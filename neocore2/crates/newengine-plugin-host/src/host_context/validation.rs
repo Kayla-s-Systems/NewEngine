@@ -16,7 +16,8 @@ pub(crate) fn effective_provider_origin(
         if cap.role != CapabilityRole::Provides {
             continue;
         }
-        let Ok(value) = serde_json::from_str::<serde_json::Value>(cap.describe_json.as_str()) else {
+        let Ok(value) = serde_json::from_str::<serde_json::Value>(cap.describe_json.as_str())
+        else {
             continue;
         };
         let backend_is_null = value
@@ -83,11 +84,17 @@ fn declared_cap_key(id: &str, kind: u8) -> DeclaredCapKey {
 }
 
 pub(crate) fn collect_declared_providers(
-    descriptors: impl Iterator<Item=PluginDescriptor>,
+    descriptors: impl Iterator<Item = PluginDescriptor>,
 ) -> newengine_math::collections_prelude::NeHashMap<DeclaredCapKey, u32> {
     let mut out = newengine_math::collections_prelude::NeHashMap::default();
-    out.insert(declared_cap_key("host.services.v1", CapabilityKind::ServiceV1 as u8), 1);
-    out.insert(declared_cap_key("host.events.v1", CapabilityKind::EventsV1 as u8), 1);
+    out.insert(
+        declared_cap_key("host.services.v1", CapabilityKind::ServiceV1 as u8),
+        1,
+    );
+    out.insert(
+        declared_cap_key("host.events.v1", CapabilityKind::EventsV1 as u8),
+        1,
+    );
 
     for d in descriptors {
         for c in d.capabilities.iter() {
@@ -104,7 +111,8 @@ pub(crate) fn collect_declared_providers(
         for gateway in crate::service_gateway::descriptor_gateway_capabilities(&d) {
             let _service_kind = gateway.service_kind.as_str();
             if crate::service_gateway::gateway_provider_service_id(&d, &gateway).is_some() {
-                let key = declared_cap_key(gateway.gateway_id.as_str(), CapabilityKind::ServiceV1 as u8);
+                let key =
+                    declared_cap_key(gateway.gateway_id.as_str(), CapabilityKind::ServiceV1 as u8);
                 let cur = out.get(&key).copied().unwrap_or(0);
                 if cur < 1 {
                     out.insert(key, 1);
@@ -132,10 +140,7 @@ pub(crate) fn missing_descriptor_requirements(
         if pv < c.version {
             out.push(format!(
                 "{}(kind={} req_v={} avail_v={})",
-                c.id,
-                c.kind as u8,
-                c.version,
-                pv
+                c.id, c.kind as u8, c.version, pv
             ));
         }
     }
@@ -149,10 +154,7 @@ pub(crate) fn missing_descriptor_requirements(
 /// - `Some(true)` if the plugin has a descriptor and declares `Provides(ServiceV1, service_id)`.
 /// - `Some(false)` if the plugin has a descriptor but does not declare that capability.
 /// - `None` if the plugin has no known descriptor (ABI v1 or loader did not register it).
-pub(crate) fn plugin_declares_provided_service(
-    plugin_id: &str,
-    service_id: &str,
-) -> Option<bool> {
+pub(crate) fn plugin_declares_provided_service(plugin_id: &str, service_id: &str) -> Option<bool> {
     let c = ctx();
     let g = c.plugin_descriptors.lock().ok()?;
     let d = g.get(plugin_id)?;

@@ -154,7 +154,9 @@ fn index_modules_strict<E: Send + 'static>(
     Ok(id_to_index)
 }
 
-fn index_modules_resilient<E: Send + 'static>(modules: &[ModuleSlot<E>]) -> HashMap<&'static str, usize> {
+fn index_modules_resilient<E: Send + 'static>(
+    modules: &[ModuleSlot<E>],
+) -> HashMap<&'static str, usize> {
     let mut id_to_index = ne_hash_map_with_capacity::<&'static str, usize>(modules.len());
     for (i, slot) in modules.iter().enumerate() {
         let id = slot.id();

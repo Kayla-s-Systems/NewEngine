@@ -47,7 +47,7 @@ pub fn upload_primitive_mesh(
             BufferUsage::Vertex,
             MemoryHint::CpuToGpu,
         )
-            .with_label(format!("{label}_vb")),
+        .with_label(format!("{label}_vb")),
     )?;
     r.write_buffer(vb, 0, &vbytes)?;
 
@@ -57,7 +57,7 @@ pub fn upload_primitive_mesh(
             BufferUsage::Index,
             MemoryHint::CpuToGpu,
         )
-            .with_label(format!("{label}_ib")),
+        .with_label(format!("{label}_ib")),
     )?;
     r.write_buffer(ib, 0, &ibytes)?;
 

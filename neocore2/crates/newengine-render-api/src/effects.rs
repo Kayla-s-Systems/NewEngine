@@ -74,7 +74,9 @@ pub enum RenderEffectStage {
 
 impl Default for RenderEffectStage {
     #[inline]
-    fn default() -> Self { Self::PostProcess }
+    fn default() -> Self {
+        Self::PostProcess
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -88,7 +90,9 @@ pub enum RenderEffectQuality {
 
 impl Default for RenderEffectQuality {
     #[inline]
-    fn default() -> Self { Self::High }
+    fn default() -> Self {
+        Self::High
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -105,7 +109,9 @@ pub enum RenderEffectCachePolicy {
 
 impl Default for RenderEffectCachePolicy {
     #[inline]
-    fn default() -> Self { Self::PipelineState }
+    fn default() -> Self {
+        Self::PipelineState
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -214,7 +220,9 @@ pub enum MsaaSampleCount {
 
 impl Default for MsaaSampleCount {
     #[inline]
-    fn default() -> Self { Self::X1 }
+    fn default() -> Self {
+        Self::X1
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -228,7 +236,10 @@ pub struct MsaaEffectConfig {
 impl Default for MsaaEffectConfig {
     #[inline]
     fn default() -> Self {
-        Self { samples: MsaaSampleCount::X4, explicit_resolve: true }
+        Self {
+            samples: MsaaSampleCount::X4,
+            explicit_resolve: true,
+        }
     }
 }
 
@@ -276,7 +287,9 @@ pub enum RenderEffectConfig {
 
 impl Default for RenderEffectConfig {
     #[inline]
-    fn default() -> Self { Self::Empty }
+    fn default() -> Self {
+        Self::Empty
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -334,7 +347,11 @@ impl RenderEffectObject {
     #[inline]
     pub fn with_cache_key(mut self, key: impl Into<String>) -> Self {
         let key = key.into();
-        self.cache_key = if key.trim().is_empty() { None } else { Some(key) };
+        self.cache_key = if key.trim().is_empty() {
+            None
+        } else {
+            Some(key)
+        };
         self
     }
 
@@ -484,55 +501,103 @@ impl RenderEffectStack {
 
 impl Default for RenderEffectStack {
     #[inline]
-    fn default() -> Self { Self::aaa_default() }
+    fn default() -> Self {
+        Self::aaa_default()
+    }
 }
 
 #[inline]
-fn default_true() -> bool { true }
+fn default_true() -> bool {
+    true
+}
 #[inline]
-fn default_effect_schema_version() -> u32 { 1 }
+fn default_effect_schema_version() -> u32 {
+    1
+}
 #[inline]
-fn default_shadow_cascade_count() -> u32 { 4 }
+fn default_shadow_cascade_count() -> u32 {
+    4
+}
 #[inline]
-fn default_shadow_resolution() -> u32 { 2048 }
+fn default_shadow_resolution() -> u32 {
+    2048
+}
 #[inline]
-fn default_shadow_atlas_size() -> u32 { 4096 }
+fn default_shadow_atlas_size() -> u32 {
+    4096
+}
 #[inline]
-fn default_shadow_max_distance() -> f32 { 192.0 }
+fn default_shadow_max_distance() -> f32 {
+    192.0
+}
 #[inline]
-fn default_pcss_blocker_samples() -> u32 { 8 }
+fn default_pcss_blocker_samples() -> u32 {
+    8
+}
 #[inline]
-fn default_pcss_filter_samples() -> u32 { 16 }
+fn default_pcss_filter_samples() -> u32 {
+    16
+}
 #[inline]
-fn default_pcss_light_radius() -> f32 { 0.035 }
+fn default_pcss_light_radius() -> f32 {
+    0.035
+}
 #[inline]
-fn default_shadow_bias() -> f32 { 0.0015 }
+fn default_shadow_bias() -> f32 {
+    0.0015
+}
 #[inline]
-fn default_shadow_normal_bias() -> f32 { 0.02 }
+fn default_shadow_normal_bias() -> f32 {
+    0.02
+}
 #[inline]
-fn default_bloom_threshold() -> f32 { 0.85 }
+fn default_bloom_threshold() -> f32 {
+    0.85
+}
 #[inline]
-fn default_bloom_knee() -> f32 { 0.35 }
+fn default_bloom_knee() -> f32 {
+    0.35
+}
 #[inline]
-fn default_bloom_intensity() -> f32 { 0.085 }
+fn default_bloom_intensity() -> f32 {
+    0.085
+}
 #[inline]
-fn default_bloom_radius() -> f32 { 1.0 }
+fn default_bloom_radius() -> f32 {
+    1.0
+}
 #[inline]
-fn default_bloom_mips() -> u32 { 5 }
+fn default_bloom_mips() -> u32 {
+    5
+}
 #[inline]
-fn default_taa_feedback() -> f32 { 0.92 }
+fn default_taa_feedback() -> f32 {
+    0.92
+}
 #[inline]
-fn default_taa_clamping() -> f32 { 1.0 }
+fn default_taa_clamping() -> f32 {
+    1.0
+}
 #[inline]
-fn default_taa_jitter_scale() -> f32 { 1.0 }
+fn default_taa_jitter_scale() -> f32 {
+    1.0
+}
 #[inline]
-fn default_tess_factor() -> f32 { 4.0 }
+fn default_tess_factor() -> f32 {
+    4.0
+}
 #[inline]
-fn default_tess_min_distance() -> f32 { 8.0 }
+fn default_tess_min_distance() -> f32 {
+    8.0
+}
 #[inline]
-fn default_tess_max_distance() -> f32 { 96.0 }
+fn default_tess_max_distance() -> f32 {
+    96.0
+}
 #[inline]
-fn default_tess_displacement_scale() -> f32 { 0.0 }
+fn default_tess_displacement_scale() -> f32 {
+    0.0
+}
 
 #[cfg(test)]
 mod tests {
@@ -562,9 +627,19 @@ mod tests {
     #[test]
     fn effect_object_keeps_base_and_tuned_config_separate() {
         let base = RenderEffectConfig::Bloom(BloomEffectConfig::default());
-        let tuned = RenderEffectConfig::Bloom(BloomEffectConfig { intensity: 0.2, ..BloomEffectConfig::default() });
-        let effect = RenderEffectObject::new(RenderEffectKind::Bloom, RenderEffectStage::PostProcess, base).tuned(tuned);
+        let tuned = RenderEffectConfig::Bloom(BloomEffectConfig {
+            intensity: 0.2,
+            ..BloomEffectConfig::default()
+        });
+        let effect = RenderEffectObject::new(
+            RenderEffectKind::Bloom,
+            RenderEffectStage::PostProcess,
+            base,
+        )
+        .tuned(tuned);
         assert!(matches!(effect.base, RenderEffectConfig::Bloom(_)));
-        assert!(matches!(effect.effective_config(), RenderEffectConfig::Bloom(cfg) if (cfg.intensity - 0.2).abs() < f32::EPSILON));
+        assert!(
+            matches!(effect.effective_config(), RenderEffectConfig::Bloom(cfg) if (cfg.intensity - 0.2).abs() < f32::EPSILON)
+        );
     }
 }

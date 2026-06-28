@@ -154,7 +154,9 @@ pub fn step_follow_camera(
         desired_rot
     } else {
         let alpha = 1.0 - (-dt / smooth_time).exp();
-        current_rot.normalize_or_identity().slerp(desired_rot, alpha)
+        current_rot
+            .normalize_or_identity()
+            .slerp(desired_rot, alpha)
     };
 
     Some(FollowCameraStep {

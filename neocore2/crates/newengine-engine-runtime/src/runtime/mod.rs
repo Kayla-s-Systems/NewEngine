@@ -4,8 +4,8 @@
 //! adapters and applies outputs. Providers own implementation details; asset
 //! data describes the score.
 
-pub mod frame;
 pub mod adapters;
 pub mod definition_apply;
-pub mod ecs_apply;
 pub mod diagnostics;
+pub mod ecs_apply;
+pub mod frame;

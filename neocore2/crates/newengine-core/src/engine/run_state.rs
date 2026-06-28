@@ -44,7 +44,10 @@ impl EngineRunState {
 
     #[inline]
     pub const fn is_shutting_down(self) -> bool {
-        matches!(self, Self::ShutdownGame | Self::ShutdownSystem | Self::Stopped)
+        matches!(
+            self,
+            Self::ShutdownGame | Self::ShutdownSystem | Self::Stopped
+        )
     }
 
     #[inline]

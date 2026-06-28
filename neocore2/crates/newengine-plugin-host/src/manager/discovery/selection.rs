@@ -77,7 +77,12 @@ impl SelectionDecision {
 #[inline]
 fn runtime_target_plugins_only() -> bool {
     std::env::var("NEWENGINE_PLUGIN_TARGET")
-        .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "runtime" | "game" | "standalone"))
+        .map(|v| {
+            matches!(
+                v.trim().to_ascii_lowercase().as_str(),
+                "runtime" | "game" | "standalone"
+            )
+        })
         .unwrap_or(false)
 }
 
@@ -89,7 +94,12 @@ fn is_editor_only_plugin(kind: Option<newengine_plugin_api::PluginKind>) -> bool
 fn headless_mode_enabled() -> bool {
     std::env::var("NEWENGINE_HEADLESS")
         .ok()
-        .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
+        .map(|v| {
+            matches!(
+                v.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
         .unwrap_or(false)
 }
 
@@ -115,13 +125,16 @@ fn emit_headless_skip_summary_once(graph: &DiscoveryGraph) {
             id,
             service_gateways,
             ..
-        } = &item.kind else {
+        } = &item.kind
+        else {
             continue;
         };
         if !is_concrete_provider_id(id) {
             continue;
         }
-        render_found |= service_gateways.iter().any(|gateway| gateway == "engine.render");
+        render_found |= service_gateways
+            .iter()
+            .any(|gateway| gateway == "engine.render");
         ui_found |= service_gateways
             .iter()
             .any(|gateway| matches!(gateway.as_str(), "engine.ui" | "engine.ui.text"));
@@ -188,7 +201,8 @@ pub(super) fn build_load_selection(
             descriptor_kind,
             service_gateways,
             ..
-        } = &item.kind else {
+        } = &item.kind
+        else {
             continue;
         };
         if loaded_ids.contains(id)
@@ -215,9 +229,9 @@ pub(super) fn build_load_selection(
 
     for item in &graph.items {
         let decision = match &item.kind {
-            ScannedDynlibKind::PlatformRuntime { .. } => SelectionDecision::Runtime {
-                label: "platform",
-            },
+            ScannedDynlibKind::PlatformRuntime { .. } => {
+                SelectionDecision::Runtime { label: "platform" }
+            }
             ScannedDynlibKind::Unknown => SelectionDecision::Unknown,
             ScannedDynlibKind::Plugin {
                 id,
@@ -285,7 +299,10 @@ fn select_gateway_provider_paths(
     let mut by_gateway: HashMap<String, Vec<&super::graph::ScannedDynlib>> = HashMap::default();
 
     for item in winners_by_id.values().copied() {
-        let ScannedDynlibKind::Plugin { service_gateways, .. } = &item.kind else {
+        let ScannedDynlibKind::Plugin {
+            service_gateways, ..
+        } = &item.kind
+        else {
             continue;
         };
         for gateway in service_gateways {
@@ -310,7 +327,9 @@ fn select_gateway_provider_paths(
 
 fn backend_provider_priority(item: &super::graph::ScannedDynlib) -> i32 {
     match &item.kind {
-        ScannedDynlibKind::Plugin { backend_priority, .. } => *backend_priority,
+        ScannedDynlibKind::Plugin {
+            backend_priority, ..
+        } => *backend_priority,
         _ => 0,
     }
 }
@@ -324,20 +343,31 @@ fn is_better_plugin_candidate(
     candidate_rank > current_rank
 }
 
-fn plugin_candidate_rank(item: &super::graph::ScannedDynlib) -> ((u64, u64, u64, u64), i32, usize, String) {
+fn plugin_candidate_rank(
+    item: &super::graph::ScannedDynlib,
+) -> ((u64, u64, u64, u64), i32, usize, String) {
     let (version, backend_priority, declared_capabilities) = match &item.kind {
         ScannedDynlibKind::Plugin {
             version,
             backend_priority,
             declared_capabilities,
             ..
-        } => (semver_rank(version), *backend_priority, declared_capabilities.unwrap_or(0)),
+        } => (
+            semver_rank(version),
+            *backend_priority,
+            declared_capabilities.unwrap_or(0),
+        ),
         _ => ((0, 0, 0, 0), 0, 0),
     };
 
     // The final path string is only a deterministic tie-breaker for two descriptors
     // with equal id/version/capability metadata. It is not used for plugin identity.
-    (version, backend_priority, declared_capabilities, item.path.to_string_lossy().to_string())
+    (
+        version,
+        backend_priority,
+        declared_capabilities,
+        item.path.to_string_lossy().to_string(),
+    )
 }
 
 fn semver_rank(version: &str) -> (u64, u64, u64, u64) {

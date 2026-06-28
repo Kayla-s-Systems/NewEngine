@@ -46,11 +46,7 @@ pub fn platform_config_from_startup_defaults(startup: &StartupConfig) -> Platfor
 }
 
 #[inline]
-fn config_patch_from_json_merge_patch(
-    name: &str,
-    priority: i32,
-    value: &Value,
-) -> ConfigPatchV1 {
+fn config_patch_from_json_merge_patch(name: &str, priority: i32, value: &Value) -> ConfigPatchV1 {
     let bytes = serde_json::to_vec(value).unwrap_or_default();
     ConfigPatchV1 {
         source: ConfigPatchSourceV1::HostRule,
@@ -199,12 +195,16 @@ fn strip_host_only_platform_keys(value: &Value) -> Value {
     value
 }
 
-
 #[inline]
 fn platform_metadata_probe_enabled() -> bool {
     std::env::var("NEWENGINE_PLATFORM_CONFIG_METADATA_PROBE")
         .ok()
-        .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
+        .map(|v| {
+            matches!(
+                v.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
         .unwrap_or(false)
 }
 
@@ -280,7 +280,6 @@ fn apply_startup_platform_overrides(
     config
 }
 
-
 fn parse_display_config(value: Option<&Value>) -> PlatformDisplayConfigV1 {
     let Some(obj) = value.and_then(Value::as_object) else {
         return PlatformDisplayConfigV1::default();
@@ -348,7 +347,9 @@ fn parse_monitor_index(value: &str) -> i32 {
 fn parse_window_mode(value: &str) -> PlatformWindowModeV1 {
     match value.trim().to_ascii_lowercase().as_str() {
         "borderless" | "borderless_fullscreen" => PlatformWindowModeV1::Borderless,
-        "exclusive" | "exclusive_fullscreen" | "fullscreen" => PlatformWindowModeV1::ExclusiveFullscreen,
+        "exclusive" | "exclusive_fullscreen" | "fullscreen" => {
+            PlatformWindowModeV1::ExclusiveFullscreen
+        }
         _ => PlatformWindowModeV1::Windowed,
     }
 }
@@ -386,8 +387,8 @@ fn resolve_platform_runtime_config_without_metadata_probe(
     runtime_path: &Path,
 ) -> ResolvedPlatformRuntimeConfig {
     let overrides = newengine_plugin_host::get_plugin_overrides_with_env(PLATFORM_PLUGIN_ID);
-    let icon_path = extract_string_field(&overrides, "icon")
-        .or_else(|| startup.window_icon_path.clone());
+    let icon_path =
+        extract_string_field(&overrides, "icon").or_else(|| startup.window_icon_path.clone());
     let config = apply_startup_platform_overrides(startup_defaults, &overrides);
     let plugin_version = platform_runtime_version_from_path(runtime_path);
     let descriptor = synthesize_platform_descriptor(
@@ -440,9 +441,7 @@ pub fn resolve_platform_runtime_config(
     );
 
     let lib = unsafe { Library::new(runtime_path) }
-        .map_err(|e| EngineError::other(format!(
-            "platform runtime metadata load failed: {e}"
-        )))?;
+        .map_err(|e| EngineError::other(format!("platform runtime metadata load failed: {e}")))?;
 
     let root_sym = match unsafe {
         lib.get::<unsafe extern "C" fn() -> PluginRootV1Ref>(PLUGIN_ROOT_SYMBOL)
@@ -479,9 +478,7 @@ pub fn resolve_platform_runtime_config(
     let defaults = module
         .config_defaults()
         .into_result()
-        .map_err(|e| EngineError::other(format!(
-            "platform config defaults failed: {e}"
-        )))?;
+        .map_err(|e| EngineError::other(format!("platform config defaults failed: {e}")))?;
 
     let overrides = newengine_plugin_host::get_plugin_overrides_with_env(&plugin_id);
     let icon_path = extract_string_field(&overrides, "icon");
@@ -489,22 +486,22 @@ pub fn resolve_platform_runtime_config(
 
     let mut patches = RVec::<ConfigPatchV1>::new();
     if is_non_empty_object(&plugin_patch) {
-        patches.push(config_patch_from_json_merge_patch("config+env", 0, &plugin_patch));
+        patches.push(config_patch_from_json_merge_patch(
+            "config+env",
+            0,
+            &plugin_patch,
+        ));
     }
 
     let applied = module
         .config_apply_patches(&defaults, patches)
         .into_result()
-        .map_err(|e| EngineError::other(format!(
-            "platform config apply failed: {e}"
-        )))?;
+        .map_err(|e| EngineError::other(format!("platform config apply failed: {e}")))?;
 
     log_platform_config_diags(&plugin_id, applied.diags.as_slice());
 
     let config = platform_config_from_effective_blob(&applied.effective)
-        .map_err(|e| EngineError::other(format!(
-            "platform config decode failed: {e}"
-        )))?;
+        .map_err(|e| EngineError::other(format!("platform config decode failed: {e}")))?;
 
     newengine_ulog_api::ulog::info!(
         "platform runtime: effective config id='{}' title='{}' size={}x{} placement={:?} icon={}",
@@ -526,7 +523,6 @@ pub fn resolve_platform_runtime_config(
     })
 }
 
-
 fn platform_runtime_version_from_path(runtime_path: &Path) -> String {
     let Some(stem) = runtime_path.file_stem().and_then(|stem| stem.to_str()) else {
         return "-".to_owned();
@@ -540,9 +536,15 @@ fn platform_runtime_version_from_path(runtime_path: &Path) -> String {
 
 fn looks_like_semver(value: &str) -> bool {
     let mut segments = value.split('.');
-    let Some(major) = segments.next() else { return false; };
-    let Some(minor) = segments.next() else { return false; };
-    let Some(patch) = segments.next() else { return false; };
+    let Some(major) = segments.next() else {
+        return false;
+    };
+    let Some(minor) = segments.next() else {
+        return false;
+    };
+    let Some(patch) = segments.next() else {
+        return false;
+    };
     segments.next().is_none()
         && !major.is_empty()
         && !minor.is_empty()
@@ -561,10 +563,7 @@ fn ensure_platform_runtime_capabilities(mut descriptor: PluginDescriptor) -> Plu
         version: u32,
     ) -> bool {
         descriptor.capabilities.iter().any(|cap| {
-            cap.id.as_str() == id
-                && cap.role == role
-                && cap.kind == kind
-                && cap.version >= version
+            cap.id.as_str() == id && cap.role == role && cap.kind == kind && cap.version >= version
         })
     }
 
@@ -597,7 +596,13 @@ fn ensure_platform_runtime_capabilities(mut descriptor: PluginDescriptor) -> Plu
     ];
 
     for cap in required {
-        if !has_cap(&descriptor, cap.id.as_str(), cap.role, cap.kind, cap.version) {
+        if !has_cap(
+            &descriptor,
+            cap.id.as_str(),
+            cap.role,
+            cap.kind,
+            cap.version,
+        ) {
             descriptor.capabilities.push(cap);
         }
     }
@@ -605,11 +610,7 @@ fn ensure_platform_runtime_capabilities(mut descriptor: PluginDescriptor) -> Plu
     descriptor
 }
 
-fn synthesize_platform_descriptor(
-    id: &str,
-    name: &str,
-    version: &str,
-) -> PluginDescriptor {
+fn synthesize_platform_descriptor(id: &str, name: &str, version: &str) -> PluginDescriptor {
     PluginDescriptor::builder(id, name, version, PluginKind::Runtime)
         .push(
             CapabilityDesc::new(
@@ -618,7 +619,7 @@ fn synthesize_platform_descriptor(
                 CapabilityKind::Other,
                 1,
             )
-                .with_json(r#"{"role":"platform-runtime"}"#),
+            .with_json(r#"{"role":"platform-runtime"}"#),
         )
         .push(
             CapabilityDesc::new(
@@ -627,7 +628,7 @@ fn synthesize_platform_descriptor(
                 CapabilityKind::Other,
                 1,
             )
-                .with_json(r#"{"role":"surface"}"#),
+            .with_json(r#"{"role":"surface"}"#),
         )
         .push(
             CapabilityDesc::new(
@@ -636,7 +637,7 @@ fn synthesize_platform_descriptor(
                 CapabilityKind::EventsV1,
                 1,
             )
-                .with_json(r#"{"role":"input-events"}"#),
+            .with_json(r#"{"role":"input-events"}"#),
         )
         .build()
 }

@@ -36,7 +36,9 @@ impl Default for TextureBuildOptions {
 impl TextureBuildOptions {
     #[inline]
     pub const fn uncompressed() -> Self {
-        Self { compression: TextureDataCompression::Raw }
+        Self {
+            compression: TextureDataCompression::Raw,
+        }
     }
 
     #[inline]
@@ -46,12 +48,18 @@ impl TextureBuildOptions {
 
     #[inline]
     pub const fn zstd_runtime() -> Self {
-        Self { compression: TextureDataCompression::Zstd { level: DEFAULT_ZSTD_LEVEL } }
+        Self {
+            compression: TextureDataCompression::Zstd {
+                level: DEFAULT_ZSTD_LEVEL,
+            },
+        }
     }
 
     #[inline]
     pub const fn zstd_with_level(level: i32) -> Self {
-        Self { compression: TextureDataCompression::Zstd { level } }
+        Self {
+            compression: TextureDataCompression::Zstd { level },
+        }
     }
 }
 
@@ -73,8 +81,9 @@ pub(crate) fn store_data(data: &[u8], options: TextureBuildOptions) -> Result<St
         }),
         TextureDataCompression::Zstd { level } => {
             let level = level.clamp(1, 22);
-            let encoded = zstd::stream::encode_all(Cursor::new(data), level)
-                .map_err(|e| TextureContainerError::CompressionFailed(format!("zstd encode failed: {e}")))?;
+            let encoded = zstd::stream::encode_all(Cursor::new(data), level).map_err(|e| {
+                TextureContainerError::CompressionFailed(format!("zstd encode failed: {e}"))
+            })?;
 
             // Deterministic safety valve: tiny/noisy dictionaries can grow after zstd framing.
             // In that case keep the runtime file raw instead of producing a larger payload.
@@ -95,7 +104,11 @@ pub(crate) fn store_data(data: &[u8], options: TextureBuildOptions) -> Result<St
     }
 }
 
-pub(crate) fn decode_stored_data(flags: u16, stored: &[u8], expected_uncompressed_len: u64) -> Result<Vec<u8>> {
+pub(crate) fn decode_stored_data(
+    flags: u16,
+    stored: &[u8],
+    expected_uncompressed_len: u64,
+) -> Result<Vec<u8>> {
     validate_header_flags(flags)?;
     match flags {
         FLAG_DATA_RAW => {
@@ -111,10 +124,13 @@ pub(crate) fn decode_stored_data(flags: u16, stored: &[u8], expected_uncompresse
         }
         FLAG_DATA_ZSTD => {
             if expected_uncompressed_len == 0 {
-                return Err(TextureContainerError::InvalidDirectory("zstd data requires data_uncompressed_len"));
+                return Err(TextureContainerError::InvalidDirectory(
+                    "zstd data requires data_uncompressed_len",
+                ));
             }
-            let decoded = zstd::stream::decode_all(Cursor::new(stored))
-                .map_err(|e| TextureContainerError::CompressionFailed(format!("zstd decode failed: {e}")))?;
+            let decoded = zstd::stream::decode_all(Cursor::new(stored)).map_err(|e| {
+                TextureContainerError::CompressionFailed(format!("zstd decode failed: {e}"))
+            })?;
             if decoded.len() as u64 != expected_uncompressed_len {
                 return Err(TextureContainerError::PayloadSizeMismatch {
                     name: "<dictionary-data>".to_owned(),

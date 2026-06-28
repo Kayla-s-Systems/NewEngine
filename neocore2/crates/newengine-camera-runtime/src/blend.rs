@@ -1,8 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use newengine_camera::{
-    CameraFrame, CameraRig, Orthographic, Perspective, Projection,
-};
+use newengine_camera::{CameraFrame, CameraRig, Orthographic, Perspective, Projection};
 use newengine_math::{Vec2, Vec3};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -187,7 +185,11 @@ pub fn blend_camera_frames(from: CameraFrame, to: CameraFrame, t: f32) -> Camera
     let t = t.clamp(0.0, 1.0);
     let rig = CameraRig {
         position: lerp_vec3(from.rig.position, to.rig.position, t),
-        rotation: from.rig.rotation.slerp(to.rig.rotation, t).normalize_or_identity(),
+        rotation: from
+            .rig
+            .rotation
+            .slerp(to.rig.rotation, t)
+            .normalize_or_identity(),
     };
     let projection = blend_projection(from.projection, to.projection, t);
     let jitter = lerp_vec2(from.jitter_px, to.jitter_px, t);

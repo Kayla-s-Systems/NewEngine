@@ -29,7 +29,14 @@ impl EngineStorageRootSpec {
         default_dir: &'static str,
         leading_segment: &'static str,
     ) -> Self {
-        Self { key, primary_env, alias_env, ready_env, default_dir, leading_segment }
+        Self {
+            key,
+            primary_env,
+            alias_env,
+            ready_env,
+            default_dir,
+            leading_segment,
+        }
     }
 }
 

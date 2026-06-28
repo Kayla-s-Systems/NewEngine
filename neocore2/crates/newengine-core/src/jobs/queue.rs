@@ -33,7 +33,12 @@ impl QueuedJob {
             self.completion.complete();
             shared.completed.fetch_add(1, Ordering::AcqRel);
             shared.completed_by_lane[lane_index].fetch_add(1, Ordering::AcqRel);
-            self.control.publish(EngineTaskPhase::Completed, "Task completed", "Task completed without a job closure.", Some(1.0));
+            self.control.publish(
+                EngineTaskPhase::Completed,
+                "Task completed",
+                "Task completed without a job closure.",
+                Some(1.0),
+            );
             release_lane();
             return;
         };
@@ -41,18 +46,33 @@ impl QueuedJob {
         if self.control.is_cancel_requested() {
             shared.cancelled.fetch_add(1, Ordering::AcqRel);
             self.completion.complete();
-            self.control.publish(EngineTaskPhase::Cancelled, "Task cancelled", "Task was cancelled before worker execution.", Some(1.0));
+            self.control.publish(
+                EngineTaskPhase::Cancelled,
+                "Task cancelled",
+                "Task was cancelled before worker execution.",
+                Some(1.0),
+            );
             release_lane();
             return;
         }
 
         shared.running.fetch_add(1, Ordering::AcqRel);
-        self.control.publish(EngineTaskPhase::Running, "Task running", "Worker picked up the task from the engine queue.", None);
+        self.control.publish(
+            EngineTaskPhase::Running,
+            "Task running",
+            "Worker picked up the task from the engine queue.",
+            None,
+        );
         if !self.control.wait_while_paused() {
             shared.running.fetch_sub(1, Ordering::AcqRel);
             shared.cancelled.fetch_add(1, Ordering::AcqRel);
             self.completion.complete();
-            self.control.publish(EngineTaskPhase::Cancelled, "Task cancelled", "Task was cancelled while paused before execution.", Some(1.0));
+            self.control.publish(
+                EngineTaskPhase::Cancelled,
+                "Task cancelled",
+                "Task was cancelled while paused before execution.",
+                Some(1.0),
+            );
             release_lane();
             return;
         }
@@ -68,7 +88,12 @@ impl QueuedJob {
 
         if result.is_err() {
             shared.panicked.fetch_add(1, Ordering::AcqRel);
-            self.control.publish(EngineTaskPhase::Failed, "Task failed", "Worker job panicked; worker recovered and continues.", Some(1.0));
+            self.control.publish(
+                EngineTaskPhase::Failed,
+                "Task failed",
+                "Worker job panicked; worker recovered and continues.",
+                Some(1.0),
+            );
             newengine_ulog_api::ulog::error!(
                 "job-system: worker job panicked label='{}' lane='{}' priority={:?}; worker recovered and continues",
                 self.request.label,
@@ -77,9 +102,19 @@ impl QueuedJob {
             );
         } else if self.control.is_cancel_requested() {
             shared.cancelled.fetch_add(1, Ordering::AcqRel);
-            self.control.publish(EngineTaskPhase::Cancelled, "Task cancelled", "Task completed after observing cancellation.", Some(1.0));
+            self.control.publish(
+                EngineTaskPhase::Cancelled,
+                "Task cancelled",
+                "Task completed after observing cancellation.",
+                Some(1.0),
+            );
         } else {
-            self.control.publish(EngineTaskPhase::Completed, "Task completed", "Task finished on engine-runtime worker thread.", Some(1.0));
+            self.control.publish(
+                EngineTaskPhase::Completed,
+                "Task completed",
+                "Task finished on engine-runtime worker thread.",
+                Some(1.0),
+            );
         }
         release_lane();
     }
@@ -151,7 +186,12 @@ impl JobShared {
 
     pub(super) fn submit(&self, job: QueuedJob) {
         if self.shutdown.load(Ordering::Acquire) {
-            job.control.publish(EngineTaskPhase::Cancelled, "Task rejected", "Job system is shutting down; task was not queued.", Some(1.0));
+            job.control.publish(
+                EngineTaskPhase::Cancelled,
+                "Task rejected",
+                "Job system is shutting down; task was not queued.",
+                Some(1.0),
+            );
             job.completion.complete();
             return;
         }
@@ -162,7 +202,12 @@ impl JobShared {
         self.submitted.fetch_add(1, Ordering::AcqRel);
         self.pending.fetch_add(1, Ordering::Release);
         self.pending_by_lane[lane_index].fetch_add(1, Ordering::Release);
-        job.control.publish(EngineTaskPhase::Scheduled, "Task scheduled", "Task was registered in the engine job queue.", Some(0.0));
+        job.control.publish(
+            EngineTaskPhase::Scheduled,
+            "Task scheduled",
+            "Task was registered in the engine job queue.",
+            Some(0.0),
+        );
         self.queues[queue_index].lock().push_back(job);
         self.sleep_wake.notify_one();
     }
@@ -223,9 +268,12 @@ impl JobShared {
         let mut running_by_lane = [0usize; JOB_LANE_COUNT];
         let mut completed_by_lane = [0u64; JOB_LANE_COUNT];
         for lane in JobLane::all() {
-            pending_by_lane[lane.index()] = self.pending_by_lane[lane.index()].load(Ordering::Acquire);
-            running_by_lane[lane.index()] = self.running_by_lane[lane.index()].load(Ordering::Acquire);
-            completed_by_lane[lane.index()] = self.completed_by_lane[lane.index()].load(Ordering::Acquire);
+            pending_by_lane[lane.index()] =
+                self.pending_by_lane[lane.index()].load(Ordering::Acquire);
+            running_by_lane[lane.index()] =
+                self.running_by_lane[lane.index()].load(Ordering::Acquire);
+            completed_by_lane[lane.index()] =
+                self.completed_by_lane[lane.index()].load(Ordering::Acquire);
         }
 
         JobSystemSnapshot {

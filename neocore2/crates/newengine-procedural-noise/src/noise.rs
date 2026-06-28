@@ -120,7 +120,8 @@ pub fn sample_fractal(settings: FractalNoise2D, x: f32, z: f32) -> f32 {
     if normalizer <= 1.0e-6 {
         0.0
     } else {
-        ((weighted / normalizer) * settings.amplitude).clamp(-settings.amplitude, settings.amplitude)
+        ((weighted / normalizer) * settings.amplitude)
+            .clamp(-settings.amplitude, settings.amplitude)
     }
 }
 
@@ -141,13 +142,21 @@ pub fn sample_algorithm(seed: u64, algorithm: NoiseAlgorithm, x: f32, z: f32) ->
 
 #[inline]
 fn finite_or(v: f32, fallback: f32) -> f32 {
-    if v.is_finite() { v } else { fallback }
+    if v.is_finite() {
+        v
+    } else {
+        fallback
+    }
 }
 
 #[inline]
 fn fast_floor(v: f32) -> i32 {
     let i = v as i32;
-    if (i as f32) > v { i - 1 } else { i }
+    if (i as f32) > v {
+        i - 1
+    } else {
+        i
+    }
 }
 
 #[inline]
@@ -279,7 +288,11 @@ fn lightning(seed: u64, x: f32, z: f32) -> f32 {
     let warp_z = value_noise(seed ^ 0x9876_1234, x * 0.7 + 41.0, z * 0.7 - 19.0) * 1.65;
     let ridge = 1.0 - value_noise(seed ^ 0xf17e_1eaf, (x + warp_x) * 1.9, (z + warp_z) * 1.9).abs();
     let filament = smoothstep(0.78, 0.98, ridge);
-    let branches = smoothstep(0.74, 0.96, cellular_edge(seed ^ 0xb01d_aced, x * 0.72 + warp_x, z * 0.72 + warp_z) * 0.5 + 0.5);
+    let branches = smoothstep(
+        0.74,
+        0.96,
+        cellular_edge(seed ^ 0xb01d_aced, x * 0.72 + warp_x, z * 0.72 + warp_z) * 0.5 + 0.5,
+    );
     ((filament.max(branches * 0.78)) * 2.0 - 1.0).clamp(-1.0, 1.0)
 }
 
@@ -305,8 +318,14 @@ mod tests {
 
     #[test]
     fn different_seeds_change_output() {
-        let a = ValueNoise2D::new(FractalNoise2D { seed: 1, ..Default::default() });
-        let b = ValueNoise2D::new(FractalNoise2D { seed: 2, ..Default::default() });
+        let a = ValueNoise2D::new(FractalNoise2D {
+            seed: 1,
+            ..Default::default()
+        });
+        let b = ValueNoise2D::new(FractalNoise2D {
+            seed: 2,
+            ..Default::default()
+        });
         assert_ne!(a.sample(5.0, 7.0), b.sample(5.0, 7.0));
     }
 

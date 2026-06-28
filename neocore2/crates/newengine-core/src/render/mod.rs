@@ -9,7 +9,6 @@ pub const RENDER_API_ID: &str = newengine_render_api::RENDER_SERVICE_ID;
 pub const RENDER_API_VERSION: ApiVersion = ApiVersion::new(0, 4, 0);
 pub const RENDER_API_PROVIDE: ApiProvide = ApiProvide::new(RENDER_API_ID, RENDER_API_VERSION);
 
-
 #[derive(Debug, Clone, Default)]
 pub struct RenderBackendStatus {
     pub degraded: bool,
@@ -32,7 +31,6 @@ impl RenderBackendStatus {
         }
     }
 }
-
 
 /// Runtime-hosted launch/loading status for scenes that must warm resources
 /// before the platform hands visual ownership to the playable world.
@@ -194,7 +192,9 @@ pub trait RenderApi: Send {
         &mut self,
         graph: RenderGraphDesc,
     ) -> EngineResult<RenderGraphValidationReport> {
-        Ok(newengine_render_api::validate_and_compile_render_graph(&graph))
+        Ok(newengine_render_api::validate_and_compile_render_graph(
+            &graph,
+        ))
     }
 
     /// Submits a declarative render frame graph. Prefer submit_frame() at runtime
@@ -222,7 +222,10 @@ pub trait RenderApi: Send {
     /// runtime/backend boundary: frame metadata, graph, draw-list routes and
     /// optional work budget travel together.
     #[inline]
-    fn submit_frame(&mut self, frame: RenderFrameEnvelope) -> EngineResult<RenderGraphSubmitReport> {
+    fn submit_frame(
+        &mut self,
+        frame: RenderFrameEnvelope,
+    ) -> EngineResult<RenderGraphSubmitReport> {
         if let Some(budget) = frame.work_budget {
             self.set_work_budget(budget)?;
         }
@@ -235,7 +238,6 @@ pub trait RenderApi: Send {
     fn set_work_budget(&mut self, _budget: RenderWorkBudget) -> EngineResult<()> {
         Ok(())
     }
-
 
     /// Pumps queued GPU upload jobs using a backend-neutral budget. Backends that
     /// support staged uploads should do bounded work here instead of blocking
@@ -320,5 +322,7 @@ pub fn require_render_api<'a, E: Send + 'static>(
     ctx: &'a crate::module::ModuleCtx<'_, E>,
 ) -> EngineResult<&'a RenderApiRef> {
     ctx.api_required::<RenderApiRef>(RENDER_API_ID)
-        .map_err(|_| EngineError::other("Render API is not available (missing render backend module?)"))
+        .map_err(|_| {
+            EngineError::other("Render API is not available (missing render backend module?)")
+        })
 }

@@ -41,7 +41,6 @@ impl Frustum {
         Self { planes: p }
     }
 
-
     #[inline]
     pub fn contains_sphere(&self, center: Vec3, radius: f32) -> bool {
         let c = Vec4::new(center.x, center.y, center.z, 1.0);

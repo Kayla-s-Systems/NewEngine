@@ -67,7 +67,10 @@ pub(super) fn terrain_surface_layers(spec: &GameReadyTerrainSpec) -> TerrainSurf
     }
 }
 
-pub(super) fn terrain_graph_for_chunk(spec: &GameReadyTerrainSpec, coord: TerrainChunkCoord) -> NoiseGraph2D {
+pub(super) fn terrain_graph_for_chunk(
+    spec: &GameReadyTerrainSpec,
+    coord: TerrainChunkCoord,
+) -> NoiseGraph2D {
     let center = coord.center(spec.size_x, spec.size_z);
 
     // GameFirst terrain is intentionally not a mountain generator. The profile
@@ -98,7 +101,10 @@ pub(super) fn terrain_graph_for_chunk(spec: &GameReadyTerrainSpec, coord: Terrai
             .seed_offset(spec.seed ^ 0x6c8e_9cf5)
             .frequency(0.42)
             .amplitude(0.18)
-            .shape(NoiseShape::SmoothStep { edge0: -0.72, edge1: 0.42 })
+            .shape(NoiseShape::SmoothStep {
+                edge0: -0.72,
+                edge1: 0.42,
+            })
             .combine(NoiseCombineMode::Add),
     )
     .with_layer(
@@ -124,7 +130,10 @@ pub(super) fn terrain_graph_for_chunk(spec: &GameReadyTerrainSpec, coord: Terrai
             .seed_offset(spec.seed ^ spec.generator.veins_seed_xor)
             .frequency(spec.generator.veins_frequency)
             .amplitude(-spec.generator.veins_amplitude.abs())
-            .shape(NoiseShape::SmoothStep { edge0: 0.12, edge1: 0.95 })
+            .shape(NoiseShape::SmoothStep {
+                edge0: 0.12,
+                edge1: 0.95,
+            })
             .combine(NoiseCombineMode::Add),
     )
     .with_remap(NoiseRemap {
@@ -140,7 +149,11 @@ pub(super) fn terrain_graph_for_chunk(spec: &GameReadyTerrainSpec, coord: Terrai
     terrain_graph
 }
 
-pub(super) fn generate_terrain_for_chunk(spec: &GameReadyTerrainSpec, coord: TerrainChunkCoord, color: [f32; 4]) -> GeneratedTerrainChunk {
+pub(super) fn generate_terrain_for_chunk(
+    spec: &GameReadyTerrainSpec,
+    coord: TerrainChunkCoord,
+    color: [f32; 4],
+) -> GeneratedTerrainChunk {
     let terrain = ProceduralTerrain::generate_descriptor(
         TerrainHeightfieldDescriptor {
             cells_x: spec.cells_x,
@@ -189,7 +202,12 @@ pub(super) fn spawn_generated_terrain_chunk(
         },
     );
     let _ = world.insert(entity, terrain);
-    let _ = world.insert(entity, PreparedTerrainPrimitiveMesh { mesh: generated.mesh });
+    let _ = world.insert(
+        entity,
+        PreparedTerrainPrimitiveMesh {
+            mesh: generated.mesh,
+        },
+    );
     let _ = world.insert(entity, bounds);
     let _ = world.insert(entity, surface.clone());
     let _ = apply_exact_material(world, mats, entity, material, material, color);
@@ -208,7 +226,9 @@ pub(super) fn spawn_streamed_terrain_chunk(
     coord: TerrainChunkCoord,
 ) -> TerrainChunkRecord {
     let generated = generate_terrain_for_chunk(spec, coord, color);
-    spawn_generated_terrain_chunk(world, root, mats, material, spec, surface, color, coord, generated)
+    spawn_generated_terrain_chunk(
+        world, root, mats, material, spec, surface, color, coord, generated,
+    )
 }
 
 pub(super) fn enqueue_streamed_terrain_chunk(
@@ -248,7 +268,9 @@ pub(super) fn enqueue_streamed_terrain_chunk(
             }
         },
     );
-    state.pending.insert(coord, PendingTerrainChunk { result, ticket });
+    state
+        .pending
+        .insert(coord, PendingTerrainChunk { result, ticket });
     true
 }
 
@@ -279,7 +301,8 @@ pub(in crate::scene_bridge::game_ready) fn spawn_procedural_terrain(
 
     let surface = terrain_surface_layers(spec);
     let origin = initial_center;
-    let record = spawn_streamed_terrain_chunk(world, root, mats, material, spec, &surface, color, origin);
+    let record =
+        spawn_streamed_terrain_chunk(world, root, mats, material, spec, &surface, color, origin);
     let terrain_entity = record.terrain;
 
     if spec.streaming.enabled {
@@ -343,7 +366,6 @@ pub(in crate::scene_bridge::game_ready) fn spawn_procedural_terrain(
     terrain_entity
 }
 
-
 pub(crate) fn tick_game_ready_streaming_terrain(
     world: &mut newengine_ecs::World,
     mats: &MaterialRegistry,
@@ -361,7 +383,8 @@ pub(crate) fn tick_game_ready_streaming_terrain(
         return;
     };
 
-    let center = TerrainChunkCoord::from_world_pos(player_pos, state.spec.size_x, state.spec.size_z);
+    let center =
+        TerrainChunkCoord::from_world_pos(player_pos, state.spec.size_x, state.spec.size_z);
     let budget = SceneStreamingBudget {
         resident_radius: state.chunk_radius,
         unload_radius: state.unload_radius,

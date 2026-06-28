@@ -18,7 +18,6 @@ pub use service_model::{JobSystem, JobSystemHandle};
 pub use status::{JobSystemSnapshot, JobTaskStatus};
 pub use tool_runner::ToolJobRunner;
 
-
 #[cfg(test)]
 mod tests {
     use super::{JobLane, JobPriority, JobRequest, JobSystem, JobSystemConfig};

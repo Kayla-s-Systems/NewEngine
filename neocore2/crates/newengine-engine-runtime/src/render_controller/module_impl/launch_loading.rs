@@ -13,10 +13,8 @@ fn scene_launch_progress(gate: &crate::gameplay::GameReadyWorldLaunchGate) -> f3
 
     let ready = gate.total_textures.saturating_sub(gate.waiting_textures);
     let ratio = ready as f32 / gate.total_textures.max(1) as f32;
-    (SCENE_LAUNCH_PROGRESS_START + ratio * SCENE_LAUNCH_PROGRESS_RANGE).clamp(
-        SCENE_LAUNCH_PROGRESS_START,
-        0.995,
-    )
+    (SCENE_LAUNCH_PROGRESS_START + ratio * SCENE_LAUNCH_PROGRESS_RANGE)
+        .clamp(SCENE_LAUNCH_PROGRESS_START, 0.995)
 }
 
 #[inline]

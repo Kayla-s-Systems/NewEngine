@@ -25,7 +25,8 @@ pub fn ensure_debug_line_pipeline(
 
     let capacity_vertices = min_vertices.max(256).next_power_of_two();
 
-    let manifest = load_runtime_shader_program_manifest("shaders/pipelines/debug_lines.pipeline.json")?;
+    let manifest =
+        load_runtime_shader_program_manifest("shaders/pipelines/debug_lines.pipeline.json")?;
     let vs_asset = manifest.shaders.vertex;
     let fs_asset = manifest.shaders.fragment;
 
@@ -78,7 +79,7 @@ pub fn ensure_debug_line_pipeline(
             BufferUsage::Uniform,
             MemoryHint::CpuToGpu,
         )
-            .with_label("game_debug_lines_ubo"),
+        .with_label("game_debug_lines_ubo"),
     )?;
     r.write_buffer(ubo, 0, &[0u8; DEBUG_LINE_UBO_SIZE as usize])?;
     let bg = r.create_bind_group(
@@ -102,7 +103,7 @@ pub fn ensure_debug_line_pipeline(
             BufferUsage::Vertex,
             MemoryHint::CpuToGpu,
         )
-            .with_label("game_debug_lines_vb"),
+        .with_label("game_debug_lines_vb"),
     )?;
 
     let gpu = DebugLineGpu {
@@ -119,4 +120,3 @@ pub fn ensure_debug_line_pipeline(
     *cached = Some(gpu);
     Ok(gpu)
 }
-

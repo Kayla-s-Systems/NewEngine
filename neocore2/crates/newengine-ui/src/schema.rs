@@ -145,7 +145,12 @@ pub struct UiDeclarativeLayout {
 
 impl UiDeclarativeLayout {
     #[inline]
-    pub fn new(id: impl Into<String>, surface_id: impl Into<String>, theme: impl Into<String>, root: UiNodeSpec) -> Self {
+    pub fn new(
+        id: impl Into<String>,
+        surface_id: impl Into<String>,
+        theme: impl Into<String>,
+        root: UiNodeSpec,
+    ) -> Self {
         Self {
             version: 1,
             id: id.into(),

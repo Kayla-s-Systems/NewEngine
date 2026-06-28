@@ -1,8 +1,8 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use newengine_ecs::{EntityId, World};
-use newengine_transform_api::EntityHandle;
 use newengine_math::{Mat4, Quat, Vec3};
+use newengine_transform_api::EntityHandle;
 
 use newengine_transform_api::{GlobalTransform, Parent, Transform};
 
@@ -15,7 +15,6 @@ fn resolve_transform_entity(world: &World, entity: EntityHandle) -> Option<Entit
         .find(|(id, _)| id.stable_u64() == entity.stable_id)
         .map(|(id, _)| id)
 }
-
 
 #[inline]
 fn world_matrix_from_local_chain(world: &World, id: EntityId) -> Option<Mat4> {
@@ -127,13 +126,13 @@ pub fn write_entity_local_from_world_pose_local_chain(
     if let Some(p) = world.get::<Parent>(id).copied() {
         if let Some(parent_id) = resolve_transform_entity(world, p.0) {
             if let Some(pm) = world_matrix_from_local_chain(world, parent_id) {
-            let local = pm.inverse() * world_m;
-            let (_s, rot, trans) = local.to_scale_rotation_translation();
-            t.position = trans;
-            t.rotation = rot.normalize_or_identity();
-            t.scale = preserve_scale;
-            let _ = world.insert(id, t);
-            return;
+                let local = pm.inverse() * world_m;
+                let (_s, rot, trans) = local.to_scale_rotation_translation();
+                t.position = trans;
+                t.rotation = rot.normalize_or_identity();
+                t.scale = preserve_scale;
+                let _ = world.insert(id, t);
+                return;
             }
         }
     }

@@ -34,19 +34,30 @@ pub fn body_is_xml(body: &[u8]) -> bool {
 }
 
 #[inline]
-pub fn text_is_xml(text: &str) -> bool { text.trim_start().starts_with('<') }
+pub fn text_is_xml(text: &str) -> bool {
+    text.trim_start().starts_with('<')
+}
 
-pub fn parse_xml_document<'input>(text: &'input str, label: &str) -> Result<XmlDocument<'input>, String> {
+pub fn parse_xml_document<'input>(
+    text: &'input str,
+    label: &str,
+) -> Result<XmlDocument<'input>, String> {
     roxmltree::Document::parse(text).map_err(|error| format!("{label}: XML parse failed: {error}"))
 }
 
-pub fn parse_xml_body<'input>(body: &'input [u8], label: &str) -> Result<XmlDocument<'input>, String> {
-    let text = std::str::from_utf8(body).map_err(|error| format!("{label}: XML body is not UTF-8: {error}"))?;
+pub fn parse_xml_body<'input>(
+    body: &'input [u8],
+    label: &str,
+) -> Result<XmlDocument<'input>, String> {
+    let text = std::str::from_utf8(body)
+        .map_err(|error| format!("{label}: XML body is not UTF-8: {error}"))?;
     parse_xml_document(text, label)
 }
 
 #[inline]
-pub fn root_schema(root: XmlNode<'_, '_>) -> String { xml_attr_any(root, &["schema"]).unwrap_or_default() }
+pub fn root_schema(root: XmlNode<'_, '_>) -> String {
+    xml_attr_any(root, &["schema"]).unwrap_or_default()
+}
 
 #[inline]
 pub fn root_has_any_name(root: XmlNode<'_, '_>, names: &[&str]) -> bool {
@@ -54,13 +65,20 @@ pub fn root_has_any_name(root: XmlNode<'_, '_>, names: &[&str]) -> bool {
 }
 
 pub fn xml_attr_any(node: XmlNode<'_, '_>, names: &[&str]) -> Option<String> {
-    names
-        .iter()
-        .find_map(|name| node.attribute(*name).map(|value| value.trim().to_owned()).filter(|value| !value.is_empty()))
+    names.iter().find_map(|name| {
+        node.attribute(*name)
+            .map(|value| value.trim().to_owned())
+            .filter(|value| !value.is_empty())
+    })
 }
 
 pub fn xml_attr_bool_any(node: XmlNode<'_, '_>, names: &[&str]) -> Option<bool> {
-    xml_attr_any(node, names).map(|value| matches!(value.to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
+    xml_attr_any(node, names).map(|value| {
+        matches!(
+            value.to_ascii_lowercase().as_str(),
+            "1" | "true" | "yes" | "on"
+        )
+    })
 }
 
 pub fn xml_attr_u32_any(node: XmlNode<'_, '_>, names: &[&str]) -> Option<u32> {
@@ -80,7 +98,10 @@ pub fn xml_child<'a, 'input>(node: XmlNode<'a, 'input>, name: &str) -> Option<Xm
         .find(|child| child.is_element() && child.tag_name().name().eq_ignore_ascii_case(name))
 }
 
-pub fn xml_children_named<'a, 'input>(node: XmlNode<'a, 'input>, name: &str) -> Vec<XmlNode<'a, 'input>> {
+pub fn xml_children_named<'a, 'input>(
+    node: XmlNode<'a, 'input>,
+    name: &str,
+) -> Vec<XmlNode<'a, 'input>> {
     node.children()
         .filter(|child| child.is_element() && child.tag_name().name().eq_ignore_ascii_case(name))
         .collect()
@@ -91,7 +112,10 @@ pub fn xml_tags(node: XmlNode<'_, '_>, container: &str) -> Vec<String> {
         .map(|tags| {
             tags.children()
                 .filter(|child| child.is_element())
-                .filter_map(|child| xml_attr_any(child, &["value", "name"]).or_else(|| child.text().map(str::trim).map(ToOwned::to_owned)))
+                .filter_map(|child| {
+                    xml_attr_any(child, &["value", "name"])
+                        .or_else(|| child.text().map(str::trim).map(ToOwned::to_owned))
+                })
                 .filter(|value| !value.trim().is_empty())
                 .collect::<Vec<_>>()
         })
@@ -100,8 +124,13 @@ pub fn xml_tags(node: XmlNode<'_, '_>, container: &str) -> Vec<String> {
 
 pub fn xml_namespace_map(container: XmlNode<'_, '_>) -> BTreeMap<String, serde_json::Value> {
     let mut out = BTreeMap::new();
-    for ns in container.children().filter(|child| child.is_element() && child.has_tag_name("Namespace")) {
-        let Some(name) = xml_attr_any(ns, &["name", "namespace"]) else { continue; };
+    for ns in container
+        .children()
+        .filter(|child| child.is_element() && child.has_tag_name("Namespace"))
+    {
+        let Some(name) = xml_attr_any(ns, &["name", "namespace"]) else {
+            continue;
+        };
         out.insert(name, xml_node_children_object(ns));
     }
     out
@@ -111,7 +140,9 @@ pub fn xml_node_children_object(node: XmlNode<'_, '_>) -> serde_json::Value {
     let mut map = serde_json::Map::new();
     for attr in node.attributes() {
         let name = attr.name();
-        if name == "name" || name == "namespace" { continue; }
+        if name == "name" || name == "namespace" {
+            continue;
+        }
         map.insert(name.to_owned(), xml_scalar(attr.value()));
     }
     for child in node.children().filter(|child| child.is_element()) {
@@ -136,7 +167,9 @@ pub fn xml_node_object(node: XmlNode<'_, '_>) -> serde_json::Value {
     let mut had_non_name_attr = false;
     for attr in node.attributes() {
         let name = attr.name();
-        if name == "name" || name == "namespace" { continue; }
+        if name == "name" || name == "namespace" {
+            continue;
+        }
         had_non_name_attr = true;
         map.insert(name.to_owned(), xml_scalar(attr.value()));
     }
@@ -151,14 +184,20 @@ pub fn xml_node_object(node: XmlNode<'_, '_>) -> serde_json::Value {
     serde_json::Value::Object(map)
 }
 
-pub fn xml_insert_child(map: &mut serde_json::Map<String, serde_json::Value>, key: &str, value: serde_json::Value) {
+pub fn xml_insert_child(
+    map: &mut serde_json::Map<String, serde_json::Value>,
+    key: &str,
+    value: serde_json::Value,
+) {
     match map.get_mut(key) {
         Some(serde_json::Value::Array(items)) => items.push(value),
         Some(existing) => {
             let old = std::mem::replace(existing, serde_json::Value::Null);
             *existing = serde_json::Value::Array(vec![old, value]);
         }
-        None => { map.insert(key.to_owned(), value); }
+        None => {
+            map.insert(key.to_owned(), value);
+        }
     }
 }
 
@@ -173,7 +212,10 @@ pub fn xml_scalar(raw: &str) -> serde_json::Value {
         // attributes as vectors only when every item is an actual scalar atom
         // (number/bool). String lists should be expressed as child XML nodes, not as
         // ambiguous comma-delimited text.
-        if atoms.iter().all(|item| !matches!(item, serde_json::Value::String(_))) {
+        if atoms
+            .iter()
+            .all(|item| !matches!(item, serde_json::Value::String(_)))
+        {
             return serde_json::Value::Array(atoms);
         }
     }
@@ -186,8 +228,12 @@ fn xml_scalar_atom(value: &str) -> serde_json::Value {
         "false" => return serde_json::Value::Bool(false),
         _ => {}
     }
-    if let Ok(integer) = value.parse::<i64>() { return serde_json::json!(integer); }
-    if let Ok(unsigned) = value.parse::<u64>() { return serde_json::json!(unsigned); }
+    if let Ok(integer) = value.parse::<i64>() {
+        return serde_json::json!(integer);
+    }
+    if let Ok(unsigned) = value.parse::<u64>() {
+        return serde_json::json!(unsigned);
+    }
     if let Ok(float) = value.parse::<f64>() {
         if let Some(number) = serde_json::Number::from_f64(float) {
             return serde_json::Value::Number(number);
@@ -200,8 +246,14 @@ pub fn xml_to_json_projection(text: &str, label: &str) -> Result<serde_json::Val
     let doc = parse_xml_document(text, label)?;
     let root = doc.root_element();
     let mut map = serde_json::Map::new();
-    map.insert("root".to_owned(), serde_json::Value::String(root.tag_name().name().to_owned()));
-    map.insert("schema".to_owned(), serde_json::Value::String(root_schema(root)));
+    map.insert(
+        "root".to_owned(),
+        serde_json::Value::String(root.tag_name().name().to_owned()),
+    );
+    map.insert(
+        "schema".to_owned(),
+        serde_json::Value::String(root_schema(root)),
+    );
     map.insert("body".to_owned(), xml_node_object(root));
     Ok(serde_json::Value::Object(map))
 }
@@ -225,7 +277,10 @@ fn format_node(out: &mut String, node: XmlNode<'_, '_>, depth: usize) {
         push_escaped(out, attr.value());
         out.push('"');
     }
-    let children = node.children().filter(|child| child.is_element()).collect::<Vec<_>>();
+    let children = node
+        .children()
+        .filter(|child| child.is_element())
+        .collect::<Vec<_>>();
     let text = node.text().map(str::trim).filter(|text| !text.is_empty());
     if children.is_empty() && text.is_none() {
         out.push_str(" />\n");
@@ -288,7 +343,9 @@ static METADATA_ROOT_SNIPPETS: &[XmlSnippet] = &[
 ];
 static METADATA_CHILD_SNIPPETS: &[XmlSnippet] = DEFINITION_CHILD_SNIPPETS;
 static NEUI_ROOT_SNIPPETS: &[XmlSnippet] = &[
-    XmlSnippet { label: "NeUi Surface Dictionary", insert: r##"<NeUiDictionary schema="newengine.neui.dictionary.v1" representation="xmlcentral" owner_scope="engine" document_kind="surface">
+    XmlSnippet {
+        label: "NeUi Surface Dictionary",
+        insert: r##"<NeUiDictionary schema="newengine.neui.dictionary.v1" representation="xmlcentral" owner_scope="engine" document_kind="surface">
   <Surface name="engine.ui.loading" root="layout.main" theme="assets/ui/themes/north_star_dark.neui@theme" bindings="bindings">
     <Dependencies>
     </Dependencies>
@@ -301,8 +358,12 @@ static NEUI_ROOT_SNIPPETS: &[XmlSnippet] = &[
   <BindingGraph name="bindings">
   </BindingGraph>
 </NeUiDictionary>
-"##, detail: "Root .neui surface dictionary" },
-    XmlSnippet { label: "NeUi Registry", insert: r##"<NeUiRegistry schema="newengine.neui.registry.v1">
+"##,
+        detail: "Root .neui surface dictionary",
+    },
+    XmlSnippet {
+        label: "NeUi Registry",
+        insert: r##"<NeUiRegistry schema="newengine.neui.registry.v1">
   <Surfaces>
     <SurfaceRef id="engine.ui.loading" ref="assets/ui/engine/loading.neui@surface" />
   </Surfaces>
@@ -312,38 +373,64 @@ static NEUI_ROOT_SNIPPETS: &[XmlSnippet] = &[
   <ComponentPacks>
   </ComponentPacks>
 </NeUiRegistry>
-"##, detail: "Registry of UI refs only; no inline layouts" },
-    XmlSnippet { label: "NeUi Theme Library", insert: r##"<NeUiThemeLibrary schema="newengine.neui.theme.v1" representation="xmlcentral" owner_scope="shared" document_kind="theme">
+"##,
+        detail: "Registry of UI refs only; no inline layouts",
+    },
+    XmlSnippet {
+        label: "NeUi Theme Library",
+        insert: r##"<NeUiThemeLibrary schema="newengine.neui.theme.v1" representation="xmlcentral" owner_scope="shared" document_kind="theme">
   <Theme name="north_star.dark">
     <Token name="color.bg" value="#0B0D10" />
     <Token name="color.accent" value="#FF7A18" />
   </Theme>
 </NeUiThemeLibrary>
-"##, detail: "Theme tokens split from surfaces" },
+"##,
+        detail: "Theme tokens split from surfaces",
+    },
 ];
 static NEUI_CHILD_SNIPPETS: &[XmlSnippet] = &[
-    XmlSnippet { label: "Surface", insert: r##"
+    XmlSnippet {
+        label: "Surface",
+        insert: r##"
   <Surface name="engine.ui.loading" root="layout.main" theme="assets/ui/themes/north_star_dark.neui@theme" bindings="bindings">
     <Dependencies>
       <ComponentRef ref="assets/ui/components/cards.neui@card.status" />
       <TextureRef ref="assets/ui/icons/builtin_icons.ytd@app_logo" />
     </Dependencies>
-  </Surface>"##, detail: "Addressable UI surface entry" },
-    XmlSnippet { label: "Layout", insert: r##"
+  </Surface>"##,
+        detail: "Addressable UI surface entry",
+    },
+    XmlSnippet {
+        label: "Layout",
+        insert: r##"
   <Layout name="layout.main" surface="engine.ui.loading">
     <Panel id="root" class="surface-shell" />
-  </Layout>"##, detail: "UI layout tree" },
-    XmlSnippet { label: "BindingGraph", insert: r##"
+  </Layout>"##,
+        detail: "UI layout tree",
+    },
+    XmlSnippet {
+        label: "BindingGraph",
+        insert: r##"
   <BindingGraph name="bindings">
     <StateSource id="loading" source="engine.ui.loading.status" contract="LoadingStatusSnapshot" update="event" />
     <Bind element="loading.progress" property="value" source="loading.progress" />
-  </BindingGraph>"##, detail: "Declarative state binding plan" },
-    XmlSnippet { label: "ActionMap", insert: r##"
+  </BindingGraph>"##,
+        detail: "Declarative state binding plan",
+    },
+    XmlSnippet {
+        label: "ActionMap",
+        insert: r##"
   <ActionMap name="actions">
     <Action id="game.resume" target="engine.lifecycle" command="game.resume" />
-  </ActionMap>"##, detail: "UI actions routed through engine gateway contracts" },
-    XmlSnippet { label: "ComponentRef", insert: r##"
-      <ComponentRef ref="assets/ui/components/buttons.neui@button.primary" />"##, detail: "Reference reusable component entry" },
+  </ActionMap>"##,
+        detail: "UI actions routed through engine gateway contracts",
+    },
+    XmlSnippet {
+        label: "ComponentRef",
+        insert: r##"
+      <ComponentRef ref="assets/ui/components/buttons.neui@button.primary" />"##,
+        detail: "Reference reusable component entry",
+    },
 ];
 pub const NEUI_ROOT_NAMES: &[&str] = &[
     "NeUiDictionary",
@@ -354,29 +441,68 @@ pub const NEUI_ROOT_NAMES: &[&str] = &[
 ];
 
 #[inline]
-pub fn is_neui_root_name(name: &str) -> bool { NEUI_ROOT_NAMES.iter().any(|candidate| *candidate == name) }
+pub fn is_neui_root_name(name: &str) -> bool {
+    NEUI_ROOT_NAMES.iter().any(|candidate| *candidate == name)
+}
 
 static EMPTY_SNIPPETS: &[XmlSnippet] = &[];
 
 pub fn completion_catalog_for_extension(extension: &str) -> XmlCompletionCatalog {
-    match extension.trim_start_matches('.').to_ascii_lowercase().as_str() {
-        "ytyp" => XmlCompletionCatalog { schema_family: "newengine.ytyp.definition_dictionary.v1", root_snippets: DEFINITION_ROOT_SNIPPETS, child_snippets: DEFINITION_CHILD_SNIPPETS },
-        "ymap" => XmlCompletionCatalog { schema_family: "newengine.map.definition.v1", root_snippets: MAP_ROOT_SNIPPETS, child_snippets: MAP_CHILD_SNIPPETS },
-        "ymt" => XmlCompletionCatalog { schema_family: "newengine.ymt.metadata.v1", root_snippets: METADATA_ROOT_SNIPPETS, child_snippets: METADATA_CHILD_SNIPPETS },
-        "nemat" => XmlCompletionCatalog { schema_family: "newengine.nemat.material_library.v1", root_snippets: MATERIAL_ROOT_SNIPPETS, child_snippets: MATERIAL_CHILD_SNIPPETS },
-        "neui" => XmlCompletionCatalog { schema_family: "newengine.neui.dictionary.v1", root_snippets: NEUI_ROOT_SNIPPETS, child_snippets: NEUI_CHILD_SNIPPETS },
-        _ => XmlCompletionCatalog { schema_family: "generic.xml", root_snippets: EMPTY_SNIPPETS, child_snippets: EMPTY_SNIPPETS },
+    match extension
+        .trim_start_matches('.')
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "ytyp" => XmlCompletionCatalog {
+            schema_family: "newengine.ytyp.definition_dictionary.v1",
+            root_snippets: DEFINITION_ROOT_SNIPPETS,
+            child_snippets: DEFINITION_CHILD_SNIPPETS,
+        },
+        "ymap" => XmlCompletionCatalog {
+            schema_family: "newengine.map.definition.v1",
+            root_snippets: MAP_ROOT_SNIPPETS,
+            child_snippets: MAP_CHILD_SNIPPETS,
+        },
+        "ymt" => XmlCompletionCatalog {
+            schema_family: "newengine.ymt.metadata.v1",
+            root_snippets: METADATA_ROOT_SNIPPETS,
+            child_snippets: METADATA_CHILD_SNIPPETS,
+        },
+        "nemat" => XmlCompletionCatalog {
+            schema_family: "newengine.nemat.material_library.v1",
+            root_snippets: MATERIAL_ROOT_SNIPPETS,
+            child_snippets: MATERIAL_CHILD_SNIPPETS,
+        },
+        "neui" => XmlCompletionCatalog {
+            schema_family: "newengine.neui.dictionary.v1",
+            root_snippets: NEUI_ROOT_SNIPPETS,
+            child_snippets: NEUI_CHILD_SNIPPETS,
+        },
+        _ => XmlCompletionCatalog {
+            schema_family: "generic.xml",
+            root_snippets: EMPTY_SNIPPETS,
+            child_snippets: EMPTY_SNIPPETS,
+        },
     }
 }
 
-pub fn completion_catalog_for_text_or_extension(text: &str, extension: &str) -> XmlCompletionCatalog {
+pub fn completion_catalog_for_text_or_extension(
+    text: &str,
+    extension: &str,
+) -> XmlCompletionCatalog {
     if let Ok(doc) = parse_xml_document(text, "completion_catalog") {
         let root = doc.root_element();
         match root.tag_name().name() {
-            "YtypDefinitionDictionary" | "DefinitionDictionary" => return completion_catalog_for_extension("ytyp"),
-            "YmapMapDefinition" | "MapDefinition" => return completion_catalog_for_extension("ymap"),
+            "YtypDefinitionDictionary" | "DefinitionDictionary" => {
+                return completion_catalog_for_extension("ytyp")
+            }
+            "YmapMapDefinition" | "MapDefinition" => {
+                return completion_catalog_for_extension("ymap")
+            }
             "YmtMetadata" => return completion_catalog_for_extension("ymt"),
-            "NematMaterialLibrary" | "MaterialLibrary" => return completion_catalog_for_extension("nemat"),
+            "NematMaterialLibrary" | "MaterialLibrary" => {
+                return completion_catalog_for_extension("nemat")
+            }
             name if is_neui_root_name(name) => return completion_catalog_for_extension("neui"),
             _ => {}
         }
@@ -392,13 +518,18 @@ mod tests {
     fn xml_scalar_keeps_comma_prose_as_string() {
         assert_eq!(
             xml_scalar("Walk data-driven ytyp, ydd, nemat and ytd assets."),
-            serde_json::Value::String("Walk data-driven ytyp, ydd, nemat and ytd assets.".to_owned())
+            serde_json::Value::String(
+                "Walk data-driven ytyp, ydd, nemat and ytd assets.".to_owned()
+            )
         );
     }
 
     #[test]
     fn xml_scalar_parses_numeric_vectors() {
-        assert_eq!(xml_scalar("1.0,2.5,-3.0"), serde_json::json!([1.0, 2.5, -3.0]));
+        assert_eq!(
+            xml_scalar("1.0,2.5,-3.0"),
+            serde_json::json!([1.0, 2.5, -3.0])
+        );
     }
 
     #[test]
@@ -408,6 +539,9 @@ mod tests {
             "xml",
         );
         assert_eq!(catalog.schema_family, "newengine.neui.dictionary.v1");
-        assert!(catalog.root_snippets.iter().any(|snippet| snippet.label.contains("NeUi")));
+        assert!(catalog
+            .root_snippets
+            .iter()
+            .any(|snippet| snippet.label.contains("NeUi")));
     }
 }

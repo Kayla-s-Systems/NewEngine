@@ -1,15 +1,14 @@
-use super::*;
 use super::foliage::{spawn_foliage_prefabs, terrain_height, SKYDOME_PRIMITIVE_ID};
 use super::materials_terrain::register_demo_materials;
 use super::player_model::spawn_game_ready_player_model;
 use super::sky::configure_game_ready_lighting;
 use super::terrain_streaming::spawn_procedural_terrain;
 use super::ytyp_metadata::{apply_game_ready_ytyp_metadata, resolve_game_ready_asset_graph};
-
+use super::*;
 
 use core::f32::consts::PI;
-use std::time::Duration;
 use newengine_assets::{AssetAccess, AssetDecodeRequest, ASSET_LIST_FILE_BODY_OUTPUT};
+use std::time::Duration;
 
 pub(super) const SKYDOME_PROCEDURAL_CAPABILITY: &str = "geometry.procedural.skydome";
 
@@ -142,9 +141,9 @@ pub(super) fn load_ne3d_mesh_asset(logical_path: &str) -> Result<PrimitiveMesh, 
     wait_ready(&assets, &id, Duration::from_secs(3))
         .map_err(|e| format!("asset not ready path='{logical_path}' id='{id}' err='{e:?}'"))?;
 
-    let (meta, payload) = assets
-        .blob_wire_v1(&id)
-        .map_err(|e| format!("asset.blob_wire_v1 failed path='{logical_path}' id='{id}' err='{e}'"))?;
+    let (meta, payload) = assets.blob_wire_v1(&id).map_err(|e| {
+        format!("asset.blob_wire_v1 failed path='{logical_path}' id='{id}' err='{e}'")
+    })?;
 
     if !meta.contains("kalitech.model3d.meta.v1") {
         newengine_ulog_api::ulog::warn!(
@@ -157,14 +156,16 @@ pub(super) fn load_ne3d_mesh_asset(logical_path: &str) -> Result<PrimitiveMesh, 
     decode_ne3d_mesh(&payload)
 }
 
-
 pub(super) fn split_ydd_asset_ref(logical_path: &str) -> Option<(&str, Option<&str>)> {
     let trimmed = logical_path.trim();
     if trimmed.is_empty() {
         return None;
     }
     let (dictionary, selector) = match trimmed.split_once('@') {
-        Some((dictionary, selector)) => (dictionary.trim(), Some(selector.trim()).filter(|s| !s.is_empty())),
+        Some((dictionary, selector)) => (
+            dictionary.trim(),
+            Some(selector.trim()).filter(|s| !s.is_empty()),
+        ),
         None => (trimmed, None),
     };
     if newengine_assets::require_asset_reference_extension(dictionary, &["ydd"], false).is_ok() {
@@ -174,7 +175,10 @@ pub(super) fn split_ydd_asset_ref(logical_path: &str) -> Option<(&str, Option<&s
     }
 }
 
-pub(super) fn json_array<'a>(value: &'a serde_json::Value, label: &str) -> Result<&'a [serde_json::Value], String> {
+pub(super) fn json_array<'a>(
+    value: &'a serde_json::Value,
+    label: &str,
+) -> Result<&'a [serde_json::Value], String> {
     value
         .as_array()
         .map(Vec::as_slice)
@@ -234,13 +238,19 @@ pub(super) fn select_ydd_mesh_part<'a>(
         }) {
             return Ok(part);
         }
-        return Err(format!("YDD selector '{selector}' was not found in mesh_parts"));
+        return Err(format!(
+            "YDD selector '{selector}' was not found in mesh_parts"
+        ));
     }
 
     Ok(&parts[0])
 }
 
-pub(super) fn decode_ydd_mesh(dictionary_path: &str, selector: Option<&str>, payload: &[u8]) -> Result<PrimitiveMesh, String> {
+pub(super) fn decode_ydd_mesh(
+    dictionary_path: &str,
+    selector: Option<&str>,
+    payload: &[u8],
+) -> Result<PrimitiveMesh, String> {
     let root: serde_json::Value = serde_json::from_slice(payload)
         .map_err(|e| format!("YDD payload is not valid JSON path='{dictionary_path}' err='{e}'"))?;
     if root
@@ -274,7 +284,14 @@ pub(super) fn decode_ydd_mesh(dictionary_path: &str, selector: Option<&str>, pay
         .ok_or_else(|| "YDD mesh part has no indices array".to_owned())
         .and_then(|v| json_array(v, "indices"))?;
 
-    decode_ydd_position_stream_mesh(dictionary_path, selector, positions, normals, uvs, indices_json)
+    decode_ydd_position_stream_mesh(
+        dictionary_path,
+        selector,
+        positions,
+        normals,
+        uvs,
+        indices_json,
+    )
 }
 
 pub(super) fn select_ydd_runtime_mesh_part<'a>(
@@ -305,7 +322,9 @@ pub(super) fn select_ydd_runtime_mesh_part<'a>(
         if parts.len() == 1 {
             return Ok(&parts[0]);
         }
-        return Err(format!("YDD selector '{selector}' was not found in runtime_mesh_parts"));
+        return Err(format!(
+            "YDD selector '{selector}' was not found in runtime_mesh_parts"
+        ));
     }
     Ok(&parts[0])
 }
@@ -354,7 +373,11 @@ pub(super) fn decode_ydd_runtime_mesh_part_for_skydome(
             .transpose()?
             .unwrap_or_else(|| {
                 let p = Vec3::new(pos[0], pos[1], pos[2]);
-                let n = if p.length_squared() > f32::EPSILON { -p.normalize() } else { Vec3::Y };
+                let n = if p.length_squared() > f32::EPSILON {
+                    -p.normalize()
+                } else {
+                    Vec3::Y
+                };
                 [n.x, n.y, n.z]
             });
         let uv = value
@@ -446,7 +469,8 @@ pub(super) fn decode_ydd_indexed_mesh_from_vertices(
     for value in indices_json {
         let index = value
             .as_u64()
-            .ok_or_else(|| "YDD index must be an unsigned integer".to_owned())? as u32;
+            .ok_or_else(|| "YDD index must be an unsigned integer".to_owned())?
+            as u32;
         if index as usize >= vertices.len() {
             return Err(format!(
                 "YDD index out of bounds path='{dictionary_path}' index={index} vertex_count={}",
@@ -498,7 +522,6 @@ pub(super) fn load_skydome_mesh_asset(logical_path: &str) -> Result<PrimitiveMes
     }
 }
 
-
 pub(super) fn build_procedural_skydome_mesh() -> PrimitiveMesh {
     const SLICES: u32 = 64;
     const STACKS: u32 = 32;
@@ -545,7 +568,10 @@ pub(super) fn build_procedural_skydome_mesh() -> PrimitiveMesh {
     }
 }
 
-pub(super) fn ensure_skydome_primitive(prims: &mut PrimitiveRegistry, logical_path: &str) -> Option<PrimitiveId> {
+pub(super) fn ensure_skydome_primitive(
+    prims: &mut PrimitiveRegistry,
+    logical_path: &str,
+) -> Option<PrimitiveId> {
     if prims.is_registered(SKYDOME_PRIMITIVE_ID) {
         return Some(SKYDOME_PRIMITIVE_ID);
     }
@@ -554,11 +580,7 @@ pub(super) fn ensure_skydome_primitive(prims: &mut PrimitiveRegistry, logical_pa
         let mesh = build_procedural_skydome_mesh();
         let vertex_count = mesh.vertices.len();
         let index_count = mesh.indices.len();
-        prims.register_mesh(
-            SKYDOME_PRIMITIVE_ID,
-            "Procedural/SkyDome".to_owned(),
-            mesh,
-        );
+        prims.register_mesh(SKYDOME_PRIMITIVE_ID, "Procedural/SkyDome".to_owned(), mesh);
         newengine_ulog_api::ulog::info!(
             "game-ready: procedural skydome selected capability='{}' vertices={} indices={}",
             SKYDOME_PROCEDURAL_CAPABILITY,
@@ -657,7 +679,6 @@ pub(super) fn spawn_skydome(
         return;
     };
 
-
     world.insert_resource(sky_atmosphere_from_spec(spec));
 
     for kind in SKY_VISUAL_SPAWN_ORDER {
@@ -687,7 +708,10 @@ pub(super) fn spawn_skydome(
     );
 }
 
-pub(super) fn to_fps_demo_rules(spec: &GameReadyGameplaySpec, model: &self::content::GameReadyPlayerModelSpec) -> FpsDemoRules {
+pub(super) fn to_fps_demo_rules(
+    spec: &GameReadyGameplaySpec,
+    model: &self::content::GameReadyPlayerModelSpec,
+) -> FpsDemoRules {
     let base = FpsPlayerTuning {
         body_radius: spec.player_collision.radius,
         body_half_height: spec.player_collision.half_height,
@@ -700,7 +724,8 @@ pub(super) fn to_fps_demo_rules(spec: &GameReadyGameplaySpec, model: &self::cont
     }
     .sanitized();
     let feet_to_eye = model.target_height * model.eye_height_ratio;
-    let model_eye_offset_from_player_origin = feet_to_eye - (base.body_half_height + base.body_radius);
+    let model_eye_offset_from_player_origin =
+        feet_to_eye - (base.body_half_height + base.body_radius);
     let player = FpsPlayerTuning {
         camera_eye_height: model_eye_offset_from_player_origin.clamp(0.05, model.target_height),
         ..base
@@ -719,7 +744,6 @@ pub(super) fn to_fps_demo_rules(spec: &GameReadyGameplaySpec, model: &self::cont
     }
 }
 
-
 pub(super) fn instantiate_game_ready_definitions(
     world: &mut newengine_ecs::World,
     root: EntityId,
@@ -733,8 +757,9 @@ pub(super) fn instantiate_game_ready_definitions(
         definitions.len()
     );
     for spec in definitions {
-        let graph = resolve_game_ready_asset_graph(&spec.definition_ref)
-            .unwrap_or_else(|| newengine_model_domain_api::AssetGraphResolver::resolve_root_ref(&spec.definition_ref));
+        let graph = resolve_game_ready_asset_graph(&spec.definition_ref).unwrap_or_else(|| {
+            newengine_model_domain_api::AssetGraphResolver::resolve_root_ref(&spec.definition_ref)
+        });
         if matches!(spec.apply_mode, GameReadyDefinitionApplyMode::MetadataOnly) {
             newengine_ulog_api::ulog::debug!(
                 "definitions.runtime: metadata-only definition_ref='{}' nodes={} missing={} apply_mode='{}' policy='domain systems consume engine.assets.definitions/engine.assets.graph explicitly; no generic ECS/render marker spawned'",
@@ -751,13 +776,14 @@ pub(super) fn instantiate_game_ready_definitions(
             rotation_ypr: spec.rotation_ypr,
             scale: [spec.scale.x, spec.scale.y, spec.scale.z],
         };
-        let (entity, trace) = crate::scene_bridge::definitions_runtime::apply_definition_instantiation(
-            world,
-            Some(root),
-            spec.definition_ref.clone(),
-            transform,
-            graph,
-        );
+        let (entity, trace) =
+            crate::scene_bridge::definitions_runtime::apply_definition_instantiation(
+                world,
+                Some(root),
+                spec.definition_ref.clone(),
+                transform,
+                graph,
+            );
         newengine_ulog_api::ulog::debug!(
             "definitions.runtime: instantiated marker definition_ref='{}' entity={:?} nodes={} missing={} render_drawables={} materials={} textures={} physics_refs={} result='{}' apply_mode='{}'",
             trace.definition_ref,
@@ -830,7 +856,15 @@ pub(in crate::scene_bridge) fn bootstrap_fps_game_ready_scene(
         &map.prefabs,
         map.player.start,
     );
-    spawn_skydome(world, prims, mats, materials, root, &map.sky, map.palette.sky);
+    spawn_skydome(
+        world,
+        prims,
+        mats,
+        materials,
+        root,
+        &map.sky,
+        map.palette.sky,
+    );
     instantiate_game_ready_definitions(world, root, &map.definitions);
 
     let start_x = map.player.start.x;
@@ -849,7 +883,14 @@ pub(in crate::scene_bridge) fn bootstrap_fps_game_ready_scene(
         false,
     );
     let model_ground_offset_y = -(player_tuning.body_half_height + player_tuning.body_radius);
-    let model_bound = spawn_game_ready_player_model(world, prims, mats, player, &map.player.model, model_ground_offset_y);
+    let model_bound = spawn_game_ready_player_model(
+        world,
+        prims,
+        mats,
+        player,
+        &map.player.model,
+        model_ground_offset_y,
+    );
     if !model_bound {
         newengine_ulog_api::ulog::warn!(
             "game-ready: player runtime model disabled or unavailable; player visual was not spawned because authored model data is required"

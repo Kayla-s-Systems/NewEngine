@@ -73,17 +73,30 @@ impl RuntimeRenderController {
     }
 
     #[inline]
-    pub(super) fn sync_cursor_state<E: Send>(&mut self, ctx: &ModuleCtx<'_, E>, desired: CursorState) {
+    pub(super) fn sync_cursor_state<E: Send>(
+        &mut self,
+        ctx: &ModuleCtx<'_, E>,
+        desired: CursorState,
+    ) {
         self.sync_cursor_state_inner(ctx, desired, false);
     }
 
     #[inline]
-    pub(super) fn force_cursor_state<E: Send>(&mut self, ctx: &ModuleCtx<'_, E>, desired: CursorState) {
+    pub(super) fn force_cursor_state<E: Send>(
+        &mut self,
+        ctx: &ModuleCtx<'_, E>,
+        desired: CursorState,
+    ) {
         self.sync_cursor_state_inner(ctx, desired, true);
     }
 
     #[inline]
-    fn sync_cursor_state_inner<E: Send>(&mut self, ctx: &ModuleCtx<'_, E>, desired: CursorState, force: bool) {
+    fn sync_cursor_state_inner<E: Send>(
+        &mut self,
+        ctx: &ModuleCtx<'_, E>,
+        desired: CursorState,
+        force: bool,
+    ) {
         if !force && desired == self.viewport.last_cursor_state {
             return;
         }

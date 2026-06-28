@@ -2,18 +2,16 @@
 
 use newengine_core::render::{
     BufferSlice, DrawArgs, DrawIndexedArgs, DrawListContribution, DrawListContributionCommand,
-    RenderDrawListKind, RenderInstanceSource, RenderMaterialBinding, RenderMeshGpuBinding,
-    RenderPipelineClass, RenderApi,
+    RenderApi, RenderDrawListKind, RenderInstanceSource, RenderMaterialBinding,
+    RenderMeshGpuBinding, RenderPipelineClass,
 };
 use newengine_core::EngineResult;
 use newengine_math::{Mat4, Vec3, Vec4};
 use newengine_render_feature_api::SceneExtractionCtx;
 
-use super::draw_lists::{
-    DrawListBuildCtx, ExternalRenderDrawListProviderDesc,
-};
-use super::RuntimeRenderController;
 use super::super::gpu::ensure_debug_line_pipeline;
+use super::draw_lists::{DrawListBuildCtx, ExternalRenderDrawListProviderDesc};
+use super::RuntimeRenderController;
 
 #[derive(Clone, Copy, Debug)]
 pub(super) struct ExternalContributionLoweringReport {
@@ -180,7 +178,6 @@ fn lower_gpu_mesh_contribution(
             Ok(false)
         }
     }
-
 }
 
 fn lower_debug_line_list_contribution(
@@ -195,7 +192,10 @@ fn lower_debug_line_list_contribution(
         return Ok(false);
     }
 
-    if !matches!(draw_list, RenderDrawListKind::Debug | RenderDrawListKind::OpaqueForward) {
+    if !matches!(
+        draw_list,
+        RenderDrawListKind::Debug | RenderDrawListKind::OpaqueForward
+    ) {
         newengine_ulog_api::ulog::warn!(
             "render draw-list provider '{}' submitted DebugLineList to mismatched draw-list '{}'",
             provider.id,
@@ -217,7 +217,8 @@ fn lower_debug_line_list_contribution(
             push_debug_line_vertex(&mut bytes, ctx.viewproj, pair[1], color);
         }
 
-        let gpu = ensure_debug_line_pipeline(&mut this.gpu.meshes.collision_lines, r, vertex_count)?;
+        let gpu =
+            ensure_debug_line_pipeline(&mut this.gpu.meshes.collision_lines, r, vertex_count)?;
         r.write_buffer(gpu.vb, 0, &bytes)?;
         r.set_pipeline(gpu.pipeline)?;
         r.set_bind_group(0, gpu.bg)?;
@@ -228,10 +229,17 @@ fn lower_debug_line_list_contribution(
     Ok(true)
 }
 
-fn push_debug_line_vertex(bytes: &mut Vec<u8>, viewproj: Mat4, position_ws: [f32; 3], color: [f32; 4]) {
+fn push_debug_line_vertex(
+    bytes: &mut Vec<u8>,
+    viewproj: Mat4,
+    position_ws: [f32; 3],
+    color: [f32; 4],
+) {
     let p = Vec3::new(position_ws[0], position_ws[1], position_ws[2]);
     let clip = viewproj * Vec4::new(p.x, p.y, p.z, 1.0);
-    for value in [clip.x, clip.y, clip.z, clip.w, color[0], color[1], color[2], color[3]] {
+    for value in [
+        clip.x, clip.y, clip.z, clip.w, color[0], color[1], color[2], color[3],
+    ] {
         bytes.extend_from_slice(&value.to_ne_bytes());
     }
 }
@@ -282,16 +290,22 @@ fn lower_single_gpu_mesh_instance(
 
     if matches!(draw_list, RenderDrawListKind::ShadowCasters) {
         let (center_ws, radius_ws) = conservative_model_sphere(model);
-        if !ctx.shadow_plan.caster_cull.map(|c| c.contains_sphere(center_ws, radius_ws)).unwrap_or(true) {
+        if !ctx
+            .shadow_plan
+            .caster_cull
+            .map(|c| c.contains_sphere(center_ws, radius_ws))
+            .unwrap_or(true)
+        {
             return Ok(());
         }
     }
 
-    let shadow_texture = if matches!(draw_list, RenderDrawListKind::ShadowCasters) || !material.receive_shadows {
-        lit.white_texture
-    } else {
-        ctx.shadow_frame.texture
-    };
+    let shadow_texture =
+        if matches!(draw_list, RenderDrawListKind::ShadowCasters) || !material.receive_shadows {
+            lit.white_texture
+        } else {
+            ctx.shadow_frame.texture
+        };
 
     let mut per = this.ensure_per_draw_ubo_with_binding(
         r,
@@ -337,7 +351,9 @@ fn lower_single_gpu_mesh_instance(
             vertex_offset: gpu.vertex_offset,
             first_instance: 0,
         })?;
-        this.diagnostics.overlay_metrics.record_indexed_triangles(gpu.index_count);
+        this.diagnostics
+            .overlay_metrics
+            .record_indexed_triangles(gpu.index_count);
     } else {
         r.draw(DrawArgs {
             vertex_count: gpu.vertex_count.max(1),
@@ -345,7 +361,9 @@ fn lower_single_gpu_mesh_instance(
             first_vertex: gpu.first_vertex,
             first_instance: 0,
         })?;
-        this.diagnostics.overlay_metrics.record_vertices_as_triangles(gpu.vertex_count);
+        this.diagnostics
+            .overlay_metrics
+            .record_vertices_as_triangles(gpu.vertex_count);
     }
     Ok(())
 }
@@ -359,12 +377,20 @@ fn select_pipeline(
     let lit = ctx.lit;
     match (draw_list, requested) {
         (RenderDrawListKind::ShadowCasters, _) | (_, RenderPipelineClass::ShadowDepth) => {
-            if double_sided { lit.shadow_double_sided_pipeline } else { lit.shadow_pipeline }
+            if double_sided {
+                lit.shadow_double_sided_pipeline
+            } else {
+                lit.shadow_pipeline
+            }
         }
         (_, RenderPipelineClass::TransparentForward)
         | (_, RenderPipelineClass::LitForward)
         | (_, RenderPipelineClass::DebugLines) => {
-            if double_sided { lit.double_sided_pipeline } else { lit.pipeline }
+            if double_sided {
+                lit.double_sided_pipeline
+            } else {
+                lit.pipeline
+            }
         }
     }
 }
@@ -377,7 +403,6 @@ fn stable_u64(value: &str) -> u64 {
     }
     hash
 }
-
 
 #[inline]
 fn conservative_model_sphere(model: Mat4) -> (Vec3, f32) {

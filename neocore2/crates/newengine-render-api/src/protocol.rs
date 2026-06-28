@@ -1,13 +1,13 @@
 use crate::{
     BeginFrameDesc, BeginRenderTargetDesc, BindGroupDesc, BindGroupId, BindGroupLayoutDesc,
     BindGroupLayoutId, BufferDesc, BufferId, BufferSlice, Color4, DrawArgs, DrawIndexedArgs,
-    Extent2D, IndexFormat, PipelineDesc, PipelineId, PipelineWarmupDesc, PipelineWarmupReport, PostFxFrameParams,
-    RectI32, RenderBackendCapabilities, RenderDiagnosticsSnapshot, RenderDrawListKind, RenderEffectStack,
-    RenderFeature, RenderGraphCompileReport, RenderGraphDesc, RenderGraphPassKind,
-    RenderGraphSubmitReport, RenderGraphValidationReport, RenderTargetDesc, RenderTargetId,
-    RenderBackendEvent, RenderWorkBudget, SamplerDesc, SamplerId, ShaderDesc, ShaderId, ShaderRuntimeCacheStats,
-    TextureDesc, TextureId, TextureResidencySnapshot, UiDrawList, UiTexId, UploadPumpDesc,
-    UploadPumpReport, Viewport,
+    Extent2D, IndexFormat, PipelineDesc, PipelineId, PipelineWarmupDesc, PipelineWarmupReport,
+    PostFxFrameParams, RectI32, RenderBackendCapabilities, RenderBackendEvent,
+    RenderDiagnosticsSnapshot, RenderDrawListKind, RenderEffectStack, RenderFeature,
+    RenderGraphCompileReport, RenderGraphDesc, RenderGraphPassKind, RenderGraphSubmitReport,
+    RenderGraphValidationReport, RenderTargetDesc, RenderTargetId, RenderWorkBudget, SamplerDesc,
+    SamplerId, ShaderDesc, ShaderId, ShaderRuntimeCacheStats, TextureDesc, TextureId,
+    TextureResidencySnapshot, UiDrawList, UiTexId, UploadPumpDesc, UploadPumpReport, Viewport,
 };
 use serde::{Deserialize, Serialize};
 
@@ -48,43 +48,87 @@ pub enum RenderCommand {
     BeginFrame(BeginFrameDesc),
     SetUiDrawList(UiDrawList),
     SetDebugText(String),
-    SetRenderPhase { phase: Option<RenderGraphPassKind> },
-    SetDrawListKind { kind: Option<RenderDrawListKind> },
+    SetRenderPhase {
+        phase: Option<RenderGraphPassKind>,
+    },
+    SetDrawListKind {
+        kind: Option<RenderDrawListKind>,
+    },
     DiscardRecordedCommands,
     EndFrame,
-    Resize { width: u32, height: u32 },
+    Resize {
+        width: u32,
+        height: u32,
+    },
     CreateRenderTarget(RenderTargetDesc),
-    DestroyRenderTarget { id: RenderTargetId },
-    RenderTargetUiTexId { id: RenderTargetId },
-    RenderTargetColorTextureId { id: RenderTargetId },
+    DestroyRenderTarget {
+        id: RenderTargetId,
+    },
+    RenderTargetUiTexId {
+        id: RenderTargetId,
+    },
+    RenderTargetColorTextureId {
+        id: RenderTargetId,
+    },
     BeginRenderTarget(BeginRenderTargetDesc),
     EndRenderTarget,
     CreateBuffer(BufferDesc),
-    DestroyBuffer { id: BufferId },
-    WriteBuffer { id: BufferId, offset: u64, data: Vec<u8> },
+    DestroyBuffer {
+        id: BufferId,
+    },
+    WriteBuffer {
+        id: BufferId,
+        offset: u64,
+        data: Vec<u8>,
+    },
     CreateTexture(TextureDesc),
-    DestroyTexture { id: TextureId },
+    DestroyTexture {
+        id: TextureId,
+    },
     CreateSampler(SamplerDesc),
-    DestroySampler { id: SamplerId },
+    DestroySampler {
+        id: SamplerId,
+    },
     CreateShader(ShaderDesc),
-    DestroyShader { id: ShaderId },
+    DestroyShader {
+        id: ShaderId,
+    },
     CreatePipeline(PipelineDesc),
-    DestroyPipeline { id: PipelineId },
+    DestroyPipeline {
+        id: PipelineId,
+    },
     CreateBindGroupLayout(BindGroupLayoutDesc),
-    DestroyBindGroupLayout { id: BindGroupLayoutId },
+    DestroyBindGroupLayout {
+        id: BindGroupLayoutId,
+    },
     CreateBindGroup(BindGroupDesc),
-    DestroyBindGroup { id: BindGroupId },
+    DestroyBindGroup {
+        id: BindGroupId,
+    },
     SetViewport(Viewport),
     SetScissor(RectI32),
-    SetPipeline { pipeline: PipelineId },
-    SetBindGroup { index: u32, group: BindGroupId },
-    SetVertexBuffer { slot: u32, slice: BufferSlice },
-    SetIndexBuffer { slice: BufferSlice, format: IndexFormat },
+    SetPipeline {
+        pipeline: PipelineId,
+    },
+    SetBindGroup {
+        index: u32,
+        group: BindGroupId,
+    },
+    SetVertexBuffer {
+        slot: u32,
+        slice: BufferSlice,
+    },
+    SetIndexBuffer {
+        slice: BufferSlice,
+        format: IndexFormat,
+    },
     Draw(DrawArgs),
     DrawIndexed(DrawIndexedArgs),
     SetWorkBudget(RenderWorkBudget),
     PumpUploads(UploadPumpDesc),
-    TextureResidency { id: TextureId },
+    TextureResidency {
+        id: TextureId,
+    },
     WarmupPipelines(PipelineWarmupDesc),
     ShaderCacheStats,
     DiagnosticsSnapshot,
@@ -113,7 +157,6 @@ pub enum RenderCommandResponse {
 pub fn encode_json<T: Serialize>(value: &T) -> Result<Vec<u8>, String> {
     serde_json::to_vec(value).map_err(|e| e.to_string())
 }
-
 
 #[inline]
 pub fn decode_json<T: for<'de> Deserialize<'de>>(bytes: &[u8]) -> Result<T, String> {
@@ -162,8 +205,9 @@ fn encode_unit_command(out: &mut Vec<u8>, command: &RenderCommand) -> Result<(),
             put_u8(out, 1);
             put_u32(out, id.get());
             put_u64(out, *offset);
-            let len = u32::try_from(data.len())
-                .map_err(|_| "render command binary write_buffer payload is too large".to_owned())?;
+            let len = u32::try_from(data.len()).map_err(|_| {
+                "render command binary write_buffer payload is too large".to_owned()
+            })?;
             put_u32(out, len);
             out.extend_from_slice(data);
         }
@@ -235,7 +279,11 @@ fn encode_unit_command(out: &mut Vec<u8>, command: &RenderCommand) -> Result<(),
         RenderCommand::DiscardRecordedCommands => {
             put_u8(out, 13);
         }
-        _ => return Err(format!("render command is not supported by binary unit batch: {command:?}")),
+        _ => {
+            return Err(format!(
+                "render command is not supported by binary unit batch: {command:?}"
+            ))
+        }
     }
     Ok(())
 }
@@ -263,7 +311,9 @@ fn decode_unit_command(r: &mut BinReader<'_>) -> Result<RenderCommand, String> {
             w: r.i32()?,
             h: r.i32()?,
         })),
-        4 => Ok(RenderCommand::SetPipeline { pipeline: PipelineId::new(r.u32()?) }),
+        4 => Ok(RenderCommand::SetPipeline {
+            pipeline: PipelineId::new(r.u32()?),
+        }),
         5 => Ok(RenderCommand::SetBindGroup {
             index: r.u32()?,
             group: BindGroupId::new(r.u32()?),
@@ -291,19 +341,25 @@ fn decode_unit_command(r: &mut BinReader<'_>) -> Result<RenderCommand, String> {
         })),
         10 => {
             let ui_bytes = r.bytes_vec()?;
-            Ok(RenderCommand::SetUiDrawList(newengine_ui_draw::decode_ui_draw_list_bin(&ui_bytes)?))
-        },
-        11 => Ok(RenderCommand::SetRenderPhase { phase: r.optional_render_graph_pass_kind()? }),
-        12 => Ok(RenderCommand::SetDrawListKind { kind: r.optional_render_draw_list_kind()? }),
+            Ok(RenderCommand::SetUiDrawList(
+                newengine_ui_draw::decode_ui_draw_list_bin(&ui_bytes)?,
+            ))
+        }
+        11 => Ok(RenderCommand::SetRenderPhase {
+            phase: r.optional_render_graph_pass_kind()?,
+        }),
+        12 => Ok(RenderCommand::SetDrawListKind {
+            kind: r.optional_render_draw_list_kind()?,
+        }),
         13 => Ok(RenderCommand::DiscardRecordedCommands),
         tag => Err(format!("unknown render command batch binary tag {tag}")),
     }
 }
 
-
 #[inline]
 fn put_len(out: &mut Vec<u8>, len: usize, what: &str) -> Result<(), String> {
-    let len = u32::try_from(len).map_err(|_| format!("{what} is too large for binary render command packet"))?;
+    let len = u32::try_from(len)
+        .map_err(|_| format!("{what} is too large for binary render command packet"))?;
     put_u32(out, len);
     Ok(())
 }
@@ -316,15 +372,25 @@ fn put_bytes(out: &mut Vec<u8>, bytes: &[u8], what: &str) -> Result<(), String> 
 }
 
 #[inline]
-fn put_u8(out: &mut Vec<u8>, v: u8) { out.push(v); }
+fn put_u8(out: &mut Vec<u8>, v: u8) {
+    out.push(v);
+}
 #[inline]
-fn put_u32(out: &mut Vec<u8>, v: u32) { out.extend_from_slice(&v.to_le_bytes()); }
+fn put_u32(out: &mut Vec<u8>, v: u32) {
+    out.extend_from_slice(&v.to_le_bytes());
+}
 #[inline]
-fn put_i32(out: &mut Vec<u8>, v: i32) { out.extend_from_slice(&v.to_le_bytes()); }
+fn put_i32(out: &mut Vec<u8>, v: i32) {
+    out.extend_from_slice(&v.to_le_bytes());
+}
 #[inline]
-fn put_u64(out: &mut Vec<u8>, v: u64) { out.extend_from_slice(&v.to_le_bytes()); }
+fn put_u64(out: &mut Vec<u8>, v: u64) {
+    out.extend_from_slice(&v.to_le_bytes());
+}
 #[inline]
-fn put_f32(out: &mut Vec<u8>, v: f32) { out.extend_from_slice(&v.to_le_bytes()); }
+fn put_f32(out: &mut Vec<u8>, v: f32) {
+    out.extend_from_slice(&v.to_le_bytes());
+}
 #[inline]
 fn put_optional_render_graph_pass_kind(out: &mut Vec<u8>, phase: Option<RenderGraphPassKind>) {
     match phase {
@@ -444,9 +510,13 @@ struct BinReader<'a> {
 
 impl<'a> BinReader<'a> {
     #[inline]
-    fn new(bytes: &'a [u8]) -> Self { Self { bytes, cursor: 0 } }
+    fn new(bytes: &'a [u8]) -> Self {
+        Self { bytes, cursor: 0 }
+    }
     #[inline]
-    fn is_eof(&self) -> bool { self.cursor == self.bytes.len() }
+    fn is_eof(&self) -> bool {
+        self.cursor == self.bytes.len()
+    }
 
     fn take(&mut self, len: usize) -> Result<&'a [u8], String> {
         let end = self.cursor.saturating_add(len);
@@ -459,7 +529,9 @@ impl<'a> BinReader<'a> {
     }
 
     #[inline]
-    fn u8(&mut self) -> Result<u8, String> { Ok(self.take(1)?[0]) }
+    fn u8(&mut self) -> Result<u8, String> {
+        Ok(self.take(1)?[0])
+    }
     #[inline]
     fn u32(&mut self) -> Result<u32, String> {
         let b = self.take(4)?;
@@ -473,7 +545,9 @@ impl<'a> BinReader<'a> {
     #[inline]
     fn u64(&mut self) -> Result<u64, String> {
         let b = self.take(8)?;
-        Ok(u64::from_le_bytes([b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]]))
+        Ok(u64::from_le_bytes([
+            b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7],
+        ]))
     }
     fn bytes_vec(&mut self) -> Result<Vec<u8>, String> {
         let len = self.u32()? as usize;
@@ -483,7 +557,9 @@ impl<'a> BinReader<'a> {
         match self.u8()? {
             0 => Ok(None),
             1 => Ok(Some(render_graph_pass_kind_from_tag(self.u8()?)?)),
-            tag => Err(format!("invalid optional render graph pass kind presence tag {tag}")),
+            tag => Err(format!(
+                "invalid optional render graph pass kind presence tag {tag}"
+            )),
         }
     }
 
@@ -491,7 +567,9 @@ impl<'a> BinReader<'a> {
         match self.u8()? {
             0 => Ok(None),
             1 => Ok(Some(render_draw_list_kind_from_tag(self.u8()?)?)),
-            tag => Err(format!("invalid optional render draw-list kind presence tag {tag}")),
+            tag => Err(format!(
+                "invalid optional render draw-list kind presence tag {tag}"
+            )),
         }
     }
 
@@ -512,7 +590,11 @@ pub struct RenderApiVersion {
 impl RenderApiVersion {
     #[inline]
     pub const fn new(major: u16, minor: u16, patch: u16) -> Self {
-        Self { major, minor, patch }
+        Self {
+            major,
+            minor,
+            patch,
+        }
     }
 }
 
@@ -617,7 +699,6 @@ impl RenderProblemDetails {
     }
 }
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct RenderFrameDomainIntent {
     #[serde(default = "default_true_domain")]
@@ -631,12 +712,18 @@ pub struct RenderFrameDomainIntent {
 impl Default for RenderFrameDomainIntent {
     #[inline]
     fn default() -> Self {
-        Self { render3d_enabled: true, render2d_enabled: true, ui_postprocess_enabled: false }
+        Self {
+            render3d_enabled: true,
+            render2d_enabled: true,
+            ui_postprocess_enabled: false,
+        }
     }
 }
 
 #[inline]
-fn default_true_domain() -> bool { true }
+fn default_true_domain() -> bool {
+    true
+}
 
 /// One renderer-facing frame package inspired by mature phase/draw-list
 /// renderers: the runtime submits a single envelope containing the graph,
@@ -689,7 +776,6 @@ impl RenderFrameEnvelope {
         }
     }
 
-
     #[inline]
     pub fn with_postfx(mut self, postfx: PostFxFrameParams) -> Self {
         self.postfx = postfx;
@@ -709,7 +795,10 @@ impl RenderFrameEnvelope {
     }
 
     #[inline]
-    pub fn with_draw_lists(mut self, draw_lists: impl IntoIterator<Item = RenderDrawListKind>) -> Self {
+    pub fn with_draw_lists(
+        mut self,
+        draw_lists: impl IntoIterator<Item = RenderDrawListKind>,
+    ) -> Self {
         self.draw_lists = draw_lists.into_iter().collect();
         self
     }
@@ -734,8 +823,12 @@ pub enum RenderServiceRequest {
     CommandBatch(Vec<RenderCommand>),
     CompileRenderGraph(RenderGraphDesc),
     ValidateRenderGraph(RenderGraphDesc),
-    SetRenderPhase { phase: Option<RenderGraphPassKind> },
-    SetDrawListKind { kind: Option<RenderDrawListKind> },
+    SetRenderPhase {
+        phase: Option<RenderGraphPassKind>,
+    },
+    SetDrawListKind {
+        kind: Option<RenderDrawListKind>,
+    },
     DiscardRecordedCommands,
     SubmitRenderGraph(RenderGraphDesc),
     SubmitFrame(RenderFrameEnvelope),
@@ -781,22 +874,34 @@ mod binary_batch_tests {
     #[test]
     fn binary_unit_batch_roundtrips_recording_scope_commands() {
         let encoded = encode_unit_command_batch_bin(&[
-            RenderCommand::SetDrawListKind { kind: Some(RenderDrawListKind::OpaqueForward) },
-            RenderCommand::SetRenderPhase { phase: Some(RenderGraphPassKind::UiComposite) },
+            RenderCommand::SetDrawListKind {
+                kind: Some(RenderDrawListKind::OpaqueForward),
+            },
+            RenderCommand::SetRenderPhase {
+                phase: Some(RenderGraphPassKind::UiComposite),
+            },
             RenderCommand::SetDrawListKind { kind: None },
             RenderCommand::DiscardRecordedCommands,
-        ]).unwrap();
+        ])
+        .unwrap();
         let decoded = decode_unit_command_batch_bin(&encoded).unwrap();
 
         assert!(matches!(
             decoded[0],
-            RenderCommand::SetDrawListKind { kind: Some(RenderDrawListKind::OpaqueForward) }
+            RenderCommand::SetDrawListKind {
+                kind: Some(RenderDrawListKind::OpaqueForward)
+            }
         ));
         assert!(matches!(
             decoded[1],
-            RenderCommand::SetRenderPhase { phase: Some(RenderGraphPassKind::UiComposite) }
+            RenderCommand::SetRenderPhase {
+                phase: Some(RenderGraphPassKind::UiComposite)
+            }
         ));
-        assert!(matches!(decoded[2], RenderCommand::SetDrawListKind { kind: None }));
+        assert!(matches!(
+            decoded[2],
+            RenderCommand::SetDrawListKind { kind: None }
+        ));
         assert!(matches!(decoded[3], RenderCommand::DiscardRecordedCommands));
     }
 }

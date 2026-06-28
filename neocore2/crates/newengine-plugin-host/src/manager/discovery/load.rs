@@ -52,12 +52,7 @@ impl PluginManager {
         host: HostApiV1,
         strict: bool,
     ) -> Result<(), PluginLoadError> {
-        self.load_from_dir_with_policy_and_filter(
-            dir,
-            host,
-            strict,
-            LoadPhaseFilter::BootstrapOnly,
-        )
+        self.load_from_dir_with_policy_and_filter(dir, host, strict, LoadPhaseFilter::BootstrapOnly)
     }
 
     #[inline]
@@ -67,7 +62,12 @@ impl PluginManager {
         strict: bool,
     ) -> Result<(), PluginLoadError> {
         let dir = default_plugins_dir()?;
-        self.load_from_dir_with_policy_and_filter(&dir, host, strict, LoadPhaseFilter::BootstrapAndEngine)
+        self.load_from_dir_with_policy_and_filter(
+            &dir,
+            host,
+            strict,
+            LoadPhaseFilter::BootstrapAndEngine,
+        )
     }
 
     #[inline]
@@ -77,7 +77,12 @@ impl PluginManager {
         host: HostApiV1,
         strict: bool,
     ) -> Result<(), PluginLoadError> {
-        self.load_from_dir_with_policy_and_filter(dir, host, strict, LoadPhaseFilter::BootstrapAndEngine)
+        self.load_from_dir_with_policy_and_filter(
+            dir,
+            host,
+            strict,
+            LoadPhaseFilter::BootstrapAndEngine,
+        )
     }
 
     #[inline]
@@ -119,11 +124,11 @@ impl PluginManager {
                     "bootstrap_queue",
                     selection.bootstrap_candidates.len().to_string(),
                 ),
-                ("engine_queue", selection.engine_candidates.len().to_string()),
                 (
-                    "platform_runtime",
-                    graph.platform_runtime_count.to_string(),
+                    "engine_queue",
+                    selection.engine_candidates.len().to_string(),
                 ),
+                ("platform_runtime", graph.platform_runtime_count.to_string()),
                 ("unknown_dynlibs", graph.unknown_dynlibs.len().to_string()),
             ],
         );
@@ -136,7 +141,11 @@ impl PluginManager {
             .chain(selection.engine_candidates.iter())
         {
             if let Err(e) = self.load_one(path, host.clone()) {
-                newengine_ulog_api::ulog::warn!("plugins: failed to load '{}': {}", display_clean(path), e);
+                newengine_ulog_api::ulog::warn!(
+                    "plugins: failed to load '{}': {}",
+                    display_clean(path),
+                    e
+                );
                 load_errors.push(e);
             }
         }
@@ -146,7 +155,6 @@ impl PluginManager {
         }
 
         emit_selection_table(&graph, &selection, filter);
-
 
         let loaded_total = self.loaded.len();
         let loaded_this_phase = loaded_total.saturating_sub(loaded_ids_before.len());

@@ -161,7 +161,10 @@ where
                         e,
                         path.display()
                     ),
-                    None => newengine_ulog_api::ulog::error!("{} launcher fatal: {e}", self.spec.app_name),
+                    None => newengine_ulog_api::ulog::error!(
+                        "{} launcher fatal: {e}",
+                        self.spec.app_name
+                    ),
                 }
                 eprintln!("Error: {e}");
                 std::process::exit(1);
@@ -202,7 +205,10 @@ where
         self.configure_sharded_log_file(&startup, &run_id);
 
         let asset_roots = collect_app_asset_roots(self.spec.app_dir_name, self.spec.app_assets_env);
-        self.early_log(format_args!("asset_roots.collected count={}", asset_roots.len()));
+        self.early_log(format_args!(
+            "asset_roots.collected count={}",
+            asset_roots.len()
+        ));
 
         let mut engine = self.build_engine(&startup)?;
         self.profile.register_modules(&mut engine, &startup)?;
@@ -279,7 +285,11 @@ where
 
         let icon = try_load_window_icon_best_effort(
             resolved_platform.icon_path.as_deref(),
-            if assets_available { Some(&assets) } else { None },
+            if assets_available {
+                Some(&assets)
+            } else {
+                None
+            },
             &asset_roots,
         );
 
@@ -347,11 +357,15 @@ where
             return;
         }
 
-        let Some(path) = startup.plugins.get("engine.logging.chronicle").and_then(|v| {
-            v.get("file")
-                .and_then(|x| x.as_str())
-                .or_else(|| v.get("file_path").and_then(|x| x.as_str()))
-        }) else {
+        let Some(path) = startup
+            .plugins
+            .get("engine.logging.chronicle")
+            .and_then(|v| {
+                v.get("file")
+                    .and_then(|x| x.as_str())
+                    .or_else(|| v.get("file_path").and_then(|x| x.as_str()))
+            })
+        else {
             return;
         };
 
@@ -377,7 +391,10 @@ where
             startup.modules_dir.display()
         ));
         let path = detect_platform_runtime_path(&startup.modules_dir)?;
-        self.early_log(format_args!("platform.detect.ok path={}", display_abs_path(&path)));
+        self.early_log(format_args!(
+            "platform.detect.ok path={}",
+            display_abs_path(&path)
+        ));
         newengine_core::crash::record_breadcrumb(format!(
             "{} launcher: platform runtime detected path='{}'",
             self.spec.app_name,
@@ -503,7 +520,12 @@ where
 fn env_bool(name: &str, default: bool) -> bool {
     std::env::var(name)
         .ok()
-        .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
+        .map(|v| {
+            matches!(
+                v.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
         .unwrap_or(default)
 }
 

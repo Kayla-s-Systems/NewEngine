@@ -98,7 +98,14 @@ impl<E: Send + 'static> Engine<E> {
 
             let module_id = s.id();
             let result: EngineResult<()> = {
-                let mut ctx = ModuleCtx::new(services, resources, bus, events, scheduler, shutdown.clone());
+                let mut ctx = ModuleCtx::new(
+                    services,
+                    resources,
+                    bus,
+                    events,
+                    scheduler,
+                    shutdown.clone(),
+                );
 
                 if catch_panics {
                     match panic::catch_unwind(AssertUnwindSafe(|| {
@@ -128,12 +135,22 @@ impl<E: Send + 'static> Engine<E> {
                     }
                     ModuleFaultTolerance::Resilient => {
                         let reason = format!("event dispatch failed: {e}");
-                        newengine_ulog_api::ulog::error!("engine: disabling module {} ({})", module_id, reason);
+                        newengine_ulog_api::ulog::error!(
+                            "engine: disabling module {} ({})",
+                            module_id,
+                            reason
+                        );
                         s.disable(reason);
 
                         if !s.shutdown_called {
-                            let mut ctx =
-                                ModuleCtx::new(services, resources, bus, events, scheduler, shutdown.clone());
+                            let mut ctx = ModuleCtx::new(
+                                services,
+                                resources,
+                                bus,
+                                events,
+                                scheduler,
+                                shutdown.clone(),
+                            );
                             let _ = s.module.shutdown(&mut ctx);
                             s.shutdown_called = true;
                             s.state = ModuleState::Disabled;

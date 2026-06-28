@@ -1,8 +1,8 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use newengine_camera::{CameraControlInput, CameraRig, OrbitController};
-use newengine_math::{Vec2, Vec3};
 use newengine_ecs::EntityId;
+use newengine_math::{Vec2, Vec3};
 
 /// Linear velocity in world space (units/sec).
 #[derive(Clone, Copy, Debug, Default)]

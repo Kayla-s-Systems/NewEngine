@@ -107,7 +107,6 @@ impl Default for TimeSnapshotV1 {
     }
 }
 
-
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct TimeTimelineV1 {
@@ -146,7 +145,11 @@ pub struct TimeRealClockV1 {
 
 impl Default for TimeRealClockV1 {
     fn default() -> Self {
-        Self { monotonic_ns: 0, delta_ns: 0, clamped_delta_ns: 0 }
+        Self {
+            monotonic_ns: 0,
+            delta_ns: 0,
+            clamped_delta_ns: 0,
+        }
     }
 }
 
@@ -206,7 +209,11 @@ pub struct TimeReplayClockV1 {
 
 impl Default for TimeReplayClockV1 {
     fn default() -> Self {
-        Self { deterministic: false, seed: 0, replay_frame: 0 }
+        Self {
+            deterministic: false,
+            seed: 0,
+            replay_frame: 0,
+        }
     }
 }
 
@@ -305,7 +312,13 @@ pub struct TimeReplayClockSetRequestV1 {
 }
 
 impl Default for TimeReplayClockSetRequestV1 {
-    fn default() -> Self { Self { deterministic: false, seed: 0, replay_frame: 0 } }
+    fn default() -> Self {
+        Self {
+            deterministic: false,
+            seed: 0,
+            replay_frame: 0,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -317,7 +330,10 @@ pub struct TimeBeginFrameRequestV1 {
 
 impl Default for TimeBeginFrameRequestV1 {
     fn default() -> Self {
-        Self { frame_index: 0, fixed_delta_ns: 16_666_667 }
+        Self {
+            frame_index: 0,
+            fixed_delta_ns: 16_666_667,
+        }
     }
 }
 
@@ -328,7 +344,9 @@ pub struct TimeScaleRequestV1 {
 }
 
 impl Default for TimeScaleRequestV1 {
-    fn default() -> Self { Self { scale: 1.0 } }
+    fn default() -> Self {
+        Self { scale: 1.0 }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -338,7 +356,9 @@ pub struct TimePauseRequestV1 {
 }
 
 impl Default for TimePauseRequestV1 {
-    fn default() -> Self { Self { paused: false } }
+    fn default() -> Self {
+        Self { paused: false }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -351,7 +371,14 @@ pub struct TimeGameClockSetRequestV1 {
 }
 
 impl Default for TimeGameClockSetRequestV1 {
-    fn default() -> Self { Self { day_index: 0, seconds_of_day: 0.0, seconds_per_game_day: 86_400.0, time_scale: 1.0 } }
+    fn default() -> Self {
+        Self {
+            day_index: 0,
+            seconds_of_day: 0.0,
+            seconds_per_game_day: 86_400.0,
+            time_scale: 1.0,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -364,7 +391,14 @@ pub struct TimeScheduledEventV1 {
 }
 
 impl Default for TimeScheduledEventV1 {
-    fn default() -> Self { Self { id: String::new(), due_simulation_tick: None, due_monotonic_ns: None, payload_json: serde_json::Value::Null } }
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            due_simulation_tick: None,
+            due_monotonic_ns: None,
+            payload_json: serde_json::Value::Null,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -374,7 +408,9 @@ pub struct TimeCancelEventRequestV1 {
 }
 
 impl Default for TimeCancelEventRequestV1 {
-    fn default() -> Self { Self { id: String::new() } }
+    fn default() -> Self {
+        Self { id: String::new() }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -384,7 +420,9 @@ pub struct TimeDueEventsV1 {
 }
 
 impl Default for TimeDueEventsV1 {
-    fn default() -> Self { Self { events: Vec::new() } }
+    fn default() -> Self {
+        Self { events: Vec::new() }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -407,7 +445,10 @@ impl Default for TimeServiceInfoV1 {
             gateway: ENGINE_TIME_SERVICE_ID.to_owned(),
             provider: "AstrolabeTimeProvider".to_owned(),
             contract: TIME_RUNTIME_CONTRACT.to_owned(),
-            methods: TIME_SERVICE_METHODS.iter().map(|m| (*m).to_owned()).collect(),
+            methods: TIME_SERVICE_METHODS
+                .iter()
+                .map(|m| (*m).to_owned())
+                .collect(),
             deterministic: false,
             ai_ready: true,
             clock_domains: vec![

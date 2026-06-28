@@ -1,5 +1,8 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 pub use newengine_assets_api::{
-    wait_ready, AssetAccess, AssetDecodeRequest, AssetError, AssetErrorKind, AssetResult, AssetResidencyDomain, AssetService, AssetState, AssetStatus, AssetStatusStage, Rgba8TextureAsset, RuntimeTextureAsset, RuntimeTextureFormat, RuntimeTextureMip, RuntimeTextureMipLayout, WaitReadyError,
+    wait_ready, AssetAccess, AssetDecodeRequest, AssetError, AssetErrorKind, AssetResidencyDomain,
+    AssetResult, AssetService, AssetState, AssetStatus, AssetStatusStage, Rgba8TextureAsset,
+    RuntimeTextureAsset, RuntimeTextureFormat, RuntimeTextureMip, RuntimeTextureMipLayout,
+    WaitReadyError,
 };

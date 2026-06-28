@@ -1,7 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
+pub mod content_manifest;
 mod control;
 mod diagnostics;
-pub mod content_manifest;
 pub mod host_api;
 pub mod host_context;
 mod log_fmt;
@@ -22,16 +22,16 @@ pub struct PluginsSnapshot {
 }
 
 pub use content_manifest::{
-    load_plugin_content_catalog_default, load_plugin_content_catalog_from_dir,
-    PluginContentBlob, PluginContentCatalog, PluginContentLoadReport,
+    load_plugin_content_catalog_default, load_plugin_content_catalog_from_dir, PluginContentBlob,
+    PluginContentCatalog, PluginContentLoadReport,
 };
 pub use control::{PluginControlCommand, PluginControlQueue, PluginControlResult};
 pub use host_api::{call_service_v1, default_host_api, host_register_service_impl};
 pub use host_context::{
-    active_engine_gateway_route, describe_service, engine_gateway_has_capability,
-    has_service, init_host_context, list_engine_gateway_routes,
-    list_external_runtime_descriptors, list_external_runtime_plugins, list_services,
-    register_engine_gateway_provider_route, register_null_engine_gateway_provider_route, register_external_runtime_plugin,
+    active_engine_gateway_route, describe_service, engine_gateway_has_capability, has_service,
+    init_host_context, list_engine_gateway_routes, list_external_runtime_descriptors,
+    list_external_runtime_plugins, list_services, register_engine_gateway_provider_route,
+    register_external_runtime_plugin, register_null_engine_gateway_provider_route,
     resolve_service_for_backend_capability, resolve_service_for_engine_gateway,
     services_generation, EngineGatewayRouteSnapshot,
 };

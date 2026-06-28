@@ -2,9 +2,7 @@
 
 use newengine_math::{Vec2, Vec3};
 
-use crate::{
-    blend_camera_projection, CameraPostEffects, CameraResolvedFrame, CameraRig,
-};
+use crate::{blend_camera_projection, CameraPostEffects, CameraResolvedFrame, CameraRig};
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -142,7 +140,9 @@ impl CameraFrameInterpolator {
         if !self.active || self.spec.duration_sec <= 0.0 {
             1.0
         } else {
-            self.spec.curve.sample(self.elapsed_sec / self.spec.duration_sec)
+            self.spec
+                .curve
+                .sample(self.elapsed_sec / self.spec.duration_sec)
         }
     }
 
@@ -186,7 +186,13 @@ pub fn blend_resolved_camera_frames(
     let rig = blend_camera_rig(from.frame.rig, to.frame.rig, t);
     let projection = blend_camera_projection(from.frame.projection, to.frame.projection, t);
     let jitter_px = lerp_vec2(from.frame.jitter_px, to.frame.jitter_px, t);
-    let frame = crate::CameraFrame::build(to.frame.channel, rig, projection, to.frame.viewport, jitter_px);
+    let frame = crate::CameraFrame::build(
+        to.frame.channel,
+        rig,
+        projection,
+        to.frame.viewport,
+        jitter_px,
+    );
     let effects = blend_camera_post_effects(from.effects, to.effects, t);
     CameraResolvedFrame::with_effects(frame, effects)
 }
@@ -222,7 +228,11 @@ pub fn blend_camera_post_effects(
         shake_amplitude: lerp_f32(from.shake_amplitude, to.shake_amplitude, t),
         exposure_bias: lerp_f32(from.exposure_bias, to.exposure_bias, t),
         jitter_px: lerp_vec2(from.jitter_px, to.jitter_px, t),
-        high_quality_dof: if t < 0.5 { from.high_quality_dof } else { to.high_quality_dof },
+        high_quality_dof: if t < 0.5 {
+            from.high_quality_dof
+        } else {
+            to.high_quality_dof
+        },
     }
     .sanitized()
 }
@@ -239,5 +249,9 @@ fn lerp_vec2(a: Vec2, b: Vec2, t: f32) -> Vec2 {
 
 #[inline]
 fn lerp_vec3(a: Vec3, b: Vec3, t: f32) -> Vec3 {
-    Vec3::new(lerp_f32(a.x, b.x, t), lerp_f32(a.y, b.y, t), lerp_f32(a.z, b.z, t))
+    Vec3::new(
+        lerp_f32(a.x, b.x, t),
+        lerp_f32(a.y, b.y, t),
+        lerp_f32(a.z, b.z, t),
+    )
 }

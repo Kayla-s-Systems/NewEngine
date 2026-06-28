@@ -6,17 +6,21 @@
 //! `engine.assets` only as the byte/VFS/codec owner, then returns texture-domain
 //! DTOs or stable runtime texture packets to consumers.
 use abi_stable::std_types::{RResult, RString};
-use newengine_assets::{AssetDecodeRequest, AssetServiceClient, Rgba8TextureAsset, RuntimeTextureAsset, RuntimeTextureFormat, RuntimeTextureMip};
+use newengine_assets::{
+    AssetDecodeRequest, AssetServiceClient, Rgba8TextureAsset, RuntimeTextureAsset,
+    RuntimeTextureFormat, RuntimeTextureMip,
+};
 use newengine_assets_api::{
-    textures_method, AssetReference, ASSET_LIST_FILE_BODY_OUTPUT, ENGINE_ASSET_SERVICE_ID, ENGINE_ASSETS_TEXTURES_SERVICE_ID,
-    TEXTURES_BACKEND_CAPABILITY_ID, TEXTURES_RUNTIME_CONTRACT, TEXTURES_SERVICE_ID,
-    TEXTURES_SERVICE_METHODS,
+    textures_method, AssetReference, ASSET_LIST_FILE_BODY_OUTPUT,
+    ENGINE_ASSETS_TEXTURES_SERVICE_ID, ENGINE_ASSET_SERVICE_ID, TEXTURES_BACKEND_CAPABILITY_ID,
+    TEXTURES_RUNTIME_CONTRACT, TEXTURES_SERVICE_ID, TEXTURES_SERVICE_METHODS,
 };
 use newengine_plugin_api::Blob;
 use newengine_service_api::EngineServiceKind;
 use newengine_service_kit::{
     engine_gateway_provider_service_description, ok_empty_blob, ok_json, payload_json,
-    register_engine_gateway_provider_service_best_effort, EngineGatewayProviderDecl, JsonServiceRouter,
+    register_engine_gateway_provider_service_best_effort, EngineGatewayProviderDecl,
+    JsonServiceRouter,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -77,7 +81,12 @@ pub struct TextureRefRequest {
 impl Default for TextureRefRequest {
     #[inline]
     fn default() -> Self {
-        Self { texture_ref: String::new(), dictionary_path: String::new(), texture_name: None, texture_hash: None }
+        Self {
+            texture_ref: String::new(),
+            dictionary_path: String::new(),
+            texture_name: None,
+            texture_hash: None,
+        }
     }
 }
 
@@ -92,7 +101,11 @@ pub struct TextureManifestRequest {
 impl Default for TextureManifestRequest {
     #[inline]
     fn default() -> Self {
-        Self { source: String::new(), dictionary_path: String::new(), texture_ref: String::new() }
+        Self {
+            source: String::new(),
+            dictionary_path: String::new(),
+            texture_ref: String::new(),
+        }
     }
 }
 
@@ -138,7 +151,8 @@ pub fn textures_service_info() -> TexturesServiceInfo {
         byte_owner: ENGINE_ASSET_SERVICE_ID,
         semantic_owner: ENGINE_ASSETS_TEXTURES_SERVICE_ID,
         methods: TEXTURES_SERVICE_METHODS,
-        validation_policy: "accept .ytd@entry and .ytd@hash:<u64>; reject raw images and .ytd without @entry",
+        validation_policy:
+            "accept .ytd@entry and .ytd@hash:<u64>; reject raw images and .ytd without @entry",
     }
 }
 
@@ -159,14 +173,20 @@ fn texture_ref_from_request(request: &TextureRefRequest) -> Result<String, Strin
     }
     let dict = normalize_logical_ref(&request.dictionary_path);
     if dict.is_empty() {
-        return Err("textures API requires texture_ref='.ytd@entry' or dictionary_path + texture_name/hash".to_owned());
+        return Err(
+            "textures API requires texture_ref='.ytd@entry' or dictionary_path + texture_name/hash"
+                .to_owned(),
+        );
     }
     if let Some(hash) = request.texture_hash {
         return Ok(format!("{dict}@hash:{hash}"));
     }
     let entry = request.texture_name.as_deref().unwrap_or("").trim();
     if entry.is_empty() {
-        return Err("textures API requires .ytd@entry; .ytd without @entry is not a runtime texture ref".to_owned());
+        return Err(
+            "textures API requires .ytd@entry; .ytd without @entry is not a runtime texture ref"
+                .to_owned(),
+        );
     }
     Ok(format!("{dict}@{entry}"))
 }
@@ -177,18 +197,29 @@ fn manifest_source_from_request(request: &TextureManifestRequest) -> Result<Stri
     } else if !request.dictionary_path.trim().is_empty() {
         request.dictionary_path.trim()
     } else if !request.texture_ref.trim().is_empty() {
-        request.texture_ref.split('@').next().unwrap_or(request.texture_ref.trim())
+        request
+            .texture_ref
+            .split('@')
+            .next()
+            .unwrap_or(request.texture_ref.trim())
     } else {
-        return Err("assets.textures.manifest_v1 requires source or dictionary_path ending in .ytd".to_owned());
+        return Err(
+            "assets.textures.manifest_v1 requires source or dictionary_path ending in .ytd"
+                .to_owned(),
+        );
     };
     let normalized = normalize_logical_ref(raw);
     reject_non_texture_ref_shape(&normalized, false)?;
-    let reference = newengine_assets_api::require_asset_reference_extension(&normalized, &["ytd"], false)
-        .map_err(|e| e.to_string())?;
+    let reference =
+        newengine_assets_api::require_asset_reference_extension(&normalized, &["ytd"], false)
+            .map_err(|e| e.to_string())?;
     Ok(reference.logical_path)
 }
 
-fn texture_ref_request_from_payload(payload: &[u8], method: &str) -> Result<TextureRefRequest, String> {
+fn texture_ref_request_from_payload(
+    payload: &[u8],
+    method: &str,
+) -> Result<TextureRefRequest, String> {
     let trimmed = std::str::from_utf8(payload)
         .map(str::trim)
         .map_err(|e| format!("{method} invalid utf-8 request: {e}"))?;
@@ -199,11 +230,17 @@ fn texture_ref_request_from_payload(payload: &[u8], method: &str) -> Result<Text
         serde_json::from_str::<TextureRefRequest>(trimmed)
             .map_err(|e| format!("{method} invalid json request: {e}"))
     } else {
-        Ok(TextureRefRequest { texture_ref: trimmed.trim_matches('"').to_owned(), ..Default::default() })
+        Ok(TextureRefRequest {
+            texture_ref: trimmed.trim_matches('"').to_owned(),
+            ..Default::default()
+        })
     }
 }
 
-fn texture_manifest_request_from_payload(payload: &[u8], method: &str) -> Result<TextureManifestRequest, String> {
+fn texture_manifest_request_from_payload(
+    payload: &[u8],
+    method: &str,
+) -> Result<TextureManifestRequest, String> {
     let trimmed = std::str::from_utf8(payload)
         .map(str::trim)
         .map_err(|e| format!("{method} invalid utf-8 request: {e}"))?;
@@ -214,22 +251,32 @@ fn texture_manifest_request_from_payload(payload: &[u8], method: &str) -> Result
         serde_json::from_str::<TextureManifestRequest>(trimmed)
             .map_err(|e| format!("{method} invalid json request: {e}"))
     } else {
-        Ok(TextureManifestRequest { source: trimmed.trim_matches('"').to_owned(), ..Default::default() })
+        Ok(TextureManifestRequest {
+            source: trimmed.trim_matches('"').to_owned(),
+            ..Default::default()
+        })
     }
 }
 
 fn normalize_logical_ref(value: &str) -> String {
     let mut s = value.trim().replace('\\', "/");
-    while let Some(rest) = s.strip_prefix("./") { s = rest.to_owned(); }
+    while let Some(rest) = s.strip_prefix("./") {
+        s = rest.to_owned();
+    }
     s = s.trim_start_matches('/').to_owned();
-    while s.contains("//") { s = s.replace("//", "/"); }
+    while s.contains("//") {
+        s = s.replace("//", "/");
+    }
     s
 }
 
 fn reject_non_texture_ref_shape(value: &str, entry_required: bool) -> Result<(), String> {
     let lower = value.to_ascii_lowercase();
     let path_part = lower.split('@').next().unwrap_or(&lower);
-    if [".png", ".jpg", ".jpeg", ".dds", ".tga", ".webp", ".bmp"].iter().any(|ext| path_part.ends_with(ext)) {
+    if [".png", ".jpg", ".jpeg", ".dds", ".tga", ".webp", ".bmp"]
+        .iter()
+        .any(|ext| path_part.ends_with(ext))
+    {
         return Err("engine.assets.textures rejects raw source image paths; importers must compile them into .ytd entries".to_owned());
     }
     if entry_required && !lower.contains('@') {
@@ -239,24 +286,36 @@ fn reject_non_texture_ref_shape(value: &str, entry_required: bool) -> Result<(),
 }
 
 fn split_hash_selector(entry: &str) -> Result<Option<u64>, String> {
-    let Some(rest) = entry.strip_prefix("hash:") else { return Ok(None); };
+    let Some(rest) = entry.strip_prefix("hash:") else {
+        return Ok(None);
+    };
     rest.parse::<u64>()
         .map(Some)
         .map_err(|_| format!("invalid .ytd hash selector '{entry}'; expected hash:<u64>"))
 }
 
-fn parse_texture_reference(value: &str) -> Result<(AssetReference, Option<String>, Option<u64>), String> {
+fn parse_texture_reference(
+    value: &str,
+) -> Result<(AssetReference, Option<String>, Option<u64>), String> {
     let normalized = normalize_logical_ref(value);
     reject_non_texture_ref_shape(&normalized, true)?;
-    let reference = newengine_assets_api::require_asset_reference_extension(&normalized, &["ytd"], true)
-        .map_err(|e| e.to_string())?;
+    let reference =
+        newengine_assets_api::require_asset_reference_extension(&normalized, &["ytd"], true)
+            .map_err(|e| e.to_string())?;
     let entry = reference.entry.clone().unwrap_or_default();
     let texture_hash = split_hash_selector(&entry)?;
-    let texture_name = if texture_hash.is_some() { None } else { Some(entry) };
+    let texture_name = if texture_hash.is_some() {
+        None
+    } else {
+        Some(entry)
+    };
     Ok((reference, texture_name, texture_hash))
 }
 
-fn validate_texture_ref(state: &mut TextureRuntimeState, request: TextureRefRequest) -> Result<TextureRefValidation, String> {
+fn validate_texture_ref(
+    state: &mut TextureRuntimeState,
+    request: TextureRefRequest,
+) -> Result<TextureRefValidation, String> {
     let texture_ref = texture_ref_from_request(&request)?;
     let (reference, texture_name, texture_hash_from_ref) = parse_texture_reference(&texture_ref)?;
     let texture_hash = request.texture_hash.or(texture_hash_from_ref);
@@ -272,10 +331,19 @@ fn validate_texture_ref(state: &mut TextureRuntimeState, request: TextureRefRequ
 
     let manifest = manifest_json(
         state,
-        TextureManifestRequest { source: reference.logical_path.clone(), ..Default::default() },
+        TextureManifestRequest {
+            source: reference.logical_path.clone(),
+            ..Default::default()
+        },
     )?;
-    let summary = texture_summary_from_manifest_entry(&manifest, texture_name.as_deref(), texture_hash)
-        .map_err(|e| format!("engine.assets.textures validation failed ref='{}' err='{}'", canonical, e))?;
+    let summary =
+        texture_summary_from_manifest_entry(&manifest, texture_name.as_deref(), texture_hash)
+            .map_err(|e| {
+                format!(
+                    "engine.assets.textures validation failed ref='{}' err='{}'",
+                    canonical, e
+                )
+            })?;
 
     let validation = TextureRefValidation {
         ok: true,
@@ -320,12 +388,19 @@ fn texture_summary_from_manifest_entry(
             .or_else(|| texture_manifest_metadata_string(entry, "color_space"))
             .unwrap_or_else(|| "linear".to_owned()),
         mip_count: texture_manifest_u32(entry, "mip_count")
-            .or_else(|| texture_manifest_metadata_string(entry, "mip_count").and_then(|value| value.parse::<u32>().ok()))
+            .or_else(|| {
+                texture_manifest_metadata_string(entry, "mip_count")
+                    .and_then(|value| value.parse::<u32>().ok())
+            })
             .unwrap_or(1) as usize,
     })
 }
 
-fn texture_manifest_entry_matches(entry: &serde_json::Value, texture_name: Option<&str>, texture_hash: Option<u64>) -> bool {
+fn texture_manifest_entry_matches(
+    entry: &serde_json::Value,
+    texture_name: Option<&str>,
+    texture_hash: Option<u64>,
+) -> bool {
     if let Some(name) = texture_name {
         if entry
             .get("name")
@@ -374,7 +449,10 @@ fn texture_manifest_metadata_string(entry: &serde_json::Value, key: &str) -> Opt
         .map(str::to_owned)
 }
 
-fn manifest_json(state: &mut TextureRuntimeState, request: TextureManifestRequest) -> Result<serde_json::Value, String> {
+fn manifest_json(
+    state: &mut TextureRuntimeState,
+    request: TextureManifestRequest,
+) -> Result<serde_json::Value, String> {
     let path = manifest_source_from_request(&request)?;
     if let Some(cached) = state.manifest_cache.get(&path).cloned() {
         newengine_ulog_api::ulog::debug!(
@@ -405,16 +483,35 @@ fn manifest_json(state: &mut TextureRuntimeState, request: TextureManifestReques
             Err(e) => errors.push(format!("{output_kind}: {e}")),
         }
     }
-    Err(format!("engine.assets.textures manifest decode failed path='{path}' errors=[{}]", errors.join(" | ")))
+    Err(format!(
+        "engine.assets.textures manifest decode failed path='{path}' errors=[{}]",
+        errors.join(" | ")
+    ))
 }
 
 fn annotate_manifest(value: &mut serde_json::Value, path: &str) {
-    let Some(map) = value.as_object_mut() else { return; };
-    map.entry("schema".to_owned()).or_insert_with(|| serde_json::Value::String("newengine.assets.textures.manifest.v1".to_owned()));
-    map.insert("gateway".to_owned(), serde_json::Value::String(ENGINE_ASSETS_TEXTURES_SERVICE_ID.to_owned()));
-    map.insert("byte_owner".to_owned(), serde_json::Value::String(ENGINE_ASSET_SERVICE_ID.to_owned()));
-    map.insert("semantic_owner".to_owned(), serde_json::Value::String(ENGINE_ASSETS_TEXTURES_SERVICE_ID.to_owned()));
-    map.insert("source".to_owned(), serde_json::Value::String(path.to_owned()));
+    let Some(map) = value.as_object_mut() else {
+        return;
+    };
+    map.entry("schema".to_owned()).or_insert_with(|| {
+        serde_json::Value::String("newengine.assets.textures.manifest.v1".to_owned())
+    });
+    map.insert(
+        "gateway".to_owned(),
+        serde_json::Value::String(ENGINE_ASSETS_TEXTURES_SERVICE_ID.to_owned()),
+    );
+    map.insert(
+        "byte_owner".to_owned(),
+        serde_json::Value::String(ENGINE_ASSET_SERVICE_ID.to_owned()),
+    );
+    map.insert(
+        "semantic_owner".to_owned(),
+        serde_json::Value::String(ENGINE_ASSETS_TEXTURES_SERVICE_ID.to_owned()),
+    );
+    map.insert(
+        "source".to_owned(),
+        serde_json::Value::String(path.to_owned()),
+    );
 }
 
 fn runtime_texture_packet_from_dictionary_cache(
@@ -427,27 +524,33 @@ fn runtime_texture_packet_from_dictionary_cache(
     let cache = state
         .runtime_dictionary_cache
         .get(dictionary_path)
-        .ok_or_else(|| format!("runtime texture dictionary cache missing after load path='{dictionary_path}'"))?;
+        .ok_or_else(|| {
+            format!("runtime texture dictionary cache missing after load path='{dictionary_path}'")
+        })?;
     if let Some(hash) = texture_hash {
-        let name = cache
-            .entry_hash_to_name
-            .get(&hash)
-            .ok_or_else(|| format!("texture hash '{hash}' is not present in dictionary '{dictionary_path}'"))?;
-        return cache
-            .entries_by_name
-            .get(name)
-            .cloned()
-            .ok_or_else(|| format!("texture entry '{name}' missing from dictionary cache '{dictionary_path}'"));
+        let name = cache.entry_hash_to_name.get(&hash).ok_or_else(|| {
+            format!("texture hash '{hash}' is not present in dictionary '{dictionary_path}'")
+        })?;
+        return cache.entries_by_name.get(name).cloned().ok_or_else(|| {
+            format!("texture entry '{name}' missing from dictionary cache '{dictionary_path}'")
+        });
     }
-    let name = texture_name.ok_or_else(|| format!("runtime texture request requires .ytd@entry path='{dictionary_path}'"))?;
+    let name = texture_name.ok_or_else(|| {
+        format!("runtime texture request requires .ytd@entry path='{dictionary_path}'")
+    })?;
     cache
         .entries_by_name
         .get(&name.to_ascii_lowercase())
         .cloned()
-        .ok_or_else(|| format!("texture entry '{name}' is not present in dictionary '{dictionary_path}'"))
+        .ok_or_else(|| {
+            format!("texture entry '{name}' is not present in dictionary '{dictionary_path}'")
+        })
 }
 
-fn ensure_runtime_dictionary_cache(state: &mut TextureRuntimeState, dictionary_path: &str) -> Result<(), String> {
+fn ensure_runtime_dictionary_cache(
+    state: &mut TextureRuntimeState,
+    dictionary_path: &str,
+) -> Result<(), String> {
     if state.runtime_dictionary_cache.contains_key(dictionary_path) {
         return Ok(());
     }
@@ -459,32 +562,56 @@ fn ensure_runtime_dictionary_cache(state: &mut TextureRuntimeState, dictionary_p
             selector: serde_json::Value::Null,
         })
         .map_err(|e| format!("engine.assets listfile body decode failed path='{dictionary_path}' output='{ASSET_LIST_FILE_BODY_OUTPUT}' err='{e}'"))?;
-    let dictionary = newengine_texture_container::parse(&body)
-        .map_err(|e| format!("engine.assets.textures dictionary parse failed path='{dictionary_path}' err='{e}'"))?;
+    let dictionary = newengine_texture_container::parse(&body).map_err(|e| {
+        format!("engine.assets.textures dictionary parse failed path='{dictionary_path}' err='{e}'")
+    })?;
     let mut cache = RuntimeTextureDictionaryCache::default();
     for meta in dictionary.entries() {
         let format = RuntimeTextureFormat::from_name(&meta.format)
             .ok_or_else(|| format!("unsupported runtime texture format path='{dictionary_path}' entry='{}' format='{}'", meta.name, meta.format))?;
-        let view = dictionary
-            .entry(&meta.name)
-            .map_err(|e| format!("texture entry lookup failed path='{dictionary_path}' entry='{}' err='{e}'", meta.name))?;
+        let view = dictionary.entry(&meta.name).map_err(|e| {
+            format!(
+                "texture entry lookup failed path='{dictionary_path}' entry='{}' err='{e}'",
+                meta.name
+            )
+        })?;
         let mut mips = Vec::with_capacity(meta.mips.len());
         for mip in &meta.mips {
-            let bytes = view
-                .mip_bytes(mip.level)
-                .ok_or_else(|| format!("missing mip bytes path='{dictionary_path}' entry='{}' level={}", meta.name, mip.level))?;
-            mips.push(RuntimeTextureMip { level: mip.level, width: mip.width, height: mip.height, bytes: bytes.to_vec() });
+            let bytes = view.mip_bytes(mip.level).ok_or_else(|| {
+                format!(
+                    "missing mip bytes path='{dictionary_path}' entry='{}' level={}",
+                    meta.name, mip.level
+                )
+            })?;
+            mips.push(RuntimeTextureMip {
+                level: mip.level,
+                width: mip.width,
+                height: mip.height,
+                bytes: bytes.to_vec(),
+            });
         }
         let name_key = meta.name.to_ascii_lowercase();
-        cache.entry_hash_to_name.insert(meta.name_hash, name_key.clone());
-        cache.entries_by_name.insert(name_key, RuntimeTextureAsset { width: meta.width, height: meta.height, format, mips });
+        cache
+            .entry_hash_to_name
+            .insert(meta.name_hash, name_key.clone());
+        cache.entries_by_name.insert(
+            name_key,
+            RuntimeTextureAsset {
+                width: meta.width,
+                height: meta.height,
+                format,
+                mips,
+            },
+        );
     }
     newengine_ulog_api::ulog::debug!(
         "assets.textures.entry_runtime_v1: dictionary cache loaded path='{}' entries={} policy='decode .ytd once, select many @entries'",
         dictionary_path,
         cache.entries_by_name.len()
     );
-    state.runtime_dictionary_cache.insert(dictionary_path.to_owned(), cache);
+    state
+        .runtime_dictionary_cache
+        .insert(dictionary_path.to_owned(), cache);
     Ok(())
 }
 
@@ -497,8 +624,18 @@ fn rgba8_packet_from_runtime(packet: &RuntimeTextureAsset) -> Result<Rgba8Textur
         .ok_or_else(|| "runtime texture packet has no mip levels".to_owned())?;
     let rgba = match packet.format {
         RuntimeTextureFormat::Rgba8Unorm | RuntimeTextureFormat::Rgba8Srgb => base.bytes.clone(),
-        _ => newengine_texture_container::decode_bcn_to_rgba8(packet.format.as_str(), packet.width, packet.height, &base.bytes)
-            .map_err(|e| format!("runtime texture RGBA8 debug decode failed format='{}' err='{e}'", packet.format.as_str()))?,
+        _ => newengine_texture_container::decode_bcn_to_rgba8(
+            packet.format.as_str(),
+            packet.width,
+            packet.height,
+            &base.bytes,
+        )
+        .map_err(|e| {
+            format!(
+                "runtime texture RGBA8 debug decode failed format='{}' err='{e}'",
+                packet.format.as_str()
+            )
+        })?,
     };
     Rgba8TextureAsset::new(packet.width, packet.height, rgba)
 }
@@ -531,7 +668,8 @@ fn texture_runtime_wire(packet: RuntimeTextureAsset) -> Vec<u8> {
 }
 
 fn texture_rgba8_wire(packet: Rgba8TextureAsset) -> Vec<u8> {
-    let mut out = Vec::with_capacity(newengine_assets_api::texture_wire::HEADER_LEN + packet.rgba.len());
+    let mut out =
+        Vec::with_capacity(newengine_assets_api::texture_wire::HEADER_LEN + packet.rgba.len());
     out.extend_from_slice(&newengine_assets_api::texture_wire::MAGIC);
     out.extend_from_slice(&newengine_assets_api::texture_wire::VERSION_RGBA8_V1.to_le_bytes());
     out.extend_from_slice(&0u16.to_le_bytes());
@@ -543,7 +681,10 @@ fn texture_rgba8_wire(packet: Rgba8TextureAsset) -> Vec<u8> {
 }
 
 fn entry_runtime_blob(state: &mut TextureRuntimeState, payload: Blob) -> RResult<Blob, RString> {
-    let request = match texture_ref_request_from_payload(payload.as_slice(), textures_method::ENTRY_RUNTIME_V1) {
+    let request = match texture_ref_request_from_payload(
+        payload.as_slice(),
+        textures_method::ENTRY_RUNTIME_V1,
+    ) {
         Ok(request) => request,
         Err(e) => return RResult::RErr(RString::from(e)),
     };
@@ -551,10 +692,11 @@ fn entry_runtime_blob(state: &mut TextureRuntimeState, payload: Blob) -> RResult
         Ok(texture_ref) => texture_ref,
         Err(e) => return RResult::RErr(RString::from(e)),
     };
-    let (reference, texture_name, texture_hash_from_ref) = match parse_texture_reference(&texture_ref) {
-        Ok(parsed) => parsed,
-        Err(e) => return RResult::RErr(RString::from(e)),
-    };
+    let (reference, texture_name, texture_hash_from_ref) =
+        match parse_texture_reference(&texture_ref) {
+            Ok(parsed) => parsed,
+            Err(e) => return RResult::RErr(RString::from(e)),
+        };
     let texture_hash = request.texture_hash.or(texture_hash_from_ref);
     let canonical = reference.canonical.clone();
     if let Some(packet) = state.runtime_packet_cache.get(&canonical).cloned() {
@@ -565,7 +707,12 @@ fn entry_runtime_blob(state: &mut TextureRuntimeState, payload: Blob) -> RResult
         );
         return RResult::ROk(Blob::from(texture_runtime_wire(packet)));
     }
-    match runtime_texture_packet_from_dictionary_cache(state, &reference.logical_path, texture_name.as_deref(), texture_hash) {
+    match runtime_texture_packet_from_dictionary_cache(
+        state,
+        &reference.logical_path,
+        texture_name.as_deref(),
+        texture_hash,
+    ) {
         Ok(packet) => {
             state.runtime_packet_cache.insert(canonical, packet.clone());
             RResult::ROk(Blob::from(texture_runtime_wire(packet)))
@@ -575,18 +722,21 @@ fn entry_runtime_blob(state: &mut TextureRuntimeState, payload: Blob) -> RResult
 }
 
 fn entry_rgba8_blob(state: &mut TextureRuntimeState, payload: Blob) -> RResult<Blob, RString> {
-    let request = match texture_ref_request_from_payload(payload.as_slice(), textures_method::ENTRY_RGBA8_V1) {
-        Ok(request) => request,
-        Err(e) => return RResult::RErr(RString::from(e)),
-    };
+    let request =
+        match texture_ref_request_from_payload(payload.as_slice(), textures_method::ENTRY_RGBA8_V1)
+        {
+            Ok(request) => request,
+            Err(e) => return RResult::RErr(RString::from(e)),
+        };
     let texture_ref = match texture_ref_from_request(&request) {
         Ok(texture_ref) => texture_ref,
         Err(e) => return RResult::RErr(RString::from(e)),
     };
-    let (reference, texture_name, texture_hash_from_ref) = match parse_texture_reference(&texture_ref) {
-        Ok(parsed) => parsed,
-        Err(e) => return RResult::RErr(RString::from(e)),
-    };
+    let (reference, texture_name, texture_hash_from_ref) =
+        match parse_texture_reference(&texture_ref) {
+            Ok(parsed) => parsed,
+            Err(e) => return RResult::RErr(RString::from(e)),
+        };
     let texture_hash = request.texture_hash.or(texture_hash_from_ref);
     let canonical = reference.canonical.clone();
     if let Some(packet) = state.rgba8_packet_cache.get(&canonical).cloned() {
@@ -597,8 +747,13 @@ fn entry_rgba8_blob(state: &mut TextureRuntimeState, payload: Blob) -> RResult<B
         );
         return RResult::ROk(Blob::from(texture_rgba8_wire(packet)));
     }
-    match runtime_texture_packet_from_dictionary_cache(state, &reference.logical_path, texture_name.as_deref(), texture_hash)
-        .and_then(|packet| rgba8_packet_from_runtime(&packet))
+    match runtime_texture_packet_from_dictionary_cache(
+        state,
+        &reference.logical_path,
+        texture_name.as_deref(),
+        texture_hash,
+    )
+    .and_then(|packet| rgba8_packet_from_runtime(&packet))
     {
         Ok(packet) => {
             state.rgba8_packet_cache.insert(canonical, packet.clone());
@@ -622,7 +777,10 @@ fn manifest_blob(state: &mut TextureRuntimeState, payload: Blob) -> RResult<Blob
             }
         }));
     }
-    let request = match texture_manifest_request_from_payload(payload.as_slice(), textures_method::MANIFEST_JSON_V1) {
+    let request = match texture_manifest_request_from_payload(
+        payload.as_slice(),
+        textures_method::MANIFEST_JSON_V1,
+    ) {
         Ok(request) => request,
         Err(e) => return RResult::RErr(RString::from(e)),
     };
@@ -637,7 +795,10 @@ fn invoke_json(state: &mut TextureRuntimeState, payload: Blob) -> RResult<Blob, 
         Ok(value) => value,
         Err(e) => return RResult::RErr(RString::from(e)),
     };
-    let method = value.get("method").and_then(|v| v.as_str()).unwrap_or(textures_method::DESCRIBE_REF_JSON_V1);
+    let method = value
+        .get("method")
+        .and_then(|v| v.as_str())
+        .unwrap_or(textures_method::DESCRIBE_REF_JSON_V1);
     match method {
         textures_method::DESCRIBE_REF_JSON_V1 | textures_method::VALIDATE_REF_V1 => {
             let request = serde_json::from_value::<TextureRefRequest>(value.get("request").cloned().unwrap_or_default())
@@ -659,7 +820,9 @@ fn invoke_json(state: &mut TextureRuntimeState, payload: Blob) -> RResult<Blob, 
     }
 }
 
-pub fn textures_gateway_service(client: AssetServiceClient) -> newengine_plugin_api::ServiceV1Dyn<'static> {
+pub fn textures_gateway_service(
+    client: AssetServiceClient,
+) -> newengine_plugin_api::ServiceV1Dyn<'static> {
     let description = engine_gateway_provider_service_description(
         TEXTURES_SERVICE_ID,
         TEXTURES_GATEWAY_OWNER,
@@ -675,12 +838,20 @@ pub fn textures_gateway_service(client: AssetServiceClient) -> newengine_plugin_
         .describe_json(&description)
         .info(textures_service_info)
         .blob(textures_method::MANIFEST_JSON_V1, manifest_blob)
-        .post_json_result::<TextureRefRequest, TextureRefValidation, _>(textures_method::VALIDATE_REF_V1, |state, request| validate_texture_ref(state, request))
-        .post_json_result::<TextureRefRequest, TextureRefValidation, _>(textures_method::DESCRIBE_REF_JSON_V1, |state, request| validate_texture_ref(state, request))
+        .post_json_result::<TextureRefRequest, TextureRefValidation, _>(
+            textures_method::VALIDATE_REF_V1,
+            |state, request| validate_texture_ref(state, request),
+        )
+        .post_json_result::<TextureRefRequest, TextureRefValidation, _>(
+            textures_method::DESCRIBE_REF_JSON_V1,
+            |state, request| validate_texture_ref(state, request),
+        )
         .blob(textures_method::ENTRY_RUNTIME_V1, entry_runtime_blob)
         .blob(textures_method::ENTRY_RGBA8_V1, entry_rgba8_blob)
         .blob(textures_method::INVOKE_JSON, invoke_json)
-        .blob(textures_method::SHUTDOWN_V1, |_state, _payload| ok_empty_blob())
+        .blob(textures_method::SHUTDOWN_V1, |_state, _payload| {
+            ok_empty_blob()
+        })
         .into_service_v1()
 }
 

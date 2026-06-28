@@ -55,7 +55,9 @@ pub enum AnimationIntentKind {
 }
 
 impl Default for AnimationIntentKind {
-    fn default() -> Self { Self::PlayClip }
+    fn default() -> Self {
+        Self::PlayClip
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -145,7 +147,10 @@ impl Default for AnimationServiceInfoV1 {
         Self {
             protocol: ANIMATION_RUNTIME_CONTRACT.to_owned(),
             provider: "engine.animation.foundation".to_owned(),
-            methods: ANIMATION_SERVICE_METHODS.iter().map(|it| (*it).to_owned()).collect(),
+            methods: ANIMATION_SERVICE_METHODS
+                .iter()
+                .map(|it| (*it).to_owned())
+                .collect(),
             features: vec!["animation-intents".to_owned(), "task-bindings".to_owned()],
         }
     }

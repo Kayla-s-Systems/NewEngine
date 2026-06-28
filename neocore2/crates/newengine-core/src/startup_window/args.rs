@@ -26,7 +26,9 @@ pub(crate) fn disabled_by_process_args_or_env() -> Option<String> {
     }
 
     for key in DISABLE_ENV {
-        let Ok(value) = std::env::var(key) else { continue; };
+        let Ok(value) = std::env::var(key) else {
+            continue;
+        };
         if is_truthy(&value) {
             return Some(format!("env:{key}"));
         }

@@ -1,5 +1,7 @@
 use crate::postfx::PostFxPassStats;
-use crate::render_graph::{RecordedDrawListStats, RenderGraphDiagnosticsStats, RenderGraphSubmitReport};
+use crate::render_graph::{
+    RecordedDrawListStats, RenderGraphDiagnosticsStats, RenderGraphSubmitReport,
+};
 use crate::shadows::ShadowPassStats;
 use serde::{Deserialize, Serialize};
 
@@ -99,7 +101,6 @@ pub struct RenderResourceStats {
     pub bind_groups: u32,
     pub render_targets: u32,
 }
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RenderFrameDebugSnapshot {

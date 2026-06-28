@@ -2,7 +2,9 @@
 
 use newengine_math::{Quat, Vec2, Vec3};
 
-use crate::{CameraChannel, CameraChannelState, CameraFrame, CameraRig, CameraViewport, Projection};
+use crate::{
+    CameraChannel, CameraChannelState, CameraFrame, CameraRig, CameraViewport, Projection,
+};
 
 /// Input for the universal camera stack.
 ///

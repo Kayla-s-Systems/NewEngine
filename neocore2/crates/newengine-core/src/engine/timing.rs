@@ -48,7 +48,9 @@ impl<E: Send + 'static> Engine<E> {
         elapsed: Elapsed,
     ) {
         match count {
-            Some(n) => newengine_ulog_api::ulog::info!("{scope}: done (phase={phase} count={n} {elapsed})"),
+            Some(n) => {
+                newengine_ulog_api::ulog::info!("{scope}: done (phase={phase} count={n} {elapsed})")
+            }
             None => newengine_ulog_api::ulog::info!("{scope}: done (phase={phase} {elapsed})"),
         }
     }

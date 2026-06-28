@@ -13,6 +13,5 @@ pub(super) const STEADY_TRACE_INTERVAL_FRAMES: u64 = 600;
 #[inline]
 pub(super) fn should_trace_frame(frame_index: u64) -> bool {
     frame_index < STARTUP_TRACE_FRAMES
-        || (STEADY_TRACE_INTERVAL_FRAMES > 0
-            && frame_index % STEADY_TRACE_INTERVAL_FRAMES == 0)
+        || (STEADY_TRACE_INTERVAL_FRAMES > 0 && frame_index % STEADY_TRACE_INTERVAL_FRAMES == 0)
 }

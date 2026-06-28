@@ -3,8 +3,8 @@ use serde::{Deserialize, Serialize};
 use crate::{
     ASSET_PACKAGE_ASSET_KIND, ASSET_PACKAGE_CONTAINER, ASSET_PACKAGE_EXTENSION,
     DRAWABLE_DICTIONARY_ASSET_KIND, DRAWABLE_DICTIONARY_CONTAINER, DRAWABLE_DICTIONARY_EXTENSION,
-    OBJECT_TYPE_DEFINITIONS_ASSET_KIND, OBJECT_TYPE_DEFINITIONS_CONTAINER,
     MATERIAL_LIBRARY_ASSET_KIND, MATERIAL_LIBRARY_CONTAINER, MATERIAL_LIBRARY_EXTENSION,
+    OBJECT_TYPE_DEFINITIONS_ASSET_KIND, OBJECT_TYPE_DEFINITIONS_CONTAINER,
     OBJECT_TYPE_DEFINITIONS_EXTENSION, TEXTURE_DICTIONARY_ASSET_KIND, TEXTURE_DICTIONARY_CONTAINER,
     TEXTURE_DICTIONARY_EXTENSION,
 };
@@ -149,21 +149,32 @@ pub const MODEL_LEGACY_ASSET_ROLES: &[ModelAssetChainRoleSpec] = &[];
 
 #[inline]
 pub fn model_asset_chain_roles() -> Vec<ModelAssetChainRole> {
-    MODEL_ASSET_CHAIN_ROLES.iter().map(ModelAssetChainRole::from).collect()
+    MODEL_ASSET_CHAIN_ROLES
+        .iter()
+        .map(ModelAssetChainRole::from)
+        .collect()
 }
 
 #[inline]
 pub fn model_asset_package_roles() -> Vec<ModelAssetChainRole> {
-    MODEL_ASSET_PACKAGE_ROLES.iter().map(ModelAssetChainRole::from).collect()
+    MODEL_ASSET_PACKAGE_ROLES
+        .iter()
+        .map(ModelAssetChainRole::from)
+        .collect()
 }
 
 #[inline]
 pub fn model_previous_asset_roles() -> Vec<ModelAssetChainRole> {
-    MODEL_LEGACY_ASSET_ROLES.iter().map(ModelAssetChainRole::from).collect()
+    MODEL_LEGACY_ASSET_ROLES
+        .iter()
+        .map(ModelAssetChainRole::from)
+        .collect()
 }
 
 #[inline]
-pub fn model_asset_chain_role_by_extension(extension: &str) -> Option<&'static ModelAssetChainRoleSpec> {
+pub fn model_asset_chain_role_by_extension(
+    extension: &str,
+) -> Option<&'static ModelAssetChainRoleSpec> {
     let ext = extension.trim().trim_start_matches('.');
     MODEL_ASSET_CHAIN_ROLES
         .iter()
@@ -172,7 +183,9 @@ pub fn model_asset_chain_role_by_extension(extension: &str) -> Option<&'static M
 }
 
 #[inline]
-pub fn model_asset_chain_role_by_kind(asset_kind: &str) -> Option<&'static ModelAssetChainRoleSpec> {
+pub fn model_asset_chain_role_by_kind(
+    asset_kind: &str,
+) -> Option<&'static ModelAssetChainRoleSpec> {
     let kind = asset_kind.trim();
     MODEL_ASSET_CHAIN_ROLES
         .iter()
@@ -181,9 +194,13 @@ pub fn model_asset_chain_role_by_kind(asset_kind: &str) -> Option<&'static Model
 }
 
 #[inline]
-pub fn model_previous_asset_role_by_extension(extension: &str) -> Option<&'static ModelAssetChainRoleSpec> {
+pub fn model_previous_asset_role_by_extension(
+    extension: &str,
+) -> Option<&'static ModelAssetChainRoleSpec> {
     let ext = extension.trim().trim_start_matches('.');
-    MODEL_LEGACY_ASSET_ROLES.iter().find(|role| role.extension.eq_ignore_ascii_case(ext))
+    MODEL_LEGACY_ASSET_ROLES
+        .iter()
+        .find(|role| role.extension.eq_ignore_ascii_case(ext))
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

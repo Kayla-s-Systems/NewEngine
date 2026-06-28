@@ -2,8 +2,8 @@
 
 use abi_stable::std_types::RResult;
 use newengine_audio_api::{
-    AudioFeedbackAck, AudioFeedbackDrain, AudioFeedbackEvent, AudioFeedbackKind,
-    AudioServiceInfo, AUDIO_BACKEND_CAPABILITY_ID, AUDIO_SERVICE_METHOD_DRAIN_EVENTS_JSON_V1,
+    AudioFeedbackAck, AudioFeedbackDrain, AudioFeedbackEvent, AudioFeedbackKind, AudioServiceInfo,
+    AUDIO_BACKEND_CAPABILITY_ID, AUDIO_SERVICE_METHOD_DRAIN_EVENTS_JSON_V1,
     AUDIO_SERVICE_METHOD_INVOKE, AUDIO_SERVICE_METHOD_PLAY_EVENT_JSON_V1,
     AUDIO_SERVICE_METHOD_SHUTDOWN_V1, ENGINE_AUDIO_SERVICE_ID,
 };
@@ -13,8 +13,8 @@ use newengine_service_kit::{
 };
 use parking_lot::Mutex;
 use std::collections::VecDeque;
-use std::sync::{Arc, OnceLock};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, OnceLock};
 
 const AUDIO_EVENT_QUEUE_CAPACITY: usize = 128;
 const AUDIO_GATEWAY_OWNER: &str = "newengine-engine-runtime.audio-gateway";
@@ -51,7 +51,9 @@ fn gateway_state() -> Arc<Mutex<AudioGatewayState>> {
     Arc::clone(AUDIO_GATEWAY.get_or_init(|| Arc::new(Mutex::new(AudioGatewayState::default()))))
 }
 
-fn audio_gateway_service(state: Arc<Mutex<AudioGatewayState>>) -> newengine_plugin_api::ServiceV1Dyn<'static> {
+fn audio_gateway_service(
+    state: Arc<Mutex<AudioGatewayState>>,
+) -> newengine_plugin_api::ServiceV1Dyn<'static> {
     let info = AudioServiceInfo::default();
     let description = engine_gateway_provider_service_description(
         ENGINE_AUDIO_SERVICE_ID,
@@ -103,7 +105,9 @@ fn audio_gateway_service(state: Arc<Mutex<AudioGatewayState>>) -> newengine_plug
             };
             ok_json(&state.push(event))
         })
-        .get_json(AUDIO_SERVICE_METHOD_DRAIN_EVENTS_JSON_V1, |state| state.drain())
+        .get_json(AUDIO_SERVICE_METHOD_DRAIN_EVENTS_JSON_V1, |state| {
+            state.drain()
+        })
         .blob(AUDIO_SERVICE_METHOD_SHUTDOWN_V1, |state, _payload| {
             state.events.clear();
             ok_empty_blob()

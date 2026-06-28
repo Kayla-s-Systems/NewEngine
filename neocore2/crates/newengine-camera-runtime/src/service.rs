@@ -3,11 +3,9 @@
 use newengine_camera::CameraRig;
 use newengine_core::host_events::CursorState;
 use newengine_ecs::{EntityId, World};
-use newengine_math::{Vec2, Vec3};
-use newengine_sim::{
-    CameraRigComp, FollowTargetCameraMotor, MotorInput,
-};
 use newengine_input_actions_api::move_mask as input_move;
+use newengine_math::{Vec2, Vec3};
+use newengine_sim::{CameraRigComp, FollowTargetCameraMotor, MotorInput};
 
 use crate::manager::{CameraDirectorRequest, CameraManagerResource};
 use crate::modes::{
@@ -125,7 +123,9 @@ impl CameraRuntimeService {
 
     #[inline]
     pub fn release_player(world: &mut World, camera: EntityId) -> bool {
-        let removed_follow = world.remove::<newengine_sim::FollowTargetCameraController>(camera).is_some();
+        let removed_follow = world
+            .remove::<newengine_sim::FollowTargetCameraController>(camera)
+            .is_some();
         let removed_motor = world.remove::<FollowTargetCameraMotor>(camera).is_some();
         removed_follow || removed_motor
     }

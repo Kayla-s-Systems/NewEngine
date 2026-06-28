@@ -1,18 +1,18 @@
 use crate::error::{EngineError, EngineResult};
 use crate::events::EventHub;
-use crate::module::{Bus, Module, Resources, Services};
 use crate::jobs::{JobSystem, JobSystemHandle, JobSystemSnapshot};
+use crate::module::{Bus, Module, Resources, Services};
 use crate::sched::Scheduler;
-use crate::sync::ShutdownToken;
 use crate::startup_status::{EngineIncrementalStartupState, EngineStartupSnapshot};
+use crate::sync::ShutdownToken;
 use newengine_plugin_host::{
     init_host_context, init_plugin_config_service, PluginControlQueue, PluginManager,
 };
 
 use newengine_math::{register_engine_builtins, MathRegistry};
 
-use std::any::Any;
 use newengine_math::collections_prelude::NeHashSet as HashSet;
+use std::any::Any;
 use std::path::PathBuf;
 use std::time::Instant;
 
@@ -240,7 +240,9 @@ impl<E: Send + 'static> Engine<E> {
 
     #[inline]
     pub(super) fn sync_shutdown_state(&mut self) {
-        let transition = self.fsm.sync_external_shutdown(self.shutdown.is_requested());
+        let transition = self
+            .fsm
+            .sync_external_shutdown(self.shutdown.is_requested());
         self.log_fsm_transition(transition);
     }
 

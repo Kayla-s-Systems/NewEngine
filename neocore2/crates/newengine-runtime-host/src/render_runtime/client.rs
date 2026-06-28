@@ -2,9 +2,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use newengine_plugin_api::HostApiV1;
 use newengine_render_api::{
-    decode_json, encode_json, encode_unit_command_batch_bin, RenderBackendInfo,
-    RenderCommand, RenderCommandResponse, RenderServiceRequest, RenderServiceResponse,
-    ENGINE_RENDER_SERVICE_ID, RENDER_SERVICE_METHOD_COMMAND_BATCH_BIN_V1,
+    decode_json, encode_json, encode_unit_command_batch_bin, RenderBackendInfo, RenderCommand,
+    RenderCommandResponse, RenderServiceRequest, RenderServiceResponse, ENGINE_RENDER_SERVICE_ID,
+    RENDER_SERVICE_METHOD_COMMAND_BATCH_BIN_V1,
 };
 
 use crate::service_runtime::GenericJsonServiceClient;
@@ -19,7 +19,9 @@ pub(crate) struct RenderServiceClient {
 impl RenderServiceClient {
     #[inline]
     pub(crate) fn new(host: HostApiV1) -> Self {
-        Self { service: GenericJsonServiceClient::new(host, ENGINE_RENDER_SERVICE_ID) }
+        Self {
+            service: GenericJsonServiceClient::new(host, ENGINE_RENDER_SERVICE_ID),
+        }
     }
 
     #[inline]
@@ -29,7 +31,10 @@ impl RenderServiceClient {
     }
 
     #[inline]
-    pub(crate) fn invoke(&self, req: RenderServiceRequest) -> Result<RenderServiceResponse, String> {
+    pub(crate) fn invoke(
+        &self,
+        req: RenderServiceRequest,
+    ) -> Result<RenderServiceResponse, String> {
         let payload = encode_json(&req)?;
         let bytes = self.service.invoke_json(payload)?;
         decode_json(&bytes)
@@ -61,7 +66,10 @@ impl RenderServiceClient {
         let binary_len = reqs.len();
         if TRY_BINARY_RENDER_BATCH.load(Ordering::Relaxed) {
             if let Ok(packet) = encode_unit_command_batch_bin(&reqs) {
-                match self.service.call_raw(RENDER_SERVICE_METHOD_COMMAND_BATCH_BIN_V1, packet) {
+                match self
+                    .service
+                    .call_raw(RENDER_SERVICE_METHOD_COMMAND_BATCH_BIN_V1, packet)
+                {
                     Ok(_) => return Ok(vec![RenderCommandResponse::Unit; binary_len]),
                     Err(err) => {
                         let detail = err.to_string();

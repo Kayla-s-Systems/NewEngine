@@ -7,7 +7,6 @@ pub(in crate::scene_bridge::game_ready) struct TreePlacement {
     pub(in crate::scene_bridge::game_ready) scale: f32,
 }
 
-
 pub(in crate::scene_bridge::game_ready) struct RuntimePrefabMeshPart {
     pub(in crate::scene_bridge::game_ready) primitive_id: PrimitiveId,
     pub(in crate::scene_bridge::game_ready) material_slot: String,
@@ -24,5 +23,5 @@ pub(in crate::scene_bridge::game_ready) struct DecodedPrefabMeshPart {
     pub(in crate::scene_bridge::game_ready) mesh: PrimitiveMesh,
 }
 
-
-pub(in crate::scene_bridge::game_ready) const SKYDOME_PRIMITIVE_ID: PrimitiveId = PrimitiveId(fnv1a_64("kalitech.asset.skydome.high.v1"));
+pub(in crate::scene_bridge::game_ready) const SKYDOME_PRIMITIVE_ID: PrimitiveId =
+    PrimitiveId(fnv1a_64("kalitech.asset.skydome.high.v1"));

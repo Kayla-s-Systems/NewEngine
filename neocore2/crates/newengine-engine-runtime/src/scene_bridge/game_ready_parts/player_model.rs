@@ -16,8 +16,16 @@ pub(super) fn ensure_player_runtime_model_parts(
     prims: &mut PrimitiveRegistry,
     mats: &MaterialRegistry,
     spec: &self::content::GameReadyPlayerModelSpec,
-) -> Result<(String, Vec<PlayerRuntimeModelPart>, Option<ModelSkeletonMetadata>), String> {
-    let mut request = ModelAssetRequest::new(spec.source.clone()).with_human_scale(spec.target_height, spec.eye_height_ratio);
+) -> Result<
+    (
+        String,
+        Vec<PlayerRuntimeModelPart>,
+        Option<ModelSkeletonMetadata>,
+    ),
+    String,
+> {
+    let mut request = ModelAssetRequest::new(spec.source.clone())
+        .with_human_scale(spec.target_height, spec.eye_height_ratio);
     if let Some(dictionary) = spec.texture_dictionary.as_deref() {
         request = request.with_texture_dictionary(dictionary);
     }
@@ -45,7 +53,10 @@ pub(super) fn ensure_player_runtime_model_parts(
     let mut registered_vertices = 0usize;
     let mut registered_indices = 0usize;
     for part in bundle.parts {
-        let primitive_id = PrimitiveId(fnv1a_64(&format!("player-model:{}:{}", bundle.source, part.material_slot)));
+        let primitive_id = PrimitiveId(fnv1a_64(&format!(
+            "player-model:{}:{}",
+            bundle.source, part.material_slot
+        )));
         let material_name = part
             .material
             .material_ref
@@ -120,12 +131,22 @@ pub(super) fn hide_player_fallback_visuals(world: &mut newengine_ecs::World, pla
     let hidden = world
         .query::<crate::gameplay::PlayerVisualPart>()
         .filter_map(|(entity, part)| {
-            (part.owner == player && matches!(part.kind, crate::gameplay::PlayerVisualKind::FallbackCapsule)).then_some(entity)
+            (part.owner == player
+                && matches!(
+                    part.kind,
+                    crate::gameplay::PlayerVisualKind::FallbackCapsule
+                ))
+            .then_some(entity)
         })
         .collect::<Vec<_>>();
 
     for entity in hidden {
-        let _ = world.insert(entity, crate::gameplay::DisplayVisibility { mode: crate::gameplay::DisplayMode::RuntimeHidden });
+        let _ = world.insert(
+            entity,
+            crate::gameplay::DisplayVisibility {
+                mode: crate::gameplay::DisplayMode::RuntimeHidden,
+            },
+        );
     }
 }
 
@@ -141,7 +162,8 @@ pub(in crate::scene_bridge::game_ready) fn spawn_game_ready_player_model(
         return false;
     }
 
-    let (model_source, parts, skeleton) = match ensure_player_runtime_model_parts(prims, mats, spec) {
+    let (model_source, parts, skeleton) = match ensure_player_runtime_model_parts(prims, mats, spec)
+    {
         Ok(model) => model,
         Err(e) => {
             newengine_ulog_api::ulog::warn!("game-ready: player model binding failed: {}", e);
@@ -170,7 +192,13 @@ pub(in crate::scene_bridge::game_ready) fn spawn_game_ready_player_model(
     for (part_index, part) in parts.iter().enumerate() {
         let entity = spawn_named(world, format!("Player/Avatar/Abigail/Part{}", part_index));
         let _ = world.insert(entity, Transform::default());
-        let _ = world.insert(entity, Primitive { id: part.primitive_id, color: part.color });
+        let _ = world.insert(
+            entity,
+            Primitive {
+                id: part.primitive_id,
+                color: part.color,
+            },
+        );
         let _ = world.insert(entity, crate::gameplay::GameplayActor);
         let _ = world.insert(
             entity,
@@ -193,9 +221,19 @@ pub(in crate::scene_bridge::game_ready) fn spawn_game_ready_player_model(
         } else {
             crate::gameplay::DisplayMode::GameOnly
         };
-        let _ = world.insert(entity, crate::gameplay::DisplayVisibility { mode: initial_mode });
+        let _ = world.insert(
+            entity,
+            crate::gameplay::DisplayVisibility { mode: initial_mode },
+        );
         let _ = set_parent(world, entity, Some(visual_root));
-        let _ = apply_exact_material(world, mats, entity, part.material_id, part.material_id, part.color);
+        let _ = apply_exact_material(
+            world,
+            mats,
+            entity,
+            part.material_id,
+            part.material_id,
+            part.color,
+        );
     }
 
     if let Some(binding) = world.get_mut::<crate::gameplay::PlayerModelBinding>(player) {
@@ -218,7 +256,10 @@ pub(in crate::scene_bridge::game_ready) fn spawn_game_ready_player_model(
         format!(
             "model='{}' skeleton='{}' parts={}",
             model_source,
-            skeleton.as_ref().map(|metadata| metadata.source.as_str()).unwrap_or("none"),
+            skeleton
+                .as_ref()
+                .map(|metadata| metadata.source.as_str())
+                .unwrap_or("none"),
             parts.len()
         ),
     );

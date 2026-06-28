@@ -1,7 +1,10 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use crate::AssetFileTypeDescriptor;
-use newengine_schema_api::{SchemaPatchDtoV1, SchemaPatchOperationV1, SchemaPropertyDescriptorV1, SchemaTransactionDtoV1, SchemaTypeDescriptorV1};
+use newengine_schema_api::{
+    SchemaPatchDtoV1, SchemaPatchOperationV1, SchemaPropertyDescriptorV1, SchemaTransactionDtoV1,
+    SchemaTypeDescriptorV1,
+};
 
 /// Provider-routed asset document inspection gateway.
 ///
@@ -94,14 +97,16 @@ pub const ASSETS_EDIT_RUNTIME_CONTRACT_SPEC: newengine_service_api::RuntimeServi
         ASSETS_EDIT_SERVICE_METHODS,
     );
 
-pub const ASSETS_INSPECT_RUNTIME_REQUIREMENT_SPEC: newengine_service_api::RuntimeServiceRequirementSpec =
+pub const ASSETS_INSPECT_RUNTIME_REQUIREMENT_SPEC:
+    newengine_service_api::RuntimeServiceRequirementSpec =
     newengine_service_api::RuntimeServiceRequirementSpec::new(
         ASSETS_INSPECT_RUNTIME_CONTRACT_SPEC,
         Some(ASSETS_INSPECT_BACKEND_CAPABILITY_ID),
         Some("NEWENGINE_REQUIRE_ASSETS_INSPECT"),
     );
 
-pub const ASSETS_EDIT_RUNTIME_REQUIREMENT_SPEC: newengine_service_api::RuntimeServiceRequirementSpec =
+pub const ASSETS_EDIT_RUNTIME_REQUIREMENT_SPEC:
+    newengine_service_api::RuntimeServiceRequirementSpec =
     newengine_service_api::RuntimeServiceRequirementSpec::new(
         ASSETS_EDIT_RUNTIME_CONTRACT_SPEC,
         Some(ASSETS_EDIT_BACKEND_CAPABILITY_ID),
@@ -138,7 +143,10 @@ impl Default for AssetDocumentRequest {
 impl AssetDocumentRequest {
     #[inline]
     pub fn new(asset_ref: impl Into<String>) -> Self {
-        Self { asset_ref: asset_ref.into(), ..Self::default() }
+        Self {
+            asset_ref: asset_ref.into(),
+            ..Self::default()
+        }
     }
 }
 
@@ -153,7 +161,12 @@ pub struct AssetDocumentPreview {
 
 impl Default for AssetDocumentPreview {
     fn default() -> Self {
-        Self { kind: "provider_declared".to_owned(), icon: String::new(), thumbnail_ref: String::new(), summary: String::new() }
+        Self {
+            kind: "provider_declared".to_owned(),
+            icon: String::new(),
+            thumbnail_ref: String::new(),
+            summary: String::new(),
+        }
     }
 }
 
@@ -166,7 +179,9 @@ pub enum AssetDocumentDiagnosticSeverity {
 }
 
 impl Default for AssetDocumentDiagnosticSeverity {
-    fn default() -> Self { Self::Info }
+    fn default() -> Self {
+        Self::Info
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -180,24 +195,44 @@ pub struct AssetDocumentDiagnostic {
 
 impl Default for AssetDocumentDiagnostic {
     fn default() -> Self {
-        Self { severity: AssetDocumentDiagnosticSeverity::Info, code: String::new(), message: String::new(), path: None }
+        Self {
+            severity: AssetDocumentDiagnosticSeverity::Info,
+            code: String::new(),
+            message: String::new(),
+            path: None,
+        }
     }
 }
 
 impl AssetDocumentDiagnostic {
     #[inline]
     pub fn info(code: impl Into<String>, message: impl Into<String>) -> Self {
-        Self { severity: AssetDocumentDiagnosticSeverity::Info, code: code.into(), message: message.into(), path: None }
+        Self {
+            severity: AssetDocumentDiagnosticSeverity::Info,
+            code: code.into(),
+            message: message.into(),
+            path: None,
+        }
     }
 
     #[inline]
     pub fn warn(code: impl Into<String>, message: impl Into<String>) -> Self {
-        Self { severity: AssetDocumentDiagnosticSeverity::Warning, code: code.into(), message: message.into(), path: None }
+        Self {
+            severity: AssetDocumentDiagnosticSeverity::Warning,
+            code: code.into(),
+            message: message.into(),
+            path: None,
+        }
     }
 
     #[inline]
     pub fn error(code: impl Into<String>, message: impl Into<String>) -> Self {
-        Self { severity: AssetDocumentDiagnosticSeverity::Error, code: code.into(), message: message.into(), path: None }
+        Self {
+            severity: AssetDocumentDiagnosticSeverity::Error,
+            code: code.into(),
+            message: message.into(),
+            path: None,
+        }
     }
 }
 
@@ -236,13 +271,34 @@ impl Default for AssetDocumentField {
 
 impl AssetDocumentField {
     #[inline]
-    pub fn readonly(id: impl Into<String>, label: impl Into<String>, value: impl Into<serde_json::Value>) -> Self {
-        Self { id: id.into(), label: label.into(), value: value.into(), ..Self::default() }
+    pub fn readonly(
+        id: impl Into<String>,
+        label: impl Into<String>,
+        value: impl Into<serde_json::Value>,
+    ) -> Self {
+        Self {
+            id: id.into(),
+            label: label.into(),
+            value: value.into(),
+            ..Self::default()
+        }
     }
 
     #[inline]
-    pub fn editable(id: impl Into<String>, label: impl Into<String>, value: impl Into<serde_json::Value>, value_kind: impl Into<String>) -> Self {
-        Self { id: id.into(), label: label.into(), value: value.into(), value_kind: value_kind.into(), editable: true, ..Self::default() }
+    pub fn editable(
+        id: impl Into<String>,
+        label: impl Into<String>,
+        value: impl Into<serde_json::Value>,
+        value_kind: impl Into<String>,
+    ) -> Self {
+        Self {
+            id: id.into(),
+            label: label.into(),
+            value: value.into(),
+            value_kind: value_kind.into(),
+            editable: true,
+            ..Self::default()
+        }
     }
 }
 
@@ -255,7 +311,13 @@ pub struct AssetDocumentSection {
 }
 
 impl Default for AssetDocumentSection {
-    fn default() -> Self { Self { id: String::new(), title: String::new(), fields: Vec::new() } }
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            title: String::new(),
+            fields: Vec::new(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -378,7 +440,13 @@ pub struct AssetPatchOperation {
 
 impl Default for AssetPatchOperation {
     fn default() -> Self {
-        Self { op: "replace".to_owned(), path: String::new(), value: serde_json::Value::Null, old_value: None, schema_operation: None }
+        Self {
+            op: "replace".to_owned(),
+            path: String::new(),
+            value: serde_json::Value::Null,
+            old_value: None,
+            schema_operation: None,
+        }
     }
 }
 

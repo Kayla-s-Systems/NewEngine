@@ -44,7 +44,8 @@ pub fn draw_procedural_terrain_shadow(
         if !material_plan.cast_shadows {
             continue;
         }
-        let (center_ws, radius_ws) = transform_sphere(model, entry.bounds_center, entry.bounds_radius);
+        let (center_ws, radius_ws) =
+            transform_sphere(model, entry.bounds_center, entry.bounds_radius);
         if !shadow_caster_visible(this.shadows_current_cull(), center_ws, radius_ws) {
             continue;
         }
@@ -84,7 +85,11 @@ pub fn draw_procedural_terrain_shadow(
         )?;
 
         stream.push(IndexedDrawPacket {
-            pipeline: if material_plan.double_sided { lit.shadow_double_sided_pipeline } else { lit.shadow_pipeline },
+            pipeline: if material_plan.double_sided {
+                lit.shadow_double_sided_pipeline
+            } else {
+                lit.shadow_pipeline
+            },
             bind_group: per.bg,
             vertex: BufferSlice::new(gpu.vb, 0),
             index: BufferSlice::new(gpu.ib, 0),
@@ -113,20 +118,25 @@ pub fn draw_primitives_shadow(
     let mats_lock = this.bridges.scene.materials();
     let mats = mats_lock.read();
 
-    let mut entries: Vec<(f32, u64, Primitive, Mat4, Option<newengine_materials::MaterialRef>)> = Vec::new();
+    let mut entries: Vec<(
+        f32,
+        u64,
+        Primitive,
+        Mat4,
+        Option<newengine_materials::MaterialRef>,
+    )> = Vec::new();
     for (id, prim, gt) in world.query2::<Primitive, GlobalTransform>() {
-        if !display_visible_in_mode(world, id, runtime) || world.get::<SkyDomeRuntime>(id).is_some() {
+        if !display_visible_in_mode(world, id, runtime) || world.get::<SkyDomeRuntime>(id).is_some()
+        {
             continue;
         }
         if runtime {
             if let Some(bounds) = world.get::<Bounds>(id) {
-                let (center_ws, radius_ws) = transform_sphere(
-                    gt.0,
-                    bounds.local_sphere.center,
-                    bounds.local_sphere.radius,
-                );
+                let (center_ws, radius_ws) =
+                    transform_sphere(gt.0, bounds.local_sphere.center, bounds.local_sphere.radius);
                 if center_ws.distance_squared(camera_position)
-                    > primitive_shadow_max_distance(runtime) * primitive_shadow_max_distance(runtime)
+                    > primitive_shadow_max_distance(runtime)
+                        * primitive_shadow_max_distance(runtime)
                 {
                     continue;
                 }
@@ -161,7 +171,8 @@ pub fn draw_primitives_shadow(
             }
 
             let gpu = ensure_primitive_gpu(&reg, prim.id, &mut this.gpu.meshes.prim_cache, r)?;
-            let (center_ws, radius_ws) = transform_sphere(model, gpu.bounds_center, gpu.bounds_radius);
+            let (center_ws, radius_ws) =
+                transform_sphere(model, gpu.bounds_center, gpu.bounds_radius);
             if !shadow_caster_visible(this.shadows_current_cull(), center_ws, radius_ws) {
                 continue;
             }
@@ -227,7 +238,8 @@ pub fn draw_primitives_shadow(
             plan
         };
 
-        let (center_ws, radius_ws) = transform_sphere(model, plan.gpu.bounds_center, plan.gpu.bounds_radius);
+        let (center_ws, radius_ws) =
+            transform_sphere(model, plan.gpu.bounds_center, plan.gpu.bounds_radius);
         if !shadow_caster_visible(this.shadows_current_cull(), center_ws, radius_ws) {
             continue;
         }
@@ -251,7 +263,13 @@ pub fn draw_primitives_shadow(
             plan.sampler,
             plan.mesh_key,
         );
-        batches.push(batch_key, plan.pipeline, plan.bind_group, plan.gpu, instance);
+        batches.push(
+            batch_key,
+            plan.pipeline,
+            plan.bind_group,
+            plan.gpu,
+            instance,
+        );
     }
 
     if batches.is_empty() {
@@ -261,16 +279,21 @@ pub fn draw_primitives_shadow(
     let mut replay = InstancedReplayState::default();
     for batch in batches.into_sorted_batches() {
         let instance_count = batch.instances.len() as u32;
-        let instance_slice = this.gpu.meshes.instance_uploader.upload(r, &batch.instances)?;
+        let instance_slice = this
+            .gpu
+            .meshes
+            .instance_uploader
+            .upload(r, &batch.instances)?;
         replay.set_pipeline(r, batch.pipeline)?;
         replay.set_bind_group0(r, batch.bind_group)?;
         replay.set_vertex_buffer(r, 0, BufferSlice::new(batch.gpu.vb, 0))?;
         replay.set_vertex_buffer(r, 1, instance_slice)?;
         replay.set_index_buffer(r, BufferSlice::new(batch.gpu.ib, 0), IndexFormat::U32)?;
-        r.draw_indexed(draw_indexed_instanced_args(batch.gpu.index_count, instance_count))?;
+        r.draw_indexed(draw_indexed_instanced_args(
+            batch.gpu.index_count,
+            instance_count,
+        ))?;
     }
 
     Ok(())
 }
-
-

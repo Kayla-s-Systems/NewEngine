@@ -6,11 +6,12 @@ use std::sync::OnceLock;
 use abi_stable::std_types::{RResult, RString};
 use newengine_plugin_api::Blob;
 use newengine_render_api::{
-    decode_json as decode_render_json, decode_unit_command_batch_bin, encode_json as encode_render_json,
-    BindGroupId, BindGroupLayoutId, BufferId, PipelineId, RenderBackendCapabilities, RenderBackendInfo,
-    RenderCommand, RenderCommandResponse, RenderDiagnosticsSnapshot, RenderGraphSubmitReport,
-    RenderServiceRequest, RenderServiceResponse, RenderTargetId, RenderWorkBudget, SamplerId, ShaderId,
-    TextureId, TextureResidencySnapshot,
+    decode_json as decode_render_json, decode_unit_command_batch_bin,
+    encode_json as encode_render_json, BindGroupId, BindGroupLayoutId, BufferId, PipelineId,
+    RenderBackendCapabilities, RenderBackendInfo, RenderCommand, RenderCommandResponse,
+    RenderDiagnosticsSnapshot, RenderGraphSubmitReport, RenderServiceRequest,
+    RenderServiceResponse, RenderTargetId, RenderWorkBudget, SamplerId, ShaderId, TextureId,
+    TextureResidencySnapshot,
 };
 use newengine_service_kit::{
     engine_gateway_provider_service_description, ok_json,
@@ -18,17 +19,18 @@ use newengine_service_kit::{
     NullEngineGatewayProviderDeclDynamic,
 };
 use newengine_ui_api::{
-    decode_ui_frame_request_bin, encode_ui_frame_response_bin, UiAck, UiDrawList, UiFrameResponse, UiServiceInfo,
-    UI_SERVICE_METHOD_ACTION_MANIFEST_V1, UI_SERVICE_METHOD_APPLY_NODE_REQUEST_V1, UI_SERVICE_METHOD_APPLY_STATE_PATCH_V1,
-    UI_SERVICE_METHOD_DEBUG_BINDINGS_V1, UI_SERVICE_METHOD_DEBUG_TELEMETRY_SCHEMA,
-    UI_SERVICE_METHOD_DEBUG_TREE_V1, UI_SERVICE_METHOD_DISPATCH_ACTION_V1,
-    UI_SERVICE_METHOD_DISPATCH_INPUT_V1, UI_SERVICE_METHOD_DOCUMENT_XML_V1,
-    UI_SERVICE_METHOD_DRAW_FRAME_BIN_V1, UI_SERVICE_METHOD_DRAW_FRAME_V1,
-    UI_SERVICE_METHOD_LAYOUT_MANIFEST_V1, UI_SERVICE_METHOD_LOADING_SHELL_V1,
-    UI_SERVICE_METHOD_MOUNT_SURFACE_V1, UI_SERVICE_METHOD_NAVIGATE_V1,
-    UI_SERVICE_METHOD_REGISTRY_LOAD_V1, UI_SERVICE_METHOD_SET_SURFACE_VISIBLE_V1,
-    UI_SERVICE_METHOD_SURFACE_CATALOG_V1, UI_SERVICE_METHOD_SURFACE_MANIFEST_V1,
-    UI_SERVICE_METHOD_SURFACE_NODE_V1, UI_SERVICE_METHOD_UNMOUNT_SURFACE_V1,
+    decode_ui_frame_request_bin, encode_ui_frame_response_bin, UiAck, UiDrawList, UiFrameResponse,
+    UiServiceInfo, UI_SERVICE_METHOD_ACTION_MANIFEST_V1, UI_SERVICE_METHOD_APPLY_NODE_REQUEST_V1,
+    UI_SERVICE_METHOD_APPLY_STATE_PATCH_V1, UI_SERVICE_METHOD_DEBUG_BINDINGS_V1,
+    UI_SERVICE_METHOD_DEBUG_TELEMETRY_SCHEMA, UI_SERVICE_METHOD_DEBUG_TREE_V1,
+    UI_SERVICE_METHOD_DISPATCH_ACTION_V1, UI_SERVICE_METHOD_DISPATCH_INPUT_V1,
+    UI_SERVICE_METHOD_DOCUMENT_XML_V1, UI_SERVICE_METHOD_DRAW_FRAME_BIN_V1,
+    UI_SERVICE_METHOD_DRAW_FRAME_V1, UI_SERVICE_METHOD_LAYOUT_MANIFEST_V1,
+    UI_SERVICE_METHOD_LOADING_SHELL_V1, UI_SERVICE_METHOD_MOUNT_SURFACE_V1,
+    UI_SERVICE_METHOD_NAVIGATE_V1, UI_SERVICE_METHOD_REGISTRY_LOAD_V1,
+    UI_SERVICE_METHOD_SET_SURFACE_VISIBLE_V1, UI_SERVICE_METHOD_SURFACE_CATALOG_V1,
+    UI_SERVICE_METHOD_SURFACE_MANIFEST_V1, UI_SERVICE_METHOD_SURFACE_NODE_V1,
+    UI_SERVICE_METHOD_UNMOUNT_SURFACE_V1,
 };
 
 const NULL_RENDER_SERVICE: &str = "null.render.api";
@@ -71,23 +73,56 @@ fn null_render_info() -> RenderBackendInfo {
     }
 }
 
-fn null_render_command(state: &mut NullRenderState, command: RenderCommand) -> RenderCommandResponse {
+fn null_render_command(
+    state: &mut NullRenderState,
+    command: RenderCommand,
+) -> RenderCommandResponse {
     match command {
-        RenderCommand::CreateRenderTarget(_) => RenderCommandResponse::RenderTargetId(RenderTargetId::new(state.alloc())),
-        RenderCommand::RenderTargetUiTexId { id } => RenderCommandResponse::UiTexId(newengine_render_api::UiTexId::new(id.get())),
-        RenderCommand::RenderTargetColorTextureId { id } => RenderCommandResponse::TextureId(TextureId::new(id.get())),
-        RenderCommand::CreateBuffer(_) => RenderCommandResponse::BufferId(BufferId::new(state.alloc())),
-        RenderCommand::CreateTexture(_) => RenderCommandResponse::TextureId(TextureId::new(state.alloc())),
-        RenderCommand::CreateSampler(_) => RenderCommandResponse::SamplerId(SamplerId::new(state.alloc())),
-        RenderCommand::CreateShader(_) => RenderCommandResponse::ShaderId(ShaderId::new(state.alloc())),
-        RenderCommand::CreatePipeline(_) => RenderCommandResponse::PipelineId(PipelineId::new(state.alloc())),
-        RenderCommand::CreateBindGroupLayout(_) => RenderCommandResponse::BindGroupLayoutId(BindGroupLayoutId::new(state.alloc())),
-        RenderCommand::CreateBindGroup(_) => RenderCommandResponse::BindGroupId(BindGroupId::new(state.alloc())),
-        RenderCommand::PumpUploads(_) => RenderCommandResponse::UploadPumpReport(Default::default()),
-        RenderCommand::TextureResidency { id } => RenderCommandResponse::TextureResidency(TextureResidencySnapshot::missing(id)),
-        RenderCommand::WarmupPipelines(_) => RenderCommandResponse::PipelineWarmupReport(Default::default()),
-        RenderCommand::ShaderCacheStats => RenderCommandResponse::ShaderCacheStats(Default::default()),
-        RenderCommand::DiagnosticsSnapshot => RenderCommandResponse::DiagnosticsSnapshot(RenderDiagnosticsSnapshot::default()),
+        RenderCommand::CreateRenderTarget(_) => {
+            RenderCommandResponse::RenderTargetId(RenderTargetId::new(state.alloc()))
+        }
+        RenderCommand::RenderTargetUiTexId { id } => {
+            RenderCommandResponse::UiTexId(newengine_render_api::UiTexId::new(id.get()))
+        }
+        RenderCommand::RenderTargetColorTextureId { id } => {
+            RenderCommandResponse::TextureId(TextureId::new(id.get()))
+        }
+        RenderCommand::CreateBuffer(_) => {
+            RenderCommandResponse::BufferId(BufferId::new(state.alloc()))
+        }
+        RenderCommand::CreateTexture(_) => {
+            RenderCommandResponse::TextureId(TextureId::new(state.alloc()))
+        }
+        RenderCommand::CreateSampler(_) => {
+            RenderCommandResponse::SamplerId(SamplerId::new(state.alloc()))
+        }
+        RenderCommand::CreateShader(_) => {
+            RenderCommandResponse::ShaderId(ShaderId::new(state.alloc()))
+        }
+        RenderCommand::CreatePipeline(_) => {
+            RenderCommandResponse::PipelineId(PipelineId::new(state.alloc()))
+        }
+        RenderCommand::CreateBindGroupLayout(_) => {
+            RenderCommandResponse::BindGroupLayoutId(BindGroupLayoutId::new(state.alloc()))
+        }
+        RenderCommand::CreateBindGroup(_) => {
+            RenderCommandResponse::BindGroupId(BindGroupId::new(state.alloc()))
+        }
+        RenderCommand::PumpUploads(_) => {
+            RenderCommandResponse::UploadPumpReport(Default::default())
+        }
+        RenderCommand::TextureResidency { id } => {
+            RenderCommandResponse::TextureResidency(TextureResidencySnapshot::missing(id))
+        }
+        RenderCommand::WarmupPipelines(_) => {
+            RenderCommandResponse::PipelineWarmupReport(Default::default())
+        }
+        RenderCommand::ShaderCacheStats => {
+            RenderCommandResponse::ShaderCacheStats(Default::default())
+        }
+        RenderCommand::DiagnosticsSnapshot => {
+            RenderCommandResponse::DiagnosticsSnapshot(RenderDiagnosticsSnapshot::default())
+        }
         _ => RenderCommandResponse::Unit,
     }
 }
@@ -132,7 +167,10 @@ fn null_render_invoke(state: &mut NullRenderState, payload: Blob) -> RResult<Blo
     }
 }
 
-fn null_render_command_batch_bin(state: &mut NullRenderState, payload: Blob) -> RResult<Blob, RString> {
+fn null_render_command_batch_bin(
+    state: &mut NullRenderState,
+    payload: Blob,
+) -> RResult<Blob, RString> {
     let commands = match decode_unit_command_batch_bin(payload.as_slice()) {
         Ok(v) => v,
         Err(e) => return RResult::RErr(RString::from(e)),
@@ -163,20 +201,28 @@ fn register_null_render_provider() {
     let service = JsonServiceRouter::with_state(NULL_RENDER_SERVICE, NullRenderState::default())
         .describe_json(&description)
         .info(null_render_info)
-        .blob(newengine_service_api::SERVICE_METHOD_INVOKE_JSON, null_render_invoke)
-        .blob(newengine_render_api::RENDER_SERVICE_METHOD_COMMAND_BATCH_BIN_V1, null_render_command_batch_bin)
+        .blob(
+            newengine_service_api::SERVICE_METHOD_INVOKE_JSON,
+            null_render_invoke,
+        )
+        .blob(
+            newengine_render_api::RENDER_SERVICE_METHOD_COMMAND_BATCH_BIN_V1,
+            null_render_command_batch_bin,
+        )
         .shutdown()
         .into_service_v1();
 
-    register_null_engine_gateway_provider_service_dynamic_best_effort(NullEngineGatewayProviderDeclDynamic {
-        gateway: "engine.render",
-        service_kind: "render",
-        provider_service: NULL_RENDER_SERVICE,
-        provider_route: "engine.render.null",
-        capability: "render.backend",
-        owner: "engine.render.null",
-        service,
-    });
+    register_null_engine_gateway_provider_service_dynamic_best_effort(
+        NullEngineGatewayProviderDeclDynamic {
+            gateway: "engine.render",
+            service_kind: "render",
+            provider_service: NULL_RENDER_SERVICE,
+            provider_route: "engine.render.null",
+            capability: "render.backend",
+            owner: "engine.render.null",
+            service,
+        },
+    );
 }
 
 fn null_physics_info() -> newengine_physics_api::PhysicsBackendInfo {
@@ -191,7 +237,9 @@ fn null_physics_info() -> newengine_physics_api::PhysicsBackendInfo {
 }
 
 fn null_physics_invoke(_state: &mut (), payload: Blob) -> RResult<Blob, RString> {
-    let request = match serde_json::from_slice::<newengine_physics_api::PhysicsServiceRequest>(payload.as_slice()) {
+    let request = match serde_json::from_slice::<newengine_physics_api::PhysicsServiceRequest>(
+        payload.as_slice(),
+    ) {
         Ok(v) => v,
         Err(e) => return RResult::RErr(RString::from(e.to_string())),
     };
@@ -242,19 +290,24 @@ fn register_null_physics_provider() {
     let service = JsonServiceRouter::new(NULL_PHYSICS_SERVICE)
         .describe_json(&description)
         .info(null_physics_info)
-        .blob(newengine_service_api::SERVICE_METHOD_INVOKE_JSON, null_physics_invoke)
+        .blob(
+            newengine_service_api::SERVICE_METHOD_INVOKE_JSON,
+            null_physics_invoke,
+        )
         .shutdown()
         .into_service_v1();
 
-    register_null_engine_gateway_provider_service_dynamic_best_effort(NullEngineGatewayProviderDeclDynamic {
-        gateway: "engine.physics",
-        service_kind: "physics",
-        provider_service: NULL_PHYSICS_SERVICE,
-        provider_route: "engine.physics.null",
-        capability: "physics.backend",
-        owner: "engine.physics.null",
-        service,
-    });
+    register_null_engine_gateway_provider_service_dynamic_best_effort(
+        NullEngineGatewayProviderDeclDynamic {
+            gateway: "engine.physics",
+            service_kind: "physics",
+            provider_service: NULL_PHYSICS_SERVICE,
+            provider_route: "engine.physics.null",
+            capability: "physics.backend",
+            owner: "engine.physics.null",
+            service,
+        },
+    );
 }
 
 fn null_ui_frame_json() -> UiFrameResponse {
@@ -319,15 +372,17 @@ fn register_null_ui_provider() {
         .shutdown()
         .into_service_v1();
 
-    register_null_engine_gateway_provider_service_dynamic_best_effort(NullEngineGatewayProviderDeclDynamic {
-        gateway: "engine.ui",
-        service_kind: "ui",
-        provider_service: NULL_UI_SERVICE,
-        provider_route: "engine.ui.null",
-        capability: "ui.backend",
-        owner: "engine.ui.null",
-        service,
-    });
+    register_null_engine_gateway_provider_service_dynamic_best_effort(
+        NullEngineGatewayProviderDeclDynamic {
+            gateway: "engine.ui",
+            service_kind: "ui",
+            provider_service: NULL_UI_SERVICE,
+            provider_route: "engine.ui.null",
+            capability: "ui.backend",
+            owner: "engine.ui.null",
+            service,
+        },
+    );
 }
 
 fn register_null_ai_provider() {
@@ -370,13 +425,15 @@ fn register_null_ai_provider() {
         .shutdown()
         .into_service_v1();
 
-    register_null_engine_gateway_provider_service_dynamic_best_effort(NullEngineGatewayProviderDeclDynamic {
-        gateway: "engine.ai",
-        service_kind: "ai",
-        provider_service: NULL_AI_SERVICE,
-        provider_route: "engine.ai.null",
-        capability: "ai.backend",
-        owner: "engine.ai.null",
-        service,
-    });
+    register_null_engine_gateway_provider_service_dynamic_best_effort(
+        NullEngineGatewayProviderDeclDynamic {
+            gateway: "engine.ai",
+            service_kind: "ai",
+            provider_service: NULL_AI_SERVICE,
+            provider_route: "engine.ai.null",
+            capability: "ai.backend",
+            owner: "engine.ai.null",
+            service,
+        },
+    );
 }

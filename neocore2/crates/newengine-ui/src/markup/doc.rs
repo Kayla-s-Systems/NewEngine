@@ -23,10 +23,13 @@ impl UiMarkupDoc {
         timeout: Duration,
     ) -> Result<Self, UiMarkupError> {
         let _ = timeout;
-        let payload = assets.text_v1(logical_path).map_err(UiMarkupError::TextRead)?;
+        let payload = assets
+            .text_v1(logical_path)
+            .map_err(UiMarkupError::TextRead)?;
 
-        let xml_text = std::str::from_utf8(&payload)
-            .map_err(|_| UiMarkupError::TextRead("asset.text_v1 payload is not valid UTF-8".to_string()))?;
+        let xml_text = std::str::from_utf8(&payload).map_err(|_| {
+            UiMarkupError::TextRead("asset.text_v1 payload is not valid UTF-8".to_string())
+        })?;
 
         Self::parse(xml_text)
     }
@@ -66,7 +69,8 @@ impl UiMarkupDoc {
     }
 
     pub fn parse(xml_text: &str) -> Result<Self, UiMarkupError> {
-        let parsed = Document::parse(xml_text).map_err(|e| UiMarkupError::XmlParse(e.to_string()))?;
+        let parsed =
+            Document::parse(xml_text).map_err(|e| UiMarkupError::XmlParse(e.to_string()))?;
 
         let root = parse_ui_root(&parsed).map_err(UiMarkupError::Invalid)?;
         let theme = parse_theme(&parsed);

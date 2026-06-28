@@ -4,10 +4,13 @@ use abi_stable::std_types::RString;
 use newengine_plugin_api::{Blob, HostApiV1, MethodName};
 
 use crate::{
-    asset_edit_method, asset_inspect_method, method, require_asset_reference_extension, textures_method, AssetAccess,
-    AssetDecodeRequest, AssetDocument, AssetDocumentRequest, AssetError, AssetPatch, AssetPatchResult,
-    AssetResult, AssetService, AssetState, NepakPackageWriteRequestV1, NepakPackageWriteResponseV1, Rgba8TextureAsset, RuntimeTextureAsset, RuntimeTextureFormat, RuntimeTextureMip,
-    ASSET_SERVICE_ID, ENGINE_ASSETS_EDIT_SERVICE_ID, ENGINE_ASSETS_INSPECT_SERVICE_ID, ENGINE_ASSETS_TEXTURES_SERVICE_ID,
+    asset_edit_method, asset_inspect_method, method, require_asset_reference_extension,
+    textures_method, AssetAccess, AssetDecodeRequest, AssetDocument, AssetDocumentRequest,
+    AssetError, AssetPatch, AssetPatchResult, AssetResult, AssetService, AssetState,
+    NepakPackageWriteRequestV1, NepakPackageWriteResponseV1, Rgba8TextureAsset,
+    RuntimeTextureAsset, RuntimeTextureFormat, RuntimeTextureMip, ASSET_SERVICE_ID,
+    ENGINE_ASSETS_EDIT_SERVICE_ID, ENGINE_ASSETS_INSPECT_SERVICE_ID,
+    ENGINE_ASSETS_TEXTURES_SERVICE_ID,
 };
 
 /// Thin client over the engine AssetManager service.
@@ -76,7 +79,9 @@ impl AssetServiceClient {
             m_texture_rgba8_v1: MethodName::from(method::TEXTURE_RGBA8_V1),
             m_decode_v1: MethodName::from(method::DECODE_V1),
             m_texture_dictionary_rgba8_v1: MethodName::from(method::TEXTURE_DICTIONARY_RGBA8_V1),
-            m_texture_dictionary_runtime_v1: MethodName::from(method::TEXTURE_DICTIONARY_RUNTIME_V1),
+            m_texture_dictionary_runtime_v1: MethodName::from(
+                method::TEXTURE_DICTIONARY_RUNTIME_V1,
+            ),
             m_status_json_v1: MethodName::from(method::STATUS_JSON_V1),
             m_status_graph_json_v1: MethodName::from(method::STATUS_GRAPH_JSON_V1),
             m_project_status_json_v1: MethodName::from(method::PROJECT_STATUS_JSON_V1),
@@ -109,7 +114,10 @@ impl AssetServiceClient {
     /// This keeps editor UI callers away from format parsing and away from the
     /// root `engine.assets` byte/VFS surface: the selected inspect provider owns
     /// the normalized `AssetDocument` DTO.
-    pub fn inspect_document_json_v1(&self, request: AssetDocumentRequest) -> Result<AssetDocument, String> {
+    pub fn inspect_document_json_v1(
+        &self,
+        request: AssetDocumentRequest,
+    ) -> Result<AssetDocument, String> {
         let payload = serde_json::to_vec(&request)
             .map_err(|e| format!("inspect_document_json_v1: invalid request: {e}"))?;
         let bytes = self.call_service(
@@ -169,7 +177,8 @@ impl AssetServiceClient {
 
     #[inline]
     fn call(&self, method_name: MethodName, payload: Vec<u8>) -> Result<Vec<u8>, String> {
-        self.call_typed(method_name, payload).map_err(|e| e.to_string())
+        self.call_typed(method_name, payload)
+            .map_err(|e| e.to_string())
     }
 
     #[inline]
@@ -178,13 +187,23 @@ impl AssetServiceClient {
     }
 
     #[inline]
-    fn call_service(&self, service_id: &'static str, method_name: MethodName, payload: Vec<u8>) -> Result<Vec<u8>, String> {
+    fn call_service(
+        &self,
+        service_id: &'static str,
+        method_name: MethodName,
+        payload: Vec<u8>,
+    ) -> Result<Vec<u8>, String> {
         self.call_service_typed(RString::from(service_id), method_name, payload)
             .map_err(|e| e.to_string())
     }
 
     #[inline]
-    fn call_service_typed(&self, service_id: RString, method_name: MethodName, payload: Vec<u8>) -> AssetResult<Vec<u8>> {
+    fn call_service_typed(
+        &self,
+        service_id: RString,
+        method_name: MethodName,
+        payload: Vec<u8>,
+    ) -> AssetResult<Vec<u8>> {
         let res = (self.host.call_service_v1)(service_id, method_name, Blob::from(payload));
 
         res.into_result()
@@ -212,7 +231,10 @@ impl AssetServiceClient {
         serde_json::from_str::<serde_json::Value>(s).map_err(|e| e.to_string())
     }
 
-    fn decode_json<T: serde::de::DeserializeOwned>(bytes: Vec<u8>, op: &'static str) -> Result<T, String> {
+    fn decode_json<T: serde::de::DeserializeOwned>(
+        bytes: Vec<u8>,
+        op: &'static str,
+    ) -> Result<T, String> {
         let s = Self::decode_utf8(bytes)?;
         serde_json::from_str::<T>(&s).map_err(|e| format!("{op}: invalid json response: {e}"))
     }
@@ -273,7 +295,10 @@ impl AssetServiceClient {
     fn decode_texture_rgba8_wire_v1(bytes: Vec<u8>) -> Result<Rgba8TextureAsset, String> {
         let min_len = crate::texture_wire::HEADER_LEN;
         if bytes.len() < min_len {
-            return Err(format!("texture_rgba8_v1: short frame bytes={} expected_at_least={min_len}", bytes.len()));
+            return Err(format!(
+                "texture_rgba8_v1: short frame bytes={} expected_at_least={min_len}",
+                bytes.len()
+            ));
         }
         if &bytes[0..4] != &crate::texture_wire::MAGIC[..] {
             return Err("texture_rgba8_v1: bad magic".to_string());
@@ -301,7 +326,10 @@ impl AssetServiceClient {
         let header_len = crate::texture_wire::RUNTIME_HEADER_LEN;
         let mip_record_len = crate::texture_wire::RUNTIME_MIP_RECORD_LEN;
         if bytes.len() < header_len {
-            return Err(format!("texture_runtime_v1: short frame bytes={} expected_at_least={header_len}", bytes.len()));
+            return Err(format!(
+                "texture_runtime_v1: short frame bytes={} expected_at_least={header_len}",
+                bytes.len()
+            ));
         }
         if &bytes[0..4] != &crate::texture_wire::MAGIC[..] {
             return Err("texture_runtime_v1: bad magic".to_string());
@@ -321,27 +349,47 @@ impl AssetServiceClient {
         let format = RuntimeTextureFormat::from_wire_id(format_id)
             .ok_or_else(|| format!("texture_runtime_v1: unsupported format id {format_id}"))?;
         let records_offset = header_len;
-        let payload_offset = records_offset.saturating_add(mip_count.saturating_mul(mip_record_len));
+        let payload_offset =
+            records_offset.saturating_add(mip_count.saturating_mul(mip_record_len));
         let expected_len = payload_offset.saturating_add(payload_len);
         if bytes.len() != expected_len {
-            return Err(format!("texture_runtime_v1: frame size mismatch bytes={} expected={expected_len}", bytes.len()));
+            return Err(format!(
+                "texture_runtime_v1: frame size mismatch bytes={} expected={expected_len}",
+                bytes.len()
+            ));
         }
         let mut mips = Vec::with_capacity(mip_count);
         for i in 0..mip_count {
             let o = records_offset + i * mip_record_len;
             let level = u16::from_le_bytes([bytes[o], bytes[o + 1]]) as u32;
-            let mip_width = u32::from_le_bytes([bytes[o + 4], bytes[o + 5], bytes[o + 6], bytes[o + 7]]);
-            let mip_height = u32::from_le_bytes([bytes[o + 8], bytes[o + 9], bytes[o + 10], bytes[o + 11]]);
-            let byte_offset = u32::from_le_bytes([bytes[o + 12], bytes[o + 13], bytes[o + 14], bytes[o + 15]]) as usize;
-            let byte_len = u32::from_le_bytes([bytes[o + 16], bytes[o + 17], bytes[o + 18], bytes[o + 19]]) as usize;
+            let mip_width =
+                u32::from_le_bytes([bytes[o + 4], bytes[o + 5], bytes[o + 6], bytes[o + 7]]);
+            let mip_height =
+                u32::from_le_bytes([bytes[o + 8], bytes[o + 9], bytes[o + 10], bytes[o + 11]]);
+            let byte_offset =
+                u32::from_le_bytes([bytes[o + 12], bytes[o + 13], bytes[o + 14], bytes[o + 15]])
+                    as usize;
+            let byte_len =
+                u32::from_le_bytes([bytes[o + 16], bytes[o + 17], bytes[o + 18], bytes[o + 19]])
+                    as usize;
             let start = payload_offset.saturating_add(byte_offset);
             let end = start.saturating_add(byte_len);
             if byte_offset > payload_len || end > bytes.len() {
                 return Err(format!("texture_runtime_v1: mip range out of bounds level={level} offset={byte_offset} len={byte_len}"));
             }
-            mips.push(RuntimeTextureMip { level, width: mip_width, height: mip_height, bytes: bytes[start..end].to_vec() });
+            mips.push(RuntimeTextureMip {
+                level,
+                width: mip_width,
+                height: mip_height,
+                bytes: bytes[start..end].to_vec(),
+            });
         }
-        Ok(RuntimeTextureAsset { width, height, format, mips })
+        Ok(RuntimeTextureAsset {
+            width,
+            height,
+            format,
+            mips,
+        })
     }
 
     #[inline]
@@ -353,7 +401,10 @@ impl AssetServiceClient {
     fn decode_texture_runtime_wire_v2_typed(bytes: Vec<u8>) -> AssetResult<RuntimeTextureAsset> {
         Self::decode_texture_runtime_wire_v2(bytes).map_err(|message| {
             let lower = message.to_ascii_lowercase();
-            if lower.contains("unsupported") || lower.contains("bad magic") || lower.contains("format") {
+            if lower.contains("unsupported")
+                || lower.contains("bad magic")
+                || lower.contains("format")
+            {
                 AssetError::unsupported_format(message)
             } else {
                 AssetError::decode_failed(message)
@@ -388,7 +439,10 @@ impl AssetServiceClient {
     /// Enqueue importer-owned asset import by logical path.
     #[inline]
     pub fn import_v1(&self, logical_path: &str) -> Result<String, String> {
-        let bytes = self.call_raw(self.m_import_v1.clone(), Self::logical_payload(logical_path))?;
+        let bytes = self.call_raw(
+            self.m_import_v1.clone(),
+            Self::logical_payload(logical_path),
+        )?;
         Self::decode_load_like(bytes, "import_v1")
     }
 
@@ -398,7 +452,10 @@ impl AssetServiceClient {
     /// still goes through the mounted VFS layers (.nepak, filesystem, future remote sources).
     #[inline]
     pub fn raw_bytes_v1(&self, logical_path: &str) -> Result<Vec<u8>, String> {
-        self.call_raw(self.m_raw_bytes_v1.clone(), Self::logical_payload(logical_path))
+        self.call_raw(
+            self.m_raw_bytes_v1.clone(),
+            Self::logical_payload(logical_path),
+        )
     }
 
     /// Read UTF-8/text asset bytes directly through the AssetManager v1 text method.
@@ -410,7 +467,10 @@ impl AssetServiceClient {
     /// Validated lifecycle projection for systems that own non-CPU residency,
     /// for example the render controller marking GPU upload/residency stages.
     #[inline]
-    pub fn project_status_json_v1(&self, payload: serde_json::Value) -> Result<serde_json::Value, String> {
+    pub fn project_status_json_v1(
+        &self,
+        payload: serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
         let bytes = serde_json::to_vec(&payload).map_err(|e| e.to_string())?;
         Self::decode_ok_json(self.call_raw(self.m_project_status_json_v1.clone(), bytes)?)
     }
@@ -426,7 +486,12 @@ impl AssetServiceClient {
     /// The service accepts either texture_name or texture_hash. When both are omitted,
     /// the first dictionary entry is selected.
     #[inline]
-    pub fn texture_dictionary_rgba8_v1_typed(&self, dictionary_path: &str, texture_name: Option<&str>, texture_hash: Option<u64>) -> AssetResult<Rgba8TextureAsset> {
+    pub fn texture_dictionary_rgba8_v1_typed(
+        &self,
+        dictionary_path: &str,
+        texture_name: Option<&str>,
+        texture_hash: Option<u64>,
+    ) -> AssetResult<Rgba8TextureAsset> {
         let mut req = serde_json::json!({ "dictionary_path": dictionary_path });
         if let Some(name) = texture_name {
             req["texture_name"] = serde_json::Value::String(name.to_owned());
@@ -436,17 +501,28 @@ impl AssetServiceClient {
         }
         let payload = Self::json_payload_typed(&req)?;
         let bytes = self.call_raw_typed(self.m_texture_dictionary_rgba8_v1.clone(), payload)?;
-        Self::decode_texture_rgba8_wire_v1_typed(bytes).map_err(|e| e.with_logical_path(dictionary_path))
+        Self::decode_texture_rgba8_wire_v1_typed(bytes)
+            .map_err(|e| e.with_logical_path(dictionary_path))
     }
 
     #[inline]
-    pub fn texture_dictionary_rgba8_v1(&self, dictionary_path: &str, texture_name: Option<&str>, texture_hash: Option<u64>) -> Result<Rgba8TextureAsset, String> {
+    pub fn texture_dictionary_rgba8_v1(
+        &self,
+        dictionary_path: &str,
+        texture_name: Option<&str>,
+        texture_hash: Option<u64>,
+    ) -> Result<Rgba8TextureAsset, String> {
         self.texture_dictionary_rgba8_v1_typed(dictionary_path, texture_name, texture_hash)
             .map_err(|e| e.to_string())
     }
 
     #[inline]
-    pub fn texture_dictionary_runtime_v1_typed(&self, dictionary_path: &str, texture_name: Option<&str>, texture_hash: Option<u64>) -> AssetResult<RuntimeTextureAsset> {
+    pub fn texture_dictionary_runtime_v1_typed(
+        &self,
+        dictionary_path: &str,
+        texture_name: Option<&str>,
+        texture_hash: Option<u64>,
+    ) -> AssetResult<RuntimeTextureAsset> {
         let mut req = serde_json::json!({ "dictionary_path": dictionary_path });
         if let Some(name) = texture_name {
             req["texture_name"] = serde_json::Value::String(name.to_owned());
@@ -456,10 +532,16 @@ impl AssetServiceClient {
         }
         let payload = Self::json_payload_typed(&req)?;
         let bytes = self.call_raw_typed(self.m_texture_dictionary_runtime_v1.clone(), payload)?;
-        Self::decode_texture_runtime_wire_v2_typed(bytes).map_err(|e| e.with_logical_path(dictionary_path))
+        Self::decode_texture_runtime_wire_v2_typed(bytes)
+            .map_err(|e| e.with_logical_path(dictionary_path))
     }
 
-    pub fn texture_dictionary_runtime_v1(&self, dictionary_path: &str, texture_name: Option<&str>, texture_hash: Option<u64>) -> Result<RuntimeTextureAsset, String> {
+    pub fn texture_dictionary_runtime_v1(
+        &self,
+        dictionary_path: &str,
+        texture_name: Option<&str>,
+        texture_hash: Option<u64>,
+    ) -> Result<RuntimeTextureAsset, String> {
         self.texture_dictionary_runtime_v1_typed(dictionary_path, texture_name, texture_hash)
             .map_err(|e| e.to_string())
     }
@@ -467,13 +549,19 @@ impl AssetServiceClient {
     /// List a mounted VFS directory through AssetManager.
     #[inline]
     pub fn vfs_list_json_v1(&self, logical_path: &str) -> Result<serde_json::Value, String> {
-        let bytes = self.call_raw(self.m_vfs_list_json_v1.clone(), Self::logical_payload(logical_path))?;
+        let bytes = self.call_raw(
+            self.m_vfs_list_json_v1.clone(),
+            Self::logical_payload(logical_path),
+        )?;
         Self::decode_ok_json(bytes)
     }
 
     /// Repack a NEF8 ListFile after editor-side entry mutation and write it back through AssetManager VFS.
     #[inline]
-    pub fn list_file_repack_json_v1(&self, payload: serde_json::Value) -> Result<serde_json::Value, String> {
+    pub fn list_file_repack_json_v1(
+        &self,
+        payload: serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
         let bytes = serde_json::to_vec(&payload).map_err(|e| e.to_string())?;
         let bytes = self.call_raw(self.m_list_file_repack_json_v1.clone(), bytes)?;
         Self::decode_ok_json(bytes)
@@ -484,63 +572,93 @@ impl AssetServiceClient {
     /// `engine.assets` remains the byte/VFS/codec-dispatch owner, but texture semantics,
     /// selector validation and runtime packet ownership belong to `engine.assets.textures`.
     #[inline]
-    pub fn textures_entry_runtime_v1_typed(&self, dictionary_path: &str, texture_name: Option<&str>, texture_hash: Option<u64>) -> AssetResult<RuntimeTextureAsset> {
+    pub fn textures_entry_runtime_v1_typed(
+        &self,
+        dictionary_path: &str,
+        texture_name: Option<&str>,
+        texture_hash: Option<u64>,
+    ) -> AssetResult<RuntimeTextureAsset> {
         let texture_ref = texture_ref_from_parts(dictionary_path, texture_name, texture_hash)?;
         self.textures_entry_runtime_ref_v1_typed(&texture_ref)
     }
 
     /// Call the semantic `engine.assets.textures` gateway with an authored `.ytd@entry` selector.
     #[inline]
-    pub fn textures_entry_runtime_ref_v1_typed(&self, texture_ref: &str) -> AssetResult<RuntimeTextureAsset> {
+    pub fn textures_entry_runtime_ref_v1_typed(
+        &self,
+        texture_ref: &str,
+    ) -> AssetResult<RuntimeTextureAsset> {
         let reference = require_asset_reference_extension(texture_ref, &["ytd"], true)
             .map_err(AssetError::invalid_request)?;
-        let payload = Self::json_payload_typed(&serde_json::json!({ "texture_ref": reference.canonical }))?;
+        let payload =
+            Self::json_payload_typed(&serde_json::json!({ "texture_ref": reference.canonical }))?;
         let res = (self.host.call_service_v1)(
             RString::from(ENGINE_ASSETS_TEXTURES_SERVICE_ID),
             MethodName::from(textures_method::ENTRY_RUNTIME_V1),
             Blob::from(payload),
         );
-        let bytes = res.into_result()
+        let bytes = res
+            .into_result()
             .map(|v| v.into_vec())
             .map_err(|e| AssetError::from_wire_or_message(e.to_string()))?;
-        Self::decode_texture_runtime_wire_v2_typed(bytes).map_err(|e| e.with_logical_path(&reference.canonical))
+        Self::decode_texture_runtime_wire_v2_typed(bytes)
+            .map_err(|e| e.with_logical_path(&reference.canonical))
     }
 
     /// Call the semantic `engine.assets.textures` gateway for `assets.textures.entry_rgba8_v1` debug/editor packets.
     #[inline]
-    pub fn textures_entry_rgba8_v1_typed(&self, dictionary_path: &str, texture_name: Option<&str>, texture_hash: Option<u64>) -> AssetResult<Rgba8TextureAsset> {
+    pub fn textures_entry_rgba8_v1_typed(
+        &self,
+        dictionary_path: &str,
+        texture_name: Option<&str>,
+        texture_hash: Option<u64>,
+    ) -> AssetResult<Rgba8TextureAsset> {
         let texture_ref = texture_ref_from_parts(dictionary_path, texture_name, texture_hash)?;
         self.textures_entry_rgba8_ref_v1_typed(&texture_ref)
     }
 
     /// Call the semantic `engine.assets.textures` gateway with an authored `.ytd@entry` selector.
     #[inline]
-    pub fn textures_entry_rgba8_ref_v1_typed(&self, texture_ref: &str) -> AssetResult<Rgba8TextureAsset> {
+    pub fn textures_entry_rgba8_ref_v1_typed(
+        &self,
+        texture_ref: &str,
+    ) -> AssetResult<Rgba8TextureAsset> {
         let reference = require_asset_reference_extension(texture_ref, &["ytd"], true)
             .map_err(AssetError::invalid_request)?;
-        let payload = Self::json_payload_typed(&serde_json::json!({ "texture_ref": reference.canonical }))?;
+        let payload =
+            Self::json_payload_typed(&serde_json::json!({ "texture_ref": reference.canonical }))?;
         let res = (self.host.call_service_v1)(
             RString::from(ENGINE_ASSETS_TEXTURES_SERVICE_ID),
             MethodName::from(textures_method::ENTRY_RGBA8_V1),
             Blob::from(payload),
         );
-        let bytes = res.into_result()
+        let bytes = res
+            .into_result()
             .map(|v| v.into_vec())
             .map_err(|e| AssetError::from_wire_or_message(e.to_string()))?;
-        Self::decode_texture_rgba8_wire_v1_typed(bytes).map_err(|e| e.with_logical_path(&reference.canonical))
+        Self::decode_texture_rgba8_wire_v1_typed(bytes)
+            .map_err(|e| e.with_logical_path(&reference.canonical))
     }
 }
 
-fn texture_ref_from_parts(dictionary_path: &str, texture_name: Option<&str>, texture_hash: Option<u64>) -> AssetResult<String> {
+fn texture_ref_from_parts(
+    dictionary_path: &str,
+    texture_name: Option<&str>,
+    texture_hash: Option<u64>,
+) -> AssetResult<String> {
     let dictionary_path = dictionary_path.trim().replace('\\', "/");
     if dictionary_path.trim().is_empty() {
-        return Err(AssetError::invalid_request("assets.textures.entry_* requires non-empty .ytd dictionary path"));
+        return Err(AssetError::invalid_request(
+            "assets.textures.entry_* requires non-empty .ytd dictionary path",
+        ));
     }
     if let Some(hash) = texture_hash {
         return Ok(format!("{}@hash:{}", dictionary_path, hash));
     }
     let Some(name) = texture_name.map(str::trim).filter(|it| !it.is_empty()) else {
-        return Err(AssetError::invalid_request("assets.textures.entry_* requires .ytd@entry or texture_hash"));
+        return Err(AssetError::invalid_request(
+            "assets.textures.entry_* requires .ytd@entry or texture_hash",
+        ));
     };
     Ok(format!("{}@{}", dictionary_path, name))
 }
@@ -572,7 +690,10 @@ impl AssetAccess for AssetServiceClient {
 
     fn status_json_v1(&self, id_or_logical_path: &str) -> Result<serde_json::Value, String> {
         let payload = if id_or_logical_path.trim().len() == 32
-            && id_or_logical_path.trim().chars().all(|c| c.is_ascii_hexdigit())
+            && id_or_logical_path
+                .trim()
+                .chars()
+                .all(|c| c.is_ascii_hexdigit())
         {
             id_or_logical_path.trim().as_bytes().to_vec()
         } else {
@@ -584,7 +705,10 @@ impl AssetAccess for AssetServiceClient {
 
     fn status_graph_json_v1(&self, id_or_logical_path: &str) -> Result<serde_json::Value, String> {
         let payload = if id_or_logical_path.trim().len() == 32
-            && id_or_logical_path.trim().chars().all(|c| c.is_ascii_hexdigit())
+            && id_or_logical_path
+                .trim()
+                .chars()
+                .all(|c| c.is_ascii_hexdigit())
         {
             id_or_logical_path.trim().as_bytes().to_vec()
         } else {
@@ -594,7 +718,10 @@ impl AssetAccess for AssetServiceClient {
         Self::decode_ok_json(bytes)
     }
 
-    fn project_status_json_v1(&self, payload: serde_json::Value) -> Result<serde_json::Value, String> {
+    fn project_status_json_v1(
+        &self,
+        payload: serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
         AssetServiceClient::project_status_json_v1(self, payload)
     }
 
@@ -620,16 +747,39 @@ impl AssetAccess for AssetServiceClient {
 
     fn texture_rgba8_v1(&self, id_hex32: &str) -> Result<Rgba8TextureAsset, String> {
         // Contract payload: utf8 id_u128_hex32. AssetManager owns texture meta parsing.
-        let bytes = self.call_raw(self.m_texture_rgba8_v1.clone(), id_hex32.as_bytes().to_vec())?;
+        let bytes = self.call_raw(
+            self.m_texture_rgba8_v1.clone(),
+            id_hex32.as_bytes().to_vec(),
+        )?;
         Self::decode_texture_rgba8_wire_v1(bytes)
     }
 
-    fn texture_dictionary_rgba8_v1(&self, dictionary_path: &str, texture_name: Option<&str>, texture_hash: Option<u64>) -> Result<Rgba8TextureAsset, String> {
-        AssetServiceClient::texture_dictionary_rgba8_v1(self, dictionary_path, texture_name, texture_hash)
+    fn texture_dictionary_rgba8_v1(
+        &self,
+        dictionary_path: &str,
+        texture_name: Option<&str>,
+        texture_hash: Option<u64>,
+    ) -> Result<Rgba8TextureAsset, String> {
+        AssetServiceClient::texture_dictionary_rgba8_v1(
+            self,
+            dictionary_path,
+            texture_name,
+            texture_hash,
+        )
     }
 
-    fn texture_dictionary_runtime_v1(&self, dictionary_path: &str, texture_name: Option<&str>, texture_hash: Option<u64>) -> Result<RuntimeTextureAsset, String> {
-        AssetServiceClient::texture_dictionary_runtime_v1(self, dictionary_path, texture_name, texture_hash)
+    fn texture_dictionary_runtime_v1(
+        &self,
+        dictionary_path: &str,
+        texture_name: Option<&str>,
+        texture_hash: Option<u64>,
+    ) -> Result<RuntimeTextureAsset, String> {
+        AssetServiceClient::texture_dictionary_runtime_v1(
+            self,
+            dictionary_path,
+            texture_name,
+            texture_hash,
+        )
     }
 
     fn textures_entry_rgba8_v1(&self, texture_ref: &str) -> Result<Rgba8TextureAsset, String> {
@@ -650,7 +800,10 @@ impl AssetService for AssetServiceClient {
     }
 
     fn info_json_v1(&self, logical_path: &str) -> Result<serde_json::Value, String> {
-        let bytes = self.call_raw(self.m_info_json_v1.clone(), Self::logical_payload(logical_path))?;
+        let bytes = self.call_raw(
+            self.m_info_json_v1.clone(),
+            Self::logical_payload(logical_path),
+        )?;
         Self::decode_ok_json(bytes)
     }
 
@@ -665,26 +818,41 @@ impl AssetService for AssetServiceClient {
     }
 
     fn vfs_list_json_v1(&self, logical_path: &str) -> Result<serde_json::Value, String> {
-        let bytes = self.call_raw(self.m_vfs_list_json_v1.clone(), Self::logical_payload(logical_path))?;
+        let bytes = self.call_raw(
+            self.m_vfs_list_json_v1.clone(),
+            Self::logical_payload(logical_path),
+        )?;
         Self::decode_ok_json(bytes)
     }
 
-    fn list_file_repack_json_v1(&self, payload: serde_json::Value) -> Result<serde_json::Value, String> {
+    fn list_file_repack_json_v1(
+        &self,
+        payload: serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
         AssetServiceClient::list_file_repack_json_v1(self, payload)
     }
 
     fn uid_json_v1(&self, logical_path: &str) -> Result<serde_json::Value, String> {
-        let bytes = self.call_raw(self.m_uid_json_v1.clone(), Self::logical_payload(logical_path))?;
+        let bytes = self.call_raw(
+            self.m_uid_json_v1.clone(),
+            Self::logical_payload(logical_path),
+        )?;
         Self::decode_ok_json(bytes)
     }
 
-    fn import_cache_json_v1(&self, payload: serde_json::Value) -> Result<serde_json::Value, String> {
+    fn import_cache_json_v1(
+        &self,
+        payload: serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
         let bytes = serde_json::to_vec(&payload).map_err(|e| e.to_string())?;
         let bytes = self.call_raw(self.m_import_cache_json_v1.clone(), bytes)?;
         Self::decode_ok_json(bytes)
     }
 
-    fn import_dirty_json_v1(&self, payload: serde_json::Value) -> Result<serde_json::Value, String> {
+    fn import_dirty_json_v1(
+        &self,
+        payload: serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
         let bytes = serde_json::to_vec(&payload).map_err(|e| e.to_string())?;
         let bytes = self.call_raw(self.m_import_dirty_json_v1.clone(), bytes)?;
         Self::decode_ok_json(bytes)
@@ -696,31 +864,46 @@ impl AssetService for AssetServiceClient {
         Self::decode_ok_json(bytes)
     }
 
-    fn import_graph_json_v1(&self, payload: serde_json::Value) -> Result<serde_json::Value, String> {
+    fn import_graph_json_v1(
+        &self,
+        payload: serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
         let bytes = serde_json::to_vec(&payload).map_err(|e| e.to_string())?;
         let bytes = self.call_raw(self.m_import_graph_json_v1.clone(), bytes)?;
         Self::decode_ok_json(bytes)
     }
 
-    fn import_diagnostics_json_v1(&self, payload: serde_json::Value) -> Result<serde_json::Value, String> {
+    fn import_diagnostics_json_v1(
+        &self,
+        payload: serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
         let bytes = serde_json::to_vec(&payload).map_err(|e| e.to_string())?;
         let bytes = self.call_raw(self.m_import_diagnostics_json_v1.clone(), bytes)?;
         Self::decode_ok_json(bytes)
     }
 
-    fn import_thumbnails_json_v1(&self, payload: serde_json::Value) -> Result<serde_json::Value, String> {
+    fn import_thumbnails_json_v1(
+        &self,
+        payload: serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
         let bytes = serde_json::to_vec(&payload).map_err(|e| e.to_string())?;
         let bytes = self.call_raw(self.m_import_thumbnails_json_v1.clone(), bytes)?;
         Self::decode_ok_json(bytes)
     }
 
-    fn import_dependencies_json_v1(&self, payload: serde_json::Value) -> Result<serde_json::Value, String> {
+    fn import_dependencies_json_v1(
+        &self,
+        payload: serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
         let bytes = serde_json::to_vec(&payload).map_err(|e| e.to_string())?;
         let bytes = self.call_raw(self.m_import_dependencies_json_v1.clone(), bytes)?;
         Self::decode_ok_json(bytes)
     }
 
-    fn import_queue_json_v1(&self, payload: serde_json::Value) -> Result<serde_json::Value, String> {
+    fn import_queue_json_v1(
+        &self,
+        payload: serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
         let bytes = serde_json::to_vec(&payload).map_err(|e| e.to_string())?;
         let bytes = self.call_raw(self.m_import_queue_json_v1.clone(), bytes)?;
         Self::decode_ok_json(bytes)
@@ -744,13 +927,19 @@ impl AssetService for AssetServiceClient {
         Self::decode_ok_json(bytes)
     }
 
-    fn package_writer_info_json_v1(&self, payload: serde_json::Value) -> Result<serde_json::Value, String> {
+    fn package_writer_info_json_v1(
+        &self,
+        payload: serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
         let bytes = serde_json::to_vec(&payload).map_err(|e| e.to_string())?;
         let bytes = self.call_raw(self.m_package_writer_info_json_v1.clone(), bytes)?;
         Self::decode_ok_json(bytes)
     }
 
-    fn package_write_nepak_json_v1(&self, payload: NepakPackageWriteRequestV1) -> Result<NepakPackageWriteResponseV1, String> {
+    fn package_write_nepak_json_v1(
+        &self,
+        payload: NepakPackageWriteRequestV1,
+    ) -> Result<NepakPackageWriteResponseV1, String> {
         let bytes = serde_json::to_vec(&payload).map_err(|e| e.to_string())?;
         let bytes = self.call_raw(self.m_package_write_nepak_json_v1.clone(), bytes)?;
         Self::decode_json::<NepakPackageWriteResponseV1>(bytes, "package_write_nepak_json_v1")

@@ -2,9 +2,9 @@
 
 use crate::{GlobalTransform, Parent, Transform, TransformDirty, WorldPose};
 use newengine_ecs::{EntityId, World};
-use newengine_transform_api::EntityHandle;
 use newengine_math::collections_prelude::NeKey;
 use newengine_math::{EulerRot, Mat4};
+use newengine_transform_api::EntityHandle;
 
 /// Reusable scratch buffers for transform propagation.
 ///
@@ -26,7 +26,8 @@ pub struct TransformPropagationScratch {
 #[inline]
 pub fn ensure_transform_outputs(world: &mut World) {
     // Move scratch out to avoid borrow conflicts.
-    let mut scratch = core::mem::take(world.resource_mut_or_insert_default::<TransformPropagationScratch>());
+    let mut scratch =
+        core::mem::take(world.resource_mut_or_insert_default::<TransformPropagationScratch>());
 
     scratch.ensure_ids.clear();
     scratch
@@ -61,7 +62,8 @@ pub fn propagate_transforms(world: &mut World) {
     ensure_transform_outputs(world);
 
     // Move scratch out of the World to avoid borrow conflicts with queries/gets.
-    let mut scratch = core::mem::take(world.resource_mut_or_insert_default::<TransformPropagationScratch>());
+    let mut scratch =
+        core::mem::take(world.resource_mut_or_insert_default::<TransformPropagationScratch>());
 
     // 1) Collect all entities that have Transform, deterministically ordered.
     scratch.ids.clear();
@@ -130,7 +132,10 @@ pub fn propagate_transforms(world: &mut World) {
                     scratch.stack.push((i, 1));
 
                     if let Some(pid) = scratch.parents[i] {
-                        if let Ok(pidx) = scratch.ids.binary_search_by_key(&pid.stable_id, |id| id.stable_u64()) {
+                        if let Ok(pidx) = scratch
+                            .ids
+                            .binary_search_by_key(&pid.stable_id, |id| id.stable_u64())
+                        {
                             if scratch.vis[pidx] != 2 {
                                 scratch.stack.push((pidx, 0));
                             }
@@ -140,7 +145,10 @@ pub fn propagate_transforms(world: &mut World) {
                 _ => {
                     let local = scratch.locals[i];
                     let composed = if let Some(pid) = scratch.parents[i] {
-                        if let Ok(pidx) = scratch.ids.binary_search_by_key(&pid.stable_id, |id| id.stable_u64()) {
+                        if let Ok(pidx) = scratch
+                            .ids
+                            .binary_search_by_key(&pid.stable_id, |id| id.stable_u64())
+                        {
                             if scratch.vis[pidx] == 2 {
                                 scratch.out[pidx] * local
                             } else {

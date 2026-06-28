@@ -17,7 +17,9 @@ pub(super) fn is_nemat_entry_ref(path: &str) -> bool {
 }
 
 #[inline]
-pub(super) fn load_material_descriptor_asset(path: &str) -> Option<NeMaterialDescriptorLoadResponse> {
+pub(super) fn load_material_descriptor_asset(
+    path: &str,
+) -> Option<NeMaterialDescriptorLoadResponse> {
     if !is_nemat_entry_ref(path) {
         newengine_ulog_api::ulog::warn!(
             "game-ready material: rejected non-canonical material asset path='{}' expected='<logical-path>.nemat@entry' policy='ytyp->ydd->nemat->ytd' action='skip_asset'",
@@ -26,11 +28,18 @@ pub(super) fn load_material_descriptor_asset(path: &str) -> Option<NeMaterialDes
         return None;
     }
 
-    let request = NeMaterialLoadRequest { logical_path: path.trim().replace('\\', "/"), selector: None };
+    let request = NeMaterialLoadRequest {
+        logical_path: path.trim().replace('\\', "/"),
+        selector: None,
+    };
     let payload = match serde_json::to_vec(&request) {
         Ok(payload) => payload,
         Err(e) => {
-            newengine_ulog_api::ulog::warn!("game-ready material: .nemat request encode failed path='{}' err='{}'", path, e);
+            newengine_ulog_api::ulog::warn!(
+                "game-ready material: .nemat request encode failed path='{}' err='{}'",
+                path,
+                e
+            );
             return None;
         }
     };
@@ -47,7 +56,7 @@ pub(super) fn load_material_descriptor_asset(path: &str) -> Option<NeMaterialDes
                 material_method::LOAD_DESCRIPTOR_V1
             );
             return None;
-        },
+        }
         Err(e) => {
             newengine_ulog_api::ulog::warn!(
                 "game-ready material: .nemat descriptor unavailable path='{}' gateway='engine.assets.materials' method='{}' err='{}'",
@@ -61,7 +70,11 @@ pub(super) fn load_material_descriptor_asset(path: &str) -> Option<NeMaterialDes
     match serde_json::from_slice::<NeMaterialDescriptorLoadResponse>(&bytes) {
         Ok(response) => Some(response),
         Err(e) => {
-            newengine_ulog_api::ulog::warn!("game-ready material: .nemat descriptor decode failed path='{}' err='{}'", path, e);
+            newengine_ulog_api::ulog::warn!(
+                "game-ready material: .nemat descriptor decode failed path='{}' err='{}'",
+                path,
+                e
+            );
             None
         }
     }
@@ -132,13 +145,21 @@ pub(super) fn register_material(
         if let Some(mut response) = load_material_descriptor_asset(asset_path) {
             response.descriptor.flags = response.descriptor.flags.union(flags);
             response.descriptor.sanitize_in_place();
-            let material_name = if response.name.trim().is_empty() { name.to_owned() } else { response.name };
+            let material_name = if response.name.trim().is_empty() {
+                name.to_owned()
+            } else {
+                response.name
+            };
             newengine_ulog_api::ulog::debug!(
                 "game-ready material: resolved .nemat material name='{}' source='{}' policy='ytyp->ydd->nemat->ytd'",
                 material_name,
                 response.source
             );
-            return mats.upsert_named_with_textures(&material_name, response.descriptor, response.textures.sanitized());
+            return mats.upsert_named_with_textures(
+                &material_name,
+                response.descriptor,
+                response.textures.sanitized(),
+            );
         }
     } else {
         newengine_ulog_api::ulog::warn!(
@@ -147,7 +168,7 @@ pub(super) fn register_material(
         );
     }
 
-    let (desc, textures) = diagnostic_unresolved_material(name, base_color, emissive, emissive_strength, flags, spec);
+    let (desc, textures) =
+        diagnostic_unresolved_material(name, base_color, emissive, emissive_strength, flags, spec);
     mats.upsert_named_with_textures(name, desc, textures)
 }
-

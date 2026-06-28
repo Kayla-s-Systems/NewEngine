@@ -13,21 +13,30 @@ pub fn normalize_texture_name(name: &str) -> String {
     // old split-on-any-dot rule collapsed them all to `newengine` and produced
     // duplicate dictionary hashes.
     match ext {
-        "png" | "jpg" | "jpeg" | "bmp" | "tga" | "webp" | "dds" | "ktx" | "ktx2" | "ytd" => stem.to_owned(),
+        "png" | "jpg" | "jpeg" | "bmp" | "tga" | "webp" | "dds" | "ktx" | "ktx2" | "ytd" => {
+            stem.to_owned()
+        }
         _ => lower,
     }
 }
 
 pub fn normalize_color_space(value: &str) -> String {
     match value.trim().to_ascii_lowercase().as_str() {
-        "srgb" | "s_rgb" | "color" | "albedo" | "basecolor" | "base_color" | "diffuse" => COLOR_SPACE_SRGB.to_owned(),
+        "srgb" | "s_rgb" | "color" | "albedo" | "basecolor" | "base_color" | "diffuse" => {
+            COLOR_SPACE_SRGB.to_owned()
+        }
         _ => COLOR_SPACE_LINEAR.to_owned(),
     }
 }
 
 pub fn infer_color_space_from_name(name: &str) -> String {
     let n = name.to_ascii_lowercase();
-    if n.contains("normal") || n.contains("roughness") || n.contains("metallic") || n.contains("occlusion") || n.contains("_ao") {
+    if n.contains("normal")
+        || n.contains("roughness")
+        || n.contains("metallic")
+        || n.contains("occlusion")
+        || n.contains("_ao")
+    {
         COLOR_SPACE_LINEAR.to_owned()
     } else {
         COLOR_SPACE_SRGB.to_owned()

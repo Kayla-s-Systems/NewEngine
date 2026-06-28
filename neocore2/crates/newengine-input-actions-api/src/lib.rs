@@ -8,7 +8,8 @@ pub const INPUT_ACTIONS_BACKEND_CAPABILITY_ID: &str = "input.actions.backend";
 
 pub const INPUT_ACTIONS_METHOD_INFO: &str = newengine_service_api::SERVICE_METHOD_INFO_JSON;
 pub const INPUT_ACTIONS_METHOD_INVOKE: &str = newengine_service_api::SERVICE_METHOD_INVOKE_JSON;
-pub const INPUT_ACTIONS_METHOD_SHUTDOWN_V1: &str = newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1;
+pub const INPUT_ACTIONS_METHOD_SHUTDOWN_V1: &str =
+    newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1;
 pub const INPUT_ACTIONS_METHOD_FRAME_JSON_V1: &str = "frame_json_v1";
 pub const INPUT_ACTIONS_METHOD_DISPATCH_JSON_V1: &str = "dispatch_json_v1";
 
@@ -32,7 +33,8 @@ pub const INPUT_ACTIONS_RUNTIME_CONTRACT_SPEC: newengine_service_api::RuntimeSer
         ],
     );
 
-pub const INPUT_ACTIONS_RUNTIME_REQUIREMENT_SPEC: newengine_service_api::RuntimeServiceRequirementSpec =
+pub const INPUT_ACTIONS_RUNTIME_REQUIREMENT_SPEC:
+    newengine_service_api::RuntimeServiceRequirementSpec =
     newengine_service_api::RuntimeServiceRequirementSpec::new(
         INPUT_ACTIONS_RUNTIME_CONTRACT_SPEC,
         Some(INPUT_ACTIONS_BACKEND_CAPABILITY_ID),
@@ -121,7 +123,9 @@ impl InputActionListenerRegistration {
 }
 
 #[inline]
-fn default_true() -> bool { true }
+fn default_true() -> bool {
+    true
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -132,7 +136,9 @@ pub enum InputActionDispatchMode {
 
 impl Default for InputActionDispatchMode {
     #[inline]
-    fn default() -> Self { Self::Broadcast }
+    fn default() -> Self {
+        Self::Broadcast
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -145,7 +151,9 @@ pub enum CameraViewRequest {
 
 impl Default for CameraViewRequest {
     #[inline]
-    fn default() -> Self { Self::None }
+    fn default() -> Self {
+        Self::None
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -280,16 +288,26 @@ pub trait InputFrameSource {
     /// This is intentionally advisory. Binding profiles use it for diagnostics and fallback
     /// policy, not for hard device gating; modal capture belongs to `engine.input.contexts`.
     #[inline]
-    fn has_gamepad_connected(&self) -> bool { false }
+    fn has_gamepad_connected(&self) -> bool {
+        false
+    }
 
     #[inline]
-    fn is_gamepad_button_down(&self, _button: &str) -> bool { false }
+    fn is_gamepad_button_down(&self, _button: &str) -> bool {
+        false
+    }
     #[inline]
-    fn is_gamepad_button_pressed(&self, _button: &str) -> bool { false }
+    fn is_gamepad_button_pressed(&self, _button: &str) -> bool {
+        false
+    }
     #[inline]
-    fn is_gamepad_button_released(&self, _button: &str) -> bool { false }
+    fn is_gamepad_button_released(&self, _button: &str) -> bool {
+        false
+    }
     #[inline]
-    fn gamepad_axis(&self, _axis: &str) -> f32 { 0.0 }
+    fn gamepad_axis(&self, _axis: &str) -> f32 {
+        0.0
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -323,7 +341,11 @@ impl Default for InputActionsServiceInfo {
 #[inline]
 pub fn normalize_action_id(value: &str) -> Option<String> {
     let trimmed = value.trim();
-    if trimmed.is_empty() || trimmed.contains(char::is_whitespace) || trimmed.contains('/') || trimmed.contains('\\') {
+    if trimmed.is_empty()
+        || trimmed.contains(char::is_whitespace)
+        || trimmed.contains('/')
+        || trimmed.contains('\\')
+    {
         None
     } else {
         Some(trimmed.to_ascii_lowercase())
@@ -333,7 +355,11 @@ pub fn normalize_action_id(value: &str) -> Option<String> {
 #[inline]
 pub fn normalize_id_like(value: &str) -> Option<String> {
     let trimmed = value.trim();
-    if trimmed.is_empty() || trimmed.contains(char::is_whitespace) || trimmed.contains('/') || trimmed.contains('\\') {
+    if trimmed.is_empty()
+        || trimmed.contains(char::is_whitespace)
+        || trimmed.contains('/')
+        || trimmed.contains('\\')
+    {
         None
     } else {
         Some(trimmed.to_owned())
@@ -355,7 +381,9 @@ pub fn normalize_string_list(values: Vec<String>) -> Vec<String> {
 pub fn normalize_action_filter(values: Vec<String>) -> Vec<String> {
     let mut out = Vec::new();
     for value in values {
-        let Some(action) = normalize_action_id(&value) else { continue; };
+        let Some(action) = normalize_action_id(&value) else {
+            continue;
+        };
         if out.iter().any(|v: &String| v == &action) {
             continue;
         }

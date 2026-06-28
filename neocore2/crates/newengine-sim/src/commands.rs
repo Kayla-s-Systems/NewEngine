@@ -86,7 +86,7 @@ impl CommandBuffer {
 
     #[cfg(debug_assertions)]
     #[inline]
-    pub(crate) fn iter(&self) -> impl Iterator<Item=&dyn Command> {
+    pub(crate) fn iter(&self) -> impl Iterator<Item = &dyn Command> {
         self.cmds.iter().map(|c| &**c)
     }
 

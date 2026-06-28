@@ -1,5 +1,5 @@
 use newengine_render_api::{
-    FrameCameraContext, RendererParitySettings, VisibilitySettings, RenderGraphDesc,
+    FrameCameraContext, RenderGraphDesc, RendererParitySettings, VisibilitySettings,
 };
 
 use crate::{
@@ -100,7 +100,6 @@ impl FrameGraphBuilder {
         self
     }
 
-
     pub fn apply_runtime_recipe(
         mut self,
         recipe: &RenderFrameRecipe,
@@ -110,7 +109,11 @@ impl FrameGraphBuilder {
             self = match phase {
                 StandardRenderPhase::BeginFrame | StandardRenderPhase::EndFrame => self,
                 StandardRenderPhase::ShadowMap => self.shadow_map(true, params.shadow_resolution),
-                StandardRenderPhase::ShadowCascadeMap => self.shadow_cascade_map(true, params.shadow_resolution, params.shadow_cascade_count),
+                StandardRenderPhase::ShadowCascadeMap => self.shadow_cascade_map(
+                    true,
+                    params.shadow_resolution,
+                    params.shadow_cascade_count,
+                ),
                 StandardRenderPhase::TessellationPrepare => self.tessellation_prepare(),
                 StandardRenderPhase::DepthPrepass => self.depth_prepass(),
                 StandardRenderPhase::ViewportGBuffer => self.gbuffer(),
@@ -130,8 +133,6 @@ impl FrameGraphBuilder {
         }
         self
     }
-
-
 }
 
 #[cfg(test)]

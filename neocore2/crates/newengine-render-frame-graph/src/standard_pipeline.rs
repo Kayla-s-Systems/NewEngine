@@ -1,8 +1,8 @@
 use newengine_render_api::{Extent2D, RenderTargetId, TextureFormat};
 
 use crate::{
-    DrawListDesc, FrameGraphBuilder, FrameGraphTargetDesc, FramePlanExecutionMode,
-    RenderFramePlan, RenderFrameRecipe, RuntimeFrameFeatureSet, RuntimeRecipeBuildParams,
+    DrawListDesc, FrameGraphBuilder, FrameGraphTargetDesc, FramePlanExecutionMode, RenderFramePlan,
+    RenderFrameRecipe, RuntimeFrameFeatureSet, RuntimeRecipeBuildParams,
 };
 
 #[derive(Debug, Clone)]
@@ -124,7 +124,6 @@ impl StandardRuntimePipelineDesc {
     }
 }
 
-
 #[inline]
 pub fn standard_runtime_frame(desc: StandardRuntimePipelineDesc) -> RenderFramePlan {
     let mut target = FrameGraphTargetDesc::new(
@@ -145,14 +144,16 @@ pub fn standard_runtime_frame(desc: StandardRuntimePipelineDesc) -> RenderFrameP
             desc.postfx_enabled,
             desc.ui_enabled,
             desc.debug_overlay_enabled,
-        ).with_ui_backdrop_blur(desc.ui_backdrop_blur_enabled)
+        )
+        .with_ui_backdrop_blur(desc.ui_backdrop_blur_enabled)
     } else {
         RuntimeFrameFeatureSet::forward(
             desc.shadow_enabled,
             desc.postfx_enabled,
             desc.ui_enabled,
             desc.debug_overlay_enabled,
-        ).with_ui_backdrop_blur(desc.ui_backdrop_blur_enabled)
+        )
+        .with_ui_backdrop_blur(desc.ui_backdrop_blur_enabled)
     };
     let recipe = RenderFrameRecipe::standard_runtime_with_shadow_mode(
         features,

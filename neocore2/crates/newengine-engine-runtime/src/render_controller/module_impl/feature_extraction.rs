@@ -6,9 +6,7 @@ use newengine_plugin_host::PluginsSnapshot;
 use newengine_render_feature_api::SceneExtractionCtx;
 use newengine_render_frame_graph::{DrawListDesc, DrawListRouteValidationReport, RenderFramePlan};
 
-use super::draw_lists::{
-    DrawListBuildCtx, RenderDrawListProviderRegistry, RuntimeDrawListSet,
-};
+use super::draw_lists::{DrawListBuildCtx, RenderDrawListProviderRegistry, RuntimeDrawListSet};
 use super::profiling::TimedBreakdown;
 use crate::render_controller::RuntimeRenderController;
 
@@ -33,27 +31,38 @@ impl FeatureExtractionFrame {
         trace_frame: bool,
     ) -> EngineResult<Self> {
         let mut registry = RenderDrawListProviderRegistry::from_runtime_providers(
-            controller.features.draw_list_providers.runtime_provider_arcs(),
+            controller
+                .features
+                .draw_list_providers
+                .runtime_provider_arcs(),
         );
         if let Some(snapshot) = plugin_snapshot {
             registry.sync_plugin_capabilities(snapshot);
         }
         if trace_frame {
-            newengine_ulog_api::ulog::debug!("render draw-list providers: {}", registry.labels().join(","));
+            newengine_ulog_api::ulog::debug!(
+                "render draw-list providers: {}",
+                registry.labels().join(",")
+            );
         }
 
         let providers = registry.providers();
         let visibility = extraction.visibility();
-        let mut draw_lists = RuntimeDrawListSet::extract(visibility, extraction, providers.as_slice());
+        let mut draw_lists =
+            RuntimeDrawListSet::extract(visibility, extraction, providers.as_slice());
         registry.add_external_draw_lists(visibility, &mut draw_lists);
 
         let mut profile = TimedBreakdown::new();
         {
             let mut build_ctx = DrawListBuildCtx::new(controller, render, &draw_lists);
-            profile.time("pass_state", || draw_lists.record_pass_state(extraction, &mut build_ctx))?;
+            profile.time("pass_state", || {
+                draw_lists.record_pass_state(extraction, &mut build_ctx)
+            })?;
 
             for provider in providers.iter().copied() {
-                profile.time(provider.id(), || provider.extract(extraction, &mut build_ctx))?;
+                profile.time(provider.id(), || {
+                    provider.extract(extraction, &mut build_ctx)
+                })?;
             }
         }
 
@@ -88,7 +97,10 @@ impl FeatureExtractionFrame {
     }
 
     #[inline]
-    pub(super) fn validate_routes(&self, report: &DrawListRouteValidationReport) -> EngineResult<()> {
+    pub(super) fn validate_routes(
+        &self,
+        report: &DrawListRouteValidationReport,
+    ) -> EngineResult<()> {
         self.registry.validate_routes(report)
     }
 

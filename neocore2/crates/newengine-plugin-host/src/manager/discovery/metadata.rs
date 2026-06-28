@@ -12,7 +12,8 @@ use super::graph::ScannedDynlibKind;
 pub(super) const PLATFORM_RUNTIME_SYMBOL: &[u8] = b"newengine_platform_runtime_run_v1";
 pub(super) const PLUGIN_SIGNATURE_SYMBOL: &[u8] = b"newengine_plugin_signature_v1";
 pub(super) const PLUGIN_ROOT_SYMBOL: &[u8] = newengine_plugin_api::PLUGIN_ROOT_SYMBOL_BYTES;
-pub(super) const LEGACY_PLUGIN_ROOT_SYMBOL: &[u8] = newengine_plugin_api::LEGACY_PLUGIN_ROOT_SYMBOL_BYTES;
+pub(super) const LEGACY_PLUGIN_ROOT_SYMBOL: &[u8] =
+    newengine_plugin_api::LEGACY_PLUGIN_ROOT_SYMBOL_BYTES;
 
 #[derive(Debug, Clone, Default)]
 pub(super) struct ScanPluginProbe {
@@ -32,8 +33,11 @@ pub(super) fn probe_plugin_metadata(lib: &Library) -> Result<ScanPluginProbe, St
         out.signature = Some(unsafe { sym() });
     }
 
-    out.has_canonical_root = unsafe { lib.get::<unsafe extern "C" fn() -> PluginRootV1Ref>(PLUGIN_ROOT_SYMBOL) }.is_ok();
-    out.has_legacy_root = unsafe { lib.get::<unsafe extern "C" fn() -> PluginRootV1Ref>(LEGACY_PLUGIN_ROOT_SYMBOL) }.is_ok();
+    out.has_canonical_root =
+        unsafe { lib.get::<unsafe extern "C" fn() -> PluginRootV1Ref>(PLUGIN_ROOT_SYMBOL) }.is_ok();
+    out.has_legacy_root =
+        unsafe { lib.get::<unsafe extern "C" fn() -> PluginRootV1Ref>(LEGACY_PLUGIN_ROOT_SYMBOL) }
+            .is_ok();
 
     if out.has_legacy_root && !out.has_canonical_root {
         newengine_ulog_api::ulog::warn!(
@@ -57,13 +61,15 @@ fn probe_identity_from_probe(probe: &ScanPluginProbe) -> (Option<String>, Option
         .map(|s| s.id.to_string())
         .filter(|v| !v.trim().is_empty())
         .or_else(|| {
-            probe.descriptor
+            probe
+                .descriptor
                 .as_ref()
                 .map(|d| d.id.to_string())
                 .filter(|v| !v.trim().is_empty())
         })
         .or_else(|| {
-            probe.info
+            probe
+                .info
                 .as_ref()
                 .map(|i| i.id.to_string())
                 .filter(|v| !v.trim().is_empty())
@@ -75,13 +81,15 @@ fn probe_identity_from_probe(probe: &ScanPluginProbe) -> (Option<String>, Option
         .map(|s| s.version.to_string())
         .filter(|v| !v.trim().is_empty())
         .or_else(|| {
-            probe.descriptor
+            probe
+                .descriptor
                 .as_ref()
                 .map(|d| d.version.to_string())
                 .filter(|v| !v.trim().is_empty())
         })
         .or_else(|| {
-            probe.info
+            probe
+                .info
                 .as_ref()
                 .map(|i| i.version.to_string())
                 .filter(|v| !v.trim().is_empty())
@@ -151,7 +159,6 @@ pub(super) fn build_scanned_plugin_kind(probe: &ScanPluginProbe) -> Option<Scann
     })
 }
 
-
 fn infer_platform_runtime_identity(path: &Path) -> (String, String) {
     let stem = path
         .file_stem()
@@ -200,4 +207,3 @@ fn normalize_version_suffix(raw: &str) -> String {
         .unwrap_or(raw)
         .to_owned()
 }
-

@@ -59,21 +59,13 @@ impl RenderBackendEvent {
         }
     }
 
-
     #[inline]
     pub fn shader_compile_event(
         kind: RenderBackendEventKind,
         phase: impl Into<String>,
         detail: impl Into<String>,
     ) -> Self {
-        Self::new(
-            "engine.render.vulkan",
-            kind,
-            0,
-            0,
-            phase,
-            detail,
-        )
+        Self::new("engine.render.vulkan", kind, 0, 0, phase, detail)
     }
 
     #[inline]

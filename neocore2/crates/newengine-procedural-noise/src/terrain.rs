@@ -21,7 +21,10 @@ impl ProceduralTerrain {
     }
 
     #[inline]
-    pub fn generate_descriptor(descriptor: TerrainHeightfieldDescriptor, base_color: [f32; 4]) -> Self {
+    pub fn generate_descriptor(
+        descriptor: TerrainHeightfieldDescriptor,
+        base_color: [f32; 4],
+    ) -> Self {
         Self {
             heightfield: Arc::new(HeightField::generate_descriptor(descriptor)),
             base_color,

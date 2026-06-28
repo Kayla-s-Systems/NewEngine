@@ -122,7 +122,10 @@ fn declares_service_or_gateway(plugin: &PluginSnapshotEntry, service_id: &str) -
         cap.role == newengine_plugin_api::CapabilityRole::Provides
             && cap.kind == newengine_plugin_api::CapabilityKind::ServiceV1
             && cap.id.as_str() == service_id
-    }) || plugin.capabilities.iter().any(|cap| capability_engine_gateway(cap).as_deref() == Some(service_id))
+    }) || plugin
+        .capabilities
+        .iter()
+        .any(|cap| capability_engine_gateway(cap).as_deref() == Some(service_id))
 }
 
 fn capability_engine_gateway(capability: &newengine_plugin_api::CapabilityDesc) -> Option<String> {

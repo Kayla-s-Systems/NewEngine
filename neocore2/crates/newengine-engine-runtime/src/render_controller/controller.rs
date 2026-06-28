@@ -10,12 +10,13 @@ use crate::viewport_bridge::ViewportBridge;
 
 use super::error_policy::RenderBackendFailureState;
 use super::gpu::{MaterialGpuPipelineKey, MaterialGpuPipelineProvider};
-use newengine_core::render::{RenderBackendCapabilities, RenderBackendStatus};
-use newengine_render_feature_api::{LightExtractionProvider, RenderDrawListProvider};
 use super::state::{
     RenderBridgeState, RenderDiagnosticsRuntimeState, RenderFeatureProviderState,
-    RenderFrameRuntimeState, RenderGpuSceneState, RenderUiSurfaceRuntimeState, RenderRuntimeProfileState, RenderShadowRuntimeState, RenderViewportState,
+    RenderFrameRuntimeState, RenderGpuSceneState, RenderRuntimeProfileState,
+    RenderShadowRuntimeState, RenderUiSurfaceRuntimeState, RenderViewportState,
 };
+use newengine_core::render::{RenderBackendCapabilities, RenderBackendStatus};
+use newengine_render_feature_api::{LightExtractionProvider, RenderDrawListProvider};
 
 /// Engine-side render composition root.
 ///
@@ -32,7 +33,9 @@ pub(super) struct RenderRuntimeAppPolicy {
 impl RenderRuntimeAppPolicy {
     pub(super) fn from_startup_config() -> Self {
         let mut policy = Self::default();
-        let Some(startup) = newengine_core::startup::last_startup_config() else { return policy; };
+        let Some(startup) = newengine_core::startup::last_startup_config() else {
+            return policy;
+        };
         if let Some(value) = startup.plugins.get("engine.render") {
             if let Ok(config) = serde_json::from_value::<RenderPolicyConfig>(value.clone()) {
                 policy.merge(config);
@@ -93,14 +96,17 @@ pub struct RuntimeRenderController {
 }
 
 impl RuntimeRenderController {
-
     #[inline]
     pub(crate) fn runtime_profile(&self) -> &super::runtime_profile::RenderRuntimeProfile {
         &self.runtime_profile.profile
     }
 
-    pub(crate) fn apply_backend_capability_profile(&mut self, capabilities: &RenderBackendCapabilities) {
-        self.runtime_profile.apply_hardware_tier_once(capabilities.hardware_tier);
+    pub(crate) fn apply_backend_capability_profile(
+        &mut self,
+        capabilities: &RenderBackendCapabilities,
+    ) {
+        self.runtime_profile
+            .apply_hardware_tier_once(capabilities.hardware_tier);
     }
 
     pub(crate) fn backend_status_snapshot(&self) -> RenderBackendStatus {
@@ -150,11 +156,10 @@ impl RuntimeRenderController {
     /// Engine-runtime has no built-in draw-list defaults: the active profile owns
     /// terrain/mesh/UI extraction policy and must register it explicitly.
     #[inline]
-    pub fn with_draw_list_provider(
-        mut self,
-        provider: Arc<dyn RenderDrawListProvider>,
-    ) -> Self {
-        self.features.draw_list_providers.register_provider(provider);
+    pub fn with_draw_list_provider(mut self, provider: Arc<dyn RenderDrawListProvider>) -> Self {
+        self.features
+            .draw_list_providers
+            .register_provider(provider);
         self
     }
 
@@ -167,7 +172,9 @@ impl RuntimeRenderController {
         mut self,
         provider: Arc<dyn LightExtractionProvider>,
     ) -> Self {
-        self.features.light_extraction_providers.register_provider(provider);
+        self.features
+            .light_extraction_providers
+            .register_provider(provider);
         self
     }
 
@@ -188,14 +195,10 @@ impl RuntimeRenderController {
     /// This keeps the reusable render controller free from GameReady shader path
     /// knowledge: the profile chooses a domain key and registers the provider.
     #[inline]
-    pub fn with_primary_lit_material_domain(
-        mut self,
-        key: MaterialGpuPipelineKey,
-    ) -> Self {
+    pub fn with_primary_lit_material_domain(mut self, key: MaterialGpuPipelineKey) -> Self {
         self.gpu.material.primary_lit_pipeline_key = Some(key);
         self
     }
-
 
     /// Enables or disables one semantic input system at runtime.
     ///
@@ -209,7 +212,9 @@ impl RuntimeRenderController {
         enabled: bool,
         reason: impl Into<String>,
     ) {
-        self.frame.input_systems.set_enabled(system, enabled, reason, self.frame.frame_index);
+        self.frame
+            .input_systems
+            .set_enabled(system, enabled, reason, self.frame.frame_index);
     }
 
     #[inline]
@@ -219,7 +224,9 @@ impl RuntimeRenderController {
 
     #[inline]
     pub fn log_input_systems_snapshot(&self, reason: &str) {
-        self.frame.input_systems.log_explicit_snapshot(self.frame.frame_index, reason);
+        self.frame
+            .input_systems
+            .log_explicit_snapshot(self.frame.frame_index, reason);
     }
 
     pub(super) fn disable_viewport_pass(

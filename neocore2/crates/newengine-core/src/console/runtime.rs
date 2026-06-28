@@ -24,7 +24,6 @@ pub struct ConsoleRuntime {
     method_cache: Mutex<BTreeMap<String, Vec<String>>>,
 
     cached_services_gen: AtomicU64,
-
 }
 
 impl ConsoleRuntime {
@@ -541,10 +540,8 @@ impl ConsoleRuntime {
         let bytes = call_service_v1(service_id, method, payload)?;
 
         match serde_json::from_slice::<serde_json::Value>(&bytes) {
-            Ok(v) => {
-                Ok(serde_json::to_string_pretty(&v)
-                    .unwrap_or_else(|_| String::from_utf8_lossy(&bytes).to_string()))
-            }
+            Ok(v) => Ok(serde_json::to_string_pretty(&v)
+                .unwrap_or_else(|_| String::from_utf8_lossy(&bytes).to_string())),
             Err(_) => Ok(String::from_utf8_lossy(&bytes).to_string()),
         }
     }

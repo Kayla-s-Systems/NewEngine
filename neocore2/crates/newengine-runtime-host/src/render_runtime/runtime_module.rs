@@ -80,14 +80,17 @@ impl<E: Send + 'static> Module<E> for RenderBackendRuntimeModule {
         let api = RenderApiRef::new(ServiceBackedRenderApi::new(client));
 
         ctx.resources_mut().insert(resolved);
-        ctx.resources_mut().register_api(RENDER_API_ID, api.clone())?;
+        ctx.resources_mut()
+            .register_api(RENDER_API_ID, api.clone())?;
         self.api = Some(api);
 
         Ok(())
     }
 
     fn shutdown(&mut self, ctx: &mut ModuleCtx<'_, E>) -> EngineResult<()> {
-        let _ = ctx.resources_mut().unregister_api::<RenderApiRef>(RENDER_API_ID);
+        let _ = ctx
+            .resources_mut()
+            .unregister_api::<RenderApiRef>(RENDER_API_ID);
         let _ = ctx.resources_mut().remove::<ResolvedRenderBackendConfig>();
         self.api = None;
         Ok(())

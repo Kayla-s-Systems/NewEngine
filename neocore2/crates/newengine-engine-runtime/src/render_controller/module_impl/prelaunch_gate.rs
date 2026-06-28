@@ -1,11 +1,13 @@
 use newengine_core::host_events::CursorState;
-use newengine_ui_api::{UiEditorRuntimeMode, UiEditorRuntimeState, UiScreenProfile, UiScreenProfileState};
 use newengine_core::render::{RenderApi, RenderWorkBudget, SceneLaunchStatus, UploadPumpDesc};
 use newengine_core::{EngineResult, ModuleCtx};
+use newengine_ui_api::{
+    UiEditorRuntimeMode, UiEditorRuntimeState, UiScreenProfile, UiScreenProfileState,
+};
 
+use super::super::controller::RuntimeRenderController;
 use super::launch_loading::scene_launch_loading_status;
 use super::readiness;
-use super::super::controller::RuntimeRenderController;
 
 impl RuntimeRenderController {
     pub(super) fn handle_prelaunch_gate<E: Send + 'static>(
@@ -21,7 +23,8 @@ impl RuntimeRenderController {
         let mut prelaunch_released = false;
         let mut editor_preview_ready = false;
         let editor_runtime_mode = editor_runtime_mode(ctx);
-        let editor_preview_blocks_auto_play = editor_runtime_mode == Some(UiEditorRuntimeMode::Edit);
+        let editor_preview_blocks_auto_play =
+            editor_runtime_mode == Some(UiEditorRuntimeMode::Edit);
 
         self.bridges.scene.apply_commands();
         {
@@ -61,13 +64,17 @@ impl RuntimeRenderController {
                 // CPU-prepared terrain chunks waiting for GPU packets, and redraws
                 // may only advance again after unrelated UI input.
                 if let Err(e) = self.pump_scene_gpu_residency(r, &scene) {
-                    newengine_ulog_api::ulog::warn!("render prelaunch: terrain GPU residency pump failed: {}", e);
+                    newengine_ulog_api::ulog::warn!(
+                        "render prelaunch: terrain GPU residency pump failed: {}",
+                        e
+                    );
                 }
 
                 self.pump_material_texture_requests(
                     r,
                     ctx.job_system(),
-                    super::super::render_quality::MATERIAL_TEXTURE_IMPORT_START_BURST.min(material_upload_jobs.max(1)),
+                    super::super::render_quality::MATERIAL_TEXTURE_IMPORT_START_BURST
+                        .min(material_upload_jobs.max(1)),
                     material_upload_jobs,
                 );
                 let upload_desc = backend_work_budget
@@ -148,7 +155,6 @@ impl RuntimeRenderController {
         Ok(Some(status))
     }
 }
-
 
 fn editor_runtime_mode<E: Send + 'static>(ctx: &ModuleCtx<'_, E>) -> Option<UiEditorRuntimeMode> {
     let screen_profile = ctx

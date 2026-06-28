@@ -41,7 +41,9 @@ fn platform_route_identity(initial: PlatformWindowReadyV1) -> PlatformRouteIdent
     }
 }
 
-fn read_platform_window_snapshot(snapshot: &Arc<Mutex<PlatformWindowReadyV1>>) -> PlatformWindowReadyV1 {
+fn read_platform_window_snapshot(
+    snapshot: &Arc<Mutex<PlatformWindowReadyV1>>,
+) -> PlatformWindowReadyV1 {
     match snapshot.lock() {
         Ok(v) => *v,
         Err(e) => *e.into_inner(),

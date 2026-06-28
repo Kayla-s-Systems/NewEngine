@@ -44,12 +44,20 @@ pub struct CameraChannelState {
 impl CameraChannelState {
     #[inline]
     pub const fn new(channel: CameraChannel, weight: f32, priority: i32) -> Self {
-        Self { channel, weight, priority }
+        Self {
+            channel,
+            weight,
+            priority,
+        }
     }
 
     #[inline]
     pub const fn dominant(channel: CameraChannel) -> Self {
-        Self { channel, weight: 1.0, priority: 0 }
+        Self {
+            channel,
+            weight: 1.0,
+            priority: 0,
+        }
     }
 }
 

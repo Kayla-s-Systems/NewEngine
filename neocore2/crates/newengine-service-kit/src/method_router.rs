@@ -12,7 +12,8 @@ use serde::Serialize;
 
 use crate::json_service::{decode_json_payload, ok_empty_blob, ok_json, payload_json};
 
-type RouteHandler<S> = Box<dyn Fn(&Arc<Mutex<S>>, Blob) -> RResult<Blob, RString> + Send + Sync + 'static>;
+type RouteHandler<S> =
+    Box<dyn Fn(&Arc<Mutex<S>>, Blob) -> RResult<Blob, RString> + Send + Sync + 'static>;
 
 pub struct JsonServiceRouter<S = ()> {
     service_id: String,
@@ -43,12 +44,18 @@ impl<S: Send + 'static> JsonServiceRouter<S> {
             "methods": []
         })
         .to_string();
-        Self { service_id, description_json, state, routes: BTreeMap::new() }
+        Self {
+            service_id,
+            description_json,
+            state,
+            routes: BTreeMap::new(),
+        }
     }
 
     #[inline]
     pub fn describe_json<T: Serialize>(mut self, description: &T) -> Self {
-        self.description_json = serde_json::to_string(description).unwrap_or_else(|_| "{}".to_owned());
+        self.description_json =
+            serde_json::to_string(description).unwrap_or_else(|_| "{}".to_owned());
         self
     }
 
@@ -58,7 +65,9 @@ impl<S: Send + 'static> JsonServiceRouter<S> {
         T: Serialize + 'static,
         F: Fn() -> T + Send + Sync + 'static,
     {
-        self.get_json(newengine_service_api::SERVICE_METHOD_INFO_JSON, move |_| handler())
+        self.get_json(newengine_service_api::SERVICE_METHOD_INFO_JSON, move |_| {
+            handler()
+        })
     }
 
     #[inline]
@@ -67,7 +76,9 @@ impl<S: Send + 'static> JsonServiceRouter<S> {
         T: Serialize + 'static,
         F: Fn() -> Result<T, String> + Send + Sync + 'static,
     {
-        self.get_json_result(newengine_service_api::SERVICE_METHOD_INFO_JSON, move |_| handler())
+        self.get_json_result(newengine_service_api::SERVICE_METHOD_INFO_JSON, move |_| {
+            handler()
+        })
     }
 
     #[inline]
@@ -179,7 +190,10 @@ impl<S: Send + 'static> JsonServiceRouter<S> {
     #[inline]
     pub fn json_value_result<F>(mut self, method: impl Into<String>, handler: F) -> Self
     where
-        F: Fn(&mut S, serde_json::Value) -> Result<serde_json::Value, String> + Send + Sync + 'static,
+        F: Fn(&mut S, serde_json::Value) -> Result<serde_json::Value, String>
+            + Send
+            + Sync
+            + 'static,
     {
         let method = method.into();
         self.routes.insert(
@@ -217,7 +231,10 @@ impl<S: Send + 'static> JsonServiceRouter<S> {
 
     #[inline]
     pub fn shutdown(self) -> Self {
-        self.blob(newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1, |_state, _payload| ok_empty_blob())
+        self.blob(
+            newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1,
+            |_state, _payload| ok_empty_blob(),
+        )
     }
 
     #[inline]

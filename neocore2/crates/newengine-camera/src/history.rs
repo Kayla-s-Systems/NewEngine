@@ -4,7 +4,6 @@ use newengine_math::Vec3;
 
 use crate::CameraFrame;
 
-
 /// Frame-to-frame camera history used by TAA, motion blur, streaming heuristics and diagnostics.
 ///
 /// The camera domain owns this as plain data. Render backends should consume protocol snapshots or
@@ -125,7 +124,11 @@ impl CameraHistorySample {
 
 #[inline]
 fn sanitize_dt(dt: f32) -> f32 {
-    if dt.is_finite() && dt > 0.0 { dt } else { 0.0 }
+    if dt.is_finite() && dt > 0.0 {
+        dt
+    } else {
+        0.0
+    }
 }
 
 #[inline]
@@ -140,14 +143,21 @@ fn camera_angular_delta(previous: CameraFrame, current: CameraFrame) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{CameraChannel, CameraChannelState, CameraRig, CameraViewport, Perspective, Projection};
+    use crate::{
+        CameraChannel, CameraChannelState, CameraRig, CameraViewport, Perspective, Projection,
+    };
     use newengine_math::{Quat, Vec2, Vec3};
 
     fn frame_at(position: Vec3) -> CameraFrame {
         CameraFrame::build(
             CameraChannelState::dominant(CameraChannel::Gameplay),
             CameraRig::new(position, Quat::IDENTITY),
-            Projection::Perspective(Perspective::new(60.0f32.to_radians(), 16.0 / 9.0, 0.01, 1000.0)),
+            Projection::Perspective(Perspective::new(
+                60.0f32.to_radians(),
+                16.0 / 9.0,
+                0.01,
+                1000.0,
+            )),
             CameraViewport::from_size(1280, 720),
             Vec2::ZERO,
         )

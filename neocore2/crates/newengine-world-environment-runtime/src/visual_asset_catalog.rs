@@ -22,7 +22,8 @@ pub(crate) struct EnvironmentVisualAssetGroupDescriptor {
 
 pub(crate) const SKYDOME_TEXTURE_DICTIONARY_REF: &str = "textures/fps/skydome.ytd";
 pub(crate) const SKYDOME_STARFIELD_REF: &str = "textures/fps/skydome.ytd@starfield";
-pub(crate) const SKYDOME_CLOUD_DENSITY_REF: &str = "textures/fps/skydome.ytd@baseperlinnoise3channel";
+pub(crate) const SKYDOME_CLOUD_DENSITY_REF: &str =
+    "textures/fps/skydome.ytd@baseperlinnoise3channel";
 pub(crate) const SKYDOME_CLOUD_DETAIL_REF: &str = "textures/fps/skydome.ytd@noise16_p";
 pub(crate) const SKYDOME_DITHER_REF: &str = "textures/fps/skydome.ytd@dither";
 pub(crate) const SKYDOME_MOON_DISK_REF: &str = "textures/fps/skydome.ytd@moon_new";
@@ -30,22 +31,25 @@ pub(crate) const SKYDOME_MOON_DISK_REF: &str = "textures/fps/skydome.ytd@moon_ne
 // There is no authored `sun_disk` entry in the current YTD inventory. Keep the
 // sun as an explicit procedural visual until a real `.ytd@sun_disk` entry is
 // authored, instead of emitting a fake/missing `textures/sky/celestial.ytd` ref.
-pub(crate) const PROCEDURAL_SUN_DISK_REF: &str = "procedural://engine.world.environment/celestial/sun_disk";
+pub(crate) const PROCEDURAL_SUN_DISK_REF: &str =
+    "procedural://engine.world.environment/celestial/sun_disk";
 
-pub(crate) const GAME_READY_SKYDOME_VISUALS: EnvironmentVisualAssetGroupDescriptor = EnvironmentVisualAssetGroupDescriptor {
-    id: "environment.visuals.game_ready_skydome.v1",
-    texture_dictionary_ref: SKYDOME_TEXTURE_DICTIONARY_REF,
-    sky_texture_ref: SKYDOME_STARFIELD_REF,
-    starfield_texture_ref: SKYDOME_STARFIELD_REF,
-    cloud_density_texture_ref: SKYDOME_CLOUD_DENSITY_REF,
-    cloud_detail_texture_ref: SKYDOME_CLOUD_DETAIL_REF,
-    cloud_dither_texture_ref: SKYDOME_DITHER_REF,
-    sun_disk_texture_ref: PROCEDURAL_SUN_DISK_REF,
-    moon_disk_texture_ref: SKYDOME_MOON_DISK_REF,
-};
+pub(crate) const GAME_READY_SKYDOME_VISUALS: EnvironmentVisualAssetGroupDescriptor =
+    EnvironmentVisualAssetGroupDescriptor {
+        id: "environment.visuals.game_ready_skydome.v1",
+        texture_dictionary_ref: SKYDOME_TEXTURE_DICTIONARY_REF,
+        sky_texture_ref: SKYDOME_STARFIELD_REF,
+        starfield_texture_ref: SKYDOME_STARFIELD_REF,
+        cloud_density_texture_ref: SKYDOME_CLOUD_DENSITY_REF,
+        cloud_detail_texture_ref: SKYDOME_CLOUD_DETAIL_REF,
+        cloud_dither_texture_ref: SKYDOME_DITHER_REF,
+        sun_disk_texture_ref: PROCEDURAL_SUN_DISK_REF,
+        moon_disk_texture_ref: SKYDOME_MOON_DISK_REF,
+    };
 
 #[allow(dead_code)]
-pub(crate) const VISUAL_GROUPS: &[EnvironmentVisualAssetGroupDescriptor] = &[GAME_READY_SKYDOME_VISUALS];
+pub(crate) const VISUAL_GROUPS: &[EnvironmentVisualAssetGroupDescriptor] =
+    &[GAME_READY_SKYDOME_VISUALS];
 
 #[allow(dead_code)]
 pub(crate) fn visual_group_by_id(id: &str) -> &'static EnvironmentVisualAssetGroupDescriptor {

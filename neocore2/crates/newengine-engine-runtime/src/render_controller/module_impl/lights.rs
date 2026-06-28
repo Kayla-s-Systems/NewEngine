@@ -13,7 +13,10 @@ pub(super) fn collect_lights(world: &newengine_ecs::World) -> PackedLights {
 
 #[inline]
 pub(super) fn collect_light_scene_snapshot(world: &newengine_ecs::World) -> LightSceneSnapshot {
-    let ambient = world.resource::<AmbientLight>().copied().unwrap_or_default();
+    let ambient = world
+        .resource::<AmbientLight>()
+        .copied()
+        .unwrap_or_default();
     let directional = primary_directional_light(world);
     let mut point_lights = Vec::new();
     for (e, light, gt) in world.query2::<PointLight, GlobalTransform>() {
@@ -25,7 +28,11 @@ pub(super) fn collect_light_scene_snapshot(world: &newengine_ecs::World) -> Ligh
         });
     }
     point_lights.sort_by(|a, b| a.stable_id.cmp(&b.stable_id));
-    LightSceneSnapshot { ambient, directional, point_lights }
+    LightSceneSnapshot {
+        ambient,
+        directional,
+        point_lights,
+    }
 }
 
 #[inline]

@@ -13,7 +13,12 @@ pub enum TextureContainerError {
     #[error("texture_dictionary: compression error: {0}")]
     CompressionFailed(String),
     #[error("texture_dictionary: invalid range {what}: offset={offset} len={len} total={total}")]
-    InvalidRange { what: &'static str, offset: u64, len: u64, total: usize },
+    InvalidRange {
+        what: &'static str,
+        offset: u64,
+        len: u64,
+        total: usize,
+    },
     #[error("texture_dictionary: invalid binary directory: {0}")]
     InvalidDirectory(&'static str),
     #[error("texture_dictionary: binary directory is too large: {0}")]
@@ -29,11 +34,20 @@ pub enum TextureContainerError {
     #[error("texture_dictionary: empty texture dictionary")]
     EmptyDictionary,
     #[error("texture_dictionary: invalid texture extent for '{name}': {width}x{height}")]
-    InvalidExtent { name: String, width: u32, height: u32 },
+    InvalidExtent {
+        name: String,
+        width: u32,
+        height: u32,
+    },
     #[error("texture_dictionary: invalid mip chain for '{0}'")]
     InvalidMipChain(String),
     #[error("texture_dictionary: payload size mismatch for '{name}' mip={mip} bytes={bytes} expected={expected}")]
-    PayloadSizeMismatch { name: String, mip: u32, bytes: usize, expected: usize },
+    PayloadSizeMismatch {
+        name: String,
+        mip: u32,
+        bytes: usize,
+        expected: usize,
+    },
     #[error("texture_dictionary: invalid pixel format '{format}' for '{name}'")]
     InvalidFormat { name: String, format: String },
     #[error("texture_dictionary: invalid color space '{color_space}' for '{name}'")]

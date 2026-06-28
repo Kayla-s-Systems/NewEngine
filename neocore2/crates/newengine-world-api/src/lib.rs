@@ -19,7 +19,8 @@ pub const WORLD_BACKEND_CAPABILITY_ID: &str = "world.backend";
 
 pub const WORLD_SERVICE_METHOD_INFO: &str = newengine_service_api::SERVICE_METHOD_INFO_JSON;
 pub const WORLD_SERVICE_METHOD_INVOKE: &str = newengine_service_api::SERVICE_METHOD_INVOKE_JSON;
-pub const WORLD_SERVICE_METHOD_SHUTDOWN_V1: &str = newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1;
+pub const WORLD_SERVICE_METHOD_SHUTDOWN_V1: &str =
+    newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1;
 pub const WORLD_SERVICE_METHOD_BOOT_JSON_V1: &str = "world.boot_json_v1";
 pub const WORLD_SERVICE_METHOD_STATE_JSON_V1: &str = "world.state_json_v1";
 pub const WORLD_SERVICE_METHOD_PARTITION_JSON_V1: &str = "world.partition_json_v1";
@@ -96,7 +97,10 @@ impl Default for WorldServiceInfo {
                 "opaque-entity-handles".to_owned(),
                 "scene-world-separation".to_owned(),
             ],
-            methods: WORLD_REQUIRED_METHODS_V1.iter().map(|it| (*it).to_owned()).collect(),
+            methods: WORLD_REQUIRED_METHODS_V1
+                .iter()
+                .map(|it| (*it).to_owned())
+                .collect(),
         }
     }
 }
@@ -114,10 +118,14 @@ pub enum WorldBootPhase {
 
 impl Default for WorldBootPhase {
     #[inline]
-    fn default() -> Self { Self::Cold }
+    fn default() -> Self {
+        Self::Cold
+    }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default, Serialize, Deserialize,
+)]
 pub struct WorldCellCoord {
     pub x: i32,
     pub z: i32,
@@ -125,7 +133,9 @@ pub struct WorldCellCoord {
 
 impl WorldCellCoord {
     #[inline]
-    pub const fn new(x: i32, z: i32) -> Self { Self { x, z } }
+    pub const fn new(x: i32, z: i32) -> Self {
+        Self { x, z }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -139,7 +149,9 @@ pub enum WorldCellResidency {
 
 impl Default for WorldCellResidency {
     #[inline]
-    fn default() -> Self { Self::Unloaded }
+    fn default() -> Self {
+        Self::Unloaded
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -254,7 +266,12 @@ pub struct WorldSnapshotRequest {
 
 impl Default for WorldSnapshotRequest {
     #[inline]
-    fn default() -> Self { Self { include_scene_payload: true, include_cells: true } }
+    fn default() -> Self {
+        Self {
+            include_scene_payload: true,
+            include_cells: true,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -364,7 +381,11 @@ pub struct WorldSaveSnapshotRequest {
 impl Default for WorldSaveSnapshotRequest {
     #[inline]
     fn default() -> Self {
-        Self { include_scene_payload: true, include_cells: true, target_ref: None }
+        Self {
+            include_scene_payload: true,
+            include_cells: true,
+            target_ref: None,
+        }
     }
 }
 
@@ -402,7 +423,9 @@ pub struct WorldInvokeRequest {
 }
 
 #[inline]
-fn default_true() -> bool { true }
+fn default_true() -> bool {
+    true
+}
 
 /// Thin host-side client over `engine.world`.
 #[derive(Clone)]
@@ -414,11 +437,18 @@ pub struct WorldClient {
 impl WorldClient {
     #[inline]
     pub fn new(host: HostApiV1) -> Self {
-        Self { host, service_id: RString::from(ENGINE_WORLD_SERVICE_ID) }
+        Self {
+            host,
+            service_id: RString::from(ENGINE_WORLD_SERVICE_ID),
+        }
     }
 
     #[inline]
-    fn call_json(&self, method: &str, payload: serde_json::Value) -> Result<serde_json::Value, String> {
+    fn call_json(
+        &self,
+        method: &str,
+        payload: serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
         let payload = serde_json::to_vec(&payload).map_err(|e| e.to_string())?;
         let res = (self.host.call_service_v1)(
             self.service_id.clone(),
@@ -431,26 +461,41 @@ impl WorldClient {
 
     #[inline]
     pub fn state_json_v1(&self, include_cells: bool) -> Result<serde_json::Value, String> {
-        self.call_json(WORLD_SERVICE_METHOD_STATE_JSON_V1, serde_json::json!({ "include_cells": include_cells }))
+        self.call_json(
+            WORLD_SERVICE_METHOD_STATE_JSON_V1,
+            serde_json::json!({ "include_cells": include_cells }),
+        )
     }
 
     #[inline]
     pub fn active_cells_json_v1(&self) -> Result<serde_json::Value, String> {
-        self.call_json(WORLD_SERVICE_METHOD_ACTIVE_CELLS_JSON_V1, serde_json::json!({}))
+        self.call_json(
+            WORLD_SERVICE_METHOD_ACTIVE_CELLS_JSON_V1,
+            serde_json::json!({}),
+        )
     }
 
     #[inline]
     pub fn snapshot_json_v1(&self) -> Result<serde_json::Value, String> {
-        self.call_json(WORLD_SERVICE_METHOD_SNAPSHOT_JSON_V1, serde_json::json!({ "include_scene_payload": true, "include_cells": true }))
+        self.call_json(
+            WORLD_SERVICE_METHOD_SNAPSHOT_JSON_V1,
+            serde_json::json!({ "include_scene_payload": true, "include_cells": true }),
+        )
     }
 
     #[inline]
     pub fn streaming_cells_json_v1(&self) -> Result<serde_json::Value, String> {
-        self.call_json(WORLD_SERVICE_METHOD_STREAMING_CELLS_JSON_V1, serde_json::json!({ "include_unloaded": false, "include_reasons": true }))
+        self.call_json(
+            WORLD_SERVICE_METHOD_STREAMING_CELLS_JSON_V1,
+            serde_json::json!({ "include_unloaded": false, "include_reasons": true }),
+        )
     }
 
     #[inline]
-    pub fn apply_stage_json_v1(&self, request: serde_json::Value) -> Result<serde_json::Value, String> {
+    pub fn apply_stage_json_v1(
+        &self,
+        request: serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
         self.call_json(WORLD_SERVICE_METHOD_APPLY_STAGE_JSON_V1, request)
     }
 }
@@ -462,8 +507,17 @@ mod tests {
     #[test]
     fn world_service_ids_are_gateway_first() {
         assert_eq!(ENGINE_WORLD_SERVICE_ID, "engine.world");
-        assert_eq!(WORLD_BACKEND_SERVICE_SPEC.engine_gateway_id, ENGINE_WORLD_SERVICE_ID);
-        assert_eq!(WORLD_BACKEND_SERVICE_SPEC.provider_service_id, WORLD_SERVICE_ID);
-        assert_eq!(WORLD_BACKEND_SERVICE_SPEC.backend_capability_id, WORLD_BACKEND_CAPABILITY_ID);
+        assert_eq!(
+            WORLD_BACKEND_SERVICE_SPEC.engine_gateway_id,
+            ENGINE_WORLD_SERVICE_ID
+        );
+        assert_eq!(
+            WORLD_BACKEND_SERVICE_SPEC.provider_service_id,
+            WORLD_SERVICE_ID
+        );
+        assert_eq!(
+            WORLD_BACKEND_SERVICE_SPEC.backend_capability_id,
+            WORLD_BACKEND_CAPABILITY_ID
+        );
     }
 }

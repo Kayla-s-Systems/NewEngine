@@ -11,8 +11,8 @@ use abi_stable::std_types::{RResult, RString};
 use newengine_entity_api::{
     EntityDespawnRequest, EntityDespawnResponse, EntityDespawnResult, EntityExistsRequest,
     EntityExistsResponse, EntityHandle, EntityInvokeRequest, EntityListRequest, EntityListResponse,
-    EntityRecord, EntityServiceInfo, EntitySpawnRequest, EntitySpawnResponse, ENTITY_BACKEND_CAPABILITY_ID,
-    ENGINE_ENTITY_SERVICE_ID,
+    EntityRecord, EntityServiceInfo, EntitySpawnRequest, EntitySpawnResponse,
+    ENGINE_ENTITY_SERVICE_ID, ENTITY_BACKEND_CAPABILITY_ID,
 };
 use newengine_plugin_api::Blob;
 use newengine_service_kit::{
@@ -40,14 +40,22 @@ impl EngineEntityGatewayService {
     }
 
     fn live_record(handle: EntityHandle) -> EntityRecord {
-        EntityRecord { handle, lifecycle: "".to_string(), tags: vec![], owner: None, debug_identity: "".to_string() }
+        EntityRecord {
+            handle,
+            lifecycle: "".to_string(),
+            tags: vec![],
+            owner: None,
+            debug_identity: "".to_string(),
+        }
     }
 
     fn find_entity_by_handle(
         world: &newengine_ecs::World,
         handle: EntityHandle,
     ) -> Option<newengine_ecs::EntityId> {
-        world.iter_entities().find(|id| id.stable_u64() == handle.stable_id)
+        world
+            .iter_entities()
+            .find(|id| id.stable_u64() == handle.stable_id)
     }
 
     fn list_json_v1(&self, payload: Blob) -> RResult<Blob, RString> {
@@ -80,9 +88,9 @@ impl EngineEntityGatewayService {
     }
 
     fn exists_json_v1(&self, payload: Blob) -> RResult<Blob, RString> {
-        let req = match payload_json(&payload)
-            .and_then(|v| serde_json::from_value::<EntityExistsRequest>(v).map_err(|e| e.to_string()))
-        {
+        let req = match payload_json(&payload).and_then(|v| {
+            serde_json::from_value::<EntityExistsRequest>(v).map_err(|e| e.to_string())
+        }) {
             Ok(v) => v,
             Err(e) => return RResult::RErr(RString::from(e)),
         };
@@ -92,13 +100,16 @@ impl EngineEntityGatewayService {
         let world = scene.world();
         let exists = Self::find_entity_by_handle(world, req.entity).is_some();
 
-        ok_json(&EntityExistsResponse { entity: req.entity, exists })
+        ok_json(&EntityExistsResponse {
+            entity: req.entity,
+            exists,
+        })
     }
 
     fn spawn_json_v1(&self, payload: Blob) -> RResult<Blob, RString> {
-        let req = match payload_json(&payload)
-            .and_then(|v| serde_json::from_value::<EntitySpawnRequest>(v).map_err(|e| e.to_string()))
-        {
+        let req = match payload_json(&payload).and_then(|v| {
+            serde_json::from_value::<EntitySpawnRequest>(v).map_err(|e| e.to_string())
+        }) {
             Ok(v) => v,
             Err(e) => return RResult::RErr(RString::from(e)),
         };
@@ -122,9 +133,9 @@ impl EngineEntityGatewayService {
     }
 
     fn despawn_json_v1(&self, payload: Blob) -> RResult<Blob, RString> {
-        let req = match payload_json(&payload)
-            .and_then(|v| serde_json::from_value::<EntityDespawnRequest>(v).map_err(|e| e.to_string()))
-        {
+        let req = match payload_json(&payload).and_then(|v| {
+            serde_json::from_value::<EntityDespawnRequest>(v).map_err(|e| e.to_string())
+        }) {
             Ok(v) => v,
             Err(e) => return RResult::RErr(RString::from(e)),
         };
@@ -141,7 +152,12 @@ impl EngineEntityGatewayService {
             results.push(EntityDespawnResult {
                 entity,
                 ok,
-                message: if ok { "entity despawned" } else { "entity not found" }.to_owned(),
+                message: if ok {
+                    "entity despawned"
+                } else {
+                    "entity not found"
+                }
+                .to_owned(),
             });
         }
 
@@ -155,9 +171,9 @@ impl EngineEntityGatewayService {
     }
 
     fn invoke_json(&self, payload: Blob) -> RResult<Blob, RString> {
-        let req = match payload_json(&payload)
-            .and_then(|v| serde_json::from_value::<EntityInvokeRequest>(v).map_err(|e| e.to_string()))
-        {
+        let req = match payload_json(&payload).and_then(|v| {
+            serde_json::from_value::<EntityInvokeRequest>(v).map_err(|e| e.to_string())
+        }) {
             Ok(v) => v,
             Err(e) => return RResult::RErr(RString::from(e)),
         };
@@ -168,9 +184,15 @@ impl EngineEntityGatewayService {
 
         match req.method.as_str() {
             newengine_entity_api::ENTITY_SERVICE_METHOD_LIST_JSON_V1 => self.list_json_v1(payload),
-            newengine_entity_api::ENTITY_SERVICE_METHOD_EXISTS_JSON_V1 => self.exists_json_v1(payload),
-            newengine_entity_api::ENTITY_SERVICE_METHOD_SPAWN_JSON_V1 => self.spawn_json_v1(payload),
-            newengine_entity_api::ENTITY_SERVICE_METHOD_DESPAWN_JSON_V1 => self.despawn_json_v1(payload),
+            newengine_entity_api::ENTITY_SERVICE_METHOD_EXISTS_JSON_V1 => {
+                self.exists_json_v1(payload)
+            }
+            newengine_entity_api::ENTITY_SERVICE_METHOD_SPAWN_JSON_V1 => {
+                self.spawn_json_v1(payload)
+            }
+            newengine_entity_api::ENTITY_SERVICE_METHOD_DESPAWN_JSON_V1 => {
+                self.despawn_json_v1(payload)
+            }
             other => RResult::RErr(RString::from(format!(
                 "engine.entity invoke_json unknown target method '{other}'"
             ))),
@@ -201,18 +223,38 @@ pub fn entity_gateway_service(
     JsonServiceRouter::new(ENGINE_ENTITY_SERVICE_ID)
         .describe_json(&description)
         .info(EntityServiceInfo::default)
-        .blob(newengine_entity_api::ENTITY_SERVICE_METHOD_INVOKE, move |_unit, payload| invoke_service.invoke_json(payload))
-        .blob(newengine_entity_api::ENTITY_SERVICE_METHOD_LIST_JSON_V1, move |_unit, payload| list_service.list_json_v1(payload))
-        .blob(newengine_entity_api::ENTITY_SERVICE_METHOD_EXISTS_JSON_V1, move |_unit, payload| exists_service.exists_json_v1(payload))
-        .blob(newengine_entity_api::ENTITY_SERVICE_METHOD_SPAWN_JSON_V1, move |_unit, payload| spawn_service.spawn_json_v1(payload))
-        .blob(newengine_entity_api::ENTITY_SERVICE_METHOD_DESPAWN_JSON_V1, move |_unit, payload| despawn_service.despawn_json_v1(payload))
-        .blob(newengine_entity_api::ENTITY_SERVICE_METHOD_SHUTDOWN_V1, |_unit, _payload| ok_empty_blob())
+        .blob(
+            newengine_entity_api::ENTITY_SERVICE_METHOD_INVOKE,
+            move |_unit, payload| invoke_service.invoke_json(payload),
+        )
+        .blob(
+            newengine_entity_api::ENTITY_SERVICE_METHOD_LIST_JSON_V1,
+            move |_unit, payload| list_service.list_json_v1(payload),
+        )
+        .blob(
+            newengine_entity_api::ENTITY_SERVICE_METHOD_EXISTS_JSON_V1,
+            move |_unit, payload| exists_service.exists_json_v1(payload),
+        )
+        .blob(
+            newengine_entity_api::ENTITY_SERVICE_METHOD_SPAWN_JSON_V1,
+            move |_unit, payload| spawn_service.spawn_json_v1(payload),
+        )
+        .blob(
+            newengine_entity_api::ENTITY_SERVICE_METHOD_DESPAWN_JSON_V1,
+            move |_unit, payload| despawn_service.despawn_json_v1(payload),
+        )
+        .blob(
+            newengine_entity_api::ENTITY_SERVICE_METHOD_SHUTDOWN_V1,
+            |_unit, _payload| ok_empty_blob(),
+        )
         .into_service_v1()
 }
 
 pub fn register_entity_gateway_best_effort(scene: Arc<newengine_scene_runtime::SceneBridge>) {
     if newengine_plugin_host::has_service(ENGINE_ENTITY_SERVICE_ID) {
-        newengine_ulog_api::ulog::debug!("engine.entity gateway registration skipped; service already available");
+        newengine_ulog_api::ulog::debug!(
+            "engine.entity gateway registration skipped; service already available"
+        );
         return;
     }
 

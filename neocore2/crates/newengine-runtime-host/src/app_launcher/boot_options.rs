@@ -57,15 +57,27 @@ pub(crate) fn apply_declared_boot_options_env(
 
     std::env::set_var(
         "NEWENGINE_REQUIRE_PLATFORM_BACKEND",
-        if has(RuntimeHostBootOption::PlatformWindow) { "1" } else { "0" },
+        if has(RuntimeHostBootOption::PlatformWindow) {
+            "1"
+        } else {
+            "0"
+        },
     );
     std::env::set_var(
         "NEWENGINE_REQUIRE_RENDER_BACKEND",
-        if has(RuntimeHostBootOption::RenderBackend) { "1" } else { "0" },
+        if has(RuntimeHostBootOption::RenderBackend) {
+            "1"
+        } else {
+            "0"
+        },
     );
     std::env::set_var(
         "NEWENGINE_REQUIRE_UI_BACKEND",
-        if has(RuntimeHostBootOption::UiBackend) { "1" } else { "0" },
+        if has(RuntimeHostBootOption::UiBackend) {
+            "1"
+        } else {
+            "0"
+        },
     );
 
     newengine_ulog_api::ulog::info!(

@@ -45,7 +45,9 @@ pub struct NavVec3 {
 }
 
 impl NavVec3 {
-    pub const fn new(x: f32, y: f32, z: f32) -> Self { Self { x, y, z } }
+    pub const fn new(x: f32, y: f32, z: f32) -> Self {
+        Self { x, y, z }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -134,7 +136,10 @@ impl Default for NavigationServiceInfoV1 {
         Self {
             protocol: NAVIGATION_RUNTIME_CONTRACT.to_owned(),
             provider: "engine.navigation.foundation".to_owned(),
-            methods: NAVIGATION_SERVICE_METHODS.iter().map(|it| (*it).to_owned()).collect(),
+            methods: NAVIGATION_SERVICE_METHODS
+                .iter()
+                .map(|it| (*it).to_owned())
+                .collect(),
             features: vec!["path-query-dto".to_owned(), "no-world-mutation".to_owned()],
         }
     }

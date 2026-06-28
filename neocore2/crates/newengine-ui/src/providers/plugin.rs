@@ -1,16 +1,17 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use newengine_ui_api::UiDocumentSourceKind;
 use crate::provider::{UiBuildFn, UiFrameDesc, UiFrameOutput, UiProvider, UiProviderKind};
 use crate::schema::{
-    UiActionDeclaration, UiActionRoute, UiLayoutDeclaration, UiProviderCatalog, UiThemeDeclaration, UI_ACTION_CLOSE_MODAL, UI_ACTION_OPEN_LOGS,
-    UI_ACTION_TOGGLE_PRIMARY_UI, UI_ACTION_QUIT, UI_ACTION_RESUME_GAME, UI_ACTION_START_GAME,
-    UI_ACTION_TOGGLE_DEBUG_OVERLAY, UI_SURFACE_DEBUG_OVERLAY, UI_SURFACE_GAME_HUD,
+    UiActionDeclaration, UiActionRoute, UiLayoutDeclaration, UiProviderCatalog, UiThemeDeclaration,
+    UI_ACTION_CLOSE_MODAL, UI_ACTION_OPEN_LOGS, UI_ACTION_QUIT, UI_ACTION_RESUME_GAME,
+    UI_ACTION_START_GAME, UI_ACTION_TOGGLE_DEBUG_OVERLAY, UI_ACTION_TOGGLE_PRIMARY_UI,
+    UI_SURFACE_DEBUG_OVERLAY, UI_SURFACE_GAME_HUD,
 };
 use crate::surface::{
     UiProviderManifest, UI_FEATURE_EXTERNAL_PLUGIN_PROVIDER, UI_SURFACE_ENGINE_ERROR_MODAL,
     UI_SURFACE_ENGINE_LOADING, UI_SURFACE_RUNTIME_OVERLAY,
 };
+use newengine_ui_api::UiDocumentSourceKind;
 use std::any::Any;
 
 /// External UI provider placeholder.
@@ -75,10 +76,42 @@ impl UiProvider for PluginUiProvider {
         let manifest = self.manifest();
         let mut catalog = UiProviderCatalog::from_manifest(manifest);
         catalog.layouts = vec![
-            UiLayoutDeclaration { id: "engine.ui.loading.ksystems".to_owned(), surface_id: UI_SURFACE_ENGINE_LOADING.to_owned(), document: "assets/ui/engine/loading.neui@surface".to_owned(), style_document: Some("assets/ui/themes/north_star_dark.neuis@theme".to_owned()), document_source: UiDocumentSourceKind::Asset, hot_reload: true, fallback_document: None },
-            UiLayoutDeclaration { id: "engine.ui.loading.subsystem_card.ksystems".to_owned(), surface_id: UI_SURFACE_ENGINE_LOADING.to_owned(), document: "assets/ui/engine/loading.neui@layout.subsystem_cards".to_owned(), style_document: Some("assets/ui/themes/north_star_dark.neuis@theme".to_owned()), document_source: UiDocumentSourceKind::Asset, hot_reload: true, fallback_document: None },
-            UiLayoutDeclaration { id: "engine.error_modal.ksystems".to_owned(), surface_id: UI_SURFACE_ENGINE_ERROR_MODAL.to_owned(), document: "assets/ui/engine/error_modal.neui@surface".to_owned(), style_document: Some("assets/ui/themes/north_star_dark.neuis@theme".to_owned()), document_source: UiDocumentSourceKind::Asset, hot_reload: true, fallback_document: None },
-            UiLayoutDeclaration { id: "game.hud.open_world".to_owned(), surface_id: UI_SURFACE_GAME_HUD.to_owned(), document: "assets/ui/game/hud.neui@surface".to_owned(), style_document: Some("assets/ui/themes/north_star_dark.neuis@theme".to_owned()), document_source: UiDocumentSourceKind::Asset, hot_reload: true, fallback_document: None },
+            UiLayoutDeclaration {
+                id: "engine.ui.loading.ksystems".to_owned(),
+                surface_id: UI_SURFACE_ENGINE_LOADING.to_owned(),
+                document: "assets/ui/engine/loading.neui@surface".to_owned(),
+                style_document: Some("assets/ui/themes/north_star_dark.neuis@theme".to_owned()),
+                document_source: UiDocumentSourceKind::Asset,
+                hot_reload: true,
+                fallback_document: None,
+            },
+            UiLayoutDeclaration {
+                id: "engine.ui.loading.subsystem_card.ksystems".to_owned(),
+                surface_id: UI_SURFACE_ENGINE_LOADING.to_owned(),
+                document: "assets/ui/engine/loading.neui@layout.subsystem_cards".to_owned(),
+                style_document: Some("assets/ui/themes/north_star_dark.neuis@theme".to_owned()),
+                document_source: UiDocumentSourceKind::Asset,
+                hot_reload: true,
+                fallback_document: None,
+            },
+            UiLayoutDeclaration {
+                id: "engine.error_modal.ksystems".to_owned(),
+                surface_id: UI_SURFACE_ENGINE_ERROR_MODAL.to_owned(),
+                document: "assets/ui/engine/error_modal.neui@surface".to_owned(),
+                style_document: Some("assets/ui/themes/north_star_dark.neuis@theme".to_owned()),
+                document_source: UiDocumentSourceKind::Asset,
+                hot_reload: true,
+                fallback_document: None,
+            },
+            UiLayoutDeclaration {
+                id: "game.hud.open_world".to_owned(),
+                surface_id: UI_SURFACE_GAME_HUD.to_owned(),
+                document: "assets/ui/game/hud.neui@surface".to_owned(),
+                style_document: Some("assets/ui/themes/north_star_dark.neuis@theme".to_owned()),
+                document_source: UiDocumentSourceKind::Asset,
+                hot_reload: true,
+                fallback_document: None,
+            },
         ];
         catalog.actions = vec![
             action(UI_ACTION_START_GAME, "Start", "GameCommand"),

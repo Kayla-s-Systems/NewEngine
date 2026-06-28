@@ -44,8 +44,12 @@ pub struct Commands {
 }
 
 enum Op {
-    Spawn { token: EntityToken },
-    Despawn { target: EntityTarget },
+    Spawn {
+        token: EntityToken,
+    },
+    Despawn {
+        target: EntityTarget,
+    },
     Insert {
         target: EntityTarget,
         f: Box<dyn FnOnce(&mut World, EntityId) + Send + 'static>,

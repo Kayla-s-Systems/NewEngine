@@ -38,9 +38,7 @@ impl PluginManager {
 
     #[inline]
     pub fn find_index(&self, id: &str) -> Option<usize> {
-        self.loaded
-            .iter()
-            .position(|p| p.info.id.as_str() == id)
+        self.loaded.iter().position(|p| p.info.id.as_str() == id)
     }
 
     #[inline]

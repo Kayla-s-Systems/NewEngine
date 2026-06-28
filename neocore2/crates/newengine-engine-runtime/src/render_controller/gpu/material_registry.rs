@@ -31,7 +31,9 @@ impl MaterialRenderDevice for CoreRenderMaterialDevice<'_> {
         &mut self,
         desc: newengine_core::render::BindGroupLayoutDesc,
     ) -> Result<newengine_core::render::BindGroupLayoutId, MaterialDomainError> {
-        self.inner.create_bind_group_layout(desc).map_err(Self::map_err)
+        self.inner
+            .create_bind_group_layout(desc)
+            .map_err(Self::map_err)
     }
 
     fn create_texture(
@@ -90,8 +92,10 @@ impl MaterialGpuRegistry {
         let key = provider.key();
         let replaced = self.providers.insert(key.as_str(), provider).is_some();
         if replaced {
-            self.resolved_pipelines.retain(|cache_key, _| !cache_key.starts_with(key.as_str()));
-            self.pending_pipelines.retain(|cache_key, _| !cache_key.starts_with(key.as_str()));
+            self.resolved_pipelines
+                .retain(|cache_key, _| !cache_key.starts_with(key.as_str()));
+            self.pending_pipelines
+                .retain(|cache_key, _| !cache_key.starts_with(key.as_str()));
             newengine_ulog_api::ulog::warn!(
                 "render material registry: replaced material-domain provider key='{}'; invalidated cached pipelines for this provider",
                 key.as_str()
@@ -192,12 +196,15 @@ impl MaterialGpuRegistry {
             }
             Err(e) => {
                 if is_transient_material_pipeline_error(&e) {
-                    let state = self.pending_pipelines.entry(cache_key.clone()).or_insert_with(|| PendingMaterialPipelineState {
-                        key,
-                        shader_event_generation: self.shader_event_generation,
-                        last_error: String::new(),
-                        wait_logged: false,
-                    });
+                    let state = self
+                        .pending_pipelines
+                        .entry(cache_key.clone())
+                        .or_insert_with(|| PendingMaterialPipelineState {
+                            key,
+                            shader_event_generation: self.shader_event_generation,
+                            last_error: String::new(),
+                            wait_logged: false,
+                        });
                     state.shader_event_generation = self.shader_event_generation;
                     state.last_error = e.to_string();
                     state.wait_logged = false;
@@ -217,7 +224,10 @@ impl MaterialGpuRegistry {
                         started_at.elapsed().as_secs_f64() * 1000.0
                     );
                 }
-                Err(EngineError::other(format!("render material registry: {}", e)))
+                Err(EngineError::other(format!(
+                    "render material registry: {}",
+                    e
+                )))
             }
         }
     }

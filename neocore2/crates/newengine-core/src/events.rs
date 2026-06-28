@@ -1,8 +1,8 @@
 use crate::error::EngineResult;
 
 use crossbeam_channel::{Receiver, Sender, TrySendError};
-use std::any::{Any, TypeId};
 use newengine_math::collections_prelude::{NeHashMap as HashMap, NeHashSet as HashSet};
+use std::any::{Any, TypeId};
 use std::sync::{
     atomic::{AtomicU64, Ordering},
     Arc, RwLock, Weak,
@@ -41,7 +41,9 @@ pub struct EventHub {
 impl Clone for EventHub {
     #[inline]
     fn clone(&self) -> Self {
-        Self { inner: Arc::clone(&self.inner) }
+        Self {
+            inner: Arc::clone(&self.inner),
+        }
     }
 }
 

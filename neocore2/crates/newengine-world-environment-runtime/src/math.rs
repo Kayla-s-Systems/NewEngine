@@ -1,10 +1,14 @@
 use newengine_world_environment_api::{Color3Dto, Vec3Dto};
 
 #[inline]
-pub(crate) fn clamp01(value: f64) -> f64 { value.clamp(0.0, 1.0) }
+pub(crate) fn clamp01(value: f64) -> f64 {
+    value.clamp(0.0, 1.0)
+}
 
 #[inline]
-pub(crate) fn clamp01_f32(value: f32) -> f32 { value.clamp(0.0, 1.0) }
+pub(crate) fn clamp01_f32(value: f32) -> f32 {
+    value.clamp(0.0, 1.0)
+}
 
 #[inline]
 pub(crate) fn normalize(v: Vec3Dto) -> Vec3Dto {
@@ -19,7 +23,11 @@ pub(crate) fn normalize(v: Vec3Dto) -> Vec3Dto {
 #[inline]
 pub(crate) fn mix_color(a: Color3Dto, b: Color3Dto, t: f32) -> Color3Dto {
     let t = clamp01_f32(t);
-    Color3Dto::new(a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t, a.b + (b.b - a.b) * t)
+    Color3Dto::new(
+        a.r + (b.r - a.r) * t,
+        a.g + (b.g - a.g) * t,
+        a.b + (b.b - a.b) * t,
+    )
 }
 
 #[inline]
@@ -54,7 +62,11 @@ pub(crate) fn unit_noise(seed: u64, day_index: u64, salt: u64) -> f32 {
 }
 
 #[inline]
-pub(crate) fn range_lerp(min: f32, max: f32, t: f32) -> f32 { min + (max - min) * clamp01_f32(t) }
+pub(crate) fn range_lerp(min: f32, max: f32, t: f32) -> f32 {
+    min + (max - min) * clamp01_f32(t)
+}
 
 #[inline]
-pub(crate) fn vec_scale(v: Vec3Dto, s: f32) -> Vec3Dto { Vec3Dto::new(v.x * s, v.y * s, v.z * s) }
+pub(crate) fn vec_scale(v: Vec3Dto, s: f32) -> Vec3Dto {
+    Vec3Dto::new(v.x * s, v.y * s, v.z * s)
+}

@@ -370,7 +370,8 @@ pub type EditorAssetImportProviderV1Dyn<'a> = EditorAssetImportProviderV1_TO<'a,
 #[sabi_trait]
 pub trait EditorCommandHandlerV1: Send + Sync {
     fn id(&self) -> RString;
-    fn handle_command(&self, invocation: EditorCommandInvocationV1) -> EditorCommandHandlerResultV1;
+    fn handle_command(&self, invocation: EditorCommandInvocationV1)
+        -> EditorCommandHandlerResultV1;
 }
 
 pub type EditorCommandHandlerV1Dyn<'a> = EditorCommandHandlerV1_TO<'a, RBox<()>>;

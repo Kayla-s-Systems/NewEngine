@@ -2,8 +2,7 @@
 
 use newengine_core::events::EventSub;
 use newengine_core::render::{
-    BindGroupId, BufferId, RenderApi, RenderBackendEvent, RenderBackendEventKind,
-    RenderTargetId,
+    BindGroupId, BufferId, RenderApi, RenderBackendEvent, RenderBackendEventKind, RenderTargetId,
 };
 
 #[derive(Clone, Copy, Debug)]

@@ -68,7 +68,8 @@ fn request_ui_draw_list_bin(
         UI_SERVICE_METHOD_DRAW_FRAME_BIN_V1,
         &payload,
     )
-    .map_err(|e| e.to_string())? else {
+    .map_err(|e| e.to_string())?
+    else {
         return Ok(None);
     };
     let service_ms = service_started.elapsed().as_secs_f32() * 1000.0;
@@ -78,7 +79,16 @@ fn request_ui_draw_list_bin(
         .map_err(|e| format!("decode binary ui frame response failed: {e}"))?;
     let decode_ms = decode_started.elapsed().as_secs_f32() * 1000.0;
 
-    log_ui_gateway_frame("bin", request, started, encode_ms, service_ms, decode_ms, bytes.len(), &response);
+    log_ui_gateway_frame(
+        "bin",
+        request,
+        started,
+        encode_ms,
+        service_ms,
+        decode_ms,
+        bytes.len(),
+        &response,
+    );
     Ok(Some(response.draw_list))
 }
 
@@ -86,8 +96,9 @@ fn request_ui_draw_list_json(
     request: &UiFrameRequest,
     started: Instant,
 ) -> EngineResult<Option<UiDrawList>> {
-    let payload = serde_json::to_vec(request)
-        .map_err(|e| newengine_core::EngineError::other(format!("encode ui frame request failed: {e}")))?;
+    let payload = serde_json::to_vec(request).map_err(|e| {
+        newengine_core::EngineError::other(format!("encode ui frame request failed: {e}"))
+    })?;
     let encode_ms = started.elapsed().as_secs_f32() * 1000.0;
 
     let service_started = Instant::now();
@@ -96,17 +107,28 @@ fn request_ui_draw_list_json(
         UI_SERVICE_METHOD_DRAW_FRAME_V1,
         &payload,
     )
-    .map_err(newengine_core::EngineError::other)? else {
+    .map_err(newengine_core::EngineError::other)?
+    else {
         return Ok(None);
     };
     let service_ms = service_started.elapsed().as_secs_f32() * 1000.0;
 
     let decode_started = Instant::now();
-    let response: UiFrameResponse = serde_json::from_slice(&bytes)
-        .map_err(|e| newengine_core::EngineError::other(format!("decode ui frame response failed: {e}")))?;
+    let response: UiFrameResponse = serde_json::from_slice(&bytes).map_err(|e| {
+        newengine_core::EngineError::other(format!("decode ui frame response failed: {e}"))
+    })?;
     let decode_ms = decode_started.elapsed().as_secs_f32() * 1000.0;
 
-    log_ui_gateway_frame("json", request, started, encode_ms, service_ms, decode_ms, bytes.len(), &response);
+    log_ui_gateway_frame(
+        "json",
+        request,
+        started,
+        encode_ms,
+        service_ms,
+        decode_ms,
+        bytes.len(),
+        &response,
+    );
     Ok(Some(response.draw_list))
 }
 
@@ -189,14 +211,26 @@ fn ui_draw_list_stats(draw_list: &UiDrawList) -> String {
         .iter()
         .filter(|command| matches!(command, UiPaintCommand::Image(_)))
         .count();
-    let first_font_ref = draw_list.paint.commands.iter().find_map(|command| match command {
-        UiPaintCommand::Text(text) if !text.font_ref.trim().is_empty() => Some(text.font_ref.as_str()),
-        _ => None,
-    });
-    let first_vector_ref = draw_list.paint.commands.iter().find_map(|command| match command {
-        UiPaintCommand::Vector(vector) if !vector.vector.uri.trim().is_empty() => Some(vector.vector.uri.as_str()),
-        _ => None,
-    });
+    let first_font_ref = draw_list
+        .paint
+        .commands
+        .iter()
+        .find_map(|command| match command {
+            UiPaintCommand::Text(text) if !text.font_ref.trim().is_empty() => {
+                Some(text.font_ref.as_str())
+            }
+            _ => None,
+        });
+    let first_vector_ref = draw_list
+        .paint
+        .commands
+        .iter()
+        .find_map(|command| match command {
+            UiPaintCommand::Vector(vector) if !vector.vector.uri.trim().is_empty() => {
+                Some(vector.vector.uri.as_str())
+            }
+            _ => None,
+        });
     format!(
         "ui(mesh_vertices={} mesh_indices={} mesh_cmds={} paint_cmds={} paint_text={} paint_vector={} paint_images={} paint_diags={} first_font_ref={:?} first_vector_ref={:?} tex_set={} tex_set_bytes={} patches={} patch_bytes={} free={})",
         draw_list.mesh.vertices.len(),

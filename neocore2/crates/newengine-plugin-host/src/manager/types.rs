@@ -84,7 +84,7 @@ pub(crate) fn snapshot_impl(loaded: &[LoadedPlugin]) -> Vec<PluginSnapshotEntry>
             PluginState::Stopped => "stopped",
             PluginState::Disabled => "disabled",
         }
-            .to_string();
+        .to_string();
 
         out.push(PluginSnapshotEntry {
             path: p.path.clone(),
@@ -105,7 +105,6 @@ pub(crate) fn snapshot_impl(loaded: &[LoadedPlugin]) -> Vec<PluginSnapshotEntry>
     out.sort_by(|a, b| a.id.cmp(&b.id));
     out
 }
-
 
 impl LoadedPlugin {
     /// Drops plugin ABI objects first and optionally keeps the dynamic library

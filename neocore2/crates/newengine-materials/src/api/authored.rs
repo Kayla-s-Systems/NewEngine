@@ -1,6 +1,8 @@
 use std::collections::BTreeMap;
 
-use newengine_assets_api::list_file::{AssetDependencyRecordV1, ListFileEntryRecordV1, ListFileMetadataNamespaceV1};
+use newengine_assets_api::list_file::{
+    AssetDependencyRecordV1, ListFileEntryRecordV1, ListFileMetadataNamespaceV1,
+};
 
 use crate::texture_refs::validate_material_texture_reference;
 
@@ -18,7 +20,12 @@ pub struct AuthoredMaterialLibrary {
 }
 
 impl Default for AuthoredMaterialLibrary {
-    fn default() -> Self { Self { version: 1, materials: Vec::new() } }
+    fn default() -> Self {
+        Self {
+            version: 1,
+            materials: Vec::new(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -56,7 +63,13 @@ pub struct AuthoredMaterialSurface {
 }
 
 impl Default for AuthoredMaterialSurface {
-    fn default() -> Self { Self { blend: "opaque".to_owned(), two_sided: false, alpha_cutoff: None } }
+    fn default() -> Self {
+        Self {
+            blend: "opaque".to_owned(),
+            two_sided: false,
+            alpha_cutoff: None,
+        }
+    }
 }
 
 /// Typed material parameter value. This replaces the old `BTreeMap<String, f32>`
@@ -64,7 +77,10 @@ impl Default for AuthoredMaterialSurface {
 /// guessing intent from parameter names.
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(tag = "type", content = "value", rename_all = "snake_case"))]
+#[cfg_attr(
+    feature = "serde",
+    serde(tag = "type", content = "value", rename_all = "snake_case")
+)]
 pub enum MaterialParamValue {
     Float(f32),
     Float2([f32; 2]),
@@ -78,12 +94,16 @@ pub enum MaterialParamValue {
 }
 
 impl Default for MaterialParamValue {
-    fn default() -> Self { Self::Float(0.0) }
+    fn default() -> Self {
+        Self::Float(0.0)
+    }
 }
 
 impl MaterialParamValue {
     #[inline]
-    pub fn texture_ref(reference: impl Into<String>) -> Self { Self::TextureRef(reference.into()) }
+    pub fn texture_ref(reference: impl Into<String>) -> Self {
+        Self::TextureRef(reference.into())
+    }
 }
 
 /// Binary/runtime material-library body projection. The actual NEF8 body can use
@@ -188,34 +208,57 @@ pub struct AuthoredMaterialValidation {
 }
 
 impl Default for AuthoredMaterialValidation {
-    fn default() -> Self { Self { valid: false, errors: Vec::new(), warnings: Vec::new() } }
+    fn default() -> Self {
+        Self {
+            valid: false,
+            errors: Vec::new(),
+            warnings: Vec::new(),
+        }
+    }
 }
 
-pub fn validate_authored_material_library(library: &AuthoredMaterialLibrary) -> AuthoredMaterialValidation {
+pub fn validate_authored_material_library(
+    library: &AuthoredMaterialLibrary,
+) -> AuthoredMaterialValidation {
     let mut result = AuthoredMaterialValidation::default();
     if library.version != 1 {
-        result.errors.push(format!("unsupported material library version {}; expected 1", library.version));
+        result.errors.push(format!(
+            "unsupported material library version {}; expected 1",
+            library.version
+        ));
     }
     if library.materials.is_empty() {
-        result.warnings.push("material library contains no materials".to_owned());
+        result
+            .warnings
+            .push("material library contains no materials".to_owned());
     }
     let mut names = std::collections::BTreeSet::new();
     for material in &library.materials {
         let name = material.name.trim();
         if name.is_empty() {
-            result.errors.push("material entry has empty name".to_owned());
+            result
+                .errors
+                .push("material entry has empty name".to_owned());
         } else if !names.insert(name.to_ascii_lowercase()) {
-            result.errors.push(format!("duplicate material name '{name}'"));
+            result
+                .errors
+                .push(format!("duplicate material name '{name}'"));
         }
         for (slot, reference) in &material.textures {
             if let Err(error) = validate_material_texture_reference(reference) {
-                result.errors.push(format!("material '{}' texture slot '{}' invalid: {}", material.name, slot, error));
+                result.errors.push(format!(
+                    "material '{}' texture slot '{}' invalid: {}",
+                    material.name, slot, error
+                ));
             }
         }
         for (param, value) in &material.params {
             if let MaterialParamValue::TextureRef(reference) = value {
                 if let Err(error) = validate_material_texture_reference(reference) {
-                    result.errors.push(format!("material '{}' param '{}' texture ref invalid: {}", material.name, param, error));
+                    result.errors.push(format!(
+                        "material '{}' param '{}' texture ref invalid: {}",
+                        material.name, param, error
+                    ));
                 }
             }
         }

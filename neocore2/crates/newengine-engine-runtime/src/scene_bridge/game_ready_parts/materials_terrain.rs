@@ -1,7 +1,5 @@
 use super::*;
 
-
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum DemoMaterialRole {
     Terrain,
@@ -37,7 +35,9 @@ impl DemoMaterials {
         fn find(ids: &[(DemoMaterialRole, MaterialId)], role: DemoMaterialRole) -> MaterialId {
             ids.iter()
                 .find_map(|(candidate, id)| (*candidate == role).then_some(*id))
-                .expect("all demo material roles are registered from the canonical definition table")
+                .expect(
+                    "all demo material roles are registered from the canonical definition table",
+                )
         }
 
         Self {
@@ -50,7 +50,10 @@ impl DemoMaterials {
     }
 
     #[inline]
-    pub(in crate::scene_bridge::game_ready) fn sky_visual_material(self, kind: SkyVisualKind) -> MaterialId {
+    pub(in crate::scene_bridge::game_ready) fn sky_visual_material(
+        self,
+        kind: SkyVisualKind,
+    ) -> MaterialId {
         match kind {
             SkyVisualKind::Dome => self.sky,
         }
@@ -77,7 +80,13 @@ pub(super) fn spawn_game_primitive(
 ) -> EntityId {
     let entity = spawn_named(world, spec.name);
     let _ = newengine_transform::set_parent(world, entity, Some(spec.parent));
-    let _ = world.insert(entity, Primitive { id: spec.primitive_id, color: spec.color });
+    let _ = world.insert(
+        entity,
+        Primitive {
+            id: spec.primitive_id,
+            color: spec.color,
+        },
+    );
 
     if let Some(bounds) = primitive_bounds(prims, spec.primitive_id) {
         let _ = world.insert(entity, bounds);
@@ -93,7 +102,6 @@ pub(super) fn spawn_game_primitive(
 
     entity
 }
-
 
 #[inline]
 pub(super) fn register_demo_material_definition(

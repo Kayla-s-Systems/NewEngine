@@ -16,7 +16,10 @@ impl SceneCellCoord {
     pub fn from_world_pos(pos: Vec3, cell_size_x: f32, cell_size_z: f32) -> Self {
         let sx = cell_size_x.max(1.0);
         let sz = cell_size_z.max(1.0);
-        Self { x: (pos.x / sx).floor() as i32, z: (pos.z / sz).floor() as i32 }
+        Self {
+            x: (pos.x / sx).floor() as i32,
+            z: (pos.z / sz).floor() as i32,
+        }
     }
 
     #[inline]
@@ -32,7 +35,11 @@ impl SceneCellCoord {
     pub const fn chebyshev_distance(self, other: Self) -> i32 {
         let dx = (self.x - other.x).abs();
         let dz = (self.z - other.z).abs();
-        if dx > dz { dx } else { dz }
+        if dx > dz {
+            dx
+        } else {
+            dz
+        }
     }
 
     #[inline]
@@ -62,7 +69,11 @@ pub struct SceneStreamingBudget {
 impl Default for SceneStreamingBudget {
     #[inline]
     fn default() -> Self {
-        Self { resident_radius: 2, unload_radius: 4, max_commits_per_tick: 4 }
+        Self {
+            resident_radius: 2,
+            unload_radius: 4,
+            max_commits_per_tick: 4,
+        }
     }
 }
 
@@ -76,10 +87,13 @@ impl SceneStreamingBudget {
         let resident_radius = self.resident_radius.clamp(0, Self::MAX_RESIDENT_RADIUS);
         Self {
             resident_radius,
-            unload_radius: self
-                .unload_radius
-                .clamp((resident_radius + 1).max(1), Self::MAX_UNLOAD_RADIUS.max(resident_radius + 1)),
-            max_commits_per_tick: self.max_commits_per_tick.clamp(1, Self::MAX_COMMITS_PER_TICK),
+            unload_radius: self.unload_radius.clamp(
+                (resident_radius + 1).max(1),
+                Self::MAX_UNLOAD_RADIUS.max(resident_radius + 1),
+            ),
+            max_commits_per_tick: self
+                .max_commits_per_tick
+                .clamp(1, Self::MAX_COMMITS_PER_TICK),
         }
     }
 }
@@ -240,7 +254,8 @@ impl SceneStreamingPlan {
             .iter()
             .copied()
             .filter(|coord| {
-                !desired_set.contains(coord) && coord.chebyshev_distance(center) > budget.unload_radius
+                !desired_set.contains(coord)
+                    && coord.chebyshev_distance(center) > budget.unload_radius
             })
             .map(|coord| SceneStreamingRequest {
                 kind: SceneStreamingRequestKind::Unload,
@@ -250,7 +265,13 @@ impl SceneStreamingPlan {
             .collect::<Vec<_>>();
         unloads.sort_by(|a, b| b.priority_key.cmp(&a.priority_key));
 
-        Self { center, budget, desired, loads, unloads }
+        Self {
+            center,
+            budget,
+            desired,
+            loads,
+            unloads,
+        }
     }
 }
 
@@ -277,17 +298,21 @@ impl SceneLayeredStreamingPlan {
         simulation_pending: impl IntoIterator<Item = SceneCellCoord>,
     ) -> Self {
         let profile = profile.sanitized();
-        let render = SceneStreamingPlan::build(center, profile.render, render_loaded, render_pending);
+        let render =
+            SceneStreamingPlan::build(center, profile.render, render_loaded, render_pending);
         let simulation = SceneStreamingPlan::build(
             center,
             profile.simulation,
             simulation_loaded,
             simulation_pending,
         );
-        Self { center, render, simulation }
+        Self {
+            center,
+            render,
+            simulation,
+        }
     }
 }
-
 
 /// Coarse active-scene bucket inspired by mature open-world streamers.
 ///
@@ -321,7 +346,10 @@ impl SceneStreamingBucket {
 
     #[inline]
     pub const fn wants_render_residency(self) -> bool {
-        matches!(self, Self::VisibleNear | Self::VisibleFar | Self::PredictedNear)
+        matches!(
+            self,
+            Self::VisibleNear | Self::VisibleFar | Self::PredictedNear
+        )
     }
 
     #[inline]
@@ -339,7 +367,11 @@ pub struct SceneBucketedCell {
 
 impl SceneBucketedCell {
     #[inline]
-    pub fn new(coord: SceneCellCoord, bucket: SceneStreamingBucket, center: SceneCellCoord) -> Self {
+    pub fn new(
+        coord: SceneCellCoord,
+        bucket: SceneStreamingBucket,
+        center: SceneCellCoord,
+    ) -> Self {
         let distance_penalty = coord.manhattan_distance(center).saturating_mul(12);
         Self {
             coord,
@@ -362,7 +394,10 @@ impl SceneBucketedCellPlan {
     ) -> Self {
         let render_set = render_desired.into_iter().collect::<BTreeSet<_>>();
         let simulation_set = simulation_desired.into_iter().collect::<BTreeSet<_>>();
-        let mut all = render_set.union(&simulation_set).copied().collect::<Vec<_>>();
+        let mut all = render_set
+            .union(&simulation_set)
+            .copied()
+            .collect::<Vec<_>>();
         all.sort_by_key(|coord| coord.distance_key(center));
         all.dedup();
 
@@ -371,7 +406,11 @@ impl SceneBucketedCellPlan {
             .map(|coord| {
                 let dist = coord.chebyshev_distance(center);
                 let bucket = if render_set.contains(&coord) {
-                    if dist <= 1 { SceneStreamingBucket::VisibleNear } else { SceneStreamingBucket::VisibleFar }
+                    if dist <= 1 {
+                        SceneStreamingBucket::VisibleNear
+                    } else {
+                        SceneStreamingBucket::VisibleFar
+                    }
                 } else if simulation_set.contains(&coord) {
                     SceneStreamingBucket::SimulationOnly
                 } else {
@@ -380,7 +419,13 @@ impl SceneBucketedCellPlan {
                 SceneBucketedCell::new(coord, bucket, center)
             })
             .collect::<Vec<_>>();
-        cells.sort_by(|a, b| b.score.cmp(&a.score).then_with(|| a.coord.distance_key(center).cmp(&b.coord.distance_key(center))));
+        cells.sort_by(|a, b| {
+            b.score.cmp(&a.score).then_with(|| {
+                a.coord
+                    .distance_key(center)
+                    .cmp(&b.coord.distance_key(center))
+            })
+        });
         Self { cells }
     }
 }
@@ -392,22 +437,34 @@ pub struct SceneResidencySet {
 
 impl SceneResidencySet {
     #[inline]
-    pub fn insert(&mut self, coord: SceneCellCoord) -> bool { self.cells.insert(coord) }
+    pub fn insert(&mut self, coord: SceneCellCoord) -> bool {
+        self.cells.insert(coord)
+    }
 
     #[inline]
-    pub fn remove(&mut self, coord: &SceneCellCoord) -> bool { self.cells.remove(coord) }
+    pub fn remove(&mut self, coord: &SceneCellCoord) -> bool {
+        self.cells.remove(coord)
+    }
 
     #[inline]
-    pub fn contains(&self, coord: &SceneCellCoord) -> bool { self.cells.contains(coord) }
+    pub fn contains(&self, coord: &SceneCellCoord) -> bool {
+        self.cells.contains(coord)
+    }
 
     #[inline]
-    pub fn len(&self) -> usize { self.cells.len() }
+    pub fn len(&self) -> usize {
+        self.cells.len()
+    }
 
     #[inline]
-    pub fn is_empty(&self) -> bool { self.cells.is_empty() }
+    pub fn is_empty(&self) -> bool {
+        self.cells.is_empty()
+    }
 
     #[inline]
-    pub fn iter(&self) -> impl Iterator<Item = SceneCellCoord> + '_ { self.cells.iter().copied() }
+    pub fn iter(&self) -> impl Iterator<Item = SceneCellCoord> + '_ {
+        self.cells.iter().copied()
+    }
 
     #[inline]
     pub fn desired_cells(center: SceneCellCoord, radius: i32) -> Vec<SceneCellCoord> {

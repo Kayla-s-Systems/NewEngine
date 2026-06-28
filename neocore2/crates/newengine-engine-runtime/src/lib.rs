@@ -8,8 +8,8 @@
 //! this layer; they must not create backend resources or Vulkan objects directly.
 pub(crate) mod env_config;
 
-pub mod authority;
 pub mod audio_gateway;
+pub mod authority;
 pub mod camera_gateway;
 pub mod engine_bounds;
 pub mod gameplay;
@@ -27,14 +27,17 @@ pub mod replay {
     pub use newengine_replay::*;
 }
 mod scene_bootstrap;
-mod ui_gateway;
 pub mod scene_bridge;
+mod ui_gateway;
 pub mod viewport_bridge;
 
 pub use audio_gateway::register_audio_gateway_best_effort;
-pub use authority::{RuntimeWorldAuthorityBridge, RuntimeWorldAuthorityFrame, RuntimeWorldAuthorityMode, RuntimeWorldAuthorityResource};
+pub use authority::{
+    RuntimeWorldAuthorityBridge, RuntimeWorldAuthorityFrame, RuntimeWorldAuthorityMode,
+    RuntimeWorldAuthorityResource,
+};
 
-pub use gameplay::{PhysicsBodyDesc, CollisionShapeDesc, GameRunMode, GameplayActor, PlayerActor};
+pub use gameplay::{CollisionShapeDesc, GameRunMode, GameplayActor, PhysicsBodyDesc, PlayerActor};
 pub use plugin_manager::PluginManagerBridge;
 pub use render_controller::RuntimeRenderController;
 pub use scene_bridge::SceneBridge;

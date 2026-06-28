@@ -106,7 +106,8 @@ impl CameraFrame {
 
         let view = rig.view_matrix();
         let proj = apply_jitter(projection.matrix(), jitter_px, viewport);
-        let matrices = CameraMatrices::from_view_proj(view, proj, rig.position, viewport, jitter_px);
+        let matrices =
+            CameraMatrices::from_view_proj(view, proj, rig.position, viewport, jitter_px);
         let frustum = Frustum::from_view_proj(matrices.view_proj);
         let (near_plane, far_plane) = projection.near_far();
 
@@ -148,7 +149,11 @@ pub struct CameraFrameDiagnostics {
 impl Default for CameraFrameDiagnostics {
     #[inline]
     fn default() -> Self {
-        Self { near_plane: 0.01, far_plane: 1000.0, finite: true }
+        Self {
+            near_plane: 0.01,
+            far_plane: 1000.0,
+            finite: true,
+        }
     }
 }
 
@@ -232,7 +237,12 @@ pub fn apply_jitter(proj: Mat4, jitter_px: Vec2, viewport: CameraViewport) -> Ma
 }
 
 #[inline]
-fn camera_frame_is_finite(rig: &CameraRig, jitter_px: Vec2, near_plane: f32, far_plane: f32) -> bool {
+fn camera_frame_is_finite(
+    rig: &CameraRig,
+    jitter_px: Vec2,
+    near_plane: f32,
+    far_plane: f32,
+) -> bool {
     rig.position.is_finite()
         && rig.rotation.is_finite()
         && jitter_px.is_finite()

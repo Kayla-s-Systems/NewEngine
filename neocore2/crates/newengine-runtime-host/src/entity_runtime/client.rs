@@ -1,8 +1,9 @@
 use newengine_entity_api::{
     EntityDespawnRequest, EntityDespawnResponse, EntityExistsRequest, EntityExistsResponse,
-    EntityInvokeRequest, EntityListRequest, EntityListResponse, EntityServiceInfo, EntitySpawnRequest,
-    EntitySpawnResponse, ENTITY_SERVICE_METHOD_DESPAWN_JSON_V1, ENTITY_SERVICE_METHOD_EXISTS_JSON_V1,
-    ENTITY_SERVICE_METHOD_LIST_JSON_V1, ENTITY_SERVICE_METHOD_SPAWN_JSON_V1, ENGINE_ENTITY_SERVICE_ID,
+    EntityInvokeRequest, EntityListRequest, EntityListResponse, EntityServiceInfo,
+    EntitySpawnRequest, EntitySpawnResponse, ENGINE_ENTITY_SERVICE_ID,
+    ENTITY_SERVICE_METHOD_DESPAWN_JSON_V1, ENTITY_SERVICE_METHOD_EXISTS_JSON_V1,
+    ENTITY_SERVICE_METHOD_LIST_JSON_V1, ENTITY_SERVICE_METHOD_SPAWN_JSON_V1,
 };
 use newengine_plugin_api::HostApiV1;
 
@@ -20,7 +21,9 @@ pub struct EntityServiceClient {
 impl EntityServiceClient {
     #[inline]
     pub fn new(host: HostApiV1) -> Self {
-        Self { service: GenericJsonServiceClient::new(host, ENGINE_ENTITY_SERVICE_ID) }
+        Self {
+            service: GenericJsonServiceClient::new(host, ENGINE_ENTITY_SERVICE_ID),
+        }
     }
 
     #[inline]
@@ -32,28 +35,36 @@ impl EntityServiceClient {
     #[inline]
     pub fn list(&self, req: EntityListRequest) -> Result<EntityListResponse, String> {
         let payload = encode_json(&req)?;
-        let bytes = self.service.call_raw(ENTITY_SERVICE_METHOD_LIST_JSON_V1, payload)?;
+        let bytes = self
+            .service
+            .call_raw(ENTITY_SERVICE_METHOD_LIST_JSON_V1, payload)?;
         decode_json(&bytes)
     }
 
     #[inline]
     pub fn exists(&self, req: EntityExistsRequest) -> Result<EntityExistsResponse, String> {
         let payload = encode_json(&req)?;
-        let bytes = self.service.call_raw(ENTITY_SERVICE_METHOD_EXISTS_JSON_V1, payload)?;
+        let bytes = self
+            .service
+            .call_raw(ENTITY_SERVICE_METHOD_EXISTS_JSON_V1, payload)?;
         decode_json(&bytes)
     }
 
     #[inline]
     pub fn spawn(&self, req: EntitySpawnRequest) -> Result<EntitySpawnResponse, String> {
         let payload = encode_json(&req)?;
-        let bytes = self.service.call_raw(ENTITY_SERVICE_METHOD_SPAWN_JSON_V1, payload)?;
+        let bytes = self
+            .service
+            .call_raw(ENTITY_SERVICE_METHOD_SPAWN_JSON_V1, payload)?;
         decode_json(&bytes)
     }
 
     #[inline]
     pub fn despawn(&self, req: EntityDespawnRequest) -> Result<EntityDespawnResponse, String> {
         let payload = encode_json(&req)?;
-        let bytes = self.service.call_raw(ENTITY_SERVICE_METHOD_DESPAWN_JSON_V1, payload)?;
+        let bytes = self
+            .service
+            .call_raw(ENTITY_SERVICE_METHOD_DESPAWN_JSON_V1, payload)?;
         decode_json(&bytes)
     }
 

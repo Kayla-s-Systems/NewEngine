@@ -1,5 +1,5 @@
-use super::*;
 use super::definitions_runtime;
+use super::*;
 use newengine_model_domain_api::AssetGraphResolver;
 
 impl SceneBridge {
@@ -110,26 +110,43 @@ impl SceneBridge {
                     );
                     pending_selection = Some(Some(player));
                 }
-                SceneCommand::SpawnImportedAsset { descriptor, name, position } => {
+                SceneCommand::SpawnImportedAsset {
+                    descriptor,
+                    name,
+                    position,
+                } => {
                     let root = ensure_root(&mut *scene);
                     let world = scene.world_mut();
                     let e = spawn_named(world, name);
                     let _ = newengine_transform::set_parent(world, e, Some(root));
 
-                    let assembler = resolve_asset_assembler(&self.asset_assemblers.read(), &descriptor);
+                    let assembler =
+                        resolve_asset_assembler(&self.asset_assemblers.read(), &descriptor);
                     let primitive_id = match assembler.assembly {
                         SceneImportedAssetAssemblyKind::StaticMeshActor => builtins::ID_CUBE,
                         SceneImportedAssetAssemblyKind::SceneAnchor => builtins::ID_PLANE,
                         SceneImportedAssetAssemblyKind::TextureCard => builtins::ID_PLANE,
-                        SceneImportedAssetAssemblyKind::MaterialPreviewSphere => builtins::ID_SPHERE_UV,
-                        SceneImportedAssetAssemblyKind::OpaqueProxy => imported_asset_primitive_id(&descriptor),
+                        SceneImportedAssetAssemblyKind::MaterialPreviewSphere => {
+                            builtins::ID_SPHERE_UV
+                        }
+                        SceneImportedAssetAssemblyKind::OpaqueProxy => {
+                            imported_asset_primitive_id(&descriptor)
+                        }
                     };
-                    let _ = world.insert(e, Primitive {
-                        id: primitive_id,
-                        color: descriptor.tint,
-                    });
+                    let _ = world.insert(
+                        e,
+                        Primitive {
+                            id: primitive_id,
+                            color: descriptor.tint,
+                        },
+                    );
                     let _ = world.insert(e, descriptor.clone());
-                    let _ = world.insert(e, DisplayVisibility { mode: descriptor.assembly.display_mode });
+                    let _ = world.insert(
+                        e,
+                        DisplayVisibility {
+                            mode: descriptor.assembly.display_mode,
+                        },
+                    );
                     if let Some(bounds) = primitive_bounds(&prims, primitive_id) {
                         let _ = world.insert(e, bounds);
                     }
@@ -148,7 +165,12 @@ impl SceneBridge {
                     }
                     pending_selection = Some(Some(e));
                 }
-                SceneCommand::InstantiateDefinition { definition_ref, position, rotation_ypr, scale } => {
+                SceneCommand::InstantiateDefinition {
+                    definition_ref,
+                    position,
+                    rotation_ypr,
+                    scale,
+                } => {
                     let root = ensure_root(&mut *scene);
                     let world = scene.world_mut();
                     newengine_ulog_api::ulog::debug!(
@@ -285,7 +307,6 @@ impl SceneBridge {
                 SceneCommand::SetPlayMode { mode } => {
                     next_mode = Some(mode);
                 }
-
             }
         }
 

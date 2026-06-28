@@ -1,7 +1,7 @@
 use crate::{
     ScriptDiagnostic, ScriptDiagnosticSeverity, ScriptModuleState, ScriptingModuleLoadBytesRequest,
-    ScriptingModuleLoadBytesResponse, ScriptingModuleRecord, ScriptingPermission, ScriptingRequestBytes,
-    ScriptingResponseBytes, ScriptingResponseStatus, ScriptingModuleRef,
+    ScriptingModuleLoadBytesResponse, ScriptingModuleRecord, ScriptingModuleRef,
+    ScriptingPermission, ScriptingRequestBytes, ScriptingResponseBytes, ScriptingResponseStatus,
 };
 use std::collections::BTreeMap;
 
@@ -15,7 +15,9 @@ const MODULE_LOAD_RESPONSE_MAGIC: &[u8; 4] = b"NSLR";
 pub struct ScriptingWireError(pub String);
 
 impl std::fmt::Display for ScriptingWireError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { self.0.fmt(f) }
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
 }
 
 impl std::error::Error for ScriptingWireError {}
@@ -53,7 +55,9 @@ pub fn decode_scripting_request_bytes(bytes: &[u8]) -> ScriptingWireResult<Scrip
 }
 
 #[inline]
-pub fn encode_scripting_module_load_bytes_request(request: &ScriptingModuleLoadBytesRequest) -> Vec<u8> {
+pub fn encode_scripting_module_load_bytes_request(
+    request: &ScriptingModuleLoadBytesRequest,
+) -> Vec<u8> {
     let mut out = Vec::new();
     write_header(&mut out, MODULE_LOAD_MAGIC);
     write_module_ref(&mut out, &request.module_ref);
@@ -64,7 +68,9 @@ pub fn encode_scripting_module_load_bytes_request(request: &ScriptingModuleLoadB
 }
 
 #[inline]
-pub fn decode_scripting_module_load_bytes_request(bytes: &[u8]) -> ScriptingWireResult<ScriptingModuleLoadBytesRequest> {
+pub fn decode_scripting_module_load_bytes_request(
+    bytes: &[u8],
+) -> ScriptingWireResult<ScriptingModuleLoadBytesRequest> {
     let mut reader = WireReader::new(bytes, MODULE_LOAD_MAGIC)?;
     let request = ScriptingModuleLoadBytesRequest {
         module_ref: reader.read_module_ref()?,
@@ -90,7 +96,9 @@ pub fn encode_scripting_response_bytes(response: &ScriptingResponseBytes) -> Vec
 }
 
 #[inline]
-pub fn encode_scripting_module_load_bytes_response(response: &ScriptingModuleLoadBytesResponse) -> Vec<u8> {
+pub fn encode_scripting_module_load_bytes_response(
+    response: &ScriptingModuleLoadBytesResponse,
+) -> Vec<u8> {
     let mut out = Vec::new();
     write_header(&mut out, MODULE_LOAD_RESPONSE_MAGIC);
     out.push(u8::from(response.ok));
@@ -105,7 +113,9 @@ fn write_header(out: &mut Vec<u8>, magic: &[u8; 4]) {
     out.extend_from_slice(&0u16.to_le_bytes());
 }
 
-fn write_string(out: &mut Vec<u8>, value: &str) { write_bytes(out, value.as_bytes()); }
+fn write_string(out: &mut Vec<u8>, value: &str) {
+    write_bytes(out, value.as_bytes());
+}
 
 fn write_bytes(out: &mut Vec<u8>, value: &[u8]) {
     out.extend_from_slice(&(value.len() as u32).to_le_bytes());
@@ -162,14 +172,20 @@ struct WireReader<'a> {
 impl<'a> WireReader<'a> {
     fn new(bytes: &'a [u8], expected_magic: &[u8; 4]) -> ScriptingWireResult<Self> {
         if bytes.len() < 8 {
-            return Err(ScriptingWireError("scripting binary envelope is shorter than header".to_owned()));
+            return Err(ScriptingWireError(
+                "scripting binary envelope is shorter than header".to_owned(),
+            ));
         }
         if bytes.get(0..4) != Some(&expected_magic[..]) {
-            return Err(ScriptingWireError("scripting binary envelope magic mismatch".to_owned()));
+            return Err(ScriptingWireError(
+                "scripting binary envelope magic mismatch".to_owned(),
+            ));
         }
         let version = u16::from_le_bytes([bytes[4], bytes[5]]);
         if version != VERSION_V1 {
-            return Err(ScriptingWireError(format!("unsupported scripting binary envelope version {version}")));
+            return Err(ScriptingWireError(format!(
+                "unsupported scripting binary envelope version {version}"
+            )));
         }
         Ok(Self { bytes, offset: 8 })
     }
@@ -192,7 +208,10 @@ impl<'a> WireReader<'a> {
     }
 
     fn read_exact(&mut self, len: usize) -> ScriptingWireResult<&'a [u8]> {
-        let end = self.offset.checked_add(len).ok_or_else(|| ScriptingWireError("scripting binary range overflow".to_owned()))?;
+        let end = self
+            .offset
+            .checked_add(len)
+            .ok_or_else(|| ScriptingWireError("scripting binary range overflow".to_owned()))?;
         let slice = self
             .bytes
             .get(self.offset..end)
@@ -207,14 +226,21 @@ impl<'a> WireReader<'a> {
     }
 
     fn read_string(&mut self) -> ScriptingWireResult<String> {
-        String::from_utf8(self.read_bytes()?).map_err(|e| ScriptingWireError(format!("invalid utf-8 string in scripting binary envelope: {e}")))
+        String::from_utf8(self.read_bytes()?).map_err(|e| {
+            ScriptingWireError(format!(
+                "invalid utf-8 string in scripting binary envelope: {e}"
+            ))
+        })
     }
 
     fn read_permissions(&mut self) -> ScriptingWireResult<Vec<ScriptingPermission>> {
         let count = self.read_u32()? as usize;
         let mut out = Vec::with_capacity(count.min(1024));
         for _ in 0..count {
-            out.push(ScriptingPermission { id: self.read_string()?, scope: self.read_string()? });
+            out.push(ScriptingPermission {
+                id: self.read_string()?,
+                scope: self.read_string()?,
+            });
         }
         Ok(out)
     }
@@ -229,7 +255,10 @@ impl<'a> WireReader<'a> {
     }
 
     fn read_module_ref(&mut self) -> ScriptingWireResult<ScriptingModuleRef> {
-        Ok(ScriptingModuleRef { reference: self.read_string()?, module_id: self.read_string()? })
+        Ok(ScriptingModuleRef {
+            reference: self.read_string()?,
+            module_id: self.read_string()?,
+        })
     }
 }
 
@@ -277,7 +306,8 @@ mod tests {
             payload_bytes: vec![1, 2, 3],
             ..ScriptingRequestBytes::default()
         };
-        let decoded = decode_scripting_request_bytes(&encode_scripting_request_bytes(&request)).unwrap();
+        let decoded =
+            decode_scripting_request_bytes(&encode_scripting_request_bytes(&request)).unwrap();
         assert_eq!(decoded.request_id, request.request_id);
         assert_eq!(decoded.script_ref, request.script_ref);
         assert_eq!(decoded.payload_bytes, request.payload_bytes);
@@ -290,7 +320,10 @@ mod tests {
             module_bytes: vec![9, 8, 7],
             ..ScriptingModuleLoadBytesRequest::default()
         };
-        let decoded = decode_scripting_module_load_bytes_request(&encode_scripting_module_load_bytes_request(&request)).unwrap();
+        let decoded = decode_scripting_module_load_bytes_request(
+            &encode_scripting_module_load_bytes_request(&request),
+        )
+        .unwrap();
         assert_eq!(decoded.module_ref.reference, request.module_ref.reference);
         assert_eq!(decoded.module_bytes, request.module_bytes);
     }

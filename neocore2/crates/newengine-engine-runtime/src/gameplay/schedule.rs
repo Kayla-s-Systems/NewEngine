@@ -1,5 +1,8 @@
 use newengine_ecs::World;
-use newengine_sim::{default_schedule, SimFrame, SimReadBatchExecutor, SimReadBatchReport, SimReadSnapshot, SimSchedule, SimStage, SimulationJobBatch, SimulationJobTelemetry};
+use newengine_sim::{
+    default_schedule, SimFrame, SimReadBatchExecutor, SimReadBatchReport, SimReadSnapshot,
+    SimSchedule, SimStage, SimulationJobBatch, SimulationJobTelemetry,
+};
 
 use super::fps_demo::step_fps_demo_gameplay;
 use super::physics::step_service_physics;
@@ -40,7 +43,6 @@ impl SimReadBatchExecutor for EngineJobsSimReadExecutor<'_> {
     }
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PhysicsIntegrationMode {
     ServiceBackend,
@@ -69,7 +71,14 @@ pub fn run_schedule_with_physics_mode(
     physics_api: Option<&PhysicsApiRef>,
     physics_mode: PhysicsIntegrationMode,
 ) {
-    run_schedule_with_physics_mode_and_telemetry(schedule, world, dt, physics_api, physics_mode, None);
+    run_schedule_with_physics_mode_and_telemetry(
+        schedule,
+        world,
+        dt,
+        physics_api,
+        physics_mode,
+        None,
+    );
 }
 
 pub fn run_schedule_with_physics_mode_and_telemetry(
@@ -104,10 +113,24 @@ pub fn run_schedule_with_physics_mode_and_telemetry_for_frame(
 ) {
     let frame = SimFrame::new(dt.max(0.0001), frame_index);
     let sim_executor = job_system.map(|jobs| EngineJobsSimReadExecutor { jobs });
-    let sim_executor_ref = sim_executor.as_ref().map(|executor| executor as &dyn SimReadBatchExecutor);
+    let sim_executor_ref = sim_executor
+        .as_ref()
+        .map(|executor| executor as &dyn SimReadBatchExecutor);
 
-    schedule.run_stage_with_telemetry_and_executor(world, SimStage::Input, frame, telemetry, sim_executor_ref);
-    schedule.run_stage_with_telemetry_and_executor(world, SimStage::Controllers, frame, telemetry, sim_executor_ref);
+    schedule.run_stage_with_telemetry_and_executor(
+        world,
+        SimStage::Input,
+        frame,
+        telemetry,
+        sim_executor_ref,
+    );
+    schedule.run_stage_with_telemetry_and_executor(
+        world,
+        SimStage::Controllers,
+        frame,
+        telemetry,
+        sim_executor_ref,
+    );
     schedule.run_stage_with_telemetry(world, SimStage::ApplyIntents, frame, telemetry);
     match physics_mode {
         PhysicsIntegrationMode::ServiceBackend => {
@@ -121,10 +144,22 @@ pub fn run_schedule_with_physics_mode_and_telemetry_for_frame(
             // Declarative safe-profile fallback: keep gameplay controls responsive
             // without entering the native physics provider path. This is a capability
             // downgrade, not a game-specific shortcut.
-            schedule.run_stage_with_telemetry_and_executor(world, SimStage::Physics, frame, telemetry, sim_executor_ref);
+            schedule.run_stage_with_telemetry_and_executor(
+                world,
+                SimStage::Physics,
+                frame,
+                telemetry,
+                sim_executor_ref,
+            );
         }
     }
-    schedule.run_stage_with_telemetry_and_executor(world, SimStage::Derived, frame, telemetry, sim_executor_ref);
+    schedule.run_stage_with_telemetry_and_executor(
+        world,
+        SimStage::Derived,
+        frame,
+        telemetry,
+        sim_executor_ref,
+    );
 
     step_fps_demo_gameplay(world, frame.dt);
 }

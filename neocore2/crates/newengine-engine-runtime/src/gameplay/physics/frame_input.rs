@@ -9,7 +9,9 @@ use newengine_transform::Transform;
 use crate::gameplay::FpsDemoRules;
 
 use super::terrain_colliders::collect_terrain_colliders;
-use super::util::{body_kind_to_dto, quat_to_arr, shape_to_dto, translated_shape_aabb, vec3_to_arr};
+use super::util::{
+    body_kind_to_dto, quat_to_arr, shape_to_dto, translated_shape_aabb, vec3_to_arr,
+};
 
 pub(super) fn build_frame_input(
     world: &World,

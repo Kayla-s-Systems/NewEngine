@@ -34,7 +34,6 @@ pub type NeHashMap<K, V> = FxHashMap<K, V>;
 /// Engine hash set for *internal* data (fast, deterministic).
 pub type NeHashSet<T> = FxHashSet<T>;
 
-
 #[inline]
 pub fn ne_hash_map<K, V>() -> NeHashMap<K, V>
 where

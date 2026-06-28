@@ -2,10 +2,7 @@
 
 use newengine_service_api::{RuntimeServiceContractSpec, RuntimeServiceRequirementSpec};
 
-const LOG_REQUIRED_METHODS: &[&str] = &[
-    "write_json",
-    "flush",
-];
+const LOG_REQUIRED_METHODS: &[&str] = &["write_json", "flush"];
 
 const LOG_RUNTIME_CONTRACT_SPEC: RuntimeServiceContractSpec = RuntimeServiceContractSpec::new(
     crate::plugin_forward_logger::ENGINE_LOG_SERVICE_ID,
@@ -32,7 +29,10 @@ impl RuntimeServiceCatalogEntry {
         requirement: RuntimeServiceRequirementSpec,
         used_by: &'static str,
     ) -> Self {
-        Self { requirement, used_by }
+        Self {
+            requirement,
+            used_by,
+        }
     }
 }
 

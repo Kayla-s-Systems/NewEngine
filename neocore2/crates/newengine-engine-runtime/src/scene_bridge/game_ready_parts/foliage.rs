@@ -2,22 +2,22 @@
 
 use super::*;
 
-#[path = "foliage/types.rs"]
-mod types;
-#[path = "foliage/placement.rs"]
-mod placement;
-#[path = "foliage/ydd_mesh.rs"]
-mod ydd_mesh;
-#[path = "foliage/material_binding.rs"]
-mod material_binding;
 #[path = "foliage/diagnostics.rs"]
 mod diagnostics;
+#[path = "foliage/material_binding.rs"]
+mod material_binding;
+#[path = "foliage/placement.rs"]
+mod placement;
 #[path = "foliage/spawn.rs"]
 mod spawn;
+#[path = "foliage/types.rs"]
+mod types;
+#[path = "foliage/ydd_mesh.rs"]
+mod ydd_mesh;
 
 use self::diagnostics::*;
-use self::placement::{choose_foliage_prefab, collect_tree_placements};
 use self::material_binding::*;
+use self::placement::{choose_foliage_prefab, collect_tree_placements};
 use self::types::*;
 use self::ydd_mesh::*;
 

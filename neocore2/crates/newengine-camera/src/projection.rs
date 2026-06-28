@@ -40,8 +40,16 @@ impl Projection {
 
     #[inline]
     pub fn set_near_far(&mut self, near: f32, far: f32) {
-        let near = if near.is_finite() && near > 0.0 { near } else { 0.01 };
-        let far = if far.is_finite() && far > near { far } else { near + 1000.0 };
+        let near = if near.is_finite() && near > 0.0 {
+            near
+        } else {
+            0.01
+        };
+        let far = if far.is_finite() && far > near {
+            far
+        } else {
+            near + 1000.0
+        };
         match self {
             Self::Perspective(p) => {
                 p.near = near;
@@ -82,10 +90,27 @@ impl Perspective {
         } else {
             60.0_f32.to_radians()
         };
-        let aspect = if aspect.is_finite() && aspect > 0.0 { aspect } else { 16.0 / 9.0 };
-        let near = if near.is_finite() && near > 0.0 { near } else { 0.01 };
-        let far = if far.is_finite() && far > near { far } else { near + 1000.0 };
-        Self { fovy, aspect: aspect.max(1e-6), near, far: far.max(near + 1e-3) }
+        let aspect = if aspect.is_finite() && aspect > 0.0 {
+            aspect
+        } else {
+            16.0 / 9.0
+        };
+        let near = if near.is_finite() && near > 0.0 {
+            near
+        } else {
+            0.01
+        };
+        let far = if far.is_finite() && far > near {
+            far
+        } else {
+            near + 1000.0
+        };
+        Self {
+            fovy,
+            aspect: aspect.max(1e-6),
+            near,
+            far: far.max(near + 1e-3),
+        }
     }
 
     /// RH perspective, Vulkan Z: 0..1, Y flipped.
@@ -116,7 +141,6 @@ impl Perspective {
             0.0,
         ])
     }
-
 
     /// RH perspective, Vulkan Z: reversed 1..0, Y flipped.
     ///
@@ -194,10 +218,26 @@ pub struct Orthographic {
 impl Orthographic {
     #[inline]
     pub fn new(half_height: f32, aspect: f32, near: f32, far: f32) -> Self {
-        let half_height = if half_height.is_finite() && half_height > 0.0 { half_height } else { 1.0 };
-        let aspect = if aspect.is_finite() && aspect > 0.0 { aspect } else { 16.0 / 9.0 };
-        let near = if near.is_finite() && near > 0.0 { near } else { 0.01 };
-        let far = if far.is_finite() && far > near { far } else { near + 1000.0 };
+        let half_height = if half_height.is_finite() && half_height > 0.0 {
+            half_height
+        } else {
+            1.0
+        };
+        let aspect = if aspect.is_finite() && aspect > 0.0 {
+            aspect
+        } else {
+            16.0 / 9.0
+        };
+        let near = if near.is_finite() && near > 0.0 {
+            near
+        } else {
+            0.01
+        };
+        let far = if far.is_finite() && far > near {
+            far
+        } else {
+            near + 1000.0
+        };
         Self {
             half_height: half_height.max(1e-6),
             aspect: aspect.max(1e-6),
@@ -250,7 +290,11 @@ pub fn blend_camera_projection(from: Projection, to: Projection, t: f32) -> Proj
             ))
         }
         _ => {
-            if t < 0.5 { from } else { to }
+            if t < 0.5 {
+                from
+            } else {
+                to
+            }
         }
     }
 }

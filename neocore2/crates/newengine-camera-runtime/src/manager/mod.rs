@@ -5,7 +5,7 @@ mod types;
 
 pub use resource::CameraManagerResource;
 pub use types::{
-    CameraDirectorKind, CameraDirectorRequest, CameraInputContext, CameraRuntimeMode,
-    CameraDirectorRuntimeSettings, CameraRuntimeReport, CameraRuntimeSettings,
-    CameraRuntimeWorldState, CameraTransitionPhase, CameraTransitionPlan, CameraTransitionState,
+    CameraDirectorKind, CameraDirectorRequest, CameraDirectorRuntimeSettings, CameraInputContext,
+    CameraRuntimeMode, CameraRuntimeReport, CameraRuntimeSettings, CameraRuntimeWorldState,
+    CameraTransitionPhase, CameraTransitionPlan, CameraTransitionState,
 };

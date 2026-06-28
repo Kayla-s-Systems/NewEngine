@@ -36,7 +36,13 @@ pub(super) fn ensure_runtime_prefab_parts(
                 index_count
             );
         }
-        let (material_id, color) = material_for_slot(&material_slot, material_ref.as_deref(), materials, material_specs, palette);
+        let (material_id, color) = material_for_slot(
+            &material_slot,
+            material_ref.as_deref(),
+            materials,
+            material_specs,
+            palette,
+        );
         out.push(RuntimePrefabMeshPart {
             primitive_id,
             material_slot,
@@ -76,7 +82,10 @@ pub(super) fn spawn_runtime_ydd_prefab_instance(
                 parent: root,
                 primitive_id: part.primitive_id,
                 material_id: part.material_id,
-                name: &format!("Foliage/TreeAnimate-{}/{}-{part_index}", placement.index, part.material_slot),
+                name: &format!(
+                    "Foliage/TreeAnimate-{}/{}-{part_index}",
+                    placement.index, part.material_slot
+                ),
                 position: placement.position,
                 scale,
                 color: part.color,
@@ -111,7 +120,13 @@ pub(in crate::scene_bridge::game_ready) fn spawn_foliage_prefabs(
         return;
     };
 
-    let runtime_parts = match ensure_runtime_prefab_parts(prims, prefab, materials, material_specs, palette) {
+    let runtime_parts = match ensure_runtime_prefab_parts(
+        prims,
+        prefab,
+        materials,
+        material_specs,
+        palette,
+    ) {
         Ok(parts) => parts,
         Err(e) => {
             newengine_ulog_api::ulog::error!(

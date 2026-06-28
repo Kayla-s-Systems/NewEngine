@@ -4,9 +4,9 @@ use super::*;
 
 impl EngineWorldGatewayService {
     pub(crate) fn apply_stage_json_v1(&self, payload: Blob) -> RResult<Blob, RString> {
-        let req = match payload_json(&payload)
-            .and_then(|v| serde_json::from_value::<WorldApplyStageRequest>(v).map_err(|e| e.to_string()))
-        {
+        let req = match payload_json(&payload).and_then(|v| {
+            serde_json::from_value::<WorldApplyStageRequest>(v).map_err(|e| e.to_string())
+        }) {
             Ok(v) => v,
             Err(e) => return RResult::RErr(RString::from(e)),
         };
@@ -22,8 +22,14 @@ impl EngineWorldGatewayService {
         {
             let scene_lock = self.scene.scene();
             let mut scene = scene_lock.write();
-            let mut asset = scene.to_asset(SceneAssetOptions { include_empty_entities: true });
-            let existing = asset.entities.iter().map(|e| e.guid).collect::<std::collections::BTreeSet<_>>();
+            let mut asset = scene.to_asset(SceneAssetOptions {
+                include_empty_entities: true,
+            });
+            let existing = asset
+                .entities
+                .iter()
+                .map(|e| e.guid)
+                .collect::<std::collections::BTreeSet<_>>();
             for command in req.commands.iter() {
                 if command.command != "scene.spawn_instance" {
                     return RResult::RErr(RString::from(format!(
@@ -32,15 +38,23 @@ impl EngineWorldGatewayService {
                     )));
                 }
                 let Some(guid) = command.guid else {
-                    return RResult::RErr(RString::from("scene.spawn_instance command requires guid"));
+                    return RResult::RErr(RString::from(
+                        "scene.spawn_instance command requires guid",
+                    ));
                 };
                 if existing.contains(&guid) || asset.entities.iter().any(|e| e.guid == guid) {
-                    return RResult::RErr(RString::from(format!("scene.spawn_instance duplicate guid={guid}")));
+                    return RResult::RErr(RString::from(format!(
+                        "scene.spawn_instance duplicate guid={guid}"
+                    )));
                 }
                 let transform = match command.transform.clone() {
                     Some(value) => match serde_json::from_value::<TransformAsset>(value) {
                         Ok(v) => Some(v),
-                        Err(e) => return RResult::RErr(RString::from(format!("scene.spawn_instance transform decode failed: {e}"))),
+                        Err(e) => {
+                            return RResult::RErr(RString::from(format!(
+                                "scene.spawn_instance transform decode failed: {e}"
+                            )))
+                        }
                     },
                     None => None,
                 };
@@ -58,7 +72,9 @@ impl EngineWorldGatewayService {
             }
             asset.entities.sort_by(|a, b| a.guid.cmp(&b.guid));
             if let Err(e) = scene.load_asset(&asset) {
-                return RResult::RErr(RString::from(format!("world.apply_stage_json_v1 scene apply failed: {e}")));
+                return RResult::RErr(RString::from(format!(
+                    "world.apply_stage_json_v1 scene apply failed: {e}"
+                )));
             }
         }
         {
@@ -79,16 +95,18 @@ impl EngineWorldGatewayService {
     }
 
     pub(crate) fn save_snapshot_json_v1(&self, payload: Blob) -> RResult<Blob, RString> {
-        let req = match payload_json(&payload)
-            .and_then(|v| serde_json::from_value::<WorldSaveSnapshotRequest>(v).map_err(|e| e.to_string()))
-        {
+        let req = match payload_json(&payload).and_then(|v| {
+            serde_json::from_value::<WorldSaveSnapshotRequest>(v).map_err(|e| e.to_string())
+        }) {
             Ok(v) => v,
             Err(e) => return RResult::RErr(RString::from(e)),
         };
         let scene_payload = if req.include_scene_payload {
             let scene_lock = self.scene.scene();
             let mut scene = scene_lock.write();
-            let asset = scene.to_asset(SceneAssetOptions { include_empty_entities: true });
+            let asset = scene.to_asset(SceneAssetOptions {
+                include_empty_entities: true,
+            });
             match serde_json::to_value(&asset) {
                 Ok(value) => Some(value),
                 Err(e) => return RResult::RErr(RString::from(e.to_string())),
@@ -115,9 +133,9 @@ impl EngineWorldGatewayService {
     }
 
     pub(crate) fn load_snapshot_json_v1(&self, payload: Blob) -> RResult<Blob, RString> {
-        let req = match payload_json(&payload)
-            .and_then(|v| serde_json::from_value::<WorldLoadSnapshotRequest>(v).map_err(|e| e.to_string()))
-        {
+        let req = match payload_json(&payload).and_then(|v| {
+            serde_json::from_value::<WorldLoadSnapshotRequest>(v).map_err(|e| e.to_string())
+        }) {
             Ok(v) => v,
             Err(e) => return RResult::RErr(RString::from(e)),
         };
@@ -126,27 +144,41 @@ impl EngineWorldGatewayService {
             None => match req.payload {
                 Some(value) => match serde_json::from_value::<WorldSnapshotResponse>(value) {
                     Ok(snapshot) => snapshot,
-                    Err(e) => return RResult::RErr(RString::from(format!("world.load_snapshot_json_v1 payload decode failed: {e}"))),
+                    Err(e) => {
+                        return RResult::RErr(RString::from(format!(
+                            "world.load_snapshot_json_v1 payload decode failed: {e}"
+                        )))
+                    }
                 },
-                None => return RResult::RErr(RString::from("world.load_snapshot_json_v1 requires snapshot or payload")),
+                None => {
+                    return RResult::RErr(RString::from(
+                        "world.load_snapshot_json_v1 requires snapshot or payload",
+                    ))
+                }
             },
         };
-        let restore = WorldRestoreSnapshotRequest { snapshot, replace_scene: req.replace_scene };
+        let restore = WorldRestoreSnapshotRequest {
+            snapshot,
+            replace_scene: req.replace_scene,
+        };
         let restore_payload = match serde_json::to_vec(&restore) {
             Ok(bytes) => Blob::from(bytes),
             Err(e) => return RResult::RErr(RString::from(e.to_string())),
         };
         match self.restore_snapshot_json_v1(restore_payload).into_result() {
             Ok(bytes) => {
-                let decoded = serde_json::from_slice::<WorldRestoreSnapshotResponse>(&bytes.into_vec())
-                    .map_err(|e| RString::from(e.to_string()));
+                let decoded =
+                    serde_json::from_slice::<WorldRestoreSnapshotResponse>(&bytes.into_vec())
+                        .map_err(|e| RString::from(e.to_string()));
                 match decoded {
-                    Ok(response) => ok_json(&WorldLoadSnapshotResponse { ok: response.ok, state: response.state }),
+                    Ok(response) => ok_json(&WorldLoadSnapshotResponse {
+                        ok: response.ok,
+                        state: response.state,
+                    }),
                     Err(e) => RResult::RErr(e),
                 }
-            },
+            }
             Err(e) => RResult::RErr(e),
         }
     }
-
 }

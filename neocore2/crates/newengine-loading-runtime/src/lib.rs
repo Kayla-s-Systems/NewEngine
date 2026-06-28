@@ -1,12 +1,13 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use std::f32::consts::TAU;
-use std::sync::{Arc, Condvar, Mutex, RwLock};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Condvar, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
 pub use newengine_loading_api::{
-    EngineTaskEvent, LoadingScreenSnapshot, LoadingStatusEvent, LoadingSubsystemPhase, LoadingSubsystemSnapshot,
+    EngineTaskEvent, LoadingScreenSnapshot, LoadingStatusEvent, LoadingSubsystemPhase,
+    LoadingSubsystemSnapshot,
 };
 
 #[derive(Debug, Clone)]
@@ -73,8 +74,12 @@ impl LoadingAnimator {
             self.last_detail_key = detail_key.clone();
         }
 
-        let visible_age = now.saturating_duration_since(self.detail_started_at).as_secs_f32();
-        let can_switch_text = self.visible_detail_key.is_empty() || visible_age >= MIN_STATUS_HOLD_SECS || !next.active;
+        let visible_age = now
+            .saturating_duration_since(self.detail_started_at)
+            .as_secs_f32();
+        let can_switch_text = self.visible_detail_key.is_empty()
+            || visible_age >= MIN_STATUS_HOLD_SECS
+            || !next.active;
         if self.visible_detail_key != detail_key && can_switch_text {
             self.visible_detail_key = detail_key;
             self.visible_title = next.title.clone();
@@ -88,8 +93,16 @@ impl LoadingAnimator {
         }
 
         let target = next.progress_01.clamp(0.0, 1.0);
-        let target = if next.active { target.max(self.visual_progress_01) } else { target };
-        let speed = if target < self.visual_progress_01 { 16.0 } else { 5.6 };
+        let target = if next.active {
+            target.max(self.visual_progress_01)
+        } else {
+            target
+        };
+        let speed = if target < self.visual_progress_01 {
+            16.0
+        } else {
+            5.6
+        };
         let alpha = 1.0 - (-speed * dt).exp();
         self.visual_progress_01 += (target - self.visual_progress_01) * alpha;
         self.visual_progress_01 = self.visual_progress_01.clamp(0.0, 1.0);
@@ -214,7 +227,10 @@ pub fn project_loading_snapshot_from_overlay_fields(
         active,
         title: normalize_text(title.into(), "NORTH STAR ENGINE // BOOTSTRAP"),
         status: normalize_text(status.into(), "Preparing runtime..."),
-        detail: normalize_text(detail.into(), "The loading status bridge is waiting for startup telemetry."),
+        detail: normalize_text(
+            detail.into(),
+            "The loading status bridge is waiting for startup telemetry.",
+        ),
         progress_01: progress_01.clamp(0.0, 1.0),
         spinner_phase,
         source: normalize_text(source.into(), "engine.ui.loading"),
@@ -225,16 +241,15 @@ pub fn project_loading_snapshot_from_overlay_fields(
     .normalize()
 }
 
-
-
 pub fn project_loading_snapshot_from_task_event(
     event: EngineTaskEvent,
     spinner_phase: u32,
     provider: impl Into<String>,
 ) -> LoadingScreenSnapshot {
-    let task_progress = event.progress_01.unwrap_or_else(|| {
-        if event.phase.is_terminal() { 1.0 } else { 0.0 }
-    });
+    let task_progress =
+        event
+            .progress_01
+            .unwrap_or_else(|| if event.phase.is_terminal() { 1.0 } else { 0.0 });
     let progress = match event.phase {
         newengine_loading_api::EngineTaskPhase::Scheduled => 0.04,
         newengine_loading_api::EngineTaskPhase::Running
@@ -242,7 +257,9 @@ pub fn project_loading_snapshot_from_task_event(
         | newengine_loading_api::EngineTaskPhase::PauseRequested
         | newengine_loading_api::EngineTaskPhase::Paused
         | newengine_loading_api::EngineTaskPhase::ResumeRequested
-        | newengine_loading_api::EngineTaskPhase::CancelRequested => (0.10 + task_progress * 0.72).clamp(0.0, 0.88),
+        | newengine_loading_api::EngineTaskPhase::CancelRequested => {
+            (0.10 + task_progress * 0.72).clamp(0.0, 0.88)
+        }
         newengine_loading_api::EngineTaskPhase::Completed
         | newengine_loading_api::EngineTaskPhase::Cancelled => 0.88,
         newengine_loading_api::EngineTaskPhase::Failed => 0.88,
@@ -260,9 +277,22 @@ pub fn project_loading_snapshot_from_task_event(
     cards.push(LoadingSubsystemSnapshot::new(
         "task-control",
         "TASK CTRL",
-        if event.can_pause || event.can_cancel { LoadingSubsystemPhase::Running } else { LoadingSubsystemPhase::Waiting },
-        if event.can_pause || event.can_cancel { "COOP" } else { "VIEW" },
-        format!("pause={} cancel={} id={}", event.can_pause, event.can_cancel, event.task_id.as_str()),
+        if event.can_pause || event.can_cancel {
+            LoadingSubsystemPhase::Running
+        } else {
+            LoadingSubsystemPhase::Waiting
+        },
+        if event.can_pause || event.can_cancel {
+            "COOP"
+        } else {
+            "VIEW"
+        },
+        format!(
+            "pause={} cancel={} id={}",
+            event.can_pause,
+            event.can_cancel,
+            event.task_id.as_str()
+        ),
         Some(task_progress),
     ));
     cards.push(LoadingSubsystemSnapshot::new(
@@ -270,7 +300,12 @@ pub fn project_loading_snapshot_from_task_event(
         "EVENT BUS",
         LoadingSubsystemPhase::Running,
         event.phase.state_label(),
-        format!("{} · {} · {}", event.source.as_str(), event.owner.as_str(), event.lane.as_str()),
+        format!(
+            "{} · {} · {}",
+            event.source.as_str(),
+            event.owner.as_str(),
+            event.lane.as_str()
+        ),
         Some(task_progress),
     ));
 
@@ -278,7 +313,10 @@ pub fn project_loading_snapshot_from_task_event(
         active: true,
         title: "NORTH STAR ENGINE // TASK STREAM".to_owned(),
         status: normalize_text(event.status.clone(), "Engine task is running..."),
-        detail: normalize_text(event.detail.clone(), "Task telemetry is flowing through engine.task.event.v1."),
+        detail: normalize_text(
+            event.detail.clone(),
+            "Task telemetry is flowing through engine.task.event.v1.",
+        ),
         progress_01: progress.clamp(0.0, 1.0),
         spinner_phase,
         source: normalize_text(event.source.clone(), "engine.task.event"),
@@ -299,7 +337,10 @@ pub fn project_loading_snapshot_from_status_event(
         active: true,
         title: normalize_text(event.title.clone(), "NORTH STAR ENGINE // BOOTSTRAP"),
         status: normalize_text(event.status.clone(), "Preparing runtime..."),
-        detail: normalize_text(event.detail.clone(), "Runtime subsystem is publishing startup telemetry."),
+        detail: normalize_text(
+            event.detail.clone(),
+            "Runtime subsystem is publishing startup telemetry.",
+        ),
         progress_01: event.progress_01.clamp(0.0, 1.0),
         spinner_phase,
         source: normalize_text(event.source.clone(), "engine.ui.loading.status"),
@@ -312,7 +353,10 @@ pub fn project_loading_snapshot_from_status_event(
 
 fn status_event_subsystems(event: &LoadingStatusEvent) -> Vec<LoadingSubsystemSnapshot> {
     let event_card = event.to_subsystem_snapshot();
-    let failed = matches!(event.phase, newengine_loading_api::LoadingStatusPhase::Failed);
+    let failed = matches!(
+        event.phase,
+        newengine_loading_api::LoadingStatusPhase::Failed
+    );
     let mut cards = Vec::with_capacity(4);
     if event.subsystem_id != "platform" {
         cards.push(LoadingSubsystemSnapshot::new(
@@ -328,8 +372,16 @@ fn status_event_subsystems(event: &LoadingStatusEvent) -> Vec<LoadingSubsystemSn
         cards.push(LoadingSubsystemSnapshot::new(
             "assets",
             "ASSETS",
-            if event.progress_01 >= 0.34 { LoadingSubsystemPhase::Ready } else { LoadingSubsystemPhase::Running },
-            if event.progress_01 >= 0.34 { "READY" } else { "SERVICES" },
+            if event.progress_01 >= 0.34 {
+                LoadingSubsystemPhase::Ready
+            } else {
+                LoadingSubsystemPhase::Running
+            },
+            if event.progress_01 >= 0.34 {
+                "READY"
+            } else {
+                "SERVICES"
+            },
             "Asset and service gateways are routed through the host bus.",
             Some((event.progress_01 / 0.34).clamp(0.0, 1.0)),
         ));
@@ -338,7 +390,11 @@ fn status_event_subsystems(event: &LoadingStatusEvent) -> Vec<LoadingSubsystemSn
     cards.push(LoadingSubsystemSnapshot::new(
         "diagnostics",
         "DIAGNOSTICS",
-        if failed { LoadingSubsystemPhase::Failed } else { LoadingSubsystemPhase::Running },
+        if failed {
+            LoadingSubsystemPhase::Failed
+        } else {
+            LoadingSubsystemPhase::Running
+        },
         if failed { "ERR" } else { "EVENT" },
         format!("{} · {}", event.domain, event.source),
         Some(event.progress_01),
@@ -355,22 +411,12 @@ pub fn parse_subsystems_from_view_json(view_json: &str) -> Vec<LoadingSubsystemS
         return Vec::new();
     };
 
-    items
-        .iter()
-        .filter_map(parse_subsystem)
-        .take(8)
-        .collect()
+    items.iter().filter_map(parse_subsystem).take(8).collect()
 }
 
 fn parse_subsystem(value: &serde_json::Value) -> Option<LoadingSubsystemSnapshot> {
-    let id = value
-        .get("id")
-        .and_then(|v| v.as_str())
-        .unwrap_or("Other");
-    let label = value
-        .get("label")
-        .and_then(|v| v.as_str())
-        .unwrap_or(id);
+    let id = value.get("id").and_then(|v| v.as_str()).unwrap_or("Other");
+    let label = value.get("label").and_then(|v| v.as_str()).unwrap_or(id);
     let phase = value
         .get("phase")
         .and_then(|v| v.as_str())
@@ -380,10 +426,7 @@ fn parse_subsystem(value: &serde_json::Value) -> Option<LoadingSubsystemSnapshot
         .get("state_label")
         .and_then(|v| v.as_str())
         .unwrap_or_else(|| default_phase_label(phase));
-    let detail = value
-        .get("detail")
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
+    let detail = value.get("detail").and_then(|v| v.as_str()).unwrap_or("");
     let progress_01 = value
         .get("progress")
         .and_then(|progress| {
@@ -432,5 +475,9 @@ fn default_phase_label(phase: LoadingSubsystemPhase) -> &'static str {
 #[inline]
 fn normalize_text(value: String, fallback: &str) -> String {
     let trimmed = value.trim();
-    if trimmed.is_empty() { fallback.to_owned() } else { trimmed.to_owned() }
+    if trimmed.is_empty() {
+        fallback.to_owned()
+    } else {
+        trimmed.to_owned()
+    }
 }

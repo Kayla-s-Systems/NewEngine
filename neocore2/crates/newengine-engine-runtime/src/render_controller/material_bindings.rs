@@ -1,8 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use newengine_materials::api::{MaterialFlags, MaterialResolved};
 use newengine_core::render::TextureId;
-
+use newengine_materials::api::{MaterialFlags, MaterialResolved};
 
 #[derive(Clone, Debug)]
 pub(super) enum MaterialTextureGpuResidency {
@@ -33,7 +32,6 @@ pub(super) enum MaterialTextureGpuResidency {
     },
 }
 
-
 /// CPU-side material plan consumed by the lit render pass.
 ///
 /// This keeps material semantics outside draw-loop plumbing and makes the
@@ -55,10 +53,7 @@ pub(super) struct LitMaterialPlan<'a> {
 
 impl<'a> LitMaterialPlan<'a> {
     #[inline]
-    pub fn from_resolved(
-        resolved: Option<&'a MaterialResolved>,
-        fallback_color: [f32; 4],
-    ) -> Self {
+    pub fn from_resolved(resolved: Option<&'a MaterialResolved>, fallback_color: [f32; 4]) -> Self {
         let Some(material) = resolved else {
             return Self::fallback(fallback_color);
         };

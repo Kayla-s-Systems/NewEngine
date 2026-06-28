@@ -12,7 +12,9 @@ pub struct BootstrapUiRgb {
 
 impl BootstrapUiRgb {
     #[inline]
-    pub const fn new(r: u8, g: u8, b: u8) -> Self { Self { r, g, b } }
+    pub const fn new(r: u8, g: u8, b: u8) -> Self {
+        Self { r, g, b }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -69,13 +71,41 @@ pub struct BootstrapUiStyle {
 }
 
 pub const NORTH_STAR_BOOTSTRAP_UI_STEPS: &[BootstrapUiStepSpec] = &[
-    BootstrapUiStepSpec { id: "platform", label: "Platform", detail: "Native compositor is rendering independently" },
-    BootstrapUiStepSpec { id: "service_call", label: "Service Call", detail: "Gateway request completed" },
-    BootstrapUiStepSpec { id: "task_ctrl", label: "Task Control", detail: "Cooperative startup task state" },
-    BootstrapUiStepSpec { id: "event_bus", label: "Event Bus", detail: "Runtime event stream" },
-    BootstrapUiStepSpec { id: "renderer", label: "Preparing Renderer", detail: "Compiling shaders" },
-    BootstrapUiStepSpec { id: "assets", label: "Building Asset Registry", detail: "Gathering asset metadata" },
-    BootstrapUiStepSpec { id: "handoff", label: "Finalizing Runtime Handoff", detail: "Completing startup" },
+    BootstrapUiStepSpec {
+        id: "platform",
+        label: "Platform",
+        detail: "Native compositor is rendering independently",
+    },
+    BootstrapUiStepSpec {
+        id: "service_call",
+        label: "Service Call",
+        detail: "Gateway request completed",
+    },
+    BootstrapUiStepSpec {
+        id: "task_ctrl",
+        label: "Task Control",
+        detail: "Cooperative startup task state",
+    },
+    BootstrapUiStepSpec {
+        id: "event_bus",
+        label: "Event Bus",
+        detail: "Runtime event stream",
+    },
+    BootstrapUiStepSpec {
+        id: "renderer",
+        label: "Preparing Renderer",
+        detail: "Compiling shaders",
+    },
+    BootstrapUiStepSpec {
+        id: "assets",
+        label: "Building Asset Registry",
+        detail: "Gathering asset metadata",
+    },
+    BootstrapUiStepSpec {
+        id: "handoff",
+        label: "Finalizing Runtime Handoff",
+        detail: "Completing startup",
+    },
 ];
 
 pub const NORTH_STAR_BOOTSTRAP_UI_STYLE: BootstrapUiStyle = BootstrapUiStyle {
@@ -115,4 +145,6 @@ pub const NORTH_STAR_BOOTSTRAP_UI_STYLE: BootstrapUiStyle = BootstrapUiStyle {
 };
 
 #[inline]
-pub const fn north_star_bootstrap_ui_style() -> BootstrapUiStyle { NORTH_STAR_BOOTSTRAP_UI_STYLE }
+pub const fn north_star_bootstrap_ui_style() -> BootstrapUiStyle {
+    NORTH_STAR_BOOTSTRAP_UI_STYLE
+}

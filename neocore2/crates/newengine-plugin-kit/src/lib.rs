@@ -13,9 +13,9 @@ pub use newengine_plugin_api::*;
 pub mod definition;
 
 pub mod prelude {
-    pub use crate::{export_newengine_plugin, export_newengine_plugin_root};
     pub use crate::definition::*;
     pub use crate::plugin_api::*;
+    pub use crate::{export_newengine_plugin, export_newengine_plugin_root};
 }
 
 /// Export a plugin root from explicitly declared create callbacks.

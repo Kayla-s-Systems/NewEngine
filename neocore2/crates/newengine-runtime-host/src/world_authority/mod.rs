@@ -2,6 +2,4 @@
 
 mod client;
 
-pub use client::{
-    WorldAuthorityClient, WorldAuthorityGatewayRoute, WorldAuthoritySnapshot,
-};
+pub use client::{WorldAuthorityClient, WorldAuthorityGatewayRoute, WorldAuthoritySnapshot};

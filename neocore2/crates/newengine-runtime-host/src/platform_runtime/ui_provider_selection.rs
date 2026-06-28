@@ -57,7 +57,9 @@ pub(crate) fn discover_available_ui_provider() -> UiProviderKind {
 pub(crate) fn log_ui_provider_selection(origin: &str, active: &UiProviderKind) {
     match active {
         UiProviderKind::Null => {
-            newengine_ulog_api::ulog::info!("ui provider: origin='{origin}' discovered=none active=none");
+            newengine_ulog_api::ulog::info!(
+                "ui provider: origin='{origin}' discovered=none active=none"
+            );
         }
         UiProviderKind::Plugin { service_id } => {
             newengine_ulog_api::ulog::info!(

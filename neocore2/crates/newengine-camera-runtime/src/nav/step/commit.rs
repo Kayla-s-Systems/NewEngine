@@ -36,8 +36,18 @@ pub(crate) fn finish_now(
     rig: &CameraRig,
 ) -> CameraNavResult {
     let projection = compute_projection(rig, bounds, params.aspect());
-    let frame = CameraFrame::build(params.channel, *rig, projection, params.viewport, newengine_math::Vec2::ZERO);
+    let frame = CameraFrame::build(
+        params.channel,
+        *rig,
+        projection,
+        params.viewport,
+        newengine_math::Vec2::ZERO,
+    );
     let cursor = cursor_state_for_nav(input);
 
-    CameraNavResult { frame, controller: *ctrl, cursor }
+    CameraNavResult {
+        frame,
+        controller: *ctrl,
+        cursor,
+    }
 }

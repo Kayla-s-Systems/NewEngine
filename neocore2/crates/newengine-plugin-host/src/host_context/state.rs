@@ -1,5 +1,7 @@
-use newengine_plugin_api::{EventSinkV1Dyn, PluginDescriptor, PluginInfo, PluginKind, ServiceV1Dyn};
 use newengine_math::collections::prelude::*;
+use newengine_plugin_api::{
+    EventSinkV1Dyn, PluginDescriptor, PluginInfo, PluginKind, ServiceV1Dyn,
+};
 use std::cell::RefCell;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -119,7 +121,8 @@ pub(crate) struct HostContext {
     /// Host-assigned provider origin keyed by plugin id. This is intentionally
     /// separate from descriptor JSON because trust tier must be assigned by the
     /// loader/profile layer, never by the plugin itself.
-    pub(crate) plugin_origins: Mutex<NeHashMap<String, crate::service_gateway::GatewayProviderOrigin>>,
+    pub(crate) plugin_origins:
+        Mutex<NeHashMap<String, crate::service_gateway::GatewayProviderOrigin>>,
 
     /// Host-registered runtime plugins that live outside the normal ABI loader path
     /// (currently platform runtime units only).

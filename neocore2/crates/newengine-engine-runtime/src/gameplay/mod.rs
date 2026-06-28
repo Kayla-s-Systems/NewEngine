@@ -9,9 +9,9 @@ mod schedule;
 mod snapshot;
 
 pub use components::{
-    PhysicsBodyDesc, CollisionShapeDesc, DisplayMode, DisplayVisibility, GameRunMode, FpsDemoGoal,
-    FpsDemoHazard, FpsDemoPickup, FpsDemoRules, FpsDemoState, FpsPlayerTuning,
-    GameReadyWorldLaunchGate, GameplayActor, PlayerActor, PlayerController, PlayerControllerKind,
+    CollisionShapeDesc, DisplayMode, DisplayVisibility, FpsDemoGoal, FpsDemoHazard, FpsDemoPickup,
+    FpsDemoRules, FpsDemoState, FpsPlayerTuning, GameReadyWorldLaunchGate, GameRunMode,
+    GameplayActor, PhysicsBodyDesc, PlayerActor, PlayerController, PlayerControllerKind,
     PlayerEvent, PlayerEventBus, PlayerEventKind, PlayerModelBinding, PlayerViewVisibility,
     PlayerViewVisibilityPolicy, PlayerVisualKind, PlayerVisualPart,
 };
@@ -26,8 +26,8 @@ pub use player::{
 };
 pub use schedule::{
     default_sim_schedule, run_schedule, run_schedule_with_physics_mode,
-    run_schedule_with_physics_mode_and_telemetry, run_schedule_with_physics_mode_and_telemetry_for_frame,
-    PhysicsIntegrationMode,
+    run_schedule_with_physics_mode_and_telemetry,
+    run_schedule_with_physics_mode_and_telemetry_for_frame, PhysicsIntegrationMode,
 };
 pub use snapshot::{
     capture_runtime_world_snapshot, restore_runtime_world_snapshot, RuntimeEntitySnapshot,

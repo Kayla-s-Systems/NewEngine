@@ -1,8 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use newengine_core::render::{
-    PostFxFrameParams, SunPostFxParams,
-};
+use newengine_core::render::{PostFxFrameParams, SunPostFxParams};
 use newengine_math::{Vec3, Vec4};
 
 use super::lights;
@@ -18,8 +16,12 @@ pub(super) fn game_sun_postfx_params(
         return params;
     };
 
-    let incoming = Vec3::new(sun.direction_ws[0], sun.direction_ws[1], sun.direction_ws[2])
-        .normalize_or_zero();
+    let incoming = Vec3::new(
+        sun.direction_ws[0],
+        sun.direction_ws[1],
+        sun.direction_ws[2],
+    )
+    .normalize_or_zero();
     if incoming.length_squared() <= 1.0e-8 || sun.intensity <= 0.0 {
         return params;
     }
@@ -45,11 +47,14 @@ pub(super) fn game_sun_postfx_params(
         && screen_y >= -0.18
         && screen_y <= 1.18
         && ndc_z >= -1.0;
-    let center_alignment = (1.0 - ((screen_x - 0.5).hypot(screen_y - 0.5) * 1.72))
-        .clamp(0.0, 1.0);
+    let center_alignment = (1.0 - ((screen_x - 0.5).hypot(screen_y - 0.5) * 1.72)).clamp(0.0, 1.0);
     let horizon_grazing = (1.0 - to_sun.y.abs()).clamp(0.0, 1.0);
     let daylight = ((to_sun.y + 0.07) / 0.24).clamp(0.0, 1.0);
-    let visibility = if on_screen { center_alignment.max(0.12) * daylight } else { 0.0 };
+    let visibility = if on_screen {
+        center_alignment.max(0.12) * daylight
+    } else {
+        0.0
+    };
 
     params.sun = SunPostFxParams {
         screen_position: [screen_x, screen_y],
@@ -63,4 +68,3 @@ pub(super) fn game_sun_postfx_params(
     };
     params
 }
-

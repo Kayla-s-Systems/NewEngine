@@ -31,7 +31,9 @@ where
         }
     };
 
-    let snapshot = ctx.resources().get::<newengine_plugin_host::PluginsSnapshot>();
+    let snapshot = ctx
+        .resources()
+        .get::<newengine_plugin_host::PluginsSnapshot>();
     let selection = resolve_backend_provider(snapshot, spec).map_err(EngineError::other)?;
     Ok((info, selection))
 }

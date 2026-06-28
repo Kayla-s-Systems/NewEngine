@@ -8,7 +8,9 @@ use std::time::Duration;
 const MAX_ENGINE_FIXED_STEPS_PER_FRAME: u32 = 1;
 const FIXED_CATCHUP_WARN_INTERVAL_FRAMES: u64 = 300;
 
-use newengine_time_api::{time_method, TimeBeginFrameRequestV1, TimeSnapshotV1, ENGINE_TIME_SERVICE_ID};
+use newengine_time_api::{
+    time_method, TimeBeginFrameRequestV1, TimeSnapshotV1, ENGINE_TIME_SERVICE_ID,
+};
 
 fn variable_delta_seconds_from_time(snapshot: &TimeSnapshotV1) -> f32 {
     if snapshot.simulation.paused {
@@ -24,10 +26,11 @@ fn advance_time_fixed_snapshot() -> EngineResult<TimeSnapshotV1> {
         time_method::ADVANCE_FIXED_V1,
         &[],
     ) {
-        Ok(Some(bytes)) => serde_json::from_slice::<TimeSnapshotV1>(&bytes)
-            .map_err(|e| EngineError::Other(format!(
+        Ok(Some(bytes)) => serde_json::from_slice::<TimeSnapshotV1>(&bytes).map_err(|e| {
+            EngineError::Other(format!(
                 "engine.time: advance_fixed_v1 returned invalid TimeSnapshotV1: {e}"
-            ))),
+            ))
+        }),
         Ok(None) => Err(EngineError::Other(
             "engine.time: required gateway missing during fixed timestep advance".to_owned(),
         )),
@@ -41,12 +44,16 @@ impl<E: Send + 'static> Engine<E> {
     fn begin_time_frame_snapshot(&mut self) -> EngineResult<TimeSnapshotV1> {
         let request = TimeBeginFrameRequestV1 {
             frame_index: self.frame_index,
-            fixed_delta_ns: Duration::from_secs_f32(self.fixed_dt).as_nanos().min(u128::from(u64::MAX)) as u64,
+            fixed_delta_ns: Duration::from_secs_f32(self.fixed_dt)
+                .as_nanos()
+                .min(u128::from(u64::MAX)) as u64,
         };
         let payload = match serde_json::to_vec(&request) {
             Ok(payload) => payload,
             Err(e) => {
-                return Err(EngineError::Other(format!("engine.time: failed to encode begin_frame_v1 request: {e}")));
+                return Err(EngineError::Other(format!(
+                    "engine.time: failed to encode begin_frame_v1 request: {e}"
+                )));
             }
         };
         match crate::call_service_v1_optional(
@@ -134,7 +141,8 @@ impl<E: Send + 'static> Engine<E> {
                 fixed_tick: self.fixed_tick,
             };
 
-            self.scheduler.run_fixed_update(Duration::from_secs_f32(self.fixed_dt));
+            self.scheduler
+                .run_fixed_update(Duration::from_secs_f32(self.fixed_dt));
 
             if let Err(e) = self.plugins.fixed_update_all(self.fixed_dt) {
                 return Err(EngineError::Other(format!(

@@ -44,12 +44,19 @@ impl RenderDrawListProvider for EngineUiDrawListBridgeProvider {
     }
 
     #[inline]
-    fn provided_draw_lists(&self, ctx: &SceneExtractionCtx<'_>) -> &'static [newengine_core::render::RenderDrawListKind] {
+    fn provided_draw_lists(
+        &self,
+        ctx: &SceneExtractionCtx<'_>,
+    ) -> &'static [newengine_core::render::RenderDrawListKind] {
         ui_list(ctx.ui.is_some())
     }
 
     #[inline]
-    fn extract(&self, ctx: &SceneExtractionCtx<'_>, out: &mut dyn DrawListBuildCtx) -> EngineResult<()> {
+    fn extract(
+        &self,
+        ctx: &SceneExtractionCtx<'_>,
+        out: &mut dyn DrawListBuildCtx,
+    ) -> EngineResult<()> {
         out.record_ui(ctx)
     }
 }

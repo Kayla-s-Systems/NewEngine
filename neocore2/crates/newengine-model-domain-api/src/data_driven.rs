@@ -2,11 +2,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     DefinitionAssetRef, DefinitionEntriesManifest, DefinitionEntry, DRAWABLE_DICTIONARY_ASSET_KIND,
-    DRAWABLE_DICTIONARY_EXTENSION, ROLE_DEFINITION_ENTRIES, ROLE_DRAWABLE_DICTIONARY, ROLE_MATERIAL_LIBRARY,
-    ROLE_TEXTURE_DICTIONARY, TEXTURE_DICTIONARY_EXTENSION,
+    DRAWABLE_DICTIONARY_EXTENSION, ROLE_DEFINITION_ENTRIES, ROLE_DRAWABLE_DICTIONARY,
+    ROLE_MATERIAL_LIBRARY, ROLE_TEXTURE_DICTIONARY, TEXTURE_DICTIONARY_EXTENSION,
 };
 
-pub const DATA_DRIVEN_CONSTRUCTION_PLAN_SCHEMA: &str = "newengine.assets.definitions.data_driven_construction_plan.v1";
+pub const DATA_DRIVEN_CONSTRUCTION_PLAN_SCHEMA: &str =
+    "newengine.assets.definitions.data_driven_construction_plan.v1";
 
 /// Declarative construction plan derived from YTYP Definition Entries.
 ///
@@ -102,7 +103,13 @@ pub struct DataDrivenLodPolicy {
 }
 
 impl Default for DataDrivenLodPolicy {
-    fn default() -> Self { Self { lod_dist: 0.0, hd_texture_dist: 0.0, flags: 0 } }
+    fn default() -> Self {
+        Self {
+            lod_dist: 0.0,
+            hd_texture_dist: 0.0,
+            flags: 0,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -115,9 +122,15 @@ pub struct DataDrivenBoundsPolicy {
 }
 
 impl Default for DataDrivenBoundsPolicy {
-    fn default() -> Self { Self { bb_min: [0.0; 3], bb_max: [0.0; 3], bs_centre: [0.0; 3], bs_radius: 0.0 } }
+    fn default() -> Self {
+        Self {
+            bb_min: [0.0; 3],
+            bb_max: [0.0; 3],
+            bs_centre: [0.0; 3],
+            bs_radius: 0.0,
+        }
+    }
 }
-
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
@@ -129,7 +142,11 @@ pub struct DataDrivenMaterialSlotBinding {
 
 impl Default for DataDrivenMaterialSlotBinding {
     fn default() -> Self {
-        Self { slot: String::new(), material: String::new(), resolve_gateway: "engine.assets.materials".to_owned() }
+        Self {
+            slot: String::new(),
+            material: String::new(),
+            resolve_gateway: "engine.assets.materials".to_owned(),
+        }
     }
 }
 
@@ -148,7 +165,8 @@ impl Default for DataDrivenMaterialBindingPolicy {
             source: "definition_entries.asset_chain".to_owned(),
             material_library_role: ROLE_MATERIAL_LIBRARY.to_owned(),
             texture_dictionary_role: ROLE_TEXTURE_DICTIONARY.to_owned(),
-            policy: "bind_drawable_material_slots_to_nemat_entries_then_resolve_ytd_textures".to_owned(),
+            policy: "bind_drawable_material_slots_to_nemat_entries_then_resolve_ytd_textures"
+                .to_owned(),
         }
     }
 }
@@ -167,7 +185,12 @@ impl Default for DataDrivenPackageHint {
         Self {
             role: "asset_package".to_owned(),
             extension: "nepak".to_owned(),
-            contains_roles: vec![ROLE_DEFINITION_ENTRIES.to_owned(), ROLE_DRAWABLE_DICTIONARY.to_owned(), ROLE_MATERIAL_LIBRARY.to_owned(), ROLE_TEXTURE_DICTIONARY.to_owned()],
+            contains_roles: vec![
+                ROLE_DEFINITION_ENTRIES.to_owned(),
+                ROLE_DRAWABLE_DICTIONARY.to_owned(),
+                ROLE_MATERIAL_LIBRARY.to_owned(),
+                ROLE_TEXTURE_DICTIONARY.to_owned(),
+            ],
             description: "Package/VFS delivery container for the authored asset chain.".to_owned(),
         }
     }
@@ -246,7 +269,11 @@ fn build_data_driven_object(entry: &DefinitionEntry) -> DataDrivenObjectConstruc
 }
 
 fn fallback_drawable_link(entry: &DefinitionEntry) -> Option<DataDrivenAssetLink> {
-    let name = if !entry.asset_name.trim().is_empty() { &entry.asset_name } else { &entry.name };
+    let name = if !entry.asset_name.trim().is_empty() {
+        &entry.asset_name
+    } else {
+        &entry.name
+    };
     let logical_path = ensure_extension(name, DRAWABLE_DICTIONARY_EXTENSION);
     (!logical_path.is_empty()).then(|| DataDrivenAssetLink {
         role: ROLE_DRAWABLE_DICTIONARY.to_owned(),
@@ -283,7 +310,11 @@ fn object_name(entry: &DefinitionEntry) -> String {
 }
 
 fn ensure_extension(value: &str, extension: &str) -> String {
-    let value = value.trim().replace('\\', "/").trim_start_matches('/').to_owned();
+    let value = value
+        .trim()
+        .replace('\\', "/")
+        .trim_start_matches('/')
+        .to_owned();
     if value.is_empty() {
         return value;
     }

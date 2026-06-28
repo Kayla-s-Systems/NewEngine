@@ -10,7 +10,6 @@
 use newengine_math::collections::prelude::{ne_new_key_type, NeKey};
 use serde::{Deserialize, Serialize};
 
-
 ne_new_key_type! {
     /// Stable, deterministic identifier of an entity across the engine.
     ///
@@ -40,7 +39,8 @@ pub const ENTITY_BACKEND_CAPABILITY_ID: &str = "entity.backend";
 
 pub const ENTITY_SERVICE_METHOD_INFO: &str = newengine_service_api::SERVICE_METHOD_INFO_JSON;
 pub const ENTITY_SERVICE_METHOD_INVOKE: &str = newengine_service_api::SERVICE_METHOD_INVOKE_JSON;
-pub const ENTITY_SERVICE_METHOD_SHUTDOWN_V1: &str = newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1;
+pub const ENTITY_SERVICE_METHOD_SHUTDOWN_V1: &str =
+    newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1;
 pub const ENTITY_SERVICE_METHOD_LIST_JSON_V1: &str = "list_json_v1";
 pub const ENTITY_SERVICE_METHOD_EXISTS_JSON_V1: &str = "exists_json_v1";
 pub const ENTITY_SERVICE_METHOD_SPAWN_JSON_V1: &str = "spawn_json_v1";
@@ -116,7 +116,9 @@ impl Default for EntityServiceInfo {
 ///
 /// The value is stable for diagnostics/tool calls but does not expose the native
 /// key layout or allow consumers to manufacture a direct `EntityId`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default, Serialize, Deserialize,
+)]
 pub struct EntityHandle {
     pub stable_id: u64,
 }
@@ -144,7 +146,9 @@ pub struct EntityListRequest {
 impl Default for EntityListRequest {
     #[inline]
     fn default() -> Self {
-        Self { limit: default_entity_limit() }
+        Self {
+            limit: default_entity_limit(),
+        }
     }
 }
 
@@ -204,7 +208,9 @@ pub struct EntitySpawnRequest {
 impl Default for EntitySpawnRequest {
     #[inline]
     fn default() -> Self {
-        Self { count: default_spawn_count() }
+        Self {
+            count: default_spawn_count(),
+        }
     }
 }
 
@@ -252,9 +258,13 @@ pub struct EntityInvokeRequest {
 }
 
 #[inline]
-fn default_entity_limit() -> usize { 4096 }
+fn default_entity_limit() -> usize {
+    4096
+}
 #[inline]
-fn default_spawn_count() -> usize { 1 }
+fn default_spawn_count() -> usize {
+    1
+}
 
 #[cfg(test)]
 mod tests {
@@ -263,9 +273,18 @@ mod tests {
     #[test]
     fn entity_service_ids_are_gateway_first() {
         assert_eq!(ENGINE_ENTITY_SERVICE_ID, "engine.entity");
-        assert_eq!(ENTITY_BACKEND_SERVICE_SPEC.engine_gateway_id, ENGINE_ENTITY_SERVICE_ID);
-        assert_eq!(ENTITY_BACKEND_SERVICE_SPEC.provider_service_id, ENTITY_SERVICE_ID);
-        assert_eq!(ENTITY_BACKEND_SERVICE_SPEC.backend_capability_id, ENTITY_BACKEND_CAPABILITY_ID);
+        assert_eq!(
+            ENTITY_BACKEND_SERVICE_SPEC.engine_gateway_id,
+            ENGINE_ENTITY_SERVICE_ID
+        );
+        assert_eq!(
+            ENTITY_BACKEND_SERVICE_SPEC.provider_service_id,
+            ENTITY_SERVICE_ID
+        );
+        assert_eq!(
+            ENTITY_BACKEND_SERVICE_SPEC.backend_capability_id,
+            ENTITY_BACKEND_CAPABILITY_ID
+        );
     }
 
     #[test]

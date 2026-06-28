@@ -38,7 +38,7 @@ impl<T> Events<T> {
 
     /// Drains currently visible events (read buffer).
     #[inline]
-    pub fn drain(&mut self) -> impl Iterator<Item=T> + '_ {
+    pub fn drain(&mut self) -> impl Iterator<Item = T> + '_ {
         self.read.drain(..)
     }
 

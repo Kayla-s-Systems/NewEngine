@@ -56,21 +56,17 @@ macro_rules! export_plugin_root {
         );
     };
     ($create:path, $ui_assets_v1:path) => {
-        $crate::export_plugin_root!(
-            $create,
-            $ui_assets_v1,
-            $crate::empty_editor_extensions_v1
-        );
+        $crate::export_plugin_root!($create, $ui_assets_v1, $crate::empty_editor_extensions_v1);
     };
     ($create:path, $ui_assets_v1:path, $editor_extensions_v1:path) => {
         #[no_mangle]
         pub extern "C" fn newengine_plugin_root_v1() -> $crate::PluginRootV1Ref {
-            < $crate::PluginRootV1 as abi_stable::prefix_type::PrefixTypeTrait >::leak_into_prefix(
+            <$crate::PluginRootV1 as abi_stable::prefix_type::PrefixTypeTrait>::leak_into_prefix(
                 $crate::PluginRootV1 {
                     create: $create,
                     ui_assets_v1: $ui_assets_v1,
                     editor_extensions_v1: $editor_extensions_v1,
-                }
+                },
             )
         }
     };

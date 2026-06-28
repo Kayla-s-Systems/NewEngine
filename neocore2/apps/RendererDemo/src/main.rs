@@ -2,8 +2,7 @@
 
 use newengine_core::{Engine, EngineResult, StartupConfig};
 use newengine_game_ready_profile::{
-    GameReadyRuntimeProfile, GAME_APP_ASSETS_DIR_ENV, GAME_FIXED_DT_MS,
-    GAME_READY_APP_DIR_NAME,
+    GameReadyRuntimeProfile, GAME_APP_ASSETS_DIR_ENV, GAME_FIXED_DT_MS, GAME_READY_APP_DIR_NAME,
 };
 use newengine_runtime_host::app_launcher::{
     RuntimeHostAppProfile, RuntimeHostBootOption, RuntimeHostLaunchSpec, RuntimeHostLauncher,

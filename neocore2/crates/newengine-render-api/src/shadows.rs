@@ -106,21 +106,37 @@ pub struct ShadowPassStats {
 }
 
 #[inline]
-fn default_true() -> bool { true }
+fn default_true() -> bool {
+    true
+}
 #[inline]
-fn default_cascade_count() -> u32 { 4 }
+fn default_cascade_count() -> u32 {
+    4
+}
 #[inline]
-fn default_cascade_lambda() -> f32 { 0.65 }
+fn default_cascade_lambda() -> f32 {
+    0.65
+}
 #[inline]
-fn default_shadow_distance() -> f32 { 192.0 }
+fn default_shadow_distance() -> f32 {
+    192.0
+}
 #[inline]
-fn default_shadow_atlas_size() -> u32 { 4096 }
+fn default_shadow_atlas_size() -> u32 {
+    4096
+}
 #[inline]
-fn default_pcss_blocker_samples() -> u32 { 8 }
+fn default_pcss_blocker_samples() -> u32 {
+    8
+}
 #[inline]
-fn default_pcss_filter_samples() -> u32 { 16 }
+fn default_pcss_filter_samples() -> u32 {
+    16
+}
 #[inline]
-fn default_pcss_light_radius() -> f32 { 0.035 }
+fn default_pcss_light_radius() -> f32 {
+    0.035
+}
 
 #[cfg(test)]
 mod tests {

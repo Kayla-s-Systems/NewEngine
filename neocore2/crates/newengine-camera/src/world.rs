@@ -22,7 +22,11 @@ pub struct CameraWorldPoint {
 }
 
 impl CameraWorldPoint {
-    pub const ZERO: Self = Self { x: 0.0, y: 0.0, z: 0.0 };
+    pub const ZERO: Self = Self {
+        x: 0.0,
+        y: 0.0,
+        z: 0.0,
+    };
 
     #[inline]
     pub const fn new(x: f64, y: f64, z: f64) -> Self {
@@ -177,13 +181,25 @@ impl CameraWorldRig {
     #[inline]
     pub fn new(position: CameraWorldPoint, rotation: Quat) -> Self {
         let origin = CameraWorldOrigin::for_camera(position, 1024.0);
-        Self { position, rotation: rotation.normalize_or_identity(), origin }
+        Self {
+            position,
+            rotation: rotation.normalize_or_identity(),
+            origin,
+        }
     }
 
     #[inline]
-    pub fn with_origin(position: CameraWorldPoint, rotation: Quat, origin: CameraWorldOrigin) -> Self {
+    pub fn with_origin(
+        position: CameraWorldPoint,
+        rotation: Quat,
+        origin: CameraWorldOrigin,
+    ) -> Self {
         let origin = origin.rebased_for_camera(position);
-        Self { position, rotation: rotation.normalize_or_identity(), origin }
+        Self {
+            position,
+            rotation: rotation.normalize_or_identity(),
+            origin,
+        }
     }
 
     #[inline]
@@ -229,8 +245,13 @@ impl CameraWorldFrame {
         jitter_px: newengine_math::Vec2,
     ) -> Self {
         rig.rebase_if_needed();
-        let frame = CameraFrame::build(channel, rig.to_local_rig(), projection, viewport, jitter_px);
-        Self { frame, camera_ws: rig.position, origin: rig.origin }
+        let frame =
+            CameraFrame::build(channel, rig.to_local_rig(), projection, viewport, jitter_px);
+        Self {
+            frame,
+            camera_ws: rig.position,
+            origin: rig.origin,
+        }
     }
 
     #[inline]

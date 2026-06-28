@@ -49,6 +49,8 @@ pub struct ShaderVariantRegistryDto {
 impl ShaderVariantRegistryDto {
     #[inline]
     pub fn find_variant(&self, variant_id: &str) -> Option<&ShaderVariantRecordDto> {
-        self.variants.iter().find(|record| record.key.variant_id == variant_id)
+        self.variants
+            .iter()
+            .find(|record| record.key.variant_id == variant_id)
     }
 }

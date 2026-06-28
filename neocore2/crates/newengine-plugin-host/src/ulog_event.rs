@@ -13,15 +13,16 @@ thread_local! {
 
 fn host_run_id() -> &'static str {
     static RUN_ID: OnceLock<String> = OnceLock::new();
-    RUN_ID.get_or_init(|| {
-        use std::time::{SystemTime, UNIX_EPOCH};
-        let ms = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis();
-        format!("HOST-RUN-{ms}")
-    })
-    .as_str()
+    RUN_ID
+        .get_or_init(|| {
+            use std::time::{SystemTime, UNIX_EPOCH};
+            let ms = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis();
+            format!("HOST-RUN-{ms}")
+        })
+        .as_str()
 }
 
 #[inline]

@@ -65,8 +65,18 @@ impl GameReadyLitMaterialDomainProvider {
             "gameready material domain: requesting renderer-owned shader builds key='{}' shader_count=9",
             GAME_READY_LIT_PIPELINE_KEY.as_str()
         );
-        let vs = create_manifest_shader(r, ShaderStage::Vertex, &manifest.shaders.lit_vs, "gameready_lit_vs")?;
-        let fs = create_manifest_shader(r, ShaderStage::Fragment, &manifest.shaders.lit_fs, "gameready_lit_fs")?;
+        let vs = create_manifest_shader(
+            r,
+            ShaderStage::Vertex,
+            &manifest.shaders.lit_vs,
+            "gameready_lit_vs",
+        )?;
+        let fs = create_manifest_shader(
+            r,
+            ShaderStage::Fragment,
+            &manifest.shaders.lit_fs,
+            "gameready_lit_fs",
+        )?;
         let gbuffer_fs = create_manifest_shader(
             r,
             ShaderStage::Fragment,
@@ -138,14 +148,22 @@ impl GameReadyLitMaterialDomainProvider {
             .with_label("gameready_lit_bgl"),
         )?;
         let white_texture = r.create_texture(
-            TextureDesc::new(Extent2D::new(1, 1), TextureFormat::Rgba8Unorm, TextureUsage::Sampled)
-                .with_label("gameready_white_tex")
-                .with_data(vec![255, 255, 255, 255]),
+            TextureDesc::new(
+                Extent2D::new(1, 1),
+                TextureFormat::Rgba8Unorm,
+                TextureUsage::Sampled,
+            )
+            .with_label("gameready_white_tex")
+            .with_data(vec![255, 255, 255, 255]),
         )?;
         let flat_normal_texture = r.create_texture(
-            TextureDesc::new(Extent2D::new(1, 1), TextureFormat::Rgba8Unorm, TextureUsage::Sampled)
-                .with_label("gameready_flat_normal_tex")
-                .with_data(vec![128, 128, 255, 255]),
+            TextureDesc::new(
+                Extent2D::new(1, 1),
+                TextureFormat::Rgba8Unorm,
+                TextureUsage::Sampled,
+            )
+            .with_label("gameready_flat_normal_tex")
+            .with_data(vec![128, 128, 255, 255]),
         )?;
         let repeat_sampler = r.create_sampler(
             SamplerDesc::default()
@@ -329,7 +347,10 @@ impl GameReadyLitMaterialDomainProvider {
                 .with_topology(PrimitiveTopology::TriangleList)
                 .with_vertex_layouts(instanced_layouts.clone())
                 .with_bind_group_layouts(vec![bgl])
-                .with_depth_state(TextureFormat::Depth32Float, PipelineDepthMode::no_write_always())
+                .with_depth_state(
+                    TextureFormat::Depth32Float,
+                    PipelineDepthMode::no_write_always(),
+                )
                 .with_cull_mode(RasterCullMode::None),
         )?;
 
@@ -424,8 +445,7 @@ impl MaterialGpuPipelineProvider for GameReadyLitMaterialDomainProvider {
 fn profile_pipeline_cache_key(profile: MaterialPipelineBuildProfile) -> String {
     format!(
         "scene={:?}|shadow={:?}",
-        profile.scene_hdr_color_format,
-        profile.shadow_map_color_format
+        profile.scene_hdr_color_format, profile.shadow_map_color_format
     )
 }
 
@@ -571,9 +591,14 @@ fn create_manifest_shader(
         .with_entry(shader.entry.clone())
         .with_variant(shader.variant_id.clone());
     let result = r.create_shader(
-        ShaderDesc::from_asset(stage, shader.entry.clone(), shader.logical_path.clone(), source_kind)
-            .with_asset(asset)
-            .with_label(label),
+        ShaderDesc::from_asset(
+            stage,
+            shader.entry.clone(),
+            shader.logical_path.clone(),
+            source_kind,
+        )
+        .with_asset(asset)
+        .with_label(label),
     );
     match &result {
         Ok(id) => newengine_ulog_api::ulog::info!(
@@ -599,13 +624,17 @@ fn create_manifest_shader(
 fn load_text_asset(rel: &str) -> MaterialDomainResult<String> {
     let assets = AssetServiceClient::new(default_host_api());
 
-    newengine_ulog_api::ulog::trace!("asset text: requesting path='{rel}' through AssetManager.text_v1");
+    newengine_ulog_api::ulog::trace!(
+        "asset text: requesting path='{rel}' through AssetManager.text_v1"
+    );
     let payload = assets.text_v1(rel).map_err(|e| {
         MaterialDomainError::other(format!("asset.text_v1 failed path='{rel}' err='{e}'"))
     })?;
 
     let s = std::str::from_utf8(&payload)
-        .map_err(|_| MaterialDomainError::other(format!("asset.text_v1 returned non-utf8 path='{rel}'")))?
+        .map_err(|_| {
+            MaterialDomainError::other(format!("asset.text_v1 returned non-utf8 path='{rel}'"))
+        })?
         .to_string();
 
     newengine_ulog_api::ulog::trace!("asset text: loaded path='{rel}' bytes={}", payload.len());

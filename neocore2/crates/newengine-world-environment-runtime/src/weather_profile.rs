@@ -1,5 +1,7 @@
 use crate::math::{circular_window, clamp01_f32, range_lerp};
-use crate::profile_catalog::{pattern_by_id, table_by_id, EnvironmentProfileDescriptor, WeatherPatternDescriptor};
+use crate::profile_catalog::{
+    pattern_by_id, table_by_id, EnvironmentProfileDescriptor, WeatherPatternDescriptor,
+};
 use newengine_world_environment_api::{
     PrecipitationKind, PrecipitationStateDto, SnowStateDto, ThunderStateDto, TimeOfDayPhase,
     WeatherStateDto, WetnessStateDto,
@@ -30,7 +32,12 @@ pub(crate) fn evaluate_weather(
     let table = table_by_id(profile.weather_table_ref);
     let selected_pattern = select_pattern(table.bands, pressure, tod, cloud_seed);
     let pattern = pattern_by_id(selected_pattern);
-    let normalized = band_normalized_intensity(pattern.intensity_min, pattern.intensity_max, pressure, cloud_seed);
+    let normalized = band_normalized_intensity(
+        pattern.intensity_min,
+        pattern.intensity_max,
+        pressure,
+        cloud_seed,
+    );
     let intensity = range_lerp(pattern.intensity_min, pattern.intensity_max, normalized);
     let precipitation = precipitation_state(pattern, intensity);
     let thunder = ThunderStateDto {
@@ -47,7 +54,11 @@ pub(crate) fn evaluate_weather(
         accumulation_rate: intensity * pattern.snow_factor * 0.055,
         melt_rate: snow_melt_rate(pattern.precipitation_kind),
     };
-    let mut tags = pattern.tags.iter().map(|tag| (*tag).to_owned()).collect::<Vec<_>>();
+    let mut tags = pattern
+        .tags
+        .iter()
+        .map(|tag| (*tag).to_owned())
+        .collect::<Vec<_>>();
     tags.extend(phase_tags(phase).iter().map(|tag| (*tag).to_owned()));
     WeatherEvaluation {
         pattern,
@@ -74,7 +85,12 @@ pub(crate) fn evaluate_weather(
     }
 }
 
-pub(crate) fn enrich_weather_tags(weather: &mut WeatherStateDto, phase: TimeOfDayPhase, visibility_meters: f32, cloud_coverage: f32) {
+pub(crate) fn enrich_weather_tags(
+    weather: &mut WeatherStateDto,
+    phase: TimeOfDayPhase,
+    visibility_meters: f32,
+    cloud_coverage: f32,
+) {
     let mut tags = weather.tags.clone();
     tags.extend(phase_tags(phase).iter().map(|tag| (*tag).to_owned()));
     tags.push(cloud_tag(cloud_coverage).to_owned());
@@ -87,7 +103,12 @@ pub(crate) fn enrich_weather_tags(weather: &mut WeatherStateDto, phase: TimeOfDa
     weather.tags = tags;
 }
 
-fn select_pattern(bands: &[crate::profile_catalog::WeatherBandDescriptor], pressure: f32, tod: f32, cloud_seed: f32) -> &'static str {
+fn select_pattern(
+    bands: &[crate::profile_catalog::WeatherBandDescriptor],
+    pressure: f32,
+    tod: f32,
+    cloud_seed: f32,
+) -> &'static str {
     bands
         .iter()
         .map(|band| (band, band_score(*band, pressure, tod, cloud_seed)))
@@ -96,7 +117,12 @@ fn select_pattern(bands: &[crate::profile_catalog::WeatherBandDescriptor], press
         .unwrap_or("weather.clear.dry_high_pressure")
 }
 
-fn band_score(band: crate::profile_catalog::WeatherBandDescriptor, pressure: f32, tod: f32, cloud_seed: f32) -> f32 {
+fn band_score(
+    band: crate::profile_catalog::WeatherBandDescriptor,
+    pressure: f32,
+    tod: f32,
+    cloud_seed: f32,
+) -> f32 {
     let pressure_mid = (band.pressure_min + band.pressure_max) * 0.5;
     let pressure_half = ((band.pressure_max - band.pressure_min) * 0.5).max(0.001);
     let pressure_score = 1.0 - ((pressure - pressure_mid).abs() / pressure_half).clamp(0.0, 1.0);
@@ -112,8 +138,14 @@ fn band_normalized_intensity(min: f32, max: f32, pressure: f32, cloud_seed: f32)
     clamp01_f32(((pressure - min) / width) * 0.82 + cloud_seed * 0.18)
 }
 
-fn precipitation_state(pattern: &WeatherPatternDescriptor, intensity: f32) -> PrecipitationStateDto {
-    PrecipitationStateDto { kind: pattern.precipitation_kind, intensity: intensity * pattern.precipitation_factor }
+fn precipitation_state(
+    pattern: &WeatherPatternDescriptor,
+    intensity: f32,
+) -> PrecipitationStateDto {
+    PrecipitationStateDto {
+        kind: pattern.precipitation_kind,
+        intensity: intensity * pattern.precipitation_factor,
+    }
 }
 
 fn drying_rate(kind: PrecipitationKind) -> f32 {
@@ -141,13 +173,29 @@ fn phase_tags(phase: TimeOfDayPhase) -> &'static [&'static str] {
 }
 
 fn cloud_tag(cloud_coverage: f32) -> &'static str {
-    const TAGS: &[(f32, &'static str)] = &[(0.82, "cloud.overcast"), (0.45, "cloud.broken"), (0.0, "cloud.sparse")];
-    TAGS.iter().find(|(threshold, _)| cloud_coverage >= *threshold).map(|(_, tag)| *tag).unwrap_or("cloud.sparse")
+    const TAGS: &[(f32, &'static str)] = &[
+        (0.82, "cloud.overcast"),
+        (0.45, "cloud.broken"),
+        (0.0, "cloud.sparse"),
+    ];
+    TAGS.iter()
+        .find(|(threshold, _)| cloud_coverage >= *threshold)
+        .map(|(_, tag)| *tag)
+        .unwrap_or("cloud.sparse")
 }
 
 fn visibility_tag(visibility_meters: f32) -> &'static str {
-    const TAGS: &[(f32, &'static str)] = &[(650.0, "visibility.very_low"), (3500.0, "visibility.low"), (f32::MAX, "visibility.normal")];
-    TAGS.iter().find(|(max_distance, _)| visibility_meters < *max_distance).map(|(_, tag)| *tag).unwrap_or("visibility.normal")
+    const TAGS: &[(f32, &'static str)] = &[
+        (650.0, "visibility.very_low"),
+        (3500.0, "visibility.low"),
+        (f32::MAX, "visibility.normal"),
+    ];
+    TAGS.iter()
+        .find(|(max_distance, _)| visibility_meters < *max_distance)
+        .map(|(_, tag)| *tag)
+        .unwrap_or("visibility.normal")
 }
 
-fn transition_progress(tod: f32, pressure: f32) -> f32 { (0.72 + 0.28 * ((tod + pressure).fract())).clamp(0.0, 1.0) }
+fn transition_progress(tod: f32, pressure: f32) -> f32 {
+    (0.72 + 0.28 * ((tod + pressure).fract())).clamp(0.0, 1.0)
+}

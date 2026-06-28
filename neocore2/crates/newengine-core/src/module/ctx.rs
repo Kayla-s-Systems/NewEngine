@@ -122,7 +122,8 @@ impl<'a, E: Send + 'static> ModuleCtx<'a, E> {
 
     #[inline]
     pub fn job_system_required(&self) -> crate::error::EngineResult<&JobSystemHandle> {
-        self.resources.get_required::<JobSystemHandle>("JobSystemHandle")
+        self.resources
+            .get_required::<JobSystemHandle>("JobSystemHandle")
     }
 
     #[inline]

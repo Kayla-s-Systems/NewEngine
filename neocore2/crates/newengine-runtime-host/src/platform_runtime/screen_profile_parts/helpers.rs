@@ -1,6 +1,9 @@
 use super::*;
 
-pub(super) fn editor_layout_metrics(resources: &Resources, hidden_panels: &BTreeSet<String>) -> EditorLayoutMetrics {
+pub(super) fn editor_layout_metrics(
+    resources: &Resources,
+    hidden_panels: &BTreeSet<String>,
+) -> EditorLayoutMetrics {
     let [w_u32, h_u32] = resources
         .get::<WindowInitSize>()
         .map(|size| [size.width.max(1), size.height.max(1)])
@@ -14,18 +17,66 @@ pub(super) fn editor_layout_metrics(resources: &Resources, hidden_panels: &BTree
     let bottom_visible = !hidden_panels.contains("bottom.asset_browser");
     let left_visible = !hidden_panels.contains("left.scene_tree");
     let right_visible = !hidden_panels.contains("right.inspector");
-    let bottom_h = if bottom_visible { (h * 0.24).clamp(176.0, 235.0) } else { 0.0 };
-    let left_w = if left_visible { (w * 0.15).clamp(210.0, 268.0) } else { 0.0 };
-    let right_w = if right_visible { (w * 0.21).clamp(286.0, 362.0) } else { 0.0 };
+    let bottom_h = if bottom_visible {
+        (h * 0.24).clamp(176.0, 235.0)
+    } else {
+        0.0
+    };
+    let left_w = if left_visible {
+        (w * 0.15).clamp(210.0, 268.0)
+    } else {
+        0.0
+    };
+    let right_w = if right_visible {
+        (w * 0.21).clamp(286.0, 362.0)
+    } else {
+        0.0
+    };
     let viewport_x = if left_visible { left_w + gap } else { gap };
     let viewport_y = menu_h + toolbar_h + gap;
-    let viewport_w = (w - left_w - right_w - gap * if left_visible && right_visible { 2.0 } else { 1.0 }).max(360.0);
-    let viewport_h = (h - menu_h - toolbar_h - status_h - bottom_h - gap * if bottom_visible { 3.0 } else { 2.0 }).max(180.0);
+    let viewport_w = (w
+        - left_w
+        - right_w
+        - gap
+            * if left_visible && right_visible {
+                2.0
+            } else {
+                1.0
+            })
+    .max(360.0);
+    let viewport_h = (h
+        - menu_h
+        - toolbar_h
+        - status_h
+        - bottom_h
+        - gap * if bottom_visible { 3.0 } else { 2.0 })
+    .max(180.0);
     let bottom_y = h - bottom_h - status_h - gap;
     let hovered_dock_slot = hovered_dock_slot_from_dispatch(resources);
     let hovered_runtime_mode = hovered_runtime_mode_from_dispatch(resources);
     let hovered_menu_id = hovered_menu_id_from_dispatch(resources);
-    EditorLayoutMetrics { screen_w: w, screen_h: h, menu_h, toolbar_h, status_h, bottom_h, left_w, right_w, gap, viewport_x, viewport_y, viewport_w, viewport_h, bottom_y, left_visible, right_visible, bottom_visible, hovered_dock_slot, hovered_runtime_mode, hovered_menu_id }
+    EditorLayoutMetrics {
+        screen_w: w,
+        screen_h: h,
+        menu_h,
+        toolbar_h,
+        status_h,
+        bottom_h,
+        left_w,
+        right_w,
+        gap,
+        viewport_x,
+        viewport_y,
+        viewport_w,
+        viewport_h,
+        bottom_y,
+        left_visible,
+        right_visible,
+        bottom_visible,
+        hovered_dock_slot,
+        hovered_runtime_mode,
+        hovered_menu_id,
+    }
 }
 
 pub(super) fn clicked_dispatch_action(resources: &Resources, prefix: &str) -> Option<String> {
@@ -33,7 +84,9 @@ pub(super) fn clicked_dispatch_action(resources: &Resources, prefix: &str) -> Op
         .get::<UiEventDispatchFrame>()?
         .actions
         .iter()
-        .find(|action| action.trigger == UiNodeEventTrigger::Click && action.action_id.starts_with(prefix))
+        .find(|action| {
+            action.trigger == UiNodeEventTrigger::Click && action.action_id.starts_with(prefix)
+        })
         .map(|action| action.action_id.clone())
 }
 
@@ -49,12 +102,21 @@ pub(super) fn hovered_action_id(resources: &Resources) -> Option<&str> {
 pub(super) fn hovered_dock_slot_from_dispatch(resources: &Resources) -> Option<&'static str> {
     let action_id = hovered_action_id(resources)?;
     let slot_id = action_id.strip_prefix("editor.dock.toggle.")?;
-    ["left.scene_tree", "right.inspector", "bottom.asset_browser", "bottom.import_queue", "bottom.output_log", "bottom.profiler_diagnostics"]
-        .into_iter()
-        .find(|slot| *slot == slot_id)
+    [
+        "left.scene_tree",
+        "right.inspector",
+        "bottom.asset_browser",
+        "bottom.import_queue",
+        "bottom.output_log",
+        "bottom.profiler_diagnostics",
+    ]
+    .into_iter()
+    .find(|slot| *slot == slot_id)
 }
 
-pub(super) fn hovered_runtime_mode_from_dispatch(resources: &Resources) -> Option<UiEditorRuntimeMode> {
+pub(super) fn hovered_runtime_mode_from_dispatch(
+    resources: &Resources,
+) -> Option<UiEditorRuntimeMode> {
     let action_id = hovered_action_id(resources)?;
     EDITOR_CHROME
         .runtime_actions
@@ -73,7 +135,12 @@ pub(super) fn hovered_menu_id_from_dispatch(resources: &Resources) -> Option<&'s
         .map(|menu| menu.id)
 }
 
-pub(super) fn dock_state(slot_id: &str, visible: bool, disabled: bool, hovered: bool) -> UiDockPanelRuntimeState {
+pub(super) fn dock_state(
+    slot_id: &str,
+    visible: bool,
+    disabled: bool,
+    hovered: bool,
+) -> UiDockPanelRuntimeState {
     UiDockPanelRuntimeState {
         slot_id: slot_id.to_owned(),
         visible,
@@ -85,7 +152,6 @@ pub(super) fn dock_state(slot_id: &str, visible: bool, disabled: bool, hovered: 
         disabled,
     }
 }
-
 
 pub(super) fn dock_slot_label(slot: &str) -> &'static str {
     match slot {
@@ -99,16 +165,28 @@ pub(super) fn dock_slot_label(slot: &str) -> &'static str {
     }
 }
 
-pub(super) fn set_input_capture_contribution(resources: &mut Resources, owner: &str, capture: UiInputCaptureState) {
-    let mut manager = resources.remove::<UiInputCaptureStateManager>().unwrap_or_default();
+pub(super) fn set_input_capture_contribution(
+    resources: &mut Resources,
+    owner: &str,
+    capture: UiInputCaptureState,
+) {
+    let mut manager = resources
+        .remove::<UiInputCaptureStateManager>()
+        .unwrap_or_default();
     manager.add_capture(owner.to_owned(), capture);
     let resolved = manager.resolve_final_capture();
     resources.insert(manager);
     resources.insert(resolved);
 }
 
-pub(super) fn remove_input_capture_contribution(resources: &mut Resources, owner: &str, refresh_surface: Option<&str>) {
-    let mut manager = resources.remove::<UiInputCaptureStateManager>().unwrap_or_default();
+pub(super) fn remove_input_capture_contribution(
+    resources: &mut Resources,
+    owner: &str,
+    refresh_surface: Option<&str>,
+) {
+    let mut manager = resources
+        .remove::<UiInputCaptureStateManager>()
+        .unwrap_or_default();
     manager.remove_capture(owner);
     let mut resolved = manager.resolve_final_capture();
     if let Some(surface) = refresh_surface {
@@ -124,17 +202,42 @@ pub(super) fn remove_input_capture_contribution(resources: &mut Resources, owner
 pub(super) fn component_id_fragment(value: &str) -> String {
     value
         .chars()
-        .map(|ch| if ch.is_ascii_alphanumeric() { ch.to_ascii_lowercase() } else { '_' })
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() {
+                ch.to_ascii_lowercase()
+            } else {
+                '_'
+            }
+        })
         .collect::<String>()
 }
 
-pub(super) fn asset_document_field_detail(field: &newengine_assets_api::AssetDocumentField) -> String {
+pub(super) fn asset_document_field_detail(
+    field: &newengine_assets_api::AssetDocumentField,
+) -> String {
     let Some(property) = field.schema_property.as_ref() else {
         return field.value_kind.clone();
     };
-    let edit_policy = if property.editable { "editable" } else { "readonly" };
-    let pointer = if property.json_pointer.trim().is_empty() { field.source_pointer.as_str() } else { property.json_pointer.as_str() };
-    format!("{} · kind={} · {}", edit_policy, property.value_kind.as_str(), if pointer.is_empty() { "schema pointer pending" } else { pointer })
+    let edit_policy = if property.editable {
+        "editable"
+    } else {
+        "readonly"
+    };
+    let pointer = if property.json_pointer.trim().is_empty() {
+        field.source_pointer.as_str()
+    } else {
+        property.json_pointer.as_str()
+    };
+    format!(
+        "{} · kind={} · {}",
+        edit_policy,
+        property.value_kind.as_str(),
+        if pointer.is_empty() {
+            "schema pointer pending"
+        } else {
+            pointer
+        }
+    )
 }
 
 pub(super) fn asset_document_value_label(value: &Value) -> String {
@@ -144,7 +247,9 @@ pub(super) fn asset_document_value_label(value: &Value) -> String {
         Value::Number(v) => v.to_string(),
         Value::String(v) => {
             let mut out = v.chars().take(48).collect::<String>();
-            if v.chars().count() > 48 { out.push('…'); }
+            if v.chars().count() > 48 {
+                out.push('…');
+            }
             out
         }
         Value::Array(items) => format!("[{} items]", items.len()),
@@ -187,10 +292,14 @@ pub(super) fn load_screen_profile_config() -> ScreenProfileConfig {
 pub(super) fn parse_config_value(value: &Value) -> Result<ScreenProfileConfig, String> {
     match value {
         Value::String(profile) => UiScreenProfile::parse(profile)
-            .map(|profile| ScreenProfileConfig { profile, ..ScreenProfileConfig::default() })
+            .map(|profile| ScreenProfileConfig {
+                profile,
+                ..ScreenProfileConfig::default()
+            })
             .ok_or_else(|| format!("unknown screen profile '{profile}'")),
-        Value::Object(_) => serde_json::from_value::<ScreenProfileConfig>(value.clone())
-            .map_err(|e| e.to_string()),
+        Value::Object(_) => {
+            serde_json::from_value::<ScreenProfileConfig>(value.clone()).map_err(|e| e.to_string())
+        }
         other => Err(format!("expected string or object, got {other}")),
     }
 }
@@ -198,7 +307,6 @@ pub(super) fn parse_config_value(value: &Value) -> Result<ScreenProfileConfig, S
 pub(super) fn compact_json(value: &Value) -> String {
     serde_json::to_string(value).unwrap_or_else(|_| "<unprintable-json>".to_owned())
 }
-
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct EditorScreen {

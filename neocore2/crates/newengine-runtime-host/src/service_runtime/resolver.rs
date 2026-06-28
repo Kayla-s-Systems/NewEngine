@@ -9,7 +9,8 @@ pub(crate) fn resolve_backend_provider(
     snapshot: Option<&PluginsSnapshot>,
     spec: BackendServiceSpec,
 ) -> Result<BackendSelection, String> {
-    let Some(route) = newengine_plugin_host::active_engine_gateway_route(spec.engine_gateway_id) else {
+    let Some(route) = newengine_plugin_host::active_engine_gateway_route(spec.engine_gateway_id)
+    else {
         let candidates = snapshot
             .map(|snapshot| service_backend_candidates(snapshot, spec).join(", "))
             .unwrap_or_else(|| "<plugin snapshot unavailable>".to_owned());
@@ -65,7 +66,11 @@ pub(crate) fn resolve_backend_provider(
         ));
     };
 
-    let Some(plugin) = snapshot.plugins.iter().find(|plugin| plugin.id == route.provider_owner_id) else {
+    let Some(plugin) = snapshot
+        .plugins
+        .iter()
+        .find(|plugin| plugin.id == route.provider_owner_id)
+    else {
         let candidates = service_backend_candidates(snapshot, spec);
         return Err(format!(
             "active {} gateway route '{}' selected owner='{}' service='{}', but that plugin is not loaded; available {} providers=[{}]",
@@ -169,7 +174,12 @@ pub(crate) fn plugin_declares_service_for_spec(
         }
         serde_json::from_str::<serde_json::Value>(cap.describe_json.as_str())
             .ok()
-            .and_then(|value| value.get("contract").and_then(|v| v.as_str()).map(str::to_owned))
+            .and_then(|value| {
+                value
+                    .get("contract")
+                    .and_then(|v| v.as_str())
+                    .map(str::to_owned)
+            })
             .is_some_and(|service_id| plugin_declares_service(plugin, &service_id))
     })
 }
@@ -179,9 +189,10 @@ pub(crate) fn plugin_declares_backend_capability(
     plugin: &PluginSnapshotEntry,
     backend_capability_id: &str,
 ) -> bool {
-    plugin.capabilities.iter().any(|cap| {
-        cap.role == CapabilityRole::Provides && cap.id.as_str() == backend_capability_id
-    })
+    plugin
+        .capabilities
+        .iter()
+        .any(|cap| cap.role == CapabilityRole::Provides && cap.id.as_str() == backend_capability_id)
 }
 
 fn service_backend_candidates(snapshot: &PluginsSnapshot, spec: BackendServiceSpec) -> Vec<String> {
@@ -193,7 +204,8 @@ fn service_backend_candidates(snapshot: &PluginsSnapshot, spec: BackendServiceSp
                 || plugin_declares_service_for_spec(plugin, spec)
         })
         .map(|plugin| {
-            let has_backend_cap = plugin_declares_backend_capability(plugin, spec.backend_capability_id);
+            let has_backend_cap =
+                plugin_declares_backend_capability(plugin, spec.backend_capability_id);
             let has_service = plugin_declares_service_for_spec(plugin, spec);
             format!(
                 "{}:{} backend_cap={} service={}",

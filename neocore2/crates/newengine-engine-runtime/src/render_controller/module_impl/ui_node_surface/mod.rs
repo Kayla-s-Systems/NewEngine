@@ -5,8 +5,8 @@ use newengine_core::render::UiBackdropPostFxParams;
 use newengine_input_bindings_api::{InputBindingsProfile, InputDevicePreference};
 use newengine_ui_api::UiInputFrame;
 use newengine_ui_api::{
-    ui_surface_node_layout, UiNodeMessage, UiNodeMessageSeverity, UiNodeTone,
-    UiSurfaceAnchor, UiSurfaceNode, UiSurfaceStyle,
+    ui_surface_node_layout, UiNodeMessage, UiNodeMessageSeverity, UiNodeTone, UiSurfaceAnchor,
+    UiSurfaceNode, UiSurfaceStyle,
 };
 use newengine_ui_navigation_api::UiNodeNavigationRuntime;
 use newengine_ui_navigation_api::{
@@ -20,7 +20,6 @@ mod navigation;
 mod presentation;
 mod rebind;
 mod routes;
-
 
 const OPEN_SPEED: f32 = 8.5;
 const CLOSE_SPEED: f32 = 10.0;
@@ -218,7 +217,11 @@ impl RenderUiNodeSurfaceState {
             navigation.reset_to_root();
         }
         self.awaiting_rebind = None;
-        self.flash_feedback("Resume", "Returning to gameplay", UiNodeMessageSeverity::Success);
+        self.flash_feedback(
+            "Resume",
+            "Returning to gameplay",
+            UiNodeMessageSeverity::Success,
+        );
         audio(AudioFeedbackKind::UiClose, frame_index);
     }
 
@@ -253,7 +256,9 @@ impl RenderUiNodeSurfaceState {
 
     #[inline]
     fn flash_navigation_feedback(&mut self, feedback: &UiNodeFeedbackEvent) {
-        self.feedback = Some(UiNodeSurfaceEventFeedback::from_navigation_feedback(feedback));
+        self.feedback = Some(UiNodeSurfaceEventFeedback::from_navigation_feedback(
+            feedback,
+        ));
     }
 
     fn ensure_navigation_document_loaded(&mut self, frame_index: u64) -> bool {
@@ -314,8 +319,18 @@ fn hovered_item_index(
     // therefore use the same surface-node layout contract as the provider draw path,
     // not a special interface layout. Body line 0 is the page/status header;
     // UI items start at line 1.
-    ui_surface_node_layout(surface_size_px, &["retained".to_owned(), "modern".to_owned(), "rounded".to_owned()], &ui_surface_style(), item_count + 1, 0)
-        .hit_item_index_after_header(mouse_pos, 1, item_count)
+    ui_surface_node_layout(
+        surface_size_px,
+        &[
+            "retained".to_owned(),
+            "modern".to_owned(),
+            "rounded".to_owned(),
+        ],
+        &ui_surface_style(),
+        item_count + 1,
+        0,
+    )
+    .hit_item_index_after_header(mouse_pos, 1, item_count)
 }
 
 #[inline]
@@ -366,7 +381,12 @@ fn ui_surface_style() -> UiSurfaceStyle {
     style.corner_radius_px = 22.0;
     style.border_px = 1.0;
     style.shadow_alpha = 0;
-    style.font.stack = vec!["NorthStarSans".to_owned(), "Inter".to_owned(), "Segoe UI".to_owned(), "NotoSans".to_owned()];
+    style.font.stack = vec![
+        "NorthStarSans".to_owned(),
+        "Inter".to_owned(),
+        "Segoe UI".to_owned(),
+        "NotoSans".to_owned(),
+    ];
     style.font.title_px = 30.0;
     style.font.body_px = 17.0;
     style.font.secondary_px = 14.0;

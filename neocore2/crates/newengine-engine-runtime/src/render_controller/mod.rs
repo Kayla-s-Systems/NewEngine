@@ -6,11 +6,11 @@ mod gpu;
 mod material_bindings;
 mod metrics;
 mod module_impl;
-mod resource_lifetime;
-mod state;
-mod resource_cache;
 mod render_quality;
+mod resource_cache;
+mod resource_lifetime;
 mod runtime_profile;
+mod state;
 mod viewport;
 
 pub use controller::RuntimeRenderController;

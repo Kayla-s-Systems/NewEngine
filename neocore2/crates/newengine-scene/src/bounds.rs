@@ -35,11 +35,14 @@ fn any_transform_inputs_dirty(world: &World, since_tick: u64) -> bool {
         return true;
     }
 
-    if world.any_changed_since::<Transform>(since_tick) || world.any_added_since::<Transform>(since_tick) {
+    if world.any_changed_since::<Transform>(since_tick)
+        || world.any_added_since::<Transform>(since_tick)
+    {
         return true;
     }
 
-    if world.any_changed_since::<Parent>(since_tick) || world.any_added_since::<Parent>(since_tick) {
+    if world.any_changed_since::<Parent>(since_tick) || world.any_added_since::<Parent>(since_tick)
+    {
         return true;
     }
 
@@ -54,7 +57,8 @@ fn any_bounds_inputs_dirty(world: &World, since_tick: u64) -> bool {
         return true;
     }
 
-    if world.any_changed_since::<Bounds>(since_tick) || world.any_added_since::<Bounds>(since_tick) {
+    if world.any_changed_since::<Bounds>(since_tick) || world.any_added_since::<Bounds>(since_tick)
+    {
         return true;
     }
 
@@ -67,7 +71,9 @@ fn update_bounds_from_global_transform(world: &mut World) {
     let mut scratch = core::mem::take(world.resource_mut_or_insert_default::<SceneBoundsScratch>());
 
     scratch.ids.clear();
-    scratch.ids.extend(world.query2_ids::<GlobalTransform, Bounds>());
+    scratch
+        .ids
+        .extend(world.query2_ids::<GlobalTransform, Bounds>());
     scratch.ids.sort_unstable_by_key(|id| id.data().as_ffi());
     scratch.ids.dedup();
 
@@ -127,7 +133,10 @@ pub fn scene_world_bounds(world: &World) -> Option<Aabb> {
 ///
 /// Caller controls determinism via iterator ordering.
 #[inline]
-pub fn selection_world_bounds(world: &World, entities: impl Iterator<Item=EntityId>) -> Option<Aabb> {
+pub fn selection_world_bounds(
+    world: &World,
+    entities: impl Iterator<Item = EntityId>,
+) -> Option<Aabb> {
     let mut it = entities.filter_map(|id| world.get::<Bounds>(id).map(|b| b.world_aabb));
     let first = it.next()?;
     let mut acc = first;
@@ -151,28 +160,45 @@ pub fn update_scene_world(world: &mut World) {
     let tick_now = world.tick();
 
     // Stage 1: transforms.
-    let last_transform_tick = { world.resource_mut_or_insert_default::<SceneDerivedCache>().last_transform_tick };
+    let last_transform_tick = {
+        world
+            .resource_mut_or_insert_default::<SceneDerivedCache>()
+            .last_transform_tick
+    };
     let mut ran_transforms = false;
 
     if last_transform_tick == 0 || any_transform_inputs_dirty(world, last_transform_tick) {
         propagate_transforms(world);
         ran_transforms = true;
-        world.resource_mut_or_insert_default::<SceneDerivedCache>().last_transform_tick = tick_now;
+        world
+            .resource_mut_or_insert_default::<SceneDerivedCache>()
+            .last_transform_tick = tick_now;
     }
 
     // Stage 2: bounds derived from GlobalTransform.
-    let last_bounds_tick = { world.resource_mut_or_insert_default::<SceneDerivedCache>().last_bounds_tick };
+    let last_bounds_tick = {
+        world
+            .resource_mut_or_insert_default::<SceneDerivedCache>()
+            .last_bounds_tick
+    };
     let mut ran_bounds = false;
 
-    let bounds_dirty = last_bounds_tick == 0 || ran_transforms || any_bounds_inputs_dirty(world, last_bounds_tick);
+    let bounds_dirty =
+        last_bounds_tick == 0 || ran_transforms || any_bounds_inputs_dirty(world, last_bounds_tick);
     if bounds_dirty {
         update_bounds_from_global_transform(world);
         ran_bounds = true;
-        world.resource_mut_or_insert_default::<SceneDerivedCache>().last_bounds_tick = tick_now;
+        world
+            .resource_mut_or_insert_default::<SceneDerivedCache>()
+            .last_bounds_tick = tick_now;
     }
 
     // Stage 3: cache union.
-    let last_union_tick = { world.resource_mut_or_insert_default::<SceneDerivedCache>().last_union_tick };
+    let last_union_tick = {
+        world
+            .resource_mut_or_insert_default::<SceneDerivedCache>()
+            .last_union_tick
+    };
     let union_dirty = last_union_tick == 0
         || ran_bounds
         || world.entities_changed_since(last_union_tick)
@@ -187,7 +213,9 @@ pub fn update_scene_world(world: &mut World) {
         sb.aabb = aabb;
         sb.sphere = sphere;
 
-        world.resource_mut_or_insert_default::<SceneDerivedCache>().last_union_tick = tick_now;
+        world
+            .resource_mut_or_insert_default::<SceneDerivedCache>()
+            .last_union_tick = tick_now;
     }
 }
 

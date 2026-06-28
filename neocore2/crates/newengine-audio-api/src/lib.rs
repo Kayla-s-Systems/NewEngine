@@ -12,7 +12,8 @@ pub const AUDIO_BACKEND_CAPABILITY_ID: &str = "audio.backend";
 
 pub const AUDIO_SERVICE_METHOD_INFO: &str = newengine_service_api::SERVICE_METHOD_INFO_JSON;
 pub const AUDIO_SERVICE_METHOD_INVOKE: &str = newengine_service_api::SERVICE_METHOD_INVOKE_JSON;
-pub const AUDIO_SERVICE_METHOD_SHUTDOWN_V1: &str = newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1;
+pub const AUDIO_SERVICE_METHOD_SHUTDOWN_V1: &str =
+    newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1;
 pub const AUDIO_SERVICE_METHOD_PLAY_EVENT_JSON_V1: &str = "play_event_json_v1";
 pub const AUDIO_SERVICE_METHOD_DRAIN_EVENTS_JSON_V1: &str = "drain_events_json_v1";
 
@@ -71,7 +72,9 @@ impl Default for AudioServiceInfo {
             methods: AUDIO_REQUIRED_METHODS_V1
                 .iter()
                 .map(|it| (*it).to_owned())
-                .chain(std::iter::once(AUDIO_SERVICE_METHOD_DRAIN_EVENTS_JSON_V1.to_owned()))
+                .chain(std::iter::once(
+                    AUDIO_SERVICE_METHOD_DRAIN_EVENTS_JSON_V1.to_owned(),
+                ))
                 .collect(),
         }
     }
@@ -158,4 +161,6 @@ pub struct AudioFeedbackDrain {
 }
 
 #[inline]
-fn default_intensity() -> f32 { 1.0 }
+fn default_intensity() -> f32 {
+    1.0
+}

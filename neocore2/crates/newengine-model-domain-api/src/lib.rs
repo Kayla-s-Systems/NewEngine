@@ -9,18 +9,18 @@
 mod asset_chain;
 mod asset_graph;
 mod construction;
+mod data_driven;
 mod definition;
 mod drawable;
 mod texture_dictionary;
-mod data_driven;
 
 pub use asset_chain::*;
 pub use asset_graph::*;
 pub use construction::*;
+pub use data_driven::*;
 pub use definition::*;
 pub use drawable::*;
 pub use texture_dictionary::*;
-pub use data_driven::*;
 
 pub use newengine_model_skeleton_api::{
     ModelSkeletonAnchors, ModelSkeletonJointMetadata, ModelSkeletonMetadata,
@@ -42,7 +42,8 @@ pub const MODEL_COLLISIONS_BACKEND_CAPABILITY_ID: &str = "assets.models.collisio
 
 pub const MODEL_SERVICE_METHOD_INFO: &str = newengine_service_api::SERVICE_METHOD_INFO_JSON;
 pub const MODEL_SERVICE_METHOD_INVOKE: &str = newengine_service_api::SERVICE_METHOD_INVOKE_JSON;
-pub const MODEL_SERVICE_METHOD_SHUTDOWN_V1: &str = newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1;
+pub const MODEL_SERVICE_METHOD_SHUTDOWN_V1: &str =
+    newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1;
 pub const MODEL_SERVICE_METHOD_ASSEMBLE_JSON_V1: &str = "assemble_json_v1";
 pub const MODEL_SERVICE_METHOD_VALIDATE_JSON_V1: &str = "validate_json_v1";
 
@@ -50,7 +51,8 @@ pub const DRAWABLE_DICTIONARY_EXTENSION: &str = "ydd";
 pub const DRAWABLE_DICTIONARY_ASSET_KIND: &str = "drawable_dictionary";
 pub const DRAWABLE_DICTIONARY_CONTAINER: &str = "newengine.listfile.nef8.ydd";
 pub const DRAWABLE_DICTIONARY_MANIFEST_SCHEMA: &str = "newengine.drawable_dictionary.manifest.v1";
-pub const MODEL_SERVICE_METHOD_DRAWABLE_DICTIONARY_MANIFEST_JSON_V1: &str = "assets.models.drawable_manifest_v1";
+pub const MODEL_SERVICE_METHOD_DRAWABLE_DICTIONARY_MANIFEST_JSON_V1: &str =
+    "assets.models.drawable_manifest_v1";
 pub const MODEL_SERVICE_METHOD_RESOLVE_DRAWABLE_V1: &str = "assets.models.resolve_drawable_v1";
 
 /// Texture dictionary role consumed after graph/material resolution.
@@ -151,10 +153,22 @@ mod tests {
 
     #[test]
     fn specs_are_gateway_first() {
-        assert_eq!(MODEL_BACKEND_SERVICE_SPEC.engine_gateway_id, ENGINE_ASSETS_MODELS_SERVICE_ID);
-        assert_eq!(MODEL_SKELETONS_BACKEND_SERVICE_SPEC.domain, "assets.models.skeletons");
-        assert_eq!(MODEL_MATERIALS_BACKEND_SERVICE_SPEC.domain, "assets.models.materials");
-        assert_eq!(MODEL_COLLISIONS_BACKEND_SERVICE_SPEC.domain, "assets.models.collisions");
+        assert_eq!(
+            MODEL_BACKEND_SERVICE_SPEC.engine_gateway_id,
+            ENGINE_ASSETS_MODELS_SERVICE_ID
+        );
+        assert_eq!(
+            MODEL_SKELETONS_BACKEND_SERVICE_SPEC.domain,
+            "assets.models.skeletons"
+        );
+        assert_eq!(
+            MODEL_MATERIALS_BACKEND_SERVICE_SPEC.domain,
+            "assets.models.materials"
+        );
+        assert_eq!(
+            MODEL_COLLISIONS_BACKEND_SERVICE_SPEC.domain,
+            "assets.models.collisions"
+        );
         assert!(!MODEL_FEATURE_DOMAINS.contains(&"definition_entries.ytyp"));
         assert!(MODEL_FEATURE_DOMAINS.contains(&"drawable.resolve"));
         assert!(MODEL_FEATURE_DOMAINS.contains(&"material.nemat"));
@@ -170,13 +184,40 @@ mod tests {
             name: "prop_box".to_owned(),
             asset_name: "prop_box_drawable".to_owned(),
             asset_type: "ASSET_TYPE_DRAWABLE".to_owned(),
-            dictionaries: DefinitionDictionaries { texture: Some("prop_box_textures".to_owned()), ..Default::default() },
+            dictionaries: DefinitionDictionaries {
+                texture: Some("prop_box_textures".to_owned()),
+                ..Default::default()
+            },
             ..Default::default()
         };
         refresh_definition_asset_chain("metadata/props.ytyp", &mut entry);
-        assert_eq!(entry.asset_chain.definition_type.as_ref().unwrap().extension, "ytyp");
-        assert_eq!(entry.asset_chain.drawable_dictionary.as_ref().unwrap().extension, "ydd");
-        assert_eq!(entry.asset_chain.texture_dictionary.as_ref().unwrap().extension, "ytd");
+        assert_eq!(
+            entry
+                .asset_chain
+                .definition_type
+                .as_ref()
+                .unwrap()
+                .extension,
+            "ytyp"
+        );
+        assert_eq!(
+            entry
+                .asset_chain
+                .drawable_dictionary
+                .as_ref()
+                .unwrap()
+                .extension,
+            "ydd"
+        );
+        assert_eq!(
+            entry
+                .asset_chain
+                .texture_dictionary
+                .as_ref()
+                .unwrap()
+                .extension,
+            "ytd"
+        );
     }
 
     #[test]
@@ -185,7 +226,10 @@ mod tests {
             name: "prop_box".to_owned(),
             asset_name: "prop_box_drawable".to_owned(),
             asset_type: "ASSET_TYPE_DRAWABLE".to_owned(),
-            dictionaries: DefinitionDictionaries { texture: Some("prop_box_textures".to_owned()), ..Default::default() },
+            dictionaries: DefinitionDictionaries {
+                texture: Some("prop_box_textures".to_owned()),
+                ..Default::default()
+            },
             ..Default::default()
         };
         refresh_definition_asset_chain("metadata/props.ytyp", &mut entry);
@@ -197,9 +241,21 @@ mod tests {
         let plan = build_data_driven_construction_plan(&manifest);
         assert_eq!(plan.objects.len(), 1);
         assert_eq!(plan.objects[0].drawable.as_ref().unwrap().extension, "ydd");
-        assert_eq!(plan.objects[0].texture_dictionary.as_ref().unwrap().extension, "ytd");
-        assert_eq!(plan.objects[0].material_binding.material_library_role, ROLE_MATERIAL_LIBRARY);
-        assert_eq!(plan.objects[0].material_binding.texture_dictionary_role, ROLE_TEXTURE_DICTIONARY);
+        assert_eq!(
+            plan.objects[0]
+                .texture_dictionary
+                .as_ref()
+                .unwrap()
+                .extension,
+            "ytd"
+        );
+        assert_eq!(
+            plan.objects[0].material_binding.material_library_role,
+            ROLE_MATERIAL_LIBRARY
+        );
+        assert_eq!(
+            plan.objects[0].material_binding.texture_dictionary_role,
+            ROLE_TEXTURE_DICTIONARY
+        );
     }
-
 }

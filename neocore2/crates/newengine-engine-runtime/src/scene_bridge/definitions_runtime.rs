@@ -16,7 +16,11 @@ pub struct DefinitionInstantiateTransform {
 
 impl Default for DefinitionInstantiateTransform {
     fn default() -> Self {
-        Self { translation: [0.0, 0.0, 0.0], rotation_ypr: [0.0, 0.0, 0.0], scale: [1.0, 1.0, 1.0] }
+        Self {
+            translation: [0.0, 0.0, 0.0],
+            rotation_ypr: [0.0, 0.0, 0.0],
+            scale: [1.0, 1.0, 1.0],
+        }
     }
 }
 
@@ -38,7 +42,13 @@ pub struct EntityCommandTrace {
 }
 
 impl Default for EntityCommandTrace {
-    fn default() -> Self { Self { command: "EntityCommand::Spawn".to_owned(), entity_name: String::new(), transform: DefinitionInstantiateTransform::default() } }
+    fn default() -> Self {
+        Self {
+            command: "EntityCommand::Spawn".to_owned(),
+            entity_name: String::new(),
+            transform: DefinitionInstantiateTransform::default(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
@@ -110,17 +120,32 @@ pub fn apply_definition_instantiation(
         let _ = newengine_transform::set_parent(world, entity, Some(parent));
     }
     let local_transform = Transform::from_yaw_pitch_roll(
-        Vec3::new(transform.translation[0], transform.translation[1], transform.translation[2]),
+        Vec3::new(
+            transform.translation[0],
+            transform.translation[1],
+            transform.translation[2],
+        ),
         transform.rotation_ypr[0],
         transform.rotation_ypr[1],
         transform.rotation_ypr[2],
         Vec3::new(transform.scale[0], transform.scale[1], transform.scale[2]),
     );
     let _ = world.insert(entity, local_transform);
-    let _ = world.insert(entity, DefinitionInstance { definition_ref: definition_ref.clone(), stable_cache_key: graph.stable_cache_key.clone() });
+    let _ = world.insert(
+        entity,
+        DefinitionInstance {
+            definition_ref: definition_ref.clone(),
+            stable_cache_key: graph.stable_cache_key.clone(),
+        },
+    );
 
     let trace = build_definition_runtime_trace(&definition_ref, transform, graph, Some(entity));
-    let _ = world.insert(entity, DefinitionRuntimeTraceComponent { trace: trace.clone() });
+    let _ = world.insert(
+        entity,
+        DefinitionRuntimeTraceComponent {
+            trace: trace.clone(),
+        },
+    );
     for line in &trace.debug_log {
         newengine_ulog_api::ulog::debug!("{line}");
     }
@@ -163,7 +188,11 @@ pub fn build_definition_runtime_trace(
     DefinitionRuntimeTrace {
         definition_ref: definition_ref.trim().replace('\\', "/"),
         resolved_graph: graph,
-        entity_command: EntityCommandTrace { command: "EntityCommand::Spawn".to_owned(), entity_name, transform },
+        entity_command: EntityCommandTrace {
+            command: "EntityCommand::Spawn".to_owned(),
+            entity_name,
+            transform,
+        },
         render_packet_request,
         physics_declaration,
         apply_result,
@@ -174,7 +203,10 @@ pub fn build_definition_runtime_trace(
 
 fn definition_entity_name(definition_ref: &str) -> String {
     let normalized = definition_ref.trim().replace('\\', "/");
-    let entry = normalized.rsplit_once('@').map(|(_, entry)| entry).unwrap_or(normalized.as_str());
+    let entry = normalized
+        .rsplit_once('@')
+        .map(|(_, entry)| entry)
+        .unwrap_or(normalized.as_str());
     format!("Definition/{entry}")
 }
 
@@ -184,7 +216,14 @@ fn graph_refs_by_extension(graph: &ResolvedAssetGraphV1, extension: &str) -> Vec
         .nodes
         .iter()
         .map(|node| node.reference.clone())
-        .filter(|reference| reference.split('@').next().unwrap_or(reference).to_ascii_lowercase().ends_with(&suffix))
+        .filter(|reference| {
+            reference
+                .split('@')
+                .next()
+                .unwrap_or(reference)
+                .to_ascii_lowercase()
+                .ends_with(&suffix)
+        })
         .collect::<Vec<_>>();
     refs.sort();
     refs.dedup();
@@ -198,7 +237,14 @@ fn graph_refs_by_render_edge(graph: &ResolvedAssetGraphV1, extension: &str) -> V
         .iter()
         .filter(|edge| explicit_render_edge_role(&edge.kind))
         .map(|edge| edge.to_ref.clone())
-        .filter(|reference| reference.split('@').next().unwrap_or(reference).to_ascii_lowercase().ends_with(&suffix))
+        .filter(|reference| {
+            reference
+                .split('@')
+                .next()
+                .unwrap_or(reference)
+                .to_ascii_lowercase()
+                .ends_with(&suffix)
+        })
         .collect::<Vec<_>>();
     refs.sort();
     refs.dedup();
@@ -220,7 +266,8 @@ mod tests {
     #[test]
     fn apply_instantiation_spawns_entity_and_trace_component() {
         let mut world = World::new();
-        let graph = newengine_model_domain_api::AssetGraphResolver::resolve_root_ref("world/foo.ytyp@bar");
+        let graph =
+            newengine_model_domain_api::AssetGraphResolver::resolve_root_ref("world/foo.ytyp@bar");
         let (entity, trace) = apply_definition_instantiation(
             &mut world,
             None,
@@ -229,7 +276,9 @@ mod tests {
             graph,
         );
         assert!(world.get::<DefinitionInstance>(entity).is_some());
-        assert!(world.get::<DefinitionRuntimeTraceComponent>(entity).is_some());
+        assert!(world
+            .get::<DefinitionRuntimeTraceComponent>(entity)
+            .is_some());
         assert!(trace.apply_result.contains("spawned entity"));
     }
 }

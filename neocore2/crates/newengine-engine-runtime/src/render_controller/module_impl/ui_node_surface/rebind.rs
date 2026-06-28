@@ -21,8 +21,12 @@ impl RenderUiNodeSurfaceState {
             audio(AudioFeedbackKind::UiBack, frame_index);
             return;
         }
-        let Some(pending) = self.awaiting_rebind.clone() else { return; };
-        let Some(input_frame) = surface_input else { return; };
+        let Some(pending) = self.awaiting_rebind.clone() else {
+            return;
+        };
+        let Some(input_frame) = surface_input else {
+            return;
+        };
 
         if let Some(&code) = input_frame.keys_pressed.iter().next() {
             if code == newengine_input_api::key_code::ESCAPE {
@@ -40,7 +44,10 @@ impl RenderUiNodeSurfaceState {
 
         if let Some(button) = input_frame.gamepad_buttons_pressed.iter().next() {
             let registration = InputBindingRegistration {
-                binding: InputBinding::gamepad_button_pressed(pending.action_id.as_str(), button.clone()),
+                binding: InputBinding::gamepad_button_pressed(
+                    pending.action_id.as_str(),
+                    button.clone(),
+                ),
                 replace_existing_for_action_device: true,
             };
             self.apply_rebind_registration(registration, &pending, "gamepad", frame_index);
@@ -74,7 +81,10 @@ impl RenderUiNodeSurfaceState {
                 self.profile = profile;
                 self.flash_feedback(
                     "Binding updated",
-                    format!("{} now uses the selected {} input", pending.label, device_label),
+                    format!(
+                        "{} now uses the selected {} input",
+                        pending.label, device_label
+                    ),
                     UiNodeMessageSeverity::Success,
                 );
                 audio(AudioFeedbackKind::UiConfirm, frame_index);

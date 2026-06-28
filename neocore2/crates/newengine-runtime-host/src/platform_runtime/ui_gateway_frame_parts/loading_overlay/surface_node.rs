@@ -1,5 +1,5 @@
-use super::*;
 use super::components::{error_overlay_components, loading_overlay_components};
+use super::*;
 
 pub(super) fn build_overlay_surface_node(
     status: &ScreenOverlayStatus,
@@ -14,10 +14,21 @@ pub(super) fn build_overlay_surface_node(
     let style_tags = spec.style_tags();
     let components = spec.components(status, progress, frame_index);
     let style = spec.style();
-    let title = if spec.is_error() { status.title.clone() } else { String::new() };
-    let subtitle = if spec.is_error() { status.status.clone() } else { String::new() };
+    let title = if spec.is_error() {
+        status.title.clone()
+    } else {
+        String::new()
+    };
+    let subtitle = if spec.is_error() {
+        status.status.clone()
+    } else {
+        String::new()
+    };
     let mut metrics = overlay_metrics(status, &projection, frame_index);
-    metrics.insert("surface_id".to_owned(), serde_json::json!(spec.surface_id.as_str()));
+    metrics.insert(
+        "surface_id".to_owned(),
+        serde_json::json!(spec.surface_id.as_str()),
+    );
 
     UiSurfaceNode {
         version: 1,
@@ -45,7 +56,10 @@ pub(super) fn build_overlay_surface_node(
 pub(super) fn hidden_loading_overlay_node(frame_index: u64) -> UiSurfaceNode {
     let mut metrics = BTreeMap::new();
     metrics.insert("frame_index".to_owned(), serde_json::json!(frame_index));
-    metrics.insert("reason".to_owned(), serde_json::json!("scene-launch-complete"));
+    metrics.insert(
+        "reason".to_owned(),
+        serde_json::json!("scene-launch-complete"),
+    );
 
     UiSurfaceNode {
         version: 1,
@@ -107,7 +121,12 @@ impl OverlaySurfaceSpec {
             } else {
                 projected_surface_id.to_owned()
             },
-            source: if is_error { "engine.ui.error" } else { "engine.ui.loading" }.to_owned(),
+            source: if is_error {
+                "engine.ui.error"
+            } else {
+                "engine.ui.loading"
+            }
+            .to_owned(),
             modal: is_error,
             z_order: if is_error { 1000 } else { 900 },
         }
@@ -148,18 +167,23 @@ impl OverlaySurfaceSpec {
             ];
         }
 
-        vec!["retained".to_owned(), "startup-loading".to_owned(), "bg-sprite-progress".to_owned()]
+        vec![
+            "retained".to_owned(),
+            "startup-loading".to_owned(),
+            "bg-sprite-progress".to_owned(),
+        ]
     }
 
-    fn components(&self, status: &ScreenOverlayStatus, progress: OverlayProgress, frame_index: u64) -> Vec<UiComponentNode> {
+    fn components(
+        &self,
+        status: &ScreenOverlayStatus,
+        progress: OverlayProgress,
+        frame_index: u64,
+    ) -> Vec<UiComponentNode> {
         if self.is_error() {
             error_overlay_components(status)
         } else {
-            loading_overlay_components(
-                progress.value,
-                progress.percent,
-                frame_index,
-            )
+            loading_overlay_components(progress.value, progress.percent, frame_index)
         }
     }
 
@@ -195,7 +219,13 @@ fn overlay_metrics(
         serde_json::to_value(projection).unwrap_or(serde_json::Value::Null),
     );
     metrics.insert("frame_index".to_owned(), serde_json::json!(frame_index));
-    metrics.insert("overlay_kind".to_owned(), serde_json::json!(format!("{:?}", status.kind)));
-    metrics.insert("overlay_reason".to_owned(), serde_json::json!(format!("{:?}", status.reason)));
+    metrics.insert(
+        "overlay_kind".to_owned(),
+        serde_json::json!(format!("{:?}", status.kind)),
+    );
+    metrics.insert(
+        "overlay_reason".to_owned(),
+        serde_json::json!(format!("{:?}", status.reason)),
+    );
     metrics
 }

@@ -2,16 +2,18 @@ use std::any::Any;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::OnceLock;
 
+use crate::scene_bridge::SkyClearColorRuntime;
 use newengine_core::render::{
     require_render_api, BeginFrameDesc, Extent2D, RectI32, SceneLaunchStatus, Viewport,
 };
 use newengine_core::{EngineResult, ModuleCtx};
 use newengine_ui_api::{UiDrawList, UiRuntimeDebugOverlayTelemetry, UiViewportSlot};
-use crate::scene_bridge::SkyClearColorRuntime;
 
-use super::frame_types::{PlayableFrameOutcome, RenderFrameScope};
 use super::super::controller::RuntimeRenderController;
-use super::super::error_policy::{is_backend_device_lost_error, is_transient_shader_pipeline_error};
+use super::super::error_policy::{
+    is_backend_device_lost_error, is_transient_shader_pipeline_error,
+};
+use super::frame_types::{PlayableFrameOutcome, RenderFrameScope};
 
 impl RuntimeRenderController {
     pub(super) fn render_runtime_module<E: Send + 'static>(
@@ -86,7 +88,8 @@ impl RuntimeRenderController {
         self.apply_editor_viewport_slot(ctx, w, h);
         let mut r = api.lock();
         let dt = ctx.frame().map(|f| f.dt).unwrap_or(0.016);
-        let scope_result = self.begin_playable_surface_frame(&mut **r, ui.is_some(), w, h, dt, trace_frame);
+        let scope_result =
+            self.begin_playable_surface_frame(&mut **r, ui.is_some(), w, h, dt, trace_frame);
         let Some(scope) = (match scope_result {
             Ok(scope) => scope,
             Err(e) if is_backend_device_lost_error(&e) => {
@@ -108,13 +111,7 @@ impl RuntimeRenderController {
         self.diagnostics.overlay_metrics.begin_frame(scope.dt);
 
         let outcome = match catch_unwind(AssertUnwindSafe(|| {
-            self.render_playable_viewport_frame(
-                ctx,
-                &mut **r,
-                plugin_snapshot.as_ref(),
-                ui,
-                scope,
-            )
+            self.render_playable_viewport_frame(ctx, &mut **r, plugin_snapshot.as_ref(), ui, scope)
         })) {
             Ok(Ok(outcome)) => outcome,
             Ok(Err(e)) => {
@@ -145,10 +142,11 @@ impl RuntimeRenderController {
                 let _ = r.discard_recorded_commands();
                 let _ = r.end_frame();
                 drop(r);
-                ctx.resources_mut().insert(newengine_core::render::RenderBackendStatus::degraded(
-                    "render.playable_frame.error",
-                    message,
-                ));
+                ctx.resources_mut()
+                    .insert(newengine_core::render::RenderBackendStatus::degraded(
+                        "render.playable_frame.error",
+                        message,
+                    ));
                 ctx.resources_mut().insert(SceneLaunchStatus::inactive());
                 return Ok(());
             }
@@ -161,16 +159,16 @@ impl RuntimeRenderController {
                 );
                 newengine_core::crash::record_breadcrumb(format!(
                     "render controller: caught playable-frame panic frame={} msg='{}'",
-                    self.frame.frame_index,
-                    message
+                    self.frame.frame_index, message
                 ));
                 let _ = r.discard_recorded_commands();
                 let _ = r.end_frame();
                 drop(r);
-                ctx.resources_mut().insert(newengine_core::render::RenderBackendStatus::degraded(
-                    "render.playable_frame.panic",
-                    message,
-                ));
+                ctx.resources_mut()
+                    .insert(newengine_core::render::RenderBackendStatus::degraded(
+                        "render.playable_frame.panic",
+                        message,
+                    ));
                 ctx.resources_mut().insert(SceneLaunchStatus::inactive());
                 return Ok(());
             }
@@ -180,7 +178,9 @@ impl RuntimeRenderController {
         let mut ui_telemetry_to_publish = None;
 
         let mut frame_debug_snapshot = match outcome {
-            PlayableFrameOutcome::Continue { frame_debug_snapshot } => frame_debug_snapshot,
+            PlayableFrameOutcome::Continue {
+                frame_debug_snapshot,
+            } => frame_debug_snapshot,
             PlayableFrameOutcome::EndedEarly { ui_telemetry } => {
                 ui_telemetry_to_publish = ui_telemetry;
                 drop(r);
@@ -197,7 +197,9 @@ impl RuntimeRenderController {
 
         {
             if let Ok(diag) = r.diagnostics_snapshot() {
-                self.diagnostics.overlay_metrics.record_backend_snapshot(&diag);
+                self.diagnostics
+                    .overlay_metrics
+                    .record_backend_snapshot(&diag);
                 if let Some(snapshot) = frame_debug_snapshot.as_mut() {
                     snapshot.queued_upload_jobs = diag.queue.queued_upload_jobs;
                     snapshot.queued_upload_bytes = diag.queue.queued_upload_bytes;
@@ -226,12 +228,18 @@ impl RuntimeRenderController {
             self.bridge_render_backend_events(ctx, &mut **r);
 
             if let Some(snapshot) = frame_debug_snapshot.take() {
-                self.diagnostics.overlay_metrics.publish_debug_snapshot(snapshot);
+                self.diagnostics
+                    .overlay_metrics
+                    .publish_debug_snapshot(snapshot);
                 let telemetry = self.diagnostics.overlay_metrics.telemetry_snapshot();
                 if runtime_debug_overlay_enabled() {
                     let overlay_text = self.diagnostics.overlay_metrics.overlay_text();
-                    let ui_telemetry = UiRuntimeDebugOverlayTelemetry::new(self.frame.frame_index, overlay_text)
-                        .with_metric("render_debug", serde_json::to_value(&telemetry).unwrap_or(serde_json::Value::Null));
+                    let ui_telemetry =
+                        UiRuntimeDebugOverlayTelemetry::new(self.frame.frame_index, overlay_text)
+                            .with_metric(
+                                "render_debug",
+                                serde_json::to_value(&telemetry).unwrap_or(serde_json::Value::Null),
+                            );
                     ui_telemetry_to_publish = Some(ui_telemetry);
                 }
                 telemetry_to_publish = Some(telemetry);
@@ -247,7 +255,9 @@ impl RuntimeRenderController {
         if let Some(ui_telemetry) = ui_telemetry_to_publish {
             ctx.resources_mut().insert(ui_telemetry);
         } else {
-            let _ = ctx.resources_mut().remove::<UiRuntimeDebugOverlayTelemetry>();
+            let _ = ctx
+                .resources_mut()
+                .remove::<UiRuntimeDebugOverlayTelemetry>();
         }
         Ok(())
     }
@@ -270,8 +280,15 @@ impl RuntimeRenderController {
         }
     }
 
-    fn apply_editor_viewport_slot<E: Send + 'static>(&self, ctx: &ModuleCtx<'_, E>, surface_w: u32, surface_h: u32) {
-        let Some(slot) = ctx.resources().get::<UiViewportSlot>() else { return; };
+    fn apply_editor_viewport_slot<E: Send + 'static>(
+        &self,
+        ctx: &ModuleCtx<'_, E>,
+        surface_w: u32,
+        surface_h: u32,
+    ) {
+        let Some(slot) = ctx.resources().get::<UiViewportSlot>() else {
+            return;
+        };
         let (mut vp_w, mut vp_h) = slot.extent_px();
         if vp_w == 0 || vp_h == 0 {
             self.bridges.viewport.publish_extent(0, 0);
@@ -297,10 +314,7 @@ impl RuntimeRenderController {
         // regardless of whether an engine.ui draw list is present. The previous
         // UI-gated condition turned this into 0x0 once UI provider output existed,
         // clearing the surface and drawing only UI.
-        let direct_surface_viewport = requested_vp_w == 0
-            && requested_vp_h == 0
-            && w > 0
-            && h > 0;
+        let direct_surface_viewport = requested_vp_w == 0 && requested_vp_h == 0 && w > 0 && h > 0;
         let (vp_w, vp_h) = if direct_surface_viewport {
             (w, h)
         } else {
@@ -317,7 +331,10 @@ impl RuntimeRenderController {
             .map(|sky| sky.color)
             .unwrap_or_else(|| self.runtime_profile().configured_clear_color());
         self.trace_begin_frame(trace_frame, vp_w, vp_h);
-        r.begin_frame(BeginFrameDesc::new(self.viewport.clear_color).with_frame_index(self.frame.frame_index.saturating_add(1).max(1)))?;
+        r.begin_frame(
+            BeginFrameDesc::new(self.viewport.clear_color)
+                .with_frame_index(self.frame.frame_index.saturating_add(1).max(1)),
+        )?;
         self.trace_begin_frame_done(trace_frame);
 
         Ok(Some(RenderFrameScope {
@@ -461,10 +478,10 @@ fn parse_runtime_debug_overlay_setting(value: Option<&str>) -> bool {
         // explicitly with NEWENGINE_RUNTIME_DEBUG_OVERLAY=1 when diagnosing frame
         // metrics; otherwise the retained debug surface churns the UI every frame.
         None => false,
-        Some("0") | Some("false") | Some("FALSE") | Some("False") | Some("no")
-        | Some("NO") | Some("No") | Some("off") | Some("OFF") | Some("Off") => false,
-        Some("1") | Some("true") | Some("TRUE") | Some("True") | Some("yes")
-        | Some("YES") | Some("Yes") | Some("on") | Some("ON") | Some("On") => true,
+        Some("0") | Some("false") | Some("FALSE") | Some("False") | Some("no") | Some("NO")
+        | Some("No") | Some("off") | Some("OFF") | Some("Off") => false,
+        Some("1") | Some("true") | Some("TRUE") | Some("True") | Some("yes") | Some("YES")
+        | Some("Yes") | Some("on") | Some("ON") | Some("On") => true,
         Some(_) => true,
     }
 }

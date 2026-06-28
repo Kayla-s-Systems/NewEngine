@@ -141,7 +141,11 @@ impl ScreenOverlaySubsystem {
     }
 
     #[inline]
-    pub fn ready(id: ScreenOverlaySubsystemId, state_label: impl Into<String>, detail: impl Into<String>) -> Self {
+    pub fn ready(
+        id: ScreenOverlaySubsystemId,
+        state_label: impl Into<String>,
+        detail: impl Into<String>,
+    ) -> Self {
         Self::new(
             id,
             default_subsystem_label(id),
@@ -153,7 +157,11 @@ impl ScreenOverlaySubsystem {
     }
 
     #[inline]
-    pub fn degraded(id: ScreenOverlaySubsystemId, state_label: impl Into<String>, detail: impl Into<String>) -> Self {
+    pub fn degraded(
+        id: ScreenOverlaySubsystemId,
+        state_label: impl Into<String>,
+        detail: impl Into<String>,
+    ) -> Self {
         Self::new(
             id,
             default_subsystem_label(id),
@@ -165,7 +173,11 @@ impl ScreenOverlaySubsystem {
     }
 
     #[inline]
-    pub fn failed(id: ScreenOverlaySubsystemId, state_label: impl Into<String>, detail: impl Into<String>) -> Self {
+    pub fn failed(
+        id: ScreenOverlaySubsystemId,
+        state_label: impl Into<String>,
+        detail: impl Into<String>,
+    ) -> Self {
         Self::new(
             id,
             default_subsystem_label(id),
@@ -322,7 +334,10 @@ impl ScreenOverlayStatus {
 
     #[inline]
     pub fn progress_01(&self) -> f32 {
-        self.progress.as_ref().map(ScreenOverlayProgress::progress_01).unwrap_or(0.0)
+        self.progress
+            .as_ref()
+            .map(ScreenOverlayProgress::progress_01)
+            .unwrap_or(0.0)
     }
 }
 

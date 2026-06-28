@@ -17,19 +17,22 @@ pub(crate) fn dispatch_input_frame(
         pixels_per_point,
         ..UiDispatchInputRequest::default()
     };
-    let payload = serde_json::to_vec(&request)
-        .map_err(|e| newengine_core::EngineError::other(format!("encode ui dispatch input request failed: {e}")))?;
+    let payload = serde_json::to_vec(&request).map_err(|e| {
+        newengine_core::EngineError::other(format!("encode ui dispatch input request failed: {e}"))
+    })?;
     let Some(bytes) = newengine_core::call_service_v1_optional(
         ENGINE_UI_SERVICE_ID,
         UI_SERVICE_METHOD_DISPATCH_INPUT_V1,
         &payload,
     )
-    .map_err(newengine_core::EngineError::other)? else {
+    .map_err(newengine_core::EngineError::other)?
+    else {
         return Ok(None);
     };
 
-    let frame: UiEventDispatchFrame = serde_json::from_slice(&bytes)
-        .map_err(|e| newengine_core::EngineError::other(format!("decode ui dispatch input response failed: {e}")))?;
+    let frame: UiEventDispatchFrame = serde_json::from_slice(&bytes).map_err(|e| {
+        newengine_core::EngineError::other(format!("decode ui dispatch input response failed: {e}"))
+    })?;
 
     apply_ui_state_patches(&frame.state_patches);
     dispatch_ui_actions(&frame.actions);
@@ -45,7 +48,10 @@ fn apply_ui_state_patches(patches: &[UiStatePatch]) {
         let payload = match serde_json::to_vec(patch) {
             Ok(payload) => payload,
             Err(e) => {
-                newengine_ulog_api::ulog::warn!("ui gateway: failed to encode state patch surface='{}': {e}", patch.surface_id);
+                newengine_ulog_api::ulog::warn!(
+                    "ui gateway: failed to encode state patch surface='{}': {e}",
+                    patch.surface_id
+                );
                 continue;
             }
         };
@@ -54,7 +60,10 @@ fn apply_ui_state_patches(patches: &[UiStatePatch]) {
             UI_SERVICE_METHOD_APPLY_STATE_PATCH_V1,
             &payload,
         ) {
-            newengine_ulog_api::ulog::warn!("ui gateway: state patch apply failed surface='{}' err='{e}'", patch.surface_id);
+            newengine_ulog_api::ulog::warn!(
+                "ui gateway: state patch apply failed surface='{}' err='{e}'",
+                patch.surface_id
+            );
         }
     }
 }
@@ -82,7 +91,11 @@ fn dispatch_ui_actions(actions: &[UiActionDispatch]) {
             }
         };
 
-        match newengine_core::call_service_v1_optional(&action.target_gateway, &action.method, &payload) {
+        match newengine_core::call_service_v1_optional(
+            &action.target_gateway,
+            &action.method,
+            &payload,
+        ) {
             Ok(Some(_)) => {}
             Ok(None) => newengine_ulog_api::ulog::warn!(
                 "ui gateway: action target unavailable action='{}' target='{}' method='{}'",

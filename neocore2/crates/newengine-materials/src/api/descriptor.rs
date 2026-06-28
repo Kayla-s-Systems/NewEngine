@@ -104,12 +104,22 @@ impl MaterialDescriptor {
     pub fn sanitize_in_place(&mut self) {
         #[inline]
         fn finite_or(v: f32, fallback: f32) -> f32 {
-            if v.is_finite() { v } else { fallback }
+            if v.is_finite() {
+                v
+            } else {
+                fallback
+            }
         }
 
         #[inline]
         fn clamp(v: f32, lo: f32, hi: f32) -> f32 {
-            if v < lo { lo } else if v > hi { hi } else { v }
+            if v < lo {
+                lo
+            } else if v > hi {
+                hi
+            } else {
+                v
+            }
         }
 
         for c in &mut self.base_color {
@@ -138,7 +148,6 @@ impl MaterialDescriptor {
         self.sanitize_in_place();
         self
     }
-
 
     /// Create a deterministic permutation key used by render backends.
     ///

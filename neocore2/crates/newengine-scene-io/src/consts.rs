@@ -83,8 +83,9 @@ pub const SCENE_RUNTIME_CONTRACT_SPEC: RuntimeServiceContractSpec = RuntimeServi
     SCENE_REQUIRED_METHODS,
 );
 
-pub const SCENE_RUNTIME_REQUIREMENT_SPEC: RuntimeServiceRequirementSpec = RuntimeServiceRequirementSpec::new(
-    SCENE_RUNTIME_CONTRACT_SPEC,
-    Some(SCENE_BACKEND_CAPABILITY_ID),
-    Some("NEWENGINE_REQUIRE_SCENE_BACKEND"),
-);
+pub const SCENE_RUNTIME_REQUIREMENT_SPEC: RuntimeServiceRequirementSpec =
+    RuntimeServiceRequirementSpec::new(
+        SCENE_RUNTIME_CONTRACT_SPEC,
+        Some(SCENE_BACKEND_CAPABILITY_ID),
+        Some("NEWENGINE_REQUIRE_SCENE_BACKEND"),
+    );

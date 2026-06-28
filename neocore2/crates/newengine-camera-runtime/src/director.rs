@@ -2,8 +2,8 @@
 
 use newengine_camera::{
     blend_resolved_camera_frames, CameraDirectorId, CameraDirectorMetadata, CameraDirectorOutput,
-    CameraDirectorRunner, CameraDirectorState, CameraModeKind, CameraPostEffects, CameraResolvedFrame,
-    CameraRenderState,
+    CameraDirectorRunner, CameraDirectorState, CameraModeKind, CameraPostEffects,
+    CameraRenderState, CameraResolvedFrame,
 };
 
 use crate::manager::CameraDirectorKind;
@@ -168,7 +168,6 @@ fn director_sort_key(kind: CameraDirectorKind) -> u8 {
     }
 }
 
-
 #[derive(Clone, Debug)]
 pub struct StaticCameraDirectorRunner {
     state: CameraDirectorState,
@@ -273,9 +272,13 @@ impl CinematicDirectorRunner {
 
 impl CameraDirectorRunner for CinematicDirectorRunner {
     #[inline]
-    fn state(&self) -> &CameraDirectorState { self.inner.state() }
+    fn state(&self) -> &CameraDirectorState {
+        self.inner.state()
+    }
     #[inline]
-    fn state_mut(&mut self) -> &mut CameraDirectorState { self.inner.state_mut() }
+    fn state_mut(&mut self) -> &mut CameraDirectorState {
+        self.inner.state_mut()
+    }
     #[inline]
     fn update_frame(&mut self, dt: f32) -> Option<CameraResolvedFrame> {
         self.inner.update_frame(dt)
@@ -299,18 +302,28 @@ impl ScriptedDirectorRunner {
     }
 
     #[inline]
-    pub fn set_frame(&mut self, frame: CameraResolvedFrame) { self.inner.set_frame(frame); }
+    pub fn set_frame(&mut self, frame: CameraResolvedFrame) {
+        self.inner.set_frame(frame);
+    }
     #[inline]
-    pub fn render(&mut self, blend_in_sec: Option<f32>) { self.inner.render(blend_in_sec); }
+    pub fn render(&mut self, blend_in_sec: Option<f32>) {
+        self.inner.render(blend_in_sec);
+    }
     #[inline]
-    pub fn stop_rendering(&mut self, blend_out_sec: Option<f32>) { self.inner.stop_rendering(blend_out_sec); }
+    pub fn stop_rendering(&mut self, blend_out_sec: Option<f32>) {
+        self.inner.stop_rendering(blend_out_sec);
+    }
 }
 
 impl CameraDirectorRunner for ScriptedDirectorRunner {
     #[inline]
-    fn state(&self) -> &CameraDirectorState { self.inner.state() }
+    fn state(&self) -> &CameraDirectorState {
+        self.inner.state()
+    }
     #[inline]
-    fn state_mut(&mut self) -> &mut CameraDirectorState { self.inner.state_mut() }
+    fn state_mut(&mut self) -> &mut CameraDirectorState {
+        self.inner.state_mut()
+    }
     #[inline]
     fn update_frame(&mut self, dt: f32) -> Option<CameraResolvedFrame> {
         self.inner.update_frame(dt)
@@ -334,18 +347,28 @@ impl ReplayDirectorRunner {
     }
 
     #[inline]
-    pub fn set_frame(&mut self, frame: CameraResolvedFrame) { self.inner.set_frame(frame); }
+    pub fn set_frame(&mut self, frame: CameraResolvedFrame) {
+        self.inner.set_frame(frame);
+    }
     #[inline]
-    pub fn render(&mut self, blend_in_sec: Option<f32>) { self.inner.render(blend_in_sec); }
+    pub fn render(&mut self, blend_in_sec: Option<f32>) {
+        self.inner.render(blend_in_sec);
+    }
     #[inline]
-    pub fn stop_rendering(&mut self, blend_out_sec: Option<f32>) { self.inner.stop_rendering(blend_out_sec); }
+    pub fn stop_rendering(&mut self, blend_out_sec: Option<f32>) {
+        self.inner.stop_rendering(blend_out_sec);
+    }
 }
 
 impl CameraDirectorRunner for ReplayDirectorRunner {
     #[inline]
-    fn state(&self) -> &CameraDirectorState { self.inner.state() }
+    fn state(&self) -> &CameraDirectorState {
+        self.inner.state()
+    }
     #[inline]
-    fn state_mut(&mut self) -> &mut CameraDirectorState { self.inner.state_mut() }
+    fn state_mut(&mut self) -> &mut CameraDirectorState {
+        self.inner.state_mut()
+    }
     #[inline]
     fn update_frame(&mut self, dt: f32) -> Option<CameraResolvedFrame> {
         self.inner.update_frame(dt)

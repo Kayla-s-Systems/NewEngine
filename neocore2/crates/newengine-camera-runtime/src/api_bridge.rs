@@ -1,16 +1,18 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use newengine_camera::{CameraFrame, CameraWorldFrame, CameraPostEffects, Projection};
+use newengine_camera::{CameraFrame, CameraPostEffects, CameraWorldFrame, Projection};
 use newengine_camera_api::{
-    CameraFrameSnapshot, CameraPostFxDofIntent, CameraPostFxIntent,
-    CameraViewMode,
-    CameraPostFxMotionBlurIntent, CameraProjectionKind, CameraProjectionSnapshot,
-    CameraViewportSnapshot, Mat4Cols,
+    CameraFrameSnapshot, CameraPostFxDofIntent, CameraPostFxIntent, CameraPostFxMotionBlurIntent,
+    CameraProjectionKind, CameraProjectionSnapshot, CameraViewMode, CameraViewportSnapshot,
+    Mat4Cols,
 };
 use newengine_math::{Mat4, Vec3};
 
 #[inline]
-pub fn camera_frame_snapshot(frame: CameraFrame, effects: CameraPostEffects) -> CameraFrameSnapshot {
+pub fn camera_frame_snapshot(
+    frame: CameraFrame,
+    effects: CameraPostEffects,
+) -> CameraFrameSnapshot {
     camera_frame_snapshot_for_view(frame, effects, CameraViewMode::FirstPerson)
 }
 

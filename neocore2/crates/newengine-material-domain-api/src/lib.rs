@@ -41,7 +41,9 @@ pub struct MaterialDomainError {
 impl MaterialDomainError {
     #[inline]
     pub fn other(message: impl Into<String>) -> Self {
-        Self { message: message.into() }
+        Self {
+            message: message.into(),
+        }
     }
 
     #[inline]
@@ -66,7 +68,10 @@ pub type MaterialDomainResult<T> = Result<T, MaterialDomainError>;
 /// stays free of `newengine-core::render::RenderApi`, which would invert the
 /// dependency direction.
 pub trait MaterialRenderDevice {
-    fn create_bind_group_layout(&mut self, desc: BindGroupLayoutDesc) -> MaterialDomainResult<BindGroupLayoutId>;
+    fn create_bind_group_layout(
+        &mut self,
+        desc: BindGroupLayoutDesc,
+    ) -> MaterialDomainResult<BindGroupLayoutId>;
     fn create_texture(&mut self, desc: TextureDesc) -> MaterialDomainResult<TextureId>;
     fn create_sampler(&mut self, desc: SamplerDesc) -> MaterialDomainResult<SamplerId>;
     fn create_shader(&mut self, desc: ShaderDesc) -> MaterialDomainResult<ShaderId>;

@@ -26,8 +26,8 @@ pub use commands::{Command, CommandBuffer};
 // Re-export simulation components/controllers at crate root for ergonomic use by editor/runtime.
 // Keep explicit re-exports to avoid accidental API disappearance when modules evolve.
 pub use components::{
-    AngularVelocity, CameraControlInputComp, CameraRigComp, CharacterMotor, FollowTargetCameraController,
-    FollowTargetCameraMotor, MotorInput, OrbitCameraMotor, Velocity,
+    AngularVelocity, CameraControlInputComp, CameraRigComp, CharacterMotor,
+    FollowTargetCameraController, FollowTargetCameraMotor, MotorInput, OrbitCameraMotor, Velocity,
 };
 pub use controller_ctx::{ControllerCtx, EntityControllerV1};
 pub use controllers::{
@@ -35,11 +35,13 @@ pub use controllers::{
     run_orbit_camera_controller, step_character_motor, step_follow_camera, CharacterMotorStep,
     FollowCameraStep,
 };
-pub use intent::{
-    ControllerIntentQueue, Intent, IntentBuffer, IntentCommandBufferExt, IntentSink,
-};
+pub use intent::{ControllerIntentQueue, Intent, IntentBuffer, IntentCommandBufferExt, IntentSink};
 
-pub use schedule::{default_schedule, SimCommandBatch, SimCommandBatchHeader, SimReadBatchExecutor, SimReadBatchReport, SimReadSnapshot, SimReadSystemDescriptor, SimSchedule, SimStage, SimWorldSnapshotHeader, SimulationJobBatch, SimulationJobTelemetry};
+pub use schedule::{
+    default_schedule, SimCommandBatch, SimCommandBatchHeader, SimReadBatchExecutor,
+    SimReadBatchReport, SimReadSnapshot, SimReadSystemDescriptor, SimSchedule, SimStage,
+    SimWorldSnapshotHeader, SimulationJobBatch, SimulationJobTelemetry,
+};
 pub use time::SimFrame;
 
 pub use transform_cmd::TransformCommandBufferExt;

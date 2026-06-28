@@ -1,7 +1,12 @@
-use newengine_render_api::{RenderGraphCompileReport, RenderGraphDesc, RenderGraphValidationReport};
+use newengine_render_api::{
+    RenderGraphCompileReport, RenderGraphDesc, RenderGraphValidationReport,
+};
 use serde::{Deserialize, Serialize};
 
-use crate::{DrawListDesc, DrawListRouteValidationIssue, DrawListRouteValidationReport, RenderPhaseDesc, StandardRenderPhase};
+use crate::{
+    DrawListDesc, DrawListRouteValidationIssue, DrawListRouteValidationReport, RenderPhaseDesc,
+    StandardRenderPhase,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum FramePlanExecutionMode {
@@ -54,7 +59,10 @@ impl RenderFramePlan {
     }
 
     #[inline]
-    pub fn compile(&self) -> Result<RenderGraphCompileReport, Vec<newengine_render_api::RenderGraphValidationIssue>> {
+    pub fn compile(
+        &self,
+    ) -> Result<RenderGraphCompileReport, Vec<newengine_render_api::RenderGraphValidationIssue>>
+    {
         newengine_render_api::compile_render_graph(&self.graph)
     }
 
@@ -98,7 +106,11 @@ impl RenderFramePlan {
 
         for pass in &self.graph.passes {
             for routed_draw_list in &pass.draw_lists {
-                if !self.draw_lists.iter().any(|list| list.kind == *routed_draw_list) {
+                if !self
+                    .draw_lists
+                    .iter()
+                    .any(|list| list.kind == *routed_draw_list)
+                {
                     warnings.push(
                         DrawListRouteValidationIssue::new(
                             "draw_list.route_without_declared_list",

@@ -21,7 +21,10 @@ pub fn call_service_utf8(service_id: &str, method: &str) -> Option<String> {
 
 /// Polls input snapshot from the canonical INPUT plugin and maps it into UiInputFrame.
 pub fn poll_input_frame() -> Option<UiInputFrame> {
-    let Some(state_json) = call_service_utf8(INPUT_SERVICE_ID, newengine_input_api::INPUT_METHOD_STATE_JSON) else {
+    let Some(state_json) = call_service_utf8(
+        INPUT_SERVICE_ID,
+        newengine_input_api::INPUT_METHOD_STATE_JSON,
+    ) else {
         if !INPUT_POLL_OFFLINE_LOGGED.swap(true, Ordering::Relaxed) {
             newengine_ulog_api::ulog::warn!(
                 "input systems: raw input polling unavailable service='{}' method='{}'",
@@ -38,16 +41,25 @@ pub fn poll_input_frame() -> Option<UiInputFrame> {
             newengine_input_api::INPUT_METHOD_STATE_JSON,
         );
     }
-    let text_json = call_service_utf8(INPUT_SERVICE_ID, newengine_input_api::INPUT_METHOD_TEXT_TAKE_JSON)
-        .unwrap_or_else(|| "{}".into());
-    let ime_json = call_service_utf8(INPUT_SERVICE_ID, newengine_input_api::INPUT_METHOD_IME_COMMIT_TAKE_JSON)
-        .unwrap_or_else(|| "{}".into());
+    let text_json = call_service_utf8(
+        INPUT_SERVICE_ID,
+        newengine_input_api::INPUT_METHOD_TEXT_TAKE_JSON,
+    )
+    .unwrap_or_else(|| "{}".into());
+    let ime_json = call_service_utf8(
+        INPUT_SERVICE_ID,
+        newengine_input_api::INPUT_METHOD_IME_COMMIT_TAKE_JSON,
+    )
+    .unwrap_or_else(|| "{}".into());
 
     let mut out = UiInputFrame::default();
     let st: serde_json::Value = match serde_json::from_str(&state_json) {
         Ok(value) => value,
         Err(e) => {
-            newengine_ulog_api::ulog::warn!("input systems: raw input state_json decode failed err='{}'", e);
+            newengine_ulog_api::ulog::warn!(
+                "input systems: raw input state_json decode failed err='{}'",
+                e
+            );
             return None;
         }
     };
@@ -102,7 +114,8 @@ pub fn poll_input_frame() -> Option<UiInputFrame> {
             for op in ops.iter().filter_map(|value| value.as_str()) {
                 if let Some(kind) = parse_text_edit_op_kind(op) {
                     state_edit_op_count = state_edit_op_count.saturating_add(1);
-                    out.text_edit_ops.push(UiTextEditOp::new(kind, "engine.input"));
+                    out.text_edit_ops
+                        .push(UiTextEditOp::new(kind, "engine.input"));
                 } else {
                     newengine_ulog_api::ulog::warn!(
                         "input systems: ignored unknown text edit op op='{}'",
@@ -140,14 +153,20 @@ pub fn poll_input_frame() -> Option<UiInputFrame> {
 
     if let Some(gamepads) = st.get("gamepads").and_then(|v| v.as_object()) {
         for pad in gamepads.values() {
-            let connected = pad.get("connected").and_then(|v| v.as_bool()).unwrap_or(false);
+            let connected = pad
+                .get("connected")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
             if connected {
                 out.gamepad_connected = out.gamepad_connected.saturating_add(1);
             }
             merge_f32_object(&mut out.gamepad_buttons, pad.get("buttons"));
             merge_f32_object(&mut out.gamepad_axes, pad.get("axes"));
             merge_string_set(&mut out.gamepad_buttons_pressed, pad.get("buttons_pressed"));
-            merge_string_set(&mut out.gamepad_buttons_released, pad.get("buttons_released"));
+            merge_string_set(
+                &mut out.gamepad_buttons_released,
+                pad.get("buttons_released"),
+            );
         }
     }
 
@@ -164,7 +183,6 @@ pub fn poll_input_frame() -> Option<UiInputFrame> {
     Some(out)
 }
 
-
 fn gate_gameplay_text_leak(frame: &mut UiInputFrame) -> bool {
     if frame.text.is_empty() && frame.ime_commit.is_empty() {
         return false;
@@ -172,7 +190,9 @@ fn gate_gameplay_text_leak(frame: &mut UiInputFrame) -> bool {
     if !frame.ime_preedit.is_empty() || !frame.text_edit_ops.is_empty() {
         return false;
     }
-    let key_activity = !frame.keys_down.is_empty() || !frame.keys_pressed.is_empty() || !frame.keys_released.is_empty();
+    let key_activity = !frame.keys_down.is_empty()
+        || !frame.keys_pressed.is_empty()
+        || !frame.keys_released.is_empty();
     let text_is_gameplay_controls = frame.text.chars().all(is_gameplay_text_leak_char)
         && frame.ime_commit.chars().all(is_gameplay_text_leak_char);
     if !text_is_gameplay_controls {
@@ -189,9 +209,30 @@ fn gate_gameplay_text_leak(frame: &mut UiInputFrame) -> bool {
 fn is_gameplay_text_leak_char(ch: char) -> bool {
     matches!(
         ch,
-        'w' | 'a' | 's' | 'd' | 'W' | 'A' | 'S' | 'D'
-            | 'ц' | 'ф' | 'ы' | 'в' | 'Ц' | 'Ф' | 'Ы' | 'В'
-            | ' ' | '`' | '~' | 'ё' | 'Ё' | '\u{1b}' | '\n' | '\r' | '\t'
+        'w' | 'a'
+            | 's'
+            | 'd'
+            | 'W'
+            | 'A'
+            | 'S'
+            | 'D'
+            | 'ц'
+            | 'ф'
+            | 'ы'
+            | 'в'
+            | 'Ц'
+            | 'Ф'
+            | 'Ы'
+            | 'В'
+            | ' '
+            | '`'
+            | '~'
+            | 'ё'
+            | 'Ё'
+            | '\u{1b}'
+            | '\n'
+            | '\r'
+            | '\t'
     )
 }
 
@@ -246,11 +287,15 @@ fn preview_text(value: &str) -> String {
     if value.chars().count() > 24 {
         out.push('…');
     }
-    out.replace('\n', "\\n").replace('\r', "\\r").replace('\t', "\\t")
+    out.replace('\n', "\\n")
+        .replace('\r', "\\r")
+        .replace('\t', "\\t")
 }
 
 fn merge_u32_set(target: &mut NeBTreeSet<u32>, value: Option<&serde_json::Value>) {
-    let Some(arr) = value.and_then(|v| v.as_array()) else { return; };
+    let Some(arr) = value.and_then(|v| v.as_array()) else {
+        return;
+    };
     for item in arr {
         if let Some(u) = item.as_u64() {
             target.insert(u as u32);
@@ -259,7 +304,9 @@ fn merge_u32_set(target: &mut NeBTreeSet<u32>, value: Option<&serde_json::Value>
 }
 
 fn merge_f32_object(target: &mut NeBTreeMap<String, f32>, value: Option<&serde_json::Value>) {
-    let Some(obj) = value.and_then(|v| v.as_object()) else { return; };
+    let Some(obj) = value.and_then(|v| v.as_object()) else {
+        return;
+    };
     for (key, raw) in obj {
         let v = raw.as_f64().unwrap_or(0.0) as f32;
         let entry = target.entry(key.clone()).or_insert(0.0);
@@ -270,7 +317,9 @@ fn merge_f32_object(target: &mut NeBTreeMap<String, f32>, value: Option<&serde_j
 }
 
 fn merge_string_set(target: &mut NeBTreeSet<String>, value: Option<&serde_json::Value>) {
-    let Some(arr) = value.and_then(|v| v.as_array()) else { return; };
+    let Some(arr) = value.and_then(|v| v.as_array()) else {
+        return;
+    };
     for item in arr {
         if let Some(s) = item.as_str() {
             target.insert(s.to_owned());

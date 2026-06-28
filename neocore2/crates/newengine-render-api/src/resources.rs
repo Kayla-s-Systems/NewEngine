@@ -65,7 +65,6 @@ pub enum TextureFormat {
     Depth32Float,
 }
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TextureMipDataDesc {
     pub level: u32,
@@ -171,7 +170,11 @@ impl TextureDesc {
     }
 
     #[inline]
-    pub fn with_deferred_mip_data(mut self, mip_data: Vec<TextureMipDataDesc>, data: Vec<u8>) -> Self {
+    pub fn with_deferred_mip_data(
+        mut self,
+        mip_data: Vec<TextureMipDataDesc>,
+        data: Vec<u8>,
+    ) -> Self {
         self.data = Some(data);
         self.mip_data = mip_data;
         self.data_policy = TextureDataPolicy::Deferred;
@@ -312,7 +315,10 @@ pub struct ShaderDefine {
 impl ShaderDefine {
     #[inline]
     pub fn new(name: impl Into<String>, value: impl Into<String>) -> Self {
-        Self { name: name.into(), value: value.into() }
+        Self {
+            name: name.into(),
+            value: value.into(),
+        }
     }
 }
 

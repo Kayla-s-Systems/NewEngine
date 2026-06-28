@@ -1,6 +1,8 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use newengine_core::render::{Extent2D, PostFxFrameParams, RenderEffectStack, RenderFrameDomainIntent, RenderFrameEnvelope};
+use newengine_core::render::{
+    Extent2D, PostFxFrameParams, RenderEffectStack, RenderFrameDomainIntent, RenderFrameEnvelope,
+};
 use newengine_render_frame_graph::{DrawListDesc, RenderFramePlan};
 
 /// Builds the backend-facing envelope from an engine-side frame plan.
@@ -24,7 +26,11 @@ pub(super) fn build_runtime_frame_envelope(
             .map(|phase| phase.label())
             .collect::<Vec<_>>()
             .join(" -> ");
-        newengine_ulog_api::ulog::debug!("render frame envelope: frame={} phases={}", frame_index, phases);
+        newengine_ulog_api::ulog::debug!(
+            "render frame envelope: frame={} phases={}",
+            frame_index,
+            phases
+        );
     }
 
     let domains = RenderFrameDomainIntent {

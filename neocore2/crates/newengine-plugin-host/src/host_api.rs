@@ -163,21 +163,21 @@ pub extern "C" fn call_service_v1(
         Some(pid) => catch_unwind(AssertUnwindSafe(|| {
             crate::host_context::with_current_plugin_id(pid, do_call)
         }))
-            .unwrap_or_else(|_| {
-                newengine_ulog_api::ulog::error_event!(
-                    "engine.services.call_panicked",
-                    "Service call panicked; auto-unregistering owner",
-                    {
-                        "service_id": id.as_str(),
-                        "requested_id": requested_id.as_str(),
-                        "method": method_string.as_str(),
-                        "owner": pid,
-                        "auto_unregister": true
-                    }
-                );
-                crate::host_context::unregister_by_owner(pid);
-                RResult::RErr(RString::from("service panicked"))
-            }),
+        .unwrap_or_else(|_| {
+            newengine_ulog_api::ulog::error_event!(
+                "engine.services.call_panicked",
+                "Service call panicked; auto-unregistering owner",
+                {
+                    "service_id": id.as_str(),
+                    "requested_id": requested_id.as_str(),
+                    "method": method_string.as_str(),
+                    "owner": pid,
+                    "auto_unregister": true
+                }
+            );
+            crate::host_context::unregister_by_owner(pid);
+            RResult::RErr(RString::from("service panicked"))
+        }),
         None => catch_unwind(AssertUnwindSafe(do_call)).unwrap_or_else(|_| {
             newengine_ulog_api::ulog::error_event!(
                 "engine.services.call_panicked",
@@ -238,7 +238,6 @@ pub extern "C" fn call_service_v1(
 }
 
 extern "C" fn host_emit_event_v1(topic: RString, payload: Blob) -> RResult<(), RString> {
-
     match crate::host_context::emit_plugin_event(topic, payload) {
         Ok(()) => RResult::ROk(()),
         Err(e) => RResult::RErr(RString::from(e)),

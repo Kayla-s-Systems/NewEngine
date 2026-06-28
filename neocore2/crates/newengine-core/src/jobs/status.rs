@@ -49,4 +49,3 @@ pub struct JobTaskStatus {
     pub cancel_requested: bool,
     pub pause_requested: bool,
 }
-

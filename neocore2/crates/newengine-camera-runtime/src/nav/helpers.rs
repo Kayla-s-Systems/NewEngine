@@ -4,7 +4,9 @@ use newengine_math::Vec3;
 use newengine_sim::{
     follow_params_from_pose, CameraRigComp, FollowTargetCameraController, FollowTargetCameraMotor,
 };
-use newengine_transform::{read_entity_world_pose_local_chain, write_entity_local_from_world_pose_local_chain, Transform};
+use newengine_transform::{
+    read_entity_world_pose_local_chain, write_entity_local_from_world_pose_local_chain, Transform,
+};
 
 use super::BoundsSphere;
 use newengine_camera::CameraRig;
@@ -38,7 +40,8 @@ pub(crate) fn retarget_follow_to_rig(
     mut follow: FollowTargetCameraController,
     rig: &CameraRig,
 ) -> FollowTargetCameraController {
-    if let Some((target_pos, target_rot)) = read_entity_world_pose_local_chain(world, follow.target) {
+    if let Some((target_pos, target_rot)) = read_entity_world_pose_local_chain(world, follow.target)
+    {
         follow.follow_rotation = true;
 
         let (offset_ls, rot_offset) =
@@ -48,12 +51,7 @@ pub(crate) fn retarget_follow_to_rig(
         follow.rot_offset = rot_offset;
 
         let _ = world.insert(cam_id, follow);
-        let _ = world.insert(
-            cam_id,
-            FollowTargetCameraMotor {
-                vel_ws: Vec3::ZERO,
-            },
-        );
+        let _ = world.insert(cam_id, FollowTargetCameraMotor { vel_ws: Vec3::ZERO });
     }
     follow
 }

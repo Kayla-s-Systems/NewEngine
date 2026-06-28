@@ -29,32 +29,57 @@ fn invoke(state: &mut SchemaRegistryState, payload: Blob) -> RResult<Blob, RStri
         Ok(value) => value,
         Err(e) => return RResult::RErr(RString::from(e)),
     };
-    let method = value.get("method").and_then(Value::as_str).unwrap_or(schema_method::DESCRIBE_TYPE_V1);
+    let method = value
+        .get("method")
+        .and_then(Value::as_str)
+        .unwrap_or(schema_method::DESCRIBE_TYPE_V1);
     let request = value.get("request").cloned().unwrap_or(Value::Null);
     match method {
         schema_method::INFO_JSON => ok_json(state.info()),
-        schema_method::DESCRIBE_TYPE_V1 => match serde_json::from_value::<SchemaDescribeTypeRequestV1>(request) {
-            Ok(request) => ok_json(state.describe_type(request)),
-            Err(e) => RResult::RErr(RString::from(format!("schema.api: invalid describe_type request: {e}"))),
-        },
-        schema_method::DESCRIBE_PROPERTIES_V1 => match serde_json::from_value::<SchemaDescribePropertiesRequestV1>(request) {
-            Ok(request) => ok_json(state.describe_properties(request)),
-            Err(e) => RResult::RErr(RString::from(format!("schema.api: invalid describe_properties request: {e}"))),
-        },
-        schema_method::VALIDATE_PATCH_V1 => match serde_json::from_value::<SchemaPatchValidationRequestV1>(request) {
-            Ok(request) => ok_json(state.validate_patch(request)),
-            Err(e) => RResult::RErr(RString::from(format!("schema.api: invalid validate_patch request: {e}"))),
-        },
-        schema_method::DEFAULT_VALUE_V1 => match serde_json::from_value::<SchemaDefaultValueRequestV1>(request) {
-            Ok(request) => ok_json(state.default_value(request)),
-            Err(e) => RResult::RErr(RString::from(format!("schema.api: invalid default_value request: {e}"))),
-        },
+        schema_method::DESCRIBE_TYPE_V1 => {
+            match serde_json::from_value::<SchemaDescribeTypeRequestV1>(request) {
+                Ok(request) => ok_json(state.describe_type(request)),
+                Err(e) => RResult::RErr(RString::from(format!(
+                    "schema.api: invalid describe_type request: {e}"
+                ))),
+            }
+        }
+        schema_method::DESCRIBE_PROPERTIES_V1 => {
+            match serde_json::from_value::<SchemaDescribePropertiesRequestV1>(request) {
+                Ok(request) => ok_json(state.describe_properties(request)),
+                Err(e) => RResult::RErr(RString::from(format!(
+                    "schema.api: invalid describe_properties request: {e}"
+                ))),
+            }
+        }
+        schema_method::VALIDATE_PATCH_V1 => {
+            match serde_json::from_value::<SchemaPatchValidationRequestV1>(request) {
+                Ok(request) => ok_json(state.validate_patch(request)),
+                Err(e) => RResult::RErr(RString::from(format!(
+                    "schema.api: invalid validate_patch request: {e}"
+                ))),
+            }
+        }
+        schema_method::DEFAULT_VALUE_V1 => {
+            match serde_json::from_value::<SchemaDefaultValueRequestV1>(request) {
+                Ok(request) => ok_json(state.default_value(request)),
+                Err(e) => RResult::RErr(RString::from(format!(
+                    "schema.api: invalid default_value request: {e}"
+                ))),
+            }
+        }
         schema_method::BINDING_MANIFEST_V1 => ok_json(state.binding_manifest_from_value(request)),
-        schema_method::TRANSACTION_PLAN_V1 => match serde_json::from_value::<SchemaTransactionDtoV1>(request) {
-            Ok(request) => ok_json(state.transaction_plan(request)),
-            Err(e) => RResult::RErr(RString::from(format!("schema.api: invalid transaction_plan request: {e}"))),
-        },
-        other => RResult::RErr(RString::from(format!("schema.api: unknown invoke method '{other}'"))),
+        schema_method::TRANSACTION_PLAN_V1 => {
+            match serde_json::from_value::<SchemaTransactionDtoV1>(request) {
+                Ok(request) => ok_json(state.transaction_plan(request)),
+                Err(e) => RResult::RErr(RString::from(format!(
+                    "schema.api: invalid transaction_plan request: {e}"
+                ))),
+            }
+        }
+        other => RResult::RErr(RString::from(format!(
+            "schema.api: unknown invoke method '{other}'"
+        ))),
     }
 }
 
@@ -82,12 +107,27 @@ pub fn schema_gateway_service() -> newengine_plugin_api::ServiceV1Dyn<'static> {
     JsonServiceRouter::with_shared_state(SCHEMA_SERVICE_ID, state())
         .describe_json(&description)
         .get_json(schema_method::INFO_JSON, |state| state.info())
-        .post_json(schema_method::DESCRIBE_TYPE_V1, |state, request| state.describe_type(request))
-        .post_json(schema_method::DESCRIBE_PROPERTIES_V1, |state, request| state.describe_properties(request))
-        .post_json(schema_method::VALIDATE_PATCH_V1, |state, request| state.validate_patch(request))
-        .post_json(schema_method::DEFAULT_VALUE_V1, |state, request| state.default_value(request))
-        .json_value_result(schema_method::BINDING_MANIFEST_V1, |state, request| Ok(serde_json::to_value(state.binding_manifest_from_value(request)).unwrap_or(Value::Null)))
-        .post_json(schema_method::TRANSACTION_PLAN_V1, |state, request| state.transaction_plan(request))
+        .post_json(schema_method::DESCRIBE_TYPE_V1, |state, request| {
+            state.describe_type(request)
+        })
+        .post_json(schema_method::DESCRIBE_PROPERTIES_V1, |state, request| {
+            state.describe_properties(request)
+        })
+        .post_json(schema_method::VALIDATE_PATCH_V1, |state, request| {
+            state.validate_patch(request)
+        })
+        .post_json(schema_method::DEFAULT_VALUE_V1, |state, request| {
+            state.default_value(request)
+        })
+        .json_value_result(schema_method::BINDING_MANIFEST_V1, |state, request| {
+            Ok(
+                serde_json::to_value(state.binding_manifest_from_value(request))
+                    .unwrap_or(Value::Null),
+            )
+        })
+        .post_json(schema_method::TRANSACTION_PLAN_V1, |state, request| {
+            state.transaction_plan(request)
+        })
         .get_json("schema.dump_registry_v1", |state| state.dump_registry())
         .blob(schema_method::INVOKE_JSON, invoke)
         .get_json(schema_method::SHUTDOWN_V1, |state| state.shutdown())

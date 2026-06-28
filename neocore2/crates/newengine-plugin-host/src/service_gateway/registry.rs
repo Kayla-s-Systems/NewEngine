@@ -3,11 +3,11 @@
 use std::path::Path;
 
 use newengine_plugin_api::PluginDescriptor;
+#[cfg(test)]
+use newengine_service_api::EngineServiceKind;
 use newengine_service_api::{
     engine_gateway_domain, engine_gateway_matches_service_kind, system_tag,
 };
-#[cfg(test)]
-use newengine_service_api::EngineServiceKind;
 
 use super::metadata::descriptor_gateway_capabilities;
 use super::provider::gateway_provider_service_id;
@@ -21,7 +21,10 @@ pub(crate) struct RegisteredServiceFact {
 impl RegisteredServiceFact {
     #[inline]
     pub(crate) fn new(service_id: String, owner_plugin_id: Option<String>) -> Self {
-        Self { service_id, owner_plugin_id }
+        Self {
+            service_id,
+            owner_plugin_id,
+        }
     }
 }
 
@@ -39,7 +42,11 @@ impl PluginDescriptorFact {
         descriptor: PluginDescriptor,
         origin: GatewayProviderOrigin,
     ) -> Self {
-        Self { plugin_id, descriptor, origin }
+        Self {
+            plugin_id,
+            descriptor,
+            origin,
+        }
     }
 }
 
@@ -173,7 +180,12 @@ impl GatewayPolicyFact {
             .collect::<Vec<_>>();
         system_tags.sort();
         system_tags.dedup();
-        Self { gateway_id, override_mode, system_tags, owner_id }
+        Self {
+            gateway_id,
+            override_mode,
+            system_tags,
+            owner_id,
+        }
     }
 }
 
@@ -236,17 +248,26 @@ impl GatewayProviderOrigin {
             return Self::DevOverride;
         }
 
-        if normalized.iter().any(|part| matches!(part.as_str(), "mods" | "mod" | "user_mods")) {
+        if normalized
+            .iter()
+            .any(|part| matches!(part.as_str(), "mods" | "mod" | "user_mods"))
+        {
             return Self::UserMod;
         }
 
         if normalized.iter().any(|part| {
-            matches!(part.as_str(), "gameplugins" | "game-plugins" | "profileplugins")
+            matches!(
+                part.as_str(),
+                "gameplugins" | "game-plugins" | "profileplugins"
+            )
         }) {
             return Self::GamePlugin;
         }
 
-        if normalized.iter().any(|part| matches!(part.as_str(), "plugins" | "plugin")) {
+        if normalized
+            .iter()
+            .any(|part| matches!(part.as_str(), "plugins" | "plugin"))
+        {
             return Self::FirstPartyPlugin;
         }
 
@@ -272,10 +293,16 @@ impl GatewayOverrideMode {
     }
 
     fn from_system_tags(tags: &[String]) -> Option<Self> {
-        if tags.iter().any(|tag| tag == system_tag::OVERRIDE_LOCKED || tag == system_tag::TRUST_ROOT) {
+        if tags
+            .iter()
+            .any(|tag| tag == system_tag::OVERRIDE_LOCKED || tag == system_tag::TRUST_ROOT)
+        {
             return Some(Self::Locked);
         }
-        if tags.iter().any(|tag| tag == system_tag::OVERRIDE_PROFILE_CONTROLLED) {
+        if tags
+            .iter()
+            .any(|tag| tag == system_tag::OVERRIDE_PROFILE_CONTROLLED)
+        {
             return Some(Self::ProfileControlled);
         }
         if tags.iter().any(|tag| tag == system_tag::OVERRIDE_OPEN) {
@@ -286,7 +313,10 @@ impl GatewayOverrideMode {
 }
 
 #[inline]
-fn route_allowed_by_policy(override_mode: GatewayOverrideMode, origin: GatewayProviderOrigin) -> bool {
+fn route_allowed_by_policy(
+    override_mode: GatewayOverrideMode,
+    origin: GatewayProviderOrigin,
+) -> bool {
     match override_mode {
         GatewayOverrideMode::Open | GatewayOverrideMode::ProfileControlled => true,
         GatewayOverrideMode::Locked => matches!(origin, GatewayProviderOrigin::EngineRuntime),
@@ -455,7 +485,9 @@ impl ActiveGatewayRegistry {
                     continue;
                 }
 
-                let policy = policy_facts.iter().find(|policy| policy.gateway_id == gateway.gateway_id);
+                let policy = policy_facts
+                    .iter()
+                    .find(|policy| policy.gateway_id == gateway.gateway_id);
                 if let Some(route) = ActiveGatewayRoute::new(
                     gateway.gateway_id,
                     gateway.service_kind,
@@ -475,7 +507,8 @@ impl ActiveGatewayRegistry {
 
         for gateway in gateway_provider_routes {
             let registered = services.iter().any(|service| {
-                service.service_id == gateway.provider_service_id && service.owner_plugin_id.is_none()
+                service.service_id == gateway.provider_service_id
+                    && service.owner_plugin_id.is_none()
             });
             if !registered {
                 skipped_unregistered += 1;
@@ -488,7 +521,9 @@ impl ActiveGatewayRegistry {
                 continue;
             }
 
-            let policy = policy_facts.iter().find(|policy| policy.gateway_id == gateway.gateway_id);
+            let policy = policy_facts
+                .iter()
+                .find(|policy| policy.gateway_id == gateway.gateway_id);
             if let Some(route) = ActiveGatewayRoute::new(
                 gateway.gateway_id.clone(),
                 gateway.service_kind.clone(),
@@ -592,7 +627,11 @@ impl ActiveGatewayRegistry {
     }
 
     pub(crate) fn gateway_ids(&self) -> Vec<String> {
-        let mut out = self.routes.iter().map(|route| route.gateway_id.clone()).collect::<Vec<_>>();
+        let mut out = self
+            .routes
+            .iter()
+            .map(|route| route.gateway_id.clone())
+            .collect::<Vec<_>>();
         out.sort();
         out.dedup();
         out
@@ -622,7 +661,9 @@ impl ActiveGatewayRegistry {
 pub(crate) fn descriptor_engine_gateways(descriptor: &PluginDescriptor) -> Vec<String> {
     let mut out: Vec<String> = descriptor_gateway_capabilities(descriptor)
         .into_iter()
-        .filter_map(|gateway| gateway_provider_service_id(descriptor, &gateway).map(|_| gateway.gateway_id))
+        .filter_map(|gateway| {
+            gateway_provider_service_id(descriptor, &gateway).map(|_| gateway.gateway_id)
+        })
         .collect();
     out.sort();
     out.dedup();

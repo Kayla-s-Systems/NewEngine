@@ -7,8 +7,8 @@
 //! owns descriptor construction and ABI boilerplate.
 
 use crate::plugin_api::{
-    BackendRouteDescriptor, BackendServiceSpec, CapabilityDesc, CapabilityKind,
-    CapabilityRole, PluginDescriptor, PluginKind,
+    BackendRouteDescriptor, BackendServiceSpec, CapabilityDesc, CapabilityKind, CapabilityRole,
+    PluginDescriptor, PluginKind,
 };
 use abi_stable::std_types::RString;
 use serde_json::Value;
@@ -72,7 +72,11 @@ pub const fn plugin_service(
     version: u32,
     describe_json: &'static str,
 ) -> PluginServiceDefinition {
-    PluginServiceDefinition { id, version, describe_json }
+    PluginServiceDefinition {
+        id,
+        version,
+        describe_json,
+    }
 }
 
 #[inline]
@@ -168,7 +172,6 @@ pub fn descriptor_from_definition(def: PluginDefinition) -> PluginDescriptor {
 }
 
 fn parse_metadata_value(key: &str, raw: &str) -> Value {
-    serde_json::from_str(raw).unwrap_or_else(|e| {
-        panic!("invalid plugin metadata JSON for key '{key}': {e}: {raw}")
-    })
+    serde_json::from_str(raw)
+        .unwrap_or_else(|e| panic!("invalid plugin metadata JSON for key '{key}': {e}: {raw}"))
 }

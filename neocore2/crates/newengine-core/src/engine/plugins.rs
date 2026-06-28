@@ -7,20 +7,24 @@ use crate::lifecycle_events::EngineLifecycleEvent;
 use crate::log_fmt::{ellipsize, emit_boxed_kv, emit_prefixed_table};
 use crate::path_fmt::display_clean;
 use crate::plugin_forward_logger::install_forward_logger_once;
+use newengine_plugin_api::PluginKind;
 use newengine_plugin_host::{
     default_host_api, PluginControlCommand, PluginControlQueue, PluginsSnapshot,
 };
-use newengine_plugin_api::PluginKind;
 
 use std::time::Instant;
 
 fn bootstrap_preload_deferred() -> bool {
     std::env::var("NEWENGINE_BOOTSTRAP_PLUGIN_PRELOAD")
         .ok()
-        .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "0" | "false" | "off" | "defer" | "deferred" | "safe"))
+        .map(|v| {
+            matches!(
+                v.trim().to_ascii_lowercase().as_str(),
+                "0" | "false" | "off" | "defer" | "deferred" | "safe"
+            )
+        })
         .unwrap_or(false)
 }
-
 
 #[inline]
 fn plugin_kind_label(kind: Option<PluginKind>) -> &'static str {
@@ -56,7 +60,9 @@ impl<E: Send + 'static> Engine<E> {
         let host = default_host_api();
 
         let res = match self.plugins_dir.as_deref() {
-            Some(dir) => self.plugins.load_bootstrap_from_dir(dir, host.clone(), strict),
+            Some(dir) => self
+                .plugins
+                .load_bootstrap_from_dir(dir, host.clone(), strict),
             None => self.plugins.load_bootstrap_default(host.clone(), strict),
         };
 
@@ -158,7 +164,9 @@ impl<E: Send + 'static> Engine<E> {
         let host = default_host_api();
 
         let load_result = match self.plugins_dir.as_deref() {
-            Some(dir) => self.plugins.load_from_dir_with_policy(dir, host.clone(), strict),
+            Some(dir) => self
+                .plugins
+                .load_from_dir_with_policy(dir, host.clone(), strict),
             None => self.plugins.load_default_with_policy(host.clone(), strict),
         };
 
@@ -251,18 +259,29 @@ impl<E: Send + 'static> Engine<E> {
         if !gateway_routes.is_empty() {
             let mut hierarchy_routes = gateway_routes.clone();
             hierarchy_routes.sort_by(|a, b| {
-                let ar = newengine_service_api::engine_gateway_root_id(&a.gateway_id).unwrap_or_else(|| a.gateway_id.clone());
-                let br = newengine_service_api::engine_gateway_root_id(&b.gateway_id).unwrap_or_else(|| b.gateway_id.clone());
+                let ar = newengine_service_api::engine_gateway_root_id(&a.gateway_id)
+                    .unwrap_or_else(|| a.gateway_id.clone());
+                let br = newengine_service_api::engine_gateway_root_id(&b.gateway_id)
+                    .unwrap_or_else(|| b.gateway_id.clone());
                 ar.cmp(&br)
-                    .then_with(|| newengine_service_api::engine_gateway_depth(&a.gateway_id).unwrap_or(0).cmp(&newengine_service_api::engine_gateway_depth(&b.gateway_id).unwrap_or(0)))
+                    .then_with(|| {
+                        newengine_service_api::engine_gateway_depth(&a.gateway_id)
+                            .unwrap_or(0)
+                            .cmp(
+                                &newengine_service_api::engine_gateway_depth(&b.gateway_id)
+                                    .unwrap_or(0),
+                            )
+                    })
                     .then_with(|| a.gateway_id.cmp(&b.gateway_id))
                     .then_with(|| b.active.cmp(&a.active))
             });
             let hierarchy_rows = hierarchy_routes
                 .iter()
                 .map(|route| {
-                    let root = newengine_service_api::engine_gateway_root_id(&route.gateway_id).unwrap_or_else(|| route.gateway_id.clone());
-                    let parent = newengine_service_api::engine_gateway_parent_id(&route.gateway_id).unwrap_or_else(|| "<root>".to_owned());
+                    let root = newengine_service_api::engine_gateway_root_id(&route.gateway_id)
+                        .unwrap_or_else(|| route.gateway_id.clone());
+                    let parent = newengine_service_api::engine_gateway_parent_id(&route.gateway_id)
+                        .unwrap_or_else(|| "<root>".to_owned());
                     let attach = if parent == "<root>" { "root" } else { "child" };
                     vec![
                         ellipsize(&root, 28),
@@ -279,7 +298,16 @@ impl<E: Send + 'static> Engine<E> {
             emit_prefixed_table(
                 "",
                 &format!("Plugins :: Gateway Hierarchy [{}]", tag),
-                &["root", "parent", "gateway", "attach", "state", "kind", "provider_route", "provider_service"],
+                &[
+                    "root",
+                    "parent",
+                    "gateway",
+                    "attach",
+                    "state",
+                    "kind",
+                    "provider_route",
+                    "provider_service",
+                ],
                 &hierarchy_rows,
             );
 
@@ -316,9 +344,30 @@ impl<E: Send + 'static> Engine<E> {
                 .collect::<Vec<_>>();
 
             let route_headers: &[&str] = if debug_tables {
-                &["gateway", "state", "source", "provider_route", "provider_service", "owner", "kind", "capability", "mode", "prio", "score", "selection_reason"]
+                &[
+                    "gateway",
+                    "state",
+                    "source",
+                    "provider_route",
+                    "provider_service",
+                    "owner",
+                    "kind",
+                    "capability",
+                    "mode",
+                    "prio",
+                    "score",
+                    "selection_reason",
+                ]
             } else {
-                &["gateway", "state", "source", "provider_route", "provider_service", "prio", "selection_reason"]
+                &[
+                    "gateway",
+                    "state",
+                    "source",
+                    "provider_route",
+                    "provider_service",
+                    "prio",
+                    "selection_reason",
+                ]
             };
             emit_prefixed_table(
                 "",
@@ -364,7 +413,10 @@ impl<E: Send + 'static> Engine<E> {
                     self.plugins.invalidate_discovery_cache();
 
                     let res = match self.plugins_dir.as_deref() {
-                        Some(dir) => self.plugins.load_from_dir_with_policy(dir, host.clone(), strict),
+                        Some(dir) => {
+                            self.plugins
+                                .load_from_dir_with_policy(dir, host.clone(), strict)
+                        }
                         None => self.plugins.load_default_with_policy(host.clone(), strict),
                     };
 

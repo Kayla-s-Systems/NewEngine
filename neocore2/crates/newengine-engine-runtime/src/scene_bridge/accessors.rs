@@ -17,12 +17,16 @@ impl SceneBridge {
     }
 
     #[inline]
-    pub fn authority_bridge(&self) -> std::sync::Arc<crate::authority::RuntimeWorldAuthorityBridge> {
+    pub fn authority_bridge(
+        &self,
+    ) -> std::sync::Arc<crate::authority::RuntimeWorldAuthorityBridge> {
         std::sync::Arc::clone(&self.authority)
     }
 
     #[inline]
-    pub fn authority_snapshot(&self) -> newengine_runtime_host::world_authority::WorldAuthoritySnapshot {
+    pub fn authority_snapshot(
+        &self,
+    ) -> newengine_runtime_host::world_authority::WorldAuthoritySnapshot {
         self.authority.detect()
     }
 
@@ -74,5 +78,4 @@ impl SceneBridge {
         out.sort_by(|a, b| a.0.cmp(&b.0));
         out
     }
-
 }

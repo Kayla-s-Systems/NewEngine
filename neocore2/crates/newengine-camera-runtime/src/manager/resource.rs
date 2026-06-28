@@ -1,6 +1,6 @@
 use newengine_camera::{
-    CameraDirectorId, CameraDirectorOutput, CameraFrame, CameraPostEffects,
-    CameraRenderState, CameraResolvedFrame, RuntimeNavMode,
+    CameraDirectorId, CameraDirectorOutput, CameraFrame, CameraPostEffects, CameraRenderState,
+    CameraResolvedFrame, RuntimeNavMode,
 };
 use newengine_camera_api::CameraViewMode;
 use newengine_core::host_events::CursorState;
@@ -136,15 +136,20 @@ impl CameraManagerResource {
                     duration,
                     self.settings.for_director(desired_director).blend_curve,
                 )
-                .with_lock_input(matches!(
-                    desired_context,
-                    CameraInputContext::TransitionLocked | CameraInputContext::CinematicLocked
-                ) || self.settings.for_director(desired_director).lock_input),
+                .with_lock_input(
+                    matches!(
+                        desired_context,
+                        CameraInputContext::TransitionLocked | CameraInputContext::CinematicLocked
+                    ) || self.settings.for_director(desired_director).lock_input,
+                ),
             });
 
             self.push_event(
-                CameraRuntimeEvent::new(CameraRuntimeEventKind::DirectorRequested, desired_director)
-                    .with_previous(Some(self.active_director)),
+                CameraRuntimeEvent::new(
+                    CameraRuntimeEventKind::DirectorRequested,
+                    desired_director,
+                )
+                .with_previous(Some(self.active_director)),
             );
 
             newengine_ulog_api::ulog::info!(
@@ -216,11 +221,18 @@ impl CameraManagerResource {
         settings: CameraDirectorRuntimeSettings,
     ) {
         self.settings.set_for_director(director, settings);
-        self.push_event(CameraRuntimeEvent::new(CameraRuntimeEventKind::EffectsChanged, director));
+        self.push_event(CameraRuntimeEvent::new(
+            CameraRuntimeEventKind::EffectsChanged,
+            director,
+        ));
     }
 
     #[inline]
-    pub fn set_director_effects(&mut self, director: CameraDirectorKind, effects: CameraPostEffects) {
+    pub fn set_director_effects(
+        &mut self,
+        director: CameraDirectorKind,
+        effects: CameraPostEffects,
+    ) {
         let mut settings = self.settings.for_director(director);
         settings.default_effects = effects.sanitized();
         self.set_director_settings(director, settings);
@@ -289,8 +301,11 @@ impl CameraManagerResource {
         let final_frame = self.viewport_manager.present_frame(final_frame, dt);
         if self.viewport_manager.changed_this_update() {
             self.push_event(
-                CameraRuntimeEvent::new(CameraRuntimeEventKind::ViewportChanged, mixed.dominant_director)
-                    .with_blend(mixed.dominant_blend_level),
+                CameraRuntimeEvent::new(
+                    CameraRuntimeEventKind::ViewportChanged,
+                    mixed.dominant_director,
+                )
+                .with_blend(mixed.dominant_blend_level),
             );
         }
         let resolved = CameraResolvedFrame::with_effects(final_frame, mixed.frame.effects);
@@ -528,4 +543,3 @@ fn director_id(kind: CameraDirectorKind) -> u64 {
         CameraDirectorKind::Debug => 11,
     }
 }
-

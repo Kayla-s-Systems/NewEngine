@@ -109,7 +109,12 @@ impl JobControl {
             return false;
         }
         self.inner.cancel_requested.store(true, Ordering::Release);
-        self.publish(EngineTaskPhase::CancelRequested, "Cancel requested", "Task cancellation was requested through engine task control.", None);
+        self.publish(
+            EngineTaskPhase::CancelRequested,
+            "Cancel requested",
+            "Task cancellation was requested through engine task control.",
+            None,
+        );
         self.inner.pause_wake.notify_all();
         true
     }
@@ -119,7 +124,12 @@ impl JobControl {
             return false;
         }
         self.inner.pause_requested.store(true, Ordering::Release);
-        self.publish(EngineTaskPhase::PauseRequested, "Pause requested", "Task pause was requested through engine task control.", None);
+        self.publish(
+            EngineTaskPhase::PauseRequested,
+            "Pause requested",
+            "Task pause was requested through engine task control.",
+            None,
+        );
         true
     }
 
@@ -128,7 +138,12 @@ impl JobControl {
             return false;
         }
         self.inner.pause_requested.store(false, Ordering::Release);
-        self.publish(EngineTaskPhase::ResumeRequested, "Resume requested", "Task resume was requested through engine task control.", None);
+        self.publish(
+            EngineTaskPhase::ResumeRequested,
+            "Resume requested",
+            "Task resume was requested through engine task control.",
+            None,
+        );
         self.inner.pause_wake.notify_all();
         true
     }
@@ -143,10 +158,23 @@ impl JobControl {
             return !self.is_cancel_requested();
         }
 
-        self.publish(EngineTaskPhase::Paused, "Task paused", "Task is paused at a cooperative checkpoint.", None);
-        let mut guard = self.inner.pause_lock.lock().unwrap_or_else(|e| e.into_inner());
+        self.publish(
+            EngineTaskPhase::Paused,
+            "Task paused",
+            "Task is paused at a cooperative checkpoint.",
+            None,
+        );
+        let mut guard = self
+            .inner
+            .pause_lock
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         while self.is_pause_requested() && !self.is_cancel_requested() {
-            guard = self.inner.pause_wake.wait(guard).unwrap_or_else(|e| e.into_inner());
+            guard = self
+                .inner
+                .pause_wake
+                .wait(guard)
+                .unwrap_or_else(|e| e.into_inner());
         }
         !self.is_cancel_requested()
     }

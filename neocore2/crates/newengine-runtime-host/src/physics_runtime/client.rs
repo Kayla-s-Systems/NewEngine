@@ -14,7 +14,9 @@ pub(crate) struct PhysicsServiceClient {
 impl PhysicsServiceClient {
     #[inline]
     pub(crate) fn new(host: HostApiV1) -> Self {
-        Self { service: GenericJsonServiceClient::new(host, ENGINE_PHYSICS_SERVICE_ID) }
+        Self {
+            service: GenericJsonServiceClient::new(host, ENGINE_PHYSICS_SERVICE_ID),
+        }
     }
 
     #[inline]
@@ -24,7 +26,10 @@ impl PhysicsServiceClient {
     }
 
     #[inline]
-    pub(crate) fn invoke(&self, req: PhysicsServiceRequest) -> Result<PhysicsServiceResponse, String> {
+    pub(crate) fn invoke(
+        &self,
+        req: PhysicsServiceRequest,
+    ) -> Result<PhysicsServiceResponse, String> {
         let payload = encode_json(&req)?;
         let bytes = self.service.invoke_json(payload)?;
         decode_json(&bytes)

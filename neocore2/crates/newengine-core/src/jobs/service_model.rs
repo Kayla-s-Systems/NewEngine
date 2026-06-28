@@ -53,13 +53,19 @@ impl JobSystemHandle {
         F: FnOnce(JobControl) + Send + 'static,
     {
         let completion = Arc::new(JobCompletion::new());
-        let task_id = request.task_id.clone().unwrap_or_else(|| self.shared.next_task_id());
+        let task_id = request
+            .task_id
+            .clone()
+            .unwrap_or_else(|| self.shared.next_task_id());
         let control = JobControl::new(task_id, &request, self.shared.events.clone());
         let ticket = JobTicket {
             completion: Arc::clone(&completion),
             control: control.clone(),
         };
-        self.shared.tasks.lock().insert(control.task_id().to_owned(), control.clone());
+        self.shared
+            .tasks
+            .lock()
+            .insert(control.task_id().to_owned(), control.clone());
         self.shared.submit(QueuedJob {
             request,
             job: Some(Box::new(f)),
@@ -96,7 +102,9 @@ impl JobSystemHandle {
         for index in 0..len {
             let f = Arc::clone(&f);
             let results = Arc::clone(&results);
-            let request = request.clone().with_task_id(format!("indexed.{}.{}", request.label, index));
+            let request = request
+                .clone()
+                .with_task_id(format!("indexed.{}.{}", request.label, index));
             tickets.push(self.submit_controlled(request, move |control| {
                 if !control.checkpoint() {
                     return;
@@ -138,7 +146,11 @@ impl JobSystemHandle {
     }
 
     pub fn task_status(&self, task_id: &str) -> Option<JobTaskStatus> {
-        self.shared.tasks.lock().get(task_id).map(JobControl::status)
+        self.shared
+            .tasks
+            .lock()
+            .get(task_id)
+            .map(JobControl::status)
     }
 
     pub fn cancel_task(&self, task_id: &str) -> bool {

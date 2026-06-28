@@ -74,7 +74,10 @@ impl HeadlessCliRuntime {
         Self {
             engine,
             fixed_dt_sec: (fixed_dt_ms.max(1) as f32) / 1000.0,
-            startup_step_limit: env_u32("NEWENGINE_HEADLESS_STARTUP_STEP_LIMIT", DEFAULT_STARTUP_STEP_LIMIT),
+            startup_step_limit: env_u32(
+                "NEWENGINE_HEADLESS_STARTUP_STEP_LIMIT",
+                DEFAULT_STARTUP_STEP_LIMIT,
+            ),
             frame_limit: headless_frame_limit_from_env(),
         }
     }
@@ -116,7 +119,10 @@ impl HeadlessCliRuntime {
         newengine_time_runtime::register_time_gateway_best_effort();
         newengine_schema_runtime::register_schema_gateway_best_effort();
         newengine_gameplay_runtime::register_gameplay_foundation_gateways_best_effort();
-        register_jobs_gateway_service_best_effort(self.engine.job_system(), self.engine.events().clone());
+        register_jobs_gateway_service_best_effort(
+            self.engine.job_system(),
+            self.engine.events().clone(),
+        );
         newengine_ulog_api::ulog::info!("headless runtime: engine.time, engine.schema, engine.jobs, synthetic engine.platform.headless and visible NullProvider routes registered; loading/status stays an engine.ui projection");
     }
 
@@ -181,7 +187,9 @@ impl HeadlessCliRuntime {
 
     fn run_frames(&mut self) -> EngineResult<()> {
         let Some(frame_limit) = self.frame_limit else {
-            newengine_ulog_api::ulog::info!("headless runtime: entering unlimited frame pump; request shutdown to exit");
+            newengine_ulog_api::ulog::info!(
+                "headless runtime: entering unlimited frame pump; request shutdown to exit"
+            );
             let mut frames = 0_u64;
             while !self.engine.run_state().is_terminal() {
                 match self.engine.step() {
@@ -191,7 +199,11 @@ impl HeadlessCliRuntime {
                 }
                 frames = frames.wrapping_add(1);
                 if frames % 300 == 0 {
-                    newengine_ulog_api::ulog::info!("headless runtime: frames={} run_state='{}'", frames, self.engine.run_state().as_str());
+                    newengine_ulog_api::ulog::info!(
+                        "headless runtime: frames={} run_state='{}'",
+                        frames,
+                        self.engine.run_state().as_str()
+                    );
                 }
                 // Headless pacing is owned by engine.time / caller event pump, not by a local sleep loop.
             }
@@ -199,7 +211,9 @@ impl HeadlessCliRuntime {
         };
 
         if frame_limit == 0 {
-            newengine_ulog_api::ulog::info!("headless runtime: startup-only CLI mode completed; no frame pump requested");
+            newengine_ulog_api::ulog::info!(
+                "headless runtime: startup-only CLI mode completed; no frame pump requested"
+            );
             return Ok(());
         }
 
@@ -223,14 +237,21 @@ impl HeadlessCliRuntime {
     }
 
     fn shutdown_engine_once(&mut self, origin: &'static str) {
-        if matches!(self.engine.run_state(), EngineRunState::Stopped | EngineRunState::Faulted) {
+        if matches!(
+            self.engine.run_state(),
+            EngineRunState::Stopped | EngineRunState::Faulted
+        ) {
             return;
         }
         newengine_ulog_api::ulog::info!("headless runtime: engine.shutdown begin origin={origin}");
         if let Err(e) = self.engine.shutdown() {
-            newengine_ulog_api::ulog::error!("headless runtime: engine.shutdown failed origin={origin}: {e}");
+            newengine_ulog_api::ulog::error!(
+                "headless runtime: engine.shutdown failed origin={origin}: {e}"
+            );
         } else {
-            newengine_ulog_api::ulog::info!("headless runtime: engine.shutdown completed origin={origin}");
+            newengine_ulog_api::ulog::info!(
+                "headless runtime: engine.shutdown completed origin={origin}"
+            );
         }
     }
 }
@@ -239,7 +260,10 @@ fn headless_frame_limit_from_env() -> Option<u64> {
     if env_bool("NEWENGINE_HEADLESS_RUN_FOREVER", false) {
         return None;
     }
-    Some(env_u64("NEWENGINE_HEADLESS_FRAMES", DEFAULT_HEADLESS_FRAMES))
+    Some(env_u64(
+        "NEWENGINE_HEADLESS_FRAMES",
+        DEFAULT_HEADLESS_FRAMES,
+    ))
 }
 
 fn env_u32(name: &str, default: u32) -> u32 {
@@ -259,6 +283,11 @@ fn env_u64(name: &str, default: u64) -> u64 {
 fn env_bool(name: &str, default: bool) -> bool {
     std::env::var(name)
         .ok()
-        .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
+        .map(|v| {
+            matches!(
+                v.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
         .unwrap_or(default)
 }

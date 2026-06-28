@@ -17,11 +17,31 @@ pub struct Vec3 {
 }
 
 impl Vec3 {
-    pub const ZERO: Self = Self { x: 0.0, y: 0.0, z: 0.0 };
-    pub const ONE: Self = Self { x: 1.0, y: 1.0, z: 1.0 };
-    pub const X: Self = Self { x: 1.0, y: 0.0, z: 0.0 };
-    pub const Y: Self = Self { x: 0.0, y: 1.0, z: 0.0 };
-    pub const Z: Self = Self { x: 0.0, y: 0.0, z: 1.0 };
+    pub const ZERO: Self = Self {
+        x: 0.0,
+        y: 0.0,
+        z: 0.0,
+    };
+    pub const ONE: Self = Self {
+        x: 1.0,
+        y: 1.0,
+        z: 1.0,
+    };
+    pub const X: Self = Self {
+        x: 1.0,
+        y: 0.0,
+        z: 0.0,
+    };
+    pub const Y: Self = Self {
+        x: 0.0,
+        y: 1.0,
+        z: 0.0,
+    };
+    pub const Z: Self = Self {
+        x: 0.0,
+        y: 0.0,
+        z: 1.0,
+    };
 
     #[inline]
     pub const fn new(x: f32, y: f32, z: f32) -> Self {
@@ -32,7 +52,6 @@ impl Vec3 {
     pub const fn splat(v: f32) -> Self {
         Self { x: v, y: v, z: v }
     }
-
 
     #[inline]
     pub fn dot(self, other: Self) -> f32 {
@@ -128,7 +147,6 @@ impl Vec3 {
     pub fn is_finite(self) -> bool {
         self.x.is_finite() && self.y.is_finite() && self.z.is_finite()
     }
-
 
     /// Component-wise clamp.
     #[inline]

@@ -27,15 +27,15 @@ impl StartupLoader {
                 "decision={:?}; details={}; disabled_by={}; warnings={}",
                 startup_window.decision,
                 startup_window.details,
-                startup_window
-                    .disabled_by
-                    .as_deref()
-                    .unwrap_or("<none>"),
+                startup_window.disabled_by.as_deref().unwrap_or("<none>"),
                 startup_window.warnings.len()
             ),
         });
 
-        if matches!(startup_window.decision, crate::startup_window::StartupWindowDecision::Cancelled) {
+        if matches!(
+            startup_window.decision,
+            crate::startup_window::StartupWindowDecision::Cancelled
+        ) {
             return Err(EngineError::ExitRequested);
         }
 
@@ -138,7 +138,6 @@ struct EngineJson {
     extra: newengine_math::collections_prelude::NeHashMap<String, serde_json::Value>,
 }
 
-
 fn apply_root(cfg: &mut StartupConfig, report: &mut StartupLoadReport, mut src: RootJson) {
     apply_root_level_storage_paths(cfg, report, &mut src.extra);
 
@@ -233,8 +232,6 @@ fn apply_root(cfg: &mut StartupConfig, report: &mut StartupLoadReport, mut src: 
             });
         }
     }
-
-
 }
 
 fn publish_startup_storage_roots(cfg: &StartupConfig, report: &mut StartupLoadReport) {
@@ -255,8 +252,12 @@ fn apply_root_level_storage_paths(
 ) {
     for kind in StartupStorageRootKind::ALL {
         for key in kind.config_keys() {
-            let Some(v) = extra.remove(*key) else { continue; };
-            let Some(path) = v.as_str().map(str::trim).filter(|s| !s.is_empty()) else { continue; };
+            let Some(v) = extra.remove(*key) else {
+                continue;
+            };
+            let Some(path) = v.as_str().map(str::trim).filter(|s| !s.is_empty()) else {
+                continue;
+            };
             apply_storage_path(report, cfg, kind, path.to_owned());
         }
     }
@@ -302,8 +303,9 @@ fn collect_plugin_override_report_entries(
     ) {
         match value {
             serde_json::Value::Object(map) => {
-                let is_leaf_like =
-                    map.is_empty() || map.keys().any(|key| key.contains('.')) || map.values().any(|v| !v.is_object());
+                let is_leaf_like = map.is_empty()
+                    || map.keys().any(|key| key.contains('.'))
+                    || map.values().any(|v| !v.is_object());
 
                 if is_leaf_like {
                     out.push(StartupPluginOverride {
@@ -348,13 +350,13 @@ fn collect_plugin_override_report_entries(
 }
 
 fn dedup_plugin_override_report_entries(entries: &mut Vec<StartupPluginOverride>) {
-    let mut by_id = newengine_math::collections_prelude::NeBTreeMap::<String, StartupPluginOverride>::new();
+    let mut by_id =
+        newengine_math::collections_prelude::NeBTreeMap::<String, StartupPluginOverride>::new();
     for entry in entries.drain(..) {
         by_id.insert(entry.plugin_id.clone(), entry);
     }
     *entries = by_id.into_values().collect();
 }
-
 
 fn parse_placement(p: WindowPlacementJson) -> Option<WindowPlacement> {
     let kind = p
@@ -373,7 +375,6 @@ fn parse_placement(p: WindowPlacementJson) -> Option<WindowPlacement> {
         _ => None,
     }
 }
-
 
 #[inline]
 fn apply_string(report: &mut StartupLoadReport, key: &'static str, dst: &mut String, v: String) {

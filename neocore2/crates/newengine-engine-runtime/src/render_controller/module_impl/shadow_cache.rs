@@ -1,7 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use super::shadows::{LightShadowPlan, ShadowFrame};
 use super::super::controller::RuntimeRenderController;
+use super::shadows::{LightShadowPlan, ShadowFrame};
 
 const SHADOW_MATRIX_EPSILON: f32 = 2.0e-4;
 const SHADOW_PARAM_EPSILON: f32 = 1.0e-4;
@@ -27,7 +27,9 @@ fn shadow_frames_match_sample_space(a: ShadowFrame, b: ShadowFrame) -> bool {
     if a.texture != b.texture || a.cascade_count != b.cascade_count {
         return false;
     }
-    let count = a.cascade_count.clamp(1, super::shadows::MAX_DIRECTIONAL_SHADOW_CASCADES as u32) as usize;
+    let count = a
+        .cascade_count
+        .clamp(1, super::shadows::MAX_DIRECTIONAL_SHADOW_CASCADES as u32) as usize;
     for i in 0..count {
         if !shadow_matrices_match(a.cascade_light_mvp[i], b.cascade_light_mvp[i]) {
             return false;
@@ -107,7 +109,10 @@ impl RuntimeRenderController {
 
 impl RuntimeRenderController {
     #[inline]
-    pub(super) fn set_shadow_caster_cull(&mut self, cull: Option<super::shadows::ShadowCasterCull>) {
+    pub(super) fn set_shadow_caster_cull(
+        &mut self,
+        cull: Option<super::shadows::ShadowCasterCull>,
+    ) {
         self.shadows.current_caster_cull = cull;
     }
 

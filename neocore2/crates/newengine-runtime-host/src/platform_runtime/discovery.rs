@@ -7,21 +7,28 @@ use newengine_platform_api::PlatformRuntimeRunFnV1;
 use newengine_plugin_api::{PluginRootV1Ref, PluginSignatureV1};
 
 use crate::platform_runtime::constants::{
-    PLATFORM_PLUGIN_ID, PLATFORM_RUNTIME_SYMBOL, PLUGIN_ROOT_SYMBOL,
-    PLUGIN_SIGNATURE_SYMBOL,
+    PLATFORM_PLUGIN_ID, PLATFORM_RUNTIME_SYMBOL, PLUGIN_ROOT_SYMBOL, PLUGIN_SIGNATURE_SYMBOL,
 };
-
 
 #[inline]
 fn desired_runtime_profile() -> &'static str {
-    if cfg!(debug_assertions) { "dev" } else { "release" }
+    if cfg!(debug_assertions) {
+        "dev"
+    } else {
+        "release"
+    }
 }
 
 #[inline]
 fn mixed_plugin_profile_allowed() -> bool {
     std::env::var("NEWENGINE_ALLOW_MIXED_PLUGIN_PROFILE")
         .ok()
-        .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
+        .map(|v| {
+            matches!(
+                v.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
         .unwrap_or(false)
 }
 
@@ -63,7 +70,12 @@ fn runtime_profile_matches(path: &Path, desired: &'static str, allow_mixed: bool
 fn runtime_metadata_probe_enabled() -> bool {
     std::env::var("NEWENGINE_PLATFORM_RUNTIME_METADATA_PROBE")
         .ok()
-        .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
+        .map(|v| {
+            matches!(
+                v.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
         .unwrap_or(false)
 }
 
@@ -71,7 +83,12 @@ fn runtime_metadata_probe_enabled() -> bool {
 fn runtime_symbol_validation_enabled() -> bool {
     std::env::var("NEWENGINE_PLATFORM_RUNTIME_VALIDATE_SYMBOL")
         .ok()
-        .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
+        .map(|v| {
+            matches!(
+                v.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
         .unwrap_or(true)
 }
 
@@ -79,7 +96,12 @@ fn runtime_symbol_validation_enabled() -> bool {
 fn legacy_platform_runtime_name_allowed() -> bool {
     std::env::var("NEWENGINE_ALLOW_LEGACY_PLATFORM_RUNTIME_NAME")
         .ok()
-        .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
+        .map(|v| {
+            matches!(
+                v.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
         .unwrap_or(false)
 }
 
@@ -99,9 +121,9 @@ fn is_legacy_platform_runtime_filename(path: &Path) -> bool {
     ]
     .iter()
     .any(|prefix| {
-        lower.strip_prefix(prefix).is_some_and(|rest| {
-            rest.chars().next().is_some_and(|ch| ch.is_ascii_digit())
-        })
+        lower
+            .strip_prefix(prefix)
+            .is_some_and(|rest| rest.chars().next().is_some_and(|ch| ch.is_ascii_digit()))
     })
 }
 
@@ -130,15 +152,14 @@ fn runtime_symbol_present(path: &Path) -> bool {
 
 fn try_read_runtime_identity(path: &Path) -> Option<(String, String)> {
     let lib = unsafe { Library::new(path) }.ok()?;
-    let has_runtime =
-        unsafe { lib.get::<PlatformRuntimeRunFnV1>(PLATFORM_RUNTIME_SYMBOL) }.is_ok();
+    let has_runtime = unsafe { lib.get::<PlatformRuntimeRunFnV1>(PLATFORM_RUNTIME_SYMBOL) }.is_ok();
     if !has_runtime {
         return None;
     }
 
-    if let Ok(sym) = unsafe {
-        lib.get::<unsafe extern "C" fn() -> PluginSignatureV1>(PLUGIN_SIGNATURE_SYMBOL)
-    } {
+    if let Ok(sym) =
+        unsafe { lib.get::<unsafe extern "C" fn() -> PluginSignatureV1>(PLUGIN_SIGNATURE_SYMBOL) }
+    {
         let signature = unsafe { sym() };
         let id = signature.id.to_string();
         let version = signature.version.to_string();
@@ -147,10 +168,8 @@ fn try_read_runtime_identity(path: &Path) -> Option<(String, String)> {
         }
     }
 
-    let root_sym = unsafe {
-        lib.get::<unsafe extern "C" fn() -> PluginRootV1Ref>(PLUGIN_ROOT_SYMBOL)
-    }
-        .ok()?;
+    let root_sym =
+        unsafe { lib.get::<unsafe extern "C" fn() -> PluginRootV1Ref>(PLUGIN_ROOT_SYMBOL) }.ok()?;
     let root = unsafe { root_sym() };
 
     let module = root.create()();
@@ -178,7 +197,8 @@ pub fn detect_platform_runtime_path(modules_dir: &Path) -> EngineResult<PathBuf>
                 continue;
             }
 
-            if is_legacy_platform_runtime_filename(&path) && !legacy_platform_runtime_name_allowed() {
+            if is_legacy_platform_runtime_filename(&path) && !legacy_platform_runtime_name_allowed()
+            {
                 crate::platform_early_log!(
                     "host.discovery.skip_legacy_platform_name path='{}'",
                     path.display()
@@ -200,7 +220,11 @@ pub fn detect_platform_runtime_path(modules_dir: &Path) -> EngineResult<PathBuf>
 
     if let Some(explicit) = std::env::var_os("NEWENGINE_PLATFORM_RUNTIME") {
         let explicit = PathBuf::from(explicit);
-        crate::platform_early_log!("host.discovery.explicit path='{}' exists={}", explicit.display(), explicit.is_file());
+        crate::platform_early_log!(
+            "host.discovery.explicit path='{}' exists={}",
+            explicit.display(),
+            explicit.is_file()
+        );
         if explicit.is_file() {
             return Ok(explicit);
         }
@@ -304,7 +328,10 @@ pub fn detect_platform_runtime_path(modules_dir: &Path) -> EngineResult<PathBuf>
         sort_runtime_candidates(&mut candidates, desired_profile);
     }
 
-    crate::platform_early_log!("host.discovery.candidates.after_profile_filter={}", candidates.len());
+    crate::platform_early_log!(
+        "host.discovery.candidates.after_profile_filter={}",
+        candidates.len()
+    );
 
     if runtime_metadata_probe_enabled() {
         if let Some(path) = candidates
@@ -410,7 +437,11 @@ fn runtime_candidate_rank(path: &Path, desired_profile: &'static str) -> (u8, u8
         "bench" => 5,
         _ => 9,
     };
-    let name_rank = if name.contains("winit-platform") { 0 } else { 1 };
+    let name_rank = if name.contains("winit-platform") {
+        0
+    } else {
+        1
+    };
     (profile_rank, name_rank, name)
 }
 

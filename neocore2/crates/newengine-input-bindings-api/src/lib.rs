@@ -2,8 +2,8 @@
 use serde::{Deserialize, Serialize};
 
 pub use newengine_input_actions_api::{
-    InputActionDefinition, InputActionDispatchMode, InputActionEffect,
-    InputActionFrame, InputActionListenerRegistration, InputFrameSource,
+    InputActionDefinition, InputActionDispatchMode, InputActionEffect, InputActionFrame,
+    InputActionListenerRegistration, InputFrameSource,
 };
 pub use newengine_input_api::{gamepad_axis, gamepad_button, key_code};
 
@@ -13,7 +13,8 @@ pub const INPUT_BINDINGS_BACKEND_CAPABILITY_ID: &str = "input.bindings.backend";
 
 pub const INPUT_BINDINGS_METHOD_INFO: &str = newengine_service_api::SERVICE_METHOD_INFO_JSON;
 pub const INPUT_BINDINGS_METHOD_INVOKE: &str = newengine_service_api::SERVICE_METHOD_INVOKE_JSON;
-pub const INPUT_BINDINGS_METHOD_SHUTDOWN_V1: &str = newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1;
+pub const INPUT_BINDINGS_METHOD_SHUTDOWN_V1: &str =
+    newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1;
 pub const INPUT_BINDINGS_METHOD_PROFILE_JSON_V1: &str = "profile_json_v1";
 pub const INPUT_BINDINGS_METHOD_SAVE_PROFILE_JSON_V1: &str = "save_profile_json_v1";
 pub const INPUT_BINDINGS_METHOD_RESET_PROFILE_JSON_V1: &str = "reset_profile_json_v1";
@@ -51,7 +52,8 @@ pub const INPUT_BINDINGS_RUNTIME_CONTRACT_SPEC: newengine_service_api::RuntimeSe
         ],
     );
 
-pub const INPUT_BINDINGS_RUNTIME_REQUIREMENT_SPEC: newengine_service_api::RuntimeServiceRequirementSpec =
+pub const INPUT_BINDINGS_RUNTIME_REQUIREMENT_SPEC:
+    newengine_service_api::RuntimeServiceRequirementSpec =
     newengine_service_api::RuntimeServiceRequirementSpec::new(
         INPUT_BINDINGS_RUNTIME_CONTRACT_SPEC,
         Some(INPUT_BINDINGS_BACKEND_CAPABILITY_ID),
@@ -70,7 +72,11 @@ pub struct InputKeyRegistration {
 
 impl InputKeyRegistration {
     pub fn new(code: u32, id: impl Into<String>, label: impl Into<String>) -> Self {
-        Self { code, id: id.into(), label: label.into() }
+        Self {
+            code,
+            id: id.into(),
+            label: label.into(),
+        }
     }
 
     pub fn normalized(mut self) -> Option<Self> {
@@ -96,7 +102,10 @@ pub struct InputBindingRegistration {
 impl InputBindingRegistration {
     #[inline]
     pub fn new(binding: InputBinding) -> Self {
-        Self { binding, replace_existing_for_action_device: false }
+        Self {
+            binding,
+            replace_existing_for_action_device: false,
+        }
     }
 }
 
@@ -145,7 +154,9 @@ pub enum InputDevicePreference {
 
 impl Default for InputDevicePreference {
     #[inline]
-    fn default() -> Self { Self::Hybrid }
+    fn default() -> Self {
+        Self::Hybrid
+    }
 }
 
 impl InputDevicePreference {
@@ -169,7 +180,9 @@ pub enum InputBindingPhase {
 
 impl Default for InputBindingPhase {
     #[inline]
-    fn default() -> Self { Self::Down }
+    fn default() -> Self {
+        Self::Down
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -181,7 +194,9 @@ pub enum InputBindingDevice {
 
 impl Default for InputBindingDevice {
     #[inline]
-    fn default() -> Self { Self::Keyboard }
+    fn default() -> Self {
+        Self::Keyboard
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -214,22 +229,46 @@ impl InputBinding {
 
     #[inline]
     pub fn keyboard_down(action: impl Into<String>, code: u32) -> Self {
-        Self { action: action.into(), device: InputBindingDevice::Keyboard, code, name: None, phase: InputBindingPhase::Down }
+        Self {
+            action: action.into(),
+            device: InputBindingDevice::Keyboard,
+            code,
+            name: None,
+            phase: InputBindingPhase::Down,
+        }
     }
 
     #[inline]
     pub fn keyboard_pressed(action: impl Into<String>, code: u32) -> Self {
-        Self { action: action.into(), device: InputBindingDevice::Keyboard, code, name: None, phase: InputBindingPhase::Pressed }
+        Self {
+            action: action.into(),
+            device: InputBindingDevice::Keyboard,
+            code,
+            name: None,
+            phase: InputBindingPhase::Pressed,
+        }
     }
 
     #[inline]
     pub fn gamepad_button_down(action: impl Into<String>, name: impl Into<String>) -> Self {
-        Self { action: action.into(), device: InputBindingDevice::GamepadButton, code: 0, name: Some(name.into()), phase: InputBindingPhase::Down }
+        Self {
+            action: action.into(),
+            device: InputBindingDevice::GamepadButton,
+            code: 0,
+            name: Some(name.into()),
+            phase: InputBindingPhase::Down,
+        }
     }
 
     #[inline]
     pub fn gamepad_button_pressed(action: impl Into<String>, name: impl Into<String>) -> Self {
-        Self { action: action.into(), device: InputBindingDevice::GamepadButton, code: 0, name: Some(name.into()), phase: InputBindingPhase::Pressed }
+        Self {
+            action: action.into(),
+            device: InputBindingDevice::GamepadButton,
+            code: 0,
+            name: Some(name.into()),
+            phase: InputBindingPhase::Pressed,
+        }
     }
 }
 
@@ -253,14 +292,23 @@ pub struct GamepadAxisBinding {
 }
 
 #[inline]
-fn default_axis_deadzone() -> f32 { 0.18 }
+fn default_axis_deadzone() -> f32 {
+    0.18
+}
 #[inline]
-fn default_axis_scale() -> f32 { 1.0 }
+fn default_axis_scale() -> f32 {
+    1.0
+}
 
 impl GamepadAxisBinding {
     #[inline]
     pub fn new(axis: impl Into<String>, target: GamepadAxisTarget, scale: f32) -> Self {
-        Self { axis: axis.into(), target, deadzone: default_axis_deadzone(), scale }
+        Self {
+            axis: axis.into(),
+            target,
+            deadzone: default_axis_deadzone(),
+            scale,
+        }
     }
 }
 
@@ -300,7 +348,9 @@ impl InputBindingsProfile {
     /// Canonicalizes only this profile. It does not inject product/gameplay defaults.
     #[inline]
     pub fn canonicalized(self) -> Self {
-        self.canonicalized_with_defaults(&InputBindingsProfile::empty("newengine.input.defaults.empty"))
+        self.canonicalized_with_defaults(&InputBindingsProfile::empty(
+            "newengine.input.defaults.empty",
+        ))
     }
 
     /// Canonicalizes this profile over a profile-owned default layer.
@@ -310,42 +360,96 @@ impl InputBindingsProfile {
             .unwrap_or_else(|| defaults.id.clone());
         self.version = self.version.max(defaults.version).max(4);
 
-        let mut keys: Vec<_> = defaults.keys.clone().into_iter().filter_map(InputKeyRegistration::normalized).collect();
-        for key in self.keys.into_iter().filter_map(InputKeyRegistration::normalized) {
+        let mut keys: Vec<_> = defaults
+            .keys
+            .clone()
+            .into_iter()
+            .filter_map(InputKeyRegistration::normalized)
+            .collect();
+        for key in self
+            .keys
+            .into_iter()
+            .filter_map(InputKeyRegistration::normalized)
+        {
             upsert_key_registration(&mut keys, key);
         }
         keys.sort_by(|a, b| a.code.cmp(&b.code).then_with(|| a.id.cmp(&b.id)));
         self.keys = keys;
 
-        let mut actions: Vec<_> = defaults.actions.clone().into_iter().filter_map(InputActionDefinition::normalized).collect();
-        for action in self.actions.into_iter().filter_map(InputActionDefinition::normalized) {
+        let mut actions: Vec<_> = defaults
+            .actions
+            .clone()
+            .into_iter()
+            .filter_map(InputActionDefinition::normalized)
+            .collect();
+        for action in self
+            .actions
+            .into_iter()
+            .filter_map(InputActionDefinition::normalized)
+        {
             upsert_action_definition(&mut actions, action);
         }
         self.actions = actions;
 
         let mut bindings = Vec::new();
-        for binding in self.bindings.into_iter().filter_map(InputBinding::normalized) {
-            if !bindings.iter().any(|existing| bindings_equivalent(existing, &binding)) {
+        for binding in self
+            .bindings
+            .into_iter()
+            .filter_map(InputBinding::normalized)
+        {
+            if !bindings
+                .iter()
+                .any(|existing| bindings_equivalent(existing, &binding))
+            {
                 bindings.push(binding);
             }
         }
-        for binding in defaults.bindings.clone().into_iter().filter_map(InputBinding::normalized) {
-            if !bindings.iter().any(|existing| bindings_equivalent(existing, &binding)) {
+        for binding in defaults
+            .bindings
+            .clone()
+            .into_iter()
+            .filter_map(InputBinding::normalized)
+        {
+            if !bindings
+                .iter()
+                .any(|existing| bindings_equivalent(existing, &binding))
+            {
                 bindings.push(binding);
             }
         }
         self.bindings = bindings;
 
-        let mut listeners: Vec<_> = defaults.listeners.clone().into_iter().filter_map(InputActionListenerRegistration::normalized).collect();
-        for listener in self.listeners.into_iter().filter_map(InputActionListenerRegistration::normalized) {
+        let mut listeners: Vec<_> = defaults
+            .listeners
+            .clone()
+            .into_iter()
+            .filter_map(InputActionListenerRegistration::normalized)
+            .collect();
+        for listener in self
+            .listeners
+            .into_iter()
+            .filter_map(InputActionListenerRegistration::normalized)
+        {
             upsert_listener_registration(&mut listeners, listener);
         }
         listeners.sort_by(|a, b| b.priority.cmp(&a.priority).then_with(|| a.id.cmp(&b.id)));
         self.listeners = listeners;
 
-        let mut gamepad_axes: Vec<_> = self.gamepad_axes.into_iter().filter_map(canonical_axis_binding).collect();
-        for axis in defaults.gamepad_axes.clone().into_iter().filter_map(canonical_axis_binding) {
-            if !gamepad_axes.iter().any(|existing| existing.axis == axis.axis && existing.target == axis.target) {
+        let mut gamepad_axes: Vec<_> = self
+            .gamepad_axes
+            .into_iter()
+            .filter_map(canonical_axis_binding)
+            .collect();
+        for axis in defaults
+            .gamepad_axes
+            .clone()
+            .into_iter()
+            .filter_map(canonical_axis_binding)
+        {
+            if !gamepad_axes
+                .iter()
+                .any(|existing| existing.axis == axis.axis && existing.target == axis.target)
+            {
                 gamepad_axes.push(axis);
             }
         }
@@ -354,41 +458,72 @@ impl InputBindingsProfile {
     }
 
     pub fn register_key(&mut self, key: InputKeyRegistration) -> Result<(), String> {
-        let key = key.normalized().ok_or_else(|| "invalid input key registration".to_owned())?;
+        let key = key
+            .normalized()
+            .ok_or_else(|| "invalid input key registration".to_owned())?;
         upsert_key_registration(&mut self.keys, key);
-        self.keys.sort_by(|a, b| a.code.cmp(&b.code).then_with(|| a.id.cmp(&b.id)));
+        self.keys
+            .sort_by(|a, b| a.code.cmp(&b.code).then_with(|| a.id.cmp(&b.id)));
         Ok(())
     }
 
     pub fn register_action(&mut self, action: InputActionDefinition) -> Result<(), String> {
-        let action = action.normalized().ok_or_else(|| "invalid input action registration".to_owned())?;
+        let action = action
+            .normalized()
+            .ok_or_else(|| "invalid input action registration".to_owned())?;
         upsert_action_definition(&mut self.actions, action);
         Ok(())
     }
 
-    pub fn register_binding(&mut self, registration: InputBindingRegistration) -> Result<(), String> {
-        let binding = registration.binding.normalized().ok_or_else(|| "invalid input binding registration".to_owned())?;
-        if !self.actions.iter().any(|action| action.id == binding.action) {
-            return Err(format!("input binding references undeclared action '{}'", binding.action));
+    pub fn register_binding(
+        &mut self,
+        registration: InputBindingRegistration,
+    ) -> Result<(), String> {
+        let binding = registration
+            .binding
+            .normalized()
+            .ok_or_else(|| "invalid input binding registration".to_owned())?;
+        if !self
+            .actions
+            .iter()
+            .any(|action| action.id == binding.action)
+        {
+            return Err(format!(
+                "input binding references undeclared action '{}'",
+                binding.action
+            ));
         }
         if registration.replace_existing_for_action_device {
-            self.bindings.retain(|existing| !(existing.action == binding.action && existing.device == binding.device));
-        } else if self.bindings.iter().any(|existing| bindings_equivalent(existing, &binding)) {
+            self.bindings.retain(|existing| {
+                !(existing.action == binding.action && existing.device == binding.device)
+            });
+        } else if self
+            .bindings
+            .iter()
+            .any(|existing| bindings_equivalent(existing, &binding))
+        {
             return Ok(());
         }
         self.bindings.push(binding);
         Ok(())
     }
 
-    pub fn register_listener(&mut self, listener: InputActionListenerRegistration) -> Result<(), String> {
-        let listener = listener.normalized().ok_or_else(|| "invalid input listener registration".to_owned())?;
+    pub fn register_listener(
+        &mut self,
+        listener: InputActionListenerRegistration,
+    ) -> Result<(), String> {
+        let listener = listener
+            .normalized()
+            .ok_or_else(|| "invalid input listener registration".to_owned())?;
         upsert_listener_registration(&mut self.listeners, listener);
         Ok(())
     }
 
     pub fn register_gamepad_axis(&mut self, axis: GamepadAxisBinding) -> Result<(), String> {
-        let axis = canonical_axis_binding(axis).ok_or_else(|| "invalid empty gamepad axis binding".to_owned())?;
-        self.gamepad_axes.retain(|existing| !(existing.axis == axis.axis && existing.target == axis.target));
+        let axis = canonical_axis_binding(axis)
+            .ok_or_else(|| "invalid empty gamepad axis binding".to_owned())?;
+        self.gamepad_axes
+            .retain(|existing| !(existing.axis == axis.axis && existing.target == axis.target));
         self.gamepad_axes.push(axis);
         Ok(())
     }
@@ -417,7 +552,10 @@ impl InputBindingsProfile {
     }
 
     pub fn action_catalog(&self) -> std::collections::BTreeMap<&str, &InputActionDefinition> {
-        self.actions.iter().map(|definition| (definition.id.as_str(), definition)).collect()
+        self.actions
+            .iter()
+            .map(|definition| (definition.id.as_str(), definition))
+            .collect()
     }
 
     #[inline]
@@ -437,7 +575,11 @@ impl InputBindingsProfile {
             ],
         };
         for device in preferred {
-            if let Some(binding) = self.bindings.iter().find(|binding| binding.action == action && binding.device == device) {
+            if let Some(binding) = self
+                .bindings
+                .iter()
+                .find(|binding| binding.action == action && binding.device == device)
+            {
                 return self.binding_display_label(binding);
             }
         }
@@ -450,7 +592,11 @@ impl InputBindingsProfile {
 
     #[inline]
     pub fn key_label(&self, code: u32) -> String {
-        self.keys.iter().find(|key| key.code == code).map(|key| key.label.clone()).unwrap_or_else(|| key_code_label(code).to_owned())
+        self.keys
+            .iter()
+            .find(|key| key.code == code)
+            .map(|key| key.label.clone())
+            .unwrap_or_else(|| key_code_label(code).to_owned())
     }
 
     #[inline]
@@ -458,14 +604,21 @@ impl InputBindingsProfile {
         match binding.device {
             InputBindingDevice::Keyboard => self.key_label(binding.code),
             InputBindingDevice::MouseButton => mouse_button_label(binding.code).to_owned(),
-            InputBindingDevice::GamepadButton => binding.name.as_deref().map(gamepad_button_label).unwrap_or("GAMEPAD").to_owned(),
+            InputBindingDevice::GamepadButton => binding
+                .name
+                .as_deref()
+                .map(gamepad_button_label)
+                .unwrap_or("GAMEPAD")
+                .to_owned(),
         }
     }
 }
 
 impl Default for InputBindingsProfile {
     #[inline]
-    fn default() -> Self { Self::empty("newengine.input.profile") }
+    fn default() -> Self {
+        Self::empty("newengine.input.profile")
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -510,7 +663,6 @@ impl Default for InputBindingsServiceInfo {
     }
 }
 
-
 #[inline]
 fn bindings_equivalent(a: &InputBinding, b: &InputBinding) -> bool {
     a.action == b.action
@@ -524,7 +676,11 @@ fn canonical_axis_binding(mut axis: GamepadAxisBinding) -> Option<GamepadAxisBin
     axis.axis = axis.axis.trim().to_owned();
     axis.deadzone = axis.deadzone.clamp(0.0, 0.95);
     axis.scale = axis.scale.clamp(-8.0, 8.0);
-    if axis.axis.is_empty() { None } else { Some(axis) }
+    if axis.axis.is_empty() {
+        None
+    } else {
+        Some(axis)
+    }
 }
 
 fn upsert_key_registration(keys: &mut Vec<InputKeyRegistration>, key: InputKeyRegistration) {
@@ -532,7 +688,10 @@ fn upsert_key_registration(keys: &mut Vec<InputKeyRegistration>, key: InputKeyRe
     keys.push(key);
 }
 
-fn upsert_action_definition(actions: &mut Vec<InputActionDefinition>, action: InputActionDefinition) {
+fn upsert_action_definition(
+    actions: &mut Vec<InputActionDefinition>,
+    action: InputActionDefinition,
+) {
     if let Some(slot) = actions.iter_mut().find(|existing| existing.id == action.id) {
         *slot = action;
     } else {
@@ -540,7 +699,10 @@ fn upsert_action_definition(actions: &mut Vec<InputActionDefinition>, action: In
     }
 }
 
-fn upsert_listener_registration(listeners: &mut Vec<InputActionListenerRegistration>, listener: InputActionListenerRegistration) {
+fn upsert_listener_registration(
+    listeners: &mut Vec<InputActionListenerRegistration>,
+    listener: InputActionListenerRegistration,
+) {
     listeners.retain(|existing| !(existing.owner == listener.owner && existing.id == listener.id));
     listeners.push(listener);
 }
@@ -568,7 +730,9 @@ fn binding_matches<T: InputFrameSource>(binding: &InputBinding, input: &T) -> bo
             InputBindingPhase::Released => input.is_mouse_released(binding.code),
         },
         InputBindingDevice::GamepadButton => {
-            let Some(name) = binding.name.as_deref() else { return false; };
+            let Some(name) = binding.name.as_deref() else {
+                return false;
+            };
             match binding.phase {
                 InputBindingPhase::Down => input.is_gamepad_button_down(name),
                 InputBindingPhase::Pressed => input.is_gamepad_button_pressed(name),
@@ -578,7 +742,11 @@ fn binding_matches<T: InputFrameSource>(binding: &InputBinding, input: &T) -> bo
     }
 }
 
-fn apply_gamepad_axes<T: InputFrameSource>(out: &mut InputActionFrame, axes: &[GamepadAxisBinding], input: &T) {
+fn apply_gamepad_axes<T: InputFrameSource>(
+    out: &mut InputActionFrame,
+    axes: &[GamepadAxisBinding],
+    input: &T,
+) {
     for axis in axes {
         let mut value = input.gamepad_axis(&axis.axis);
         if value.abs() < axis.deadzone {
@@ -595,12 +763,24 @@ fn apply_gamepad_axes<T: InputFrameSource>(out: &mut InputActionFrame, axes: &[G
     }
     out.move_axis = out.move_axis.map(|v| v.clamp(-1.0, 1.0));
     out.look_axis = out.look_axis.map(|v| v.clamp(-1.0, 1.0));
-    if out.move_axis[0] > 0.0 { out.move_mask |= newengine_input_actions_api::move_mask::RIGHT; }
-    if out.move_axis[0] < 0.0 { out.move_mask |= newengine_input_actions_api::move_mask::LEFT; }
-    if out.move_axis[1] > 0.0 { out.move_mask |= newengine_input_actions_api::move_mask::UP; }
-    if out.move_axis[1] < 0.0 { out.move_mask |= newengine_input_actions_api::move_mask::DOWN; }
-    if out.move_axis[2] > 0.0 { out.move_mask |= newengine_input_actions_api::move_mask::FORWARD; }
-    if out.move_axis[2] < 0.0 { out.move_mask |= newengine_input_actions_api::move_mask::BACK; }
+    if out.move_axis[0] > 0.0 {
+        out.move_mask |= newengine_input_actions_api::move_mask::RIGHT;
+    }
+    if out.move_axis[0] < 0.0 {
+        out.move_mask |= newengine_input_actions_api::move_mask::LEFT;
+    }
+    if out.move_axis[1] > 0.0 {
+        out.move_mask |= newengine_input_actions_api::move_mask::UP;
+    }
+    if out.move_axis[1] < 0.0 {
+        out.move_mask |= newengine_input_actions_api::move_mask::DOWN;
+    }
+    if out.move_axis[2] > 0.0 {
+        out.move_mask |= newengine_input_actions_api::move_mask::FORWARD;
+    }
+    if out.move_axis[2] < 0.0 {
+        out.move_mask |= newengine_input_actions_api::move_mask::BACK;
+    }
 }
 
 fn dispatch_action_definition(
@@ -625,7 +805,10 @@ fn dispatch_event_for(
         listeners: Vec::new(),
         consumed_by: None,
     };
-    for listener in listeners.iter().filter(|listener| listener.enabled && listener_matches_action(listener, definition)) {
+    for listener in listeners
+        .iter()
+        .filter(|listener| listener.enabled && listener_matches_action(listener, definition))
+    {
         let listener_id = format!("{}:{}", listener.owner, listener.id);
         event.listeners.push(listener_id.clone());
         if definition.dispatch == InputActionDispatchMode::ConsumeFirst && listener.consume {
@@ -636,13 +819,23 @@ fn dispatch_event_for(
     event
 }
 
-fn listener_matches_action(listener: &InputActionListenerRegistration, definition: &InputActionDefinition) -> bool {
-    let action_match = listener.action_filter.is_empty() || listener.action_filter.iter().any(|action| action == &definition.id);
+fn listener_matches_action(
+    listener: &InputActionListenerRegistration,
+    definition: &InputActionDefinition,
+) -> bool {
+    let action_match = listener.action_filter.is_empty()
+        || listener
+            .action_filter
+            .iter()
+            .any(|action| action == &definition.id);
     if !action_match {
         return false;
     }
     listener.context_filter.is_empty()
-        || definition.contexts.iter().any(|ctx| listener.context_filter.iter().any(|wanted| wanted == ctx))
+        || definition
+            .contexts
+            .iter()
+            .any(|ctx| listener.context_filter.iter().any(|wanted| wanted == ctx))
 }
 
 fn apply_action_effect(out: &mut InputActionFrame, effect: &InputActionEffect) {
@@ -665,7 +858,11 @@ pub fn binding_display_label(binding: &InputBinding) -> String {
     match binding.device {
         InputBindingDevice::Keyboard => key_code_label(binding.code),
         InputBindingDevice::MouseButton => mouse_button_label(binding.code),
-        InputBindingDevice::GamepadButton => binding.name.as_deref().map(gamepad_button_label).unwrap_or("GAMEPAD"),
+        InputBindingDevice::GamepadButton => binding
+            .name
+            .as_deref()
+            .map(gamepad_button_label)
+            .unwrap_or("GAMEPAD"),
     }
     .to_owned()
 }

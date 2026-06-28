@@ -35,7 +35,10 @@ impl CameraControlInput {
 
     #[inline]
     pub fn sanitized(self) -> Self {
-        let look_delta = Vec2::new(finite_or_zero(self.look_delta.x), finite_or_zero(self.look_delta.y));
+        let look_delta = Vec2::new(
+            finite_or_zero(self.look_delta.x),
+            finite_or_zero(self.look_delta.y),
+        );
         let move_axis = Vec3::new(
             finite_or_zero(self.move_axis.x),
             finite_or_zero(self.move_axis.y),
@@ -255,7 +258,8 @@ impl OrbitController {
             let response = (0.12 * self.dolly_speed.max(0.05).sqrt() * bounded_speed_mul.sqrt())
                 .clamp(0.05, 0.20);
             let zoom_factor = (-bounded_zoom * response).exp();
-            self.distance = (self.distance * zoom_factor).clamp(self.min_distance, self.max_distance);
+            self.distance =
+                (self.distance * zoom_factor).clamp(self.min_distance, self.max_distance);
         }
 
         // Build rotation.
@@ -280,8 +284,11 @@ impl OrbitController {
     }
 }
 
-
 #[inline]
 fn finite_or_zero(value: f32) -> f32 {
-    if value.is_finite() { value } else { 0.0 }
+    if value.is_finite() {
+        value
+    } else {
+        0.0
+    }
 }

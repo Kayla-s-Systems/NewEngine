@@ -18,11 +18,17 @@ pub struct PhysicsBackendStatus {
 
 impl PhysicsBackendStatus {
     #[inline]
-    pub fn healthy() -> Self { Self::default() }
+    pub fn healthy() -> Self {
+        Self::default()
+    }
 
     #[inline]
     pub fn degraded(phase: &'static str, message: impl Into<String>) -> Self {
-        Self { degraded: true, phase: Some(phase), message: Some(message.into()) }
+        Self {
+            degraded: true,
+            phase: Some(phase),
+            message: Some(message.into()),
+        }
     }
 }
 
@@ -61,5 +67,7 @@ pub fn require_physics_api<'a, E: Send + 'static>(
     ctx: &'a crate::module::ModuleCtx<'_, E>,
 ) -> EngineResult<&'a PhysicsApiRef> {
     ctx.api_required::<PhysicsApiRef>(PHYSICS_API_ID)
-        .map_err(|_| EngineError::other("Physics API is not available (missing physics backend module?)"))
+        .map_err(|_| {
+            EngineError::other("Physics API is not available (missing physics backend module?)")
+        })
 }

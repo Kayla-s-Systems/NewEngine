@@ -1,20 +1,34 @@
 use crate::format::{
-    parse_pixel_format, TexturePixelFormat, PIXEL_FORMAT_BC1_RGBA_SRGB, PIXEL_FORMAT_BC1_RGBA_UNORM,
-    PIXEL_FORMAT_BC3_RGBA_SRGB, PIXEL_FORMAT_BC3_RGBA_UNORM, PIXEL_FORMAT_BC5_RG_UNORM,
+    parse_pixel_format, TexturePixelFormat, PIXEL_FORMAT_BC1_RGBA_SRGB,
+    PIXEL_FORMAT_BC1_RGBA_UNORM, PIXEL_FORMAT_BC3_RGBA_SRGB, PIXEL_FORMAT_BC3_RGBA_UNORM,
+    PIXEL_FORMAT_BC5_RG_UNORM,
 };
 use crate::mips::{rgba8_len, TextureEncodedMipData, TextureMipData};
 use crate::{COLOR_SPACE_LINEAR, COLOR_SPACE_SRGB};
 
 #[derive(Debug, thiserror::Error)]
 pub enum BcnEncodeError {
-    #[error("bcn: invalid RGBA8 payload bytes={bytes} expected={expected} extent={width}x{height}")]
-    InvalidRgbaPayload { bytes: usize, expected: usize, width: u32, height: u32 },
+    #[error(
+        "bcn: invalid RGBA8 payload bytes={bytes} expected={expected} extent={width}x{height}"
+    )]
+    InvalidRgbaPayload {
+        bytes: usize,
+        expected: usize,
+        width: u32,
+        height: u32,
+    },
     #[error("bcn: unsupported encoder target '{0}'")]
     UnsupportedTarget(String),
     #[error("bcn: unsupported decoder source '{0}'")]
     UnsupportedSource(String),
     #[error("bcn: invalid BCn payload bytes={bytes} expected={expected} extent={width}x{height} format={format}")]
-    InvalidBcnPayload { bytes: usize, expected: usize, width: u32, height: u32, format: String },
+    InvalidBcnPayload {
+        bytes: usize,
+        expected: usize,
+        width: u32,
+        height: u32,
+        format: String,
+    },
 }
 
 pub fn infer_bcn_format(name: &str, color_space: &str, rgba: &[u8]) -> &'static str {
@@ -49,30 +63,58 @@ pub fn infer_bcn_format(name: &str, color_space: &str, rgba: &[u8]) -> &'static 
     }
 }
 
-pub fn encode_rgba8_mips_to_bcn(format: &str, mips: &[TextureMipData]) -> Result<Vec<TextureEncodedMipData>, BcnEncodeError> {
-    let target = parse_pixel_format(format, "<bcn>").map_err(|_| BcnEncodeError::UnsupportedTarget(format.to_owned()))?;
+pub fn encode_rgba8_mips_to_bcn(
+    format: &str,
+    mips: &[TextureMipData],
+) -> Result<Vec<TextureEncodedMipData>, BcnEncodeError> {
+    let target = parse_pixel_format(format, "<bcn>")
+        .map_err(|_| BcnEncodeError::UnsupportedTarget(format.to_owned()))?;
     let mut out = Vec::with_capacity(mips.len());
     for mip in mips {
         let expected = rgba8_len(mip.width, mip.height);
         if mip.rgba.len() != expected {
-            return Err(BcnEncodeError::InvalidRgbaPayload { bytes: mip.rgba.len(), expected, width: mip.width, height: mip.height });
+            return Err(BcnEncodeError::InvalidRgbaPayload {
+                bytes: mip.rgba.len(),
+                expected,
+                width: mip.width,
+                height: mip.height,
+            });
         }
         let bytes = match target {
-            TexturePixelFormat::Bc1RgbaUnorm | TexturePixelFormat::Bc1RgbaSrgb => encode_bc1(mip.width, mip.height, &mip.rgba),
-            TexturePixelFormat::Bc3RgbaUnorm | TexturePixelFormat::Bc3RgbaSrgb => encode_bc3(mip.width, mip.height, &mip.rgba),
+            TexturePixelFormat::Bc1RgbaUnorm | TexturePixelFormat::Bc1RgbaSrgb => {
+                encode_bc1(mip.width, mip.height, &mip.rgba)
+            }
+            TexturePixelFormat::Bc3RgbaUnorm | TexturePixelFormat::Bc3RgbaSrgb => {
+                encode_bc3(mip.width, mip.height, &mip.rgba)
+            }
             TexturePixelFormat::Bc5RgUnorm => encode_bc5(mip.width, mip.height, &mip.rgba),
             _ => return Err(BcnEncodeError::UnsupportedTarget(format.to_owned())),
         };
-        out.push(TextureEncodedMipData { level: mip.level, width: mip.width, height: mip.height, bytes });
+        out.push(TextureEncodedMipData {
+            level: mip.level,
+            width: mip.width,
+            height: mip.height,
+            bytes,
+        });
     }
     Ok(out)
 }
 
-pub fn decode_bcn_to_rgba8(format: &str, width: u32, height: u32, bytes: &[u8]) -> Result<Vec<u8>, BcnEncodeError> {
-    let source = parse_pixel_format(format, "<bcn>").map_err(|_| BcnEncodeError::UnsupportedSource(format.to_owned()))?;
+pub fn decode_bcn_to_rgba8(
+    format: &str,
+    width: u32,
+    height: u32,
+    bytes: &[u8],
+) -> Result<Vec<u8>, BcnEncodeError> {
+    let source = parse_pixel_format(format, "<bcn>")
+        .map_err(|_| BcnEncodeError::UnsupportedSource(format.to_owned()))?;
     match source {
-        TexturePixelFormat::Bc1RgbaUnorm | TexturePixelFormat::Bc1RgbaSrgb => decode_bc1(width, height, bytes, format),
-        TexturePixelFormat::Bc3RgbaUnorm | TexturePixelFormat::Bc3RgbaSrgb => decode_bc3(width, height, bytes, format),
+        TexturePixelFormat::Bc1RgbaUnorm | TexturePixelFormat::Bc1RgbaSrgb => {
+            decode_bc1(width, height, bytes, format)
+        }
+        TexturePixelFormat::Bc3RgbaUnorm | TexturePixelFormat::Bc3RgbaSrgb => {
+            decode_bc3(width, height, bytes, format)
+        }
         TexturePixelFormat::Bc5RgUnorm => decode_bc5(width, height, bytes, format),
         _ => Err(BcnEncodeError::UnsupportedSource(format.to_owned())),
     }
@@ -93,7 +135,11 @@ fn unpack_rgb565(v: u16) -> [u8; 3] {
     let r = ((v >> 11) & 0x1f) as u8;
     let g = ((v >> 5) & 0x3f) as u8;
     let b = (v & 0x1f) as u8;
-    [(r << 3) | (r >> 2), (g << 2) | (g >> 4), (b << 3) | (b >> 2)]
+    [
+        (r << 3) | (r >> 2),
+        (g << 2) | (g >> 4),
+        (b << 3) | (b >> 2),
+    ]
 }
 
 #[inline]
@@ -124,14 +170,24 @@ fn encode_bc1(width: u32, height: u32, rgba: &[u8]) -> Vec<u8> {
             }
             let mut c0 = rgb565(max[0], max[1], max[2]);
             let mut c1 = rgb565(min[0], min[1], min[2]);
-            if c0 <= c1 { core::mem::swap(&mut c0, &mut c1); }
+            if c0 <= c1 {
+                core::mem::swap(&mut c0, &mut c1);
+            }
             let p0 = unpack_rgb565(c0);
             let p1 = unpack_rgb565(c1);
             let palette = [
                 p0,
                 p1,
-                [((2 * p0[0] as u16 + p1[0] as u16) / 3) as u8, ((2 * p0[1] as u16 + p1[1] as u16) / 3) as u8, ((2 * p0[2] as u16 + p1[2] as u16) / 3) as u8],
-                [((p0[0] as u16 + 2 * p1[0] as u16) / 3) as u8, ((p0[1] as u16 + 2 * p1[1] as u16) / 3) as u8, ((p0[2] as u16 + 2 * p1[2] as u16) / 3) as u8],
+                [
+                    ((2 * p0[0] as u16 + p1[0] as u16) / 3) as u8,
+                    ((2 * p0[1] as u16 + p1[1] as u16) / 3) as u8,
+                    ((2 * p0[2] as u16 + p1[2] as u16) / 3) as u8,
+                ],
+                [
+                    ((p0[0] as u16 + 2 * p1[0] as u16) / 3) as u8,
+                    ((p0[1] as u16 + 2 * p1[1] as u16) / 3) as u8,
+                    ((p0[2] as u16 + 2 * p1[2] as u16) / 3) as u8,
+                ],
             ];
             let mut indices = 0u32;
             for (i, p) in px.iter().enumerate() {
@@ -142,7 +198,10 @@ fn encode_bc1(width: u32, height: u32, rgba: &[u8]) -> Vec<u8> {
                     let dg = p[1] as i32 - q[1] as i32;
                     let db = p[2] as i32 - q[2] as i32;
                     let d = (dr * dr + dg * dg + db * db) as u32;
-                    if d < best_d { best_d = d; best = j; }
+                    if d < best_d {
+                        best_d = d;
+                        best = j;
+                    }
                 }
                 indices |= (best as u32) << (i * 2);
             }
@@ -214,7 +273,10 @@ fn encode_bc4_block(values: &[u8; 16]) -> [u8; 8] {
         let mut best_d = u16::MAX;
         for (j, &p) in palette.iter().enumerate() {
             let d = (v as i16 - p as i16).unsigned_abs();
-            if d < best_d { best_d = d; best = j as u64; }
+            if d < best_d {
+                best_d = d;
+                best = j as u64;
+            }
         }
         bits |= best << (i * 3);
     }
@@ -253,11 +315,22 @@ fn alpha_palette(a0: u8, a1: u8) -> [u8; 8] {
     }
 }
 
-fn decode_bc1(width: u32, height: u32, bytes: &[u8], format: &str) -> Result<Vec<u8>, BcnEncodeError> {
+fn decode_bc1(
+    width: u32,
+    height: u32,
+    bytes: &[u8],
+    format: &str,
+) -> Result<Vec<u8>, BcnEncodeError> {
     let (bw, bh) = blocks(width, height);
     let expected = bw * bh * 8;
     if bytes.len() != expected {
-        return Err(BcnEncodeError::InvalidBcnPayload { bytes: bytes.len(), expected, width, height, format: format.to_owned() });
+        return Err(BcnEncodeError::InvalidBcnPayload {
+            bytes: bytes.len(),
+            expected,
+            width,
+            height,
+            format: format.to_owned(),
+        });
     }
     let mut out = vec![0u8; rgba8_len(width, height)];
     let mut cursor = 0usize;
@@ -265,27 +338,55 @@ fn decode_bc1(width: u32, height: u32, bytes: &[u8], format: &str) -> Result<Vec
         for bx in 0..bw as u32 {
             let c0 = u16::from_le_bytes([bytes[cursor], bytes[cursor + 1]]);
             let c1 = u16::from_le_bytes([bytes[cursor + 2], bytes[cursor + 3]]);
-            let indices = u32::from_le_bytes([bytes[cursor + 4], bytes[cursor + 5], bytes[cursor + 6], bytes[cursor + 7]]);
+            let indices = u32::from_le_bytes([
+                bytes[cursor + 4],
+                bytes[cursor + 5],
+                bytes[cursor + 6],
+                bytes[cursor + 7],
+            ]);
             cursor += 8;
             let p0 = unpack_rgb565(c0);
             let p1 = unpack_rgb565(c1);
             let palette = [
                 [p0[0], p0[1], p0[2], 255],
                 [p1[0], p1[1], p1[2], 255],
-                [((2 * p0[0] as u16 + p1[0] as u16) / 3) as u8, ((2 * p0[1] as u16 + p1[1] as u16) / 3) as u8, ((2 * p0[2] as u16 + p1[2] as u16) / 3) as u8, 255],
-                [((p0[0] as u16 + 2 * p1[0] as u16) / 3) as u8, ((p0[1] as u16 + 2 * p1[1] as u16) / 3) as u8, ((p0[2] as u16 + 2 * p1[2] as u16) / 3) as u8, 255],
+                [
+                    ((2 * p0[0] as u16 + p1[0] as u16) / 3) as u8,
+                    ((2 * p0[1] as u16 + p1[1] as u16) / 3) as u8,
+                    ((2 * p0[2] as u16 + p1[2] as u16) / 3) as u8,
+                    255,
+                ],
+                [
+                    ((p0[0] as u16 + 2 * p1[0] as u16) / 3) as u8,
+                    ((p0[1] as u16 + 2 * p1[1] as u16) / 3) as u8,
+                    ((p0[2] as u16 + 2 * p1[2] as u16) / 3) as u8,
+                    255,
+                ],
             ];
-            write_decoded_block(width, height, &mut out, bx, by, |i| palette[((indices >> (i * 2)) & 3) as usize]);
+            write_decoded_block(width, height, &mut out, bx, by, |i| {
+                palette[((indices >> (i * 2)) & 3) as usize]
+            });
         }
     }
     Ok(out)
 }
 
-fn decode_bc3(width: u32, height: u32, bytes: &[u8], format: &str) -> Result<Vec<u8>, BcnEncodeError> {
+fn decode_bc3(
+    width: u32,
+    height: u32,
+    bytes: &[u8],
+    format: &str,
+) -> Result<Vec<u8>, BcnEncodeError> {
     let (bw, bh) = blocks(width, height);
     let expected = bw * bh * 16;
     if bytes.len() != expected {
-        return Err(BcnEncodeError::InvalidBcnPayload { bytes: bytes.len(), expected, width, height, format: format.to_owned() });
+        return Err(BcnEncodeError::InvalidBcnPayload {
+            bytes: bytes.len(),
+            expected,
+            width,
+            height,
+            format: format.to_owned(),
+        });
     }
     let mut out = vec![0u8; rgba8_len(width, height)];
     let mut cursor = 0usize;
@@ -294,17 +395,35 @@ fn decode_bc3(width: u32, height: u32, bytes: &[u8], format: &str) -> Result<Vec
             let alphas = decode_bc4_block(&bytes[cursor..cursor + 8]);
             let colors = decode_bc1(4, 4, &bytes[cursor + 8..cursor + 16], format)?;
             cursor += 16;
-            write_decoded_block(width, height, &mut out, bx, by, |i| [colors[i * 4], colors[i * 4 + 1], colors[i * 4 + 2], alphas[i]]);
+            write_decoded_block(width, height, &mut out, bx, by, |i| {
+                [
+                    colors[i * 4],
+                    colors[i * 4 + 1],
+                    colors[i * 4 + 2],
+                    alphas[i],
+                ]
+            });
         }
     }
     Ok(out)
 }
 
-fn decode_bc5(width: u32, height: u32, bytes: &[u8], format: &str) -> Result<Vec<u8>, BcnEncodeError> {
+fn decode_bc5(
+    width: u32,
+    height: u32,
+    bytes: &[u8],
+    format: &str,
+) -> Result<Vec<u8>, BcnEncodeError> {
     let (bw, bh) = blocks(width, height);
     let expected = bw * bh * 16;
     if bytes.len() != expected {
-        return Err(BcnEncodeError::InvalidBcnPayload { bytes: bytes.len(), expected, width, height, format: format.to_owned() });
+        return Err(BcnEncodeError::InvalidBcnPayload {
+            bytes: bytes.len(),
+            expected,
+            width,
+            height,
+            format: format.to_owned(),
+        });
     }
     let mut out = vec![0u8; rgba8_len(width, height)];
     let mut cursor = 0usize;
@@ -332,12 +451,21 @@ fn decode_bc4_block(bytes: &[u8]) -> [u8; 16] {
     out
 }
 
-fn write_decoded_block<F: Fn(usize) -> [u8; 4]>(width: u32, height: u32, out: &mut [u8], bx: u32, by: u32, sample: F) {
+fn write_decoded_block<F: Fn(usize) -> [u8; 4]>(
+    width: u32,
+    height: u32,
+    out: &mut [u8],
+    bx: u32,
+    by: u32,
+    sample: F,
+) {
     for y in 0..4u32 {
         for x in 0..4u32 {
             let dx = bx * 4 + x;
             let dy = by * 4 + y;
-            if dx >= width || dy >= height { continue; }
+            if dx >= width || dy >= height {
+                continue;
+            }
             let dst = ((dy as usize * width as usize) + dx as usize) * 4;
             let p = sample((y * 4 + x) as usize);
             out[dst..dst + 4].copy_from_slice(&p);

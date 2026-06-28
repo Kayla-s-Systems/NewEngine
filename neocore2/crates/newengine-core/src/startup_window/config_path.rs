@@ -38,7 +38,10 @@ pub(crate) fn resolve_for_edit(raw_path: &str) -> Result<PathBuf, String> {
     }
 
     // If no file exists yet, create/edit the most stable candidate available.
-    if let Some(root) = roots.iter().find(|root| root.join("NewEngine").join("neocore2").exists()) {
+    if let Some(root) = roots
+        .iter()
+        .find(|root| root.join("NewEngine").join("neocore2").exists())
+    {
         return Ok(root.join("NewEngine").join("neocore2").join(raw));
     }
 

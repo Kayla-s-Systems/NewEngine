@@ -2,8 +2,12 @@ use crate::path_fmt::canonicalize_if_exists;
 use newengine_plugin_api::{PluginDescriptor, PluginInfo};
 use std::path::PathBuf;
 
-use super::state::{bump_services_generation, ctx, ExternalRuntimePluginEntry, ExternalRuntimePluginSnapshot};
-use super::validation::{collect_declared_providers, effective_provider_origin, missing_descriptor_requirements};
+use super::state::{
+    bump_services_generation, ctx, ExternalRuntimePluginEntry, ExternalRuntimePluginSnapshot,
+};
+use super::validation::{
+    collect_declared_providers, effective_provider_origin, missing_descriptor_requirements,
+};
 
 pub fn register_external_runtime_plugin(
     path: PathBuf,

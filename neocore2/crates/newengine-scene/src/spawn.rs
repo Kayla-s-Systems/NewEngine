@@ -19,5 +19,8 @@ pub fn spawn_named(world: &mut World, name: impl Into<String>) -> EntityId {
 /// Attempts to read an entity name.
 #[inline]
 pub fn name_or<'a>(world: &'a World, id: EntityId, fallback: &'a str) -> &'a str {
-    world.get::<Name>(id).map(|n| n.as_str()).unwrap_or(fallback)
+    world
+        .get::<Name>(id)
+        .map(|n| n.as_str())
+        .unwrap_or(fallback)
 }

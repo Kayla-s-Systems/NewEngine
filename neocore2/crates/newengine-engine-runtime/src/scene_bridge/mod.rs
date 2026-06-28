@@ -1,19 +1,22 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
+mod accessors;
+mod apply_commands;
 mod commands;
+mod commands_api;
 mod definitions_runtime;
 mod game_ready;
 mod helpers;
 mod imported_assets;
 mod material_application;
 mod queue;
-mod accessors;
-mod commands_api;
-mod apply_commands;
 mod view_gateway;
 
 pub use commands::SceneCommand;
-pub use definitions_runtime::{DefinitionInstance, DefinitionInstantiateTransform, DefinitionRuntimeTrace, DefinitionRuntimeTraceComponent, RuntimeCommand};
+pub use definitions_runtime::{
+    DefinitionInstance, DefinitionInstantiateTransform, DefinitionRuntimeTrace,
+    DefinitionRuntimeTraceComponent, RuntimeCommand,
+};
 pub use imported_assets::{
     PrimitiveMaterialBase, SceneImportedAssetAssembler, SceneImportedAssetAssemblyDescriptor,
     SceneImportedAssetAssemblyKind, SceneImportedAssetDescriptor, SceneImportedAssetKind,
@@ -41,8 +44,8 @@ use crate::audio_gateway::register_audio_gateway_best_effort;
 use crate::authority::RuntimeWorldAuthorityBridge;
 use crate::camera_gateway::CameraGatewayBridge;
 use crate::gameplay::{
-    ensure_physics_body, remove_physics_body, spawn_default_player, DisplayMode,
-    DisplayVisibility, GameRunMode,
+    ensure_physics_body, remove_physics_body, spawn_default_player, DisplayMode, DisplayVisibility,
+    GameRunMode,
 };
 use crate::scene_bootstrap::bootstrap_runtime_scene;
 
@@ -101,7 +104,6 @@ impl SceneBridge {
         }
     }
 
-
     #[inline]
     pub fn scene(&self) -> Arc<RwLock<Scene>> {
         Arc::clone(&self.scene)
@@ -133,7 +135,8 @@ impl SceneBridge {
 
         *self.selection.lock() = selected;
         *self.selection_authority.lock() = selected_authority;
-        self.authority.log_bootstrap_boundary("game-ready-scene-bootstrap");
+        self.authority
+            .log_bootstrap_boundary("game-ready-scene-bootstrap");
         // Do not expose Play here. CPU scene bootstrap is not equivalent to
         // playable-world readiness; renderer-side launch gate owns promotion.
         *self.play_mode.lock() = GameRunMode::Staging;

@@ -3,8 +3,8 @@
 use core::fmt;
 use core::ptr::NonNull;
 
-use parking_lot::{Mutex, RwLock};
 use newengine_math::collections_prelude::NeHashMap as HashMap;
+use parking_lot::{Mutex, RwLock};
 use std::time::{Duration, Instant};
 
 use newengine_service_api::{InterfaceId, ServiceInterface, ServiceKey};
@@ -160,7 +160,11 @@ impl ServiceRegistry {
     #[inline]
     fn log_missing(&self, service: ServiceKey, iface: InterfaceId, policy: MissingServicePolicy) {
         if policy == MissingServicePolicy::RequiredHard {
-            newengine_ulog_api::ulog::error!("fatal: missing service={:?} interface={:?}", service, iface);
+            newengine_ulog_api::ulog::error!(
+                "fatal: missing service={:?} interface={:?}",
+                service,
+                iface
+            );
             return;
         }
 

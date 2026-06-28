@@ -1,7 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use serde_json::Value;
 use newengine_math::collections_prelude::NeHashMap as HashMap;
+use serde_json::Value;
 use std::path::{Path, PathBuf};
 
 use crate::log_fmt::{ellipsize, emit_boxed_kv};
@@ -88,7 +88,6 @@ pub struct StartupConfig {
     /// treated as disposable cache data.
     pub config: PathBuf,
 
-
     /// Raw plugin override roots from the `plugins` object in `config.json`.
     ///
     /// Supported forms:
@@ -117,7 +116,6 @@ impl Default for StartupConfig {
             modules_dir: PathBuf::from("pluginsRuntime"),
             cache_files: PathBuf::from(crate::cache_files::DEFAULT_CACHE_FILES_DIR),
             config: PathBuf::from(crate::config_root::DEFAULT_CONFIG_DIR),
-
 
             plugins: HashMap::default(),
 
@@ -168,7 +166,9 @@ impl StartupConfig {
     pub fn publish_storage_root_env(&self, kind: StartupStorageRootKind) -> PathBuf {
         let root = self.resolved_storage_root(kind);
         match kind {
-            StartupStorageRootKind::CacheFiles => crate::cache_files::publish_cache_files_env(&root),
+            StartupStorageRootKind::CacheFiles => {
+                crate::cache_files::publish_cache_files_env(&root)
+            }
             StartupStorageRootKind::Config => crate::config_root::publish_config_env(&root),
         }
         root
@@ -177,12 +177,14 @@ impl StartupConfig {
     #[inline]
     pub fn storage_child(&self, kind: StartupStorageRootKind, path: impl AsRef<Path>) -> PathBuf {
         match kind {
-            StartupStorageRootKind::CacheFiles => {
-                crate::cache_files::resolve_under_cache_root(&self.resolved_storage_root(kind), path.as_ref())
-            }
-            StartupStorageRootKind::Config => {
-                crate::config_root::resolve_under_config_root(&self.resolved_storage_root(kind), path.as_ref())
-            }
+            StartupStorageRootKind::CacheFiles => crate::cache_files::resolve_under_cache_root(
+                &self.resolved_storage_root(kind),
+                path.as_ref(),
+            ),
+            StartupStorageRootKind::Config => crate::config_root::resolve_under_config_root(
+                &self.resolved_storage_root(kind),
+                path.as_ref(),
+            ),
         }
     }
 
@@ -354,11 +356,7 @@ impl StartupLoadReport {
                 .map(|o| {
                     (
                         o.plugin_id.as_str(),
-                        format!(
-                            "{} -> {}",
-                            o.from,
-                            summarize_plugin_override_preview(&o.to)
-                        ),
+                        format!("{} -> {}", o.from, summarize_plugin_override_preview(&o.to)),
                     )
                 })
                 .collect();

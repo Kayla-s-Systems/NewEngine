@@ -102,10 +102,7 @@ impl CapabilityDesc {
     }
 
     #[inline]
-    pub fn backend_route(
-        id: impl Into<CapabilityId>,
-        descriptor: BackendRouteDescriptor,
-    ) -> Self {
+    pub fn backend_route(id: impl Into<CapabilityId>, descriptor: BackendRouteDescriptor) -> Self {
         Self::new(id, CapabilityRole::Provides, CapabilityKind::Other, 1)
             .with_json(descriptor.to_json_string())
     }
@@ -121,7 +118,6 @@ impl CapabilityDesc {
         capability_has_tag(self, tag)
     }
 }
-
 
 #[repr(C)]
 #[derive(Debug, Clone, StableAbi)]
@@ -181,7 +177,7 @@ impl PluginDescriptorBuilder {
                 CapabilityKind::ServiceV1,
                 version,
             )
-                .with_json(describe_json),
+            .with_json(describe_json),
         )
     }
 
@@ -199,7 +195,7 @@ impl PluginDescriptorBuilder {
                 CapabilityKind::ServiceV1,
                 version,
             )
-                .with_json(describe_json),
+            .with_json(describe_json),
         )
     }
 
@@ -217,7 +213,7 @@ impl PluginDescriptorBuilder {
                 CapabilityKind::EventsV1,
                 version,
             )
-                .with_json(describe_json),
+            .with_json(describe_json),
         )
     }
 
@@ -235,7 +231,7 @@ impl PluginDescriptorBuilder {
                 CapabilityKind::AssetImporterV1,
                 version,
             )
-                .with_json(describe_json),
+            .with_json(describe_json),
         )
     }
 
@@ -253,7 +249,7 @@ impl PluginDescriptorBuilder {
                 CapabilityKind::SceneContributionV1,
                 version,
             )
-                .with_json(describe_json),
+            .with_json(describe_json),
         )
     }
 
@@ -271,7 +267,7 @@ impl PluginDescriptorBuilder {
                 CapabilityKind::SceneContributionV1,
                 version,
             )
-                .with_json(describe_json),
+            .with_json(describe_json),
         )
     }
 

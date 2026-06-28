@@ -44,7 +44,14 @@ impl<E: Send + 'static> Engine<E> {
             let module_id = s.id();
 
             let result: EngineResult<()> = {
-                let mut ctx = ModuleCtx::new(services, resources, bus, events, scheduler, shutdown.clone());
+                let mut ctx = ModuleCtx::new(
+                    services,
+                    resources,
+                    bus,
+                    events,
+                    scheduler,
+                    shutdown.clone(),
+                );
                 ctx.set_frame(frame);
 
                 if self.catch_panics {
@@ -68,13 +75,23 @@ impl<E: Send + 'static> Engine<E> {
                     }
                     ModuleFaultTolerance::Resilient => {
                         let reason = format!("stage {stage:?} failed: {e}");
-                        newengine_ulog_api::ulog::error!("engine: disabling module {} ({})", module_id, reason);
+                        newengine_ulog_api::ulog::error!(
+                            "engine: disabling module {} ({})",
+                            module_id,
+                            reason
+                        );
 
                         s.disable(reason);
 
                         if !s.shutdown_called {
-                            let mut ctx =
-                                ModuleCtx::new(services, resources, bus, events, scheduler, shutdown.clone());
+                            let mut ctx = ModuleCtx::new(
+                                services,
+                                resources,
+                                bus,
+                                events,
+                                scheduler,
+                                shutdown.clone(),
+                            );
                             ctx.set_frame(frame);
 
                             let _ = s.module.shutdown(&mut ctx);
@@ -118,7 +135,10 @@ impl<E: Send + 'static> Engine<E> {
                 self.shutdown.clone(),
             );
 
-            newengine_ulog_api::ulog::debug!("engine shutdown: module shutdown begin id='{}'", module_id);
+            newengine_ulog_api::ulog::debug!(
+                "engine shutdown: module shutdown begin id='{}'",
+                module_id
+            );
             crate::crash::record_breadcrumb(format!(
                 "engine shutdown: module shutdown begin id={module_id}"
             ));
@@ -127,7 +147,10 @@ impl<E: Send + 'static> Engine<E> {
                 .shutdown(&mut ctx)
                 .map_err(|e| EngineError::with_module_stage(module_id, ModuleStage::Shutdown, e));
 
-            newengine_ulog_api::ulog::debug!("engine shutdown: module shutdown completed id='{}'", module_id);
+            newengine_ulog_api::ulog::debug!(
+                "engine shutdown: module shutdown completed id='{}'",
+                module_id
+            );
             crate::crash::record_breadcrumb(format!(
                 "engine shutdown: module shutdown completed id={module_id}"
             ));

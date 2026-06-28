@@ -48,7 +48,16 @@ impl HeaderV2 {
         let data_offset = read_u64(bytes, 32);
         let data_len = read_u64(bytes, 40);
         let data_uncompressed_len = read_u64(bytes, 48);
-        Ok(Self { version, flags, entry_count, directory_offset, directory_len, data_offset, data_len, data_uncompressed_len })
+        Ok(Self {
+            version,
+            flags,
+            entry_count,
+            directory_offset,
+            directory_len,
+            data_offset,
+            data_len,
+            data_uncompressed_len,
+        })
     }
 
     pub fn write(self, out: &mut [u8]) {
@@ -74,7 +83,13 @@ impl HeaderV2 {
 #[inline]
 fn read_u64(bytes: &[u8], offset: usize) -> u64 {
     u64::from_le_bytes([
-        bytes[offset], bytes[offset + 1], bytes[offset + 2], bytes[offset + 3],
-        bytes[offset + 4], bytes[offset + 5], bytes[offset + 6], bytes[offset + 7],
+        bytes[offset],
+        bytes[offset + 1],
+        bytes[offset + 2],
+        bytes[offset + 3],
+        bytes[offset + 4],
+        bytes[offset + 5],
+        bytes[offset + 6],
+        bytes[offset + 7],
     ])
 }

@@ -7,7 +7,6 @@ use std::path::PathBuf;
 
 use crate::startup::StartupConfig;
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ModuleFaultTolerance {
     /// Fail-fast: any module init/start/update error aborts the engine.

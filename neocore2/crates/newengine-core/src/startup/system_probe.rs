@@ -40,8 +40,14 @@ impl SystemProbe {
     pub fn emit_table(&self, stage: &str) {
         let title = format!("SystemProbe :: Host [{}]", stage);
         let rows = vec![
-            ("run_tag", crate::run_id::run_tag().unwrap_or("<unknown>").to_owned()),
-            ("run_id", crate::run_id::run_id().unwrap_or("<unknown>").to_owned()),
+            (
+                "run_tag",
+                crate::run_id::run_tag().unwrap_or("<unknown>").to_owned(),
+            ),
+            (
+                "run_id",
+                crate::run_id::run_id().unwrap_or("<unknown>").to_owned(),
+            ),
             ("os", self.value_or_unknown(self.os.as_deref())),
             ("cpu", self.value_or_unknown(self.cpu.as_deref())),
             (
@@ -89,7 +95,11 @@ fn probe_sysinfo() -> (Option<String>, Option<String>, Option<u32>, Option<u64>)
     let os = first_non_empty([
         System::long_os_version(),
         System::name(),
-        Some(format!("{} {}", std::env::consts::OS, std::env::consts::ARCH)),
+        Some(format!(
+            "{} {}",
+            std::env::consts::OS,
+            std::env::consts::ARCH
+        )),
     ]);
 
     let cpu = first_non_empty([
@@ -115,12 +125,18 @@ fn probe_sysinfo() -> (Option<String>, Option<String>, Option<u32>, Option<u64>)
 
 #[cfg(not(feature = "host-probe"))]
 fn probe_sysinfo() -> (Option<String>, Option<String>, Option<u32>, Option<u64>) {
-    let os = Some(format!("{} {}", std::env::consts::OS, std::env::consts::ARCH));
+    let os = Some(format!(
+        "{} {}",
+        std::env::consts::OS,
+        std::env::consts::ARCH
+    ));
     let cpu = first_non_empty([
         std::env::var("PROCESSOR_IDENTIFIER").ok(),
         std::env::var("PROCESSOR_ARCHITECTURE").ok(),
     ]);
-    let cores = std::thread::available_parallelism().ok().map(|n| n.get() as u32);
+    let cores = std::thread::available_parallelism()
+        .ok()
+        .map(|n| n.get() as u32);
     let ram_mb = probe_memory_mb_fallback();
     (os, cpu, cores, ram_mb)
 }

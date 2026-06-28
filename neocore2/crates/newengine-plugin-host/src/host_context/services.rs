@@ -42,7 +42,8 @@ pub fn list_services() -> Vec<String> {
 /// Returns the `describe()` JSON for the given service id, if present.
 #[inline]
 pub fn describe_service(service_id: &str) -> Option<String> {
-    let routed_id = resolve_service_for_engine_gateway(service_id).unwrap_or_else(|| service_id.to_owned());
+    let routed_id =
+        resolve_service_for_engine_gateway(service_id).unwrap_or_else(|| service_id.to_owned());
 
     let c = ctx();
     let g = c.services.lock().ok()?;

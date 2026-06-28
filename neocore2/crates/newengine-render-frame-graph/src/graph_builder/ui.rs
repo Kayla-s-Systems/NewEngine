@@ -27,7 +27,8 @@ impl FrameGraphBuilder {
             return self;
         }
         self.add_phase_pass(StandardRenderPhase::UiComposite, |pass| {
-            pass.with_domain(RenderGraphPassDomain::Render2d).writes(RG_SURFACE_COLOR, RenderGraphResourceUsage::ColorAttachment)
+            pass.with_domain(RenderGraphPassDomain::Render2d)
+                .writes(RG_SURFACE_COLOR, RenderGraphResourceUsage::ColorAttachment)
                 .draw_list(DrawListKind::Ui)
         });
         self
@@ -37,12 +38,12 @@ impl FrameGraphBuilder {
     pub fn debug_overlay(mut self, enabled: bool) -> Self {
         if enabled {
             self.add_phase_pass(StandardRenderPhase::DebugOverlay, |pass| {
-                pass.with_domain(RenderGraphPassDomain::Render2d).reads(RG_SURFACE_COLOR, RenderGraphResourceUsage::ColorAttachment)
+                pass.with_domain(RenderGraphPassDomain::Render2d)
+                    .reads(RG_SURFACE_COLOR, RenderGraphResourceUsage::ColorAttachment)
                     .writes(RG_SURFACE_COLOR, RenderGraphResourceUsage::ColorAttachment)
                     .draw_list(DrawListKind::Debug)
             });
         }
         self
     }
-
 }

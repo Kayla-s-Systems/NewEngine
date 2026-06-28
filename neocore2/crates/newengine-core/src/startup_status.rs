@@ -200,7 +200,8 @@ impl EngineStartupSnapshot {
             phase: EngineStartupPhase::Running,
             run_state,
             status: "Engine runtime ready.".to_owned(),
-            detail: "Core FSM reached running; frame loop may accept playable-world handoff.".to_owned(),
+            detail: "Core FSM reached running; frame loop may accept playable-world handoff."
+                .to_owned(),
             progress_01: 1.0,
             current_module: None,
             module_index: module_total,
@@ -316,16 +317,26 @@ pub struct EngineStartupStepOutcome {
 impl EngineStartupStepOutcome {
     #[inline]
     pub fn running(snapshot: EngineStartupSnapshot) -> Self {
-        Self { finished: false, snapshot }
+        Self {
+            finished: false,
+            snapshot,
+        }
     }
 
     #[inline]
     pub fn complete(snapshot: EngineStartupSnapshot) -> Self {
-        Self { finished: true, snapshot }
+        Self {
+            finished: true,
+            snapshot,
+        }
     }
 }
 
 fn normalize(value: String, fallback: &str) -> String {
     let trimmed = value.trim();
-    if trimmed.is_empty() { fallback.to_owned() } else { trimmed.to_owned() }
+    if trimmed.is_empty() {
+        fallback.to_owned()
+    } else {
+        trimmed.to_owned()
+    }
 }

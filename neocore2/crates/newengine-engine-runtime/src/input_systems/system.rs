@@ -84,11 +84,17 @@ pub struct InputRuntimeSystemState {
 
 impl InputRuntimeSystemState {
     #[inline]
-    pub fn id(&self) -> &'static str { self.system.id() }
+    pub fn id(&self) -> &'static str {
+        self.system.id()
+    }
     #[inline]
-    pub fn label(&self) -> &'static str { self.system.label() }
+    pub fn label(&self) -> &'static str {
+        self.system.label()
+    }
     #[inline]
-    pub fn owner(&self) -> &'static str { self.system.owner() }
+    pub fn owner(&self) -> &'static str {
+        self.system.owner()
+    }
 }
 
 #[derive(Clone, Debug, Default)]

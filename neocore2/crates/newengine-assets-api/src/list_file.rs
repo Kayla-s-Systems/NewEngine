@@ -26,14 +26,26 @@ pub struct AssetGatewayRoute {
 
 impl Default for AssetGatewayRoute {
     fn default() -> Self {
-        Self { gateway: "engine.assets".to_owned(), method: "asset.decode_v1".to_owned(), semantic_owner: "asset".to_owned() }
+        Self {
+            gateway: "engine.assets".to_owned(),
+            method: "asset.decode_v1".to_owned(),
+            semantic_owner: "asset".to_owned(),
+        }
     }
 }
 
 impl AssetGatewayRoute {
     #[inline]
-    pub fn new(gateway: impl Into<String>, method: impl Into<String>, semantic_owner: impl Into<String>) -> Self {
-        Self { gateway: gateway.into(), method: method.into(), semantic_owner: semantic_owner.into() }
+    pub fn new(
+        gateway: impl Into<String>,
+        method: impl Into<String>,
+        semantic_owner: impl Into<String>,
+    ) -> Self {
+        Self {
+            gateway: gateway.into(),
+            method: method.into(),
+            semantic_owner: semantic_owner.into(),
+        }
     }
 }
 
@@ -53,20 +65,40 @@ pub struct AssetEntryDependency {
 }
 
 impl Default for AssetEntryDependency {
-    fn default() -> Self { Self { reference: String::new(), kind: String::new(), role: String::new(), domain: String::new(), required: true } }
+    fn default() -> Self {
+        Self {
+            reference: String::new(),
+            kind: String::new(),
+            role: String::new(),
+            domain: String::new(),
+            required: true,
+        }
+    }
 }
 
 impl AssetEntryDependency {
     #[inline]
     pub fn required(reference: impl Into<String>, kind: impl Into<String>) -> Self {
         let kind = kind.into();
-        Self { reference: reference.into(), role: kind.clone(), kind, domain: String::new(), required: true }
+        Self {
+            reference: reference.into(),
+            role: kind.clone(),
+            kind,
+            domain: String::new(),
+            required: true,
+        }
     }
 
     #[inline]
     pub fn optional(reference: impl Into<String>, kind: impl Into<String>) -> Self {
         let kind = kind.into();
-        Self { reference: reference.into(), role: kind.clone(), kind, domain: String::new(), required: false }
+        Self {
+            reference: reference.into(),
+            role: kind.clone(),
+            kind,
+            domain: String::new(),
+            required: false,
+        }
     }
 
     #[inline]
@@ -84,7 +116,6 @@ impl AssetEntryDependency {
     }
 }
 
-
 /// Common dependency record used inside NEF8/ListFile domain bodies.
 ///
 /// This is the binary-domain counterpart of `AssetEntryDependency`: codecs and
@@ -101,14 +132,29 @@ pub struct AssetDependencyRecordV1 {
 
 impl Default for AssetDependencyRecordV1 {
     fn default() -> Self {
-        Self { reference: String::new(), role: String::new(), required: true, domain: String::new() }
+        Self {
+            reference: String::new(),
+            role: String::new(),
+            required: true,
+            domain: String::new(),
+        }
     }
 }
 
 impl AssetDependencyRecordV1 {
     #[inline]
-    pub fn new(reference: impl Into<String>, role: impl Into<String>, domain: impl Into<String>, required: bool) -> Self {
-        Self { reference: reference.into(), role: role.into(), domain: domain.into(), required }
+    pub fn new(
+        reference: impl Into<String>,
+        role: impl Into<String>,
+        domain: impl Into<String>,
+        required: bool,
+    ) -> Self {
+        Self {
+            reference: reference.into(),
+            role: role.into(),
+            domain: domain.into(),
+            required,
+        }
     }
 }
 
@@ -151,9 +197,19 @@ impl Default for ListFileEntryRecordV1 {
 
 impl ListFileEntryRecordV1 {
     #[inline]
-    pub fn new(name: impl Into<String>, entry_kind: impl Into<String>, schema: impl Into<String>) -> Self {
+    pub fn new(
+        name: impl Into<String>,
+        entry_kind: impl Into<String>,
+        schema: impl Into<String>,
+    ) -> Self {
         let name = name.into();
-        Self { stable_hash: stable_hash_from_text(&name), name, entry_kind: entry_kind.into(), schema: schema.into(), ..Default::default() }
+        Self {
+            stable_hash: stable_hash_from_text(&name),
+            name,
+            entry_kind: entry_kind.into(),
+            schema: schema.into(),
+            ..Default::default()
+        }
     }
 }
 
@@ -169,7 +225,14 @@ pub struct ListFileMetadataNamespaceV1 {
 }
 
 impl Default for ListFileMetadataNamespaceV1 {
-    fn default() -> Self { Self { namespace: String::new(), schema: String::new(), payload_offset: 0, payload_len: 0 } }
+    fn default() -> Self {
+        Self {
+            namespace: String::new(),
+            schema: String::new(),
+            payload_offset: 0,
+            payload_len: 0,
+        }
+    }
 }
 
 /// One addressable entry inside a dictionary/container file.
@@ -201,9 +264,19 @@ impl Default for AssetEntryManifest {
 
 impl AssetEntryManifest {
     #[inline]
-    pub fn new(name: impl Into<String>, asset_kind: impl Into<String>, entry_ref: impl Into<String>) -> Self {
+    pub fn new(
+        name: impl Into<String>,
+        asset_kind: impl Into<String>,
+        entry_ref: impl Into<String>,
+    ) -> Self {
         let name = name.into();
-        Self { stable_id: stable_id_from_text(&name), name, asset_kind: asset_kind.into(), entry_ref: entry_ref.into(), ..Default::default() }
+        Self {
+            stable_id: stable_id_from_text(&name),
+            name,
+            asset_kind: asset_kind.into(),
+            entry_ref: entry_ref.into(),
+            ..Default::default()
+        }
     }
 }
 
@@ -236,7 +309,8 @@ impl Default for AssetFileManifest {
             policy: vec![
                 "entries are addressed as <logical-path>@entry".to_owned(),
                 "logical paths are VFS paths, never physical filesystem paths".to_owned(),
-                "domain gateways interpret entries; AssetManager owns bytes and codec dispatch".to_owned(),
+                "domain gateways interpret entries; AssetManager owns bytes and codec dispatch"
+                    .to_owned(),
             ],
         }
     }
@@ -244,9 +318,17 @@ impl Default for AssetFileManifest {
 
 #[inline]
 pub fn entry_ref(logical_path: &str, entry: &str) -> String {
-    let path = logical_path.trim().replace('\\', "/").trim_start_matches('/').to_owned();
+    let path = logical_path
+        .trim()
+        .replace('\\', "/")
+        .trim_start_matches('/')
+        .to_owned();
     let entry = entry.trim();
-    if entry.is_empty() { path } else { format!("{path}@{entry}") }
+    if entry.is_empty() {
+        path
+    } else {
+        format!("{path}@{entry}")
+    }
 }
 
 #[inline]
@@ -330,11 +412,14 @@ pub struct ListFileHeaderV1 {
 
 impl ListFileHeaderV1 {
     #[inline]
-    pub fn content_kind_label(&self) -> &'static str { list_file_content_kind_label(self.content_kind) }
+    pub fn content_kind_label(&self) -> &'static str {
+        list_file_content_kind_label(self.content_kind)
+    }
 
     #[inline]
     pub fn is_deflate_body(&self) -> bool {
-        (self.flags & LIST_FILE_FLAG_BODY_DEFLATE) != 0 && self.compression == LIST_FILE_COMPRESSION_DEFLATE
+        (self.flags & LIST_FILE_FLAG_BODY_DEFLATE) != 0
+            && self.compression == LIST_FILE_COMPRESSION_DEFLATE
     }
 }
 
@@ -424,10 +509,13 @@ pub struct ListFileFormatSpec {
     pub selector_syntax: &'static str,
 }
 
-
 pub fn parse_list_file_header_v1(bytes: &[u8]) -> Result<ListFileHeaderV1, String> {
     if bytes.len() < LIST_FILE_HEADER_LEN_V1 {
-        return Err(format!("NEF8 ListFile header too small: bytes={} expected>={}", bytes.len(), LIST_FILE_HEADER_LEN_V1));
+        return Err(format!(
+            "NEF8 ListFile header too small: bytes={} expected>={}",
+            bytes.len(),
+            LIST_FILE_HEADER_LEN_V1
+        ));
     }
     if bytes.get(0..4) != Some(&LIST_FILE_MAGIC_NEF8[..]) {
         return Err("NEF8 ListFile magic mismatch".to_owned());
@@ -449,10 +537,14 @@ pub fn parse_list_file_header_v1(bytes: &[u8]) -> Result<ListFileHeaderV1, Strin
     let flags = read_u16(bytes, 10)?;
     let compression = read_u16(bytes, 12)?;
     if compression != LIST_FILE_COMPRESSION_DEFLATE {
-        return Err(format!("unsupported NEF8 ListFile body compression {compression}"));
+        return Err(format!(
+            "unsupported NEF8 ListFile body compression {compression}"
+        ));
     }
     if (flags & LIST_FILE_FLAG_BODY_DEFLATE) == 0 {
-        return Err(format!("NEF8 ListFile missing deflate body flag flags=0x{flags:04x}"));
+        return Err(format!(
+            "NEF8 ListFile missing deflate body flag flags=0x{flags:04x}"
+        ));
     }
 
     let entry_count_u64 = read_u64(bytes, 40)?;
@@ -484,17 +576,25 @@ pub fn parse_list_file_header_v1(bytes: &[u8]) -> Result<ListFileHeaderV1, Strin
 }
 
 fn read_u16(bytes: &[u8], offset: usize) -> Result<u16, String> {
-    let slice = bytes.get(offset..offset + 2).ok_or_else(|| format!("NEF8 header truncated at u16 offset {offset}"))?;
+    let slice = bytes
+        .get(offset..offset + 2)
+        .ok_or_else(|| format!("NEF8 header truncated at u16 offset {offset}"))?;
     Ok(u16::from_le_bytes([slice[0], slice[1]]))
 }
 
 fn read_u64(bytes: &[u8], offset: usize) -> Result<u64, String> {
-    let slice = bytes.get(offset..offset + 8).ok_or_else(|| format!("NEF8 header truncated at u64 offset {offset}"))?;
-    Ok(u64::from_le_bytes([slice[0], slice[1], slice[2], slice[3], slice[4], slice[5], slice[6], slice[7]]))
+    let slice = bytes
+        .get(offset..offset + 8)
+        .ok_or_else(|| format!("NEF8 header truncated at u64 offset {offset}"))?;
+    Ok(u64::from_le_bytes([
+        slice[0], slice[1], slice[2], slice[3], slice[4], slice[5], slice[6], slice[7],
+    ]))
 }
 
 fn read_hash32(bytes: &[u8], offset: usize) -> Result<[u8; 32], String> {
-    let slice = bytes.get(offset..offset + 32).ok_or_else(|| format!("NEF8 header truncated at hash32 offset {offset}"))?;
+    let slice = bytes
+        .get(offset..offset + 32)
+        .ok_or_else(|| format!("NEF8 header truncated at hash32 offset {offset}"))?;
     let mut out = [0u8; 32];
     out.copy_from_slice(slice);
     Ok(out)

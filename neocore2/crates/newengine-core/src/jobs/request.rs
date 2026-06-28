@@ -69,7 +69,6 @@ impl JobRequest {
         self
     }
 
-
     #[inline]
     pub const fn with_frame_id(mut self, frame_id: u64) -> Self {
         self.frame_id = Some(frame_id);
@@ -118,4 +117,3 @@ impl JobRequest {
         self
     }
 }
-

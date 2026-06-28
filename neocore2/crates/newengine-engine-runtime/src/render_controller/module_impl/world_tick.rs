@@ -3,12 +3,14 @@ use newengine_core::render::RenderApi;
 use newengine_scene::Scene;
 
 use crate::engine_bounds::EngineBoundsSnap;
+use crate::gameplay::{
+    run_schedule_with_physics_mode_and_telemetry_for_frame, GameRunMode, PhysicsIntegrationMode,
+};
 use crate::scene_bridge::EngineViewInput;
-use crate::gameplay::{run_schedule_with_physics_mode_and_telemetry_for_frame, GameRunMode, PhysicsIntegrationMode};
 
+use super::super::controller::RuntimeRenderController;
 use super::frame_types::WorldFrameState;
 use super::input::ViewportInputSnap;
-use super::super::controller::RuntimeRenderController;
 use super::{readiness, scene};
 
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -35,9 +37,11 @@ impl RuntimeRenderController {
         let selection = scene_bridge.selection();
 
         let view_frame = scene.run_frame(self.frame.frame_index, |world| {
-            let _authority_frame = scene_bridge
-                .authority_bridge()
-                .publish_frame(world, self.frame.frame_index, "render.world_tick");
+            let _authority_frame = scene_bridge.authority_bridge().publish_frame(
+                world,
+                self.frame.frame_index,
+                "render.world_tick",
+            );
 
             let world_playable = readiness::update_game_ready_launch_gate(
                 self,
@@ -48,11 +52,17 @@ impl RuntimeRenderController {
             );
             let gate_released_waiting_activation = world
                 .resource::<crate::gameplay::GameReadyWorldLaunchGate>()
-                .map(|gate| gate.is_released() && !gate.is_play_activated() && !gate.is_editor_preview_ready())
+                .map(|gate| {
+                    gate.is_released()
+                        && !gate.is_play_activated()
+                        && !gate.is_editor_preview_ready()
+                })
                 .unwrap_or(false);
 
             let effective_play_mode = if gate_released_waiting_activation {
-                if let Some(gate) = world.resource_mut::<crate::gameplay::GameReadyWorldLaunchGate>() {
+                if let Some(gate) =
+                    world.resource_mut::<crate::gameplay::GameReadyWorldLaunchGate>()
+                {
                     gate.mark_play_activated();
                 }
                 activate_game_ready_play_after_frame = true;
@@ -69,7 +79,9 @@ impl RuntimeRenderController {
                 if runtime_profile.use_runtime_terrain_streaming() {
                     let mats_lock = scene_bridge.materials();
                     let mats = mats_lock.read();
-                    crate::scene_bridge::tick_game_ready_streaming_terrain(world, &mats, job_system);
+                    crate::scene_bridge::tick_game_ready_streaming_terrain(
+                        world, &mats, job_system,
+                    );
                 } else {
                     log_streaming_skip_once();
                 }
@@ -93,7 +105,9 @@ impl RuntimeRenderController {
                     None
                 };
                 if let Some(physics_mode) = physics_mode {
-                    world.insert_resource(crate::gameplay::PhysicsRuntimeFrameIndex(self.frame.frame_index));
+                    world.insert_resource(crate::gameplay::PhysicsRuntimeFrameIndex(
+                        self.frame.frame_index,
+                    ));
                     let publish_sim_job = |event: newengine_jobs_api::EngineTaskEvent| {
                         let job_event = newengine_jobs_api::EngineJobEventV1::new(
                             event.clone(),
@@ -117,7 +131,8 @@ impl RuntimeRenderController {
                             let _ = events.publish(job_event);
                         }
                     };
-                    let sim_telemetry = newengine_sim::SimulationJobTelemetry::new(&publish_sim_job);
+                    let sim_telemetry =
+                        newengine_sim::SimulationJobTelemetry::new(&publish_sim_job);
                     run_schedule_with_physics_mode_and_telemetry_for_frame(
                         &mut self.frame.sim_schedule,
                         world,
@@ -171,7 +186,6 @@ static GPU_SAFE_PHYSICS_SKIP_LOGGED: AtomicBool = AtomicBool::new(false);
 static SERVICE_PHYSICS_UNAVAILABLE_LOGGED: AtomicBool = AtomicBool::new(false);
 static GPU_SAFE_STREAMING_SKIP_LOGGED: AtomicBool = AtomicBool::new(false);
 
-
 fn log_service_physics_unavailable_once() {
     if SERVICE_PHYSICS_UNAVAILABLE_LOGGED
         .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
@@ -181,7 +195,8 @@ fn log_service_physics_unavailable_once() {
             "render world tick: engine.physics provider unavailable; physics step skipped because no explicit ECS fallback profile policy is active"
         );
         newengine_core::crash::record_breadcrumb(
-            "render world tick: missing physics backend skipped; no hidden fallback constructed".to_owned(),
+            "render world tick: missing physics backend skipped; no hidden fallback constructed"
+                .to_owned(),
         );
     }
 }

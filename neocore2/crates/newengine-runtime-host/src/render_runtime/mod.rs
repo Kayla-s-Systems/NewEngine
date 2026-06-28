@@ -6,6 +6,4 @@ mod service_api;
 mod types;
 
 pub use runtime_module::RenderBackendRuntimeModule;
-pub use types::{
-    ResolvedRenderBackendConfig,
-};
+pub use types::ResolvedRenderBackendConfig;

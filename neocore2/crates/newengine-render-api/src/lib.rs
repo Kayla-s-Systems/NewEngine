@@ -4,8 +4,8 @@ pub use newengine_ui_draw::{
     TextureRef, UiBorderPaintCommand, UiClipPaintCommand, UiDrawCmd, UiDrawList,
     UiIconPaintCommand, UiImagePaintCommand, UiImageRef, UiLayerPaintCommand, UiMesh,
     UiPaintCommand, UiPaintList, UiPaintNodeRef, UiRect, UiRectPaintCommand,
-    UiRoundedRectPaintCommand, UiScopePaintCommand, UiTexId, UiTextPaintCommand,
-    UiTexture, UiTextureDelta, UiTexturePatch, UiVectorPaintCommand, UiVertex, VectorRef,
+    UiRoundedRectPaintCommand, UiScopePaintCommand, UiTexId, UiTextPaintCommand, UiTexture,
+    UiTextureDelta, UiTexturePatch, UiVectorPaintCommand, UiVertex, VectorRef,
 };
 
 pub mod reserved_textures {
@@ -16,44 +16,44 @@ mod bindings;
 mod capabilities;
 mod constants;
 mod diagnostics;
-mod events;
 mod effects;
-mod frame;
+mod events;
 mod feature_registry;
-mod material_graph;
-mod shader_variants;
-mod maturity;
+mod frame;
 mod ids;
+mod material_graph;
+mod maturity;
 mod pipeline;
+mod postfx;
 mod protocol;
 mod provider_bridge;
 mod render_graph;
 mod residency;
 mod resources;
 mod shader_cache;
+mod shader_variants;
 mod shadows;
-mod postfx;
 mod uploads;
 
 pub use bindings::*;
 pub use capabilities::*;
 pub use constants::*;
 pub use diagnostics::*;
-pub use events::*;
 pub use effects::*;
-pub use frame::*;
+pub use events::*;
 pub use feature_registry::*;
-pub use material_graph::*;
-pub use shader_variants::*;
-pub use maturity::*;
+pub use frame::*;
 pub use ids::*;
+pub use material_graph::*;
+pub use maturity::*;
 pub use pipeline::*;
+pub use postfx::*;
 pub use protocol::*;
 pub use provider_bridge::*;
 pub use render_graph::*;
 pub use residency::*;
 pub use resources::*;
 pub use shader_cache::*;
+pub use shader_variants::*;
 pub use shadows::*;
-pub use postfx::*;
 pub use uploads::*;

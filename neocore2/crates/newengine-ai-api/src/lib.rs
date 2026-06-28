@@ -92,7 +92,9 @@ pub enum AiIntentKind {
 }
 
 impl Default for AiIntentKind {
-    fn default() -> Self { Self::Idle }
+    fn default() -> Self {
+        Self::Idle
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -184,7 +186,10 @@ impl Default for AiServiceInfoV1 {
         Self {
             protocol: AI_RUNTIME_CONTRACT.to_owned(),
             provider: "engine.ai.foundation".to_owned(),
-            methods: AI_SERVICE_METHODS.iter().map(|it| (*it).to_owned()).collect(),
+            methods: AI_SERVICE_METHODS
+                .iter()
+                .map(|it| (*it).to_owned())
+                .collect(),
             features: vec![
                 "frame-dto-input".to_owned(),
                 "intent-dto-output".to_owned(),

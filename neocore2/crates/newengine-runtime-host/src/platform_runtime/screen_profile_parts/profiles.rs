@@ -9,8 +9,20 @@ impl Default for EditorScreen {
 }
 
 impl EditorScreen {
-    pub(super) fn surface_node(&self, frame_index: u64, runtime_mode: UiEditorRuntimeMode, layout: &EditorLayoutMetrics, active_menu_id: Option<&str>) -> UiSurfaceNode {
-        editor_screen_surface_node(&self.descriptor, frame_index, runtime_mode, layout, active_menu_id)
+    pub(super) fn surface_node(
+        &self,
+        frame_index: u64,
+        runtime_mode: UiEditorRuntimeMode,
+        layout: &EditorLayoutMetrics,
+        active_menu_id: Option<&str>,
+    ) -> UiSurfaceNode {
+        editor_screen_surface_node(
+            &self.descriptor,
+            frame_index,
+            runtime_mode,
+            layout,
+            active_menu_id,
+        )
     }
 }
 
@@ -39,7 +51,10 @@ impl GameScreen {
     }
 }
 
-pub(super) fn screen_profile_descriptor(profile: UiScreenProfile, game_ui_root: Option<String>) -> UiScreenProfileDescriptor {
+pub(super) fn screen_profile_descriptor(
+    profile: UiScreenProfile,
+    game_ui_root: Option<String>,
+) -> UiScreenProfileDescriptor {
     match profile {
         UiScreenProfile::Editor => editor_screen_descriptor(),
         UiScreenProfile::Game => game_screen_descriptor(game_ui_root),
@@ -57,15 +72,143 @@ pub(super) fn editor_screen_descriptor() -> UiScreenProfileDescriptor {
         game_ui_root_surface_id: None,
         input_focus_policy: UiScreenInputFocusPolicy::EditorShell,
         panels: vec![
-            screen_panel("top.toolbar", "Toolbar", "engine.ui.editor.toolbar", "engine.ui", "newengine.ui.editor.toolbar.dto.v1", true, false, ["top", "toolbar", "editor", "neui:assets/ui/editor/editor_shell.neui@toolbar"]),
-            screen_panel("center.viewport", "Viewport", DEFAULT_VIEWPORT_SURFACE, "engine.render", "newengine.render.viewport.surface_ref.v1", true, false, ["center", "viewport", "render-target"]),
-            screen_panel("center.viewport_gizmos", "Viewport Gizmos", "engine.ui.editor.viewport_gizmos", "engine.ui", "newengine.ui.editor.viewport_gizmos.node_tree.v1", true, false, ["center", "viewport-gizmos", "gizmo", "neui:assets/ui/editor/viewport_gizmos.neui@surface"]),
-            screen_panel("left.scene_tree", "Scene Tree", "engine.ui.editor.scene_tree", "engine.scene", "newengine.scene.tree_snapshot.schema_driven.v1", true, false, ["left", "scene-tree", "scene", "world", "neui:assets/ui/editor/scene_tree.neui@surface"]),
-            screen_panel("right.inspector", "Inspector", "engine.ui.editor.inspector", "engine.schema", "newengine.schema.properties.inspector.v1", true, false, ["right", "inspector", "schema", "properties", "neui:assets/ui/editor/inspector.neui@surface"]),
-            screen_panel("bottom.asset_browser", "Asset Browser", "ui.assets.catalog", "engine.assets", "newengine.assets.catalog_ui.asset_document_dto.v1", true, false, ["bottom", "assets", "asset-browser", "content-browser", "neui:assets/ui/editor/content_browser.neui@editor.asset_browser"]),
-            screen_panel("bottom.import_queue", "Import Queue", "engine.ui.editor.import_queue", "engine.assets", "newengine.assets.import_queue.snapshot.v1", true, false, ["bottom", "import-queue", "assets", "jobs", "neui:assets/ui/editor/import_queue.neui@surface"]),
-            screen_panel("bottom.output_log", "Output Log", "engine.ui.editor.output_log", "engine.diagnostics", "newengine.diagnostics.output_log_snapshot.v1", true, false, ["bottom", "output-log", "console", "diagnostics", "neui:assets/ui/editor/output_log.neui@surface"]),
-            screen_panel("bottom.profiler_diagnostics", "Profiler / Diagnostics", "engine.ui.editor.profiler_diagnostics", "engine.diagnostics", "newengine.diagnostics.profiler_route_snapshot.v1", true, false, ["bottom", "profiler", "diagnostics", "gateway", "jobs", "neui:assets/ui/editor/profiler_diagnostics.neui@surface"]),
+            screen_panel(
+                "top.toolbar",
+                "Toolbar",
+                "engine.ui.editor.toolbar",
+                "engine.ui",
+                "newengine.ui.editor.toolbar.dto.v1",
+                true,
+                false,
+                [
+                    "top",
+                    "toolbar",
+                    "editor",
+                    "neui:assets/ui/editor/editor_shell.neui@toolbar",
+                ],
+            ),
+            screen_panel(
+                "center.viewport",
+                "Viewport",
+                DEFAULT_VIEWPORT_SURFACE,
+                "engine.render",
+                "newengine.render.viewport.surface_ref.v1",
+                true,
+                false,
+                ["center", "viewport", "render-target"],
+            ),
+            screen_panel(
+                "center.viewport_gizmos",
+                "Viewport Gizmos",
+                "engine.ui.editor.viewport_gizmos",
+                "engine.ui",
+                "newengine.ui.editor.viewport_gizmos.node_tree.v1",
+                true,
+                false,
+                [
+                    "center",
+                    "viewport-gizmos",
+                    "gizmo",
+                    "neui:assets/ui/editor/viewport_gizmos.neui@surface",
+                ],
+            ),
+            screen_panel(
+                "left.scene_tree",
+                "Scene Tree",
+                "engine.ui.editor.scene_tree",
+                "engine.scene",
+                "newengine.scene.tree_snapshot.schema_driven.v1",
+                true,
+                false,
+                [
+                    "left",
+                    "scene-tree",
+                    "scene",
+                    "world",
+                    "neui:assets/ui/editor/scene_tree.neui@surface",
+                ],
+            ),
+            screen_panel(
+                "right.inspector",
+                "Inspector",
+                "engine.ui.editor.inspector",
+                "engine.schema",
+                "newengine.schema.properties.inspector.v1",
+                true,
+                false,
+                [
+                    "right",
+                    "inspector",
+                    "schema",
+                    "properties",
+                    "neui:assets/ui/editor/inspector.neui@surface",
+                ],
+            ),
+            screen_panel(
+                "bottom.asset_browser",
+                "Asset Browser",
+                "ui.assets.catalog",
+                "engine.assets",
+                "newengine.assets.catalog_ui.asset_document_dto.v1",
+                true,
+                false,
+                [
+                    "bottom",
+                    "assets",
+                    "asset-browser",
+                    "content-browser",
+                    "neui:assets/ui/editor/content_browser.neui@editor.asset_browser",
+                ],
+            ),
+            screen_panel(
+                "bottom.import_queue",
+                "Import Queue",
+                "engine.ui.editor.import_queue",
+                "engine.assets",
+                "newengine.assets.import_queue.snapshot.v1",
+                true,
+                false,
+                [
+                    "bottom",
+                    "import-queue",
+                    "assets",
+                    "jobs",
+                    "neui:assets/ui/editor/import_queue.neui@surface",
+                ],
+            ),
+            screen_panel(
+                "bottom.output_log",
+                "Output Log",
+                "engine.ui.editor.output_log",
+                "engine.diagnostics",
+                "newengine.diagnostics.output_log_snapshot.v1",
+                true,
+                false,
+                [
+                    "bottom",
+                    "output-log",
+                    "console",
+                    "diagnostics",
+                    "neui:assets/ui/editor/output_log.neui@surface",
+                ],
+            ),
+            screen_panel(
+                "bottom.profiler_diagnostics",
+                "Profiler / Diagnostics",
+                "engine.ui.editor.profiler_diagnostics",
+                "engine.diagnostics",
+                "newengine.diagnostics.profiler_route_snapshot.v1",
+                true,
+                false,
+                [
+                    "bottom",
+                    "profiler",
+                    "diagnostics",
+                    "gateway",
+                    "jobs",
+                    "neui:assets/ui/editor/profiler_diagnostics.neui@surface",
+                ],
+            ),
         ],
         diagnostics: vec![
             "EditorScreen is a UI composition profile, not a backend domain.".to_owned(),
@@ -120,11 +263,23 @@ pub(super) fn headless_screen_descriptor() -> UiScreenProfileDescriptor {
     }
 }
 
-pub(super) fn editor_screen_surface_node(descriptor: &UiScreenProfileDescriptor, frame_index: u64, runtime_mode: UiEditorRuntimeMode, layout: &EditorLayoutMetrics, active_menu_id: Option<&str>) -> UiSurfaceNode {
+pub(super) fn editor_screen_surface_node(
+    descriptor: &UiScreenProfileDescriptor,
+    frame_index: u64,
+    runtime_mode: UiEditorRuntimeMode,
+    layout: &EditorLayoutMetrics,
+    active_menu_id: Option<&str>,
+) -> UiSurfaceNode {
     let body_lines = Vec::new();
-    let footer_lines = vec![format!("mode={} · 1 Edit · 2 Simulate · 3 Play", runtime_mode.id())];
+    let footer_lines = vec![format!(
+        "mode={} · 1 Edit · 2 Simulate · 3 Play",
+        runtime_mode.id()
+    )];
     let mut metrics = screen_metrics(descriptor, frame_index);
-    metrics.insert("editor_panel_count".to_owned(), serde_json::json!(descriptor.panels.len()));
+    metrics.insert(
+        "editor_panel_count".to_owned(),
+        serde_json::json!(descriptor.panels.len()),
+    );
     metrics.insert("menu_h".to_owned(), serde_json::json!(layout.menu_h));
     metrics.insert("toolbar_h".to_owned(), serde_json::json!(layout.toolbar_h));
     metrics.insert("status_h".to_owned(), serde_json::json!(layout.status_h));
@@ -133,15 +288,42 @@ pub(super) fn editor_screen_surface_node(descriptor: &UiScreenProfileDescriptor,
     metrics.insert("right_w".to_owned(), serde_json::json!(layout.right_w));
     metrics.insert("gap".to_owned(), serde_json::json!(layout.gap));
     metrics.insert("bottom_y".to_owned(), serde_json::json!(layout.bottom_y));
-    metrics.insert("viewport_x".to_owned(), serde_json::json!(layout.viewport_x));
-    metrics.insert("viewport_y".to_owned(), serde_json::json!(layout.viewport_y));
-    metrics.insert("viewport_w".to_owned(), serde_json::json!(layout.viewport_w));
-    metrics.insert("viewport_h".to_owned(), serde_json::json!(layout.viewport_h));
-    metrics.insert("dock_left_visible".to_owned(), serde_json::json!(layout.left_visible));
-    metrics.insert("dock_right_visible".to_owned(), serde_json::json!(layout.right_visible));
-    metrics.insert("dock_bottom_visible".to_owned(), serde_json::json!(layout.bottom_visible));
-    metrics.insert("source_ref".to_owned(), serde_json::json!(EDITOR_SHELL_NEUI_REF));
-    metrics.insert("ui_request_transport".to_owned(), serde_json::json!("UiNodeTreeRequest"));
+    metrics.insert(
+        "viewport_x".to_owned(),
+        serde_json::json!(layout.viewport_x),
+    );
+    metrics.insert(
+        "viewport_y".to_owned(),
+        serde_json::json!(layout.viewport_y),
+    );
+    metrics.insert(
+        "viewport_w".to_owned(),
+        serde_json::json!(layout.viewport_w),
+    );
+    metrics.insert(
+        "viewport_h".to_owned(),
+        serde_json::json!(layout.viewport_h),
+    );
+    metrics.insert(
+        "dock_left_visible".to_owned(),
+        serde_json::json!(layout.left_visible),
+    );
+    metrics.insert(
+        "dock_right_visible".to_owned(),
+        serde_json::json!(layout.right_visible),
+    );
+    metrics.insert(
+        "dock_bottom_visible".to_owned(),
+        serde_json::json!(layout.bottom_visible),
+    );
+    metrics.insert(
+        "source_ref".to_owned(),
+        serde_json::json!(EDITOR_SHELL_NEUI_REF),
+    );
+    metrics.insert(
+        "ui_request_transport".to_owned(),
+        serde_json::json!("UiNodeTreeRequest"),
+    );
 
     UiSurfaceNode {
         version: 1,
@@ -151,7 +333,8 @@ pub(super) fn editor_screen_surface_node(descriptor: &UiScreenProfileDescriptor,
         modal: false,
         z_order: 100,
         title: EDITOR_CHROME.product_title.to_owned(),
-        subtitle: "Editor shell · viewport contained inside UI · simulation stopped until command".to_owned(),
+        subtitle: "Editor shell · viewport contained inside UI · simulation stopped until command"
+            .to_owned(),
         body_lines,
         footer_lines,
         style_tags: vec![
@@ -186,7 +369,11 @@ pub(super) fn editor_screen_surface_node(descriptor: &UiScreenProfileDescriptor,
             corner_radius_px: 7.0,
             border_px: 1.0,
             font: newengine_ui_api::UiFontStyle {
-                stack: vec![UI_FONT_ASSET_EDITOR_SANS.to_owned(), UI_FONT_ASSET_EDITOR_DISPLAY.to_owned(), "Segoe UI".to_owned()],
+                stack: vec![
+                    UI_FONT_ASSET_EDITOR_SANS.to_owned(),
+                    UI_FONT_ASSET_EDITOR_DISPLAY.to_owned(),
+                    "Segoe UI".to_owned(),
+                ],
                 body_px: 11.0,
                 title_px: 13.0,
                 secondary_px: 9.5,
@@ -200,16 +387,27 @@ pub(super) fn editor_screen_surface_node(descriptor: &UiScreenProfileDescriptor,
     }
 }
 
-pub(super) fn game_screen_surface_node(descriptor: &UiScreenProfileDescriptor, frame_index: u64) -> Option<UiSurfaceNode> {
+pub(super) fn game_screen_surface_node(
+    descriptor: &UiScreenProfileDescriptor,
+    frame_index: u64,
+) -> Option<UiSurfaceNode> {
     let root = descriptor.game_ui_root_surface_id.as_ref()?.trim();
     if root.is_empty() {
         return None;
     }
     let diagnostic_panel_enabled = std::env::var("NEWENGINE_GAME_SCREEN_DIAGNOSTIC_PANEL")
-        .map(|value| matches!(value.trim(), "1" | "true" | "TRUE" | "True" | "on" | "ON" | "On"))
+        .map(|value| {
+            matches!(
+                value.trim(),
+                "1" | "true" | "TRUE" | "True" | "on" | "ON" | "On"
+            )
+        })
         .unwrap_or(false);
     let mut metrics = screen_metrics(descriptor, frame_index);
-    metrics.insert("game_ui_root_surface_id".to_owned(), serde_json::json!(root));
+    metrics.insert(
+        "game_ui_root_surface_id".to_owned(),
+        serde_json::json!(root),
+    );
     if !diagnostic_panel_enabled {
         return Some(UiSurfaceNode {
             version: 1,
@@ -220,13 +418,27 @@ pub(super) fn game_screen_surface_node(descriptor: &UiScreenProfileDescriptor, f
             z_order: 520,
             title: String::new(),
             subtitle: String::new(),
-            body_lines: vec!["+".to_owned()],
+            body_lines: Vec::new(),
             footer_lines: Vec::new(),
-            style_tags: vec!["retained".to_owned(), "hud".to_owned(), "crosshair".to_owned()],
+            style_tags: vec![
+                "retained".to_owned(),
+                "hud".to_owned(),
+                "crosshair".to_owned(),
+            ],
             theme_id: UI_THEME_NORTHSTAR_EDITOR.to_owned(),
             style_ref: Some(UI_THEME_ASSET_NORTHSTAR_EDITOR.to_owned()),
             component_id: UI_COMPONENT_PANEL.to_owned(),
-            components: Vec::new(),
+            components: vec![{
+                let mut crosshair = UiComponentNode::text("hud.crosshair", "+");
+                crosshair.font_token = Some("body".to_owned());
+                crosshair.tone = UiNodeTone::Accent;
+                crosshair.state_tags = vec![
+                    "crosshair".to_owned(),
+                    "hud".to_owned(),
+                    "retained".to_owned(),
+                ];
+                crosshair
+            }],
             message: None,
             style: UiSurfaceStyle {
                 anchor: UiSurfaceAnchor::Center,
@@ -255,14 +467,26 @@ pub(super) fn game_screen_surface_node(descriptor: &UiScreenProfileDescriptor, f
         modal: false,
         z_order: 480,
         title: "Game Screen".to_owned(),
-        subtitle: "Clean runtime presentation; editor panels are not part of this profile".to_owned(),
+        subtitle: "Clean runtime presentation; editor panels are not part of this profile"
+            .to_owned(),
         body_lines: vec![format!("Game UI root: {root}")],
-        footer_lines: vec!["Editor shell is absent; debug overlays must be explicitly enabled.".to_owned()],
-        style_tags: vec!["retained".to_owned(), "screen-profile".to_owned(), "game-screen".to_owned()],
+        footer_lines: vec![
+            "Editor shell is absent; debug overlays must be explicitly enabled.".to_owned(),
+        ],
+        style_tags: vec![
+            "retained".to_owned(),
+            "screen-profile".to_owned(),
+            "game-screen".to_owned(),
+        ],
         theme_id: UI_THEME_NORTHSTAR_EDITOR.to_owned(),
         style_ref: Some(UI_THEME_ASSET_NORTHSTAR_EDITOR.to_owned()),
         component_id: UI_COMPONENT_PANEL.to_owned(),
-        components: descriptor.panels.first().map(|panel| panel_component(panel, true, false)).into_iter().collect(),
+        components: descriptor
+            .panels
+            .first()
+            .map(|panel| panel_component(panel, true, false))
+            .into_iter()
+            .collect(),
         message: None,
         style: UiSurfaceStyle {
             anchor: UiSurfaceAnchor::BottomRight,
@@ -277,4 +501,3 @@ pub(super) fn game_screen_surface_node(descriptor: &UiScreenProfileDescriptor, f
         metrics,
     })
 }
-

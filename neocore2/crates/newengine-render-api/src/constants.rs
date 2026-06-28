@@ -15,7 +15,8 @@ pub const RENDER_MATERIALS_SERVICE_ID: &str = "render.materials.api";
 pub const RENDER_MATERIALS_BACKEND_CAPABILITY_ID: &str = "render.materials.backend";
 pub const RENDER_SERVICE_METHOD_INVOKE: &str = newengine_service_api::SERVICE_METHOD_INVOKE_JSON;
 pub const RENDER_SERVICE_METHOD_INFO: &str = newengine_service_api::SERVICE_METHOD_INFO_JSON;
-pub const RENDER_SERVICE_METHOD_SHUTDOWN_V1: &str = newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1;
+pub const RENDER_SERVICE_METHOD_SHUTDOWN_V1: &str =
+    newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1;
 /// Binary hot-path method for frame-local unit render commands.
 ///
 /// The regular invoke_json surface remains the typed control protocol. This
@@ -26,7 +27,8 @@ pub const RENDER_SERVICE_METHOD_COMMAND_BATCH_BIN_V1: &str = "command_batch_bin_
 
 /// Renderer diagnostics surfaces. These are JSON control-plane dumps, not frame hot-path commands.
 pub const RENDER_SERVICE_METHOD_DUMP_PHASE_GRAPH_V1: &str = "engine.render.dump_phase_graph_v1";
-pub const RENDER_SERVICE_METHOD_DUMP_RESOURCE_LIFETIME_V1: &str = "engine.render.dump_resource_lifetime_v1";
+pub const RENDER_SERVICE_METHOD_DUMP_RESOURCE_LIFETIME_V1: &str =
+    "engine.render.dump_resource_lifetime_v1";
 pub const RENDER_SERVICE_METHOD_DUMP_SHADER_CACHE_V1: &str = "engine.render.dump_shader_cache_v1";
 pub const RENDER_SERVICE_METHOD_DUMP_EFFECT_GRAPH_V1: &str = "engine.render.dump_effect_graph_v1";
 

@@ -9,8 +9,8 @@
 
 mod args;
 mod config_path;
-mod unavailable_presenter;
 mod report;
+mod unavailable_presenter;
 
 pub use report::{StartupWindowDecision, StartupWindowReport};
 

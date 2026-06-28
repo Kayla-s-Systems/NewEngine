@@ -32,7 +32,10 @@ fn collect_providers(loaded: &[LoadedPlugin]) -> HashMap<CapKey, u32> {
     let mut out: HashMap<CapKey, u32> = HashMap::default();
 
     // Engine/Host baseline capabilities.
-    out.insert(cap_key("host.services.v1", CapabilityKind::ServiceV1 as u8), 1);
+    out.insert(
+        cap_key("host.services.v1", CapabilityKind::ServiceV1 as u8),
+        1,
+    );
     out.insert(cap_key("host.events.v1", CapabilityKind::EventsV1 as u8), 1);
 
     // Registered services and active engine gateways are first-class providers too.
@@ -105,10 +108,7 @@ fn missing_requirements(d: &PluginDescriptor, providers: &HashMap<CapKey, u32>) 
         if pv < c.version {
             out.push(format!(
                 "{}(kind={} req_v={} avail_v={})",
-                c.id,
-                c.kind as u8,
-                c.version,
-                pv
+                c.id, c.kind as u8, c.version, pv
             ));
         }
     }
@@ -117,7 +117,6 @@ fn missing_requirements(d: &PluginDescriptor, providers: &HashMap<CapKey, u32>) 
     out.dedup();
     out
 }
-
 
 #[inline]
 fn warn_descriptor_retired_capabilities(plugin_id: &str, descriptor: &PluginDescriptor) {

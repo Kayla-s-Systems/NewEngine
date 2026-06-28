@@ -115,7 +115,10 @@ impl DrawStateCache {
         slot: u32,
         slice: BufferSlice,
     ) -> EngineResult<bool> {
-        debug_assert_eq!(slot, 0, "bucketed lit draw stream currently owns vertex slot 0 only");
+        debug_assert_eq!(
+            slot, 0,
+            "bucketed lit draw stream currently owns vertex slot 0 only"
+        );
         let key = BufferSliceKey::from(slice);
         if self.vertex_slot0 == Some(key) {
             return Ok(false);
@@ -142,8 +145,16 @@ impl DrawStateCache {
     }
 
     #[inline]
-    fn set_bind_group(&mut self, r: &mut dyn RenderApi, slot: u32, bind_group: BindGroupId) -> EngineResult<bool> {
-        debug_assert_eq!(slot, 0, "bucketed lit draw stream currently owns bind group slot 0 only");
+    fn set_bind_group(
+        &mut self,
+        r: &mut dyn RenderApi,
+        slot: u32,
+        bind_group: BindGroupId,
+    ) -> EngineResult<bool> {
+        debug_assert_eq!(
+            slot, 0,
+            "bucketed lit draw stream currently owns bind group slot 0 only"
+        );
         if self.bind_group0 == Some(bind_group) {
             return Ok(false);
         }

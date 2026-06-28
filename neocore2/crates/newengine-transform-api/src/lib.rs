@@ -2,8 +2,8 @@
 
 mod components;
 
-pub use newengine_entity_api::EntityHandle;
 pub use components::{Children, GlobalTransform, Parent, Transform, TransformDirty, WorldPose};
+pub use newengine_entity_api::EntityHandle;
 
 use newengine_service_api::{hash_u128, InterfaceId, ServiceKey};
 

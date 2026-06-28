@@ -81,7 +81,7 @@ impl MathRegistry {
     #[inline]
     pub fn register_many<I>(&self, provider: ProviderId, funs: I) -> MathResult<()>
     where
-        I: IntoIterator<Item=Arc<dyn DynMathFn>>,
+        I: IntoIterator<Item = Arc<dyn DynMathFn>>,
     {
         for f in funs {
             self.register(provider.clone(), f)?;

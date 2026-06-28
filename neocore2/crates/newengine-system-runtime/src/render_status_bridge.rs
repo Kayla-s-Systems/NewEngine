@@ -11,10 +11,9 @@ pub fn overlay_from_render_backend_status(
     }
 
     let phase = status.phase.unwrap_or("unknown");
-    let detail = status
-        .message
-        .as_deref()
-        .unwrap_or("GPU backend entered degraded mode. Event loop is alive; renderer must be recreated.");
+    let detail = status.message.as_deref().unwrap_or(
+        "GPU backend entered degraded mode. Event loop is alive; renderer must be recreated.",
+    );
 
     Some(ScreenOverlayStatus::degraded(
         ScreenOverlayReason::GpuDeviceLost,

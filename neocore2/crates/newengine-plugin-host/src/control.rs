@@ -50,7 +50,7 @@ impl PluginControlQueue {
     }
 
     #[inline]
-    pub fn drain(&mut self) -> impl Iterator<Item=PluginControlCommand> + '_ {
+    pub fn drain(&mut self) -> impl Iterator<Item = PluginControlCommand> + '_ {
         self.q.drain(..)
     }
 

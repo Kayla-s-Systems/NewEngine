@@ -2,8 +2,8 @@ use abi_stable::std_types::RString;
 use newengine_plugin_api::Blob;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
-use super::state::{ctx, with_current_plugin_id, ServiceEntry};
 use super::state::bump_services_generation;
+use super::state::{ctx, with_current_plugin_id, ServiceEntry};
 
 /// Best-effort explicit service shutdown for all services owned by a plugin.
 ///

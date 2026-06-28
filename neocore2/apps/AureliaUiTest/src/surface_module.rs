@@ -447,8 +447,6 @@ impl AureliaUiTestSurfaceModule {
     }
 }
 
-
-
 fn action_has_value_payload(action: &newengine_ui_api::UiActionDispatch) -> bool {
     action_payload_string(action).is_some()
         || action_payload_bool(action).is_some()

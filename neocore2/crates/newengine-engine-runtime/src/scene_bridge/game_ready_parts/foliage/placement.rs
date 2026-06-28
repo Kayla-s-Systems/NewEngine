@@ -1,13 +1,22 @@
 use super::*;
 
-pub(in crate::scene_bridge::game_ready) fn terrain_height(world: &newengine_ecs::World, terrain: EntityId, x: f32, z: f32) -> f32 {
+pub(in crate::scene_bridge::game_ready) fn terrain_height(
+    world: &newengine_ecs::World,
+    terrain: EntityId,
+    x: f32,
+    z: f32,
+) -> f32 {
     let origin = world
         .get::<Transform>(terrain)
         .map(|t| t.position)
         .unwrap_or(Vec3::ZERO);
     world
         .get::<ProceduralTerrain>(terrain)
-        .map(|t| t.heightfield.sample_height_local(x - origin.x, z - origin.z) + origin.y)
+        .map(|t| {
+            t.heightfield
+                .sample_height_local(x - origin.x, z - origin.z)
+                + origin.y
+        })
         .unwrap_or(0.0)
 }
 
@@ -93,7 +102,8 @@ pub(super) fn collect_tree_placements(
             let y = terrain_height(world, terrain, x, z) + spec.surface_offset;
             let scale_t = unit_from_hash(hash_cell(spec.seed, gx, gz, 0x51ca_1e00));
             let scale = spec.min_scale + (spec.max_scale - spec.min_scale) * scale_t;
-            let yaw = unit_from_hash(hash_cell(spec.seed, gx, gz, 0x7a77_0001)) * core::f32::consts::TAU;
+            let yaw =
+                unit_from_hash(hash_cell(spec.seed, gx, gz, 0x7a77_0001)) * core::f32::consts::TAU;
 
             placements.push(TreePlacement {
                 index: placements.len() as u32,

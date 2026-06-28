@@ -1,21 +1,27 @@
 use newengine_plugin_api::HostApiV1;
 use std::time::Instant;
 
-use crate::host_context::{shutdown_services_by_owner, unregister_by_owner, with_current_plugin_id};
+use crate::host_context::{
+    shutdown_services_by_owner, unregister_by_owner, with_current_plugin_id,
+};
 
 use super::types::{rresult_unit_to_string, PluginState};
 use super::{PluginLoadError, PluginManager};
 
 fn runtime_dll_unload_enabled() -> bool {
     matches!(
-        std::env::var("NEWENGINE_UNLOAD_RUNTIME_DLLS").ok().as_deref(),
+        std::env::var("NEWENGINE_UNLOAD_RUNTIME_DLLS")
+            .ok()
+            .as_deref(),
         Some("1") | Some("true") | Some("TRUE") | Some("yes") | Some("YES")
     )
 }
 
 fn plugin_module_shutdown_enabled() -> bool {
     !matches!(
-        std::env::var("NEWENGINE_DISABLE_PLUGIN_MODULE_SHUTDOWN").ok().as_deref(),
+        std::env::var("NEWENGINE_DISABLE_PLUGIN_MODULE_SHUTDOWN")
+            .ok()
+            .as_deref(),
         Some("1") | Some("true") | Some("TRUE") | Some("yes") | Some("YES")
     )
 }
@@ -69,7 +75,6 @@ impl PluginManager {
         Ok(())
     }
 
-
     fn start_plugin_inline(&mut self, idx: usize) {
         if idx >= self.loaded.len() {
             return;
@@ -90,7 +95,9 @@ impl PluginManager {
         // plugin, record a normal log, then mark the plugin Running. Other lifecycle
         // operations still use the diagnostics bridge through `call_plugin`.
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            with_current_plugin_id(&id, || rresult_unit_to_string(self.loaded[idx].module.start()))
+            with_current_plugin_id(&id, || {
+                rresult_unit_to_string(self.loaded[idx].module.start())
+            })
         }));
 
         match result {
@@ -109,7 +116,10 @@ impl PluginManager {
                 self.disable_plugin(idx, &id, format!("op 'start' failed: {e}"));
             }
             Err(_) => {
-                newengine_ulog_api::ulog::error!("plugins: panic during start id='{}' (plugin disabled)", id);
+                newengine_ulog_api::ulog::error!(
+                    "plugins: panic during start id='{}' (plugin disabled)",
+                    id
+                );
                 self.disable_plugin(idx, &id, "panic during op 'start'".to_owned());
             }
         }
@@ -152,7 +162,11 @@ impl PluginManager {
         newengine_ulog_api::ulog::info!(
             "plugins shutdown: begin count={} dll_policy='{}'",
             self.loaded.len(),
-            if retain_libraries { "process_lifetime" } else { "unload" }
+            if retain_libraries {
+                "process_lifetime"
+            } else {
+                "unload"
+            }
         );
 
         let call_module_shutdown = plugin_module_shutdown_enabled();
@@ -162,9 +176,15 @@ impl PluginManager {
             newengine_ulog_api::ulog::info!("plugins shutdown: plugin begin id='{}'", id);
             shutdown_services_by_owner(&id, "plugin-manager.shutdown");
             if call_module_shutdown {
-                newengine_ulog_api::ulog::debug!("plugins shutdown: module.shutdown begin id='{}'", id);
+                newengine_ulog_api::ulog::debug!(
+                    "plugins shutdown: module.shutdown begin id='{}'",
+                    id
+                );
                 self.safe_shutdown_one_reason(i, "plugin-manager.shutdown");
-                newengine_ulog_api::ulog::debug!("plugins shutdown: module.shutdown complete id='{}'", id);
+                newengine_ulog_api::ulog::debug!(
+                    "plugins shutdown: module.shutdown complete id='{}'",
+                    id
+                );
             } else {
                 newengine_ulog_api::ulog::debug!(
                     "plugins shutdown: module.shutdown disabled id='{}' reason='NEWENGINE_DISABLE_PLUGIN_MODULE_SHUTDOWN is set'",
@@ -184,7 +204,11 @@ impl PluginManager {
 
         newengine_ulog_api::ulog::info!(
             "plugins shutdown: complete dll_policy='{}'",
-            if retain_libraries { "process_lifetime" } else { "unload" }
+            if retain_libraries {
+                "process_lifetime"
+            } else {
+                "unload"
+            }
         );
     }
 
@@ -355,7 +379,12 @@ impl PluginManager {
                 true
             }
             Err(_) => {
-                self.emit_provider_shutdown_failed(&id, reason, elapsed_ms, "panic during module.shutdown");
+                self.emit_provider_shutdown_failed(
+                    &id,
+                    reason,
+                    elapsed_ms,
+                    "panic during module.shutdown",
+                );
                 false
             }
         }

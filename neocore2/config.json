@@ -1294,7 +1294,7 @@
             "deferred": "disabled",
             "hdr_scene": "disabled",
             "postfx": "disabled",
-            "shadows": "enabled",
+            "shadows": "disabled",
             "sky": {
               "mode": "native",
               "tick_cycle": "enabled"

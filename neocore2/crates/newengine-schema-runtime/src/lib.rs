@@ -23,9 +23,30 @@ mod tests {
     #[test]
     fn embedded_registry_loads_foundation_domains() {
         let state = SchemaRegistryState::default();
-        assert!(state.describe_type(SchemaDescribeTypeRequestV1 { type_id: "newengine.assets.document.asset_document".to_owned(), ..Default::default() }).accepted);
-        assert!(state.describe_type(SchemaDescribeTypeRequestV1 { type_id: "newengine.component.transform.v1".to_owned(), ..Default::default() }).accepted);
-        assert!(state.describe_type(SchemaDescribeTypeRequestV1 { type_id: "newengine.settings.world_environment.v1".to_owned(), ..Default::default() }).accepted);
+        assert!(
+            state
+                .describe_type(SchemaDescribeTypeRequestV1 {
+                    type_id: "newengine.assets.document.asset_document".to_owned(),
+                    ..Default::default()
+                })
+                .accepted
+        );
+        assert!(
+            state
+                .describe_type(SchemaDescribeTypeRequestV1 {
+                    type_id: "newengine.component.transform.v1".to_owned(),
+                    ..Default::default()
+                })
+                .accepted
+        );
+        assert!(
+            state
+                .describe_type(SchemaDescribeTypeRequestV1 {
+                    type_id: "newengine.settings.world_environment.v1".to_owned(),
+                    ..Default::default()
+                })
+                .accepted
+        );
     }
 
     #[test]
@@ -37,7 +58,12 @@ mod tests {
             ..Default::default()
         });
         assert!(response.accepted);
-        assert!(response.descriptor.unwrap().properties.iter().any(|prop| prop.property_id == "time_of_day"));
+        assert!(response
+            .descriptor
+            .unwrap()
+            .properties
+            .iter()
+            .any(|prop| prop.property_id == "time_of_day"));
     }
 
     #[test]

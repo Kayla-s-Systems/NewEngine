@@ -14,7 +14,10 @@ pub mod replay;
 pub mod shape;
 pub mod world;
 
-pub use body::{CharacterControllerDesc, PhysicsBodyDesc, PhysicsBodyKind, PhysicsBodyRuntimeFlags, PhysicsHandle};
+pub use body::{
+    CharacterControllerDesc, PhysicsBodyDesc, PhysicsBodyKind, PhysicsBodyRuntimeFlags,
+    PhysicsHandle,
+};
 pub use events::{PhysicsContactEvent, PhysicsEvent, PhysicsStepReport};
 pub use material::PhysicsMaterialDesc;
 pub use query::{PhysicsQuery, PhysicsQueryHit, PhysicsQueryKind};

@@ -9,7 +9,6 @@ use core::any::{Any, TypeId};
 use newengine_math::collections::prelude::*;
 use newengine_math::collections::raw::hash_map::Entry;
 
-
 /// A small, deterministic ECS world.
 ///
 /// Design goals:
@@ -138,7 +137,7 @@ impl World {
     }
 
     #[inline]
-    pub fn iter_entities(&self) -> impl Iterator<Item=EntityId> + '_ {
+    pub fn iter_entities(&self) -> impl Iterator<Item = EntityId> + '_ {
         self.entities.keys()
     }
 
@@ -354,7 +353,6 @@ impl World {
         None
     }
 
-
     /// Marks a component as changed for the current world tick.
     ///
     /// This is useful when you mutated a component via interior mutability or
@@ -404,7 +402,7 @@ impl World {
     pub fn query_changed<T: Component>(
         &self,
         since_tick: u64,
-    ) -> impl Iterator<Item=(EntityId, &T)> + '_ {
+    ) -> impl Iterator<Item = (EntityId, &T)> + '_ {
         self.query::<T>()
             .filter(move |(id, _)| self.is_changed_since::<T>(*id, since_tick))
     }
@@ -414,7 +412,7 @@ impl World {
     pub fn query_added<T: Component>(
         &self,
         since_tick: u64,
-    ) -> impl Iterator<Item=(EntityId, &T)> + '_ {
+    ) -> impl Iterator<Item = (EntityId, &T)> + '_ {
         self.query::<T>()
             .filter(move |(id, _)| self.is_added_since::<T>(*id, since_tick))
     }
@@ -446,7 +444,12 @@ impl World {
     pub fn query_mut_tracked<T: Component>(&mut self) -> Option<QueryMutTracked<'_, T>> {
         let tick = self.tick;
         let s = self.storage_mut_if_exists::<T>()?;
-        let Storage { map, changed_tick, max_changed_tick, .. } = s;
+        let Storage {
+            map,
+            changed_tick,
+            max_changed_tick,
+            ..
+        } = s;
         Some(QueryMutTracked {
             iter: map.iter_mut(),
             changed_tick,
@@ -466,9 +469,15 @@ impl World {
         match (a, b) {
             (Some(am), Some(bm)) => {
                 if am.len() <= bm.len() {
-                    Query2::A(Query2A { iter: am.iter(), b: bm })
+                    Query2::A(Query2A {
+                        iter: am.iter(),
+                        b: bm,
+                    })
                 } else {
-                    Query2::B(Query2B { iter: bm.iter(), a: am })
+                    Query2::B(Query2B {
+                        iter: bm.iter(),
+                        a: am,
+                    })
                 }
             }
             _ => Query2::Empty,
@@ -479,7 +488,7 @@ impl World {
     ///
     /// Useful for safely performing staged updates on multiple component types.
     #[inline]
-    pub fn query2_ids<A: Component, B: Component>(&self) -> impl Iterator<Item=EntityId> + '_ {
+    pub fn query2_ids<A: Component, B: Component>(&self) -> impl Iterator<Item = EntityId> + '_ {
         self.query2::<A, B>().map(|(id, _, _)| id)
     }
 }

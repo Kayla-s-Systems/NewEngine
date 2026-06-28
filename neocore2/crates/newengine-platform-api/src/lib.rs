@@ -15,7 +15,8 @@ pub const PLATFORM_BACKEND_CAPABILITY_ID: &str = "platform.backend";
 
 pub const PLATFORM_SERVICE_METHOD_INFO: &str = newengine_service_api::SERVICE_METHOD_INFO_JSON;
 pub const PLATFORM_SERVICE_METHOD_INVOKE: &str = newengine_service_api::SERVICE_METHOD_INVOKE_JSON;
-pub const PLATFORM_SERVICE_METHOD_SHUTDOWN_V1: &str = newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1;
+pub const PLATFORM_SERVICE_METHOD_SHUTDOWN_V1: &str =
+    newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1;
 pub const PLATFORM_SERVICE_METHOD_WINDOW_SNAPSHOT_JSON_V1: &str = "window_snapshot_json_v1";
 
 pub const PLATFORM_REQUIRED_METHODS_V1: &[&str] = &[
@@ -103,7 +104,6 @@ impl Default for PlatformWindowPlacementV1 {
         }
     }
 }
-
 
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, StableAbi, Serialize, Deserialize)]
@@ -414,7 +414,9 @@ pub struct PlatformHostJobCallbackV1 {
 impl PlatformHostJobCallbackV1 {
     #[inline]
     pub fn from_fn(callback: extern "C" fn(usize) -> RResult<(), RString>) -> Self {
-        Self { callback_addr: callback as usize }
+        Self {
+            callback_addr: callback as usize,
+        }
     }
 
     #[inline]
@@ -434,17 +436,21 @@ impl Default for PlatformHostJobCallbackV1 {
 #[derive(Clone, StableAbi)]
 pub struct PlatformHostApiV1 {
     pub user_data: usize,
-    pub on_window_ready_v1:
-        extern "C" fn(usize, PlatformWindowReadyV1) -> RResult<(), RString>,
+    pub on_window_ready_v1: extern "C" fn(usize, PlatformWindowReadyV1) -> RResult<(), RString>,
     pub on_window_resized_v1:
         extern "C" fn(usize, PlatformSurfaceMetricsV1) -> RResult<(), RString>,
     pub on_window_focused_v1: extern "C" fn(usize, bool) -> RResult<(), RString>,
     pub on_close_requested_v1: extern "C" fn(usize) -> RResult<(), RString>,
     pub step_v1: extern "C" fn(usize, f32) -> RResult<PlatformStepResultV1, RString>,
     pub poll_cursor_state_v1: extern "C" fn(usize) -> PlatformCursorPollV1,
-    pub submit_job_v1: extern "C" fn(usize, PlatformHostJobRequestV1, PlatformHostJobCallbackV1, usize) -> PlatformHostJobTicketV1,
+    pub submit_job_v1: extern "C" fn(
+        usize,
+        PlatformHostJobRequestV1,
+        PlatformHostJobCallbackV1,
+        usize,
+    ) -> PlatformHostJobTicketV1,
 }
 
 pub type PlatformRunResultV1 = RResult<(), RString>;
 pub type PlatformRuntimeRunFnV1 =
-unsafe extern "C" fn(HostApiV1, PlatformHostApiV1, PlatformAppConfigV1) -> PlatformRunResultV1;
+    unsafe extern "C" fn(HostApiV1, PlatformHostApiV1, PlatformAppConfigV1) -> PlatformRunResultV1;

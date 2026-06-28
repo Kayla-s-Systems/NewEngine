@@ -1,8 +1,8 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
+use crate::input_systems::InputActionFrameCarrier;
 use newengine_input_actions_api::{CameraViewRequest, InputActionFrame, InputFrameSource};
 use newengine_ui_api::UiInputFrame;
-use crate::input_systems::InputActionFrameCarrier;
 
 #[derive(Clone, Debug, Default)]
 pub(super) struct ViewportInputSnap {
@@ -33,8 +33,18 @@ pub(super) struct ViewportInputSnap {
 impl ViewportInputSnap {
     #[inline]
     pub(super) fn read(bridge: &crate::viewport_bridge::ViewportBridge) -> Self {
-        let (dx_px, dy_px, wheel_y, active, look_drag, pan_drag, ui_busy, fly_rmb, move_mask, speed_scalar) =
-            bridge.read_camera_input();
+        let (
+            dx_px,
+            dy_px,
+            wheel_y,
+            active,
+            look_drag,
+            pan_drag,
+            ui_busy,
+            fly_rmb,
+            move_mask,
+            speed_scalar,
+        ) = bridge.read_camera_input();
         Self {
             dx_px,
             dy_px,
@@ -59,7 +69,8 @@ impl ViewportInputSnap {
         let Some(input) = input else {
             return Self::default();
         };
-        let actions = newengine_input_bindings_runtime::resolve_input_actions(&UiInputSource(input));
+        let actions =
+            newengine_input_bindings_runtime::resolve_input_actions(&UiInputSource(input));
 
         Self {
             dx_px: input.mouse_delta.0 + actions.look_axis[0] * 18.0,
@@ -90,8 +101,11 @@ impl ViewportInputSnap {
     /// in direct-surface debug paths.
     #[inline]
     pub(super) fn merge_semantic_actions_from_surface(&mut self, input: Option<&UiInputFrame>) {
-        let Some(input) = input else { return; };
-        let actions = newengine_input_bindings_runtime::resolve_input_actions(&UiInputSource(input));
+        let Some(input) = input else {
+            return;
+        };
+        let actions =
+            newengine_input_bindings_runtime::resolve_input_actions(&UiInputSource(input));
 
         self.dx_px += actions.look_axis[0] * 18.0;
         self.dy_px += actions.look_axis[1] * 18.0;
@@ -106,7 +120,6 @@ impl ViewportInputSnap {
         }
         self.actions = actions;
     }
-
 
     #[inline]
     pub(super) fn apply_gameplay_input_handoff(
@@ -144,33 +157,54 @@ impl ViewportInputSnap {
             actions: &mut self.actions,
         }
     }
-
 }
 
 struct UiInputSource<'a>(&'a UiInputFrame);
 
 impl InputFrameSource for UiInputSource<'_> {
     #[inline]
-    fn is_key_down(&self, key: u32) -> bool { self.0.is_key_down(key) }
+    fn is_key_down(&self, key: u32) -> bool {
+        self.0.is_key_down(key)
+    }
     #[inline]
-    fn is_key_pressed(&self, key: u32) -> bool { self.0.is_key_pressed(key) }
+    fn is_key_pressed(&self, key: u32) -> bool {
+        self.0.is_key_pressed(key)
+    }
     #[inline]
-    fn is_key_released(&self, key: u32) -> bool { self.0.keys_released.contains(&key) }
+    fn is_key_released(&self, key: u32) -> bool {
+        self.0.keys_released.contains(&key)
+    }
     #[inline]
-    fn is_mouse_down(&self, button: u32) -> bool { self.0.is_mouse_down(button) }
+    fn is_mouse_down(&self, button: u32) -> bool {
+        self.0.is_mouse_down(button)
+    }
     #[inline]
-    fn is_mouse_pressed(&self, button: u32) -> bool { self.0.is_mouse_pressed(button) }
+    fn is_mouse_pressed(&self, button: u32) -> bool {
+        self.0.is_mouse_pressed(button)
+    }
     #[inline]
-    fn is_mouse_released(&self, button: u32) -> bool { self.0.mouse_released.contains(&button) }
+    fn is_mouse_released(&self, button: u32) -> bool {
+        self.0.mouse_released.contains(&button)
+    }
     #[inline]
-    fn has_gamepad_connected(&self) -> bool { self.0.has_gamepad_connected() }
+    fn has_gamepad_connected(&self) -> bool {
+        self.0.has_gamepad_connected()
+    }
 
     #[inline]
-    fn is_gamepad_button_down(&self, button: &str) -> bool { self.0.is_gamepad_button_down(button) }
+    fn is_gamepad_button_down(&self, button: &str) -> bool {
+        self.0.is_gamepad_button_down(button)
+    }
     #[inline]
-    fn is_gamepad_button_pressed(&self, button: &str) -> bool { self.0.is_gamepad_button_pressed(button) }
+    fn is_gamepad_button_pressed(&self, button: &str) -> bool {
+        self.0.is_gamepad_button_pressed(button)
+    }
     #[inline]
-    fn is_gamepad_button_released(&self, button: &str) -> bool { self.0.is_gamepad_button_released(button) }
+    fn is_gamepad_button_released(&self, button: &str) -> bool {
+        self.0.is_gamepad_button_released(button)
+    }
     #[inline]
-    fn gamepad_axis(&self, axis: &str) -> f32 { self.0.gamepad_axis(axis) }
+    fn gamepad_axis(&self, axis: &str) -> f32 {
+        self.0.gamepad_axis(axis)
+    }
 }

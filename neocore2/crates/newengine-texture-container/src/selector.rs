@@ -15,7 +15,11 @@ pub struct TextureDictionarySelector {
 impl TextureDictionarySelector {
     pub const SCHEMA: &'static str = "newengine.texture_dictionary.selector.v1";
 
-    pub fn by_name(dictionary_path: impl Into<String>, texture_name: impl Into<String>, material_path: Option<String>) -> Self {
+    pub fn by_name(
+        dictionary_path: impl Into<String>,
+        texture_name: impl Into<String>,
+        material_path: Option<String>,
+    ) -> Self {
         Self {
             schema: Self::SCHEMA.to_owned(),
             dictionary_path: normalize_path(&dictionary_path.into()),
@@ -25,7 +29,11 @@ impl TextureDictionarySelector {
         }
     }
 
-    pub fn by_hash(dictionary_path: impl Into<String>, texture_hash: u64, material_path: Option<String>) -> Self {
+    pub fn by_hash(
+        dictionary_path: impl Into<String>,
+        texture_hash: u64,
+        material_path: Option<String>,
+    ) -> Self {
         Self {
             schema: Self::SCHEMA.to_owned(),
             dictionary_path: normalize_path(&dictionary_path.into()),
@@ -49,7 +57,9 @@ impl TextureDictionarySelector {
         serde_json::to_string(self).expect("selector serialization is infallible")
     }
 
-    pub fn from_settings_json(value: &str) -> std::result::Result<Option<Self>, TextureSelectorError> {
+    pub fn from_settings_json(
+        value: &str,
+    ) -> std::result::Result<Option<Self>, TextureSelectorError> {
         let trimmed = value.trim();
         if trimmed.is_empty() {
             return Ok(None);
@@ -61,7 +71,9 @@ impl TextureDictionarySelector {
         Ok(Some(selector))
     }
 
-    pub fn parse_material_path(value: &str) -> std::result::Result<Option<Self>, TextureSelectorError> {
+    pub fn parse_material_path(
+        value: &str,
+    ) -> std::result::Result<Option<Self>, TextureSelectorError> {
         let normalized = normalize_path(value);
         let Some((dictionary_path, selector)) = normalized.rsplit_once('@') else {
             return Ok(None);
@@ -69,7 +81,10 @@ impl TextureDictionarySelector {
         if dictionary_path.trim().is_empty() || selector.trim().is_empty() {
             return Err(TextureSelectorError::InvalidMaterialPath(normalized));
         }
-        if !dictionary_path.to_ascii_lowercase().ends_with(&format!(".{}", newengine_asset_format_nef8::ytd::EXTENSION)) {
+        if !dictionary_path
+            .to_ascii_lowercase()
+            .ends_with(&format!(".{}", newengine_asset_format_nef8::ytd::EXTENSION))
+        {
             return Ok(None);
         }
         let selector = selector.trim();
@@ -106,7 +121,10 @@ fn normalize_path(value: &str) -> String {
 
 fn parse_hash(value: &str) -> Option<u64> {
     let s = value.trim();
-    let raw = s.strip_prefix("hash:").or_else(|| s.strip_prefix("hash=")).unwrap_or(s);
+    let raw = s
+        .strip_prefix("hash:")
+        .or_else(|| s.strip_prefix("hash="))
+        .unwrap_or(s);
     if let Some(hex) = raw.strip_prefix("0x") {
         return u64::from_str_radix(hex, 16).ok();
     }

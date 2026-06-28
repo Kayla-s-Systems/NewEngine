@@ -8,19 +8,20 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use abi_stable::std_types::{RResult, RString};
-use newengine_authored_xml as authored_xml;
 use newengine_assets::{AssetDecodeRequest, AssetServiceClient};
 use newengine_assets_api::{
     definitions_method, stable_hash_from_text, AssetDependencyRecordV1, AssetReference,
     ASSET_LIST_FILE_BODY_OUTPUT, DEFINITIONS_BACKEND_CAPABILITY_ID, DEFINITIONS_RUNTIME_CONTRACT,
-    DEFINITIONS_SERVICE_ID, DEFINITIONS_SERVICE_METHODS, ENGINE_ASSETS_GRAPH_SERVICE_ID,
-    ENGINE_ASSET_SERVICE_ID, ENGINE_ASSETS_DEFINITIONS_SERVICE_ID,
+    DEFINITIONS_SERVICE_ID, DEFINITIONS_SERVICE_METHODS, ENGINE_ASSETS_DEFINITIONS_SERVICE_ID,
+    ENGINE_ASSETS_GRAPH_SERVICE_ID, ENGINE_ASSET_SERVICE_ID,
 };
+use newengine_authored_xml as authored_xml;
 use newengine_plugin_api::Blob;
 use newengine_service_api::EngineServiceKind;
 use newengine_service_kit::{
     engine_gateway_provider_service_description, ok_empty_blob, ok_json, payload_json,
-    register_engine_gateway_provider_service_best_effort, EngineGatewayProviderDecl, JsonServiceRouter,
+    register_engine_gateway_provider_service_best_effort, EngineGatewayProviderDecl,
+    JsonServiceRouter,
 };
 use serde::{Deserialize, Serialize};
 
@@ -33,7 +34,9 @@ pub struct DefinitionsRuntimeState {
 
 impl DefinitionsRuntimeState {
     #[inline]
-    pub fn new(client: AssetServiceClient) -> Self { Self { client } }
+    pub fn new(client: AssetServiceClient) -> Self {
+        Self { client }
+    }
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -58,7 +61,13 @@ pub struct DefinitionRefRequest {
 
 impl Default for DefinitionRefRequest {
     #[inline]
-    fn default() -> Self { Self { definition_ref: String::new(), source: String::new(), entry: None } }
+    fn default() -> Self {
+        Self {
+            definition_ref: String::new(),
+            source: String::new(),
+            entry: None,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -70,7 +79,12 @@ pub struct DefinitionManifestRequest {
 
 impl Default for DefinitionManifestRequest {
     #[inline]
-    fn default() -> Self { Self { source: String::new(), definition_ref: String::new() } }
+    fn default() -> Self {
+        Self {
+            source: String::new(),
+            definition_ref: String::new(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -120,7 +134,13 @@ pub struct DefinitionIdentityV1 {
 }
 
 impl Default for DefinitionIdentityV1 {
-    fn default() -> Self { Self { name: String::new(), source: String::new(), definition_ref: String::new() } }
+    fn default() -> Self {
+        Self {
+            name: String::new(),
+            source: String::new(),
+            definition_ref: String::new(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -148,7 +168,12 @@ pub struct DefinitionSideEffectV1 {
 
 impl Default for DefinitionSideEffectV1 {
     fn default() -> Self {
-        Self { domain: String::new(), effect: String::new(), target: String::new(), metadata: BTreeMap::new() }
+        Self {
+            domain: String::new(),
+            effect: String::new(),
+            target: String::new(),
+            metadata: BTreeMap::new(),
+        }
     }
 }
 
@@ -256,9 +281,13 @@ pub fn definitions_service_info() -> DefinitionsServiceInfo {
 
 fn normalize_logical_ref(value: &str) -> String {
     let mut s = value.trim().replace('\\', "/");
-    while let Some(rest) = s.strip_prefix("./") { s = rest.to_owned(); }
+    while let Some(rest) = s.strip_prefix("./") {
+        s = rest.to_owned();
+    }
     s = s.trim_start_matches('/').to_owned();
-    while s.contains("//") { s = s.replace("//", "/"); }
+    while s.contains("//") {
+        s = s.replace("//", "/");
+    }
     s
 }
 
@@ -268,9 +297,17 @@ fn definition_ref_from_request(request: &DefinitionRefRequest) -> Result<String,
     }
     let source = normalize_logical_ref(&request.source);
     if source.is_empty() {
-        return Err("assets.definitions.entry_v1 requires definition_ref='.ytyp@entry' or source + entry".to_owned());
+        return Err(
+            "assets.definitions.entry_v1 requires definition_ref='.ytyp@entry' or source + entry"
+                .to_owned(),
+        );
     }
-    let Some(entry) = request.entry.as_deref().map(str::trim).filter(|it| !it.is_empty()) else {
+    let Some(entry) = request
+        .entry
+        .as_deref()
+        .map(str::trim)
+        .filter(|it| !it.is_empty())
+    else {
         return Err("assets.definitions.entry_v1 requires .ytyp@entry; .ytyp without @entry is a dictionary manifest request".to_owned());
     };
     Ok(format!("{source}@{entry}"))
@@ -286,13 +323,18 @@ fn manifest_source_from_request(request: &DefinitionManifestRequest) -> Result<S
     let raw = if !request.source.trim().is_empty() {
         request.source.trim()
     } else if !request.definition_ref.trim().is_empty() {
-        request.definition_ref.split('@').next().unwrap_or(request.definition_ref.trim())
+        request
+            .definition_ref
+            .split('@')
+            .next()
+            .unwrap_or(request.definition_ref.trim())
     } else {
         return Err("assets.definitions.manifest_v1 requires source='world/foo.ytyp' or definition_ref='world/foo.ytyp@entry'".to_owned());
     };
     let normalized = normalize_logical_ref(raw);
-    let reference = newengine_assets_api::require_asset_reference_extension(&normalized, &["ytyp"], false)
-        .map_err(|e| e.to_string())?;
+    let reference =
+        newengine_assets_api::require_asset_reference_extension(&normalized, &["ytyp"], false)
+            .map_err(|e| e.to_string())?;
     Ok(reference.logical_path)
 }
 
@@ -307,11 +349,17 @@ fn ref_request_from_payload(payload: &[u8], method: &str) -> Result<DefinitionRe
         serde_json::from_str::<DefinitionRefRequest>(trimmed)
             .map_err(|e| format!("{method} invalid json request: {e}"))
     } else {
-        Ok(DefinitionRefRequest { definition_ref: trimmed.trim_matches('"').to_owned(), ..Default::default() })
+        Ok(DefinitionRefRequest {
+            definition_ref: trimmed.trim_matches('"').to_owned(),
+            ..Default::default()
+        })
     }
 }
 
-fn manifest_request_from_payload(payload: &[u8], method: &str) -> Result<DefinitionManifestRequest, String> {
+fn manifest_request_from_payload(
+    payload: &[u8],
+    method: &str,
+) -> Result<DefinitionManifestRequest, String> {
     let trimmed = std::str::from_utf8(payload)
         .map(str::trim)
         .map_err(|e| format!("{method} invalid utf-8 request: {e}"))?;
@@ -322,11 +370,17 @@ fn manifest_request_from_payload(payload: &[u8], method: &str) -> Result<Definit
         serde_json::from_str::<DefinitionManifestRequest>(trimmed)
             .map_err(|e| format!("{method} invalid json request: {e}"))
     } else {
-        Ok(DefinitionManifestRequest { source: trimmed.trim_matches('"').to_owned(), ..Default::default() })
+        Ok(DefinitionManifestRequest {
+            source: trimmed.trim_matches('"').to_owned(),
+            ..Default::default()
+        })
     }
 }
 
-fn load_dictionary_body(state: &DefinitionsRuntimeState, source: &str) -> Result<(Vec<RawDefinitionEntryV1>, Vec<String>), String> {
+fn load_dictionary_body(
+    state: &DefinitionsRuntimeState,
+    source: &str,
+) -> Result<(Vec<RawDefinitionEntryV1>, Vec<String>), String> {
     let body = state.client.decode_v1(&AssetDecodeRequest {
         logical_path: source.to_owned(),
         output_kind: ASSET_LIST_FILE_BODY_OUTPUT.to_owned(),
@@ -344,13 +398,19 @@ fn load_dictionary_body(state: &DefinitionsRuntimeState, source: &str) -> Result
     parse_definition_dictionary_xml(source, &body)
 }
 
-
-fn parse_definition_dictionary_xml(source: &str, body: &[u8]) -> Result<(Vec<RawDefinitionEntryV1>, Vec<String>), String> {
+fn parse_definition_dictionary_xml(
+    source: &str,
+    body: &[u8],
+) -> Result<(Vec<RawDefinitionEntryV1>, Vec<String>), String> {
     let text = std::str::from_utf8(body)
         .map_err(|error| format!("engine.assets.definitions: .ytyp XML body is not UTF-8 source='{source}' err='{error}'"))?;
-    let doc = authored_xml::parse_xml_document(text, &format!("engine.assets.definitions source='{source}'"))?;
+    let doc = authored_xml::parse_xml_document(
+        text,
+        &format!("engine.assets.definitions source='{source}'"),
+    )?;
     let root = doc.root_element();
-    if !root.has_tag_name("YtypDefinitionDictionary") && !root.has_tag_name("DefinitionDictionary") {
+    if !root.has_tag_name("YtypDefinitionDictionary") && !root.has_tag_name("DefinitionDictionary")
+    {
         return Err(format!(
             "engine.assets.definitions: .ytyp XML root must be <YtypDefinitionDictionary> source='{source}' actual='{}'",
             root.tag_name().name()
@@ -358,7 +418,9 @@ fn parse_definition_dictionary_xml(source: &str, body: &[u8]) -> Result<(Vec<Raw
     }
     let schema = authored_xml::xml_attr_any(root, &["schema"]).unwrap_or_default();
     if schema.trim().is_empty() {
-        return Err(format!("engine.assets.definitions: .ytyp XML dictionary missing schema source='{source}'"));
+        return Err(format!(
+            "engine.assets.definitions: .ytyp XML dictionary missing schema source='{source}'"
+        ));
     }
     if schema != "newengine.ytyp.definition_dictionary.v1" {
         return Err(format!(
@@ -369,7 +431,10 @@ fn parse_definition_dictionary_xml(source: &str, body: &[u8]) -> Result<(Vec<Raw
     let mut warnings = Vec::new();
     warnings.push(".ytyp body parsed as XML metadata projection; NEF8 envelope still owns compression/hash/content_kind".to_owned());
     let mut entries = Vec::new();
-    for entry_node in root.children().filter(|node| node.is_element() && node.has_tag_name("Entry")) {
+    for entry_node in root
+        .children()
+        .filter(|node| node.is_element() && node.has_tag_name("Entry"))
+    {
         entries.push(parse_definition_entry_xml(entry_node, source)?);
     }
     if entries.is_empty() {
@@ -378,22 +443,37 @@ fn parse_definition_dictionary_xml(source: &str, body: &[u8]) -> Result<(Vec<Raw
     Ok((entries, warnings))
 }
 
-fn parse_definition_entry_xml(node: authored_xml::XmlNode<'_, '_>, source: &str) -> Result<RawDefinitionEntryV1, String> {
+fn parse_definition_entry_xml(
+    node: authored_xml::XmlNode<'_, '_>,
+    source: &str,
+) -> Result<RawDefinitionEntryV1, String> {
     let mut raw = RawDefinitionEntryV1::default();
     raw.name = authored_xml::xml_attr_any(node, &["name", "asset_name", "id"]).unwrap_or_default();
     if raw.name.trim().is_empty() {
-        return Err(format!("engine.assets.definitions: .ytyp XML <Entry> without name source='{source}'"));
+        return Err(format!(
+            "engine.assets.definitions: .ytyp XML <Entry> without name source='{source}'"
+        ));
     }
-    raw.stable_hash = authored_xml::xml_attr_u64_any(node, &["stable_hash", "stableHash"]).unwrap_or(0);
-    raw.entry_kind = authored_xml::xml_attr_any(node, &["entry_kind", "entryKind"]).unwrap_or_else(|| "archetype_definition".to_owned());
-    raw.kind = authored_xml::xml_attr_any(node, &["kind"]).unwrap_or_else(|| raw.entry_kind.clone());
-    raw.schema = authored_xml::xml_attr_any(node, &["schema"]).unwrap_or_else(|| "newengine.ytyp.definition_entry.v1".to_owned());
+    raw.stable_hash =
+        authored_xml::xml_attr_u64_any(node, &["stable_hash", "stableHash"]).unwrap_or(0);
+    raw.entry_kind = authored_xml::xml_attr_any(node, &["entry_kind", "entryKind"])
+        .unwrap_or_else(|| "archetype_definition".to_owned());
+    raw.kind =
+        authored_xml::xml_attr_any(node, &["kind"]).unwrap_or_else(|| raw.entry_kind.clone());
+    raw.schema = authored_xml::xml_attr_any(node, &["schema"])
+        .unwrap_or_else(|| "newengine.ytyp.definition_entry.v1".to_owned());
     raw.flags = authored_xml::xml_attr_u32_any(node, &["flags"]).unwrap_or(0);
 
     if let Some(deps) = authored_xml::xml_child(node, "Dependencies") {
-        for dep in deps.children().filter(|child| child.is_element() && child.has_tag_name("Dependency")) {
-            let reference = authored_xml::xml_attr_any(dep, &["reference", "ref"]).unwrap_or_default();
-            if reference.trim().is_empty() { continue; }
+        for dep in deps
+            .children()
+            .filter(|child| child.is_element() && child.has_tag_name("Dependency"))
+        {
+            let reference =
+                authored_xml::xml_attr_any(dep, &["reference", "ref"]).unwrap_or_default();
+            if reference.trim().is_empty() {
+                continue;
+            }
             raw.dependencies.push(AssetDependencyRecordV1 {
                 reference,
                 role: authored_xml::xml_attr_any(dep, &["role"]).unwrap_or_default(),
@@ -432,7 +512,10 @@ fn xml_side_effect(node: authored_xml::XmlNode<'_, '_>) -> DefinitionSideEffectV
         metadata: BTreeMap::new(),
     };
     for child in node.children().filter(|child| child.is_element()) {
-        effect.metadata.insert(child.tag_name().name().to_owned(), authored_xml::xml_node_object(child));
+        effect.metadata.insert(
+            child.tag_name().name().to_owned(),
+            authored_xml::xml_node_object(child),
+        );
     }
     effect
 }
@@ -442,7 +525,10 @@ fn entry_matches(raw: &RawDefinitionEntryV1, selector: &str) -> bool {
         return true;
     }
     if let Some(rest) = selector.strip_prefix("hash:") {
-        return rest.parse::<u64>().map(|hash| hash == effective_hash(raw)).unwrap_or(false);
+        return rest
+            .parse::<u64>()
+            .map(|hash| hash == effective_hash(raw))
+            .unwrap_or(false);
     }
     false
 }
@@ -450,13 +536,19 @@ fn entry_matches(raw: &RawDefinitionEntryV1, selector: &str) -> bool {
 fn effective_kind(raw: &RawDefinitionEntryV1) -> String {
     for candidate in [&raw.kind, &raw.entry_kind] {
         let trimmed = candidate.trim();
-        if !trimmed.is_empty() { return trimmed.to_owned(); }
+        if !trimmed.is_empty() {
+            return trimmed.to_owned();
+        }
     }
     "archetype_definition".to_owned()
 }
 
 fn effective_hash(raw: &RawDefinitionEntryV1) -> u64 {
-    if raw.stable_hash == 0 { stable_hash_from_text(&raw.name) } else { raw.stable_hash }
+    if raw.stable_hash == 0 {
+        stable_hash_from_text(&raw.name)
+    } else {
+        raw.stable_hash
+    }
 }
 
 fn value_collect_tags(value: &serde_json::Value, key_hint: &str, out: &mut BTreeSet<String>) {
@@ -464,14 +556,20 @@ fn value_collect_tags(value: &serde_json::Value, key_hint: &str, out: &mut BTree
         serde_json::Value::String(text) => {
             if key_hint.contains("tag") || key_hint.contains("domain") {
                 let t = text.trim();
-                if !t.is_empty() { out.insert(t.to_owned()); }
+                if !t.is_empty() {
+                    out.insert(t.to_owned());
+                }
             }
         }
         serde_json::Value::Array(items) => {
-            for item in items { value_collect_tags(item, key_hint, out); }
+            for item in items {
+                value_collect_tags(item, key_hint, out);
+            }
         }
         serde_json::Value::Object(map) => {
-            for (k, v) in map { value_collect_tags(v, k, out); }
+            for (k, v) in map {
+                value_collect_tags(v, k, out);
+            }
         }
         _ => {}
     }
@@ -482,18 +580,26 @@ fn collect_tags(raw: &RawDefinitionEntryV1) -> (Vec<String>, Vec<String>) {
     let mut domain = BTreeSet::new();
     for tag in &raw.semantic_tags {
         let t = tag.trim();
-        if !t.is_empty() { semantic.insert(t.to_owned()); }
+        if !t.is_empty() {
+            semantic.insert(t.to_owned());
+        }
     }
     for tag in &raw.domain_tags {
         let t = tag.trim();
-        if !t.is_empty() { domain.insert(t.to_owned()); }
+        if !t.is_empty() {
+            domain.insert(t.to_owned());
+        }
     }
     for (ns, value) in &raw.namespaces {
-        if !ns.trim().is_empty() { domain.insert(ns.to_owned()); }
+        if !ns.trim().is_empty() {
+            domain.insert(ns.to_owned());
+        }
         value_collect_tags(value, ns, &mut semantic);
     }
     for (ns, value) in &raw.metadata {
-        if ns.contains("domain") || ns.starts_with("engine.") { domain.insert(ns.to_owned()); }
+        if ns.contains("domain") || ns.starts_with("engine.") {
+            domain.insert(ns.to_owned());
+        }
         value_collect_tags(value, ns, &mut semantic);
     }
     (semantic.into_iter().collect(), domain.into_iter().collect())
@@ -501,9 +607,15 @@ fn collect_tags(raw: &RawDefinitionEntryV1) -> (Vec<String>, Vec<String>) {
 
 fn classify_ref(reference: &str, role: &str, domain: &str, refs: &mut DefinitionRefsV1) {
     let reference = normalize_logical_ref(reference);
-    if reference.is_empty() { return; }
+    if reference.is_empty() {
+        return;
+    }
     let lower = reference.to_ascii_lowercase();
-    let hint = format!("{} {}", role.to_ascii_lowercase(), domain.to_ascii_lowercase());
+    let hint = format!(
+        "{} {}",
+        role.to_ascii_lowercase(),
+        domain.to_ascii_lowercase()
+    );
     let bucket = if lower.contains(".ydd@") || hint.contains("drawable") || hint.contains("model") {
         &mut refs.drawable_refs
     } else if lower.contains(".nemat@") || hint.contains("material") {
@@ -514,7 +626,11 @@ fn classify_ref(reference: &str, role: &str, domain: &str, refs: &mut Definition
         &mut refs.collision_refs
     } else if hint.contains("physics") {
         &mut refs.physics_refs
-    } else if lower.contains(".nebrain@") || lower.contains(".nepat@") || lower.contains(".nemem@") || hint.contains("ai") {
+    } else if lower.contains(".nebrain@")
+        || lower.contains(".nepat@")
+        || lower.contains(".nemem@")
+        || hint.contains("ai")
+    {
         &mut refs.ai_refs
     } else if hint.contains("stream") {
         &mut refs.streaming_refs
@@ -533,15 +649,32 @@ fn collect_refs_from_value(value: &serde_json::Value, key_hint: &str, refs: &mut
         serde_json::Value::String(text) => {
             let normalized = normalize_logical_ref(text);
             let lower = normalized.to_ascii_lowercase();
-            if [".ydd@", ".nemat@", ".ytd@", ".ybn@", ".ycol@", ".nebrain@", ".nepat@", ".nemem@", ".ytyp@"].iter().any(|needle| lower.contains(needle)) {
+            if [
+                ".ydd@",
+                ".nemat@",
+                ".ytd@",
+                ".ybn@",
+                ".ycol@",
+                ".nebrain@",
+                ".nepat@",
+                ".nemem@",
+                ".ytyp@",
+            ]
+            .iter()
+            .any(|needle| lower.contains(needle))
+            {
                 classify_ref(&normalized, key_hint, key_hint, refs);
             }
         }
         serde_json::Value::Array(items) => {
-            for item in items { collect_refs_from_value(item, key_hint, refs); }
+            for item in items {
+                collect_refs_from_value(item, key_hint, refs);
+            }
         }
         serde_json::Value::Object(map) => {
-            for (k, v) in map { collect_refs_from_value(v, k, refs); }
+            for (k, v) in map {
+                collect_refs_from_value(v, k, refs);
+            }
         }
         _ => {}
     }
@@ -567,14 +700,29 @@ fn collect_refs(raw: &RawDefinitionEntryV1) -> DefinitionRefsV1 {
 fn imperative_field_name(key: &str) -> bool {
     matches!(
         key.trim().to_ascii_lowercase().as_str(),
-        "run_code" | "script" | "script_body" | "eval" | "function" | "call" | "callback" | "command" | "imperative" | "spawn_logic"
+        "run_code"
+            | "script"
+            | "script_body"
+            | "eval"
+            | "function"
+            | "call"
+            | "callback"
+            | "command"
+            | "imperative"
+            | "spawn_logic"
     )
 }
 
-fn side_effect_from_value(value: &serde_json::Value, out: &mut Vec<DefinitionSideEffectV1>, errors: &mut Vec<String>) {
+fn side_effect_from_value(
+    value: &serde_json::Value,
+    out: &mut Vec<DefinitionSideEffectV1>,
+    errors: &mut Vec<String>,
+) {
     match value {
         serde_json::Value::Array(items) => {
-            for item in items { side_effect_from_value(item, out, errors); }
+            for item in items {
+                side_effect_from_value(item, out, errors);
+            }
         }
         serde_json::Value::Object(map) => {
             for key in map.keys() {
@@ -582,23 +730,44 @@ fn side_effect_from_value(value: &serde_json::Value, out: &mut Vec<DefinitionSid
                     errors.push(format!("imperative side-effect field '{key}' is forbidden; use descriptive domain/effect/target metadata only"));
                 }
             }
-            let domain = map.get("domain").and_then(|v| v.as_str()).unwrap_or_default().trim();
-            let effect = map.get("effect").and_then(|v| v.as_str()).unwrap_or_default().trim();
-            let target = map.get("target").and_then(|v| v.as_str()).unwrap_or_default().trim();
+            let domain = map
+                .get("domain")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default()
+                .trim();
+            let effect = map
+                .get("effect")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default()
+                .trim();
+            let target = map
+                .get("target")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default()
+                .trim();
             if !domain.is_empty() || !effect.is_empty() || !target.is_empty() {
                 if domain.is_empty() || effect.is_empty() || target.is_empty() {
-                    errors.push("side-effect declaration requires domain, effect and target".to_owned());
+                    errors.push(
+                        "side-effect declaration requires domain, effect and target".to_owned(),
+                    );
                 } else {
                     let metadata = map
                         .iter()
                         .filter(|(k, _)| *k != "domain" && *k != "effect" && *k != "target")
                         .map(|(k, v)| (k.clone(), v.clone()))
                         .collect();
-                    out.push(DefinitionSideEffectV1 { domain: domain.to_owned(), effect: effect.to_owned(), target: target.to_owned(), metadata });
+                    out.push(DefinitionSideEffectV1 {
+                        domain: domain.to_owned(),
+                        effect: effect.to_owned(),
+                        target: target.to_owned(),
+                        metadata,
+                    });
                 }
             }
             for (k, v) in map {
-                if k == "domain" || k == "effect" || k == "target" { continue; }
+                if k == "domain" || k == "effect" || k == "target" {
+                    continue;
+                }
                 side_effect_from_value(v, out, errors);
             }
         }
@@ -606,12 +775,19 @@ fn side_effect_from_value(value: &serde_json::Value, out: &mut Vec<DefinitionSid
     }
 }
 
-fn collect_side_effects(raw: &RawDefinitionEntryV1) -> Result<Vec<DefinitionSideEffectV1>, Vec<String>> {
+fn collect_side_effects(
+    raw: &RawDefinitionEntryV1,
+) -> Result<Vec<DefinitionSideEffectV1>, Vec<String>> {
     let mut side_effects = raw.side_effects.clone();
     let mut errors = Vec::new();
     for effect in &side_effects {
-        if effect.domain.trim().is_empty() || effect.effect.trim().is_empty() || effect.target.trim().is_empty() {
-            errors.push("side-effect declaration requires non-empty domain, effect and target".to_owned());
+        if effect.domain.trim().is_empty()
+            || effect.effect.trim().is_empty()
+            || effect.target.trim().is_empty()
+        {
+            errors.push(
+                "side-effect declaration requires non-empty domain, effect and target".to_owned(),
+            );
         }
         for key in effect.metadata.keys() {
             if imperative_field_name(key) {
@@ -619,7 +795,12 @@ fn collect_side_effects(raw: &RawDefinitionEntryV1) -> Result<Vec<DefinitionSide
             }
         }
     }
-    for key in ["side_effects", "sideEffects", "effects", "runtime_side_effects"] {
+    for key in [
+        "side_effects",
+        "sideEffects",
+        "effects",
+        "runtime_side_effects",
+    ] {
         if let Some(value) = raw.metadata.get(key).or_else(|| raw.namespaces.get(key)) {
             side_effect_from_value(value, &mut side_effects, &mut errors);
         }
@@ -627,15 +808,31 @@ fn collect_side_effects(raw: &RawDefinitionEntryV1) -> Result<Vec<DefinitionSide
     if let Some(target) = &raw.target {
         side_effect_from_value(target, &mut side_effects, &mut errors);
     }
-    if errors.is_empty() { Ok(side_effects) } else { Err(errors) }
+    if errors.is_empty() {
+        Ok(side_effects)
+    } else {
+        Err(errors)
+    }
 }
 
 fn arbitrary_metadata(raw: &RawDefinitionEntryV1) -> BTreeMap<String, serde_json::Value> {
     let mut metadata = BTreeMap::new();
-    metadata.insert("namespaces".to_owned(), serde_json::to_value(&raw.namespaces).unwrap_or_default());
-    metadata.insert("metadata".to_owned(), serde_json::to_value(&raw.metadata).unwrap_or_default());
-    metadata.insert("target".to_owned(), raw.target.clone().unwrap_or(serde_json::Value::Null));
-    metadata.insert("dependencies".to_owned(), serde_json::to_value(&raw.dependencies).unwrap_or_default());
+    metadata.insert(
+        "namespaces".to_owned(),
+        serde_json::to_value(&raw.namespaces).unwrap_or_default(),
+    );
+    metadata.insert(
+        "metadata".to_owned(),
+        serde_json::to_value(&raw.metadata).unwrap_or_default(),
+    );
+    metadata.insert(
+        "target".to_owned(),
+        raw.target.clone().unwrap_or(serde_json::Value::Null),
+    );
+    metadata.insert(
+        "dependencies".to_owned(),
+        serde_json::to_value(&raw.dependencies).unwrap_or_default(),
+    );
     metadata.insert("flags".to_owned(), serde_json::json!(raw.flags));
     let mut unknown = BTreeSet::new();
     for key in raw.namespaces.keys().chain(raw.metadata.keys()) {
@@ -643,11 +840,18 @@ fn arbitrary_metadata(raw: &RawDefinitionEntryV1) -> BTreeMap<String, serde_json
             unknown.insert(key.clone());
         }
     }
-    metadata.insert("unknown_metadata_namespaces".to_owned(), serde_json::json!(unknown.into_iter().collect::<Vec<_>>()));
+    metadata.insert(
+        "unknown_metadata_namespaces".to_owned(),
+        serde_json::json!(unknown.into_iter().collect::<Vec<_>>()),
+    );
     metadata
 }
 
-fn build_entry(source: &str, raw: RawDefinitionEntryV1, inherited_warnings: &[String]) -> Result<DefinitionEntryV1, String> {
+fn build_entry(
+    source: &str,
+    raw: RawDefinitionEntryV1,
+    inherited_warnings: &[String],
+) -> Result<DefinitionEntryV1, String> {
     let name = raw.name.trim().to_owned();
     if name.is_empty() {
         return Err(".ytyp Definition Entry has empty identity.name".to_owned());
@@ -673,12 +877,17 @@ fn build_entry(source: &str, raw: RawDefinitionEntryV1, inherited_warnings: &[St
     })
 }
 
-fn load_manifest(state: &DefinitionsRuntimeState, source: &str) -> Result<DefinitionManifestV1, String> {
+fn load_manifest(
+    state: &DefinitionsRuntimeState,
+    source: &str,
+) -> Result<DefinitionManifestV1, String> {
     let (raw_entries, warnings) = load_dictionary_body(state, source)?;
     let mut entries = Vec::with_capacity(raw_entries.len());
     for raw in raw_entries {
         let name = raw.name.trim().to_owned();
-        if name.is_empty() { continue; }
+        if name.is_empty() {
+            continue;
+        }
         let (semantic_tags, domain_tags) = collect_tags(&raw);
         entries.push(DefinitionManifestEntryV1 {
             stable_hash: effective_hash(&raw),
@@ -689,7 +898,11 @@ fn load_manifest(state: &DefinitionsRuntimeState, source: &str) -> Result<Defini
             domain_tags,
         });
     }
-    entries.sort_by(|a, b| a.name.cmp(&b.name).then_with(|| a.stable_hash.cmp(&b.stable_hash)));
+    entries.sort_by(|a, b| {
+        a.name
+            .cmp(&b.name)
+            .then_with(|| a.stable_hash.cmp(&b.stable_hash))
+    });
     Ok(DefinitionManifestV1 {
         schema: "newengine.assets.definitions.manifest.v1",
         gateway: ENGINE_ASSETS_DEFINITIONS_SERVICE_ID,
@@ -702,7 +915,10 @@ fn load_manifest(state: &DefinitionsRuntimeState, source: &str) -> Result<Defini
     })
 }
 
-fn load_entry(state: &DefinitionsRuntimeState, request: DefinitionRefRequest) -> Result<DefinitionEntryV1, String> {
+fn load_entry(
+    state: &DefinitionsRuntimeState,
+    request: DefinitionRefRequest,
+) -> Result<DefinitionEntryV1, String> {
     let reference = parse_definition_ref(&request)?;
     let entry_selector = reference.entry.as_deref().unwrap_or_default().to_owned();
     let (raw_entries, warnings) = load_dictionary_body(state, &reference.logical_path)?;
@@ -711,7 +927,10 @@ fn load_entry(state: &DefinitionsRuntimeState, request: DefinitionRefRequest) ->
             return build_entry(&reference.logical_path, raw, &warnings);
         }
     }
-    Err(format!("engine.assets.definitions: Definition Entry not found ref='{}'", reference.canonical))
+    Err(format!(
+        "engine.assets.definitions: Definition Entry not found ref='{}'",
+        reference.canonical
+    ))
 }
 
 fn flatten_refs(refs: &DefinitionRefsV1) -> Vec<String> {
@@ -730,7 +949,10 @@ fn flatten_refs(refs: &DefinitionRefsV1) -> Vec<String> {
     all
 }
 
-fn validate_entry(state: &DefinitionsRuntimeState, request: DefinitionRefRequest) -> DefinitionValidationV1 {
+fn validate_entry(
+    state: &DefinitionsRuntimeState,
+    request: DefinitionRefRequest,
+) -> DefinitionValidationV1 {
     match load_entry(state, request) {
         Ok(entry) => DefinitionValidationV1 {
             ok: true,
@@ -768,7 +990,10 @@ fn manifest_blob(state: &mut DefinitionsRuntimeState, payload: Blob) -> RResult<
             "ownership_policy": ".ytyp is metadata owned by engine.assets.definitions; not scene and not model"
         }));
     }
-    let request = match manifest_request_from_payload(payload.as_slice(), definitions_method::MANIFEST_JSON_V1) {
+    let request = match manifest_request_from_payload(
+        payload.as_slice(),
+        definitions_method::MANIFEST_JSON_V1,
+    ) {
         Ok(request) => request,
         Err(e) => return RResult::RErr(RString::from(e)),
     };
@@ -783,10 +1008,11 @@ fn manifest_blob(state: &mut DefinitionsRuntimeState, payload: Blob) -> RResult<
 }
 
 fn entry_blob(state: &mut DefinitionsRuntimeState, payload: Blob) -> RResult<Blob, RString> {
-    let request = match ref_request_from_payload(payload.as_slice(), definitions_method::ENTRY_JSON_V1) {
-        Ok(request) => request,
-        Err(e) => return RResult::RErr(RString::from(e)),
-    };
+    let request =
+        match ref_request_from_payload(payload.as_slice(), definitions_method::ENTRY_JSON_V1) {
+            Ok(request) => request,
+            Err(e) => return RResult::RErr(RString::from(e)),
+        };
     match load_entry(state, request) {
         Ok(value) => ok_json(value),
         Err(e) => RResult::RErr(RString::from(e)),
@@ -798,21 +1024,40 @@ fn invoke_json(state: &mut DefinitionsRuntimeState, payload: Blob) -> RResult<Bl
         Ok(value) => value,
         Err(e) => return RResult::RErr(RString::from(e)),
     };
-    let method = value.get("method").and_then(|v| v.as_str()).unwrap_or(definitions_method::VALIDATE_V1);
+    let method = value
+        .get("method")
+        .and_then(|v| v.as_str())
+        .unwrap_or(definitions_method::VALIDATE_V1);
     match method {
         definitions_method::VALIDATE_V1 => {
-            let request = serde_json::from_value::<DefinitionRefRequest>(value.get("request").cloned().unwrap_or_default()).unwrap_or_default();
+            let request = serde_json::from_value::<DefinitionRefRequest>(
+                value.get("request").cloned().unwrap_or_default(),
+            )
+            .unwrap_or_default();
             ok_json(validate_entry(state, request))
         }
         definitions_method::ENTRY_JSON_V1 => {
-            let request = serde_json::from_value::<DefinitionRefRequest>(value.get("request").cloned().unwrap_or_default()).unwrap_or_default();
+            let request = serde_json::from_value::<DefinitionRefRequest>(
+                value.get("request").cloned().unwrap_or_default(),
+            )
+            .unwrap_or_default();
             match load_entry(state, request) {
                 Ok(entry) => ok_json(entry),
-                Err(e) => ok_json(StableDiagnostic { ok: false, code: "definitions.entry_unavailable", message: e, gateway: ENGINE_ASSETS_DEFINITIONS_SERVICE_ID, byte_owner: ENGINE_ASSET_SERVICE_ID, semantic_owner: ENGINE_ASSETS_DEFINITIONS_SERVICE_ID }),
+                Err(e) => ok_json(StableDiagnostic {
+                    ok: false,
+                    code: "definitions.entry_unavailable",
+                    message: e,
+                    gateway: ENGINE_ASSETS_DEFINITIONS_SERVICE_ID,
+                    byte_owner: ENGINE_ASSET_SERVICE_ID,
+                    semantic_owner: ENGINE_ASSETS_DEFINITIONS_SERVICE_ID,
+                }),
             }
         }
         definitions_method::RESOLVE_REFS_V1 => {
-            let request = serde_json::from_value::<DefinitionRefRequest>(value.get("request").cloned().unwrap_or_default()).unwrap_or_default();
+            let request = serde_json::from_value::<DefinitionRefRequest>(
+                value.get("request").cloned().unwrap_or_default(),
+            )
+            .unwrap_or_default();
             match load_entry(state, request) {
                 Ok(entry) => {
                     let flattened_refs = flatten_refs(&entry.refs);
@@ -828,11 +1073,21 @@ fn invoke_json(state: &mut DefinitionsRuntimeState, payload: Blob) -> RResult<Bl
                         warnings: entry.warnings,
                     })
                 }
-                Err(e) => ok_json(StableDiagnostic { ok: false, code: "definitions.refs_unavailable", message: e, gateway: ENGINE_ASSETS_DEFINITIONS_SERVICE_ID, byte_owner: ENGINE_ASSET_SERVICE_ID, semantic_owner: ENGINE_ASSETS_DEFINITIONS_SERVICE_ID }),
+                Err(e) => ok_json(StableDiagnostic {
+                    ok: false,
+                    code: "definitions.refs_unavailable",
+                    message: e,
+                    gateway: ENGINE_ASSETS_DEFINITIONS_SERVICE_ID,
+                    byte_owner: ENGINE_ASSET_SERVICE_ID,
+                    semantic_owner: ENGINE_ASSETS_DEFINITIONS_SERVICE_ID,
+                }),
             }
         }
         definitions_method::DESCRIBE_SIDE_EFFECTS_V1 => {
-            let request = serde_json::from_value::<DefinitionRefRequest>(value.get("request").cloned().unwrap_or_default()).unwrap_or_default();
+            let request = serde_json::from_value::<DefinitionRefRequest>(
+                value.get("request").cloned().unwrap_or_default(),
+            )
+            .unwrap_or_default();
             match load_entry(state, request) {
                 Ok(entry) => ok_json(serde_json::json!({
                     "ok": true,
@@ -844,21 +1099,44 @@ fn invoke_json(state: &mut DefinitionsRuntimeState, payload: Blob) -> RResult<Bl
                     "side_effects": entry.side_effects,
                     "domain_tags": entry.domain_tags,
                 })),
-                Err(e) => ok_json(StableDiagnostic { ok: false, code: "definitions.side_effects_unavailable", message: e, gateway: ENGINE_ASSETS_DEFINITIONS_SERVICE_ID, byte_owner: ENGINE_ASSET_SERVICE_ID, semantic_owner: ENGINE_ASSETS_DEFINITIONS_SERVICE_ID }),
+                Err(e) => ok_json(StableDiagnostic {
+                    ok: false,
+                    code: "definitions.side_effects_unavailable",
+                    message: e,
+                    gateway: ENGINE_ASSETS_DEFINITIONS_SERVICE_ID,
+                    byte_owner: ENGINE_ASSET_SERVICE_ID,
+                    semantic_owner: ENGINE_ASSETS_DEFINITIONS_SERVICE_ID,
+                }),
             }
         }
         definitions_method::MANIFEST_JSON_V1 => {
-            let request = serde_json::from_value::<DefinitionManifestRequest>(value.get("request").cloned().unwrap_or_default()).unwrap_or_default();
-            match manifest_source_from_request(&request).and_then(|source| load_manifest(state, &source)) {
+            let request = serde_json::from_value::<DefinitionManifestRequest>(
+                value.get("request").cloned().unwrap_or_default(),
+            )
+            .unwrap_or_default();
+            match manifest_source_from_request(&request)
+                .and_then(|source| load_manifest(state, &source))
+            {
                 Ok(manifest) => ok_json(manifest),
-                Err(e) => ok_json(StableDiagnostic { ok: false, code: "definitions.manifest_unavailable", message: e, gateway: ENGINE_ASSETS_DEFINITIONS_SERVICE_ID, byte_owner: ENGINE_ASSET_SERVICE_ID, semantic_owner: ENGINE_ASSETS_DEFINITIONS_SERVICE_ID }),
+                Err(e) => ok_json(StableDiagnostic {
+                    ok: false,
+                    code: "definitions.manifest_unavailable",
+                    message: e,
+                    gateway: ENGINE_ASSETS_DEFINITIONS_SERVICE_ID,
+                    byte_owner: ENGINE_ASSET_SERVICE_ID,
+                    semantic_owner: ENGINE_ASSETS_DEFINITIONS_SERVICE_ID,
+                }),
             }
         }
-        other => RResult::RErr(RString::from(format!("engine.assets.definitions: unknown invoke method '{other}'"))),
+        other => RResult::RErr(RString::from(format!(
+            "engine.assets.definitions: unknown invoke method '{other}'"
+        ))),
     }
 }
 
-pub fn definitions_gateway_service(client: AssetServiceClient) -> newengine_plugin_api::ServiceV1Dyn<'static> {
+pub fn definitions_gateway_service(
+    client: AssetServiceClient,
+) -> newengine_plugin_api::ServiceV1Dyn<'static> {
     let description = engine_gateway_provider_service_description(
         DEFINITIONS_SERVICE_ID,
         DEFINITIONS_GATEWAY_OWNER,
@@ -958,9 +1236,24 @@ mod tests {
         let raw = RawDefinitionEntryV1 {
             name: "body".to_owned(),
             dependencies: vec![
-                AssetDependencyRecordV1::new("models/foo.ydd@body", "drawable", "engine.assets.models", true),
-                AssetDependencyRecordV1::new("materials/foo.nemat@body", "material", "engine.assets.materials", true),
-                AssetDependencyRecordV1::new("textures/foo.ytd@diff", "texture", "engine.assets.textures", true),
+                AssetDependencyRecordV1::new(
+                    "models/foo.ydd@body",
+                    "drawable",
+                    "engine.assets.models",
+                    true,
+                ),
+                AssetDependencyRecordV1::new(
+                    "materials/foo.nemat@body",
+                    "material",
+                    "engine.assets.materials",
+                    true,
+                ),
+                AssetDependencyRecordV1::new(
+                    "textures/foo.ytd@diff",
+                    "texture",
+                    "engine.assets.textures",
+                    true,
+                ),
             ],
             ..Default::default()
         };

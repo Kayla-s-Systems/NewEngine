@@ -17,7 +17,8 @@ impl FrameGraphBuilder {
             return self;
         };
         self.add_phase_pass(StandardRenderPhase::PostFx, |pass| {
-            pass.with_domain(RenderGraphPassDomain::PostProcess).reads(input, RenderGraphResourceUsage::SampledTexture)
+            pass.with_domain(RenderGraphPassDomain::PostProcess)
+                .reads(input, RenderGraphResourceUsage::SampledTexture)
                 .writes(RG_SURFACE_COLOR, RenderGraphResourceUsage::ColorAttachment)
         });
         self
@@ -29,7 +30,8 @@ impl FrameGraphBuilder {
             return self;
         };
         self.add_phase_pass(StandardRenderPhase::BloomExtract, |pass| {
-            pass.with_domain(RenderGraphPassDomain::PostProcess).reads(input, RenderGraphResourceUsage::SampledTexture)
+            pass.with_domain(RenderGraphPassDomain::PostProcess)
+                .reads(input, RenderGraphResourceUsage::SampledTexture)
                 .writes(RG_SURFACE_COLOR, RenderGraphResourceUsage::ColorAttachment)
         });
         self
@@ -38,7 +40,8 @@ impl FrameGraphBuilder {
     #[inline]
     pub fn bloom_blur(mut self) -> Self {
         self.add_phase_pass(StandardRenderPhase::BloomBlur, |pass| {
-            pass.with_domain(RenderGraphPassDomain::PostProcess).reads(RG_SURFACE_COLOR, RenderGraphResourceUsage::SampledTexture)
+            pass.with_domain(RenderGraphPassDomain::PostProcess)
+                .reads(RG_SURFACE_COLOR, RenderGraphResourceUsage::SampledTexture)
                 .writes(RG_SURFACE_COLOR, RenderGraphResourceUsage::ColorAttachment)
         });
         self
@@ -47,7 +50,8 @@ impl FrameGraphBuilder {
     #[inline]
     pub fn taa_resolve(mut self) -> Self {
         self.add_phase_pass(StandardRenderPhase::TaaResolve, |pass| {
-            pass.with_domain(RenderGraphPassDomain::PostProcess).reads(RG_SURFACE_COLOR, RenderGraphResourceUsage::SampledTexture)
+            pass.with_domain(RenderGraphPassDomain::PostProcess)
+                .reads(RG_SURFACE_COLOR, RenderGraphResourceUsage::SampledTexture)
                 .writes(RG_SURFACE_COLOR, RenderGraphResourceUsage::ColorAttachment)
         });
         self
@@ -56,7 +60,8 @@ impl FrameGraphBuilder {
     #[inline]
     pub fn msaa_resolve(mut self) -> Self {
         self.add_phase_pass(StandardRenderPhase::MsaaResolve, |pass| {
-            pass.with_domain(RenderGraphPassDomain::PostProcess).reads(RG_SURFACE_COLOR, RenderGraphResourceUsage::SampledTexture)
+            pass.with_domain(RenderGraphPassDomain::PostProcess)
+                .reads(RG_SURFACE_COLOR, RenderGraphResourceUsage::SampledTexture)
                 .writes(RG_SURFACE_COLOR, RenderGraphResourceUsage::ColorAttachment)
         });
         self
@@ -73,19 +78,24 @@ impl FrameGraphBuilder {
 
         let id = newengine_render_api::RenderGraphPassId(self.next_custom_pass);
         self.next_custom_pass = self.next_custom_pass.saturating_add(1);
-        let pass = RenderGraphPassDesc::new(id, "hdr_scene_resolve_to_surface", RenderGraphPassKind::Copy)
-            .with_domain(RenderGraphPassDomain::PostProcess)
-            .reads(input, RenderGraphResourceUsage::SampledTexture)
-            .writes(RG_SURFACE_COLOR, RenderGraphResourceUsage::ColorAttachment);
+        let pass = RenderGraphPassDesc::new(
+            id,
+            "hdr_scene_resolve_to_surface",
+            RenderGraphPassKind::Copy,
+        )
+        .with_domain(RenderGraphPassDomain::PostProcess)
+        .reads(input, RenderGraphResourceUsage::SampledTexture)
+        .writes(RG_SURFACE_COLOR, RenderGraphResourceUsage::ColorAttachment);
         self.graph.passes.push(pass);
     }
 
     #[inline]
     fn has_surface_color_writer(&self) -> bool {
-        self.graph
-            .passes
-            .iter()
-            .any(|pass| pass.writes.iter().any(|write| write.resource == RG_SURFACE_COLOR))
+        self.graph.passes.iter().any(|pass| {
+            pass.writes
+                .iter()
+                .any(|write| write.resource == RG_SURFACE_COLOR)
+        })
     }
 
     #[inline]
@@ -98,5 +108,4 @@ impl FrameGraphBuilder {
         }
         None
     }
-
 }

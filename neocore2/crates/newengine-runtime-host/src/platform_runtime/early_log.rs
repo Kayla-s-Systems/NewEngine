@@ -69,16 +69,29 @@ fn candidate_paths() -> Vec<PathBuf> {
         .or_else(|| std::env::var_os("CACHE_FILES"))
         .filter(|v| !v.as_os_str().is_empty())
     {
-        paths.push(PathBuf::from(cache).join("logs").join("current.ulog.ndjson"));
+        paths.push(
+            PathBuf::from(cache)
+                .join("logs")
+                .join("current.ulog.ndjson"),
+        );
     }
 
-    paths.push(find_neocore2_root().join("cache").join("logs").join("current.ulog.ndjson"));
+    paths.push(
+        find_neocore2_root()
+            .join("cache")
+            .join("logs")
+            .join("current.ulog.ndjson"),
+    );
     dedup_paths(paths)
 }
 
 fn find_neocore2_root() -> PathBuf {
     if let Ok(cwd) = std::env::current_dir() {
-        if cwd.file_name().and_then(|s| s.to_str()).is_some_and(|s| s.eq_ignore_ascii_case("neocore2")) {
+        if cwd
+            .file_name()
+            .and_then(|s| s.to_str())
+            .is_some_and(|s| s.eq_ignore_ascii_case("neocore2"))
+        {
             return cwd;
         }
         let nested = cwd.join("NewEngine").join("neocore2");
@@ -86,7 +99,11 @@ fn find_neocore2_root() -> PathBuf {
             return nested;
         }
         for ancestor in cwd.ancestors() {
-            if ancestor.file_name().and_then(|s| s.to_str()).is_some_and(|s| s.eq_ignore_ascii_case("neocore2")) {
+            if ancestor
+                .file_name()
+                .and_then(|s| s.to_str())
+                .is_some_and(|s| s.eq_ignore_ascii_case("neocore2"))
+            {
                 return ancestor.to_path_buf();
             }
         }
@@ -94,7 +111,11 @@ fn find_neocore2_root() -> PathBuf {
 
     if let Ok(exe) = std::env::current_exe() {
         for ancestor in exe.ancestors() {
-            if ancestor.file_name().and_then(|s| s.to_str()).is_some_and(|s| s.eq_ignore_ascii_case("neocore2")) {
+            if ancestor
+                .file_name()
+                .and_then(|s| s.to_str())
+                .is_some_and(|s| s.eq_ignore_ascii_case("neocore2"))
+            {
                 return ancestor.to_path_buf();
             }
         }

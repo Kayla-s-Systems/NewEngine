@@ -1,15 +1,15 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use newengine_schema_api::{
-    SchemaDiagnosticV1, SchemaPropertyDescriptorV1, SchemaTypeDescriptorV1,
-    SchemaValueKindV1,
+    SchemaDiagnosticV1, SchemaPropertyDescriptorV1, SchemaTypeDescriptorV1, SchemaValueKindV1,
 };
 use serde::Deserialize;
 use serde_json::Value;
 
 use crate::validation::default_value_for_kind;
 
-pub(crate) const EMBEDDED_SCHEMA_REGISTRY: &str = include_str!("../../../config/schema/schema_registry.v1.json");
+pub(crate) const EMBEDDED_SCHEMA_REGISTRY: &str =
+    include_str!("../../../config/schema/schema_registry.v1.json");
 
 #[derive(Clone, Debug, Default)]
 pub(crate) struct LoadedRegistry {
@@ -99,7 +99,10 @@ fn from_registry_file(file: SchemaRegistryFileV1) -> LoadedRegistry {
     }
 }
 
-fn descriptor_from_record(record: SchemaRegistryRecordV1, diagnostics: &mut Vec<SchemaDiagnosticV1>) -> SchemaTypeDescriptorV1 {
+fn descriptor_from_record(
+    record: SchemaRegistryRecordV1,
+    diagnostics: &mut Vec<SchemaDiagnosticV1>,
+) -> SchemaTypeDescriptorV1 {
     let type_id = record.type_id.trim().to_owned();
     let mut properties = Vec::with_capacity(record.properties.len());
     let mut seen = BTreeSet::new();
@@ -130,23 +133,52 @@ fn descriptor_from_record(record: SchemaRegistryRecordV1, diagnostics: &mut Vec<
         if property.default_value.is_null() && !property.nullable {
             property.default_value = default_value_for_kind(property.value_kind);
         }
-        property.metadata.insert("owner_gateway".to_owned(), Value::String(record.owner_gateway.clone()));
-        property.metadata.insert("source_contract".to_owned(), Value::String(record.source_contract.clone()));
+        property.metadata.insert(
+            "owner_gateway".to_owned(),
+            Value::String(record.owner_gateway.clone()),
+        );
+        property.metadata.insert(
+            "source_contract".to_owned(),
+            Value::String(record.source_contract.clone()),
+        );
         properties.push(property);
     }
 
     let mut metadata = record.metadata;
-    metadata.insert("owner_gateway".to_owned(), Value::String(record.owner_gateway));
-    metadata.insert("source_contract".to_owned(), Value::String(record.source_contract));
-    metadata.insert("patch_validation".to_owned(), Value::String(record.patch_validation));
-    metadata.insert("transaction_dto".to_owned(), Value::String(record.transaction_dto));
-    metadata.insert("consumers".to_owned(), Value::Array(record.consumers.into_iter().map(Value::String).collect()));
+    metadata.insert(
+        "owner_gateway".to_owned(),
+        Value::String(record.owner_gateway),
+    );
+    metadata.insert(
+        "source_contract".to_owned(),
+        Value::String(record.source_contract),
+    );
+    metadata.insert(
+        "patch_validation".to_owned(),
+        Value::String(record.patch_validation),
+    );
+    metadata.insert(
+        "transaction_dto".to_owned(),
+        Value::String(record.transaction_dto),
+    );
+    metadata.insert(
+        "consumers".to_owned(),
+        Value::Array(record.consumers.into_iter().map(Value::String).collect()),
+    );
 
     SchemaTypeDescriptorV1 {
         type_id: type_id.clone(),
-        display_name: if record.display_name.trim().is_empty() { title_case(&type_id) } else { record.display_name },
+        display_name: if record.display_name.trim().is_empty() {
+            title_case(&type_id)
+        } else {
+            record.display_name
+        },
         domain: record.domain,
-        kind: if record.kind.trim().is_empty() { "resource".to_owned() } else { record.kind },
+        kind: if record.kind.trim().is_empty() {
+            "resource".to_owned()
+        } else {
+            record.kind
+        },
         properties,
         capabilities: record.capabilities,
         tags: record.tags,
@@ -156,7 +188,12 @@ fn descriptor_from_record(record: SchemaRegistryRecordV1, diagnostics: &mut Vec<
 }
 
 fn title_case(value: &str) -> String {
-    let last = value.rsplit('.').next().unwrap_or(value).replace('_', " " ).replace('-', " " );
+    let last = value
+        .rsplit('.')
+        .next()
+        .unwrap_or(value)
+        .replace('_', " ")
+        .replace('-', " ");
     let mut out = String::new();
     for word in last.split_whitespace() {
         let mut chars = word.chars();
@@ -170,4 +207,6 @@ fn title_case(value: &str) -> String {
 }
 
 #[allow(dead_code)]
-fn _kind_for_docs(kind: SchemaValueKindV1) -> &'static str { kind.as_str() }
+fn _kind_for_docs(kind: SchemaValueKindV1) -> &'static str {
+    kind.as_str()
+}

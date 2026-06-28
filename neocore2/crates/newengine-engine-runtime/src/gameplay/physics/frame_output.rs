@@ -24,7 +24,11 @@ pub(super) fn apply_frame_output(world: &mut World, output: PhysicsFrameOutput) 
         apply_velocity_update(world, &key_to_entity, update);
     }
 
-    world.insert_resource(report_from_dto(output.report, output.events, &key_to_entity));
+    world.insert_resource(report_from_dto(
+        output.report,
+        output.events,
+        &key_to_entity,
+    ));
 }
 
 fn apply_pose_update(
@@ -32,7 +36,9 @@ fn apply_pose_update(
     key_to_entity: &BTreeMap<u64, EntityId>,
     update: PhysicsBodyPoseUpdate,
 ) {
-    let Some(entity) = key_to_entity.get(&update.entity).copied() else { return; };
+    let Some(entity) = key_to_entity.get(&update.entity).copied() else {
+        return;
+    };
     let controlled_body = is_directly_controlled_body(world, entity);
     if let Some(transform) = world.get_mut::<Transform>(entity) {
         transform.position = arr_to_vec3(update.position);
@@ -47,7 +53,9 @@ fn apply_velocity_update(
     key_to_entity: &BTreeMap<u64, EntityId>,
     update: PhysicsBodyVelocityUpdate,
 ) {
-    let Some(entity) = key_to_entity.get(&update.entity).copied() else { return; };
+    let Some(entity) = key_to_entity.get(&update.entity).copied() else {
+        return;
+    };
     let physics_velocity = arr_to_vec3(update.linear_velocity);
     let next = if is_directly_controlled_body(world, entity) {
         let current = world.get::<Velocity>(entity).copied().unwrap_or_default().0;
@@ -76,12 +84,16 @@ fn report_from_dto(
         match event {
             newengine_physics_api::PhysicsEventDto::BodyCreated { entity } => {
                 if let Some(entity) = key_to_entity.get(&entity).copied() {
-                    converted_events.push(PhysicsEvent::BodyCreated { entity: entity.into() });
+                    converted_events.push(PhysicsEvent::BodyCreated {
+                        entity: entity.into(),
+                    });
                 }
             }
             newengine_physics_api::PhysicsEventDto::BodyDestroyed { entity } => {
                 if let Some(entity) = key_to_entity.get(&entity).copied() {
-                    converted_events.push(PhysicsEvent::BodyDestroyed { entity: entity.into() });
+                    converted_events.push(PhysicsEvent::BodyDestroyed {
+                        entity: entity.into(),
+                    });
                 }
             }
             _ => {}

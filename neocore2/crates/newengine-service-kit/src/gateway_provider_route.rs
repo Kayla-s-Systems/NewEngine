@@ -44,7 +44,9 @@ pub struct NullEngineGatewayProviderDeclDynamic {
     pub service: ServiceV1Dyn<'static>,
 }
 
-pub fn register_engine_gateway_provider_service(decl: EngineGatewayProviderDecl) -> Result<(), String> {
+pub fn register_engine_gateway_provider_service(
+    decl: EngineGatewayProviderDecl,
+) -> Result<(), String> {
     let service_id = decl.service.id().to_string();
     if service_id != decl.provider_service {
         return Err(format!(
@@ -69,7 +71,9 @@ pub fn register_engine_gateway_provider_service(decl: EngineGatewayProviderDecl)
     )
 }
 
-pub fn register_engine_gateway_provider_service_dynamic(decl: EngineGatewayProviderDeclDynamic) -> Result<(), String> {
+pub fn register_engine_gateway_provider_service_dynamic(
+    decl: EngineGatewayProviderDeclDynamic,
+) -> Result<(), String> {
     let service_id = decl.service.id().to_string();
     if service_id != decl.provider_service {
         return Err(format!(
@@ -94,7 +98,9 @@ pub fn register_engine_gateway_provider_service_dynamic(decl: EngineGatewayProvi
     )
 }
 
-pub fn register_null_engine_gateway_provider_service_dynamic(decl: NullEngineGatewayProviderDeclDynamic) -> Result<(), String> {
+pub fn register_null_engine_gateway_provider_service_dynamic(
+    decl: NullEngineGatewayProviderDeclDynamic,
+) -> Result<(), String> {
     let service_id = decl.service.id().to_string();
     if service_id != decl.provider_service {
         return Err(format!(
@@ -118,7 +124,9 @@ pub fn register_null_engine_gateway_provider_service_dynamic(decl: NullEngineGat
     )
 }
 
-pub fn register_engine_gateway_provider_service_best_effort(decl: EngineGatewayProviderDecl) -> bool {
+pub fn register_engine_gateway_provider_service_best_effort(
+    decl: EngineGatewayProviderDecl,
+) -> bool {
     let gateway = decl.gateway;
     let capability = decl.capability;
     let provider_route = decl.provider_route;
@@ -148,7 +156,9 @@ pub fn register_engine_gateway_provider_service_best_effort(decl: EngineGatewayP
     }
 }
 
-pub fn register_engine_gateway_provider_service_dynamic_best_effort(decl: EngineGatewayProviderDeclDynamic) -> bool {
+pub fn register_engine_gateway_provider_service_dynamic_best_effort(
+    decl: EngineGatewayProviderDeclDynamic,
+) -> bool {
     let gateway = decl.gateway;
     let capability = decl.capability;
     let provider_route = decl.provider_route;
@@ -178,7 +188,9 @@ pub fn register_engine_gateway_provider_service_dynamic_best_effort(decl: Engine
     }
 }
 
-pub fn register_null_engine_gateway_provider_service_dynamic_best_effort(decl: NullEngineGatewayProviderDeclDynamic) -> bool {
+pub fn register_null_engine_gateway_provider_service_dynamic_best_effort(
+    decl: NullEngineGatewayProviderDeclDynamic,
+) -> bool {
     let gateway = decl.gateway;
     let capability = decl.capability;
     let provider_route = decl.provider_route;

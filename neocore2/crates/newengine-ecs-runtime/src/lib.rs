@@ -49,9 +49,9 @@ impl EngineEcsGatewayService {
     }
 
     fn snapshot_json_v1(&self, payload: Blob) -> RResult<Blob, RString> {
-        let req = match payload_json(&payload)
-            .and_then(|v| serde_json::from_value::<EcsSnapshotRequest>(v).map_err(|e| e.to_string()))
-        {
+        let req = match payload_json(&payload).and_then(|v| {
+            serde_json::from_value::<EcsSnapshotRequest>(v).map_err(|e| e.to_string())
+        }) {
             Ok(v) => v,
             Err(e) => return RResult::RErr(RString::from(e)),
         };
@@ -75,7 +75,11 @@ impl EngineEcsGatewayService {
             }
         }
 
-        ok_json(&EcsWorldSnapshot { summary, entities, truncated })
+        ok_json(&EcsWorldSnapshot {
+            summary,
+            entities,
+            truncated,
+        })
     }
 
     fn command_json_v1(&self, payload: Blob) -> RResult<Blob, RString> {
@@ -123,7 +127,11 @@ impl EngineEcsGatewayService {
                         message: "entity spawned".to_owned(),
                     });
                 }
-                EcsCommand::SetComponentJson { entity_id, component_type, .. } => {
+                EcsCommand::SetComponentJson {
+                    entity_id,
+                    component_type,
+                    ..
+                } => {
                     results.push(EcsCommandResult {
                         index,
                         ok: false,
@@ -135,7 +143,10 @@ impl EngineEcsGatewayService {
                         ),
                     });
                 }
-                EcsCommand::RemoveComponentJson { entity_id, component_type } => {
+                EcsCommand::RemoveComponentJson {
+                    entity_id,
+                    component_type,
+                } => {
                     results.push(EcsCommandResult {
                         index,
                         ok: false,
@@ -151,7 +162,11 @@ impl EngineEcsGatewayService {
         }
 
         let summary = Self::world_summary(world);
-        ok_json(&EcsCommandResponse { ok: true, summary, results })
+        ok_json(&EcsCommandResponse {
+            ok: true,
+            summary,
+            results,
+        })
     }
 
     fn invoke_json(&self, payload: Blob) -> RResult<Blob, RString> {
@@ -168,7 +183,9 @@ impl EngineEcsGatewayService {
 
         match req.method.as_str() {
             newengine_ecs_api::ECS_SERVICE_METHOD_SUMMARY_JSON_V1 => self.summary_json_v1(),
-            newengine_ecs_api::ECS_SERVICE_METHOD_SNAPSHOT_JSON_V1 => self.snapshot_json_v1(payload),
+            newengine_ecs_api::ECS_SERVICE_METHOD_SNAPSHOT_JSON_V1 => {
+                self.snapshot_json_v1(payload)
+            }
             newengine_ecs_api::ECS_SERVICE_METHOD_COMMAND_JSON_V1 => self.command_json_v1(payload),
             other => RResult::RErr(RString::from(format!(
                 "engine.ecs invoke_json unknown target method '{other}'"
@@ -199,17 +216,34 @@ pub fn ecs_gateway_service(
     JsonServiceRouter::new(ENGINE_ECS_SERVICE_ID)
         .describe_json(&description)
         .info(EcsServiceInfo::default)
-        .blob(newengine_ecs_api::ECS_SERVICE_METHOD_INVOKE, move |_unit, payload| invoke_service.invoke_json(payload))
-        .blob(newengine_ecs_api::ECS_SERVICE_METHOD_SUMMARY_JSON_V1, move |_unit, _payload| summary_service.summary_json_v1())
-        .blob(newengine_ecs_api::ECS_SERVICE_METHOD_SNAPSHOT_JSON_V1, move |_unit, payload| snapshot_service.snapshot_json_v1(payload))
-        .blob(newengine_ecs_api::ECS_SERVICE_METHOD_COMMAND_JSON_V1, move |_unit, payload| command_service.command_json_v1(payload))
-        .blob(newengine_ecs_api::ECS_SERVICE_METHOD_SHUTDOWN_V1, |_unit, _payload| ok_empty_blob())
+        .blob(
+            newengine_ecs_api::ECS_SERVICE_METHOD_INVOKE,
+            move |_unit, payload| invoke_service.invoke_json(payload),
+        )
+        .blob(
+            newengine_ecs_api::ECS_SERVICE_METHOD_SUMMARY_JSON_V1,
+            move |_unit, _payload| summary_service.summary_json_v1(),
+        )
+        .blob(
+            newengine_ecs_api::ECS_SERVICE_METHOD_SNAPSHOT_JSON_V1,
+            move |_unit, payload| snapshot_service.snapshot_json_v1(payload),
+        )
+        .blob(
+            newengine_ecs_api::ECS_SERVICE_METHOD_COMMAND_JSON_V1,
+            move |_unit, payload| command_service.command_json_v1(payload),
+        )
+        .blob(
+            newengine_ecs_api::ECS_SERVICE_METHOD_SHUTDOWN_V1,
+            |_unit, _payload| ok_empty_blob(),
+        )
         .into_service_v1()
 }
 
 pub fn register_ecs_gateway_best_effort(scene: Arc<newengine_scene_runtime::SceneBridge>) {
     if newengine_plugin_host::has_service(ENGINE_ECS_SERVICE_ID) {
-        newengine_ulog_api::ulog::debug!("engine.ecs gateway registration skipped; service already available");
+        newengine_ulog_api::ulog::debug!(
+            "engine.ecs gateway registration skipped; service already available"
+        );
         return;
     }
 

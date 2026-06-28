@@ -3,14 +3,18 @@ use super::*;
 impl ScreenProfileRuntimeState {
     pub(crate) fn load() -> Self {
         let config = load_screen_profile_config();
-        let descriptor = screen_profile_descriptor(config.profile, config.game_ui_root_surface_id.clone());
+        let descriptor =
+            screen_profile_descriptor(config.profile, config.game_ui_root_surface_id.clone());
         newengine_ulog_api::ulog::info!(
             "screen profile: loaded profile='{}' layout='{}' focus={:?} panels={} game_ui_root={}",
             descriptor.profile.id(),
             descriptor.layout_id,
             descriptor.input_focus_policy,
             descriptor.panels.len(),
-            descriptor.game_ui_root_surface_id.as_deref().unwrap_or("<none>"),
+            descriptor
+                .game_ui_root_surface_id
+                .as_deref()
+                .unwrap_or("<none>"),
         );
         Self {
             config,
@@ -51,37 +55,59 @@ impl ScreenProfileRuntimeState {
 
         match self.descriptor.profile {
             UiScreenProfile::Editor => {
-                refresh_ui |= self.hide_profile_surface(UI_SURFACE_GAME_PRESENTATION, profile_changed);
+                refresh_ui |=
+                    self.hide_profile_surface(UI_SURFACE_GAME_PRESENTATION, profile_changed);
                 if self.config.publish_editor_shell {
                     let layout = editor_layout_metrics(resources, &self.hidden_panels);
-                    let mut node = EditorScreen::default().surface_node(frame_index, self.editor_runtime_mode, &layout, self.active_menu_id.as_deref());
+                    let mut node = EditorScreen::default().surface_node(
+                        frame_index,
+                        self.editor_runtime_mode,
+                        &layout,
+                        self.active_menu_id.as_deref(),
+                    );
                     self.append_right_edit_window(resources, &mut node, &layout);
                     self.append_toast_components(resources, &mut node, &layout);
                     sort_components_by_layout_y(&mut node.components);
-                    publish_screen_node_tree_request(&UiNodeTreeRequest::from_surface_node(&node, UiNodeRequestSourceKind::Generated));
-                    self.published_surfaces.insert(UI_SURFACE_EDITOR_SHELL.to_owned());
+                    publish_screen_node_tree_request(&UiNodeTreeRequest::from_surface_node(
+                        &node,
+                        UiNodeRequestSourceKind::Generated,
+                    ));
+                    self.published_surfaces
+                        .insert(UI_SURFACE_EDITOR_SHELL.to_owned());
                     refresh_ui = true;
                 } else {
-                    refresh_ui |= self.hide_profile_surface(UI_SURFACE_EDITOR_SHELL, profile_changed);
+                    refresh_ui |=
+                        self.hide_profile_surface(UI_SURFACE_EDITOR_SHELL, profile_changed);
                 }
             }
             UiScreenProfile::Game => {
                 refresh_ui |= self.hide_profile_surface(UI_SURFACE_EDITOR_SHELL, profile_changed);
-                let game = match self.descriptor.game_ui_root_surface_id.as_ref().filter(|it| !it.trim().is_empty()) {
+                let game = match self
+                    .descriptor
+                    .game_ui_root_surface_id
+                    .as_ref()
+                    .filter(|it| !it.trim().is_empty())
+                {
                     Some(root) => GameScreen::with_game_ui_root(root.clone()),
                     None => GameScreen::default(),
                 };
                 if let Some(node) = game.surface_node(frame_index) {
-                    publish_screen_node_tree_request(&UiNodeTreeRequest::from_surface_node(&node, UiNodeRequestSourceKind::Generated));
-                    self.published_surfaces.insert(UI_SURFACE_GAME_PRESENTATION.to_owned());
+                    publish_screen_node_tree_request(&UiNodeTreeRequest::from_surface_node(
+                        &node,
+                        UiNodeRequestSourceKind::Generated,
+                    ));
+                    self.published_surfaces
+                        .insert(UI_SURFACE_GAME_PRESENTATION.to_owned());
                     refresh_ui = true;
                 } else {
-                    refresh_ui |= self.hide_profile_surface(UI_SURFACE_GAME_PRESENTATION, profile_changed);
+                    refresh_ui |=
+                        self.hide_profile_surface(UI_SURFACE_GAME_PRESENTATION, profile_changed);
                 }
             }
             UiScreenProfile::Headless => {
                 refresh_ui |= self.hide_profile_surface(UI_SURFACE_EDITOR_SHELL, profile_changed);
-                refresh_ui |= self.hide_profile_surface(UI_SURFACE_GAME_PRESENTATION, profile_changed);
+                refresh_ui |=
+                    self.hide_profile_surface(UI_SURFACE_GAME_PRESENTATION, profile_changed);
             }
         }
 
@@ -101,10 +127,14 @@ impl ScreenProfileRuntimeState {
     }
 
     fn update_menu_interaction(&mut self, resources: &Resources, frame_index: u64) {
-        if self.descriptor.profile != UiScreenProfile::Editor || self.last_menu_click_frame == frame_index {
+        if self.descriptor.profile != UiScreenProfile::Editor
+            || self.last_menu_click_frame == frame_index
+        {
             return;
         }
-        let Some(action_id) = clicked_dispatch_action(resources, "editor.menu.") else { return; };
+        let Some(action_id) = clicked_dispatch_action(resources, "editor.menu.") else {
+            return;
+        };
         let menu_id = action_id.trim_start_matches("editor.menu.");
         if !EDITOR_CHROME.menu.iter().any(|menu| menu.id == menu_id) {
             if self.active_menu_id.is_some() && !action_id.starts_with("editor.menu_popup.") {
@@ -122,7 +152,11 @@ impl ScreenProfileRuntimeState {
         newengine_ulog_api::ulog::info!(
             "editor menu: '{}' {} via ui.dispatch_input_v1",
             menu_id,
-            if self.active_menu_id.as_deref() == Some(menu_id) { "opened" } else { "closed" }
+            if self.active_menu_id.as_deref() == Some(menu_id) {
+                "opened"
+            } else {
+                "closed"
+            }
         );
     }
 
@@ -169,35 +203,58 @@ impl ScreenProfileRuntimeState {
             mode: self.editor_runtime_mode,
             source_surface: self.descriptor.surface_id.clone(),
             reason: match self.editor_runtime_mode {
-                UiEditorRuntimeMode::Edit => "editor boot default: simulation stopped until Simulate or Play".to_owned(),
-                UiEditorRuntimeMode::Simulate => "toolbar/shortcut requested simulation preview".to_owned(),
+                UiEditorRuntimeMode::Edit => {
+                    "editor boot default: simulation stopped until Simulate or Play".to_owned()
+                }
+                UiEditorRuntimeMode::Simulate => {
+                    "toolbar/shortcut requested simulation preview".to_owned()
+                }
                 UiEditorRuntimeMode::Play => "toolbar/shortcut requested play in editor".to_owned(),
             },
         });
     }
 
     fn update_dock_interaction(&mut self, resources: &Resources, frame_index: u64) {
-        if self.descriptor.profile != UiScreenProfile::Editor || self.last_dock_click_frame == frame_index {
+        if self.descriptor.profile != UiScreenProfile::Editor
+            || self.last_dock_click_frame == frame_index
+        {
             return;
         }
-        let Some(action_id) = clicked_dispatch_action(resources, "editor.dock.toggle.") else { return; };
+        let Some(action_id) = clicked_dispatch_action(resources, "editor.dock.toggle.") else {
+            return;
+        };
         let slot_id = action_id.trim_start_matches("editor.dock.toggle.");
-        if !self.descriptor.panels.iter().any(|panel| panel.slot_id == slot_id) {
+        if !self
+            .descriptor
+            .panels
+            .iter()
+            .any(|panel| panel.slot_id == slot_id)
+        {
             return;
         }
         self.last_dock_click_frame = frame_index;
         if self.hidden_panels.contains(slot_id) {
             self.hidden_panels.remove(slot_id);
-            newengine_ulog_api::ulog::info!("editor dock: panel '{}' shown via ui.dispatch_input_v1", slot_id);
+            newengine_ulog_api::ulog::info!(
+                "editor dock: panel '{}' shown via ui.dispatch_input_v1",
+                slot_id
+            );
         } else {
             self.hidden_panels.insert(slot_id.to_owned());
-            newengine_ulog_api::ulog::info!("editor dock: panel '{}' hidden via ui.dispatch_input_v1", slot_id);
+            newengine_ulog_api::ulog::info!(
+                "editor dock: panel '{}' hidden via ui.dispatch_input_v1",
+                slot_id
+            );
         }
     }
 
     fn publish_editor_layout_state(&self, resources: &mut Resources, frame_index: u64) {
         if self.descriptor.profile != UiScreenProfile::Editor {
-            resources.insert(UiDockLayoutState { version: 1, frame_index, panels: Vec::new() });
+            resources.insert(UiDockLayoutState {
+                version: 1,
+                frame_index,
+                panels: Vec::new(),
+            });
             resources.insert(UiViewportSlot::default());
             return;
         }
@@ -218,12 +275,42 @@ impl ScreenProfileRuntimeState {
             version: 1,
             frame_index,
             panels: vec![
-                dock_state("left.scene_tree", layout.left_visible, false, layout.hovered_dock_slot == Some("left.scene_tree")),
-                dock_state("right.inspector", layout.right_visible, false, layout.hovered_dock_slot == Some("right.inspector")),
-                dock_state("bottom.asset_browser", layout.bottom_visible, false, layout.hovered_dock_slot == Some("bottom.asset_browser")),
-                dock_state("bottom.import_queue", layout.bottom_visible, false, layout.hovered_dock_slot == Some("bottom.import_queue")),
-                dock_state("bottom.output_log", layout.bottom_visible, false, layout.hovered_dock_slot == Some("bottom.output_log")),
-                dock_state("bottom.profiler_diagnostics", layout.bottom_visible, false, layout.hovered_dock_slot == Some("bottom.profiler_diagnostics")),
+                dock_state(
+                    "left.scene_tree",
+                    layout.left_visible,
+                    false,
+                    layout.hovered_dock_slot == Some("left.scene_tree"),
+                ),
+                dock_state(
+                    "right.inspector",
+                    layout.right_visible,
+                    false,
+                    layout.hovered_dock_slot == Some("right.inspector"),
+                ),
+                dock_state(
+                    "bottom.asset_browser",
+                    layout.bottom_visible,
+                    false,
+                    layout.hovered_dock_slot == Some("bottom.asset_browser"),
+                ),
+                dock_state(
+                    "bottom.import_queue",
+                    layout.bottom_visible,
+                    false,
+                    layout.hovered_dock_slot == Some("bottom.import_queue"),
+                ),
+                dock_state(
+                    "bottom.output_log",
+                    layout.bottom_visible,
+                    false,
+                    layout.hovered_dock_slot == Some("bottom.output_log"),
+                ),
+                dock_state(
+                    "bottom.profiler_diagnostics",
+                    layout.bottom_visible,
+                    false,
+                    layout.hovered_dock_slot == Some("bottom.profiler_diagnostics"),
+                ),
                 dock_state("center.viewport_gizmos", true, false, false),
             ],
         });
@@ -249,24 +336,35 @@ impl ScreenProfileRuntimeState {
         });
     }
 
-    fn append_toast_components(&self, resources: &Resources, node: &mut UiSurfaceNode, layout: &EditorLayoutMetrics) {
-        let Some(stack) = resources.get::<UiToastStack>() else { return; };
+    fn append_toast_components(
+        &self,
+        resources: &Resources,
+        node: &mut UiSurfaceNode,
+        layout: &EditorLayoutMetrics,
+    ) {
+        let Some(stack) = resources.get::<UiToastStack>() else {
+            return;
+        };
         let toast_w = 320.0_f32.min((layout.screen_w * 0.32).max(220.0));
         let toast_x = (layout.screen_w - toast_w - 16.0).max(8.0);
         let mut toast_y = layout.menu_h + layout.toolbar_h + 12.0;
         for toast in stack.notifications.iter().take(4) {
-            let mut component = UiComponentNode::row(format!("editor.toast.{}", component_id_fragment(&toast.id)), toast.title.clone())
-                .with_detail(toast.detail.clone())
-                .with_tone(match toast.severity {
-                    UiToastSeverity::Info | UiToastSeverity::Success => UiNodeTone::Accent,
-                    UiToastSeverity::Warning | UiToastSeverity::Error => UiNodeTone::Danger,
-                })
-                .tagged("toast")
-                .tagged("notification");
+            let mut component = UiComponentNode::row(
+                format!("editor.toast.{}", component_id_fragment(&toast.id)),
+                toast.title.clone(),
+            )
+            .with_detail(toast.detail.clone())
+            .with_tone(match toast.severity {
+                UiToastSeverity::Info | UiToastSeverity::Success => UiNodeTone::Accent,
+                UiToastSeverity::Warning | UiToastSeverity::Error => UiNodeTone::Danger,
+            })
+            .tagged("toast")
+            .tagged("notification");
             if let Some(progress) = toast.progress_permille {
                 component.value = Some(format!("{}%", progress as f32 / 10.0));
             }
-            node.components.push(with_rect(component, toast_x, toast_y, toast_w, 34.0));
+            node.components
+                .push(with_rect(component, toast_x, toast_y, toast_w, 34.0));
             toast_y += 40.0;
         }
     }
@@ -300,7 +398,12 @@ impl ScreenProfileRuntimeState {
         }
     }
 
-    fn append_right_edit_window(&mut self, resources: &Resources, node: &mut UiSurfaceNode, layout: &EditorLayoutMetrics) {
+    fn append_right_edit_window(
+        &mut self,
+        resources: &Resources,
+        node: &mut UiSurfaceNode,
+        layout: &EditorLayoutMetrics,
+    ) {
         let selection = resources
             .get::<EditorSelectionContext>()
             .cloned()
@@ -310,8 +413,16 @@ impl ScreenProfileRuntimeState {
         node.components.push(
             UiComponentNode::row("right_edit_window.header", "Right Edit Window")
                 .with_value(selection.kind.as_str())
-                .with_detail(if selection.reference.is_empty() { "no active editor selection".to_owned() } else { selection.reference.clone() })
-                .with_tone(if selection.kind == EditorSelectionKind::None { UiNodeTone::Normal } else { UiNodeTone::Accent })
+                .with_detail(if selection.reference.is_empty() {
+                    "no active editor selection".to_owned()
+                } else {
+                    selection.reference.clone()
+                })
+                .with_tone(if selection.kind == EditorSelectionKind::None {
+                    UiNodeTone::Normal
+                } else {
+                    UiNodeTone::Accent
+                })
                 .tagged("right")
                 .tagged("edit-window")
                 .tagged("selection-context"),
@@ -321,7 +432,9 @@ impl ScreenProfileRuntimeState {
             EditorSelectionKind::None => {
                 node.components.push(
                     UiComponentNode::row("right_edit_window.empty", "No selection")
-                        .with_detail("viewport/outliner/content browser can publish EditorSelectionContext")
+                        .with_detail(
+                            "viewport/outliner/content browser can publish EditorSelectionContext",
+                        )
                         .with_tone(UiNodeTone::Normal)
                         .tagged("right")
                         .tagged("edit-window"),
@@ -338,7 +451,9 @@ impl ScreenProfileRuntimeState {
                         .tagged("opaque-handles"),
                 );
             }
-            EditorSelectionKind::Asset | EditorSelectionKind::AssetEntry | EditorSelectionKind::Material => {
+            EditorSelectionKind::Asset
+            | EditorSelectionKind::AssetEntry
+            | EditorSelectionKind::Material => {
                 self.push_asset_document_components(node, &selection);
             }
             EditorSelectionKind::World => {
@@ -357,7 +472,11 @@ impl ScreenProfileRuntimeState {
         let right_w = (layout.right_w - 28.0).max(160.0);
         let mut y = layout.viewport_y + 84.0;
         for component in node.components.iter_mut().skip(first_right_component) {
-            let h = if component.state_tags.iter().any(|tag| tag == "asset-field") { 24.0 } else { 34.0 };
+            let h = if component.state_tags.iter().any(|tag| tag == "asset-field") {
+                24.0
+            } else {
+                34.0
+            };
             set_rect(component, right_x, y, right_w, h);
             y += h + 5.0;
             if y > layout.bottom_y - 12.0 {
@@ -375,7 +494,12 @@ impl ScreenProfileRuntimeState {
         self.cached_right_edit_document = None;
         self.cached_right_edit_error = None;
 
-        if !matches!(selection.kind, EditorSelectionKind::Asset | EditorSelectionKind::AssetEntry | EditorSelectionKind::Material) {
+        if !matches!(
+            selection.kind,
+            EditorSelectionKind::Asset
+                | EditorSelectionKind::AssetEntry
+                | EditorSelectionKind::Material
+        ) {
             return;
         }
         if selection.reference.trim().is_empty() {
@@ -394,11 +518,18 @@ impl ScreenProfileRuntimeState {
         }
     }
 
-    fn push_asset_document_components(&self, node: &mut UiSurfaceNode, selection: &EditorSelectionContext) {
+    fn push_asset_document_components(
+        &self,
+        node: &mut UiSurfaceNode,
+        selection: &EditorSelectionContext,
+    ) {
         node.components.push(
             UiComponentNode::row("right_edit_window.asset.route", "Asset Document Editor")
                 .with_value("engine.assets.inspect")
-                .with_detail(format!("source={} semantic_gateway={}", selection.source_surface, selection.semantic_gateway))
+                .with_detail(format!(
+                    "source={} semantic_gateway={}",
+                    selection.source_surface, selection.semantic_gateway
+                ))
                 .with_tone(UiNodeTone::Accent)
                 .tagged("right")
                 .tagged("asset-document"),
@@ -433,16 +564,32 @@ impl ScreenProfileRuntimeState {
                     "schema_editable={} can_apply_patch={} writer={}",
                     document.editable_fields_available,
                     document.can_apply_patch,
-                    if document.writer_capability.is_empty() { "missing" } else { document.writer_capability.as_str() }
+                    if document.writer_capability.is_empty() {
+                        "missing"
+                    } else {
+                        document.writer_capability.as_str()
+                    }
                 ))
-                .with_tone(if document.can_apply_patch { UiNodeTone::Accent } else { UiNodeTone::Normal })
+                .with_tone(if document.can_apply_patch {
+                    UiNodeTone::Accent
+                } else {
+                    UiNodeTone::Normal
+                })
                 .tagged("right")
                 .tagged("asset-document"),
         );
         node.components.push(
             UiComponentNode::row("right_edit_window.asset.contract", "Contract")
                 .with_value(document.inspect_contract.clone())
-                .with_detail(format!("edit_contract={} write_owner={}", if document.edit_contract.is_empty() { "none" } else { document.edit_contract.as_str() }, document.write_owner))
+                .with_detail(format!(
+                    "edit_contract={} write_owner={}",
+                    if document.edit_contract.is_empty() {
+                        "none"
+                    } else {
+                        document.edit_contract.as_str()
+                    },
+                    document.write_owner
+                ))
                 .with_tone(UiNodeTone::Normal)
                 .tagged("right")
                 .tagged("asset-document"),
@@ -451,7 +598,12 @@ impl ScreenProfileRuntimeState {
             node.components.push(
                 UiComponentNode::row("right_edit_window.asset.schema", "Schema Type")
                     .with_value(schema_type.type_id.clone())
-                    .with_detail(format!("route={} contract={} properties={}", ENGINE_SCHEMA_SERVICE_ID, document.schema_contract, schema_type.properties.len()))
+                    .with_detail(format!(
+                        "route={} contract={} properties={}",
+                        ENGINE_SCHEMA_SERVICE_ID,
+                        document.schema_contract,
+                        schema_type.properties.len()
+                    ))
                     .with_tone(UiNodeTone::Accent)
                     .tagged("right")
                     .tagged("asset-document")
@@ -461,21 +613,35 @@ impl ScreenProfileRuntimeState {
 
         for section in document.sections.iter().take(3) {
             node.components.push(
-                UiComponentNode::row(format!("right_edit_window.asset.section.{}", component_id_fragment(&section.id)), section.title.clone())
-                    .with_value(format!("{} fields", section.fields.len()))
-                    .with_tone(UiNodeTone::Accent)
-                    .tagged("right")
-                    .tagged("asset-section"),
+                UiComponentNode::row(
+                    format!(
+                        "right_edit_window.asset.section.{}",
+                        component_id_fragment(&section.id)
+                    ),
+                    section.title.clone(),
+                )
+                .with_value(format!("{} fields", section.fields.len()))
+                .with_tone(UiNodeTone::Accent)
+                .tagged("right")
+                .tagged("asset-section"),
             );
             for field in section.fields.iter().take(4) {
                 node.components.push(
                     UiComponentNode::row(
-                        format!("right_edit_window.asset.field.{}.{}", component_id_fragment(&section.id), component_id_fragment(&field.id)),
+                        format!(
+                            "right_edit_window.asset.field.{}.{}",
+                            component_id_fragment(&section.id),
+                            component_id_fragment(&field.id)
+                        ),
                         field.label.clone(),
                     )
                     .with_value(asset_document_value_label(&field.value))
                     .with_detail(asset_document_field_detail(field))
-                    .with_tone(if field.editable { UiNodeTone::Accent } else { UiNodeTone::Normal })
+                    .with_tone(if field.editable {
+                        UiNodeTone::Accent
+                    } else {
+                        UiNodeTone::Normal
+                    })
                     .tagged("right")
                     .tagged("asset-field")
                     .tagged("schema-property"),

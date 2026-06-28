@@ -11,7 +11,10 @@ use super::*;
 impl RenderUiNodeSurfaceState {
     pub(super) fn build_ui_state(&self, visual_visible: bool) -> UiSurfaceNode {
         if !visual_visible {
-            return UiSurfaceNode::hidden(newengine_ui_api::UI_SURFACE_ENGINE_PRIMARY, "engine.ui.primary");
+            return UiSurfaceNode::hidden(
+                newengine_ui_api::UI_SURFACE_ENGINE_PRIMARY,
+                "engine.ui.primary",
+            );
         }
 
         let Some(navigation) = self.navigation.as_ref() else {
@@ -71,8 +74,14 @@ impl RenderUiNodeSurfaceState {
         }
 
         let mut metrics = std::collections::BTreeMap::new();
-        metrics.insert("page".to_owned(), serde_json::json!(navigation.current_page_id()));
-        metrics.insert("selected_index".to_owned(), serde_json::json!(selected_index));
+        metrics.insert(
+            "page".to_owned(),
+            serde_json::json!(navigation.current_page_id()),
+        );
+        metrics.insert(
+            "selected_index".to_owned(),
+            serde_json::json!(selected_index),
+        );
         metrics.insert("hovered_index".to_owned(), serde_json::json!(hovered_index));
         metrics.insert("document".to_owned(), serde_json::json!(document.id));
 
@@ -87,12 +96,20 @@ impl RenderUiNodeSurfaceState {
             subtitle: page_subtitle.to_owned(),
             body_lines,
             footer_lines,
-            style_tags: vec!["retained".to_owned(), "node".to_owned(), "modern".to_owned(), "rounded".to_owned()],
+            style_tags: vec![
+                "retained".to_owned(),
+                "node".to_owned(),
+                "modern".to_owned(),
+                "rounded".to_owned(),
+            ],
             theme_id: UI_THEME_NORTHSTAR_DEFAULT.to_owned(),
             style_ref: None,
             component_id: UI_COMPONENT_PANEL.to_owned(),
             components,
-            message: self.feedback.as_ref().map(UiNodeSurfaceEventFeedback::to_ui_message),
+            message: self
+                .feedback
+                .as_ref()
+                .map(UiNodeSurfaceEventFeedback::to_ui_message),
             style: ui_surface_style(),
             admission_policy: UiSurfaceAdmissionPolicy::AcceptAllButThis,
             metrics,
@@ -105,18 +122,24 @@ impl RenderUiNodeSurfaceState {
             .as_deref()
             .unwrap_or("UI document is waiting for engine.assets/VFS availability")
             .to_owned();
-        let message = self.feedback.as_ref().map(UiNodeSurfaceEventFeedback::to_ui_message).or_else(|| {
-            Some(UiNodeMessage::new(
-                "UI surface document unavailable",
-                detail.clone(),
-                UiNodeMessageSeverity::Warning,
-            ))
-        });
+        let message = self
+            .feedback
+            .as_ref()
+            .map(UiNodeSurfaceEventFeedback::to_ui_message)
+            .or_else(|| {
+                Some(UiNodeMessage::new(
+                    "UI surface document unavailable",
+                    detail.clone(),
+                    UiNodeMessageSeverity::Warning,
+                ))
+            });
         let lines = vec![
             "UI document is not mounted yet".to_owned(),
             detail.clone(),
-            "Gameplay navigation is gated while this modal is open; raw sampling remains alive".to_owned(),
-            "Check engine.assets.ui route, AssetManager mount roots and package/VFS configuration".to_owned(),
+            "Gameplay navigation is gated while this modal is open; raw sampling remains alive"
+                .to_owned(),
+            "Check engine.assets.ui route, AssetManager mount roots and package/VFS configuration"
+                .to_owned(),
         ];
         UiSurfaceNode {
             version: 1,
@@ -129,19 +152,29 @@ impl RenderUiNodeSurfaceState {
             subtitle: "Waiting for declarative engine.ui surface from engine.assets/VFS".to_owned(),
             body_lines: lines.clone(),
             footer_lines: vec!["ESC closes diagnostic overlay".to_owned()],
-            style_tags: vec!["retained".to_owned(), "error".to_owned(), "modern".to_owned(), "rounded".to_owned()],
+            style_tags: vec![
+                "retained".to_owned(),
+                "error".to_owned(),
+                "modern".to_owned(),
+                "rounded".to_owned(),
+            ],
             theme_id: UI_THEME_NORTHSTAR_DEFAULT.to_owned(),
             style_ref: None,
             component_id: UI_COMPONENT_PANEL.to_owned(),
             components: lines
                 .iter()
                 .enumerate()
-                .map(|(idx, line)| UiComponentNode::text(format!("unavailable.{idx}"), line.clone()))
+                .map(|(idx, line)| {
+                    UiComponentNode::text(format!("unavailable.{idx}"), line.clone())
+                })
                 .collect(),
             message,
             style: ui_surface_style(),
             admission_policy: UiSurfaceAdmissionPolicy::AcceptAllButThis,
-            metrics: std::collections::BTreeMap::from([("error".to_owned(), serde_json::json!(detail))]),
+            metrics: std::collections::BTreeMap::from([(
+                "error".to_owned(),
+                serde_json::json!(detail),
+            )]),
         }
     }
 
@@ -178,7 +211,10 @@ impl RenderUiNodeSurfaceState {
     }
 
     fn item_detail(&self, item: &UiNodeNavigationItem) -> Option<String> {
-        let awaiting_action = self.awaiting_rebind.as_ref().map(|pending| pending.action_id.as_str());
+        let awaiting_action = self
+            .awaiting_rebind
+            .as_ref()
+            .map(|pending| pending.action_id.as_str());
         let item_action = item
             .action
             .as_ref()
@@ -192,13 +228,29 @@ impl RenderUiNodeSurfaceState {
 }
 
 fn component_line(component: &UiComponentNode) -> String {
-    let selector = if component.state_tags.iter().any(|tag| tag == "selected" || tag == "hovered") { ">" } else { " " };
+    let selector = if component
+        .state_tags
+        .iter()
+        .any(|tag| tag == "selected" || tag == "hovered")
+    {
+        ">"
+    } else {
+        " "
+    };
     let mut line = format!("{selector} {}", component.text);
-    if let Some(value) = component.value.as_deref().filter(|value| !value.trim().is_empty()) {
+    if let Some(value) = component
+        .value
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+    {
         line.push_str(" = ");
         line.push_str(value);
     }
-    if let Some(detail) = component.detail.as_deref().filter(|detail| !detail.trim().is_empty()) {
+    if let Some(detail) = component
+        .detail
+        .as_deref()
+        .filter(|detail| !detail.trim().is_empty())
+    {
         line.push_str("  - ");
         line.push_str(detail);
     }

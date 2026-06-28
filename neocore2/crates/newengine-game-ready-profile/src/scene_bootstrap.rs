@@ -2,20 +2,22 @@
 
 use std::{any::Any, sync::Arc};
 
-use newengine_assets::{AssetServiceClient};
+use newengine_assets::AssetServiceClient;
 use newengine_core::{
-    EngineLifecycleEvent, EngineReadinessKey, EngineReadinessSnapshot, EngineResult, Module, ModuleCtx,
+    EngineLifecycleEvent, EngineReadinessKey, EngineReadinessSnapshot, EngineResult, Module,
+    ModuleCtx,
 };
 use newengine_runtime_host::asset_bootstrap::{
     collect_app_asset_roots, mount_asset_roots_best_effort,
 };
-use newengine_ui_api::{UiEditorRuntimeMode, UiEditorRuntimeState, UiScreenProfile, UiScreenProfileState};
+use newengine_ui_api::{
+    UiEditorRuntimeMode, UiEditorRuntimeState, UiScreenProfile, UiScreenProfileState,
+};
 
 use crate::{GAME_APP_ASSETS_DIR_ENV, GAME_READY_APP_DIR_NAME};
 
-const GAME_READY_SCENE_BOOTSTRAP_REQUIRES: &[EngineReadinessKey] = &[
-    EngineReadinessKey::EnginePluginsReady,
-];
+const GAME_READY_SCENE_BOOTSTRAP_REQUIRES: &[EngineReadinessKey] =
+    &[EngineReadinessKey::EnginePluginsReady];
 
 pub(crate) struct GameReadySceneBootstrapModule {
     scene: Arc<newengine_scene_runtime::SceneBridge>,
@@ -48,7 +50,11 @@ impl GameReadySceneBootstrapModule {
     }
 
     #[inline]
-    fn editor_bootstrap_allowed<E: Send + 'static>(&mut self, ctx: &ModuleCtx<'_, E>, origin: &'static str) -> bool {
+    fn editor_bootstrap_allowed<E: Send + 'static>(
+        &mut self,
+        ctx: &ModuleCtx<'_, E>,
+        origin: &'static str,
+    ) -> bool {
         let profile = ctx
             .resources()
             .get::<UiScreenProfileState>()
@@ -62,7 +68,10 @@ impl GameReadySceneBootstrapModule {
             .get::<UiEditorRuntimeState>()
             .map(|state| state.mode)
             .unwrap_or(UiEditorRuntimeMode::Edit);
-        let allowed = matches!(mode, UiEditorRuntimeMode::Simulate | UiEditorRuntimeMode::Play);
+        let allowed = matches!(
+            mode,
+            UiEditorRuntimeMode::Simulate | UiEditorRuntimeMode::Play
+        );
         if !allowed && !self.editor_deferred_logged {
             self.editor_deferred_logged = true;
             newengine_ulog_api::ulog::info!(
@@ -75,7 +84,11 @@ impl GameReadySceneBootstrapModule {
     }
 
     #[inline]
-    fn try_bootstrap_if_allowed<E: Send + 'static>(&mut self, ctx: &mut ModuleCtx<'_, E>, origin: &'static str) -> EngineResult<()> {
+    fn try_bootstrap_if_allowed<E: Send + 'static>(
+        &mut self,
+        ctx: &mut ModuleCtx<'_, E>,
+        origin: &'static str,
+    ) -> EngineResult<()> {
         if !self.editor_bootstrap_allowed(ctx, origin) {
             return Ok(());
         }

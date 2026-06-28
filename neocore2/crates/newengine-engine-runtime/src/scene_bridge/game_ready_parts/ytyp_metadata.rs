@@ -12,7 +12,10 @@ use super::*;
 /// and prevents local ad-hoc material JSON from becoming a second source of
 /// truth.
 #[inline]
-pub(super) fn value_path<'a>(mut value: &'a serde_json::Value, path: &[&str]) -> Option<&'a serde_json::Value> {
+pub(super) fn value_path<'a>(
+    mut value: &'a serde_json::Value,
+    path: &[&str],
+) -> Option<&'a serde_json::Value> {
     for key in path {
         value = value.get(*key)?;
     }
@@ -21,7 +24,11 @@ pub(super) fn value_path<'a>(mut value: &'a serde_json::Value, path: &[&str]) ->
 
 #[inline]
 pub(super) fn value_string(value: &serde_json::Value) -> Option<String> {
-    value.as_str().map(str::trim).filter(|s| !s.is_empty()).map(|s| s.replace('\\', "/"))
+    value
+        .as_str()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|s| s.replace('\\', "/"))
 }
 
 #[inline]
@@ -42,7 +49,10 @@ pub(super) fn is_ytd_ref(value: &str) -> bool {
 }
 
 #[inline]
-pub(super) fn material_spec_mut<'a>(profile: &'a mut GameReadyMapProfile, key: &str) -> Option<&'a mut GameReadyMaterialSpec> {
+pub(super) fn material_spec_mut<'a>(
+    profile: &'a mut GameReadyMapProfile,
+    key: &str,
+) -> Option<&'a mut GameReadyMaterialSpec> {
     match key {
         "terrain" => Some(&mut profile.materials.terrain),
         "sky" | "skydome" => Some(&mut profile.materials.sky),
@@ -55,11 +65,19 @@ pub(super) fn material_spec_mut<'a>(profile: &'a mut GameReadyMapProfile, key: &
     }
 }
 
-pub(super) fn apply_material_refs_from_ytyp(profile: &mut GameReadyMapProfile, metadata: &serde_json::Value, definition_ref: &str) -> usize {
-    let Some(materials) = metadata.get("materials").and_then(|v| v.as_object()) else { return 0; };
+pub(super) fn apply_material_refs_from_ytyp(
+    profile: &mut GameReadyMapProfile,
+    metadata: &serde_json::Value,
+    definition_ref: &str,
+) -> usize {
+    let Some(materials) = metadata.get("materials").and_then(|v| v.as_object()) else {
+        return 0;
+    };
     let mut applied = 0usize;
     for (key, value) in materials {
-        let Some(reference) = value_string(value) else { continue; };
+        let Some(reference) = value_string(value) else {
+            continue;
+        };
         if !is_nemat_ref(&reference) {
             newengine_ulog_api::ulog::warn!(
                 "game-ready ytyp metadata: rejected material key='{}' ref='{}' definition_ref='{}' reason='expected .nemat@entry'",
@@ -102,28 +120,55 @@ pub(super) fn apply_ytd_constant(
     Some(reference)
 }
 
-pub(super) fn apply_texture_refs_from_ytyp(profile: &mut GameReadyMapProfile, metadata: &serde_json::Value, definition_ref: &str) -> usize {
+pub(super) fn apply_texture_refs_from_ytyp(
+    profile: &mut GameReadyMapProfile,
+    metadata: &serde_json::Value,
+    definition_ref: &str,
+) -> usize {
     let mut applied = 0usize;
-    if let Some(reference) = apply_ytd_constant(metadata, &["terrain", "surface", "forest_base_texture"], "terrain.surface.forest_base_texture", definition_ref) {
+    if let Some(reference) = apply_ytd_constant(
+        metadata,
+        &["terrain", "surface", "forest_base_texture"],
+        "terrain.surface.forest_base_texture",
+        definition_ref,
+    ) {
         profile.terrain.surface.forest_base_texture = reference;
         applied += 1;
     }
-    if let Some(reference) = apply_ytd_constant(metadata, &["terrain", "surface", "sand_base_texture"], "terrain.surface.sand_base_texture", definition_ref) {
+    if let Some(reference) = apply_ytd_constant(
+        metadata,
+        &["terrain", "surface", "sand_base_texture"],
+        "terrain.surface.sand_base_texture",
+        definition_ref,
+    ) {
         profile.terrain.surface.sand_base_texture = reference;
         applied += 1;
     }
-    if let Some(reference) = apply_ytd_constant(metadata, &["terrain", "surface", "rock_base_texture"], "terrain.surface.rock_base_texture", definition_ref) {
+    if let Some(reference) = apply_ytd_constant(
+        metadata,
+        &["terrain", "surface", "rock_base_texture"],
+        "terrain.surface.rock_base_texture",
+        definition_ref,
+    ) {
         profile.terrain.surface.rock_base_texture = reference;
         applied += 1;
     }
-    if let Some(reference) = apply_ytd_constant(metadata, &["sky", "moon_texture"], "sky.moon_texture", definition_ref) {
+    if let Some(reference) = apply_ytd_constant(
+        metadata,
+        &["sky", "moon_texture"],
+        "sky.moon_texture",
+        definition_ref,
+    ) {
         profile.sky.moon_texture = reference;
         applied += 1;
     }
     applied
 }
 
-pub(super) fn apply_sky_constants_from_ytyp(profile: &mut GameReadyMapProfile, metadata: &serde_json::Value) -> usize {
+pub(super) fn apply_sky_constants_from_ytyp(
+    profile: &mut GameReadyMapProfile,
+    metadata: &serde_json::Value,
+) -> usize {
     let mut applied = 0usize;
     if let Some(radius) = value_path(metadata, &["sky", "radius"]).and_then(value_f32) {
         profile.sky.radius = radius.max(16.0);
@@ -141,32 +186,47 @@ pub(super) fn apply_sky_constants_from_ytyp(profile: &mut GameReadyMapProfile, m
         profile.sky.mesh = mesh;
         applied += 1;
     }
-    if let Some(cloud_dictionary) = value_path(metadata, &["sky", "cloud_dictionary"]).and_then(value_string) {
+    if let Some(cloud_dictionary) =
+        value_path(metadata, &["sky", "cloud_dictionary"]).and_then(value_string)
+    {
         profile.sky.cloud_dictionary = cloud_dictionary;
         applied += 1;
     }
-    if let Some(cloud_profile) = value_path(metadata, &["sky", "cloud_profile"]).and_then(value_string) {
+    if let Some(cloud_profile) =
+        value_path(metadata, &["sky", "cloud_profile"]).and_then(value_string)
+    {
         profile.sky.cloud_profile = cloud_profile;
         applied += 1;
     }
     applied
 }
 
-pub(super) fn apply_time_constants_from_ytyp(profile: &mut GameReadyMapProfile, metadata: &serde_json::Value) -> usize {
+pub(super) fn apply_time_constants_from_ytyp(
+    profile: &mut GameReadyMapProfile,
+    metadata: &serde_json::Value,
+) -> usize {
     let mut applied = 0usize;
-    if let Some(hours) = value_path(metadata, &["lighting", "day_night", "time_of_day_hours"]).and_then(value_f32) {
+    if let Some(hours) =
+        value_path(metadata, &["lighting", "day_night", "time_of_day_hours"]).and_then(value_f32)
+    {
         profile.lighting.day_night.time_of_day_hours = hours.rem_euclid(24.0);
         applied += 1;
     }
-    if let Some(day_len) = value_path(metadata, &["lighting", "day_night", "day_length_seconds"]).and_then(value_f32) {
+    if let Some(day_len) =
+        value_path(metadata, &["lighting", "day_night", "day_length_seconds"]).and_then(value_f32)
+    {
         profile.lighting.day_night.day_length_seconds = day_len.max(1.0);
         applied += 1;
     }
-    if let Some(latitude) = value_path(metadata, &["lighting", "day_night", "latitude_degrees"]).and_then(value_f32) {
+    if let Some(latitude) =
+        value_path(metadata, &["lighting", "day_night", "latitude_degrees"]).and_then(value_f32)
+    {
         profile.lighting.day_night.latitude_degrees = latitude.clamp(-89.0, 89.0);
         applied += 1;
     }
-    if let Some(axial_tilt) = value_path(metadata, &["lighting", "day_night", "axial_tilt_degrees"]).and_then(value_f32) {
+    if let Some(axial_tilt) =
+        value_path(metadata, &["lighting", "day_night", "axial_tilt_degrees"]).and_then(value_f32)
+    {
         profile.lighting.day_night.axial_tilt_degrees = axial_tilt.clamp(-45.0, 45.0);
         applied += 1;
     }
@@ -174,7 +234,8 @@ pub(super) fn apply_time_constants_from_ytyp(profile: &mut GameReadyMapProfile, 
 }
 
 pub(super) fn load_game_ready_definition_entry(definition_ref: &str) -> Option<serde_json::Value> {
-    let payload = serde_json::to_vec(&serde_json::json!({ "definition_ref": definition_ref })).ok()?;
+    let payload =
+        serde_json::to_vec(&serde_json::json!({ "definition_ref": definition_ref })).ok()?;
     match call_service_v1_optional(
         newengine_assets::ENGINE_ASSETS_DEFINITIONS_SERVICE_ID,
         newengine_assets::definitions_method::ENTRY_JSON_V1,
@@ -190,15 +251,21 @@ pub(super) fn load_game_ready_definition_entry(definition_ref: &str) -> Option<s
         Ok(None) => {
             newengine_ulog_api::ulog::debug!("game-ready ytyp metadata: engine.assets.definitions route absent ref='{}'; metadata hydration skipped", definition_ref);
             None
-        },
+        }
         Err(e) => {
-            newengine_ulog_api::ulog::warn!("game-ready ytyp metadata: engine.assets.definitions call failed ref='{}' err='{}'", definition_ref, e);
+            newengine_ulog_api::ulog::warn!(
+                "game-ready ytyp metadata: engine.assets.definitions call failed ref='{}' err='{}'",
+                definition_ref,
+                e
+            );
             None
         }
     }
 }
 
-pub(super) fn game_ready_metadata_namespace(entry: &serde_json::Value) -> Option<&serde_json::Value> {
+pub(super) fn game_ready_metadata_namespace(
+    entry: &serde_json::Value,
+) -> Option<&serde_json::Value> {
     // engine.assets.definitions returns arbitrary metadata as a source-of-knowledge
     // envelope: { arbitrary_metadata: { metadata: { ns: ... }, namespaces: { ns: ... } } }.
     // Older probes may still expose metadata directly. Accept both shapes, but
@@ -207,13 +274,32 @@ pub(super) fn game_ready_metadata_namespace(entry: &serde_json::Value) -> Option
         .get("arbitrary_metadata")
         .and_then(|v| v.get("metadata"))
         .and_then(|v| v.get("newengine.game_ready"))
-        .or_else(|| entry.get("arbitrary_metadata").and_then(|v| v.get("namespaces")).and_then(|v| v.get("newengine.game_ready")))
-        .or_else(|| entry.get("arbitrary_metadata").and_then(|v| v.get("newengine.game_ready")))
-        .or_else(|| entry.get("metadata").and_then(|v| v.get("newengine.game_ready")))
-        .or_else(|| entry.get("namespaces").and_then(|v| v.get("newengine.game_ready")))
+        .or_else(|| {
+            entry
+                .get("arbitrary_metadata")
+                .and_then(|v| v.get("namespaces"))
+                .and_then(|v| v.get("newengine.game_ready"))
+        })
+        .or_else(|| {
+            entry
+                .get("arbitrary_metadata")
+                .and_then(|v| v.get("newengine.game_ready"))
+        })
+        .or_else(|| {
+            entry
+                .get("metadata")
+                .and_then(|v| v.get("newengine.game_ready"))
+        })
+        .or_else(|| {
+            entry
+                .get("namespaces")
+                .and_then(|v| v.get("newengine.game_ready"))
+        })
 }
 
-pub(in crate::scene_bridge::game_ready) fn apply_game_ready_ytyp_metadata(profile: &mut GameReadyMapProfile) {
+pub(in crate::scene_bridge::game_ready) fn apply_game_ready_ytyp_metadata(
+    profile: &mut GameReadyMapProfile,
+) {
     let definitions = profile.definitions.clone();
     if definitions.is_empty() {
         newengine_ulog_api::ulog::warn!(
@@ -225,7 +311,9 @@ pub(in crate::scene_bridge::game_ready) fn apply_game_ready_ytyp_metadata(profil
     let mut applied_total = 0usize;
     for spec in definitions {
         let definition_ref = spec.definition_ref.trim();
-        let Some(entry) = load_game_ready_definition_entry(definition_ref) else { continue; };
+        let Some(entry) = load_game_ready_definition_entry(definition_ref) else {
+            continue;
+        };
         let null_metadata = serde_json::Value::Null;
         let metadata = game_ready_metadata_namespace(&entry).unwrap_or(&null_metadata);
         if metadata.is_null() {
@@ -253,26 +341,42 @@ pub(in crate::scene_bridge::game_ready) fn apply_game_ready_ytyp_metadata(profil
     );
 }
 
-pub(in crate::scene_bridge::game_ready) fn resolve_game_ready_asset_graph(root_ref: &str) -> Option<newengine_model_domain_api::ResolvedAssetGraphV2> {
+pub(in crate::scene_bridge::game_ready) fn resolve_game_ready_asset_graph(
+    root_ref: &str,
+) -> Option<newengine_model_domain_api::ResolvedAssetGraphV2> {
     let payload = serde_json::to_vec(&serde_json::json!({ "root_ref": root_ref })).ok()?;
     match call_service_v1_optional(
         newengine_model_domain_api::ENGINE_ASSETS_GRAPH_SERVICE_ID,
         newengine_model_domain_api::ASSET_GRAPH_METHOD_RESOLVE_V1,
         &payload,
     ) {
-        Ok(Some(bytes)) => match serde_json::from_slice::<newengine_model_domain_api::ResolvedAssetGraphV2>(&bytes) {
-            Ok(graph) => Some(graph),
-            Err(e) => {
-                newengine_ulog_api::ulog::warn!("assets.graph.resolve_v1: invalid json graph root_ref='{}' err='{}'", root_ref, e);
-                None
+        Ok(Some(bytes)) => {
+            match serde_json::from_slice::<newengine_model_domain_api::ResolvedAssetGraphV2>(&bytes)
+            {
+                Ok(graph) => Some(graph),
+                Err(e) => {
+                    newengine_ulog_api::ulog::warn!(
+                        "assets.graph.resolve_v1: invalid json graph root_ref='{}' err='{}'",
+                        root_ref,
+                        e
+                    );
+                    None
+                }
             }
-        },
+        }
         Ok(None) => {
-            newengine_ulog_api::ulog::debug!("assets.graph.resolve_v1: route absent root_ref='{}'; graph hydration skipped", root_ref);
+            newengine_ulog_api::ulog::debug!(
+                "assets.graph.resolve_v1: route absent root_ref='{}'; graph hydration skipped",
+                root_ref
+            );
             None
-        },
+        }
         Err(e) => {
-            newengine_ulog_api::ulog::warn!("assets.graph.resolve_v1: gateway call failed root_ref='{}' err='{}'", root_ref, e);
+            newengine_ulog_api::ulog::warn!(
+                "assets.graph.resolve_v1: gateway call failed root_ref='{}' err='{}'",
+                root_ref,
+                e
+            );
             None
         }
     }

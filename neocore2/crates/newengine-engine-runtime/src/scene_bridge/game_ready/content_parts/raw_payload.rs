@@ -1,18 +1,18 @@
 use newengine_math::Vec3;
 use serde::Deserialize;
 
-#[path = "raw_payload_defaults.rs"]
-mod raw_payload_defaults;
 #[path = "profile_parse.rs"]
 mod profile_parse;
+#[path = "raw_payload_defaults.rs"]
+mod raw_payload_defaults;
 #[path = "sanitize_defaults.rs"]
 mod sanitize_defaults;
 
 pub(in crate::scene_bridge::game_ready) use self::profile_parse::load_game_ready_map_profile;
 
-use super::profile::*;
 use self::profile_parse::*;
 use self::sanitize_defaults::*;
+use super::profile::*;
 
 #[derive(Debug, Deserialize)]
 struct RawGameReadyPayload {
@@ -56,7 +56,6 @@ struct RawPlayerSpec {
     pub(super) model: RawPlayerModelSpec,
 }
 
-
 #[derive(Debug, Deserialize)]
 struct RawPlayerModelSpec {
     #[serde(default = "default_player_model_enabled")]
@@ -78,7 +77,6 @@ struct RawPlayerModelSpec {
     #[serde(default = "default_player_model_hide_in_first_person")]
     pub(super) hide_in_first_person: bool,
 }
-
 
 #[derive(Debug, Deserialize)]
 struct RawTerrainSpec {
@@ -118,7 +116,6 @@ struct RawTerrainSurfaceSpec {
     pub(super) blend_softness: f32,
 }
 
-
 #[derive(Debug, Deserialize)]
 struct RawTerrainStreamingSpec {
     #[serde(default = "default_terrain_streaming_enabled")]
@@ -130,8 +127,6 @@ struct RawTerrainStreamingSpec {
     #[serde(default = "default_terrain_max_chunks_per_frame")]
     pub(super) max_chunks_per_frame: usize,
 }
-
-
 
 #[derive(Debug, Deserialize)]
 struct RawTerrainGeneratorSpec {
@@ -159,7 +154,6 @@ struct RawTerrainGeneratorSpec {
     pub(super) smoothing_strength: f32,
 }
 
-
 #[derive(Debug, Deserialize)]
 struct RawSkySpec {
     #[serde(default = "default_sky_radius")]
@@ -181,7 +175,6 @@ struct RawSkySpec {
     #[serde(default)]
     pub(super) atmosphere: RawSkyAtmosphereSpec,
 }
-
 
 #[derive(Debug, Deserialize)]
 struct RawSkyAtmosphereSpec {
@@ -209,7 +202,6 @@ struct RawSkyAtmosphereSpec {
     pub(super) cloud_softness: f32,
 }
 
-
 #[derive(Debug, Deserialize)]
 struct RawGameplaySpec {
     #[serde(default = "default_status_text")]
@@ -234,7 +226,6 @@ struct RawGameplaySpec {
     pub(super) physics: RawPhysicsSpec,
 }
 
-
 #[derive(Debug, Deserialize)]
 struct RawPlayerCollisionSpec {
     #[serde(default = "default_player_body_radius")]
@@ -242,7 +233,6 @@ struct RawPlayerCollisionSpec {
     #[serde(default = "default_player_body_half_height")]
     pub(super) half_height: f32,
 }
-
 
 #[derive(Debug, Deserialize)]
 struct RawPlayerVisualSpec {
@@ -256,7 +246,6 @@ struct RawPlayerVisualSpec {
     pub(super) sprint_multiplier: f32,
 }
 
-
 #[derive(Debug, Deserialize)]
 struct RawPhysicsSpec {
     #[serde(default = "default_gravity")]
@@ -264,7 +253,6 @@ struct RawPhysicsSpec {
     #[serde(default = "default_contact_skin")]
     pub(super) contact_skin: f32,
 }
-
 
 #[derive(Debug, Deserialize)]
 struct RawPaletteSpec {
@@ -281,7 +269,6 @@ struct RawPaletteSpec {
     #[serde(default = "default_tree_branch_color")]
     pub(super) tree_branch: ColorRgba,
 }
-
 
 #[derive(Debug, Deserialize)]
 struct RawMaterialSetSpec {
@@ -300,7 +287,6 @@ struct RawMaterialSetSpec {
     #[serde(default = "default_tree_branch_material")]
     pub(super) tree_branch: RawMaterialSpec,
 }
-
 
 #[derive(Debug, Clone, Deserialize)]
 struct RawMaterialSpec {
@@ -324,7 +310,6 @@ struct RawMaterialSpec {
     pub(super) occlusion_strength: f32,
 }
 
-
 #[derive(Debug, Deserialize)]
 struct RawLightingSpec {
     #[serde(default = "default_ambient_color")]
@@ -342,7 +327,6 @@ struct RawLightingSpec {
     #[serde(default)]
     pub(super) day_night: RawDayNightSpec,
 }
-
 
 #[derive(Debug, Deserialize)]
 struct RawDayNightSpec {

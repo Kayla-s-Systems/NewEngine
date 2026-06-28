@@ -203,7 +203,10 @@ impl MaterialRegistry {
         let mut v = self.inner.write();
         if let Some(e) = v.iter_mut().find(|e| e.name == name) {
             match &mut e.kind {
-                EntryKind::Instance { base: b, overrides: o } => {
+                EntryKind::Instance {
+                    base: b,
+                    overrides: o,
+                } => {
                     *b = base;
                     *o = overrides;
                 }

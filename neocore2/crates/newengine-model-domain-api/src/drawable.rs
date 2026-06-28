@@ -1,12 +1,14 @@
 use std::ops::Range;
 
+use newengine_assets_api::list_file::{
+    AssetDependencyRecordV1, ListFileEntryRecordV1, ListFileMetadataNamespaceV1,
+};
 use serde::{Deserialize, Serialize};
-use newengine_assets_api::list_file::{AssetDependencyRecordV1, ListFileEntryRecordV1, ListFileMetadataNamespaceV1};
 
 use crate::{
-    DRAWABLE_DICTIONARY_ASSET_KIND, DRAWABLE_DICTIONARY_CONTAINER, DRAWABLE_DICTIONARY_MANIFEST_SCHEMA,
+    DRAWABLE_DICTIONARY_ASSET_KIND, DRAWABLE_DICTIONARY_CONTAINER,
+    DRAWABLE_DICTIONARY_MANIFEST_SCHEMA,
 };
-
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -87,7 +89,16 @@ pub struct MeshPartRecordV1 {
     pub bounds_index: u32,
 }
 impl Default for MeshPartRecordV1 {
-    fn default() -> Self { Self { vertex_layout_id: String::new(), vertex_stream_range: 0..0, index_buffer_index: 0, material_slot_index: 0, primitive_topology: "triangles".to_owned(), bounds_index: 0 } }
+    fn default() -> Self {
+        Self {
+            vertex_layout_id: String::new(),
+            vertex_stream_range: 0..0,
+            index_buffer_index: 0,
+            material_slot_index: 0,
+            primitive_topology: "triangles".to_owned(),
+            bounds_index: 0,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -100,7 +111,15 @@ pub struct VertexStreamDescriptorV1 {
     pub payload_len: u64,
 }
 impl Default for VertexStreamDescriptorV1 {
-    fn default() -> Self { Self { semantic: String::new(), format: String::new(), stride: 0, payload_offset: 0, payload_len: 0 } }
+    fn default() -> Self {
+        Self {
+            semantic: String::new(),
+            format: String::new(),
+            stride: 0,
+            payload_offset: 0,
+            payload_len: 0,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -111,7 +130,13 @@ pub struct IndexBufferDescriptorV1 {
     pub payload_len: u64,
 }
 impl Default for IndexBufferDescriptorV1 {
-    fn default() -> Self { Self { index_format: "u32".to_owned(), payload_offset: 0, payload_len: 0 } }
+    fn default() -> Self {
+        Self {
+            index_format: "u32".to_owned(),
+            payload_offset: 0,
+            payload_len: 0,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -122,7 +147,13 @@ pub struct MaterialSlotRecordV1 {
     pub required: bool,
 }
 impl Default for MaterialSlotRecordV1 {
-    fn default() -> Self { Self { slot_name: String::new(), material_ref: String::new(), required: true } }
+    fn default() -> Self {
+        Self {
+            slot_name: String::new(),
+            material_ref: String::new(),
+            required: true,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -134,7 +165,14 @@ pub struct LodRecordV1 {
     pub required: bool,
 }
 impl Default for LodRecordV1 {
-    fn default() -> Self { Self { name: String::new(), drawable_ref: String::new(), max_distance: 0.0, required: false } }
+    fn default() -> Self {
+        Self {
+            name: String::new(),
+            drawable_ref: String::new(),
+            max_distance: 0.0,
+            required: false,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -146,18 +184,45 @@ pub struct BoundsRecordV1 {
     pub sphere_radius: f32,
 }
 impl Default for BoundsRecordV1 {
-    fn default() -> Self { Self { aabb_min: [0.0; 3], aabb_max: [0.0; 3], sphere_center: [0.0; 3], sphere_radius: 0.0 } }
+    fn default() -> Self {
+        Self {
+            aabb_min: [0.0; 3],
+            aabb_max: [0.0; 3],
+            sphere_center: [0.0; 3],
+            sphere_radius: 0.0,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
-pub struct DrawableDictionaryRequest { pub source: String, pub selector: Option<String> }
-impl Default for DrawableDictionaryRequest { fn default() -> Self { Self { source: String::new(), selector: None } } }
+pub struct DrawableDictionaryRequest {
+    pub source: String,
+    pub selector: Option<String>,
+}
+impl Default for DrawableDictionaryRequest {
+    fn default() -> Self {
+        Self {
+            source: String::new(),
+            selector: None,
+        }
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
-pub struct DrawableMaterialSlotRef { pub slot: String, pub material: String }
-impl Default for DrawableMaterialSlotRef { fn default() -> Self { Self { slot: String::new(), material: String::new() } } }
+pub struct DrawableMaterialSlotRef {
+    pub slot: String,
+    pub material: String,
+}
+impl Default for DrawableMaterialSlotRef {
+    fn default() -> Self {
+        Self {
+            slot: String::new(),
+            material: String::new(),
+        }
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -177,7 +242,20 @@ pub struct DrawableDictionaryEntry {
     pub bounds_max: [f32; 3],
 }
 impl Default for DrawableDictionaryEntry {
-    fn default() -> Self { Self { name: String::new(), name_hash: 0, mesh_count: 0, material_slots: Vec::new(), skeleton_refs: Vec::new(), lods: Vec::new(), collision_refs: Vec::new(), dependency_refs: Vec::new(), bounds_min: [0.0; 3], bounds_max: [0.0; 3] } }
+    fn default() -> Self {
+        Self {
+            name: String::new(),
+            name_hash: 0,
+            mesh_count: 0,
+            material_slots: Vec::new(),
+            skeleton_refs: Vec::new(),
+            lods: Vec::new(),
+            collision_refs: Vec::new(),
+            dependency_refs: Vec::new(),
+            bounds_min: [0.0; 3],
+            bounds_max: [0.0; 3],
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -192,5 +270,15 @@ pub struct DrawableDictionaryManifest {
     pub warnings: Vec<String>,
 }
 impl Default for DrawableDictionaryManifest {
-    fn default() -> Self { Self { schema: DRAWABLE_DICTIONARY_MANIFEST_SCHEMA.to_owned(), source: String::new(), asset_kind: DRAWABLE_DICTIONARY_ASSET_KIND.to_owned(), container: DRAWABLE_DICTIONARY_CONTAINER.to_owned(), texture_dictionary: None, entries: Vec::new(), warnings: Vec::new() } }
+    fn default() -> Self {
+        Self {
+            schema: DRAWABLE_DICTIONARY_MANIFEST_SCHEMA.to_owned(),
+            source: String::new(),
+            asset_kind: DRAWABLE_DICTIONARY_ASSET_KIND.to_owned(),
+            container: DRAWABLE_DICTIONARY_CONTAINER.to_owned(),
+            texture_dictionary: None,
+            entries: Vec::new(),
+            warnings: Vec::new(),
+        }
+    }
 }

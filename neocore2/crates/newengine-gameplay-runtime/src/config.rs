@@ -54,7 +54,11 @@ pub(crate) struct RawAnimationGraph {
 
 impl GameplayFoundationConfig {
     pub(crate) fn load() -> Self {
-        serde_json::from_str(CONFIG_JSON).unwrap_or_else(|_| Self { tags: Vec::new(), tasks: Vec::new(), animation_graphs: Vec::new() })
+        serde_json::from_str(CONFIG_JSON).unwrap_or_else(|_| Self {
+            tags: Vec::new(),
+            tasks: Vec::new(),
+            animation_graphs: Vec::new(),
+        })
     }
 }
 

@@ -18,7 +18,9 @@ pub struct InputCaptureState {
 
 impl Default for InputCaptureState {
     #[inline]
-    fn default() -> Self { Self::clear() }
+    fn default() -> Self {
+        Self::clear()
+    }
 }
 
 impl InputCaptureState {
@@ -102,6 +104,10 @@ pub(super) struct SystemObservation {
 impl SystemObservation {
     #[inline]
     pub(super) const fn new(active: bool, captured: bool, reason: &'static str) -> Self {
-        Self { active, captured, reason }
+        Self {
+            active,
+            captured,
+            reason,
+        }
     }
 }

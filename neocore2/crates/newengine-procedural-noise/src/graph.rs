@@ -207,7 +207,11 @@ impl NoiseShape {
             Self::Power { exponent } => v.signum() * v.abs().powf(exponent),
             Self::SmoothStep { edge0, edge1 } => smoothstep(edge0, edge1, v),
             Self::Threshold { threshold } => {
-                if v >= threshold { 1.0 } else { -1.0 }
+                if v >= threshold {
+                    1.0
+                } else {
+                    -1.0
+                }
             }
         }
     }
@@ -339,14 +343,20 @@ impl NoiseGraph2D {
                 .combine(NoiseCombineMode::Replace)
                 .frequency(1.0)
                 .amplitude(1.4)
-                .shape(NoiseShape::SmoothStep { edge0: 0.18, edge1: 0.98 }),
+                .shape(NoiseShape::SmoothStep {
+                    edge0: 0.18,
+                    edge1: 0.98,
+                }),
         )
         .with_layer(
             NoiseLayer2D::new(NoiseAlgorithm::Lightning)
                 .seed_offset(0x1a7e_51de)
                 .frequency(2.25)
                 .amplitude(0.72)
-                .shape(NoiseShape::SmoothStep { edge0: 0.25, edge1: 1.0 })
+                .shape(NoiseShape::SmoothStep {
+                    edge0: 0.25,
+                    edge1: 1.0,
+                })
                 .combine(NoiseCombineMode::Screen),
         )
         .with_layer(
@@ -375,7 +385,10 @@ impl NoiseGraph2D {
             NoiseLayer2D::new(NoiseAlgorithm::VoronoiCells)
                 .combine(NoiseCombineMode::Replace)
                 .amplitude(1.0)
-                .shape(NoiseShape::SmoothStep { edge0: -0.25, edge1: 0.9 }),
+                .shape(NoiseShape::SmoothStep {
+                    edge0: -0.25,
+                    edge1: 0.9,
+                }),
         )
         .with_layer(
             NoiseLayer2D::new(NoiseAlgorithm::Billow)
@@ -410,7 +423,10 @@ impl NoiseGraph2D {
                 .seed_offset(0xed9e_0001)
                 .frequency(0.8)
                 .amplitude(0.45)
-                .shape(NoiseShape::SmoothStep { edge0: 0.15, edge1: 1.0 })
+                .shape(NoiseShape::SmoothStep {
+                    edge0: 0.15,
+                    edge1: 1.0,
+                })
                 .combine(NoiseCombineMode::Screen),
         )
         .with_remap(NoiseRemap::normalized_01())
@@ -550,12 +566,19 @@ fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
 
 #[inline]
 fn finite_or(v: f32, fallback: f32) -> f32 {
-    if v.is_finite() { v } else { fallback }
+    if v.is_finite() {
+        v
+    } else {
+        fallback
+    }
 }
 
 #[inline]
 fn mix_u64(mut h: u64, v: u64) -> u64 {
-    h ^= v.wrapping_add(0x9e37_79b9_7f4a_7c15).wrapping_add(h << 6).wrapping_add(h >> 2);
+    h ^= v
+        .wrapping_add(0x9e37_79b9_7f4a_7c15)
+        .wrapping_add(h << 6)
+        .wrapping_add(h >> 2);
     h
 }
 

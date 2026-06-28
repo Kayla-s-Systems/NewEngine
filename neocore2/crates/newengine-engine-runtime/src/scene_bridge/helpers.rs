@@ -23,8 +23,15 @@ pub(super) fn place_spawn_position(base: Vec3, index: usize) -> Vec3 {
 }
 
 #[inline]
-pub(super) fn ensure_primitive_base(world: &mut newengine_ecs::World, entity: EntityId, base: MaterialId) {
-    let _ = world.insert(entity, super::imported_assets::PrimitiveMaterialBase { id: base });
+pub(super) fn ensure_primitive_base(
+    world: &mut newengine_ecs::World,
+    entity: EntityId,
+    base: MaterialId,
+) {
+    let _ = world.insert(
+        entity,
+        super::imported_assets::PrimitiveMaterialBase { id: base },
+    );
 }
 
 #[inline]
@@ -107,7 +114,6 @@ pub(super) fn restore_non_collision_bounds(
     }
 }
 
-
 #[inline]
 pub(super) fn effective_material_base(material: MaterialId, fallback: MaterialId) -> MaterialId {
     if material.is_valid() {
@@ -117,10 +123,8 @@ pub(super) fn effective_material_base(material: MaterialId, fallback: MaterialId
     }
 }
 
-
 #[inline]
 pub(super) fn reset_game_runtime_state(scene: &mut Scene) -> Option<EntityId> {
     bootstrap_runtime_scene(scene);
     scene.active_camera()
 }
-

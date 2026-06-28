@@ -4,13 +4,13 @@ use newengine_math::collections_prelude::NeHashSet as HashSet;
 use std::path::{Path, PathBuf};
 
 #[cfg(feature = "window-icon")]
-use std::time::Duration;
-#[cfg(feature = "window-icon")]
 use abi_stable::std_types::RVec;
 #[cfg(feature = "window-icon")]
 use newengine_assets::{wait_ready, AssetAccess};
 use newengine_assets::{AssetService, AssetServiceClient};
 use newengine_platform_api::PlatformAppIconV1;
+#[cfg(feature = "window-icon")]
+use std::time::Duration;
 
 pub fn collect_app_asset_roots(app_dir_name: &str, env_var: &str) -> Vec<PathBuf> {
     let mut roots: Vec<PathBuf> = Vec::new();
@@ -26,7 +26,9 @@ pub fn collect_app_asset_roots(app_dir_name: &str, env_var: &str) -> Vec<PathBuf
         push_asset_roots_from_base(&mut roots, &cwd, app_dir_name);
         let mut cur = Some(cwd);
         for _ in 0..8 {
-            let Some(base) = cur.clone() else { break; };
+            let Some(base) = cur.clone() else {
+                break;
+            };
             push_asset_roots_from_base(&mut roots, &base, app_dir_name);
             cur = base.parent().map(Path::to_path_buf);
         }
@@ -94,7 +96,6 @@ fn push_asset_roots_from_base(roots: &mut Vec<PathBuf>, base: &Path, app_dir_nam
     }
 }
 
-
 pub fn mount_asset_roots_best_effort(assets: &AssetServiceClient, roots: &[PathBuf]) {
     for root in roots {
         try_mount(assets, root);
@@ -143,20 +144,26 @@ pub fn try_load_window_icon_best_effort(
     let id_hex32 = match assets.import_v1(path) {
         Ok(v) => v,
         Err(e) => {
-            newengine_ulog_api::ulog::warn!("window icon: asset.import_v1 failed path='{path}' err='{e}'");
+            newengine_ulog_api::ulog::warn!(
+                "window icon: asset.import_v1 failed path='{path}' err='{e}'"
+            );
             return None;
         }
     };
 
     if let Err(e) = wait_ready(assets, &id_hex32, Duration::from_millis(500)) {
-        newengine_ulog_api::ulog::warn!("window icon: wait_ready failed path='{path}' id='{id_hex32}' err='{e:?}'");
+        newengine_ulog_api::ulog::warn!(
+            "window icon: wait_ready failed path='{path}' id='{id_hex32}' err='{e:?}'"
+        );
         return None;
     }
 
     let texture = match assets.texture_rgba8_v1(&id_hex32) {
         Ok(v) => v,
         Err(e) => {
-            newengine_ulog_api::ulog::warn!("window icon: texture_rgba8_v1 failed path='{path}' id='{id_hex32}' err='{e}'");
+            newengine_ulog_api::ulog::warn!(
+                "window icon: texture_rgba8_v1 failed path='{path}' id='{id_hex32}' err='{e}'"
+            );
             return None;
         }
     };
@@ -179,7 +186,6 @@ pub fn try_load_window_icon_best_effort(
     let _ = roots;
     None
 }
-
 
 #[inline]
 pub fn shard_log_path_by_run_id(original: &str, run_id: &str) -> Option<String> {

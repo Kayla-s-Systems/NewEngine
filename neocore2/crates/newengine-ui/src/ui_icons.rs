@@ -108,7 +108,6 @@ pub const EDITOR_DEFAULT_ICONS: &[BuiltinUiIcon] = &[
     BuiltinUiIcon::FileOpen,
     BuiltinUiIcon::FileSave,
     BuiltinUiIcon::AssetManager,
-
     BuiltinUiIcon::Refresh,
     BuiltinUiIcon::Load,
     BuiltinUiIcon::Reset,
@@ -116,13 +115,11 @@ pub const EDITOR_DEFAULT_ICONS: &[BuiltinUiIcon] = &[
     BuiltinUiIcon::Enable,
     BuiltinUiIcon::Disable,
     BuiltinUiIcon::Close,
-
     BuiltinUiIcon::GizmoTranslate,
     BuiltinUiIcon::GizmoRotate,
     BuiltinUiIcon::GizmoScale,
     BuiltinUiIcon::Play,
     BuiltinUiIcon::Stop,
-
     BuiltinUiIcon::LightDirectional,
     BuiltinUiIcon::LightPoint,
 ];

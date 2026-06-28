@@ -18,17 +18,16 @@ use newengine_service_kit::{
 };
 use newengine_world_api::{
     WorldActiveCellsRequest, WorldActiveCellsResponse, WorldApplyStageRequest,
-    WorldApplyStageResponse, WorldBootPhase, WorldBootRequest, WorldBootResponse,
-    WorldCellCoord, WorldCellRecord, WorldCellResidency, WorldInvokeRequest,
-    WorldLoadSnapshotRequest, WorldLoadSnapshotResponse, WorldPartitionResponse,
-    WorldPartitionState, WorldRestoreSnapshotRequest, WorldRestoreSnapshotResponse,
-    WorldRuntimeState, WorldSaveSnapshotRequest, WorldSaveSnapshotResponse, WorldServiceInfo,
-    WorldSnapshotRequest, WorldSnapshotResponse, WorldStateRequest, WorldStateResponse,
-    WorldStreamingCellDto, WorldStreamingCellsRequest, WorldStreamingCellsResponse,
-    WorldStreamingPlanDto, ENGINE_WORLD_SERVICE_ID, WORLD_BACKEND_CAPABILITY_ID,
-    WORLD_SERVICE_ID, WORLD_SERVICE_METHOD_ACTIVE_CELLS_JSON_V1,
-    WORLD_SERVICE_METHOD_APPLY_STAGE_JSON_V1, WORLD_SERVICE_METHOD_BOOT_JSON_V1,
-    WORLD_SERVICE_METHOD_INFO, WORLD_SERVICE_METHOD_INVOKE,
+    WorldApplyStageResponse, WorldBootPhase, WorldBootRequest, WorldBootResponse, WorldCellCoord,
+    WorldCellRecord, WorldCellResidency, WorldInvokeRequest, WorldLoadSnapshotRequest,
+    WorldLoadSnapshotResponse, WorldPartitionResponse, WorldPartitionState,
+    WorldRestoreSnapshotRequest, WorldRestoreSnapshotResponse, WorldRuntimeState,
+    WorldSaveSnapshotRequest, WorldSaveSnapshotResponse, WorldServiceInfo, WorldSnapshotRequest,
+    WorldSnapshotResponse, WorldStateRequest, WorldStateResponse, WorldStreamingCellDto,
+    WorldStreamingCellsRequest, WorldStreamingCellsResponse, WorldStreamingPlanDto,
+    ENGINE_WORLD_SERVICE_ID, WORLD_BACKEND_CAPABILITY_ID, WORLD_SERVICE_ID,
+    WORLD_SERVICE_METHOD_ACTIVE_CELLS_JSON_V1, WORLD_SERVICE_METHOD_APPLY_STAGE_JSON_V1,
+    WORLD_SERVICE_METHOD_BOOT_JSON_V1, WORLD_SERVICE_METHOD_INFO, WORLD_SERVICE_METHOD_INVOKE,
     WORLD_SERVICE_METHOD_LOAD_SNAPSHOT_JSON_V1, WORLD_SERVICE_METHOD_PARTITION_JSON_V1,
     WORLD_SERVICE_METHOD_RESTORE_SNAPSHOT_JSON_V1, WORLD_SERVICE_METHOD_SAVE_SNAPSHOT_JSON_V1,
     WORLD_SERVICE_METHOD_SHUTDOWN_V1, WORLD_SERVICE_METHOD_SNAPSHOT_JSON_V1,
@@ -39,8 +38,8 @@ pub const WORLD_GATEWAY_OWNER: &str = "newengine-world-runtime.world-gateway";
 pub const WORLD_FOUNDATION_PROVIDER_ROUTE: &str = "engine.world.foundation";
 const WORLD_SNAPSHOT_SCHEMA_V1: &str = "newengine.world.snapshot.v1";
 
-mod streaming_cells;
 mod apply_stage;
+mod streaming_cells;
 
 #[derive(Clone, Debug)]
 struct WorldRuntimeBookkeeping {
@@ -82,23 +81,27 @@ pub struct EngineWorldGatewayService {
 impl EngineWorldGatewayService {
     #[inline]
     pub fn new(scene: Arc<newengine_scene_runtime::SceneBridge>) -> Self {
-        Self { scene, state: Arc::new(parking_lot::Mutex::new(WorldRuntimeBookkeeping::default())) }
+        Self {
+            scene,
+            state: Arc::new(parking_lot::Mutex::new(WorldRuntimeBookkeeping::default())),
+        }
     }
 
     fn authority_json(&self) -> serde_json::Value {
         let snap = self.scene.authority_snapshot();
-        let route_json = |route: &newengine_runtime_host::world_authority::WorldAuthorityGatewayRoute| {
-            serde_json::json!({
-                "gateway": route.gateway_id,
-                "kind": route.service_kind,
-                "provider_service": route.provider_service_id,
-                "provider_owner": route.provider_owner_id,
-                "capability": route.backend_capability_id,
-                "origin": route.origin,
-                "priority": route.backend_priority,
-                "score": route.active_score,
-            })
-        };
+        let route_json =
+            |route: &newengine_runtime_host::world_authority::WorldAuthorityGatewayRoute| {
+                serde_json::json!({
+                    "gateway": route.gateway_id,
+                    "kind": route.service_kind,
+                    "provider_service": route.provider_service_id,
+                    "provider_owner": route.provider_owner_id,
+                    "capability": route.backend_capability_id,
+                    "origin": route.origin,
+                    "priority": route.backend_priority,
+                    "score": route.active_score,
+                })
+            };
         serde_json::json!({
             "authority": snap.authority_label(),
             "split": snap.has_split_world_authority(),
@@ -116,14 +119,20 @@ impl EngineWorldGatewayService {
         if !partition.enabled {
             return Vec::new();
         }
-        let radius = partition.simulation_radius.max(partition.render_radius).clamp(0, 16);
+        let radius = partition
+            .simulation_radius
+            .max(partition.render_radius)
+            .clamp(0, 16);
         let mut cells = Vec::new();
         for z in (partition.center.z - radius)..=(partition.center.z + radius) {
             for x in (partition.center.x - radius)..=(partition.center.x + radius) {
                 let dx = (x - partition.center.x).abs();
                 let dz = (z - partition.center.z).abs();
                 let dist = dx.max(dz);
-                let residency = match (dist <= partition.render_radius, dist <= partition.simulation_radius) {
+                let residency = match (
+                    dist <= partition.render_radius,
+                    dist <= partition.simulation_radius,
+                ) {
                     (true, true) => WorldCellResidency::RenderAndSimulation,
                     (true, false) => WorldCellResidency::Render,
                     (false, true) => WorldCellResidency::Simulation,
@@ -147,7 +156,6 @@ impl EngineWorldGatewayService {
         cells
     }
 
-
     fn runtime_state(&self, include_cells: bool) -> WorldRuntimeState {
         let bookkeeping = self.state.lock().clone();
         let (tick, entity_count) = {
@@ -155,7 +163,11 @@ impl EngineWorldGatewayService {
             let scene = scene_lock.read();
             (scene.world().tick(), scene.world().entity_count() as u64)
         };
-        let active_cells = if include_cells { bookkeeping.active_cells.clone() } else { Vec::new() };
+        let active_cells = if include_cells {
+            bookkeeping.active_cells.clone()
+        } else {
+            Vec::new()
+        };
         WorldRuntimeState {
             world_instance_id: bookkeeping.world_instance_id,
             phase: bookkeeping.phase,
@@ -171,7 +183,9 @@ impl EngineWorldGatewayService {
         }
     }
 
-    fn info_json(&self) -> WorldServiceInfo { WorldServiceInfo::default() }
+    fn info_json(&self) -> WorldServiceInfo {
+        WorldServiceInfo::default()
+    }
 
     fn boot_json_v1(&self, payload: Blob) -> RResult<Blob, RString> {
         let req = match payload_json(&payload)
@@ -191,7 +205,13 @@ impl EngineWorldGatewayService {
                 .unwrap_or(false);
             state.phase = if headless {
                 WorldBootPhase::Headless
-            } else if req.scene_ref.as_deref().map(str::trim).filter(|it| !it.is_empty()).is_some() {
+            } else if req
+                .scene_ref
+                .as_deref()
+                .map(str::trim)
+                .filter(|it| !it.is_empty())
+                .is_some()
+            {
                 WorldBootPhase::SceneDeclared
             } else {
                 WorldBootPhase::RuntimeBootstrapped
@@ -207,7 +227,10 @@ impl EngineWorldGatewayService {
             ));
         }
 
-        ok_json(&WorldBootResponse { ok: true, state: self.runtime_state(true) })
+        ok_json(&WorldBootResponse {
+            ok: true,
+            state: self.runtime_state(true),
+        })
     }
 
     fn state_json_v1(&self, payload: Blob) -> RResult<Blob, RString> {
@@ -217,13 +240,15 @@ impl EngineWorldGatewayService {
             Ok(v) => v,
             Err(e) => return RResult::RErr(RString::from(e)),
         };
-        ok_json(&WorldStateResponse { state: self.runtime_state(req.include_cells) })
+        ok_json(&WorldStateResponse {
+            state: self.runtime_state(req.include_cells),
+        })
     }
 
     fn active_cells_json_v1(&self, payload: Blob) -> RResult<Blob, RString> {
-        let req = match payload_json(&payload)
-            .and_then(|v| serde_json::from_value::<WorldActiveCellsRequest>(v).map_err(|e| e.to_string()))
-        {
+        let req = match payload_json(&payload).and_then(|v| {
+            serde_json::from_value::<WorldActiveCellsRequest>(v).map_err(|e| e.to_string())
+        }) {
             Ok(v) => v,
             Err(e) => return RResult::RErr(RString::from(e)),
         };
@@ -232,7 +257,10 @@ impl EngineWorldGatewayService {
         if !req.include_unloaded {
             cells.retain(|cell| !matches!(cell.residency, WorldCellResidency::Unloaded));
         }
-        ok_json(&WorldActiveCellsResponse { partition: state.partition, cells })
+        ok_json(&WorldActiveCellsResponse {
+            partition: state.partition,
+            cells,
+        })
     }
 
     fn partition_json_v1(&self) -> RResult<Blob, RString> {
@@ -241,16 +269,18 @@ impl EngineWorldGatewayService {
     }
 
     fn snapshot_json_v1(&self, payload: Blob) -> RResult<Blob, RString> {
-        let req = match payload_json(&payload)
-            .and_then(|v| serde_json::from_value::<WorldSnapshotRequest>(v).map_err(|e| e.to_string()))
-        {
+        let req = match payload_json(&payload).and_then(|v| {
+            serde_json::from_value::<WorldSnapshotRequest>(v).map_err(|e| e.to_string())
+        }) {
             Ok(v) => v,
             Err(e) => return RResult::RErr(RString::from(e)),
         };
         let scene_payload = if req.include_scene_payload {
             let scene_lock = self.scene.scene();
             let mut scene = scene_lock.write();
-            let asset = scene.to_asset(SceneAssetOptions { include_empty_entities: true });
+            let asset = scene.to_asset(SceneAssetOptions {
+                include_empty_entities: true,
+            });
             match serde_json::to_value(&asset) {
                 Ok(value) => Some(value),
                 Err(e) => return RResult::RErr(RString::from(e.to_string())),
@@ -266,9 +296,9 @@ impl EngineWorldGatewayService {
     }
 
     fn restore_snapshot_json_v1(&self, payload: Blob) -> RResult<Blob, RString> {
-        let req = match payload_json(&payload)
-            .and_then(|v| serde_json::from_value::<WorldRestoreSnapshotRequest>(v).map_err(|e| e.to_string()))
-        {
+        let req = match payload_json(&payload).and_then(|v| {
+            serde_json::from_value::<WorldRestoreSnapshotRequest>(v).map_err(|e| e.to_string())
+        }) {
             Ok(v) => v,
             Err(e) => return RResult::RErr(RString::from(e)),
         };
@@ -278,12 +308,18 @@ impl EngineWorldGatewayService {
             if let Some(scene_payload) = snapshot.scene_payload.take() {
                 let asset = match serde_json::from_value::<SceneAsset>(scene_payload) {
                     Ok(asset) => asset,
-                    Err(e) => return RResult::RErr(RString::from(format!("world snapshot scene payload decode failed: {e}"))),
+                    Err(e) => {
+                        return RResult::RErr(RString::from(format!(
+                            "world snapshot scene payload decode failed: {e}"
+                        )))
+                    }
                 };
                 let scene_lock = self.scene.scene();
                 let mut scene = scene_lock.write();
                 if let Err(e) = scene.load_asset(&asset) {
-                    return RResult::RErr(RString::from(format!("world snapshot scene restore failed: {e}")));
+                    return RResult::RErr(RString::from(format!(
+                        "world snapshot scene restore failed: {e}"
+                    )));
                 }
             }
         }
@@ -300,13 +336,16 @@ impl EngineWorldGatewayService {
             state.notes.push("snapshot restored through engine.world; scene payload restored through engine.scene-compatible asset contract".to_owned());
         }
 
-        ok_json(&WorldRestoreSnapshotResponse { ok: true, state: self.runtime_state(true) })
+        ok_json(&WorldRestoreSnapshotResponse {
+            ok: true,
+            state: self.runtime_state(true),
+        })
     }
 
     fn invoke_json(&self, payload: Blob) -> RResult<Blob, RString> {
-        let req = match payload_json(&payload)
-            .and_then(|v| serde_json::from_value::<WorldInvokeRequest>(v).map_err(|e| e.to_string()))
-        {
+        let req = match payload_json(&payload).and_then(|v| {
+            serde_json::from_value::<WorldInvokeRequest>(v).map_err(|e| e.to_string())
+        }) {
             Ok(v) => v,
             Err(e) => return RResult::RErr(RString::from(e)),
         };
@@ -325,12 +364,16 @@ impl EngineWorldGatewayService {
             WORLD_SERVICE_METHOD_APPLY_STAGE_JSON_V1 => self.apply_stage_json_v1(payload),
             WORLD_SERVICE_METHOD_SAVE_SNAPSHOT_JSON_V1 => self.save_snapshot_json_v1(payload),
             WORLD_SERVICE_METHOD_LOAD_SNAPSHOT_JSON_V1 => self.load_snapshot_json_v1(payload),
-            other => RResult::RErr(RString::from(format!("engine.world invoke_json unknown target method '{other}'"))),
+            other => RResult::RErr(RString::from(format!(
+                "engine.world invoke_json unknown target method '{other}'"
+            ))),
         }
     }
 }
 
-pub fn world_gateway_service(scene: Arc<newengine_scene_runtime::SceneBridge>) -> newengine_plugin_api::ServiceV1Dyn<'static> {
+pub fn world_gateway_service(
+    scene: Arc<newengine_scene_runtime::SceneBridge>,
+) -> newengine_plugin_api::ServiceV1Dyn<'static> {
     let service = EngineWorldGatewayService::new(scene);
     let info = WorldServiceInfo::default();
     let description = engine_gateway_provider_service_description(
@@ -360,24 +403,58 @@ pub fn world_gateway_service(scene: Arc<newengine_scene_runtime::SceneBridge>) -
     JsonServiceRouter::new(WORLD_SERVICE_ID)
         .describe_json(&description)
         .get_json(WORLD_SERVICE_METHOD_INFO, move |_| info_service.info_json())
-        .blob(WORLD_SERVICE_METHOD_INVOKE, move |_unit, payload| invoke_service.invoke_json(payload))
-        .blob(WORLD_SERVICE_METHOD_BOOT_JSON_V1, move |_unit, payload| boot_service.boot_json_v1(payload))
-        .blob(WORLD_SERVICE_METHOD_STATE_JSON_V1, move |_unit, payload| state_service.state_json_v1(payload))
-        .blob(WORLD_SERVICE_METHOD_ACTIVE_CELLS_JSON_V1, move |_unit, payload| cells_service.active_cells_json_v1(payload))
-        .blob(WORLD_SERVICE_METHOD_STREAMING_CELLS_JSON_V1, move |_unit, payload| streaming_service.streaming_cells_json_v1(payload))
-        .blob(WORLD_SERVICE_METHOD_PARTITION_JSON_V1, move |_unit, _payload| partition_service.partition_json_v1())
-        .blob(WORLD_SERVICE_METHOD_SNAPSHOT_JSON_V1, move |_unit, payload| snapshot_service.snapshot_json_v1(payload))
-        .blob(WORLD_SERVICE_METHOD_RESTORE_SNAPSHOT_JSON_V1, move |_unit, payload| restore_service.restore_snapshot_json_v1(payload))
-        .blob(WORLD_SERVICE_METHOD_APPLY_STAGE_JSON_V1, move |_unit, payload| apply_service.apply_stage_json_v1(payload))
-        .blob(WORLD_SERVICE_METHOD_SAVE_SNAPSHOT_JSON_V1, move |_unit, payload| save_snapshot_service.save_snapshot_json_v1(payload))
-        .blob(WORLD_SERVICE_METHOD_LOAD_SNAPSHOT_JSON_V1, move |_unit, payload| load_snapshot_service.load_snapshot_json_v1(payload))
-        .blob(WORLD_SERVICE_METHOD_SHUTDOWN_V1, |_unit, _payload| ok_empty_blob())
+        .blob(WORLD_SERVICE_METHOD_INVOKE, move |_unit, payload| {
+            invoke_service.invoke_json(payload)
+        })
+        .blob(WORLD_SERVICE_METHOD_BOOT_JSON_V1, move |_unit, payload| {
+            boot_service.boot_json_v1(payload)
+        })
+        .blob(WORLD_SERVICE_METHOD_STATE_JSON_V1, move |_unit, payload| {
+            state_service.state_json_v1(payload)
+        })
+        .blob(
+            WORLD_SERVICE_METHOD_ACTIVE_CELLS_JSON_V1,
+            move |_unit, payload| cells_service.active_cells_json_v1(payload),
+        )
+        .blob(
+            WORLD_SERVICE_METHOD_STREAMING_CELLS_JSON_V1,
+            move |_unit, payload| streaming_service.streaming_cells_json_v1(payload),
+        )
+        .blob(
+            WORLD_SERVICE_METHOD_PARTITION_JSON_V1,
+            move |_unit, _payload| partition_service.partition_json_v1(),
+        )
+        .blob(
+            WORLD_SERVICE_METHOD_SNAPSHOT_JSON_V1,
+            move |_unit, payload| snapshot_service.snapshot_json_v1(payload),
+        )
+        .blob(
+            WORLD_SERVICE_METHOD_RESTORE_SNAPSHOT_JSON_V1,
+            move |_unit, payload| restore_service.restore_snapshot_json_v1(payload),
+        )
+        .blob(
+            WORLD_SERVICE_METHOD_APPLY_STAGE_JSON_V1,
+            move |_unit, payload| apply_service.apply_stage_json_v1(payload),
+        )
+        .blob(
+            WORLD_SERVICE_METHOD_SAVE_SNAPSHOT_JSON_V1,
+            move |_unit, payload| save_snapshot_service.save_snapshot_json_v1(payload),
+        )
+        .blob(
+            WORLD_SERVICE_METHOD_LOAD_SNAPSHOT_JSON_V1,
+            move |_unit, payload| load_snapshot_service.load_snapshot_json_v1(payload),
+        )
+        .blob(WORLD_SERVICE_METHOD_SHUTDOWN_V1, |_unit, _payload| {
+            ok_empty_blob()
+        })
         .into_service_v1()
 }
 
 pub fn register_world_gateway_best_effort(scene: Arc<newengine_scene_runtime::SceneBridge>) {
     if newengine_plugin_host::has_service(ENGINE_WORLD_SERVICE_ID) {
-        newengine_ulog_api::ulog::debug!("engine.world gateway registration skipped; service already available");
+        newengine_ulog_api::ulog::debug!(
+            "engine.world gateway registration skipped; service already available"
+        );
         return;
     }
 

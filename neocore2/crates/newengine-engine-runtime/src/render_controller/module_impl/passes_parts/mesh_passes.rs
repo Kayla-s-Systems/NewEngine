@@ -1,42 +1,37 @@
-
-use newengine_core::render::{BindGroupId, BufferSlice, DrawIndexedArgs, IndexFormat, PipelineId, SamplerId, TextureId};
+use newengine_core::render::{
+    BindGroupId, BufferSlice, DrawIndexedArgs, IndexFormat, PipelineId, SamplerId, TextureId,
+};
 use newengine_math::{Mat4, Vec3};
 
+use newengine_bounds::Bounds;
 use newengine_materials::api::{MaterialId, MaterialRegistryApi};
 use newengine_primitives::Primitive;
 use newengine_transform::GlobalTransform;
-use newengine_bounds::Bounds;
 
 use super::super::super::gpu::{ensure_primitive_gpu, PrimitiveGpu};
+use super::super::super::material_bindings::LitMaterialPlan;
 use super::super::draw_bucket::{BucketedIndexedDrawStream, IndexedDrawPacket};
 use super::super::instancing::{
     draw_indexed_instanced_args, InstanceBatchKey, InstanceBatchSet, InstancedReplayState,
     RenderInstanceRaw,
 };
-use super::super::super::material_bindings::LitMaterialPlan;
-use newengine_render_feature_api::PackedLights;
-use crate::render_controller::RuntimeRenderController;
-use crate::gameplay::display_visible_in_mode;
-use crate::scene_bridge::{SkyDomeRuntime, SkyVisualKind, SkyVisualRuntime, TerrainSurfaceLayers};
 use super::mesh_visibility::{
-    distance_sq_to_camera, forward_sphere_visible, primitive_budget, primitive_forward_max_distance,
-    primitive_near_accept_distance, primitive_shadow_max_distance, scene_forward_cone_dot,
-    shadow_caster_visible, sort_by_distance_then_key, terrain_budget, terrain_forward_max_distance,
-    terrain_near_accept_distance, transform_sphere,
+    distance_sq_to_camera, forward_sphere_visible, primitive_budget,
+    primitive_forward_max_distance, primitive_near_accept_distance, primitive_shadow_max_distance,
+    scene_forward_cone_dot, shadow_caster_visible, sort_by_distance_then_key, terrain_budget,
+    terrain_forward_max_distance, terrain_near_accept_distance, transform_sphere,
 };
-use newengine_procedural_noise::ProceduralTerrain;
+use crate::gameplay::display_visible_in_mode;
+use crate::render_controller::RuntimeRenderController;
+use crate::scene_bridge::{SkyDomeRuntime, SkyVisualKind, SkyVisualRuntime, TerrainSurfaceLayers};
 use newengine_math::collections::FxHashMap;
+use newengine_procedural_noise::ProceduralTerrain;
+use newengine_render_feature_api::PackedLights;
 
 mod mesh_passes_shadow;
 mod scene_mesh_pass;
 pub use self::mesh_passes_shadow::{draw_primitives_shadow, draw_procedural_terrain_shadow};
 use self::scene_mesh_pass::SceneMeshPass;
-
-
-#[inline]
-fn draw_authored_sky_background_mesh() -> bool {
-    crate::env_config::var_bool("NEWENGINE_RENDER_DRAW_SKY_MESH", true)
-}
 
 pub(crate) fn publish_camera_spawn(
     bridge: &crate::viewport_bridge::ViewportBridge,
@@ -68,7 +63,6 @@ struct TerrainShadowEntry {
     material: Option<newengine_materials::MaterialRef>,
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 struct PrimitivePlanKey {
     primitive_id: u64,
@@ -88,7 +82,9 @@ impl PrimitivePlanKey {
     ) -> Self {
         Self {
             primitive_id: prim.id.0,
-            material_id: material_ref.map(|mr| mr.id.raw()).unwrap_or(MaterialId::invalid().raw()),
+            material_id: material_ref
+                .map(|mr| mr.id.raw())
+                .unwrap_or(MaterialId::invalid().raw()),
             color: [
                 prim.color[0].to_bits(),
                 prim.color[1].to_bits(),
@@ -117,8 +113,6 @@ struct PrimitiveGpuPlan {
     uv_transform: [f32; 4],
     material_params: [f32; 4],
 }
-
-
 
 pub fn draw_procedural_terrain(
     this: &mut RuntimeRenderController,
@@ -253,7 +247,11 @@ fn draw_procedural_terrain_for_pass(
 
         let key = entity_key
             ^ 0x7e44_1000_0000_0000u64
-            ^ if pass.is_gbuffer() { 0x0000_0000_0b00_0000u64 } else { 0 };
+            ^ if pass.is_gbuffer() {
+                0x0000_0000_0b00_0000u64
+            } else {
+                0
+            };
         let (pipeline, base_tex, normal_tex, roughness_tex, sampler, material_params) =
             if let Some(layers) = surface_layers {
                 let forest_tex = this.material_texture_or_default(
@@ -272,7 +270,11 @@ fn draw_procedural_terrain_for_pass(
                     lit.white_texture,
                 );
                 (
-                    if pass.is_gbuffer() { lit.gbuffer_terrain_pipeline } else { lit.terrain_pipeline },
+                    if pass.is_gbuffer() {
+                        lit.gbuffer_terrain_pipeline
+                    } else {
+                        lit.terrain_pipeline
+                    },
                     forest_tex,
                     sand_tex,
                     rock_tex,
@@ -333,7 +335,11 @@ fn draw_procedural_terrain_for_pass(
             base_tex,
             normal_tex,
             roughness_tex,
-            if pass.is_gbuffer() { lit.white_texture } else { shadow_texture },
+            if pass.is_gbuffer() {
+                lit.white_texture
+            } else {
+                shadow_texture
+            },
             sampler,
         )?;
         per.last_seen_frame = this.frame.frame_index;
@@ -359,14 +365,14 @@ fn draw_procedural_terrain_for_pass(
             index_format: IndexFormat::U32,
             args: DrawIndexedArgs::new(gpu.index_count),
         });
-        this.diagnostics.overlay_metrics.record_indexed_triangles(gpu.index_count);
+        this.diagnostics
+            .overlay_metrics
+            .record_indexed_triangles(gpu.index_count);
     }
     stream.emit_sorted(r)?;
 
     Ok(())
 }
-
-
 
 #[inline]
 fn instance_batch_ubo_key(
@@ -391,7 +397,10 @@ fn instance_batch_ubo_key(
 
 #[inline]
 fn mix_u64(mut h: u64, v: u64) -> u64 {
-    h ^= v.wrapping_add(0x9e37_79b9_7f4a_7c15).wrapping_add(h << 6).wrapping_add(h >> 2);
+    h ^= v
+        .wrapping_add(0x9e37_79b9_7f4a_7c15)
+        .wrapping_add(h << 6)
+        .wrapping_add(h >> 2);
     h
 }
 
@@ -478,8 +487,24 @@ fn draw_primitives_for_pass(
     let mats_lock = this.bridges.scene.materials();
     let mats = mats_lock.read();
 
-    let mut sky_entries: Vec<(f32, u64, Primitive, Mat4, Option<newengine_materials::MaterialRef>, bool, bool)> = Vec::new();
-    let mut entries: Vec<(f32, u64, Primitive, Mat4, Option<newengine_materials::MaterialRef>, bool, bool)> = Vec::new();
+    let mut sky_entries: Vec<(
+        f32,
+        u64,
+        Primitive,
+        Mat4,
+        Option<newengine_materials::MaterialRef>,
+        bool,
+        bool,
+    )> = Vec::new();
+    let mut entries: Vec<(
+        f32,
+        u64,
+        Primitive,
+        Mat4,
+        Option<newengine_materials::MaterialRef>,
+        bool,
+        bool,
+    )> = Vec::new();
     let mut sky_seen = 0usize;
     let mut sky_profile_culled = 0usize;
     for (id, prim, gt) in world.query2::<Primitive, GlobalTransform>() {
@@ -495,33 +520,24 @@ fn draw_primitives_for_pass(
         if follow_camera_sky {
             sky_seen += 1;
         }
-        // Diagnostics as Truth: the authored sky dome is a valid scene asset,
-        // but it must not be replayed through the generic lit primitive path by
-        // default. When the camera sits inside a follow-camera dome, any depth,
-        // winding or pipeline-state mismatch turns the whole frame into a
-        // camera-dependent single-color sky sample. Until a dedicated sky pass
-        // owns this draw explicitly, the runtime uses SkyClearColorRuntime as
-        // the background and leaves the world draw list authoritative.
-        let authored_sky_background_mesh_enabled = draw_authored_sky_background_mesh();
-        if follow_camera_sky
-            && (!this.runtime_profile().draw_sky_visuals()
-                || (background_sky && !authored_sky_background_mesh_enabled))
-        {
+        // Render-role routing: a follow-camera background sky dome is not a
+        // world primitive. It belongs to a dedicated sky/background pass, not to
+        // the generic lit primitive forward pass. Routing by SkyVisualRuntime +
+        // SkyDomeRuntime keeps this semantic and data-driven; it is not a
+        // per-mesh environment switch.
+        if follow_camera_sky && (!this.runtime_profile().draw_sky_visuals() || background_sky) {
             sky_profile_culled += 1;
             if background_sky && this.frame.frame_index <= 2 {
                 newengine_ulog_api::ulog::info!(
-                    "sky.draw_list: authored background dome skipped policy='clear-color-background until dedicated sky pass' reason='prevents follow-camera dome from covering world frame' env='NEWENGINE_RENDER_DRAW_SKY_MESH=1 to opt in'"
+                    "sky.draw_list: authored background dome skipped policy='render-role-routing' reason='follow-camera sky dome is excluded from generic primitive pass until dedicated sky pass owns it'"
                 );
             }
             continue;
         }
         if runtime && !follow_camera_sky {
             if let Some(bounds) = world.get::<Bounds>(id) {
-                let (center_ws, radius_ws) = transform_sphere(
-                    gt.0,
-                    bounds.local_sphere.center,
-                    bounds.local_sphere.radius,
-                );
+                let (center_ws, radius_ws) =
+                    transform_sphere(gt.0, bounds.local_sphere.center, bounds.local_sphere.radius);
                 if !forward_sphere_visible(
                     camera_position,
                     camera_forward,
@@ -541,7 +557,11 @@ fn draw_primitives_for_pass(
         }
         let key = id.stable_u64();
         let entry = (
-            if follow_camera_sky { 0.0 } else { distance_sq_to_camera(gt.0, camera_position) },
+            if follow_camera_sky {
+                0.0
+            } else {
+                distance_sq_to_camera(gt.0, camera_position)
+            },
             key,
             *prim,
             gt.0,
@@ -578,7 +598,9 @@ fn draw_primitives_for_pass(
     // group / mesh for performance, so the dome must not share the same unordered
     // set with sun/moon discs: draw authored dome first, sky foreground discs next,
     // then world opaque batches.
-    for (_distance_sq, _entity_key, prim, model, material_ref, follow_camera_sky, background_sky) in sky_entries.into_iter().chain(entries.into_iter()) {
+    for (_distance_sq, _entity_key, prim, model, material_ref, follow_camera_sky, background_sky) in
+        sky_entries.into_iter().chain(entries.into_iter())
+    {
         let model = if follow_camera_sky {
             recenter_model_translation(model, camera_position)
         } else {
@@ -587,7 +609,8 @@ fn draw_primitives_for_pass(
         if pass.is_gbuffer() && follow_camera_sky {
             continue;
         }
-        let plan_key = PrimitivePlanKey::new(prim, material_ref, follow_camera_sky, pass.is_gbuffer());
+        let plan_key =
+            PrimitivePlanKey::new(prim, material_ref, follow_camera_sky, pass.is_gbuffer());
         let plan = if let Some(plan) = plan_cache.get(&plan_key).copied() {
             plan
         } else {
@@ -595,9 +618,21 @@ fn draw_primitives_for_pass(
             let resolved = material_ref.and_then(|mr| mats.resolve(mr.id));
             let material_plan = LitMaterialPlan::from_resolved(resolved.as_ref(), prim.color);
 
-            let base_tex = this.material_texture_or_default(r, material_plan.base_color_texture, lit.white_texture);
-            let normal_tex = this.material_texture_or_default(r, material_plan.normal_texture, lit.flat_normal_texture);
-            let roughness_tex = this.material_texture_or_default(r, material_plan.roughness_texture, lit.white_texture);
+            let base_tex = this.material_texture_or_default(
+                r,
+                material_plan.base_color_texture,
+                lit.white_texture,
+            );
+            let normal_tex = this.material_texture_or_default(
+                r,
+                material_plan.normal_texture,
+                lit.flat_normal_texture,
+            );
+            let roughness_tex = this.material_texture_or_default(
+                r,
+                material_plan.roughness_texture,
+                lit.white_texture,
+            );
             let sampler = if follow_camera_sky {
                 lit.clamp_sampler
             } else if material_plan.has_textures() {
@@ -605,14 +640,12 @@ fn draw_primitives_for_pass(
             } else {
                 lit.clamp_sampler
             };
-            let material_shadow_texture = if pass.is_gbuffer()
-                || follow_camera_sky
-                || !material_plan.receive_shadows
-            {
-                lit.white_texture
-            } else {
-                shadow_texture
-            };
+            let material_shadow_texture =
+                if pass.is_gbuffer() || follow_camera_sky || !material_plan.receive_shadows {
+                    lit.white_texture
+                } else {
+                    shadow_texture
+                };
             let pipeline = if pass.is_gbuffer() {
                 if material_plan.double_sided {
                     lit.gbuffer_instanced_double_sided_pipeline
@@ -706,16 +739,39 @@ fn draw_primitives_for_pass(
             plan.mesh_key,
         );
         if follow_camera_sky && background_sky {
-            sky_background_batches.push(batch_key, plan.pipeline, plan.bind_group, plan.gpu, instance);
+            sky_background_batches.push(
+                batch_key,
+                plan.pipeline,
+                plan.bind_group,
+                plan.gpu,
+                instance,
+            );
         } else if follow_camera_sky {
-            sky_foreground_batches.push(batch_key, plan.pipeline, plan.bind_group, plan.gpu, instance);
+            sky_foreground_batches.push(
+                batch_key,
+                plan.pipeline,
+                plan.bind_group,
+                plan.gpu,
+                instance,
+            );
         } else {
-            opaque_batches.push(batch_key, plan.pipeline, plan.bind_group, plan.gpu, instance);
+            opaque_batches.push(
+                batch_key,
+                plan.pipeline,
+                plan.bind_group,
+                plan.gpu,
+                instance,
+            );
         }
-        this.diagnostics.overlay_metrics.record_indexed_triangles(plan.gpu.index_count);
+        this.diagnostics
+            .overlay_metrics
+            .record_indexed_triangles(plan.gpu.index_count);
     }
 
-    if sky_background_batches.is_empty() && sky_foreground_batches.is_empty() && opaque_batches.is_empty() {
+    if sky_background_batches.is_empty()
+        && sky_foreground_batches.is_empty()
+        && opaque_batches.is_empty()
+    {
         return Ok(());
     }
 
@@ -727,15 +783,21 @@ fn draw_primitives_for_pass(
         .chain(opaque_batches.into_sorted_batches().into_iter())
     {
         let instance_count = batch.instances.len() as u32;
-        let instance_slice = this.gpu.meshes.instance_uploader.upload(r, &batch.instances)?;
+        let instance_slice = this
+            .gpu
+            .meshes
+            .instance_uploader
+            .upload(r, &batch.instances)?;
         replay.set_pipeline(r, batch.pipeline)?;
         replay.set_bind_group0(r, batch.bind_group)?;
         replay.set_vertex_buffer(r, 0, BufferSlice::new(batch.gpu.vb, 0))?;
         replay.set_vertex_buffer(r, 1, instance_slice)?;
         replay.set_index_buffer(r, BufferSlice::new(batch.gpu.ib, 0), IndexFormat::U32)?;
-        r.draw_indexed(draw_indexed_instanced_args(batch.gpu.index_count, instance_count))?;
+        r.draw_indexed(draw_indexed_instanced_args(
+            batch.gpu.index_count,
+            instance_count,
+        ))?;
     }
 
     Ok(())
 }
-

@@ -13,7 +13,9 @@ use super::imported_assets::SceneImportedAssetDescriptor;
 #[derive(Clone, Debug)]
 pub enum SceneCommand {
     NewScene,
-    LoadSceneAsset { asset: SceneAsset },
+    LoadSceneAsset {
+        asset: SceneAsset,
+    },
 
     SpawnPrimitive {
         id: PrimitiveId,
@@ -104,4 +106,3 @@ pub enum SceneCommand {
         mode: GameRunMode,
     },
 }
-

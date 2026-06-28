@@ -15,7 +15,9 @@ pub enum PhysicsBodyKind {
 
 impl Default for PhysicsBodyKind {
     #[inline]
-    fn default() -> Self { Self::Static }
+    fn default() -> Self {
+        Self::Static
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -55,8 +57,16 @@ impl PhysicsBodyDesc {
         Self {
             shape,
             kind: PhysicsBodyKind::Static,
-            flags: PhysicsBodyRuntimeFlags { is_trigger: false, participates_in_queries: true, casts_contacts: true },
-            material: PhysicsMaterialDesc { friction: 0.75, restitution: 0.05, density: 1.0 },
+            flags: PhysicsBodyRuntimeFlags {
+                is_trigger: false,
+                participates_in_queries: true,
+                casts_contacts: true,
+            },
+            material: PhysicsMaterialDesc {
+                friction: 0.75,
+                restitution: 0.05,
+                density: 1.0,
+            },
         }
     }
 
@@ -65,8 +75,16 @@ impl PhysicsBodyDesc {
         Self {
             shape,
             kind: PhysicsBodyKind::Dynamic,
-            flags: PhysicsBodyRuntimeFlags { is_trigger: false, participates_in_queries: true, casts_contacts: true },
-            material: PhysicsMaterialDesc { friction: 0.75, restitution: 0.05, density: 1.0 },
+            flags: PhysicsBodyRuntimeFlags {
+                is_trigger: false,
+                participates_in_queries: true,
+                casts_contacts: true,
+            },
+            material: PhysicsMaterialDesc {
+                friction: 0.75,
+                restitution: 0.05,
+                density: 1.0,
+            },
         }
     }
 
@@ -75,8 +93,16 @@ impl PhysicsBodyDesc {
         Self {
             shape,
             kind: PhysicsBodyKind::Static,
-            flags: PhysicsBodyRuntimeFlags { is_trigger: true, participates_in_queries: true, casts_contacts: false },
-            material: PhysicsMaterialDesc { friction: 0.75, restitution: 0.05, density: 1.0 },
+            flags: PhysicsBodyRuntimeFlags {
+                is_trigger: true,
+                participates_in_queries: true,
+                casts_contacts: false,
+            },
+            material: PhysicsMaterialDesc {
+                friction: 0.75,
+                restitution: 0.05,
+                density: 1.0,
+            },
         }
     }
 
@@ -86,10 +112,14 @@ impl PhysicsBodyDesc {
     }
 
     #[inline]
-    pub const fn is_trigger(self) -> bool { self.flags.is_trigger }
+    pub const fn is_trigger(self) -> bool {
+        self.flags.is_trigger
+    }
 
     #[inline]
-    pub fn to_bounds(self) -> Bounds { self.shape.to_bounds() }
+    pub fn to_bounds(self) -> Bounds {
+        self.shape.to_bounds()
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -109,7 +139,9 @@ impl CharacterControllerDesc {
             radius: self.radius.clamp(0.05, 5.0),
             half_height: self.half_height.clamp(0.05, 8.0),
             contact_skin: self.contact_skin.clamp(0.0, 0.5),
-            max_slope_radians: self.max_slope_radians.clamp(0.0, core::f32::consts::FRAC_PI_2),
+            max_slope_radians: self
+                .max_slope_radians
+                .clamp(0.0, core::f32::consts::FRAC_PI_2),
         }
     }
 }

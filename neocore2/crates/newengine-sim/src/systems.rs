@@ -9,9 +9,9 @@ use newengine_transform::{read_entity_world_pose_local_chain, Transform};
 use crate::{
     run_character_motor_controller, run_follow_camera_controller, run_orbit_camera_controller,
     AngularVelocity, CameraControlInputComp, CameraRigComp, CharacterMotor, CommandBuffer,
-    ControllerCtx, ControllerIntentQueue, FollowTargetCameraController,
-    FollowTargetCameraMotor, IntentBuffer, IntentCommandBufferExt, MotorInput, OrbitCameraMotor,
-    SimFrame, TransformCommandBufferExt, Velocity,
+    ControllerCtx, ControllerIntentQueue, FollowTargetCameraController, FollowTargetCameraMotor,
+    IntentBuffer, IntentCommandBufferExt, MotorInput, OrbitCameraMotor, SimFrame,
+    TransformCommandBufferExt, Velocity,
 };
 
 #[inline]
@@ -55,7 +55,9 @@ pub fn sys_orbit_camera(world: &World, frame: SimFrame, cmd: &mut CommandBuffer)
         return;
     }
 
-    let mut ids: Vec<EntityId> = world.query2_ids::<OrbitCameraMotor, CameraRigComp>().collect();
+    let mut ids: Vec<EntityId> = world
+        .query2_ids::<OrbitCameraMotor, CameraRigComp>()
+        .collect();
     sort_ids(&mut ids);
 
     let mut intents = IntentBuffer::new();

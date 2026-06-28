@@ -21,7 +21,11 @@ pub struct StartupWindowReport {
 
 impl StartupWindowReport {
     #[allow(dead_code)]
-    pub(crate) fn presented(config_path: PathBuf, details: impl Into<String>, warnings: Vec<String>) -> Self {
+    pub(crate) fn presented(
+        config_path: PathBuf,
+        details: impl Into<String>,
+        warnings: Vec<String>,
+    ) -> Self {
         Self {
             decision: StartupWindowDecision::Presented,
             config_path: Some(config_path),

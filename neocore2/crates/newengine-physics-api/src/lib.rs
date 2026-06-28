@@ -22,7 +22,8 @@ pub const PHYSICS_CONSTRAINTS_SERVICE_ID: &str = "physics.constraints.api";
 pub const PHYSICS_CONSTRAINTS_BACKEND_CAPABILITY_ID: &str = "physics.constraints.backend";
 pub const PHYSICS_SERVICE_METHOD_INFO: &str = newengine_service_api::SERVICE_METHOD_INFO_JSON;
 pub const PHYSICS_SERVICE_METHOD_INVOKE: &str = newengine_service_api::SERVICE_METHOD_INVOKE_JSON;
-pub const PHYSICS_SERVICE_METHOD_SHUTDOWN_V1: &str = newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1;
+pub const PHYSICS_SERVICE_METHOD_SHUTDOWN_V1: &str =
+    newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1;
 
 /// Generic backend-family declaration for physics providers.
 pub const PHYSICS_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec =
@@ -90,13 +91,19 @@ pub struct PhysicsApiVersion {
 impl PhysicsApiVersion {
     #[inline]
     pub const fn new(major: u16, minor: u16, patch: u16) -> Self {
-        Self { major, minor, patch }
+        Self {
+            major,
+            minor,
+            patch,
+        }
     }
 }
 
 impl Default for PhysicsApiVersion {
     #[inline]
-    fn default() -> Self { Self::new(1, 0, 0) }
+    fn default() -> Self {
+        Self::new(1, 0, 0)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -108,7 +115,9 @@ pub enum PhysicsBackendClass {
 
 impl Default for PhysicsBackendClass {
     #[inline]
-    fn default() -> Self { Self::Deterministic }
+    fn default() -> Self {
+        Self::Deterministic
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -135,7 +144,11 @@ pub struct PhysicsLimits {
 impl Default for PhysicsLimits {
     #[inline]
     fn default() -> Self {
-        Self { max_bodies: 100_000, max_queries_per_frame: 4096, max_substeps: 16 }
+        Self {
+            max_bodies: 100_000,
+            max_queries_per_frame: 4096,
+            max_substeps: 16,
+        }
     }
 }
 
@@ -191,12 +204,16 @@ impl PhysicsBackendCapabilities {
     }
 
     #[inline]
-    pub fn supports(&self, feature: PhysicsFeature) -> bool { self.features.contains(&feature) }
+    pub fn supports(&self, feature: PhysicsFeature) -> bool {
+        self.features.contains(&feature)
+    }
 }
 
 impl Default for PhysicsBackendCapabilities {
     #[inline]
-    fn default() -> Self { Self::deterministic_default() }
+    fn default() -> Self {
+        Self::deterministic_default()
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -220,7 +237,10 @@ pub struct PhysicsProtocolNotice {
 impl PhysicsProtocolNotice {
     #[inline]
     pub fn new(code: impl Into<String>, message: impl Into<String>) -> Self {
-        Self { code: code.into(), message: message.into() }
+        Self {
+            code: code.into(),
+            message: message.into(),
+        }
     }
 }
 
@@ -268,7 +288,11 @@ pub struct PhysicsProblemDetails {
 
 impl PhysicsProblemDetails {
     #[inline]
-    pub fn new(code: impl Into<String>, title: impl Into<String>, detail: impl Into<String>) -> Self {
+    pub fn new(
+        code: impl Into<String>,
+        title: impl Into<String>,
+        detail: impl Into<String>,
+    ) -> Self {
         Self {
             code: code.into(),
             title: title.into(),
@@ -307,7 +331,9 @@ pub enum PhysicsBodyKindDto {
 
 impl Default for PhysicsBodyKindDto {
     #[inline]
-    fn default() -> Self { Self::Static }
+    fn default() -> Self {
+        Self::Static
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -319,7 +345,11 @@ pub enum CollisionShapeDto {
 
 impl Default for CollisionShapeDto {
     #[inline]
-    fn default() -> Self { Self::Box { half_extents: [0.5, 0.5, 0.5] } }
+    fn default() -> Self {
+        Self::Box {
+            half_extents: [0.5, 0.5, 0.5],
+        }
+    }
 }
 
 /// Static terrain heightfield packet.
@@ -423,9 +453,18 @@ pub struct PhysicsFrameBodySnapshot {
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum PhysicsCommandKindDto {
-    SetBodyPose { entity: PhysicsEntityKey, position: PhysicsVec3, rotation: PhysicsQuat },
-    SetLinearVelocity { entity: PhysicsEntityKey, velocity: PhysicsVec3 },
-    DestroyBody { entity: PhysicsEntityKey },
+    SetBodyPose {
+        entity: PhysicsEntityKey,
+        position: PhysicsVec3,
+        rotation: PhysicsQuat,
+    },
+    SetLinearVelocity {
+        entity: PhysicsEntityKey,
+        velocity: PhysicsVec3,
+    },
+    DestroyBody {
+        entity: PhysicsEntityKey,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -436,9 +475,19 @@ pub struct PhysicsCommandDto {
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum PhysicsQueryKindDto {
-    Ray { origin: PhysicsVec3, dir: PhysicsVec3, max_t: f32 },
-    Sphere { center: PhysicsVec3, radius: f32 },
-    Aabb { min: PhysicsVec3, max: PhysicsVec3 },
+    Ray {
+        origin: PhysicsVec3,
+        dir: PhysicsVec3,
+        max_t: f32,
+    },
+    Sphere {
+        center: PhysicsVec3,
+        radius: f32,
+    },
+    Aabb {
+        min: PhysicsVec3,
+        max: PhysicsVec3,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -507,9 +556,16 @@ pub struct PhysicsContactEventDto {
 pub enum PhysicsEventDto {
     ContactBegin(PhysicsContactEventDto),
     ContactPersist(PhysicsContactEventDto),
-    ContactEnd { a: PhysicsEntityKey, b: PhysicsEntityKey },
-    BodyCreated { entity: PhysicsEntityKey },
-    BodyDestroyed { entity: PhysicsEntityKey },
+    ContactEnd {
+        a: PhysicsEntityKey,
+        b: PhysicsEntityKey,
+    },
+    BodyCreated {
+        entity: PhysicsEntityKey,
+    },
+    BodyDestroyed {
+        entity: PhysicsEntityKey,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]

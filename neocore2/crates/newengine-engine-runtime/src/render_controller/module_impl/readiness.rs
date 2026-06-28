@@ -6,7 +6,7 @@ use newengine_materials::api::MaterialRegistryApi;
 use newengine_math::collections::FxHashSet;
 use newengine_plugin_host::default_host_api;
 
-use crate::gameplay::{clear_player_input, first_player, GameRunMode, GameReadyWorldLaunchGate};
+use crate::gameplay::{clear_player_input, first_player, GameReadyWorldLaunchGate, GameRunMode};
 use crate::scene_bridge::{PreparedTerrainPrimitiveMesh, TerrainSurfaceLayers};
 use newengine_procedural_noise::ProceduralTerrain;
 
@@ -40,7 +40,6 @@ pub(super) fn update_game_ready_launch_gate(
         return true;
     }
 
-
     let readiness = critical_scene_residency_ready(this, r, world);
     if readiness.ready {
         let (waited_frames, reason) = {
@@ -69,9 +68,7 @@ pub(super) fn update_game_ready_launch_gate(
             gate.update_texture_counts(readiness.waiting, readiness.total, readiness.failed);
             let waited_frames = frame_index.saturating_sub(gate.requested_frame);
 
-            if waited_frames >= scene_texture_gate_soft_timeout_frames()
-                && frame_index % 120 == 0
-            {
+            if waited_frames >= scene_texture_gate_soft_timeout_frames() && frame_index % 120 == 0 {
                 newengine_ulog_api::ulog::warn!(
                     "game-ready launch gate: still waiting for visual completeness frame={} waited_frames={} reason='{}'",
                     frame_index,
@@ -111,7 +108,6 @@ struct LaunchReadiness {
     total: u32,
     failed: u32,
 }
-
 
 fn critical_scene_residency_ready(
     this: &mut RuntimeRenderController,
@@ -157,7 +153,12 @@ fn critical_terrain_gpu_ready(
         }
 
         prepared_total = prepared_total.saturating_add(1);
-        if this.gpu.meshes.terrain_cache.contains_key(&terrain.mesh_key()) {
+        if this
+            .gpu
+            .meshes
+            .terrain_cache
+            .contains_key(&terrain.mesh_key())
+        {
             resident = resident.saturating_add(1);
         } else {
             waiting = waiting.saturating_add(1);
@@ -178,13 +179,9 @@ fn critical_terrain_gpu_ready(
         };
     }
 
-    let min_ready = crate::env_config::var_u32(
-        "NEWENGINE_TERRAIN_LAUNCH_MIN_READY_PACKETS",
-        1,
-        1,
-        64,
-    )
-    .min(prepared_total);
+    let min_ready =
+        crate::env_config::var_u32("NEWENGINE_TERRAIN_LAUNCH_MIN_READY_PACKETS", 1, 1, 64)
+            .min(prepared_total);
 
     if resident >= min_ready {
         LaunchReadiness {
@@ -286,9 +283,7 @@ fn critical_scene_materials_ready(
         let suffix = if failed == 0 {
             format!("scene material textures ready total={total}")
         } else {
-            format!(
-                "scene material textures ready with fallbacks total={total} failed={failed}"
-            )
+            format!("scene material textures ready with fallbacks total={total} failed={failed}")
         };
         LaunchReadiness {
             ready: true,

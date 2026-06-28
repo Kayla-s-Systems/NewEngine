@@ -13,7 +13,6 @@ use crate::manager::types::PluginLoadError;
 use crate::path_fmt::display_clean;
 use crate::paths::is_dynamic_lib;
 
-
 pub(super) fn scan_plugins_dir(dir: &Path) -> Result<DiscoveryGraph, PluginLoadError> {
     let rd = std::fs::read_dir(dir).map_err(|e| PluginLoadError {
         path: dir.to_path_buf(),
@@ -49,7 +48,11 @@ pub(super) fn scan_plugins_dir(dir: &Path) -> Result<DiscoveryGraph, PluginLoadE
         match scan_dynamic_lib(&path) {
             Ok(v) => items.push(v),
             Err(e) => {
-                newengine_ulog_api::ulog::warn!("plugins: scan failed for '{}': {}", display_clean(&path), e);
+                newengine_ulog_api::ulog::warn!(
+                    "plugins: scan failed for '{}': {}",
+                    display_clean(&path),
+                    e
+                );
                 scan_errors.push(format!("{}: {}", display_clean(&path), e));
             }
         }
@@ -154,12 +157,14 @@ fn scan_dynamic_lib(path: &Path) -> Result<ScannedDynlib, String> {
 fn metadata_probe_enabled() -> bool {
     std::env::var("NEWENGINE_PLUGIN_DISCOVERY_ABI_PROBE")
         .ok()
-        .map(|v| !matches!(v.trim().to_ascii_lowercase().as_str(), "0" | "false" | "no" | "off"))
+        .map(|v| {
+            !matches!(
+                v.trim().to_ascii_lowercase().as_str(),
+                "0" | "false" | "no" | "off"
+            )
+        })
         .unwrap_or(true)
 }
-
-
-
 
 fn deprecated_runtime_artifact_stem(file_name: &str) -> Option<&'static str> {
     let lower = file_name.to_ascii_lowercase();
@@ -201,11 +206,7 @@ fn deprecated_runtime_artifact_stem(file_name: &str) -> Option<&'static str> {
         let Some(rest) = lower.strip_prefix(&prefix) else {
             continue;
         };
-        if rest
-            .chars()
-            .next()
-            .is_some_and(|ch| ch.is_ascii_digit())
-        {
+        if rest.chars().next().is_some_and(|ch| ch.is_ascii_digit()) {
             return Some(stem);
         }
     }

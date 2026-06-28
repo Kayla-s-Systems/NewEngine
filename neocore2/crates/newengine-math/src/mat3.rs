@@ -155,7 +155,7 @@ mod tests {
                 f32_from_u32(xorshift32(&mut rng)),
                 f32_from_u32(xorshift32(&mut rng)),
             )
-                .normalize_or_identity();
+            .normalize_or_identity();
 
             let v = Vec3::new(
                 f32_from_u32(xorshift32(&mut rng)),
@@ -190,7 +190,7 @@ mod tests {
                 f32_from_u32(xorshift32(&mut rng)),
                 f32_from_u32(xorshift32(&mut rng)),
             )
-                .normalize_or_identity();
+            .normalize_or_identity();
 
             let m = Mat3::from_quat(q);
 

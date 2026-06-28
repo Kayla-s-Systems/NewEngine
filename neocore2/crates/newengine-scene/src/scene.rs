@@ -48,7 +48,9 @@ impl Scene {
 
     #[inline]
     pub fn active_camera(&self) -> Option<EntityId> {
-        self.world.resource::<SceneState>().and_then(|s| s.active_camera)
+        self.world
+            .resource::<SceneState>()
+            .and_then(|s| s.active_camera)
     }
 
     #[inline]
@@ -85,7 +87,11 @@ impl Scene {
     /// - Avoids ad-hoc tick juggling in higher layers.
     /// - Preserves change-tracking invariants without hidden allocations.
     #[inline]
-    pub fn run_frame<R, F: FnOnce(&mut World) -> R>(&mut self, frame_tick: u64, controller: F) -> R {
+    pub fn run_frame<R, F: FnOnce(&mut World) -> R>(
+        &mut self,
+        frame_tick: u64,
+        controller: F,
+    ) -> R {
         self.world.set_tick(frame_tick);
 
         // Pre: derived state for controller logic (bounds/world pose queries).
@@ -101,7 +107,6 @@ impl Scene {
 
         out
     }
-
 
     #[inline]
     fn reconcile_unique_marker<C: Component>(&mut self) -> (Option<EntityId>, bool) {

@@ -1,4 +1,6 @@
-use newengine_plugin_api::{CapabilityDesc, CapabilityKind, CapabilityRole, PluginDescriptor, PluginKind};
+use newengine_plugin_api::{
+    CapabilityDesc, CapabilityKind, CapabilityRole, PluginDescriptor, PluginKind,
+};
 use newengine_service_api::EngineServiceKind;
 
 use super::*;
@@ -64,7 +66,9 @@ fn plugin_origin_tier_overrides_engine_runtime_even_with_lower_backend_priority(
     )];
 
     let registry = ActiveGatewayRegistry::from_facts(&descriptors, &services, &engine_runtime);
-    let route = registry.resolve_route("engine.camera").expect("engine.camera route");
+    let route = registry
+        .resolve_route("engine.camera")
+        .expect("engine.camera route");
 
     assert_eq!(route.provider_service_id, "mod.camera.api");
     assert_eq!(route.origin, GatewayProviderOrigin::UserMod);
@@ -128,8 +132,12 @@ fn one_plugin_can_override_multiple_authority_gateways() {
     ];
 
     let registry = ActiveGatewayRegistry::from_facts(&descriptors, &services, &engine_runtime);
-    let ecs_route = registry.resolve_route("engine.ecs").expect("engine.ecs route");
-    let entity_route = registry.resolve_route("engine.entity").expect("engine.entity route");
+    let ecs_route = registry
+        .resolve_route("engine.ecs")
+        .expect("engine.ecs route");
+    let entity_route = registry
+        .resolve_route("engine.entity")
+        .expect("engine.entity route");
 
     assert_eq!(ecs_route.provider_service_id, "ecs.api");
     assert_eq!(entity_route.provider_service_id, "entity.api");
@@ -156,7 +164,9 @@ fn dynamic_engine_runtime_gateway_does_not_require_central_service_kind_enum() {
     )];
 
     let registry = ActiveGatewayRegistry::from_facts(&[], &services, &engine_runtime);
-    let route = registry.resolve_route("engine.render.draw_lists").expect("dynamic draw-list route");
+    let route = registry
+        .resolve_route("engine.render.draw_lists")
+        .expect("dynamic draw-list route");
 
     assert_eq!(route.service_kind, "render.draw_lists");
     assert_eq!(route.provider_service_id, "render.draw_lists.api");
@@ -176,7 +186,9 @@ fn engine_runtime_is_used_when_no_plugin_provider_exists() {
     )];
 
     let registry = ActiveGatewayRegistry::from_facts(&[], &services, &engine_runtime);
-    let route = registry.resolve_route("engine.camera").expect("engine.camera route");
+    let route = registry
+        .resolve_route("engine.camera")
+        .expect("engine.camera route");
 
     assert_eq!(route.provider_service_id, "engine.camera");
     assert_eq!(route.origin, GatewayProviderOrigin::EngineRuntime);
@@ -217,7 +229,9 @@ fn higher_priority_wins_inside_same_origin_tier() {
     ];
 
     let registry = ActiveGatewayRegistry::from_facts(&descriptors, &services, &[]);
-    let route = registry.resolve_route("engine.camera").expect("engine.camera route");
+    let route = registry
+        .resolve_route("engine.camera")
+        .expect("engine.camera route");
 
     assert_eq!(route.provider_service_id, "mod.camera.high.api");
     assert_eq!(route.active_score, 40_020);
@@ -263,7 +277,9 @@ fn locked_gateway_rejects_plugin_route() {
         &engine_runtime,
         &policies,
     );
-    let route = registry.resolve_route("engine.security").expect("engine.security route");
+    let route = registry
+        .resolve_route("engine.security")
+        .expect("engine.security route");
 
     assert_eq!(route.provider_service_id, "engine.security");
     assert_eq!(route.origin, GatewayProviderOrigin::EngineRuntime);
@@ -274,12 +290,26 @@ fn tie_breakers_are_deterministic() {
     let descriptors = vec![
         PluginDescriptorFact::new(
             "mod.b".to_owned(),
-            descriptor("mod.b", "b.camera.api", "engine.camera", "camera.backend", "camera", 1),
+            descriptor(
+                "mod.b",
+                "b.camera.api",
+                "engine.camera",
+                "camera.backend",
+                "camera",
+                1,
+            ),
             GatewayProviderOrigin::UserMod,
         ),
         PluginDescriptorFact::new(
             "mod.a".to_owned(),
-            descriptor("mod.a", "a.camera.api", "engine.camera", "camera.backend", "camera", 1),
+            descriptor(
+                "mod.a",
+                "a.camera.api",
+                "engine.camera",
+                "camera.backend",
+                "camera",
+                1,
+            ),
             GatewayProviderOrigin::UserMod,
         ),
     ];
@@ -289,7 +319,9 @@ fn tie_breakers_are_deterministic() {
     ];
 
     let registry = ActiveGatewayRegistry::from_facts(&descriptors, &services, &[]);
-    let route = registry.resolve_route("engine.camera").expect("engine.camera route");
+    let route = registry
+        .resolve_route("engine.camera")
+        .expect("engine.camera route");
 
     assert_eq!(route.provider_service_id, "a.camera.api");
 }
@@ -307,16 +339,22 @@ fn child_domain_route_is_selected_when_kind_and_gateway_match() {
         ),
         GatewayProviderOrigin::UserMod,
     )];
-    let services = vec![service("mod.input.bindings.api", Some("mod.input.bindings"))];
+    let services = vec![service(
+        "mod.input.bindings.api",
+        Some("mod.input.bindings"),
+    )];
 
     let registry = ActiveGatewayRegistry::from_facts(&descriptors, &services, &[]);
-    let route = registry.resolve_route("engine.input.bindings").expect("engine.input.bindings route");
+    let route = registry
+        .resolve_route("engine.input.bindings")
+        .expect("engine.input.bindings route");
 
-    assert_eq!(route.service_kind, EngineServiceKind::InputBindings.as_str());
+    assert_eq!(
+        route.service_kind,
+        EngineServiceKind::InputBindings.as_str()
+    );
     assert_eq!(route.provider_service_id, "mod.input.bindings.api");
 }
-
-
 
 #[test]
 fn dynamic_gateway_kind_does_not_require_engine_enum_entry() {
@@ -335,7 +373,9 @@ fn dynamic_gateway_kind_does_not_require_engine_enum_entry() {
     let services = vec![service("mod.weather.api", Some("mod.weather"))];
 
     let registry = ActiveGatewayRegistry::from_facts(&descriptors, &services, &[]);
-    let route = registry.resolve_route("engine.weather").expect("engine.weather route");
+    let route = registry
+        .resolve_route("engine.weather")
+        .expect("engine.weather route");
 
     assert_eq!(route.service_kind, "weather");
     assert_eq!(route.provider_service_id, "mod.weather.api");
@@ -364,16 +404,17 @@ fn system_tags_can_drive_policy_without_gateway_match_lists() {
         "profile.gateway-policy".to_owned(),
     )];
 
-    let registry = ActiveGatewayRegistry::from_facts_with_policy(
-        &descriptors,
-        &services,
-        &[],
-        &policies,
-    );
-    let route = registry.resolve_route("engine.render").expect("engine.render route");
+    let registry =
+        ActiveGatewayRegistry::from_facts_with_policy(&descriptors, &services, &[], &policies);
+    let route = registry
+        .resolve_route("engine.render")
+        .expect("engine.render route");
 
     assert_eq!(route.override_mode, GatewayOverrideMode::ProfileControlled);
-    assert!(route.system_tags.iter().any(|tag| tag == system_tag::OVERRIDE_PROFILE_CONTROLLED));
+    assert!(route
+        .system_tags
+        .iter()
+        .any(|tag| tag == system_tag::OVERRIDE_PROFILE_CONTROLLED));
 }
 #[test]
 fn mixed_parent_and_child_domain_route_is_ignored() {
@@ -418,12 +459,16 @@ fn root_gateway_keeps_provider_implementation_identity_as_metadata() {
     let services = vec![service("primary.ui.api", Some("provider.ui.primary"))];
 
     let registry = ActiveGatewayRegistry::from_facts(&descriptors, &services, &[]);
-    let root_route = registry.resolve_route("engine.ui").expect("engine.ui route");
+    let root_route = registry
+        .resolve_route("engine.ui")
+        .expect("engine.ui route");
 
     assert_eq!(root_route.gateway_id, "engine.ui");
     assert_eq!(root_route.service_kind, "ui");
     assert_eq!(root_route.provider_service_id, "primary.ui.api");
-    assert!(registry.resolve_route("engine.ui.provider_primary").is_none());
+    assert!(registry
+        .resolve_route("engine.ui.provider_primary")
+        .is_none());
     assert!(registry.has_gateway_capability("engine.ui", "ui.backend"));
 }
 
@@ -451,7 +496,9 @@ fn provider_implementation_child_route_does_not_become_api_domain() {
     let registry = ActiveGatewayRegistry::from_facts(&descriptors, &services, &[]);
 
     assert!(registry.resolve_route("engine.ui").is_none());
-    assert!(registry.resolve_route("engine.ui.provider_primary").is_none());
+    assert!(registry
+        .resolve_route("engine.ui.provider_primary")
+        .is_none());
 }
 
 #[test]
@@ -512,12 +559,24 @@ fn null_provider_route_is_real_visible_and_shadowed_by_concrete_provider() {
     )];
 
     let registry = ActiveGatewayRegistry::from_facts(&descriptors, &services, &null_routes);
-    let active = registry.resolve_route("engine.render").expect("engine.render route");
+    let active = registry
+        .resolve_route("engine.render")
+        .expect("engine.render route");
 
     assert_eq!(active.provider_service_id, "render.api");
-    assert_eq!(active.provider_route_id.as_deref(), Some("engine.render.vulkan"));
+    assert_eq!(
+        active.provider_route_id.as_deref(),
+        Some("engine.render.vulkan")
+    );
     assert_eq!(active.origin, GatewayProviderOrigin::FirstPartyPlugin);
-    assert_eq!(registry.routes().iter().filter(|route| route.gateway_id == "engine.render").count(), 2);
+    assert_eq!(
+        registry
+            .routes()
+            .iter()
+            .filter(|route| route.gateway_id == "engine.render")
+            .count(),
+        2
+    );
     assert!(registry.routes().iter().any(|route| {
         route.gateway_id == "engine.render"
             && route.provider_service_id == "null.render.api"
@@ -564,14 +623,22 @@ fn active_and_shadowed_routes_are_diagnostic_visible() {
     ];
 
     let registry = ActiveGatewayRegistry::from_facts(&[], &services, &routes);
-    let active = registry.resolve_route("engine.camera").expect("engine.camera active route");
+    let active = registry
+        .resolve_route("engine.camera")
+        .expect("engine.camera active route");
 
-    assert_eq!(active.provider_route_id.as_deref(), Some("engine.camera.stargazer"));
+    assert_eq!(
+        active.provider_route_id.as_deref(),
+        Some("engine.camera.stargazer")
+    );
 
     let diagnostics = registry.route_diagnostics("engine.camera");
     assert_eq!(diagnostics.gateway_id, "engine.camera");
     assert_eq!(
-        diagnostics.active_route.as_ref().and_then(|route| route.provider_route_id.as_deref()),
+        diagnostics
+            .active_route
+            .as_ref()
+            .and_then(|route| route.provider_route_id.as_deref()),
         Some("engine.camera.stargazer")
     );
     assert_eq!(diagnostics.shadowed_routes.len(), 1);

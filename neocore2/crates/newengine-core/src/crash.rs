@@ -197,7 +197,11 @@ fn report_fatal_impl(
         let _ = writeln!(text, "Cwd: {}", display_clean(&canonicalize_if_exists(cwd)));
     }
     if let Some(log_file) = std::env::var_os("NEWENGINE_LOG_FILE") {
-        let _ = writeln!(text, "LogFile: {}", display_clean(&canonicalize_if_exists(&PathBuf::from(log_file))));
+        let _ = writeln!(
+            text,
+            "LogFile: {}",
+            display_clean(&canonicalize_if_exists(&PathBuf::from(log_file)))
+        );
     }
 
     let _ = writeln!(text);
@@ -240,7 +244,10 @@ fn report_fatal_impl(
     let out_dir = resolve_crash_dir(&cfg, sys.exe.as_deref());
     let out_path = write_report_file(&out_dir, sys.pid, unix_ms, rid, rtag, &text).ok()?;
 
-    eprintln!("[newengine] crash report written: {}", display_clean(&canonicalize_if_exists(&out_path)));
+    eprintln!(
+        "[newengine] crash report written: {}",
+        display_clean(&canonicalize_if_exists(&out_path))
+    );
 
     if cfg.spawn_reporter {
         let _ = spawn_reporter(&cfg, &out_path);
@@ -294,7 +301,11 @@ fn write_report_file(
 
     let mut n = 0u32;
     loop {
-        let suffix = if n == 0 { String::new() } else { format!("_{n}") };
+        let suffix = if n == 0 {
+            String::new()
+        } else {
+            format!("_{n}")
+        };
 
         let file = format!("crash_{unix_ms}_pid{pid}_run{run_tag}{suffix}.txt");
         let path = dir.join(file);
@@ -383,16 +394,10 @@ unsafe extern "system" fn unhandled_exception_filter(
     info: *const windows::Win32::System::Diagnostics::Debug::EXCEPTION_POINTERS,
 ) -> i32 {
     use windows::Win32::Foundation::{
-        EXCEPTION_ACCESS_VIOLATION,
-        EXCEPTION_ARRAY_BOUNDS_EXCEEDED,
-        EXCEPTION_BREAKPOINT,
-        EXCEPTION_DATATYPE_MISALIGNMENT,
-        EXCEPTION_FLT_DIVIDE_BY_ZERO,
-        EXCEPTION_ILLEGAL_INSTRUCTION,
-        EXCEPTION_INT_DIVIDE_BY_ZERO,
-        EXCEPTION_IN_PAGE_ERROR,
-        EXCEPTION_STACK_OVERFLOW,
-        NTSTATUS,
+        EXCEPTION_ACCESS_VIOLATION, EXCEPTION_ARRAY_BOUNDS_EXCEEDED, EXCEPTION_BREAKPOINT,
+        EXCEPTION_DATATYPE_MISALIGNMENT, EXCEPTION_FLT_DIVIDE_BY_ZERO,
+        EXCEPTION_ILLEGAL_INSTRUCTION, EXCEPTION_INT_DIVIDE_BY_ZERO, EXCEPTION_IN_PAGE_ERROR,
+        EXCEPTION_STACK_OVERFLOW, NTSTATUS,
     };
     use windows::Win32::System::Diagnostics::Debug::EXCEPTION_EXECUTE_HANDLER;
 
@@ -441,9 +446,7 @@ unsafe extern "system" fn unhandled_exception_filter(
 
     record_breadcrumb(format!(
         "seh: code=0x{:08X} kind={} address=0x{:X}",
-        code.0 as u32,
-        kind,
-        address
+        code.0 as u32, kind, address
     ));
 
     let details = format!(

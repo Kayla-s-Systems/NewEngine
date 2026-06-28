@@ -181,7 +181,6 @@ pub(in crate::scene_bridge::game_ready) struct GameReadyShadowSpec {
     pub(in crate::scene_bridge::game_ready) contact_strength: f32,
 }
 
-
 #[derive(Clone, Debug)]
 pub(in crate::scene_bridge::game_ready) struct GameReadyFoliageSpec {
     pub(in crate::scene_bridge::game_ready) enabled: bool,
@@ -208,7 +207,6 @@ pub(in crate::scene_bridge::game_ready) struct GameReadyPrefabSpec {
     pub(in crate::scene_bridge::game_ready) enabled: bool,
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(in crate::scene_bridge::game_ready) enum GameReadyDefinitionApplyMode {
     /// Resolve metadata/dependency graph only. No ECS marker and no render packet
@@ -222,13 +220,17 @@ pub(in crate::scene_bridge::game_ready) enum GameReadyDefinitionApplyMode {
 }
 
 impl Default for GameReadyDefinitionApplyMode {
-    fn default() -> Self { Self::MetadataOnly }
+    fn default() -> Self {
+        Self::MetadataOnly
+    }
 }
 
 impl GameReadyDefinitionApplyMode {
     pub(in crate::scene_bridge::game_ready) fn from_str(value: &str) -> Self {
         match value.trim().to_ascii_lowercase().as_str() {
-            "instantiate" | "instantiate_marker" | "marker" | "diagnostic_marker" => Self::InstantiateMarker,
+            "instantiate" | "instantiate_marker" | "marker" | "diagnostic_marker" => {
+                Self::InstantiateMarker
+            }
             _ => Self::MetadataOnly,
         }
     }
@@ -283,4 +285,3 @@ pub(in crate::scene_bridge::game_ready) struct GameReadyPhysicsSpec {
     pub(in crate::scene_bridge::game_ready) gravity: f32,
     pub(in crate::scene_bridge::game_ready) contact_skin: f32,
 }
-

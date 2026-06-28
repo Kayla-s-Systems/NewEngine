@@ -40,7 +40,9 @@ impl AssetErrorKind {
             "not_ready" | "notready" | "asset_not_ready" => Some(Self::NotReady),
             "not_found" | "notfound" | "missing" => Some(Self::NotFound),
             "decode_failed" | "decode" | "decodefailed" => Some(Self::DecodeFailed),
-            "unsupported_format" | "unsupported" | "unsupportedformat" => Some(Self::UnsupportedFormat),
+            "unsupported_format" | "unsupported" | "unsupportedformat" => {
+                Some(Self::UnsupportedFormat)
+            }
             "io" | "i/o" => Some(Self::Io),
             "invalid_request" | "bad_request" | "invalid" => Some(Self::InvalidRequest),
             "service_unavailable" | "unavailable" => Some(Self::ServiceUnavailable),
@@ -197,13 +199,33 @@ impl AssetError {
 impl core::fmt::Display for AssetError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match (&self.logical_path, &self.id_hex32, &self.detail) {
-            (Some(path), Some(id), Some(detail)) => write!(f, "{}: {} path='{}' id={} detail='{}'", self.kind, self.message, path, id, detail),
-            (Some(path), Some(id), None) => write!(f, "{}: {} path='{}' id={}", self.kind, self.message, path, id),
-            (Some(path), None, Some(detail)) => write!(f, "{}: {} path='{}' detail='{}'", self.kind, self.message, path, detail),
-            (None, Some(id), Some(detail)) => write!(f, "{}: {} id={} detail='{}'", self.kind, self.message, id, detail),
-            (Some(path), None, None) => write!(f, "{}: {} path='{}'", self.kind, self.message, path),
+            (Some(path), Some(id), Some(detail)) => write!(
+                f,
+                "{}: {} path='{}' id={} detail='{}'",
+                self.kind, self.message, path, id, detail
+            ),
+            (Some(path), Some(id), None) => write!(
+                f,
+                "{}: {} path='{}' id={}",
+                self.kind, self.message, path, id
+            ),
+            (Some(path), None, Some(detail)) => write!(
+                f,
+                "{}: {} path='{}' detail='{}'",
+                self.kind, self.message, path, detail
+            ),
+            (None, Some(id), Some(detail)) => write!(
+                f,
+                "{}: {} id={} detail='{}'",
+                self.kind, self.message, id, detail
+            ),
+            (Some(path), None, None) => {
+                write!(f, "{}: {} path='{}'", self.kind, self.message, path)
+            }
             (None, Some(id), None) => write!(f, "{}: {} id={}", self.kind, self.message, id),
-            (None, None, Some(detail)) => write!(f, "{}: {} detail='{}'", self.kind, self.message, detail),
+            (None, None, Some(detail)) => {
+                write!(f, "{}: {} detail='{}'", self.kind, self.message, detail)
+            }
             (None, None, None) => write!(f, "{}: {}", self.kind, self.message),
         }
     }
@@ -230,17 +252,32 @@ pub fn decode_asset_error_wire(value: &str) -> Option<AssetError> {
 pub fn classify_text_asset_error(message: impl Into<String>) -> AssetError {
     let message = message.into();
     let lower = message.to_ascii_lowercase();
-    let kind = if lower.contains("not ready") || lower.contains("loading") || lower.contains("queued") {
+    let kind = if lower.contains("not ready")
+        || lower.contains("loading")
+        || lower.contains("queued")
+    {
         AssetErrorKind::NotReady
-    } else if lower.contains("not found") || lower.contains("missing") || lower.contains("no such") {
+    } else if lower.contains("not found") || lower.contains("missing") || lower.contains("no such")
+    {
         AssetErrorKind::NotFound
-    } else if lower.contains("unsupported") || lower.contains("bad magic") || lower.contains("bad format") {
+    } else if lower.contains("unsupported")
+        || lower.contains("bad magic")
+        || lower.contains("bad format")
+    {
         AssetErrorKind::UnsupportedFormat
-    } else if lower.contains("decode") || lower.contains("parse") || lower.contains("bad json") || lower.contains("non-utf8") {
+    } else if lower.contains("decode")
+        || lower.contains("parse")
+        || lower.contains("bad json")
+        || lower.contains("non-utf8")
+    {
         AssetErrorKind::DecodeFailed
-    } else if lower.contains("io") || lower.contains("failed to read") || lower.contains("permission denied") {
+    } else if lower.contains("io")
+        || lower.contains("failed to read")
+        || lower.contains("permission denied")
+    {
         AssetErrorKind::Io
-    } else if lower.contains("bad id") || lower.contains("empty path") || lower.contains("invalid") {
+    } else if lower.contains("bad id") || lower.contains("empty path") || lower.contains("invalid")
+    {
         AssetErrorKind::InvalidRequest
     } else {
         AssetErrorKind::Internal

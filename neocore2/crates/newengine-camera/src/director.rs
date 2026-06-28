@@ -138,9 +138,7 @@ impl CameraDirectorState {
     #[inline]
     pub fn blend_level(&self) -> f32 {
         match self.render_state {
-            CameraRenderState::InterpolatingIn => {
-                ratio(self.elapsed_sec, self.blend.blend_in_sec)
-            }
+            CameraRenderState::InterpolatingIn => ratio(self.elapsed_sec, self.blend.blend_in_sec),
             CameraRenderState::InterpolatingOut => {
                 1.0 - ratio(self.elapsed_sec, self.blend.blend_out_sec)
             }

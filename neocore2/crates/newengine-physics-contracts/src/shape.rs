@@ -11,7 +11,9 @@ pub enum CollisionShapeDesc {
 impl Default for CollisionShapeDesc {
     #[inline]
     fn default() -> Self {
-        Self::Box { half_extents: [0.5, 0.5, 0.5] }
+        Self::Box {
+            half_extents: [0.5, 0.5, 0.5],
+        }
     }
 }
 
@@ -26,8 +28,13 @@ impl CollisionShapeDesc {
                     half_extents[2].abs().clamp(0.001, 10_000.0),
                 ],
             },
-            Self::Sphere { radius } => Self::Sphere { radius: radius.abs().clamp(0.001, 10_000.0) },
-            Self::Capsule { radius, half_height } => Self::Capsule {
+            Self::Sphere { radius } => Self::Sphere {
+                radius: radius.abs().clamp(0.001, 10_000.0),
+            },
+            Self::Capsule {
+                radius,
+                half_height,
+            } => Self::Capsule {
                 radius: radius.abs().clamp(0.001, 10_000.0),
                 half_height: half_height.abs().clamp(0.0, 10_000.0),
             },
@@ -41,10 +48,16 @@ impl CollisionShapeDesc {
                 Vec3::ZERO,
                 Vec3::new(half_extents[0], half_extents[1], half_extents[2]),
             ),
-            Self::Sphere { radius } => Aabb::from_center_half_extents(Vec3::ZERO, Vec3::splat(radius)),
-            Self::Capsule { radius, half_height } => {
-                Aabb::from_center_half_extents(Vec3::ZERO, Vec3::new(radius, half_height + radius, radius))
+            Self::Sphere { radius } => {
+                Aabb::from_center_half_extents(Vec3::ZERO, Vec3::splat(radius))
             }
+            Self::Capsule {
+                radius,
+                half_height,
+            } => Aabb::from_center_half_extents(
+                Vec3::ZERO,
+                Vec3::new(radius, half_height + radius, radius),
+            ),
         }
     }
 
@@ -56,7 +69,10 @@ impl CollisionShapeDesc {
                 Sphere::new(Vec3::ZERO, he.length().max(0.001))
             }
             Self::Sphere { radius } => Sphere::new(Vec3::ZERO, radius),
-            Self::Capsule { radius, half_height } => Sphere::new(Vec3::ZERO, (half_height + radius).max(0.001)),
+            Self::Capsule {
+                radius,
+                half_height,
+            } => Sphere::new(Vec3::ZERO, (half_height + radius).max(0.001)),
         }
     }
 

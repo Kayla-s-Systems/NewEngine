@@ -3,7 +3,10 @@ pub(crate) fn publish_surface_node(node: &UiSurfaceNode) {
     let payload = match serde_json::to_vec(node) {
         Ok(payload) => payload,
         Err(e) => {
-            newengine_ulog_api::ulog::warn!("ui gateway: failed to encode surface node surface='{}': {e}", node.surface_id);
+            newengine_ulog_api::ulog::warn!(
+                "ui gateway: failed to encode surface node surface='{}': {e}",
+                node.surface_id
+            );
             return;
         }
     };
@@ -20,7 +23,6 @@ pub(crate) fn publish_surface_node(node: &UiSurfaceNode) {
         Err(e) => newengine_ulog_api::ulog::warn!("ui gateway: surface node publish failed surface='{}' err='{e}'", node.surface_id),
     }
 }
-
 
 pub(crate) fn publish_node_tree_request(request: &UiNodeTreeRequest) {
     let payload = match serde_json::to_vec(request) {
@@ -68,12 +70,19 @@ pub(crate) fn publish_debug_overlay_telemetry(telemetry: &UiRuntimeDebugOverlayT
         return;
     }
     let mut lines = if telemetry.lines.is_empty() {
-        telemetry.text.lines().map(str::to_owned).collect::<Vec<_>>()
+        telemetry
+            .text
+            .lines()
+            .map(str::to_owned)
+            .collect::<Vec<_>>()
     } else {
         telemetry.lines.clone()
     };
     if lines.is_empty() {
-        lines.push(format!("frame={} source={}", telemetry.frame_index, telemetry.source));
+        lines.push(format!(
+            "frame={} source={}",
+            telemetry.frame_index, telemetry.source
+        ));
     }
     let node = UiSurfaceNode {
         version: 1,
@@ -89,8 +98,14 @@ pub(crate) fn publish_debug_overlay_telemetry(telemetry: &UiRuntimeDebugOverlayT
         title: "RUNTIME DEBUG".to_owned(),
         subtitle: telemetry.source.clone(),
         body_lines: lines.clone(),
-        footer_lines: vec!["Runtime Debug is a bottom-layer surface; other UI may cover it.".to_owned()],
-        style_tags: vec!["retained".to_owned(), "runtime-debug".to_owned(), "bottom-layer".to_owned()],
+        footer_lines: vec![
+            "Runtime Debug is a bottom-layer surface; other UI may cover it.".to_owned(),
+        ],
+        style_tags: vec![
+            "retained".to_owned(),
+            "runtime-debug".to_owned(),
+            "bottom-layer".to_owned(),
+        ],
         theme_id: UI_THEME_NORTHSTAR_DEFAULT.to_owned(),
         style_ref: None,
         component_id: UI_COMPONENT_PANEL.to_owned(),
@@ -100,12 +115,9 @@ pub(crate) fn publish_debug_overlay_telemetry(telemetry: &UiRuntimeDebugOverlayT
                 .with_tone(UiNodeTone::Accent)
                 .tagged("debug-toggle"),
         )
-        .chain(
-            lines
-                .iter()
-                .enumerate()
-                .map(|(index, line)| UiComponentNode::text(format!("debug.line.{index}"), line.clone())),
-        )
+        .chain(lines.iter().enumerate().map(|(index, line)| {
+            UiComponentNode::text(format!("debug.line.{index}"), line.clone())
+        }))
         .collect(),
         message: None,
         style: UiSurfaceStyle {
@@ -121,5 +133,3 @@ pub(crate) fn publish_debug_overlay_telemetry(telemetry: &UiRuntimeDebugOverlayT
     };
     publish_surface_node(&node);
 }
-
-

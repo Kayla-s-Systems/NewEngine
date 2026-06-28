@@ -33,7 +33,12 @@ impl MaterialSourceDocument {
 
     #[inline]
     pub fn with_fallback_name(mut self, fallback: impl Into<String>) -> Self {
-        if self.name.as_ref().map(|v| v.trim().is_empty()).unwrap_or(true) {
+        if self
+            .name
+            .as_ref()
+            .map(|v| v.trim().is_empty())
+            .unwrap_or(true)
+        {
             self.name = normalize_name(Some(fallback.into()));
         }
         self
@@ -54,7 +59,6 @@ struct RawMaterialSourceDocument {
 
     /// Preferred nested texture bindings.
     textures: Option<MaterialTextureBindings>,
-
 }
 
 impl Default for RawMaterialSourceDocument {
@@ -91,7 +95,9 @@ pub fn parse_material_source_json(json: &str) -> Result<MaterialSourceDocument, 
 }
 
 #[inline]
-pub fn parse_material_source_slice(bytes: &[u8]) -> Result<MaterialSourceDocument, serde_json::Error> {
+pub fn parse_material_source_slice(
+    bytes: &[u8],
+) -> Result<MaterialSourceDocument, serde_json::Error> {
     let raw = serde_json::from_slice::<RawMaterialSourceDocument>(bytes)?;
     Ok(raw.into_source())
 }

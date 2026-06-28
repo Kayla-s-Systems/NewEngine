@@ -215,5 +215,9 @@ fn default_priority_for_channel(channel: CameraChannel) -> i32 {
 
 #[inline]
 fn finite_non_negative(v: f32) -> f32 {
-    if v.is_finite() && v > 0.0 { v } else { 0.0 }
+    if v.is_finite() && v > 0.0 {
+        v
+    } else {
+        0.0
+    }
 }

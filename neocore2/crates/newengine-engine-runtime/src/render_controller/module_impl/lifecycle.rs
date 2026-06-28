@@ -32,9 +32,7 @@ impl RuntimeRenderController {
         &mut self,
         ctx: &mut ModuleCtx<'_, E>,
     ) -> EngineResult<()> {
-        newengine_core::crash::record_breadcrumb(
-            "render controller: shutdown begin".to_string(),
-        );
+        newengine_core::crash::record_breadcrumb("render controller: shutdown begin".to_string());
         self.sync_cursor_state(ctx, CursorState::released());
         self.viewport.pass_disabled = true;
         Ok(())

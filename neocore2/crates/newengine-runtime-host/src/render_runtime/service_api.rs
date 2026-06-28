@@ -2,16 +2,18 @@ use std::sync::Mutex;
 
 use newengine_core::render::{
     BeginFrameDesc, BeginRenderTargetDesc, BindGroupDesc, BindGroupId, BindGroupLayoutDesc,
-    BindGroupLayoutId, BufferDesc, BufferId, BufferSlice, DrawArgs, DrawIndexedArgs,
-    IndexFormat, PipelineDesc, PipelineId, PipelineWarmupDesc, PipelineWarmupReport, RectI32, RenderApi,
-    RenderDrawListKind, RenderFrameEnvelope, RenderGraphCompileReport, RenderGraphDesc, RenderGraphPassKind,
-    RenderGraphSubmitReport, RenderGraphValidationReport, RenderTargetDesc, RenderDiagnosticsSnapshot,
-    RenderBackendEvent, RenderTargetId, RenderWorkBudget, SamplerDesc,
+    BindGroupLayoutId, BufferDesc, BufferId, BufferSlice, DrawArgs, DrawIndexedArgs, IndexFormat,
+    PipelineDesc, PipelineId, PipelineWarmupDesc, PipelineWarmupReport, RectI32, RenderApi,
+    RenderBackendEvent, RenderDiagnosticsSnapshot, RenderDrawListKind, RenderFrameEnvelope,
+    RenderGraphCompileReport, RenderGraphDesc, RenderGraphPassKind, RenderGraphSubmitReport,
+    RenderGraphValidationReport, RenderTargetDesc, RenderTargetId, RenderWorkBudget, SamplerDesc,
     SamplerId, ShaderDesc, ShaderId, ShaderRuntimeCacheStats, TextureDesc, TextureId,
     TextureResidencySnapshot, UiDrawList, UiTexId, UploadPumpDesc, UploadPumpReport, Viewport,
 };
 use newengine_core::{EngineError, EngineResult};
-use newengine_render_api::{RenderCommand, RenderCommandResponse, RenderServiceRequest, RenderServiceResponse};
+use newengine_render_api::{
+    RenderCommand, RenderCommandResponse, RenderServiceRequest, RenderServiceResponse,
+};
 
 use crate::render_runtime::client::RenderServiceClient;
 
@@ -52,7 +54,10 @@ impl ServiceBackedRenderApi {
             std::mem::take(&mut *guard)
         };
 
-        let responses = self.client.command_batch(pending).map_err(EngineError::other)?;
+        let responses = self
+            .client
+            .command_batch(pending)
+            .map_err(EngineError::other)?;
         for response in responses {
             match response {
                 RenderCommandResponse::Unit => {}
@@ -315,7 +320,6 @@ impl RenderApi for ServiceBackedRenderApi {
         self.queue_unit(RenderCommand::SetRenderPhase { phase })
     }
 
-
     fn set_draw_list_kind(&mut self, kind: Option<RenderDrawListKind>) -> EngineResult<()> {
         self.queue_unit(RenderCommand::SetDrawListKind { kind })
     }
@@ -373,7 +377,10 @@ impl RenderApi for ServiceBackedRenderApi {
         }
     }
 
-    fn submit_frame(&mut self, frame: RenderFrameEnvelope) -> EngineResult<RenderGraphSubmitReport> {
+    fn submit_frame(
+        &mut self,
+        frame: RenderFrameEnvelope,
+    ) -> EngineResult<RenderGraphSubmitReport> {
         match self.invoke_service(RenderServiceRequest::SubmitFrame(frame))? {
             RenderServiceResponse::GraphSubmitReport(report) => Ok(report),
             other => Err(EngineError::other(format!(
@@ -392,7 +399,6 @@ impl RenderApi for ServiceBackedRenderApi {
             ))),
         }
     }
-
 
     fn pump_uploads(&mut self, desc: UploadPumpDesc) -> EngineResult<UploadPumpReport> {
         match self.invoke_service(RenderServiceRequest::PumpUploads(desc))? {

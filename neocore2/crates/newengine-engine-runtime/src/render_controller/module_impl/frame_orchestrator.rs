@@ -3,27 +3,29 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::OnceLock;
 
+use crate::gameplay::GameRunMode;
 use newengine_core::render::{
     Extent2D, RectI32, RenderApi, RenderFrameDebugSnapshot, RenderTargetId, TextureFormat, Viewport,
 };
-use crate::gameplay::GameRunMode;
 use newengine_core::{EngineResult, JobSystemHandle};
 use newengine_render_feature_api::SceneExtractionCtx;
 use newengine_render_frame_graph::{standard_runtime_frame, StandardRuntimePipelineDesc};
 use newengine_scene::Scene;
 use newengine_ui_api::{UiDrawList, UiPaintCommand};
 
+use super::super::controller::RuntimeRenderController;
+use super::super::error_policy::{
+    is_backend_device_lost_error, is_transient_shader_pipeline_error,
+};
 use super::draw_lists::DrawListBuildCtx;
 use super::feature_extraction::FeatureExtractionFrame;
 use super::frame_envelope_builder::build_runtime_frame_envelope;
 use super::frame_snapshots::SceneRenderSnapshot;
 use super::frame_submit::submit_frame_envelope;
-use super::profiling::{emit_timed_profile, FrameCpuProfile};
 use super::frame_types::{PlayableFrameOutcome, RenderFrameScope, WorldFrameState};
+use super::profiling::{emit_timed_profile, FrameCpuProfile};
 use super::{lights, passes, picking, postfx, shadows};
 use crate::scene_bridge::{apply_engine_view_postfx, EngineViewTransitionPhase};
-use super::super::controller::RuntimeRenderController;
-use super::super::error_policy::{is_backend_device_lost_error, is_transient_shader_pipeline_error};
 
 static RENDER_JOB_EVENT_MODE: OnceLock<String> = OnceLock::new();
 static RENDER_JOB_EVENT_INTERVAL: OnceLock<u64> = OnceLock::new();
@@ -48,7 +50,11 @@ impl RenderFrameOrchestrator {
         let view_frame = &world_frame.view_frame;
         let view = view_frame.view;
         let viewproj = view.view_projection;
-        passes::publish_camera_spawn(&controller.bridges.viewport, view.position_ws, view.forward_ws);
+        passes::publish_camera_spawn(
+            &controller.bridges.viewport,
+            view.position_ws,
+            view.forward_ws,
+        );
         controller.bridges.viewport.publish_view_frame(
             view.view,
             view.projection,
@@ -100,7 +106,10 @@ impl RenderFrameOrchestrator {
         } else {
             TextureFormat::Bgra8Unorm
         };
-        let lit = match controller.gpu.require_primary_lit_pipeline_for(scene_color_format, r) {
+        let lit = match controller
+            .gpu
+            .require_primary_lit_pipeline_for(scene_color_format, r)
+        {
             Ok(lit) => lit,
             Err(e) if is_transient_shader_pipeline_error(&e) => {
                 Self::end_viewport_after_transient_pipeline_wait(
@@ -120,12 +129,20 @@ impl RenderFrameOrchestrator {
         cpu_profile.mark("pipeline");
 
         if let Err(e) = controller.pump_scene_gpu_residency(r, scene) {
-            newengine_ulog_api::ulog::warn!("render residency: terrain gpu upload budget failed: {}", e);
+            newengine_ulog_api::ulog::warn!(
+                "render residency: terrain gpu upload budget failed: {}",
+                e
+            );
         }
         cpu_profile.mark("gpu_residency");
 
-        let camera_position = [snapshot.camera_position.x, snapshot.camera_position.y, snapshot.camera_position.z];
-        let base_lights = lights::collect_lights(scene.world()).with_camera_position(camera_position);
+        let camera_position = [
+            snapshot.camera_position.x,
+            snapshot.camera_position.y,
+            snapshot.camera_position.z,
+        ];
+        let base_lights =
+            lights::collect_lights(scene.world()).with_camera_position(camera_position);
         let extent = Extent2D::new(scope.vp_w, scope.vp_h);
         let gpu_safe_profile = runtime_profile.gpu_safe_enabled();
         if gpu_safe_profile {
@@ -142,14 +159,21 @@ impl RenderFrameOrchestrator {
                 lit,
                 viewproj,
                 camera_position,
-                [snapshot.camera_forward.x, snapshot.camera_forward.y, snapshot.camera_forward.z],
+                [
+                    snapshot.camera_forward.x,
+                    snapshot.camera_forward.y,
+                    snapshot.camera_forward.z,
+                ],
                 extent,
                 snapshot.surface_extent,
                 plugin_snapshot,
             ) {
                 Ok(plan) => plan,
                 Err(e) => {
-                    newengine_ulog_api::ulog::warn!("render controller: shadow plan disabled for this frame: {}", e);
+                    newengine_ulog_api::ulog::warn!(
+                        "render controller: shadow plan disabled for this frame: {}",
+                        e
+                    );
                     let _ = r.discard_recorded_commands();
                     shadows::LightShadowPlan::disabled(lit.white_texture)
                 }
@@ -157,8 +181,17 @@ impl RenderFrameOrchestrator {
         };
 
         let render_shadow_map = controller.should_render_shadow_map_this_frame(shadow_plan);
-        controller.set_shadow_caster_cull(if render_shadow_map { shadow_plan.caster_cull } else { None });
-        Self::trace_shadow_plan(controller, scope.trace_frame, shadow_plan, render_shadow_map);
+        controller.set_shadow_caster_cull(if render_shadow_map {
+            shadow_plan.caster_cull
+        } else {
+            None
+        });
+        Self::trace_shadow_plan(
+            controller,
+            scope.trace_frame,
+            shadow_plan,
+            render_shadow_map,
+        );
         cpu_profile.mark("shadow_plan");
 
         let shadow_frame = if shadow_plan.is_active()
@@ -178,7 +211,9 @@ impl RenderFrameOrchestrator {
             // Keep sampling with that same frame until the next scheduled shadow
             // refresh; otherwise a moving sun would sample an old shadow map with
             // a new light matrix and produce swimming/self-shadowing artefacts.
-            controller.cached_shadow_frame().unwrap_or(shadow_plan.frame)
+            controller
+                .cached_shadow_frame()
+                .unwrap_or(shadow_plan.frame)
         } else {
             shadow_plan.frame
         };
@@ -243,7 +278,11 @@ impl RenderFrameOrchestrator {
             newengine_jobs_api::job_pass::FEATURE_EXTRACT,
             newengine_jobs_api::EngineTaskPhase::Completed,
             "RenderPrep pass completed",
-            format!("Feature extraction completed profile_ms={:.2} breakdown={}", features.profile_total_ms(), features.profile_breakdown()),
+            format!(
+                "Feature extraction completed profile_ms={:.2} breakdown={}",
+                features.profile_total_ms(),
+                features.profile_breakdown()
+            ),
             Some(1.0),
         );
         cpu_profile.mark("feature_extract");
@@ -257,19 +296,34 @@ impl RenderFrameOrchestrator {
         let ui_backdrop = controller.ui.primary.ui_backdrop_postfx();
         let ui_enabled = scope.ui_enabled || ui.is_some();
         let frame_plan = standard_runtime_frame(
-            StandardRuntimePipelineDesc::new(controller.frame.frame_index, Extent2D::new(scope.w, scope.h), extent)
-                .viewport_is_surface(scope.direct_surface_viewport)
-                .viewport_render_target(rt)
-                .shadow(runtime_profile.shadows_enabled() && render_shadow_map && shadow_rt_for_graph.is_some(), shadow_plan.resolution)
-                .shadow_cascades(if runtime_profile.shadows_enabled() { shadow_plan.cascade_count() } else { 0 })
-                .shadow_render_target(shadow_rt_for_graph)
-                .deferred(runtime_profile.deferred_enabled())
-                .hdr_scene(runtime_profile.hdr_scene_enabled())
-                .postfx(runtime_profile.postfx_enabled())
-                .ui(ui_enabled)
-                .ui_backdrop_blur(ui_enabled && ui_backdrop.enabled && ui_backdrop.blur_radius_px > 0.05)
-                .debug_overlay(false)
-                .draw_lists(draw_list_descs.clone()),
+            StandardRuntimePipelineDesc::new(
+                controller.frame.frame_index,
+                Extent2D::new(scope.w, scope.h),
+                extent,
+            )
+            .viewport_is_surface(scope.direct_surface_viewport)
+            .viewport_render_target(rt)
+            .shadow(
+                runtime_profile.shadows_enabled()
+                    && render_shadow_map
+                    && shadow_rt_for_graph.is_some(),
+                shadow_plan.resolution,
+            )
+            .shadow_cascades(if runtime_profile.shadows_enabled() {
+                shadow_plan.cascade_count()
+            } else {
+                0
+            })
+            .shadow_render_target(shadow_rt_for_graph)
+            .deferred(runtime_profile.deferred_enabled())
+            .hdr_scene(runtime_profile.hdr_scene_enabled())
+            .postfx(runtime_profile.postfx_enabled())
+            .ui(ui_enabled)
+            .ui_backdrop_blur(
+                ui_enabled && ui_backdrop.enabled && ui_backdrop.blur_radius_px > 0.05,
+            )
+            .debug_overlay(false)
+            .draw_lists(draw_list_descs.clone()),
         );
 
         features.validate_routes(&frame_plan.validate_draw_list_routes())?;
@@ -354,18 +408,31 @@ impl RenderFrameOrchestrator {
             newengine_jobs_api::job_pass::RENDER_SUBMIT,
             newengine_jobs_api::EngineTaskPhase::Completed,
             "Render submit completed",
-            format!("Frame envelope submitted cpu_record_ms={:.2} gpu_submit_ms={:.2}", submit_report.cpu_record_ms, submit_report.gpu_submit_ms),
+            format!(
+                "Frame envelope submitted cpu_record_ms={:.2} gpu_submit_ms={:.2}",
+                submit_report.cpu_record_ms, submit_report.gpu_submit_ms
+            ),
             Some(1.0),
         );
-        Self::trace_cpu_profile(controller.frame.frame_index, scope.trace_frame, &cpu_profile);
+        Self::trace_cpu_profile(
+            controller.frame.frame_index,
+            scope.trace_frame,
+            &cpu_profile,
+        );
         if render_shadow_map {
             controller.mark_shadow_map_rendered(shadow_plan);
         }
-        controller.diagnostics.overlay_metrics.record_graph_submit(submit_report.clone());
+        controller
+            .diagnostics
+            .overlay_metrics
+            .record_graph_submit(submit_report.clone());
 
         let mut debug_notes = Vec::new();
         if let Some(report) = view_frame.diagnostics.clone() {
-            controller.diagnostics.overlay_metrics.record_view_report(report.clone());
+            controller
+                .diagnostics
+                .overlay_metrics
+                .record_view_report(report.clone());
             debug_notes.push(format!(
                 "view director={} mode={} view={} dominant={:?} rendered={} input={} lock={} gate_blocked={} blend_active={} blend_alpha={:.3} events={}",
                 report.active_director,
@@ -383,9 +450,7 @@ impl RenderFrameOrchestrator {
             if report.transition.phase != EngineViewTransitionPhase::Idle {
                 debug_notes.push(format!(
                     "view transition {:?} {:.2}s target={:?}",
-                    report.transition.phase,
-                    report.transition.elapsed_sec,
-                    report.target_entity,
+                    report.transition.phase, report.transition.elapsed_sec, report.target_entity,
                 ));
             }
         }
@@ -419,7 +484,6 @@ impl RenderFrameOrchestrator {
             }),
         })
     }
-
 
     fn render_prep_executor_detail(
         job_system: Option<&JobSystemHandle>,
@@ -520,7 +584,9 @@ impl RenderFrameOrchestrator {
         breakdown: &str,
         ui: Option<&UiDrawList>,
     ) {
-        let ui_stats = ui.map(Self::ui_draw_list_stats).unwrap_or_else(|| "ui=none".to_owned());
+        let ui_stats = ui
+            .map(Self::ui_draw_list_stats)
+            .unwrap_or_else(|| "ui=none".to_owned());
         emit_timed_profile(
             "render feature profile",
             frame_index,
@@ -595,11 +661,7 @@ impl RenderFrameOrchestrator {
         )
     }
 
-    fn trace_cpu_profile(
-        frame_index: u64,
-        trace_frame: bool,
-        profile: &FrameCpuProfile,
-    ) {
+    fn trace_cpu_profile(frame_index: u64, trace_frame: bool, profile: &FrameCpuProfile) {
         emit_timed_profile(
             "render cpu profile",
             frame_index,
@@ -617,10 +679,7 @@ impl RenderFrameOrchestrator {
         scope: RenderFrameScope,
         error: impl std::fmt::Display,
     ) -> EngineResult<()> {
-        log_transient_pipeline_wait_once(
-            controller.frame.frame_index,
-            &format!("{}", error),
-        );
+        log_transient_pipeline_wait_once(controller.frame.frame_index, &format!("{}", error));
         let _ = r.discard_recorded_commands();
         r.set_viewport(Viewport::full(Extent2D::new(scope.w, scope.h)))?;
         r.set_scissor(RectI32::new(0, 0, scope.w as i32, scope.h as i32))?;
@@ -645,7 +704,8 @@ impl RenderFrameOrchestrator {
         scope: RenderFrameScope,
         error: impl std::fmt::Display,
     ) -> EngineResult<()> {
-        controller.disable_viewport_pass("material_gpu_registry.require_primary_lit_pipeline", &error);
+        controller
+            .disable_viewport_pass("material_gpu_registry.require_primary_lit_pipeline", &error);
         r.set_viewport(Viewport::full(Extent2D::new(scope.w, scope.h)))?;
         r.set_scissor(RectI32::new(0, 0, scope.w as i32, scope.h as i32))?;
         if let Some(ui) = ui {
@@ -705,7 +765,6 @@ impl RenderFrameOrchestrator {
         );
     }
 }
-
 
 static GPU_SAFE_PROFILE_LOGGED: AtomicBool = AtomicBool::new(false);
 

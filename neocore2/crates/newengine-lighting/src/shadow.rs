@@ -78,5 +78,9 @@ impl Default for ShadowSettings {
 
 #[inline]
 fn finite_or(v: f32, fallback: f32) -> f32 {
-    if v.is_finite() { v } else { fallback }
+    if v.is_finite() {
+        v
+    } else {
+        fallback
+    }
 }

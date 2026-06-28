@@ -60,10 +60,7 @@ fn validate_one(
     let provider = provider_for(plugins, contract.service_id);
     let provider_service = active_provider_service_id(contract.service_id);
     let source = active_route_source(contract.service_id);
-    let capability = requirement
-        .required_capability_id
-        .unwrap_or("-")
-        .to_owned();
+    let capability = requirement.required_capability_id.unwrap_or("-").to_owned();
     let used_by = runtime_service_user(contract.service_id);
 
     let mut report = ContractReport {
@@ -95,7 +92,10 @@ fn validate_one(
             requirement,
             plugins,
             report,
-            format!("service '{}' has no describe() contract", contract.service_id),
+            format!(
+                "service '{}' has no describe() contract",
+                contract.service_id
+            ),
         );
     };
 
@@ -126,8 +126,14 @@ fn validate_one(
             .required_methods
             .iter()
             .map(|method| {
-                let label = method.rsplit_once('.').map(|(_, tail)| tail).unwrap_or(method);
-                if missing.iter().any(|missing_method| missing_method == method) {
+                let label = method
+                    .rsplit_once('.')
+                    .map(|(_, tail)| tail)
+                    .unwrap_or(method);
+                if missing
+                    .iter()
+                    .any(|missing_method| missing_method == method)
+                {
                     format!("{label}=no")
                 } else {
                     format!("{label}=yes")
@@ -182,7 +188,8 @@ fn finish_violation(
 fn emit_contract_line(report: &ContractReport) {
     match report.status {
         "ok" => {
-            let parent = newengine_service_api::engine_gateway_parent_id(&report.service_id).unwrap_or_else(|| "<root>".to_owned());
+            let parent = newengine_service_api::engine_gateway_parent_id(&report.service_id)
+                .unwrap_or_else(|| "<root>".to_owned());
             newengine_ulog_api::ulog::debug!(
                 "runtime contract ok: service='{}' parent='{}' provider_service='{}' source='{}' expected='{}'",
                 report.service_id,
@@ -220,8 +227,10 @@ fn emit_runtime_api_table(reports: &[ContractReport]) {
         let rows = reports
             .iter()
             .map(|report| {
-                let root = newengine_service_api::engine_gateway_root_id(&report.service_id).unwrap_or_else(|| report.service_id.clone());
-                let parent = newengine_service_api::engine_gateway_parent_id(&report.service_id).unwrap_or_else(|| "<root>".to_owned());
+                let root = newengine_service_api::engine_gateway_root_id(&report.service_id)
+                    .unwrap_or_else(|| report.service_id.clone());
+                let parent = newengine_service_api::engine_gateway_parent_id(&report.service_id)
+                    .unwrap_or_else(|| "<root>".to_owned());
                 vec![
                     root,
                     parent,
@@ -259,9 +268,18 @@ fn emit_runtime_api_table(reports: &[ContractReport]) {
         return;
     }
 
-    let ok = reports.iter().filter(|report| report.status == "ok").count();
-    let degraded = reports.iter().filter(|report| report.status == "degraded").count();
-    let fatal = reports.iter().filter(|report| report.status == "fatal").count();
+    let ok = reports
+        .iter()
+        .filter(|report| report.status == "ok")
+        .count();
+    let degraded = reports
+        .iter()
+        .filter(|report| report.status == "degraded")
+        .count();
+    let fatal = reports
+        .iter()
+        .filter(|report| report.status == "fatal")
+        .count();
     newengine_ulog_api::ulog::info!(
         "runtime api: contracts total={} ok={} degraded={} fatal={}",
         reports.len(),
@@ -270,7 +288,6 @@ fn emit_runtime_api_table(reports: &[ContractReport]) {
         fatal,
     );
 }
-
 
 fn active_route_source(service_id: &str) -> String {
     newengine_plugin_host::active_engine_gateway_route(service_id)

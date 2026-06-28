@@ -28,7 +28,9 @@ fn state() -> &'static RwLock<PluginRootObserverState> {
 #[inline]
 pub fn register_plugin_root_observer(observer: PluginRootObserver, replay_existing: bool) {
     let replay = {
-        let mut guard = state().write().expect("plugin root observer state poisoned");
+        let mut guard = state()
+            .write()
+            .expect("plugin root observer state poisoned");
         let replay = if replay_existing {
             guard.loaded.clone()
         } else {
@@ -46,7 +48,9 @@ pub fn register_plugin_root_observer(observer: PluginRootObserver, replay_existi
 #[inline]
 pub(crate) fn record_loaded_plugin_root(snapshot: LoadedPluginRootSnapshot) {
     let observers = {
-        let mut guard = state().write().expect("plugin root observer state poisoned");
+        let mut guard = state()
+            .write()
+            .expect("plugin root observer state poisoned");
         if let Some(existing) = guard
             .loaded
             .iter_mut()

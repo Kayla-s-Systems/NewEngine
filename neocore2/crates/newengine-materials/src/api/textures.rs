@@ -1,7 +1,6 @@
 use crate::api::MaterialId;
 use crate::texture_refs::normalize_material_texture_reference;
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum MaterialTextureSlot {
@@ -83,7 +82,11 @@ impl MaterialTextureResidency {
     }
 
     #[inline]
-    pub fn failed(slot: MaterialTextureSlot, path: impl Into<String>, message: impl Into<String>) -> Self {
+    pub fn failed(
+        slot: MaterialTextureSlot,
+        path: impl Into<String>,
+        message: impl Into<String>,
+    ) -> Self {
         Self {
             slot,
             path: Some(path.into()),
@@ -110,7 +113,6 @@ pub struct MaterialTextureBindings {
     pub uv_scale: [f32; 2],
     pub uv_offset: [f32; 2],
 }
-
 
 impl Default for MaterialTextureBindings {
     #[inline]

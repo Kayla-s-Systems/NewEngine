@@ -1,11 +1,12 @@
-use serde::{Deserialize, Serialize};
 use newengine_assets_api::{normalize_asset_reference_text, parse_asset_reference};
+use serde::{Deserialize, Serialize};
 
 use crate::{
-    model_asset_chain_role_by_extension, CLIP_DICTIONARY_ASSET_KIND, CLIP_DICTIONARY_EXTENSION, DEFINITION_ENTRIES_SCHEMA,
-    DRAWABLE_DICTIONARY_ASSET_KIND, DRAWABLE_DICTIONARY_EXTENSION, OBJECT_TYPE_DEFINITIONS_ASSET_KIND,
-    OBJECT_TYPE_DEFINITIONS_CONTAINER, OBJECT_TYPE_DEFINITIONS_EXTENSION, PHYSICS_DICTIONARY_ASSET_KIND,
-    PHYSICS_DICTIONARY_EXTENSION, TEXTURE_DICTIONARY_ASSET_KIND, TEXTURE_DICTIONARY_EXTENSION,
+    model_asset_chain_role_by_extension, CLIP_DICTIONARY_ASSET_KIND, CLIP_DICTIONARY_EXTENSION,
+    DEFINITION_ENTRIES_SCHEMA, DRAWABLE_DICTIONARY_ASSET_KIND, DRAWABLE_DICTIONARY_EXTENSION,
+    OBJECT_TYPE_DEFINITIONS_ASSET_KIND, OBJECT_TYPE_DEFINITIONS_CONTAINER,
+    OBJECT_TYPE_DEFINITIONS_EXTENSION, PHYSICS_DICTIONARY_ASSET_KIND, PHYSICS_DICTIONARY_EXTENSION,
+    TEXTURE_DICTIONARY_ASSET_KIND, TEXTURE_DICTIONARY_EXTENSION,
 };
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -16,7 +17,12 @@ pub struct DefinitionEntriesRequest {
 }
 
 impl Default for DefinitionEntriesRequest {
-    fn default() -> Self { Self { source: String::new(), selector: None } }
+    fn default() -> Self {
+        Self {
+            source: String::new(),
+            selector: None,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -33,7 +39,15 @@ pub struct DefinitionAssetRef {
 
 impl Default for DefinitionAssetRef {
     fn default() -> Self {
-        Self { name: String::new(), role: String::new(), extension: String::new(), asset_kind: String::new(), logical_path_hint: None, entry: None, canonical_ref: String::new() }
+        Self {
+            name: String::new(),
+            role: String::new(),
+            extension: String::new(),
+            asset_kind: String::new(),
+            logical_path_hint: None,
+            entry: None,
+            canonical_ref: String::new(),
+        }
     }
 }
 
@@ -41,7 +55,9 @@ impl DefinitionAssetRef {
     pub fn named(name: impl Into<String>, extension: &str, asset_kind: &str) -> Option<Self> {
         let name = name.into();
         let normalized = normalize_definition_asset_name(&name);
-        if normalized.is_empty() { return None; }
+        if normalized.is_empty() {
+            return None;
+        }
         let extension = extension.trim_start_matches('.').to_ascii_lowercase();
         let reference_text = ensure_reference_extension(&normalized, &extension);
         let reference = parse_asset_reference(&reference_text).ok()?;
@@ -92,7 +108,14 @@ pub struct DefinitionDictionaries {
 }
 
 impl Default for DefinitionDictionaries {
-    fn default() -> Self { Self { texture: None, drawable: None, clip: None, physics: None } }
+    fn default() -> Self {
+        Self {
+            texture: None,
+            drawable: None,
+            clip: None,
+            physics: None,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -105,7 +128,14 @@ pub struct DefinitionBounds {
 }
 
 impl Default for DefinitionBounds {
-    fn default() -> Self { Self { bb_min: [0.0; 3], bb_max: [0.0; 3], bs_centre: [0.0; 3], bs_radius: 0.0 } }
+    fn default() -> Self {
+        Self {
+            bb_min: [0.0; 3],
+            bb_max: [0.0; 3],
+            bs_centre: [0.0; 3],
+            bs_radius: 0.0,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -170,28 +200,40 @@ impl Default for DefinitionEntriesManifest {
 
 pub fn build_definition_asset_chain(source: &str, entry: &DefinitionEntry) -> DefinitionAssetChain {
     DefinitionAssetChain {
-        definition_type: DefinitionAssetRef::named(source, OBJECT_TYPE_DEFINITIONS_EXTENSION, OBJECT_TYPE_DEFINITIONS_ASSET_KIND),
+        definition_type: DefinitionAssetRef::named(
+            source,
+            OBJECT_TYPE_DEFINITIONS_EXTENSION,
+            OBJECT_TYPE_DEFINITIONS_ASSET_KIND,
+        ),
         drawable_dictionary: entry
             .dictionaries
             .drawable
             .as_deref()
             .or_else(|| drawable_name_from_entry(entry))
-            .and_then(|name| DefinitionAssetRef::named(name, DRAWABLE_DICTIONARY_EXTENSION, DRAWABLE_DICTIONARY_ASSET_KIND)),
-        texture_dictionary: entry
-            .dictionaries
-            .texture
-            .as_deref()
-            .and_then(|name| DefinitionAssetRef::named(name, TEXTURE_DICTIONARY_EXTENSION, TEXTURE_DICTIONARY_ASSET_KIND)),
-        clip_dictionary: entry
-            .dictionaries
-            .clip
-            .as_deref()
-            .and_then(|name| DefinitionAssetRef::named(name, CLIP_DICTIONARY_EXTENSION, CLIP_DICTIONARY_ASSET_KIND)),
-        physics_dictionary: entry
-            .dictionaries
-            .physics
-            .as_deref()
-            .and_then(|name| DefinitionAssetRef::named(name, PHYSICS_DICTIONARY_EXTENSION, PHYSICS_DICTIONARY_ASSET_KIND)),
+            .and_then(|name| {
+                DefinitionAssetRef::named(
+                    name,
+                    DRAWABLE_DICTIONARY_EXTENSION,
+                    DRAWABLE_DICTIONARY_ASSET_KIND,
+                )
+            }),
+        texture_dictionary: entry.dictionaries.texture.as_deref().and_then(|name| {
+            DefinitionAssetRef::named(
+                name,
+                TEXTURE_DICTIONARY_EXTENSION,
+                TEXTURE_DICTIONARY_ASSET_KIND,
+            )
+        }),
+        clip_dictionary: entry.dictionaries.clip.as_deref().and_then(|name| {
+            DefinitionAssetRef::named(name, CLIP_DICTIONARY_EXTENSION, CLIP_DICTIONARY_ASSET_KIND)
+        }),
+        physics_dictionary: entry.dictionaries.physics.as_deref().and_then(|name| {
+            DefinitionAssetRef::named(
+                name,
+                PHYSICS_DICTIONARY_EXTENSION,
+                PHYSICS_DICTIONARY_ASSET_KIND,
+            )
+        }),
     }
 }
 
@@ -216,16 +258,23 @@ fn drawable_name_from_entry(entry: &DefinitionEntry) -> Option<&str> {
     None
 }
 
-
 fn ensure_reference_extension(value: &str, extension: &str) -> String {
-    let normalized = normalize_asset_reference_text(value).unwrap_or_else(|_| normalize_definition_asset_name(value));
+    let normalized = normalize_asset_reference_text(value)
+        .unwrap_or_else(|_| normalize_definition_asset_name(value));
     let (path, entry) = normalized
         .rsplit_once('@')
         .map(|(path, entry)| (path.to_owned(), Some(entry.to_owned())))
         .unwrap_or_else(|| (normalized.clone(), None));
     let lower_path = path.to_ascii_lowercase();
-    let path = if lower_path.ends_with(&format!(".{extension}")) { path } else { format!("{path}.{extension}") };
-    match entry { Some(entry) if !entry.trim().is_empty() => format!("{path}@{}", entry.trim()), _ => path }
+    let path = if lower_path.ends_with(&format!(".{extension}")) {
+        path
+    } else {
+        format!("{path}.{extension}")
+    };
+    match entry {
+        Some(entry) if !entry.trim().is_empty() => format!("{path}@{}", entry.trim()),
+        _ => path,
+    }
 }
 
 fn normalize_definition_asset_name(value: &str) -> String {

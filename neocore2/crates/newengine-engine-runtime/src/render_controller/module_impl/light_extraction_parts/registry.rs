@@ -2,20 +2,26 @@ use std::sync::Arc;
 
 use newengine_core::render::{
     BackendShadowCapabilities, LightExtractionProviderRequest, LightExtractionProviderResponse,
-    LightExtractionSnapshot, LightPlanContribution, LightPlanContributionKind, RenderBoundsSnapshot,
-    RenderViewSnapshot, RenderTargetId, ShadowSettingsSnapshot, TextureId,
+    LightExtractionSnapshot, LightPlanContribution, LightPlanContributionKind,
+    RenderBoundsSnapshot, RenderTargetId, RenderViewSnapshot, ShadowSettingsSnapshot, TextureId,
 };
 use newengine_core::EngineResult;
-use newengine_plugin_api::{CapabilityKind, CapabilityRole, CAPABILITY_ID_RENDER_LIGHT_EXTRACTION_PROVIDER};
-use newengine_plugin_host::{has_service, PluginsSnapshot};
 use newengine_lighting::ShadowMethod;
 use newengine_math::Mat4;
+use newengine_plugin_api::{
+    CapabilityKind, CapabilityRole, CAPABILITY_ID_RENDER_LIGHT_EXTRACTION_PROVIDER,
+};
+use newengine_plugin_host::{has_service, PluginsSnapshot};
 use newengine_render_feature_api::{
     LightExtractionCommand, LightExtractionCtx, LightExtractionProvider, LightShadowPlan,
     LIGHT_PROVIDER_CAP_EXTRACTION,
 };
 use serde::Deserialize;
-#[path = "plugin_bridge.rs"] mod plugin_bridge; use self::plugin_bridge::{build_light_provider_request, light_plan_from_contribution, parse_plugin_light_provider};
+#[path = "plugin_bridge.rs"]
+mod plugin_bridge;
+use self::plugin_bridge::{
+    build_light_provider_request, light_plan_from_contribution, parse_plugin_light_provider,
+};
 
 pub(super) const LIGHT_PROVIDER_TAG_PLUGIN: &str = "plugin";
 
@@ -30,7 +36,6 @@ pub(crate) struct ExternalLightExtractionProviderDesc {
     pub(super) gateway_id: String,
     pub(super) method: String,
 }
-
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -86,7 +91,10 @@ impl LightExtractionProviderRegistry {
         self.providers.push(provider);
     }
 
-    pub(crate) fn register_external_provider(&mut self, provider: ExternalLightExtractionProviderDesc) {
+    pub(crate) fn register_external_provider(
+        &mut self,
+        provider: ExternalLightExtractionProviderDesc,
+    ) {
         if self
             .external_providers
             .iter()
@@ -196,8 +204,8 @@ impl LightExtractionProviderRegistry {
                 }
             };
 
-            let response: LightExtractionProviderResponse = serde_json::from_slice(bytes.as_slice())
-                .map_err(|e| {
+            let response: LightExtractionProviderResponse =
+                serde_json::from_slice(bytes.as_slice()).map_err(|e| {
                     newengine_core::EngineError::other(format!(
                         "render light extraction provider '{}' returned invalid response JSON: {e}",
                         provider.id
@@ -205,14 +213,22 @@ impl LightExtractionProviderRegistry {
                 })?;
 
             for warning in response.warnings {
-                newengine_ulog_api::ulog::warn!("render light extraction provider '{}': {}", provider.id, warning);
+                newengine_ulog_api::ulog::warn!(
+                    "render light extraction provider '{}': {}",
+                    provider.id,
+                    warning
+                );
             }
 
             let Some(contribution) = response.contribution else {
                 continue;
             };
             for warning in &contribution.warnings {
-                newengine_ulog_api::ulog::warn!("render light extraction provider '{}': {}", provider.id, warning);
+                newengine_ulog_api::ulog::warn!(
+                    "render light extraction provider '{}': {}",
+                    provider.id,
+                    warning
+                );
             }
             if !contribution.handled {
                 continue;

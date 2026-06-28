@@ -14,7 +14,12 @@ pub struct RuntimeFrameFeatureSet {
 
 impl RuntimeFrameFeatureSet {
     #[inline]
-    pub const fn forward(shadows: bool, postfx: bool, ui_composite: bool, debug_overlay: bool) -> Self {
+    pub const fn forward(
+        shadows: bool,
+        postfx: bool,
+        ui_composite: bool,
+        debug_overlay: bool,
+    ) -> Self {
         Self {
             shadows,
             deferred: false,
@@ -26,7 +31,12 @@ impl RuntimeFrameFeatureSet {
     }
 
     #[inline]
-    pub const fn deferred(shadows: bool, postfx: bool, ui_composite: bool, debug_overlay: bool) -> Self {
+    pub const fn deferred(
+        shadows: bool,
+        postfx: bool,
+        ui_composite: bool,
+        debug_overlay: bool,
+    ) -> Self {
         Self {
             shadows,
             deferred: true,
@@ -52,7 +62,10 @@ pub struct RenderPhaseRecipeStep {
 impl RenderPhaseRecipeStep {
     #[inline]
     pub const fn enabled(phase: StandardRenderPhase) -> Self {
-        Self { phase, enabled: true }
+        Self {
+            phase,
+            enabled: true,
+        }
     }
 
     #[inline]
@@ -79,24 +92,54 @@ impl RenderFrameRecipe {
         cascaded_shadows: bool,
     ) -> Self {
         let mut steps = Vec::with_capacity(12);
-        steps.push(RenderPhaseRecipeStep::enabled(StandardRenderPhase::BeginFrame));
+        steps.push(RenderPhaseRecipeStep::enabled(
+            StandardRenderPhase::BeginFrame,
+        ));
         if cascaded_shadows {
-            steps.push(RenderPhaseRecipeStep::optional(StandardRenderPhase::ShadowCascadeMap, features.shadows));
+            steps.push(RenderPhaseRecipeStep::optional(
+                StandardRenderPhase::ShadowCascadeMap,
+                features.shadows,
+            ));
         } else {
-            steps.push(RenderPhaseRecipeStep::optional(StandardRenderPhase::ShadowMap, features.shadows));
+            steps.push(RenderPhaseRecipeStep::optional(
+                StandardRenderPhase::ShadowMap,
+                features.shadows,
+            ));
         }
         if features.deferred {
-            steps.push(RenderPhaseRecipeStep::enabled(StandardRenderPhase::DepthPrepass));
-            steps.push(RenderPhaseRecipeStep::enabled(StandardRenderPhase::ViewportGBuffer));
-            steps.push(RenderPhaseRecipeStep::enabled(StandardRenderPhase::DeferredLighting));
+            steps.push(RenderPhaseRecipeStep::enabled(
+                StandardRenderPhase::DepthPrepass,
+            ));
+            steps.push(RenderPhaseRecipeStep::enabled(
+                StandardRenderPhase::ViewportGBuffer,
+            ));
+            steps.push(RenderPhaseRecipeStep::enabled(
+                StandardRenderPhase::DeferredLighting,
+            ));
         } else {
-            steps.push(RenderPhaseRecipeStep::enabled(StandardRenderPhase::ViewportForward));
+            steps.push(RenderPhaseRecipeStep::enabled(
+                StandardRenderPhase::ViewportForward,
+            ));
         }
-        steps.push(RenderPhaseRecipeStep::optional(StandardRenderPhase::PostFx, features.postfx));
-        steps.push(RenderPhaseRecipeStep::optional(StandardRenderPhase::UiBackdropBlur, features.ui_composite && features.ui_backdrop_blur));
-        steps.push(RenderPhaseRecipeStep::optional(StandardRenderPhase::UiComposite, features.ui_composite));
-        steps.push(RenderPhaseRecipeStep::optional(StandardRenderPhase::DebugOverlay, features.debug_overlay));
-        steps.push(RenderPhaseRecipeStep::enabled(StandardRenderPhase::EndFrame));
+        steps.push(RenderPhaseRecipeStep::optional(
+            StandardRenderPhase::PostFx,
+            features.postfx,
+        ));
+        steps.push(RenderPhaseRecipeStep::optional(
+            StandardRenderPhase::UiBackdropBlur,
+            features.ui_composite && features.ui_backdrop_blur,
+        ));
+        steps.push(RenderPhaseRecipeStep::optional(
+            StandardRenderPhase::UiComposite,
+            features.ui_composite,
+        ));
+        steps.push(RenderPhaseRecipeStep::optional(
+            StandardRenderPhase::DebugOverlay,
+            features.debug_overlay,
+        ));
+        steps.push(RenderPhaseRecipeStep::enabled(
+            StandardRenderPhase::EndFrame,
+        ));
 
         Self {
             label: "runtime.standard_frame".to_owned(),
@@ -123,7 +166,10 @@ pub struct RuntimeRecipeBuildParams {
 impl RuntimeRecipeBuildParams {
     #[inline]
     pub const fn new(shadow_resolution: u32) -> Self {
-        Self { shadow_resolution, shadow_cascade_count: 1 }
+        Self {
+            shadow_resolution,
+            shadow_cascade_count: 1,
+        }
     }
 
     #[inline]

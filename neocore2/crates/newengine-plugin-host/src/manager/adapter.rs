@@ -20,13 +20,23 @@ impl ModuleAdapterAny {
     }
 
     #[inline]
-    pub(crate) fn start(&mut self) -> RResult<(), RString> { self.module.start() }
+    pub(crate) fn start(&mut self) -> RResult<(), RString> {
+        self.module.start()
+    }
     #[inline]
-    pub(crate) fn fixed_update(&mut self, dt: f32) -> RResult<(), RString> { self.module.fixed_update(dt) }
+    pub(crate) fn fixed_update(&mut self, dt: f32) -> RResult<(), RString> {
+        self.module.fixed_update(dt)
+    }
     #[inline]
-    pub(crate) fn update(&mut self, dt: f32) -> RResult<(), RString> { self.module.update(dt) }
+    pub(crate) fn update(&mut self, dt: f32) -> RResult<(), RString> {
+        self.module.update(dt)
+    }
     #[inline]
-    pub(crate) fn render(&mut self, dt: f32) -> RResult<(), RString> { self.module.render(dt) }
+    pub(crate) fn render(&mut self, dt: f32) -> RResult<(), RString> {
+        self.module.render(dt)
+    }
     #[inline]
-    pub(crate) fn shutdown(&mut self) { self.module.shutdown(); }
+    pub(crate) fn shutdown(&mut self) {
+        self.module.shutdown();
+    }
 }

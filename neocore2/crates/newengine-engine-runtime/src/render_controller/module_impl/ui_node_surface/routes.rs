@@ -2,18 +2,26 @@
 
 use newengine_audio_api::AudioFeedbackKind;
 use newengine_input_bindings_api::InputDevicePreference;
-use newengine_ui_navigation_api::UiNodeRouteDispatch;
 use newengine_ui_navigation_api::UiNodeActionRoute;
+use newengine_ui_navigation_api::UiNodeRouteDispatch;
 
 use super::*;
 
 impl RenderUiNodeSurfaceState {
-    pub(super) fn dispatch_navigation_route(&mut self, dispatch: UiNodeRouteDispatch, frame_index: u64) {
+    pub(super) fn dispatch_navigation_route(
+        &mut self,
+        dispatch: UiNodeRouteDispatch,
+        frame_index: u64,
+    ) {
         if let Some(audio_id) = dispatch.route.audio.as_deref() {
             audio(audio_feedback_from_route(audio_id), frame_index);
         }
 
-        let UiNodeRouteDispatch { route, source_label, .. } = dispatch;
+        let UiNodeRouteDispatch {
+            route,
+            source_label,
+            ..
+        } = dispatch;
         match (route.target.as_str(), route.event.as_str()) {
             (TARGET_SYSTEM_COMMAND, EVENT_ENGINE_SHUTDOWN_REQUEST) => {
                 self.exit_requested = true;
@@ -82,7 +90,10 @@ impl RenderUiNodeSurfaceState {
                 );
             }
             Err(e) => {
-                newengine_ulog_api::ulog::warn!("UI surface ui node command router: reset bindings rejected err='{}'", e);
+                newengine_ulog_api::ulog::warn!(
+                    "UI surface ui node command router: reset bindings rejected err='{}'",
+                    e
+                );
                 self.flash_feedback("Reset failed", e, UiNodeMessageSeverity::Danger);
             }
         }
@@ -102,12 +113,18 @@ impl RenderUiNodeSurfaceState {
                 self.profile = profile;
                 self.flash_feedback(
                     "Input device",
-                    format!("Preference: {}", device_preference_label(self.profile.device_preference)),
+                    format!(
+                        "Preference: {}",
+                        device_preference_label(self.profile.device_preference)
+                    ),
                     UiNodeMessageSeverity::Success,
                 );
             }
             Err(e) => {
-                newengine_ulog_api::ulog::warn!("UI surface ui node command router: device preference save failed err='{}'", e);
+                newengine_ulog_api::ulog::warn!(
+                    "UI surface ui node command router: device preference save failed err='{}'",
+                    e
+                );
                 self.flash_feedback("Save failed", e, UiNodeMessageSeverity::Danger);
             }
         }

@@ -16,7 +16,8 @@ pub const LOADING_BACKEND_CAPABILITY_ID: &str = "loading.backend";
 
 pub const LOADING_SERVICE_METHOD_INFO: &str = newengine_service_api::SERVICE_METHOD_INFO_JSON;
 pub const LOADING_SERVICE_METHOD_INVOKE: &str = newengine_service_api::SERVICE_METHOD_INVOKE_JSON;
-pub const LOADING_SERVICE_METHOD_SHUTDOWN_V1: &str = newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1;
+pub const LOADING_SERVICE_METHOD_SHUTDOWN_V1: &str =
+    newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1;
 pub const LOADING_SERVICE_METHOD_SNAPSHOT_JSON_V1: &str = "snapshot_json_v1";
 pub const LOADING_SERVICE_METHOD_PUBLISH_JSON_V1: &str = "publish_json_v1";
 pub const LOADING_SERVICE_METHOD_PUBLISH_STATUS_JSON_V1: &str = "publish_status_json_v1";
@@ -78,13 +79,16 @@ impl Default for LoadingServiceInfo {
             methods: LOADING_REQUIRED_METHODS_V1
                 .iter()
                 .map(|it| (*it).to_owned())
-                .chain(std::iter::once(LOADING_SERVICE_METHOD_PUBLISH_JSON_V1.to_owned()))
-                .chain(std::iter::once(LOADING_SERVICE_METHOD_PUBLISH_STATUS_JSON_V1.to_owned()))
+                .chain(std::iter::once(
+                    LOADING_SERVICE_METHOD_PUBLISH_JSON_V1.to_owned(),
+                ))
+                .chain(std::iter::once(
+                    LOADING_SERVICE_METHOD_PUBLISH_STATUS_JSON_V1.to_owned(),
+                ))
                 .collect(),
         }
     }
 }
-
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum LoadingStatusPhase {
@@ -121,7 +125,9 @@ impl LoadingStatusPhase {
 
 impl Default for LoadingStatusPhase {
     #[inline]
-    fn default() -> Self { Self::Running }
+    fn default() -> Self {
+        Self::Running
+    }
 }
 
 /// Generic loading/status event published through the engine bus.
@@ -170,7 +176,10 @@ impl LoadingStatusEvent {
             status: status.into(),
             detail: detail.into(),
             progress_01: progress_01.clamp(0.0, 1.0),
-            terminal: matches!(phase, LoadingStatusPhase::Ready | LoadingStatusPhase::Failed),
+            terminal: matches!(
+                phase,
+                LoadingStatusPhase::Ready | LoadingStatusPhase::Failed
+            ),
         }
     }
 
@@ -197,7 +206,6 @@ impl LoadingStatusEvent {
         )
     }
 }
-
 
 /// Host/event-bus topic for every engine task lifecycle update.
 ///
@@ -237,8 +245,12 @@ impl EngineTaskPhase {
     #[inline]
     pub const fn loading_phase(self) -> LoadingStatusPhase {
         match self {
-            Self::Scheduled | Self::PauseRequested | Self::ResumeRequested => LoadingStatusPhase::Waiting,
-            Self::Running | Self::Blocked | Self::Paused | Self::CancelRequested => LoadingStatusPhase::Running,
+            Self::Scheduled | Self::PauseRequested | Self::ResumeRequested => {
+                LoadingStatusPhase::Waiting
+            }
+            Self::Running | Self::Blocked | Self::Paused | Self::CancelRequested => {
+                LoadingStatusPhase::Running
+            }
             Self::Completed | Self::Cancelled => LoadingStatusPhase::Ready,
             Self::Failed => LoadingStatusPhase::Failed,
         }
@@ -400,7 +412,6 @@ impl EngineTaskEvent {
         }
     }
 
-
     #[inline]
     pub fn with_frame_id(mut self, frame_id: u64) -> Self {
         self.frame_id = Some(frame_id);
@@ -469,9 +480,9 @@ impl EngineTaskEvent {
     }
 
     pub fn to_loading_status_event(&self) -> LoadingStatusEvent {
-        let progress = self.progress_01.unwrap_or_else(|| {
-            if self.phase.is_terminal() { 1.0 } else { 0.0 }
-        });
+        let progress =
+            self.progress_01
+                .unwrap_or_else(|| if self.phase.is_terminal() { 1.0 } else { 0.0 });
         LoadingStatusEvent::new(
             self.source.as_str(),
             self.category.as_str(),
@@ -498,7 +509,6 @@ impl EngineTaskEvent {
         )
     }
 }
-
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum LoadingSubsystemPhase {

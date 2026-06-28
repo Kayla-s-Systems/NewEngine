@@ -1,16 +1,19 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use abi_stable::std_types::{RResult, RString};
-use newengine_input_actions_api::{InputActionDefinition, InputActionFrame, InputActionListenerRegistration, InputFrameSource};
+use newengine_input_actions_api::{
+    InputActionDefinition, InputActionFrame, InputActionListenerRegistration, InputFrameSource,
+};
 use newengine_input_bindings_api::{
-    InputBindingRegistration, InputKeyRegistration, InputBindingsManifest, InputBindingsProfile, InputBindingsServiceInfo, ENGINE_INPUT_BINDINGS_SERVICE_ID,
+    InputBindingRegistration, InputBindingsManifest, InputBindingsProfile,
+    InputBindingsServiceInfo, InputKeyRegistration, ENGINE_INPUT_BINDINGS_SERVICE_ID,
     INPUT_BINDINGS_BACKEND_CAPABILITY_ID, INPUT_BINDINGS_METHOD_ACTION_CATALOG_JSON_V1,
-    INPUT_BINDINGS_METHOD_KEY_CATALOG_JSON_V1, INPUT_BINDINGS_METHOD_INVOKE, INPUT_BINDINGS_METHOD_PROFILE_JSON_V1,
-    INPUT_BINDINGS_METHOD_REGISTER_ACTION_JSON_V1, INPUT_BINDINGS_METHOD_REGISTER_BINDING_JSON_V1,
-    INPUT_BINDINGS_METHOD_REGISTER_KEY_JSON_V1,
-    INPUT_BINDINGS_METHOD_REGISTER_LISTENER_JSON_V1, INPUT_BINDINGS_METHOD_REGISTER_MANIFEST_JSON_V1,
-    INPUT_BINDINGS_METHOD_RESET_PROFILE_JSON_V1, INPUT_BINDINGS_METHOD_SAVE_PROFILE_JSON_V1,
-    INPUT_BINDINGS_METHOD_SHUTDOWN_V1,
+    INPUT_BINDINGS_METHOD_INVOKE, INPUT_BINDINGS_METHOD_KEY_CATALOG_JSON_V1,
+    INPUT_BINDINGS_METHOD_PROFILE_JSON_V1, INPUT_BINDINGS_METHOD_REGISTER_ACTION_JSON_V1,
+    INPUT_BINDINGS_METHOD_REGISTER_BINDING_JSON_V1, INPUT_BINDINGS_METHOD_REGISTER_KEY_JSON_V1,
+    INPUT_BINDINGS_METHOD_REGISTER_LISTENER_JSON_V1,
+    INPUT_BINDINGS_METHOD_REGISTER_MANIFEST_JSON_V1, INPUT_BINDINGS_METHOD_RESET_PROFILE_JSON_V1,
+    INPUT_BINDINGS_METHOD_SAVE_PROFILE_JSON_V1, INPUT_BINDINGS_METHOD_SHUTDOWN_V1,
 };
 use newengine_plugin_api::Blob;
 use newengine_service_kit::{
@@ -64,10 +67,13 @@ impl InputBindingsGatewayState {
                 profile_path.display(),
             );
         }
-        Self { profile, default_profile, profile_path }
+        Self {
+            profile,
+            default_profile,
+            profile_path,
+        }
     }
 }
-
 
 const INPUT_BINDINGS_GATEWAY_OWNER: &str = "newengine-input-bindings-runtime.bindings-gateway";
 
@@ -89,11 +95,20 @@ fn input_bindings_gateway_service(
     JsonServiceRouter::with_shared_state(ENGINE_INPUT_BINDINGS_SERVICE_ID, state)
         .describe_json(&description)
         .info(InputBindingsServiceInfo::default)
-        .get_json(INPUT_BINDINGS_METHOD_PROFILE_JSON_V1, |state| state.profile.clone())
-        .get_json(INPUT_BINDINGS_METHOD_ACTION_CATALOG_JSON_V1, |state| state.profile.actions.clone())
-        .get_json(INPUT_BINDINGS_METHOD_KEY_CATALOG_JSON_V1, |state| state.profile.keys.clone())
+        .get_json(INPUT_BINDINGS_METHOD_PROFILE_JSON_V1, |state| {
+            state.profile.clone()
+        })
+        .get_json(INPUT_BINDINGS_METHOD_ACTION_CATALOG_JSON_V1, |state| {
+            state.profile.actions.clone()
+        })
+        .get_json(INPUT_BINDINGS_METHOD_KEY_CATALOG_JSON_V1, |state| {
+            state.profile.keys.clone()
+        })
         .blob(INPUT_BINDINGS_METHOD_INVOKE, save_profile_payload)
-        .blob(INPUT_BINDINGS_METHOD_SAVE_PROFILE_JSON_V1, save_profile_payload)
+        .blob(
+            INPUT_BINDINGS_METHOD_SAVE_PROFILE_JSON_V1,
+            save_profile_payload,
+        )
         .post_json_result::<InputKeyRegistration, InputBindingsProfile, _>(
             INPUT_BINDINGS_METHOD_REGISTER_KEY_JSON_V1,
             |state, registration| {
@@ -115,12 +130,16 @@ fn input_bindings_gateway_service(
         .post_json_result::<InputActionListenerRegistration, InputBindingsProfile, _>(
             INPUT_BINDINGS_METHOD_REGISTER_LISTENER_JSON_V1,
             |state, registration| {
-                mutate_profile_state_result(state, |profile| profile.register_listener(registration))
+                mutate_profile_state_result(state, |profile| {
+                    profile.register_listener(registration)
+                })
             },
         )
         .post_json_result::<InputBindingsManifest, InputBindingsProfile, _>(
             INPUT_BINDINGS_METHOD_REGISTER_MANIFEST_JSON_V1,
-            |state, manifest| mutate_profile_state_result(state, |profile| manifest.apply_to(profile)),
+            |state, manifest| {
+                mutate_profile_state_result(state, |profile| manifest.apply_to(profile))
+            },
         )
         .get_json_result(INPUT_BINDINGS_METHOD_RESET_PROFILE_JSON_V1, |state| {
             let profile = state.default_profile.clone().canonicalized();
@@ -135,7 +154,9 @@ fn input_bindings_gateway_service(
             })?;
             Ok(profile)
         })
-        .blob(INPUT_BINDINGS_METHOD_SHUTDOWN_V1, |_state, _payload| ok_empty_blob())
+        .blob(INPUT_BINDINGS_METHOD_SHUTDOWN_V1, |_state, _payload| {
+            ok_empty_blob()
+        })
         .into_service_v1()
 }
 
@@ -183,11 +204,18 @@ fn save_profile_to_config(path: &PathBuf, profile: &InputBindingsProfile) -> Res
     std::fs::write(path, txt).map_err(|e| e.to_string())
 }
 
-fn gateway_state_with_default(default_profile: InputBindingsProfile) -> Arc<Mutex<InputBindingsGatewayState>> {
-    Arc::clone(INPUT_BINDINGS_GATEWAY.get_or_init(|| Arc::new(Mutex::new(InputBindingsGatewayState::new(default_profile)))))
+fn gateway_state_with_default(
+    default_profile: InputBindingsProfile,
+) -> Arc<Mutex<InputBindingsGatewayState>> {
+    Arc::clone(
+        INPUT_BINDINGS_GATEWAY
+            .get_or_init(|| Arc::new(Mutex::new(InputBindingsGatewayState::new(default_profile)))),
+    )
 }
 
-fn install_or_update_default_profile(default_profile: InputBindingsProfile) -> Arc<Mutex<InputBindingsGatewayState>> {
+fn install_or_update_default_profile(
+    default_profile: InputBindingsProfile,
+) -> Arc<Mutex<InputBindingsGatewayState>> {
     let default_profile = default_profile.canonicalized();
     if let Some(existing) = INPUT_BINDINGS_GATEWAY.get() {
         let state_ref = Arc::clone(existing);
@@ -197,7 +225,10 @@ fn install_or_update_default_profile(default_profile: InputBindingsProfile) -> A
         let old_bindings = state.profile.bindings.len();
         let old_axes = state.profile.gamepad_axes.len();
         state.default_profile = default_profile.clone();
-        state.profile = state.profile.clone().canonicalized_with_defaults(&default_profile);
+        state.profile = state
+            .profile
+            .clone()
+            .canonicalized_with_defaults(&default_profile);
         let path = state.profile_path.clone();
         if let Err(e) = save_profile_to_config(&path, &state.profile) {
             newengine_ulog_api::ulog::warn!(
@@ -235,15 +266,15 @@ pub fn input_bindings_profile_snapshot() -> InputBindingsProfile {
 }
 
 #[inline]
-pub fn resolve_input_actions<T: InputFrameSource>(
-    input: &T,
-) -> InputActionFrame {
+pub fn resolve_input_actions<T: InputFrameSource>(input: &T) -> InputActionFrame {
     let state_ref = gateway_state();
     let state = state_ref.lock();
     state.profile.resolve(input)
 }
 
-pub fn save_input_bindings_profile(profile: InputBindingsProfile) -> Result<InputBindingsProfile, String> {
+pub fn save_input_bindings_profile(
+    profile: InputBindingsProfile,
+) -> Result<InputBindingsProfile, String> {
     let path = {
         let state_ref = gateway_state();
         let mut state = state_ref.lock();
@@ -257,7 +288,11 @@ pub fn save_input_bindings_profile(profile: InputBindingsProfile) -> Result<Inpu
 }
 
 pub fn reset_input_bindings_profile() -> Result<InputBindingsProfile, String> {
-    let profile = gateway_state().lock().default_profile.clone().canonicalized();
+    let profile = gateway_state()
+        .lock()
+        .default_profile
+        .clone()
+        .canonicalized();
     save_input_bindings_profile(profile)
 }
 
@@ -270,7 +305,10 @@ where
 {
     mutate(&mut state.profile)
         .map_err(|e| format!("engine.input.bindings: registration failed: {}", e))?;
-    state.profile = state.profile.clone().canonicalized_with_defaults(&state.default_profile);
+    state.profile = state
+        .profile
+        .clone()
+        .canonicalized_with_defaults(&state.default_profile);
     let profile = state.profile.clone();
     let path = state.profile_path.clone();
     save_profile_to_config(&path, &profile).map_err(|e| {
@@ -299,22 +337,30 @@ pub fn register_input_key(key: InputKeyRegistration) -> Result<InputBindingsProf
     mutate_profile_result(&state, |profile| profile.register_key(key))
 }
 
-pub fn register_input_action(action: InputActionDefinition) -> Result<InputBindingsProfile, String> {
+pub fn register_input_action(
+    action: InputActionDefinition,
+) -> Result<InputBindingsProfile, String> {
     let state = gateway_state();
     mutate_profile_result(&state, |profile| profile.register_action(action))
 }
 
-pub fn register_input_binding(registration: InputBindingRegistration) -> Result<InputBindingsProfile, String> {
+pub fn register_input_binding(
+    registration: InputBindingRegistration,
+) -> Result<InputBindingsProfile, String> {
     let state = gateway_state();
     mutate_profile_result(&state, |profile| profile.register_binding(registration))
 }
 
-pub fn register_input_listener(listener: InputActionListenerRegistration) -> Result<InputBindingsProfile, String> {
+pub fn register_input_listener(
+    listener: InputActionListenerRegistration,
+) -> Result<InputBindingsProfile, String> {
     let state = gateway_state();
     mutate_profile_result(&state, |profile| profile.register_listener(listener))
 }
 
-pub fn register_input_manifest(manifest: InputBindingsManifest) -> Result<InputBindingsProfile, String> {
+pub fn register_input_manifest(
+    manifest: InputBindingsManifest,
+) -> Result<InputBindingsProfile, String> {
     let state = gateway_state();
     mutate_profile_result(&state, |profile| manifest.apply_to(profile))
 }

@@ -2,8 +2,8 @@
 
 use crossbeam_channel::unbounded;
 use newengine_core::{
-    Bus, Engine, EngineConfig, EngineResult, ModuleFaultTolerance, PluginFaultTolerance,
-    Services, ShutdownToken, StartupConfig,
+    Bus, Engine, EngineConfig, EngineResult, ModuleFaultTolerance, PluginFaultTolerance, Services,
+    ShutdownToken, StartupConfig,
 };
 use newengine_ui::UiProviderKind;
 
@@ -26,7 +26,6 @@ impl Services for DefaultHostServices {
         &self.registry
     }
 }
-
 
 #[inline]
 pub fn ui_provider_kind_from_startup(_startup: &StartupConfig) -> UiProviderKind {

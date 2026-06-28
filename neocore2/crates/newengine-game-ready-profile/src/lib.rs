@@ -48,7 +48,9 @@ impl GameReadyRuntimeProfile {
         Self {
             viewport: Arc::new(newengine_engine_runtime::ViewportBridge::new()),
             plugins: Arc::new(newengine_engine_runtime::PluginManagerBridge::new()),
-            scene: Arc::new(newengine_scene_runtime::SceneBridge::new(newengine_scene::Scene::new())),
+            scene: Arc::new(newengine_scene_runtime::SceneBridge::new(
+                newengine_scene::Scene::new(),
+            )),
             editor_tools: true,
         }
     }
@@ -74,7 +76,9 @@ impl GameReadyRuntimeProfile {
         } else {
             newengine_input_profile_gameready::game_ready_game_input_profile()
         };
-        newengine_input_bindings_runtime::register_input_bindings_gateway_best_effort(input_profile);
+        newengine_input_bindings_runtime::register_input_bindings_gateway_best_effort(
+            input_profile,
+        );
 
         engine.register_module(Box::new(PhysicsBackendRuntimeModule::new(
             startup.modules_dir.clone(),
@@ -85,7 +89,9 @@ impl GameReadyRuntimeProfile {
         )))?;
 
         if self.editor_tools {
-            engine.register_module(Box::new(newengine_assets_catalog_ui_runtime::AssetsCatalogUiRuntimeModule::new()))?;
+            engine.register_module(Box::new(
+                newengine_assets_catalog_ui_runtime::AssetsCatalogUiRuntimeModule::new(),
+            ))?;
         }
 
         let render_features = GameReadyRenderFeaturePack::new();
@@ -99,7 +105,8 @@ impl GameReadyRuntimeProfile {
 
         // UI is not a GameReady feature. It is the canonical engine.ui draw-list bridge,
         // so profiling and diagnostics expose one UI path: engine.ui -> engine.render.
-        render_controller = render_controller.with_draw_list_provider(EngineUiDrawListBridgeProvider::shared());
+        render_controller =
+            render_controller.with_draw_list_provider(EngineUiDrawListBridgeProvider::shared());
         for provider in render_features.draw_list_providers() {
             render_controller = render_controller.with_draw_list_provider(provider);
         }
@@ -117,10 +124,8 @@ impl GameReadyRuntimeProfile {
 
     #[inline]
     pub fn register_engine_provider_routes_best_effort(&self) {
-        let asset_mounts = SceneGatewayAssetMounts::new(
-            GAME_READY_APP_DIR_NAME,
-            GAME_APP_ASSETS_DIR_ENV,
-        );
+        let asset_mounts =
+            SceneGatewayAssetMounts::new(GAME_READY_APP_DIR_NAME, GAME_APP_ASSETS_DIR_ENV);
         newengine_scene_runtime::register_scene_gateway_best_effort(
             Arc::clone(&self.scene),
             Some(asset_mounts),
@@ -134,7 +139,9 @@ impl GameReadyRuntimeProfile {
         } else {
             newengine_input_profile_gameready::game_ready_game_input_profile()
         };
-        newengine_input_bindings_runtime::register_input_bindings_gateway_best_effort(input_profile);
+        newengine_input_bindings_runtime::register_input_bindings_gateway_best_effort(
+            input_profile,
+        );
         newengine_time_runtime::register_time_gateway_best_effort();
         newengine_schema_runtime::register_schema_gateway_best_effort();
         newengine_scripting_runtime::register_scripting_gateway_best_effort();
@@ -144,23 +151,37 @@ impl GameReadyRuntimeProfile {
         let host_api = newengine_plugin_host::default_host_api();
         let registered_file_types = newengine_asset_format_nef8::descriptors()
             .into_iter()
-            .filter(|descriptor| newengine_assets::register_asset_type_descriptor_best_effort(&host_api, descriptor.clone()))
+            .filter(|descriptor| {
+                newengine_assets::register_asset_type_descriptor_best_effort(
+                    &host_api,
+                    descriptor.clone(),
+                )
+            })
             .count();
         newengine_ulog_api::ulog::info!(
             "asset type descriptors: registered {} provider-owned first-party formats",
             registered_file_types
         );
-        let asset_document_routes_ok = newengine_assets::register_asset_document_gateways_best_effort(host_api.clone());
+        let asset_document_routes_ok =
+            newengine_assets::register_asset_document_gateways_best_effort(host_api.clone());
         newengine_ulog_api::ulog::info!(
             "asset document gateways: registered={} routes='engine.assets.inspect,engine.assets.edit'",
             asset_document_routes_ok
         );
         let asset_client = newengine_assets::AssetServiceClient::new(host_api.clone());
         newengine_textures_runtime::register_textures_gateway_best_effort(asset_client.clone());
-        newengine_definitions_runtime::register_definitions_gateway_best_effort(asset_client.clone());
+        newengine_definitions_runtime::register_definitions_gateway_best_effort(
+            asset_client.clone(),
+        );
         newengine_assets_ui_runtime::register_assets_ui_gateway_best_effort(asset_client.clone());
-        newengine_material_runtime::register_materials_gateway_best_effort_with_host(Some(host_api.clone()), asset_client.clone());
-        newengine_model_runtime::register_model_gateway_best_effort_with_host(host_api.clone(), asset_client.clone());
+        newengine_material_runtime::register_materials_gateway_best_effort_with_host(
+            Some(host_api.clone()),
+            asset_client.clone(),
+        );
+        newengine_model_runtime::register_model_gateway_best_effort_with_host(
+            host_api.clone(),
+            asset_client.clone(),
+        );
         newengine_model_runtime::register_asset_graph_gateway_best_effort(host_api, asset_client);
     }
 
@@ -174,10 +195,7 @@ impl GameReadyRuntimeProfile {
     /// Standalone game builds render directly into the platform surface.
     /// No authoring panels, docking, hierarchy, property grid, or markup loading.
     #[inline]
-    pub fn ui_build_from_startup(
-        &self,
-        _startup: &StartupConfig,
-    ) -> Option<Box<dyn UiBuildFn>> {
+    pub fn ui_build_from_startup(&self, _startup: &StartupConfig) -> Option<Box<dyn UiBuildFn>> {
         None
     }
 

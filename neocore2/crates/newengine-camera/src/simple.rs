@@ -4,8 +4,8 @@ use newengine_math::{Quat, Vec2, Vec3};
 
 use crate::{
     CameraChannel, CameraChannelState, CameraClipPolicy, CameraControlInput, CameraFrame,
-    CameraLens, CameraWorldFrame, CameraWorldRig, CameraRig, CameraViewport,
-    CameraWorldPoint, FreeFlyController, OrbitController, Projection,
+    CameraLens, CameraRig, CameraViewport, CameraWorldFrame, CameraWorldPoint, CameraWorldRig,
+    FreeFlyController, OrbitController, Projection,
 };
 
 #[cfg(feature = "serde")]
@@ -46,7 +46,10 @@ impl Camera {
 
     #[inline]
     pub fn from_size(width: u32, height: u32) -> Self {
-        Self::perspective(CameraViewport::from_size(width, height), CameraLens::default())
+        Self::perspective(
+            CameraViewport::from_size(width, height),
+            CameraLens::default(),
+        )
     }
 
     #[inline]
@@ -82,14 +85,26 @@ impl Camera {
     }
 
     #[inline]
-    pub fn update_clip_for_focus(&mut self, policy: CameraClipPolicy, distance: f32, radius: f32, max_far: f32) {
+    pub fn update_clip_for_focus(
+        &mut self,
+        policy: CameraClipPolicy,
+        distance: f32,
+        radius: f32,
+        max_far: f32,
+    ) {
         let (near, far) = policy.near_far(distance, radius, max_far);
         self.projection.set_near_far(near, far);
     }
 
     #[inline]
     pub fn frame(&self) -> CameraFrame {
-        CameraFrame::build(self.channel, self.rig, self.projection, self.viewport, self.jitter_px)
+        CameraFrame::build(
+            self.channel,
+            self.rig,
+            self.projection,
+            self.viewport,
+            self.jitter_px,
+        )
     }
 }
 
@@ -119,7 +134,11 @@ pub struct CameraController {
 impl Default for CameraController {
     #[inline]
     fn default() -> Self {
-        Self { mode: CameraControllerMode::Orbit, orbit: OrbitController::default(), fly: FreeFlyController::default() }
+        Self {
+            mode: CameraControllerMode::Orbit,
+            orbit: OrbitController::default(),
+            fly: FreeFlyController::default(),
+        }
     }
 }
 
@@ -174,7 +193,11 @@ impl WorldCamera {
 
     #[inline]
     pub fn from_size(width: u32, height: u32) -> Self {
-        Self::new(CameraWorldPoint::ZERO, CameraViewport::from_size(width, height), CameraLens::default())
+        Self::new(
+            CameraWorldPoint::ZERO,
+            CameraViewport::from_size(width, height),
+            CameraLens::default(),
+        )
     }
 
     #[inline]
@@ -189,7 +212,8 @@ impl WorldCamera {
         self.rig.rebase_if_needed();
         let local_pos = self.rig.origin.relative_point(position);
         let local_target = self.rig.origin.relative_point(target);
-        self.rig.rotation = crate::CameraRig::from_look_at(local_pos, local_target, Vec3::Y).rotation;
+        self.rig.rotation =
+            crate::CameraRig::from_look_at(local_pos, local_target, Vec3::Y).rotation;
     }
 
     #[inline]
@@ -230,7 +254,13 @@ impl WorldCamera {
 
     #[inline]
     pub fn frame(&self) -> CameraWorldFrame {
-        CameraWorldFrame::build(self.channel, self.rig, self.projection, self.viewport, self.jitter_px)
+        CameraWorldFrame::build(
+            self.channel,
+            self.rig,
+            self.projection,
+            self.viewport,
+            self.jitter_px,
+        )
     }
 }
 

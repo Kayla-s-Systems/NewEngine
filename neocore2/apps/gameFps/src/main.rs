@@ -35,9 +35,18 @@ const ENV_DEFAULTS: &[(&str, &str)] = &[
     ("NEWENGINE_SCENE_TEXTURE_GATE_SOFT_TIMEOUT_FRAMES", "1800"),
     // App-level direct profile request. This is data, not engine-side game logic:
     // engine.runtime remains the host executor and the app asks for game presentation.
-    ("NEWENGINE_PLUGIN_ENGINE_RUNTIME__ui__screen_profile__profile", "game"),
-    ("NEWENGINE_PLUGIN_ENGINE_RUNTIME__ui__screen_profile__game_ui_root_surface_id", "gameFps.ui.root"),
-    ("NEWENGINE_PLUGIN_ENGINE_RUNTIME__ui__screen_profile__publish_editor_shell", "false"),
+    (
+        "NEWENGINE_PLUGIN_ENGINE_RUNTIME__ui__screen_profile__profile",
+        "game",
+    ),
+    (
+        "NEWENGINE_PLUGIN_ENGINE_RUNTIME__ui__screen_profile__game_ui_root_surface_id",
+        "gameFps.ui.root",
+    ),
+    (
+        "NEWENGINE_PLUGIN_ENGINE_RUNTIME__ui__screen_profile__publish_editor_shell",
+        "false",
+    ),
 ];
 
 #[derive(Clone)]

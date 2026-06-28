@@ -65,7 +65,10 @@ impl Default for RenderGraphResourceSemantic {
 impl RenderGraphResourceSemantic {
     #[inline]
     pub const fn is_depth(self) -> bool {
-        matches!(self, Self::ViewportDepth | Self::ShadowMap | Self::GBufferDepth)
+        matches!(
+            self,
+            Self::ViewportDepth | Self::ShadowMap | Self::GBufferDepth
+        )
     }
 
     #[inline]
@@ -255,7 +258,6 @@ impl RenderGraphResourceDesc {
         self.semantic = semantic;
         self
     }
-
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -284,7 +286,6 @@ impl RenderGraphResourceRef {
         }
     }
 }
-
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum RenderDrawListKind {
@@ -326,8 +327,16 @@ impl RenderDrawListKind {
     #[inline]
     pub const fn is_compatible_with_pass(self, pass: RenderGraphPassKind) -> bool {
         match (self, pass) {
-            (Self::ShadowCasters, RenderGraphPassKind::ShadowMap | RenderGraphPassKind::ShadowCascadeMap | RenderGraphPassKind::DepthPrepass) => true,
-            (Self::OpaqueForward, RenderGraphPassKind::ForwardOpaque | RenderGraphPassKind::GBuffer) => true,
+            (
+                Self::ShadowCasters,
+                RenderGraphPassKind::ShadowMap
+                | RenderGraphPassKind::ShadowCascadeMap
+                | RenderGraphPassKind::DepthPrepass,
+            ) => true,
+            (
+                Self::OpaqueForward,
+                RenderGraphPassKind::ForwardOpaque | RenderGraphPassKind::GBuffer,
+            ) => true,
             (Self::Transparent, RenderGraphPassKind::Transparent) => true,
             (Self::Ui, RenderGraphPassKind::UiComposite) => true,
             (Self::Debug, RenderGraphPassKind::DebugOverlay) => true,
@@ -361,12 +370,29 @@ impl RenderMaterialDomain {
     #[inline]
     pub const fn is_compatible_with_pass(self, pass: RenderGraphPassKind) -> bool {
         match (self, pass) {
-            (Self::ShadowCaster, RenderGraphPassKind::ShadowMap | RenderGraphPassKind::ShadowCascadeMap | RenderGraphPassKind::DepthPrepass) => true,
-            (Self::OpaqueLit | Self::Terrain | Self::Vegetation, RenderGraphPassKind::ForwardOpaque | RenderGraphPassKind::GBuffer) => true,
+            (
+                Self::ShadowCaster,
+                RenderGraphPassKind::ShadowMap
+                | RenderGraphPassKind::ShadowCascadeMap
+                | RenderGraphPassKind::DepthPrepass,
+            ) => true,
+            (
+                Self::OpaqueLit | Self::Terrain | Self::Vegetation,
+                RenderGraphPassKind::ForwardOpaque | RenderGraphPassKind::GBuffer,
+            ) => true,
             (Self::Transparent, RenderGraphPassKind::Transparent) => true,
             (Self::Water, RenderGraphPassKind::Water) => true,
             (Self::Ui, RenderGraphPassKind::UiComposite) => true,
-            (Self::PostFx, RenderGraphPassKind::PostFx | RenderGraphPassKind::BloomExtract | RenderGraphPassKind::BloomBlur | RenderGraphPassKind::TaaResolve | RenderGraphPassKind::MsaaResolve | RenderGraphPassKind::DeferredLighting | RenderGraphPassKind::UiBackdropBlur) => true,
+            (
+                Self::PostFx,
+                RenderGraphPassKind::PostFx
+                | RenderGraphPassKind::BloomExtract
+                | RenderGraphPassKind::BloomBlur
+                | RenderGraphPassKind::TaaResolve
+                | RenderGraphPassKind::MsaaResolve
+                | RenderGraphPassKind::DeferredLighting
+                | RenderGraphPassKind::UiBackdropBlur,
+            ) => true,
             (Self::Debug, RenderGraphPassKind::DebugOverlay) => true,
             (Self::Custom, _) => true,
             _ => false,
@@ -403,8 +429,6 @@ impl DrawPacket {
     }
 }
 
-
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RenderGraphPassDomain {
     Unknown,
@@ -416,7 +440,9 @@ pub enum RenderGraphPassDomain {
 
 impl Default for RenderGraphPassDomain {
     #[inline]
-    fn default() -> Self { Self::Unknown }
+    fn default() -> Self {
+        Self::Unknown
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -475,14 +501,24 @@ impl RenderGraphPassDesc {
     }
 
     #[inline]
-    pub fn reads(mut self, resource: RenderGraphResourceId, usage: RenderGraphResourceUsage) -> Self {
-        self.reads.push(RenderGraphResourceRef::read(resource, usage));
+    pub fn reads(
+        mut self,
+        resource: RenderGraphResourceId,
+        usage: RenderGraphResourceUsage,
+    ) -> Self {
+        self.reads
+            .push(RenderGraphResourceRef::read(resource, usage));
         self
     }
 
     #[inline]
-    pub fn writes(mut self, resource: RenderGraphResourceId, usage: RenderGraphResourceUsage) -> Self {
-        self.writes.push(RenderGraphResourceRef::write(resource, usage));
+    pub fn writes(
+        mut self,
+        resource: RenderGraphResourceId,
+        usage: RenderGraphResourceUsage,
+    ) -> Self {
+        self.writes
+            .push(RenderGraphResourceRef::write(resource, usage));
         self
     }
 
@@ -494,8 +530,6 @@ impl RenderGraphPassDesc {
         self
     }
 }
-
-
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct VisibilitySettings {
@@ -561,7 +595,9 @@ impl FrameCameraContext {
             if !value.is_finite() {
                 return 0;
             }
-            (value / POS_STEP_METERS).round().clamp(i32::MIN as f32, i32::MAX as f32) as i32
+            (value / POS_STEP_METERS)
+                .round()
+                .clamp(i32::MIN as f32, i32::MAX as f32) as i32
         }
 
         fn normalize_or_default(v: [f32; 3], fallback: [f32; 3]) -> [f32; 3] {
@@ -606,18 +642,29 @@ impl FrameCameraContext {
 }
 
 #[inline]
-fn default_true() -> bool { true }
+fn default_true() -> bool {
+    true
+}
 #[inline]
-fn default_camera_forward() -> [f32; 3] { [0.0, 0.0, -1.0] }
+fn default_camera_forward() -> [f32; 3] {
+    [0.0, 0.0, -1.0]
+}
 #[inline]
-fn default_camera_up() -> [f32; 3] { [0.0, 1.0, 0.0] }
+fn default_camera_up() -> [f32; 3] {
+    [0.0, 1.0, 0.0]
+}
 #[inline]
-fn default_camera_fov_y() -> f32 { 60.0_f32.to_radians() }
+fn default_camera_fov_y() -> f32 {
+    60.0_f32.to_radians()
+}
 #[inline]
-fn default_camera_near() -> f32 { 0.05 }
+fn default_camera_near() -> f32 {
+    0.05
+}
 #[inline]
-fn default_camera_far() -> f32 { 10_000.0 }
-
+fn default_camera_far() -> f32 {
+    10_000.0
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SecondaryCommandBufferSettings {
@@ -725,9 +772,13 @@ impl Default for RendererParitySettings {
 }
 
 #[inline]
-fn default_bindless_texture_capacity() -> u32 { 16_384 }
+fn default_bindless_texture_capacity() -> u32 {
+    16_384
+}
 #[inline]
-fn default_bindless_material_capacity() -> u32 { 8_192 }
+fn default_bindless_material_capacity() -> u32 {
+    8_192
+}
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct RenderGraphDesc {
@@ -863,7 +914,6 @@ pub struct RecordedDrawListStats {
     pub invalid_draw_calls: u32,
 }
 
-
 impl RecordedDrawListStats {
     #[inline]
     pub fn total_draw_calls(self) -> u32 {
@@ -956,7 +1006,8 @@ pub fn compile_render_graph(
             RenderGraphResourceLifetime::Persistent | RenderGraphResourceLifetime::External => {
                 lifetime.persistent = lifetime.persistent.saturating_add(1);
             }
-            RenderGraphResourceLifetime::TransientFrame | RenderGraphResourceLifetime::Frames(_) => {
+            RenderGraphResourceLifetime::TransientFrame
+            | RenderGraphResourceLifetime::Frames(_) => {
                 lifetime.transient = lifetime.transient.saturating_add(1);
             }
         }
@@ -1008,11 +1059,18 @@ pub fn compile_render_graph(
     }
 
     let mut last_writer: BTreeMap<RenderGraphResourceId, RenderGraphPassId> = BTreeMap::new();
-    let mut last_readers: BTreeMap<RenderGraphResourceId, BTreeSet<RenderGraphPassId>> = BTreeMap::new();
-    let mut dependencies: BTreeMap<RenderGraphPassId, BTreeSet<RenderGraphPassId>> =
-        graph.passes.iter().map(|p| (p.id, BTreeSet::new())).collect();
-    let mut reverse_edges: BTreeMap<RenderGraphPassId, BTreeSet<RenderGraphPassId>> =
-        graph.passes.iter().map(|p| (p.id, BTreeSet::new())).collect();
+    let mut last_readers: BTreeMap<RenderGraphResourceId, BTreeSet<RenderGraphPassId>> =
+        BTreeMap::new();
+    let mut dependencies: BTreeMap<RenderGraphPassId, BTreeSet<RenderGraphPassId>> = graph
+        .passes
+        .iter()
+        .map(|p| (p.id, BTreeSet::new()))
+        .collect();
+    let mut reverse_edges: BTreeMap<RenderGraphPassId, BTreeSet<RenderGraphPassId>> = graph
+        .passes
+        .iter()
+        .map(|p| (p.id, BTreeSet::new()))
+        .collect();
     let mut barriers = RenderGraphBarrierStats::default();
 
     for pass in &graph.passes {
@@ -1030,7 +1088,10 @@ pub fn compile_render_graph(
             } else {
                 barriers.external_imports = barriers.external_imports.saturating_add(1);
             }
-            last_readers.entry(read.resource).or_default().insert(pass.id);
+            last_readers
+                .entry(read.resource)
+                .or_default()
+                .insert(pass.id);
         }
 
         for write in &pass.writes {

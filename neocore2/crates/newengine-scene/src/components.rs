@@ -25,7 +25,6 @@ impl EntityGuid {
     }
 }
 
-
 /// Authored definition/archetype reference attached to a scene entity.
 ///
 /// This is deliberately a stable asset reference string (for example
@@ -37,7 +36,9 @@ pub struct DefinitionRef(pub String);
 
 impl DefinitionRef {
     #[inline]
-    pub fn as_str(&self) -> &str { self.0.as_str() }
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
 }
 
 /// Human-readable name of an entity.

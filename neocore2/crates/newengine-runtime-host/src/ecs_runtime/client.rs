@@ -1,7 +1,7 @@
 use newengine_ecs_api::{
     EcsCommandRequest, EcsCommandResponse, EcsInvokeRequest, EcsServiceInfo, EcsSnapshotRequest,
-    EcsWorldSnapshot, EcsWorldSummary, ECS_SERVICE_METHOD_COMMAND_JSON_V1, ECS_SERVICE_METHOD_SNAPSHOT_JSON_V1,
-    ECS_SERVICE_METHOD_SUMMARY_JSON_V1, ENGINE_ECS_SERVICE_ID,
+    EcsWorldSnapshot, EcsWorldSummary, ECS_SERVICE_METHOD_COMMAND_JSON_V1,
+    ECS_SERVICE_METHOD_SNAPSHOT_JSON_V1, ECS_SERVICE_METHOD_SUMMARY_JSON_V1, ENGINE_ECS_SERVICE_ID,
 };
 use newengine_plugin_api::HostApiV1;
 
@@ -19,7 +19,9 @@ pub struct EcsServiceClient {
 impl EcsServiceClient {
     #[inline]
     pub fn new(host: HostApiV1) -> Self {
-        Self { service: GenericJsonServiceClient::new(host, ENGINE_ECS_SERVICE_ID) }
+        Self {
+            service: GenericJsonServiceClient::new(host, ENGINE_ECS_SERVICE_ID),
+        }
     }
 
     #[inline]
@@ -30,21 +32,27 @@ impl EcsServiceClient {
 
     #[inline]
     pub fn summary(&self) -> Result<EcsWorldSummary, String> {
-        let bytes = self.service.call_raw(ECS_SERVICE_METHOD_SUMMARY_JSON_V1, Vec::new())?;
+        let bytes = self
+            .service
+            .call_raw(ECS_SERVICE_METHOD_SUMMARY_JSON_V1, Vec::new())?;
         decode_json(&bytes)
     }
 
     #[inline]
     pub fn snapshot(&self, req: EcsSnapshotRequest) -> Result<EcsWorldSnapshot, String> {
         let payload = encode_json(&req)?;
-        let bytes = self.service.call_raw(ECS_SERVICE_METHOD_SNAPSHOT_JSON_V1, payload)?;
+        let bytes = self
+            .service
+            .call_raw(ECS_SERVICE_METHOD_SNAPSHOT_JSON_V1, payload)?;
         decode_json(&bytes)
     }
 
     #[inline]
     pub fn command(&self, req: EcsCommandRequest) -> Result<EcsCommandResponse, String> {
         let payload = encode_json(&req)?;
-        let bytes = self.service.call_raw(ECS_SERVICE_METHOD_COMMAND_JSON_V1, payload)?;
+        let bytes = self
+            .service
+            .call_raw(ECS_SERVICE_METHOD_COMMAND_JSON_V1, payload)?;
         decode_json(&bytes)
     }
 

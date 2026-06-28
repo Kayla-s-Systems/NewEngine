@@ -1,5 +1,10 @@
-use newengine_ecs_api::{EcsCommandRequest, EcsCommandResponse, EcsSnapshotRequest, EcsWorldSnapshot, EcsWorldSummary};
-use newengine_entity_api::{EntityDespawnRequest, EntityDespawnResponse, EntityListRequest, EntityListResponse, EntitySpawnRequest, EntitySpawnResponse};
+use newengine_ecs_api::{
+    EcsCommandRequest, EcsCommandResponse, EcsSnapshotRequest, EcsWorldSnapshot, EcsWorldSummary,
+};
+use newengine_entity_api::{
+    EntityDespawnRequest, EntityDespawnResponse, EntityListRequest, EntityListResponse,
+    EntitySpawnRequest, EntitySpawnResponse,
+};
 use newengine_plugin_host::EngineGatewayRouteSnapshot;
 
 use crate::{ecs_runtime::EcsServiceClient, entity_runtime::EntityServiceClient};
@@ -83,7 +88,9 @@ impl WorldAuthoritySnapshot {
     pub fn ecs_entity_are_plugin_authority(&self) -> bool {
         match (&self.ecs, &self.entity) {
             (Some(ecs), Some(entity)) => {
-                ecs.is_external_provider() && entity.is_external_provider() && ecs.provider_owner_id == entity.provider_owner_id
+                ecs.is_external_provider()
+                    && entity.is_external_provider()
+                    && ecs.provider_owner_id == entity.provider_owner_id
             }
             _ => false,
         }
@@ -100,18 +107,30 @@ impl WorldAuthoritySnapshot {
     #[inline]
     pub fn has_split_world_authority(&self) -> bool {
         self.ecs_entity_are_plugin_authority()
-            && self.scene.as_ref().map(|route| route.provider_owner_id.as_str())
-                != self.ecs.as_ref().map(|route| route.provider_owner_id.as_str())
+            && self
+                .scene
+                .as_ref()
+                .map(|route| route.provider_owner_id.as_str())
+                != self
+                    .ecs
+                    .as_ref()
+                    .map(|route| route.provider_owner_id.as_str())
     }
 
     #[inline]
     pub fn authority_label(&self) -> String {
         match (&self.ecs, &self.entity) {
             (Some(ecs), Some(entity)) if ecs.provider_owner_id == entity.provider_owner_id => {
-                format!("{} via {}/{}", ecs.provider_owner_id, ecs.provider_service_id, entity.provider_service_id)
+                format!(
+                    "{} via {}/{}",
+                    ecs.provider_owner_id, ecs.provider_service_id, entity.provider_service_id
+                )
             }
             (Some(ecs), Some(entity)) => {
-                format!("split ecs={} entity={}", ecs.provider_owner_id, entity.provider_owner_id)
+                format!(
+                    "split ecs={} entity={}",
+                    ecs.provider_owner_id, entity.provider_owner_id
+                )
             }
             (Some(ecs), None) => format!("ecs={} entity=<missing>", ecs.provider_owner_id),
             (None, Some(entity)) => format!("ecs=<missing> entity={}", entity.provider_owner_id),
@@ -170,10 +189,14 @@ impl WorldAuthorityClient {
             out.notes.push("engine.ecs has no active route".to_owned());
         }
         if out.entity.is_none() {
-            out.notes.push("engine.entity has no active route".to_owned());
+            out.notes
+                .push("engine.entity has no active route".to_owned());
         }
         if out.world.is_none() {
-            out.notes.push("engine.world has no active route; runtime world coordination is degraded".to_owned());
+            out.notes.push(
+                "engine.world has no active route; runtime world coordination is degraded"
+                    .to_owned(),
+            );
         }
         if let (Some(ecs), Some(entity)) = (&out.ecs, &out.entity) {
             if ecs.provider_owner_id != entity.provider_owner_id {
@@ -228,7 +251,10 @@ impl WorldAuthorityClient {
     }
 
     #[inline]
-    pub fn despawn_entities(&self, req: EntityDespawnRequest) -> Result<EntityDespawnResponse, String> {
+    pub fn despawn_entities(
+        &self,
+        req: EntityDespawnRequest,
+    ) -> Result<EntityDespawnResponse, String> {
         self.entity.despawn(req)
     }
 }
@@ -259,8 +285,16 @@ mod tests {
     #[test]
     fn ecs_entity_same_plugin_is_plugin_authority() {
         let snap = WorldAuthoritySnapshot {
-            ecs: Some(route("engine.ecs", "newengine.ecs.flecs", "first-party-plugin")),
-            entity: Some(route("engine.entity", "newengine.ecs.flecs", "first-party-plugin")),
+            ecs: Some(route(
+                "engine.ecs",
+                "newengine.ecs.flecs",
+                "first-party-plugin",
+            )),
+            entity: Some(route(
+                "engine.entity",
+                "newengine.ecs.flecs",
+                "first-party-plugin",
+            )),
             ..Default::default()
         };
         assert!(snap.ecs_entity_are_plugin_authority());
@@ -270,9 +304,21 @@ mod tests {
     #[test]
     fn scene_owned_by_engine_while_ecs_plugin_is_split_authority() {
         let snap = WorldAuthoritySnapshot {
-            ecs: Some(route("engine.ecs", "newengine.ecs.flecs", "first-party-plugin")),
-            entity: Some(route("engine.entity", "newengine.ecs.flecs", "first-party-plugin")),
-            scene: Some(route("engine.scene", "newengine-scene-runtime.scene-gateway", "engine-runtime")),
+            ecs: Some(route(
+                "engine.ecs",
+                "newengine.ecs.flecs",
+                "first-party-plugin",
+            )),
+            entity: Some(route(
+                "engine.entity",
+                "newengine.ecs.flecs",
+                "first-party-plugin",
+            )),
+            scene: Some(route(
+                "engine.scene",
+                "newengine-scene-runtime.scene-gateway",
+                "engine-runtime",
+            )),
             ..Default::default()
         };
         assert!(snap.has_split_world_authority());
@@ -282,9 +328,21 @@ mod tests {
     #[test]
     fn scene_owned_by_same_plugin_removes_split_authority() {
         let snap = WorldAuthoritySnapshot {
-            ecs: Some(route("engine.ecs", "newengine.ecs.flecs", "first-party-plugin")),
-            entity: Some(route("engine.entity", "newengine.ecs.flecs", "first-party-plugin")),
-            scene: Some(route("engine.scene", "newengine.ecs.flecs", "first-party-plugin")),
+            ecs: Some(route(
+                "engine.ecs",
+                "newengine.ecs.flecs",
+                "first-party-plugin",
+            )),
+            entity: Some(route(
+                "engine.entity",
+                "newengine.ecs.flecs",
+                "first-party-plugin",
+            )),
+            scene: Some(route(
+                "engine.scene",
+                "newengine.ecs.flecs",
+                "first-party-plugin",
+            )),
             ..Default::default()
         };
         assert!(!snap.has_split_world_authority());

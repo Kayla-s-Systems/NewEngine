@@ -18,9 +18,11 @@ use newengine_math::{Mat4, Vec3};
 use newengine_ui::draw::UiDrawList;
 
 pub const PROVIDER_TAG_FEATURE: &str = "feature";
-pub const PROVIDER_CAP_DRAW_LISTS: &str = newengine_plugin_api::CAPABILITY_ID_RENDER_DRAW_LIST_PROVIDER;
+pub const PROVIDER_CAP_DRAW_LISTS: &str =
+    newengine_plugin_api::CAPABILITY_ID_RENDER_DRAW_LIST_PROVIDER;
 pub const LIGHT_PROVIDER_TAG_FEATURE: &str = "feature";
-pub const LIGHT_PROVIDER_CAP_EXTRACTION: &str = newengine_plugin_api::CAPABILITY_ID_RENDER_LIGHT_EXTRACTION_PROVIDER;
+pub const LIGHT_PROVIDER_CAP_EXTRACTION: &str =
+    newengine_plugin_api::CAPABILITY_ID_RENDER_LIGHT_EXTRACTION_PROVIDER;
 
 const EMPTY_LISTS: &[RenderDrawListKind] = &[];
 const OPAQUE_FORWARD: &[RenderDrawListKind] = &[RenderDrawListKind::OpaqueForward];
@@ -100,9 +102,18 @@ impl<'a> SceneExtractionCtx<'a> {
 }
 
 pub trait DrawListBuildCtx {
-    fn record_procedural_terrain_shadow(&mut self, ctx: &SceneExtractionCtx<'_>) -> EngineResult<()>;
-    fn record_procedural_terrain_forward(&mut self, ctx: &SceneExtractionCtx<'_>) -> EngineResult<()>;
-    fn record_procedural_terrain_gbuffer(&mut self, _ctx: &SceneExtractionCtx<'_>) -> EngineResult<()> {
+    fn record_procedural_terrain_shadow(
+        &mut self,
+        ctx: &SceneExtractionCtx<'_>,
+    ) -> EngineResult<()>;
+    fn record_procedural_terrain_forward(
+        &mut self,
+        ctx: &SceneExtractionCtx<'_>,
+    ) -> EngineResult<()>;
+    fn record_procedural_terrain_gbuffer(
+        &mut self,
+        _ctx: &SceneExtractionCtx<'_>,
+    ) -> EngineResult<()> {
         Ok(())
     }
     fn record_primitive_mesh_shadow(&mut self, ctx: &SceneExtractionCtx<'_>) -> EngineResult<()>;
@@ -142,15 +153,27 @@ pub trait RenderDrawListProvider: Send + Sync {
 
     fn provided_draw_lists(&self, ctx: &SceneExtractionCtx<'_>) -> &'static [RenderDrawListKind];
 
-    fn extract(&self, ctx: &SceneExtractionCtx<'_>, out: &mut dyn DrawListBuildCtx) -> EngineResult<()>;
+    fn extract(
+        &self,
+        ctx: &SceneExtractionCtx<'_>,
+        out: &mut dyn DrawListBuildCtx,
+    ) -> EngineResult<()>;
 }
 
 #[inline]
 pub const fn shadow_and_opaque_list(active: bool) -> &'static [RenderDrawListKind] {
-    if active { SHADOW_AND_OPAQUE } else { OPAQUE_FORWARD }
+    if active {
+        SHADOW_AND_OPAQUE
+    } else {
+        OPAQUE_FORWARD
+    }
 }
 
 #[inline]
 pub const fn ui_list(active: bool) -> &'static [RenderDrawListKind] {
-    if active { UI_LIST } else { EMPTY_LISTS }
+    if active {
+        UI_LIST
+    } else {
+        EMPTY_LISTS
+    }
 }

@@ -36,7 +36,11 @@ pub struct FrameGraphTargetDesc {
 
 impl FrameGraphTargetDesc {
     #[inline]
-    pub fn new(surface_extent: Extent2D, viewport_extent: Extent2D, viewport_is_surface: bool) -> Self {
+    pub fn new(
+        surface_extent: Extent2D,
+        viewport_extent: Extent2D,
+        viewport_is_surface: bool,
+    ) -> Self {
         Self {
             surface_extent,
             viewport_extent,
@@ -77,24 +81,28 @@ impl FrameGraphTargetDesc {
 
 impl FrameGraphBuilder {
     pub(super) fn add_standard_external_resources(&mut self) {
-        self.graph.resources.push(RenderGraphResourceDesc::external_swapchain(
-            RG_SURFACE_COLOR,
-            "swapchain_surface_color",
-            RenderGraphResourceUsage::ColorAttachment,
-            self.target.surface_extent,
-            self.target.color_format,
-        )
-        .with_semantic(RenderGraphResourceSemantic::SurfaceColor));
+        self.graph.resources.push(
+            RenderGraphResourceDesc::external_swapchain(
+                RG_SURFACE_COLOR,
+                "swapchain_surface_color",
+                RenderGraphResourceUsage::ColorAttachment,
+                self.target.surface_extent,
+                self.target.color_format,
+            )
+            .with_semantic(RenderGraphResourceSemantic::SurfaceColor),
+        );
 
         if self.target.hdr_scene_enabled {
-            self.graph.resources.push(RenderGraphResourceDesc::transient_texture(
-                RG_SCENE_HDR_COLOR,
-                "scene_hdr_color",
-                RenderGraphResourceUsage::ColorAttachment,
-                self.target.viewport_extent,
-                self.target.scene_color_format,
-            )
-            .with_semantic(RenderGraphResourceSemantic::SceneHdrColor));
+            self.graph.resources.push(
+                RenderGraphResourceDesc::transient_texture(
+                    RG_SCENE_HDR_COLOR,
+                    "scene_hdr_color",
+                    RenderGraphResourceUsage::ColorAttachment,
+                    self.target.viewport_extent,
+                    self.target.scene_color_format,
+                )
+                .with_semantic(RenderGraphResourceSemantic::SceneHdrColor),
+            );
 
             // HDR scene rendering is offscreen even when the viewport is the native surface.
             // The world pass must therefore own a matching depth attachment in the same
@@ -102,72 +110,85 @@ impl FrameGraphBuilder {
             // swapchain/external depth here makes the forward material pipelines use a
             // color+depth render pass while the actual offscreen target is color-only,
             // which can silently produce an empty scene before postFX composition.
-            self.graph.resources.push(RenderGraphResourceDesc::transient_texture(
-                RG_VIEWPORT_DEPTH,
-                "scene_hdr_depth",
-                RenderGraphResourceUsage::DepthAttachment,
-                self.target.viewport_extent,
-                self.target.depth_format,
-            )
-            .with_semantic(RenderGraphResourceSemantic::ViewportDepth));
-        }
-
-        if self.target.viewport_is_surface {
-            self.graph.resources.push(RenderGraphResourceDesc::external_swapchain(
-                RG_VIEWPORT_COLOR,
-                "viewport_surface_color",
-                RenderGraphResourceUsage::ColorAttachment,
-                self.target.surface_extent,
-                self.target.color_format,
-            )
-            .with_semantic(RenderGraphResourceSemantic::ViewportColor));
-            if !self.target.hdr_scene_enabled {
-                self.graph.resources.push(RenderGraphResourceDesc::external_swapchain(
+            self.graph.resources.push(
+                RenderGraphResourceDesc::transient_texture(
                     RG_VIEWPORT_DEPTH,
-                    "viewport_surface_depth",
-                    RenderGraphResourceUsage::DepthAttachment,
-                    self.target.surface_extent,
-                    self.target.depth_format,
-                )
-                .with_semantic(RenderGraphResourceSemantic::ViewportDepth));
-            }
-        } else if let Some(rt) = self.target.viewport_render_target {
-            self.graph.resources.push(RenderGraphResourceDesc::external_render_target(
-                RG_VIEWPORT_COLOR,
-                "viewport_render_target_color",
-                rt,
-                RenderGraphResourceUsage::ColorAttachment,
-                self.target.viewport_extent,
-                self.target.color_format,
-            )
-            .with_semantic(RenderGraphResourceSemantic::ViewportColor));
-            if !self.target.hdr_scene_enabled {
-                self.graph.resources.push(RenderGraphResourceDesc::external_render_target(
-                    RG_VIEWPORT_DEPTH,
-                    "viewport_render_target_depth",
-                    rt,
+                    "scene_hdr_depth",
                     RenderGraphResourceUsage::DepthAttachment,
                     self.target.viewport_extent,
                     self.target.depth_format,
                 )
-                .with_semantic(RenderGraphResourceSemantic::ViewportDepth));
+                .with_semantic(RenderGraphResourceSemantic::ViewportDepth),
+            );
+        }
+
+        if self.target.viewport_is_surface {
+            self.graph.resources.push(
+                RenderGraphResourceDesc::external_swapchain(
+                    RG_VIEWPORT_COLOR,
+                    "viewport_surface_color",
+                    RenderGraphResourceUsage::ColorAttachment,
+                    self.target.surface_extent,
+                    self.target.color_format,
+                )
+                .with_semantic(RenderGraphResourceSemantic::ViewportColor),
+            );
+            if !self.target.hdr_scene_enabled {
+                self.graph.resources.push(
+                    RenderGraphResourceDesc::external_swapchain(
+                        RG_VIEWPORT_DEPTH,
+                        "viewport_surface_depth",
+                        RenderGraphResourceUsage::DepthAttachment,
+                        self.target.surface_extent,
+                        self.target.depth_format,
+                    )
+                    .with_semantic(RenderGraphResourceSemantic::ViewportDepth),
+                );
+            }
+        } else if let Some(rt) = self.target.viewport_render_target {
+            self.graph.resources.push(
+                RenderGraphResourceDesc::external_render_target(
+                    RG_VIEWPORT_COLOR,
+                    "viewport_render_target_color",
+                    rt,
+                    RenderGraphResourceUsage::ColorAttachment,
+                    self.target.viewport_extent,
+                    self.target.color_format,
+                )
+                .with_semantic(RenderGraphResourceSemantic::ViewportColor),
+            );
+            if !self.target.hdr_scene_enabled {
+                self.graph.resources.push(
+                    RenderGraphResourceDesc::external_render_target(
+                        RG_VIEWPORT_DEPTH,
+                        "viewport_render_target_depth",
+                        rt,
+                        RenderGraphResourceUsage::DepthAttachment,
+                        self.target.viewport_extent,
+                        self.target.depth_format,
+                    )
+                    .with_semantic(RenderGraphResourceSemantic::ViewportDepth),
+                );
             }
         } else {
-            self.graph.resources.push(RenderGraphResourceDesc::external(
-                RG_VIEWPORT_COLOR,
-                "viewport_render_target_color",
-                RenderGraphResourceUsage::ColorAttachment,
-            )
-            .with_semantic(RenderGraphResourceSemantic::ViewportColor));
-            if !self.target.hdr_scene_enabled {
-                self.graph.resources.push(RenderGraphResourceDesc::external(
-                    RG_VIEWPORT_DEPTH,
-                    "viewport_depth",
-                    RenderGraphResourceUsage::DepthAttachment,
+            self.graph.resources.push(
+                RenderGraphResourceDesc::external(
+                    RG_VIEWPORT_COLOR,
+                    "viewport_render_target_color",
+                    RenderGraphResourceUsage::ColorAttachment,
                 )
-                .with_semantic(RenderGraphResourceSemantic::ViewportDepth));
+                .with_semantic(RenderGraphResourceSemantic::ViewportColor),
+            );
+            if !self.target.hdr_scene_enabled {
+                self.graph.resources.push(
+                    RenderGraphResourceDesc::external(
+                        RG_VIEWPORT_DEPTH,
+                        "viewport_depth",
+                        RenderGraphResourceUsage::DepthAttachment,
+                    )
+                    .with_semantic(RenderGraphResourceSemantic::ViewportDepth),
+                );
             }
         }
     }
-
 }

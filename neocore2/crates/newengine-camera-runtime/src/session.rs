@@ -99,7 +99,10 @@ impl CameraRuntimeSessionService {
             .unwrap_or_default()
     }
 
-    pub fn sync(world: &mut World, request: CameraRuntimeSessionSync) -> CameraRuntimeSessionReport {
+    pub fn sync(
+        world: &mut World,
+        request: CameraRuntimeSessionSync,
+    ) -> CameraRuntimeSessionReport {
         Self::ensure_resource(world);
 
         let previous_mode = Self::current_mode(world);

@@ -53,7 +53,9 @@ pub(super) fn parse_plugin_draw_list_provider(
     let method = parsed
         .method
         .filter(|it| !it.trim().is_empty())
-        .unwrap_or_else(|| newengine_core::render::RENDER_DRAW_LIST_PROVIDER_METHOD_EXTRACT.to_string());
+        .unwrap_or_else(|| {
+            newengine_core::render::RENDER_DRAW_LIST_PROVIDER_METHOD_EXTRACT.to_string()
+        });
 
     Some(ExternalRenderDrawListProviderDesc {
         id,
@@ -86,7 +88,6 @@ fn parse_draw_list_kind(value: &str) -> Option<RenderDrawListKind> {
     }
 }
 
-
 #[inline]
 pub(super) fn build_draw_list_provider_request(
     ctx: &SceneExtractionCtx<'_>,
@@ -113,12 +114,20 @@ pub(super) fn build_draw_list_provider_request(
             runtime: ctx.runtime,
             debug_overlays: ctx.debug_overlays,
             bounds: RenderBoundsSnapshot {
-                center: [ctx.bounds.center.x, ctx.bounds.center.y, ctx.bounds.center.z],
+                center: [
+                    ctx.bounds.center.x,
+                    ctx.bounds.center.y,
+                    ctx.bounds.center.z,
+                ],
                 radius: ctx.bounds.radius,
             },
             view: RenderViewSnapshot {
                 view_projection_cols: ctx.viewproj.to_cols_array_2d(),
-                position_ws: [ctx.camera_position.x, ctx.camera_position.y, ctx.camera_position.z],
+                position_ws: [
+                    ctx.camera_position.x,
+                    ctx.camera_position.y,
+                    ctx.camera_position.z,
+                ],
             },
             active_draw_lists: lists.kinds().into_iter().collect(),
         },

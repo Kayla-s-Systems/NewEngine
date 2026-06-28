@@ -25,16 +25,22 @@ pub const WORLD_ENVIRONMENT_WEATHER_CAPABILITY_ID: &str = "world.environment.wea
 pub const WORLD_ENVIRONMENT_WIND_CAPABILITY_ID: &str = "world.environment.wind";
 pub const WORLD_ENVIRONMENT_SNAPSHOT_CAPABILITY_ID: &str = "world.environment.snapshot";
 pub const WORLD_ENVIRONMENT_STREAMING_CAPABILITY_ID: &str = "world.environment.streaming";
-pub const WORLD_ENVIRONMENT_DETERMINISTIC_REPLAY_CAPABILITY_ID: &str = "world.environment.deterministic_replay";
+pub const WORLD_ENVIRONMENT_DETERMINISTIC_REPLAY_CAPABILITY_ID: &str =
+    "world.environment.deterministic_replay";
 
-pub const WORLD_ENVIRONMENT_SERVICE_METHOD_INFO: &str = newengine_service_api::SERVICE_METHOD_INFO_JSON;
-pub const WORLD_ENVIRONMENT_SERVICE_METHOD_INVOKE: &str = newengine_service_api::SERVICE_METHOD_INVOKE_JSON;
-pub const WORLD_ENVIRONMENT_SERVICE_METHOD_SHUTDOWN_V1: &str = newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1;
+pub const WORLD_ENVIRONMENT_SERVICE_METHOD_INFO: &str =
+    newengine_service_api::SERVICE_METHOD_INFO_JSON;
+pub const WORLD_ENVIRONMENT_SERVICE_METHOD_INVOKE: &str =
+    newengine_service_api::SERVICE_METHOD_INVOKE_JSON;
+pub const WORLD_ENVIRONMENT_SERVICE_METHOD_SHUTDOWN_V1: &str =
+    newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1;
 pub const WORLD_ENVIRONMENT_SERVICE_METHOD_FRAME_JSON_V1: &str = "environment.frame_json_v1";
-pub const WORLD_ENVIRONMENT_SERVICE_METHOD_SAMPLE_AT_POSITION_JSON_V1: &str = "environment.sample_at_position_json_v1";
+pub const WORLD_ENVIRONMENT_SERVICE_METHOD_SAMPLE_AT_POSITION_JSON_V1: &str =
+    "environment.sample_at_position_json_v1";
 pub const WORLD_ENVIRONMENT_SERVICE_METHOD_SNAPSHOT_JSON_V1: &str = "environment.snapshot_json_v1";
 pub const WORLD_ENVIRONMENT_SERVICE_METHOD_RESTORE_JSON_V1: &str = "environment.restore_json_v1";
-pub const WORLD_ENVIRONMENT_SERVICE_METHOD_PREVIEW_TIME_JSON_V1: &str = "environment.preview_time_json_v1";
+pub const WORLD_ENVIRONMENT_SERVICE_METHOD_PREVIEW_TIME_JSON_V1: &str =
+    "environment.preview_time_json_v1";
 
 pub const WORLD_ENVIRONMENT_REQUIRED_METHODS_V1: &[&str] = &[
     WORLD_ENVIRONMENT_SERVICE_METHOD_INFO,
@@ -55,7 +61,8 @@ pub const WORLD_ENVIRONMENT_BACKEND_SERVICE_SPEC: newengine_service_api::Backend
         WORLD_ENVIRONMENT_BACKEND_CAPABILITY_ID,
     );
 
-pub const WORLD_ENVIRONMENT_RUNTIME_CONTRACT_SPEC: newengine_service_api::RuntimeServiceContractSpec =
+pub const WORLD_ENVIRONMENT_RUNTIME_CONTRACT_SPEC:
+    newengine_service_api::RuntimeServiceContractSpec =
     newengine_service_api::RuntimeServiceContractSpec::new(
         ENGINE_WORLD_ENVIRONMENT_SERVICE_ID,
         "newengine.world.environment-api >= 0.1.x",
@@ -64,7 +71,8 @@ pub const WORLD_ENVIRONMENT_RUNTIME_CONTRACT_SPEC: newengine_service_api::Runtim
 
 /// Missing `engine.world.environment` degrades by profile policy; the default
 /// runtime also registers a visible NullEnvironment route for explicit degraded mode.
-pub const WORLD_ENVIRONMENT_RUNTIME_REQUIREMENT_SPEC: newengine_service_api::RuntimeServiceRequirementSpec =
+pub const WORLD_ENVIRONMENT_RUNTIME_REQUIREMENT_SPEC:
+    newengine_service_api::RuntimeServiceRequirementSpec =
     newengine_service_api::RuntimeServiceRequirementSpec::new(
         WORLD_ENVIRONMENT_RUNTIME_CONTRACT_SPEC,
         Some(WORLD_ENVIRONMENT_BACKEND_CAPABILITY_ID),
@@ -108,7 +116,10 @@ impl EnvironmentServiceInfo {
                 "lighting-intent".to_owned(),
                 "gameplay-modifiers".to_owned(),
             ],
-            methods: WORLD_ENVIRONMENT_REQUIRED_METHODS_V1.iter().map(|it| (*it).to_owned()).collect(),
+            methods: WORLD_ENVIRONMENT_REQUIRED_METHODS_V1
+                .iter()
+                .map(|it| (*it).to_owned())
+                .collect(),
         }
     }
 
@@ -126,7 +137,9 @@ impl EnvironmentServiceInfo {
 
 impl Default for EnvironmentServiceInfo {
     #[inline]
-    fn default() -> Self { Self::default_provider("environment.default") }
+    fn default() -> Self {
+        Self::default_provider("environment.default")
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -138,18 +151,34 @@ pub struct Vec3Dto {
 
 impl Vec3Dto {
     #[inline]
-    pub const fn new(x: f32, y: f32, z: f32) -> Self { Self { x, y, z } }
+    pub const fn new(x: f32, y: f32, z: f32) -> Self {
+        Self { x, y, z }
+    }
 
     #[inline]
-    pub const fn zero() -> Self { Self { x: 0.0, y: 0.0, z: 0.0 } }
+    pub const fn zero() -> Self {
+        Self {
+            x: 0.0,
+            y: 0.0,
+            z: 0.0,
+        }
+    }
 
     #[inline]
-    pub const fn up() -> Self { Self { x: 0.0, y: 1.0, z: 0.0 } }
+    pub const fn up() -> Self {
+        Self {
+            x: 0.0,
+            y: 1.0,
+            z: 0.0,
+        }
+    }
 }
 
 impl Default for Vec3Dto {
     #[inline]
-    fn default() -> Self { Self::zero() }
+    fn default() -> Self {
+        Self::zero()
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -161,18 +190,34 @@ pub struct Color3Dto {
 
 impl Color3Dto {
     #[inline]
-    pub const fn new(r: f32, g: f32, b: f32) -> Self { Self { r, g, b } }
+    pub const fn new(r: f32, g: f32, b: f32) -> Self {
+        Self { r, g, b }
+    }
 
     #[inline]
-    pub const fn black() -> Self { Self { r: 0.0, g: 0.0, b: 0.0 } }
+    pub const fn black() -> Self {
+        Self {
+            r: 0.0,
+            g: 0.0,
+            b: 0.0,
+        }
+    }
 
     #[inline]
-    pub const fn white() -> Self { Self { r: 1.0, g: 1.0, b: 1.0 } }
+    pub const fn white() -> Self {
+        Self {
+            r: 1.0,
+            g: 1.0,
+            b: 1.0,
+        }
+    }
 }
 
 impl Default for Color3Dto {
     #[inline]
-    fn default() -> Self { Self::black() }
+    fn default() -> Self {
+        Self::black()
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -183,7 +228,12 @@ pub struct AabbDto {
 
 impl Default for AabbDto {
     #[inline]
-    fn default() -> Self { Self { min: Vec3Dto::zero(), max: Vec3Dto::zero() } }
+    fn default() -> Self {
+        Self {
+            min: Vec3Dto::zero(),
+            max: Vec3Dto::zero(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -210,7 +260,9 @@ pub struct EnvironmentProfileRefDto {
     pub profile_id: String,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default, Serialize, Deserialize,
+)]
 pub struct EnvironmentObjectId {
     pub stable_id: u64,
 }
@@ -230,7 +282,9 @@ pub enum WeatherKind {
 
 impl Default for WeatherKind {
     #[inline]
-    fn default() -> Self { Self::Clear }
+    fn default() -> Self {
+        Self::Clear
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -243,7 +297,9 @@ pub enum PrecipitationKind {
 
 impl Default for PrecipitationKind {
     #[inline]
-    fn default() -> Self { Self::None }
+    fn default() -> Self {
+        Self::None
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -260,7 +316,9 @@ pub enum EnvironmentObjectKind {
 
 impl Default for EnvironmentObjectKind {
     #[inline]
-    fn default() -> Self { Self::CloudField }
+    fn default() -> Self {
+        Self::CloudField
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -273,7 +331,9 @@ pub enum TimeOfDayPhase {
 
 impl Default for TimeOfDayPhase {
     #[inline]
-    fn default() -> Self { Self::Night }
+    fn default() -> Self {
+        Self::Night
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -327,7 +387,9 @@ impl Default for EnvironmentFrameRequest {
             active_region: None,
             active_biome: None,
             resident_cells: Vec::new(),
-            environment_profile: EnvironmentProfileRefDto { profile_id: "environment.default".to_owned() },
+            environment_profile: EnvironmentProfileRefDto {
+                profile_id: "environment.default".to_owned(),
+            },
             seed: 0,
         }
     }
@@ -543,7 +605,12 @@ pub struct PrecipitationStateDto {
 
 impl Default for PrecipitationStateDto {
     #[inline]
-    fn default() -> Self { Self { kind: PrecipitationKind::None, intensity: 0.0 } }
+    fn default() -> Self {
+        Self {
+            kind: PrecipitationKind::None,
+            intensity: 0.0,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -554,7 +621,12 @@ pub struct ThunderStateDto {
 
 impl Default for ThunderStateDto {
     #[inline]
-    fn default() -> Self { Self { probability: 0.0, distance_meters: 0.0 } }
+    fn default() -> Self {
+        Self {
+            probability: 0.0,
+            distance_meters: 0.0,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -566,7 +638,13 @@ pub struct WetnessStateDto {
 
 impl Default for WetnessStateDto {
     #[inline]
-    fn default() -> Self { Self { surface_wetness: 0.0, accumulation_rate: 0.0, drying_rate: 0.02 } }
+    fn default() -> Self {
+        Self {
+            surface_wetness: 0.0,
+            accumulation_rate: 0.0,
+            drying_rate: 0.02,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -578,7 +656,13 @@ pub struct SnowStateDto {
 
 impl Default for SnowStateDto {
     #[inline]
-    fn default() -> Self { Self { surface_snow: 0.0, accumulation_rate: 0.0, melt_rate: 0.0 } }
+    fn default() -> Self {
+        Self {
+            surface_snow: 0.0,
+            accumulation_rate: 0.0,
+            melt_rate: 0.0,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -716,7 +800,12 @@ pub struct ExposureIntentDto {
 impl Default for ExposureIntentDto {
     #[inline]
     fn default() -> Self {
-        Self { night_adaptation_hint: 1.0, storm_darkening: 0.0, sun_glare_hint: 0.0, interior_exterior_bias: 0.0 }
+        Self {
+            night_adaptation_hint: 1.0,
+            storm_darkening: 0.0,
+            sun_glare_hint: 0.0,
+            interior_exterior_bias: 0.0,
+        }
     }
 }
 
@@ -964,7 +1053,13 @@ pub struct StreamingEnvironmentHintsDto {
 
 impl Default for StreamingEnvironmentHintsDto {
     #[inline]
-    fn default() -> Self { Self { residency_intents: Vec::new(), affected_cells: Vec::new(), tags: Vec::new() } }
+    fn default() -> Self {
+        Self {
+            residency_intents: Vec::new(),
+            affected_cells: Vec::new(),
+            tags: Vec::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -1000,7 +1095,15 @@ pub struct EnvironmentSampleAtPositionRequest {
 impl Default for EnvironmentSampleAtPositionRequest {
     #[inline]
     fn default() -> Self {
-        Self { frame: EnvironmentFrameDto::neutral_degraded(0, "world.runtime.default", "environment.sample.default"), position: Vec3Dto::zero(), cell: None }
+        Self {
+            frame: EnvironmentFrameDto::neutral_degraded(
+                0,
+                "world.runtime.default",
+                "environment.sample.default",
+            ),
+            position: Vec3Dto::zero(),
+            cell: None,
+        }
     }
 }
 
@@ -1022,7 +1125,11 @@ pub struct EnvironmentSnapshotRequest {
 
 impl Default for EnvironmentSnapshotRequest {
     #[inline]
-    fn default() -> Self { Self { include_objects: true } }
+    fn default() -> Self {
+        Self {
+            include_objects: true,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -1039,7 +1146,11 @@ pub struct EnvironmentRestoreRequest {
 
 impl Default for EnvironmentRestoreRequest {
     #[inline]
-    fn default() -> Self { Self { snapshot: EnvironmentSnapshotResponse::default() } }
+    fn default() -> Self {
+        Self {
+            snapshot: EnvironmentSnapshotResponse::default(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -1057,7 +1168,12 @@ pub struct EnvironmentPreviewTimeRequest {
 
 impl Default for EnvironmentPreviewTimeRequest {
     #[inline]
-    fn default() -> Self { Self { base_request: EnvironmentFrameRequest::default(), normalized_time_of_day: 0.5 } }
+    fn default() -> Self {
+        Self {
+            base_request: EnvironmentFrameRequest::default(),
+            normalized_time_of_day: 0.5,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -1069,7 +1185,11 @@ pub struct EnvironmentInvokeRequest {
 
 impl EnvironmentFrameDto {
     #[inline]
-    pub fn neutral_degraded(frame_id: u64, world_instance_id: impl Into<String>, key: impl Into<String>) -> Self {
+    pub fn neutral_degraded(
+        frame_id: u64,
+        world_instance_id: impl Into<String>,
+        key: impl Into<String>,
+    ) -> Self {
         let world_instance_id = world_instance_id.into();
         let key = key.into();
         Self {
@@ -1085,8 +1205,21 @@ impl EnvironmentFrameDto {
             sky: SkyStateDto::default(),
             atmosphere: AtmosphereStateDto::default(),
             weather: WeatherStateDto::default(),
-            clouds: CloudStateDto { coverage: 0.0, overcast: 0.0, shadow_strength: 0.0, light_absorption: 0.0, layers: Vec::new(), volumes: Vec::new(), storm_cells: Vec::new() },
-            wind: WindStateDto { global_direction: Vec3Dto::zero(), global_speed_mps: 0.0, gust_strength: 0.0, cloud_advection: Vec3Dto::zero() },
+            clouds: CloudStateDto {
+                coverage: 0.0,
+                overcast: 0.0,
+                shadow_strength: 0.0,
+                light_absorption: 0.0,
+                layers: Vec::new(),
+                volumes: Vec::new(),
+                storm_cells: Vec::new(),
+            },
+            wind: WindStateDto {
+                global_direction: Vec3Dto::zero(),
+                global_speed_mps: 0.0,
+                gust_strength: 0.0,
+                cloud_advection: Vec3Dto::zero(),
+            },
             lighting_intent: EnvironmentLightingIntentDto::default(),
             gameplay_modifiers: EnvironmentGameplayModifiersDto::default(),
             exposure_intent: ExposureIntentDto::default(),
@@ -1107,13 +1240,18 @@ impl EnvironmentFrameDto {
 
 impl Default for EnvironmentFrameDto {
     #[inline]
-    fn default() -> Self { Self::neutral_degraded(0, "world.runtime.default", "environment.default") }
+    fn default() -> Self {
+        Self::neutral_degraded(0, "world.runtime.default", "environment.default")
+    }
 }
 
 impl Default for EnvironmentSnapshotResponse {
     #[inline]
     fn default() -> Self {
-        Self { schema: "newengine.world.environment.snapshot.v1".to_owned(), frame: EnvironmentFrameDto::default() }
+        Self {
+            schema: "newengine.world.environment.snapshot.v1".to_owned(),
+            frame: EnvironmentFrameDto::default(),
+        }
     }
 }
 
@@ -1127,11 +1265,18 @@ pub struct EnvironmentClient {
 impl EnvironmentClient {
     #[inline]
     pub fn new(host: HostApiV1) -> Self {
-        Self { host, service_id: RString::from(ENGINE_WORLD_ENVIRONMENT_SERVICE_ID) }
+        Self {
+            host,
+            service_id: RString::from(ENGINE_WORLD_ENVIRONMENT_SERVICE_ID),
+        }
     }
 
     #[inline]
-    fn call_json(&self, method: &str, payload: serde_json::Value) -> Result<serde_json::Value, String> {
+    fn call_json(
+        &self,
+        method: &str,
+        payload: serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
         let payload = serde_json::to_vec(&payload).map_err(|e| e.to_string())?;
         let res = (self.host.call_service_v1)(
             self.service_id.clone(),
@@ -1143,7 +1288,10 @@ impl EnvironmentClient {
     }
 
     #[inline]
-    pub fn frame_json_v1(&self, request: EnvironmentFrameRequest) -> Result<EnvironmentFrameDto, String> {
+    pub fn frame_json_v1(
+        &self,
+        request: EnvironmentFrameRequest,
+    ) -> Result<EnvironmentFrameDto, String> {
         let value = serde_json::to_value(request).map_err(|e| e.to_string())?;
         let response = self.call_json(WORLD_ENVIRONMENT_SERVICE_METHOD_FRAME_JSON_V1, value)?;
         serde_json::from_value(response).map_err(|e| e.to_string())
@@ -1165,10 +1313,22 @@ mod tests {
 
     #[test]
     fn environment_service_ids_are_world_subdomain_gateway_first() {
-        assert_eq!(ENGINE_WORLD_ENVIRONMENT_SERVICE_ID, "engine.world.environment");
-        assert_eq!(WORLD_ENVIRONMENT_BACKEND_SERVICE_SPEC.engine_gateway_id, ENGINE_WORLD_ENVIRONMENT_SERVICE_ID);
-        assert_eq!(WORLD_ENVIRONMENT_BACKEND_SERVICE_SPEC.provider_service_id, WORLD_ENVIRONMENT_DEFAULT_SERVICE_ID);
-        assert_eq!(WORLD_ENVIRONMENT_BACKEND_SERVICE_SPEC.backend_capability_id, WORLD_ENVIRONMENT_BACKEND_CAPABILITY_ID);
+        assert_eq!(
+            ENGINE_WORLD_ENVIRONMENT_SERVICE_ID,
+            "engine.world.environment"
+        );
+        assert_eq!(
+            WORLD_ENVIRONMENT_BACKEND_SERVICE_SPEC.engine_gateway_id,
+            ENGINE_WORLD_ENVIRONMENT_SERVICE_ID
+        );
+        assert_eq!(
+            WORLD_ENVIRONMENT_BACKEND_SERVICE_SPEC.provider_service_id,
+            WORLD_ENVIRONMENT_DEFAULT_SERVICE_ID
+        );
+        assert_eq!(
+            WORLD_ENVIRONMENT_BACKEND_SERVICE_SPEC.backend_capability_id,
+            WORLD_ENVIRONMENT_BACKEND_CAPABILITY_ID
+        );
     }
 
     #[test]

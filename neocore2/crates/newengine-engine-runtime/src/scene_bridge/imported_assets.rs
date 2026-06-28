@@ -65,48 +65,57 @@ pub struct SceneImportedAssetAssembler {
 }
 
 #[inline]
-pub(super) fn imported_asset_primitive_id(descriptor: &SceneImportedAssetDescriptor) -> PrimitiveId {
+pub(super) fn imported_asset_primitive_id(
+    descriptor: &SceneImportedAssetDescriptor,
+) -> PrimitiveId {
     descriptor.assembly.primitive_id
 }
 
 #[inline]
-pub(super) fn imported_asset_collision(descriptor: &SceneImportedAssetDescriptor) -> Option<PhysicsBodyDesc> {
+pub(super) fn imported_asset_collision(
+    descriptor: &SceneImportedAssetDescriptor,
+) -> Option<PhysicsBodyDesc> {
     if !descriptor.assembly.with_collision {
         return None;
     }
     match descriptor.assembly.assembly {
-        SceneImportedAssetAssemblyKind::StaticMeshActor | SceneImportedAssetAssemblyKind::OpaqueProxy => Some(if descriptor.assembly.dynamic_collision {
-            PhysicsBodyDesc::dynamic_solid(CollisionShapeDesc::Box {
-                half_extents: [
-                    descriptor.default_scale[0].abs().max(0.5),
-                    descriptor.default_scale[1].abs().max(0.5),
-                    descriptor.default_scale[2].abs().max(0.5),
-                ],
+        SceneImportedAssetAssemblyKind::StaticMeshActor
+        | SceneImportedAssetAssemblyKind::OpaqueProxy => {
+            Some(if descriptor.assembly.dynamic_collision {
+                PhysicsBodyDesc::dynamic_solid(CollisionShapeDesc::Box {
+                    half_extents: [
+                        descriptor.default_scale[0].abs().max(0.5),
+                        descriptor.default_scale[1].abs().max(0.5),
+                        descriptor.default_scale[2].abs().max(0.5),
+                    ],
+                })
+            } else {
+                PhysicsBodyDesc::static_solid(CollisionShapeDesc::Box {
+                    half_extents: [
+                        descriptor.default_scale[0].abs().max(0.5),
+                        descriptor.default_scale[1].abs().max(0.5),
+                        descriptor.default_scale[2].abs().max(0.5),
+                    ],
+                })
             })
-        } else {
-            PhysicsBodyDesc::static_solid(CollisionShapeDesc::Box {
+        }
+        SceneImportedAssetAssemblyKind::TextureCard => {
+            Some(PhysicsBodyDesc::trigger(CollisionShapeDesc::Box {
                 half_extents: [
-                    descriptor.default_scale[0].abs().max(0.5),
-                    descriptor.default_scale[1].abs().max(0.5),
-                    descriptor.default_scale[2].abs().max(0.5),
+                    descriptor.default_scale[0].abs().max(0.25),
+                    0.05,
+                    descriptor.default_scale[2].abs().max(0.25),
                 ],
-            })
-        }),
-        SceneImportedAssetAssemblyKind::TextureCard => Some(PhysicsBodyDesc::trigger(CollisionShapeDesc::Box {
-            half_extents: [
-                descriptor.default_scale[0].abs().max(0.25),
-                0.05,
-                descriptor.default_scale[2].abs().max(0.25),
-            ],
-        })),
-        SceneImportedAssetAssemblyKind::MaterialPreviewSphere => Some(PhysicsBodyDesc::static_solid(CollisionShapeDesc::Sphere {
-            radius: descriptor.default_scale[0].abs().max(0.5),
-        })),
+            }))
+        }
+        SceneImportedAssetAssemblyKind::MaterialPreviewSphere => {
+            Some(PhysicsBodyDesc::static_solid(CollisionShapeDesc::Sphere {
+                radius: descriptor.default_scale[0].abs().max(0.5),
+            }))
+        }
         SceneImportedAssetAssemblyKind::SceneAnchor => None,
     }
 }
-
-
 
 #[inline]
 pub(super) fn builtin_asset_assemblers() -> Vec<SceneImportedAssetAssembler> {
@@ -156,7 +165,10 @@ pub(super) fn resolve_asset_assembler(
         .or_else(|| {
             registry
                 .iter()
-                .find(|it| it.import_kind == descriptor.import_kind && it.assembly == descriptor.assembly.assembly)
+                .find(|it| {
+                    it.import_kind == descriptor.import_kind
+                        && it.assembly == descriptor.assembly.assembly
+                })
                 .cloned()
         })
         .unwrap_or_else(|| SceneImportedAssetAssembler {

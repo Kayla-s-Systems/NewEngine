@@ -30,7 +30,11 @@ pub fn build(params: &PrimitiveParams) -> PrimitiveMesh {
             let (st, ct) = theta.sin_cos();
             let n = Vec3::new(ct * sp, cp, st * sp);
             let p = n * radius;
-            vertices.push(PrimitiveVertex { pos: [p.x, p.y, p.z], nrm: [n.x, n.y, n.z], uv: [u, 1.0 - v] });
+            vertices.push(PrimitiveVertex {
+                pos: [p.x, p.y, p.z],
+                nrm: [n.x, n.y, n.z],
+                uv: [u, 1.0 - v],
+            });
         }
     }
     let mut indices = Vec::with_capacity((slices * stacks * 2) as usize * 3);
@@ -43,5 +47,10 @@ pub fn build(params: &PrimitiveParams) -> PrimitiveMesh {
             indices.extend_from_slice(&[i0, i2, i1, i1, i2, i3]);
         }
     }
-    PrimitiveMesh { vertices, indices, bounds_center: Vec3::ZERO, bounds_radius: radius }
+    PrimitiveMesh {
+        vertices,
+        indices,
+        bounds_center: Vec3::ZERO,
+        bounds_radius: radius,
+    }
 }

@@ -170,7 +170,12 @@ pub struct PlayerEventBus {
 
 impl PlayerEventBus {
     #[inline]
-    pub fn emit(&mut self, entity: newengine_ecs::EntityId, kind: PlayerEventKind, message: impl Into<String>) {
+    pub fn emit(
+        &mut self,
+        entity: newengine_ecs::EntityId,
+        kind: PlayerEventKind,
+        message: impl Into<String>,
+    ) {
         const MAX_RETAINED_EVENTS: usize = 256;
         if self.events.len() >= MAX_RETAINED_EVENTS {
             let overflow = self.events.len() + 1 - MAX_RETAINED_EVENTS;
@@ -256,7 +261,8 @@ impl Default for FpsDemoRules {
             pickup_status: "Core acquired.".to_string(),
             hazard_status: "You touched a hazard. Relaunch the demo to retry.".to_string(),
             goal_locked_status: "Beacon locked: collect all cores first.".to_string(),
-            goal_complete_status: "Extraction complete. Stable runtime loop is playable.".to_string(),
+            goal_complete_status: "Extraction complete. Stable runtime loop is playable."
+                .to_string(),
             failed_progress_label: "FAILED — touch a hazard to retry scene".to_string(),
             completed_progress_label: "EXTRACTED".to_string(),
             player: FpsPlayerTuning::default(),
@@ -330,7 +336,11 @@ impl FpsDemoState {
     #[inline]
     pub fn progress_label(&self) -> String {
         if self.completed {
-            return format!("{} in {:.1}s", self.completed_progress_label, self.elapsed_sec.max(0.0));
+            return format!(
+                "{} in {:.1}s",
+                self.completed_progress_label,
+                self.elapsed_sec.max(0.0)
+            );
         }
         if self.failed {
             return self.failed_progress_label.clone();
@@ -410,12 +420,19 @@ impl GameReadyWorldLaunchGate {
 
     #[inline]
     pub const fn is_editor_preview_ready(&self) -> bool {
-        matches!(self.phase, GameReadyWorldLaunchGatePhase::EditorPreviewReady)
+        matches!(
+            self.phase,
+            GameReadyWorldLaunchGatePhase::EditorPreviewReady
+        )
     }
 
     #[inline]
     pub const fn needs_prelaunch_gate(&self) -> bool {
-        matches!(self.phase, GameReadyWorldLaunchGatePhase::WaitingForResidency | GameReadyWorldLaunchGatePhase::Released)
+        matches!(
+            self.phase,
+            GameReadyWorldLaunchGatePhase::WaitingForResidency
+                | GameReadyWorldLaunchGatePhase::Released
+        )
     }
 
     #[inline]

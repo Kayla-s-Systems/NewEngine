@@ -1,13 +1,19 @@
 use super::*;
 
-pub(super) fn build_light_provider_request(ctx: &LightExtractionCtx<'_>) -> LightExtractionProviderRequest {
+pub(super) fn build_light_provider_request(
+    ctx: &LightExtractionCtx<'_>,
+) -> LightExtractionProviderRequest {
     LightExtractionProviderRequest {
         scene: LightExtractionSnapshot {
             frame_index: ctx.frame_index,
             viewport_extent: ctx.viewport_extent,
             surface_extent: ctx.surface_extent,
             bounds: RenderBoundsSnapshot {
-                center: [ctx.bounds.center.x, ctx.bounds.center.y, ctx.bounds.center.z],
+                center: [
+                    ctx.bounds.center.x,
+                    ctx.bounds.center.y,
+                    ctx.bounds.center.z,
+                ],
                 radius: ctx.bounds.radius,
             },
             view: RenderViewSnapshot {
@@ -46,7 +52,9 @@ pub(super) fn light_plan_from_contribution(
     let resolution = contribution.resolution.max(1);
     let fallback = ctx.lit.white_texture;
     let kind = match contribution.kind {
-        LightPlanContributionKind::Directional => super::super::super::shadows::ShadowLightKind::Directional,
+        LightPlanContributionKind::Directional => {
+            super::super::super::shadows::ShadowLightKind::Directional
+        }
         LightPlanContributionKind::Point => super::super::super::shadows::ShadowLightKind::Point,
         LightPlanContributionKind::Spot => super::super::super::shadows::ShadowLightKind::Spot,
         LightPlanContributionKind::AmbientOcclusion | LightPlanContributionKind::None => {
@@ -67,10 +75,17 @@ pub(super) fn light_plan_from_contribution(
     let mvp = Mat4::from_cols_array_2d(&contribution.light_mvp_cols);
 
     match kind {
-        super::super::super::shadows::ShadowLightKind::Directional => {
-            LightShadowPlan::directional(rt, tex, resolution, mvp, contribution.params, contribution.extra, None)
-        }
-        super::super::super::shadows::ShadowLightKind::Point | super::super::super::shadows::ShadowLightKind::Spot => {
+        super::super::super::shadows::ShadowLightKind::Directional => LightShadowPlan::directional(
+            rt,
+            tex,
+            resolution,
+            mvp,
+            contribution.params,
+            contribution.extra,
+            None,
+        ),
+        super::super::super::shadows::ShadowLightKind::Point
+        | super::super::super::shadows::ShadowLightKind::Spot => {
             LightShadowPlan::unsupported(kind, fallback, resolution)
         }
     }
@@ -108,7 +123,9 @@ pub(super) fn parse_plugin_light_provider(
     let gateway_id = parsed
         .engine_gateway
         .filter(|it| !it.trim().is_empty())
-        .unwrap_or_else(|| newengine_core::render::ENGINE_RENDER_LIGHT_EXTRACTION_SERVICE_ID.to_owned());
+        .unwrap_or_else(|| {
+            newengine_core::render::ENGINE_RENDER_LIGHT_EXTRACTION_SERVICE_ID.to_owned()
+        });
     if !newengine_service_api::engine_gateway_matches_service_kind(
         &gateway_id,
         newengine_core::render::RENDER_LIGHT_EXTRACTION_PROVIDER_SERVICE_KIND,
@@ -125,7 +142,9 @@ pub(super) fn parse_plugin_light_provider(
     let method = parsed
         .method
         .filter(|it| !it.trim().is_empty())
-        .unwrap_or_else(|| newengine_core::render::RENDER_LIGHT_EXTRACTION_PROVIDER_METHOD_EXTRACT.to_string());
+        .unwrap_or_else(|| {
+            newengine_core::render::RENDER_LIGHT_EXTRACTION_PROVIDER_METHOD_EXTRACT.to_string()
+        });
 
     Some(ExternalLightExtractionProviderDesc {
         id,

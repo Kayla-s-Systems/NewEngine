@@ -8,7 +8,6 @@ pub struct TextureMipData {
     pub rgba: Vec<u8>,
 }
 
-
 #[derive(Debug, Clone)]
 pub struct TextureEncodedMipData {
     pub level: u32,
@@ -17,30 +16,59 @@ pub struct TextureEncodedMipData {
     pub bytes: Vec<u8>,
 }
 
-pub fn generate_rgba8_mips(width: u32, height: u32, base_rgba: Vec<u8>) -> Result<Vec<TextureMipData>> {
+pub fn generate_rgba8_mips(
+    width: u32,
+    height: u32,
+    base_rgba: Vec<u8>,
+) -> Result<Vec<TextureMipData>> {
     if width == 0 || height == 0 {
-        return Err(TextureContainerError::InvalidExtent { name: "<generated>".to_owned(), width, height });
+        return Err(TextureContainerError::InvalidExtent {
+            name: "<generated>".to_owned(),
+            width,
+            height,
+        });
     }
     let expected = rgba8_len(width, height);
     if base_rgba.len() != expected {
-        return Err(TextureContainerError::PayloadSizeMismatch { name: "<generated>".to_owned(), mip: 0, bytes: base_rgba.len(), expected });
+        return Err(TextureContainerError::PayloadSizeMismatch {
+            name: "<generated>".to_owned(),
+            mip: 0,
+            bytes: base_rgba.len(),
+            expected,
+        });
     }
 
     let mut out = Vec::new();
-    out.push(TextureMipData { level: 0, width, height, rgba: base_rgba });
-    while out.last().map(|m| m.width > 1 || m.height > 1).unwrap_or(false) {
+    out.push(TextureMipData {
+        level: 0,
+        width,
+        height,
+        rgba: base_rgba,
+    });
+    while out
+        .last()
+        .map(|m| m.width > 1 || m.height > 1)
+        .unwrap_or(false)
+    {
         let prev = out.last().expect("at least base mip exists");
         let next_w = (prev.width / 2).max(1);
         let next_h = (prev.height / 2).max(1);
         let next = downsample_rgba8_box(prev.width, prev.height, &prev.rgba, next_w, next_h);
-        out.push(TextureMipData { level: out.len() as u32, width: next_w, height: next_h, rgba: next });
+        out.push(TextureMipData {
+            level: out.len() as u32,
+            width: next_w,
+            height: next_h,
+            rgba: next,
+        });
     }
     Ok(out)
 }
 
 #[inline]
 pub fn rgba8_len(width: u32, height: u32) -> usize {
-    (width as usize).saturating_mul(height as usize).saturating_mul(4)
+    (width as usize)
+        .saturating_mul(height as usize)
+        .saturating_mul(4)
 }
 
 fn downsample_rgba8_box(src_w: u32, src_h: u32, src: &[u8], dst_w: u32, dst_h: u32) -> Vec<u8> {

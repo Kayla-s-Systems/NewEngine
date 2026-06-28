@@ -65,9 +65,13 @@ impl Default for ToneMapDisplayParams {
 }
 
 #[inline]
-fn default_exposure() -> f32 { 1.12 }
+fn default_exposure() -> f32 {
+    1.12
+}
 #[inline]
-fn default_gamma() -> f32 { 2.2 }
+fn default_gamma() -> f32 {
+    2.2
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct BloomParams {
@@ -101,13 +105,21 @@ impl Default for BloomParams {
 }
 
 #[inline]
-fn default_bloom_threshold() -> f32 { 0.85 }
+fn default_bloom_threshold() -> f32 {
+    0.85
+}
 #[inline]
-fn default_bloom_knee() -> f32 { 0.35 }
+fn default_bloom_knee() -> f32 {
+    0.35
+}
 #[inline]
-fn default_bloom_intensity() -> f32 { 0.085 }
+fn default_bloom_intensity() -> f32 {
+    0.085
+}
 #[inline]
-fn default_bloom_radius() -> f32 { 1.0 }
+fn default_bloom_radius() -> f32 {
+    1.0
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct FxaaParams {
@@ -137,12 +149,17 @@ impl Default for FxaaParams {
 }
 
 #[inline]
-fn default_fxaa_edge_threshold() -> f32 { 0.125 }
+fn default_fxaa_edge_threshold() -> f32 {
+    0.125
+}
 #[inline]
-fn default_fxaa_edge_threshold_min() -> f32 { 0.0312 }
+fn default_fxaa_edge_threshold_min() -> f32 {
+    0.0312
+}
 #[inline]
-fn default_fxaa_subpixel_quality() -> f32 { 0.75 }
-
+fn default_fxaa_subpixel_quality() -> f32 {
+    0.75
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct TaaParams {
@@ -172,11 +189,17 @@ impl Default for TaaParams {
 }
 
 #[inline]
-fn default_taa_feedback() -> f32 { 0.92 }
+fn default_taa_feedback() -> f32 {
+    0.92
+}
 #[inline]
-fn default_taa_neighborhood_clamping() -> f32 { 1.0 }
+fn default_taa_neighborhood_clamping() -> f32 {
+    1.0
+}
 #[inline]
-fn default_taa_jitter_scale() -> f32 { 1.0 }
+fn default_taa_jitter_scale() -> f32 {
+    1.0
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct ColorGradeParams {
@@ -210,15 +233,25 @@ impl Default for ColorGradeParams {
 }
 
 #[inline]
-fn default_saturation() -> f32 { 1.06 }
+fn default_saturation() -> f32 {
+    1.06
+}
 #[inline]
-fn default_contrast() -> f32 { 1.03 }
+fn default_contrast() -> f32 {
+    1.03
+}
 #[inline]
-fn default_vignette_strength() -> f32 { 0.10 }
+fn default_vignette_strength() -> f32 {
+    0.10
+}
 #[inline]
-fn default_local_contrast_strength() -> f32 { 0.055 }
+fn default_local_contrast_strength() -> f32 {
+    0.055
+}
 #[inline]
-fn default_dither_strength() -> f32 { 1.0 }
+fn default_dither_strength() -> f32 {
+    1.0
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct SsaoParams {
@@ -248,11 +281,17 @@ impl Default for SsaoParams {
 }
 
 #[inline]
-fn default_ssao_radius_ws() -> f32 { 0.75 }
+fn default_ssao_radius_ws() -> f32 {
+    0.75
+}
 #[inline]
-fn default_ssao_intensity() -> f32 { 0.82 }
+fn default_ssao_intensity() -> f32 {
+    0.82
+}
 #[inline]
-fn default_ssao_quality_steps() -> u32 { 16 }
+fn default_ssao_quality_steps() -> u32 {
+    16
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct PostFxQualityParams {
@@ -329,21 +368,33 @@ impl Default for SunPostFxParams {
 }
 
 #[inline]
-fn default_true() -> bool { true }
+fn default_true() -> bool {
+    true
+}
 #[inline]
-fn default_sun_screen_position() -> [f32; 2] { [0.5, 0.5] }
+fn default_sun_screen_position() -> [f32; 2] {
+    [0.5, 0.5]
+}
 #[inline]
-fn default_sun_color() -> [f32; 3] { [1.0, 0.94, 0.82] }
+fn default_sun_color() -> [f32; 3] {
+    [1.0, 0.94, 0.82]
+}
 #[inline]
-fn default_sun_direction() -> [f32; 3] { [-0.53590363, -0.7989835, -0.27282366] }
+fn default_sun_direction() -> [f32; 3] {
+    [-0.53590363, -0.7989835, -0.27282366]
+}
 #[inline]
-fn default_sun_disk_radius() -> f32 { 0.018 }
+fn default_sun_disk_radius() -> f32 {
+    0.018
+}
 #[inline]
-fn default_sun_flare_strength() -> f32 { 0.18 }
+fn default_sun_flare_strength() -> f32 {
+    0.18
+}
 #[inline]
-fn default_sun_ray_strength() -> f32 { 0.16 }
-
-
+fn default_sun_ray_strength() -> f32 {
+    0.16
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct ViewDepthOfFieldFrameParams {
@@ -376,7 +427,9 @@ impl Default for ViewDepthOfFieldFrameParams {
 }
 
 #[inline]
-fn default_dof_far_plane() -> f32 { 10_000.0 }
+fn default_dof_far_plane() -> f32 {
+    10_000.0
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct ViewMotionBlurFrameParams {
@@ -397,7 +450,9 @@ impl Default for ViewMotionBlurFrameParams {
 }
 
 #[inline]
-fn default_motion_blur_decay_rate() -> f32 { 0.5 }
+fn default_motion_blur_decay_rate() -> f32 {
+    0.5
+}
 
 /// Renderer-facing, source-agnostic frame post-process intent.
 ///
@@ -431,7 +486,6 @@ impl Default for ViewPostFxFrameParams {
     }
 }
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct UiBackdropPostFxParams {
     #[serde(default)]
@@ -447,7 +501,12 @@ pub struct UiBackdropPostFxParams {
 impl Default for UiBackdropPostFxParams {
     #[inline]
     fn default() -> Self {
-        Self { enabled: false, alpha: 0.0, dim_opacity: 0.0, blur_radius_px: 0.0 }
+        Self {
+            enabled: false,
+            alpha: 0.0,
+            dim_opacity: 0.0,
+            blur_radius_px: 0.0,
+        }
     }
 }
 
@@ -570,7 +629,8 @@ mod tests {
             "display":{"exposure":1.0,"gamma":2.2,"black_lift":0.0,"operator":"AcesApprox"},
             "sun":{"screen_position":[0.5,0.5],"color":[1.0,0.94,0.82],"intensity":3.2,"visibility":1.0,"disk_radius":0.018,"flare_strength":0.2,"ray_strength":0.16}
         }"#;
-        let decoded: PostFxFrameParams = serde_json::from_str(json).expect("old postfx payload must remain valid");
+        let decoded: PostFxFrameParams =
+            serde_json::from_str(json).expect("old postfx payload must remain valid");
         assert!(decoded.quality.bloom.enabled);
         assert!(decoded.quality.fxaa.enabled);
         assert_eq!(decoded.quality.anti_aliasing, AntiAliasingMode::Fxaa);
@@ -584,7 +644,8 @@ mod tests {
             "sun":{"screen_position":[0.5,0.5],"color":[1.0,0.94,0.82],"intensity":3.2,"visibility":1.0,"disk_radius":0.018,"flare_strength":0.2,"ray_strength":0.16},
             "quality":{"anti_aliasing":"Fxaa"}
         }"#;
-        let decoded: PostFxFrameParams = serde_json::from_str(json).expect("old postfx payload must remain valid");
+        let decoded: PostFxFrameParams =
+            serde_json::from_str(json).expect("old postfx payload must remain valid");
         assert_eq!(decoded.view.motion_blur.strength, 0.0);
         assert_eq!(decoded.view.dof.far_end, default_dof_far_plane());
     }

@@ -14,7 +14,10 @@ pub struct BeginFrameDesc {
 impl BeginFrameDesc {
     #[inline]
     pub const fn new(clear_color: Color4) -> Self {
-        Self { clear_color, frame_index: 0 }
+        Self {
+            clear_color,
+            frame_index: 0,
+        }
     }
 
     #[inline]

@@ -78,10 +78,16 @@ impl UiNodeNavigationDocument {
             return Err("ui navigation document id is empty".to_owned());
         }
         if self.surface_id.is_empty() {
-            return Err(format!("ui navigation document '{}' surface_id is empty", self.id));
+            return Err(format!(
+                "ui navigation document '{}' surface_id is empty",
+                self.id
+            ));
         }
         if self.root_page.is_empty() {
-            return Err(format!("ui navigation document '{}' root_page is empty", self.id));
+            return Err(format!(
+                "ui navigation document '{}' root_page is empty",
+                self.id
+            ));
         }
         if self.root().is_none() {
             return Err(format!(
@@ -118,7 +124,10 @@ impl UiNodeNavigationPage {
         self.id = self.id.trim().to_owned();
         self.title = self.title.trim().to_owned();
         self.subtitle = self.subtitle.trim().to_owned();
-        self.parent_page = self.parent_page.take().and_then(|value| normalize_optional_string(&value));
+        self.parent_page = self
+            .parent_page
+            .take()
+            .and_then(|value| normalize_optional_string(&value));
         self.footer_lines = normalize_non_empty_strings(std::mem::take(&mut self.footer_lines));
         if let Some(route) = &mut self.back_route {
             route.canonicalize_in_place();
@@ -130,7 +139,10 @@ impl UiNodeNavigationPage {
 
     fn validate(&self, document: &UiNodeNavigationDocument) -> Result<(), String> {
         if self.id.is_empty() {
-            return Err(format!("ui navigation document '{}' contains page with empty id", document.id));
+            return Err(format!(
+                "ui navigation document '{}' contains page with empty id",
+                document.id
+            ));
         }
         if let Some(parent) = self.parent_page.as_deref() {
             if document.page(parent).is_none() {
@@ -173,9 +185,18 @@ impl UiNodeNavigationItem {
     fn canonicalize_in_place(&mut self) {
         self.id = self.id.trim().to_owned();
         self.label = self.label.trim().to_owned();
-        self.value = self.value.take().and_then(|value| normalize_optional_string(&value));
-        self.detail = self.detail.take().and_then(|value| normalize_optional_string(&value));
-        self.dynamic_value = self.dynamic_value.take().and_then(|value| normalize_optional_string(&value));
+        self.value = self
+            .value
+            .take()
+            .and_then(|value| normalize_optional_string(&value));
+        self.detail = self
+            .detail
+            .take()
+            .and_then(|value| normalize_optional_string(&value));
+        self.dynamic_value = self
+            .dynamic_value
+            .take()
+            .and_then(|value| normalize_optional_string(&value));
         if let Some(route) = &mut self.action {
             route.canonicalize_in_place();
         }
@@ -187,9 +208,16 @@ impl UiNodeNavigationItem {
         }
     }
 
-    fn validate(&self, _document: &UiNodeNavigationDocument, page: &UiNodeNavigationPage) -> Result<(), String> {
+    fn validate(
+        &self,
+        _document: &UiNodeNavigationDocument,
+        page: &UiNodeNavigationPage,
+    ) -> Result<(), String> {
         if self.id.is_empty() {
-            return Err(format!("ui navigation page '{}' contains item with empty id", page.id));
+            return Err(format!(
+                "ui navigation page '{}' contains item with empty id",
+                page.id
+            ));
         }
         if self.label.is_empty() {
             return Err(format!("ui navigation item '{}' has empty label", self.id));
@@ -220,7 +248,10 @@ impl UiNodeActionRoute {
         self.source = self.source.trim().to_owned();
         self.target = self.target.trim().to_owned();
         self.event = self.event.trim().to_owned();
-        self.audio = self.audio.take().and_then(|value| normalize_optional_string(&value));
+        self.audio = self
+            .audio
+            .take()
+            .and_then(|value| normalize_optional_string(&value));
         if let Some(transition) = &mut self.transition {
             transition.canonicalize_in_place();
         }
@@ -264,16 +295,27 @@ pub struct UiNodeTransition {
 impl UiNodeTransition {
     #[inline]
     pub fn close() -> Self {
-        Self { kind: UiNodeTransitionKind::Close, page: None, reset_selection: true }
+        Self {
+            kind: UiNodeTransitionKind::Close,
+            page: None,
+            reset_selection: true,
+        }
     }
 
     #[inline]
     pub fn open_page(page: impl Into<String>) -> Self {
-        Self { kind: UiNodeTransitionKind::OpenPage, page: Some(page.into()), reset_selection: true }
+        Self {
+            kind: UiNodeTransitionKind::OpenPage,
+            page: Some(page.into()),
+            reset_selection: true,
+        }
     }
 
     fn canonicalize_in_place(&mut self) {
-        self.page = self.page.take().and_then(|value| normalize_optional_string(&value));
+        self.page = self
+            .page
+            .take()
+            .and_then(|value| normalize_optional_string(&value));
     }
 }
 
@@ -334,7 +376,6 @@ pub struct UiNodeSelectionState {
     #[serde(default)]
     pub hovered_index: Option<usize>,
 }
-
 
 #[derive(Debug, Clone, Default)]
 pub struct UiNodeHitTestState {
@@ -410,7 +451,9 @@ impl UiNodeNavigationRuntime {
 
     #[inline]
     pub fn current_items(&self) -> &[UiNodeNavigationItem] {
-        self.current_page().map(|page| page.items.as_slice()).unwrap_or(&[])
+        self.current_page()
+            .map(|page| page.items.as_slice())
+            .unwrap_or(&[])
     }
 
     #[inline]
@@ -484,18 +527,30 @@ impl UiNodeNavigationRuntime {
     }
 
     fn activate_selected(&mut self, output: &mut UiNodeNavigationOutput) {
-        let Some(item) = self.current_items().get(self.selected_index()).cloned() else { return; };
-        let Some(route) = item.action.clone() else { return; };
+        let Some(item) = self.current_items().get(self.selected_index()).cloned() else {
+            return;
+        };
+        let Some(route) = item.action.clone() else {
+            return;
+        };
         self.dispatch_route(route, Some(item), output);
     }
 
-    fn dispatch_selected_nav_route(&mut self, direction: UiNodeNavigationDirection, output: &mut UiNodeNavigationOutput) {
-        let Some(item) = self.current_items().get(self.selected_index()).cloned() else { return; };
+    fn dispatch_selected_nav_route(
+        &mut self,
+        direction: UiNodeNavigationDirection,
+        output: &mut UiNodeNavigationOutput,
+    ) {
+        let Some(item) = self.current_items().get(self.selected_index()).cloned() else {
+            return;
+        };
         let route = match direction {
             UiNodeNavigationDirection::Left => item.nav_left.clone(),
             UiNodeNavigationDirection::Right => item.nav_right.clone(),
         };
-        let Some(route) = route else { return; };
+        let Some(route) = route else {
+            return;
+        };
         self.dispatch_route(route, Some(item), output);
     }
 
@@ -506,7 +561,10 @@ impl UiNodeNavigationRuntime {
         }
         let transition = if self.current_page_id() == self.document.root_page {
             UiNodeTransition::close()
-        } else if let Some(parent) = self.current_page().and_then(|page| page.parent_page.clone()) {
+        } else if let Some(parent) = self
+            .current_page()
+            .and_then(|page| page.parent_page.clone())
+        {
             UiNodeTransition::open_page(parent)
         } else {
             UiNodeTransition::close()
@@ -533,7 +591,11 @@ impl UiNodeNavigationRuntime {
         });
     }
 
-    fn apply_transition(&mut self, transition: &UiNodeTransition, output: &mut UiNodeNavigationOutput) {
+    fn apply_transition(
+        &mut self,
+        transition: &UiNodeTransition,
+        output: &mut UiNodeNavigationOutput,
+    ) {
         output.transition = Some(transition.clone());
         match transition.kind {
             UiNodeTransitionKind::None => {}
@@ -549,7 +611,10 @@ impl UiNodeNavigationRuntime {
                 }
             }
             UiNodeTransitionKind::Back => {
-                if let Some(parent) = self.current_page().and_then(|page| page.parent_page.clone()) {
+                if let Some(parent) = self
+                    .current_page()
+                    .and_then(|page| page.parent_page.clone())
+                {
                     if self.document.page(&parent).is_some() {
                         self.current_page = parent;
                         self.hovered_index = None;
@@ -639,12 +704,15 @@ mod tests {
 
     #[test]
     fn parse_minimal_document() {
-        let doc = UiNodeNavigationDocument::from_json_str(r#"{
+        let doc = UiNodeNavigationDocument::from_json_str(
+            r#"{
           "id":"engine.ui.primary",
           "surface_id":"engine.ui.primary",
           "root_page":"root",
           "pages":[{"id":"root","items":[{"id":"resume","label":"Resume"}]}]
-        }"#).unwrap();
+        }"#,
+        )
+        .unwrap();
         doc.validate().unwrap();
         assert_eq!(doc.root().unwrap().items[0].label, "Resume");
     }

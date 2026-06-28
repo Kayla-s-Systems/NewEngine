@@ -3,8 +3,8 @@
 use core::cmp::Ordering;
 
 use newengine_ecs::World;
-use serde::{Deserialize, Serialize};
 use newengine_jobs_api::{job_domain, job_pass, EngineTaskEvent, EngineTaskPhase};
+use serde::{Deserialize, Serialize};
 
 use crate::{access::AccessMask, commands::CommandBuffer, systems, SimFrame};
 
@@ -82,7 +82,11 @@ impl SimulationJobBatch {
 
     #[inline]
     pub fn event_dependency_group(&self) -> String {
-        format!("simulation.frame.{}.{}", self.fixed_tick, self.stage.as_str())
+        format!(
+            "simulation.frame.{}.{}",
+            self.fixed_tick,
+            self.stage.as_str()
+        )
     }
 
     pub fn event(
@@ -97,7 +101,11 @@ impl SimulationJobBatch {
             "newengine-sim.schedule",
             "newengine-sim",
             "simulation",
-            format!("simulation:{}:batch:{}", self.stage.as_str(), self.batch_index),
+            format!(
+                "simulation:{}:batch:{}",
+                self.stage.as_str(),
+                self.batch_index
+            ),
             "simulation",
             phase,
             status,
@@ -144,7 +152,6 @@ impl<'a> SimulationJobTelemetry<'a> {
     }
 }
 
-
 /// Worker-safe summary of ECS world state captured on the world-owner thread.
 ///
 /// This intentionally contains only serializable facts. The concrete `World`,
@@ -185,7 +192,12 @@ pub struct SimReadSystemDescriptor {
 impl SimReadSystemDescriptor {
     #[inline]
     fn from_entry(entry: &SystemEntry) -> Self {
-        Self { order: entry.order, seq: entry.seq, name: entry.name.to_owned(), access: entry.access }
+        Self {
+            order: entry.order,
+            seq: entry.seq,
+            name: entry.name.to_owned(),
+            access: entry.access,
+        }
     }
 }
 
@@ -212,16 +224,23 @@ impl SimReadSnapshot {
             frame,
             stage,
             world: SimWorldSnapshotHeader::capture(world),
-            systems: systems.iter().map(SimReadSystemDescriptor::from_entry).collect(),
+            systems: systems
+                .iter()
+                .map(SimReadSystemDescriptor::from_entry)
+                .collect(),
             dependency_group: format!("simulation.frame.{}.{}", frame.fixed_tick, stage.as_str()),
         }
     }
 
     #[inline]
-    pub fn system_count(&self) -> usize { self.systems.len() }
+    pub fn system_count(&self) -> usize {
+        self.systems.len()
+    }
 
     #[inline]
-    pub fn is_worker_safe(&self) -> bool { true }
+    pub fn is_worker_safe(&self) -> bool {
+        true
+    }
 }
 
 /// Serializable command-batch header visible to jobs/profiler.
@@ -244,7 +263,13 @@ pub struct SimCommandBatch {
 
 impl SimCommandBatch {
     #[inline]
-    pub fn new(frame: SimFrame, stage: SimStage, batch_index: usize, commands: CommandBuffer, dependency_group: impl Into<String>) -> Self {
+    pub fn new(
+        frame: SimFrame,
+        stage: SimStage,
+        batch_index: usize,
+        commands: CommandBuffer,
+        dependency_group: impl Into<String>,
+    ) -> Self {
         let command_count = commands.len();
         Self {
             header: SimCommandBatchHeader {
@@ -438,7 +463,18 @@ fn run_stage_single_thread(
     executor: Option<&dyn SimReadBatchExecutor>,
 ) {
     let snapshot = SimReadSnapshot::capture(world, frame, stage, systems);
-    let batch = SimulationJobBatch::new(stage, frame, 0, 1, systems.len(), if executor.is_some() { "engine.jobs" } else { "world-owner-apply-stage" });
+    let batch = SimulationJobBatch::new(
+        stage,
+        frame,
+        0,
+        1,
+        systems.len(),
+        if executor.is_some() {
+            "engine.jobs"
+        } else {
+            "world-owner-apply-stage"
+        },
+    );
     if let Some(telemetry) = telemetry {
         telemetry.publish_batch(&batch, EngineTaskPhase::Scheduled, "Simulation read snapshot captured", format!("SimReadSnapshot captured dependency_group='{}' systems={} entities={} storages={} resources={}; DTO is serializable and worker-safe.", snapshot.dependency_group, snapshot.system_count(), snapshot.world.entity_count, snapshot.world.storage_count, snapshot.world.resource_count), Some(0.0));
     }
@@ -472,7 +508,13 @@ fn run_stage_single_thread(
         }
     }
     if let Some(telemetry) = telemetry {
-        telemetry.publish_batch(&batch, EngineTaskPhase::Completed, "Simulation command batch applied", "SimCommandBatch apply-stage completed on the world owner thread.", Some(1.0));
+        telemetry.publish_batch(
+            &batch,
+            EngineTaskPhase::Completed,
+            "Simulation command batch applied",
+            "SimCommandBatch apply-stage completed on the world owner thread.",
+            Some(1.0),
+        );
     }
 }
 
@@ -548,7 +590,11 @@ pub fn default_schedule() -> SimSchedule {
         SimStage::ApplyIntents,
         10,
         "apply_controller_intents",
-        AccessMask::rw(0, (1u128 << (crate::Subsystem::Gameplay as u32)) | (1u128 << (crate::Subsystem::Camera as u32))),
+        AccessMask::rw(
+            0,
+            (1u128 << (crate::Subsystem::Gameplay as u32))
+                | (1u128 << (crate::Subsystem::Camera as u32)),
+        ),
         systems::sys_apply_controller_intents,
     );
     s.add_system(

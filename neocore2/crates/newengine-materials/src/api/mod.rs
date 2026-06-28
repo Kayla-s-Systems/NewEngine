@@ -11,7 +11,11 @@ mod textures;
 
 mod types;
 
-pub use self::authored::{validate_authored_material_library, AuthoredMaterialDescriptor, AuthoredMaterialLibrary, AuthoredMaterialSurface, AuthoredMaterialValidation, MaterialEntryV1, MaterialParamValue, MaterialTextureBindingV1, NematMaterialLibraryBodyV1};
+pub use self::authored::{
+    validate_authored_material_library, AuthoredMaterialDescriptor, AuthoredMaterialLibrary,
+    AuthoredMaterialSurface, AuthoredMaterialValidation, MaterialEntryV1, MaterialParamValue,
+    MaterialTextureBindingV1, NematMaterialLibraryBodyV1,
+};
 pub use self::descriptor::{MaterialDescriptor, MaterialFlags};
 pub use self::instance::{MaterialInstanceDesc, MaterialOverrides};
 pub use self::material::{

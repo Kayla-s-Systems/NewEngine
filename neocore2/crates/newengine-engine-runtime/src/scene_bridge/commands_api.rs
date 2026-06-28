@@ -8,7 +8,10 @@ impl SceneBridge {
 
     #[inline]
     pub fn cmd_load_scene_asset(&self, asset: SceneAsset) {
-        self.queue.lock().cmds.push(SceneCommand::LoadSceneAsset { asset });
+        self.queue
+            .lock()
+            .cmds
+            .push(SceneCommand::LoadSceneAsset { asset });
     }
 
     #[inline]
@@ -61,24 +64,34 @@ impl SceneBridge {
         });
     }
 
-
     #[inline]
-    pub fn cmd_spawn_imported_asset(&self, descriptor: SceneImportedAssetDescriptor, name: String, position: Vec3) {
-        self.queue.lock().cmds.push(SceneCommand::SpawnImportedAsset {
-            descriptor,
-            name,
-            position: [position.x, position.y, position.z],
-        });
+    pub fn cmd_spawn_imported_asset(
+        &self,
+        descriptor: SceneImportedAssetDescriptor,
+        name: String,
+        position: Vec3,
+    ) {
+        self.queue
+            .lock()
+            .cmds
+            .push(SceneCommand::SpawnImportedAsset {
+                descriptor,
+                name,
+                position: [position.x, position.y, position.z],
+            });
     }
 
     #[inline]
     pub fn cmd_instantiate_definition(&self, definition_ref: String, position: Vec3) {
-        self.queue.lock().cmds.push(SceneCommand::InstantiateDefinition {
-            definition_ref,
-            position: [position.x, position.y, position.z],
-            rotation_ypr: [0.0, 0.0, 0.0],
-            scale: [1.0, 1.0, 1.0],
-        });
+        self.queue
+            .lock()
+            .cmds
+            .push(SceneCommand::InstantiateDefinition {
+                definition_ref,
+                position: [position.x, position.y, position.z],
+                rotation_ypr: [0.0, 0.0, 0.0],
+                scale: [1.0, 1.0, 1.0],
+            });
     }
 
     #[inline]
@@ -89,12 +102,15 @@ impl SceneBridge {
         rotation_ypr: (f32, f32, f32),
         scale: Vec3,
     ) {
-        self.queue.lock().cmds.push(SceneCommand::InstantiateDefinition {
-            definition_ref,
-            position: [position.x, position.y, position.z],
-            rotation_ypr: [rotation_ypr.0, rotation_ypr.1, rotation_ypr.2],
-            scale: [scale.x, scale.y, scale.z],
-        });
+        self.queue
+            .lock()
+            .cmds
+            .push(SceneCommand::InstantiateDefinition {
+                definition_ref,
+                position: [position.x, position.y, position.z],
+                rotation_ypr: [rotation_ypr.0, rotation_ypr.1, rotation_ypr.2],
+                scale: [scale.x, scale.y, scale.z],
+            });
     }
 
     #[inline]
@@ -197,10 +213,12 @@ impl SceneBridge {
             .push(SceneCommand::ClearPhysicsBody { entity });
     }
 
-
     #[inline]
     pub fn cmd_set_parent(&self, child: EntityId, parent: Option<EntityId>) {
-        self.queue.lock().cmds.push(SceneCommand::SetParent { child, parent });
+        self.queue
+            .lock()
+            .cmds
+            .push(SceneCommand::SetParent { child, parent });
     }
 
     #[inline]
@@ -213,9 +231,9 @@ impl SceneBridge {
 
     #[inline]
     pub fn cmd_set_play_mode(&self, mode: GameRunMode) {
-        self.queue.lock().cmds.push(SceneCommand::SetPlayMode { mode });
+        self.queue
+            .lock()
+            .cmds
+            .push(SceneCommand::SetPlayMode { mode });
     }
-
-
-
 }

@@ -8,11 +8,13 @@ use libloading::Library;
 
 use newengine_plugin_api::{
     ConfigDiagLevelV1, ConfigPatchV1, HostApiV1, PluginDescriptor, PluginInfo, PluginRootV1Ref,
-    LEGACY_PLUGIN_ROOT_SYMBOL_BYTES_NUL, LEGACY_PLUGIN_ROOT_SYMBOL_NAME, PLUGIN_ROOT_SYMBOL_BYTES_NUL,
-    PLUGIN_ROOT_SYMBOL_NAME,
+    LEGACY_PLUGIN_ROOT_SYMBOL_BYTES_NUL, LEGACY_PLUGIN_ROOT_SYMBOL_NAME,
+    PLUGIN_ROOT_SYMBOL_BYTES_NUL, PLUGIN_ROOT_SYMBOL_NAME,
 };
 
-use crate::host_context::{register_plugin_descriptor, unregister_by_owner, with_current_plugin_id};
+use crate::host_context::{
+    register_plugin_descriptor, unregister_by_owner, with_current_plugin_id,
+};
 use crate::path_fmt::{canonicalize_if_exists, display_clean};
 use crate::plugin_config_service::get_plugin_overrides_with_env;
 use crate::root_observers::{record_loaded_plugin_root, LoadedPluginRootSnapshot};
@@ -46,7 +48,12 @@ impl LoadProfilerJob {
             "detail": "dynamic library load + canonical ABI root + init",
             "metadata": { "path": path, "operation": "load_one" }
         }));
-        Self { id, path: path.to_owned(), started: Instant::now(), completed: false }
+        Self {
+            id,
+            path: path.to_owned(),
+            started: Instant::now(),
+            completed: false,
+        }
     }
 
     fn complete_ok(&mut self, plugin_id: &str, timings: &LoadTimings) {
@@ -187,7 +194,8 @@ impl PluginManager {
         let overrides_non_empty =
             !matches!(overrides, serde_json::Value::Object(ref mm) if mm.is_empty());
 
-        let mut provider_origin = crate::service_gateway::GatewayProviderOrigin::from_plugin_path(path);
+        let mut provider_origin =
+            crate::service_gateway::GatewayProviderOrigin::from_plugin_path(path);
         provider_origin = register_plugin_descriptor(&id_str, descriptor.clone(), provider_origin);
 
         let t = Instant::now();
@@ -264,7 +272,10 @@ impl PluginManager {
             }),
         );
 
-        record_loaded_plugin_root(LoadedPluginRootSnapshot { plugin_id: id_str.clone(), editor_extensions_v1 });
+        record_loaded_plugin_root(LoadedPluginRootSnapshot {
+            plugin_id: id_str.clone(),
+            editor_extensions_v1,
+        });
         load_job.complete_ok(&id_str, &tm);
         Ok(())
     }
@@ -272,7 +283,12 @@ impl PluginManager {
 
 fn select_module(
     root: PluginRootV1Ref,
-) -> (ModuleAdapterAny, PluginInfo, PluginDescriptor, Option<PluginIconData>) {
+) -> (
+    ModuleAdapterAny,
+    PluginInfo,
+    PluginDescriptor,
+    Option<PluginIconData>,
+) {
     let module = root.create()();
     let descriptor = module.descriptor();
     let info = PluginInfo {
@@ -314,7 +330,12 @@ fn init_with_overrides(
 
             let mut patches = RVec::<ConfigPatchV1>::new();
             if overrides_non_empty {
-                patches.push(config_patch_from_json_merge_patch(id_str, "config+env", 0, overrides));
+                patches.push(config_patch_from_json_merge_patch(
+                    id_str,
+                    "config+env",
+                    0,
+                    overrides,
+                ));
             }
 
             let t0 = Instant::now();
@@ -505,7 +526,11 @@ fn diff_json_paths(
 
 #[inline]
 fn join_path(prefix: &str, key: &str) -> String {
-    if prefix.is_empty() { key.to_owned() } else { format!("{}.{}", prefix, key) }
+    if prefix.is_empty() {
+        key.to_owned()
+    } else {
+        format!("{}.{}", prefix, key)
+    }
 }
 
 fn shutdown_after_failed_init(id_str: &str, module_any: &mut ModuleAdapterAny) {

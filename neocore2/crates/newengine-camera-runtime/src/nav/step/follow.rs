@@ -22,7 +22,9 @@ pub(crate) fn try_step_follow_orbit(
     follow_ctrl: Option<FollowTargetCameraController>,
     state: &mut CameraNavState,
 ) -> Option<CameraNavResult> {
-    let Some(mut follow) = follow_ctrl else { return None };
+    let Some(mut follow) = follow_ctrl else {
+        return None;
+    };
 
     if !follow.follow_rotation {
         follow = retarget_follow_to_rig(world, cam_id, follow, rig);
@@ -32,7 +34,8 @@ pub(crate) fn try_step_follow_orbit(
         return None;
     }
 
-    let Some((target_pos, target_rot)) = read_entity_world_pose_local_chain(world, follow.target) else {
+    let Some((target_pos, target_rot)) = read_entity_world_pose_local_chain(world, follow.target)
+    else {
         return None;
     };
 
@@ -76,8 +79,18 @@ pub(crate) fn try_step_follow_orbit(
     state.last_bounds_radius = bounds.radius;
 
     let projection = compute_projection(rig, bounds, params.aspect());
-    let frame = CameraFrame::build(params.channel, *rig, projection, params.viewport, newengine_math::Vec2::ZERO);
+    let frame = CameraFrame::build(
+        params.channel,
+        *rig,
+        projection,
+        params.viewport,
+        newengine_math::Vec2::ZERO,
+    );
     let cursor = cursor_state_for_nav(input);
 
-    Some(CameraNavResult { frame, controller: *ctrl, cursor })
+    Some(CameraNavResult {
+        frame,
+        controller: *ctrl,
+        cursor,
+    })
 }

@@ -31,12 +31,7 @@ pub fn bootstrap_runtime_scene(scene: &mut Scene) {
         }
 
         // Root: reuse when present.
-        let root = root_hint.or_else(|| {
-            world
-                .query::<SceneRoot>()
-                .next()
-                .map(|(id, _)| id)
-        });
+        let root = root_hint.or_else(|| world.query::<SceneRoot>().next().map(|(id, _)| id));
 
         let root = match root {
             Some(id) if world.exists(id) => id,
@@ -60,12 +55,7 @@ pub fn bootstrap_runtime_scene(scene: &mut Scene) {
         }
 
         // Active camera: reuse when present.
-        let cam = cam_hint.or_else(|| {
-            world
-                .query::<ActiveCamera>()
-                .next()
-                .map(|(id, _)| id)
-        });
+        let cam = cam_hint.or_else(|| world.query::<ActiveCamera>().next().map(|(id, _)| id));
 
         let cam = match cam {
             Some(id) if world.exists(id) => id,

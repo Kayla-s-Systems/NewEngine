@@ -51,7 +51,10 @@ pub struct CameraTransitionOverlayReport {
 }
 
 #[inline]
-pub fn apply_view_postfx(mut params: PostFxFrameParams, view: ViewPostFxFrameParams) -> PostFxFrameParams {
+pub fn apply_view_postfx(
+    mut params: PostFxFrameParams,
+    view: ViewPostFxFrameParams,
+) -> PostFxFrameParams {
     params.display.exposure *= 2.0f32.powf(view.exposure_bias);
     params.view = view;
     params
@@ -69,25 +72,42 @@ pub(super) fn sanitize_camera_dt(dt: f32) -> f32 {
 
 #[inline]
 fn finite_or_zero(v: f32) -> f32 {
-    if v.is_finite() { v } else { 0.0 }
+    if v.is_finite() {
+        v
+    } else {
+        0.0
+    }
 }
 
 #[inline]
 fn finite_or_one(v: f32) -> f32 {
-    if v.is_finite() && v > 0.0 { v } else { 1.0 }
+    if v.is_finite() && v > 0.0 {
+        v
+    } else {
+        1.0
+    }
 }
 
 #[inline]
-pub(super) fn camera_runtime_service_config(world: &World, active_view: CameraViewMode) -> CameraRuntimeServiceConfig {
+pub(super) fn camera_runtime_service_config(
+    world: &World,
+    active_view: CameraViewMode,
+) -> CameraRuntimeServiceConfig {
     let mut config = CameraRuntimeServiceConfig::default();
     if let Some(rules) = world.resource::<FpsDemoRules>() {
         config.first_person_eye_height = rules.player.camera_eye_height;
         config.sprint_multiplier = rules.player.sprint_multiplier;
     }
     config.runner = match active_view {
-        CameraViewMode::FirstPerson => newengine_camera_runtime::GameplayCameraRunnerKind::FirstPerson,
-        CameraViewMode::ThirdPersonFollow => newengine_camera_runtime::GameplayCameraRunnerKind::ThirdPersonFollow,
-        CameraViewMode::ThirdPersonAim => newengine_camera_runtime::GameplayCameraRunnerKind::ThirdPersonAim,
+        CameraViewMode::FirstPerson => {
+            newengine_camera_runtime::GameplayCameraRunnerKind::FirstPerson
+        }
+        CameraViewMode::ThirdPersonFollow => {
+            newengine_camera_runtime::GameplayCameraRunnerKind::ThirdPersonFollow
+        }
+        CameraViewMode::ThirdPersonAim => {
+            newengine_camera_runtime::GameplayCameraRunnerKind::ThirdPersonAim
+        }
     };
     config
 }
@@ -103,7 +123,9 @@ pub(super) fn apply_runtime_input(
     };
     if input.gameplay_movement_gated {
         CameraRuntimeService::clear_player_input(world, player);
-    } else if effective_play_mode.wants_direct_player_control() && is_player_controller_enabled(world, player) {
+    } else if effective_play_mode.wants_direct_player_control()
+        && is_player_controller_enabled(world, player)
+    {
         CameraRuntimeService::apply_player_input(
             world,
             player,
@@ -112,14 +134,22 @@ pub(super) fn apply_runtime_input(
             input.active,
             service_config.sprint_multiplier,
         );
-        emit_player_event(world, player, PlayerEventKind::InputApplied, "local input sampled");
+        emit_player_event(
+            world,
+            player,
+            PlayerEventKind::InputApplied,
+            "local input sampled",
+        );
     } else {
         CameraRuntimeService::clear_player_input(world, player);
     }
 }
 
 #[inline]
-pub(super) fn camera_nav_input(input: CameraGatewayInput, play_mode: GameRunMode) -> CameraNavInput {
+pub(super) fn camera_nav_input(
+    input: CameraGatewayInput,
+    play_mode: GameRunMode,
+) -> CameraNavInput {
     let mut nav_input = CameraNavInput {
         dx_px: finite_or_zero(input.dx_px).clamp(-240.0, 240.0),
         dy_px: finite_or_zero(input.dy_px).clamp(-240.0, 240.0),
@@ -144,7 +174,9 @@ pub(super) fn camera_nav_input(input: CameraGatewayInput, play_mode: GameRunMode
 }
 
 #[inline]
-pub(super) fn view_postfx_from_camera_snapshot(snapshot: CameraFrameSnapshot) -> ViewPostFxFrameParams {
+pub(super) fn view_postfx_from_camera_snapshot(
+    snapshot: CameraFrameSnapshot,
+) -> ViewPostFxFrameParams {
     let postfx = snapshot.postfx;
     ViewPostFxFrameParams {
         dof: ViewDepthOfFieldFrameParams {
@@ -194,10 +226,9 @@ pub(super) fn camera_report_snapshot(report: CameraRuntimeReport) -> CameraRunti
 #[inline]
 fn mat4_from_cols(cols: [[f32; 4]; 4]) -> Mat4 {
     Mat4::from_cols_array(&[
-        cols[0][0], cols[0][1], cols[0][2], cols[0][3],
-        cols[1][0], cols[1][1], cols[1][2], cols[1][3],
-        cols[2][0], cols[2][1], cols[2][2], cols[2][3],
-        cols[3][0], cols[3][1], cols[3][2], cols[3][3],
+        cols[0][0], cols[0][1], cols[0][2], cols[0][3], cols[1][0], cols[1][1], cols[1][2],
+        cols[1][3], cols[2][0], cols[2][1], cols[2][2], cols[2][3], cols[3][0], cols[3][1],
+        cols[3][2], cols[3][3],
     ])
 }
 

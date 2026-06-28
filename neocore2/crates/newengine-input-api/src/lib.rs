@@ -39,8 +39,6 @@ pub const INPUT_RUNTIME_REQUIREMENT_SPEC: newengine_service_api::RuntimeServiceR
         Some("NEWENGINE_REQUIRE_INPUT_BACKEND"),
     );
 
-
-
 /// Canonical engine key codes used by raw input providers and binding profiles.
 /// Platform plugins must explicitly translate native key enums into these stable values.
 pub mod key_code {

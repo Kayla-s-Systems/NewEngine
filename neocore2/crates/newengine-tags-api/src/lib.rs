@@ -54,10 +54,14 @@ pub struct TagId(pub String);
 
 impl TagId {
     #[inline]
-    pub fn new(value: impl Into<String>) -> Self { Self(value.into()) }
+    pub fn new(value: impl Into<String>) -> Self {
+        Self(value.into())
+    }
 
     #[inline]
-    pub fn as_str(&self) -> &str { &self.0 }
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -76,7 +80,9 @@ pub enum TagDomain {
 
 impl Default for TagDomain {
     #[inline]
-    fn default() -> Self { Self::Gameplay }
+    fn default() -> Self {
+        Self::Gameplay
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -184,8 +190,14 @@ impl Default for TagsServiceInfoV1 {
         Self {
             protocol: TAGS_RUNTIME_CONTRACT.to_owned(),
             provider: "engine.tags.foundation".to_owned(),
-            methods: TAGS_SERVICE_METHODS.iter().map(|it| (*it).to_owned()).collect(),
-            features: vec!["gameplay-vocabulary".to_owned(), "data-driven-tags".to_owned()],
+            methods: TAGS_SERVICE_METHODS
+                .iter()
+                .map(|it| (*it).to_owned())
+                .collect(),
+            features: vec![
+                "gameplay-vocabulary".to_owned(),
+                "data-driven-tags".to_owned(),
+            ],
         }
     }
 }

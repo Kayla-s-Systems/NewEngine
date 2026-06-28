@@ -6,9 +6,10 @@ use crate::profile_catalog::{profile_by_id, EnvironmentProfileDescriptor};
 use crate::weather_profile::{enrich_weather_tags, evaluate_weather};
 use newengine_world_environment_api::{
     AtmosphereStateDto, CelestialStateDto, CloudLayerDto, CloudStateDto, Color3Dto,
-    EnvironmentDiagnosticsDto, EnvironmentFrameDto, EnvironmentFrameRequest, EnvironmentGameplayModifiersDto,
-    EnvironmentGlobalStateDto, EnvironmentLightingIntentDto, EnvironmentObjectKind, EnvironmentVisualAssetRefsDto,
-    ExposureIntentDto, SkyStateDto, Vec3Dto, WindStateDto,
+    EnvironmentDiagnosticsDto, EnvironmentFrameDto, EnvironmentFrameRequest,
+    EnvironmentGameplayModifiersDto, EnvironmentGlobalStateDto, EnvironmentLightingIntentDto,
+    EnvironmentObjectKind, EnvironmentVisualAssetRefsDto, ExposureIntentDto, SkyStateDto, Vec3Dto,
+    WindStateDto,
 };
 
 pub(crate) fn build_default_environment_frame(
@@ -19,7 +20,8 @@ pub(crate) fn build_default_environment_frame(
     let tod = normalized_day_from_time(&req);
     let day_index_u64 = req.time.game.day_index;
     let day_index = day_index_u64.min(u32::MAX as u64) as u32;
-    let world_time_seconds = req.time.game.day_index as f64 * req.time.game.seconds_per_game_day.max(1.0)
+    let world_time_seconds = req.time.game.day_index as f64
+        * req.time.game.seconds_per_game_day.max(1.0)
         + req.time.game.seconds_of_day.max(0.0);
 
     let requested_profile_id = normalized_profile_id(&req);
@@ -29,13 +31,18 @@ pub(crate) fn build_default_environment_frame(
     let moon = moon_body(tod, req.seed, day_index_u64);
     let cloud_seed = unit_noise(req.seed, day_index_u64, 0xC10D_0001);
     let pressure = weather_pressure(req.seed, day_index_u64, tod);
-    let weather_eval = evaluate_weather(profile, tod, pressure, cloud_seed, time_of_day_state.phase);
+    let weather_eval =
+        evaluate_weather(profile, tod, pressure, cloud_seed, time_of_day_state.phase);
     let visual_assets = profile.visual_assets;
     let mut weather = weather_eval.weather.clone();
 
     let baseline_coverage = baseline_cloud_coverage(req.seed, day_index_u64, tod, profile);
-    let cloud_coverage = baseline_coverage.max(weather_eval.cloud_floor).clamp(0.0, 1.0);
-    let overcast = clamp01_f32((cloud_coverage - 0.55) * 1.9 + weather.intensity * 0.20 + weather_eval.overcast_bias);
+    let cloud_coverage = baseline_coverage
+        .max(weather_eval.cloud_floor)
+        .clamp(0.0, 1.0);
+    let overcast = clamp01_f32(
+        (cloud_coverage - 0.55) * 1.9 + weather.intensity * 0.20 + weather_eval.overcast_bias,
+    );
     let precipitation = weather.precipitation.intensity;
     let fog_weather = weather_eval.fog_bias * weather.intensity;
     let haze = 0.04
@@ -44,16 +51,38 @@ pub(crate) fn build_default_environment_frame(
         + 0.22 * precipitation
         + weather_eval.haze_bias
         + 0.16 * fog_weather;
-    let visibility = (20_000.0 * weather_eval.visibility_factor * (1.0 - overcast * 0.34) * (1.0 - haze * 0.45))
-        .max(120.0);
+    let visibility =
+        (20_000.0 * weather_eval.visibility_factor * (1.0 - overcast * 0.34) * (1.0 - haze * 0.45))
+            .max(120.0);
 
-    enrich_weather_tags(&mut weather, time_of_day_state.phase, visibility, cloud_coverage);
+    enrich_weather_tags(
+        &mut weather,
+        time_of_day_state.phase,
+        visibility,
+        cloud_coverage,
+    );
 
     let sky = SkyStateDto {
-        zenith_color_linear: mix_color(Color3Dto::new(0.010, 0.014, 0.035), Color3Dto::new(0.18, 0.34, 0.62), time_of_day_state.day_blend),
-        horizon_color_linear: mix_color(Color3Dto::new(0.020, 0.026, 0.058), Color3Dto::new(0.48, 0.62, 0.84), time_of_day_state.day_blend),
-        sun_horizon_color_linear: mix_color(Color3Dto::new(0.14, 0.07, 0.04), Color3Dto::new(1.0, 0.48, 0.18), time_of_day_state.dawn_dusk_blend),
-        opposite_horizon_color_linear: mix_color(Color3Dto::new(0.018, 0.030, 0.070), Color3Dto::new(0.32, 0.45, 0.68), time_of_day_state.day_blend),
+        zenith_color_linear: mix_color(
+            Color3Dto::new(0.010, 0.014, 0.035),
+            Color3Dto::new(0.18, 0.34, 0.62),
+            time_of_day_state.day_blend,
+        ),
+        horizon_color_linear: mix_color(
+            Color3Dto::new(0.020, 0.026, 0.058),
+            Color3Dto::new(0.48, 0.62, 0.84),
+            time_of_day_state.day_blend,
+        ),
+        sun_horizon_color_linear: mix_color(
+            Color3Dto::new(0.14, 0.07, 0.04),
+            Color3Dto::new(1.0, 0.48, 0.18),
+            time_of_day_state.dawn_dusk_blend,
+        ),
+        opposite_horizon_color_linear: mix_color(
+            Color3Dto::new(0.018, 0.030, 0.070),
+            Color3Dto::new(0.32, 0.45, 0.68),
+            time_of_day_state.day_blend,
+        ),
         dusk_dawn_blend: time_of_day_state.dawn_dusk_blend,
         night_blend: time_of_day_state.night_blend,
         overcast_blend: overcast,
@@ -61,36 +90,75 @@ pub(crate) fn build_default_environment_frame(
     };
 
     let atmosphere = AtmosphereStateDto {
-        fog_density: 0.006 + overcast * 0.024 + precipitation * 0.020 + weather_eval.fog_bias * weather.intensity,
+        fog_density: 0.006
+            + overcast * 0.024
+            + precipitation * 0.020
+            + weather_eval.fog_bias * weather.intensity,
         fog_height_falloff: 0.12,
-        fog_color_linear: mix_color(Color3Dto::new(0.06, 0.07, 0.11), Color3Dto::new(0.56, 0.62, 0.70), time_of_day_state.day_blend),
+        fog_color_linear: mix_color(
+            Color3Dto::new(0.06, 0.07, 0.11),
+            Color3Dto::new(0.56, 0.62, 0.70),
+            time_of_day_state.day_blend,
+        ),
         haze_amount: haze,
-        humidity: clamp01_f32(0.26 + cloud_coverage * 0.30 + precipitation * 0.34 + weather_eval.fog_bias * 0.28),
+        humidity: clamp01_f32(
+            0.26 + cloud_coverage * 0.30 + precipitation * 0.34 + weather_eval.fog_bias * 0.28,
+        ),
         aerosol_density: 0.08 + haze,
         visibility_distance_meters: visibility,
     };
 
     let wind = WindStateDto {
         global_direction: normalize(Vec3Dto::new(0.92, 0.0, 0.38)),
-        global_speed_mps: weather_eval.wind_base_mps + cloud_coverage * 1.6 + weather_eval.wind_gain_mps * weather.intensity,
-        gust_strength: (weather_eval.gust_base + weather_eval.gust_gain * weather.intensity + overcast * 0.12).clamp(0.0, 1.0),
+        global_speed_mps: weather_eval.wind_base_mps
+            + cloud_coverage * 1.6
+            + weather_eval.wind_gain_mps * weather.intensity,
+        gust_strength: (weather_eval.gust_base
+            + weather_eval.gust_gain * weather.intensity
+            + overcast * 0.12)
+            .clamp(0.0, 1.0),
         cloud_advection: Vec3Dto::new(
-            weather_eval.wind_base_mps + cloud_coverage * 1.8 + weather_eval.wind_gain_mps * weather.intensity,
+            weather_eval.wind_base_mps
+                + cloud_coverage * 1.8
+                + weather_eval.wind_gain_mps * weather.intensity,
             0.0,
             0.8 + weather.intensity * 1.4,
         ),
     };
 
     let activation = (cloud_coverage * 0.55 + weather.intensity * 0.45).clamp(0.0, 1.0);
-    let environment_objects = build_environment_objects(&req, profile, weather_eval.pattern, activation, cloud_coverage, &weather, atmosphere.fog_density, &wind);
+    let environment_objects = build_environment_objects(
+        &req,
+        profile,
+        weather_eval.pattern,
+        activation,
+        cloud_coverage,
+        &weather,
+        atmosphere.fog_density,
+        &wind,
+    );
     let cloud_volumes = environment_objects
         .iter()
-        .filter(|it| matches!(it.kind, EnvironmentObjectKind::CloudVolume | EnvironmentObjectKind::CloudField | EnvironmentObjectKind::FogBank | EnvironmentObjectKind::SnowBand | EnvironmentObjectKind::DustWall))
+        .filter(|it| {
+            matches!(
+                it.kind,
+                EnvironmentObjectKind::CloudVolume
+                    | EnvironmentObjectKind::CloudField
+                    | EnvironmentObjectKind::FogBank
+                    | EnvironmentObjectKind::SnowBand
+                    | EnvironmentObjectKind::DustWall
+            )
+        })
         .cloned()
         .collect::<Vec<_>>();
     let storm_cells = environment_objects
         .iter()
-        .filter(|it| matches!(it.kind, EnvironmentObjectKind::StormCell | EnvironmentObjectKind::WeatherFront))
+        .filter(|it| {
+            matches!(
+                it.kind,
+                EnvironmentObjectKind::StormCell | EnvironmentObjectKind::WeatherFront
+            )
+        })
         .cloned()
         .collect::<Vec<_>>();
 
@@ -98,8 +166,17 @@ pub(crate) fn build_default_environment_frame(
         coverage: cloud_coverage,
         overcast,
         shadow_strength: clamp01_f32(cloud_coverage * 0.46 + weather.intensity * 0.20),
-        light_absorption: clamp01_f32(cloud_coverage * 0.28 + overcast * 0.24 + precipitation * 0.16),
-        layers: cloud_layers(profile, cloud_coverage, overcast, pressure, precipitation, &wind),
+        light_absorption: clamp01_f32(
+            cloud_coverage * 0.28 + overcast * 0.24 + precipitation * 0.16,
+        ),
+        layers: cloud_layers(
+            profile,
+            cloud_coverage,
+            overcast,
+            pressure,
+            precipitation,
+            &wind,
+        ),
         volumes: cloud_volumes,
         storm_cells,
     };
@@ -107,18 +184,33 @@ pub(crate) fn build_default_environment_frame(
     let lighting_intent = EnvironmentLightingIntentDto {
         sun_lux_hint: sun.intensity_lux_hint * (1.0 - clouds.light_absorption),
         moon_lux_hint: moon.intensity_lux_hint * (1.0 - clouds.light_absorption),
-        ambient_intensity: (0.04 + time_of_day_state.day_blend * 0.22 + cloud_coverage * 0.06 - weather.intensity * 0.025).max(0.015),
-        sky_light_intensity: (0.07 + time_of_day_state.day_blend * 0.45 - overcast * 0.12).max(0.02),
+        ambient_intensity: (0.04 + time_of_day_state.day_blend * 0.22 + cloud_coverage * 0.06
+            - weather.intensity * 0.025)
+            .max(0.015),
+        sky_light_intensity: (0.07 + time_of_day_state.day_blend * 0.45 - overcast * 0.12)
+            .max(0.02),
         cloud_shadow_strength: clouds.shadow_strength,
         wetness_specular_boost: weather.wetness.surface_wetness * 0.55,
     };
 
     let gameplay_modifiers = EnvironmentGameplayModifiersDto {
         visibility_multiplier: clamp01_f32(visibility / 20_000.0),
-        audio_masking_multiplier: clamp01_f32(precipitation * 0.55 + weather.thunder.probability * 0.30 + wind.gust_strength * 0.12),
-        weather_hazard_level: clamp01_f32(weather.thunder.probability * 0.85 + precipitation * 0.25 + weather_eval.fog_bias * 0.18),
-        shelter_score: clamp01_f32(precipitation * 0.60 + weather.thunder.probability * 0.95 + weather.snow.surface_snow * 0.25),
-        surface_slipperiness_hint: clamp01_f32(weather.wetness.surface_wetness * 0.82 + weather.snow.surface_snow * 0.30),
+        audio_masking_multiplier: clamp01_f32(
+            precipitation * 0.55 + weather.thunder.probability * 0.30 + wind.gust_strength * 0.12,
+        ),
+        weather_hazard_level: clamp01_f32(
+            weather.thunder.probability * 0.85
+                + precipitation * 0.25
+                + weather_eval.fog_bias * 0.18,
+        ),
+        shelter_score: clamp01_f32(
+            precipitation * 0.60
+                + weather.thunder.probability * 0.95
+                + weather.snow.surface_snow * 0.25,
+        ),
+        surface_slipperiness_hint: clamp01_f32(
+            weather.wetness.surface_wetness * 0.82 + weather.snow.surface_snow * 0.30,
+        ),
     };
 
     let exposure_intent = ExposureIntentDto {
@@ -241,11 +333,22 @@ pub(crate) fn normalized_day_from_time(req: &EnvironmentFrameRequest) -> f32 {
 
 fn normalized_profile_id(req: &EnvironmentFrameRequest) -> String {
     let trimmed = req.environment_profile.profile_id.trim();
-    if trimmed.is_empty() { "environment.default".to_owned() } else { trimmed.to_owned() }
+    if trimmed.is_empty() {
+        "environment.default".to_owned()
+    } else {
+        trimmed.to_owned()
+    }
 }
 
 fn profile_warning(found: bool, requested: &str) -> Vec<String> {
-    if found { Vec::new() } else { vec![format!("unknown environment profile '{}' routed to descriptor 'environment.default'", requested)] }
+    if found {
+        Vec::new()
+    } else {
+        vec![format!(
+            "unknown environment profile '{}' routed to descriptor 'environment.default'",
+            requested
+        )]
+    }
 }
 
 fn weather_pressure(seed: u64, day_index: u64, tod: f32) -> f32 {
@@ -255,11 +358,21 @@ fn weather_pressure(seed: u64, day_index: u64, tod: f32) -> f32 {
     (front * 0.55 + slow * 0.30 + base * 0.15).clamp(0.0, 1.0)
 }
 
-fn baseline_cloud_coverage(seed: u64, day_index: u64, tod: f32, profile: &EnvironmentProfileDescriptor) -> f32 {
+fn baseline_cloud_coverage(
+    seed: u64,
+    day_index: u64,
+    tod: f32,
+    profile: &EnvironmentProfileDescriptor,
+) -> f32 {
     let seed_phase = unit_noise(seed, day_index, 0xC10D_7001);
     let daily_wave = ((std::f32::consts::TAU * (tod + seed_phase)).sin() + 1.0) * 0.5;
     let slow_front = unit_noise(seed, day_index / 3, 0xC10D_7002);
-    let profile_bias = profile.cloud_profile_ref.bytes().fold(0.0f32, |acc, byte| acc + byte as f32 * 0.00001).fract() * 0.08;
+    let profile_bias = profile
+        .cloud_profile_ref
+        .bytes()
+        .fold(0.0f32, |acc, byte| acc + byte as f32 * 0.00001)
+        .fract()
+        * 0.08;
     clamp01_f32(0.08 + daily_wave * 0.34 + slow_front * 0.40 + profile_bias)
 }
 
@@ -271,7 +384,11 @@ fn cloud_layers(
     precipitation: f32,
     wind: &WindStateDto,
 ) -> Vec<CloudLayerDto> {
-    let low_layer_base = if profile.biome == "desert" { 1600.0 } else { 1200.0 };
+    let low_layer_base = if profile.biome == "desert" {
+        1600.0
+    } else {
+        1200.0
+    };
     vec![
         CloudLayerDto {
             altitude_min_meters: low_layer_base,
@@ -285,7 +402,11 @@ fn cloud_layers(
             altitude_max_meters: 5200.0,
             coverage: clamp01_f32(cloud_coverage * 0.45 + pressure * 0.18),
             density: 0.10 + cloud_coverage * 0.20,
-            wind_velocity: Vec3Dto::new(wind.cloud_advection.x * 1.35, 0.0, wind.cloud_advection.z * 1.35),
+            wind_velocity: Vec3Dto::new(
+                wind.cloud_advection.x * 1.35,
+                0.0,
+                wind.cloud_advection.z * 1.35,
+            ),
         },
     ]
 }

@@ -19,10 +19,7 @@ fn warn_once(key: String, message: impl FnOnce()) {
     }
 }
 
-pub(crate) fn descriptor_declares_service(
-    descriptor: &PluginDescriptor,
-    service_id: &str,
-) -> bool {
+pub(crate) fn descriptor_declares_service(descriptor: &PluginDescriptor, service_id: &str) -> bool {
     descriptor.capabilities.iter().any(|cap| {
         cap.role == CapabilityRole::Provides
             && cap.kind == CapabilityKind::ServiceV1
@@ -93,7 +90,10 @@ pub(crate) fn gateway_provider_service_id(
             warn_once(
                 format!(
                     "multi-service:{}:{}:{}:{}",
-                    descriptor.id, gateway.gateway_id, gateway.backend_capability_id, services_joined
+                    descriptor.id,
+                    gateway.gateway_id,
+                    gateway.backend_capability_id,
+                    services_joined
                 ),
                 || {
                     newengine_ulog_api::ulog::warn!(

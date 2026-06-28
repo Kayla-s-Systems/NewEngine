@@ -61,15 +61,26 @@ impl CameraLens {
     #[inline]
     pub fn sanitized(self) -> Self {
         let fovy = if self.fovy.is_finite() {
-            self.fovy.clamp(1.0_f32.to_radians(), 170.0_f32.to_radians())
+            self.fovy
+                .clamp(1.0_f32.to_radians(), 170.0_f32.to_radians())
         } else {
             60.0_f32.to_radians()
         };
         let min_near = finite_positive_or(self.min_near, 0.01).max(0.0005);
         let max_far = finite_positive_or(self.max_far, 100_000.0).max(min_near + 1.0);
-        let near = finite_positive_or(self.near, min_near).max(min_near).min(max_far - 0.001);
-        let far = finite_positive_or(self.far, max_far.min(10_000.0)).max(near + 0.001).min(max_far);
-        Self { fovy, near, far, min_near, max_far }
+        let near = finite_positive_or(self.near, min_near)
+            .max(min_near)
+            .min(max_far - 0.001);
+        let far = finite_positive_or(self.far, max_far.min(10_000.0))
+            .max(near + 0.001)
+            .min(max_far);
+        Self {
+            fovy,
+            near,
+            far,
+            min_near,
+            max_far,
+        }
     }
 
     #[inline]
@@ -105,7 +116,11 @@ pub struct CameraOrthoLens {
 impl CameraOrthoLens {
     #[inline]
     pub const fn new(half_height: f32, near: f32, far: f32) -> Self {
-        Self { half_height, near, far }
+        Self {
+            half_height,
+            near,
+            far,
+        }
     }
 
     #[inline]
@@ -180,7 +195,11 @@ impl CameraClipPolicy {
 
 #[inline]
 fn finite_positive_or(value: f32, fallback: f32) -> f32 {
-    if value.is_finite() && value > 0.0 { value } else { fallback }
+    if value.is_finite() && value > 0.0 {
+        value
+    } else {
+        fallback
+    }
 }
 
 #[cfg(test)]

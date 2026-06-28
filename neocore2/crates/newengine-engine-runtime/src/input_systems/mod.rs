@@ -50,7 +50,9 @@ pub struct InputRuntimeSystems {
 
 impl Default for InputRuntimeSystems {
     #[inline]
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl InputRuntimeSystems {
@@ -84,7 +86,10 @@ impl InputRuntimeSystems {
     }
 
     pub fn snapshot(&self, frame_index: u64) -> InputRuntimeSystemsSnapshot {
-        InputRuntimeSystemsSnapshot { frame_index, systems: self.states.clone() }
+        InputRuntimeSystemsSnapshot {
+            frame_index,
+            systems: self.states.clone(),
+        }
     }
 
     pub fn set_enabled(
@@ -143,13 +148,21 @@ impl InputRuntimeSystems {
             SystemObservation::new(
                 raw_sample.present && raw_enabled,
                 false,
-                if raw_sample.present { REASON_RAW_RECEIVED } else { REASON_RAW_MISSING },
+                if raw_sample.present {
+                    REASON_RAW_RECEIVED
+                } else {
+                    REASON_RAW_MISSING
+                },
             ),
         );
         self.transition(
             InputRuntimeSystem::Bindings,
             frame_index,
-            SystemObservation::new(raw_sample.present && bindings_enabled, false, REASON_BINDINGS_READY),
+            SystemObservation::new(
+                raw_sample.present && bindings_enabled,
+                false,
+                REASON_BINDINGS_READY,
+            ),
         );
 
         let has_actions = action_frame_has_activity(input.actions);
@@ -159,37 +172,62 @@ impl InputRuntimeSystems {
             SystemObservation::new(
                 actions_enabled && has_actions,
                 false,
-                if has_actions { REASON_ACTIONS_ACTIVE } else { REASON_ACTIONS_IDLE },
+                if has_actions {
+                    REASON_ACTIONS_ACTIVE
+                } else {
+                    REASON_ACTIONS_IDLE
+                },
             ),
         );
         self.transition(
             InputRuntimeSystem::Gamepad,
             frame_index,
             SystemObservation::new(
-                gamepad_enabled && (raw_sample.gamepad_connected > 0 || raw_sample.gamepad_activity),
+                gamepad_enabled
+                    && (raw_sample.gamepad_connected > 0 || raw_sample.gamepad_activity),
                 false,
-                if raw_sample.gamepad_connected > 0 { REASON_GAMEPAD_CONNECTED } else { REASON_GAMEPAD_IDLE },
+                if raw_sample.gamepad_connected > 0 {
+                    REASON_GAMEPAD_CONNECTED
+                } else {
+                    REASON_GAMEPAD_IDLE
+                },
             ),
         );
 
         let camera_captured = self.capture_policy.captures(InputRuntimeSystem::CameraLook);
-        let movement_captured = self.capture_policy.captures(InputRuntimeSystem::GameplayMovement);
+        let movement_captured = self
+            .capture_policy
+            .captures(InputRuntimeSystem::GameplayMovement);
         self.transition(
             InputRuntimeSystem::CameraLook,
             frame_index,
             SystemObservation::new(
                 camera_look_enabled && !camera_captured && input_has_look(input),
                 camera_captured,
-                if camera_captured { REASON_CAPTURED_BY_MODAL_UI } else if input_has_look(input) { REASON_LOOK_ACTIVE } else { REASON_IDLE },
+                if camera_captured {
+                    REASON_CAPTURED_BY_MODAL_UI
+                } else if input_has_look(input) {
+                    REASON_LOOK_ACTIVE
+                } else {
+                    REASON_IDLE
+                },
             ),
         );
         self.transition(
             InputRuntimeSystem::GameplayMovement,
             frame_index,
             SystemObservation::new(
-                gameplay_movement_enabled && !movement_captured && movement_has_activity(input.actions),
+                gameplay_movement_enabled
+                    && !movement_captured
+                    && movement_has_activity(input.actions),
                 movement_captured,
-                if movement_captured { REASON_CAPTURED_BY_MODAL_UI } else if movement_has_activity(input.actions) { REASON_MOVE_ACTIVE } else { REASON_IDLE },
+                if movement_captured {
+                    REASON_CAPTURED_BY_MODAL_UI
+                } else if movement_has_activity(input.actions) {
+                    REASON_MOVE_ACTIVE
+                } else {
+                    REASON_IDLE
+                },
             ),
         );
         self.transition(
@@ -198,7 +236,11 @@ impl InputRuntimeSystems {
             SystemObservation::new(
                 ui_navigation_enabled && input_has_ui_navigation_action(input),
                 false,
-                if input_has_ui_navigation_action(input) { REASON_UI_NAV_ACTIVE } else { REASON_IDLE },
+                if input_has_ui_navigation_action(input) {
+                    REASON_UI_NAV_ACTIVE
+                } else {
+                    REASON_IDLE
+                },
             ),
         );
 
@@ -227,14 +269,23 @@ impl InputRuntimeSystems {
         capture: InputCaptureState,
         input: &mut InputActionFrameCarrier,
     ) {
-        let capture = InputCaptureState { sampling_alive: true, ..capture };
+        let capture = InputCaptureState {
+            sampling_alive: true,
+            ..capture
+        };
         let changed = self.capture_policy.set_capture_state(capture);
         *input.sampling_alive = true;
         *input.camera_navigation_gated = capture.camera_navigation_gated;
         *input.gameplay_movement_gated = capture.gameplay_movement_gated;
 
-        for system in [InputRuntimeSystem::GameplayMovement, InputRuntimeSystem::CameraLook] {
-            let was_active = self.state(system).map(|state| state.active).unwrap_or(false);
+        for system in [
+            InputRuntimeSystem::GameplayMovement,
+            InputRuntimeSystem::CameraLook,
+        ] {
+            let was_active = self
+                .state(system)
+                .map(|state| state.active)
+                .unwrap_or(false);
             let captured = capture.gates(system);
             self.transition(
                 system,
@@ -243,7 +294,11 @@ impl InputRuntimeSystems {
                     // Listener stays alive under UI capture; only navigation is gated.
                     was_active,
                     captured,
-                    if captured { capture.reason } else { REASON_IDLE },
+                    if captured {
+                        capture.reason
+                    } else {
+                        REASON_IDLE
+                    },
                 ),
             );
         }
@@ -275,11 +330,19 @@ impl InputRuntimeSystems {
         blocks_gameplay: bool,
         input: &mut InputActionFrameCarrier,
     ) {
-        self.publish_input_capture_state(frame_index, InputCaptureState::modal_ui(blocks_gameplay), input);
+        self.publish_input_capture_state(
+            frame_index,
+            InputCaptureState::modal_ui(blocks_gameplay),
+            input,
+        );
     }
 
     pub fn log_explicit_snapshot(&self, frame_index: u64, reason: &str) {
-        newengine_ulog_api::ulog::info!("input systems: snapshot frame={} reason='{}'", frame_index, reason);
+        newengine_ulog_api::ulog::info!(
+            "input systems: snapshot frame={} reason='{}'",
+            frame_index,
+            reason
+        );
         for state in &self.states {
             newengine_ulog_api::ulog::info!(
                 "input systems: | {:31} | enabled={:<5} active={:<5} captured={:<5} reason='{}' |",
@@ -352,7 +415,12 @@ impl InputRuntimeSystems {
         }
     }
 
-    fn transition(&mut self, system: InputRuntimeSystem, frame_index: u64, observed: SystemObservation) {
+    fn transition(
+        &mut self,
+        system: InputRuntimeSystem,
+        frame_index: u64,
+        observed: SystemObservation,
+    ) {
         let state = self.state_mut(system);
         let state_changed = state.active != observed.active || state.captured != observed.captured;
         let reason_changed = state.reason != observed.reason;
@@ -383,7 +451,8 @@ impl InputRuntimeSystems {
 
     fn log_compact_summary(&mut self, frame_index: u64, summary: String) {
         let should_log = summary != self.log_state.last_frame_summary
-            || frame_index.saturating_sub(self.log_state.last_summary_frame) >= SUMMARY_INTERVAL_FRAMES;
+            || frame_index.saturating_sub(self.log_state.last_summary_frame)
+                >= SUMMARY_INTERVAL_FRAMES;
         if !should_log {
             return;
         }

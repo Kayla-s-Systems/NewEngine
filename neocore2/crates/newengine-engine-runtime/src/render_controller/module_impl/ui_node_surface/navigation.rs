@@ -2,7 +2,9 @@
 
 use newengine_audio_api::AudioFeedbackKind;
 use newengine_ui_api::UiInputFrame;
-use newengine_ui_navigation_api::{UiNodeHitTestState, UiNodeNavigationInput, UiNodeNavigationOutput};
+use newengine_ui_navigation_api::{
+    UiNodeHitTestState, UiNodeNavigationInput, UiNodeNavigationOutput,
+};
 
 use super::super::input::ViewportInputSnap;
 use super::*;
@@ -33,7 +35,9 @@ impl RenderUiNodeSurfaceState {
             pointer_primary_pressed: input_frame.is_mouse_pressed(1),
         });
 
-        let Some(navigation) = self.navigation.as_mut() else { return; };
+        let Some(navigation) = self.navigation.as_mut() else {
+            return;
+        };
         let output = navigation.handle_input(UiNodeNavigationInput {
             nav_x: input.actions.ui_nav[0],
             nav_y: input.actions.ui_nav[1],
@@ -45,7 +49,11 @@ impl RenderUiNodeSurfaceState {
         self.apply_navigation_runtime_output(output, frame_index);
     }
 
-    fn apply_navigation_runtime_output(&mut self, output: UiNodeNavigationOutput, frame_index: u64) {
+    fn apply_navigation_runtime_output(
+        &mut self,
+        output: UiNodeNavigationOutput,
+        frame_index: u64,
+    ) {
         if output.selection_changed {
             audio(AudioFeedbackKind::UiNavigate, frame_index);
         }
@@ -62,7 +70,11 @@ impl RenderUiNodeSurfaceState {
             self.open = false;
             self.awaiting_rebind = None;
             if self.feedback.is_none() {
-                self.flash_feedback("Resume", "Returning to gameplay", UiNodeMessageSeverity::Success);
+                self.flash_feedback(
+                    "Resume",
+                    "Returning to gameplay",
+                    UiNodeMessageSeverity::Success,
+                );
             }
         }
     }

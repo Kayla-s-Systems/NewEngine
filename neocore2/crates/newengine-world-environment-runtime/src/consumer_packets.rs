@@ -1,5 +1,6 @@
 use crate::phenomena::required_assets_for_object;
 use crate::profile_catalog::{EnvironmentProfileDescriptor, WeatherPatternDescriptor};
+use newengine_world_api::WorldCellCoord;
 use newengine_world_environment_api::{
     AiEnvironmentObservationDto, AtmosphereStateDto, AudioEnvironmentPacketDto, CelestialBodyDto,
     CloudStateDto, EnvironmentConsumerPacketsDto, EnvironmentGameplayModifiersDto,
@@ -7,7 +8,6 @@ use newengine_world_environment_api::{
     PrecipitationKind, RenderEnvironmentPacketDto, StreamingEnvironmentHintsDto, TimeOfDayPhase,
     TimeOfDayStateDto, Vec3Dto, WeatherStateDto, WindStateDto,
 };
-use newengine_world_api::WorldCellCoord;
 
 pub(crate) fn build_consumer_packets(
     profile: &EnvironmentProfileDescriptor,
@@ -96,8 +96,18 @@ pub(crate) fn build_consumer_packets(
                     object_id: object.id,
                     owning_cells: object.owning_cells.clone(),
                     required_assets: required_assets_for_object(object, pattern, profile),
-                    priority: object.state_json.get("priority").and_then(|v| v.as_str()).unwrap_or("normal").to_owned(),
-                    reason: object.state_json.get("reason").and_then(|v| v.as_str()).unwrap_or("environment").to_owned(),
+                    priority: object
+                        .state_json
+                        .get("priority")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("normal")
+                        .to_owned(),
+                    reason: object
+                        .state_json
+                        .get("reason")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("environment")
+                        .to_owned(),
                 })
                 .collect(),
             affected_cells,

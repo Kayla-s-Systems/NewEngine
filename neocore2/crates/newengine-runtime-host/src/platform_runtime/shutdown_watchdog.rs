@@ -32,10 +32,17 @@ impl ShutdownWatchdog {
         let completed = Arc::new(AtomicBool::new(false));
         let Some(timeout_ms) = configured_timeout_ms() else {
             completed.store(true, Ordering::Release);
-            return Self { completed, task_id: None, ticket: None };
+            return Self {
+                completed,
+                task_id: None,
+                ticket: None,
+            };
         };
 
-        let task_id = format!("runtime.shutdown_watchdog.{}", jobs.snapshot().submitted_jobs.saturating_add(1));
+        let task_id = format!(
+            "runtime.shutdown_watchdog.{}",
+            jobs.snapshot().submitted_jobs.saturating_add(1)
+        );
         publish_watchdog_event(
             task_id.as_str(),
             EngineTaskPhase::Scheduled,
@@ -87,7 +94,11 @@ impl ShutdownWatchdog {
             exit_code
         );
 
-        Self { completed, task_id: Some(task_id), ticket: Some(ticket) }
+        Self {
+            completed,
+            task_id: Some(task_id),
+            ticket: Some(ticket),
+        }
     }
 
     #[inline]
@@ -142,12 +153,22 @@ fn publish_watchdog_event(
     if let Some(progress) = progress_01 {
         event = event.with_progress(progress);
     }
-    let job_event = EngineJobEventV1::new(event.clone(), JobExecutorKind::RuntimeWatchdog, "shutdown-watchdog");
+    let job_event = EngineJobEventV1::new(
+        event.clone(),
+        JobExecutorKind::RuntimeWatchdog,
+        "shutdown-watchdog",
+    );
     if let Ok(bytes) = serde_json::to_vec(&event) {
-        let _ = newengine_plugin_host::host_context::publish_event(newengine_jobs_api::ENGINE_TASK_EVENT_TOPIC_V1, &bytes);
+        let _ = newengine_plugin_host::host_context::publish_event(
+            newengine_jobs_api::ENGINE_TASK_EVENT_TOPIC_V1,
+            &bytes,
+        );
     }
     if let Ok(bytes) = serde_json::to_vec(&job_event) {
-        let _ = newengine_plugin_host::host_context::publish_event(newengine_jobs_api::ENGINE_JOB_EVENT_TOPIC_V1, &bytes);
+        let _ = newengine_plugin_host::host_context::publish_event(
+            newengine_jobs_api::ENGINE_JOB_EVENT_TOPIC_V1,
+            &bytes,
+        );
     }
 }
 

@@ -20,9 +20,7 @@ pub use propagate::{ensure_transform_outputs, propagate_transforms};
 
 #[cfg(feature = "ecs")]
 pub use world_space::{
-    read_entity_world_pose,
-    read_entity_world_pose_local_chain,
-    write_entity_local_from_world_pose,
+    read_entity_world_pose, read_entity_world_pose_local_chain, write_entity_local_from_world_pose,
     write_entity_local_from_world_pose_local_chain,
 };
 

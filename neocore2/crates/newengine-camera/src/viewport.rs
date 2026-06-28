@@ -25,7 +25,12 @@ impl Default for CameraViewport {
 impl CameraViewport {
     #[inline]
     pub const fn new(x: u32, y: u32, width: u32, height: u32) -> Self {
-        Self { x, y, width, height }
+        Self {
+            x,
+            y,
+            width,
+            height,
+        }
     }
 
     #[inline]
@@ -35,7 +40,11 @@ impl CameraViewport {
 
     #[inline]
     pub fn sanitized(self) -> Self {
-        Self { width: self.width.max(1), height: self.height.max(1), ..self }
+        Self {
+            width: self.width.max(1),
+            height: self.height.max(1),
+            ..self
+        }
     }
 
     #[inline]

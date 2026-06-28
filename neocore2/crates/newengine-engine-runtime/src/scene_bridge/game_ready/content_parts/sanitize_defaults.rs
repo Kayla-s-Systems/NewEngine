@@ -20,11 +20,14 @@ impl Default for RawGameReadyPayload {
     }
 }
 
-
 #[inline]
 pub(super) fn non_empty_or(value: String, fallback: String) -> String {
     let trimmed = value.trim();
-    if trimmed.is_empty() { fallback } else { trimmed.to_owned() }
+    if trimmed.is_empty() {
+        fallback
+    } else {
+        trimmed.to_owned()
+    }
 }
 
 #[inline]
@@ -36,7 +39,11 @@ pub(super) fn sanitize_texture_path(value: Option<String>) -> Option<String> {
 pub(super) fn sanitize_asset_path(value: Option<String>) -> Option<String> {
     value.and_then(|s| {
         let trimmed = s.trim();
-        if trimmed.is_empty() { None } else { Some(trimmed.replace('\\', "/")) }
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.replace('\\', "/"))
+        }
     })
 }
 
@@ -101,7 +108,9 @@ pub(super) fn sanitize_direction3(v: ColorRgb, fallback: ColorRgb) -> ColorRgb {
 }
 
 #[inline]
-pub(super) fn sanitize_sky_atmosphere_spec(raw: RawSkyAtmosphereSpec) -> GameReadySkyAtmosphereSpec {
+pub(super) fn sanitize_sky_atmosphere_spec(
+    raw: RawSkyAtmosphereSpec,
+) -> GameReadySkyAtmosphereSpec {
     GameReadySkyAtmosphereSpec {
         day_zenith: sanitize_color3(raw.day_zenith, default_sky_day_zenith()),
         day_horizon: sanitize_color3(raw.day_horizon, default_sky_day_horizon()),
@@ -144,7 +153,6 @@ pub(super) fn sanitize_lighting_spec(raw: RawLightingSpec) -> GameReadyLightingS
         },
     }
 }
-
 
 #[inline]
 pub(super) fn sanitize_foliage_spec(raw: RawFoliageSpec) -> GameReadyFoliageSpec {
@@ -189,9 +197,10 @@ pub(super) fn sanitize_prefab_spec(raw: RawPrefabSpec) -> Option<GameReadyPrefab
     })
 }
 
-
 #[inline]
-pub(super) fn sanitize_definition_instance_spec(raw: RawDefinitionInstanceSpec) -> Option<GameReadyDefinitionInstanceSpec> {
+pub(super) fn sanitize_definition_instance_spec(
+    raw: RawDefinitionInstanceSpec,
+) -> Option<GameReadyDefinitionInstanceSpec> {
     let definition_ref = raw.definition_ref.trim().replace('\\', "/");
     if definition_ref.is_empty() {
         return None;
@@ -208,7 +217,10 @@ pub(super) fn sanitize_definition_instance_spec(raw: RawDefinitionInstanceSpec) 
         definition_ref,
         position: arr3(raw.position),
         rotation_ypr: sanitize_array3_finite(raw.rotation_ypr, [0.0, 0.0, 0.0]),
-        scale: arr3(sanitize_array3_positive(raw.scale, default_definition_scale())),
+        scale: arr3(sanitize_array3_positive(
+            raw.scale,
+            default_definition_scale(),
+        )),
         apply_mode,
     })
 }
@@ -216,7 +228,9 @@ pub(super) fn sanitize_definition_instance_spec(raw: RawDefinitionInstanceSpec) 
 #[inline]
 pub(super) fn sanitize_array3_finite(mut value: [f32; 3], fallback: [f32; 3]) -> [f32; 3] {
     for i in 0..3 {
-        if !value[i].is_finite() { value[i] = fallback[i]; }
+        if !value[i].is_finite() {
+            value[i] = fallback[i];
+        }
     }
     value
 }
@@ -224,133 +238,376 @@ pub(super) fn sanitize_array3_finite(mut value: [f32; 3], fallback: [f32; 3]) ->
 #[inline]
 pub(super) fn sanitize_array3_positive(mut value: [f32; 3], fallback: [f32; 3]) -> [f32; 3] {
     for i in 0..3 {
-        if !value[i].is_finite() || value[i].abs() <= 1.0e-6 { value[i] = fallback[i]; }
+        if !value[i].is_finite() || value[i].abs() <= 1.0e-6 {
+            value[i] = fallback[i];
+        }
     }
     value
 }
 
 #[inline]
-pub(super) fn arr3(v: [f32; 3]) -> Vec3 { Vec3::new(v[0], v[1], v[2]) }
+pub(super) fn arr3(v: [f32; 3]) -> Vec3 {
+    Vec3::new(v[0], v[1], v[2])
+}
 
-pub(super) fn default_definition_scale() -> [f32; 3] { [1.0, 1.0, 1.0] }
-pub(super) fn default_definition_apply_mode() -> String { "metadata_only".to_owned() }
-pub(super) fn default_title() -> String { "KAYLA FPS: Procedural Highlands".to_owned() }
-pub(super) fn default_objective() -> String { "Walk a deterministic map assembled from .ymap -> .ytyp -> .ydd -> .nemat -> .ytd assets.".to_owned() }
-pub(super) fn default_player_start() -> [f32; 3] { [-17.5, 0.0, -17.5] }
-pub(super) fn default_player_yaw() -> f32 { -0.72 }
-pub(super) fn default_move_speed() -> f32 { 7.3 }
-pub(super) fn default_look_sens() -> f32 { 0.0022 }
-pub(super) fn default_player_model_enabled() -> bool { false }
-pub(super) fn default_player_model_source() -> String { String::new() }
-pub(super) fn default_player_texture_dictionary() -> Option<String> { None }
-pub(super) fn default_player_skeleton() -> Option<String> { None }
-pub(super) fn default_player_model_height() -> f32 { 1.78 }
-pub(super) fn default_player_model_eye_height_ratio() -> f32 { 0.91 }
-pub(super) fn default_player_model_offset() -> [f32; 3] { [0.0, 0.0, 0.0] }
-pub(super) fn default_player_model_yaw_offset() -> f32 { 0.0 }
-pub(super) fn default_player_model_hide_in_first_person() -> bool { true }
-pub(super) fn default_terrain_seed() -> u64 { 0x2026_0509_4b41_594c }
-pub(super) fn default_terrain_cells() -> u32 { 80 }
-pub(super) fn default_terrain_size() -> f32 { 52.0 }
-pub(super) fn default_base_height() -> f32 { -0.04 }
-pub(super) fn default_height_scale() -> f32 { 1.35 }
-pub(super) fn default_terrain_generator_id() -> String { "newengine.generator.lowland-biomes.v1".to_owned() }
-pub(super) fn default_ridged_seed_xor() -> u64 { 0x7e22_a11d }
-pub(super) fn default_ridged_frequency() -> f32 { 1.25 }
-pub(super) fn default_ridged_amplitude() -> f32 { 0.11 }
-pub(super) fn default_ridged_shape_edge0() -> f32 { 0.08 }
-pub(super) fn default_ridged_shape_edge1() -> f32 { 1.0 }
-pub(super) fn default_veins_seed_xor() -> u64 { 0x5317_1001 }
-pub(super) fn default_veins_frequency() -> f32 { 0.52 }
-pub(super) fn default_veins_amplitude() -> f32 { 0.10 }
-pub(super) fn default_smoothing_passes() -> u32 { 2 }
-pub(super) fn default_smoothing_strength() -> f32 { 0.42 }
-pub(super) fn default_terrain_surface_forest() -> String { String::new() }
-pub(super) fn default_terrain_surface_sand() -> String { String::new() }
-pub(super) fn default_terrain_surface_rock() -> String { String::new() }
-pub(super) fn default_terrain_patch_scale() -> f32 { 0.033 }
-pub(super) fn default_terrain_blend_softness() -> f32 { 0.18 }
-pub(super) fn default_terrain_streaming_enabled() -> bool { true }
-pub(super) fn default_terrain_chunk_radius() -> i32 { 2 }
-pub(super) fn default_terrain_unload_radius() -> i32 { 4 }
-pub(super) fn default_terrain_max_chunks_per_frame() -> usize { 4 }
-pub(super) fn default_sky_radius() -> f32 { 220.0 }
-pub(super) fn default_skydome_mesh() -> String { String::new() }
-pub(super) fn default_sky_follow_camera() -> bool { true }
-pub(super) fn default_cloud_dictionary() -> String { String::new() }
-pub(super) fn default_cloud_profile() -> String { "clear".to_owned() }
-pub(super) fn default_sky_sun_radius() -> f32 { 18.0 }
-pub(super) fn default_sky_moon_radius() -> f32 { 13.5 }
-pub(super) fn default_moon_texture() -> String { String::new() }
-pub(super) fn default_sky_day_zenith() -> ColorRgb { [0.23, 0.42, 0.82] }
-pub(super) fn default_sky_day_horizon() -> ColorRgb { [0.64, 0.78, 0.96] }
-pub(super) fn default_sky_dusk_zenith() -> ColorRgb { [0.16, 0.20, 0.40] }
-pub(super) fn default_sky_dusk_horizon() -> ColorRgb { [1.00, 0.47, 0.20] }
-pub(super) fn default_sky_night_zenith() -> ColorRgb { [0.006, 0.010, 0.030] }
-pub(super) fn default_sky_night_horizon() -> ColorRgb { [0.020, 0.024, 0.052] }
-pub(super) fn default_sky_cloud_day() -> ColorRgb { [0.98, 0.96, 0.88] }
-pub(super) fn default_sky_cloud_night() -> ColorRgb { [0.040, 0.050, 0.085] }
-pub(super) fn default_sky_night_strength() -> f32 { 0.35 }
-pub(super) fn default_sky_cloud_coverage() -> f32 { 0.42 }
-pub(super) fn default_sky_cloud_softness() -> f32 { 0.72 }
-pub(super) fn default_status_text() -> String { String::new() }
-pub(super) fn default_pickup_status() -> String { String::new() }
-pub(super) fn default_hazard_status() -> String { String::new() }
-pub(super) fn default_goal_locked_status() -> String { String::new() }
-pub(super) fn default_goal_complete_status() -> String { String::new() }
-pub(super) fn default_failed_progress_label() -> String { String::new() }
-pub(super) fn default_completed_progress_label() -> String { String::new() }
-pub(super) fn default_player_body_radius() -> f32 { 0.45 }
-pub(super) fn default_player_body_half_height() -> f32 { 0.45 }
-pub(super) fn default_player_visual_radius() -> f32 { 0.45 }
-pub(super) fn default_player_visual_half_height() -> f32 { 0.90 }
-pub(super) fn default_camera_eye_height() -> f32 { 0.72 }
-pub(super) fn default_sprint_multiplier() -> f32 { 1.75 }
-pub(super) fn default_gravity() -> f32 { 9.81 }
-pub(super) fn default_contact_skin() -> f32 { 0.035 }
-pub(super) fn default_terrain_color() -> ColorRgba { [0.78, 0.86, 0.68, 1.0] }
-pub(super) fn default_sky_color() -> ColorRgba { [0.08, 0.16, 0.34, 1.0] }
-pub(super) fn default_sky_emissive() -> ColorRgb { [0.07, 0.14, 0.34] }
-pub(super) fn default_tree_bark_color() -> ColorRgba { [0.38, 0.23, 0.12, 1.0] }
-pub(super) fn default_tree_leaf_color() -> ColorRgba { [0.18, 0.42, 0.16, 1.0] }
-pub(super) fn default_tree_branch_color() -> ColorRgba { [0.32, 0.20, 0.12, 1.0] }
-pub(super) fn default_uv_scale() -> [f32; 2] { [1.0, 1.0] }
-pub(super) fn default_uv_offset() -> [f32; 2] { [0.0, 0.0] }
-pub(super) fn default_material_roughness() -> f32 { 0.86 }
-pub(super) fn default_material_normal_scale() -> f32 { 1.0 }
-pub(super) fn default_material_occlusion_strength() -> f32 { 1.0 }
-pub(super) fn default_ambient_color() -> ColorRgb { [0.42, 0.47, 0.56] }
-pub(super) fn default_ambient_intensity() -> f32 { 0.36 }
-pub(super) fn default_sun_direction() -> ColorRgb { [-0.55, -0.82, -0.28] }
-pub(super) fn default_sun_color() -> ColorRgb { [1.0, 0.955, 0.86] }
-pub(super) fn default_sun_intensity() -> f32 { 4.60 }
-pub(super) fn default_day_night_enabled() -> bool { true }
-pub(super) fn default_time_of_day_hours() -> f32 { 9.35 }
-pub(super) fn default_day_length_seconds() -> f32 { 720.0 }
-pub(super) fn default_sun_latitude_degrees() -> f32 { 45.0 }
-pub(super) fn default_axial_tilt_degrees() -> f32 { 23.44 }
-pub(super) fn default_shadow_enabled() -> bool { true }
-pub(super) fn default_shadow_resolution() -> u32 { 4096 }
-pub(super) fn default_shadow_cascade_count() -> u32 { 4 }
-pub(super) fn default_shadow_max_distance() -> f32 { 180.0 }
-pub(super) fn default_shadow_softness() -> f32 { 0.62 }
-pub(super) fn default_shadow_bias() -> f32 { 0.0025 }
-pub(super) fn default_shadow_normal_bias() -> f32 { 0.015 }
-pub(super) fn default_shadow_contact_strength() -> f32 { 0.58 }
-pub(super) fn default_foliage_prefab() -> String { String::new() }
-pub(super) fn default_foliage_seed() -> u64 { 0x5452_4545_2026 }
-pub(super) fn default_foliage_grid_min() -> i32 { -5 }
-pub(super) fn default_foliage_grid_max() -> i32 { 5 }
-pub(super) fn default_foliage_spacing() -> f32 { 6.0 }
-pub(super) fn default_foliage_jitter() -> f32 { 0.45 }
-pub(super) fn default_foliage_gate_threshold() -> f32 { 0.62 }
-pub(super) fn default_foliage_min_scale() -> f32 { 0.85 }
-pub(super) fn default_foliage_max_scale() -> f32 { 1.35 }
-pub(super) fn default_foliage_min_player_distance() -> f32 { 5.0 }
-pub(super) fn default_foliage_edge_margin() -> f32 { 4.0 }
-pub(super) fn default_foliage_surface_offset() -> f32 { 0.03 }
-pub(super) fn default_prefab_proxy() -> String { String::new() }
-pub(super) fn default_prefab_enabled() -> bool { false }
+pub(super) fn default_definition_scale() -> [f32; 3] {
+    [1.0, 1.0, 1.0]
+}
+pub(super) fn default_definition_apply_mode() -> String {
+    "metadata_only".to_owned()
+}
+pub(super) fn default_title() -> String {
+    "KAYLA FPS: Procedural Highlands".to_owned()
+}
+pub(super) fn default_objective() -> String {
+    "Walk a deterministic map assembled from .ymap -> .ytyp -> .ydd -> .nemat -> .ytd assets."
+        .to_owned()
+}
+pub(super) fn default_player_start() -> [f32; 3] {
+    [-17.5, 0.0, -17.5]
+}
+pub(super) fn default_player_yaw() -> f32 {
+    -0.72
+}
+pub(super) fn default_move_speed() -> f32 {
+    7.3
+}
+pub(super) fn default_look_sens() -> f32 {
+    0.0022
+}
+pub(super) fn default_player_model_enabled() -> bool {
+    false
+}
+pub(super) fn default_player_model_source() -> String {
+    String::new()
+}
+pub(super) fn default_player_texture_dictionary() -> Option<String> {
+    None
+}
+pub(super) fn default_player_skeleton() -> Option<String> {
+    None
+}
+pub(super) fn default_player_model_height() -> f32 {
+    1.78
+}
+pub(super) fn default_player_model_eye_height_ratio() -> f32 {
+    0.91
+}
+pub(super) fn default_player_model_offset() -> [f32; 3] {
+    [0.0, 0.0, 0.0]
+}
+pub(super) fn default_player_model_yaw_offset() -> f32 {
+    0.0
+}
+pub(super) fn default_player_model_hide_in_first_person() -> bool {
+    true
+}
+pub(super) fn default_terrain_seed() -> u64 {
+    0x2026_0509_4b41_594c
+}
+pub(super) fn default_terrain_cells() -> u32 {
+    80
+}
+pub(super) fn default_terrain_size() -> f32 {
+    52.0
+}
+pub(super) fn default_base_height() -> f32 {
+    -0.04
+}
+pub(super) fn default_height_scale() -> f32 {
+    1.35
+}
+pub(super) fn default_terrain_generator_id() -> String {
+    "newengine.generator.lowland-biomes.v1".to_owned()
+}
+pub(super) fn default_ridged_seed_xor() -> u64 {
+    0x7e22_a11d
+}
+pub(super) fn default_ridged_frequency() -> f32 {
+    1.25
+}
+pub(super) fn default_ridged_amplitude() -> f32 {
+    0.11
+}
+pub(super) fn default_ridged_shape_edge0() -> f32 {
+    0.08
+}
+pub(super) fn default_ridged_shape_edge1() -> f32 {
+    1.0
+}
+pub(super) fn default_veins_seed_xor() -> u64 {
+    0x5317_1001
+}
+pub(super) fn default_veins_frequency() -> f32 {
+    0.52
+}
+pub(super) fn default_veins_amplitude() -> f32 {
+    0.10
+}
+pub(super) fn default_smoothing_passes() -> u32 {
+    2
+}
+pub(super) fn default_smoothing_strength() -> f32 {
+    0.42
+}
+pub(super) fn default_terrain_surface_forest() -> String {
+    String::new()
+}
+pub(super) fn default_terrain_surface_sand() -> String {
+    String::new()
+}
+pub(super) fn default_terrain_surface_rock() -> String {
+    String::new()
+}
+pub(super) fn default_terrain_patch_scale() -> f32 {
+    0.033
+}
+pub(super) fn default_terrain_blend_softness() -> f32 {
+    0.18
+}
+pub(super) fn default_terrain_streaming_enabled() -> bool {
+    true
+}
+pub(super) fn default_terrain_chunk_radius() -> i32 {
+    2
+}
+pub(super) fn default_terrain_unload_radius() -> i32 {
+    4
+}
+pub(super) fn default_terrain_max_chunks_per_frame() -> usize {
+    4
+}
+pub(super) fn default_sky_radius() -> f32 {
+    220.0
+}
+pub(super) fn default_skydome_mesh() -> String {
+    String::new()
+}
+pub(super) fn default_sky_follow_camera() -> bool {
+    true
+}
+pub(super) fn default_cloud_dictionary() -> String {
+    String::new()
+}
+pub(super) fn default_cloud_profile() -> String {
+    "clear".to_owned()
+}
+pub(super) fn default_sky_sun_radius() -> f32 {
+    18.0
+}
+pub(super) fn default_sky_moon_radius() -> f32 {
+    13.5
+}
+pub(super) fn default_moon_texture() -> String {
+    String::new()
+}
+pub(super) fn default_sky_day_zenith() -> ColorRgb {
+    [0.23, 0.42, 0.82]
+}
+pub(super) fn default_sky_day_horizon() -> ColorRgb {
+    [0.64, 0.78, 0.96]
+}
+pub(super) fn default_sky_dusk_zenith() -> ColorRgb {
+    [0.16, 0.20, 0.40]
+}
+pub(super) fn default_sky_dusk_horizon() -> ColorRgb {
+    [1.00, 0.47, 0.20]
+}
+pub(super) fn default_sky_night_zenith() -> ColorRgb {
+    [0.006, 0.010, 0.030]
+}
+pub(super) fn default_sky_night_horizon() -> ColorRgb {
+    [0.020, 0.024, 0.052]
+}
+pub(super) fn default_sky_cloud_day() -> ColorRgb {
+    [0.98, 0.96, 0.88]
+}
+pub(super) fn default_sky_cloud_night() -> ColorRgb {
+    [0.040, 0.050, 0.085]
+}
+pub(super) fn default_sky_night_strength() -> f32 {
+    0.35
+}
+pub(super) fn default_sky_cloud_coverage() -> f32 {
+    0.42
+}
+pub(super) fn default_sky_cloud_softness() -> f32 {
+    0.72
+}
+pub(super) fn default_status_text() -> String {
+    String::new()
+}
+pub(super) fn default_pickup_status() -> String {
+    String::new()
+}
+pub(super) fn default_hazard_status() -> String {
+    String::new()
+}
+pub(super) fn default_goal_locked_status() -> String {
+    String::new()
+}
+pub(super) fn default_goal_complete_status() -> String {
+    String::new()
+}
+pub(super) fn default_failed_progress_label() -> String {
+    String::new()
+}
+pub(super) fn default_completed_progress_label() -> String {
+    String::new()
+}
+pub(super) fn default_player_body_radius() -> f32 {
+    0.45
+}
+pub(super) fn default_player_body_half_height() -> f32 {
+    0.45
+}
+pub(super) fn default_player_visual_radius() -> f32 {
+    0.45
+}
+pub(super) fn default_player_visual_half_height() -> f32 {
+    0.90
+}
+pub(super) fn default_camera_eye_height() -> f32 {
+    0.72
+}
+pub(super) fn default_sprint_multiplier() -> f32 {
+    1.75
+}
+pub(super) fn default_gravity() -> f32 {
+    9.81
+}
+pub(super) fn default_contact_skin() -> f32 {
+    0.035
+}
+pub(super) fn default_terrain_color() -> ColorRgba {
+    [0.78, 0.86, 0.68, 1.0]
+}
+pub(super) fn default_sky_color() -> ColorRgba {
+    [0.08, 0.16, 0.34, 1.0]
+}
+pub(super) fn default_sky_emissive() -> ColorRgb {
+    [0.07, 0.14, 0.34]
+}
+pub(super) fn default_tree_bark_color() -> ColorRgba {
+    [0.38, 0.23, 0.12, 1.0]
+}
+pub(super) fn default_tree_leaf_color() -> ColorRgba {
+    [0.18, 0.42, 0.16, 1.0]
+}
+pub(super) fn default_tree_branch_color() -> ColorRgba {
+    [0.32, 0.20, 0.12, 1.0]
+}
+pub(super) fn default_uv_scale() -> [f32; 2] {
+    [1.0, 1.0]
+}
+pub(super) fn default_uv_offset() -> [f32; 2] {
+    [0.0, 0.0]
+}
+pub(super) fn default_material_roughness() -> f32 {
+    0.86
+}
+pub(super) fn default_material_normal_scale() -> f32 {
+    1.0
+}
+pub(super) fn default_material_occlusion_strength() -> f32 {
+    1.0
+}
+pub(super) fn default_ambient_color() -> ColorRgb {
+    [0.42, 0.47, 0.56]
+}
+pub(super) fn default_ambient_intensity() -> f32 {
+    0.36
+}
+pub(super) fn default_sun_direction() -> ColorRgb {
+    [-0.55, -0.82, -0.28]
+}
+pub(super) fn default_sun_color() -> ColorRgb {
+    [1.0, 0.955, 0.86]
+}
+pub(super) fn default_sun_intensity() -> f32 {
+    4.60
+}
+pub(super) fn default_day_night_enabled() -> bool {
+    true
+}
+pub(super) fn default_time_of_day_hours() -> f32 {
+    9.35
+}
+pub(super) fn default_day_length_seconds() -> f32 {
+    720.0
+}
+pub(super) fn default_sun_latitude_degrees() -> f32 {
+    45.0
+}
+pub(super) fn default_axial_tilt_degrees() -> f32 {
+    23.44
+}
+pub(super) fn default_shadow_enabled() -> bool {
+    true
+}
+pub(super) fn default_shadow_resolution() -> u32 {
+    4096
+}
+pub(super) fn default_shadow_cascade_count() -> u32 {
+    4
+}
+pub(super) fn default_shadow_max_distance() -> f32 {
+    180.0
+}
+pub(super) fn default_shadow_softness() -> f32 {
+    0.62
+}
+pub(super) fn default_shadow_bias() -> f32 {
+    0.0025
+}
+pub(super) fn default_shadow_normal_bias() -> f32 {
+    0.015
+}
+pub(super) fn default_shadow_contact_strength() -> f32 {
+    0.58
+}
+pub(super) fn default_foliage_prefab() -> String {
+    String::new()
+}
+pub(super) fn default_foliage_seed() -> u64 {
+    0x5452_4545_2026
+}
+pub(super) fn default_foliage_grid_min() -> i32 {
+    -5
+}
+pub(super) fn default_foliage_grid_max() -> i32 {
+    5
+}
+pub(super) fn default_foliage_spacing() -> f32 {
+    6.0
+}
+pub(super) fn default_foliage_jitter() -> f32 {
+    0.45
+}
+pub(super) fn default_foliage_gate_threshold() -> f32 {
+    0.62
+}
+pub(super) fn default_foliage_min_scale() -> f32 {
+    0.85
+}
+pub(super) fn default_foliage_max_scale() -> f32 {
+    1.35
+}
+pub(super) fn default_foliage_min_player_distance() -> f32 {
+    5.0
+}
+pub(super) fn default_foliage_edge_margin() -> f32 {
+    4.0
+}
+pub(super) fn default_foliage_surface_offset() -> f32 {
+    0.03
+}
+pub(super) fn default_prefab_proxy() -> String {
+    String::new()
+}
+pub(super) fn default_prefab_enabled() -> bool {
+    false
+}
 pub(super) fn default_terrain_material() -> RawMaterialSpec {
     RawMaterialSpec {
         roughness: default_material_roughness(),
@@ -359,7 +616,6 @@ pub(super) fn default_terrain_material() -> RawMaterialSpec {
         ..RawMaterialSpec::default()
     }
 }
-
 
 pub(super) fn default_sky_material() -> RawMaterialSpec {
     RawMaterialSpec {

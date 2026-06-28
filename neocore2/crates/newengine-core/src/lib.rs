@@ -1,24 +1,24 @@
 pub mod bus;
 pub mod cache_files;
 pub mod config_root;
-pub mod storage_root;
 pub mod console;
 pub mod core_invariants;
+pub mod crash;
 pub mod engine;
 pub mod error;
-pub mod crash;
 pub mod error_reporter;
 pub mod events;
 pub mod frame;
 pub mod host_events;
+pub mod host_services;
 pub mod jobs;
 pub mod lifecycle_events;
-pub mod host_services;
-pub mod module;
-pub(crate) mod plugin_forward_logger;
 pub(crate) mod log_fmt;
+pub mod module;
 pub(crate) mod path_fmt;
+pub(crate) mod plugin_forward_logger;
 pub mod render;
+pub mod storage_root;
 pub mod audio {
     pub use newengine_audio_api::*;
 }
@@ -50,24 +50,33 @@ pub use newengine_service_api::{InterfaceId, ServiceInterface, ServiceKey};
 pub use services_registry::{ErasedService, MissingServicePolicy, ServiceRegistry};
 
 pub use bus::Bus;
-pub use cache_files::{cache_child, publish_cache_files_env, resolve_cache_files_dir, resolve_under_cache_root, CACHE_FILES_ALIAS_ENV, CACHE_FILES_ENV, CACHE_FILES_READY_ENV};
-pub use config_root::{config_child, publish_config_env, resolve_config_dir, resolve_under_config_root, CONFIG_ALIAS_ENV, CONFIG_ENV, CONFIG_READY_ENV};
-pub use engine::{Engine, EngineConfig, EngineFsm, EngineFsmTransition, EngineRunState, ModuleFaultTolerance, PluginFaultTolerance};
+pub use cache_files::{
+    cache_child, publish_cache_files_env, resolve_cache_files_dir, resolve_under_cache_root,
+    CACHE_FILES_ALIAS_ENV, CACHE_FILES_ENV, CACHE_FILES_READY_ENV,
+};
+pub use config_root::{
+    config_child, publish_config_env, resolve_config_dir, resolve_under_config_root,
+    CONFIG_ALIAS_ENV, CONFIG_ENV, CONFIG_READY_ENV,
+};
+pub use engine::{
+    Engine, EngineConfig, EngineFsm, EngineFsmTransition, EngineRunState, ModuleFaultTolerance,
+    PluginFaultTolerance,
+};
 pub use error::{EngineError, EngineResult, ModuleStage};
 pub use error_reporter::{EngineErrorReporter, EngineErrorReporterConfig};
 pub use events::{EventHub, EventSub};
 pub use frame::Frame;
 pub use host_events::WindowHostEvent;
 pub use lifecycle_events::{EngineLifecycleEvent, EngineReadinessKey, EngineReadinessSnapshot};
-pub use startup_status::{
-    EngineIncrementalStartupState, EngineStartupPhase, EngineStartupSnapshot,
-    EngineStartupStepOutcome, EngineStartupStepPhase, EngineStartupSystemPhase,
-    EngineStartupSystemStatus,
-};
 pub use module::{ApiProvide, ApiRequire, ApiVersion, Module, ModuleCtx, Resources, Services};
 pub use sched::{
     ScheduleBudgetClass, SchedulePhase, SchedulePhaseStats, ScheduleRunReport, ScheduleTaskDesc,
     Scheduler, SchedulerSnapshot,
+};
+pub use startup_status::{
+    EngineIncrementalStartupState, EngineStartupPhase, EngineStartupSnapshot,
+    EngineStartupStepOutcome, EngineStartupStepPhase, EngineStartupSystemPhase,
+    EngineStartupSystemStatus,
 };
 pub use sync::ShutdownToken;
 

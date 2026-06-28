@@ -5,7 +5,9 @@ use newengine_core::EngineResult;
 use newengine_lighting::ShadowSettings;
 use newengine_math::{Mat4, Vec3};
 
-use crate::{BoundsSnap, LightSceneSnapshot, LIGHT_PROVIDER_CAP_EXTRACTION, LIGHT_PROVIDER_TAG_FEATURE};
+use crate::{
+    BoundsSnap, LightSceneSnapshot, LIGHT_PROVIDER_CAP_EXTRACTION, LIGHT_PROVIDER_TAG_FEATURE,
+};
 
 pub const MAX_DIRECTIONAL_SHADOW_CASCADES: usize = 4;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -75,7 +77,14 @@ impl ShadowCascadeFrame {
     pub fn disabled() -> Self {
         Self {
             light_mvp: Mat4::IDENTITY,
-            viewport: Viewport { x: 0.0, y: 0.0, w: 1.0, h: 1.0, min_depth: 0.0, max_depth: 1.0 },
+            viewport: Viewport {
+                x: 0.0,
+                y: 0.0,
+                w: 1.0,
+                h: 1.0,
+                min_depth: 0.0,
+                max_depth: 1.0,
+            },
             scissor: RectI32::new(0, 0, 1, 1),
             split_near: 0.0,
             split_far: 0.0,
@@ -113,12 +122,26 @@ impl ShadowFrame {
     }
 
     #[inline]
-    pub fn single(texture: TextureId, light_mvp: Mat4, params: [f32; 4], extra: [f32; 4], caster_cull: Option<ShadowCasterCull>) -> Self {
-        let cull = caster_cull.unwrap_or_else(|| ShadowCasterCull::directional(Mat4::IDENTITY, 1.0, 0.1, 1.0));
+    pub fn single(
+        texture: TextureId,
+        light_mvp: Mat4,
+        params: [f32; 4],
+        extra: [f32; 4],
+        caster_cull: Option<ShadowCasterCull>,
+    ) -> Self {
+        let cull = caster_cull
+            .unwrap_or_else(|| ShadowCasterCull::directional(Mat4::IDENTITY, 1.0, 0.1, 1.0));
         let split_far = extra[3].max(0.0);
         let cascade = ShadowCascadeFrame {
             light_mvp,
-            viewport: Viewport { x: 0.0, y: 0.0, w: 1.0, h: 1.0, min_depth: 0.0, max_depth: 1.0 },
+            viewport: Viewport {
+                x: 0.0,
+                y: 0.0,
+                w: 1.0,
+                h: 1.0,
+                min_depth: 0.0,
+                max_depth: 1.0,
+            },
             scissor: RectI32::new(0, 0, 1, 1),
             split_near: 0.0,
             split_far,
@@ -173,7 +196,10 @@ impl ShadowFrame {
 
     #[inline]
     pub fn cascade(self, index: usize) -> ShadowCascadeFrame {
-        let max = self.cascade_count.saturating_sub(1).min((MAX_DIRECTIONAL_SHADOW_CASCADES - 1) as u32) as usize;
+        let max = self
+            .cascade_count
+            .saturating_sub(1)
+            .min((MAX_DIRECTIONAL_SHADOW_CASCADES - 1) as u32) as usize;
         self.cascades[index.min(max)]
     }
 }
@@ -261,7 +287,11 @@ impl LightShadowPlan {
 
     #[inline]
     pub fn render_target(self) -> Option<RenderTargetId> {
-        if self.is_active() { self.target } else { None }
+        if self.is_active() {
+            self.target
+        } else {
+            None
+        }
     }
 
     #[inline]
@@ -280,10 +310,11 @@ impl LightShadowPlan {
 
     #[inline]
     pub fn cascade_count(self) -> u32 {
-        self.frame.cascade_count.clamp(1, MAX_DIRECTIONAL_SHADOW_CASCADES as u32)
+        self.frame
+            .cascade_count
+            .clamp(1, MAX_DIRECTIONAL_SHADOW_CASCADES as u32)
     }
 }
-
 
 #[derive(Clone, Copy, Debug)]
 pub struct LightExtractionProviderMetadata {
@@ -361,5 +392,6 @@ pub trait LightExtractionProvider: Send + Sync {
 
     fn supports(&self, ctx: &LightExtractionCtx<'_>) -> bool;
 
-    fn extract(&self, ctx: &LightExtractionCtx<'_>) -> EngineResult<Option<LightExtractionCommand>>;
+    fn extract(&self, ctx: &LightExtractionCtx<'_>)
+        -> EngineResult<Option<LightExtractionCommand>>;
 }

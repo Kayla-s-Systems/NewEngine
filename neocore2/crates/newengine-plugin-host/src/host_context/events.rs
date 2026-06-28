@@ -1,9 +1,9 @@
+use super::state::{ctx, current_plugin_id, with_current_plugin_id, EventSinkEntry};
+use crate::host_context::unregister_by_owner;
 use abi_stable::std_types::RString;
 use newengine_plugin_api::{Blob, EventSinkV1Dyn};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::{Arc, Mutex};
-use crate::host_context::unregister_by_owner;
-use super::state::{ctx, current_plugin_id, with_current_plugin_id, EventSinkEntry};
 
 pub fn subscribe_event_sink(sink: EventSinkV1Dyn<'static>) -> Result<(), String> {
     let c = ctx();
@@ -50,7 +50,10 @@ pub fn publish_event(topic: &str, payload: &[u8]) -> Result<(), String> {
                     );
                     bad_owners.push(pid);
                 } else {
-                    newengine_ulog_api::ulog::error!("events: sink mutex poisoned; owner=<host> topic='{}'", topic);
+                    newengine_ulog_api::ulog::error!(
+                        "events: sink mutex poisoned; owner=<host> topic='{}'",
+                        topic
+                    );
                 }
                 continue;
             }
@@ -75,7 +78,10 @@ pub fn publish_event(topic: &str, payload: &[u8]) -> Result<(), String> {
                 );
                 bad_owners.push(pid);
             } else {
-                newengine_ulog_api::ulog::error!("events: sink panicked; owner=<host> topic='{}'", topic);
+                newengine_ulog_api::ulog::error!(
+                    "events: sink panicked; owner=<host> topic='{}'",
+                    topic
+                );
             }
         }
     }

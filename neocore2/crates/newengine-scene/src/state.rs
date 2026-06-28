@@ -14,6 +14,9 @@ pub struct SceneState {
 impl SceneState {
     #[inline]
     pub fn new(root: Option<EntityId>, active_camera: Option<EntityId>) -> Self {
-        Self { root, active_camera }
+        Self {
+            root,
+            active_camera,
+        }
     }
 }

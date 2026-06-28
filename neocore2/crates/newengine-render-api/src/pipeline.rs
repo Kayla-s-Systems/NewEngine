@@ -23,7 +23,6 @@ impl Default for RasterCullMode {
     }
 }
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PipelineDepthCompare {
     Always,
@@ -48,7 +47,11 @@ pub struct PipelineDepthMode {
 impl PipelineDepthMode {
     #[inline]
     pub const fn new(test: bool, write: bool, compare: PipelineDepthCompare) -> Self {
-        Self { test, write, compare }
+        Self {
+            test,
+            write,
+            compare,
+        }
     }
 
     #[inline]
@@ -137,7 +140,6 @@ impl VertexLayout {
     }
 }
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TessellationMode {
     Disabled,
@@ -147,7 +149,9 @@ pub enum TessellationMode {
 
 impl Default for TessellationMode {
     #[inline]
-    fn default() -> Self { Self::Disabled }
+    fn default() -> Self {
+        Self::Disabled
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -175,11 +179,17 @@ impl Default for TessellationDesc {
 }
 
 #[inline]
-fn default_tess_factor() -> f32 { 4.0 }
+fn default_tess_factor() -> f32 {
+    4.0
+}
 #[inline]
-fn default_tess_min_distance() -> f32 { 8.0 }
+fn default_tess_min_distance() -> f32 {
+    8.0
+}
 #[inline]
-fn default_tess_max_distance() -> f32 { 96.0 }
+fn default_tess_max_distance() -> f32 {
+    96.0
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PipelineDesc {
@@ -279,7 +289,11 @@ impl PipelineDesc {
     }
 
     #[inline]
-    pub fn with_depth_state(mut self, depth_format: TextureFormat, depth_mode: PipelineDepthMode) -> Self {
+    pub fn with_depth_state(
+        mut self,
+        depth_format: TextureFormat,
+        depth_mode: PipelineDepthMode,
+    ) -> Self {
         self.depth_format = Some(depth_format);
         self.depth_mode = depth_mode;
         self
@@ -300,7 +314,11 @@ impl PipelineDesc {
     #[inline]
     pub fn with_cache_key(mut self, key: impl Into<String>) -> Self {
         let key = key.into();
-        self.cache_key = if key.trim().is_empty() { None } else { Some(key) };
+        self.cache_key = if key.trim().is_empty() {
+            None
+        } else {
+            Some(key)
+        };
         self
     }
 

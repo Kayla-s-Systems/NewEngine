@@ -200,7 +200,6 @@ impl Default for CameraRuntimeReport {
     }
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct CameraDirectorRuntimeSettings {
     pub blend_in_sec: f32,
@@ -265,7 +264,11 @@ impl CameraDirectorRuntimeSettings {
     #[inline]
     pub fn blend_plan(self, entering: bool) -> CameraFrameBlendPlan {
         let this = self.sanitized();
-        let duration = if entering { this.blend_in_sec } else { this.blend_out_sec };
+        let duration = if entering {
+            this.blend_in_sec
+        } else {
+            this.blend_out_sec
+        };
         if duration <= 0.0 {
             CameraFrameBlendPlan::cut()
         } else {
@@ -404,5 +407,9 @@ impl CameraRuntimeSettings {
 
 #[inline]
 fn sanitize_duration(value: f32) -> f32 {
-    if value.is_finite() && value > 0.0 { value } else { 0.0 }
+    if value.is_finite() && value > 0.0 {
+        value
+    } else {
+        0.0
+    }
 }

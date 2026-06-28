@@ -6,10 +6,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use newengine_core::EngineResult;
 use newengine_ui_api::{
     decode_ui_frame_response_bin, encode_ui_frame_request_bin, UiComponentNode, UiDrawList,
-    UiFrameRequest, UiFrameResponse, UiInputCaptureState, UiNodeMessage, UiNodeMessageSeverity, UiNodeTone,
-    UiSurfaceAdmissionPolicy, UiSurfaceAnchor, UiSurfaceNode, UiSurfaceStyle,
-    ENGINE_UI_SERVICE_ID, UI_COMPONENT_PANEL,
-    UI_SERVICE_METHOD_DRAW_FRAME_BIN_V1, UI_SERVICE_METHOD_DRAW_FRAME_V1, UI_SERVICE_METHOD_SURFACE_NODE_V1,
+    UiFrameRequest, UiFrameResponse, UiInputCaptureState, UiNodeMessage, UiNodeMessageSeverity,
+    UiNodeTone, UiSurfaceAdmissionPolicy, UiSurfaceAnchor, UiSurfaceNode, UiSurfaceStyle,
+    ENGINE_UI_SERVICE_ID, UI_COMPONENT_PANEL, UI_SERVICE_METHOD_DRAW_FRAME_BIN_V1,
+    UI_SERVICE_METHOD_DRAW_FRAME_V1, UI_SERVICE_METHOD_SURFACE_NODE_V1,
     UI_SURFACE_ENGINE_ERROR_MODAL, UI_THEME_NORTHSTAR_DEFAULT,
 };
 
@@ -44,7 +44,10 @@ pub(crate) fn publish_render_backend_error_modal(phase: &'static str, error: &st
     let mut metrics = BTreeMap::new();
     metrics.insert("phase".to_owned(), serde_json::json!(phase));
     metrics.insert("backend".to_owned(), serde_json::json!("engine.render"));
-    metrics.insert("safe_mode".to_owned(), serde_json::json!("degraded-ui-present"));
+    metrics.insert(
+        "safe_mode".to_owned(),
+        serde_json::json!("degraded-ui-present"),
+    );
     metrics.insert("error".to_owned(), serde_json::json!(error));
 
     let short_error = summarize_backend_error(error);
@@ -125,9 +128,6 @@ fn summarize_backend_error(error: &str) -> String {
     }
 }
 
-
-
-
 /// Publish a retained UI surface/node to the active `engine.ui` provider.
 ///
 /// Runtime code owns only the state packet. The provider owns node retention,
@@ -182,8 +182,10 @@ pub fn request_draw_list(
     surface_size_px: [u32; 2],
     pixels_per_point: f32,
 ) -> EngineResult<Option<UiDrawList>> {
-    Ok(request_frame_output(frame_index, dt_sec, surface_size_px, pixels_per_point)?
-        .map(|output| output.draw_list))
+    Ok(
+        request_frame_output(frame_index, dt_sec, surface_size_px, pixels_per_point)?
+            .map(|output| output.draw_list),
+    )
 }
 
 pub fn request_frame_output(
@@ -224,7 +226,8 @@ fn request_frame_output_bin(request: &UiFrameRequest) -> Result<Option<UiFrameOu
         UI_SERVICE_METHOD_DRAW_FRAME_BIN_V1,
         &payload,
     )
-    .map_err(|e| e.to_string())? else {
+    .map_err(|e| e.to_string())?
+    else {
         return Ok(None);
     };
     let response = decode_ui_frame_response_bin(&bytes)
@@ -233,20 +236,23 @@ fn request_frame_output_bin(request: &UiFrameRequest) -> Result<Option<UiFrameOu
 }
 
 fn request_frame_output_json(request: &UiFrameRequest) -> EngineResult<Option<UiFrameOutput>> {
-    let payload = serde_json::to_vec(request)
-        .map_err(|e| newengine_core::EngineError::other(format!("encode ui frame request failed: {e}")))?;
+    let payload = serde_json::to_vec(request).map_err(|e| {
+        newengine_core::EngineError::other(format!("encode ui frame request failed: {e}"))
+    })?;
 
     let Some(bytes) = newengine_core::call_service_v1_optional(
         ENGINE_UI_SERVICE_ID,
         UI_SERVICE_METHOD_DRAW_FRAME_V1,
         &payload,
     )
-    .map_err(newengine_core::EngineError::other)? else {
+    .map_err(newengine_core::EngineError::other)?
+    else {
         return Ok(None);
     };
 
-    let response: UiFrameResponse = serde_json::from_slice(&bytes)
-        .map_err(|e| newengine_core::EngineError::other(format!("decode ui frame response failed: {e}")))?;
+    let response: UiFrameResponse = serde_json::from_slice(&bytes).map_err(|e| {
+        newengine_core::EngineError::other(format!("decode ui frame response failed: {e}"))
+    })?;
     Ok(response_to_frame_output(response))
 }
 

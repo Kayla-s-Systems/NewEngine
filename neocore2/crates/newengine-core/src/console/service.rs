@@ -96,4 +96,3 @@ pub fn init_console_service() {
 
     let _ = host_register_service_impl(dyn_svc);
 }
-

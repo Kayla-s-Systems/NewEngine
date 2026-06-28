@@ -32,8 +32,15 @@ impl CameraRig {
 
     #[inline]
     pub fn sanitized(self) -> Self {
-        let position = if self.position.is_finite() { self.position } else { Vec3::ZERO };
-        Self { position, rotation: self.rotation.normalize_or_identity() }
+        let position = if self.position.is_finite() {
+            self.position
+        } else {
+            Vec3::ZERO
+        };
+        Self {
+            position,
+            rotation: self.rotation.normalize_or_identity(),
+        }
     }
 
     #[inline]
@@ -89,7 +96,11 @@ impl CameraRig {
     /// Convention: camera forward is -Z.
     #[inline]
     pub fn set_look_at(&mut self, position: Vec3, target: Vec3, up: Vec3) {
-        self.position = if position.is_finite() { position } else { Vec3::ZERO };
+        self.position = if position.is_finite() {
+            position
+        } else {
+            Vec3::ZERO
+        };
         self.rotation = look_at_rotation(position, target, up);
         *self = self.sanitized();
     }

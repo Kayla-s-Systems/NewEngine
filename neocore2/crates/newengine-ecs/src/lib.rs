@@ -20,13 +20,13 @@
 //! - Use explicit schedules (`Schedule`) and system ordering to keep simulation deterministic.
 //! - `TypeId` is an internal implementation detail and must not be used as a persistent identifier.
 
-mod component;
-mod storage;
-mod query;
-mod world;
 mod commands;
+mod component;
 mod events;
+mod query;
 mod schedule;
+mod storage;
+mod world;
 
 pub use newengine_entity::EntityId;
 

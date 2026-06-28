@@ -90,7 +90,11 @@ impl TransformAsset {
     #[inline]
     pub fn into_transform(self) -> Transform {
         Transform {
-            position: newengine_math::Vec3::new(self.position[0], self.position[1], self.position[2]),
+            position: newengine_math::Vec3::new(
+                self.position[0],
+                self.position[1],
+                self.position[2],
+            ),
             rotation: newengine_math::Quat::from_xyzw(
                 self.rotation[0],
                 self.rotation[1],
@@ -114,7 +118,9 @@ impl fmt::Display for SceneAssetError {
         match self {
             Self::MissingGuidAllocator => write!(f, "scene asset: missing guid allocator"),
             Self::InvalidRootGuid(g) => write!(f, "scene asset: invalid root guid {g}"),
-            Self::InvalidActiveCameraGuid(g) => write!(f, "scene asset: invalid active camera guid {g}"),
+            Self::InvalidActiveCameraGuid(g) => {
+                write!(f, "scene asset: invalid active camera guid {g}")
+            }
         }
     }
 }
@@ -131,7 +137,6 @@ impl Scene {
 
         let world = self.world_mut();
 
-
         // Pass 1: ensure GUID for every entity.
         let ids: Vec<EntityId> = world.iter_entities().collect();
         for id in ids.iter().copied() {
@@ -140,8 +145,10 @@ impl Scene {
 
         // Helper maps: native EntityId stays local to the scene runtime; parent links
         // cross the component boundary as opaque EntityHandle stable ids.
-        let mut id_to_guid: newengine_math::collections::FxHashMap<EntityId, u128> = Default::default();
-        let mut handle_to_guid: newengine_math::collections::FxHashMap<u64, u128> = Default::default();
+        let mut id_to_guid: newengine_math::collections::FxHashMap<EntityId, u128> =
+            Default::default();
+        let mut handle_to_guid: newengine_math::collections::FxHashMap<u64, u128> =
+            Default::default();
         for id in world.iter_entities() {
             if let Some(g) = world.get::<EntityGuid>(id) {
                 id_to_guid.insert(id, g.0);
@@ -173,7 +180,10 @@ impl Scene {
             };
 
             let name = world.get::<Name>(id).map(|n| n.0.clone());
-            let transform = world.get::<Transform>(id).copied().map(TransformAsset::from);
+            let transform = world
+                .get::<Transform>(id)
+                .copied()
+                .map(TransformAsset::from);
 
             let parent = world
                 .get::<Parent>(id)
@@ -181,7 +191,11 @@ impl Scene {
 
             let definition_ref = world.get::<DefinitionRef>(id).map(|r| r.0.clone());
 
-            if !opts.include_empty_entities && name.is_none() && transform.is_none() && definition_ref.is_none() {
+            if !opts.include_empty_entities
+                && name.is_none()
+                && transform.is_none()
+                && definition_ref.is_none()
+            {
                 // Skip entities that carry no authoring signal.
                 continue;
             }
@@ -223,7 +237,8 @@ impl Scene {
         });
 
         // Pass 1: spawn all entities and map guid -> EntityId.
-        let mut guid_to_id: newengine_math::collections::FxHashMap<u128, EntityId> = Default::default();
+        let mut guid_to_id: newengine_math::collections::FxHashMap<u128, EntityId> =
+            Default::default();
         for e in asset.entities.iter() {
             let id = world.spawn();
             let _ = world.insert(id, EntityGuid(e.guid));
@@ -235,14 +250,21 @@ impl Scene {
             if let Some(t) = e.transform {
                 let _ = world.insert(id, t.into_transform());
             }
-            if let Some(definition_ref) = e.definition_ref.as_ref().map(|it| it.trim()).filter(|it| !it.is_empty()) {
+            if let Some(definition_ref) = e
+                .definition_ref
+                .as_ref()
+                .map(|it| it.trim())
+                .filter(|it| !it.is_empty())
+            {
                 let _ = world.insert(id, DefinitionRef(definition_ref.to_owned()));
             }
         }
 
         // Pass 2: apply hierarchy.
         for e in asset.entities.iter() {
-            let Some(&id) = guid_to_id.get(&e.guid) else { continue; };
+            let Some(&id) = guid_to_id.get(&e.guid) else {
+                continue;
+            };
             let parent_id = e.parent.and_then(|pg| guid_to_id.get(&pg).copied());
             let _ = set_parent(&mut world, id, parent_id);
         }

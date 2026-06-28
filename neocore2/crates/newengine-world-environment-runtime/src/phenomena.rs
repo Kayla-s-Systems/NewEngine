@@ -1,10 +1,12 @@
 use crate::math::{mix_u64, vec_scale};
-use crate::profile_catalog::{EnvironmentProfileDescriptor, PhenomenonTemplateDescriptor, WeatherPatternDescriptor};
-use newengine_world_environment_api::{
-    AabbDto, EnvironmentObjectDto, EnvironmentObjectId, EnvironmentObjectKind, TransformDto, Vec3Dto,
-    WeatherStateDto, WindStateDto,
+use crate::profile_catalog::{
+    EnvironmentProfileDescriptor, PhenomenonTemplateDescriptor, WeatherPatternDescriptor,
 };
 use newengine_world_api::WorldCellCoord;
+use newengine_world_environment_api::{
+    AabbDto, EnvironmentObjectDto, EnvironmentObjectId, EnvironmentObjectKind, TransformDto,
+    Vec3Dto, WeatherStateDto, WindStateDto,
+};
 
 pub(crate) fn build_environment_objects(
     req: &newengine_world_environment_api::EnvironmentFrameRequest,
@@ -21,19 +23,52 @@ pub(crate) fn build_environment_objects(
         .phenomena
         .iter()
         .filter(|template| activation >= template.activation_threshold)
-        .map(|template| build_object(req, profile, template, &owning_cells, cloud_coverage, weather, fog_density, wind))
+        .map(|template| {
+            build_object(
+                req,
+                profile,
+                template,
+                &owning_cells,
+                cloud_coverage,
+                weather,
+                fog_density,
+                wind,
+            )
+        })
         .collect()
 }
 
-pub(crate) fn required_assets_for_object(object: &EnvironmentObjectDto, pattern: &WeatherPatternDescriptor, profile: &EnvironmentProfileDescriptor) -> Vec<String> {
+pub(crate) fn required_assets_for_object(
+    object: &EnvironmentObjectDto,
+    pattern: &WeatherPatternDescriptor,
+    profile: &EnvironmentProfileDescriptor,
+) -> Vec<String> {
     let mut assets = Vec::new();
     assets.push(profile.visual_assets.cloud_density_texture_ref.to_owned());
     assets.push(profile.visual_assets.cloud_detail_texture_ref.to_owned());
     assets.push(profile.visual_assets.cloud_dither_texture_ref.to_owned());
-    assets.extend(pattern.required_assets.iter().map(|asset| (*asset).to_owned()));
-    if let Some(template_id) = object.state_json.get("template_id").and_then(|value| value.as_str()) {
-        if let Some(template) = pattern.phenomena.iter().find(|template| template.template_id == template_id) {
-            assets.extend(template.required_assets.iter().map(|asset| (*asset).to_owned()));
+    assets.extend(
+        pattern
+            .required_assets
+            .iter()
+            .map(|asset| (*asset).to_owned()),
+    );
+    if let Some(template_id) = object
+        .state_json
+        .get("template_id")
+        .and_then(|value| value.as_str())
+    {
+        if let Some(template) = pattern
+            .phenomena
+            .iter()
+            .find(|template| template.template_id == template_id)
+        {
+            assets.extend(
+                template
+                    .required_assets
+                    .iter()
+                    .map(|asset| (*asset).to_owned()),
+            );
         }
     }
     assets.sort();
@@ -41,11 +76,15 @@ pub(crate) fn required_assets_for_object(object: &EnvironmentObjectDto, pattern:
     assets
 }
 
-pub(crate) fn environment_object_cells(req: &newengine_world_environment_api::EnvironmentFrameRequest) -> Vec<WorldCellCoord> {
+pub(crate) fn environment_object_cells(
+    req: &newengine_world_environment_api::EnvironmentFrameRequest,
+) -> Vec<WorldCellCoord> {
     if !req.resident_cells.is_empty() {
         return req.resident_cells.clone();
     }
-    req.observer_cell.map(|cell| vec![cell]).unwrap_or_else(|| vec![WorldCellCoord::new(0, 0)])
+    req.observer_cell
+        .map(|cell| vec![cell])
+        .unwrap_or_else(|| vec![WorldCellCoord::new(0, 0)])
 }
 
 fn build_object(
@@ -58,14 +97,31 @@ fn build_object(
     fog_density: f32,
     wind: &WindStateDto,
 ) -> EnvironmentObjectDto {
-    let center = offset(req.observer_position, template.offset_x, template.offset_y, template.offset_z);
-    let density = cloud_density(template.kind, cloud_coverage, weather.intensity, fog_density);
+    let center = offset(
+        req.observer_position,
+        template.offset_x,
+        template.offset_y,
+        template.offset_z,
+    );
+    let density = cloud_density(
+        template.kind,
+        cloud_coverage,
+        weather.intensity,
+        fog_density,
+    );
     EnvironmentObjectDto {
-        id: stable_environment_object_id(req.seed, req.time.game.day_index, object_salt(template.template_id)),
+        id: stable_environment_object_id(
+            req.seed,
+            req.time.game.day_index,
+            object_salt(template.template_id),
+        ),
         kind: template.kind,
         bounds: regional_bounds(center, template.radius, template.y_min, template.y_max),
         owning_cells: owning_cells.to_vec(),
-        transform: TransformDto { translation: center, ..TransformDto::default() },
+        transform: TransformDto {
+            translation: center,
+            ..TransformDto::default()
+        },
         tags: object_tags(template, profile, weather),
         state_json: serde_json::json!({
             "template_id": template.template_id,
@@ -86,8 +142,16 @@ fn build_object(
     }
 }
 
-fn object_tags(template: &PhenomenonTemplateDescriptor, profile: &EnvironmentProfileDescriptor, weather: &WeatherStateDto) -> Vec<String> {
-    let mut tags = template.tags.iter().map(|tag| (*tag).to_owned()).collect::<Vec<_>>();
+fn object_tags(
+    template: &PhenomenonTemplateDescriptor,
+    profile: &EnvironmentProfileDescriptor,
+    weather: &WeatherStateDto,
+) -> Vec<String> {
+    let mut tags = template
+        .tags
+        .iter()
+        .map(|tag| (*tag).to_owned())
+        .collect::<Vec<_>>();
     tags.push(profile.cloud_profile_ref.to_owned());
     tags.extend(weather.tags.iter().cloned());
     tags.sort();
@@ -95,7 +159,12 @@ fn object_tags(template: &PhenomenonTemplateDescriptor, profile: &EnvironmentPro
     tags
 }
 
-fn cloud_density(kind: EnvironmentObjectKind, coverage: f32, weather_intensity: f32, fog_density: f32) -> f32 {
+fn cloud_density(
+    kind: EnvironmentObjectKind,
+    coverage: f32,
+    weather_intensity: f32,
+    fog_density: f32,
+) -> f32 {
     match kind {
         EnvironmentObjectKind::FogBank => (fog_density * 4.0).clamp(0.0, 1.0),
         EnvironmentObjectKind::StormCell => (0.35 + weather_intensity * 0.55).clamp(0.0, 1.0),
@@ -138,12 +207,18 @@ fn regional_bounds(center: Vec3Dto, radius: f32, y_min: f32, y_max: f32) -> Aabb
     }
 }
 
-fn offset(v: Vec3Dto, x: f32, y: f32, z: f32) -> Vec3Dto { Vec3Dto::new(v.x + x, v.y + y, v.z + z) }
+fn offset(v: Vec3Dto, x: f32, y: f32, z: f32) -> Vec3Dto {
+    Vec3Dto::new(v.x + x, v.y + y, v.z + z)
+}
 
 fn stable_environment_object_id(seed: u64, day_index: u64, salt: u64) -> EnvironmentObjectId {
-    EnvironmentObjectId { stable_id: mix_u64(seed ^ day_index.rotate_left(17) ^ salt) }
+    EnvironmentObjectId {
+        stable_id: mix_u64(seed ^ day_index.rotate_left(17) ^ salt),
+    }
 }
 
 fn object_salt(id: &str) -> u64 {
-    id.bytes().fold(0xE470_0000_0000_0001u64, |acc, byte| acc.rotate_left(5) ^ u64::from(byte))
+    id.bytes().fold(0xE470_0000_0000_0001u64, |acc, byte| {
+        acc.rotate_left(5) ^ u64::from(byte)
+    })
 }

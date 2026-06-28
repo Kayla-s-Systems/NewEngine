@@ -274,6 +274,9 @@ mod tests {
         let bytes = encode_ui_frame_response_bin(&response).unwrap();
         let decoded = decode_ui_frame_response_bin(&bytes).unwrap();
         assert!(decoded.input_capture.requests_capture());
-        assert_eq!(decoded.input_capture.surfaces, vec!["surface.main".to_owned()]);
+        assert_eq!(
+            decoded.input_capture.surfaces,
+            vec!["surface.main".to_owned()]
+        );
     }
 }

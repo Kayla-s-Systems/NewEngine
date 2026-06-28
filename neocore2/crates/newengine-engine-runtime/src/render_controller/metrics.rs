@@ -2,8 +2,8 @@
 
 use crate::scene_bridge::{EngineViewDiagnostics, EngineViewTransitionPhase};
 use newengine_core::render::{
-    RecordedDrawListStats, RenderDebugChartSample, RenderDebugTelemetry,
-    RenderDiagnosticsSnapshot, RenderFrameDebugSnapshot, RenderGraphSubmitReport,
+    RecordedDrawListStats, RenderDebugChartSample, RenderDebugTelemetry, RenderDiagnosticsSnapshot,
+    RenderFrameDebugSnapshot, RenderGraphSubmitReport,
 };
 
 const DEBUG_HISTORY_CAPACITY: usize = 240;
@@ -25,7 +25,6 @@ pub(super) struct RuntimeOverlayMetrics {
     view_report: Option<EngineViewDiagnostics>,
     backend_notes: Vec<String>,
 }
-
 
 impl RuntimeOverlayMetrics {
     #[inline]
@@ -59,7 +58,11 @@ impl RuntimeOverlayMetrics {
     pub(super) fn begin_frame(&mut self, dt: f32) {
         self.frame_triangles = 0;
         self.frame_draws = 0;
-        let dt = if dt.is_finite() && dt > 0.000_001 { dt } else { 1.0 / 60.0 };
+        let dt = if dt.is_finite() && dt > 0.000_001 {
+            dt
+        } else {
+            1.0 / 60.0
+        };
         let fps = 1.0 / dt;
         if self.initialized {
             self.fps_ema = self.fps_ema * 0.92 + fps * 0.08;
@@ -71,13 +74,17 @@ impl RuntimeOverlayMetrics {
 
     #[inline]
     pub(super) fn record_indexed_triangles(&mut self, index_count: u32) {
-        self.frame_triangles = self.frame_triangles.saturating_add((index_count / 3) as u64);
+        self.frame_triangles = self
+            .frame_triangles
+            .saturating_add((index_count / 3) as u64);
         self.frame_draws = self.frame_draws.saturating_add(1);
     }
 
     #[inline]
     pub(super) fn record_vertices_as_triangles(&mut self, vertex_count: u32) {
-        self.frame_triangles = self.frame_triangles.saturating_add((vertex_count / 3) as u64);
+        self.frame_triangles = self
+            .frame_triangles
+            .saturating_add((vertex_count / 3) as u64);
         self.frame_draws = self.frame_draws.saturating_add(1);
     }
 
@@ -98,18 +105,24 @@ impl RuntimeOverlayMetrics {
         self.resource_pipelines = snapshot.resources.pipelines;
         self.queued_upload_jobs = snapshot.queue.queued_upload_jobs;
         self.queued_upload_bytes = snapshot.queue.queued_upload_bytes;
-        self.backend_notes = snapshot.notes.iter().rev().take(3).cloned().collect::<Vec<_>>();
+        self.backend_notes = snapshot
+            .notes
+            .iter()
+            .rev()
+            .take(3)
+            .cloned()
+            .collect::<Vec<_>>();
         self.backend_notes.reverse();
     }
 
     pub(super) fn publish_debug_snapshot(&mut self, snapshot: RenderFrameDebugSnapshot) {
         let draw_calls = snapshot.draw_list_stats.iter().fold(0_u32, |acc, stats| {
-            acc.saturating_add(stats.draw_calls).saturating_add(stats.indexed_draw_calls)
+            acc.saturating_add(stats.draw_calls)
+                .saturating_add(stats.indexed_draw_calls)
         });
-        let indexed_draw_calls = snapshot
-            .draw_list_stats
-            .iter()
-            .fold(0_u32, |acc, stats| acc.saturating_add(stats.indexed_draw_calls));
+        let indexed_draw_calls = snapshot.draw_list_stats.iter().fold(0_u32, |acc, stats| {
+            acc.saturating_add(stats.indexed_draw_calls)
+        });
         let queued_upload_mb = snapshot.queued_upload_bytes as f32 / (1024.0 * 1024.0);
 
         self.history.push(RenderDebugChartSample {
@@ -141,9 +154,7 @@ impl RuntimeOverlayMetrics {
         let mut lines = Vec::with_capacity(4);
         lines.push(format!(
             "FPS {:>5.1} | TRI {:>8} | DRAWS {:>4}",
-            self.fps_ema,
-            self.frame_triangles,
-            self.frame_draws
+            self.fps_ema, self.frame_triangles, self.frame_draws
         ));
 
         if let Some(view) = self.view_report.as_ref() {
@@ -156,16 +167,18 @@ impl RuntimeOverlayMetrics {
                 view.rendered_director_count,
                 view.director_lock_input,
                 view.gate_blocked,
-                if view.frame_blend_active { "on " } else { "off " },
+                if view.frame_blend_active {
+                    "on "
+                } else {
+                    "off "
+                },
                 view.frame_blend_alpha * 100.0,
                 view.pending_event_count,
             ));
             if view.transition.phase != EngineViewTransitionPhase::Idle {
                 lines.push(format!(
                     "VIEW transition {:?} {:.2}s target={:?}",
-                    view.transition.phase,
-                    view.transition.elapsed_sec,
-                    view.target_entity,
+                    view.transition.phase, view.transition.elapsed_sec, view.target_entity,
                 ));
             }
         }
@@ -192,10 +205,9 @@ impl RuntimeOverlayMetrics {
             ));
             if !report.draw_list_stats.is_empty() {
                 lines.push(format_draw_list_stats(report.draw_list_stats.as_slice()));
-                let invalid_draws = report
-                    .draw_list_stats
-                    .iter()
-                    .fold(0_u32, |acc, stats| acc.saturating_add(stats.invalid_draw_calls));
+                let invalid_draws = report.draw_list_stats.iter().fold(0_u32, |acc, stats| {
+                    acc.saturating_add(stats.invalid_draw_calls)
+                });
                 if invalid_draws > 0 {
                     lines.push(format!("WARN invalid replay draws: {}", invalid_draws));
                 }

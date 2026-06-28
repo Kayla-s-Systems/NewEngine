@@ -2,21 +2,25 @@ use std::sync::Arc;
 
 use newengine_core::render::{
     DrawListProviderExtractRequest, DrawListProviderExtractResponse, FrameGraphRoute,
-    FrameGraphRoutes, RenderBoundsSnapshot, RenderViewSnapshot, RenderDrawListKind,
+    FrameGraphRoutes, RenderBoundsSnapshot, RenderDrawListKind, RenderViewSnapshot,
     SceneExtractionSnapshot, VisibilityMask,
 };
 use newengine_core::EngineResult;
-use newengine_plugin_api::{CapabilityKind, CapabilityRole, CAPABILITY_ID_RENDER_DRAW_LIST_PROVIDER};
+use newengine_plugin_api::{
+    CapabilityKind, CapabilityRole, CAPABILITY_ID_RENDER_DRAW_LIST_PROVIDER,
+};
 use newengine_plugin_host::{has_service, PluginsSnapshot};
 use newengine_render_feature_api::{
     RenderDrawListProvider, RuntimeVisibilityPlan, SceneExtractionCtx, PROVIDER_CAP_DRAW_LISTS,
 };
 use newengine_render_frame_graph::DrawListRouteValidationReport;
 use serde::Deserialize;
-#[path = "plugin_bridge.rs"] mod plugin_bridge; use self::plugin_bridge::{build_draw_list_provider_request, parse_plugin_draw_list_provider};
+#[path = "plugin_bridge.rs"]
+mod plugin_bridge;
+use self::plugin_bridge::{build_draw_list_provider_request, parse_plugin_draw_list_provider};
 
-use super::extraction::{DrawListBuildCtx, RuntimeDrawListSet};
 use super::super::external_contribution_lowering::lower_external_draw_list_contribution;
+use super::extraction::{DrawListBuildCtx, RuntimeDrawListSet};
 
 pub(super) const PROVIDER_TAG_PLUGIN: &str = "plugin";
 
@@ -31,7 +35,6 @@ pub(crate) struct ExternalRenderDrawListProviderDesc {
     pub(super) gateway_id: String,
     pub(super) method: String,
 }
-
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -87,7 +90,10 @@ impl RenderDrawListProviderRegistry {
         self.providers.push(provider);
     }
 
-    pub(crate) fn register_external_provider(&mut self, provider: ExternalRenderDrawListProviderDesc) {
+    pub(crate) fn register_external_provider(
+        &mut self,
+        provider: ExternalRenderDrawListProviderDesc,
+    ) {
         if self
             .external_providers
             .iter()
@@ -207,8 +213,8 @@ impl RenderDrawListProviderRegistry {
                 }
             };
 
-            let response: DrawListProviderExtractResponse = serde_json::from_slice(bytes.as_slice())
-                .map_err(|e| {
+            let response: DrawListProviderExtractResponse =
+                serde_json::from_slice(bytes.as_slice()).map_err(|e| {
                     newengine_core::EngineError::other(format!(
                         "render draw-list provider '{}' returned invalid response JSON: {e}",
                         provider.id
@@ -231,7 +237,8 @@ impl RenderDrawListProviderRegistry {
                     );
                     continue;
                 }
-                let lowering = lower_external_draw_list_contribution(provider, contribution, ctx, out)?;
+                let lowering =
+                    lower_external_draw_list_contribution(provider, contribution, ctx, out)?;
                 newengine_ulog_api::ulog::debug!(
                     "render draw-list provider '{}' lowered draw_list={} commands={} draw_calls={} skipped={} triangles={}",
                     provider.id,

@@ -7,8 +7,8 @@
 //! component storages. In-process gameplay systems may still use typed ECS
 //! internals, but service/runtime boundaries should call `engine.ecs`.
 
-use serde::{Deserialize, Serialize};
 use newengine_entity_api::EntityHandle;
+use serde::{Deserialize, Serialize};
 
 /// Engine-facing ECS service gateway id. Consumers call this facade; the host
 /// resolves it to the active provider by descriptor metadata / engine-runtime facts.
@@ -80,7 +80,10 @@ impl Default for EcsServiceInfo {
                 "command-envelope".to_owned(),
                 "semantic-component-packets".to_owned(),
             ],
-            methods: ECS_REQUIRED_METHODS_V1.iter().map(|it| (*it).to_owned()).collect(),
+            methods: ECS_REQUIRED_METHODS_V1
+                .iter()
+                .map(|it| (*it).to_owned())
+                .collect(),
         }
     }
 }
@@ -111,7 +114,10 @@ pub struct EcsSnapshotRequest {
 impl Default for EcsSnapshotRequest {
     #[inline]
     fn default() -> Self {
-        Self { include_entities: true, entity_limit: default_entity_limit() }
+        Self {
+            include_entities: true,
+            entity_limit: default_entity_limit(),
+        }
     }
 }
 
@@ -192,9 +198,13 @@ pub struct EcsInvokeRequest {
 }
 
 #[inline]
-fn default_true() -> bool { true }
+fn default_true() -> bool {
+    true
+}
 #[inline]
-fn default_entity_limit() -> usize { 4096 }
+fn default_entity_limit() -> usize {
+    4096
+}
 
 #[cfg(test)]
 mod tests {
@@ -203,9 +213,15 @@ mod tests {
     #[test]
     fn ecs_service_ids_are_gateway_first() {
         assert_eq!(ENGINE_ECS_SERVICE_ID, "engine.ecs");
-        assert_eq!(ECS_BACKEND_SERVICE_SPEC.engine_gateway_id, ENGINE_ECS_SERVICE_ID);
+        assert_eq!(
+            ECS_BACKEND_SERVICE_SPEC.engine_gateway_id,
+            ENGINE_ECS_SERVICE_ID
+        );
         assert_eq!(ECS_BACKEND_SERVICE_SPEC.provider_service_id, ECS_SERVICE_ID);
-        assert_eq!(ECS_BACKEND_SERVICE_SPEC.backend_capability_id, ECS_BACKEND_CAPABILITY_ID);
+        assert_eq!(
+            ECS_BACKEND_SERVICE_SPEC.backend_capability_id,
+            ECS_BACKEND_CAPABILITY_ID
+        );
     }
 
     #[test]

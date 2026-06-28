@@ -12,14 +12,13 @@ use newengine_ui_api::{
     decode_ui_frame_response_bin, encode_ui_frame_request_bin, UiActionDispatch, UiComponentNode,
     UiDispatchActionRequest, UiDispatchInputRequest, UiDrawList, UiEventDispatchFrame,
     UiFrameRequest, UiFrameResponse, UiInputFrame, UiNodeRequestAck, UiNodeTone, UiNodeTreeRequest,
-    UiPaintCommand,
-    UiRuntimeDebugOverlayTelemetry, UiStatePatch, UiSurfaceAnchor, UiSurfaceNode, UiSurfaceStyle,
-    ENGINE_UI_SERVICE_ID, UI_COMPONENT_PANEL, UI_SERVICE_METHOD_APPLY_NODE_REQUEST_V1,
-    UI_SERVICE_METHOD_APPLY_STATE_PATCH_V1, UI_SERVICE_METHOD_DISPATCH_ACTION_V1,
-    UI_SERVICE_METHOD_DISPATCH_INPUT_V1, UI_SERVICE_METHOD_DRAW_FRAME_BIN_V1,
-    UI_SERVICE_METHOD_DRAW_FRAME_V1, UI_SERVICE_METHOD_SURFACE_NODE_V1,
-    UI_SURFACE_ENGINE_ERROR_MODAL, UI_SURFACE_ENGINE_LOADING, UI_SURFACE_RUNTIME_DEBUG_OVERLAY,
-    UI_THEME_NORTHSTAR_DEFAULT,
+    UiPaintCommand, UiRuntimeDebugOverlayTelemetry, UiStatePatch, UiSurfaceAnchor, UiSurfaceNode,
+    UiSurfaceStyle, ENGINE_UI_SERVICE_ID, UI_COMPONENT_PANEL,
+    UI_SERVICE_METHOD_APPLY_NODE_REQUEST_V1, UI_SERVICE_METHOD_APPLY_STATE_PATCH_V1,
+    UI_SERVICE_METHOD_DISPATCH_ACTION_V1, UI_SERVICE_METHOD_DISPATCH_INPUT_V1,
+    UI_SERVICE_METHOD_DRAW_FRAME_BIN_V1, UI_SERVICE_METHOD_DRAW_FRAME_V1,
+    UI_SERVICE_METHOD_SURFACE_NODE_V1, UI_SURFACE_ENGINE_ERROR_MODAL, UI_SURFACE_ENGINE_LOADING,
+    UI_SURFACE_RUNTIME_DEBUG_OVERLAY, UI_THEME_NORTHSTAR_DEFAULT,
 };
 use serde::Deserialize;
 
@@ -44,10 +43,16 @@ impl Default for UiGatewayFramePolicy {
 impl UiGatewayFramePolicy {
     pub(crate) fn from_startup_config(startup: Option<&newengine_core::StartupConfig>) -> Self {
         let mut policy = Self::default();
-        let Some(startup) = startup else { return policy; };
-        let Some(value) = startup.plugins.get(ENGINE_UI_SERVICE_ID) else { return policy; };
+        let Some(startup) = startup else {
+            return policy;
+        };
+        let Some(value) = startup.plugins.get(ENGINE_UI_SERVICE_ID) else {
+            return policy;
+        };
         let Ok(config) = serde_json::from_value::<UiGatewayPluginConfig>(value.clone()) else {
-            newengine_ulog_api::ulog::warn!("ui gateway: invalid engine.ui config shape; using default frame policy");
+            newengine_ulog_api::ulog::warn!(
+                "ui gateway: invalid engine.ui config shape; using default frame policy"
+            );
             return policy;
         };
 
@@ -107,10 +112,10 @@ struct UiGatewayPluginConfig {
 // focus, hover, pointer capture and action emission, and product modules consume
 // `UiEventDispatchFrame` instead of calculating private rectangles.
 
-#[path = "ui_gateway_frame_parts/input_dispatch.rs"]
-mod input_dispatch;
 #[path = "ui_gateway_frame_parts/draw_list.rs"]
 mod draw_list;
+#[path = "ui_gateway_frame_parts/input_dispatch.rs"]
+mod input_dispatch;
 #[path = "ui_gateway_frame_parts/loading_overlay.rs"]
 mod loading_overlay;
 #[path = "ui_gateway_frame_parts/publish.rs"]

@@ -6,7 +6,10 @@ use crate::manifest::{TextureDictionaryManifest, TextureEntryMeta, TextureMipMet
 use crate::mips::{rgba8_len, TextureEncodedMipData, TextureMipData};
 use crate::names::{normalize_color_space, normalize_texture_name, stable_name_hash64};
 use crate::storage::{store_data, TextureBuildOptions};
-use crate::{align_u64, align_vec, COLOR_SPACE_SRGB, HEADER_LEN, PIXEL_FORMAT_RGBA8_SRGB, PIXEL_FORMAT_RGBA8_UNORM, VERSION_V2};
+use crate::{
+    align_u64, align_vec, COLOR_SPACE_SRGB, HEADER_LEN, PIXEL_FORMAT_RGBA8_SRGB,
+    PIXEL_FORMAT_RGBA8_UNORM, VERSION_V2,
+};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Debug, Clone)]
@@ -32,18 +35,37 @@ pub fn pack(entries: Vec<TextureBuildEntry>) -> Result<Vec<u8>> {
     pack_with_options(entries, TextureBuildOptions::default())
 }
 
-pub fn pack_with_options(entries: Vec<TextureBuildEntry>, options: TextureBuildOptions) -> Result<Vec<u8>> {
+pub fn pack_with_options(
+    entries: Vec<TextureBuildEntry>,
+    options: TextureBuildOptions,
+) -> Result<Vec<u8>> {
     let encoded = entries
         .into_iter()
         .map(|entry| {
             let color_space = normalize_color_space(&entry.color_space);
-            let format = if color_space == COLOR_SPACE_SRGB { PIXEL_FORMAT_RGBA8_SRGB } else { PIXEL_FORMAT_RGBA8_UNORM };
+            let format = if color_space == COLOR_SPACE_SRGB {
+                PIXEL_FORMAT_RGBA8_SRGB
+            } else {
+                PIXEL_FORMAT_RGBA8_UNORM
+            };
             let mips = entry
                 .mips
                 .into_iter()
-                .map(|mip| TextureEncodedMipData { level: mip.level, width: mip.width, height: mip.height, bytes: mip.rgba })
+                .map(|mip| TextureEncodedMipData {
+                    level: mip.level,
+                    width: mip.width,
+                    height: mip.height,
+                    bytes: mip.rgba,
+                })
                 .collect();
-            TextureEncodedBuildEntry { name: entry.name, width: entry.width, height: entry.height, format: format.to_owned(), color_space, mips }
+            TextureEncodedBuildEntry {
+                name: entry.name,
+                width: entry.width,
+                height: entry.height,
+                format: format.to_owned(),
+                color_space,
+                mips,
+            }
         })
         .collect();
     pack_encoded_with_options(encoded, options)
@@ -53,7 +75,10 @@ pub fn pack_encoded(entries: Vec<TextureEncodedBuildEntry>) -> Result<Vec<u8>> {
     pack_encoded_with_options(entries, TextureBuildOptions::raw_runtime())
 }
 
-pub fn pack_encoded_with_options(entries: Vec<TextureEncodedBuildEntry>, options: TextureBuildOptions) -> Result<Vec<u8>> {
+pub fn pack_encoded_with_options(
+    entries: Vec<TextureEncodedBuildEntry>,
+    options: TextureBuildOptions,
+) -> Result<Vec<u8>> {
     if entries.is_empty() {
         return Err(TextureContainerError::EmptyDictionary);
     }
@@ -69,10 +94,18 @@ pub fn pack_encoded_with_options(entries: Vec<TextureEncodedBuildEntry>, options
             return Err(TextureContainerError::DuplicateEntry(name));
         }
         if entry.width == 0 || entry.height == 0 {
-            return Err(TextureContainerError::InvalidExtent { name, width: entry.width, height: entry.height });
+            return Err(TextureContainerError::InvalidExtent {
+                name,
+                width: entry.width,
+                height: entry.height,
+            });
         }
         let pixel_format = parse_pixel_format(&entry.format, &name)?;
-        if entry.mips.is_empty() || entry.mips[0].level != 0 || entry.mips[0].width != entry.width || entry.mips[0].height != entry.height {
+        if entry.mips.is_empty()
+            || entry.mips[0].level != 0
+            || entry.mips[0].width != entry.width
+            || entry.mips[0].height != entry.height
+        {
             return Err(TextureContainerError::InvalidMipChain(name));
         }
 
@@ -92,7 +125,12 @@ pub fn pack_encoded_with_options(entries: Vec<TextureEncodedBuildEntry>, options
                 texture_payload_len(&entry.format, mip.width, mip.height)?
             };
             if mip.bytes.len() != expected {
-                return Err(TextureContainerError::PayloadSizeMismatch { name: name.clone(), mip: mip.level, bytes: mip.bytes.len(), expected });
+                return Err(TextureContainerError::PayloadSizeMismatch {
+                    name: name.clone(),
+                    mip: mip.level,
+                    bytes: mip.bytes.len(),
+                    expected,
+                });
             }
             let (offset, len) = if let Some(&(offset, len)) = dedupe.get(&mip.bytes) {
                 (offset, len)
@@ -106,16 +144,31 @@ pub fn pack_encoded_with_options(entries: Vec<TextureEncodedBuildEntry>, options
             };
             entry_min_offset = entry_min_offset.min(offset);
             entry_max_end = entry_max_end.max(offset.saturating_add(len));
-            mip_metas.push(TextureMipMeta { level: mip.level, width: mip.width, height: mip.height, byte_offset: offset, byte_len: len });
+            mip_metas.push(TextureMipMeta {
+                level: mip.level,
+                width: mip.width,
+                height: mip.height,
+                byte_offset: offset,
+                byte_len: len,
+            });
             expected_w = (expected_w / 2).max(1);
             expected_h = (expected_h / 2).max(1);
         }
 
-        let entry_offset = if entry_min_offset == u64::MAX { 0 } else { entry_min_offset };
+        let entry_offset = if entry_min_offset == u64::MAX {
+            0
+        } else {
+            entry_min_offset
+        };
         let entry_len = entry_max_end.saturating_sub(entry_offset);
         let color_space = normalize_color_space(&entry.color_space);
-        let format = parse_pixel_format(&entry.format, &name)?.as_str().to_owned();
-        if is_rgba8_format(&format) && color_space == COLOR_SPACE_SRGB && format != PIXEL_FORMAT_RGBA8_SRGB {
+        let format = parse_pixel_format(&entry.format, &name)?
+            .as_str()
+            .to_owned();
+        if is_rgba8_format(&format)
+            && color_space == COLOR_SPACE_SRGB
+            && format != PIXEL_FORMAT_RGBA8_SRGB
+        {
             return Err(TextureContainerError::InvalidFormat { name, format });
         }
         metas.push(TextureEntryMeta {

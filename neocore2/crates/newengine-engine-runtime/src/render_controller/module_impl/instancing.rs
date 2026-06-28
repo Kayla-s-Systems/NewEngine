@@ -57,7 +57,6 @@ impl RenderInstanceRaw {
             ],
         }
     }
-
 }
 
 #[inline]
@@ -114,7 +113,9 @@ impl InstanceBufferUploader {
         let required_end = self.cursor_bytes.saturating_add(bytes.len() as u64);
         self.ensure_capacity(r, required_end)?;
 
-        let buffer = self.buffer.expect("instance buffer exists after ensure_capacity");
+        let buffer = self
+            .buffer
+            .expect("instance buffer exists after ensure_capacity");
         let offset = self.cursor_bytes;
         r.write_buffer(buffer, offset, bytes)?;
         self.cursor_bytes = align_up(required_end, 256);
@@ -376,7 +377,10 @@ impl IndexBufferKey {
 }
 
 #[inline]
-pub(super) fn draw_indexed_instanced_args(index_count: u32, instance_count: u32) -> DrawIndexedArgs {
+pub(super) fn draw_indexed_instanced_args(
+    index_count: u32,
+    instance_count: u32,
+) -> DrawIndexedArgs {
     DrawIndexedArgs {
         index_count,
         instance_count,

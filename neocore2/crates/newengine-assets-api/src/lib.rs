@@ -80,7 +80,6 @@ pub const ASSET_GRAPH_SERVICE_ID: &str = "asset_graph.api";
 pub const ASSET_GRAPH_BACKEND_CAPABILITY_ID: &str = "assets.graph.backend";
 pub const ASSET_GRAPH_RUNTIME_CONTRACT: &str = "newengine.assets.graph.runtime.v1";
 
-
 /// Editor/import lifecycle sub-gateways and capability ids.
 ///
 /// These are Godot-inspired lifecycle surfaces, but they do not adopt Godot's
@@ -166,7 +165,8 @@ pub const ENGINE_WORLD_STREAMING_SERVICE_ID: &str = "engine.world.streaming";
 pub const WORLD_STREAMING_SERVICE_ID: &str = "world.streaming.api";
 pub const WORLD_STREAMING_BACKEND_CAPABILITY_ID: &str = "world.streaming.backend";
 pub const WORLD_STREAMING_CELLS_CAPABILITY_ID: &str = "world.streaming.cells";
-pub const WORLD_STREAMING_VISIBILITY_BUDGET_CAPABILITY_ID: &str = "world.streaming.visibility_budget";
+pub const WORLD_STREAMING_VISIBILITY_BUDGET_CAPABILITY_ID: &str =
+    "world.streaming.visibility_budget";
 pub const WORLD_STREAMING_RUNTIME_CONTRACT: &str = "newengine.world.streaming.runtime.v1";
 
 pub mod asset_graph_method {
@@ -272,7 +272,8 @@ pub const ASSET_TYPES_RUNTIME_CONTRACT_SPEC: newengine_service_api::RuntimeServi
         ASSET_TYPES_SERVICE_METHODS,
     );
 
-pub const ASSET_TYPES_RUNTIME_REQUIREMENT_SPEC: newengine_service_api::RuntimeServiceRequirementSpec =
+pub const ASSET_TYPES_RUNTIME_REQUIREMENT_SPEC:
+    newengine_service_api::RuntimeServiceRequirementSpec =
     newengine_service_api::RuntimeServiceRequirementSpec::new(
         ASSET_TYPES_RUNTIME_CONTRACT_SPEC,
         Some(ASSET_TYPES_BACKEND_CAPABILITY_ID),
@@ -307,12 +308,16 @@ pub mod codec_type {
 
 #[inline]
 pub fn codec_type_allows_nested_assets(codec_type: &str) -> bool {
-    codec_type.trim().eq_ignore_ascii_case(codec_type::CONTAINER)
+    codec_type
+        .trim()
+        .eq_ignore_ascii_case(codec_type::CONTAINER)
 }
 
 #[inline]
 pub fn codec_type_requires_magic_by_default(codec_type: &str) -> bool {
-    !codec_type.trim().eq_ignore_ascii_case(codec_type::PLAIN_TEXT)
+    !codec_type
+        .trim()
+        .eq_ignore_ascii_case(codec_type::PLAIN_TEXT)
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -413,7 +418,10 @@ impl Default for AssetFileTypeDescriptor {
 
 impl AssetFileTypeDescriptor {
     pub fn extension_key(extension: &str) -> String {
-        extension.trim().trim_start_matches('.').to_ascii_lowercase()
+        extension
+            .trim()
+            .trim_start_matches('.')
+            .to_ascii_lowercase()
     }
 
     #[inline]
@@ -466,7 +474,10 @@ impl AssetFileTypeDescriptor {
             return Err(format!("codec '.{}' descriptor byte_owner is empty", ext));
         }
         if self.semantic_gateway.trim().is_empty() {
-            return Err(format!("codec '.{}' descriptor semantic_gateway is empty", ext));
+            return Err(format!(
+                "codec '.{}' descriptor semantic_gateway is empty",
+                ext
+            ));
         }
         if self.gateway.trim() != self.semantic_gateway.trim() {
             return Err(format!(
@@ -475,7 +486,10 @@ impl AssetFileTypeDescriptor {
             ));
         }
         if self.handler_service.trim().is_empty() {
-            return Err(format!("codec '.{}' descriptor handler_service is empty", ext));
+            return Err(format!(
+                "codec '.{}' descriptor handler_service is empty",
+                ext
+            ));
         }
         let is_container = self.is_container_codec();
         if self.allow_nested_assets != is_container {
@@ -484,13 +498,21 @@ impl AssetFileTypeDescriptor {
                 ext, self.allow_nested_assets, self.codec_type
             ));
         }
-        if codec_type_requires_magic_by_default(&self.codec_type) && self.requires_magic && self.magic.is_none() {
+        if codec_type_requires_magic_by_default(&self.codec_type)
+            && self.requires_magic
+            && self.magic.is_none()
+        {
             return Err(format!(
                 "codec '.{}' is binary type '{}' but declares no magic bytes",
                 ext, self.codec_type
             ));
         }
-        if !is_container && self.outputs.iter().any(|o| o == "vfs.layer" || o == "container.vfs_layer") {
+        if !is_container
+            && self
+                .outputs
+                .iter()
+                .any(|o| o == "vfs.layer" || o == "container.vfs_layer")
+        {
             return Err(format!(
                 "codec '.{}' is '{}' and cannot expose nested VFS outputs",
                 ext, self.codec_type
@@ -526,7 +548,9 @@ pub struct AssetFileTypeProbeRequest {
 
 impl Default for AssetFileTypeProbeRequest {
     fn default() -> Self {
-        Self { logical_path: String::new() }
+        Self {
+            logical_path: String::new(),
+        }
     }
 }
 
@@ -538,7 +562,9 @@ pub struct AssetFileTypeRegisterRequest {
 
 impl Default for AssetFileTypeRegisterRequest {
     fn default() -> Self {
-        Self { descriptor: AssetFileTypeDescriptor::default() }
+        Self {
+            descriptor: AssetFileTypeDescriptor::default(),
+        }
     }
 }
 
@@ -571,7 +597,12 @@ pub struct AssetFileTypeProbeResult {
 
 impl Default for AssetFileTypeProbeResult {
     fn default() -> Self {
-        Self { logical_path: String::new(), extension: String::new(), known: false, descriptor: None }
+        Self {
+            logical_path: String::new(),
+            extension: String::new(),
+            known: false,
+            descriptor: None,
+        }
     }
 }
 
@@ -665,7 +696,6 @@ pub mod method {
 
     // Generic lifecycle hook understood by the plugin host.
     pub const SHUTDOWN_V1: &str = newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1;
-
 }
 
 pub mod textures_method {
@@ -765,7 +795,8 @@ pub const DEFINITIONS_RUNTIME_CONTRACT_SPEC: newengine_service_api::RuntimeServi
         DEFINITIONS_SERVICE_METHODS,
     );
 
-pub const DEFINITIONS_RUNTIME_REQUIREMENT_SPEC: newengine_service_api::RuntimeServiceRequirementSpec =
+pub const DEFINITIONS_RUNTIME_REQUIREMENT_SPEC:
+    newengine_service_api::RuntimeServiceRequirementSpec =
     newengine_service_api::RuntimeServiceRequirementSpec::new(
         DEFINITIONS_RUNTIME_CONTRACT_SPEC,
         Some(DEFINITIONS_BACKEND_CAPABILITY_ID),
@@ -779,7 +810,8 @@ pub const ASSET_GRAPH_RUNTIME_CONTRACT_SPEC: newengine_service_api::RuntimeServi
         ASSET_GRAPH_SERVICE_METHODS,
     );
 
-pub const ASSET_GRAPH_RUNTIME_REQUIREMENT_SPEC: newengine_service_api::RuntimeServiceRequirementSpec =
+pub const ASSET_GRAPH_RUNTIME_REQUIREMENT_SPEC:
+    newengine_service_api::RuntimeServiceRequirementSpec =
     newengine_service_api::RuntimeServiceRequirementSpec::new(
         ASSET_GRAPH_RUNTIME_CONTRACT_SPEC,
         Some(ASSET_GRAPH_BACKEND_CAPABILITY_ID),
@@ -886,10 +918,17 @@ impl Rgba8TextureAsset {
         if rgba.len() != expected {
             return Err(format!(
                 "rgba8 texture payload size mismatch bytes={} expected={} extent={}x{}",
-                rgba.len(), expected, width, height
+                rgba.len(),
+                expected,
+                width,
+                height
             ));
         }
-        Ok(Self { width, height, rgba })
+        Ok(Self {
+            width,
+            height,
+            rgba,
+        })
     }
 }
 
@@ -1171,7 +1210,10 @@ pub trait AssetAccess {
     fn status_graph_json_v1(&self, id_or_logical_path: &str) -> Result<serde_json::Value, String>;
 
     /// Project a validated lifecycle transition from an owning subsystem, e.g. render GPU residency.
-    fn project_status_json_v1(&self, payload: serde_json::Value) -> Result<serde_json::Value, String>;
+    fn project_status_json_v1(
+        &self,
+        payload: serde_json::Value,
+    ) -> Result<serde_json::Value, String>;
 
     /// Read UTF-8/text asset bytes by logical path through AssetManager/VFS.
     fn text_v1(&self, logical_path: &str) -> Result<Vec<u8>, String>;
@@ -1197,10 +1239,20 @@ pub trait AssetAccess {
     fn texture_rgba8_v1(&self, id_hex32: &str) -> Result<Rgba8TextureAsset, String>;
 
     /// Select and read a runtime-ready RGBA8 texture from a .ytd dictionary.
-    fn texture_dictionary_rgba8_v1(&self, dictionary_path: &str, texture_name: Option<&str>, texture_hash: Option<u64>) -> Result<Rgba8TextureAsset, String>;
+    fn texture_dictionary_rgba8_v1(
+        &self,
+        dictionary_path: &str,
+        texture_name: Option<&str>,
+        texture_hash: Option<u64>,
+    ) -> Result<Rgba8TextureAsset, String>;
 
     /// Select and read a runtime-ready GPU-native texture from a .ytd dictionary.
-    fn texture_dictionary_runtime_v1(&self, dictionary_path: &str, texture_name: Option<&str>, texture_hash: Option<u64>) -> Result<RuntimeTextureAsset, String>;
+    fn texture_dictionary_runtime_v1(
+        &self,
+        dictionary_path: &str,
+        texture_name: Option<&str>,
+        texture_hash: Option<u64>,
+    ) -> Result<RuntimeTextureAsset, String>;
 
     /// Select and read a runtime-ready RGBA8 texture through semantic `engine.assets.textures` ownership.
     ///
@@ -1212,9 +1264,17 @@ pub trait AssetAccess {
         let entry = reference.entry.as_deref().unwrap_or_default();
         let texture_hash = entry
             .strip_prefix("hash:")
-            .map(|value| value.parse::<u64>().map_err(|_| format!("invalid texture hash selector '{entry}'")))
+            .map(|value| {
+                value
+                    .parse::<u64>()
+                    .map_err(|_| format!("invalid texture hash selector '{entry}'"))
+            })
             .transpose()?;
-        let texture_name = if texture_hash.is_some() { None } else { Some(entry) };
+        let texture_name = if texture_hash.is_some() {
+            None
+        } else {
+            Some(entry)
+        };
         self.texture_dictionary_rgba8_v1(&reference.logical_path, texture_name, texture_hash)
     }
 
@@ -1228,9 +1288,17 @@ pub trait AssetAccess {
         let entry = reference.entry.as_deref().unwrap_or_default();
         let texture_hash = entry
             .strip_prefix("hash:")
-            .map(|value| value.parse::<u64>().map_err(|_| format!("invalid texture hash selector '{entry}'")))
+            .map(|value| {
+                value
+                    .parse::<u64>()
+                    .map_err(|_| format!("invalid texture hash selector '{entry}'"))
+            })
             .transpose()?;
-        let texture_name = if texture_hash.is_some() { None } else { Some(entry) };
+        let texture_name = if texture_hash.is_some() {
+            None
+        } else {
+            Some(entry)
+        };
         self.texture_dictionary_runtime_v1(&reference.logical_path, texture_name, texture_hash)
     }
 }
@@ -1256,34 +1324,50 @@ pub trait AssetService: AssetAccess {
     fn vfs_list_json_v1(&self, logical_path: &str) -> Result<serde_json::Value, String>;
 
     /// Rebuild/repack a NEF8 ListFile and write it back through the winning writable VFS source.
-    fn list_file_repack_json_v1(&self, payload: serde_json::Value) -> Result<serde_json::Value, String>;
+    fn list_file_repack_json_v1(
+        &self,
+        payload: serde_json::Value,
+    ) -> Result<serde_json::Value, String>;
 
     /// Return the engine.assets UID row for a logical asset.
     fn uid_json_v1(&self, logical_path: &str) -> Result<serde_json::Value, String>;
 
     /// Return the editor/import cache projection over status, codec metadata and dirty flags.
-    fn import_cache_json_v1(&self, payload: serde_json::Value) -> Result<serde_json::Value, String>;
+    fn import_cache_json_v1(&self, payload: serde_json::Value)
+        -> Result<serde_json::Value, String>;
 
     /// Mark one logical asset dirty/stale; file watchers should use this before reload/reimport.
-    fn import_dirty_json_v1(&self, payload: serde_json::Value) -> Result<serde_json::Value, String>;
+    fn import_dirty_json_v1(&self, payload: serde_json::Value)
+        -> Result<serde_json::Value, String>;
 
     /// Bounded VFS scan for editor/import discovery.
     fn import_scan_json_v1(&self, payload: serde_json::Value) -> Result<serde_json::Value, String>;
 
     /// Import dependency graph projection for one asset.
-    fn import_graph_json_v1(&self, payload: serde_json::Value) -> Result<serde_json::Value, String>;
+    fn import_graph_json_v1(&self, payload: serde_json::Value)
+        -> Result<serde_json::Value, String>;
 
     /// Human-readable import diagnostics.
-    fn import_diagnostics_json_v1(&self, payload: serde_json::Value) -> Result<serde_json::Value, String>;
+    fn import_diagnostics_json_v1(
+        &self,
+        payload: serde_json::Value,
+    ) -> Result<serde_json::Value, String>;
 
     /// Editor thumbnail metadata/cache-key plan. Final pixels belong to render/UI providers.
-    fn import_thumbnails_json_v1(&self, payload: serde_json::Value) -> Result<serde_json::Value, String>;
+    fn import_thumbnails_json_v1(
+        &self,
+        payload: serde_json::Value,
+    ) -> Result<serde_json::Value, String>;
 
     /// Direct dependency/dependent list for one asset.
-    fn import_dependencies_json_v1(&self, payload: serde_json::Value) -> Result<serde_json::Value, String>;
+    fn import_dependencies_json_v1(
+        &self,
+        payload: serde_json::Value,
+    ) -> Result<serde_json::Value, String>;
 
     /// Queue read-model for background import work.
-    fn import_queue_json_v1(&self, payload: serde_json::Value) -> Result<serde_json::Value, String>;
+    fn import_queue_json_v1(&self, payload: serde_json::Value)
+        -> Result<serde_json::Value, String>;
 
     /// Explicit dirty+reload lifecycle command.
     fn reimport_v1(&self, payload: serde_json::Value) -> Result<serde_json::Value, String>;
@@ -1295,17 +1379,22 @@ pub trait AssetService: AssetAccess {
     fn dirty_scan_json_v1(&self, payload: serde_json::Value) -> Result<serde_json::Value, String>;
 
     /// Package/listFile writer capability diagnostics.
-    fn package_writer_info_json_v1(&self, payload: serde_json::Value) -> Result<serde_json::Value, String>;
+    fn package_writer_info_json_v1(
+        &self,
+        payload: serde_json::Value,
+    ) -> Result<serde_json::Value, String>;
 
     /// Explicit .nepak package writer execution through engine.assets.package_writer.
-    fn package_write_nepak_json_v1(&self, payload: NepakPackageWriteRequestV1) -> Result<NepakPackageWriteResponseV1, String>;
+    fn package_write_nepak_json_v1(
+        &self,
+        payload: NepakPackageWriteRequestV1,
+    ) -> Result<NepakPackageWriteResponseV1, String>;
 
     /// Mount one source through the strict v1 JSON source model.
     fn mount_source_json_v1(&self, payload: serde_json::Value) -> Result<(), String>;
 
     /// Returns a deterministic trace describing which sources contain the asset.
     fn resolve_trace_json_v1(&self, logical_path: &str) -> Result<serde_json::Value, String>;
-
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1377,7 +1466,10 @@ mod file_type_layer_contract_tests {
             selector_syntax: Some("file.opaque@entry".to_owned()),
             consumer_domains: vec!["engine.assets.provider_declared".to_owned()],
             magic: Some("4e454638".to_owned()),
-            outputs: vec![ASSET_LIST_FILE_MANIFEST_OUTPUT.to_owned(), ASSET_LIST_FILE_BODY_OUTPUT.to_owned()],
+            outputs: vec![
+                ASSET_LIST_FILE_MANIFEST_OUTPUT.to_owned(),
+                ASSET_LIST_FILE_BODY_OUTPUT.to_owned(),
+            ],
             runtime_ready: true,
             native_container: true,
             requires_magic: true,

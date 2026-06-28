@@ -1,8 +1,8 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use parking_lot::Mutex;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 use abi_stable::std_types::{RResult, RString};
 
@@ -15,10 +15,10 @@ use newengine_camera_api::{
 };
 use newengine_camera_contracts::CameraFrameSnapshot;
 use newengine_camera_runtime::{
-    camera_frame_snapshot_for_view, cursor_state_for_nav, step_camera_nav, BoundsSphere as CamBoundsSphere,
-    CameraManagerResource, CameraNavFrameRequest, CameraNavInput, CameraNavParams,
-    CameraRuntimeReport, CameraRuntimeService, CameraRuntimeServiceConfig, CameraRuntimeWorldState,
-    CameraTransitionPhase as RuntimeCameraTransitionPhase,
+    camera_frame_snapshot_for_view, cursor_state_for_nav, step_camera_nav,
+    BoundsSphere as CamBoundsSphere, CameraManagerResource, CameraNavFrameRequest, CameraNavInput,
+    CameraNavParams, CameraRuntimeReport, CameraRuntimeService, CameraRuntimeServiceConfig,
+    CameraRuntimeWorldState, CameraTransitionPhase as RuntimeCameraTransitionPhase,
 };
 use newengine_core::host_events::CursorState;
 use newengine_core::render::{
@@ -35,14 +35,13 @@ use newengine_service_kit::{
 };
 use newengine_transform::Transform;
 
+use crate::engine_bounds::EngineBoundsSnap;
 use crate::gameplay::{
     capture_runtime_world_snapshot, emit_player_event, first_player, is_player_controller_enabled,
     restore_runtime_world_snapshot, sync_player_view_listeners, FpsDemoRules, GameRunMode,
     PlayerEventKind, RuntimeWorldSnapshot,
 };
-use crate::engine_bounds::EngineBoundsSnap;
 use crate::viewport_bridge::ViewportBridge;
-
 
 const CAMERA_GATEWAY_OWNER: &str = "newengine-engine-runtime.camera-gateway";
 static CAMERA_GATEWAY_REGISTERED: AtomicBool = AtomicBool::new(false);
@@ -50,15 +49,17 @@ static CAMERA_GATEWAY_REGISTERED: AtomicBool = AtomicBool::new(false);
 #[path = "camera_gateway_helpers.rs"]
 mod camera_gateway_helpers;
 use self::camera_gateway_helpers::{
-    camera_nav_input, camera_report_snapshot, camera_runtime_service_config,
-    apply_runtime_input, sanitize_camera_dt, view_postfx_from_camera_snapshot,
+    apply_runtime_input, camera_nav_input, camera_report_snapshot, camera_runtime_service_config,
+    sanitize_camera_dt, view_postfx_from_camera_snapshot,
 };
 pub use self::camera_gateway_helpers::{
     apply_view_postfx, CameraRuntimeOverlayReport, CameraTransitionOverlayReport,
     CameraTransitionPhase,
 };
 
-fn camera_gateway_service(state: Arc<Mutex<CameraGatewayState>>) -> newengine_plugin_api::ServiceV1Dyn<'static> {
+fn camera_gateway_service(
+    state: Arc<Mutex<CameraGatewayState>>,
+) -> newengine_plugin_api::ServiceV1Dyn<'static> {
     let info = CameraServiceInfo::default();
     let description = engine_gateway_provider_service_description(
         ENGINE_CAMERA_SERVICE_ID,
@@ -72,27 +73,33 @@ fn camera_gateway_service(state: Arc<Mutex<CameraGatewayState>>) -> newengine_pl
     JsonServiceRouter::with_shared_state(ENGINE_CAMERA_SERVICE_ID, state)
         .describe_json(&description)
         .info(CameraServiceInfo::default)
-        .get_json(newengine_camera_api::CAMERA_SERVICE_METHOD_SNAPSHOT_JSON_V1, |state| {
-            state.last_snapshot.unwrap_or_default()
-        })
-        .blob(newengine_camera_api::CAMERA_SERVICE_METHOD_INVOKE, |state, payload| {
-            invoke_camera_gateway(state, payload)
-        })
-        .blob(newengine_camera_api::CAMERA_SERVICE_METHOD_VIEW_SET_JSON_V1, |state, payload| {
-            apply_camera_view_command(state, payload)
-        })
-        .get_json(newengine_camera_api::CAMERA_SERVICE_METHOD_VIEW_NEXT_JSON_V1, |state| {
-            let active_view = state.set_view_command(CameraViewCommand::Next);
-            CameraViewCommandResponse { active_view }
-        })
-        .blob(newengine_camera_api::CAMERA_SERVICE_METHOD_SHUTDOWN_V1, |_state, _payload| ok_empty_blob())
+        .get_json(
+            newengine_camera_api::CAMERA_SERVICE_METHOD_SNAPSHOT_JSON_V1,
+            |state| state.last_snapshot.unwrap_or_default(),
+        )
+        .blob(
+            newengine_camera_api::CAMERA_SERVICE_METHOD_INVOKE,
+            |state, payload| invoke_camera_gateway(state, payload),
+        )
+        .blob(
+            newengine_camera_api::CAMERA_SERVICE_METHOD_VIEW_SET_JSON_V1,
+            |state, payload| apply_camera_view_command(state, payload),
+        )
+        .get_json(
+            newengine_camera_api::CAMERA_SERVICE_METHOD_VIEW_NEXT_JSON_V1,
+            |state| {
+                let active_view = state.set_view_command(CameraViewCommand::Next);
+                CameraViewCommandResponse { active_view }
+            },
+        )
+        .blob(
+            newengine_camera_api::CAMERA_SERVICE_METHOD_SHUTDOWN_V1,
+            |_state, _payload| ok_empty_blob(),
+        )
         .into_service_v1()
 }
 
-fn invoke_camera_gateway(
-    state: &mut CameraGatewayState,
-    payload: Blob,
-) -> RResult<Blob, RString> {
+fn invoke_camera_gateway(state: &mut CameraGatewayState, payload: Blob) -> RResult<Blob, RString> {
     if payload.as_slice().is_empty() {
         let snapshot = state.last_snapshot.unwrap_or_default();
         return ok_json(&snapshot);
@@ -149,7 +156,6 @@ fn register_camera_gateway_service_best_effort(state: Arc<Mutex<CameraGatewaySta
         CAMERA_GATEWAY_REGISTERED.store(false, Ordering::Release);
     }
 }
-
 
 /// Runtime-hosted camera gateway bridge.
 ///
@@ -233,7 +239,10 @@ impl CameraGatewayBridge {
             } else {
                 CameraChannel::Runtime
             }),
-            bounds: CamBoundsSphere { center: bounds.center, radius: bounds.radius },
+            bounds: CamBoundsSphere {
+                center: bounds.center,
+                radius: bounds.radius,
+            },
             selection_bounds: selection_bounds.map(|b| CamBoundsSphere {
                 center: b.center,
                 radius: b.radius,
@@ -245,7 +254,10 @@ impl CameraGatewayBridge {
             all: viewport.read_frame_all(),
         };
 
-        if suppress_game_nav || effective_play_mode.wants_direct_player_control() || nav_input.navigation_gated {
+        if suppress_game_nav
+            || effective_play_mode.wants_direct_player_control()
+            || nav_input.navigation_gated
+        {
             nav_input.gate_navigation();
         }
 
@@ -258,19 +270,29 @@ impl CameraGatewayBridge {
             frame_req,
         );
 
-        let (snapshot, report) = if let Some(manager) = world.resource_mut::<CameraManagerResource>() {
-            manager.sync_runtime_nav_mode_from_controller(out.controller.mode);
-            manager.set_last_cursor(out.cursor);
-            let frame = manager.resolve_camera_frame(out.frame, dt);
-            let effects = manager.last_post_effects().unwrap_or_default();
-            (camera_frame_snapshot_for_view(frame, effects, manager.active_view_mode()), Some(camera_report_snapshot(manager.report())))
-        } else {
-            (camera_frame_snapshot_for_view(out.frame, Default::default(), active_view), None)
-        };
+        let (snapshot, report) =
+            if let Some(manager) = world.resource_mut::<CameraManagerResource>() {
+                manager.sync_runtime_nav_mode_from_controller(out.controller.mode);
+                manager.set_last_cursor(out.cursor);
+                let frame = manager.resolve_camera_frame(out.frame, dt);
+                let effects = manager.last_post_effects().unwrap_or_default();
+                (
+                    camera_frame_snapshot_for_view(frame, effects, manager.active_view_mode()),
+                    Some(camera_report_snapshot(manager.report())),
+                )
+            } else {
+                (
+                    camera_frame_snapshot_for_view(out.frame, Default::default(), active_view),
+                    None,
+                )
+            };
 
         state.last_snapshot = Some(snapshot);
         let view = EngineViewFrame::from_camera_snapshot(snapshot);
-        let cursor = if effective_play_mode.wants_direct_player_control() && input.active && !input.camera_navigation_gated {
+        let cursor = if effective_play_mode.wants_direct_player_control()
+            && input.active
+            && !input.camera_navigation_gated
+        {
             CursorState::captured_locked()
         } else {
             cursor_state_for_nav(&nav_input)
@@ -305,7 +327,6 @@ struct CameraGatewayState {
     active_view: CameraViewMode,
 }
 
-
 impl Default for CameraGatewayState {
     #[inline]
     fn default() -> Self {
@@ -321,7 +342,6 @@ impl Default for CameraGatewayState {
 }
 
 impl CameraGatewayState {
-
     fn set_view_command(&mut self, command: CameraViewCommand) -> CameraViewMode {
         self.active_view = match command {
             CameraViewCommand::Next => self.active_view.next(),
@@ -372,7 +392,11 @@ impl CameraGatewayState {
                 .copied()
                 .unwrap_or_default();
             let transform = world.get::<Transform>(cam_id).copied();
-            self.play_session = Some(CameraPlaySessionSnapshot { cam_id, rig, transform });
+            self.play_session = Some(CameraPlaySessionSnapshot {
+                cam_id,
+                rig,
+                transform,
+            });
         }
 
         if self.last_play_mode.is_runtime() && !effective_play_mode.is_runtime() {
@@ -436,4 +460,3 @@ pub struct EngineViewFrame {
     pub viewport_height: u32,
     pub aspect: f32,
 }
-

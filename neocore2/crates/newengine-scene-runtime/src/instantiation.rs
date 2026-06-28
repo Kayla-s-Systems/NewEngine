@@ -4,14 +4,20 @@ use abi_stable::std_types::{RResult, RString};
 use newengine_plugin_api::Blob;
 use newengine_service_kit::{ok_json, payload_json};
 
-use crate::{EngineSceneGatewayService, validate_definition_ref_through_gateways};
+use crate::{validate_definition_ref_through_gateways, EngineSceneGatewayService};
 
 fn deterministic_instance_guid(source: &str, instance_id: &str, salt: &str) -> u128 {
     // Stable FNV-1a style fold. This is not a cryptographic id; it is an authoring/runtime
     // deterministic GUID seed so repeated plans produce identical command DTOs.
     let mut hi: u64 = 0xcbf29ce484222325;
     let mut lo: u64 = 0x84222325cbf29ce4;
-    for byte in source.bytes().chain([0xff]).chain(instance_id.bytes()).chain([0xfe]).chain(salt.bytes()) {
+    for byte in source
+        .bytes()
+        .chain([0xff])
+        .chain(instance_id.bytes())
+        .chain([0xfe])
+        .chain(salt.bytes())
+    {
         hi ^= byte as u64;
         hi = hi.wrapping_mul(0x100000001b3);
         lo ^= (byte as u64).rotate_left(7);
@@ -21,11 +27,13 @@ fn deterministic_instance_guid(source: &str, instance_id: &str, salt: &str) -> u
 }
 
 fn transform_or_identity(value: Option<&serde_json::Value>) -> serde_json::Value {
-    value.cloned().unwrap_or_else(|| serde_json::json!({
-        "position": [0.0, 0.0, 0.0],
-        "rotation": [0.0, 0.0, 0.0, 1.0],
-        "scale": [1.0, 1.0, 1.0]
-    }))
+    value.cloned().unwrap_or_else(|| {
+        serde_json::json!({
+            "position": [0.0, 0.0, 0.0],
+            "rotation": [0.0, 0.0, 0.0, 1.0],
+            "scale": [1.0, 1.0, 1.0]
+        })
+    })
 }
 
 impl EngineSceneGatewayService {
@@ -34,12 +42,24 @@ impl EngineSceneGatewayService {
             Ok(v) => v,
             Err(e) => return RResult::RErr(RString::from(e)),
         };
-        let prefab_ref = req.get("prefab_ref").and_then(|v| v.as_str()).map(str::trim).filter(|it| !it.is_empty());
+        let prefab_ref = req
+            .get("prefab_ref")
+            .and_then(|v| v.as_str())
+            .map(str::trim)
+            .filter(|it| !it.is_empty());
         let Some(prefab_ref) = prefab_ref else {
-            return RResult::RErr(RString::from("scene.instantiate_prefab_json_v1 requires prefab_ref"));
+            return RResult::RErr(RString::from(
+                "scene.instantiate_prefab_json_v1 requires prefab_ref",
+            ));
         };
-        let instance_id = req.get("instance_id").and_then(|v| v.as_str()).unwrap_or("prefab_instance");
-        let name = req.get("name").and_then(|v| v.as_str()).unwrap_or(instance_id);
+        let instance_id = req
+            .get("instance_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("prefab_instance");
+        let name = req
+            .get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or(instance_id);
         let guid = req
             .get("guid")
             .and_then(|v| v.as_u64())
@@ -72,24 +92,35 @@ impl EngineSceneGatewayService {
             Ok(v) => v,
             Err(e) => return RResult::RErr(RString::from(e)),
         };
-        let definition_ref = req.get("definition_ref")
+        let definition_ref = req
+            .get("definition_ref")
             .or_else(|| req.get("archetype_ref"))
             .and_then(|v| v.as_str())
             .map(str::trim)
             .filter(|it| !it.is_empty());
         let Some(definition_ref) = definition_ref else {
-            return RResult::RErr(RString::from("scene.instantiate_archetype_json_v1 requires definition_ref or archetype_ref"));
+            return RResult::RErr(RString::from(
+                "scene.instantiate_archetype_json_v1 requires definition_ref or archetype_ref",
+            ));
         };
         if let Err(e) = validate_definition_ref_through_gateways(definition_ref) {
             return RResult::RErr(RString::from(e));
         }
-        let instance_id = req.get("instance_id").and_then(|v| v.as_str()).unwrap_or("archetype_instance");
-        let name = req.get("name").and_then(|v| v.as_str()).unwrap_or(instance_id);
+        let instance_id = req
+            .get("instance_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("archetype_instance");
+        let name = req
+            .get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or(instance_id);
         let guid = req
             .get("guid")
             .and_then(|v| v.as_u64())
             .map(u128::from)
-            .unwrap_or_else(|| deterministic_instance_guid(definition_ref, instance_id, "archetype"));
+            .unwrap_or_else(|| {
+                deterministic_instance_guid(definition_ref, instance_id, "archetype")
+            });
         let transform = transform_or_identity(req.get("transform"));
         ok_json(serde_json::json!({
             "schema": "newengine.scene.instantiation_plan.v1",
@@ -111,5 +142,4 @@ impl EngineSceneGatewayService {
             ]
         }))
     }
-
 }

@@ -41,9 +41,12 @@ pub(super) fn build_light_shadow_plan(
         return Ok(LightShadowPlan::disabled(lit.white_texture));
     }
 
-    let mut registry = super::light_extraction::LightExtractionProviderRegistry::from_runtime_providers(
-        this.features.light_extraction_providers.runtime_provider_arcs(),
-    );
+    let mut registry =
+        super::light_extraction::LightExtractionProviderRegistry::from_runtime_providers(
+            this.features
+                .light_extraction_providers
+                .runtime_provider_arcs(),
+        );
     if let Some(snapshot) = plugin_snapshot {
         registry.sync_plugin_capabilities(snapshot);
     }
@@ -170,7 +173,9 @@ pub fn try_build_directional_shadow_plan(
     };
 
     let cascade_count = if matches!(settings.method, ShadowMethod::CascadedShadowMaps) {
-        settings.cascade_count.clamp(2, MAX_DIRECTIONAL_SHADOW_CASCADES as u32)
+        settings
+            .cascade_count
+            .clamp(2, MAX_DIRECTIONAL_SHADOW_CASCADES as u32)
     } else {
         1
     };
@@ -197,13 +202,21 @@ pub fn try_build_directional_shadow_plan(
     } else {
         Vec3::Z
     };
-    let up = if dir.dot(Vec3::Y).abs() > 0.92 { Vec3::Z } else { Vec3::Y };
+    let up = if dir.dot(Vec3::Y).abs() > 0.92 {
+        Vec3::Z
+    } else {
+        Vec3::Y
+    };
     let max_distance = settings.max_distance.max(16.0);
     let params = [
         1.0,
         settings.bias,
-        settings.contact_strength.clamp(0.0, super::super::render_quality::SHADOW_STRENGTH_MAX),
-        settings.softness.clamp(0.0, super::super::render_quality::SHADOW_SOFTNESS_MAX),
+        settings
+            .contact_strength
+            .clamp(0.0, super::super::render_quality::SHADOW_STRENGTH_MAX),
+        settings
+            .softness
+            .clamp(0.0, super::super::render_quality::SHADOW_SOFTNESS_MAX),
     ];
     let extra = [
         settings.normal_bias.clamp(0.0, 0.5) * 0.012,
@@ -247,7 +260,8 @@ pub fn try_build_directional_shadow_plan(
         let segment_mid = (split_near + split_far) * 0.5;
         let center = camera + camera_forward * segment_mid;
         let radius = csm_cascade_radius(split_near, split_far, max_distance);
-        let snapped_center = snapped_directional_shadow_center(center, dir, up, radius, settings.resolution);
+        let snapped_center =
+            snapped_directional_shadow_center(center, dir, up, radius, settings.resolution);
         let eye = snapped_center - dir * (radius * 1.85);
         let view = Mat4::look_at_rh(eye, snapped_center, up);
         let near = 0.1;
@@ -255,7 +269,8 @@ pub fn try_build_directional_shadow_plan(
         let proj = Mat4::orthographic_rh(-radius, radius, -radius, radius, near, far);
         let cull = ShadowCasterCull::directional(view, radius, near, far);
         union_cull = Some(cull);
-        let (viewport, scissor) = csm_tile_viewport_scissor(i as u32, cascade_count, settings.resolution);
+        let (viewport, scissor) =
+            csm_tile_viewport_scissor(i as u32, cascade_count, settings.resolution);
         cascades[i] = ShadowCascadeFrame {
             light_mvp: proj * view,
             viewport,
@@ -321,7 +336,11 @@ fn snapped_directional_shadow_center(
 }
 
 #[inline]
-fn csm_split_distances(near: f32, far: f32, cascade_count: u32) -> [f32; MAX_DIRECTIONAL_SHADOW_CASCADES] {
+fn csm_split_distances(
+    near: f32,
+    far: f32,
+    cascade_count: u32,
+) -> [f32; MAX_DIRECTIONAL_SHADOW_CASCADES] {
     let count = cascade_count.clamp(1, MAX_DIRECTIONAL_SHADOW_CASCADES as u32) as usize;
     let mut out = [far; MAX_DIRECTIONAL_SHADOW_CASCADES];
     let lambda = 0.68;
@@ -345,7 +364,11 @@ fn csm_cascade_radius(split_near: f32, split_far: f32, max_distance: f32) -> f32
 }
 
 #[inline]
-fn csm_tile_viewport_scissor(index: u32, cascade_count: u32, resolution: u32) -> (Viewport, RectI32) {
+fn csm_tile_viewport_scissor(
+    index: u32,
+    cascade_count: u32,
+    resolution: u32,
+) -> (Viewport, RectI32) {
     let cascades = cascade_count.clamp(1, MAX_DIRECTIONAL_SHADOW_CASCADES as u32);
     let columns = if cascades <= 1 { 1 } else { 2 };
     let x = (index % columns) * resolution;
@@ -362,7 +385,6 @@ fn csm_tile_viewport_scissor(index: u32, cascade_count: u32, resolution: u32) ->
         RectI32::new(x as i32, y as i32, resolution as i32, resolution as i32),
     )
 }
-
 
 #[inline]
 fn shadow_rt_extent_key(extent: Extent2D) -> u32 {
@@ -404,15 +426,15 @@ fn ensure_shadow_rt(
                 atlas_extent,
                 super::super::render_quality::SHADOW_MAP_COLOR_FORMAT,
             )
-                .with_depth(TextureFormat::Depth32Float)
-                .with_label(if cascades > 1 {
-                    format!(
-                        "game_sun_csm_atlas_{}x{}_cascades_{}",
-                        atlas_extent.width, atlas_extent.height, cascades
-                    )
-                } else {
-                    format!("game_sun_shadow_map_{resolution}")
-                }),
+            .with_depth(TextureFormat::Depth32Float)
+            .with_label(if cascades > 1 {
+                format!(
+                    "game_sun_csm_atlas_{}x{}_cascades_{}",
+                    atlas_extent.width, atlas_extent.height, cascades
+                )
+            } else {
+                format!("game_sun_shadow_map_{resolution}")
+            }),
         )?;
         this.shadows.render_target = Some(rt);
         this.shadows.render_target_resolution = atlas_key;

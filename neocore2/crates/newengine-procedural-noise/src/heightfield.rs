@@ -337,20 +337,35 @@ impl HeightField {
     #[inline]
     pub fn local_bounds(&self) -> Aabb {
         Aabb::new(
-            Vec3::new(-self.settings.size_x * 0.5, self.min_height, -self.settings.size_z * 0.5),
-            Vec3::new(self.settings.size_x * 0.5, self.max_height, self.settings.size_z * 0.5),
+            Vec3::new(
+                -self.settings.size_x * 0.5,
+                self.min_height,
+                -self.settings.size_z * 0.5,
+            ),
+            Vec3::new(
+                self.settings.size_x * 0.5,
+                self.max_height,
+                self.settings.size_z * 0.5,
+            ),
         )
     }
 }
 
 #[inline]
 fn finite_or(v: f32, fallback: f32) -> f32 {
-    if v.is_finite() { v } else { fallback }
+    if v.is_finite() {
+        v
+    } else {
+        fallback
+    }
 }
 
 #[inline]
 fn mix_u64(mut h: u64, v: u64) -> u64 {
-    h ^= v.wrapping_add(0x9e37_79b9_7f4a_7c15).wrapping_add(h << 6).wrapping_add(h >> 2);
+    h ^= v
+        .wrapping_add(0x9e37_79b9_7f4a_7c15)
+        .wrapping_add(h << 6)
+        .wrapping_add(h >> 2);
     h
 }
 
@@ -395,13 +410,12 @@ fn apply_height_smoothing(
             for x in 1..width - 1 {
                 let i = z * width + x;
                 let center = scratch[i];
-                let avg = (
-                    scratch[i - 1]
+                let avg = (scratch[i - 1]
                     + scratch[i + 1]
                     + scratch[i - width]
                     + scratch[i + width]
-                    + center * 2.0
-                ) / 6.0;
+                    + center * 2.0)
+                    / 6.0;
                 heights[i] = center + (avg - center) * strength;
             }
         }
@@ -414,7 +428,11 @@ mod tests {
 
     #[test]
     fn heightfield_has_expected_vertex_count() {
-        let hf = HeightField::generate(TerrainHeightfieldSettings { cells_x: 8, cells_z: 4, ..Default::default() });
+        let hf = HeightField::generate(TerrainHeightfieldSettings {
+            cells_x: 8,
+            cells_z: 4,
+            ..Default::default()
+        });
         assert_eq!(hf.heights().len(), 9 * 5);
     }
 

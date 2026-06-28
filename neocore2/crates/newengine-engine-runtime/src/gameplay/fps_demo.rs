@@ -2,11 +2,11 @@ use newengine_ecs::{EntityId, World};
 use newengine_math::Vec3;
 use newengine_transform::Transform;
 
+use super::player::first_player;
 use super::{
     DisplayMode, DisplayVisibility, FpsDemoGoal, FpsDemoHazard, FpsDemoPickup, FpsDemoRules,
     FpsDemoState,
 };
-use super::player::first_player;
 
 #[inline]
 fn distance_sq(a: Vec3, b: Vec3) -> f32 {
@@ -89,7 +89,10 @@ pub fn step_fps_demo_gameplay(world: &mut World, dt: f32) {
         }
     }
 
-    let rules = world.resource::<FpsDemoRules>().cloned().unwrap_or_default();
+    let rules = world
+        .resource::<FpsDemoRules>()
+        .cloned()
+        .unwrap_or_default();
     let collected_delta = picked.len() as u32;
     if let Some(state) = world.resource_mut::<FpsDemoState>() {
         state.pickups_collected = state

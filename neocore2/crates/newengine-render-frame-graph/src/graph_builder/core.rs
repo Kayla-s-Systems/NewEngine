@@ -8,7 +8,8 @@ impl FrameGraphBuilder {
     #[inline]
     pub fn submit(mut self) -> RenderFramePlan {
         self.finalize_surface_output();
-        self.phases.push(RenderPhaseDesc::standard(StandardRenderPhase::EndFrame));
+        self.phases
+            .push(RenderPhaseDesc::standard(StandardRenderPhase::EndFrame));
         let mut plan = RenderFramePlan::new(self.graph);
         plan.phases = self.phases;
         plan.draw_lists = self.draw_lists;
@@ -48,6 +49,9 @@ impl FrameGraphBuilder {
 
     #[inline]
     pub(super) fn has_resource(&self, id: RenderGraphResourceId) -> bool {
-        self.graph.resources.iter().any(|resource| resource.id == id)
+        self.graph
+            .resources
+            .iter()
+            .any(|resource| resource.id == id)
     }
 }

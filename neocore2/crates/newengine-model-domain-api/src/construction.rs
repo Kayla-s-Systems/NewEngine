@@ -30,7 +30,12 @@ impl Default for ModelAssetRequest {
 
 impl ModelAssetRequest {
     #[inline]
-    pub fn new(model: impl Into<String>) -> Self { Self { model: model.into(), ..Self::default() } }
+    pub fn new(model: impl Into<String>) -> Self {
+        Self {
+            model: model.into(),
+            ..Self::default()
+        }
+    }
 
     #[inline]
     pub fn with_manifest(mut self, manifest: impl Into<String>) -> Self {
@@ -144,7 +149,13 @@ pub struct ModelSkeletonRef {
 }
 
 impl Default for ModelSkeletonRef {
-    fn default() -> Self { Self { source: String::new(), format: "auto".to_owned(), humanoid_profile: None } }
+    fn default() -> Self {
+        Self {
+            source: String::new(),
+            format: "auto".to_owned(),
+            humanoid_profile: None,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -155,7 +166,12 @@ pub struct ModelMaterialSetRef {
 }
 
 impl Default for ModelMaterialSetRef {
-    fn default() -> Self { Self { texture_dictionary: None, material_manifest: None } }
+    fn default() -> Self {
+        Self {
+            texture_dictionary: None,
+            material_manifest: None,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -194,7 +210,9 @@ pub enum ModelCollisionKind {
 }
 
 impl Default for ModelCollisionKind {
-    fn default() -> Self { Self::Capsule }
+    fn default() -> Self {
+        Self::Capsule
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

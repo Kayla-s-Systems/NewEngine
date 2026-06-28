@@ -6,4 +6,3 @@ use super::SceneCommand;
 pub(super) struct SceneQueue {
     pub(super) cmds: Vec<SceneCommand>,
 }
-

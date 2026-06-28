@@ -1,7 +1,9 @@
 use newengine_core::physics::PhysicsApiRef;
 use newengine_ecs::World;
 
-use crate::authority::{current_entity_authority_map, current_world_authority_frame, RuntimeWorldAuthorityMode};
+use crate::authority::{
+    current_entity_authority_map, current_world_authority_frame, RuntimeWorldAuthorityMode,
+};
 
 mod frame_input;
 mod frame_output;
@@ -67,7 +69,8 @@ pub(super) fn step_service_physics(
     if let Some(authority) = current_world_authority_frame(world) {
         if matches!(
             authority.mode,
-            RuntimeWorldAuthorityMode::PluginEcsEntityAuthority | RuntimeWorldAuthorityMode::SplitAuthority
+            RuntimeWorldAuthorityMode::PluginEcsEntityAuthority
+                | RuntimeWorldAuthorityMode::SplitAuthority
         ) {
             let provider_entities = current_entity_authority_map(world)
                 .map(|map| map.native_to_provider.len())
@@ -89,7 +92,10 @@ pub(super) fn step_service_physics(
         match api.step_frame(input) {
             Ok(output) => output,
             Err(err) => {
-                newengine_ulog_api::ulog::warn!("physics sync: engine.physics step failed: {}", err);
+                newengine_ulog_api::ulog::warn!(
+                    "physics sync: engine.physics step failed: {}",
+                    err
+                );
                 return;
             }
         }

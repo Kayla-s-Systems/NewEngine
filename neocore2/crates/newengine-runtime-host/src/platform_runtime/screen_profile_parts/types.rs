@@ -33,20 +33,73 @@ pub(super) struct EditorRuntimeActionDescriptor {
 }
 
 pub(super) const EDITOR_MENUS: &[EditorChromeMenuItem] = &[
-    EditorChromeMenuItem { id: "file", label: "File", tooltip: "Project, scene and source operations" },
-    EditorChromeMenuItem { id: "edit", label: "Edit", tooltip: "Undo, redo and selection operations" },
-    EditorChromeMenuItem { id: "create", label: "Create", tooltip: "Create entities, assets and authored data" },
-    EditorChromeMenuItem { id: "scene", label: "Scene", tooltip: "Scene/world commands and placement tools" },
-    EditorChromeMenuItem { id: "assets", label: "Assets", tooltip: "Import, reimport and inspect content" },
-    EditorChromeMenuItem { id: "tools", label: "Tools", tooltip: "Editor tools and diagnostics" },
-    EditorChromeMenuItem { id: "window", label: "Window", tooltip: "Show, hide and dock editor panels" },
-    EditorChromeMenuItem { id: "help", label: "Help", tooltip: "Documentation and runtime diagnostics" },
+    EditorChromeMenuItem {
+        id: "file",
+        label: "File",
+        tooltip: "Project, scene and source operations",
+    },
+    EditorChromeMenuItem {
+        id: "edit",
+        label: "Edit",
+        tooltip: "Undo, redo and selection operations",
+    },
+    EditorChromeMenuItem {
+        id: "create",
+        label: "Create",
+        tooltip: "Create entities, assets and authored data",
+    },
+    EditorChromeMenuItem {
+        id: "scene",
+        label: "Scene",
+        tooltip: "Scene/world commands and placement tools",
+    },
+    EditorChromeMenuItem {
+        id: "assets",
+        label: "Assets",
+        tooltip: "Import, reimport and inspect content",
+    },
+    EditorChromeMenuItem {
+        id: "tools",
+        label: "Tools",
+        tooltip: "Editor tools and diagnostics",
+    },
+    EditorChromeMenuItem {
+        id: "window",
+        label: "Window",
+        tooltip: "Show, hide and dock editor panels",
+    },
+    EditorChromeMenuItem {
+        id: "help",
+        label: "Help",
+        tooltip: "Documentation and runtime diagnostics",
+    },
 ];
 
 pub(super) const EDITOR_RUNTIME_ACTIONS: &[EditorRuntimeActionDescriptor] = &[
-    EditorRuntimeActionDescriptor { id: "edit", label: "Stop", action_id: "editor.runtime.edit", hotkey: "1", tooltip: "Stop simulation and keep the viewport as an editor preview", mode: UiEditorRuntimeMode::Edit },
-    EditorRuntimeActionDescriptor { id: "simulate", label: "Simulate", action_id: "editor.runtime.simulate", hotkey: "2", tooltip: "Run world simulation without direct player possession", mode: UiEditorRuntimeMode::Simulate },
-    EditorRuntimeActionDescriptor { id: "play", label: "Play", action_id: "editor.runtime.play", hotkey: "3", tooltip: "Play in editor through the contained viewport", mode: UiEditorRuntimeMode::Play },
+    EditorRuntimeActionDescriptor {
+        id: "edit",
+        label: "Stop",
+        action_id: "editor.runtime.edit",
+        hotkey: "1",
+        tooltip: "Stop simulation and keep the viewport as an editor preview",
+        mode: UiEditorRuntimeMode::Edit,
+    },
+    EditorRuntimeActionDescriptor {
+        id: "simulate",
+        label: "Simulate",
+        action_id: "editor.runtime.simulate",
+        hotkey: "2",
+        tooltip: "Run world simulation without direct player possession",
+        mode: UiEditorRuntimeMode::Simulate,
+    },
+    EditorRuntimeActionDescriptor {
+        id: "play",
+        label: "Play",
+        action_id: "editor.runtime.play",
+        hotkey: "3",
+        tooltip: "Play in editor through the contained viewport",
+        mode: UiEditorRuntimeMode::Play,
+    },
 ];
 
 pub(super) const EDITOR_CHROME: EditorChromeDescriptor = EditorChromeDescriptor {

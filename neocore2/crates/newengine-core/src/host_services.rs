@@ -3,7 +3,10 @@
 use abi_stable::std_types::{RResult, RString};
 use newengine_plugin_api::{Blob, CapabilityId, MethodName};
 
-use newengine_plugin_host::{call_service_v1 as host_call_service_v1, describe_service as host_describe_service, has_service as host_has_service, list_services as host_list_services};
+use newengine_plugin_host::{
+    call_service_v1 as host_call_service_v1, describe_service as host_describe_service,
+    has_service as host_has_service, list_services as host_list_services,
+};
 
 #[inline]
 pub fn call_service_v1(
@@ -41,7 +44,6 @@ pub fn list_service_ids() -> Vec<String> {
 pub fn describe_service(service_id: &str) -> Option<String> {
     host_describe_service(service_id)
 }
-
 
 /// Resolves a canonical `engine.*` gateway to the active provider service, if any.
 ///

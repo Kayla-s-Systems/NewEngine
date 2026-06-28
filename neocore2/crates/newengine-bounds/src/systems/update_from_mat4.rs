@@ -21,7 +21,8 @@ struct BoundsUpdateFromMat4Scratch {
 #[inline]
 pub fn update_bounds_from_mat4_system(world: &mut World) {
     // Move scratch out to avoid borrow conflicts with world queries/gets.
-    let mut scratch = core::mem::take(world.resource_mut_or_insert_default::<BoundsUpdateFromMat4Scratch>());
+    let mut scratch =
+        core::mem::take(world.resource_mut_or_insert_default::<BoundsUpdateFromMat4Scratch>());
 
     scratch.ids.clear();
     scratch.ids.extend(world.query2_ids::<Mat4, Bounds>());

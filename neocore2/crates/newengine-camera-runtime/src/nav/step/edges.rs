@@ -81,8 +81,18 @@ pub(crate) fn handle_capture_edge(
     state.last_bounds_radius = bounds.radius;
 
     let projection = compute_projection(rig, bounds, params.aspect());
-    let frame = CameraFrame::build(params.channel, *rig, projection, params.viewport, newengine_math::Vec2::ZERO);
+    let frame = CameraFrame::build(
+        params.channel,
+        *rig,
+        projection,
+        params.viewport,
+        newengine_math::Vec2::ZERO,
+    );
     let cursor = cursor_state_for_nav(input);
 
-    Some(CameraNavResult { frame, controller: *ctrl, cursor })
+    Some(CameraNavResult {
+        frame,
+        controller: *ctrl,
+        cursor,
+    })
 }

@@ -3,9 +3,8 @@
 use newengine_math::{Quat, Vec2, Vec3};
 
 use crate::{
-    auto_near_far, default_perspective, frame_orbit_to_sphere, CameraChannel,
-    CameraChannelState, CameraControlInput, CameraFrame, CameraRig, CameraViewport,
-    OrbitController, Projection,
+    auto_near_far, default_perspective, frame_orbit_to_sphere, CameraChannel, CameraChannelState,
+    CameraControlInput, CameraFrame, CameraRig, CameraViewport, OrbitController, Projection,
 };
 
 /// Axis-aligned bounding box used by runtime framing.
@@ -107,7 +106,8 @@ impl RuntimePreviewCamera {
             self.orbit.apply(&mut self.rig, i, dt);
         } else {
             self.was_look_active = false;
-            self.orbit.apply(&mut self.rig, CameraControlInput::idle(), 0.0);
+            self.orbit
+                .apply(&mut self.rig, CameraControlInput::idle(), 0.0);
         }
 
         let (near, far) = auto_near_far(self.orbit.distance, self.focus_radius);
@@ -122,7 +122,13 @@ impl RuntimePreviewCamera {
             }
         }
 
-        CameraFrame::build(self.channel, self.rig, self.projection, self.viewport, self.jitter_px)
+        CameraFrame::build(
+            self.channel,
+            self.rig,
+            self.projection,
+            self.viewport,
+            self.jitter_px,
+        )
     }
 
     #[inline]
@@ -136,7 +142,8 @@ impl RuntimePreviewCamera {
             self.focus_radius,
             self.margin.max(1.0),
         );
-        self.orbit.apply(&mut self.rig, CameraControlInput::idle(), 0.0);
+        self.orbit
+            .apply(&mut self.rig, CameraControlInput::idle(), 0.0);
     }
 
     #[inline]
@@ -455,11 +462,7 @@ impl RuntimeNavController {
     /// Use after changing `orbit.target / yaw / pitch / distance` directly (e.g. framing).
     #[inline]
     pub fn rebuild_orbit_rig(&mut self, rig: &mut CameraRig) {
-        self.apply_orbit(
-            rig,
-            CameraControlInput::idle(),
-            0.0,
-        );
+        self.apply_orbit(rig, CameraControlInput::idle(), 0.0);
     }
 
     #[inline]

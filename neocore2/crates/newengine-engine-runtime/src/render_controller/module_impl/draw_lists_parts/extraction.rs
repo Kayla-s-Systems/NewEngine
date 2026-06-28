@@ -1,8 +1,12 @@
 use std::collections::BTreeSet;
 
-use newengine_core::render::{Extent2D, RectI32, RenderApi, RenderDrawListKind, RenderGraphPassKind, Viewport};
+use newengine_core::render::{
+    Extent2D, RectI32, RenderApi, RenderDrawListKind, RenderGraphPassKind, Viewport,
+};
 use newengine_core::EngineResult;
-use newengine_render_feature_api::{RenderDrawListProvider, RuntimeVisibilityPlan, SceneExtractionCtx};
+use newengine_render_feature_api::{
+    RenderDrawListProvider, RuntimeVisibilityPlan, SceneExtractionCtx,
+};
 use newengine_render_frame_graph::DrawListDesc;
 
 use crate::render_controller::RuntimeRenderController;
@@ -18,7 +22,9 @@ impl RuntimeDrawListSet {
         ctx: &SceneExtractionCtx<'_>,
         providers: &[&dyn RenderDrawListProvider],
     ) -> Self {
-        let mut this = Self { lists: Vec::with_capacity(5) };
+        let mut this = Self {
+            lists: Vec::with_capacity(5),
+        };
         for provider in providers {
             for &kind in provider.provided_draw_lists(ctx) {
                 if visibility.allows(kind) {
@@ -59,7 +65,12 @@ impl RuntimeDrawListSet {
             let extent = ctx.shadow_plan.extent();
             let _ = out.record(RenderDrawListKind::ShadowCasters, move |_this, r| {
                 r.set_viewport(Viewport::full(extent))?;
-                r.set_scissor(RectI32::new(0, 0, extent.width as i32, extent.height as i32))?;
+                r.set_scissor(RectI32::new(
+                    0,
+                    0,
+                    extent.width as i32,
+                    extent.height as i32,
+                ))?;
                 Ok(())
             })?;
         }
@@ -68,7 +79,12 @@ impl RuntimeDrawListSet {
             let extent = ctx.viewport_extent;
             let _ = out.record(RenderDrawListKind::OpaqueForward, move |_this, r| {
                 r.set_viewport(Viewport::full(extent))?;
-                r.set_scissor(RectI32::new(0, 0, extent.width as i32, extent.height as i32))?;
+                r.set_scissor(RectI32::new(
+                    0,
+                    0,
+                    extent.width as i32,
+                    extent.height as i32,
+                ))?;
                 Ok(())
             })?;
         }
@@ -97,7 +113,11 @@ impl<'a> DrawListBuildCtx<'a> {
         render: &'a mut dyn RenderApi,
         lists: &'a RuntimeDrawListSet,
     ) -> Self {
-        Self { controller, render, lists }
+        Self {
+            controller,
+            render,
+            lists,
+        }
     }
 
     pub(crate) fn record<T>(
@@ -132,24 +152,28 @@ impl<'a> DrawListBuildCtx<'a> {
 }
 
 impl<'a> newengine_render_feature_api::DrawListBuildCtx for DrawListBuildCtx<'a> {
-    fn record_procedural_terrain_shadow(&mut self, ctx: &SceneExtractionCtx<'_>) -> EngineResult<()> {
+    fn record_procedural_terrain_shadow(
+        &mut self,
+        ctx: &SceneExtractionCtx<'_>,
+    ) -> EngineResult<()> {
         if ctx.shadow_frame.cascade_count > 1 {
             for cascade_index in 0..ctx.shadow_frame.cascade_count as usize {
                 let cascade = ctx.shadow_frame.cascade(cascade_index);
-                let _ = self.record_shadow_phase(RenderGraphPassKind::ShadowCascadeMap, |this, r| {
-                    r.set_viewport(cascade.viewport)?;
-                    r.set_scissor(cascade.scissor)?;
-                    this.set_shadow_caster_cull(Some(cascade.caster_cull));
-                    super::super::passes::draw_procedural_terrain_shadow(
-                        this,
-                        r,
-                        ctx.scene,
-                        ctx.lit,
-                        cascade.light_mvp,
-                        &ctx.lights,
-                        ctx.runtime,
-                    )
-                })?;
+                let _ =
+                    self.record_shadow_phase(RenderGraphPassKind::ShadowCascadeMap, |this, r| {
+                        r.set_viewport(cascade.viewport)?;
+                        r.set_scissor(cascade.scissor)?;
+                        this.set_shadow_caster_cull(Some(cascade.caster_cull));
+                        super::super::passes::draw_procedural_terrain_shadow(
+                            this,
+                            r,
+                            ctx.scene,
+                            ctx.lit,
+                            cascade.light_mvp,
+                            &ctx.lights,
+                            ctx.runtime,
+                        )
+                    })?;
             }
             return Ok(());
         }
@@ -168,7 +192,10 @@ impl<'a> newengine_render_feature_api::DrawListBuildCtx for DrawListBuildCtx<'a>
         Ok(())
     }
 
-    fn record_procedural_terrain_forward(&mut self, ctx: &SceneExtractionCtx<'_>) -> EngineResult<()> {
+    fn record_procedural_terrain_forward(
+        &mut self,
+        ctx: &SceneExtractionCtx<'_>,
+    ) -> EngineResult<()> {
         let _ = self.record(RenderDrawListKind::OpaqueForward, |this, r| {
             super::super::passes::draw_procedural_terrain(
                 this,
@@ -186,7 +213,10 @@ impl<'a> newengine_render_feature_api::DrawListBuildCtx for DrawListBuildCtx<'a>
         Ok(())
     }
 
-    fn record_procedural_terrain_gbuffer(&mut self, ctx: &SceneExtractionCtx<'_>) -> EngineResult<()> {
+    fn record_procedural_terrain_gbuffer(
+        &mut self,
+        ctx: &SceneExtractionCtx<'_>,
+    ) -> EngineResult<()> {
         let _ = self.record_shadow_phase(RenderGraphPassKind::GBuffer, |this, r| {
             r.set_viewport(Viewport::full(ctx.viewport_extent))?;
             r.set_scissor(RectI32::new(
@@ -214,21 +244,22 @@ impl<'a> newengine_render_feature_api::DrawListBuildCtx for DrawListBuildCtx<'a>
         if ctx.shadow_frame.cascade_count > 1 {
             for cascade_index in 0..ctx.shadow_frame.cascade_count as usize {
                 let cascade = ctx.shadow_frame.cascade(cascade_index);
-                let _ = self.record_shadow_phase(RenderGraphPassKind::ShadowCascadeMap, |this, r| {
-                    r.set_viewport(cascade.viewport)?;
-                    r.set_scissor(cascade.scissor)?;
-                    this.set_shadow_caster_cull(Some(cascade.caster_cull));
-                    super::super::passes::draw_primitives_shadow(
-                        this,
-                        r,
-                        ctx.scene,
-                        ctx.lit,
-                        cascade.light_mvp,
-                        &ctx.lights,
-                        ctx.runtime,
-                        ctx.camera_position,
-                    )
-                })?;
+                let _ =
+                    self.record_shadow_phase(RenderGraphPassKind::ShadowCascadeMap, |this, r| {
+                        r.set_viewport(cascade.viewport)?;
+                        r.set_scissor(cascade.scissor)?;
+                        this.set_shadow_caster_cull(Some(cascade.caster_cull));
+                        super::super::passes::draw_primitives_shadow(
+                            this,
+                            r,
+                            ctx.scene,
+                            ctx.lit,
+                            cascade.light_mvp,
+                            &ctx.lights,
+                            ctx.runtime,
+                            ctx.camera_position,
+                        )
+                    })?;
             }
             return Ok(());
         }
@@ -297,7 +328,12 @@ impl<'a> newengine_render_feature_api::DrawListBuildCtx for DrawListBuildCtx<'a>
         let extent: Extent2D = ctx.surface_extent;
         let _ = self.record(RenderDrawListKind::Ui, |_this, r| {
             r.set_viewport(Viewport::full(extent))?;
-            r.set_scissor(RectI32::new(0, 0, extent.width as i32, extent.height as i32))?;
+            r.set_scissor(RectI32::new(
+                0,
+                0,
+                extent.width as i32,
+                extent.height as i32,
+            ))?;
             r.set_ui_draw_list(ui.clone());
             Ok(())
         })?;

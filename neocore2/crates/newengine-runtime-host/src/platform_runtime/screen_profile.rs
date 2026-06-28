@@ -1,19 +1,19 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use newengine_assets_api::{AssetDocument, AssetDocumentRequest, AssetServiceClient};
-use newengine_schema_api::ENGINE_SCHEMA_SERVICE_ID;
 use newengine_core::host_events::WindowInitSize;
 use newengine_core::Resources;
+use newengine_schema_api::ENGINE_SCHEMA_SERVICE_ID;
 use newengine_ui_api::{
-    EditorSelectionContext, EditorSelectionKind, UiComponentNode, UiEditorRuntimeMode,
-    UiEditorRuntimeState, UiEventDispatchFrame, UiInputCaptureState, UiInputCaptureStateManager,
-    UiDockLayoutState, UiDockPanelRuntimeState, UiNodeEventTrigger, UiNodeRequestSourceKind,
-    UiNodeTone, UiNodeTreeRequest, UiScreenInputFocusPolicy,
-    UiScreenPanelDescriptor, UiScreenProfile, UiScreenProfileDescriptor, UiScreenProfileState,
-    UiSurfaceAnchor, UiSurfaceNode, UiSurfaceStyle, UiToastNotification, UiToastSeverity,
-    UiToastStack, UiViewportSlot, UI_COMPONENT_PANEL, UI_COMPONENT_ROW,
-    UI_SURFACE_EDITOR_SHELL, UI_SURFACE_GAME_PRESENTATION, UI_SURFACE_SCREEN_ROOT,
-    UI_THEME_NORTHSTAR_EDITOR, UI_THEME_ASSET_NORTHSTAR_EDITOR, UI_FONT_ASSET_EDITOR_SANS, UI_FONT_ASSET_EDITOR_DISPLAY,
+    EditorSelectionContext, EditorSelectionKind, UiComponentNode, UiDockLayoutState,
+    UiDockPanelRuntimeState, UiEditorRuntimeMode, UiEditorRuntimeState, UiEventDispatchFrame,
+    UiInputCaptureState, UiInputCaptureStateManager, UiNodeEventTrigger, UiNodeRequestSourceKind,
+    UiNodeTone, UiNodeTreeRequest, UiScreenInputFocusPolicy, UiScreenPanelDescriptor,
+    UiScreenProfile, UiScreenProfileDescriptor, UiScreenProfileState, UiSurfaceAnchor,
+    UiSurfaceNode, UiSurfaceStyle, UiToastNotification, UiToastSeverity, UiToastStack,
+    UiViewportSlot, UI_COMPONENT_PANEL, UI_COMPONENT_ROW, UI_FONT_ASSET_EDITOR_DISPLAY,
+    UI_FONT_ASSET_EDITOR_SANS, UI_SURFACE_EDITOR_SHELL, UI_SURFACE_GAME_PRESENTATION,
+    UI_SURFACE_SCREEN_ROOT, UI_THEME_ASSET_NORTHSTAR_EDITOR, UI_THEME_NORTHSTAR_EDITOR,
 };
 use serde::Deserialize;
 use serde_json::Value;
@@ -37,18 +37,18 @@ const OUTPUT_LOG_NEUI_REF: &str = "assets/ui/editor/output_log.neui@surface";
 const PROFILER_DIAGNOSTICS_NEUI_REF: &str = "assets/ui/editor/profiler_diagnostics.neui@surface";
 const VIEWPORT_GIZMOS_NEUI_REF: &str = "assets/ui/editor/viewport_gizmos.neui@surface";
 
-#[path = "screen_profile_parts/types.rs"]
-mod types;
+#[path = "screen_profile_parts/components.rs"]
+mod components;
 #[path = "screen_profile_parts/helpers.rs"]
 mod helpers;
 #[path = "screen_profile_parts/panels_and_tests.rs"]
 mod panels_and_tests;
-#[path = "screen_profile_parts/components.rs"]
-mod components;
 #[path = "screen_profile_parts/profiles.rs"]
 mod profiles;
 #[path = "screen_profile_parts/state.rs"]
 mod state;
+#[path = "screen_profile_parts/types.rs"]
+mod types;
 
 use self::components::*;
 use self::helpers::*;

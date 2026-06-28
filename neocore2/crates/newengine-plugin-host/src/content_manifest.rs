@@ -108,12 +108,13 @@ pub fn load_plugin_content_catalog_from_dir(
         }
     };
 
-    let mut manifest = serde_json::from_slice::<DeploymentManifestWithContent>(&bytes).map_err(|e| {
-        PluginLoadError {
-            path: path.clone(),
-            message: format!("content manifest parse failed: {e}"),
-        }
-    })?;
+    let mut manifest =
+        serde_json::from_slice::<DeploymentManifestWithContent>(&bytes).map_err(|e| {
+            PluginLoadError {
+                path: path.clone(),
+                message: format!("content manifest parse failed: {e}"),
+            }
+        })?;
 
     if manifest.content.schema.trim().is_empty() {
         manifest.content.schema = manifest.schema;

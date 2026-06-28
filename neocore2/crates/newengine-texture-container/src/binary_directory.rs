@@ -1,12 +1,10 @@
 use crate::error::{Result, TextureContainerError};
 use crate::manifest::{TextureDictionaryManifest, TextureEntryMeta, TextureMipMeta};
 use crate::{
-    COLOR_SPACE_LINEAR, COLOR_SPACE_SRGB, PIXEL_FORMAT_BC1_RGBA_SRGB,
-    PIXEL_FORMAT_BC1_RGBA_UNORM, PIXEL_FORMAT_BC2_RGBA_SRGB,
-    PIXEL_FORMAT_BC2_RGBA_UNORM, PIXEL_FORMAT_BC3_RGBA_SRGB,
-    PIXEL_FORMAT_BC3_RGBA_UNORM, PIXEL_FORMAT_BC5_RG_UNORM,
-    PIXEL_FORMAT_BC6H_SF16, PIXEL_FORMAT_BC6H_UF16,
-    PIXEL_FORMAT_BC7_RGBA_SRGB, PIXEL_FORMAT_BC7_RGBA_UNORM,
+    COLOR_SPACE_LINEAR, COLOR_SPACE_SRGB, PIXEL_FORMAT_BC1_RGBA_SRGB, PIXEL_FORMAT_BC1_RGBA_UNORM,
+    PIXEL_FORMAT_BC2_RGBA_SRGB, PIXEL_FORMAT_BC2_RGBA_UNORM, PIXEL_FORMAT_BC3_RGBA_SRGB,
+    PIXEL_FORMAT_BC3_RGBA_UNORM, PIXEL_FORMAT_BC5_RG_UNORM, PIXEL_FORMAT_BC6H_SF16,
+    PIXEL_FORMAT_BC6H_UF16, PIXEL_FORMAT_BC7_RGBA_SRGB, PIXEL_FORMAT_BC7_RGBA_UNORM,
     PIXEL_FORMAT_RGBA8_SRGB, PIXEL_FORMAT_RGBA8_UNORM, VERSION_V2,
 };
 
@@ -47,22 +45,40 @@ pub fn encode(manifest: &TextureDictionaryManifest) -> Result<Vec<u8>> {
 
     let entries_offset = DIRECTORY_HEADER_LEN as u32;
     let mips_offset = entries_offset
-        .checked_add(entry_count.checked_mul(ENTRY_RECORD_LEN as u32).ok_or(TextureContainerError::DirectoryTooLarge("entries"))?)
+        .checked_add(
+            entry_count
+                .checked_mul(ENTRY_RECORD_LEN as u32)
+                .ok_or(TextureContainerError::DirectoryTooLarge("entries"))?,
+        )
         .ok_or(TextureContainerError::DirectoryTooLarge("mips_offset"))?;
     let names_offset = mips_offset
-        .checked_add(mip_count.checked_mul(MIP_RECORD_LEN as u32).ok_or(TextureContainerError::DirectoryTooLarge("mips"))?)
+        .checked_add(
+            mip_count
+                .checked_mul(MIP_RECORD_LEN as u32)
+                .ok_or(TextureContainerError::DirectoryTooLarge("mips"))?,
+        )
         .ok_or(TextureContainerError::DirectoryTooLarge("names_offset"))?;
 
     let mut names = Vec::<u8>::new();
     let mut out = vec![0u8; names_offset as usize];
     let mut mip_cursor = 0u32;
 
-    write_header(&mut out[..DIRECTORY_HEADER_LEN], entry_count, mip_count, entries_offset, mips_offset, names_offset, 0);
+    write_header(
+        &mut out[..DIRECTORY_HEADER_LEN],
+        entry_count,
+        mip_count,
+        entries_offset,
+        mips_offset,
+        names_offset,
+        0,
+    );
 
     for (entry_index, entry) in manifest.entries.iter().enumerate() {
-        let name_offset = u32::try_from(names.len()).map_err(|_| TextureContainerError::DirectoryTooLarge("name_offset"))?;
+        let name_offset = u32::try_from(names.len())
+            .map_err(|_| TextureContainerError::DirectoryTooLarge("name_offset"))?;
         let name_bytes = entry.name.as_bytes();
-        let name_len = u16::try_from(name_bytes.len()).map_err(|_| TextureContainerError::NameTooLong(entry.name.clone()))?;
+        let name_len = u16::try_from(name_bytes.len())
+            .map_err(|_| TextureContainerError::NameTooLong(entry.name.clone()))?;
         names.extend_from_slice(name_bytes);
 
         let entry_record_offset = entries_offset as usize + entry_index * ENTRY_RECORD_LEN;
@@ -77,14 +93,18 @@ pub fn encode(manifest: &TextureDictionaryManifest) -> Result<Vec<u8>> {
         for mip in &entry.mips {
             let mip_index = mip_cursor as usize;
             let mip_record_offset = mips_offset as usize + mip_index * MIP_RECORD_LEN;
-            write_mip_record(&mut out[mip_record_offset..mip_record_offset + MIP_RECORD_LEN], mip);
+            write_mip_record(
+                &mut out[mip_record_offset..mip_record_offset + MIP_RECORD_LEN],
+                mip,
+            );
             mip_cursor = mip_cursor
                 .checked_add(1)
                 .ok_or(TextureContainerError::DirectoryTooLarge("mip_cursor"))?;
         }
     }
 
-    let names_len = u32::try_from(names.len()).map_err(|_| TextureContainerError::DirectoryTooLarge("names_len"))?;
+    let names_len = u32::try_from(names.len())
+        .map_err(|_| TextureContainerError::DirectoryTooLarge("names_len"))?;
     write_u32(&mut out, 32, names_len);
     out.extend_from_slice(&names);
     Ok(out)
@@ -97,8 +117,18 @@ pub fn decode(bytes: &[u8]) -> Result<TextureDictionaryManifest> {
     let names_start = header.names_offset as usize;
     let names_len = header.names_len as usize;
 
-    checked_range(bytes.len(), entries_start, header.entry_count as usize * ENTRY_RECORD_LEN, "directory.entries")?;
-    checked_range(bytes.len(), mips_start, header.mip_count as usize * MIP_RECORD_LEN, "directory.mips")?;
+    checked_range(
+        bytes.len(),
+        entries_start,
+        header.entry_count as usize * ENTRY_RECORD_LEN,
+        "directory.entries",
+    )?;
+    checked_range(
+        bytes.len(),
+        mips_start,
+        header.mip_count as usize * MIP_RECORD_LEN,
+        "directory.mips",
+    )?;
     checked_range(bytes.len(), names_start, names_len, "directory.names")?;
 
     let names = &bytes[names_start..names_start + names_len];
@@ -120,7 +150,12 @@ pub fn decode(bytes: &[u8]) -> Result<TextureDictionaryManifest> {
         let color_space_id = read_u16(record, 48);
 
         checked_range(names.len(), name_offset, name_len, "entry.name")?;
-        checked_range(header.mip_count as usize, first_mip, mip_count, "entry.mips")?;
+        checked_range(
+            header.mip_count as usize,
+            first_mip,
+            mip_count,
+            "entry.mips",
+        )?;
         let name = std::str::from_utf8(&names[name_offset..name_offset + name_len])
             .map_err(|_| TextureContainerError::InvalidDirectory("entry name is not utf-8"))?
             .to_owned();
@@ -177,19 +212,27 @@ struct DirectoryHeader {
 
 fn read_header(bytes: &[u8]) -> Result<DirectoryHeader> {
     if bytes.len() < DIRECTORY_HEADER_LEN {
-        return Err(TextureContainerError::InvalidDirectory("short binary directory header"));
+        return Err(TextureContainerError::InvalidDirectory(
+            "short binary directory header",
+        ));
     }
     if &bytes[0..4] != DIRECTORY_MAGIC.as_slice() {
-        return Err(TextureContainerError::InvalidDirectory("bad binary directory magic"));
+        return Err(TextureContainerError::InvalidDirectory(
+            "bad binary directory magic",
+        ));
     }
     let version = read_u16(bytes, 4);
     if version != DIRECTORY_VERSION {
-        return Err(TextureContainerError::InvalidDirectory("unsupported binary directory version"));
+        return Err(TextureContainerError::InvalidDirectory(
+            "unsupported binary directory version",
+        ));
     }
     let entry_record_len = read_u16(bytes, 6);
     let mip_record_len = read_u16(bytes, 8);
     if entry_record_len as usize != ENTRY_RECORD_LEN || mip_record_len as usize != MIP_RECORD_LEN {
-        return Err(TextureContainerError::InvalidDirectory("unsupported binary directory record sizes"));
+        return Err(TextureContainerError::InvalidDirectory(
+            "unsupported binary directory record sizes",
+        ));
     }
     Ok(DirectoryHeader {
         entry_count: read_u32(bytes, 12),
@@ -201,7 +244,15 @@ fn read_header(bytes: &[u8]) -> Result<DirectoryHeader> {
     })
 }
 
-fn write_header(out: &mut [u8], entry_count: u32, mip_count: u32, entries_offset: u32, mips_offset: u32, names_offset: u32, names_len: u32) {
+fn write_header(
+    out: &mut [u8],
+    entry_count: u32,
+    mip_count: u32,
+    entries_offset: u32,
+    mips_offset: u32,
+    names_offset: u32,
+    names_len: u32,
+) {
     out.fill(0);
     out[0..4].copy_from_slice(&DIRECTORY_MAGIC);
     write_u16(out, 4, DIRECTORY_VERSION);
@@ -216,7 +267,13 @@ fn write_header(out: &mut [u8], entry_count: u32, mip_count: u32, entries_offset
     write_u32(out, 32, names_len);
 }
 
-fn write_entry_record(out: &mut [u8], entry: &TextureEntryMeta, name_offset: u32, name_len: u16, first_mip: u32) -> Result<()> {
+fn write_entry_record(
+    out: &mut [u8],
+    entry: &TextureEntryMeta,
+    name_offset: u32,
+    name_len: u16,
+    first_mip: u32,
+) -> Result<()> {
     out.fill(0);
     write_u64(out, 0, entry.name_hash);
     write_u64(out, 8, entry.byte_offset);
@@ -256,7 +313,10 @@ fn format_to_id(format: &str, name: &str) -> Result<u16> {
         PIXEL_FORMAT_BC6H_SF16 => Ok(FORMAT_BC6H_SF16),
         PIXEL_FORMAT_BC7_RGBA_UNORM => Ok(FORMAT_BC7_RGBA_UNORM),
         PIXEL_FORMAT_BC7_RGBA_SRGB => Ok(FORMAT_BC7_RGBA_SRGB),
-        other => Err(TextureContainerError::InvalidFormat { name: name.to_owned(), format: other.to_owned() }),
+        other => Err(TextureContainerError::InvalidFormat {
+            name: name.to_owned(),
+            format: other.to_owned(),
+        }),
     }
 }
 
@@ -275,7 +335,10 @@ fn format_from_id(id: u16, name: &str) -> Result<&'static str> {
         FORMAT_BC6H_SF16 => Ok(PIXEL_FORMAT_BC6H_SF16),
         FORMAT_BC7_RGBA_UNORM => Ok(PIXEL_FORMAT_BC7_RGBA_UNORM),
         FORMAT_BC7_RGBA_SRGB => Ok(PIXEL_FORMAT_BC7_RGBA_SRGB),
-        _ => Err(TextureContainerError::InvalidFormat { name: name.to_owned(), format: format!("id:{id}") }),
+        _ => Err(TextureContainerError::InvalidFormat {
+            name: name.to_owned(),
+            format: format!("id:{id}"),
+        }),
     }
 }
 
@@ -283,7 +346,10 @@ fn color_space_to_id(color_space: &str, name: &str) -> Result<u16> {
     match color_space {
         COLOR_SPACE_LINEAR => Ok(COLOR_LINEAR),
         COLOR_SPACE_SRGB => Ok(COLOR_SRGB),
-        other => Err(TextureContainerError::InvalidColorSpace { name: name.to_owned(), color_space: other.to_owned() }),
+        other => Err(TextureContainerError::InvalidColorSpace {
+            name: name.to_owned(),
+            color_space: other.to_owned(),
+        }),
     }
 }
 
@@ -291,17 +357,22 @@ fn color_space_from_id(id: u16, name: &str) -> Result<&'static str> {
     match id {
         COLOR_LINEAR => Ok(COLOR_SPACE_LINEAR),
         COLOR_SRGB => Ok(COLOR_SPACE_SRGB),
-        _ => Err(TextureContainerError::InvalidColorSpace { name: name.to_owned(), color_space: format!("id:{id}") }),
+        _ => Err(TextureContainerError::InvalidColorSpace {
+            name: name.to_owned(),
+            color_space: format!("id:{id}"),
+        }),
     }
 }
 
 fn checked_range(total: usize, offset: usize, len: usize, what: &'static str) -> Result<()> {
-    let end = offset.checked_add(len).ok_or(TextureContainerError::InvalidRange {
-        what,
-        offset: offset as u64,
-        len: len as u64,
-        total,
-    })?;
+    let end = offset
+        .checked_add(len)
+        .ok_or(TextureContainerError::InvalidRange {
+            what,
+            offset: offset as u64,
+            len: len as u64,
+            total,
+        })?;
     if offset > total || end > total {
         return Err(TextureContainerError::InvalidRange {
             what,
@@ -320,14 +391,25 @@ fn read_u16(bytes: &[u8], offset: usize) -> u16 {
 
 #[inline]
 fn read_u32(bytes: &[u8], offset: usize) -> u32 {
-    u32::from_le_bytes([bytes[offset], bytes[offset + 1], bytes[offset + 2], bytes[offset + 3]])
+    u32::from_le_bytes([
+        bytes[offset],
+        bytes[offset + 1],
+        bytes[offset + 2],
+        bytes[offset + 3],
+    ])
 }
 
 #[inline]
 fn read_u64(bytes: &[u8], offset: usize) -> u64 {
     u64::from_le_bytes([
-        bytes[offset], bytes[offset + 1], bytes[offset + 2], bytes[offset + 3],
-        bytes[offset + 4], bytes[offset + 5], bytes[offset + 6], bytes[offset + 7],
+        bytes[offset],
+        bytes[offset + 1],
+        bytes[offset + 2],
+        bytes[offset + 3],
+        bytes[offset + 4],
+        bytes[offset + 5],
+        bytes[offset + 6],
+        bytes[offset + 7],
     ])
 }
 

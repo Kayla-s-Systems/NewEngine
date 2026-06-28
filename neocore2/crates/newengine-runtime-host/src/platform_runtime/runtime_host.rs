@@ -3,57 +3,59 @@ use std::path::Path;
 use abi_stable::std_types::RString;
 use libloading::Library;
 use newengine_core::events::EventSub;
-use newengine_core::render::{RenderBackendStatus, SceneLaunchStatus};
 use newengine_core::host_events::{
     CursorGrabMode, CursorState, HostEvent, WindowHandles, WindowHostEvent, WindowInitSize,
 };
-use newengine_core::{Engine, EngineError, EngineResult, EngineRunState, JobLane, JobPriority, JobRequest};
+use newengine_core::render::{RenderBackendStatus, SceneLaunchStatus};
+use newengine_core::{
+    Engine, EngineError, EngineResult, EngineRunState, JobLane, JobPriority, JobRequest,
+};
 use newengine_platform_api::{
-    PlatformCursorGrabModeV1, PlatformCursorPollV1, PlatformCursorStateV1,
-    PlatformDisplayConfigV1, PlatformHostApiV1, PlatformHostJobCallbackV1, PlatformHostJobRequestV1, PlatformHostJobTicketV1,
-    PlatformRuntimeRunFnV1, PlatformStepResultV1, PlatformSurfaceMetricsV1, PlatformWindowReadyV1,
+    PlatformCursorGrabModeV1, PlatformCursorPollV1, PlatformCursorStateV1, PlatformDisplayConfigV1,
+    PlatformHostApiV1, PlatformHostJobCallbackV1, PlatformHostJobRequestV1,
+    PlatformHostJobTicketV1, PlatformRuntimeRunFnV1, PlatformStepResultV1,
+    PlatformSurfaceMetricsV1, PlatformWindowReadyV1,
 };
 use newengine_plugin_api::PluginInfo;
 use newengine_system_contracts::{ScreenOverlayReason, ScreenOverlayStatus};
 use newengine_system_runtime::{
     overlay_from_engine_startup_snapshot, overlay_from_render_backend_status,
-    overlay_to_step_result_with_provider,
-    startup_status_mapper::bootstrap_loading_with_subsystems,
+    overlay_to_step_result_with_provider, startup_status_mapper::bootstrap_loading_with_subsystems,
 };
 use newengine_ui::{
-    create_provider, UiBuildFn, UiFrameDesc, UiProvider, UiProviderKind,
-    UiProviderOptions, UiProviderBinding,
+    create_provider, UiBuildFn, UiFrameDesc, UiProvider, UiProviderBinding, UiProviderKind,
+    UiProviderOptions,
 };
 use newengine_ui_api::{UiDrawList, UiEventDispatchFrame, UiInputFrame};
 
 use crate::platform_input::poll_input_frame;
-use crate::platform_runtime::bootstrap_subsystems::{
-    build_bootstrap_subsystems, build_scene_launch_subsystems, BootstrapSubsystemInput,
-    SceneLaunchSubsystemInput,
-};
-use crate::platform_runtime::fatal_overlay::{build_fatal_bootstrap_overlay, FatalOverlayInput};
-use crate::platform_runtime::callbacks::{
-    host_on_close_requested_v1, host_on_window_focused_v1, host_on_window_ready_v1,
-    host_on_window_resized_v1, host_poll_cursor_state_v1, host_step_v1, host_submit_job_v1,
-};
 use crate::platform_runtime::bootstrap_overlay::{
     map_engine_startup_progress_to_bootstrap, RuntimeBootstrapOverlayState, RuntimeBootstrapStage,
     OVERLAY_LOG_PROGRESS_EPSILON, START_ENGINE_BOOTSTRAP_BASE_PROGRESS,
 };
+use crate::platform_runtime::bootstrap_subsystems::{
+    build_bootstrap_subsystems, build_scene_launch_subsystems, BootstrapSubsystemInput,
+    SceneLaunchSubsystemInput,
+};
+use crate::platform_runtime::callbacks::{
+    host_on_close_requested_v1, host_on_window_focused_v1, host_on_window_ready_v1,
+    host_on_window_resized_v1, host_poll_cursor_state_v1, host_step_v1, host_submit_job_v1,
+};
 use crate::platform_runtime::constants::PLATFORM_RUNTIME_SYMBOL;
+use crate::platform_runtime::fatal_overlay::{build_fatal_bootstrap_overlay, FatalOverlayInput};
 use crate::platform_runtime::handles::{native_to_raw_handles, raw_to_native_handles};
+use crate::platform_runtime::jobs_gateway::register_jobs_gateway_service_best_effort;
+use crate::platform_runtime::screen_profile::ScreenProfileRuntimeState;
+use crate::platform_runtime::shutdown_watchdog::ShutdownWatchdog;
 use crate::platform_runtime::snapshot_service::{
     register_platform_window_service_best_effort, update_platform_window_snapshot,
 };
-use crate::platform_runtime::jobs_gateway::register_jobs_gateway_service_best_effort;
-use crate::platform_runtime::shutdown_watchdog::ShutdownWatchdog;
-use crate::platform_runtime::screen_profile::ScreenProfileRuntimeState;
 use crate::platform_runtime::types::ResolvedPlatformRuntimeConfig;
-use crate::render_runtime::ResolvedRenderBackendConfig;
+use crate::platform_runtime::ui_gateway_frame::UiGatewayFramePolicy;
 use crate::platform_runtime::ui_provider_selection::{
     log_ui_provider_selection, UiProviderSelection,
 };
-use crate::platform_runtime::ui_gateway_frame::UiGatewayFramePolicy;
+use crate::render_runtime::ResolvedRenderBackendConfig;
 
 pub struct HostPlatformRuntime {
     engine: Engine<()>,
@@ -86,7 +88,6 @@ pub struct HostPlatformRuntime {
     runtime_bootstrap_overlay_enabled: bool,
 }
 
-
 impl HostPlatformRuntime {
     pub fn new(
         engine: Engine<()>,
@@ -100,7 +101,9 @@ impl HostPlatformRuntime {
 
         Self {
             engine,
-            ui: create_provider(UiProviderOptions { kind: active_ui_kind }),
+            ui: create_provider(UiProviderOptions {
+                kind: active_ui_kind,
+            }),
             ui_build,
             ui_selection,
             screen_profile: ScreenProfileRuntimeState::load(),
@@ -125,10 +128,14 @@ impl HostPlatformRuntime {
             runtime_soft_degraded_origin: None,
             runtime_soft_degraded_frames: 0,
             cached_provider_ui_draw: None,
-            ui_frame_policy: UiGatewayFramePolicy::from_startup_config(newengine_core::startup::last_startup_config()),
-            runtime_bootstrap_overlay_enabled: std::env::var("NEWENGINE_RUNTIME_BOOTSTRAP_OVERLAY_DISABLED")
-                .map(|value| value.trim() != "1" && !value.eq_ignore_ascii_case("true"))
-                .unwrap_or(true),
+            ui_frame_policy: UiGatewayFramePolicy::from_startup_config(
+                newengine_core::startup::last_startup_config(),
+            ),
+            runtime_bootstrap_overlay_enabled: std::env::var(
+                "NEWENGINE_RUNTIME_BOOTSTRAP_OVERLAY_DISABLED",
+            )
+            .map(|value| value.trim() != "1" && !value.eq_ignore_ascii_case("true"))
+            .unwrap_or(true),
         }
     }
 
@@ -157,23 +164,25 @@ impl HostPlatformRuntime {
         newengine_ulog_api::ulog::info!("platform runtime: loading '{}'", runtime_path.display());
 
         crate::platform_early_log!("host.dll.load.begin path='{}'", runtime_path.display());
-        let lib = unsafe { Library::new(runtime_path) }
-            .map_err(|e| {
-                crate::platform_early_log!("host.dll.load.err error='{}'", e);
-                EngineError::other(format!("platform runtime load failed: {e}"))
-            })?;
+        let lib = unsafe { Library::new(runtime_path) }.map_err(|e| {
+            crate::platform_early_log!("host.dll.load.err error='{}'", e);
+            EngineError::other(format!("platform runtime load failed: {e}"))
+        })?;
         crate::platform_early_log!("host.dll.load.ok path='{}'", runtime_path.display());
 
-        crate::platform_early_log!("host.symbol.resolve.begin symbol='{}'", "newengine_platform_runtime_run_v1");
+        crate::platform_early_log!(
+            "host.symbol.resolve.begin symbol='{}'",
+            "newengine_platform_runtime_run_v1"
+        );
         let run: libloading::Symbol<PlatformRuntimeRunFnV1> =
-            unsafe { lib.get(PLATFORM_RUNTIME_SYMBOL) }
-                .map_err(|e| {
-                    crate::platform_early_log!("host.symbol.resolve.err error='{}'", e);
-                    EngineError::other(format!(
-                        "platform runtime symbol missing: {e}"
-                    ))
-                })?;
-        crate::platform_early_log!("host.symbol.resolve.ok symbol='{}'", "newengine_platform_runtime_run_v1");
+            unsafe { lib.get(PLATFORM_RUNTIME_SYMBOL) }.map_err(|e| {
+                crate::platform_early_log!("host.symbol.resolve.err error='{}'", e);
+                EngineError::other(format!("platform runtime symbol missing: {e}"))
+            })?;
+        crate::platform_early_log!(
+            "host.symbol.resolve.ok symbol='{}'",
+            "newengine_platform_runtime_run_v1"
+        );
 
         newengine_ulog_api::ulog::info!(
             "platform runtime: entry resolved symbol='{}' title='{}' size={}x{}",
@@ -191,7 +200,10 @@ impl HostPlatformRuntime {
         // engine.jobs is available before the platform provider starts its
         // native bootstrap surface. Platform plugins must submit bootstrap work
         // through this callback instead of creating hidden threads.
-        register_jobs_gateway_service_best_effort(self.engine.job_system(), self.engine.events().clone());
+        register_jobs_gateway_service_best_effort(
+            self.engine.job_system(),
+            self.engine.events().clone(),
+        );
 
         let host = PlatformHostApiV1 {
             user_data: (&mut self as *mut Self) as usize,
@@ -221,7 +233,11 @@ impl HostPlatformRuntime {
         }
 
         let shutdown_exit_code = if result.is_ok() { 0 } else { 1 };
-        let shutdown_watchdog = ShutdownWatchdog::arm(self.engine.job_system(), "platform runtime returned", shutdown_exit_code);
+        let shutdown_watchdog = ShutdownWatchdog::arm(
+            self.engine.job_system(),
+            "platform runtime returned",
+            shutdown_exit_code,
+        );
 
         self.shutdown_engine_once("platform runtime returned");
 
@@ -269,26 +285,40 @@ impl HostPlatformRuntime {
             job = job.with_task_id(request.task_id.to_string());
         }
 
-        let ticket = self.engine.job_system().submit_controlled(job, move |control| {
-            control.publish_progress(0.0, "Platform job entered", "Platform provider callback is running on engine.jobs.");
-            // SAFETY: platform providers build this handle with
-            // `PlatformHostJobCallbackV1::from_fn`. The handle crosses the ABI
-            // as a plain address because `abi_stable` does not derive
-            // `StableAbi` for function-pointer parameters nested inside another
-            // function-pointer signature. The callback is executed once by the
-            // submitted engine.jobs task.
-            let callback_fn: extern "C" fn(usize) -> abi_stable::std_types::RResult<(), RString> =
-                unsafe { std::mem::transmute(callback_addr) };
-            let result = callback_fn(callback_user_data);
-            match result {
-                abi_stable::std_types::RResult::ROk(()) => {
-                    control.publish_progress(1.0, "Platform job completed", "Platform provider callback completed normally.");
+        let ticket = self
+            .engine
+            .job_system()
+            .submit_controlled(job, move |control| {
+                control.publish_progress(
+                    0.0,
+                    "Platform job entered",
+                    "Platform provider callback is running on engine.jobs.",
+                );
+                // SAFETY: platform providers build this handle with
+                // `PlatformHostJobCallbackV1::from_fn`. The handle crosses the ABI
+                // as a plain address because `abi_stable` does not derive
+                // `StableAbi` for function-pointer parameters nested inside another
+                // function-pointer signature. The callback is executed once by the
+                // submitted engine.jobs task.
+                let callback_fn: extern "C" fn(
+                    usize,
+                )
+                    -> abi_stable::std_types::RResult<(), RString> =
+                    unsafe { std::mem::transmute(callback_addr) };
+                let result = callback_fn(callback_user_data);
+                match result {
+                    abi_stable::std_types::RResult::ROk(()) => {
+                        control.publish_progress(
+                            1.0,
+                            "Platform job completed",
+                            "Platform provider callback completed normally.",
+                        );
+                    }
+                    abi_stable::std_types::RResult::RErr(e) => {
+                        control.publish_progress(1.0, "Platform job failed", e.to_string());
+                    }
                 }
-                abi_stable::std_types::RResult::RErr(e) => {
-                    control.publish_progress(1.0, "Platform job failed", e.to_string());
-                }
-            }
-        });
+            });
 
         PlatformHostJobTicketV1 {
             accepted: true,
@@ -299,7 +329,12 @@ impl HostPlatformRuntime {
     }
 
     fn shutdown_engine_once(&mut self, origin: &'static str) {
-        if self.shutting_down || matches!(self.engine.run_state(), EngineRunState::Stopped | EngineRunState::Faulted) {
+        if self.shutting_down
+            || matches!(
+                self.engine.run_state(),
+                EngineRunState::Stopped | EngineRunState::Faulted
+            )
+        {
             return;
         }
         self.shutting_down = true;
@@ -309,10 +344,14 @@ impl HostPlatformRuntime {
         ));
         match self.engine.shutdown() {
             Ok(()) => {
-                newengine_ulog_api::ulog::info!("platform runtime: engine.shutdown completed origin={origin}");
+                newengine_ulog_api::ulog::info!(
+                    "platform runtime: engine.shutdown completed origin={origin}"
+                );
             }
             Err(e) => {
-                newengine_ulog_api::ulog::error!("platform runtime: engine.shutdown failed origin={origin}: {e}");
+                newengine_ulog_api::ulog::error!(
+                    "platform runtime: engine.shutdown failed origin={origin}: {e}"
+                );
             }
         }
         newengine_core::crash::record_breadcrumb(format!(
@@ -340,16 +379,20 @@ impl HostPlatformRuntime {
         newengine_time_runtime::register_time_gateway_best_effort();
         newengine_schema_runtime::register_schema_gateway_best_effort();
         newengine_gameplay_runtime::register_gameplay_foundation_gateways_best_effort();
-        register_jobs_gateway_service_best_effort(self.engine.job_system(), self.engine.events().clone());
+        register_jobs_gateway_service_best_effort(
+            self.engine.job_system(),
+            self.engine.events().clone(),
+        );
         register_platform_window_service_best_effort(ready);
         let (display, window) = native_to_raw_handles(ready.handles)?;
 
-        self.engine.resources_mut().insert(WindowHandles { window, display });
+        self.engine
+            .resources_mut()
+            .insert(WindowHandles { window, display });
         self.engine.resources_mut().insert(WindowInitSize {
             width: ready.surface.width,
             height: ready.surface.height,
         });
-
 
         self.window_ready_emitted = false;
         self.bootstrap_stage = RuntimeBootstrapStage::AnnounceLoadEnginePlugins;
@@ -398,13 +441,16 @@ impl HostPlatformRuntime {
         if minimized != self.minimized {
             self.minimized = minimized;
             self.engine
-                .emit(HostEvent::Window(WindowHostEvent::MinimizedChanged(minimized)))?;
+                .emit(HostEvent::Window(WindowHostEvent::MinimizedChanged(
+                    minimized,
+                )))?;
         }
 
-        self.engine.emit(HostEvent::Window(WindowHostEvent::Resized {
-            width: metrics.width,
-            height: metrics.height,
-        }))?;
+        self.engine
+            .emit(HostEvent::Window(WindowHostEvent::Resized {
+                width: metrics.width,
+                height: metrics.height,
+            }))?;
         Ok(())
     }
 
@@ -425,7 +471,9 @@ impl HostPlatformRuntime {
 
     pub(crate) fn on_close_requested(&mut self) -> EngineResult<()> {
         if self.close_requested {
-            newengine_ulog_api::ulog::debug!("platform runtime: close requested ignored; shutdown already requested");
+            newengine_ulog_api::ulog::debug!(
+                "platform runtime: close requested ignored; shutdown already requested"
+            );
             return Ok(());
         }
 
@@ -448,7 +496,8 @@ impl HostPlatformRuntime {
         } else if self.fatal_bootstrap_error.is_some() {
             self.fatal_bootstrap_step_result()
         } else {
-            let bootstrap_active = self.bootstrap_stage != RuntimeBootstrapStage::Running || !self.window_ready_emitted;
+            let bootstrap_active = self.bootstrap_stage != RuntimeBootstrapStage::Running
+                || !self.window_ready_emitted;
             let result = if bootstrap_active {
                 self.step_bootstrap()
             } else {
@@ -459,7 +508,9 @@ impl HostPlatformRuntime {
                 Ok(step) => step,
                 Err(e) if bootstrap_active => {
                     let message = e.to_string();
-                    newengine_ulog_api::ulog::error!("platform runtime bootstrap: fatal startup error: {message}");
+                    newengine_ulog_api::ulog::error!(
+                        "platform runtime bootstrap: fatal startup error: {message}"
+                    );
                     self.fatal_bootstrap_error = Some(message);
                     self.fatal_bootstrap_step_result()
                 }
@@ -509,7 +560,10 @@ impl HostPlatformRuntime {
                         Ok(self.loading_step_result())
                     }
                     Err(e) => {
-                        newengine_ulog_api::ulog::error!("platform runtime: engine plugins init failed: {}", e);
+                        newengine_ulog_api::ulog::error!(
+                            "platform runtime: engine plugins init failed: {}",
+                            e
+                        );
                         Err(e)
                     }
                 }
@@ -523,37 +577,39 @@ impl HostPlatformRuntime {
                 self.bootstrap_stage = RuntimeBootstrapStage::StartEngine;
                 Ok(self.loading_step_result())
             }
-            RuntimeBootstrapStage::StartEngine => {
-                match self.engine.start_incremental_step() {
-                    Ok(outcome) => {
-                        let snapshot = outcome.snapshot;
-                        let overlay_progress = map_engine_startup_progress_to_bootstrap(
-                            snapshot.progress_01,
-                        )
-                        .clamp(START_ENGINE_BOOTSTRAP_BASE_PROGRESS, 0.94);
-                        self.set_bootstrap_overlay(
-                            snapshot.status.clone(),
-                            snapshot.detail.clone(),
-                            overlay_progress,
+            RuntimeBootstrapStage::StartEngine => match self.engine.start_incremental_step() {
+                Ok(outcome) => {
+                    let snapshot = outcome.snapshot;
+                    let overlay_progress =
+                        map_engine_startup_progress_to_bootstrap(snapshot.progress_01)
+                            .clamp(START_ENGINE_BOOTSTRAP_BASE_PROGRESS, 0.94);
+                    self.set_bootstrap_overlay(
+                        snapshot.status.clone(),
+                        snapshot.detail.clone(),
+                        overlay_progress,
+                    );
+
+                    if outcome.finished {
+                        self.started = true;
+                        newengine_ulog_api::ulog::info!(
+                            "platform runtime: engine.start incremental pump completed"
                         );
-
-                        if outcome.finished {
-                            self.started = true;
-                            newengine_ulog_api::ulog::info!("platform runtime: engine.start incremental pump completed");
-                            self.set_bootstrap_overlay(
-                                "Engine runtime started.",
-                                "Finalizing gated scene readiness and host window events.",
-                                0.90,
-                            );
-                            self.bootstrap_stage = RuntimeBootstrapStage::AnnounceEnterRuntime;
-                        }
-
-                        Ok(self.loading_step_result())
+                        self.set_bootstrap_overlay(
+                            "Engine runtime started.",
+                            "Finalizing gated scene readiness and host window events.",
+                            0.90,
+                        );
+                        self.bootstrap_stage = RuntimeBootstrapStage::AnnounceEnterRuntime;
                     }
-                    Err(e) => {
-                        newengine_ulog_api::ulog::error!("platform runtime: engine.start incremental pump failed: {}", e);
-                        Err(e)
-                    }
+
+                    Ok(self.loading_step_result())
+                }
+                Err(e) => {
+                    newengine_ulog_api::ulog::error!(
+                        "platform runtime: engine.start incremental pump failed: {}",
+                        e
+                    );
+                    Err(e)
                 }
             },
             RuntimeBootstrapStage::AnnounceEnterRuntime => {
@@ -582,7 +638,8 @@ impl HostPlatformRuntime {
                 if self.ready_overlay_frames_left == 0 {
                     self.bootstrap_stage = RuntimeBootstrapStage::Running;
                 } else {
-                    self.ready_overlay_frames_left = self.ready_overlay_frames_left.saturating_sub(1);
+                    self.ready_overlay_frames_left =
+                        self.ready_overlay_frames_left.saturating_sub(1);
                 }
                 Ok(result)
             }
@@ -608,7 +665,9 @@ impl HostPlatformRuntime {
         // before the real modal owner has updated animation/navigation state.
 
         let ui_dispatch_frame = if let Some(input) = input_frame.clone() {
-            self.engine.resources_mut().insert::<UiInputFrame>(input.clone());
+            self.engine
+                .resources_mut()
+                .insert::<UiInputFrame>(input.clone());
             match crate::platform_runtime::ui_gateway_frame::dispatch_input_frame(
                 ui_frame_index,
                 &input,
@@ -616,7 +675,9 @@ impl HostPlatformRuntime {
                 self.surface.pixels_per_point,
             )? {
                 Some(frame) => {
-                    self.engine.resources_mut().insert::<UiEventDispatchFrame>(frame.clone());
+                    self.engine
+                        .resources_mut()
+                        .insert::<UiEventDispatchFrame>(frame.clone());
                     Some(frame)
                 }
                 None => {
@@ -635,7 +696,8 @@ impl HostPlatformRuntime {
             .unwrap_or(false);
 
         if let Some(status) = self.engine.resources.get::<SceneLaunchStatus>().cloned() {
-            if status.active && matches!(self.ui_selection.active(), UiProviderKind::Plugin { .. }) {
+            if status.active && matches!(self.ui_selection.active(), UiProviderKind::Plugin { .. })
+            {
                 let overlay = self.scene_launch_overlay(&status);
                 crate::platform_runtime::ui_gateway_frame::publish_loading_overlay(
                     &overlay,
@@ -651,7 +713,8 @@ impl HostPlatformRuntime {
             screen_profile.prepare_frame(resources, ui_frame_index)
         };
 
-        let provider_ui_active = matches!(self.ui_selection.active(), UiProviderKind::Plugin { .. });
+        let provider_ui_active =
+            matches!(self.ui_selection.active(), UiProviderKind::Plugin { .. });
         let debug_overlay_active = self
             .engine
             .resources
@@ -674,7 +737,10 @@ impl HostPlatformRuntime {
             || scene_launch_active
             || screen_profile_refresh
             || ui_dispatch_refresh;
-        let provider_gameplay_hud = provider_ui_active && !self.minimized && self.surface.width > 0 && self.surface.height > 0;
+        let provider_gameplay_hud = provider_ui_active
+            && !self.minimized
+            && self.surface.width > 0
+            && self.surface.height > 0;
         let provider_ui_refresh = provider_gameplay_hud
             || provider_ui_needed
             || screen_profile_refresh
@@ -733,7 +799,10 @@ impl HostPlatformRuntime {
         if let Some(draw_list) = ui_draw {
             self.engine.resources_mut().insert(draw_list);
         } else {
-            let _ = self.engine.resources_mut().remove::<newengine_ui_api::UiDrawList>();
+            let _ = self
+                .engine
+                .resources_mut()
+                .remove::<newengine_ui_api::UiDrawList>();
         }
 
         match self.engine.step() {
@@ -756,7 +825,9 @@ impl HostPlatformRuntime {
                         return Ok(self.scene_launch_step_result(&status));
                     }
                     if matches!(self.ui_selection.active(), UiProviderKind::Plugin { .. }) {
-                        crate::platform_runtime::ui_gateway_frame::publish_loading_overlay_inactive(ui_frame_index);
+                        crate::platform_runtime::ui_gateway_frame::publish_loading_overlay_inactive(
+                            ui_frame_index,
+                        );
                     }
                 }
 
@@ -779,7 +850,6 @@ impl HostPlatformRuntime {
         }
     }
 
-
     pub(crate) fn enter_runtime_soft_degraded_step(
         &mut self,
         origin: &'static str,
@@ -796,7 +866,9 @@ impl HostPlatformRuntime {
         );
         self.runtime_soft_degraded_origin = Some(origin);
         self.runtime_soft_degraded_error = Some(message.clone());
-        self.engine.resources_mut().insert(RenderBackendStatus::degraded(origin, message));
+        self.engine
+            .resources_mut()
+            .insert(RenderBackendStatus::degraded(origin, message));
         self.runtime_soft_degraded_step_result()
     }
 
@@ -832,7 +904,6 @@ impl HostPlatformRuntime {
         self.loading_overlay_step_result(&overlay, self.runtime_soft_degraded_frames as u32)
     }
 
-
     fn scene_launch_step_result(&mut self, status: &SceneLaunchStatus) -> PlatformStepResultV1 {
         self.bootstrap_spinner_phase = self.bootstrap_spinner_phase.wrapping_add(1);
         let overlay = self.scene_launch_overlay(status);
@@ -849,7 +920,11 @@ impl HostPlatformRuntime {
                     self.ui_provider_binding().id()
                 );
             }
-            return overlay_to_step_result_with_provider(&overlay, self.bootstrap_spinner_phase, self.ui_provider_binding());
+            return overlay_to_step_result_with_provider(
+                &overlay,
+                self.bootstrap_spinner_phase,
+                self.ui_provider_binding(),
+            );
         }
 
         if self.bootstrap_spinner_phase % 120 == 1 {
@@ -857,7 +932,11 @@ impl HostPlatformRuntime {
                 "platform loading overlay: engine.ui provider unavailable; no platform-native UI renderer will be used"
             );
         }
-        overlay_to_step_result_with_provider(&overlay, self.bootstrap_spinner_phase, UiProviderBinding::None)
+        overlay_to_step_result_with_provider(
+            &overlay,
+            self.bootstrap_spinner_phase,
+            UiProviderBinding::None,
+        )
     }
 
     fn scene_launch_overlay(&self, status: &SceneLaunchStatus) -> ScreenOverlayStatus {
@@ -873,7 +952,6 @@ impl HostPlatformRuntime {
         )
     }
 
-
     fn degraded_backend_step_result(&self, status: &RenderBackendStatus) -> PlatformStepResultV1 {
         match overlay_from_render_backend_status(status) {
             Some(overlay) => self.overlay_step_result(&overlay, 0),
@@ -881,11 +959,23 @@ impl HostPlatformRuntime {
         }
     }
 
-    fn overlay_step_result(&self, overlay: &ScreenOverlayStatus, spinner_phase: u32) -> PlatformStepResultV1 {
-        overlay_to_step_result_with_provider(overlay, spinner_phase, self.overlay_provider_binding())
+    fn overlay_step_result(
+        &self,
+        overlay: &ScreenOverlayStatus,
+        spinner_phase: u32,
+    ) -> PlatformStepResultV1 {
+        overlay_to_step_result_with_provider(
+            overlay,
+            spinner_phase,
+            self.overlay_provider_binding(),
+        )
     }
 
-    fn loading_overlay_step_result(&self, overlay: &ScreenOverlayStatus, spinner_phase: u32) -> PlatformStepResultV1 {
+    fn loading_overlay_step_result(
+        &self,
+        overlay: &ScreenOverlayStatus,
+        spinner_phase: u32,
+    ) -> PlatformStepResultV1 {
         if !self.runtime_bootstrap_overlay_enabled {
             if spinner_phase % 120 == 1 {
                 newengine_ulog_api::ulog::debug!(
@@ -909,7 +999,11 @@ impl HostPlatformRuntime {
                 "bootstrap loading overlay: engine.ui unavailable; no special/native UI renderer will be used"
             );
         }
-        overlay_to_step_result_with_provider(overlay, spinner_phase, self.overlay_provider_binding())
+        overlay_to_step_result_with_provider(
+            overlay,
+            spinner_phase,
+            self.overlay_provider_binding(),
+        )
     }
 
     fn ui_provider_binding(&self) -> UiProviderBinding {
@@ -1036,9 +1130,10 @@ impl HostPlatformRuntime {
 
     #[inline]
     fn platform_window_ready(&self) -> bool {
-        self.surface.width > 0 && self.surface.height > 0 && self.bootstrap_stage != RuntimeBootstrapStage::AwaitingWindow
+        self.surface.width > 0
+            && self.surface.height > 0
+            && self.bootstrap_stage != RuntimeBootstrapStage::AwaitingWindow
     }
-
 
     fn render_backend_label(&self) -> String {
         self.engine

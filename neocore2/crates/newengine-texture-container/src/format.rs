@@ -96,7 +96,14 @@ impl TexturePixelFormat {
 
     #[inline]
     pub const fn is_srgb(self) -> bool {
-        matches!(self, Self::Rgba8Srgb | Self::Bc1RgbaSrgb | Self::Bc2RgbaSrgb | Self::Bc3RgbaSrgb | Self::Bc7RgbaSrgb)
+        matches!(
+            self,
+            Self::Rgba8Srgb
+                | Self::Bc1RgbaSrgb
+                | Self::Bc2RgbaSrgb
+                | Self::Bc3RgbaSrgb
+                | Self::Bc7RgbaSrgb
+        )
     }
 
     #[inline]
@@ -104,29 +111,43 @@ impl TexturePixelFormat {
         match self {
             Self::Rgba8Unorm | Self::Rgba8Srgb => 4,
             Self::Bc1RgbaUnorm | Self::Bc1RgbaSrgb => 8,
-            Self::Bc2RgbaUnorm | Self::Bc2RgbaSrgb | Self::Bc3RgbaUnorm | Self::Bc3RgbaSrgb | Self::Bc5RgUnorm | Self::Bc6hUf16 | Self::Bc6hSf16 | Self::Bc7RgbaUnorm | Self::Bc7RgbaSrgb => 16,
+            Self::Bc2RgbaUnorm
+            | Self::Bc2RgbaSrgb
+            | Self::Bc3RgbaUnorm
+            | Self::Bc3RgbaSrgb
+            | Self::Bc5RgUnorm
+            | Self::Bc6hUf16
+            | Self::Bc6hSf16
+            | Self::Bc7RgbaUnorm
+            | Self::Bc7RgbaSrgb => 16,
         }
     }
 
     #[inline]
     pub const fn block_extent(self) -> u32 {
-        if self.is_block_compressed() { 4 } else { 1 }
+        if self.is_block_compressed() {
+            4
+        } else {
+            1
+        }
     }
 }
 
 #[inline]
 pub fn parse_pixel_format(format: &str, name: &str) -> Result<TexturePixelFormat> {
-    TexturePixelFormat::parse(format)
-        .ok_or_else(|| TextureContainerError::InvalidFormat { name: name.to_owned(), format: format.to_owned() })
+    TexturePixelFormat::parse(format).ok_or_else(|| TextureContainerError::InvalidFormat {
+        name: name.to_owned(),
+        format: format.to_owned(),
+    })
 }
 
 #[inline]
 pub fn texture_payload_len(format: &str, width: u32, height: u32) -> Result<usize> {
     let f = parse_pixel_format(format, "<payload>")?;
     Ok(match f {
-        TexturePixelFormat::Rgba8Unorm | TexturePixelFormat::Rgba8Srgb => {
-            (width as usize).saturating_mul(height as usize).saturating_mul(4)
-        }
+        TexturePixelFormat::Rgba8Unorm | TexturePixelFormat::Rgba8Srgb => (width as usize)
+            .saturating_mul(height as usize)
+            .saturating_mul(4),
         _ => {
             let block = f.block_extent() as usize;
             let bw = (width as usize).saturating_add(block - 1) / block;
@@ -138,10 +159,14 @@ pub fn texture_payload_len(format: &str, width: u32, height: u32) -> Result<usiz
 
 #[inline]
 pub fn is_rgba8_format(format: &str) -> bool {
-    TexturePixelFormat::parse(format).map(TexturePixelFormat::is_rgba8).unwrap_or(false)
+    TexturePixelFormat::parse(format)
+        .map(TexturePixelFormat::is_rgba8)
+        .unwrap_or(false)
 }
 
 #[inline]
 pub fn is_block_compressed_format(format: &str) -> bool {
-    TexturePixelFormat::parse(format).map(TexturePixelFormat::is_block_compressed).unwrap_or(false)
+    TexturePixelFormat::parse(format)
+        .map(TexturePixelFormat::is_block_compressed)
+        .unwrap_or(false)
 }

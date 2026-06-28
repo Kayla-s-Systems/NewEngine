@@ -1,6 +1,8 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use newengine_assets::{AssetErrorKind, AssetServiceClient, RuntimeTextureAsset, RuntimeTextureFormat};
+use newengine_assets::{
+    AssetErrorKind, AssetServiceClient, RuntimeTextureAsset, RuntimeTextureFormat,
+};
 use newengine_core::render::{
     Extent2D, GpuResourceResidencyState, RenderTargetId, SamplerId, TextureDesc, TextureFormat,
     TextureId, TextureMipDataDesc, TextureUsage,
@@ -14,10 +16,10 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use super::controller::RuntimeRenderController;
-pub use super::state::PerDrawUbo;
 use super::gpu::{LitPipeline, LIT_UBO_SIZE};
 use super::material_bindings::MaterialTextureGpuResidency;
 use super::state::MaterialTextureDecodeJob;
+pub use super::state::PerDrawUbo;
 
 fn render_texture_format_from_runtime(format: RuntimeTextureFormat) -> TextureFormat {
     match format {
@@ -48,9 +50,7 @@ fn sanitize_material_texture_task_id(path: &str) -> String {
     out
 }
 
-
 impl RuntimeRenderController {
-
     fn queue_dictionary_material_texture_decode(
         &mut self,
         path: String,
@@ -73,7 +73,10 @@ impl RuntimeRenderController {
                 path,
                 message
             );
-            self.gpu.material.textures.insert(path, MaterialTextureGpuResidency::Failed { message });
+            self.gpu
+                .material
+                .textures
+                .insert(path, MaterialTextureGpuResidency::Failed { message });
             return;
         };
 
@@ -88,7 +91,10 @@ impl RuntimeRenderController {
             .with_lane(JobLane::AssetIo)
             .with_priority(JobPriority::Interactive)
             .with_frame_id(self.frame.frame_index)
-            .with_dependency_group(format!("frame.{}.asset-io.texture-decode", self.frame.frame_index))
+            .with_dependency_group(format!(
+                "frame.{}.asset-io.texture-decode",
+                self.frame.frame_index
+            ))
             .with_job_domain(job_domain::ENGINE_ASSETS)
             .with_job_pass(job_pass::TEXTURE_DECODE)
             .with_task_id(format!("render.material.texture.decode.{task_path}"));
@@ -98,10 +104,10 @@ impl RuntimeRenderController {
             *result_out.lock() = Some(decoded);
         });
 
-        self.gpu.material.texture_decode_jobs.insert(
-            path.clone(),
-            MaterialTextureDecodeJob { ticket, result },
-        );
+        self.gpu
+            .material
+            .texture_decode_jobs
+            .insert(path.clone(), MaterialTextureDecodeJob { ticket, result });
         self.gpu.material.textures.insert(
             path,
             MaterialTextureGpuResidency::CpuDecoding {
@@ -122,7 +128,9 @@ impl RuntimeRenderController {
         let (payload, layout) = texture_asset.concatenated_payload_and_layout();
         let mip_data: Vec<TextureMipDataDesc> = layout
             .into_iter()
-            .map(|mip| TextureMipDataDesc::new(mip.level, mip.width, mip.height, mip.offset, mip.byte_len))
+            .map(|mip| {
+                TextureMipDataDesc::new(mip.level, mip.width, mip.height, mip.offset, mip.byte_len)
+            })
             .collect();
 
         match r.create_texture(
@@ -157,7 +165,10 @@ impl RuntimeRenderController {
                     path,
                     message
                 );
-                self.gpu.material.textures.insert(path, MaterialTextureGpuResidency::Failed { message });
+                self.gpu
+                    .material
+                    .textures
+                    .insert(path, MaterialTextureGpuResidency::Failed { message });
             }
         }
     }
@@ -173,7 +184,13 @@ impl RuntimeRenderController {
             .material
             .texture_decode_jobs
             .iter()
-            .filter_map(|(path, job)| if job.is_complete() { Some(path.clone()) } else { None })
+            .filter_map(|(path, job)| {
+                if job.is_complete() {
+                    Some(path.clone())
+                } else {
+                    None
+                }
+            })
             .take(max_completions)
             .collect::<Vec<_>>();
 
@@ -188,7 +205,10 @@ impl RuntimeRenderController {
                     "render controller: material texture decode job completed without result path='{}'",
                     path
                 );
-                self.gpu.material.textures.insert(path, MaterialTextureGpuResidency::Failed { message });
+                self.gpu
+                    .material
+                    .textures
+                    .insert(path, MaterialTextureGpuResidency::Failed { message });
                 continue;
             };
 
@@ -206,7 +226,10 @@ impl RuntimeRenderController {
                             },
                         );
                     } else {
-                        self.gpu.material.textures.insert(path.clone(), MaterialTextureGpuResidency::Requested);
+                        self.gpu
+                            .material
+                            .textures
+                            .insert(path.clone(), MaterialTextureGpuResidency::Requested);
                     }
                     if !self.gpu.material.texture_queue.contains(&path) {
                         self.gpu.material.texture_queue.push_back(path);
@@ -221,10 +244,15 @@ impl RuntimeRenderController {
                         e,
                     );
                     match e.kind {
-                        AssetErrorKind::DecodeFailed | AssetErrorKind::UnsupportedFormat => newengine_ulog_api::ulog::debug!("{}", line),
+                        AssetErrorKind::DecodeFailed | AssetErrorKind::UnsupportedFormat => {
+                            newengine_ulog_api::ulog::debug!("{}", line)
+                        }
                         _ => newengine_ulog_api::ulog::warn!("{}", line),
                     }
-                    self.gpu.material.textures.insert(path, MaterialTextureGpuResidency::Failed { message });
+                    self.gpu
+                        .material
+                        .textures
+                        .insert(path, MaterialTextureGpuResidency::Failed { message });
                 }
             }
         }
@@ -234,7 +262,9 @@ impl RuntimeRenderController {
         if self.gpu.material.textures.contains_key(path) {
             return;
         }
-        self.gpu.material.textures
+        self.gpu
+            .material
+            .textures
             .insert(path.to_string(), MaterialTextureGpuResidency::Requested);
         self.gpu.material.texture_queue.push_back(path.to_string());
     }
@@ -252,7 +282,8 @@ impl RuntimeRenderController {
             .min(super::render_quality::MATERIAL_TEXTURE_MAX_ASYNC_DECODE_JOBS as u32);
         let max_jobs_this_pump = max_start_jobs.min(max_decode_jobs).max(1);
         let pump_started = Instant::now();
-        let decode_budget_ms = super::render_quality::MATERIAL_TEXTURE_DECODE_PUMP_BUDGET_MS.max(0.25);
+        let decode_budget_ms =
+            super::render_quality::MATERIAL_TEXTURE_DECODE_PUMP_BUDGET_MS.max(0.25);
         // Progress AssetManager's own background queue, then harvest any render-owned
         // CPU decode jobs that completed on worker threads. This function must stay
         // bounded: it may start/poll work, but must never synchronously decode a .ytd.
@@ -264,15 +295,18 @@ impl RuntimeRenderController {
             .textures
             .iter()
             .filter_map(|(path, state)| match state {
-                MaterialTextureGpuResidency::AssetLoading { requested_frame, .. }
-                    if self.frame.frame_index > *requested_frame => Some(path.clone()),
+                MaterialTextureGpuResidency::AssetLoading {
+                    requested_frame, ..
+                } if self.frame.frame_index > *requested_frame => Some(path.clone()),
                 _ => None,
             })
             .collect::<Vec<_>>();
 
         for path in loading_retry_paths {
             if !self.gpu.material.texture_queue.contains(&path) {
-                self.gpu.material.textures
+                self.gpu
+                    .material
+                    .textures
                     .insert(path.clone(), MaterialTextureGpuResidency::Requested);
                 self.gpu.material.texture_queue.push_back(path);
             }
@@ -398,7 +432,10 @@ impl RuntimeRenderController {
                 }
                 fallback
             }
-            MaterialTextureGpuResidency::AssetLoading { id_hex32, requested_frame } => {
+            MaterialTextureGpuResidency::AssetLoading {
+                id_hex32,
+                requested_frame,
+            } => {
                 let waited = self.frame.frame_index.saturating_sub(requested_frame);
                 if waited > 180 && waited % 120 == 0 {
                     newengine_ulog_api::ulog::debug!(
@@ -416,7 +453,6 @@ impl RuntimeRenderController {
             }
         }
     }
-
 
     pub(super) fn ensure_per_draw_ubo_with_binding(
         &mut self,
@@ -448,14 +484,21 @@ impl RuntimeRenderController {
             let bg = r.create_bind_group(
                 newengine_core::render::BindGroupDesc::new(lit.bgl)
                     .with_label("material_lit_entity_bg")
-                    .with_uniform0(newengine_core::render::BufferBinding::new(e.ubo, 0, LIT_UBO_SIZE))
+                    .with_uniform0(newengine_core::render::BufferBinding::new(
+                        e.ubo,
+                        0,
+                        LIT_UBO_SIZE,
+                    ))
                     .with_texture0(base_texture)
                     .with_texture1(normal_texture)
                     .with_texture2(roughness_texture)
                     .with_texture3(shadow_texture)
                     .with_sampler0(sampler),
             )?;
-            self.gpu.lifetimes.resources.retire_bind_group_after_frame(old_bg, self.frame.frame_index);
+            self.gpu
+                .lifetimes
+                .resources
+                .retire_bind_group_after_frame(old_bg, self.frame.frame_index);
             e.bg = bg;
             e.base_texture = base_texture;
             e.normal_texture = normal_texture;
@@ -478,7 +521,11 @@ impl RuntimeRenderController {
         let bg = r.create_bind_group(
             newengine_core::render::BindGroupDesc::new(lit.bgl)
                 .with_label("material_lit_entity_bg")
-                .with_uniform0(newengine_core::render::BufferBinding::new(ubo, 0, LIT_UBO_SIZE))
+                .with_uniform0(newengine_core::render::BufferBinding::new(
+                    ubo,
+                    0,
+                    LIT_UBO_SIZE,
+                ))
                 .with_texture0(base_texture)
                 .with_texture1(normal_texture)
                 .with_texture2(roughness_texture)
@@ -500,7 +547,10 @@ impl RuntimeRenderController {
         Ok(entry)
     }
 
-    pub(super) fn collect_render_lifetime_events(&mut self, r: &mut dyn newengine_core::render::RenderApi) {
+    pub(super) fn collect_render_lifetime_events(
+        &mut self,
+        r: &mut dyn newengine_core::render::RenderApi,
+    ) {
         self.gpu.lifetimes.resources.collect(r);
     }
 
@@ -540,5 +590,4 @@ impl RuntimeRenderController {
         }
         self.collect_render_lifetime_events(r);
     }
-
 }

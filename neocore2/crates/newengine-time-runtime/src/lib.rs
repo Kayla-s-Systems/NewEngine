@@ -6,8 +6,8 @@ use std::time::Instant;
 use abi_stable::std_types::{RResult, RString};
 use newengine_plugin_api::Blob;
 use newengine_service_kit::{
-    engine_gateway_provider_service_description, ok_empty_blob, ok_json,
-    payload_json, register_engine_gateway_provider_service_best_effort, EngineGatewayProviderDecl,
+    engine_gateway_provider_service_description, ok_empty_blob, ok_json, payload_json,
+    register_engine_gateway_provider_service_best_effort, EngineGatewayProviderDecl,
     JsonServiceRouter,
 };
 use newengine_time_api::{
@@ -15,8 +15,8 @@ use newengine_time_api::{
     TimeDueEventsV1, TimeFixedStepRequestV1, TimeGameClockSetRequestV1, TimePauseRequestV1,
     TimeRealClockV1, TimeReplayClockSetRequestV1, TimeReplayClockV1, TimeScaleRequestV1,
     TimeScheduledEventV1, TimeServiceInfoV1, TimeSimulationClockV1, TimeSnapshotV1, TimeTimelineV1,
-    ENGINE_TIME_SERVICE_ID, TIME_BACKEND_CAPABILITY_ID, TIME_RUNTIME_CONTRACT,
-    TIME_SERVICE_ID, TIME_SERVICE_METHODS,
+    ENGINE_TIME_SERVICE_ID, TIME_BACKEND_CAPABILITY_ID, TIME_RUNTIME_CONTRACT, TIME_SERVICE_ID,
+    TIME_SERVICE_METHODS,
 };
 use parking_lot::Mutex;
 use std::sync::{Arc, OnceLock};
@@ -99,22 +99,24 @@ impl RuntimeHostedTimeState {
             h if h < 17.0 => "day",
             h if h < 20.0 => "dusk",
             _ => "night",
-        }.to_owned()
+        }
+        .to_owned()
     }
 
     fn next_ai_decision_tick(&self) -> u64 {
         let interval = self.ai_decision_tick_interval.max(1) as u64;
         let rem = self.tick % interval;
-        if rem == 0 { self.tick } else { self.tick + (interval - rem) }
+        if rem == 0 {
+            self.tick
+        } else {
+            self.tick + (interval - rem)
+        }
     }
 
     fn ai_deterministic_key(&self) -> String {
         format!(
             "ai-time:v1:seed={:016x}:day={}:tick={}:frame={}",
-            self.replay_seed,
-            self.day_index,
-            self.tick,
-            self.replay_frame,
+            self.replay_seed, self.day_index, self.tick, self.replay_frame,
         )
     }
 
@@ -198,7 +200,10 @@ impl RuntimeHostedTimeState {
 
     fn begin_frame(&mut self, request: TimeBeginFrameRequestV1) -> TimeSnapshotV1 {
         let now = Instant::now();
-        let raw_delta_ns = now.duration_since(self.last).as_nanos().min(u128::from(u64::MAX)) as u64;
+        let raw_delta_ns = now
+            .duration_since(self.last)
+            .as_nanos()
+            .min(u128::from(u64::MAX)) as u64;
         self.last = now;
         self.frame_index = request.frame_index;
         if request.fixed_delta_ns > 0 {
@@ -227,7 +232,9 @@ impl RuntimeHostedTimeState {
         self.accumulator_ns = if self.paused {
             0
         } else {
-            self.accumulator_ns.saturating_add(scaled_delta_ns).min(accumulator_cap)
+            self.accumulator_ns
+                .saturating_add(scaled_delta_ns)
+                .min(accumulator_cap)
         };
         self.ticks_to_run = if self.fixed_delta_ns == 0 || self.paused {
             0
@@ -291,8 +298,14 @@ impl RuntimeHostedTimeState {
             .scheduled_events
             .iter()
             .filter_map(|(id, event)| {
-                let due_tick = event.due_simulation_tick.map(|tick| tick <= self.tick).unwrap_or(false);
-                let due_time = event.due_monotonic_ns.map(|ns| ns <= now_ns).unwrap_or(false);
+                let due_tick = event
+                    .due_simulation_tick
+                    .map(|tick| tick <= self.tick)
+                    .unwrap_or(false);
+                let due_time = event
+                    .due_monotonic_ns
+                    .map(|ns| ns <= now_ns)
+                    .unwrap_or(false);
                 (due_tick || due_time).then_some(id.clone())
             })
             .collect::<Vec<_>>();
@@ -327,7 +340,9 @@ fn invoke(state: &mut RuntimeHostedTimeState, payload: Blob) -> RResult<Blob, RS
         time_method::SNAPSHOT_V1 => ok_json(state.snapshot()),
         time_method::DESCRIBE_CLOCK_V1 => ok_json(info()),
         time_method::AI_CONTEXT_V1 => ok_json(state.ai_context()),
-        other => RResult::RErr(RString::from(format!("engine.time: unknown invoke method '{other}'"))),
+        other => RResult::RErr(RString::from(format!(
+            "engine.time: unknown invoke method '{other}'"
+        ))),
     }
 }
 
@@ -348,64 +363,95 @@ fn service() -> newengine_plugin_api::ServiceV1Dyn<'static> {
         .info(info)
         .get_json(time_method::SNAPSHOT_V1, |state| state.snapshot())
         .get_json(time_method::FRAME_V1, |state| state.snapshot())
-        .post_json::<TimeBeginFrameRequestV1, TimeSnapshotV1, _>(time_method::BEGIN_FRAME_V1, |state, request| state.begin_frame(request))
+        .post_json::<TimeBeginFrameRequestV1, TimeSnapshotV1, _>(
+            time_method::BEGIN_FRAME_V1,
+            |state, request| state.begin_frame(request),
+        )
         .get_json(time_method::ADVANCE_FIXED_V1, |state| state.advance_fixed())
         .get_json(time_method::FIXED_TICK_V1, |state| state.advance_fixed())
         .get_json(time_method::GAME_CLOCK_V1, |state| state.snapshot().game)
-        .post_json::<TimePauseRequestV1, TimeSnapshotV1, _>(time_method::PAUSE_DOMAIN_V1, |state, request| {
-            state.paused = request.paused;
-            state.snapshot()
-        })
+        .post_json::<TimePauseRequestV1, TimeSnapshotV1, _>(
+            time_method::PAUSE_DOMAIN_V1,
+            |state, request| {
+                state.paused = request.paused;
+                state.snapshot()
+            },
+        )
         .get_json(time_method::TIMELINE_V1, |state| state.timeline())
-        .get_json(time_method::REPLAY_CLOCK_V1, |state| state.snapshot().replay)
-        .post_json::<TimeScaleRequestV1, TimeSnapshotV1, _>(time_method::SET_SCALE_V1, |state, request| {
-            state.scale = request.scale.clamp(0.0, 64.0);
-            state.snapshot()
+        .get_json(time_method::REPLAY_CLOCK_V1, |state| {
+            state.snapshot().replay
         })
-        .post_json::<TimePauseRequestV1, TimeSnapshotV1, _>(time_method::SET_PAUSE_V1, |state, request| {
-            state.paused = request.paused;
-            state.snapshot()
-        })
-        .post_json::<TimeGameClockSetRequestV1, TimeSnapshotV1, _>(time_method::SET_GAME_CLOCK_V1, |state, request| {
-            state.day_index = request.day_index;
-            state.seconds_of_day = request.seconds_of_day.rem_euclid(86_400.0);
-            if request.seconds_per_game_day > f64::EPSILON {
-                state.seconds_per_game_day = request.seconds_per_game_day;
-            }
-            state.game_time_scale = request.time_scale.max(0.0);
-            state.snapshot()
-        })
-        .post_json::<TimeFixedStepRequestV1, TimeSnapshotV1, _>(time_method::SET_FIXED_STEP_V1, |state, request| {
-            if request.fixed_delta_ns > 0 {
-                state.fixed_delta_ns = request.fixed_delta_ns;
-            }
-            state.max_fixed_ticks_per_frame = 1;
-            state.ai_decision_tick_interval = request.ai_decision_tick_interval.max(1);
-            state.ai_tick_budget_ns = request.ai_tick_budget_ns.max(1_000);
-            state.snapshot()
-        })
-        .post_json::<TimeReplayClockSetRequestV1, TimeSnapshotV1, _>(time_method::SET_REPLAY_CLOCK_V1, |state, request| {
-            state.replay_deterministic = request.deterministic;
-            state.replay_seed = request.seed;
-            state.replay_frame = request.replay_frame;
-            state.snapshot()
-        })
+        .post_json::<TimeScaleRequestV1, TimeSnapshotV1, _>(
+            time_method::SET_SCALE_V1,
+            |state, request| {
+                state.scale = request.scale.clamp(0.0, 64.0);
+                state.snapshot()
+            },
+        )
+        .post_json::<TimePauseRequestV1, TimeSnapshotV1, _>(
+            time_method::SET_PAUSE_V1,
+            |state, request| {
+                state.paused = request.paused;
+                state.snapshot()
+            },
+        )
+        .post_json::<TimeGameClockSetRequestV1, TimeSnapshotV1, _>(
+            time_method::SET_GAME_CLOCK_V1,
+            |state, request| {
+                state.day_index = request.day_index;
+                state.seconds_of_day = request.seconds_of_day.rem_euclid(86_400.0);
+                if request.seconds_per_game_day > f64::EPSILON {
+                    state.seconds_per_game_day = request.seconds_per_game_day;
+                }
+                state.game_time_scale = request.time_scale.max(0.0);
+                state.snapshot()
+            },
+        )
+        .post_json::<TimeFixedStepRequestV1, TimeSnapshotV1, _>(
+            time_method::SET_FIXED_STEP_V1,
+            |state, request| {
+                if request.fixed_delta_ns > 0 {
+                    state.fixed_delta_ns = request.fixed_delta_ns;
+                }
+                state.max_fixed_ticks_per_frame = 1;
+                state.ai_decision_tick_interval = request.ai_decision_tick_interval.max(1);
+                state.ai_tick_budget_ns = request.ai_tick_budget_ns.max(1_000);
+                state.snapshot()
+            },
+        )
+        .post_json::<TimeReplayClockSetRequestV1, TimeSnapshotV1, _>(
+            time_method::SET_REPLAY_CLOCK_V1,
+            |state, request| {
+                state.replay_deterministic = request.deterministic;
+                state.replay_seed = request.seed;
+                state.replay_frame = request.replay_frame;
+                state.snapshot()
+            },
+        )
         .get_json(time_method::AI_CONTEXT_V1, |state| state.ai_context())
-        .post_json::<TimeScheduledEventV1, TimeScheduledEventV1, _>(time_method::SCHEDULE_EVENT_V1, |state, event| {
-            let mut event = event;
-            if event.id.trim().is_empty() {
-                event.id = format!("time.event.{}", state.scheduled_events.len() + 1);
-            }
-            state.scheduled_events.insert(event.id.clone(), event.clone());
-            event
-        })
-        .post_json::<TimeCancelEventRequestV1, TimeDueEventsV1, _>(time_method::CANCEL_EVENT_V1, |state, request| {
-            let mut events = Vec::new();
-            if let Some(event) = state.scheduled_events.remove(request.id.trim()) {
-                events.push(event);
-            }
-            TimeDueEventsV1 { events }
-        })
+        .post_json::<TimeScheduledEventV1, TimeScheduledEventV1, _>(
+            time_method::SCHEDULE_EVENT_V1,
+            |state, event| {
+                let mut event = event;
+                if event.id.trim().is_empty() {
+                    event.id = format!("time.event.{}", state.scheduled_events.len() + 1);
+                }
+                state
+                    .scheduled_events
+                    .insert(event.id.clone(), event.clone());
+                event
+            },
+        )
+        .post_json::<TimeCancelEventRequestV1, TimeDueEventsV1, _>(
+            time_method::CANCEL_EVENT_V1,
+            |state, request| {
+                let mut events = Vec::new();
+                if let Some(event) = state.scheduled_events.remove(request.id.trim()) {
+                    events.push(event);
+                }
+                TimeDueEventsV1 { events }
+            },
+        )
         .get_json(time_method::DUE_EVENTS_V1, |state| state.due_events())
         .get_json(time_method::DESCRIBE_CLOCK_V1, |_state| info())
         .blob(time_method::INVOKE_JSON, invoke)

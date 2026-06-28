@@ -2,8 +2,8 @@
 #![allow(non_local_definitions)]
 
 pub mod capability;
-pub mod editor;
 pub mod config;
+pub mod editor;
 pub mod host;
 pub mod module;
 pub mod root;

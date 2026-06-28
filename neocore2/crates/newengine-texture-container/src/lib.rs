@@ -9,32 +9,42 @@
 //! supported for UI/editor tooling. `.ytd` never stores raw source-image
 //! paths, authoring provenance or JSON directory data.
 
+pub mod bcn;
 pub mod binary_directory;
 pub mod builder;
-pub mod storage;
-pub mod bcn;
 pub mod dds;
-pub mod format;
 pub mod dictionary;
 pub mod error;
+pub mod format;
 pub mod header;
 pub mod manifest;
 pub mod mips;
 pub mod names;
 pub mod selector;
+pub mod storage;
 
-pub use builder::{pack, pack_encoded, pack_encoded_with_options, pack_with_options, TextureBuildEntry, TextureEncodedBuildEntry};
-pub use storage::{TextureBuildOptions, TextureDataCompression, FLAG_DATA_RAW, FLAG_DATA_ZSTD};
 pub use bcn::{decode_bcn_to_rgba8, encode_rgba8_mips_to_bcn, infer_bcn_format, BcnEncodeError};
-pub use dds::{write_dds_rgba8, write_dds_rgba8_mip_chain, write_dds_runtime_mip_chain, DdsExportError};
-pub use format::{is_block_compressed_format, is_rgba8_format, parse_pixel_format, texture_payload_len, TexturePixelFormat};
+pub use builder::{
+    pack, pack_encoded, pack_encoded_with_options, pack_with_options, TextureBuildEntry,
+    TextureEncodedBuildEntry,
+};
+pub use dds::{
+    write_dds_rgba8, write_dds_rgba8_mip_chain, write_dds_runtime_mip_chain, DdsExportError,
+};
 pub use dictionary::{parse, parse_manifest_only, TextureDictionary, TextureEntryView};
 pub use error::{Result, TextureContainerError};
+pub use format::{
+    is_block_compressed_format, is_rgba8_format, parse_pixel_format, texture_payload_len,
+    TexturePixelFormat,
+};
 pub use header::HeaderV2;
 pub use manifest::{TextureDictionaryManifest, TextureEntryMeta, TextureMipMeta};
 pub use mips::{generate_rgba8_mips, rgba8_len, TextureEncodedMipData, TextureMipData};
-pub use names::{infer_color_space_from_name, normalize_color_space, normalize_texture_name, stable_name_hash64};
+pub use names::{
+    infer_color_space_from_name, normalize_color_space, normalize_texture_name, stable_name_hash64,
+};
 pub use selector::{TextureDictionarySelector, TextureSelectorError};
+pub use storage::{TextureBuildOptions, TextureDataCompression, FLAG_DATA_RAW, FLAG_DATA_ZSTD};
 
 /// Inner payload magic for TextureDictionaryPayloadV1 stored inside NEF8 .ytd bodies.
 pub const TEXTURE_DICTIONARY_PAYLOAD_MAGIC: [u8; 4] = *b"NETD";
@@ -44,12 +54,10 @@ pub const VERSION_V2: u16 = 2;
 pub const HEADER_LEN: usize = 64;
 pub const EXTENSION: &str = "ytd";
 pub use format::{
-    PIXEL_FORMAT_BC1_RGBA_SRGB, PIXEL_FORMAT_BC1_RGBA_UNORM,
-    PIXEL_FORMAT_BC2_RGBA_SRGB, PIXEL_FORMAT_BC2_RGBA_UNORM,
-    PIXEL_FORMAT_BC3_RGBA_SRGB, PIXEL_FORMAT_BC3_RGBA_UNORM,
-    PIXEL_FORMAT_BC5_RG_UNORM, PIXEL_FORMAT_BC6H_SF16,
-    PIXEL_FORMAT_BC6H_UF16, PIXEL_FORMAT_BC7_RGBA_SRGB,
-    PIXEL_FORMAT_BC7_RGBA_UNORM, PIXEL_FORMAT_RGBA8_SRGB,
+    PIXEL_FORMAT_BC1_RGBA_SRGB, PIXEL_FORMAT_BC1_RGBA_UNORM, PIXEL_FORMAT_BC2_RGBA_SRGB,
+    PIXEL_FORMAT_BC2_RGBA_UNORM, PIXEL_FORMAT_BC3_RGBA_SRGB, PIXEL_FORMAT_BC3_RGBA_UNORM,
+    PIXEL_FORMAT_BC5_RG_UNORM, PIXEL_FORMAT_BC6H_SF16, PIXEL_FORMAT_BC6H_UF16,
+    PIXEL_FORMAT_BC7_RGBA_SRGB, PIXEL_FORMAT_BC7_RGBA_UNORM, PIXEL_FORMAT_RGBA8_SRGB,
     PIXEL_FORMAT_RGBA8_UNORM,
 };
 pub const COLOR_SPACE_LINEAR: &str = "linear";
@@ -78,7 +86,11 @@ pub(crate) fn slice_checked(bytes: &[u8], offset: u64, len: u64) -> std::result:
 }
 
 #[inline]
-pub(crate) fn slice_checked_len(total_len: usize, offset: u64, len: u64) -> std::result::Result<usize, ()> {
+pub(crate) fn slice_checked_len(
+    total_len: usize,
+    offset: u64,
+    len: u64,
+) -> std::result::Result<usize, ()> {
     let start = offset as usize;
     let len_usize = len as usize;
     let end = start.checked_add(len_usize).ok_or(())?;

@@ -12,7 +12,6 @@ use crate::startup_status::{
     EngineStartupSystemStatus,
 };
 
-
 impl<E: Send + 'static> Engine<E> {
     /// Compatibility entry point: drives the real incremental startup pump to
     /// completion in the current thread. Platform hosts should prefer
@@ -61,7 +60,11 @@ impl<E: Send + 'static> Engine<E> {
             return Ok(EngineStartupStepOutcome::running(snapshot));
         }
 
-        let phase = self.incremental_startup.as_ref().map(|s| s.phase).unwrap_or(EngineStartupStepPhase::Idle);
+        let phase = self
+            .incremental_startup
+            .as_ref()
+            .map(|s| s.phase)
+            .unwrap_or(EngineStartupStepPhase::Idle);
         match phase {
             EngineStartupStepPhase::Idle => {
                 self.set_incremental_phase(EngineStartupStepPhase::EnterSystemInit);
@@ -88,11 +91,13 @@ impl<E: Send + 'static> Engine<E> {
                         e,
                     );
                 }
-                self.set_incremental_phase(if matches!(self.module_fault_tolerance, ModuleFaultTolerance::Strict) {
-                    EngineStartupStepPhase::ValidateApiContracts
-                } else {
-                    EngineStartupStepPhase::EnterGameInit
-                });
+                self.set_incremental_phase(
+                    if matches!(self.module_fault_tolerance, ModuleFaultTolerance::Strict) {
+                        EngineStartupStepPhase::ValidateApiContracts
+                    } else {
+                        EngineStartupStepPhase::EnterGameInit
+                    },
+                );
                 let snapshot = self.make_startup_snapshot(
                     EngineStartupPhase::SystemInit,
                     "Core FSM entered init-system.",
@@ -148,12 +153,18 @@ impl<E: Send + 'static> Engine<E> {
                 let result = match self.module_fault_tolerance {
                     ModuleFaultTolerance::Strict => {
                         planner::build_strict_module_order(&self.modules).map(|order| {
-                            planner::reorder_slots_by_order(std::mem::take(&mut self.modules), &order)
+                            planner::reorder_slots_by_order(
+                                std::mem::take(&mut self.modules),
+                                &order,
+                            )
                         })
                     }
                     ModuleFaultTolerance::Resilient => {
                         let plan = planner::build_resilient_module_plan(&self.modules);
-                        Ok(planner::partition_slots_by_resilient_plan(std::mem::take(&mut self.modules), plan))
+                        Ok(planner::partition_slots_by_resilient_plan(
+                            std::mem::take(&mut self.modules),
+                            plan,
+                        ))
                     }
                 };
 
@@ -236,7 +247,10 @@ impl<E: Send + 'static> Engine<E> {
                 let snapshot = self.make_startup_snapshot(
                     EngineStartupPhase::RuntimePlugins,
                     "Runtime plugins loaded.",
-                    format!("{} plugin descriptor(s) are visible to the host.", self.plugins.snapshot().len()),
+                    format!(
+                        "{} plugin descriptor(s) are visible to the host.",
+                        self.plugins.snapshot().len()
+                    ),
                     0.82,
                     None,
                     self.modules.len(),
@@ -352,7 +366,11 @@ impl<E: Send + 'static> Engine<E> {
 
     fn start_incremental_init_module(&mut self) -> EngineResult<EngineStartupStepOutcome> {
         let total = self.modules.len();
-        let mut index = self.incremental_startup.as_ref().map(|s| s.index).unwrap_or(0);
+        let mut index = self
+            .incremental_startup
+            .as_ref()
+            .map(|s| s.index)
+            .unwrap_or(0);
 
         while index < total {
             self.sync_shutdown_state();
@@ -432,9 +450,10 @@ impl<E: Send + 'static> Engine<E> {
                     }
                     return Ok(EngineStartupStepOutcome::running(snapshot));
                 }
-                Err(err) => match self.module_fault_tolerance {
-                    ModuleFaultTolerance::Strict => {
-                        newengine_ulog_api::ulog::error!(
+                Err(err) => {
+                    match self.module_fault_tolerance {
+                        ModuleFaultTolerance::Strict => {
+                            newengine_ulog_api::ulog::error!(
                             "startup fsm: module init failed module='{}' index={} total={} elapsed_ms={} tolerance=strict err='{}'",
                             module_id,
                             index + 1,
@@ -442,13 +461,13 @@ impl<E: Send + 'static> Engine<E> {
                             init_ms,
                             err
                         );
-                        let initialized = self
-                            .incremental_startup
-                            .as_ref()
-                            .map(|s| s.initialized)
-                            .unwrap_or(index);
-                        self.shutdown_initialized_modules(initialized);
-                        return self.fail_incremental_startup(
+                            let initialized = self
+                                .incremental_startup
+                                .as_ref()
+                                .map(|s| s.initialized)
+                                .unwrap_or(index);
+                            self.shutdown_initialized_modules(initialized);
+                            return self.fail_incremental_startup(
                             EngineStartupPhase::ModuleInit,
                             format!("Module init failed: {module_id}"),
                             format!("Strict startup stopped while initializing module '{module_id}'."),
@@ -456,10 +475,10 @@ impl<E: Send + 'static> Engine<E> {
                             Some(module_id.to_owned()),
                             EngineError::with_module_stage(module_id, ModuleStage::Init, err),
                         );
-                    }
-                    ModuleFaultTolerance::Resilient => {
-                        let reason = format!("init failed: {err}");
-                        newengine_ulog_api::ulog::error!(
+                        }
+                        ModuleFaultTolerance::Resilient => {
+                            let reason = format!("init failed: {err}");
+                            newengine_ulog_api::ulog::error!(
                             "startup fsm: module init failed module='{}' index={} total={} elapsed_ms={} tolerance=resilient err='{}'",
                             module_id,
                             index + 1,
@@ -467,25 +486,26 @@ impl<E: Send + 'static> Engine<E> {
                             init_ms,
                             err
                         );
-                        self.modules[index].disable(reason.clone());
-                        self.shutdown_slot_by_index(index);
-                        index += 1;
-                        if let Some(state) = &mut self.incremental_startup {
-                            state.index = index;
+                            self.modules[index].disable(reason.clone());
+                            self.shutdown_slot_by_index(index);
+                            index += 1;
+                            if let Some(state) = &mut self.incremental_startup {
+                                state.index = index;
+                            }
+                            let snapshot = self.make_startup_snapshot(
+                                EngineStartupPhase::ModuleInit,
+                                format!("Module disabled: {module_id}"),
+                                format!("Resilient startup disabled '{module_id}': {reason}"),
+                                self.module_init_progress(index, total),
+                                Some(module_id.to_owned()),
+                                index,
+                                total,
+                            );
+                            self.publish_startup_snapshot(snapshot.clone());
+                            return Ok(EngineStartupStepOutcome::running(snapshot));
                         }
-                        let snapshot = self.make_startup_snapshot(
-                            EngineStartupPhase::ModuleInit,
-                            format!("Module disabled: {module_id}"),
-                            format!("Resilient startup disabled '{module_id}': {reason}"),
-                            self.module_init_progress(index, total),
-                            Some(module_id.to_owned()),
-                            index,
-                            total,
-                        );
-                        self.publish_startup_snapshot(snapshot.clone());
-                        return Ok(EngineStartupStepOutcome::running(snapshot));
                     }
-                },
+                }
             }
         }
 
@@ -555,13 +575,13 @@ impl<E: Send + 'static> Engine<E> {
         module_total: usize,
         plugin_count: usize,
     ) -> Vec<EngineStartupSystemStatus> {
-        let modules_phase = startup_system_phase(
-            phase == EngineStartupPhase::ModuleInit,
-            progress_01,
-            0.70,
-        );
+        let modules_phase =
+            startup_system_phase(phase == EngineStartupPhase::ModuleInit, progress_01, 0.70);
         let plugins_phase = startup_system_phase(
-            matches!(phase, EngineStartupPhase::RuntimePlugins | EngineStartupPhase::PluginStart),
+            matches!(
+                phase,
+                EngineStartupPhase::RuntimePlugins | EngineStartupPhase::PluginStart
+            ),
             progress_01,
             0.88,
         );
@@ -668,7 +688,11 @@ impl<E: Send + 'static> Engine<E> {
             progress_01,
             error
         );
-        let module_index = self.incremental_startup.as_ref().map(|s| s.index).unwrap_or(0);
+        let module_index = self
+            .incremental_startup
+            .as_ref()
+            .map(|s| s.index)
+            .unwrap_or(0);
         let module_total = self.modules.len();
         let snapshot = EngineStartupSnapshot::failed(
             phase,
@@ -793,7 +817,11 @@ impl<E: Send + 'static> Engine<E> {
                     "startup graph: module gated module='{}' origin='{}' missing='{}'",
                     module_id,
                     origin,
-                    if missing.is_empty() { "-" } else { missing.as_str() },
+                    if missing.is_empty() {
+                        "-"
+                    } else {
+                        missing.as_str()
+                    },
                 );
                 continue;
             }
@@ -829,7 +857,11 @@ impl<E: Send + 'static> Engine<E> {
                     }
                     ModuleFaultTolerance::Resilient => {
                         let reason = format!("start failed: {err}");
-                        newengine_ulog_api::ulog::error!("engine: module start failed: {} ({})", module_id, reason);
+                        newengine_ulog_api::ulog::error!(
+                            "engine: module start failed: {} ({})",
+                            module_id,
+                            reason
+                        );
                         self.modules[i].disable(reason);
                         self.shutdown_slot_by_index(i);
                         continue;
@@ -881,7 +913,6 @@ impl<E: Send + 'static> Engine<E> {
         self.modules[index].shutdown_called = true;
         self.modules[index].state = ModuleState::Disabled;
     }
-
 }
 #[inline]
 fn startup_system_phase(

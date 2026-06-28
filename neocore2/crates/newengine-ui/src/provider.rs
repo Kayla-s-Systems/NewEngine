@@ -86,7 +86,6 @@ pub enum UiProviderKind {
     Plugin { service_id: String },
 }
 
-
 impl UiProviderKind {
     /// Build a provider kind from a startup-config plugin id.
     ///

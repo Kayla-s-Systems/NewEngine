@@ -8,7 +8,8 @@ pub const INPUT_CONTEXTS_BACKEND_CAPABILITY_ID: &str = "input.contexts.backend";
 
 pub const INPUT_CONTEXTS_METHOD_INFO: &str = newengine_service_api::SERVICE_METHOD_INFO_JSON;
 pub const INPUT_CONTEXTS_METHOD_INVOKE: &str = newengine_service_api::SERVICE_METHOD_INVOKE_JSON;
-pub const INPUT_CONTEXTS_METHOD_SHUTDOWN_V1: &str = newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1;
+pub const INPUT_CONTEXTS_METHOD_SHUTDOWN_V1: &str =
+    newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1;
 pub const INPUT_CONTEXTS_METHOD_STACK_JSON_V1: &str = "stack_json_v1";
 pub const INPUT_CONTEXTS_METHOD_PUSH_JSON_V1: &str = "push_json_v1";
 pub const INPUT_CONTEXTS_METHOD_POP_JSON_V1: &str = "pop_json_v1";
@@ -31,7 +32,9 @@ pub enum InputCapturePolicy {
 
 impl Default for InputCapturePolicy {
     #[inline]
-    fn default() -> Self { Self::ObserveOnly }
+    fn default() -> Self {
+        Self::ObserveOnly
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -44,7 +47,9 @@ pub enum InputContextLifetime {
 
 impl Default for InputContextLifetime {
     #[inline]
-    fn default() -> Self { Self::Modal }
+    fn default() -> Self {
+        Self::Modal
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -97,7 +102,8 @@ pub struct InputContextStack {
 impl InputContextStack {
     pub fn canonicalized(mut self) -> Self {
         self.contexts.retain(|ctx| !ctx.id.trim().is_empty());
-        self.contexts.sort_by(|a, b| b.priority.cmp(&a.priority).then_with(|| a.id.cmp(&b.id)));
+        self.contexts
+            .sort_by(|a, b| b.priority.cmp(&a.priority).then_with(|| a.id.cmp(&b.id)));
         self
     }
 }
@@ -115,7 +121,11 @@ impl Default for InputContextsServiceInfo {
     fn default() -> Self {
         Self {
             protocol: "newengine.input-contexts/v1".to_owned(),
-            features: vec!["context-stack".to_owned(), "modal-capture".to_owned(), "priority-consume-policy".to_owned()],
+            features: vec![
+                "context-stack".to_owned(),
+                "modal-capture".to_owned(),
+                "priority-consume-policy".to_owned(),
+            ],
             methods: vec![
                 INPUT_CONTEXTS_METHOD_INFO.to_owned(),
                 INPUT_CONTEXTS_METHOD_INVOKE.to_owned(),
@@ -176,4 +186,6 @@ impl InputCaptureStateV1 {
 }
 
 #[inline]
-fn default_true() -> bool { true }
+fn default_true() -> bool {
+    true
+}

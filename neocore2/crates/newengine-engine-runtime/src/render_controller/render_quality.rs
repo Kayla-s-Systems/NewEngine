@@ -39,7 +39,6 @@ pub(crate) const MATERIAL_TEXTURE_MAX_ASYNC_DECODE_JOBS: usize = 6;
 /// warmup instead of doing every heavy pass on frame one.
 pub(crate) const SHADOW_WARMUP_DEFER_FRAMES: u8 = 0;
 
-
 #[inline]
 pub(crate) const fn shadow_refresh_period_frames() -> u64 {
     // Stable CSM should not refresh every frame by default. Runtime overrides

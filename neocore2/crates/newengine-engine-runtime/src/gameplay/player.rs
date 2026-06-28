@@ -126,13 +126,20 @@ fn spawn_fallback_player_visual(
         Transform {
             position: Vec3::ZERO,
             rotation: Quat::IDENTITY,
-            scale: Vec3::new(tuning.visual_radius, tuning.visual_half_height, tuning.visual_radius),
+            scale: Vec3::new(
+                tuning.visual_radius,
+                tuning.visual_half_height,
+                tuning.visual_radius,
+            ),
         },
     );
-    let _ = world.insert(visual, Primitive {
-        id: prim_builtins::ID_CAPSULE,
-        color: [0.30, 0.72, 0.98, 1.0],
-    });
+    let _ = world.insert(
+        visual,
+        Primitive {
+            id: prim_builtins::ID_CAPSULE,
+            color: [0.30, 0.72, 0.98, 1.0],
+        },
+    );
     let _ = world.insert(visual, GameplayActor);
     let _ = world.insert(
         visual,
@@ -228,7 +235,12 @@ pub fn apply_player_input(
         applied = true;
     }
     if applied {
-        emit_player_event(world, player, PlayerEventKind::InputApplied, "local input sampled");
+        emit_player_event(
+            world,
+            player,
+            PlayerEventKind::InputApplied,
+            "local input sampled",
+        );
     }
 }
 
@@ -269,10 +281,12 @@ pub fn attach_active_camera_to_player(world: &mut World, camera: EntityId, playe
         let rig = world
             .get::<Transform>(camera)
             .copied()
-            .map(|t| CameraRigComp(newengine_camera::CameraRig {
-                position: t.position,
-                rotation: t.rotation,
-            }))
+            .map(|t| {
+                CameraRigComp(newengine_camera::CameraRig {
+                    position: t.position,
+                    rotation: t.rotation,
+                })
+            })
             .unwrap_or_default();
         let _ = world.insert(camera, rig);
     }

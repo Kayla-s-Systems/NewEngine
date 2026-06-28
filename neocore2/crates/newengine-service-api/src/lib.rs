@@ -113,7 +113,9 @@ pub fn normalize_service_kind(value: &str) -> Option<String> {
 
 #[inline]
 pub fn engine_gateway_domain(gateway_id: &str) -> Option<String> {
-    normalize_engine_gateway_id(gateway_id)?.strip_prefix(ENGINE_SERVICE_GATEWAY_PREFIX).map(str::to_owned)
+    normalize_engine_gateway_id(gateway_id)?
+        .strip_prefix(ENGINE_SERVICE_GATEWAY_PREFIX)
+        .map(str::to_owned)
 }
 
 #[inline]
@@ -209,7 +211,12 @@ impl BackendServiceSpec {
         provider_service_id: &'static str,
         backend_capability_id: &'static str,
     ) -> Self {
-        Self { domain, engine_gateway_id, provider_service_id, backend_capability_id }
+        Self {
+            domain,
+            engine_gateway_id,
+            provider_service_id,
+            backend_capability_id,
+        }
     }
 }
 
@@ -276,7 +283,8 @@ impl BackendRouteDescriptor {
     #[inline]
     pub fn provider_route(mut self, provider_route: &'static str) -> Self {
         self.provider_route = Some(provider_route);
-        self.system_tags.push(system_tag::PROVIDER_IMPLEMENTATION_ROUTE);
+        self.system_tags
+            .push(system_tag::PROVIDER_IMPLEMENTATION_ROUTE);
         self
     }
 
@@ -286,7 +294,8 @@ impl BackendRouteDescriptor {
     /// the root engine API gateway (for example `engine.ui`), while the personal
     /// implementation identity should be stored with `provider_route()`.
     pub fn provider_implementation_route(mut self) -> Self {
-        self.system_tags.push(system_tag::PROVIDER_IMPLEMENTATION_ROUTE);
+        self.system_tags
+            .push(system_tag::PROVIDER_IMPLEMENTATION_ROUTE);
         self
     }
 
@@ -506,11 +515,17 @@ impl EngineServiceKind {
             "assets.inspect" | "assets_inspect" => Some(Self::AssetInspect),
             "assets.edit" | "assets_edit" => Some(Self::AssetEdit),
             "assets.packages" | "assets_packages" => Some(Self::AssetPackages),
-            "assets.listfiles" | "assets_listfiles" | "assets.list_files" | "assets_list_files" => Some(Self::AssetListFiles),
+            "assets.listfiles" | "assets_listfiles" | "assets.list_files" | "assets_list_files" => {
+                Some(Self::AssetListFiles)
+            }
             "assets.uid" | "assets_uid" => Some(Self::AssetUid),
             "assets.dependencies" | "assets_dependencies" => Some(Self::AssetDependencies),
-            "assets.import_queue" | "assets_import_queue" | "assets.import-queue" => Some(Self::AssetImportQueue),
-            "assets.package_writer" | "assets_package_writer" | "assets.package-writer" => Some(Self::AssetPackageWriter),
+            "assets.import_queue" | "assets_import_queue" | "assets.import-queue" => {
+                Some(Self::AssetImportQueue)
+            }
+            "assets.package_writer" | "assets_package_writer" | "assets.package-writer" => {
+                Some(Self::AssetPackageWriter)
+            }
             "assets.maps" | "assets_maps" => Some(Self::AssetMaps),
             "assets.validation" | "assets_validation" => Some(Self::AssetValidation),
             "assets.ui" | "assets_ui" => Some(Self::AssetUi),
@@ -556,14 +571,17 @@ impl EngineServiceKind {
             "entity" => Some(Self::Entity),
             "plugin_host" | "plugin-host" | "plugin.host" => Some(Self::PluginHost),
             "abi" => Some(Self::Abi),
-            "gateway_registry" | "gateway-registry" | "gateway.registry" => Some(Self::GatewayRegistry),
+            "gateway_registry" | "gateway-registry" | "gateway.registry" => {
+                Some(Self::GatewayRegistry)
+            }
             "security" => Some(Self::Security),
             "scheduler.core" | "scheduler_core" | "scheduler-core" => Some(Self::SchedulerCore),
-            "capability_validator" | "capability-validator" | "capability.validator" => Some(Self::CapabilityValidator),
+            "capability_validator" | "capability-validator" | "capability.validator" => {
+                Some(Self::CapabilityValidator)
+            }
             _ => None,
         }
     }
-
 
     /// Returns the direct parent domain for third-level extension domains.
     ///
@@ -571,9 +589,28 @@ impl EngineServiceKind {
     #[inline]
     pub const fn parent(self) -> Option<Self> {
         match self {
-            Self::AssetVfs | Self::AssetTypes | Self::AssetInspect | Self::AssetEdit | Self::AssetPackages | Self::AssetListFiles | Self::AssetUid | Self::AssetDependencies | Self::AssetImportQueue | Self::AssetPackageWriter | Self::AssetMaps | Self::AssetValidation | Self::AssetUi | Self::Materials | Self::Textures | Self::Definitions | Self::AssetGraph | Self::Model => Some(Self::Assets),
+            Self::AssetVfs
+            | Self::AssetTypes
+            | Self::AssetInspect
+            | Self::AssetEdit
+            | Self::AssetPackages
+            | Self::AssetListFiles
+            | Self::AssetUid
+            | Self::AssetDependencies
+            | Self::AssetImportQueue
+            | Self::AssetPackageWriter
+            | Self::AssetMaps
+            | Self::AssetValidation
+            | Self::AssetUi
+            | Self::Materials
+            | Self::Textures
+            | Self::Definitions
+            | Self::AssetGraph
+            | Self::Model => Some(Self::Assets),
             Self::RenderEffects | Self::RenderMaterials => Some(Self::Render),
-            Self::ModelSkeletons | Self::ModelMaterials | Self::ModelCollisions => Some(Self::Model),
+            Self::ModelSkeletons | Self::ModelMaterials | Self::ModelCollisions => {
+                Some(Self::Model)
+            }
             Self::CameraModes | Self::CameraAnimations => Some(Self::Camera),
             Self::PhysicsContacts | Self::PhysicsConstraints => Some(Self::Physics),
             Self::InputBindings | Self::InputActions | Self::InputContexts => Some(Self::Input),
@@ -666,7 +703,10 @@ impl EngineServiceKind {
 
     #[inline]
     pub fn matches_engine_gateway_id(self, gateway_id: &str) -> bool {
-        self.engine_gateway_id() == normalize_engine_gateway_id(gateway_id).as_deref().unwrap_or("")
+        self.engine_gateway_id()
+            == normalize_engine_gateway_id(gateway_id)
+                .as_deref()
+                .unwrap_or("")
     }
 
     #[inline]
@@ -695,10 +735,13 @@ impl RuntimeServiceContractSpec {
         expected_contract: &'static str,
         required_methods: &'static [&'static str],
     ) -> Self {
-        Self { service_id, expected_contract, required_methods }
+        Self {
+            service_id,
+            expected_contract,
+            required_methods,
+        }
     }
 }
-
 
 /// Declarative startup policy for a runtime service gateway or direct host service.
 ///
@@ -719,7 +762,11 @@ impl RuntimeServiceRequirementSpec {
         required_capability_id: Option<&'static str>,
         required_env: Option<&'static str>,
     ) -> Self {
-        Self { contract, required_capability_id, required_env }
+        Self {
+            contract,
+            required_capability_id,
+            required_env,
+        }
     }
 }
 
@@ -806,48 +853,206 @@ mod tests {
     #[test]
     fn child_domains_parse_with_canonical_gateways() {
         let cases = [
-            ("assets.vfs", EngineServiceKind::AssetVfs, "engine.assets.vfs", Some(EngineServiceKind::Assets)),
-            ("assets.types", EngineServiceKind::AssetTypes, "engine.assets.types", Some(EngineServiceKind::Assets)),
-            ("assets.inspect", EngineServiceKind::AssetInspect, "engine.assets.inspect", Some(EngineServiceKind::Assets)),
-            ("assets.edit", EngineServiceKind::AssetEdit, "engine.assets.edit", Some(EngineServiceKind::Assets)),
-            ("assets.packages", EngineServiceKind::AssetPackages, "engine.assets.packages", Some(EngineServiceKind::Assets)),
-            ("assets.listfiles", EngineServiceKind::AssetListFiles, "engine.assets.listfiles", Some(EngineServiceKind::Assets)),
-            ("assets.maps", EngineServiceKind::AssetMaps, "engine.assets.maps", Some(EngineServiceKind::Assets)),
-            ("assets.validation", EngineServiceKind::AssetValidation, "engine.assets.validation", Some(EngineServiceKind::Assets)),
-            ("assets.ui", EngineServiceKind::AssetUi, "engine.assets.ui", Some(EngineServiceKind::Assets)),
-            ("assets.materials", EngineServiceKind::Materials, "engine.assets.materials", Some(EngineServiceKind::Assets)),
-            ("assets.textures", EngineServiceKind::Textures, "engine.assets.textures", Some(EngineServiceKind::Assets)),
-            ("assets.definitions", EngineServiceKind::Definitions, "engine.assets.definitions", Some(EngineServiceKind::Assets)),
-            ("assets.graph", EngineServiceKind::AssetGraph, "engine.assets.graph", Some(EngineServiceKind::Assets)),
+            (
+                "assets.vfs",
+                EngineServiceKind::AssetVfs,
+                "engine.assets.vfs",
+                Some(EngineServiceKind::Assets),
+            ),
+            (
+                "assets.types",
+                EngineServiceKind::AssetTypes,
+                "engine.assets.types",
+                Some(EngineServiceKind::Assets),
+            ),
+            (
+                "assets.inspect",
+                EngineServiceKind::AssetInspect,
+                "engine.assets.inspect",
+                Some(EngineServiceKind::Assets),
+            ),
+            (
+                "assets.edit",
+                EngineServiceKind::AssetEdit,
+                "engine.assets.edit",
+                Some(EngineServiceKind::Assets),
+            ),
+            (
+                "assets.packages",
+                EngineServiceKind::AssetPackages,
+                "engine.assets.packages",
+                Some(EngineServiceKind::Assets),
+            ),
+            (
+                "assets.listfiles",
+                EngineServiceKind::AssetListFiles,
+                "engine.assets.listfiles",
+                Some(EngineServiceKind::Assets),
+            ),
+            (
+                "assets.maps",
+                EngineServiceKind::AssetMaps,
+                "engine.assets.maps",
+                Some(EngineServiceKind::Assets),
+            ),
+            (
+                "assets.validation",
+                EngineServiceKind::AssetValidation,
+                "engine.assets.validation",
+                Some(EngineServiceKind::Assets),
+            ),
+            (
+                "assets.ui",
+                EngineServiceKind::AssetUi,
+                "engine.assets.ui",
+                Some(EngineServiceKind::Assets),
+            ),
+            (
+                "assets.materials",
+                EngineServiceKind::Materials,
+                "engine.assets.materials",
+                Some(EngineServiceKind::Assets),
+            ),
+            (
+                "assets.textures",
+                EngineServiceKind::Textures,
+                "engine.assets.textures",
+                Some(EngineServiceKind::Assets),
+            ),
+            (
+                "assets.definitions",
+                EngineServiceKind::Definitions,
+                "engine.assets.definitions",
+                Some(EngineServiceKind::Assets),
+            ),
+            (
+                "assets.graph",
+                EngineServiceKind::AssetGraph,
+                "engine.assets.graph",
+                Some(EngineServiceKind::Assets),
+            ),
             ("time", EngineServiceKind::Time, "engine.time", None),
             ("schema", EngineServiceKind::Schema, "engine.schema", None),
-            ("animation", EngineServiceKind::Animation, "engine.animation", None),
-            ("navigation", EngineServiceKind::Navigation, "engine.navigation", None),
+            (
+                "animation",
+                EngineServiceKind::Animation,
+                "engine.animation",
+                None,
+            ),
+            (
+                "navigation",
+                EngineServiceKind::Navigation,
+                "engine.navigation",
+                None,
+            ),
             ("ai", EngineServiceKind::Ai, "engine.ai", None),
             ("tags", EngineServiceKind::Tags, "engine.tags", None),
             ("tasks", EngineServiceKind::Tasks, "engine.tasks", None),
             ("jobs", EngineServiceKind::Jobs, "engine.jobs", None),
-            ("scripting", EngineServiceKind::Scripting, "engine.scripting", None),
-            ("input.bindings", EngineServiceKind::InputBindings, "engine.input.bindings", Some(EngineServiceKind::Input)),
-            ("input.actions", EngineServiceKind::InputActions, "engine.input.actions", Some(EngineServiceKind::Input)),
-            ("input.contexts", EngineServiceKind::InputContexts, "engine.input.contexts", Some(EngineServiceKind::Input)),
-            ("render.effects", EngineServiceKind::RenderEffects, "engine.render.effects", Some(EngineServiceKind::Render)),
-            ("render.materials", EngineServiceKind::RenderMaterials, "engine.render.materials", Some(EngineServiceKind::Render)),
-            ("assets.models", EngineServiceKind::Model, "engine.assets.models", Some(EngineServiceKind::Assets)),
-            ("assets.models.skeletons", EngineServiceKind::ModelSkeletons, "engine.assets.models.skeletons", Some(EngineServiceKind::Model)),
-            ("assets.models.materials", EngineServiceKind::ModelMaterials, "engine.assets.models.materials", Some(EngineServiceKind::Model)),
-            ("assets.models.collisions", EngineServiceKind::ModelCollisions, "engine.assets.models.collisions", Some(EngineServiceKind::Model)),
-            ("physics.contacts", EngineServiceKind::PhysicsContacts, "engine.physics.contacts", Some(EngineServiceKind::Physics)),
-            ("physics.constraints", EngineServiceKind::PhysicsConstraints, "engine.physics.constraints", Some(EngineServiceKind::Physics)),
-            ("camera.modes", EngineServiceKind::CameraModes, "engine.camera.modes", Some(EngineServiceKind::Camera)),
-            ("camera.animations", EngineServiceKind::CameraAnimations, "engine.camera.animations", Some(EngineServiceKind::Camera)),
-            ("ui.text", EngineServiceKind::UiText, "engine.ui.text", Some(EngineServiceKind::Ui)),
-            ("ui.debug", EngineServiceKind::UiDebug, "engine.ui.debug", Some(EngineServiceKind::Ui)),
+            (
+                "scripting",
+                EngineServiceKind::Scripting,
+                "engine.scripting",
+                None,
+            ),
+            (
+                "input.bindings",
+                EngineServiceKind::InputBindings,
+                "engine.input.bindings",
+                Some(EngineServiceKind::Input),
+            ),
+            (
+                "input.actions",
+                EngineServiceKind::InputActions,
+                "engine.input.actions",
+                Some(EngineServiceKind::Input),
+            ),
+            (
+                "input.contexts",
+                EngineServiceKind::InputContexts,
+                "engine.input.contexts",
+                Some(EngineServiceKind::Input),
+            ),
+            (
+                "render.effects",
+                EngineServiceKind::RenderEffects,
+                "engine.render.effects",
+                Some(EngineServiceKind::Render),
+            ),
+            (
+                "render.materials",
+                EngineServiceKind::RenderMaterials,
+                "engine.render.materials",
+                Some(EngineServiceKind::Render),
+            ),
+            (
+                "assets.models",
+                EngineServiceKind::Model,
+                "engine.assets.models",
+                Some(EngineServiceKind::Assets),
+            ),
+            (
+                "assets.models.skeletons",
+                EngineServiceKind::ModelSkeletons,
+                "engine.assets.models.skeletons",
+                Some(EngineServiceKind::Model),
+            ),
+            (
+                "assets.models.materials",
+                EngineServiceKind::ModelMaterials,
+                "engine.assets.models.materials",
+                Some(EngineServiceKind::Model),
+            ),
+            (
+                "assets.models.collisions",
+                EngineServiceKind::ModelCollisions,
+                "engine.assets.models.collisions",
+                Some(EngineServiceKind::Model),
+            ),
+            (
+                "physics.contacts",
+                EngineServiceKind::PhysicsContacts,
+                "engine.physics.contacts",
+                Some(EngineServiceKind::Physics),
+            ),
+            (
+                "physics.constraints",
+                EngineServiceKind::PhysicsConstraints,
+                "engine.physics.constraints",
+                Some(EngineServiceKind::Physics),
+            ),
+            (
+                "camera.modes",
+                EngineServiceKind::CameraModes,
+                "engine.camera.modes",
+                Some(EngineServiceKind::Camera),
+            ),
+            (
+                "camera.animations",
+                EngineServiceKind::CameraAnimations,
+                "engine.camera.animations",
+                Some(EngineServiceKind::Camera),
+            ),
+            (
+                "ui.text",
+                EngineServiceKind::UiText,
+                "engine.ui.text",
+                Some(EngineServiceKind::Ui),
+            ),
+            (
+                "ui.debug",
+                EngineServiceKind::UiDebug,
+                "engine.ui.debug",
+                Some(EngineServiceKind::Ui),
+            ),
         ];
 
         for (text, kind, gateway, parent) in cases {
             assert_eq!(EngineServiceKind::parse(text), Some(kind));
-            assert_eq!(EngineServiceKind::parse_engine_gateway_id(gateway), Some(kind));
+            assert_eq!(
+                EngineServiceKind::parse_engine_gateway_id(gateway),
+                Some(kind)
+            );
             assert_eq!(kind.engine_gateway_id(), gateway);
             assert_eq!(kind.parent(), parent);
             assert!(kind.matches_engine_gateway_id(gateway));
@@ -860,7 +1065,9 @@ mod tests {
         assert!(!EngineServiceKind::Input.matches_engine_gateway_id("engine.input.bindings"));
         assert!(!EngineServiceKind::Render.matches_engine_gateway_id("engine.render.effects"));
         assert!(!EngineServiceKind::Physics.matches_engine_gateway_id("engine.physics.contacts"));
-        assert!(!EngineServiceKind::Model.matches_engine_gateway_id("engine.assets.models.skeletons"));
+        assert!(
+            !EngineServiceKind::Model.matches_engine_gateway_id("engine.assets.models.skeletons")
+        );
         assert!(!EngineServiceKind::Camera.matches_engine_gateway_id("engine.camera.modes"));
         assert!(!EngineServiceKind::Ui.matches_engine_gateway_id("engine.ui.text"));
         assert!(!EngineServiceKind::Assets.matches_engine_gateway_id("engine.assets.ui"));
@@ -872,10 +1079,12 @@ mod tests {
             service_kind_from_engine_gateway_id("engine.assets.zzx").as_deref(),
             Some("assets.zzx")
         );
-        assert!(engine_gateway_matches_service_kind("engine.render.draw_lists", "render.draw_lists"));
+        assert!(engine_gateway_matches_service_kind(
+            "engine.render.draw_lists",
+            "render.draw_lists"
+        ));
         assert!(EngineServiceKind::parse_engine_gateway_id("engine.assets.zzx").is_none());
     }
-
 
     #[test]
     fn backend_route_descriptor_can_serialize_named_provider_route() {
@@ -894,7 +1103,10 @@ mod tests {
         assert_eq!(value["engine_gateway"], "engine.render");
         assert_eq!(value["provider_route"], "engine.render.vulkan");
         assert_eq!(value["system_tags"][0], "provider.implementation_route");
-        assert!(engine_gateway_is_direct_child_of_service_kind("engine.render.vulkan", "render"));
+        assert!(engine_gateway_is_direct_child_of_service_kind(
+            "engine.render.vulkan",
+            "render"
+        ));
     }
 
     #[test]

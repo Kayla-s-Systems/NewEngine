@@ -1,11 +1,11 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
+use crate::scene_bridge::PreparedTerrainPrimitiveMesh;
 use newengine_core::render::RenderApi;
 use newengine_core::EngineResult;
 use newengine_primitives::Primitive;
 use newengine_procedural_noise::ProceduralTerrain;
 use newengine_scene::Scene;
-use crate::scene_bridge::PreparedTerrainPrimitiveMesh;
 
 use super::super::gpu::{ensure_primitive_gpu, upload_primitive_mesh};
 use super::RuntimeRenderController;

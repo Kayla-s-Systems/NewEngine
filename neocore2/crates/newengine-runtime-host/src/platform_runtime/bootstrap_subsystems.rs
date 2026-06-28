@@ -55,17 +55,24 @@ pub(crate) fn build_bootstrap_subsystems(
 
     match input.bootstrap_stage {
         RuntimeBootstrapStage::AwaitingWindow => awaiting_window_subsystems(),
-        RuntimeBootstrapStage::AnnounceLoadEnginePlugins | RuntimeBootstrapStage::LoadEnginePlugins => {
+        RuntimeBootstrapStage::AnnounceLoadEnginePlugins
+        | RuntimeBootstrapStage::LoadEnginePlugins => {
             loading_engine_plugins_subsystems(input.bootstrap_progress)
         }
         RuntimeBootstrapStage::AnnounceStartEngine | RuntimeBootstrapStage::StartEngine => {
-            starting_engine_subsystems(input.render_backend, plugin_detail, input.bootstrap_progress)
+            starting_engine_subsystems(
+                input.render_backend,
+                plugin_detail,
+                input.bootstrap_progress,
+            )
         }
         RuntimeBootstrapStage::AnnounceEnterRuntime
         | RuntimeBootstrapStage::EmitWindowReady
-        | RuntimeBootstrapStage::ReadyOverlay => {
-            runtime_handoff_subsystems(input.render_backend, plugin_detail, input.bootstrap_progress)
-        }
+        | RuntimeBootstrapStage::ReadyOverlay => runtime_handoff_subsystems(
+            input.render_backend,
+            plugin_detail,
+            input.bootstrap_progress,
+        ),
         RuntimeBootstrapStage::Running => running_subsystems(input.render_backend),
     }
 }
@@ -74,7 +81,8 @@ pub(crate) fn build_scene_launch_subsystems(
     input: SceneLaunchSubsystemInput<'_>,
 ) -> Vec<ScreenOverlaySubsystem> {
     let progress = input.status.progress_01.clamp(0.0, 0.995);
-    let assets_ready = progress >= 0.96 || !input.status.detail.to_ascii_lowercase().contains("waiting");
+    let assets_ready =
+        progress >= 0.96 || !input.status.detail.to_ascii_lowercase().contains("waiting");
     let simulation_ready = progress >= 0.90;
 
     vec![
@@ -260,7 +268,11 @@ fn running_subsystems(render_backend: String) -> Vec<ScreenOverlaySubsystem> {
             "READY",
             "Platform runtime is running.",
         ),
-        subsystem_ready(ScreenOverlaySubsystemId::Assets, "READY", "Asset services are online."),
+        subsystem_ready(
+            ScreenOverlaySubsystemId::Assets,
+            "READY",
+            "Asset services are online.",
+        ),
         subsystem_ready(
             ScreenOverlaySubsystemId::Renderer,
             render_backend,

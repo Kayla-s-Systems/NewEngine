@@ -2,8 +2,8 @@
 
 mod debug_lines;
 mod material_registry;
-mod shader_manifest;
 mod primitives;
+mod shader_manifest;
 mod types;
 
 pub(super) use debug_lines::ensure_debug_line_pipeline;

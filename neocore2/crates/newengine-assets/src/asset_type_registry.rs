@@ -2,16 +2,16 @@
 
 use abi_stable::std_types::{RResult, RString};
 use newengine_assets_api::{
-    file_type_method, AssetFileTypeDescriptor, AssetFileTypeManifest,
-    AssetFileTypeProbeRequest, AssetFileTypeProbeResult, AssetFileTypeRegisterRequest,
-    ASSET_TYPES_SERVICE_METHODS, ASSET_TYPES_BACKEND_CAPABILITY_ID,
-    ASSET_TYPES_SERVICE_ID, ENGINE_ASSET_TYPES_SERVICE_ID,
+    file_type_method, AssetFileTypeDescriptor, AssetFileTypeManifest, AssetFileTypeProbeRequest,
+    AssetFileTypeProbeResult, AssetFileTypeRegisterRequest, ASSET_TYPES_BACKEND_CAPABILITY_ID,
+    ASSET_TYPES_SERVICE_ID, ASSET_TYPES_SERVICE_METHODS, ENGINE_ASSET_TYPES_SERVICE_ID,
 };
 use newengine_plugin_api::{Blob, HostApiV1, MethodName};
 use newengine_service_api::EngineServiceKind;
 use newengine_service_kit::{
     engine_gateway_provider_service_description, ok_empty_blob, ok_json,
-    register_engine_gateway_provider_service_best_effort, EngineGatewayProviderDecl, JsonServiceRouter,
+    register_engine_gateway_provider_service_best_effort, EngineGatewayProviderDecl,
+    JsonServiceRouter,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -35,7 +35,9 @@ impl Default for AssetTypeRegistryState {
         // Empty by design: formats self-register through their own crates/providers.
         // The registry is a generic collector/resolver, not a god table of
         // extensions and semantic gateways.
-        Self { registry: BTreeMap::new() }
+        Self {
+            registry: BTreeMap::new(),
+        }
     }
 }
 
@@ -70,7 +72,11 @@ impl AssetTypeRegistryState {
         let replace = self
             .registry
             .get(&key)
-            .map(|prev| desc.priority > prev.priority || (desc.priority == prev.priority && desc.handler_service < prev.handler_service))
+            .map(|prev| {
+                desc.priority > prev.priority
+                    || (desc.priority == prev.priority
+                        && desc.handler_service < prev.handler_service)
+            })
             .unwrap_or(true);
         if replace {
             self.registry.insert(key, desc.clone());
@@ -80,7 +86,9 @@ impl AssetTypeRegistryState {
 
     fn probe(&self, request: AssetFileTypeProbeRequest) -> AssetFileTypeProbeResult {
         let logical_path = normalize_logical_path(&request.logical_path);
-        let extension = self.best_extension_match(&logical_path).unwrap_or_else(|| path_extension(&logical_path));
+        let extension = self
+            .best_extension_match(&logical_path)
+            .unwrap_or_else(|| path_extension(&logical_path));
         let descriptor = self.registry.get(&extension).cloned();
         AssetFileTypeProbeResult {
             logical_path,
@@ -91,7 +99,11 @@ impl AssetTypeRegistryState {
     }
 
     fn best_extension_match(&self, logical_path: &str) -> Option<String> {
-        let path = logical_path.split('@').next().unwrap_or(logical_path).to_ascii_lowercase();
+        let path = logical_path
+            .split('@')
+            .next()
+            .unwrap_or(logical_path)
+            .to_ascii_lowercase();
         self.registry
             .keys()
             .filter(|ext| path.ends_with(&format!(".{ext}")))
@@ -109,30 +121,46 @@ impl AssetTypeRegistryState {
 
         let envelope = match serde_json::from_slice::<InvokeEnvelope>(payload.as_slice()) {
             Ok(envelope) => envelope,
-            Err(e) => return RResult::RErr(RString::from(format!("asset.file_types: invalid invoke_json payload: {e}"))),
+            Err(e) => {
+                return RResult::RErr(RString::from(format!(
+                    "asset.file_types: invalid invoke_json payload: {e}"
+                )))
+            }
         };
 
         match envelope.method.as_str() {
             file_type_method::MANIFEST_JSON_V1 => ok_json(self.manifest()),
             file_type_method::REGISTER_JSON_V1 => {
-                let request = match serde_json::from_value::<AssetFileTypeRegisterRequest>(envelope.request) {
+                let request = match serde_json::from_value::<AssetFileTypeRegisterRequest>(
+                    envelope.request,
+                ) {
                     Ok(request) => request,
-                    Err(e) => return RResult::RErr(RString::from(format!("asset.file_types: invalid register request: {e}"))),
+                    Err(e) => {
+                        return RResult::RErr(RString::from(format!(
+                            "asset.file_types: invalid register request: {e}"
+                        )))
+                    }
                 };
                 ok_json(self.register(request))
             }
             file_type_method::PROBE_JSON_V1 | file_type_method::RESOLVE_JSON_V1 => {
-                let request = match serde_json::from_value::<AssetFileTypeProbeRequest>(envelope.request) {
-                    Ok(request) => request,
-                    Err(e) => return RResult::RErr(RString::from(format!("asset.file_types: invalid probe request: {e}"))),
-                };
+                let request =
+                    match serde_json::from_value::<AssetFileTypeProbeRequest>(envelope.request) {
+                        Ok(request) => request,
+                        Err(e) => {
+                            return RResult::RErr(RString::from(format!(
+                                "asset.file_types: invalid probe request: {e}"
+                            )))
+                        }
+                    };
                 ok_json(self.probe(request))
             }
-            other => RResult::RErr(RString::from(format!("asset.file_types: unknown invoke method '{other}'"))),
+            other => RResult::RErr(RString::from(format!(
+                "asset.file_types: unknown invoke method '{other}'"
+            ))),
         }
     }
 }
-
 
 fn warn_if_semantic_gateway_unresolved(desc: &AssetFileTypeDescriptor) {
     if !newengine_service_api::is_engine_service_gateway_id(&desc.semantic_gateway) {
@@ -145,7 +173,8 @@ fn warn_if_semantic_gateway_unresolved(desc: &AssetFileTypeDescriptor) {
         return;
     }
 
-    let is_byte_bucket_only = desc.semantic_gateway == newengine_assets_api::ENGINE_ASSET_SERVICE_ID;
+    let is_byte_bucket_only =
+        desc.semantic_gateway == newengine_assets_api::ENGINE_ASSET_SERVICE_ID;
     if is_byte_bucket_only && !desc.is_container_codec() {
         newengine_ulog_api::ulog::warn!(
             "asset type registry: semantic_gateway fell back to engine.assets for non-container extension='.{}' asset_kind='{}'; this is a byte-owner only fallback and must be replaced by a real domain gateway",
@@ -166,7 +195,9 @@ pub fn register_asset_type_descriptor_best_effort(
     let payload = match serde_json::to_vec(&AssetFileTypeRegisterRequest { descriptor }) {
         Ok(payload) => payload,
         Err(e) => {
-            newengine_ulog_api::ulog::warn!("asset type registry: failed to serialize descriptor registration: {e}");
+            newengine_ulog_api::ulog::warn!(
+                "asset type registry: failed to serialize descriptor registration: {e}"
+            );
             return false;
         }
     };
@@ -178,7 +209,9 @@ pub fn register_asset_type_descriptor_best_effort(
     match result.into_result() {
         Ok(_) => true,
         Err(e) => {
-            newengine_ulog_api::ulog::warn!("asset type registry: descriptor self-registration failed: {e}");
+            newengine_ulog_api::ulog::warn!(
+                "asset type registry: descriptor self-registration failed: {e}"
+            );
             false
         }
     }
@@ -196,28 +229,29 @@ pub fn asset_types_gateway_service() -> newengine_plugin_api::ServiceV1Dyn<'stat
     .features(["codec-descriptor-registry", "self-registration", "provider-owned-format-descriptors"])
     .notes("Descriptor registry starts empty. Format crates/codecs/providers self-register descriptors; the registry only stores, validates and resolves them.");
 
-    JsonServiceRouter::with_state(
-        ASSET_TYPES_SERVICE_ID,
-        AssetTypeRegistryState::default(),
-    )
-    .describe_json(&description)
-    .info(asset_types_service_info)
-    .get_json(file_type_method::MANIFEST_JSON_V1, |state| state.manifest())
-    .post_json::<AssetFileTypeRegisterRequest, AssetFileTypeDescriptor, _>(
-        file_type_method::REGISTER_JSON_V1,
-        |state, request| state.register(request),
-    )
-    .post_json::<AssetFileTypeProbeRequest, AssetFileTypeProbeResult, _>(
-        file_type_method::PROBE_JSON_V1,
-        |state, request| state.probe(request),
-    )
-    .post_json::<AssetFileTypeProbeRequest, AssetFileTypeProbeResult, _>(
-        file_type_method::RESOLVE_JSON_V1,
-        |state, request| state.probe(request),
-    )
-    .blob(file_type_method::INVOKE_JSON, |state, payload| state.invoke_json(payload))
-    .blob(file_type_method::SHUTDOWN_V1, |_state, _payload| ok_empty_blob())
-    .into_service_v1()
+    JsonServiceRouter::with_state(ASSET_TYPES_SERVICE_ID, AssetTypeRegistryState::default())
+        .describe_json(&description)
+        .info(asset_types_service_info)
+        .get_json(file_type_method::MANIFEST_JSON_V1, |state| state.manifest())
+        .post_json::<AssetFileTypeRegisterRequest, AssetFileTypeDescriptor, _>(
+            file_type_method::REGISTER_JSON_V1,
+            |state, request| state.register(request),
+        )
+        .post_json::<AssetFileTypeProbeRequest, AssetFileTypeProbeResult, _>(
+            file_type_method::PROBE_JSON_V1,
+            |state, request| state.probe(request),
+        )
+        .post_json::<AssetFileTypeProbeRequest, AssetFileTypeProbeResult, _>(
+            file_type_method::RESOLVE_JSON_V1,
+            |state, request| state.probe(request),
+        )
+        .blob(file_type_method::INVOKE_JSON, |state, payload| {
+            state.invoke_json(payload)
+        })
+        .blob(file_type_method::SHUTDOWN_V1, |_state, _payload| {
+            ok_empty_blob()
+        })
+        .into_service_v1()
 }
 
 pub fn register_asset_types_gateway_best_effort() -> bool {
@@ -233,12 +267,15 @@ pub fn register_asset_types_gateway_best_effort() -> bool {
     })
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn explicit_descriptor(extension: &str, priority: i32, semantic_gateway: &str) -> AssetFileTypeDescriptor {
+    fn explicit_descriptor(
+        extension: &str,
+        priority: i32,
+        semantic_gateway: &str,
+    ) -> AssetFileTypeDescriptor {
         AssetFileTypeDescriptor {
             extension: extension.to_owned(),
             asset_kind: "provider_declared_asset".to_owned(),
@@ -251,7 +288,10 @@ mod tests {
             selector_syntax: Some(format!("file.{extension}@entry")),
             consumer_domains: vec![semantic_gateway.to_owned()],
             magic: Some("4e454638".to_owned()),
-            outputs: vec![newengine_assets_api::ASSET_LIST_FILE_MANIFEST_OUTPUT.to_owned(), "asset.blob".to_owned()],
+            outputs: vec![
+                newengine_assets_api::ASSET_LIST_FILE_MANIFEST_OUTPUT.to_owned(),
+                "asset.blob".to_owned(),
+            ],
             priority,
             vfs_backed: true,
             runtime_ready: true,
@@ -282,7 +322,8 @@ mod tests {
         assert_eq!(registered.gateway, "engine.assets.zzx");
         assert_eq!(registered.content_kind, Some(1000));
         assert_eq!(
-            newengine_service_api::service_kind_from_engine_gateway_id("engine.assets.zzx").as_deref(),
+            newengine_service_api::service_kind_from_engine_gateway_id("engine.assets.zzx")
+                .as_deref(),
             Some("assets.zzx")
         );
     }
@@ -308,7 +349,16 @@ mod tests {
         state.register(AssetFileTypeRegisterRequest { descriptor: low });
         let registered = state.register(AssetFileTypeRegisterRequest { descriptor: high });
         assert_eq!(registered.semantic_gateway, "engine.assets.high");
-        assert_eq!(state.probe(AssetFileTypeProbeRequest { logical_path: "foo.same@main".to_owned() }).descriptor.unwrap().semantic_gateway, "engine.assets.high");
+        assert_eq!(
+            state
+                .probe(AssetFileTypeProbeRequest {
+                    logical_path: "foo.same@main".to_owned()
+                })
+                .descriptor
+                .unwrap()
+                .semantic_gateway,
+            "engine.assets.high"
+        );
     }
 
     #[test]
@@ -329,8 +379,14 @@ mod tests {
             requires_magic: true,
             ..Default::default()
         });
-        assert_eq!(registered.semantic_gateway, newengine_assets_api::ENGINE_ASSET_SERVICE_ID);
-        assert_eq!(registered.consumer_domains, vec![newengine_assets_api::ENGINE_ASSET_SERVICE_ID.to_owned()]);
+        assert_eq!(
+            registered.semantic_gateway,
+            newengine_assets_api::ENGINE_ASSET_SERVICE_ID
+        );
+        assert_eq!(
+            registered.consumer_domains,
+            vec![newengine_assets_api::ENGINE_ASSET_SERVICE_ID.to_owned()]
+        );
         assert!(registered.selector_syntax.is_none());
     }
 }

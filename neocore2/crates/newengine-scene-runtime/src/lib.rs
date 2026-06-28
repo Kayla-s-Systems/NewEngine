@@ -11,8 +11,12 @@ use std::sync::Arc;
 use abi_stable::std_types::{RResult, RString};
 use newengine_assets::AssetServiceClient;
 use newengine_plugin_api::{Blob, MethodName};
-use newengine_scene::{SceneAsset, SceneAssetOptions, SCENE_ASSET_SCHEMA_V1, SCENE_ASSET_STATUS_TRANSITIONAL_JSON};
-use newengine_scene_io::{method as scene_method, ENGINE_SCENE_SERVICE_ID, SCENE_BACKEND_CAPABILITY_ID};
+use newengine_scene::{
+    SceneAsset, SceneAssetOptions, SCENE_ASSET_SCHEMA_V1, SCENE_ASSET_STATUS_TRANSITIONAL_JSON,
+};
+use newengine_scene_io::{
+    method as scene_method, ENGINE_SCENE_SERVICE_ID, SCENE_BACKEND_CAPABILITY_ID,
+};
 
 mod authored_scene_method {
     // Local bridge constants keep new engine.scene authored-structure methods buildable even
@@ -44,7 +48,10 @@ pub struct SceneGatewayAssetMounts {
 impl SceneGatewayAssetMounts {
     #[inline]
     pub const fn new(app_dir_name: &'static str, app_assets_env: &'static str) -> Self {
-        Self { app_dir_name, app_assets_env }
+        Self {
+            app_dir_name,
+            app_assets_env,
+        }
     }
 }
 
@@ -54,18 +61,24 @@ pub struct EngineSceneGatewayService {
     asset_mounts: Option<SceneGatewayAssetMounts>,
 }
 
-
 fn normalize_scene_path(path: &str) -> String {
     let mut s = path.trim().replace('\\', "/");
-    while let Some(rest) = s.strip_prefix("./") { s = rest.to_owned(); }
+    while let Some(rest) = s.strip_prefix("./") {
+        s = rest.to_owned();
+    }
     s = s.trim_start_matches('/').to_owned();
-    while s.contains("//") { s = s.replace("//", "/"); }
+    while s.contains("//") {
+        s = s.replace("//", "/");
+    }
     s
 }
 
 fn reject_ytyp_scene_path(path: &str) -> Result<(), String> {
     let lower = path.split('@').next().unwrap_or(path).to_ascii_lowercase();
-    if lower.ends_with(&format!(".{}", newengine_asset_format_nef8::ytyp::EXTENSION)) {
+    if lower.ends_with(&format!(
+        ".{}",
+        newengine_asset_format_nef8::ytyp::EXTENSION
+    )) {
         return Err(format!(
             "engine.scene load_json_v1 cannot load '{path}' as a scene path: definition dictionary assets are owned by engine.assets.definitions, not engine.scene"
         ));
@@ -86,7 +99,11 @@ fn validate_scene_asset_contract(path: &str, asset: &SceneAsset) -> Result<(), S
     Ok(())
 }
 
-fn call_gateway_json(service: &str, method: &str, request: serde_json::Value) -> Result<serde_json::Value, String> {
+fn call_gateway_json(
+    service: &str,
+    method: &str,
+    request: serde_json::Value,
+) -> Result<serde_json::Value, String> {
     let host = newengine_plugin_host::default_host_api();
     let payload = serde_json::to_vec(&request).map_err(|e| e.to_string())?;
     let result = (host.call_service_v1)(
@@ -101,16 +118,30 @@ fn call_gateway_json(service: &str, method: &str, request: serde_json::Value) ->
 
 fn validate_definition_ref_through_gateways(definition_ref: &str) -> Result<(), String> {
     let normalized = normalize_scene_path(definition_ref);
-    let reference = newengine_assets_api::require_asset_reference_extension(&normalized, &["ytyp"], true)
-        .map_err(|e| format!("scene definition_ref must be .ytyp@entry and resolved outside engine.scene: {e}"))?;
+    let reference = newengine_assets_api::require_asset_reference_extension(
+        &normalized,
+        &["ytyp"],
+        true,
+    )
+    .map_err(|e| {
+        format!("scene definition_ref must be .ytyp@entry and resolved outside engine.scene: {e}")
+    })?;
 
     let graph = call_gateway_json(
         newengine_assets_api::ENGINE_ASSETS_GRAPH_SERVICE_ID,
         newengine_assets_api::asset_graph_method::RESOLVE_V1,
         serde_json::json!({ "root_ref": reference.canonical }),
     )?;
-    if graph.get("root_ref").and_then(|v| v.as_str()).unwrap_or("").is_empty() {
-        return Err(format!("engine.assets.graph returned no root_ref for scene definition_ref='{}'", reference.canonical));
+    if graph
+        .get("root_ref")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .is_empty()
+    {
+        return Err(format!(
+            "engine.assets.graph returned no root_ref for scene definition_ref='{}'",
+            reference.canonical
+        ));
     }
 
     let validation = call_gateway_json(
@@ -118,15 +149,27 @@ fn validate_definition_ref_through_gateways(definition_ref: &str) -> Result<(), 
         newengine_assets_api::definitions_method::VALIDATE_V1,
         serde_json::json!({ "definition_ref": reference.canonical }),
     )?;
-    if !validation.get("ok").and_then(|v| v.as_bool()).unwrap_or(false) {
-        return Err(format!("engine.assets.definitions rejected scene definition_ref='{}': {}", reference.canonical, validation));
+    if !validation
+        .get("ok")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+    {
+        return Err(format!(
+            "engine.assets.definitions rejected scene definition_ref='{}': {}",
+            reference.canonical, validation
+        ));
     }
     Ok(())
 }
 
 fn validate_scene_definition_refs(asset: &SceneAsset) -> Result<(), String> {
     for entity in &asset.entities {
-        let Some(definition_ref) = entity.definition_ref.as_deref().map(str::trim).filter(|it| !it.is_empty()) else {
+        let Some(definition_ref) = entity
+            .definition_ref
+            .as_deref()
+            .map(str::trim)
+            .filter(|it| !it.is_empty())
+        else {
             continue;
         };
         validate_definition_ref_through_gateways(definition_ref)?;
@@ -134,11 +177,13 @@ fn validate_scene_definition_refs(asset: &SceneAsset) -> Result<(), String> {
     Ok(())
 }
 
-
 impl EngineSceneGatewayService {
     #[inline]
     pub fn new(scene: Arc<SceneBridge>) -> Self {
-        Self { scene, asset_mounts: None }
+        Self {
+            scene,
+            asset_mounts: None,
+        }
     }
 
     #[inline]
@@ -146,9 +191,11 @@ impl EngineSceneGatewayService {
         scene: Arc<SceneBridge>,
         asset_mounts: SceneGatewayAssetMounts,
     ) -> Self {
-        Self { scene, asset_mounts: Some(asset_mounts) }
+        Self {
+            scene,
+            asset_mounts: Some(asset_mounts),
+        }
     }
-
 
     fn authority_json(&self) -> serde_json::Value {
         let snap = self.scene.authority_snapshot();
@@ -220,7 +267,9 @@ impl EngineSceneGatewayService {
             .map(str::trim)
             .filter(|s| !s.is_empty());
         let Some(path) = path else {
-            return RResult::RErr(RString::from("engine.scene load_json_v1 requires non-empty path"));
+            return RResult::RErr(RString::from(
+                "engine.scene load_json_v1 requires non-empty path",
+            ));
         };
         let path = normalize_scene_path(path);
         if let Err(e) = reject_ytyp_scene_path(&path) {
@@ -247,7 +296,10 @@ impl EngineSceneGatewayService {
                 mounts.app_dir_name,
                 mounts.app_assets_env,
             );
-            newengine_runtime_host::asset_bootstrap::mount_asset_roots_best_effort(&assets, &asset_roots);
+            newengine_runtime_host::asset_bootstrap::mount_asset_roots_best_effort(
+                &assets,
+                &asset_roots,
+            );
         }
 
         let bytes = match assets.text_v1(&path) {
@@ -310,7 +362,9 @@ impl EngineSceneGatewayService {
     fn current_scene_asset(&self, include_empty_entities: bool) -> Result<SceneAsset, String> {
         let scene_lock = self.scene.scene();
         let mut scene = scene_lock.write();
-        Ok(scene.to_asset(SceneAssetOptions { include_empty_entities }))
+        Ok(scene.to_asset(SceneAssetOptions {
+            include_empty_entities,
+        }))
     }
 
     fn graph_json_v1(&self) -> RResult<Blob, RString> {
@@ -318,15 +372,19 @@ impl EngineSceneGatewayService {
             Ok(asset) => asset,
             Err(e) => return RResult::RErr(RString::from(e)),
         };
-        let nodes = asset.entities.iter().map(|entity| {
-            serde_json::json!({
-                "guid": entity.guid.to_string(),
-                "name": entity.name.clone(),
-                "parent": entity.parent.map(|v| v.to_string()),
-                "has_transform": entity.transform.is_some(),
-                "definition_ref": entity.definition_ref.clone(),
+        let nodes = asset
+            .entities
+            .iter()
+            .map(|entity| {
+                serde_json::json!({
+                    "guid": entity.guid.to_string(),
+                    "name": entity.name.clone(),
+                    "parent": entity.parent.map(|v| v.to_string()),
+                    "has_transform": entity.transform.is_some(),
+                    "definition_ref": entity.definition_ref.clone(),
+                })
             })
-        }).collect::<Vec<_>>();
+            .collect::<Vec<_>>();
         ok_json(serde_json::json!({
             "schema": asset.schema,
             "semantics": "authored_scene_graph",
@@ -343,18 +401,28 @@ impl EngineSceneGatewayService {
             Ok(asset) => asset,
             Err(e) => return RResult::RErr(RString::from(e)),
         };
-        let mut refs = asset.entities.iter()
-            .filter_map(|entity| entity.definition_ref.as_ref().map(|definition_ref| (entity.guid, definition_ref.clone())))
+        let mut refs = asset
+            .entities
+            .iter()
+            .filter_map(|entity| {
+                entity
+                    .definition_ref
+                    .as_ref()
+                    .map(|definition_ref| (entity.guid, definition_ref.clone()))
+            })
             .collect::<Vec<_>>();
         refs.sort_by(|a, b| a.1.cmp(&b.1).then_with(|| a.0.cmp(&b.0)));
-        let entries = refs.into_iter().map(|(guid, definition_ref)| {
-            serde_json::json!({
-                "instance_guid": guid.to_string(),
-                "definition_ref": definition_ref,
-                "definition_domain": newengine_assets_api::ENGINE_ASSETS_DEFINITIONS_SERVICE_ID,
-                "dependency_graph_domain": newengine_assets_api::ENGINE_ASSETS_GRAPH_SERVICE_ID,
+        let entries = refs
+            .into_iter()
+            .map(|(guid, definition_ref)| {
+                serde_json::json!({
+                    "instance_guid": guid.to_string(),
+                    "definition_ref": definition_ref,
+                    "definition_domain": newengine_assets_api::ENGINE_ASSETS_DEFINITIONS_SERVICE_ID,
+                    "dependency_graph_domain": newengine_assets_api::ENGINE_ASSETS_GRAPH_SERVICE_ID,
+                })
             })
-        }).collect::<Vec<_>>();
+            .collect::<Vec<_>>();
         ok_json(serde_json::json!({
             "semantics": "authored_archetype_graph",
             "not_runtime_spawn_state": true,
@@ -367,15 +435,21 @@ impl EngineSceneGatewayService {
             Ok(asset) => asset,
             Err(e) => return RResult::RErr(RString::from(e)),
         };
-        let placements = asset.entities.iter().filter_map(|entity| {
-            entity.transform.map(|transform| serde_json::json!({
-                "guid": entity.guid.to_string(),
-                "name": entity.name.clone(),
-                "parent": entity.parent.map(|v| v.to_string()),
-                "definition_ref": entity.definition_ref.clone(),
-                "transform": transform,
-            }))
-        }).collect::<Vec<_>>();
+        let placements = asset
+            .entities
+            .iter()
+            .filter_map(|entity| {
+                entity.transform.map(|transform| {
+                    serde_json::json!({
+                        "guid": entity.guid.to_string(),
+                        "name": entity.name.clone(),
+                        "parent": entity.parent.map(|v| v.to_string()),
+                        "definition_ref": entity.definition_ref.clone(),
+                        "transform": transform,
+                    })
+                })
+            })
+            .collect::<Vec<_>>();
         ok_json(serde_json::json!({
             "semantics": "authored_placement_declarations",
             "world_runtime": "engine.world",
@@ -399,7 +473,9 @@ impl EngineSceneGatewayService {
         let asset = {
             let scene_lock = self.scene.scene();
             let mut scene = scene_lock.write();
-            scene.to_asset(SceneAssetOptions { include_empty_entities })
+            scene.to_asset(SceneAssetOptions {
+                include_empty_entities,
+            })
         };
 
         let payload = match serde_json::to_value(&asset) {
@@ -471,15 +547,40 @@ pub fn scene_gateway_service(
 
     JsonServiceRouter::new(ENGINE_SCENE_SERVICE_ID)
         .describe_json(&description)
-        .blob(scene_method::FORMATS_JSON, move |_unit, _payload| formats_service.formats_json())
-        .blob(scene_method::LOAD_JSON_V1, move |_unit, payload| load_service.load_json_v1(payload))
-        .blob(scene_method::SAVE_JSON_V1, move |_unit, payload| save_service.save_json_v1(payload))
-        .blob(authored_scene_method::GRAPH_JSON_V1, move |_unit, _payload| graph_service.graph_json_v1())
-        .blob(authored_scene_method::ARCHETYPE_GRAPH_JSON_V1, move |_unit, _payload| archetype_service.archetype_graph_json_v1())
-        .blob(authored_scene_method::PLACEMENTS_JSON_V1, move |_unit, _payload| placement_service.placements_json_v1())
-        .blob(authored_scene_method::INSTANTIATE_PREFAB_JSON_V1, move |_unit, payload| prefab_service.instantiate_prefab_json_v1(payload))
-        .blob(authored_scene_method::INSTANTIATE_ARCHETYPE_JSON_V1, move |_unit, payload| archetype_instantiate_service.instantiate_archetype_json_v1(payload))
-        .blob(scene_method::SHUTDOWN_V1, move |_unit, _payload| RResult::ROk(Blob::from(Vec::new())))
+        .blob(scene_method::FORMATS_JSON, move |_unit, _payload| {
+            formats_service.formats_json()
+        })
+        .blob(scene_method::LOAD_JSON_V1, move |_unit, payload| {
+            load_service.load_json_v1(payload)
+        })
+        .blob(scene_method::SAVE_JSON_V1, move |_unit, payload| {
+            save_service.save_json_v1(payload)
+        })
+        .blob(
+            authored_scene_method::GRAPH_JSON_V1,
+            move |_unit, _payload| graph_service.graph_json_v1(),
+        )
+        .blob(
+            authored_scene_method::ARCHETYPE_GRAPH_JSON_V1,
+            move |_unit, _payload| archetype_service.archetype_graph_json_v1(),
+        )
+        .blob(
+            authored_scene_method::PLACEMENTS_JSON_V1,
+            move |_unit, _payload| placement_service.placements_json_v1(),
+        )
+        .blob(
+            authored_scene_method::INSTANTIATE_PREFAB_JSON_V1,
+            move |_unit, payload| prefab_service.instantiate_prefab_json_v1(payload),
+        )
+        .blob(
+            authored_scene_method::INSTANTIATE_ARCHETYPE_JSON_V1,
+            move |_unit, payload| {
+                archetype_instantiate_service.instantiate_archetype_json_v1(payload)
+            },
+        )
+        .blob(scene_method::SHUTDOWN_V1, move |_unit, _payload| {
+            RResult::ROk(Blob::from(Vec::new()))
+        })
         .into_service_v1()
 }
 
@@ -488,7 +589,9 @@ pub fn register_scene_gateway_best_effort(
     asset_mounts: Option<SceneGatewayAssetMounts>,
 ) {
     if newengine_plugin_host::has_service(ENGINE_SCENE_SERVICE_ID) {
-        newengine_ulog_api::ulog::debug!("engine.scene gateway registration skipped; service already available");
+        newengine_ulog_api::ulog::debug!(
+            "engine.scene gateway registration skipped; service already available"
+        );
         return;
     }
 

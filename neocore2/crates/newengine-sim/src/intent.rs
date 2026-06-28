@@ -15,20 +15,32 @@ use crate::{
 /// them into ECS/storage mutations in a single, ordered place.
 #[derive(Clone, Copy, Debug)]
 pub enum Intent {
-    TransformSetLocalPosition { entity: EntityId, position: Vec3 },
-    TransformSetLocalRotation { entity: EntityId, rotation: Quat },
+    TransformSetLocalPosition {
+        entity: EntityId,
+        position: Vec3,
+    },
+    TransformSetLocalRotation {
+        entity: EntityId,
+        rotation: Quat,
+    },
     TransformSetLocalPose {
         entity: EntityId,
         position: Vec3,
         rotation: Quat,
     },
-    TransformSetLocalScale { entity: EntityId, scale: Vec3 },
+    TransformSetLocalScale {
+        entity: EntityId,
+        scale: Vec3,
+    },
     TransformSetWorldPose {
         entity: EntityId,
         position: Vec3,
         rotation: Quat,
     },
-    SetVelocity { entity: EntityId, value: Velocity },
+    SetVelocity {
+        entity: EntityId,
+        value: Velocity,
+    },
     SetAngularVelocity {
         entity: EntityId,
         value: AngularVelocity,
@@ -41,7 +53,10 @@ pub enum Intent {
         entity: EntityId,
         value: OrbitCameraMotor,
     },
-    SetCameraRig { entity: EntityId, value: CameraRigComp },
+    SetCameraRig {
+        entity: EntityId,
+        value: CameraRigComp,
+    },
     SetFollowTargetCameraMotor {
         entity: EntityId,
         value: FollowTargetCameraMotor,
@@ -106,7 +121,9 @@ pub struct IntentBuffer {
 impl IntentBuffer {
     #[inline]
     pub fn new() -> Self {
-        Self { intents: Vec::new() }
+        Self {
+            intents: Vec::new(),
+        }
     }
 
     #[inline]
@@ -125,7 +142,7 @@ impl IntentBuffer {
     }
 
     #[inline]
-    pub fn iter(&self) -> impl Iterator<Item=&Intent> {
+    pub fn iter(&self) -> impl Iterator<Item = &Intent> {
         self.intents.iter()
     }
 }

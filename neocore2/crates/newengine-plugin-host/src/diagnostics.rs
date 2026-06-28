@@ -5,8 +5,8 @@ use std::sync::{Mutex, OnceLock};
 use std::time::Instant;
 
 use newengine_jobs_api::{
-    EngineJobEventV1, EngineTaskEvent, EngineTaskPhase, JobExecutorKind,
-    ENGINE_JOB_EVENT_TOPIC_V1, ENGINE_TASK_EVENT_TOPIC_V1,
+    EngineJobEventV1, EngineTaskEvent, EngineTaskPhase, JobExecutorKind, ENGINE_JOB_EVENT_TOPIC_V1,
+    ENGINE_TASK_EVENT_TOPIC_V1,
 };
 use newengine_math::collections_prelude::NeHashMap as HashMap;
 
@@ -84,7 +84,11 @@ impl PluginHostJobBridge {
         if let Ok(mut active) = Self::active_jobs().lock() {
             active.insert(record.task_id.clone(), record.clone());
         }
-        let detail = str_field(&value, "detail", "Plugin-host work entered the engine.jobs bridge.");
+        let detail = str_field(
+            &value,
+            "detail",
+            "Plugin-host work entered the engine.jobs bridge.",
+        );
         Self::publish(
             &record,
             EngineTaskPhase::Scheduled,
@@ -109,7 +113,11 @@ impl PluginHostJobBridge {
             .and_then(|mut active| active.remove(task_id.as_str()))
             .unwrap_or_else(|| PluginHostJobRecord::from_json(&value));
 
-        let phase = match value.get("status").and_then(|v| v.as_str()).unwrap_or_default() {
+        let phase = match value
+            .get("status")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+        {
             "completed" => EngineTaskPhase::Completed,
             "cancelled" | "canceled" => EngineTaskPhase::Cancelled,
             _ => EngineTaskPhase::Failed,
@@ -148,7 +156,11 @@ impl PluginHostJobBridge {
 
 #[inline]
 pub(crate) fn next_job_id(prefix: &str) -> String {
-    format!("{}.{}", prefix, HOST_JOB_SEQ.fetch_add(1, Ordering::Relaxed))
+    format!(
+        "{}.{}",
+        prefix,
+        HOST_JOB_SEQ.fetch_add(1, Ordering::Relaxed)
+    )
 }
 
 #[inline]
@@ -172,9 +184,24 @@ fn owner_from_json(value: &serde_json::Value) -> &str {
         .and_then(|v| v.as_str())
         .or_else(|| value.get("plugin_id").and_then(|v| v.as_str()))
         .or_else(|| value.get("service_id").and_then(|v| v.as_str()))
-        .or_else(|| value.get("metadata").and_then(|m| m.get("owner_plugin_id")).and_then(|v| v.as_str()))
-        .or_else(|| value.get("metadata").and_then(|m| m.get("plugin_id")).and_then(|v| v.as_str()))
-        .or_else(|| value.get("metadata").and_then(|m| m.get("service_id")).and_then(|v| v.as_str()))
+        .or_else(|| {
+            value
+                .get("metadata")
+                .and_then(|m| m.get("owner_plugin_id"))
+                .and_then(|v| v.as_str())
+        })
+        .or_else(|| {
+            value
+                .get("metadata")
+                .and_then(|m| m.get("plugin_id"))
+                .and_then(|v| v.as_str())
+        })
+        .or_else(|| {
+            value
+                .get("metadata")
+                .and_then(|m| m.get("service_id"))
+                .and_then(|v| v.as_str())
+        })
         .unwrap_or("newengine-plugin-host")
 }
 

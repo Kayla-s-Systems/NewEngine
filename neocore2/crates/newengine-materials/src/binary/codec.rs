@@ -1,8 +1,6 @@
 use super::error::{MaterialBinaryError, MaterialBinaryResult};
 use super::format::{
-    decode_descriptor_from,
-    encode_descriptor_into,
-    MATERIAL_BINARY_VERSION,
+    decode_descriptor_from, encode_descriptor_into, MATERIAL_BINARY_VERSION,
     MATERIAL_DESCRIPTOR_SIZE,
 };
 use super::io::{push_u16, read_u16};

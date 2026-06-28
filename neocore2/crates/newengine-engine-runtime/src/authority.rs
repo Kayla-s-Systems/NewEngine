@@ -59,7 +59,11 @@ pub struct RuntimeWorldAuthorityFrame {
 impl RuntimeWorldAuthorityFrame {
     #[inline]
     pub fn native_world_is_component_cache(&self) -> bool {
-        matches!(self.mode, RuntimeWorldAuthorityMode::PluginEcsEntityAuthority | RuntimeWorldAuthorityMode::SplitAuthority)
+        matches!(
+            self.mode,
+            RuntimeWorldAuthorityMode::PluginEcsEntityAuthority
+                | RuntimeWorldAuthorityMode::SplitAuthority
+        )
     }
 }
 
@@ -162,7 +166,9 @@ impl RuntimeWorldAuthorityBridge {
             native_storage_count: world.storage_count() as u64,
             native_resource_count: world.resource_count() as u64,
         };
-        world.insert_resource(RuntimeWorldAuthorityResource { frame: frame.clone() });
+        world.insert_resource(RuntimeWorldAuthorityResource {
+            frame: frame.clone(),
+        });
         self.log_frame_boundary(&frame);
         frame
     }
@@ -311,7 +317,9 @@ impl RuntimeWorldAuthorityBridge {
 
 #[inline]
 pub fn current_world_authority_frame(world: &World) -> Option<&RuntimeWorldAuthorityFrame> {
-    world.resource::<RuntimeWorldAuthorityResource>().map(|resource| &resource.frame)
+    world
+        .resource::<RuntimeWorldAuthorityResource>()
+        .map(|resource| &resource.frame)
 }
 
 #[inline]
@@ -341,9 +349,21 @@ mod tests {
     #[test]
     fn plugin_ecs_and_entity_same_owner_is_plugin_mode() {
         let snapshot = WorldAuthoritySnapshot {
-            ecs: Some(route("engine.ecs", "newengine.ecs.flecs", "first-party-plugin")),
-            entity: Some(route("engine.entity", "newengine.ecs.flecs", "first-party-plugin")),
-            scene: Some(route("engine.scene", "newengine.ecs.flecs", "first-party-plugin")),
+            ecs: Some(route(
+                "engine.ecs",
+                "newengine.ecs.flecs",
+                "first-party-plugin",
+            )),
+            entity: Some(route(
+                "engine.entity",
+                "newengine.ecs.flecs",
+                "first-party-plugin",
+            )),
+            scene: Some(route(
+                "engine.scene",
+                "newengine.ecs.flecs",
+                "first-party-plugin",
+            )),
             ..Default::default()
         };
         assert_eq!(
@@ -355,9 +375,21 @@ mod tests {
     #[test]
     fn plugin_ecs_with_engine_scene_is_split_authority() {
         let snapshot = WorldAuthoritySnapshot {
-            ecs: Some(route("engine.ecs", "newengine.ecs.flecs", "first-party-plugin")),
-            entity: Some(route("engine.entity", "newengine.ecs.flecs", "first-party-plugin")),
-            scene: Some(route("engine.scene", "newengine-scene-runtime.scene-gateway", "engine-runtime")),
+            ecs: Some(route(
+                "engine.ecs",
+                "newengine.ecs.flecs",
+                "first-party-plugin",
+            )),
+            entity: Some(route(
+                "engine.entity",
+                "newengine.ecs.flecs",
+                "first-party-plugin",
+            )),
+            scene: Some(route(
+                "engine.scene",
+                "newengine-scene-runtime.scene-gateway",
+                "engine-runtime",
+            )),
             ..Default::default()
         };
         assert_eq!(

@@ -164,7 +164,11 @@ impl CameraViewportManagerResource {
         } else {
             self.layers.push(layer);
         }
-        self.layers.sort_by(|a, b| a.priority.cmp(&b.priority).then_with(|| a.id.0.cmp(&b.id.0)));
+        self.layers.sort_by(|a, b| {
+            a.priority
+                .cmp(&b.priority)
+                .then_with(|| a.id.0.cmp(&b.id.0))
+        });
         self.changed_this_update = true;
     }
 
@@ -192,7 +196,11 @@ impl CameraViewportManagerResource {
             .iter()
             .enumerate()
             .filter(|(_, layer)| layer.enabled)
-            .max_by(|(_, a), (_, b)| a.priority.cmp(&b.priority).then_with(|| a.id.0.cmp(&b.id.0)))
+            .max_by(|(_, a), (_, b)| {
+                a.priority
+                    .cmp(&b.priority)
+                    .then_with(|| a.id.0.cmp(&b.id.0))
+            })
             .map(|(index, _)| index)
             .unwrap_or(0);
 

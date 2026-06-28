@@ -21,5 +21,4 @@ pub struct DebugLineGpu {
     pub capacity_vertices: u32,
 }
 
-
 pub(super) const DEBUG_LINE_UBO_SIZE: u64 = 16;

@@ -23,7 +23,13 @@ pub struct ModelMaterialSource {
 impl Default for ModelMaterialSource {
     #[inline]
     fn default() -> Self {
-        Self { kd: [0.82, 0.78, 0.72], alpha: 1.0, ns: 32.0, base_color_texture: None, normal_texture: None }
+        Self {
+            kd: [0.82, 0.78, 0.72],
+            alpha: 1.0,
+            ns: 32.0,
+            base_color_texture: None,
+            normal_texture: None,
+        }
     }
 }
 
@@ -77,23 +83,49 @@ where
             continue;
         }
         let mut words = line.split_whitespace();
-        let Some(tag) = words.next() else { continue; };
+        let Some(tag) = words.next() else {
+            continue;
+        };
         match tag {
             "v" => {
-                let x = words.next().and_then(|v| v.parse::<f32>().ok()).unwrap_or(0.0);
-                let y = words.next().and_then(|v| v.parse::<f32>().ok()).unwrap_or(0.0);
-                let z = words.next().and_then(|v| v.parse::<f32>().ok()).unwrap_or(0.0);
+                let x = words
+                    .next()
+                    .and_then(|v| v.parse::<f32>().ok())
+                    .unwrap_or(0.0);
+                let y = words
+                    .next()
+                    .and_then(|v| v.parse::<f32>().ok())
+                    .unwrap_or(0.0);
+                let z = words
+                    .next()
+                    .and_then(|v| v.parse::<f32>().ok())
+                    .unwrap_or(0.0);
                 positions.push([x, y, z]);
             }
             "vn" => {
-                let x = words.next().and_then(|v| v.parse::<f32>().ok()).unwrap_or(0.0);
-                let y = words.next().and_then(|v| v.parse::<f32>().ok()).unwrap_or(1.0);
-                let z = words.next().and_then(|v| v.parse::<f32>().ok()).unwrap_or(0.0);
+                let x = words
+                    .next()
+                    .and_then(|v| v.parse::<f32>().ok())
+                    .unwrap_or(0.0);
+                let y = words
+                    .next()
+                    .and_then(|v| v.parse::<f32>().ok())
+                    .unwrap_or(1.0);
+                let z = words
+                    .next()
+                    .and_then(|v| v.parse::<f32>().ok())
+                    .unwrap_or(0.0);
                 normals.push([x, y, z]);
             }
             "vt" => {
-                let u = words.next().and_then(|v| v.parse::<f32>().ok()).unwrap_or(0.0);
-                let v = words.next().and_then(|v| v.parse::<f32>().ok()).unwrap_or(0.0);
+                let u = words
+                    .next()
+                    .and_then(|v| v.parse::<f32>().ok())
+                    .unwrap_or(0.0);
+                let v = words
+                    .next()
+                    .and_then(|v| v.parse::<f32>().ok())
+                    .unwrap_or(0.0);
                 uvs.push([u, 1.0 - v]);
             }
             "mtllib" => {
@@ -106,14 +138,22 @@ where
             }
             "f" => {
                 let corners = words
-                    .filter_map(|token| parse_face_corner(token, positions.len(), uvs.len(), normals.len()))
+                    .filter_map(|token| {
+                        parse_face_corner(token, positions.len(), uvs.len(), normals.len())
+                    })
                     .collect::<Vec<_>>();
                 if corners.len() < 3 {
                     continue;
                 }
                 let part = groups.entry(current_material.clone()).or_default();
                 for i in 1..corners.len() - 1 {
-                    push_triangle(part, [corners[0], corners[i], corners[i + 1]], &positions, &uvs, &normals);
+                    push_triangle(
+                        part,
+                        [corners[0], corners[i], corners[i + 1]],
+                        &positions,
+                        &uvs,
+                        &normals,
+                    );
                 }
             }
             _ => {}
@@ -122,16 +162,27 @@ where
 
     let mut parts = groups
         .into_iter()
-        .filter_map(|(material_slot, builder)| mesh_from_builder(builder).map(|mesh| ObjPart { material_slot, mesh }))
+        .filter_map(|(material_slot, builder)| {
+            mesh_from_builder(builder).map(|mesh| ObjPart {
+                material_slot,
+                mesh,
+            })
+        })
         .collect::<Vec<_>>();
 
     if parts.is_empty() {
-        return Err(format!("model OBJ has no renderable faces path='{logical_path}'"));
+        return Err(format!(
+            "model OBJ has no renderable faces path='{logical_path}'"
+        ));
     }
 
     normalize_parts(&mut parts, target_height);
     let materials = load_mtl_map(&logical_path, &mtllibs, &mut read_mtl);
-    Ok(ObjDecodeResult { parts, materials, mtllibs })
+    Ok(ObjDecodeResult {
+        parts,
+        materials,
+        mtllibs,
+    })
 }
 
 pub fn parse_mtl_text(base_dir: &str, text: &str) -> BTreeMap<String, ModelMaterialSource> {
@@ -143,32 +194,49 @@ pub fn parse_mtl_text(base_dir: &str, text: &str) -> BTreeMap<String, ModelMater
             continue;
         }
         let mut words = line.split_whitespace();
-        let Some(tag) = words.next() else { continue; };
+        let Some(tag) = words.next() else {
+            continue;
+        };
         let rest = words.collect::<Vec<_>>();
         match tag {
             "newmtl" => {
                 if let Some((name, mat)) = current.take() {
                     out.insert(name, mat);
                 }
-                current = Some((rest.first().copied().unwrap_or("default").to_owned(), ModelMaterialSource::default()));
+                current = Some((
+                    rest.first().copied().unwrap_or("default").to_owned(),
+                    ModelMaterialSource::default(),
+                ));
             }
             "Kd" => {
                 if let Some((_, mat)) = &mut current {
                     mat.kd = [
-                        rest.get(0).and_then(|v| v.parse::<f32>().ok()).unwrap_or(mat.kd[0]),
-                        rest.get(1).and_then(|v| v.parse::<f32>().ok()).unwrap_or(mat.kd[1]),
-                        rest.get(2).and_then(|v| v.parse::<f32>().ok()).unwrap_or(mat.kd[2]),
+                        rest.get(0)
+                            .and_then(|v| v.parse::<f32>().ok())
+                            .unwrap_or(mat.kd[0]),
+                        rest.get(1)
+                            .and_then(|v| v.parse::<f32>().ok())
+                            .unwrap_or(mat.kd[1]),
+                        rest.get(2)
+                            .and_then(|v| v.parse::<f32>().ok())
+                            .unwrap_or(mat.kd[2]),
                     ];
                 }
             }
             "d" => {
                 if let Some((_, mat)) = &mut current {
-                    mat.alpha = rest.first().and_then(|v| v.parse::<f32>().ok()).unwrap_or(mat.alpha);
+                    mat.alpha = rest
+                        .first()
+                        .and_then(|v| v.parse::<f32>().ok())
+                        .unwrap_or(mat.alpha);
                 }
             }
             "Ns" => {
                 if let Some((_, mat)) = &mut current {
-                    mat.ns = rest.first().and_then(|v| v.parse::<f32>().ok()).unwrap_or(mat.ns);
+                    mat.ns = rest
+                        .first()
+                        .and_then(|v| v.parse::<f32>().ok())
+                        .unwrap_or(mat.ns);
                 }
             }
             "map_Kd" => {
@@ -190,7 +258,11 @@ pub fn parse_mtl_text(base_dir: &str, text: &str) -> BTreeMap<String, ModelMater
     out
 }
 
-fn load_mtl_map<F>(obj_path: &str, mtllibs: &[String], read_mtl: &mut F) -> BTreeMap<String, ModelMaterialSource>
+fn load_mtl_map<F>(
+    obj_path: &str,
+    mtllibs: &[String],
+    read_mtl: &mut F,
+) -> BTreeMap<String, ModelMaterialSource>
 where
     F: FnMut(&str) -> Option<String>,
 {
@@ -199,7 +271,11 @@ where
 
     for rel in mtllibs {
         let Ok(path) = join_logical_path(base, rel) else {
-            newengine_ulog_api::ulog::warn!("model import obj: MTL rejected relative='{}' base='{}'", rel, base);
+            newengine_ulog_api::ulog::warn!(
+                "model import obj: MTL rejected relative='{}' base='{}'",
+                rel,
+                base
+            );
             continue;
         };
         let Some(text) = read_mtl(&path) else {
@@ -218,7 +294,9 @@ pub fn normalize_logical_path(raw: &str, allow_selector: bool) -> Result<String,
         return Err("empty asset path".to_owned());
     }
     if !allow_selector && trimmed.contains('@') {
-        return Err(format!("texture selector is not allowed for asset path '{raw}'"));
+        return Err(format!(
+            "texture selector is not allowed for asset path '{raw}'"
+        ));
     }
 
     let (path, selector) = if allow_selector {
@@ -246,7 +324,12 @@ pub fn normalize_logical_path(raw: &str, allow_selector: bool) -> Result<String,
     let normalized = parts.join("/");
     if let Some(selector) = selector {
         let selector = selector.trim();
-        if selector.is_empty() || selector.contains('@') || selector.contains('/') || selector.contains('\\') || selector.contains(':') {
+        if selector.is_empty()
+            || selector.contains('@')
+            || selector.contains('/')
+            || selector.contains('\\')
+            || selector.contains(':')
+        {
             return Err(format!("invalid logical texture selector '{raw}'"));
         }
         Ok(format!("{}@{}", normalized, selector))
@@ -257,7 +340,10 @@ pub fn normalize_logical_path(raw: &str, allow_selector: bool) -> Result<String,
 
 #[inline]
 pub fn logical_dir(logical_path: &str) -> &str {
-    logical_path.rsplit_once('/').map(|(dir, _)| dir).unwrap_or("")
+    logical_path
+        .rsplit_once('/')
+        .map(|(dir, _)| dir)
+        .unwrap_or("")
 }
 
 pub fn join_logical_path(base_dir: &str, relative: &str) -> Result<String, String> {
@@ -290,33 +376,85 @@ fn parse_obj_index(raw: &str, len: usize) -> Option<usize> {
     }
 }
 
-fn parse_face_corner(token: &str, pos_len: usize, uv_len: usize, nrm_len: usize) -> Option<ObjCorner> {
+fn parse_face_corner(
+    token: &str,
+    pos_len: usize,
+    uv_len: usize,
+    nrm_len: usize,
+) -> Option<ObjCorner> {
     let mut it = token.split('/');
     let pos = parse_obj_index(it.next()?, pos_len)?;
-    let uv = it.next().and_then(|v| if v.trim().is_empty() { None } else { parse_obj_index(v, uv_len) });
-    let nrm = it.next().and_then(|v| if v.trim().is_empty() { None } else { parse_obj_index(v, nrm_len) });
+    let uv = it.next().and_then(|v| {
+        if v.trim().is_empty() {
+            None
+        } else {
+            parse_obj_index(v, uv_len)
+        }
+    });
+    let nrm = it.next().and_then(|v| {
+        if v.trim().is_empty() {
+            None
+        } else {
+            parse_obj_index(v, nrm_len)
+        }
+    });
     Some(ObjCorner { pos, uv, nrm })
 }
 
 #[inline]
-fn vertex(corner: ObjCorner, positions: &[[f32; 3]], uvs: &[[f32; 2]], normals: &[[f32; 3]], fallback_normal: [f32; 3]) -> PrimitiveVertex {
+fn vertex(
+    corner: ObjCorner,
+    positions: &[[f32; 3]],
+    uvs: &[[f32; 2]],
+    normals: &[[f32; 3]],
+    fallback_normal: [f32; 3],
+) -> PrimitiveVertex {
     PrimitiveVertex {
         pos: positions[corner.pos],
-        nrm: corner.nrm.and_then(|ix| normals.get(ix).copied()).unwrap_or(fallback_normal),
-        uv: corner.uv.and_then(|ix| uvs.get(ix).copied()).unwrap_or([0.0, 0.0]),
+        nrm: corner
+            .nrm
+            .and_then(|ix| normals.get(ix).copied())
+            .unwrap_or(fallback_normal),
+        uv: corner
+            .uv
+            .and_then(|ix| uvs.get(ix).copied())
+            .unwrap_or([0.0, 0.0]),
     }
 }
 
-fn push_triangle(part: &mut ObjPartBuilder, tri: [ObjCorner; 3], positions: &[[f32; 3]], uvs: &[[f32; 2]], normals: &[[f32; 3]]) {
-    let a = Vec3::new(positions[tri[0].pos][0], positions[tri[0].pos][1], positions[tri[0].pos][2]);
-    let b = Vec3::new(positions[tri[1].pos][0], positions[tri[1].pos][1], positions[tri[1].pos][2]);
-    let c = Vec3::new(positions[tri[2].pos][0], positions[tri[2].pos][1], positions[tri[2].pos][2]);
+fn push_triangle(
+    part: &mut ObjPartBuilder,
+    tri: [ObjCorner; 3],
+    positions: &[[f32; 3]],
+    uvs: &[[f32; 2]],
+    normals: &[[f32; 3]],
+) {
+    let a = Vec3::new(
+        positions[tri[0].pos][0],
+        positions[tri[0].pos][1],
+        positions[tri[0].pos][2],
+    );
+    let b = Vec3::new(
+        positions[tri[1].pos][0],
+        positions[tri[1].pos][1],
+        positions[tri[1].pos][2],
+    );
+    let c = Vec3::new(
+        positions[tri[2].pos][0],
+        positions[tri[2].pos][1],
+        positions[tri[2].pos][2],
+    );
     let n = (b - a).cross(c - a).normalize_or_zero();
-    let fallback = if n.length_squared() > 0.0 { [n.x, n.y, n.z] } else { [0.0, 1.0, 0.0] };
+    let fallback = if n.length_squared() > 0.0 {
+        [n.x, n.y, n.z]
+    } else {
+        [0.0, 1.0, 0.0]
+    };
 
     for corner in tri {
         let ix = part.vertices.len() as u32;
-        part.vertices.push(vertex(corner, positions, uvs, normals, fallback));
+        part.vertices
+            .push(vertex(corner, positions, uvs, normals, fallback));
         part.indices.push(ix);
     }
 }
@@ -344,7 +482,12 @@ fn mesh_from_builder(mut builder: ObjPartBuilder) -> Option<PrimitiveMesh> {
         *index = (*index).min(builder.vertices.len().saturating_sub(1) as u32);
     }
 
-    Some(PrimitiveMesh { vertices: builder.vertices, indices: builder.indices, bounds_center: center, bounds_radius: radius.max(0.001) })
+    Some(PrimitiveMesh {
+        vertices: builder.vertices,
+        indices: builder.indices,
+        bounds_center: center,
+        bounds_radius: radius.max(0.001),
+    })
 }
 
 fn normalize_parts(parts: &mut [ObjPart], target_height: f32) {

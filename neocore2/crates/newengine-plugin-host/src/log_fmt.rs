@@ -31,7 +31,11 @@ pub(crate) fn emit_boxed_kv(title: &str, rows: &[(&str, String)]) {
         return;
     }
 
-    let key_width = rows.iter().map(|(key, _)| key.chars().count()).max().unwrap_or(0);
+    let key_width = rows
+        .iter()
+        .map(|(key, _)| key.chars().count())
+        .max()
+        .unwrap_or(0);
     let value_width = rows
         .iter()
         .flat_map(|(_, value)| wrap_value(value, 80))
@@ -96,7 +100,10 @@ pub(crate) fn emit_prefixed_table(
         return;
     }
 
-    let mut widths: Vec<usize> = headers.iter().map(|header| header.chars().count()).collect();
+    let mut widths: Vec<usize> = headers
+        .iter()
+        .map(|header| header.chars().count())
+        .collect();
     for row in rows {
         for (index, value) in row.iter().enumerate() {
             if index < widths.len() {

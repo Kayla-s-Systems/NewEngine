@@ -8,7 +8,11 @@ pub struct PhysicsMaterialDesc {
 impl Default for PhysicsMaterialDesc {
     #[inline]
     fn default() -> Self {
-        Self { friction: 0.75, restitution: 0.05, density: 1.0 }
+        Self {
+            friction: 0.75,
+            restitution: 0.05,
+            density: 1.0,
+        }
     }
 }
 

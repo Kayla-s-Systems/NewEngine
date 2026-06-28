@@ -133,7 +133,12 @@ pub fn run_character_motor_controller(
     input: MotorInput,
     out: &mut impl IntentSink,
 ) {
-    let Some(step) = step_character_motor(motor, input, ctx.local_rotation_or_identity(entity), ctx.dt()) else {
+    let Some(step) = step_character_motor(
+        motor,
+        input,
+        ctx.local_rotation_or_identity(entity),
+        ctx.dt(),
+    ) else {
         return;
     };
 

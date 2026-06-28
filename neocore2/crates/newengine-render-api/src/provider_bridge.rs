@@ -207,16 +207,24 @@ impl Default for RenderMaterialBinding {
 }
 
 #[inline]
-fn default_true() -> bool { true }
+fn default_true() -> bool {
+    true
+}
 
 #[inline]
-fn default_material_base_color() -> [f32; 4] { [1.0, 1.0, 1.0, 1.0] }
+fn default_material_base_color() -> [f32; 4] {
+    [1.0, 1.0, 1.0, 1.0]
+}
 
 #[inline]
-fn default_uv_transform() -> [f32; 4] { [1.0, 1.0, 0.0, 0.0] }
+fn default_uv_transform() -> [f32; 4] {
+    [1.0, 1.0, 0.0, 0.0]
+}
 
 #[inline]
-fn default_material_params() -> [f32; 4] { [0.5, 0.0, 1.0, 0.0] }
+fn default_material_params() -> [f32; 4] {
+    [0.5, 0.0, 1.0, 0.0]
+}
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct RenderMeshGpuBinding {
@@ -237,7 +245,9 @@ pub struct RenderMeshGpuBinding {
 }
 
 #[inline]
-fn default_index_format() -> IndexFormat { IndexFormat::U32 }
+fn default_index_format() -> IndexFormat {
+    IndexFormat::U32
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RenderInstanceData {
@@ -329,7 +339,9 @@ pub struct BackendShadowCapabilities {
 }
 
 #[inline]
-fn default_max_directional_cascades() -> u32 { 1 }
+fn default_max_directional_cascades() -> u32 {
+    1
+}
 
 impl Default for BackendShadowCapabilities {
     #[inline]
@@ -372,7 +384,9 @@ pub struct ShadowSettingsSnapshot {
 }
 
 #[inline]
-fn default_cascade_count() -> u32 { 1 }
+fn default_cascade_count() -> u32 {
+    1
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LightExtractionProviderRequest {
@@ -431,7 +445,6 @@ pub struct LightExtractionProviderResponse {
     pub warnings: Vec<String>,
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -464,7 +477,8 @@ mod tests {
             "light_mvp_cols": [[1.0,0.0,0.0,0.0],[0.0,1.0,0.0,0.0],[0.0,0.0,1.0,0.0],[0.0,0.0,0.0,1.0]],
             "params": [1.0, 0.0015, 0.35, 0.4]
         }"#;
-        let contribution: LightPlanContribution = serde_json::from_str(minimal).expect("minimal contribution json");
+        let contribution: LightPlanContribution =
+            serde_json::from_str(minimal).expect("minimal contribution json");
         assert_eq!(contribution.extra, [0.0; 4]);
     }
 }

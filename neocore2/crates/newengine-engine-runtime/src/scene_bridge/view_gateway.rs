@@ -11,8 +11,8 @@ use newengine_input_actions_api::CameraViewRequest;
 use newengine_math::{Mat4, Vec3};
 
 use crate::camera_gateway::{CameraGatewayFrame, CameraGatewayInput, CameraTransitionPhase};
-use crate::gameplay::GameRunMode;
 use crate::engine_bounds::EngineBoundsSnap;
+use crate::gameplay::GameRunMode;
 use crate::viewport_bridge::ViewportBridge;
 
 use super::SceneBridge;
@@ -172,7 +172,9 @@ pub(crate) struct EngineViewTransitionDiagnostics {
     pub elapsed_sec: f32,
 }
 
-impl From<crate::camera_gateway::CameraTransitionOverlayReport> for EngineViewTransitionDiagnostics {
+impl From<crate::camera_gateway::CameraTransitionOverlayReport>
+    for EngineViewTransitionDiagnostics
+{
     #[inline]
     fn from(report: crate::camera_gateway::CameraTransitionOverlayReport) -> Self {
         Self {

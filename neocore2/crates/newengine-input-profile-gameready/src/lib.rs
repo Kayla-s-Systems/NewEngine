@@ -1,8 +1,14 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use newengine_input_actions_api::{move_mask, CameraViewRequest, InputActionDefinition, InputActionDispatchMode, InputActionEffect, InputActionListenerRegistration};
+use newengine_input_actions_api::{
+    move_mask, CameraViewRequest, InputActionDefinition, InputActionDispatchMode,
+    InputActionEffect, InputActionListenerRegistration,
+};
 use newengine_input_api::{engine_default_keybind, gamepad_axis, gamepad_button, key_identity};
-use newengine_input_bindings_api::{GamepadAxisBinding, GamepadAxisTarget, InputBinding, InputBindingDevice, InputBindingPhase, InputBindingsProfile, InputDevicePreference, InputKeyRegistration};
+use newengine_input_bindings_api::{
+    GamepadAxisBinding, GamepadAxisTarget, InputBinding, InputBindingDevice, InputBindingPhase,
+    InputBindingsProfile, InputDevicePreference, InputKeyRegistration,
+};
 
 pub mod action {
     pub const PLAYER_MOVE_FORWARD: &str = "player.move.forward";
@@ -19,15 +25,22 @@ pub mod action {
     pub const CAMERA_VIEW_THIRD_PERSON_FOLLOW: &str = "camera.view.third_person.follow";
     pub const CAMERA_VIEW_THIRD_PERSON_AIM: &str = "camera.view.third_person.aim";
 
-    pub const UI_NAVIGATION_TOGGLE: &str = newengine_input_actions_api::engine_action::UI_NAVIGATION_TOGGLE;
-    pub const UI_NAVIGATION_ACCEPT: &str = newengine_input_actions_api::engine_action::UI_NAVIGATION_ACCEPT;
-    pub const UI_NAVIGATION_BACK: &str = newengine_input_actions_api::engine_action::UI_NAVIGATION_BACK;
+    pub const UI_NAVIGATION_TOGGLE: &str =
+        newengine_input_actions_api::engine_action::UI_NAVIGATION_TOGGLE;
+    pub const UI_NAVIGATION_ACCEPT: &str =
+        newengine_input_actions_api::engine_action::UI_NAVIGATION_ACCEPT;
+    pub const UI_NAVIGATION_BACK: &str =
+        newengine_input_actions_api::engine_action::UI_NAVIGATION_BACK;
     pub const UI_NAVIGATION_UP: &str = newengine_input_actions_api::engine_action::UI_NAVIGATION_UP;
-    pub const UI_NAVIGATION_DOWN: &str = newengine_input_actions_api::engine_action::UI_NAVIGATION_DOWN;
-    pub const UI_NAVIGATION_LEFT: &str = newengine_input_actions_api::engine_action::UI_NAVIGATION_LEFT;
-    pub const UI_NAVIGATION_RIGHT: &str = newengine_input_actions_api::engine_action::UI_NAVIGATION_RIGHT;
+    pub const UI_NAVIGATION_DOWN: &str =
+        newengine_input_actions_api::engine_action::UI_NAVIGATION_DOWN;
+    pub const UI_NAVIGATION_LEFT: &str =
+        newengine_input_actions_api::engine_action::UI_NAVIGATION_LEFT;
+    pub const UI_NAVIGATION_RIGHT: &str =
+        newengine_input_actions_api::engine_action::UI_NAVIGATION_RIGHT;
 
-    pub const ASSET_CATALOG_UI_TOGGLE: &str = newengine_input_actions_api::engine_action::ASSET_CATALOG_UI_TOGGLE;
+    pub const ASSET_CATALOG_UI_TOGGLE: &str =
+        newengine_input_actions_api::engine_action::ASSET_CATALOG_UI_TOGGLE;
 }
 
 #[inline]
@@ -52,11 +65,15 @@ pub fn game_ready_game_input_profile() -> InputBindingsProfile {
     let mut profile = game_ready_input_profile();
     profile.id = "newengine.gameready.game.input.profile".to_owned();
     profile.version = profile.version.saturating_add(1);
-    profile.actions.retain(|action| action.id != action::ASSET_CATALOG_UI_TOGGLE);
+    profile
+        .actions
+        .retain(|action| action.id != action::ASSET_CATALOG_UI_TOGGLE);
     profile.listeners.retain(|listener| {
         listener.id != "asset-browser-ui" && listener.id != "assets-browser-navigation"
     });
-    profile.bindings.retain(|binding| binding.action != action::ASSET_CATALOG_UI_TOGGLE);
+    profile
+        .bindings
+        .retain(|binding| binding.action != action::ASSET_CATALOG_UI_TOGGLE);
     profile.canonicalized()
 }
 
@@ -93,26 +110,102 @@ pub fn gameplay_default_key_registry() -> Vec<InputKeyRegistration> {
 #[inline]
 pub fn gameplay_default_actions() -> Vec<InputActionDefinition> {
     vec![
-        InputActionDefinition::new(action::PLAYER_MOVE_FORWARD).with_label("Move forward").with_effect(InputActionEffect::MoveMask { mask: move_mask::FORWARD }),
-        InputActionDefinition::new(action::PLAYER_MOVE_BACK).with_label("Move back").with_effect(InputActionEffect::MoveMask { mask: move_mask::BACK }),
-        InputActionDefinition::new(action::PLAYER_MOVE_LEFT).with_label("Move left").with_effect(InputActionEffect::MoveMask { mask: move_mask::LEFT }),
-        InputActionDefinition::new(action::PLAYER_MOVE_RIGHT).with_label("Move right").with_effect(InputActionEffect::MoveMask { mask: move_mask::RIGHT }),
-        InputActionDefinition::new(action::PLAYER_MOVE_UP).with_label("Move up").with_effect(InputActionEffect::MoveMask { mask: move_mask::UP }),
-        InputActionDefinition::new(action::PLAYER_MOVE_DOWN).with_label("Move down").with_effect(InputActionEffect::MoveMask { mask: move_mask::DOWN }),
-        InputActionDefinition::new(action::PLAYER_SPRINT).with_label("Sprint").with_effect(InputActionEffect::MoveMask { mask: move_mask::SPRINT }).with_effect(InputActionEffect::Sprint { enabled: true }),
-        InputActionDefinition::new(action::CAMERA_VIEW_NEXT).with_label("Next camera view").with_effect(InputActionEffect::CameraView { request: CameraViewRequest::Next }),
-        InputActionDefinition::new(action::CAMERA_VIEW_PREVIOUS).with_label("Previous camera view").with_effect(InputActionEffect::CameraView { request: CameraViewRequest::Previous }),
-        InputActionDefinition::new(action::CAMERA_VIEW_FIRST_PERSON).with_label("First-person camera").with_effect(InputActionEffect::CameraView { request: CameraViewRequest::Set(newengine_camera_api::CameraViewMode::FirstPerson) }),
-        InputActionDefinition::new(action::CAMERA_VIEW_THIRD_PERSON_FOLLOW).with_label("Third-person follow camera").with_effect(InputActionEffect::CameraView { request: CameraViewRequest::Set(newengine_camera_api::CameraViewMode::ThirdPersonFollow) }),
-        InputActionDefinition::new(action::CAMERA_VIEW_THIRD_PERSON_AIM).with_label("Third-person aim camera").with_effect(InputActionEffect::CameraView { request: CameraViewRequest::Set(newengine_camera_api::CameraViewMode::ThirdPersonAim) }),
-        InputActionDefinition::new(action::UI_NAVIGATION_TOGGLE).with_dispatch(InputActionDispatchMode::ConsumeFirst).with_label("Toggle UI").with_effect(InputActionEffect::UiToggle),
-        InputActionDefinition::new(action::UI_NAVIGATION_ACCEPT).with_dispatch(InputActionDispatchMode::ConsumeFirst).with_label("Accept").with_effect(InputActionEffect::UiAccept),
-        InputActionDefinition::new(action::UI_NAVIGATION_BACK).with_dispatch(InputActionDispatchMode::ConsumeFirst).with_label("Back").with_effect(InputActionEffect::UiBack),
-        InputActionDefinition::new(action::UI_NAVIGATION_UP).with_dispatch(InputActionDispatchMode::ConsumeFirst).with_label("UI up").with_effect(InputActionEffect::UiNav { x: 0, y: -1 }),
-        InputActionDefinition::new(action::UI_NAVIGATION_DOWN).with_dispatch(InputActionDispatchMode::ConsumeFirst).with_label("UI down").with_effect(InputActionEffect::UiNav { x: 0, y: 1 }),
-        InputActionDefinition::new(action::UI_NAVIGATION_LEFT).with_dispatch(InputActionDispatchMode::ConsumeFirst).with_label("UI left").with_effect(InputActionEffect::UiNav { x: -1, y: 0 }),
-        InputActionDefinition::new(action::UI_NAVIGATION_RIGHT).with_dispatch(InputActionDispatchMode::ConsumeFirst).with_label("UI right").with_effect(InputActionEffect::UiNav { x: 1, y: 0 }),
-        InputActionDefinition::new(action::ASSET_CATALOG_UI_TOGGLE).with_dispatch(InputActionDispatchMode::ConsumeFirst).with_label("Toggle assets catalog UI"),
+        InputActionDefinition::new(action::PLAYER_MOVE_FORWARD)
+            .with_label("Move forward")
+            .with_effect(InputActionEffect::MoveMask {
+                mask: move_mask::FORWARD,
+            }),
+        InputActionDefinition::new(action::PLAYER_MOVE_BACK)
+            .with_label("Move back")
+            .with_effect(InputActionEffect::MoveMask {
+                mask: move_mask::BACK,
+            }),
+        InputActionDefinition::new(action::PLAYER_MOVE_LEFT)
+            .with_label("Move left")
+            .with_effect(InputActionEffect::MoveMask {
+                mask: move_mask::LEFT,
+            }),
+        InputActionDefinition::new(action::PLAYER_MOVE_RIGHT)
+            .with_label("Move right")
+            .with_effect(InputActionEffect::MoveMask {
+                mask: move_mask::RIGHT,
+            }),
+        InputActionDefinition::new(action::PLAYER_MOVE_UP)
+            .with_label("Move up")
+            .with_effect(InputActionEffect::MoveMask {
+                mask: move_mask::UP,
+            }),
+        InputActionDefinition::new(action::PLAYER_MOVE_DOWN)
+            .with_label("Move down")
+            .with_effect(InputActionEffect::MoveMask {
+                mask: move_mask::DOWN,
+            }),
+        InputActionDefinition::new(action::PLAYER_SPRINT)
+            .with_label("Sprint")
+            .with_effect(InputActionEffect::MoveMask {
+                mask: move_mask::SPRINT,
+            })
+            .with_effect(InputActionEffect::Sprint { enabled: true }),
+        InputActionDefinition::new(action::CAMERA_VIEW_NEXT)
+            .with_label("Next camera view")
+            .with_effect(InputActionEffect::CameraView {
+                request: CameraViewRequest::Next,
+            }),
+        InputActionDefinition::new(action::CAMERA_VIEW_PREVIOUS)
+            .with_label("Previous camera view")
+            .with_effect(InputActionEffect::CameraView {
+                request: CameraViewRequest::Previous,
+            }),
+        InputActionDefinition::new(action::CAMERA_VIEW_FIRST_PERSON)
+            .with_label("First-person camera")
+            .with_effect(InputActionEffect::CameraView {
+                request: CameraViewRequest::Set(newengine_camera_api::CameraViewMode::FirstPerson),
+            }),
+        InputActionDefinition::new(action::CAMERA_VIEW_THIRD_PERSON_FOLLOW)
+            .with_label("Third-person follow camera")
+            .with_effect(InputActionEffect::CameraView {
+                request: CameraViewRequest::Set(
+                    newengine_camera_api::CameraViewMode::ThirdPersonFollow,
+                ),
+            }),
+        InputActionDefinition::new(action::CAMERA_VIEW_THIRD_PERSON_AIM)
+            .with_label("Third-person aim camera")
+            .with_effect(InputActionEffect::CameraView {
+                request: CameraViewRequest::Set(
+                    newengine_camera_api::CameraViewMode::ThirdPersonAim,
+                ),
+            }),
+        InputActionDefinition::new(action::UI_NAVIGATION_TOGGLE)
+            .with_dispatch(InputActionDispatchMode::ConsumeFirst)
+            .with_label("Toggle UI")
+            .with_effect(InputActionEffect::UiToggle),
+        InputActionDefinition::new(action::UI_NAVIGATION_ACCEPT)
+            .with_dispatch(InputActionDispatchMode::ConsumeFirst)
+            .with_label("Accept")
+            .with_effect(InputActionEffect::UiAccept),
+        InputActionDefinition::new(action::UI_NAVIGATION_BACK)
+            .with_dispatch(InputActionDispatchMode::ConsumeFirst)
+            .with_label("Back")
+            .with_effect(InputActionEffect::UiBack),
+        InputActionDefinition::new(action::UI_NAVIGATION_UP)
+            .with_dispatch(InputActionDispatchMode::ConsumeFirst)
+            .with_label("UI up")
+            .with_effect(InputActionEffect::UiNav { x: 0, y: -1 }),
+        InputActionDefinition::new(action::UI_NAVIGATION_DOWN)
+            .with_dispatch(InputActionDispatchMode::ConsumeFirst)
+            .with_label("UI down")
+            .with_effect(InputActionEffect::UiNav { x: 0, y: 1 }),
+        InputActionDefinition::new(action::UI_NAVIGATION_LEFT)
+            .with_dispatch(InputActionDispatchMode::ConsumeFirst)
+            .with_label("UI left")
+            .with_effect(InputActionEffect::UiNav { x: -1, y: 0 }),
+        InputActionDefinition::new(action::UI_NAVIGATION_RIGHT)
+            .with_dispatch(InputActionDispatchMode::ConsumeFirst)
+            .with_label("UI right")
+            .with_effect(InputActionEffect::UiNav { x: 1, y: 0 }),
+        InputActionDefinition::new(action::ASSET_CATALOG_UI_TOGGLE)
+            .with_dispatch(InputActionDispatchMode::ConsumeFirst)
+            .with_label("Toggle assets catalog UI"),
     ]
 }
 
@@ -175,7 +268,10 @@ fn ensure_required_system_bindings(bindings: &mut Vec<InputBinding>) {
             && binding.phase == InputBindingPhase::Pressed
     });
     if !has_keyboard_toggle {
-        bindings.push(InputBinding::keyboard_pressed(action::UI_NAVIGATION_TOGGLE, engine_default_keybind::PRIMARY_UI_TOGGLE));
+        bindings.push(InputBinding::keyboard_pressed(
+            action::UI_NAVIGATION_TOGGLE,
+            engine_default_keybind::PRIMARY_UI_TOGGLE,
+        ));
     }
 
     let has_gamepad_toggle = bindings.iter().any(|binding| {
@@ -184,7 +280,10 @@ fn ensure_required_system_bindings(bindings: &mut Vec<InputBinding>) {
             && binding.phase == InputBindingPhase::Pressed
     });
     if !has_gamepad_toggle {
-        bindings.push(InputBinding::gamepad_button_pressed(action::UI_NAVIGATION_TOGGLE, gamepad_button::START));
+        bindings.push(InputBinding::gamepad_button_pressed(
+            action::UI_NAVIGATION_TOGGLE,
+            gamepad_button::START,
+        ));
     }
 
     let has_asset_catalog_toggle = bindings.iter().any(|binding| {
@@ -244,15 +343,27 @@ fn gameplay_gamepad_button_bindings() -> [InputBinding; 12] {
         InputBinding::gamepad_button_down(action::PLAYER_SPRINT, gamepad_button::LEFT_THUMB),
         InputBinding::gamepad_button_pressed(action::CAMERA_VIEW_NEXT, gamepad_button::SELECT),
         InputBinding::gamepad_button_pressed(action::CAMERA_VIEW_NEXT, gamepad_button::MODE),
-        InputBinding::gamepad_button_pressed(action::CAMERA_VIEW_FIRST_PERSON, gamepad_button::DPAD_UP),
-        InputBinding::gamepad_button_pressed(action::CAMERA_VIEW_THIRD_PERSON_FOLLOW, gamepad_button::DPAD_LEFT),
-        InputBinding::gamepad_button_pressed(action::CAMERA_VIEW_THIRD_PERSON_AIM, gamepad_button::DPAD_RIGHT),
+        InputBinding::gamepad_button_pressed(
+            action::CAMERA_VIEW_FIRST_PERSON,
+            gamepad_button::DPAD_UP,
+        ),
+        InputBinding::gamepad_button_pressed(
+            action::CAMERA_VIEW_THIRD_PERSON_FOLLOW,
+            gamepad_button::DPAD_LEFT,
+        ),
+        InputBinding::gamepad_button_pressed(
+            action::CAMERA_VIEW_THIRD_PERSON_AIM,
+            gamepad_button::DPAD_RIGHT,
+        ),
         InputBinding::gamepad_button_pressed(action::UI_NAVIGATION_ACCEPT, gamepad_button::SOUTH),
         InputBinding::gamepad_button_pressed(action::UI_NAVIGATION_BACK, gamepad_button::EAST),
         InputBinding::gamepad_button_pressed(action::UI_NAVIGATION_UP, gamepad_button::DPAD_UP),
         InputBinding::gamepad_button_pressed(action::UI_NAVIGATION_DOWN, gamepad_button::DPAD_DOWN),
         InputBinding::gamepad_button_pressed(action::UI_NAVIGATION_LEFT, gamepad_button::DPAD_LEFT),
-        InputBinding::gamepad_button_pressed(action::UI_NAVIGATION_RIGHT, gamepad_button::DPAD_RIGHT),
+        InputBinding::gamepad_button_pressed(
+            action::UI_NAVIGATION_RIGHT,
+            gamepad_button::DPAD_RIGHT,
+        ),
     ]
 }
 
@@ -273,16 +384,44 @@ mod tests {
     #[test]
     fn default_profile_has_camera_view_switching() {
         let profile = game_ready_input_profile();
-        assert!(profile.keys.iter().any(|k| k.id == "keyboard.escape" && k.code == engine_default_keybind::PRIMARY_UI_TOGGLE));
-        assert!(profile.bindings.iter().any(|b| b.action == action::CAMERA_VIEW_NEXT));
-        assert!(profile.bindings.iter().any(|b| b.action == action::PLAYER_MOVE_FORWARD));
-        assert!(profile.actions.iter().any(|a| a.id == action::CAMERA_VIEW_NEXT));
+        assert!(profile
+            .keys
+            .iter()
+            .any(|k| k.id == "keyboard.escape"
+                && k.code == engine_default_keybind::PRIMARY_UI_TOGGLE));
+        assert!(profile
+            .bindings
+            .iter()
+            .any(|b| b.action == action::CAMERA_VIEW_NEXT));
+        assert!(profile
+            .bindings
+            .iter()
+            .any(|b| b.action == action::PLAYER_MOVE_FORWARD));
+        assert!(profile
+            .actions
+            .iter()
+            .any(|a| a.id == action::CAMERA_VIEW_NEXT));
         assert!(profile.listeners.iter().any(|l| l.id == "ui-navigation"));
         assert!(profile.listeners.iter().any(|l| l.id == "asset-browser-ui"));
-        assert!(profile.listeners.iter().any(|l| l.id == "assets-browser-navigation"));
-        assert!(profile.bindings.iter().any(|b| b.action == action::UI_NAVIGATION_TOGGLE && b.code == engine_default_keybind::PRIMARY_UI_TOGGLE));
-        assert!(profile.bindings.iter().any(|b| b.action == action::ASSET_CATALOG_UI_TOGGLE && b.code == engine_default_keybind::ASSET_CATALOG_UI_TOGGLE));
-        assert!(!profile.bindings.iter().any(|b| b.action == action::UI_NAVIGATION_BACK && b.code == engine_default_keybind::PRIMARY_UI_TOGGLE));
+        assert!(profile
+            .listeners
+            .iter()
+            .any(|l| l.id == "assets-browser-navigation"));
+        assert!(profile
+            .bindings
+            .iter()
+            .any(|b| b.action == action::UI_NAVIGATION_TOGGLE
+                && b.code == engine_default_keybind::PRIMARY_UI_TOGGLE));
+        assert!(profile
+            .bindings
+            .iter()
+            .any(|b| b.action == action::ASSET_CATALOG_UI_TOGGLE
+                && b.code == engine_default_keybind::ASSET_CATALOG_UI_TOGGLE));
+        assert!(!profile
+            .bindings
+            .iter()
+            .any(|b| b.action == action::UI_NAVIGATION_BACK
+                && b.code == engine_default_keybind::PRIMARY_UI_TOGGLE));
     }
 
     #[test]
@@ -290,9 +429,22 @@ mod tests {
         let profile = game_ready_game_input_profile();
         assert!(profile.listeners.iter().any(|l| l.id == "ui-navigation"));
         assert!(!profile.listeners.iter().any(|l| l.id == "asset-browser-ui"));
-        assert!(!profile.listeners.iter().any(|l| l.id == "assets-browser-navigation"));
-        assert!(!profile.actions.iter().any(|a| a.id == action::ASSET_CATALOG_UI_TOGGLE));
-        assert!(!profile.bindings.iter().any(|b| b.action == action::ASSET_CATALOG_UI_TOGGLE));
-        assert!(profile.bindings.iter().any(|b| b.action == action::UI_NAVIGATION_TOGGLE && b.code == engine_default_keybind::PRIMARY_UI_TOGGLE));
+        assert!(!profile
+            .listeners
+            .iter()
+            .any(|l| l.id == "assets-browser-navigation"));
+        assert!(!profile
+            .actions
+            .iter()
+            .any(|a| a.id == action::ASSET_CATALOG_UI_TOGGLE));
+        assert!(!profile
+            .bindings
+            .iter()
+            .any(|b| b.action == action::ASSET_CATALOG_UI_TOGGLE));
+        assert!(profile
+            .bindings
+            .iter()
+            .any(|b| b.action == action::UI_NAVIGATION_TOGGLE
+                && b.code == engine_default_keybind::PRIMARY_UI_TOGGLE));
     }
 }

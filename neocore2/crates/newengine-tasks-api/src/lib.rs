@@ -42,10 +42,14 @@ pub struct TaskId(pub String);
 
 impl TaskId {
     #[inline]
-    pub fn new(value: impl Into<String>) -> Self { Self(value.into()) }
+    pub fn new(value: impl Into<String>) -> Self {
+        Self(value.into())
+    }
 
     #[inline]
-    pub fn as_str(&self) -> &str { &self.0 }
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -61,7 +65,9 @@ pub enum TaskKind {
 
 impl Default for TaskKind {
     #[inline]
-    fn default() -> Self { Self::Custom("unknown".to_owned()) }
+    fn default() -> Self {
+        Self::Custom("unknown".to_owned())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -164,8 +170,14 @@ impl Default for TasksServiceInfoV1 {
         Self {
             protocol: TASKS_RUNTIME_CONTRACT.to_owned(),
             provider: "engine.tasks.foundation".to_owned(),
-            methods: TASKS_SERVICE_METHODS.iter().map(|it| (*it).to_owned()).collect(),
-            features: vec!["declarative-task-language".to_owned(), "intent-friendly".to_owned()],
+            methods: TASKS_SERVICE_METHODS
+                .iter()
+                .map(|it| (*it).to_owned())
+                .collect(),
+            features: vec![
+                "declarative-task-language".to_owned(),
+                "intent-friendly".to_owned(),
+            ],
         }
     }
 }

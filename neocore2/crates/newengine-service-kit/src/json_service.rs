@@ -32,10 +32,11 @@ pub fn payload_json(payload: &Blob) -> Result<serde_json::Value, String> {
 }
 
 #[inline]
-pub fn decode_json_payload<T: DeserializeOwned>(service_id: &str, method: &str, payload: &Blob) -> Result<T, RString> {
-    serde_json::from_slice::<T>(payload.as_slice()).map_err(|e| {
-        RString::from(format!(
-            "{service_id}: invalid {method} payload: {e}"
-        ))
-    })
+pub fn decode_json_payload<T: DeserializeOwned>(
+    service_id: &str,
+    method: &str,
+    payload: &Blob,
+) -> Result<T, RString> {
+    serde_json::from_slice::<T>(payload.as_slice())
+        .map_err(|e| RString::from(format!("{service_id}: invalid {method} payload: {e}")))
 }

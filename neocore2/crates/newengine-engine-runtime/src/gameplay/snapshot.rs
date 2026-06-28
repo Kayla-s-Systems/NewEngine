@@ -6,7 +6,7 @@ use newengine_sim::{
 };
 use newengine_transform::Transform;
 
-use super::{PhysicsBodyDesc, DisplayVisibility};
+use super::{DisplayVisibility, PhysicsBodyDesc};
 
 #[derive(Clone, Copy, Debug)]
 pub struct RuntimeEntitySnapshot {
@@ -51,7 +51,11 @@ pub fn capture_runtime_world_snapshot(world: &World) -> RuntimeWorldSnapshot {
 }
 
 #[inline]
-fn restore_component_opt<T: Component + Copy>(world: &mut World, entity: EntityId, value: Option<T>) {
+fn restore_component_opt<T: Component + Copy>(
+    world: &mut World,
+    entity: EntityId,
+    value: Option<T>,
+) {
     if let Some(v) = value {
         let _ = world.insert(entity, v);
     } else {

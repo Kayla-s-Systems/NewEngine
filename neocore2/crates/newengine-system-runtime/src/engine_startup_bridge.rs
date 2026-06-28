@@ -1,8 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use newengine_core::{
-    EngineStartupPhase, EngineStartupSnapshot, EngineStartupSystemPhase,
-    EngineStartupSystemStatus,
+    EngineStartupPhase, EngineStartupSnapshot, EngineStartupSystemPhase, EngineStartupSystemStatus,
 };
 use newengine_system_contracts::{
     ScreenOverlayProgress, ScreenOverlayReason, ScreenOverlayStatus, ScreenOverlayStatusKind,
@@ -106,14 +105,21 @@ fn platform_subsystem(platform_ready: bool) -> ScreenOverlaySubsystem {
         } else {
             "Waiting for platform window callback."
         },
-        Some(ScreenOverlayProgress::percent(if platform_ready { 1.0 } else { 0.2 })),
+        Some(ScreenOverlayProgress::percent(if platform_ready {
+            1.0
+        } else {
+            0.2
+        })),
     )
 }
 
-fn renderer_subsystem(snapshot: &EngineStartupSnapshot, renderer_label: &str) -> ScreenOverlaySubsystem {
+fn renderer_subsystem(
+    snapshot: &EngineStartupSnapshot,
+    renderer_label: &str,
+) -> ScreenOverlaySubsystem {
     let renderer_label = normalize_label(renderer_label, "WAIT");
-    let failed = snapshot.error.is_some()
-        && snapshot.status.to_ascii_lowercase().contains("render");
+    let failed =
+        snapshot.error.is_some() && snapshot.status.to_ascii_lowercase().contains("render");
     let ready = snapshot.phase == EngineStartupPhase::Running || snapshot.progress_01 >= 0.92;
 
     let phase = if failed {
@@ -130,7 +136,11 @@ fn renderer_subsystem(snapshot: &EngineStartupSnapshot, renderer_label: &str) ->
         phase,
         state_label_for_phase(phase, renderer_label),
         "Renderer backend binding is tracked through runtime resources and readiness gates.",
-        Some(ScreenOverlayProgress::percent(if ready { 1.0 } else { snapshot.progress_01 })),
+        Some(ScreenOverlayProgress::percent(if ready {
+            1.0
+        } else {
+            snapshot.progress_01
+        })),
     )
 }
 
@@ -171,7 +181,9 @@ fn state_label_for_phase<'a>(
     running_label: &'a str,
 ) -> &'a str {
     match phase {
-        ScreenOverlaySubsystemPhase::Waiting | ScreenOverlaySubsystemPhase::Running => running_label,
+        ScreenOverlaySubsystemPhase::Waiting | ScreenOverlaySubsystemPhase::Running => {
+            running_label
+        }
         ScreenOverlaySubsystemPhase::Ready => "READY",
         ScreenOverlaySubsystemPhase::Degraded => "DEGRADED",
         ScreenOverlaySubsystemPhase::Failed => "ERR",

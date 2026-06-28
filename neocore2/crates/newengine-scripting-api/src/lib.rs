@@ -24,7 +24,8 @@ pub const SCRIPTING_BACKEND_CAPABILITY_ID: &str = "scripting.backend";
 
 pub const SCRIPTING_SERVICE_METHOD_INFO: &str = newengine_service_api::SERVICE_METHOD_INFO_JSON;
 pub const SCRIPTING_SERVICE_METHOD_INVOKE: &str = newengine_service_api::SERVICE_METHOD_INVOKE_JSON;
-pub const SCRIPTING_SERVICE_METHOD_SHUTDOWN_V1: &str = newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1;
+pub const SCRIPTING_SERVICE_METHOD_SHUTDOWN_V1: &str =
+    newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1;
 
 /// Primary hot-path methods. Payloads for these methods use the binary wire
 /// helpers in `wire.rs`; JSON is reserved for control/debug surfaces only.
@@ -35,10 +36,12 @@ pub const SCRIPTING_SERVICE_METHOD_FRAME_BYTES_V1: &str = "scripting.frame_bytes
 /// Debug/control methods. These are inspectable control surfaces, not runtime
 /// frame/module execution APIs.
 pub const SCRIPTING_SERVICE_METHOD_DUMP_STATE_JSON_V1: &str = "scripting.dump_state_json_v1";
-pub const SCRIPTING_SERVICE_METHOD_VALIDATE_MODULE_REF_JSON_V1: &str = "scripting.validate_module_ref_json_v1";
+pub const SCRIPTING_SERVICE_METHOD_VALIDATE_MODULE_REF_JSON_V1: &str =
+    "scripting.validate_module_ref_json_v1";
 pub const SCRIPTING_SERVICE_METHOD_UNLOAD_MODULE_JSON_V1: &str = "scripting.unload_module_json_v1";
 /// Generates provider-facing scripting binding modules from engine.schema manifests.
-pub const SCRIPTING_SERVICE_METHOD_BINDING_MANIFEST_JSON_V1: &str = "scripting.binding_manifest_json_v1";
+pub const SCRIPTING_SERVICE_METHOD_BINDING_MANIFEST_JSON_V1: &str =
+    "scripting.binding_manifest_json_v1";
 
 /// Generic backend-family declaration for scripting providers.
 pub const SCRIPTING_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec =
@@ -95,7 +98,9 @@ pub enum ScriptModuleState {
 
 impl Default for ScriptModuleState {
     #[inline]
-    fn default() -> Self { Self::Declared }
+    fn default() -> Self {
+        Self::Declared
+    }
 }
 
 pub type ScriptingModuleState = ScriptModuleState;
@@ -111,7 +116,9 @@ pub enum ScriptDiagnosticSeverity {
 
 impl Default for ScriptDiagnosticSeverity {
     #[inline]
-    fn default() -> Self { Self::Info }
+    fn default() -> Self {
+        Self::Info
+    }
 }
 
 pub type ScriptingDiagnosticSeverity = ScriptDiagnosticSeverity;
@@ -128,7 +135,9 @@ pub enum ScriptingResponseStatus {
 
 impl Default for ScriptingResponseStatus {
     #[inline]
-    fn default() -> Self { Self::Ok }
+    fn default() -> Self {
+        Self::Ok
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -164,7 +173,10 @@ impl Default for ScriptingServiceInfo {
                 "no-language-whitelist".to_owned(),
                 "no-direct-world-access".to_owned(),
             ],
-            methods: SCRIPTING_SERVICE_METHODS.iter().map(|it| (*it).to_owned()).collect(),
+            methods: SCRIPTING_SERVICE_METHODS
+                .iter()
+                .map(|it| (*it).to_owned())
+                .collect(),
             provider_metadata: BTreeMap::new(),
         }
     }
@@ -182,7 +194,12 @@ pub struct ScriptingInvokeEnvelope {
 
 impl Default for ScriptingInvokeEnvelope {
     #[inline]
-    fn default() -> Self { Self { method: String::new(), request_bytes: Vec::new() } }
+    fn default() -> Self {
+        Self {
+            method: String::new(),
+            request_bytes: Vec::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -197,14 +214,22 @@ pub struct ScriptModuleRef {
 
 impl Default for ScriptModuleRef {
     #[inline]
-    fn default() -> Self { Self { reference: String::new(), module_id: String::new() } }
+    fn default() -> Self {
+        Self {
+            reference: String::new(),
+            module_id: String::new(),
+        }
+    }
 }
 
 impl ScriptModuleRef {
     #[inline]
     pub fn new(reference: impl Into<String>) -> Self {
         let reference = reference.into();
-        Self { module_id: default_module_id_from_ref(&reference), reference }
+        Self {
+            module_id: default_module_id_from_ref(&reference),
+            reference,
+        }
     }
 
     #[inline]
@@ -226,16 +251,29 @@ pub struct ScriptPermission {
 
 impl Default for ScriptPermission {
     #[inline]
-    fn default() -> Self { Self { id: String::new(), scope: String::new() } }
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            scope: String::new(),
+        }
+    }
 }
 
 impl ScriptPermission {
     #[inline]
-    pub fn new(id: impl Into<String>) -> Self { Self { id: id.into(), scope: String::new() } }
+    pub fn new(id: impl Into<String>) -> Self {
+        Self {
+            id: id.into(),
+            scope: String::new(),
+        }
+    }
 
     #[inline]
     pub fn scoped(id: impl Into<String>, scope: impl Into<String>) -> Self {
-        Self { id: id.into(), scope: scope.into() }
+        Self {
+            id: id.into(),
+            scope: scope.into(),
+        }
     }
 }
 
@@ -267,17 +305,32 @@ impl Default for ScriptDiagnostic {
 impl ScriptDiagnostic {
     #[inline]
     pub fn info(code: impl Into<String>, message: impl Into<String>) -> Self {
-        Self { severity: ScriptDiagnosticSeverity::Info, code: code.into(), message: message.into(), ..Self::default() }
+        Self {
+            severity: ScriptDiagnosticSeverity::Info,
+            code: code.into(),
+            message: message.into(),
+            ..Self::default()
+        }
     }
 
     #[inline]
     pub fn warning(code: impl Into<String>, message: impl Into<String>) -> Self {
-        Self { severity: ScriptDiagnosticSeverity::Warning, code: code.into(), message: message.into(), ..Self::default() }
+        Self {
+            severity: ScriptDiagnosticSeverity::Warning,
+            code: code.into(),
+            message: message.into(),
+            ..Self::default()
+        }
     }
 
     #[inline]
     pub fn error(code: impl Into<String>, message: impl Into<String>) -> Self {
-        Self { severity: ScriptDiagnosticSeverity::Error, code: code.into(), message: message.into(), ..Self::default() }
+        Self {
+            severity: ScriptDiagnosticSeverity::Error,
+            code: code.into(),
+            message: message.into(),
+            ..Self::default()
+        }
     }
 }
 
@@ -340,7 +393,11 @@ impl Default for ScriptingResponseBytes {
 impl ScriptingResponseBytes {
     #[inline]
     pub fn empty_for(request: &ScriptingRequestBytes) -> Self {
-        Self { request_id: request.request_id.clone(), status: ScriptingResponseStatus::Empty, ..Self::default() }
+        Self {
+            request_id: request.request_id.clone(),
+            status: ScriptingResponseStatus::Empty,
+            ..Self::default()
+        }
     }
 }
 
@@ -358,7 +415,12 @@ pub struct ScriptingModuleLoadBytesRequest {
 impl Default for ScriptingModuleLoadBytesRequest {
     #[inline]
     fn default() -> Self {
-        Self { module_ref: ScriptingModuleRef::default(), module_bytes: Vec::new(), permissions: Vec::new(), metadata: BTreeMap::new() }
+        Self {
+            module_ref: ScriptingModuleRef::default(),
+            module_bytes: Vec::new(),
+            permissions: Vec::new(),
+            metadata: BTreeMap::new(),
+        }
     }
 }
 
@@ -370,7 +432,11 @@ pub struct ScriptingModuleUnloadRequest {
 
 impl Default for ScriptingModuleUnloadRequest {
     #[inline]
-    fn default() -> Self { Self { module_ref: ScriptingModuleRef::default() } }
+    fn default() -> Self {
+        Self {
+            module_ref: ScriptingModuleRef::default(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -410,7 +476,13 @@ pub struct ScriptingModuleLoadBytesResponse {
 
 impl Default for ScriptingModuleLoadBytesResponse {
     #[inline]
-    fn default() -> Self { Self { ok: false, module: ScriptingModuleRecord::default(), diagnostics: Vec::new() } }
+    fn default() -> Self {
+        Self {
+            ok: false,
+            module: ScriptingModuleRecord::default(),
+            diagnostics: Vec::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -423,7 +495,13 @@ pub struct ScriptingModuleRefValidationResponse {
 
 impl Default for ScriptingModuleRefValidationResponse {
     #[inline]
-    fn default() -> Self { Self { ok: false, module_ref: ScriptingModuleRef::default(), diagnostics: Vec::new() } }
+    fn default() -> Self {
+        Self {
+            ok: false,
+            module_ref: ScriptingModuleRef::default(),
+            diagnostics: Vec::new(),
+        }
+    }
 }
 
 pub type ScriptModuleRefValidationResponse = ScriptingModuleRefValidationResponse;
@@ -466,7 +544,15 @@ pub fn default_module_id_from_ref(reference: &str) -> String {
         return String::new();
     }
     id = id.trim_start_matches('/').to_ascii_lowercase();
-    id.chars().map(|ch| if matches!(ch, '/' | '@' | '.') { '_' } else { ch }).collect()
+    id.chars()
+        .map(|ch| {
+            if matches!(ch, '/' | '@' | '.') {
+                '_'
+            } else {
+                ch
+            }
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -484,14 +570,20 @@ mod tests {
     fn service_info_has_no_known_language_list() {
         let info = ScriptingServiceInfo::default();
         assert!(info.features.iter().any(|it| it == "no-language-whitelist"));
-        assert!(info.methods.iter().any(|it| it == SCRIPTING_SERVICE_METHOD_INVOKE_BYTES_V1));
+        assert!(info
+            .methods
+            .iter()
+            .any(|it| it == SCRIPTING_SERVICE_METHOD_INVOKE_BYTES_V1));
         assert!(!info.features.iter().any(|it| it.contains("known-language")));
         assert!(!info.features.iter().any(|it| it.contains("compat")));
     }
 
     #[test]
     fn response_preserves_request_id_only() {
-        let request = ScriptingRequestBytes { request_id: "req-1".to_owned(), ..ScriptingRequestBytes::default() };
+        let request = ScriptingRequestBytes {
+            request_id: "req-1".to_owned(),
+            ..ScriptingRequestBytes::default()
+        };
         let response = ScriptingResponseBytes::empty_for(&request);
         assert_eq!(response.request_id, "req-1");
         assert_eq!(response.status, ScriptingResponseStatus::Empty);

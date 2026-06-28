@@ -29,7 +29,11 @@ impl PhysicsWorldDesc {
     #[inline]
     pub fn sanitized(self) -> Self {
         Self {
-            gravity: if self.gravity.is_finite() { self.gravity } else { Vec3::new(0.0, -9.81, 0.0) },
+            gravity: if self.gravity.is_finite() {
+                self.gravity
+            } else {
+                Vec3::new(0.0, -9.81, 0.0)
+            },
             fixed_dt: self.fixed_dt.clamp(1.0 / 240.0, 1.0 / 15.0),
             max_substeps: self.max_substeps.clamp(1, 16),
             contact_skin: self.contact_skin.clamp(0.0, 0.5),
@@ -40,10 +44,24 @@ impl PhysicsWorldDesc {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum PhysicsCommandKind {
-    CreateBody { entity: EntityHandle, desc: PhysicsBodyDesc, position: Vec3, rotation: Quat },
-    DestroyBody { entity: EntityHandle },
-    SetBodyPose { handle: PhysicsHandle, position: Vec3, rotation: Quat },
-    SetLinearVelocity { handle: PhysicsHandle, velocity: Vec3 },
+    CreateBody {
+        entity: EntityHandle,
+        desc: PhysicsBodyDesc,
+        position: Vec3,
+        rotation: Quat,
+    },
+    DestroyBody {
+        entity: EntityHandle,
+    },
+    SetBodyPose {
+        handle: PhysicsHandle,
+        position: Vec3,
+        rotation: Quat,
+    },
+    SetLinearVelocity {
+        handle: PhysicsHandle,
+        velocity: Vec3,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]

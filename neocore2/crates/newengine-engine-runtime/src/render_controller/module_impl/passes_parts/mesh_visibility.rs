@@ -73,35 +73,50 @@ pub(super) trait DistanceKeyEntry {
 
 impl<T> DistanceKeyEntry for (f32, u64, T) {
     #[inline]
-    fn distance_sq(&self) -> f32 { self.0 }
+    fn distance_sq(&self) -> f32 {
+        self.0
+    }
 
     #[inline]
-    fn stable_key(&self) -> u64 { self.1 }
+    fn stable_key(&self) -> u64 {
+        self.1
+    }
 }
 
 impl<T0, T1, T2> DistanceKeyEntry for (f32, u64, T0, T1, T2) {
     #[inline]
-    fn distance_sq(&self) -> f32 { self.0 }
+    fn distance_sq(&self) -> f32 {
+        self.0
+    }
 
     #[inline]
-    fn stable_key(&self) -> u64 { self.1 }
+    fn stable_key(&self) -> u64 {
+        self.1
+    }
 }
 
 impl<T0, T1, T2, T3> DistanceKeyEntry for (f32, u64, T0, T1, T2, T3) {
     #[inline]
-    fn distance_sq(&self) -> f32 { self.0 }
+    fn distance_sq(&self) -> f32 {
+        self.0
+    }
 
     #[inline]
-    fn stable_key(&self) -> u64 { self.1 }
+    fn stable_key(&self) -> u64 {
+        self.1
+    }
 }
-
 
 impl<T0, T1, T2, T3, T4> DistanceKeyEntry for (f32, u64, T0, T1, T2, T3, T4) {
     #[inline]
-    fn distance_sq(&self) -> f32 { self.0 }
+    fn distance_sq(&self) -> f32 {
+        self.0
+    }
 
     #[inline]
-    fn stable_key(&self) -> u64 { self.1 }
+    fn stable_key(&self) -> u64 {
+        self.1
+    }
 }
 
 #[inline]
@@ -113,7 +128,6 @@ pub(super) fn sort_by_distance_then_key<T: DistanceKeyEntry>(items: &mut [T]) {
             .then_with(|| a.stable_key().cmp(&b.stable_key()))
     });
 }
-
 
 #[inline]
 pub(super) fn max_axis_scale(model: Mat4) -> f32 {
@@ -137,9 +151,9 @@ pub(super) fn shadow_caster_visible(
     center_ws: Vec3,
     radius_ws: f32,
 ) -> bool {
-    cull.map(|c| c.contains_sphere(center_ws, radius_ws)).unwrap_or(true)
+    cull.map(|c| c.contains_sphere(center_ws, radius_ws))
+        .unwrap_or(true)
 }
-
 
 #[inline]
 pub(super) fn render_scene_culling_enabled() -> bool {

@@ -14,7 +14,6 @@
 //! - Normal usage: `use newengine_math::collections::prelude::*;`
 //! - Escape hatch: `use newengine_math::collections::raw::...;` (implementation-specific APIs)
 
-
 #[cfg(feature = "collections")]
 pub mod policy;
 

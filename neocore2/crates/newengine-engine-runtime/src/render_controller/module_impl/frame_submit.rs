@@ -1,6 +1,9 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use newengine_core::render::{RenderApi, RenderDrawListKind, RenderFrameEnvelope, RenderGraphPassKind, RenderGraphSubmitReport};
+use newengine_core::render::{
+    RenderApi, RenderDrawListKind, RenderFrameEnvelope, RenderGraphPassKind,
+    RenderGraphSubmitReport,
+};
 use newengine_core::EngineResult;
 
 #[inline]
@@ -9,7 +12,10 @@ pub(super) fn submit_frame_envelope(
     frame: RenderFrameEnvelope,
     trace_frame: bool,
 ) -> EngineResult<RenderGraphSubmitReport> {
-    let graph_label = frame.label.clone().unwrap_or_else(|| "<unnamed>".to_owned());
+    let graph_label = frame
+        .label
+        .clone()
+        .unwrap_or_else(|| "<unnamed>".to_owned());
     let report = r.submit_frame(frame)?;
     if trace_frame {
         newengine_ulog_api::ulog::debug!(
@@ -45,7 +51,10 @@ pub(super) fn submit_frame_envelope(
                 })
                 .collect::<Vec<_>>()
                 .join(", ");
-            newengine_ulog_api::ulog::debug!("render frame envelope: draw-list replay stats [{}]", draw_lists);
+            newengine_ulog_api::ulog::debug!(
+                "render frame envelope: draw-list replay stats [{}]",
+                draw_lists
+            );
         }
     }
     Ok(report)
@@ -66,7 +75,6 @@ pub fn record_draw_list<T>(
         (Ok(_), Err(error)) => Err(error),
     }
 }
-
 
 #[inline]
 pub fn record_render_phase<T>(

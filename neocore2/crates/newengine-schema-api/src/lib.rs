@@ -90,7 +90,9 @@ pub enum SchemaValueKindV1 {
 
 impl Default for SchemaValueKindV1 {
     #[inline]
-    fn default() -> Self { Self::String }
+    fn default() -> Self {
+        Self::String
+    }
 }
 
 impl SchemaValueKindV1 {
@@ -129,24 +131,44 @@ pub struct SchemaDiagnosticV1 {
 impl Default for SchemaDiagnosticV1 {
     #[inline]
     fn default() -> Self {
-        Self { severity: "info".to_owned(), code: String::new(), message: String::new(), path: None }
+        Self {
+            severity: "info".to_owned(),
+            code: String::new(),
+            message: String::new(),
+            path: None,
+        }
     }
 }
 
 impl SchemaDiagnosticV1 {
     #[inline]
     pub fn info(code: impl Into<String>, message: impl Into<String>) -> Self {
-        Self { severity: "info".to_owned(), code: code.into(), message: message.into(), path: None }
+        Self {
+            severity: "info".to_owned(),
+            code: code.into(),
+            message: message.into(),
+            path: None,
+        }
     }
 
     #[inline]
     pub fn warn(code: impl Into<String>, message: impl Into<String>) -> Self {
-        Self { severity: "warning".to_owned(), code: code.into(), message: message.into(), path: None }
+        Self {
+            severity: "warning".to_owned(),
+            code: code.into(),
+            message: message.into(),
+            path: None,
+        }
     }
 
     #[inline]
     pub fn error(code: impl Into<String>, message: impl Into<String>) -> Self {
-        Self { severity: "error".to_owned(), code: code.into(), message: message.into(), path: None }
+        Self {
+            severity: "error".to_owned(),
+            code: code.into(),
+            message: message.into(),
+            path: None,
+        }
     }
 }
 
@@ -285,7 +307,12 @@ pub struct SchemaDescribeTypeRequestV1 {
 impl Default for SchemaDescribeTypeRequestV1 {
     #[inline]
     fn default() -> Self {
-        Self { type_id: String::new(), resource_ref: None, requester: "engine.editor".to_owned(), include_properties: true }
+        Self {
+            type_id: String::new(),
+            resource_ref: None,
+            requester: "engine.editor".to_owned(),
+            include_properties: true,
+        }
     }
 }
 
@@ -301,7 +328,12 @@ pub struct SchemaDescribeTypeResponseV1 {
 impl Default for SchemaDescribeTypeResponseV1 {
     #[inline]
     fn default() -> Self {
-        Self { schema: "newengine.schema.describe_type.response.v1".to_owned(), accepted: false, descriptor: None, diagnostics: Vec::new() }
+        Self {
+            schema: "newengine.schema.describe_type.response.v1".to_owned(),
+            accepted: false,
+            descriptor: None,
+            diagnostics: Vec::new(),
+        }
     }
 }
 
@@ -316,7 +348,11 @@ pub struct SchemaDescribePropertiesRequestV1 {
 impl Default for SchemaDescribePropertiesRequestV1 {
     #[inline]
     fn default() -> Self {
-        Self { type_id: String::new(), resource_ref: None, requester: "engine.editor".to_owned() }
+        Self {
+            type_id: String::new(),
+            resource_ref: None,
+            requester: "engine.editor".to_owned(),
+        }
     }
 }
 
@@ -333,7 +369,13 @@ pub struct SchemaDescribePropertiesResponseV1 {
 impl Default for SchemaDescribePropertiesResponseV1 {
     #[inline]
     fn default() -> Self {
-        Self { schema: "newengine.schema.describe_properties.response.v1".to_owned(), accepted: false, type_id: String::new(), properties: Vec::new(), diagnostics: Vec::new() }
+        Self {
+            schema: "newengine.schema.describe_properties.response.v1".to_owned(),
+            accepted: false,
+            type_id: String::new(),
+            properties: Vec::new(),
+            diagnostics: Vec::new(),
+        }
     }
 }
 
@@ -350,7 +392,13 @@ pub struct SchemaPatchOperationV1 {
 impl Default for SchemaPatchOperationV1 {
     #[inline]
     fn default() -> Self {
-        Self { op: "replace".to_owned(), path: String::new(), property_id: String::new(), value: Value::Null, old_value: None }
+        Self {
+            op: "replace".to_owned(),
+            path: String::new(),
+            property_id: String::new(),
+            value: Value::Null,
+            old_value: None,
+        }
     }
 }
 
@@ -390,7 +438,12 @@ pub struct SchemaPatchValidationRequestV1 {
 
 impl Default for SchemaPatchValidationRequestV1 {
     #[inline]
-    fn default() -> Self { Self { patch: SchemaPatchDtoV1::default(), mode: "validate_only".to_owned() } }
+    fn default() -> Self {
+        Self {
+            patch: SchemaPatchDtoV1::default(),
+            mode: "validate_only".to_owned(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -406,7 +459,13 @@ pub struct SchemaPatchValidationResponseV1 {
 impl Default for SchemaPatchValidationResponseV1 {
     #[inline]
     fn default() -> Self {
-        Self { schema: "newengine.schema.validate_patch.response.v1".to_owned(), accepted: false, normalized_patch: None, undo_operations: Vec::new(), diagnostics: Vec::new() }
+        Self {
+            schema: "newengine.schema.validate_patch.response.v1".to_owned(),
+            accepted: false,
+            normalized_patch: None,
+            undo_operations: Vec::new(),
+            diagnostics: Vec::new(),
+        }
     }
 }
 
@@ -420,7 +479,13 @@ pub struct SchemaDefaultValueRequestV1 {
 
 impl Default for SchemaDefaultValueRequestV1 {
     #[inline]
-    fn default() -> Self { Self { type_id: String::new(), property_id: String::new(), requester: "engine.editor".to_owned() } }
+    fn default() -> Self {
+        Self {
+            type_id: String::new(),
+            property_id: String::new(),
+            requester: "engine.editor".to_owned(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -437,7 +502,14 @@ pub struct SchemaDefaultValueResponseV1 {
 impl Default for SchemaDefaultValueResponseV1 {
     #[inline]
     fn default() -> Self {
-        Self { schema: "newengine.schema.default_value.response.v1".to_owned(), accepted: false, type_id: String::new(), property_id: String::new(), value: Value::Null, diagnostics: Vec::new() }
+        Self {
+            schema: "newengine.schema.default_value.response.v1".to_owned(),
+            accepted: false,
+            type_id: String::new(),
+            property_id: String::new(),
+            value: Value::Null,
+            diagnostics: Vec::new(),
+        }
     }
 }
 
@@ -486,7 +558,14 @@ pub struct SchemaTransactionResultV1 {
 impl Default for SchemaTransactionResultV1 {
     #[inline]
     fn default() -> Self {
-        Self { schema: "newengine.schema.transaction_result.v1".to_owned(), transaction_id: String::new(), accepted: false, committed: false, revision: None, diagnostics: Vec::new() }
+        Self {
+            schema: "newengine.schema.transaction_result.v1".to_owned(),
+            transaction_id: String::new(),
+            accepted: false,
+            committed: false,
+            revision: None,
+            diagnostics: Vec::new(),
+        }
     }
 }
 
@@ -502,7 +581,15 @@ pub struct SchemaBindingFunctionV1 {
 
 impl Default for SchemaBindingFunctionV1 {
     #[inline]
-    fn default() -> Self { Self { name: String::new(), method: String::new(), request_type: String::new(), response_type: String::new(), gateway: String::new() } }
+    fn default() -> Self {
+        Self {
+            name: String::new(),
+            method: String::new(),
+            request_type: String::new(),
+            response_type: String::new(),
+            gateway: String::new(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

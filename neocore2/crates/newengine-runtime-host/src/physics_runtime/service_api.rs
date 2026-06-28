@@ -1,4 +1,6 @@
-use newengine_core::physics::{PhysicsApi, PhysicsBackendInfo, PhysicsFrameInput, PhysicsFrameOutput};
+use newengine_core::physics::{
+    PhysicsApi, PhysicsBackendInfo, PhysicsFrameInput, PhysicsFrameOutput,
+};
 use newengine_core::{EngineError, EngineResult};
 
 use crate::physics_runtime::client::PhysicsServiceClient;
@@ -9,7 +11,9 @@ pub(crate) struct ServiceBackedPhysicsApi {
 
 impl ServiceBackedPhysicsApi {
     #[inline]
-    pub(crate) fn new(client: PhysicsServiceClient) -> Self { Self { client } }
+    pub(crate) fn new(client: PhysicsServiceClient) -> Self {
+        Self { client }
+    }
 }
 
 impl PhysicsApi for ServiceBackedPhysicsApi {

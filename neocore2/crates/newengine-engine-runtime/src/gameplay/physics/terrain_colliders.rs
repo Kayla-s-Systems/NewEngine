@@ -40,7 +40,9 @@ pub(super) fn collect_terrain_colliders(
 
     for body in dynamic_bodies {
         for terrain in &terrains {
-            if let Some(collider) = build_body_local_heightfield_collider(&body, terrain, contact_skin) {
+            if let Some(collider) =
+                build_body_local_heightfield_collider(&body, terrain, contact_skin)
+            {
                 out.push(collider);
             }
         }
@@ -79,9 +81,14 @@ fn build_body_local_heightfield_collider(
         .min(TERRAIN_COLLIDER_MAX_HALF_EXTENT);
     let tile_center = quantized_xz(body_pos, TERRAIN_COLLIDER_TILE_SIZE);
     let spacing = (half_extent * 2.0) / (TERRAIN_COLLIDER_SAMPLE_COUNT as f32 - 1.0);
-    let local_origin = Vec3::new(tile_center.x - half_extent, 0.0, tile_center.z - half_extent);
+    let local_origin = Vec3::new(
+        tile_center.x - half_extent,
+        0.0,
+        tile_center.z - half_extent,
+    );
 
-    let mut heights = Vec::with_capacity(TERRAIN_COLLIDER_SAMPLE_COUNT * TERRAIN_COLLIDER_SAMPLE_COUNT);
+    let mut heights =
+        Vec::with_capacity(TERRAIN_COLLIDER_SAMPLE_COUNT * TERRAIN_COLLIDER_SAMPLE_COUNT);
     let mut min_height = f32::INFINITY;
     let mut max_height = f32::NEG_INFINITY;
 
@@ -89,14 +96,19 @@ fn build_body_local_heightfield_collider(
         for x in 0..TERRAIN_COLLIDER_SAMPLE_COUNT {
             let world_x = local_origin.x + x as f32 * spacing;
             let world_z = local_origin.z + z as f32 * spacing;
-            let local_sample = terrain.local_from_world.transform_point3(Vec3::new(world_x, body_pos.y, world_z));
-            let h_local = terrain
-                .terrain
-                .heightfield
-                .sample_height_local_checked(local_sample.x, local_sample.z, half_extent + contact_skin + 0.5)?;
-            let world_ground = terrain
-                .world_from_local
-                .transform_point3(Vec3::new(local_sample.x, h_local, local_sample.z));
+            let local_sample = terrain
+                .local_from_world
+                .transform_point3(Vec3::new(world_x, body_pos.y, world_z));
+            let h_local = terrain.terrain.heightfield.sample_height_local_checked(
+                local_sample.x,
+                local_sample.z,
+                half_extent + contact_skin + 0.5,
+            )?;
+            let world_ground = terrain.world_from_local.transform_point3(Vec3::new(
+                local_sample.x,
+                h_local,
+                local_sample.z,
+            ));
             let height = world_ground.y;
             min_height = min_height.min(height);
             max_height = max_height.max(height);
@@ -108,7 +120,11 @@ fn build_body_local_heightfield_collider(
         return None;
     }
 
-    let bounds_min = Vec3::new(local_origin.x, min_height - contact_skin.max(0.0), local_origin.z);
+    let bounds_min = Vec3::new(
+        local_origin.x,
+        min_height - contact_skin.max(0.0),
+        local_origin.z,
+    );
     let bounds_max = Vec3::new(
         local_origin.x + spacing * (TERRAIN_COLLIDER_SAMPLE_COUNT as f32 - 1.0),
         max_height + contact_skin.max(0.0),
@@ -149,7 +165,8 @@ fn terrain_body_footprint(body: &PhysicsFrameBodySnapshot) -> f32 {
         CollisionShapeDto::Sphere { radius } => radius.abs(),
         CollisionShapeDto::Capsule { radius, .. } => radius.abs(),
     };
-    let bounds_radius = ((body.bounds_max[0] - body.bounds_min[0]).abs()
+    let bounds_radius = ((body.bounds_max[0] - body.bounds_min[0])
+        .abs()
         .max((body.bounds_max[2] - body.bounds_min[2]).abs()))
         * 0.5;
     shape_radius.max(bounds_radius).max(0.35).min(4.0) + 0.25
@@ -164,13 +181,21 @@ fn quantized_xz(pos: Vec3, tile_size: f32) -> Vec3 {
     )
 }
 
-fn terrain_heightfield_entity_key(dynamic_entity: u64, terrain_entity: u64, tile_center: Vec3) -> u64 {
+fn terrain_heightfield_entity_key(
+    dynamic_entity: u64,
+    terrain_entity: u64,
+    tile_center: Vec3,
+) -> u64 {
     let tile_x = (tile_center.x * 8.0).round() as i64 as u64;
     let tile_z = (tile_center.z * 8.0).round() as i64 as u64;
     let mut h = 0x9e37_79b9_7f4a_7c15_u64;
-    h ^= dynamic_entity.wrapping_add(0xbf58_476d_1ce4_e5b9).rotate_left(17);
+    h ^= dynamic_entity
+        .wrapping_add(0xbf58_476d_1ce4_e5b9)
+        .rotate_left(17);
     h = h.wrapping_mul(0x94d0_49bb_1331_11eb);
-    h ^= terrain_entity.wrapping_add(0x2545_f491_4f6c_dd1d).rotate_left(29);
+    h ^= terrain_entity
+        .wrapping_add(0x2545_f491_4f6c_dd1d)
+        .rotate_left(29);
     h = h.wrapping_mul(0xbf58_476d_1ce4_e5b9);
     h ^= tile_x.rotate_left(7) ^ tile_z.rotate_left(39);
     0x8000_0000_0000_0000 | (h & 0x7fff_ffff_ffff_ffff)

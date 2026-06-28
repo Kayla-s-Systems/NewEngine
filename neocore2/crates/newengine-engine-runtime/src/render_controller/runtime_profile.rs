@@ -1,8 +1,8 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
+use newengine_core::render::RenderHardwareTier;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use newengine_core::render::RenderHardwareTier;
 
 /// Declarative render-runtime profile loaded through the host plugin config service.
 ///
@@ -314,13 +314,19 @@ fn default_profile_id() -> String {
 }
 
 #[inline]
-const fn default_true() -> bool { true }
+const fn default_true() -> bool {
+    true
+}
 
 #[inline]
-const fn default_clear_color() -> [f32; 4] { [0.020, 0.025, 0.035, 1.0] }
+const fn default_clear_color() -> [f32; 4] {
+    [0.020, 0.025, 0.035, 1.0]
+}
 
 #[inline]
-const fn default_sky_mode() -> SkyPassMode { SkyPassMode::Native }
+const fn default_sky_mode() -> SkyPassMode {
+    SkyPassMode::Native
+}
 
 fn compact_json(value: &Value) -> String {
     serde_json::to_string(value).unwrap_or_else(|_| "<unprintable>".to_owned())

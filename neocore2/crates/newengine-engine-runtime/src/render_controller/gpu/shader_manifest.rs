@@ -43,18 +43,28 @@ impl RuntimeShaderStageRef {
     }
 }
 
-pub(super) fn load_runtime_shader_program_manifest(logical_path: &str) -> CoreResult<RuntimeShaderProgramManifest> {
+pub(super) fn load_runtime_shader_program_manifest(
+    logical_path: &str,
+) -> CoreResult<RuntimeShaderProgramManifest> {
     let assets = AssetServiceClient::new(default_host_api());
     let payload = assets.text_v1(logical_path).map_err(|e| {
-        EngineError::other(format!("runtime shader manifest load failed path='{logical_path}' err='{e}'"))
+        EngineError::other(format!(
+            "runtime shader manifest load failed path='{logical_path}' err='{e}'"
+        ))
     })?;
     let text = std::str::from_utf8(&payload).map_err(|_| {
-        EngineError::other(format!("runtime shader manifest is not UTF-8 path='{logical_path}'"))
+        EngineError::other(format!(
+            "runtime shader manifest is not UTF-8 path='{logical_path}'"
+        ))
     })?;
     let manifest: RuntimeShaderProgramManifest = serde_json::from_str(text).map_err(|e| {
-        EngineError::other(format!("runtime shader manifest parse failed path='{logical_path}' err='{e}'"))
+        EngineError::other(format!(
+            "runtime shader manifest parse failed path='{logical_path}' err='{e}'"
+        ))
     })?;
-    if manifest.shaders.vertex.logical_path.trim().is_empty() || manifest.shaders.fragment.logical_path.trim().is_empty() {
+    if manifest.shaders.vertex.logical_path.trim().is_empty()
+        || manifest.shaders.fragment.logical_path.trim().is_empty()
+    {
         return Err(EngineError::other(format!(
             "runtime shader manifest path='{logical_path}' must define vertex and fragment shader logical paths"
         )));
@@ -62,6 +72,12 @@ pub(super) fn load_runtime_shader_program_manifest(logical_path: &str) -> CoreRe
     Ok(manifest)
 }
 
-fn default_source_kind() -> String { "glsl".to_owned() }
-fn default_entry() -> String { "main".to_owned() }
-fn default_variant() -> String { "runtime_default".to_owned() }
+fn default_source_kind() -> String {
+    "glsl".to_owned()
+}
+fn default_entry() -> String {
+    "main".to_owned()
+}
+fn default_variant() -> String {
+    "runtime_default".to_owned()
+}

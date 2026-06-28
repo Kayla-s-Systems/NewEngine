@@ -23,6 +23,9 @@ pub fn overlay_from_task_status(task: &SystemTaskStatus) -> Option<ScreenOverlay
         task.label.clone(),
         task.detail.clone(),
         task.progress_01().map(ScreenOverlayProgress::percent),
-        matches!(task.phase, SystemTaskPhase::Completed | SystemTaskPhase::Failed),
+        matches!(
+            task.phase,
+            SystemTaskPhase::Completed | SystemTaskPhase::Failed
+        ),
     ))
 }

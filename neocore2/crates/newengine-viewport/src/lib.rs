@@ -1,11 +1,11 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
+pub mod input;
+pub mod nav;
 mod viewport;
 mod viewport_descriptor;
 mod viewport_render_resources;
 mod viewport_runtime;
-pub mod input;
-pub mod nav;
 
 pub use viewport::Viewport;
 pub use viewport_descriptor::ViewportDescriptor;

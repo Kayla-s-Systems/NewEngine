@@ -38,7 +38,6 @@ impl UiProviderBinding {
         Self::None
     }
 
-
     #[inline]
     pub fn plugin(service_id: impl Into<String>) -> Self {
         Self::Plugin {
@@ -58,7 +57,6 @@ impl UiProviderBinding {
     pub fn is_none(&self) -> bool {
         matches!(self, Self::None)
     }
-
 
     #[inline]
     pub fn is_plugin(&self) -> bool {
@@ -92,7 +90,6 @@ impl UiProviderManifest {
     pub fn supports_surface(&self, surface_id: &str) -> bool {
         self.surfaces.iter().any(|surface| surface == surface_id)
     }
-
 
     #[inline]
     pub fn none() -> Self {
@@ -306,7 +303,12 @@ pub struct UiSurfaceProjection<T> {
 
 impl<T> UiSurfaceProjection<T> {
     #[inline]
-    pub fn new(surface_id: impl Into<String>, provider: UiProviderBinding, shell: UiShellSpec, state: T) -> Self {
+    pub fn new(
+        surface_id: impl Into<String>,
+        provider: UiProviderBinding,
+        shell: UiShellSpec,
+        state: T,
+    ) -> Self {
         Self {
             version: 1,
             surface_id: surface_id.into(),

@@ -1,19 +1,18 @@
+use crate::input_systems::InputCaptureState;
+use crate::ui_gateway;
 use newengine_core::host_events::CursorState;
 use newengine_core::physics::PhysicsApiRef;
 use newengine_core::render::{Extent2D, RenderApi};
 use newengine_core::{EngineResult, ModuleCtx};
-use crate::ui_gateway;
-use crate::input_systems::InputCaptureState;
 use newengine_ui_api::{
-    UiDrawCmd, UiDrawList, UiEditorRuntimeMode, UiEditorRuntimeState, UiInputCaptureState,
-    UiRect, UiRuntimeDebugOverlayTelemetry, UiScreenProfile, UiScreenProfileState, UiSurfaceNode,
-    UiTexId, UiVertex, UiViewportSlot,
+    UiDrawCmd, UiDrawList, UiEditorRuntimeMode, UiEditorRuntimeState, UiInputCaptureState, UiRect,
+    UiRuntimeDebugOverlayTelemetry, UiScreenProfile, UiScreenProfileState, UiSurfaceNode, UiTexId,
+    UiVertex, UiViewportSlot,
 };
 
+use super::super::controller::RuntimeRenderController;
 use super::frame_types::{PlayableFrameOutcome, RenderFrameScope, ViewportFrameInput};
 use super::input::ViewportInputSnap;
-use super::super::controller::RuntimeRenderController;
-
 
 #[inline]
 fn viewport_texture_color() -> u32 {
@@ -34,24 +33,48 @@ fn prepend_viewport_slot_quad(ui: &mut UiDrawList, slot: &UiViewportSlot, textur
     let h = slot.h_px.round().max(1.0);
     let color = viewport_texture_color();
     ui.mesh.vertices.extend_from_slice(&[
-        UiVertex { pos: [x, y], uv: [0.0, 0.0], color },
-        UiVertex { pos: [x + w, y], uv: [1.0, 0.0], color },
-        UiVertex { pos: [x + w, y + h], uv: [1.0, 1.0], color },
-        UiVertex { pos: [x, y + h], uv: [0.0, 1.0], color },
+        UiVertex {
+            pos: [x, y],
+            uv: [0.0, 0.0],
+            color,
+        },
+        UiVertex {
+            pos: [x + w, y],
+            uv: [1.0, 0.0],
+            color,
+        },
+        UiVertex {
+            pos: [x + w, y + h],
+            uv: [1.0, 1.0],
+            color,
+        },
+        UiVertex {
+            pos: [x, y + h],
+            uv: [0.0, 1.0],
+            color,
+        },
     ]);
     ui.mesh.indices.extend_from_slice(&[0, 1, 2, 0, 2, 3]);
     ui.mesh.cmds.push(UiDrawCmd {
         texture: UiTexId(texture_id),
-        clip_rect: UiRect { min_x: x, min_y: y, max_x: x + w, max_y: y + h },
+        clip_rect: UiRect {
+            min_x: x,
+            min_y: y,
+            max_x: x + w,
+            max_y: y + h,
+        },
         index_range: 0..6,
     });
 
     let vertex_offset = 4u32;
     let index_offset = 6u32;
     ui.mesh.vertices.extend(old_vertices);
-    ui.mesh.indices.extend(old_indices.into_iter().map(|idx| idx + vertex_offset));
+    ui.mesh
+        .indices
+        .extend(old_indices.into_iter().map(|idx| idx + vertex_offset));
     for mut cmd in old_cmds {
-        cmd.index_range = (cmd.index_range.start + index_offset)..(cmd.index_range.end + index_offset);
+        cmd.index_range =
+            (cmd.index_range.start + index_offset)..(cmd.index_range.end + index_offset);
         ui.mesh.cmds.push(cmd);
     }
 }
@@ -96,7 +119,9 @@ impl RuntimeRenderController {
             self.restore_playable_view_after_ui_close();
         }
         if primary_ui.exit_requested {
-            newengine_ulog_api::ulog::info!("UI surface: exit requested through declarative menu action");
+            newengine_ulog_api::ulog::info!(
+                "UI surface: exit requested through declarative menu action"
+            );
             ctx.request_exit();
         }
         {
@@ -150,7 +175,9 @@ impl RuntimeRenderController {
         self.bridges.scene.apply_commands();
         let scene_lock = self.bridges.scene.scene();
         let mut scene = scene_lock.write();
-        let physics_api = ctx.api::<PhysicsApiRef>(newengine_core::physics::PHYSICS_API_ID).cloned();
+        let physics_api = ctx
+            .api::<PhysicsApiRef>(newengine_core::physics::PHYSICS_API_ID)
+            .cloned();
         let job_system = ctx.job_system().cloned();
         let world_frame = self.tick_world_for_render(
             r,
@@ -168,8 +195,11 @@ impl RuntimeRenderController {
         );
 
         if !world_frame.view_frame.world_playable {
-            let ui_telemetry = self.end_frame_for_unplayable_world(ctx, r, &scene, frame_input.ui, scope)?;
-            return Ok(PlayableFrameOutcome::EndedEarly { ui_telemetry: Some(ui_telemetry) });
+            let ui_telemetry =
+                self.end_frame_for_unplayable_world(ctx, r, &scene, frame_input.ui, scope)?;
+            return Ok(PlayableFrameOutcome::EndedEarly {
+                ui_telemetry: Some(ui_telemetry),
+            });
         }
 
         if modal_blocks_gameplay {
@@ -198,7 +228,6 @@ impl RuntimeRenderController {
         Ok(outcome)
     }
 
-
     fn refresh_modal_ui_draw_list<E: Send + 'static>(
         &self,
         _ctx: &ModuleCtx<'_, E>,
@@ -215,7 +244,8 @@ impl RuntimeRenderController {
             ui_gateway::publish_surface_node(primary_state);
         }
 
-        let external_refresh = external_capture.draw_refresh_requested || external_capture.requests_capture();
+        let external_refresh =
+            external_capture.draw_refresh_requested || external_capture.requests_capture();
 
         if !primary_state.visible && !primary_was_open && !external_refresh {
             return Ok(None);
@@ -241,7 +271,9 @@ impl RuntimeRenderController {
                 }
             }
             Err(e) => {
-                newengine_ulog_api::ulog::warn!("modal ui: same-frame draw-list refresh failed: {e}");
+                newengine_ulog_api::ulog::warn!(
+                    "modal ui: same-frame draw-list refresh failed: {e}"
+                );
                 if needs_clear_packet {
                     *ui = Some(clear_ui_draw_list([scope.w, scope.h]));
                 }
@@ -257,7 +289,10 @@ impl RuntimeRenderController {
         ui: Option<UiDrawList>,
         scope: RenderFrameScope,
     ) -> ViewportFrameInput {
-        let surface_input = ctx.resources().get::<newengine_ui_api::UiInputFrame>().cloned();
+        let surface_input = ctx
+            .resources()
+            .get::<newengine_ui_api::UiInputFrame>()
+            .cloned();
         let mut input = if scope.direct_surface_viewport {
             ViewportInputSnap::read_direct_surface(surface_input.as_ref())
         } else {
@@ -273,7 +308,8 @@ impl RuntimeRenderController {
                 &mut carrier,
             );
         }
-        let play_mode = editor_viewport_play_mode(ctx).unwrap_or_else(|| self.bridges.scene.play_mode());
+        let play_mode =
+            editor_viewport_play_mode(ctx).unwrap_or_else(|| self.bridges.scene.play_mode());
         if play_mode.wants_direct_player_control() {
             input.apply_gameplay_input_handoff(&self.runtime_profile().input);
         }
@@ -338,8 +374,7 @@ impl RuntimeRenderController {
             );
             newengine_core::crash::record_breadcrumb(format!(
                 "render controller: gated loading end_frame frame={} reason={}",
-                self.frame.frame_index,
-                gate_reason
+                self.frame.frame_index, gate_reason
             ));
         }
         r.end_frame()?;
@@ -371,8 +406,10 @@ impl RuntimeRenderController {
     }
 }
 
-
-fn merge_ui_input_capture(mut out: UiInputCaptureState, incoming: UiInputCaptureState) -> UiInputCaptureState {
+fn merge_ui_input_capture(
+    mut out: UiInputCaptureState,
+    incoming: UiInputCaptureState,
+) -> UiInputCaptureState {
     out.sampling_alive = true;
     out.camera_navigation_gated |= incoming.camera_navigation_gated;
     out.gameplay_movement_gated |= incoming.gameplay_movement_gated;
@@ -406,8 +443,9 @@ fn clear_ui_draw_list(surface_size_px: [u32; 2]) -> UiDrawList {
     draw_list
 }
 
-
-fn editor_viewport_runtime_mode<E: Send + 'static>(ctx: &ModuleCtx<'_, E>) -> Option<UiEditorRuntimeMode> {
+fn editor_viewport_runtime_mode<E: Send + 'static>(
+    ctx: &ModuleCtx<'_, E>,
+) -> Option<UiEditorRuntimeMode> {
     let profile = ctx
         .resources()
         .get::<UiScreenProfileState>()
@@ -424,7 +462,9 @@ fn editor_viewport_runtime_mode<E: Send + 'static>(ctx: &ModuleCtx<'_, E>) -> Op
     )
 }
 
-fn editor_viewport_play_mode<E: Send + 'static>(ctx: &ModuleCtx<'_, E>) -> Option<crate::gameplay::GameRunMode> {
+fn editor_viewport_play_mode<E: Send + 'static>(
+    ctx: &ModuleCtx<'_, E>,
+) -> Option<crate::gameplay::GameRunMode> {
     let mode = editor_viewport_runtime_mode(ctx)?;
     Some(match mode {
         UiEditorRuntimeMode::Edit => crate::gameplay::GameRunMode::Staging,

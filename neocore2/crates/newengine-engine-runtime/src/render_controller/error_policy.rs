@@ -23,7 +23,6 @@ impl RenderBackendFailureState {
         self.disabled
     }
 
-
     #[inline]
     pub(crate) fn snapshot(&self) -> RenderBackendStatus {
         if self.disabled {
@@ -56,7 +55,6 @@ pub(crate) fn is_backend_device_lost_error(error: &EngineError) -> bool {
         || text.contains("vk_error_device_lost")
         || text.contains("vulkan device lost")
 }
-
 
 /// Returns true for a transient render-material failure caused by an async
 /// shader compile job that has been queued through `engine.jobs` but has not
@@ -93,7 +91,7 @@ impl RuntimeRenderController {
         if is_backend_device_lost_error(&error) {
             let first = self.backend_failure.mark_disabled(phase, &error);
             self.viewport.pass_disabled = true;
-    
+
             if first {
                 newengine_ulog_api::ulog::error!(
                     "render controller: backend disabled after fatal GPU error phase='{}' err='{}'",

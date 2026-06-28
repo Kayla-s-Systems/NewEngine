@@ -106,7 +106,9 @@ impl JobExecutorKind {
 
 impl Default for JobExecutorKind {
     #[inline]
-    fn default() -> Self { Self::EngineWorker }
+    fn default() -> Self {
+        Self::EngineWorker
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -171,7 +173,11 @@ impl Default for EngineJobEventV1 {
 
 impl EngineJobEventV1 {
     #[inline]
-    pub fn new(mut event: EngineTaskEvent, executor: JobExecutorKind, semantic_owner: impl Into<String>) -> Self {
+    pub fn new(
+        mut event: EngineTaskEvent,
+        executor: JobExecutorKind,
+        semantic_owner: impl Into<String>,
+    ) -> Self {
         if event.executor.is_none() {
             event = event.with_executor(executor.as_str());
         }
@@ -267,7 +273,10 @@ impl Default for JobsServiceInfoV1 {
             gateway: ENGINE_JOBS_SERVICE_ID.to_owned(),
             provider: "ForgeJobsProvider".to_owned(),
             contract: JOBS_RUNTIME_CONTRACT.to_owned(),
-            methods: JOBS_SERVICE_METHODS.iter().map(|m| (*m).to_owned()).collect(),
+            methods: JOBS_SERVICE_METHODS
+                .iter()
+                .map(|m| (*m).to_owned())
+                .collect(),
             event_topic: ENGINE_TASK_EVENT_TOPIC_V1.to_owned(),
             control_topic: ENGINE_TASK_CONTROL_TOPIC_V1.to_owned(),
             job_event_topic: ENGINE_JOB_EVENT_TOPIC_V1.to_owned(),
@@ -287,7 +296,11 @@ pub struct JobIdRequestV1 {
 
 impl Default for JobIdRequestV1 {
     fn default() -> Self {
-        Self { job_id: String::new(), reason: String::new(), source: "engine.jobs".to_owned() }
+        Self {
+            job_id: String::new(),
+            reason: String::new(),
+            source: "engine.jobs".to_owned(),
+        }
     }
 }
 
@@ -334,8 +347,6 @@ impl Default for JobStartRequestV1 {
         }
     }
 }
-
-
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -607,7 +618,13 @@ pub struct JobControlResponseV1 {
 }
 
 impl Default for JobControlResponseV1 {
-    fn default() -> Self { Self { job_id: String::new(), action: String::new(), accepted: false } }
+    fn default() -> Self {
+        Self {
+            job_id: String::new(),
+            action: String::new(),
+            accepted: false,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -658,5 +675,11 @@ pub struct JobTraceJsonV1 {
 }
 
 impl Default for JobTraceJsonV1 {
-    fn default() -> Self { Self { job_id: String::new(), status: JobStatusJsonV1::default(), note: String::new() } }
+    fn default() -> Self {
+        Self {
+            job_id: String::new(),
+            status: JobStatusJsonV1::default(),
+            note: String::new(),
+        }
+    }
 }

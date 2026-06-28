@@ -144,7 +144,11 @@ fn write_startup_load_report(out: &mut String, report: &startup::StartupLoadRepo
     let _ = writeln!(out, "  - file_bytes: {:?}", report.file_bytes);
     let _ = writeln!(out, "  - total_ms: {:?}", report.total_ms);
     let _ = writeln!(out, "  - overrides: {}", report.overrides.len());
-    let _ = writeln!(out, "  - plugin_overrides: {}", report.plugin_overrides.len());
+    let _ = writeln!(
+        out,
+        "  - plugin_overrides: {}",
+        report.plugin_overrides.len()
+    );
 
     if !report.overrides.is_empty() {
         let _ = writeln!(out, "  - override_list:");
@@ -159,10 +163,7 @@ fn write_startup_load_report(out: &mut String, report: &startup::StartupLoadRepo
             let _ = writeln!(
                 out,
                 "    - {} {}: '{}' -> '{}'",
-                o.plugin_id,
-                o.key,
-                o.from,
-                o.to
+                o.plugin_id, o.key, o.from, o.to
             );
         }
     }
@@ -171,12 +172,24 @@ fn write_startup_load_report(out: &mut String, report: &startup::StartupLoadRepo
 fn write_startup_config(out: &mut String, cfg: &startup::StartupConfig) {
     let _ = writeln!(out, "- ConfigSnapshot:");
     let _ = writeln!(out, "  - window_title: {}", cfg.window_title);
-    let _ = writeln!(out, "  - window_size: {}x{}", cfg.window_size.0, cfg.window_size.1);
+    let _ = writeln!(
+        out,
+        "  - window_size: {}x{}",
+        cfg.window_size.0, cfg.window_size.1
+    );
     let _ = writeln!(out, "  - window_placement: {:?}", cfg.window_placement);
     let _ = writeln!(out, "  - window_icon_path: {:?}", cfg.window_icon_path);
     let _ = writeln!(out, "  - modules_dir: {}", display_clean(&cfg.modules_dir));
-    let _ = writeln!(out, "  - cache_files: {}", display_clean(&cfg.resolved_cache_files_dir()));
-    let _ = writeln!(out, "  - config: {}", display_clean(&cfg.resolved_config_dir()));
+    let _ = writeln!(
+        out,
+        "  - cache_files: {}",
+        display_clean(&cfg.resolved_cache_files_dir())
+    );
+    let _ = writeln!(
+        out,
+        "  - config: {}",
+        display_clean(&cfg.resolved_config_dir())
+    );
     let _ = writeln!(out, "  - plugins: {}", cfg.plugins.len());
     let _ = writeln!(out, "  - extra: {}", cfg.extra.len());
 

@@ -1,13 +1,13 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
+use newengine_assets::{AssetResult, RuntimeTextureAsset};
 use newengine_camera_contracts::CameraFrameSnapshot;
 use newengine_core::host_events::CursorState;
-use newengine_assets::{AssetResult, RuntimeTextureAsset};
 use newengine_core::render::{Extent2D, RenderHardwareTier, RenderTargetId, SamplerId, TextureId};
 use newengine_core::JobTicket;
 use newengine_math::collections::FxHashMap;
-use std::collections::VecDeque;
 use parking_lot::Mutex;
+use std::collections::VecDeque;
 use std::sync::Arc;
 
 use crate::plugin_manager::PluginManagerBridge;
@@ -15,20 +15,19 @@ use crate::scene_bridge::SceneBridge;
 use crate::viewport_bridge::ViewportBridge;
 
 use super::gpu::{
-    DebugLineGpu, MaterialGpuPipeline, MaterialGpuPipelineKey, MaterialGpuRegistry,
-    LitPipeline, MaterialPipelineBuildProfile, PrimitiveGpu,
+    DebugLineGpu, LitPipeline, MaterialGpuPipeline, MaterialGpuPipelineKey, MaterialGpuRegistry,
+    MaterialPipelineBuildProfile, PrimitiveGpu,
 };
 use super::material_bindings::MaterialTextureGpuResidency;
 use super::metrics::RuntimeOverlayMetrics;
-use super::module_impl::instancing::InstanceBufferUploader;
 use super::module_impl::draw_lists::RenderDrawListProviderRegistry;
+use super::module_impl::instancing::InstanceBufferUploader;
 use super::module_impl::light_extraction::LightExtractionProviderRegistry;
 use super::resource_lifetime::RenderGpuLifetimeQueue;
 use super::runtime_profile::RenderRuntimeProfile;
 
 type PrimGpuCache = FxHashMap<newengine_primitives::PrimitiveId, PrimitiveGpu>;
 type TerrainGpuCache = FxHashMap<u64, PrimitiveGpu>;
-
 
 #[derive(Clone, Copy)]
 pub struct PerDrawUbo {
@@ -41,7 +40,6 @@ pub struct PerDrawUbo {
     pub sampler: SamplerId,
     pub last_seen_frame: u64,
 }
-
 
 /// Profile-owned render feature providers registered by the app/runtime profile.
 ///
@@ -146,7 +144,6 @@ impl RenderRuntimeProfileState {
     }
 }
 
-
 impl RenderViewportState {
     #[inline]
     pub(super) fn new() -> Self {
@@ -197,7 +194,6 @@ impl RenderShadowRuntimeState {
         }
     }
 }
-
 
 /// Engine.jobs-backed CPU decode job for a material texture request.
 ///
@@ -369,12 +365,14 @@ impl RenderGpuSceneState {
         r: &mut dyn newengine_core::render::RenderApi,
     ) -> newengine_core::EngineResult<LitPipeline> {
         let key = self.primary_lit_pipeline_key()?;
-        self.require_material_pipeline_for(key, scene_color_format, r)?.lit().ok_or_else(|| {
-            newengine_core::EngineError::other(format!(
+        self.require_material_pipeline_for(key, scene_color_format, r)?
+            .lit()
+            .ok_or_else(|| {
+                newengine_core::EngineError::other(format!(
                 "render material registry: selected material domain is not a lit pipeline key='{}'",
                 key.as_str()
             ))
-        })
+            })
     }
 }
 
@@ -421,9 +419,6 @@ impl RenderDiagnosticsRuntimeState {
     }
 }
 
-
-
-
 pub(super) struct RenderUiSurfaceRuntimeState {
     pub(super) primary: super::module_impl::ui_node_surface::RenderUiNodeSurfaceState,
 }
@@ -436,4 +431,3 @@ impl RenderUiSurfaceRuntimeState {
         }
     }
 }
-

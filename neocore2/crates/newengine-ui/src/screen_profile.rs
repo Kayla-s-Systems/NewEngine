@@ -5,8 +5,9 @@ use std::collections::BTreeMap;
 use newengine_ui_api::{
     UiComponentNode, UiNodeTone, UiScreenInputFocusPolicy, UiScreenPanelDescriptor,
     UiScreenProfile, UiScreenProfileDescriptor, UiSurfaceAnchor, UiSurfaceNode, UiSurfaceStyle,
-    UI_COMPONENT_PANEL, UI_COMPONENT_ROW, UI_FONT_ASSET_EDITOR_SANS,
-    UI_SURFACE_EDITOR_SHELL, UI_SURFACE_GAME_PRESENTATION, UI_SURFACE_SCREEN_ROOT, UI_THEME_ASSET_NORTHSTAR_EDITOR, UI_THEME_NORTHSTAR_EDITOR,
+    UI_COMPONENT_PANEL, UI_COMPONENT_ROW, UI_FONT_ASSET_EDITOR_SANS, UI_SURFACE_EDITOR_SHELL,
+    UI_SURFACE_GAME_PRESENTATION, UI_SURFACE_SCREEN_ROOT, UI_THEME_ASSET_NORTHSTAR_EDITOR,
+    UI_THEME_NORTHSTAR_EDITOR,
 };
 
 const SOURCE: &str = "engine.ui.screen_profile";
@@ -94,7 +95,10 @@ impl GameScreen {
 }
 
 #[inline]
-pub fn screen_profile_descriptor(profile: UiScreenProfile, game_ui_root: Option<String>) -> UiScreenProfileDescriptor {
+pub fn screen_profile_descriptor(
+    profile: UiScreenProfile,
+    game_ui_root: Option<String>,
+) -> UiScreenProfileDescriptor {
     match profile {
         UiScreenProfile::Editor => editor_screen_descriptor(),
         UiScreenProfile::Game => game_screen_descriptor(game_ui_root),
@@ -112,17 +116,123 @@ pub fn editor_screen_descriptor() -> UiScreenProfileDescriptor {
         game_ui_root_surface_id: None,
         input_focus_policy: UiScreenInputFocusPolicy::EditorShell,
         panels: vec![
-            panel("top.toolbar", "Toolbar", "engine.ui.editor.toolbar", "engine.ui", "newengine.ui.editor.toolbar.dto.v1", true, false, ["top", "toolbar", "editor"]),
-            panel("center.viewport", "Viewport", DEFAULT_VIEWPORT_SURFACE, "engine.render", "newengine.render.viewport.surface_ref.v1", true, false, ["center", "viewport", "render-target"]),
-            panel("left.outliner", "Scene / World Outliner", "engine.ui.editor.outliner", "engine.scene", "newengine.scene.world_outliner.readonly_snapshot.v1", true, false, ["left", "outliner", "scene", "world"]),
-            panel("left.visibility", "ECS / Entity Visibility", "engine.ui.editor.entity_visibility", "engine.entity", "newengine.entity.visibility.opaque_handles.v1", false, false, ["left", "entity", "visibility", "opaque-handles"]),
-            panel("right.edit_window", "Right Edit Window", "engine.ui.editor.edit_window", "engine.editor", "newengine.editor.selection_context.v1", true, false, ["right", "edit-window", "selection-context", "asset-document", "component-dto", "opaque-handles"]),
-            panel("right.world_settings", "World Settings", "engine.ui.editor.world_settings", "engine.world", "newengine.world.settings.dto.v1", false, false, ["right", "world-settings", "dto"]),
-            panel("bottom.content_browser", "Content Browser", "ui.assets.catalog", "engine.assets", "newengine.assets.catalog_ui.asset_document_dto.v1", true, false, ["bottom", "assets", "content-browser", "ui-composition"]),
-            panel("bottom.console", "Console / Output Log", "engine.ui.editor.console", "engine.console", "newengine.console.output_log_snapshot.v1", false, false, ["bottom", "console", "output-log"]),
-            panel("bottom.shader_compile", "Shader Compile", "engine.ui.editor.shader_compile", "engine.jobs", "newengine.jobs.shader_compile_snapshot.v1", false, false, ["bottom", "shader", "jobs"]),
-            panel("bottom.jobs_profiler", "Jobs / Profiler", "engine.ui.editor.profiler", "engine.jobs", "newengine.jobs.profiler_snapshot.v1", false, false, ["bottom", "jobs", "profiler"]),
-            panel("bottom.gateway_diagnostics", "North Star Gateway", "engine.ui.editor.gateway_diagnostics", "engine.gateway_registry", "newengine.gateway.route_diagnostics.v1", true, false, ["bottom", "gateway", "diagnostics"]),
+            panel(
+                "top.toolbar",
+                "Toolbar",
+                "engine.ui.editor.toolbar",
+                "engine.ui",
+                "newengine.ui.editor.toolbar.dto.v1",
+                true,
+                false,
+                ["top", "toolbar", "editor"],
+            ),
+            panel(
+                "center.viewport",
+                "Viewport",
+                DEFAULT_VIEWPORT_SURFACE,
+                "engine.render",
+                "newengine.render.viewport.surface_ref.v1",
+                true,
+                false,
+                ["center", "viewport", "render-target"],
+            ),
+            panel(
+                "left.outliner",
+                "Scene / World Outliner",
+                "engine.ui.editor.outliner",
+                "engine.scene",
+                "newengine.scene.world_outliner.readonly_snapshot.v1",
+                true,
+                false,
+                ["left", "outliner", "scene", "world"],
+            ),
+            panel(
+                "left.visibility",
+                "ECS / Entity Visibility",
+                "engine.ui.editor.entity_visibility",
+                "engine.entity",
+                "newengine.entity.visibility.opaque_handles.v1",
+                false,
+                false,
+                ["left", "entity", "visibility", "opaque-handles"],
+            ),
+            panel(
+                "right.edit_window",
+                "Right Edit Window",
+                "engine.ui.editor.edit_window",
+                "engine.editor",
+                "newengine.editor.selection_context.v1",
+                true,
+                false,
+                [
+                    "right",
+                    "edit-window",
+                    "selection-context",
+                    "asset-document",
+                    "component-dto",
+                    "opaque-handles",
+                ],
+            ),
+            panel(
+                "right.world_settings",
+                "World Settings",
+                "engine.ui.editor.world_settings",
+                "engine.world",
+                "newengine.world.settings.dto.v1",
+                false,
+                false,
+                ["right", "world-settings", "dto"],
+            ),
+            panel(
+                "bottom.content_browser",
+                "Content Browser",
+                "ui.assets.catalog",
+                "engine.assets",
+                "newengine.assets.catalog_ui.asset_document_dto.v1",
+                true,
+                false,
+                ["bottom", "assets", "content-browser", "ui-composition"],
+            ),
+            panel(
+                "bottom.console",
+                "Console / Output Log",
+                "engine.ui.editor.console",
+                "engine.console",
+                "newengine.console.output_log_snapshot.v1",
+                false,
+                false,
+                ["bottom", "console", "output-log"],
+            ),
+            panel(
+                "bottom.shader_compile",
+                "Shader Compile",
+                "engine.ui.editor.shader_compile",
+                "engine.jobs",
+                "newengine.jobs.shader_compile_snapshot.v1",
+                false,
+                false,
+                ["bottom", "shader", "jobs"],
+            ),
+            panel(
+                "bottom.jobs_profiler",
+                "Jobs / Profiler",
+                "engine.ui.editor.profiler",
+                "engine.jobs",
+                "newengine.jobs.profiler_snapshot.v1",
+                false,
+                false,
+                ["bottom", "jobs", "profiler"],
+            ),
+            panel(
+                "bottom.gateway_diagnostics",
+                "North Star Gateway",
+                "engine.ui.editor.gateway_diagnostics",
+                "engine.gateway_registry",
+                "newengine.gateway.route_diagnostics.v1",
+                true,
+                false,
+                ["bottom", "gateway", "diagnostics"],
+            ),
         ],
         diagnostics: vec![
             "EditorScreen is a UI composition profile, not a backend domain.".to_owned(),
@@ -177,16 +287,23 @@ pub fn headless_screen_descriptor() -> UiScreenProfileDescriptor {
     }
 }
 
-fn editor_screen_surface_node(descriptor: &UiScreenProfileDescriptor, frame_index: u64) -> UiSurfaceNode {
+fn editor_screen_surface_node(
+    descriptor: &UiScreenProfileDescriptor,
+    frame_index: u64,
+) -> UiSurfaceNode {
     let body_lines = vec![
-        "Editor profile publishes a compact dock shell; content is routed through DTO contracts.".to_owned(),
+        "Editor profile publishes a compact dock shell; content is routed through DTO contracts."
+            .to_owned(),
         "The viewport is a contained render target, not a fullscreen game background.".to_owned(),
     ];
     let footer_lines = vec![
         "Profile: Editor · simulation stopped until command · provider routes unchanged".to_owned(),
     ];
     let mut metrics = screen_metrics(descriptor, frame_index);
-    metrics.insert("editor_panel_count".to_owned(), serde_json::json!(descriptor.panels.len()));
+    metrics.insert(
+        "editor_panel_count".to_owned(),
+        serde_json::json!(descriptor.panels.len()),
+    );
 
     UiSurfaceNode {
         version: 1,
@@ -196,7 +313,8 @@ fn editor_screen_surface_node(descriptor: &UiScreenProfileDescriptor, frame_inde
         modal: false,
         z_order: 100,
         title: "North Star".to_owned(),
-        subtitle: "Editor shell · viewport contained inside UI · simulation stopped until command".to_owned(),
+        subtitle: "Editor shell · viewport contained inside UI · simulation stopped until command"
+            .to_owned(),
         body_lines,
         footer_lines,
         style_tags: vec![
@@ -238,13 +356,19 @@ fn editor_screen_surface_node(descriptor: &UiScreenProfileDescriptor, frame_inde
     }
 }
 
-fn game_screen_surface_node(descriptor: &UiScreenProfileDescriptor, frame_index: u64) -> Option<UiSurfaceNode> {
+fn game_screen_surface_node(
+    descriptor: &UiScreenProfileDescriptor,
+    frame_index: u64,
+) -> Option<UiSurfaceNode> {
     let root = descriptor.game_ui_root_surface_id.as_ref()?.trim();
     if root.is_empty() {
         return None;
     }
     let mut metrics = screen_metrics(descriptor, frame_index);
-    metrics.insert("game_ui_root_surface_id".to_owned(), serde_json::json!(root));
+    metrics.insert(
+        "game_ui_root_surface_id".to_owned(),
+        serde_json::json!(root),
+    );
     Some(UiSurfaceNode {
         version: 1,
         surface_id: descriptor.surface_id.clone(),
@@ -253,10 +377,17 @@ fn game_screen_surface_node(descriptor: &UiScreenProfileDescriptor, frame_index:
         modal: false,
         z_order: 480,
         title: "Game Screen".to_owned(),
-        subtitle: "Clean runtime presentation; editor panels are not part of this profile".to_owned(),
+        subtitle: "Clean runtime presentation; editor panels are not part of this profile"
+            .to_owned(),
         body_lines: vec![format!("Game UI root: {root}")],
-        footer_lines: vec!["Editor shell is absent; debug overlays must be explicitly enabled.".to_owned()],
-        style_tags: vec!["retained".to_owned(), "screen-profile".to_owned(), "game-screen".to_owned()],
+        footer_lines: vec![
+            "Editor shell is absent; debug overlays must be explicitly enabled.".to_owned(),
+        ],
+        style_tags: vec![
+            "retained".to_owned(),
+            "screen-profile".to_owned(),
+            "game-screen".to_owned(),
+        ],
         theme_id: UI_THEME_NORTHSTAR_EDITOR.to_owned(),
         style_ref: Some(UI_THEME_ASSET_NORTHSTAR_EDITOR.to_owned()),
         component_id: UI_COMPONENT_PANEL.to_owned(),
@@ -300,20 +431,39 @@ fn panel_component(panel: &UiScreenPanelDescriptor) -> UiComponentNode {
         detail: Some(panel.data_contract.clone()),
         icon: None,
         font_token: None,
-        tone: if panel.required { UiNodeTone::Accent } else { UiNodeTone::Normal },
+        tone: if panel.required {
+            UiNodeTone::Accent
+        } else {
+            UiNodeTone::Normal
+        },
         state_tags: panel.tags.clone(),
         action_id: None,
         props: BTreeMap::new(),
         children: Vec::new(),
     };
-    component.props.insert("surface_id".to_owned(), serde_json::json!(panel.surface_id));
-    component.props.insert("required".to_owned(), serde_json::json!(panel.required));
-    component.props.insert("debug_only".to_owned(), serde_json::json!(panel.debug_only));
-    component.props.insert("dock_label".to_owned(), serde_json::json!(dock_slot_label(&panel.slot_id)));
-    component.props.insert("panel_title".to_owned(), serde_json::json!(panel.label.as_str()));
+    component
+        .props
+        .insert("surface_id".to_owned(), serde_json::json!(panel.surface_id));
+    component
+        .props
+        .insert("required".to_owned(), serde_json::json!(panel.required));
+    component
+        .props
+        .insert("debug_only".to_owned(), serde_json::json!(panel.debug_only));
+    component.props.insert(
+        "dock_label".to_owned(),
+        serde_json::json!(dock_slot_label(&panel.slot_id)),
+    );
+    component.props.insert(
+        "panel_title".to_owned(),
+        serde_json::json!(panel.label.as_str()),
+    );
     component.props.insert(
         "tooltip".to_owned(),
-        serde_json::json!(format!("{} · {}", panel.source_gateway, panel.data_contract)),
+        serde_json::json!(format!(
+            "{} · {}",
+            panel.source_gateway, panel.data_contract
+        )),
     );
     component
 }
@@ -349,13 +499,28 @@ fn panel<const N: usize>(
     }
 }
 
-fn screen_metrics(descriptor: &UiScreenProfileDescriptor, frame_index: u64) -> BTreeMap<String, serde_json::Value> {
+fn screen_metrics(
+    descriptor: &UiScreenProfileDescriptor,
+    frame_index: u64,
+) -> BTreeMap<String, serde_json::Value> {
     BTreeMap::from([
         ("frame_index".to_owned(), serde_json::json!(frame_index)),
-        ("screen_profile".to_owned(), serde_json::json!(descriptor.profile.id())),
-        ("layout_id".to_owned(), serde_json::json!(descriptor.layout_id.as_str())),
-        ("viewport_surface_id".to_owned(), serde_json::json!(descriptor.viewport_surface_id.as_str())),
-        ("input_focus_policy".to_owned(), serde_json::json!(format!("{:?}", descriptor.input_focus_policy))),
+        (
+            "screen_profile".to_owned(),
+            serde_json::json!(descriptor.profile.id()),
+        ),
+        (
+            "layout_id".to_owned(),
+            serde_json::json!(descriptor.layout_id.as_str()),
+        ),
+        (
+            "viewport_surface_id".to_owned(),
+            serde_json::json!(descriptor.viewport_surface_id.as_str()),
+        ),
+        (
+            "input_focus_policy".to_owned(),
+            serde_json::json!(format!("{:?}", descriptor.input_focus_policy)),
+        ),
         ("gateway".to_owned(), serde_json::json!("engine.ui")),
     ])
 }
@@ -367,26 +532,43 @@ mod tests {
     #[test]
     fn editor_screen_declares_required_editor_panels() {
         let descriptor = editor_screen_descriptor();
-        let slots = descriptor.panels.iter().map(|p| p.slot_id.as_str()).collect::<Vec<_>>();
+        let slots = descriptor
+            .panels
+            .iter()
+            .map(|p| p.slot_id.as_str())
+            .collect::<Vec<_>>();
         assert!(slots.contains(&"center.viewport"));
         assert!(slots.contains(&"left.outliner"));
         assert!(slots.contains(&"right.edit_window"));
         assert!(slots.contains(&"bottom.content_browser"));
         assert!(slots.contains(&"bottom.gateway_diagnostics"));
-        let content_browser = descriptor.panels.iter().find(|p| p.slot_id == "bottom.content_browser").unwrap();
+        let content_browser = descriptor
+            .panels
+            .iter()
+            .find(|p| p.slot_id == "bottom.content_browser")
+            .unwrap();
         assert_eq!(content_browser.surface_id, "ui.assets.catalog");
         assert_eq!(content_browser.source_gateway, "engine.assets");
         assert_ne!(content_browser.source_gateway, content_browser.surface_id);
-        assert!(content_browser.tags.iter().any(|tag| tag == "ui-composition"));
+        assert!(content_browser
+            .tags
+            .iter()
+            .any(|tag| tag == "ui-composition"));
         assert_eq!(descriptor.profile, UiScreenProfile::Editor);
-        assert_eq!(descriptor.input_focus_policy, UiScreenInputFocusPolicy::EditorShell);
+        assert_eq!(
+            descriptor.input_focus_policy,
+            UiScreenInputFocusPolicy::EditorShell
+        );
     }
 
     #[test]
     fn game_screen_has_no_editor_panels_by_default() {
         let descriptor = game_screen_descriptor(None);
         assert_eq!(descriptor.profile, UiScreenProfile::Game);
-        assert_eq!(descriptor.input_focus_policy, UiScreenInputFocusPolicy::GameViewport);
+        assert_eq!(
+            descriptor.input_focus_policy,
+            UiScreenInputFocusPolicy::GameViewport
+        );
         assert!(descriptor.panels.is_empty());
         assert!(GameScreen::default().surface_node(1).is_none());
     }
@@ -394,9 +576,19 @@ mod tests {
     #[test]
     fn right_edit_window_contract_uses_selection_context_not_native_entity_id() {
         let descriptor = editor_screen_descriptor();
-        let edit_window = descriptor.panels.iter().find(|p| p.slot_id == "right.edit_window").unwrap();
-        assert_eq!(edit_window.data_contract, "newengine.editor.selection_context.v1");
-        assert!(edit_window.tags.iter().any(|tag| tag == "selection-context"));
+        let edit_window = descriptor
+            .panels
+            .iter()
+            .find(|p| p.slot_id == "right.edit_window")
+            .unwrap();
+        assert_eq!(
+            edit_window.data_contract,
+            "newengine.editor.selection_context.v1"
+        );
+        assert!(edit_window
+            .tags
+            .iter()
+            .any(|tag| tag == "selection-context"));
         assert!(edit_window.tags.iter().any(|tag| tag == "opaque-handles"));
         assert!(!edit_window.data_contract.contains("EntityId"));
         assert!(!edit_window.data_contract.contains("World"));

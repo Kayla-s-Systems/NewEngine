@@ -16,14 +16,21 @@ pub struct PhysicsBackendRuntimeModule {
 impl PhysicsBackendRuntimeModule {
     #[inline]
     pub fn new(modules_dir: PathBuf) -> Self {
-        Self { _modules_dir: modules_dir, api: None }
+        Self {
+            _modules_dir: modules_dir,
+            api: None,
+        }
     }
 }
 
 impl<E: Send + 'static> Module<E> for PhysicsBackendRuntimeModule {
-    fn id(&self) -> &'static str { "physics.runtime.loader" }
+    fn id(&self) -> &'static str {
+        "physics.runtime.loader"
+    }
 
-    fn provides(&self) -> &'static [newengine_core::ApiProvide] { &[PHYSICS_API_PROVIDE] }
+    fn provides(&self) -> &'static [newengine_core::ApiProvide] {
+        &[PHYSICS_API_PROVIDE]
+    }
 
     fn init(&mut self, ctx: &mut ModuleCtx<'_, E>) -> EngineResult<()> {
         let host = newengine_plugin_host::default_host_api();
@@ -69,14 +76,17 @@ impl<E: Send + 'static> Module<E> for PhysicsBackendRuntimeModule {
         let api = PhysicsApiRef::new(ServiceBackedPhysicsApi::new(client));
 
         ctx.resources_mut().insert(resolved);
-        ctx.resources_mut().register_api(PHYSICS_API_ID, api.clone())?;
+        ctx.resources_mut()
+            .register_api(PHYSICS_API_ID, api.clone())?;
         self.api = Some(api);
 
         Ok(())
     }
 
     fn shutdown(&mut self, ctx: &mut ModuleCtx<'_, E>) -> EngineResult<()> {
-        let _ = ctx.resources_mut().unregister_api::<PhysicsApiRef>(PHYSICS_API_ID);
+        let _ = ctx
+            .resources_mut()
+            .unregister_api::<PhysicsApiRef>(PHYSICS_API_ID);
         let _ = ctx.resources_mut().remove::<ResolvedPhysicsBackendConfig>();
         self.api = None;
         Ok(())

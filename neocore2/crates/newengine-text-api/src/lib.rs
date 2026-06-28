@@ -73,7 +73,10 @@ impl Default for TextServiceInfo {
                 "imported-face-blob-source-v1".to_owned(),
                 "localization-v1".to_owned(),
             ],
-            methods: text_service_methods().iter().map(|it| (*it).to_owned()).collect(),
+            methods: text_service_methods()
+                .iter()
+                .map(|it| (*it).to_owned())
+                .collect(),
         }
     }
 }
@@ -92,7 +95,9 @@ pub const TEXT_SERVICE_METHODS: &[&str] = &[
 ];
 
 #[inline]
-pub const fn text_service_methods() -> &'static [&'static str] { TEXT_SERVICE_METHODS }
+pub const fn text_service_methods() -> &'static [&'static str] {
+    TEXT_SERVICE_METHODS
+}
 
 /// Canonical editor font dictionary. The file is a NEF8/ListFile `.neftd` asset;
 /// entries name imported font faces and atlas policy. Runtime code consumes this
@@ -119,7 +124,9 @@ pub enum TextFontSourceKind {
 
 impl Default for TextFontSourceKind {
     #[inline]
-    fn default() -> Self { Self::ImportedFace }
+    fn default() -> Self {
+        Self::ImportedFace
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -132,7 +139,9 @@ pub enum TextDirection {
 
 impl Default for TextDirection {
     #[inline]
-    fn default() -> Self { Self::Auto }
+    fn default() -> Self {
+        Self::Auto
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -146,7 +155,9 @@ pub enum TextWrapMode {
 
 impl Default for TextWrapMode {
     #[inline]
-    fn default() -> Self { Self::Word }
+    fn default() -> Self {
+        Self::Word
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -158,9 +169,10 @@ pub enum TextOverflowMode {
 
 impl Default for TextOverflowMode {
     #[inline]
-    fn default() -> Self { Self::Clip }
+    fn default() -> Self {
+        Self::Clip
+    }
 }
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
@@ -172,7 +184,14 @@ pub struct TextFontVariationAxis {
 }
 
 impl Default for TextFontVariationAxis {
-    fn default() -> Self { Self { tag: String::new(), min: 0.0, default: 0.0, max: 0.0 } }
+    fn default() -> Self {
+        Self {
+            tag: String::new(),
+            min: 0.0,
+            default: 0.0,
+            max: 0.0,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -184,7 +203,13 @@ pub struct TextFontCoverageSummary {
 }
 
 impl Default for TextFontCoverageSummary {
-    fn default() -> Self { Self { unicode_ranges: Vec::new(), cmap_entries: 0, missing_codepoints: Vec::new() } }
+    fn default() -> Self {
+        Self {
+            unicode_ranges: Vec::new(),
+            cmap_entries: 0,
+            missing_codepoints: Vec::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -269,7 +294,13 @@ pub struct TextImeComposition {
 
 impl Default for TextImeComposition {
     fn default() -> Self {
-        Self { active: false, text: String::new(), selection_start: 0, selection_end: 0, clauses: Vec::new() }
+        Self {
+            active: false,
+            text: String::new(),
+            selection_start: 0,
+            selection_end: 0,
+            clauses: Vec::new(),
+        }
     }
 }
 
@@ -290,7 +321,11 @@ impl Default for TextShapeRunRequest {
         Self {
             text: String::new(),
             locale: "und".to_owned(),
-            font_stack: vec![TEXT_FONT_REF_EDITOR_SANS.to_owned(), "Segoe UI".to_owned(), "NotoSans".to_owned()],
+            font_stack: vec![
+                TEXT_FONT_REF_EDITOR_SANS.to_owned(),
+                "Segoe UI".to_owned(),
+                "NotoSans".to_owned(),
+            ],
             size_px: 16.0,
             direction: TextDirection::Auto,
             features: Vec::new(),
@@ -369,7 +404,12 @@ pub struct TextSelectionRect {
 }
 
 impl Default for TextSelectionRect {
-    fn default() -> Self { Self { text_range: [0, 0], rect_px: [0.0, 0.0, 0.0, 0.0] } }
+    fn default() -> Self {
+        Self {
+            text_range: [0, 0],
+            rect_px: [0.0, 0.0, 0.0, 0.0],
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -385,7 +425,14 @@ pub struct TextShapeRunResponse {
 
 impl Default for TextShapeRunResponse {
     fn default() -> Self {
-        Self { version: 1, runs: Vec::new(), total_advance_px: 0.0, caret_positions_px: vec![0.0], selection_rects: Vec::new(), diagnostics: Vec::new() }
+        Self {
+            version: 1,
+            runs: Vec::new(),
+            total_advance_px: 0.0,
+            caret_positions_px: vec![0.0],
+            selection_rects: Vec::new(),
+            diagnostics: Vec::new(),
+        }
     }
 }
 
@@ -434,7 +481,15 @@ pub struct TextLineBox {
 }
 
 impl Default for TextLineBox {
-    fn default() -> Self { Self { text_range: [0, 0], glyph_range: [0, 0], rect_px: [0.0, 0.0, 0.0, 0.0], baseline_y_px: 0.0, ellipsized: false } }
+    fn default() -> Self {
+        Self {
+            text_range: [0, 0],
+            glyph_range: [0, 0],
+            rect_px: [0.0, 0.0, 0.0, 0.0],
+            baseline_y_px: 0.0,
+            ellipsized: false,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -451,7 +506,15 @@ pub struct TextLayoutParagraphResponse {
 
 impl Default for TextLayoutParagraphResponse {
     fn default() -> Self {
-        Self { version: 1, lines: Vec::new(), glyph_runs: Vec::new(), caret_positions_px: Vec::new(), selection_rects: Vec::new(), size_px: [0.0, 0.0], diagnostics: Vec::new() }
+        Self {
+            version: 1,
+            lines: Vec::new(),
+            glyph_runs: Vec::new(),
+            caret_positions_px: Vec::new(),
+            selection_rects: Vec::new(),
+            size_px: [0.0, 0.0],
+            diagnostics: Vec::new(),
+        }
     }
 }
 
@@ -468,7 +531,14 @@ pub struct TextMeasureTextRequest {
 
 impl Default for TextMeasureTextRequest {
     fn default() -> Self {
-        Self { text: String::new(), locale: "und".to_owned(), font_stack: TextFontManifest::default().fallback_stack, size_px: 16.0, max_width_px: 0.0, wrap: TextWrapMode::Word }
+        Self {
+            text: String::new(),
+            locale: "und".to_owned(),
+            font_stack: TextFontManifest::default().fallback_stack,
+            size_px: 16.0,
+            max_width_px: 0.0,
+            wrap: TextWrapMode::Word,
+        }
     }
 }
 
@@ -484,7 +554,16 @@ pub struct TextMeasureTextResponse {
 }
 
 impl Default for TextMeasureTextResponse {
-    fn default() -> Self { Self { version: 1, size_px: [0.0, 0.0], baseline_y_px: 0.0, line_count: 0, glyph_count: 0, diagnostics: Vec::new() } }
+    fn default() -> Self {
+        Self {
+            version: 1,
+            size_px: [0.0, 0.0],
+            baseline_y_px: 0.0,
+            line_count: 0,
+            glyph_count: 0,
+            diagnostics: Vec::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -498,7 +577,15 @@ pub struct TextFontFallbackRequest {
 }
 
 impl Default for TextFontFallbackRequest {
-    fn default() -> Self { Self { text: String::new(), locale: "und".to_owned(), preferred_stack: Vec::new(), require_emoji: false, require_symbols: false } }
+    fn default() -> Self {
+        Self {
+            text: String::new(),
+            locale: "und".to_owned(),
+            preferred_stack: Vec::new(),
+            require_emoji: false,
+            require_symbols: false,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -511,7 +598,14 @@ pub struct TextFontFallbackResponse {
 }
 
 impl Default for TextFontFallbackResponse {
-    fn default() -> Self { Self { version: 1, fallback_stack: TextFontManifest::default().fallback_stack, missing_codepoints: Vec::new(), diagnostics: Vec::new() } }
+    fn default() -> Self {
+        Self {
+            version: 1,
+            fallback_stack: TextFontManifest::default().fallback_stack,
+            missing_codepoints: Vec::new(),
+            diagnostics: Vec::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -523,7 +617,13 @@ pub struct TextAtlasPlanRequest {
 }
 
 impl Default for TextAtlasPlanRequest {
-    fn default() -> Self { Self { glyphs: Vec::new(), max_page_size_px: [1024, 1024], format: "rgba8".to_owned() } }
+    fn default() -> Self {
+        Self {
+            glyphs: Vec::new(),
+            max_page_size_px: [1024, 1024],
+            format: "rgba8".to_owned(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -537,7 +637,15 @@ pub struct TextAtlasPage {
 }
 
 impl Default for TextAtlasPage {
-    fn default() -> Self { Self { atlas_id: String::new(), page_index: 0, size_px: [0, 0], format: "rgba8".to_owned(), glyph_count: 0 } }
+    fn default() -> Self {
+        Self {
+            atlas_id: String::new(),
+            page_index: 0,
+            size_px: [0, 0],
+            format: "rgba8".to_owned(),
+            glyph_count: 0,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -550,7 +658,14 @@ pub struct TextAtlasPlanResponse {
 }
 
 impl Default for TextAtlasPlanResponse {
-    fn default() -> Self { Self { version: 1, atlas_id: "aurelia.default.font_atlas".to_owned(), pages: Vec::new(), diagnostics: Vec::new() } }
+    fn default() -> Self {
+        Self {
+            version: 1,
+            atlas_id: "aurelia.default.font_atlas".to_owned(),
+            pages: Vec::new(),
+            diagnostics: Vec::new(),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -560,7 +675,10 @@ mod tests {
     #[test]
     fn text_gateway_is_engine_facing() {
         assert_eq!(ENGINE_TEXT_SERVICE_ID, "engine.ui.text");
-        assert_eq!(TEXT_BACKEND_SERVICE_SPEC.engine_gateway_id, ENGINE_TEXT_SERVICE_ID);
+        assert_eq!(
+            TEXT_BACKEND_SERVICE_SPEC.engine_gateway_id,
+            ENGINE_TEXT_SERVICE_ID
+        );
     }
 
     #[test]

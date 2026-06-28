@@ -6,7 +6,12 @@ pub enum DdsExportError {
     #[error("dds: invalid extent {width}x{height}")]
     InvalidExtent { width: u32, height: u32 },
     #[error("dds: invalid payload bytes={bytes} expected={expected} extent={width}x{height}")]
-    InvalidPayload { bytes: usize, expected: usize, width: u32, height: u32 },
+    InvalidPayload {
+        bytes: usize,
+        expected: usize,
+        width: u32,
+        height: u32,
+    },
     #[error("dds: mip generation failed: {0}")]
     MipGeneration(String),
     #[error("dds: unsupported pixel format '{0}'")]
@@ -16,35 +21,64 @@ pub enum DdsExportError {
 /// Writes a simple uncompressed RGBA8 DDS file with a full generated mip chain.
 ///
 /// This is an authoring/export helper for the texture tool. Runtime never reads DDS.
-pub fn write_dds_rgba8(width: u32, height: u32, rgba: &[u8]) -> std::result::Result<Vec<u8>, DdsExportError> {
+pub fn write_dds_rgba8(
+    width: u32,
+    height: u32,
+    rgba: &[u8],
+) -> std::result::Result<Vec<u8>, DdsExportError> {
     if width == 0 || height == 0 {
         return Err(DdsExportError::InvalidExtent { width, height });
     }
     let expected = rgba8_len(width, height);
     if rgba.len() != expected {
-        return Err(DdsExportError::InvalidPayload { bytes: rgba.len(), expected, width, height });
+        return Err(DdsExportError::InvalidPayload {
+            bytes: rgba.len(),
+            expected,
+            width,
+            height,
+        });
     }
     let mips = generate_rgba8_mips(width, height, rgba.to_vec())
         .map_err(|e| DdsExportError::MipGeneration(e.to_string()))?;
     write_dds_rgba8_mip_chain(width, height, &mips)
 }
 
-pub fn write_dds_rgba8_mip_chain(width: u32, height: u32, mips: &[TextureMipData]) -> std::result::Result<Vec<u8>, DdsExportError> {
+pub fn write_dds_rgba8_mip_chain(
+    width: u32,
+    height: u32,
+    mips: &[TextureMipData],
+) -> std::result::Result<Vec<u8>, DdsExportError> {
     let encoded = mips
         .iter()
-        .map(|m| TextureEncodedMipData { level: m.level, width: m.width, height: m.height, bytes: m.rgba.clone() })
+        .map(|m| TextureEncodedMipData {
+            level: m.level,
+            width: m.width,
+            height: m.height,
+            bytes: m.rgba.clone(),
+        })
         .collect::<Vec<_>>();
     write_dds_runtime_mip_chain(width, height, crate::PIXEL_FORMAT_RGBA8_UNORM, &encoded)
 }
 
-pub fn write_dds_runtime_mip_chain(width: u32, height: u32, format: &str, mips: &[TextureEncodedMipData]) -> std::result::Result<Vec<u8>, DdsExportError> {
+pub fn write_dds_runtime_mip_chain(
+    width: u32,
+    height: u32,
+    format: &str,
+    mips: &[TextureEncodedMipData],
+) -> std::result::Result<Vec<u8>, DdsExportError> {
     if width == 0 || height == 0 {
         return Err(DdsExportError::InvalidExtent { width, height });
     }
     if mips.is_empty() {
-        return Err(DdsExportError::InvalidPayload { bytes: 0, expected: rgba8_len(width, height), width, height });
+        return Err(DdsExportError::InvalidPayload {
+            bytes: 0,
+            expected: rgba8_len(width, height),
+            width,
+            height,
+        });
     }
-    let pixel_format = parse_pixel_format(format, "dds").map_err(|_| DdsExportError::UnsupportedFormat(format.to_owned()))?;
+    let pixel_format = parse_pixel_format(format, "dds")
+        .map_err(|_| DdsExportError::UnsupportedFormat(format.to_owned()))?;
     let payload_len = mips.iter().map(|m| m.bytes.len()).sum::<usize>();
     let mip_count = mips.len() as u32;
     let has_mips = mip_count > 1;
@@ -53,16 +87,25 @@ pub fn write_dds_runtime_mip_chain(width: u32, height: u32, format: &str, mips: 
     out.extend_from_slice(b"DDS ");
     write_u32(&mut out, 124); // dwSize
     let mut flags = 0x0000_1007; // CAPS | HEIGHT | WIDTH | PIXELFORMAT
-    if pixel_format.is_rgba8() { flags |= 0x0000_0008; } // PITCH
-    else { flags |= 0x0008_0000; } // LINEARSIZE
-    if has_mips { flags |= 0x0002_0000; }
+    if pixel_format.is_rgba8() {
+        flags |= 0x0000_0008;
+    }
+    // PITCH
+    else {
+        flags |= 0x0008_0000;
+    } // LINEARSIZE
+    if has_mips {
+        flags |= 0x0002_0000;
+    }
     write_u32(&mut out, flags);
     write_u32(&mut out, height);
     write_u32(&mut out, width);
     write_u32(&mut out, pitch_or_linear_size(pixel_format, width, height));
     write_u32(&mut out, 0);
     write_u32(&mut out, mip_count);
-    for _ in 0..11 { write_u32(&mut out, 0); }
+    for _ in 0..11 {
+        write_u32(&mut out, 0);
+    }
 
     write_u32(&mut out, 32); // DDPIXELFORMAT size
     match pixel_format {
@@ -75,10 +118,14 @@ pub fn write_dds_runtime_mip_chain(width: u32, height: u32, format: &str, mips: 
             write_u32(&mut out, 0x00ff_0000);
             write_u32(&mut out, 0xff00_0000);
         }
-        TexturePixelFormat::Bc1RgbaUnorm | TexturePixelFormat::Bc1RgbaSrgb => write_fourcc_pf(&mut out, *b"DXT1"),
+        TexturePixelFormat::Bc1RgbaUnorm | TexturePixelFormat::Bc1RgbaSrgb => {
+            write_fourcc_pf(&mut out, *b"DXT1")
+        }
         TexturePixelFormat::Bc2RgbaUnorm => write_fourcc_pf(&mut out, *b"DXT3"),
         TexturePixelFormat::Bc2RgbaSrgb => write_fourcc_pf(&mut out, *b"DX10"),
-        TexturePixelFormat::Bc3RgbaUnorm | TexturePixelFormat::Bc3RgbaSrgb => write_fourcc_pf(&mut out, *b"DXT5"),
+        TexturePixelFormat::Bc3RgbaUnorm | TexturePixelFormat::Bc3RgbaSrgb => {
+            write_fourcc_pf(&mut out, *b"DXT5")
+        }
         TexturePixelFormat::Bc5RgUnorm
         | TexturePixelFormat::Bc6hUf16
         | TexturePixelFormat::Bc6hSf16
@@ -90,7 +137,9 @@ pub fn write_dds_runtime_mip_chain(width: u32, height: u32, format: &str, mips: 
     }
 
     let mut caps = 0x0000_1000;
-    if has_mips { caps |= 0x0000_0008 | 0x0040_0000; }
+    if has_mips {
+        caps |= 0x0000_0008 | 0x0040_0000;
+    }
     write_u32(&mut out, caps);
     write_u32(&mut out, 0);
     write_u32(&mut out, 0);
@@ -134,8 +183,12 @@ fn write_fourcc_pf(out: &mut Vec<u8>, cc: [u8; 4]) {
 fn pitch_or_linear_size(format: TexturePixelFormat, width: u32, height: u32) -> u32 {
     match format {
         TexturePixelFormat::Rgba8Unorm | TexturePixelFormat::Rgba8Srgb => width.saturating_mul(4),
-        TexturePixelFormat::Bc1RgbaUnorm | TexturePixelFormat::Bc1RgbaSrgb => ((width + 3) / 4).saturating_mul((height + 3) / 4).saturating_mul(8),
-        _ => ((width + 3) / 4).saturating_mul((height + 3) / 4).saturating_mul(16),
+        TexturePixelFormat::Bc1RgbaUnorm | TexturePixelFormat::Bc1RgbaSrgb => ((width + 3) / 4)
+            .saturating_mul((height + 3) / 4)
+            .saturating_mul(8),
+        _ => ((width + 3) / 4)
+            .saturating_mul((height + 3) / 4)
+            .saturating_mul(16),
     }
 }
 
@@ -143,12 +196,12 @@ fn pitch_or_linear_size(format: TexturePixelFormat, width: u32, height: u32) -> 
 fn dxgi_format(format: TexturePixelFormat) -> u32 {
     match format {
         TexturePixelFormat::Bc2RgbaUnorm => 74, // DXGI_FORMAT_BC2_UNORM
-        TexturePixelFormat::Bc2RgbaSrgb => 75, // DXGI_FORMAT_BC2_UNORM_SRGB
-        TexturePixelFormat::Bc5RgUnorm => 83, // DXGI_FORMAT_BC5_UNORM
-        TexturePixelFormat::Bc6hUf16 => 95, // DXGI_FORMAT_BC6H_UF16
-        TexturePixelFormat::Bc6hSf16 => 96, // DXGI_FORMAT_BC6H_SF16
+        TexturePixelFormat::Bc2RgbaSrgb => 75,  // DXGI_FORMAT_BC2_UNORM_SRGB
+        TexturePixelFormat::Bc5RgUnorm => 83,   // DXGI_FORMAT_BC5_UNORM
+        TexturePixelFormat::Bc6hUf16 => 95,     // DXGI_FORMAT_BC6H_UF16
+        TexturePixelFormat::Bc6hSf16 => 96,     // DXGI_FORMAT_BC6H_SF16
         TexturePixelFormat::Bc7RgbaUnorm => 98, // DXGI_FORMAT_BC7_UNORM
-        TexturePixelFormat::Bc7RgbaSrgb => 99, // DXGI_FORMAT_BC7_UNORM_SRGB
+        TexturePixelFormat::Bc7RgbaSrgb => 99,  // DXGI_FORMAT_BC7_UNORM_SRGB
         _ => 0,
     }
 }

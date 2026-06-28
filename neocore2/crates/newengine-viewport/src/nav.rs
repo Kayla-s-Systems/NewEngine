@@ -54,7 +54,12 @@ impl FlyRmbLatch {
 
     /// Apply grace-frame suppression to per-frame motion.
     #[inline]
-    pub fn suppress_motion_if_needed(&mut self, dx_px: &mut f32, dy_px: &mut f32, wheel_y: &mut f32) {
+    pub fn suppress_motion_if_needed(
+        &mut self,
+        dx_px: &mut f32,
+        dy_px: &mut f32,
+        wheel_y: &mut f32,
+    ) {
         if self.grace_frames == 0 {
             return;
         }
