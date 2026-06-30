@@ -102,6 +102,13 @@ pub struct UiMesh {
     pub cmds: SmallVec<[UiDrawCmd; 8]>,
 }
 
+impl Default for UiMesh {
+    #[inline]
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl UiMesh {
     #[inline]
     pub fn new() -> Self {
@@ -131,6 +138,13 @@ pub struct UiDrawList {
     /// generic primitives here; GPU backends turn this into batches.
     pub paint: UiPaintList,
     pub texture_delta: UiTextureDelta,
+}
+
+impl Default for UiDrawList {
+    #[inline]
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl UiDrawList {
@@ -164,6 +178,13 @@ pub struct UiTextureDelta {
     pub set: FxHashMap<UiTexId, UiTexture>,
     pub patches: Vec<UiTexturePatch>,
     pub free: Vec<UiTexId>,
+}
+
+impl Default for UiTextureDelta {
+    #[inline]
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl UiTextureDelta {

@@ -2,36 +2,18 @@ use serde::{Deserialize, Serialize};
 
 use crate::UiTexId;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, Default)]
 #[serde(default)]
 pub struct TextureRef {
     pub uri: String,
     pub variant: Option<String>,
 }
 
-impl Default for TextureRef {
-    fn default() -> Self {
-        Self {
-            uri: String::new(),
-            variant: None,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, Default)]
 #[serde(default)]
 pub struct VectorRef {
     pub uri: String,
     pub variant: Option<String>,
-}
-
-impl Default for VectorRef {
-    fn default() -> Self {
-        Self {
-            uri: String::new(),
-            variant: None,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
@@ -233,6 +215,9 @@ pub struct UiImagePaintCommand {
     pub texture_ref: Option<String>,
     pub uv_rect: [f32; 4],
     pub tint_rgba: u32,
+    /// Clockwise visual rotation around the image rect center, in radians.
+    /// Zero keeps the legacy axis-aligned quad path.
+    pub rotation_radians: f32,
     pub clip_rect: Option<[f32; 4]>,
 }
 
@@ -245,6 +230,7 @@ impl Default for UiImagePaintCommand {
             texture_ref: None,
             uv_rect: [0.0, 0.0, 1.0, 1.0],
             tint_rgba: 0xffff_ffff,
+            rotation_radians: 0.0,
             clip_rect: None,
         }
     }
