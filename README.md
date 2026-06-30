@@ -1,4 +1,8 @@
-# CoreEngine / NewEngine
+<p align="center">
+  <img src=".github/NorthStarBanner.png" alt="NorthStar Engine banner" width="100%">
+</p>
+
+# NorthStar Engine
 
 [![CI](https://img.shields.io/badge/CI-GitHub%20Actions-2088ff?logo=githubactions&logoColor=white)](.github/workflows/ci.yml)
 [![Rust](https://img.shields.io/badge/Rust-stable%20%7C%20nightly-orange?logo=rust&logoColor=white)](https://www.rust-lang.org/)
@@ -6,7 +10,8 @@
 [![Architecture](https://img.shields.io/badge/architecture-host%2Fplugin-blueviolet)](NewEngine/neocore2/docs/CoreEngine_Documentation/15_GATEWAY_SERVICE_LAYER.md)
 [![Status](https://img.shields.io/badge/status-pre--alpha-yellow)](#project-status)
 
-CoreEngine is a Rust game-engine runtime built around a strict host/plugin architecture.
+**NorthStar Engine** is the Take Some() modular runtime and rendering technology stack for game-engine infrastructure.
+This repository contains **NewEngine / CoreEngine**: a Rust game-engine runtime built around a strict host/plugin architecture.
 The engine owns lifecycle, scheduling, resources, startup validation, and service routing.
 Feature implementations live in replaceable plugins.
 
@@ -14,9 +19,19 @@ Feature implementations live in replaceable plugins.
 consumer -> engine.* gateway -> active provider service -> typed adapter -> runtime systems
 ```
 
+## Project identity
+
+| Field | Value |
+| --- | --- |
+| Product | NorthStar Engine |
+| Organization | Take Some() |
+| Repository | NewEngine |
+| Core architecture | Host/plugin runtime with stable engine gateways and replaceable providers |
+| Primary implementation | Rust workspace under `NewEngine/neocore2` |
+
 ## Why this engine exists
 
-CoreEngine is designed to avoid becoming a wrapper around one renderer, one physics SDK, or one asset manager.
+NorthStar Engine is designed to avoid becoming a wrapper around one renderer, one physics SDK, or one asset manager.
 The host exposes stable engine-facing gateways such as `engine.render`, `engine.physics`, `engine.assets`, and `engine.input`.
 Provider plugins describe themselves through metadata, and the host selects the active implementation from descriptors.
 
@@ -106,8 +121,30 @@ Start here:
 
 ## Project status
 
-CoreEngine is pre-alpha engine infrastructure. The architecture is intentionally strict and release-oriented, but APIs may still move while the runtime, plugin SDK, conformance tests, and content tools mature.
+NorthStar Engine is pre-alpha engine infrastructure.
+The architecture is intentionally strict and release-oriented, but APIs may still move while the runtime, plugin SDK, conformance tests, and content tools mature.
 
 ## Contributing
 
-Contributions should preserve the host/plugin boundary. Avoid provider-specific branches in engine-runtime and prefer descriptor-driven routing over manual service-name checks.
+Contributions should preserve the host/plugin boundary.
+Avoid provider-specific branches in engine-runtime and prefer descriptor-driven routing over manual service-name checks.
+
+<!-- NORTHSTAR-DIR-README:BEGIN -->
+
+## Directory purpose
+
+**Path:** `NewEngine`
+
+**Role:** Core engine source area. This is where the engine host, runtime crates, config, editor, and core scan scripts live.
+
+**Local contents:** 3 direct subdirectories, 5 direct files.
+
+**Direct file examples:** `.gitignore`, `banner.png`, `CODE_OF_CONDUCT.md`, `LICENSE`
+
+## Working rules
+
+- Do not put transient build output in this directory unless the directory is explicitly a runtime output/cache location.
+- Keep runtime assets and editable source assets separate: source assets are packed into runtime formats through explicit tools/manifests.
+- Do not introduce hidden provider/backend coupling here; use declared descriptors, gateways, DTOs, and explicit maintenance scripts.
+
+<!-- NORTHSTAR-DIR-README:END -->
