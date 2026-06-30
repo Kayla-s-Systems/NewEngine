@@ -7,10 +7,10 @@ use newengine_sim::{
 use super::fps_demo::step_fps_demo_gameplay;
 use super::physics::step_service_physics;
 use newengine_core::physics::PhysicsApiRef;
-use newengine_core::{JobLane, JobPriority, JobRequest, JobSystemHandle};
+use newengine_core::{TaskLane, TaskPriority, TaskRequest, ThreadPoolHandle};
 
 struct EngineJobsSimReadExecutor<'a> {
-    jobs: &'a JobSystemHandle,
+    jobs: &'a ThreadPoolHandle,
 }
 
 impl SimReadBatchExecutor for EngineJobsSimReadExecutor<'_> {
@@ -23,17 +23,17 @@ impl SimReadBatchExecutor for EngineJobsSimReadExecutor<'_> {
         let fallback = SimReadBatchReport::from_snapshot(&snapshot, batch.batch_index);
         let result = std::sync::Arc::new(parking_lot::Mutex::new(None::<SimReadBatchReport>));
         let result_for_job = std::sync::Arc::clone(&result);
-        let request = JobRequest::new("simulation.read-snapshot")
+        let request = TaskRequest::new("simulation.read-snapshot")
             .with_source("newengine-engine-runtime.sim")
             .with_owner("newengine-engine-runtime")
             .with_category("simulation-read-batch")
-            .with_lane(JobLane::Simulation)
-            .with_priority(JobPriority::Interactive)
+            .with_lane(TaskLane::Simulation)
+            .with_priority(TaskPriority::Interactive)
             .with_task_id(batch.task_id.clone())
             .with_frame_id(batch.fixed_tick)
             .with_dependency_group(batch.event_dependency_group())
-            .with_job_domain(newengine_jobs_api::job_domain::ENGINE_SIMULATION)
-            .with_job_pass(batch.stage.as_str());
+            .with_task_domain(newengine_task_api::task_domain::ENGINE_SIMULATION)
+            .with_task_pass(batch.stage.as_str());
         let ticket = self.jobs.submit_request(request, move || {
             *result_for_job.lock() = Some(job(snapshot));
         });
@@ -109,10 +109,10 @@ pub fn run_schedule_with_physics_mode_and_telemetry_for_frame(
     physics_api: Option<&PhysicsApiRef>,
     physics_mode: PhysicsIntegrationMode,
     telemetry: Option<&SimulationJobTelemetry<'_>>,
-    job_system: Option<&JobSystemHandle>,
+    thread_pool: Option<&ThreadPoolHandle>,
 ) {
     let frame = SimFrame::new(dt.max(0.0001), frame_index);
-    let sim_executor = job_system.map(|jobs| EngineJobsSimReadExecutor { jobs });
+    let sim_executor = thread_pool.map(|jobs| EngineJobsSimReadExecutor { jobs });
     let sim_executor_ref = sim_executor
         .as_ref()
         .map(|executor| executor as &dyn SimReadBatchExecutor);

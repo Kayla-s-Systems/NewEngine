@@ -407,10 +407,8 @@ pub(crate) fn insert_theme_token(bundle: &mut ThemeTokenBundle, name: &str, valu
     if name.is_empty() {
         return;
     }
-    if name == "density" || name == "density.mode" {
-        if !value.is_empty() {
-            bundle.density = value.clone();
-        }
+    if (name == "density" || name == "density.mode") && !value.is_empty() {
+        bundle.density = value.clone();
     }
     if let Some(color) = parse_hex_rgba(&value) {
         if name.starts_with("color.") {

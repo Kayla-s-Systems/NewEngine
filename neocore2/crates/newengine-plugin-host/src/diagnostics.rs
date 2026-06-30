@@ -4,11 +4,11 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::Instant;
 
-use newengine_jobs_api::{
-    EngineJobEventV1, EngineTaskEvent, EngineTaskPhase, JobExecutorKind, ENGINE_JOB_EVENT_TOPIC_V1,
-    ENGINE_TASK_EVENT_TOPIC_V1,
-};
 use newengine_math::collections_prelude::NeHashMap as HashMap;
+use newengine_task_api::{
+    EngineTaskEnvelopeV1, EngineTaskEvent, EngineTaskPhase, TaskExecutorKind,
+    ENGINE_TASK_ENVELOPE_TOPIC_V1, ENGINE_TASK_EVENT_TOPIC_V1,
+};
 
 static HOST_JOB_SEQ: AtomicU64 = AtomicU64::new(1);
 static ACTIVE_HOST_JOBS: OnceLock<Mutex<HashMap<String, PluginHostJobRecord>>> = OnceLock::new();
@@ -140,16 +140,16 @@ impl PluginHostJobBridge {
         progress_01: Option<f32>,
     ) {
         let event = record.task_event(phase, status, detail, progress_01);
-        let job_event = EngineJobEventV1::new(
+        let job_event = EngineTaskEnvelopeV1::new(
             event.clone(),
-            JobExecutorKind::PluginHostBridge,
+            TaskExecutorKind::PluginHostBridge,
             record.semantic_owner.clone(),
         );
         if let Ok(bytes) = serde_json::to_vec(&event) {
             let _ = crate::host_context::publish_event(ENGINE_TASK_EVENT_TOPIC_V1, &bytes);
         }
         if let Ok(bytes) = serde_json::to_vec(&job_event) {
-            let _ = crate::host_context::publish_event(ENGINE_JOB_EVENT_TOPIC_V1, &bytes);
+            let _ = crate::host_context::publish_event(ENGINE_TASK_ENVELOPE_TOPIC_V1, &bytes);
         }
     }
 }

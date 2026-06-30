@@ -53,6 +53,6 @@ impl EngineWorldGatewayService {
             Ok(v) => v,
             Err(e) => return RResult::RErr(RString::from(e)),
         };
-        ok_json(&self.streaming_response(req))
+        ok_json(self.streaming_response(req))
     }
 }

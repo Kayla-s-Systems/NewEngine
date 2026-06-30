@@ -92,7 +92,7 @@ impl<S: Send + 'static> JsonServiceRouter<S> {
             method,
             Box::new(move |state, _payload| {
                 let mut state = state.lock();
-                ok_json(&handler(&mut state))
+                ok_json(handler(&mut state))
             }),
         );
         self
@@ -135,7 +135,7 @@ impl<S: Send + 'static> JsonServiceRouter<S> {
                     Err(e) => return RResult::RErr(e),
                 };
                 let mut state = state.lock();
-                ok_json(&handler(&mut state, request))
+                ok_json(handler(&mut state, request))
             }),
         );
         self

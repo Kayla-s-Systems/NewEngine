@@ -300,7 +300,7 @@ impl AssetServiceClient {
                 bytes.len()
             ));
         }
-        if &bytes[0..4] != &crate::texture_wire::MAGIC[..] {
+        if bytes[0..4] != crate::texture_wire::MAGIC[..] {
             return Err("texture_rgba8_v1: bad magic".to_string());
         }
         let version = u16::from_le_bytes([bytes[4], bytes[5]]);
@@ -331,7 +331,7 @@ impl AssetServiceClient {
                 bytes.len()
             ));
         }
-        if &bytes[0..4] != &crate::texture_wire::MAGIC[..] {
+        if bytes[0..4] != crate::texture_wire::MAGIC[..] {
             return Err("texture_runtime_v1: bad magic".to_string());
         }
         let version = u16::from_le_bytes([bytes[4], bytes[5]]);

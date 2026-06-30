@@ -22,7 +22,7 @@ pub(crate) const SHADOW_RESOLUTION_MAX: u32 = 4096;
 /// dictionary on the present/submit thread.
 pub(crate) const MATERIAL_TEXTURE_IMPORT_START_BURST: u32 = 4;
 pub(crate) const MATERIAL_TEXTURE_DECODE_PUMP_BUDGET_MS: f32 = 2.0;
-/// Maximum in-flight material texture decode jobs submitted to engine.jobs.
+/// Maximum in-flight material texture decode jobs submitted to engine.threading.
 ///
 /// `call_service_v1` stays synchronous inside a worker job, but the render
 /// thread no longer blocks on the asset provider. This is the first hot-path

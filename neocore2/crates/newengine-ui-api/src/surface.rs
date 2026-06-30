@@ -163,13 +163,11 @@ impl UiSurfaceNode {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct UiRegistryLoadRequest {
     pub registry_ref: String,
 }
-impl Default for UiRegistryLoadRequest { fn default() -> Self { Self { registry_ref: String::new() } } }
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct UiMountSurfaceRequest {
@@ -179,13 +177,11 @@ pub struct UiMountSurfaceRequest {
 }
 impl Default for UiMountSurfaceRequest { fn default() -> Self { Self { surface_id: String::new(), document: UiCompiledDocument::default(), visible: true } } }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct UiSurfaceRequest {
     pub surface_id: String,
 }
-impl Default for UiSurfaceRequest { fn default() -> Self { Self { surface_id: String::new() } } }
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct UiSurfaceVisibilityRequest {
@@ -241,14 +237,12 @@ pub struct UiDispatchActionRequest {
 }
 impl Default for UiDispatchActionRequest { fn default() -> Self { Self { surface_id: String::new(), action_id: String::new(), payload: serde_json::Value::Null } } }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct UiNavigateRequest {
     pub surface_id: String,
     pub target: String,
 }
-impl Default for UiNavigateRequest { fn default() -> Self { Self { surface_id: String::new(), target: String::new() } } }
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct UiDebugTreeResponse {

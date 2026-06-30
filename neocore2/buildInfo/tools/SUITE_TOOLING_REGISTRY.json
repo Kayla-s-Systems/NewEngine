@@ -1,1356 +1,2711 @@
 {
+
   "schema": "northstar.suite_tooling_registry_report.v1",
+
   "ok": true,
+
   "tool_registry": {
+
     "schema": "northstar.tool_registry.v1",
+
     "ok": true,
+
     "summary": {
+
       "tool_count": 0,
+
       "error_count": 0,
+
       "warning_count": 0,
+
       "duplicate_tool_ids": []
+
     },
+
     "tools": [],
+
     "validation": []
+
   },
+
   "suite_action_registry": {
+
     "schema": "northstar.suite_action_registry.v1",
+
     "ok": true,
+
     "summary": {
+
       "action_count": 48,
+
       "error_count": 0,
+
       "warning_count": 0,
+
       "duplicate_action_ids": []
+
     },
+
     "actions": [
+
       {
+
         "action_id": "plugins.build.dev",
+
         "group": "Build",
+
         "title": "Build runtime plugins / dev",
+
         "description": "Build and install all runtime plugin providers in dev profile.",
+
         "command": "build-plugins",
+
         "args": [
+
           "dev"
+
         ],
+
         "requires_tools": [],
+
         "requires_workspace": [
+
           "script_env",
+
           "cargo"
+
         ],
+
         "outputs": [
+
           "NewEngine/neocore2/logs/build/plugin-sync-latest.log",
+
           "lastbuild.log"
+
         ],
+
         "safe_for_menu": true,
+
         "danger_level": "normal",
+
         "descriptor_path": "tools/suite/actions/plugins.build.dev.json",
+
         "metadata": {}
+
       },
+
       {
+
         "action_id": "plugins.build.force.dev",
+
         "group": "Build",
+
         "title": "Build runtime plugins / force dev",
+
         "description": "Force rebuild and install all runtime plugin providers in dev profile.",
+
         "command": "build-plugins",
+
         "args": [
+
           "dev",
+
           "--force"
+
         ],
+
         "requires_tools": [],
+
         "requires_workspace": [
+
           "script_env",
+
           "cargo"
+
         ],
+
         "outputs": [
+
           "NewEngine/neocore2/logs/build/plugin-sync-latest.log",
+
           "lastbuild.log"
+
         ],
+
         "safe_for_menu": true,
+
         "danger_level": "normal",
+
         "descriptor_path": "tools/suite/actions/build.plugins.force.dev.json",
+
         "metadata": {}
+
       },
+
       {
+
         "action_id": "plugins.build.release",
+
         "group": "Build",
+
         "title": "Build runtime plugins / release",
+
         "description": "Build and install all runtime plugin providers in release profile.",
+
         "command": "build-plugins",
+
         "args": [
+
           "release"
+
         ],
+
         "requires_tools": [],
+
         "requires_workspace": [
+
           "script_env",
+
           "cargo"
+
         ],
+
         "outputs": [
+
           "NewEngine/neocore2/logs/build/plugin-sync-latest.log",
+
           "lastbuild.log"
+
         ],
+
         "safe_for_menu": true,
+
         "danger_level": "normal",
+
         "descriptor_path": "tools/suite/actions/plugins.build.release.json",
+
         "metadata": {}
+
       },
+
       {
+
         "action_id": "build.registry.check",
+
         "group": "Diagnostics",
+
         "title": "Registry check for build",
+
         "description": "Validate ToolRegistry and SuiteActionRegistry before plugin rebuild. Errors stop the build; warnings are reported only.",
+
         "command": "registry-preflight",
+
         "args": [],
+
         "requires_tools": [],
+
         "requires_workspace": [
+
           "script_env"
+
         ],
+
         "outputs": [
+
           "NewEngine/neocore2/buildInfo/tools/SUITE_TOOLING_REGISTRY.json",
+
           "NewEngine/neocore2/buildInfo/tools/TOOL_AUDIT_FINDINGS.md"
+
         ],
+
         "safe_for_menu": true,
+
         "danger_level": "normal",
+
         "descriptor_path": "tools/suite/actions/build.registry.check.json",
+
         "metadata": {}
+
       },
+
       {
+
         "action_id": "registry.generate",
+
         "group": "Diagnostics",
+
         "title": "Generate Suite/tooling registry",
+
         "description": "Generate TOOL_REGISTRY, SUITE_ACTIONS and TOOL_AUDIT_FINDINGS reports from descriptors.",
+
         "command": "registry-report",
+
         "args": [],
+
         "requires_tools": [],
+
         "requires_workspace": [
+
           "script_env"
+
         ],
+
         "outputs": [
+
           "NewEngine/neocore2/buildInfo/tools/TOOL_REGISTRY.json",
+
           "NewEngine/neocore2/buildInfo/tools/SUITE_ACTIONS.json",
+
           "NewEngine/neocore2/buildInfo/tools/TOOL_AUDIT_FINDINGS.md"
+
         ],
+
         "safe_for_menu": true,
+
         "danger_level": "normal",
+
         "descriptor_path": "tools/suite/actions/registry.generate.json",
+
         "metadata": {}
+
       },
+
       {
+
         "action_id": "suite.actions.list",
+
         "group": "Diagnostics",
+
         "title": "List descriptor Suite actions",
+
         "description": "List Suite actions from SuiteActionRegistry descriptors.",
+
         "command": "suite-actions-list",
+
         "args": [],
+
         "requires_tools": [],
+
         "requires_workspace": [
+
           "script_env"
+
         ],
+
         "outputs": [
+
           "NewEngine/neocore2/buildInfo/tools/SUITE_ACTIONS.json"
+
         ],
+
         "safe_for_menu": true,
+
         "danger_level": "normal",
+
         "descriptor_path": "tools/suite/actions/suite.actions.list.json",
+
         "metadata": {}
+
       },
+
       {
+
         "action_id": "suite.actions.validate",
+
         "group": "Diagnostics",
+
         "title": "Validate SuiteActionRegistry",
+
         "description": "Validate descriptor Suite actions and write Suite action reports.",
+
         "command": "suite-actions-validate",
+
         "args": [],
+
         "requires_tools": [],
+
         "requires_workspace": [
+
           "script_env"
+
         ],
+
         "outputs": [
+
           "NewEngine/neocore2/buildInfo/tools/SUITE_ACTIONS.md"
+
         ],
+
         "safe_for_menu": true,
+
         "danger_level": "normal",
+
         "descriptor_path": "tools/suite/actions/suite.actions.validate.json",
+
         "metadata": {}
+
       },
+
       {
+
         "action_id": "suite.bridge.menu.generate",
+
         "group": "Diagnostics",
+
         "title": "Generate Suite bridge menu JSON",
+
         "description": "Generate bridge/UI menu action JSON from SuiteActionRegistry descriptors.",
+
         "command": "suite-bridge-menu-generate",
+
         "args": [],
+
         "requires_tools": [],
+
         "requires_workspace": [
+
           "script_env"
+
         ],
+
         "outputs": [
+
           "NewEngine/neocore2/buildInfo/tools/SUITE_ACTIONS_BRIDGE_MENU.json"
+
         ],
+
         "safe_for_menu": true,
+
         "danger_level": "normal",
+
         "descriptor_path": "tools/suite/actions/suite.bridge.menu.generate.json",
+
         "metadata": {}
+
       },
+
       {
+
         "action_id": "gui.editor.build.dev",
+
         "group": "Editor",
+
         "title": "Build NorthStar GUI Editor / dev",
+
         "description": "Build the standalone NorthStar GUI Editor host shell in dev profile.",
+
         "command": "build-tool",
+
         "args": [
+
           "--tool-dir",
+
           "EngineRepo/NewEngine/editor/northstar-gui-editor"
+
         ],
+
         "requires_tools": [],
+
         "requires_workspace": [
+
           "script_env",
+
           "cargo"
+
         ],
+
         "outputs": [
+
           "EngineRepo/NewEngine/editor/northstar-gui-editor/target/debug/northstar-gui-editor.exe"
+
         ],
+
         "safe_for_menu": true,
+
         "danger_level": "normal",
+
         "descriptor_path": "tools/suite/actions/gui.editor.build.dev.json",
+
         "metadata": {}
+
       },
+
       {
+
         "action_id": "gui.editor.build.release",
+
         "group": "Editor",
+
         "title": "Build NorthStar GUI Editor / release",
+
         "description": "Build the standalone NorthStar GUI Editor host shell in release profile.",
+
         "command": "build-tool",
+
         "args": [
+
           "--tool-dir",
+
           "EngineRepo/NewEngine/editor/northstar-gui-editor",
+
           "--release"
+
         ],
+
         "requires_tools": [],
+
         "requires_workspace": [
+
           "script_env",
+
           "cargo"
+
         ],
+
         "outputs": [
+
           "EngineRepo/NewEngine/editor/northstar-gui-editor/target/release/northstar-gui-editor.exe"
+
         ],
+
         "safe_for_menu": true,
+
         "danger_level": "normal",
+
         "descriptor_path": "tools/suite/actions/gui.editor.build.release.json",
+
         "metadata": {}
+
       },
+
       {
+
         "action_id": "gui.editor.doctor",
+
         "group": "Editor",
+
         "title": "Run NorthStar GUI Editor doctor",
+
         "description": "Run runtime discovery diagnostics for the standalone NorthStar GUI Editor host shell.",
+
         "command": "tools",
+
         "args": [
+
           "run",
+
           "northstar.gui_editor",
+
           "--",
+
           "doctor",
+
           "--root",
+
           "$repo_root/EngineRepo/NewEngine"
+
         ],
+
         "requires_tools": [
+
           "northstar.gui_editor"
+
         ],
+
         "requires_workspace": [
+
           "script_env"
+
         ],
+
         "outputs": [],
+
         "safe_for_menu": true,
+
         "danger_level": "normal",
+
         "descriptor_path": "tools/suite/actions/gui.editor.doctor.json",
+
         "metadata": {}
+
       },
+
       {
+
         "action_id": "gui.editor.open.texture_dictionary",
+
         "group": "Editor",
+
         "title": "Open texture dictionary through NorthStar GUI Editor route",
+
         "description": "Open a known texture dictionary asset through the NorthStar GUI Editor provider/type routing pipeline.",
+
         "command": "tools",
+
         "args": [
+
           "run",
+
           "northstar.gui_editor",
+
           "--",
+
           "open",
+
           "--root",
+
           "$repo_root/EngineRepo/NewEngine",
+
           "--asset",
-          "assets/ui/icons/builtin_icons.ytd"
+
+          "assets/textures/ui/icons/builtin_icons.ytd"
+
         ],
+
         "requires_tools": [
+
           "northstar.gui_editor"
+
         ],
+
         "requires_workspace": [
+
           "script_env"
+
         ],
+
         "outputs": [],
+
         "safe_for_menu": true,
+
         "danger_level": "normal",
+
         "descriptor_path": "tools/suite/actions/gui.editor.open.texture_dictionary.json",
+
         "metadata": {}
+
       },
+
       {
+
         "action_id": "gui.editor.types.list",
+
         "group": "Editor",
+
         "title": "List NorthStar GUI Editor format types",
+
         "description": "Run the NorthStar GUI Editor type registry listing through descriptor-driven tool execution.",
+
         "command": "tools",
+
         "args": [
+
           "run",
+
           "northstar.gui_editor",
+
           "--",
+
           "types-list",
+
           "--root",
+
           "$repo_root/EngineRepo/NewEngine"
+
         ],
+
         "requires_tools": [
+
           "northstar.gui_editor"
+
         ],
+
         "requires_workspace": [
+
           "script_env"
+
         ],
+
         "outputs": [],
+
         "safe_for_menu": true,
+
         "danger_level": "normal",
+
         "descriptor_path": "tools/suite/actions/gui.editor.types.list.json",
+
         "metadata": {}
+
       },
+
       {
+
         "action_id": "importers.build.dev",
+
         "group": "Importers",
+
         "title": "Build importers / dev",
+
         "description": "Build importer toolchain in dev profile.",
+
         "command": "build-importers",
+
         "args": [
+
           "dev"
+
         ],
+
         "requires_tools": [],
+
         "requires_workspace": [
+
           "script_env",
+
           "cargo"
+
         ],
+
         "outputs": [
+
           "NewEngine/neocore2/logs/build/"
+
         ],
+
         "safe_for_menu": true,
+
         "danger_level": "normal",
+
         "descriptor_path": "tools/suite/actions/importers.build.dev.json",
+
         "metadata": {}
+
       },
+
       {
+
         "action_id": "importers.build.release",
+
         "group": "Importers",
+
         "title": "Build importers / release",
+
         "description": "Build importer toolchain in release profile.",
+
         "command": "build-importers",
+
         "args": [
+
           "release"
+
         ],
+
         "requires_tools": [],
+
         "requires_workspace": [
+
           "script_env",
+
           "cargo"
+
         ],
+
         "outputs": [
+
           "NewEngine/neocore2/logs/build/"
+
         ],
+
         "safe_for_menu": true,
+
         "danger_level": "normal",
+
         "descriptor_path": "tools/suite/actions/importers.build.release.json",
+
         "metadata": {}
+
       },
+
       {
+
         "action_id": "ytyp.build",
+
         "group": "Metadata",
+
         "title": "Build YTYP metadata",
+
         "description": "Compile XML-first .ytyp.xml metadata sources into NEF8 .ytyp runtime assets.",
+
         "command": "build-ytyp",
+
         "args": [],
+
         "requires_tools": [
+
           "northstar.ytyp_packer"
+
         ],
+
         "requires_workspace": [
+
           "script_env"
+
         ],
+
         "outputs": [
+
           "**/*.ytyp"
+
         ],
+
         "safe_for_menu": true,
+
         "danger_level": "normal",
+
         "descriptor_path": "tools/suite/actions/ytyp.build.json",
+
         "metadata": {}
+
       },
+
       {
+
         "action_id": "ytyp.inspect",
+
         "group": "Metadata",
+
         "title": "Inspect YTYP metadata",
+
         "description": "Inspect a NEF8 .ytyp generic XML metadata dictionary and print readable JSON.",
+
         "command": "inspect-ytyp",
+
         "args": [],
+
         "requires_tools": [
+
           "northstar.ytyp_packer"
+
         ],
+
         "requires_workspace": [
+
           "script_env"
+
         ],
+
         "outputs": [],
+
         "safe_for_menu": true,
+
         "danger_level": "normal",
+
         "descriptor_path": "tools/suite/actions/ytyp.inspect.json",
+
         "metadata": {}
+
       },
+
       {
+
         "action_id": "ytyp.validate",
+
         "group": "Metadata",
+
         "title": "Validate YTYP metadata",
+
         "description": "Validate .ytyp.xml source and NEF8 .ytyp runtime generic metadata assets.",
+
         "command": "validate-ytyp",
+
         "args": [],
+
         "requires_tools": [
+
           "northstar.ytyp_packer"
+
         ],
+
         "requires_workspace": [
+
           "script_env"
+
         ],
+
         "outputs": [],
+
         "safe_for_menu": true,
+
         "danger_level": "normal",
+
         "descriptor_path": "tools/suite/actions/ytyp.validate.json",
+
         "metadata": {}
+
       },
+
       {
+
         "action_id": "runtime.run.game.dev",
+
         "group": "Run",
+
         "title": "Run game/runtime demo / dev",
+
         "description": "Synchronize dev plugins and run the game-ready-fps runtime demo.",
+
         "command": "run-game",
+
         "args": [
+
           "dev"
+
         ],
+
         "requires_tools": [],
+
         "requires_workspace": [
+
           "script_env",
+
           "cargo"
+
         ],
+
         "outputs": [
+
           "NewEngine/neocore2/logs/run/"
+
         ],
+
         "safe_for_menu": true,
+
         "danger_level": "normal",
+
         "descriptor_path": "tools/suite/actions/run.game.dev.json",
+
         "metadata": {}
+
       },
+
       {
+
         "action_id": "source.pack",
+
         "group": "Source",
+
         "title": "Pack source snapshot",
+
         "description": "Create a clean source archive using the canonical source packaging policy.",
+
         "command": "pack-source",
+
         "args": [],
+
         "requires_tools": [],
+
         "requires_workspace": [
+
           "script_env"
+
         ],
+
         "outputs": [
+
           "SOURCE_ARCHIVE_MANIFEST.json"
+
         ],
+
         "safe_for_menu": true,
+
         "danger_level": "normal",
+
         "descriptor_path": "tools/suite/actions/source.pack.json",
+
         "metadata": {}
+
       },
+
       {
+
         "action_id": "suite.intelligence.analyze",
+
         "group": "Suite Intelligence",
+
         "title": "Analyze and assign next task",
+
         "description": "Analyze recent suite logs and SuiteRegistry actions, then recommend the next executable suite tasks. Uses PyTorch tensor scoring when torch is installed, with deterministic fallback otherwise.",
+
         "command": "suite-intelligence",
+
         "args": [],
+
         "requires_tools": [],
+
         "requires_workspace": [
+
           "script_env"
+
         ],
+
         "outputs": [
+
           ".takesome/intelligence/suite-task-report.json"
+
         ],
+
         "safe_for_menu": true,
+
         "danger_level": "normal",
+
         "descriptor_path": "tools/suite/actions/suite.intelligence.analyze.json",
+
         "metadata": {}
+
       },
+
       {
+
         "action_id": "suite.intelligence.loop",
+
         "group": "Suite Intelligence",
+
         "title": "Run Suite Intelligence resident loop",
+
         "description": "Run the foreground resident intelligence loop. It scans workspace state, self-checks wiring, ranks next tasks, calls the configured cloud planner on a throttle, and writes state/events until stopped by the operator.",
+
         "command": "suite-intelligence-loop",
+
         "args": [],
+
         "requires_tools": [],
+
         "requires_workspace": [
+
           "script_env"
+
         ],
+
         "outputs": [
+
           ".takesome/intelligence/loop-state.json",
+
           ".takesome/intelligence/loop-events.jsonl",
+
           ".takesome/intelligence/operator-request.md",
+
           ".takesome/intelligence/operator-response.md"
+
         ],
+
         "safe_for_menu": true,
+
         "danger_level": "normal",
+
         "descriptor_path": "tools/suite/actions/suite.intelligence.loop.json",
+
         "metadata": {}
+
       },
+
       {
+
         "action_id": "suite.intelligence.loop.check",
+
         "group": "Suite Intelligence",
+
         "title": "Run Suite Intelligence loop check",
+
         "description": "Run exactly one resident intelligence loop cycle: scan workspace, self-check wiring, rank next tasks, call the configured cloud planner when available, and write loop state/events.",
+
         "command": "suite-intelligence-loop-check",
+
         "args": [],
+
         "requires_tools": [],
+
         "requires_workspace": [
+
           "script_env"
+
         ],
+
         "outputs": [
+
           ".takesome/intelligence/loop-state.json",
+
           ".takesome/intelligence/loop-events.jsonl",
+
           ".takesome/intelligence/operator-request.md"
+
         ],
+
         "safe_for_menu": true,
+
         "danger_level": "normal",
+
         "descriptor_path": "tools/suite/actions/suite.intelligence.loop.check.json",
+
         "metadata": {}
+
       },
+
       {
+
         "action_id": "first_party.ddsinfo.inspect",
+
         "group": "Textures",
+
         "title": "Inspect DDS metadata",
+
         "description": "Run first-party North Star ddsinfo through ToolRegistry against the bundled smoke DDS fixture.",
+
         "command": "tools",
+
         "args": [
+
           "run",
+
           "northstar.ddsinfo",
+
           "--",
+
           "--library",
+
           "$repo_root/tools/toolbelt/libraries/northstar.ddsinfo.dll",
+
           "--dimensions",
+
           "--compression",
+
           "$repo_root/tools/toolbelt/first_party/northstar/ddsinfo/testData/test.dds"
+
         ],
+
         "requires_tools": [
+
           "northstar.ddsinfo"
+
         ],
+
         "requires_workspace": [
+
           "script_env"
+
         ],
+
         "outputs": [],
+
         "safe_for_menu": true,
+
         "danger_level": "normal",
+
         "descriptor_path": "tools/suite/actions/first_party.ddsinfo.inspect.json",
+
         "metadata": {}
+
       },
+
       {
+
         "action_id": "ytd.build",
+
         "group": "Textures",
+
         "title": "Build YTD texture dictionary",
+
         "description": "Build XML-free NEF8 .ytd texture dictionaries from source image files.",
+
         "command": "build-ytd",
+
         "args": [],
+
         "requires_tools": [
+
           "northstar.ytd_packer"
+
         ],
+
         "requires_workspace": [
+
           "script_env"
+
         ],
+
         "outputs": [
+
           "**/*.ytd"
+
         ],
+
         "safe_for_menu": true,
+
         "danger_level": "normal",
+
         "descriptor_path": "tools/suite/actions/ytd.build.json",
+
         "metadata": {}
+
       },
+
       {
+
         "action_id": "ytd.extract",
+
         "group": "Textures",
+
         "title": "Extract YTD texture dictionary",
+
         "description": "Extract .ytd texture entries to DDS files for inspection/debugging.",
+
         "command": "extract-ytd",
+
         "args": [],
+
         "requires_tools": [
+
           "northstar.ytd_packer"
+
         ],
+
         "requires_workspace": [
+
           "script_env"
+
         ],
+
         "outputs": [
+
           ".takesome/extract/ytd/**/*.dds"
+
         ],
+
         "safe_for_menu": true,
+
         "danger_level": "normal",
+
         "descriptor_path": "tools/suite/actions/ytd.extract.json",
+
         "metadata": {}
+
       },
+
       {
+
         "action_id": "ytd.inspect",
+
         "group": "Textures",
+
         "title": "Inspect YTD texture dictionary",
+
         "description": "Inspect a NEF8 .ytd / NETD texture dictionary and print readable JSON.",
+
         "command": "inspect-ytd",
+
         "args": [],
+
         "requires_tools": [
+
           "northstar.ytd_packer"
+
         ],
+
         "requires_workspace": [
+
           "script_env"
+
         ],
+
         "outputs": [],
+
         "safe_for_menu": true,
+
         "danger_level": "normal",
+
         "descriptor_path": "tools/suite/actions/ytd.inspect.json",
+
         "metadata": {}
+
       },
+
       {
+
         "action_id": "ytd.validate",
+
         "group": "Textures",
+
         "title": "Validate YTD texture dictionary",
+
         "description": "Validate NEF8 header, NETD payload, texture directory, mip chains and payload sizes.",
+
         "command": "validate-ytd",
+
         "args": [],
+
         "requires_tools": [
+
           "northstar.ytd_packer"
+
         ],
+
         "requires_workspace": [
+
           "script_env"
+
         ],
+
         "outputs": [],
+
         "safe_for_menu": true,
+
         "danger_level": "normal",
+
         "descriptor_path": "tools/suite/actions/ytd.validate.json",
+
         "metadata": {}
+
       },
+
       {
+
         "action_id": "first_party.testAll",
+
         "group": "Tools",
+
         "title": "Run first-party smoke tests",
+
         "description": "Recursively discover and run all tools/toolbelt/first_party/<tool>/test/test.bat smoke tests through the first-party aggregate runner.",
+
         "command": "first-party-test-all",
+
         "args": [],
+
         "requires_tools": [],
+
         "requires_workspace": [
+
           "script_env"
+
         ],
+
         "outputs": [
+
           "tools/toolbelt/first_party/.testAll/last-run.txt"
+
         ],
+
         "safe_for_menu": true,
+
         "danger_level": "normal",
+
         "descriptor_path": "tools/suite/actions/first_party.testAll.json",
+
         "metadata": {}
+
       },
+
       {
+
         "action_id": "tools.doctor",
+
         "group": "Tools",
+
         "title": "Run ToolRegistry doctor",
+
         "description": "Run registry-aware tool diagnostics. ERROR blocks; WARN is visible and non-blocking.",
+
         "command": "tools-doctor",
+
         "args": [],
+
         "requires_tools": [],
+
         "requires_workspace": [
+
           "script_env"
+
         ],
+
         "outputs": [
+
           "NewEngine/neocore2/buildInfo/tools/TOOL_AUDIT_FINDINGS.md"
+
         ],
+
         "safe_for_menu": true,
+
         "danger_level": "normal",
+
         "descriptor_path": "tools/suite/actions/tools.doctor.json",
+
         "metadata": {}
+
       },
+
       {
+
         "action_id": "tools.list",
+
         "group": "Tools",
+
         "title": "List registered tools",
+
         "description": "List descriptor-registered tools from ToolRegistry.",
+
         "command": "tools-list",
+
         "args": [],
+
         "requires_tools": [],
+
         "requires_workspace": [
+
           "script_env"
+
         ],
+
         "outputs": [
+
           "NewEngine/neocore2/buildInfo/tools/TOOL_REGISTRY.json"
+
         ],
+
         "safe_for_menu": true,
+
         "danger_level": "normal",
+
         "descriptor_path": "tools/suite/actions/tools.list.json",
+
         "metadata": {}
+
       },
+
       {
+
         "action_id": "tools.validate",
+
         "group": "Tools",
+
         "title": "Validate ToolRegistry",
+
         "description": "Validate descriptor-registered tools and write registry reports.",
+
         "command": "tools-validate",
+
         "args": [],
+
         "requires_tools": [],
+
         "requires_workspace": [
+
           "script_env"
+
         ],
+
         "outputs": [
+
           "NewEngine/neocore2/buildInfo/tools/TOOL_REGISTRY.md",
+
           "NewEngine/neocore2/buildInfo/tools/TOOL_AUDIT_FINDINGS.md"
+
         ],
+
         "safe_for_menu": true,
+
         "danger_level": "normal",
+
         "descriptor_path": "tools/suite/actions/tools.validate.json",
+
         "metadata": {}
+
       },
+
       {
+
         "action_id": "ui.build",
+
         "group": "UI",
+
         "title": "Build UI NEUI assets",
+
         "description": "Compile XML-first .neui.xml sources into NEF8 .neui runtime assets.",
+
         "command": "build-ui",
+
         "args": [],
+
         "requires_tools": [
+
           "northstar.neui_packer"
+
         ],
+
         "requires_workspace": [
+
           "script_env"
+
         ],
+
         "outputs": [
+
           "EngineRepo/gameAssets/ui/**/*.neui"
+
         ],
+
         "safe_for_menu": true,
+
         "danger_level": "normal",
+
         "descriptor_path": "tools/suite/actions/ui.build.json",
+
         "metadata": {}
+
       },
+
       {
+
         "action_id": "ui.inspect",
+
         "group": "UI",
+
         "title": "Inspect UI NEUI asset",
+
         "description": "Inspect first discovered .neui asset and print readable NEF8/XMLcentral diagnostics.",
+
         "command": "inspect-ui",
+
         "args": [],
+
         "requires_tools": [
+
           "northstar.neui_packer"
+
         ],
+
         "requires_workspace": [
+
           "script_env"
+
         ],
+
         "outputs": [],
+
         "safe_for_menu": true,
+
         "danger_level": "normal",
+
         "descriptor_path": "tools/suite/actions/ui.inspect.json",
+
         "metadata": {}
+
       },
+
       {
+
         "action_id": "ui.validate",
+
         "group": "UI",
+
         "title": "Validate UI NEUI assets",
+
         "description": "Validate .neui.xml authoring files and runtime .neui NEF8 assets.",
+
         "command": "validate-ui",
+
         "args": [],
+
         "requires_tools": [
+
           "northstar.neui_packer"
+
         ],
+
         "requires_workspace": [
+
           "script_env"
+
         ],
+
         "outputs": [],
+
         "safe_for_menu": true,
+
         "danger_level": "normal",
+
         "descriptor_path": "tools/suite/actions/ui.validate.json",
+
         "metadata": {}
+
       },
+
       {
+
         "action_id": "third_party.testAll",
+
         "group": "Vendor Tools",
+
         "title": "Run third-party smoke tests",
+
         "description": "Recursively discover and run all tools/toolbelt/third_party/<tool>/test/test.bat smoke tests through the third-party aggregate runner.",
+
         "command": "third-party-test-all",
+
         "args": [],
+
         "requires_tools": [],
+
         "requires_workspace": [
+
           "script_env"
+
         ],
+
         "outputs": [
+
           "tools/toolbelt/third_party/.testAll/last-run.txt"
+
         ],
+
         "safe_for_menu": true,
+
         "danger_level": "normal",
+
         "descriptor_path": "tools/suite/actions/third_party.testAll.json",
+
         "metadata": {}
+
       },
+
       {
+
         "action_id": "vendor.archive.create",
+
         "group": "Vendor Tools",
+
         "title": "Create archive",
+
         "description": "Run self-contained third-party GNUWin32 archive wrapper to create an archive from explicit inputs. This action requires CLI arguments.",
+
         "command": "tar-create",
+
         "args": [],
+
         "requires_tools": [
+
           "vendor.gnuwin32.tar"
+
         ],
+
         "requires_workspace": [
+
           "script_env"
+
         ],
+
         "outputs": [],
+
         "safe_for_menu": false,
+
         "danger_level": "normal",
+
         "descriptor_path": "tools/suite/actions/vendor.archive.create.json",
+
         "metadata": {}
+
       },
+
       {
+
         "action_id": "vendor.archive.extract",
+
         "group": "Vendor Tools",
+
         "title": "Extract archive",
+
         "description": "Run self-contained third-party GNUWin32 archive wrapper to extract into an output directory. This action requires CLI arguments.",
+
         "command": "tar-extract",
+
         "args": [],
+
         "requires_tools": [
+
           "vendor.gnuwin32.tar"
+
         ],
+
         "requires_workspace": [
+
           "script_env"
+
         ],
+
         "outputs": [],
+
         "safe_for_menu": false,
+
         "danger_level": "normal",
+
         "descriptor_path": "tools/suite/actions/vendor.archive.extract.json",
+
         "metadata": {}
+
       },
+
       {
+
         "action_id": "vendor.archive.list",
+
         "group": "Vendor Tools",
+
         "title": "List archive",
+
         "description": "Run self-contained third-party GNUWin32 archive wrapper to list entries. This action requires CLI arguments.",
+
         "command": "tar-list",
+
         "args": [],
+
         "requires_tools": [
+
           "vendor.gnuwin32.tar"
+
         ],
+
         "requires_workspace": [
+
           "script_env"
+
         ],
+
         "outputs": [],
+
         "safe_for_menu": false,
+
         "danger_level": "normal",
+
         "descriptor_path": "tools/suite/actions/vendor.archive.list.json",
+
         "metadata": {}
+
       },
+
       {
+
         "action_id": "vendor.diff.files",
+
         "group": "Vendor Tools",
+
         "title": "Diff files",
+
         "description": "Run self-contained third-party GNUWin32 diff through the safe Suite wrapper. This action requires CLI arguments and is primarily a registry-visible command descriptor.",
+
         "command": "diff-files",
+
         "args": [],
+
         "requires_tools": [
+
           "vendor.gnuwin32.diff"
+
         ],
+
         "requires_workspace": [
+
           "script_env"
+
         ],
+
         "outputs": [],
+
         "safe_for_menu": false,
+
         "danger_level": "normal",
+
         "descriptor_path": "tools/suite/actions/vendor.diff.files.json",
+
         "metadata": {}
+
       },
+
       {
+
         "action_id": "vendor.fgrep.files",
+
         "group": "Vendor Tools",
+
         "title": "Fixed-string search files",
+
         "description": "Run self-contained third-party GNUWin32 fgrep through the safe Suite wrapper. This action requires CLI arguments and is primarily a registry-visible command descriptor.",
+
         "command": "fgrep-files",
+
         "args": [],
+
         "requires_tools": [
+
           "vendor.gnuwin32.fgrep"
+
         ],
+
         "requires_workspace": [
+
           "script_env"
+
         ],
+
         "outputs": [],
+
         "safe_for_menu": false,
+
         "danger_level": "normal",
+
         "descriptor_path": "tools/suite/actions/vendor.fgrep.files.json",
+
         "metadata": {}
+
       },
+
       {
+
         "action_id": "vendor.gnuwin32.doctor",
+
         "group": "Vendor Tools",
+
         "title": "Validate GNUWin32 vendor tools",
+
         "description": "Validate self-contained third-party GNUWin32 binaries and SHA-256 hashes under tools/toolbelt/third_party/<tool>/bin.",
+
         "command": "vendor-gnuwin32-doctor",
+
         "args": [],
+
         "requires_tools": [],
+
         "requires_workspace": [
+
           "script_env"
+
         ],
+
         "outputs": [],
+
         "safe_for_menu": true,
+
         "danger_level": "normal",
+
         "descriptor_path": "tools/suite/actions/vendor.gnuwin32.doctor.json",
+
         "metadata": {}
+
       },
+
       {
+
         "action_id": "vendor.merge3.files",
+
         "group": "Vendor Tools",
+
         "title": "Three-way merge report",
+
         "description": "Run the self-contained third-party GNUWin32 three-way comparison wrapper. This action requires CLI arguments and is primarily a registry-visible command descriptor.",
+
         "command": "diff3-files",
+
         "args": [],
+
         "requires_tools": [
+
           "vendor.gnuwin32.merge3"
+
         ],
+
         "requires_workspace": [
+
           "script_env"
+
         ],
+
         "outputs": [],
+
         "safe_for_menu": false,
+
         "danger_level": "normal",
+
         "descriptor_path": "tools/suite/actions/vendor.merge3.files.json",
+
         "metadata": {}
+
       },
+
       {
+
         "action_id": "vendor.sdiff.files",
+
         "group": "Vendor Tools",
+
         "title": "Side-by-side diff files",
+
         "description": "Run self-contained third-party GNUWin32 sdiff through the safe Suite wrapper. This action requires CLI arguments and is primarily a registry-visible command descriptor.",
+
         "command": "sdiff-files",
+
         "args": [],
+
         "requires_tools": [
+
           "vendor.gnuwin32.sdiff"
+
         ],
+
         "requires_workspace": [
+
           "script_env"
+
         ],
+
         "outputs": [],
+
         "safe_for_menu": false,
+
         "danger_level": "normal",
+
         "descriptor_path": "tools/suite/actions/vendor.sdiff.files.json",
+
         "metadata": {}
+
       },
+
       {
+
         "action_id": "vendor.sed.file",
+
         "group": "Vendor Tools",
+
         "title": "Stream edit file",
+
         "description": "Run self-contained third-party GNUWin32 sed through the safe Suite wrapper. This action requires CLI arguments and is primarily a registry-visible command descriptor.",
+
         "command": "sed-file",
+
         "args": [],
+
         "requires_tools": [
+
           "vendor.gnuwin32.sed"
+
         ],
+
         "requires_workspace": [
+
           "script_env"
+
         ],
+
         "outputs": [],
+
         "safe_for_menu": false,
+
         "danger_level": "normal",
+
         "descriptor_path": "tools/suite/actions/vendor.sed.file.json",
+
         "metadata": {}
+
       },
+
       {
+
         "action_id": "vendor.tail.file",
+
         "group": "Vendor Tools",
+
         "title": "Tail file",
+
         "description": "Run self-contained third-party GNUWin32 tail through the safe bounded Suite wrapper. This action requires CLI arguments and is primarily a registry-visible command descriptor.",
+
         "command": "tail-file",
+
         "args": [],
+
         "requires_tools": [
+
           "vendor.gnuwin32.tail"
+
         ],
+
         "requires_workspace": [
+
           "script_env"
+
         ],
+
         "outputs": [],
+
         "safe_for_menu": false,
+
         "danger_level": "normal",
+
         "descriptor_path": "tools/suite/actions/vendor.tail.file.json",
+
         "metadata": {}
+
       },
+
       {
+
         "action_id": "vendor.touch.file",
+
         "group": "Vendor Tools",
+
         "title": "Touch file",
+
         "description": "Run self-contained third-party GNUWin32 touch through the safe Suite wrapper. This action requires CLI arguments and is primarily a registry-visible command descriptor.",
+
         "command": "touch-file",
+
         "args": [],
+
         "requires_tools": [
+
           "vendor.gnuwin32.touch"
+
         ],
+
         "requires_workspace": [
+
           "script_env"
+
         ],
+
         "outputs": [],
+
         "safe_for_menu": false,
+
         "danger_level": "normal",
+
         "descriptor_path": "tools/suite/actions/vendor.touch.file.json",
+
         "metadata": {}
+
       },
+
       {
+
         "action_id": "workspace.clean.full",
+
         "group": "Workspace",
+
         "title": "Clean workspace",
+
         "description": "Run the canonical workspace cleanup through the Python script plane.",
+
         "command": "clean-workspace",
+
         "args": [],
+
         "requires_tools": [],
+
         "requires_workspace": [
+
           "script_env"
+
         ],
+
         "outputs": [
+
           "NewEngine/neocore2/logs/"
+
         ],
+
         "safe_for_menu": true,
+
         "danger_level": "destructive",
+
         "descriptor_path": "tools/suite/actions/workspace.clean.full.json",
+
         "metadata": {}
+
       }
+
     ],
+
     "validation": [
+
       {
+
         "action_id": "plugins.build.force.dev",
+
         "path": "tools/suite/actions/build.plugins.force.dev.json",
+
         "ok": true,
+
         "errors": [],
+
         "warnings": []
+
       },
+
       {
+
         "action_id": "build.registry.check",
+
         "path": "tools/suite/actions/build.registry.check.json",
+
         "ok": true,
+
         "errors": [],
+
         "warnings": []
+
       },
+
       {
+
         "action_id": "first_party.ddsinfo.inspect",
+
         "path": "tools/suite/actions/first_party.ddsinfo.inspect.json",
+
         "ok": true,
+
         "errors": [],
+
         "warnings": []
+
       },
+
       {
+
         "action_id": "first_party.testAll",
+
         "path": "tools/suite/actions/first_party.testAll.json",
+
         "ok": true,
+
         "errors": [],
+
         "warnings": []
+
       },
+
       {
+
         "action_id": "gui.editor.build.dev",
+
         "path": "tools/suite/actions/gui.editor.build.dev.json",
+
         "ok": true,
+
         "errors": [],
+
         "warnings": []
+
       },
+
       {
+
         "action_id": "gui.editor.build.release",
+
         "path": "tools/suite/actions/gui.editor.build.release.json",
+
         "ok": true,
+
         "errors": [],
+
         "warnings": []
+
       },
+
       {
+
         "action_id": "gui.editor.doctor",
+
         "path": "tools/suite/actions/gui.editor.doctor.json",
+
         "ok": true,
+
         "errors": [],
+
         "warnings": []
+
       },
+
       {
+
         "action_id": "gui.editor.open.texture_dictionary",
+
         "path": "tools/suite/actions/gui.editor.open.texture_dictionary.json",
+
         "ok": true,
+
         "errors": [],
+
         "warnings": []
+
       },
+
       {
+
         "action_id": "gui.editor.types.list",
+
         "path": "tools/suite/actions/gui.editor.types.list.json",
+
         "ok": true,
+
         "errors": [],
+
         "warnings": []
+
       },
+
       {
+
         "action_id": "importers.build.dev",
+
         "path": "tools/suite/actions/importers.build.dev.json",
+
         "ok": true,
+
         "errors": [],
+
         "warnings": []
+
       },
+
       {
+
         "action_id": "importers.build.release",
+
         "path": "tools/suite/actions/importers.build.release.json",
+
         "ok": true,
+
         "errors": [],
+
         "warnings": []
+
       },
+
       {
+
         "action_id": "plugins.build.dev",
+
         "path": "tools/suite/actions/plugins.build.dev.json",
+
         "ok": true,
+
         "errors": [],
+
         "warnings": []
+
       },
+
       {
+
         "action_id": "plugins.build.release",
+
         "path": "tools/suite/actions/plugins.build.release.json",
+
         "ok": true,
+
         "errors": [],
+
         "warnings": []
+
       },
+
       {
+
         "action_id": "registry.generate",
+
         "path": "tools/suite/actions/registry.generate.json",
+
         "ok": true,
+
         "errors": [],
+
         "warnings": []
+
       },
+
       {
+
         "action_id": "runtime.run.game.dev",
+
         "path": "tools/suite/actions/run.game.dev.json",
+
         "ok": true,
+
         "errors": [],
+
         "warnings": []
+
       },
+
       {
+
         "action_id": "source.pack",
+
         "path": "tools/suite/actions/source.pack.json",
+
         "ok": true,
+
         "errors": [],
+
         "warnings": []
+
       },
+
       {
+
         "action_id": "suite.actions.list",
+
         "path": "tools/suite/actions/suite.actions.list.json",
+
         "ok": true,
+
         "errors": [],
+
         "warnings": []
+
       },
+
       {
+
         "action_id": "suite.actions.validate",
+
         "path": "tools/suite/actions/suite.actions.validate.json",
+
         "ok": true,
+
         "errors": [],
+
         "warnings": []
+
       },
+
       {
+
         "action_id": "suite.bridge.menu.generate",
+
         "path": "tools/suite/actions/suite.bridge.menu.generate.json",
+
         "ok": true,
+
         "errors": [],
+
         "warnings": []
+
       },
+
       {
+
         "action_id": "suite.intelligence.analyze",
+
         "path": "tools/suite/actions/suite.intelligence.analyze.json",
+
         "ok": true,
+
         "errors": [],
+
         "warnings": []
+
       },
+
       {
+
         "action_id": "suite.intelligence.loop.check",
+
         "path": "tools/suite/actions/suite.intelligence.loop.check.json",
+
         "ok": true,
+
         "errors": [],
+
         "warnings": []
+
       },
+
       {
+
         "action_id": "suite.intelligence.loop",
+
         "path": "tools/suite/actions/suite.intelligence.loop.json",
+
         "ok": true,
+
         "errors": [],
+
         "warnings": []
+
       },
+
       {
+
         "action_id": "third_party.testAll",
+
         "path": "tools/suite/actions/third_party.testAll.json",
+
         "ok": true,
+
         "errors": [],
+
         "warnings": []
+
       },
+
       {
+
         "action_id": "tools.doctor",
+
         "path": "tools/suite/actions/tools.doctor.json",
+
         "ok": true,
+
         "errors": [],
+
         "warnings": []
+
       },
+
       {
+
         "action_id": "tools.list",
+
         "path": "tools/suite/actions/tools.list.json",
+
         "ok": true,
+
         "errors": [],
+
         "warnings": []
+
       },
+
       {
+
         "action_id": "tools.validate",
+
         "path": "tools/suite/actions/tools.validate.json",
+
         "ok": true,
+
         "errors": [],
+
         "warnings": []
+
       },
+
       {
+
         "action_id": "ui.build",
+
         "path": "tools/suite/actions/ui.build.json",
+
         "ok": true,
+
         "errors": [],
+
         "warnings": []
+
       },
+
       {
+
         "action_id": "ui.inspect",
+
         "path": "tools/suite/actions/ui.inspect.json",
+
         "ok": true,
+
         "errors": [],
+
         "warnings": []
+
       },
+
       {
+
         "action_id": "ui.validate",
+
         "path": "tools/suite/actions/ui.validate.json",
+
         "ok": true,
+
         "errors": [],
+
         "warnings": []
+
       },
+
       {
+
         "action_id": "vendor.archive.create",
+
         "path": "tools/suite/actions/vendor.archive.create.json",
+
         "ok": true,
+
         "errors": [],
+
         "warnings": []
+
       },
+
       {
+
         "action_id": "vendor.archive.extract",
+
         "path": "tools/suite/actions/vendor.archive.extract.json",
+
         "ok": true,
+
         "errors": [],
+
         "warnings": []
+
       },
+
       {
+
         "action_id": "vendor.archive.list",
+
         "path": "tools/suite/actions/vendor.archive.list.json",
+
         "ok": true,
+
         "errors": [],
+
         "warnings": []
+
       },
+
       {
+
         "action_id": "vendor.diff.files",
+
         "path": "tools/suite/actions/vendor.diff.files.json",
+
         "ok": true,
+
         "errors": [],
+
         "warnings": []
+
       },
+
       {
+
         "action_id": "vendor.fgrep.files",
+
         "path": "tools/suite/actions/vendor.fgrep.files.json",
+
         "ok": true,
+
         "errors": [],
+
         "warnings": []
+
       },
+
       {
+
         "action_id": "vendor.gnuwin32.doctor",
+
         "path": "tools/suite/actions/vendor.gnuwin32.doctor.json",
+
         "ok": true,
+
         "errors": [],
+
         "warnings": []
+
       },
+
       {
+
         "action_id": "vendor.merge3.files",
+
         "path": "tools/suite/actions/vendor.merge3.files.json",
+
         "ok": true,
+
         "errors": [],
+
         "warnings": []
+
       },
+
       {
+
         "action_id": "vendor.sdiff.files",
+
         "path": "tools/suite/actions/vendor.sdiff.files.json",
+
         "ok": true,
+
         "errors": [],
+
         "warnings": []
+
       },
+
       {
+
         "action_id": "vendor.sed.file",
+
         "path": "tools/suite/actions/vendor.sed.file.json",
+
         "ok": true,
+
         "errors": [],
+
         "warnings": []
+
       },
+
       {
+
         "action_id": "vendor.tail.file",
+
         "path": "tools/suite/actions/vendor.tail.file.json",
+
         "ok": true,
+
         "errors": [],
+
         "warnings": []
+
       },
+
       {
+
         "action_id": "vendor.touch.file",
+
         "path": "tools/suite/actions/vendor.touch.file.json",
+
         "ok": true,
+
         "errors": [],
+
         "warnings": []
+
       },
+
       {
+
         "action_id": "workspace.clean.full",
+
         "path": "tools/suite/actions/workspace.clean.full.json",
+
         "ok": true,
+
         "errors": [],
+
         "warnings": []
+
       },
+
       {
+
         "action_id": "ytd.build",
+
         "path": "tools/suite/actions/ytd.build.json",
+
         "ok": true,
+
         "errors": [],
+
         "warnings": []
+
       },
+
       {
+
         "action_id": "ytd.extract",
+
         "path": "tools/suite/actions/ytd.extract.json",
+
         "ok": true,
+
         "errors": [],
+
         "warnings": []
+
       },
+
       {
+
         "action_id": "ytd.inspect",
+
         "path": "tools/suite/actions/ytd.inspect.json",
+
         "ok": true,
+
         "errors": [],
+
         "warnings": []
+
       },
+
       {
+
         "action_id": "ytd.validate",
+
         "path": "tools/suite/actions/ytd.validate.json",
+
         "ok": true,
+
         "errors": [],
+
         "warnings": []
+
       },
+
       {
+
         "action_id": "ytyp.build",
+
         "path": "tools/suite/actions/ytyp.build.json",
+
         "ok": true,
+
         "errors": [],
+
         "warnings": []
+
       },
+
       {
+
         "action_id": "ytyp.inspect",
+
         "path": "tools/suite/actions/ytyp.inspect.json",
+
         "ok": true,
+
         "errors": [],
+
         "warnings": []
+
       },
+
       {
+
         "action_id": "ytyp.validate",
+
         "path": "tools/suite/actions/ytyp.validate.json",
+
         "ok": true,
+
         "errors": [],
+
         "warnings": []
+
       }
+
     ]
+
   }
+
 }

@@ -7,6 +7,8 @@ mod profile_parse;
 mod raw_payload_defaults;
 #[path = "sanitize_defaults.rs"]
 mod sanitize_defaults;
+#[path = "ymap_read_diagnostics.rs"]
+mod ymap_read_diagnostics;
 
 pub(in crate::scene_bridge::game_ready) use self::profile_parse::load_game_ready_map_profile;
 
@@ -62,6 +64,8 @@ struct RawPlayerModelSpec {
     pub(super) enabled: bool,
     #[serde(default = "default_player_model_source")]
     pub(super) source: String,
+    #[serde(default = "default_player_model_properties_ref")]
+    pub(super) properties_ref: Option<String>,
     #[serde(default = "default_player_texture_dictionary")]
     pub(super) texture_dictionary: Option<String>,
     #[serde(default = "default_player_skeleton")]
@@ -99,6 +103,8 @@ struct RawTerrainSpec {
     #[serde(default)]
     pub(super) surface: RawTerrainSurfaceSpec,
     #[serde(default)]
+    pub(super) heightmap: RawTerrainHeightmapSpec,
+    #[serde(default)]
     pub(super) streaming: RawTerrainStreamingSpec,
 }
 
@@ -114,6 +120,44 @@ struct RawTerrainSurfaceSpec {
     pub(super) patch_scale: f32,
     #[serde(default = "default_terrain_blend_softness")]
     pub(super) blend_softness: f32,
+    #[serde(default)]
+    pub(super) layers: Vec<RawTerrainSurfaceLayerSpec>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct RawTerrainSurfaceLayerSpec {
+    #[serde(default)]
+    pub(super) role: String,
+    #[serde(default)]
+    pub(super) base_texture: String,
+    #[serde(default)]
+    pub(super) texture: String,
+    #[serde(default = "default_terrain_surface_layer_weight")]
+    pub(super) weight: f32,
+    #[serde(default = "default_terrain_surface_layer_uv_scale")]
+    pub(super) uv_scale: f32,
+}
+
+#[derive(Debug, Deserialize)]
+struct RawTerrainHeightmapSpec {
+    #[serde(default)]
+    pub(super) enabled: bool,
+    #[serde(default)]
+    pub(super) source: String,
+    #[serde(default = "default_terrain_heightmap_mode")]
+    pub(super) mode: String,
+    #[serde(default = "default_terrain_heightmap_strength")]
+    pub(super) strength: f32,
+    #[serde(default = "default_terrain_heightmap_min_height")]
+    pub(super) min_height: f32,
+    #[serde(default = "default_terrain_heightmap_max_height")]
+    pub(super) max_height: f32,
+    #[serde(default = "default_terrain_heightmap_tile_scale")]
+    pub(super) tile_scale: [f32; 2],
+    #[serde(default = "default_terrain_heightmap_tile_offset")]
+    pub(super) tile_offset: [f32; 2],
+    #[serde(default)]
+    pub(super) invert: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -156,6 +200,8 @@ struct RawTerrainGeneratorSpec {
 
 #[derive(Debug, Deserialize)]
 struct RawSkySpec {
+    #[serde(default = "default_sky_definition_ref")]
+    pub(super) definition_ref: String,
     #[serde(default = "default_sky_radius")]
     pub(super) radius: f32,
     #[serde(default = "default_skydome_mesh")]

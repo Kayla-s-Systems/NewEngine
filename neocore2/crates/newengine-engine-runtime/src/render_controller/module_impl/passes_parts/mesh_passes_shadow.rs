@@ -1,5 +1,14 @@
 use super::*;
 
+#[inline]
+fn shadow_light_view_key(light_viewproj: Mat4) -> u64 {
+    let mut h = 0xa5ad_50c5_1a57_0001u64;
+    for f in light_viewproj.to_cols_array() {
+        h = mix_u64(h, f.to_bits() as u64);
+    }
+    h
+}
+
 pub fn draw_procedural_terrain_shadow(
     this: &mut RuntimeRenderController,
     r: &mut dyn newengine_core::render::RenderApi,
@@ -9,6 +18,7 @@ pub fn draw_procedural_terrain_shadow(
     lights: &PackedLights,
     runtime: bool,
 ) -> newengine_core::EngineResult<()> {
+    let shadow_view_key = shadow_light_view_key(light_viewproj);
     let world = scene.world();
     let mats_lock = this.bridges.scene.materials();
     let mats = mats_lock.read();
@@ -20,6 +30,13 @@ pub fn draw_procedural_terrain_shadow(
         }
         let mesh_key = terrain.mesh_key();
         let local_bounds = terrain.heightfield.local_bounds();
+        let render_options = world
+            .get::<MeshRenderOptions>(id)
+            .cloned()
+            .unwrap_or_else(MeshRenderOptions::terrain_patch);
+        if !terrain_cast_shadows_enabled(render_options.shadow_policy) {
+            continue;
+        }
         entries.push(TerrainShadowEntry {
             entity_key: id.stable_u64(),
             mesh_key,
@@ -31,7 +48,17 @@ pub fn draw_procedural_terrain_shadow(
         });
     }
     entries.sort_by(|a, b| a.entity_key.cmp(&b.entity_key));
-    entries.truncate(terrain_budget(runtime, true));
+    let terrain_shadow_candidates = entries.len();
+    let terrain_shadow_budget = terrain_budget(runtime, true);
+    entries.truncate(terrain_shadow_budget);
+    if runtime && primitive_route_diagnostics_due(this.frame.frame_index) {
+        newengine_ulog_api::ulog::debug!(
+            "terrain.draw_list: pass='shadow_casters' candidates={} planned={} budget={} policy='terrain casts only when authored ytyp shadow_policy is cast or cast_and_receive'",
+            terrain_shadow_candidates,
+            entries.len(),
+            terrain_shadow_budget,
+        );
+    }
 
     let mut stream = BucketedIndexedDrawStream::with_capacity(entries.len());
     for entry in entries {
@@ -57,7 +84,7 @@ pub fn draw_procedural_terrain_shadow(
             continue;
         };
 
-        let key = entity_key ^ 0x5a44_1000_0000_0000u64;
+        let key = mix_u64(entity_key ^ 0x5a44_1000_0000_0000u64, shadow_view_key);
         let mut per = this.ensure_per_draw_ubo_with_binding(
             r,
             lit,
@@ -112,6 +139,7 @@ pub fn draw_primitives_shadow(
     runtime: bool,
     camera_position: Vec3,
 ) -> newengine_core::EngineResult<()> {
+    let shadow_view_key = shadow_light_view_key(light_viewproj);
     let world = scene.world();
     let reg_lock = this.bridges.scene.primitives();
     let reg = reg_lock.read();
@@ -183,7 +211,7 @@ pub fn draw_primitives_shadow(
             };
             let mesh_key = prim.id.0;
             let ubo_key = instance_batch_ubo_key(
-                0x5b1d_5a50_0000_0000,
+                mix_u64(0x5b1d_5a50_0000_0000, shadow_view_key),
                 pipeline,
                 mesh_key,
                 lit.white_texture,

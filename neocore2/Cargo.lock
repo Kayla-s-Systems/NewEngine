@@ -610,7 +610,6 @@ dependencies = [
  "newengine-entity-api",
  "newengine-input-api",
  "newengine-input-bindings-api",
- "newengine-jobs-api",
  "newengine-loading-api",
  "newengine-materials",
  "newengine-math",
@@ -621,6 +620,7 @@ dependencies = [
  "newengine-render-api",
  "newengine-scene-io",
  "newengine-service-api",
+ "newengine-task-api",
  "newengine-time-api",
  "newengine-ui-api",
  "newengine-ui-draw",
@@ -643,6 +643,7 @@ dependencies = [
  "newengine-assets",
  "newengine-assets-api",
  "newengine-authored-xml",
+ "newengine-model-domain-api",
  "newengine-plugin-api",
  "newengine-service-api",
  "newengine-service-kit",
@@ -713,7 +714,6 @@ dependencies = [
  "newengine-input-api",
  "newengine-input-bindings-api",
  "newengine-input-bindings-runtime",
- "newengine-jobs-api",
  "newengine-lighting",
  "newengine-material-domain-api",
  "newengine-materials",
@@ -737,6 +737,7 @@ dependencies = [
  "newengine-service-api",
  "newengine-service-kit",
  "newengine-sim",
+ "newengine-task-api",
  "newengine-texture-container",
  "newengine-transform",
  "newengine-transform-api",
@@ -904,16 +905,6 @@ dependencies = [
  "newengine-input-actions-api",
  "newengine-input-api",
  "newengine-input-bindings-api",
-]
-
-[[package]]
-name = "newengine-jobs-api"
-version = "0.1.0"
-dependencies = [
- "newengine-loading-api",
- "newengine-service-api",
- "serde",
- "serde_json",
 ]
 
 [[package]]
@@ -1123,11 +1114,11 @@ dependencies = [
  "abi_stable",
  "libloading 0.9.0",
  "log",
- "newengine-jobs-api",
  "newengine-loading-api",
  "newengine-math",
  "newengine-plugin-api",
  "newengine-service-api",
+ "newengine-task-api",
  "newengine-ulog-api",
  "serde",
  "serde_json",
@@ -1237,7 +1228,6 @@ dependencies = [
  "newengine-entity-api",
  "newengine-gameplay-runtime",
  "newengine-input-api",
- "newengine-jobs-api",
  "newengine-math",
  "newengine-physics-api",
  "newengine-platform-api",
@@ -1251,6 +1241,7 @@ dependencies = [
  "newengine-service-kit",
  "newengine-system-contracts",
  "newengine-system-runtime",
+ "newengine-task-api",
  "newengine-time-runtime",
  "newengine-transform",
  "newengine-ui",
@@ -1383,8 +1374,8 @@ version = "0.1.0"
 dependencies = [
  "newengine-camera",
  "newengine-ecs",
- "newengine-jobs-api",
  "newengine-math",
+ "newengine-task-api",
  "newengine-transform",
  "newengine-transform-api",
  "serde",
@@ -1417,6 +1408,16 @@ name = "newengine-tags-api"
 version = "0.1.0"
 dependencies = [
  "newengine-entity-api",
+ "newengine-service-api",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "newengine-task-api"
+version = "0.1.0"
+dependencies = [
+ "newengine-loading-api",
  "newengine-service-api",
  "serde",
  "serde_json",

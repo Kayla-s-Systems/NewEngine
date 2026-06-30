@@ -19,7 +19,7 @@ pub(crate) struct StartupReadinessGraph {
 impl StartupReadinessGraph {
     #[inline]
     pub(crate) fn is_satisfied(&self, key: EngineReadinessKey) -> bool {
-        self.satisfied.iter().any(|&k| k == key)
+        self.satisfied.contains(&key)
     }
 
     #[inline]

@@ -17,3 +17,5 @@ newengine-plugin-api = { path = "../newengine-plugin-api" }
 newengine-service-api = { path = "../newengine-service-api" }
 newengine-service-kit = { path = "../newengine-service-kit" }
 newengine-authored-xml = { path = "../newengine-authored-xml" }
+
+newengine-model-domain-api = { path = "../newengine-model-domain-api" }

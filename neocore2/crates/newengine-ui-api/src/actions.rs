@@ -29,7 +29,7 @@ impl Default for UiUpdatePolicy {
     fn default() -> Self { Self::OnChange }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct UiStateSource {
     pub id: String,
@@ -37,14 +37,7 @@ pub struct UiStateSource {
     pub contract: String,
     pub update_policy: UiUpdatePolicy,
 }
-
-impl Default for UiStateSource {
-    fn default() -> Self {
-        Self { id: String::new(), source: String::new(), contract: String::new(), update_policy: UiUpdatePolicy::default() }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct UiBindingEdge {
     pub element_id: String,
@@ -57,22 +50,7 @@ pub struct UiBindingEdge {
     #[serde(default)]
     pub transform: Option<String>,
 }
-
-impl Default for UiBindingEdge {
-    fn default() -> Self {
-        Self {
-            element_id: String::new(),
-            property: String::new(),
-            source_id: String::new(),
-            path: String::new(),
-            mode: UiBindingMode::default(),
-            fallback: None,
-            transform: None,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct UiActionEdge {
     pub element_id: String,
@@ -83,14 +61,7 @@ pub struct UiActionEdge {
     #[serde(default)]
     pub payload_schema: Option<String>,
 }
-
-impl Default for UiActionEdge {
-    fn default() -> Self {
-        Self { element_id: String::new(), trigger: String::new(), action_id: String::new(), target_gateway: String::new(), command: String::new(), payload_schema: None }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct UiBindingPlan {
     pub document_ref: String,
@@ -99,13 +70,6 @@ pub struct UiBindingPlan {
     pub bindings: Vec<UiBindingEdge>,
     pub actions: Vec<UiActionEdge>,
 }
-
-impl Default for UiBindingPlan {
-    fn default() -> Self {
-        Self { document_ref: String::new(), surface_id: String::new(), state_sources: Vec::new(), bindings: Vec::new(), actions: Vec::new() }
-    }
-}
-
 
 /// Runtime source kind for UI documents.
 ///
@@ -151,18 +115,13 @@ impl Default for UiDocumentSource {
 /// Source location carried by compiled `.neui` diagnostics. Authoring/import
 /// tools should fill line/column from the original asset; generated documents
 /// may leave them as zero.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct UiSourceSpan {
     pub source_ref: String,
     pub line: u32,
     pub column: u32,
 }
-
-impl Default for UiSourceSpan {
-    fn default() -> Self { Self { source_ref: String::new(), line: 0, column: 0 } }
-}
-
 impl UiSourceSpan {
     #[inline]
     pub fn display(&self, fallback_ref: &str) -> String {
@@ -228,28 +187,18 @@ impl Default for UiSchemaValidationReport {
     fn default() -> Self { Self { ok: true, diagnostics: Vec::new() } }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct UiComponentLibraryRef {
     pub library_ref: String,
     pub entries: Vec<String>,
 }
-
-impl Default for UiComponentLibraryRef {
-    fn default() -> Self { Self { library_ref: String::new(), entries: Vec::new() } }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct UiThemeLibraryRef {
     pub theme_ref: String,
     pub entries: Vec<String>,
 }
-
-impl Default for UiThemeLibraryRef {
-    fn default() -> Self { Self { theme_ref: String::new(), entries: Vec::new() } }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct UiComponentTemplate {
@@ -265,18 +214,13 @@ impl Default for UiComponentTemplate {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct UiDependencyResolveReport {
     pub resolved: Vec<String>,
     pub missing: Vec<String>,
     pub diagnostics: Vec<String>,
 }
-
-impl Default for UiDependencyResolveReport {
-    fn default() -> Self { Self { resolved: Vec::new(), missing: Vec::new(), diagnostics: Vec::new() } }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct UiCompiledDocument {
@@ -335,18 +279,13 @@ impl Default for UiStateChange {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct UiStatePatch {
     pub frame_index: u64,
     pub surface_id: String,
     pub changes: Vec<UiStateChange>,
 }
-
-impl Default for UiStatePatch {
-    fn default() -> Self { Self { frame_index: 0, surface_id: String::new(), changes: Vec::new() } }
-}
-
 impl UiStatePatch {
     #[inline]
     pub fn new(frame_index: u64, surface_id: impl Into<String>) -> Self {

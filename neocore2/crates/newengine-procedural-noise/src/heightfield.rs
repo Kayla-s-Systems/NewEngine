@@ -180,6 +180,34 @@ impl HeightField {
         })
     }
 
+    pub fn generate_descriptor_with_world_height_modifier(
+        descriptor: TerrainHeightfieldDescriptor,
+        modifier_key: u64,
+        mut modifier: impl FnMut(f32, f32, f32) -> f32,
+    ) -> Self {
+        let descriptor = descriptor.sanitized();
+        let settings = descriptor.compact_settings();
+        let graph = descriptor.graph.clone();
+        let graph_key = mix_u64(graph.revision_key(), modifier_key);
+        let height_scale = settings.height_scale.abs().max(1.0e-6);
+        Self::generate_impl(
+            settings,
+            graph_key,
+            descriptor.smoothing_passes,
+            descriptor.smoothing_strength,
+            move |local_x, local_z| {
+                let procedural_sample = graph.sample(local_x, local_z);
+                let procedural_height = settings.base_height + procedural_sample * height_scale;
+                let modified_height = modifier(local_x, local_z, procedural_height);
+                if modified_height.is_finite() {
+                    (modified_height - settings.base_height) / height_scale
+                } else {
+                    procedural_sample
+                }
+            },
+        )
+    }
+
     fn generate_impl(
         settings: TerrainHeightfieldSettings,
         source_key: u64,

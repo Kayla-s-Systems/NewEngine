@@ -89,6 +89,7 @@ impl GatewayProviderRouteFact {
 
     #[cfg(test)]
     #[allow(dead_code)]
+    #[allow(clippy::too_many_arguments)]
     #[inline]
     pub(crate) fn new_dynamic<I, S>(
         gateway_id: String,
@@ -117,6 +118,7 @@ impl GatewayProviderRouteFact {
         )
     }
 
+    #[allow(clippy::too_many_arguments)]
     #[inline]
     pub(crate) fn new_dynamic_with_origin<I, S>(
         gateway_id: String,
@@ -368,6 +370,7 @@ pub(crate) struct ActiveGatewayRoute {
 }
 
 impl ActiveGatewayRoute {
+    #[allow(clippy::too_many_arguments)]
     #[inline]
     fn new(
         gateway_id: String,

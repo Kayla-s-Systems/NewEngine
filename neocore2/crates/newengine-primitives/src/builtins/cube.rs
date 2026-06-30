@@ -45,7 +45,7 @@ pub fn build(_params: &PrimitiveParams) -> PrimitiveMesh {
     let mut i: Vec<u32> = Vec::with_capacity(36);
     for f in 0..6u32 {
         let base = f * 4;
-        i.extend_from_slice(&[base + 0, base + 1, base + 2, base + 0, base + 2, base + 3]);
+        i.extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
     }
 
     PrimitiveMesh {

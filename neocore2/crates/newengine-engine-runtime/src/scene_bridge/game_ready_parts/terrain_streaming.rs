@@ -1,3 +1,4 @@
+use super::terrain_heightmap::{load_terrain_heightmap, TerrainHeightmapRuntime};
 use super::*;
 
 // Terrain streaming owns chunk residency, procedural heightfield generation
@@ -39,7 +40,7 @@ pub(super) struct GeneratedTerrainChunk {
 
 pub(super) struct PendingTerrainChunk {
     result: Arc<Mutex<Option<GeneratedTerrainChunk>>>,
-    ticket: JobTicket,
+    ticket: TaskTicket,
 }
 
 pub(crate) struct GameReadyTerrainStreamingState {
@@ -48,6 +49,7 @@ pub(crate) struct GameReadyTerrainStreamingState {
     color: [f32; 4],
     spec: GameReadyTerrainSpec,
     surface: TerrainSurfaceLayers,
+    heightmap: Option<Arc<TerrainHeightmapRuntime>>,
     chunk_radius: i32,
     unload_radius: i32,
     max_chunks_per_frame: usize,
@@ -153,21 +155,36 @@ pub(super) fn generate_terrain_for_chunk(
     spec: &GameReadyTerrainSpec,
     coord: TerrainChunkCoord,
     color: [f32; 4],
+    heightmap: Option<&TerrainHeightmapRuntime>,
 ) -> GeneratedTerrainChunk {
-    let terrain = ProceduralTerrain::generate_descriptor(
-        TerrainHeightfieldDescriptor {
-            cells_x: spec.cells_x,
-            cells_z: spec.cells_z,
-            size_x: spec.size_x,
-            size_z: spec.size_z,
-            base_height: spec.base_height,
-            height_scale: spec.height_scale,
-            graph: terrain_graph_for_chunk(spec, coord),
-            smoothing_passes: spec.generator.smoothing_passes,
-            smoothing_strength: spec.generator.smoothing_strength,
-        },
-        color,
-    );
+    let center = coord.center(spec.size_x, spec.size_z);
+    let descriptor = TerrainHeightfieldDescriptor {
+        cells_x: spec.cells_x,
+        cells_z: spec.cells_z,
+        size_x: spec.size_x,
+        size_z: spec.size_z,
+        base_height: spec.base_height,
+        height_scale: spec.height_scale,
+        graph: terrain_graph_for_chunk(spec, coord),
+        smoothing_passes: spec.generator.smoothing_passes,
+        smoothing_strength: spec.generator.smoothing_strength,
+    };
+    let terrain = if let Some(heightmap) = heightmap {
+        ProceduralTerrain::generate_descriptor_with_world_height_modifier(
+            descriptor,
+            color,
+            heightmap.revision_key(),
+            |local_x, local_z, procedural_height| {
+                heightmap.apply_world_height(
+                    center.x + local_x,
+                    center.z + local_z,
+                    procedural_height,
+                )
+            },
+        )
+    } else {
+        ProceduralTerrain::generate_descriptor(descriptor, color)
+    };
     // Build the renderable primitive mesh on the generation lane as well.
     // Previously every committed streamed chunk did this conversion inside the
     // render draw-list extraction path; in debug/profile-dev this cost dominated
@@ -224,8 +241,9 @@ pub(super) fn spawn_streamed_terrain_chunk(
     surface: &TerrainSurfaceLayers,
     color: [f32; 4],
     coord: TerrainChunkCoord,
+    heightmap: Option<&TerrainHeightmapRuntime>,
 ) -> TerrainChunkRecord {
-    let generated = generate_terrain_for_chunk(spec, coord, color);
+    let generated = generate_terrain_for_chunk(spec, coord, color, heightmap);
     spawn_generated_terrain_chunk(
         world, root, mats, material, spec, surface, color, coord, generated,
     )
@@ -233,7 +251,7 @@ pub(super) fn spawn_streamed_terrain_chunk(
 
 pub(super) fn enqueue_streamed_terrain_chunk(
     state: &mut GameReadyTerrainStreamingState,
-    job_system: Option<&JobSystemHandle>,
+    thread_pool: Option<&ThreadPoolHandle>,
     coord: TerrainChunkCoord,
 ) -> bool {
     if state.pending.contains_key(&coord) || state.loaded.contains_key(&coord) {
@@ -243,26 +261,27 @@ pub(super) fn enqueue_streamed_terrain_chunk(
         return false;
     }
 
-    let Some(job_system) = job_system else {
+    let Some(thread_pool) = thread_pool else {
         return false;
     };
 
     let spec = state.spec.clone();
     let color = state.color;
+    let heightmap = state.heightmap.clone();
     let result = Arc::new(Mutex::new(None));
     let result_for_job = Arc::clone(&result);
-    let ticket = job_system.submit_request(
-        JobRequest::new("game-ready.terrain.chunk.render-packet")
+    let ticket = thread_pool.submit_request(
+        TaskRequest::new("game-ready.terrain.chunk.render-packet")
             .with_source("scene.streaming.terrain")
             .with_owner("engine.render")
             .with_category("terrain.render-packet")
-            .with_lane(JobLane::RenderPrep)
-            .with_priority(JobPriority::Interactive)
+            .with_lane(TaskLane::RenderPrep)
+            .with_priority(TaskPriority::Interactive)
             .with_dependency_group(format!("terrain.chunk.{}.{}.renderprep", coord.x, coord.z))
-            .with_job_domain(job_domain::ENGINE_RENDER_PREP)
-            .with_job_pass(job_pass::TERRAIN_RENDER_PACKET),
+            .with_task_domain(task_domain::ENGINE_RENDER_PREP)
+            .with_task_pass(task_pass::TERRAIN_RENDER_PACKET),
         move || {
-            let generated = generate_terrain_for_chunk(&spec, coord, color);
+            let generated = generate_terrain_for_chunk(&spec, coord, color, heightmap.as_deref());
             if let Ok(mut slot) = result_for_job.lock() {
                 *slot = Some(generated);
             }
@@ -284,7 +303,7 @@ pub(in crate::scene_bridge::game_ready) fn spawn_procedural_terrain(
     initial_center: TerrainChunkCoord,
 ) -> EntityId {
     newengine_ulog_api::ulog::info!(
-        "game-ready: terrain generator id='{}' seed={} cells={}x{} chunk_size={}x{} streaming={} radius={} unload_radius={} surface_layers=[forest='{}', sand='{}', rock='{}']",
+        "game-ready: terrain generator id='{}' seed={} cells={}x{} chunk_size={}x{} streaming={} radius={} unload_radius={} surface_mode='multi_textured' layer_count={} heightmap_enabled={} surface_layers=[forest='{}', sand='{}', rock='{}']",
         spec.generator.id,
         spec.seed,
         spec.cells_x,
@@ -294,15 +313,47 @@ pub(in crate::scene_bridge::game_ready) fn spawn_procedural_terrain(
         spec.streaming.enabled,
         spec.streaming.chunk_radius,
         spec.streaming.unload_radius,
+        spec.surface.layers.len(),
+        spec.heightmap.enabled,
         spec.surface.forest_base_texture,
         spec.surface.sand_base_texture,
         spec.surface.rock_base_texture,
     );
 
+    if !spec.surface.layers.is_empty() {
+        let summary = spec
+            .surface
+            .layers
+            .iter()
+            .map(|layer| {
+                format!(
+                    "{}:texture='{}':weight={:.3}:uv_scale={:.3}",
+                    layer.role, layer.base_texture, layer.weight, layer.uv_scale
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(",");
+        newengine_ulog_api::ulog::info!(
+            "game-ready terrain surface package: declarative_layers={} projection='3-channel terrain shader' layers=[{}]",
+            spec.surface.layers.len(),
+            summary
+        );
+    }
+
     let surface = terrain_surface_layers(spec);
+    let heightmap = load_terrain_heightmap(spec);
     let origin = initial_center;
-    let record =
-        spawn_streamed_terrain_chunk(world, root, mats, material, spec, &surface, color, origin);
+    let record = spawn_streamed_terrain_chunk(
+        world,
+        root,
+        mats,
+        material,
+        spec,
+        &surface,
+        color,
+        origin,
+        heightmap.as_deref(),
+    );
     let terrain_entity = record.terrain;
 
     if spec.streaming.enabled {
@@ -318,6 +369,7 @@ pub(in crate::scene_bridge::game_ready) fn spawn_procedural_terrain(
             color,
             spec: spec.clone(),
             surface,
+            heightmap: heightmap.clone(),
             chunk_radius: budget.resident_radius,
             unload_radius: budget.unload_radius,
             max_chunks_per_frame: budget.max_commits_per_tick,
@@ -346,6 +398,7 @@ pub(in crate::scene_bridge::game_ready) fn spawn_procedural_terrain(
                 &state.surface,
                 state.color,
                 coord,
+                state.heightmap.as_deref(),
             );
             state.loaded.insert(coord, record);
             warmed = warmed.saturating_add(1);
@@ -369,7 +422,7 @@ pub(in crate::scene_bridge::game_ready) fn spawn_procedural_terrain(
 pub(crate) fn tick_game_ready_streaming_terrain(
     world: &mut newengine_ecs::World,
     mats: &MaterialRegistry,
-    job_system: Option<&JobSystemHandle>,
+    thread_pool: Option<&ThreadPoolHandle>,
 ) {
     let Some(player) = crate::gameplay::first_player(world) else {
         return;
@@ -482,7 +535,7 @@ pub(crate) fn tick_game_ready_streaming_terrain(
 
     let mut scheduled = 0usize;
     for coord in stream_requests {
-        if enqueue_streamed_terrain_chunk(&mut state, job_system, coord) {
+        if enqueue_streamed_terrain_chunk(&mut state, thread_pool, coord) {
             scheduled += 1;
             continue;
         }
@@ -496,6 +549,7 @@ pub(crate) fn tick_game_ready_streaming_terrain(
             &state.surface,
             state.color,
             coord,
+            state.heightmap.as_deref(),
         );
         state.loaded.insert(coord, record);
         created += 1;

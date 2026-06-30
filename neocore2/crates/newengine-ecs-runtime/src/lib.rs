@@ -45,7 +45,7 @@ impl EngineEcsGatewayService {
     fn summary_json_v1(&self) -> RResult<Blob, RString> {
         let scene_lock = self.scene.scene();
         let scene = scene_lock.read();
-        ok_json(&Self::world_summary(scene.world()))
+        ok_json(Self::world_summary(scene.world()))
     }
 
     fn snapshot_json_v1(&self, payload: Blob) -> RResult<Blob, RString> {

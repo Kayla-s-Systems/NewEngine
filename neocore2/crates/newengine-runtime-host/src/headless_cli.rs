@@ -12,7 +12,7 @@ use std::time::Instant;
 use newengine_core::host_events::{HostEvent, WindowHostEvent, WindowInitSize};
 use newengine_core::{Engine, EngineError, EngineResult, EngineRunState};
 
-use crate::platform_runtime::register_jobs_gateway_service_best_effort;
+use crate::platform_runtime::register_threading_gateway_service_best_effort;
 
 const DEFAULT_HEADLESS_WIDTH: u32 = 1;
 const DEFAULT_HEADLESS_HEIGHT: u32 = 1;
@@ -119,11 +119,11 @@ impl HeadlessCliRuntime {
         newengine_time_runtime::register_time_gateway_best_effort();
         newengine_schema_runtime::register_schema_gateway_best_effort();
         newengine_gameplay_runtime::register_gameplay_foundation_gateways_best_effort();
-        register_jobs_gateway_service_best_effort(
-            self.engine.job_system(),
+        register_threading_gateway_service_best_effort(
+            self.engine.thread_pool(),
             self.engine.events().clone(),
         );
-        newengine_ulog_api::ulog::info!("headless runtime: engine.time, engine.schema, engine.jobs, synthetic engine.platform.headless and visible NullProvider routes registered; loading/status stays an engine.ui projection");
+        newengine_ulog_api::ulog::info!("headless runtime: engine.time, engine.schema, engine.threading, synthetic engine.platform.headless and visible NullProvider routes registered; loading/status stays an engine.ui projection");
     }
 
     fn publish_headless_window_contract(&mut self) -> EngineResult<()> {
@@ -172,7 +172,7 @@ impl HeadlessCliRuntime {
             if snapshot.terminal && self.engine.run_state().is_terminal() {
                 return Err(EngineError::other(format!(
                     "headless startup reached terminal state before running: {}",
-                    snapshot.error.unwrap_or_else(|| snapshot.detail)
+                    snapshot.error.unwrap_or(snapshot.detail)
                 )));
             }
 
@@ -198,7 +198,7 @@ impl HeadlessCliRuntime {
                     Err(e) => return Err(e),
                 }
                 frames = frames.wrapping_add(1);
-                if frames % 300 == 0 {
+                if frames.is_multiple_of(300) {
                     newengine_ulog_api::ulog::info!(
                         "headless runtime: frames={} run_state='{}'",
                         frames,
@@ -223,7 +223,7 @@ impl HeadlessCliRuntime {
                 Err(EngineError::ExitRequested) => break,
                 Err(e) => return Err(e),
             }
-            if frame == 0 || (frame + 1) % 300 == 0 || frame + 1 == frame_limit {
+            if frame == 0 || (frame + 1).is_multiple_of(300) || frame + 1 == frame_limit {
                 newengine_ulog_api::ulog::info!(
                     "headless runtime: frame={}/{} run_state='{}'",
                     frame + 1,

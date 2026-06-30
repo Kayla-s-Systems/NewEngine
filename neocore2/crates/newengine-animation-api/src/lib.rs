@@ -44,8 +44,9 @@ pub struct AnimationGraphRef(pub String);
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct AnimationClipRef(pub String);
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub enum AnimationIntentKind {
+    #[default]
     PlayClip,
     Stop,
     BlendToState,
@@ -53,13 +54,6 @@ pub enum AnimationIntentKind {
     AttachTask,
     Custom(String),
 }
-
-impl Default for AnimationIntentKind {
-    fn default() -> Self {
-        Self::PlayClip
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AnimationIntentDtoV1 {
     pub entity: EntityHandle,

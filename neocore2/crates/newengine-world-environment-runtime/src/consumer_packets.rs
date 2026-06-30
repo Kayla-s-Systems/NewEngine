@@ -1,3 +1,4 @@
+#![allow(clippy::too_many_arguments)]
 use crate::phenomena::required_assets_for_object;
 use crate::profile_catalog::{EnvironmentProfileDescriptor, WeatherPatternDescriptor};
 use newengine_world_api::WorldCellCoord;
@@ -59,7 +60,7 @@ pub(crate) fn build_consumer_packets(
             fog_color_linear: atmosphere.fog_color_linear,
             cloud_coverage: clouds.coverage,
             cloud_shadow_strength: clouds.shadow_strength,
-            exposure: exposure.clone(),
+            exposure: *exposure,
         },
         ai: AiEnvironmentObservationDto {
             time_of_day_normalized: time.normalized_day,

@@ -14,7 +14,7 @@ pub(super) enum MaterialTextureGpuResidency {
         id_hex32: String,
         requested_frame: u64,
     },
-    /// CPU-heavy texture decoding has been submitted to engine.jobs and the
+    /// CPU-heavy texture decoding has been submitted to engine.threading and the
     /// render thread must keep presenting fallback material textures.
     CpuDecoding {
         requested_frame: u64,

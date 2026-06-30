@@ -346,11 +346,11 @@ fn csm_split_distances(
     let lambda = 0.68;
     let near = near.max(0.05);
     let far = far.max(near + 1.0);
-    for i in 0..count {
+    for (i, slot) in out.iter_mut().enumerate().take(count) {
         let p = (i + 1) as f32 / count as f32;
         let uniform = near + (far - near) * p;
         let logarithmic = near * (far / near).powf(p);
-        out[i] = logarithmic * lambda + uniform * (1.0 - lambda);
+        *slot = logarithmic * lambda + uniform * (1.0 - lambda);
     }
     out[count - 1] = far;
     out
@@ -406,7 +406,7 @@ fn ensure_shadow_rt(
     );
     let cascades = cascade_count.clamp(1, 4);
     let columns = if cascades <= 1 { 1 } else { 2 };
-    let rows = ((cascades + columns - 1) / columns).max(1);
+    let rows = cascades.div_ceil(columns).max(1);
     let atlas_extent = Extent2D::new(
         resolution.saturating_mul(columns),
         resolution.saturating_mul(rows),

@@ -6,6 +6,7 @@ use crate::nav::helpers::persist_camera_pose;
 use crate::nav::{BoundsSphere, CameraNavInput, CameraNavState};
 
 #[inline]
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn ensure_mode_without_impulse(
     world: &mut World,
     cam_id: EntityId,

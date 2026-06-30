@@ -35,7 +35,7 @@ impl Default for TextureDictionaryManifest {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct TextureDictionaryEntry {
     pub name: String,
@@ -47,20 +47,4 @@ pub struct TextureDictionaryEntry {
     pub height: u32,
     pub mip_count: u32,
     pub warnings: Vec<String>,
-}
-
-impl Default for TextureDictionaryEntry {
-    fn default() -> Self {
-        Self {
-            name: String::new(),
-            name_hash: 0,
-            stable_id: String::new(),
-            pixel_format: String::new(),
-            color_space: String::new(),
-            width: 0,
-            height: 0,
-            mip_count: 0,
-            warnings: Vec::new(),
-        }
-    }
 }

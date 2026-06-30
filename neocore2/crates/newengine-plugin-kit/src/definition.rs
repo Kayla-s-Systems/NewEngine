@@ -101,6 +101,7 @@ pub const fn provided_capability(
 }
 
 #[inline]
+#[allow(clippy::too_many_arguments)]
 pub const fn optional_backend_route(
     capability_id: &'static str,
     spec: BackendServiceSpec,

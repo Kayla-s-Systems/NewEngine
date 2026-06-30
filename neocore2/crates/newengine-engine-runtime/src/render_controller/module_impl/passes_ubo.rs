@@ -33,31 +33,31 @@ pub(super) fn write_lit_ubo_ex(
     }
 
     let base_off = 128;
-    for i in 0..4 {
+    for (i, component) in base_color.iter().enumerate() {
         let off = base_off + i * 4;
-        bytes[off..off + 4].copy_from_slice(&base_color[i].to_ne_bytes());
+        bytes[off..off + 4].copy_from_slice(&component.to_ne_bytes());
     }
 
     // std140 vec3 is padded to vec4.
     let em_off = 144;
-    for i in 0..3 {
+    for (i, component) in emissive_radiance.iter().enumerate() {
         let off = em_off + i * 4;
-        bytes[off..off + 4].copy_from_slice(&emissive_radiance[i].to_ne_bytes());
+        bytes[off..off + 4].copy_from_slice(&component.to_ne_bytes());
     }
     bytes[em_off + 12..em_off + 16].copy_from_slice(&0.0_f32.to_ne_bytes());
 
     lights.write_into(&mut bytes);
 
     let uv_off = 352;
-    for i in 0..4 {
+    for (i, component) in uv_transform.iter().enumerate() {
         let off = uv_off + i * 4;
-        bytes[off..off + 4].copy_from_slice(&uv_transform[i].to_ne_bytes());
+        bytes[off..off + 4].copy_from_slice(&component.to_ne_bytes());
     }
 
     let mat_off = 368;
-    for i in 0..4 {
+    for (i, component) in material_params.iter().enumerate() {
         let off = mat_off + i * 4;
-        bytes[off..off + 4].copy_from_slice(&material_params[i].to_ne_bytes());
+        bytes[off..off + 4].copy_from_slice(&component.to_ne_bytes());
     }
 
     let light_mvp_off = 384;

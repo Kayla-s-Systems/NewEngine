@@ -540,34 +540,16 @@ impl Default for AssetFileTypeManifest {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
 #[serde(default)]
 pub struct AssetFileTypeProbeRequest {
     pub logical_path: String,
 }
-
-impl Default for AssetFileTypeProbeRequest {
-    fn default() -> Self {
-        Self {
-            logical_path: String::new(),
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
 #[serde(default)]
 pub struct AssetFileTypeRegisterRequest {
     pub descriptor: AssetFileTypeDescriptor,
 }
-
-impl Default for AssetFileTypeRegisterRequest {
-    fn default() -> Self {
-        Self {
-            descriptor: AssetFileTypeDescriptor::default(),
-        }
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(default)]
 pub struct AssetDecodeRequest {
@@ -586,7 +568,7 @@ impl Default for AssetDecodeRequest {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
 #[serde(default)]
 pub struct AssetFileTypeProbeResult {
     pub logical_path: String,
@@ -594,18 +576,6 @@ pub struct AssetFileTypeProbeResult {
     pub known: bool,
     pub descriptor: Option<AssetFileTypeDescriptor>,
 }
-
-impl Default for AssetFileTypeProbeResult {
-    fn default() -> Self {
-        Self {
-            logical_path: String::new(),
-            extension: String::new(),
-            known: false,
-            descriptor: None,
-        }
-    }
-}
-
 /// Canonical AssetManager v1 method names.
 ///
 /// There is one supported runtime contract: explicit `*_v1` entry points for

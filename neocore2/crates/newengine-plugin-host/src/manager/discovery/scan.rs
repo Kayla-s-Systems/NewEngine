@@ -40,7 +40,7 @@ pub(super) fn scan_plugins_dir(dir: &Path) -> Result<DiscoveryGraph, PluginLoadE
         dynlib_paths.push(path);
     }
 
-    dynlib_paths.sort_by(|a, b| sort_key(a).cmp(&sort_key(b)));
+    dynlib_paths.sort_by_key(|a| sort_key(a));
 
     let mut items: Vec<ScannedDynlib> = Vec::with_capacity(dynlib_paths.len());
 

@@ -4,7 +4,7 @@ use newengine_assets::{AssetResult, RuntimeTextureAsset};
 use newengine_camera_contracts::CameraFrameSnapshot;
 use newengine_core::host_events::CursorState;
 use newengine_core::render::{Extent2D, RenderHardwareTier, RenderTargetId, SamplerId, TextureId};
-use newengine_core::JobTicket;
+use newengine_core::TaskTicket;
 use newengine_math::collections::FxHashMap;
 use parking_lot::Mutex;
 use std::collections::VecDeque;
@@ -200,7 +200,7 @@ impl RenderShadowRuntimeState {
 /// The render controller owns only the ticket/result bridge. The actual heavy
 /// work runs on the engine-runtime job system, not on ad-hoc per-request threads.
 pub(super) struct MaterialTextureDecodeJob {
-    pub(super) ticket: JobTicket,
+    pub(super) ticket: TaskTicket,
     pub(super) result: Arc<Mutex<Option<AssetResult<RuntimeTextureAsset>>>>,
 }
 

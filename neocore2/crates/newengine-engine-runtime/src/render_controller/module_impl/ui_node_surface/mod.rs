@@ -363,6 +363,7 @@ fn tone_from_navigation(tone: UiNodeNavigationTone) -> UiNodeTone {
     }
 }
 
+#[allow(clippy::field_reassign_with_default)]
 fn ui_surface_style() -> UiSurfaceStyle {
     let mut style = UiSurfaceStyle::default();
     style.anchor = UiSurfaceAnchor::TopLeft;

@@ -42,11 +42,8 @@ pub(super) fn game_sun_postfx_params(
     let screen_x = ndc_x * 0.5 + 0.5;
     let screen_y = ndc_y * 0.5 + 0.5;
 
-    let on_screen = screen_x >= -0.18
-        && screen_x <= 1.18
-        && screen_y >= -0.18
-        && screen_y <= 1.18
-        && ndc_z >= -1.0;
+    let on_screen =
+        (-0.18..=1.18).contains(&screen_x) && (-0.18..=1.18).contains(&screen_y) && ndc_z >= -1.0;
     let center_alignment = (1.0 - ((screen_x - 0.5).hypot(screen_y - 0.5) * 1.72)).clamp(0.0, 1.0);
     let horizon_grazing = (1.0 - to_sun.y.abs()).clamp(0.0, 1.0);
     let daylight = ((to_sun.y + 0.07) / 0.24).clamp(0.0, 1.0);

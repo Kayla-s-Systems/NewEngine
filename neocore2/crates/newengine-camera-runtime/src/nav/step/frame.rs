@@ -3,6 +3,7 @@ use newengine_camera::{orbit_frame_sphere, CameraRig, RuntimeNavController, Runt
 use crate::nav::{BoundsSphere, CameraNavFrameRequest, CameraNavParams, CameraNavState};
 
 #[inline]
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn maybe_frame_orbit(
     state: &mut CameraNavState,
     params: CameraNavParams,

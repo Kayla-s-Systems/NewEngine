@@ -192,8 +192,7 @@ fn title_case(value: &str) -> String {
         .rsplit('.')
         .next()
         .unwrap_or(value)
-        .replace('_', " ")
-        .replace('-', " ");
+        .replace(['_', '-'], " ");
     let mut out = String::new();
     for word in last.split_whitespace() {
         let mut chars = word.chars();

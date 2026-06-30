@@ -24,6 +24,8 @@ enum EntityTarget {
     Token(EntityToken),
 }
 
+type EntityCommandFn = Box<dyn FnOnce(&mut World, EntityId) + Send + 'static>;
+
 /// Deterministic ECS command buffer.
 ///
 /// ## Principles
@@ -52,11 +54,11 @@ enum Op {
     },
     Insert {
         target: EntityTarget,
-        f: Box<dyn FnOnce(&mut World, EntityId) + Send + 'static>,
+        f: EntityCommandFn,
     },
     Remove {
         target: EntityTarget,
-        f: Box<dyn FnOnce(&mut World, EntityId) + Send + 'static>,
+        f: EntityCommandFn,
     },
 }
 
@@ -191,8 +193,8 @@ impl Commands {
         // IMPORTANT: tokens can be sparse (e.g. if ops are manipulated externally in the future
         // or if we ever add conditional recording). We therefore store `Option<EntityId>` to
         // avoid fabricating mappings for tokens that never spawned.
-        let mut token_to_entity: Vec<Option<EntityId>> = Vec::new();
-        token_to_entity.reserve(self.next_token.saturating_sub(1) as usize);
+        let mut token_to_entity: Vec<Option<EntityId>> =
+            Vec::with_capacity(self.next_token.saturating_sub(1) as usize);
 
         for op in self.ops.iter() {
             if let Op::Spawn { token } = *op {
@@ -250,8 +252,7 @@ impl Commands {
         }
 
         // Public return: resolved spawn tokens only, in token order.
-        let mut out: Vec<(EntityToken, EntityId)> = Vec::new();
-        out.reserve(token_to_entity.len());
+        let mut out: Vec<(EntityToken, EntityId)> = Vec::with_capacity(token_to_entity.len());
         for (i, id) in token_to_entity.into_iter().enumerate() {
             if let Some(id) = id {
                 out.push((EntityToken((i as u32) + 1), id));

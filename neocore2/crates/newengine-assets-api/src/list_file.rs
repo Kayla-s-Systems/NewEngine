@@ -215,7 +215,7 @@ impl ListFileEntryRecordV1 {
 
 /// Common metadata namespace blob. Unknown namespaces must be preserved by tools
 /// and ignored by runtime domains that do not own them.
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
 #[serde(default)]
 pub struct ListFileMetadataNamespaceV1 {
     pub namespace: String,
@@ -223,20 +223,8 @@ pub struct ListFileMetadataNamespaceV1 {
     pub payload_offset: u64,
     pub payload_len: u64,
 }
-
-impl Default for ListFileMetadataNamespaceV1 {
-    fn default() -> Self {
-        Self {
-            namespace: String::new(),
-            schema: String::new(),
-            payload_offset: 0,
-            payload_len: 0,
-        }
-    }
-}
-
 /// One addressable entry inside a dictionary/container file.
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
 #[serde(default)]
 pub struct AssetEntryManifest {
     pub name: String,
@@ -247,21 +235,6 @@ pub struct AssetEntryManifest {
     pub dependencies: Vec<AssetEntryDependency>,
     pub metadata: BTreeMap<String, String>,
 }
-
-impl Default for AssetEntryManifest {
-    fn default() -> Self {
-        Self {
-            name: String::new(),
-            stable_id: String::new(),
-            asset_kind: String::new(),
-            entry_ref: String::new(),
-            route: AssetGatewayRoute::default(),
-            dependencies: Vec::new(),
-            metadata: BTreeMap::new(),
-        }
-    }
-}
-
 impl AssetEntryManifest {
     #[inline]
     pub fn new(
@@ -387,6 +360,7 @@ pub const LIST_FILE_CONTENT_KIND_YWR: u32 = 17;
 pub const LIST_FILE_CONTENT_KIND_YSC: u32 = 18;
 pub const LIST_FILE_CONTENT_KIND_YBD: u32 = 19;
 pub const LIST_FILE_CONTENT_KIND_YTF: u32 = 20;
+pub const LIST_FILE_CONTENT_KIND_YTYD: u32 = 21;
 /// NewEngine UI dictionary: surfaces/layouts/themes/components/bindings in XMLcentral payload.
 pub const LIST_FILE_CONTENT_KIND_NEUI: u32 = 32;
 
@@ -487,6 +461,7 @@ pub const fn list_file_content_kind_label(kind: u32) -> &'static str {
         LIST_FILE_CONTENT_KIND_YSC => "ysc_script_module",
         LIST_FILE_CONTENT_KIND_YBD => "ybd_bounds_dictionary",
         LIST_FILE_CONTENT_KIND_YTF => "ytf_unknown_y_file",
+        LIST_FILE_CONTENT_KIND_YTYD => "ytyd_uv_layout_dictionary",
         LIST_FILE_CONTENT_KIND_NEUI => "neui_ui_dictionary",
         _ => "provider_declared",
     }

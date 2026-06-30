@@ -287,10 +287,10 @@ pub enum DrawListContributionCommand {
         #[serde(default)]
         material: Option<RenderMaterialHandle>,
         #[serde(default)]
-        material_binding: RenderMaterialBinding,
+        material_binding: Box<RenderMaterialBinding>,
         gpu: RenderMeshGpuBinding,
         #[serde(default)]
-        instances: RenderInstanceSource,
+        instances: Box<RenderInstanceSource>,
         #[serde(default)]
         pipeline: RenderPipelineClass,
     },

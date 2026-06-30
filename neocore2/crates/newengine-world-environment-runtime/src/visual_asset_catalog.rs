@@ -20,13 +20,13 @@ pub(crate) struct EnvironmentVisualAssetGroupDescriptor {
     pub moon_disk_texture_ref: &'static str,
 }
 
-pub(crate) const SKYDOME_TEXTURE_DICTIONARY_REF: &str = "textures/fps/skydome.ytd";
-pub(crate) const SKYDOME_STARFIELD_REF: &str = "textures/fps/skydome.ytd@starfield";
+pub(crate) const SKYDOME_TEXTURE_DICTIONARY_REF: &str = "textures/environment/skydome.ytd";
+pub(crate) const SKYDOME_STARFIELD_REF: &str = "textures/environment/skydome.ytd@starfield";
 pub(crate) const SKYDOME_CLOUD_DENSITY_REF: &str =
-    "textures/fps/skydome.ytd@baseperlinnoise3channel";
-pub(crate) const SKYDOME_CLOUD_DETAIL_REF: &str = "textures/fps/skydome.ytd@noise16_p";
-pub(crate) const SKYDOME_DITHER_REF: &str = "textures/fps/skydome.ytd@dither";
-pub(crate) const SKYDOME_MOON_DISK_REF: &str = "textures/fps/skydome.ytd@moon_new";
+    "textures/environment/skydome.ytd@baseperlinnoise3channel";
+pub(crate) const SKYDOME_CLOUD_DETAIL_REF: &str = "textures/environment/skydome.ytd@noise16_p";
+pub(crate) const SKYDOME_DITHER_REF: &str = "textures/environment/skydome.ytd@dither";
+pub(crate) const SKYDOME_MOON_DISK_REF: &str = "textures/environment/skydome.ytd@moon_new";
 
 // There is no authored `sun_disk` entry in the current YTD inventory. Keep the
 // sun as an explicit procedural visual until a real `.ytd@sun_disk` entry is

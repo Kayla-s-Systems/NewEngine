@@ -9,9 +9,8 @@ use newengine_render_api::{
     decode_json as decode_render_json, decode_unit_command_batch_bin,
     encode_json as encode_render_json, BindGroupId, BindGroupLayoutId, BufferId, PipelineId,
     RenderBackendCapabilities, RenderBackendInfo, RenderCommand, RenderCommandResponse,
-    RenderDiagnosticsSnapshot, RenderGraphSubmitReport, RenderServiceRequest,
-    RenderServiceResponse, RenderTargetId, RenderWorkBudget, SamplerId, ShaderId, TextureId,
-    TextureResidencySnapshot,
+    RenderGraphSubmitReport, RenderServiceRequest, RenderServiceResponse, RenderTargetId,
+    RenderWorkBudget, SamplerId, ShaderId, TextureId, TextureResidencySnapshot,
 };
 use newengine_service_kit::{
     engine_gateway_provider_service_description, ok_json,
@@ -121,7 +120,7 @@ fn null_render_command(
             RenderCommandResponse::ShaderCacheStats(Default::default())
         }
         RenderCommand::DiagnosticsSnapshot => {
-            RenderCommandResponse::DiagnosticsSnapshot(RenderDiagnosticsSnapshot::default())
+            RenderCommandResponse::DiagnosticsSnapshot(Box::default())
         }
         _ => RenderCommandResponse::Unit,
     }
@@ -144,7 +143,7 @@ fn null_render_invoke(state: &mut NullRenderState, payload: Blob) -> RResult<Blo
         }
         RenderServiceRequest::PumpUploads(_) => RenderServiceResponse::UploadPumpReport(Default::default()),
         RenderServiceRequest::DrainBackendEvents => RenderServiceResponse::BackendEvents(Vec::new()),
-        RenderServiceRequest::DiagnosticsSnapshot => RenderServiceResponse::DiagnosticsSnapshot(RenderDiagnosticsSnapshot::default()),
+        RenderServiceRequest::DiagnosticsSnapshot => RenderServiceResponse::DiagnosticsSnapshot(Box::default()),
         RenderServiceRequest::Negotiate(req) => RenderServiceResponse::Negotiation(newengine_render_api::RenderCapabilityNegotiationResponse {
             accepted_version: req.preferred_version,
             backend_version: Default::default(),
@@ -258,8 +257,10 @@ fn null_physics_invoke(_state: &mut (), payload: Blob) -> RResult<Blob, RString>
             })
         }
         newengine_physics_api::PhysicsServiceRequest::StepFrame(input) => {
-            let mut output = newengine_physics_api::PhysicsFrameOutput::default();
-            output.fixed_tick = input.fixed_tick;
+            let mut output = newengine_physics_api::PhysicsFrameOutput {
+                fixed_tick: input.fixed_tick,
+                ..Default::default()
+            };
             output.report.fixed_tick = input.fixed_tick;
             output.report.dt = input.dt;
             newengine_physics_api::PhysicsServiceResponse::FrameOutput(output)

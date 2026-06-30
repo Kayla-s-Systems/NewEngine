@@ -181,7 +181,7 @@ fn finish_violation(
         return (report, Some(error));
     }
 
-    report.status = "degraded";
+    report.status = "optional";
     (report, None)
 }
 
@@ -202,6 +202,16 @@ fn emit_contract_line(report: &ContractReport) {
         "fatal" => {
             newengine_ulog_api::ulog::error!(
                 "runtime contract fatal: service='{}' provider='{}' source='{}' expected='{}' reason='{}'",
+                report.service_id,
+                report.provider,
+                report.source,
+                report.expected,
+                report.reason
+            );
+        }
+        "optional" => {
+            newengine_ulog_api::ulog::info!(
+                "runtime contract optional: service='{}' provider='{}' source='{}' expected='{}' reason='{}' policy='non-strict capability; demo may continue with feature unavailable'",
                 report.service_id,
                 report.provider,
                 report.source,

@@ -12,7 +12,7 @@ use super::scene;
 /// This is the first structural boundary for moving provider-safe extraction out
 /// of `render.controller`. It intentionally contains DTO-like values, not
 /// `RenderApi`, backend handles or mutable world references. Heavy consumers can
-/// later receive this through `engine.jobs` RenderPrep batches and return frame
+/// later receive this through `engine.threading` RenderPrep batches and return frame
 /// packets for render-thread recording.
 #[derive(Clone, Copy, Debug)]
 pub(super) struct SceneRenderSnapshot {

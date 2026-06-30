@@ -15,7 +15,7 @@ use crate::{
 };
 
 #[inline]
-fn sort_ids(ids: &mut Vec<EntityId>) {
+fn sort_ids(ids: &mut [EntityId]) {
     ids.sort_unstable_by_key(|id| id.data().as_ffi());
 }
 
@@ -184,7 +184,7 @@ pub fn sys_integrate_velocities(world: &World, frame: SimFrame, cmd: &mut Comman
         if let Some(v) = world.get::<Velocity>(id).copied() {
             let d = v.0 * dt;
             if d.is_finite() {
-                next_pos_ws = next_pos_ws + d;
+                next_pos_ws += d;
             }
         }
 

@@ -70,6 +70,7 @@ pub(super) fn spawn_runtime_ydd_prefab_instance(
     root: EntityId,
     parts: &[RuntimePrefabMeshPart],
     placement: TreePlacement,
+    render_options: &newengine_model_domain_api::MeshRenderOptions,
 ) {
     let yaw = Quat::from_rotation_y(placement.yaw);
     let scale = Vec3::splat(placement.scale);
@@ -89,6 +90,7 @@ pub(super) fn spawn_runtime_ydd_prefab_instance(
                 position: placement.position,
                 scale,
                 color: part.color,
+                render_options: render_options.clone(),
             },
         );
         if let Some(t) = world.get_mut_tracked::<Transform>(entity) {
@@ -143,7 +145,15 @@ pub(in crate::scene_bridge::game_ready) fn spawn_foliage_prefabs(
     let placements = collect_tree_placements(world, terrain, foliage, player_start);
     let count = placements.len();
     for placement in placements {
-        spawn_runtime_ydd_prefab_instance(world, &*prims, mats, root, &runtime_parts, placement);
+        spawn_runtime_ydd_prefab_instance(
+            world,
+            &*prims,
+            mats,
+            root,
+            &runtime_parts,
+            placement,
+            &foliage.render_options,
+        );
     }
 
     log_foliage_prefab_placement(

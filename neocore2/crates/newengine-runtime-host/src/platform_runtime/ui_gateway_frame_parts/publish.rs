@@ -40,16 +40,7 @@ pub(crate) fn publish_node_tree_request(request: &UiNodeTreeRequest) {
         UI_SERVICE_METHOD_APPLY_NODE_REQUEST_V1,
         &payload,
     ) {
-        Ok(Some(bytes)) => {
-            if let Ok(ack) = serde_json::from_slice::<UiNodeRequestAck>(&bytes) {
-                newengine_ulog_api::ulog::trace!(
-                    "ui gateway: node tree request accepted surface='{}' nodes={} provider={}",
-                    ack.surface_id,
-                    ack.accepted_nodes,
-                    ack.provider.as_deref().unwrap_or("engine.ui")
-                );
-            }
-        }
+        Ok(Some(_)) => {}
         Ok(None) => newengine_ulog_api::ulog::warn!(
             "ui gateway: engine.ui route unavailable; node tree surface='{}' skipped",
             request.surface_id,

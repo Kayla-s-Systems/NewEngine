@@ -1,8 +1,11 @@
 use newengine_core::host_events::CursorState;
-use newengine_core::render::{RenderApi, RenderWorkBudget, SceneLaunchStatus, UploadPumpDesc};
+use newengine_core::render::{
+    BeginFrameDesc, Extent2D, RectI32, RenderApi, RenderWorkBudget, SceneLaunchStatus,
+    UploadPumpDesc, Viewport,
+};
 use newengine_core::{EngineResult, ModuleCtx};
 use newengine_ui_api::{
-    UiEditorRuntimeMode, UiEditorRuntimeState, UiScreenProfile, UiScreenProfileState,
+    UiDrawList, UiEditorRuntimeMode, UiEditorRuntimeState, UiScreenProfile, UiScreenProfileState,
 };
 
 use super::super::controller::RuntimeRenderController;
@@ -17,6 +20,8 @@ impl RuntimeRenderController {
         backend_work_budget: Option<RenderWorkBudget>,
         material_upload_jobs: u32,
         trace_frame: bool,
+        window_w: u32,
+        window_h: u32,
     ) -> EngineResult<Option<SceneLaunchStatus>> {
         let next_frame = self.frame.frame_index.saturating_add(1).max(1);
         let mut prelaunch_gate = None;
@@ -39,7 +44,7 @@ impl RuntimeRenderController {
             if has_pending_gate {
                 let requested_play_mode = self.bridges.scene.play_mode();
                 let runtime_profile = self.runtime_profile().clone();
-                let job_system = ctx.job_system().cloned();
+                let thread_pool = ctx.thread_pool().cloned();
                 let world_playable = scene.run_frame(next_frame, |world| {
                     if runtime_profile.use_runtime_terrain_streaming() {
                         let mats_lock = self.bridges.scene.materials();
@@ -47,7 +52,7 @@ impl RuntimeRenderController {
                         crate::scene_bridge::tick_game_ready_streaming_terrain(
                             world,
                             &mats,
-                            job_system.as_ref(),
+                            thread_pool.as_ref(),
                         );
                     }
                     readiness::update_game_ready_launch_gate(
@@ -72,7 +77,7 @@ impl RuntimeRenderController {
 
                 self.pump_material_texture_requests(
                     r,
-                    ctx.job_system(),
+                    ctx.thread_pool(),
                     super::super::render_quality::MATERIAL_TEXTURE_IMPORT_START_BURST
                         .min(material_upload_jobs.max(1)),
                     material_upload_jobs,
@@ -129,6 +134,49 @@ impl RuntimeRenderController {
         self.sync_cursor_state(ctx, CursorState::released());
         let _ = r.discard_recorded_commands();
 
+        // This prelaunch gate returns before `render_runtime_module` consumes the
+        // provider-owned UiDrawList and before the normal frame envelope can run.
+        // Present a minimal UI-only frame here so `engine.ui.loading` image paints
+        // are actually composited while scene texture residency is blocking Play.
+        if let Some(ui) = ctx.resources().get::<UiDrawList>().cloned() {
+            let paint_images = ui
+                .paint
+                .commands
+                .iter()
+                .filter(|cmd| matches!(cmd, newengine_ui_api::UiPaintCommand::Image(_)))
+                .count();
+            newengine_ulog_api::ulog::warn!(
+                "render prelaunch loading ui: present frame={} window={}x{} mesh_cmds={} paint_cmds={} paint_images={} tex_set={} tex_set_bytes={} reason='{}'",
+                next_frame,
+                window_w,
+                window_h,
+                ui.mesh.cmds.len(),
+                ui.paint.commands.len(),
+                paint_images,
+                ui.texture_delta.set.len(),
+                ui.texture_delta
+                    .set
+                    .iter()
+                    .map(|(_, texture)| texture.rgba8.len())
+                    .sum::<usize>(),
+                gate.reason
+            );
+            present_prelaunch_loading_ui_frame(
+                r,
+                ui,
+                self.viewport.clear_color,
+                next_frame,
+                window_w,
+                window_h,
+            )?;
+        } else {
+            newengine_ulog_api::ulog::warn!(
+                "render prelaunch loading ui: missing UiDrawList in resources frame={} reason='{}'",
+                next_frame,
+                gate.reason
+            );
+        }
+
         let status = if prelaunch_released {
             self.bridges.scene.activate_profile_play_now();
             self.diagnostics.overlay_metrics.reset_interactive_timing();
@@ -154,6 +202,26 @@ impl RuntimeRenderController {
 
         Ok(Some(status))
     }
+}
+
+fn present_prelaunch_loading_ui_frame(
+    r: &mut dyn RenderApi,
+    ui: UiDrawList,
+    clear_color: [f32; 4],
+    frame_index: u64,
+    window_w: u32,
+    window_h: u32,
+) -> EngineResult<()> {
+    if window_w == 0 || window_h == 0 {
+        return Ok(());
+    }
+
+    r.begin_frame(BeginFrameDesc::new(clear_color).with_frame_index(frame_index))?;
+    let extent = Extent2D::new(window_w, window_h);
+    r.set_viewport(Viewport::full(extent))?;
+    r.set_scissor(RectI32::new(0, 0, window_w as i32, window_h as i32))?;
+    r.set_ui_draw_list(ui);
+    r.end_frame()
 }
 
 fn editor_runtime_mode<E: Send + 'static>(ctx: &ModuleCtx<'_, E>) -> Option<UiEditorRuntimeMode> {

@@ -260,6 +260,7 @@ impl LightShadowPlan {
     }
 
     #[inline]
+    #[allow(clippy::too_many_arguments)]
     pub fn directional_cascaded(
         target: RenderTargetId,
         texture: TextureId,
@@ -301,7 +302,7 @@ impl LightShadowPlan {
             return Extent2D::new(self.resolution, self.resolution);
         }
         let columns = if cascades <= 4 { 2 } else { 4 };
-        let rows = ((cascades + columns - 1) / columns).max(1);
+        let rows = cascades.div_ceil(columns).max(1);
         Extent2D::new(
             self.resolution.saturating_mul(columns),
             self.resolution.saturating_mul(rows),

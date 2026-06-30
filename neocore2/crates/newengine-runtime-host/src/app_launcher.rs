@@ -224,10 +224,30 @@ where
         ));
 
         let assets = AssetServiceClient::new(newengine_plugin_host::default_host_api());
-        let assets_available = false;
+        let assets_available =
+            newengine_core::has_engine_gateway_route(newengine_assets_api::ENGINE_ASSET_SERVICE_ID)
+                || newengine_plugin_host::has_service(newengine_assets::consts::ASSET_SERVICE_ID);
+        self.early_log(format_args!(
+            "asset_service.availability available={} gateway={}",
+            assets_available,
+            newengine_assets_api::ENGINE_ASSET_SERVICE_ID
+        ));
 
         if assets_available {
             mount_asset_roots_best_effort(&assets, &asset_roots);
+            self.early_log(format_args!(
+                "asset_roots.mount.requested count={}",
+                asset_roots.len()
+            ));
+        } else {
+            newengine_ulog_api::ulog::warn!(
+                "{} launcher: engine.assets route unavailable after profile registration; asset root mount skipped until provider readiness",
+                self.spec.app_name
+            );
+            newengine_core::crash::record_breadcrumb(format!(
+                "{} launcher: engine.assets unavailable during initial asset mount",
+                self.spec.app_name
+            ));
         }
 
         if self.headless_mode_requested() {

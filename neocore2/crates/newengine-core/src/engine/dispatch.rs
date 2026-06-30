@@ -38,7 +38,7 @@ impl<E: Send + 'static> Engine<E> {
         }
 
         if let Some(task_control) = (&event as &dyn Any).downcast_ref::<EngineTaskControlEvent>() {
-            let applied = self.job_system.handle().apply_control_event(task_control);
+            let applied = self.thread_pool.apply_control_event(task_control);
             newengine_ulog_api::ulog::info!(
                 "dispatch: task control action='{}' task_id='{}' applied={}",
                 task_control.action.as_str(),

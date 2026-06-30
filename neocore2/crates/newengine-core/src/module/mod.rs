@@ -1,4 +1,5 @@
 pub mod ctx;
+#[allow(clippy::module_inception)]
 pub mod module;
 pub mod resources;
 pub mod services;

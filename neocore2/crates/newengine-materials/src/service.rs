@@ -57,7 +57,7 @@ pub const MATERIALS_RUNTIME_REQUIREMENT_SPEC: newengine_service_api::RuntimeServ
         Some("NEWENGINE_REQUIRE_MATERIALS_BACKEND"),
     );
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(default))]
 pub struct MaterialLoadRequest {
@@ -66,16 +66,6 @@ pub struct MaterialLoadRequest {
     /// Optional split selector for hosts that pass path and entry separately.
     pub selector: Option<String>,
 }
-
-impl Default for MaterialLoadRequest {
-    fn default() -> Self {
-        Self {
-            logical_path: String::new(),
-            selector: None,
-        }
-    }
-}
-
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(default))]
@@ -99,22 +89,13 @@ impl Default for MaterialLoadResponse {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(default))]
 pub struct MaterialTextureRefRequest {
     pub reference: String,
 }
-
-impl Default for MaterialTextureRefRequest {
-    fn default() -> Self {
-        Self {
-            reference: String::new(),
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(default))]
 pub struct MaterialTextureRefInfo {
@@ -126,21 +107,6 @@ pub struct MaterialTextureRefInfo {
     pub warnings: Vec<String>,
     pub errors: Vec<String>,
 }
-
-impl Default for MaterialTextureRefInfo {
-    fn default() -> Self {
-        Self {
-            valid: false,
-            canonical: String::new(),
-            dictionary_path: String::new(),
-            entry_selector: String::new(),
-            extension: String::new(),
-            warnings: Vec::new(),
-            errors: Vec::new(),
-        }
-    }
-}
-
 impl MaterialTextureRefInfo {
     pub fn from_reference(value: &str) -> Self {
         match MaterialTextureReference::parse_strict(value) {
@@ -195,7 +161,7 @@ impl Default for MaterialsManifest {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(default))]
 pub struct MaterialDescriptorLoadResponse {
@@ -204,35 +170,14 @@ pub struct MaterialDescriptorLoadResponse {
     pub descriptor: MaterialDescriptor,
     pub textures: MaterialTextureBindings,
 }
-
-impl Default for MaterialDescriptorLoadResponse {
-    fn default() -> Self {
-        Self {
-            source: String::new(),
-            name: String::new(),
-            descriptor: MaterialDescriptor::default(),
-            textures: MaterialTextureBindings::default(),
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(default))]
 pub struct MaterialValidationRequest {
     pub logical_path: String,
     pub selector: Option<String>,
 }
-impl Default for MaterialValidationRequest {
-    fn default() -> Self {
-        Self {
-            logical_path: String::new(),
-            selector: None,
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(default))]
 pub struct MaterialValidationResult {
@@ -241,17 +186,6 @@ pub struct MaterialValidationResult {
     pub errors: Vec<String>,
     pub warnings: Vec<String>,
 }
-impl Default for MaterialValidationResult {
-    fn default() -> Self {
-        Self {
-            valid: false,
-            source: String::new(),
-            errors: Vec::new(),
-            warnings: Vec::new(),
-        }
-    }
-}
-
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(default))]

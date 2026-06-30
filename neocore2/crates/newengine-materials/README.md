@@ -33,9 +33,29 @@ They should be introduced once the asset pipeline exposes a stable texture handl
 `.nemat` is a NEF8/ListFile material library with multiple addressable entries:
 
 ```text
-materials/world/garage.nemat@garage_door
+materials/world_garage.nemat@garage_door
 ```
 
 Runtime material loading resolves one selected library entry through `engine.assets.materials`, validates `.ytd@entry` texture refs, then emits a renderer-agnostic `RenderMaterialPacket`.
 
 The old single-material binary helpers remain low-level descriptor payload utilities only; they are not the public `.nemat` file contract.
+
+<!-- NORTHSTAR-DIR-README:BEGIN -->
+
+## Directory purpose
+
+**Path:** `NewEngine/neocore2/crates/newengine-materials`
+
+**Role:** Material libraries, material sources, or material runtime assets.
+
+**Local contents:** 1 direct subdirectories, 2 direct files.
+
+**Direct file examples:** `Cargo.toml`
+
+## Working rules
+
+- Do not put transient build output in this directory unless the directory is explicitly a runtime output/cache location.
+- Keep runtime assets and editable source assets separate: source assets are packed into runtime formats through explicit tools/manifests.
+- Do not introduce hidden provider/backend coupling here; use declared descriptors, gateways, DTOs, and explicit maintenance scripts.
+
+<!-- NORTHSTAR-DIR-README:END -->

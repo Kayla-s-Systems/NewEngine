@@ -266,12 +266,13 @@ mod tests {
     #[test]
     fn apply_instantiation_spawns_entity_and_trace_component() {
         let mut world = World::new();
-        let graph =
-            newengine_model_domain_api::AssetGraphResolver::resolve_root_ref("world/foo.ytyp@bar");
+        let graph = newengine_model_domain_api::AssetGraphResolver::resolve_root_ref(
+            "definitions/foo.ytyp@bar",
+        );
         let (entity, trace) = apply_definition_instantiation(
             &mut world,
             None,
-            "world/foo.ytyp@bar".to_owned(),
+            "definitions/foo.ytyp@bar".to_owned(),
             DefinitionInstantiateTransform::default(),
             graph,
         );

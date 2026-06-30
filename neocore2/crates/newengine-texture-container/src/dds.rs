@@ -183,11 +183,13 @@ fn write_fourcc_pf(out: &mut Vec<u8>, cc: [u8; 4]) {
 fn pitch_or_linear_size(format: TexturePixelFormat, width: u32, height: u32) -> u32 {
     match format {
         TexturePixelFormat::Rgba8Unorm | TexturePixelFormat::Rgba8Srgb => width.saturating_mul(4),
-        TexturePixelFormat::Bc1RgbaUnorm | TexturePixelFormat::Bc1RgbaSrgb => ((width + 3) / 4)
-            .saturating_mul((height + 3) / 4)
+        TexturePixelFormat::Bc1RgbaUnorm | TexturePixelFormat::Bc1RgbaSrgb => width
+            .div_ceil(4)
+            .saturating_mul(height.div_ceil(4))
             .saturating_mul(8),
-        _ => ((width + 3) / 4)
-            .saturating_mul((height + 3) / 4)
+        _ => width
+            .div_ceil(4)
+            .saturating_mul(height.div_ceil(4))
             .saturating_mul(16),
     }
 }

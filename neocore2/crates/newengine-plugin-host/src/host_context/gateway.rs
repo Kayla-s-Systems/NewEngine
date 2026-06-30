@@ -342,6 +342,7 @@ pub fn active_engine_gateway_route(gateway_id: &str) -> Option<EngineGatewayRout
         })
 }
 
+#[allow(clippy::too_many_arguments)]
 fn register_engine_gateway_provider_route_with_origin<S>(
     gateway_id: &str,
     service_kind: S,
@@ -513,7 +514,7 @@ fn provider_route_extends_gateway_parent(gateway_id: &str, provider_route_id: &s
     if gateway_parts.len() < 2 || provider_parts.len() <= gateway_parts.len() {
         return false;
     }
-    if gateway_parts.get(0) != Some(&"engine") || provider_parts.get(0) != Some(&"engine") {
+    if gateway_parts.first() != Some(&"engine") || provider_parts.first() != Some(&"engine") {
         return false;
     }
     if gateway_parts.get(1) != provider_parts.get(1) {

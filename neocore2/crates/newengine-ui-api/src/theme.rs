@@ -75,22 +75,12 @@ impl Default for UiThemeComponentStyle {
 ///
 /// Example selectors: `button.primary:hover`, `input.error:focused`,
 /// `tree.row:selected`, `scrollbar.thumb:active`, `panel.dock.right`.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct UiThemeStyleRule {
     pub selector: String,
     pub props: BTreeMap<String, serde_json::Value>,
 }
-
-impl Default for UiThemeStyleRule {
-    fn default() -> Self {
-        Self {
-            selector: String::new(),
-            props: BTreeMap::new(),
-        }
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct UiThemeDefinition {

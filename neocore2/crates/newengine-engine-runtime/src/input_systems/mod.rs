@@ -435,7 +435,7 @@ impl InputRuntimeSystems {
         state.reason = observed.reason.to_owned();
         state.frame_index = frame_index;
 
-        if state_changed && frame_index % 120 == 0 {
+        if state_changed && frame_index.is_multiple_of(120) {
             newengine_ulog_api::ulog::trace!(
                 "input systems: transition system='{}' active {}->{} captured {}->{} frame={} reason='{}'",
                 system.id(),
@@ -458,7 +458,7 @@ impl InputRuntimeSystems {
         }
         self.log_state.last_frame_summary = summary.clone();
         self.log_state.last_summary_frame = frame_index;
-        if frame_index % 120 == 0 {
+        if frame_index.is_multiple_of(120) {
             newengine_ulog_api::ulog::trace!("input systems: frame={} {}", frame_index, summary);
         }
     }

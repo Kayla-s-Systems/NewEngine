@@ -9,7 +9,7 @@ use newengine_ui_navigation_api::{
 };
 use serde::Deserialize;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Default)]
 #[serde(default)]
 struct AssetsUiCompileResponse {
     ok: bool,
@@ -19,20 +19,6 @@ struct AssetsUiCompileResponse {
     navigation_document: Option<UiNodeNavigationDocument>,
     warnings: Vec<String>,
 }
-
-impl Default for AssetsUiCompileResponse {
-    fn default() -> Self {
-        Self {
-            ok: false,
-            document_ref: String::new(),
-            surface_id: String::new(),
-            compiled_document: UiCompiledDocument::default(),
-            navigation_document: None,
-            warnings: Vec::new(),
-        }
-    }
-}
-
 /// Load the UI surface through the canonical UI asset pipeline.
 ///
 /// Boundary rule:

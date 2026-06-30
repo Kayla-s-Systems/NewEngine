@@ -35,7 +35,9 @@ pub use host_context::{
     resolve_service_for_backend_capability, resolve_service_for_engine_gateway,
     services_generation, EngineGatewayRouteSnapshot,
 };
-pub use manager::{PluginIconSnapshot, PluginLoadError, PluginManager, PluginSnapshotEntry};
+pub use manager::{
+    IncrementalLoadOutcome, PluginIconSnapshot, PluginLoadError, PluginManager, PluginSnapshotEntry,
+};
 pub use plugin_config_service::{
     get_plugin_overrides_with_env, init_plugin_config_service, CONFIG_SERVICE_ID,
 };

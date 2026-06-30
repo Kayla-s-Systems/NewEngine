@@ -37,12 +37,10 @@ pub(crate) fn resolve_plugins_dir(dir: &Path) -> Result<PathBuf, PluginLoadError
 }
 
 pub(crate) fn is_dynamic_lib(p: &Path) -> bool {
-    match p.extension().and_then(OsStr::to_str) {
-        Some("dll") => true,
-        Some("so") => true,
-        Some("dylib") => true,
-        _ => false,
-    }
+    matches!(
+        p.extension().and_then(OsStr::to_str),
+        Some("dll") | Some("so") | Some("dylib")
+    )
 }
 
 pub(crate) fn default_plugins_dir() -> Result<PathBuf, PluginLoadError> {

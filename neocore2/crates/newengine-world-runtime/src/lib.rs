@@ -105,12 +105,12 @@ impl EngineWorldGatewayService {
         serde_json::json!({
             "authority": snap.authority_label(),
             "split": snap.has_split_world_authority(),
-            "ecs": snap.ecs.as_ref().map(|route| route_json(route)),
-            "entity": snap.entity.as_ref().map(|route| route_json(route)),
-            "scene": snap.scene.as_ref().map(|route| route_json(route)),
-            "world": snap.world.as_ref().map(|route| route_json(route)),
-            "physics": snap.physics.as_ref().map(|route| route_json(route)),
-            "render": snap.render.as_ref().map(|route| route_json(route)),
+            "ecs": snap.ecs.as_ref().map(route_json),
+            "entity": snap.entity.as_ref().map(route_json),
+            "scene": snap.scene.as_ref().map(route_json),
+            "world": snap.world.as_ref().map(route_json),
+            "physics": snap.physics.as_ref().map(route_json),
+            "render": snap.render.as_ref().map(route_json),
             "notes": snap.notes,
         })
     }

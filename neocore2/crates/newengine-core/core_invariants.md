@@ -26,7 +26,7 @@ Shutdown is initiated/coordinated by core. Modules can request shutdown through 
 
 ### I3. Core owns thread delegation
 
-CPU-heavy work goes through `JobSystemHandle`. Engine-thread commits go through `Scheduler`. Subsystems must not create hidden worker pools for asset IO, streaming, render-prep, simulation or plugin tasks.
+CPU-heavy work goes through `ThreadPoolHandle` / `engine.threading`. Engine-thread commits go through `Scheduler`. Subsystems must not create hidden worker pools for asset IO, streaming, render-prep, simulation or plugin tasks.
 
 ### I4. Core does not own subsystem state
 

@@ -89,7 +89,7 @@ impl RuntimeRenderController {
         }
 
         let interval = terrain_gpu_upload_interval_frames();
-        if interval > 1 && self.frame.frame_index % interval != 0 {
+        if interval > 1 && !self.frame.frame_index.is_multiple_of(interval) {
             return Ok(0);
         }
 

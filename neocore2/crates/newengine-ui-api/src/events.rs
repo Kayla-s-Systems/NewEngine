@@ -173,7 +173,7 @@ impl Default for UiFocusGraphState {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct UiModalStackEntry {
     pub surface_id: String,
@@ -181,18 +181,6 @@ pub struct UiModalStackEntry {
     pub z_order: i32,
     pub reason: String,
 }
-
-impl Default for UiModalStackEntry {
-    fn default() -> Self {
-        Self {
-            surface_id: String::new(),
-            modal: false,
-            z_order: 0,
-            reason: String::new(),
-        }
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct UiEventModelFrame {

@@ -422,17 +422,7 @@ pub(super) fn game_screen_surface_node(
             theme_id: UI_THEME_NORTHSTAR_EDITOR.to_owned(),
             style_ref: Some(UI_THEME_ASSET_NORTHSTAR_EDITOR.to_owned()),
             component_id: UI_COMPONENT_PANEL.to_owned(),
-            components: vec![{
-                let mut crosshair = UiComponentNode::text("hud.crosshair", "+");
-                crosshair.font_token = Some("body".to_owned());
-                crosshair.tone = UiNodeTone::Accent;
-                crosshair.state_tags = vec![
-                    "crosshair".to_owned(),
-                    "hud".to_owned(),
-                    "retained".to_owned(),
-                ];
-                crosshair
-            }],
+            components: Vec::new(),
             message: None,
             style: UiSurfaceStyle {
                 anchor: UiSurfaceAnchor::Center,

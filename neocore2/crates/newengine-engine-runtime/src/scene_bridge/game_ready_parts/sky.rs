@@ -1,4 +1,5 @@
 use super::*;
+use newengine_model_domain_api::MeshRenderOptions;
 
 // Sky lifecycle applies resolved world-environment frames to the scene.
 // engine.world.environment owns atmospheric meaning, celestial math, weather and clouds;
@@ -6,7 +7,8 @@ use super::*;
 
 #[derive(Clone, Debug)]
 pub(crate) struct SkyDomeRuntime {
-    pub follow_camera: bool,
+    pub definition_ref: Option<String>,
+    pub asset_ref: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -65,13 +67,6 @@ impl SkyVisualKind {
     }
 
     #[inline]
-    pub(super) fn follows_camera(self, spec: &GameReadySkySpec) -> bool {
-        match self {
-            SkyVisualKind::Dome => spec.follow_camera,
-        }
-    }
-
-    #[inline]
     pub(super) fn primitive_id(self, dome_primitive_id: PrimitiveId) -> PrimitiveId {
         match self {
             SkyVisualKind::Dome => dome_primitive_id,
@@ -95,11 +90,20 @@ pub(super) fn attach_sky_visual_runtime(
     material_id: MaterialId,
     kind: SkyVisualKind,
     color: [f32; 4],
-    follow_camera: bool,
+    definition_ref: Option<String>,
+    asset_ref: Option<String>,
+    render_options: MeshRenderOptions,
 ) {
     let _ = world.remove::<Bounds>(entity);
-    let _ = world.insert(entity, SkyDomeRuntime { follow_camera });
+    let _ = world.insert(
+        entity,
+        SkyDomeRuntime {
+            definition_ref,
+            asset_ref,
+        },
+    );
     let _ = world.insert(entity, SkyVisualRuntime { kind });
+    let _ = world.insert(entity, render_options);
     let _ = apply_exact_material(world, mats, entity, material_id, material_id, color);
 }
 

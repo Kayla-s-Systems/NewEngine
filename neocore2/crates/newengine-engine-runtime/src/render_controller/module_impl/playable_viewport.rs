@@ -178,11 +178,11 @@ impl RuntimeRenderController {
         let physics_api = ctx
             .api::<PhysicsApiRef>(newengine_core::physics::PHYSICS_API_ID)
             .cloned();
-        let job_system = ctx.job_system().cloned();
+        let thread_pool = ctx.thread_pool().cloned();
         let world_frame = self.tick_world_for_render(
             r,
             physics_api.as_ref(),
-            job_system.as_ref(),
+            thread_pool.as_ref(),
             Some(ctx.events()),
             &mut scene,
             &frame_input.input,
@@ -222,7 +222,7 @@ impl RuntimeRenderController {
             rt,
             scope,
             &world_frame,
-            job_system.as_ref(),
+            thread_pool.as_ref(),
         )?;
         drop(scene);
         Ok(outcome)
@@ -359,9 +359,11 @@ impl RuntimeRenderController {
 
         self.sync_cursor_state(ctx, CursorState::released());
         let _ = r.discard_recorded_commands();
-        if let Some(ui) = ui {
-            r.set_ui_draw_list(ui);
-        }
+        // The scene launch gate is an early-return path: it does not go through
+        // the normal frame-envelope UI composite pass. Reuse the UI-only submit
+        // path so retained loading visuals with UiPaintCommand::Image are staged
+        // with a valid viewport/scissor and can be composited before end_frame().
+        self.render_ui_only_frame(ctx, r, ui, scope)?;
         let ui_telemetry = UiRuntimeDebugOverlayTelemetry::new(
             self.frame.frame_index,
             format!("NewEngine | Loading scene\n{}", gate_reason),

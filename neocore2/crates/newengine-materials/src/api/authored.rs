@@ -198,7 +198,7 @@ impl Default for MaterialTextureBindingV1 {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(default))]
 pub struct AuthoredMaterialValidation {
@@ -206,17 +206,6 @@ pub struct AuthoredMaterialValidation {
     pub errors: Vec<String>,
     pub warnings: Vec<String>,
 }
-
-impl Default for AuthoredMaterialValidation {
-    fn default() -> Self {
-        Self {
-            valid: false,
-            errors: Vec::new(),
-            warnings: Vec::new(),
-        }
-    }
-}
-
 pub fn validate_authored_material_library(
     library: &AuthoredMaterialLibrary,
 ) -> AuthoredMaterialValidation {

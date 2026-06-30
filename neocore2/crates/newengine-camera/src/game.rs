@@ -75,8 +75,10 @@ impl GameCameraPresets {
         )));
         stack.push_modifier(Box::new(Sway::default()));
         stack.push_modifier(Box::new(NoiseShake::default()));
-        let mut jitter = TaaJitter::default();
-        jitter.scale_px = Vec2::new(0.5, 0.5);
+        let jitter = TaaJitter {
+            scale_px: Vec2::new(0.5, 0.5),
+            ..TaaJitter::default()
+        };
         stack.push_modifier(Box::new(jitter));
 
         stack

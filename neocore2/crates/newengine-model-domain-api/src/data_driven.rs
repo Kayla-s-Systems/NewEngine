@@ -38,7 +38,7 @@ impl Default for DataDrivenConstructionPlan {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct DataDrivenObjectConstruction {
     pub name: String,
@@ -54,25 +54,7 @@ pub struct DataDrivenObjectConstruction {
     pub notes: Vec<String>,
 }
 
-impl Default for DataDrivenObjectConstruction {
-    fn default() -> Self {
-        Self {
-            name: String::new(),
-            archetype_kind: String::new(),
-            definition: DataDrivenAssetLink::default(),
-            drawable: None,
-            texture_dictionary: None,
-            physics_dictionary: None,
-            lod: DataDrivenLodPolicy::default(),
-            bounds: DataDrivenBoundsPolicy::default(),
-            material_binding: DataDrivenMaterialBindingPolicy::default(),
-            material_slots: Vec::new(),
-            notes: Vec::new(),
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct DataDrivenAssetLink {
     pub role: String,
@@ -80,18 +62,6 @@ pub struct DataDrivenAssetLink {
     pub asset_kind: String,
     pub extension: String,
     pub required: bool,
-}
-
-impl Default for DataDrivenAssetLink {
-    fn default() -> Self {
-        Self {
-            role: String::new(),
-            logical_path: String::new(),
-            asset_kind: String::new(),
-            extension: String::new(),
-            required: false,
-        }
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

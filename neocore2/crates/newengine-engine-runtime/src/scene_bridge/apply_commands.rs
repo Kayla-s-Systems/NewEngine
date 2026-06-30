@@ -26,7 +26,7 @@ impl SceneBridge {
             match cmd {
                 SceneCommand::NewScene => {
                     *scene = Scene::new();
-                    pending_selection = Some(reset_game_runtime_state(&mut *scene));
+                    pending_selection = Some(reset_game_runtime_state(&mut scene));
                     next_mode = Some(GameRunMode::Staging);
                 }
                 SceneCommand::LoadSceneAsset { asset } => {
@@ -34,7 +34,7 @@ impl SceneBridge {
                     if let Err(e) = scene.load_asset(&asset) {
                         newengine_ulog_api::ulog::error!("scene.load_asset failed: {e}");
                     }
-                    pending_selection = Some(reset_game_runtime_state(&mut *scene));
+                    pending_selection = Some(reset_game_runtime_state(&mut scene));
                     next_mode = Some(GameRunMode::Staging);
                 }
                 SceneCommand::SpawnPrimitive {
@@ -44,7 +44,7 @@ impl SceneBridge {
                     scale,
                     color,
                 } => {
-                    let root = ensure_root(&mut *scene);
+                    let root = ensure_root(&mut scene);
                     let world = scene.world_mut();
                     let prim_index = world.query::<Primitive>().count();
                     let spawn_pos = place_spawn_position(
@@ -61,7 +61,7 @@ impl SceneBridge {
                     }
 
                     ensure_primitive_base(world, e, default_mat);
-                    apply_primitive_instance(world, &*mats, e, default_mat, color);
+                    apply_primitive_instance(world, &mats, e, default_mat, color);
 
                     if let Some(t) = world.get_mut_tracked::<Transform>(e) {
                         t.position = spawn_pos;
@@ -75,13 +75,15 @@ impl SceneBridge {
                     position,
                     direction_ws,
                 } => {
-                    let root = ensure_root(&mut *scene);
+                    let root = ensure_root(&mut scene);
                     let world = scene.world_mut();
                     let e = spawn_named(world, name);
                     let _ = newengine_transform::set_parent(world, e, Some(root));
 
-                    let mut dl = DirectionalLight::default();
-                    dl.direction_ws = direction_ws;
+                    let dl = DirectionalLight {
+                        direction_ws,
+                        ..DirectionalLight::default()
+                    };
                     let _ = world.insert(e, dl);
                     if let Some(t) = world.get_mut_tracked::<Transform>(e) {
                         t.position = Vec3::new(position[0], position[1], position[2]);
@@ -89,7 +91,7 @@ impl SceneBridge {
                     pending_selection = Some(Some(e));
                 }
                 SceneCommand::SpawnPointLight { name, position } => {
-                    let root = ensure_root(&mut *scene);
+                    let root = ensure_root(&mut scene);
                     let world = scene.world_mut();
                     let e = spawn_named(world, name);
                     let _ = newengine_transform::set_parent(world, e, Some(root));
@@ -100,7 +102,7 @@ impl SceneBridge {
                     pending_selection = Some(Some(e));
                 }
                 SceneCommand::SpawnPlayer { name, position } => {
-                    let root = ensure_root(&mut *scene);
+                    let root = ensure_root(&mut scene);
                     let world = scene.world_mut();
                     let player = spawn_default_player(
                         world,
@@ -115,7 +117,7 @@ impl SceneBridge {
                     name,
                     position,
                 } => {
-                    let root = ensure_root(&mut *scene);
+                    let root = ensure_root(&mut scene);
                     let world = scene.world_mut();
                     let e = spawn_named(world, name);
                     let _ = newengine_transform::set_parent(world, e, Some(root));
@@ -151,7 +153,7 @@ impl SceneBridge {
                         let _ = world.insert(e, bounds);
                     }
                     ensure_primitive_base(world, e, default_mat);
-                    apply_primitive_instance(world, &*mats, e, default_mat, descriptor.tint);
+                    apply_primitive_instance(world, &mats, e, default_mat, descriptor.tint);
                     if let Some(collision) = imported_asset_collision(&descriptor) {
                         let _ = world.insert(e, collision);
                     }
@@ -171,7 +173,7 @@ impl SceneBridge {
                     rotation_ypr,
                     scale,
                 } => {
-                    let root = ensure_root(&mut *scene);
+                    let root = ensure_root(&mut scene);
                     let world = scene.world_mut();
                     newengine_ulog_api::ulog::debug!(
                         "definitions.runtime: command RuntimeCommand::InstantiateDefinition definition_ref='{}'",
@@ -231,7 +233,7 @@ impl SceneBridge {
                         .map(|x| effective_material_base(x.id, default_mat))
                         .unwrap_or(default_mat);
                     ensure_primitive_base(world, entity, base);
-                    apply_primitive_instance(world, &*mats, entity, base, color);
+                    apply_primitive_instance(world, &mats, entity, base, color);
                 }
                 SceneCommand::SetMaterial { entity, material } => {
                     let world = scene.world_mut();
@@ -242,7 +244,7 @@ impl SceneBridge {
                             .map(|p| p.color)
                             .unwrap_or([1.0, 1.0, 1.0, 1.0]);
                         ensure_primitive_base(world, entity, base);
-                        apply_primitive_instance(world, &*mats, entity, base, color);
+                        apply_primitive_instance(world, &mats, entity, base, color);
                     } else {
                         let _ = world.insert(entity, MaterialRef { id: material });
                     }

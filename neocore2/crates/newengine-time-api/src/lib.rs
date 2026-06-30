@@ -135,22 +135,12 @@ impl Default for TimeTimelineV1 {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct TimeRealClockV1 {
     pub monotonic_ns: u64,
     pub delta_ns: u64,
     pub clamped_delta_ns: u64,
-}
-
-impl Default for TimeRealClockV1 {
-    fn default() -> Self {
-        Self {
-            monotonic_ns: 0,
-            delta_ns: 0,
-            clamped_delta_ns: 0,
-        }
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -199,22 +189,12 @@ impl Default for TimeGameClockV1 {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct TimeReplayClockV1 {
     pub deterministic: bool,
     pub seed: u64,
     pub replay_frame: u64,
-}
-
-impl Default for TimeReplayClockV1 {
-    fn default() -> Self {
-        Self {
-            deterministic: false,
-            seed: 0,
-            replay_frame: 0,
-        }
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -303,22 +283,12 @@ impl Default for TimeFixedStepRequestV1 {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct TimeReplayClockSetRequestV1 {
     pub deterministic: bool,
     pub seed: u64,
     pub replay_frame: u64,
-}
-
-impl Default for TimeReplayClockSetRequestV1 {
-    fn default() -> Self {
-        Self {
-            deterministic: false,
-            seed: 0,
-            replay_frame: 0,
-        }
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -349,16 +319,10 @@ impl Default for TimeScaleRequestV1 {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct TimePauseRequestV1 {
     pub paused: bool,
-}
-
-impl Default for TimePauseRequestV1 {
-    fn default() -> Self {
-        Self { paused: false }
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -401,28 +365,16 @@ impl Default for TimeScheduledEventV1 {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct TimeCancelEventRequestV1 {
     pub id: String,
 }
 
-impl Default for TimeCancelEventRequestV1 {
-    fn default() -> Self {
-        Self { id: String::new() }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct TimeDueEventsV1 {
     pub events: Vec<TimeScheduledEventV1>,
-}
-
-impl Default for TimeDueEventsV1 {
-    fn default() -> Self {
-        Self { events: Vec::new() }
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

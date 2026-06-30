@@ -71,7 +71,7 @@ pub fn decode_asset(bytes: &[u8]) -> MaterialBinaryResult<MaterialBinaryAsset> {
         .map_err(|_| MaterialBinaryError::InvalidUtf8)?
         .to_string();
 
-    while off % 4 != 0 {
+    while !off.is_multiple_of(4) {
         off += 1;
         if off > bytes.len() {
             return Err(MaterialBinaryError::UnexpectedEof);

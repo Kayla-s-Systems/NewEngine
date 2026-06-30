@@ -12,7 +12,20 @@ pub(super) fn build_overlay_surface_node(
     let body_lines = spec.body_lines(status, progress.percent);
     let footer_lines = spec.footer_lines();
     let style_tags = spec.style_tags();
-    let components = spec.components(status, progress, frame_index);
+    let visuals = newengine_core::loading::LoadingVisualRefs::from_last_startup_config_or_default();
+    let components = spec.components(status, progress, frame_index, &visuals);
+    if !spec.is_error() && frame_index <= 3 {
+        newengine_ulog_api::ulog::warn!(
+            "loading overlay production visuals: frame={} source='{}' background={} logo={} spinner={} components={} image_layers={}",
+            frame_index,
+            visuals.source,
+            visuals.background.as_deref().unwrap_or("<none>"),
+            visuals.logo.as_deref().unwrap_or("<none>"),
+            visuals.spinner.as_deref().unwrap_or("<none>"),
+            components.len(),
+            visuals.image_layer_count()
+        );
+    }
     let style = spec.style();
     let title = if spec.is_error() {
         status.title.clone()
@@ -28,6 +41,16 @@ pub(super) fn build_overlay_surface_node(
     metrics.insert(
         "surface_id".to_owned(),
         serde_json::json!(spec.surface_id.as_str()),
+    );
+    metrics.insert(
+        "loading_visuals".to_owned(),
+        serde_json::json!({
+            "source": visuals.source.as_str(),
+            "background": visuals.background.as_deref().unwrap_or(""),
+            "logo": visuals.logo.as_deref().unwrap_or(""),
+            "spinner": visuals.spinner.as_deref().unwrap_or(""),
+            "image_layers": visuals.image_layer_count(),
+        }),
     );
 
     UiSurfaceNode {
@@ -170,6 +193,8 @@ impl OverlaySurfaceSpec {
         vec![
             "retained".to_owned(),
             "startup-loading".to_owned(),
+            "production-loading".to_owned(),
+            "fullscreen".to_owned(),
             "bg-sprite-progress".to_owned(),
         ]
     }
@@ -179,11 +204,12 @@ impl OverlaySurfaceSpec {
         status: &ScreenOverlayStatus,
         progress: OverlayProgress,
         frame_index: u64,
+        visuals: &newengine_core::loading::LoadingVisualRefs,
     ) -> Vec<UiComponentNode> {
         if self.is_error() {
             error_overlay_components(status)
         } else {
-            loading_overlay_components(progress.value, progress.percent, frame_index)
+            loading_overlay_components(progress.value, progress.percent, frame_index, visuals)
         }
     }
 
@@ -203,6 +229,17 @@ impl OverlaySurfaceSpec {
             min_size_px: [0.0, 0.0],
             max_size_px: [100_000.0, 100_000.0],
             row_pitch_px: 0.0,
+            margin_px: [0.0, 0.0],
+            padding_px: [0.0, 0.0, 0.0, 0.0],
+            corner_radius_px: 0.0,
+            border_px: 0.0,
+            panel_rgba: [0, 0, 0, 0],
+            panel_header_rgba: [0, 0, 0, 0],
+            text_rgba: [235, 245, 255, 255],
+            text_muted_rgba: [148, 163, 184, 255],
+            border_rgba: [0, 0, 0, 0],
+            backdrop_rgba: [0, 0, 0, 0],
+            shadow_alpha: 0,
             ..UiSurfaceStyle::default()
         }
     }

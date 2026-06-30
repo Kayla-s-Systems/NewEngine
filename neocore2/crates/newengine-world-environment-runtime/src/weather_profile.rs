@@ -108,7 +108,7 @@ fn select_pattern(
     pressure: f32,
     tod: f32,
     cloud_seed: f32,
-) -> &'static str {
+) -> &str {
     bands
         .iter()
         .map(|band| (band, band_score(*band, pressure, tod, cloud_seed)))
@@ -173,7 +173,7 @@ fn phase_tags(phase: TimeOfDayPhase) -> &'static [&'static str] {
 }
 
 fn cloud_tag(cloud_coverage: f32) -> &'static str {
-    const TAGS: &[(f32, &'static str)] = &[
+    const TAGS: &[(f32, &str)] = &[
         (0.82, "cloud.overcast"),
         (0.45, "cloud.broken"),
         (0.0, "cloud.sparse"),
@@ -185,7 +185,7 @@ fn cloud_tag(cloud_coverage: f32) -> &'static str {
 }
 
 fn visibility_tag(visibility_meters: f32) -> &'static str {
-    const TAGS: &[(f32, &'static str)] = &[
+    const TAGS: &[(f32, &str)] = &[
         (650.0, "visibility.very_low"),
         (3500.0, "visibility.low"),
         (f32::MAX, "visibility.normal"),

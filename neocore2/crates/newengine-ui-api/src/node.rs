@@ -686,7 +686,7 @@ impl UiNodeTreeRequest {
                 .with_detail(node.subtitle.clone())
                 .with_children(node.components.iter().map(UiNodeRequest::from_component_node).collect()),
             surface_style: Some(node.style.clone()),
-            admission_policy: Some(node.admission_policy.clone()),
+            admission_policy: Some(node.admission_policy),
             diagnostics: node.footer_lines.clone(),
         }
     }
@@ -713,7 +713,7 @@ impl UiNodeTreeRequest {
             components: root_component.children.clone(),
             message: None,
             style: self.surface_style.clone().unwrap_or_else(|| UiSurfaceStyle { theme_id: self.theme_id.clone(), ..UiSurfaceStyle::default() }),
-            admission_policy: self.admission_policy.clone().unwrap_or(UiSurfaceAdmissionPolicy::AcceptAll),
+            admission_policy: self.admission_policy.unwrap_or(UiSurfaceAdmissionPolicy::AcceptAll),
             metrics: BTreeMap::from([
                 ("request_id".to_owned(), serde_json::json!(self.request_id)),
                 ("root_id".to_owned(), serde_json::json!(self.root.id)),

@@ -7,9 +7,9 @@ use newengine_core::render::{
     Extent2D, GpuResourceResidencyState, RenderTargetId, SamplerId, TextureDesc, TextureFormat,
     TextureId, TextureMipDataDesc, TextureUsage,
 };
-use newengine_core::{JobLane, JobPriority, JobRequest, JobSystemHandle};
-use newengine_jobs_api::{job_domain, job_pass};
+use newengine_core::{TaskLane, TaskPriority, TaskRequest, ThreadPoolHandle};
 use newengine_plugin_host::default_host_api;
+use newengine_task_api::{task_domain, task_pass};
 use parking_lot::Mutex;
 use std::num::NonZeroU32;
 use std::sync::Arc;
@@ -54,7 +54,7 @@ impl RuntimeRenderController {
     fn queue_dictionary_material_texture_decode(
         &mut self,
         path: String,
-        job_system: Option<&JobSystemHandle>,
+        thread_pool: Option<&ThreadPoolHandle>,
     ) {
         if self.gpu.material.texture_decode_jobs.contains_key(&path) {
             self.gpu.material.textures.insert(
@@ -66,8 +66,8 @@ impl RuntimeRenderController {
             return;
         }
 
-        let Some(job_system) = job_system else {
-            let message = "engine.jobs unavailable for material texture decode".to_owned();
+        let Some(thread_pool) = thread_pool else {
+            let message = "engine.threading unavailable for material texture decode".to_owned();
             newengine_ulog_api::ulog::warn!(
                 "render controller: material texture decode skipped path='{}' err='{}'",
                 path,
@@ -84,21 +84,21 @@ impl RuntimeRenderController {
         let result = Arc::new(Mutex::new(None));
         let result_out = Arc::clone(&result);
         let task_path = sanitize_material_texture_task_id(&path);
-        let request = JobRequest::new("material.texture.decode")
+        let request = TaskRequest::new("material.texture.decode")
             .with_source("render.controller")
             .with_owner("engine.render")
             .with_category("asset-decode")
-            .with_lane(JobLane::AssetIo)
-            .with_priority(JobPriority::Interactive)
+            .with_lane(TaskLane::AssetIo)
+            .with_priority(TaskPriority::Interactive)
             .with_frame_id(self.frame.frame_index)
             .with_dependency_group(format!(
                 "frame.{}.asset-io.texture-decode",
                 self.frame.frame_index
             ))
-            .with_job_domain(job_domain::ENGINE_ASSETS)
-            .with_job_pass(job_pass::TEXTURE_DECODE)
+            .with_task_domain(task_domain::ENGINE_ASSETS)
+            .with_task_pass(task_pass::TEXTURE_DECODE)
             .with_task_id(format!("render.material.texture.decode.{task_path}"));
-        let ticket = job_system.submit_request(request, move || {
+        let ticket = thread_pool.submit_request(request, move || {
             let assets = AssetServiceClient::new(default_host_api());
             let decoded = assets.textures_entry_runtime_ref_v1_typed(&worker_path);
             *result_out.lock() = Some(decoded);
@@ -272,7 +272,7 @@ impl RuntimeRenderController {
     pub(super) fn pump_material_texture_requests(
         &mut self,
         r: &mut dyn newengine_core::render::RenderApi,
-        job_system: Option<&JobSystemHandle>,
+        thread_pool: Option<&ThreadPoolHandle>,
         max_start_jobs: u32,
         max_decode_jobs: u32,
     ) {
@@ -330,7 +330,7 @@ impl RuntimeRenderController {
                 continue;
             }
 
-            self.queue_dictionary_material_texture_decode(path, job_system);
+            self.queue_dictionary_material_texture_decode(path, thread_pool);
             started_jobs = started_jobs.saturating_add(1);
 
             let elapsed_ms = pump_started.elapsed().as_secs_f32() * 1000.0;

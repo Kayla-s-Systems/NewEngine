@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Deny runtime work that bypasses engine.jobs identity.
+"""Deny runtime work that bypasses engine.threading CPU authority.
 
-The playable runtime may only create long-running work through engine.jobs.
+The playable runtime may only create long-running work through engine.threading.
 Standalone tools/importers are intentionally skipped because they do not live in
 runtime. Platform-bootstrap exceptions must carry an explicit marker and should
 emit a console warning when stopped/joined.
@@ -139,7 +139,7 @@ def main() -> int:
 
     if errors:
         print("\nno-hidden-thread scan failed:")
-        print("  Runtime/plugin threads must go through engine.jobs or a documented platform-bootstrap exception. Hidden processes are reported as warnings until tool-runner migration.")
+        print("  Runtime/plugin threads must go through engine.threading or a documented platform-bootstrap exception. Hidden processes are reported as warnings until tool-runner migration.")
         print("  Standalone tools/importers are skipped by this scanner.")
         return 1
 
@@ -147,7 +147,7 @@ def main() -> int:
         print("\nno-hidden-thread scan passed with warnings: local queues remain audited but not fatal.")
         return 0
 
-    print("no-hidden-thread scan passed: runtime executors are engine.jobs-visible or explicitly annotated bootstrap exceptions.")
+    print("no-hidden-thread scan passed: runtime executors are engine.threading-visible or explicitly annotated bootstrap exceptions.")
     return 0
 
 

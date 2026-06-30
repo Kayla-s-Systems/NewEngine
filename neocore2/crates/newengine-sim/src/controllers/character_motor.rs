@@ -73,8 +73,8 @@ pub fn step_character_motor(
     if input.look_active {
         let d = sanitize_vec2(input.look_delta);
         // dt is intentionally NOT applied to mouse delta (it's already "per-frame").
-        motor.yaw = motor.yaw + d.x * motor.look_sens;
-        motor.pitch = motor.pitch + d.y * motor.look_sens;
+        motor.yaw += d.x * motor.look_sens;
+        motor.pitch += d.y * motor.look_sens;
     }
 
     let pitch_limit = if motor.pitch_limit.is_finite() && motor.pitch_limit > 0.0 {

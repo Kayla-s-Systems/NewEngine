@@ -263,7 +263,7 @@ impl Default for AssetInvalidationPlanV1 {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct NepakPackageWriteEntryV1 {
     pub target_path: String,
@@ -272,19 +272,6 @@ pub struct NepakPackageWriteEntryV1 {
     pub content_kind: String,
     pub cache_key: String,
 }
-
-impl Default for NepakPackageWriteEntryV1 {
-    fn default() -> Self {
-        Self {
-            target_path: String::new(),
-            source_ref: String::new(),
-            payload_base64: String::new(),
-            content_kind: String::new(),
-            cache_key: String::new(),
-        }
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct NepakPackageWriteRequestV1 {

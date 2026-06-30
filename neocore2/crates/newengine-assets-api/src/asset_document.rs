@@ -170,20 +170,14 @@ impl Default for AssetDocumentPreview {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum AssetDocumentDiagnosticSeverity {
+    #[default]
     Info,
     Warning,
     Error,
 }
-
-impl Default for AssetDocumentDiagnosticSeverity {
-    fn default() -> Self {
-        Self::Info
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(default)]
 pub struct AssetDocumentDiagnostic {
@@ -302,24 +296,13 @@ impl AssetDocumentField {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize, Default)]
 #[serde(default)]
 pub struct AssetDocumentSection {
     pub id: String,
     pub title: String,
     pub fields: Vec<AssetDocumentField>,
 }
-
-impl Default for AssetDocumentSection {
-    fn default() -> Self {
-        Self {
-            id: String::new(),
-            title: String::new(),
-            fields: Vec::new(),
-        }
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(default)]
 pub struct AssetDocument {

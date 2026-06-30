@@ -260,7 +260,7 @@ impl RuntimeHostedTimeState {
         }
         self.replay_frame = self.replay_frame.wrapping_add(1);
         if self.ticks_to_run >= self.max_fixed_ticks_per_frame.max(1)
-            && self.frame_index % 120 == 0
+            && self.frame_index.is_multiple_of(120)
             && !self.paused
         {
             newengine_ulog_api::ulog::warn!(

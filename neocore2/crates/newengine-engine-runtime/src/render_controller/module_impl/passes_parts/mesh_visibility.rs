@@ -2,12 +2,12 @@ use newengine_math::{Mat4, Vec3};
 
 /// Runtime draw budgets keep the current non-instanced Vulkan path stable.
 /// They are intentionally deterministic: nearest objects win, ties are stable-key ordered.
-pub(super) const RUNTIME_OPAQUE_PRIMITIVE_BUDGET: usize = 32;
-pub(super) const RUNTIME_SHADOW_PRIMITIVE_BUDGET: usize = 16;
+pub(super) const RUNTIME_OPAQUE_PRIMITIVE_BUDGET: usize = 96;
+pub(super) const RUNTIME_SHADOW_PRIMITIVE_BUDGET: usize = 48;
 pub(super) const EDITOR_OPAQUE_PRIMITIVE_BUDGET: usize = 256;
 pub(super) const EDITOR_SHADOW_PRIMITIVE_BUDGET: usize = 160;
-pub(super) const RUNTIME_TERRAIN_FORWARD_BUDGET: usize = 9;
-pub(super) const RUNTIME_TERRAIN_SHADOW_BUDGET: usize = 4;
+pub(super) const RUNTIME_TERRAIN_FORWARD_BUDGET: usize = 64;
+pub(super) const RUNTIME_TERRAIN_SHADOW_BUDGET: usize = 64;
 pub(super) const EDITOR_TERRAIN_FORWARD_BUDGET: usize = 64;
 pub(super) const EDITOR_TERRAIN_SHADOW_BUDGET: usize = 64;
 
@@ -62,8 +62,40 @@ pub(super) fn terrain_budget(runtime: bool, shadow_pass: bool) -> usize {
 
     crate::env_config::var(key)
         .and_then(|value| value.trim().parse::<usize>().ok())
-        .map(|value| value.clamp(1, 256))
+        .map(|value| value.clamp(0, 256))
         .unwrap_or(default)
+}
+
+#[inline]
+pub(super) fn terrain_receive_shadows_enabled(
+    policy: newengine_model_domain_api::MeshShadowPolicy,
+) -> bool {
+    let authored = matches!(
+        policy,
+        newengine_model_domain_api::MeshShadowPolicy::ReceiveOnly
+            | newengine_model_domain_api::MeshShadowPolicy::CastAndReceive
+            | newengine_model_domain_api::MeshShadowPolicy::ProfileControlled
+    );
+    crate::env_config::var("NEWENGINE_TERRAIN_RECEIVE_SHADOWS")
+        .map(|value| {
+            matches!(
+                value.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
+        .unwrap_or(authored)
+}
+
+#[inline]
+pub(super) fn terrain_cast_shadows_enabled(
+    policy: newengine_model_domain_api::MeshShadowPolicy,
+) -> bool {
+    matches!(
+        policy,
+        newengine_model_domain_api::MeshShadowPolicy::CastOnly
+            | newengine_model_domain_api::MeshShadowPolicy::CastAndReceive
+            | newengine_model_domain_api::MeshShadowPolicy::ProfileControlled
+    )
 }
 
 pub(super) trait DistanceKeyEntry {

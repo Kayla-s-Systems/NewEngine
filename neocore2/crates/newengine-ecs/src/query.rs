@@ -87,7 +87,7 @@ impl<'a, A: 'static, B: 'static> Iterator for Query2<'a, A, B> {
         match self {
             Query2::Empty => None,
             Query2::A(q) => {
-                while let Some((id, a)) = q.iter.next() {
+                for (id, a) in q.iter.by_ref() {
                     if let Some(b) = q.b.get(id) {
                         return Some((id, a, b));
                     }
@@ -95,7 +95,7 @@ impl<'a, A: 'static, B: 'static> Iterator for Query2<'a, A, B> {
                 None
             }
             Query2::B(q) => {
-                while let Some((id, b)) = q.iter.next() {
+                for (id, b) in q.iter.by_ref() {
                     if let Some(a) = q.a.get(id) {
                         return Some((id, a, b));
                     }

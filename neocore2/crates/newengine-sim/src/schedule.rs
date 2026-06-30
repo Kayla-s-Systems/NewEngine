@@ -3,7 +3,7 @@
 use core::cmp::Ordering;
 
 use newengine_ecs::World;
-use newengine_jobs_api::{job_domain, job_pass, EngineTaskEvent, EngineTaskPhase};
+use newengine_task_api::{task_domain, task_pass, EngineTaskEvent, EngineTaskPhase};
 use serde::{Deserialize, Serialize};
 
 use crate::{access::AccessMask, commands::CommandBuffer, systems, SimFrame};
@@ -35,11 +35,11 @@ impl SimStage {
     #[inline]
     pub const fn as_str(self) -> &'static str {
         match self {
-            Self::Input => job_pass::INPUT,
-            Self::Controllers => job_pass::CONTROLLERS,
-            Self::ApplyIntents => job_pass::APPLY_INTENTS,
-            Self::Physics => job_pass::PHYSICS,
-            Self::Derived => job_pass::DERIVED,
+            Self::Input => task_pass::INPUT,
+            Self::Controllers => task_pass::CONTROLLERS,
+            Self::ApplyIntents => task_pass::APPLY_INTENTS,
+            Self::Physics => task_pass::PHYSICS,
+            Self::Derived => task_pass::DERIVED,
         }
     }
 }
@@ -114,8 +114,8 @@ impl SimulationJobBatch {
         .with_controls(false, false)
         .with_frame_id(self.fixed_tick)
         .with_dependency_group(self.event_dependency_group())
-        .with_job_domain(job_domain::ENGINE_SIMULATION)
-        .with_job_pass(self.stage.as_str())
+        .with_task_domain(task_domain::ENGINE_SIMULATION)
+        .with_task_pass(self.stage.as_str())
         .with_priority("interactive")
         .with_executor(self.executor.clone());
         if let Some(progress) = progress_01 {

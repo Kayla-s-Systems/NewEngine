@@ -303,7 +303,7 @@ impl UiFrameInput {
 
 /// Provider font resolution diagnostic. Missing requested fonts must be reported
 /// here instead of silently falling back to a debug/bitmap face.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct UiFontResolveDiagnostics {
     pub requested_font_ref: String,
@@ -315,22 +315,6 @@ pub struct UiFontResolveDiagnostics {
     pub atlas_page_count: u32,
     pub diagnostics: Vec<String>,
 }
-
-impl Default for UiFontResolveDiagnostics {
-    fn default() -> Self {
-        Self {
-            requested_font_ref: String::new(),
-            resolved_font_ref: String::new(),
-            resolved_face_name: String::new(),
-            fallback_used: false,
-            fallback_face: String::new(),
-            glyph_miss_count: 0,
-            atlas_page_count: 0,
-            diagnostics: Vec::new(),
-        }
-    }
-}
-
 impl UiFontResolveDiagnostics {
     #[inline]
     pub fn missing(requested_font_ref: impl Into<String>, fallback_face: impl Into<String>) -> Self {

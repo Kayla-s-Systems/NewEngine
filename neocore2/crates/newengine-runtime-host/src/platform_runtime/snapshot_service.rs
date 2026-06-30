@@ -73,7 +73,7 @@ fn platform_window_service(
         .describe_json(&description)
         .info(PlatformServiceInfo::default)
         .blob(PLATFORM_SERVICE_METHOD_INVOKE, |_unit, payload| {
-            ok_json(&serde_json::json!({
+            ok_json(serde_json::json!({
                 "ok": false,
                 "error": "engine.platform invoke_json has no generic command envelope yet",
                 "payload_len": payload.as_slice().len()

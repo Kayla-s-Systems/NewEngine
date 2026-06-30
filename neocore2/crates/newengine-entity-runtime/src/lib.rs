@@ -100,7 +100,7 @@ impl EngineEntityGatewayService {
         let world = scene.world();
         let exists = Self::find_entity_by_handle(world, req.entity).is_some();
 
-        ok_json(&EntityExistsResponse {
+        ok_json(EntityExistsResponse {
             entity: req.entity,
             exists,
         })

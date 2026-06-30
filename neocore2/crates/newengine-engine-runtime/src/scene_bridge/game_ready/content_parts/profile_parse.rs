@@ -4,6 +4,10 @@ use super::*;
 use newengine_assets::{AssetDecodeRequest, ASSET_LIST_FILE_BODY_OUTPUT};
 use newengine_authored_xml as authored_xml;
 
+use super::ymap_read_diagnostics::{
+    format_asset_roots, log_loaded_profile_summary, log_ymap_value_summary,
+};
+
 #[derive(Debug, Deserialize)]
 pub(super) struct RawShadowSpec {
     #[serde(default = "default_shadow_enabled")]
@@ -121,13 +125,9 @@ pub(super) struct RawDefinitionInstanceSpec {
     pub(super) scale: [f32; 3],
 }
 
-pub(in crate::scene_bridge::game_ready) fn load_game_ready_map_profile() -> GameReadyMapProfile {
-    load_profile_from_asset_manager().unwrap_or_else(|errors| {
-        panic!(
-            "game-ready strict data-driven startup failed: authored .ymap was not resolved into a valid XML map profile. Emergency fallback profiles are forbidden; fix VFS mounts, NEF8 envelope, or XML schema. Attempts: {}",
-            errors.join(" | ")
-        )
-    })
+pub(in crate::scene_bridge::game_ready) fn load_game_ready_map_profile(
+) -> Result<GameReadyMapProfile, Vec<String>> {
+    load_profile_from_asset_manager()
 }
 
 fn load_profile_from_asset_manager() -> Result<GameReadyMapProfile, Vec<String>> {
@@ -152,10 +152,34 @@ fn load_profile_from_asset_manager() -> Result<GameReadyMapProfile, Vec<String>>
     );
     newengine_runtime_host::asset_bootstrap::mount_asset_roots_best_effort(&assets, &roots);
 
+    let candidates = profile_asset_candidates();
+    newengine_ulog_api::ulog::info!(
+        "game-ready ymap read: begin gateway='{}' candidates={} asset_roots={} roots=[{}] policy='AssetManager decode_v1 only'",
+        newengine_assets_api::ENGINE_ASSET_SERVICE_ID,
+        candidates.len(),
+        roots.len(),
+        format_asset_roots(&roots),
+    );
+
     let mut errors = Vec::new();
-    for logical_path in profile_asset_candidates() {
+    for (index, logical_path) in candidates.into_iter().enumerate() {
+        newengine_ulog_api::ulog::info!(
+            "game-ready ymap read: candidate begin index={} path='{}'",
+            index,
+            logical_path,
+        );
         match load_profile_asset(&assets, &logical_path) {
             Ok(profile) => {
+                let trace = assets
+                    .resolve_trace_json_v1(&logical_path)
+                    .map(|v| v.to_string())
+                    .unwrap_or_else(|te| format!("{{\"trace_error\":\"{te}\"}}"));
+                newengine_ulog_api::ulog::info!(
+                    "game-ready ymap read: candidate selected index={} path='{}' trace={}",
+                    index,
+                    logical_path,
+                    trace,
+                );
                 newengine_ulog_api::ulog::info!(
                     "game-ready: loaded authored map asset='{}'",
                     logical_path,
@@ -168,7 +192,11 @@ fn load_profile_from_asset_manager() -> Result<GameReadyMapProfile, Vec<String>>
                     .map(|v| v.to_string())
                     .unwrap_or_else(|te| format!("{{\"trace_error\":\"{te}\"}}"));
                 let message = format!("path='{logical_path}' err='{e}' trace={trace}");
-                newengine_ulog_api::ulog::debug!("game-ready: map asset unavailable {message}");
+                newengine_ulog_api::ulog::info!(
+                    "game-ready ymap read: candidate rejected index={} {}",
+                    index,
+                    message
+                );
                 errors.push(message);
             }
         }
@@ -196,21 +224,40 @@ fn load_profile_asset(
         ));
     }
 
+    newengine_ulog_api::ulog::info!(
+        "game-ready ymap read: canonical accepted path='{}' extension='{}'",
+        logical_path,
+        newengine_asset_format_nef8::ymap::EXTENSION,
+    );
+
     let output_kind = ASSET_LIST_FILE_BODY_OUTPUT;
     let request = AssetDecodeRequest {
         logical_path: logical_path.to_owned(),
         output_kind: output_kind.to_owned(),
         selector: serde_json::Value::Null,
     };
+    newengine_ulog_api::ulog::info!(
+        "game-ready ymap read: decode start path='{}' output='{}' selector=null",
+        logical_path,
+        output_kind,
+    );
     let payload = assets.decode_v1(&request).map_err(|e| {
         format!("asset.decode_v1 failed path='{logical_path}' output='{output_kind}' err='{e}'")
     })?;
+    newengine_ulog_api::ulog::info!(
+        "game-ready ymap read: decode complete path='{}' output='{}' payload_bytes={}",
+        logical_path,
+        output_kind,
+        payload.len(),
+    );
     if !authored_xml::body_is_xml(&payload) {
         return Err(format!(
-            "ymap body must be XML path='{logical_path}' output='{output_kind}' policy='authored map metadata uses XML presentation inside NEF8; JSON runtime map bodies are forbidden'"
+            "ymap body must be XML path='{logical_path}' output='{output_kind}' payload_bytes={} policy='authored map metadata uses XML presentation inside NEF8; JSON runtime map bodies are forbidden'",
+            payload.len()
         ));
     }
     let value = parse_ymap_xml_payload(&payload, logical_path)?;
+    log_ymap_value_summary(logical_path, &value);
     newengine_ulog_api::ulog::info!(
         "game-ready: decoded authored .ymap path='{}' output='{}' policy='NEF8/ListFile body from engine.assets; XML map semantics stay outside AssetManager'",
         logical_path,
@@ -234,6 +281,16 @@ fn parse_ymap_xml_payload(payload: &[u8], logical_path: &str) -> Result<serde_js
     if !schema.starts_with("newengine.map.definition.") {
         return Err(format!("ymap unsupported XML schema path='{logical_path}' schema='{schema}' expected='newengine.map.definition.*'"));
     }
+    let child_elements = root.children().filter(|child| child.is_element()).count();
+    newengine_ulog_api::ulog::info!(
+        "game-ready ymap read: XML accepted path='{}' payload_bytes={} root='{}' schema='{}' child_elements={}",
+        logical_path,
+        payload.len(),
+        root.tag_name().name(),
+        schema,
+        child_elements,
+    );
+
     let mut root_json = serde_json::Map::new();
     root_json.insert(
         "schema".to_owned(),
@@ -270,10 +327,10 @@ fn parse_map_definition_payload(
     }
 
     if let Some(profile) = value.pointer("/map/profile").cloned() {
-        return parse_payload(profile, "ymap.map.profile");
+        return parse_payload(profile, "ymap.map.profile", logical_path);
     }
     if let Some(profile) = value.get("profile").cloned() {
-        return parse_payload(profile, "ymap.profile");
+        return parse_payload(profile, "ymap.profile", logical_path);
     }
     if value.get("scene").is_some() {
         return Err(format!(
@@ -281,18 +338,21 @@ fn parse_map_definition_payload(
         ));
     }
     if let Some(payload) = value.get("payload").cloned() {
-        return parse_payload(payload, "ymap.payload");
+        return parse_payload(payload, "ymap.payload", logical_path);
     }
-    parse_payload(value, "ymap.root")
+    parse_payload(value, "ymap.root", logical_path)
 }
 
 fn parse_payload(
     value: serde_json::Value,
     source_label: &str,
+    logical_path: &str,
 ) -> Result<GameReadyMapProfile, String> {
     let raw: RawGameReadyPayload = serde_json::from_value(value)
         .map_err(|e| format!("map payload parse failed source='{source_label}': {e}"))?;
-    Ok(raw.into_profile())
+    let profile = raw.into_profile();
+    log_loaded_profile_summary(logical_path, source_label, &profile);
+    Ok(profile)
 }
 
 fn ymap_node_object(node: authored_xml::XmlNode<'_, '_>) -> serde_json::Value {
@@ -316,6 +376,8 @@ fn ymap_node_object(node: authored_xml::XmlNode<'_, '_>) -> serde_json::Value {
         || tag.eq_ignore_ascii_case("placements")
         || tag.eq_ignore_ascii_case("prefabs")
         || tag.eq_ignore_ascii_case("policy")
+        || tag.eq_ignore_ascii_case("layers")
+        || tag.eq_ignore_ascii_case("surface_layers")
     {
         let items = node
             .children()
@@ -372,6 +434,7 @@ fn ymap_insert_child(
         "Definition" => "definitions",
         "Placement" => "placements",
         "Prefab" => "prefabs",
+        "Layer" | "SurfaceLayer" => "layers",
         other => other,
     };
     match map.get_mut(key) {
@@ -413,6 +476,7 @@ impl RawGameReadyPayload {
                     } else {
                         String::new()
                     },
+                    properties_ref: sanitize_asset_path(self.player.model.properties_ref),
                     texture_dictionary: sanitize_texture_path(self.player.model.texture_dictionary),
                     skeleton: sanitize_asset_path(self.player.model.skeleton),
                     target_height: self.player.model.target_height.clamp(0.25, 3.0),
@@ -420,6 +484,7 @@ impl RawGameReadyPayload {
                     local_offset: arr3(self.player.model.local_offset),
                     yaw_offset: self.player.model.yaw_offset,
                     hide_in_first_person: self.player.model.hide_in_first_person,
+                    render_options: newengine_model_domain_api::MeshRenderOptions::character_body(),
                 },
             },
             terrain: GameReadyTerrainSpec {
@@ -430,6 +495,7 @@ impl RawGameReadyPayload {
                 size_z: self.terrain.size_z.max(4.0),
                 base_height: self.terrain.base_height,
                 height_scale: self.terrain.height_scale.clamp(0.05, 1.45),
+                render_options: newengine_model_domain_api::MeshRenderOptions::terrain_patch(),
                 generator: GameReadyTerrainGeneratorSpec {
                     id: self.terrain.generator.id,
                     ridged_seed_xor: self.terrain.generator.ridged_seed_xor,
@@ -443,22 +509,8 @@ impl RawGameReadyPayload {
                     smoothing_passes: self.terrain.generator.smoothing_passes.min(16),
                     smoothing_strength: self.terrain.generator.smoothing_strength.clamp(0.0, 1.0),
                 },
-                surface: GameReadyTerrainSurfaceSpec {
-                    forest_base_texture: non_empty_or(
-                        self.terrain.surface.forest_base_texture,
-                        default_terrain_surface_forest(),
-                    ),
-                    sand_base_texture: non_empty_or(
-                        self.terrain.surface.sand_base_texture,
-                        default_terrain_surface_sand(),
-                    ),
-                    rock_base_texture: non_empty_or(
-                        self.terrain.surface.rock_base_texture,
-                        default_terrain_surface_rock(),
-                    ),
-                    patch_scale: self.terrain.surface.patch_scale.clamp(0.0025, 0.25),
-                    blend_softness: self.terrain.surface.blend_softness.clamp(0.01, 0.45),
-                },
+                surface: sanitize_terrain_surface_spec(self.terrain.surface),
+                heightmap: sanitize_terrain_heightmap_spec(self.terrain.heightmap),
                 streaming: GameReadyTerrainStreamingSpec {
                     enabled: self.terrain.streaming.enabled,
                     chunk_radius: terrain_chunk_radius,
@@ -470,6 +522,8 @@ impl RawGameReadyPayload {
                 },
             },
             sky: GameReadySkySpec {
+                definition_ref: non_empty_or(self.sky.definition_ref, default_sky_definition_ref()),
+                render_options: newengine_model_domain_api::MeshRenderOptions::sky_background(),
                 radius: self.sky.radius.max(16.0),
                 mesh: non_empty_or(self.sky.mesh, default_skydome_mesh()),
                 follow_camera: self.sky.follow_camera,

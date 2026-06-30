@@ -20,7 +20,7 @@ impl RuntimeRenderController {
         &mut self,
         r: &mut dyn RenderApi,
         physics_api: Option<&PhysicsApiRef>,
-        job_system: Option<&newengine_core::JobSystemHandle>,
+        thread_pool: Option<&newengine_core::ThreadPoolHandle>,
         job_events: Option<&newengine_core::EventHub>,
         scene: &mut Scene,
         input: &ViewportInputSnap,
@@ -80,7 +80,9 @@ impl RuntimeRenderController {
                     let mats_lock = scene_bridge.materials();
                     let mats = mats_lock.read();
                     crate::scene_bridge::tick_game_ready_streaming_terrain(
-                        world, &mats, job_system,
+                        world,
+                        &mats,
+                        thread_pool,
                     );
                 } else {
                     log_streaming_skip_once();
@@ -108,21 +110,21 @@ impl RuntimeRenderController {
                     world.insert_resource(crate::gameplay::PhysicsRuntimeFrameIndex(
                         self.frame.frame_index,
                     ));
-                    let publish_sim_job = |event: newengine_jobs_api::EngineTaskEvent| {
-                        let job_event = newengine_jobs_api::EngineJobEventV1::new(
+                    let publish_sim_job = |event: newengine_task_api::EngineTaskEvent| {
+                        let job_event = newengine_task_api::EngineTaskEnvelopeV1::new(
                             event.clone(),
-                            newengine_jobs_api::JobExecutorKind::SimulationInternalParallelism,
+                            newengine_task_api::TaskExecutorKind::SimulationInternalParallelism,
                             "simulation-job-batch",
                         );
                         if let Ok(payload) = serde_json::to_vec(&event) {
                             let _ = newengine_plugin_host::host_context::publish_event(
-                                newengine_jobs_api::ENGINE_TASK_EVENT_TOPIC_V1,
+                                newengine_task_api::ENGINE_TASK_EVENT_TOPIC_V1,
                                 &payload,
                             );
                         }
                         if let Ok(payload) = serde_json::to_vec(&job_event) {
                             let _ = newengine_plugin_host::host_context::publish_event(
-                                newengine_jobs_api::ENGINE_JOB_EVENT_TOPIC_V1,
+                                newengine_task_api::ENGINE_TASK_ENVELOPE_TOPIC_V1,
                                 &payload,
                             );
                         }
@@ -141,7 +143,7 @@ impl RuntimeRenderController {
                         physics_api,
                         physics_mode,
                         Some(&sim_telemetry),
-                        job_system,
+                        thread_pool,
                     );
                 } else {
                     log_physics_skip_once();
@@ -195,8 +197,7 @@ fn log_service_physics_unavailable_once() {
             "render world tick: engine.physics provider unavailable; physics step skipped because no explicit ECS fallback profile policy is active"
         );
         newengine_core::crash::record_breadcrumb(
-            "render world tick: missing physics backend skipped; no hidden fallback constructed"
-                .to_owned(),
+            "render world tick: missing physics backend skipped; no hidden fallback constructed",
         );
     }
 }
@@ -210,7 +211,7 @@ fn log_physics_skip_once() {
             "render world tick: physics schedule skipped by explicit profile policy or missing provider; no hidden ECS fallback constructed"
         );
         newengine_core::crash::record_breadcrumb(
-            "render world tick: physics schedule skipped without hidden fallback".to_owned(),
+            "render world tick: physics schedule skipped without hidden fallback",
         );
     }
 }
@@ -224,7 +225,7 @@ fn log_streaming_skip_once() {
             "render world tick: runtime terrain streaming skipped by conservative GPU profile; change plugins.engine.runtime.render.runtime_profile.world.runtime_terrain_streaming to 'enabled' to test the original streaming path"
         );
         newengine_core::crash::record_breadcrumb(
-            "render world tick: conservative profile skipped runtime terrain streaming".to_owned(),
+            "render world tick: conservative profile skipped runtime terrain streaming",
         );
     }
 }

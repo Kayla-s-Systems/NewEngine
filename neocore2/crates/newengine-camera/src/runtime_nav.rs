@@ -227,14 +227,18 @@ pub struct RuntimeNavController {
 impl Default for RuntimeNavController {
     #[inline]
     fn default() -> Self {
-        let mut orbit = OrbitController::default();
-        orbit.yaw = 0.7853982;
-        orbit.pitch = -0.55;
-        orbit.distance = 6.0;
+        let orbit = OrbitController {
+            yaw: core::f32::consts::FRAC_PI_4,
+            pitch: -0.55,
+            distance: 6.0,
+            ..OrbitController::default()
+        };
 
-        let mut fly = crate::FreeFlyController::default();
-        fly.yaw = 0.7853982;
-        fly.pitch = -0.55;
+        let fly = crate::FreeFlyController {
+            yaw: core::f32::consts::FRAC_PI_4,
+            pitch: -0.55,
+            ..crate::FreeFlyController::default()
+        };
 
         Self {
             mode: RuntimeNavMode::Orbit,

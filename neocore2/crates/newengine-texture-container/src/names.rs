@@ -2,7 +2,11 @@ use crate::{COLOR_SPACE_LINEAR, COLOR_SPACE_SRGB};
 
 pub fn normalize_texture_name(name: &str) -> String {
     let trimmed = name.trim().replace('\\', "/");
-    let file_name = trimmed.split('/').last().unwrap_or(trimmed.as_str()).trim();
+    let file_name = trimmed
+        .split('/')
+        .next_back()
+        .unwrap_or(trimmed.as_str())
+        .trim();
     let lower = file_name.to_ascii_lowercase();
     let Some((stem, ext)) = lower.rsplit_once('.') else {
         return lower;

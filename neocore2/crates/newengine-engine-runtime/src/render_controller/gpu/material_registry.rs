@@ -254,7 +254,7 @@ fn is_transient_material_pipeline_error(error: &MaterialDomainError) -> bool {
         || text.contains("shader is not ready yet")
         || text.contains("shader compile job is still pending")
         || text.contains("shader compile job is still pending")
-        || text.contains("engine.jobs shader admission timeout")
+        || text.contains("engine.threading shader admission timeout")
         || text.contains("leave_pending_and_retry_later")
         || text.contains("pipeline pending_event")
 }

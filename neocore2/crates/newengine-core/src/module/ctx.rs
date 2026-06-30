@@ -1,9 +1,9 @@
 use crate::events::EventHub;
 use crate::frame::Frame;
-use crate::jobs::JobSystemHandle;
 use crate::module::{Bus, Resources, Services};
 use crate::sched::Scheduler;
 use crate::sync::ShutdownToken;
+use crate::threading::ThreadPoolHandle;
 
 /// Context passed to modules.
 ///
@@ -116,14 +116,14 @@ impl<'a, E: Send + 'static> ModuleCtx<'a, E> {
     }
 
     #[inline]
-    pub fn job_system(&self) -> Option<&JobSystemHandle> {
-        self.resources.get::<JobSystemHandle>()
+    pub fn thread_pool(&self) -> Option<&ThreadPoolHandle> {
+        self.resources.get::<ThreadPoolHandle>()
     }
 
     #[inline]
-    pub fn job_system_required(&self) -> crate::error::EngineResult<&JobSystemHandle> {
+    pub fn thread_pool_required(&self) -> crate::error::EngineResult<&ThreadPoolHandle> {
         self.resources
-            .get_required::<JobSystemHandle>("JobSystemHandle")
+            .get_required::<ThreadPoolHandle>("ThreadPoolHandle")
     }
 
     #[inline]

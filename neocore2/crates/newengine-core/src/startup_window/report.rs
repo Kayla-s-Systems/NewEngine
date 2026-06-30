@@ -2,6 +2,10 @@
 
 use std::path::PathBuf;
 
+use crate::loading::{BootFrameDto, ResolvedLoadingAssignment};
+
+pub type StartupLoadingAssignmentReport = ResolvedLoadingAssignment;
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum StartupWindowDecision {
     Presented,
@@ -17,6 +21,8 @@ pub struct StartupWindowReport {
     pub disabled_by: Option<String>,
     pub details: String,
     pub warnings: Vec<String>,
+    pub loading_assignment: Option<StartupLoadingAssignmentReport>,
+    pub boot_frame: Option<BootFrameDto>,
 }
 
 impl StartupWindowReport {
@@ -32,6 +38,26 @@ impl StartupWindowReport {
             disabled_by: None,
             details: details.into(),
             warnings,
+            loading_assignment: None,
+            boot_frame: None,
+        }
+    }
+
+    pub(crate) fn presented_with_loading_assignment(
+        config_path: PathBuf,
+        details: impl Into<String>,
+        warnings: Vec<String>,
+        loading_assignment: StartupLoadingAssignmentReport,
+        boot_frame: BootFrameDto,
+    ) -> Self {
+        Self {
+            decision: StartupWindowDecision::Presented,
+            config_path: Some(config_path),
+            disabled_by: None,
+            details: details.into(),
+            warnings,
+            loading_assignment: Some(loading_assignment),
+            boot_frame: Some(boot_frame),
         }
     }
 
@@ -43,6 +69,8 @@ impl StartupWindowReport {
             disabled_by: Some(disabled_by.clone()),
             details: format!("disabled by {disabled_by}"),
             warnings: Vec::new(),
+            loading_assignment: None,
+            boot_frame: None,
         }
     }
 
@@ -54,6 +82,8 @@ impl StartupWindowReport {
             disabled_by: None,
             details: details.into(),
             warnings: Vec::new(),
+            loading_assignment: None,
+            boot_frame: None,
         }
     }
 
@@ -64,20 +94,8 @@ impl StartupWindowReport {
             disabled_by: None,
             details: details.into(),
             warnings: Vec::new(),
-        }
-    }
-
-    pub(crate) fn unavailable_with_warnings(
-        config_path: Option<PathBuf>,
-        details: impl Into<String>,
-        warnings: Vec<String>,
-    ) -> Self {
-        Self {
-            decision: StartupWindowDecision::Unavailable,
-            config_path,
-            disabled_by: None,
-            details: details.into(),
-            warnings,
+            loading_assignment: None,
+            boot_frame: None,
         }
     }
 }

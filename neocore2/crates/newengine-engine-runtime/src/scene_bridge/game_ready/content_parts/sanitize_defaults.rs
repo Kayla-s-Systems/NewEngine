@@ -86,6 +86,119 @@ pub(super) fn sanitize_material_spec_with_default_asset(
 }
 
 #[inline]
+fn sanitize_surface_layer(
+    raw: RawTerrainSurfaceLayerSpec,
+) -> Option<GameReadyTerrainSurfaceLayerSpec> {
+    let role = raw.role.trim().replace('\\', "/");
+    let base = if raw.base_texture.trim().is_empty() {
+        raw.texture
+    } else {
+        raw.base_texture
+    };
+    let base_texture = sanitize_texture_path(Some(base)).unwrap_or_default();
+    if role.trim().is_empty() || base_texture.trim().is_empty() {
+        return None;
+    }
+    Some(GameReadyTerrainSurfaceLayerSpec {
+        role,
+        base_texture,
+        weight: raw.weight.clamp(0.0, 8.0),
+        uv_scale: raw.uv_scale.clamp(0.0025, 64.0),
+    })
+}
+
+#[inline]
+fn terrain_layer_role_matches(role: &str, aliases: &[&str]) -> bool {
+    let role = role.trim().to_ascii_lowercase();
+    aliases.iter().any(|alias| role == *alias)
+}
+
+#[inline]
+fn terrain_layer_texture_for(
+    layers: &[GameReadyTerrainSurfaceLayerSpec],
+    aliases: &[&str],
+) -> Option<String> {
+    layers
+        .iter()
+        .find(|layer| terrain_layer_role_matches(&layer.role, aliases))
+        .map(|layer| layer.base_texture.clone())
+}
+
+#[inline]
+pub(super) fn sanitize_terrain_surface_spec(
+    raw: RawTerrainSurfaceSpec,
+) -> GameReadyTerrainSurfaceSpec {
+    let layers = raw
+        .layers
+        .into_iter()
+        .filter_map(sanitize_surface_layer)
+        .collect::<Vec<_>>();
+    let forest_from_layer =
+        terrain_layer_texture_for(&layers, &["forest", "base", "grass", "meadow", "lowland"]);
+    let sand_from_layer =
+        terrain_layer_texture_for(&layers, &["sand", "path", "dirt", "basin", "ground"]);
+    let rock_from_layer = terrain_layer_texture_for(&layers, &["rock", "slope", "cliff", "moss"]);
+
+    GameReadyTerrainSurfaceSpec {
+        forest_base_texture: non_empty_or(
+            raw.forest_base_texture,
+            forest_from_layer.unwrap_or_else(default_terrain_surface_forest),
+        ),
+        sand_base_texture: non_empty_or(
+            raw.sand_base_texture,
+            sand_from_layer.unwrap_or_else(default_terrain_surface_sand),
+        ),
+        rock_base_texture: non_empty_or(
+            raw.rock_base_texture,
+            rock_from_layer.unwrap_or_else(default_terrain_surface_rock),
+        ),
+        patch_scale: raw.patch_scale.clamp(0.0025, 0.25),
+        blend_softness: raw.blend_softness.clamp(0.01, 0.45),
+        layers,
+    }
+}
+
+#[inline]
+pub(super) fn sanitize_terrain_heightmap_spec(
+    raw: RawTerrainHeightmapSpec,
+) -> GameReadyTerrainHeightmapSpec {
+    let source = sanitize_texture_path(Some(raw.source)).unwrap_or_default();
+    let mode = match raw.mode.trim().to_ascii_lowercase().as_str() {
+        "add" | "additive" => "add",
+        "replace" | "override" => "replace",
+        _ => "blend",
+    }
+    .to_owned();
+    let mut min_height = if raw.min_height.is_finite() {
+        raw.min_height
+    } else {
+        default_terrain_heightmap_min_height()
+    };
+    let mut max_height = if raw.max_height.is_finite() {
+        raw.max_height
+    } else {
+        default_terrain_heightmap_max_height()
+    };
+    if max_height < min_height {
+        std::mem::swap(&mut min_height, &mut max_height);
+    }
+    let mut tile_scale = sanitize_vec2(raw.tile_scale, default_terrain_heightmap_tile_scale());
+    tile_scale[0] = tile_scale[0].abs().max(0.0001);
+    tile_scale[1] = tile_scale[1].abs().max(0.0001);
+    GameReadyTerrainHeightmapSpec {
+        enabled: raw.enabled && !source.is_empty(),
+        source,
+        mode,
+        strength: raw.strength.clamp(0.0, 4.0),
+        min_height,
+        max_height,
+        tile_scale,
+        tile_offset: sanitize_vec2(raw.tile_offset, default_terrain_heightmap_tile_offset()),
+        invert: raw.invert,
+    }
+}
+
+#[inline]
 pub(super) fn sanitize_color3(mut v: ColorRgb, fallback: ColorRgb) -> ColorRgb {
     for i in 0..3 {
         if !v[i].is_finite() {
@@ -179,6 +292,7 @@ pub(super) fn sanitize_foliage_spec(raw: RawFoliageSpec) -> GameReadyFoliageSpec
         min_player_distance: raw.min_player_distance.clamp(0.0, 256.0),
         edge_margin: raw.edge_margin.clamp(0.0, 512.0),
         surface_offset: raw.surface_offset.clamp(-4.0, 8.0),
+        render_options: newengine_model_domain_api::MeshRenderOptions::foliage_instanced(),
     }
 }
 
@@ -281,6 +395,9 @@ pub(super) fn default_player_model_enabled() -> bool {
 pub(super) fn default_player_model_source() -> String {
     String::new()
 }
+pub(super) fn default_player_model_properties_ref() -> Option<String> {
+    None
+}
 pub(super) fn default_player_texture_dictionary() -> Option<String> {
     None
 }
@@ -365,6 +482,30 @@ pub(super) fn default_terrain_patch_scale() -> f32 {
 pub(super) fn default_terrain_blend_softness() -> f32 {
     0.18
 }
+pub(super) fn default_terrain_surface_layer_weight() -> f32 {
+    1.0
+}
+pub(super) fn default_terrain_surface_layer_uv_scale() -> f32 {
+    1.0
+}
+pub(super) fn default_terrain_heightmap_mode() -> String {
+    "blend".to_owned()
+}
+pub(super) fn default_terrain_heightmap_strength() -> f32 {
+    0.0
+}
+pub(super) fn default_terrain_heightmap_min_height() -> f32 {
+    -1.0
+}
+pub(super) fn default_terrain_heightmap_max_height() -> f32 {
+    1.0
+}
+pub(super) fn default_terrain_heightmap_tile_scale() -> [f32; 2] {
+    [1.0, 1.0]
+}
+pub(super) fn default_terrain_heightmap_tile_offset() -> [f32; 2] {
+    [0.0, 0.0]
+}
 pub(super) fn default_terrain_streaming_enabled() -> bool {
     true
 }
@@ -376,6 +517,9 @@ pub(super) fn default_terrain_unload_radius() -> i32 {
 }
 pub(super) fn default_terrain_max_chunks_per_frame() -> usize {
     4
+}
+pub(super) fn default_sky_definition_ref() -> String {
+    String::new()
 }
 pub(super) fn default_sky_radius() -> f32 {
     220.0

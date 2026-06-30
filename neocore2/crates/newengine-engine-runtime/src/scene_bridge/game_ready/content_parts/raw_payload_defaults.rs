@@ -17,6 +17,7 @@ impl Default for RawPlayerModelSpec {
         Self {
             enabled: default_player_model_enabled(),
             source: String::new(),
+            properties_ref: default_player_model_properties_ref(),
             texture_dictionary: default_player_texture_dictionary(),
             skeleton: default_player_skeleton(),
             target_height: default_player_model_height(),
@@ -36,6 +37,23 @@ impl Default for RawTerrainSurfaceSpec {
             rock_base_texture: default_terrain_surface_rock(),
             patch_scale: default_terrain_patch_scale(),
             blend_softness: default_terrain_blend_softness(),
+            layers: Vec::new(),
+        }
+    }
+}
+
+impl Default for RawTerrainHeightmapSpec {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            source: String::new(),
+            mode: default_terrain_heightmap_mode(),
+            strength: default_terrain_heightmap_strength(),
+            min_height: default_terrain_heightmap_min_height(),
+            max_height: default_terrain_heightmap_max_height(),
+            tile_scale: default_terrain_heightmap_tile_scale(),
+            tile_offset: default_terrain_heightmap_tile_offset(),
+            invert: false,
         }
     }
 }
@@ -63,6 +81,7 @@ impl Default for RawTerrainSpec {
             height_scale: default_height_scale(),
             generator: RawTerrainGeneratorSpec::default(),
             surface: RawTerrainSurfaceSpec::default(),
+            heightmap: RawTerrainHeightmapSpec::default(),
             streaming: RawTerrainStreamingSpec::default(),
         }
     }
@@ -89,6 +108,7 @@ impl Default for RawTerrainGeneratorSpec {
 impl Default for RawSkySpec {
     fn default() -> Self {
         Self {
+            definition_ref: default_sky_definition_ref(),
             radius: default_sky_radius(),
             mesh: default_skydome_mesh(),
             follow_camera: default_sky_follow_camera(),

@@ -101,6 +101,7 @@ impl<E: Send + 'static> Engine<E> {
         self.acc = time_snapshot.simulation.accumulator_ns as f32 / 1_000_000_000.0;
 
         let frame_dt = Duration::from_secs_f32(dt);
+        self.thread_pool.begin_configured_frame_budget();
         self.scheduler.begin_frame(frame_dt);
 
         self.process_plugin_control()?;
@@ -108,7 +109,10 @@ impl<E: Send + 'static> Engine<E> {
 
         let mut steps_to_run = time_snapshot.simulation.ticks_to_run;
         if steps_to_run > MAX_ENGINE_FIXED_STEPS_PER_FRAME {
-            if self.frame_index % FIXED_CATCHUP_WARN_INTERVAL_FRAMES == 0 {
+            if self
+                .frame_index
+                .is_multiple_of(FIXED_CATCHUP_WARN_INTERVAL_FRAMES)
+            {
                 newengine_ulog_api::ulog::warn!(
                     "engine.time: realtime fixed-step debt dropped frame={} requested_ticks={} per_frame_steps={} accumulator_ns={} fixed_delta_ns={}",
                     self.frame_index,

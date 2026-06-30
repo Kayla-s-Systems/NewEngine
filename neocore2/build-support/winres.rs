@@ -16,8 +16,7 @@ pub fn compile_windows_app_resources() {
         let icon_path = icon.to_string_lossy().replace('\\', "\\\\");
         let rc = format!("1 ICON \"{}\"\n", icon_path);
         if std::fs::write(&rc_path, rc).is_ok() {
-            let _ =
-                embed_resource::compile(rc_path.to_string_lossy().as_ref(), embed_resource::NONE);
+            embed_resource::compile(rc_path.to_string_lossy().as_ref(), embed_resource::NONE);
         }
     }
 }

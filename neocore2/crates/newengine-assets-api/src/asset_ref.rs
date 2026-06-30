@@ -8,24 +8,13 @@
 /// and `.nemat@material_name`.
 pub const ASSET_REF_ENTRY_SEPARATOR: char = '@';
 
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
 #[serde(default)]
 pub struct AssetReference {
     pub logical_path: String,
     pub entry: Option<String>,
     pub canonical: String,
 }
-
-impl Default for AssetReference {
-    fn default() -> Self {
-        Self {
-            logical_path: String::new(),
-            entry: None,
-            canonical: String::new(),
-        }
-    }
-}
-
 impl AssetReference {
     pub fn parse(value: &str) -> Result<Self, String> {
         parse_asset_reference(value)

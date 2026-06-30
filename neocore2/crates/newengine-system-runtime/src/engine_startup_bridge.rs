@@ -176,10 +176,7 @@ fn normalize_label<'a>(value: &'a str, fallback: &'static str) -> &'a str {
     }
 }
 
-fn state_label_for_phase<'a>(
-    phase: ScreenOverlaySubsystemPhase,
-    running_label: &'a str,
-) -> &'a str {
+fn state_label_for_phase(phase: ScreenOverlaySubsystemPhase, running_label: &str) -> &str {
     match phase {
         ScreenOverlaySubsystemPhase::Waiting | ScreenOverlaySubsystemPhase::Running => {
             running_label

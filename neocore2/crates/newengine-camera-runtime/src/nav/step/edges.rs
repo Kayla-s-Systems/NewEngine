@@ -8,6 +8,7 @@ use crate::nav::{BoundsSphere, CameraNavInput, CameraNavParams, CameraNavResult,
 use newengine_sim::CameraRigComp;
 
 #[inline]
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn handle_capture_edge(
     state: &mut CameraNavState,
     world: &mut World,

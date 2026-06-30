@@ -21,7 +21,10 @@ use newengine_ui::{UiBuildFn, UiProviderKind};
 
 use scene_bootstrap::GameReadySceneBootstrapModule;
 
-pub use game_ready_fps::{run_game_ready_fps_process, GameReadyFpsApp};
+pub use game_ready_fps::{
+    run_game_ready_fps_process, GameReadyFpsApp, GAME_READY_DEFAULT_PROFILE_ASSET,
+    GAME_READY_GAME_UI_ENV_DEFAULTS, GAME_READY_PROFILE_ENV, GAME_READY_RUNTIME_ENV_DEFAULTS,
+};
 
 pub const GAME_FIXED_DT_MS: u32 = 16;
 pub const GAME_APP_ASSETS_DIR_ENV: &str = "NEWENGINE_GAME_ASSETS_DIR";

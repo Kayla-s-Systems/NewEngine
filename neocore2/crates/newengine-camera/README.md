@@ -84,3 +84,23 @@ navigation gated = policy
 ```
 
 UI capture must not unsubscribe or silence camera sampling. UI publishes capture state; the camera/input layer receives the sampled frame every tick and decides which deltas/actions may affect navigation or gameplay movement.
+
+<!-- NORTHSTAR-DIR-README:BEGIN -->
+
+## Directory purpose
+
+**Path:** `NewEngine/neocore2/crates/newengine-camera`
+
+**Role:** Engine repository directory. Keep files here scoped to this directory's domain and avoid cross-domain ownership drift.
+
+**Local contents:** 1 direct subdirectories, 2 direct files.
+
+**Direct file examples:** `Cargo.toml`
+
+## Working rules
+
+- Do not put transient build output in this directory unless the directory is explicitly a runtime output/cache location.
+- Keep runtime assets and editable source assets separate: source assets are packed into runtime formats through explicit tools/manifests.
+- Do not introduce hidden provider/backend coupling here; use declared descriptors, gateways, DTOs, and explicit maintenance scripts.
+
+<!-- NORTHSTAR-DIR-README:END -->

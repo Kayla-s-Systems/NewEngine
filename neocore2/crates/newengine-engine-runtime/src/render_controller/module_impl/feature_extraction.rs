@@ -59,7 +59,7 @@ impl FeatureExtractionFrame {
                 draw_lists.record_pass_state(extraction, &mut build_ctx)
             })?;
 
-            for provider in providers.iter().copied() {
+            for provider in providers.iter() {
                 profile.time(provider.id(), || {
                     provider.extract(extraction, &mut build_ctx)
                 })?;

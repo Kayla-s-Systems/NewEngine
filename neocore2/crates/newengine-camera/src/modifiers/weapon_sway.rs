@@ -80,7 +80,7 @@ impl CameraModifier for WeaponSway {
         if self.max_angle > 0.0 {
             let len = self.offset.length();
             if len > self.max_angle {
-                self.offset = self.offset * (self.max_angle / len);
+                self.offset *= self.max_angle / len;
                 self.vel = Vec2::ZERO;
             }
         }

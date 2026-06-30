@@ -1,6 +1,6 @@
 use serde_json::Value;
 
-use crate::jobs::JobSystemConfig;
+use crate::threading::ThreadPoolConfig;
 
 use newengine_math::collections_prelude::NeHashMap as HashMap;
 use std::path::PathBuf;
@@ -57,7 +57,7 @@ pub struct EngineConfig {
     pub plugin_fault_tolerance: PluginFaultTolerance,
 
     /// Engine-wide CPU worker pool configuration.
-    pub job_system: JobSystemConfig,
+    pub thread_pool: ThreadPoolConfig,
 
     /// Controls how the engine reacts to panics inside module callbacks.
     ///
@@ -75,7 +75,7 @@ impl Default for EngineConfig {
             plugin_overrides: HashMap::default(),
             module_fault_tolerance: ModuleFaultTolerance::Resilient,
             plugin_fault_tolerance: PluginFaultTolerance::Resilient,
-            job_system: JobSystemConfig::auto(),
+            thread_pool: ThreadPoolConfig::auto(),
             catch_panics: true,
         }
     }
@@ -90,7 +90,7 @@ impl EngineConfig {
             plugin_overrides: HashMap::default(),
             module_fault_tolerance: ModuleFaultTolerance::Resilient,
             plugin_fault_tolerance: PluginFaultTolerance::Resilient,
-            job_system: JobSystemConfig::auto(),
+            thread_pool: ThreadPoolConfig::auto(),
             catch_panics: true,
         }
     }
@@ -132,8 +132,8 @@ impl EngineConfig {
     }
 
     #[inline]
-    pub fn with_job_system(mut self, config: JobSystemConfig) -> Self {
-        self.job_system = config;
+    pub fn with_thread_pool(mut self, config: ThreadPoolConfig) -> Self {
+        self.thread_pool = config;
         self
     }
 

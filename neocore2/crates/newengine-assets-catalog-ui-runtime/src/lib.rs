@@ -1,4 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
+#![allow(clippy::too_many_arguments)]
+#![allow(clippy::field_reassign_with_default)]
 
 //! Asset Browser retained UI projection over engine.assets data.
 //!
@@ -47,9 +49,9 @@ pub const ASSETS_CATALOG_UI_OWNER: &str = "app.asset_browser";
 const ASSETS_CATALOG_SURFACE_ID: &str = "ui.assets.catalog";
 const ASSETS_CATALOG_INPUT_LISTENER: &str = "asset-browser-ui";
 const ASSETS_CATALOG_THEME_ID: &str = UI_THEME_NORTHSTAR_EDITOR;
-pub(crate) const ASSET_BROWSER_ICON_FOLDER: &str = "ui/icons/assetBrowser.ytd@folder";
-pub(crate) const ASSET_BROWSER_ICON_TEXTURE: &str = "ui/icons/assetBrowser.ytd@texture";
-pub(crate) const ASSET_BROWSER_ICON_GENERIC: &str = "ui/icons/assetBrowser.ytd@generic";
+pub(crate) const ASSET_BROWSER_ICON_FOLDER: &str = "textures/ui/icons/assetBrowser.ytd@folder";
+pub(crate) const ASSET_BROWSER_ICON_TEXTURE: &str = "textures/ui/icons/assetBrowser.ytd@texture";
+pub(crate) const ASSET_BROWSER_ICON_GENERIC: &str = "textures/ui/icons/assetBrowser.ytd@generic";
 pub(crate) const MAX_VISIBLE_ENTRIES: usize = 64;
 const UI_SCROLLBAR_DRAG_ACTION: &str = "ui.scrollbar.drag";
 const UI_SCROLL_WHEEL_ACTION: &str = "ui.scroll.wheel";

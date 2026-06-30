@@ -7,6 +7,7 @@ use crate::nav::input::cursor_state_for_nav;
 use crate::nav::{BoundsSphere, CameraNavInput, CameraNavParams, CameraNavResult, CameraNavState};
 
 #[inline]
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn commit_and_finish(
     world: &mut World,
     cam_id: EntityId,

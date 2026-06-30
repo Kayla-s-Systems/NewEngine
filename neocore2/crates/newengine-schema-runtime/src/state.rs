@@ -209,8 +209,10 @@ impl SchemaRegistryState {
         &self,
         transaction: SchemaTransactionDtoV1,
     ) -> SchemaTransactionResultV1 {
-        let mut response = SchemaTransactionResultV1::default();
-        response.transaction_id = transaction.transaction_id.clone();
+        let mut response = SchemaTransactionResultV1 {
+            transaction_id: transaction.transaction_id.clone(),
+            ..Default::default()
+        };
         if !self.records.contains_key(transaction.target_type.trim()) {
             response.diagnostics.push(SchemaDiagnosticV1::error(
                 "SCHEMA_TRANSACTION_TARGET_TYPE_NOT_FOUND",

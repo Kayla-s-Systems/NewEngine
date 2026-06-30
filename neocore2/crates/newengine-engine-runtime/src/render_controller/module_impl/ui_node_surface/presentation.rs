@@ -30,7 +30,7 @@ impl RenderUiNodeSurfaceState {
         let page_subtitle = current_page
             .map(|page| page.subtitle.as_str())
             .filter(|subtitle| !subtitle.is_empty())
-            .unwrap_or_else(|| document.subtitle.as_str());
+            .unwrap_or(document.subtitle.as_str());
 
         let selected_index = navigation.selected_index();
         let hovered_index = navigation.hovered_index();

@@ -15,4 +15,4 @@ newengine-plugin-api = { path = "../newengine-plugin-api" }
 newengine-math = { path = "../newengine-math" }
 newengine-service-api = { path = "../newengine-service-api" }
 newengine-loading-api = { path = "../newengine-loading-api" }
-newengine-jobs-api = { path = "../newengine-jobs-api" }
+newengine-task-api = { path = "../newengine-task-api" }

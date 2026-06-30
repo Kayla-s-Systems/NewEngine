@@ -1172,6 +1172,22 @@
         {
           "dir": null,
           "mount": "",
+          "path": "../../gameAssets/",
+          "pattern": null,
+          "priority": 240,
+          "type": "dir"
+        },
+        {
+          "dir": "../../gameAssets/",
+          "mount": "",
+          "path": null,
+          "pattern": "*",
+          "priority": 220,
+          "type": "container_glob"
+        },
+        {
+          "dir": null,
+          "mount": "",
           "path": "assets/",
           "pattern": null,
           "priority": 100,
@@ -1294,7 +1310,7 @@
             "deferred": "disabled",
             "hdr_scene": "disabled",
             "postfx": "disabled",
-            "shadows": "disabled",
+            "shadows": "enabled",
             "sky": {
               "mode": "native",
               "tick_cycle": "enabled"
@@ -1318,6 +1334,23 @@
           }
         }
       }
+    },
+    "engine.loading": {
+      "enabled": true,
+      "manifest_id": "app.gamefps.loading",
+      "brand_id": "brand.gamefps.northstar",
+      "display_name": "North Star gameFps",
+      "prestart": {
+        "background": "textures/ui/loading/loaderWindow.ytd@north_star_preload_background",
+        "logo": "textures/ui/loading/loaderWindow.ytd@north_star_engine_logo",
+        "spinner": "textures/ui/loading/loaderWindow.ytd@north_star_loading_spinner"
+      },
+      "runtime_loading": {
+        "background": "textures/ui/loading/loaderWindow.ytd@north_star_preload_background",
+        "logo": "textures/ui/loading/loaderWindow.ytd@north_star_engine_logo",
+        "spinner": "textures/ui/loading/loaderWindow.ytd@north_star_loading_spinner"
+      },
+      "replace_policy": "consumer_profile_override"
     }
   },
   "window": {

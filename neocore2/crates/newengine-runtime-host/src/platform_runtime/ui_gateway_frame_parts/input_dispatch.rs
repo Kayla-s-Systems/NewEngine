@@ -45,6 +45,9 @@ fn apply_ui_state_patches(patches: &[UiStatePatch]) {
         return;
     }
     for patch in patches {
+        if is_runtime_overlay_surface(patch.surface_id.as_str()) {
+            continue;
+        }
         let payload = match serde_json::to_vec(patch) {
             Ok(payload) => payload,
             Err(e) => {
@@ -66,6 +69,15 @@ fn apply_ui_state_patches(patches: &[UiStatePatch]) {
             );
         }
     }
+}
+
+fn is_runtime_overlay_surface(surface_id: &str) -> bool {
+    matches!(
+        surface_id,
+        UI_SURFACE_ENGINE_LOADING
+            | UI_SURFACE_ENGINE_ERROR_MODAL
+            | UI_SURFACE_RUNTIME_DEBUG_OVERLAY
+    )
 }
 
 fn dispatch_ui_actions(actions: &[UiActionDispatch]) {

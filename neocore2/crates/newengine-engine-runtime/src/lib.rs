@@ -1,4 +1,5 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
+#![allow(clippy::too_many_arguments)]
 
 //! Engine runtime composition layer.
 //!

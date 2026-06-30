@@ -349,11 +349,11 @@ pub struct EngineTaskEvent {
     /// Domain-level job pass, e.g. `visibility`, `streaming`, `terrain`,
     /// `texture-decode`, `simulation`, `shader-compile`.
     #[serde(default)]
-    pub job_pass: Option<String>,
+    pub task_pass: Option<String>,
     /// Owner domain for the pass, e.g. `engine.render`, `engine.assets`,
     /// `engine.simulation`.
     #[serde(default)]
-    pub job_domain: Option<String>,
+    pub task_domain: Option<String>,
     /// Stable scheduler priority as text.
     #[serde(default)]
     pub priority: Option<String>,
@@ -397,8 +397,8 @@ impl EngineTaskEvent {
             lane: lane.into(),
             frame_id: None,
             dependency_group: None,
-            job_pass: None,
-            job_domain: None,
+            task_pass: None,
+            task_domain: None,
             priority: None,
             executor: None,
             phase,
@@ -425,14 +425,14 @@ impl EngineTaskEvent {
     }
 
     #[inline]
-    pub fn with_job_pass(mut self, job_pass: impl Into<String>) -> Self {
-        self.job_pass = Some(job_pass.into());
+    pub fn with_task_pass(mut self, task_pass: impl Into<String>) -> Self {
+        self.task_pass = Some(task_pass.into());
         self
     }
 
     #[inline]
-    pub fn with_job_domain(mut self, job_domain: impl Into<String>) -> Self {
-        self.job_domain = Some(job_domain.into());
+    pub fn with_task_domain(mut self, task_domain: impl Into<String>) -> Self {
+        self.task_domain = Some(task_domain.into());
         self
     }
 

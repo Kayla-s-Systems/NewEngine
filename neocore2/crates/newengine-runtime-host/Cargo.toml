@@ -22,7 +22,7 @@ newengine-assets-api = { path = "../newengine-assets-api" }
 newengine-core = { path = "../newengine-core" }
 newengine-math = { path = "../newengine-math" }
 newengine-platform-api = { path = "../newengine-platform-api" }
-newengine-jobs-api = { path = "../newengine-jobs-api" }
+newengine-task-api = { path = "../newengine-task-api" }
 newengine-gameplay-runtime = { path = "../newengine-gameplay-runtime" }
 newengine-time-runtime = { path = "../newengine-time-runtime" }
 newengine-input-api = { path = "../newengine-input-api" }

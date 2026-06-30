@@ -4,7 +4,6 @@
 ///
 /// The core treats invariant violations as fatal, because silent corruption is worse than a crash.
 /// This module must remain tiny and dependency-free.
-
 #[cold]
 #[inline(never)]
 fn violation(msg: &'static str) -> ! {

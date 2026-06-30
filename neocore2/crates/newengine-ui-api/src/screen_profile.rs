@@ -274,7 +274,7 @@ impl Default for UiScreenInputFocusPolicy {
 /// `data_contract` is the important field: editor panels consume readonly DTOs,
 /// snapshots and opaque handles. They must not receive native `EntityId`, raw
 /// `World`, renderer-private handles, or provider-owned objects.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct UiScreenPanelDescriptor {
     pub slot_id: String,
@@ -286,22 +286,6 @@ pub struct UiScreenPanelDescriptor {
     pub debug_only: bool,
     pub tags: Vec<String>,
 }
-
-impl Default for UiScreenPanelDescriptor {
-    fn default() -> Self {
-        Self {
-            slot_id: String::new(),
-            label: String::new(),
-            surface_id: String::new(),
-            source_gateway: String::new(),
-            data_contract: String::new(),
-            required: false,
-            debug_only: false,
-            tags: Vec::new(),
-        }
-    }
-}
-
 /// Runtime/editor screen profile descriptor.
 ///
 /// This DTO is intentionally generic so more products can define their own

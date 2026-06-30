@@ -1,8 +1,9 @@
 use super::split_ref;
 use crate::{
     DRAWABLE_DICTIONARY_ASSET_KIND, MATERIAL_LIBRARY_ASSET_KIND,
-    OBJECT_TYPE_DEFINITIONS_ASSET_KIND, ROLE_DEFINITION_ENTRIES, ROLE_DRAWABLE_DICTIONARY,
-    ROLE_MATERIAL_LIBRARY, ROLE_TEXTURE_DICTIONARY, TEXTURE_DICTIONARY_ASSET_KIND,
+    OBJECT_TYPE_DEFINITIONS_ASSET_KIND, ROLE_ASSET_PROPERTIES, ROLE_DRAWABLE_DICTIONARY,
+    ROLE_MATERIAL_LIBRARY, ROLE_TEXTURE_DICTIONARY, ROLE_UV_LAYOUT_DICTIONARY,
+    TEXTURE_DICTIONARY_ASSET_KIND, UV_LAYOUT_DICTIONARY_ASSET_KIND,
 };
 
 pub(super) fn classify_ref(
@@ -15,16 +16,22 @@ pub(super) fn classify_ref(
         .unwrap_or_default();
     match ext.as_str() {
         "ytyp" => (
-            ROLE_DEFINITION_ENTRIES,
+            ROLE_ASSET_PROPERTIES,
             OBJECT_TYPE_DEFINITIONS_ASSET_KIND,
-            "engine.definitions",
-            "definitions.entry_json_v1",
+            "engine.assets.definitions",
+            "definitions.properties_json_v1",
         ),
         "ydd" => (
             ROLE_DRAWABLE_DICTIONARY,
             DRAWABLE_DICTIONARY_ASSET_KIND,
             "engine.model",
             "model.drawable_dictionary_manifest_json_v1",
+        ),
+        "ytyd" => (
+            ROLE_UV_LAYOUT_DICTIONARY,
+            UV_LAYOUT_DICTIONARY_ASSET_KIND,
+            "engine.model",
+            "model.uv_layout_dictionary_manifest_json_v1",
         ),
         "nemat" => (
             ROLE_MATERIAL_LIBRARY,

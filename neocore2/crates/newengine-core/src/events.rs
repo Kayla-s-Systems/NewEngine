@@ -126,6 +126,7 @@ impl EventHub {
         let id = self.inner.next_id.fetch_add(1, Ordering::Relaxed);
         let dropped = Arc::new(AtomicU64::new(0));
 
+        #[allow(clippy::type_complexity)]
         let filter_arc: Arc<dyn Fn(&Arc<dyn Any + Send + Sync>) -> bool + Send + Sync> =
             Arc::new(move |a: &Arc<dyn Any + Send + Sync>| {
                 if let Some(ev) = a.as_ref().downcast_ref::<T>() {
@@ -334,5 +335,6 @@ struct Subscriber {
     tx: Sender<Arc<dyn Any + Send + Sync>>,
     overflow: OverflowPolicy,
     dropped: Arc<AtomicU64>,
+    #[allow(clippy::type_complexity)]
     filter: Option<Arc<dyn Fn(&Arc<dyn Any + Send + Sync>) -> bool + Send + Sync>>,
 }

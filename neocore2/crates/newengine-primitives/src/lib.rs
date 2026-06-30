@@ -23,7 +23,7 @@ mod tests {
     fn validate_mesh(m: &PrimitiveMesh) {
         assert!(!m.vertices.is_empty());
         assert!(!m.indices.is_empty());
-        assert!(m.indices.len() % 3 == 0);
+        assert!(m.indices.len().is_multiple_of(3));
         let vlen = m.vertices.len() as u32;
         for &ix in &m.indices {
             assert!(ix < vlen);

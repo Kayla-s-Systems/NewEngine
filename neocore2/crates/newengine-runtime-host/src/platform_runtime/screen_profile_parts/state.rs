@@ -183,9 +183,8 @@ impl ScreenProfileRuntimeState {
         } else {
             None
         };
-        let requested = dispatch_requested.map(|mode| {
+        let requested = dispatch_requested.inspect(|_| {
             self.last_runtime_button_pointer_frame = frame_index;
-            mode
         });
 
         if let Some(mode) = requested.filter(|mode| *mode != self.editor_runtime_mode) {

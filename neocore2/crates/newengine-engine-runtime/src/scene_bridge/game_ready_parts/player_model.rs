@@ -26,6 +26,9 @@ pub(super) fn ensure_player_runtime_model_parts(
 > {
     let mut request = ModelAssetRequest::new(spec.source.clone())
         .with_human_scale(spec.target_height, spec.eye_height_ratio);
+    if let Some(properties_ref) = spec.properties_ref.as_deref() {
+        request = request.with_properties_ref(properties_ref);
+    }
     if let Some(dictionary) = spec.texture_dictionary.as_deref() {
         request = request.with_texture_dictionary(dictionary);
     }
@@ -64,7 +67,7 @@ pub(super) fn ensure_player_runtime_model_parts(
             .unwrap_or_else(|| format!("Player/Avatar/{}", part.material_slot));
         let material_id = mats.upsert_named_with_textures(
             &material_name,
-            part.material.descriptor.clone(),
+            part.material.descriptor,
             part.material.textures.clone().sanitized(),
         );
         if !prims.is_registered(primitive_id) {
@@ -113,6 +116,14 @@ pub(super) fn ensure_player_runtime_model_parts(
             bundle.source,
             dictionary,
             out.len()
+        );
+    }
+
+    if let Some(properties_ref) = bundle.properties_ref.as_deref() {
+        newengine_ulog_api::ulog::info!(
+            "game-ready: player model properties descriptor bound source='{}' properties_ref='{}' policy='.ydd/.obj slots -> .ytyp material bindings -> .nemat/.ytd'",
+            bundle.source,
+            properties_ref
         );
     }
 

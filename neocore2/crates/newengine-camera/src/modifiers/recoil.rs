@@ -85,7 +85,7 @@ impl CameraModifier for Recoil {
         // Clamp.
         let len = self.offset.length();
         if self.max_angle > 0.0 && len > self.max_angle {
-            self.offset = self.offset * (self.max_angle / len);
+            self.offset *= self.max_angle / len;
             self.vel = Vec2::ZERO;
         }
 

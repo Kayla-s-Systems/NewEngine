@@ -24,6 +24,7 @@ pub struct DrawableDictionaryBodyV1 {
     pub material_slots: Vec<MaterialSlotRecordV1>,
     pub lods: Vec<LodRecordV1>,
     pub refs: Vec<String>,
+    pub properties_refs: Vec<String>,
     pub bounds: Vec<BoundsRecordV1>,
 }
 impl Default for DrawableDictionaryBodyV1 {
@@ -40,6 +41,7 @@ impl Default for DrawableDictionaryBodyV1 {
             material_slots: Vec::new(),
             lods: Vec::new(),
             refs: Vec::new(),
+            properties_refs: Vec::new(),
             bounds: Vec::new(),
         }
     }
@@ -101,7 +103,7 @@ impl Default for MeshPartRecordV1 {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct VertexStreamDescriptorV1 {
     pub semantic: String,
@@ -109,17 +111,6 @@ pub struct VertexStreamDescriptorV1 {
     pub stride: u32,
     pub payload_offset: u64,
     pub payload_len: u64,
-}
-impl Default for VertexStreamDescriptorV1 {
-    fn default() -> Self {
-        Self {
-            semantic: String::new(),
-            format: String::new(),
-            stride: 0,
-            payload_offset: 0,
-            payload_len: 0,
-        }
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -141,15 +132,36 @@ impl Default for IndexBufferDescriptorV1 {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
-pub struct MaterialSlotRecordV1 {
+pub struct MaterialSlotDecl {
     pub slot_name: String,
-    pub material_ref: String,
     pub required: bool,
 }
-impl Default for MaterialSlotRecordV1 {
+impl Default for MaterialSlotDecl {
     fn default() -> Self {
         Self {
             slot_name: String::new(),
+            required: true,
+        }
+    }
+}
+
+/// Material slot declaration stored by `.ydd` model dictionaries.
+///
+/// This declares an abstract material socket on geometry. Concrete material refs
+/// are descriptor-owned and live in `.ytyp` MaterialBindingRef values.
+pub type MaterialSlotRecordV1 = MaterialSlotDecl;
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct MaterialBindingRef {
+    pub slot: String,
+    pub material_ref: String,
+    pub required: bool,
+}
+impl Default for MaterialBindingRef {
+    fn default() -> Self {
+        Self {
+            slot: String::new(),
             material_ref: String::new(),
             required: true,
         }
@@ -194,46 +206,32 @@ impl Default for BoundsRecordV1 {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct DrawableDictionaryRequest {
     pub source: String,
     pub selector: Option<String>,
-}
-impl Default for DrawableDictionaryRequest {
-    fn default() -> Self {
-        Self {
-            source: String::new(),
-            selector: None,
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(default)]
-pub struct DrawableMaterialSlotRef {
-    pub slot: String,
-    pub material: String,
-}
-impl Default for DrawableMaterialSlotRef {
-    fn default() -> Self {
-        Self {
-            slot: String::new(),
-            material: String::new(),
-        }
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct DrawableDictionaryEntry {
     pub name: String,
+    /// Optional explicit descriptor for this drawable dictionary cell.
+    ///
+    /// `.ydd` is a model dictionary; each addressable cell may point to a `.ytyp`
+    /// Y-Type Properties document that explains material bindings, render role,
+    /// collision policy, LOD and other domain usage. Loaders must follow this
+    /// explicit reference instead of searching for files near the model asset.
+    pub properties_ref: Option<String>,
     pub name_hash: u64,
     pub mesh_count: u32,
-    /// Declarative material slot references. Drawable dictionaries never store
-    /// renderer-owned material state; they point to material descriptors such as
-    /// `player/abigail/materials/abigail_skin.nemat@head`.
-    pub material_slots: Vec<DrawableMaterialSlotRef>,
+    /// Abstract material slot declarations owned by the geometry cell.
+    ///
+    /// These are sockets such as `leaf`, `bark`, `sky` or `body_paint`.
+    /// Concrete `.nemat` references are descriptor-owned and live in `.ytyp`
+    /// `MaterialBindingRef` values.
+    pub material_slots: Vec<MaterialSlotDecl>,
     pub skeleton_refs: Vec<String>,
     pub lods: Vec<String>,
     pub collision_refs: Vec<String>,
@@ -245,6 +243,7 @@ impl Default for DrawableDictionaryEntry {
     fn default() -> Self {
         Self {
             name: String::new(),
+            properties_ref: None,
             name_hash: 0,
             mesh_count: 0,
             material_slots: Vec::new(),

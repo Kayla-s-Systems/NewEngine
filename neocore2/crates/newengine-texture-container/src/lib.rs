@@ -65,12 +65,12 @@ pub const COLOR_SPACE_SRGB: &str = "srgb";
 
 #[inline]
 pub(crate) fn align_u64(v: u64, alignment: u64) -> u64 {
-    ((v + alignment - 1) / alignment) * alignment
+    v.div_ceil(alignment) * alignment
 }
 
 #[inline]
 pub(crate) fn align_vec(v: &mut Vec<u8>, alignment: usize) {
-    let aligned = ((v.len() + alignment - 1) / alignment) * alignment;
+    let aligned = v.len().div_ceil(alignment) * alignment;
     v.resize(aligned, 0);
 }
 

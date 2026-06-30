@@ -7,6 +7,7 @@ use crate::ModelSkeletonMetadata;
 pub struct ModelAssetRequest {
     pub model: String,
     pub manifest: Option<String>,
+    pub properties_ref: Option<String>,
     pub skeleton: Option<String>,
     pub texture_dictionary: Option<String>,
     pub collisions: Vec<ModelCollisionRef>,
@@ -19,6 +20,7 @@ impl Default for ModelAssetRequest {
         Self {
             model: String::new(),
             manifest: None,
+            properties_ref: None,
             skeleton: None,
             texture_dictionary: None,
             collisions: Vec::new(),
@@ -40,6 +42,12 @@ impl ModelAssetRequest {
     #[inline]
     pub fn with_manifest(mut self, manifest: impl Into<String>) -> Self {
         self.manifest = Some(manifest.into());
+        self
+    }
+
+    #[inline]
+    pub fn with_properties_ref(mut self, properties_ref: impl Into<String>) -> Self {
+        self.properties_ref = Some(properties_ref.into());
         self
     }
 
@@ -72,6 +80,7 @@ impl ModelAssetRequest {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ModelAssetBundle {
     pub source: String,
+    pub properties_ref: Option<String>,
     pub parts: Vec<ModelMeshPart>,
     pub skeleton: Option<ModelSkeletonMetadata>,
     pub texture_dictionary: Option<String>,
@@ -120,6 +129,7 @@ pub struct ModelConstructionManifest {
     pub id: String,
     pub model: String,
     pub skeleton: Option<ModelSkeletonRef>,
+    pub properties_ref: Option<String>,
     pub material_set: ModelMaterialSetRef,
     pub collisions: Vec<ModelCollisionRef>,
     pub target_height: f32,
@@ -132,6 +142,7 @@ impl Default for ModelConstructionManifest {
             id: String::new(),
             model: String::new(),
             skeleton: None,
+            properties_ref: None,
             material_set: ModelMaterialSetRef::default(),
             collisions: Vec::new(),
             target_height: 1.8,
@@ -158,20 +169,11 @@ impl Default for ModelSkeletonRef {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct ModelMaterialSetRef {
     pub texture_dictionary: Option<String>,
     pub material_manifest: Option<String>,
-}
-
-impl Default for ModelMaterialSetRef {
-    fn default() -> Self {
-        Self {
-            texture_dictionary: None,
-            material_manifest: None,
-        }
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -200,19 +202,14 @@ impl Default for ModelCollisionRef {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum ModelCollisionKind {
     None,
+    #[default]
     Capsule,
     Box,
     Sphere,
     Mesh,
-}
-
-impl Default for ModelCollisionKind {
-    fn default() -> Self {
-        Self::Capsule
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

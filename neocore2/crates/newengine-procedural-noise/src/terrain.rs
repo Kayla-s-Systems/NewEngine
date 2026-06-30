@@ -44,6 +44,23 @@ impl ProceduralTerrain {
     }
 
     #[inline]
+    pub fn generate_descriptor_with_world_height_modifier(
+        descriptor: TerrainHeightfieldDescriptor,
+        base_color: [f32; 4],
+        modifier_key: u64,
+        modifier: impl FnMut(f32, f32, f32) -> f32,
+    ) -> Self {
+        Self {
+            heightfield: Arc::new(HeightField::generate_descriptor_with_world_height_modifier(
+                descriptor,
+                modifier_key,
+                modifier,
+            )),
+            base_color,
+        }
+    }
+
+    #[inline]
     pub fn mesh_key(&self) -> u64 {
         self.heightfield.revision_key()
     }

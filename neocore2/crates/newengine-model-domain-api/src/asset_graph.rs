@@ -28,17 +28,10 @@ pub const ASSET_GRAPH_METHODS: &[&str] = &[
     ASSET_GRAPH_METHOD_DUMP_JSON_V1,
 ];
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct AssetGraphResolveRequest {
     pub root_ref: String,
-}
-impl Default for AssetGraphResolveRequest {
-    fn default() -> Self {
-        Self {
-            root_ref: String::new(),
-        }
-    }
 }
 
 impl AssetGraphResolveRequest {
@@ -209,7 +202,7 @@ impl Default for ResolvedAssetGraphV1 {
 pub type ResolvedAssetGraphV2 = ResolvedAssetGraphV1;
 pub type ResolvedAssetGraph = ResolvedAssetGraphV2;
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct AssetGraphValidationResult {
     pub valid: bool,
@@ -217,17 +210,6 @@ pub struct AssetGraphValidationResult {
     pub errors: Vec<String>,
     pub warnings: Vec<String>,
     pub graph: Option<ResolvedAssetGraphV2>,
-}
-impl Default for AssetGraphValidationResult {
-    fn default() -> Self {
-        Self {
-            valid: false,
-            root_ref: String::new(),
-            errors: Vec::new(),
-            warnings: Vec::new(),
-            graph: None,
-        }
-    }
 }
 
 pub struct AssetGraphResolver;

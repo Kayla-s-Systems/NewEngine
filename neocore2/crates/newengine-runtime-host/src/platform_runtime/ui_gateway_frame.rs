@@ -9,16 +9,17 @@ use newengine_system_contracts::{ScreenOverlayStatus, ScreenOverlayStatusKind};
 use newengine_system_runtime::loading_surface_projection;
 use newengine_ui::UiProviderBinding;
 use newengine_ui_api::{
-    decode_ui_frame_response_bin, encode_ui_frame_request_bin, UiActionDispatch, UiComponentNode,
-    UiDispatchActionRequest, UiDispatchInputRequest, UiDrawList, UiEventDispatchFrame,
-    UiFrameRequest, UiFrameResponse, UiInputFrame, UiNodeRequestAck, UiNodeTone, UiNodeTreeRequest,
-    UiPaintCommand, UiRuntimeDebugOverlayTelemetry, UiStatePatch, UiSurfaceAnchor, UiSurfaceNode,
-    UiSurfaceStyle, ENGINE_UI_SERVICE_ID, UI_COMPONENT_PANEL,
-    UI_SERVICE_METHOD_APPLY_NODE_REQUEST_V1, UI_SERVICE_METHOD_APPLY_STATE_PATCH_V1,
-    UI_SERVICE_METHOD_DISPATCH_ACTION_V1, UI_SERVICE_METHOD_DISPATCH_INPUT_V1,
-    UI_SERVICE_METHOD_DRAW_FRAME_BIN_V1, UI_SERVICE_METHOD_DRAW_FRAME_V1,
-    UI_SERVICE_METHOD_SURFACE_NODE_V1, UI_SURFACE_ENGINE_ERROR_MODAL, UI_SURFACE_ENGINE_LOADING,
-    UI_SURFACE_RUNTIME_DEBUG_OVERLAY, UI_THEME_NORTHSTAR_DEFAULT,
+    decode_ui_frame_response_bin, encode_ui_frame_request_bin, reserved, UiActionDispatch,
+    UiComponentNode, UiDispatchActionRequest, UiDispatchInputRequest, UiDrawList,
+    UiEventDispatchFrame, UiFrameRequest, UiFrameResponse, UiImagePaintCommand, UiInputFrame,
+    UiNodeTone, UiNodeTreeRequest, UiPaintCommand, UiPaintNodeRef, UiRuntimeDebugOverlayTelemetry,
+    UiStatePatch, UiSurfaceAnchor, UiSurfaceNode, UiSurfaceStyle, UiTexId, ENGINE_UI_SERVICE_ID,
+    UI_COMPONENT_PANEL, UI_SERVICE_METHOD_APPLY_NODE_REQUEST_V1,
+    UI_SERVICE_METHOD_APPLY_STATE_PATCH_V1, UI_SERVICE_METHOD_DISPATCH_ACTION_V1,
+    UI_SERVICE_METHOD_DISPATCH_INPUT_V1, UI_SERVICE_METHOD_DRAW_FRAME_BIN_V1,
+    UI_SERVICE_METHOD_DRAW_FRAME_V1, UI_SERVICE_METHOD_SURFACE_NODE_V1,
+    UI_SURFACE_ENGINE_ERROR_MODAL, UI_SURFACE_ENGINE_LOADING, UI_SURFACE_RUNTIME_DEBUG_OVERLAY,
+    UI_THEME_NORTHSTAR_DEFAULT,
 };
 use serde::Deserialize;
 

@@ -159,7 +159,7 @@ impl<E: Send + 'static> Engine<E> {
         }
 
         self.set_run_state(EngineRunState::ShutdownSystem);
-        self.job_system.shutdown_and_join();
+        self.thread_pool.shutdown_and_join();
         self.plugins_shutdown();
         self.set_run_state(EngineRunState::Stopped);
 

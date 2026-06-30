@@ -111,7 +111,7 @@ impl RenderApi for ServiceBackedRenderApi {
         // UI draw lists can be large enough that the JSON command path becomes
         // a frame-time bottleneck. Queue it with the other unit commands so it
         // travels through command_batch_bin_v1 when the active renderer supports it.
-        let _ = self.queue_unit(RenderCommand::SetUiDrawList(ui));
+        let _ = self.queue_unit(RenderCommand::SetUiDrawList(Box::new(ui)));
     }
 
     fn set_debug_text(&mut self, text: String) {
@@ -381,7 +381,7 @@ impl RenderApi for ServiceBackedRenderApi {
         &mut self,
         frame: RenderFrameEnvelope,
     ) -> EngineResult<RenderGraphSubmitReport> {
-        match self.invoke_service(RenderServiceRequest::SubmitFrame(frame))? {
+        match self.invoke_service(RenderServiceRequest::SubmitFrame(Box::new(frame)))? {
             RenderServiceResponse::GraphSubmitReport(report) => Ok(report),
             other => Err(EngineError::other(format!(
                 "render service protocol error: expected GraphSubmitReport, got {:?}",
@@ -454,7 +454,7 @@ impl RenderApi for ServiceBackedRenderApi {
 
     fn diagnostics_snapshot(&self) -> EngineResult<RenderDiagnosticsSnapshot> {
         match self.invoke_service(RenderServiceRequest::DiagnosticsSnapshot)? {
-            RenderServiceResponse::DiagnosticsSnapshot(snapshot) => Ok(snapshot),
+            RenderServiceResponse::DiagnosticsSnapshot(snapshot) => Ok(*snapshot),
             other => Err(EngineError::other(format!(
                 "render service protocol error: expected DiagnosticsSnapshot, got {:?}",
                 other

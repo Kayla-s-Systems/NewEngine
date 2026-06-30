@@ -61,7 +61,7 @@ pub fn publish_event(topic: &str, payload: &[u8]) -> Result<(), String> {
 
         let call = || {
             // Blob is consumed by on_event(); clone bytes per sink.
-            let _ = guard.on_event(RString::from(topic), Blob::from(payload_vec.clone()));
+            guard.on_event(RString::from(topic), Blob::from(payload_vec.clone()));
         };
 
         let r = match owner.as_deref() {

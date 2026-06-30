@@ -10,6 +10,7 @@
     "tools/toolbelt/first_party/northstar\\neui_packer\\bin\\northstar-neui-packer.exe",
     "tools/toolbelt/first_party/northstar\\ydd_packer\\bin\\northstar-ydd-packer.exe",
     "tools/toolbelt/first_party/northstar\\ytd_packer\\bin\\northstar-ytd-packer.exe",
+    "tools/toolbelt/first_party/northstar\\ymap_packer\\bin\\northstar-ymap-packer.exe",
     "tools/toolbelt/first_party/northstar\\ytyp_packer\\bin\\northstar-ytyp-packer.exe"
   ]
 }

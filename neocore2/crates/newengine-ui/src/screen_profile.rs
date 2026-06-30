@@ -477,6 +477,7 @@ fn dock_slot_label(slot: &str) -> &'static str {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn panel<const N: usize>(
     slot_id: &str,
     label: &str,

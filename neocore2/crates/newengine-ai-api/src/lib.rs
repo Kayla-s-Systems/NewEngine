@@ -78,7 +78,7 @@ pub struct AiAgentSnapshotV1 {
     pub blackboard: serde_json::Value,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum AiIntentKind {
     MoveTo,
     FollowPath,
@@ -87,16 +87,10 @@ pub enum AiIntentKind {
     AddTag,
     RemoveTag,
     EmitEvent,
+    #[default]
     Idle,
     Custom(String),
 }
-
-impl Default for AiIntentKind {
-    fn default() -> Self {
-        Self::Idle
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AiIntentDtoV1 {
     pub intent_id: String,

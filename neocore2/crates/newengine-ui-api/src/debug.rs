@@ -95,7 +95,7 @@ impl Default for UiDebugTreeRequest {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct UiDebugDrawCost {
     pub draw_cmds: u32,
@@ -106,21 +106,6 @@ pub struct UiDebugDrawCost {
     pub texture_patches: u32,
     pub texture_frees: u32,
 }
-
-impl Default for UiDebugDrawCost {
-    fn default() -> Self {
-        Self {
-            draw_cmds: 0,
-            vertices: 0,
-            indices: 0,
-            estimated_quads: 0,
-            texture_sets: 0,
-            texture_patches: 0,
-            texture_frees: 0,
-        }
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct UiDebugNode {

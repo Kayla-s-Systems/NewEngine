@@ -4,8 +4,8 @@ use std::{any::Any, sync::Arc};
 
 use newengine_assets::AssetServiceClient;
 use newengine_core::{
-    EngineLifecycleEvent, EngineReadinessKey, EngineReadinessSnapshot, EngineResult, Module,
-    ModuleCtx,
+    render::SceneLaunchStatus, EngineLifecycleEvent, EngineReadinessKey, EngineReadinessSnapshot,
+    EngineResult, Module, ModuleCtx,
 };
 use newengine_runtime_host::asset_bootstrap::{
     collect_app_asset_roots, mount_asset_roots_best_effort,
@@ -92,11 +92,15 @@ impl GameReadySceneBootstrapModule {
         if !self.editor_bootstrap_allowed(ctx, origin) {
             return Ok(());
         }
-        self.try_bootstrap(origin)
+        self.try_bootstrap(ctx, origin)
     }
 
     #[inline]
-    fn try_bootstrap(&mut self, origin: &'static str) -> EngineResult<()> {
+    fn try_bootstrap<E: Send + 'static>(
+        &mut self,
+        ctx: &mut ModuleCtx<'_, E>,
+        origin: &'static str,
+    ) -> EngineResult<()> {
         if self.bootstrapped {
             return Ok(());
         }
@@ -123,9 +127,15 @@ impl GameReadySceneBootstrapModule {
             }
             None => {
                 newengine_ulog_api::ulog::warn!(
-                    "game-ready runtime: scene bootstrap failed after readiness dispatch origin='{}'",
+                    "game-ready runtime: scene bootstrap failed after readiness dispatch origin='{}'; publishing engine.ui loading failure overlay",
                     origin
                 );
+                ctx.resources_mut().insert(SceneLaunchStatus::loading(
+                    "Scene bootstrap failed",
+                    "Authored world was not loaded",
+                    "The strict data-driven .ymap bootstrap failed before playable-world handoff. Emergency fallback profiles are forbidden, so the host keeps the loading/error surface visible instead of presenting a black viewport. Check the preceding game-ready asset diagnostics for the exact AssetManager decode failure.",
+                    0.995,
+                ));
             }
         }
 
@@ -170,9 +180,9 @@ impl<E: Send + 'static> Module<E> for GameReadySceneBootstrapModule {
                 self.try_bootstrap_if_allowed(ctx, origin)
             }
             EngineLifecycleEvent::EngineStartCompleted { .. } => {
-                if self.bootstrapped {
-                    Ok(())
-                } else if !self.editor_bootstrap_allowed(ctx, "engine-start-completed") {
+                if self.bootstrapped
+                    || !self.editor_bootstrap_allowed(ctx, "engine-start-completed")
+                {
                     Ok(())
                 } else {
                     self.log_waiting_once("engine-start-completed");

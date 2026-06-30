@@ -840,11 +840,11 @@ pub fn textures_gateway_service(
         .blob(textures_method::MANIFEST_JSON_V1, manifest_blob)
         .post_json_result::<TextureRefRequest, TextureRefValidation, _>(
             textures_method::VALIDATE_REF_V1,
-            |state, request| validate_texture_ref(state, request),
+            validate_texture_ref,
         )
         .post_json_result::<TextureRefRequest, TextureRefValidation, _>(
             textures_method::DESCRIBE_REF_JSON_V1,
-            |state, request| validate_texture_ref(state, request),
+            validate_texture_ref,
         )
         .blob(textures_method::ENTRY_RUNTIME_V1, entry_runtime_blob)
         .blob(textures_method::ENTRY_RGBA8_V1, entry_rgba8_blob)

@@ -76,9 +76,10 @@ fn build_body_local_heightfield_collider(
 ) -> Option<PhysicsFrameColliderSnapshot> {
     let body_pos = arr_to_vec3(body.position);
     let footprint = terrain_body_footprint(body);
-    let half_extent = (footprint * 6.0)
-        .max(TERRAIN_COLLIDER_MIN_HALF_EXTENT)
-        .min(TERRAIN_COLLIDER_MAX_HALF_EXTENT);
+    let half_extent = (footprint * 6.0).clamp(
+        TERRAIN_COLLIDER_MIN_HALF_EXTENT,
+        TERRAIN_COLLIDER_MAX_HALF_EXTENT,
+    );
     let tile_center = quantized_xz(body_pos, TERRAIN_COLLIDER_TILE_SIZE);
     let spacing = (half_extent * 2.0) / (TERRAIN_COLLIDER_SAMPLE_COUNT as f32 - 1.0);
     let local_origin = Vec3::new(
@@ -169,7 +170,7 @@ fn terrain_body_footprint(body: &PhysicsFrameBodySnapshot) -> f32 {
         .abs()
         .max((body.bounds_max[2] - body.bounds_min[2]).abs()))
         * 0.5;
-    shape_radius.max(bounds_radius).max(0.35).min(4.0) + 0.25
+    shape_radius.max(bounds_radius).clamp(0.35, 4.0) + 0.25
 }
 
 fn quantized_xz(pos: Vec3, tile_size: f32) -> Vec3 {

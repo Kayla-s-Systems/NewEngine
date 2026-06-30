@@ -25,7 +25,7 @@ fn normalize_icon(icon: PluginBinaryAssetV1) -> Option<PluginIconData> {
         return None;
     }
 
-    if icon.media_type.len() == 0 || icon.media_type.len() > MAX_PLUGIN_ICON_MEDIA_TYPE_BYTES {
+    if icon.media_type.is_empty() || icon.media_type.len() > MAX_PLUGIN_ICON_MEDIA_TYPE_BYTES {
         return None;
     }
 

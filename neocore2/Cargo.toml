@@ -39,7 +39,7 @@ members = [
     "crates/newengine-input-profile-gameready",
     "crates/newengine-lighting",
     "crates/newengine-loading-api",
-    "crates/newengine-jobs-api",
+    "crates/newengine-task-api",
     "crates/newengine-loading-runtime",
     "crates/newengine-material-domain-api",
     "crates/newengine-material-domain-gameready",

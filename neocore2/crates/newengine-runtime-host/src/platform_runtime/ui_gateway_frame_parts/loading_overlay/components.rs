@@ -1,98 +1,167 @@
 use super::*;
-
-const STARTUP_BG_TEXTURE: &str = "tmp/bg.png";
-const STARTUP_LOGO_SPRITE: &str = "tmp/logo.png";
-const STARTUP_LOGO_SPRITE_COLUMNS: u32 = 14;
-const STARTUP_LOGO_SPRITE_ROWS: u32 = 14;
-const STARTUP_LOGO_FRAME_WIDTH: u32 = 256;
-const STARTUP_LOGO_FRAME_HEIGHT: u32 = 256;
-const STARTUP_LOGO_FRAME_COUNT: u64 = 177;
-const STARTUP_LOGO_FPS: u32 = 30;
+use newengine_core::loading::LoadingVisualRefs;
 
 pub(super) fn loading_overlay_components(
     progress_01: f32,
     progress_percent: f32,
     frame_index: u64,
+    visuals: &LoadingVisualRefs,
 ) -> Vec<UiComponentNode> {
-    let mut background =
-        UiComponentNode::text("loading.background", "").tagged("startup-background");
-    background.component_id = newengine_ui_api::UI_COMPONENT_EXTERNAL_TEXTURE.to_owned();
-    background.icon = Some(STARTUP_BG_TEXTURE.to_owned());
-    background
-        .props
-        .insert("texture".to_owned(), serde_json::json!(STARTUP_BG_TEXTURE));
-    background.props.insert(
-        "asset_path".to_owned(),
-        serde_json::json!(STARTUP_BG_TEXTURE),
-    );
-    background
-        .props
-        .insert("fit".to_owned(), serde_json::json!("cover"));
-    background
-        .props
-        .insert("layer".to_owned(), serde_json::json!("background"));
+    let mut components = Vec::new();
 
-    let mut logo = UiComponentNode::text("loading.logo_sprite", "")
-        .tagged("startup-logo")
-        .tagged("sprite-animation");
-    logo.component_id = newengine_ui_api::UI_COMPONENT_EXTERNAL_TEXTURE.to_owned();
-    logo.icon = Some(STARTUP_LOGO_SPRITE.to_owned());
-    logo.props
-        .insert("texture".to_owned(), serde_json::json!(STARTUP_LOGO_SPRITE));
-    logo.props.insert(
-        "asset_path".to_owned(),
-        serde_json::json!(STARTUP_LOGO_SPRITE),
-    );
-    logo.props
-        .insert("anchor".to_owned(), serde_json::json!("center"));
-    logo.props.insert(
-        "sprite_columns".to_owned(),
-        serde_json::json!(STARTUP_LOGO_SPRITE_COLUMNS),
-    );
-    logo.props.insert(
-        "sprite_rows".to_owned(),
-        serde_json::json!(STARTUP_LOGO_SPRITE_ROWS),
-    );
-    logo.props.insert(
-        "frame_width".to_owned(),
-        serde_json::json!(STARTUP_LOGO_FRAME_WIDTH),
-    );
-    logo.props.insert(
-        "frame_height".to_owned(),
-        serde_json::json!(STARTUP_LOGO_FRAME_HEIGHT),
-    );
-    logo.props.insert(
-        "frame_count".to_owned(),
-        serde_json::json!(STARTUP_LOGO_FRAME_COUNT),
-    );
-    logo.props.insert(
-        "frame_index".to_owned(),
-        serde_json::json!(logo_sprite_frame(frame_index)),
-    );
-    logo.props
-        .insert("fps".to_owned(), serde_json::json!(STARTUP_LOGO_FPS));
-    logo.props
-        .insert("loop".to_owned(), serde_json::json!(false));
-    logo.props
-        .insert("freeze_last_frame".to_owned(), serde_json::json!(true));
+    if let Some(texture_ref) = valid_visual_ref(visuals.background.as_deref()) {
+        let mut background = UiComponentNode::text("loading.background", "")
+            .tagged("startup-background")
+            .tagged("fill")
+            .tagged("stretch");
+        background.component_id = newengine_ui_api::UI_COMPONENT_EXTERNAL_TEXTURE.to_owned();
+        set_ytd_texture_ref(&mut background, texture_ref);
+        set_production_paint_only(&mut background);
+        background
+            .props
+            .insert("fit".to_owned(), serde_json::json!("cover"));
+        background
+            .props
+            .insert("layer".to_owned(), serde_json::json!("background"));
+        background
+            .props
+            .insert("fill".to_owned(), serde_json::json!(true));
+        background
+            .props
+            .insert("position".to_owned(), serde_json::json!("fixed"));
+        background
+            .props
+            .insert("display".to_owned(), serde_json::json!("leaf"));
+        background
+            .props
+            .insert("z_order".to_owned(), serde_json::json!(0));
+        components.push(background);
+    }
+
+    if let Some(texture_ref) = valid_visual_ref(visuals.logo.as_deref()) {
+        let mut logo = UiComponentNode::text("loading.logo", "")
+            .tagged("startup-logo")
+            .tagged("loading-brand-logo");
+        logo.component_id = newengine_ui_api::UI_COMPONENT_EXTERNAL_TEXTURE.to_owned();
+        set_ytd_texture_ref(&mut logo, texture_ref);
+        set_production_paint_only(&mut logo);
+        logo.props
+            .insert("position".to_owned(), serde_json::json!("fixed"));
+        logo.props
+            .insert("display".to_owned(), serde_json::json!("leaf"));
+        logo.props
+            .insert("anchor".to_owned(), serde_json::json!("center"));
+        logo.props
+            .insert("w_px".to_owned(), serde_json::json!(360.0));
+        logo.props
+            .insert("h_px".to_owned(), serde_json::json!(360.0));
+        logo.props
+            .insert("z_order".to_owned(), serde_json::json!(10));
+        components.push(logo);
+    }
+
+    if let Some(texture_ref) = valid_visual_ref(visuals.spinner.as_deref()) {
+        let mut spinner = UiComponentNode::text("loading.spinner", "")
+            .tagged("startup-spinner")
+            .tagged("loading-spinner");
+        spinner.component_id = newengine_ui_api::UI_COMPONENT_EXTERNAL_TEXTURE.to_owned();
+        set_ytd_texture_ref(&mut spinner, texture_ref);
+        set_production_paint_only(&mut spinner);
+        spinner
+            .props
+            .insert("position".to_owned(), serde_json::json!("fixed"));
+        spinner
+            .props
+            .insert("display".to_owned(), serde_json::json!("leaf"));
+        spinner
+            .props
+            .insert("anchor".to_owned(), serde_json::json!("bottom_center"));
+        spinner
+            .props
+            .insert("bottom_px".to_owned(), serde_json::json!(96.0));
+        spinner
+            .props
+            .insert("w_px".to_owned(), serde_json::json!(64.0));
+        spinner
+            .props
+            .insert("h_px".to_owned(), serde_json::json!(64.0));
+        spinner
+            .props
+            .insert("z_order".to_owned(), serde_json::json!(20));
+        spinner
+            .props
+            .insert("animation".to_owned(), serde_json::json!("rotate"));
+        spinner
+            .props
+            .insert("frame_index".to_owned(), serde_json::json!(frame_index));
+        components.push(spinner);
+    }
 
     let mut progress = UiComponentNode::row("loading.progress_bar", "")
-        .with_value(format!("{progress_percent:.0}%"))
+        .with_value("")
         .tagged("progress")
         .tagged("progress-bar");
     progress.component_id = "progress_bar".to_owned();
+    progress
+        .props
+        .insert("position".to_owned(), serde_json::json!("fixed"));
+    progress
+        .props
+        .insert("anchor".to_owned(), serde_json::json!("bottom_center"));
+    progress
+        .props
+        .insert("bottom_px".to_owned(), serde_json::json!(48.0));
+    progress
+        .props
+        .insert("w_px".to_owned(), serde_json::json!(760.0));
+    progress
+        .props
+        .insert("h_px".to_owned(), serde_json::json!(18.0));
+    progress
+        .props
+        .insert("debug_chrome".to_owned(), serde_json::json!(false));
+    progress
+        .props
+        .insert("label_visible".to_owned(), serde_json::json!(false));
     progress
         .props
         .insert("progress_01".to_owned(), serde_json::json!(progress_01));
     progress
         .props
         .insert("percent".to_owned(), serde_json::json!(progress_percent));
+    progress
+        .props
+        .insert("z_order".to_owned(), serde_json::json!(30));
+    components.push(progress);
 
-    vec![background, logo, progress]
+    components
 }
 
-fn logo_sprite_frame(frame_index: u64) -> u64 {
-    frame_index.min(STARTUP_LOGO_FRAME_COUNT.saturating_sub(1))
+fn set_production_paint_only(component: &mut UiComponentNode) {
+    component
+        .props
+        .insert("paint_only".to_owned(), serde_json::json!(true));
+    component
+        .props
+        .insert("debug_chrome".to_owned(), serde_json::json!(false));
+    component
+        .props
+        .insert("hit_test".to_owned(), serde_json::json!(false));
+}
+
+fn valid_visual_ref(value: Option<&str>) -> Option<&str> {
+    value.map(str::trim).filter(|value| !value.is_empty())
+}
+
+fn set_ytd_texture_ref(component: &mut UiComponentNode, texture_ref: &str) {
+    component
+        .props
+        .insert("texture_ref".to_owned(), serde_json::json!(texture_ref));
+    // Compatibility with authored .neui Image/ExternalTexture nodes: Aurelia
+    // consumes either texture_ref or texture, but both must be runtime refs.
+    component
+        .props
+        .insert("texture".to_owned(), serde_json::json!(texture_ref));
 }
 
 pub(super) fn error_overlay_components(status: &ScreenOverlayStatus) -> Vec<UiComponentNode> {

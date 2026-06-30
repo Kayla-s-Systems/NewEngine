@@ -12,6 +12,13 @@ pub struct ViewportRuntime {
     resized: bool,
 }
 
+impl Default for ViewportRuntime {
+    #[inline]
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ViewportRuntime {
     #[inline]
     pub fn new() -> Self {

@@ -6,7 +6,8 @@ use crate::{
     MATERIAL_LIBRARY_ASSET_KIND, MATERIAL_LIBRARY_CONTAINER, MATERIAL_LIBRARY_EXTENSION,
     OBJECT_TYPE_DEFINITIONS_ASSET_KIND, OBJECT_TYPE_DEFINITIONS_CONTAINER,
     OBJECT_TYPE_DEFINITIONS_EXTENSION, TEXTURE_DICTIONARY_ASSET_KIND, TEXTURE_DICTIONARY_CONTAINER,
-    TEXTURE_DICTIONARY_EXTENSION,
+    TEXTURE_DICTIONARY_EXTENSION, UV_LAYOUT_DICTIONARY_ASSET_KIND, UV_LAYOUT_DICTIONARY_CONTAINER,
+    UV_LAYOUT_DICTIONARY_EXTENSION,
 };
 
 /// Compile-time canonical asset-chain role.
@@ -14,7 +15,7 @@ use crate::{
 /// This table is the source of truth for authored data-driven model content.
 /// Runtime code, codecs and tools should query it instead of copying extension /
 /// kind tuples into separate branches.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub struct ModelAssetChainRoleSpec {
     pub role: &'static str,
     pub extension: &'static str,
@@ -28,7 +29,7 @@ pub struct ModelAssetChainRoleSpec {
 }
 
 /// Serializable owned role used by tools and asset graph diagnostics.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct ModelAssetChainRole {
     pub role: String,
@@ -40,22 +41,6 @@ pub struct ModelAssetChainRole {
     pub runtime_ready: bool,
     pub runtime_container: Option<String>,
     pub description: String,
-}
-
-impl Default for ModelAssetChainRole {
-    fn default() -> Self {
-        Self {
-            role: String::new(),
-            extension: String::new(),
-            asset_kind: String::new(),
-            source_container: String::new(),
-            codec_service: String::new(),
-            primary_output: String::new(),
-            runtime_ready: false,
-            runtime_container: None,
-            description: String::new(),
-        }
-    }
 }
 
 impl From<&ModelAssetChainRoleSpec> for ModelAssetChainRole {
@@ -74,14 +59,16 @@ impl From<&ModelAssetChainRoleSpec> for ModelAssetChainRole {
     }
 }
 
-pub const ROLE_DEFINITION_ENTRIES: &str = "definition_entries";
+pub const ROLE_ASSET_PROPERTIES: &str = "asset_properties";
+// Backward-compatible role alias for existing DTO fields/logs. New code should use ROLE_ASSET_PROPERTIES.
+pub const ROLE_DEFINITION_ENTRIES: &str = ROLE_ASSET_PROPERTIES;
 pub const ROLE_DRAWABLE_DICTIONARY: &str = "drawable_dictionary";
 pub const ROLE_MATERIAL_LIBRARY: &str = "material_library";
 pub const ROLE_TEXTURE_DICTIONARY: &str = "texture_dictionary";
+pub const ROLE_UV_LAYOUT_DICTIONARY: &str = "uv_layout_dictionary";
 pub const ROLE_ASSET_PACKAGE: &str = "asset_package";
 
-/// Public authored chain: `.ytyp -> .ydd -> .nemat -> .ytd`.
-///
+/// Public authored chain: `.ytyp -> .ytyd -> .ydd -> .nemat -> .ytd`.
 pub const MODEL_ASSET_CHAIN_ROLES: &[ModelAssetChainRoleSpec] = &[
     ModelAssetChainRoleSpec {
         role: ROLE_DEFINITION_ENTRIES,
@@ -92,7 +79,18 @@ pub const MODEL_ASSET_CHAIN_ROLES: &[ModelAssetChainRoleSpec] = &[
         primary_output: "assets.definitions.manifest_v1",
         runtime_ready: true,
         runtime_container: None,
-        description: "Definition Entries / archetype metadata served by engine.assets.definitions. NEF8 ListFile supplies only envelope/body bytes; semantic projection declares drawable, texture, physics, bounds and LOD metadata.",
+        description: "JSON .ytyp archetype metadata served by engine.assets.definitions. It declares drawable, UV layout, texture, physics, render-role, bounds and LOD metadata.",
+    },
+    ModelAssetChainRoleSpec {
+        role: ROLE_UV_LAYOUT_DICTIONARY,
+        extension: UV_LAYOUT_DICTIONARY_EXTENSION,
+        asset_kind: UV_LAYOUT_DICTIONARY_ASSET_KIND,
+        source_container: UV_LAYOUT_DICTIONARY_CONTAINER,
+        codec_service: "asset.codec.listfile.ytyd",
+        primary_output: "model.uv_layout_dictionary_manifest_json",
+        runtime_ready: true,
+        runtime_container: None,
+        description: "NEF8 ListFile UV layout / unwrap metadata dictionary. YTYP/YDD entries reference .ytyd@entry selectors.",
     },
     ModelAssetChainRoleSpec {
         role: ROLE_DRAWABLE_DICTIONARY,
@@ -140,7 +138,7 @@ pub const MODEL_ASSET_PACKAGE_ROLES: &[ModelAssetChainRoleSpec] = &[
         primary_output: "container.manifest_json",
         runtime_ready: true,
         runtime_container: None,
-        description: "Package container for delivering .ytyp/.ydd/.nemat/.ytd and related assets as one VFS layer.",
+        description: "Package container for delivering .ytyp/.ytyd plus .ydd/.nemat/.ytd dictionaries and related assets as one VFS layer.",
     },
 ];
 
@@ -221,9 +219,15 @@ impl Default for ModelAssetChainManifest {
             roles: model_asset_chain_roles(),
             package_roles: model_asset_package_roles(),
             previous_roles: Vec::new(),
-            authored_chain: vec!["ytyp".to_owned(), "ydd".to_owned(), "nemat".to_owned(), "ytd".to_owned()],
+            authored_chain: vec![
+                "ytyp".to_owned(),
+                "ytyd".to_owned(),
+                "ydd".to_owned(),
+                "nemat".to_owned(),
+                "ytd".to_owned(),
+            ],
             notes: vec![
-                "ListFile implementers keep their extensions (.ytyp/.ydd/.ytd/.nemat) but share NEF8 as top-level magic.".to_owned(),
+                "ListFile implementers keep their extensions (.ytyp/.ytyd/.ydd/.ytd/.nemat) but share NEF8 as top-level magic.".to_owned(),
                 ".nepak is a separate package/VFS delivery container, not a NEF8 ListFile.".to_owned(),
                 "Data-driven runtime should consume dependency graphs resolved from engine.assets.definitions and engine.assets.graph.".to_owned(),
             ],

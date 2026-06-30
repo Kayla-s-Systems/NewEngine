@@ -1,10 +1,10 @@
 use crate::error::{EngineError, EngineResult};
 use crate::events::EventHub;
-use crate::jobs::{JobSystem, JobSystemHandle, JobSystemSnapshot};
 use crate::module::{Bus, Module, Resources, Services};
 use crate::sched::Scheduler;
 use crate::startup_status::{EngineIncrementalStartupState, EngineStartupSnapshot};
 use crate::sync::ShutdownToken;
+use crate::threading::{ThreadPoolHandle, ThreadPoolManager, ThreadPoolSnapshot};
 use newengine_plugin_host::{
     init_host_context, init_plugin_config_service, PluginControlQueue, PluginManager,
 };
@@ -35,7 +35,7 @@ pub struct Engine<E: Send + 'static> {
 
     pub(super) events: EventHub,
     pub(super) scheduler: Scheduler,
-    pub(super) job_system: JobSystem,
+    pub(super) thread_pool: ThreadPoolManager,
     pub(super) startup_graph: StartupReadinessGraph,
     pub(super) startup_snapshot: EngineStartupSnapshot,
     pub(super) incremental_startup: Option<EngineIncrementalStartupState>,
@@ -112,13 +112,13 @@ impl<E: Send + 'static> Engine<E> {
     }
 
     #[inline]
-    pub fn job_system(&self) -> JobSystemHandle {
-        self.job_system.handle()
+    pub fn thread_pool(&self) -> ThreadPoolHandle {
+        self.thread_pool.handle()
     }
 
     #[inline]
-    pub fn job_system_snapshot(&self) -> JobSystemSnapshot {
-        self.job_system.snapshot()
+    pub fn thread_pool_snapshot(&self) -> ThreadPoolSnapshot {
+        self.thread_pool.snapshot()
     }
 
     pub fn emit<T>(&self, event: T) -> EngineResult<()>
@@ -166,8 +166,8 @@ impl<E: Send + 'static> Engine<E> {
         resources.insert(PluginControlQueue::default());
 
         let events = EventHub::new();
-        let job_system = JobSystem::new_with_event_hub(config.job_system, events.clone());
-        resources.insert(job_system.handle());
+        let thread_pool = ThreadPoolManager::new_with_event_hub(config.thread_pool, events.clone());
+        resources.insert(thread_pool.handle());
 
         init_host_context();
         init_plugin_config_service(config.plugin_overrides.clone());
@@ -188,7 +188,7 @@ impl<E: Send + 'static> Engine<E> {
             bus,
             events,
             scheduler: Scheduler::new(),
-            job_system,
+            thread_pool,
             startup_graph: StartupReadinessGraph::default(),
             startup_snapshot: EngineStartupSnapshot::idle(EngineRunState::Created.as_str()),
             incremental_startup: None,

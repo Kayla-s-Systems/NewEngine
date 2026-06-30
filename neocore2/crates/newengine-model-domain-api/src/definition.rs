@@ -6,26 +6,18 @@ use crate::{
     DEFINITION_ENTRIES_SCHEMA, DRAWABLE_DICTIONARY_ASSET_KIND, DRAWABLE_DICTIONARY_EXTENSION,
     OBJECT_TYPE_DEFINITIONS_ASSET_KIND, OBJECT_TYPE_DEFINITIONS_CONTAINER,
     OBJECT_TYPE_DEFINITIONS_EXTENSION, PHYSICS_DICTIONARY_ASSET_KIND, PHYSICS_DICTIONARY_EXTENSION,
-    TEXTURE_DICTIONARY_ASSET_KIND, TEXTURE_DICTIONARY_EXTENSION,
+    TEXTURE_DICTIONARY_ASSET_KIND, TEXTURE_DICTIONARY_EXTENSION, UV_LAYOUT_DICTIONARY_ASSET_KIND,
+    UV_LAYOUT_DICTIONARY_EXTENSION,
 };
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct DefinitionEntriesRequest {
     pub source: String,
     pub selector: Option<String>,
 }
 
-impl Default for DefinitionEntriesRequest {
-    fn default() -> Self {
-        Self {
-            source: String::new(),
-            selector: None,
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct DefinitionAssetRef {
     pub name: String,
@@ -35,20 +27,6 @@ pub struct DefinitionAssetRef {
     pub logical_path_hint: Option<String>,
     pub entry: Option<String>,
     pub canonical_ref: String,
-}
-
-impl Default for DefinitionAssetRef {
-    fn default() -> Self {
-        Self {
-            name: String::new(),
-            role: String::new(),
-            extension: String::new(),
-            asset_kind: String::new(),
-            logical_path_hint: None,
-            entry: None,
-            canonical_ref: String::new(),
-        }
-    }
 }
 
 impl DefinitionAssetRef {
@@ -76,46 +54,25 @@ impl DefinitionAssetRef {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct DefinitionAssetChain {
     pub definition_type: Option<DefinitionAssetRef>,
     pub drawable_dictionary: Option<DefinitionAssetRef>,
     pub texture_dictionary: Option<DefinitionAssetRef>,
+    pub uv_layout_dictionary: Option<DefinitionAssetRef>,
     pub clip_dictionary: Option<DefinitionAssetRef>,
     pub physics_dictionary: Option<DefinitionAssetRef>,
 }
 
-impl Default for DefinitionAssetChain {
-    fn default() -> Self {
-        Self {
-            definition_type: None,
-            drawable_dictionary: None,
-            texture_dictionary: None,
-            clip_dictionary: None,
-            physics_dictionary: None,
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct DefinitionDictionaries {
     pub texture: Option<String>,
     pub drawable: Option<String>,
+    pub uv_layout: Option<String>,
     pub clip: Option<String>,
     pub physics: Option<String>,
-}
-
-impl Default for DefinitionDictionaries {
-    fn default() -> Self {
-        Self {
-            texture: None,
-            drawable: None,
-            clip: None,
-            physics: None,
-        }
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -222,6 +179,13 @@ pub fn build_definition_asset_chain(source: &str, entry: &DefinitionEntry) -> De
                 name,
                 TEXTURE_DICTIONARY_EXTENSION,
                 TEXTURE_DICTIONARY_ASSET_KIND,
+            )
+        }),
+        uv_layout_dictionary: entry.dictionaries.uv_layout.as_deref().and_then(|name| {
+            DefinitionAssetRef::named(
+                name,
+                UV_LAYOUT_DICTIONARY_EXTENSION,
+                UV_LAYOUT_DICTIONARY_ASSET_KIND,
             )
         }),
         clip_dictionary: entry.dictionaries.clip.as_deref().and_then(|name| {

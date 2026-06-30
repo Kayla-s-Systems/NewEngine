@@ -146,9 +146,7 @@ impl RuntimeRenderController {
                 self.frame.frame_index,
             );
         }
-        newengine_core::crash::record_breadcrumb(
-            "render controller: UI restore contract applied".to_owned(),
-        );
+        newengine_core::crash::record_breadcrumb("render controller: UI restore contract applied");
     }
 
     /// Registers a profile-owned draw-list provider.

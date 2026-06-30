@@ -19,26 +19,6 @@ impl StartupLoader {
         let mut cfg = StartupConfig::default();
         let mut report = StartupLoadReport::new();
 
-        let startup_window = crate::startup_window::present_before_startup_if_needed(paths);
-        report.overrides.push(StartupOverride {
-            key: "startup_window",
-            from: "core default".to_owned(),
-            to: format!(
-                "decision={:?}; details={}; disabled_by={}; warnings={}",
-                startup_window.decision,
-                startup_window.details,
-                startup_window.disabled_by.as_deref().unwrap_or("<none>"),
-                startup_window.warnings.len()
-            ),
-        });
-
-        if matches!(
-            startup_window.decision,
-            crate::startup_window::StartupWindowDecision::Cancelled
-        ) {
-            return Err(EngineError::ExitRequested);
-        }
-
         let raw_path = paths.startup_path();
 
         match resolve_startup_file_optional(paths, raw_path) {
@@ -78,6 +58,42 @@ impl StartupLoader {
             Err(e) => return Err(e),
         }
 
+        // Present/record PreStart loading only after config.json is known, so
+        // consumer-owned `plugins.engine.loading` manifests can assign bg/logo/spinner.
+        let startup_window = crate::startup_window::present_before_startup_if_needed(paths, &cfg);
+        if let Some(loading_assignment) = startup_window.loading_assignment.as_ref() {
+            report.overrides.push(StartupOverride {
+                key: "engine.loading",
+                from: "core default / consumer manifest".to_owned(),
+                to: loading_assignment.override_summary(),
+            });
+        }
+        if let Some(boot_frame) = startup_window.boot_frame.as_ref() {
+            report.overrides.push(StartupOverride {
+                key: "engine.loading.boot_frame",
+                from: "<none>".to_owned(),
+                to: boot_frame.diagnostic_summary(),
+            });
+        }
+        report.overrides.push(StartupOverride {
+            key: "startup_window",
+            from: "core default".to_owned(),
+            to: format!(
+                "decision={:?}; details={}; disabled_by={}; warnings={}",
+                startup_window.decision,
+                startup_window.details,
+                startup_window.disabled_by.as_deref().unwrap_or("<none>"),
+                startup_window.warnings.len()
+            ),
+        });
+
+        if matches!(
+            startup_window.decision,
+            crate::startup_window::StartupWindowDecision::Cancelled
+        ) {
+            return Err(EngineError::ExitRequested);
+        }
+
         // Publish engine-level roots as soon as startup config is resolved.
         // CACHE_FILES is disposable generated data. CONFIG is durable user settings.
         publish_startup_storage_roots(&cfg, &mut report);
@@ -109,7 +125,7 @@ struct WindowJson {
 
     placement: Option<WindowPlacementJson>,
 
-    /// Logical path inside assets, e.g. "ui/icons/builtin_icons.ytd@app_logo"
+    /// Logical path inside assets, e.g. "textures/ui/icons/builtin_icons.ytd@app_logo"
     icon: Option<String>,
 }
 

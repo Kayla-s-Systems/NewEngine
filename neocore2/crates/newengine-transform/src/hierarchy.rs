@@ -57,7 +57,7 @@ pub fn set_parent(world: &mut World, child: EntityId, parent: Option<EntityId>) 
             }
 
             if let Some(ch) = world.get_mut::<Children>(p) {
-                if !ch.0.iter().any(|&e| e == child_handle) {
+                if !ch.0.contains(&child_handle) {
                     ch.0.push(child_handle);
                     world.mark_changed::<Children>(p);
                 }

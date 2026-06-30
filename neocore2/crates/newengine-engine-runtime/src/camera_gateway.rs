@@ -79,11 +79,11 @@ fn camera_gateway_service(
         )
         .blob(
             newengine_camera_api::CAMERA_SERVICE_METHOD_INVOKE,
-            |state, payload| invoke_camera_gateway(state, payload),
+            invoke_camera_gateway,
         )
         .blob(
             newengine_camera_api::CAMERA_SERVICE_METHOD_VIEW_SET_JSON_V1,
-            |state, payload| apply_camera_view_command(state, payload),
+            apply_camera_view_command,
         )
         .get_json(
             newengine_camera_api::CAMERA_SERVICE_METHOD_VIEW_NEXT_JSON_V1,
@@ -102,7 +102,7 @@ fn camera_gateway_service(
 fn invoke_camera_gateway(state: &mut CameraGatewayState, payload: Blob) -> RResult<Blob, RString> {
     if payload.as_slice().is_empty() {
         let snapshot = state.last_snapshot.unwrap_or_default();
-        return ok_json(&snapshot);
+        return ok_json(snapshot);
     }
     apply_camera_view_command(state, payload)
 }
@@ -125,7 +125,7 @@ fn apply_camera_view_command(
         Err(e) => return RResult::RErr(e),
     };
     let active_view = state.set_view_command(request.command);
-    ok_json(&CameraViewCommandResponse { active_view })
+    ok_json(CameraViewCommandResponse { active_view })
 }
 
 fn register_camera_gateway_service_best_effort(state: Arc<Mutex<CameraGatewayState>>) {

@@ -2,9 +2,10 @@
 // This file is included flat from lib.rs to preserve the existing public API.
 
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum UiTextEditOpKind {
+    #[default]
     InsertText,
     Backspace,
     Delete,
@@ -17,11 +18,6 @@ pub enum UiTextEditOpKind {
     Cut,
     Paste,
 }
-
-impl Default for UiTextEditOpKind {
-    fn default() -> Self { Self::InsertText }
-}
-
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct UiTextEditOp {

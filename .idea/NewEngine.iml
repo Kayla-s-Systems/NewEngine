@@ -169,6 +169,8 @@
       <sourceFolder url="file://$MODULE_DIR$/neocore2/apps/RendererDemo/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-ulog-api/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/neocore2/apps/gameFps/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-assets-ui-runtime/examples" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-task-api/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/neocore2/apps/editor/target" />
       <excludeFolder url="file://$MODULE_DIR$/neocore2/target" />
       <excludeFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-sim/target" />

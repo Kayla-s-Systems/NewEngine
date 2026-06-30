@@ -3,19 +3,20 @@
 //! Runtime-hosted `engine.assets.definitions` runtime service.
 //!
 //! `.ytyp` ownership lives here. The service uses `engine.assets` only as the
-//! VFS/raw-bytes/NEF8-envelope owner and returns Definition Entry DTOs to tools,
+//! VFS/raw-bytes owner and returns single-asset Properties DTOs to tools,
 //! scene/map placement loaders and the asset graph resolver.
 use std::collections::{BTreeMap, BTreeSet};
 
 use abi_stable::std_types::{RResult, RString};
-use newengine_assets::{AssetDecodeRequest, AssetServiceClient};
+use newengine_assets::AssetServiceClient;
 use newengine_assets_api::{
-    definitions_method, stable_hash_from_text, AssetDependencyRecordV1, AssetReference,
-    ASSET_LIST_FILE_BODY_OUTPUT, DEFINITIONS_BACKEND_CAPABILITY_ID, DEFINITIONS_RUNTIME_CONTRACT,
-    DEFINITIONS_SERVICE_ID, DEFINITIONS_SERVICE_METHODS, ENGINE_ASSETS_DEFINITIONS_SERVICE_ID,
-    ENGINE_ASSETS_GRAPH_SERVICE_ID, ENGINE_ASSET_SERVICE_ID,
+    definitions_method, stable_hash_from_text, AssetDecodeRequest, AssetDependencyRecordV1,
+    AssetReference, ASSET_LIST_FILE_BODY_OUTPUT, DEFINITIONS_BACKEND_CAPABILITY_ID,
+    DEFINITIONS_RUNTIME_CONTRACT, DEFINITIONS_SERVICE_ID, DEFINITIONS_SERVICE_METHODS,
+    ENGINE_ASSETS_DEFINITIONS_SERVICE_ID, ENGINE_ASSETS_GRAPH_SERVICE_ID, ENGINE_ASSET_SERVICE_ID,
 };
 use newengine_authored_xml as authored_xml;
+use newengine_model_domain_api::{MaterialBindingRef, MeshRenderOptions, MeshShadowPolicy};
 use newengine_plugin_api::Blob;
 use newengine_service_api::EngineServiceKind;
 use newengine_service_kit::{
@@ -90,8 +91,11 @@ impl Default for DefinitionManifestRequest {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default)]
 struct RawDefinitionEntryV1 {
+    #[serde(alias = "id", alias = "asset_name", alias = "assetName")]
     name: String,
+    #[serde(alias = "stableHash")]
     stable_hash: u64,
+    #[serde(alias = "entryKind")]
     entry_kind: String,
     kind: String,
     schema: String,
@@ -99,8 +103,13 @@ struct RawDefinitionEntryV1 {
     dependencies: Vec<AssetDependencyRecordV1>,
     namespaces: BTreeMap<String, serde_json::Value>,
     metadata: BTreeMap<String, serde_json::Value>,
+    #[serde(alias = "materialBindings")]
+    material_bindings: Vec<MaterialBindingRef>,
+    #[serde(alias = "semanticTags")]
     semantic_tags: Vec<String>,
+    #[serde(alias = "domainTags")]
     domain_tags: Vec<String>,
+    #[serde(alias = "sideEffects")]
     side_effects: Vec<DefinitionSideEffectV1>,
     flags: u32,
 }
@@ -117,6 +126,7 @@ impl Default for RawDefinitionEntryV1 {
             dependencies: Vec::new(),
             namespaces: BTreeMap::new(),
             metadata: BTreeMap::new(),
+            material_bindings: Vec::new(),
             semantic_tags: Vec::new(),
             domain_tags: Vec::new(),
             side_effects: Vec::new(),
@@ -125,30 +135,20 @@ impl Default for RawDefinitionEntryV1 {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct DefinitionIdentityV1 {
     pub name: String,
     pub source: String,
     pub definition_ref: String,
 }
-
-impl Default for DefinitionIdentityV1 {
-    fn default() -> Self {
-        Self {
-            name: String::new(),
-            source: String::new(),
-            definition_ref: String::new(),
-        }
-    }
-}
-
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct DefinitionRefsV1 {
     pub drawable_refs: Vec<String>,
     pub material_refs: Vec<String>,
     pub texture_refs: Vec<String>,
+    pub uv_layout_refs: Vec<String>,
     pub physics_refs: Vec<String>,
     pub collision_refs: Vec<String>,
     pub ai_refs: Vec<String>,
@@ -157,7 +157,7 @@ pub struct DefinitionRefsV1 {
     pub other_refs: Vec<String>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct DefinitionSideEffectV1 {
     pub domain: String,
@@ -165,14 +165,48 @@ pub struct DefinitionSideEffectV1 {
     pub target: String,
     pub metadata: BTreeMap<String, serde_json::Value>,
 }
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ModelExplanationV1 {
+    pub schema: String,
+    pub source: String,
+    pub model_ref: Option<String>,
+    pub drawable_ref: Option<String>,
+    pub material_bindings: Vec<MaterialBindingRef>,
+    pub material_refs: Vec<String>,
+    pub texture_refs: Vec<String>,
+    pub uv_layout_refs: Vec<String>,
+    pub physics_refs: Vec<String>,
+    pub collision_refs: Vec<String>,
+    pub render_options: MeshRenderOptions,
+    pub collision_policy: String,
+    pub uv_policy: String,
+    pub physics_policy: String,
+    pub lod_policy: String,
+    pub streaming_policy: String,
+    pub explanation: String,
+}
 
-impl Default for DefinitionSideEffectV1 {
+impl Default for ModelExplanationV1 {
     fn default() -> Self {
         Self {
-            domain: String::new(),
-            effect: String::new(),
-            target: String::new(),
-            metadata: BTreeMap::new(),
+            schema: "newengine.ytyp.model_explanation.v1".to_owned(),
+            source: String::new(),
+            model_ref: None,
+            drawable_ref: None,
+            material_bindings: Vec::new(),
+            material_refs: Vec::new(),
+            texture_refs: Vec::new(),
+            uv_layout_refs: Vec::new(),
+            physics_refs: Vec::new(),
+            collision_refs: Vec::new(),
+            render_options: MeshRenderOptions::world_opaque(),
+            collision_policy: "unspecified".to_owned(),
+            uv_policy: "authored".to_owned(),
+            physics_policy: "unspecified".to_owned(),
+            lod_policy: "unspecified".to_owned(),
+            streaming_policy: "unspecified".to_owned(),
+            explanation: String::new(),
         }
     }
 }
@@ -187,6 +221,7 @@ pub struct DefinitionEntryV1 {
     pub semantic_tags: Vec<String>,
     pub domain_tags: Vec<String>,
     pub refs: DefinitionRefsV1,
+    pub model_explanation: ModelExplanationV1,
     pub side_effects: Vec<DefinitionSideEffectV1>,
     pub arbitrary_metadata: BTreeMap<String, serde_json::Value>,
     pub warnings: Vec<String>,
@@ -202,6 +237,7 @@ impl Default for DefinitionEntryV1 {
             semantic_tags: Vec::new(),
             domain_tags: Vec::new(),
             refs: DefinitionRefsV1::default(),
+            model_explanation: ModelExplanationV1::default(),
             side_effects: Vec::new(),
             arbitrary_metadata: BTreeMap::new(),
             warnings: Vec::new(),
@@ -298,24 +334,25 @@ fn definition_ref_from_request(request: &DefinitionRefRequest) -> Result<String,
     let source = normalize_logical_ref(&request.source);
     if source.is_empty() {
         return Err(
-            "assets.definitions.entry_v1 requires definition_ref='.ytyp@entry' or source + entry"
+            "assets.definitions.entry_v1 requires definition_ref='definitions/foo.ytyp' or source='definitions/foo.ytyp'"
                 .to_owned(),
         );
     }
-    let Some(entry) = request
+    if let Some(entry) = request
         .entry
         .as_deref()
         .map(str::trim)
         .filter(|it| !it.is_empty())
-    else {
-        return Err("assets.definitions.entry_v1 requires .ytyp@entry; .ytyp without @entry is a dictionary manifest request".to_owned());
-    };
-    Ok(format!("{source}@{entry}"))
+    {
+        Ok(format!("{source}@{entry}"))
+    } else {
+        Ok(source)
+    }
 }
 
 fn parse_definition_ref(request: &DefinitionRefRequest) -> Result<AssetReference, String> {
     let raw = definition_ref_from_request(request)?;
-    newengine_assets_api::require_asset_reference_extension(&raw, &["ytyp"], true)
+    newengine_assets_api::require_asset_reference_extension(&raw, &["ytyp"], false)
         .map_err(|e| e.to_string())
 }
 
@@ -329,7 +366,7 @@ fn manifest_source_from_request(request: &DefinitionManifestRequest) -> Result<S
             .next()
             .unwrap_or(request.definition_ref.trim())
     } else {
-        return Err("assets.definitions.manifest_v1 requires source='world/foo.ytyp' or definition_ref='world/foo.ytyp@entry'".to_owned());
+        return Err("assets.definitions.manifest_v1 requires source='definitions/foo.ytyp' or definition_ref='definitions/foo.ytyp'".to_owned());
     };
     let normalized = normalize_logical_ref(raw);
     let reference =
@@ -343,7 +380,7 @@ fn ref_request_from_payload(payload: &[u8], method: &str) -> Result<DefinitionRe
         .map(str::trim)
         .map_err(|e| format!("{method} invalid utf-8 request: {e}"))?;
     if trimmed.is_empty() {
-        return Err(format!("{method} requires definition_ref='.ytyp@entry'"));
+        return Err(format!("{method} requires definition_ref='.ytyp'"));
     }
     if trimmed.starts_with('{') {
         serde_json::from_str::<DefinitionRefRequest>(trimmed)
@@ -364,7 +401,7 @@ fn manifest_request_from_payload(
         .map(str::trim)
         .map_err(|e| format!("{method} invalid utf-8 request: {e}"))?;
     if trimmed.is_empty() {
-        return Err(format!("{method} requires source='world/foo.ytyp'"));
+        return Err(format!("{method} requires source='definitions/foo.ytyp'"));
     }
     if trimmed.starts_with('{') {
         serde_json::from_str::<DefinitionManifestRequest>(trimmed)
@@ -377,147 +414,377 @@ fn manifest_request_from_payload(
     }
 }
 
-fn load_dictionary_body(
+fn load_ytyp_semantic_body(
+    state: &DefinitionsRuntimeState,
+    source: &str,
+) -> Result<(Vec<u8>, Vec<String>), String> {
+    match state.client.raw_bytes_v1(source) {
+        Ok(body) if body.get(0..4) != Some(&newengine_assets_api::LIST_FILE_MAGIC_NEF8[..]) => {
+            Ok((
+                body,
+                vec![
+                    ".ytyp loose authoring body read through engine.assets raw_bytes_v1".to_owned(),
+                ],
+            ))
+        }
+        Ok(_nef8_envelope) => {
+            let request = AssetDecodeRequest {
+                logical_path: source.to_owned(),
+                output_kind: ASSET_LIST_FILE_BODY_OUTPUT.to_owned(),
+                selector: serde_json::Value::Null,
+            };
+            state
+                .client
+                .decode_v1(&request)
+                .map(|body| {
+                    (
+                        body,
+                        vec![".ytyp NEF8 ListFile body decoded through engine.assets".to_owned()],
+                    )
+                })
+                .map_err(|decode_error| {
+                    format!("engine.assets.definitions: .ytyp NEF8 source requires asset.decode_v1 source='{source}' err='{decode_error}'")
+                })
+        }
+        Err(read_error) => {
+            let request = AssetDecodeRequest {
+                logical_path: source.to_owned(),
+                output_kind: ASSET_LIST_FILE_BODY_OUTPUT.to_owned(),
+                selector: serde_json::Value::Null,
+            };
+            state
+                .client
+                .decode_v1(&request)
+                .map(|body| {
+                    (
+                        body,
+                        vec![".ytyp body decoded through engine.assets after raw_bytes_v1 miss".to_owned()],
+                    )
+                })
+                .map_err(|decode_error| {
+                    format!("engine.assets.definitions: .ytyp unavailable source='{source}' read_err='{read_error}' decode_err='{decode_error}'")
+                })
+        }
+    }
+}
+
+fn load_properties_body(
     state: &DefinitionsRuntimeState,
     source: &str,
 ) -> Result<(Vec<RawDefinitionEntryV1>, Vec<String>), String> {
-    let body = state.client.decode_v1(&AssetDecodeRequest {
-        logical_path: source.to_owned(),
-        output_kind: ASSET_LIST_FILE_BODY_OUTPUT.to_owned(),
-        selector: serde_json::Value::Null,
-    }).map_err(|error| format!(
-        "engine.assets.definitions: raw NEF8 body unavailable source='{source}' output='{}' err='{error}'",
-        ASSET_LIST_FILE_BODY_OUTPUT
-    ))?;
-
-    if !authored_xml::body_is_xml(&body) {
-        return Err(format!(
-            "engine.assets.definitions: .ytyp body must be XML DefinitionDictionary source='{source}' policy='metadata ListFiles use XML presentation inside NEF8; JSON runtime bodies are forbidden'"
-        ));
+    let (body, mut warnings) = load_ytyp_semantic_body(state, source)?;
+    if authored_xml::body_is_xml(&body) {
+        let (entries, mut parse_warnings) = parse_ytyp_xml_document(source, &body)?;
+        warnings.append(&mut parse_warnings);
+        warnings
+            .push(".ytyp loose XML authoring body adapted into archetype metadata DTO".to_owned());
+        return Ok((entries, warnings));
     }
-    parse_definition_dictionary_xml(source, &body)
-}
-
-fn parse_definition_dictionary_xml(
-    source: &str,
-    body: &[u8],
-) -> Result<(Vec<RawDefinitionEntryV1>, Vec<String>), String> {
-    let text = std::str::from_utf8(body)
-        .map_err(|error| format!("engine.assets.definitions: .ytyp XML body is not UTF-8 source='{source}' err='{error}'"))?;
-    let doc = authored_xml::parse_xml_document(
-        text,
-        &format!("engine.assets.definitions source='{source}'"),
-    )?;
-    let root = doc.root_element();
-    if !root.has_tag_name("YtypDefinitionDictionary") && !root.has_tag_name("DefinitionDictionary")
-    {
-        return Err(format!(
-            "engine.assets.definitions: .ytyp XML root must be <YtypDefinitionDictionary> source='{source}' actual='{}'",
-            root.tag_name().name()
-        ));
-    }
-    let schema = authored_xml::xml_attr_any(root, &["schema"]).unwrap_or_default();
-    if schema.trim().is_empty() {
-        return Err(format!(
-            "engine.assets.definitions: .ytyp XML dictionary missing schema source='{source}'"
-        ));
-    }
-    if schema != "newengine.ytyp.definition_dictionary.v1" {
-        return Err(format!(
-            "engine.assets.definitions: unsupported .ytyp XML schema source='{source}' expected='newengine.ytyp.definition_dictionary.v1' actual='{schema}'"
-        ));
-    }
-
-    let mut warnings = Vec::new();
-    warnings.push(".ytyp body parsed as XML metadata projection; NEF8 envelope still owns compression/hash/content_kind".to_owned());
-    let mut entries = Vec::new();
-    for entry_node in root
-        .children()
-        .filter(|node| node.is_element() && node.has_tag_name("Entry"))
-    {
-        entries.push(parse_definition_entry_xml(entry_node, source)?);
-    }
-    if entries.is_empty() {
-        warnings.push(format!("source='{source}' contains no <Entry> nodes"));
-    }
+    let (entries, mut parse_warnings) = parse_ytyp_json_document(source, &body)?;
+    warnings.append(&mut parse_warnings);
+    warnings.push(".ytyp semantic body parsed as archetype metadata DTO".to_owned());
     Ok((entries, warnings))
 }
 
-fn parse_definition_entry_xml(
-    node: authored_xml::XmlNode<'_, '_>,
-    source: &str,
-) -> Result<RawDefinitionEntryV1, String> {
-    let mut raw = RawDefinitionEntryV1::default();
-    raw.name = authored_xml::xml_attr_any(node, &["name", "asset_name", "id"]).unwrap_or_default();
-    if raw.name.trim().is_empty() {
-        return Err(format!(
-            "engine.assets.definitions: .ytyp XML <Entry> without name source='{source}'"
-        ));
-    }
-    raw.stable_hash =
-        authored_xml::xml_attr_u64_any(node, &["stable_hash", "stableHash"]).unwrap_or(0);
-    raw.entry_kind = authored_xml::xml_attr_any(node, &["entry_kind", "entryKind"])
-        .unwrap_or_else(|| "archetype_definition".to_owned());
-    raw.kind =
-        authored_xml::xml_attr_any(node, &["kind"]).unwrap_or_else(|| raw.entry_kind.clone());
-    raw.schema = authored_xml::xml_attr_any(node, &["schema"])
-        .unwrap_or_else(|| "newengine.ytyp.definition_entry.v1".to_owned());
-    raw.flags = authored_xml::xml_attr_u32_any(node, &["flags"]).unwrap_or(0);
+fn xml_attr_string(node: authored_xml::XmlNode<'_, '_>, names: &[&str]) -> Option<String> {
+    authored_xml::xml_attr_any(node, names)
+        .map(|value| value.trim().replace('\\', "/"))
+        .filter(|value| !value.is_empty())
+}
 
-    if let Some(deps) = authored_xml::xml_child(node, "Dependencies") {
-        for dep in deps
-            .children()
-            .filter(|child| child.is_element() && child.has_tag_name("Dependency"))
-        {
-            let reference =
-                authored_xml::xml_attr_any(dep, &["reference", "ref"]).unwrap_or_default();
-            if reference.trim().is_empty() {
-                continue;
-            }
-            raw.dependencies.push(AssetDependencyRecordV1 {
+fn xml_attr_bool(node: authored_xml::XmlNode<'_, '_>, names: &[&str], default: bool) -> bool {
+    xml_attr_string(node, names)
+        .map(|value| {
+            matches!(
+                value.to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "required"
+            )
+        })
+        .unwrap_or(default)
+}
+
+fn xml_attr_u64(node: authored_xml::XmlNode<'_, '_>, names: &[&str]) -> u64 {
+    xml_attr_string(node, names)
+        .and_then(|value| value.parse::<u64>().ok())
+        .unwrap_or_default()
+}
+
+fn xml_attr_u32(node: authored_xml::XmlNode<'_, '_>, names: &[&str]) -> u32 {
+    xml_attr_string(node, names)
+        .and_then(|value| value.parse::<u32>().ok())
+        .unwrap_or_default()
+}
+
+fn xml_tags(container: Option<authored_xml::XmlNode<'_, '_>>) -> Vec<String> {
+    let Some(container) = container else {
+        return Vec::new();
+    };
+    container
+        .children()
+        .filter(|child| child.is_element() && child.has_tag_name("Tag"))
+        .filter_map(|tag| xml_attr_string(tag, &["value", "name", "tag"]))
+        .collect()
+}
+
+fn xml_dependencies(
+    container: Option<authored_xml::XmlNode<'_, '_>>,
+) -> Vec<AssetDependencyRecordV1> {
+    let Some(container) = container else {
+        return Vec::new();
+    };
+    container
+        .children()
+        .filter(|child| child.is_element() && child.has_tag_name("Dependency"))
+        .filter_map(|dep| {
+            let reference = xml_attr_string(dep, &["reference", "ref", "path"])?;
+            let role =
+                xml_attr_string(dep, &["role", "kind"]).unwrap_or_else(|| "dependency".to_owned());
+            let domain = xml_attr_string(dep, &["domain"]).unwrap_or_default();
+            Some(AssetDependencyRecordV1::new(
                 reference,
-                role: authored_xml::xml_attr_any(dep, &["role"]).unwrap_or_default(),
-                domain: authored_xml::xml_attr_any(dep, &["domain"]).unwrap_or_default(),
-                required: authored_xml::xml_attr_bool_any(dep, &["required"]).unwrap_or(true),
-            });
+                role,
+                domain,
+                xml_attr_bool(dep, &["required"], true),
+            ))
+        })
+        .collect()
+}
+
+fn xml_material_bindings(
+    container: Option<authored_xml::XmlNode<'_, '_>>,
+) -> Vec<MaterialBindingRef> {
+    let Some(container) = container else {
+        return Vec::new();
+    };
+    container
+        .children()
+        .filter(|child| child.is_element() && child.has_tag_name("Binding"))
+        .filter_map(|binding| {
+            let slot = xml_attr_string(binding, &["slot", "name"])?;
+            let material_ref = xml_attr_string(binding, &["material_ref", "material", "ref"])?;
+            Some(MaterialBindingRef {
+                slot,
+                material_ref,
+                required: xml_attr_bool(binding, &["required"], true),
+            })
+        })
+        .collect()
+}
+
+fn xml_side_effects(
+    container: Option<authored_xml::XmlNode<'_, '_>>,
+) -> Vec<DefinitionSideEffectV1> {
+    let Some(container) = container else {
+        return Vec::new();
+    };
+    container
+        .children()
+        .filter(|child| child.is_element() && child.has_tag_name("SideEffect"))
+        .map(|effect| DefinitionSideEffectV1 {
+            domain: xml_attr_string(effect, &["domain"]).unwrap_or_default(),
+            effect: xml_attr_string(effect, &["effect", "name"]).unwrap_or_default(),
+            target: xml_attr_string(effect, &["target"]).unwrap_or_default(),
+            metadata: BTreeMap::new(),
+        })
+        .collect()
+}
+
+fn xml_render_namespace_value(ns: authored_xml::XmlNode<'_, '_>) -> serde_json::Value {
+    let mut map = serde_json::Map::new();
+    for child in ns.children().filter(|child| child.is_element()) {
+        if child.has_tag_name("Value") {
+            if let (Some(key), Some(value)) = (
+                xml_attr_string(child, &["key", "name"]),
+                xml_attr_string(child, &["value"]),
+            ) {
+                map.insert(key, serde_json::Value::String(value));
+            }
+        } else {
+            map.insert(
+                child.tag_name().name().to_owned(),
+                authored_xml::xml_node_object(child),
+            );
         }
     }
+    serde_json::Value::Object(map)
+}
 
-    raw.semantic_tags = authored_xml::xml_tags(node, "SemanticTags");
-    raw.domain_tags = authored_xml::xml_tags(node, "DomainTags");
-    if let Some(namespaces) = authored_xml::xml_child(node, "Namespaces") {
-        raw.namespaces = authored_xml::xml_namespace_map(namespaces);
+fn xml_metadata_namespaces(
+    container: Option<authored_xml::XmlNode<'_, '_>>,
+) -> BTreeMap<String, serde_json::Value> {
+    let mut out = BTreeMap::new();
+    let Some(container) = container else {
+        return out;
+    };
+    for ns in container
+        .children()
+        .filter(|child| child.is_element() && child.has_tag_name("Namespace"))
+    {
+        let Some(name) = xml_attr_string(ns, &["name", "namespace"]) else {
+            continue;
+        };
+        let value = if name == "render" || name == "newengine.render" {
+            xml_render_namespace_value(ns)
+        } else {
+            authored_xml::xml_node_children_object(ns)
+        };
+        out.insert(name, value);
     }
-    if let Some(metadata) = authored_xml::xml_child(node, "Metadata") {
-        raw.metadata = authored_xml::xml_namespace_map(metadata);
+    out
+}
+
+fn parse_ytyp_xml_document(
+    source: &str,
+    body: &[u8],
+) -> Result<(Vec<RawDefinitionEntryV1>, Vec<String>), String> {
+    let document = authored_xml::parse_xml_body(body, source)?;
+    let root = document.root_element();
+    if !authored_xml::root_has_any_name(
+        root,
+        &["YtypProperties", "YtypDictionary", "DefinitionEntry"],
+    ) {
+        return Err(format!(
+            "engine.assets.definitions: unsupported .ytyp XML root source='{source}' actual='{}'",
+            root.tag_name().name()
+        ));
     }
-    if let Some(side_effects) = authored_xml::xml_child(node, "SideEffects") {
-        raw.side_effects = side_effects
-            .children()
-            .filter(|child| child.is_element() && child.has_tag_name("SideEffect"))
-            .map(xml_side_effect)
-            .collect();
+    let mut raw = RawDefinitionEntryV1 {
+        name: xml_attr_string(root, &["name", "id", "asset_name"]).unwrap_or_else(|| {
+            source
+                .rsplit('/')
+                .next()
+                .unwrap_or(source)
+                .trim_end_matches(".ytyp")
+                .to_owned()
+        }),
+        stable_hash: xml_attr_u64(root, &["stable_hash", "stableHash"]),
+        entry_kind: xml_attr_string(root, &["entry_kind", "entryKind"])
+            .unwrap_or_else(|| "archetype_definition".to_owned()),
+        kind: xml_attr_string(root, &["kind"]).unwrap_or_default(),
+        schema: xml_attr_string(root, &["schema"])
+            .unwrap_or_else(|| "newengine.ytyp.properties.v1".to_owned()),
+        flags: xml_attr_u32(root, &["flags"]),
+        ..Default::default()
+    };
+    raw.dependencies = xml_dependencies(authored_xml::xml_child(root, "Dependencies"));
+    raw.material_bindings =
+        xml_material_bindings(authored_xml::xml_child(root, "MaterialBindings"));
+    raw.semantic_tags = xml_tags(authored_xml::xml_child(root, "SemanticTags"));
+    raw.domain_tags = xml_tags(authored_xml::xml_child(root, "DomainTags"));
+    raw.namespaces = authored_xml::xml_child(root, "Namespaces")
+        .map(authored_xml::xml_namespace_map)
+        .unwrap_or_default();
+    raw.metadata = xml_metadata_namespaces(authored_xml::xml_child(root, "Metadata"));
+    raw.side_effects = xml_side_effects(authored_xml::xml_child(root, "SideEffects"));
+    Ok((
+        vec![raw],
+        vec![format!(
+            ".ytyp parsed as XML authoring schema='{}' source='{}'",
+            authored_xml::root_schema(root),
+            source
+        )],
+    ))
+}
+
+fn json_string_at(value: &serde_json::Value, path: &[&str]) -> Option<String> {
+    let mut current = value;
+    for key in path {
+        current = current.get(*key)?;
     }
-    if let Some(target) = authored_xml::xml_child(node, "Target") {
-        raw.target = Some(authored_xml::xml_node_object(target));
+    current
+        .as_str()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(ToOwned::to_owned)
+}
+
+fn raw_definition_entry_from_json(
+    source: &str,
+    value: &serde_json::Value,
+) -> Result<RawDefinitionEntryV1, String> {
+    let mut raw = serde_json::from_value::<RawDefinitionEntryV1>(value.clone()).map_err(|error| {
+        format!("engine.assets.definitions: invalid .ytyp JSON entry source='{source}' err='{error}'")
+    })?;
+    if raw.name.trim().is_empty() {
+        raw.name = json_string_at(value, &["identity", "name"])
+            .or_else(|| json_string_at(value, &["asset", "name"]))
+            .or_else(|| json_string_at(value, &["archetype", "name"]))
+            .unwrap_or_default();
+    }
+    if raw.schema.trim().is_empty() {
+        raw.schema = json_string_at(value, &["schema"])
+            .unwrap_or_else(|| "newengine.ytyp.definition_entry.v1".to_owned());
     }
     Ok(raw)
 }
 
-fn xml_side_effect(node: authored_xml::XmlNode<'_, '_>) -> DefinitionSideEffectV1 {
-    let mut effect = DefinitionSideEffectV1 {
-        domain: authored_xml::xml_attr_any(node, &["domain"]).unwrap_or_default(),
-        effect: authored_xml::xml_attr_any(node, &["effect"]).unwrap_or_default(),
-        target: authored_xml::xml_attr_any(node, &["target"]).unwrap_or_default(),
-        metadata: BTreeMap::new(),
-    };
-    for child in node.children().filter(|child| child.is_element()) {
-        effect.metadata.insert(
-            child.tag_name().name().to_owned(),
-            authored_xml::xml_node_object(child),
-        );
+fn parse_ytyp_json_entries(
+    source: &str,
+    value: &serde_json::Value,
+) -> Result<Vec<RawDefinitionEntryV1>, String> {
+    if let Some(entries) = value
+        .get("entries")
+        .or_else(|| value.get("definition_entries"))
+        .or_else(|| value.get("definitionEntries"))
+        .and_then(|v| v.as_array())
+    {
+        return entries
+            .iter()
+            .map(|entry| raw_definition_entry_from_json(source, entry))
+            .collect();
     }
-    effect
+    if let Some(entry) = value.get("entry").or_else(|| value.get("definition_entry")) {
+        return Ok(vec![raw_definition_entry_from_json(source, entry)?]);
+    }
+    if let Some(entries) = value.as_array() {
+        return entries
+            .iter()
+            .map(|entry| raw_definition_entry_from_json(source, entry))
+            .collect();
+    }
+    if value.is_object() {
+        return Ok(vec![raw_definition_entry_from_json(source, value)?]);
+    }
+    Err(format!(
+        "engine.assets.definitions: .ytyp JSON root must be object or array source='{source}'"
+    ))
+}
+
+fn parse_ytyp_json_document(
+    source: &str,
+    body: &[u8],
+) -> Result<(Vec<RawDefinitionEntryV1>, Vec<String>), String> {
+    let value = serde_json::from_slice::<serde_json::Value>(body).map_err(|error| {
+        format!(
+            "engine.assets.definitions: .ytyp JSON body is invalid source='{source}' err='{error}'"
+        )
+    })?;
+    let schema = value
+        .get("schema")
+        .and_then(|v| v.as_str())
+        .unwrap_or("newengine.ytyp.dictionary.v1");
+    match schema {
+        "newengine.ytyp.dictionary.v1"
+        | "newengine.ytyp.archetype_dictionary.v1"
+        | "newengine.ytyp.definition_entry.v1"
+        | "newengine.ytyp.properties.v1" => {}
+        other => {
+            return Err(format!(
+                "engine.assets.definitions: unsupported .ytyp JSON schema source='{source}' expected='newengine.ytyp.dictionary.v1' actual='{other}'"
+            ));
+        }
+    }
+    let entries = parse_ytyp_json_entries(source, &value)?;
+    if entries.is_empty() {
+        return Err(format!("source='{source}' contains no .ytyp entries"));
+    }
+    Ok((
+        entries,
+        vec![format!(
+            ".ytyp parsed as JSON schema='{schema}' entries_source='{}'",
+            source
+        )],
+    ))
 }
 
 fn entry_matches(raw: &RawDefinitionEntryV1, selector: &str) -> bool {
@@ -616,7 +883,9 @@ fn classify_ref(reference: &str, role: &str, domain: &str, refs: &mut Definition
         role.to_ascii_lowercase(),
         domain.to_ascii_lowercase()
     );
-    let bucket = if lower.contains(".ydd@") || hint.contains("drawable") || hint.contains("model") {
+    let bucket = if lower.contains(".ytyd@") || hint.contains("uv") || hint.contains("unwrap") {
+        &mut refs.uv_layout_refs
+    } else if lower.contains(".ydd@") || hint.contains("drawable") || hint.contains("model") {
         &mut refs.drawable_refs
     } else if lower.contains(".nemat@") || hint.contains("material") {
         &mut refs.material_refs
@@ -653,6 +922,7 @@ fn collect_refs_from_value(value: &serde_json::Value, key_hint: &str, refs: &mut
                 ".ydd@",
                 ".nemat@",
                 ".ytd@",
+                ".ytyd@",
                 ".ybn@",
                 ".ycol@",
                 ".nebrain@",
@@ -684,6 +954,14 @@ fn collect_refs(raw: &RawDefinitionEntryV1) -> DefinitionRefsV1 {
     let mut refs = DefinitionRefsV1::default();
     for dep in &raw.dependencies {
         classify_ref(&dep.reference, &dep.role, &dep.domain, &mut refs);
+    }
+    for binding in &raw.material_bindings {
+        classify_ref(
+            &binding.material_ref,
+            &format!("material_slot/{}", binding.slot),
+            "engine.assets.materials",
+            &mut refs,
+        );
     }
     if let Some(target) = &raw.target {
         collect_refs_from_value(target, "target", &mut refs);
@@ -833,6 +1111,10 @@ fn arbitrary_metadata(raw: &RawDefinitionEntryV1) -> BTreeMap<String, serde_json
         "dependencies".to_owned(),
         serde_json::to_value(&raw.dependencies).unwrap_or_default(),
     );
+    metadata.insert(
+        "material_bindings".to_owned(),
+        serde_json::to_value(&raw.material_bindings).unwrap_or_default(),
+    );
     metadata.insert("flags".to_owned(), serde_json::json!(raw.flags));
     let mut unknown = BTreeSet::new();
     for key in raw.namespaces.keys().chain(raw.metadata.keys()) {
@@ -847,6 +1129,156 @@ fn arbitrary_metadata(raw: &RawDefinitionEntryV1) -> BTreeMap<String, serde_json
     metadata
 }
 
+fn raw_has_tag(raw: &RawDefinitionEntryV1, needle: &str) -> bool {
+    let needle = needle.to_ascii_lowercase();
+    raw.semantic_tags
+        .iter()
+        .chain(raw.domain_tags.iter())
+        .any(|tag| tag.to_ascii_lowercase() == needle)
+}
+
+fn value_string_for_key(value: &serde_json::Value, wanted_key: &str) -> Option<String> {
+    match value {
+        serde_json::Value::Object(map) => {
+            if map
+                .get("key")
+                .and_then(|v| v.as_str())
+                .map(|key| key.eq_ignore_ascii_case(wanted_key))
+                .unwrap_or(false)
+            {
+                if let Some(text) = map.get("value").and_then(|v| v.as_str()) {
+                    return Some(text.to_owned());
+                }
+            }
+            if let Some(text) = map.get(wanted_key).and_then(|v| v.as_str()) {
+                return Some(text.to_owned());
+            }
+            for value in map.values() {
+                if let Some(found) = value_string_for_key(value, wanted_key) {
+                    return Some(found);
+                }
+            }
+            None
+        }
+        serde_json::Value::Array(items) => items
+            .iter()
+            .find_map(|item| value_string_for_key(item, wanted_key)),
+        _ => None,
+    }
+}
+
+fn raw_render_string(raw: &RawDefinitionEntryV1, key: &str) -> Option<String> {
+    raw.metadata
+        .get("render")
+        .or_else(|| raw.metadata.get("newengine.render"))
+        .or_else(|| raw.namespaces.get("render"))
+        .or_else(|| raw.namespaces.get("newengine.render"))
+        .and_then(|value| value_string_for_key(value, key))
+}
+
+fn render_options_from_role(role: &str) -> Option<MeshRenderOptions> {
+    match role.trim().to_ascii_lowercase().as_str() {
+        "world_opaque" | "opaque" => Some(MeshRenderOptions::world_opaque()),
+        "terrain_patch" | "terrain" => Some(MeshRenderOptions::terrain_patch()),
+        "foliage_instanced" | "foliage" | "tree" => Some(MeshRenderOptions::foliage_instanced()),
+        "character_body" | "character" | "player" => Some(MeshRenderOptions::character_body()),
+        "first_person_view_model" | "view_model" | "fps_view_model" => {
+            Some(MeshRenderOptions::first_person_view_model())
+        }
+        "sky_background" | "sky" => Some(MeshRenderOptions::sky_background()),
+        "celestial_billboard" => Some(MeshRenderOptions::celestial_billboard()),
+        _ => None,
+    }
+}
+
+fn shadow_policy_from_string(value: &str) -> Option<MeshShadowPolicy> {
+    match value
+        .trim()
+        .to_ascii_lowercase()
+        .replace(['-', ' '], "_")
+        .as_str()
+    {
+        "none" | "off" | "disabled" => Some(MeshShadowPolicy::None),
+        "cast" | "cast_only" | "caster" => Some(MeshShadowPolicy::CastOnly),
+        "receive" | "receive_only" | "receiver" | "recive" | "recive_only" => {
+            Some(MeshShadowPolicy::ReceiveOnly)
+        }
+        "cast_and_receive" | "cast_receive" | "cast_and_recive" | "cast_recive" => {
+            Some(MeshShadowPolicy::CastAndReceive)
+        }
+        "profile" | "profile_controlled" | "profiled" => Some(MeshShadowPolicy::ProfileControlled),
+        _ => None,
+    }
+}
+
+fn apply_shadow_policy_from_metadata(
+    raw: &RawDefinitionEntryV1,
+    mut options: MeshRenderOptions,
+) -> MeshRenderOptions {
+    if let Some(policy) = raw_render_string(raw, "shadow_policy")
+        .or_else(|| raw_render_string(raw, "shadow.policy"))
+        .or_else(|| raw_render_string(raw, "render.shadow_policy"))
+        .or_else(|| raw_render_string(raw, "render.shadow.policy"))
+        .and_then(|value| shadow_policy_from_string(&value))
+    {
+        options.shadow_policy = policy;
+    }
+    options
+}
+
+fn infer_render_options(raw: &RawDefinitionEntryV1, _refs: &DefinitionRefsV1) -> MeshRenderOptions {
+    let options = if let Some(options) = raw_render_string(raw, "mesh.role")
+        .or_else(|| raw_render_string(raw, "role"))
+        .and_then(|role| render_options_from_role(&role))
+    {
+        options
+    } else if raw_has_tag(raw, "sky") {
+        MeshRenderOptions::sky_background()
+    } else if raw_has_tag(raw, "terrain") {
+        MeshRenderOptions::terrain_patch()
+    } else if raw_has_tag(raw, "foliage") || raw_has_tag(raw, "tree") {
+        MeshRenderOptions::foliage_instanced()
+    } else if raw_has_tag(raw, "player") || raw_has_tag(raw, "character") {
+        MeshRenderOptions::character_body()
+    } else {
+        MeshRenderOptions::world_opaque()
+    };
+    apply_shadow_policy_from_metadata(raw, options)
+}
+
+fn build_model_explanation(
+    source: &str,
+    raw: &RawDefinitionEntryV1,
+    refs: &DefinitionRefsV1,
+) -> ModelExplanationV1 {
+    let drawable_ref = refs.drawable_refs.first().cloned();
+    ModelExplanationV1 {
+        source: source.to_owned(),
+        model_ref: drawable_ref.clone(),
+        drawable_ref,
+        material_bindings: raw.material_bindings.clone(),
+        material_refs: refs.material_refs.clone(),
+        texture_refs: refs.texture_refs.clone(),
+        uv_layout_refs: refs.uv_layout_refs.clone(),
+        physics_refs: refs.physics_refs.clone(),
+        collision_refs: refs.collision_refs.clone(),
+        render_options: infer_render_options(raw, refs),
+        collision_policy: raw_render_string(raw, "collision.policy")
+            .unwrap_or_else(|| "unspecified".to_owned()),
+        uv_policy: raw_render_string(raw, "uv.policy").unwrap_or_else(|| "authored".to_owned()),
+        physics_policy: raw_render_string(raw, "physics.policy")
+            .unwrap_or_else(|| "unspecified".to_owned()),
+        lod_policy: raw_render_string(raw, "lod.policy")
+            .unwrap_or_else(|| "unspecified".to_owned()),
+        streaming_policy: raw_render_string(raw, "streaming.policy")
+            .unwrap_or_else(|| "unspecified".to_owned()),
+        explanation:
+            "YTYP descriptor binds .ydd slots to materials and declares render/collision/LOD policy"
+                .to_owned(),
+        ..Default::default()
+    }
+}
+
 fn build_entry(
     source: &str,
     raw: RawDefinitionEntryV1,
@@ -858,6 +1290,8 @@ fn build_entry(
     }
     let side_effects = collect_side_effects(&raw).map_err(|errors| errors.join("; "))?;
     let stable_hash = effective_hash(&raw);
+    let refs = collect_refs(&raw);
+    let model_explanation = build_model_explanation(source, &raw, &refs);
     let (semantic_tags, domain_tags) = collect_tags(&raw);
     Ok(DefinitionEntryV1 {
         identity: DefinitionIdentityV1 {
@@ -869,7 +1303,8 @@ fn build_entry(
         stable_hash,
         semantic_tags,
         domain_tags,
-        refs: collect_refs(&raw),
+        refs,
+        model_explanation,
         side_effects,
         arbitrary_metadata: arbitrary_metadata(&raw),
         warnings: inherited_warnings.to_vec(),
@@ -881,7 +1316,7 @@ fn load_manifest(
     state: &DefinitionsRuntimeState,
     source: &str,
 ) -> Result<DefinitionManifestV1, String> {
-    let (raw_entries, warnings) = load_dictionary_body(state, source)?;
+    let (raw_entries, warnings) = load_properties_body(state, source)?;
     let mut entries = Vec::with_capacity(raw_entries.len());
     for raw in raw_entries {
         let name = raw.name.trim().to_owned();
@@ -915,22 +1350,70 @@ fn load_manifest(
     })
 }
 
+fn ytyp_sidecar_source(source: &str, entry_selector: &str) -> Option<String> {
+    let entry = entry_selector.trim();
+    if entry.is_empty() {
+        return None;
+    }
+    let source = source.trim().replace('\\', "/");
+    let (dir, _) = source.rsplit_once('/')?;
+    let candidate = format!("{dir}/{entry}.ytyp");
+    (candidate != source).then_some(candidate)
+}
+
+fn load_entry_from_source(
+    state: &DefinitionsRuntimeState,
+    source: &str,
+    entry_selector: &str,
+) -> Result<DefinitionEntryV1, String> {
+    let (raw_entries, warnings) = load_properties_body(state, source)?;
+    for raw in raw_entries {
+        if entry_selector.trim().is_empty() || entry_matches(&raw, entry_selector) {
+            return build_entry(source, raw, &warnings);
+        }
+    }
+    Err(format!(
+        "engine.assets.definitions: Definition Entry not found source='{}' selector='{}'",
+        source, entry_selector
+    ))
+}
+
 fn load_entry(
     state: &DefinitionsRuntimeState,
     request: DefinitionRefRequest,
 ) -> Result<DefinitionEntryV1, String> {
     let reference = parse_definition_ref(&request)?;
     let entry_selector = reference.entry.as_deref().unwrap_or_default().to_owned();
-    let (raw_entries, warnings) = load_dictionary_body(state, &reference.logical_path)?;
-    for raw in raw_entries {
-        if entry_matches(&raw, &entry_selector) {
-            return build_entry(&reference.logical_path, raw, &warnings);
+    if let Some(sidecar_source) = ytyp_sidecar_source(&reference.logical_path, &entry_selector) {
+        match load_entry_from_source(state, &sidecar_source, &entry_selector) {
+            Ok(mut entry) => {
+                entry.identity.definition_ref = reference.canonical.clone();
+                entry.warnings.push(format!(
+                    ".ytyp Definition Entry resolved through sidecar source='{sidecar_source}' canonical_ref='{}'",
+                    reference.canonical
+                ));
+                return Ok(entry);
+            }
+            Err(sidecar_error) => {
+                let primary =
+                    load_entry_from_source(state, &reference.logical_path, &entry_selector);
+                return primary.map_err(|primary_error| {
+                    format!(
+                        "engine.assets.definitions: Definition Entry not found ref='{}' sidecar='{}' sidecar_err='{}' primary='{}'",
+                        reference.canonical, sidecar_source, sidecar_error, primary_error
+                    )
+                });
+            }
         }
     }
-    Err(format!(
-        "engine.assets.definitions: Definition Entry not found ref='{}'",
-        reference.canonical
-    ))
+    load_entry_from_source(state, &reference.logical_path, &entry_selector).map_err(
+        |primary_error| {
+            format!(
+                "engine.assets.definitions: Definition Entry not found ref='{}' err='{}'",
+                reference.canonical, primary_error
+            )
+        },
+    )
 }
 
 fn flatten_refs(refs: &DefinitionRefsV1) -> Vec<String> {
@@ -938,6 +1421,7 @@ fn flatten_refs(refs: &DefinitionRefsV1) -> Vec<String> {
     all.extend(refs.drawable_refs.iter().cloned());
     all.extend(refs.material_refs.iter().cloned());
     all.extend(refs.texture_refs.iter().cloned());
+    all.extend(refs.uv_layout_refs.iter().cloned());
     all.extend(refs.physics_refs.iter().cloned());
     all.extend(refs.collision_refs.iter().cloned());
     all.extend(refs.ai_refs.iter().cloned());
@@ -1261,5 +1745,59 @@ mod tests {
         assert_eq!(refs.drawable_refs, vec!["models/foo.ydd@body"]);
         assert_eq!(refs.material_refs, vec!["materials/foo.nemat@body"]);
         assert_eq!(refs.texture_refs, vec!["textures/foo.ytd@diff"]);
+    }
+
+    #[test]
+    fn json_ytyp_dictionary_preserves_uv_layout_refs_and_arbitrary_strings() {
+        let body = br#"{
+            "schema": "newengine.ytyp.dictionary.v1",
+            "entries": [
+                {
+                    "name": "sky_northstar_default",
+                    "semantic_tags": ["sky"],
+                    "dependencies": [
+                        {
+                            "reference": "layouts/sky.ytyd@skydome_uv",
+                            "role": "uv_layout",
+                            "domain": "engine.model",
+                            "required": true
+                        }
+                    ],
+                    "metadata": {
+                        "newengine.game_ready": {
+                            "sky": {
+                                "mesh": "any authored mesh string",
+                                "definition_ref": "any authored definition string"
+                            }
+                        },
+                        "render": {
+                            "role": "sky_background",
+                            "uv.policy": "authored_ytyd"
+                        }
+                    }
+                }
+            ]
+        }
+        "#;
+        let (entries, warnings) = parse_ytyp_json_document("definitions/sky.ytyp", body).unwrap();
+        assert_eq!(entries.len(), 1);
+        assert!(warnings.iter().any(|warning| warning.contains("JSON")));
+        let entry = build_entry("definitions/sky.ytyp", entries[0].clone(), &warnings).unwrap();
+        assert_eq!(
+            entry.refs.uv_layout_refs,
+            vec!["layouts/sky.ytyd@skydome_uv"]
+        );
+        assert!(entry.model_explanation.render_options.is_sky_role());
+        assert_eq!(entry.model_explanation.uv_policy, "authored_ytyd");
+        let metadata = entry
+            .arbitrary_metadata
+            .get("metadata")
+            .and_then(|value| value.get("newengine.game_ready"))
+            .and_then(|value| value.get("sky"))
+            .unwrap();
+        assert_eq!(
+            metadata.get("mesh").and_then(|value| value.as_str()),
+            Some("any authored mesh string")
+        );
     }
 }

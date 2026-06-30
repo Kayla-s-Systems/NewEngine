@@ -7,3 +7,5 @@ mod scan;
 mod selection;
 
 pub(super) use self::graph::DiscoveryGraph;
+pub use self::load::IncrementalLoadOutcome;
+pub(super) use self::load::IncrementalLoadState;

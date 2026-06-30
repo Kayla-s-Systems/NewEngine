@@ -122,7 +122,7 @@ pub fn decode_bcn_to_rgba8(
 
 #[inline]
 fn blocks(width: u32, height: u32) -> (usize, usize) {
-    (((width as usize) + 3) / 4, ((height as usize) + 3) / 4)
+    ((width as usize).div_ceil(4), (height as usize).div_ceil(4))
 }
 
 #[inline]

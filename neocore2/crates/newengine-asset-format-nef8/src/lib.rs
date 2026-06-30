@@ -61,15 +61,15 @@ impl Nef8FormatSpec {
             editable: false,
             schema_editable: matches!(
                 extension.as_str(),
-                "ytyp" | "ydd" | "ytd" | "nemat" | "neftd"
+                "ymap" | "ytyp" | "ytyd" | "ydd" | "ytd" | "nemat" | "neftd"
             ),
             write_back_available: matches!(
                 extension.as_str(),
-                "ytyp" | "ydd" | "ytd" | "nemat" | "neftd"
+                "ymap" | "ytyp" | "ytyd" | "ydd" | "ytd" | "nemat" | "neftd"
             ),
             writer_capability: if matches!(
                 extension.as_str(),
-                "ytyp" | "ydd" | "ytd" | "nemat" | "neftd"
+                "ymap" | "ytyp" | "ytyd" | "ydd" | "ytd" | "nemat" | "neftd"
             ) {
                 newengine_assets_api::ASSETS_PACKAGE_WRITER_CAPABILITY_ID.to_owned()
             } else {
@@ -78,7 +78,7 @@ impl Nef8FormatSpec {
             inspect_contract: format!("asset.inspect.{extension}.v1"),
             edit_contract: if matches!(
                 extension.as_str(),
-                "ytyp" | "ydd" | "ytd" | "nemat" | "neftd"
+                "ymap" | "ytyp" | "ytyd" | "ydd" | "ytd" | "nemat" | "neftd"
             ) {
                 format!("asset.edit.{extension}.v1")
             } else {
@@ -451,14 +451,14 @@ pub mod ytf {
 
 pub mod ytyp {
     pub const EXTENSION: &str = "ytyp";
-    pub const ASSET_KIND: &str = "generic_metadata_dictionary";
+    pub const ASSET_KIND: &str = "archetype_metadata_dictionary";
     pub const CONTENT_KIND: u32 = newengine_assets_api::LIST_FILE_CONTENT_KIND_YTYP;
-    pub const PURPOSE: &str = "Generic XML Metadata Dictionary";
-    pub const SEMANTIC_GATEWAY: &str = "engine.assets.metadata";
+    pub const PURPOSE: &str = "JSON Archetype Metadata Dictionary";
+    pub const SEMANTIC_GATEWAY: &str = "engine.assets.definitions";
     pub const HANDLER_SERVICE: &str = "asset.codec.listfile.ytyp";
     pub const SELECTOR_SYNTAX: &str = "file.ytyp@metadata_entry";
     pub const CONSUMER_DOMAINS: &[&str] = &[
-        "engine.assets.metadata",
+        "engine.assets.definitions",
         "engine.assets.graph",
         "engine.scene",
         "engine.model",
@@ -468,6 +468,25 @@ pub mod ytyp {
         "engine.editor",
         "engine.streaming",
         "engine.ui",
+    ];
+}
+
+pub mod ytyd {
+    pub const EXTENSION: &str = "ytyd";
+    pub const ASSET_KIND: &str = "uv_layout_dictionary";
+    pub const CONTENT_KIND: u32 = newengine_assets_api::LIST_FILE_CONTENT_KIND_YTYD;
+    pub const PURPOSE: &str = "UV Layout / Unwrap Dictionary";
+    pub const SEMANTIC_GATEWAY: &str = "engine.model";
+    pub const HANDLER_SERVICE: &str = "asset.codec.listfile.ytyd";
+    pub const SELECTOR_SYNTAX: &str = "file.ytyd@uv_layout_entry";
+    pub const CONSUMER_DOMAINS: &[&str] = &[
+        "engine.model",
+        "engine.assets.definitions",
+        "engine.assets.graph",
+        "engine.scene",
+        "engine.materials",
+        "engine.render",
+        "engine.editor",
     ];
 }
 
@@ -712,6 +731,16 @@ pub fn specs() -> &'static [Nef8FormatSpec] {
             consumer_domains: ytyp::CONSUMER_DOMAINS,
         },
         Nef8FormatSpec {
+            extension: ytyd::EXTENSION,
+            asset_kind: ytyd::ASSET_KIND,
+            content_kind: Some(ytyd::CONTENT_KIND),
+            semantic_gateway: ytyd::SEMANTIC_GATEWAY,
+            handler_service: ytyd::HANDLER_SERVICE,
+            selector_syntax: Some(ytyd::SELECTOR_SYNTAX),
+            purpose: ytyd::PURPOSE,
+            consumer_domains: ytyd::CONSUMER_DOMAINS,
+        },
+        Nef8FormatSpec {
             extension: yvr::EXTENSION,
             asset_kind: yvr::ASSET_KIND,
             content_kind: Some(yvr::CONTENT_KIND),
@@ -782,5 +811,14 @@ mod tests {
         assert_eq!(descriptor.extension, ytd::EXTENSION);
         assert_eq!(descriptor.content_kind, Some(ytd::CONTENT_KIND));
         assert_eq!(descriptor.semantic_gateway, ytd::SEMANTIC_GATEWAY);
+    }
+
+    #[test]
+    fn ytyd_descriptor_routes_to_model_domain() {
+        let descriptor = descriptor_for_extension("ytyd").expect("ytyd descriptor");
+        assert_eq!(descriptor.extension, ytyd::EXTENSION);
+        assert_eq!(descriptor.content_kind, Some(ytyd::CONTENT_KIND));
+        assert_eq!(descriptor.semantic_gateway, ytyd::SEMANTIC_GATEWAY);
+        assert!(descriptor.schema_editable);
     }
 }

@@ -165,6 +165,95 @@ pub(super) fn apply_texture_refs_from_ytyp(
     applied
 }
 
+pub(super) fn apply_player_model_from_ytyp(
+    profile: &mut GameReadyMapProfile,
+    metadata: &serde_json::Value,
+    definition_ref: &str,
+) -> usize {
+    let player_node = value_path(metadata, &["player"]);
+    let Some(model) = player_node
+        .and_then(|player| player.get("model"))
+        .filter(|model| model.is_object())
+        .or_else(|| {
+            player_node.filter(|player| {
+                player.get("source").is_some()
+                    || player.get("texture_dictionary").is_some()
+                    || player.get("metadata").is_some()
+                    || player
+                        .get("model")
+                        .and_then(|value| value.as_str())
+                        .is_some()
+            })
+        })
+        .or_else(|| value_path(metadata, &["model"]))
+        .or_else(|| player_node.and_then(|player| player.get("model")))
+    else {
+        return 0;
+    };
+    let mut applied = 0usize;
+    let source = value_path(model, &["source"])
+        .or_else(|| value_path(model, &["model"]))
+        .and_then(value_string)
+        .or_else(|| value_string(model));
+    if let Some(source) = source {
+        profile.player.model.source = source;
+        profile.player.model.enabled = true;
+        applied += 1;
+    }
+    if let Some(properties_ref) = value_path(model, &["properties_ref"])
+        .or_else(|| value_path(model, &["descriptor_ref"]))
+        .or_else(|| value_path(model, &["ytyp_ref"]))
+        .and_then(value_string)
+    {
+        profile.player.model.properties_ref = Some(properties_ref);
+        applied += 1;
+    }
+    if applied > 0 && profile.player.model.properties_ref.is_none() {
+        let normalized_ref = definition_ref.trim().replace('\\', "/");
+        if !normalized_ref.is_empty() {
+            profile.player.model.properties_ref = Some(normalized_ref);
+            applied += 1;
+        }
+    }
+    if let Some(texture_dictionary) = value_path(model, &["texture_dictionary"])
+        .or_else(|| value_path(model, &["textures"]))
+        .and_then(value_string)
+    {
+        profile.player.model.texture_dictionary = Some(texture_dictionary);
+        applied += 1;
+    }
+    if let Some(skeleton) = value_path(model, &["skeleton"])
+        .or_else(|| value_path(model, &["metadata"]))
+        .or_else(|| value_path(model, &["skeleton_ref"]))
+        .and_then(value_string)
+    {
+        profile.player.model.skeleton = Some(skeleton);
+        applied += 1;
+    }
+    if let Some(visibility) = value_path(model, &["visibility"]).and_then(value_string) {
+        let visibility = visibility.to_ascii_lowercase();
+        profile.player.model.hide_in_first_person = visibility.contains("hide_in_first_person")
+            || visibility.contains("first_person_hidden");
+        applied += 1;
+    }
+    if let Some(target_height) = value_path(model, &["target_height"]).and_then(value_f32) {
+        profile.player.model.target_height = target_height.clamp(0.25, 3.0);
+        applied += 1;
+    }
+    if let Some(eye_height_ratio) = value_path(model, &["eye_height_ratio"]).and_then(value_f32) {
+        profile.player.model.eye_height_ratio = eye_height_ratio.clamp(0.55, 0.98);
+        applied += 1;
+    }
+    if applied > 0 {
+        newengine_ulog_api::ulog::info!(
+            "game-ready ytyp metadata: player model descriptor source='{}' properties_ref={:?} policy='.ytyp connects model source to material bindings'",
+            profile.player.model.source,
+            profile.player.model.properties_ref
+        );
+    }
+    applied
+}
+
 pub(super) fn apply_sky_constants_from_ytyp(
     profile: &mut GameReadyMapProfile,
     metadata: &serde_json::Value,
@@ -184,6 +273,21 @@ pub(super) fn apply_sky_constants_from_ytyp(
     }
     if let Some(mesh) = value_path(metadata, &["sky", "mesh"]).and_then(value_string) {
         profile.sky.mesh = mesh;
+        applied += 1;
+    }
+    if let Some(definition_ref) =
+        value_path(metadata, &["sky", "definition_ref"]).and_then(value_string)
+    {
+        profile.sky.definition_ref = definition_ref;
+        applied += 1;
+    }
+    if let Some(render_options) =
+        value_path(metadata, &["sky", "render_options"]).and_then(|value| {
+            serde_json::from_value::<newengine_model_domain_api::MeshRenderOptions>(value.clone())
+                .ok()
+        })
+    {
+        profile.sky.render_options = render_options;
         applied += 1;
     }
     if let Some(cloud_dictionary) =
@@ -297,6 +401,50 @@ pub(super) fn game_ready_metadata_namespace(
         })
 }
 
+fn definition_render_options(
+    entry: &serde_json::Value,
+) -> Option<newengine_model_domain_api::MeshRenderOptions> {
+    entry
+        .get("model_explanation")
+        .and_then(|value| value.get("render_options"))
+        .cloned()
+        .and_then(|value| serde_json::from_value(value).ok())
+}
+
+fn apply_render_options_from_ytyp(
+    profile: &mut GameReadyMapProfile,
+    entry: &serde_json::Value,
+    definition_ref: &str,
+) -> usize {
+    let Some(options) = definition_render_options(entry) else {
+        return 0;
+    };
+    let target = match options.role {
+        newengine_model_domain_api::MeshRenderRole::TerrainPatch => {
+            profile.terrain.render_options = options.clone();
+            "terrain"
+        }
+        newengine_model_domain_api::MeshRenderRole::FoliageInstanced => {
+            profile.foliage.render_options = options.clone();
+            "foliage"
+        }
+        newengine_model_domain_api::MeshRenderRole::SkyBackground
+        | newengine_model_domain_api::MeshRenderRole::CelestialBillboard => {
+            profile.sky.render_options = options.clone();
+            "sky"
+        }
+        newengine_model_domain_api::MeshRenderRole::CharacterBody => {
+            profile.player.model.render_options = options.clone();
+            "player"
+        }
+        _ => {
+            return 0;
+        }
+    };
+    newengine_ulog_api::ulog::info!("game-ready ytyp render policy: target='{}' definition_ref='{}' role={:?} shadow_policy={:?} source='engine.assets.definitions/.ytyp'", target, definition_ref, options.role, options.shadow_policy);
+    1
+}
+
 pub(in crate::scene_bridge::game_ready) fn apply_game_ready_ytyp_metadata(
     profile: &mut GameReadyMapProfile,
 ) {
@@ -322,8 +470,10 @@ pub(in crate::scene_bridge::game_ready) fn apply_game_ready_ytyp_metadata(
                 definition_ref
             );
         }
-        let applied = apply_material_refs_from_ytyp(profile, metadata, definition_ref)
+        let applied = apply_render_options_from_ytyp(profile, &entry, definition_ref)
+            + apply_material_refs_from_ytyp(profile, metadata, definition_ref)
             + apply_texture_refs_from_ytyp(profile, metadata, definition_ref)
+            + apply_player_model_from_ytyp(profile, metadata, definition_ref)
             + apply_sky_constants_from_ytyp(profile, metadata)
             + apply_time_constants_from_ytyp(profile, metadata);
         applied_total += applied;
@@ -335,7 +485,7 @@ pub(in crate::scene_bridge::game_ready) fn apply_game_ready_ytyp_metadata(
     }
 
     newengine_ulog_api::ulog::info!(
-        "game-ready ytyp metadata: completed definitions={} applied_constants={} chain='.ytyp -> .ydd -> .nemat -> .ytd'",
+        "game-ready ytyp metadata: completed definitions={} applied_constants={} chain='.ytyp -> .ytyd -> .ydd -> .nemat -> .ytd'",
         profile.definitions.len(),
         applied_total
     );

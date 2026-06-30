@@ -1,3 +1,4 @@
+#![allow(clippy::too_many_arguments)]
 use crate::math::{mix_u64, vec_scale};
 use crate::profile_catalog::{
     EnvironmentProfileDescriptor, PhenomenonTemplateDescriptor, WeatherPatternDescriptor,

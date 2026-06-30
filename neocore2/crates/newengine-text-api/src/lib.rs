@@ -194,24 +194,13 @@ impl Default for TextFontVariationAxis {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct TextFontCoverageSummary {
     pub unicode_ranges: Vec<String>,
     pub cmap_entries: usize,
     pub missing_codepoints: Vec<u32>,
 }
-
-impl Default for TextFontCoverageSummary {
-    fn default() -> Self {
-        Self {
-            unicode_ranges: Vec::new(),
-            cmap_entries: 0,
-            missing_codepoints: Vec::new(),
-        }
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct TextFontFaceDescriptor {
@@ -282,7 +271,7 @@ impl Default for TextFontManifest {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct TextImeComposition {
     pub active: bool,
@@ -291,19 +280,6 @@ pub struct TextImeComposition {
     pub selection_end: usize,
     pub clauses: Vec<[usize; 2]>,
 }
-
-impl Default for TextImeComposition {
-    fn default() -> Self {
-        Self {
-            active: false,
-            text: String::new(),
-            selection_start: 0,
-            selection_end: 0,
-            clauses: Vec::new(),
-        }
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct TextShapeRunRequest {

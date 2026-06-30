@@ -115,6 +115,7 @@ fn look_at_rotation_rh(eye: Vec3, center: Vec3, up: Vec3) -> Quat {
 /// - `follow_rotation`: if false, camera will look at the target.
 /// - `smooth_time/max_speed`: position smoothing params.
 #[inline]
+#[allow(clippy::too_many_arguments)]
 pub fn step_follow_camera(
     current_pos: Vec3,
     current_rot: Quat,

@@ -46,9 +46,11 @@ pub struct ScriptingRuntimeState {
 impl ScriptingRuntimeState {
     #[inline]
     pub fn service_info(&self) -> ScriptingServiceInfo {
-        let mut info = ScriptingServiceInfo::default();
-        info.provider = SCRIPTING_SERVICE_ID.to_owned();
-        info.backend = "engine.scripting.nullstar".to_owned();
+        let mut info = ScriptingServiceInfo {
+            provider: SCRIPTING_SERVICE_ID.to_owned(),
+            backend: "engine.scripting.nullstar".to_owned(),
+            ..ScriptingServiceInfo::default()
+        };
         info.features
             .push("null-provider-empty-response".to_owned());
         info

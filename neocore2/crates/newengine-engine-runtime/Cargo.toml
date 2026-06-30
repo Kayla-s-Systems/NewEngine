@@ -35,7 +35,7 @@ newengine-input-actions-api = { path = "../newengine-input-actions-api" }
 newengine-input-api = { path = "../newengine-input-api" }
 newengine-input-bindings-api = { path = "../newengine-input-bindings-api" }
 newengine-input-bindings-runtime = { path = "../newengine-input-bindings-runtime" }
-newengine-jobs-api = { path = "../newengine-jobs-api" }
+newengine-task-api = { path = "../newengine-task-api" }
 newengine-ecs = { path = "../newengine-ecs" }
 newengine-ecs-api = { path = "../newengine-ecs-api" }
 newengine-entity-api = { path = "../newengine-entity-api" }

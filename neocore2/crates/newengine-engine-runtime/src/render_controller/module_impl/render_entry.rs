@@ -60,10 +60,10 @@ impl RuntimeRenderController {
         let material_upload_jobs = backend_work_budget
             .map(|b| b.max_upload_jobs_per_frame.max(1))
             .unwrap_or(1);
-        let job_system = ctx.job_system().cloned();
+        let thread_pool = ctx.thread_pool().cloned();
         self.pump_material_texture_requests(
             &mut **r,
-            job_system.as_ref(),
+            thread_pool.as_ref(),
             material_upload_jobs,
             material_upload_jobs,
         );
@@ -75,6 +75,8 @@ impl RuntimeRenderController {
             backend_work_budget,
             material_upload_jobs,
             trace_frame,
+            w,
+            h,
         )? {
             drop(r);
             ctx.resources_mut().insert(status);

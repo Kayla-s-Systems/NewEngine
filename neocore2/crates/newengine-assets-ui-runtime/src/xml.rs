@@ -131,9 +131,7 @@ pub(crate) fn matching_close_tag(xml: &str, name: &str, from: usize) -> Option<(
                     next,
                     Some(b' ') | Some(b'\t') | Some(b'\n') | Some(b'\r') | Some(b'>') | Some(b'/')
                 ) {
-                    let Some(open_end_rel) = xml[open_pos..].find('>') else {
-                        return None;
-                    };
+                    let open_end_rel = xml[open_pos..].find('>')?;
                     let open_end = open_pos + open_end_rel;
                     if !xml[open_pos..=open_end].trim_end().ends_with("/>") {
                         depth += 1;

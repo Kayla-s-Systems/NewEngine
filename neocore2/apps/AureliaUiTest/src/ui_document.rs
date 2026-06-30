@@ -45,7 +45,7 @@ impl AureliaUiTestRouteStatus {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Default)]
 #[serde(default)]
 struct AssetsUiCompileResponse {
     ok: bool,
@@ -54,19 +54,6 @@ struct AssetsUiCompileResponse {
     compiled_document: UiCompiledDocument,
     warnings: Vec<String>,
 }
-
-impl Default for AssetsUiCompileResponse {
-    fn default() -> Self {
-        Self {
-            ok: false,
-            document_ref: String::new(),
-            surface_id: String::new(),
-            compiled_document: UiCompiledDocument::default(),
-            warnings: Vec::new(),
-        }
-    }
-}
-
 pub fn build_aurelia_ui_test_request(
     frame_index: u64,
     click_count: u64,
@@ -235,6 +222,7 @@ fn patch_value(node: &mut UiNodeRequest, id: &str, value: &str) {
     }
 }
 
+#[allow(clippy::field_reassign_with_default)]
 fn showcase_surface_style() -> UiSurfaceStyle {
     let mut style = UiSurfaceStyle::default();
     style.theme_id = UI_THEME_NORTHSTAR_DEFAULT.to_owned();

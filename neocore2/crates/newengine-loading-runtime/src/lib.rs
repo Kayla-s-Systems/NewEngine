@@ -210,6 +210,7 @@ impl SharedLoadingSnapshot {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn project_loading_snapshot_from_overlay_fields(
     active: bool,
     title: impl Into<String>,

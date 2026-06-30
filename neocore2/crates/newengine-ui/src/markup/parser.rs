@@ -233,7 +233,7 @@ fn parse_node(n: Node) -> Result<UiNode, String> {
 #[inline]
 fn parse_select_options_str(options_raw: &str) -> Vec<(String, String)> {
     let mut options = Vec::new();
-    for part in options_raw.split(|c| c == ',' || c == ';') {
+    for part in options_raw.split([',', ';']) {
         let p = part.trim();
         if p.is_empty() {
             continue;

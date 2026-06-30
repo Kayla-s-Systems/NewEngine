@@ -11,14 +11,15 @@ pub mod events;
 pub mod frame;
 pub mod host_events;
 pub mod host_services;
-pub mod jobs;
 pub mod lifecycle_events;
+pub mod loading;
 pub(crate) mod log_fmt;
 pub mod module;
 pub(crate) mod path_fmt;
 pub(crate) mod plugin_forward_logger;
 pub mod render;
 pub mod storage_root;
+mod task_core;
 pub mod audio {
     pub use newengine_audio_api::*;
 }
@@ -40,6 +41,7 @@ pub mod startup_status;
 pub mod startup_window;
 pub mod sync;
 mod system_info;
+pub mod threading;
 
 pub use host_services::{
     call_service_v1, call_service_v1_optional, describe_service, engine_gateway_has_capability,
@@ -80,9 +82,16 @@ pub use startup_status::{
 };
 pub use sync::ShutdownToken;
 
-pub use jobs::{
-    JobControl, JobLane, JobPriority, JobRequest, JobSystem, JobSystemConfig, JobSystemHandle,
-    JobSystemSnapshot, JobTaskStatus, JobTicket, JOB_LANE_COUNT, JOB_PRIORITY_COUNT,
+pub use threading::{
+    CpuTaskDto, CpuTaskPriority, CpuTaskResultDto, CpuTaskTicket, TaskContext, TaskRuntimeStatus,
+    TaskStatus, TaskTicket, ThreadPoolConfig, ThreadPoolHandle, ThreadPoolLaneSnapshot,
+    ThreadPoolManager, ThreadPoolSnapshot, ENGINE_THREADING_GATEWAY_ID,
+    THREADING_BACKEND_CAPABILITY_ID, THREADING_PROVIDER_SERVICE_ID, THREADING_RUNTIME_CONTRACT,
+};
+
+pub use task_core::{
+    TaskLane, TaskPriority, TaskRequest, DEFAULT_FRAME_CPU_BUDGET_MS, JOB_LANE_COUNT,
+    JOB_PRIORITY_COUNT,
 };
 
 pub use run_id::{init_run_id, run_id};

@@ -254,7 +254,6 @@ const PHENOMENA_FOG: &[PhenomenonTemplateDescriptor] = &[PhenomenonTemplateDescr
     priority: "high",
     reason: "environment_fog",
     tags: &["environment.fog_bank", "weather.fog", "visibility.low"],
-    ..FAIR_CLOUD_FIELD
 }];
 
 const PHENOMENA_SNOW: &[PhenomenonTemplateDescriptor] = &[PhenomenonTemplateDescriptor {

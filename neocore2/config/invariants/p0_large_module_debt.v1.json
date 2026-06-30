@@ -108,7 +108,7 @@
       "rule": "split_by_ownership_before_strict_removal"
     },
     {
-      "path": "NewEngine/neocore2/crates/newengine-jobs-api/src/lib.rs",
+      "path": "NewEngine/neocore2/crates/newengine-task-api/src/lib.rs",
       "loc": 663,
       "limit": 550,
       "owner_wave": "P0.ownership_split_backlog",
@@ -220,7 +220,7 @@
       "rule": "split_by_ownership_before_strict_removal"
     },
     {
-      "path": "NewEngine/neocore2/crates/newengine-runtime-host/src/platform_runtime/jobs_gateway.rs",
+      "path": "NewEngine/neocore2/crates/newengine-runtime-host/src/platform_runtime/threading_gateway.rs",
       "loc": 683,
       "limit": 550,
       "owner_wave": "P0.ownership_split_backlog",

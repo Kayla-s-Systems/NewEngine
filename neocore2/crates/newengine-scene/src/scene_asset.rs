@@ -215,7 +215,7 @@ impl Scene {
         SceneAsset {
             schema: SCENE_ASSET_SCHEMA_V1.to_string(),
             version: 1,
-            settings: self.settings.clone(),
+            settings: self.settings,
             guid_seed: alloc.seed,
             guid_next: alloc.next,
             root,
@@ -286,7 +286,7 @@ impl Scene {
 
         // Swap into self.
         self.world = world;
-        self.settings = asset.settings.clone();
+        self.settings = asset.settings;
         let _ = self.validate_invariants();
 
         Ok(())

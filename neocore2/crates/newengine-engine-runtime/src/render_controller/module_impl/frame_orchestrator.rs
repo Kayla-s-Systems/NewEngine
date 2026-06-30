@@ -7,7 +7,7 @@ use crate::gameplay::GameRunMode;
 use newengine_core::render::{
     Extent2D, RectI32, RenderApi, RenderFrameDebugSnapshot, RenderTargetId, TextureFormat, Viewport,
 };
-use newengine_core::{EngineResult, JobSystemHandle};
+use newengine_core::{EngineResult, ThreadPoolHandle};
 use newengine_render_feature_api::SceneExtractionCtx;
 use newengine_render_frame_graph::{standard_runtime_frame, StandardRuntimePipelineDesc};
 use newengine_scene::Scene;
@@ -43,7 +43,7 @@ impl RenderFrameOrchestrator {
         rt: Option<RenderTargetId>,
         scope: RenderFrameScope,
         world_frame: &WorldFrameState,
-        job_system: Option<&JobSystemHandle>,
+        thread_pool: Option<&ThreadPoolHandle>,
     ) -> EngineResult<PlayableFrameOutcome> {
         let mut cpu_profile = FrameCpuProfile::new();
 
@@ -64,18 +64,18 @@ impl RenderFrameOrchestrator {
         picking::handle_picking(controller, scene, viewproj, scope.vp_w, scope.vp_h);
         cpu_profile.mark("view");
 
-        Self::publish_render_job_pass_event(
+        Self::publish_render_task_pass_event(
             controller.frame.frame_index,
-            newengine_jobs_api::job_pass::SCENE_RENDER_SNAPSHOT,
-            newengine_jobs_api::EngineTaskPhase::Scheduled,
+            newengine_task_api::task_pass::SCENE_RENDER_SNAPSHOT,
+            newengine_task_api::EngineTaskPhase::Scheduled,
             "SceneRenderSnapshot scheduled",
-            Self::render_prep_executor_detail(job_system, "SceneRenderSnapshot still borrows Scene; capture is a visible render-prep barrier until the scene read model is Send + 'static."),
+            Self::render_prep_executor_detail(thread_pool, "SceneRenderSnapshot still borrows Scene; capture is a visible render-prep barrier until the scene read model is Send + 'static."),
             Some(0.0),
         );
-        Self::publish_render_job_pass_event(
+        Self::publish_render_task_pass_event(
             controller.frame.frame_index,
-            newengine_jobs_api::job_pass::SCENE_RENDER_SNAPSHOT,
-            newengine_jobs_api::EngineTaskPhase::Running,
+            newengine_task_api::task_pass::SCENE_RENDER_SNAPSHOT,
+            newengine_task_api::EngineTaskPhase::Running,
             "SceneRenderSnapshot running",
             "Capturing DTO-like render read model before feature extraction.",
             None,
@@ -91,10 +91,10 @@ impl RenderFrameOrchestrator {
             ui.is_some(),
             plugin_snapshot.is_some(),
         );
-        Self::publish_render_job_pass_event(
+        Self::publish_render_task_pass_event(
             controller.frame.frame_index,
-            newengine_jobs_api::job_pass::SCENE_RENDER_SNAPSHOT,
-            newengine_jobs_api::EngineTaskPhase::Completed,
+            newengine_task_api::task_pass::SCENE_RENDER_SNAPSHOT,
+            newengine_task_api::EngineTaskPhase::Completed,
             "SceneRenderSnapshot captured",
             snapshot.diagnostic_detail(),
             Some(1.0),
@@ -221,7 +221,7 @@ impl RenderFrameOrchestrator {
         let extraction = SceneExtractionCtx {
             scene,
             lit,
-            viewproj: viewproj,
+            viewproj,
             camera_position: view.position_ws,
             camera_forward: view.forward_ws,
             bounds,
@@ -236,18 +236,18 @@ impl RenderFrameOrchestrator {
             ui,
         };
 
-        Self::publish_render_job_pass_event(
+        Self::publish_render_task_pass_event(
             controller.frame.frame_index,
-            newengine_jobs_api::job_pass::FEATURE_EXTRACT,
-            newengine_jobs_api::EngineTaskPhase::Scheduled,
+            newengine_task_api::task_pass::FEATURE_EXTRACT,
+            newengine_task_api::EngineTaskPhase::Scheduled,
             "RenderPrep pass scheduled",
-            Self::render_prep_executor_detail(job_system, "Feature extraction is the profiler hotspot. Provider-safe DTO building should move to engine.jobs; RenderApi command recording stays on the render thread."),
+            Self::render_prep_executor_detail(thread_pool, "Feature extraction is the profiler hotspot. Provider-safe DTO building should move to engine.threading; RenderApi command recording stays on the render thread."),
             Some(0.0),
         );
-        Self::publish_render_job_pass_event(
+        Self::publish_render_task_pass_event(
             controller.frame.frame_index,
-            newengine_jobs_api::job_pass::FEATURE_EXTRACT,
-            newengine_jobs_api::EngineTaskPhase::Running,
+            newengine_task_api::task_pass::FEATURE_EXTRACT,
+            newengine_task_api::EngineTaskPhase::Running,
             "RenderPrep pass running",
             "Feature extraction is executing on the render-thread barrier because current providers still record RenderApi command lists. Treat this as the synchronous fallback path, not the target architecture.",
             None,
@@ -273,10 +273,10 @@ impl RenderFrameOrchestrator {
             &features.profile_breakdown(),
             ui,
         );
-        Self::publish_render_job_pass_event(
+        Self::publish_render_task_pass_event(
             controller.frame.frame_index,
-            newengine_jobs_api::job_pass::FEATURE_EXTRACT,
-            newengine_jobs_api::EngineTaskPhase::Completed,
+            newengine_task_api::task_pass::FEATURE_EXTRACT,
+            newengine_task_api::EngineTaskPhase::Completed,
             "RenderPrep pass completed",
             format!(
                 "Feature extraction completed profile_ms={:.2} breakdown={}",
@@ -347,10 +347,10 @@ impl RenderFrameOrchestrator {
             view_frame.postfx,
         );
         postfx.ui_backdrop = ui_backdrop;
-        Self::publish_render_job_pass_event(
+        Self::publish_render_task_pass_event(
             controller.frame.frame_index,
-            newengine_jobs_api::job_pass::FRAME_ENVELOPE,
-            newengine_jobs_api::EngineTaskPhase::Scheduled,
+            newengine_task_api::task_pass::FRAME_ENVELOPE,
+            newengine_task_api::EngineTaskPhase::Scheduled,
             "FrameEnvelope staging scheduled",
             "FrameEnvelope packet staging is the render-thread handoff boundary: RenderPrep produces packets, RenderApi recording consumes only the envelope.",
             Some(0.0),
@@ -366,20 +366,20 @@ impl RenderFrameOrchestrator {
             postfx,
             scope.trace_frame,
         );
-        Self::publish_render_job_pass_event(
+        Self::publish_render_task_pass_event(
             controller.frame.frame_index,
-            newengine_jobs_api::job_pass::FRAME_ENVELOPE,
-            newengine_jobs_api::EngineTaskPhase::Completed,
+            newengine_task_api::task_pass::FRAME_ENVELOPE,
+            newengine_task_api::EngineTaskPhase::Completed,
             "FrameEnvelope packet staged",
             "RenderApi submit is now consuming a staged FrameEnvelope instead of constructing world packets inside submit.",
             Some(1.0),
         );
         cpu_profile.mark("envelope");
 
-        Self::publish_render_job_pass_event(
+        Self::publish_render_task_pass_event(
             controller.frame.frame_index,
-            newengine_jobs_api::job_pass::RENDER_SUBMIT,
-            newengine_jobs_api::EngineTaskPhase::Running,
+            newengine_task_api::task_pass::RENDER_SUBMIT,
+            newengine_task_api::EngineTaskPhase::Running,
             "Render submit consuming packets",
             "Render submit is consuming the prepared frame envelope. Heavy world construction must happen before this point in RenderPrep/Streaming/AssetIo jobs.",
             None,
@@ -403,10 +403,10 @@ impl RenderFrameOrchestrator {
             }
         };
         cpu_profile.mark("submit");
-        Self::publish_render_job_pass_event(
+        Self::publish_render_task_pass_event(
             controller.frame.frame_index,
-            newengine_jobs_api::job_pass::RENDER_SUBMIT,
-            newengine_jobs_api::EngineTaskPhase::Completed,
+            newengine_task_api::task_pass::RENDER_SUBMIT,
+            newengine_task_api::EngineTaskPhase::Completed,
             "Render submit completed",
             format!(
                 "Frame envelope submitted cpu_record_ms={:.2} gpu_submit_ms={:.2}",
@@ -486,22 +486,22 @@ impl RenderFrameOrchestrator {
     }
 
     fn render_prep_executor_detail(
-        job_system: Option<&JobSystemHandle>,
+        thread_pool: Option<&ThreadPoolHandle>,
         detail: &'static str,
     ) -> String {
-        match job_system {
+        match thread_pool {
             Some(jobs) => format!(
-                "{detail} engine.jobs available worker_threads={} pending_render_prep={}; target split: jobs build provider-safe packets, render thread submits GPU/backend envelope.",
+                "{detail} engine.threading available worker_threads={} pending_render_prep={}; target split: jobs build provider-safe packets, render thread submits GPU/backend envelope.",
                 jobs.worker_threads(),
-                jobs.pending_for_lane(newengine_core::JobLane::RenderPrep),
+                jobs.pending_for_lane(newengine_core::TaskLane::RenderPrep),
             ),
             None => format!(
-                "{detail} engine.jobs handle unavailable for this frame; render-prep remains a main-thread barrier."
+                "{detail} engine.threading handle unavailable for this frame; render-prep remains a main-thread barrier."
             ),
         }
     }
 
-    fn should_publish_render_job_pass_event(frame_index: u64) -> bool {
+    fn should_publish_render_task_pass_event(frame_index: u64) -> bool {
         let mode = RENDER_JOB_EVENT_MODE.get_or_init(|| {
             crate::env_config::var("NEWENGINE_RENDER_JOB_EVENT_MODE")
                 .unwrap_or_else(|| "sampled".to_owned())
@@ -520,24 +520,24 @@ impl RenderFrameOrchestrator {
                         6000,
                     )
                 });
-                frame_index <= 3 || frame_index % interval == 0
+                frame_index <= 3 || frame_index.is_multiple_of(interval)
             }
         }
     }
 
-    fn publish_render_job_pass_event(
+    fn publish_render_task_pass_event(
         frame_index: u64,
         pass: &'static str,
-        phase: newengine_jobs_api::EngineTaskPhase,
+        phase: newengine_task_api::EngineTaskPhase,
         status: impl Into<String>,
         detail: impl Into<String>,
         progress_01: Option<f32>,
     ) {
-        if !Self::should_publish_render_job_pass_event(frame_index) {
+        if !Self::should_publish_render_task_pass_event(frame_index) {
             return;
         }
 
-        let mut event = newengine_jobs_api::EngineTaskEvent::new(
+        let mut event = newengine_task_api::EngineTaskEvent::new(
             format!("render.frame.{frame_index}.{pass}"),
             "render.frame-orchestrator",
             "engine.render",
@@ -550,28 +550,28 @@ impl RenderFrameOrchestrator {
         )
         .with_frame_id(frame_index)
         .with_dependency_group(format!("frame.{frame_index}.render"))
-        .with_job_domain(newengine_jobs_api::job_domain::ENGINE_RENDER)
-        .with_job_pass(pass)
+        .with_task_domain(newengine_task_api::task_domain::ENGINE_RENDER)
+        .with_task_pass(pass)
         .with_priority("critical")
         .with_executor("main-thread-barrier")
         .with_controls(false, false);
         if let Some(progress) = progress_01 {
             event = event.with_progress(progress);
         }
-        let job_event = newengine_jobs_api::EngineJobEventV1::new(
+        let job_event = newengine_task_api::EngineTaskEnvelopeV1::new(
             event.clone(),
-            newengine_jobs_api::JobExecutorKind::MainThreadBarrier,
+            newengine_task_api::TaskExecutorKind::MainThreadBarrier,
             "render-frame-job-pass",
         );
         if let Ok(payload) = serde_json::to_vec(&event) {
             let _ = newengine_plugin_host::host_context::publish_event(
-                newengine_jobs_api::ENGINE_TASK_EVENT_TOPIC_V1,
+                newengine_task_api::ENGINE_TASK_EVENT_TOPIC_V1,
                 &payload,
             );
         }
         if let Ok(payload) = serde_json::to_vec(&job_event) {
             let _ = newengine_plugin_host::host_context::publish_event(
-                newengine_jobs_api::ENGINE_JOB_EVENT_TOPIC_V1,
+                newengine_task_api::ENGINE_TASK_ENVELOPE_TOPIC_V1,
                 &payload,
             );
         }
@@ -777,7 +777,7 @@ fn log_gpu_safe_profile_once() {
             "render controller: legacy conservative GPU profile active; high-cost feature branches are disabled only by explicit runtime profile policy"
         );
         newengine_core::crash::record_breadcrumb(
-            "render controller: legacy conservative GPU profile active".to_owned(),
+            "render controller: legacy conservative GPU profile active",
         );
     }
 }
@@ -799,12 +799,10 @@ fn log_transient_pipeline_wait_once(frame_index: u64, error: &str) {
             "render controller: transient material shader pipeline wait frame={} err='{}'",
             frame_index, error
         ));
-    } else {
-        if frame_index % TRANSIENT_SHADER_PIPELINE_WAIT_HEARTBEAT_FRAMES == 0 {
-            newengine_ulog_api::ulog::debug!(
-                "render controller: material pipeline still pending heartbeat frame={} waiting_for='renderer.shader_compile_event'",
-                frame_index
-            );
-        }
+    } else if frame_index.is_multiple_of(TRANSIENT_SHADER_PIPELINE_WAIT_HEARTBEAT_FRAMES) {
+        newengine_ulog_api::ulog::debug!(
+            "render controller: material pipeline still pending heartbeat frame={} waiting_for='renderer.shader_compile_event'",
+            frame_index
+        );
     }
 }

@@ -122,9 +122,7 @@ pub(crate) fn gateway_capability_from_capability(
         }
     };
 
-    let Some(gateway_id) = json_field_string(&value, ENGINE_GATEWAY_FIELD) else {
-        return None;
-    };
+    let gateway_id = json_field_string(&value, ENGINE_GATEWAY_FIELD)?;
 
     if !is_engine_service_gateway_id(&gateway_id) {
         newengine_ulog_api::ulog::warn!(

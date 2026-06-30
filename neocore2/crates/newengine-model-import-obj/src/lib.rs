@@ -211,7 +211,7 @@ pub fn parse_mtl_text(base_dir: &str, text: &str) -> BTreeMap<String, ModelMater
             "Kd" => {
                 if let Some((_, mat)) = &mut current {
                     mat.kd = [
-                        rest.get(0)
+                        rest.first()
                             .and_then(|v| v.parse::<f32>().ok())
                             .unwrap_or(mat.kd[0]),
                         rest.get(1)

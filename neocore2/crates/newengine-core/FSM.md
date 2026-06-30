@@ -38,4 +38,4 @@ Invalid transitions force `Faulted` and are logged by `Engine`.
 - `EngineFsm` replaces parallel lifecycle flags.
 - `ShutdownToken` replaces mutable exit booleans in module contexts.
 - Runtime-host/editor/runtime layers may observe `Engine::run_state()`, but may not derive independent lifecycle state from it.
-- Job delegation goes through `JobSystemHandle`; engine-thread commits go through `Scheduler`.
+- CPU execution goes through `ThreadPoolHandle` / `engine.threading`; engine-thread commits go through `Scheduler`.

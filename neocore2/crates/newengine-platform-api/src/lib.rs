@@ -357,7 +357,7 @@ impl Default for PlatformStepResultV1 {
 
 #[repr(C)]
 #[derive(Debug, Clone, PartialEq, StableAbi)]
-pub struct PlatformHostJobRequestV1 {
+pub struct PlatformHostTaskRequestV1 {
     pub label: RString,
     pub source: RString,
     pub owner: RString,
@@ -368,7 +368,7 @@ pub struct PlatformHostJobRequestV1 {
     pub can_cancel: bool,
 }
 
-impl Default for PlatformHostJobRequestV1 {
+impl Default for PlatformHostTaskRequestV1 {
     #[inline]
     fn default() -> Self {
         Self {
@@ -386,14 +386,14 @@ impl Default for PlatformHostJobRequestV1 {
 
 #[repr(C)]
 #[derive(Debug, Clone, PartialEq, StableAbi)]
-pub struct PlatformHostJobTicketV1 {
+pub struct PlatformHostTaskTicketV1 {
     pub accepted: bool,
     pub job_id: RString,
     pub status: RString,
     pub detail: RString,
 }
 
-impl Default for PlatformHostJobTicketV1 {
+impl Default for PlatformHostTaskTicketV1 {
     #[inline]
     fn default() -> Self {
         Self {
@@ -445,10 +445,10 @@ pub struct PlatformHostApiV1 {
     pub poll_cursor_state_v1: extern "C" fn(usize) -> PlatformCursorPollV1,
     pub submit_job_v1: extern "C" fn(
         usize,
-        PlatformHostJobRequestV1,
+        PlatformHostTaskRequestV1,
         PlatformHostJobCallbackV1,
         usize,
-    ) -> PlatformHostJobTicketV1,
+    ) -> PlatformHostTaskTicketV1,
 }
 
 pub type PlatformRunResultV1 = RResult<(), RString>;

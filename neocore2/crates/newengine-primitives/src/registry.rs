@@ -99,7 +99,7 @@ impl PrimitiveRegistry {
     /// Overriding is allowed intentionally:
     /// - for editor/dev tools
     /// - for platform-specific mesh variants
-    /// If you want to forbid overrides, add a `try_register` method.
+    ///   If you want to forbid overrides, add a `try_register` method.
     #[inline]
     pub fn register(
         &mut self,

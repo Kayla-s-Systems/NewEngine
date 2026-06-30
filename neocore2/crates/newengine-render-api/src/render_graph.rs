@@ -326,22 +326,20 @@ impl RenderDrawListKind {
 
     #[inline]
     pub const fn is_compatible_with_pass(self, pass: RenderGraphPassKind) -> bool {
-        match (self, pass) {
+        matches!(
+            (self, pass),
             (
                 Self::ShadowCasters,
                 RenderGraphPassKind::ShadowMap
-                | RenderGraphPassKind::ShadowCascadeMap
-                | RenderGraphPassKind::DepthPrepass,
-            ) => true,
-            (
+                    | RenderGraphPassKind::ShadowCascadeMap
+                    | RenderGraphPassKind::DepthPrepass,
+            ) | (
                 Self::OpaqueForward,
                 RenderGraphPassKind::ForwardOpaque | RenderGraphPassKind::GBuffer,
-            ) => true,
-            (Self::Transparent, RenderGraphPassKind::Transparent) => true,
-            (Self::Ui, RenderGraphPassKind::UiComposite) => true,
-            (Self::Debug, RenderGraphPassKind::DebugOverlay) => true,
-            _ => false,
-        }
+            ) | (Self::Transparent, RenderGraphPassKind::Transparent)
+                | (Self::Ui, RenderGraphPassKind::UiComposite)
+                | (Self::Debug, RenderGraphPassKind::DebugOverlay)
+        )
     }
 }
 
@@ -369,34 +367,32 @@ impl Default for RenderMaterialDomain {
 impl RenderMaterialDomain {
     #[inline]
     pub const fn is_compatible_with_pass(self, pass: RenderGraphPassKind) -> bool {
-        match (self, pass) {
+        matches!(
+            (self, pass),
             (
                 Self::ShadowCaster,
                 RenderGraphPassKind::ShadowMap
-                | RenderGraphPassKind::ShadowCascadeMap
-                | RenderGraphPassKind::DepthPrepass,
-            ) => true,
-            (
+                    | RenderGraphPassKind::ShadowCascadeMap
+                    | RenderGraphPassKind::DepthPrepass,
+            ) | (
                 Self::OpaqueLit | Self::Terrain | Self::Vegetation,
                 RenderGraphPassKind::ForwardOpaque | RenderGraphPassKind::GBuffer,
-            ) => true,
-            (Self::Transparent, RenderGraphPassKind::Transparent) => true,
-            (Self::Water, RenderGraphPassKind::Water) => true,
-            (Self::Ui, RenderGraphPassKind::UiComposite) => true,
-            (
-                Self::PostFx,
-                RenderGraphPassKind::PostFx
-                | RenderGraphPassKind::BloomExtract
-                | RenderGraphPassKind::BloomBlur
-                | RenderGraphPassKind::TaaResolve
-                | RenderGraphPassKind::MsaaResolve
-                | RenderGraphPassKind::DeferredLighting
-                | RenderGraphPassKind::UiBackdropBlur,
-            ) => true,
-            (Self::Debug, RenderGraphPassKind::DebugOverlay) => true,
-            (Self::Custom, _) => true,
-            _ => false,
-        }
+            ) | (Self::Transparent, RenderGraphPassKind::Transparent)
+                | (Self::Water, RenderGraphPassKind::Water)
+                | (Self::Ui, RenderGraphPassKind::UiComposite)
+                | (
+                    Self::PostFx,
+                    RenderGraphPassKind::PostFx
+                        | RenderGraphPassKind::BloomExtract
+                        | RenderGraphPassKind::BloomBlur
+                        | RenderGraphPassKind::TaaResolve
+                        | RenderGraphPassKind::MsaaResolve
+                        | RenderGraphPassKind::DeferredLighting
+                        | RenderGraphPassKind::UiBackdropBlur,
+                )
+                | (Self::Debug, RenderGraphPassKind::DebugOverlay)
+                | (Self::Custom, _)
+        )
     }
 }
 

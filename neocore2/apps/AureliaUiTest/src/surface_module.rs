@@ -190,7 +190,7 @@ impl AureliaUiTestSurfaceModule {
     fn publish_surface(&self, frame_index: u64) -> bool {
         let route_status = self.route_status();
         if !route_status.assets_ui_available {
-            if !self.published_once || frame_index % 120 == 0 {
+            if !self.published_once || frame_index.is_multiple_of(120) {
                 newengine_ulog_api::ulog::warn!(
                     "AureliaUiTest: engine.assets.ui is not registered yet; waiting before compiling Showcase .neui"
                 );

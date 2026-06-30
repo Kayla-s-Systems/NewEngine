@@ -12,7 +12,9 @@ mod construction;
 mod data_driven;
 mod definition;
 mod drawable;
+mod mesh_render;
 mod texture_dictionary;
+mod uv_layout;
 
 pub use asset_chain::*;
 pub use asset_graph::*;
@@ -20,7 +22,9 @@ pub use construction::*;
 pub use data_driven::*;
 pub use definition::*;
 pub use drawable::*;
+pub use mesh_render::*;
 pub use texture_dictionary::*;
+pub use uv_layout::*;
 
 pub use newengine_model_skeleton_api::{
     ModelSkeletonAnchors, ModelSkeletonJointMetadata, ModelSkeletonMetadata,
@@ -74,10 +78,22 @@ pub const CLIP_DICTIONARY_ASSET_KIND: &str = "clip_dictionary";
 pub const PHYSICS_DICTIONARY_EXTENSION: &str = "ybn";
 pub const PHYSICS_DICTIONARY_ASSET_KIND: &str = "physics_dictionary";
 
-pub const OBJECT_TYPE_DEFINITIONS_EXTENSION: &str = "ytyp";
-pub const OBJECT_TYPE_DEFINITIONS_ASSET_KIND: &str = "archetype_dictionary";
-pub const OBJECT_TYPE_DEFINITIONS_CONTAINER: &str = "newengine.listfile.nef8.ytyp";
-pub const DEFINITION_ENTRIES_SCHEMA: &str = "newengine.ytyp.definition_entries.v1";
+pub const OBJECT_TYPE_PROPERTIES_EXTENSION: &str = "ytyp";
+pub const OBJECT_TYPE_PROPERTIES_ASSET_KIND: &str = "asset_properties";
+pub const OBJECT_TYPE_PROPERTIES_CONTAINER: &str = "newengine.listfile.nef8.ytyp";
+pub const OBJECT_TYPE_PROPERTIES_SCHEMA: &str = "newengine.ytyp.dictionary.v1";
+
+pub const UV_LAYOUT_DICTIONARY_EXTENSION: &str = "ytyd";
+pub const UV_LAYOUT_DICTIONARY_ASSET_KIND: &str = "uv_layout_dictionary";
+pub const UV_LAYOUT_DICTIONARY_CONTAINER: &str = "newengine.listfile.nef8.ytyd";
+pub const UV_LAYOUT_DICTIONARY_SCHEMA: &str = "newengine.ytyd.uv_layout.dictionary.v1";
+
+// Compatibility aliases while older call sites still speak in definition-entry terms.
+// Canonical architecture: `.ytyp` is JSON archetype metadata compiled/stored as NEF8 ListFile data.
+pub const OBJECT_TYPE_DEFINITIONS_EXTENSION: &str = OBJECT_TYPE_PROPERTIES_EXTENSION;
+pub const OBJECT_TYPE_DEFINITIONS_ASSET_KIND: &str = OBJECT_TYPE_PROPERTIES_ASSET_KIND;
+pub const OBJECT_TYPE_DEFINITIONS_CONTAINER: &str = OBJECT_TYPE_PROPERTIES_CONTAINER;
+pub const DEFINITION_ENTRIES_SCHEMA: &str = OBJECT_TYPE_PROPERTIES_SCHEMA;
 
 pub const MODEL_FEATURE_DOMAINS: &[&str] = &[
     "mesh.obj",
@@ -89,6 +105,8 @@ pub const MODEL_FEATURE_DOMAINS: &[&str] = &[
     "texture.ytd",
     "package.nepak",
     "drawable.resolve",
+    "properties.ytyp",
+    "uv_layout.ytyd",
 ];
 
 pub const MODEL_SERVICE_METHODS: &[&str] = &[
@@ -171,6 +189,8 @@ mod tests {
         );
         assert!(!MODEL_FEATURE_DOMAINS.contains(&"definition_entries.ytyp"));
         assert!(MODEL_FEATURE_DOMAINS.contains(&"drawable.resolve"));
+        assert!(MODEL_FEATURE_DOMAINS.contains(&"properties.ytyp"));
+        assert!(MODEL_FEATURE_DOMAINS.contains(&"uv_layout.ytyd"));
         assert!(MODEL_FEATURE_DOMAINS.contains(&"material.nemat"));
         assert!(MODEL_FEATURE_DOMAINS.contains(&"texture.ytd"));
         assert!(MODEL_FEATURE_DOMAINS.contains(&"package.nepak"));

@@ -7,6 +7,7 @@ use crate::nav::input::build_camera_input;
 use crate::nav::CameraNavInput;
 
 #[inline]
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn integrate_nav(
     world: &mut World,
     cam_id: EntityId,

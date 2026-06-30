@@ -11,6 +11,13 @@ pub struct ShutdownToken {
     flag: Arc<AtomicBool>,
 }
 
+impl Default for ShutdownToken {
+    #[inline]
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ShutdownToken {
     #[inline]
     pub fn new() -> Self {

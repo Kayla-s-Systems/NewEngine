@@ -261,7 +261,7 @@ pub fn default_host_api() -> HostApiV1 {
         log_error: host_log_error,
 
         register_service_v1: host_register_service_v1_plain,
-        call_service_v1: call_service_v1,
+        call_service_v1,
 
         emit_event_v1: host_emit_event_v1,
         subscribe_events_v1: host_subscribe_events_v1,

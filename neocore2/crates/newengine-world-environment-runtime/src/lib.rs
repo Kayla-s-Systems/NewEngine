@@ -336,9 +336,11 @@ mod tests {
 
     #[test]
     fn default_provider_is_deterministic_for_same_request() {
-        let mut req = EnvironmentFrameRequest::default();
-        req.frame_id = 17;
-        req.seed = 42;
+        let mut req = EnvironmentFrameRequest {
+            frame_id: 17,
+            seed: 42,
+            ..EnvironmentFrameRequest::default()
+        };
         req.time.game.normalized_day = 0.5;
         let a = build_default_environment_frame(
             "environment.default",
@@ -366,19 +368,19 @@ mod tests {
         );
         assert_eq!(
             a.visual_assets.texture_dictionary_ref,
-            "textures/fps/skydome.ytd"
+            "textures/environment/skydome.ytd"
         );
         assert_eq!(
             a.visual_assets.sky_texture_ref,
-            "textures/fps/skydome.ytd@starfield"
+            "textures/environment/skydome.ytd@starfield"
         );
         assert_eq!(
             a.visual_assets.cloud_density_texture_ref,
-            "textures/fps/skydome.ytd@baseperlinnoise3channel"
+            "textures/environment/skydome.ytd@baseperlinnoise3channel"
         );
         assert_eq!(
             a.visual_assets.moon_disk_texture_ref,
-            "textures/fps/skydome.ytd@moon_new"
+            "textures/environment/skydome.ytd@moon_new"
         );
         assert!(!a
             .visual_assets
@@ -435,7 +437,7 @@ mod tests {
         );
         let serialized =
             serde_json::to_string(&frame.visual_assets).expect("visual assets serialize");
-        assert!(serialized.contains("textures/fps/skydome.ytd"));
+        assert!(serialized.contains("textures/environment/skydome.ytd"));
         assert!(!serialized.contains("textures/sky/highlands_sky.ytd"));
         assert!(!serialized.contains("textures/sky/default_sky.ytd"));
         assert!(!serialized.contains("textures/sky/alpine_sky.ytd"));

@@ -55,7 +55,7 @@ fn world_matrix_from_local_chain(world: &World, id: EntityId) -> Option<Mat4> {
             // Degrade: treat missing local as identity.
             continue;
         };
-        m = m * t.to_mat4();
+        m *= t.to_mat4();
     }
 
     Some(m)

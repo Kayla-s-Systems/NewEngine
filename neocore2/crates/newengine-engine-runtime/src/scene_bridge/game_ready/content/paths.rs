@@ -10,7 +10,7 @@ pub(super) fn profile_asset_candidates() -> Vec<String> {
 
     for raw in PROFILE_ENV_KEYS
         .into_iter()
-        .filter_map(|key| crate::env_config::var(key))
+        .filter_map(crate::env_config::var)
     {
         let trimmed = raw.trim();
         if trimmed.is_empty() {

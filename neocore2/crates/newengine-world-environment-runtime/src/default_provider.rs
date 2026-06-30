@@ -323,7 +323,7 @@ pub(crate) fn deterministic_key(req: &EnvironmentFrameRequest, provider: &str) -
 
 pub(crate) fn normalized_day_from_time(req: &EnvironmentFrameRequest) -> f32 {
     let normalized = req.time.game.normalized_day;
-    if normalized.is_finite() && normalized >= 0.0 && normalized <= 1.0 {
+    if normalized.is_finite() && (0.0..=1.0).contains(&normalized) {
         return normalized as f32;
     }
     let seconds_per_day = req.time.game.seconds_per_game_day.max(1.0);

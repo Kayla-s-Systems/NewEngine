@@ -25,22 +25,10 @@ pub struct AssetTypesServiceInfo {
     pub registered_extensions: Vec<String>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 struct AssetTypeRegistryState {
     registry: BTreeMap<String, AssetFileTypeDescriptor>,
 }
-
-impl Default for AssetTypeRegistryState {
-    fn default() -> Self {
-        // Empty by design: formats self-register through their own crates/providers.
-        // The registry is a generic collector/resolver, not a god table of
-        // extensions and semantic gateways.
-        Self {
-            registry: BTreeMap::new(),
-        }
-    }
-}
-
 impl AssetTypeRegistryState {
     fn service_info(&self) -> AssetTypesServiceInfo {
         AssetTypesServiceInfo {
@@ -268,6 +256,7 @@ pub fn register_asset_types_gateway_best_effort() -> bool {
 }
 
 #[cfg(test)]
+#[allow(clippy::items_after_test_module)]
 mod tests {
     use super::*;
 

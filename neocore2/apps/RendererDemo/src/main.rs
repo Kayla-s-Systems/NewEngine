@@ -3,34 +3,18 @@
 use newengine_core::{Engine, EngineResult, StartupConfig};
 use newengine_game_ready_profile::{
     GameReadyRuntimeProfile, GAME_APP_ASSETS_DIR_ENV, GAME_FIXED_DT_MS, GAME_READY_APP_DIR_NAME,
+    GAME_READY_DEFAULT_PROFILE_ASSET, GAME_READY_PROFILE_ENV, GAME_READY_RUNTIME_ENV_DEFAULTS,
 };
 use newengine_runtime_host::app_launcher::{
     RuntimeHostAppProfile, RuntimeHostBootOption, RuntimeHostLaunchSpec, RuntimeHostLauncher,
 };
 use newengine_ui::{UiBuildFn, UiProviderKind};
 
-const RENDERER_DEMO_PROFILE_ENV: &str = "NEWENGINE_SCENE_PROFILE";
-const RENDERER_DEMO_PROFILE_ASSET: &str = "game_ready_highlands.ymap";
-
 const BOOT_OPTIONS: &[RuntimeHostBootOption] = &[
     RuntimeHostBootOption::RuntimeBootstrapOverlay,
     RuntimeHostBootOption::RuntimePlugins,
     RuntimeHostBootOption::PlatformWindow,
     RuntimeHostBootOption::RenderBackend,
-];
-
-const ENV_DEFAULTS: &[(&str, &str)] = &[
-    ("NEWENGINE_RENDERER_DEMO", "1"),
-    ("NEWENGINE_GAME_READY_DEMO", "1"),
-    ("NEWENGINE_REQUIRE_RENDER_BACKEND", "1"),
-    ("NEWENGINE_REQUIRE_ASSET_MANAGER", "1"),
-    ("NEWENGINE_REQUIRE_MATERIALS_BACKEND", "1"),
-    ("NEWENGINE_PLUGIN_TARGET", "runtime"),
-    ("NEWENGINE_BOOTSTRAP_PLUGIN_PRELOAD", "deferred"),
-    ("NEWENGINE_SHADER_ASYNC_PREBAKED_UNTIL_READY", "1"),
-    ("NEWENGINE_SCENE_TEXTURE_LAUNCH_MIN_READY", "24"),
-    ("NEWENGINE_SCENE_TEXTURE_LAUNCH_MIN_RATIO", "1.0"),
-    ("NEWENGINE_SCENE_TEXTURE_GATE_SOFT_TIMEOUT_FRAMES", "1800"),
 ];
 
 #[derive(Clone)]
@@ -60,8 +44,8 @@ impl RendererDemoApp {
             app_assets_env: GAME_APP_ASSETS_DIR_ENV,
             window_title: "RendererDemo: Shaded Lighting Scene",
             early_log_file_name: "renderer-demo-early.log",
-            default_profile_env: Some((RENDERER_DEMO_PROFILE_ENV, RENDERER_DEMO_PROFILE_ASSET)),
-            env_defaults: ENV_DEFAULTS,
+            default_profile_env: Some((GAME_READY_PROFILE_ENV, GAME_READY_DEFAULT_PROFILE_ASSET)),
+            env_defaults: GAME_READY_RUNTIME_ENV_DEFAULTS,
         }
     }
 

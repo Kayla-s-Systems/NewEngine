@@ -149,8 +149,8 @@ pub(super) fn emit_timed_profile(
     let traceable = trace_frame || total_ms >= trace_ms_threshold();
     let sample_interval = profiler_sample_interval_frames();
     let should_sample = trace_frame
-        || frame_index % sample_interval == 0
-        || (slow && frame_index % slow_profile_log_interval_frames() == 0);
+        || frame_index.is_multiple_of(sample_interval)
+        || (slow && frame_index.is_multiple_of(slow_profile_log_interval_frames()));
     if should_sample {
         emit_profiler_sample(
             label,
@@ -166,7 +166,7 @@ pub(super) fn emit_timed_profile(
         return;
     }
 
-    if slow && !trace_frame && frame_index % slow_profile_log_interval_frames() != 0 {
+    if slow && !trace_frame && !frame_index.is_multiple_of(slow_profile_log_interval_frames()) {
         return;
     }
 

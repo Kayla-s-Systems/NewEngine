@@ -68,7 +68,9 @@ pub(super) fn update_game_ready_launch_gate(
             gate.update_texture_counts(readiness.waiting, readiness.total, readiness.failed);
             let waited_frames = frame_index.saturating_sub(gate.requested_frame);
 
-            if waited_frames >= scene_texture_gate_soft_timeout_frames() && frame_index % 120 == 0 {
+            if waited_frames >= scene_texture_gate_soft_timeout_frames()
+                && frame_index.is_multiple_of(120)
+            {
                 newengine_ulog_api::ulog::warn!(
                     "game-ready launch gate: still waiting for visual completeness frame={} waited_frames={} reason='{}'",
                     frame_index,
@@ -79,7 +81,7 @@ pub(super) fn update_game_ready_launch_gate(
 
             gate.reason = readiness.reason;
             let early_wait_frame = waited_frames <= 8;
-            if first_wait || frame_index % 60 == 0 {
+            if first_wait || frame_index.is_multiple_of(60) {
                 newengine_ulog_api::ulog::info!(
                     "game-ready launch gate: blocked frame={} reason='{}'",
                     frame_index,
@@ -119,9 +121,7 @@ fn critical_scene_residency_ready(
 
     LaunchReadiness {
         ready: materials.ready && terrain.ready,
-        reason: if materials.ready && terrain.ready {
-            format!("{} · {}", materials.reason, terrain.reason)
-        } else if !materials.ready && !terrain.ready {
+        reason: if materials.ready == terrain.ready {
             format!("{} · {}", materials.reason, terrain.reason)
         } else if !materials.ready {
             materials.reason

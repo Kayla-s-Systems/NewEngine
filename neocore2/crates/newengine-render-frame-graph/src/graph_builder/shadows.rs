@@ -81,7 +81,7 @@ impl FrameGraphBuilder {
         } else {
             4
         };
-        let atlas_rows = ((cascades + atlas_cols - 1) / atlas_cols).max(1);
+        let atlas_rows = cascades.div_ceil(atlas_cols).max(1);
         let shadow_extent = Extent2D::new(
             resolution.saturating_mul(atlas_cols),
             resolution.saturating_mul(atlas_rows),

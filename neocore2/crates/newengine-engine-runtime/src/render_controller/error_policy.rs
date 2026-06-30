@@ -57,7 +57,7 @@ pub(crate) fn is_backend_device_lost_error(error: &EngineError) -> bool {
 }
 
 /// Returns true for a transient render-material failure caused by an async
-/// shader compile job that has been queued through `engine.jobs` but has not
+/// shader compile job that has been queued through `engine.threading` but has not
 /// admitted SPIR-V into the renderer cache yet.
 ///
 /// This is not a fatal GPU/backend error: the next frames must keep pumping
@@ -71,7 +71,7 @@ pub(crate) fn is_transient_shader_pipeline_error(error: &EngineError) -> bool {
         || text.contains("shader pending")
         || text.contains("shader is not ready yet")
         || text.contains("shader compile job is still pending")
-        || text.contains("engine.jobs shader admission timeout")
+        || text.contains("engine.threading shader admission timeout")
         || text.contains("leave_pending_and_retry_later")
         || text.contains("pipeline pending_event"))
         && !is_backend_device_lost_error(error)

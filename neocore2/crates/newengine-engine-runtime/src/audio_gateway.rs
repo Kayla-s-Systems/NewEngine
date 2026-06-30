@@ -71,7 +71,7 @@ fn audio_gateway_service(
         .info(AudioServiceInfo::default)
         .blob(AUDIO_SERVICE_METHOD_INVOKE, |state, payload| {
             if payload.is_empty() {
-                return ok_json(&AudioFeedbackAck {
+                return ok_json(AudioFeedbackAck {
                     accepted: true,
                     provider: "engine.audio.echo-event-queue".to_owned(),
                     queued_events: state.events.len(),
@@ -85,11 +85,11 @@ fn audio_gateway_service(
                 Ok(event) => event,
                 Err(e) => return RResult::RErr(e),
             };
-            ok_json(&state.push(event))
+            ok_json(state.push(event))
         })
         .blob(AUDIO_SERVICE_METHOD_PLAY_EVENT_JSON_V1, |state, payload| {
             if payload.is_empty() {
-                return ok_json(&AudioFeedbackAck {
+                return ok_json(AudioFeedbackAck {
                     accepted: true,
                     provider: "engine.audio.echo-event-queue".to_owned(),
                     queued_events: state.events.len(),
@@ -103,7 +103,7 @@ fn audio_gateway_service(
                 Ok(event) => event,
                 Err(e) => return RResult::RErr(e),
             };
-            ok_json(&state.push(event))
+            ok_json(state.push(event))
         })
         .get_json(AUDIO_SERVICE_METHOD_DRAIN_EVENTS_JSON_V1, |state| {
             state.drain()

@@ -81,6 +81,7 @@ pub(super) fn panel_component(
     component
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn screen_panel<const N: usize>(
     slot_id: &str,
     label: &str,

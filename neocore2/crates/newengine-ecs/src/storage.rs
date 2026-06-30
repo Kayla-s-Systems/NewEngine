@@ -19,6 +19,7 @@ pub trait ErasedStorage: Any + Send + Sync {
     fn has(&self, id: EntityId) -> bool;
 
     fn len(&self) -> usize;
+    fn is_empty(&self) -> bool;
 }
 
 /// Per-component storage with conservative change tracking.
@@ -130,5 +131,10 @@ impl<T: Component> ErasedStorage for Storage<T> {
     #[inline]
     fn len(&self) -> usize {
         self.map.len()
+    }
+
+    #[inline]
+    fn is_empty(&self) -> bool {
+        self.map.is_empty()
     }
 }

@@ -41,9 +41,11 @@ fn runtime_file_profile(path: &Path) -> &'static str {
         .to_ascii_lowercase();
     if lower.contains("-release.") || lower.contains("-release-") {
         "release"
-    } else if lower.contains("-dev.") || lower.contains("-dev-") {
-        "dev"
-    } else if lower.contains("-debug.") || lower.contains("-debug-") {
+    } else if lower.contains("-dev.")
+        || lower.contains("-dev-")
+        || lower.contains("-debug.")
+        || lower.contains("-debug-")
+    {
         "dev"
     } else if lower.contains("-test.") || lower.contains("-test-") {
         "test"

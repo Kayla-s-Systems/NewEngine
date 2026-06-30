@@ -9,6 +9,7 @@ mod loader;
 mod types;
 mod ui_assets;
 
+pub use discovery::IncrementalLoadOutcome;
 pub use types::{PluginIconSnapshot, PluginLoadError, PluginSnapshotEntry};
 
 use newengine_math::collections::prelude::*;
@@ -19,6 +20,7 @@ pub struct PluginManager {
     loaded: Vec<LoadedPlugin>,
     loaded_ids: NeHashSet<String>,
     discovery_cache: Option<discovery::DiscoveryGraph>,
+    incremental_load: Option<discovery::IncrementalLoadState>,
 }
 
 impl PluginManager {
@@ -28,6 +30,7 @@ impl PluginManager {
             loaded: Vec::new(),
             loaded_ids: NeHashSet::default(),
             discovery_cache: None,
+            incremental_load: None,
         }
     }
 

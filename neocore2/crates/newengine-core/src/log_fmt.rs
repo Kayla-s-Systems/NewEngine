@@ -26,14 +26,17 @@ pub(crate) fn ellipsize(value: &str, max_chars: usize) -> String {
     out
 }
 
-pub(crate) fn emit_boxed_kv(title: &str, rows: &[(&str, String)]) {
+pub(crate) fn emit_boxed_kv<K>(title: &str, rows: &[(K, String)])
+where
+    K: AsRef<str>,
+{
     if !newengine_ulog_api::ulog::debug_enabled() {
         return;
     }
 
     let key_width = rows
         .iter()
-        .map(|(key, _)| key.chars().count())
+        .map(|(key, _)| key.as_ref().chars().count())
         .max()
         .unwrap_or(0);
     let value_width = rows
@@ -66,6 +69,7 @@ pub(crate) fn emit_boxed_kv(title: &str, rows: &[(&str, String)]) {
     newengine_ulog_api::ulog::debug!("+{}", "-".repeat(inner_width + 2));
 
     for (key, value) in rows {
+        let key = key.as_ref();
         let wrapped = wrap_value(value, value_area_width);
         for (index, line) in wrapped.iter().enumerate() {
             if key_width == 0 {

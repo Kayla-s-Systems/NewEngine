@@ -1,4 +1,5 @@
 use newengine_math::Vec3;
+use newengine_model_domain_api::MeshRenderOptions;
 
 pub(in crate::scene_bridge::game_ready) type ColorRgba = [f32; 4];
 pub(in crate::scene_bridge::game_ready) type ColorRgb = [f32; 3];
@@ -32,6 +33,7 @@ pub(in crate::scene_bridge::game_ready) struct GameReadyPlayerSpec {
 pub(in crate::scene_bridge::game_ready) struct GameReadyPlayerModelSpec {
     pub(in crate::scene_bridge::game_ready) enabled: bool,
     pub(in crate::scene_bridge::game_ready) source: String,
+    pub(in crate::scene_bridge::game_ready) properties_ref: Option<String>,
     pub(in crate::scene_bridge::game_ready) texture_dictionary: Option<String>,
     pub(in crate::scene_bridge::game_ready) skeleton: Option<String>,
     pub(in crate::scene_bridge::game_ready) target_height: f32,
@@ -39,6 +41,7 @@ pub(in crate::scene_bridge::game_ready) struct GameReadyPlayerModelSpec {
     pub(in crate::scene_bridge::game_ready) local_offset: Vec3,
     pub(in crate::scene_bridge::game_ready) yaw_offset: f32,
     pub(in crate::scene_bridge::game_ready) hide_in_first_person: bool,
+    pub(in crate::scene_bridge::game_ready) render_options: MeshRenderOptions,
 }
 
 #[derive(Clone, Debug)]
@@ -50,8 +53,10 @@ pub(in crate::scene_bridge::game_ready) struct GameReadyTerrainSpec {
     pub(in crate::scene_bridge::game_ready) size_z: f32,
     pub(in crate::scene_bridge::game_ready) base_height: f32,
     pub(in crate::scene_bridge::game_ready) height_scale: f32,
+    pub(in crate::scene_bridge::game_ready) render_options: MeshRenderOptions,
     pub(in crate::scene_bridge::game_ready) generator: GameReadyTerrainGeneratorSpec,
     pub(in crate::scene_bridge::game_ready) surface: GameReadyTerrainSurfaceSpec,
+    pub(in crate::scene_bridge::game_ready) heightmap: GameReadyTerrainHeightmapSpec,
     pub(in crate::scene_bridge::game_ready) streaming: GameReadyTerrainStreamingSpec,
 }
 
@@ -62,6 +67,32 @@ pub(in crate::scene_bridge::game_ready) struct GameReadyTerrainSurfaceSpec {
     pub(in crate::scene_bridge::game_ready) rock_base_texture: String,
     pub(in crate::scene_bridge::game_ready) patch_scale: f32,
     pub(in crate::scene_bridge::game_ready) blend_softness: f32,
+    /// Declarative authoring projection for the terrain surface package.
+    /// Runtime currently maps these roles onto the stable 3-channel terrain shader
+    /// contract: forest/base, sand/path and rock/slope. The fixed fields above are
+    /// the compatibility projection consumed by the renderer.
+    pub(in crate::scene_bridge::game_ready) layers: Vec<GameReadyTerrainSurfaceLayerSpec>,
+}
+
+#[derive(Clone, Debug)]
+pub(in crate::scene_bridge::game_ready) struct GameReadyTerrainSurfaceLayerSpec {
+    pub(in crate::scene_bridge::game_ready) role: String,
+    pub(in crate::scene_bridge::game_ready) base_texture: String,
+    pub(in crate::scene_bridge::game_ready) weight: f32,
+    pub(in crate::scene_bridge::game_ready) uv_scale: f32,
+}
+
+#[derive(Clone, Debug)]
+pub(in crate::scene_bridge::game_ready) struct GameReadyTerrainHeightmapSpec {
+    pub(in crate::scene_bridge::game_ready) enabled: bool,
+    pub(in crate::scene_bridge::game_ready) source: String,
+    pub(in crate::scene_bridge::game_ready) mode: String,
+    pub(in crate::scene_bridge::game_ready) strength: f32,
+    pub(in crate::scene_bridge::game_ready) min_height: f32,
+    pub(in crate::scene_bridge::game_ready) max_height: f32,
+    pub(in crate::scene_bridge::game_ready) tile_scale: [f32; 2],
+    pub(in crate::scene_bridge::game_ready) tile_offset: [f32; 2],
+    pub(in crate::scene_bridge::game_ready) invert: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -89,6 +120,8 @@ pub(in crate::scene_bridge::game_ready) struct GameReadyTerrainGeneratorSpec {
 
 #[derive(Clone, Debug)]
 pub(in crate::scene_bridge) struct GameReadySkySpec {
+    pub(in crate::scene_bridge::game_ready) definition_ref: String,
+    pub(in crate::scene_bridge::game_ready) render_options: MeshRenderOptions,
     pub(in crate::scene_bridge::game_ready) radius: f32,
     pub(in crate::scene_bridge::game_ready) mesh: String,
     pub(in crate::scene_bridge::game_ready) follow_camera: bool,
@@ -197,6 +230,7 @@ pub(in crate::scene_bridge::game_ready) struct GameReadyFoliageSpec {
     pub(in crate::scene_bridge::game_ready) min_player_distance: f32,
     pub(in crate::scene_bridge::game_ready) edge_margin: f32,
     pub(in crate::scene_bridge::game_ready) surface_offset: f32,
+    pub(in crate::scene_bridge::game_ready) render_options: MeshRenderOptions,
 }
 
 #[derive(Clone, Debug)]
@@ -207,24 +241,18 @@ pub(in crate::scene_bridge::game_ready) struct GameReadyPrefabSpec {
     pub(in crate::scene_bridge::game_ready) enabled: bool,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub(in crate::scene_bridge::game_ready) enum GameReadyDefinitionApplyMode {
     /// Resolve metadata/dependency graph only. No ECS marker and no render packet
     /// are produced by the generic definition instantiator. Domain systems such
     /// as sky, terrain, foliage or player avatar consume the metadata explicitly.
+    #[default]
     MetadataOnly,
     /// Spawn a lightweight diagnostic marker entity carrying DefinitionInstance
     /// and DefinitionRuntimeTrace. This is explicit because `.ytyp` dependencies
     /// are not render/spawn commands.
     InstantiateMarker,
 }
-
-impl Default for GameReadyDefinitionApplyMode {
-    fn default() -> Self {
-        Self::MetadataOnly
-    }
-}
-
 impl GameReadyDefinitionApplyMode {
     pub(in crate::scene_bridge::game_ready) fn from_str(value: &str) -> Self {
         match value.trim().to_ascii_lowercase().as_str() {

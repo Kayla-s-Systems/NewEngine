@@ -52,7 +52,7 @@ use crate::scene_bootstrap::bootstrap_runtime_scene;
 use game_ready::bootstrap_fps_game_ready_scene;
 pub(crate) use game_ready::{
     tick_game_ready_sky_cycle, tick_game_ready_streaming_terrain, PreparedTerrainPrimitiveMesh,
-    SkyClearColorRuntime, SkyDomeRuntime, SkyVisualKind, SkyVisualRuntime, TerrainSurfaceLayers,
+    SkyClearColorRuntime, SkyDomeRuntime, TerrainSurfaceLayers,
 };
 use helpers::{
     apply_primitive_instance, effective_material_base, ensure_primitive_base, ensure_root,
@@ -124,7 +124,7 @@ impl SceneBridge {
             let mut scene = self.scene.write();
             let mut prims = self.primitives.write();
             let mats = self.materials.read();
-            let selected = bootstrap_fps_game_ready_scene(&mut scene, &mut *prims, &*mats);
+            let selected = bootstrap_fps_game_ready_scene(&mut scene, &mut prims, &mats);
             let selected_authority = self.authority.declare_native_scene_cache(
                 scene.world_mut(),
                 "game-ready-scene-bootstrap",

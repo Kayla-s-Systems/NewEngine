@@ -40,7 +40,7 @@ impl CameraLens {
 
     #[inline]
     pub const fn perspective_60() -> Self {
-        Self::new(1.0471976, 0.01, 10_000.0)
+        Self::new(core::f32::consts::FRAC_PI_3, 0.01, 10_000.0)
     }
 
     #[inline]

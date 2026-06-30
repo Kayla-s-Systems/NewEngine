@@ -60,7 +60,7 @@ impl DemoMaterials {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub(super) struct PrimitiveSpawnSpec<'a> {
     pub(in crate::scene_bridge::game_ready) parent: EntityId,
     pub(in crate::scene_bridge::game_ready) primitive_id: PrimitiveId,
@@ -69,6 +69,8 @@ pub(super) struct PrimitiveSpawnSpec<'a> {
     pub(in crate::scene_bridge::game_ready) position: Vec3,
     pub(in crate::scene_bridge::game_ready) scale: Vec3,
     pub(in crate::scene_bridge::game_ready) color: [f32; 4],
+    pub(in crate::scene_bridge::game_ready) render_options:
+        newengine_model_domain_api::MeshRenderOptions,
 }
 
 #[inline]
@@ -94,6 +96,7 @@ pub(super) fn spawn_game_primitive(
 
     ensure_primitive_base(world, entity, spec.material_id);
     apply_primitive_instance(world, mats, entity, spec.material_id, spec.color);
+    let _ = world.insert(entity, spec.render_options.clone());
 
     if let Some(t) = world.get_mut_tracked::<Transform>(entity) {
         t.position = spec.position;

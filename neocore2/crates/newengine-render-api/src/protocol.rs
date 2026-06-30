@@ -46,7 +46,7 @@ impl RenderBackendInfo {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum RenderCommand {
     BeginFrame(BeginFrameDesc),
-    SetUiDrawList(UiDrawList),
+    SetUiDrawList(Box<UiDrawList>),
     SetDebugText(String),
     SetRenderPhase {
         phase: Option<RenderGraphPassKind>,
@@ -150,7 +150,7 @@ pub enum RenderCommandResponse {
     TextureResidency(TextureResidencySnapshot),
     PipelineWarmupReport(PipelineWarmupReport),
     ShaderCacheStats(ShaderRuntimeCacheStats),
-    DiagnosticsSnapshot(RenderDiagnosticsSnapshot),
+    DiagnosticsSnapshot(Box<RenderDiagnosticsSnapshot>),
 }
 
 #[inline]
@@ -341,9 +341,9 @@ fn decode_unit_command(r: &mut BinReader<'_>) -> Result<RenderCommand, String> {
         })),
         10 => {
             let ui_bytes = r.bytes_vec()?;
-            Ok(RenderCommand::SetUiDrawList(
+            Ok(RenderCommand::SetUiDrawList(Box::new(
                 newengine_ui_draw::decode_ui_draw_list_bin(&ui_bytes)?,
-            ))
+            )))
         }
         11 => Ok(RenderCommand::SetRenderPhase {
             phase: r.optional_render_graph_pass_kind()?,
@@ -831,7 +831,7 @@ pub enum RenderServiceRequest {
     },
     DiscardRecordedCommands,
     SubmitRenderGraph(RenderGraphDesc),
-    SubmitFrame(RenderFrameEnvelope),
+    SubmitFrame(Box<RenderFrameEnvelope>),
     SetWorkBudget(RenderWorkBudget),
     PumpUploads(UploadPumpDesc),
     DrainBackendEvents,
@@ -848,7 +848,7 @@ pub enum RenderServiceResponse {
     GraphValidationReport(RenderGraphValidationReport),
     GraphSubmitReport(RenderGraphSubmitReport),
     UploadPumpReport(UploadPumpReport),
-    DiagnosticsSnapshot(RenderDiagnosticsSnapshot),
+    DiagnosticsSnapshot(Box<RenderDiagnosticsSnapshot>),
     BackendEvents(Vec<RenderBackendEvent>),
     Problem(RenderProblemDetails),
 }
@@ -863,7 +863,8 @@ mod binary_batch_tests {
         ui.screen_size_px = [320, 200];
         ui.pixels_per_point = 1.0;
 
-        let encoded = encode_unit_command_batch_bin(&[RenderCommand::SetUiDrawList(ui)]).unwrap();
+        let encoded =
+            encode_unit_command_batch_bin(&[RenderCommand::SetUiDrawList(Box::new(ui))]).unwrap();
         let decoded = decode_unit_command_batch_bin(&encoded).unwrap();
         match &decoded[0] {
             RenderCommand::SetUiDrawList(list) => assert_eq!(list.screen_size_px, [320, 200]),

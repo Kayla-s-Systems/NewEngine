@@ -111,14 +111,14 @@ mod tests {
     #[test]
     fn nemat_entry_selector_is_first_class() {
         let (path, selector) =
-            split_nemat_selector("materials/world/garage.nemat@garage_door", None).unwrap();
-        assert_eq!(path, "materials/world/garage.nemat");
+            split_nemat_selector("materials/world_garage.nemat@garage_door", None).unwrap();
+        assert_eq!(path, "materials/world_garage.nemat");
         assert_eq!(selector, "garage_door");
     }
 
     #[test]
     fn nemat_without_entry_is_rejected() {
-        let err = split_nemat_selector("materials/world/garage.nemat", None).unwrap_err();
+        let err = split_nemat_selector("materials/world_garage.nemat", None).unwrap_err();
         assert!(err.contains("@entry"));
     }
 
@@ -917,12 +917,14 @@ fn material_response_from_authored(
 }
 
 fn descriptor_from_authored(material: &AuthoredMaterialDescriptor) -> MaterialDescriptor {
-    let mut descriptor = MaterialDescriptor::default();
-    descriptor.domain = MaterialDomain::Surface;
-    descriptor.shading_model = if material.shader.to_ascii_lowercase().contains("unlit") {
-        ShadingModel::Unlit
-    } else {
-        ShadingModel::PbrMetallicRoughness
+    let mut descriptor = MaterialDescriptor {
+        domain: MaterialDomain::Surface,
+        shading_model: if material.shader.to_ascii_lowercase().contains("unlit") {
+            ShadingModel::Unlit
+        } else {
+            ShadingModel::PbrMetallicRoughness
+        },
+        ..MaterialDescriptor::default()
     };
     if material.surface.two_sided {
         descriptor.flags = descriptor.flags.union(MaterialFlags::DOUBLE_SIDED);

@@ -99,13 +99,11 @@ fn hex_upper_4x4_u64(v: u64) -> String {
     let bytes = v.to_be_bytes();
 
     let mut w = 0usize;
-    for i in 0..8 {
+    for (i, b) in bytes.iter().copied().enumerate() {
         if i == 2 || i == 4 || i == 6 {
             out[w] = b'-';
             w += 1;
         }
-
-        let b = bytes[i];
         let hi = (b >> 4) as usize;
         let lo = (b & 0x0F) as usize;
         out[w] = LUT[hi];

@@ -963,7 +963,7 @@ fn asset_document_schema_type(document: &AssetDocument) -> SchemaTypeDescriptorV
     SchemaTypeDescriptorV1 {
         type_id: format!(
             "newengine.assets.document.{}",
-            document.asset_kind.replace(' ', "_").replace('/', "_")
+            document.asset_kind.replace([' ', '/'], "_")
         ),
         display_name: document.title.clone(),
         domain: "engine.assets.inspect".to_owned(),
@@ -1046,15 +1046,15 @@ fn icon_for_descriptor(
         .map(|d| d.asset_kind.as_str())
         .unwrap_or(extension)
     {
-        "texture_dictionary" => "ui/icons/assetBrowser.ytd@texture",
-        "material_library" => "ui/icons/assetBrowser.ytd@material",
-        "drawable_dictionary" | "drawable" => "ui/icons/assetBrowser.ytd@model",
-        "archetype_dictionary" | "map_data" => "ui/icons/assetBrowser.ytd@world",
-        "asset_package" => "ui/icons/assetBrowser.ytd@package",
-        "ui_dictionary" => "ui/icons/assetBrowser.ytd@ui",
-        "font_dictionary" => "ui/icons/assetBrowser.ytd@ui",
-        "script_module" => "ui/icons/assetBrowser.ytd@script",
-        _ => "ui/icons/assetBrowser.ytd@generic",
+        "texture_dictionary" => "textures/ui/icons/assetBrowser.ytd@texture",
+        "material_library" => "textures/ui/icons/assetBrowser.ytd@material",
+        "drawable_dictionary" | "drawable" => "textures/ui/icons/assetBrowser.ytd@model",
+        "archetype_dictionary" | "map_data" => "textures/ui/icons/assetBrowser.ytd@world",
+        "asset_package" => "textures/ui/icons/assetBrowser.ytd@package",
+        "ui_dictionary" => "textures/ui/icons/assetBrowser.ytd@ui",
+        "font_dictionary" => "textures/ui/icons/assetBrowser.ytd@ui",
+        "script_module" => "textures/ui/icons/assetBrowser.ytd@script",
+        _ => "textures/ui/icons/assetBrowser.ytd@generic",
     }
 }
 

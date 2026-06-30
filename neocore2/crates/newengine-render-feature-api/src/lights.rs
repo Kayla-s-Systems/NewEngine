@@ -126,8 +126,7 @@ impl PackedLights {
             ..Self::default()
         };
         let n = pts.len().min(MAX_POINT_LIGHTS);
-        for i in 0..n {
-            let p = pts[i];
+        for (i, p) in pts.iter().enumerate().take(n) {
             out.point_pos_range[i] = [
                 p.position.x,
                 p.position.y,
@@ -177,9 +176,9 @@ impl PackedLights {
     pub fn write_into(&self, bytes: &mut [u8; Self::UBO_SIZE]) {
         let mut off = 160;
         fn write_vec4(dst: &mut [u8], off: &mut usize, v: [f32; 4]) {
-            for i in 0..4 {
+            for (i, component) in v.iter().enumerate() {
                 let o = *off + i * 4;
-                dst[o..o + 4].copy_from_slice(&v[i].to_ne_bytes());
+                dst[o..o + 4].copy_from_slice(&component.to_ne_bytes());
             }
             *off += 16;
         }

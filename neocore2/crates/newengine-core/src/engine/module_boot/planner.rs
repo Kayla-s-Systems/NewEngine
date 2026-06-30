@@ -40,7 +40,8 @@ pub(super) fn build_strict_module_order<E: Send + 'static>(
             .indegree
             .iter()
             .enumerate()
-            .filter_map(|(i, deg)| (*deg != 0).then(|| modules[i].id()))
+            .filter(|(_, deg)| **deg != 0)
+            .map(|(i, _)| modules[i].id())
             .collect::<Vec<_>>();
         return Err(EngineError::Other(format!(
             "module dependency cycle detected among: {:?}",

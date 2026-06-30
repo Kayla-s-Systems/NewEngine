@@ -59,14 +59,7 @@ pub(super) fn material_for_slot(
 ) -> (MaterialId, [f32; 4]) {
     let role = material_ref
         .and_then(|reference| foliage_role_for_material_ref(reference, material_specs))
-        .unwrap_or_else(|| {
-            newengine_ulog_api::ulog::warn!(
-                "game-ready foliage: .ydd mesh part material slot='{}' ref={:?} did not resolve through authored .nemat material refs; falling back to slot-name classifier",
-                slot,
-                material_ref
-            );
-            foliage_role_for_slot(slot)
-        });
+        .unwrap_or_else(|| foliage_role_for_slot(slot));
 
     match role {
         FoliageMaterialRole::Bark => (materials.tree_bark, palette.tree_bark),

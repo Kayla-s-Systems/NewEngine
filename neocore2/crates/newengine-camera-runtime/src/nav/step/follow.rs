@@ -11,6 +11,7 @@ use crate::nav::{BoundsSphere, CameraNavInput, CameraNavParams, CameraNavResult,
 use newengine_sim::CameraRigComp;
 
 #[inline]
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn try_step_follow_orbit(
     world: &mut World,
     cam_id: EntityId,
@@ -22,9 +23,7 @@ pub(crate) fn try_step_follow_orbit(
     follow_ctrl: Option<FollowTargetCameraController>,
     state: &mut CameraNavState,
 ) -> Option<CameraNavResult> {
-    let Some(mut follow) = follow_ctrl else {
-        return None;
-    };
+    let mut follow = follow_ctrl?;
 
     if !follow.follow_rotation {
         follow = retarget_follow_to_rig(world, cam_id, follow, rig);
@@ -34,17 +33,14 @@ pub(crate) fn try_step_follow_orbit(
         return None;
     }
 
-    let Some((target_pos, target_rot)) = read_entity_world_pose_local_chain(world, follow.target)
-    else {
-        return None;
-    };
+    let (target_pos, target_rot) = read_entity_world_pose_local_chain(world, follow.target)?;
 
     let motor = world
         .get::<FollowTargetCameraMotor>(cam_id)
         .copied()
         .unwrap_or_default();
 
-    let Some(step) = step_follow_camera(
+    let step = step_follow_camera(
         rig.position,
         rig.rotation,
         target_pos,
@@ -56,9 +52,7 @@ pub(crate) fn try_step_follow_orbit(
         follow.smooth_time,
         follow.max_speed,
         params.dt,
-    ) else {
-        return None;
-    };
+    )?;
 
     rig.position = step.next_pos;
     rig.rotation = step.next_rot;

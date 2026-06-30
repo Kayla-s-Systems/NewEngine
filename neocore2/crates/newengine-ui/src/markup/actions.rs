@@ -56,7 +56,7 @@ pub(crate) fn parse_actions_for(
 
 #[inline]
 fn split_actions_into(s: &str, out: &mut SmallVec<[String; 2]>) {
-    for part in s.split(|c| c == ',' || c == '|') {
+    for part in s.split([',', '|']) {
         let p = part.trim();
         if p.is_empty() {
             continue;

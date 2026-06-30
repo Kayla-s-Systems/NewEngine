@@ -80,6 +80,13 @@ struct UiCameraControlInputState {
     speed_scalar: f32,
 }
 
+impl Default for ViewportBridge {
+    #[inline]
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ViewportBridge {
     #[inline]
     pub fn new() -> Self {

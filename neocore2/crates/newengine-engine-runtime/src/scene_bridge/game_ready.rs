@@ -13,6 +13,8 @@ mod materials_terrain;
 mod player_model;
 #[path = "game_ready_parts/sky.rs"]
 mod sky;
+#[path = "game_ready_parts/terrain_heightmap.rs"]
+mod terrain_heightmap;
 #[path = "game_ready_parts/terrain_streaming.rs"]
 mod terrain_streaming;
 #[path = "game_ready_parts/ytyp_metadata.rs"]
@@ -23,10 +25,9 @@ use core::f32::consts::TAU;
 use newengine_assets::{wait_ready, AssetServiceClient};
 use newengine_bounds::Bounds;
 use newengine_core::{
-    call_service_v1_optional, JobLane, JobPriority, JobRequest, JobSystemHandle, JobTicket,
+    call_service_v1_optional, TaskLane, TaskPriority, TaskRequest, TaskTicket, ThreadPoolHandle,
 };
 use newengine_ecs::EntityId;
-use newengine_jobs_api::{job_domain, job_pass};
 use newengine_lighting::{AmbientLight, DirectionalLight, ShadowSettings};
 use newengine_materials::{MaterialFlags, MaterialId, MaterialRegistry};
 use newengine_math::{EulerRot, Quat, Vec3};
@@ -42,6 +43,7 @@ use newengine_scene::{
     spawn_named, Scene, SceneBucketedCellPlan, SceneCellCoord, SceneLayeredStreamingPlan,
     SceneResidencySet, SceneStreamingBudget, SceneStreamingProfile,
 };
+use newengine_task_api::{task_domain, task_pass};
 use newengine_transform::{set_parent, Transform};
 
 use std::sync::{Arc, Mutex};
@@ -57,7 +59,7 @@ use self::content::{
     GameReadyDefinitionInstanceSpec, GameReadyFoliageSpec, GameReadyGameplaySpec,
     GameReadyLightingSpec, GameReadyMapProfile, GameReadyMaterialSetSpec, GameReadyMaterialSpec,
     GameReadyPaletteSpec, GameReadyPrefabSpec, GameReadySkyAtmosphereSpec, GameReadySkySpec,
-    GameReadyTerrainSpec,
+    GameReadyTerrainHeightmapSpec, GameReadyTerrainSpec,
 };
 use super::helpers::{
     apply_exact_material, apply_primitive_instance, ensure_primitive_base, ensure_root,
@@ -67,7 +69,6 @@ use super::helpers::{
 pub(super) use self::assets_bootstrap::bootstrap_fps_game_ready_scene;
 pub(crate) use self::sky::{
     tick_game_ready_sky_cycle, SkyClearColorRuntime, SkyDomeRuntime, SkyVisualKind,
-    SkyVisualRuntime,
 };
 pub(crate) use self::terrain_streaming::{
     tick_game_ready_streaming_terrain, PreparedTerrainPrimitiveMesh, TerrainSurfaceLayers,
