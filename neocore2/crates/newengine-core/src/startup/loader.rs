@@ -61,6 +61,28 @@ impl StartupLoader {
         // Present/record PreStart loading only after config.json is known, so
         // consumer-owned `plugins.engine.loading` manifests can assign bg/logo/spinner.
         let startup_window = crate::startup_window::present_before_startup_if_needed(paths, &cfg);
+        if let Some(selection) = startup_window.selection.as_ref() {
+            apply_size(
+                &mut report,
+                "window_size.prestart",
+                &mut cfg.window_size,
+                selection.window_size,
+            );
+            apply_placement(
+                &mut report,
+                "window_placement.prestart",
+                &mut cfg.window_placement,
+                selection.window_placement,
+            );
+            let from = format!("{:?}", cfg.launch_settings);
+            cfg.launch_settings = selection.launch_settings.clone();
+            cfg.launch_settings_explicit = true;
+            report.overrides.push(StartupOverride {
+                key: "startup_settings.prestart",
+                from,
+                to: format!("{:?}", cfg.launch_settings),
+            });
+        }
         if let Some(loading_assignment) = startup_window.loading_assignment.as_ref() {
             report.overrides.push(StartupOverride {
                 key: "engine.loading",
@@ -94,6 +116,27 @@ impl StartupLoader {
             return Err(EngineError::ExitRequested);
         }
 
+        // Publish the core-owned launch snapshot before platform and renderer
+        // creation. Rust consumers use `startup_launch_settings()` while plugin
+        // and FFI consumers can use the mirrored process variables.
+        crate::startup_window::set_startup_launch_settings(cfg.launch_settings.clone());
+        report.overrides.push(StartupOverride {
+            key: "startup_settings.variables",
+            from: "core defaults / saved config".to_owned(),
+            to: format!(
+                "preset={} msaa={} fxaa={} taa={} ssao={} bloom={} shadows={} window_mode={} vsync={}",
+                cfg.launch_settings.graphics.preset.as_str(),
+                cfg.launch_settings.graphics.msaa_samples,
+                cfg.launch_settings.graphics.fxaa_enabled,
+                cfg.launch_settings.graphics.taa_enabled,
+                cfg.launch_settings.graphics.ssao_enabled,
+                cfg.launch_settings.graphics.bloom_enabled,
+                cfg.launch_settings.graphics.shadows_enabled,
+                cfg.launch_settings.display.window_mode.as_str(),
+                cfg.launch_settings.display.vsync,
+            ),
+        });
+
         // Publish engine-level roots as soon as startup config is resolved.
         // CACHE_FILES is disposable generated data. CONFIG is durable user settings.
         publish_startup_storage_roots(&cfg, &mut report);
@@ -109,6 +152,7 @@ impl StartupLoader {
 struct RootJson {
     window: Option<WindowJson>,
     engine: Option<EngineJson>,
+    startup_settings: Option<crate::startup_window::StartupLaunchSettings>,
     plugins: Option<newengine_math::collections_prelude::NeHashMap<String, serde_json::Value>>,
 
     #[serde(flatten)]
@@ -156,6 +200,18 @@ struct EngineJson {
 
 fn apply_root(cfg: &mut StartupConfig, report: &mut StartupLoadReport, mut src: RootJson) {
     apply_root_level_storage_paths(cfg, report, &mut src.extra);
+
+    if let Some(mut settings) = src.startup_settings.take() {
+        settings.normalize();
+        let from = format!("{:?}", cfg.launch_settings);
+        cfg.launch_settings = settings;
+        cfg.launch_settings_explicit = true;
+        report.overrides.push(StartupOverride {
+            key: "startup_settings",
+            from,
+            to: format!("{:?}", cfg.launch_settings),
+        });
+    }
 
     if !src.extra.is_empty() {
         let mut keys: Vec<String> = src.extra.keys().cloned().collect();

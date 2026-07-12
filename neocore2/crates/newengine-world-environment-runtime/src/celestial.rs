@@ -43,7 +43,9 @@ pub(crate) fn sun_body(
 ) -> CelestialBodyDto {
     let tau = std::f32::consts::TAU;
     let latitude = latitude_degrees.to_radians().clamp(-1.5533, 1.5533);
-    let tilt = axial_tilt_degrees.to_radians().clamp(0.0, 0.5236);
+    let tilt = axial_tilt_degrees
+        .to_radians()
+        .clamp(0.0, std::f32::consts::FRAC_PI_6);
     let season = tau * ((day_index as f32 - 80.0) / 365.2422);
     let declination = tilt * season.sin();
     let hour_angle = tau * (tod.rem_euclid(1.0) - 0.5);

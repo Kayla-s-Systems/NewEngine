@@ -1,6 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use newengine_core::render::{PostFxFrameParams, SunPostFxParams};
+use newengine_core::render::{AntiAliasingMode, PostFxFrameParams, SunPostFxParams};
 use newengine_math::{Vec3, Vec4};
 
 use super::lights;
@@ -11,6 +11,29 @@ pub(super) fn game_sun_postfx_params(
     camera_position: Vec3,
 ) -> PostFxFrameParams {
     let mut params = PostFxFrameParams::default();
+    let launch_graphics = newengine_core::startup_launch_settings().graphics;
+    params.quality.anti_aliasing = match launch_graphics.msaa_samples {
+        8 => AntiAliasingMode::Msaa8x,
+        4 => AntiAliasingMode::Msaa4x,
+        2 => AntiAliasingMode::Msaa2x,
+        _ if launch_graphics.taa_enabled => AntiAliasingMode::Taa,
+        _ if launch_graphics.fxaa_enabled => AntiAliasingMode::Fxaa,
+        _ => AntiAliasingMode::None,
+    };
+    params.quality.fxaa.enabled = launch_graphics.fxaa_enabled;
+    params.quality.fxaa.edge_threshold = launch_graphics.fxaa_edge_threshold;
+    params.quality.fxaa.edge_threshold_min = launch_graphics.fxaa_edge_threshold_min;
+    params.quality.fxaa.subpixel_quality = launch_graphics.fxaa_subpixel_quality;
+    params.quality.taa.enabled = launch_graphics.taa_enabled;
+    params.quality.taa.feedback = launch_graphics.taa_feedback;
+    params.quality.taa.neighborhood_clamping = launch_graphics.taa_neighborhood_clamping;
+    params.quality.taa.jitter_scale = launch_graphics.taa_jitter_scale;
+    params.quality.ssao.enabled = launch_graphics.ssao_enabled;
+    params.quality.ssao.radius_ws = launch_graphics.ssao_radius_ws;
+    params.quality.ssao.intensity = launch_graphics.ssao_intensity;
+    params.quality.ssao.quality_steps = launch_graphics.ssao_quality_steps;
+    params.quality.ssao.half_resolution = launch_graphics.ssao_half_resolution;
+
     let sky_postfx = world
         .resource::<crate::scene_bridge::SkyPostFxRuntime>()
         .copied()
@@ -24,11 +47,11 @@ pub(super) fn game_sun_postfx_params(
     params.quality.color.vignette_strength = sky_postfx.vignette_strength;
     params.quality.color.local_contrast_strength = sky_postfx.local_contrast_strength;
     params.quality.color.dither_strength = sky_postfx.dither_strength;
-    params.quality.bloom.enabled = sky_postfx.bloom_intensity > 0.001;
-    params.quality.bloom.threshold = sky_postfx.bloom_threshold;
-    params.quality.bloom.knee = sky_postfx.bloom_knee;
-    params.quality.bloom.intensity = sky_postfx.bloom_intensity;
-    params.quality.bloom.radius = sky_postfx.bloom_radius;
+    params.quality.bloom.enabled = launch_graphics.bloom_enabled;
+    params.quality.bloom.threshold = launch_graphics.bloom_threshold;
+    params.quality.bloom.knee = launch_graphics.bloom_knee;
+    params.quality.bloom.intensity = launch_graphics.bloom_intensity;
+    params.quality.bloom.radius = launch_graphics.bloom_radius;
 
     let Some(sun) = lights::primary_directional_light(world) else {
         return params;
@@ -78,8 +101,16 @@ pub(super) fn game_sun_postfx_params(
         intensity: sun.intensity,
         visibility,
         disk_radius: 0.013 + 0.012 * horizon_grazing,
-        flare_strength: (0.18 + 0.32 * horizon_grazing) * sky_postfx.sun_glare_scale,
-        ray_strength: (0.14 + 0.30 * horizon_grazing) * sky_postfx.sun_ray_scale,
+        flare_strength: if launch_graphics.sun_rays_enabled {
+            (0.18 + 0.32 * horizon_grazing) * sky_postfx.sun_glare_scale
+        } else {
+            0.0
+        },
+        ray_strength: if launch_graphics.sun_rays_enabled {
+            (0.14 + 0.30 * horizon_grazing) * sky_postfx.sun_ray_scale
+        } else {
+            0.0
+        },
     };
     params
 }

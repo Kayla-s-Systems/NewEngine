@@ -83,6 +83,7 @@ pub struct SceneBridge {
     camera_gateway: Arc<CameraGatewayBridge>,
     authority: Arc<RuntimeWorldAuthorityBridge>,
     play_mode: Arc<Mutex<GameRunMode>>,
+    in_game_editor_enabled: Arc<Mutex<bool>>,
 }
 impl SceneBridge {
     #[inline]
@@ -108,6 +109,7 @@ impl SceneBridge {
             camera_gateway: Arc::new(CameraGatewayBridge::new()),
             authority: Arc::new(RuntimeWorldAuthorityBridge::new()),
             play_mode: Arc::new(Mutex::new(initial_mode)),
+            in_game_editor_enabled: Arc::new(Mutex::new(false)),
         }
     }
 

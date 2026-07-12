@@ -27,7 +27,6 @@ pub(crate) fn evaluate_weather(
     tod: f32,
     pressure: f32,
     cloud_seed: f32,
-    phase: TimeOfDayPhase,
 ) -> WeatherEvaluation {
     let table = table_by_id(profile.weather_table_ref);
     let selected_pattern = select_pattern(table.bands, pressure, tod, cloud_seed);
@@ -54,12 +53,11 @@ pub(crate) fn evaluate_weather(
         accumulation_rate: intensity * pattern.snow_factor * 0.055,
         melt_rate: snow_melt_rate(pattern.precipitation_kind),
     };
-    let mut tags = pattern
+    let tags = pattern
         .tags
         .iter()
         .map(|tag| (*tag).to_owned())
         .collect::<Vec<_>>();
-    tags.extend(phase_tags(phase).iter().map(|tag| (*tag).to_owned()));
     WeatherEvaluation {
         pattern,
         weather: WeatherStateDto {

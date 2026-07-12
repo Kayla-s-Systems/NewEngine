@@ -101,19 +101,27 @@ pub(super) fn spatial_cloud_shadow_from_dynamics(
     let overcast = frame.cloud_overcast.clamp(0.0, 1.0);
     let absorption = frame.cloud_light_absorption.clamp(0.0, 1.0);
     let sun_visible = sky_smoothstep(-0.02, 0.10, frame.to_sun.y);
+    // Thin or nearly absent cloud cover may still be visible as high, optically
+    // light haze, but it must not project opaque moving shapes onto the ground.
+    // Fade local shadows in only after a coherent cumulus deck exists.
+    let cloud_presence = sky_smoothstep(0.06, 0.24, coverage);
     let local_strength = (0.32 + dynamics.shadow_strength.clamp(0.0, 1.0) * 0.58 + overcast * 0.10)
         .clamp(0.0, 1.0)
-        * sun_visible;
+        * sun_visible
+        * cloud_presence;
     // This is the large-scale atmospheric attenuation shared by the whole map.
     // Local differences are evaluated per-fragment by the projected cloud field.
     let broad_optical_depth = overcast * 0.92 + absorption * 0.72 + coverage * 0.10;
     let broad_direct_scale = (-broad_optical_depth).exp().clamp(0.32, 1.0);
     let broad_ambient_scale = (1.0 - overcast * 0.15 - absorption * 0.10).clamp(0.68, 1.0);
-    let world_frequency = (0.0036 + coverage * 0.0012 + overcast * 0.0008).clamp(0.0028, 0.0065);
+    // Ground receivers use a deliberately low-frequency mask. The visible dome
+    // carries the fine detail; repeating that detail in every world fragment
+    // produces noisy, expensive and visually disconnected shadow freckles.
+    let world_frequency = (0.0027 + coverage * 0.0009 + overcast * 0.0005).clamp(0.0024, 0.0044);
     let cloud_altitude = (1650.0 + overcast * 420.0 - absorption * 160.0).clamp(1100.0, 2400.0);
-    let erosion_frequency = (world_frequency * (7.2 + coverage * 1.8)).clamp(0.022, 0.058);
-    let erosion_strength = (0.10 + coverage * 0.09 + overcast * 0.045).clamp(0.08, 0.24);
-    let erosion_fade_distance = (76.0 + coverage * 34.0 + overcast * 22.0).clamp(64.0, 132.0);
+    let erosion_frequency = (world_frequency * (5.8 + coverage * 1.2)).clamp(0.016, 0.034);
+    let erosion_strength = (0.055 + coverage * 0.055 + overcast * 0.030).clamp(0.05, 0.15);
+    let erosion_fade_distance = (84.0 + coverage * 38.0 + overcast * 28.0).clamp(72.0, 150.0);
     SpatialCloudShadowRuntime {
         map0: [
             dynamics.cloud_offset.x,
@@ -131,7 +139,7 @@ pub(super) fn spatial_cloud_shadow_from_dynamics(
             local_strength,
             absorption,
             broad_direct_scale,
-            if sun_visible > 0.01 && coverage > 0.015 {
+            if sun_visible > 0.01 && cloud_presence > 0.01 && local_strength > 0.01 {
                 1.0
             } else {
                 0.0

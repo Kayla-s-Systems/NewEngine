@@ -158,9 +158,10 @@ fn register_authored_prefab_material(
         normal_scale: 0.72,
         occlusion_strength: 1.0,
     };
-    let flags = MaterialFlags::DOUBLE_SIDED
-        .union(MaterialFlags::CAST_SHADOWS)
-        .union(MaterialFlags::RECEIVE_SHADOWS);
+    // Authored `.nemat` owns the double-sided policy. Runtime contributes only
+    // the static-world shadow requirements so terrain can explicitly cull its
+    // underside while foliage/props remain two-sided when their asset says so.
+    let flags = MaterialFlags::CAST_SHADOWS.union(MaterialFlags::RECEIVE_SHADOWS);
     Some(register_material(
         mats,
         &format!("World/Static/{}/Material", prefab.id),

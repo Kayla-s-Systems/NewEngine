@@ -271,6 +271,70 @@ fn disabled_or_night_spatial_shadow_is_fully_lit() {
 }
 
 #[test]
+fn nearly_clear_sky_does_not_project_orphan_cloud_shadows() {
+    let mut frame = sample_sky_frame(&test_cycle(), None, Vec3::new(0.22, 0.82, 0.53).normalize());
+    frame.cloud_coverage = 0.02;
+    frame.cloud_overcast = 0.0;
+    frame.cloud_light_absorption = 0.05;
+    frame.cloud_shadow_strength = 0.90;
+    let dynamics = SkyDynamicsFrame {
+        cloud_offset: Vec2::new(0.17, 0.29),
+        coverage: 0.02,
+        softness: 0.72,
+        shadow_strength: 0.90,
+        haze: 0.08,
+        evolution_phase: 0.24,
+        lifecycle: 0.62,
+        gust_factor: 1.0,
+        previous_cloud_offset: Vec2::new(0.17, 0.29),
+        previous_evolution_phase: 0.24,
+        previous_lifecycle: 0.62,
+        temporal_history_weight: 0.0,
+        sun_occlusion: CloudSunOcclusionRuntime::default(),
+    };
+
+    let shadow = spatial_cloud_shadow_from_dynamics(&frame, &dynamics);
+    assert_eq!(shadow.map2[3], 0.0, "clear sky enabled local shadow field");
+    assert!(
+        shadow.map2[0] <= 1.0e-6,
+        "clear sky retained local shadow strength={}",
+        shadow.map2[0]
+    );
+    assert_eq!(
+        sample_spatial_cloud_shadow_cpu(&shadow, frame.to_sun, Vec3::new(18.0, 0.0, -11.0),),
+        1.0
+    );
+}
+
+#[test]
+fn coherent_fair_cumulus_keeps_spatial_cloud_shadows_enabled() {
+    let mut frame = sample_sky_frame(&test_cycle(), None, Vec3::new(0.22, 0.82, 0.53).normalize());
+    frame.cloud_coverage = 0.45;
+    frame.cloud_overcast = 0.18;
+    frame.cloud_light_absorption = 0.22;
+    frame.cloud_shadow_strength = 0.62;
+    let dynamics = SkyDynamicsFrame {
+        cloud_offset: Vec2::new(0.17, 0.29),
+        coverage: 0.45,
+        softness: 0.68,
+        shadow_strength: 0.62,
+        haze: 0.12,
+        evolution_phase: 0.24,
+        lifecycle: 0.62,
+        gust_factor: 1.0,
+        previous_cloud_offset: Vec2::new(0.168, 0.287),
+        previous_evolution_phase: 0.238,
+        previous_lifecycle: 0.618,
+        temporal_history_weight: 0.72,
+        sun_occlusion: CloudSunOcclusionRuntime::default(),
+    };
+
+    let shadow = spatial_cloud_shadow_from_dynamics(&frame, &dynamics);
+    assert_eq!(shadow.map2[3], 1.0);
+    assert!(shadow.map2[0] > 0.40);
+}
+
+#[test]
 fn spatial_shadow_broad_light_scale_is_not_local_camera_occlusion() {
     let mut frame = sample_sky_frame(&test_cycle(), None, Vec3::new(0.3, 0.82, 0.48).normalize());
     frame.cloud_coverage = 0.62;
@@ -463,9 +527,9 @@ fn spatial_runtime_carries_previous_cloud_state_into_ubo_maps() {
     assert_eq!(spatial.map3[2], dynamics.previous_evolution_phase);
     assert_eq!(spatial.map3[3], dynamics.previous_lifecycle);
     assert_eq!(spatial.map4[0], dynamics.temporal_history_weight);
-    assert!((0.022..=0.058).contains(&spatial.map4[1]));
-    assert!((0.08..=0.24).contains(&spatial.map4[2]));
-    assert!((64.0..=132.0).contains(&spatial.map4[3]));
+    assert!((0.016..=0.034).contains(&spatial.map4[1]));
+    assert!((0.05..=0.15).contains(&spatial.map4[2]));
+    assert!((72.0..=150.0).contains(&spatial.map4[3]));
 }
 
 #[test]

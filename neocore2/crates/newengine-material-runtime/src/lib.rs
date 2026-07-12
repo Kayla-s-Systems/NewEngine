@@ -141,6 +141,33 @@ mod tests {
         assert_eq!(material.name, "garage_door");
         assert!(material.textures.contains_key("base_color"));
     }
+
+    #[test]
+    fn authored_uv_transform_populates_texture_bindings() {
+        let payload = br#"<?xml version="1.0" encoding="UTF-8"?>
+<NematMaterialLibrary schema="newengine.nemat.material_library.v1" version="1">
+  <Material name="terrain" shader="pbr.default">
+    <Surface blend="opaque" two_sided="false" />
+    <Textures>
+      <Texture slot="base_color" ref="textures/world/terrain.ytd@grass" />
+    </Textures>
+    <Params>
+      <Param name="uv_scale" type="float2" value="128,96" />
+      <Param name="uv_offset" type="float2" value="0.25,-0.5" />
+    </Params>
+  </Material>
+</NematMaterialLibrary>
+"#;
+        let material = decode_material_entry_payload(payload, "terrain").unwrap();
+        let response = material_response_from_authored("materials/test.nemat", "terrain", material)
+            .expect("authored material response");
+        assert_eq!(response.textures.uv_scale, [128.0, 96.0]);
+        assert_eq!(response.textures.uv_offset, [0.25, -0.5]);
+        assert!(!response
+            .descriptor
+            .flags
+            .contains(MaterialFlags::DOUBLE_SIDED));
+    }
 }
 
 use abi_stable::std_types::{RResult, RString};
@@ -989,6 +1016,12 @@ fn texture_bindings_from_authored(
             }
         }
     }
+    if let Some(value) = param_float2(&material.params, "uv_scale") {
+        bindings.uv_scale = value;
+    }
+    if let Some(value) = param_float2(&material.params, "uv_offset") {
+        bindings.uv_offset = value;
+    }
     Ok(bindings.sanitized())
 }
 
@@ -1010,6 +1043,16 @@ fn param_color(
     match params.get(key)? {
         MaterialParamValue::Color(value) | MaterialParamValue::Float4(value) => Some(*value),
         MaterialParamValue::Float3(value) => Some([value[0], value[1], value[2], 1.0]),
+        _ => None,
+    }
+}
+
+fn param_float2(
+    params: &std::collections::BTreeMap<String, MaterialParamValue>,
+    key: &str,
+) -> Option<[f32; 2]> {
+    match params.get(key)? {
+        MaterialParamValue::Float2(value) => Some(*value),
         _ => None,
     }
 }

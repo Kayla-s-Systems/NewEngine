@@ -195,19 +195,28 @@ pub(crate) fn apply_engine_view_postfx(
     mut params: PostFxFrameParams,
     view: ViewPostFxFrameParams,
 ) -> PostFxFrameParams {
+    let launch_graphics = newengine_core::startup_launch_settings().graphics;
     params.display.exposure *= 2.0f32.powf(view.exposure_bias);
     params.view = ViewPostFxFrameParams {
-        dof: ViewDepthOfFieldFrameParams {
-            near_start: view.dof.near_start,
-            near_end: view.dof.near_end,
-            far_start: view.dof.far_start,
-            far_end: view.dof.far_end,
-            blend_level: view.dof.blend_level,
-            high_quality: view.dof.high_quality,
+        dof: if launch_graphics.depth_of_field_enabled {
+            ViewDepthOfFieldFrameParams {
+                near_start: view.dof.near_start,
+                near_end: view.dof.near_end,
+                far_start: view.dof.far_start,
+                far_end: view.dof.far_end,
+                blend_level: view.dof.blend_level,
+                high_quality: view.dof.high_quality,
+            }
+        } else {
+            ViewDepthOfFieldFrameParams::default()
         },
-        motion_blur: ViewMotionBlurFrameParams {
-            strength: view.motion_blur.strength,
-            decay_rate: view.motion_blur.decay_rate,
+        motion_blur: if launch_graphics.motion_blur_enabled {
+            ViewMotionBlurFrameParams {
+                strength: view.motion_blur.strength,
+                decay_rate: view.motion_blur.decay_rate,
+            }
+        } else {
+            ViewMotionBlurFrameParams::default()
         },
         shake_amplitude: view.shake_amplitude,
         exposure_bias: view.exposure_bias,

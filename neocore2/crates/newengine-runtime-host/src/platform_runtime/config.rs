@@ -35,14 +35,61 @@ pub fn platform_config_from_startup_defaults(startup: &StartupConfig) -> Platfor
         }
     };
 
+    let display = if startup.launch_settings_explicit {
+        platform_display_from_launch_settings(startup)
+    } else {
+        PlatformDisplayConfigV1::default()
+    };
+
     PlatformAppConfigV1 {
         title: startup.window_title.clone().into(),
         width: startup.window_size.0,
         height: startup.window_size.1,
         placement,
         icon: ROption::RNone,
-        display: PlatformDisplayConfigV1::default(),
+        display,
     }
+}
+
+fn platform_display_from_launch_settings(startup: &StartupConfig) -> PlatformDisplayConfigV1 {
+    let launch_display = &startup.launch_settings.display;
+    let window_mode = match launch_display.window_mode {
+        newengine_core::StartupWindowMode::Windowed => PlatformWindowModeV1::Windowed,
+        newengine_core::StartupWindowMode::Borderless => PlatformWindowModeV1::Borderless,
+        newengine_core::StartupWindowMode::ExclusiveFullscreen => {
+            PlatformWindowModeV1::ExclusiveFullscreen
+        }
+    };
+    let hdr = match launch_display.hdr {
+        newengine_core::StartupHdrMode::Auto => PlatformHdrModeV1::Auto,
+        newengine_core::StartupHdrMode::Enabled => PlatformHdrModeV1::Enabled,
+        newengine_core::StartupHdrMode::Disabled => PlatformHdrModeV1::Disabled,
+    };
+    PlatformDisplayConfigV1 {
+        monitor_index: launch_display.monitor_index,
+        window_mode,
+        vsync: launch_display.vsync,
+        refresh_rate_millihz: launch_display.refresh_rate_millihz,
+        render_scale: launch_display.render_scale,
+        hdr,
+    }
+}
+
+fn apply_confirmed_core_launch_settings(
+    mut config: PlatformAppConfigV1,
+    startup: &StartupConfig,
+) -> PlatformAppConfigV1 {
+    if !startup.launch_settings_explicit {
+        return config;
+    }
+
+    let confirmed = platform_config_from_startup_defaults(startup);
+    config.title = confirmed.title;
+    config.width = confirmed.width;
+    config.height = confirmed.height;
+    config.placement = confirmed.placement;
+    config.display = platform_display_from_launch_settings(startup);
+    config
 }
 
 #[inline]
@@ -404,7 +451,10 @@ fn resolve_platform_runtime_config_without_metadata_probe(
     let overrides = newengine_plugin_host::get_plugin_overrides_with_env(PLATFORM_PLUGIN_ID);
     let icon_path =
         extract_string_field(&overrides, "icon").or_else(|| startup.window_icon_path.clone());
-    let config = apply_startup_platform_overrides(startup_defaults, &overrides);
+    let config = apply_confirmed_core_launch_settings(
+        apply_startup_platform_overrides(startup_defaults, &overrides),
+        startup,
+    );
     let plugin_version = platform_runtime_version_from_path(runtime_path);
     let descriptor = synthesize_platform_descriptor(
         PLATFORM_PLUGIN_ID,
@@ -515,8 +565,11 @@ pub fn resolve_platform_runtime_config(
 
     log_platform_config_diags(&plugin_id, applied.diags.as_slice());
 
-    let config = platform_config_from_effective_blob(&applied.effective)
-        .map_err(|e| EngineError::other(format!("platform config decode failed: {e}")))?;
+    let config = apply_confirmed_core_launch_settings(
+        platform_config_from_effective_blob(&applied.effective)
+            .map_err(|e| EngineError::other(format!("platform config decode failed: {e}")))?,
+        startup,
+    );
 
     newengine_ulog_api::ulog::info!(
         "platform runtime: effective config id='{}' title='{}' size={}x{} placement={:?} icon={}",
@@ -659,3 +712,77 @@ fn synthesize_platform_descriptor(id: &str, name: &str, version: &str) -> Plugin
 
 #[allow(dead_code)]
 fn _abi_marker(_: PlatformRuntimeRunFnV1) {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unrequested_launch_settings_do_not_change_historical_platform_defaults() {
+        let mut startup = StartupConfig::default();
+        startup.launch_settings.display.window_mode = newengine_core::StartupWindowMode::Borderless;
+        startup.launch_settings.display.vsync = false;
+        startup.launch_settings.display.render_scale = 1.5;
+        startup.launch_settings_explicit = false;
+
+        let config = platform_config_from_startup_defaults(&startup);
+
+        assert_eq!(config.display.window_mode, PlatformWindowModeV1::Windowed);
+        assert!(config.display.vsync);
+        assert_eq!(config.display.render_scale, 1.0);
+    }
+
+    #[test]
+    fn explicit_core_launch_settings_feed_platform_creation() {
+        let mut startup = StartupConfig::default();
+        startup.window_size = (2560, 1440);
+        startup.launch_settings.display.monitor_index = 2;
+        startup.launch_settings.display.window_mode =
+            newengine_core::StartupWindowMode::ExclusiveFullscreen;
+        startup.launch_settings.display.vsync = false;
+        startup.launch_settings.display.refresh_rate_millihz = 165_000;
+        startup.launch_settings.display.render_scale = 1.25;
+        startup.launch_settings.display.hdr = newengine_core::StartupHdrMode::Enabled;
+        startup.launch_settings_explicit = true;
+
+        let config = platform_config_from_startup_defaults(&startup);
+
+        assert_eq!((config.width, config.height), (2560, 1440));
+        assert_eq!(config.display.monitor_index, 2);
+        assert_eq!(
+            config.display.window_mode,
+            PlatformWindowModeV1::ExclusiveFullscreen
+        );
+        assert!(!config.display.vsync);
+        assert_eq!(config.display.refresh_rate_millihz, 165_000);
+        assert_eq!(config.display.render_scale, 1.25);
+        assert_eq!(config.display.hdr, PlatformHdrModeV1::Enabled);
+    }
+
+    #[test]
+    fn confirmed_core_settings_have_last_priority_over_platform_plugin_config() {
+        let mut startup = StartupConfig::default();
+        startup.window_size = (1920, 1080);
+        startup.launch_settings.display.window_mode = newengine_core::StartupWindowMode::Borderless;
+        startup.launch_settings.display.vsync = false;
+        startup.launch_settings.display.render_scale = 0.8;
+        startup.launch_settings_explicit = true;
+
+        let mut plugin_config = PlatformAppConfigV1::default();
+        plugin_config.width = 800;
+        plugin_config.height = 600;
+        plugin_config.display.window_mode = PlatformWindowModeV1::Windowed;
+        plugin_config.display.vsync = true;
+        plugin_config.display.render_scale = 2.0;
+
+        let effective = apply_confirmed_core_launch_settings(plugin_config, &startup);
+
+        assert_eq!((effective.width, effective.height), (1920, 1080));
+        assert_eq!(
+            effective.display.window_mode,
+            PlatformWindowModeV1::Borderless
+        );
+        assert!(!effective.display.vsync);
+        assert_eq!(effective.display.render_scale, 0.8);
+    }
+}

@@ -358,6 +358,9 @@ impl RenderGpuSceneState {
 pub(super) struct RenderFrameRuntimeState {
     pub(super) frame_index: u64,
     pub(super) last_pick_seq: u64,
+    /// Selection produced while the render orchestration holds a scene lock.
+    /// Applied by the playable viewport after that lock is released.
+    pub(super) pending_pick_selection: Option<Option<newengine_ecs::EntityId>>,
     /// Last camera frame observed by render orchestration.
     ///
     /// This is a pure DTO snapshot from the camera contract boundary. Render
@@ -374,6 +377,7 @@ impl RenderFrameRuntimeState {
         Self {
             frame_index: 0,
             last_pick_seq: 0,
+            pending_pick_selection: None,
             last_camera_snapshot: None,
             sim_schedule: crate::gameplay::default_sim_schedule(),
             input_systems: crate::input_systems::InputRuntimeSystems::new(),

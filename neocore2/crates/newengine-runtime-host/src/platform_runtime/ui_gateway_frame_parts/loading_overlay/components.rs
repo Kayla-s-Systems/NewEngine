@@ -2,8 +2,8 @@ use super::*;
 use newengine_core::loading::LoadingVisualRefs;
 
 pub(super) fn loading_overlay_components(
-    progress_01: f32,
-    progress_percent: f32,
+    _progress_01: f32,
+    _progress_percent: f32,
     frame_index: u64,
     visuals: &LoadingVisualRefs,
 ) -> Vec<UiComponentNode> {
@@ -93,46 +93,12 @@ pub(super) fn loading_overlay_components(
             .insert("animation".to_owned(), serde_json::json!("rotate"));
         spinner
             .props
+            .insert("rotation_rps".to_owned(), serde_json::json!(2.8));
+        spinner
+            .props
             .insert("frame_index".to_owned(), serde_json::json!(frame_index));
         components.push(spinner);
     }
-
-    let mut progress = UiComponentNode::row("loading.progress_bar", "")
-        .with_value("")
-        .tagged("progress")
-        .tagged("progress-bar");
-    progress.component_id = "progress_bar".to_owned();
-    progress
-        .props
-        .insert("position".to_owned(), serde_json::json!("fixed"));
-    progress
-        .props
-        .insert("anchor".to_owned(), serde_json::json!("bottom_center"));
-    progress
-        .props
-        .insert("bottom_px".to_owned(), serde_json::json!(48.0));
-    progress
-        .props
-        .insert("w_px".to_owned(), serde_json::json!(760.0));
-    progress
-        .props
-        .insert("h_px".to_owned(), serde_json::json!(18.0));
-    progress
-        .props
-        .insert("debug_chrome".to_owned(), serde_json::json!(false));
-    progress
-        .props
-        .insert("label_visible".to_owned(), serde_json::json!(false));
-    progress
-        .props
-        .insert("progress_01".to_owned(), serde_json::json!(progress_01));
-    progress
-        .props
-        .insert("percent".to_owned(), serde_json::json!(progress_percent));
-    progress
-        .props
-        .insert("z_order".to_owned(), serde_json::json!(30));
-    components.push(progress);
 
     components
 }

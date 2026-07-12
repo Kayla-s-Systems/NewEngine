@@ -3,6 +3,9 @@
 use std::path::PathBuf;
 
 use crate::loading::{BootFrameDto, ResolvedLoadingAssignment};
+use crate::startup::WindowPlacement;
+
+use super::settings::StartupLaunchSettings;
 
 pub type StartupLoadingAssignmentReport = ResolvedLoadingAssignment;
 
@@ -14,6 +17,13 @@ pub enum StartupWindowDecision {
     Cancelled,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct StartupWindowSelection {
+    pub launch_settings: StartupLaunchSettings,
+    pub window_size: (u32, u32),
+    pub window_placement: WindowPlacement,
+}
+
 #[derive(Clone, Debug)]
 pub struct StartupWindowReport {
     pub decision: StartupWindowDecision,
@@ -23,14 +33,16 @@ pub struct StartupWindowReport {
     pub warnings: Vec<String>,
     pub loading_assignment: Option<StartupLoadingAssignmentReport>,
     pub boot_frame: Option<BootFrameDto>,
+    pub selection: Option<StartupWindowSelection>,
 }
 
 impl StartupWindowReport {
-    #[allow(dead_code)]
-    pub(crate) fn presented(
+    #[cfg(feature = "startup-window-egui")]
+    pub(crate) fn presented_with_selection(
         config_path: PathBuf,
         details: impl Into<String>,
         warnings: Vec<String>,
+        selection: StartupWindowSelection,
     ) -> Self {
         Self {
             decision: StartupWindowDecision::Presented,
@@ -40,6 +52,7 @@ impl StartupWindowReport {
             warnings,
             loading_assignment: None,
             boot_frame: None,
+            selection: Some(selection),
         }
     }
 
@@ -58,7 +71,14 @@ impl StartupWindowReport {
             warnings,
             loading_assignment: Some(loading_assignment),
             boot_frame: Some(boot_frame),
+            selection: None,
         }
+    }
+
+    pub(crate) fn attach_loading_handoff(&mut self, handoff: StartupWindowReport) {
+        self.loading_assignment = handoff.loading_assignment;
+        self.boot_frame = handoff.boot_frame;
+        self.warnings.extend(handoff.warnings);
     }
 
     pub(crate) fn skipped(disabled_by: impl Into<String>) -> Self {
@@ -71,10 +91,11 @@ impl StartupWindowReport {
             warnings: Vec::new(),
             loading_assignment: None,
             boot_frame: None,
+            selection: None,
         }
     }
 
-    #[allow(dead_code)]
+    #[cfg(feature = "startup-window-egui")]
     pub(crate) fn cancelled(config_path: PathBuf, details: impl Into<String>) -> Self {
         Self {
             decision: StartupWindowDecision::Cancelled,
@@ -84,6 +105,7 @@ impl StartupWindowReport {
             warnings: Vec::new(),
             loading_assignment: None,
             boot_frame: None,
+            selection: None,
         }
     }
 
@@ -96,6 +118,7 @@ impl StartupWindowReport {
             warnings: Vec::new(),
             loading_assignment: None,
             boot_frame: None,
+            selection: None,
         }
     }
 }

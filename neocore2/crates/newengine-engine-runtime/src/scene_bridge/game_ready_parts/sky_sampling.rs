@@ -177,6 +177,14 @@ pub(in crate::scene_bridge::game_ready) fn sky_mul3(a: [f32; 3], s: f32) -> [f32
 }
 
 #[inline]
+pub(in crate::scene_bridge::game_ready) fn sky_mul3_components(
+    a: [f32; 3],
+    b: [f32; 3],
+) -> [f32; 3] {
+    [a[0] * b[0], a[1] * b[1], a[2] * b[2]]
+}
+
+#[inline]
 pub(in crate::scene_bridge::game_ready) fn sky_clamp3(a: [f32; 3], lo: f32, hi: f32) -> [f32; 3] {
     [a[0].clamp(lo, hi), a[1].clamp(lo, hi), a[2].clamp(lo, hi)]
 }
@@ -327,6 +335,108 @@ pub(in crate::scene_bridge::game_ready) fn env_color_to_rgb(
     ]
 }
 
+#[derive(Clone, Copy)]
+struct SkyCloudVisualPreset {
+    softness: f32,
+    haze_bias: f32,
+    shadow_scale: f32,
+    day_tint: [f32; 3],
+    night_tint: [f32; 3],
+    rayleigh_scale: f32,
+    mie_scale: f32,
+}
+
+#[inline]
+fn sky_cloud_visual_preset(
+    weather: newengine_world_environment_api::WeatherKind,
+) -> SkyCloudVisualPreset {
+    use newengine_world_environment_api::WeatherKind;
+
+    match weather {
+        WeatherKind::Clear => SkyCloudVisualPreset {
+            softness: 0.88,
+            haze_bias: -0.02,
+            shadow_scale: 0.45,
+            day_tint: [1.03, 1.02, 1.00],
+            night_tint: [0.90, 0.96, 1.08],
+            rayleigh_scale: 1.06,
+            mie_scale: 0.86,
+        },
+        WeatherKind::Cloudy => SkyCloudVisualPreset {
+            softness: 0.74,
+            haze_bias: 0.01,
+            shadow_scale: 0.92,
+            day_tint: [1.00, 0.99, 0.98],
+            night_tint: [0.90, 0.96, 1.07],
+            rayleigh_scale: 0.98,
+            mie_scale: 1.00,
+        },
+        WeatherKind::Overcast => SkyCloudVisualPreset {
+            softness: 0.60,
+            haze_bias: 0.05,
+            shadow_scale: 1.04,
+            day_tint: [0.82, 0.88, 0.98],
+            night_tint: [0.76, 0.84, 1.02],
+            rayleigh_scale: 0.84,
+            mie_scale: 1.18,
+        },
+        WeatherKind::Rain => SkyCloudVisualPreset {
+            softness: 0.52,
+            haze_bias: 0.09,
+            shadow_scale: 1.12,
+            day_tint: [0.70, 0.78, 0.90],
+            night_tint: [0.66, 0.75, 0.92],
+            rayleigh_scale: 0.74,
+            mie_scale: 1.32,
+        },
+        WeatherKind::Storm => SkyCloudVisualPreset {
+            softness: 0.42,
+            haze_bias: 0.13,
+            shadow_scale: 1.25,
+            day_tint: [0.52, 0.60, 0.72],
+            night_tint: [0.50, 0.59, 0.78],
+            rayleigh_scale: 0.64,
+            mie_scale: 1.48,
+        },
+        WeatherKind::Snow => SkyCloudVisualPreset {
+            softness: 0.66,
+            haze_bias: 0.07,
+            shadow_scale: 0.88,
+            day_tint: [1.05, 1.09, 1.17],
+            night_tint: [0.82, 0.91, 1.10],
+            rayleigh_scale: 0.94,
+            mie_scale: 1.12,
+        },
+        WeatherKind::Fog => SkyCloudVisualPreset {
+            softness: 0.92,
+            haze_bias: 0.16,
+            shadow_scale: 0.34,
+            day_tint: [0.90, 0.95, 1.01],
+            night_tint: [0.76, 0.85, 0.99],
+            rayleigh_scale: 0.68,
+            mie_scale: 1.52,
+        },
+        WeatherKind::DustStorm => SkyCloudVisualPreset {
+            softness: 0.72,
+            haze_bias: 0.22,
+            shadow_scale: 0.56,
+            day_tint: [1.16, 0.88, 0.64],
+            night_tint: [0.88, 0.66, 0.50],
+            rayleigh_scale: 0.58,
+            mie_scale: 1.78,
+        },
+        WeatherKind::HeatHaze => SkyCloudVisualPreset {
+            softness: 0.90,
+            haze_bias: 0.10,
+            shadow_scale: 0.22,
+            day_tint: [1.10, 0.99, 0.82],
+            night_tint: [0.90, 0.82, 0.72],
+            rayleigh_scale: 0.82,
+            mie_scale: 1.32,
+        },
+    }
+}
+
 pub(in crate::scene_bridge::game_ready) fn sample_sky_frame_from_environment(
     cycle: &SkyCycleRuntime,
     environment: &newengine_world_environment_api::EnvironmentFrameDto,
@@ -339,7 +449,11 @@ pub(in crate::scene_bridge::game_ready) fn sample_sky_frame_from_environment(
     let day_strength = (render.sun_intensity_hint / 105_000.0).clamp(0.0, 1.0);
     let moon_strength = (render.moon_intensity_hint / 0.25).clamp(0.0, 1.0);
     let overcast = environment.sky.overcast_blend.clamp(0.0, 1.0);
-    let haze = environment.atmosphere.haze_amount.clamp(0.0, 1.0);
+    let weather_intensity = environment.weather.intensity.clamp(0.0, 1.0);
+    let preset = sky_cloud_visual_preset(environment.weather.state);
+    let preset_blend = (0.24 + weather_intensity * 0.66 + overcast * 0.10).clamp(0.0, 1.0);
+    let haze =
+        (environment.atmosphere.haze_amount + preset.haze_bias * preset_blend).clamp(0.0, 1.0);
     let overcast_loss = 1.0 - overcast * 0.32;
     let sky_rgb = sky_mul3(
         sky_lerp3(
@@ -349,13 +463,36 @@ pub(in crate::scene_bridge::game_ready) fn sample_sky_frame_from_environment(
         ),
         overcast_loss,
     );
-    let cloud_rgb = sky_mul3(
+    let phase_tint = match environment.time_of_day_state.phase {
+        newengine_world_environment_api::TimeOfDayPhase::Dawn => [1.06, 0.96, 0.88],
+        newengine_world_environment_api::TimeOfDayPhase::Dusk => [1.08, 0.93, 0.84],
+        newengine_world_environment_api::TimeOfDayPhase::Night => [0.88, 0.94, 1.10],
+        newengine_world_environment_api::TimeOfDayPhase::Day => [1.0, 1.0, 1.0],
+    };
+    let sky_phase_weight = (environment.sky.dusk_dawn_blend * 0.20
+        + environment.sky.night_blend * 0.10)
+        .clamp(0.0, 0.24);
+    let sky_rgb = sky_mul3_components(
+        sky_rgb,
+        sky_lerp3([1.0, 1.0, 1.0], phase_tint, sky_phase_weight),
+    );
+
+    let cloud_base_rgb = sky_mul3(
         sky_lerp3(
             env_color_to_rgb(environment.sky.horizon_color_linear),
             env_color_to_rgb(environment.sky.sun_horizon_color_linear),
             environment.sky.dusk_dawn_blend.clamp(0.0, 1.0) * 0.52,
         ),
         (0.76 + day_strength * 0.42 - environment.clouds.light_absorption * 0.28).clamp(0.05, 1.25),
+    );
+    let preset_tint = sky_lerp3(
+        preset.night_tint,
+        preset.day_tint,
+        environment.time_of_day_state.day_blend.clamp(0.0, 1.0),
+    );
+    let cloud_rgb = sky_mul3_components(
+        cloud_base_rgb,
+        sky_lerp3([1.0, 1.0, 1.0], preset_tint, preset_blend * 0.62),
     );
     let sun_color = sky_lerp3(
         env_color_to_rgb(environment.celestial.moon.color_linear),
@@ -387,7 +524,12 @@ pub(in crate::scene_bridge::game_ready) fn sample_sky_frame_from_environment(
         * (0.11 + day_strength.powf(0.58) * 0.82 + sky_light * 0.55 + overcast * 0.12)
         * (1.0 - storm_darkening * 0.55);
     let cloud_coverage = environment.clouds.coverage.clamp(0.0, 1.0);
-    let cloud_softness = (0.88 - overcast * 0.30).clamp(0.36, 0.92);
+    let baseline_softness = (0.88 - overcast * 0.30).clamp(0.36, 0.92);
+    let cloud_softness = (baseline_softness + (preset.softness - baseline_softness) * preset_blend)
+        .clamp(0.34, 0.94);
+    let cloud_shadow_strength = (environment.clouds.shadow_strength
+        * (1.0 + (preset.shadow_scale - 1.0) * preset_blend))
+        .clamp(0.0, 1.0);
     let adv = environment.wind.cloud_advection;
     SkyFrameSample {
         to_sun,
@@ -399,11 +541,15 @@ pub(in crate::scene_bridge::game_ready) fn sample_sky_frame_from_environment(
         ambient_intensity: ambient_intensity.max(0.0),
         cloud_coverage,
         cloud_softness,
-        cloud_shadow_strength: environment.clouds.shadow_strength.clamp(0.0, 1.0),
+        cloud_shadow_strength,
         haze_amount: haze,
         cloud_advection: Vec2::new(adv.x, adv.z),
-        rayleigh_strength: (1.08 - haze * 0.22).clamp(0.65, 1.15),
-        mie_strength: (0.50 + haze * 1.65 + overcast * 0.25).clamp(0.35, 2.2),
+        rayleigh_strength: ((1.08 - haze * 0.22)
+            * (1.0 + (preset.rayleigh_scale - 1.0) * preset_blend))
+            .clamp(0.50, 1.20),
+        mie_strength: ((0.50 + haze * 1.65 + overcast * 0.25)
+            * (1.0 + (preset.mie_scale - 1.0) * preset_blend))
+            .clamp(0.35, 2.75),
         star_intensity: (environment.sky.night_blend
             * (1.0 - environment.sky.light_pollution.clamp(0.0, 1.0))
             * (1.0 - overcast * 0.82))

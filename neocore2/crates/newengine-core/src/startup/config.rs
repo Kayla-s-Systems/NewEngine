@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 
 use crate::log_fmt::{ellipsize, emit_boxed_kv};
 use crate::path_fmt::{canonicalize_if_exists, display_clean};
+use crate::startup_window::StartupLaunchSettings;
 
 #[derive(Debug, Clone)]
 pub enum StartupConfigSource {
@@ -74,6 +75,14 @@ pub struct StartupConfig {
     /// Example: "textures/ui/icons/builtin_icons.ytd@app_logo".
     pub window_icon_path: Option<String>,
 
+    /// Core-owned, pre-engine display and graphics settings. These values are
+    /// loaded from `startup_settings`, may be edited by the optional PreStart
+    /// window, and are published before platform/renderer creation.
+    pub launch_settings: StartupLaunchSettings,
+    /// True when `startup_settings` was loaded from config.json or confirmed
+    /// through the core PreStart window during this launch.
+    pub launch_settings_explicit: bool,
+
     pub modules_dir: PathBuf,
 
     /// Engine-wide cache root. All loggers, shader bakers and cache writers
@@ -112,6 +121,8 @@ impl Default for StartupConfig {
             window_placement: WindowPlacement::Default,
 
             window_icon_path: None,
+            launch_settings: StartupLaunchSettings::default(),
+            launch_settings_explicit: false,
 
             modules_dir: PathBuf::from("pluginsRuntime"),
             cache_files: PathBuf::from(crate::cache_files::DEFAULT_CACHE_FILES_DIR),

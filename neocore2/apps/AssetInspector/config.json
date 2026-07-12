@@ -1,0 +1,64 @@
+{
+  "window": {
+    "title": "North Star Asset Inspector",
+    "size": [
+      1600,
+      900
+    ],
+    "placement": {
+      "type": "centered"
+    }
+  },
+  "engine": {
+    "modules_dir": "pluginsRuntime",
+    "CACHE_FILES": "../../cache/asset-inspector",
+    "CONFIG": "../../config/asset-inspector"
+  },
+  "plugins": {
+    "engine.platform": {
+      "window": {
+        "title": "North Star Asset Inspector",
+        "width": 1600,
+        "height": 900
+      }
+    },
+    "engine.render": {
+      "clear_color": [
+        0.012,
+        0.018,
+        0.028,
+        1.0
+      ],
+      "debug_text": "AssetInspector",
+      "mode": "ui_only",
+      "viewport_pass": false
+    },
+    "engine.ui": {
+      "surface": "asset.inspector",
+      "theme": "aurelia.dark",
+      "required": true,
+      "required_capabilities": [
+        "ui.backend"
+      ],
+      "allow_json_fallback": false,
+      "document_id": "tools.asset_inspector",
+      "asset_root": "gameAssets",
+      "source_xml": "ui/src/tools/asset_inspector.neui.xml",
+      "compiled_asset": "ui/tools/asset_inspector.neui",
+      "mount_surface": "asset.inspector",
+      "load_mode": "compiled_neui"
+    },
+    "engine.runtime": {
+      "ui": {
+        "screen_profile": {
+          "profile": "headless",
+          "publish_editor_shell": false
+        }
+      },
+      "render": {
+        "ui_only": true,
+        "viewport_pass": false
+      }
+    }
+  }
+}

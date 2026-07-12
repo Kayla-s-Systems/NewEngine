@@ -3,9 +3,7 @@ use std::sync::{Arc, OnceLock};
 use abi_stable::std_types::{RResult, RString};
 use newengine_plugin_api::Blob;
 use newengine_schema_api::{
-    schema_method, SchemaDefaultValueRequestV1, SchemaDescribePropertiesRequestV1,
-    SchemaDescribeTypeRequestV1, SchemaPatchValidationRequestV1, SchemaTransactionDtoV1,
-    ENGINE_SCHEMA_SERVICE_ID, SCHEMA_BACKEND_CAPABILITY_ID, SCHEMA_RUNTIME_CONTRACT,
+    schema_method, ENGINE_SCHEMA_SERVICE_ID, SCHEMA_BACKEND_CAPABILITY_ID, SCHEMA_RUNTIME_CONTRACT,
     SCHEMA_SERVICE_ID, SCHEMA_SERVICE_METHODS,
 };
 use newengine_service_kit::{
@@ -14,6 +12,7 @@ use newengine_service_kit::{
     JsonServiceRouter,
 };
 use parking_lot::Mutex;
+use serde::{de::DeserializeOwned, Serialize};
 use serde_json::Value;
 
 use crate::state::SchemaRegistryState;
@@ -24,58 +23,61 @@ fn state() -> Arc<Mutex<SchemaRegistryState>> {
     Arc::clone(SCHEMA_REGISTRY.get_or_init(|| Arc::new(Mutex::new(SchemaRegistryState::default()))))
 }
 
+fn decode_and_respond<T, R>(
+    request: Value,
+    label: &str,
+    handler: impl FnOnce(T) -> R,
+) -> RResult<Blob, RString>
+where
+    T: DeserializeOwned,
+    R: Serialize,
+{
+    match serde_json::from_value::<T>(request) {
+        Ok(request) => ok_json(handler(request)),
+        Err(error) => RResult::RErr(RString::from(format!(
+            "schema.api: invalid {label} request: {error}"
+        ))),
+    }
+}
+
 fn invoke(state: &mut SchemaRegistryState, payload: Blob) -> RResult<Blob, RString> {
     let value = match payload_json(&payload) {
         Ok(value) => value,
-        Err(e) => return RResult::RErr(RString::from(e)),
+        Err(error) => return RResult::RErr(RString::from(error)),
     };
     let method = value
         .get("method")
         .and_then(Value::as_str)
         .unwrap_or(schema_method::DESCRIBE_TYPE_V1);
     let request = value.get("request").cloned().unwrap_or(Value::Null);
+
     match method {
         schema_method::INFO_JSON => ok_json(state.info()),
         schema_method::DESCRIBE_TYPE_V1 => {
-            match serde_json::from_value::<SchemaDescribeTypeRequestV1>(request) {
-                Ok(request) => ok_json(state.describe_type(request)),
-                Err(e) => RResult::RErr(RString::from(format!(
-                    "schema.api: invalid describe_type request: {e}"
-                ))),
-            }
+            decode_and_respond(request, "describe_type", |request| {
+                state.describe_type(request)
+            })
         }
         schema_method::DESCRIBE_PROPERTIES_V1 => {
-            match serde_json::from_value::<SchemaDescribePropertiesRequestV1>(request) {
-                Ok(request) => ok_json(state.describe_properties(request)),
-                Err(e) => RResult::RErr(RString::from(format!(
-                    "schema.api: invalid describe_properties request: {e}"
-                ))),
-            }
+            decode_and_respond(request, "describe_properties", |request| {
+                state.describe_properties(request)
+            })
         }
         schema_method::VALIDATE_PATCH_V1 => {
-            match serde_json::from_value::<SchemaPatchValidationRequestV1>(request) {
-                Ok(request) => ok_json(state.validate_patch(request)),
-                Err(e) => RResult::RErr(RString::from(format!(
-                    "schema.api: invalid validate_patch request: {e}"
-                ))),
-            }
+            decode_and_respond(request, "validate_patch", |request| {
+                state.validate_patch(request)
+            })
         }
         schema_method::DEFAULT_VALUE_V1 => {
-            match serde_json::from_value::<SchemaDefaultValueRequestV1>(request) {
-                Ok(request) => ok_json(state.default_value(request)),
-                Err(e) => RResult::RErr(RString::from(format!(
-                    "schema.api: invalid default_value request: {e}"
-                ))),
-            }
+            decode_and_respond(request, "default_value", |request| {
+                state.default_value(request)
+            })
         }
         schema_method::BINDING_MANIFEST_V1 => ok_json(state.binding_manifest_from_value(request)),
         schema_method::TRANSACTION_PLAN_V1 => {
-            match serde_json::from_value::<SchemaTransactionDtoV1>(request) {
-                Ok(request) => ok_json(state.transaction_plan(request)),
-                Err(e) => RResult::RErr(RString::from(format!(
-                    "schema.api: invalid transaction_plan request: {e}"
-                ))),
-            }
+            decode_and_respond(request, "transaction_plan", |request| {
+                state.transaction_plan(request)
+            })
         }
         other => RResult::RErr(RString::from(format!(
             "schema.api: unknown invoke method '{other}'"
@@ -120,10 +122,8 @@ pub fn schema_gateway_service() -> newengine_plugin_api::ServiceV1Dyn<'static> {
             state.default_value(request)
         })
         .json_value_result(schema_method::BINDING_MANIFEST_V1, |state, request| {
-            Ok(
-                serde_json::to_value(state.binding_manifest_from_value(request))
-                    .unwrap_or(Value::Null),
-            )
+            serde_json::to_value(state.binding_manifest_from_value(request))
+                .map_err(|error| error.to_string())
         })
         .post_json(schema_method::TRANSACTION_PLAN_V1, |state, request| {
             state.transaction_plan(request)

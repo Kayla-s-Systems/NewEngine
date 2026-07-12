@@ -172,6 +172,9 @@
       <sourceFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-assets-ui-runtime/examples" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-task-api/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-engine-runtime/examples" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/neocore2/apps/AssetInspector/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-asset-format-nef8/examples" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-asset-inspector-runtime/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/neocore2/apps/editor/target" />
       <excludeFolder url="file://$MODULE_DIR$/neocore2/target" />
       <excludeFolder url="file://$MODULE_DIR$/neocore2/crates/newengine-sim/target" />

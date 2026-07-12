@@ -109,4 +109,9 @@ pub use startup::{
     ConfigPaths, StartupConfig, StartupConfigSource, StartupLoadReport, StartupLoader,
     StartupOverride, StartupResolvedFrom, StartupStorageRootKind, WindowPlacement,
 };
-pub use startup_window::{StartupWindowDecision, StartupWindowReport};
+pub use startup_window::{
+    startup_launch_settings, GraphicsPreset, ShadowQuality, StartupDisplaySettings,
+    StartupGraphicsSettings, StartupHdrMode, StartupLaunchSettings, StartupWindowDecision,
+    StartupWindowMode, StartupWindowReport, StartupWindowSelection, TextureQuality,
+    STARTUP_SETTINGS_SCHEMA_VERSION,
+};

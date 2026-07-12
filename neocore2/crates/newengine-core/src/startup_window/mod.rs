@@ -1,25 +1,39 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-//! PreStart loading lifecycle diagnostics.
+//! Core-owned PreStart launch configuration.
 //!
-//! `startup_window` owns native window/display configuration only. Loading
-//! assignment is resolved by the core-owned `engine.loading` domain and then
-//! handed off to platform/runtime presenters. PreStart must not depend on a
-//! runtime UI provider route.
+//! The feature is compiled into `newengine-core` through the optional
+//! `startup-window-egui` feature and is requested at runtime through the
+//! runtime-host `PreStartConfigWindow` boot option. No separate settings crate
+//! is involved.
+//!
+//! Core owns the typed settings model, validation, persistence contract,
+//! process variables and the launch/cancel decision. Platform and render
+//! runtimes consume the confirmed core snapshot after this phase.
 
 mod args;
 mod config_path;
+#[cfg(feature = "startup-window-egui")]
+mod egui_presenter;
 mod loading_handoff;
 mod report;
+mod settings;
 
-pub use report::{StartupLoadingAssignmentReport, StartupWindowDecision, StartupWindowReport};
+pub use report::{
+    StartupLoadingAssignmentReport, StartupWindowDecision, StartupWindowReport,
+    StartupWindowSelection,
+};
+pub use settings::{
+    startup_launch_settings, GraphicsPreset, ShadowQuality, StartupDisplaySettings,
+    StartupGraphicsSettings, StartupHdrMode, StartupLaunchSettings, StartupWindowMode,
+    TextureQuality, STARTUP_SETTINGS_SCHEMA_VERSION,
+};
 
 use crate::startup::{ConfigPaths, StartupConfig};
 
-/// Resolves PreStart configuration state before `StartupLoader` consumes
-/// `config.json`, unless the process args explicitly disable it. UI drawing is
-/// intentionally not performed here; this records the engine.loading handoff
-/// contract so diagnostics show ownership and dependency boundaries.
+/// Presents the core-owned PreStart settings window before Engine creation when
+/// the launch contract requests it. Closing or cancelling returns
+/// `StartupWindowDecision::Cancelled` and never persists editor state.
 pub fn present_before_startup_if_needed(
     paths: &ConfigPaths,
     startup: &StartupConfig,
@@ -37,5 +51,18 @@ pub fn present_before_startup_if_needed(
         }
     };
 
-    loading_handoff::present(&config_path, startup)
+    let loading_handoff = loading_handoff::present(&config_path, startup);
+
+    #[cfg(feature = "startup-window-egui")]
+    let mut report = egui_presenter::present(&config_path, startup);
+
+    #[cfg(not(feature = "startup-window-egui"))]
+    let mut report = StartupWindowReport::unavailable(
+        "PreStart configuration was requested, but newengine-core was built without the 'startup-window-egui' feature",
+    );
+
+    report.attach_loading_handoff(loading_handoff);
+    report
 }
+
+pub(crate) use settings::set_startup_launch_settings;

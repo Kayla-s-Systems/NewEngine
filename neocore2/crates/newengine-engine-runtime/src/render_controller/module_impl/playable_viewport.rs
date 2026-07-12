@@ -97,6 +97,45 @@ impl RuntimeRenderController {
             scope.dt,
             self.frame.frame_index,
         );
+        let game_profile = is_game_screen_profile(ctx);
+        if game_profile
+            && frame_input
+                .surface_input
+                .as_ref()
+                .is_some_and(|input| input.is_key_pressed(newengine_input_api::key_code::F2))
+        {
+            self.bridges.scene.toggle_in_game_editor();
+        } else if !game_profile && self.bridges.scene.in_game_editor_enabled() {
+            self.bridges.scene.set_in_game_editor_enabled(false);
+        }
+
+        if let Some(dispatch_frame) = ctx
+            .resources()
+            .get::<newengine_ui_api::UiEventDispatchFrame>()
+        {
+            if game_profile {
+                let _ = self
+                    .bridges
+                    .scene
+                    .apply_in_game_editor_actions(dispatch_frame);
+            }
+            let _ = self
+                .bridges
+                .scene
+                .apply_editor_selection_actions(dispatch_frame);
+            let _ = self
+                .bridges
+                .scene
+                .apply_inventory_ui_actions(dispatch_frame);
+        }
+        let in_game_editor = game_profile && self.bridges.scene.in_game_editor_enabled();
+        if in_game_editor && scope.vp_w > 0 && scope.vp_h > 0 {
+            self.bridges.viewport.publish_pick_request(
+                (scope.vp_w.saturating_sub(1) as f32) * 0.5,
+                (scope.vp_h.saturating_sub(1) as f32) * 0.5,
+            );
+        }
+
         let external_ui_capture = ctx
             .resources()
             .get::<UiInputCaptureState>()
@@ -114,7 +153,7 @@ impl RuntimeRenderController {
             external_ui_capture.merged_with_primary_modal(primary_ui.blocks_gameplay),
             provider_ui_capture.unwrap_or_else(UiInputCaptureState::none),
         );
-        let modal_blocks_gameplay = published_capture.requests_capture();
+        let modal_blocks_gameplay = published_capture.requests_capture() || in_game_editor;
         if primary_was_open && !primary_ui.blocks_gameplay {
             self.restore_playable_view_after_ui_close();
         }
@@ -131,20 +170,6 @@ impl RuntimeRenderController {
                 InputCaptureState::modal_ui(published_capture.requests_capture()),
                 &mut carrier,
             );
-        }
-
-        if let Some(dispatch_frame) = ctx
-            .resources()
-            .get::<newengine_ui_api::UiEventDispatchFrame>()
-        {
-            let _ = self
-                .bridges
-                .scene
-                .apply_editor_selection_actions(dispatch_frame);
-            let _ = self
-                .bridges
-                .scene
-                .apply_inventory_ui_actions(dispatch_frame);
         }
 
         if editor_viewport_runtime_mode(ctx) == Some(UiEditorRuntimeMode::Edit) {
@@ -241,9 +266,12 @@ impl RuntimeRenderController {
             scope,
             &world_frame,
             thread_pool.as_ref(),
-        )?;
+        );
         drop(scene);
-        Ok(outcome)
+        if let Some(picked) = self.frame.pending_pick_selection.take() {
+            self.bridges.scene.set_selection(picked);
+        }
+        Ok(outcome?)
     }
 
     fn refresh_modal_ui_draw_list<E: Send + 'static>(
@@ -461,6 +489,13 @@ fn clear_ui_draw_list(surface_size_px: [u32; 2]) -> UiDrawList {
     draw_list.screen_size_px = surface_size_px;
     draw_list.pixels_per_point = 1.0;
     draw_list
+}
+
+fn is_game_screen_profile<E: Send + 'static>(ctx: &ModuleCtx<'_, E>) -> bool {
+    ctx.resources()
+        .get::<UiScreenProfileState>()
+        .map(|state| state.descriptor.profile == UiScreenProfile::Game)
+        .unwrap_or(true)
 }
 
 fn editor_viewport_runtime_mode<E: Send + 'static>(

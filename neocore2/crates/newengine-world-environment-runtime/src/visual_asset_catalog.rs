@@ -23,8 +23,9 @@ pub(crate) struct EnvironmentVisualAssetGroupDescriptor {
 pub(crate) const SKYDOME_TEXTURE_DICTIONARY_REF: &str = "textures/environment/skydome.ytd";
 pub(crate) const SKYDOME_STARFIELD_REF: &str = "textures/environment/skydome.ytd@starfield";
 pub(crate) const SKYDOME_CLOUD_DENSITY_REF: &str =
-    "textures/environment/skydome.ytd@baseperlinnoise3channel";
-pub(crate) const SKYDOME_CLOUD_DETAIL_REF: &str = "textures/environment/skydome.ytd@noise16_p";
+    "textures/environment/sky_clouds_v2.ytd@cloud_base_shape";
+pub(crate) const SKYDOME_CLOUD_DETAIL_REF: &str =
+    "textures/environment/sky_clouds_v2.ytd@cloud_detail_erosion";
 pub(crate) const SKYDOME_DITHER_REF: &str = "textures/environment/skydome.ytd@dither";
 pub(crate) const SKYDOME_MOON_DISK_REF: &str = "textures/environment/skydome.ytd@moon_new";
 

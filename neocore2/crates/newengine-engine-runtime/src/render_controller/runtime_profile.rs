@@ -258,6 +258,9 @@ impl RenderRuntimeProfile {
     #[inline]
     pub(crate) fn shadows_enabled(&self) -> bool {
         self.graphics.shadows.enabled()
+            && newengine_core::startup_launch_settings()
+                .graphics
+                .shadows_enabled
     }
 
     #[inline]

@@ -7,8 +7,7 @@ use crate::{ViewportDescriptor, ViewportRenderResources, ViewportRuntime};
 
 /// High-level viewport abstraction.
 ///
-/// Combines logical descriptor,
-/// runtime parameters and render backing.
+/// Combines logical descriptor, runtime parameters and render backing.
 #[derive(Clone, Debug)]
 pub struct Viewport {
     descriptor: ViewportDescriptor,
@@ -26,8 +25,6 @@ impl Viewport {
         }
     }
 
-    // --- Descriptor ---
-
     #[inline]
     pub fn camera(&self) -> Option<EntityId> {
         self.descriptor.camera
@@ -37,8 +34,6 @@ impl Viewport {
     pub fn set_camera(&mut self, camera: Option<EntityId>) {
         self.descriptor.camera = camera;
     }
-
-    // --- Runtime ---
 
     #[inline]
     pub fn extent(&self) -> Extent2D {
@@ -50,15 +45,11 @@ impl Viewport {
         self.runtime.set_extent(width, height);
     }
 
-    /// Returns whether viewport was resized since last call and clears the flag.
+    /// Returns whether the viewport was resized since the previous call.
     #[inline]
     pub fn take_resize_flag(&mut self) -> bool {
-        let resized = self.runtime.is_resized();
-        self.runtime.clear_resize_flag();
-        resized
+        self.runtime.take_resize_flag()
     }
-
-    // --- Render Resources ---
 
     #[inline]
     pub fn render_resources(&self) -> &ViewportRenderResources {
