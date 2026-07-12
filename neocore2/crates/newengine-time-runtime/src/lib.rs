@@ -22,7 +22,8 @@ use parking_lot::Mutex;
 use std::sync::{Arc, OnceLock};
 
 const OWNER: &str = "newengine-time-runtime.engine-runtime-provider";
-const MAX_FIXED_TICKS_PER_FRAME: u32 = 1;
+const DEFAULT_MAX_FIXED_TICKS_PER_FRAME: u32 = 4;
+const HARD_MAX_FIXED_TICKS_PER_FRAME: u32 = 8;
 
 static TIME_GATEWAY: OnceLock<Arc<Mutex<RuntimeHostedTimeState>>> = OnceLock::new();
 
@@ -62,7 +63,7 @@ impl Default for RuntimeHostedTimeState {
             last_raw_delta_ns: 0,
             last_clamped_delta_ns: 0,
             fixed_delta_ns: 16_666_667,
-            max_fixed_ticks_per_frame: MAX_FIXED_TICKS_PER_FRAME,
+            max_fixed_ticks_per_frame: DEFAULT_MAX_FIXED_TICKS_PER_FRAME,
             accumulator_ns: 0,
             tick: 0,
             ticks_to_run: 0,
@@ -205,12 +206,22 @@ impl RuntimeHostedTimeState {
             .as_nanos()
             .min(u128::from(u64::MAX)) as u64;
         self.last = now;
+        self.begin_frame_with_raw_delta(request, raw_delta_ns)
+    }
+
+    fn begin_frame_with_raw_delta(
+        &mut self,
+        request: TimeBeginFrameRequestV1,
+        raw_delta_ns: u64,
+    ) -> TimeSnapshotV1 {
         self.frame_index = request.frame_index;
         if request.fixed_delta_ns > 0 {
             self.fixed_delta_ns = request.fixed_delta_ns;
         }
         self.last_raw_delta_ns = raw_delta_ns;
-        let max_ticks = self.max_fixed_ticks_per_frame.max(1);
+        let max_ticks = self
+            .max_fixed_ticks_per_frame
+            .clamp(1, HARD_MAX_FIXED_TICKS_PER_FRAME);
         let accumulator_cap = self
             .fixed_delta_ns
             .saturating_mul(u64::from(max_ticks))
@@ -222,31 +233,23 @@ impl RuntimeHostedTimeState {
         } else {
             ((self.last_clamped_delta_ns as f64) * self.scale.max(0.0)) as u64
         };
+        let accumulated_before_cap = self.accumulator_ns.saturating_add(scaled_delta_ns);
+        let debt_dropped = !self.paused
+            && (raw_delta_ns > accumulator_cap || accumulated_before_cap > accumulator_cap);
 
-        // Realtime frame policy: never accumulate a simulation backlog on the
-        // render thread. If a frame is slow, the engine advances at most the
-        // configured fixed-step budget and drops excess wall-clock debt instead
-        // of trying to "catch up" with multiple plugin lifecycle passes on the
-        // next visible frame. This does not cap FPS; it prevents fixed-update
-        // work from multiplying when FPS is already low.
+        // Realtime policy: catch up a bounded number of fixed steps on a slow
+        // render frame, but cap pathological stalls (breakpoints, device loss,
+        // window drags) so the render thread cannot enter a spiral of death.
         self.accumulator_ns = if self.paused {
             0
         } else {
-            self.accumulator_ns
-                .saturating_add(scaled_delta_ns)
-                .min(accumulator_cap)
+            accumulated_before_cap.min(accumulator_cap)
         };
         self.ticks_to_run = if self.fixed_delta_ns == 0 || self.paused {
             0
-        } else if self.accumulator_ns >= self.fixed_delta_ns {
-            max_ticks
         } else {
-            0
+            (self.accumulator_ns / self.fixed_delta_ns).min(u64::from(max_ticks)) as u32
         };
-
-        if self.ticks_to_run >= max_ticks && self.accumulator_ns > accumulator_cap {
-            self.accumulator_ns = accumulator_cap;
-        }
 
         if !self.paused && self.seconds_per_game_day > f64::EPSILON {
             let game_delta_seconds = (self.last_clamped_delta_ns as f64 / 1_000_000_000.0)
@@ -259,10 +262,7 @@ impl RuntimeHostedTimeState {
             }
         }
         self.replay_frame = self.replay_frame.wrapping_add(1);
-        if self.ticks_to_run >= self.max_fixed_ticks_per_frame.max(1)
-            && self.frame_index.is_multiple_of(120)
-            && !self.paused
-        {
+        if debt_dropped && self.frame_index > 0 && self.frame_index.is_multiple_of(120) {
             newengine_ulog_api::ulog::warn!(
                 "time gateway: realtime fixed-step debt dropped frame={} raw_delta_ns={} clamped_ns={} ticks_to_run={} max_ticks={} accumulator_ns={} scale={:.3}",
                 self.frame_index,
@@ -284,11 +284,7 @@ impl RuntimeHostedTimeState {
             self.accumulator_ns = 0;
         }
         self.tick = self.tick.wrapping_add(1);
-        // Realtime mode drops remaining debt after the visible-frame fixed step.
-        // Separate simulation workers may later own high-frequency catch-up, but
-        // plugin lifecycle fixed_update must not multiply on the render thread.
-        self.accumulator_ns = 0;
-        self.ticks_to_run = 0;
+        self.ticks_to_run = self.ticks_to_run.saturating_sub(1);
         self.snapshot()
     }
 
@@ -413,7 +409,9 @@ fn service() -> newengine_plugin_api::ServiceV1Dyn<'static> {
                 if request.fixed_delta_ns > 0 {
                     state.fixed_delta_ns = request.fixed_delta_ns;
                 }
-                state.max_fixed_ticks_per_frame = 1;
+                state.max_fixed_ticks_per_frame = request
+                    .max_fixed_ticks_per_frame
+                    .clamp(1, HARD_MAX_FIXED_TICKS_PER_FRAME);
                 state.ai_decision_tick_interval = request.ai_decision_tick_interval.max(1);
                 state.ai_tick_budget_ns = request.ai_tick_budget_ns.max(1_000);
                 state.snapshot()
@@ -470,4 +468,64 @@ pub fn register_time_gateway_best_effort() -> bool {
         owner: OWNER,
         service: service(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn request(frame_index: u64, fixed_delta_ns: u64) -> TimeBeginFrameRequestV1 {
+        TimeBeginFrameRequestV1 {
+            frame_index,
+            fixed_delta_ns,
+        }
+    }
+
+    #[test]
+    fn slow_render_frame_schedules_only_the_required_fixed_steps() {
+        let mut state = RuntimeHostedTimeState {
+            max_fixed_ticks_per_frame: 4,
+            ..RuntimeHostedTimeState::default()
+        };
+
+        let snapshot = state.begin_frame_with_raw_delta(request(1, 16_000_000), 38_000_000);
+
+        assert_eq!(snapshot.simulation.ticks_to_run, 2);
+        assert_eq!(snapshot.simulation.accumulator_ns, 38_000_000);
+        assert_eq!(snapshot.real.clamped_delta_ns, 38_000_000);
+    }
+
+    #[test]
+    fn fixed_advances_preserve_fractional_remainder() {
+        let mut state = RuntimeHostedTimeState {
+            max_fixed_ticks_per_frame: 4,
+            ..RuntimeHostedTimeState::default()
+        };
+        state.begin_frame_with_raw_delta(request(1, 16_000_000), 38_000_000);
+
+        let first = state.advance_fixed();
+        let second = state.advance_fixed();
+
+        assert_eq!(first.simulation.tick, 1);
+        assert_eq!(first.simulation.ticks_to_run, 1);
+        assert_eq!(first.simulation.accumulator_ns, 22_000_000);
+        assert_eq!(second.simulation.tick, 2);
+        assert_eq!(second.simulation.ticks_to_run, 0);
+        assert_eq!(second.simulation.accumulator_ns, 6_000_000);
+    }
+
+    #[test]
+    fn pathological_stall_is_capped_to_the_configured_budget() {
+        let mut state = RuntimeHostedTimeState {
+            max_fixed_ticks_per_frame: 4,
+            ..RuntimeHostedTimeState::default()
+        };
+
+        let snapshot = state.begin_frame_with_raw_delta(request(120, 16_000_000), 250_000_000);
+
+        assert_eq!(snapshot.simulation.ticks_to_run, 4);
+        assert_eq!(snapshot.simulation.accumulator_ns, 64_000_000);
+        assert_eq!(snapshot.real.delta_ns, 250_000_000);
+        assert_eq!(snapshot.real.clamped_delta_ns, 64_000_000);
+    }
 }

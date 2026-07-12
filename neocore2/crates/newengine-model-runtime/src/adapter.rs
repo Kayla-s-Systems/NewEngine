@@ -292,166 +292,89 @@ impl ModelAssetAdapter {
                     newengine_assets_api::ASSET_LIST_FILE_BODY_OUTPUT
                 )
             })?;
-        let root: serde_json::Value = serde_json::from_slice(&bytes).map_err(|e| {
-            format!("model.api: .ydd NEF8 body returned invalid json path='{source}' err='{e}'")
-        })?;
-        let encoding = root
-            .get("mesh_encoding")
-            .and_then(serde_json::Value::as_str)
-            .unwrap_or_default();
-        if encoding != "newengine.ydd.runtime_mesh_parts.v1" {
-            return Err(format!("model.api: .ydd runtime mesh encoding unsupported path='{source}' encoding='{encoding}'"));
-        }
-        let parts = root
-            .get("runtime_mesh_parts")
-            .and_then(serde_json::Value::as_array)
-            .ok_or_else(|| {
-                format!("model.api: .ydd has no runtime_mesh_parts array path='{source}'")
+        let document = newengine_asset_format_nef8::ydd_binary::decode_ydd_binary_body(&bytes)
+            .map_err(|error| {
+                format!("model.api: binary .ydd decode failed path='{source}' err='{error}'")
             })?;
-        let properties_by_entry = ydd_properties_ref_by_entry(&root);
-        let root_properties_ref = ydd_root_properties_ref(&root);
-        let request_properties_ref = request_properties_ref
+        let entry = document.select_entry(selector, true).map_err(|error| {
+            format!("model.api: binary .ydd selection failed path='{source}' err='{error}'")
+        })?;
+        let properties_ref = entry
+            .properties_ref
+            .as_deref()
             .map(str::trim)
             .filter(|value| !value.is_empty())
-            .map(ToOwned::to_owned);
-        let mut material_bindings_by_properties =
-            std::collections::BTreeMap::<String, std::collections::BTreeMap<String, String>>::new();
-        let mut out = Vec::new();
-        let single_part_selector_fallback = selector.is_some() && parts.len() == 1;
-        for part in parts {
-            let entry = part
-                .get("entry")
-                .or_else(|| part.get("name"))
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or_default();
-            if !single_part_selector_fallback
-                && selector
-                    .map(|needle| !needle.eq_ignore_ascii_case(entry))
-                    .unwrap_or(false)
-            {
-                continue;
-            }
-            let material_slot = ydd_part_material_slot(part);
-            let properties_ref = part
-                .get("properties_ref")
-                .and_then(serde_json::Value::as_str)
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-                .map(ToOwned::to_owned)
-                .or_else(|| properties_by_entry.get(entry).cloned())
-                .or_else(|| root_properties_ref.clone())
-                .or_else(|| request_properties_ref.clone());
-            let descriptor_material_ref = properties_ref.as_ref().and_then(|properties_ref| {
-                if !material_bindings_by_properties.contains_key(properties_ref) {
-                    let bindings = self
-                        .load_material_bindings_from_properties_ref(properties_ref)
-                        .unwrap_or_default();
-                    material_bindings_by_properties.insert(properties_ref.clone(), bindings);
-                }
-                material_bindings_by_properties
-                    .get(properties_ref)
-                    .and_then(|bindings| bindings.get(&material_slot).cloned())
+            .map(ToOwned::to_owned)
+            .or_else(|| {
+                request_properties_ref
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                    .map(ToOwned::to_owned)
             });
-            out.push(self.decode_ydd_runtime_model_part(source, part, descriptor_material_ref)?);
+        let descriptor_bindings = properties_ref
+            .as_deref()
+            .map(|reference| self.load_material_bindings_from_properties_ref(reference))
+            .transpose()?
+            .unwrap_or_default();
+        let mut out = Vec::with_capacity(entry.meshes.len());
+        for source_mesh in &entry.meshes {
+            let material_slot = source_mesh.material_slot();
+            let descriptor_material_ref = descriptor_bindings.get(&material_slot).cloned();
+            let material_ref = descriptor_material_ref.or_else(|| source_mesh.material_ref.clone());
+            let material = match material_ref
+                .as_deref()
+                .and_then(|reference| self.load_material_binding_from_ref(reference))
+            {
+                Some(mut binding) => {
+                    binding.slot = material_slot.clone();
+                    binding
+                }
+                None => ModelMaterialBinding {
+                    slot: material_slot.clone(),
+                    material_ref,
+                    fallback_color: [0.82, 0.78, 0.72, 1.0],
+                    ..ModelMaterialBinding::default()
+                },
+            };
+            let vertices = source_mesh
+                .vertices
+                .iter()
+                .map(|vertex| PrimitiveVertex {
+                    pos: vertex.position,
+                    nrm: vertex.normal,
+                    uv: vertex.uv0,
+                })
+                .collect::<Vec<_>>();
+            let min = Vec3::new(
+                source_mesh.bounds_min[0],
+                source_mesh.bounds_min[1],
+                source_mesh.bounds_min[2],
+            );
+            let max = Vec3::new(
+                source_mesh.bounds_max[0],
+                source_mesh.bounds_max[1],
+                source_mesh.bounds_max[2],
+            );
+            let bounds_center = (min + max) * 0.5;
+            let bounds_radius = recompute_bounds_radius(bounds_center, &vertices);
+            out.push(ModelMeshPart {
+                material_slot,
+                mesh: PrimitiveMesh {
+                    vertices,
+                    indices: source_mesh.indices.clone(),
+                    bounds_center,
+                    bounds_radius,
+                },
+                material,
+            });
         }
         if out.is_empty() {
             return Err(format!(
-                "model.api: .ydd selector '{}' produced no runtime mesh parts path='{source}'",
-                selector.unwrap_or("<all>")
+                "model.api: binary .ydd selector '{}' produced no mesh parts path='{source}'",
+                selector.unwrap_or("<first>")
             ));
         }
         Ok(out)
-    }
-
-    fn decode_ydd_runtime_model_part(
-        &self,
-        source: &str,
-        part: &serde_json::Value,
-        descriptor_material_ref: Option<String>,
-    ) -> Result<ModelMeshPart, String> {
-        let material_slot = part
-            .get("material_slot")
-            .and_then(serde_json::Value::as_str)
-            .unwrap_or("material")
-            .trim()
-            .to_owned();
-        let vertices_json = part
-            .get("vertices")
-            .and_then(serde_json::Value::as_array)
-            .ok_or_else(|| format!("model.api: .ydd runtime part has no vertices path='{source}' slot='{material_slot}'"))?;
-        let indices_json = part
-            .get("indices")
-            .and_then(serde_json::Value::as_array)
-            .ok_or_else(|| format!("model.api: .ydd runtime part has no indices path='{source}' slot='{material_slot}'"))?;
-        let mut vertices = Vec::with_capacity(vertices_json.len());
-        for (index, vertex) in vertices_json.iter().enumerate() {
-            vertices.push(PrimitiveVertex {
-                pos: json_vec3(vertex.get("pos"), source, index, "pos")?,
-                nrm: json_vec3(vertex.get("nrm"), source, index, "nrm")?,
-                uv: json_vec2(vertex.get("uv"), source, index, "uv")?,
-            });
-        }
-        let mut indices = Vec::with_capacity(indices_json.len());
-        for (index, value) in indices_json.iter().enumerate() {
-            let item = value
-                .as_u64()
-                .ok_or_else(|| format!("model.api: .ydd index must be u32 path='{source}' slot='{material_slot}' index={index}"))?;
-            let item = u32::try_from(item)
-                .map_err(|_| format!("model.api: .ydd index exceeds u32 path='{source}' slot='{material_slot}' index={index}"))?;
-            if item as usize >= vertices.len() {
-                return Err(format!("model.api: .ydd index out of bounds path='{source}' slot='{material_slot}' index={item} vertices={}", vertices.len()));
-            }
-            indices.push(item);
-        }
-        let bounds_center = part
-            .get("bounds_center")
-            .map(|value| json_vec3(Some(value), source, 0, "bounds_center"))
-            .transpose()?
-            .map(|v| Vec3::new(v[0], v[1], v[2]))
-            .unwrap_or(Vec3::ZERO);
-        let bounds_radius = part
-            .get("bounds_radius")
-            .and_then(serde_json::Value::as_f64)
-            .map(|value| value as f32)
-            .unwrap_or_else(|| recompute_bounds_radius(bounds_center, &vertices));
-        let material_ref = descriptor_material_ref.or_else(|| {
-            // Legacy fallback for pre-properties .ydd files. New .ydd assets must
-            // declare material slots only and bind concrete .nemat refs through
-            // their explicit .ytyp properties descriptor.
-            part.get("material_ref")
-                .and_then(serde_json::Value::as_str)
-                .map(str::trim)
-                .filter(|v| !v.is_empty())
-                .map(ToOwned::to_owned)
-        });
-        let material = match material_ref
-            .as_deref()
-            .and_then(|material_ref| self.load_material_binding_from_ref(material_ref))
-        {
-            Some(mut binding) => {
-                binding.slot = material_slot.clone();
-                binding
-            }
-            None => ModelMaterialBinding {
-                slot: material_slot.clone(),
-                material_ref,
-                fallback_color: part
-                    .get("fallback_color")
-                    .and_then(|value| json_vec4_value(value).ok())
-                    .unwrap_or([0.82, 0.78, 0.72, 1.0]),
-                ..ModelMaterialBinding::default()
-            },
-        };
-        Ok(ModelMeshPart {
-            material_slot,
-            mesh: PrimitiveMesh {
-                vertices,
-                indices,
-                bounds_center,
-                bounds_radius,
-            },
-            material,
-        })
     }
 
     fn load_material_bindings_from_properties_ref(
@@ -560,52 +483,6 @@ impl ModelAssetAdapter {
     }
 }
 
-fn ydd_part_material_slot(part: &serde_json::Value) -> String {
-    part.get("material_slot")
-        .and_then(serde_json::Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .unwrap_or("material")
-        .to_owned()
-}
-
-fn ydd_root_properties_ref(root: &serde_json::Value) -> Option<String> {
-    root.get("properties_ref")
-        .or_else(|| root.get("descriptor_ref"))
-        .or_else(|| root.get("ytyp_ref"))
-        .and_then(serde_json::Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToOwned::to_owned)
-}
-
-fn ydd_properties_ref_by_entry(
-    root: &serde_json::Value,
-) -> std::collections::BTreeMap<String, String> {
-    let mut out = std::collections::BTreeMap::new();
-    let Some(entries) = root.get("entries").and_then(serde_json::Value::as_array) else {
-        return out;
-    };
-    for entry in entries {
-        let name = entry
-            .get("name")
-            .or_else(|| entry.get("entry"))
-            .and_then(serde_json::Value::as_str)
-            .map(str::trim)
-            .filter(|value| !value.is_empty());
-        let properties_ref = entry
-            .get("properties_ref")
-            .or_else(|| entry.get("descriptor_ref"))
-            .and_then(serde_json::Value::as_str)
-            .map(str::trim)
-            .filter(|value| !value.is_empty());
-        if let (Some(name), Some(properties_ref)) = (name, properties_ref) {
-            out.insert(name.to_owned(), properties_ref.to_owned());
-        }
-    }
-    out
-}
-
 fn split_model_selector(source: &str) -> (String, Option<String>) {
     match source.rsplit_once('@') {
         Some((path, selector)) => (
@@ -614,75 +491,6 @@ fn split_model_selector(source: &str) -> (String, Option<String>) {
         ),
         None => (source.to_owned(), None),
     }
-}
-
-fn json_vec3(
-    value: Option<&serde_json::Value>,
-    source: &str,
-    index: usize,
-    label: &str,
-) -> Result<[f32; 3], String> {
-    let arr = value.and_then(serde_json::Value::as_array).ok_or_else(|| {
-        format!(
-            "model.api: .ydd vertex field '{label}' must be vec3 path='{source}' vertex={index}"
-        )
-    })?;
-    if arr.len() != 3 {
-        return Err(format!("model.api: .ydd field '{label}' must have 3 components path='{source}' vertex={index} got={}", arr.len()));
-    }
-    Ok([
-        arr[0].as_f64().ok_or_else(|| {
-            format!("model.api: .ydd '{label}.x' must be number path='{source}' vertex={index}")
-        })? as f32,
-        arr[1].as_f64().ok_or_else(|| {
-            format!("model.api: .ydd '{label}.y' must be number path='{source}' vertex={index}")
-        })? as f32,
-        arr[2].as_f64().ok_or_else(|| {
-            format!("model.api: .ydd '{label}.z' must be number path='{source}' vertex={index}")
-        })? as f32,
-    ])
-}
-
-fn json_vec2(
-    value: Option<&serde_json::Value>,
-    source: &str,
-    index: usize,
-    label: &str,
-) -> Result<[f32; 2], String> {
-    let arr = value.and_then(serde_json::Value::as_array).ok_or_else(|| {
-        format!(
-            "model.api: .ydd vertex field '{label}' must be vec2 path='{source}' vertex={index}"
-        )
-    })?;
-    if arr.len() != 2 {
-        return Err(format!("model.api: .ydd field '{label}' must have 2 components path='{source}' vertex={index} got={}", arr.len()));
-    }
-    Ok([
-        arr[0].as_f64().ok_or_else(|| {
-            format!("model.api: .ydd '{label}.x' must be number path='{source}' vertex={index}")
-        })? as f32,
-        arr[1].as_f64().ok_or_else(|| {
-            format!("model.api: .ydd '{label}.y' must be number path='{source}' vertex={index}")
-        })? as f32,
-    ])
-}
-
-fn json_vec4_value(value: &serde_json::Value) -> Result<[f32; 4], String> {
-    let arr = value
-        .as_array()
-        .ok_or_else(|| "vec4 value must be array".to_owned())?;
-    if arr.len() != 4 {
-        return Err(format!(
-            "vec4 value must have 4 components, got {}",
-            arr.len()
-        ));
-    }
-    Ok([
-        arr[0].as_f64().unwrap_or(1.0) as f32,
-        arr[1].as_f64().unwrap_or(1.0) as f32,
-        arr[2].as_f64().unwrap_or(1.0) as f32,
-        arr[3].as_f64().unwrap_or(1.0) as f32,
-    ])
 }
 
 fn recompute_bounds_radius(center: Vec3, vertices: &[PrimitiveVertex]) -> f32 {

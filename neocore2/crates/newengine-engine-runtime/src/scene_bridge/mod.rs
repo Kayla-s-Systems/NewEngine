@@ -10,9 +10,14 @@ mod helpers;
 mod imported_assets;
 mod material_application;
 mod queue;
+mod scene_object_validation;
 mod view_gateway;
 
 pub use commands::SceneCommand;
+pub(crate) use scene_object_validation::{
+    scene_object_invariant_snapshot_json, validate_scene_object_invariants,
+};
+
 pub use definitions_runtime::{
     DefinitionInstance, DefinitionInstantiateTransform, DefinitionRuntimeTrace,
     DefinitionRuntimeTraceComponent, RuntimeCommand,
@@ -51,8 +56,10 @@ use crate::scene_bootstrap::bootstrap_runtime_scene;
 
 use game_ready::bootstrap_fps_game_ready_scene;
 pub(crate) use game_ready::{
-    tick_game_ready_sky_cycle, tick_game_ready_streaming_terrain, PreparedTerrainPrimitiveMesh,
-    SkyClearColorRuntime, SkyDomeRuntime, TerrainSurfaceLayers,
+    tick_game_ready_sky_cycle, tick_game_ready_static_world_prefabs,
+    tick_game_ready_streaming_terrain, GameReadyStaticWorldResidency, PreparedTerrainPrimitiveMesh,
+    SkyClearColorRuntime, SkyDomeRuntime, SkyPostFxRuntime, SpatialCloudShadowRuntime,
+    TerrainSurfaceLayers,
 };
 use helpers::{
     apply_primitive_instance, effective_material_base, ensure_primitive_base, ensure_root,
@@ -117,6 +124,11 @@ impl SceneBridge {
     #[inline]
     pub fn materials(&self) -> Arc<RwLock<MaterialRegistry>> {
         Arc::clone(&self.materials)
+    }
+
+    pub fn scene_object_invariants_snapshot_json(&self) -> serde_json::Value {
+        let scene = self.scene.read();
+        scene_object_invariant_snapshot_json(scene.world())
     }
 
     pub fn bootstrap_profile_scene_now(&self) -> Option<EntityId> {

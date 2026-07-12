@@ -134,58 +134,24 @@ fn put_f32(out: &mut Vec<u8>, v: f32) {
     out.extend_from_slice(&v.to_le_bytes());
 }
 
-struct BinReader<'a> {
-    bytes: &'a [u8],
-    cursor: usize,
-}
+struct BinReader<'a>(newengine_ui_draw::binary_codec::ReadCursor<'a>);
 
 impl<'a> BinReader<'a> {
     #[inline]
     fn new(bytes: &'a [u8]) -> Self {
-        Self { bytes, cursor: 0 }
-    }
-    #[inline]
-    fn is_eof(&self) -> bool {
-        self.cursor == self.bytes.len()
-    }
-
-    fn take(&mut self, len: usize) -> Result<&'a [u8], String> {
-        let end = self.cursor.saturating_add(len);
-        if end > self.bytes.len() {
-            return Err("ui frame binary packet ended early".to_owned());
-        }
-        let out = &self.bytes[self.cursor..end];
-        self.cursor = end;
-        Ok(out)
-    }
-
-    #[inline]
-    fn u32(&mut self) -> Result<u32, String> {
-        let b = self.take(4)?;
-        Ok(u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
-    }
-
-    #[inline]
-    fn u64(&mut self) -> Result<u64, String> {
-        let b = self.take(8)?;
-        Ok(u64::from_le_bytes([
-            b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7],
-        ]))
-    }
-
-    #[inline]
-    fn f32(&mut self) -> Result<f32, String> {
-        let b = self.take(4)?;
-        Ok(f32::from_le_bytes([b[0], b[1], b[2], b[3]]))
-    }
-
-    fn bytes_vec(&mut self) -> Result<Vec<u8>, String> {
-        let len = self.u32()? as usize;
-        Ok(self.take(len)?.to_vec())
+        Self(newengine_ui_draw::binary_codec::ReadCursor::new(
+            bytes,
+            "ui frame binary packet",
+        ))
     }
 
     fn string_vec(&mut self) -> Result<Vec<String>, String> {
         let len = self.u32()? as usize;
+        if len > 16_384 {
+            return Err(format!(
+                "ui frame binary string vector exceeds limit length={len} limit=16384"
+            ));
+        }
         let mut out = Vec::with_capacity(len.min(64));
         for _ in 0..len {
             let bytes = self.bytes_vec()?;
@@ -197,6 +163,22 @@ impl<'a> BinReader<'a> {
             }
         }
         Ok(out)
+    }
+}
+
+impl<'a> core::ops::Deref for BinReader<'a> {
+    type Target = newengine_ui_draw::binary_codec::ReadCursor<'a>;
+
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl core::ops::DerefMut for BinReader<'_> {
+    #[inline]
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
     }
 }
 

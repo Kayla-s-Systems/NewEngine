@@ -14,6 +14,7 @@ newengine-asset-format-nef8 = { path = "../newengine-asset-format-nef8" }
 abi_stable = { version = "0.11" }
 blake3 = "1"
 crossbeam-channel = "0.5"
+flate2 = "1"
 libloading = "0.9"
 log = "0.4"
 parking_lot = "0.12"
@@ -52,6 +53,7 @@ newengine-platform-api = { path = "../newengine-platform-api" }
 newengine-plugin-api = { path = "../newengine-plugin-api" }
 newengine-plugin-host = { path = "../newengine-plugin-host" }
 newengine-replay = { path = "../newengine-replay" }
+newengine-render-api = { path = "../newengine-render-api" }
 newengine-primitives = { path = "../newengine-primitives" }
 newengine-procedural-noise = { path = "../newengine-procedural-noise" }
 newengine-runtime-host = { path = "../newengine-runtime-host" }

@@ -872,7 +872,7 @@
       "domain": "jobs",
       "capability_id": "jobs.backend",
       "owner_service": "jobs.api",
-      "engine_gateway": "engine.jobs",
+      "engine_gateway": "engine.threading",
       "contract": "jobs.api",
       "quality_tier": "production",
       "backend_priority": 0,

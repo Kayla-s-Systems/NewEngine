@@ -72,6 +72,11 @@ pub struct PackedLights {
     pub shadow_cascade_splits: [f32; MAX_DIRECTIONAL_SHADOW_CASCADES],
     pub shadow_params: [f32; 4],
     pub shadow_extra: [f32; 4],
+    pub cloud_shadow_map0: [f32; 4],
+    pub cloud_shadow_map1: [f32; 4],
+    pub cloud_shadow_map2: [f32; 4],
+    pub cloud_shadow_map3: [f32; 4],
+    pub cloud_shadow_map4: [f32; 4],
 }
 
 impl Default for PackedLights {
@@ -89,12 +94,17 @@ impl Default for PackedLights {
             shadow_cascade_splits: [0.0; MAX_DIRECTIONAL_SHADOW_CASCADES],
             shadow_params: [0.0; 4],
             shadow_extra: [0.0; 4],
+            cloud_shadow_map0: [0.0; 4],
+            cloud_shadow_map1: [0.0; 4],
+            cloud_shadow_map2: [0.0; 4],
+            cloud_shadow_map3: [0.0; 4],
+            cloud_shadow_map4: [0.0; 4],
         }
     }
 }
 
 impl PackedLights {
-    pub const UBO_SIZE: usize = 752;
+    pub const UBO_SIZE: usize = 832;
 
     #[inline]
     pub fn from_snapshot(snapshot: &LightSceneSnapshot) -> Self {
@@ -163,6 +173,23 @@ impl PackedLights {
     }
 
     #[inline]
+    pub fn with_cloud_shadow(
+        mut self,
+        map0: [f32; 4],
+        map1: [f32; 4],
+        map2: [f32; 4],
+        map3: [f32; 4],
+        map4: [f32; 4],
+    ) -> Self {
+        self.cloud_shadow_map0 = map0;
+        self.cloud_shadow_map1 = map1;
+        self.cloud_shadow_map2 = map2;
+        self.cloud_shadow_map3 = map3;
+        self.cloud_shadow_map4 = map4;
+        self
+    }
+
+    #[inline]
     pub fn with_shadow_frame(mut self, frame: ShadowFrame) -> Self {
         self.shadow_light_mvp = frame.light_mvp;
         self.shadow_cascade_light_mvp = frame.cascade_light_mvp;
@@ -191,5 +218,26 @@ impl PackedLights {
             write_vec4(bytes, &mut off, self.point_color_intensity[i]);
         }
         write_vec4(bytes, &mut off, self.point_count_pad);
+    }
+}
+
+#[cfg(test)]
+mod cloud_shadow_ubo_tests {
+    use super::*;
+
+    #[test]
+    fn packed_cloud_shadow_occupies_appended_std140_slots() {
+        let map0 = [0.11, 0.22, 0.33, 0.44];
+        let map1 = [0.005, 1800.0, 0.55, 0.66];
+        let map2 = [0.77, 0.28, 0.82, 1.0];
+        let map3 = [0.10, 0.20, 0.31, 0.43];
+        let map4 = [0.78, 0.035, 0.17, 96.0];
+        let packed = PackedLights::default().with_cloud_shadow(map0, map1, map2, map3, map4);
+        assert_eq!(PackedLights::UBO_SIZE, 832);
+        assert_eq!(packed.cloud_shadow_map0, map0);
+        assert_eq!(packed.cloud_shadow_map1, map1);
+        assert_eq!(packed.cloud_shadow_map2, map2);
+        assert_eq!(packed.cloud_shadow_map3, map3);
+        assert_eq!(packed.cloud_shadow_map4, map4);
     }
 }

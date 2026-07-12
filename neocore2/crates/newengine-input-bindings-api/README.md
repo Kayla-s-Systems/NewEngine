@@ -2,6 +2,17 @@
 
 Configuration/profile API for `engine.input.bindings`. This crate defines binding DTOs, manifests, profile canonicalization and service constants. It deliberately contains no GameReady FPS default action or binding set.
 
+## Internal architecture
+
+- `contracts.rs` — service constants and service-info contract.
+- `binding.rs` / `axis.rs` — binding and gamepad-axis DTOs.
+- `registration.rs` — key, binding and manifest registration DTOs.
+- `profile.rs` + `profile/` — profile model, canonicalization, mutation and query behavior.
+- `resolve.rs` — raw-frame matching and semantic action dispatch.
+- `labels.rs` — canonical display labels.
+
+The action-resolution hot path does not allocate a temporary action map or duplicate-action set per frame.
+
 <!-- NORTHSTAR-DIR-README:BEGIN -->
 
 ## Directory purpose

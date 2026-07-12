@@ -3,6 +3,8 @@
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
+use newengine_math::hash_combine_u64;
+
 use crate::noise::{sample_algorithm, FractalNoise2D, NoiseAlgorithm};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -467,29 +469,29 @@ impl NoiseGraph2D {
     pub fn revision_key(&self) -> u64 {
         let mut h = 0xcbf2_9ce4_8422_2325_u64;
         let domain = self.domain.sanitized();
-        h = mix_u64(h, domain.seed);
-        h = mix_u64(h, domain.frequency.to_bits() as u64);
-        h = mix_u64(h, domain.offset_x.to_bits() as u64);
-        h = mix_u64(h, domain.offset_z.to_bits() as u64);
+        h = hash_combine_u64(h, domain.seed);
+        h = hash_combine_u64(h, domain.frequency.to_bits() as u64);
+        h = hash_combine_u64(h, domain.offset_x.to_bits() as u64);
+        h = hash_combine_u64(h, domain.offset_z.to_bits() as u64);
         if let Some(warp) = domain.warp {
-            h = mix_u64(h, warp.seed_offset);
-            h = mix_u64(h, warp.frequency.to_bits() as u64);
-            h = mix_u64(h, warp.strength.to_bits() as u64);
-            h = mix_u64(h, warp.octaves as u64);
+            h = hash_combine_u64(h, warp.seed_offset);
+            h = hash_combine_u64(h, warp.frequency.to_bits() as u64);
+            h = hash_combine_u64(h, warp.strength.to_bits() as u64);
+            h = hash_combine_u64(h, warp.octaves as u64);
         }
-        h = mix_u64(h, self.remap.input_min.to_bits() as u64);
-        h = mix_u64(h, self.remap.input_max.to_bits() as u64);
-        h = mix_u64(h, self.remap.output_min.to_bits() as u64);
-        h = mix_u64(h, self.remap.output_max.to_bits() as u64);
-        h = mix_u64(h, self.remap.clamp as u64);
+        h = hash_combine_u64(h, self.remap.input_min.to_bits() as u64);
+        h = hash_combine_u64(h, self.remap.input_max.to_bits() as u64);
+        h = hash_combine_u64(h, self.remap.output_min.to_bits() as u64);
+        h = hash_combine_u64(h, self.remap.output_max.to_bits() as u64);
+        h = hash_combine_u64(h, self.remap.clamp as u64);
         for layer in &self.layers {
             let layer = layer.sanitized();
-            h = mix_u64(h, layer.algorithm as u64);
-            h = mix_u64(h, layer.combine as u64);
-            h = mix_u64(h, layer.seed_offset);
-            h = mix_u64(h, layer.frequency.to_bits() as u64);
-            h = mix_u64(h, layer.amplitude.to_bits() as u64);
-            h = mix_u64(h, layer.bias.to_bits() as u64);
+            h = hash_combine_u64(h, layer.algorithm as u64);
+            h = hash_combine_u64(h, layer.combine as u64);
+            h = hash_combine_u64(h, layer.seed_offset);
+            h = hash_combine_u64(h, layer.frequency.to_bits() as u64);
+            h = hash_combine_u64(h, layer.amplitude.to_bits() as u64);
+            h = hash_combine_u64(h, layer.bias.to_bits() as u64);
             h = hash_shape(h, layer.shape);
         }
         h
@@ -499,21 +501,21 @@ impl NoiseGraph2D {
 #[inline]
 fn hash_shape(mut h: u64, shape: NoiseShape) -> u64 {
     match shape.sanitized() {
-        NoiseShape::Identity => mix_u64(h, 0),
-        NoiseShape::Abs => mix_u64(h, 1),
-        NoiseShape::Invert => mix_u64(h, 2),
+        NoiseShape::Identity => hash_combine_u64(h, 0),
+        NoiseShape::Abs => hash_combine_u64(h, 1),
+        NoiseShape::Invert => hash_combine_u64(h, 2),
         NoiseShape::Power { exponent } => {
-            h = mix_u64(h, 3);
-            mix_u64(h, exponent.to_bits() as u64)
+            h = hash_combine_u64(h, 3);
+            hash_combine_u64(h, exponent.to_bits() as u64)
         }
         NoiseShape::SmoothStep { edge0, edge1 } => {
-            h = mix_u64(h, 4);
-            h = mix_u64(h, edge0.to_bits() as u64);
-            mix_u64(h, edge1.to_bits() as u64)
+            h = hash_combine_u64(h, 4);
+            h = hash_combine_u64(h, edge0.to_bits() as u64);
+            hash_combine_u64(h, edge1.to_bits() as u64)
         }
         NoiseShape::Threshold { threshold } => {
-            h = mix_u64(h, 5);
-            mix_u64(h, threshold.to_bits() as u64)
+            h = hash_combine_u64(h, 5);
+            hash_combine_u64(h, threshold.to_bits() as u64)
         }
     }
 }
@@ -571,15 +573,6 @@ fn finite_or(v: f32, fallback: f32) -> f32 {
     } else {
         fallback
     }
-}
-
-#[inline]
-fn mix_u64(mut h: u64, v: u64) -> u64 {
-    h ^= v
-        .wrapping_add(0x9e37_79b9_7f4a_7c15)
-        .wrapping_add(h << 6)
-        .wrapping_add(h >> 2);
-    h
 }
 
 #[cfg(test)]

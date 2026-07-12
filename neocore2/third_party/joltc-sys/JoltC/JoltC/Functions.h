@@ -162,6 +162,34 @@ typedef struct JPC_RayCastResult {
 typedef struct JPC_Body JPC_Body;
 
 ////////////////////////////////////////////////////////////////////////////////
+// ContactListener
+
+typedef struct JPC_ContactEvent {
+	JPC_BodyID Body1ID;
+	JPC_BodyID Body2ID;
+	uint64_t Body1UserData;
+	uint64_t Body2UserData;
+	JPC_SubShapeID SubShapeID1;
+	JPC_SubShapeID SubShapeID2;
+	JPC_RVec3 Point;
+	JPC_Vec3 Normal;
+	float PenetrationDepth;
+	float EstimatedImpulse;
+} JPC_ContactEvent;
+
+typedef void (*JPC_ContactEventCallback)(void *user_data, const JPC_ContactEvent *event);
+
+typedef struct JPC_ContactListenerFns {
+	JPC_ContactEventCallback OnContactAdded;
+	JPC_ContactEventCallback OnContactPersisted;
+} JPC_ContactListenerFns;
+
+typedef struct JPC_ContactListener JPC_ContactListener;
+
+JPC_API JPC_ContactListener* JPC_ContactListener_new(void *user_data, JPC_ContactListenerFns callbacks);
+JPC_API void JPC_ContactListener_delete(JPC_ContactListener *listener);
+
+////////////////////////////////////////////////////////////////////////////////
 // VertexList == Array<Float3> == std::vector<Float3>
 
 typedef struct JPC_VertexList JPC_VertexList;
@@ -846,6 +874,13 @@ JPC_API JPC_PhysicsUpdateError JPC_PhysicsSystem_Update(
 	JPC_JobSystemThreadPool *inJobSystem); // FIXME: un-specialize
 
 JPC_API JPC_BodyInterface* JPC_PhysicsSystem_GetBodyInterface(JPC_PhysicsSystem* self);
+JPC_API void JPC_PhysicsSystem_SetContactListener(JPC_PhysicsSystem *self, JPC_ContactListener *listener);
+JPC_API bool JPC_PhysicsSystem_GetBodySurfaceNormal(
+	const JPC_PhysicsSystem *self,
+	JPC_BodyID body_id,
+	JPC_SubShapeID sub_shape_id,
+	JPC_RVec3 position,
+	JPC_Vec3 *out_normal);
 
 JPC_API const JPC_NarrowPhaseQuery* JPC_PhysicsSystem_GetNarrowPhaseQuery(const JPC_PhysicsSystem* self);
 

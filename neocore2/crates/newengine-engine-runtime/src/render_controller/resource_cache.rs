@@ -21,6 +21,9 @@ use super::material_bindings::MaterialTextureGpuResidency;
 use super::state::MaterialTextureDecodeJob;
 pub use super::state::PerDrawUbo;
 
+const PER_DRAW_UBO_GC_INTERVAL_FRAMES: u64 = 120;
+const PER_DRAW_UBO_IDLE_FRAMES: u64 = 240;
+
 fn render_texture_format_from_runtime(format: RuntimeTextureFormat) -> TextureFormat {
     match format {
         RuntimeTextureFormat::Rgba8Unorm => TextureFormat::Rgba8Unorm,
@@ -126,6 +129,27 @@ impl RuntimeRenderController {
         let mip_levels = NonZeroU32::new(texture_asset.mips.len().max(1) as u32)
             .expect("runtime texture mip count is non-zero");
         let (payload, layout) = texture_asset.concatenated_payload_and_layout();
+        let payload_bytes = payload.len();
+        if payload_bytes > super::render_quality::MATERIAL_TEXTURE_MAX_UPLOAD_PAYLOAD_BYTES {
+            let message = format!(
+                "texture upload payload exceeds runtime safety limit bytes={} limit={} format={:?} extent={}x{}; use BC-compressed runtime assets",
+                payload_bytes,
+                super::render_quality::MATERIAL_TEXTURE_MAX_UPLOAD_PAYLOAD_BYTES,
+                texture_asset.format,
+                texture_asset.width,
+                texture_asset.height,
+            );
+            newengine_ulog_api::ulog::warn!(
+                "render controller: material texture rejected path='{}' err='{}'",
+                path,
+                message
+            );
+            self.gpu
+                .material
+                .textures
+                .insert(path, MaterialTextureGpuResidency::Failed { message });
+            return;
+        }
         let mip_data: Vec<TextureMipDataDesc> = layout
             .into_iter()
             .map(|mip| {
@@ -133,6 +157,7 @@ impl RuntimeRenderController {
             })
             .collect();
 
+        let upload_started = Instant::now();
         match r.create_texture(
             TextureDesc::new(
                 extent,
@@ -150,6 +175,18 @@ impl RuntimeRenderController {
                     texture,
                     self.frame.frame_index
                 );
+                let upload_elapsed_ms = upload_started.elapsed().as_secs_f32() * 1000.0;
+                if upload_elapsed_ms
+                    >= super::render_quality::MATERIAL_TEXTURE_DECODE_PUMP_BUDGET_MS
+                {
+                    newengine_ulog_api::ulog::warn!(
+                        "render controller: texture allocation exceeded frame budget path='{}' bytes={} elapsed_ms={:.2} budget_ms={:.2}",
+                        path,
+                        payload_bytes,
+                        upload_elapsed_ms,
+                        super::render_quality::MATERIAL_TEXTURE_DECODE_PUMP_BUDGET_MS,
+                    );
+                }
                 self.gpu.material.textures.insert(
                     path,
                     MaterialTextureGpuResidency::GpuLoading {
@@ -287,7 +324,10 @@ impl RuntimeRenderController {
         // Progress AssetManager's own background queue, then harvest any render-owned
         // CPU decode jobs that completed on worker threads. This function must stay
         // bounded: it may start/poll work, but must never synchronously decode a .ytd.
-        self.poll_material_texture_decode_jobs(r, max_decode_jobs);
+        self.poll_material_texture_decode_jobs(
+            r,
+            super::render_quality::MATERIAL_TEXTURE_MAX_UPLOADS_PER_FRAME,
+        );
 
         let loading_retry_paths = self
             .gpu
@@ -563,6 +603,45 @@ impl RuntimeRenderController {
 
     pub(super) fn gc_per_draw_ubos(&mut self, r: &mut dyn newengine_core::render::RenderApi) {
         self.collect_render_lifetime_events(r);
+
+        let frame = self.frame.frame_index;
+        if !frame.is_multiple_of(PER_DRAW_UBO_GC_INTERVAL_FRAMES) {
+            return;
+        }
+        let cutoff = frame.saturating_sub(PER_DRAW_UBO_IDLE_FRAMES);
+        let stale = self
+            .gpu
+            .material
+            .per_draw_ubo
+            .iter()
+            .filter_map(|(key, entry)| (entry.last_seen_frame < cutoff).then_some(*key))
+            .collect::<Vec<_>>();
+        if stale.is_empty() {
+            return;
+        }
+
+        let mut retired = 0usize;
+        for key in stale {
+            let Some(entry) = self.gpu.material.per_draw_ubo.remove(&key) else {
+                continue;
+            };
+            self.gpu
+                .lifetimes
+                .resources
+                .retire_bind_group_after_frame(entry.bg, frame);
+            self.gpu
+                .lifetimes
+                .resources
+                .retire_buffer_after_frame(entry.ubo, frame);
+            retired += 1;
+        }
+        newengine_ulog_api::ulog::debug!(
+            "render material cache: retired stale per-draw UBOs frame={} retired={} remaining={} idle_frames={}",
+            frame,
+            retired,
+            self.gpu.material.per_draw_ubo.len(),
+            PER_DRAW_UBO_IDLE_FRAMES,
+        );
     }
 
     pub(super) fn gc_deferred_rts(&mut self, r: &mut dyn newengine_core::render::RenderApi) {

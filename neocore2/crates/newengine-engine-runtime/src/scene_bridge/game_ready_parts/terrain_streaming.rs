@@ -1,5 +1,6 @@
 use super::terrain_heightmap::{load_terrain_heightmap, TerrainHeightmapRuntime};
 use super::*;
+use std::time::{Duration, Instant};
 
 // Terrain streaming owns chunk residency, procedural heightfield generation
 // and precomputed render mesh payloads. Material registration and sky
@@ -45,6 +46,7 @@ pub(super) struct PendingTerrainChunk {
 
 pub(crate) struct GameReadyTerrainStreamingState {
     root: EntityId,
+    anchor: EntityId,
     material: MaterialId,
     color: [f32; 4],
     spec: GameReadyTerrainSpec,
@@ -54,6 +56,8 @@ pub(crate) struct GameReadyTerrainStreamingState {
     unload_radius: i32,
     max_chunks_per_frame: usize,
     max_pending_jobs: usize,
+    stream_commit_count: u64,
+    last_stream_commit_at: Option<Instant>,
     loaded: std::collections::BTreeMap<TerrainChunkCoord, TerrainChunkRecord>,
     pending: std::collections::BTreeMap<TerrainChunkCoord, PendingTerrainChunk>,
 }
@@ -67,6 +71,48 @@ pub(super) fn terrain_surface_layers(spec: &GameReadyTerrainSpec) -> TerrainSurf
         patch_scale: spec.surface.patch_scale,
         blend_softness: spec.surface.blend_softness,
     }
+}
+
+#[inline]
+fn launch_blocking_warm_radius(target_radius: i32) -> i32 {
+    const DEFAULT_LAUNCH_WARM_RADIUS: i32 = 1;
+    let requested = std::env::var("NEWENGINE_SCENE_TERRAIN_LAUNCH_WARM_RADIUS")
+        .ok()
+        .and_then(|value| value.trim().parse::<i32>().ok())
+        .unwrap_or(DEFAULT_LAUNCH_WARM_RADIUS);
+    requested.clamp(0, target_radius.max(0))
+}
+
+#[inline]
+fn responsive_stream_commit_budget(
+    target_budget: usize,
+    state: &mut GameReadyTerrainStreamingState,
+) -> usize {
+    if target_budget == 0 {
+        return 0;
+    }
+
+    let burst = std::env::var("NEWENGINE_SCENE_TERRAIN_STREAM_BURST")
+        .ok()
+        .and_then(|value| value.trim().parse::<usize>().ok())
+        .unwrap_or(1)
+        .clamp(1, target_budget.max(1));
+    let interval_ms = std::env::var("NEWENGINE_SCENE_TERRAIN_STREAM_INTERVAL_MS")
+        .ok()
+        .and_then(|value| value.trim().parse::<u64>().ok())
+        .unwrap_or(140)
+        .clamp(16, 2_000);
+
+    let now = Instant::now();
+    if let Some(last) = state.last_stream_commit_at {
+        if now.duration_since(last) < Duration::from_millis(interval_ms) {
+            return 0;
+        }
+    }
+
+    state.last_stream_commit_at = Some(now);
+    state.stream_commit_count = state.stream_commit_count.saturating_add(1);
+    burst
 }
 
 pub(super) fn terrain_graph_for_chunk(
@@ -225,7 +271,9 @@ pub(super) fn spawn_generated_terrain_chunk(
             mesh: generated.mesh,
         },
     );
+    let terrain_half_extents = bounds.local_aabb.half_extents();
     let _ = world.insert(entity, bounds);
+    crate::gameplay::attach_scene_object_core(world, entity, center, terrain_half_extents);
     let _ = world.insert(entity, surface.clone());
     let _ = apply_exact_material(world, mats, entity, material, material, color);
 
@@ -342,6 +390,21 @@ pub(in crate::scene_bridge::game_ready) fn spawn_procedural_terrain(
 
     let surface = terrain_surface_layers(spec);
     let heightmap = load_terrain_heightmap(spec);
+    let streaming_anchor = spawn_named(world, "Scene/Terrain/StreamingAnchor");
+    let _ = set_parent(world, streaming_anchor, Some(root));
+    crate::gameplay::attach_scene_element_core(
+        world,
+        streaming_anchor,
+        crate::gameplay::SceneEntityRole::TerrainStreamingAnchor,
+        "Scene/Terrain/StreamingAnchor",
+        Vec3::ZERO,
+        Vec3::splat(1.0),
+    );
+    let _ = world.insert(
+        streaming_anchor,
+        crate::gameplay::SceneAnchorFollow::player(),
+    );
+
     let origin = initial_center;
     let record = spawn_streamed_terrain_chunk(
         world,
@@ -355,6 +418,12 @@ pub(in crate::scene_bridge::game_ready) fn spawn_procedural_terrain(
         heightmap.as_deref(),
     );
     let terrain_entity = record.terrain;
+    newengine_ulog_api::ulog::info!(
+        "game-ready terrain anchor: terrain_entity={:?} streaming_anchor={:?} parent={:?} policy='terrain streaming target is an ordinary ECS entity anchor'",
+        terrain_entity,
+        streaming_anchor,
+        root
+    );
 
     if spec.streaming.enabled {
         let budget = SceneStreamingBudget {
@@ -365,6 +434,7 @@ pub(in crate::scene_bridge::game_ready) fn spawn_procedural_terrain(
         .sanitized();
         let mut state = GameReadyTerrainStreamingState {
             root,
+            anchor: streaming_anchor,
             material,
             color,
             spec: spec.clone(),
@@ -374,18 +444,21 @@ pub(in crate::scene_bridge::game_ready) fn spawn_procedural_terrain(
             unload_radius: budget.unload_radius,
             max_chunks_per_frame: budget.max_commits_per_tick,
             max_pending_jobs: budget.max_commits_per_tick.saturating_mul(4).max(4),
+            stream_commit_count: 0,
+            last_stream_commit_at: None,
             loaded: std::collections::BTreeMap::new(),
             pending: std::collections::BTreeMap::new(),
         };
         state.loaded.insert(origin, record);
 
-        // The initial resident ring must be present before the public launch gate
-        // opens. Otherwise the first playable frames stream the remaining chunks
-        // one by one, and each cold terrain GPU upload lands on the render
-        // extraction path. In the current GameReady profile that produced visible
-        // ~250-300 ms frame gaps while Vulkan submit itself stayed mostly idle.
+        // Keep the native window responsive during first world handoff. The full
+        // streaming target radius remains active, but only a small launch ring is
+        // generated synchronously before the public launch gate opens. Remaining
+        // chunks are admitted by tick_game_ready_streaming_terrain() through the
+        // normal frame-budgeted streaming path.
+        let launch_warm_radius = launch_blocking_warm_radius(state.chunk_radius);
         let mut warmed = 1usize;
-        for coord in SceneResidencySet::desired_cells(origin, state.chunk_radius) {
+        for coord in SceneResidencySet::desired_cells(origin, launch_warm_radius) {
             if state.loaded.contains_key(&coord) {
                 continue;
             }
@@ -403,13 +476,16 @@ pub(in crate::scene_bridge::game_ready) fn spawn_procedural_terrain(
             state.loaded.insert(coord, record);
             warmed = warmed.saturating_add(1);
         }
-        if warmed > 1 {
+        if warmed > 1 || launch_warm_radius != state.chunk_radius {
+            let target_chunks = SceneResidencySet::desired_cells(origin, state.chunk_radius).len();
             newengine_ulog_api::ulog::info!(
-                "game-ready terrain streaming: initial resident chunks warmed center=[{},{}] radius={} chunks={}",
+                "game-ready terrain streaming: initial resident chunks warmed center=[{},{}] launch_radius={} target_radius={} chunks={} target_chunks={} policy='responsive startup; remaining chunks stream after launch'",
                 origin.x,
                 origin.z,
+                launch_warm_radius,
                 state.chunk_radius,
-                warmed
+                warmed,
+                target_chunks
             );
         }
 
@@ -431,13 +507,31 @@ pub(crate) fn tick_game_ready_streaming_terrain(
         .get::<Transform>(player)
         .map(|t| t.position)
         .unwrap_or(Vec3::ZERO);
+    let role_anchor = crate::gameplay::scene_entity_by_role(
+        world,
+        crate::gameplay::SceneEntityRole::TerrainStreamingAnchor,
+    );
 
     let Some(mut state) = world.remove_resource::<GameReadyTerrainStreamingState>() else {
         return;
     };
+    state.anchor = role_anchor.unwrap_or(state.anchor);
+    let follow_player = world
+        .get::<crate::gameplay::SceneAnchorFollow>(state.anchor)
+        .map(|follow| follow.enabled)
+        .unwrap_or(false);
+    if follow_player {
+        if let Some(t) = world.get_mut_tracked::<Transform>(state.anchor) {
+            t.position = player_pos;
+        }
+    }
+    let anchor_pos = world
+        .get::<Transform>(state.anchor)
+        .map(|t| t.position)
+        .unwrap_or(player_pos);
 
     let center =
-        TerrainChunkCoord::from_world_pos(player_pos, state.spec.size_x, state.spec.size_z);
+        TerrainChunkCoord::from_world_pos(anchor_pos, state.spec.size_x, state.spec.size_z);
     let budget = SceneStreamingBudget {
         resident_radius: state.chunk_radius,
         unload_radius: state.unload_radius,
@@ -476,9 +570,17 @@ pub(crate) fn tick_game_ready_streaming_terrain(
         layered_plan.simulation.desired.iter().copied(),
     );
 
-    let commit_budget = budget.max_commits_per_tick.max(1);
-    let mut created = 0usize;
-    let completed = state
+    let loaded_coords = state
+        .loaded
+        .keys()
+        .copied()
+        .collect::<std::collections::BTreeSet<_>>();
+    let pending_coords = state
+        .pending
+        .keys()
+        .copied()
+        .collect::<std::collections::BTreeSet<_>>();
+    let completed_ready = state
         .pending
         .keys()
         .copied()
@@ -489,9 +591,23 @@ pub(crate) fn tick_game_ready_streaming_terrain(
                 .map(|pending| pending.ticket.is_complete())
                 .unwrap_or(false)
         })
-        .take(commit_budget)
         .collect::<Vec<_>>();
-    for coord in completed {
+    let stream_requests_ready = bucket_plan
+        .cells
+        .iter()
+        .filter(|cell| cell.bucket.wants_render_residency())
+        .map(|cell| cell.coord)
+        .filter(|coord| !loaded_coords.contains(coord) && !pending_coords.contains(coord))
+        .collect::<Vec<_>>();
+
+    let target_commit_budget = budget.max_commits_per_tick.max(1);
+    let commit_budget = if completed_ready.is_empty() && stream_requests_ready.is_empty() {
+        0
+    } else {
+        responsive_stream_commit_budget(target_commit_budget, &mut state)
+    };
+    let mut created = 0usize;
+    for coord in completed_ready.into_iter().take(commit_budget) {
         let Some(pending) = state.pending.remove(&coord) else {
             continue;
         };
@@ -514,22 +630,8 @@ pub(crate) fn tick_game_ready_streaming_terrain(
     }
 
     let remaining_commit_budget = commit_budget.saturating_sub(created);
-    let loaded_coords = state
-        .loaded
-        .keys()
-        .copied()
-        .collect::<std::collections::BTreeSet<_>>();
-    let pending_coords = state
-        .pending
-        .keys()
-        .copied()
-        .collect::<std::collections::BTreeSet<_>>();
-    let stream_requests = bucket_plan
-        .cells
-        .iter()
-        .filter(|cell| cell.bucket.wants_render_residency())
-        .map(|cell| cell.coord)
-        .filter(|coord| !loaded_coords.contains(coord) && !pending_coords.contains(coord))
+    let stream_requests = stream_requests_ready
+        .into_iter()
         .take(remaining_commit_budget)
         .collect::<Vec<_>>();
 
@@ -575,20 +677,40 @@ pub(crate) fn tick_game_ready_streaming_terrain(
         state.pending.remove(&coord);
     }
 
-    if created > 0 || scheduled > 0 || removed > 0 {
+    let streaming_changed = created > 0 || scheduled > 0 || removed > 0;
+    let render_desired = bucket_plan
+        .cells
+        .iter()
+        .filter(|cell| cell.bucket.wants_render_residency())
+        .count();
+    let simulation_desired = bucket_plan
+        .cells
+        .iter()
+        .filter(|cell| cell.bucket.wants_simulation_residency())
+        .count();
+    let reached_render_target = state.loaded.len() >= render_desired && state.pending.is_empty();
+    let diagnostics_due =
+        removed > 0 || state.stream_commit_count.is_multiple_of(16) || reached_render_target;
+
+    if streaming_changed && diagnostics_due {
         newengine_ulog_api::ulog::debug!(
-            "game-ready terrain streaming: center=[{},{}] render_loaded={} render_pending={} created={} scheduled={} removed={} render_loads={} render_unloads={} sim_desired={}",
+            "game-ready terrain streaming: center=[{},{}] anchor={:?} follow_player={} render_loaded={} render_pending={} created={} scheduled={} removed={} commit_budget={} commit_count={} render_desired={} render_unloads={} sim_desired={}",
             center.x,
             center.z,
+            state.anchor,
+            follow_player,
             state.loaded.len(),
             state.pending.len(),
             created,
             scheduled,
             removed,
-            bucket_plan.cells.iter().filter(|cell| cell.bucket.wants_render_residency()).count(),
+            commit_budget,
+            state.stream_commit_count,
+            render_desired,
             plan.unloads.len(),
-            bucket_plan.cells.iter().filter(|cell| cell.bucket.wants_simulation_residency()).count(),
+            simulation_desired,
         );
+        let _ = validate_scene_object_invariants(world, "game-ready.streaming-terrain");
     }
 
     world.insert_resource(state);

@@ -1,3 +1,4 @@
+use super::super::plugin_discovery::PluginDiscoveryScanTask;
 use super::super::{Engine, PluginFaultTolerance};
 
 use crate::error::{EngineError, EngineResult};
@@ -5,6 +6,7 @@ use crate::lifecycle_events::EngineLifecycleEvent;
 use crate::plugin_forward_logger::install_forward_logger_once;
 use newengine_plugin_host::default_host_api;
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
 fn bootstrap_preload_deferred() -> bool {
@@ -19,13 +21,34 @@ fn bootstrap_preload_deferred() -> bool {
         .unwrap_or(false)
 }
 
+static STARTUP_LOGS_EMITTED_AFTER_LOGGER_READY: AtomicBool = AtomicBool::new(false);
 
 fn emit_startup_logs_after_logger_ready() {
+    if STARTUP_LOGS_EMITTED_AFTER_LOGGER_READY.swap(true, Ordering::AcqRel) {
+        return;
+    }
+
     let rid = crate::run_id::run_id().unwrap_or("<unknown>");
     newengine_ulog_api::ulog::info!("startup: Run ID: {}", rid);
     crate::startup::SystemProbe::probe().emit_table("startup");
     if let Some(r) = crate::startup::last_load_report() {
         r.emit_logs();
+    }
+}
+
+fn plugin_discovery_pending_outcome(
+    loaded_total: usize,
+    current_path: Option<std::path::PathBuf>,
+) -> newengine_plugin_host::IncrementalLoadOutcome {
+    newengine_plugin_host::IncrementalLoadOutcome {
+        finished: false,
+        loaded_total,
+        loaded_this_phase: 0,
+        pending_total: 1,
+        completed: 0,
+        load_errors: 0,
+        progress_01: 0.02,
+        current_path,
     }
 }
 
@@ -141,17 +164,64 @@ impl<E: Send + 'static> Engine<E> {
 
         let strict = matches!(self.plugin_fault_tolerance, PluginFaultTolerance::Strict);
         let host = default_host_api();
+        let discovery_dir =
+            newengine_plugin_host::resolve_plugin_discovery_dir(self.plugins_dir.as_deref())
+                .map_err(|e| {
+                    EngineError::Other(format!("plugins: discovery dir resolve failed: {e}"))
+                })?;
 
-        let outcome = match self.plugins_dir.as_deref() {
-            Some(dir) => {
-                self.plugins
-                    .load_engine_from_dir_incremental_step(dir, host.clone(), strict)
+        if !self.plugins.has_incremental_load_state()
+            && !self.plugins.has_discovery_cache_for_dir(&discovery_dir)
+        {
+            if self.plugin_discovery_scan.is_none() {
+                newengine_ulog_api::ulog::info!(
+                    "plugins: discovery scan submitted via engine.threading dir='{}'",
+                    discovery_dir.display()
+                );
+                self.plugin_discovery_scan = Some(PluginDiscoveryScanTask::submit(
+                    self.thread_pool(),
+                    discovery_dir.clone(),
+                ));
+                return Ok(plugin_discovery_pending_outcome(
+                    self.plugins.snapshot().len(),
+                    Some(discovery_dir),
+                ));
             }
-            None => self
-                .plugins
-                .load_engine_default_incremental_step(host.clone(), strict),
+
+            if let Some(task) = self.plugin_discovery_scan.as_ref() {
+                if let Some(result) = task.take_result() {
+                    let task_dir = task.dir().clone();
+                    self.plugin_discovery_scan = None;
+                    match result {
+                        Ok(graph) => {
+                            newengine_ulog_api::ulog::info!(
+                                "plugins: discovery scan committed on main thread dir='{}'",
+                                task_dir.display()
+                            );
+                            self.plugins
+                                .begin_engine_incremental_load_from_discovery_graph(graph, strict);
+                        }
+                        Err(e) => {
+                            return Err(EngineError::Other(format!(
+                                "plugins: async discovery scan failed: {e}"
+                            )));
+                        }
+                    }
+                } else {
+                    return Ok(plugin_discovery_pending_outcome(
+                        self.plugins.snapshot().len(),
+                        Some(task.dir().clone()),
+                    ));
+                }
+            }
         }
-        .map_err(|e| EngineError::Other(format!("plugins: incremental engine load failed: {e}")))?;
+
+        let outcome = self
+            .plugins
+            .load_engine_from_dir_incremental_step(&discovery_dir, host.clone(), strict)
+            .map_err(|e| {
+                EngineError::Other(format!("plugins: incremental engine load failed: {e}"))
+            })?;
 
         install_forward_logger_once(host);
         if bootstrap_preload_deferred() {
@@ -179,7 +249,6 @@ impl<E: Send + 'static> Engine<E> {
 
         Ok(outcome)
     }
-
 
     /// Loads plugins once (idempotent).
     ///

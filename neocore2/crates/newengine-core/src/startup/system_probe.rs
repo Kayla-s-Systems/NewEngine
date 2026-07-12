@@ -116,7 +116,6 @@ impl SystemProbe {
         out
     }
 
-
     #[inline]
     pub fn gpu_count(&self) -> usize {
         self.gpu_inventory.adapter_count()
@@ -162,8 +161,6 @@ impl SystemProbe {
     fn apply_gpu_inventory(&mut self, inventory: GpuInventory) {
         self.gpu_inventory = inventory;
     }
-
-
 }
 
 #[cfg(feature = "host-probe")]
@@ -430,7 +427,6 @@ fn select_primary_adapter_index(adapters: &[GpuAdapterInfo]) -> Option<usize> {
 
     best_index
 }
-
 
 fn probe_fake_gpu_inventory_from_env() -> Option<GpuInventory> {
     let raw = std::env::var("NEWENGINE_GPU_PROBE_FAKE").ok()?;

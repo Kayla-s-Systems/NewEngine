@@ -14,7 +14,8 @@ use super::super::material_bindings::{LitMaterialPlan, MaterialTextureGpuResiden
 use super::RuntimeRenderController;
 
 const SCENE_TEXTURE_GATE_SOFT_TIMEOUT_FRAMES: u64 = 1_800;
-const SCENE_TEXTURE_LAUNCH_MIN_RATIO_DEFAULT: f32 = 0.85;
+const SCENE_TEXTURE_GATE_SOFT_TIMEOUT_MS: u64 = 90_000;
+const SCENE_TEXTURE_LAUNCH_MIN_RATIO_DEFAULT: f32 = 1.00;
 
 /// Updates the standalone game launch gate and returns whether the playable world
 /// may be simulated or possessed this frame.
@@ -40,66 +41,89 @@ pub(super) fn update_game_ready_launch_gate(
         return true;
     }
 
+    let now_ms = wall_clock_millis();
     let readiness = critical_scene_residency_ready(this, r, world);
-    if readiness.ready {
-        let (waited_frames, reason) = {
-            let Some(gate) = world.resource_mut::<GameReadyWorldLaunchGate>() else {
-                return true;
-            };
+    let mut release: Option<(bool, u64, u64, String)> = None;
+
+    if let Some(gate) = world.resource_mut::<GameReadyWorldLaunchGate>() {
+        let first_wait = gate.requested_frame == u64::MAX;
+        if first_wait {
+            gate.requested_frame = frame_index;
+        } else {
             gate.requested_frame = gate.requested_frame.min(frame_index);
-            gate.update_texture_counts(readiness.waiting, readiness.total, readiness.failed);
+        }
+        if gate.requested_at_ms == 0 {
+            gate.requested_at_ms = now_ms;
+        }
+        gate.update_texture_counts(readiness.waiting, readiness.total, readiness.failed);
+
+        let waited_frames = frame_index.saturating_sub(gate.requested_frame);
+        let waited_ms = now_ms.saturating_sub(gate.requested_at_ms);
+        let soft_timeout = waited_frames >= scene_texture_gate_soft_timeout_frames()
+            || waited_ms >= scene_texture_gate_soft_timeout_ms();
+
+        if readiness.ready {
             gate.release(frame_index, readiness.reason);
-            (
-                frame_index.saturating_sub(gate.requested_frame),
-                gate.reason.clone(),
-            )
-        };
-        newengine_ulog_api::ulog::info!(
-            "game-ready launch gate: released frame={} waited_frames={} reason='{}'",
-            frame_index,
-            waited_frames,
-            reason
-        );
-        true
-    } else {
-        if let Some(gate) = world.resource_mut::<GameReadyWorldLaunchGate>() {
-            let first_wait = gate.requested_frame == u64::MAX;
-            gate.requested_frame = gate.requested_frame.min(frame_index);
-            gate.update_texture_counts(readiness.waiting, readiness.total, readiness.failed);
-            let waited_frames = frame_index.saturating_sub(gate.requested_frame);
-
-            if waited_frames >= scene_texture_gate_soft_timeout_frames()
-                && frame_index.is_multiple_of(120)
-            {
-                newengine_ulog_api::ulog::warn!(
-                    "game-ready launch gate: still waiting for visual completeness frame={} waited_frames={} reason='{}'",
-                    frame_index,
-                    waited_frames,
-                    readiness.reason
-                );
-            }
-
+            release = Some((false, waited_frames, waited_ms, gate.reason.clone()));
+        } else if soft_timeout {
+            let fallback_reason = format!(
+                "soft timeout released with renderer fallbacks waited_ms={waited_ms} waited_frames={waited_frames} waiting={} total={} failed={} last='{}'",
+                readiness.waiting, readiness.total, readiness.failed, readiness.reason
+            );
+            gate.release(frame_index, fallback_reason);
+            release = Some((true, waited_frames, waited_ms, gate.reason.clone()));
+        } else {
             gate.reason = readiness.reason;
             let early_wait_frame = waited_frames <= 8;
             if first_wait || frame_index.is_multiple_of(60) {
                 newengine_ulog_api::ulog::info!(
-                    "game-ready launch gate: blocked frame={} reason='{}'",
+                    "game-ready launch gate: blocked frame={} waited_ms={} reason='{}'",
                     frame_index,
+                    waited_ms,
                     gate.reason
                 );
             } else if early_wait_frame {
                 newengine_ulog_api::ulog::debug!(
-                    "game-ready launch gate: blocked frame={} reason='{}'",
+                    "game-ready launch gate: blocked frame={} waited_ms={} reason='{}'",
                     frame_index,
+                    waited_ms,
                     gate.reason
                 );
             }
         }
-        if let Some(player) = first_player(world) {
-            clear_player_input(world, player);
-        }
-        false
+    } else {
+        return true;
     }
+
+    if let Some((fallback, waited_frames, waited_ms, reason)) = release {
+        if fallback {
+            newengine_ulog_api::ulog::warn!(
+                "game-ready launch gate: soft-timeout release frame={} waited_frames={} waited_ms={} reason='{}'",
+                frame_index,
+                waited_frames,
+                waited_ms,
+                reason
+            );
+            newengine_core::crash::record_breadcrumb(format!(
+                "game-ready launch gate: fallback release frame={} waited_ms={} reason='{}'",
+                frame_index, waited_ms, reason
+            ));
+        } else {
+            newengine_ulog_api::ulog::info!(
+                "game-ready launch gate: released frame={} waited_frames={} waited_ms={} reason='{}'",
+                frame_index,
+                waited_frames,
+                waited_ms,
+                reason
+            );
+        }
+        return true;
+    }
+
+    if let Some(player) = first_player(world) {
+        clear_player_input(world, player);
+    }
+    false
 }
 
 #[derive(Clone, Debug)]
@@ -116,21 +140,114 @@ fn critical_scene_residency_ready(
     r: &mut dyn RenderApi,
     world: &newengine_ecs::World,
 ) -> LaunchReadiness {
+    let static_world = critical_static_world_ready(world);
+    let primitive_gpu = critical_primitive_gpu_ready(this, world);
     let materials = critical_scene_materials_ready(this, r, world);
     let terrain = critical_terrain_gpu_ready(this, world);
 
+    let reason = if !static_world.ready {
+        static_world.reason.clone()
+    } else if !primitive_gpu.ready {
+        primitive_gpu.reason.clone()
+    } else if !materials.ready {
+        materials.reason.clone()
+    } else if !terrain.ready {
+        terrain.reason.clone()
+    } else {
+        format!(
+            "{} · {} · {} · {}",
+            static_world.reason, primitive_gpu.reason, materials.reason, terrain.reason
+        )
+    };
     LaunchReadiness {
-        ready: materials.ready && terrain.ready,
-        reason: if materials.ready == terrain.ready {
-            format!("{} · {}", materials.reason, terrain.reason)
-        } else if !materials.ready {
-            materials.reason
+        ready: static_world.ready && primitive_gpu.ready && materials.ready && terrain.ready,
+        reason,
+        waiting: static_world
+            .waiting
+            .saturating_add(primitive_gpu.waiting)
+            .saturating_add(materials.waiting)
+            .saturating_add(terrain.waiting),
+        total: static_world
+            .total
+            .saturating_add(primitive_gpu.total)
+            .saturating_add(materials.total)
+            .saturating_add(terrain.total),
+        failed: static_world
+            .failed
+            .saturating_add(primitive_gpu.failed)
+            .saturating_add(materials.failed)
+            .saturating_add(terrain.failed),
+    }
+}
+
+fn critical_primitive_gpu_ready(
+    this: &RuntimeRenderController,
+    world: &newengine_ecs::World,
+) -> LaunchReadiness {
+    let mut unique = std::collections::BTreeSet::new();
+    for (_entity, primitive) in world.query::<newengine_primitives::Primitive>() {
+        unique.insert(primitive.id);
+    }
+    let total = unique.len() as u32;
+    if total == 0 {
+        return LaunchReadiness {
+            ready: true,
+            reason: "no primitive gpu meshes declared".to_owned(),
+            waiting: 0,
+            total: 0,
+            failed: 0,
+        };
+    }
+    let resident = unique
+        .iter()
+        .filter(|id| this.gpu.meshes.prim_cache.contains_key(*id))
+        .count() as u32;
+    let waiting = total.saturating_sub(resident);
+    LaunchReadiness {
+        ready: waiting == 0,
+        reason: if waiting == 0 {
+            format!("primitive gpu meshes resident ready={resident}/{total}")
         } else {
-            terrain.reason
+            format!("waiting for bounded primitive gpu residency ready={resident}/{total} waiting={waiting}")
         },
-        waiting: materials.waiting.saturating_add(terrain.waiting),
-        total: materials.total.saturating_add(terrain.total),
-        failed: materials.failed.saturating_add(terrain.failed),
+        waiting,
+        total,
+        failed: 0,
+    }
+}
+
+fn critical_static_world_ready(world: &newengine_ecs::World) -> LaunchReadiness {
+    let Some(residency) = world.resource::<crate::scene_bridge::GameReadyStaticWorldResidency>()
+    else {
+        return LaunchReadiness {
+            ready: true,
+            reason: "no incremental static world declared".to_owned(),
+            waiting: 0,
+            total: 0,
+            failed: 0,
+        };
+    };
+    LaunchReadiness {
+        ready: residency.is_ready(),
+        reason: if residency.is_ready() {
+            format!(
+                "static world assembled completed={}/{} failed={}",
+                residency.completed(),
+                residency.total(),
+                residency.failed(),
+            )
+        } else {
+            format!(
+                "waiting for incremental static world completed={}/{} pending={} failed={}",
+                residency.completed(),
+                residency.total(),
+                residency.pending(),
+                residency.failed(),
+            )
+        },
+        waiting: residency.pending(),
+        total: residency.total(),
+        failed: residency.failed(),
     }
 }
 
@@ -214,10 +331,16 @@ fn critical_scene_materials_ready(
     let mats_lock = this.bridges.scene.materials();
     let mats = mats_lock.read();
     let mut unique_paths = FxHashSet::<String>::default();
+    let mut alpha_critical_paths = FxHashSet::<String>::default();
 
     for (_entity, material_ref) in world.query::<newengine_materials::MaterialRef>() {
         let resolved = mats.resolve(material_ref.id);
         let plan = LitMaterialPlan::from_resolved(resolved.as_ref(), [1.0, 1.0, 1.0, 1.0]);
+        if plan.alpha_cutoff > 0.0 {
+            if let Some(path) = plan.base_color_texture {
+                alpha_critical_paths.insert(path.to_owned());
+            }
+        }
         for path in [
             plan.base_color_texture,
             plan.normal_texture,
@@ -240,6 +363,8 @@ fn critical_scene_materials_ready(
     let mut waiting = 0_u32;
     let mut failed = 0_u32;
     let mut optional = 0_u32;
+    let mut alpha_waiting = 0_u32;
+    let mut alpha_failed = 0_u32;
     for path in unique_paths.iter() {
         this.request_material_texture(path);
         if is_launch_gate_optional_texture(path) {
@@ -247,10 +372,21 @@ fn critical_scene_materials_ready(
             continue;
         }
         total = total.saturating_add(1);
+        let alpha_critical = alpha_critical_paths.contains(path);
         match material_texture_ready_state(this, r, path) {
             TextureReadyState::Ready => {}
-            TextureReadyState::Failed => failed = failed.saturating_add(1),
-            TextureReadyState::Waiting => waiting = waiting.saturating_add(1),
+            TextureReadyState::Failed => {
+                failed = failed.saturating_add(1);
+                if alpha_critical {
+                    alpha_failed = alpha_failed.saturating_add(1);
+                }
+            }
+            TextureReadyState::Waiting => {
+                waiting = waiting.saturating_add(1);
+                if alpha_critical {
+                    alpha_waiting = alpha_waiting.saturating_add(1);
+                }
+            }
         }
     }
 
@@ -279,7 +415,21 @@ fn critical_scene_materials_ready(
     let visual_floor = scene_texture_launch_visual_floor(total);
     let min_ready = configured_min_ready.max(visual_floor).min(total);
 
-    if waiting == 0 {
+    if alpha_waiting > 0 || alpha_failed > 0 {
+        LaunchReadiness {
+            ready: false,
+            reason: format!(
+                "waiting for alpha-critical texture residency ready={}/{} waiting={} failed={} policy='Masked base textures never use opaque fallback'",
+                alpha_critical_paths.len() as u32 - alpha_waiting - alpha_failed,
+                alpha_critical_paths.len(),
+                alpha_waiting,
+                alpha_failed,
+            ),
+            waiting,
+            total,
+            failed,
+        }
+    } else if waiting == 0 {
         let suffix = if failed == 0 {
             format!("scene material textures ready total={total}")
         } else {
@@ -296,7 +446,7 @@ fn critical_scene_materials_ready(
         LaunchReadiness {
             ready: true,
             reason: format!(
-                "scene material textures partially resident ready={ready_count}/{total} waiting={waiting} failed={failed} min_ready={min_ready} policy='NEWENGINE_SCENE_TEXTURE_LAUNCH_MIN_READY'"
+                "scene material textures partially resident ready={ready_count}/{total} waiting={waiting} failed={failed} min_ready={min_ready} policy='NEWENGINE_SCENE_TEXTURE_LAUNCH_MIN_READY/NEWENGINE_SCENE_TEXTURE_LAUNCH_MIN_RATIO'"
             ),
             waiting,
             total,
@@ -336,9 +486,26 @@ fn scene_texture_gate_soft_timeout_frames() -> u64 {
     crate::env_config::var_u64(
         "NEWENGINE_SCENE_TEXTURE_GATE_SOFT_TIMEOUT_FRAMES",
         SCENE_TEXTURE_GATE_SOFT_TIMEOUT_FRAMES,
-        300,
+        60,
         18_000,
     )
+}
+
+fn scene_texture_gate_soft_timeout_ms() -> u64 {
+    crate::env_config::var_u64(
+        "NEWENGINE_SCENE_TEXTURE_GATE_SOFT_TIMEOUT_MS",
+        SCENE_TEXTURE_GATE_SOFT_TIMEOUT_MS,
+        5_000,
+        600_000,
+    )
+}
+
+#[inline]
+fn wall_clock_millis() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_millis().min(u64::MAX as u128) as u64)
+        .unwrap_or(0)
 }
 
 fn scene_texture_launch_visual_floor(total: u32) -> u32 {

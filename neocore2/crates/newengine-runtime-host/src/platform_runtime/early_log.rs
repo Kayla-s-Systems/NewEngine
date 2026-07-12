@@ -77,51 +77,12 @@ fn candidate_paths() -> Vec<PathBuf> {
     }
 
     paths.push(
-        find_neocore2_root()
+        crate::path_resolver::find_neocore2_root()
             .join("cache")
             .join("logs")
             .join("current.ulog.ndjson"),
     );
     dedup_paths(paths)
-}
-
-fn find_neocore2_root() -> PathBuf {
-    if let Ok(cwd) = std::env::current_dir() {
-        if cwd
-            .file_name()
-            .and_then(|s| s.to_str())
-            .is_some_and(|s| s.eq_ignore_ascii_case("neocore2"))
-        {
-            return cwd;
-        }
-        let nested = cwd.join("NewEngine").join("neocore2");
-        if nested.exists() {
-            return nested;
-        }
-        for ancestor in cwd.ancestors() {
-            if ancestor
-                .file_name()
-                .and_then(|s| s.to_str())
-                .is_some_and(|s| s.eq_ignore_ascii_case("neocore2"))
-            {
-                return ancestor.to_path_buf();
-            }
-        }
-    }
-
-    if let Ok(exe) = std::env::current_exe() {
-        for ancestor in exe.ancestors() {
-            if ancestor
-                .file_name()
-                .and_then(|s| s.to_str())
-                .is_some_and(|s| s.eq_ignore_ascii_case("neocore2"))
-            {
-                return ancestor.to_path_buf();
-            }
-        }
-    }
-
-    std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
 }
 
 fn dedup_paths(paths: Vec<PathBuf>) -> Vec<PathBuf> {

@@ -146,6 +146,7 @@ pub(super) struct ScreenProfileConfig {
     #[serde(default = "default_screen_profile")]
     pub(super) profile: UiScreenProfile,
     pub(super) game_ui_root_surface_id: Option<String>,
+    pub(super) game_ui_document_ref: Option<String>,
     #[serde(default = "default_publish_editor_shell")]
     pub(super) publish_editor_shell: bool,
 }
@@ -166,6 +167,7 @@ impl Default for ScreenProfileConfig {
             // surface must expose the editor shell, content browser and right edit window.
             profile: UiScreenProfile::Editor,
             game_ui_root_surface_id: None,
+            game_ui_document_ref: None,
             publish_editor_shell: true,
         }
     }
@@ -177,6 +179,8 @@ pub(crate) struct ScreenProfileRuntimeState {
     pub(super) descriptor: UiScreenProfileDescriptor,
     pub(super) last_published_profile: Option<UiScreenProfile>,
     pub(super) published_surfaces: BTreeSet<String>,
+    pub(super) mounted_game_ui_document_ref: Option<String>,
+    pub(super) failed_game_ui_document_ref: Option<String>,
     pub(super) last_right_edit_selection_key: String,
     pub(super) cached_right_edit_document: Option<AssetDocument>,
     pub(super) cached_right_edit_error: Option<String>,

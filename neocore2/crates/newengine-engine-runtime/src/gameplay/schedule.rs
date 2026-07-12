@@ -4,8 +4,12 @@ use newengine_sim::{
     SimSchedule, SimStage, SimulationJobBatch, SimulationJobTelemetry,
 };
 
+use super::combat::step_player_combat;
 use super::fps_demo::step_fps_demo_gameplay;
+use super::inventory::step_world_items;
+use super::inventory_hud::step_inventory_commands;
 use super::physics::step_service_physics;
+use super::player::apply_player_fixed_commands;
 use newengine_core::physics::PhysicsApiRef;
 use newengine_core::{TaskLane, TaskPriority, TaskRequest, ThreadPoolHandle};
 
@@ -132,6 +136,10 @@ pub fn run_schedule_with_physics_mode_and_telemetry_for_frame(
         sim_executor_ref,
     );
     schedule.run_stage_with_telemetry(world, SimStage::ApplyIntents, frame, telemetry);
+    apply_player_fixed_commands(world, frame.dt, frame.fixed_tick);
+    step_inventory_commands(world, frame.fixed_tick);
+    step_world_items(world, frame.dt);
+    step_player_combat(world, frame.dt, frame.fixed_tick);
     match physics_mode {
         PhysicsIntegrationMode::ServiceBackend => {
             // Service-backed physics owns integration for PhysicsBodyDesc entities.

@@ -33,7 +33,11 @@ add_library(joltc STATIC
     JoltC/Test.cpp
 )
 
-target_compile_features(joltc PUBLIC cxx_std_17)
+set_target_properties(joltc PROPERTIES
+    CXX_STANDARD 17
+    CXX_STANDARD_REQUIRED YES
+    CXX_EXTENSIONS NO
+)
 target_include_directories(joltc PUBLIC . JoltPhysics)
 target_link_libraries(joltc PUBLIC Jolt)
 
@@ -62,7 +66,11 @@ if (CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
     )
 
     # cxx_std_20 gives us designated initializers, bringing us closer to Actual C.
-    target_compile_features(HelloWorld PRIVATE cxx_std_20)
+    set_target_properties(HelloWorld PROPERTIES
+        CXX_STANDARD 20
+        CXX_STANDARD_REQUIRED YES
+        CXX_EXTENSIONS NO
+    )
 
     # Eventually we should switch back to Actual C:
     # set_property(TARGET HelloWorld PROPERTY C_STANDARD 23)

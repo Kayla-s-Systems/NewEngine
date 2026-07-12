@@ -1,12 +1,27 @@
 use super::*;
+use newengine_ui_api::{
+    UiCompiledDocument, UiMountSurfaceRequest, UI_SERVICE_METHOD_MOUNT_SURFACE_V1,
+};
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(default)]
+struct ScreenProfileAssetsUiCompileResponse {
+    ok: bool,
+    document_ref: String,
+    surface_id: String,
+    compiled_document: UiCompiledDocument,
+    warnings: Vec<String>,
+}
 
 impl ScreenProfileRuntimeState {
     pub(crate) fn load() -> Self {
         let config = load_screen_profile_config();
         let descriptor =
             screen_profile_descriptor(config.profile, config.game_ui_root_surface_id.clone());
+        let mut descriptor = descriptor;
+        descriptor.game_ui_document_ref = config.game_ui_document_ref.clone();
         newengine_ulog_api::ulog::info!(
-            "screen profile: loaded profile='{}' layout='{}' focus={:?} panels={} game_ui_root={}",
+            "screen profile: loaded profile='{}' layout='{}' focus={:?} panels={} game_ui_root={} game_ui_document_ref={}",
             descriptor.profile.id(),
             descriptor.layout_id,
             descriptor.input_focus_policy,
@@ -15,12 +30,18 @@ impl ScreenProfileRuntimeState {
                 .game_ui_root_surface_id
                 .as_deref()
                 .unwrap_or("<none>"),
+            descriptor
+                .game_ui_document_ref
+                .as_deref()
+                .unwrap_or("<none>"),
         );
         Self {
             config,
             descriptor,
             last_published_profile: None,
             published_surfaces: BTreeSet::new(),
+            mounted_game_ui_document_ref: None,
+            failed_game_ui_document_ref: None,
             last_right_edit_selection_key: String::new(),
             cached_right_edit_document: None,
             cached_right_edit_error: None,
@@ -82,24 +103,45 @@ impl ScreenProfileRuntimeState {
             }
             UiScreenProfile::Game => {
                 refresh_ui |= self.hide_profile_surface(UI_SURFACE_EDITOR_SHELL, profile_changed);
-                let game = match self
+                if let Some(document_ref) = self
                     .descriptor
-                    .game_ui_root_surface_id
+                    .game_ui_document_ref
                     .as_ref()
-                    .filter(|it| !it.trim().is_empty())
+                    .map(|it| it.trim().to_owned())
+                    .filter(|it| !it.is_empty())
                 {
-                    Some(root) => GameScreen::with_game_ui_root(root.clone()),
-                    None => GameScreen::default(),
-                };
-                if let Some(node) = game.surface_node(frame_index) {
-                    publish_screen_node_tree_request(&UiNodeTreeRequest::from_surface_node(
-                        &node,
-                        UiNodeRequestSourceKind::Generated,
-                    ));
-                    self.published_surfaces
-                        .insert(UI_SURFACE_GAME_PRESENTATION.to_owned());
-                    refresh_ui = true;
+                    let already_mounted =
+                        self.mounted_game_ui_document_ref.as_deref() == Some(document_ref.as_str());
+                    let failed_same_document =
+                        self.failed_game_ui_document_ref.as_deref() == Some(document_ref.as_str());
+                    let should_mount =
+                        profile_changed || (!already_mounted && !failed_same_document);
+                    if should_mount {
+                        match self.mount_authored_game_ui_document(document_ref.as_str()) {
+                            Ok(surface_id) => {
+                                self.published_surfaces.insert(surface_id);
+                                self.mounted_game_ui_document_ref = Some(document_ref.clone());
+                                self.failed_game_ui_document_ref = None;
+                                refresh_ui = true;
+                            }
+                            Err(error) => {
+                                self.failed_game_ui_document_ref = Some(document_ref.clone());
+                                newengine_ulog_api::ulog::warn!(
+                                    "screen profile: authored game .neui mount failed ref='{}' err='{}' policy='no generated gameplay HUD fallback; retry only when document/profile changes'",
+                                    document_ref,
+                                    error
+                                );
+                            }
+                        }
+                    }
+                    refresh_ui |=
+                        self.hide_profile_surface(UI_SURFACE_GAME_PRESENTATION, profile_changed);
                 } else {
+                    if profile_changed {
+                        newengine_ulog_api::ulog::warn!(
+                            "screen profile: game profile has no authored game_ui_document_ref; no generated gameplay UI fallback is allowed"
+                        );
+                    }
                     refresh_ui |=
                         self.hide_profile_surface(UI_SURFACE_GAME_PRESENTATION, profile_changed);
                 }
@@ -126,6 +168,83 @@ impl ScreenProfileRuntimeState {
         refresh_ui
     }
 
+    fn mount_authored_game_ui_document(&mut self, document_ref: &str) -> Result<String, String> {
+        // Screen profile initialization can run before scene/content bootstrap. Mount
+        // canonical runtime roots here as a synchronous prerequisite so authored HUD
+        // compilation never depends on a later world tick or the process CWD.
+        let assets =
+            newengine_assets::AssetServiceClient::new(newengine_plugin_host::default_host_api());
+        let roots = crate::asset_bootstrap::collect_app_asset_roots("", "NEWENGINE_APP_ASSETS");
+        crate::asset_bootstrap::mount_asset_roots_best_effort(&assets, &roots);
+
+        let payload = serde_json::to_vec(&serde_json::json!({
+            "document_ref": document_ref,
+            "source_kind": "asset",
+            "mount_runtime": false
+        }))
+        .map_err(|e| e.to_string())?;
+        let bytes = newengine_core::call_service_v1_optional(
+            ENGINE_ASSETS_UI_SERVICE_ID,
+            assets_ui_method::COMPILE_DOCUMENT_V1,
+            &payload,
+        )?
+        .ok_or_else(|| {
+            format!(
+                "engine.assets.ui service is not registered; cannot compile '{}'",
+                document_ref
+            )
+        })?;
+        let response: ScreenProfileAssetsUiCompileResponse = serde_json::from_slice(&bytes)
+            .map_err(|e| format!("engine.assets.ui returned invalid compile response: {e}"))?;
+        if !response.ok {
+            return Err(format!(
+                "engine.assets.ui returned ok=false for '{}' surface='{}'",
+                response.document_ref, response.surface_id
+            ));
+        }
+        for warning in &response.warnings {
+            newengine_ulog_api::ulog::warn!(
+                "screen profile: authored game .neui compile warning ref='{}' warning='{}'",
+                response.document_ref,
+                warning
+            );
+        }
+        let surface_id = if response.compiled_document.surface_id.trim().is_empty() {
+            response.surface_id.clone()
+        } else {
+            response.compiled_document.surface_id.clone()
+        };
+        if surface_id.trim().is_empty() {
+            return Err(format!(
+                "compiled game .neui '{}' did not declare a surface id",
+                document_ref
+            ));
+        }
+        let request = UiMountSurfaceRequest {
+            surface_id: surface_id.clone(),
+            document: response.compiled_document,
+            visible: true,
+        };
+        let payload = serde_json::to_vec(&request)
+            .map_err(|e| format!("failed to encode ui.mount_surface_v1 request: {e}"))?;
+        newengine_core::call_service_v1_optional(
+            newengine_ui_api::ENGINE_UI_SERVICE_ID,
+            UI_SERVICE_METHOD_MOUNT_SURFACE_V1,
+            &payload,
+        )?
+        .ok_or_else(|| {
+            format!(
+                "engine.ui service is not registered; cannot mount authored game UI '{}'",
+                document_ref
+            )
+        })?;
+        newengine_ulog_api::ulog::info!(
+            "screen profile: authored game .neui mounted ref='{}' surface='{}' policy='no generated gameplay HUD fallback'",
+            document_ref,
+            surface_id
+        );
+        Ok(surface_id)
+    }
     fn update_menu_interaction(&mut self, resources: &Resources, frame_index: u64) {
         if self.descriptor.profile != UiScreenProfile::Editor
             || self.last_menu_click_frame == frame_index

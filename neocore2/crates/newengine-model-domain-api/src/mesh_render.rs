@@ -122,6 +122,18 @@ impl MeshRenderOptions {
         }
     }
 
+    pub fn world_masked() -> Self {
+        Self {
+            role: MeshRenderRole::WorldMasked,
+            transform_policy: MeshTransformPolicy::World,
+            visibility_policy: MeshVisibilityPolicy::FrustumAndDistance,
+            depth_policy: MeshDepthPolicy::ReadWrite,
+            shadow_policy: MeshShadowPolicy::ProfileControlled,
+            cull_policy: MeshCullPolicy::ProfileControlled,
+            sort_policy: MeshSortPolicy::Opaque,
+        }
+    }
+
     pub fn terrain_patch() -> Self {
         Self {
             role: MeshRenderRole::TerrainPatch,

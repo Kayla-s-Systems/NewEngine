@@ -56,7 +56,6 @@ impl RenderGpuLifetimeQueue {
     }
 
     #[inline]
-    #[allow(dead_code)]
     pub(super) fn retire_buffer_after_frame(&mut self, id: BufferId, frame: u64) {
         self.retired.push(RetiredGpuResourceEntry {
             resource: RetiredGpuResource::Buffer(id),

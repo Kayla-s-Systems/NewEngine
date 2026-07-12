@@ -400,7 +400,7 @@
     "gpu_particles": true,
     "max_emitters": 512,
     "max_particles": 262144,
-    "simulation_stage": "engine.jobs -> render_prep -> engine.render.vfx"
+    "simulation_stage": "engine.threading -> render_prep -> engine.render.vfx"
   },
   "terrain_foliage_lod_occlusion": {
     "terrain_cells": 256,

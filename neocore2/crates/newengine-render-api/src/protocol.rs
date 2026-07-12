@@ -10,6 +10,7 @@ use crate::{
     TextureResidencySnapshot, UiDrawList, UiTexId, UploadPumpDesc, UploadPumpReport, Viewport,
 };
 use serde::{Deserialize, Serialize};
+use std::num::NonZeroU32;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RenderBackendInfo {
@@ -197,6 +198,353 @@ pub fn decode_unit_command_batch_bin(bytes: &[u8]) -> Result<Vec<RenderCommand>,
         return Err("render command batch binary packet has trailing bytes".to_owned());
     }
     Ok(commands)
+}
+
+const MULTI_ADAPTER_MESH_REQUEST_MAGIC: &[u8; 8] = b"NEMW\x01\0\0\0";
+const MULTI_ADAPTER_MESH_RESPONSE_MAGIC: &[u8; 8] = b"NEMX\x01\0\0\0";
+pub const MULTI_ADAPTER_VERTEX_STRIDE_BYTES: usize = 32;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MultiAdapterMeshTranscodeRequest {
+    /// Interleaved little-endian f32 records: position.xyz, normal.xyz, uv.xy.
+    pub vertex_bytes: Vec<u8>,
+}
+
+impl MultiAdapterMeshTranscodeRequest {
+    pub fn new(vertex_bytes: Vec<u8>) -> Result<Self, String> {
+        validate_multi_adapter_vertex_bytes(&vertex_bytes)?;
+        Ok(Self { vertex_bytes })
+    }
+
+    #[inline]
+    pub fn vertex_count(&self) -> usize {
+        self.vertex_bytes.len() / MULTI_ADAPTER_VERTEX_STRIDE_BYTES
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MultiAdapterMeshTranscodeResult {
+    pub worker_index: u32,
+    pub invalid_vertex_count: u32,
+    pub gpu_elapsed_ns: u64,
+    pub vertex_bytes: Vec<u8>,
+}
+
+impl MultiAdapterMeshTranscodeResult {
+    #[inline]
+    pub fn vertex_count(&self) -> usize {
+        self.vertex_bytes.len() / MULTI_ADAPTER_VERTEX_STRIDE_BYTES
+    }
+}
+
+pub fn encode_multi_adapter_mesh_transcode_request(
+    request: &MultiAdapterMeshTranscodeRequest,
+) -> Result<Vec<u8>, String> {
+    validate_multi_adapter_vertex_bytes(&request.vertex_bytes)?;
+    let vertex_count = u32::try_from(request.vertex_count())
+        .map_err(|_| "multi-adapter mesh packet contains too many vertices".to_owned())?;
+    let mut out = Vec::with_capacity(request.vertex_bytes.len().saturating_add(20));
+    out.extend_from_slice(MULTI_ADAPTER_MESH_REQUEST_MAGIC);
+    put_u32(&mut out, MULTI_ADAPTER_VERTEX_STRIDE_BYTES as u32);
+    put_u32(&mut out, vertex_count);
+    put_bytes(
+        &mut out,
+        &request.vertex_bytes,
+        "multi-adapter vertex payload",
+    )?;
+    Ok(out)
+}
+
+pub fn decode_multi_adapter_mesh_transcode_request(
+    bytes: &[u8],
+) -> Result<MultiAdapterMeshTranscodeRequest, String> {
+    let mut reader = BinReader::new(bytes);
+    if reader.take(8)? != MULTI_ADAPTER_MESH_REQUEST_MAGIC {
+        return Err("multi-adapter mesh request has invalid magic".to_owned());
+    }
+    let stride = reader.u32()? as usize;
+    if stride != MULTI_ADAPTER_VERTEX_STRIDE_BYTES {
+        return Err(format!(
+            "multi-adapter mesh request has unsupported vertex stride={stride} expected={MULTI_ADAPTER_VERTEX_STRIDE_BYTES}"
+        ));
+    }
+    let declared_count = reader.u32()? as usize;
+    let vertex_bytes = reader.bytes_vec()?;
+    if !reader.is_eof() {
+        return Err("multi-adapter mesh request has trailing bytes".to_owned());
+    }
+    validate_multi_adapter_vertex_bytes(&vertex_bytes)?;
+    let actual_count = vertex_bytes.len() / MULTI_ADAPTER_VERTEX_STRIDE_BYTES;
+    if actual_count != declared_count {
+        return Err(format!(
+            "multi-adapter mesh request vertex count mismatch declared={declared_count} actual={actual_count}"
+        ));
+    }
+    Ok(MultiAdapterMeshTranscodeRequest { vertex_bytes })
+}
+
+pub fn encode_multi_adapter_mesh_transcode_result(
+    result: &MultiAdapterMeshTranscodeResult,
+) -> Result<Vec<u8>, String> {
+    validate_multi_adapter_vertex_bytes(&result.vertex_bytes)?;
+    let vertex_count = u32::try_from(result.vertex_count())
+        .map_err(|_| "multi-adapter mesh response contains too many vertices".to_owned())?;
+    let mut out = Vec::with_capacity(result.vertex_bytes.len().saturating_add(32));
+    out.extend_from_slice(MULTI_ADAPTER_MESH_RESPONSE_MAGIC);
+    put_u32(&mut out, result.worker_index);
+    put_u32(&mut out, result.invalid_vertex_count);
+    put_u64(&mut out, result.gpu_elapsed_ns);
+    put_u32(&mut out, MULTI_ADAPTER_VERTEX_STRIDE_BYTES as u32);
+    put_u32(&mut out, vertex_count);
+    put_bytes(
+        &mut out,
+        &result.vertex_bytes,
+        "multi-adapter result payload",
+    )?;
+    Ok(out)
+}
+
+pub fn decode_multi_adapter_mesh_transcode_result(
+    bytes: &[u8],
+) -> Result<MultiAdapterMeshTranscodeResult, String> {
+    let mut reader = BinReader::new(bytes);
+    if reader.take(8)? != MULTI_ADAPTER_MESH_RESPONSE_MAGIC {
+        return Err("multi-adapter mesh response has invalid magic".to_owned());
+    }
+    let worker_index = reader.u32()?;
+    let invalid_vertex_count = reader.u32()?;
+    let gpu_elapsed_ns = reader.u64()?;
+    let stride = reader.u32()? as usize;
+    if stride != MULTI_ADAPTER_VERTEX_STRIDE_BYTES {
+        return Err(format!(
+            "multi-adapter mesh response has unsupported vertex stride={stride} expected={MULTI_ADAPTER_VERTEX_STRIDE_BYTES}"
+        ));
+    }
+    let declared_count = reader.u32()? as usize;
+    let vertex_bytes = reader.bytes_vec()?;
+    if !reader.is_eof() {
+        return Err("multi-adapter mesh response has trailing bytes".to_owned());
+    }
+    validate_multi_adapter_vertex_bytes(&vertex_bytes)?;
+    let actual_count = vertex_bytes.len() / MULTI_ADAPTER_VERTEX_STRIDE_BYTES;
+    if actual_count != declared_count {
+        return Err(format!(
+            "multi-adapter mesh response vertex count mismatch declared={declared_count} actual={actual_count}"
+        ));
+    }
+    Ok(MultiAdapterMeshTranscodeResult {
+        worker_index,
+        invalid_vertex_count,
+        gpu_elapsed_ns,
+        vertex_bytes,
+    })
+}
+
+fn validate_multi_adapter_vertex_bytes(bytes: &[u8]) -> Result<(), String> {
+    if bytes.is_empty() {
+        return Err("multi-adapter mesh packet contains no vertices".to_owned());
+    }
+    if bytes.len() % MULTI_ADAPTER_VERTEX_STRIDE_BYTES != 0 {
+        return Err(format!(
+            "multi-adapter mesh packet byte length is not stride-aligned bytes={} stride={MULTI_ADAPTER_VERTEX_STRIDE_BYTES}",
+            bytes.len()
+        ));
+    }
+    const MAX_PACKET_BYTES: usize = 128 * 1024 * 1024;
+    if bytes.len() > MAX_PACKET_BYTES {
+        return Err(format!(
+            "multi-adapter mesh packet exceeds safety limit bytes={} limit={MAX_PACKET_BYTES}",
+            bytes.len()
+        ));
+    }
+    Ok(())
+}
+
+const CREATE_TEXTURE_BIN_MAGIC: &[u8; 8] = b"NECT\x01\0\0\0";
+const CREATE_TEXTURE_RESPONSE_BIN_MAGIC: &[u8; 8] = b"NETR\x01\0\0\0";
+
+/// Compact binary transport for `TextureDesc`, including an optional full mip chain.
+/// JSON is intentionally not used here because large `Vec<u8>` payloads expand into
+/// millions of decimal tokens and can stall the native window for tens of seconds.
+pub fn encode_create_texture_bin(desc: &TextureDesc) -> Result<Vec<u8>, String> {
+    let payload_len = desc.data.as_ref().map_or(0, Vec::len);
+    let mut out = Vec::with_capacity(payload_len.saturating_add(128));
+    out.extend_from_slice(CREATE_TEXTURE_BIN_MAGIC);
+    match desc.label.as_deref() {
+        Some(label) => {
+            put_u8(&mut out, 1);
+            put_bytes(&mut out, label.as_bytes(), "texture label")?;
+        }
+        None => put_u8(&mut out, 0),
+    }
+    put_u32(&mut out, desc.extent.width);
+    put_u32(&mut out, desc.extent.height);
+    put_u8(&mut out, texture_format_tag(desc.format));
+    put_u8(&mut out, texture_usage_tag(desc.usage));
+    put_u32(&mut out, desc.mip_levels.get());
+    put_u8(&mut out, texture_data_policy_tag(desc.data_policy));
+    put_len(&mut out, desc.mip_data.len(), "texture mip layout")?;
+    for mip in &desc.mip_data {
+        put_u32(&mut out, mip.level);
+        put_u32(&mut out, mip.width);
+        put_u32(&mut out, mip.height);
+        put_u64(&mut out, mip.offset);
+        put_u64(&mut out, mip.byte_len);
+    }
+    match desc.data.as_deref() {
+        Some(data) => {
+            put_u8(&mut out, 1);
+            put_bytes(&mut out, data, "texture payload")?;
+        }
+        None => put_u8(&mut out, 0),
+    }
+    Ok(out)
+}
+
+pub fn decode_create_texture_bin(bytes: &[u8]) -> Result<TextureDesc, String> {
+    let mut r = BinReader::new(bytes);
+    if r.take(8)? != CREATE_TEXTURE_BIN_MAGIC {
+        return Err("create-texture binary packet has invalid magic".to_owned());
+    }
+    let label = match r.u8()? {
+        0 => None,
+        1 => Some(r.string()?),
+        tag => return Err(format!("invalid create-texture label presence tag {tag}")),
+    };
+    let extent = Extent2D::new(r.u32()?, r.u32()?);
+    let format = texture_format_from_tag(r.u8()?)?;
+    let usage = texture_usage_from_tag(r.u8()?)?;
+    let mip_levels = NonZeroU32::new(r.u32()?)
+        .ok_or_else(|| "create-texture binary packet has zero mip levels".to_owned())?;
+    let data_policy = texture_data_policy_from_tag(r.u8()?)?;
+    let mip_count = r.u32()? as usize;
+    let mut mip_data = Vec::with_capacity(mip_count);
+    for _ in 0..mip_count {
+        mip_data.push(crate::TextureMipDataDesc::new(
+            r.u32()?,
+            r.u32()?,
+            r.u32()?,
+            r.u64()?,
+            r.u64()?,
+        ));
+    }
+    let data = match r.u8()? {
+        0 => None,
+        1 => Some(r.bytes_vec()?),
+        tag => return Err(format!("invalid create-texture data presence tag {tag}")),
+    };
+    if !r.is_eof() {
+        return Err("create-texture binary packet has trailing bytes".to_owned());
+    }
+    Ok(TextureDesc {
+        label,
+        extent,
+        format,
+        usage,
+        mip_levels,
+        data,
+        mip_data,
+        data_policy,
+    })
+}
+
+pub fn encode_texture_id_bin(id: TextureId) -> Vec<u8> {
+    let mut out = Vec::with_capacity(12);
+    out.extend_from_slice(CREATE_TEXTURE_RESPONSE_BIN_MAGIC);
+    put_u32(&mut out, id.get());
+    out
+}
+
+pub fn decode_texture_id_bin(bytes: &[u8]) -> Result<TextureId, String> {
+    let mut r = BinReader::new(bytes);
+    if r.take(8)? != CREATE_TEXTURE_RESPONSE_BIN_MAGIC {
+        return Err("create-texture binary response has invalid magic".to_owned());
+    }
+    let id = TextureId::new(r.u32()?);
+    if !r.is_eof() {
+        return Err("create-texture binary response has trailing bytes".to_owned());
+    }
+    Ok(id)
+}
+
+#[inline]
+fn texture_format_tag(format: crate::TextureFormat) -> u8 {
+    match format {
+        crate::TextureFormat::Rgba8Unorm => 1,
+        crate::TextureFormat::Rgba8Srgb => 2,
+        crate::TextureFormat::Bgra8Unorm => 3,
+        crate::TextureFormat::Bgra8Srgb => 4,
+        crate::TextureFormat::Rgba16Float => 5,
+        crate::TextureFormat::R32Float => 6,
+        crate::TextureFormat::Bc1RgbaUnorm => 7,
+        crate::TextureFormat::Bc1RgbaSrgb => 8,
+        crate::TextureFormat::Bc3RgbaUnorm => 9,
+        crate::TextureFormat::Bc3RgbaSrgb => 10,
+        crate::TextureFormat::Bc5RgUnorm => 11,
+        crate::TextureFormat::Bc7RgbaUnorm => 12,
+        crate::TextureFormat::Bc7RgbaSrgb => 13,
+        crate::TextureFormat::Depth24Stencil8 => 14,
+        crate::TextureFormat::Depth32Float => 15,
+    }
+}
+
+fn texture_format_from_tag(tag: u8) -> Result<crate::TextureFormat, String> {
+    match tag {
+        1 => Ok(crate::TextureFormat::Rgba8Unorm),
+        2 => Ok(crate::TextureFormat::Rgba8Srgb),
+        3 => Ok(crate::TextureFormat::Bgra8Unorm),
+        4 => Ok(crate::TextureFormat::Bgra8Srgb),
+        5 => Ok(crate::TextureFormat::Rgba16Float),
+        6 => Ok(crate::TextureFormat::R32Float),
+        7 => Ok(crate::TextureFormat::Bc1RgbaUnorm),
+        8 => Ok(crate::TextureFormat::Bc1RgbaSrgb),
+        9 => Ok(crate::TextureFormat::Bc3RgbaUnorm),
+        10 => Ok(crate::TextureFormat::Bc3RgbaSrgb),
+        11 => Ok(crate::TextureFormat::Bc5RgUnorm),
+        12 => Ok(crate::TextureFormat::Bc7RgbaUnorm),
+        13 => Ok(crate::TextureFormat::Bc7RgbaSrgb),
+        14 => Ok(crate::TextureFormat::Depth24Stencil8),
+        15 => Ok(crate::TextureFormat::Depth32Float),
+        _ => Err(format!("invalid texture format binary tag {tag}")),
+    }
+}
+
+#[inline]
+fn texture_usage_tag(usage: crate::TextureUsage) -> u8 {
+    match usage {
+        crate::TextureUsage::Sampled => 1,
+        crate::TextureUsage::RenderTarget => 2,
+        crate::TextureUsage::DepthStencil => 3,
+        crate::TextureUsage::Storage => 4,
+    }
+}
+
+fn texture_usage_from_tag(tag: u8) -> Result<crate::TextureUsage, String> {
+    match tag {
+        1 => Ok(crate::TextureUsage::Sampled),
+        2 => Ok(crate::TextureUsage::RenderTarget),
+        3 => Ok(crate::TextureUsage::DepthStencil),
+        4 => Ok(crate::TextureUsage::Storage),
+        _ => Err(format!("invalid texture usage binary tag {tag}")),
+    }
+}
+
+#[inline]
+fn texture_data_policy_tag(policy: crate::TextureDataPolicy) -> u8 {
+    match policy {
+        crate::TextureDataPolicy::Immediate => 1,
+        crate::TextureDataPolicy::Deferred => 2,
+        crate::TextureDataPolicy::Empty => 3,
+    }
+}
+
+fn texture_data_policy_from_tag(tag: u8) -> Result<crate::TextureDataPolicy, String> {
+    match tag {
+        1 => Ok(crate::TextureDataPolicy::Immediate),
+        2 => Ok(crate::TextureDataPolicy::Deferred),
+        3 => Ok(crate::TextureDataPolicy::Empty),
+        _ => Err(format!("invalid texture data-policy binary tag {tag}")),
+    }
 }
 
 fn encode_unit_command(out: &mut Vec<u8>, command: &RenderCommand) -> Result<(), String> {
@@ -503,56 +851,22 @@ fn get_index_format(v: u8) -> Result<IndexFormat, String> {
     }
 }
 
-struct BinReader<'a> {
-    bytes: &'a [u8],
-    cursor: usize,
-}
+struct BinReader<'a>(newengine_ui_draw::binary_codec::ReadCursor<'a>);
 
 impl<'a> BinReader<'a> {
     #[inline]
     fn new(bytes: &'a [u8]) -> Self {
-        Self { bytes, cursor: 0 }
-    }
-    #[inline]
-    fn is_eof(&self) -> bool {
-        self.cursor == self.bytes.len()
-    }
-
-    fn take(&mut self, len: usize) -> Result<&'a [u8], String> {
-        let end = self.cursor.saturating_add(len);
-        if end > self.bytes.len() {
-            return Err("render command batch binary packet ended early".to_owned());
-        }
-        let out = &self.bytes[self.cursor..end];
-        self.cursor = end;
-        Ok(out)
+        Self(newengine_ui_draw::binary_codec::ReadCursor::new(
+            bytes,
+            "render command batch binary packet",
+        ))
     }
 
-    #[inline]
-    fn u8(&mut self) -> Result<u8, String> {
-        Ok(self.take(1)?[0])
+    fn string(&mut self) -> Result<String, String> {
+        String::from_utf8(self.bytes_vec()?)
+            .map_err(|e| format!("invalid UTF-8 string in render binary packet: {e}"))
     }
-    #[inline]
-    fn u32(&mut self) -> Result<u32, String> {
-        let b = self.take(4)?;
-        Ok(u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
-    }
-    #[inline]
-    fn i32(&mut self) -> Result<i32, String> {
-        let b = self.take(4)?;
-        Ok(i32::from_le_bytes([b[0], b[1], b[2], b[3]]))
-    }
-    #[inline]
-    fn u64(&mut self) -> Result<u64, String> {
-        let b = self.take(8)?;
-        Ok(u64::from_le_bytes([
-            b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7],
-        ]))
-    }
-    fn bytes_vec(&mut self) -> Result<Vec<u8>, String> {
-        let len = self.u32()? as usize;
-        Ok(self.take(len)?.to_vec())
-    }
+
     fn optional_render_graph_pass_kind(&mut self) -> Result<Option<RenderGraphPassKind>, String> {
         match self.u8()? {
             0 => Ok(None),
@@ -572,11 +886,21 @@ impl<'a> BinReader<'a> {
             )),
         }
     }
+}
+
+impl<'a> core::ops::Deref for BinReader<'a> {
+    type Target = newengine_ui_draw::binary_codec::ReadCursor<'a>;
 
     #[inline]
-    fn f32(&mut self) -> Result<f32, String> {
-        let b = self.take(4)?;
-        Ok(f32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl core::ops::DerefMut for BinReader<'_> {
+    #[inline]
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
     }
 }
 
@@ -856,6 +1180,73 @@ pub enum RenderServiceResponse {
 #[cfg(test)]
 mod binary_batch_tests {
     use super::*;
+
+    #[test]
+    fn binary_multi_adapter_mesh_packet_roundtrips() {
+        let mut vertices = Vec::new();
+        for value in [
+            1.0_f32, 2.0, 3.0, 0.0, 2.0, 0.0, 0.25, 0.75, 4.0, 5.0, 6.0, 0.0, 0.0, 4.0, 0.5, 1.0,
+        ] {
+            vertices.extend_from_slice(&value.to_le_bytes());
+        }
+        let request = MultiAdapterMeshTranscodeRequest::new(vertices.clone()).unwrap();
+        let request = decode_multi_adapter_mesh_transcode_request(
+            &encode_multi_adapter_mesh_transcode_request(&request).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(request.vertex_count(), 2);
+        assert_eq!(request.vertex_bytes, vertices);
+
+        let response = MultiAdapterMeshTranscodeResult {
+            worker_index: 1,
+            invalid_vertex_count: 2,
+            gpu_elapsed_ns: 42_000,
+            vertex_bytes: vertices,
+        };
+        let response = decode_multi_adapter_mesh_transcode_result(
+            &encode_multi_adapter_mesh_transcode_result(&response).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(response.worker_index, 1);
+        assert_eq!(response.invalid_vertex_count, 2);
+        assert_eq!(response.gpu_elapsed_ns, 42_000);
+        assert_eq!(response.vertex_count(), 2);
+    }
+
+    #[test]
+    fn binary_create_texture_roundtrips_payload_and_response() {
+        let desc = TextureDesc::new(
+            Extent2D::new(8, 4),
+            crate::TextureFormat::Bc3RgbaSrgb,
+            crate::TextureUsage::Sampled,
+        )
+        .with_label("binary-texture")
+        .with_mips(NonZeroU32::new(2).unwrap())
+        .with_deferred_mip_data(
+            vec![
+                crate::TextureMipDataDesc::new(0, 8, 4, 0, 32),
+                crate::TextureMipDataDesc::new(1, 4, 2, 32, 16),
+            ],
+            (0_u8..48).collect(),
+        );
+        let encoded = encode_create_texture_bin(&desc).unwrap();
+        let decoded = decode_create_texture_bin(&encoded).unwrap();
+        assert_eq!(decoded.label.as_deref(), Some("binary-texture"));
+        assert_eq!(decoded.extent.width, 8);
+        assert_eq!(decoded.extent.height, 4);
+        assert_eq!(decoded.format, crate::TextureFormat::Bc3RgbaSrgb);
+        assert_eq!(decoded.usage, crate::TextureUsage::Sampled);
+        assert_eq!(decoded.mip_levels.get(), 2);
+        assert_eq!(decoded.data_policy, crate::TextureDataPolicy::Deferred);
+        assert_eq!(decoded.mip_data.len(), 2);
+        assert_eq!(decoded.data.as_ref().map(Vec::len), Some(48));
+
+        let id = TextureId::new(77);
+        assert_eq!(
+            decode_texture_id_bin(&encode_texture_id_bin(id)).unwrap(),
+            id
+        );
+    }
 
     #[test]
     fn binary_unit_batch_roundtrips_ui_draw_list() {

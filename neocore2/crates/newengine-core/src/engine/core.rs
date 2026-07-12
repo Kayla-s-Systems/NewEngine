@@ -44,6 +44,7 @@ pub struct Engine<E: Send + 'static> {
     pub(super) plugins_loaded: bool,
     pub(super) engine_plugins_loaded: bool,
     pub(super) plugins_dir: Option<PathBuf>,
+    pub(super) plugin_discovery_scan: Option<super::plugin_discovery::PluginDiscoveryScanTask>,
 
     pub(super) shutdown: ShutdownToken,
     pub(super) fsm: EngineFsm,
@@ -197,6 +198,7 @@ impl<E: Send + 'static> Engine<E> {
             plugins_loaded: false,
             engine_plugins_loaded: false,
             plugins_dir: config.plugins_dir,
+            plugin_discovery_scan: None,
 
             shutdown,
             fsm: EngineFsm::new(),

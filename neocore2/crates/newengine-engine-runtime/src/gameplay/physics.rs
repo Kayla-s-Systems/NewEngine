@@ -1,5 +1,6 @@
 use newengine_core::physics::PhysicsApiRef;
 use newengine_ecs::World;
+use std::collections::BTreeMap;
 
 use crate::authority::{
     current_entity_authority_map, current_world_authority_frame, RuntimeWorldAuthorityMode,
@@ -21,6 +22,9 @@ use frame_output::apply_frame_output;
 pub struct PhysicsSyncModule {
     fixed_tick: u64,
     missing_backend_logged: bool,
+    /// Last static-mesh revision acknowledged by the service-backed physics world.
+    /// Full triangle arrays cross the service boundary only on add/change.
+    static_mesh_revisions: BTreeMap<u64, u64>,
 }
 
 impl PhysicsSyncModule {
@@ -63,9 +67,10 @@ pub(super) fn step_service_physics(
         .resource::<PhysicsRuntimeFrameIndex>()
         .map(|v| v.0)
         .unwrap_or(0);
-    let fixed_tick = ensure_sync_module(world)
-        .map(|sync| sync.next_fixed_tick())
-        .unwrap_or(0);
+    let mut sync = world
+        .remove_resource::<PhysicsSyncModule>()
+        .unwrap_or_default();
+    let fixed_tick = sync.next_fixed_tick();
     if let Some(authority) = current_world_authority_frame(world) {
         if matches!(
             authority.mode,
@@ -85,15 +90,25 @@ pub(super) fn step_service_physics(
         }
     }
 
-    let input = build_frame_input(world, frame_index, fixed_tick, dt);
+    let input = build_frame_input(
+        world,
+        frame_index,
+        fixed_tick,
+        dt,
+        &mut sync.static_mesh_revisions,
+    );
+    world.insert_resource(sync);
 
     let output = {
         let mut api = api.lock();
         match api.step_frame(input) {
             Ok(output) => output,
             Err(err) => {
+                if let Some(sync) = world.resource_mut::<PhysicsSyncModule>() {
+                    sync.static_mesh_revisions.clear();
+                }
                 newengine_ulog_api::ulog::warn!(
-                    "physics sync: engine.physics step failed: {}",
+                    "physics sync: engine.physics step failed: {}; static mesh revisions cleared for retry",
                     err
                 );
                 return;

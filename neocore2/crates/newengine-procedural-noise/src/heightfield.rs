@@ -4,7 +4,7 @@
 use serde::{Deserialize, Serialize};
 
 use newengine_bounds::Aabb;
-use newengine_math::Vec3;
+use newengine_math::{hash_combine_u64, Vec3};
 
 use crate::graph::NoiseGraph2D;
 use crate::noise::{FractalNoise2D, ValueNoise2D};
@@ -188,7 +188,7 @@ impl HeightField {
         let descriptor = descriptor.sanitized();
         let settings = descriptor.compact_settings();
         let graph = descriptor.graph.clone();
-        let graph_key = mix_u64(graph.revision_key(), modifier_key);
+        let graph_key = hash_combine_u64(graph.revision_key(), modifier_key);
         let height_scale = settings.height_scale.abs().max(1.0e-6);
         Self::generate_impl(
             settings,
@@ -388,15 +388,6 @@ fn finite_or(v: f32, fallback: f32) -> f32 {
     }
 }
 
-#[inline]
-fn mix_u64(mut h: u64, v: u64) -> u64 {
-    h ^= v
-        .wrapping_add(0x9e37_79b9_7f4a_7c15)
-        .wrapping_add(h << 6)
-        .wrapping_add(h >> 2);
-    h
-}
-
 fn hash_settings_and_heights(
     settings: TerrainHeightfieldSettings,
     source_key: u64,
@@ -406,17 +397,17 @@ fn hash_settings_and_heights(
     smoothing_strength: f32,
 ) -> u64 {
     let mut h = 0xcbf2_9ce4_8422_2325_u64;
-    h = mix_u64(h, settings.cells_x as u64);
-    h = mix_u64(h, settings.cells_z as u64);
-    h = mix_u64(h, settings.size_x.to_bits() as u64);
-    h = mix_u64(h, settings.size_z.to_bits() as u64);
-    h = mix_u64(h, settings.base_height.to_bits() as u64);
-    h = mix_u64(h, settings.height_scale.to_bits() as u64);
-    h = mix_u64(h, source_key);
-    h = mix_u64(h, min_height.to_bits() as u64);
-    h = mix_u64(h, max_height.to_bits() as u64);
-    h = mix_u64(h, smoothing_passes as u64);
-    h = mix_u64(h, smoothing_strength.to_bits() as u64);
+    h = hash_combine_u64(h, settings.cells_x as u64);
+    h = hash_combine_u64(h, settings.cells_z as u64);
+    h = hash_combine_u64(h, settings.size_x.to_bits() as u64);
+    h = hash_combine_u64(h, settings.size_z.to_bits() as u64);
+    h = hash_combine_u64(h, settings.base_height.to_bits() as u64);
+    h = hash_combine_u64(h, settings.height_scale.to_bits() as u64);
+    h = hash_combine_u64(h, source_key);
+    h = hash_combine_u64(h, min_height.to_bits() as u64);
+    h = hash_combine_u64(h, max_height.to_bits() as u64);
+    h = hash_combine_u64(h, smoothing_passes as u64);
+    h = hash_combine_u64(h, smoothing_strength.to_bits() as u64);
     h
 }
 

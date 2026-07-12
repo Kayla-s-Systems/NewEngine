@@ -1328,9 +1328,9 @@
             "restore_viewport_pass_on_close": true
           },
           "world": {
-            "fallback_ecs_physics": true,
+            "fallback_ecs_physics": false,
             "runtime_terrain_streaming": "enabled",
-            "service_physics": "disabled"
+            "service_physics": "enabled"
           }
         }
       }

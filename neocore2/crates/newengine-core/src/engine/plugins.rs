@@ -1,8 +1,8 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
+mod control;
 mod diagnostics;
 mod load;
-mod control;
 
 use super::Engine;
 

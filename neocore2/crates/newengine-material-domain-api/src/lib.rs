@@ -87,6 +87,10 @@ pub trait MaterialRenderDevice {
 pub struct MaterialPipelineBuildProfile {
     pub scene_hdr_color_format: TextureFormat,
     pub shadow_map_color_format: TextureFormat,
+    /// Whether the runtime needs GBuffer/deferred-compatible pipelines for this
+    /// material domain. Forward-only GameReady startup must not pay for deferred
+    /// pipeline creation during the launch handoff.
+    pub deferred_pipelines: bool,
 }
 
 impl MaterialPipelineBuildProfile {
@@ -98,7 +102,14 @@ impl MaterialPipelineBuildProfile {
         Self {
             scene_hdr_color_format,
             shadow_map_color_format,
+            deferred_pipelines: true,
         }
+    }
+
+    #[inline]
+    pub const fn with_deferred_pipelines(mut self, deferred_pipelines: bool) -> Self {
+        self.deferred_pipelines = deferred_pipelines;
+        self
     }
 }
 
@@ -147,7 +158,7 @@ pub struct LitPipeline {
 }
 
 /// std140 layout consumed by the current lit shader family.
-pub const LIT_UBO_SIZE: u64 = 752;
+pub const LIT_UBO_SIZE: u64 = 832;
 
 /// Vertex stride consumed by the current instanced lit shader family.
 ///

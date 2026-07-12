@@ -2,14 +2,16 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use newengine_plugin_api::HostApiV1;
 use newengine_render_api::{
-    decode_json, encode_json, encode_unit_command_batch_bin, RenderBackendInfo, RenderCommand,
-    RenderCommandResponse, RenderServiceRequest, RenderServiceResponse, ENGINE_RENDER_SERVICE_ID,
-    RENDER_SERVICE_METHOD_COMMAND_BATCH_BIN_V1,
+    decode_json, decode_texture_id_bin, encode_create_texture_bin, encode_json,
+    encode_unit_command_batch_bin, RenderBackendInfo, RenderCommand, RenderCommandResponse,
+    RenderServiceRequest, RenderServiceResponse, TextureDesc, TextureId, ENGINE_RENDER_SERVICE_ID,
+    RENDER_SERVICE_METHOD_COMMAND_BATCH_BIN_V1, RENDER_SERVICE_METHOD_CREATE_TEXTURE_BIN_V1,
 };
 
 use crate::service_runtime::GenericJsonServiceClient;
 
 static TRY_BINARY_RENDER_BATCH: AtomicBool = AtomicBool::new(true);
+static TRY_BINARY_CREATE_TEXTURE: AtomicBool = AtomicBool::new(true);
 
 #[derive(Clone)]
 pub(crate) struct RenderServiceClient {
@@ -38,6 +40,49 @@ impl RenderServiceClient {
         let payload = encode_json(&req)?;
         let bytes = self.service.invoke_json(payload)?;
         decode_json(&bytes)
+    }
+
+    pub(crate) fn create_texture(&self, desc: TextureDesc) -> Result<TextureId, String> {
+        if TRY_BINARY_CREATE_TEXTURE.load(Ordering::Relaxed) {
+            match encode_create_texture_bin(&desc) {
+                Ok(packet) => match self
+                    .service
+                    .call_raw(RENDER_SERVICE_METHOD_CREATE_TEXTURE_BIN_V1, packet)
+                {
+                    Ok(response) => return decode_texture_id_bin(&response),
+                    Err(err) => {
+                        let detail = err.to_string();
+                        let unsupported = detail.contains("unsupported")
+                            || detail.contains("unknown method")
+                            || detail.contains("not found");
+                        if unsupported {
+                            if TRY_BINARY_CREATE_TEXTURE.swap(false, Ordering::Relaxed) {
+                                newengine_ulog_api::ulog::debug!(
+                                    "render service: binary create-texture disabled for this run; falling back to JSON err='{}'",
+                                    detail
+                                );
+                            }
+                        } else {
+                            return Err(detail);
+                        }
+                    }
+                },
+                Err(err) => {
+                    newengine_ulog_api::ulog::warn!(
+                        "render service: binary create-texture encode failed; falling back to JSON err='{}'",
+                        err
+                    );
+                }
+            }
+        }
+
+        match self.command(RenderCommand::CreateTexture(desc))? {
+            RenderCommandResponse::TextureId(id) => Ok(id),
+            other => Err(format!(
+                "render service protocol error: expected TextureId, got {:?}",
+                other
+            )),
+        }
     }
 
     #[inline]

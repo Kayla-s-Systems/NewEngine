@@ -9,6 +9,8 @@ mod foliage;
 mod material_source;
 #[path = "game_ready_parts/materials_terrain.rs"]
 mod materials_terrain;
+#[path = "game_ready_parts/mission.rs"]
+mod mission;
 #[path = "game_ready_parts/player_model.rs"]
 mod player_model;
 #[path = "game_ready_parts/sky.rs"]
@@ -17,6 +19,8 @@ mod sky;
 mod terrain_heightmap;
 #[path = "game_ready_parts/terrain_streaming.rs"]
 mod terrain_streaming;
+#[path = "game_ready_parts/world_model.rs"]
+mod world_model;
 #[path = "game_ready_parts/ytyp_metadata.rs"]
 mod ytyp_metadata;
 
@@ -33,7 +37,7 @@ use newengine_materials::{MaterialFlags, MaterialId, MaterialRegistry};
 use newengine_math::{EulerRot, Quat, Vec3};
 use newengine_plugin_host::default_host_api;
 use newengine_primitives::{
-    fnv1a_64, Primitive, PrimitiveId, PrimitiveMesh, PrimitiveRegistry, PrimitiveVertex,
+    builtins, fnv1a_64, Primitive, PrimitiveId, PrimitiveMesh, PrimitiveRegistry, PrimitiveVertex,
 };
 use newengine_procedural_noise::{
     DomainWarp2D, NoiseAlgorithm, NoiseCombineMode, NoiseDomain2D, NoiseGraph2D, NoiseLayer2D,
@@ -58,8 +62,8 @@ use self::content::{
     load_game_ready_map_profile, GameReadyDayNightSpec, GameReadyDefinitionApplyMode,
     GameReadyDefinitionInstanceSpec, GameReadyFoliageSpec, GameReadyGameplaySpec,
     GameReadyLightingSpec, GameReadyMapProfile, GameReadyMaterialSetSpec, GameReadyMaterialSpec,
-    GameReadyPaletteSpec, GameReadyPrefabSpec, GameReadySkyAtmosphereSpec, GameReadySkySpec,
-    GameReadyTerrainHeightmapSpec, GameReadyTerrainSpec,
+    GameReadyMissionSpec, GameReadyPaletteSpec, GameReadyPrefabSpec, GameReadySkyAtmosphereSpec,
+    GameReadySkySpec, GameReadyTerrainHeightmapSpec, GameReadyTerrainSpec,
 };
 use super::helpers::{
     apply_exact_material, apply_primitive_instance, ensure_primitive_base, ensure_root,
@@ -68,12 +72,17 @@ use super::helpers::{
 
 pub(super) use self::assets_bootstrap::bootstrap_fps_game_ready_scene;
 pub(crate) use self::sky::{
-    tick_game_ready_sky_cycle, SkyClearColorRuntime, SkyDomeRuntime, SkyVisualKind,
+    tick_game_ready_sky_cycle, SkyClearColorRuntime, SkyDomeRuntime, SkyPostFxRuntime,
+    SkyVisualKind, SpatialCloudShadowRuntime,
 };
 pub(crate) use self::terrain_streaming::{
     tick_game_ready_streaming_terrain, PreparedTerrainPrimitiveMesh, TerrainSurfaceLayers,
+};
+pub(crate) use self::world_model::{
+    tick_game_ready_static_world_prefabs, GameReadyStaticWorldResidency,
 };
 
 use self::material_source::*;
 use self::materials_terrain::*;
 use self::sky::*;
+use super::scene_object_validation::*;

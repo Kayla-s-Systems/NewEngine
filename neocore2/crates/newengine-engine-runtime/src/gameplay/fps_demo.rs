@@ -5,7 +5,7 @@ use newengine_transform::Transform;
 use super::player::first_player;
 use super::{
     DisplayMode, DisplayVisibility, FpsDemoGoal, FpsDemoHazard, FpsDemoPickup, FpsDemoRules,
-    FpsDemoState,
+    FpsDemoState, FpsDemoTarget, Health, PhysicsBodyDesc,
 };
 
 #[inline]
@@ -65,6 +65,27 @@ pub fn step_fps_demo_gameplay(world: &mut World, dt: f32) {
         );
     }
 
+    let mut destroyed_targets: Vec<EntityId> = Vec::new();
+    for (entity, _) in world.query::<FpsDemoTarget>() {
+        if world
+            .get::<Health>(entity)
+            .is_some_and(|health| !health.alive())
+        {
+            destroyed_targets.push(entity);
+        }
+    }
+    destroyed_targets.sort_by_key(|id| id.stable_u64());
+    for entity in &destroyed_targets {
+        let _ = world.remove::<FpsDemoTarget>(*entity);
+        let _ = world.remove::<PhysicsBodyDesc>(*entity);
+        let _ = world.insert(
+            *entity,
+            DisplayVisibility {
+                mode: DisplayMode::RuntimeHidden,
+            },
+        );
+    }
+
     let mut hit_hazard = false;
     for (entity, hazard) in world.query::<FpsDemoHazard>() {
         let Some(t) = world.get::<Transform>(entity) else {
@@ -94,20 +115,29 @@ pub fn step_fps_demo_gameplay(world: &mut World, dt: f32) {
         .cloned()
         .unwrap_or_default();
     let collected_delta = picked.len() as u32;
+    let destroyed_delta = destroyed_targets.len() as u32;
     if let Some(state) = world.resource_mut::<FpsDemoState>() {
         state.pickups_collected = state
             .pickups_collected
             .saturating_add(collected_delta)
             .min(state.pickups_total);
+        state.targets_destroyed = state
+            .targets_destroyed
+            .saturating_add(destroyed_delta)
+            .min(state.targets_total);
+        let objectives_complete = state.pickups_collected >= state.pickups_total
+            && state.targets_destroyed >= state.targets_total;
 
         if hit_hazard {
             state.failed = true;
             state.status = rules.hazard_status.clone();
-        } else if reached_goal && state.pickups_collected >= state.pickups_total {
+        } else if reached_goal && objectives_complete {
             state.completed = true;
             state.status = rules.goal_complete_status.clone();
         } else if reached_goal {
             state.status = rules.goal_locked_status.clone();
+        } else if destroyed_delta > 0 {
+            state.status = rules.target_status.clone();
         } else if collected_delta > 0 {
             state.status = rules.pickup_status.clone();
         } else {

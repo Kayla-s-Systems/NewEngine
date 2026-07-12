@@ -22,7 +22,8 @@ pub(crate) fn process_status_from_record(
     record: ProcessResultRecord,
 ) -> TaskStatusJsonV1 {
     TaskStatusJsonV1 {
-        task_id,
+        task_id: task_id.clone(),
+        job_id: task_id,
         name: "external-process".to_owned(),
         lane: record.lane,
         priority: record.priority,
@@ -139,7 +140,8 @@ pub(crate) fn submit_process_task(
     let requested_task_id = request.task_id.trim().to_owned();
     if executable.is_empty() {
         return TaskRunProcessStartedV1 {
-            task_id: requested_task_id,
+            task_id: requested_task_id.clone(),
+            job_id: requested_task_id,
             accepted: false,
             status: "rejected".to_owned(),
             detail: "task.run_process_start_v1 requires executable".to_owned(),
@@ -359,8 +361,10 @@ pub(crate) fn submit_process_task(
         );
     });
 
+    let task_id = ticket.task_id().to_owned();
     TaskRunProcessStartedV1 {
-        task_id: ticket.task_id().to_owned(),
+        task_id: task_id.clone(),
+        job_id: task_id,
         accepted: true,
         status: "scheduled".to_owned(),
         detail: "External process scheduled on engine.threading; caller must poll status/result through the threading gateway.".to_owned(),

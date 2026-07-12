@@ -84,6 +84,8 @@ struct RawPlayerModelSpec {
 
 #[derive(Debug, Deserialize)]
 struct RawTerrainSpec {
+    #[serde(default = "default_terrain_enabled")]
+    pub(super) enabled: bool,
     #[serde(default = "default_terrain_seed")]
     pub(super) seed: u64,
     #[serde(default = "default_terrain_cells")]
@@ -254,6 +256,8 @@ struct RawGameplaySpec {
     pub(super) default_status: String,
     #[serde(default = "default_pickup_status")]
     pub(super) pickup_status: String,
+    #[serde(default = "default_target_status")]
+    pub(super) target_status: String,
     #[serde(default = "default_hazard_status")]
     pub(super) hazard_status: String,
     #[serde(default = "default_goal_locked_status")]
@@ -270,6 +274,68 @@ struct RawGameplaySpec {
     pub(super) player_visual: RawPlayerVisualSpec,
     #[serde(default)]
     pub(super) physics: RawPhysicsSpec,
+    #[serde(default)]
+    pub(super) mission: RawMissionSpec,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct RawMissionSpec {
+    #[serde(default)]
+    pub(super) pickups: Vec<RawMissionPickupSpec>,
+    #[serde(default)]
+    pub(super) targets: Vec<RawMissionTargetSpec>,
+    #[serde(default)]
+    pub(super) hazards: Vec<RawMissionHazardSpec>,
+    #[serde(default)]
+    pub(super) goals: Vec<RawMissionGoalSpec>,
+}
+
+#[derive(Debug, Deserialize)]
+struct RawMissionPickupSpec {
+    #[serde(default)]
+    pub(super) id: String,
+    #[serde(default)]
+    pub(super) position: [f32; 3],
+    #[serde(default)]
+    pub(super) radius: f32,
+    #[serde(default)]
+    pub(super) scale: [f32; 3],
+}
+
+#[derive(Debug, Deserialize)]
+struct RawMissionTargetSpec {
+    #[serde(default)]
+    pub(super) id: String,
+    #[serde(default)]
+    pub(super) position: [f32; 3],
+    #[serde(default)]
+    pub(super) health: f32,
+    #[serde(default)]
+    pub(super) scale: [f32; 3],
+}
+
+#[derive(Debug, Deserialize)]
+struct RawMissionHazardSpec {
+    #[serde(default)]
+    pub(super) id: String,
+    #[serde(default)]
+    pub(super) position: [f32; 3],
+    #[serde(default)]
+    pub(super) radius: f32,
+    #[serde(default)]
+    pub(super) scale: [f32; 3],
+}
+
+#[derive(Debug, Deserialize)]
+struct RawMissionGoalSpec {
+    #[serde(default)]
+    pub(super) id: String,
+    #[serde(default)]
+    pub(super) position: [f32; 3],
+    #[serde(default)]
+    pub(super) radius: f32,
+    #[serde(default)]
+    pub(super) scale: [f32; 3],
 }
 
 #[derive(Debug, Deserialize)]
@@ -382,6 +448,8 @@ struct RawDayNightSpec {
     pub(super) time_of_day_hours: f32,
     #[serde(default = "default_day_length_seconds")]
     pub(super) day_length_seconds: f32,
+    #[serde(default = "default_day_of_year")]
+    pub(super) day_of_year: u32,
     #[serde(default = "default_sun_latitude_degrees")]
     pub(super) latitude_degrees: f32,
     #[serde(default = "default_axial_tilt_degrees")]

@@ -312,6 +312,11 @@ impl SceneBridge {
             }
         }
 
+        let _scene_object_invariant_report = {
+            let world = scene.world_mut();
+            validate_scene_object_invariants(world, "scene-bridge.commands")
+        };
+
         if let Some(mode) = next_mode {
             *self.play_mode.lock() = mode;
         }

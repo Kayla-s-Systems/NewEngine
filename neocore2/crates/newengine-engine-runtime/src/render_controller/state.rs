@@ -300,19 +300,16 @@ impl RenderGpuSceneState {
     }
 
     #[inline]
-    pub(super) fn material_pipeline_profile(&self) -> MaterialPipelineBuildProfile {
-        self.material_pipeline_profile_for(super::render_quality::SCENE_HDR_COLOR_FORMAT)
-    }
-
-    #[inline]
     pub(super) fn material_pipeline_profile_for(
         &self,
         scene_color_format: newengine_core::render::TextureFormat,
+        deferred_pipelines: bool,
     ) -> MaterialPipelineBuildProfile {
         MaterialPipelineBuildProfile::new(
             scene_color_format,
             super::render_quality::SHADOW_MAP_COLOR_FORMAT,
         )
+        .with_deferred_pipelines(deferred_pipelines)
     }
 
     pub(super) fn primary_lit_pipeline_key(
@@ -326,46 +323,25 @@ impl RenderGpuSceneState {
     }
 
     #[inline]
-    pub(super) fn require_material_pipeline(
-        &mut self,
-        key: MaterialGpuPipelineKey,
-        r: &mut dyn newengine_core::render::RenderApi,
-    ) -> newengine_core::EngineResult<MaterialGpuPipeline> {
-        let profile = self.material_pipeline_profile();
-        self.material.registry.require_pipeline(key, profile, r)
-    }
-
-    #[inline]
     pub(super) fn require_material_pipeline_for(
         &mut self,
         key: MaterialGpuPipelineKey,
         scene_color_format: newengine_core::render::TextureFormat,
+        deferred_pipelines: bool,
         r: &mut dyn newengine_core::render::RenderApi,
     ) -> newengine_core::EngineResult<MaterialGpuPipeline> {
-        let profile = self.material_pipeline_profile_for(scene_color_format);
+        let profile = self.material_pipeline_profile_for(scene_color_format, deferred_pipelines);
         self.material.registry.require_pipeline(key, profile, r)
-    }
-
-    pub(super) fn require_primary_lit_pipeline(
-        &mut self,
-        r: &mut dyn newengine_core::render::RenderApi,
-    ) -> newengine_core::EngineResult<LitPipeline> {
-        let key = self.primary_lit_pipeline_key()?;
-        self.require_material_pipeline(key, r)?.lit().ok_or_else(|| {
-            newengine_core::EngineError::other(format!(
-                "render material registry: primary material domain produced no lit pipeline key={:?}",
-                key
-            ))
-        })
     }
 
     pub(super) fn require_primary_lit_pipeline_for(
         &mut self,
         scene_color_format: newengine_core::render::TextureFormat,
+        deferred_pipelines: bool,
         r: &mut dyn newengine_core::render::RenderApi,
     ) -> newengine_core::EngineResult<LitPipeline> {
         let key = self.primary_lit_pipeline_key()?;
-        self.require_material_pipeline_for(key, scene_color_format, r)?
+        self.require_material_pipeline_for(key, scene_color_format, deferred_pipelines, r)?
             .lit()
             .ok_or_else(|| {
                 newengine_core::EngineError::other(format!(
@@ -421,6 +397,10 @@ impl RenderDiagnosticsRuntimeState {
 
 pub(super) struct RenderUiSurfaceRuntimeState {
     pub(super) primary: super::module_impl::ui_node_surface::RenderUiNodeSurfaceState,
+    /// Full provider image payloads may be repeated every loading frame. Keep a
+    /// content fingerprint so only changed UI textures reach Vulkan again.
+    pub(super) prelaunch_texture_fingerprints: FxHashMap<u32, u64>,
+    pub(super) prelaunch_patch_fingerprints: FxHashMap<(u32, u32, u32, u32, u32), u64>,
 }
 
 impl RenderUiSurfaceRuntimeState {
@@ -428,6 +408,8 @@ impl RenderUiSurfaceRuntimeState {
     pub(super) fn new() -> Self {
         Self {
             primary: super::module_impl::ui_node_surface::RenderUiNodeSurfaceState::new(),
+            prelaunch_texture_fingerprints: FxHashMap::default(),
+            prelaunch_patch_fingerprints: FxHashMap::default(),
         }
     }
 }

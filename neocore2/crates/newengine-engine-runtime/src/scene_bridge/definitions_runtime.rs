@@ -131,6 +131,16 @@ pub fn apply_definition_instantiation(
         Vec3::new(transform.scale[0], transform.scale[1], transform.scale[2]),
     );
     let _ = world.insert(entity, local_transform);
+    crate::gameplay::attach_scene_object_core(
+        world,
+        entity,
+        local_transform.position,
+        Vec3::new(
+            transform.scale[0].abs().max(0.5),
+            transform.scale[1].abs().max(0.5),
+            transform.scale[2].abs().max(0.5),
+        ),
+    );
     let _ = world.insert(
         entity,
         DefinitionInstance {

@@ -29,7 +29,8 @@ pub use builder::{
     TextureEncodedBuildEntry,
 };
 pub use dds::{
-    write_dds_rgba8, write_dds_rgba8_mip_chain, write_dds_runtime_mip_chain, DdsExportError,
+    read_dds_runtime_texture, write_dds_rgba8, write_dds_rgba8_mip_chain,
+    write_dds_runtime_mip_chain, DdsExportError, DdsImportError, DdsRuntimeTexture,
 };
 pub use dictionary::{parse, parse_manifest_only, TextureDictionary, TextureEntryView};
 pub use error::{Result, TextureContainerError};

@@ -5,7 +5,7 @@ use crate::frame::Frame;
 
 use std::time::Duration;
 
-const MAX_ENGINE_FIXED_STEPS_PER_FRAME: u32 = 1;
+const MAX_ENGINE_FIXED_STEPS_PER_FRAME: u32 = 4;
 const FIXED_CATCHUP_WARN_INTERVAL_FRAMES: u64 = 300;
 
 use newengine_time_api::{

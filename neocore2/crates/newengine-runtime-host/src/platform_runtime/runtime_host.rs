@@ -211,6 +211,21 @@ impl HostPlatformRuntime {
             Ok(()) => crate::platform_early_log!("host.ffi.call.returned ok"),
             Err(e) => crate::platform_early_log!("host.ffi.call.returned err='{}'", e),
         }
+        newengine_ulog_api::ulog::info!(
+            "platform runtime: native runtime returned status={} close_requested={} engine_shutdown_requested={} started={} window_ready_emitted={} bootstrap_stage={:?} ui_frames={} surface={}x{} minimized={} degraded={} fatal_bootstrap={} reason='platform-runtime-return'",
+            if result.is_ok() { "ok" } else { "err" },
+            self.close_requested,
+            self.engine.shutdown_token().is_requested(),
+            self.started,
+            self.window_ready_emitted,
+            self.bootstrap_stage,
+            self.ui_frame_index,
+            self.surface.width,
+            self.surface.height,
+            self.minimized,
+            self.runtime_soft_degraded_error.is_some(),
+            self.fatal_bootstrap_error.is_some(),
+        );
 
         let shutdown_exit_code = if result.is_ok() { 0 } else { 1 };
         let shutdown_watchdog = ShutdownWatchdog::arm(
@@ -373,6 +388,12 @@ impl HostPlatformRuntime {
 
     pub(crate) fn step(&mut self, dt_sec: f32) -> EngineResult<PlatformStepResultV1> {
         let step = if self.close_requested {
+            newengine_ulog_api::ulog::info!(
+                "platform runtime: step requested native exit reason='close_requested' ui_frames={} started={} bootstrap_stage={:?}",
+                self.ui_frame_index,
+                self.started,
+                self.bootstrap_stage,
+            );
             PlatformStepResultV1 {
                 exit_requested: true,
                 ..PlatformStepResultV1::default()

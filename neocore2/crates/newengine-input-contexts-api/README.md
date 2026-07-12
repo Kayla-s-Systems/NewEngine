@@ -2,6 +2,14 @@
 
 Context stack and modal capture contract for `engine.input.contexts`.
 
+## Internal architecture
+
+- `contracts.rs` — `engine.input.contexts` service contract and service-info DTO.
+- `context.rs` — context, lifetime, capture policy and ordered context stack.
+- `capture.rs` — provider-neutral modal capture state.
+
+`lib.rs` only re-exports the stable public contract.
+
 <!-- NORTHSTAR-DIR-README:BEGIN -->
 
 ## Directory purpose

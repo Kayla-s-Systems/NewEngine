@@ -1,10 +1,16 @@
+use super::mesh_passes_primitive::{instance_batch_ubo_key, PrimitiveGpuPlan, PrimitivePlanKey};
+
+use newengine_math::{collections::FxHashSet, hash_combine_u64};
+
+use super::scene_mesh_pass::route_diagnostics_due;
+
 use super::*;
 
 #[inline]
 fn shadow_light_view_key(light_viewproj: Mat4) -> u64 {
     let mut h = 0xa5ad_50c5_1a57_0001u64;
     for f in light_viewproj.to_cols_array() {
-        h = mix_u64(h, f.to_bits() as u64);
+        h = hash_combine_u64(h, f.to_bits() as u64);
     }
     h
 }
@@ -51,7 +57,7 @@ pub fn draw_procedural_terrain_shadow(
     let terrain_shadow_candidates = entries.len();
     let terrain_shadow_budget = terrain_budget(runtime, true);
     entries.truncate(terrain_shadow_budget);
-    if runtime && primitive_route_diagnostics_due(this.frame.frame_index) {
+    if runtime && route_diagnostics_due(this.frame.frame_index) {
         newengine_ulog_api::ulog::debug!(
             "terrain.draw_list: pass='shadow_casters' candidates={} planned={} budget={} policy='terrain casts only when authored ytyp shadow_policy is cast or cast_and_receive'",
             terrain_shadow_candidates,
@@ -84,7 +90,7 @@ pub fn draw_procedural_terrain_shadow(
             continue;
         };
 
-        let key = mix_u64(entity_key ^ 0x5a44_1000_0000_0000u64, shadow_view_key);
+        let key = hash_combine_u64(entity_key ^ 0x5a44_1000_0000_0000u64, shadow_view_key);
         let mut per = this.ensure_per_draw_ubo_with_binding(
             r,
             lit,
@@ -106,6 +112,7 @@ pub fn draw_procedural_terrain_shadow(
             model,
             material_plan.base_color,
             material_plan.emissive_radiance,
+            material_plan.alpha_cutoff,
             material_plan.uv_transform,
             material_plan.material_params,
             lights,
@@ -139,7 +146,6 @@ pub fn draw_primitives_shadow(
     runtime: bool,
     camera_position: Vec3,
 ) -> newengine_core::EngineResult<()> {
-    let shadow_view_key = shadow_light_view_key(light_viewproj);
     let world = scene.world();
     let reg_lock = this.bridges.scene.primitives();
     let reg = reg_lock.read();
@@ -153,9 +159,22 @@ pub fn draw_primitives_shadow(
         Mat4,
         Option<newengine_materials::MaterialRef>,
     )> = Vec::new();
+    let mut shadow_seen = 0usize;
+    let mut shadow_policy_culled = 0usize;
+    let mut shadow_distance_culled = 0usize;
+    let mut shadow_light_culled = 0usize;
     for (id, prim, gt) in world.query2::<Primitive, GlobalTransform>() {
+        shadow_seen = shadow_seen.saturating_add(1);
         if !display_visible_in_mode(world, id, runtime) || world.get::<SkyDomeRuntime>(id).is_some()
         {
+            continue;
+        }
+        let render_options = world
+            .get::<MeshRenderOptions>(id)
+            .cloned()
+            .unwrap_or_else(MeshRenderOptions::world_opaque);
+        if !primitive_cast_shadows_enabled(&render_options) {
+            shadow_policy_culled = shadow_policy_culled.saturating_add(1);
             continue;
         }
         if runtime {
@@ -166,9 +185,11 @@ pub fn draw_primitives_shadow(
                     > primitive_shadow_max_distance(runtime)
                         * primitive_shadow_max_distance(runtime)
                 {
+                    shadow_distance_culled = shadow_distance_culled.saturating_add(1);
                     continue;
                 }
                 if !shadow_caster_visible(this.shadows_current_cull(), center_ws, radius_ws) {
+                    shadow_light_culled = shadow_light_culled.saturating_add(1);
                     continue;
                 }
             }
@@ -183,10 +204,14 @@ pub fn draw_primitives_shadow(
         ));
     }
     sort_by_distance_then_key(&mut entries);
-    entries.truncate(primitive_budget(runtime, true));
+    let shadow_visible = entries.len();
+    let shadow_budget = primitive_budget(runtime, true);
+    entries.truncate(shadow_budget);
 
     let mut plan_cache: FxHashMap<PrimitivePlanKey, PrimitiveGpuPlan> = FxHashMap::default();
+    let mut written_ubos = FxHashSet::<u64>::default();
     let mut batches = InstanceBatchSet::default();
+    let mut shadow_submitted = 0usize;
     for (_distance_sq, _entity_key, prim, model, material_ref) in entries {
         let plan_key = PrimitivePlanKey::new(prim, material_ref, false, true);
         let plan = if let Some(plan) = plan_cache.get(&plan_key).copied() {
@@ -209,12 +234,20 @@ pub fn draw_primitives_shadow(
             } else {
                 lit.shadow_instanced_pipeline
             };
+            let base_texture = if material_plan.alpha_cutoff > 0.0 {
+                this.material_texture_or_default(
+                    r,
+                    material_plan.base_color_texture,
+                    lit.white_texture,
+                )
+            } else {
+                lit.white_texture
+            };
             let mesh_key = prim.id.0;
             let ubo_key = instance_batch_ubo_key(
-                mix_u64(0x5b1d_5a50_0000_0000, shadow_view_key),
+                0x5b1d_5a50_0000_0000,
                 pipeline,
-                mesh_key,
-                lit.white_texture,
+                base_texture,
                 lit.flat_normal_texture,
                 lit.white_texture,
                 lit.white_texture,
@@ -225,7 +258,7 @@ pub fn draw_primitives_shadow(
                 r,
                 lit,
                 ubo_key,
-                lit.white_texture,
+                base_texture,
                 lit.flat_normal_texture,
                 lit.white_texture,
                 lit.white_texture,
@@ -234,24 +267,30 @@ pub fn draw_primitives_shadow(
             per.last_seen_frame = this.frame.frame_index;
             this.gpu.material.per_draw_ubo.insert(ubo_key, per);
 
-            // Shadow instancing also shares one UBO per material/mesh bucket.
-            super::super::super::passes_ubo::write_lit_ubo_ex(
-                r,
-                per.ubo,
-                Mat4::IDENTITY,
-                Mat4::IDENTITY,
-                [1.0, 1.0, 1.0, 1.0],
-                [0.0, 0.0, 0.0],
-                [1.0, 1.0, 0.0, 0.0],
-                [1.0, 0.75, 0.0, 1.0],
-                lights,
-            )?;
+            // The light-view transform is instance data, not UBO data. Keep
+            // this key stable across shadow refreshes and share it between meshes
+            // that use the same alpha texture/pipeline. This avoids allocating a
+            // new UBO and bind group for every moving shadow projection.
+            if written_ubos.insert(ubo_key) {
+                super::super::super::passes_ubo::write_lit_ubo_ex(
+                    r,
+                    per.ubo,
+                    Mat4::IDENTITY,
+                    Mat4::IDENTITY,
+                    [1.0, 1.0, 1.0, 1.0],
+                    [0.0, 0.0, 0.0],
+                    0.0,
+                    [1.0, 1.0, 0.0, 0.0],
+                    [1.0, 0.75, 0.0, 1.0],
+                    lights,
+                )?;
+            }
 
             let plan = PrimitiveGpuPlan {
                 gpu,
                 pipeline,
                 bind_group: per.bg,
-                base_texture: lit.white_texture,
+                base_texture,
                 normal_texture: lit.flat_normal_texture,
                 roughness_texture: lit.white_texture,
                 shadow_texture: lit.white_texture,
@@ -259,6 +298,7 @@ pub fn draw_primitives_shadow(
                 mesh_key,
                 base_color: material_plan.base_color,
                 emissive_radiance: material_plan.emissive_radiance,
+                alpha_cutoff: material_plan.alpha_cutoff,
                 uv_transform: material_plan.uv_transform,
                 material_params: material_plan.material_params,
             };
@@ -279,6 +319,7 @@ pub fn draw_primitives_shadow(
             plan.uv_transform,
             plan.material_params,
             plan.emissive_radiance,
+            plan.alpha_cutoff,
         );
         let batch_key = InstanceBatchKey::new(
             plan.pipeline,
@@ -298,20 +339,44 @@ pub fn draw_primitives_shadow(
             plan.gpu,
             instance,
         );
+        shadow_submitted = shadow_submitted.saturating_add(1);
     }
 
+    let shadow_log_due = runtime && route_diagnostics_due(this.frame.frame_index);
+    let shadow_batch_count = batches.batch_count();
+    let shadow_instance_count = batches.instance_count();
     if batches.is_empty() {
+        if shadow_log_due {
+            newengine_ulog_api::ulog::debug!(
+                "primitive.draw_list: pass='shadow_casters' seen={} visible={} submitted=0 policy_culled={} distance_culled={} light_culled={} budget={} plans={} shared_ubos={} batches={} instances={} policy='MeshShadowPolicy + stable light-space cull + shared texture-set UBO'",
+                shadow_seen,
+                shadow_visible,
+                shadow_policy_culled,
+                shadow_distance_culled,
+                shadow_light_culled,
+                shadow_budget,
+                plan_cache.len(),
+                written_ubos.len(),
+                shadow_batch_count,
+                shadow_instance_count,
+            );
+        }
         return Ok(());
     }
 
+    let ordered_batches = batches.into_sorted_batches();
+    let packed_upload = this
+        .gpu
+        .meshes
+        .instance_uploader
+        .upload_batches(r, &ordered_batches)?;
+
     let mut replay = InstancedReplayState::default();
-    for batch in batches.into_sorted_batches() {
+    for (batch, instance_slice) in ordered_batches
+        .into_iter()
+        .zip(packed_upload.slices.iter().copied())
+    {
         let instance_count = batch.instances.len() as u32;
-        let instance_slice = this
-            .gpu
-            .meshes
-            .instance_uploader
-            .upload(r, &batch.instances)?;
         replay.set_pipeline(r, batch.pipeline)?;
         replay.set_bind_group0(r, batch.bind_group)?;
         replay.set_vertex_buffer(r, 0, BufferSlice::new(batch.gpu.vb, 0))?;
@@ -321,6 +386,24 @@ pub fn draw_primitives_shadow(
             batch.gpu.index_count,
             instance_count,
         ))?;
+    }
+
+    if shadow_log_due {
+        newengine_ulog_api::ulog::debug!(
+            "primitive.draw_list: pass='shadow_casters' seen={} visible={} submitted={} policy_culled={} distance_culled={} light_culled={} budget={} plans={} shared_ubos={} batches={} instances={} upload_writes=1 upload_bytes={} policy='MeshShadowPolicy + stable light-space cull + shared texture-set UBO + packed instance upload'",
+            shadow_seen,
+            shadow_visible,
+            shadow_submitted,
+            shadow_policy_culled,
+            shadow_distance_culled,
+            shadow_light_culled,
+            shadow_budget,
+            plan_cache.len(),
+            written_ubos.len(),
+            shadow_batch_count,
+            shadow_instance_count,
+            packed_upload.bytes_written,
+        );
     }
 
     Ok(())

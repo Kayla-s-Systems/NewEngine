@@ -1,6 +1,6 @@
 {
   "id": "newengine.gameready.input.profile",
-  "version": 6,
+  "version": 8,
   "device_preference": "hybrid",
   "keys": [
     {
@@ -19,9 +19,39 @@
       "label": "3"
     },
     {
+      "code": 9,
+      "id": "keyboard.digit4",
+      "label": "4"
+    },
+    {
+      "code": 10,
+      "id": "keyboard.digit5",
+      "label": "5"
+    },
+    {
+      "code": 11,
+      "id": "keyboard.digit6",
+      "label": "6"
+    },
+    {
+      "code": 12,
+      "id": "keyboard.digit7",
+      "label": "7"
+    },
+    {
+      "code": 13,
+      "id": "keyboard.digit8",
+      "label": "8"
+    },
+    {
       "code": 19,
       "id": "keyboard.key_a",
       "label": "A"
+    },
+    {
+      "code": 21,
+      "id": "keyboard.key_c",
+      "label": "C"
     },
     {
       "code": 22,
@@ -39,9 +69,19 @@
       "label": "F"
     },
     {
+      "code": 27,
+      "id": "keyboard.key_i",
+      "label": "I"
+    },
+    {
       "code": 35,
       "id": "keyboard.key_q",
       "label": "Q"
+    },
+    {
+      "code": 36,
+      "id": "keyboard.key_r",
+      "label": "R"
     },
     {
       "code": 37,
@@ -74,9 +114,19 @@
       "label": "RIGHT SHIFT"
     },
     {
+      "code": 62,
+      "id": "keyboard.control_left",
+      "label": "LEFT CTRL"
+    },
+    {
       "code": 63,
       "id": "keyboard.tab",
       "label": "TAB"
+    },
+    {
+      "code": 64,
+      "id": "keyboard.control_right",
+      "label": "RIGHT CTRL"
     },
     {
       "code": 70,
@@ -169,30 +219,6 @@
       ]
     },
     {
-      "id": "player.move.up",
-      "label": "Move up",
-      "contexts": [],
-      "dispatch": "broadcast",
-      "effects": [
-        {
-          "kind": "move_mask",
-          "mask": 16
-        }
-      ]
-    },
-    {
-      "id": "player.move.down",
-      "label": "Move down",
-      "contexts": [],
-      "dispatch": "broadcast",
-      "effects": [
-        {
-          "kind": "move_mask",
-          "mask": 32
-        }
-      ]
-    },
-    {
       "id": "player.sprint",
       "label": "Sprint",
       "contexts": [],
@@ -207,6 +233,90 @@
           "enabled": true
         }
       ]
+    },
+    {
+      "id": "player.jump",
+      "label": "Jump",
+      "contexts": [],
+      "dispatch": "broadcast",
+      "effects": []
+    },
+    {
+      "id": "player.crouch",
+      "label": "Crouch",
+      "contexts": [],
+      "dispatch": "broadcast",
+      "effects": []
+    },
+    {
+      "id": "player.fire.primary",
+      "label": "Primary fire",
+      "contexts": [],
+      "dispatch": "broadcast",
+      "effects": []
+    },
+    {
+      "id": "player.aim",
+      "label": "Aim",
+      "contexts": [],
+      "dispatch": "broadcast",
+      "effects": []
+    },
+    {
+      "id": "player.reload",
+      "label": "Reload",
+      "contexts": [],
+      "dispatch": "broadcast",
+      "effects": []
+    },
+    {
+      "id": "player.interact",
+      "label": "Interact",
+      "contexts": [],
+      "dispatch": "broadcast",
+      "effects": []
+    },
+    {
+      "id": "player.inventory.toggle",
+      "label": "Toggle inventory",
+      "contexts": [],
+      "dispatch": "broadcast",
+      "effects": []
+    },
+    {
+      "id": "player.equipment.primary",
+      "label": "Equip primary weapon",
+      "contexts": [],
+      "dispatch": "broadcast",
+      "effects": []
+    },
+    {
+      "id": "player.equipment.secondary",
+      "label": "Equip secondary weapon",
+      "contexts": [],
+      "dispatch": "broadcast",
+      "effects": []
+    },
+    {
+      "id": "player.equipment.sidearm",
+      "label": "Equip sidearm",
+      "contexts": [],
+      "dispatch": "broadcast",
+      "effects": []
+    },
+    {
+      "id": "player.equipment.melee",
+      "label": "Equip melee weapon",
+      "contexts": [],
+      "dispatch": "broadcast",
+      "effects": []
+    },
+    {
+      "id": "player.equipment.throwable",
+      "label": "Equip throwable",
+      "contexts": [],
+      "dispatch": "broadcast",
+      "effects": []
     },
     {
       "id": "camera.view.next",
@@ -360,6 +470,37 @@
       ]
     },
     {
+      "id": "game.hud.visibility.toggle",
+      "label": "Toggle HUD visibility",
+      "contexts": [],
+      "dispatch": "broadcast",
+      "effects": []
+    },
+    {
+      "id": "player.move.up",
+      "label": "Move up",
+      "contexts": [],
+      "dispatch": "broadcast",
+      "effects": [
+        {
+          "kind": "move_mask",
+          "mask": 16
+        }
+      ]
+    },
+    {
+      "id": "player.move.down",
+      "label": "Move down",
+      "contexts": [],
+      "dispatch": "broadcast",
+      "effects": [
+        {
+          "kind": "move_mask",
+          "mask": 32
+        }
+      ]
+    },
+    {
       "id": "ui.assets.catalog.toggle",
       "label": "Toggle Asset Browser",
       "contexts": [],
@@ -368,6 +509,23 @@
     }
   ],
   "listeners": [
+    {
+      "owner": "newengine-inventory",
+      "id": "inventory-controller",
+      "action_filter": [
+        "player.inventory.toggle",
+        "player.equipment.primary",
+        "player.equipment.secondary",
+        "player.equipment.sidearm",
+        "player.equipment.melee",
+        "player.equipment.throwable",
+        "game.hud.visibility.toggle"
+      ],
+      "context_filter": [],
+      "priority": 120,
+      "consume": false,
+      "enabled": true
+    },
     {
       "owner": "app.asset_browser",
       "id": "asset-browser-ui",
@@ -678,9 +836,156 @@
       "phase": "Pressed"
     },
     {
-      "action": "ui.assets.catalog.toggle",
+      "action": "game.hud.visibility.toggle",
       "device": "Keyboard",
       "code": 159,
+      "name": null,
+      "phase": "Pressed"
+    },
+    {
+      "action": "ui.assets.catalog.toggle",
+      "device": "Keyboard",
+      "code": 160,
+      "name": null,
+      "phase": "Pressed"
+    },
+    {
+      "action": "player.jump",
+      "device": "Keyboard",
+      "code": 58,
+      "name": null,
+      "phase": "Pressed"
+    },
+    {
+      "action": "player.crouch",
+      "device": "Keyboard",
+      "code": 21,
+      "name": null,
+      "phase": "Down"
+    },
+    {
+      "action": "player.crouch",
+      "device": "Keyboard",
+      "code": 62,
+      "name": null,
+      "phase": "Down"
+    },
+    {
+      "action": "player.crouch",
+      "device": "Keyboard",
+      "code": 64,
+      "name": null,
+      "phase": "Down"
+    },
+    {
+      "action": "player.reload",
+      "device": "Keyboard",
+      "code": 36,
+      "name": null,
+      "phase": "Pressed"
+    },
+    {
+      "action": "player.interact",
+      "device": "Keyboard",
+      "code": 23,
+      "name": null,
+      "phase": "Pressed"
+    },
+    {
+      "action": "player.fire.primary",
+      "device": "MouseButton",
+      "code": 1,
+      "name": null,
+      "phase": "Down"
+    },
+    {
+      "action": "player.aim",
+      "device": "MouseButton",
+      "code": 2,
+      "name": null,
+      "phase": "Down"
+    },
+    {
+      "action": "player.jump",
+      "device": "GamepadButton",
+      "code": 0,
+      "name": "South",
+      "phase": "Pressed"
+    },
+    {
+      "action": "player.crouch",
+      "device": "GamepadButton",
+      "code": 0,
+      "name": "RightThumb",
+      "phase": "Down"
+    },
+    {
+      "action": "player.fire.primary",
+      "device": "GamepadButton",
+      "code": 0,
+      "name": "RightTrigger2",
+      "phase": "Down"
+    },
+    {
+      "action": "player.aim",
+      "device": "GamepadButton",
+      "code": 0,
+      "name": "LeftTrigger2",
+      "phase": "Down"
+    },
+    {
+      "action": "player.reload",
+      "device": "GamepadButton",
+      "code": 0,
+      "name": "West",
+      "phase": "Pressed"
+    },
+    {
+      "action": "player.interact",
+      "device": "GamepadButton",
+      "code": 0,
+      "name": "North",
+      "phase": "Pressed"
+    },
+    {
+      "action": "player.inventory.toggle",
+      "device": "Keyboard",
+      "code": 27,
+      "name": null,
+      "phase": "Pressed"
+    },
+    {
+      "action": "player.equipment.primary",
+      "device": "Keyboard",
+      "code": 6,
+      "name": null,
+      "phase": "Pressed"
+    },
+    {
+      "action": "player.equipment.secondary",
+      "device": "Keyboard",
+      "code": 7,
+      "name": null,
+      "phase": "Pressed"
+    },
+    {
+      "action": "player.equipment.sidearm",
+      "device": "Keyboard",
+      "code": 8,
+      "name": null,
+      "phase": "Pressed"
+    },
+    {
+      "action": "player.equipment.melee",
+      "device": "Keyboard",
+      "code": 9,
+      "name": null,
+      "phase": "Pressed"
+    },
+    {
+      "action": "player.equipment.throwable",
+      "device": "Keyboard",
+      "code": 10,
       "name": null,
       "phase": "Pressed"
     }

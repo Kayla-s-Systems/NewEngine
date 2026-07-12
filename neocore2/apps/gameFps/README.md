@@ -16,7 +16,7 @@ runtime starts:
 
 screen_profile = game
 
-scene_profile  = maps/game_ready_highlands.ymap
+scene_profile  = maps/forest_road_operation.ymap
 
 boot_options   = startup selector + runtime plugins + platform window + render backend
 

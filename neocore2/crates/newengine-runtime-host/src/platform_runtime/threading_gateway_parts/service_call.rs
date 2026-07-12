@@ -61,7 +61,8 @@ pub(crate) fn submit_service_call_task(
 
     if target_gateway.is_empty() || target_method.is_empty() {
         return TaskServiceCallAcceptedV1 {
-            task_id: requested_task_id,
+            task_id: requested_task_id.clone(),
+            job_id: requested_task_id,
             accepted: false,
             gateway: target_gateway,
             method: target_method,
@@ -119,8 +120,10 @@ pub(crate) fn submit_service_call_task(
         }
     });
 
+    let task_id = ticket.task_id().to_owned();
     TaskServiceCallAcceptedV1 {
-        task_id: ticket.task_id().to_owned(),
+        task_id: task_id.clone(),
+        job_id: task_id,
         accepted: true,
         gateway: request.target.gateway,
         method: request.target.method,

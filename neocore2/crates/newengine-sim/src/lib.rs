@@ -7,7 +7,7 @@
 //! # Jobs policy
 //!
 //! Simulation currently executes deterministically on the caller thread. Future
-//! parallel execution must be routed through `engine.jobs`, not through a crate-
+//! parallel execution must be routed through `engine.threading`, not through a crate-
 //! local worker pool or `rayon`, so every batch is visible to diagnostics,
 //! profiler, pause/resume and cancellation control.
 mod access;

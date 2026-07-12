@@ -14,6 +14,27 @@ use crate::path_fmt::{canonicalize_if_exists, display_clean};
 use crate::paths::{default_plugins_dir, resolve_plugins_dir};
 use crate::PluginManager;
 
+pub fn resolve_plugin_discovery_dir(dir: Option<&Path>) -> Result<PathBuf, PluginLoadError> {
+    let dir = match dir {
+        Some(dir) => resolve_plugins_dir(dir)?,
+        None => default_plugins_dir()?,
+    };
+
+    if let Err(e) = std::fs::create_dir_all(&dir) {
+        return Err(PluginLoadError {
+            path: dir.clone(),
+            message: format!("create_dir_all failed: {e}"),
+        });
+    }
+
+    Ok(canonicalize_if_exists(&dir))
+}
+
+pub fn scan_plugin_discovery_graph(dir: &Path) -> Result<DiscoveryGraph, PluginLoadError> {
+    let dir = resolve_plugin_discovery_dir(Some(dir))?;
+    scan_plugins_dir(&dir)
+}
+
 #[derive(Debug, Clone)]
 pub struct IncrementalLoadOutcome {
     pub finished: bool,
@@ -173,6 +194,81 @@ impl PluginManager {
     #[inline]
     pub fn invalidate_discovery_cache(&mut self) {
         self.discovery_cache = None;
+    }
+
+    #[inline]
+    pub fn has_incremental_load_state(&self) -> bool {
+        self.incremental_load.is_some()
+    }
+
+    #[inline]
+    pub fn has_discovery_cache_for_dir(&self, dir: &Path) -> bool {
+        self.discovery_cache
+            .as_ref()
+            .is_some_and(|graph| graph.dir == canonicalize_if_exists(dir))
+    }
+
+    pub fn begin_engine_incremental_load_from_discovery_graph(
+        &mut self,
+        graph: DiscoveryGraph,
+        strict: bool,
+    ) {
+        self.begin_incremental_load_from_graph(
+            graph,
+            true,
+            LoadPhaseFilter::BootstrapAndEngine,
+            strict,
+        );
+    }
+
+    fn begin_incremental_load_from_graph(
+        &mut self,
+        graph: DiscoveryGraph,
+        graph_is_new: bool,
+        filter: LoadPhaseFilter,
+        strict: bool,
+    ) {
+        let selection = build_load_selection(&graph, filter, &self.loaded_ids);
+        let pending = selection
+            .bootstrap_candidates
+            .iter()
+            .chain(selection.engine_candidates.iter())
+            .cloned()
+            .collect::<Vec<_>>();
+
+        emit_boxed_kv(
+            &format!(
+                "PluginDiscovery :: Incremental Phase Selection [{}]",
+                filter.label()
+            ),
+            &[
+                ("dir", display_clean(&graph.dir)),
+                ("pending", pending.len().to_string()),
+                (
+                    "bootstrap_queue",
+                    selection.bootstrap_candidates.len().to_string(),
+                ),
+                (
+                    "engine_queue",
+                    selection.engine_candidates.len().to_string(),
+                ),
+                ("platform_runtime", graph.platform_runtime_count.to_string()),
+                ("unknown_dynlibs", graph.unknown_dynlibs.len().to_string()),
+            ],
+        );
+
+        self.discovery_cache = Some(graph.clone());
+        self.incremental_load = Some(IncrementalLoadState {
+            graph,
+            graph_is_new,
+            selection,
+            filter,
+            pending,
+            next_index: 0,
+            loaded_ids_before_len: self.loaded_ids.len(),
+            load_errors: Vec::new(),
+            strict,
+        });
     }
 
     fn load_from_dir_with_policy_and_filter(
@@ -361,46 +457,7 @@ impl PluginManager {
     ) -> Result<IncrementalLoadOutcome, PluginLoadError> {
         if self.incremental_load.is_none() {
             let (graph, graph_is_new) = self.ensure_discovery_graph(dir)?;
-            let selection = build_load_selection(&graph, filter, &self.loaded_ids);
-            let pending = selection
-                .bootstrap_candidates
-                .iter()
-                .chain(selection.engine_candidates.iter())
-                .cloned()
-                .collect::<Vec<_>>();
-
-            emit_boxed_kv(
-                &format!(
-                    "PluginDiscovery :: Incremental Phase Selection [{}]",
-                    filter.label()
-                ),
-                &[
-                    ("dir", display_clean(&graph.dir)),
-                    ("pending", pending.len().to_string()),
-                    (
-                        "bootstrap_queue",
-                        selection.bootstrap_candidates.len().to_string(),
-                    ),
-                    (
-                        "engine_queue",
-                        selection.engine_candidates.len().to_string(),
-                    ),
-                    ("platform_runtime", graph.platform_runtime_count.to_string()),
-                    ("unknown_dynlibs", graph.unknown_dynlibs.len().to_string()),
-                ],
-            );
-
-            self.incremental_load = Some(IncrementalLoadState {
-                graph,
-                graph_is_new,
-                selection,
-                filter,
-                pending,
-                next_index: 0,
-                loaded_ids_before_len: self.loaded_ids.len(),
-                load_errors: Vec::new(),
-                strict,
-            });
+            self.begin_incremental_load_from_graph(graph, graph_is_new, filter, strict);
         }
 
         let Some(mut state) = self.incremental_load.take() else {

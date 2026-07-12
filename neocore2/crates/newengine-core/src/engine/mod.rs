@@ -8,6 +8,7 @@ mod frame_loop;
 mod module_boot;
 mod module_slot;
 mod panic;
+mod plugin_discovery;
 mod plugins;
 mod run_stage;
 mod run_state;

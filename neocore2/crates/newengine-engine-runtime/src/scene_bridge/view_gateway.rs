@@ -7,7 +7,7 @@ use newengine_core::render::{
     ViewPostFxFrameParams,
 };
 use newengine_ecs::World;
-use newengine_input_actions_api::CameraViewRequest;
+use newengine_input_actions_api::{CameraViewRequest, GameplayActionFrame};
 use newengine_math::{Mat4, Vec3};
 
 use crate::camera_gateway::{CameraGatewayFrame, CameraGatewayInput, CameraTransitionPhase};
@@ -38,6 +38,7 @@ pub(crate) struct EngineViewInput {
     pub move_mask: u64,
     pub speed_scalar: f32,
     pub camera_view: CameraViewRequest,
+    pub gameplay_actions: GameplayActionFrame,
 }
 
 impl From<EngineViewInput> for CameraGatewayInput {
@@ -58,6 +59,7 @@ impl From<EngineViewInput> for CameraGatewayInput {
             move_mask: input.move_mask,
             speed_scalar: input.speed_scalar,
             camera_view: input.camera_view,
+            gameplay_actions: input.gameplay_actions,
         }
     }
 }
@@ -215,6 +217,22 @@ pub(crate) fn apply_engine_view_postfx(
 }
 
 impl SceneBridge {
+    /// Apply direct-player input before simulation and consume camera-view requests.
+    pub(crate) fn prepare_engine_runtime_input(
+        &self,
+        world: &mut World,
+        input: EngineViewInput,
+        effective_play_mode: GameRunMode,
+        frame_index: u64,
+    ) {
+        self.camera_gateway.prepare_world_input(
+            world,
+            CameraGatewayInput::from(input),
+            effective_play_mode,
+            frame_index,
+        );
+    }
+
     /// Resolve the engine view for this frame through `engine.camera`.
     ///
     /// The render controller calls this neutral bridge and receives only a

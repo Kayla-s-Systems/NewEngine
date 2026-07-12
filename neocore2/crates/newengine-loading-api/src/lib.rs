@@ -335,7 +335,7 @@ pub struct EngineTaskEvent {
     pub category: String,
     pub name: String,
     pub lane: String,
-    /// Optional frame id for frame-bound engine.jobs work.
+    /// Optional frame id for frame-bound engine.threading work.
     ///
     /// This is deliberately generic task metadata so profiler/loading/debug tools
     /// can correlate CPU work without knowing the producer crate. Long-running

@@ -22,7 +22,7 @@ pub struct EngineGatewayProviderDecl {
 /// by the historical `EngineServiceKind` convenience enum. Prefer this for new
 /// third-level domains and profile/plugin-owned feature surfaces.
 pub struct EngineGatewayProviderDeclDynamic {
-    /// Public engine API gateway, for example `engine.jobs` or a data-declared child gateway.
+    /// Public engine API gateway, for example `engine.threading` or a data-declared child gateway.
     pub gateway: &'static str,
     pub service_kind: &'static str,
     pub provider_service: &'static str,

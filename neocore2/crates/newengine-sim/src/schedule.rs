@@ -206,7 +206,7 @@ impl SimReadSystemDescriptor {
 /// Canonical boundary:
 ///
 /// ```text
-/// world-owner capture -> SimReadSnapshot DTO -> engine.jobs read-only batches
+/// world-owner capture -> SimReadSnapshot DTO -> engine.threading read-only batches
 ///                       -> SimCommandBatch -> world-owner apply stage
 /// ```
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -309,7 +309,7 @@ impl SimReadBatchReport {
     }
 }
 
-/// Host-owned adapter that maps simulation read batches to `engine.jobs`.
+/// Host-owned adapter that maps simulation read batches to `engine.threading`.
 ///
 /// `newengine-sim` deliberately depends only on this trait, not on
 /// `newengine-core`, so the simulation crate stays provider/runtime agnostic.
@@ -470,7 +470,7 @@ fn run_stage_single_thread(
         1,
         systems.len(),
         if executor.is_some() {
-            "engine.jobs"
+            "engine.threading"
         } else {
             "world-owner-apply-stage"
         },
@@ -486,7 +486,7 @@ fn run_stage_single_thread(
             Box::new(|snapshot| SimReadBatchReport::from_snapshot(&snapshot, 0)),
         );
         if let Some(telemetry) = telemetry {
-            telemetry.publish_batch(&batch, EngineTaskPhase::Completed, "Simulation read snapshot processed", format!("engine.jobs processed SimReadSnapshot dependency_group='{}' systems={} worker_safe={}; apply stage remains world-owner.", report.dependency_group, report.system_count, report.worker_safe), Some(0.35));
+            telemetry.publish_batch(&batch, EngineTaskPhase::Completed, "Simulation read snapshot processed", format!("engine.threading processed SimReadSnapshot dependency_group='{}' systems={} worker_safe={}; apply stage remains world-owner.", report.dependency_group, report.system_count, report.worker_safe), Some(0.35));
         }
     }
 
@@ -520,7 +520,7 @@ fn run_stage_single_thread(
 
 // Parallel simulation is intentionally not implemented through `rayon` here.
 // When this scheduler grows parallel execution again, each batch must be
-// submitted through `engine.jobs` so it has a JobId, lane, priority, progress
+// submitted through `engine.threading` so it has a JobId, lane, priority, progress
 // events and cooperative cancellation.
 
 #[cfg(debug_assertions)]

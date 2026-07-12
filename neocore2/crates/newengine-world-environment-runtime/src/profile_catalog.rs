@@ -17,6 +17,8 @@ pub(crate) struct EnvironmentProfileDescriptor {
     pub cloud_profile_ref: &'static str,
     pub wind_profile_ref: &'static str,
     pub visual_assets: &'static EnvironmentVisualAssetGroupDescriptor,
+    pub latitude_degrees: f32,
+    pub axial_tilt_degrees: f32,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -558,6 +560,40 @@ const DEFAULT_WEATHER_BANDS: &[WeatherBandDescriptor] = &[
 ];
 
 const HIGHLANDS_WEATHER_BANDS: &[WeatherBandDescriptor] = DEFAULT_WEATHER_BANDS;
+const FOREST_ROAD_WEATHER_BANDS: &[WeatherBandDescriptor] = &[
+    WeatherBandDescriptor {
+        pattern_id: "weather.fog.ground_radiation",
+        pressure_min: 0.18,
+        pressure_max: 0.46,
+        time_center: Some(0.23),
+        time_half_width: 0.055,
+        score_bias: 0.06,
+    },
+    WeatherBandDescriptor {
+        pattern_id: "weather.clear.dry_high_pressure",
+        pressure_min: 0.00,
+        pressure_max: 0.64,
+        time_center: None,
+        time_half_width: 0.0,
+        score_bias: 0.15,
+    },
+    WeatherBandDescriptor {
+        pattern_id: "weather.cloudy.fair_cumulus",
+        pressure_min: 0.28,
+        pressure_max: 0.88,
+        time_center: None,
+        time_half_width: 0.0,
+        score_bias: 0.12,
+    },
+    WeatherBandDescriptor {
+        pattern_id: "weather.overcast.stratus_deck",
+        pressure_min: 0.82,
+        pressure_max: 1.00,
+        time_center: None,
+        time_half_width: 0.0,
+        score_bias: -0.08,
+    },
+];
 const SNOW_WEATHER_BANDS: &[WeatherBandDescriptor] = &[
     WeatherBandDescriptor {
         pattern_id: "weather.snow.stratiform",
@@ -605,6 +641,10 @@ const DESERT_WEATHER_BANDS: &[WeatherBandDescriptor] = &[
 
 const TABLES: &[WeatherTableDescriptor] = &[
     WeatherTableDescriptor {
+        id: "weather/game_ready_forest_road.yweather@table",
+        bands: FOREST_ROAD_WEATHER_BANDS,
+    },
+    WeatherTableDescriptor {
         id: "weather/game_ready_highlands.yweather@table",
         bands: HIGHLANDS_WEATHER_BANDS,
     },
@@ -624,6 +664,18 @@ const TABLES: &[WeatherTableDescriptor] = &[
 
 const PROFILES: &[EnvironmentProfileDescriptor] = &[
     EnvironmentProfileDescriptor {
+        id: "environment.game_ready_forest_road",
+        region: "game_ready.forest_road",
+        biome: "temperate_forest",
+        weather_table_ref: "weather/game_ready_forest_road.yweather@table",
+        sky_profile_ref: "sky/temperate_forest_morning.ysky@gradient",
+        cloud_profile_ref: "clouds/temperate_cumulus.ycloud@profile",
+        wind_profile_ref: "wind/forest_canopy_breeze.ywind@profile",
+        visual_assets: &GAME_READY_SKYDOME_VISUALS,
+        latitude_degrees: 45.0,
+        axial_tilt_degrees: 23.44,
+    },
+    EnvironmentProfileDescriptor {
         id: "environment.game_ready_highlands",
         region: "game_ready.highlands",
         biome: "highlands",
@@ -632,6 +684,8 @@ const PROFILES: &[EnvironmentProfileDescriptor] = &[
         cloud_profile_ref: "clouds/highlands_fields.ycloud@profile",
         wind_profile_ref: "wind/highlands_breeze.ywind@profile",
         visual_assets: &GAME_READY_SKYDOME_VISUALS,
+        latitude_degrees: 45.0,
+        axial_tilt_degrees: 23.44,
     },
     EnvironmentProfileDescriptor {
         id: "environment.default",
@@ -642,6 +696,8 @@ const PROFILES: &[EnvironmentProfileDescriptor] = &[
         cloud_profile_ref: "clouds/default_temperate.ycloud@profile",
         wind_profile_ref: "wind/default_breeze.ywind@profile",
         visual_assets: &GAME_READY_SKYDOME_VISUALS,
+        latitude_degrees: 38.0,
+        axial_tilt_degrees: 23.44,
     },
     EnvironmentProfileDescriptor {
         id: "environment.alpine_winter",
@@ -652,6 +708,8 @@ const PROFILES: &[EnvironmentProfileDescriptor] = &[
         cloud_profile_ref: "clouds/alpine_winter.ycloud@profile",
         wind_profile_ref: "wind/alpine_gusts.ywind@profile",
         visual_assets: &GAME_READY_SKYDOME_VISUALS,
+        latitude_degrees: 58.0,
+        axial_tilt_degrees: 23.44,
     },
     EnvironmentProfileDescriptor {
         id: "environment.desert_dusk",
@@ -662,11 +720,16 @@ const PROFILES: &[EnvironmentProfileDescriptor] = &[
         cloud_profile_ref: "clouds/desert_dust.ycloud@profile",
         wind_profile_ref: "wind/desert_front.ywind@profile",
         visual_assets: &GAME_READY_SKYDOME_VISUALS,
+        latitude_degrees: 27.0,
+        axial_tilt_degrees: 23.44,
     },
 ];
 
 pub(crate) fn default_profile() -> &'static EnvironmentProfileDescriptor {
-    &PROFILES[1]
+    PROFILES
+        .iter()
+        .find(|profile| profile.id == "environment.default")
+        .unwrap_or(&PROFILES[0])
 }
 
 pub(crate) fn profile_by_id(id: &str) -> (&'static EnvironmentProfileDescriptor, bool) {

@@ -298,6 +298,7 @@ impl<'a> newengine_render_feature_api::DrawListBuildCtx for DrawListBuildCtx<'a>
                 ctx.runtime,
                 ctx.camera_position,
                 ctx.camera_forward,
+                ctx.deferred,
             )
         })?;
         Ok(())
@@ -316,6 +317,7 @@ impl<'a> newengine_render_feature_api::DrawListBuildCtx for DrawListBuildCtx<'a>
                 ctx.runtime,
                 ctx.camera_position,
                 ctx.camera_forward,
+                ctx.deferred,
             )
         })?;
         Ok(())

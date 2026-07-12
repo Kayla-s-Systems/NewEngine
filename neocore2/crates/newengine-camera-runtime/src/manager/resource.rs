@@ -470,8 +470,13 @@ fn transition_duration_from_settings(
 fn effects_for_mode(mode: CameraRuntimeMode, base: CameraPostEffects) -> CameraPostEffects {
     let mut effects = base.sanitized();
     match mode {
-        CameraRuntimeMode::GameplayFirstPerson | CameraRuntimeMode::GameplayThirdPersonAim => {
-            effects.motion_blur.strength = effects.motion_blur.strength.max(0.03);
+        CameraRuntimeMode::GameplayFirstPerson => {
+            // Mouse look must remain crisp. Camera motion blur makes low frame-rate
+            // input feel heavier and adds no useful readability in first person.
+            effects.motion_blur.strength = 0.0;
+        }
+        CameraRuntimeMode::GameplayThirdPersonAim => {
+            effects.motion_blur.strength = effects.motion_blur.strength.min(0.015);
         }
         CameraRuntimeMode::CinematicPreview
         | CameraRuntimeMode::ScriptedPreview

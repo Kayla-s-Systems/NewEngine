@@ -1,4 +1,15 @@
 use super::*;
+use abi_stable::std_types::RString;
+use newengine_asset_format_nef8::ydd_binary::{decode_ydd_binary_body, YddBinaryVertex};
+use newengine_plugin_api::{Blob, MethodName};
+use newengine_render_api::{
+    decode_multi_adapter_mesh_transcode_result, encode_multi_adapter_mesh_transcode_request,
+    MultiAdapterMeshTranscodeRequest, RENDER_SERVICE_ID,
+    RENDER_SERVICE_METHOD_MULTI_ADAPTER_MESH_TRANSCODE_BIN_V1,
+};
+use std::sync::atomic::{AtomicBool, Ordering};
+
+static MULTI_ADAPTER_SERVICE_DISABLED: AtomicBool = AtomicBool::new(false);
 
 pub(super) fn canonical_ydd_prefab_ref(prefab: &GameReadyPrefabSpec) -> Result<String, String> {
     let source = prefab.source.trim().replace('\\', "/");
@@ -8,76 +19,22 @@ pub(super) fn canonical_ydd_prefab_ref(prefab: &GameReadyPrefabSpec) -> Result<S
             prefab.id
         ));
     }
-    let lower = source.to_ascii_lowercase();
-    if !lower.contains(".ydd@") {
+    if !source.to_ascii_lowercase().contains(".ydd@") {
         return Err(format!(
-            "prefab id='{}' source='{}' rejected: runtime foliage requires .ydd@entry, not prefab/json/gltf sidecars",
+            "prefab id='{}' source='{}' rejected: runtime requires binary .ydd@entry",
             prefab.id, source
         ));
     }
     Ok(source)
 }
 
-pub(super) fn ydd_body_json(logical_ref: &str) -> Result<serde_json::Value, String> {
-    let assets = AssetServiceClient::new(default_host_api());
-    let body = assets
-        .decode_v1(&newengine_assets::AssetDecodeRequest {
-            logical_path: logical_ref.to_owned(),
-            output_kind: "asset.list_file_body_v1".to_owned(),
-            selector: serde_json::Value::Null,
-        })
-        .map_err(|e| {
-            format!("AssetManager decode .ydd body failed path='{logical_ref}' err='{e}'")
-        })?;
-    serde_json::from_slice(&body)
-        .map_err(|e| format!("ydd body JSON parse failed path='{logical_ref}' err='{e}'"))
-}
-
-#[inline]
-pub(super) fn ydd_array<'a>(
-    value: &'a serde_json::Value,
-    key: &str,
-) -> Result<&'a Vec<serde_json::Value>, String> {
-    value
-        .get(key)
-        .and_then(|x| x.as_array())
-        .ok_or_else(|| format!("ydd runtime mesh part missing array '{key}'"))
-}
-
-pub(super) fn ydd_vec3(value: &serde_json::Value, key: &str, default: [f32; 3]) -> [f32; 3] {
-    let Some(values) = value.get(key).and_then(|x| x.as_array()) else {
-        return default;
-    };
-    if values.len() < 3 {
-        return default;
-    }
-    [
-        values[0].as_f64().unwrap_or(default[0] as f64) as f32,
-        values[1].as_f64().unwrap_or(default[1] as f64) as f32,
-        values[2].as_f64().unwrap_or(default[2] as f64) as f32,
-    ]
-}
-
-pub(super) fn ydd_vec2(value: &serde_json::Value, key: &str, default: [f32; 2]) -> [f32; 2] {
-    let Some(values) = value.get(key).and_then(|x| x.as_array()) else {
-        return default;
-    };
-    if values.len() < 2 {
-        return default;
-    }
-    [
-        values[0].as_f64().unwrap_or(default[0] as f64) as f32,
-        values[1].as_f64().unwrap_or(default[1] as f64) as f32,
-    ]
-}
-
 pub(super) fn recompute_ydd_mesh_bounds(mesh: &mut PrimitiveMesh) {
     let mut min = Vec3::splat(f32::INFINITY);
     let mut max = Vec3::splat(f32::NEG_INFINITY);
-    for v in &mesh.vertices {
-        let p = Vec3::new(v.pos[0], v.pos[1], v.pos[2]);
-        min = min.min(p);
-        max = max.max(p);
+    for vertex in &mesh.vertices {
+        let point = Vec3::new(vertex.pos[0], vertex.pos[1], vertex.pos[2]);
+        min = min.min(point);
+        max = max.max(point);
     }
     if mesh.vertices.is_empty() || !min.is_finite() || !max.is_finite() {
         mesh.bounds_center = Vec3::ZERO;
@@ -85,149 +42,261 @@ pub(super) fn recompute_ydd_mesh_bounds(mesh: &mut PrimitiveMesh) {
         return;
     }
     mesh.bounds_center = (min + max) * 0.5;
-    let mut radius = 0.0f32;
-    for v in &mesh.vertices {
-        let p = Vec3::new(v.pos[0], v.pos[1], v.pos[2]);
-        radius = radius.max((p - mesh.bounds_center).length());
-    }
-    mesh.bounds_radius = radius.max(0.001);
+    mesh.bounds_radius = mesh
+        .vertices
+        .iter()
+        .map(|vertex| {
+            let point = Vec3::new(vertex.pos[0], vertex.pos[1], vertex.pos[2]);
+            (point - mesh.bounds_center).length()
+        })
+        .fold(0.001_f32, f32::max);
 }
 
-pub(super) fn decode_ydd_runtime_mesh_part(
-    logical_ref: &str,
-    index: usize,
-    part: &serde_json::Value,
-    material_ref: Option<String>,
-) -> Result<DecodedPrefabMeshPart, String> {
-    let name = part
-        .get("name")
-        .and_then(|x| x.as_str())
-        .unwrap_or("YDD/Prefab/Mesh")
-        .trim()
-        .to_owned();
-    let material_slot = part
-        .get("material_slot")
-        .and_then(|x| x.as_str())
-        .unwrap_or("Default")
-        .trim()
-        .to_owned();
-    let primitive_id = PrimitiveId(
-        part.get("primitive_id")
-            .and_then(|x| x.as_u64())
-            .unwrap_or_else(|| {
-                fnv1a_64(&format!(
-                    "newengine.prefab.ydd:{logical_ref}#part:{index}:mat:{material_slot}"
-                ))
-            }),
-    );
+fn multi_adapter_mesh_min_bytes() -> usize {
+    std::env::var("NEWENGINE_MULTI_ADAPTER_MESH_MIN_BYTES")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .unwrap_or(64 * 1024)
+        .clamp(4 * 1024, 128 * 1024 * 1024)
+}
 
-    let vertices_json = ydd_array(part, "vertices")?;
-    let indices_json = ydd_array(part, "indices")?;
-    if vertices_json.is_empty() {
-        return Err(format!(
-            "ydd runtime mesh part has no vertices path='{logical_ref}' index={index}"
-        ));
-    }
-    if indices_json.len() % 3 != 0 {
-        return Err(format!(
-            "ydd runtime mesh part index count is not triangular path='{logical_ref}' index={index} indices={}",
-            indices_json.len()
-        ));
-    }
-
-    let mut vertices = Vec::with_capacity(vertices_json.len());
-    for vertex in vertices_json {
-        vertices.push(PrimitiveVertex {
-            pos: ydd_vec3(vertex, "pos", [0.0, 0.0, 0.0]),
-            nrm: ydd_vec3(vertex, "nrm", [0.0, 1.0, 0.0]),
-            uv: ydd_vec2(vertex, "uv", [0.0, 0.0]),
-        });
-    }
-
-    let mut indices = Vec::with_capacity(indices_json.len());
-    for item in indices_json {
-        let Some(index_value) = item.as_u64() else {
-            return Err(format!(
-                "ydd runtime mesh part index is not u64 path='{logical_ref}' part={index}"
-            ));
-        };
-        let index_value = u32::try_from(index_value)
-            .map_err(|_| format!("ydd runtime mesh part index exceeds u32 path='{logical_ref}' part={index} index={index_value}"))?;
-        if index_value as usize >= vertices.len() {
-            return Err(format!(
-                "ydd runtime mesh part index out of bounds path='{logical_ref}' part={index} index={} vertices={}",
-                index_value,
-                vertices.len()
-            ));
+fn pack_ydd_vertices(vertices: &[YddBinaryVertex]) -> Vec<u8> {
+    let mut bytes = Vec::with_capacity(vertices.len().saturating_mul(32));
+    for vertex in vertices {
+        for value in vertex
+            .position
+            .iter()
+            .chain(vertex.normal.iter())
+            .chain(vertex.uv0.iter())
+        {
+            bytes.extend_from_slice(&value.to_le_bytes());
         }
-        indices.push(index_value);
+    }
+    bytes
+}
+
+fn primitive_vertices_from_bytes(bytes: &[u8]) -> Result<Vec<PrimitiveVertex>, String> {
+    if bytes.len() % 32 != 0 {
+        return Err(format!(
+            "multi-adapter vertex response is not 32-byte aligned bytes={}",
+            bytes.len()
+        ));
+    }
+    fn read_f32(bytes: &[u8], offset: usize) -> f32 {
+        f32::from_le_bytes([
+            bytes[offset],
+            bytes[offset + 1],
+            bytes[offset + 2],
+            bytes[offset + 3],
+        ])
+    }
+    Ok(bytes
+        .chunks_exact(32)
+        .map(|record| PrimitiveVertex {
+            pos: [
+                read_f32(record, 0),
+                read_f32(record, 4),
+                read_f32(record, 8),
+            ],
+            nrm: [
+                read_f32(record, 12),
+                read_f32(record, 16),
+                read_f32(record, 20),
+            ],
+            uv: [read_f32(record, 24), read_f32(record, 28)],
+        })
+        .collect())
+}
+
+fn cpu_primitive_vertices(vertices: &[YddBinaryVertex]) -> Vec<PrimitiveVertex> {
+    vertices
+        .iter()
+        .map(|vertex| PrimitiveVertex {
+            pos: vertex.position,
+            nrm: vertex.normal,
+            uv: vertex.uv0,
+        })
+        .collect()
+}
+
+fn transcode_ydd_vertices(
+    logical_ref: &str,
+    mesh_name: &str,
+    vertices: &[YddBinaryVertex],
+) -> Vec<PrimitiveVertex> {
+    let bytes = pack_ydd_vertices(vertices);
+    if bytes.len() < multi_adapter_mesh_min_bytes()
+        || MULTI_ADAPTER_SERVICE_DISABLED.load(Ordering::Relaxed)
+    {
+        return cpu_primitive_vertices(vertices);
     }
 
-    let mut mesh = PrimitiveMesh {
-        vertices,
-        indices,
-        bounds_center: Vec3::ZERO,
-        bounds_radius: 0.001,
+    let request = match MultiAdapterMeshTranscodeRequest::new(bytes) {
+        Ok(request) => request,
+        Err(error) => {
+            newengine_ulog_api::ulog::warn!(
+                "game-ready: multi-adapter request rejected path='{}' mesh='{}' err='{}'; using CPU vertex stream",
+                logical_ref,
+                mesh_name,
+                error
+            );
+            return cpu_primitive_vertices(vertices);
+        }
     };
-    recompute_ydd_mesh_bounds(&mut mesh);
+    let packet = match encode_multi_adapter_mesh_transcode_request(&request) {
+        Ok(packet) => packet,
+        Err(error) => {
+            newengine_ulog_api::ulog::warn!(
+                "game-ready: multi-adapter request encode failed path='{}' mesh='{}' err='{}'; using CPU vertex stream",
+                logical_ref,
+                mesh_name,
+                error
+            );
+            return cpu_primitive_vertices(vertices);
+        }
+    };
 
-    Ok(DecodedPrefabMeshPart {
-        primitive_id,
-        name,
-        material_slot,
-        material_ref,
-        mesh,
-    })
+    let host = default_host_api();
+    let response = (host.call_service_v1)(
+        RString::from(RENDER_SERVICE_ID),
+        MethodName::from(RENDER_SERVICE_METHOD_MULTI_ADAPTER_MESH_TRANSCODE_BIN_V1),
+        Blob::from(packet),
+    )
+    .into_result();
+    let response = match response {
+        Ok(response) => response.into_vec(),
+        Err(error) => {
+            let detail = error.to_string();
+            if detail.contains("unavailable")
+                || detail.contains("unknown method")
+                || detail.contains("unknown service")
+                || detail.contains("not found")
+            {
+                if !MULTI_ADAPTER_SERVICE_DISABLED.swap(true, Ordering::Relaxed) {
+                    newengine_ulog_api::ulog::info!(
+                        "game-ready: independent multi-adapter mesh transcode unavailable; CPU fallback active err='{}'",
+                        detail
+                    );
+                }
+            } else {
+                newengine_ulog_api::ulog::warn!(
+                    "game-ready: multi-adapter mesh transcode failed path='{}' mesh='{}' err='{}'; using CPU vertex stream",
+                    logical_ref,
+                    mesh_name,
+                    detail
+                );
+            }
+            return cpu_primitive_vertices(vertices);
+        }
+    };
+    let result = match decode_multi_adapter_mesh_transcode_result(&response) {
+        Ok(result) => result,
+        Err(error) => {
+            newengine_ulog_api::ulog::warn!(
+                "game-ready: multi-adapter response decode failed path='{}' mesh='{}' err='{}'; using CPU vertex stream",
+                logical_ref,
+                mesh_name,
+                error
+            );
+            return cpu_primitive_vertices(vertices);
+        }
+    };
+    if result.vertex_count() != vertices.len() {
+        newengine_ulog_api::ulog::warn!(
+            "game-ready: multi-adapter vertex count mismatch path='{}' mesh='{}' expected={} actual={}; using CPU vertex stream",
+            logical_ref,
+            mesh_name,
+            vertices.len(),
+            result.vertex_count()
+        );
+        return cpu_primitive_vertices(vertices);
+    }
+    match primitive_vertices_from_bytes(&result.vertex_bytes) {
+        Ok(vertices) => {
+            newengine_ulog_api::ulog::info!(
+                "game-ready: multi-adapter vertex stream ready path='{}' mesh='{}' worker={} vertices={} bytes={} repaired={} gpu_ns={}",
+                logical_ref,
+                mesh_name,
+                result.worker_index,
+                vertices.len(),
+                result.vertex_bytes.len(),
+                result.invalid_vertex_count,
+                result.gpu_elapsed_ns,
+            );
+            vertices
+        }
+        Err(error) => {
+            newengine_ulog_api::ulog::warn!(
+                "game-ready: multi-adapter vertex response invalid path='{}' mesh='{}' err='{}'; using CPU vertex stream",
+                logical_ref,
+                mesh_name,
+                error
+            );
+            cpu_primitive_vertices(vertices)
+        }
+    }
 }
 
-pub(super) fn ydd_material_ref_for_runtime_part(
-    body: &serde_json::Value,
-    index: usize,
-) -> Option<String> {
-    let mesh_part = body.get("mesh_parts")?.as_array()?.get(index)?;
-    let slot_index = mesh_part.get("material_slot_index")?.as_u64()? as usize;
-    let slot = body.get("material_slots")?.as_array()?.get(slot_index)?;
-    let reference = slot
-        .get("material_ref")?
-        .as_str()?
-        .trim()
-        .replace('\\', "/");
-    (!reference.is_empty()).then_some(reference)
-}
-
-pub(super) fn decode_runtime_ydd_prefab(
+pub(in crate::scene_bridge::game_ready) fn decode_runtime_ydd_prefab(
     logical_ref: &str,
 ) -> Result<Vec<DecodedPrefabMeshPart>, String> {
-    let body = ydd_body_json(logical_ref)?;
-    let encoding = body
-        .get("mesh_encoding")
-        .and_then(|x| x.as_str())
-        .unwrap_or("unknown");
-    if encoding != "newengine.ydd.runtime_mesh_parts.v1" {
-        return Err(format!(
-            "ydd drawable has no supported runtime mesh encoding path='{logical_ref}' encoding='{encoding}'"
-        ));
-    }
-    let parts_json = ydd_array(&body, "runtime_mesh_parts")?;
-    let mut parts = Vec::with_capacity(parts_json.len());
-    for (index, part) in parts_json.iter().enumerate() {
-        let material_ref = ydd_material_ref_for_runtime_part(&body, index);
-        parts.push(decode_ydd_runtime_mesh_part(
-            logical_ref,
-            index,
-            part,
+    let assets = AssetServiceClient::new(default_host_api());
+    let body = assets
+        .decode_v1(&newengine_assets::AssetDecodeRequest {
+            logical_path: logical_ref.to_owned(),
+            output_kind: "asset.list_file_body_v1".to_owned(),
+            selector: serde_json::Value::Null,
+        })
+        .map_err(|error| {
+            format!("AssetManager decode .ydd body failed path='{logical_ref}' err='{error}'")
+        })?;
+    let document = decode_ydd_binary_body(&body)
+        .map_err(|error| format!("binary YDD decode failed path='{logical_ref}' err='{error}'"))?;
+    let selector = logical_ref
+        .rsplit_once('@')
+        .map(|(_, selector)| selector.trim())
+        .filter(|selector| !selector.is_empty());
+    let entry = document.select_entry(selector, false).map_err(|error| {
+        format!("binary YDD selection failed path='{logical_ref}' err='{error}'")
+    })?;
+    let mut parts = Vec::with_capacity(entry.meshes.len());
+    for (mesh_index, source_mesh) in entry.meshes.iter().enumerate() {
+        let material_ref = source_mesh
+            .material_ref
+            .clone()
+            .or_else(|| entry.properties_ref.clone());
+        let material_slot = source_mesh.material_slot();
+        let vertices =
+            transcode_ydd_vertices(logical_ref, &source_mesh.name, &source_mesh.vertices);
+        let primitive_id = PrimitiveId(fnv1a_64(&format!(
+            "newengine.prefab.ydd:{logical_ref}#entry:{}:mesh:{mesh_index}:slot:{material_slot}",
+            entry.name
+        )));
+        let mut mesh = PrimitiveMesh {
+            vertices,
+            indices: source_mesh.indices.clone(),
+            bounds_center: Vec3::ZERO,
+            bounds_radius: 0.001,
+        };
+        recompute_ydd_mesh_bounds(&mut mesh);
+        parts.push(DecodedPrefabMeshPart {
+            primitive_id,
+            name: source_mesh.name.clone(),
+            material_slot,
             material_ref,
-        )?);
+            mesh,
+        });
     }
     if parts.is_empty() {
         return Err(format!(
-            "ydd drawable has no runtime mesh parts path='{logical_ref}'"
+            "binary YDD contains no runtime mesh parts path='{logical_ref}'"
         ));
     }
     newengine_ulog_api::ulog::info!(
-        "game-ready: ydd drawable decoded path='{}' parts={} policy='.ymap -> .ytyp -> .ydd -> .nemat -> .ytd'",
+        "game-ready: binary ydd drawable decoded path='{}' parts={} encoding='{}' policy='.ymap -> .ytyp -> .ydd -> .nemat -> .ytd'",
         logical_ref,
-        parts.len()
+        parts.len(),
+        newengine_asset_format_nef8::ydd_binary::YDD_BINARY_ENCODING,
     );
     Ok(parts)
 }

@@ -333,6 +333,7 @@ fn lower_single_gpu_mesh_instance(
         model,
         base_color,
         material.emissive_radiance,
+        0.0,
         material.uv_transform,
         material.material_params,
         &ctx.lights,

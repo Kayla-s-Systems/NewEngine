@@ -106,13 +106,31 @@ impl HostPlatformRuntime {
             && !self.minimized
             && self.surface.width > 0
             && self.surface.height > 0;
-        let provider_ui_refresh = provider_gameplay_hud
-            || provider_ui_needed
+        // Authored gameplay HUD is retained UI. Rebuilding and serializing the
+        // entire component graph every render frame creates a CPU/service stall and
+        // directly harms mouse-look frame pacing. State patches continue to update
+        // provider state; the cached draw-list is refreshed at 15 Hz at a 60 Hz
+        // render cadence, immediately for interaction/layout changes, and whenever
+        // no valid cache exists.
+        let gameplay_hud_refresh_due =
+            provider_gameplay_hud && (ui_frame_index <= 4 || ui_frame_index % 4 == 1);
+        let provider_ui_refresh = scene_launch_active
+            || debug_overlay_active
             || screen_profile_refresh
             || ui_dispatch_refresh
+            || self.ui_build.is_some()
             || self.cached_provider_ui_draw.is_none()
-            || ui_frame_index <= 4
-            || ui_frame_index % 30 == 1;
+            || gameplay_hud_refresh_due
+            || ui_frame_index % 120 == 1;
+        let allow_cached_provider_ui_draw = provider_gameplay_hud
+            || scene_launch_active
+            || debug_overlay_active
+            || screen_profile_refresh
+            || ui_dispatch_refresh
+            || self.ui_build.is_some();
+        if !allow_cached_provider_ui_draw && self.cached_provider_ui_draw.is_some() {
+            self.cached_provider_ui_draw = None;
+        }
 
         let mut ui_draw = if provider_ui_active && (provider_ui_needed || provider_gameplay_hud) {
             if provider_ui_refresh {
@@ -139,10 +157,17 @@ impl HostPlatformRuntime {
                         self.cached_provider_ui_draw = None;
                         None
                     }
-                    None => self.cached_provider_ui_draw.clone(),
+                    None if allow_cached_provider_ui_draw => self.cached_provider_ui_draw.clone(),
+                    None => {
+                        self.cached_provider_ui_draw = None;
+                        None
+                    }
                 }
-            } else {
+            } else if allow_cached_provider_ui_draw {
                 self.cached_provider_ui_draw.clone()
+            } else {
+                self.cached_provider_ui_draw = None;
+                None
             }
         } else {
             self.cached_provider_ui_draw = None;

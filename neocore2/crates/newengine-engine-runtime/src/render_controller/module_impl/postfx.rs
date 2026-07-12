@@ -11,6 +11,24 @@ pub(super) fn game_sun_postfx_params(
     camera_position: Vec3,
 ) -> PostFxFrameParams {
     let mut params = PostFxFrameParams::default();
+    let sky_postfx = world
+        .resource::<crate::scene_bridge::SkyPostFxRuntime>()
+        .copied()
+        .unwrap_or_default();
+    params.display.exposure = sky_postfx.exposure;
+    params.display.gamma = sky_postfx.gamma;
+    params.display.black_lift = sky_postfx.black_lift;
+    params.quality.color.saturation = sky_postfx.saturation;
+    params.quality.color.contrast = sky_postfx.contrast;
+    params.quality.color.temperature = sky_postfx.temperature;
+    params.quality.color.vignette_strength = sky_postfx.vignette_strength;
+    params.quality.color.local_contrast_strength = sky_postfx.local_contrast_strength;
+    params.quality.color.dither_strength = sky_postfx.dither_strength;
+    params.quality.bloom.enabled = sky_postfx.bloom_intensity > 0.001;
+    params.quality.bloom.threshold = sky_postfx.bloom_threshold;
+    params.quality.bloom.knee = sky_postfx.bloom_knee;
+    params.quality.bloom.intensity = sky_postfx.bloom_intensity;
+    params.quality.bloom.radius = sky_postfx.bloom_radius;
 
     let Some(sun) = lights::primary_directional_light(world) else {
         return params;
@@ -60,8 +78,8 @@ pub(super) fn game_sun_postfx_params(
         intensity: sun.intensity,
         visibility,
         disk_radius: 0.013 + 0.012 * horizon_grazing,
-        flare_strength: 0.18 + 0.32 * horizon_grazing,
-        ray_strength: 0.14 + 0.30 * horizon_grazing,
+        flare_strength: (0.18 + 0.32 * horizon_grazing) * sky_postfx.sun_glare_scale,
+        ray_strength: (0.14 + 0.30 * horizon_grazing) * sky_postfx.sun_ray_scale,
     };
     params
 }

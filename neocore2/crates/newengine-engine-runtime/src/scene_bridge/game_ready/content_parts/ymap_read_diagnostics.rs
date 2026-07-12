@@ -60,9 +60,11 @@ pub(super) fn log_loaded_profile_summary(
     let surface_status = terrain_surface_status(profile);
     let heightmap_status = terrain_heightmap_status(profile);
     let terrain_package_status = terrain_package_status(profile);
-    let initial_resident_chunks = initial_resident_chunks(profile.terrain.streaming.chunk_radius);
+    let target_resident_chunks = resident_chunks(profile.terrain.streaming.chunk_radius);
+    let launch_radius = launch_blocking_warm_radius(profile.terrain.streaming.chunk_radius);
+    let launch_resident_chunks = resident_chunks(launch_radius);
     newengine_ulog_api::ulog::info!(
-        "game-ready ymap read: profile materialized path='{}' source='{}' title='{}' terrain_cells={}x{} terrain_size={}x{} base_height={} height_scale={} generator='{}' surface_mode='multi_textured_projected_3ch' surface_status='{}' surface_layer_count={} projected_surface=[forest='{}',sand='{}',rock='{}'] surface_layers=[{}] heightmap_status='{}' heightmap_enabled={} heightmap_source='{}' heightmap_mode='{}' heightmap_strength={} heightmap_range=[{},{}] heightmap_tile_scale=[{},{}] heightmap_tile_offset=[{},{}] heightmap_invert={} streaming_enabled={} chunk_radius={} unload_radius={} max_chunks_per_frame={} initial_resident_chunks={} definitions={} prefabs={} terrain_package_status='{}'",
+        "game-ready ymap read: profile materialized path='{}' source='{}' title='{}' terrain_cells={}x{} terrain_size={}x{} base_height={} height_scale={} generator='{}' surface_mode='multi_textured_projected_3ch' surface_status='{}' surface_layer_count={} projected_surface=[forest='{}',sand='{}',rock='{}'] surface_layers=[{}] heightmap_status='{}' heightmap_enabled={} heightmap_source='{}' heightmap_mode='{}' heightmap_strength={} heightmap_range=[{},{}] heightmap_tile_scale=[{},{}] heightmap_tile_offset=[{},{}] heightmap_invert={} streaming_enabled={} chunk_radius={} unload_radius={} max_chunks_per_frame={} launch_radius={} launch_resident_chunks={} target_resident_chunks={} definitions={} prefabs={} terrain_package_status='{}'",
         logical_path,
         source_label,
         profile.title,
@@ -95,7 +97,9 @@ pub(super) fn log_loaded_profile_summary(
         profile.terrain.streaming.chunk_radius,
         profile.terrain.streaming.unload_radius,
         profile.terrain.streaming.max_chunks_per_frame,
-        initial_resident_chunks,
+        launch_radius,
+        launch_resident_chunks,
+        target_resident_chunks,
         profile.definitions.len(),
         profile.prefabs.len(),
         terrain_package_status,
@@ -103,7 +107,13 @@ pub(super) fn log_loaded_profile_summary(
 
     log_surface_layer_details(logical_path, profile);
     log_heightmap_readiness(logical_path, profile);
-    log_streaming_readiness(logical_path, profile, initial_resident_chunks);
+    log_streaming_readiness(
+        logical_path,
+        profile,
+        launch_radius,
+        launch_resident_chunks,
+        target_resident_chunks,
+    );
     log_terrain_package_readiness(logical_path, profile, surface_status, heightmap_status);
 }
 
@@ -162,16 +172,20 @@ fn log_heightmap_readiness(logical_path: &str, profile: &GameReadyMapProfile) {
 fn log_streaming_readiness(
     logical_path: &str,
     profile: &GameReadyMapProfile,
-    initial_resident_chunks: usize,
+    launch_radius: i32,
+    launch_resident_chunks: usize,
+    target_resident_chunks: usize,
 ) {
     newengine_ulog_api::ulog::info!(
-        "game-ready ymap read: terrain streaming path='{}' enabled={} render_radius={} unload_radius={} max_chunks_per_frame={} initial_resident_chunks={} policy='warm resident render ring before launch gate; movement schedules additional chunks asynchronously'",
+        "game-ready ymap read: terrain streaming path='{}' enabled={} render_radius={} unload_radius={} max_chunks_per_frame={} launch_radius={} launch_resident_chunks={} target_resident_chunks={} policy='warm small launch ring before gate; full render radius streams after public Play'",
         logical_path,
         profile.terrain.streaming.enabled,
         profile.terrain.streaming.chunk_radius,
         profile.terrain.streaming.unload_radius,
         profile.terrain.streaming.max_chunks_per_frame,
-        initial_resident_chunks,
+        launch_radius,
+        launch_resident_chunks,
+        target_resident_chunks,
     );
 }
 
@@ -264,10 +278,19 @@ fn projected_surface_slot(role: &str) -> &'static str {
     }
 }
 
-fn initial_resident_chunks(radius: i32) -> usize {
+fn resident_chunks(radius: i32) -> usize {
     let radius = radius.max(0) as usize;
     let width = radius.saturating_mul(2).saturating_add(1);
     width.saturating_mul(width)
+}
+
+fn launch_blocking_warm_radius(target_radius: i32) -> i32 {
+    const DEFAULT_LAUNCH_WARM_RADIUS: i32 = 1;
+    let requested = std::env::var("NEWENGINE_SCENE_TERRAIN_LAUNCH_WARM_RADIUS")
+        .ok()
+        .and_then(|value| value.trim().parse::<i32>().ok())
+        .unwrap_or(DEFAULT_LAUNCH_WARM_RADIUS);
+    requested.clamp(0, target_radius.max(0))
 }
 
 fn ymap_payload_section_label(value: &Value) -> &'static str {

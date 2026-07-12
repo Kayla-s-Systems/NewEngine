@@ -8,7 +8,14 @@ use newengine_transform::GlobalTransform;
 #[inline]
 pub(super) fn collect_lights(world: &newengine_ecs::World) -> PackedLights {
     let snapshot = collect_light_scene_snapshot(world);
-    PackedLights::from_snapshot(&snapshot)
+    let packed = PackedLights::from_snapshot(&snapshot);
+    world
+        .resource::<crate::scene_bridge::SpatialCloudShadowRuntime>()
+        .copied()
+        .map(|cloud| {
+            packed.with_cloud_shadow(cloud.map0, cloud.map1, cloud.map2, cloud.map3, cloud.map4)
+        })
+        .unwrap_or(packed)
 }
 
 #[inline]

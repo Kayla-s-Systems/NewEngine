@@ -7,7 +7,8 @@ use std::sync::Arc;
 use abi_stable::std_types::{RResult, RString};
 
 use newengine_camera::{
-    CameraChannel, CameraChannelState, CameraViewport, RuntimeNavController, RuntimeNavMode,
+    CameraChannel, CameraChannelState, CameraFrame, CameraViewport, Projection,
+    RuntimeNavController, RuntimeNavMode,
 };
 use newengine_camera_api::{
     CameraServiceInfo, CameraViewCommand, CameraViewCommandRequest, CameraViewCommandResponse,
@@ -26,7 +27,7 @@ use newengine_core::render::{
     ViewPostFxFrameParams,
 };
 use newengine_ecs::{EntityId, World};
-use newengine_input_actions_api::CameraViewRequest;
+use newengine_input_actions_api::{CameraViewRequest, GameplayActionFrame};
 use newengine_math::{Mat4, Vec2, Vec3};
 use newengine_plugin_api::Blob;
 use newengine_service_kit::{
@@ -37,9 +38,9 @@ use newengine_transform::Transform;
 
 use crate::engine_bounds::EngineBoundsSnap;
 use crate::gameplay::{
-    capture_runtime_world_snapshot, emit_player_event, first_player, is_player_controller_enabled,
-    restore_runtime_world_snapshot, sync_player_view_listeners, FpsDemoRules, GameRunMode,
-    PlayerEventKind, RuntimeWorldSnapshot,
+    apply_player_command_frame, capture_runtime_world_snapshot, emit_player_event, first_player,
+    is_player_controller_enabled, restore_runtime_world_snapshot, sync_player_view_listeners,
+    FpsDemoRules, GameRunMode, PlayerEventKind, RuntimeWorldSnapshot,
 };
 use crate::viewport_bridge::ViewportBridge;
 
@@ -49,8 +50,8 @@ static CAMERA_GATEWAY_REGISTERED: AtomicBool = AtomicBool::new(false);
 #[path = "camera_gateway_helpers.rs"]
 mod camera_gateway_helpers;
 use self::camera_gateway_helpers::{
-    apply_runtime_input, camera_nav_input, camera_report_snapshot, camera_runtime_service_config,
-    sanitize_camera_dt, view_postfx_from_camera_snapshot,
+    apply_gameplay_view_lens, apply_runtime_input, camera_nav_input, camera_report_snapshot,
+    camera_runtime_service_config, sanitize_camera_dt, view_postfx_from_camera_snapshot,
 };
 pub use self::camera_gateway_helpers::{
     apply_view_postfx, CameraRuntimeOverlayReport, CameraTransitionOverlayReport,
@@ -175,6 +176,32 @@ impl CameraGatewayBridge {
         Self { state }
     }
 
+    /// Samples direct-player input before the fixed simulation schedule.
+    ///
+    /// Camera/view requests are consumed here exactly once. The render-phase camera
+    /// resolution then observes the post-simulation player pose without adding an
+    /// extra frame of movement/look latency.
+    pub fn prepare_world_input(
+        &self,
+        world: &mut World,
+        input: CameraGatewayInput,
+        effective_play_mode: GameRunMode,
+        frame_index: u64,
+    ) {
+        let active_view = self
+            .state
+            .lock()
+            .apply_input_view_request(input.camera_view);
+        let service_config = camera_runtime_service_config(world, active_view);
+        apply_runtime_input(
+            world,
+            input,
+            effective_play_mode,
+            service_config,
+            frame_index,
+        );
+    }
+
     pub fn tick_world_frame(
         &self,
         world: &mut World,
@@ -229,7 +256,13 @@ impl CameraGatewayBridge {
         state.sync_play_mode_transition(world, cam_id, effective_play_mode);
         let service_config = camera_runtime_service_config(world, active_view);
         CameraRuntimeService::apply_pending_director_requests(world, cam_id, service_config);
-        apply_runtime_input(world, input, effective_play_mode, service_config);
+        if effective_play_mode.wants_direct_player_control()
+            && matches!(active_view, CameraViewMode::FirstPerson)
+        {
+            if let Some(player) = player {
+                let _ = CameraRuntimeService::sync_first_person_camera_now(world, cam_id, player);
+            }
+        }
 
         let params = CameraNavParams {
             dt: camera_dt,
@@ -254,9 +287,11 @@ impl CameraGatewayBridge {
             all: viewport.read_frame_all(),
         };
 
+        let inventory_open = crate::gameplay::inventory_hud_is_open(world);
         if suppress_game_nav
             || effective_play_mode.wants_direct_player_control()
             || nav_input.navigation_gated
+            || inventory_open
         {
             nav_input.gate_navigation();
         }
@@ -275,6 +310,7 @@ impl CameraGatewayBridge {
                 manager.sync_runtime_nav_mode_from_controller(out.controller.mode);
                 manager.set_last_cursor(out.cursor);
                 let frame = manager.resolve_camera_frame(out.frame, dt);
+                let frame = apply_gameplay_view_lens(frame, manager.active_view_mode());
                 let effects = manager.last_post_effects().unwrap_or_default();
                 (
                     camera_frame_snapshot_for_view(frame, effects, manager.active_view_mode()),
@@ -292,6 +328,7 @@ impl CameraGatewayBridge {
         let cursor = if effective_play_mode.wants_direct_player_control()
             && input.active
             && !input.camera_navigation_gated
+            && !inventory_open
         {
             CursorState::captured_locked()
         } else {
@@ -431,6 +468,7 @@ pub struct CameraGatewayInput {
     pub move_mask: u64,
     pub speed_scalar: f32,
     pub camera_view: CameraViewRequest,
+    pub gameplay_actions: GameplayActionFrame,
 }
 
 #[derive(Clone, Debug)]

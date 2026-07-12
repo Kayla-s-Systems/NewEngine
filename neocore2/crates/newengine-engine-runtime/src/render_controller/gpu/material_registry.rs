@@ -1,7 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use std::collections::HashMap;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use newengine_core::render::{RenderApi, RenderBackendEvent, RenderBackendEventKind};
 use newengine_core::{EngineError, EngineResult as CoreResult};
@@ -85,6 +85,8 @@ struct PendingMaterialPipelineState {
     shader_event_generation: u64,
     last_error: String,
     wait_logged: bool,
+    last_attempt_at: Instant,
+    retry_count: u32,
 }
 
 impl MaterialGpuRegistry {
@@ -140,32 +142,51 @@ impl MaterialGpuRegistry {
         }
 
         if let Some(pending) = self.pending_pipelines.get_mut(&cache_key) {
-            if pending.shader_event_generation == self.shader_event_generation {
+            let shader_event_observed =
+                pending.shader_event_generation != self.shader_event_generation;
+            let retry_due = pending.last_attempt_at.elapsed() >= Duration::from_millis(100);
+
+            if !shader_event_observed && !retry_due {
                 if !pending.wait_logged {
                     newengine_ulog_api::ulog::warn!(
-                        "render material registry: pipeline pending key='{}' cache_key='{}' waiting_for='renderer.shader_compile_event' generation={} err='{}'",
+                        "render material registry: pipeline pending key='{}' cache_key='{}' waiting_for='renderer.shader_compile_event_or_retry_poll' generation={} retry_count={} err='{}'",
                         pending.key.as_str(),
                         cache_key,
                         pending.shader_event_generation,
+                        pending.retry_count,
                         pending.last_error
                     );
                     pending.wait_logged = true;
                 }
                 return Err(EngineError::other(format!(
-                    "render material registry: pipeline pending_event key='{}' cache_key='{}' waiting_for='renderer.shader_compile_event' err='{}'",
+                    "render material registry: pipeline pending_event key='{}' cache_key='{}' waiting_for='renderer.shader_compile_event_or_retry_poll' err='{}'",
                     pending.key.as_str(),
                     cache_key,
                     pending.last_error
                 )));
             }
 
-            newengine_ulog_api::ulog::info!(
-                "render material registry: retrying pending pipeline after shader event key='{}' cache_key='{}' previous_generation={} current_generation={}",
-                pending.key.as_str(),
-                cache_key,
-                pending.shader_event_generation,
-                self.shader_event_generation
-            );
+            pending.last_attempt_at = Instant::now();
+            pending.retry_count = pending.retry_count.saturating_add(1);
+            if shader_event_observed {
+                newengine_ulog_api::ulog::info!(
+                    "render material registry: retrying pending pipeline after shader event key='{}' cache_key='{}' previous_generation={} current_generation={} retry_count={}",
+                    pending.key.as_str(),
+                    cache_key,
+                    pending.shader_event_generation,
+                    self.shader_event_generation,
+                    pending.retry_count
+                );
+            } else {
+                newengine_ulog_api::ulog::debug!(
+                    "render material registry: retrying pending pipeline by renderer poll key='{}' cache_key='{}' generation={} retry_count={} err='{}'",
+                    pending.key.as_str(),
+                    cache_key,
+                    self.shader_event_generation,
+                    pending.retry_count,
+                    pending.last_error
+                );
+            }
         }
 
         let Some(provider) = self.providers.get_mut(key.as_str()) else {
@@ -204,12 +225,15 @@ impl MaterialGpuRegistry {
                             shader_event_generation: self.shader_event_generation,
                             last_error: String::new(),
                             wait_logged: false,
+                            last_attempt_at: Instant::now(),
+                            retry_count: 0,
                         });
                     state.shader_event_generation = self.shader_event_generation;
                     state.last_error = e.to_string();
                     state.wait_logged = false;
+                    state.last_attempt_at = Instant::now();
                     newengine_ulog_api::ulog::warn!(
-                        "render material registry: pipeline request pending key='{}' cache_key='{}' generation={} err='{}' elapsed_ms={:.2} action='wait_for_renderer_shader_event'",
+                        "render material registry: pipeline request pending key='{}' cache_key='{}' generation={} err='{}' elapsed_ms={:.2} action='wait_for_renderer_shader_event_or_retry_poll'",
                         key.as_str(),
                         cache_key,
                         self.shader_event_generation,

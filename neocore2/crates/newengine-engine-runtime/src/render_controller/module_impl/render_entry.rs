@@ -69,7 +69,7 @@ impl RuntimeRenderController {
         );
         self.trace_render_begin(trace_frame, w, h);
 
-        if let Some(status) = self.handle_prelaunch_gate(
+        let prelaunch_status = match self.handle_prelaunch_gate(
             ctx,
             &mut **r,
             backend_work_budget,
@@ -77,7 +77,18 @@ impl RuntimeRenderController {
             trace_frame,
             w,
             h,
-        )? {
+        ) {
+            Ok(status) => status,
+            Err(error) if is_backend_device_lost_error(&error) => {
+                self.record_render_backend_error("render.prelaunch_gate", error)?;
+                drop(r);
+                ctx.resources_mut().insert(self.backend_status_snapshot());
+                ctx.resources_mut().insert(SceneLaunchStatus::inactive());
+                return Ok(());
+            }
+            Err(error) => return Err(error),
+        };
+        if let Some(status) = prelaunch_status {
             drop(r);
             ctx.resources_mut().insert(status);
             return Ok(());
@@ -89,9 +100,28 @@ impl RuntimeRenderController {
         let ui: Option<UiDrawList> = ctx.resources_mut().remove::<UiDrawList>();
         self.apply_editor_viewport_slot(ctx, w, h);
         let mut r = api.lock();
-        let dt = ctx.frame().map(|f| f.dt).unwrap_or(0.016);
-        let scope_result =
-            self.begin_playable_surface_frame(&mut **r, ui.is_some(), w, h, dt, trace_frame);
+        let (dt, fixed_dt, fixed_step_count, fixed_tick) = ctx
+            .frame()
+            .map(|frame| {
+                (
+                    frame.dt,
+                    frame.fixed_dt,
+                    frame.fixed_step_count,
+                    frame.fixed_tick,
+                )
+            })
+            .unwrap_or((0.016, 0.016, 1, 0));
+        let scope_result = self.begin_playable_surface_frame(
+            &mut **r,
+            ui.is_some(),
+            w,
+            h,
+            dt,
+            fixed_dt,
+            fixed_step_count,
+            fixed_tick,
+            trace_frame,
+        );
         let Some(scope) = (match scope_result {
             Ok(scope) => scope,
             Err(e) if is_backend_device_lost_error(&e) => {
@@ -308,6 +338,9 @@ impl RuntimeRenderController {
         w: u32,
         h: u32,
         dt: f32,
+        fixed_dt: f32,
+        fixed_step_count: u32,
+        fixed_tick: u64,
         trace_frame: bool,
     ) -> EngineResult<Option<RenderFrameScope>> {
         let (requested_vp_w, requested_vp_h) = self.bridges.viewport.read_extent();
@@ -348,6 +381,9 @@ impl RuntimeRenderController {
             ui_enabled,
             trace_frame,
             dt,
+            fixed_dt,
+            fixed_step_count,
+            fixed_tick,
         }))
     }
 

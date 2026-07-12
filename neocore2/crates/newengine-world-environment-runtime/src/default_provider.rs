@@ -26,8 +26,13 @@ pub(crate) fn build_default_environment_frame(
 
     let requested_profile_id = normalized_profile_id(&req);
     let (profile, profile_found) = profile_by_id(&requested_profile_id);
-    let time_of_day_state = time_of_day_state(tod);
-    let sun = sun_body(tod);
+    let sun = sun_body(
+        tod,
+        profile.latitude_degrees,
+        profile.axial_tilt_degrees,
+        day_index_u64,
+    );
+    let time_of_day_state = time_of_day_state(tod, sun.direction_world.y);
     let moon = moon_body(tod, req.seed, day_index_u64);
     let cloud_seed = unit_noise(req.seed, day_index_u64, 0xC10D_0001);
     let pressure = weather_pressure(req.seed, day_index_u64, tod);

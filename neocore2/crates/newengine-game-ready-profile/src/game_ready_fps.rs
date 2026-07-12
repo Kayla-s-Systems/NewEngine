@@ -1,63 +1,79 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-//! Declarative launcher binding for the Game Ready FPS vertical slice.
-
+//! Canonical launcher binding for the Game Ready FPS vertical slice.
 //!
-
 //! The binary entrypoint delegates here instead of manually assembling runtime
-
-//! host services, engine modules, plugin preload, asset roots and platform
-
-//! runtime execution.
+//! host services, boot options, engine modules, plugin preload, asset roots and
+//! platform runtime execution.
 
 use newengine_core::{Engine, EngineResult, StartupConfig};
-
 use newengine_runtime_host::app_launcher::{
-    RuntimeHostAppProfile, RuntimeHostLaunchSpec, RuntimeHostLauncher,
+    RuntimeHostAppProfile, RuntimeHostBootOption, RuntimeHostLaunchSpec, RuntimeHostLauncher,
 };
-
 use newengine_ui::{UiBuildFn, UiProviderKind};
 
 use crate::{
     GameReadyRuntimeProfile, GAME_APP_ASSETS_DIR_ENV, GAME_FIXED_DT_MS, GAME_READY_APP_DIR_NAME,
 };
 
-pub const GAME_READY_RUNTIME_ENV_DEFAULTS: &[(&str, &str)] = &[
+pub const GAME_READY_FPS_APP_NAME: &str = "game-ready-fps";
+pub const GAME_READY_FPS_WINDOW_TITLE: &str = "North Star Game Ready FPS";
+pub const GAME_READY_FPS_EARLY_LOG_FILE: &str = "game-ready-fps-early.log";
+
+pub const GAME_READY_UI_SCREEN_PROFILE_ENV: &str =
+    "NEWENGINE_PLUGIN_ENGINE_RUNTIME__ui__screen_profile__profile";
+pub const GAME_READY_UI_ROOT_SURFACE_ENV: &str =
+    "NEWENGINE_PLUGIN_ENGINE_RUNTIME__ui__screen_profile__game_ui_root_surface_id";
+pub const GAME_READY_UI_DOCUMENT_REF_ENV: &str =
+    "NEWENGINE_PLUGIN_ENGINE_RUNTIME__ui__screen_profile__game_ui_document_ref";
+pub const GAME_READY_UI_PUBLISH_EDITOR_SHELL_ENV: &str =
+    "NEWENGINE_PLUGIN_ENGINE_RUNTIME__ui__screen_profile__publish_editor_shell";
+
+pub const GAME_READY_UI_PROFILE_GAME: &str = "game";
+pub const GAME_READY_UI_ROOT_SURFACE_GAME: &str = "game.hud";
+pub const GAME_READY_UI_DOCUMENT_REF_GAME: &str = "ui/game/game_hud.neui@surface";
+
+pub const GAME_READY_FPS_BOOT_OPTIONS: &[RuntimeHostBootOption] = &[
+    RuntimeHostBootOption::PreStartConfigWindow,
+    RuntimeHostBootOption::RuntimeBootstrapOverlay,
+    RuntimeHostBootOption::RuntimePlugins,
+    RuntimeHostBootOption::PlatformWindow,
+    RuntimeHostBootOption::RenderBackend,
+];
+
+/// Core GameReady runtime policy shared by editor-oriented and standalone game
+/// launchers. Keep provider requirements here so app binaries never duplicate
+/// engine capability policy.
+pub const GAME_READY_CORE_ENV_POLICY: &[(&str, &str)] = &[
     ("NEWENGINE_GAME_READY_DEMO", "1"),
     ("NEWENGINE_REQUIRE_RENDER_BACKEND", "1"),
     ("NEWENGINE_REQUIRE_ASSET_MANAGER", "1"),
     ("NEWENGINE_REQUIRE_MATERIALS_BACKEND", "1"),
     ("NEWENGINE_PLUGIN_TARGET", "runtime"),
     // Game-ready launch must not dlopen bootstrap DLLs before platform/runtime
-
     // diagnostics are visible. Bootstrap plugins are loaded together with the
-
     // engine phase; stale DLLs can otherwise terminate the process with SEH
-
     // STATUS_ACCESS_VIOLATION before Rust can report an error.
     ("NEWENGINE_BOOTSTRAP_PLUGIN_PRELOAD", "deferred"),
     // Profile-owned render startup policy: keep the viewport alive while the
-
-    // real authored GLSL is being compiled asynchronously by engine.jobs.
-
+    // real authored GLSL is being compiled asynchronously by engine.threading.
     // Users can override this env value before launch; it is still reported in
-
     // shader diagnostics as an explicit degraded policy.
     ("NEWENGINE_SHADER_ASYNC_PREBAKED_UNTIL_READY", "1"),
-    // Keep the loading projection visible until the first playable frame is
-
-    // visually coherent. Heavy .ytd dictionaries may continue streaming later,
-
-    // but the profile must not reveal a mostly untextured world.
-    ("NEWENGINE_SCENE_TEXTURE_LAUNCH_MIN_READY", "24"),
-    ("NEWENGINE_SCENE_TEXTURE_LAUNCH_MIN_RATIO", "1.0"),
+    // Keep the loading projection visible until every non-optional scene
+    // material texture is GPU-resident. Partial material residency is an explicit
+    // opt-in override, never the shipping GameReady default.
+    ("NEWENGINE_SCENE_TEXTURE_LAUNCH_MIN_READY", "0"),
+    ("NEWENGINE_SCENE_TEXTURE_LAUNCH_MIN_RATIO", "1.00"),
     ("NEWENGINE_SCENE_TEXTURE_GATE_SOFT_TIMEOUT_FRAMES", "1800"),
+    ("NEWENGINE_SCENE_TEXTURE_GATE_SOFT_TIMEOUT_MS", "90000"),
 ];
 
-/// Standalone game viewport defaults layered on top of the game-ready runtime
-/// defaults. Kept in the profile crate so app binaries do not duplicate engine
-/// policy keys or hardcode the UI projection route.
-pub const GAME_READY_GAME_UI_ENV_DEFAULTS: &[(&str, &str)] = &[
+/// Backward-compatible name for editor/runtime demo launchers.
+pub const GAME_READY_RUNTIME_ENV_DEFAULTS: &[(&str, &str)] = GAME_READY_CORE_ENV_POLICY;
+
+/// Canonical env policy for the shipping FPS vertical slice.
+pub const GAME_READY_FPS_ENV_POLICY: &[(&str, &str)] = &[
     ("NEWENGINE_GAME_FPS_DEMO", "1"),
     ("NEWENGINE_GAME_READY_DEMO", "1"),
     ("NEWENGINE_REQUIRE_RENDER_BACKEND", "1"),
@@ -66,26 +82,27 @@ pub const GAME_READY_GAME_UI_ENV_DEFAULTS: &[(&str, &str)] = &[
     ("NEWENGINE_PLUGIN_TARGET", "runtime"),
     ("NEWENGINE_BOOTSTRAP_PLUGIN_PRELOAD", "deferred"),
     ("NEWENGINE_SHADER_ASYNC_PREBAKED_UNTIL_READY", "1"),
-    ("NEWENGINE_SCENE_TEXTURE_LAUNCH_MIN_READY", "24"),
-    ("NEWENGINE_SCENE_TEXTURE_LAUNCH_MIN_RATIO", "1.0"),
+    ("NEWENGINE_SCENE_TEXTURE_LAUNCH_MIN_READY", "0"),
+    ("NEWENGINE_SCENE_TEXTURE_LAUNCH_MIN_RATIO", "1.00"),
     ("NEWENGINE_SCENE_TEXTURE_GATE_SOFT_TIMEOUT_FRAMES", "1800"),
+    ("NEWENGINE_SCENE_TEXTURE_GATE_SOFT_TIMEOUT_MS", "90000"),
+    (GAME_READY_UI_SCREEN_PROFILE_ENV, GAME_READY_UI_PROFILE_GAME),
     (
-        "NEWENGINE_PLUGIN_ENGINE_RUNTIME__ui__screen_profile__profile",
-        "game",
+        GAME_READY_UI_ROOT_SURFACE_ENV,
+        GAME_READY_UI_ROOT_SURFACE_GAME,
     ),
     (
-        "NEWENGINE_PLUGIN_ENGINE_RUNTIME__ui__screen_profile__game_ui_root_surface_id",
-        "gameFps.ui.root",
+        GAME_READY_UI_DOCUMENT_REF_ENV,
+        GAME_READY_UI_DOCUMENT_REF_GAME,
     ),
-    (
-        "NEWENGINE_PLUGIN_ENGINE_RUNTIME__ui__screen_profile__publish_editor_shell",
-        "false",
-    ),
+    (GAME_READY_UI_PUBLISH_EDITOR_SHELL_ENV, "false"),
 ];
 
-pub const GAME_READY_PROFILE_ENV: &str = "NEWENGINE_SCENE_PROFILE";
+/// Backward-compatible name for the standalone game viewport policy.
+pub const GAME_READY_GAME_UI_ENV_DEFAULTS: &[(&str, &str)] = GAME_READY_FPS_ENV_POLICY;
 
-pub const GAME_READY_DEFAULT_PROFILE_ASSET: &str = "maps/game_ready_highlands.ymap";
+pub const GAME_READY_PROFILE_ENV: &str = "NEWENGINE_SCENE_PROFILE";
+pub const GAME_READY_DEFAULT_PROFILE_ASSET: &str = "maps/forest_road_operation.ymap";
 
 #[derive(Clone)]
 pub struct GameReadyFpsApp {
@@ -103,34 +120,29 @@ impl GameReadyFpsApp {
     #[inline]
     pub fn new() -> Self {
         Self {
-            profile: GameReadyRuntimeProfile::new(),
+            profile: GameReadyRuntimeProfile::standalone_game(),
         }
+    }
+
+    #[inline]
+    pub fn with_profile(profile: GameReadyRuntimeProfile) -> Self {
+        Self { profile }
     }
 
     #[inline]
     pub fn launch_spec() -> RuntimeHostLaunchSpec {
         RuntimeHostLaunchSpec {
-            product_name: "NewEngine",
-
-            app_name: "game-ready-fps",
-
+            product_name: "North Star",
+            app_name: GAME_READY_FPS_APP_NAME,
             app_version: env!("CARGO_PKG_VERSION"),
-
             startup_config_path: "config.json",
-
             fixed_dt_ms: GAME_FIXED_DT_MS,
-
             app_dir_name: GAME_READY_APP_DIR_NAME,
-
             app_assets_env: GAME_APP_ASSETS_DIR_ENV,
-
-            window_title: "KAYLA FPS: Procedural Highlands",
-
-            early_log_file_name: "game-ready-early.log",
-
+            window_title: GAME_READY_FPS_WINDOW_TITLE,
+            early_log_file_name: GAME_READY_FPS_EARLY_LOG_FILE,
             default_profile_env: Some((GAME_READY_PROFILE_ENV, GAME_READY_DEFAULT_PROFILE_ASSET)),
-
-            env_defaults: GAME_READY_RUNTIME_ENV_DEFAULTS,
+            env_defaults: GAME_READY_FPS_ENV_POLICY,
         }
     }
 
@@ -144,12 +156,15 @@ impl RuntimeHostAppProfile for GameReadyFpsApp {
     #[inline]
     fn register_modules(
         &self,
-
         engine: &mut Engine<()>,
-
         startup: &StartupConfig,
     ) -> EngineResult<()> {
         self.profile.register_modules(engine, startup)
+    }
+
+    #[inline]
+    fn boot_options(&self) -> Option<&'static [RuntimeHostBootOption]> {
+        Some(GAME_READY_FPS_BOOT_OPTIONS)
     }
 
     #[inline]

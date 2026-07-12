@@ -22,20 +22,45 @@ use newengine_ui::{UiBuildFn, UiProviderKind};
 use scene_bootstrap::GameReadySceneBootstrapModule;
 
 pub use game_ready_fps::{
-    run_game_ready_fps_process, GameReadyFpsApp, GAME_READY_DEFAULT_PROFILE_ASSET,
+    run_game_ready_fps_process, GameReadyFpsApp, GAME_READY_CORE_ENV_POLICY,
+    GAME_READY_DEFAULT_PROFILE_ASSET, GAME_READY_FPS_APP_NAME, GAME_READY_FPS_BOOT_OPTIONS,
+    GAME_READY_FPS_EARLY_LOG_FILE, GAME_READY_FPS_ENV_POLICY, GAME_READY_FPS_WINDOW_TITLE,
     GAME_READY_GAME_UI_ENV_DEFAULTS, GAME_READY_PROFILE_ENV, GAME_READY_RUNTIME_ENV_DEFAULTS,
+    GAME_READY_UI_PROFILE_GAME, GAME_READY_UI_PUBLISH_EDITOR_SHELL_ENV,
+    GAME_READY_UI_ROOT_SURFACE_ENV, GAME_READY_UI_ROOT_SURFACE_GAME,
+    GAME_READY_UI_SCREEN_PROFILE_ENV,
 };
 
 pub const GAME_FIXED_DT_MS: u32 = 16;
 pub const GAME_APP_ASSETS_DIR_ENV: &str = "NEWENGINE_GAME_ASSETS_DIR";
 pub const GAME_READY_APP_DIR_NAME: &str = "game-ready-fps";
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GameReadyRuntimeKind {
+    EditorTools,
+    StandaloneGame,
+}
+
+impl Default for GameReadyRuntimeKind {
+    #[inline]
+    fn default() -> Self {
+        Self::EditorTools
+    }
+}
+
+impl GameReadyRuntimeKind {
+    #[inline]
+    pub const fn editor_tools_enabled(self) -> bool {
+        matches!(self, Self::EditorTools)
+    }
+}
+
 #[derive(Clone)]
 pub struct GameReadyRuntimeProfile {
     viewport: Arc<newengine_engine_runtime::ViewportBridge>,
     plugins: Arc<newengine_engine_runtime::PluginManagerBridge>,
     scene: Arc<newengine_scene_runtime::SceneBridge>,
-    editor_tools: bool,
+    kind: GameReadyRuntimeKind,
 }
 
 impl Default for GameReadyRuntimeProfile {
@@ -54,14 +79,54 @@ impl GameReadyRuntimeProfile {
             scene: Arc::new(newengine_scene_runtime::SceneBridge::new(
                 newengine_scene::Scene::new(),
             )),
-            editor_tools: true,
+            kind: GameReadyRuntimeKind::EditorTools,
         }
     }
 
     #[inline]
-    pub fn without_editor_tools(mut self) -> Self {
-        self.editor_tools = false;
+    pub fn editor_tools() -> Self {
+        Self::new().with_kind(GameReadyRuntimeKind::EditorTools)
+    }
+
+    #[inline]
+    pub fn standalone_game() -> Self {
+        Self::new().with_kind(GameReadyRuntimeKind::StandaloneGame)
+    }
+
+    #[inline]
+    pub fn with_kind(mut self, kind: GameReadyRuntimeKind) -> Self {
+        self.kind = kind;
         self
+    }
+
+    #[inline]
+    pub fn without_editor_tools(self) -> Self {
+        self.with_kind(GameReadyRuntimeKind::StandaloneGame)
+    }
+
+    #[inline]
+    pub const fn kind(&self) -> GameReadyRuntimeKind {
+        self.kind
+    }
+
+    #[inline]
+    pub const fn editor_tools_enabled(&self) -> bool {
+        self.kind.editor_tools_enabled()
+    }
+
+    #[inline]
+    fn register_input_bindings_gateway_best_effort(&self) {
+        let input_profile = match self.kind {
+            GameReadyRuntimeKind::EditorTools => {
+                newengine_input_profile_gameready::game_ready_input_profile()
+            }
+            GameReadyRuntimeKind::StandaloneGame => {
+                newengine_input_profile_gameready::game_ready_game_input_profile()
+            }
+        };
+        newengine_input_bindings_runtime::register_input_bindings_gateway_best_effort(
+            input_profile,
+        );
     }
 
     #[inline]
@@ -74,14 +139,7 @@ impl GameReadyRuntimeProfile {
         // RuntimeRenderController owns the retained UI node state, and that state snapshots
         // the active input profile during construction. Initializing the bindings
         // gateway here prevents an empty generic profile from being captured first.
-        let input_profile = if self.editor_tools {
-            newengine_input_profile_gameready::game_ready_input_profile()
-        } else {
-            newengine_input_profile_gameready::game_ready_game_input_profile()
-        };
-        newengine_input_bindings_runtime::register_input_bindings_gateway_best_effort(
-            input_profile,
-        );
+        self.register_input_bindings_gateway_best_effort();
 
         engine.register_module(Box::new(PhysicsBackendRuntimeModule::new(
             startup.modules_dir.clone(),
@@ -91,7 +149,7 @@ impl GameReadyRuntimeProfile {
             startup.modules_dir.clone(),
         )))?;
 
-        if self.editor_tools {
+        if self.editor_tools_enabled() {
             engine.register_module(Box::new(
                 newengine_assets_catalog_ui_runtime::AssetsCatalogUiRuntimeModule::new(),
             ))?;
@@ -137,14 +195,7 @@ impl GameReadyRuntimeProfile {
         newengine_world_environment_runtime::register_world_environment_gateway_best_effort();
         newengine_ecs_runtime::register_ecs_gateway_best_effort(Arc::clone(&self.scene));
         newengine_entity_runtime::register_entity_gateway_best_effort(Arc::clone(&self.scene));
-        let input_profile = if self.editor_tools {
-            newengine_input_profile_gameready::game_ready_input_profile()
-        } else {
-            newengine_input_profile_gameready::game_ready_game_input_profile()
-        };
-        newengine_input_bindings_runtime::register_input_bindings_gateway_best_effort(
-            input_profile,
-        );
+        self.register_input_bindings_gateway_best_effort();
         newengine_time_runtime::register_time_gateway_best_effort();
         newengine_schema_runtime::register_schema_gateway_best_effort();
         newengine_scripting_runtime::register_scripting_gateway_best_effort();

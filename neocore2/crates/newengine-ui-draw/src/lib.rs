@@ -7,6 +7,7 @@ use smallvec::SmallVec;
 use newengine_math::collections::FxHashMap;
 
 mod binary;
+pub mod binary_codec;
 mod paint;
 pub use binary::{decode_ui_draw_list_bin, encode_ui_draw_list_bin, encode_ui_draw_list_bin_into};
 pub use paint::{

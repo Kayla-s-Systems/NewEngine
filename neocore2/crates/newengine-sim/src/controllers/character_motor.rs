@@ -52,7 +52,7 @@ fn sanitize_vec3(v: Vec3) -> Vec3 {
 /// Inputs:
 /// - `motor`: current motor state.
 /// - `input`: sampled input for this tick.
-/// - `current_rot`: current entity rotation (used to convert local move axis to world).
+/// - `current_rot`: retained for API compatibility; locomotion uses the motor yaw so view pitch cannot tilt movement.
 /// - `dt`: delta time.
 ///
 /// Output:
@@ -63,7 +63,7 @@ fn sanitize_vec3(v: Vec3) -> Vec3 {
 pub fn step_character_motor(
     motor: CharacterMotor,
     input: MotorInput,
-    current_rot: Quat,
+    _current_rot: Quat,
     dt: f32,
 ) -> Option<CharacterMotorStep> {
     let dt = sanitize_dt(dt)?;
@@ -109,7 +109,8 @@ pub fn step_character_motor(
         } else {
             0.0
         };
-        (current_rot * dir) * (move_speed * speed_mul)
+        let locomotion_rotation = Quat::from_rotation_y(motor.yaw);
+        (locomotion_rotation * dir) * (move_speed * speed_mul)
     } else {
         Vec3::ZERO
     };
@@ -162,4 +163,49 @@ pub fn run_character_motor_controller(
         entity,
         value: step.motor,
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn forward_locomotion_stays_horizontal_at_extreme_view_pitch() {
+        let motor = CharacterMotor {
+            pitch: 1.4,
+            move_speed: 6.0,
+            ..CharacterMotor::default()
+        };
+        let input = MotorInput {
+            move_axis: Vec3::new(0.0, 0.0, 1.0),
+            speed_mul: 1.0,
+            ..MotorInput::default()
+        };
+        let pitched_rotation = Quat::from_euler(EulerRot::YXZ, 0.0, motor.pitch, 0.0);
+
+        let step = step_character_motor(motor, input, pitched_rotation, 1.0 / 60.0)
+            .expect("valid fixed-step motor update");
+
+        assert!(step.velocity_ws.y.abs() <= 1.0e-6);
+        assert!((step.velocity_ws.length() - 6.0).abs() <= 1.0e-5);
+    }
+
+    #[test]
+    fn diagonal_locomotion_is_normalized() {
+        let motor = CharacterMotor {
+            move_speed: 7.5,
+            ..CharacterMotor::default()
+        };
+        let input = MotorInput {
+            move_axis: Vec3::new(1.0, 0.0, 1.0),
+            speed_mul: 1.0,
+            ..MotorInput::default()
+        };
+
+        let step = step_character_motor(motor, input, Quat::IDENTITY, 1.0 / 60.0)
+            .expect("valid fixed-step motor update");
+
+        assert!((step.velocity_ws.length() - 7.5).abs() <= 1.0e-5);
+        assert!(step.velocity_ws.y.abs() <= 1.0e-6);
+    }
 }

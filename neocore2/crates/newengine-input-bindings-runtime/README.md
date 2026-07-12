@@ -2,6 +2,16 @@
 
 Runtime-hosted `engine.input.bindings` service runtime. It stores/canonicalizes the active input profile, persists it under config, resolves semantic action frames from raw input and registers the engine-runtime route.
 
+## Internal architecture
+
+- `state.rs` — singleton gateway state and default-profile installation.
+- `persistence.rs` — profile path, load and save operations.
+- `service.rs` — JSON service router.
+- `api.rs` — runtime snapshot, resolution and mutation API.
+- `registration.rs` — engine gateway registration.
+
+Profile save now returns the snapshot captured under the original lock instead of reacquiring the global mutex.
+
 <!-- NORTHSTAR-DIR-README:BEGIN -->
 
 ## Directory purpose

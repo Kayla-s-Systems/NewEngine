@@ -24,6 +24,14 @@ pub const RENDER_SERVICE_METHOD_SHUTDOWN_V1: &str =
 /// write_buffer/set_pipeline/draw so draw-list extraction does not serialize
 /// byte payloads as JSON arrays on every frame.
 pub const RENDER_SERVICE_METHOD_COMMAND_BATCH_BIN_V1: &str = "command_batch_bin_v1";
+/// Binary allocation path for texture descriptors carrying large mip payloads.
+/// This avoids JSON byte-array expansion on the render thread.
+pub const RENDER_SERVICE_METHOD_CREATE_TEXTURE_BIN_V1: &str = "create_texture_bin_v1";
+/// Host-staged independent multi-adapter vertex transcode. The method is served
+/// outside the primary renderer mutex so GPU1/GPU2 can execute concurrently with
+/// GPU0 presentation and upload work.
+pub const RENDER_SERVICE_METHOD_MULTI_ADAPTER_MESH_TRANSCODE_BIN_V1: &str =
+    "multi_adapter_mesh_transcode_bin_v1";
 
 /// Renderer diagnostics surfaces. These are JSON control-plane dumps, not frame hot-path commands.
 pub const RENDER_SERVICE_METHOD_DUMP_PHASE_GRAPH_V1: &str = "engine.render.dump_phase_graph_v1";

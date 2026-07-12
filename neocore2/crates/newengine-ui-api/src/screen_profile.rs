@@ -19,7 +19,9 @@ pub enum UiScreenProfile {
 
 impl Default for UiScreenProfile {
     #[inline]
-    fn default() -> Self { Self::Game }
+    fn default() -> Self {
+        Self::Game
+    }
 }
 
 impl UiScreenProfile {
@@ -59,7 +61,9 @@ pub enum UiEditorRuntimeMode {
 
 impl Default for UiEditorRuntimeMode {
     #[inline]
-    fn default() -> Self { Self::Edit }
+    fn default() -> Self {
+        Self::Edit
+    }
 }
 
 impl UiEditorRuntimeMode {
@@ -99,7 +103,6 @@ impl Default for UiEditorRuntimeState {
         }
     }
 }
-
 
 /// Pixel-space viewport slot published by the editor shell.
 ///
@@ -141,7 +144,10 @@ impl Default for UiViewportSlot {
 impl UiViewportSlot {
     #[inline]
     pub fn extent_px(&self) -> (u32, u32) {
-        (self.w_px.max(0.0).round() as u32, self.h_px.max(0.0).round() as u32)
+        (
+            self.w_px.max(0.0).round() as u32,
+            self.h_px.max(0.0).round() as u32,
+        )
     }
 
     #[inline]
@@ -213,7 +219,9 @@ pub enum UiToastSeverity {
 
 impl Default for UiToastSeverity {
     #[inline]
-    fn default() -> Self { Self::Info }
+    fn default() -> Self {
+        Self::Info
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -266,7 +274,9 @@ pub enum UiScreenInputFocusPolicy {
 
 impl Default for UiScreenInputFocusPolicy {
     #[inline]
-    fn default() -> Self { Self::GameViewport }
+    fn default() -> Self {
+        Self::GameViewport
+    }
 }
 
 /// Declarative slot/panel request produced by a screen profile.
@@ -299,6 +309,7 @@ pub struct UiScreenProfileDescriptor {
     pub surface_id: String,
     pub viewport_surface_id: String,
     pub game_ui_root_surface_id: Option<String>,
+    pub game_ui_document_ref: Option<String>,
     pub input_focus_policy: UiScreenInputFocusPolicy,
     pub panels: Vec<UiScreenPanelDescriptor>,
     pub diagnostics: Vec<String>,
@@ -313,6 +324,7 @@ impl Default for UiScreenProfileDescriptor {
             surface_id: UI_SURFACE_SCREEN_ROOT.to_owned(),
             viewport_surface_id: "engine.render.viewport.primary".to_owned(),
             game_ui_root_surface_id: None,
+            game_ui_document_ref: None,
             input_focus_policy: UiScreenInputFocusPolicy::GameViewport,
             panels: Vec::new(),
             diagnostics: Vec::new(),

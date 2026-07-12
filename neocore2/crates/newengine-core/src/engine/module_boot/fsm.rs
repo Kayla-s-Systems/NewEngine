@@ -1,5 +1,5 @@
-use super::planner;
 use super::super::{Engine, EngineRunState, ModuleFaultTolerance};
+use super::planner;
 
 use crate::error::EngineResult;
 use crate::startup_status::{
@@ -358,7 +358,4 @@ impl<E: Send + 'static> Engine<E> {
             }
         }
     }
-
-
-
 }

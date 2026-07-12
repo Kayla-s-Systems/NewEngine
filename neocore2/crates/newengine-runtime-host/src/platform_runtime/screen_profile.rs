@@ -1,6 +1,9 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use newengine_assets_api::{AssetDocument, AssetDocumentRequest, AssetServiceClient};
+use newengine_assets_api::{
+    assets_ui_method, AssetDocument, AssetDocumentRequest, AssetServiceClient,
+    ENGINE_ASSETS_UI_SERVICE_ID,
+};
 use newengine_core::host_events::WindowInitSize;
 use newengine_core::Resources;
 use newengine_schema_api::ENGINE_SCHEMA_SERVICE_ID;

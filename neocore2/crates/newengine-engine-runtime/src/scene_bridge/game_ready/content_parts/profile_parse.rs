@@ -104,8 +104,17 @@ pub(super) struct RawPrefabSpec {
     pub(super) source: String,
     #[serde(default = "default_prefab_proxy")]
     pub(super) proxy: String,
+    /// Optional exact NEMAT selector used by static world geometry.
+    #[serde(default)]
+    pub(super) material: String,
     #[serde(default = "default_prefab_enabled")]
     pub(super) enabled: bool,
+    #[serde(default)]
+    pub(super) position: [f32; 3],
+    #[serde(default)]
+    pub(super) rotation_ypr: [f32; 3],
+    #[serde(default = "default_definition_scale")]
+    pub(super) scale: [f32; 3],
 }
 
 #[derive(Debug, Deserialize)]
@@ -378,6 +387,10 @@ fn ymap_node_object(node: authored_xml::XmlNode<'_, '_>) -> serde_json::Value {
         || tag.eq_ignore_ascii_case("policy")
         || tag.eq_ignore_ascii_case("layers")
         || tag.eq_ignore_ascii_case("surface_layers")
+        || tag.eq_ignore_ascii_case("pickups")
+        || tag.eq_ignore_ascii_case("targets")
+        || tag.eq_ignore_ascii_case("hazards")
+        || tag.eq_ignore_ascii_case("goals")
     {
         let items = node
             .children()
@@ -435,6 +448,10 @@ fn ymap_insert_child(
         "Placement" => "placements",
         "Prefab" => "prefabs",
         "Layer" | "SurfaceLayer" => "layers",
+        "Pickup" => "pickups",
+        "Target" => "targets",
+        "Hazard" => "hazards",
+        "Goal" => "goals",
         other => other,
     };
     match map.get_mut(key) {
@@ -488,6 +505,7 @@ impl RawGameReadyPayload {
                 },
             },
             terrain: GameReadyTerrainSpec {
+                enabled: self.terrain.enabled,
                 seed: self.terrain.seed,
                 cells_x: self.terrain.cells_x.clamp(16, 80),
                 cells_z: self.terrain.cells_z.clamp(16, 80),
@@ -582,6 +600,7 @@ impl RawGameReadyPayload {
             gameplay: GameReadyGameplaySpec {
                 default_status: non_empty_or(self.gameplay.default_status, default_status_text()),
                 pickup_status: non_empty_or(self.gameplay.pickup_status, default_pickup_status()),
+                target_status: non_empty_or(self.gameplay.target_status, default_target_status()),
                 hazard_status: non_empty_or(self.gameplay.hazard_status, default_hazard_status()),
                 goal_locked_status: non_empty_or(
                     self.gameplay.goal_locked_status,
@@ -620,6 +639,36 @@ impl RawGameReadyPayload {
                 physics: GameReadyPhysicsSpec {
                     gravity: self.gameplay.physics.gravity.clamp(0.0, 80.0),
                     contact_skin: self.gameplay.physics.contact_skin.clamp(0.0, 0.50),
+                },
+                mission: GameReadyMissionSpec {
+                    pickups: self
+                        .gameplay
+                        .mission
+                        .pickups
+                        .into_iter()
+                        .filter_map(sanitize_mission_pickup_spec)
+                        .collect(),
+                    targets: self
+                        .gameplay
+                        .mission
+                        .targets
+                        .into_iter()
+                        .filter_map(sanitize_mission_target_spec)
+                        .collect(),
+                    hazards: self
+                        .gameplay
+                        .mission
+                        .hazards
+                        .into_iter()
+                        .filter_map(sanitize_mission_hazard_spec)
+                        .collect(),
+                    goals: self
+                        .gameplay
+                        .mission
+                        .goals
+                        .into_iter()
+                        .filter_map(sanitize_mission_goal_spec)
+                        .collect(),
                 },
             },
             palette: GameReadyPaletteSpec {

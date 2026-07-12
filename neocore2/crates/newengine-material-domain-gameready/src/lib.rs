@@ -218,9 +218,13 @@ impl GameReadyLitMaterialDomainProvider {
             TextureFormat::Rgba8Unorm,
         ];
 
+        let build_deferred_pipelines = profile.deferred_pipelines;
+        let declared_pipeline_count = if build_deferred_pipelines { 14 } else { 10 };
         newengine_ulog_api::ulog::info!(
-            "gameready material domain: creating GPU pipelines key='{}' pipeline_count=14",
-            GAME_READY_LIT_PIPELINE_KEY.as_str()
+            "gameready material domain: creating GPU pipelines key='{}' pipeline_count={} deferred_pipelines={} policy='forward runtime skips deferred gbuffer pipeline burst'",
+            GAME_READY_LIT_PIPELINE_KEY.as_str(),
+            declared_pipeline_count,
+            build_deferred_pipelines,
         );
         let pipeline = r.create_pipeline(
             PipelineDesc::new(vs, fs, profile.scene_hdr_color_format)
@@ -250,36 +254,50 @@ impl GameReadyLitMaterialDomainProvider {
                 .with_depth(TextureFormat::Depth32Float),
         )?;
 
-        let gbuffer_terrain_pipeline = r.create_pipeline(
-            PipelineDesc::new(vs, gbuffer_terrain_fs, TextureFormat::Rgba8Unorm)
-                .with_label("gameready_gbuffer_terrain_pipeline")
-                .with_topology(PrimitiveTopology::TriangleList)
-                .with_vertex_layouts(vec![layout.clone()])
-                .with_bind_group_layouts(vec![bgl])
-                .with_color_formats(gbuffer_color_formats.clone())
-                .with_depth(TextureFormat::Depth32Float),
-        )?;
+        let (gbuffer_terrain_pipeline, gbuffer_pipeline, gbuffer_double_sided_pipeline) =
+            if build_deferred_pipelines {
+                let gbuffer_terrain_pipeline = r.create_pipeline(
+                    PipelineDesc::new(vs, gbuffer_terrain_fs, TextureFormat::Rgba8Unorm)
+                        .with_label("gameready_gbuffer_terrain_pipeline")
+                        .with_topology(PrimitiveTopology::TriangleList)
+                        .with_vertex_layouts(vec![layout.clone()])
+                        .with_bind_group_layouts(vec![bgl])
+                        .with_color_formats(gbuffer_color_formats.clone())
+                        .with_depth(TextureFormat::Depth32Float),
+                )?;
 
-        let gbuffer_pipeline = r.create_pipeline(
-            PipelineDesc::new(vs, gbuffer_fs, TextureFormat::Rgba8Unorm)
-                .with_label("gameready_gbuffer_lit_pipeline")
-                .with_topology(PrimitiveTopology::TriangleList)
-                .with_vertex_layouts(vec![layout.clone()])
-                .with_bind_group_layouts(vec![bgl])
-                .with_color_formats(gbuffer_color_formats.clone())
-                .with_depth(TextureFormat::Depth32Float),
-        )?;
+                let gbuffer_pipeline = r.create_pipeline(
+                    PipelineDesc::new(vs, gbuffer_fs, TextureFormat::Rgba8Unorm)
+                        .with_label("gameready_gbuffer_lit_pipeline")
+                        .with_topology(PrimitiveTopology::TriangleList)
+                        .with_vertex_layouts(vec![layout.clone()])
+                        .with_bind_group_layouts(vec![bgl])
+                        .with_color_formats(gbuffer_color_formats.clone())
+                        .with_depth(TextureFormat::Depth32Float),
+                )?;
 
-        let gbuffer_double_sided_pipeline = r.create_pipeline(
-            PipelineDesc::new(vs, gbuffer_fs, TextureFormat::Rgba8Unorm)
-                .with_label("gameready_gbuffer_lit_pipeline_double_sided")
-                .with_topology(PrimitiveTopology::TriangleList)
-                .with_vertex_layouts(vec![layout.clone()])
-                .with_bind_group_layouts(vec![bgl])
-                .with_color_formats(gbuffer_color_formats.clone())
-                .with_depth(TextureFormat::Depth32Float)
-                .with_cull_mode(RasterCullMode::None),
-        )?;
+                let gbuffer_double_sided_pipeline = r.create_pipeline(
+                    PipelineDesc::new(vs, gbuffer_fs, TextureFormat::Rgba8Unorm)
+                        .with_label("gameready_gbuffer_lit_pipeline_double_sided")
+                        .with_topology(PrimitiveTopology::TriangleList)
+                        .with_vertex_layouts(vec![layout.clone()])
+                        .with_bind_group_layouts(vec![bgl])
+                        .with_color_formats(gbuffer_color_formats.clone())
+                        .with_depth(TextureFormat::Depth32Float)
+                        .with_cull_mode(RasterCullMode::None),
+                )?;
+
+                (
+                    gbuffer_terrain_pipeline,
+                    gbuffer_pipeline,
+                    gbuffer_double_sided_pipeline,
+                )
+            } else {
+                // Forward-only runtime never records GBuffer passes. Keep handles
+                // structurally valid without creating deferred pipelines during the
+                // startup handoff.
+                (terrain_pipeline, pipeline, double_sided_pipeline)
+            };
 
         let shadow_pipeline = r.create_pipeline(
             PipelineDesc::new(shadow_vs, shadow_fs, profile.shadow_map_color_format)
@@ -320,26 +338,36 @@ impl GameReadyLitMaterialDomainProvider {
                 .with_cull_mode(RasterCullMode::None),
         )?;
 
-        let gbuffer_instanced_pipeline = r.create_pipeline(
-            PipelineDesc::new(instanced_vs, gbuffer_fs, TextureFormat::Rgba8Unorm)
-                .with_label("gameready_gbuffer_lit_pipeline_instanced")
-                .with_topology(PrimitiveTopology::TriangleList)
-                .with_vertex_layouts(instanced_layouts.clone())
-                .with_bind_group_layouts(vec![bgl])
-                .with_color_formats(gbuffer_color_formats.clone())
-                .with_depth(TextureFormat::Depth32Float),
-        )?;
+        let (gbuffer_instanced_pipeline, gbuffer_instanced_double_sided_pipeline) =
+            if build_deferred_pipelines {
+                let gbuffer_instanced_pipeline = r.create_pipeline(
+                    PipelineDesc::new(instanced_vs, gbuffer_fs, TextureFormat::Rgba8Unorm)
+                        .with_label("gameready_gbuffer_lit_pipeline_instanced")
+                        .with_topology(PrimitiveTopology::TriangleList)
+                        .with_vertex_layouts(instanced_layouts.clone())
+                        .with_bind_group_layouts(vec![bgl])
+                        .with_color_formats(gbuffer_color_formats.clone())
+                        .with_depth(TextureFormat::Depth32Float),
+                )?;
 
-        let gbuffer_instanced_double_sided_pipeline = r.create_pipeline(
-            PipelineDesc::new(instanced_vs, gbuffer_fs, TextureFormat::Rgba8Unorm)
-                .with_label("gameready_gbuffer_lit_pipeline_instanced_double_sided")
-                .with_topology(PrimitiveTopology::TriangleList)
-                .with_vertex_layouts(instanced_layouts.clone())
-                .with_bind_group_layouts(vec![bgl])
-                .with_color_formats(gbuffer_color_formats.clone())
-                .with_depth(TextureFormat::Depth32Float)
-                .with_cull_mode(RasterCullMode::None),
-        )?;
+                let gbuffer_instanced_double_sided_pipeline = r.create_pipeline(
+                    PipelineDesc::new(instanced_vs, gbuffer_fs, TextureFormat::Rgba8Unorm)
+                        .with_label("gameready_gbuffer_lit_pipeline_instanced_double_sided")
+                        .with_topology(PrimitiveTopology::TriangleList)
+                        .with_vertex_layouts(instanced_layouts.clone())
+                        .with_bind_group_layouts(vec![bgl])
+                        .with_color_formats(gbuffer_color_formats.clone())
+                        .with_depth(TextureFormat::Depth32Float)
+                        .with_cull_mode(RasterCullMode::None),
+                )?;
+
+                (
+                    gbuffer_instanced_pipeline,
+                    gbuffer_instanced_double_sided_pipeline,
+                )
+            } else {
+                (instanced_pipeline, instanced_double_sided_pipeline)
+            };
 
         let sky_instanced_pipeline = r.create_pipeline(
             PipelineDesc::new(instanced_vs, instanced_fs, profile.scene_hdr_color_format)

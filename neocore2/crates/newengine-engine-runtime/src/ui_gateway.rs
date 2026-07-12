@@ -7,10 +7,11 @@ use newengine_core::EngineResult;
 use newengine_ui_api::{
     decode_ui_frame_response_bin, encode_ui_frame_request_bin, UiComponentNode, UiDrawList,
     UiFrameRequest, UiFrameResponse, UiInputCaptureState, UiNodeMessage, UiNodeMessageSeverity,
-    UiNodeTone, UiSurfaceAdmissionPolicy, UiSurfaceAnchor, UiSurfaceNode, UiSurfaceStyle,
-    ENGINE_UI_SERVICE_ID, UI_COMPONENT_PANEL, UI_SERVICE_METHOD_DRAW_FRAME_BIN_V1,
-    UI_SERVICE_METHOD_DRAW_FRAME_V1, UI_SERVICE_METHOD_SURFACE_NODE_V1,
-    UI_SURFACE_ENGINE_ERROR_MODAL, UI_THEME_NORTHSTAR_DEFAULT,
+    UiNodeTone, UiStatePatch, UiSurfaceAdmissionPolicy, UiSurfaceAnchor, UiSurfaceNode,
+    UiSurfaceStyle, UiSurfaceVisibilityRequest, ENGINE_UI_SERVICE_ID, UI_COMPONENT_PANEL,
+    UI_SERVICE_METHOD_APPLY_STATE_PATCH_V1, UI_SERVICE_METHOD_DRAW_FRAME_BIN_V1,
+    UI_SERVICE_METHOD_DRAW_FRAME_V1, UI_SERVICE_METHOD_SET_SURFACE_VISIBLE_V1,
+    UI_SERVICE_METHOD_SURFACE_NODE_V1, UI_SURFACE_ENGINE_ERROR_MODAL, UI_THEME_NORTHSTAR_DEFAULT,
 };
 
 static UI_ROUTE_MISSING_LOGGED: AtomicBool = AtomicBool::new(false);
@@ -161,6 +162,105 @@ pub fn publish_surface_node(node: &UiSurfaceNode) {
         Err(e) => newengine_ulog_api::ulog::warn!(
             "ui gateway: surface node publish failed surface='{}' err='{}'",
             node.surface_id,
+            e
+        ),
+    }
+}
+
+/// Set authoritative visibility for a retained provider-owned surface.
+///
+/// This changes surface admission, painting and hit-testing together. A state
+/// binding on a child/root layout is not equivalent because the surface itself
+/// would remain in the provider's visible surface set.
+pub fn set_surface_visible(surface_id: &str, visible: bool) -> bool {
+    let surface_id = surface_id.trim();
+    if surface_id.is_empty() {
+        newengine_ulog_api::ulog::warn!(
+            "ui gateway: set surface visibility rejected: empty surface id"
+        );
+        return false;
+    }
+    let request = UiSurfaceVisibilityRequest {
+        surface_id: surface_id.to_owned(),
+        visible,
+    };
+    let payload = match serde_json::to_vec(&request) {
+        Ok(payload) => payload,
+        Err(error) => {
+            newengine_ulog_api::ulog::warn!(
+                "ui gateway: failed to encode surface visibility surface='{}' visible={} err='{}'",
+                surface_id,
+                visible,
+                error
+            );
+            return false;
+        }
+    };
+    match newengine_core::call_service_v1_optional(
+        ENGINE_UI_SERVICE_ID,
+        UI_SERVICE_METHOD_SET_SURFACE_VISIBLE_V1,
+        &payload,
+    ) {
+        Ok(Some(_)) => {
+            newengine_ulog_api::ulog::info!(
+                "ui gateway: surface visibility applied surface='{}' visible={}",
+                surface_id,
+                visible
+            );
+            true
+        }
+        Ok(None) => {
+            log_missing_ui_route_once("set_surface_visible");
+            false
+        }
+        Err(error) => {
+            newengine_ulog_api::ulog::warn!(
+                "ui gateway: set surface visibility failed surface='{}' visible={} err='{}'",
+                surface_id,
+                visible,
+                error
+            );
+            false
+        }
+    }
+}
+
+pub fn publish_state_patch(
+    patch: &UiStatePatch,
+    source_gateway: &'static str,
+    contract: &'static str,
+) {
+    let payload = match serde_json::to_vec(patch) {
+        Ok(payload) => payload,
+        Err(e) => {
+            newengine_ulog_api::ulog::warn!(
+                "ui gateway: failed to encode state patch surface='{}' source_gateway='{}' contract='{}': {e}",
+                patch.surface_id,
+                source_gateway,
+                contract
+            );
+            return;
+        }
+    };
+
+    match newengine_core::call_service_v1_optional(
+        ENGINE_UI_SERVICE_ID,
+        UI_SERVICE_METHOD_APPLY_STATE_PATCH_V1,
+        &payload,
+    ) {
+        Ok(Some(_)) => newengine_ulog_api::ulog::trace!(
+            "ui gateway: state patch published surface='{}' source_gateway='{}' contract='{}' changes={}",
+            patch.surface_id,
+            source_gateway,
+            contract,
+            patch.changes.len()
+        ),
+        Ok(None) => log_missing_ui_route_once("publish_state_patch"),
+        Err(e) => newengine_ulog_api::ulog::warn!(
+            "ui gateway: state patch publish failed surface='{}' source_gateway='{}' contract='{}' err='{}'",
+            patch.surface_id,
+            source_gateway,
+            contract,
             e
         ),
     }

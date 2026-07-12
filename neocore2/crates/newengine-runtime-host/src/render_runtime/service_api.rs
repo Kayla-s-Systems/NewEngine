@@ -195,13 +195,8 @@ impl RenderApi for ServiceBackedRenderApi {
     }
 
     fn create_texture(&mut self, desc: TextureDesc) -> EngineResult<TextureId> {
-        match self.command(RenderCommand::CreateTexture(desc))? {
-            RenderCommandResponse::TextureId(id) => Ok(id),
-            other => Err(EngineError::other(format!(
-                "render service protocol error: expected TextureId, got {:?}",
-                other
-            ))),
-        }
+        self.flush_unit_batch()?;
+        self.client.create_texture(desc).map_err(EngineError::other)
     }
 
     fn destroy_texture(&mut self, id: TextureId) {

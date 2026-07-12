@@ -65,6 +65,23 @@ pub mod engine_action {
     pub const ASSET_CATALOG_UI_TOGGLE: &str = "ui.assets.catalog.toggle";
 }
 
+/// Engine-reserved gameplay action ids used by profile bindings and ECS command handoff.
+pub mod gameplay_action {
+    pub const PLAYER_JUMP: &str = "player.jump";
+    pub const PLAYER_CROUCH: &str = "player.crouch";
+    pub const PLAYER_FIRE_PRIMARY: &str = "player.fire.primary";
+    pub const PLAYER_AIM: &str = "player.aim";
+    pub const PLAYER_RELOAD: &str = "player.reload";
+    pub const PLAYER_INTERACT: &str = "player.interact";
+    pub const INVENTORY_TOGGLE: &str = "player.inventory.toggle";
+    pub const HUD_VISIBILITY_TOGGLE: &str = "game.hud.visibility.toggle";
+    pub const EQUIP_PRIMARY: &str = "player.equipment.primary";
+    pub const EQUIP_SECONDARY: &str = "player.equipment.secondary";
+    pub const EQUIP_SIDEARM: &str = "player.equipment.sidearm";
+    pub const EQUIP_MELEE: &str = "player.equipment.melee";
+    pub const EQUIP_THROWABLE: &str = "player.equipment.throwable";
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct InputActionListenerRegistration {
     pub owner: String,
@@ -266,6 +283,86 @@ impl Default for InputActionFrame {
     }
 }
 
+/// Compact gameplay command state extracted from a semantic input action frame.
+///
+/// `*_pressed` commands are one-render-frame pulses; held commands remain true for
+/// every frame in which their binding resolves. Fixed-step consumers should use the
+/// enclosing source-frame sequence to consume pulse commands at most once.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GameplayActionFrame {
+    pub jump_pressed: bool,
+    pub crouch_held: bool,
+    pub fire_primary_held: bool,
+    pub aim_held: bool,
+    pub reload_pressed: bool,
+    pub interact_pressed: bool,
+    pub inventory_toggle_pressed: bool,
+    pub hud_visibility_toggle_pressed: bool,
+    pub equipment_slot_pressed: Option<u8>,
+}
+
+impl GameplayActionFrame {
+    #[inline]
+    pub fn clear_pulses(&mut self) {
+        self.jump_pressed = false;
+        self.reload_pressed = false;
+        self.interact_pressed = false;
+        self.inventory_toggle_pressed = false;
+        self.hud_visibility_toggle_pressed = false;
+        self.equipment_slot_pressed = None;
+    }
+
+    #[inline]
+    pub fn merge_pending(&mut self, latest: Self) {
+        self.jump_pressed |= latest.jump_pressed;
+        self.reload_pressed |= latest.reload_pressed;
+        self.interact_pressed |= latest.interact_pressed;
+        self.inventory_toggle_pressed |= latest.inventory_toggle_pressed;
+        self.hud_visibility_toggle_pressed |= latest.hud_visibility_toggle_pressed;
+        if latest.equipment_slot_pressed.is_some() {
+            self.equipment_slot_pressed = latest.equipment_slot_pressed;
+        }
+        self.crouch_held = latest.crouch_held;
+        self.fire_primary_held = latest.fire_primary_held;
+        self.aim_held = latest.aim_held;
+    }
+}
+
+impl InputActionFrame {
+    #[inline]
+    pub fn contains_action(&self, action: &str) -> bool {
+        self.actions.iter().any(|candidate| candidate == action)
+    }
+
+    #[inline]
+    pub fn gameplay_actions(&self) -> GameplayActionFrame {
+        GameplayActionFrame {
+            jump_pressed: self.contains_action(gameplay_action::PLAYER_JUMP),
+            crouch_held: self.contains_action(gameplay_action::PLAYER_CROUCH),
+            fire_primary_held: self.contains_action(gameplay_action::PLAYER_FIRE_PRIMARY),
+            aim_held: self.contains_action(gameplay_action::PLAYER_AIM),
+            reload_pressed: self.contains_action(gameplay_action::PLAYER_RELOAD),
+            interact_pressed: self.contains_action(gameplay_action::PLAYER_INTERACT),
+            inventory_toggle_pressed: self.contains_action(gameplay_action::INVENTORY_TOGGLE),
+            hud_visibility_toggle_pressed: self
+                .contains_action(gameplay_action::HUD_VISIBILITY_TOGGLE),
+            equipment_slot_pressed: if self.contains_action(gameplay_action::EQUIP_PRIMARY) {
+                Some(1)
+            } else if self.contains_action(gameplay_action::EQUIP_SECONDARY) {
+                Some(2)
+            } else if self.contains_action(gameplay_action::EQUIP_SIDEARM) {
+                Some(3)
+            } else if self.contains_action(gameplay_action::EQUIP_MELEE) {
+                Some(4)
+            } else if self.contains_action(gameplay_action::EQUIP_THROWABLE) {
+                Some(5)
+            } else {
+                None
+            },
+        }
+    }
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct InputActionDispatchEvent {
     pub action: String,
@@ -398,4 +495,33 @@ pub fn move_axis_from_mask(mask: u64) -> [f32; 3] {
     let y = ((mask & move_mask::UP != 0) as i32 - (mask & move_mask::DOWN != 0) as i32) as f32;
     let z = ((mask & move_mask::FORWARD != 0) as i32 - (mask & move_mask::BACK != 0) as i32) as f32;
     [x, y, z]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn gameplay_action_frame_extracts_semantic_commands() {
+        let input = InputActionFrame {
+            actions: vec![
+                gameplay_action::PLAYER_JUMP.into(),
+                gameplay_action::PLAYER_FIRE_PRIMARY.into(),
+                gameplay_action::PLAYER_AIM.into(),
+                gameplay_action::HUD_VISIBILITY_TOGGLE.into(),
+            ],
+            ..InputActionFrame::default()
+        };
+
+        assert_eq!(
+            input.gameplay_actions(),
+            GameplayActionFrame {
+                jump_pressed: true,
+                fire_primary_held: true,
+                aim_held: true,
+                hud_visibility_toggle_pressed: true,
+                ..GameplayActionFrame::default()
+            }
+        );
+    }
 }

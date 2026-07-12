@@ -98,6 +98,33 @@ pub(super) fn terrain_cast_shadows_enabled(
     )
 }
 
+#[inline]
+pub(super) fn primitive_cast_shadows_enabled(
+    options: &newengine_model_domain_api::MeshRenderOptions,
+) -> bool {
+    use newengine_model_domain_api::{MeshRenderRole, MeshShadowPolicy};
+
+    if matches!(
+        options.role,
+        MeshRenderRole::SkyBackground
+            | MeshRenderRole::CelestialBillboard
+            | MeshRenderRole::WeatherVolume
+            | MeshRenderRole::FirstPersonViewModel
+            | MeshRenderRole::CollisionProxy
+            | MeshRenderRole::EditorGizmo
+            | MeshRenderRole::DebugPrimitive
+    ) {
+        return false;
+    }
+
+    matches!(
+        options.shadow_policy,
+        MeshShadowPolicy::CastOnly
+            | MeshShadowPolicy::CastAndReceive
+            | MeshShadowPolicy::ProfileControlled
+    )
+}
+
 pub(super) trait DistanceKeyEntry {
     fn distance_sq(&self) -> f32;
     fn stable_key(&self) -> u64;

@@ -133,6 +133,20 @@ impl RuntimeRenderController {
             );
         }
 
+        if let Some(dispatch_frame) = ctx
+            .resources()
+            .get::<newengine_ui_api::UiEventDispatchFrame>()
+        {
+            let _ = self
+                .bridges
+                .scene
+                .apply_editor_selection_actions(dispatch_frame);
+            let _ = self
+                .bridges
+                .scene
+                .apply_inventory_ui_actions(dispatch_frame);
+        }
+
         if editor_viewport_runtime_mode(ctx) == Some(UiEditorRuntimeMode::Edit) {
             // Editor/Edit is a tooling state, not a playable-world frame. Keep the
             // viewport slot as UI chrome only and do not tick scene/world, build
@@ -188,11 +202,15 @@ impl RuntimeRenderController {
             &frame_input.input,
             frame_input.play_mode,
             scope.dt,
+            scope.fixed_dt,
+            scope.fixed_step_count,
+            scope.fixed_tick,
             modal_blocks_gameplay,
             scope.aspect(),
             scope.vp_w,
             scope.vp_h,
         );
+        crate::gameplay::publish_inventory_hud_state(scene.world_mut(), self.frame.frame_index);
 
         if !world_frame.view_frame.world_playable {
             let ui_telemetry =

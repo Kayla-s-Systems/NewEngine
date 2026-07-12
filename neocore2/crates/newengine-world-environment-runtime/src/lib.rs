@@ -401,6 +401,40 @@ mod tests {
     }
 
     #[test]
+    fn forest_road_profile_uses_temperate_non_storm_baseline() {
+        for seed in 0..32u64 {
+            let mut req = EnvironmentFrameRequest::default();
+            req.environment_profile.profile_id = "environment.game_ready_forest_road".to_owned();
+            req.active_region = Some("game_ready.forest_road".to_owned());
+            req.active_biome = Some("temperate_forest".to_owned());
+            req.seed = seed;
+            req.time.game.day_index = 171;
+            req.time.game.normalized_day = 8.65 / 24.0;
+            let frame = build_default_environment_frame(
+                "environment.default",
+                WORLD_ENVIRONMENT_DEFAULT_PROVIDER_ROUTE,
+                req,
+            );
+            assert_eq!(
+                frame.global.active_environment_profile,
+                "environment.game_ready_forest_road"
+            );
+            assert_eq!(
+                frame.global.weather_table_ref,
+                "weather/game_ready_forest_road.yweather@table"
+            );
+            assert!(
+                !frame.global.active_weather_profile.contains("rain")
+                    && !frame.global.active_weather_profile.contains("storm"),
+                "seed={seed} selected {}",
+                frame.global.active_weather_profile
+            );
+            assert!(frame.celestial.sun.direction_world.y > 0.0);
+            assert!(frame.lighting_intent.sky_light_intensity >= 0.02);
+        }
+    }
+
+    #[test]
     fn profile_selection_is_exact_descriptor_not_substring_weather_force() {
         let mut req = EnvironmentFrameRequest::default();
         req.environment_profile.profile_id =

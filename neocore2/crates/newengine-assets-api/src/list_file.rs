@@ -363,6 +363,8 @@ pub const LIST_FILE_CONTENT_KIND_YTF: u32 = 20;
 pub const LIST_FILE_CONTENT_KIND_YTYD: u32 = 21;
 /// NewEngine UI dictionary: surfaces/layouts/themes/components/bindings in XMLcentral payload.
 pub const LIST_FILE_CONTENT_KIND_NEUI: u32 = 32;
+/// NewEngine authored item/inventory definition package.
+pub const LIST_FILE_CONTENT_KIND_NEITEMS: u32 = 33;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ListFileHeaderV1 {
@@ -463,6 +465,7 @@ pub const fn list_file_content_kind_label(kind: u32) -> &'static str {
         LIST_FILE_CONTENT_KIND_YTF => "ytf_unknown_y_file",
         LIST_FILE_CONTENT_KIND_YTYD => "ytyd_uv_layout_dictionary",
         LIST_FILE_CONTENT_KIND_NEUI => "neui_ui_dictionary",
+        LIST_FILE_CONTENT_KIND_NEITEMS => "neitems_inventory_dictionary",
         _ => "provider_declared",
     }
 }

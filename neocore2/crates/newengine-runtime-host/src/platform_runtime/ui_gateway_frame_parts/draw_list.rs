@@ -856,16 +856,17 @@ fn ui_draw_list_stats(draw_list: &UiDrawList) -> String {
         .iter()
         .filter(|command| matches!(command, UiPaintCommand::Image(_)))
         .count();
-    let first_font_ref = draw_list
+    let first_text = draw_list
         .paint
         .commands
         .iter()
         .find_map(|command| match command {
-            UiPaintCommand::Text(text) if !text.font_ref.trim().is_empty() => {
-                Some(text.font_ref.as_str())
-            }
+            UiPaintCommand::Text(text) => Some(text),
             _ => None,
         });
+    let first_font_ref = first_text
+        .filter(|text| !text.font_ref.trim().is_empty())
+        .map(|text| text.font_ref.as_str());
     let first_vector_ref = draw_list
         .paint
         .commands
@@ -877,7 +878,7 @@ fn ui_draw_list_stats(draw_list: &UiDrawList) -> String {
             _ => None,
         });
     format!(
-        "ui(mesh_vertices={} mesh_indices={} mesh_cmds={} paint_cmds={} paint_text={} paint_vector={} paint_images={} paint_diags={} first_font_ref={:?} first_vector_ref={:?} tex_set={} tex_set_bytes={} patches={} patch_bytes={} free={})",
+        "ui(mesh_vertices={} mesh_indices={} mesh_cmds={} paint_cmds={} paint_text={} paint_vector={} paint_images={} paint_diags={} first_font_ref={:?} first_text={:?} first_text_rect={:?} first_text_clip={:?} first_text_color={:?} first_text_px={:?} first_vector_ref={:?} tex_set={} tex_set_bytes={} patches={} patch_bytes={} free={})",
         draw_list.mesh.vertices.len(),
         draw_list.mesh.indices.len(),
         draw_list.mesh.cmds.len(),
@@ -887,6 +888,11 @@ fn ui_draw_list_stats(draw_list: &UiDrawList) -> String {
         paint_images,
         draw_list.paint.diagnostics.len(),
         first_font_ref,
+        first_text.map(|text| text.text.as_str()),
+        first_text.map(|text| text.rect),
+        first_text.and_then(|text| text.clip_rect),
+        first_text.map(|text| format!("0x{:08x}", text.color)),
+        first_text.map(|text| text.font_px),
         first_vector_ref,
         draw_list.texture_delta.set.len(),
         texture_set_bytes,

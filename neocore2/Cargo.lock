@@ -90,7 +90,6 @@ dependencies = [
 name = "aurelia-ui-test"
 version = "0.1.0"
 dependencies = [
- "log",
  "newengine-assets",
  "newengine-assets-api",
  "newengine-assets-ui-runtime",
@@ -297,10 +296,7 @@ name = "game-fps"
 version = "0.1.0"
 dependencies = [
  "embed-resource",
- "newengine-core",
  "newengine-game-ready-profile",
- "newengine-runtime-host",
- "newengine-ui",
 ]
 
 [[package]]
@@ -694,6 +690,7 @@ dependencies = [
  "abi_stable",
  "blake3",
  "crossbeam-channel",
+ "flate2",
  "libloading 0.9.0",
  "log",
  "newengine-asset-format-nef8",
@@ -728,6 +725,7 @@ dependencies = [
  "newengine-plugin-host",
  "newengine-primitives",
  "newengine-procedural-noise",
+ "newengine-render-api",
  "newengine-render-feature-api",
  "newengine-render-frame-graph",
  "newengine-replay",
@@ -784,6 +782,7 @@ dependencies = [
  "newengine-service-api",
  "newengine-service-kit",
  "newengine-ulog-api",
+ "serde",
  "serde_json",
 ]
 

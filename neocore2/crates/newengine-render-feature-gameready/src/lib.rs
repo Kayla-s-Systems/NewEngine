@@ -93,8 +93,11 @@ impl RenderDrawListProvider for GameReadyTerrainProvider {
         if ctx.render_shadow_map {
             out.record_procedural_terrain_shadow(ctx)?;
         }
-        out.record_procedural_terrain_gbuffer(ctx)?;
-        out.record_procedural_terrain_forward(ctx)
+        if ctx.deferred {
+            out.record_procedural_terrain_gbuffer(ctx)
+        } else {
+            out.record_procedural_terrain_forward(ctx)
+        }
     }
 }
 
@@ -127,7 +130,11 @@ impl RenderDrawListProvider for GameReadyPrimitiveMeshProvider {
         if ctx.render_shadow_map {
             out.record_primitive_mesh_shadow(ctx)?;
         }
-        out.record_primitive_mesh_gbuffer(ctx)?;
+        if ctx.deferred {
+            out.record_primitive_mesh_gbuffer(ctx)?;
+        }
+        // Forward remains active in deferred mode for sky, transparent and
+        // view-model roles; the runtime pass filter excludes deferred opaques.
         out.record_primitive_mesh_forward(ctx)
     }
 }

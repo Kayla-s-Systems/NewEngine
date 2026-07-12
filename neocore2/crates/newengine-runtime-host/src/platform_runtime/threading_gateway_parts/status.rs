@@ -2,8 +2,10 @@ use newengine_core::TaskRuntimeStatus;
 use newengine_task_api::TaskStatusJsonV1;
 
 pub(crate) fn status_from_core(status: TaskRuntimeStatus) -> TaskStatusJsonV1 {
+    let task_id = status.task_id;
     TaskStatusJsonV1 {
-        task_id: status.task_id,
+        task_id: task_id.clone(),
+        job_id: task_id,
         name: status.label.to_owned(),
         lane: status.lane.as_str().to_owned(),
         priority: status.priority.as_str().to_owned(),
@@ -21,8 +23,10 @@ pub(crate) fn status_from_core(status: TaskRuntimeStatus) -> TaskStatusJsonV1 {
 }
 
 pub(crate) fn missing_status(task_id: impl Into<String>) -> TaskStatusJsonV1 {
+    let task_id = task_id.into();
     TaskStatusJsonV1 {
-        task_id: task_id.into(),
+        task_id: task_id.clone(),
+        job_id: task_id,
         found: false,
         ..Default::default()
     }

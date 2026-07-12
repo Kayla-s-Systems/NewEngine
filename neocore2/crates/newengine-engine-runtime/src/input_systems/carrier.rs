@@ -1,5 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
+use std::collections::BTreeSet;
+
 use newengine_input_actions_api::{move_mask, CameraViewRequest, InputActionFrame};
 
 /// Mutable carrier used by the render controller so input policy does not own
@@ -35,6 +37,31 @@ impl InputActionFrameCarrier<'_> {
         *self.move_mask = 0;
         *self.camera_view = CameraViewRequest::None;
         *self.actions = InputActionFrame::default();
+    }
+
+    pub(super) fn suppress_gameplay_actions(&mut self) {
+        const GAMEPLAY_LISTENER: &str = "newengine-gameplay:player-controller";
+        let blocked = self
+            .actions
+            .events
+            .iter()
+            .filter(|event| {
+                event
+                    .listeners
+                    .iter()
+                    .any(|listener| listener == GAMEPLAY_LISTENER)
+            })
+            .map(|event| event.action.clone())
+            .collect::<BTreeSet<_>>();
+        if blocked.is_empty() {
+            return;
+        }
+        self.actions
+            .actions
+            .retain(|action| !blocked.contains(action));
+        self.actions
+            .events
+            .retain(|event| !blocked.contains(&event.action));
     }
 
     pub(super) fn suppress_camera_look(&mut self) {
@@ -100,6 +127,7 @@ impl InputActionFrameCarrier<'_> {
         self.actions.look_axis = [0.0, 0.0];
         self.actions.sprint = false;
         self.actions.camera_view = CameraViewRequest::None;
+        self.suppress_gameplay_actions();
     }
 }
 
@@ -130,4 +158,127 @@ pub(super) fn movement_has_activity(frame: &InputActionFrame) -> bool {
         != 0
         || frame.move_axis != [0.0, 0.0, 0.0]
         || frame.sprint
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use newengine_input_actions_api::InputActionDispatchEvent;
+
+    #[test]
+    fn modal_gate_preserves_inventory_controller_actions() {
+        let mut dx_px = 0.0;
+        let mut dy_px = 0.0;
+        let mut wheel_y = 0.0;
+        let mut active = true;
+        let mut look_drag = false;
+        let mut pan_drag = false;
+        let mut ui_busy = false;
+        let mut fly_rmb = false;
+        let mut sampling_alive = false;
+        let mut camera_navigation_gated = false;
+        let mut gameplay_movement_gated = false;
+        let mut move_mask = 0;
+        let mut speed_scalar = 1.0;
+        let mut camera_view = CameraViewRequest::None;
+        let mut actions = InputActionFrame {
+            actions: vec![
+                "player.fire.primary".into(),
+                "player.inventory.toggle".into(),
+            ],
+            events: vec![
+                InputActionDispatchEvent {
+                    action: "player.fire.primary".into(),
+                    listeners: vec!["newengine-gameplay:player-controller".into()],
+                    consumed_by: None,
+                },
+                InputActionDispatchEvent {
+                    action: "player.inventory.toggle".into(),
+                    listeners: vec!["newengine-inventory:inventory-controller".into()],
+                    consumed_by: None,
+                },
+            ],
+            ..InputActionFrame::default()
+        };
+        let mut carrier = InputActionFrameCarrier {
+            dx_px: &mut dx_px,
+            dy_px: &mut dy_px,
+            wheel_y: &mut wheel_y,
+            active: &mut active,
+            look_drag: &mut look_drag,
+            pan_drag: &mut pan_drag,
+            ui_busy: &mut ui_busy,
+            fly_rmb: &mut fly_rmb,
+            sampling_alive: &mut sampling_alive,
+            camera_navigation_gated: &mut camera_navigation_gated,
+            gameplay_movement_gated: &mut gameplay_movement_gated,
+            move_mask: &mut move_mask,
+            speed_scalar: &mut speed_scalar,
+            camera_view: &mut camera_view,
+            actions: &mut actions,
+        };
+        carrier.gate_runtime_navigation_by_ui();
+        assert_eq!(carrier.actions.actions, ["player.inventory.toggle"]);
+        assert_eq!(carrier.actions.events.len(), 1);
+    }
+
+    #[test]
+    fn modal_gate_removes_gameplay_actions_but_preserves_ui_actions() {
+        let mut dx_px = 4.0;
+        let mut dy_px = 3.0;
+        let mut wheel_y = 1.0;
+        let mut active = true;
+        let mut look_drag = true;
+        let mut pan_drag = true;
+        let mut ui_busy = false;
+        let mut fly_rmb = true;
+        let mut sampling_alive = false;
+        let mut camera_navigation_gated = false;
+        let mut gameplay_movement_gated = false;
+        let mut move_mask = move_mask::FORWARD;
+        let mut speed_scalar = 2.0;
+        let mut camera_view = CameraViewRequest::Next;
+        let mut actions = InputActionFrame {
+            actions: vec!["player.fire.primary".into(), "ui.accept".into()],
+            events: vec![
+                InputActionDispatchEvent {
+                    action: "player.fire.primary".into(),
+                    listeners: vec!["newengine-gameplay:player-controller".into()],
+                    consumed_by: None,
+                },
+                InputActionDispatchEvent {
+                    action: "ui.accept".into(),
+                    listeners: vec!["newengine-ui:ui-navigation".into()],
+                    consumed_by: Some("newengine-ui:ui-navigation".into()),
+                },
+            ],
+            ..InputActionFrame::default()
+        };
+        let mut carrier = InputActionFrameCarrier {
+            dx_px: &mut dx_px,
+            dy_px: &mut dy_px,
+            wheel_y: &mut wheel_y,
+            active: &mut active,
+            look_drag: &mut look_drag,
+            pan_drag: &mut pan_drag,
+            ui_busy: &mut ui_busy,
+            fly_rmb: &mut fly_rmb,
+            sampling_alive: &mut sampling_alive,
+            camera_navigation_gated: &mut camera_navigation_gated,
+            gameplay_movement_gated: &mut gameplay_movement_gated,
+            move_mask: &mut move_mask,
+            speed_scalar: &mut speed_scalar,
+            camera_view: &mut camera_view,
+            actions: &mut actions,
+        };
+
+        carrier.gate_runtime_navigation_by_ui();
+
+        assert_eq!(carrier.actions.actions, ["ui.accept"]);
+        assert_eq!(carrier.actions.events.len(), 1);
+        assert_eq!(carrier.actions.events[0].action, "ui.accept");
+        assert!(*carrier.sampling_alive);
+        assert!(*carrier.camera_navigation_gated);
+        assert!(*carrier.gameplay_movement_gated);
+    }
 }

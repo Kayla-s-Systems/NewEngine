@@ -7,6 +7,7 @@ pub mod entity_runtime;
 pub(crate) mod headless_cli;
 pub(crate) mod null_providers;
 pub mod path_display;
+pub(crate) mod path_resolver;
 pub mod physics_runtime;
 pub mod platform_input;
 pub mod platform_runtime;

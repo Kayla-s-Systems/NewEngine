@@ -26,31 +26,6 @@ impl EditorScreen {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) struct GameScreen {
-    descriptor: UiScreenProfileDescriptor,
-}
-
-impl Default for GameScreen {
-    fn default() -> Self {
-        Self {
-            descriptor: game_screen_descriptor(None),
-        }
-    }
-}
-
-impl GameScreen {
-    pub(super) fn with_game_ui_root(surface_id: impl Into<String>) -> Self {
-        Self {
-            descriptor: game_screen_descriptor(Some(surface_id.into())),
-        }
-    }
-
-    pub(super) fn surface_node(&self, frame_index: u64) -> Option<UiSurfaceNode> {
-        game_screen_surface_node(&self.descriptor, frame_index)
-    }
-}
-
 pub(super) fn screen_profile_descriptor(
     profile: UiScreenProfile,
     game_ui_root: Option<String>,
@@ -70,6 +45,7 @@ pub(super) fn editor_screen_descriptor() -> UiScreenProfileDescriptor {
         surface_id: UI_SURFACE_EDITOR_SHELL.to_owned(),
         viewport_surface_id: DEFAULT_VIEWPORT_SURFACE.to_owned(),
         game_ui_root_surface_id: None,
+        game_ui_document_ref: None,
         input_focus_policy: UiScreenInputFocusPolicy::EditorShell,
         panels: vec![
             screen_panel(
@@ -132,8 +108,8 @@ pub(super) fn editor_screen_descriptor() -> UiScreenProfileDescriptor {
                 "right.inspector",
                 "Inspector",
                 "engine.ui.editor.inspector",
-                "engine.schema",
-                "newengine.schema.properties.inspector.v1",
+                "engine.scene",
+                "newengine.scene.selected_entity_inspector.snapshot.v1",
                 true,
                 false,
                 [
@@ -209,6 +185,22 @@ pub(super) fn editor_screen_descriptor() -> UiScreenProfileDescriptor {
                     "neui:assets/ui/editor/profiler_diagnostics.neui@surface",
                 ],
             ),
+            screen_panel(
+                "bottom.scene_object_invariants",
+                "Scene Object Invariants",
+                "engine.ui.editor.scene_object_invariants",
+                "engine.scene",
+                "newengine.scene.object_invariants.snapshot.v1",
+                true,
+                false,
+                [
+                    "bottom",
+                    "scene",
+                    "invariants",
+                    "diagnostics",
+                    "neui:assets/ui/editor/scene_object_invariants.neui@surface",
+                ],
+            ),
         ],
         diagnostics: vec![
             "EditorScreen is a UI composition profile, not a backend domain.".to_owned(),
@@ -240,11 +232,12 @@ pub(super) fn game_screen_descriptor(game_ui_root: Option<String>) -> UiScreenPr
         surface_id: UI_SURFACE_GAME_PRESENTATION.to_owned(),
         viewport_surface_id: DEFAULT_VIEWPORT_SURFACE.to_owned(),
         game_ui_root_surface_id: game_ui_root,
+        game_ui_document_ref: None,
         input_focus_policy: UiScreenInputFocusPolicy::GameViewport,
         panels,
         diagnostics: vec![
-            "GameScreen is clean runtime presentation.".to_owned(),
-            "Editor toolbar/outliner/right edit window/content browser are absent unless explicitly published as debug overlays.".to_owned(),
+            "Game profile consumes authored .neui documents only.".to_owned(),
+            "Runtime-host does not generate gameplay HUD nodes.".to_owned(),
         ],
     }
 }
@@ -257,6 +250,7 @@ pub(super) fn headless_screen_descriptor() -> UiScreenProfileDescriptor {
         surface_id: UI_SURFACE_SCREEN_ROOT.to_owned(),
         viewport_surface_id: String::new(),
         game_ui_root_surface_id: None,
+        game_ui_document_ref: None,
         input_focus_policy: UiScreenInputFocusPolicy::Headless,
         panels: Vec::new(),
         diagnostics: vec!["Headless profile publishes no visual screen shell.".to_owned()],
@@ -385,103 +379,4 @@ pub(super) fn editor_screen_surface_node(
         admission_policy: Default::default(),
         metrics,
     }
-}
-
-pub(super) fn game_screen_surface_node(
-    descriptor: &UiScreenProfileDescriptor,
-    frame_index: u64,
-) -> Option<UiSurfaceNode> {
-    let root = descriptor.game_ui_root_surface_id.as_ref()?.trim();
-    if root.is_empty() {
-        return None;
-    }
-    let diagnostic_panel_enabled =
-        crate::platform_runtime::config::game_screen_diagnostic_panel_enabled();
-    let mut metrics = screen_metrics(descriptor, frame_index);
-    metrics.insert(
-        "game_ui_root_surface_id".to_owned(),
-        serde_json::json!(root),
-    );
-    if !diagnostic_panel_enabled {
-        return Some(UiSurfaceNode {
-            version: 1,
-            surface_id: descriptor.surface_id.clone(),
-            source: SCREEN_PROFILE_SOURCE.to_owned(),
-            visible: true,
-            modal: false,
-            z_order: 520,
-            title: String::new(),
-            subtitle: String::new(),
-            body_lines: Vec::new(),
-            footer_lines: Vec::new(),
-            style_tags: vec![
-                "retained".to_owned(),
-                "hud".to_owned(),
-                "crosshair".to_owned(),
-            ],
-            theme_id: UI_THEME_NORTHSTAR_EDITOR.to_owned(),
-            style_ref: Some(UI_THEME_ASSET_NORTHSTAR_EDITOR.to_owned()),
-            component_id: UI_COMPONENT_PANEL.to_owned(),
-            components: Vec::new(),
-            message: None,
-            style: UiSurfaceStyle {
-                anchor: UiSurfaceAnchor::Center,
-                min_size_px: [28.0, 28.0],
-                max_size_px: [44.0, 44.0],
-                margin_px: [0.0, 0.0],
-                padding_px: [0.0, 0.0, 0.0, 0.0],
-                row_pitch_px: 16.0,
-                panel_rgba: [0, 0, 0, 0],
-                panel_header_rgba: [0, 0, 0, 0],
-                backdrop_rgba: [0, 0, 0, 0],
-                border_rgba: [255, 255, 255, 0],
-                text_rgba: [235, 245, 255, 220],
-                shadow_alpha: 0,
-                ..UiSurfaceStyle::default()
-            },
-            admission_policy: Default::default(),
-            metrics,
-        });
-    }
-    Some(UiSurfaceNode {
-        version: 1,
-        surface_id: descriptor.surface_id.clone(),
-        source: SCREEN_PROFILE_SOURCE.to_owned(),
-        visible: true,
-        modal: false,
-        z_order: 480,
-        title: "Game Screen".to_owned(),
-        subtitle: "Clean runtime presentation; editor panels are not part of this profile"
-            .to_owned(),
-        body_lines: vec![format!("Game UI root: {root}")],
-        footer_lines: vec![
-            "Editor shell is absent; debug overlays must be explicitly enabled.".to_owned(),
-        ],
-        style_tags: vec![
-            "retained".to_owned(),
-            "screen-profile".to_owned(),
-            "game-screen".to_owned(),
-        ],
-        theme_id: UI_THEME_NORTHSTAR_EDITOR.to_owned(),
-        style_ref: Some(UI_THEME_ASSET_NORTHSTAR_EDITOR.to_owned()),
-        component_id: UI_COMPONENT_PANEL.to_owned(),
-        components: descriptor
-            .panels
-            .first()
-            .map(|panel| panel_component(panel, true, false))
-            .into_iter()
-            .collect(),
-        message: None,
-        style: UiSurfaceStyle {
-            anchor: UiSurfaceAnchor::BottomRight,
-            min_size_px: [300.0, 88.0],
-            max_size_px: [520.0, 160.0],
-            margin_px: [12.0, 12.0],
-            padding_px: [18.0, 48.0, 18.0, 22.0],
-            row_pitch_px: 22.0,
-            ..UiSurfaceStyle::default()
-        },
-        admission_policy: Default::default(),
-        metrics,
-    })
 }

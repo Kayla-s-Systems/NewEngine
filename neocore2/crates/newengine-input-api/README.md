@@ -1,5 +1,14 @@
 # newengine-input-api
 
+## Internal architecture
+
+- `contracts.rs` — raw input service identifiers and runtime requirements.
+- `key_code.rs` / `key_identity.rs` — stable keyboard codes and semantic identities.
+- `mouse_button.rs`, `gamepad_button.rs`, `gamepad_axis.rs` — canonical device vocabularies.
+- `snapshot.rs` — provider-neutral input state DTOs.
+
+`lib.rs` is a compatibility facade and keeps the historical root exports.
+
 <!-- NORTHSTAR-DIR-README:BEGIN -->
 
 ## Directory purpose

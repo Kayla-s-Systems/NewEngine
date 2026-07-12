@@ -88,7 +88,7 @@ pub fn encode_ui_draw_list_bin_into(out: &mut Vec<u8>, list: &UiDrawList) -> Res
 }
 
 pub fn decode_ui_draw_list_bin(bytes: &[u8]) -> Result<UiDrawList, String> {
-    let mut r = BinReader::new(bytes);
+    let mut r = BinReader::new(bytes, "ui binary packet");
     let magic = r.take(8)?;
     if magic != UI_DRAW_LIST_BIN_MAGIC {
         return Err("ui draw-list binary packet has invalid magic".to_owned());
@@ -195,48 +195,7 @@ fn put_f32(out: &mut Vec<u8>, v: f32) {
     out.extend_from_slice(&v.to_le_bytes());
 }
 
-struct BinReader<'a> {
-    bytes: &'a [u8],
-    cursor: usize,
-}
-
-impl<'a> BinReader<'a> {
-    #[inline]
-    fn new(bytes: &'a [u8]) -> Self {
-        Self { bytes, cursor: 0 }
-    }
-    #[inline]
-    fn is_eof(&self) -> bool {
-        self.cursor == self.bytes.len()
-    }
-
-    fn take(&mut self, len: usize) -> Result<&'a [u8], String> {
-        let end = self.cursor.saturating_add(len);
-        if end > self.bytes.len() {
-            return Err("ui binary packet ended early".to_owned());
-        }
-        let out = &self.bytes[self.cursor..end];
-        self.cursor = end;
-        Ok(out)
-    }
-
-    #[inline]
-    fn u32(&mut self) -> Result<u32, String> {
-        let b = self.take(4)?;
-        Ok(u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
-    }
-
-    #[inline]
-    fn f32(&mut self) -> Result<f32, String> {
-        let b = self.take(4)?;
-        Ok(f32::from_le_bytes([b[0], b[1], b[2], b[3]]))
-    }
-
-    fn bytes_vec(&mut self) -> Result<Vec<u8>, String> {
-        let len = self.u32()? as usize;
-        Ok(self.take(len)?.to_vec())
-    }
-}
+type BinReader<'a> = crate::binary_codec::ReadCursor<'a>;
 
 #[cfg(test)]
 mod tests {

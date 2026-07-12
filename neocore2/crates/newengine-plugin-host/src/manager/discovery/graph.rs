@@ -30,7 +30,7 @@ pub(super) struct ScannedDynlib {
 }
 
 #[derive(Debug, Clone)]
-pub(in crate::manager) struct DiscoveryGraph {
+pub struct DiscoveryGraph {
     pub(super) dir: PathBuf,
     pub(super) entries_total: usize,
     pub(super) skipped_non_dynlib: usize,

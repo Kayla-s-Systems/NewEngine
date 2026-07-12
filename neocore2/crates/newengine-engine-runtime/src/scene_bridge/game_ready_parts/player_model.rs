@@ -191,6 +191,12 @@ pub(in crate::scene_bridge::game_ready) fn spawn_game_ready_player_model(
             scale: Vec3::ONE,
         },
     );
+    crate::gameplay::attach_scene_object_core(
+        world,
+        visual_root,
+        spec.local_offset + Vec3::new(0.0, capsule_ground_offset_y, 0.0),
+        Vec3::new(0.5, (spec.target_height * 0.5).max(0.5), 0.5),
+    );
     let _ = world.insert(visual_root, crate::gameplay::GameplayActor);
     let _ = set_parent(world, visual_root, Some(player));
 
@@ -210,6 +216,10 @@ pub(in crate::scene_bridge::game_ready) fn spawn_game_ready_player_model(
                 color: part.color,
             },
         );
+        if let Some(bounds) = primitive_bounds(prims, part.primitive_id) {
+            let _ = world.insert(entity, bounds);
+        }
+        crate::gameplay::attach_scene_object_core(world, entity, Vec3::ZERO, Vec3::splat(0.25));
         let _ = world.insert(entity, crate::gameplay::GameplayActor);
         let _ = world.insert(
             entity,

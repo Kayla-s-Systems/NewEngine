@@ -31,7 +31,7 @@ pub enum CommandTag {
 /// A command produced by a system and applied after execution.
 ///
 /// Commands are committed in deterministic order (by system `(order, seq)`).
-/// If this stage becomes parallel again, it must run through `engine.jobs` so
+/// If this stage becomes parallel again, it must run through `engine.threading` so
 /// each batch remains visible and controllable.
 pub trait Command: Send {
     /// Apply this command.

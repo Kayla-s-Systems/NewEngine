@@ -4,7 +4,8 @@ use newengine_scene::Scene;
 
 use crate::engine_bounds::EngineBoundsSnap;
 use crate::gameplay::{
-    run_schedule_with_physics_mode_and_telemetry_for_frame, GameRunMode, PhysicsIntegrationMode,
+    consume_player_transient_input, run_schedule_with_physics_mode_and_telemetry_for_frame,
+    GameRunMode, PhysicsIntegrationMode,
 };
 use crate::scene_bridge::EngineViewInput;
 
@@ -26,6 +27,9 @@ impl RuntimeRenderController {
         input: &ViewportInputSnap,
         play_mode: GameRunMode,
         dt: f32,
+        fixed_dt: f32,
+        fixed_step_count: u32,
+        fixed_tick: u64,
         pause_world: bool,
         _aspect: f32,
         vp_w: u32,
@@ -42,6 +46,19 @@ impl RuntimeRenderController {
                 self.frame.frame_index,
                 "render.world_tick",
             );
+
+            {
+                let prims_lock = scene_bridge.primitives();
+                let mut prims = prims_lock.write();
+                let mats_lock = scene_bridge.materials();
+                let mats = mats_lock.read();
+                crate::scene_bridge::tick_game_ready_static_world_prefabs(
+                    world,
+                    &mut prims,
+                    &mats,
+                    thread_pool,
+                );
+            }
 
             let world_playable = readiness::update_game_ready_launch_gate(
                 self,
@@ -74,6 +91,16 @@ impl RuntimeRenderController {
             };
 
             let runtime_profile = self.runtime_profile().clone();
+            let mut engine_view_input = EngineViewInput::from(input);
+            scene_bridge.prepare_engine_runtime_input(
+                world,
+                engine_view_input,
+                effective_play_mode,
+                self.frame.frame_index,
+            );
+            // The view request was consumed in the pre-simulation input phase. Keeping
+            // it in the render-phase packet would cycle camera modes twice in one frame.
+            engine_view_input.camera_view = newengine_input_actions_api::CameraViewRequest::None;
 
             if effective_play_mode.is_runtime() {
                 if runtime_profile.use_runtime_terrain_streaming() {
@@ -107,9 +134,6 @@ impl RuntimeRenderController {
                     None
                 };
                 if let Some(physics_mode) = physics_mode {
-                    world.insert_resource(crate::gameplay::PhysicsRuntimeFrameIndex(
-                        self.frame.frame_index,
-                    ));
                     let publish_sim_job = |event: newengine_task_api::EngineTaskEvent| {
                         let job_event = newengine_task_api::EngineTaskEnvelopeV1::new(
                             event.clone(),
@@ -135,16 +159,25 @@ impl RuntimeRenderController {
                     };
                     let sim_telemetry =
                         newengine_sim::SimulationJobTelemetry::new(&publish_sim_job);
-                    run_schedule_with_physics_mode_and_telemetry_for_frame(
-                        &mut self.frame.sim_schedule,
-                        world,
-                        dt,
-                        self.frame.frame_index,
-                        physics_api,
-                        physics_mode,
-                        Some(&sim_telemetry),
-                        thread_pool,
-                    );
+                    let fixed_dt = fixed_dt.max(0.000_001);
+                    for step_index in 0..fixed_step_count {
+                        let remaining_after_step = u64::from(fixed_step_count - step_index - 1);
+                        let simulation_tick = fixed_tick.saturating_sub(remaining_after_step);
+                        world.insert_resource(crate::gameplay::PhysicsRuntimeFrameIndex(
+                            simulation_tick,
+                        ));
+                        run_schedule_with_physics_mode_and_telemetry_for_frame(
+                            &mut self.frame.sim_schedule,
+                            world,
+                            fixed_dt,
+                            simulation_tick,
+                            physics_api,
+                            physics_mode,
+                            Some(&sim_telemetry),
+                            thread_pool,
+                        );
+                        consume_player_transient_input(world);
+                    }
                 } else {
                     log_physics_skip_once();
                 }
@@ -157,7 +190,7 @@ impl RuntimeRenderController {
             let frame = scene_bridge.resolve_engine_view_frame(
                 world,
                 &viewport_bridge,
-                EngineViewInput::from(input),
+                engine_view_input,
                 play_mode,
                 effective_play_mode,
                 world_playable,
@@ -248,6 +281,7 @@ impl From<&ViewportInputSnap> for EngineViewInput {
             move_mask: input.move_mask,
             speed_scalar: input.speed_scalar,
             camera_view: input.camera_view,
+            gameplay_actions: input.actions.gameplay_actions(),
         }
     }
 }

@@ -9,7 +9,10 @@ mod loader;
 mod types;
 mod ui_assets;
 
-pub use discovery::IncrementalLoadOutcome;
+pub use discovery::{
+    resolve_plugin_discovery_dir, scan_plugin_discovery_graph,
+    DiscoveryGraph as PluginDiscoveryGraph, IncrementalLoadOutcome,
+};
 pub use types::{PluginIconSnapshot, PluginLoadError, PluginSnapshotEntry};
 
 use newengine_math::collections::prelude::*;

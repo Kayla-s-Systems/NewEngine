@@ -289,6 +289,7 @@ impl Default for TaskServiceInfoV1 {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct TaskIdRequestV1 {
+    #[serde(alias = "job_id")]
     pub task_id: String,
     pub reason: String,
     pub source: String,
@@ -315,6 +316,7 @@ impl TaskIdRequestV1 {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct TaskStartRequestV1 {
+    #[serde(alias = "job_id")]
     pub task_id: String,
     pub name: String,
     pub owner: String,
@@ -351,6 +353,7 @@ impl Default for TaskStartRequestV1 {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct TaskRunProcessStartRequestV1 {
+    #[serde(alias = "job_id")]
     pub task_id: String,
     pub name: String,
     pub owner: String,
@@ -396,6 +399,7 @@ impl Default for TaskRunProcessStartRequestV1 {
 #[serde(default)]
 pub struct TaskRunProcessStartedV1 {
     pub task_id: String,
+    pub job_id: String,
     pub accepted: bool,
     pub status: String,
     pub detail: String,
@@ -406,6 +410,7 @@ impl Default for TaskRunProcessStartedV1 {
     fn default() -> Self {
         Self {
             task_id: String::new(),
+            job_id: String::new(),
             accepted: false,
             status: "rejected".to_owned(),
             detail: String::new(),
@@ -435,6 +440,7 @@ impl Default for TaskServiceCallTargetV1 {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct TaskServiceCallRequestV1 {
+    #[serde(alias = "job_id")]
     pub task_id: String,
     pub name: String,
     pub owner: String,
@@ -474,6 +480,7 @@ impl Default for TaskServiceCallRequestV1 {
 #[serde(default)]
 pub struct TaskServiceCallAcceptedV1 {
     pub task_id: String,
+    pub job_id: String,
     pub accepted: bool,
     pub gateway: String,
     pub method: String,
@@ -560,6 +567,7 @@ impl TaskProgressEventV1 {
 #[serde(default)]
 pub struct TaskStatusJsonV1 {
     pub task_id: String,
+    pub job_id: String,
     pub name: String,
     pub lane: String,
     pub priority: String,
@@ -579,6 +587,7 @@ impl Default for TaskStatusJsonV1 {
     fn default() -> Self {
         Self {
             task_id: String::new(),
+            job_id: String::new(),
             name: String::new(),
             lane: String::new(),
             priority: String::new(),
@@ -600,6 +609,7 @@ impl Default for TaskStatusJsonV1 {
 #[serde(default)]
 pub struct TaskControlResponseV1 {
     pub task_id: String,
+    pub job_id: String,
     pub action: String,
     pub accepted: bool,
 }
@@ -638,6 +648,7 @@ pub struct TaskQueueLaneSnapshotJsonV1 {
 #[serde(default)]
 pub struct TaskTraceJsonV1 {
     pub task_id: String,
+    pub job_id: String,
     pub status: TaskStatusJsonV1,
     pub note: String,
 }

@@ -46,6 +46,9 @@ pub(in crate::scene_bridge::game_ready) struct GameReadyPlayerModelSpec {
 
 #[derive(Clone, Debug)]
 pub(in crate::scene_bridge::game_ready) struct GameReadyTerrainSpec {
+    /// Whether the procedural terrain mesh/heightfield is instantiated. Maps with
+    /// authored world meshes can disable it and use static mesh collision instead.
+    pub(in crate::scene_bridge::game_ready) enabled: bool,
     pub(in crate::scene_bridge::game_ready) seed: u64,
     pub(in crate::scene_bridge::game_ready) cells_x: u32,
     pub(in crate::scene_bridge::game_ready) cells_z: u32,
@@ -198,6 +201,9 @@ pub(in crate::scene_bridge::game_ready) struct GameReadyDayNightSpec {
     pub(in crate::scene_bridge::game_ready) enabled: bool,
     pub(in crate::scene_bridge::game_ready) time_of_day_hours: f32,
     pub(in crate::scene_bridge::game_ready) day_length_seconds: f32,
+    /// Seasonal day in the tropical year, 1..=366. It drives solar declination
+    /// independently from the time-of-day clock.
+    pub(in crate::scene_bridge::game_ready) day_of_year: u32,
     pub(in crate::scene_bridge::game_ready) latitude_degrees: f32,
     pub(in crate::scene_bridge::game_ready) axial_tilt_degrees: f32,
 }
@@ -238,7 +244,11 @@ pub(in crate::scene_bridge::game_ready) struct GameReadyPrefabSpec {
     pub(in crate::scene_bridge::game_ready) id: String,
     pub(in crate::scene_bridge::game_ready) source: String,
     pub(in crate::scene_bridge::game_ready) proxy: String,
+    pub(in crate::scene_bridge::game_ready) material: String,
     pub(in crate::scene_bridge::game_ready) enabled: bool,
+    pub(in crate::scene_bridge::game_ready) position: Vec3,
+    pub(in crate::scene_bridge::game_ready) rotation_ypr: Vec3,
+    pub(in crate::scene_bridge::game_ready) scale: Vec3,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -284,6 +294,7 @@ pub(in crate::scene_bridge::game_ready) struct GameReadyDefinitionInstanceSpec {
 pub(in crate::scene_bridge::game_ready) struct GameReadyGameplaySpec {
     pub(in crate::scene_bridge::game_ready) default_status: String,
     pub(in crate::scene_bridge::game_ready) pickup_status: String,
+    pub(in crate::scene_bridge::game_ready) target_status: String,
     pub(in crate::scene_bridge::game_ready) hazard_status: String,
     pub(in crate::scene_bridge::game_ready) goal_locked_status: String,
     pub(in crate::scene_bridge::game_ready) goal_complete_status: String,
@@ -292,6 +303,47 @@ pub(in crate::scene_bridge::game_ready) struct GameReadyGameplaySpec {
     pub(in crate::scene_bridge::game_ready) player_collision: GameReadyPlayerCollisionSpec,
     pub(in crate::scene_bridge::game_ready) player_visual: GameReadyPlayerVisualSpec,
     pub(in crate::scene_bridge::game_ready) physics: GameReadyPhysicsSpec,
+    pub(in crate::scene_bridge::game_ready) mission: GameReadyMissionSpec,
+}
+
+#[derive(Clone, Debug, Default)]
+pub(in crate::scene_bridge::game_ready) struct GameReadyMissionSpec {
+    pub(in crate::scene_bridge::game_ready) pickups: Vec<GameReadyMissionPickupSpec>,
+    pub(in crate::scene_bridge::game_ready) targets: Vec<GameReadyMissionTargetSpec>,
+    pub(in crate::scene_bridge::game_ready) hazards: Vec<GameReadyMissionHazardSpec>,
+    pub(in crate::scene_bridge::game_ready) goals: Vec<GameReadyMissionGoalSpec>,
+}
+
+#[derive(Clone, Debug)]
+pub(in crate::scene_bridge::game_ready) struct GameReadyMissionPickupSpec {
+    pub(in crate::scene_bridge::game_ready) id: String,
+    pub(in crate::scene_bridge::game_ready) position: Vec3,
+    pub(in crate::scene_bridge::game_ready) radius: f32,
+    pub(in crate::scene_bridge::game_ready) scale: Vec3,
+}
+
+#[derive(Clone, Debug)]
+pub(in crate::scene_bridge::game_ready) struct GameReadyMissionTargetSpec {
+    pub(in crate::scene_bridge::game_ready) id: String,
+    pub(in crate::scene_bridge::game_ready) position: Vec3,
+    pub(in crate::scene_bridge::game_ready) health: f32,
+    pub(in crate::scene_bridge::game_ready) scale: Vec3,
+}
+
+#[derive(Clone, Debug)]
+pub(in crate::scene_bridge::game_ready) struct GameReadyMissionHazardSpec {
+    pub(in crate::scene_bridge::game_ready) id: String,
+    pub(in crate::scene_bridge::game_ready) position: Vec3,
+    pub(in crate::scene_bridge::game_ready) radius: f32,
+    pub(in crate::scene_bridge::game_ready) scale: Vec3,
+}
+
+#[derive(Clone, Debug)]
+pub(in crate::scene_bridge::game_ready) struct GameReadyMissionGoalSpec {
+    pub(in crate::scene_bridge::game_ready) id: String,
+    pub(in crate::scene_bridge::game_ready) position: Vec3,
+    pub(in crate::scene_bridge::game_ready) radius: f32,
+    pub(in crate::scene_bridge::game_ready) scale: Vec3,
 }
 
 #[derive(Clone, Debug)]

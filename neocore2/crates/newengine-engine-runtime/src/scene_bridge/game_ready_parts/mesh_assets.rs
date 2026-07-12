@@ -171,323 +171,50 @@ pub(super) fn split_ydd_asset_ref(logical_path: &str) -> Option<(&str, Option<&s
     }
 }
 
-pub(super) fn json_array<'a>(
-    value: &'a serde_json::Value,
-    label: &str,
-) -> Result<&'a [serde_json::Value], String> {
-    value
-        .as_array()
-        .map(Vec::as_slice)
-        .ok_or_else(|| format!("{label} must be an array"))
-}
-
-pub(super) fn json_f32(value: &serde_json::Value, label: &str) -> Result<f32, String> {
-    value
-        .as_f64()
-        .map(|v| v as f32)
-        .ok_or_else(|| format!("{label} must be a number"))
-}
-
-pub(super) fn json_vec3(value: &serde_json::Value, label: &str) -> Result<[f32; 3], String> {
-    let arr = json_array(value, label)?;
-    if arr.len() != 3 {
-        return Err(format!("{label} must have 3 components, got {}", arr.len()));
-    }
-    Ok([
-        json_f32(&arr[0], label)?,
-        json_f32(&arr[1], label)?,
-        json_f32(&arr[2], label)?,
-    ])
-}
-
-pub(super) fn json_vec2(value: &serde_json::Value, label: &str) -> Result<[f32; 2], String> {
-    let arr = json_array(value, label)?;
-    if arr.len() != 2 {
-        return Err(format!("{label} must have 2 components, got {}", arr.len()));
-    }
-    Ok([json_f32(&arr[0], label)?, json_f32(&arr[1], label)?])
-}
-
-pub(super) fn select_ydd_mesh_part<'a>(
-    root: &'a serde_json::Value,
-    selector: Option<&str>,
-) -> Result<&'a serde_json::Value, String> {
-    let parts = root
-        .get("mesh_parts")
-        .ok_or_else(|| "YDD payload has no mesh_parts array".to_owned())
-        .and_then(|v| json_array(v, "mesh_parts"))?;
-    if parts.is_empty() {
-        return Err("YDD payload has no mesh parts".to_owned());
-    }
-
-    if let Some(selector) = selector {
-        if let Some(part) = parts.iter().find(|part| {
-            part.get("entry")
-                .and_then(serde_json::Value::as_str)
-                .map(|v| v.eq_ignore_ascii_case(selector))
-                .unwrap_or(false)
-                || part
-                    .get("name")
-                    .and_then(serde_json::Value::as_str)
-                    .map(|v| v.eq_ignore_ascii_case(selector))
-                    .unwrap_or(false)
-        }) {
-            return Ok(part);
-        }
-        return Err(format!(
-            "YDD selector '{selector}' was not found in mesh_parts"
-        ));
-    }
-
-    Ok(&parts[0])
-}
-
 pub(super) fn decode_ydd_mesh(
     dictionary_path: &str,
     selector: Option<&str>,
     payload: &[u8],
 ) -> Result<PrimitiveMesh, String> {
-    let root: serde_json::Value = serde_json::from_slice(payload)
-        .map_err(|e| format!("YDD payload is not valid JSON path='{dictionary_path}' err='{e}'"))?;
-    if root
-        .get("mesh_encoding")
-        .and_then(serde_json::Value::as_str)
-        .map(|encoding| encoding == "newengine.ydd.runtime_mesh_parts.v1")
-        .unwrap_or(false)
-    {
-        let part = select_ydd_runtime_mesh_part(&root, selector)?;
-        return decode_ydd_runtime_mesh_part_for_skydome(dictionary_path, selector, part);
-    }
-    let part = select_ydd_mesh_part(&root, selector)?;
-    let streams = part
-        .get("vertex_streams")
-        .and_then(serde_json::Value::as_object)
-        .ok_or_else(|| "YDD mesh part has no vertex_streams object".to_owned())?;
-
-    let positions = streams
-        .get("position_f32x3")
-        .ok_or_else(|| "YDD mesh part has no position_f32x3 stream".to_owned())
-        .and_then(|v| json_array(v, "position_f32x3"))?;
-    let normals = streams
-        .get("normal_f32x3_generated_from_position")
-        .or_else(|| streams.get("normal_f32x3"))
-        .and_then(serde_json::Value::as_array);
-    let uvs = streams
-        .get("uv0_f32x2")
-        .and_then(serde_json::Value::as_array);
-    let indices_json = part
-        .get("indices")
-        .ok_or_else(|| "YDD mesh part has no indices array".to_owned())
-        .and_then(|v| json_array(v, "indices"))?;
-
-    decode_ydd_position_stream_mesh(
-        dictionary_path,
-        selector,
-        positions,
-        normals,
-        uvs,
-        indices_json,
-    )
-}
-
-pub(super) fn select_ydd_runtime_mesh_part<'a>(
-    root: &'a serde_json::Value,
-    selector: Option<&str>,
-) -> Result<&'a serde_json::Value, String> {
-    let parts = root
-        .get("runtime_mesh_parts")
-        .ok_or_else(|| "YDD payload has no runtime_mesh_parts array".to_owned())
-        .and_then(|v| json_array(v, "runtime_mesh_parts"))?;
-    if parts.is_empty() {
-        return Err("YDD payload has no runtime mesh parts".to_owned());
-    }
-    if let Some(selector) = selector {
-        if let Some(part) = parts.iter().find(|part| {
-            part.get("entry")
-                .and_then(serde_json::Value::as_str)
-                .map(|v| v.eq_ignore_ascii_case(selector))
-                .unwrap_or(false)
-                || part
-                    .get("name")
-                    .and_then(serde_json::Value::as_str)
-                    .map(|v| v.eq_ignore_ascii_case(selector))
-                    .unwrap_or(false)
-        }) {
-            return Ok(part);
-        }
-        if parts.len() == 1 {
-            return Ok(&parts[0]);
-        }
-        return Err(format!(
-            "YDD selector '{selector}' was not found in runtime_mesh_parts"
-        ));
-    }
-    Ok(&parts[0])
-}
-
-pub(super) fn decode_ydd_runtime_mesh_part_for_skydome(
-    dictionary_path: &str,
-    selector: Option<&str>,
-    part: &serde_json::Value,
-) -> Result<PrimitiveMesh, String> {
-    let vertices_json = part
-        .get("vertices")
-        .ok_or_else(|| "YDD runtime mesh part has no vertices array".to_owned())
-        .and_then(|v| json_array(v, "vertices"))?;
-    let indices_json = part
-        .get("indices")
-        .ok_or_else(|| "YDD runtime mesh part has no indices array".to_owned())
-        .and_then(|v| json_array(v, "indices"))?;
-    if vertices_json.is_empty() || indices_json.is_empty() {
-        return Err(format!(
-            "YDD runtime mesh is empty path='{dictionary_path}' selector='{}' vertices={} indices={}",
-            selector.unwrap_or("<first>"),
-            vertices_json.len(),
-            indices_json.len()
-        ));
-    }
-    if vertices_json.len() > 1_000_000 || indices_json.len() > 6_000_000 {
-        return Err(format!(
-            "YDD runtime mesh exceeds runtime limits vertices={} indices={}",
-            vertices_json.len(),
-            indices_json.len()
-        ));
-    }
-
-    let mut vertices = Vec::with_capacity(vertices_json.len());
-    let mut min = Vec3::splat(f32::INFINITY);
-    let mut max = Vec3::splat(f32::NEG_INFINITY);
-    for value in vertices_json {
-        let pos = value
-            .get("pos")
-            .map(|v| json_vec3(v, "vertices[].pos"))
-            .transpose()?
-            .unwrap_or([0.0, 0.0, 0.0]);
-        let nrm = value
-            .get("nrm")
-            .map(|v| json_vec3(v, "vertices[].nrm"))
-            .transpose()?
-            .unwrap_or_else(|| {
-                let p = Vec3::new(pos[0], pos[1], pos[2]);
-                let n = if p.length_squared() > f32::EPSILON {
-                    -p.normalize()
-                } else {
-                    Vec3::Y
-                };
-                [n.x, n.y, n.z]
-            });
-        let uv = value
-            .get("uv")
-            .map(|v| json_vec2(v, "vertices[].uv"))
-            .transpose()?
-            .unwrap_or([0.0, 0.0]);
-        min.x = min.x.min(pos[0]);
-        min.y = min.y.min(pos[1]);
-        min.z = min.z.min(pos[2]);
-        max.x = max.x.max(pos[0]);
-        max.y = max.y.max(pos[1]);
-        max.z = max.z.max(pos[2]);
-        vertices.push(PrimitiveVertex { pos, nrm, uv });
-    }
-
-    decode_ydd_indexed_mesh_from_vertices(dictionary_path, vertices, indices_json, min, max)
-}
-
-pub(super) fn decode_ydd_position_stream_mesh(
-    dictionary_path: &str,
-    selector: Option<&str>,
-    positions: &[serde_json::Value],
-    normals: Option<&Vec<serde_json::Value>>,
-    uvs: Option<&Vec<serde_json::Value>>,
-    indices_json: &[serde_json::Value],
-) -> Result<PrimitiveMesh, String> {
-    if positions.is_empty() || indices_json.is_empty() {
-        return Err(format!(
-            "YDD mesh is empty path='{dictionary_path}' selector='{}' vertices={} indices={}",
-            selector.unwrap_or("<first>"),
-            positions.len(),
-            indices_json.len()
-        ));
-    }
-    if positions.len() > 1_000_000 || indices_json.len() > 6_000_000 {
-        return Err(format!(
-            "YDD mesh exceeds runtime limits vertices={} indices={}",
-            positions.len(),
-            indices_json.len()
-        ));
-    }
-
-    let mut vertices = Vec::with_capacity(positions.len());
-    let mut min = Vec3::splat(f32::INFINITY);
-    let mut max = Vec3::splat(f32::NEG_INFINITY);
-
-    for (index, value) in positions.iter().enumerate() {
-        let pos = json_vec3(value, "position_f32x3[]")?;
-        let nrm = normals
-            .and_then(|n| n.get(index))
-            .map(|v| json_vec3(v, "normal_f32x3[]"))
-            .transpose()?
-            .unwrap_or_else(|| {
-                let p = Vec3::new(pos[0], pos[1], pos[2]);
-                let n = if p.length_squared() > f32::EPSILON {
-                    -p.normalize()
-                } else {
-                    Vec3::Y
-                };
-                [n.x, n.y, n.z]
-            });
-        let uv = uvs
-            .and_then(|uvs| uvs.get(index))
-            .map(|v| json_vec2(v, "uv0_f32x2[]"))
-            .transpose()?
-            .unwrap_or([0.0, 0.0]);
-
-        min.x = min.x.min(pos[0]);
-        min.y = min.y.min(pos[1]);
-        min.z = min.z.min(pos[2]);
-        max.x = max.x.max(pos[0]);
-        max.y = max.y.max(pos[1]);
-        max.z = max.z.max(pos[2]);
-        vertices.push(PrimitiveVertex { pos, nrm, uv });
-    }
-
-    decode_ydd_indexed_mesh_from_vertices(dictionary_path, vertices, indices_json, min, max)
-}
-
-pub(super) fn decode_ydd_indexed_mesh_from_vertices(
-    dictionary_path: &str,
-    vertices: Vec<PrimitiveVertex>,
-    indices_json: &[serde_json::Value],
-    min: Vec3,
-    max: Vec3,
-) -> Result<PrimitiveMesh, String> {
-    let mut indices = Vec::with_capacity(indices_json.len());
-    for value in indices_json {
-        let index = value
-            .as_u64()
-            .ok_or_else(|| "YDD index must be an unsigned integer".to_owned())?
-            as u32;
-        if index as usize >= vertices.len() {
-            return Err(format!(
-                "YDD index out of bounds path='{dictionary_path}' index={index} vertex_count={}",
-                vertices.len()
-            ));
-        }
-        indices.push(index);
-    }
-
+    let document = newengine_asset_format_nef8::ydd_binary::decode_ydd_binary_body(payload)
+        .map_err(|error| {
+            format!("binary YDD decode failed path='{dictionary_path}' err='{error}'")
+        })?;
+    let (_entry, source_mesh) = document.select_mesh(selector, true).map_err(|error| {
+        format!("binary YDD selection failed path='{dictionary_path}' err='{error}'")
+    })?;
+    let vertices = source_mesh
+        .vertices
+        .iter()
+        .map(|vertex| PrimitiveVertex {
+            pos: vertex.position,
+            nrm: vertex.normal,
+            uv: vertex.uv0,
+        })
+        .collect::<Vec<_>>();
+    let min = Vec3::new(
+        source_mesh.bounds_min[0],
+        source_mesh.bounds_min[1],
+        source_mesh.bounds_min[2],
+    );
+    let max = Vec3::new(
+        source_mesh.bounds_max[0],
+        source_mesh.bounds_max[1],
+        source_mesh.bounds_max[2],
+    );
     let bounds_center = (min + max) * 0.5;
-    let mut bounds_radius = 0.0f32;
-    for v in &vertices {
-        let p = Vec3::new(v.pos[0], v.pos[1], v.pos[2]);
-        bounds_radius = bounds_radius.max((p - bounds_center).length());
-    }
-
+    let bounds_radius = vertices
+        .iter()
+        .map(|vertex| {
+            let point = Vec3::new(vertex.pos[0], vertex.pos[1], vertex.pos[2]);
+            (point - bounds_center).length()
+        })
+        .fold(0.001_f32, f32::max);
     Ok(PrimitiveMesh {
         vertices,
-        indices,
+        indices: source_mesh.indices.clone(),
         bounds_center,
-        bounds_radius: bounds_radius.max(0.001),
+        bounds_radius,
     })
 }
 

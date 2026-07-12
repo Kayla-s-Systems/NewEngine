@@ -302,7 +302,7 @@ impl PluginManager {
         // diagnostics jobs. JSON lifecycle envelopes made fixed_update/update/render
         // more expensive than most no-op plugin work. Slow/error paths still log a
         // compact text diagnostic; structured profiler export must be fed by typed
-        // engine.jobs/task events, not serde_json on every plugin callback.
+        // engine.threading/task events, not serde_json on every plugin callback.
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             with_current_plugin_id(&id, || f(&mut self.loaded[idx].module))
         }));

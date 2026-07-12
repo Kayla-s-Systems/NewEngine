@@ -6,6 +6,8 @@ mod metadata;
 mod scan;
 mod selection;
 
-pub(super) use self::graph::DiscoveryGraph;
-pub use self::load::IncrementalLoadOutcome;
+pub use self::graph::DiscoveryGraph;
 pub(super) use self::load::IncrementalLoadState;
+pub use self::load::{
+    resolve_plugin_discovery_dir, scan_plugin_discovery_graph, IncrementalLoadOutcome,
+};

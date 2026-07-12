@@ -72,6 +72,7 @@ impl Default for RawTerrainStreamingSpec {
 impl Default for RawTerrainSpec {
     fn default() -> Self {
         Self {
+            enabled: default_terrain_enabled(),
             seed: default_terrain_seed(),
             cells_x: default_terrain_cells(),
             cells_z: default_terrain_cells(),
@@ -145,6 +146,7 @@ impl Default for RawGameplaySpec {
         Self {
             default_status: default_status_text(),
             pickup_status: default_pickup_status(),
+            target_status: default_target_status(),
             hazard_status: default_hazard_status(),
             goal_locked_status: default_goal_locked_status(),
             goal_complete_status: default_goal_complete_status(),
@@ -153,6 +155,7 @@ impl Default for RawGameplaySpec {
             player_collision: RawPlayerCollisionSpec::default(),
             player_visual: RawPlayerVisualSpec::default(),
             physics: RawPhysicsSpec::default(),
+            mission: RawMissionSpec::default(),
         }
     }
 }
@@ -249,6 +252,7 @@ impl Default for RawDayNightSpec {
             enabled: default_day_night_enabled(),
             time_of_day_hours: default_time_of_day_hours(),
             day_length_seconds: default_day_length_seconds(),
+            day_of_year: default_day_of_year(),
             latitude_degrees: default_sun_latitude_degrees(),
             axial_tilt_degrees: default_axial_tilt_degrees(),
         }

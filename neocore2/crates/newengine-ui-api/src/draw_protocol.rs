@@ -186,7 +186,10 @@ impl Default for UiServiceInfo {
                 "texture-atlas-viewer-v1".to_owned(),
                 "debug-bindings-v1".to_owned(),
             ],
-            methods: ui_service_methods().iter().map(|it| (*it).to_owned()).collect(),
+            methods: ui_service_methods()
+                .iter()
+                .map(|it| (*it).to_owned())
+                .collect(),
             surfaces: vec![
                 UI_SURFACE_ENGINE_LOADING.to_owned(),
                 UI_SURFACE_ENGINE_ERROR_MODAL.to_owned(),
@@ -272,7 +275,12 @@ impl Default for UiFrameInput {
 
 impl UiFrameInput {
     #[inline]
-    pub fn new(frame_index: u64, dt_sec: f32, viewport_px: [u32; 2], pixels_per_point: f32) -> Self {
+    pub fn new(
+        frame_index: u64,
+        dt_sec: f32,
+        viewport_px: [u32; 2],
+        pixels_per_point: f32,
+    ) -> Self {
         Self {
             frame_index,
             dt_sec: dt_sec.max(0.0),
@@ -290,13 +298,21 @@ impl UiFrameInput {
 
     #[inline]
     pub fn with_render_surface_ids(mut self, render_surface_ids: Vec<String>) -> Self {
-        self.render_surface_ids = render_surface_ids.into_iter().map(|it| it.trim().to_owned()).filter(|it| !it.is_empty()).collect();
+        self.render_surface_ids = render_surface_ids
+            .into_iter()
+            .map(|it| it.trim().to_owned())
+            .filter(|it| !it.is_empty())
+            .collect();
         self
     }
 
     #[inline]
     pub fn with_diagnostics_flags(mut self, diagnostics_flags: Vec<String>) -> Self {
-        self.diagnostics_flags = diagnostics_flags.into_iter().map(|it| it.trim().to_owned()).filter(|it| !it.is_empty()).collect();
+        self.diagnostics_flags = diagnostics_flags
+            .into_iter()
+            .map(|it| it.trim().to_owned())
+            .filter(|it| !it.is_empty())
+            .collect();
         self
     }
 }
@@ -317,10 +333,15 @@ pub struct UiFontResolveDiagnostics {
 }
 impl UiFontResolveDiagnostics {
     #[inline]
-    pub fn missing(requested_font_ref: impl Into<String>, fallback_face: impl Into<String>) -> Self {
+    pub fn missing(
+        requested_font_ref: impl Into<String>,
+        fallback_face: impl Into<String>,
+    ) -> Self {
         let requested_font_ref = requested_font_ref.into();
         Self {
-            diagnostics: vec![format!("font requested ref '{requested_font_ref}' could not be resolved")],
+            diagnostics: vec![format!(
+                "font requested ref '{requested_font_ref}' could not be resolved"
+            )],
             requested_font_ref,
             resolved_font_ref: "<missing>".to_owned(),
             fallback_used: true,
@@ -370,12 +391,19 @@ pub struct UiFrameRequest {
 }
 
 impl Default for UiFrameRequest {
-    fn default() -> Self { Self::new(0, 0.0, [0, 0], 1.0) }
+    fn default() -> Self {
+        Self::new(0, 0.0, [0, 0], 1.0)
+    }
 }
 
 impl UiFrameRequest {
     #[inline]
-    pub fn new(frame_index: u64, dt_sec: f32, surface_size_px: [u32; 2], pixels_per_point: f32) -> Self {
+    pub fn new(
+        frame_index: u64,
+        dt_sec: f32,
+        surface_size_px: [u32; 2],
+        pixels_per_point: f32,
+    ) -> Self {
         Self {
             version: 1,
             frame_index,
@@ -396,7 +424,11 @@ impl UiFrameRequest {
 
     #[inline]
     pub fn with_render_surface_ids(mut self, render_surface_ids: Vec<String>) -> Self {
-        let ids: Vec<String> = render_surface_ids.into_iter().map(|it| it.trim().to_owned()).filter(|it| !it.is_empty()).collect();
+        let ids: Vec<String> = render_surface_ids
+            .into_iter()
+            .map(|it| it.trim().to_owned())
+            .filter(|it| !it.is_empty())
+            .collect();
         self.render_surface_ids = ids.clone();
         self.frame_input.render_surface_ids = ids;
         self
@@ -404,7 +436,11 @@ impl UiFrameRequest {
 
     #[inline]
     pub fn with_diagnostics_flags(mut self, diagnostics_flags: Vec<String>) -> Self {
-        let flags: Vec<String> = diagnostics_flags.into_iter().map(|it| it.trim().to_owned()).filter(|it| !it.is_empty()).collect();
+        let flags: Vec<String> = diagnostics_flags
+            .into_iter()
+            .map(|it| it.trim().to_owned())
+            .filter(|it| !it.is_empty())
+            .collect();
         self.diagnostics_flags = flags.clone();
         self.frame_input.diagnostics_flags = flags;
         self
@@ -423,7 +459,10 @@ impl UiFrameRequest {
         if input.viewport_px == [0, 0] && self.surface_size_px != [0, 0] {
             input.viewport_px = self.surface_size_px;
         }
-        input.pixels_per_point = input.pixels_per_point.max(self.pixels_per_point).max(0.0001);
+        input.pixels_per_point = input
+            .pixels_per_point
+            .max(self.pixels_per_point)
+            .max(0.0001);
         if input.render_surface_ids.is_empty() && !self.render_surface_ids.is_empty() {
             input.render_surface_ids = self.render_surface_ids.clone();
         }
@@ -448,7 +487,9 @@ pub struct UiFrameResponse {
 }
 
 impl Default for UiFrameResponse {
-    fn default() -> Self { Self::new(UiDrawList::new()) }
+    fn default() -> Self {
+        Self::new(UiDrawList::new())
+    }
 }
 
 impl UiFrameResponse {
@@ -475,6 +516,10 @@ pub struct UiAck {
 impl UiAck {
     #[inline]
     pub fn ok(provider: impl Into<String>) -> Self {
-        Self { ok: true, provider: Some(provider.into()), message: None }
+        Self {
+            ok: true,
+            provider: Some(provider.into()),
+            message: None,
+        }
     }
 }

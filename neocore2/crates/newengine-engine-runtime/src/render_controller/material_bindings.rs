@@ -41,6 +41,8 @@ pub(super) enum MaterialTextureGpuResidency {
 pub(super) struct LitMaterialPlan<'a> {
     pub base_color: [f32; 4],
     pub emissive_radiance: [f32; 3],
+    /// Zero disables cutout; positive values are the authored alpha cutoff.
+    pub alpha_cutoff: f32,
     pub uv_transform: [f32; 4],
     pub material_params: [f32; 4],
     pub base_color_texture: Option<&'a str>,
@@ -61,6 +63,11 @@ impl<'a> LitMaterialPlan<'a> {
         Self {
             base_color: material.desc.base_color,
             emissive_radiance: material.desc.emissive_radiance(),
+            alpha_cutoff: if material.desc.flags.contains(MaterialFlags::ALPHA_TEST) {
+                material.desc.alpha_cutoff.max(0.001)
+            } else {
+                0.0
+            },
             uv_transform: [
                 material.textures.uv_scale[0],
                 material.textures.uv_scale[1],
@@ -95,6 +102,7 @@ impl<'a> LitMaterialPlan<'a> {
         Self {
             base_color,
             emissive_radiance: [0.0, 0.0, 0.0],
+            alpha_cutoff: 0.0,
             uv_transform: [1.0, 1.0, 0.0, 0.0],
             material_params: [1.0, 0.75, 0.0, 1.0],
             base_color_texture: None,

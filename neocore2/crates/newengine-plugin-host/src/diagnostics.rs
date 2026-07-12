@@ -87,7 +87,7 @@ impl PluginHostJobBridge {
         let detail = str_field(
             &value,
             "detail",
-            "Plugin-host work entered the engine.jobs bridge.",
+            "Plugin-host work entered the engine.threading bridge.",
         );
         Self::publish(
             &record,

@@ -4,8 +4,14 @@ use newengine_camera::CameraRig;
 use newengine_core::host_events::CursorState;
 use newengine_ecs::{EntityId, World};
 use newengine_input_actions_api::move_mask as input_move;
-use newengine_math::{Vec2, Vec3};
-use newengine_sim::{CameraRigComp, FollowTargetCameraMotor, MotorInput};
+use newengine_math::{EulerRot, Quat, Vec2, Vec3};
+use newengine_sim::{
+    CameraRigComp, CharacterMotor, FollowTargetCameraController, FollowTargetCameraMotor,
+    MotorInput,
+};
+use newengine_transform::{
+    read_entity_world_pose_local_chain, write_entity_local_from_world_pose_local_chain,
+};
 
 use crate::manager::{CameraDirectorRequest, CameraManagerResource};
 use crate::modes::{
@@ -130,6 +136,58 @@ impl CameraRuntimeService {
         removed_follow || removed_motor
     }
 
+    fn apply_player_look_immediate(
+        world: &mut World,
+        player: EntityId,
+        look_delta_px: Vec2,
+        look_active: bool,
+    ) -> bool {
+        if !look_active {
+            return false;
+        }
+        let delta = Vec2::new(
+            if look_delta_px.x.is_finite() {
+                look_delta_px.x
+            } else {
+                0.0
+            },
+            if look_delta_px.y.is_finite() {
+                look_delta_px.y
+            } else {
+                0.0
+            },
+        );
+        if delta.length_squared() <= 1.0e-12 {
+            return false;
+        }
+        let Some(mut motor) = world.get::<CharacterMotor>(player).copied() else {
+            return false;
+        };
+        let sensitivity = if motor.look_sens.is_finite() && motor.look_sens > 0.0 {
+            motor.look_sens
+        } else {
+            CharacterMotor::default().look_sens
+        };
+        motor.yaw += delta.x * sensitivity;
+        motor.pitch += delta.y * sensitivity;
+        let pitch_limit = if motor.pitch_limit.is_finite() && motor.pitch_limit > 0.0 {
+            motor.pitch_limit
+        } else {
+            CharacterMotor::default().pitch_limit
+        };
+        motor.pitch = motor.pitch.clamp(-pitch_limit, pitch_limit);
+        let rotation = Quat::from_euler(EulerRot::YXZ, motor.yaw, motor.pitch, 0.0);
+        let position = read_entity_world_pose_local_chain(world, player)
+            .map(|(position, _)| position)
+            .unwrap_or(Vec3::ZERO);
+        let _ = world.insert(player, motor);
+        write_entity_local_from_world_pose_local_chain(world, player, position, rotation);
+        true
+    }
+
+    /// Applies mouse look immediately at render/input cadence while movement
+    /// remains fixed-step deterministic. This removes fixed-step quantization and
+    /// one-frame latency from first-person camera rotation.
     pub fn apply_player_input(
         world: &mut World,
         player: EntityId,
@@ -158,10 +216,17 @@ impl CameraRuntimeService {
             axis.y -= 1.0;
         }
 
+        let look_applied_immediately =
+            Self::apply_player_look_immediate(world, player, look_delta_px, look_active);
+
         if let Some(input) = world.get_mut::<MotorInput>(player) {
             input.move_axis = axis;
-            input.look_delta = look_delta_px;
-            input.look_active = look_active;
+            input.look_delta = if look_applied_immediately {
+                Vec2::ZERO
+            } else {
+                look_delta_px
+            };
+            input.look_active = look_active && !look_applied_immediately;
             input.speed_mul = if input_mask & input_move::SPRINT != 0 {
                 sprint_multiplier.max(1.0)
             } else {
@@ -169,6 +234,45 @@ impl CameraRuntimeService {
             };
             input.zoom_delta = 0.0;
         }
+    }
+
+    /// Synchronizes the first-person camera to the already updated player
+    /// pose in the same render frame. Fixed-step simulation remains authoritative
+    /// for translation; view rotation no longer waits for the next simulation tick.
+    pub fn sync_first_person_camera_now(
+        world: &mut World,
+        camera: EntityId,
+        player: EntityId,
+    ) -> bool {
+        let Some(controller) = world.get::<FollowTargetCameraController>(camera).copied() else {
+            return false;
+        };
+        if controller.target != player || !controller.follow_rotation {
+            return false;
+        }
+        let Some((target_position, target_rotation)) =
+            read_entity_world_pose_local_chain(world, player)
+        else {
+            return false;
+        };
+        let target_rotation = target_rotation.normalize_or_identity();
+        let camera_position = target_position + target_rotation * controller.offset_ls;
+        let camera_rotation = (target_rotation * controller.rot_offset).normalize_or_identity();
+        let _ = world.insert(
+            camera,
+            CameraRigComp(CameraRig {
+                position: camera_position,
+                rotation: camera_rotation,
+            }),
+        );
+        let _ = world.insert(camera, FollowTargetCameraMotor::default());
+        write_entity_local_from_world_pose_local_chain(
+            world,
+            camera,
+            camera_position,
+            camera_rotation,
+        );
+        true
     }
 
     #[inline]

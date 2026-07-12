@@ -36,7 +36,8 @@ pub use host_context::{
     services_generation, EngineGatewayRouteSnapshot,
 };
 pub use manager::{
-    IncrementalLoadOutcome, PluginIconSnapshot, PluginLoadError, PluginManager, PluginSnapshotEntry,
+    resolve_plugin_discovery_dir, scan_plugin_discovery_graph, IncrementalLoadOutcome,
+    PluginDiscoveryGraph, PluginIconSnapshot, PluginLoadError, PluginManager, PluginSnapshotEntry,
 };
 pub use plugin_config_service::{
     get_plugin_overrides_with_env, init_plugin_config_service, CONFIG_SERVICE_ID,

@@ -102,6 +102,16 @@ pub(super) fn spawn_game_primitive(
         t.position = spec.position;
         t.scale = spec.scale;
     }
+    crate::gameplay::attach_scene_object_core(
+        world,
+        entity,
+        spec.position,
+        Vec3::new(
+            spec.scale.x.abs().max(0.25),
+            spec.scale.y.abs().max(0.25),
+            spec.scale.z.abs().max(0.25),
+        ),
+    );
 
     entity
 }

@@ -211,11 +211,6 @@ pub(crate) fn runtime_bootstrap_overlay_enabled() -> bool {
 }
 
 #[inline]
-pub(crate) fn game_screen_diagnostic_panel_enabled() -> bool {
-    env_flag("NEWENGINE_GAME_SCREEN_DIAGNOSTIC_PANEL").unwrap_or(false)
-}
-
-#[inline]
 fn platform_metadata_probe_enabled() -> bool {
     std::env::var("NEWENGINE_PLATFORM_CONFIG_METADATA_PROBE")
         .ok()

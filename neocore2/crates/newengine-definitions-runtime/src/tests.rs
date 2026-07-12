@@ -1,0 +1,130 @@
+use super::*;
+
+#[test]
+fn imperative_side_effect_fields_are_rejected() {
+    let raw = RawDefinitionEntryV1 {
+        name: "garage".to_owned(),
+        metadata: BTreeMap::from([(
+            "side_effects".to_owned(),
+            serde_json::json!([{ "run_code": "spawnGarageHardcodedLogic()" }]),
+        )]),
+        ..Default::default()
+    };
+    assert!(collect_side_effects(&raw).is_err());
+}
+
+#[test]
+fn declarative_side_effect_is_allowed() {
+    let raw = RawDefinitionEntryV1 {
+        name: "body".to_owned(),
+        metadata: BTreeMap::from([(
+            "side_effects".to_owned(),
+            serde_json::json!([{ "domain": "engine.assets.models", "effect": "require_drawable", "target": "models/foo.ydd@body" }]),
+        )]),
+        ..Default::default()
+    };
+    let effects = collect_side_effects(&raw).unwrap();
+    assert_eq!(effects[0].domain, "engine.assets.models");
+}
+
+#[test]
+fn refs_are_classified_by_extension() {
+    let raw = RawDefinitionEntryV1 {
+        name: "body".to_owned(),
+        dependencies: vec![
+            AssetDependencyRecordV1::new(
+                "models/foo.ydd@body",
+                "drawable",
+                "engine.assets.models",
+                true,
+            ),
+            AssetDependencyRecordV1::new(
+                "materials/foo.nemat@body",
+                "material",
+                "engine.assets.materials",
+                true,
+            ),
+            AssetDependencyRecordV1::new(
+                "textures/foo.ytd@diff",
+                "texture",
+                "engine.assets.textures",
+                true,
+            ),
+        ],
+        ..Default::default()
+    };
+    let refs = collect_refs(&raw);
+    assert_eq!(refs.drawable_refs, vec!["models/foo.ydd@body"]);
+    assert_eq!(refs.material_refs, vec!["materials/foo.nemat@body"]);
+    assert_eq!(refs.texture_refs, vec!["textures/foo.ytd@diff"]);
+}
+
+#[test]
+fn json_ytyp_dictionary_preserves_uv_layout_refs_and_arbitrary_strings() {
+    let body = br#"{
+            "schema": "newengine.ytyp.dictionary.v1",
+            "entries": [
+                {
+                    "name": "sky_northstar_default",
+                    "semantic_tags": ["sky"],
+                    "dependencies": [
+                        {
+                            "reference": "layouts/sky.ytyd@skydome_uv",
+                            "role": "uv_layout",
+                            "domain": "engine.model",
+                            "required": true
+                        }
+                    ],
+                    "metadata": {
+                        "newengine.game_ready": {
+                            "sky": {
+                                "mesh": "any authored mesh string",
+                                "definition_ref": "any authored definition string"
+                            }
+                        },
+                        "render": {
+                            "role": "sky_background",
+                            "uv.policy": "authored_ytyd"
+                        }
+                    }
+                }
+            ]
+        }
+        "#;
+    let (entries, warnings) = parse_ytyp_json_document("definitions/sky.ytyp", body).unwrap();
+    assert_eq!(entries.len(), 1);
+    assert!(warnings.iter().any(|warning| warning.contains("JSON")));
+    let entry = build_entry("definitions/sky.ytyp", entries[0].clone(), &warnings).unwrap();
+    assert_eq!(
+        entry.refs.uv_layout_refs,
+        vec!["layouts/sky.ytyd@skydome_uv"]
+    );
+    assert!(entry.model_explanation.render_options.is_sky_role());
+    assert_eq!(entry.model_explanation.uv_policy, "authored_ytyd");
+    let metadata = entry
+        .arbitrary_metadata
+        .get("metadata")
+        .and_then(|value| value.get("newengine.game_ready"))
+        .and_then(|value| value.get("sky"))
+        .unwrap();
+    assert_eq!(
+        metadata.get("mesh").and_then(|value| value.as_str()),
+        Some("any authored mesh string")
+    );
+}
+
+#[test]
+fn logical_ref_normalization_is_linear_and_stable() {
+    assert_eq!(
+        normalize_logical_ref(r"  .\definitions\\fps//player.ytyp  "),
+        "definitions/fps/player.ytyp"
+    );
+    assert_eq!(
+        normalize_logical_ref("////definitions///fps///player.ytyp"),
+        "definitions/fps/player.ytyp"
+    );
+    assert_eq!(
+        normalize_logical_ref("../shared/player.ytyp"),
+        "../shared/player.ytyp"
+    );
+}

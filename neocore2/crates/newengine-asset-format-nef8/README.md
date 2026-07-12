@@ -8,6 +8,28 @@ registry table: extension, content kind, semantic gateway, handler, outputs and
 consumer domains. The engine collects descriptors from this crate instead of
 compiling dozens of tiny `newengine-asset-format-*` crates.
 
+
+## Internal architecture
+
+The crate keeps one public registry while separating responsibilities:
+
+```text
+src/
+├── lib.rs                 # compatibility facade and public re-exports
+├── descriptor.rs          # descriptor construction and write-back policy
+├── formats.rs             # data-only identities for all NEF8 extensions
+├── registry.rs            # canonical static spec table and lookup
+├── tests.rs               # registry contract tests
+├── ydd_binary.rs          # binary YDD facade
+└── ydd_binary/
+    ├── types.rs           # public document model and selectors
+    ├── decode.rs          # strict bounded decoder
+    └── tests.rs           # binary layout regression tests
+```
+
+Public paths such as `newengine_asset_format_nef8::ydd::EXTENSION`,
+`specs()`, `descriptor_for_extension()` and `ydd_binary::*` remain stable.
+
 <!-- NORTHSTAR-DIR-README:BEGIN -->
 
 ## Directory purpose

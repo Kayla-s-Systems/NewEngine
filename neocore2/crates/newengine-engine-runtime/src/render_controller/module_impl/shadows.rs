@@ -297,7 +297,17 @@ pub fn try_build_directional_shadow_plan(
 #[inline]
 fn directional_shadow_center(bounds: BoundsSnap, camera_position: [f32; 3], radius: f32) -> Vec3 {
     if bounds.radius > radius * 1.25 {
-        Vec3::new(camera_position[0], camera_position[1], camera_position[2])
+        let camera = Vec3::new(camera_position[0], camera_position[1], camera_position[2]);
+        // Horizontal camera motion must move the local shadow window, but the
+        // character motor continuously corrects eye/ground height by tiny amounts.
+        // Feeding that Y jitter into texel snapping makes the complete map jump
+        // between neighbouring light-space rows and is perceived as flicker.
+        let stable_y = if bounds.center.y.is_finite() {
+            bounds.center.y
+        } else {
+            camera.y
+        };
+        Vec3::new(camera.x, stable_y, camera.z)
     } else {
         bounds.center
     }

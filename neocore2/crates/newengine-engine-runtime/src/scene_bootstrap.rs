@@ -1,6 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use newengine_lighting::{AmbientLight, DirectionalLight, ShadowSettings};
+use newengine_math::Vec3;
 use newengine_scene::components::{ActiveCamera, SceneRoot};
 use newengine_scene::{spawn_named, Scene, SceneState};
 use newengine_transform::set_parent;
@@ -8,6 +9,8 @@ use newengine_transform::set_parent;
 use newengine_camera::RuntimeNavController;
 use newengine_camera_runtime::CameraManagerResource;
 use newengine_sim::CameraRigComp;
+
+use crate::gameplay::{attach_scene_element_core, SceneEntityRole};
 
 /// Runtime bootstrap for a fresh scene.
 ///
@@ -47,11 +50,19 @@ pub fn bootstrap_runtime_scene(scene: &mut Scene) {
             let _ = world.insert(root, SceneRoot);
         }
 
-        // Default sun light (only if no directional lights exist).
-        if world.query::<DirectionalLight>().next().is_none() {
+        // Default sun light is a scene entity, not a scene side-channel.
+        if crate::gameplay::scene_entity_by_role(world, SceneEntityRole::Sun).is_none() {
             let sun = spawn_named(world, "Sun");
             let _ = world.insert(sun, DirectionalLight::default());
             let _ = set_parent(world, sun, Some(root));
+            attach_scene_element_core(
+                world,
+                sun,
+                SceneEntityRole::Sun,
+                "Scene/Environment/Sun",
+                Vec3::ZERO,
+                Vec3::splat(0.5),
+            );
         }
 
         // Active camera: reuse when present.
@@ -71,6 +82,14 @@ pub fn bootstrap_runtime_scene(scene: &mut Scene) {
         if world.get::<ActiveCamera>(cam).is_none() {
             let _ = world.insert(cam, ActiveCamera);
         }
+        attach_scene_element_core(
+            world,
+            cam,
+            SceneEntityRole::ActiveCamera,
+            "Scene/Cameras/ActiveCamera",
+            Vec3::ZERO,
+            Vec3::splat(0.35),
+        );
 
         // Runtime camera controller composition (no renderer coupling).
         if world.get::<CameraRigComp>(cam).is_none() {

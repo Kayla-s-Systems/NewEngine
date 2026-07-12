@@ -13,6 +13,7 @@ pub(super) fn write_lit_ubo_ex(
     model: Mat4,
     base_color: [f32; 4],
     emissive_radiance: [f32; 3],
+    alpha_cutoff: f32,
     uv_transform: [f32; 4],
     material_params: [f32; 4],
     lights: &PackedLights,
@@ -44,7 +45,7 @@ pub(super) fn write_lit_ubo_ex(
         let off = em_off + i * 4;
         bytes[off..off + 4].copy_from_slice(&component.to_ne_bytes());
     }
-    bytes[em_off + 12..em_off + 16].copy_from_slice(&0.0_f32.to_ne_bytes());
+    bytes[em_off + 12..em_off + 16].copy_from_slice(&alpha_cutoff.max(0.0).to_ne_bytes());
 
     lights.write_into(&mut bytes);
 
@@ -92,6 +93,19 @@ pub(super) fn write_lit_ubo_ex(
     for i in 0..4 {
         let off = shadow_splits_off + i * 4;
         bytes[off..off + 4].copy_from_slice(&lights.shadow_cascade_splits[i].to_ne_bytes());
+    }
+
+    for (base, values) in [
+        (752usize, lights.cloud_shadow_map0),
+        (768usize, lights.cloud_shadow_map1),
+        (784usize, lights.cloud_shadow_map2),
+        (800usize, lights.cloud_shadow_map3),
+        (816usize, lights.cloud_shadow_map4),
+    ] {
+        for (i, value) in values.iter().enumerate() {
+            let off = base + i * 4;
+            bytes[off..off + 4].copy_from_slice(&value.to_ne_bytes());
+        }
     }
 
     r.write_buffer(ubo, 0, &bytes)

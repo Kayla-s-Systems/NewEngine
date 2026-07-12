@@ -42,6 +42,7 @@ impl RenderInstanceRaw {
         uv_transform: [f32; 4],
         material_params: [f32; 4],
         emissive_radiance: [f32; 3],
+        alpha_cutoff: f32,
     ) -> Self {
         Self {
             model_cols: mat4_cols(model),
@@ -53,7 +54,7 @@ impl RenderInstanceRaw {
                 emissive_radiance[0],
                 emissive_radiance[1],
                 emissive_radiance[2],
-                0.0,
+                alpha_cutoff.max(0.0),
             ],
         }
     }
@@ -85,11 +86,21 @@ pub(super) fn render_instances_as_bytes(instances: &[RenderInstanceRaw]) -> &[u8
 /// insufficient and keeps a cursor for sub-allocation. This avoids one buffer per
 /// batch and keeps ownership inside the render controller instead of the Vulkan
 /// plugin.
+#[derive(Debug)]
+pub(in crate::render_controller) struct PackedInstanceUpload {
+    pub(in crate::render_controller) slices: Vec<BufferSlice>,
+    pub(in crate::render_controller) instance_count: usize,
+    pub(in crate::render_controller) bytes_written: u64,
+}
+
 #[derive(Debug, Default)]
 pub(in crate::render_controller) struct InstanceBufferUploader {
     buffer: Option<BufferId>,
     capacity_bytes: u64,
     cursor_bytes: u64,
+    /// Reused CPU staging storage. After the first peak frame, packed instance
+    /// uploads no longer allocate a flattening vector for every render pass.
+    staging_instances: Vec<RenderInstanceRaw>,
 }
 
 impl InstanceBufferUploader {
@@ -98,28 +109,66 @@ impl InstanceBufferUploader {
         self.cursor_bytes = 0;
     }
 
-    pub(in crate::render_controller) fn upload(
+    /// Uploads all sorted instance batches with one backend buffer write.
+    ///
+    /// Individual batches still receive distinct `BufferSlice` offsets, but the
+    /// CPU-to-GPU transfer is coalesced. This avoids one service/backend write
+    /// command per material/mesh batch while preserving draw ordering.
+    pub(super) fn upload_batches(
         &mut self,
         r: &mut dyn RenderApi,
-        instances: &[RenderInstanceRaw],
-    ) -> EngineResult<BufferSlice> {
-        let bytes = render_instances_as_bytes(instances);
-        if bytes.is_empty() {
+        batches: &[InstanceBatch],
+    ) -> EngineResult<PackedInstanceUpload> {
+        if batches.is_empty() {
             return Err(newengine_core::EngineError::other(
-                "instance upload requested with empty instance slice",
+                "packed instance upload requested with no batches",
             ));
         }
 
-        let required_end = self.cursor_bytes.saturating_add(bytes.len() as u64);
+        let instance_count = batches
+            .iter()
+            .map(|batch| batch.instances.len())
+            .sum::<usize>();
+        if instance_count == 0 {
+            return Err(newengine_core::EngineError::other(
+                "packed instance upload requested with no instances",
+            ));
+        }
+
+        let stride = core::mem::size_of::<RenderInstanceRaw>() as u64;
+        let byte_len = (instance_count as u64).saturating_mul(stride);
+        let required_end = self.cursor_bytes.saturating_add(byte_len);
         self.ensure_capacity(r, required_end)?;
 
         let buffer = self
             .buffer
             .expect("instance buffer exists after ensure_capacity");
-        let offset = self.cursor_bytes;
-        r.write_buffer(buffer, offset, bytes)?;
+        let base_offset = self.cursor_bytes;
+        self.staging_instances.clear();
+        self.staging_instances
+            .reserve(instance_count.saturating_sub(self.staging_instances.capacity()));
+        let mut slices = Vec::with_capacity(batches.len());
+        let mut running_instances = 0u64;
+
+        for batch in batches {
+            let offset = base_offset.saturating_add(running_instances.saturating_mul(stride));
+            slices.push(BufferSlice::new(buffer, offset));
+            self.staging_instances.extend_from_slice(&batch.instances);
+            running_instances = running_instances.saturating_add(batch.instances.len() as u64);
+        }
+
+        r.write_buffer(
+            buffer,
+            base_offset,
+            render_instances_as_bytes(&self.staging_instances),
+        )?;
         self.cursor_bytes = align_up(required_end, 256);
-        Ok(BufferSlice::new(buffer, offset))
+
+        Ok(PackedInstanceUpload {
+            slices,
+            instance_count,
+            bytes_written: byte_len,
+        })
     }
 
     fn ensure_capacity(&mut self, r: &mut dyn RenderApi, required_bytes: u64) -> EngineResult<()> {
@@ -255,6 +304,19 @@ impl InstanceBatchSet {
     #[inline]
     pub(super) fn is_empty(&self) -> bool {
         self.batches.is_empty()
+    }
+
+    #[inline]
+    pub(super) fn batch_count(&self) -> usize {
+        self.batches.len()
+    }
+
+    #[inline]
+    pub(super) fn instance_count(&self) -> usize {
+        self.batches
+            .values()
+            .map(|batch| batch.instances.len())
+            .sum()
     }
 
     pub(super) fn into_sorted_batches(self) -> Vec<InstanceBatch> {

@@ -43,18 +43,27 @@ impl RuntimeRenderController {
 
             if has_pending_gate {
                 let requested_play_mode = self.bridges.scene.play_mode();
-                let runtime_profile = self.runtime_profile().clone();
-                let thread_pool = ctx.thread_pool().cloned();
+                let prims_lock = self.bridges.scene.primitives();
+                let mut prims = prims_lock.write();
+                let mats_lock = self.bridges.scene.materials();
+                let mats = mats_lock.read();
                 let world_playable = scene.run_frame(next_frame, |world| {
-                    if runtime_profile.use_runtime_terrain_streaming() {
-                        let mats_lock = self.bridges.scene.materials();
-                        let mats = mats_lock.read();
-                        crate::scene_bridge::tick_game_ready_streaming_terrain(
-                            world,
-                            &mats,
-                            thread_pool.as_ref(),
-                        );
-                    }
+                    // Static authored world assembly is incremental and must progress
+                    // inside the prelaunch path. The normal world tick is intentionally
+                    // bypassed while the gate is active, so admitting it only there would
+                    // starve the queue until the soft timeout.
+                    crate::scene_bridge::tick_game_ready_static_world_prefabs(
+                        world,
+                        &mut prims,
+                        &mats,
+                        ctx.thread_pool(),
+                    );
+                    // Prelaunch may pump GPU residency for the already materialized launch
+                    // ring, but must not admit additional CPU terrain chunks. Otherwise the
+                    // launch gate target keeps growing before public Play, and the window
+                    // remains blocked in loading while streaming expands toward the full
+                    // runtime radius. Full streaming admission resumes from world_tick after
+                    // the launch gate releases.
                     readiness::update_game_ready_launch_gate(
                         self,
                         r,
@@ -63,6 +72,11 @@ impl RuntimeRenderController {
                         next_frame,
                     )
                 });
+                // The residency pump below reads the primitive registry. Release
+                // the static-world admission write guard first; otherwise the
+                // prelaunch thread deadlocks itself on the same RwLock.
+                drop(prims);
+                drop(mats);
 
                 // Launch gate must pump world/terrain residency too. Otherwise
                 // `Loading World` can reach texture 100% while the world still has
@@ -138,15 +152,40 @@ impl RuntimeRenderController {
         // provider-owned UiDrawList and before the normal frame envelope can run.
         // Present a minimal UI-only frame here so `engine.ui.loading` image paints
         // are actually composited while scene texture residency is blocking Play.
-        if let Some(ui) = ctx.resources().get::<UiDrawList>().cloned() {
+        if let Some(mut ui) = ctx.resources().get::<UiDrawList>().cloned() {
             let paint_images = ui
                 .paint
                 .commands
                 .iter()
                 .filter(|cmd| matches!(cmd, newengine_ui_api::UiPaintCommand::Image(_)))
                 .count();
+            let original_set = ui.texture_delta.set.len();
+            let original_patches = ui.texture_delta.patches.len();
+            let original_bytes = ui
+                .texture_delta
+                .set
+                .values()
+                .map(|texture| texture.rgba8.len())
+                .sum::<usize>()
+                + ui.texture_delta
+                    .patches
+                    .iter()
+                    .map(|patch| patch.rgba8.len())
+                    .sum::<usize>();
+            self.filter_redundant_prelaunch_texture_delta(&mut ui);
+            let submitted_bytes = ui
+                .texture_delta
+                .set
+                .values()
+                .map(|texture| texture.rgba8.len())
+                .sum::<usize>()
+                + ui.texture_delta
+                    .patches
+                    .iter()
+                    .map(|patch| patch.rgba8.len())
+                    .sum::<usize>();
             newengine_ulog_api::ulog::warn!(
-                "render prelaunch loading ui: present frame={} window={}x{} mesh_cmds={} paint_cmds={} paint_images={} tex_set={} tex_set_bytes={} reason='{}'",
+                "render prelaunch loading ui: present frame={} window={}x{} mesh_cmds={} paint_cmds={} paint_images={} tex_set={}/{} patches={}/{} tex_bytes={}/{} reason='{}'",
                 next_frame,
                 window_w,
                 window_h,
@@ -154,11 +193,11 @@ impl RuntimeRenderController {
                 ui.paint.commands.len(),
                 paint_images,
                 ui.texture_delta.set.len(),
-                ui.texture_delta
-                    .set
-                    .iter()
-                    .map(|(_, texture)| texture.rgba8.len())
-                    .sum::<usize>(),
+                original_set,
+                ui.texture_delta.patches.len(),
+                original_patches,
+                submitted_bytes,
+                original_bytes,
                 gate.reason
             );
             present_prelaunch_loading_ui_frame(
@@ -181,14 +220,14 @@ impl RuntimeRenderController {
             self.bridges.scene.activate_profile_play_now();
             self.diagnostics.overlay_metrics.reset_interactive_timing();
             newengine_ulog_api::ulog::info!(
-                "render controller: scene launch gate released; deferring first world present to next frame"
+                "render controller: scene launch gate released; loading overlay deactivated; deferring first world present to next frame"
             );
-            SceneLaunchStatus::loading(
-                "NEWENGINE // LOADING WORLD",
-                "Playable world is ready.",
-                "Preparing the first stable gameplay frame.",
-                0.995,
-            )
+            // The launch gate is released at this point. Returning another active
+            // loading status keeps engine.ui.loading alive for the next runtime
+            // frame and can leave a small loading menu over the first gameplay
+            // presents. The next frame is intentionally deferred, but the loading
+            // overlay lifecycle must already be inactive.
+            SceneLaunchStatus::inactive()
         } else {
             if trace_frame {
                 newengine_ulog_api::ulog::debug!(
@@ -202,6 +241,52 @@ impl RuntimeRenderController {
 
         Ok(Some(status))
     }
+
+    fn filter_redundant_prelaunch_texture_delta(&mut self, ui: &mut UiDrawList) {
+        for id in &ui.texture_delta.free {
+            self.ui.prelaunch_texture_fingerprints.remove(&id.0);
+            self.ui
+                .prelaunch_patch_fingerprints
+                .retain(|key, _| key.0 != id.0);
+        }
+
+        ui.texture_delta.set.retain(|id, texture| {
+            let fingerprint = ui_payload_fingerprint(texture.size, &texture.rgba8);
+            !matches!(
+                self.ui
+                    .prelaunch_texture_fingerprints
+                    .insert(id.0, fingerprint),
+                Some(previous) if previous == fingerprint
+            )
+        });
+
+        ui.texture_delta.patches.retain(|patch| {
+            let key = (
+                patch.id.0,
+                patch.origin[0],
+                patch.origin[1],
+                patch.size[0],
+                patch.size[1],
+            );
+            let fingerprint = ui_payload_fingerprint(patch.size, &patch.rgba8);
+            !matches!(
+                self.ui
+                    .prelaunch_patch_fingerprints
+                    .insert(key, fingerprint),
+                Some(previous) if previous == fingerprint
+            )
+        });
+    }
+}
+
+#[inline]
+fn ui_payload_fingerprint(size: [u32; 2], rgba8: &[u8]) -> u64 {
+    let mut hasher = blake3::Hasher::new();
+    hasher.update(&size[0].to_le_bytes());
+    hasher.update(&size[1].to_le_bytes());
+    hasher.update(rgba8);
+    let hash = hasher.finalize();
+    u64::from_le_bytes(hash.as_bytes()[0..8].try_into().expect("blake3 prefix"))
 }
 
 fn present_prelaunch_loading_ui_frame(

@@ -8,6 +8,9 @@
 
 use std::sync::OnceLock;
 
+pub mod formatting;
+pub mod path_format;
+
 #[doc(hidden)]
 pub mod __private {
     pub use log;

@@ -151,7 +151,7 @@
     },
     {
       "family": "jobs",
-      "gateway": "engine.jobs",
+      "gateway": "engine.threading",
       "capability": "jobs.backend",
       "service": "jobs.api",
       "methods": [

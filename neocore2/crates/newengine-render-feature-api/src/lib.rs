@@ -83,6 +83,9 @@ pub struct SceneExtractionCtx<'a> {
     pub shadow_plan: LightShadowPlan,
     pub shadow_frame: ShadowFrame,
     pub render_shadow_map: bool,
+    /// True when opaque geometry is routed through the deferred GBuffer path.
+    /// Providers use this to avoid building command streams for inactive passes.
+    pub deferred: bool,
     pub viewport_extent: Extent2D,
     pub surface_extent: Extent2D,
     pub runtime: bool,

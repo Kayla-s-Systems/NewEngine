@@ -1,0 +1,17 @@
+pub const SOUTH: &str = "South";
+pub const EAST: &str = "East";
+pub const WEST: &str = "West";
+pub const NORTH: &str = "North";
+pub const LEFT_TRIGGER: &str = "LeftTrigger";
+pub const LEFT_TRIGGER_2: &str = "LeftTrigger2";
+pub const RIGHT_TRIGGER: &str = "RightTrigger";
+pub const RIGHT_TRIGGER_2: &str = "RightTrigger2";
+pub const SELECT: &str = "Select";
+pub const START: &str = "Start";
+pub const MODE: &str = "Mode";
+pub const LEFT_THUMB: &str = "LeftThumb";
+pub const RIGHT_THUMB: &str = "RightThumb";
+pub const DPAD_UP: &str = "DPadUp";
+pub const DPAD_DOWN: &str = "DPadDown";
+pub const DPAD_LEFT: &str = "DPadLeft";
+pub const DPAD_RIGHT: &str = "DPadRight";

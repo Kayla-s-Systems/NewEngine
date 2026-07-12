@@ -117,15 +117,35 @@ pub(super) fn apply_runtime_input(
     input: CameraGatewayInput,
     effective_play_mode: GameRunMode,
     service_config: CameraRuntimeServiceConfig,
+    frame_index: u64,
 ) {
     let Some(player) = first_player(world) else {
         return;
     };
-    if input.gameplay_movement_gated {
-        CameraRuntimeService::clear_player_input(world, player);
-    } else if effective_play_mode.wants_direct_player_control()
-        && is_player_controller_enabled(world, player)
+    let controller_active = effective_play_mode.wants_direct_player_control()
+        && is_player_controller_enabled(world, player);
+    let inventory_open = crate::gameplay::inventory_hud_is_open(world);
+    let direct_control = controller_active && !input.gameplay_movement_gated && !inventory_open;
+    let command_actions = if controller_active && (!input.gameplay_movement_gated || inventory_open)
     {
+        if inventory_open {
+            GameplayActionFrame {
+                inventory_toggle_pressed: input.gameplay_actions.inventory_toggle_pressed,
+                hud_visibility_toggle_pressed: input.gameplay_actions.hud_visibility_toggle_pressed,
+                equipment_slot_pressed: input.gameplay_actions.equipment_slot_pressed,
+                ..GameplayActionFrame::default()
+            }
+        } else {
+            input.gameplay_actions
+        }
+    } else {
+        GameplayActionFrame::default()
+    };
+    apply_player_command_frame(world, player, frame_index, command_actions);
+
+    if input.gameplay_movement_gated || inventory_open {
+        CameraRuntimeService::clear_player_input(world, player);
+    } else if direct_control {
         CameraRuntimeService::apply_player_input(
             world,
             player,
@@ -171,6 +191,34 @@ pub(super) fn camera_nav_input(
         nav_input.gate_navigation();
     }
     nav_input
+}
+
+#[inline]
+pub(super) fn apply_gameplay_view_lens(
+    frame: CameraFrame,
+    active_view: CameraViewMode,
+) -> CameraFrame {
+    let target_fov_y = match active_view {
+        // 68 degrees vertical is approximately 100 degrees horizontal at 16:9.
+        // It increases peripheral motion cues without becoming a distorted ultra-wide view.
+        CameraViewMode::FirstPerson => 68.0_f32.to_radians(),
+        CameraViewMode::ThirdPersonFollow => 64.0_f32.to_radians(),
+        CameraViewMode::ThirdPersonAim => 54.0_f32.to_radians(),
+    };
+    let Projection::Perspective(mut perspective) = frame.projection else {
+        return frame;
+    };
+    if (perspective.fovy - target_fov_y).abs() <= 1.0e-6 {
+        return frame;
+    }
+    perspective.fovy = target_fov_y;
+    CameraFrame::build(
+        frame.channel,
+        frame.rig,
+        Projection::Perspective(perspective),
+        frame.viewport,
+        frame.jitter_px,
+    )
 }
 
 #[inline]

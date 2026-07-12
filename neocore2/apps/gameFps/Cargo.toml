@@ -16,10 +16,7 @@ icon = "assets/app.ico"
 # internal_name = "game-fps"
 
 [dependencies]
-newengine-core = { path = "../../crates/newengine-core", features = ["host-probe"] }
 newengine-game-ready-profile = { path = "../../crates/newengine-game-ready-profile" }
-newengine-runtime-host = { path = "../../crates/newengine-runtime-host" }
-newengine-ui = { path = "../../crates/newengine-ui", default-features = false }
 
 [build-dependencies]
 embed-resource = "2"

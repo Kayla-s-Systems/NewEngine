@@ -495,7 +495,34 @@ pub struct JPC_NarrowPhaseQuery_CastRayArgs {
 #[cfg(feature = "double-precision")] pub type JPC_RMat44 = JPC_DMat44;
 #[cfg(not(feature = "double-precision"))] pub type JPC_RMat44 = JPC_Mat44;
 
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct JPC_ContactEvent {
+    pub Body1ID: JPC_BodyID,
+    pub Body2ID: JPC_BodyID,
+    pub Body1UserData: u64,
+    pub Body2UserData: u64,
+    pub SubShapeID1: JPC_SubShapeID,
+    pub SubShapeID2: JPC_SubShapeID,
+    pub Point: JPC_RVec3,
+    pub Normal: JPC_Vec3,
+    pub PenetrationDepth: f32,
+    pub EstimatedImpulse: f32,
+}
+
+pub type JPC_ContactEventCallback = Option<
+    unsafe extern "C" fn(user_data: *mut c_void, event: *const JPC_ContactEvent),
+>;
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct JPC_ContactListenerFns {
+    pub OnContactAdded: JPC_ContactEventCallback,
+    pub OnContactPersisted: JPC_ContactEventCallback,
+}
+
 #[repr(C)] pub struct JPC_Body { _unused: [u8; 0] }
+#[repr(C)] pub struct JPC_ContactListener { _unused: [u8; 0] }
 #[repr(C)] pub struct JPC_BodyFilter { _unused: [u8; 0] }
 #[repr(C)] pub struct JPC_BodyInterface { _unused: [u8; 0] }
 #[repr(C)] pub struct JPC_BroadPhaseLayerFilter { _unused: [u8; 0] }
@@ -519,6 +546,11 @@ extern "C" {
     pub fn JPC_FactoryDelete();
     pub fn JPC_RegisterTypes();
     pub fn JPC_UnregisterTypes();
+    pub fn JPC_ContactListener_new(
+        user_data: *mut c_void,
+        callbacks: JPC_ContactListenerFns,
+    ) -> *mut JPC_ContactListener;
+    pub fn JPC_ContactListener_delete(listener: *mut JPC_ContactListener);
     pub fn JPC_VertexList_new(arg0: *const JPC_Float3, arg1: usize) -> *mut JPC_VertexList;
     pub fn JPC_VertexList_delete(arg0: *mut JPC_VertexList);
     pub fn JPC_IndexedTriangleList_new(arg0: *const JPC_IndexedTriangle, arg1: usize) -> *mut JPC_IndexedTriangleList;
@@ -708,6 +740,17 @@ extern "C" {
     pub fn JPC_PhysicsSystem_OptimizeBroadPhase(arg0: *mut JPC_PhysicsSystem);
     pub fn JPC_PhysicsSystem_Update(arg0: *mut JPC_PhysicsSystem, arg1: f32, arg2: c_int, arg3: *mut JPC_TempAllocatorImpl, arg4: *mut JPC_JobSystemThreadPool) -> JPC_PhysicsUpdateError;
     pub fn JPC_PhysicsSystem_GetBodyInterface(arg0: *mut JPC_PhysicsSystem) -> *mut JPC_BodyInterface;
+    pub fn JPC_PhysicsSystem_SetContactListener(
+        arg0: *mut JPC_PhysicsSystem,
+        arg1: *mut JPC_ContactListener,
+    );
+    pub fn JPC_PhysicsSystem_GetBodySurfaceNormal(
+        arg0: *const JPC_PhysicsSystem,
+        arg1: JPC_BodyID,
+        arg2: JPC_SubShapeID,
+        arg3: JPC_RVec3,
+        arg4: *mut JPC_Vec3,
+    ) -> bool;
     pub fn JPC_PhysicsSystem_GetNarrowPhaseQuery(arg0: *const JPC_PhysicsSystem) -> *const JPC_NarrowPhaseQuery;
     pub fn JPC_PhysicsSystem_DrawBodies(arg0: *mut JPC_PhysicsSystem, arg1: *mut JPC_BodyManager_DrawSettings, arg2: *mut JPC_DebugRendererSimple, arg3: *const c_void);
 }

@@ -5,7 +5,9 @@
 #include <Jolt/Core/TempAllocator.h>
 #include <Jolt/Physics/Body/BodyActivationListener.h>
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
+#include <Jolt/Physics/Body/BodyLock.h>
 #include <Jolt/Physics/Collision/CastResult.h>
+#include <Jolt/Physics/Collision/ContactListener.h>
 #include <Jolt/Physics/Collision/RayCast.h>
 #include <Jolt/Physics/Collision/Shape/BoxShape.h>
 #include <Jolt/Physics/Collision/Shape/CapsuleShape.h>
@@ -26,6 +28,7 @@
 
 #include <JoltC/JoltC.h>
 
+#include <algorithm>
 #include <cfloat>
 
 #define OPAQUE_WRAPPER(c_type, cpp_type) \
@@ -182,6 +185,88 @@ static JPC_RayCastResult to_jpc(JPH::RayCastResult in) {
 	out.SubShapeID2 = to_jpc(in.mSubShapeID2);
 
 	return out;
+}
+
+static JPH::SubShapeID sub_shape_to_jph(JPC_SubShapeID in) {
+	static_assert(sizeof(JPC_SubShapeID) == sizeof(JPH::SubShapeID));
+	JPH::SubShapeID out;
+	memcpy(&out, &in, sizeof(out));
+	return out;
+}
+
+class JPCContactListener final : public JPH::ContactListener {
+public:
+	JPCContactListener(void *user_data, JPC_ContactListenerFns callbacks)
+		: mUserData(user_data), mCallbacks(callbacks) { }
+
+	void OnContactAdded(
+		const JPH::Body &body1,
+		const JPH::Body &body2,
+		const JPH::ContactManifold &manifold,
+		JPH::ContactSettings &) override
+	{
+		Dispatch(mCallbacks.OnContactAdded, body1, body2, manifold);
+	}
+
+	void OnContactPersisted(
+		const JPH::Body &body1,
+		const JPH::Body &body2,
+		const JPH::ContactManifold &manifold,
+		JPH::ContactSettings &) override
+	{
+		Dispatch(mCallbacks.OnContactPersisted, body1, body2, manifold);
+	}
+
+private:
+	void Dispatch(
+		JPC_ContactEventCallback callback,
+		const JPH::Body &body1,
+		const JPH::Body &body2,
+		const JPH::ContactManifold &manifold) const
+	{
+		if (callback == nullptr)
+			return;
+
+		JPC_ContactEvent event{};
+		event.Body1ID = to_jpc(body1.GetID());
+		event.Body2ID = to_jpc(body2.GetID());
+		event.Body1UserData = body1.GetUserData();
+		event.Body2UserData = body2.GetUserData();
+		event.SubShapeID1 = to_jpc(manifold.mSubShapeID1);
+		event.SubShapeID2 = to_jpc(manifold.mSubShapeID2);
+		event.Point = to_jpc(
+			manifold.mRelativeContactPointsOn1.empty()
+				? manifold.mBaseOffset
+				: manifold.GetWorldSpaceContactPointOn1(0));
+		event.Normal = to_jpc(manifold.mWorldSpaceNormal.NormalizedOr(JPH::Vec3::sAxisY()));
+		event.PenetrationDepth = manifold.mPenetrationDepth;
+
+		const float approach_speed = std::max(
+			0.0f,
+			-(body2.GetLinearVelocity() - body1.GetLinearVelocity()).Dot(manifold.mWorldSpaceNormal));
+		const JPH::MotionProperties *motion1 = body1.GetMotionPropertiesUnchecked();
+		const JPH::MotionProperties *motion2 = body2.GetMotionPropertiesUnchecked();
+		const float inv_mass1 = motion1 != nullptr ? motion1->GetInverseMassUnchecked() : 0.0f;
+		const float inv_mass2 = motion2 != nullptr ? motion2->GetInverseMassUnchecked() : 0.0f;
+		const float inv_mass_sum = inv_mass1 + inv_mass2;
+		event.EstimatedImpulse = inv_mass_sum > 1.0e-6f ? approach_speed / inv_mass_sum : 0.0f;
+
+		callback(mUserData, &event);
+	}
+
+	void *mUserData;
+	JPC_ContactListenerFns mCallbacks;
+};
+
+JPC_API JPC_ContactListener* JPC_ContactListener_new(
+	void *user_data,
+	JPC_ContactListenerFns callbacks)
+{
+	return reinterpret_cast<JPC_ContactListener *>(new JPCContactListener(user_data, callbacks));
+}
+
+JPC_API void JPC_ContactListener_delete(JPC_ContactListener *listener) {
+	delete reinterpret_cast<JPCContactListener *>(listener);
 }
 
 JPC_API void JPC_RegisterDefaultAllocator() {
@@ -1582,6 +1667,34 @@ JPC_API void JPC_PhysicsSystem_OptimizeBroadPhase(JPC_PhysicsSystem* self) {
 
 JPC_API JPC_BodyInterface* JPC_PhysicsSystem_GetBodyInterface(JPC_PhysicsSystem* self) {
 	return to_jpc(&to_jph(self)->GetBodyInterface());
+}
+
+
+JPC_API void JPC_PhysicsSystem_SetContactListener(
+	JPC_PhysicsSystem *self,
+	JPC_ContactListener *listener)
+{
+	to_jph(self)->SetContactListener(reinterpret_cast<JPCContactListener *>(listener));
+}
+
+JPC_API bool JPC_PhysicsSystem_GetBodySurfaceNormal(
+	const JPC_PhysicsSystem *self,
+	JPC_BodyID body_id,
+	JPC_SubShapeID sub_shape_id,
+	JPC_RVec3 position,
+	JPC_Vec3 *out_normal)
+{
+	if (self == nullptr || out_normal == nullptr)
+		return false;
+
+	JPH::BodyLockRead lock(to_jph(self)->GetBodyLockInterface(), to_jph(body_id));
+	if (!lock.Succeeded())
+		return false;
+
+	*out_normal = to_jpc(
+		lock.GetBody().GetWorldSpaceSurfaceNormal(sub_shape_to_jph(sub_shape_id), to_jph(position))
+			.NormalizedOr(JPH::Vec3::sAxisY()));
+	return true;
 }
 
 JPC_API const JPC_NarrowPhaseQuery* JPC_PhysicsSystem_GetNarrowPhaseQuery(const JPC_PhysicsSystem* self) {

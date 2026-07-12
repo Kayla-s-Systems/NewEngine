@@ -1,0 +1,268 @@
+use super::*;
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct InventoryEntry {
+    pub instance_id: ItemInstanceId,
+    pub item: ItemId,
+    pub quantity: u32,
+    pub condition: f32,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct PlayerInventory {
+    pub slot_capacity: u32,
+    pub weight_capacity: f32,
+    pub entries: Vec<InventoryEntry>,
+    pub equipped: BTreeMap<EquipmentSlot, ItemInstanceId>,
+    pub active_slot: Option<EquipmentSlot>,
+    pub weapon_states: BTreeMap<ItemInstanceId, PlayerWeaponState>,
+    pub(super) next_instance_serial: u64,
+}
+
+impl Default for PlayerInventory {
+    fn default() -> Self {
+        Self {
+            slot_capacity: 24,
+            weight_capacity: 80.0,
+            entries: Vec::new(),
+            equipped: BTreeMap::new(),
+            active_slot: None,
+            weapon_states: BTreeMap::new(),
+            next_instance_serial: 1,
+        }
+    }
+}
+
+impl PlayerInventory {
+    #[inline]
+    pub fn quantity(&self, item: ItemId) -> u32 {
+        self.entries
+            .iter()
+            .filter(|entry| entry.item == item)
+            .fold(0u32, |total, entry| total.saturating_add(entry.quantity))
+    }
+
+    #[inline]
+    pub fn used_slots(&self) -> u32 {
+        self.entries.len().min(u32::MAX as usize) as u32
+    }
+
+    pub fn total_weight(&self, catalog: &ItemCatalog) -> f32 {
+        self.entries.iter().fold(0.0, |total, entry| {
+            let weight = catalog
+                .get(entry.item)
+                .map(|definition| definition.unit_weight)
+                .unwrap_or(0.0);
+            total + weight * entry.quantity as f32
+        })
+    }
+
+    #[inline]
+    pub fn entry(&self, instance: ItemInstanceId) -> Option<&InventoryEntry> {
+        self.entries
+            .iter()
+            .find(|entry| entry.instance_id == instance)
+    }
+
+    #[inline]
+    pub fn equipped_instance(&self, slot: EquipmentSlot) -> Option<ItemInstanceId> {
+        self.equipped.get(&slot).copied()
+    }
+
+    fn allocate_instance(&mut self, owner: EntityId, item: ItemId) -> ItemInstanceId {
+        loop {
+            let serial = self.next_instance_serial;
+            self.next_instance_serial = self.next_instance_serial.wrapping_add(1).max(1);
+            let candidate = ItemInstanceId(mix64(
+                owner.stable_u64()
+                    ^ item.0.rotate_left(19)
+                    ^ serial.wrapping_mul(0x9e37_79b9_7f4a_7c15),
+            ));
+            if candidate.0 != 0 && self.entry(candidate).is_none() {
+                return candidate;
+            }
+        }
+    }
+
+    pub(super) fn add_definition(
+        &mut self,
+        owner: EntityId,
+        definition: &ItemDefinition,
+        requested: u32,
+        catalog: &ItemCatalog,
+    ) -> InventoryMutation {
+        if requested == 0 {
+            return InventoryMutation::default();
+        }
+
+        self.slot_capacity = self.slot_capacity.clamp(1, 100_000);
+        self.weight_capacity = sanitize_non_negative(self.weight_capacity);
+        let max_stack = definition.max_stack.max(1);
+        let mut remaining = requested;
+        let mut touched = Vec::new();
+
+        let weight_allowance = if definition.unit_weight <= f32::EPSILON {
+            u32::MAX
+        } else {
+            let free_weight = (self.weight_capacity - self.total_weight(catalog)).max(0.0);
+            (free_weight / definition.unit_weight)
+                .floor()
+                .clamp(0.0, u32::MAX as f32) as u32
+        };
+        remaining = remaining.min(weight_allowance);
+        let weight_rejected = requested.saturating_sub(remaining);
+
+        for entry in self
+            .entries
+            .iter_mut()
+            .filter(|entry| entry.item == definition.id && entry.quantity < max_stack)
+        {
+            if remaining == 0 {
+                break;
+            }
+            let moved = remaining.min(max_stack - entry.quantity);
+            entry.quantity += moved;
+            remaining -= moved;
+            touched.push(entry.instance_id);
+        }
+
+        while remaining > 0 && self.used_slots() < self.slot_capacity {
+            let quantity = remaining.min(max_stack);
+            let instance_id = self.allocate_instance(owner, definition.id);
+            self.entries.push(InventoryEntry {
+                instance_id,
+                item: definition.id,
+                quantity,
+                condition: 1.0,
+            });
+            touched.push(instance_id);
+            remaining -= quantity;
+        }
+
+        let accepted_by_weight = requested.saturating_sub(weight_rejected);
+        let accepted = accepted_by_weight.saturating_sub(remaining);
+        InventoryMutation {
+            accepted,
+            rejected: requested.saturating_sub(accepted),
+            touched_instances: touched,
+        }
+    }
+
+    pub(super) fn remove_quantity(&mut self, item: ItemId, requested: u32) -> InventoryMutation {
+        if requested == 0 {
+            return InventoryMutation::default();
+        }
+        let mut remaining = requested;
+        let mut touched = Vec::new();
+        let mut index = self.entries.len();
+        while index > 0 && remaining > 0 {
+            index -= 1;
+            if self.entries[index].item != item {
+                continue;
+            }
+            let moved = remaining.min(self.entries[index].quantity);
+            self.entries[index].quantity -= moved;
+            remaining -= moved;
+            touched.push(self.entries[index].instance_id);
+            if self.entries[index].quantity == 0 {
+                let removed = self.entries.remove(index);
+                self.weapon_states.remove(&removed.instance_id);
+                self.equipped
+                    .retain(|_, instance| *instance != removed.instance_id);
+                if self
+                    .active_slot
+                    .is_some_and(|slot| !self.equipped.contains_key(&slot))
+                {
+                    self.active_slot = None;
+                }
+            }
+        }
+        InventoryMutation {
+            accepted: requested - remaining,
+            rejected: remaining,
+            touched_instances: touched,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct InventoryMutation {
+    pub accepted: u32,
+    pub rejected: u32,
+    pub touched_instances: Vec<ItemInstanceId>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct EquippedWeaponBinding {
+    pub instance_id: ItemInstanceId,
+    pub item: ItemId,
+    pub slot: EquipmentSlot,
+    pub ammo_item: ItemId,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ItemPickup {
+    pub item: ItemId,
+    pub quantity: u32,
+    pub auto_equip: bool,
+    pub destroy_when_empty: bool,
+    pub enabled: bool,
+}
+
+impl ItemPickup {
+    pub const fn new(item: ItemId, quantity: u32) -> Self {
+        Self {
+            item,
+            quantity,
+            auto_equip: false,
+            destroy_when_empty: true,
+            enabled: true,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum InventoryEventKind {
+    ItemAdded,
+    ItemRemoved,
+    Equipped,
+    Unequipped,
+    ActiveSlotChanged,
+    AmmoConsumed,
+    ItemUsed,
+    ItemDropped,
+    PickupCollected,
+    PickupRejected,
+    LoadoutApplied,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct InventoryEvent {
+    pub kind: InventoryEventKind,
+    pub owner: EntityId,
+    pub item: ItemId,
+    pub instance_id: Option<ItemInstanceId>,
+    pub quantity: u32,
+    pub slot: Option<EquipmentSlot>,
+    pub world_entity: Option<EntityId>,
+    pub message: String,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct InventoryEventBus {
+    pub events: VecDeque<InventoryEvent>,
+}
+
+impl InventoryEventBus {
+    pub(super) fn emit(&mut self, event: InventoryEvent) {
+        const CAPACITY: usize = 512;
+        if self.events.len() == CAPACITY {
+            self.events.pop_front();
+        }
+        self.events.push_back(event);
+    }
+
+    pub fn drain(&mut self) -> Vec<InventoryEvent> {
+        self.events.drain(..).collect()
+    }
+}
