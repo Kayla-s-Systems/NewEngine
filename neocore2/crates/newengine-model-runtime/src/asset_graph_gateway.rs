@@ -330,7 +330,7 @@ impl RuntimeAssetGraphResolver {
         if selector.is_none() {
             let request = AssetDecodeRequest {
                 logical_path: path.clone(),
-                output_kind: newengine_assets_api::method::LIST_FILE_MANIFEST_V1.to_owned(),
+                output_kind: newengine_assets_api::method::LIST_FILE_MANIFEST.to_owned(),
                 selector: serde_json::Value::Null,
             };
             if let Err(err) = self.client.decode_v1(&request) {
@@ -372,7 +372,7 @@ impl RuntimeAssetGraphResolver {
         let (path, _) = split_asset_ref(asset_ref);
         let request = AssetDecodeRequest {
             logical_path: path.clone(),
-            output_kind: newengine_assets_api::method::LIST_FILE_MANIFEST_V1.to_owned(),
+            output_kind: newengine_assets_api::method::LIST_FILE_MANIFEST.to_owned(),
             selector: serde_json::Value::Null,
         };
         match self.client.decode_v1(&request) {

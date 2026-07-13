@@ -47,8 +47,8 @@ pub(crate) fn load_xmlcentral(
 }
 
 pub(crate) fn decode_neui_xmlcentral(logical_path: &str, bytes: &[u8]) -> Result<String, String> {
-    let header = parse_list_file_header_v1(bytes)?;
-    if header.content_kind != LIST_FILE_CONTENT_KIND_NEUI {
+    let header = parse_list_file_header(bytes)?;
+    if !header.content_kind_matches(LIST_FILE_CONTENT_KIND_NEUI) {
         return Err(format!(
             "{} is NEF8 content_kind='{}' ({}) not ui_dictionary ({})",
             logical_path,
@@ -78,7 +78,7 @@ pub(crate) fn decode_neui_xmlcentral(logical_path: &str, bytes: &[u8]) -> Result
     decoder
         .read_to_end(&mut body)
         .map_err(|e| format!("NEF8 deflate body decode failed: {e}"))?;
-    if body.len() != header.body_uncompressed_len as usize {
+    if header.body_uncompressed_len != 0 && body.len() != header.body_uncompressed_len as usize {
         return Err(format!(
             "NEF8 inflated body length mismatch: got={} expected={}",
             body.len(),
@@ -86,7 +86,7 @@ pub(crate) fn decode_neui_xmlcentral(logical_path: &str, bytes: &[u8]) -> Result
         ));
     }
     let hash = blake3::hash(&body);
-    if header.body_raw_hash != *hash.as_bytes() {
+    if header.has_body_raw_hash() && header.body_raw_hash != *hash.as_bytes() {
         return Err("NEF8 inflated body BLAKE3 hash mismatch".to_owned());
     }
     let xml =

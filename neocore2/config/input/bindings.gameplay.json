@@ -988,6 +988,13 @@
       "code": 10,
       "name": null,
       "phase": "Pressed"
+    },
+    {
+      "action": "ui.assets.catalog.toggle",
+      "device": "Keyboard",
+      "code": 159,
+      "name": null,
+      "phase": "Pressed"
     }
   ],
   "gamepad_axes": [

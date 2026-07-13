@@ -10,7 +10,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use abi_stable::std_types::{RResult, RString};
 use newengine_assets::AssetServiceClient;
 use newengine_assets_api::{
-    definitions_method, stable_hash_from_text, AssetDecodeRequest, AssetDependencyRecordV1,
+    definitions_method, stable_hash_from_text, AssetDecodeRequest, AssetDependencyRecord,
     AssetReference, ASSET_LIST_FILE_BODY_OUTPUT, DEFINITIONS_BACKEND_CAPABILITY_ID,
     DEFINITIONS_RUNTIME_CONTRACT, DEFINITIONS_SERVICE_ID, DEFINITIONS_SERVICE_METHODS,
     ENGINE_ASSETS_DEFINITIONS_SERVICE_ID, ENGINE_ASSETS_GRAPH_SERVICE_ID, ENGINE_ASSET_SERVICE_ID,
@@ -106,7 +106,7 @@ struct RawDefinitionEntryV1 {
     kind: String,
     schema: String,
     target: Option<serde_json::Value>,
-    dependencies: Vec<AssetDependencyRecordV1>,
+    dependencies: Vec<AssetDependencyRecord>,
     namespaces: BTreeMap<String, serde_json::Value>,
     metadata: BTreeMap<String, serde_json::Value>,
     #[serde(alias = "materialBindings")]

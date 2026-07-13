@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use newengine_assets_api::list_file::{
-    AssetDependencyRecordV1, ListFileEntryRecordV1, ListFileMetadataNamespaceV1,
+    AssetDependencyRecord, ListFileEntryRecord, ListFileMetadataNamespace,
 };
 
 use crate::texture_refs::validate_material_texture_reference;
@@ -115,10 +115,10 @@ impl MaterialParamValue {
 pub struct NematMaterialLibraryBodyV1 {
     pub schema: String,
     /// Common ListFile entry projection shared with .ytd/.ydd/.ytyp.
-    pub common_entries: Vec<ListFileEntryRecordV1>,
+    pub common_entries: Vec<ListFileEntryRecord>,
     /// Dependency table: material entries point to .ytd@entry texture refs.
-    pub dependencies: Vec<AssetDependencyRecordV1>,
-    pub metadata_namespaces: Vec<ListFileMetadataNamespaceV1>,
+    pub dependencies: Vec<AssetDependencyRecord>,
+    pub metadata_namespaces: Vec<ListFileMetadataNamespace>,
     pub entries: Vec<MaterialEntryV1>,
     pub texture_bindings: Vec<MaterialTextureBindingV1>,
     pub params: BTreeMap<String, MaterialParamValue>,

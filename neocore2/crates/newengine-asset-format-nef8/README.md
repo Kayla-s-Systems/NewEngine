@@ -9,6 +9,35 @@ consumer domains. The engine collects descriptors from this crate instead of
 compiling dozens of tiny `newengine-asset-format-*` crates.
 
 
+
+## NEF8 wire envelope
+
+The canonical wire parser and encoder live in `newengine-assets-api::list_file`.
+This registry crate owns format/type declarations and consumes that shared
+contract; individual format modules must not duplicate binary header offsets.
+
+NEF8 uses a bounded, self-describing power-of-two header size class:
+
+| `size_class` | Header bytes | Defined fields |
+|---:|---:|---|
+| 4 | 16 | prologue, type ID, flags, schema version, entry count |
+| 5 | 32 | stored body length and decompressed body length |
+| 6 | 64 | full BLAKE3 hash of the decompressed body |
+| 7 | 128 | stable file/import identities and reserved extension space |
+| 8 | 256 | forward-compatible reserved extension space |
+
+Readers accept only wire version `2` and size classes `4..=8`. Integers are
+parsed explicitly as little-endian. Unknown extension bytes are skipped up to
+the declared header boundary, while unsupported wire versions are rejected.
+
+`type_id` is a stable enum registry, not a bit mask. Values do not need to be
+powers of two. YBN owns ID `8`; NEFTD owns the distinct ID `22`.
+
+Small resources without header metadata may use the 16-byte class. Assets with
+decompressed-length information use 32 bytes; assets retaining a full BLAKE3
+integrity field use 64 bytes. A 128-byte header is selected only when identity
+or extension fields are actually requested.
+
 ## Internal architecture
 
 The crate keeps one public registry while separating responsibilities:

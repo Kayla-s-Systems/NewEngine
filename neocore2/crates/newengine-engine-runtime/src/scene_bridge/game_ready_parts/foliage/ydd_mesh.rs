@@ -244,7 +244,7 @@ pub(in crate::scene_bridge::game_ready) fn decode_runtime_ydd_prefab(
     let body = assets
         .decode_v1(&newengine_assets::AssetDecodeRequest {
             logical_path: logical_ref.to_owned(),
-            output_kind: "asset.list_file_body_v1".to_owned(),
+            output_kind: "asset.list_file_body".to_owned(),
             selector: serde_json::Value::Null,
         })
         .map_err(|error| {

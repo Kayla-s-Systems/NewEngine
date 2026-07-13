@@ -1,7 +1,7 @@
 use std::ops::Range;
 
 use newengine_assets_api::list_file::{
-    AssetDependencyRecordV1, ListFileEntryRecordV1, ListFileMetadataNamespaceV1,
+    AssetDependencyRecord, ListFileEntryRecord, ListFileMetadataNamespace,
 };
 use serde::{Deserialize, Serialize};
 
@@ -15,9 +15,9 @@ use crate::{
 pub struct DrawableDictionaryBodyV1 {
     pub schema: String,
     pub entries: Vec<DrawableEntryV1>,
-    pub common_entries: Vec<ListFileEntryRecordV1>,
-    pub dependencies: Vec<AssetDependencyRecordV1>,
-    pub metadata: Vec<ListFileMetadataNamespaceV1>,
+    pub common_entries: Vec<ListFileEntryRecord>,
+    pub dependencies: Vec<AssetDependencyRecord>,
+    pub metadata: Vec<ListFileMetadataNamespace>,
     pub mesh_parts: Vec<MeshPartRecordV1>,
     pub vertex_streams: Vec<VertexStreamDescriptorV1>,
     pub index_buffers: Vec<IndexBufferDescriptorV1>,

@@ -183,7 +183,7 @@ pub(crate) fn manifest_json(
         textures_method::MANIFEST_JSON_V1,
         "texture_dictionary.manifest_json",
         "texture_dictionary.manifest_json_v1",
-        "asset.list_file_manifest_v1",
+        "asset.list_file_manifest",
     ] {
         match state.client.decode_v1(&AssetDecodeRequest {
             logical_path: path.clone(),

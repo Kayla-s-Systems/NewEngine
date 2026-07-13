@@ -32,19 +32,19 @@ fn refs_are_classified_by_extension() {
     let raw = RawDefinitionEntryV1 {
         name: "body".to_owned(),
         dependencies: vec![
-            AssetDependencyRecordV1::new(
+            AssetDependencyRecord::new(
                 "models/foo.ydd@body",
                 "drawable",
                 "engine.assets.models",
                 true,
             ),
-            AssetDependencyRecordV1::new(
+            AssetDependencyRecord::new(
                 "materials/foo.nemat@body",
                 "material",
                 "engine.assets.materials",
                 true,
             ),
-            AssetDependencyRecordV1::new(
+            AssetDependencyRecord::new(
                 "textures/foo.ytd@diff",
                 "texture",
                 "engine.assets.textures",

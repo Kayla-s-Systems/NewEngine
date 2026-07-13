@@ -2,16 +2,19 @@
 
 use std::{collections::BTreeMap, ops::Range};
 
+mod nef8;
+pub use nef8::{encode_list_file, ListFileEncodeRequest};
+
 /// Canonical manifest schema returned by dictionary/container codecs for the
 /// data-driven asset world.
 ///
 /// `listFiles` answers one generic question for every format: which addressable
 /// entries does this logical file expose, and through which gateway/method should
 /// those entries be resolved?
-pub const ASSET_FILE_MANIFEST_SCHEMA: &str = "newengine.asset.list_files.v1";
-pub const ASSET_LIST_FILE_MANIFEST_OUTPUT: &str = "asset.list_file_manifest_v1";
-pub const ASSET_LIST_FILE_HEADER_OUTPUT: &str = "asset.list_file_header_v1";
-pub const ASSET_LIST_FILE_BODY_OUTPUT: &str = "asset.list_file_body_v1";
+pub const ASSET_FILE_MANIFEST_SCHEMA: &str = "newengine.asset.list_files";
+pub const ASSET_LIST_FILE_MANIFEST_OUTPUT: &str = "asset.list_file_manifest";
+pub const ASSET_LIST_FILE_HEADER_OUTPUT: &str = "asset.list_file_header";
+pub const ASSET_LIST_FILE_BODY_OUTPUT: &str = "asset.list_file_body";
 
 /// Declarative route from an asset entry to the gateway that owns its semantic
 /// interpretation. AssetManager still owns VFS bytes/codec dispatch; domain
@@ -123,14 +126,14 @@ impl AssetEntryDependency {
 /// material/model/texture semantics.
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(default)]
-pub struct AssetDependencyRecordV1 {
+pub struct AssetDependencyRecord {
     pub reference: String,
     pub role: String,
     pub required: bool,
     pub domain: String,
 }
 
-impl Default for AssetDependencyRecordV1 {
+impl Default for AssetDependencyRecord {
     fn default() -> Self {
         Self {
             reference: String::new(),
@@ -141,7 +144,7 @@ impl Default for AssetDependencyRecordV1 {
     }
 }
 
-impl AssetDependencyRecordV1 {
+impl AssetDependencyRecord {
     #[inline]
     pub fn new(
         reference: impl Into<String>,
@@ -165,7 +168,7 @@ impl AssetDependencyRecordV1 {
 /// ranges are relative to the inflated NEF8 body, never to a filesystem path.
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(default)]
-pub struct ListFileEntryRecordV1 {
+pub struct ListFileEntryRecord {
     pub name: String,
     pub stable_hash: u64,
     pub entry_kind: String,
@@ -178,7 +181,7 @@ pub struct ListFileEntryRecordV1 {
     pub flags: u32,
 }
 
-impl Default for ListFileEntryRecordV1 {
+impl Default for ListFileEntryRecord {
     fn default() -> Self {
         Self {
             name: String::new(),
@@ -195,7 +198,7 @@ impl Default for ListFileEntryRecordV1 {
     }
 }
 
-impl ListFileEntryRecordV1 {
+impl ListFileEntryRecord {
     #[inline]
     pub fn new(
         name: impl Into<String>,
@@ -217,7 +220,7 @@ impl ListFileEntryRecordV1 {
 /// and ignored by runtime domains that do not own them.
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
 #[serde(default)]
-pub struct ListFileMetadataNamespaceV1 {
+pub struct ListFileMetadataNamespace {
     pub namespace: String,
     pub schema: String,
     pub payload_offset: u64,
@@ -331,9 +334,18 @@ fn fnv1a64(bytes: &[u8]) -> u64 {
 /// but the top-level binary envelope is always NEF8. Concrete content identity is
 /// declared by `content_kind`, not by per-format magic bytes.
 pub const LIST_FILE_MAGIC_NEF8: [u8; 4] = *b"NEF8";
-pub const LIST_FILE_VERSION_V1: u16 = 1;
-pub const LIST_FILE_HEADER_LEN_V1: usize = 128;
+/// Current self-describing variable-header wire version.
+pub const LIST_FILE_VERSION: u16 = 2;
+pub const LIST_FILE_HEADER_SIZE_CLASS_MIN: u8 = 4;
+pub const LIST_FILE_HEADER_SIZE_CLASS_MAX: u8 = 8;
+pub const LIST_FILE_HEADER_LEN_MIN: usize = 16;
+/// Bodies below this threshold default to compact headers without full BLAKE3.
+pub const LIST_FILE_FULL_HASH_BODY_THRESHOLD: usize = 4096;
 pub const LIST_FILE_FLAG_BODY_DEFLATE: u16 = 0x0001;
+pub const LIST_FILE_FLAG_HEADER_METADATA: u16 = 0x0002;
+pub const LIST_FILE_FLAG_BODY_HASH_BLAKE3: u16 = 0x0004;
+pub const LIST_FILE_FLAG_STABLE_FILE_ID: u16 = 0x0008;
+pub const LIST_FILE_FLAG_IMPORT_SETTINGS_HASH: u16 = 0x0010;
 pub const LIST_FILE_COMPRESSION_DEFLATE: u16 = 1;
 
 pub const LIST_FILE_CONTENT_KIND_UNKNOWN: u32 = 0;
@@ -344,10 +356,10 @@ pub const LIST_FILE_CONTENT_KIND_NEMAT: u32 = 4;
 pub const LIST_FILE_CONTENT_KIND_YMAP: u32 = 5;
 pub const LIST_FILE_CONTENT_KIND_YDR: u32 = 6;
 pub const LIST_FILE_CONTENT_KIND_YFT: u32 = 7;
-/// North Star Font Dictionary: resident NEF8/ListFile font dictionary used by engine.ui.text.
-/// NOTE: currently shares kind 8 with legacy YBN until the historical YBN slot is migrated.
-pub const LIST_FILE_CONTENT_KIND_NEFTD: u32 = 8;
+/// Bounds dictionary type identifier.
 pub const LIST_FILE_CONTENT_KIND_YBN: u32 = 8;
+/// North Star font dictionary type identifier.
+pub const LIST_FILE_CONTENT_KIND_NEFTD: u32 = 22;
 pub const LIST_FILE_CONTENT_KIND_YMF: u32 = 9;
 pub const LIST_FILE_CONTENT_KIND_YMT: u32 = 10;
 pub const LIST_FILE_CONTENT_KIND_YCD: u32 = 11;
@@ -367,8 +379,10 @@ pub const LIST_FILE_CONTENT_KIND_NEUI: u32 = 32;
 pub const LIST_FILE_CONTENT_KIND_NEITEMS: u32 = 33;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct ListFileHeaderV1 {
+pub struct ListFileHeader {
     pub version: u16,
+    /// Header size class in `4..=8` (`header_len = 1 << size_class`).
+    pub size_class: u8,
     pub header_len: u16,
     pub content_kind: u32,
     pub content_schema_version: u16,
@@ -386,7 +400,7 @@ pub struct ListFileHeaderV1 {
     pub stable_file_id: u64,
 }
 
-impl ListFileHeaderV1 {
+impl ListFileHeader {
     #[inline]
     pub fn content_kind_label(&self) -> &'static str {
         list_file_content_kind_label(self.content_kind)
@@ -396,6 +410,16 @@ impl ListFileHeaderV1 {
     pub fn is_deflate_body(&self) -> bool {
         (self.flags & LIST_FILE_FLAG_BODY_DEFLATE) != 0
             && self.compression == LIST_FILE_COMPRESSION_DEFLATE
+    }
+
+    #[inline]
+    pub fn has_body_raw_hash(&self) -> bool {
+        (self.flags & LIST_FILE_FLAG_BODY_HASH_BLAKE3) != 0
+    }
+
+    #[inline]
+    pub fn content_kind_matches(&self, expected: u32) -> bool {
+        self.content_kind == expected
     }
 }
 
@@ -419,7 +443,7 @@ pub struct ListFileHeaderMetadata {
 impl Default for ListFileHeaderMetadata {
     fn default() -> Self {
         Self {
-            schema: "newengine.asset.list_file.header_metadata.v1".to_owned(),
+            schema: "newengine.asset.list_file.header_metadata".to_owned(),
             logical_path: String::new(),
             content_kind: String::new(),
             authored_by: String::new(),
@@ -450,7 +474,8 @@ pub const fn list_file_content_kind_label(kind: u32) -> &'static str {
         LIST_FILE_CONTENT_KIND_YMAP => "ymap_map_data",
         LIST_FILE_CONTENT_KIND_YDR => "ydr_drawable",
         LIST_FILE_CONTENT_KIND_YFT => "yft_fragment",
-        LIST_FILE_CONTENT_KIND_NEFTD => "neftd_or_ybn_dictionary",
+        LIST_FILE_CONTENT_KIND_YBN => "ybn_bounds_dictionary",
+        LIST_FILE_CONTENT_KIND_NEFTD => "neftd_font_dictionary",
         LIST_FILE_CONTENT_KIND_YMF => "ymf_manifest",
         LIST_FILE_CONTENT_KIND_YMT => "ymt_metadata",
         LIST_FILE_CONTENT_KIND_YCD => "ycd_clip_dictionary",
@@ -487,93 +512,8 @@ pub struct ListFileFormatSpec {
     pub selector_syntax: &'static str,
 }
 
-pub fn parse_list_file_header_v1(bytes: &[u8]) -> Result<ListFileHeaderV1, String> {
-    if bytes.len() < LIST_FILE_HEADER_LEN_V1 {
-        return Err(format!(
-            "NEF8 ListFile header too small: bytes={} expected>={}",
-            bytes.len(),
-            LIST_FILE_HEADER_LEN_V1
-        ));
-    }
-    if bytes.get(0..4) != Some(&LIST_FILE_MAGIC_NEF8[..]) {
-        return Err("NEF8 ListFile magic mismatch".to_owned());
-    }
-    let version = read_u16(bytes, 4)?;
-    if version != LIST_FILE_VERSION_V1 {
-        return Err(format!("unsupported NEF8 ListFile version {version}"));
-    }
-    let header_len = read_u16(bytes, 6)?;
-    if (header_len as usize) > bytes.len() || (header_len as usize) < LIST_FILE_HEADER_LEN_V1 {
-        return Err(format!("invalid NEF8 ListFile header_len={header_len}"));
-    }
-
-    let content_kind = read_u16(bytes, 8)? as u32;
-    if content_kind == LIST_FILE_CONTENT_KIND_UNKNOWN {
-        return Err("NEF8 ListFile content_kind unknown/invalid".to_owned());
-    }
-
-    let flags = read_u16(bytes, 10)?;
-    let compression = read_u16(bytes, 12)?;
-    if compression != LIST_FILE_COMPRESSION_DEFLATE {
-        return Err(format!(
-            "unsupported NEF8 ListFile body compression {compression}"
-        ));
-    }
-    if (flags & LIST_FILE_FLAG_BODY_DEFLATE) == 0 {
-        return Err(format!(
-            "NEF8 ListFile missing deflate body flag flags=0x{flags:04x}"
-        ));
-    }
-
-    let entry_count_u64 = read_u64(bytes, 40)?;
-    let entry_count = u32::try_from(entry_count_u64)
-        .map_err(|_| format!("NEF8 ListFile entry_count too large: {entry_count_u64}"))?;
-
-    // Canonical NEF8HeaderV1 layout:
-    // 0x08 u16 content_kind, 0x0A u16 flags, 0x0C u16 compression,
-    // 0x10.. body range, 0x28 entry_count, 0x30 metadata range,
-    // 0x40 body_raw_hash[32] (BLAKE3), 0x60 file uuid/stable id,
-    // 0x70 schema version.
-    Ok(ListFileHeaderV1 {
-        version,
-        header_len,
-        content_kind,
-        content_schema_version: read_u64(bytes, 112).unwrap_or(1) as u16,
-        flags,
-        compression,
-        entry_count,
-        body_offset: read_u64(bytes, 16)?,
-        body_len: read_u64(bytes, 24)?,
-        body_uncompressed_len: read_u64(bytes, 32)?,
-        header_metadata_offset: read_u64(bytes, 48)?,
-        header_metadata_len: read_u64(bytes, 56)?,
-        body_raw_hash: read_hash32(bytes, 64)?,
-        import_settings_hash: 0,
-        stable_file_id: read_u64(bytes, 96).unwrap_or(0),
-    })
-}
-
-fn read_u16(bytes: &[u8], offset: usize) -> Result<u16, String> {
-    let slice = bytes
-        .get(offset..offset + 2)
-        .ok_or_else(|| format!("NEF8 header truncated at u16 offset {offset}"))?;
-    Ok(u16::from_le_bytes([slice[0], slice[1]]))
-}
-
-fn read_u64(bytes: &[u8], offset: usize) -> Result<u64, String> {
-    let slice = bytes
-        .get(offset..offset + 8)
-        .ok_or_else(|| format!("NEF8 header truncated at u64 offset {offset}"))?;
-    Ok(u64::from_le_bytes([
-        slice[0], slice[1], slice[2], slice[3], slice[4], slice[5], slice[6], slice[7],
-    ]))
-}
-
-fn read_hash32(bytes: &[u8], offset: usize) -> Result<[u8; 32], String> {
-    let slice = bytes
-        .get(offset..offset + 32)
-        .ok_or_else(|| format!("NEF8 header truncated at hash32 offset {offset}"))?;
-    let mut out = [0u8; 32];
-    out.copy_from_slice(slice);
-    Ok(out)
+/// Parse the canonical self-describing NEF8 envelope.
+#[inline]
+pub fn parse_list_file_header(bytes: &[u8]) -> Result<ListFileHeader, String> {
+    nef8::parse_list_file_header(bytes)
 }

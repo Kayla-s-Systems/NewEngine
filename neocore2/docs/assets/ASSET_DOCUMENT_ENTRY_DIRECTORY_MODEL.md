@@ -13,7 +13,7 @@ path/file.ytyp
   @archetype_b
 ```
 
-The UI asks for `asset.list_file_manifest_v1` through `engine.assets` and receives addressable entries. It never parses the file body directly.
+The UI asks for `asset.list_file_manifest` through `engine.assets` and receives addressable entries. It never parses the file body directly.
 
 The global Right Edit Window consumes `EditorSelectionContext`:
 

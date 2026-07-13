@@ -2,12 +2,10 @@ use std::io::{Read, Write};
 
 use flate2::{read::DeflateDecoder, write::DeflateEncoder, Compression};
 use newengine_assets_api::{
-    parse_list_file_header_v1, LIST_FILE_COMPRESSION_DEFLATE, LIST_FILE_CONTENT_KIND_NEITEMS,
-    LIST_FILE_FLAG_BODY_DEFLATE, LIST_FILE_HEADER_LEN_V1, LIST_FILE_MAGIC_NEF8,
-    LIST_FILE_VERSION_V1,
+    encode_list_file, parse_list_file_header, ListFileEncodeRequest,
+    LIST_FILE_CONTENT_KIND_NEITEMS, LIST_FILE_FULL_HASH_BODY_THRESHOLD, LIST_FILE_MAGIC_NEF8,
 };
 use newengine_ecs::World;
-use newengine_math::fnv1a_64;
 use newengine_primitives::builtins as primitive_builtins;
 use serde::{Deserialize, Serialize};
 
@@ -315,7 +313,7 @@ pub fn install_compiled_item_package(world: &mut World, package: CompiledItemPac
 
 pub fn encode_authored_item_package_nef8(
     package: &AuthoredItemPackage,
-    logical_path: &str,
+    _logical_path: &str,
 ) -> Result<Vec<u8>, String> {
     validate_package_header(package)?;
     let body = serde_json::to_vec(package)
@@ -328,36 +326,31 @@ pub fn encode_authored_item_package_nef8(
         .finish()
         .map_err(|error| format!("NEITEMS deflate finish failed: {error}"))?;
 
-    let mut output = vec![0u8; LIST_FILE_HEADER_LEN_V1];
-    output[0..4].copy_from_slice(&LIST_FILE_MAGIC_NEF8);
-    write_u16(&mut output, 4, LIST_FILE_VERSION_V1);
-    write_u16(&mut output, 6, LIST_FILE_HEADER_LEN_V1 as u16);
-    write_u16(&mut output, 8, LIST_FILE_CONTENT_KIND_NEITEMS as u16);
-    write_u16(&mut output, 10, LIST_FILE_FLAG_BODY_DEFLATE);
-    write_u16(&mut output, 12, LIST_FILE_COMPRESSION_DEFLATE);
-    write_u64(&mut output, 16, LIST_FILE_HEADER_LEN_V1 as u64);
-    write_u64(&mut output, 24, compressed.len() as u64);
-    write_u64(&mut output, 32, body.len() as u64);
-    write_u64(
-        &mut output,
-        40,
-        package.items.len().saturating_add(package.loadouts.len()) as u64,
-    );
-    output[64..96].copy_from_slice(blake3::hash(&body).as_bytes());
-    write_u64(&mut output, 96, fnv1a_64(logical_path.as_bytes()));
-    write_u64(
-        &mut output,
-        104,
-        fnv1a_64(b"newengine.items.package.compiler.v1"),
-    );
-    write_u64(&mut output, 112, AUTHORED_ITEM_PACKAGE_VERSION as u64);
-    output.extend_from_slice(&compressed);
-    Ok(output)
+    let body_hash =
+        (body.len() >= LIST_FILE_FULL_HASH_BODY_THRESHOLD).then(|| *blake3::hash(&body).as_bytes());
+    let entry_count = package
+        .items
+        .len()
+        .saturating_add(package.loadouts.len())
+        .min(u32::MAX as usize) as u32;
+    encode_list_file(ListFileEncodeRequest {
+        content_kind: LIST_FILE_CONTENT_KIND_NEITEMS,
+        content_schema_version: AUTHORED_ITEM_PACKAGE_VERSION as u16,
+        entry_count,
+        additional_flags: 0,
+        min_size_class: 4,
+        header_metadata: &[],
+        body_stored: &compressed,
+        body_uncompressed_len: body.len() as u64,
+        body_raw_hash: body_hash,
+        stable_file_id: None,
+        import_settings_hash: None,
+    })
 }
 
 pub fn decode_authored_item_package_nef8(bytes: &[u8]) -> Result<AuthoredItemPackage, String> {
-    let header = parse_list_file_header_v1(bytes)?;
-    if header.content_kind != LIST_FILE_CONTENT_KIND_NEITEMS {
+    let header = parse_list_file_header(bytes)?;
+    if !header.content_kind_matches(LIST_FILE_CONTENT_KIND_NEITEMS) {
         return Err(format!(
             "NEITEMS content kind mismatch: got={} expected={}",
             header.content_kind, LIST_FILE_CONTENT_KIND_NEITEMS
@@ -381,14 +374,14 @@ pub fn decode_authored_item_package_nef8(bytes: &[u8]) -> Result<AuthoredItemPac
     decoder
         .read_to_end(&mut body)
         .map_err(|error| format!("NEITEMS deflate decode failed: {error}"))?;
-    if body.len() != header.body_uncompressed_len as usize {
+    if header.body_uncompressed_len != 0 && body.len() != header.body_uncompressed_len as usize {
         return Err(format!(
             "NEITEMS body length mismatch: got={} expected={}",
             body.len(),
             header.body_uncompressed_len
         ));
     }
-    if header.body_raw_hash != *blake3::hash(&body).as_bytes() {
+    if header.has_body_raw_hash() && header.body_raw_hash != *blake3::hash(&body).as_bytes() {
         return Err("NEITEMS body BLAKE3 hash mismatch".to_owned());
     }
     parse_authored_item_package_json(&body)
@@ -519,14 +512,6 @@ fn parse_use_effect(effect: Option<&AuthoredUseEffect>) -> Result<ItemUseEffect,
     }
 }
 
-fn write_u16(output: &mut [u8], offset: usize, value: u16) {
-    output[offset..offset + 2].copy_from_slice(&value.to_le_bytes());
-}
-
-fn write_u64(output: &mut [u8], offset: usize, value: u64) {
-    output[offset..offset + 8].copy_from_slice(&value.to_le_bytes());
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -576,6 +561,9 @@ mod tests {
         let encoded = encode_authored_item_package_nef8(&package, "items/test.neitems")
             .expect("encode NEITEMS");
         assert!(encoded.starts_with(&LIST_FILE_MAGIC_NEF8));
+        let header = parse_list_file_header(&encoded).expect("parse V2 header");
+        assert_eq!(header.version, newengine_assets_api::LIST_FILE_VERSION);
+        assert!(matches!(header.header_len, 32 | 64));
         let decoded = decode_authored_item_package_nef8(&encoded).expect("decode NEITEMS");
         assert_eq!(decoded, package);
     }

@@ -43,3 +43,30 @@ fn extension_lookup_normalizes_dot_and_case_once() {
     let descriptor = descriptor_for_extension(".YDD").expect("normalized ydd descriptor");
     assert_eq!(descriptor.extension, ydd::EXTENSION);
 }
+
+#[test]
+fn published_nef8_content_kind_ids_are_unique() {
+    let mut kinds = std::collections::BTreeMap::<u32, String>::new();
+    for descriptor in descriptors() {
+        let Some(kind) = descriptor.content_kind else {
+            continue;
+        };
+        assert_ne!(kind, newengine_assets_api::LIST_FILE_CONTENT_KIND_UNKNOWN);
+        if let Some(previous) = kinds.insert(kind, descriptor.extension.clone()) {
+            panic!(
+                "duplicate NEF8 content kind {} for .{} and .{}",
+                kind, previous, descriptor.extension
+            );
+        }
+    }
+    assert_eq!(
+        newengine_assets_api::LIST_FILE_CONTENT_KIND_YBN,
+        8,
+        "legacy YBN id is frozen"
+    );
+    assert_eq!(
+        newengine_assets_api::LIST_FILE_CONTENT_KIND_NEFTD,
+        22,
+        "NEFTD must have a dedicated non-colliding id"
+    );
+}

@@ -42,7 +42,7 @@ fn xml_tags(container: Option<authored_xml::XmlNode<'_, '_>>) -> Vec<String> {
 
 fn xml_dependencies(
     container: Option<authored_xml::XmlNode<'_, '_>>,
-) -> Vec<AssetDependencyRecordV1> {
+) -> Vec<AssetDependencyRecord> {
     let Some(container) = container else {
         return Vec::new();
     };
@@ -54,7 +54,7 @@ fn xml_dependencies(
             let role =
                 xml_attr_string(dep, &["role", "kind"]).unwrap_or_else(|| "dependency".to_owned());
             let domain = xml_attr_string(dep, &["domain"]).unwrap_or_default();
-            Some(AssetDependencyRecordV1::new(
+            Some(AssetDependencyRecord::new(
                 reference,
                 role,
                 domain,

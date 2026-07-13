@@ -361,7 +361,7 @@ pub mod method {
     // Debug/diagnostics.
     pub const RESOLVE_TRACE_JSON_V1: &str = "asset.resolve_trace_json_v1";
     /// Standard listFiles manifest for any dictionary/container asset. Codec-defined output; not a raw VFS read.
-    pub const LIST_FILE_MANIFEST_V1: &str = "asset.list_file_manifest_v1";
+    pub const LIST_FILE_MANIFEST: &str = "asset.list_file_manifest";
 
     // Editor/import lifecycle read-model.
     //

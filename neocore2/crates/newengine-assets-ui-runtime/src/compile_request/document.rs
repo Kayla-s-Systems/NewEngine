@@ -51,7 +51,7 @@ pub(crate) fn compile_document(
         }
     }
     let style_dependencies = inferred_style_ref.iter().cloned().collect::<Vec<_>>();
-    let binding_plan = parse_binding_plan(&xml, &resolved.document_ref, &surface.name);
+    let mut binding_plan = parse_binding_plan(&xml, &resolved.document_ref, &surface.name);
     let component_libraries = parse_component_libraries(&xml);
     let theme_libraries = parse_theme_libraries(&xml, surface.theme.as_deref());
     let local_component_templates = parse_component_templates(&xml, &resolved.document_ref);
@@ -75,6 +75,7 @@ pub(crate) fn compile_document(
         inferred_style_ref.as_deref(),
         &dialect,
     )?;
+    extend_binding_plan_with_inline_nodes(&mut binding_plan, &root);
     root.props.insert(
         "dialect_ref".to_owned(),
         serde_json::Value::String(dialect_ref.clone()),
@@ -94,7 +95,7 @@ pub(crate) fn compile_document(
         root.style_tags.dedup();
     }
     warnings.push(format!(
-        ".neui live root compiled source='{}' entry='@{}' surface='{}' root_node='{}' children={} component_libraries={} theme_libraries={} component_templates={} theme_tokens={}",
+        ".neui live root compiled source='{}' entry='@{}' surface='{}' root_node='{}' children={} component_libraries={} theme_libraries={} component_templates={} bindings={} theme_tokens={}",
         resolved.document_ref,
         resolved.entry,
         surface.name,
@@ -103,6 +104,7 @@ pub(crate) fn compile_document(
         component_libraries.len(),
         theme_libraries.len(),
         component_templates.len(),
+        binding_plan.bindings.len(),
         theme_tokens.as_ref().map(|tokens| tokens.theme_id.as_str()).unwrap_or("<none>")
     ));
     let source = UiDocumentSource {
