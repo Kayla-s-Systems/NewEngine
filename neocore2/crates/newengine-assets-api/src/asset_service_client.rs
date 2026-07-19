@@ -8,9 +8,9 @@ use crate::{
     textures_method, AssetAccess, AssetDecodeRequest, AssetDocument, AssetDocumentRequest,
     AssetError, AssetPatch, AssetPatchResult, AssetResult, AssetService, AssetState,
     NepakPackageWriteRequestV1, NepakPackageWriteResponseV1, Rgba8TextureAsset,
-    RuntimeTextureAsset, RuntimeTextureFormat, RuntimeTextureMip, ASSET_SERVICE_ID,
-    ENGINE_ASSETS_EDIT_SERVICE_ID, ENGINE_ASSETS_INSPECT_SERVICE_ID,
-    ENGINE_ASSETS_TEXTURES_SERVICE_ID,
+    RuntimeTextureAsset, RuntimeTextureFormat, RuntimeTextureMip, TextAssetWriteRequestV1,
+    TextAssetWriteResponseV1, ASSET_SERVICE_ID, ENGINE_ASSETS_EDIT_SERVICE_ID,
+    ENGINE_ASSETS_INSPECT_SERVICE_ID, ENGINE_ASSETS_TEXTURES_SERVICE_ID,
 };
 
 /// Thin client over the engine AssetManager service.
@@ -57,6 +57,7 @@ pub struct AssetServiceClient {
     m_dirty_scan_json_v1: MethodName,
     m_package_writer_info_json_v1: MethodName,
     m_package_write_nepak_json_v1: MethodName,
+    m_package_write_text_json_v1: MethodName,
     m_mount_source_json_v1: MethodName,
     m_get_state_v1: MethodName,
 }
@@ -104,6 +105,7 @@ impl AssetServiceClient {
             m_dirty_scan_json_v1: MethodName::from(method::DIRTY_SCAN_JSON_V1),
             m_package_writer_info_json_v1: MethodName::from(method::PACKAGE_WRITER_INFO_JSON_V1),
             m_package_write_nepak_json_v1: MethodName::from(method::PACKAGE_WRITE_NEPAK_JSON_V1),
+            m_package_write_text_json_v1: MethodName::from(method::PACKAGE_WRITE_TEXT_JSON_V1),
             m_mount_source_json_v1: MethodName::from(method::MOUNT_SOURCE_JSON_V1),
             m_get_state_v1: MethodName::from(method::GET_STATE_V1),
         }
@@ -150,6 +152,54 @@ impl AssetServiceClient {
             payload,
         )?;
         Self::decode_json::<AssetPatchResult>(bytes, "apply_patch_json_v1")
+    }
+
+    /// Stage an editor-produced patch without writing source bytes.
+    pub fn stage_patch_json_v1(&self, patch: AssetPatch) -> Result<AssetPatchResult, String> {
+        let payload = serde_json::to_vec(&patch)
+            .map_err(|e| format!("stage_patch_json_v1: invalid patch: {e}"))?;
+        let bytes = self.call_service(
+            ENGINE_ASSETS_EDIT_SERVICE_ID,
+            MethodName::from(asset_edit_method::STAGE_PATCH_JSON_V1),
+            payload,
+        )?;
+        Self::decode_json::<AssetPatchResult>(bytes, "stage_patch_json_v1")
+    }
+
+    /// Rebuild/commit all staged mutations for one logical asset container.
+    pub fn rebuild_staged_json_v1(&self, asset_ref: &str) -> Result<AssetPatchResult, String> {
+        let payload = serde_json::to_vec(&serde_json::json!({ "asset_ref": asset_ref }))
+            .map_err(|e| format!("rebuild_staged_json_v1: invalid request: {e}"))?;
+        let bytes = self.call_service(
+            ENGINE_ASSETS_EDIT_SERVICE_ID,
+            MethodName::from(asset_edit_method::REBUILD_JSON_V1),
+            payload,
+        )?;
+        Self::decode_json::<AssetPatchResult>(bytes, "rebuild_staged_json_v1")
+    }
+
+    /// Discard all staged mutations for one logical asset container.
+    pub fn discard_staged_json_v1(&self, asset_ref: &str) -> Result<AssetPatchResult, String> {
+        let payload = serde_json::to_vec(&serde_json::json!({ "asset_ref": asset_ref }))
+            .map_err(|e| format!("discard_staged_json_v1: invalid request: {e}"))?;
+        let bytes = self.call_service(
+            ENGINE_ASSETS_EDIT_SERVICE_ID,
+            MethodName::from(asset_edit_method::DISCARD_STAGED_JSON_V1),
+            payload,
+        )?;
+        Self::decode_json::<AssetPatchResult>(bytes, "discard_staged_json_v1")
+    }
+
+    /// Query staged/dirty state for one logical asset container.
+    pub fn dirty_state_json_v1(&self, asset_ref: &str) -> Result<AssetPatchResult, String> {
+        let payload = serde_json::to_vec(&serde_json::json!({ "asset_ref": asset_ref }))
+            .map_err(|e| format!("dirty_state_json_v1: invalid request: {e}"))?;
+        let bytes = self.call_service(
+            ENGINE_ASSETS_EDIT_SERVICE_ID,
+            MethodName::from(asset_edit_method::DIRTY_STATE_JSON_V1),
+            payload,
+        )?;
+        Self::decode_json::<AssetPatchResult>(bytes, "dirty_state_json_v1")
     }
 
     #[inline]
@@ -943,6 +993,15 @@ impl AssetService for AssetServiceClient {
         let bytes = serde_json::to_vec(&payload).map_err(|e| e.to_string())?;
         let bytes = self.call_raw(self.m_package_write_nepak_json_v1.clone(), bytes)?;
         Self::decode_json::<NepakPackageWriteResponseV1>(bytes, "package_write_nepak_json_v1")
+    }
+
+    fn package_write_text_json_v1(
+        &self,
+        payload: TextAssetWriteRequestV1,
+    ) -> Result<TextAssetWriteResponseV1, String> {
+        let bytes = serde_json::to_vec(&payload).map_err(|e| e.to_string())?;
+        let bytes = self.call_raw(self.m_package_write_text_json_v1.clone(), bytes)?;
+        Self::decode_json::<TextAssetWriteResponseV1>(bytes, "package_write_text_json_v1")
     }
 
     fn mount_source_json_v1(&self, payload: serde_json::Value) -> Result<(), String> {

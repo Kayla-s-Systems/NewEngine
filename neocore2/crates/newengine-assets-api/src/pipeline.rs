@@ -308,3 +308,36 @@ pub struct NepakPackageWriteResponseV1 {
     pub package_hash: String,
     pub diagnostics: Vec<String>,
 }
+
+/// Explicit UTF-8 text replacement through the AssetManager package-writer
+/// capability. This is a VFS write contract, not a direct filesystem path.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TextAssetWriteRequestV1 {
+    pub logical_path: String,
+    pub text: String,
+    pub expected_hash: String,
+    pub requested_capability: String,
+}
+
+impl Default for TextAssetWriteRequestV1 {
+    fn default() -> Self {
+        Self {
+            logical_path: String::new(),
+            text: String::new(),
+            expected_hash: String::new(),
+            requested_capability: crate::ASSETS_PACKAGE_WRITER_CAPABILITY_ID.to_owned(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct TextAssetWriteResponseV1 {
+    pub ok: bool,
+    pub written: bool,
+    pub logical_path: String,
+    pub bytes_written: u64,
+    pub content_hash: String,
+    pub diagnostics: Vec<String>,
+}

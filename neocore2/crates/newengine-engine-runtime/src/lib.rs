@@ -9,6 +9,7 @@
 //! this layer; they must not create backend resources or Vulkan objects directly.
 pub(crate) mod env_config;
 
+pub mod asset_preview;
 pub mod audio_gateway;
 pub mod authority;
 pub mod camera_gateway;
@@ -32,6 +33,7 @@ pub mod scene_bridge;
 mod ui_gateway;
 pub mod viewport_bridge;
 
+pub use asset_preview::{AssetPreviewApi, AssetPreviewKind, AssetPreviewSnapshot};
 pub use audio_gateway::register_audio_gateway_best_effort;
 pub use authority::{
     RuntimeWorldAuthorityBridge, RuntimeWorldAuthorityFrame, RuntimeWorldAuthorityMode,

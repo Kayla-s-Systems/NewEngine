@@ -123,6 +123,35 @@ mod tests {
     }
 
     #[test]
+    fn preview_selector_prefers_opaque_base_color_material_over_glass() {
+        let body = br#"<NematMaterialLibrary schema="newengine.nemat.material_library.v1" version="1">
+            <Material name="cpp_glasses" shader="pbr.default">
+                <Surface blend="alpha" two_sided="True" />
+                <Textures><Texture slot="normal" ref="textures/test.ytd@normal" /></Textures>
+                <Params><Param name="base_color" type="color" value="0.03,0.03,0.03,0.32" /></Params>
+            </Material>
+            <Material name="material" shader="pbr.default">
+                <Surface blend="opaque" two_sided="False" />
+                <Textures><Texture slot="base_color" ref="textures/test.ytd@base" /></Textures>
+                <Params><Param name="base_color" type="color" value="1,1,1,1" /></Params>
+            </Material>
+        </NematMaterialLibrary>"#;
+
+        assert_eq!(preview_material_name_from_body(body).unwrap(), "material");
+    }
+
+    #[test]
+    fn preview_selector_falls_back_to_first_named_material_when_all_are_transparent() {
+        let body =
+            br#"<NematMaterialLibrary schema="newengine.nemat.material_library.v1" version="1">
+            <Material name="glass_a" shader="pbr.default"><Surface blend="alpha" /></Material>
+            <Material name="glass_b" shader="pbr.default"><Surface blend="alpha" /></Material>
+        </NematMaterialLibrary>"#;
+
+        assert_eq!(preview_material_name_from_body(body).unwrap(), "glass_a");
+    }
+
+    #[test]
     fn material_library_payload_selects_entry() {
         let payload = br#"<?xml version="1.0" encoding="UTF-8"?>
 <NematMaterialLibrary schema="newengine.nemat.material_library.v1" version="1">
@@ -218,6 +247,32 @@ impl MaterialAssetGatewayAdapter {
             descriptor_cache: Arc::new(Mutex::new(HashMap::default())),
             graph_cache: Arc::new(Mutex::new(HashMap::default())),
         }
+    }
+
+    pub fn preview_material_ref(&self, logical_path: &str) -> Result<String, String> {
+        let source = normalize_material_logical_path(
+            logical_path.split('@').next().unwrap_or(logical_path),
+        )?;
+        if !source.to_ascii_lowercase().ends_with(&format!(
+            ".{}",
+            newengine_asset_format_nef8::nemat::EXTENSION
+        )) {
+            return Err(format!(
+                "materials: expected provider-declared material library path, got '{source}'"
+            ));
+        }
+        let bytes = self
+            .client
+            .decode_v1(&AssetDecodeRequest {
+                logical_path: source.clone(),
+                output_kind: ASSET_LIST_FILE_BODY_OUTPUT.to_owned(),
+                selector: serde_json::Value::Null,
+            })
+            .map_err(|e| format!(
+                "engine.assets decode_v1 failed path='{source}' output='{ASSET_LIST_FILE_BODY_OUTPUT}' err='{e}'"
+            ))?;
+        let selector = preview_material_name_from_body(&bytes)?;
+        Ok(format!("{source}@{selector}"))
     }
 
     pub fn load_material(
@@ -743,6 +798,72 @@ fn split_nemat_selector(
     }
     let source = normalize_material_logical_path(path_part)?;
     Ok((source, selector.to_owned()))
+}
+
+fn preview_material_name_from_body(bytes: &[u8]) -> Result<String, String> {
+    let text = std::str::from_utf8(bytes).map_err(|_| {
+        "NEMAT payload must be UTF-8 XML material library inside the NEF8 ListFile body".to_owned()
+    })?;
+    if !authored_xml::text_is_xml(text) {
+        return Err(
+            "NEMAT body must be XML <NematMaterialLibrary>; JSON material bodies are forbidden in authored .nemat files"
+                .to_owned(),
+        );
+    }
+    let library = decode_nemat_material_library_xml(text)?;
+    let validation = validate_authored_material_library(&library);
+    if !validation.valid {
+        return Err(format!(
+            "invalid XML material library: {}",
+            validation.errors.join("; ")
+        ));
+    }
+
+    library
+        .materials
+        .iter()
+        .enumerate()
+        .filter(|(_, material)| !material.name.trim().is_empty())
+        .max_by_key(|(index, material)| {
+            // A root .nemat preview is a visual thumbnail, not semantic entry
+            // selection. Prefer a material that can visibly demonstrate the
+            // library: opaque first, then base-color-textured, then any textured
+            // material. Preserve authored order as the final tie-breaker.
+            let blend = material.surface.blend.trim().to_ascii_lowercase();
+            let opaque = matches!(blend.as_str(), "" | "opaque");
+            let has_base_color = material.textures.keys().any(|slot| {
+                matches!(
+                    slot.trim().to_ascii_lowercase().as_str(),
+                    "base_color" | "basecolor" | "albedo" | "diffuse"
+                )
+            });
+            let base_alpha = material
+                .params
+                .get("base_color")
+                .and_then(|value| match value {
+                    MaterialParamValue::Color(value) | MaterialParamValue::Float4(value) => {
+                        Some(value[3])
+                    }
+                    _ => None,
+                })
+                .unwrap_or(1.0);
+            let visible_alpha = base_alpha >= 0.95;
+            let textured = !material.textures.is_empty();
+            let conventional_name = matches!(
+                material.name.trim().to_ascii_lowercase().as_str(),
+                "material" | "default" | "main" | "body"
+            );
+            (
+                opaque as u8,
+                visible_alpha as u8,
+                has_base_color as u8,
+                textured as u8,
+                conventional_name as u8,
+                usize::MAX - *index,
+            )
+        })
+        .map(|(_, material)| material.name.trim().to_owned())
+        .ok_or_else(|| "material library contains no named materials".to_owned())
 }
 
 fn decode_material_entry_payload(

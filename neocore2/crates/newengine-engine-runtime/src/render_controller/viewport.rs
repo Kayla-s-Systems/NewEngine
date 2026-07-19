@@ -26,7 +26,9 @@ impl RuntimeRenderController {
             self.viewport.render_target = None;
         }
 
-        let color_format = if self.runtime_profile().hdr_scene_enabled() {
+        let color_format = if self.external_preview_target_active() {
+            TextureFormat::Bgra8Unorm
+        } else if self.runtime_profile().hdr_scene_enabled() {
             super::render_quality::SCENE_HDR_COLOR_FORMAT
         } else {
             TextureFormat::Bgra8Unorm

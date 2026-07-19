@@ -31,12 +31,23 @@ pub(crate) fn mount_asset_inspector_surface() -> Result<String, String> {
             response.document_ref
         ));
     }
-    for warning in &response.warnings {
-        newengine_ulog_api::ulog::warn!(
-            "asset inspector: authored UI compile warning document='{}' warning='{}'",
-            response.document_ref,
-            warning
-        );
+    for diagnostic in &response.warnings {
+        let informational = diagnostic.contains("resolved ref=")
+            || diagnostic.contains("dialect loaded ref=")
+            || diagnostic.contains("live root compiled source=");
+        if informational {
+            newengine_ulog_api::ulog::info!(
+                "asset inspector: authored UI compile detail document='{}' detail='{}'",
+                response.document_ref,
+                diagnostic
+            );
+        } else {
+            newengine_ulog_api::ulog::warn!(
+                "asset inspector: authored UI compile warning document='{}' warning='{}'",
+                response.document_ref,
+                diagnostic
+            );
+        }
     }
     let surface_id = if response.compiled_document.surface_id.trim().is_empty() {
         response.surface_id.clone()

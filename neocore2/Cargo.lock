@@ -190,14 +190,20 @@ dependencies = [
  "newengine-assets",
  "newengine-assets-ui-runtime",
  "newengine-core",
+ "newengine-definitions-runtime",
  "newengine-engine-runtime",
+ "newengine-material-domain-gameready",
+ "newengine-material-runtime",
+ "newengine-model-runtime",
  "newengine-plugin-host",
  "newengine-render-ui-bridge",
  "newengine-runtime-host",
  "newengine-scene",
  "newengine-scene-runtime",
  "newengine-schema-runtime",
+ "newengine-textures-runtime",
  "newengine-ui",
+ "newengine-ulog-api",
 ]
 
 [[package]]
@@ -1691,11 +1697,10 @@ dependencies = [
  "newengine-assets",
  "newengine-assets-api",
  "newengine-assets-ui-runtime",
- "newengine-authored-xml",
  "newengine-core",
- "newengine-model-import-obj",
+ "newengine-engine-runtime",
  "newengine-plugin-host",
- "newengine-texture-container",
+ "newengine-schema-api",
  "newengine-ui-api",
  "newengine-ulog-api",
  "serde",
@@ -1959,6 +1964,7 @@ dependencies = [
  "newengine-input-bindings-runtime",
  "newengine-lighting",
  "newengine-material-domain-api",
+ "newengine-material-runtime",
  "newengine-materials",
  "newengine-math",
  "newengine-model-domain-api",
@@ -2262,6 +2268,7 @@ dependencies = [
  "newengine-primitives",
  "newengine-service-api",
  "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -2417,6 +2424,7 @@ dependencies = [
  "newengine-lighting",
  "newengine-material-domain-api",
  "newengine-math",
+ "newengine-model-domain-api",
  "newengine-plugin-api",
  "newengine-scene",
  "newengine-transform",

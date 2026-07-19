@@ -1,472 +1,316 @@
-use newengine_assets::AssetServiceClient;
-use newengine_assets_api::{
-    AssetDecodeRequest, AssetFileManifest, ASSET_LIST_FILE_MANIFEST_OUTPUT,
-};
-use newengine_core::{EngineReadinessKey, EngineResult, Module, ModuleCtx};
-use newengine_ui_api::{UiEventDispatchFrame, UiNodeEventTrigger};
-use serde_json::{json, Value};
+use std::collections::VecDeque;
+use std::sync::Arc;
+use std::time::Instant;
 
-use crate::inspection::NativeAssetInspector;
-use crate::model::{AssetInspectorMode, AssetInspectorReport, InspectorEntry};
-use crate::mounts::mount_asset_roots;
-use crate::source_pair::{is_source_asset_ref, source_runtime_counterpart};
+use newengine_assets_api::{AssetDocument, AssetDocumentField, AssetPatchResult};
+use newengine_core::{EngineReadinessKey, EngineResult, Module, ModuleCtx};
+use newengine_engine_runtime::{AssetPreviewApi, AssetPreviewKind, AssetPreviewSnapshot};
+use newengine_ui_api::{UiEventDispatchFrame, UiInputFrame, UiNodeEventTrigger};
+
+use crate::facade::EngineAssetFacade;
+use crate::model::{AssetInspectorMode, InspectorEntry};
 use crate::surface::mount_asset_inspector_surface;
-use crate::ui_state::{publish_inspector_state, InspectorUiSnapshot, ENTRY_ROWS};
+use crate::syntax_preview::{highlight_editor_page, highlight_preview_page, SyntaxPreviewPage};
+use crate::ui_state::{
+    publish_inspector_state, InspectorUiSnapshot, ACTION_ROWS, ENTRY_ROWS, FIELD_ROWS,
+    PREVIEW_ENTRY_ROWS, TEXT_ROWS,
+};
 use crate::ASSET_INSPECTOR_SURFACE_ID;
 
+mod activity;
+mod document;
+mod interaction;
+mod lifecycle;
+mod navigation;
+mod presentation;
+#[cfg(test)]
+mod tests;
 const ACTION_REFRESH: &str = "asset.inspector.refresh";
 const ACTION_UP: &str = "asset.inspector.up";
-const ACTION_PAGE_PREVIOUS: &str = "asset.inspector.page.previous";
-const ACTION_PAGE_NEXT: &str = "asset.inspector.page.next";
 const ACTION_MODE_ALL: &str = "asset.inspector.mode.all";
-const ACTION_MODE_RUNTIME: &str = "asset.inspector.mode.runtime";
-const ACTION_MODE_SOURCE: &str = "asset.inspector.mode.source";
+const ACTION_MODE_ASSETS: &str = "asset.inspector.mode.assets";
+const ACTION_MODE_FOLDERS: &str = "asset.inspector.mode.folders";
 const ACTION_ENTRY: &str = "asset.inspector.entry";
-const ACTION_COUNTERPART: &str = "asset.inspector.counterpart";
+const ACTION_CONTAINER_OPEN: &str = "asset.inspector.container.open";
+const ACTION_PREVIEW_ENTRY: &str = "asset.inspector.preview_entry";
+const ACTION_PREVIEW_ENTRIES_REFRESH: &str = "asset.inspector.preview_entries.refresh";
+const ACTION_INFO_OPEN: &str = "asset.inspector.info.open";
+const ACTION_INFO_CLOSE: &str = "asset.inspector.info.close";
+const ACTION_FIELD_EDIT: &str = "asset.inspector.field.edit";
+const ACTION_DOCUMENT_ACTION: &str = "asset.inspector.document_action";
+const ACTION_HOVER: &str = "asset.inspector.hover";
+const ACTION_TEXT_LINE_EDIT: &str = "asset.inspector.text_line.edit";
+const ACTION_TEXT_PREVIOUS: &str = "asset.inspector.text.previous";
+const ACTION_TEXT_NEXT: &str = "asset.inspector.text.next";
+const ACTION_TEXT_SAVE: &str = "asset.inspector.text.save";
+const ACTION_TEXT_DISCARD: &str = "asset.inspector.text.discard";
+const ACTION_TEXT_CLOSE: &str = "asset.inspector.text.close";
+const UI_SCROLLBAR_DRAG_ACTION: &str = "ui.scrollbar.drag";
+const UI_SCROLL_WHEEL_ACTION: &str = "ui.scroll.wheel";
+const BROWSER_SCROLL_NODE_ID: &str = "asset.inspector.browser.scroll";
+const PREVIEW_ENTRIES_SCROLL_NODE_ID: &str = "asset.inspector.entries.scroll";
+const STARTUP_ASSET_ENV: &str = "NEWENGINE_ASSET_INSPECTOR_OPEN";
+const ACTIVITY_BAR_INNER_WIDTH_PX: f32 = 156.0;
+const ACTIVITY_COMPLETE_ANIMATION_FRAMES: u64 = 18;
+const ACTIVITY_COMPLETE_HOLD_FRAMES: u64 = 12;
+const ACTIVITY_PUBLISH_INTERVAL_FRAMES: u64 = 3;
+const DOCUMENT_CACHE_CAPACITY: usize = 8;
+const PREVIEW_WIDTH: u32 = 488;
+const PREVIEW_HEIGHT: u32 = 236;
+const PREVIEW_ENTRY_CACHE_CAPACITY: usize = 8;
+const PREVIEW_ENTRY_LOAD_DELAY_FRAMES: u64 = 2;
+const PREVIEW_PAN_MOUSE_BUTTON: u32 = 3; // newengine_input_api::mouse_button::MIDDLE
 
-pub struct AssetInspectorRuntimeModule {
-    assets: AssetServiceClient,
-    inspector: NativeAssetInspector,
-    current_path: String,
-    mode: AssetInspectorMode,
-    page: usize,
-    entries: Vec<InspectorEntry>,
-    selected_index: Option<usize>,
-    report: Option<AssetInspectorReport>,
-    status: String,
-    last_refresh_frame: u64,
-    last_action_frame: u64,
-    dirty: bool,
-    roots_mounted: bool,
-    last_root_mount_attempt_frame: u64,
-    surface_mounted: bool,
-    last_surface_mount_attempt_frame: u64,
+#[derive(Clone, Debug)]
+struct InspectorActivity {
+    label: String,
+    started_frame: u64,
+    completed_frame: Option<u64>,
+    waiting_for_preview: bool,
+    last_published_frame: u64,
 }
 
-impl Default for AssetInspectorRuntimeModule {
-    fn default() -> Self {
-        Self::new()
+#[derive(Clone, Debug)]
+struct TextEditorState {
+    asset_ref: String,
+    original_text: String,
+    lines: Vec<String>,
+    line_ending: &'static str,
+    page: usize,
+    language: String,
+    editable: bool,
+    dirty: bool,
+}
+
+impl TextEditorState {
+    fn from_document(document: &AssetDocument) -> Option<Self> {
+        let text = document.text.as_ref()?;
+        let line_ending = if text.content.contains("\r\n") {
+            "\r\n"
+        } else {
+            "\n"
+        };
+        let normalized = text.content.replace("\r\n", "\n");
+        let lines = normalized
+            .split('\n')
+            .map(str::to_owned)
+            .collect::<Vec<_>>();
+        Some(Self {
+            asset_ref: document.asset_ref.clone(),
+            original_text: text.content.clone(),
+            lines: if lines.is_empty() {
+                vec![String::new()]
+            } else {
+                lines
+            },
+            line_ending,
+            page: 0,
+            language: text.language.clone(),
+            editable: text.editable && !text.truncated,
+            dirty: false,
+        })
     }
+
+    fn compose(&self) -> String {
+        self.lines.join(self.line_ending)
+    }
+
+    fn total_pages(&self) -> usize {
+        self.lines.len().max(1).div_ceil(TEXT_ROWS)
+    }
+
+    fn reset(&mut self) {
+        let normalized = self.original_text.replace("\r\n", "\n");
+        self.lines = normalized.split('\n').map(str::to_owned).collect();
+        if self.lines.is_empty() {
+            self.lines.push(String::new());
+        }
+        self.page = self.page.min(self.total_pages().saturating_sub(1));
+        self.dirty = false;
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+struct DocumentCache {
+    entries: VecDeque<(String, AssetDocument)>,
+}
+
+impl DocumentCache {
+    fn get(&mut self, asset_ref: &str) -> Option<AssetDocument> {
+        let index = self
+            .entries
+            .iter()
+            .position(|(cached_ref, _)| cached_ref == asset_ref)?;
+        let entry = self.entries.remove(index)?;
+        let document = entry.1.clone();
+        self.entries.push_front(entry);
+        Some(document)
+    }
+
+    fn insert(&mut self, document: &AssetDocument) {
+        self.invalidate(&document.asset_ref);
+        self.entries
+            .push_front((document.asset_ref.clone(), document.clone()));
+        self.entries.truncate(DOCUMENT_CACHE_CAPACITY);
+    }
+
+    fn invalidate(&mut self, asset_ref: &str) {
+        self.entries
+            .retain(|(cached_ref, _)| cached_ref != asset_ref);
+    }
+
+    fn clear(&mut self) {
+        self.entries.clear();
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+struct PreviewEntryCache {
+    entries: VecDeque<(String, Vec<InspectorEntry>)>,
+}
+
+impl PreviewEntryCache {
+    fn get(&mut self, source_ref: &str) -> Option<Vec<InspectorEntry>> {
+        let index = self
+            .entries
+            .iter()
+            .position(|(cached_ref, _)| cached_ref == source_ref)?;
+        let entry = self.entries.remove(index)?;
+        let value = entry.1.clone();
+        self.entries.push_front(entry);
+        Some(value)
+    }
+
+    fn insert(&mut self, source_ref: &str, entries: &[InspectorEntry]) {
+        self.invalidate(source_ref);
+        self.entries
+            .push_front((source_ref.to_owned(), entries.to_vec()));
+        self.entries.truncate(PREVIEW_ENTRY_CACHE_CAPACITY);
+    }
+
+    fn invalidate(&mut self, source_ref: &str) {
+        self.entries
+            .retain(|(cached_ref, _)| cached_ref != source_ref);
+    }
+
+    fn clear(&mut self) {
+        self.entries.clear();
+    }
+}
+
+#[derive(Clone, Debug)]
+struct PendingPreviewEntriesLoad {
+    source_ref: String,
+    requested_frame: u64,
+}
+
+#[derive(Clone, Debug)]
+struct PendingPreviewEntryActivation {
+    entry: InspectorEntry,
+    row: usize,
+    requested_frame: u64,
+}
+
+#[derive(Clone, Debug)]
+struct PendingEntryActivation {
+    entry: InspectorEntry,
+    absolute_index: usize,
+    requested_frame: u64,
+}
+
+pub struct AssetInspectorRuntimeModule {
+    facade: EngineAssetFacade,
+    preview_api: Arc<AssetPreviewApi>,
+    preview_snapshot: Option<AssetPreviewSnapshot>,
+    startup_asset_ref: Option<String>,
+    startup_asset_opened: bool,
+    startup_asset_attempts: u32,
+    last_startup_asset_attempt_frame: Option<u64>,
+    current_path: String,
+    inside_container: bool,
+    mode: AssetInspectorMode,
+    browser_window_start: usize,
+    entries: Vec<InspectorEntry>,
+    selected_index: Option<usize>,
+    pending_entry_activation: Option<PendingEntryActivation>,
+    pending_preview_entry_activation: Option<PendingPreviewEntryActivation>,
+    pending_preview_entries_load: Option<PendingPreviewEntriesLoad>,
+    preview_entry_cache: PreviewEntryCache,
+    preview_entries: Vec<InspectorEntry>,
+    preview_entries_source: String,
+    selected_preview_entry: Option<usize>,
+    preview_entries_window_start: usize,
+    document_cache: DocumentCache,
+    text_editor: Option<TextEditorState>,
+    syntax_preview: Option<SyntaxPreviewPage>,
+    syntax_editor: Option<SyntaxPreviewPage>,
+    document: Option<AssetDocument>,
+    last_patch_result: Option<AssetPatchResult>,
+    selected_container_entry_count: usize,
+    selected_container_available: bool,
+    status: String,
+    activity: Option<InspectorActivity>,
+    hovered_node: Option<String>,
+    hover_hint: String,
+    preview_pointer_captured: bool,
+    preview_middle_pan_active: bool,
+    current_preview_cache_valid: bool,
+    info_modal_visible: bool,
+    last_refresh_frame: Option<u64>,
+    last_action_frame: Option<u64>,
+    dirty: bool,
+    surface_mounted: bool,
+    last_surface_mount_attempt_frame: Option<u64>,
 }
 
 impl AssetInspectorRuntimeModule {
-    pub fn new() -> Self {
+    pub fn new(preview_api: Arc<AssetPreviewApi>) -> Self {
         Self {
-            assets: AssetServiceClient::new(newengine_plugin_host::default_host_api()),
-            inspector: NativeAssetInspector::new(),
+            facade: EngineAssetFacade::new(),
+            preview_api,
+            preview_snapshot: None,
+            startup_asset_ref: std::env::var(STARTUP_ASSET_ENV)
+                .ok()
+                .map(|value| value.trim().replace('\\', "/"))
+                .filter(|value| !value.is_empty()),
+            startup_asset_opened: false,
+            startup_asset_attempts: 0,
+            last_startup_asset_attempt_frame: None,
             current_path: String::new(),
+            inside_container: false,
             mode: AssetInspectorMode::All,
-            page: 0,
+            browser_window_start: 0,
             entries: Vec::new(),
             selected_index: None,
-            report: None,
-            status: "Waiting for engine.assets".to_owned(),
-            last_refresh_frame: 0,
-            last_action_frame: u64::MAX,
+            pending_entry_activation: None,
+            pending_preview_entry_activation: None,
+            pending_preview_entries_load: None,
+            preview_entry_cache: PreviewEntryCache::default(),
+            preview_entries: Vec::new(),
+            preview_entries_source: String::new(),
+            selected_preview_entry: None,
+            preview_entries_window_start: 0,
+            document_cache: DocumentCache::default(),
+            text_editor: None,
+            syntax_preview: None,
+            syntax_editor: None,
+            document: None,
+            last_patch_result: None,
+            selected_container_entry_count: 0,
+            selected_container_available: false,
+            status: "Waiting for engine.assets and engine.ui".to_owned(),
+            activity: None,
+            hovered_node: None,
+            hover_hint: String::new(),
+            preview_pointer_captured: false,
+            preview_middle_pan_active: false,
+            current_preview_cache_valid: false,
+            info_modal_visible: false,
+            last_refresh_frame: None,
+            last_action_frame: None,
             dirty: true,
-            roots_mounted: false,
-            last_root_mount_attempt_frame: u64::MAX,
             surface_mounted: false,
-            last_surface_mount_attempt_frame: u64::MAX,
+            last_surface_mount_attempt_frame: None,
         }
-    }
-
-    fn ensure_roots_mounted(&mut self, frame_index: u64) {
-        if self.roots_mounted {
-            return;
-        }
-        let should_attempt = self.last_root_mount_attempt_frame == u64::MAX
-            || frame_index.saturating_sub(self.last_root_mount_attempt_frame) >= 30;
-        if !should_attempt {
-            return;
-        }
-        self.last_root_mount_attempt_frame = frame_index;
-        match mount_asset_roots(&self.assets) {
-            Ok(roots) => {
-                self.roots_mounted = true;
-                self.last_refresh_frame = 0;
-                self.status = format!("Mounted {} standalone gameAssets root(s)", roots.len());
-                self.dirty = true;
-                for root in roots {
-                    newengine_ulog_api::ulog::info!(
-                        "asset inspector: standalone VFS root mounted path='{}'",
-                        root.display()
-                    );
-                }
-            }
-            Err(error) => {
-                self.status = format!("Waiting for engine.assets VFS: {error}");
-                if frame_index == 0 || frame_index.is_multiple_of(120) {
-                    newengine_ulog_api::ulog::warn!(
-                        "asset inspector: standalone VFS mount deferred frame={} err='{}'",
-                        frame_index,
-                        error
-                    );
-                }
-            }
-        }
-    }
-
-    fn ensure_surface_mounted(&mut self, frame_index: u64) {
-        if self.surface_mounted || !self.roots_mounted {
-            return;
-        }
-        let should_attempt = self.last_surface_mount_attempt_frame == u64::MAX
-            || frame_index.saturating_sub(self.last_surface_mount_attempt_frame) >= 30;
-        if !should_attempt {
-            return;
-        }
-        self.last_surface_mount_attempt_frame = frame_index;
-        match mount_asset_inspector_surface() {
-            Ok(_) => {
-                self.surface_mounted = true;
-                self.status = "Standalone authored UI mounted".to_owned();
-                self.dirty = true;
-            }
-            Err(error) => {
-                self.status = format!("Waiting for standalone UI services: {error}");
-                if frame_index == 0 || frame_index.is_multiple_of(120) {
-                    newengine_ulog_api::ulog::warn!(
-                        "asset inspector: standalone surface mount deferred frame={} err='{}'",
-                        frame_index,
-                        error
-                    );
-                }
-            }
-        }
-    }
-
-    fn refresh(&mut self, frame_index: u64) {
-        match list_path(&self.assets, &self.current_path) {
-            Ok(mut entries) => {
-                entries.retain(|entry| self.mode.accepts(entry.is_directory, entry.source_asset));
-                entries.sort_by(|a, b| {
-                    b.is_directory.cmp(&a.is_directory).then_with(|| {
-                        a.name
-                            .to_ascii_lowercase()
-                            .cmp(&b.name.to_ascii_lowercase())
-                    })
-                });
-                self.entries = entries;
-                let total_pages = self.entries.len().max(1).div_ceil(ENTRY_ROWS);
-                self.page = self.page.min(total_pages.saturating_sub(1));
-                if self
-                    .selected_index
-                    .is_some_and(|index| index >= self.entries.len())
-                {
-                    self.selected_index = None;
-                    self.report = None;
-                }
-                self.status = format!(
-                    "{} entries · {} mode · native codecs through engine.assets",
-                    self.entries.len(),
-                    self.mode.label()
-                );
-                newengine_ulog_api::ulog::info!(
-                    "asset inspector: VFS snapshot path='{}' mode={} entries={} source_entries={} runtime_entries={}",
-                    if self.current_path.is_empty() { "<root>" } else { self.current_path.as_str() },
-                    self.mode.label(),
-                    self.entries.len(),
-                    self.entries.iter().filter(|entry| entry.source_asset).count(),
-                    self.entries.iter().filter(|entry| !entry.source_asset && !entry.is_directory).count(),
-                );
-            }
-            Err(error) => {
-                self.entries.clear();
-                self.status = error;
-            }
-        }
-        self.last_refresh_frame = frame_index;
-        self.dirty = true;
-    }
-
-    fn handle_actions(&mut self, frame: &UiEventDispatchFrame) {
-        if self.last_action_frame == frame.frame_index {
-            return;
-        }
-        let mut consumed = false;
-        for action in frame
-            .actions
-            .iter()
-            .filter(|action| action.surface_id == ASSET_INSPECTOR_SURFACE_ID)
-            .filter(|action| {
-                matches!(
-                    action.trigger,
-                    UiNodeEventTrigger::Click | UiNodeEventTrigger::DoubleClick
-                )
-            })
-        {
-            consumed = true;
-            match action.action_id.as_str() {
-                ACTION_REFRESH => self.refresh(frame.frame_index),
-                ACTION_UP => self.navigate_up(),
-                ACTION_PAGE_PREVIOUS => self.page = self.page.saturating_sub(1),
-                ACTION_PAGE_NEXT => {
-                    let max_page = self.entries.len().max(1).div_ceil(ENTRY_ROWS) - 1;
-                    self.page = (self.page + 1).min(max_page);
-                }
-                ACTION_MODE_ALL => self.set_mode(AssetInspectorMode::All),
-                ACTION_MODE_RUNTIME => self.set_mode(AssetInspectorMode::Runtime),
-                ACTION_MODE_SOURCE => self.set_mode(AssetInspectorMode::Source),
-                ACTION_ENTRY => {
-                    if let Some(row) = parse_row(&action.node_id) {
-                        self.activate_row(row);
-                    }
-                }
-                ACTION_COUNTERPART => self.open_counterpart(),
-                _ => consumed = false,
-            }
-        }
-        if consumed {
-            self.last_action_frame = frame.frame_index;
-            self.dirty = true;
-        }
-    }
-
-    fn set_mode(&mut self, mode: AssetInspectorMode) {
-        if self.mode != mode {
-            self.mode = mode;
-            self.page = 0;
-            self.selected_index = None;
-            self.report = None;
-            self.last_refresh_frame = 0;
-        }
-    }
-
-    fn navigate_up(&mut self) {
-        if let Some((parent, _)) = self.current_path.rsplit_once('/') {
-            self.current_path = parent.to_owned();
-        } else {
-            self.current_path.clear();
-        }
-        self.page = 0;
-        self.selected_index = None;
-        self.report = None;
-        self.last_refresh_frame = 0;
-    }
-
-    fn activate_row(&mut self, row: usize) {
-        let absolute = self.page * ENTRY_ROWS + row;
-        let Some(entry) = self.entries.get(absolute).cloned() else {
-            return;
-        };
-        if entry.is_directory {
-            self.current_path = entry.logical_path;
-            self.page = 0;
-            self.selected_index = None;
-            self.report = None;
-            self.last_refresh_frame = 0;
-        } else {
-            self.selected_index = Some(absolute);
-            self.report = Some(self.inspector.inspect(&entry.logical_path));
-            self.status = format!(
-                "Inspected {} through {}",
-                entry.name,
-                self.report
-                    .as_ref()
-                    .map_or("native provider", |it| it.decoder.as_str())
-            );
-        }
-    }
-
-    fn open_counterpart(&mut self) {
-        let counterpart = self
-            .report
-            .as_ref()
-            .and_then(|report| report.counterpart.clone())
-            .or_else(|| {
-                self.selected_index
-                    .and_then(|index| self.entries.get(index))
-                    .and_then(|entry| source_runtime_counterpart(&entry.logical_path))
-            });
-        let Some(counterpart) = counterpart else {
-            self.status = "No source/runtime counterpart resolved".to_owned();
-            return;
-        };
-        let looks_like_file = counterpart
-            .rsplit('/')
-            .next()
-            .is_some_and(|name| name.contains('.'));
-        if looks_like_file {
-            self.report = Some(self.inspector.inspect(&counterpart));
-            self.status = format!("Opened counterpart {counterpart}");
-        } else {
-            self.current_path = counterpart;
-            self.page = 0;
-            self.selected_index = None;
-            self.report = None;
-            self.last_refresh_frame = 0;
-        }
-    }
-}
-
-impl<E: Send + 'static> Module<E> for AssetInspectorRuntimeModule {
-    fn id(&self) -> &'static str {
-        "app.asset_inspector.runtime"
-    }
-
-    fn startup_requires(&self) -> &'static [EngineReadinessKey] {
-        const REQUIRES: &[EngineReadinessKey] = &[EngineReadinessKey::EnginePluginsReady];
-        REQUIRES
-    }
-
-    fn start(&mut self, _ctx: &mut ModuleCtx<'_, E>) -> EngineResult<()> {
-        self.dirty = true;
-        Ok(())
-    }
-
-    fn update(&mut self, ctx: &mut ModuleCtx<'_, E>) -> EngineResult<()> {
-        let frame_index = ctx.frame().map(|frame| frame.frame_index).unwrap_or(0);
-        self.ensure_roots_mounted(frame_index);
-        self.ensure_surface_mounted(frame_index);
-        if let Some(dispatch) = ctx.resources().get::<UiEventDispatchFrame>().cloned() {
-            self.handle_actions(&dispatch);
-        }
-        if self.roots_mounted
-            && (self.last_refresh_frame == 0
-                || frame_index.saturating_sub(self.last_refresh_frame) >= 120)
-        {
-            self.refresh(frame_index);
-        }
-        if self.dirty && self.surface_mounted {
-            let published = publish_inspector_state(InspectorUiSnapshot {
-                frame_index,
-                current_path: &self.current_path,
-                mode: self.mode,
-                page: self.page,
-                entries: &self.entries,
-                selected_index: self.selected_index,
-                report: self.report.as_ref(),
-                status: &self.status,
-            });
-            self.dirty = !published;
-        }
-        Ok(())
-    }
-}
-
-fn list_path(
-    client: &AssetServiceClient,
-    logical_path: &str,
-) -> Result<Vec<InspectorEntry>, String> {
-    match client.vfs_list_json_v1(logical_path) {
-        Ok(value) => Ok(entries_from_vfs(&value)),
-        Err(vfs_error) if !logical_path.is_empty() && !logical_path.contains('@') => {
-            let request = AssetDecodeRequest {
-                logical_path: logical_path.to_owned(),
-                output_kind: ASSET_LIST_FILE_MANIFEST_OUTPUT.to_owned(),
-                selector: json!({}),
-            };
-            let bytes = client.decode_v1(&request).map_err(|decode_error| {
-                format!("VFS listing failed: {vfs_error}; ListFile listing failed: {decode_error}")
-            })?;
-            let manifest = serde_json::from_slice::<AssetFileManifest>(&bytes)
-                .map_err(|error| format!("invalid native ListFile manifest: {error}"))?;
-            Ok(manifest
-                .entries
-                .into_iter()
-                .map(|entry| InspectorEntry {
-                    name: entry.name,
-                    logical_path: entry.entry_ref,
-                    kind: entry.asset_kind,
-                    extension: extension_from_ref(logical_path),
-                    is_directory: false,
-                    source_asset: false,
-                    byte_len: None,
-                })
-                .collect())
-        }
-        Err(error) => Err(format!("engine.assets VFS listing failed: {error}")),
-    }
-}
-
-fn entries_from_vfs(value: &Value) -> Vec<InspectorEntry> {
-    value
-        .get("entries")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .map(|entry| {
-            let name = first_string(entry, &["name", "file_name", "display_name"])
-                .unwrap_or_else(|| "<unnamed>".to_owned());
-            let logical_path = first_string(entry, &["logical_path", "path", "reference", "id"])
-                .unwrap_or_else(|| name.clone())
-                .replace('\\', "/")
-                .trim_matches('/')
-                .to_owned();
-            let kind = first_string(entry, &["kind", "node_kind", "entry_kind"])
-                .unwrap_or_else(|| "asset".to_owned());
-            let is_directory = entry
-                .get("is_dir")
-                .or_else(|| entry.get("directory"))
-                .or_else(|| entry.get("is_directory"))
-                .and_then(Value::as_bool)
-                .unwrap_or_else(|| {
-                    matches!(
-                        kind.to_ascii_lowercase().as_str(),
-                        "directory" | "dir" | "folder" | "mount"
-                    )
-                });
-            InspectorEntry {
-                name,
-                extension: extension_from_ref(&logical_path),
-                source_asset: is_source_asset_ref(&logical_path),
-                logical_path,
-                kind,
-                is_directory,
-                byte_len: entry
-                    .get("byte_len")
-                    .or_else(|| entry.get("size"))
-                    .and_then(Value::as_u64),
-            }
-        })
-        .collect()
-}
-
-fn first_string(value: &Value, keys: &[&str]) -> Option<String> {
-    keys.iter()
-        .find_map(|key| value.get(*key).and_then(Value::as_str))
-        .map(ToOwned::to_owned)
-}
-
-fn extension_from_ref(value: &str) -> String {
-    let path = value
-        .split('@')
-        .next()
-        .unwrap_or(value)
-        .to_ascii_lowercase();
-    for compound in ["ymap.xml", "ytyp.xml", "nemat.xml", "neui.xml"] {
-        if path.ends_with(compound) {
-            return compound.to_owned();
-        }
-    }
-    path.rsplit_once('.')
-        .map(|(_, extension)| extension.to_owned())
-        .unwrap_or_default()
-}
-
-fn parse_row(node_id: &str) -> Option<usize> {
-    node_id
-        .strip_prefix("asset.inspector.entry.")?
-        .parse::<usize>()
-        .ok()
-        .filter(|row| *row < ENTRY_ROWS)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn parses_authored_row_ids() {
-        assert_eq!(parse_row("asset.inspector.entry.07"), Some(7));
-        assert_eq!(parse_row("other.07"), None);
-    }
-
-    #[test]
-    fn source_mode_keeps_directories_and_source_files() {
-        assert!(AssetInspectorMode::Source.accepts(true, false));
-        assert!(AssetInspectorMode::Source.accepts(false, true));
-        assert!(!AssetInspectorMode::Source.accepts(false, false));
     }
 }

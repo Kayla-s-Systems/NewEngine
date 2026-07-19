@@ -5,6 +5,8 @@ use newengine_loading_api::bootstrap_ui::north_star_bootstrap_ui_style;
 
 use super::super::style::color32;
 
+const GRID_SETTING_LABEL_WIDTH: f32 = 220.0;
+
 pub(in crate::startup_window::egui_presenter) fn setting_label(
     ui: &mut egui::Ui,
     title: &str,
@@ -12,19 +14,78 @@ pub(in crate::startup_window::egui_presenter) fn setting_label(
 ) {
     let style = north_star_bootstrap_ui_style();
     ui.vertical(|ui| {
-        ui.label(
-            egui::RichText::new(title)
-                .size(12.5)
-                .strong()
-                .color(color32(style.palette.text)),
+        // Egui Grid otherwise sizes this cell from the short title and then wraps
+        // the explanatory text into a one-word-wide column. Keep every settings
+        // page readable even when it still uses the legacy two-column grid.
+        ui.set_min_width(GRID_SETTING_LABEL_WIDTH.min(ui.available_width().max(1.0)));
+        ui.add(
+            egui::Label::new(
+                egui::RichText::new(title)
+                    .size(12.5)
+                    .strong()
+                    .color(color32(style.palette.text)),
+            )
+            .wrap(),
         );
-        ui.label(
-            egui::RichText::new(detail)
-                .size(10.5)
-                .color(color32(style.palette.muted)),
+        ui.add(
+            egui::Label::new(
+                egui::RichText::new(detail)
+                    .size(10.5)
+                    .color(color32(style.palette.muted)),
+            )
+            .wrap(),
         );
     });
 }
+
+pub(in crate::startup_window::egui_presenter) fn setting_block(
+    ui: &mut egui::Ui,
+    title: &str,
+    detail: &str,
+    add_contents: impl FnOnce(&mut egui::Ui),
+) {
+    let style = north_star_bootstrap_ui_style();
+    let outer_width = ui.available_width();
+    egui::Frame::none()
+        .fill(color32(style.palette.bg_deep))
+        .stroke(egui::Stroke::new(1.0, color32(style.palette.edge_soft)))
+        .rounding(egui::Rounding::same(8.0))
+        .inner_margin(egui::Margin::same(12.0))
+        .show(ui, |ui| {
+            ui.set_min_width((outer_width - 24.0).max(180.0));
+            ui.add(
+                egui::Label::new(
+                    egui::RichText::new(title)
+                        .size(13.0)
+                        .strong()
+                        .color(color32(style.palette.text)),
+                )
+                .wrap(),
+            );
+            ui.add(
+                egui::Label::new(
+                    egui::RichText::new(detail)
+                        .size(10.5)
+                        .color(color32(style.palette.muted)),
+                )
+                .wrap(),
+            );
+            ui.add_space(9.0);
+            add_contents(ui);
+        });
+}
+
+pub(in crate::startup_window::egui_presenter) fn value_caption(ui: &mut egui::Ui, label: &str) {
+    let palette = north_star_bootstrap_ui_style().palette;
+    ui.label(
+        egui::RichText::new(label)
+            .size(9.0)
+            .strong()
+            .monospace()
+            .color(color32(palette.muted)),
+    );
+}
+
 pub(in crate::startup_window::egui_presenter) fn setting_group_label(
     ui: &mut egui::Ui,
     label: &str,

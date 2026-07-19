@@ -25,11 +25,11 @@ use style::configure_style;
 pub(super) const APP_TITLE: &str = north_star_bootstrap_ui_style().brand.prestart_title;
 pub(super) const APP_SUBTITLE: &str = north_star_bootstrap_ui_style().brand.prestart_subtitle;
 pub(super) const APP_TAGLINE: &str = north_star_bootstrap_ui_style().brand.tagline;
-pub(super) const WINDOW_WIDTH: f32 = 1180.0;
-pub(super) const WINDOW_HEIGHT: f32 = 790.0;
-pub(super) const MIN_WINDOW_WIDTH: f32 = 980.0;
-pub(super) const MIN_WINDOW_HEIGHT: f32 = 680.0;
-pub(super) const SIDEBAR_WIDTH: f32 = 246.0;
+pub(super) const WINDOW_WIDTH: f32 = 1240.0;
+pub(super) const WINDOW_HEIGHT: f32 = 780.0;
+pub(super) const MIN_WINDOW_WIDTH: f32 = 1024.0;
+pub(super) const MIN_WINDOW_HEIGHT: f32 = 660.0;
+pub(super) const SIDEBAR_WIDTH: f32 = 224.0;
 
 pub(crate) fn present(config_path: &Path, startup: &StartupConfig) -> StartupWindowReport {
     let report_path = config_path.to_path_buf();

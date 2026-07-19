@@ -10,11 +10,17 @@ newengine-asset-inspector-runtime = { path = "../../crates/newengine-asset-inspe
 newengine-assets = { path = "../../crates/newengine-assets" }
 newengine-assets-ui-runtime = { path = "../../crates/newengine-assets-ui-runtime" }
 newengine-core = { path = "../../crates/newengine-core" }
+newengine-definitions-runtime = { path = "../../crates/newengine-definitions-runtime" }
 newengine-engine-runtime = { path = "../../crates/newengine-engine-runtime" }
+newengine-material-runtime = { path = "../../crates/newengine-material-runtime" }
+newengine-material-domain-gameready = { path = "../../crates/newengine-material-domain-gameready" }
+newengine-model-runtime = { path = "../../crates/newengine-model-runtime" }
 newengine-plugin-host = { path = "../../crates/newengine-plugin-host" }
 newengine-render-ui-bridge = { path = "../../crates/newengine-render-ui-bridge" }
 newengine-runtime-host = { path = "../../crates/newengine-runtime-host" }
 newengine-schema-runtime = { path = "../../crates/newengine-schema-runtime" }
 newengine-scene = { path = "../../crates/newengine-scene", features = ["runtime"] }
 newengine-scene-runtime = { path = "../../crates/newengine-scene-runtime" }
+newengine-textures-runtime = { path = "../../crates/newengine-textures-runtime" }
+newengine-ulog-api = { path = "../../crates/newengine-ulog-api" }
 newengine-ui = { path = "../../crates/newengine-ui", default-features = false }

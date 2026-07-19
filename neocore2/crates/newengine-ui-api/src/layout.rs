@@ -128,8 +128,19 @@ pub fn ui_surface_node_layout(
 
     let docked = style_tags.iter().any(|tag| tag == "dock-bottom" || tag == "dock-left" || tag == "dock-right" || tag == "dock-top" || tag == "docked-panel");
     let workspace = !docked && style_tags.iter().any(|tag| tag == "workspace" || tag == "fullscreen");
-    let available_w = (w - style.margin_px[0] * 2.0).max(style.min_size_px[0]);
-    let available_h = (h - style.margin_px[1] * 2.0).max(style.min_size_px[1]);
+    // Fullscreen/workspace surfaces own the complete drawable client area.
+    // Applying floating-panel margins here shifts authored absolute layouts and
+    // clips their right/bottom edges even when they match the window extent.
+    let available_w = if workspace {
+        w
+    } else {
+        (w - style.margin_px[0] * 2.0).max(style.min_size_px[0])
+    };
+    let available_h = if workspace {
+        h
+    } else {
+        (h - style.margin_px[1] * 2.0).max(style.min_size_px[1])
+    };
     let line_count = body_line_count.max(1) + footer_line_count + 2;
     let content_h = line_count as f32 * style.row_pitch_px.max(style.font.line_height_px).max(24.0)
         + style.padding_px[1] + style.padding_px[3] + 10.0;
@@ -144,15 +155,27 @@ pub fn ui_surface_node_layout(
         style.max_size_px[1].min(available_h).max(style.min_size_px[1]).max(content_h.min(available_h))
     };
 
-    let panel_x = match style.anchor {
-        UiSurfaceAnchor::TopRight | UiSurfaceAnchor::BottomRight => (w - panel_w - style.margin_px[0]).max(style.margin_px[0]),
-        UiSurfaceAnchor::Center => ((w - panel_w) * 0.5).max(style.margin_px[0]),
-        UiSurfaceAnchor::TopLeft | UiSurfaceAnchor::BottomLeft => style.margin_px[0],
+    let panel_x = if workspace {
+        0.0
+    } else {
+        match style.anchor {
+            UiSurfaceAnchor::TopRight | UiSurfaceAnchor::BottomRight => {
+                (w - panel_w - style.margin_px[0]).max(style.margin_px[0])
+            }
+            UiSurfaceAnchor::Center => ((w - panel_w) * 0.5).max(style.margin_px[0]),
+            UiSurfaceAnchor::TopLeft | UiSurfaceAnchor::BottomLeft => style.margin_px[0],
+        }
     };
-    let panel_y = match style.anchor {
-        UiSurfaceAnchor::BottomLeft | UiSurfaceAnchor::BottomRight => (h - panel_h - style.margin_px[1]).max(style.margin_px[1]),
-        UiSurfaceAnchor::Center => ((h - panel_h) * 0.5).max(style.margin_px[1]),
-        UiSurfaceAnchor::TopLeft | UiSurfaceAnchor::TopRight => style.margin_px[1],
+    let panel_y = if workspace {
+        0.0
+    } else {
+        match style.anchor {
+            UiSurfaceAnchor::BottomLeft | UiSurfaceAnchor::BottomRight => {
+                (h - panel_h - style.margin_px[1]).max(style.margin_px[1])
+            }
+            UiSurfaceAnchor::Center => ((h - panel_h) * 0.5).max(style.margin_px[1]),
+            UiSurfaceAnchor::TopLeft | UiSurfaceAnchor::TopRight => style.margin_px[1],
+        }
     };
 
     let raw_line_h = if style.font.line_height_px > 0.0 { style.font.line_height_px } else { 24.0 };

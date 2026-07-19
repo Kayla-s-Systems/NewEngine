@@ -50,7 +50,9 @@ pub(in crate::startup_window::egui_presenter) fn compact_choice_button(
     selected: bool,
 ) -> egui::Response {
     let palette = north_star_bootstrap_ui_style().palette;
-    ui.add(
+    let minimum_width = (label.chars().count() as f32 * 7.0 + 24.0).max(54.0);
+    ui.add_sized(
+        [minimum_width, 30.0],
         egui::Button::new(
             egui::RichText::new(label)
                 .size(11.5)

@@ -3,17 +3,16 @@ name = "newengine-asset-inspector-runtime"
 version = "0.1.0"
 edition = "2021"
 readme = "README.md"
-description = "Authored-UI asset inspection product runtime over engine.assets and native format decoders"
+description = "Thin authored-UI facade over engine.assets inspection, preview, schema editing and provider mutations"
 
 [dependencies]
 newengine-assets = { path = "../newengine-assets" }
 newengine-assets-api = { path = "../newengine-assets-api" }
 newengine-assets-ui-runtime = { path = "../newengine-assets-ui-runtime" }
-newengine-authored-xml = { path = "../newengine-authored-xml" }
 newengine-core = { path = "../newengine-core" }
-newengine-model-import-obj = { path = "../newengine-model-import-obj" }
+newengine-engine-runtime = { path = "../newengine-engine-runtime" }
 newengine-plugin-host = { path = "../newengine-plugin-host" }
-newengine-texture-container = { path = "../newengine-texture-container" }
+newengine-schema-api = { path = "../newengine-schema-api" }
 newengine-ui-api = { path = "../newengine-ui-api" }
 newengine-ulog-api = { path = "../newengine-ulog-api" }
 serde = { version = "1.0.228", features = ["derive"] }

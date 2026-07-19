@@ -8,7 +8,7 @@ use newengine_materials::api::{MaterialId, MaterialRegistryApi};
 use newengine_primitives::Primitive;
 use newengine_transform::GlobalTransform;
 
-use super::super::super::gpu::{ensure_primitive_gpu, PrimitiveGpu};
+use super::super::super::gpu::{ensure_primitive_gpu, upload_primitive_mesh, PrimitiveGpu};
 use super::super::super::material_bindings::LitMaterialPlan;
 use super::super::draw_bucket::{BucketedIndexedDrawStream, IndexedDrawPacket};
 use super::super::instancing::{
@@ -37,7 +37,9 @@ mod mesh_passes_primitive;
 mod mesh_passes_shadow;
 mod scene_mesh_pass;
 
-pub use self::mesh_passes_primitive::{draw_primitives, draw_primitives_gbuffer};
+pub use self::mesh_passes_primitive::{
+    draw_asset_preview_bundle, draw_primitives, draw_primitives_gbuffer,
+};
 pub use self::mesh_passes_shadow::{draw_primitives_shadow, draw_procedural_terrain_shadow};
 use self::scene_mesh_pass::{route_diagnostics_due, SceneMeshPass};
 

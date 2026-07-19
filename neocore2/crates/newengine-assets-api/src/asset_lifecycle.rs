@@ -324,6 +324,12 @@ pub trait AssetService: AssetAccess {
         payload: NepakPackageWriteRequestV1,
     ) -> Result<NepakPackageWriteResponseV1, String>;
 
+    /// Replace one existing UTF-8 text asset through an explicit writable VFS source.
+    fn package_write_text_json_v1(
+        &self,
+        payload: TextAssetWriteRequestV1,
+    ) -> Result<TextAssetWriteResponseV1, String>;
+
     /// Mount one source through the strict v1 JSON source model.
     fn mount_source_json_v1(&self, payload: serde_json::Value) -> Result<(), String>;
 

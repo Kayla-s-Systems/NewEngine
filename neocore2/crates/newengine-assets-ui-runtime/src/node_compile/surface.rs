@@ -29,6 +29,7 @@ pub(crate) fn compile_surface_root(
     root.visible = !bool_attr(&layout.open, "hidden");
     root.interactive = false;
     root.source_span = Some(source_span_for_open(xml, &layout.open, source_ref));
+    root.style_tags.extend(class_tags(&layout.open));
     root.style_tags.extend([
         "surface-root".to_owned(),
         format!("surface:{}", sanitize_tag(&surface.name)),
@@ -37,6 +38,8 @@ pub(crate) fn compile_surface_root(
         root.style_tags
             .push(format!("surface-kind:{}", sanitize_tag(&surface.kind)));
     }
+    root.style_tags.sort();
+    root.style_tags.dedup();
     root.props.insert(
         "surface_id".to_owned(),
         serde_json::Value::String(surface.name.clone()),

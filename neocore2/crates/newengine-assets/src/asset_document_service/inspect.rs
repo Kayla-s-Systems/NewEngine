@@ -158,7 +158,31 @@ impl AssetInspectState {
             entry_selector.as_deref(),
             &mut document,
         );
+        self.hydrate_text_document(
+            &logical_path,
+            entry_selector.as_deref(),
+            &extension,
+            &mut document,
+        );
         self.hydrate_lifecycle_section(&logical_path, &mut document);
+        match self.assets.dirty_state_json_v1(&logical_path) {
+            Ok(state) => {
+                document.dirty = state.dirty;
+                if state.staged_operations > 0 {
+                    document.diagnostics.push(AssetDocumentDiagnostic::info(
+                        "edit.session.dirty",
+                        format!(
+                            "{} staged operation(s) await provider rebuild",
+                            state.staged_operations
+                        ),
+                    ));
+                }
+            }
+            Err(error) => document.diagnostics.push(AssetDocumentDiagnostic::warn(
+                "edit.session.unavailable",
+                error,
+            )),
+        }
         document.schema_type = Some(asset_document_schema_type(&document));
         document.schema_contract = SCHEMA_RUNTIME_CONTRACT.to_owned();
         document.actions = asset_document_actions(&document, entry_selector.as_deref());
@@ -284,6 +308,95 @@ impl AssetInspectState {
         });
     }
 
+    fn hydrate_text_document(
+        &self,
+        logical_path: &str,
+        selected_entry: Option<&str>,
+        extension: &str,
+        document: &mut AssetDocument,
+    ) {
+        const MAX_EDITOR_TEXT_BYTES: usize = 1024 * 1024;
+        if selected_entry.is_some() || !is_text_asset_extension(extension) {
+            return;
+        }
+        let bytes = match self.assets.text_v1(logical_path) {
+            Ok(bytes) => bytes,
+            Err(error) => {
+                document.diagnostics.push(AssetDocumentDiagnostic::warn(
+                    "text.decode.unavailable",
+                    format!("engine.assets text decode failed: {error}"),
+                ));
+                return;
+            }
+        };
+        let byte_len = bytes.len();
+        let truncated = byte_len > MAX_EDITOR_TEXT_BYTES;
+        let visible_bytes = if truncated {
+            &bytes[..utf8_prefix_len(&bytes, MAX_EDITOR_TEXT_BYTES)]
+        } else {
+            bytes.as_slice()
+        };
+        let content = match std::str::from_utf8(visible_bytes) {
+            Ok(content) => content.to_owned(),
+            Err(error) => {
+                document.diagnostics.push(AssetDocumentDiagnostic::warn(
+                    "text.decode.non_utf8",
+                    format!("asset is not valid UTF-8: {error}"),
+                ));
+                return;
+            }
+        };
+        let writable = !truncated
+            && self
+                .assets
+                .package_writer_info_json_v1(json!({}))
+                .ok()
+                .and_then(|value| {
+                    value
+                        .get("operations")
+                        .and_then(|operations| operations.get("loose_vfs_write_back"))
+                        .and_then(Value::as_bool)
+                })
+                .unwrap_or(false);
+        let line_count = text_line_count(&content);
+        document.text = Some(AssetDocumentText {
+            encoding: "utf-8".to_owned(),
+            language: text_language_for_extension(extension).to_owned(),
+            content,
+            byte_len: byte_len as u64,
+            line_count,
+            truncated,
+            editable: writable,
+        });
+        document.preview.kind = "text".to_owned();
+        document.preview.summary = format!(
+            "UTF-8 text · {} line(s) · {} bytes{}",
+            line_count,
+            byte_len,
+            if truncated {
+                " · preview truncated"
+            } else {
+                ""
+            }
+        );
+        if writable {
+            document.editable = true;
+            document.editable_fields_available = true;
+            document.can_apply_patch = true;
+            document.edit_contract = "newengine.asset.text.utf8.v1".to_owned();
+            document.writer_capability = ASSETS_PACKAGE_WRITER_CAPABILITY_ID.to_owned();
+            document.write_owner = "engine.assets.package_writer".to_owned();
+        } else if truncated {
+            document.diagnostics.push(AssetDocumentDiagnostic::warn(
+                "text.editor.size_limit",
+                format!(
+                    "text editor is read-only because the asset exceeds {} bytes",
+                    MAX_EDITOR_TEXT_BYTES
+                ),
+            ));
+        }
+    }
+
     fn hydrate_lifecycle_section(&self, logical_path: &str, document: &mut AssetDocument) {
         let client = &self.assets;
         let mut fields = Vec::new();
@@ -301,22 +414,6 @@ impl AssetInspectState {
                 error,
             )),
         }
-        match client.thumbnail_json_v1(json!({ "logical_path": logical_path })) {
-            Ok(value) => {
-                if let Some(label) = value
-                    .get("thumbnail")
-                    .and_then(Value::as_str)
-                    .or_else(|| value.get("cache_key").and_then(Value::as_str))
-                {
-                    document.preview.thumbnail_ref = label.to_owned();
-                }
-                fields.push(json_field("thumbnail", "Preview", value, false));
-            }
-            Err(error) => document.diagnostics.push(AssetDocumentDiagnostic::warn(
-                "assets.thumbnail.unavailable",
-                error,
-            )),
-        }
         if !fields.is_empty() {
             document.sections.push(AssetDocumentSection {
                 id: "lifecycle".to_owned(),
@@ -324,5 +421,135 @@ impl AssetInspectState {
                 fields,
             });
         }
+    }
+}
+
+fn is_text_asset_extension(extension: &str) -> bool {
+    matches!(
+        extension.trim().to_ascii_lowercase().as_str(),
+        "txt"
+            | "md"
+            | "json"
+            | "json5"
+            | "xml"
+            | "toml"
+            | "yaml"
+            | "yml"
+            | "ini"
+            | "cfg"
+            | "ron"
+            | "csv"
+            | "glsl"
+            | "vert"
+            | "frag"
+            | "comp"
+            | "tesc"
+            | "tese"
+            | "geom"
+            | "wgsl"
+            | "hlsl"
+            | "lua"
+            | "py"
+            | "rs"
+            | "c"
+            | "h"
+            | "cpp"
+            | "hpp"
+            | "cs"
+            | "js"
+            | "ts"
+            | "css"
+            | "html"
+            | "bat"
+            | "cmd"
+            | "ps1"
+            | "sh"
+            | "log"
+            | "conf"
+            | "properties"
+            | "env"
+            | "gitignore"
+            | "java"
+            | "kt"
+            | "kts"
+            | "sql"
+    )
+}
+
+fn text_language_for_extension(extension: &str) -> &'static str {
+    match extension.trim().to_ascii_lowercase().as_str() {
+        "md" => "markdown",
+        "json" | "json5" => "json",
+        "xml" => "xml",
+        "toml" => "toml",
+        "yaml" | "yml" => "yaml",
+        "vert" | "frag" | "comp" | "tesc" | "tese" | "geom" | "glsl" => "glsl",
+        "wgsl" => "wgsl",
+        "hlsl" => "hlsl",
+        "rs" => "rust",
+        "py" => "python",
+        "js" => "javascript",
+        "ts" => "typescript",
+        "html" => "html",
+        "css" => "css",
+        "lua" => "lua",
+        "java" => "java",
+        "kt" | "kts" => "kotlin",
+        "sql" => "sql",
+        "properties" | "conf" | "env" | "gitignore" | "log" => "text",
+        _ => "text",
+    }
+}
+
+fn utf8_prefix_len(bytes: &[u8], limit: usize) -> usize {
+    let mut end = limit.min(bytes.len());
+    while end > 0 && std::str::from_utf8(&bytes[..end]).is_err() {
+        end -= 1;
+    }
+    end
+}
+
+fn text_line_count(content: &str) -> usize {
+    if content.is_empty() {
+        1
+    } else {
+        content.lines().count() + usize::from(content.ends_with('\n'))
+    }
+}
+
+#[cfg(test)]
+mod text_document_tests {
+    use super::*;
+
+    #[test]
+    fn text_extension_detection_is_explicit() {
+        assert!(is_text_asset_extension("json"));
+        assert!(is_text_asset_extension("RS"));
+        assert!(is_text_asset_extension("log"));
+        assert!(is_text_asset_extension("properties"));
+        assert!(!is_text_asset_extension("ytd"));
+        assert!(!is_text_asset_extension("ydd"));
+    }
+
+    #[test]
+    fn utf8_prefix_never_splits_a_codepoint() {
+        let bytes = "abcЖ".as_bytes();
+        assert_eq!(
+            std::str::from_utf8(&bytes[..utf8_prefix_len(bytes, 4)]).unwrap(),
+            "abc"
+        );
+    }
+
+    #[test]
+    fn text_line_count_preserves_trailing_empty_line() {
+        assert_eq!(
+            text_line_count(
+                "a
+b
+"
+            ),
+            3
+        );
+        assert_eq!(text_line_count(""), 1);
     }
 }

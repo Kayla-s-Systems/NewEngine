@@ -167,7 +167,7 @@ impl RuntimeRenderController {
             let mut carrier = frame_input.input.action_carrier();
             self.frame.input_systems.publish_input_capture_state(
                 self.frame.frame_index,
-                InputCaptureState::modal_ui(published_capture.requests_capture()),
+                InputCaptureState::modal_ui(modal_blocks_gameplay),
                 &mut carrier,
             );
         }
@@ -177,6 +177,21 @@ impl RuntimeRenderController {
             // viewport slot as UI chrome only and do not tick scene/world, build
             // game pipelines, run shadow planning, or submit gameplay draw-list
             // providers. Simulate/Play explicitly re-enable the world path.
+            self.render_ui_only_frame(ctx, r, frame_input.ui, scope)?;
+            return Ok(PlayableFrameOutcome::Continue {
+                frame_debug_snapshot: None,
+            });
+        }
+
+        if self.app_policy.idle_preview_uses_ui_only(
+            self.bridges.viewport.external_extent_owned(),
+            self.bridges.viewport.external_redraw_requested(),
+        ) {
+            // Standalone asset tools must not initialize gameplay pipelines or
+            // tick an empty world while no 3D preview is requested. A preview API
+            // explicitly owns the offscreen extent for a real 3D preview. Once
+            // its warmup/redraw budget is exhausted, UI keeps sampling the cached
+            // target while the expensive world/render path sleeps.
             self.render_ui_only_frame(ctx, r, frame_input.ui, scope)?;
             return Ok(PlayableFrameOutcome::Continue {
                 frame_debug_snapshot: None,
@@ -266,12 +281,17 @@ impl RuntimeRenderController {
             scope,
             &world_frame,
             thread_pool.as_ref(),
-        );
+        )?;
         drop(scene);
+        if matches!(outcome, PlayableFrameOutcome::Continue { .. })
+            && self.external_preview_target_active()
+        {
+            self.bridges.viewport.mark_external_redraw_presented();
+        }
         if let Some(picked) = self.frame.pending_pick_selection.take() {
             self.bridges.scene.set_selection(picked);
         }
-        Ok(outcome?)
+        Ok(outcome)
     }
 
     fn refresh_modal_ui_draw_list<E: Send + 'static>(

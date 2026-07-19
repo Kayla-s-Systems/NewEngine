@@ -104,6 +104,29 @@ impl<'a> SceneExtractionCtx<'a> {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct AssetPreviewView {
+    pub yaw_radians: f32,
+    pub pitch_radians: f32,
+    pub distance: f32,
+    /// Camera orbit target offset in preview world space.
+    ///
+    /// The model remains at the origin; panning translates the camera and its
+    /// look-at target together so the operation is independent of model data.
+    pub target_offset: [f32; 3],
+}
+
+impl Default for AssetPreviewView {
+    fn default() -> Self {
+        Self {
+            yaw_radians: 0.72,
+            pitch_radians: 0.34,
+            distance: 4.0,
+            target_offset: [0.0, 0.0, 0.0],
+        }
+    }
+}
+
 pub trait DrawListBuildCtx {
     fn record_procedural_terrain_shadow(
         &mut self,
@@ -122,6 +145,16 @@ pub trait DrawListBuildCtx {
     fn record_primitive_mesh_shadow(&mut self, ctx: &SceneExtractionCtx<'_>) -> EngineResult<()>;
     fn record_primitive_mesh_forward(&mut self, ctx: &SceneExtractionCtx<'_>) -> EngineResult<()>;
     fn record_primitive_mesh_gbuffer(&mut self, _ctx: &SceneExtractionCtx<'_>) -> EngineResult<()> {
+        Ok(())
+    }
+    /// Record a renderer-only asset preview packet. Implementations must not
+    /// require ECS entities, gameplay components or physics state.
+    fn record_asset_preview(
+        &mut self,
+        _ctx: &SceneExtractionCtx<'_>,
+        _bundle: &newengine_model_domain_api::ModelAssetBundle,
+        _view: AssetPreviewView,
+    ) -> EngineResult<()> {
         Ok(())
     }
     fn record_ui(&mut self, ctx: &SceneExtractionCtx<'_>) -> EngineResult<()>;
@@ -169,6 +202,15 @@ pub const fn shadow_and_opaque_list(active: bool) -> &'static [RenderDrawListKin
         SHADOW_AND_OPAQUE
     } else {
         OPAQUE_FORWARD
+    }
+}
+
+#[inline]
+pub const fn opaque_list(active: bool) -> &'static [RenderDrawListKind] {
+    if active {
+        OPAQUE_FORWARD
+    } else {
+        EMPTY_LISTS
     }
 }
 

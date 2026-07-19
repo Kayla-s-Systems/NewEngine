@@ -11,11 +11,12 @@ use newengine_assets_api::{
     asset_document_action_id, asset_edit_method, asset_inspect_method, file_type_method,
     AssetAccess, AssetDecodeRequest, AssetDocument, AssetDocumentAction, AssetDocumentDiagnostic,
     AssetDocumentField, AssetDocumentPreview, AssetDocumentRequest, AssetDocumentSection,
-    AssetFileManifest, AssetFileTypeDescriptor, AssetFileTypeProbeRequest,
+    AssetDocumentText, AssetFileManifest, AssetFileTypeDescriptor, AssetFileTypeProbeRequest,
     AssetFileTypeProbeResult, AssetPatch, AssetPatchOperation, AssetPatchResult, AssetService,
     AssetServiceClient, ASSETS_EDIT_BACKEND_CAPABILITY_ID, ASSETS_EDIT_SERVICE_ID,
     ASSETS_EDIT_SERVICE_METHODS, ASSETS_INSPECT_BACKEND_CAPABILITY_ID, ASSETS_INSPECT_SERVICE_ID,
-    ASSETS_INSPECT_SERVICE_METHODS, ASSET_LIST_FILE_MANIFEST_OUTPUT, ENGINE_ASSETS_EDIT_SERVICE_ID,
+    ASSETS_INSPECT_SERVICE_METHODS, ASSETS_PACKAGE_WRITER_CAPABILITY_ID,
+    ASSET_LIST_FILE_MANIFEST_OUTPUT, ENGINE_ASSETS_EDIT_SERVICE_ID,
     ENGINE_ASSETS_INSPECT_SERVICE_ID, ENGINE_ASSET_TYPES_SERVICE_ID,
 };
 use newengine_plugin_api::{Blob, HostApiV1, MethodName};
@@ -30,6 +31,8 @@ use newengine_service_kit::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::collections::BTreeMap;
+use std::sync::{Arc, Mutex};
 
 mod actions;
 mod edit;
@@ -78,6 +81,7 @@ struct AssetInspectState {
 #[derive(Clone)]
 struct AssetEditState {
     assets: AssetServiceClient,
+    staged: Arc<Mutex<BTreeMap<String, Vec<AssetPatch>>>>,
 }
 
 #[cfg(test)]

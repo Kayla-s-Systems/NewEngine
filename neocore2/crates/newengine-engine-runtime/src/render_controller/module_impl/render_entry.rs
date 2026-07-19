@@ -15,6 +15,11 @@ use super::super::error_policy::{
 };
 use super::frame_types::{PlayableFrameOutcome, RenderFrameScope};
 
+/// Neutral editor background used by standalone 3D asset/material previews.
+/// Kept slightly blue-gray so silhouettes, the editor grid and material values
+/// remain readable without the harsh contrast of a black clear color.
+const ASSET_PREVIEW_EDITOR_CLEAR_COLOR: [f32; 4] = [0.16, 0.17, 0.19, 1.0];
+
 impl RuntimeRenderController {
     pub(super) fn render_runtime_module<E: Send + 'static>(
         &mut self,
@@ -40,6 +45,14 @@ impl RuntimeRenderController {
                 self.apply_backend_capability_profile(&cfg.capabilities);
                 cfg.work_budget
             });
+
+        // A minimized native window commonly reports 0x0. This is not a renderer
+        // failure and must never reach begin_frame/create_swapchain. Keep the last
+        // valid extent and retain the UI draw list; restore will force one resize.
+        if w == 0 || h == 0 {
+            self.suspend_zero_sized_surface(w, h);
+            return Ok(());
+        }
 
         let trace_frame = super::trace_policy::should_trace_frame(self.frame.frame_index);
         let api = match require_render_api(ctx) {
@@ -318,6 +331,9 @@ impl RuntimeRenderController {
         surface_w: u32,
         surface_h: u32,
     ) {
+        if self.bridges.viewport.external_extent_owned() {
+            return;
+        }
         let Some(slot) = ctx.resources().get::<UiViewportSlot>() else {
             return;
         };
@@ -356,15 +372,19 @@ impl RuntimeRenderController {
             (requested_vp_w, requested_vp_h)
         };
 
-        self.viewport.clear_color = self
+        let scene_clear_color = self
             .bridges
             .scene
             .scene()
             .read()
             .world()
             .resource::<SkyClearColorRuntime>()
-            .map(|sky| sky.color)
-            .unwrap_or_else(|| self.runtime_profile().configured_clear_color());
+            .map(|sky| sky.color);
+        self.viewport.clear_color = resolve_viewport_clear_color(
+            self.external_preview_target_active(),
+            scene_clear_color,
+            self.runtime_profile().configured_clear_color(),
+        );
         self.trace_begin_frame(trace_frame, vp_w, vp_h);
         r.begin_frame(
             BeginFrameDesc::new(self.viewport.clear_color)
@@ -492,6 +512,19 @@ impl RuntimeRenderController {
     }
 }
 
+#[inline]
+fn resolve_viewport_clear_color(
+    external_preview_target: bool,
+    scene_clear_color: Option<[f32; 4]>,
+    configured_clear_color: [f32; 4],
+) -> [f32; 4] {
+    if external_preview_target {
+        ASSET_PREVIEW_EDITOR_CLEAR_COLOR
+    } else {
+        scene_clear_color.unwrap_or(configured_clear_color)
+    }
+}
+
 fn panic_payload_message(payload: Box<dyn Any + Send>) -> String {
     if let Some(msg) = payload.downcast_ref::<&str>() {
         (*msg).to_owned()
@@ -526,7 +559,26 @@ fn parse_runtime_debug_overlay_setting(value: Option<&str>) -> bool {
 
 #[cfg(test)]
 mod runtime_debug_overlay_setting_tests {
-    use super::parse_runtime_debug_overlay_setting;
+    use super::{
+        parse_runtime_debug_overlay_setting, resolve_viewport_clear_color,
+        ASSET_PREVIEW_EDITOR_CLEAR_COLOR,
+    };
+
+    #[test]
+    fn external_preview_uses_editor_gray_clear_color() {
+        let resolved =
+            resolve_viewport_clear_color(true, Some([0.0, 0.0, 0.0, 1.0]), [0.9, 0.8, 0.7, 1.0]);
+        assert_eq!(resolved, ASSET_PREVIEW_EDITOR_CLEAR_COLOR);
+    }
+
+    #[test]
+    fn normal_viewport_keeps_scene_clear_color() {
+        let scene = [0.1, 0.2, 0.3, 1.0];
+        assert_eq!(
+            resolve_viewport_clear_color(false, Some(scene), [0.9, 0.8, 0.7, 1.0]),
+            scene
+        );
+    }
 
     #[test]
     fn runtime_debug_overlay_is_disabled_by_default() {

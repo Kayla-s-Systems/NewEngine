@@ -1355,7 +1355,7 @@
   },
   "startup_settings": {
     "display": {
-      "center_window": false,
+      "center_window": true,
       "frame_limit": 0,
       "hdr": "auto",
       "monitor_index": -1,
@@ -1374,20 +1374,20 @@
       "depth_of_field_enabled": true,
       "fxaa_edge_threshold": 0.125,
       "fxaa_edge_threshold_min": 0.031199999153614044,
-      "fxaa_enabled": true,
+      "fxaa_enabled": false,
       "fxaa_subpixel_quality": 0.75,
       "motion_blur_enabled": true,
-      "msaa_samples": 4,
-      "preset": "ultra",
+      "msaa_samples": 8,
+      "preset": "custom",
       "shadow_quality": "cinematic",
       "shadows_enabled": true,
-      "ssao_enabled": true,
+      "ssao_enabled": false,
       "ssao_half_resolution": false,
       "ssao_intensity": 0.8199999928474426,
       "ssao_quality_steps": 32,
       "ssao_radius_ws": 0.75,
       "sun_rays_enabled": true,
-      "taa_enabled": true,
+      "taa_enabled": false,
       "taa_feedback": 0.9200000166893005,
       "taa_jitter_scale": 1.0,
       "taa_neighborhood_clamping": 1.0,
@@ -1403,7 +1403,11 @@
     },
     "height": 900,
     "placement": {
-      "type": "default"
+      "offset": [
+        0,
+        0
+      ],
+      "type": "centered"
     },
     "size": [
       1600,

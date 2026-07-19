@@ -10,11 +10,22 @@
     }
   },
   "engine": {
-    "modules_dir": "pluginsRuntime",
+    "modules_dir": "pluginsRuntimeAssetInspector",
     "CACHE_FILES": "../../cache/asset-inspector",
     "CONFIG": "../../config/asset-inspector"
   },
   "plugins": {
+    "engine.logging.chronicle": {
+      "sources": {
+        "console": {
+          "level": "info"
+        },
+        "file": {
+          "level": "info",
+          "mode": "truncate"
+        }
+      }
+    },
     "engine.platform": {
       "window": {
         "title": "North Star Asset Inspector",
@@ -22,20 +33,23 @@
         "height": 900
       }
     },
-    "engine.render": {
+    "engine.render.vulkan": {
       "clear_color": [
-        0.012,
-        0.018,
-        0.028,
+        0.93,
+        0.95,
+        0.98,
         1.0
       ],
       "debug_text": "AssetInspector",
-      "mode": "ui_only",
-      "viewport_pass": false
+      "mode": "runtime",
+      "viewport_pass": true,
+      "present": {
+        "mode": "mailbox"
+      }
     },
     "engine.ui": {
       "surface": "asset.inspector",
-      "theme": "aurelia.dark",
+      "theme": "asset_inspector.light",
       "required": true,
       "required_capabilities": [
         "ui.backend"
@@ -56,9 +70,24 @@
         }
       },
       "render": {
-        "ui_only": true,
-        "viewport_pass": false
+        "ui_only": false,
+        "preview_only": true,
+        "viewport_pass": true
       }
+    },
+    "engine.input.compass": {
+      "keyboard": true,
+      "mouse": true,
+      "gamepad": false
+    },
+    "engine.profiler.starprofiler": {
+      "enabled": false
+    },
+    "engine.ecs.constellation": {
+      "enabled": false
+    },
+    "engine.physics.gravitas": {
+      "enabled": false
     }
   }
 }

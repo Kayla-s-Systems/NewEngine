@@ -132,7 +132,11 @@ pub fn standard_runtime_frame(desc: StandardRuntimePipelineDesc) -> RenderFrameP
         desc.viewport_is_surface,
     );
     target.color_format = TextureFormat::Bgra8Unorm;
-    target.scene_color_format = TextureFormat::Rgba16Float;
+    target.scene_color_format = if desc.hdr_scene_enabled {
+        TextureFormat::Rgba16Float
+    } else {
+        TextureFormat::Bgra8Unorm
+    };
     target.depth_format = TextureFormat::Depth32Float;
     target.hdr_scene_enabled = desc.hdr_scene_enabled;
     target.viewport_render_target = desc.viewport_render_target;
@@ -170,4 +174,51 @@ pub fn standard_runtime_frame(desc: StandardRuntimePipelineDesc) -> RenderFrameP
                 .with_shadow_cascade_count(desc.shadow_cascade_count),
         )
         .submit()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use newengine_render_api::RenderGraphResourceSemantic;
+
+    #[test]
+    fn ldr_standard_pipeline_uses_display_compatible_scene_color() {
+        let plan = standard_runtime_frame(
+            StandardRuntimePipelineDesc::new(1, Extent2D::new(1600, 900), Extent2D::new(488, 236))
+                .viewport_render_target(Some(RenderTargetId(
+                    std::num::NonZeroU32::new(77).unwrap(),
+                )))
+                .hdr_scene(false)
+                .postfx(false)
+                .shadow(false, 1),
+        );
+        let viewport = plan
+            .graph
+            .resources
+            .iter()
+            .find(|resource| resource.semantic == RenderGraphResourceSemantic::ViewportColor)
+            .expect("viewport color resource");
+        assert_eq!(viewport.format, Some(TextureFormat::Bgra8Unorm));
+        assert!(!plan
+            .graph
+            .resources
+            .iter()
+            .any(|resource| { resource.semantic == RenderGraphResourceSemantic::SceneHdrColor }));
+    }
+
+    #[test]
+    fn hdr_standard_pipeline_keeps_float_scene_color() {
+        let plan = standard_runtime_frame(StandardRuntimePipelineDesc::new(
+            1,
+            Extent2D::new(1600, 900),
+            Extent2D::new(488, 236),
+        ));
+        let scene = plan
+            .graph
+            .resources
+            .iter()
+            .find(|resource| resource.semantic == RenderGraphResourceSemantic::SceneHdrColor)
+            .expect("HDR scene color resource");
+        assert_eq!(scene.format, Some(TextureFormat::Rgba16Float));
+    }
 }

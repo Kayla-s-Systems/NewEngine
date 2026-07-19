@@ -1,6 +1,4 @@
 use super::*;
-
-use super::*;
 use crate::gameplay::{
     default_medkit_item_id, default_rifle_item_id, give_item, spawn_default_player,
 };

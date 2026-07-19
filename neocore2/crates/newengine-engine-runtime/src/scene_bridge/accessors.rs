@@ -87,7 +87,12 @@ impl SceneBridge {
             return enabled;
         }
         if !enabled {
-            self.set_selection(None);
+            *self.selection.lock() = None;
+            *self.selection_authority.lock() = None;
+            let snapshot = self.inspector_snapshot_json(None);
+            publish_inspector_snapshot_to_surface(&snapshot, GAME_HUD_SURFACE_ID);
+        } else {
+            crate::ui_gateway::set_surface_visible(EDITOR_INSPECTOR_SURFACE_ID, false);
         }
         self.publish_in_game_editor_state(enabled);
         if enabled {
@@ -277,9 +282,10 @@ impl SceneBridge {
 
     fn publish_inspector_state(&self, selected: Option<EntityId>) {
         let snapshot = self.inspector_snapshot_json(selected);
-        publish_inspector_snapshot_to_surface(&snapshot, EDITOR_INSPECTOR_SURFACE_ID);
         if self.in_game_editor_enabled() {
             publish_inspector_snapshot_to_surface(&snapshot, GAME_HUD_SURFACE_ID);
+        } else {
+            publish_inspector_snapshot_to_surface(&snapshot, EDITOR_INSPECTOR_SURFACE_ID);
         }
     }
 

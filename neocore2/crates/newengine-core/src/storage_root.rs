@@ -1,7 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use std::ffi::OsString;
-use std::path::{Path, PathBuf};
+use std::ffi::{OsStr, OsString};
+use std::path::{Component, Path, PathBuf};
 
 /// Declarative specification for an engine-runtime filesystem root.
 ///
@@ -51,23 +51,30 @@ pub fn resolve_dir(spec: EngineStorageRootSpec, default_base: Option<&Path>) -> 
     normalize_path(PathBuf::from(spec.default_dir), default_base)
 }
 
+/// Resolve a storage path to an absolute, lexically normalized path.
+///
+/// Storage roots are passed to external tools such as shader compilers. Keeping
+/// `..` components in an otherwise absolute path unnecessarily consumes the
+/// Windows legacy path budget and can make a valid cache location unusable.
+/// This normalization is filesystem-independent and therefore also works before
+/// the target directory exists.
 pub fn normalize_path(path: PathBuf, default_base: Option<&Path>) -> PathBuf {
-    if path.is_absolute() {
-        return path;
-    }
-
-    if let Some(base) = default_base {
-        return base.join(path);
-    }
-
-    std::env::current_dir()
-        .unwrap_or_else(|_| PathBuf::from("."))
-        .join(path)
+    let absolute = if path.is_absolute() {
+        path
+    } else if let Some(base) = default_base {
+        base.join(path)
+    } else {
+        std::env::current_dir()
+            .unwrap_or_else(|_| PathBuf::from("."))
+            .join(path)
+    };
+    lexical_normalize(&absolute)
 }
 
 pub fn publish_env(spec: EngineStorageRootSpec, path: &Path) {
-    std::env::set_var(spec.primary_env, path);
-    std::env::set_var(spec.alias_env, path);
+    let normalized = lexical_normalize(path);
+    std::env::set_var(spec.primary_env, &normalized);
+    std::env::set_var(spec.alias_env, &normalized);
     std::env::set_var(spec.ready_env, "1");
 }
 
@@ -83,15 +90,53 @@ pub fn child(spec: EngineStorageRootSpec, child: impl AsRef<Path>) -> PathBuf {
 /// config root), that segment is stripped to avoid `cache/cache` and
 /// `config/config` paths. This is a canonicalization rule, not an alternate routing path.
 pub fn resolve_under_root(spec: EngineStorageRootSpec, root: &Path, child: &Path) -> PathBuf {
-    if child.is_absolute() {
-        return child.to_path_buf();
-    }
-
-    root.join(strip_leading_segment(spec.leading_segment, child))
+    let resolved = if child.is_absolute() {
+        child.to_path_buf()
+    } else {
+        root.join(strip_leading_segment(spec.leading_segment, child))
+    };
+    lexical_normalize(&resolved)
 }
 
 pub fn display_path(path: &Path) -> String {
     path.to_string_lossy().replace('\\', "/")
+}
+
+fn lexical_normalize(path: &Path) -> PathBuf {
+    let mut prefix: Option<OsString> = None;
+    let mut rooted = false;
+    let mut parts = Vec::<OsString>::new();
+
+    for component in path.components() {
+        match component {
+            Component::Prefix(value) => prefix = Some(value.as_os_str().to_owned()),
+            Component::RootDir => rooted = true,
+            Component::CurDir => {}
+            Component::ParentDir => {
+                let can_pop = parts
+                    .last()
+                    .is_some_and(|part| part.as_os_str() != OsStr::new(".."));
+                if can_pop {
+                    parts.pop();
+                } else if !rooted {
+                    parts.push(OsString::from(".."));
+                }
+            }
+            Component::Normal(value) => parts.push(value.to_owned()),
+        }
+    }
+
+    let mut out = PathBuf::new();
+    if let Some(prefix) = prefix {
+        out.push(prefix);
+    }
+    if rooted {
+        out.push(std::path::MAIN_SEPARATOR.to_string());
+    }
+    for part in parts {
+        out.push(part);
+    }
+    out
 }
 
 fn strip_leading_segment(segment: &str, path: &Path) -> PathBuf {
@@ -101,7 +146,7 @@ fn strip_leading_segment(segment: &str, path: &Path) -> PathBuf {
     };
 
     let first_matches = match first {
-        std::path::Component::Normal(s) => s.to_string_lossy().eq_ignore_ascii_case(segment),
+        Component::Normal(s) => s.to_string_lossy().eq_ignore_ascii_case(segment),
         _ => false,
     };
 
@@ -118,4 +163,41 @@ fn strip_leading_segment(segment: &str, path: &Path) -> PathBuf {
 
 fn non_empty_env(name: &str) -> Option<OsString> {
     std::env::var_os(name).filter(|value| !value.as_os_str().is_empty())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn normalize_path_removes_parent_components_before_external_tool_use() {
+        let base = std::env::current_dir()
+            .unwrap()
+            .join("apps")
+            .join("AssetInspector");
+        let normalized = normalize_path(PathBuf::from("../../cache/asset-inspector"), Some(&base));
+        assert!(normalized.is_absolute());
+        assert!(!normalized
+            .components()
+            .any(|component| matches!(component, Component::ParentDir | Component::CurDir)));
+        assert!(normalized.ends_with(Path::new("cache/asset-inspector")));
+    }
+
+    #[test]
+    fn resolve_under_root_is_also_lexically_normalized() {
+        let root = normalize_path(PathBuf::from("cache/asset-inspector"), None);
+        let spec = EngineStorageRootSpec::new(
+            "CACHE_FILES",
+            "TEST_CACHE_PRIMARY",
+            "TEST_CACHE_ALIAS",
+            "TEST_CACHE_READY",
+            "cache",
+            "cache",
+        );
+        let child = resolve_under_root(spec, &root, Path::new("shaders/../shaders/vulkan"));
+        assert!(child.ends_with(Path::new("cache/asset-inspector/shaders/vulkan")));
+        assert!(!child
+            .components()
+            .any(|component| matches!(component, Component::ParentDir | Component::CurDir)));
+    }
 }

@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::ModelSkeletonMetadata;
+use crate::{MaterialBindingRef, MeshRenderOptions, ModelSkeletonMetadata, ResolvedAssetGraphV2};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -11,6 +11,9 @@ pub struct ModelAssetRequest {
     pub skeleton: Option<String>,
     pub texture_dictionary: Option<String>,
     pub collisions: Vec<ModelCollisionRef>,
+    /// Hydrated dependency graph resolved by the caller through engine.assets.graph.
+    /// Model runtime must not call the graph gateway reentrantly from inside model service execution.
+    pub dependency_graph: Option<ResolvedAssetGraphV2>,
     pub target_height: f32,
     pub eye_height_ratio: f32,
 }
@@ -24,6 +27,7 @@ impl Default for ModelAssetRequest {
             skeleton: None,
             texture_dictionary: None,
             collisions: Vec::new(),
+            dependency_graph: None,
             target_height: 1.8,
             eye_height_ratio: 0.91,
         }
@@ -77,6 +81,62 @@ impl ModelAssetRequest {
     }
 }
 
+/// Complete runtime configuration projected from the model's companion `.ytyp`
+/// and hydrated dependency graph. Preview and game runtime consume the same DTO.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ModelRuntimeConfiguration {
+    pub properties_ref: Option<String>,
+    pub model_ref: Option<String>,
+    pub drawable_ref: Option<String>,
+    pub material_bindings: Vec<MaterialBindingRef>,
+    pub material_refs: Vec<String>,
+    pub texture_refs: Vec<String>,
+    pub uv_layout_refs: Vec<String>,
+    pub physics_refs: Vec<String>,
+    pub collision_refs: Vec<String>,
+    pub ai_refs: Vec<String>,
+    pub streaming_refs: Vec<String>,
+    pub editor_refs: Vec<String>,
+    pub other_refs: Vec<String>,
+    pub render_options: MeshRenderOptions,
+    pub collision_policy: String,
+    pub uv_policy: String,
+    pub physics_policy: String,
+    pub lod_policy: String,
+    pub streaming_policy: String,
+    pub metadata: serde_json::Value,
+    pub warnings: Vec<String>,
+}
+
+impl Default for ModelRuntimeConfiguration {
+    fn default() -> Self {
+        Self {
+            properties_ref: None,
+            model_ref: None,
+            drawable_ref: None,
+            material_bindings: Vec::new(),
+            material_refs: Vec::new(),
+            texture_refs: Vec::new(),
+            uv_layout_refs: Vec::new(),
+            physics_refs: Vec::new(),
+            collision_refs: Vec::new(),
+            ai_refs: Vec::new(),
+            streaming_refs: Vec::new(),
+            editor_refs: Vec::new(),
+            other_refs: Vec::new(),
+            render_options: MeshRenderOptions::world_opaque(),
+            collision_policy: "unspecified".to_owned(),
+            uv_policy: "authored".to_owned(),
+            physics_policy: "unspecified".to_owned(),
+            lod_policy: "unspecified".to_owned(),
+            streaming_policy: "unspecified".to_owned(),
+            metadata: serde_json::Value::Null,
+            warnings: Vec::new(),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ModelAssetBundle {
     pub source: String,
@@ -85,6 +145,8 @@ pub struct ModelAssetBundle {
     pub skeleton: Option<ModelSkeletonMetadata>,
     pub texture_dictionary: Option<String>,
     pub collisions: Vec<ModelCollisionRef>,
+    pub configuration: ModelRuntimeConfiguration,
+    pub dependency_graph: ResolvedAssetGraphV2,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

@@ -29,6 +29,8 @@ pub mod asset_document_action_id {
     pub const DELETE: &str = "asset.document.delete";
     pub const RENAME: &str = "asset.document.rename";
     pub const SAVE: &str = "asset.document.save";
+    pub const REBUILD: &str = "asset.document.rebuild";
+    pub const DISCARD: &str = "asset.document.discard_staged";
 }
 
 pub mod asset_inspect_method {
@@ -46,6 +48,9 @@ pub mod asset_edit_method {
     pub const SHUTDOWN_V1: &str = newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1;
     pub const VALIDATE_PATCH_JSON_V1: &str = "assets.edit.validate_patch_json_v1";
     pub const APPLY_PATCH_JSON_V1: &str = "assets.edit.apply_patch_json_v1";
+    pub const STAGE_PATCH_JSON_V1: &str = "assets.edit.stage_patch_json_v1";
+    pub const REBUILD_JSON_V1: &str = "assets.edit.rebuild_json_v1";
+    pub const DISCARD_STAGED_JSON_V1: &str = "assets.edit.discard_staged_json_v1";
     pub const DIRTY_STATE_JSON_V1: &str = "assets.edit.dirty_state_json_v1";
 }
 
@@ -64,6 +69,9 @@ pub const ASSETS_EDIT_SERVICE_METHODS: &[&str] = &[
     asset_edit_method::SHUTDOWN_V1,
     asset_edit_method::VALIDATE_PATCH_JSON_V1,
     asset_edit_method::APPLY_PATCH_JSON_V1,
+    asset_edit_method::STAGE_PATCH_JSON_V1,
+    asset_edit_method::REBUILD_JSON_V1,
+    asset_edit_method::DISCARD_STAGED_JSON_V1,
     asset_edit_method::DIRTY_STATE_JSON_V1,
 ];
 
@@ -166,6 +174,32 @@ impl Default for AssetDocumentPreview {
             icon: String::new(),
             thumbnail_ref: String::new(),
             summary: String::new(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
+pub struct AssetDocumentText {
+    pub encoding: String,
+    pub language: String,
+    pub content: String,
+    pub byte_len: u64,
+    pub line_count: usize,
+    pub truncated: bool,
+    pub editable: bool,
+}
+
+impl Default for AssetDocumentText {
+    fn default() -> Self {
+        Self {
+            encoding: "utf-8".to_owned(),
+            language: "text".to_owned(),
+            content: String::new(),
+            byte_len: 0,
+            line_count: 0,
+            truncated: false,
+            editable: false,
         }
     }
 }
@@ -331,6 +365,10 @@ pub struct AssetDocument {
     pub writer_capability: String,
     pub dirty: bool,
     pub preview: AssetDocumentPreview,
+    /// Provider-decoded UTF-8 document payload for text-editor consumers.
+    /// The inspector never reads source files directly; this projection is
+    /// populated through engine.assets text/VFS routing.
+    pub text: Option<AssetDocumentText>,
     pub descriptor: Option<AssetFileTypeDescriptor>,
     /// Provider-declared document actions such as Add/Delete/Rename/Save.
     ///
@@ -365,6 +403,7 @@ impl Default for AssetDocument {
             writer_capability: String::new(),
             dirty: false,
             preview: AssetDocumentPreview::default(),
+            text: None,
             descriptor: None,
             actions: Vec::new(),
             sections: Vec::new(),
@@ -471,6 +510,10 @@ pub struct AssetPatchResult {
     pub accepted: bool,
     pub written: bool,
     pub dirty: bool,
+    /// Number of provider-owned staged mutations waiting for rebuild/commit.
+    pub staged_operations: usize,
+    /// Provider-owned staged patches used by tooling to project a virtual container view.
+    pub staged_patches: Vec<AssetPatch>,
     pub diagnostics: Vec<AssetDocumentDiagnostic>,
 }
 
@@ -482,6 +525,8 @@ impl Default for AssetPatchResult {
             accepted: false,
             written: false,
             dirty: false,
+            staged_operations: 0,
+            staged_patches: Vec::new(),
             diagnostics: Vec::new(),
         }
     }

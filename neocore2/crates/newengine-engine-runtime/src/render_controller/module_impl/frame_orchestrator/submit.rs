@@ -69,14 +69,19 @@ impl RenderFrameOrchestrator {
         );
         let bounds = snapshot.bounds;
         let runtime_profile = controller.runtime_profile().clone();
-        let scene_color_format = if runtime_profile.hdr_scene_enabled() {
+        let external_preview_target = controller.external_preview_target_active();
+        let hdr_scene_enabled = runtime_profile.hdr_scene_enabled() && !external_preview_target;
+        let deferred_enabled = runtime_profile.deferred_enabled() && !external_preview_target;
+        let postfx_enabled = runtime_profile.postfx_enabled() && !external_preview_target;
+        let shadows_enabled = runtime_profile.shadows_enabled() && !external_preview_target;
+        let scene_color_format = if hdr_scene_enabled {
             crate::render_controller::render_quality::SCENE_HDR_COLOR_FORMAT
         } else {
             TextureFormat::Bgra8Unorm
         };
         let lit = match controller.gpu.require_primary_lit_pipeline_for(
             scene_color_format,
-            runtime_profile.deferred_enabled(),
+            deferred_enabled,
             r,
         ) {
             Ok(lit) => lit,
@@ -117,7 +122,7 @@ impl RenderFrameOrchestrator {
         if gpu_safe_profile {
             log_gpu_safe_profile_once();
         }
-        let shadow_plan = if !runtime_profile.shadows_enabled() {
+        let shadow_plan = if !shadows_enabled {
             shadows::LightShadowPlan::disabled(lit.white_texture)
         } else {
             match shadows::build_light_shadow_plan(
@@ -198,7 +203,7 @@ impl RenderFrameOrchestrator {
             shadow_plan,
             shadow_frame,
             render_shadow_map,
-            deferred: runtime_profile.deferred_enabled(),
+            deferred: deferred_enabled,
             viewport_extent: snapshot.viewport_extent,
             surface_extent: snapshot.surface_extent,
             runtime: view_frame.effective_play_mode.is_runtime(),
@@ -274,20 +279,18 @@ impl RenderFrameOrchestrator {
             .viewport_is_surface(scope.direct_surface_viewport)
             .viewport_render_target(rt)
             .shadow(
-                runtime_profile.shadows_enabled()
-                    && render_shadow_map
-                    && shadow_rt_for_graph.is_some(),
+                shadows_enabled && render_shadow_map && shadow_rt_for_graph.is_some(),
                 shadow_plan.resolution,
             )
-            .shadow_cascades(if runtime_profile.shadows_enabled() {
+            .shadow_cascades(if shadows_enabled {
                 shadow_plan.cascade_count()
             } else {
                 0
             })
             .shadow_render_target(shadow_rt_for_graph)
-            .deferred(runtime_profile.deferred_enabled())
-            .hdr_scene(runtime_profile.hdr_scene_enabled())
-            .postfx(runtime_profile.postfx_enabled())
+            .deferred(deferred_enabled)
+            .hdr_scene(hdr_scene_enabled)
+            .postfx(postfx_enabled)
             .ui(ui_enabled)
             .ui_backdrop_blur(
                 ui_enabled && ui_backdrop.enabled && ui_backdrop.blur_radius_px > 0.05,
@@ -356,6 +359,16 @@ impl RenderFrameOrchestrator {
         );
         let submit_report = match submit_frame_envelope(r, frame_envelope, scope.trace_frame) {
             Ok(report) => report,
+            Err(e) if is_transient_shader_pipeline_error(&e) => {
+                Self::end_viewport_after_transient_pipeline_wait(
+                    controller,
+                    r,
+                    ui.cloned(),
+                    scope,
+                    e,
+                )?;
+                return Ok(PlayableFrameOutcome::EndedEarly { ui_telemetry: None });
+            }
             Err(e) => {
                 let message = e.to_string();
                 controller.disable_viewport_pass("render_graph.submit_frame", &message);

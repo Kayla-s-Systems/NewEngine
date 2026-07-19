@@ -91,6 +91,9 @@ pub(super) struct RenderViewportState {
     pub(super) clear_color: [f32; 4],
     pub(super) last_w: u32,
     pub(super) last_h: u32,
+    /// True while the native window has no presentable surface extent (typically minimized).
+    /// The last valid dimensions remain intact so restore can force a backend resize.
+    pub(super) surface_suspended: bool,
     pub(super) last_vp_w: u32,
     pub(super) last_vp_h: u32,
     pub(super) last_aspect: f32,
@@ -151,6 +154,7 @@ impl RenderViewportState {
             clear_color: [0.0, 0.0, 0.0, 1.0],
             last_w: 0,
             last_h: 0,
+            surface_suspended: false,
             last_vp_w: 0,
             last_vp_h: 0,
             last_aspect: 1.0,

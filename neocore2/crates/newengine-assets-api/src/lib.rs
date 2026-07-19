@@ -384,6 +384,8 @@ pub mod method {
     pub const PACKAGE_WRITER_INFO_JSON_V1: &str = "asset.package_writer_info_json_v1";
     /// Explicit .nepak package writer execution. Payload is NepakPackageWriteRequestV1.
     pub const PACKAGE_WRITE_NEPAK_JSON_V1: &str = "asset.package_write_nepak_json_v1";
+    /// Explicit UTF-8 text replacement through the winning writable VFS source.
+    pub const PACKAGE_WRITE_TEXT_JSON_V1: &str = "asset.package_write_text_json_v1";
 
     // Generic lifecycle hook understood by the plugin host.
     pub const SHUTDOWN_V1: &str = newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1;
@@ -558,6 +560,7 @@ pub const REQUIRED_RUNTIME_METHODS_V1: &[&str] = &[
     method::DIRTY_SCAN_JSON_V1,
     method::PACKAGE_WRITER_INFO_JSON_V1,
     method::PACKAGE_WRITE_NEPAK_JSON_V1,
+    method::PACKAGE_WRITE_TEXT_JSON_V1,
 ];
 
 /// Startup validation contract for the engine-facing asset gateway.

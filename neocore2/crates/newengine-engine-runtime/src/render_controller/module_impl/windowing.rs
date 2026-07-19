@@ -7,6 +7,24 @@ use super::super::controller::RuntimeRenderController;
 
 impl RuntimeRenderController {
     #[inline]
+    pub(super) fn suspend_zero_sized_surface(&mut self, w: u32, h: u32) {
+        if self.viewport.surface_suspended {
+            return;
+        }
+
+        self.viewport.surface_suspended = true;
+        newengine_ulog_api::ulog::info!(
+            "render controller: surface suspended because native extent is {}x{}; GPU presentation paused",
+            w,
+            h
+        );
+        newengine_core::crash::record_breadcrumb(format!(
+            "render controller: surface suspended at native extent {}x{}",
+            w, h
+        ));
+    }
+
+    #[inline]
     pub(super) fn read_window_size<E: Send>(ctx: &ModuleCtx<'_, E>) -> (u32, u32) {
         ctx.resources()
             .get::<WindowInitSize>()
@@ -21,8 +39,38 @@ impl RuntimeRenderController {
         h: u32,
     ) -> EngineResult<()> {
         if w == 0 || h == 0 {
+            self.suspend_zero_sized_surface(w, h);
+            return Ok(());
+        }
+
+        if self.viewport.surface_suspended {
+            let old_w = self.viewport.last_w;
+            let old_h = self.viewport.last_h;
+            newengine_ulog_api::ulog::info!(
+                "render controller: restoring presentable surface {}x{} -> {}x{}",
+                old_w,
+                old_h,
+                w,
+                h
+            );
+            newengine_core::crash::record_breadcrumb(format!(
+                "render controller: restoring presentable surface {}x{} -> {}x{}",
+                old_w, old_h, w, h
+            ));
+
+            // Force the backend through its resize/recreate path even when the restored
+            // dimensions equal the pre-minimize dimensions. The OS may have invalidated
+            // the old swapchain while the native surface had no presentable extent.
+            r.resize(w, h)?;
+
             self.viewport.last_w = w;
             self.viewport.last_h = h;
+            self.viewport.surface_suspended = false;
+            newengine_ulog_api::ulog::info!(
+                "render controller: presentable surface restored {}x{}",
+                w,
+                h
+            );
             return Ok(());
         }
 

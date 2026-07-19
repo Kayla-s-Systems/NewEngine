@@ -23,7 +23,8 @@ impl RuntimeRenderController {
             );
         }
         newengine_ulog_api::ulog::info!(
-            "render controller: scene pipeline warmup deferred until Simulate/Play or game profile viewport"
+            "render controller: scene pipeline warmup deferred until a playable viewport or owned preview extent; preview_only={}",
+            self.app_policy.preview_only
         );
         Ok(())
     }

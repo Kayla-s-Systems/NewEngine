@@ -188,19 +188,44 @@ impl PreStartGraphicsApp {
     }
     pub(super) fn show_launch_summary(&self, ui: &mut egui::Ui) {
         let style = north_star_bootstrap_ui_style();
+        let outer_width = ui.available_width();
         egui::Frame::none()
             .fill(color32(style.palette.panel_active))
             .stroke(egui::Stroke::new(1.0, color32(style.palette.blue)))
             .rounding(egui::Rounding::same(10.0))
             .inner_margin(egui::Margin::symmetric(16.0, 12.0))
             .show(ui, |ui| {
-                ui.horizontal_wrapped(|ui| {
-                    summary_metric(ui, "OUTPUT", &format!("{}×{}", self.width, self.height));
-                    summary_metric(ui, "MODE", self.settings.display.window_mode.label());
-                    summary_metric(ui, "AA STACK", &aa_summary(&self.settings));
-                    summary_metric(ui, "PRESET", self.settings.graphics.preset.label());
-                    summary_metric(ui, "PRESSURE", self.render_pressure().label());
-                });
+                ui.set_min_width((outer_width - 32.0).max(1.0));
+                if ui.available_width() >= 700.0 {
+                    ui.columns(5, |columns| {
+                        summary_metric(
+                            &mut columns[0],
+                            "OUTPUT",
+                            &format!("{}×{}", self.width, self.height),
+                        );
+                        summary_metric(
+                            &mut columns[1],
+                            "MODE",
+                            self.settings.display.window_mode.label(),
+                        );
+                        summary_metric(&mut columns[2], "AA STACK", &aa_summary(&self.settings));
+                        summary_metric(
+                            &mut columns[3],
+                            "PRESET",
+                            self.settings.graphics.preset.label(),
+                        );
+                        summary_metric(&mut columns[4], "PRESSURE", self.render_pressure().label());
+                    });
+                } else {
+                    ui.horizontal_wrapped(|ui| {
+                        ui.spacing_mut().item_spacing.x = 22.0;
+                        summary_metric(ui, "OUTPUT", &format!("{}×{}", self.width, self.height));
+                        summary_metric(ui, "MODE", self.settings.display.window_mode.label());
+                        summary_metric(ui, "AA STACK", &aa_summary(&self.settings));
+                        summary_metric(ui, "PRESET", self.settings.graphics.preset.label());
+                        summary_metric(ui, "PRESSURE", self.render_pressure().label());
+                    });
+                }
             });
         ui.add_space(12.0);
     }

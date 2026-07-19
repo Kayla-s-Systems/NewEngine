@@ -84,14 +84,22 @@ fn edit_invoke_json(state: &mut AssetEditState, payload: Blob) -> RResult<Blob, 
             };
             ok_json(state.apply_patch(patch))
         }
-        asset_edit_method::DIRTY_STATE_JSON_V1 => ok_json(AssetPatchResult {
-            accepted: true,
-            diagnostics: vec![AssetDocumentDiagnostic::info(
-                "dirty_state.generic",
-                "generic edit provider has no local dirty cache",
-            )],
-            ..AssetPatchResult::default()
-        }),
+        asset_edit_method::STAGE_PATCH_JSON_V1 => {
+            let patch = match serde_json::from_value::<AssetPatch>(envelope.request) {
+                Ok(patch) => patch,
+                Err(e) => {
+                    return RResult::RErr(RString::from(format!(
+                        "assets.edit: invalid staged patch: {e}"
+                    )))
+                }
+            };
+            ok_json(state.stage_patch(patch))
+        }
+        asset_edit_method::REBUILD_JSON_V1 => ok_json(state.rebuild_staged(envelope.request)),
+        asset_edit_method::DISCARD_STAGED_JSON_V1 => {
+            ok_json(state.discard_staged(envelope.request))
+        }
+        asset_edit_method::DIRTY_STATE_JSON_V1 => ok_json(state.dirty_state(envelope.request)),
         other => RResult::RErr(RString::from(format!(
             "assets.edit: unknown invoke method '{other}'"
         ))),
@@ -145,7 +153,13 @@ pub fn asset_document_edit_gateway_service(
     )
     .gateway(ENGINE_ASSETS_EDIT_SERVICE_ID)
     .protocol("json")
-    .features(["asset-patch-dto", "provider-validated-writeback", "explicit-writer-capability"])
+    .features([
+        "asset-patch-dto",
+        "staged-edit-session",
+        "provider-validated-writeback",
+        "explicit-rebuild-commit",
+        "explicit-writer-capability",
+    ])
     .notes("Generic edit route validates patch transport. Real write-back is owned by format/package writer providers.");
 
     JsonServiceRouter::with_state(ASSETS_EDIT_SERVICE_ID, AssetEditState::new(host))
@@ -159,16 +173,21 @@ pub fn asset_document_edit_gateway_service(
             asset_edit_method::APPLY_PATCH_JSON_V1,
             |state, patch| state.apply_patch(patch),
         )
+        .post_json::<AssetPatch, AssetPatchResult, _>(
+            asset_edit_method::STAGE_PATCH_JSON_V1,
+            |state, patch| state.stage_patch(patch),
+        )
+        .post_json::<Value, AssetPatchResult, _>(
+            asset_edit_method::REBUILD_JSON_V1,
+            |state, payload| state.rebuild_staged(payload),
+        )
+        .post_json::<Value, AssetPatchResult, _>(
+            asset_edit_method::DISCARD_STAGED_JSON_V1,
+            |state, payload| state.discard_staged(payload),
+        )
         .post_json::<Value, AssetPatchResult, _>(
             asset_edit_method::DIRTY_STATE_JSON_V1,
-            |_state, _payload| AssetPatchResult {
-                accepted: true,
-                diagnostics: vec![AssetDocumentDiagnostic::info(
-                    "dirty_state.generic",
-                    "generic edit provider has no local dirty cache",
-                )],
-                ..AssetPatchResult::default()
-            },
+            |state, payload| state.dirty_state(payload),
         )
         .blob(asset_edit_method::INVOKE_JSON, edit_invoke_json)
         .blob(asset_edit_method::SHUTDOWN_V1, |_state, _payload| {
@@ -183,7 +202,7 @@ pub fn register_asset_document_gateways_best_effort(host: HostApiV1) -> bool {
             gateway: ENGINE_ASSETS_INSPECT_SERVICE_ID,
             service_kind: "assets.inspect",
             provider_service: ASSETS_INSPECT_SERVICE_ID,
-            provider_route: "engine.assets.starvault.document_inspect",
+            provider_route: "engine.assets.starvault.inspect",
             capability: ASSETS_INSPECT_BACKEND_CAPABILITY_ID,
             priority: 0,
             owner: "newengine-assets.document-inspect",
@@ -195,7 +214,7 @@ pub fn register_asset_document_gateways_best_effort(host: HostApiV1) -> bool {
             gateway: ENGINE_ASSETS_EDIT_SERVICE_ID,
             service_kind: "assets.edit",
             provider_service: ASSETS_EDIT_SERVICE_ID,
-            provider_route: "engine.assets.starvault.document_edit",
+            provider_route: "engine.assets.starvault.edit",
             capability: ASSETS_EDIT_BACKEND_CAPABILITY_ID,
             priority: 0,
             owner: "newengine-assets.document-edit",

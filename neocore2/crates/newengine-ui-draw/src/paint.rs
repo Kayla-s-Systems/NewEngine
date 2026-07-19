@@ -186,6 +186,9 @@ pub struct UiTextPaintCommand {
     pub text: String,
     pub font_ref: String,
     pub font_px: f32,
+    /// Additional authored tracking applied after the font advance, in pixels.
+    /// Zero preserves the font's nominal spacing.
+    pub letter_spacing_px: f32,
     pub color: u32,
     pub max_width_px: f32,
     pub clip_rect: Option<[f32; 4]>,
@@ -199,6 +202,7 @@ impl Default for UiTextPaintCommand {
             text: String::new(),
             font_ref: String::new(),
             font_px: 14.0,
+            letter_spacing_px: 0.0,
             color: 0,
             max_width_px: 0.0,
             clip_rect: None,

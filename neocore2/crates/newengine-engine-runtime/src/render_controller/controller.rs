@@ -27,6 +27,7 @@ use newengine_render_feature_api::{LightExtractionProvider, RenderDrawListProvid
 #[derive(Clone, Debug, Default)]
 pub(super) struct RenderRuntimeAppPolicy {
     pub(super) ui_only: bool,
+    pub(super) preview_only: bool,
     pub(super) viewport_pass: Option<bool>,
 }
 
@@ -51,19 +52,35 @@ impl RenderRuntimeAppPolicy {
             }
         }
         if policy.ui_only {
+            policy.preview_only = false;
             policy.viewport_pass = Some(false);
         }
         policy
+    }
+
+    pub(super) fn idle_preview_uses_ui_only(
+        &self,
+        external_extent_owned: bool,
+        external_redraw_requested: bool,
+    ) -> bool {
+        self.preview_only && (!external_extent_owned || !external_redraw_requested)
     }
 
     fn merge(&mut self, config: RenderPolicyConfig) {
         if let Some(mode) = config.mode.as_deref() {
             if mode.eq_ignore_ascii_case("ui_only") || mode.eq_ignore_ascii_case("ui-only") {
                 self.ui_only = true;
+            } else if mode.eq_ignore_ascii_case("preview_only")
+                || mode.eq_ignore_ascii_case("preview-only")
+            {
+                self.preview_only = true;
             }
         }
         if let Some(ui_only) = config.ui_only {
             self.ui_only = ui_only;
+        }
+        if let Some(preview_only) = config.preview_only {
+            self.preview_only = preview_only;
         }
         if let Some(viewport_pass) = config.viewport_pass {
             self.viewport_pass = Some(viewport_pass);
@@ -77,6 +94,8 @@ struct RenderPolicyConfig {
     mode: Option<String>,
     #[serde(default)]
     ui_only: Option<bool>,
+    #[serde(default)]
+    preview_only: Option<bool>,
     #[serde(default)]
     viewport_pass: Option<bool>,
 }
@@ -99,6 +118,14 @@ impl RuntimeRenderController {
     #[inline]
     pub(crate) fn runtime_profile(&self) -> &super::runtime_profile::RenderRuntimeProfile {
         &self.runtime_profile.profile
+    }
+
+    /// True only while a standalone preview-only tool owns an offscreen viewport.
+    /// Such targets are sampled directly by retained UI, so they must remain LDR
+    /// and must not depend on the gameplay HDR/postFX chain to become displayable.
+    #[inline]
+    pub(super) fn external_preview_target_active(&self) -> bool {
+        self.app_policy.preview_only && self.bridges.viewport.external_extent_owned()
     }
 
     pub(crate) fn apply_backend_capability_profile(
@@ -266,5 +293,31 @@ impl RuntimeRenderController {
             backend_failure: RenderBackendFailureState::new(),
             app_policy: RenderRuntimeAppPolicy::from_startup_config(),
         }
+    }
+}
+
+#[cfg(test)]
+mod app_policy_tests {
+    use super::*;
+
+    #[test]
+    fn preview_only_policy_skips_world_until_preview_extent_is_owned() {
+        let policy = RenderRuntimeAppPolicy {
+            preview_only: true,
+            ..RenderRuntimeAppPolicy::default()
+        };
+        assert!(policy.idle_preview_uses_ui_only(false, false));
+        assert!(policy.idle_preview_uses_ui_only(true, false));
+        assert!(!policy.idle_preview_uses_ui_only(true, true));
+    }
+
+    #[test]
+    fn ui_only_policy_does_not_activate_preview_world_path() {
+        let policy = RenderRuntimeAppPolicy {
+            ui_only: true,
+            preview_only: false,
+            viewport_pass: Some(false),
+        };
+        assert!(!policy.idle_preview_uses_ui_only(false, false));
     }
 }

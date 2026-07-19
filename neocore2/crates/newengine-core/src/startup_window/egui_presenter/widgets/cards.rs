@@ -119,5 +119,4 @@ pub(in crate::startup_window::egui_presenter) fn summary_metric(
                 .color(color32(palette.text)),
         );
     });
-    ui.add_space(20.0);
 }

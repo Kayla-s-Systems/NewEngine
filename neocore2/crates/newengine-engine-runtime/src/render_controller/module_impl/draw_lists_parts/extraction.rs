@@ -323,6 +323,25 @@ impl<'a> newengine_render_feature_api::DrawListBuildCtx for DrawListBuildCtx<'a>
         Ok(())
     }
 
+    fn record_asset_preview(
+        &mut self,
+        ctx: &SceneExtractionCtx<'_>,
+        bundle: &newengine_model_domain_api::ModelAssetBundle,
+        view: newengine_render_feature_api::AssetPreviewView,
+    ) -> EngineResult<()> {
+        let _ = self.record(RenderDrawListKind::OpaqueForward, |this, r| {
+            super::super::passes::draw_asset_preview_bundle(
+                this,
+                r,
+                bundle,
+                ctx.lit,
+                ctx.viewport_extent,
+                view,
+            )
+        })?;
+        Ok(())
+    }
+
     fn record_ui(&mut self, ctx: &SceneExtractionCtx<'_>) -> EngineResult<()> {
         let Some(ui) = ctx.ui else {
             return Ok(());

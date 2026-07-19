@@ -1,4 +1,5 @@
-use std::sync::Arc;
+use std::collections::HashSet;
+use std::sync::{Arc, Mutex};
 
 use newengine_core::render::{
     DrawListProviderExtractRequest, DrawListProviderExtractResponse, FrameGraphRoute,
@@ -53,6 +54,7 @@ struct PluginDrawListProviderJson {
 pub(crate) struct RenderDrawListProviderRegistry {
     providers: Vec<Arc<dyn RenderDrawListProvider>>,
     external_providers: Vec<ExternalRenderDrawListProviderDesc>,
+    reported_route_warnings: Mutex<HashSet<String>>,
 }
 
 impl RenderDrawListProviderRegistry {
@@ -61,6 +63,7 @@ impl RenderDrawListProviderRegistry {
         Self {
             providers: Vec::new(),
             external_providers: Vec::new(),
+            reported_route_warnings: Mutex::new(HashSet::new()),
         }
     }
 
@@ -69,6 +72,7 @@ impl RenderDrawListProviderRegistry {
         Self {
             providers,
             external_providers: Vec::new(),
+            reported_route_warnings: Mutex::new(HashSet::new()),
         }
     }
 
@@ -284,12 +288,20 @@ impl RenderDrawListProviderRegistry {
         &self,
         report: &DrawListRouteValidationReport,
     ) -> EngineResult<()> {
+        let mut reported = self.reported_route_warnings.lock().ok();
         for issue in &report.warnings {
-            newengine_ulog_api::ulog::warn!(
-                "render draw-list route validation: code='{}' {}",
-                issue.code,
-                issue.message
-            );
+            let key = format!("{}:{}", issue.code, issue.message);
+            let first_report = reported
+                .as_mut()
+                .map(|reported| reported.insert(key))
+                .unwrap_or(true);
+            if first_report {
+                newengine_ulog_api::ulog::warn!(
+                    "render draw-list route validation: code='{}' {} (further identical warnings suppressed)",
+                    issue.code,
+                    issue.message
+                );
+            }
         }
         if report.errors.is_empty() {
             return Ok(());

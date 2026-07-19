@@ -4,6 +4,7 @@ impl AssetEditState {
     pub(super) fn new(host: HostApiV1) -> Self {
         Self {
             assets: AssetServiceClient::new(host),
+            staged: Arc::new(Mutex::new(BTreeMap::new())),
         }
     }
 
@@ -65,6 +66,15 @@ impl AssetEditState {
             result.accepted = false;
             return result;
         }
+        for operation in &patch.operations {
+            if normalized_operation(&operation.op).is_none() {
+                result.diagnostics.push(AssetDocumentDiagnostic::error(
+                    "patch.operation.unsupported",
+                    format!("unsupported asset patch operation '{}'", operation.op),
+                ));
+                return result;
+            }
+        }
         result.accepted = true;
         result.dirty = true;
         result.diagnostics.push(AssetDocumentDiagnostic::info(
@@ -74,6 +84,197 @@ impl AssetEditState {
         result
     }
 
+    /// Stage a mutation in the engine-owned edit session without touching VFS bytes.
+    pub(super) fn stage_patch(&self, patch: AssetPatch) -> AssetPatchResult {
+        let mut result = self.validate_patch(patch.clone());
+        if !result.accepted || patch.operations.is_empty() {
+            return result;
+        }
+        let (logical_path, _) = split_entry_ref(&result.asset_ref);
+        let mut staged = match self.staged.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        staged.entry(logical_path.clone()).or_default().push(patch);
+        result.asset_ref = logical_path;
+        result.written = false;
+        result.dirty = true;
+        result.staged_operations = staged_operation_count(&staged, &result.asset_ref);
+        result.staged_patches = staged.get(&result.asset_ref).cloned().unwrap_or_default();
+        result.diagnostics.push(AssetDocumentDiagnostic::info(
+            "patch.staged",
+            format!(
+                "mutation staged in engine.assets.edit; {} operation(s) await Rebuild",
+                result.staged_operations
+            ),
+        ));
+        result
+    }
+
+    pub(super) fn dirty_state(&self, payload: Value) -> AssetPatchResult {
+        let asset_ref = request_asset_ref(&payload);
+        let (logical_path, _) = split_entry_ref(&asset_ref);
+        let staged = match self.staged.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        let count = staged_operation_count(&staged, &logical_path);
+        let staged_patches = staged.get(&logical_path).cloned().unwrap_or_default();
+        AssetPatchResult {
+            asset_ref: logical_path,
+            accepted: true,
+            written: false,
+            dirty: count > 0,
+            staged_operations: count,
+            staged_patches,
+            diagnostics: vec![AssetDocumentDiagnostic::info(
+                "edit.session.state",
+                format!("{count} staged operation(s)"),
+            )],
+            ..AssetPatchResult::default()
+        }
+    }
+
+    pub(super) fn discard_staged(&self, payload: Value) -> AssetPatchResult {
+        let asset_ref = request_asset_ref(&payload);
+        let (logical_path, _) = split_entry_ref(&asset_ref);
+        let mut staged = match self.staged.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        let discarded = staged
+            .remove(&logical_path)
+            .map(|patches| patches.iter().map(|patch| patch.operations.len()).sum())
+            .unwrap_or(0usize);
+        AssetPatchResult {
+            asset_ref: logical_path,
+            accepted: true,
+            written: false,
+            dirty: false,
+            staged_operations: 0,
+            diagnostics: vec![AssetDocumentDiagnostic::info(
+                "edit.session.discarded",
+                format!("discarded {discarded} staged operation(s)"),
+            )],
+            ..AssetPatchResult::default()
+        }
+    }
+
+    /// Commit all staged operations with one provider-owned rebuild/repack call.
+    pub(super) fn rebuild_staged(&self, payload: Value) -> AssetPatchResult {
+        let asset_ref = request_asset_ref(&payload);
+        let (logical_path, _) = split_entry_ref(&asset_ref);
+        let patches = {
+            let staged = match self.staged.lock() {
+                Ok(guard) => guard,
+                Err(poisoned) => poisoned.into_inner(),
+            };
+            staged.get(&logical_path).cloned().unwrap_or_default()
+        };
+        let staged_operations = patches.iter().map(|patch| patch.operations.len()).sum();
+        if staged_operations == 0 {
+            return AssetPatchResult {
+                asset_ref: logical_path,
+                accepted: true,
+                written: false,
+                dirty: false,
+                staged_operations: 0,
+                diagnostics: vec![AssetDocumentDiagnostic::info(
+                    "edit.session.clean",
+                    "no staged mutations to rebuild",
+                )],
+                ..AssetPatchResult::default()
+            };
+        }
+
+        let mutations = patches
+            .iter()
+            .flat_map(|patch| {
+                patch
+                    .operations
+                    .iter()
+                    .filter_map(|operation| mutation_payload(&patch.asset_ref, operation))
+            })
+            .collect::<Vec<_>>();
+        if mutations.len() != staged_operations {
+            return AssetPatchResult {
+                asset_ref: logical_path,
+                accepted: false,
+                written: false,
+                dirty: true,
+                staged_operations,
+                diagnostics: vec![AssetDocumentDiagnostic::error(
+                    "edit.session.invalid_mutation",
+                    "one or more staged operations could not be projected into provider mutation DTOs",
+                )],
+                ..AssetPatchResult::default()
+            };
+        }
+
+        let writer_payload = json!({
+            "logical_path": logical_path,
+            "operation": "rebuild",
+            "mutations": mutations,
+            "verify_after_build": true,
+            "dry_run": false,
+        });
+        match self.assets.list_file_repack_json_v1(writer_payload) {
+            Ok(value) => {
+                let ok = value.get("ok").and_then(Value::as_bool).unwrap_or(false);
+                let applied = value
+                    .get("applied")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false);
+                if ok && applied {
+                    let mut staged = match self.staged.lock() {
+                        Ok(guard) => guard,
+                        Err(poisoned) => poisoned.into_inner(),
+                    };
+                    staged.remove(&logical_path);
+                }
+                AssetPatchResult {
+                    asset_ref: logical_path,
+                    accepted: ok,
+                    written: applied,
+                    dirty: !(ok && applied),
+                    staged_operations: if ok && applied { 0 } else { staged_operations },
+                    diagnostics: vec![if ok && applied {
+                        AssetDocumentDiagnostic::info(
+                            "asset.rebuild.completed",
+                            value
+                                .get("message")
+                                .and_then(Value::as_str)
+                                .unwrap_or("asset container rebuilt and written"),
+                        )
+                    } else {
+                        AssetDocumentDiagnostic::error(
+                            "asset.rebuild.failed",
+                            value
+                                .get("message")
+                                .or_else(|| value.get("error"))
+                                .and_then(Value::as_str)
+                                .unwrap_or("asset writer rejected rebuild"),
+                        )
+                    }],
+                    ..AssetPatchResult::default()
+                }
+            }
+            Err(error) => AssetPatchResult {
+                asset_ref: logical_path,
+                accepted: false,
+                written: false,
+                dirty: true,
+                staged_operations,
+                diagnostics: vec![AssetDocumentDiagnostic::error(
+                    "asset.rebuild.transport_failed",
+                    error,
+                )],
+                ..AssetPatchResult::default()
+            },
+        }
+    }
+
+    /// Immediate write path retained for callers that explicitly request Apply.
     pub(super) fn apply_patch(&self, patch: AssetPatch) -> AssetPatchResult {
         let mut result = self.validate_patch(patch.clone());
         if !result.accepted {
@@ -85,40 +286,25 @@ impl AssetEditState {
             result.dirty = false;
             return result;
         };
-
-        let operation = match first_op.op.trim().to_ascii_lowercase().as_str() {
-            "remove" | "delete" => "delete",
-            "rename" => "rename",
-            "add" | "create" | "replace" | "update" => "update",
-            _ => {
-                result.accepted = false;
-                result.diagnostics.push(AssetDocumentDiagnostic::error(
-                    "patch.operation.unsupported",
-                    format!("unsupported asset patch operation '{}'", first_op.op),
-                ));
-                return result;
-            }
+        let Some(operation) = normalized_operation(&first_op.op) else {
+            result.accepted = false;
+            result.diagnostics.push(AssetDocumentDiagnostic::error(
+                "patch.operation.unsupported",
+                format!("unsupported asset patch operation '{}'", first_op.op),
+            ));
+            return result;
         };
 
-        let client = &self.assets;
-        let mut payload = json!({
-            "target_ref": result.asset_ref,
-            "operation": operation,
-            "verify_after_build": true,
-            "dry_run": false,
+        let mut payload = mutation_payload(&patch.asset_ref, first_op).unwrap_or_else(|| {
+            json!({
+                "target_ref": result.asset_ref,
+                "operation": operation,
+            })
         });
-        if operation == "update" {
-            payload["payload_json"] = first_op.value.clone();
-        }
-        if operation == "rename" {
-            if let Some(new_name) = first_op.value.as_str() {
-                payload["new_name"] = json!(new_name);
-            } else if let Some(new_name) = first_op.value.get("name").and_then(Value::as_str) {
-                payload["new_name"] = json!(new_name);
-            }
-        }
+        payload["verify_after_build"] = json!(true);
+        payload["dry_run"] = json!(false);
 
-        match client.list_file_repack_json_v1(payload) {
+        match self.assets.list_file_repack_json_v1(payload) {
             Ok(value) => {
                 let ok = value.get("ok").and_then(Value::as_bool).unwrap_or(false);
                 let applied = value
@@ -133,14 +319,8 @@ impl AssetEditState {
                     value
                         .get("message")
                         .and_then(Value::as_str)
-                        .unwrap_or("NEF8 ListFile writer completed"),
+                        .unwrap_or("asset writer completed"),
                 ));
-                if !ok {
-                    result.diagnostics.push(AssetDocumentDiagnostic::warn(
-                        "listfile.repack.not_applied",
-                        "writer rejected or dry-ran the patch",
-                    ));
-                }
                 result
             }
             Err(error) => {
@@ -155,4 +335,50 @@ impl AssetEditState {
             }
         }
     }
+}
+
+fn normalized_operation(operation: &str) -> Option<&'static str> {
+    match operation.trim().to_ascii_lowercase().as_str() {
+        "remove" | "delete" => Some("delete"),
+        "rename" => Some("rename"),
+        "add" | "create" | "replace" | "update" => Some("update"),
+        "rebuild" | "repack" => Some("rebuild"),
+        _ => None,
+    }
+}
+
+fn request_asset_ref(payload: &Value) -> String {
+    normalize_asset_ref(
+        payload
+            .get("asset_ref")
+            .or_else(|| payload.get("target_ref"))
+            .or_else(|| payload.get("logical_path"))
+            .and_then(Value::as_str)
+            .unwrap_or_default(),
+    )
+}
+
+fn staged_operation_count(staged: &BTreeMap<String, Vec<AssetPatch>>, logical_path: &str) -> usize {
+    staged
+        .get(logical_path)
+        .map(|patches| patches.iter().map(|patch| patch.operations.len()).sum())
+        .unwrap_or(0)
+}
+
+fn mutation_payload(asset_ref: &str, operation: &AssetPatchOperation) -> Option<Value> {
+    let kind = normalized_operation(&operation.op)?;
+    let mut payload = json!({
+        "target_ref": normalize_asset_ref(asset_ref),
+        "operation": kind,
+    });
+    if kind == "update" {
+        payload["payload_json"] = operation.value.clone();
+    } else if kind == "rename" {
+        if let Some(name) = operation.value.as_str() {
+            payload["new_name"] = json!(name);
+        } else if let Some(name) = operation.value.get("name").and_then(Value::as_str) {
+            payload["new_name"] = json!(name);
+        }
+    }
+    Some(payload)
 }

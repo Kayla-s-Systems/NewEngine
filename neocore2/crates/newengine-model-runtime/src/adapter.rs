@@ -11,6 +11,76 @@ pub struct ModelAssetAdapter {
     host: Option<HostApiV1>,
 }
 
+struct LoadedModelParts {
+    parts: Vec<ModelMeshPart>,
+    properties_ref: Option<String>,
+    configuration: ModelRuntimeConfiguration,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(default)]
+struct DefinitionEntryProjection {
+    refs: DefinitionRefsProjection,
+    model_explanation: ModelExplanationProjection,
+    arbitrary_metadata: serde_json::Value,
+    warnings: Vec<String>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(default)]
+struct DefinitionRefsProjection {
+    drawable_refs: Vec<String>,
+    material_refs: Vec<String>,
+    texture_refs: Vec<String>,
+    uv_layout_refs: Vec<String>,
+    physics_refs: Vec<String>,
+    collision_refs: Vec<String>,
+    ai_refs: Vec<String>,
+    streaming_refs: Vec<String>,
+    editor_refs: Vec<String>,
+    other_refs: Vec<String>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(default)]
+struct ModelExplanationProjection {
+    model_ref: Option<String>,
+    drawable_ref: Option<String>,
+    material_bindings: Vec<newengine_model_domain_api::MaterialBindingRef>,
+    material_refs: Vec<String>,
+    texture_refs: Vec<String>,
+    uv_layout_refs: Vec<String>,
+    physics_refs: Vec<String>,
+    collision_refs: Vec<String>,
+    render_options: newengine_model_domain_api::MeshRenderOptions,
+    collision_policy: String,
+    uv_policy: String,
+    physics_policy: String,
+    lod_policy: String,
+    streaming_policy: String,
+}
+
+impl Default for ModelExplanationProjection {
+    fn default() -> Self {
+        Self {
+            model_ref: None,
+            drawable_ref: None,
+            material_bindings: Vec::new(),
+            material_refs: Vec::new(),
+            texture_refs: Vec::new(),
+            uv_layout_refs: Vec::new(),
+            physics_refs: Vec::new(),
+            collision_refs: Vec::new(),
+            render_options: newengine_model_domain_api::MeshRenderOptions::world_opaque(),
+            collision_policy: "unspecified".to_owned(),
+            uv_policy: "authored".to_owned(),
+            physics_policy: "unspecified".to_owned(),
+            lod_policy: "unspecified".to_owned(),
+            streaming_policy: "unspecified".to_owned(),
+        }
+    }
+}
+
 impl ModelAssetAdapter {
     #[inline]
     pub fn with_client(client: AssetServiceClient) -> Self {
@@ -28,14 +98,14 @@ impl ModelAssetAdapter {
     pub fn load_bundle(&self, request: &ModelAssetRequest) -> Result<ModelAssetBundle, String> {
         let request = self.resolve_request(request)?;
         let target_height = request.target_height.clamp(0.25, 3.0);
-        let properties_ref = request
+        let request_properties_ref = request
             .properties_ref
             .as_deref()
             .map(|path| normalize_logical_path(path, true))
             .transpose()?;
         let source_ref = normalize_logical_path(&request.model, true)?;
         let (source_path, selector) = split_model_selector(&source_ref);
-        let texture_dictionary = request
+        let requested_texture_dictionary = request
             .texture_dictionary
             .as_deref()
             .map(|path| normalize_logical_path(path, false))
@@ -44,19 +114,25 @@ impl ModelAssetAdapter {
                 path.ends_with(&format!(".{}", newengine_asset_format_nef8::ytd::EXTENSION))
             });
 
-        let skeleton = match request.skeleton.as_deref() {
-            Some(path) => {
-                Some(self.load_skeleton_metadata(path, target_height, request.eye_height_ratio)?)
-            }
-            None => None,
-        };
-
         if has_extension(&source_path, DRAWABLE_DICTIONARY_EXTENSION) {
-            let parts = self.load_ydd_runtime_parts(
+            let loaded = self.load_ydd_runtime_parts(
                 &source_path,
                 selector.as_deref(),
-                properties_ref.as_deref(),
+                request_properties_ref.as_deref(),
             )?;
+            let properties_ref = loaded.properties_ref.or(request_properties_ref);
+            let configuration = loaded.configuration;
+            let dependency_graph = request.dependency_graph.clone().unwrap_or_default();
+            let texture_dictionary = requested_texture_dictionary
+                .or_else(|| first_texture_dictionary(&configuration.texture_refs));
+            let skeleton = match request.skeleton.as_deref() {
+                Some(path) => Some(self.load_skeleton_metadata(
+                    path,
+                    target_height,
+                    request.eye_height_ratio,
+                )?),
+                None => None,
+            };
             let collisions = if request.collisions.is_empty() {
                 newengine_model_collision_runtime::default_collisions_for_model(
                     skeleton.as_ref(),
@@ -68,14 +144,31 @@ impl ModelAssetAdapter {
             return Ok(ModelAssetBundle {
                 source: source_ref,
                 properties_ref,
-                parts,
+                parts: loaded.parts,
                 skeleton,
                 texture_dictionary,
                 collisions,
+                configuration,
+                dependency_graph,
             });
         }
 
         let source = normalize_logical_path(&request.model, false)?;
+        let configuration = request_properties_ref
+            .as_deref()
+            .map(|reference| self.load_model_configuration(reference))
+            .transpose()?
+            .unwrap_or_default();
+        let dependency_graph = request.dependency_graph.clone().unwrap_or_default();
+        let texture_dictionary = requested_texture_dictionary
+            .or_else(|| first_texture_dictionary(&configuration.texture_refs));
+        let skeleton = match request.skeleton.as_deref() {
+            Some(path) => {
+                Some(self.load_skeleton_metadata(path, target_height, request.eye_height_ratio)?)
+            }
+            None => None,
+        };
+
         let obj_text = self.read_text(&source)?;
         let decoded = newengine_model_import_obj::decode_obj_with_mtl_loader(
             &source,
@@ -84,15 +177,14 @@ impl ModelAssetAdapter {
             |path| self.read_text(path).ok(),
         )?;
 
-        let descriptor_bindings = properties_ref.as_deref().and_then(|properties_ref| {
-            self.load_material_bindings_from_properties_ref(properties_ref)
-                .ok()
-        });
+        let descriptor_bindings = configuration
+            .material_bindings
+            .iter()
+            .map(|binding| (binding.slot.clone(), binding.material_ref.clone()))
+            .collect::<std::collections::BTreeMap<_, _>>();
         let mut parts = Vec::with_capacity(decoded.parts.len());
         for part in decoded.parts {
-            let descriptor_material_ref = descriptor_bindings
-                .as_ref()
-                .and_then(|bindings| bindings.get(&part.material_slot).cloned());
+            let descriptor_material_ref = descriptor_bindings.get(&part.material_slot).cloned();
             let material = match descriptor_material_ref
                 .as_deref()
                 .and_then(|material_ref| self.load_material_binding_from_ref(material_ref))
@@ -125,11 +217,13 @@ impl ModelAssetAdapter {
 
         Ok(ModelAssetBundle {
             source,
-            properties_ref,
+            properties_ref: request_properties_ref,
             parts,
             skeleton,
             texture_dictionary,
             collisions,
+            configuration,
+            dependency_graph,
         })
     }
 
@@ -144,35 +238,54 @@ impl ModelAssetAdapter {
         &self,
         request: &ModelAssetRequest,
     ) -> Result<ModelAssetRequest, String> {
-        let Some(manifest_path) = request.manifest.as_deref() else {
-            return Ok(request.clone());
-        };
-        let manifest = self.load_manifest(manifest_path)?;
         let mut resolved = request.clone();
+        if let Some(manifest_path) = request.manifest.as_deref() {
+            let manifest = self.load_manifest(manifest_path)?;
+            if resolved.model.trim().is_empty() {
+                resolved.model = manifest.model;
+            }
+            if resolved.skeleton.is_none() {
+                resolved.skeleton = manifest.skeleton.map(|it| it.source);
+            }
+            if resolved.properties_ref.is_none() {
+                resolved.properties_ref = manifest.properties_ref;
+            }
+            if resolved.texture_dictionary.is_none() {
+                resolved.texture_dictionary = manifest.material_set.texture_dictionary;
+            }
+            if resolved.collisions.is_empty() {
+                resolved.collisions = manifest.collisions;
+            }
+            if (resolved.target_height - ModelAssetRequest::default().target_height).abs()
+                < f32::EPSILON
+            {
+                resolved.target_height = manifest.target_height;
+            }
+            if (resolved.eye_height_ratio - ModelAssetRequest::default().eye_height_ratio).abs()
+                < f32::EPSILON
+            {
+                resolved.eye_height_ratio = manifest.eye_height_ratio;
+            }
+        }
+
         if resolved.model.trim().is_empty() {
-            resolved.model = manifest.model;
-        }
-        if resolved.skeleton.is_none() {
-            resolved.skeleton = manifest.skeleton.map(|it| it.source);
-        }
-        if resolved.properties_ref.is_none() {
-            resolved.properties_ref = manifest.properties_ref;
-        }
-        if resolved.texture_dictionary.is_none() {
-            resolved.texture_dictionary = manifest.material_set.texture_dictionary;
-        }
-        if resolved.collisions.is_empty() {
-            resolved.collisions = manifest.collisions;
-        }
-        if (resolved.target_height - ModelAssetRequest::default().target_height).abs()
-            < f32::EPSILON
-        {
-            resolved.target_height = manifest.target_height;
-        }
-        if (resolved.eye_height_ratio - ModelAssetRequest::default().eye_height_ratio).abs()
-            < f32::EPSILON
-        {
-            resolved.eye_height_ratio = manifest.eye_height_ratio;
+            let properties_ref = resolved.properties_ref.as_deref().ok_or_else(|| {
+                "model request requires model, manifest, or properties_ref".to_owned()
+            })?;
+            let configuration = self.load_model_configuration(properties_ref)?;
+            resolved.model = configuration
+                .drawable_ref
+                .clone()
+                .or(configuration.model_ref.clone())
+                .ok_or_else(|| {
+                    format!(
+                        "model properties '{}' declares neither drawable_ref nor model_ref",
+                        properties_ref
+                    )
+                })?;
+            if resolved.texture_dictionary.is_none() {
+                resolved.texture_dictionary = first_texture_dictionary(&configuration.texture_refs);
+            }
         }
         Ok(resolved)
     }
@@ -278,7 +391,7 @@ impl ModelAssetAdapter {
         source: &str,
         selector: Option<&str>,
         request_properties_ref: Option<&str>,
-    ) -> Result<Vec<ModelMeshPart>, String> {
+    ) -> Result<LoadedModelParts, String> {
         let bytes = self
             .client
             .decode_v1(&AssetDecodeRequest {
@@ -311,11 +424,16 @@ impl ModelAssetAdapter {
                     .filter(|value| !value.is_empty())
                     .map(ToOwned::to_owned)
             });
-        let descriptor_bindings = properties_ref
+        let configuration = properties_ref
             .as_deref()
-            .map(|reference| self.load_material_bindings_from_properties_ref(reference))
+            .map(|reference| self.load_model_configuration(reference))
             .transpose()?
             .unwrap_or_default();
+        let descriptor_bindings = configuration
+            .material_bindings
+            .iter()
+            .map(|binding| (binding.slot.clone(), binding.material_ref.clone()))
+            .collect::<std::collections::BTreeMap<_, _>>();
         let mut out = Vec::with_capacity(entry.meshes.len());
         for source_mesh in &entry.meshes {
             let material_slot = source_mesh.material_slot();
@@ -374,16 +492,20 @@ impl ModelAssetAdapter {
                 selector.unwrap_or("<first>")
             ));
         }
-        Ok(out)
+        Ok(LoadedModelParts {
+            parts: out,
+            properties_ref,
+            configuration,
+        })
     }
 
-    fn load_material_bindings_from_properties_ref(
+    fn load_model_configuration(
         &self,
         properties_ref: &str,
-    ) -> Result<std::collections::BTreeMap<String, String>, String> {
+    ) -> Result<ModelRuntimeConfiguration, String> {
         let host = self.host.as_ref().ok_or_else(|| {
             format!(
-                "model.api: .ydd properties_ref='{properties_ref}' requires engine.assets.definitions host access"
+                "model.api: properties_ref='{properties_ref}' requires engine.assets.definitions host access"
             )
         })?;
         let payload = serde_json::to_vec(&serde_json::json!({
@@ -398,34 +520,15 @@ impl ModelAssetAdapter {
         .into_result()
         .map(|value| value.into_vec())
         .map_err(|err| err.to_string())?;
-        let value: serde_json::Value = serde_json::from_slice(&bytes).map_err(|e| {
-            format!("model.api: .ytyp descriptor returned invalid json ref='{properties_ref}' err='{e}'")
+        let projection = serde_json::from_slice::<DefinitionEntryProjection>(&bytes).map_err(|e| {
+            format!(
+                "model.api: .ytyp descriptor returned invalid Definition Entry ref='{properties_ref}' err='{e}'"
+            )
         })?;
-        let mut out = std::collections::BTreeMap::new();
-        let Some(bindings) = value
-            .get("model_explanation")
-            .and_then(|value| value.get("material_bindings"))
-            .and_then(serde_json::Value::as_array)
-        else {
-            return Ok(out);
-        };
-        for binding in bindings {
-            let slot = binding
-                .get("slot")
-                .and_then(serde_json::Value::as_str)
-                .map(str::trim)
-                .filter(|value| !value.is_empty());
-            let material_ref = binding
-                .get("material_ref")
-                .or_else(|| binding.get("material"))
-                .and_then(serde_json::Value::as_str)
-                .map(str::trim)
-                .filter(|value| !value.is_empty());
-            if let (Some(slot), Some(material_ref)) = (slot, material_ref) {
-                out.insert(slot.to_owned(), material_ref.to_owned());
-            }
-        }
-        Ok(out)
+        model_configuration_from_projection(
+            normalize_logical_path(properties_ref, true)?,
+            projection,
+        )
     }
 
     fn load_nef8_ymt_skeleton_metadata(
@@ -481,6 +584,52 @@ impl ModelAssetAdapter {
         String::from_utf8(bytes)
             .map_err(|e| format!("asset text is not UTF-8 path='{path}' err='{e}'"))
     }
+}
+
+fn model_configuration_from_projection(
+    properties_ref: String,
+    projection: DefinitionEntryProjection,
+) -> Result<ModelRuntimeConfiguration, String> {
+    let explanation = projection.model_explanation;
+    let refs = projection.refs;
+    Ok(ModelRuntimeConfiguration {
+        properties_ref: Some(properties_ref),
+        model_ref: explanation.model_ref,
+        drawable_ref: explanation.drawable_ref,
+        material_bindings: explanation.material_bindings,
+        material_refs: merge_refs(explanation.material_refs, refs.material_refs),
+        texture_refs: merge_refs(explanation.texture_refs, refs.texture_refs),
+        uv_layout_refs: merge_refs(explanation.uv_layout_refs, refs.uv_layout_refs),
+        physics_refs: merge_refs(explanation.physics_refs, refs.physics_refs),
+        collision_refs: merge_refs(explanation.collision_refs, refs.collision_refs),
+        ai_refs: refs.ai_refs,
+        streaming_refs: refs.streaming_refs,
+        editor_refs: refs.editor_refs,
+        other_refs: refs.other_refs,
+        render_options: explanation.render_options,
+        collision_policy: explanation.collision_policy,
+        uv_policy: explanation.uv_policy,
+        physics_policy: explanation.physics_policy,
+        lod_policy: explanation.lod_policy,
+        streaming_policy: explanation.streaming_policy,
+        metadata: projection.arbitrary_metadata,
+        warnings: projection.warnings,
+    })
+}
+
+fn merge_refs(mut primary: Vec<String>, secondary: Vec<String>) -> Vec<String> {
+    primary.extend(secondary);
+    primary.retain(|reference| !reference.trim().is_empty());
+    primary.sort();
+    primary.dedup();
+    primary
+}
+
+fn first_texture_dictionary(texture_refs: &[String]) -> Option<String> {
+    texture_refs.iter().find_map(|reference| {
+        let dictionary = reference.split('@').next().unwrap_or(reference).trim();
+        (!dictionary.is_empty()).then(|| dictionary.to_owned())
+    })
 }
 
 fn split_model_selector(source: &str) -> (String, Option<String>) {
@@ -584,4 +733,51 @@ fn has_extension(path: &str, extension: &str) -> bool {
         .unwrap_or(path)
         .to_ascii_lowercase()
         .ends_with(&format!(".{expected}"))
+}
+
+#[cfg(test)]
+mod runtime_configuration_tests {
+    use super::*;
+
+    #[test]
+    fn ytyp_projection_preserves_full_runtime_dependency_configuration() {
+        let projection = DefinitionEntryProjection {
+            refs: DefinitionRefsProjection {
+                material_refs: vec!["materials/car.nemat@paint".to_owned()],
+                texture_refs: vec!["textures/car.ytd@paint_bc".to_owned()],
+                uv_layout_refs: vec!["models/car.ytyd@body".to_owned()],
+                physics_refs: vec!["physics/car.ybn@body".to_owned()],
+                streaming_refs: vec!["stream/car.ymf@main".to_owned()],
+                ..Default::default()
+            },
+            model_explanation: ModelExplanationProjection {
+                drawable_ref: Some("models/car.ydd@body".to_owned()),
+                material_bindings: vec![newengine_model_domain_api::MaterialBindingRef {
+                    slot: "paint".to_owned(),
+                    material_ref: "materials/car.nemat@paint".to_owned(),
+                    required: true,
+                }],
+                render_options: newengine_model_domain_api::MeshRenderOptions::world_masked(),
+                lod_policy: "authored_lods".to_owned(),
+                streaming_policy: "distance_streamed".to_owned(),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let config =
+            model_configuration_from_projection("definitions/car.ytyp".to_owned(), projection)
+                .unwrap();
+        assert_eq!(config.drawable_ref.as_deref(), Some("models/car.ydd@body"));
+        assert_eq!(config.material_bindings.len(), 1);
+        assert_eq!(config.texture_refs, vec!["textures/car.ytd@paint_bc"]);
+        assert_eq!(config.uv_layout_refs, vec!["models/car.ytyd@body"]);
+        assert_eq!(config.physics_refs, vec!["physics/car.ybn@body"]);
+        assert_eq!(config.streaming_refs, vec!["stream/car.ymf@main"]);
+        assert_eq!(config.lod_policy, "authored_lods");
+        assert_eq!(config.streaming_policy, "distance_streamed");
+        assert_eq!(
+            config.render_options,
+            newengine_model_domain_api::MeshRenderOptions::world_masked()
+        );
+    }
 }

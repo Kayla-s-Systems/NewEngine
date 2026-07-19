@@ -2,7 +2,10 @@
 
 use newengine_math::{Mat4, Vec3};
 use parking_lot::Mutex;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+
+const EXTERNAL_PREVIEW_WARMUP_FRAMES: u64 = 4;
+const EXTERNAL_PREVIEW_INTERACTION_FRAMES: u64 = 2;
 
 #[derive(Clone, Copy, Debug)]
 pub struct ViewportCameraFrame {
@@ -29,6 +32,10 @@ pub struct ViewportCameraFrame {
 pub struct ViewportBridge {
     extent_wh: AtomicU64,
     tex_user: AtomicU64,
+    /// True while an engine API such as asset preview owns the offscreen extent.
+    /// Editor/UI viewport slots must not overwrite it with their default 0x0 value.
+    external_extent_owned: AtomicBool,
+    external_redraw_budget: AtomicU64,
 
     /// UI -> renderer camera input snapshot.
     ///
@@ -93,6 +100,8 @@ impl ViewportBridge {
         Self {
             extent_wh: AtomicU64::new(0),
             tex_user: AtomicU64::new(0),
+            external_extent_owned: AtomicBool::new(false),
+            external_redraw_budget: AtomicU64::new(0),
 
             ui_input: Mutex::new(UiCameraControlInputState::default()),
 
@@ -151,6 +160,60 @@ impl ViewportBridge {
     #[inline]
     pub fn read_extent(&self) -> (u32, u32) {
         Self::unpack_wh(self.extent_wh.load(Ordering::Relaxed))
+    }
+
+    /// Publish an offscreen extent owned by a non-editor engine API.
+    #[inline]
+    pub fn publish_external_extent(&self, w: u32, h: u32) {
+        self.extent_wh
+            .store(Self::pack_wh(w.max(1), h.max(1)), Ordering::Release);
+        self.external_extent_owned.store(true, Ordering::Release);
+        self.request_external_redraw_frames(EXTERNAL_PREVIEW_WARMUP_FRAMES);
+    }
+
+    /// Release a previously owned offscreen extent back to UI/editor control.
+    #[inline]
+    pub fn clear_external_extent(&self) {
+        self.external_extent_owned.store(false, Ordering::Release);
+        self.external_redraw_budget.store(0, Ordering::Release);
+        self.extent_wh.store(Self::pack_wh(0, 0), Ordering::Release);
+        self.tex_user.store(0, Ordering::Release);
+    }
+
+    #[inline]
+    pub fn external_extent_owned(&self) -> bool {
+        self.external_extent_owned.load(Ordering::Acquire)
+    }
+
+    fn request_external_redraw_frames(&self, frames: u64) {
+        let _ = self.external_redraw_budget.fetch_update(
+            Ordering::AcqRel,
+            Ordering::Acquire,
+            |current| Some(current.max(frames.max(1))),
+        );
+    }
+
+    pub fn request_external_redraw(&self) {
+        if self.external_extent_owned() {
+            self.request_external_redraw_frames(EXTERNAL_PREVIEW_INTERACTION_FRAMES);
+        }
+    }
+
+    pub fn external_redraw_requested(&self) -> bool {
+        self.external_redraw_budget.load(Ordering::Acquire) > 0
+    }
+
+    pub fn mark_external_redraw_presented(&self) {
+        let _ = self.external_redraw_budget.fetch_update(
+            Ordering::AcqRel,
+            Ordering::Acquire,
+            |current| Some(current.saturating_sub(1)),
+        );
+    }
+
+    #[cfg(test)]
+    fn external_redraw_budget(&self) -> u64 {
+        self.external_redraw_budget.load(Ordering::Acquire)
     }
 
     /// Publish the external UI texture id (renderer -> UI).
@@ -298,5 +361,37 @@ impl ViewportBridge {
     #[inline]
     pub fn read_camera_frame(&self) -> Option<ViewportCameraFrame> {
         *self.camera_frame.lock()
+    }
+}
+
+#[cfg(test)]
+mod external_preview_redraw_tests {
+    use super::*;
+
+    #[test]
+    fn external_preview_redraw_budget_is_bounded() {
+        let bridge = ViewportBridge::new();
+        bridge.publish_external_extent(488, 236);
+        assert_eq!(
+            bridge.external_redraw_budget(),
+            EXTERNAL_PREVIEW_WARMUP_FRAMES
+        );
+        for _ in 0..EXTERNAL_PREVIEW_WARMUP_FRAMES {
+            bridge.mark_external_redraw_presented();
+        }
+        assert!(!bridge.external_redraw_requested());
+        bridge.request_external_redraw();
+        assert_eq!(
+            bridge.external_redraw_budget(),
+            EXTERNAL_PREVIEW_INTERACTION_FRAMES
+        );
+    }
+
+    #[test]
+    fn clearing_external_extent_cancels_pending_redraws() {
+        let bridge = ViewportBridge::new();
+        bridge.publish_external_extent(488, 236);
+        bridge.clear_external_extent();
+        assert!(!bridge.external_redraw_requested());
     }
 }
