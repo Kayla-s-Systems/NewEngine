@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::time::Instant;
 
 use abi_stable::std_types::RString;
 use libloading::Library;
@@ -13,6 +14,7 @@ use newengine_platform_api::{
     PlatformStepResultV1, PlatformSurfaceMetricsV1, PlatformWindowReadyV1,
 };
 use newengine_plugin_api::PluginInfo;
+use newengine_system_contracts::ScreenOverlayStatus;
 use newengine_ui::{create_provider, UiBuildFn, UiProvider, UiProviderKind, UiProviderOptions};
 use newengine_ui_api::UiDrawList;
 
@@ -67,13 +69,16 @@ pub struct HostPlatformRuntime {
     runtime_soft_degraded_origin: Option<&'static str>,
     runtime_soft_degraded_frames: u64,
     cached_provider_ui_draw: Option<UiDrawList>,
+    last_published_loading_overlay: Option<ScreenOverlayStatus>,
+    last_loading_overlay_publish_at: Option<Instant>,
+    loading_surface_inactive_published: bool,
     ui_frame_policy: UiGatewayFramePolicy,
     runtime_bootstrap_overlay_enabled: bool,
 }
 
 impl HostPlatformRuntime {
     pub fn new(
-        engine: Engine<()>,
+        mut engine: Engine<()>,
         ui_kind: UiProviderKind,
         ui_build: Option<Box<dyn UiBuildFn>>,
     ) -> Self {
@@ -81,6 +86,8 @@ impl HostPlatformRuntime {
         let ui_selection = UiProviderSelection::new(ui_kind);
         log_ui_provider_selection("initial", ui_selection.active());
         let active_ui_kind = ui_selection.active().clone();
+        let screen_profile = ScreenProfileRuntimeState::load();
+        screen_profile.install_initial_resources(engine.resources_mut());
 
         Self {
             engine,
@@ -89,7 +96,7 @@ impl HostPlatformRuntime {
             }),
             ui_build,
             ui_selection,
-            screen_profile: ScreenProfileRuntimeState::load(),
+            screen_profile,
             host_events,
             surface: PlatformSurfaceMetricsV1::default(),
             display: PlatformDisplayConfigV1::default(),
@@ -111,6 +118,12 @@ impl HostPlatformRuntime {
             runtime_soft_degraded_origin: None,
             runtime_soft_degraded_frames: 0,
             cached_provider_ui_draw: None,
+            last_published_loading_overlay: None,
+            last_loading_overlay_publish_at: None,
+            // Bootstrap may have mounted engine.ui.loading before the running loop
+            // starts. The first non-loading frame must therefore publish an explicit
+            // inactive state even though the running-loop cache is still empty.
+            loading_surface_inactive_published: false,
             ui_frame_policy: UiGatewayFramePolicy::from_startup_config(
                 newengine_core::startup::last_startup_config(),
             ),

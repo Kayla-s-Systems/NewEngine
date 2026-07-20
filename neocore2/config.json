@@ -122,7 +122,7 @@
           "height": 900,
           "width": 1600
         },
-        "vsync": false,
+        "vsync": true,
         "window_mode": "windowed"
       },
       "enabled": true,
@@ -218,6 +218,97 @@
             "service_physics": "enabled"
           }
         }
+      },
+      "ui": {
+        "screen_profile": {
+          "game_ui_document_ref": "ui/game/game_hud.neui@surface",
+          "game_ui_root_surface_id": "game.hud",
+          "presentation_flow": {
+            "enabled": true,
+            "id": "game.frontend",
+            "initial_state": "main_menu",
+            "states": [
+              {
+                "blocks_gameplay_input": true,
+                "blocks_world_bootstrap": true,
+                "document_ref": "ui/engine/main_menu.neui@surface",
+                "id": "main_menu",
+                "input_focus_policy": "ui_surface",
+                "surface_id": "engine.main_menu"
+              },
+              {
+                "blocks_gameplay_input": true,
+                "blocks_world_bootstrap": true,
+                "document_ref": "ui/engine/settings.neui@surface",
+                "id": "settings",
+                "input_focus_policy": "ui_surface",
+                "surface_id": "engine.settings"
+              },
+              {
+                "blocks_gameplay_input": true,
+                "blocks_world_bootstrap": true,
+                "document_ref": "ui/engine/credits.neui@surface",
+                "id": "credits",
+                "input_focus_policy": "ui_surface",
+                "surface_id": "engine.credits"
+              },
+              {
+                "blocks_gameplay_input": true,
+                "blocks_world_bootstrap": false,
+                "id": "loading",
+                "input_focus_policy": "ui_surface"
+              },
+              {
+                "blocks_gameplay_input": false,
+                "blocks_world_bootstrap": false,
+                "document_ref": "ui/game/game_hud.neui@surface",
+                "id": "gameplay",
+                "input_focus_policy": "game_viewport",
+                "surface_id": "game.hud"
+              }
+            ],
+            "transitions": [
+              {
+                "from": "main_menu",
+                "on_action": "engine.settings.open",
+                "to": "settings"
+              },
+              {
+                "from": "settings",
+                "on_action": "settings.apply",
+                "to": "main_menu"
+              },
+              {
+                "from": "settings",
+                "on_action": "ui.back",
+                "to": "main_menu"
+              },
+              {
+                "from": "main_menu",
+                "on_action": "game.credits",
+                "to": "credits"
+              },
+              {
+                "from": "credits",
+                "on_action": "ui.back",
+                "to": "main_menu"
+              },
+              {
+                "from": "main_menu",
+                "on_action": "game.start",
+                "reset_runtime_ready": true,
+                "to": "loading"
+              },
+              {
+                "from": "loading",
+                "on_runtime_ready": true,
+                "to": "gameplay"
+              }
+            ]
+          },
+          "profile": "game",
+          "publish_editor_shell": false
+        }
       }
     },
     "newengine": {
@@ -239,7 +330,7 @@
             "height": 900,
             "width": 1600
           },
-          "vsync": false,
+          "vsync": true,
           "window_mode": "windowed"
         },
         "graphics_backend": {
@@ -1361,12 +1452,12 @@
       "monitor_index": -1,
       "refresh_rate_millihz": 0,
       "render_scale": 1.0,
-      "vsync": false,
+      "vsync": true,
       "window_mode": "windowed"
     },
     "graphics": {
       "anisotropy": 16,
-      "bloom_enabled": true,
+      "bloom_enabled": false,
       "bloom_intensity": 0.08500000089406967,
       "bloom_knee": 0.3499999940395355,
       "bloom_radius": 1.0,
@@ -1376,7 +1467,7 @@
       "fxaa_edge_threshold_min": 0.031199999153614044,
       "fxaa_enabled": false,
       "fxaa_subpixel_quality": 0.75,
-      "motion_blur_enabled": true,
+      "motion_blur_enabled": false,
       "msaa_samples": 8,
       "preset": "custom",
       "shadow_quality": "cinematic",
@@ -1386,7 +1477,7 @@
       "ssao_intensity": 0.8199999928474426,
       "ssao_quality_steps": 32,
       "ssao_radius_ws": 0.75,
-      "sun_rays_enabled": true,
+      "sun_rays_enabled": false,
       "taa_enabled": false,
       "taa_feedback": 0.9200000166893005,
       "taa_jitter_scale": 1.0,

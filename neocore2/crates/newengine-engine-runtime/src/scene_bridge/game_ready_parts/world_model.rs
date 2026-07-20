@@ -269,7 +269,7 @@ fn spawn_collision_ydd_prefab_from_decoded(
             landing_event: "audio.landing.dirt".to_owned(),
         },
     );
-    newengine_ulog_api::ulog::info!(
+    newengine_ulog_api::ulog::debug!(
         "static world collision spawned id='{}' source='{}' entity={:?} parts={} vertices={} triangles={} position={:?} rotation_ypr={:?} scale_baked={:?} bounds_min={:?} bounds_max={:?}",
         prefab.id,
         prefab.source,
@@ -469,11 +469,17 @@ fn static_world_source(prefab: &GameReadyPrefabSpec) -> String {
 }
 
 fn static_world_decode_concurrency(thread_pool: &ThreadPoolHandle) -> usize {
-    let _available_workers = thread_pool.worker_threads();
-    // The AssetManager gateway performs substantial dictionary/JSON work and
-    // currently serializes portions of its cache. Three concurrent decoders match
-    // this workstation's three physical adapters without starving UI/render jobs.
-    crate::env_config::var_u32("NEWENGINE_STATIC_WORLD_DECODE_JOBS", 3, 1, 6) as usize
+    let available_workers = thread_pool.worker_threads();
+    // AssetManager serializes portions of its dictionary cache, so unbounded
+    // concurrency only creates contention. Scale modestly with the worker pool
+    // while preserving the historical three-job baseline on larger machines.
+    let adaptive_default = available_workers.saturating_sub(1).clamp(1, 3) as u32;
+    crate::env_config::var_u32("NEWENGINE_STATIC_WORLD_DECODE_JOBS", adaptive_default, 1, 6)
+        as usize
+}
+
+fn static_world_admission_budget_ms() -> f32 {
+    crate::env_config::var_f32("NEWENGINE_STATIC_WORLD_BOOTSTRAP_BUDGET_MS", 3.5, 0.5, 16.0)
 }
 
 fn submit_static_world_decode_jobs(
@@ -511,7 +517,7 @@ fn submit_static_world_decode_jobs(
             .with_owner("engine.scene")
             .with_category("asset-decode")
             .with_lane(TaskLane::AssetIo)
-            .with_priority(TaskPriority::Normal)
+            .with_priority(TaskPriority::Interactive)
             .with_task_id(format!(
                 "scene.static-world.decode.{:016x}",
                 newengine_primitives::fnv1a_64(&source)
@@ -589,14 +595,21 @@ pub(crate) fn tick_game_ready_static_world_prefabs(
 
     let max_models = crate::env_config::var_u32(
         "NEWENGINE_STATIC_WORLD_BOOTSTRAP_MODELS_PER_FRAME",
-        4,
+        8,
         1,
-        16,
+        32,
     ) as usize;
+    let admission_budget_ms = static_world_admission_budget_ms();
+    let admission_started = Instant::now();
 
     let mut completed_this_frame = 0u32;
     let mut failed_this_frame = 0u32;
     for _ in 0..max_models {
+        let admitted = completed_this_frame.saturating_add(failed_this_frame);
+        if admitted > 0 && admission_started.elapsed().as_secs_f32() * 1000.0 >= admission_budget_ms
+        {
+            break;
+        }
         if let Some(failed_position) = state.pending.iter().position(|prefab| {
             state
                 .decode_errors
@@ -664,7 +677,7 @@ pub(crate) fn tick_game_ready_static_world_prefabs(
                 state.summary.parts = state.summary.parts.saturating_add(parts);
                 state.summary.triangles = state.summary.triangles.saturating_add(triangles);
                 completed_this_frame = completed_this_frame.saturating_add(1);
-                newengine_ulog_api::ulog::info!(
+                newengine_ulog_api::ulog::debug!(
                     "static world prefab streamed id='{}' source='{}' material='{}' position={:?} parts={} triangles={} pending={} decode_jobs={} decoded_ready={}",
                     prefab.id,
                     prefab.source,

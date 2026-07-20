@@ -7,7 +7,9 @@ use newengine_core::render::{
     require_render_api, BeginFrameDesc, Extent2D, RectI32, SceneLaunchStatus, Viewport,
 };
 use newengine_core::{EngineResult, ModuleCtx};
-use newengine_ui_api::{UiDrawList, UiRuntimeDebugOverlayTelemetry, UiViewportSlot};
+use newengine_ui_api::{
+    UiDrawList, UiPresentationFlowState, UiRuntimeDebugOverlayTelemetry, UiViewportSlot,
+};
 
 use super::super::controller::RuntimeRenderController;
 use super::super::error_policy::{
@@ -74,12 +76,6 @@ impl RuntimeRenderController {
             .map(|b| b.max_upload_jobs_per_frame.max(1))
             .unwrap_or(1);
         let thread_pool = ctx.thread_pool().cloned();
-        self.pump_material_texture_requests(
-            &mut **r,
-            thread_pool.as_ref(),
-            material_upload_jobs,
-            material_upload_jobs,
-        );
         self.trace_render_begin(trace_frame, w, h);
 
         let prelaunch_status = match self.handle_prelaunch_gate(
@@ -102,10 +98,28 @@ impl RuntimeRenderController {
             Err(error) => return Err(error),
         };
         if let Some(status) = prelaunch_status {
+            if !status.active {
+                if let Some(flow) = ctx.resources_mut().get_mut::<UiPresentationFlowState>() {
+                    flow.mark_runtime_ready(
+                        self.frame.frame_index,
+                        "renderer launch gate released; runtime presentation may activate",
+                    );
+                }
+            }
             drop(r);
             ctx.resources_mut().insert(status);
             return Ok(());
         }
+
+        // Normal interactive frames pump material work once. The prelaunch path
+        // owns its own loading-specific pump and budget, so doing this before the
+        // gate duplicated queue scans and could start twice the configured jobs.
+        self.pump_material_texture_requests(
+            &mut **r,
+            thread_pool.as_ref(),
+            material_upload_jobs,
+            material_upload_jobs,
+        );
 
         self.resize_if_needed(&mut **r, w, h)?;
         drop(r);

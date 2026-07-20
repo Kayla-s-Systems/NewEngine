@@ -156,6 +156,83 @@ mod tests {
     }
 
     #[test]
+    fn presentation_flow_is_parsed_as_authored_state_graph() {
+        let parsed = parse_config_value(&json!({
+            "profile": "game",
+            "presentation_flow": {
+                "enabled": true,
+                "id": "game.frontend",
+                "initial_state": "main_menu",
+                "states": [
+                    {
+                        "id": "main_menu",
+                        "document_ref": "ui/engine/main_menu.neui@surface",
+                        "surface_id": "engine.main_menu",
+                        "input_focus_policy": "ui_surface",
+                        "blocks_world_bootstrap": true,
+                        "blocks_gameplay_input": true
+                    },
+                    {
+                        "id": "loading",
+                        "blocks_world_bootstrap": false,
+                        "blocks_gameplay_input": true
+                    },
+                    {
+                        "id": "gameplay",
+                        "document_ref": "ui/game/game_hud.neui@surface",
+                        "surface_id": "game.hud",
+                        "input_focus_policy": "game_viewport"
+                    }
+                ],
+                "transitions": [
+                    {
+                        "from": "main_menu",
+                        "to": "loading",
+                        "on_action": "game.start",
+                        "reset_runtime_ready": true
+                    },
+                    {
+                        "from": "loading",
+                        "to": "gameplay",
+                        "on_runtime_ready": true
+                    }
+                ]
+            }
+        }))
+        .unwrap();
+        let flow = parsed.presentation_flow.expect("presentation flow");
+        assert!(flow.is_valid());
+        assert_eq!(flow.initial_state, "main_menu");
+        assert_eq!(flow.states.len(), 3);
+        assert_eq!(flow.transitions.len(), 2);
+        assert!(
+            flow.state("main_menu")
+                .expect("main menu")
+                .blocks_world_bootstrap
+        );
+    }
+
+    #[test]
+    fn presentation_flow_rejects_transition_to_unknown_state() {
+        let parsed = parse_config_value(&json!({
+            "profile": "game",
+            "presentation_flow": {
+                "enabled": true,
+                "id": "broken",
+                "initial_state": "main_menu",
+                "states": [{"id": "main_menu"}],
+                "transitions": [{
+                    "from": "main_menu",
+                    "to": "missing",
+                    "on_action": "game.start"
+                }]
+            }
+        }))
+        .unwrap();
+        assert!(!parsed.presentation_flow.expect("flow").is_valid());
+    }
+
+    #[test]
     fn game_profile_keeps_game_ui_root_as_data() {
         let parsed = parse_config_value(&json!({
             "profile":"game",

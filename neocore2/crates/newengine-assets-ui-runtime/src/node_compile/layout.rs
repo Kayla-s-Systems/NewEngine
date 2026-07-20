@@ -37,6 +37,13 @@ fn put_bool_prop(node: &mut UiNodeRequest, key: &str, value: bool) {
 }
 
 pub(super) fn apply_layout_attrs(node: &mut UiNodeRequest, open: &str) {
+    if let Some(value) = attr_value(open, "position")
+        .map(|value| value.trim().to_ascii_lowercase())
+        .filter(|value| matches!(value.as_str(), "absolute" | "fixed" | "flow" | "relative"))
+    {
+        node.props
+            .insert("position".to_owned(), serde_json::Value::String(value));
+    }
     if let Some(value) = attr_f32(open, &["x_px", "x"]) {
         node.layout.x_px = Some(value);
         put_f32_prop(node, "x_px", value);

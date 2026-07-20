@@ -142,11 +142,80 @@ pub(super) struct EditorLayoutMetrics {
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(default)]
+pub(super) struct ScreenPresentationStateConfig {
+    pub(super) id: String,
+    pub(super) document_ref: Option<String>,
+    pub(super) surface_id: Option<String>,
+    #[serde(default = "default_ui_surface_focus_policy")]
+    pub(super) input_focus_policy: UiScreenInputFocusPolicy,
+    pub(super) blocks_world_bootstrap: bool,
+    pub(super) blocks_gameplay_input: bool,
+}
+
+impl Default for ScreenPresentationStateConfig {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            document_ref: None,
+            surface_id: None,
+            input_focus_policy: default_ui_surface_focus_policy(),
+            blocks_world_bootstrap: false,
+            blocks_gameplay_input: false,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(default)]
+pub(super) struct ScreenPresentationTransitionConfig {
+    pub(super) from: String,
+    pub(super) to: String,
+    pub(super) on_action: Option<String>,
+    pub(super) on_runtime_ready: bool,
+    pub(super) reset_runtime_ready: bool,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(default)]
+pub(super) struct ScreenPresentationFlowConfig {
+    pub(super) enabled: bool,
+    pub(super) id: String,
+    pub(super) initial_state: String,
+    pub(super) states: Vec<ScreenPresentationStateConfig>,
+    pub(super) transitions: Vec<ScreenPresentationTransitionConfig>,
+}
+
+impl ScreenPresentationFlowConfig {
+    pub(super) fn state(&self, state_id: &str) -> Option<&ScreenPresentationStateConfig> {
+        self.states.iter().find(|state| state.id == state_id)
+    }
+
+    pub(super) fn is_valid(&self) -> bool {
+        self.enabled
+            && !self.id.trim().is_empty()
+            && !self.initial_state.trim().is_empty()
+            && self.state(self.initial_state.trim()).is_some()
+            && self.states.iter().all(|state| !state.id.trim().is_empty())
+            && self.transitions.iter().all(|transition| {
+                self.state(transition.from.trim()).is_some()
+                    && self.state(transition.to.trim()).is_some()
+                    && (transition
+                        .on_action
+                        .as_deref()
+                        .is_some_and(|action| !action.trim().is_empty())
+                        || transition.on_runtime_ready)
+            })
+    }
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(default)]
 pub(super) struct ScreenProfileConfig {
     #[serde(default = "default_screen_profile")]
     pub(super) profile: UiScreenProfile,
     pub(super) game_ui_root_surface_id: Option<String>,
     pub(super) game_ui_document_ref: Option<String>,
+    pub(super) presentation_flow: Option<ScreenPresentationFlowConfig>,
     #[serde(default = "default_publish_editor_shell")]
     pub(super) publish_editor_shell: bool,
 }
@@ -159,6 +228,10 @@ pub(super) fn default_publish_editor_shell() -> bool {
     true
 }
 
+pub(super) fn default_ui_surface_focus_policy() -> UiScreenInputFocusPolicy {
+    UiScreenInputFocusPolicy::UiSurface
+}
+
 impl Default for ScreenProfileConfig {
     fn default() -> Self {
         Self {
@@ -168,6 +241,7 @@ impl Default for ScreenProfileConfig {
             profile: UiScreenProfile::Editor,
             game_ui_root_surface_id: None,
             game_ui_document_ref: None,
+            presentation_flow: None,
             publish_editor_shell: true,
         }
     }
@@ -181,6 +255,14 @@ pub(crate) struct ScreenProfileRuntimeState {
     pub(super) published_surfaces: BTreeSet<String>,
     pub(super) mounted_game_ui_document_ref: Option<String>,
     pub(super) failed_game_ui_document_ref: Option<String>,
+    pub(super) presentation_state_id: Option<String>,
+    pub(super) last_published_presentation_state_id: Option<String>,
+    pub(super) presentation_runtime_ready: bool,
+    pub(super) mounted_presentation_documents: BTreeMap<String, String>,
+    pub(super) failed_presentation_documents: BTreeSet<String>,
+    pub(super) last_presentation_action_frame: u64,
+    pub(super) pending_presentation_action_id: Option<String>,
+    pub(super) pending_presentation_action_frame: u64,
     pub(super) last_right_edit_selection_key: String,
     pub(super) cached_right_edit_document: Option<AssetDocument>,
     pub(super) cached_right_edit_error: Option<String>,

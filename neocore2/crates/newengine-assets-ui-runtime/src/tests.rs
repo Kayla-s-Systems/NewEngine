@@ -335,3 +335,52 @@ fn compiles_aurelia_asset_preview_stand_with_font_texture_and_binding_refs() {
         .any(|action| action.action_id == "ui.preview.refresh"
             && action.target_gateway == "engine.ui"));
 }
+
+#[test]
+fn compiled_absolute_image_preserves_authored_position_and_extent() {
+    let xml = r#"
+<NeUiDictionary document_kind="surface">
+  <Surface name="engine.test.absolute_image" kind="main_menu" root="layout.main" />
+  <Layout name="layout.main" surface="engine.test.absolute_image">
+    <Image id="menu.logo"
+           position="absolute"
+           x_px="64" y_px="48" w_px="512" h_px="144"
+           texture="textures/ui/menu/main_menu_logo.ytd@logo" />
+  </Layout>
+</NeUiDictionary>
+"#;
+    let surface = parse_surface(xml).expect("surface declaration");
+    let root = compile_surface_root(
+        xml,
+        &surface,
+        "ui/engine/test.neui@surface",
+        None,
+        &NeUiDialect::builtin(),
+    )
+    .expect("compile absolute image");
+    let image = find_node(&root, "menu.logo").expect("compiled image node");
+    assert_eq!(image.kind, UiRuntimeNodeKind::ExternalTexture);
+    assert_eq!(
+        image
+            .props
+            .get("position")
+            .and_then(serde_json::Value::as_str),
+        Some("absolute")
+    );
+    assert_eq!(
+        image.props.get("x_px").and_then(serde_json::Value::as_f64),
+        Some(64.0)
+    );
+    assert_eq!(
+        image.props.get("y_px").and_then(serde_json::Value::as_f64),
+        Some(48.0)
+    );
+    assert_eq!(
+        image.props.get("w_px").and_then(serde_json::Value::as_f64),
+        Some(512.0)
+    );
+    assert_eq!(
+        image.props.get("h_px").and_then(serde_json::Value::as_f64),
+        Some(144.0)
+    );
+}

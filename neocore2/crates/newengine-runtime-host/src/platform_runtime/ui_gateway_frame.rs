@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
+use std::time::Instant;
 
 use newengine_core::EngineResult;
 use newengine_system_contracts::{ScreenOverlayStatus, ScreenOverlayStatusKind};
@@ -122,7 +122,9 @@ mod loading_overlay;
 #[path = "ui_gateway_frame_parts/publish.rs"]
 mod publish;
 
-pub(crate) use self::draw_list::request_ui_draw_list;
+pub(crate) use self::draw_list::{
+    animate_loading_draw_list, loading_animation_now_ms, request_ui_draw_list,
+};
 pub(crate) use self::input_dispatch::dispatch_input_frame;
 pub(crate) use self::loading_overlay::{publish_loading_overlay, publish_loading_overlay_inactive};
 pub(crate) use self::publish::{

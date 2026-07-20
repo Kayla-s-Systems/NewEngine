@@ -1,5 +1,67 @@
 use super::*;
 
+const DEFAULT_LOADING_SPINNER_RPS: f32 = 0.90;
+const LOADING_TEXTURE_SESSION_RESET_MAX_FRAME: u64 = 4;
+
+static LOADING_ANIMATION_EPOCH: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
+
+#[derive(Default)]
+struct LoadingTextureResidencyState {
+    last_frame_index: Option<u64>,
+    resident_refs: BTreeMap<u32, String>,
+}
+
+static LOADING_TEXTURE_RESIDENCY: std::sync::OnceLock<
+    std::sync::Mutex<LoadingTextureResidencyState>,
+> = std::sync::OnceLock::new();
+
+#[inline]
+pub(crate) fn loading_animation_now_ms() -> u64 {
+    LOADING_ANIMATION_EPOCH
+        .get_or_init(Instant::now)
+        .elapsed()
+        .as_millis()
+        .min(u128::from(u64::MAX)) as u64
+}
+
+fn loading_texture_residency() -> &'static std::sync::Mutex<LoadingTextureResidencyState> {
+    LOADING_TEXTURE_RESIDENCY
+        .get_or_init(|| std::sync::Mutex::new(LoadingTextureResidencyState::default()))
+}
+
+fn lock_loading_texture_residency() -> std::sync::MutexGuard<'static, LoadingTextureResidencyState>
+{
+    loading_texture_residency()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+fn begin_loading_texture_frame(frame_index: u64) {
+    let mut state = lock_loading_texture_residency();
+    let starts_new_session = state.last_frame_index.is_some_and(|last| {
+        frame_index < last
+            || (frame_index <= LOADING_TEXTURE_SESSION_RESET_MAX_FRAME
+                && last > LOADING_TEXTURE_SESSION_RESET_MAX_FRAME)
+    });
+    if starts_new_session {
+        state.resident_refs.clear();
+    }
+    state.last_frame_index = Some(frame_index);
+}
+
+fn loading_texture_is_resident(texture_id: UiTexId, texture_ref: &str) -> bool {
+    lock_loading_texture_residency()
+        .resident_refs
+        .get(&texture_id.0)
+        .is_some_and(|resident_ref| resident_ref == texture_ref)
+}
+
+fn mark_loading_texture_resident(texture_id: UiTexId, texture_ref: &str) {
+    lock_loading_texture_residency()
+        .resident_refs
+        .insert(texture_id.0, texture_ref.to_owned());
+}
+
 pub(crate) fn request_ui_draw_list(
     frame_index: u64,
     dt_sec: f32,
@@ -13,10 +75,7 @@ pub(crate) fn request_ui_draw_list(
     }
 
     let started = Instant::now();
-    let now_ms = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|it| it.as_millis().min(u128::from(u64::MAX)) as u64)
-        .unwrap_or(0);
+    let now_ms = loading_animation_now_ms();
     let render_surface_ids: Vec<String> = render_surface_ids
         .iter()
         .map(|surface_id| surface_id.trim().to_owned())
@@ -79,6 +138,7 @@ fn request_ui_draw_list_bin(
         .map_err(|e| format!("decode binary ui frame response failed: {e}"))?;
     let decode_ms = decode_started.elapsed().as_secs_f32() * 1000.0;
     ensure_production_loading_images(request, &mut response.draw_list);
+    animate_loading_draw_list(&mut response.draw_list, request.frame_input.now_ms);
 
     log_ui_gateway_frame(
         "bin",
@@ -120,6 +180,7 @@ fn request_ui_draw_list_json(
     })?;
     let decode_ms = decode_started.elapsed().as_secs_f32() * 1000.0;
     ensure_production_loading_images(request, &mut response.draw_list);
+    animate_loading_draw_list(&mut response.draw_list, request.frame_input.now_ms);
 
     log_ui_gateway_frame(
         "json",
@@ -164,6 +225,7 @@ fn ensure_production_loading_images(request: &UiFrameRequest, draw_list: &mut Ui
     // here is the generic retained-UI chrome that produced the visible accent
     // stripe/title/debug rows on the loading screen, so it must not survive.
     draw_list.mesh.clear();
+    begin_loading_texture_frame(request.frame_index);
 
     let sw = request.surface_size_px[0].max(1) as f32;
     let sh = request.surface_size_px[1].max(1) as f32;
@@ -250,6 +312,39 @@ fn ensure_production_loading_images(request: &UiFrameRequest, draw_list: &mut Ui
     }
 }
 
+pub(crate) fn animate_loading_draw_list(draw_list: &mut UiDrawList, now_ms: u64) {
+    let rotation_radians = loading_spinner_animation_spec()
+        .runtime(now_ms)
+        .rotation_radians;
+    apply_loading_spinner_rotation(draw_list, rotation_radians);
+}
+
+fn apply_loading_spinner_rotation(draw_list: &mut UiDrawList, rotation_radians: f32) {
+    if !rotation_radians.is_finite() {
+        return;
+    }
+
+    for command in &mut draw_list.paint.commands {
+        let UiPaintCommand::Image(image) = command else {
+            continue;
+        };
+        if is_loading_spinner_image(image) {
+            image.rotation_radians = rotation_radians;
+        }
+    }
+}
+
+fn is_loading_spinner_image(image: &UiImagePaintCommand) -> bool {
+    image.node.node_id == "loading.spinner"
+        || image.node.component_id.contains("spinner")
+        || image.node.role.contains("spinner")
+        || image
+            .node
+            .state_tags
+            .iter()
+            .any(|tag| tag == "loading-spinner" || tag == "startup-spinner")
+}
+
 fn valid_loading_texture_ref(value: Option<&str>) -> Option<&str> {
     value
         .map(str::trim)
@@ -283,7 +378,7 @@ struct LoadingSpinnerRuntimeAnimation {
 impl LoadingSpinnerAnimationSpec {
     fn fallback() -> Self {
         Self {
-            rotation_rps: 2.8,
+            rotation_rps: DEFAULT_LOADING_SPINNER_RPS,
             sprite_fps: 24.0,
             sprite_frames: Some(1),
             sprite_columns: Some(1),
@@ -295,13 +390,15 @@ impl LoadingSpinnerAnimationSpec {
     }
 
     fn runtime(&self, now_ms: u64) -> LoadingSpinnerRuntimeAnimation {
-        let t_sec = (now_ms % 10_000) as f32 * 0.001;
-        let rotation_radians = (t_sec * self.rotation_rps.max(0.0) * std::f32::consts::TAU)
-            .rem_euclid(std::f32::consts::TAU);
+        let t_sec = now_ms as f64 * 0.001;
+        let rotation_radians =
+            (t_sec * f64::from(self.rotation_rps.max(0.0)) * std::f64::consts::TAU)
+                .rem_euclid(std::f64::consts::TAU) as f32;
         let sprite_frame_index = if self.sprite_fps > 0.0 {
+            let frame_count = self.sprite_frames.unwrap_or(usize::MAX).max(1);
             Some(
-                ((t_sec * self.sprite_fps).floor() as usize)
-                    % self.sprite_frames.unwrap_or(usize::MAX).max(1),
+                ((t_sec * f64::from(self.sprite_fps)).floor() as u64
+                    % frame_count.min(u64::MAX as usize) as u64) as usize,
             )
         } else {
             None
@@ -489,7 +586,6 @@ fn push_loading_image(
         texture_id,
         texture_ref,
         node_id,
-        rotation_radians,
         spinner_animation,
     );
     draw_list
@@ -519,10 +615,16 @@ fn ensure_loading_texture_payload(
     texture_id: UiTexId,
     texture_ref: &str,
     node_id: &str,
-    rotation_radians: f32,
     spinner_animation: Option<LoadingSpinnerRuntimeAnimation>,
 ) {
     if draw_list.texture_delta.set.contains_key(&texture_id) {
+        return;
+    }
+
+    let cacheable = spinner_animation
+        .map(|animation| animation.sprite_frames.unwrap_or(1) <= 1)
+        .unwrap_or(true);
+    if cacheable && loading_texture_is_resident(texture_id, texture_ref) {
         return;
     }
 
@@ -562,23 +664,23 @@ fn ensure_loading_texture_payload(
         Ok(mut texture) => {
             if node_id.contains("spinner") {
                 apply_spinner_sprite_frame_if_sheet(&mut texture, spinner_animation);
-                if rotation_radians.is_finite() && rotation_radians.abs() > 0.000_1 {
-                    rotate_ui_texture_rgba8_in_place(&mut texture, rotation_radians);
-                }
             }
             let size = texture.size;
             let bytes = texture.rgba8.len();
             draw_list.texture_delta.set.insert(texture_id, texture);
+            if cacheable {
+                mark_loading_texture_resident(texture_id, texture_ref);
+            }
             if draw_list.texture_delta.set.len() <= 4 {
                 newengine_ulog_api::ulog::warn!(
-                    "engine.ui.loading texture payload bound node_id={} ref='{}' tex_id={} size={}x{} bytes={} rotation_rad={:.3}",
+                    "engine.ui.loading texture payload bound node_id={} ref='{}' tex_id={} size={}x{} bytes={} cacheable={}",
                     node_id,
                     texture_ref,
                     texture_id.0,
                     size[0],
                     size[1],
                     bytes,
-                    rotation_radians
+                    cacheable
                 );
             }
         }
@@ -732,42 +834,6 @@ fn apply_spinner_sprite_frame_if_sheet(
     texture.rgba8 = dst;
 }
 
-fn rotate_ui_texture_rgba8_in_place(texture: &mut newengine_ui_api::UiTexture, angle: f32) {
-    let width = texture.size[0] as usize;
-    let height = texture.size[1] as usize;
-    if width == 0
-        || height == 0
-        || texture.rgba8.len() != width.saturating_mul(height).saturating_mul(4)
-    {
-        return;
-    }
-
-    let src = texture.rgba8.clone();
-    let mut dst = vec![0u8; src.len()];
-    let cx = (width as f32 - 1.0) * 0.5;
-    let cy = (height as f32 - 1.0) * 0.5;
-    let s = angle.sin();
-    let c = angle.cos();
-
-    for y in 0..height {
-        for x in 0..width {
-            let dx = x as f32 - cx;
-            let dy = y as f32 - cy;
-            // Inverse rotation: sample source that maps into this destination pixel.
-            let sx = cx + dx * c + dy * s;
-            let sy = cy - dx * s + dy * c;
-            let sx_i = sx.round() as isize;
-            let sy_i = sy.round() as isize;
-            let dst_i = (y * width + x) * 4;
-            if sx_i >= 0 && sy_i >= 0 && (sx_i as usize) < width && (sy_i as usize) < height {
-                let src_i = ((sy_i as usize) * width + sx_i as usize) * 4;
-                dst[dst_i..dst_i + 4].copy_from_slice(&src[src_i..src_i + 4]);
-            }
-        }
-    }
-    texture.rgba8 = dst;
-}
-
 fn texture_id_for_loading_ref(texture_ref: &str) -> UiTexId {
     let mut hash = 0x811c_9dc5u32;
     for byte in texture_ref.as_bytes() {
@@ -900,4 +966,43 @@ fn ui_draw_list_stats(draw_list: &UiDrawList) -> String {
         patch_bytes,
         draw_list.texture_delta.free.len(),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn spinner_runtime_uses_continuous_elapsed_time() {
+        let spec = LoadingSpinnerAnimationSpec {
+            rotation_rps: 1.0,
+            sprite_fps: 0.0,
+            sprite_frames: None,
+            sprite_columns: None,
+            sprite_rows: None,
+            frame_width: None,
+            frame_height: None,
+            source: "test",
+        };
+
+        let quarter_turn = spec.runtime(250).rotation_radians;
+        assert!((quarter_turn - std::f32::consts::FRAC_PI_2).abs() < 0.000_1);
+    }
+
+    #[test]
+    fn cached_loading_spinner_rotates_without_rebuilding_texture_payload() {
+        let mut draw_list = UiDrawList::new();
+        let mut spinner = UiImagePaintCommand::default();
+        spinner.node.node_id = "loading.spinner".to_owned();
+        draw_list.paint.push(UiPaintCommand::Image(spinner));
+
+        apply_loading_spinner_rotation(&mut draw_list, 1.25);
+
+        let UiPaintCommand::Image(spinner) = &draw_list.paint.commands[0] else {
+            panic!("expected loading spinner image");
+        };
+        assert_eq!(spinner.rotation_radians, 1.25);
+        assert!(draw_list.texture_delta.set.is_empty());
+        assert!(draw_list.texture_delta.patches.is_empty());
+    }
 }

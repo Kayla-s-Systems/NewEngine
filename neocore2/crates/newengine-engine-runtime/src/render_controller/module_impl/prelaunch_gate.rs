@@ -42,12 +42,16 @@ impl RuntimeRenderController {
                 .unwrap_or(false);
 
             if has_pending_gate {
+                // Prelaunch is a real presented frame. Advance the controller index
+                // before scheduling work so task ids, retry ages and residency
+                // intervals all refer to the frame currently being prepared.
+                self.frame.frame_index = next_frame;
                 let requested_play_mode = self.bridges.scene.play_mode();
                 let prims_lock = self.bridges.scene.primitives();
                 let mut prims = prims_lock.write();
                 let mats_lock = self.bridges.scene.materials();
                 let mats = mats_lock.read();
-                let world_playable = scene.run_frame(next_frame, |world| {
+                let material_plan = scene.run_frame(next_frame, |world| {
                     // Static authored world assembly is incremental and must progress
                     // inside the prelaunch path. The normal world tick is intentionally
                     // bypassed while the gate is active, so admitting it only there would
@@ -58,57 +62,99 @@ impl RuntimeRenderController {
                         &mats,
                         ctx.thread_pool(),
                     );
-                    // Prelaunch may pump GPU residency for the already materialized launch
-                    // ring, but must not admit additional CPU terrain chunks. Otherwise the
-                    // launch gate target keeps growing before public Play, and the window
-                    // remains blocked in loading while streaming expands toward the full
-                    // runtime radius. Full streaming admission resumes from world_tick after
-                    // the launch gate releases.
-                    readiness::update_game_ready_launch_gate(
-                        self,
-                        r,
-                        world,
-                        requested_play_mode,
-                        next_frame,
-                    )
+
+                    // Queue only launch-critical textures, with alpha-tested base
+                    // textures first. Optional environment maps remain post-launch
+                    // streaming work and cannot consume the limited decode slots.
+                    readiness::prepare_game_ready_launch_resources(self, world, &*mats)
                 });
-                // The residency pump below reads the primitive registry. Release
-                // the static-world admission write guard first; otherwise the
-                // prelaunch thread deadlocks itself on the same RwLock.
+                // The residency pump below reads the primitive/material registries.
+                // Release static-world admission guards first to avoid self-deadlock.
                 drop(prims);
                 drop(mats);
 
-                // Launch gate must pump world/terrain residency too. Otherwise
-                // `Loading World` can reach texture 100% while the world still has
-                // CPU-prepared terrain chunks waiting for GPU packets, and redraws
-                // may only advance again after unrelated UI input.
+                // Admit bounded terrain/primitive packets before evaluating readiness.
+                // The previous order checked readiness first, so work completed by this
+                // frame's pump could not release Play until the following frame.
                 if let Err(e) = self.pump_scene_gpu_residency(r, &scene) {
                     newengine_ulog_api::ulog::warn!(
-                        "render prelaunch: terrain GPU residency pump failed: {}",
+                        "render prelaunch: scene GPU residency pump failed: {}",
                         e
                     );
                 }
 
+                let decode_jobs = prelaunch_material_decode_jobs(material_upload_jobs);
                 self.pump_material_texture_requests(
                     r,
                     ctx.thread_pool(),
                     super::super::render_quality::MATERIAL_TEXTURE_IMPORT_START_BURST
-                        .min(material_upload_jobs.max(1)),
-                    material_upload_jobs,
+                        .min(decode_jobs),
+                    decode_jobs,
                 );
-                let upload_desc = backend_work_budget
-                    .map(|budget| UploadPumpDesc::loading_screen_warmup().with_budget(budget))
-                    .unwrap_or_else(UploadPumpDesc::loading_screen_warmup);
-                let _ = r.pump_uploads(upload_desc);
 
-                if world_playable {
-                    if let Err(e) = self.prewarm_scene_gpu_resources(r, &scene) {
+                let upload_budget = loading_screen_work_budget(backend_work_budget);
+                let upload_desc =
+                    UploadPumpDesc::loading_screen_warmup().with_budget(upload_budget);
+                match r.pump_uploads(upload_desc) {
+                    Ok(report) => {
+                        if report.failed_jobs > 0 {
+                            newengine_ulog_api::ulog::warn!(
+                                "render prelaunch: upload pump completed with failures frame={} processed_jobs={} processed_bytes={} remaining_jobs={} remaining_bytes={} failed_jobs={}",
+                                next_frame,
+                                report.processed_jobs,
+                                report.processed_bytes,
+                                report.remaining_jobs,
+                                report.remaining_bytes,
+                                report.failed_jobs,
+                            );
+                        } else if trace_frame
+                            && (report.processed_jobs > 0 || report.remaining_jobs > 0)
+                        {
+                            newengine_ulog_api::ulog::debug!(
+                                "render prelaunch: upload pump frame={} processed_jobs={} processed_bytes={} remaining_jobs={} remaining_bytes={} budget_blocked={}",
+                                next_frame,
+                                report.processed_jobs,
+                                report.processed_bytes,
+                                report.remaining_jobs,
+                                report.remaining_bytes,
+                                report.blocked_by_budget,
+                            );
+                        }
+                    }
+                    Err(e) => {
                         newengine_ulog_api::ulog::warn!(
-                            "render prewarm: failed during launch gate handoff err='{}'",
+                            "render prelaunch: upload pump failed frame={} err='{}'",
+                            next_frame,
                             e
                         );
                     }
                 }
+
+                // Pipeline construction belongs under the loading projection, not
+                // in the first public gameplay frame. Mesh uploads remain bounded by
+                // pump_scene_gpu_residency and are never swept synchronously here.
+                if let Err(e) = self.prewarm_scene_pipeline(r) {
+                    if next_frame <= 4 || next_frame.is_multiple_of(120) {
+                        newengine_ulog_api::ulog::warn!(
+                            "render prewarm: primary scene pipeline not ready frame={} err='{}'",
+                            next_frame,
+                            e
+                        );
+                    }
+                }
+
+                // Evaluate against the resource state produced by this same frame's
+                // CPU decode, GPU upload and pipeline warmup work.
+                let world_playable = scene.run_frame(next_frame, |world| {
+                    readiness::update_game_ready_launch_gate_with_material_plan(
+                        self,
+                        r,
+                        world,
+                        requested_play_mode,
+                        &material_plan,
+                        next_frame,
+                    )
+                });
 
                 if let Some(gate) = scene
                     .world_mut()
@@ -309,6 +355,39 @@ fn present_prelaunch_loading_ui_frame(
     r.end_frame()
 }
 
+fn prelaunch_material_decode_jobs(configured_jobs: u32) -> u32 {
+    let ceiling = super::super::render_quality::MATERIAL_TEXTURE_MAX_ASYNC_DECODE_JOBS as u32;
+    configured_jobs
+        .max(1)
+        .saturating_mul(2)
+        .max(super::super::render_quality::MATERIAL_TEXTURE_IMPORT_START_BURST)
+        .min(ceiling.max(1))
+}
+
+fn loading_screen_work_budget(base: Option<RenderWorkBudget>) -> RenderWorkBudget {
+    let mut budget = base.unwrap_or_default();
+    budget.max_upload_bytes_per_frame = budget
+        .max_upload_bytes_per_frame
+        .saturating_mul(2)
+        .clamp(8 * 1024 * 1024, 64 * 1024 * 1024);
+    budget.max_upload_jobs_per_frame = budget
+        .max_upload_jobs_per_frame
+        .max(1)
+        .saturating_mul(2)
+        .clamp(2, 16);
+    budget.max_pipeline_builds_per_frame = budget
+        .max_pipeline_builds_per_frame
+        .max(1)
+        .saturating_mul(2)
+        .clamp(1, 4);
+    budget.max_blocking_ms_per_frame = if budget.max_blocking_ms_per_frame.is_finite() {
+        budget.max_blocking_ms_per_frame.clamp(6.0, 12.0)
+    } else {
+        6.0
+    };
+    budget
+}
+
 fn editor_runtime_mode<E: Send + 'static>(ctx: &ModuleCtx<'_, E>) -> Option<UiEditorRuntimeMode> {
     let screen_profile = ctx
         .resources()
@@ -324,4 +403,26 @@ fn editor_runtime_mode<E: Send + 'static>(ctx: &ModuleCtx<'_, E>) -> Option<UiEd
             .map(|state| state.mode)
             .unwrap_or(UiEditorRuntimeMode::Edit),
     )
+}
+
+#[cfg(test)]
+mod loading_budget_tests {
+    use super::*;
+
+    #[test]
+    fn loading_budget_is_more_aggressive_but_bounded() {
+        let base = RenderWorkBudget::default();
+        let loading = loading_screen_work_budget(Some(base));
+        assert!(loading.max_upload_bytes_per_frame > base.max_upload_bytes_per_frame);
+        assert!(loading.max_upload_jobs_per_frame > base.max_upload_jobs_per_frame);
+        assert!((6.0..=12.0).contains(&loading.max_blocking_ms_per_frame));
+    }
+
+    #[test]
+    fn prelaunch_decode_jobs_respect_runtime_ceiling() {
+        assert_eq!(
+            prelaunch_material_decode_jobs(u32::MAX),
+            super::super::super::render_quality::MATERIAL_TEXTURE_MAX_ASYNC_DECODE_JOBS as u32
+        );
+    }
 }

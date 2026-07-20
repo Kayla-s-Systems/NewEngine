@@ -5,13 +5,14 @@ use std::{any::Any, sync::Arc};
 use newengine_assets::AssetServiceClient;
 use newengine_core::{
     render::SceneLaunchStatus, EngineLifecycleEvent, EngineReadinessKey, EngineReadinessSnapshot,
-    EngineResult, Module, ModuleCtx,
+    EngineResult, Module, ModuleCtx, Resources,
 };
 use newengine_runtime_host::asset_bootstrap::{
     collect_app_asset_roots, mount_asset_roots_best_effort,
 };
 use newengine_ui_api::{
-    UiEditorRuntimeMode, UiEditorRuntimeState, UiScreenProfile, UiScreenProfileState,
+    UiEditorRuntimeMode, UiEditorRuntimeState, UiPresentationFlowState, UiScreenProfile,
+    UiScreenProfileState,
 };
 
 use crate::{GAME_APP_ASSETS_DIR_ENV, GAME_READY_APP_DIR_NAME};
@@ -24,6 +25,7 @@ pub(crate) struct GameReadySceneBootstrapModule {
     bootstrapped: bool,
     waiting_logged: bool,
     editor_deferred_logged: bool,
+    presentation_deferred_logged: bool,
 }
 
 impl GameReadySceneBootstrapModule {
@@ -34,6 +36,7 @@ impl GameReadySceneBootstrapModule {
             bootstrapped: false,
             waiting_logged: false,
             editor_deferred_logged: false,
+            presentation_deferred_logged: false,
         }
     }
 
@@ -84,12 +87,40 @@ impl GameReadySceneBootstrapModule {
     }
 
     #[inline]
+    fn presentation_bootstrap_allowed<E: Send + 'static>(
+        &mut self,
+        ctx: &ModuleCtx<'_, E>,
+        origin: &'static str,
+    ) -> bool {
+        if presentation_flow_allows_bootstrap(ctx.resources()) {
+            return true;
+        }
+        let flow = ctx
+            .resources()
+            .get::<UiPresentationFlowState>()
+            .expect("blocked presentation flow state");
+        if !self.presentation_deferred_logged {
+            self.presentation_deferred_logged = true;
+            newengine_ulog_api::ulog::info!(
+                "game-ready runtime: scene bootstrap deferred by authored presentation flow origin='{}' flow='{}' state='{}' surface='{}'",
+                origin,
+                flow.flow_id,
+                flow.state_id,
+                flow.active_surface_id.as_deref().unwrap_or("<none>"),
+            );
+        }
+        false
+    }
+
+    #[inline]
     fn try_bootstrap_if_allowed<E: Send + 'static>(
         &mut self,
         ctx: &mut ModuleCtx<'_, E>,
         origin: &'static str,
     ) -> EngineResult<()> {
-        if !self.editor_bootstrap_allowed(ctx, origin) {
+        if !self.editor_bootstrap_allowed(ctx, origin)
+            || !self.presentation_bootstrap_allowed(ctx, origin)
+        {
             return Ok(());
         }
         self.try_bootstrap(ctx, origin)
@@ -182,6 +213,7 @@ impl<E: Send + 'static> Module<E> for GameReadySceneBootstrapModule {
             EngineLifecycleEvent::EngineStartCompleted { .. } => {
                 if self.bootstrapped
                     || !self.editor_bootstrap_allowed(ctx, "engine-start-completed")
+                    || !self.presentation_bootstrap_allowed(ctx, "engine-start-completed")
                 {
                     Ok(())
                 } else {
@@ -200,5 +232,41 @@ impl<E: Send + 'static> Module<E> for GameReadySceneBootstrapModule {
             self.try_bootstrap_if_allowed(ctx, "update-readiness-fallback")?;
         }
         Ok(())
+    }
+}
+
+fn presentation_flow_allows_bootstrap(resources: &Resources) -> bool {
+    resources
+        .get::<UiPresentationFlowState>()
+        .map(UiPresentationFlowState::allows_world_bootstrap)
+        .unwrap_or(true)
+}
+
+#[cfg(test)]
+mod presentation_flow_tests {
+    use super::*;
+
+    #[test]
+    fn absent_presentation_flow_keeps_legacy_bootstrap_behavior() {
+        assert!(presentation_flow_allows_bootstrap(&Resources::default()));
+    }
+
+    #[test]
+    fn authored_frontend_can_gate_world_bootstrap() {
+        let mut resources = Resources::default();
+        resources.insert(UiPresentationFlowState {
+            flow_id: "game.frontend".to_owned(),
+            state_id: "main_menu".to_owned(),
+            blocks_world_bootstrap: true,
+            blocks_gameplay_input: true,
+            ..UiPresentationFlowState::default()
+        });
+        assert!(!presentation_flow_allows_bootstrap(&resources));
+
+        resources
+            .get_mut::<UiPresentationFlowState>()
+            .expect("flow state")
+            .blocks_world_bootstrap = false;
+        assert!(presentation_flow_allows_bootstrap(&resources));
     }
 }

@@ -237,8 +237,9 @@ pub enum GameReadyWorldLaunchGatePhase {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GameReadyWorldLaunchGate {
     pub requested_frame: u64,
-    /// Wall-clock origin for the soft launch timeout. Frame-based timeouts alone
-    /// are insufficient while prelaunch GPU uploads make individual frames slow.
+    /// Process-monotonic origin for the soft launch timeout. Frame-based timeouts
+    /// alone are insufficient while prelaunch GPU uploads make frames uneven; a
+    /// monotonic clock also avoids system-time adjustments extending the gate.
     pub requested_at_ms: u64,
     pub released_frame: Option<u64>,
     pub phase: GameReadyWorldLaunchGatePhase,

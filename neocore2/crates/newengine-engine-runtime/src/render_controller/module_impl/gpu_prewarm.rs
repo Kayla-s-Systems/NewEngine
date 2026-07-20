@@ -12,61 +12,33 @@ use super::super::gpu::{ensure_primitive_gpu, upload_primitive_mesh};
 use super::RuntimeRenderController;
 
 impl RuntimeRenderController {
-    /// Builds the expensive immutable GPU resources while the loading projection is still active.
+    /// Warms the immutable scene pipeline while the loading projection is active.
     ///
-    /// The reference renderer keeps draw-list population and resource residency
-    /// ahead of presentation. This small warmup step follows the same principle:
-    /// terrain meshes, primitive meshes and lit pipelines are created before the
-    /// first public gameplay frame, so frame one does not absorb every cold cache
-    /// cost at once.
-    pub(super) fn prewarm_scene_gpu_resources(
-        &mut self,
-        r: &mut dyn RenderApi,
-        scene: &Scene,
-    ) -> EngineResult<()> {
+    /// Mesh residency is intentionally excluded from this method. Terrain and
+    /// primitive uploads are admitted by `pump_scene_gpu_residency`, which applies
+    /// explicit per-frame budgets. Performing an unbounded terrain sweep during
+    /// the final launch-gate handoff caused a visible freeze immediately before
+    /// the first playable frame.
+    pub(super) fn prewarm_scene_pipeline(&mut self, r: &mut dyn RenderApi) -> EngineResult<()> {
         let started = std::time::Instant::now();
         let scene_color_format = if self.runtime_profile().hdr_scene_enabled() {
             super::super::render_quality::SCENE_HDR_COLOR_FORMAT
         } else {
             TextureFormat::Bgra8Unorm
         };
-        if let Err(e) = self.gpu.require_primary_lit_pipeline_for(
+        let _ = self.gpu.require_primary_lit_pipeline_for(
             scene_color_format,
             self.runtime_profile().deferred_enabled(),
             r,
-        ) {
-            newengine_ulog_api::ulog::warn!(
-                "render prewarm: material pipeline is not ready format={:?}; continuing mesh residency and retrying pipeline on later frames err='{}'",
+        )?;
+
+        if newengine_ulog_api::ulog::trace_enabled() {
+            newengine_ulog_api::ulog::trace!(
+                "render prewarm: primary scene pipeline ready format={:?} elapsed_ms={:.2}",
                 scene_color_format,
-                e
+                started.elapsed().as_secs_f32() * 1000.0,
             );
         }
-
-        let world = scene.world();
-        let mut terrain_uploaded = 0_u32;
-        for (_entity, terrain) in world.query::<ProceduralTerrain>() {
-            let mesh_key = terrain.mesh_key();
-            if self.gpu.meshes.terrain_cache.contains_key(&mesh_key) {
-                continue;
-            }
-            let gpu = if let Some(prepared) = world.get::<PreparedTerrainPrimitiveMesh>(_entity) {
-                upload_primitive_mesh(r, prepared.mesh.as_ref(), "prewarm_proc_terrain")?
-            } else {
-                let mesh = terrain.heightfield.to_primitive_mesh();
-                upload_primitive_mesh(r, &mesh, "prewarm_proc_terrain")?
-            };
-            self.gpu.meshes.terrain_cache.insert(mesh_key, gpu);
-            terrain_uploaded = terrain_uploaded.saturating_add(1);
-        }
-
-        if terrain_uploaded > 0 {
-            newengine_ulog_api::ulog::info!(
-                "render prewarm: gpu resources prepared terrain_meshes={} primitive_meshes=0 elapsed_ms={:.2} policy='primitive meshes are admitted by bounded residency pump'",
-                terrain_uploaded,
-                started.elapsed().as_secs_f32() * 1000.0
-            );
-        }
-
         Ok(())
     }
 

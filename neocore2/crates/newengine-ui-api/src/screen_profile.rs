@@ -266,6 +266,10 @@ pub enum UiScreenInputFocusPolicy {
     /// Editor shell owns high-level input focus. Gameplay movement is gated;
     /// editor tools may still route viewport navigation through their own policy.
     EditorShell,
+    /// An authored UI surface owns focus, for example a main menu or frontend.
+    /// Gameplay movement and possession remain gated until the presentation flow
+    /// transitions to a viewport-owned state.
+    UiSurface,
     /// Game viewport owns input focus. Editor panels are absent.
     GameViewport,
     /// No screen focus is active.
@@ -276,6 +280,61 @@ impl Default for UiScreenInputFocusPolicy {
     #[inline]
     fn default() -> Self {
         Self::GameViewport
+    }
+}
+
+/// Generic product presentation-flow state shared between runtime-host, UI,
+/// scene bootstrap and renderer readiness.
+///
+/// State ids, documents and action routes remain product-authored data. Engine
+/// modules consume only the policy flags and readiness signal, so adding a new
+/// frontend or replacing the main menu does not require renderer/scene branches.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UiPresentationFlowState {
+    pub version: u32,
+    pub frame_index: u64,
+    pub flow_id: String,
+    pub state_id: String,
+    pub active_surface_id: Option<String>,
+    pub blocks_world_bootstrap: bool,
+    pub blocks_gameplay_input: bool,
+    pub runtime_ready: bool,
+    pub reason: String,
+}
+
+impl Default for UiPresentationFlowState {
+    fn default() -> Self {
+        Self {
+            version: 1,
+            frame_index: 0,
+            flow_id: String::new(),
+            state_id: String::new(),
+            active_surface_id: None,
+            blocks_world_bootstrap: false,
+            blocks_gameplay_input: false,
+            runtime_ready: false,
+            reason: "presentation flow disabled".to_owned(),
+        }
+    }
+}
+
+impl UiPresentationFlowState {
+    #[inline]
+    pub const fn allows_world_bootstrap(&self) -> bool {
+        !self.blocks_world_bootstrap
+    }
+
+    #[inline]
+    pub const fn allows_gameplay_input(&self) -> bool {
+        !self.blocks_gameplay_input && self.runtime_ready
+    }
+
+    #[inline]
+    pub fn mark_runtime_ready(&mut self, frame_index: u64, reason: impl Into<String>) {
+        self.frame_index = frame_index;
+        self.runtime_ready = true;
+        self.reason = reason.into();
     }
 }
 
@@ -355,3 +414,28 @@ impl Default for UiScreenProfileState {
 pub const UI_SURFACE_SCREEN_ROOT: &str = "engine.ui.screen";
 pub const UI_SURFACE_EDITOR_SHELL: &str = "engine.ui.screen.editor";
 pub const UI_SURFACE_GAME_PRESENTATION: &str = "engine.ui.screen.game";
+
+#[cfg(test)]
+mod presentation_flow_tests {
+    use super::*;
+
+    #[test]
+    fn presentation_flow_gates_bootstrap_and_input_independently() {
+        let state = UiPresentationFlowState {
+            blocks_world_bootstrap: true,
+            blocks_gameplay_input: true,
+            ..UiPresentationFlowState::default()
+        };
+        assert!(!state.allows_world_bootstrap());
+        assert!(!state.allows_gameplay_input());
+    }
+
+    #[test]
+    fn runtime_ready_signal_is_provider_neutral() {
+        let mut state = UiPresentationFlowState::default();
+        state.mark_runtime_ready(42, "launch gate released");
+        assert!(state.runtime_ready);
+        assert_eq!(state.frame_index, 42);
+        assert_eq!(state.reason, "launch gate released");
+    }
+}
