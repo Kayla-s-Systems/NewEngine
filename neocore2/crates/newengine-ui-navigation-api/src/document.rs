@@ -198,10 +198,11 @@ impl UiNodeNavigationItem {
             .dynamic_value
             .take()
             .and_then(|value| normalize_optional_string(&value));
-        for route in [&mut self.action, &mut self.nav_left, &mut self.nav_right] {
-            if let Some(route) = route {
-                route.canonicalize_in_place();
-            }
+        for route in [&mut self.action, &mut self.nav_left, &mut self.nav_right]
+            .into_iter()
+            .flatten()
+        {
+            route.canonicalize_in_place();
         }
     }
 

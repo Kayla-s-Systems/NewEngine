@@ -13,6 +13,17 @@ struct ScreenProfileAssetsUiCompileResponse {
     warnings: Vec<String>,
 }
 
+fn authored_ui_compile_message_is_info(message: &str) -> bool {
+    [
+        ".neui dialect loaded ",
+        ".neui theme library resolved ",
+        ".neui component library resolved ",
+        ".neui live root compiled ",
+    ]
+    .iter()
+    .any(|prefix| message.starts_with(prefix))
+}
+
 impl ScreenProfileRuntimeState {
     pub(crate) fn load() -> Self {
         let config = load_screen_profile_config();
@@ -21,16 +32,18 @@ impl ScreenProfileRuntimeState {
         let mut descriptor = descriptor;
         descriptor.game_ui_document_ref = config.game_ui_document_ref.clone();
         let presentation_state_id = config.presentation_flow.as_ref().and_then(|flow| {
-            if flow.is_valid() {
+            let validation_errors = flow.validation_errors();
+            if validation_errors.is_empty() {
                 Some(flow.initial_state.trim().to_owned())
             } else {
                 if flow.enabled {
                     newengine_ulog_api::ulog::warn!(
-                        "screen profile: presentation_flow is enabled but invalid; legacy game_ui_document_ref path remains active flow_id='{}' initial_state='{}' states={} transitions={}",
+                        "screen profile: presentation_flow is enabled but invalid; legacy game_ui_document_ref path remains active flow_id='{}' initial_state='{}' states={} transitions={} errors='{}'",
                         flow.id,
                         flow.initial_state,
                         flow.states.len(),
                         flow.transitions.len(),
+                        validation_errors.join("; "),
                     );
                 }
                 None
@@ -308,14 +321,33 @@ impl ScreenProfileRuntimeState {
                 })
                 .map(|action| action.action_id.clone());
             click_action.or_else(|| {
-                let escape_pressed = resources
-                    .get::<UiInputFrame>()
-                    .is_some_and(|input| input.is_key_pressed(newengine_ui_api::keys::ESCAPE));
-                let supports_back = flow.transitions.iter().any(|transition| {
-                    transition.from == current_state
-                        && transition.on_action.as_deref() == Some("ui.back")
+                let input = resources.get::<UiInputFrame>();
+                let escape_pressed =
+                    input.is_some_and(|input| input.is_key_pressed(newengine_ui_api::keys::ESCAPE));
+                let gamepad_start_pressed = input.is_some_and(|input| {
+                    input
+                        .gamepad_buttons_pressed
+                        .contains(newengine_input_api::gamepad_button::START)
                 });
-                (escape_pressed && supports_back).then(|| "ui.back".to_owned())
+                let gamepad_back_pressed = input.is_some_and(|input| {
+                    input
+                        .gamepad_buttons_pressed
+                        .contains(newengine_input_api::gamepad_button::EAST)
+                });
+                if (escape_pressed || gamepad_back_pressed)
+                    && flow.has_action_transition(&current_state, "ui.back")
+                {
+                    return Some("ui.back".to_owned());
+                }
+                if (escape_pressed || gamepad_start_pressed)
+                    && flow.has_action_transition(
+                        &current_state,
+                        newengine_ui::UI_ACTION_TOGGLE_PRIMARY_UI,
+                    )
+                {
+                    return Some(newengine_ui::UI_ACTION_TOGGLE_PRIMARY_UI.to_owned());
+                }
+                None
             })
         };
 
@@ -524,12 +556,20 @@ impl ScreenProfileRuntimeState {
                 response.document_ref, response.surface_id
             ));
         }
-        for warning in &response.warnings {
-            newengine_ulog_api::ulog::warn!(
-                "screen profile: authored game .neui compile warning ref='{}' warning='{}'",
-                response.document_ref,
-                warning
-            );
+        for diagnostic in &response.warnings {
+            if authored_ui_compile_message_is_info(diagnostic) {
+                newengine_ulog_api::ulog::info!(
+                    "screen profile: authored game .neui compile info ref='{}' diagnostic='{}'",
+                    response.document_ref,
+                    diagnostic
+                );
+            } else {
+                newengine_ulog_api::ulog::warn!(
+                    "screen profile: authored game .neui compile warning ref='{}' warning='{}'",
+                    response.document_ref,
+                    diagnostic
+                );
+            }
         }
         let surface_id = if response.compiled_document.surface_id.trim().is_empty() {
             response.surface_id.clone()
@@ -1102,6 +1142,35 @@ impl ScreenProfileRuntimeState {
                     .tagged("schema-property"),
                 );
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod authored_ui_diagnostic_tests {
+    use super::authored_ui_compile_message_is_info;
+
+    #[test]
+    fn successful_compiler_diagnostics_are_info() {
+        for message in [
+            ".neui dialect loaded ref='ui/dialects/runtime.neui@dialect'",
+            ".neui theme library resolved ref='ui/themes/default.neui@theme'",
+            ".neui component library resolved ref='ui/components/common.neui@library'",
+            ".neui live root compiled source='ui/engine/main_menu.neui@surface'",
+        ] {
+            assert!(authored_ui_compile_message_is_info(message), "{message}");
+        }
+    }
+
+    #[test]
+    fn degraded_compiler_diagnostics_remain_warnings() {
+        for message in [
+            ".neui dialect fallback ref='ui/dialects/runtime.neui@dialect'",
+            ".neui theme library unresolved ref='ui/themes/missing.neui@theme'",
+            ".neui theme library contains no Theme entry ref='ui/themes/empty.neui@theme'",
+            ".neui component library unresolved ref='ui/components/missing.neui@library'",
+        ] {
+            assert!(!authored_ui_compile_message_is_info(message), "{message}");
         }
     }
 }

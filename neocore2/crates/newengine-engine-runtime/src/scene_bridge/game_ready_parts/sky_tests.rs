@@ -469,7 +469,7 @@ fn near_detail_reduces_history_weight_to_preserve_edge_response() {
     let mut history = erosion_test_shadow();
     history.map4[0] = 0.86;
     history.map4[2] = 0.0;
-    history.map0 = [0.162, 0.318, 0.252, 0.655];
+    history.map0 = [0.162, 318.0 / 1000.0, 0.252, 0.655];
     history.map3 = [0.137, 0.291, 0.238, 0.640];
     let mut current_only = history;
     current_only.map4[0] = 0.0;

@@ -675,7 +675,7 @@ fn draw_primitives_for_pass(
     let mats_lock = this.bridges.scene.materials();
     let mats = mats_lock.read();
 
-    let mut sky_entries: Vec<(
+    type PrimitiveDrawEntry = (
         f32,
         u64,
         Primitive,
@@ -683,16 +683,10 @@ fn draw_primitives_for_pass(
         Option<newengine_materials::MaterialRef>,
         u8,
         Option<SkyDomeRuntime>,
-    )> = Vec::new();
-    let mut entries: Vec<(
-        f32,
-        u64,
-        Primitive,
-        Mat4,
-        Option<newengine_materials::MaterialRef>,
-        u8,
-        Option<SkyDomeRuntime>,
-    )> = Vec::new();
+    );
+
+    let mut sky_entries: Vec<PrimitiveDrawEntry> = Vec::new();
+    let mut entries: Vec<PrimitiveDrawEntry> = Vec::new();
     let mut sky_seen = 0usize;
     let mut sky_profile_culled = 0usize;
     for (id, prim, gt) in world.query2::<Primitive, GlobalTransform>() {

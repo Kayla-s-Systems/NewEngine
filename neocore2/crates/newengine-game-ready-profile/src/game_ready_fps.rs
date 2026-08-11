@@ -39,6 +39,7 @@ pub const GAME_READY_FPS_BOOT_OPTIONS: &[RuntimeHostBootOption] = &[
     RuntimeHostBootOption::RuntimePlugins,
     RuntimeHostBootOption::PlatformWindow,
     RuntimeHostBootOption::RenderBackend,
+    RuntimeHostBootOption::UiBackend,
 ];
 
 /// Core GameReady runtime policy shared by editor-oriented and standalone game
@@ -79,6 +80,7 @@ pub const GAME_READY_FPS_ENV_POLICY: &[(&str, &str)] = &[
     ("NEWENGINE_REQUIRE_RENDER_BACKEND", "1"),
     ("NEWENGINE_REQUIRE_ASSET_MANAGER", "1"),
     ("NEWENGINE_REQUIRE_MATERIALS_BACKEND", "1"),
+    ("NEWENGINE_REQUIRE_UI_BACKEND", "1"),
     ("NEWENGINE_PLUGIN_TARGET", "runtime"),
     ("NEWENGINE_BOOTSTRAP_PLUGIN_PRELOAD", "deferred"),
     ("NEWENGINE_SHADER_ASYNC_PREBAKED_UNTIL_READY", "1"),
@@ -191,4 +193,70 @@ impl RuntimeHostAppProfile for GameReadyFpsApp {
 #[inline]
 pub fn run_game_ready_fps_process() -> ! {
     GameReadyFpsApp::default().run_process()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashSet;
+
+    #[test]
+    fn shipping_fps_requires_every_visual_runtime_backend() {
+        for required in [
+            RuntimeHostBootOption::RuntimePlugins,
+            RuntimeHostBootOption::PlatformWindow,
+            RuntimeHostBootOption::RenderBackend,
+            RuntimeHostBootOption::UiBackend,
+        ] {
+            assert!(
+                GAME_READY_FPS_BOOT_OPTIONS.contains(&required),
+                "missing required Game Ready boot option: {required:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn shipping_fps_policy_requires_ui_and_selects_game_surfaces() {
+        let value = |key: &str| {
+            GAME_READY_FPS_ENV_POLICY
+                .iter()
+                .find_map(|(candidate, value)| (*candidate == key).then_some(*value))
+        };
+        assert_eq!(value("NEWENGINE_REQUIRE_UI_BACKEND"), Some("1"));
+        assert_eq!(
+            value(GAME_READY_UI_SCREEN_PROFILE_ENV),
+            Some(GAME_READY_UI_PROFILE_GAME)
+        );
+        assert_eq!(
+            value(GAME_READY_UI_ROOT_SURFACE_ENV),
+            Some(GAME_READY_UI_ROOT_SURFACE_GAME)
+        );
+        assert_eq!(
+            value(GAME_READY_UI_DOCUMENT_REF_ENV),
+            Some(GAME_READY_UI_DOCUMENT_REF_GAME)
+        );
+        assert_eq!(value(GAME_READY_UI_PUBLISH_EDITOR_SHELL_ENV), Some("false"));
+    }
+
+    #[test]
+    fn shipping_fps_environment_policy_has_unique_keys() {
+        let mut keys = HashSet::new();
+        for (key, _) in GAME_READY_FPS_ENV_POLICY {
+            assert!(
+                keys.insert(*key),
+                "duplicate Game Ready env policy key: {key}"
+            );
+        }
+    }
+
+    #[test]
+    fn launch_spec_uses_authored_game_ready_scene_by_default() {
+        let spec = GameReadyFpsApp::launch_spec();
+        assert_eq!(
+            spec.default_profile_env,
+            Some((GAME_READY_PROFILE_ENV, GAME_READY_DEFAULT_PROFILE_ASSET))
+        );
+        assert_eq!(spec.env_defaults, GAME_READY_FPS_ENV_POLICY);
+        assert_eq!(spec.window_title, GAME_READY_FPS_WINDOW_TITLE);
+    }
 }

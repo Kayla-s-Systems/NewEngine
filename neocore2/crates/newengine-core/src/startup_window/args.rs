@@ -12,6 +12,7 @@ const DISABLE_ARGS: &[&str] = &[
 const DISABLE_ENV: &[&str] = &[
     "NEWENGINE_STARTUP_WINDOW_DISABLED",
     "NEWENGINE_STARTUP_WINDOW_SKIP",
+    "NEWENGINE_HEADLESS",
 ];
 
 pub(crate) fn disabled_by_process_args_or_env() -> Option<String> {
@@ -57,4 +58,17 @@ fn is_truthy(value: &str) -> bool {
         value.trim().to_ascii_lowercase().as_str(),
         "1" | "true" | "yes" | "on" | "disabled" | "skip"
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn headless_environment_disables_prestart_window() {
+        assert!(DISABLE_ENV.contains(&"NEWENGINE_HEADLESS"));
+        assert!(is_truthy("1"));
+        assert!(is_truthy("true"));
+        assert!(!is_truthy("0"));
+    }
 }

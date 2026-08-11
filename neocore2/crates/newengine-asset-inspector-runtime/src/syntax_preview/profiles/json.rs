@@ -39,7 +39,7 @@ pub(super) fn classify_json(chars: &[char]) -> Vec<SyntaxClass> {
                 paint(&mut classes, index, end, SyntaxClass::Number);
                 index = end.max(index + 1);
             }
-            ch if matches!(ch, ':' | ',' | '[' | ']' | '{' | '}') => {
+            ':' | ',' | '[' | ']' | '{' | '}' => {
                 classes[index] = SyntaxClass::Symbol;
                 index += 1;
             }

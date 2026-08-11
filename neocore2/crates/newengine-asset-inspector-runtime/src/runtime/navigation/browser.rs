@@ -195,9 +195,11 @@ pub(in crate::runtime::navigation) fn sort_entries(
     directories_first: bool,
 ) {
     entries.sort_by(|a, b| {
-        let directory_order = directories_first
-            .then(|| b.is_directory.cmp(&a.is_directory))
-            .unwrap_or(std::cmp::Ordering::Equal);
+        let directory_order = if directories_first {
+            b.is_directory.cmp(&a.is_directory)
+        } else {
+            std::cmp::Ordering::Equal
+        };
         directory_order.then_with(|| {
             a.name
                 .to_ascii_lowercase()

@@ -8,6 +8,7 @@
 
 mod game_ready_fps;
 mod scene_bootstrap;
+mod validation;
 
 use std::sync::Arc;
 
@@ -20,6 +21,7 @@ use newengine_scene_runtime::SceneGatewayAssetMounts;
 use newengine_ui::{UiBuildFn, UiProviderKind};
 
 use scene_bootstrap::GameReadySceneBootstrapModule;
+use validation::GameReadyValidationModule;
 
 pub use game_ready_fps::{
     run_game_ready_fps_process, GameReadyFpsApp, GAME_READY_CORE_ENV_POLICY,
@@ -180,6 +182,9 @@ impl GameReadyRuntimeProfile {
         engine.register_module(Box::new(GameReadySceneBootstrapModule::new(Arc::clone(
             &self.scene,
         ))))?;
+        if let Some(validation) = GameReadyValidationModule::from_env() {
+            engine.register_module(Box::new(validation))?;
+        }
         Ok(())
     }
 

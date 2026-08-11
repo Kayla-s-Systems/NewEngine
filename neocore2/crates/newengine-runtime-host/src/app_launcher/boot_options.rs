@@ -29,6 +29,11 @@ pub(crate) fn boot_option_enabled(
         .unwrap_or(true)
 }
 
+#[inline]
+fn backend_required(declared: bool, headless_requested: bool) -> bool {
+    declared && !headless_requested
+}
+
 pub(crate) fn apply_declared_boot_options_env(
     app_name: &str,
     options: Option<&'static [RuntimeHostBootOption]>,
@@ -42,52 +47,70 @@ pub(crate) fn apply_declared_boot_options_env(
     };
 
     let has = |option| options.contains(&option);
-    if has(RuntimeHostBootOption::PreStartConfigWindow) {
+    let headless_requested = super::env_bool("NEWENGINE_HEADLESS", false);
+
+    if has(RuntimeHostBootOption::PreStartConfigWindow) && !headless_requested {
         std::env::remove_var("NEWENGINE_STARTUP_WINDOW_DISABLED");
         std::env::remove_var("NEWENGINE_STARTUP_WINDOW_SKIP");
     } else {
         std::env::set_var("NEWENGINE_STARTUP_WINDOW_DISABLED", "1");
     }
 
-    if has(RuntimeHostBootOption::RuntimeBootstrapOverlay) {
+    if has(RuntimeHostBootOption::RuntimeBootstrapOverlay) && !headless_requested {
         std::env::remove_var("NEWENGINE_RUNTIME_BOOTSTRAP_OVERLAY_DISABLED");
     } else {
         std::env::set_var("NEWENGINE_RUNTIME_BOOTSTRAP_OVERLAY_DISABLED", "1");
     }
 
+    let require_platform = backend_required(
+        has(RuntimeHostBootOption::PlatformWindow),
+        headless_requested,
+    );
+    let require_render = backend_required(
+        has(RuntimeHostBootOption::RenderBackend),
+        headless_requested,
+    );
+    let require_ui = backend_required(has(RuntimeHostBootOption::UiBackend), headless_requested);
+
     std::env::set_var(
         "NEWENGINE_REQUIRE_PLATFORM_BACKEND",
-        if has(RuntimeHostBootOption::PlatformWindow) {
-            "1"
-        } else {
-            "0"
-        },
+        if require_platform { "1" } else { "0" },
     );
     std::env::set_var(
         "NEWENGINE_REQUIRE_RENDER_BACKEND",
-        if has(RuntimeHostBootOption::RenderBackend) {
-            "1"
-        } else {
-            "0"
-        },
+        if require_render { "1" } else { "0" },
     );
     std::env::set_var(
         "NEWENGINE_REQUIRE_UI_BACKEND",
-        if has(RuntimeHostBootOption::UiBackend) {
-            "1"
-        } else {
-            "0"
-        },
+        if require_ui { "1" } else { "0" },
     );
 
     newengine_ulog_api::ulog::info!(
-        "{} launcher: boot options declared pre_start_window={} bootstrap_overlay={} runtime_plugins={} platform={} render={} ui={}",
+        "{} launcher: boot options declared headless={} pre_start_window={} bootstrap_overlay={} runtime_plugins={} platform={} render={} ui={}",
         app_name,
-        has(RuntimeHostBootOption::PreStartConfigWindow),
-        has(RuntimeHostBootOption::RuntimeBootstrapOverlay),
+        headless_requested,
+        has(RuntimeHostBootOption::PreStartConfigWindow) && !headless_requested,
+        has(RuntimeHostBootOption::RuntimeBootstrapOverlay) && !headless_requested,
         has(RuntimeHostBootOption::RuntimePlugins),
-        has(RuntimeHostBootOption::PlatformWindow),
-        has(RuntimeHostBootOption::RenderBackend),
-        has(RuntimeHostBootOption::UiBackend),
+        require_platform,
+        require_render,
+        require_ui,
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn explicit_headless_mode_disables_visual_backend_requirements() {
+        assert!(!backend_required(true, true));
+        assert!(!backend_required(false, true));
+    }
+
+    #[test]
+    fn normal_launch_preserves_declared_backend_requirements() {
+        assert!(backend_required(true, false));
+        assert!(!backend_required(false, false));
+    }
 }

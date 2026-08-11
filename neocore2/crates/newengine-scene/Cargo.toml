@@ -23,3 +23,6 @@ newengine-transform-api = { path = "../newengine-transform-api" }
 newengine-bounds = { path = "../newengine-bounds", optional = true }
 newengine-math = { path = "../newengine-math" }
 serde = { version = "1.0", features = ["derive"] }
+
+[dev-dependencies]
+serde_json = "1"

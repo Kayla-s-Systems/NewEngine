@@ -76,7 +76,7 @@ fn pack_ydd_vertices(vertices: &[YddBinaryVertex]) -> Vec<u8> {
 }
 
 fn primitive_vertices_from_bytes(bytes: &[u8]) -> Result<Vec<PrimitiveVertex>, String> {
-    if bytes.len() % 32 != 0 {
+    if !bytes.len().is_multiple_of(32) {
         return Err(format!(
             "multi-adapter vertex response is not 32-byte aligned bytes={}",
             bytes.len()

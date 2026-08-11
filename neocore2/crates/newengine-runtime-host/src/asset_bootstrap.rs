@@ -129,9 +129,7 @@ pub fn try_load_window_icon_best_effort(
     roots: &[PathBuf],
 ) -> Option<PlatformAppIconV1> {
     let _ = roots;
-    let Some(path) = icon_path else {
-        return None;
-    };
+    let path = icon_path?;
 
     let Some(assets) = assets else {
         newengine_ulog_api::ulog::info!(

@@ -233,6 +233,108 @@ mod tests {
     }
 
     #[test]
+    fn presentation_flow_rejects_duplicate_states_and_ambiguous_actions() {
+        let parsed = parse_config_value(&json!({
+            "profile": "game",
+            "presentation_flow": {
+                "enabled": true,
+                "id": "duplicate-flow",
+                "initial_state": "main_menu",
+                "states": [
+                    {"id": "main_menu"},
+                    {"id": "main_menu"},
+                    {"id": "gameplay"}
+                ],
+                "transitions": [
+                    {"from": "main_menu", "to": "gameplay", "on_action": "game.start"},
+                    {"from": "main_menu", "to": "gameplay", "on_action": "game.start"}
+                ]
+            }
+        }))
+        .unwrap();
+        let errors = parsed.presentation_flow.expect("flow").validation_errors();
+        assert!(errors
+            .iter()
+            .any(|error| error.contains("duplicate state id")));
+        assert!(errors
+            .iter()
+            .any(|error| error.contains("ambiguous action transition")));
+    }
+
+    #[test]
+    fn presentation_flow_rejects_unreachable_states() {
+        let parsed = parse_config_value(&json!({
+            "profile": "game",
+            "presentation_flow": {
+                "enabled": true,
+                "id": "unreachable-flow",
+                "initial_state": "main_menu",
+                "states": [
+                    {"id": "main_menu"},
+                    {"id": "gameplay"},
+                    {"id": "credits"}
+                ],
+                "transitions": [
+                    {"from": "main_menu", "to": "gameplay", "on_action": "game.start"}
+                ]
+            }
+        }))
+        .unwrap();
+        let errors = parsed.presentation_flow.expect("flow").validation_errors();
+        assert!(errors
+            .iter()
+            .any(|error| error.contains("state 'credits' is unreachable")));
+    }
+
+    #[test]
+    fn presentation_flow_requires_document_and_surface_as_a_pair() {
+        let parsed = parse_config_value(&json!({
+            "profile": "game",
+            "presentation_flow": {
+                "enabled": true,
+                "id": "surface-pair-flow",
+                "initial_state": "main_menu",
+                "states": [{
+                    "id": "main_menu",
+                    "document_ref": "ui/engine/main_menu.neui@surface"
+                }],
+                "transitions": []
+            }
+        }))
+        .unwrap();
+        let errors = parsed.presentation_flow.expect("flow").validation_errors();
+        assert!(errors
+            .iter()
+            .any(|error| error.contains("document_ref and surface_id together")));
+    }
+
+    #[test]
+    fn presentation_flow_rejects_conflicting_runtime_ready_transitions() {
+        let parsed = parse_config_value(&json!({
+            "profile": "game",
+            "presentation_flow": {
+                "enabled": true,
+                "id": "runtime-ready-flow",
+                "initial_state": "loading",
+                "states": [
+                    {"id": "loading"},
+                    {"id": "gameplay"},
+                    {"id": "error"}
+                ],
+                "transitions": [
+                    {"from": "loading", "to": "gameplay", "on_runtime_ready": true},
+                    {"from": "loading", "to": "error", "on_runtime_ready": true}
+                ]
+            }
+        }))
+        .unwrap();
+        let errors = parsed.presentation_flow.expect("flow").validation_errors();
+        assert!(errors
+            .iter()
+            .any(|error| error.contains("ambiguous runtime_ready transition")));
+    }
+
+    #[test]
     fn game_profile_keeps_game_ui_root_as_data() {
         let parsed = parse_config_value(&json!({
             "profile":"game",

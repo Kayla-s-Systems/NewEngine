@@ -2042,6 +2042,7 @@ dependencies = [
 name = "newengine-game-ready-profile"
 version = "0.1.0"
 dependencies = [
+ "abi_stable",
  "log",
  "newengine-asset-format-nef8",
  "newengine-assets",
@@ -2053,10 +2054,12 @@ dependencies = [
  "newengine-engine-runtime",
  "newengine-entity-runtime",
  "newengine-gameplay-runtime",
+ "newengine-input-api",
  "newengine-input-bindings-runtime",
  "newengine-input-profile-gameready",
  "newengine-material-runtime",
  "newengine-model-runtime",
+ "newengine-plugin-api",
  "newengine-plugin-host",
  "newengine-render-feature-api",
  "newengine-render-feature-gameready",
@@ -2071,8 +2074,10 @@ dependencies = [
  "newengine-ui",
  "newengine-ui-api",
  "newengine-ulog-api",
+ "newengine-world-api",
  "newengine-world-environment-runtime",
  "newengine-world-runtime",
+ "serde_json",
 ]
 
 [[package]]
@@ -2515,6 +2520,7 @@ dependencies = [
  "newengine-transform",
  "newengine-transform-api",
  "serde",
+ "serde_json",
 ]
 
 [[package]]

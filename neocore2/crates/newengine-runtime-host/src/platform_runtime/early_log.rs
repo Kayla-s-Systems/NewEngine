@@ -61,8 +61,10 @@ pub(crate) fn write(args: fmt::Arguments<'_>) {
 fn candidate_paths() -> Vec<PathBuf> {
     let mut paths = Vec::new();
 
-    if let Some(path) = std::env::var_os("NEWENGINE_PLATFORM_EARLY_LOG") {
-        paths.push(PathBuf::from(path));
+    if let Some(path) =
+        std::env::var_os("NEWENGINE_PLATFORM_EARLY_LOG").filter(|value| !value.is_empty())
+    {
+        return vec![PathBuf::from(path)];
     }
 
     if let Some(cache) = std::env::var_os("NEWENGINE_CACHE_FILES")

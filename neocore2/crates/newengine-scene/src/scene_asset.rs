@@ -16,6 +16,87 @@ use crate::Scene;
 pub const SCENE_ASSET_SCHEMA_V1: &str = "newengine.scene.asset.v1";
 pub const SCENE_ASSET_STATUS_TRANSITIONAL_JSON: &str = "transitional_json_scene_asset";
 
+mod serde_u128_string {
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum GuidValue {
+        Text(String),
+        Unsigned(u64),
+        Signed(i64),
+    }
+
+    fn parse_text(value: &str) -> Result<u128, String> {
+        let value = value.trim();
+        if value.is_empty() {
+            return Err("GUID string is empty".to_owned());
+        }
+        let compact = value.strip_prefix("0x").unwrap_or(value).replace('-', "");
+        if compact.len() == 32 || value.starts_with("0x") || value.contains('-') {
+            return u128::from_str_radix(&compact, 16)
+                .map_err(|error| format!("invalid hexadecimal GUID '{value}': {error}"));
+        }
+        value
+            .parse::<u128>()
+            .or_else(|_| u128::from_str_radix(&compact, 16))
+            .map_err(|error| format!("invalid GUID '{value}': {error}"))
+    }
+
+    fn into_u128<E: serde::de::Error>(value: GuidValue) -> Result<u128, E> {
+        match value {
+            GuidValue::Text(value) => parse_text(&value).map_err(E::custom),
+            GuidValue::Unsigned(value) => Ok(u128::from(value)),
+            GuidValue::Signed(value) if value >= 0 => Ok(value as u128),
+            GuidValue::Signed(value) => Err(E::custom(format!("GUID cannot be negative: {value}"))),
+        }
+    }
+
+    pub fn serialize<S>(value: &u128, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&format!("{value:032x}"))
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<u128, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        into_u128(GuidValue::deserialize(deserializer)?)
+    }
+
+    pub(super) fn deserialize_option<'de, D>(deserializer: D) -> Result<Option<u128>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Option::<GuidValue>::deserialize(deserializer)?
+            .map(into_u128)
+            .transpose()
+    }
+}
+
+mod serde_option_u128_string {
+    use serde::{Deserializer, Serializer};
+
+    pub fn serialize<S>(value: &Option<u128>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match value {
+            Some(value) => serializer.serialize_some(&format!("{value:032x}")),
+            None => serializer.serialize_none(),
+        }
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<u128>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        super::serde_u128_string::deserialize_option(deserializer)
+    }
+}
+
 /// Options for extracting a `SceneAsset` from a runtime scene.
 #[derive(Clone, Copy, Debug)]
 pub struct SceneAssetOptions {
@@ -49,7 +130,9 @@ pub struct SceneAsset {
     pub guid_seed: u64,
     pub guid_next: u64,
 
+    #[serde(default, with = "serde_option_u128_string")]
     pub root: Option<u128>,
+    #[serde(default, with = "serde_option_u128_string")]
     pub active_camera: Option<u128>,
 
     pub entities: Vec<SceneEntityAsset>,
@@ -57,8 +140,10 @@ pub struct SceneAsset {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SceneEntityAsset {
+    #[serde(with = "serde_u128_string")]
     pub guid: u128,
     pub name: Option<String>,
+    #[serde(default, with = "serde_option_u128_string")]
     pub parent: Option<u128>,
     pub transform: Option<TransformAsset>,
     /// Optional reference to a .ytyp Definition Entry consumed by scene placement.
@@ -290,5 +375,50 @@ impl Scene {
         let _ = self.validate_invariants();
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod json_guid_tests {
+    use super::*;
+
+    fn asset_with_guid(guid: u128) -> SceneAsset {
+        SceneAsset {
+            schema: SCENE_ASSET_SCHEMA_V1.to_owned(),
+            version: 1,
+            settings: SceneSettings::default(),
+            guid_seed: 1,
+            guid_next: 2,
+            root: Some(guid),
+            active_camera: None,
+            entities: vec![SceneEntityAsset {
+                guid,
+                name: Some("large-guid".to_owned()),
+                parent: None,
+                transform: None,
+                definition_ref: None,
+            }],
+        }
+    }
+
+    #[test]
+    fn scene_asset_json_roundtrips_full_u128_guid_as_string() {
+        let guid = u128::MAX - 41;
+        let asset = asset_with_guid(guid);
+        let text = serde_json::to_string(&asset).expect("serialize scene asset");
+        assert!(text.contains(&format!("{guid:032x}")));
+        let restored = serde_json::from_str::<SceneAsset>(&text).expect("deserialize scene asset");
+        assert_eq!(restored.root, Some(guid));
+        assert_eq!(restored.entities[0].guid, guid);
+    }
+
+    #[test]
+    fn scene_asset_json_accepts_legacy_small_numeric_guids() {
+        let mut value = serde_json::to_value(asset_with_guid(7)).expect("serialize fixture");
+        value["root"] = serde_json::json!(7);
+        value["entities"][0]["guid"] = serde_json::json!(7);
+        let restored = serde_json::from_value::<SceneAsset>(value).expect("legacy numeric guid");
+        assert_eq!(restored.root, Some(7));
+        assert_eq!(restored.entities[0].guid, 7);
     }
 }

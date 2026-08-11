@@ -734,8 +734,10 @@ mod tests {
 
     #[test]
     fn explicit_core_launch_settings_feed_platform_creation() {
-        let mut startup = StartupConfig::default();
-        startup.window_size = (2560, 1440);
+        let mut startup = StartupConfig {
+            window_size: (2560, 1440),
+            ..StartupConfig::default()
+        };
         startup.launch_settings.display.monitor_index = 2;
         startup.launch_settings.display.window_mode =
             newengine_core::StartupWindowMode::ExclusiveFullscreen;
@@ -761,16 +763,20 @@ mod tests {
 
     #[test]
     fn confirmed_core_settings_have_last_priority_over_platform_plugin_config() {
-        let mut startup = StartupConfig::default();
-        startup.window_size = (1920, 1080);
+        let mut startup = StartupConfig {
+            window_size: (1920, 1080),
+            ..StartupConfig::default()
+        };
         startup.launch_settings.display.window_mode = newengine_core::StartupWindowMode::Borderless;
         startup.launch_settings.display.vsync = false;
         startup.launch_settings.display.render_scale = 0.8;
         startup.launch_settings_explicit = true;
 
-        let mut plugin_config = PlatformAppConfigV1::default();
-        plugin_config.width = 800;
-        plugin_config.height = 600;
+        let mut plugin_config = PlatformAppConfigV1 {
+            width: 800,
+            height: 600,
+            ..PlatformAppConfigV1::default()
+        };
         plugin_config.display.window_mode = PlatformWindowModeV1::Windowed;
         plugin_config.display.vsync = true;
         plugin_config.display.render_scale = 2.0;

@@ -1,6 +1,7 @@
 use newengine_plugin_api::{CapabilityKind, CapabilityRole};
 use std::cell::Cell;
-use std::sync::atomic::Ordering;
+use std::collections::HashMap;
+use std::sync::{atomic::Ordering, Mutex, OnceLock};
 
 use super::state::{
     bump_services_generation, ctx, EngineGatewayRouteSnapshot, GatewayProviderRouteEntry,
@@ -27,6 +28,23 @@ fn emit_gateway_diagnostic(f: impl FnOnce()) {
         let _restore = Restore(c);
         f();
     });
+}
+
+static GATEWAY_RESOLUTION_DIAGNOSTICS: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
+
+fn should_emit_gateway_resolution(gateway_id: &str, resolution: &str) -> bool {
+    let state = GATEWAY_RESOLUTION_DIAGNOSTICS.get_or_init(|| Mutex::new(HashMap::new()));
+    let mut state = match state.lock() {
+        Ok(state) => state,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    match state.get(gateway_id) {
+        Some(previous) if previous == resolution => false,
+        _ => {
+            state.insert(gateway_id.to_owned(), resolution.to_owned());
+            true
+        }
+    }
 }
 
 fn build_gateway_registry_snapshot() -> crate::service_gateway::ActiveGatewayRegistry {
@@ -229,11 +247,22 @@ pub fn resolve_service_for_engine_gateway(gateway_id: &str) -> Option<String> {
     let route = registry.resolve_route(gateway_id);
     match route {
         Some(route) => {
-            emit_gateway_route_selected(gateway_id, route);
+            let resolution = format!(
+                "selected:{}:{}:{}:{}",
+                route.provider_service_id,
+                route.provider_route_id.as_deref().unwrap_or(""),
+                route.provider_owner_id,
+                route.active_score
+            );
+            if should_emit_gateway_resolution(gateway_id, &resolution) {
+                emit_gateway_route_selected(gateway_id, route);
+            }
             Some(route.provider_service_id.clone())
         }
         None => {
-            emit_gateway_route_missing(gateway_id);
+            if should_emit_gateway_resolution(gateway_id, "missing") {
+                emit_gateway_route_missing(gateway_id);
+            }
             None
         }
     }
@@ -745,4 +774,20 @@ pub fn resolve_service_for_backend_capability(capability_id: &str) -> Option<Str
     }
 
     Some(active_service_id)
+}
+
+#[cfg(test)]
+mod gateway_diagnostic_tests {
+    use super::*;
+
+    #[test]
+    fn gateway_resolution_diagnostics_emit_only_when_resolution_changes() {
+        let gateway = "engine.test.diagnostic-dedupe";
+        assert!(should_emit_gateway_resolution(gateway, "selected:one"));
+        assert!(!should_emit_gateway_resolution(gateway, "selected:one"));
+        assert!(should_emit_gateway_resolution(gateway, "selected:two"));
+        assert!(!should_emit_gateway_resolution(gateway, "selected:two"));
+        assert!(should_emit_gateway_resolution(gateway, "missing"));
+        assert!(!should_emit_gateway_resolution(gateway, "missing"));
+    }
 }

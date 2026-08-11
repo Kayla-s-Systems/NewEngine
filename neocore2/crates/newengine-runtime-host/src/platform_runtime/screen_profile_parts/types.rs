@@ -187,24 +187,153 @@ pub(super) struct ScreenPresentationFlowConfig {
 
 impl ScreenPresentationFlowConfig {
     pub(super) fn state(&self, state_id: &str) -> Option<&ScreenPresentationStateConfig> {
-        self.states.iter().find(|state| state.id == state_id)
+        let state_id = state_id.trim();
+        self.states.iter().find(|state| state.id.trim() == state_id)
+    }
+
+    pub(super) fn has_action_transition(&self, state_id: &str, action_id: &str) -> bool {
+        let state_id = state_id.trim();
+        let action_id = action_id.trim();
+        self.transitions.iter().any(|transition| {
+            transition.from.trim() == state_id
+                && transition.on_action.as_deref().map(str::trim) == Some(action_id)
+        })
+    }
+
+    pub(super) fn validation_errors(&self) -> Vec<String> {
+        let mut errors = Vec::new();
+        if !self.enabled {
+            errors.push("presentation flow is disabled".to_owned());
+        }
+        if self.id.trim().is_empty() {
+            errors.push("flow id is empty".to_owned());
+        }
+        if self.initial_state.trim().is_empty() {
+            errors.push("initial_state is empty".to_owned());
+        }
+
+        let mut state_ids = BTreeSet::new();
+        for (index, state) in self.states.iter().enumerate() {
+            let id = state.id.trim();
+            if id.is_empty() {
+                errors.push(format!("states[{index}] has an empty id"));
+                continue;
+            }
+            if state.id != id {
+                errors.push(format!(
+                    "state id '{}' has leading or trailing whitespace",
+                    id
+                ));
+            }
+            if !state_ids.insert(id.to_owned()) {
+                errors.push(format!("duplicate state id '{id}'"));
+            }
+            if state
+                .document_ref
+                .as_ref()
+                .is_some_and(|value| value.trim().is_empty())
+            {
+                errors.push(format!("state '{id}' has an empty document_ref"));
+            }
+            if state
+                .surface_id
+                .as_ref()
+                .is_some_and(|value| value.trim().is_empty())
+            {
+                errors.push(format!("state '{id}' has an empty surface_id"));
+            }
+            if state.document_ref.is_some() != state.surface_id.is_some() {
+                errors.push(format!(
+                    "state '{id}' must declare document_ref and surface_id together"
+                ));
+            }
+            if state.input_focus_policy == UiScreenInputFocusPolicy::GameViewport
+                && state.blocks_gameplay_input
+            {
+                errors.push(format!(
+                    "state '{id}' uses game_viewport focus while blocking gameplay input"
+                ));
+            }
+        }
+
+        let initial_state = self.initial_state.trim();
+        if !initial_state.is_empty() && !state_ids.contains(initial_state) {
+            errors.push(format!(
+                "initial_state '{initial_state}' does not reference a declared state"
+            ));
+        }
+
+        let mut action_triggers = BTreeSet::new();
+        let mut runtime_ready_sources = BTreeSet::new();
+        for (index, transition) in self.transitions.iter().enumerate() {
+            let from = transition.from.trim();
+            let to = transition.to.trim();
+            if from.is_empty() {
+                errors.push(format!("transitions[{index}] has an empty from state"));
+            } else if !state_ids.contains(from) {
+                errors.push(format!(
+                    "transition {index} from '{from}' references an unknown state"
+                ));
+            }
+            if to.is_empty() {
+                errors.push(format!("transitions[{index}] has an empty to state"));
+            } else if !state_ids.contains(to) {
+                errors.push(format!(
+                    "transition {index} to '{to}' references an unknown state"
+                ));
+            }
+
+            let action = transition.on_action.as_deref().map(str::trim);
+            let has_action = action.is_some_and(|value| !value.is_empty());
+            if transition.on_action.is_some() && !has_action {
+                errors.push(format!("transitions[{index}] has an empty on_action"));
+            }
+            if has_action == transition.on_runtime_ready {
+                errors.push(format!(
+                    "transitions[{index}] must have exactly one trigger: on_action or on_runtime_ready"
+                ));
+            }
+            if has_action && !from.is_empty() {
+                let action = action.unwrap_or_default();
+                if !action_triggers.insert((from.to_owned(), action.to_owned())) {
+                    errors.push(format!(
+                        "ambiguous action transition from '{from}' on '{action}'"
+                    ));
+                }
+            }
+            if transition.on_runtime_ready
+                && !from.is_empty()
+                && !runtime_ready_sources.insert(from.to_owned())
+            {
+                errors.push(format!("ambiguous runtime_ready transition from '{from}'"));
+            }
+        }
+
+        if errors.is_empty() && !state_ids.is_empty() {
+            let mut reachable = BTreeSet::new();
+            let mut frontier = vec![initial_state.to_owned()];
+            while let Some(current) = frontier.pop() {
+                if !reachable.insert(current.clone()) {
+                    continue;
+                }
+                for transition in &self.transitions {
+                    if transition.from.trim() == current {
+                        frontier.push(transition.to.trim().to_owned());
+                    }
+                }
+            }
+            for state_id in state_ids.difference(&reachable) {
+                errors.push(format!(
+                    "state '{state_id}' is unreachable from initial_state '{initial_state}'"
+                ));
+            }
+        }
+
+        errors
     }
 
     pub(super) fn is_valid(&self) -> bool {
-        self.enabled
-            && !self.id.trim().is_empty()
-            && !self.initial_state.trim().is_empty()
-            && self.state(self.initial_state.trim()).is_some()
-            && self.states.iter().all(|state| !state.id.trim().is_empty())
-            && self.transitions.iter().all(|transition| {
-                self.state(transition.from.trim()).is_some()
-                    && self.state(transition.to.trim()).is_some()
-                    && (transition
-                        .on_action
-                        .as_deref()
-                        .is_some_and(|action| !action.trim().is_empty())
-                        || transition.on_runtime_ready)
-            })
+        self.validation_errors().is_empty()
     }
 }
 

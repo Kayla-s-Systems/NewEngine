@@ -41,7 +41,7 @@ pub fn update_bounds_from_transform_system(world: &mut World) {
             None => continue,
         };
 
-        let m = t.matrix();
+        let m = t.to_mat4();
 
         let mut world_sphere = src.local_sphere;
         world_sphere.center = m.transform_point3(src.local_sphere.center);

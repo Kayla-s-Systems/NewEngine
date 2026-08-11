@@ -344,7 +344,10 @@ fn validate_multi_adapter_vertex_bytes(bytes: &[u8]) -> Result<(), String> {
     if bytes.is_empty() {
         return Err("multi-adapter mesh packet contains no vertices".to_owned());
     }
-    if bytes.len() % MULTI_ADAPTER_VERTEX_STRIDE_BYTES != 0 {
+    if !bytes
+        .len()
+        .is_multiple_of(MULTI_ADAPTER_VERTEX_STRIDE_BYTES)
+    {
         return Err(format!(
             "multi-adapter mesh packet byte length is not stride-aligned bytes={} stride={MULTI_ADAPTER_VERTEX_STRIDE_BYTES}",
             bytes.len()

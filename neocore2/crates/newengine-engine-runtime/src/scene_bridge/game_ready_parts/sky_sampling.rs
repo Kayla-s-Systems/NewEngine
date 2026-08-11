@@ -157,7 +157,9 @@ pub(in crate::scene_bridge::game_ready) fn solar_direction_from_cycle(
     // varied declination during a single day and produced an asymmetric, visibly
     // accelerating solar arc. This uses a stable tropical-year approximation.
     let latitude = latitude_degrees.to_radians().clamp(-1.5533, 1.5533);
-    let axial_tilt = axial_tilt_degrees.to_radians().clamp(0.0, 0.5236);
+    let axial_tilt = axial_tilt_degrees
+        .to_radians()
+        .clamp(0.0, std::f32::consts::FRAC_PI_6);
     let season = TAU * ((day_index as f32 - 80.0) / 365.2422);
     let declination = axial_tilt * season.sin();
     let hour_angle = TAU * (time_hours / 24.0 - 0.5);

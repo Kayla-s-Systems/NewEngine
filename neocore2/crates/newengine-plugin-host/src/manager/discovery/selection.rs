@@ -103,9 +103,7 @@ fn headless_mode_enabled() -> bool {
         .unwrap_or(false)
 }
 
-static HEADLESS_RENDER_SKIP_MESSAGE_PRINTED: AtomicBool = AtomicBool::new(false);
-static HEADLESS_UI_SKIP_MESSAGE_PRINTED: AtomicBool = AtomicBool::new(false);
-static HEADLESS_RENDER_UI_SKIP_MESSAGE_PRINTED: AtomicBool = AtomicBool::new(false);
+static HEADLESS_PROVIDER_SKIP_MESSAGE_PRINTED: AtomicBool = AtomicBool::new(false);
 
 #[inline]
 fn is_concrete_provider_id(id: &str) -> bool {
@@ -113,71 +111,88 @@ fn is_concrete_provider_id(id: &str) -> bool {
     !(id.contains(".null") || id.contains("null"))
 }
 
+#[inline]
+fn headless_native_provider_domain(id: &str) -> Option<&'static str> {
+    let id = id.trim().to_ascii_lowercase();
+    [
+        ("engine.platform.", "platform"),
+        ("engine.render.", "render"),
+        ("engine.ui.", "ui"),
+        ("engine.input.", "input"),
+        ("engine.logging.", "logging"),
+    ]
+    .into_iter()
+    .find_map(|(prefix, domain)| id.starts_with(prefix).then_some(domain))
+}
+
+#[inline]
+fn gateway_is_native_headless_domain(gateway: &str) -> bool {
+    matches!(
+        gateway,
+        "engine.platform"
+            | "engine.render"
+            | "engine.ui"
+            | "engine.ui.text"
+            | "engine.input"
+            | "engine.logging"
+    )
+}
+
+#[inline]
+fn headless_skips_native_provider_for_mode(
+    headless: bool,
+    id: &str,
+    service_gateways: &[String],
+) -> bool {
+    headless
+        && is_concrete_provider_id(id)
+        && (headless_native_provider_domain(id).is_some()
+            || service_gateways
+                .iter()
+                .any(|gateway| gateway_is_native_headless_domain(gateway)))
+}
+
 fn emit_headless_skip_summary_once(graph: &DiscoveryGraph) {
-    if !headless_mode_enabled() {
+    if !headless_mode_enabled()
+        || HEADLESS_PROVIDER_SKIP_MESSAGE_PRINTED.swap(true, Ordering::AcqRel)
+    {
         return;
     }
 
-    let mut render_found = false;
-    let mut ui_found = false;
-    for item in &graph.items {
-        let ScannedDynlibKind::Plugin {
-            id,
-            service_gateways,
-            ..
-        } = &item.kind
-        else {
-            continue;
-        };
-        if !is_concrete_provider_id(id) {
-            continue;
-        }
-        render_found |= service_gateways
-            .iter()
-            .any(|gateway| gateway == "engine.render");
-        ui_found |= service_gateways
-            .iter()
-            .any(|gateway| matches!(gateway.as_str(), "engine.ui" | "engine.ui.text"));
-    }
+    let mut skipped = graph
+        .items
+        .iter()
+        .filter_map(|item| {
+            let ScannedDynlibKind::Plugin {
+                id,
+                service_gateways,
+                ..
+            } = &item.kind
+            else {
+                return None;
+            };
+            headless_skips_native_provider_for_mode(true, id, service_gateways).then(|| {
+                format!(
+                    "{}:{}",
+                    headless_native_provider_domain(id).unwrap_or("gateway"),
+                    id
+                )
+            })
+        })
+        .collect::<Vec<_>>();
+    skipped.sort();
+    skipped.dedup();
 
-    if render_found && ui_found {
-        if !HEADLESS_RENDER_UI_SKIP_MESSAGE_PRINTED.swap(true, Ordering::AcqRel) {
-            HEADLESS_RENDER_SKIP_MESSAGE_PRINTED.store(true, Ordering::Release);
-            HEADLESS_UI_SKIP_MESSAGE_PRINTED.store(true, Ordering::Release);
-            eprintln!(
-                "Awwwww, headless mode detected. Renderer found, UI found, but today North Star runs on pure console magic."
-            );
-        }
-        return;
-    }
-
-    if render_found && !HEADLESS_RENDER_SKIP_MESSAGE_PRINTED.swap(true, Ordering::AcqRel) {
+    if !skipped.is_empty() {
         eprintln!(
-            "Awwwww, seems you're using a headless mode, so looks like you're not gonna use renderer today. Poor GPU, it dressed up for nothing."
-        );
-    }
-    if ui_found && !HEADLESS_UI_SKIP_MESSAGE_PRINTED.swap(true, Ordering::AcqRel) {
-        eprintln!(
-            "Awwwww, seems you're using a headless mode, so looks like you're not gonna use ui today. The buttons have been sent home."
+            "[HEADLESS] Native device providers skipped before initialization: {}",
+            skipped.join(", ")
         );
     }
 }
 
-fn headless_skips_concrete_provider(id: &str, service_gateways: &[String]) -> bool {
-    if !headless_mode_enabled() {
-        return false;
-    }
-
-    if !is_concrete_provider_id(id) {
-        return false;
-    }
-
-    service_gateways.iter().any(|gateway| {
-        matches!(
-            gateway.as_str(),
-            "engine.render" | "engine.ui" | "engine.ui.text"
-        )
-    })
+fn headless_skips_native_provider(id: &str, service_gateways: &[String]) -> bool {
+    headless_skips_native_provider_for_mode(headless_mode_enabled(), id, service_gateways)
 }
 
 pub(super) fn build_load_selection(
@@ -209,7 +224,7 @@ pub(super) fn build_load_selection(
             || !crate::plugin_config_service::plugin_enabled_by_config(id)
             || !filter.allows(*phase)
             || (runtime_only && is_editor_only_plugin(*descriptor_kind))
-            || headless_skips_concrete_provider(id, service_gateways)
+            || headless_skips_native_provider(id, service_gateways)
         {
             continue;
         }
@@ -248,9 +263,9 @@ pub(super) fn build_load_selection(
                     SelectionDecision::Unsupported {
                         reason: "editor plugin disabled for runtime target",
                     }
-                } else if headless_skips_concrete_provider(id, service_gateways) {
+                } else if headless_skips_native_provider(id, service_gateways) {
                     SelectionDecision::Unsupported {
-                        reason: "headless mode uses visible NullProvider routes for render/ui",
+                        reason: "headless mode owns platform/render/ui/input/logging through host or null routes",
                     }
                 } else if !filter.allows(*phase) {
                     SelectionDecision::Filtered {
@@ -386,4 +401,61 @@ fn semver_rank(version: &str) -> (u64, u64, u64, u64) {
         parts.next().unwrap_or(0),
         parts.next().unwrap_or(0),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn signature_only_native_provider_ids_are_skipped_in_headless_mode() {
+        let no_gateways = Vec::<String>::new();
+        for id in [
+            "engine.platform.winit",
+            "engine.render.vulkan",
+            "engine.ui.aurelia",
+            "engine.input.compass",
+            "engine.logging.chronicle",
+        ] {
+            assert!(
+                headless_skips_native_provider_for_mode(true, id, &no_gateways),
+                "expected headless skip for {id}"
+            );
+        }
+    }
+
+    #[test]
+    fn simulation_and_asset_plugins_remain_available_in_headless_mode() {
+        let no_gateways = Vec::<String>::new();
+        for id in [
+            "engine.assets.starvault",
+            "engine.ecs.constellation",
+            "engine.physics.gravitas",
+            "engine.profiler.starprofiler",
+        ] {
+            assert!(
+                !headless_skips_native_provider_for_mode(true, id, &no_gateways),
+                "unexpected headless skip for {id}"
+            );
+        }
+    }
+
+    #[test]
+    fn gateway_metadata_still_skips_custom_native_providers() {
+        assert!(headless_skips_native_provider_for_mode(
+            true,
+            "vendor.custom-backend",
+            &["engine.render".to_owned()]
+        ));
+        assert!(!headless_skips_native_provider_for_mode(
+            false,
+            "engine.render.vulkan",
+            &[]
+        ));
+        assert!(!headless_skips_native_provider_for_mode(
+            true,
+            "engine.render.null",
+            &["engine.render".to_owned()]
+        ));
+    }
 }

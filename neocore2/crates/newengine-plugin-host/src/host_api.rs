@@ -30,6 +30,21 @@ fn debug_no_recurse(args: std::fmt::Arguments<'_>) {
     });
 }
 
+#[inline]
+fn service_error_is_expected_rejection(error: &str) -> bool {
+    let error = error.trim().to_ascii_lowercase();
+    [
+        "unavailable",
+        "not supported",
+        "unsupported",
+        "disabled by configuration",
+        "disabled by config",
+        "capability is disabled",
+    ]
+    .into_iter()
+    .any(|marker| error.contains(marker))
+}
+
 extern "C" fn host_log_info(s: RString) {
     newengine_ulog_api::ulog::info!("{}", s);
 }
@@ -214,22 +229,40 @@ pub extern "C" fn call_service_v1(
             }
         }
         RResult::RErr(e) => {
-            newengine_ulog_api::ulog::error_event!(
-                "engine.services.call_failed",
-                "Service call returned error",
-                {
-                    "service_id": id.as_str(),
-                    "requested_id": requested_id.as_str(),
-                    "method": method_string.as_str(),
-                    "owner": owner.as_deref().unwrap_or("<host>"),
-                    "payload_bytes": payload_len,
-                    "elapsed_ms": elapsed_ms,
-                    "error": e.to_string()
-                }
-            );
+            let error = e.to_string();
+            if service_error_is_expected_rejection(&error) {
+                newengine_ulog_api::ulog::warn_event!(
+                    "engine.services.call_rejected",
+                    "Service call rejected by provider",
+                    {
+                        "service_id": id.as_str(),
+                        "requested_id": requested_id.as_str(),
+                        "method": method_string.as_str(),
+                        "owner": owner.as_deref().unwrap_or("<host>"),
+                        "payload_bytes": payload_len,
+                        "elapsed_ms": elapsed_ms,
+                        "error": error.as_str(),
+                        "expected_fallback": true
+                    }
+                );
+            } else {
+                newengine_ulog_api::ulog::error_event!(
+                    "engine.services.call_failed",
+                    "Service call returned error",
+                    {
+                        "service_id": id.as_str(),
+                        "requested_id": requested_id.as_str(),
+                        "method": method_string.as_str(),
+                        "owner": owner.as_deref().unwrap_or("<host>"),
+                        "payload_bytes": payload_len,
+                        "elapsed_ms": elapsed_ms,
+                        "error": error.as_str()
+                    }
+                );
+            }
             debug_no_recurse(format_args!(
                 "services: call err id='{}' method='{}' err='{}'",
-                id, method, e
+                id, method, error
             ));
         }
     }
@@ -265,5 +298,31 @@ pub fn default_host_api() -> HostApiV1 {
 
         emit_event_v1: host_emit_event_v1,
         subscribe_events_v1: host_subscribe_events_v1,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unavailable_optional_backend_feature_is_expected_rejection() {
+        assert!(service_error_is_expected_rejection(
+            "independent multi-adapter mesh workers are unavailable"
+        ));
+        assert!(service_error_is_expected_rejection(
+            "feature not supported by the selected adapter"
+        ));
+        assert!(service_error_is_expected_rejection(
+            "capability is disabled"
+        ));
+    }
+
+    #[test]
+    fn malformed_requests_and_panics_remain_failures() {
+        assert!(!service_error_is_expected_rejection("invalid payload"));
+        assert!(!service_error_is_expected_rejection("service panicked"));
+        assert!(!service_error_is_expected_rejection("unknown method"));
+        assert!(!service_error_is_expected_rejection("unknown service"));
     }
 }

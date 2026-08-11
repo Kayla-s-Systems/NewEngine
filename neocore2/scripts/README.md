@@ -19,3 +19,47 @@
 - Do not introduce hidden provider/backend coupling here; use declared descriptors, gateways, DTOs, and explicit maintenance scripts.
 
 <!-- NORTHSTAR-DIR-README:END -->
+
+## Game Ready runtime gates
+
+Run the complete Windows shipping-path regression suite:
+
+```powershell
+python scripts/game_ready_smoke_suite.py
+```
+
+The suite drives the real Winit window and covers authored frontend/pause/settings
+navigation, responsive paint-hit-test parity, save/restart/load, virtual device
+hot-plug, controller-only navigation, world-partition churn with a process-memory
+plateau, post-warmup render CPU budgets, Chronicle ULOG policy, and an isolated
+package outside the source tree. Results are written to
+`target/smoke/game-ready-suite-report.json`.
+
+Use a physical-copy package instead of hardlinks:
+
+```powershell
+python scripts/game_ready_smoke_suite.py --package-copy
+```
+
+Run the shipping endurance profile for four wall-clock hours:
+
+```powershell
+python scripts/game_ready_smoke_suite.py --long-soak-hours 4
+```
+
+The endurance gate keeps frame-budget sampling active, samples process Working Set,
+emits periodic heartbeats, enforces a stderr growth guard, and relies on Chronicle
+per-run rotation for bounded structured logs.
+
+Individual gates:
+
+```powershell
+python scripts/game_ready_pause_flow_smoke.py
+python scripts/game_ready_resolution_smoke.py
+python scripts/game_ready_save_load_smoke.py
+python scripts/game_ready_validation_smoke.py hotplug
+python scripts/game_ready_validation_smoke.py controller
+python scripts/game_ready_streaming_stress_smoke.py --steps 512
+python scripts/game_ready_render_soak_smoke.py --duration 14400
+python scripts/game_ready_package_smoke.py --copy
+```

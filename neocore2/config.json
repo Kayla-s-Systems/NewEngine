@@ -93,17 +93,35 @@
       }
     },
     "engine.logging.chronicle": {
+      "dedup": {
+        "capacity": 4096,
+        "window_ms": 1000
+      },
       "enabled": true,
       "host": {
         "enabled": true
       },
+      "rolling": {
+        "keep_days": 7,
+        "max_bytes": 33554432,
+        "max_files": 4
+      },
       "sources": {
         "console": {
-          "level": "trace"
+          "colors": true,
+          "enabled": true,
+          "level": "info",
+          "target": "stderr"
         },
         "file": {
-          "level": "trace",
-          "mode": "truncate"
+          "enabled": false,
+          "level": "info",
+          "mode": "append"
+        },
+        "ulog": {
+          "enabled": true,
+          "level": "info",
+          "path": "logs/current.ulog.ndjson"
         }
       },
       "timestamp": "millis"
@@ -265,6 +283,22 @@
                 "id": "gameplay",
                 "input_focus_policy": "game_viewport",
                 "surface_id": "game.hud"
+              },
+              {
+                "blocks_gameplay_input": true,
+                "blocks_world_bootstrap": false,
+                "document_ref": "ui/engine/pause_menu.neui@surface",
+                "id": "pause",
+                "input_focus_policy": "ui_surface",
+                "surface_id": "engine.pause_menu"
+              },
+              {
+                "blocks_gameplay_input": true,
+                "blocks_world_bootstrap": false,
+                "document_ref": "ui/engine/settings.neui@surface",
+                "id": "pause_settings",
+                "input_focus_policy": "ui_surface",
+                "surface_id": "engine.settings"
               }
             ],
             "transitions": [
@@ -303,6 +337,36 @@
                 "from": "loading",
                 "on_runtime_ready": true,
                 "to": "gameplay"
+              },
+              {
+                "from": "gameplay",
+                "on_action": "engine.ui.primary.toggle",
+                "to": "pause"
+              },
+              {
+                "from": "pause",
+                "on_action": "engine.ui.primary.toggle",
+                "to": "gameplay"
+              },
+              {
+                "from": "pause",
+                "on_action": "game.resume",
+                "to": "gameplay"
+              },
+              {
+                "from": "pause",
+                "on_action": "engine.settings.open",
+                "to": "pause_settings"
+              },
+              {
+                "from": "pause_settings",
+                "on_action": "settings.apply",
+                "to": "pause"
+              },
+              {
+                "from": "pause_settings",
+                "on_action": "ui.back",
+                "to": "pause"
               }
             ]
           },

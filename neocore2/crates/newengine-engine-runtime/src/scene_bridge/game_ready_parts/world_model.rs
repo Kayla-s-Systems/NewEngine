@@ -55,9 +55,11 @@ impl GameReadyStaticWorldResidency {
     }
 }
 
+type StaticWorldDecodeResult = Arc<Mutex<Option<Result<Vec<DecodedPrefabMeshPart>, String>>>>;
+
 struct StaticWorldDecodeJob {
     ticket: TaskTicket,
-    result: Arc<Mutex<Option<Result<Vec<DecodedPrefabMeshPart>, String>>>>,
+    result: StaticWorldDecodeResult,
 }
 
 struct GameReadyStaticWorldStreamingState {
@@ -535,7 +537,8 @@ fn poll_static_world_decode_jobs(state: &mut GameReadyStaticWorldStreamingState)
     let ready = state
         .decode_jobs
         .iter()
-        .filter_map(|(source, job)| job.ticket.is_complete().then(|| source.clone()))
+        .filter(|(_, job)| job.ticket.is_complete())
+        .map(|(source, _)| source.clone())
         .collect::<Vec<_>>();
     for source in ready {
         let Some(job) = state.decode_jobs.remove(&source) else {
