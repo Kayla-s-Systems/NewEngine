@@ -1,0 +1,9 @@
+[package]
+name = "newengine-gameplay-fps-api"
+version = "0.1.0"
+edition = "2021"
+description = "Data-only FPS gameplay action contracts for NewEngine"
+license = "Proprietary"
+
+[dependencies]
+newengine-input-actions-api = { path = "../newengine-input-actions-api" }

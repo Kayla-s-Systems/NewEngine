@@ -1699,6 +1699,7 @@ dependencies = [
  "newengine-assets-ui-runtime",
  "newengine-core",
  "newengine-engine-runtime",
+ "newengine-math",
  "newengine-plugin-host",
  "newengine-schema-api",
  "newengine-ui-api",
@@ -1765,6 +1766,7 @@ dependencies = [
  "log",
  "newengine-asset-format-nef8",
  "newengine-assets-api",
+ "newengine-math",
  "newengine-plugin-api",
  "newengine-service-api",
  "newengine-service-kit",
@@ -1941,7 +1943,6 @@ dependencies = [
  "abi_stable",
  "blake3",
  "crossbeam-channel",
- "flate2",
  "libloading 0.9.0",
  "log",
  "newengine-asset-format-nef8",
@@ -2028,11 +2029,13 @@ dependencies = [
  "log",
  "newengine-ecs",
  "newengine-entity-api",
+ "newengine-math",
  "newengine-plugin-api",
  "newengine-plugin-host",
  "newengine-scene-runtime",
  "newengine-service-api",
  "newengine-service-kit",
+ "newengine-transform",
  "newengine-ulog-api",
  "serde",
  "serde_json",
@@ -2050,17 +2053,25 @@ dependencies = [
  "newengine-assets-ui-runtime",
  "newengine-core",
  "newengine-definitions-runtime",
+ "newengine-ecs",
  "newengine-ecs-runtime",
  "newengine-engine-runtime",
+ "newengine-entity-api",
  "newengine-entity-runtime",
+ "newengine-game-ready-world",
+ "newengine-gameplay-fps",
  "newengine-gameplay-runtime",
  "newengine-input-api",
  "newengine-input-bindings-runtime",
  "newengine-input-profile-gameready",
+ "newengine-maps-runtime",
  "newengine-material-runtime",
+ "newengine-materials",
+ "newengine-math",
  "newengine-model-runtime",
  "newengine-plugin-api",
  "newengine-plugin-host",
+ "newengine-primitives",
  "newengine-render-feature-api",
  "newengine-render-feature-gameready",
  "newengine-render-ui-bridge",
@@ -2078,6 +2089,77 @@ dependencies = [
  "newengine-world-environment-runtime",
  "newengine-world-runtime",
  "serde_json",
+]
+
+[[package]]
+name = "newengine-game-ready-world"
+version = "0.1.0"
+dependencies = [
+ "abi_stable",
+ "blake3",
+ "flate2",
+ "newengine-asset-format-nef8",
+ "newengine-assets",
+ "newengine-assets-api",
+ "newengine-authored-xml",
+ "newengine-bounds",
+ "newengine-core",
+ "newengine-ecs",
+ "newengine-engine-runtime",
+ "newengine-gameplay-fps-api",
+ "newengine-lighting",
+ "newengine-materials",
+ "newengine-math",
+ "newengine-model-domain-api",
+ "newengine-model-runtime",
+ "newengine-model-skeleton-api",
+ "newengine-physics-contracts",
+ "newengine-plugin-api",
+ "newengine-plugin-host",
+ "newengine-primitives",
+ "newengine-procedural-noise",
+ "newengine-render-api",
+ "newengine-scene",
+ "newengine-sim",
+ "newengine-task-api",
+ "newengine-transform",
+ "newengine-ui-api",
+ "newengine-ulog-api",
+ "newengine-world-environment-api",
+ "parking_lot",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "newengine-gameplay-fps"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "flate2",
+ "newengine-assets-api",
+ "newengine-camera",
+ "newengine-ecs",
+ "newengine-engine-runtime",
+ "newengine-gameplay-fps-api",
+ "newengine-input-actions-api",
+ "newengine-math",
+ "newengine-physics-api",
+ "newengine-primitives",
+ "newengine-scene",
+ "newengine-sim",
+ "newengine-transform",
+ "newengine-ui-api",
+ "newengine-ulog-api",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "newengine-gameplay-fps-api"
+version = "0.1.0"
+dependencies = [
+ "newengine-input-actions-api",
 ]
 
 [[package]]
@@ -2158,6 +2240,7 @@ name = "newengine-input-profile-gameready"
 version = "0.1.0"
 dependencies = [
  "newengine-camera-api",
+ "newengine-gameplay-fps-api",
  "newengine-input-actions-api",
  "newengine-input-api",
  "newengine-input-bindings-api",
@@ -2183,6 +2266,21 @@ name = "newengine-loading-runtime"
 version = "0.1.0"
 dependencies = [
  "newengine-loading-api",
+ "serde_json",
+]
+
+[[package]]
+name = "newengine-maps-runtime"
+version = "0.1.0"
+dependencies = [
+ "abi_stable",
+ "newengine-assets",
+ "newengine-assets-api",
+ "newengine-authored-xml",
+ "newengine-plugin-api",
+ "newengine-service-api",
+ "newengine-service-kit",
+ "serde",
  "serde_json",
 ]
 
@@ -2220,6 +2318,7 @@ dependencies = [
  "newengine-assets-api",
  "newengine-authored-xml",
  "newengine-materials",
+ "newengine-math",
  "newengine-model-domain-api",
  "newengine-model-import-obj",
  "newengine-plugin-api",
@@ -2721,6 +2820,7 @@ dependencies = [
  "log",
  "newengine-assets",
  "newengine-assets-api",
+ "newengine-math",
  "newengine-plugin-api",
  "newengine-service-api",
  "newengine-service-kit",

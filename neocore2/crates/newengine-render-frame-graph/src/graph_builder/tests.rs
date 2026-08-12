@@ -77,7 +77,7 @@ fn forward_runtime_graph_does_not_emit_deferred_resolve() {
 }
 
 #[test]
-fn hdr_scene_with_postfx_writes_surface_through_postfx() {
+fn hdr_scene_with_postfx_writes_viewport_through_postfx() {
     let plan = standard_runtime_frame(
         StandardRuntimePipelineDesc::new(9, Extent2D::new(1280, 720), Extent2D::new(1280, 720))
             .hdr_scene(true)
@@ -98,9 +98,15 @@ fn hdr_scene_with_postfx_writes_surface_through_postfx() {
         .any(|read| read.resource == RG_SCENE_HDR_COLOR
             && read.usage == RenderGraphResourceUsage::SampledTexture));
     assert!(postfx
+        .reads
+        .iter()
+        .any(|read| read.resource == RG_VIEWPORT_DEPTH
+            && read.usage == RenderGraphResourceUsage::SampledTexture),
+        "postFX micro-visibility must consume the scene depth without adding a second depth prepass");
+    assert!(postfx
         .writes
         .iter()
-        .any(|write| write.resource == RG_SURFACE_COLOR
+        .any(|write| write.resource == RG_VIEWPORT_COLOR
             && write.usage == RenderGraphResourceUsage::ColorAttachment));
     assert!(!plan
         .graph
@@ -111,7 +117,7 @@ fn hdr_scene_with_postfx_writes_surface_through_postfx() {
 }
 
 #[test]
-fn hdr_scene_without_postfx_adds_surface_resolve() {
+fn hdr_scene_without_postfx_adds_viewport_resolve() {
     let plan = standard_runtime_frame(
         StandardRuntimePipelineDesc::new(10, Extent2D::new(1280, 720), Extent2D::new(1280, 720))
             .hdr_scene(true)
@@ -136,7 +142,7 @@ fn hdr_scene_without_postfx_adds_surface_resolve() {
     assert!(resolve
         .writes
         .iter()
-        .any(|write| write.resource == RG_SURFACE_COLOR
+        .any(|write| write.resource == RG_VIEWPORT_COLOR
             && write.usage == RenderGraphResourceUsage::ColorAttachment));
 }
 

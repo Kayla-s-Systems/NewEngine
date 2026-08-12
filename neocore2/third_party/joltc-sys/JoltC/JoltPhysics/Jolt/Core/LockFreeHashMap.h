@@ -128,6 +128,9 @@ public:
 	/// Convert uint32 handle back to key and value
 	inline const KeyValue *	FromHandle(uint32 inHandle) const;
 
+	/// Convert uint32 handle back to key and value (note that it is illegal to change the key this way)
+	inline KeyValue *		FromHandle(uint32 inHandle);
+
 #ifdef JPH_ENABLE_ASSERTS
 	/// Get the number of key value pairs that this map currently contains.
 	/// Available only when asserts are enabled because adding elements creates contention on this atomic and negatively affects performance.
@@ -145,7 +148,7 @@ public:
 		bool				operator != (const Iterator &inRHS) const	{ return !(*this == inRHS); }
 
 		/// Convert to key value pair
-		KeyValue & 			operator * ();
+		KeyValue &			operator * ();
 
 		/// Next item
 		Iterator &			operator ++ ();
@@ -160,7 +163,7 @@ public:
 	Iterator				begin();
 	Iterator				end();
 
-#ifdef _DEBUG
+#ifdef JPH_DEBUG
 	/// Output stats about this map to the log
 	void					TraceStats() const;
 #endif

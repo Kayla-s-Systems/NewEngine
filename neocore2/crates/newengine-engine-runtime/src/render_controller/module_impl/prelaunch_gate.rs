@@ -37,7 +37,7 @@ impl RuntimeRenderController {
             let mut scene = scene_lock.write();
             let has_pending_gate = scene
                 .world()
-                .resource::<crate::gameplay::GameReadyWorldLaunchGate>()
+                .resource::<crate::gameplay::WorldActivationState>()
                 .map(|gate| gate.needs_prelaunch_gate())
                 .unwrap_or(false);
 
@@ -56,17 +56,18 @@ impl RuntimeRenderController {
                     // inside the prelaunch path. The normal world tick is intentionally
                     // bypassed while the gate is active, so admitting it only there would
                     // starve the queue until the soft timeout.
-                    crate::scene_bridge::tick_game_ready_static_world_prefabs(
+                    self.frame.world_runtime.tick_prelaunch(
                         world,
                         &mut prims,
                         &mats,
                         ctx.thread_pool(),
+                        next_frame,
                     );
 
                     // Queue only launch-critical textures, with alpha-tested base
                     // textures first. Optional environment maps remain post-launch
                     // streaming work and cannot consume the limited decode slots.
-                    readiness::prepare_game_ready_launch_resources(self, world, &*mats)
+                    readiness::prepare_scene_launch_resources(self, world, &*mats)
                 });
                 // The residency pump below reads the primitive/material registries.
                 // Release static-world admission guards first to avoid self-deadlock.
@@ -146,7 +147,7 @@ impl RuntimeRenderController {
                 // Evaluate against the resource state produced by this same frame's
                 // CPU decode, GPU upload and pipeline warmup work.
                 let world_playable = scene.run_frame(next_frame, |world| {
-                    readiness::update_game_ready_launch_gate_with_material_plan(
+                    readiness::update_world_activation_gate_with_material_plan(
                         self,
                         r,
                         world,
@@ -158,17 +159,17 @@ impl RuntimeRenderController {
 
                 if let Some(gate) = scene
                     .world_mut()
-                    .resource_mut::<crate::gameplay::GameReadyWorldLaunchGate>()
+                    .resource_mut::<crate::gameplay::WorldActivationState>()
                 {
-                    if world_playable && !gate.is_play_activated() {
+                    if world_playable && !gate.is_active() {
                         if editor_preview_blocks_auto_play {
-                            gate.mark_editor_preview_ready(
+                            gate.mark_preview_ready(
                                 next_frame,
                                 "editor preview ready; simulation stopped until Simulate or Play",
                             );
                             editor_preview_ready = true;
                         } else {
-                            gate.mark_play_activated();
+                            gate.mark_active();
                             prelaunch_released = true;
                         }
                     }

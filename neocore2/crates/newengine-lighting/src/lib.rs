@@ -12,4 +12,4 @@ mod lights;
 mod shadow;
 
 pub use lights::{AmbientLight, DirectionalLight, PointLight, SpotLight};
-pub use shadow::{ShadowMethod, ShadowSettings};
+pub use shadow::{ShadowFilter, ShadowMethod, ShadowPcssSettings, ShadowSettings};

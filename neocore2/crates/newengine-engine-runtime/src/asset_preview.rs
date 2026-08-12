@@ -1,6 +1,5 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
 
@@ -12,7 +11,7 @@ use newengine_assets_api::{
 };
 use newengine_material_runtime::MaterialAssetGatewayAdapter;
 use newengine_materials::MaterialLoadRequest;
-use newengine_math::Vec3;
+use newengine_math::{collections::BoundedCache, Vec3};
 use newengine_model_domain_api::{
     AssetGraphResolveRequest, ModelAssetBundle, ModelAssetRequest, ModelMaterialBinding,
     ModelMeshPart, ModelRuntimeConfiguration, ResolvedAssetGraphV2, ASSET_GRAPH_METHOD_RESOLVE_V1,
@@ -84,12 +83,6 @@ impl AssetPreviewSnapshot {
     }
 }
 
-#[derive(Clone)]
-struct CachedPreviewBundle {
-    asset_ref: String,
-    bundle: Arc<ModelAssetBundle>,
-}
-
 /// Single engine API point for visual asset previews.
 ///
 /// It resolves assets through the same definitions/graph/model/material/texture
@@ -103,8 +96,8 @@ pub struct AssetPreviewApi {
     viewport: Arc<ViewportBridge>,
     current: Mutex<AssetPreviewSnapshot>,
     render_bundle: RwLock<Option<Arc<ModelAssetBundle>>>,
-    bundle_cache: Mutex<VecDeque<CachedPreviewBundle>>,
-    texture_cache: Mutex<VecDeque<(String, AssetPreviewSnapshot)>>,
+    bundle_cache: Mutex<BoundedCache<String, Arc<ModelAssetBundle>>>,
+    texture_cache: Mutex<BoundedCache<String, AssetPreviewSnapshot>>,
     last_request_cache_hit: AtomicBool,
     camera: AssetPreviewCameraState,
 }

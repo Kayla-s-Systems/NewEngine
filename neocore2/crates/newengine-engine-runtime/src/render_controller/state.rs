@@ -5,7 +5,7 @@ use newengine_camera_contracts::CameraFrameSnapshot;
 use newengine_core::host_events::CursorState;
 use newengine_core::render::{Extent2D, RenderHardwareTier, RenderTargetId, SamplerId, TextureId};
 use newengine_core::TaskTicket;
-use newengine_math::collections::FxHashMap;
+use newengine_math::collections::{FxHashMap, FxHashSet};
 use parking_lot::Mutex;
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -43,7 +43,7 @@ pub struct PerDrawUbo {
 
 /// Profile-owned render feature providers registered by the app/runtime profile.
 ///
-/// The reusable engine render controller starts with empty registries. GameReady,
+/// The reusable engine render controller starts with empty registries. Application profiles,
 /// editor preview, tests or future content plugins must explicitly register the
 /// draw-list and light extraction providers they need.
 pub(super) struct RenderFeatureProviderState {
@@ -230,6 +230,7 @@ pub(super) struct RenderMaterialGpuState {
     pub(super) primary_lit_pipeline_key: Option<MaterialGpuPipelineKey>,
     pub(super) textures: FxHashMap<String, MaterialTextureGpuResidency>,
     pub(super) texture_queue: VecDeque<String>,
+    pub(super) texture_queued: FxHashSet<String>,
     pub(super) texture_decode_jobs: FxHashMap<String, MaterialTextureDecodeJob>,
     pub(super) per_draw_ubo: FxHashMap<u64, PerDrawUbo>,
 }
@@ -242,6 +243,7 @@ impl RenderMaterialGpuState {
             primary_lit_pipeline_key: None,
             textures: FxHashMap::default(),
             texture_queue: VecDeque::new(),
+            texture_queued: FxHashSet::default(),
             texture_decode_jobs: FxHashMap::default(),
             per_draw_ubo: FxHashMap::default(),
         }
@@ -371,6 +373,11 @@ pub(super) struct RenderFrameRuntimeState {
     /// runtime must not own `newengine-camera` projection/controller/nav state.
     pub(super) last_camera_snapshot: Option<CameraFrameSnapshot>,
     pub(super) sim_schedule: newengine_sim::SimSchedule,
+    pub(super) gameplay_systems: crate::gameplay::GameplaySystemProviderRegistry,
+    pub(super) gameplay_content: crate::gameplay::GameplayContentProviderRegistry,
+    pub(super) gameplay_ui: crate::gameplay::GameplayUiProviderRegistry,
+    pub(super) gameplay_physics_queries: crate::gameplay::GameplayPhysicsQueryProviderRegistry,
+    pub(super) world_runtime: crate::WorldRuntimeProviderRegistry,
     pub(super) input_systems: crate::input_systems::InputRuntimeSystems,
     pub(super) last_play_mode: crate::GameRunMode,
 }
@@ -384,6 +391,11 @@ impl RenderFrameRuntimeState {
             pending_pick_selection: None,
             last_camera_snapshot: None,
             sim_schedule: crate::gameplay::default_sim_schedule(),
+            gameplay_systems: crate::gameplay::GameplaySystemProviderRegistry::new(),
+            gameplay_content: crate::gameplay::GameplayContentProviderRegistry::new(),
+            gameplay_ui: crate::gameplay::GameplayUiProviderRegistry::new(),
+            gameplay_physics_queries: crate::gameplay::GameplayPhysicsQueryProviderRegistry::new(),
+            world_runtime: crate::WorldRuntimeProviderRegistry::new(),
             input_systems: crate::input_systems::InputRuntimeSystems::new(),
             last_play_mode: crate::GameRunMode::Staging,
         }

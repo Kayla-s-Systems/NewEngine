@@ -1,0 +1,298 @@
+use super::*;
+
+use newengine_model_domain_api::ModelAssetRequest;
+use newengine_model_runtime::ModelGatewayClient;
+use newengine_model_skeleton_api::ModelSkeletonMetadata;
+
+#[derive(Clone, Debug)]
+pub(super) struct PlayerRuntimeModelPart {
+    primitive_id: PrimitiveId,
+    material_id: MaterialId,
+    material_slot: String,
+    color: [f32; 4],
+}
+
+pub(super) fn ensure_player_runtime_model_parts(
+    prims: &mut PrimitiveRegistry,
+    mats: &MaterialRegistry,
+    spec: &self::content::GameReadyPlayerModelSpec,
+) -> Result<
+    (
+        String,
+        Vec<PlayerRuntimeModelPart>,
+        Option<ModelSkeletonMetadata>,
+    ),
+    String,
+> {
+    let mut request = ModelAssetRequest::new(spec.source.clone())
+        .with_human_scale(spec.target_height, spec.eye_height_ratio);
+    if let Some(properties_ref) = spec.properties_ref.as_deref() {
+        request = request.with_properties_ref(properties_ref);
+    }
+    if let Some(dictionary) = spec.texture_dictionary.as_deref() {
+        request = request.with_texture_dictionary(dictionary);
+    }
+    if let Some(skeleton) = spec.skeleton.as_deref() {
+        request = request.with_skeleton(skeleton);
+    }
+
+    let constructor = ModelGatewayClient::new(newengine_plugin_host::default_host_api());
+    let bundle = constructor.assemble_bundle(&request)?;
+
+    if let Some(metadata) = bundle.skeleton.as_ref() {
+        newengine_ulog_api::ulog::info!(
+            "game-ready: player skeleton metadata bound source='{}' skeleton='{}' format='{}' bytes={} joints={} status='{}'",
+            bundle.source,
+            metadata.source,
+            metadata.source_format,
+            metadata.byte_len,
+            metadata.joints.len(),
+            metadata.decode_status
+        );
+    }
+
+    let mut out = Vec::with_capacity(bundle.parts.len());
+    let mut registered_parts = 0usize;
+    let mut registered_vertices = 0usize;
+    let mut registered_indices = 0usize;
+    for part in bundle.parts {
+        let primitive_id = PrimitiveId(fnv1a_64(&format!(
+            "player-model:{}:{}",
+            bundle.source, part.material_slot
+        )));
+        let material_name = part
+            .material
+            .material_ref
+            .clone()
+            .unwrap_or_else(|| format!("Player/Avatar/{}", part.material_slot));
+        let material_id = mats.upsert_named_with_textures(
+            &material_name,
+            part.material.descriptor,
+            part.material.textures.clone().sanitized(),
+        );
+        if !prims.is_registered(primitive_id) {
+            let vertex_count = part.mesh.vertices.len();
+            let index_count = part.mesh.indices.len();
+            prims.register_mesh(
+                primitive_id,
+                format!("PlayerModel/{} ({})", part.material_slot, bundle.source),
+                part.mesh,
+            );
+            registered_parts += 1;
+            registered_vertices += vertex_count;
+            registered_indices += index_count;
+            newengine_ulog_api::ulog::debug!(
+                "game-ready: player model part registered source='{}' slot='{}' vertices={} indices={} material='{}' policy='ydd->nemat->ytd'",
+                bundle.source,
+                part.material_slot,
+                vertex_count,
+                index_count,
+                material_name
+            );
+        }
+
+        out.push(PlayerRuntimeModelPart {
+            primitive_id,
+            material_id,
+            material_slot: part.material_slot,
+            color: part.material.fallback_color,
+        });
+    }
+
+    if registered_parts > 0 {
+        newengine_ulog_api::ulog::info!(
+            "game-ready: player model registered source='{}' parts={} vertices={} indices={} materials={}",
+            bundle.source,
+            registered_parts,
+            registered_vertices,
+            registered_indices,
+            out.len(),
+        );
+    }
+
+    if let Some(dictionary) = bundle.texture_dictionary.as_deref() {
+        newengine_ulog_api::ulog::info!(
+            "game-ready: player model texture dictionary bound source='{}' dictionary='{}' materials={}",
+            bundle.source,
+            dictionary,
+            out.len()
+        );
+    }
+
+    if let Some(properties_ref) = bundle.properties_ref.as_deref() {
+        newengine_ulog_api::ulog::info!(
+            "game-ready: player model properties descriptor bound source='{}' properties_ref='{}' policy='.ydd/.obj slots -> .ytyp material bindings -> .nemat/.ytd'",
+            bundle.source,
+            properties_ref
+        );
+    }
+
+    if !bundle.collisions.is_empty() {
+        newengine_ulog_api::ulog::info!(
+            "game-ready: player model collision bindings derived source='{}' collisions={}",
+            bundle.source,
+            bundle.collisions.len()
+        );
+    }
+
+    Ok((bundle.source, out, bundle.skeleton))
+}
+
+pub(super) fn hide_player_fallback_visuals(world: &mut newengine_ecs::World, player: EntityId) {
+    let hidden = world
+        .query::<newengine_engine_runtime::gameplay::PlayerVisualPart>()
+        .filter_map(|(entity, part)| {
+            (part.owner == player
+                && matches!(
+                    part.kind,
+                    newengine_engine_runtime::gameplay::PlayerVisualKind::FallbackCapsule
+                ))
+            .then_some(entity)
+        })
+        .collect::<Vec<_>>();
+
+    for entity in hidden {
+        let _ = world.insert(
+            entity,
+            newengine_engine_runtime::gameplay::DisplayVisibility {
+                mode: newengine_engine_runtime::gameplay::DisplayMode::RuntimeHidden,
+            },
+        );
+    }
+}
+
+pub(crate) fn spawn_game_ready_player_model(
+    world: &mut newengine_ecs::World,
+    prims: &mut PrimitiveRegistry,
+    mats: &MaterialRegistry,
+    player: EntityId,
+    spec: &self::content::GameReadyPlayerModelSpec,
+    capsule_ground_offset_y: f32,
+) -> bool {
+    if !spec.enabled || spec.source.trim().is_empty() {
+        return false;
+    }
+
+    let (model_source, parts, skeleton) = match ensure_player_runtime_model_parts(prims, mats, spec)
+    {
+        Ok(model) => model,
+        Err(e) => {
+            newengine_ulog_api::ulog::warn!("game-ready: player model binding failed: {}", e);
+            return false;
+        }
+    };
+
+    let visual_root = spawn_named(world, "Player/Avatar/Abigail");
+    let _ = world.insert(
+        visual_root,
+        Transform {
+            position: spec.local_offset + Vec3::new(0.0, capsule_ground_offset_y, 0.0),
+            rotation: Quat::from_euler(EulerRot::YXZ, spec.yaw_offset, 0.0, 0.0),
+            scale: Vec3::ONE,
+        },
+    );
+    newengine_engine_runtime::gameplay::attach_scene_object_core(
+        world,
+        visual_root,
+        spec.local_offset + Vec3::new(0.0, capsule_ground_offset_y, 0.0),
+        Vec3::new(0.5, (spec.target_height * 0.5).max(0.5), 0.5),
+    );
+    let _ = world.insert(
+        visual_root,
+        newengine_engine_runtime::gameplay::GameplayActor,
+    );
+    let _ = set_parent(world, visual_root, Some(player));
+
+    let visibility_policy = if spec.hide_in_first_person {
+        newengine_engine_runtime::gameplay::PlayerViewVisibilityPolicy::HideInFirstPerson
+    } else {
+        newengine_engine_runtime::gameplay::PlayerViewVisibilityPolicy::AlwaysVisible
+    };
+
+    for (part_index, part) in parts.iter().enumerate() {
+        let entity = spawn_named(world, format!("Player/Avatar/Abigail/Part{}", part_index));
+        let _ = world.insert(entity, Transform::default());
+        let _ = world.insert(
+            entity,
+            Primitive {
+                id: part.primitive_id,
+                color: part.color,
+            },
+        );
+        if let Some(bounds) = primitive_bounds(prims, part.primitive_id) {
+            let _ = world.insert(entity, bounds);
+        }
+        newengine_engine_runtime::gameplay::attach_scene_object_core(
+            world,
+            entity,
+            Vec3::ZERO,
+            Vec3::splat(0.25),
+        );
+        let _ = world.insert(entity, newengine_engine_runtime::gameplay::GameplayActor);
+        let _ = world.insert(
+            entity,
+            newengine_engine_runtime::gameplay::PlayerVisualPart {
+                owner: player,
+                part_index: part_index as u32,
+                kind: newengine_engine_runtime::gameplay::PlayerVisualKind::RuntimeModelPart,
+                material_slot: part.material_slot.clone(),
+            },
+        );
+        let _ = world.insert(
+            entity,
+            newengine_engine_runtime::gameplay::PlayerViewVisibility {
+                base_mode: newengine_engine_runtime::gameplay::DisplayMode::GameOnly,
+                policy: visibility_policy,
+            },
+        );
+        let initial_mode = if spec.hide_in_first_person {
+            newengine_engine_runtime::gameplay::DisplayMode::RuntimeHidden
+        } else {
+            newengine_engine_runtime::gameplay::DisplayMode::GameOnly
+        };
+        let _ = world.insert(
+            entity,
+            newengine_engine_runtime::gameplay::DisplayVisibility { mode: initial_mode },
+        );
+        let _ = set_parent(world, entity, Some(visual_root));
+        let _ = apply_exact_material(
+            world,
+            mats,
+            entity,
+            part.material_id,
+            part.material_id,
+            part.color,
+        );
+    }
+
+    if let Some(binding) =
+        world.get_mut::<newengine_engine_runtime::gameplay::PlayerModelBinding>(player)
+    {
+        binding.source = model_source.clone();
+        binding.skeleton_source = skeleton.as_ref().map(|metadata| metadata.source.clone());
+        binding.visual_root = Some(visual_root);
+        binding.part_count = parts.len() as u32;
+        binding.target_height = spec.target_height;
+        binding.feet_to_eye_height = skeleton
+            .as_ref()
+            .map(|metadata| metadata.anchors.eye_height)
+            .unwrap_or(spec.target_height * spec.eye_height_ratio);
+    }
+
+    hide_player_fallback_visuals(world, player);
+    newengine_engine_runtime::gameplay::emit_player_event(
+        world,
+        player,
+        newengine_engine_runtime::gameplay::PlayerEventKind::ModelBound,
+        format!(
+            "model='{}' skeleton='{}' parts={}",
+            model_source,
+            skeleton
+                .as_ref()
+                .map(|metadata| metadata.source.as_str())
+                .unwrap_or("none"),
+            parts.len()
+        ),
+    );
+    true
+}

@@ -251,13 +251,13 @@ fn emit_runtime_api_table(reports: &[ContractReport]) {
                     report.capability.clone(),
                     report.required.to_owned(),
                     report.used_by.to_owned(),
-                    crate::log_fmt::ellipsize(&report.provider, 72),
-                    crate::log_fmt::ellipsize(&report.methods, 64),
+                    newengine_ulog_api::formatting::ellipsize(&report.provider, 72),
+                    newengine_ulog_api::formatting::ellipsize(&report.methods, 64),
                 ]
             })
             .collect::<Vec<_>>();
 
-        crate::log_fmt::emit_prefixed_table(
+        newengine_ulog_api::formatting::emit_prefixed_table(
             "runtime api:",
             "Engine API gateway/service contracts",
             &[

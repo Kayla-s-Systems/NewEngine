@@ -7,6 +7,7 @@
 //!
 //! - Internal/fast containers: `NeHashMap`, `NeHashSet`
 //! - Untrusted/secure containers: `NeSecureHashMap`, `NeSecureHashSet`
+//! - Bounded runtime cache: `NeBoundedCache`
 //! - Constructors: `ne_hash_map()`, `ne_hash_set()`, `ne_*_with_capacity()`
 //! - SlotMap aliases: `NeSlotMap`, `NeSecondaryMap`, `NeKey`, `ne_new_key_type`
 //!
@@ -33,6 +34,11 @@ pub type NeHashMap<K, V> = FxHashMap<K, V>;
 
 /// Engine hash set for *internal* data (fast, deterministic).
 pub type NeHashSet<T> = FxHashSet<T>;
+
+/// Engine bounded LRU-style runtime cache. Hits are O(1) average; eviction scans
+/// only when capacity is exceeded.
+pub type NeBoundedCache<K, V> = super::BoundedCache<K, V>;
+pub use super::CacheStats as NeCacheStats;
 
 #[inline]
 pub fn ne_hash_map<K, V>() -> NeHashMap<K, V>
@@ -130,4 +136,12 @@ where
     T: Eq + Hash,
 {
     UntrustedSet::with_hasher(NeSecureBuildHasher::default())
+}
+
+#[inline]
+pub fn ne_bounded_cache<K, V>(capacity: usize) -> NeBoundedCache<K, V>
+where
+    K: Eq + Hash + Clone,
+{
+    NeBoundedCache::new(capacity)
 }

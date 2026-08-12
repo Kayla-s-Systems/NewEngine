@@ -7,15 +7,47 @@ use newengine_core::{
     render::SceneLaunchStatus, EngineLifecycleEvent, EngineReadinessKey, EngineReadinessSnapshot,
     EngineResult, Module, ModuleCtx, Resources,
 };
-use newengine_runtime_host::asset_bootstrap::{
-    collect_app_asset_roots, mount_asset_roots_best_effort,
-};
+use newengine_runtime_host::asset_bootstrap::mount_profile_content_best_effort;
 use newengine_ui_api::{
     UiEditorRuntimeMode, UiEditorRuntimeState, UiPresentationFlowState, UiScreenProfile,
     UiScreenProfileState,
 };
 
-use crate::{GAME_APP_ASSETS_DIR_ENV, GAME_READY_APP_DIR_NAME};
+use crate::GAME_READY_MOUNT_SPEC;
+
+/// Product-owned adapter for the generic engine scene-bootstrap boundary.
+/// The engine never selects this provider by name; the active application profile injects it.
+pub(crate) struct GameReadyWorldSceneBootstrapProvider;
+
+impl GameReadyWorldSceneBootstrapProvider {
+    #[inline]
+    pub(crate) fn shared() -> Arc<dyn newengine_engine_runtime::SceneBootstrapProvider> {
+        Arc::new(Self)
+    }
+}
+
+impl newengine_engine_runtime::SceneBootstrapProvider for GameReadyWorldSceneBootstrapProvider {
+    #[inline]
+    fn id(&self) -> &'static str {
+        "app.game-ready.world-bootstrap"
+    }
+
+    fn bootstrap(
+        &self,
+        ctx: &mut newengine_engine_runtime::SceneBootstrapContext<'_>,
+    ) -> Result<newengine_engine_runtime::SceneBootstrapResult, String> {
+        let primary = newengine_game_ready_world::bootstrap_world_scene(
+            ctx.scene,
+            ctx.primitives,
+            ctx.materials,
+        );
+        primary
+            .map(|entity| newengine_engine_runtime::SceneBootstrapResult::new(Some(entity)))
+            .ok_or_else(|| {
+                "authored GameReady world bootstrap returned no primary entity".to_owned()
+            })
+    }
+}
 
 const GAME_READY_SCENE_BOOTSTRAP_REQUIRES: &[EngineReadinessKey] =
     &[EngineReadinessKey::EnginePluginsReady];
@@ -142,8 +174,7 @@ impl GameReadySceneBootstrapModule {
         }
 
         let assets = AssetServiceClient::new(newengine_plugin_host::default_host_api());
-        let asset_roots = collect_app_asset_roots(GAME_READY_APP_DIR_NAME, GAME_APP_ASSETS_DIR_ENV);
-        mount_asset_roots_best_effort(&assets, &asset_roots);
+        mount_profile_content_best_effort(&assets, GAME_READY_MOUNT_SPEC);
 
         match self.scene.bootstrap_profile_scene_now() {
             Some(player) => {

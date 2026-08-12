@@ -9,14 +9,28 @@ impl InputBindingsProfile {
             {
                 continue;
             }
+            let phase = match binding.phase {
+                InputBindingPhase::Down => newengine_input_actions_api::InputActionPhase::Down,
+                InputBindingPhase::Pressed => {
+                    newengine_input_actions_api::InputActionPhase::Pressed
+                }
+                InputBindingPhase::Released => {
+                    newengine_input_actions_api::InputActionPhase::Released
+                }
+            };
             if let Some(definition) = self
                 .actions
                 .iter()
                 .find(|definition| definition.id == binding.action)
             {
-                dispatch_action_definition(&mut out, definition, &self.listeners);
+                dispatch_action_definition(&mut out, definition, &self.listeners, phase);
             } else {
                 out.actions.push(binding.action.clone());
+                out.signals
+                    .push(newengine_input_actions_api::InputActionSignal {
+                        action: binding.action.clone(),
+                        phase,
+                    });
             }
         }
         if self.device_preference.allows_gamepad() {

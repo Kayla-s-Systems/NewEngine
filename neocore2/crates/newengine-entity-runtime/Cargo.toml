@@ -19,3 +19,5 @@ newengine-plugin-api = { path = "../newengine-plugin-api" }
 newengine-plugin-host = { path = "../newengine-plugin-host" }
 newengine-service-api = { path = "../newengine-service-api" }
 newengine-service-kit = { path = "../newengine-service-kit" }
+newengine-math = { path = "../newengine-math" }
+newengine-transform = { path = "../newengine-transform", features = ["ecs"], default-features = false }

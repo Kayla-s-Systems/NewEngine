@@ -127,7 +127,7 @@ pub fn load_plugin_content_catalog_from_dir(
 
     newengine_ulog_api::ulog::info!(
         "plugins: content catalog path='{}' scenes={} prefabs={} materials={} generators={}",
-        crate::path_fmt::display_clean(&path),
+        newengine_ulog_api::path_format::display_clean(&path),
         manifest.content.scenes.len(),
         manifest.content.prefabs.len(),
         manifest.content.materials.len(),

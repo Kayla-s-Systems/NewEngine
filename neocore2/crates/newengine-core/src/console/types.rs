@@ -2,6 +2,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use super::descriptor::{CommandArgSpec, CommandFlags};
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct ConsoleCmdEntry {
     pub name: String,
@@ -17,6 +19,14 @@ pub struct ConsoleCmdEntry {
     pub method: Option<String>,
     #[serde(default)]
     pub payload: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub args: Vec<CommandArgSpec>,
+    #[serde(default)]
+    pub flags: CommandFlags,
+    #[serde(default)]
+    pub owner: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -26,6 +36,9 @@ pub struct DynCommand {
     pub service_id: String,
     pub method: String,
     pub payload: DynPayload,
+    pub args: Vec<CommandArgSpec>,
+    pub flags: CommandFlags,
+    pub owner: String,
 }
 
 #[derive(Debug, Clone, Copy)]

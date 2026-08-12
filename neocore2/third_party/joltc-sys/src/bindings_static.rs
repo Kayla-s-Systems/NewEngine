@@ -22,6 +22,11 @@ pub const JPC_SHAPE_COLOR_SLEEP_COLOR: JPC_ShapeColor = 3;
 pub const JPC_SHAPE_COLOR_ISLAND_COLOR: JPC_ShapeColor = 4;
 pub const JPC_SHAPE_COLOR_MATERIAL_COLOR: JPC_ShapeColor = 5;
 
+pub type JPC_SoftBodyConstraintColor = c_int;
+pub const JPC_SOFT_BODY_CONSTRAINT_COLOR_CONSTRAINT_TYPE: JPC_SoftBodyConstraintColor = 0;
+pub const JPC_SOFT_BODY_CONSTRAINT_COLOR_CONSTRAINT_GROUP: JPC_SoftBodyConstraintColor = 1;
+pub const JPC_SOFT_BODY_CONSTRAINT_COLOR_CONSTRAINT_ORDER: JPC_SoftBodyConstraintColor = 2;
+
 pub type JPC_ShapeType = u8;
 pub const JPC_SHAPE_TYPE_CONVEX: JPC_ShapeType = 0;
 pub const JPC_SHAPE_TYPE_COMPOUND: JPC_ShapeType = 1;
@@ -243,6 +248,7 @@ pub struct JPC_IndexedTriangleNoMaterial {
 pub struct JPC_IndexedTriangle {
     pub idx: [u32; 3],
     pub materialIndex: u32,
+    pub userData: u32,
 }
 
 #[repr(C)]
@@ -327,7 +333,11 @@ pub struct JPC_BodyManager_DrawSettings {
     pub mDrawSoftBodyVolumeConstraints: bool,
     pub mDrawSoftBodySkinConstraints: bool,
     pub mDrawSoftBodyLRAConstraints: bool,
+    pub mDrawSoftBodyRods: bool,
+    pub mDrawSoftBodyRodStates: bool,
+    pub mDrawSoftBodyRodBendTwistConstraints: bool,
     pub mDrawSoftBodyPredictedBounds: bool,
+    pub mDrawSoftBodyConstraintColor: JPC_SoftBodyConstraintColor,
 }
 
 #[repr(C)]

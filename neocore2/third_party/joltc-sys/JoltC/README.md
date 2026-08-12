@@ -1,6 +1,6 @@
 # JoltC
 
-C wrapper for [Jolt Physics](https://github.com/jrouwe/JoltPhysics) 5.0.0.
+C wrapper for [Jolt Physics](https://github.com/jrouwe/JoltPhysics) 5.6.0.
 
 Currently a work in progress. Bindings contain functions that we've needed as part of our game or the Rust bindings we'
 re working on in [jolt-rust](https://github.com/SecondHalfGames/jolt-rust).

@@ -1,8 +1,8 @@
 use super::super::Engine;
 
-use crate::log_fmt::{ellipsize, emit_boxed_kv, emit_prefixed_table};
-use crate::path_fmt::display_clean;
 use newengine_plugin_api::PluginKind;
+use newengine_ulog_api::formatting::{ellipsize, emit_boxed_kv, emit_prefixed_table};
+use newengine_ulog_api::path_format::display_clean;
 
 #[inline]
 fn plugin_kind_label(kind: Option<PluginKind>) -> &'static str {

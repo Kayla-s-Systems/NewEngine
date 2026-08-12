@@ -75,7 +75,7 @@ pub(crate) struct GatewayProviderRouteEntry {
 #[derive(Clone)]
 pub(crate) struct GatewayRegistryCache {
     pub(crate) generation: u64,
-    pub(crate) registry: crate::service_gateway::ActiveGatewayRegistry,
+    pub(crate) registry: Arc<crate::service_gateway::ActiveGatewayRegistry>,
 }
 
 thread_local! {

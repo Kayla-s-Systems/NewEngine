@@ -4,7 +4,7 @@ use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
 use crate::manager::PluginLoadError;
-use crate::path_fmt::canonicalize_if_exists;
+use newengine_ulog_api::path_format::canonicalize_if_exists;
 
 const PLUGIN_DIR_ENV: &str = "NEWENGINE_PLUGIN_DIR";
 const PLUGINS_DIR_ENV: &str = "NEWENGINE_PLUGINS_DIR";

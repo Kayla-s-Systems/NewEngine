@@ -34,10 +34,15 @@
     "script_entrypoint": "python tools/scripts/takesome.py import-ui-assets",
     "descriptor_driven": true,
     "supported_importers": [
+      "northstar.importer.blender_map.v1",
       "northstar.importer.neui.v1",
       "northstar.importer.yft_font.v1"
     ],
+    "direct_authoring_entrypoints": {
+      "northstar.importer.blender_map.v1": "NewEngine/neocore2/scripts/import_blender_map.py"
+    },
     "writes": [
+      "Blender map import writes deterministic OBJ/YDD/YTYP/YMAP sources/runtime assets and updates the native asset build plan",
       "NewEngine/neocore2/config/assets/import_pipeline.generated_graph.v1.json",
       "NewEngine/neocore2/config/assets/import_pipeline.invalidation_plan.v1.json when --changed-source is provided",
       "runtime .neui assets through northstar.neui_packer unless --skip-neui is provided"

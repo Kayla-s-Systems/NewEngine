@@ -12,6 +12,159 @@ use newengine_platform_api::PlatformAppIconV1;
 #[cfg(feature = "window-icon")]
 use std::time::Duration;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ContentSetSpec {
+    pub id: &'static str,
+    pub app_dir_name: Option<&'static str>,
+    pub env_roots: &'static [&'static str],
+    pub priority: i32,
+    pub mount: &'static str,
+    pub include_shared_assets: bool,
+    pub include_app_assets: bool,
+    pub include_outer_game_assets: bool,
+    pub include_legacy_layouts: bool,
+}
+
+impl ContentSetSpec {
+    #[inline]
+    pub const fn runtime_app(
+        id: &'static str,
+        app_dir_name: &'static str,
+        env_roots: &'static [&'static str],
+    ) -> Self {
+        Self {
+            id,
+            app_dir_name: Some(app_dir_name),
+            env_roots,
+            priority: 200,
+            mount: "",
+            include_shared_assets: true,
+            include_app_assets: true,
+            include_outer_game_assets: true,
+            include_legacy_layouts: true,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ProfileMountSpec {
+    pub profile_id: &'static str,
+    pub content_sets: &'static [ContentSetSpec],
+}
+
+impl ProfileMountSpec {
+    #[inline]
+    pub const fn new(profile_id: &'static str, content_sets: &'static [ContentSetSpec]) -> Self {
+        Self {
+            profile_id,
+            content_sets,
+        }
+    }
+}
+
+/// Resolves declarative content sets into OS candidates. Profiles describe content only;
+/// runtime-host owns CWD/executable compatibility discovery and deduplication.
+pub fn collect_profile_mount_roots(spec: ProfileMountSpec) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    let mut dedup: HashSet<PathBuf> = HashSet::default();
+    for content in spec.content_sets {
+        for root in collect_content_set_roots(*content) {
+            if dedup.insert(root.clone()) {
+                out.push(root);
+            }
+        }
+    }
+    out
+}
+
+pub fn mount_profile_content_best_effort(assets: &AssetServiceClient, spec: ProfileMountSpec) {
+    let mut mounted: HashSet<PathBuf> = HashSet::default();
+    for content in spec.content_sets {
+        for root in collect_content_set_roots(*content) {
+            if !mounted.insert(root.clone()) {
+                continue;
+            }
+            try_mount_with_policy(assets, &root, content.priority, content.mount, content.id);
+        }
+    }
+}
+
+fn collect_content_set_roots(content: ContentSetSpec) -> Vec<PathBuf> {
+    let mut roots = Vec::new();
+    for env_var in content.env_roots {
+        if let Ok(path) = std::env::var(env_var) {
+            let path = path.trim();
+            if !path.is_empty() {
+                roots.push(PathBuf::from(path));
+            }
+        }
+    }
+
+    if let Ok(cwd) = std::env::current_dir() {
+        let mut cur = Some(cwd);
+        for _ in 0..8 {
+            let Some(base) = cur.clone() else {
+                break;
+            };
+            push_content_roots_from_base(&mut roots, &base, content);
+            cur = base.parent().map(Path::to_path_buf);
+        }
+    }
+
+    if let Ok(exe) = std::env::current_exe() {
+        let mut cur = exe.parent().map(Path::to_path_buf);
+        for _ in 0..8 {
+            let Some(base) = cur.clone() else {
+                break;
+            };
+            push_content_roots_from_base(&mut roots, &base, content);
+            cur = base.parent().map(Path::to_path_buf);
+        }
+    }
+
+    let mut out = Vec::new();
+    let mut dedup: HashSet<PathBuf> = HashSet::default();
+    for root in roots {
+        if dedup.insert(root.clone()) {
+            out.push(root);
+        }
+    }
+    out
+}
+
+fn push_content_roots_from_base(roots: &mut Vec<PathBuf>, base: &Path, content: ContentSetSpec) {
+    if content.include_shared_assets {
+        let shared = base.join("assets");
+        if shared.is_dir() {
+            roots.push(shared);
+        }
+    }
+    if content.include_app_assets {
+        if let Some(app_dir_name) = content.app_dir_name {
+            let app = base.join("apps").join(app_dir_name).join("assets");
+            if app.is_dir() {
+                roots.push(app);
+            }
+        }
+    }
+    if content.include_outer_game_assets {
+        let game_assets = base.join("gameAssets");
+        if game_assets.is_dir() {
+            roots.push(game_assets);
+        }
+    }
+    if content.include_legacy_layouts {
+        let legacy_engine = base.join("NewEngine").join("assets");
+        if legacy_engine.is_dir() {
+            roots.push(legacy_engine);
+        }
+        let legacy_workspace = base.join("NewEngine").join("neocore2").join("assets");
+        if legacy_workspace.is_dir() {
+            roots.push(legacy_workspace);
+        }
+    }
+}
+
 pub fn collect_app_asset_roots(app_dir_name: &str, env_var: &str) -> Vec<PathBuf> {
     let mut roots: Vec<PathBuf> = Vec::new();
 
@@ -103,6 +256,16 @@ pub fn mount_asset_roots_best_effort(assets: &AssetServiceClient, roots: &[PathB
 }
 
 fn try_mount(assets: &AssetServiceClient, path: &Path) {
+    try_mount_with_policy(assets, path, 200, "", "legacy-app-roots");
+}
+
+fn try_mount_with_policy(
+    assets: &AssetServiceClient,
+    path: &Path,
+    priority: i32,
+    mount: &str,
+    content_set: &str,
+) {
     if !path.is_dir() {
         return;
     }
@@ -110,12 +273,13 @@ fn try_mount(assets: &AssetServiceClient, path: &Path) {
     let path_string = path.to_string_lossy().to_string();
     if let Err(e) = assets.mount_source_json_v1(serde_json::json!({
         "kind": "filesystem",
-        "priority": 200,
-        "mount": "",
+        "priority": priority,
+        "mount": mount,
         "config": { "root": path_string }
     })) {
         newengine_ulog_api::ulog::warn!(
-            "runtime host: asset.mount_source_json_v1(dir) failed path='{}' err='{}'",
+            "runtime host: asset.mount_source_json_v1(dir) failed content_set='{}' path='{}' err='{}'",
+            content_set,
             path.display(),
             e
         );

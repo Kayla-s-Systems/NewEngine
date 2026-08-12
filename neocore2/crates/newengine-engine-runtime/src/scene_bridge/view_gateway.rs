@@ -7,7 +7,7 @@ use newengine_core::render::{
     ViewPostFxFrameParams,
 };
 use newengine_ecs::World;
-use newengine_input_actions_api::{CameraViewRequest, GameplayActionFrame};
+use newengine_input_actions_api::{ActionCommandFrame, CameraViewRequest};
 use newengine_math::{Mat4, Vec3};
 
 use crate::camera_gateway::{CameraGatewayFrame, CameraGatewayInput, CameraTransitionPhase};
@@ -22,7 +22,7 @@ use super::SceneBridge;
 /// Render code may assemble this from viewport/input state, but it must not know
 /// whether the active camera backend is runtime-nav, cinematic, replay, scripted,
 /// or a future provider plugin.
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub(crate) struct EngineViewInput {
     pub dx_px: f32,
     pub dy_px: f32,
@@ -38,7 +38,7 @@ pub(crate) struct EngineViewInput {
     pub move_mask: u64,
     pub speed_scalar: f32,
     pub camera_view: CameraViewRequest,
-    pub gameplay_actions: GameplayActionFrame,
+    pub gameplay_actions: ActionCommandFrame,
 }
 
 impl From<EngineViewInput> for CameraGatewayInput {

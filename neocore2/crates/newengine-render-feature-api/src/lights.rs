@@ -72,11 +72,17 @@ pub struct PackedLights {
     pub shadow_cascade_splits: [f32; MAX_DIRECTIONAL_SHADOW_CASCADES],
     pub shadow_params: [f32; 4],
     pub shadow_extra: [f32; 4],
+    pub shadow_pcss0: [f32; 4],
+    pub shadow_pcss1: [f32; 4],
     pub cloud_shadow_map0: [f32; 4],
     pub cloud_shadow_map1: [f32; 4],
     pub cloud_shadow_map2: [f32; 4],
     pub cloud_shadow_map3: [f32; 4],
     pub cloud_shadow_map4: [f32; 4],
+    /// xyz = normalized active camera forward direction; w reserved.
+    /// Appended to the std140 block so CSM receiver selection can use the exact
+    /// same camera-forward depth convention as CPU cascade fitting.
+    pub shadow_view_forward: [f32; 4],
 }
 
 impl Default for PackedLights {
@@ -94,17 +100,20 @@ impl Default for PackedLights {
             shadow_cascade_splits: [0.0; MAX_DIRECTIONAL_SHADOW_CASCADES],
             shadow_params: [0.0; 4],
             shadow_extra: [0.0; 4],
+            shadow_pcss0: [0.0; 4],
+            shadow_pcss1: [0.0; 4],
             cloud_shadow_map0: [0.0; 4],
             cloud_shadow_map1: [0.0; 4],
             cloud_shadow_map2: [0.0; 4],
             cloud_shadow_map3: [0.0; 4],
             cloud_shadow_map4: [0.0; 4],
+            shadow_view_forward: [0.0, 0.0, 1.0, 0.0],
         }
     }
 }
 
 impl PackedLights {
-    pub const UBO_SIZE: usize = 832;
+    pub const UBO_SIZE: usize = 880;
 
     #[inline]
     pub fn from_snapshot(snapshot: &LightSceneSnapshot) -> Self {
@@ -163,6 +172,23 @@ impl PackedLights {
     }
 
     #[inline]
+    pub fn with_camera_forward(mut self, camera_forward: [f32; 3]) -> Self {
+        let len2 = camera_forward[0] * camera_forward[0]
+            + camera_forward[1] * camera_forward[1]
+            + camera_forward[2] * camera_forward[2];
+        if len2 > 1.0e-8 {
+            let inv_len = len2.sqrt().recip();
+            self.shadow_view_forward = [
+                camera_forward[0] * inv_len,
+                camera_forward[1] * inv_len,
+                camera_forward[2] * inv_len,
+                0.0,
+            ];
+        }
+        self
+    }
+
+    #[inline]
     pub fn with_shadow(mut self, light_mvp: Mat4, params: [f32; 4], extra: [f32; 4]) -> Self {
         self.shadow_light_mvp = light_mvp;
         self.shadow_cascade_light_mvp = [light_mvp; MAX_DIRECTIONAL_SHADOW_CASCADES];
@@ -196,6 +222,8 @@ impl PackedLights {
         self.shadow_cascade_splits = frame.cascade_splits;
         self.shadow_params = frame.params;
         self.shadow_extra = frame.extra;
+        self.shadow_pcss0 = frame.pcss0;
+        self.shadow_pcss1 = frame.pcss1;
         self
     }
 
@@ -226,6 +254,28 @@ mod cloud_shadow_ubo_tests {
     use super::*;
 
     #[test]
+    fn packed_camera_forward_is_normalized_for_csm_receiver_depth() {
+        let packed = PackedLights::default().with_camera_forward([0.0, 3.0, 4.0]);
+        assert_eq!(PackedLights::UBO_SIZE, 880);
+        assert!((packed.shadow_view_forward[0] - 0.0).abs() < 1.0e-6);
+        assert!((packed.shadow_view_forward[1] - 0.6).abs() < 1.0e-6);
+        assert!((packed.shadow_view_forward[2] - 0.8).abs() < 1.0e-6);
+        assert_eq!(packed.shadow_view_forward[3], 0.0);
+    }
+
+    #[test]
+    fn packed_pcss_parameters_survive_shadow_frame_bridge() {
+        let pcss0 = [2.0, 0.00464, 5.0, 12.0];
+        let pcss1 = [12.0, 16.0, 0.55, 4.0];
+        let frame = ShadowFrame::disabled(newengine_core::render::TextureId::new(1))
+            .with_pcss(pcss0, pcss1);
+        let packed = PackedLights::default().with_shadow_frame(frame);
+        assert_eq!(PackedLights::UBO_SIZE, 880);
+        assert_eq!(packed.shadow_pcss0, pcss0);
+        assert_eq!(packed.shadow_pcss1, pcss1);
+    }
+
+    #[test]
     fn packed_cloud_shadow_occupies_appended_std140_slots() {
         let map0 = [0.11, 0.22, 0.33, 0.44];
         let map1 = [0.005, 1800.0, 0.55, 0.66];
@@ -233,7 +283,7 @@ mod cloud_shadow_ubo_tests {
         let map3 = [0.10, 0.20, 0.31, 0.43];
         let map4 = [0.78, 0.035, 0.17, 96.0];
         let packed = PackedLights::default().with_cloud_shadow(map0, map1, map2, map3, map4);
-        assert_eq!(PackedLights::UBO_SIZE, 832);
+        assert_eq!(PackedLights::UBO_SIZE, 880);
         assert_eq!(packed.cloud_shadow_map0, map0);
         assert_eq!(packed.cloud_shadow_map1, map1);
         assert_eq!(packed.cloud_shadow_map2, map2);

@@ -1,54 +1,17 @@
 use super::*;
 
-#[inline]
-pub fn default_rifle_item_id() -> ItemId {
-    ItemId::from_name(DEFAULT_RIFLE_ITEM_NAME).expect("valid built-in item name")
-}
-
-#[inline]
-pub fn default_rifle_ammo_id() -> ItemId {
-    ItemId::from_name(DEFAULT_RIFLE_AMMO_NAME).expect("valid built-in ammo name")
-}
-
-#[inline]
-pub fn default_medkit_item_id() -> ItemId {
-    ItemId::from_name(DEFAULT_MEDKIT_ITEM_NAME).expect("valid built-in item name")
-}
-
-#[inline]
-pub fn default_fps_loadout_id() -> ItemId {
-    ItemId::from_name(DEFAULT_FPS_LOADOUT_NAME).expect("valid built-in loadout name")
-}
-
-pub fn ensure_default_item_catalog(world: &mut World) {
-    if world.resource::<ItemCatalog>().is_none()
-        || world.resource::<InventoryLoadoutCatalog>().is_none()
-    {
-        match crate::gameplay::item_assets::compiled_embedded_fps_item_package() {
-            Ok(package) => {
-                crate::gameplay::item_assets::install_compiled_item_package(world, package)
-            }
-            Err(error) => {
-                newengine_ulog_api::ulog::warn!(
-                    "inventory: authored embedded NEITEMS package failed; using built-in fallback err='{}'",
-                    error
-                );
-                if world.resource::<ItemCatalog>().is_none() {
-                    world.insert_resource(ItemCatalog::fps_defaults());
-                }
-                if world.resource::<InventoryLoadoutCatalog>().is_none() {
-                    world.insert_resource(InventoryLoadoutCatalog::fps_defaults());
-                }
-            }
-        }
-    }
+/// Ensures only generic inventory runtime resources.
+///
+/// Item definitions and loadouts are profile-owned content and must be installed explicitly
+/// through a gameplay content provider. This function deliberately does not create catalogs.
+pub fn ensure_inventory_runtime(world: &mut World) {
     if world.resource::<InventoryEventBus>().is_none() {
         world.insert_resource(InventoryEventBus::default());
     }
 }
 
 pub fn ensure_player_inventory(world: &mut World, owner: EntityId) {
-    ensure_default_item_catalog(world);
+    ensure_inventory_runtime(world);
     if world.get::<PlayerInventory>(owner).is_none() {
         let _ = world.insert(owner, PlayerInventory::default());
     }
@@ -61,10 +24,9 @@ pub fn give_item(
     quantity: u32,
 ) -> Result<InventoryMutation, String> {
     ensure_player_inventory(world, owner);
-    let catalog = world
-        .resource::<ItemCatalog>()
-        .cloned()
-        .ok_or_else(|| "item catalog is unavailable".to_owned())?;
+    let catalog = world.resource::<ItemCatalog>().cloned().ok_or_else(|| {
+        "item catalog is unavailable; install a gameplay content provider".to_owned()
+    })?;
     let definition = catalog
         .get(item)
         .cloned()
@@ -140,7 +102,9 @@ pub fn apply_loadout(world: &mut World, owner: EntityId, loadout: ItemId) -> Res
         .resource::<InventoryLoadoutCatalog>()
         .and_then(|catalog| catalog.get(loadout))
         .cloned()
-        .ok_or_else(|| "loadout definition is unavailable".to_owned())?;
+        .ok_or_else(|| {
+            "loadout definition is unavailable; install a gameplay content provider".to_owned()
+        })?;
     if loadout.clear_existing {
         persist_equipped_weapon_state(world, owner);
         if let Some(inventory) = world.get_mut::<PlayerInventory>(owner) {
@@ -162,6 +126,9 @@ pub fn apply_loadout(world: &mut World, owner: EntityId, loadout: ItemId) -> Res
             equip_first_item(world, owner, entry.item)?;
         }
     }
+    if let Some(inventory) = world.get_mut::<PlayerInventory>(owner) {
+        inventory.mark_loadout_initialized();
+    }
     emit_inventory_event(
         world,
         InventoryEvent {
@@ -179,10 +146,6 @@ pub fn apply_loadout(world: &mut World, owner: EntityId, loadout: ItemId) -> Res
     Ok(())
 }
 
-pub fn give_default_fps_loadout(world: &mut World, owner: EntityId) -> Result<(), String> {
-    apply_loadout(world, owner, default_fps_loadout_id())
-}
-
 pub fn drain_inventory_events(world: &mut World) -> Vec<InventoryEvent> {
     world
         .resource_mut::<InventoryEventBus>()
@@ -191,9 +154,7 @@ pub fn drain_inventory_events(world: &mut World) -> Vec<InventoryEvent> {
 }
 
 pub(super) fn emit_inventory_event(world: &mut World, event: InventoryEvent) {
-    if world.resource::<InventoryEventBus>().is_none() {
-        world.insert_resource(InventoryEventBus::default());
-    }
+    ensure_inventory_runtime(world);
     if let Some(bus) = world.resource_mut::<InventoryEventBus>() {
         bus.emit(event);
     }

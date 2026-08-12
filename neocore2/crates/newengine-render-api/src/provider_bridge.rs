@@ -372,6 +372,8 @@ pub struct LightExtractionSnapshot {
 pub struct ShadowSettingsSnapshot {
     pub enabled: bool,
     pub method: String,
+    #[serde(default = "default_shadow_filter")]
+    pub filter: String,
     pub resolution: u32,
     pub max_distance: f32,
     pub bias: f32,
@@ -381,6 +383,65 @@ pub struct ShadowSettingsSnapshot {
     pub normal_bias: f32,
     #[serde(default = "default_cascade_count")]
     pub cascade_count: u32,
+    #[serde(default)]
+    pub pcss: ShadowPcssSettingsSnapshot,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ShadowPcssSettingsSnapshot {
+    #[serde(default = "default_pcss_light_angular_radius_degrees")]
+    pub light_angular_radius_degrees: f32,
+    #[serde(default = "default_pcss_blocker_search_radius_texels")]
+    pub blocker_search_radius_texels: f32,
+    #[serde(default = "default_pcss_max_filter_radius_texels")]
+    pub max_filter_radius_texels: f32,
+    #[serde(default = "default_pcss_blocker_samples")]
+    pub blocker_samples: u32,
+    #[serde(default = "default_pcss_filter_samples")]
+    pub filter_samples: u32,
+    #[serde(default = "default_pcss_min_filter_radius_texels")]
+    pub min_filter_radius_texels: f32,
+    #[serde(default = "default_pcss_stable_kernel_cell_texels")]
+    pub stable_kernel_cell_texels: f32,
+}
+
+impl Default for ShadowPcssSettingsSnapshot {
+    fn default() -> Self {
+        Self {
+            light_angular_radius_degrees: default_pcss_light_angular_radius_degrees(),
+            blocker_search_radius_texels: default_pcss_blocker_search_radius_texels(),
+            max_filter_radius_texels: default_pcss_max_filter_radius_texels(),
+            blocker_samples: default_pcss_blocker_samples(),
+            filter_samples: default_pcss_filter_samples(),
+            min_filter_radius_texels: default_pcss_min_filter_radius_texels(),
+            stable_kernel_cell_texels: default_pcss_stable_kernel_cell_texels(),
+        }
+    }
+}
+
+fn default_shadow_filter() -> String {
+    "pcf".to_owned()
+}
+fn default_pcss_light_angular_radius_degrees() -> f32 {
+    0.266
+}
+fn default_pcss_blocker_search_radius_texels() -> f32 {
+    3.0
+}
+fn default_pcss_max_filter_radius_texels() -> f32 {
+    5.0
+}
+fn default_pcss_blocker_samples() -> u32 {
+    10
+}
+fn default_pcss_filter_samples() -> u32 {
+    12
+}
+fn default_pcss_min_filter_radius_texels() -> f32 {
+    0.18
+}
+fn default_pcss_stable_kernel_cell_texels() -> f32 {
+    8.0
 }
 
 #[inline]
@@ -417,6 +478,10 @@ pub struct LightPlanContribution {
     #[serde(default)]
     pub extra: [f32; 4],
     #[serde(default)]
+    pub pcss0: [f32; 4],
+    #[serde(default)]
+    pub pcss1: [f32; 4],
+    #[serde(default)]
     pub warnings: Vec<String>,
 }
 
@@ -433,6 +498,8 @@ impl LightPlanContribution {
             light_mvp_cols: [[0.0; 4]; 4],
             params: [0.0; 4],
             extra: [0.0; 4],
+            pcss0: [0.0; 4],
+            pcss1: [0.0; 4],
             warnings: Vec::new(),
         }
     }

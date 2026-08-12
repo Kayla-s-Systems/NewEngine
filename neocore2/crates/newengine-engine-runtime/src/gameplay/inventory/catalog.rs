@@ -54,39 +54,4 @@ impl ItemCatalog {
     pub fn is_empty(&self) -> bool {
         self.definitions.is_empty()
     }
-
-    pub fn fps_defaults() -> Self {
-        let ammo = ItemDefinition::stackable(
-            DEFAULT_RIFLE_AMMO_NAME,
-            "Standard Rifle Ammunition",
-            ItemKind::Ammo,
-            240,
-            0.012,
-        )
-        .expect("valid built-in ammo definition");
-        let ammo_id = ammo.id;
-        let rifle = ItemDefinition::weapon(
-            DEFAULT_RIFLE_ITEM_NAME,
-            "Standard Service Rifle",
-            EquipmentSlot::Primary,
-            HitscanWeaponTuning::default(),
-            ammo_id,
-            3.6,
-        )
-        .expect("valid built-in weapon definition");
-        let medkit = ItemDefinition::consumable(
-            DEFAULT_MEDKIT_ITEM_NAME,
-            "Field Medkit",
-            5,
-            0.75,
-            ItemUseEffect::Heal { amount: 45.0 },
-        )
-        .expect("valid built-in consumable definition");
-
-        let mut catalog = Self::default();
-        catalog.register(ammo).expect("unique built-in ammo");
-        catalog.register(rifle).expect("unique built-in rifle");
-        catalog.register(medkit).expect("unique built-in medkit");
-        catalog
-    }
 }

@@ -1,13 +1,17 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use newengine_core::render::{AntiAliasingMode, PostFxFrameParams, SunPostFxParams};
-use newengine_math::{Vec3, Vec4};
+use newengine_math::{Mat4, Vec3, Vec4};
 
 use super::lights;
 
+/// Apparent angular half-radius of the Sun as seen from Earth (~0.2666 degrees).
+const SOLAR_ANGULAR_RADIUS_RAD: f32 = 0.004_653;
+const SUN_PROJECTION_DISTANCE: f32 = 2_048.0;
+
 pub(super) fn game_sun_postfx_params(
     world: &newengine_ecs::World,
-    viewproj: newengine_math::Mat4,
+    viewproj: Mat4,
     camera_position: Vec3,
 ) -> PostFxFrameParams {
     let mut params = PostFxFrameParams::default();
@@ -35,7 +39,7 @@ pub(super) fn game_sun_postfx_params(
     params.quality.ssao.half_resolution = launch_graphics.ssao_half_resolution;
 
     let sky_postfx = world
-        .resource::<crate::scene_bridge::SkyPostFxRuntime>()
+        .resource::<crate::gameplay::EnvironmentPostFxState>()
         .copied()
         .unwrap_or_default();
     params.display.exposure = sky_postfx.exposure;
@@ -67,32 +71,36 @@ pub(super) fn game_sun_postfx_params(
         return params;
     }
 
-    // DirectionalLight.direction_ws points from the sun into the scene. The
-    // visible solar disk lies in the opposite direction from the camera.
+    // DirectionalLight.direction_ws points from the Sun into the scene. The
+    // visible solar disc lies in the opposite direction from the camera.
     let to_sun = -incoming;
-    let sun_world = camera_position + to_sun * 2048.0;
-    let clip = viewproj * Vec4::new(sun_world.x, sun_world.y, sun_world.z, 1.0);
-    if clip.w <= 1.0e-5 {
+    let Some(screen) = project_direction_to_screen(viewproj, camera_position, to_sun) else {
         return params;
-    }
+    };
+    let screen_x = screen[0];
+    let screen_y = screen[1];
 
-    let inv_w = 1.0 / clip.w;
-    let ndc_x = clip.x * inv_w;
-    let ndc_y = clip.y * inv_w;
-    let ndc_z = clip.z * inv_w;
-    let screen_x = ndc_x * 0.5 + 0.5;
-    let screen_y = ndc_y * 0.5 + 0.5;
-
-    let on_screen =
-        (-0.18..=1.18).contains(&screen_x) && (-0.18..=1.18).contains(&screen_y) && ndc_z >= -1.0;
-    let center_alignment = (1.0 - ((screen_x - 0.5).hypot(screen_y - 0.5) * 1.72)).clamp(0.0, 1.0);
+    // Fade only at the viewport boundary. Do not use center alignment as an
+    // artificial visibility term: a real lens still flares near the frame edge.
+    let edge_distance = screen_x
+        .min(1.0 - screen_x)
+        .min(screen_y)
+        .min(1.0 - screen_y);
+    let edge_visibility = ((edge_distance + 0.06) / 0.10).clamp(0.0, 1.0);
+    let on_screen = (-0.06..=1.06).contains(&screen_x) && (-0.06..=1.06).contains(&screen_y);
+    let daylight = ((to_sun.y + 0.035) / 0.16).clamp(0.0, 1.0);
     let horizon_grazing = (1.0 - to_sun.y.abs()).clamp(0.0, 1.0);
-    let daylight = ((to_sun.y + 0.07) / 0.24).clamp(0.0, 1.0);
     let visibility = if on_screen {
-        center_alignment.max(0.12) * daylight
+        daylight * edge_visibility
     } else {
         0.0
     };
+
+    // Derive the disc radius from the active projection rather than hard-coding
+    // a screen-space size. This keeps the visual Sun stable across FOV/aspect.
+    let disk_radius = projected_solar_radius(viewproj, camera_position, to_sun)
+        .unwrap_or(0.0045)
+        .clamp(0.0015, 0.018);
 
     params.sun = SunPostFxParams {
         screen_position: [screen_x, screen_y],
@@ -100,17 +108,79 @@ pub(super) fn game_sun_postfx_params(
         direction: [incoming.x, incoming.y, incoming.z],
         intensity: sun.intensity,
         visibility,
-        disk_radius: 0.013 + 0.012 * horizon_grazing,
-        flare_strength: if launch_graphics.sun_rays_enabled {
-            (0.18 + 0.32 * horizon_grazing) * sky_postfx.sun_glare_scale
-        } else {
-            0.0
-        },
+        disk_radius,
+        // Lens flare is an optical response to a visible HDR solar source and is
+        // intentionally independent from the optional god-ray/streak toggle.
+        flare_strength: (0.26 + 0.22 * horizon_grazing) * sky_postfx.sun_glare_scale,
         ray_strength: if launch_graphics.sun_rays_enabled {
-            (0.14 + 0.30 * horizon_grazing) * sky_postfx.sun_ray_scale
+            (0.10 + 0.18 * horizon_grazing) * sky_postfx.sun_ray_scale
         } else {
             0.0
         },
     };
     params
+}
+
+fn project_direction_to_screen(
+    viewproj: Mat4,
+    camera_position: Vec3,
+    direction: Vec3,
+) -> Option<[f32; 2]> {
+    let direction = direction.normalize_or_zero();
+    if direction.length_squared() <= 1.0e-8 {
+        return None;
+    }
+    let world = camera_position + direction * SUN_PROJECTION_DISTANCE;
+    let clip = viewproj * Vec4::new(world.x, world.y, world.z, 1.0);
+    if !clip.is_finite() || clip.w <= 1.0e-5 {
+        return None;
+    }
+    let inv_w = 1.0 / clip.w;
+    Some([clip.x * inv_w * 0.5 + 0.5, clip.y * inv_w * 0.5 + 0.5])
+}
+
+fn projected_solar_radius(viewproj: Mat4, camera_position: Vec3, to_sun: Vec3) -> Option<f32> {
+    let to_sun = to_sun.normalize_or_zero();
+    let center = project_direction_to_screen(viewproj, camera_position, to_sun)?;
+
+    let mut tangent = to_sun.cross(Vec3::Y).normalize_or_zero();
+    if tangent.length_squared() <= 1.0e-8 {
+        tangent = to_sun.cross(Vec3::X).normalize_or_zero();
+    }
+    if tangent.length_squared() <= 1.0e-8 {
+        return None;
+    }
+
+    let edge_direction = (to_sun * SOLAR_ANGULAR_RADIUS_RAD.cos()
+        + tangent * SOLAR_ANGULAR_RADIUS_RAD.sin())
+    .normalize_or_zero();
+    let edge = project_direction_to_screen(viewproj, camera_position, edge_direction)?;
+    let dx = edge[0] - center[0];
+    let dy = edge[1] - center[1];
+    Some(dx.hypot(dy))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn projected_solar_radius_is_positive_and_small() {
+        let camera = Vec3::ZERO;
+        let view = Mat4::IDENTITY;
+        let proj = Mat4::perspective_rh(60.0_f32.to_radians(), 16.0 / 9.0, 0.1, 5_000.0);
+        let radius = projected_solar_radius(proj * view, camera, Vec3::new(0.0, 0.1, -1.0))
+            .expect("sun must project");
+        assert!(radius > 0.001, "radius={radius}");
+        assert!(radius < 0.02, "radius={radius}");
+    }
+
+    #[test]
+    fn projected_sun_center_tracks_view_projection() {
+        let proj = Mat4::perspective_rh(60.0_f32.to_radians(), 1.0, 0.1, 5_000.0);
+        let center = project_direction_to_screen(proj, Vec3::ZERO, -Vec3::Z)
+            .expect("forward sun must project");
+        assert!((center[0] - 0.5).abs() < 1.0e-4, "x={}", center[0]);
+        assert!((center[1] - 0.5).abs() < 1.0e-4, "y={}", center[1]);
+    }
 }

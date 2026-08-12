@@ -1,0 +1,177 @@
+use std::collections::BTreeMap;
+
+use serde::Serialize;
+
+use crate::system_tag;
+
+/// Common declaration for a backend service family.
+///
+/// This intentionally does not describe domain packets. Render, physics, input,
+/// UI and future domains still own their DTOs and typed adapters; this spec only
+/// tells the host which service id and backend capability must co-exist on the
+/// provider plugin.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BackendServiceSpec {
+    /// Human-readable domain label used in diagnostics.
+    pub domain: &'static str,
+    /// Stable engine-facing gateway id consumers call, e.g. `engine.render`.
+    pub engine_gateway_id: &'static str,
+    /// First-party/default provider service id, e.g. `render.api`.
+    ///
+    /// Third-party providers may use a different service id when their backend
+    /// capability metadata declares the same `engine_gateway` and points its
+    /// `contract` field at the registered provider service.
+    pub provider_service_id: &'static str,
+    /// Backend capability id declared by provider plugins.
+    pub backend_capability_id: &'static str,
+}
+
+impl BackendServiceSpec {
+    #[inline]
+    pub const fn new(
+        domain: &'static str,
+        engine_gateway_id: &'static str,
+        provider_service_id: &'static str,
+        backend_capability_id: &'static str,
+    ) -> Self {
+        Self {
+            domain,
+            engine_gateway_id,
+            provider_service_id,
+            backend_capability_id,
+        }
+    }
+}
+
+/// Typed provider route metadata serialized into backend capability JSON.
+///
+/// This is the structured form of the descriptor fragment consumed by the
+/// gateway registry. Providers should build this from their domain
+/// `BackendServiceSpec` instead of hand-writing JSON strings for
+/// `service_kind`, `engine_gateway`, `contract` and `backend_priority`.
+#[derive(Debug, Clone, Serialize)]
+pub struct BackendRouteDescriptor {
+    pub service_kind: &'static str,
+    pub engine_gateway: &'static str,
+    pub contract: &'static str,
+    pub backend_priority: i32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provider_route: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub backend: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mode: Option<&'static str>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub features: Vec<&'static str>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub system_tags: Vec<&'static str>,
+    #[serde(flatten, skip_serializing_if = "BTreeMap::is_empty")]
+    pub metadata: BTreeMap<&'static str, serde_json::Value>,
+}
+
+impl BackendRouteDescriptor {
+    #[inline]
+    pub fn new(spec: BackendServiceSpec) -> Self {
+        let service_kind = spec.domain;
+        debug_assert!(
+            !service_kind.trim().is_empty(),
+            "BackendServiceSpec domain must not be empty",
+        );
+        Self {
+            service_kind,
+            engine_gateway: spec.engine_gateway_id,
+            contract: spec.provider_service_id,
+            backend_priority: 0,
+            provider_route: None,
+            backend: None,
+            mode: None,
+            features: Vec::new(),
+            system_tags: Vec::new(),
+            metadata: BTreeMap::new(),
+        }
+    }
+
+    #[inline]
+    pub fn contract(mut self, contract: &'static str) -> Self {
+        self.contract = contract;
+        self
+    }
+
+    #[inline]
+    pub fn engine_gateway(mut self, engine_gateway: &'static str) -> Self {
+        self.engine_gateway = engine_gateway;
+        self
+    }
+
+    #[inline]
+    pub fn provider_route(mut self, provider_route: &'static str) -> Self {
+        self.provider_route = Some(provider_route);
+        self.system_tags
+            .push(system_tag::PROVIDER_IMPLEMENTATION_ROUTE);
+        self
+    }
+
+    /// Marks this backend route as a concrete provider implementation.
+    ///
+    /// This is intentionally metadata only. The `engine_gateway` field must remain
+    /// the root engine API gateway (for example `engine.ui`), while the personal
+    /// implementation identity should be stored with `provider_route()`.
+    pub fn provider_implementation_route(mut self) -> Self {
+        self.system_tags
+            .push(system_tag::PROVIDER_IMPLEMENTATION_ROUTE);
+        self
+    }
+
+    #[inline]
+    pub fn priority(mut self, backend_priority: i32) -> Self {
+        self.backend_priority = backend_priority;
+        self
+    }
+
+    #[inline]
+    pub fn backend(mut self, backend: &'static str) -> Self {
+        self.backend = Some(backend);
+        self
+    }
+
+    #[inline]
+    pub fn mode(mut self, mode: &'static str) -> Self {
+        self.mode = Some(mode);
+        self
+    }
+
+    #[inline]
+    pub fn feature(mut self, feature: &'static str) -> Self {
+        self.features.push(feature);
+        self
+    }
+
+    #[inline]
+    pub fn features(mut self, features: impl IntoIterator<Item = &'static str>) -> Self {
+        self.features.extend(features);
+        self
+    }
+
+    #[inline]
+    pub fn system_tag(mut self, tag: &'static str) -> Self {
+        self.system_tags.push(tag);
+        self
+    }
+
+    #[inline]
+    pub fn system_tags(mut self, tags: impl IntoIterator<Item = &'static str>) -> Self {
+        self.system_tags.extend(tags);
+        self
+    }
+
+    #[inline]
+    pub fn metadata_json(mut self, key: &'static str, value: serde_json::Value) -> Self {
+        self.metadata.insert(key, value);
+        self
+    }
+
+    #[inline]
+    pub fn to_json_string(&self) -> String {
+        serde_json::to_string(self).expect("BackendRouteDescriptor must serialize to JSON")
+    }
+}

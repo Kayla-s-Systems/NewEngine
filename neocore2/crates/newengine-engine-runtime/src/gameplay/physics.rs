@@ -1,3 +1,4 @@
+use super::physics_queries::GameplayPhysicsQueryProviderRegistry;
 use newengine_core::physics::PhysicsApiRef;
 use newengine_ecs::World;
 use std::collections::BTreeMap;
@@ -50,6 +51,7 @@ pub(super) fn step_service_physics(
     world: &mut World,
     dt: f32,
     physics_api: Option<&PhysicsApiRef>,
+    gameplay_queries: &GameplayPhysicsQueryProviderRegistry,
 ) {
     let Some(api) = physics_api else {
         let should_log = ensure_sync_module(world)
@@ -96,6 +98,7 @@ pub(super) fn step_service_physics(
         fixed_tick,
         dt,
         &mut sync.static_mesh_revisions,
+        gameplay_queries,
     );
     world.insert_resource(sync);
 
@@ -116,7 +119,7 @@ pub(super) fn step_service_physics(
         }
     };
 
-    apply_frame_output(world, output);
+    apply_frame_output(world, output, gameplay_queries);
 }
 
 fn ensure_sync_module(world: &mut World) -> Option<&mut PhysicsSyncModule> {

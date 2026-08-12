@@ -24,6 +24,7 @@ pub(super) fn build_light_provider_request(
         settings: ShadowSettingsSnapshot {
             enabled: ctx.settings.enabled,
             method: shadow_method_label(ctx.settings.method).to_string(),
+            filter: shadow_filter_label(ctx.settings.filter).to_string(),
             resolution: ctx.settings.resolution,
             max_distance: ctx.settings.max_distance,
             bias: ctx.settings.bias,
@@ -31,6 +32,15 @@ pub(super) fn build_light_provider_request(
             contact_strength: ctx.settings.contact_strength,
             normal_bias: ctx.settings.normal_bias,
             cascade_count: ctx.settings.cascade_count,
+            pcss: newengine_render_api::ShadowPcssSettingsSnapshot {
+                light_angular_radius_degrees: ctx.settings.pcss.light_angular_radius_degrees,
+                blocker_search_radius_texels: ctx.settings.pcss.blocker_search_radius_texels,
+                max_filter_radius_texels: ctx.settings.pcss.max_filter_radius_texels,
+                blocker_samples: ctx.settings.pcss.blocker_samples,
+                filter_samples: ctx.settings.pcss.filter_samples,
+                min_filter_radius_texels: ctx.settings.pcss.min_filter_radius_texels,
+                stable_kernel_cell_texels: ctx.settings.pcss.stable_kernel_cell_texels,
+            },
         },
         backend: BackendShadowCapabilities {
             directional_depth_map: true,
@@ -83,11 +93,21 @@ pub(super) fn light_plan_from_contribution(
             contribution.params,
             contribution.extra,
             None,
-        ),
+        )
+        .with_pcss(contribution.pcss0, contribution.pcss1),
         super::super::super::shadows::ShadowLightKind::Point
         | super::super::super::shadows::ShadowLightKind::Spot => {
             LightShadowPlan::unsupported(kind, fallback, resolution)
         }
+    }
+}
+
+#[inline]
+const fn shadow_filter_label(filter: newengine_lighting::ShadowFilter) -> &'static str {
+    match filter {
+        newengine_lighting::ShadowFilter::Hard => "hard",
+        newengine_lighting::ShadowFilter::Pcf => "pcf",
+        newengine_lighting::ShadowFilter::Pcss => "pcss",
     }
 }
 

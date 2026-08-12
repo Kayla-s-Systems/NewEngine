@@ -4,12 +4,10 @@ use newengine_sim::{
     SimSchedule, SimStage, SimulationJobBatch, SimulationJobTelemetry,
 };
 
-use super::combat::step_player_combat;
-use super::fps_demo::step_fps_demo_gameplay;
-use super::inventory::step_world_items;
-use super::inventory_hud::step_inventory_commands;
+use super::content::GameplayContentProviderRegistry;
+use super::execution::{GameplayExecutionPhase, GameplayFrame, GameplaySystemProviderRegistry};
 use super::physics::step_service_physics;
-use super::player::apply_player_fixed_commands;
+use super::physics_queries::GameplayPhysicsQueryProviderRegistry;
 use newengine_core::physics::PhysicsApiRef;
 use newengine_core::{TaskLane, TaskPriority, TaskRequest, ThreadPoolHandle};
 
@@ -55,12 +53,18 @@ pub enum PhysicsIntegrationMode {
 
 pub fn run_schedule(
     schedule: &mut SimSchedule,
+    gameplay_content: &mut GameplayContentProviderRegistry,
+    gameplay_systems: &GameplaySystemProviderRegistry,
+    gameplay_physics_queries: &GameplayPhysicsQueryProviderRegistry,
     world: &mut World,
     dt: f32,
     physics_api: Option<&PhysicsApiRef>,
 ) {
     run_schedule_with_physics_mode(
         schedule,
+        gameplay_content,
+        gameplay_systems,
+        gameplay_physics_queries,
         world,
         dt,
         physics_api,
@@ -70,6 +74,9 @@ pub fn run_schedule(
 
 pub fn run_schedule_with_physics_mode(
     schedule: &mut SimSchedule,
+    gameplay_content: &mut GameplayContentProviderRegistry,
+    gameplay_systems: &GameplaySystemProviderRegistry,
+    gameplay_physics_queries: &GameplayPhysicsQueryProviderRegistry,
     world: &mut World,
     dt: f32,
     physics_api: Option<&PhysicsApiRef>,
@@ -77,6 +84,9 @@ pub fn run_schedule_with_physics_mode(
 ) {
     run_schedule_with_physics_mode_and_telemetry(
         schedule,
+        gameplay_content,
+        gameplay_systems,
+        gameplay_physics_queries,
         world,
         dt,
         physics_api,
@@ -87,6 +97,9 @@ pub fn run_schedule_with_physics_mode(
 
 pub fn run_schedule_with_physics_mode_and_telemetry(
     schedule: &mut SimSchedule,
+    gameplay_content: &mut GameplayContentProviderRegistry,
+    gameplay_systems: &GameplaySystemProviderRegistry,
+    gameplay_physics_queries: &GameplayPhysicsQueryProviderRegistry,
     world: &mut World,
     dt: f32,
     physics_api: Option<&PhysicsApiRef>,
@@ -95,6 +108,9 @@ pub fn run_schedule_with_physics_mode_and_telemetry(
 ) {
     run_schedule_with_physics_mode_and_telemetry_for_frame(
         schedule,
+        gameplay_content,
+        gameplay_systems,
+        gameplay_physics_queries,
         world,
         dt,
         0,
@@ -107,6 +123,9 @@ pub fn run_schedule_with_physics_mode_and_telemetry(
 
 pub fn run_schedule_with_physics_mode_and_telemetry_for_frame(
     schedule: &mut SimSchedule,
+    gameplay_content: &mut GameplayContentProviderRegistry,
+    gameplay_systems: &GameplaySystemProviderRegistry,
+    gameplay_physics_queries: &GameplayPhysicsQueryProviderRegistry,
     world: &mut World,
     dt: f32,
     frame_index: u64,
@@ -116,6 +135,7 @@ pub fn run_schedule_with_physics_mode_and_telemetry_for_frame(
     thread_pool: Option<&ThreadPoolHandle>,
 ) {
     let frame = SimFrame::new(dt.max(0.0001), frame_index);
+    let gameplay_frame = GameplayFrame::from(frame);
     let sim_executor = thread_pool.map(|jobs| EngineJobsSimReadExecutor { jobs });
     let sim_executor_ref = sim_executor
         .as_ref()
@@ -136,17 +156,22 @@ pub fn run_schedule_with_physics_mode_and_telemetry_for_frame(
         sim_executor_ref,
     );
     schedule.run_stage_with_telemetry(world, SimStage::ApplyIntents, frame, telemetry);
-    apply_player_fixed_commands(world, frame.dt, frame.fixed_tick);
-    step_inventory_commands(world, frame.fixed_tick);
-    step_world_items(world, frame.dt);
-    step_player_combat(world, frame.dt, frame.fixed_tick);
+
+    // Profile-owned authored content is installed explicitly before gameplay execution.
+    // Generic engine code never manufactures FPS items/loadouts as a fallback.
+    gameplay_content.install_pending(world);
+
+    // Product/gameplay behavior is profile-owned. The engine only owns the stable
+    // execution phase boundary and never names FPS, inventory, combat or missions.
+    gameplay_systems.run_phase(GameplayExecutionPhase::BeforePhysics, world, gameplay_frame);
+
     match physics_mode {
         PhysicsIntegrationMode::ServiceBackend => {
             // Service-backed physics owns integration for PhysicsBodyDesc entities.
             // Do not run the default in-process SimStage::Physics velocity integrator
             // here, otherwise controlled characters are moved once by ECS and again by
             // the backend provider.
-            step_service_physics(world, frame.dt, physics_api);
+            step_service_physics(world, frame.dt, physics_api, gameplay_physics_queries);
         }
         PhysicsIntegrationMode::EcsFallback => {
             // Declarative safe-profile fallback: keep gameplay controls responsive
@@ -161,6 +186,9 @@ pub fn run_schedule_with_physics_mode_and_telemetry_for_frame(
             );
         }
     }
+
+    gameplay_systems.run_phase(GameplayExecutionPhase::AfterPhysics, world, gameplay_frame);
+
     schedule.run_stage_with_telemetry_and_executor(
         world,
         SimStage::Derived,
@@ -169,7 +197,7 @@ pub fn run_schedule_with_physics_mode_and_telemetry_for_frame(
         sim_executor_ref,
     );
 
-    step_fps_demo_gameplay(world, frame.dt);
+    gameplay_systems.run_phase(GameplayExecutionPhase::AfterDerived, world, gameplay_frame);
 }
 
 #[inline]

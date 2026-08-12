@@ -29,9 +29,8 @@ pub use definitions::{
 };
 pub use loadouts::{InventoryLoadout, InventoryLoadoutCatalog, InventoryLoadoutEntry};
 pub use operations::{
-    apply_loadout, default_fps_loadout_id, default_medkit_item_id, default_rifle_ammo_id,
-    default_rifle_item_id, drain_inventory_events, ensure_default_item_catalog,
-    ensure_player_inventory, give_default_fps_loadout, give_item, inventory_quantity, remove_item,
+    apply_loadout, drain_inventory_events, ensure_inventory_runtime, ensure_player_inventory,
+    give_item, inventory_quantity, remove_item,
 };
 pub use storage::{
     EquippedWeaponBinding, InventoryEntry, InventoryEvent, InventoryEventBus, InventoryEventKind,
@@ -43,15 +42,10 @@ pub use inventory_equipment::{
     persist_equipped_weapon_state, select_equipment_slot, sync_equipped_weapon_runtime,
     unequip_slot, use_item,
 };
-pub(crate) use inventory_world::try_collect_item_pickup;
+pub use inventory_world::try_collect_item_pickup;
 pub use inventory_world::{
     drop_item, spawn_item_pickup, spawn_persistent_item_pickup, step_world_items,
 };
-
-pub const DEFAULT_RIFLE_ITEM_NAME: &str = "weapon.rifle.standard";
-pub const DEFAULT_RIFLE_AMMO_NAME: &str = "ammo.rifle.standard";
-pub const DEFAULT_MEDKIT_ITEM_NAME: &str = "consumable.medkit.standard";
-pub const DEFAULT_FPS_LOADOUT_NAME: &str = "loadout.fps.default";
 
 fn normalize_item_name(raw: &str) -> Option<String> {
     let mut normalized = String::with_capacity(raw.len());
@@ -91,6 +85,3 @@ fn sanitize_non_negative(value: f32) -> f32 {
         0.0
     }
 }
-
-#[cfg(test)]
-mod inventory_tests;

@@ -27,7 +27,7 @@ use newengine_core::render::{
     ViewPostFxFrameParams,
 };
 use newengine_ecs::{EntityId, World};
-use newengine_input_actions_api::{CameraViewRequest, GameplayActionFrame};
+use newengine_input_actions_api::{ActionCommandFrame, CameraViewRequest};
 use newengine_math::{Mat4, Vec2, Vec3};
 use newengine_plugin_api::Blob;
 use newengine_service_kit::{
@@ -40,7 +40,8 @@ use crate::engine_bounds::EngineBoundsSnap;
 use crate::gameplay::{
     apply_player_command_frame, capture_runtime_world_snapshot, emit_player_event, first_player,
     is_player_controller_enabled, restore_runtime_world_snapshot, sync_player_view_listeners,
-    FpsDemoRules, GameRunMode, PlayerEventKind, RuntimeWorldSnapshot,
+    CharacterBody, CharacterMotionTuning, GameRunMode, PlayerEventKind, PlayerStanceState,
+    RuntimeWorldSnapshot,
 };
 use crate::viewport_bridge::ViewportBridge;
 
@@ -219,7 +220,7 @@ impl CameraGatewayBridge {
     ) -> CameraGatewayFrame {
         let camera_dt = sanitize_camera_dt(dt);
         let mut state = self.state.lock();
-        let mut nav_input = camera_nav_input(input, play_mode);
+        let mut nav_input = camera_nav_input(input.clone(), play_mode);
         let active_view = state.apply_input_view_request(input.camera_view);
         sync_player_view_listeners(world, matches!(active_view, CameraViewMode::FirstPerson));
         let cam_id = world
@@ -287,11 +288,11 @@ impl CameraGatewayBridge {
             all: viewport.read_frame_all(),
         };
 
-        let inventory_open = crate::gameplay::inventory_hud_is_open(world);
+        let gameplay_capture = crate::gameplay::gameplay_input_capture(world);
         if suppress_game_nav
             || effective_play_mode.wants_direct_player_control()
             || nav_input.navigation_gated
-            || inventory_open
+            || gameplay_capture.block_camera_navigation
         {
             nav_input.gate_navigation();
         }
@@ -328,7 +329,7 @@ impl CameraGatewayBridge {
         let cursor = if effective_play_mode.wants_direct_player_control()
             && input.active
             && !input.camera_navigation_gated
-            && !inventory_open
+            && !gameplay_capture.release_cursor
         {
             CursorState::captured_locked()
         } else {
@@ -452,7 +453,7 @@ struct CameraPlaySessionSnapshot {
     transform: Option<Transform>,
 }
 
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct CameraGatewayInput {
     pub dx_px: f32,
     pub dy_px: f32,
@@ -468,7 +469,7 @@ pub struct CameraGatewayInput {
     pub move_mask: u64,
     pub speed_scalar: f32,
     pub camera_view: CameraViewRequest,
-    pub gameplay_actions: GameplayActionFrame,
+    pub gameplay_actions: ActionCommandFrame,
 }
 
 #[derive(Clone, Debug)]

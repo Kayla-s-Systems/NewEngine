@@ -27,6 +27,8 @@ pub struct EntityRecord {
     #[serde(default)]
     pub owner: Option<String>,
     #[serde(default)]
+    pub archetype: Option<String>,
+    #[serde(default)]
     pub debug_identity: String,
 }
 
@@ -38,6 +40,7 @@ impl EntityRecord {
             lifecycle: "alive".to_owned(),
             tags: Vec::new(),
             owner: None,
+            archetype: None,
             debug_identity: format!("entity:{}", handle.stable_id),
         }
     }
@@ -64,10 +67,45 @@ pub struct EntityExistsResponse {
     pub exists: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct EntitySpawnTransform {
+    #[serde(default)]
+    pub position: [f32; 3],
+    #[serde(default = "default_spawn_rotation")]
+    pub rotation_xyzw: [f32; 4],
+    #[serde(default = "default_spawn_scale")]
+    pub scale: [f32; 3],
+}
+
+impl Default for EntitySpawnTransform {
+    #[inline]
+    fn default() -> Self {
+        Self {
+            position: [0.0; 3],
+            rotation_xyzw: default_spawn_rotation(),
+            scale: default_spawn_scale(),
+        }
+    }
+}
+
+/// Provider-neutral entity construction request.
+///
+/// `archetype` selects a registered composition factory. `properties` are opaque to the entity
+/// gateway and interpreted by that factory; transform/tags/owner are common lifecycle metadata.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EntitySpawnRequest {
     #[serde(default = "default_spawn_count")]
     pub count: usize,
+    #[serde(default = "default_archetype_id")]
+    pub archetype: String,
+    #[serde(default)]
+    pub transform: Option<EntitySpawnTransform>,
+    #[serde(default)]
+    pub properties: serde_json::Value,
+    #[serde(default)]
+    pub tags: Vec<String>,
+    #[serde(default)]
+    pub owner: Option<String>,
 }
 
 impl Default for EntitySpawnRequest {
@@ -75,8 +113,28 @@ impl Default for EntitySpawnRequest {
     fn default() -> Self {
         Self {
             count: default_spawn_count(),
+            archetype: default_archetype_id(),
+            transform: None,
+            properties: serde_json::Value::Null,
+            tags: Vec::new(),
+            owner: None,
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EntityArchetypeDescriptor {
+    pub id: String,
+    #[serde(default)]
+    pub owner: String,
+    #[serde(default)]
+    pub description: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EntityArchetypeListResponse {
+    #[serde(default)]
+    pub archetypes: Vec<EntityArchetypeDescriptor>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -123,6 +181,21 @@ pub struct EntityInvokeRequest {
 }
 
 #[inline]
+fn default_archetype_id() -> String {
+    "entity.empty".to_owned()
+}
+
+#[inline]
+fn default_spawn_rotation() -> [f32; 4] {
+    [0.0, 0.0, 0.0, 1.0]
+}
+
+#[inline]
+fn default_spawn_scale() -> [f32; 3] {
+    [1.0, 1.0, 1.0]
+}
+
+#[inline]
 fn default_entity_limit() -> usize {
     4096
 }
@@ -146,6 +219,7 @@ mod tests {
     fn spawn_request_decodes_with_default_count() {
         let request: EntitySpawnRequest = serde_json::from_str("{}").expect("defaults decode");
         assert_eq!(request.count, 1);
+        assert_eq!(request.archetype, "entity.empty");
     }
 
     #[test]

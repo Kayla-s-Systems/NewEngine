@@ -2,10 +2,10 @@
 
 mod accessors;
 mod apply_commands;
+mod bootstrap_provider;
 mod commands;
 mod commands_api;
 mod definitions_runtime;
-mod game_ready;
 mod helpers;
 mod imported_assets;
 mod material_application;
@@ -13,11 +13,13 @@ mod queue;
 mod scene_object_validation;
 mod view_gateway;
 
+pub use bootstrap_provider::{SceneBootstrapContext, SceneBootstrapProvider, SceneBootstrapResult};
 pub use commands::SceneCommand;
 pub(crate) use scene_object_validation::{
     scene_object_invariant_snapshot_json, validate_scene_object_invariants,
 };
 
+pub(crate) use definitions_runtime::apply_definition_instantiation;
 pub use definitions_runtime::{
     DefinitionInstance, DefinitionInstantiateTransform, DefinitionRuntimeTrace,
     DefinitionRuntimeTraceComponent, RuntimeCommand,
@@ -54,16 +56,13 @@ use crate::gameplay::{
 };
 use crate::scene_bootstrap::bootstrap_runtime_scene;
 
-use game_ready::bootstrap_fps_game_ready_scene;
-pub(crate) use game_ready::{
-    tick_game_ready_sky_cycle, tick_game_ready_static_world_prefabs,
-    tick_game_ready_streaming_terrain, GameReadyStaticWorldResidency, PreparedTerrainPrimitiveMesh,
-    SkyClearColorRuntime, SkyDomeRuntime, SkyPostFxRuntime, SpatialCloudShadowRuntime,
-    TerrainSurfaceLayers,
+pub(crate) use helpers::{
+    apply_exact_material, apply_primitive_instance, ensure_primitive_base, ensure_root,
+    primitive_bounds,
 };
 use helpers::{
-    apply_primitive_instance, effective_material_base, ensure_primitive_base, ensure_root,
-    place_spawn_position, primitive_bounds, reset_game_runtime_state, restore_non_collision_bounds,
+    effective_material_base, place_spawn_position, reset_game_runtime_state,
+    restore_non_collision_bounds,
 };
 use imported_assets::{
     builtin_asset_assemblers, imported_asset_collision, imported_asset_primitive_id,
@@ -84,6 +83,7 @@ pub struct SceneBridge {
     authority: Arc<RuntimeWorldAuthorityBridge>,
     play_mode: Arc<Mutex<GameRunMode>>,
     in_game_editor_enabled: Arc<Mutex<bool>>,
+    scene_bootstrap_provider: Arc<RwLock<Option<Arc<dyn SceneBootstrapProvider>>>>,
 }
 impl SceneBridge {
     #[inline]
@@ -110,6 +110,7 @@ impl SceneBridge {
             authority: Arc::new(RuntimeWorldAuthorityBridge::new()),
             play_mode: Arc::new(Mutex::new(initial_mode)),
             in_game_editor_enabled: Arc::new(Mutex::new(false)),
+            scene_bootstrap_provider: Arc::new(RwLock::new(None)),
         }
     }
 
@@ -133,26 +134,64 @@ impl SceneBridge {
         scene_object_invariant_snapshot_json(scene.world())
     }
 
+    pub fn set_scene_bootstrap_provider(&self, provider: Arc<dyn SceneBootstrapProvider>) {
+        let descriptor = provider.descriptor();
+        if let Err(error) = crate::provider_contract::validate_provider_contract(
+            descriptor,
+            crate::provider_contract::I_SCENE_BOOTSTRAP_PROVIDER_V1,
+            crate::provider_contract::PROVIDER_CONTRACT_V1,
+        ) {
+            newengine_ulog_api::ulog::warn!("scene bootstrap provider rejected: {}", error);
+            return;
+        }
+        *self.scene_bootstrap_provider.write() = Some(provider);
+    }
+
+    pub fn clear_scene_bootstrap_provider(&self) {
+        *self.scene_bootstrap_provider.write() = None;
+    }
+
     pub fn bootstrap_profile_scene_now(&self) -> Option<EntityId> {
+        let provider = self.scene_bootstrap_provider.read().clone();
+        let Some(provider) = provider else {
+            newengine_ulog_api::ulog::error!(
+                "scene bootstrap: no SceneBootstrapProvider registered; profile scene assembly skipped"
+            );
+            return None;
+        };
+        let provider_id = provider.id();
         let (selected, selected_authority) = {
             let mut scene = self.scene.write();
             let mut prims = self.primitives.write();
             let mats = self.materials.read();
-            let selected = bootstrap_fps_game_ready_scene(&mut scene, &mut prims, &mats);
-            let selected_authority = self.authority.declare_native_scene_cache(
-                scene.world_mut(),
-                "game-ready-scene-bootstrap",
-                selected,
-            );
+            let mut ctx = SceneBootstrapContext {
+                scene: &mut scene,
+                primitives: &mut prims,
+                materials: &mats,
+            };
+            let result = match provider.bootstrap(&mut ctx) {
+                Ok(result) => result,
+                Err(error) => {
+                    newengine_ulog_api::ulog::error!(
+                        "scene bootstrap provider failed provider='{}' err='{}'",
+                        provider_id,
+                        error
+                    );
+                    return None;
+                }
+            };
+            let selected = result.primary_entity;
+            let selected_authority =
+                self.authority
+                    .declare_native_scene_cache(scene.world_mut(), provider_id, selected);
             (selected, selected_authority)
         };
 
         *self.selection.lock() = selected;
         *self.selection_authority.lock() = selected_authority;
-        self.authority
-            .log_bootstrap_boundary("game-ready-scene-bootstrap");
-        // Do not expose Play here. CPU scene bootstrap is not equivalent to
-        // playable-world readiness; renderer-side launch gate owns promotion.
+        self.authority.log_bootstrap_boundary(provider_id);
+        // CPU scene assembly is not equivalent to playable-world readiness.
+        // Generic activation state/policy owns promotion to public Play.
         *self.play_mode.lock() = GameRunMode::Staging;
         selected
     }

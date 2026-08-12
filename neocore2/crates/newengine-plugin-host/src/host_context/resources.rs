@@ -1,5 +1,5 @@
-use crate::path_fmt::canonicalize_if_exists;
 use newengine_plugin_api::{PluginDescriptor, PluginInfo};
+use newengine_ulog_api::path_format::canonicalize_if_exists;
 use std::path::PathBuf;
 
 use super::state::{
@@ -87,7 +87,7 @@ pub fn register_external_runtime_plugin(
         info.version,
         descriptor.kind,
         origin.as_str(),
-        crate::path_fmt::display_clean(&normalized_path)
+        newengine_ulog_api::path_format::display_clean(&normalized_path)
     );
 
     Ok(())

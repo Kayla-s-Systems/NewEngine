@@ -16,10 +16,11 @@ class TempAllocator;
 /// Class that constructs a StaticCompoundShape. Note that if you only want a compound of 1 shape, use a RotatedTranslatedShape instead.
 class JPH_EXPORT StaticCompoundShapeSettings final : public CompoundShapeSettings
 {
-public:
 	JPH_DECLARE_SERIALIZABLE_VIRTUAL(JPH_EXPORT, StaticCompoundShapeSettings)
 
-	// See: ShapeSettings
+public:
+	/// Create a shape according to the settings specified by this object.
+	/// Note when there is only 1 sub shape, this will create a RotatedTranslatedShape, or when the sub shape has no rotation/translation, it will return the child shape itself.
 	virtual ShapeResult				Create() const override;
 
 	/// Specialization of Create() function that allows specifying a temp allocator to avoid temporary memory allocations on the heap

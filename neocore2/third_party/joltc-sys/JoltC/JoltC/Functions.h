@@ -139,6 +139,7 @@ ENSURE_SIZE_ALIGN(JPC_IndexedTriangleNoMaterial, JPH::IndexedTriangleNoMaterial)
 typedef struct JPC_IndexedTriangle {
 	uint32_t idx[3];
 	uint32_t materialIndex;
+	uint32_t userData;
 } JPC_IndexedTriangle;
 
 ENSURE_SIZE_ALIGN(JPC_IndexedTriangle, JPH::IndexedTriangle)
@@ -343,7 +344,11 @@ typedef struct JPC_BodyManager_DrawSettings {
 	bool mDrawSoftBodyVolumeConstraints;
 	bool mDrawSoftBodySkinConstraints;
 	bool mDrawSoftBodyLRAConstraints;
+	bool mDrawSoftBodyRods;
+	bool mDrawSoftBodyRodStates;
+	bool mDrawSoftBodyRodBendTwistConstraints;
 	bool mDrawSoftBodyPredictedBounds;
+	JPC_SoftBodyConstraintColor mDrawSoftBodyConstraintColor;
 } JPC_BodyManager_DrawSettings;
 
 ENSURE_SIZE_ALIGN(JPC_BodyManager_DrawSettings, JPH::BodyManager::DrawSettings)

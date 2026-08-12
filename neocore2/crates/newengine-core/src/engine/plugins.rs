@@ -9,6 +9,19 @@ use super::Engine;
 use crate::error::{EngineError, EngineResult};
 use newengine_plugin_host::PluginsSnapshot;
 
+#[inline]
+fn bootstrap_preload_deferred() -> bool {
+    std::env::var("NEWENGINE_BOOTSTRAP_PLUGIN_PRELOAD")
+        .ok()
+        .map(|v| {
+            matches!(
+                v.trim().to_ascii_lowercase().as_str(),
+                "0" | "false" | "off" | "defer" | "deferred" | "safe"
+            )
+        })
+        .unwrap_or(false)
+}
+
 impl<E: Send + 'static> Engine<E> {
     #[inline]
     pub(crate) fn expose_plugins_snapshot(&mut self) {

@@ -218,7 +218,10 @@ impl RuntimeWorldAuthorityBridge {
             return None;
         }
 
-        let spawn = match self.client.spawn_entities(EntitySpawnRequest { count }) {
+        let spawn = match self.client.spawn_entities(EntitySpawnRequest {
+            count,
+            ..EntitySpawnRequest::default()
+        }) {
             Ok(v) => v,
             Err(e) => {
                 newengine_ulog_api::ulog::warn!(

@@ -15,9 +15,9 @@ use newengine_plugin_api::{
 use crate::host_context::{
     register_plugin_descriptor, unregister_by_owner, with_current_plugin_id,
 };
-use crate::path_fmt::{canonicalize_if_exists, display_clean};
 use crate::plugin_config_service::get_plugin_overrides_with_env;
 use crate::root_observers::{record_loaded_plugin_root, LoadedPluginRootSnapshot};
+use newengine_ulog_api::path_format::{canonicalize_if_exists, display_clean};
 
 use super::adapter::ModuleAdapterAny;
 use super::config_patch::config_patch_from_json_merge_patch;

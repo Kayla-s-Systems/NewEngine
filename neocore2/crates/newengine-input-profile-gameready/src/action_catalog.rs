@@ -42,6 +42,8 @@ pub fn gameplay_default_actions() -> Vec<InputActionDefinition> {
         InputActionDefinition::new(action::PLAYER_JUMP).with_label("Jump"),
         InputActionDefinition::new(action::PLAYER_CROUCH).with_label("Crouch"),
         InputActionDefinition::new(action::PLAYER_FIRE_PRIMARY).with_label("Primary fire"),
+        InputActionDefinition::new(action::PLAYER_LAUNCH_PROJECTILE)
+            .with_label("Launch physics sphere"),
         InputActionDefinition::new(action::PLAYER_AIM).with_label("Aim"),
         InputActionDefinition::new(action::PLAYER_RELOAD).with_label("Reload"),
         InputActionDefinition::new(action::PLAYER_INTERACT).with_label("Interact"),

@@ -55,7 +55,7 @@ use newengine_ui_navigation_api::{
 
 use serde::{Deserialize, Serialize};
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 
 use std::io::Read;
 

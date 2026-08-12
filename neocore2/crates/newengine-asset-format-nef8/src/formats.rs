@@ -200,12 +200,12 @@ pub mod yld {
 
 pub mod ymap {
     pub const EXTENSION: &str = "ymap";
-    pub const ASSET_KIND: &str = "map_data";
+    pub const ASSET_KIND: &str = "discrete_map_dictionary";
     pub const CONTENT_KIND: u32 = newengine_assets_api::LIST_FILE_CONTENT_KIND_YMAP;
-    pub const PURPOSE: &str = "Map Data / Placement";
+    pub const PURPOSE: &str = "Discrete Map Index / Cell Placements";
     pub const SEMANTIC_GATEWAY: &str = "engine.assets.maps";
     pub const HANDLER_SERVICE: &str = "asset.codec.listfile.ymap";
-    pub const SELECTOR_SYNTAX: &str = "file.ymap@entry";
+    pub const SELECTOR_SYNTAX: &str = "file.ymap@map | file.ymap@cell/x/z";
     pub const CONSUMER_DOMAINS: &[&str] = &[
         "engine.assets.maps",
         "engine.scene",

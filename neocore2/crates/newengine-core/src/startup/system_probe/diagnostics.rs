@@ -1,6 +1,6 @@
 use super::{GpuAdapterInfo, SystemProbe};
 
-use crate::log_fmt::emit_boxed_kv;
+use newengine_ulog_api::formatting::emit_boxed_kv;
 
 impl SystemProbe {
     pub fn emit_table(&self, stage: &str) {

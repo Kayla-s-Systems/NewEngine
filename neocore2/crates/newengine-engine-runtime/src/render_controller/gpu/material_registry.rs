@@ -67,7 +67,7 @@ impl MaterialRenderDevice for CoreRenderMaterialDevice<'_> {
 
 /// GPU material registry owned by the engine runtime side of the renderer.
 ///
-/// Reusable runtime orchestration no longer owns GameReady/FPS shader paths or
+/// Reusable runtime orchestration no longer owns product-specific shader paths or
 /// material presets. It only stores host-side material-domain providers that are
 /// registered by the game/profile layer, then asks the selected provider to build
 /// a backend-neutral pipeline bundle through `RenderApi`.

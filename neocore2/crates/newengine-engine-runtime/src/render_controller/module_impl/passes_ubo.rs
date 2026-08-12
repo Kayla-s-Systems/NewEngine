@@ -96,11 +96,14 @@ pub(super) fn write_lit_ubo_ex(
     }
 
     for (base, values) in [
-        (752usize, lights.cloud_shadow_map0),
-        (768usize, lights.cloud_shadow_map1),
-        (784usize, lights.cloud_shadow_map2),
-        (800usize, lights.cloud_shadow_map3),
-        (816usize, lights.cloud_shadow_map4),
+        (752usize, lights.shadow_pcss0),
+        (768usize, lights.shadow_pcss1),
+        (784usize, lights.cloud_shadow_map0),
+        (800usize, lights.cloud_shadow_map1),
+        (816usize, lights.cloud_shadow_map2),
+        (832usize, lights.cloud_shadow_map3),
+        (848usize, lights.cloud_shadow_map4),
+        (864usize, lights.shadow_view_forward),
     ] {
         for (i, value) in values.iter().enumerate() {
             let off = base + i * 4;

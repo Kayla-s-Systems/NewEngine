@@ -5,21 +5,21 @@ pub const PLAYER_MOVE_RIGHT: &str = "player.move.right";
 pub const PLAYER_MOVE_UP: &str = "player.move.up";
 pub const PLAYER_MOVE_DOWN: &str = "player.move.down";
 pub const PLAYER_SPRINT: &str = "player.sprint";
-pub const PLAYER_JUMP: &str = newengine_input_actions_api::gameplay_action::PLAYER_JUMP;
-pub const PLAYER_CROUCH: &str = newengine_input_actions_api::gameplay_action::PLAYER_CROUCH;
-pub const PLAYER_FIRE_PRIMARY: &str =
-    newengine_input_actions_api::gameplay_action::PLAYER_FIRE_PRIMARY;
-pub const PLAYER_AIM: &str = newengine_input_actions_api::gameplay_action::PLAYER_AIM;
-pub const PLAYER_RELOAD: &str = newengine_input_actions_api::gameplay_action::PLAYER_RELOAD;
-pub const PLAYER_INTERACT: &str = newengine_input_actions_api::gameplay_action::PLAYER_INTERACT;
-pub const INVENTORY_TOGGLE: &str = newengine_input_actions_api::gameplay_action::INVENTORY_TOGGLE;
-pub const HUD_VISIBILITY_TOGGLE: &str =
-    newengine_input_actions_api::gameplay_action::HUD_VISIBILITY_TOGGLE;
-pub const EQUIP_PRIMARY: &str = newengine_input_actions_api::gameplay_action::EQUIP_PRIMARY;
-pub const EQUIP_SECONDARY: &str = newengine_input_actions_api::gameplay_action::EQUIP_SECONDARY;
-pub const EQUIP_SIDEARM: &str = newengine_input_actions_api::gameplay_action::EQUIP_SIDEARM;
-pub const EQUIP_MELEE: &str = newengine_input_actions_api::gameplay_action::EQUIP_MELEE;
-pub const EQUIP_THROWABLE: &str = newengine_input_actions_api::gameplay_action::EQUIP_THROWABLE;
+pub const PLAYER_JUMP: &str = newengine_gameplay_fps_api::action::PLAYER_JUMP;
+pub const PLAYER_CROUCH: &str = newengine_gameplay_fps_api::action::PLAYER_CROUCH;
+pub const PLAYER_FIRE_PRIMARY: &str = newengine_gameplay_fps_api::action::PLAYER_FIRE_PRIMARY;
+pub const PLAYER_LAUNCH_PROJECTILE: &str =
+    newengine_gameplay_fps_api::action::PLAYER_LAUNCH_PROJECTILE;
+pub const PLAYER_AIM: &str = newengine_gameplay_fps_api::action::PLAYER_AIM;
+pub const PLAYER_RELOAD: &str = newengine_gameplay_fps_api::action::PLAYER_RELOAD;
+pub const PLAYER_INTERACT: &str = newengine_gameplay_fps_api::action::PLAYER_INTERACT;
+pub const INVENTORY_TOGGLE: &str = newengine_gameplay_fps_api::action::INVENTORY_TOGGLE;
+pub const HUD_VISIBILITY_TOGGLE: &str = newengine_gameplay_fps_api::action::HUD_VISIBILITY_TOGGLE;
+pub const EQUIP_PRIMARY: &str = newengine_gameplay_fps_api::action::EQUIP_PRIMARY;
+pub const EQUIP_SECONDARY: &str = newengine_gameplay_fps_api::action::EQUIP_SECONDARY;
+pub const EQUIP_SIDEARM: &str = newengine_gameplay_fps_api::action::EQUIP_SIDEARM;
+pub const EQUIP_MELEE: &str = newengine_gameplay_fps_api::action::EQUIP_MELEE;
+pub const EQUIP_THROWABLE: &str = newengine_gameplay_fps_api::action::EQUIP_THROWABLE;
 
 pub const CAMERA_VIEW_NEXT: &str = "camera.view.next";
 pub const CAMERA_VIEW_PREVIOUS: &str = "camera.view.previous";

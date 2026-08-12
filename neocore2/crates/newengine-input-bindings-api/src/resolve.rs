@@ -127,8 +127,14 @@ pub(crate) fn dispatch_action_definition(
     out: &mut InputActionFrame,
     definition: &InputActionDefinition,
     listeners: &[InputActionListenerRegistration],
+    phase: newengine_input_actions_api::InputActionPhase,
 ) {
     out.actions.push(definition.id.clone());
+    out.signals
+        .push(newengine_input_actions_api::InputActionSignal {
+            action: definition.id.clone(),
+            phase,
+        });
     out.events.push(dispatch_event_for(definition, listeners));
     for effect in &definition.effects {
         apply_action_effect(out, effect);

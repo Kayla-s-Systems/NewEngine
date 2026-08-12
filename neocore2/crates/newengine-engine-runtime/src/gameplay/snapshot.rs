@@ -13,8 +13,8 @@ use super::inventory::{
     PlayerInventory, WorldItemPresentation, WorldItemRuntime,
 };
 use super::{
-    DisplayVisibility, Health, HitscanWeaponTuning, Interactable, InteractionEventBus,
-    InventoryHudState, PhysicsBodyDesc, PhysicsSurface, PlayerCommandFrame, PlayerEventBus,
+    DisplayVisibility, GameplayModalState, Health, HitscanWeaponTuning, Interactable,
+    InteractionEventBus, PhysicsBodyDesc, PhysicsSurface, PlayerCommandFrame, PlayerEventBus,
     PlayerGroundState, PlayerInteractionTuning, PlayerLocomotionState, PlayerStanceState,
     PlayerWeaponState, WeaponEventBus,
 };
@@ -59,7 +59,7 @@ pub struct RuntimeWorldSnapshot {
     pub weapon_events: Option<WeaponEventBus>,
     pub interaction_events: Option<InteractionEventBus>,
     pub inventory_events: Option<InventoryEventBus>,
-    pub inventory_hud: Option<InventoryHudState>,
+    pub gameplay_modal: Option<GameplayModalState>,
     pub item_catalog: Option<ItemCatalog>,
     pub loadout_catalog: Option<InventoryLoadoutCatalog>,
 }
@@ -81,7 +81,7 @@ pub fn capture_runtime_world_snapshot(world: &World) -> RuntimeWorldSnapshot {
             physics_body: world.get::<PhysicsBodyDesc>(entity).copied(),
             bounds: world.get::<Bounds>(entity).copied(),
             display_visibility: world.get::<DisplayVisibility>(entity).copied(),
-            player_commands: world.get::<PlayerCommandFrame>(entity).copied(),
+            player_commands: world.get::<PlayerCommandFrame>(entity).cloned(),
             player_ground: world.get::<PlayerGroundState>(entity).copied(),
             player_locomotion: world.get::<PlayerLocomotionState>(entity).copied(),
             player_stance: world.get::<PlayerStanceState>(entity).copied(),
@@ -107,7 +107,8 @@ pub fn capture_runtime_world_snapshot(world: &World) -> RuntimeWorldSnapshot {
         weapon_events: world.resource::<WeaponEventBus>().cloned(),
         interaction_events: world.resource::<InteractionEventBus>().cloned(),
         inventory_events: world.resource::<InventoryEventBus>().cloned(),
-        inventory_hud: world.resource::<InventoryHudState>().cloned(),
+
+        gameplay_modal: world.resource::<GameplayModalState>().copied(),
         item_catalog: world.resource::<ItemCatalog>().cloned(),
         loadout_catalog: world.resource::<InventoryLoadoutCatalog>().cloned(),
     }
@@ -156,7 +157,7 @@ pub fn restore_runtime_world_snapshot(world: &mut World, snapshot: RuntimeWorldS
         weapon_events,
         interaction_events,
         inventory_events,
-        inventory_hud,
+        gameplay_modal,
         item_catalog,
         loadout_catalog,
     } = snapshot;
@@ -185,7 +186,7 @@ pub fn restore_runtime_world_snapshot(world: &mut World, snapshot: RuntimeWorldS
         restore_component_opt(world, entry.entity, entry.physics_body);
         restore_component_opt(world, entry.entity, entry.bounds);
         restore_component_opt(world, entry.entity, entry.display_visibility);
-        restore_component_opt(world, entry.entity, entry.player_commands);
+        restore_component_clone(world, entry.entity, entry.player_commands);
         restore_component_opt(world, entry.entity, entry.player_ground);
         restore_component_opt(world, entry.entity, entry.player_locomotion);
         restore_component_opt(world, entry.entity, entry.player_stance);
@@ -208,7 +209,7 @@ pub fn restore_runtime_world_snapshot(world: &mut World, snapshot: RuntimeWorldS
     restore_resource_clone(world, weapon_events);
     restore_resource_clone(world, interaction_events);
     restore_resource_clone(world, inventory_events);
-    restore_resource_clone(world, inventory_hud);
+    restore_resource_clone(world, gameplay_modal);
     restore_resource_clone(world, item_catalog);
     restore_resource_clone(world, loadout_catalog);
 }
@@ -217,34 +218,99 @@ pub fn restore_runtime_world_snapshot(world: &mut World, snapshot: RuntimeWorldS
 mod tests {
     use super::*;
     use crate::gameplay::{
-        apply_player_stance_geometry, default_medkit_item_id, default_rifle_ammo_id,
-        inventory_quantity, remove_item, spawn_default_player, spawn_persistent_item_pickup,
-        FpsPlayerTuning, PlayerStanceKind,
+        apply_loadout, apply_player_stance_geometry, inventory_quantity, remove_item,
+        spawn_default_player, spawn_persistent_item_pickup, try_collect_item_pickup, CharacterBody,
+        EquipmentSlot, InventoryLoadout, InventoryLoadoutCatalog, InventoryLoadoutEntry,
+        ItemCatalog, ItemDefinition, ItemId, ItemKind, ItemUseEffect, PlayerStanceKind,
     };
     use newengine_math::Vec3;
+
+    const TEST_AMMO_NAME: &str = "test.snapshot.ammo";
+    const TEST_WEAPON_NAME: &str = "test.snapshot.weapon";
+    const TEST_MEDKIT_NAME: &str = "test.snapshot.medkit";
+    const TEST_LOADOUT_NAME: &str = "test.snapshot.loadout";
+
+    fn item_id(name: &str) -> ItemId {
+        ItemId::from_name(name).expect("valid test item")
+    }
+
+    fn install_test_content(world: &mut World) {
+        let ammo =
+            ItemDefinition::stackable(TEST_AMMO_NAME, "Snapshot Ammo", ItemKind::Ammo, 120, 0.01)
+                .expect("ammo");
+        let weapon = ItemDefinition::weapon(
+            TEST_WEAPON_NAME,
+            "Snapshot Weapon",
+            EquipmentSlot::Primary,
+            HitscanWeaponTuning::default(),
+            ammo.id,
+            1.0,
+        )
+        .expect("weapon");
+        let medkit = ItemDefinition::consumable(
+            TEST_MEDKIT_NAME,
+            "Snapshot Medkit",
+            4,
+            0.25,
+            ItemUseEffect::Heal { amount: 25.0 },
+        )
+        .expect("medkit");
+
+        let mut catalog = ItemCatalog::default();
+        catalog.register(ammo).expect("register ammo");
+        catalog.register(weapon).expect("register weapon");
+        catalog.register(medkit).expect("register medkit");
+        world.insert_resource(catalog);
+
+        let mut loadout = InventoryLoadout::new(TEST_LOADOUT_NAME).expect("loadout");
+        loadout.entries = vec![
+            InventoryLoadoutEntry {
+                item: item_id(TEST_WEAPON_NAME),
+                quantity: 1,
+                equip: true,
+            },
+            InventoryLoadoutEntry {
+                item: item_id(TEST_AMMO_NAME),
+                quantity: 30,
+                equip: false,
+            },
+            InventoryLoadoutEntry {
+                item: item_id(TEST_MEDKIT_NAME),
+                quantity: 2,
+                equip: false,
+            },
+        ];
+        let mut loadouts = InventoryLoadoutCatalog::default();
+        loadouts.register(loadout).expect("register loadout");
+        world.insert_resource(loadouts);
+    }
 
     #[test]
     fn runtime_snapshot_restores_stance_bounds_weapon_and_health_state() {
         let mut world = World::new();
-        let tuning = FpsPlayerTuning::default().sanitized();
+        install_test_content(&mut world);
+        let body = CharacterBody::default().sanitized();
         let player = spawn_default_player(
             &mut world,
             None,
             "snapshot-player",
-            Vec3::new(0.0, tuning.body_half_height + tuning.body_radius, 0.0),
+            Vec3::new(0.0, body.standing_half_height + body.radius, 0.0),
         );
+        apply_loadout(&mut world, player, item_id(TEST_LOADOUT_NAME)).expect("apply loadout");
+
         let source_pickup = spawn_persistent_item_pickup(
             &mut world,
             None,
-            default_rifle_ammo_id(),
+            item_id(TEST_AMMO_NAME),
             4,
             Vec3::new(3.0, 1.0, 0.0),
             "snapshot.pickup.ammo",
             5.0,
         )
         .expect("persistent pickup");
-        let medkit = default_medkit_item_id();
+        let medkit = item_id(TEST_MEDKIT_NAME);
         let medkits_before = inventory_quantity(&world, player, medkit);
+        world.insert_resource(GameplayModalState::default());
         let before = capture_runtime_world_snapshot(&world);
         let standing_y = world
             .get::<Transform>(player)
@@ -252,7 +318,7 @@ mod tests {
             .position
             .y;
 
-        apply_player_stance_geometry(&mut world, player, PlayerStanceKind::Crouched, tuning, 5);
+        apply_player_stance_geometry(&mut world, player, PlayerStanceKind::Crouched, 5);
         if let Some(weapon) = world.get_mut::<PlayerWeaponState>(player) {
             weapon.ammo_in_magazine = 1;
             weapon.reserve_ammo = 0;
@@ -260,16 +326,15 @@ mod tests {
         if let Some(health) = world.get_mut::<Health>(player) {
             health.current = 7.0;
         }
-        if let Some(hud) = world.resource_mut::<InventoryHudState>() {
-            hud.open = true;
-        }
+        world.insert_resource(GameplayModalState {
+            active: true,
+            capture: crate::gameplay::GameplayInputCapture::modal(),
+            provider_count: 1,
+            revision: 1,
+        });
         remove_item(&mut world, player, medkit, medkits_before).expect("remove medkits");
         assert_eq!(inventory_quantity(&world, player, medkit), 0);
-        assert!(crate::gameplay::inventory::try_collect_item_pickup(
-            &mut world,
-            player,
-            source_pickup,
-        ));
+        assert!(try_collect_item_pickup(&mut world, player, source_pickup));
         assert_eq!(
             world
                 .get::<DisplayVisibility>(source_pickup)
@@ -309,9 +374,9 @@ mod tests {
         assert!(world.get::<EquippedWeaponBinding>(player).is_some());
         assert!(
             !world
-                .resource::<InventoryHudState>()
-                .expect("inventory HUD")
-                .open
+                .resource::<GameplayModalState>()
+                .expect("gameplay modal state")
+                .active
         );
         assert!(world.exists(source_pickup));
         assert_eq!(
@@ -333,8 +398,7 @@ mod tests {
         assert!(world.get::<WorldItemRuntime>(source_pickup).is_some());
         let bounds = world.get::<Bounds>(player).expect("bounds");
         assert!(
-            (bounds.local_aabb.half_extents().y - (tuning.body_half_height + tuning.body_radius))
-                .abs()
+            (bounds.local_aabb.half_extents().y - (body.standing_half_height + body.radius)).abs()
                 < 1.0e-6
         );
     }

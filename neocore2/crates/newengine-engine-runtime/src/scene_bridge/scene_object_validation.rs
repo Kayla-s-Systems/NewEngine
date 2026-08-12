@@ -1,4 +1,5 @@
 use super::*;
+use crate::gameplay::PreparedRenderMesh;
 use newengine_bounds::Bounds;
 use newengine_ui_api::UiStatePatch;
 
@@ -54,8 +55,8 @@ pub(crate) fn validate_scene_object_invariants(
             add_target(&mut targets, entity, "Primitive");
         }
     }
-    for (entity, _) in world.query::<PreparedTerrainPrimitiveMesh>() {
-        add_target(&mut targets, entity, "PreparedTerrainPrimitiveMesh");
+    for (entity, _) in world.query::<PreparedRenderMesh>() {
+        add_target(&mut targets, entity, "PreparedRenderMesh");
     }
     for (entity, _) in world.query::<crate::scene_bridge::definitions_runtime::DefinitionInstance>()
     {
@@ -157,15 +158,14 @@ fn scene_object_invariants_ui_enabled() -> bool {
     const EDITOR_SHELL_ENV: &str =
         "NEWENGINE_PLUGIN_ENGINE_RUNTIME__ui__screen_profile__publish_editor_shell";
 
-    if let Ok(value) = std::env::var(OVERRIDE_ENV) {
+    if let Some(value) = crate::env_config::var(OVERRIDE_ENV) {
         return matches!(
             value.trim().to_ascii_lowercase().as_str(),
             "1" | "true" | "yes" | "on"
         );
     }
 
-    let editor_shell_enabled = std::env::var(EDITOR_SHELL_ENV)
-        .ok()
+    let editor_shell_enabled = crate::env_config::var(EDITOR_SHELL_ENV)
         .map(|value| {
             !matches!(
                 value.trim().to_ascii_lowercase().as_str(),
@@ -173,14 +173,12 @@ fn scene_object_invariants_ui_enabled() -> bool {
             )
         })
         .unwrap_or(true);
-    let runtime_target = std::env::var("NEWENGINE_PLUGIN_TARGET")
-        .ok()
-        .is_some_and(|value| {
-            matches!(
-                value.trim().to_ascii_lowercase().as_str(),
-                "runtime" | "game" | "standalone"
-            )
-        });
+    let runtime_target = crate::env_config::var("NEWENGINE_PLUGIN_TARGET").is_some_and(|value| {
+        matches!(
+            value.trim().to_ascii_lowercase().as_str(),
+            "runtime" | "game" | "standalone"
+        )
+    });
 
     editor_shell_enabled && !runtime_target
 }

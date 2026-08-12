@@ -94,9 +94,16 @@ pub(super) fn camera_runtime_service_config(
     active_view: CameraViewMode,
 ) -> CameraRuntimeServiceConfig {
     let mut config = CameraRuntimeServiceConfig::default();
-    if let Some(rules) = world.resource::<FpsDemoRules>() {
-        config.first_person_eye_height = rules.player.camera_eye_height;
-        config.sprint_multiplier = rules.player.sprint_multiplier;
+    if let Some(player) = first_player(world) {
+        if let Some(body) = world.get::<CharacterBody>(player) {
+            config.first_person_eye_height = world
+                .get::<PlayerStanceState>(player)
+                .map(|state| state.current_eye_height)
+                .unwrap_or(body.standing_eye_height);
+        }
+        if let Some(motion) = world.get::<CharacterMotionTuning>(player) {
+            config.sprint_multiplier = motion.sanitized().sprint_multiplier;
+        }
     }
     config.runner = match active_view {
         CameraViewMode::FirstPerson => {
@@ -124,26 +131,17 @@ pub(super) fn apply_runtime_input(
     };
     let controller_active = effective_play_mode.wants_direct_player_control()
         && is_player_controller_enabled(world, player);
-    let inventory_open = crate::gameplay::inventory_hud_is_open(world);
-    let direct_control = controller_active && !input.gameplay_movement_gated && !inventory_open;
-    let command_actions = if controller_active && (!input.gameplay_movement_gated || inventory_open)
-    {
-        if inventory_open {
-            GameplayActionFrame {
-                inventory_toggle_pressed: input.gameplay_actions.inventory_toggle_pressed,
-                hud_visibility_toggle_pressed: input.gameplay_actions.hud_visibility_toggle_pressed,
-                equipment_slot_pressed: input.gameplay_actions.equipment_slot_pressed,
-                ..GameplayActionFrame::default()
-            }
-        } else {
-            input.gameplay_actions
-        }
+    let gameplay_capture = crate::gameplay::gameplay_input_capture(world);
+    let movement_blocked = input.gameplay_movement_gated || gameplay_capture.block_player_movement;
+    let direct_control = controller_active && !movement_blocked;
+    let command_actions = if controller_active {
+        input.gameplay_actions
     } else {
-        GameplayActionFrame::default()
+        ActionCommandFrame::default()
     };
     apply_player_command_frame(world, player, frame_index, command_actions);
 
-    if input.gameplay_movement_gated || inventory_open {
+    if movement_blocked {
         CameraRuntimeService::clear_player_input(world, player);
     } else if direct_control {
         CameraRuntimeService::apply_player_input(

@@ -1,0 +1,43 @@
+[package]
+name = "newengine-game-ready-world"
+version = "0.1.0"
+edition = "2021"
+description = "Product-owned authored GameReady world package for NewEngine"
+license = "Proprietary"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+blake3 = "1"
+flate2 = "1"
+
+newengine-engine-runtime = { path = "../newengine-engine-runtime" }
+newengine-gameplay-fps-api = { path = "../newengine-gameplay-fps-api" }
+newengine-assets = { path = "../newengine-assets" }
+newengine-assets-api = { path = "../newengine-assets-api" }
+newengine-bounds = { path = "../newengine-bounds" }
+newengine-core = { path = "../newengine-core" }
+newengine-ecs = { path = "../newengine-ecs" }
+newengine-lighting = { path = "../newengine-lighting" }
+newengine-materials = { path = "../newengine-materials", features = ["serde"] }
+newengine-math = { path = "../newengine-math" }
+newengine-model-domain-api = { path = "../newengine-model-domain-api" }
+newengine-model-runtime = { path = "../newengine-model-runtime" }
+newengine-model-skeleton-api = { path = "../newengine-model-skeleton-api" }
+newengine-physics-contracts = { path = "../newengine-physics-contracts" }
+newengine-plugin-host = { path = "../newengine-plugin-host" }
+newengine-primitives = { path = "../newengine-primitives" }
+newengine-procedural-noise = { path = "../newengine-procedural-noise" }
+newengine-scene = { path = "../newengine-scene", features = ["runtime"] }
+newengine-task-api = { path = "../newengine-task-api" }
+newengine-transform = { path = "../newengine-transform", features = ["ecs"], default-features = false }
+newengine-ui-api = { path = "../newengine-ui-api" }
+newengine-ulog-api = { path = "../newengine-ulog-api" }
+newengine-world-environment-api = { path = "../newengine-world-environment-api" }
+abi_stable = "0.11"
+parking_lot = "0.12"
+newengine-asset-format-nef8 = { path = "../newengine-asset-format-nef8" }
+newengine-authored-xml = { path = "../newengine-authored-xml" }
+newengine-plugin-api = { path = "../newengine-plugin-api" }
+newengine-render-api = { path = "../newengine-render-api" }
+newengine-sim = { path = "../newengine-sim" }

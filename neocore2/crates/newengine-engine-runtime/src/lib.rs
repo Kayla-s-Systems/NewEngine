@@ -7,7 +7,10 @@
 //! UI code: scene bridge, gameplay components/schedules, viewport bridge and the
 //! render controller that talks to `newengine-render-api`. Applications consume
 //! this layer; they must not create backend resources or Vulkan objects directly.
-pub(crate) mod env_config;
+mod env_config;
+mod provider_contract;
+pub mod world_authoring;
+mod world_runtime_provider;
 
 pub mod asset_preview;
 pub mod audio_gateway;
@@ -42,6 +45,16 @@ pub use authority::{
 
 pub use gameplay::{CollisionShapeDesc, GameRunMode, GameplayActor, PhysicsBodyDesc, PlayerActor};
 pub use plugin_manager::PluginManagerBridge;
+pub use provider_contract::{
+    validate_provider_contract, RuntimeProviderDescriptor, I_GAMEPLAY_CONTENT_PROVIDER_V1,
+    I_GAMEPLAY_PHYSICS_QUERY_PROVIDER_V1, I_GAMEPLAY_SYSTEM_PROVIDER_V1, I_GAMEPLAY_UI_PROVIDER_V1,
+    I_SCENE_BOOTSTRAP_PROVIDER_V1, I_WORLD_RUNTIME_PROVIDER_V1, PROVIDER_CONTRACT_V1,
+};
 pub use render_controller::RuntimeRenderController;
-pub use scene_bridge::SceneBridge;
+pub use scene_bridge::{
+    SceneBootstrapContext, SceneBootstrapProvider, SceneBootstrapResult, SceneBridge,
+};
 pub use viewport_bridge::ViewportBridge;
+pub use world_runtime_provider::{
+    WorldRuntimeFrame, WorldRuntimeProvider, WorldRuntimeProviderRegistry,
+};

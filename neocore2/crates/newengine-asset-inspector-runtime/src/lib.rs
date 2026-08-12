@@ -7,6 +7,7 @@
 //! services routed through `engine.assets`, `engine.assets.inspect` and
 //! `engine.assets.edit`.
 
+mod env_config;
 mod facade;
 mod model;
 mod runtime;

@@ -6,22 +6,29 @@
 //! modules, the GameReady render feature pack, the game-ready scene bootstrap
 //! module and the selected engine-runtime route services.
 
+mod entity_archetypes;
+mod env_config;
 mod game_ready_fps;
 mod scene_bootstrap;
 mod validation;
+mod world_runtime;
 
 use std::sync::Arc;
 
 use newengine_core::{Engine, EngineResult, StartupConfig};
 use newengine_render_feature_gameready::GameReadyRenderFeaturePack;
 use newengine_render_ui_bridge::EngineUiDrawListBridgeProvider;
+use newengine_runtime_host::asset_bootstrap::{ContentSetSpec, ProfileMountSpec};
 use newengine_runtime_host::physics_runtime::PhysicsBackendRuntimeModule;
 use newengine_runtime_host::render_runtime::RenderBackendRuntimeModule;
 use newengine_scene_runtime::SceneGatewayAssetMounts;
 use newengine_ui::{UiBuildFn, UiProviderKind};
 
-use scene_bootstrap::GameReadySceneBootstrapModule;
+use entity_archetypes::register_game_ready_entity_archetypes_best_effort;
+use newengine_gameplay_fps::{FpsContentProvider, FpsGameplayProvider, FpsInventoryHudProvider};
+use scene_bootstrap::{GameReadySceneBootstrapModule, GameReadyWorldSceneBootstrapProvider};
 use validation::GameReadyValidationModule;
+use world_runtime::GameReadyWorldRuntimeProvider;
 
 pub use game_ready_fps::{
     run_game_ready_fps_process, GameReadyFpsApp, GAME_READY_CORE_ENV_POLICY,
@@ -36,6 +43,13 @@ pub use game_ready_fps::{
 pub const GAME_FIXED_DT_MS: u32 = 16;
 pub const GAME_APP_ASSETS_DIR_ENV: &str = "NEWENGINE_GAME_ASSETS_DIR";
 pub const GAME_READY_APP_DIR_NAME: &str = "game-ready-fps";
+pub const GAME_READY_CONTENT_SETS: &[ContentSetSpec] = &[ContentSetSpec::runtime_app(
+    "game-ready.primary",
+    GAME_READY_APP_DIR_NAME,
+    &[GAME_APP_ASSETS_DIR_ENV],
+)];
+pub const GAME_READY_MOUNT_SPEC: ProfileMountSpec =
+    ProfileMountSpec::new("game-ready", GAME_READY_CONTENT_SETS);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum GameReadyRuntimeKind {
@@ -75,12 +89,14 @@ impl Default for GameReadyRuntimeProfile {
 impl GameReadyRuntimeProfile {
     #[inline]
     pub fn new() -> Self {
+        let scene = Arc::new(newengine_scene_runtime::SceneBridge::new(
+            newengine_scene::Scene::new(),
+        ));
+        scene.set_scene_bootstrap_provider(GameReadyWorldSceneBootstrapProvider::shared());
         Self {
             viewport: Arc::new(newengine_engine_runtime::ViewportBridge::new()),
             plugins: Arc::new(newengine_engine_runtime::PluginManagerBridge::new()),
-            scene: Arc::new(newengine_scene_runtime::SceneBridge::new(
-                newengine_scene::Scene::new(),
-            )),
+            scene,
             kind: GameReadyRuntimeKind::EditorTools,
         }
     }
@@ -163,6 +179,11 @@ impl GameReadyRuntimeProfile {
             Arc::clone(&self.plugins),
             Arc::clone(&self.scene),
         )
+        .with_gameplay_content_provider(FpsContentProvider::shared())
+        .with_gameplay_ui_provider(FpsInventoryHudProvider::shared())
+        .with_gameplay_system_provider(FpsGameplayProvider::shared())
+        .with_gameplay_physics_query_provider(FpsGameplayProvider::shared())
+        .with_world_runtime_provider(GameReadyWorldRuntimeProvider::shared())
         .with_material_pipeline_provider(render_features.material_pipeline_provider())
         .with_primary_lit_material_domain(render_features.primary_lit_material_domain());
 
@@ -190,8 +211,8 @@ impl GameReadyRuntimeProfile {
 
     #[inline]
     pub fn register_engine_provider_routes_best_effort(&self) {
-        let asset_mounts =
-            SceneGatewayAssetMounts::new(GAME_READY_APP_DIR_NAME, GAME_APP_ASSETS_DIR_ENV);
+        register_game_ready_entity_archetypes_best_effort();
+        let asset_mounts = SceneGatewayAssetMounts::from_profile(GAME_READY_MOUNT_SPEC);
         newengine_scene_runtime::register_scene_gateway_best_effort(
             Arc::clone(&self.scene),
             Some(asset_mounts),
@@ -232,6 +253,7 @@ impl GameReadyRuntimeProfile {
         newengine_definitions_runtime::register_definitions_gateway_best_effort(
             asset_client.clone(),
         );
+        newengine_maps_runtime::register_maps_gateway_best_effort(asset_client.clone());
         newengine_assets_ui_runtime::register_assets_ui_gateway_best_effort(asset_client.clone());
         newengine_material_runtime::register_materials_gateway_best_effort_with_host(
             Some(host_api.clone()),

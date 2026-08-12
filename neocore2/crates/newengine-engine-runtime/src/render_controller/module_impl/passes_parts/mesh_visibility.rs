@@ -229,7 +229,7 @@ fn env_f32(name: &str, default: f32, min: f32, max: f32) -> f32 {
     crate::env_config::var_f32(name, default, min, max)
 }
 
-/// Conservative forward-visibility test used by the GameReady runtime draw lists.
+/// Conservative forward-visibility test used by the runtime draw lists.
 ///
 /// This is intentionally a cheap scene-streamer bucket test, not a replacement
 /// for backend frustum clipping. It keeps the CPU extraction path from treating

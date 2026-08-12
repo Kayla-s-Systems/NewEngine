@@ -32,12 +32,9 @@ pub(crate) fn runtime_texture_packet_from_dictionary_cache<'a>(
     let name = texture_name.ok_or_else(|| {
         format!("runtime texture request requires .ytd@entry path='{dictionary_path}'")
     })?;
-    cache
-        .entries_by_name
-        .get(&name.to_ascii_lowercase())
-        .ok_or_else(|| {
-            format!("texture entry '{name}' is not present in dictionary '{dictionary_path}'")
-        })
+    cache.entries_by_name.get(name).ok_or_else(|| {
+        format!("texture entry '{name}' is not present in dictionary '{dictionary_path}'")
+    })
 }
 
 fn ensure_runtime_dictionary_cache(

@@ -1,0 +1,401 @@
+use super::*;
+
+use super::super::super::paths::profile_asset_candidates;
+use super::super::ymap_read_diagnostics::log_ymap_value_summary;
+use super::xml::{parse_map_definition_payload, parse_payload, parse_ymap_xml_payload};
+use newengine_assets::{AssetDecodeRequest, ASSET_LIST_FILE_BODY_OUTPUT};
+use newengine_authored_xml as authored_xml;
+
+pub(crate) fn load_game_ready_map_profile() -> Result<GameReadyMapProfile, Vec<String>> {
+    load_profile_from_asset_manager()
+}
+
+fn load_profile_from_asset_manager() -> Result<GameReadyMapProfile, Vec<String>> {
+    use newengine_assets::AssetService;
+
+    if !newengine_core::has_engine_gateway_route(newengine_assets_api::ENGINE_ASSET_SERVICE_ID) {
+        newengine_ulog_api::ulog::debug!(
+            "game-ready: AssetManager service '{}' unavailable while resolving authored map",
+            newengine_assets_api::ENGINE_ASSET_SERVICE_ID
+        );
+        return Err(vec![format!(
+            "AssetManager service '{}' unavailable while resolving authored map",
+            newengine_assets_api::ENGINE_ASSET_SERVICE_ID
+        )]);
+    }
+
+    let assets =
+        newengine_assets::AssetServiceClient::new(newengine_plugin_host::default_host_api());
+    let candidates = profile_asset_candidates();
+    newengine_ulog_api::ulog::info!(
+        "game-ready ymap read: begin gateway='{}' candidates={} mount_policy='profile-owned VFS mounts already established' decode_policy='AssetManager decode_v1 only'",
+        newengine_assets_api::ENGINE_ASSET_SERVICE_ID,
+        candidates.len(),
+    );
+
+    let mut errors = Vec::new();
+    for (index, logical_path) in candidates.into_iter().enumerate() {
+        newengine_ulog_api::ulog::info!(
+            "game-ready ymap read: candidate begin index={} path='{}'",
+            index,
+            logical_path,
+        );
+        match load_profile_asset(&assets, &logical_path) {
+            Ok(profile) => {
+                let trace = assets
+                    .resolve_trace_json_v1(&logical_path)
+                    .map(|v| v.to_string())
+                    .unwrap_or_else(|te| format!("{{\"trace_error\":\"{te}\"}}"));
+                newengine_ulog_api::ulog::info!(
+                    "game-ready ymap read: candidate selected index={} path='{}' trace={}",
+                    index,
+                    logical_path,
+                    trace,
+                );
+                newengine_ulog_api::ulog::info!(
+                    "game-ready: loaded authored map asset='{}'",
+                    logical_path,
+                );
+                return Ok(profile);
+            }
+            Err(e) => {
+                let trace = assets
+                    .resolve_trace_json_v1(&logical_path)
+                    .map(|v| v.to_string())
+                    .unwrap_or_else(|te| format!("{{\"trace_error\":\"{te}\"}}"));
+                let message = format!("path='{logical_path}' err='{e}' trace={trace}");
+                newengine_ulog_api::ulog::info!(
+                    "game-ready ymap read: candidate rejected index={} {}",
+                    index,
+                    message
+                );
+                errors.push(message);
+            }
+        }
+    }
+
+    Err(errors)
+}
+
+fn load_profile_asset(
+    assets: &newengine_assets::AssetServiceClient,
+    logical_path: &str,
+) -> Result<GameReadyMapProfile, String> {
+    if !logical_path
+        .to_ascii_lowercase()
+        .split('@')
+        .next()
+        .unwrap_or(logical_path)
+        .ends_with(&format!(
+            ".{}",
+            newengine_asset_format_nef8::ymap::EXTENSION
+        ))
+    {
+        return Err(format!(
+            "non-canonical authored map rejected path='{logical_path}' expected='.{}' policy='authored maps are NEF8/ListFile, not runtime plain JSON'", newengine_asset_format_nef8::ymap::EXTENSION
+        ));
+    }
+
+    newengine_ulog_api::ulog::info!(
+        "game-ready ymap read: canonical accepted path='{}' extension='{}'",
+        logical_path,
+        newengine_asset_format_nef8::ymap::EXTENSION,
+    );
+
+    let output_kind = ASSET_LIST_FILE_BODY_OUTPUT;
+    let request = AssetDecodeRequest {
+        logical_path: logical_path.to_owned(),
+        output_kind: output_kind.to_owned(),
+        selector: serde_json::Value::Null,
+    };
+    newengine_ulog_api::ulog::info!(
+        "game-ready ymap read: decode start path='{}' output='{}' selector=null",
+        logical_path,
+        output_kind,
+    );
+    let payload = assets.decode_v1(&request).map_err(|e| {
+        format!("asset.decode_v1 failed path='{logical_path}' output='{output_kind}' err='{e}'")
+    })?;
+    newengine_ulog_api::ulog::info!(
+        "game-ready ymap read: decode complete path='{}' output='{}' payload_bytes={}",
+        logical_path,
+        output_kind,
+        payload.len(),
+    );
+    if !authored_xml::body_is_xml(&payload) {
+        return Err(format!(
+            "ymap body must be XML path='{logical_path}' output='{output_kind}' payload_bytes={} policy='authored map metadata uses XML presentation inside NEF8; JSON runtime map bodies are forbidden'",
+            payload.len()
+        ));
+    }
+    if ymap_schema(&payload, logical_path)?.as_str() == "newengine.map.definition.v2" {
+        return load_discrete_map_profile(logical_path);
+    }
+    let value = parse_ymap_xml_payload(&payload, logical_path)?;
+    log_ymap_value_summary(logical_path, &value);
+    newengine_ulog_api::ulog::info!(
+        "game-ready: decoded authored .ymap path='{}' output='{}' policy='NEF8/ListFile body from engine.assets; XML map semantics stay outside AssetManager'",
+        logical_path,
+        output_kind
+    );
+    parse_map_definition_payload(value, logical_path)
+}
+
+fn ymap_schema(payload: &[u8], logical_path: &str) -> Result<String, String> {
+    let text = std::str::from_utf8(payload)
+        .map_err(|e| format!("ymap XML body is not UTF-8 path='{logical_path}' err='{e}'"))?;
+    let doc = authored_xml::parse_xml_document(text, &format!("ymap path='{logical_path}'"))?;
+    let root = doc.root_element();
+    if !root.has_tag_name("YmapMapDefinition") && !root.has_tag_name("MapDefinition") {
+        return Err(format!(
+            "ymap XML root must be <YmapMapDefinition> path='{logical_path}' actual='{}'",
+            root.tag_name().name()
+        ));
+    }
+    Ok(root
+        .attribute("schema")
+        .unwrap_or_default()
+        .trim()
+        .to_owned())
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(default)]
+struct ResolvedMapDefinitionRefs {
+    drawable_refs: Vec<String>,
+    material_refs: Vec<String>,
+    collision_refs: Vec<String>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(default)]
+struct ResolvedMapDefinitionEntry {
+    refs: ResolvedMapDefinitionRefs,
+    semantic_tags: Vec<String>,
+}
+
+fn load_resolved_map_definition(
+    definition_ref: &str,
+) -> Result<ResolvedMapDefinitionEntry, String> {
+    let payload = serde_json::to_vec(&serde_json::json!({ "definition_ref": definition_ref }))
+        .map_err(|e| {
+            format!(
+                "discrete YMAP definition request encode failed definition_ref='{definition_ref}' err='{e}'"
+            )
+        })?;
+    let bytes = newengine_core::call_service_v1_optional(
+        newengine_assets_api::ENGINE_ASSETS_DEFINITIONS_SERVICE_ID,
+        newengine_assets_api::definitions_method::ENTRY_JSON_V1,
+        &payload,
+    )
+    .map_err(|e| {
+        format!(
+            "engine.assets.definitions request failed definition_ref='{definition_ref}' err='{e}'"
+        )
+    })?
+    .ok_or_else(|| {
+        format!("engine.assets.definitions route unavailable definition_ref='{definition_ref}'")
+    })?;
+    serde_json::from_slice(&bytes).map_err(|e| {
+        format!(
+            "engine.assets.definitions returned invalid definition DTO definition_ref='{definition_ref}' err='{e}'"
+        )
+    })
+}
+
+fn load_discrete_map_profile(logical_path: &str) -> Result<GameReadyMapProfile, String> {
+    let map_ref =
+        newengine_assets_api::map_entry_ref(logical_path, newengine_assets_api::MAP_INDEX_ENTRY);
+    let request = serde_json::to_vec(&newengine_assets_api::MapRefRequestV1 {
+        map_ref: map_ref.clone(),
+    })
+    .map_err(|e| {
+        format!("discrete YMAP index request encode failed path='{logical_path}' err='{e}'")
+    })?;
+    let index_bytes = newengine_core::call_service_v1_optional(
+        newengine_assets_api::ENGINE_ASSETS_MAPS_SERVICE_ID,
+        newengine_assets_api::maps_method::INDEX_V1,
+        &request,
+    )
+    .map_err(|e| format!("engine.assets.maps index request failed map='{map_ref}' err='{e}'"))?
+    .ok_or_else(|| format!("engine.assets.maps route unavailable while loading map='{map_ref}'"))?;
+    let index: newengine_assets_api::MapIndexV1 =
+        serde_json::from_slice(&index_bytes).map_err(|e| {
+            format!("engine.assets.maps returned invalid MapIndexV1 map='{map_ref}' err='{e}'")
+        })?;
+
+    // Game-mode constants are owned by GameReady, not by YMAP. The valid v2 map
+    // contributes only world composition, while this empty payload intentionally
+    // resolves through the same canonical defaults/sanitizers as game-mode data.
+    let mut profile = parse_payload(
+        serde_json::json!({}),
+        "game-ready.mode-defaults",
+        logical_path,
+    )?;
+    profile.title = index.map_id.clone();
+    profile.objective = format!("Explore {}", index.map_id);
+    profile.terrain.enabled = false;
+    profile.terrain.streaming.enabled = false;
+    profile.foliage.enabled = false;
+    profile.foliage.max_count = 0;
+    profile.prefabs.clear();
+    profile.definitions.clear();
+
+    // Discrete YMAP owns topology/placements only. GameReady still owns the
+    // mode-level environment definition, so seed the canonical SkyDome metadata
+    // definition before map-local placement definitions are appended.
+    let mode_sky_definition = profile.sky.definition_ref.trim().to_owned();
+    if !mode_sky_definition.is_empty() {
+        profile.definitions.push(GameReadyDefinitionInstanceSpec {
+            definition_ref: mode_sky_definition,
+            position: Vec3::ZERO,
+            rotation_ypr: [0.0, 0.0, 0.0],
+            scale: Vec3::ONE,
+            apply_mode: GameReadyDefinitionApplyMode::MetadataOnly,
+        });
+    }
+
+    let mut definition_cache =
+        std::collections::BTreeMap::<String, ResolvedMapDefinitionEntry>::new();
+    for cell_ref in &index.cells {
+        let cell_request = serde_json::to_vec(&newengine_assets_api::MapCellRequestV1 {
+            map_ref: map_ref.clone(),
+            coord: cell_ref.coord,
+        })
+        .map_err(|e| {
+            format!("discrete YMAP cell request encode failed map='{map_ref}' err='{e}'")
+        })?;
+        let cell_bytes = newengine_core::call_service_v1_optional(
+            newengine_assets_api::ENGINE_ASSETS_MAPS_SERVICE_ID,
+            newengine_assets_api::maps_method::CELL_V1,
+            &cell_request,
+        )
+        .map_err(|e| {
+            format!(
+                "engine.assets.maps cell request failed map='{map_ref}' cell={},{} err='{e}'",
+                cell_ref.coord.x, cell_ref.coord.z
+            )
+        })?
+        .ok_or_else(|| {
+            format!(
+                "engine.assets.maps route unavailable while loading map='{map_ref}' cell={},{}",
+                cell_ref.coord.x, cell_ref.coord.z
+            )
+        })?;
+        let resolved: newengine_assets_api::MapResolvedCellV1 =
+            serde_json::from_slice(&cell_bytes).map_err(|e| {
+                format!(
+                    "engine.assets.maps returned invalid MapResolvedCellV1 map='{map_ref}' cell={},{} err='{e}'",
+                    cell_ref.coord.x, cell_ref.coord.z
+                )
+            })?;
+
+        for placement in resolved
+            .cell
+            .placements
+            .into_iter()
+            .filter(|placement| placement.enabled)
+        {
+            let definition = if let Some(existing) = definition_cache.get(&placement.definition_ref)
+            {
+                existing.clone()
+            } else {
+                let parsed =
+                    load_resolved_map_definition(&placement.definition_ref).map_err(|e| {
+                        format!(
+                        "discrete YMAP placement '{}' definition_ref='{}' resolution failed: {e}",
+                        placement.id, placement.definition_ref
+                    )
+                    })?;
+                definition_cache.insert(placement.definition_ref.clone(), parsed.clone());
+                parsed
+            };
+
+            let drawable_ref = definition
+                .refs
+                .drawable_refs
+                .first()
+                .cloned()
+                .ok_or_else(|| {
+                    format!(
+                        "discrete YMAP placement '{}' definition_ref='{}' has no drawable_refs",
+                        placement.id, placement.definition_ref
+                    )
+                })?;
+            let material_ref = definition
+                .refs
+                .material_refs
+                .first()
+                .cloned()
+                .unwrap_or_default();
+            let position = Vec3::new(
+                placement.transform.position[0],
+                placement.transform.position[1],
+                placement.transform.position[2],
+            );
+            let scale = Vec3::new(
+                placement.transform.scale[0],
+                placement.transform.scale[1],
+                placement.transform.scale[2],
+            );
+            let rotation_ypr = Vec3::new(
+                placement.transform.rotation_ypr[0],
+                placement.transform.rotation_ypr[1],
+                placement.transform.rotation_ypr[2],
+            );
+            let dynamic_physics = placement
+                .apply_mode
+                .trim()
+                .eq_ignore_ascii_case("dynamic_physics");
+            profile.prefabs.push(GameReadyPrefabSpec {
+                id: placement.id.clone(),
+                source: drawable_ref.clone(),
+                proxy: if dynamic_physics {
+                    "world_dynamic_ydd".to_owned()
+                } else {
+                    "world_static_ydd".to_owned()
+                },
+                material: material_ref,
+                enabled: true,
+                position,
+                rotation_ypr,
+                scale,
+            });
+
+            let has_collision = !definition.refs.collision_refs.is_empty()
+                || definition
+                    .semantic_tags
+                    .iter()
+                    .any(|tag| tag.eq_ignore_ascii_case("collision"));
+            if has_collision && !dynamic_physics {
+                profile.prefabs.push(GameReadyPrefabSpec {
+                    id: format!("{}#collision", placement.id),
+                    source: drawable_ref,
+                    proxy: "world_collision_ydd".to_owned(),
+                    material: String::new(),
+                    enabled: true,
+                    position,
+                    rotation_ypr,
+                    scale,
+                });
+            }
+
+            profile.definitions.push(GameReadyDefinitionInstanceSpec {
+                definition_ref: placement.definition_ref,
+                position,
+                rotation_ypr: placement.transform.rotation_ypr,
+                scale,
+                apply_mode: GameReadyDefinitionApplyMode::MetadataOnly,
+            });
+        }
+    }
+
+    newengine_ulog_api::ulog::info!(
+        "game-ready: loaded discrete YMAP v2 map='{}' cells={} placements={} resolved_definitions={} policy='YMAP -> engine.assets.maps DTO -> engine.assets.definitions DTO -> scene-owned static-world admission'",
+        map_ref,
+        index.cells.len(),
+        profile.definitions.len(),
+        definition_cache.len(),
+    );
+    Ok(profile)
+}

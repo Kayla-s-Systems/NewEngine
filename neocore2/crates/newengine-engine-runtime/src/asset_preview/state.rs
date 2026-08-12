@@ -8,17 +8,12 @@ impl AssetPreviewApi {
 
     pub fn invalidate(&self, asset_ref: &str) {
         let source = asset_ref.split('@').next().unwrap_or(asset_ref);
-        self.bundle_cache.lock().retain(|entry| {
-            entry
-                .asset_ref
-                .split('@')
-                .next()
-                .unwrap_or(&entry.asset_ref)
-                != source
-        });
+        self.bundle_cache
+            .lock()
+            .retain(|cached_ref, _| cached_ref.split('@').next().unwrap_or(cached_ref) != source);
         self.texture_cache
             .lock()
-            .retain(|(cached_ref, _)| cached_ref.split('@').next().unwrap_or(cached_ref) != source);
+            .retain(|cached_ref, _| cached_ref.split('@').next().unwrap_or(cached_ref) != source);
     }
 
     pub fn invalidate_all(&self) {
@@ -50,12 +45,9 @@ impl AssetPreviewApi {
 
     pub(super) fn activate_cached_bundle(&self, asset_ref: &str) -> bool {
         let mut cache = self.bundle_cache.lock();
-        let Some(index) = cache.iter().position(|entry| entry.asset_ref == asset_ref) else {
+        let Some(bundle) = cache.get(asset_ref).cloned() else {
             return false;
         };
-        let entry = cache.remove(index).expect("cached bundle index must exist");
-        let bundle = Arc::clone(&entry.bundle);
-        cache.push_front(entry);
         drop(cache);
         self.camera.reset();
         *self.render_bundle.write() = Some(bundle);
@@ -86,33 +78,23 @@ impl AssetPreviewApi {
         let bundle = Arc::new(bundle);
         *self.render_bundle.write() = Some(Arc::clone(&bundle));
         if vertex_count <= PREVIEW_BUNDLE_CACHE_MAX_VERTICES {
-            let mut cache = self.bundle_cache.lock();
-            cache.retain(|entry| entry.asset_ref != asset_ref);
-            cache.push_front(CachedPreviewBundle {
-                asset_ref: asset_ref.to_owned(),
-                bundle,
-            });
-            cache.truncate(PREVIEW_BUNDLE_CACHE_CAPACITY);
+            self.bundle_cache
+                .lock()
+                .insert(asset_ref.to_owned(), bundle);
         }
     }
 
     pub(super) fn cached_texture(&self, asset_ref: &str) -> Option<AssetPreviewSnapshot> {
         let mut cache = self.texture_cache.lock();
-        let index = cache
-            .iter()
-            .position(|(cached_ref, _)| cached_ref == asset_ref)?;
-        let entry = cache.remove(index)?;
-        let snapshot = entry.1.clone();
-        cache.push_front(entry);
+        let snapshot = cache.get(asset_ref)?.clone();
         self.last_request_cache_hit.store(true, Ordering::Release);
         Some(snapshot)
     }
 
     pub(super) fn cache_texture(&self, snapshot: &AssetPreviewSnapshot) {
-        let mut cache = self.texture_cache.lock();
-        cache.retain(|(cached_ref, _)| cached_ref != &snapshot.asset_ref);
-        cache.push_front((snapshot.asset_ref.clone(), snapshot.clone()));
-        cache.truncate(PREVIEW_TEXTURE_CACHE_CAPACITY);
+        self.texture_cache
+            .lock()
+            .insert(snapshot.asset_ref.clone(), snapshot.clone());
     }
 
     pub(super) fn clear_render_bundle(&self) {

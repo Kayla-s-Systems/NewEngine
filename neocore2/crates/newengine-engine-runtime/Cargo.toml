@@ -14,7 +14,6 @@ newengine-asset-format-nef8 = { path = "../newengine-asset-format-nef8" }
 abi_stable = { version = "0.11" }
 blake3 = "1"
 crossbeam-channel = "0.5"
-flate2 = "1"
 libloading = "0.9"
 log = "0.4"
 parking_lot = "0.12"

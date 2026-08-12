@@ -212,7 +212,7 @@
             ],
             "deferred": "disabled",
             "hdr_scene": "disabled",
-            "postfx": "disabled",
+            "postfx": "enabled",
             "shadows": "enabled",
             "sky": {
               "mode": "native",
@@ -1536,7 +1536,7 @@
       "preset": "custom",
       "shadow_quality": "cinematic",
       "shadows_enabled": true,
-      "ssao_enabled": false,
+      "ssao_enabled": true,
       "ssao_half_resolution": false,
       "ssao_intensity": 0.8199999928474426,
       "ssao_quality_steps": 32,

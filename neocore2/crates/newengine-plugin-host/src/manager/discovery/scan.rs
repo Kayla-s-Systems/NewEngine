@@ -10,8 +10,8 @@ use super::metadata::{
     PLATFORM_RUNTIME_SYMBOL,
 };
 use crate::manager::types::PluginLoadError;
-use crate::path_fmt::display_clean;
 use crate::paths::is_dynamic_lib;
+use newengine_ulog_api::path_format::display_clean;
 
 pub(super) fn scan_plugins_dir(dir: &Path) -> Result<DiscoveryGraph, PluginLoadError> {
     let rd = std::fs::read_dir(dir).map_err(|e| PluginLoadError {

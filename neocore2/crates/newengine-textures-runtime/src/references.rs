@@ -167,7 +167,7 @@ pub(crate) fn parse_texture_reference(value: &str) -> Result<ResolvedTextureRefe
             .map_err(|error| error.to_string())?;
     let entry = reference.entry.clone().unwrap_or_default();
     let texture_hash = split_hash_selector(&entry)?;
-    let texture_name = texture_hash.is_none().then_some(entry);
+    let texture_name = texture_hash.is_none().then(|| entry.to_ascii_lowercase());
     let canonical = reference.canonical.clone();
 
     Ok(ResolvedTextureReference {

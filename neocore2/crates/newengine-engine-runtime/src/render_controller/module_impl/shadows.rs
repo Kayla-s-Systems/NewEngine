@@ -1,11 +1,8 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use newengine_core::render::{
-    Extent2D, RectI32, RenderApi, RenderTargetDesc, RenderTargetId, TextureFormat, TextureId,
-    Viewport,
-};
+use newengine_core::render::{Extent2D, RenderApi};
 use newengine_core::EngineResult;
-use newengine_lighting::{ShadowMethod, ShadowSettings};
+use newengine_lighting::{ShadowFilter, ShadowMethod, ShadowSettings};
 use newengine_math::{Mat4, Vec3};
 pub(crate) use newengine_render_feature_api::{
     BoundsSnap, LightExtractionCommand, LightExtractionCtx, LightShadowPlan, ShadowCascadeFrame,
@@ -14,6 +11,19 @@ pub(crate) use newengine_render_feature_api::{
 
 use super::lights;
 use crate::render_controller::RuntimeRenderController;
+
+mod fit;
+mod targets;
+
+use fit::{
+    csm_cascade_radius, csm_split_distances, csm_tile_viewport_scissor, directional_shadow_center,
+    directional_shadow_frustum_fit, directional_shadow_stable_fit,
+    snapped_directional_shadow_center, DirectionalShadowFit,
+};
+use targets::{
+    ensure_shadow_rt, retire_shadow_rt, warn_unsupported_point_shadow_once,
+    warn_unsupported_spot_shadow_once,
+};
 
 #[inline]
 pub(super) fn build_light_shadow_plan(
@@ -84,6 +94,7 @@ pub(super) fn build_light_shadow_plan(
             bounds,
             lit,
             settings,
+            viewproj,
             camera_position,
             Vec3::new(camera_forward[0], camera_forward[1], camera_forward[2]),
             command,
@@ -102,6 +113,7 @@ fn lower_light_extraction_command(
     bounds: BoundsSnap,
     lit: newengine_material_domain_api::LitPipeline,
     settings: ShadowSettings,
+    viewproj: Mat4,
     camera_position: [f32; 3],
     camera_forward: Vec3,
     command: LightExtractionCommand,
@@ -115,6 +127,7 @@ fn lower_light_extraction_command(
                 bounds,
                 lit,
                 settings,
+                viewproj,
                 camera_position,
                 camera_forward,
             )? {
@@ -165,6 +178,7 @@ pub fn try_build_directional_shadow_plan(
     bounds: BoundsSnap,
     _lit: newengine_material_domain_api::LitPipeline,
     settings: ShadowSettings,
+    viewproj: Mat4,
     camera_position: [f32; 3],
     camera_forward: Vec3,
 ) -> EngineResult<Option<LightShadowPlan>> {
@@ -219,36 +233,84 @@ pub fn try_build_directional_shadow_plan(
             .clamp(0.0, super::super::render_quality::SHADOW_SOFTNESS_MAX),
     ];
     let extra = [
-        settings.normal_bias.clamp(0.0, 0.5) * 0.012,
+        // Keep normal-bias as a dimensionless quality control. The shader converts
+        // it to a per-cascade texel/depth bias, avoiding world-space peter-panning.
+        settings.normal_bias.clamp(0.0, 0.5),
         cascade_count as f32,
         settings.resolution as f32,
         max_distance,
     ];
+    let pcss = settings.pcss.sanitized();
+    let filter_mode = match settings.filter {
+        ShadowFilter::Hard => 0.0,
+        ShadowFilter::Pcf => 1.0,
+        ShadowFilter::Pcss => 2.0,
+    };
+    let pcss0 = [
+        filter_mode,
+        pcss.light_angular_radius_tangent(),
+        pcss.blocker_search_radius_texels,
+        pcss.max_filter_radius_texels,
+    ];
+    let pcss1 = [
+        pcss.blocker_samples as f32,
+        pcss.filter_samples as f32,
+        pcss.min_filter_radius_texels,
+        pcss.stable_kernel_cell_texels,
+    ];
 
     if cascade_count <= 1 {
-        let radius = bounds.radius.max(4.0).min(max_distance.max(4.0));
-        let center = snapped_directional_shadow_center(
-            directional_shadow_center(bounds, camera_position, radius),
+        let fallback_radius = bounds.radius.max(4.0).min(max_distance.max(4.0));
+        let fallback_center = directional_shadow_center(bounds, camera_position, fallback_radius);
+        let fit = directional_shadow_frustum_fit(
+            viewproj,
+            camera,
+            camera_forward,
+            0.5,
+            max_distance,
             dir,
             up,
-            radius,
+            settings.resolution,
+        )
+        .unwrap_or(DirectionalShadowFit {
+            center: fallback_center,
+            half_x: fallback_radius,
+            half_y: fallback_radius,
+            depth_radius: fallback_radius,
+        });
+        let center = snapped_directional_shadow_center(
+            fit.center,
+            dir,
+            up,
+            fit.half_x,
+            fit.half_y,
             settings.resolution,
         );
-        let eye = center - dir * (radius * 1.75);
+        let depth_radius = fit.depth_radius.max(fit.half_x.max(fit.half_y)).max(4.0);
+        let eye = center - dir * (depth_radius * 1.90);
         let view = Mat4::look_at_rh(eye, center, up);
         let near = 0.1;
-        let far = radius * 4.0;
-        let proj = Mat4::orthographic_rh(-radius, radius, -radius, radius, near, far);
-        let caster_cull = Some(ShadowCasterCull::directional(view, radius, near, far));
-        return Ok(Some(LightShadowPlan::directional(
-            rt,
-            shadow_texture,
-            settings.resolution,
-            proj * view,
-            params,
-            extra,
-            caster_cull,
-        )));
+        let far = depth_radius * 4.20;
+        let proj =
+            Mat4::orthographic_rh(-fit.half_x, fit.half_x, -fit.half_y, fit.half_y, near, far);
+        let caster_cull = Some(ShadowCasterCull::directional(
+            view,
+            fit.half_x.max(fit.half_y),
+            near,
+            far,
+        ));
+        return Ok(Some(
+            LightShadowPlan::directional(
+                rt,
+                shadow_texture,
+                settings.resolution,
+                proj * view,
+                params,
+                extra,
+                caster_cull,
+            )
+            .with_pcss(pcss0, pcss1),
+        ));
     }
 
     let splits = csm_split_distances(0.5, max_distance, cascade_count);
@@ -258,16 +320,43 @@ pub fn try_build_directional_shadow_plan(
         let split_near = if i == 0 { 0.5 } else { splits[i - 1] };
         let split_far = splits[i].max(split_near + 0.1);
         let segment_mid = (split_near + split_far) * 0.5;
-        let center = camera + camera_forward * segment_mid;
-        let radius = csm_cascade_radius(split_near, split_far, max_distance);
-        let snapped_center =
-            snapped_directional_shadow_center(center, dir, up, radius, settings.resolution);
-        let eye = snapped_center - dir * (radius * 1.85);
+        let fallback_radius = csm_cascade_radius(split_near, split_far, max_distance);
+        let fallback_center = camera + camera_forward * segment_mid;
+        // Stabilized CSM fit: use a rotation-invariant bounding sphere for the
+        // frustum slice. A tight light-space AABB changes half_x/half_y when the
+        // camera rotates, which changes world-units-per-texel and produces visible
+        // shimmer even when the center itself is snapped. The sphere keeps the
+        // projection footprint constant for a fixed split/FOV/aspect.
+        let fit = directional_shadow_stable_fit(
+            viewproj,
+            camera,
+            camera_forward,
+            split_near,
+            split_far,
+            settings.resolution,
+        )
+        .unwrap_or(DirectionalShadowFit {
+            center: fallback_center,
+            half_x: fallback_radius,
+            half_y: fallback_radius,
+            depth_radius: fallback_radius,
+        });
+        let snapped_center = snapped_directional_shadow_center(
+            fit.center,
+            dir,
+            up,
+            fit.half_x,
+            fit.half_y,
+            settings.resolution,
+        );
+        let depth_radius = fit.depth_radius.max(fit.half_x.max(fit.half_y)).max(4.0);
+        let eye = snapped_center - dir * (depth_radius * 1.95);
         let view = Mat4::look_at_rh(eye, snapped_center, up);
         let near = 0.1;
-        let far = radius * 4.25;
-        let proj = Mat4::orthographic_rh(-radius, radius, -radius, radius, near, far);
-        let cull = ShadowCasterCull::directional(view, radius, near, far);
+        let far = depth_radius * 4.35;
+        let proj =
+            Mat4::orthographic_rh(-fit.half_x, fit.half_x, -fit.half_y, fit.half_y, near, far);
+        let cull = ShadowCasterCull::directional(view, fit.half_x.max(fit.half_y), near, far);
         union_cull = Some(cull);
         let (viewport, scissor) =
             csm_tile_viewport_scissor(i as u32, cascade_count, settings.resolution);
@@ -277,213 +366,24 @@ pub fn try_build_directional_shadow_plan(
             scissor,
             split_near,
             split_far,
-            texel_world_size: (radius * 2.0) / settings.resolution.max(1) as f32,
+            texel_world_size: ((fit.half_x.max(fit.half_y) * 2.0)
+                / settings.resolution.max(1) as f32)
+                .max(1.0e-6),
             caster_cull: cull,
         };
     }
 
-    Ok(Some(LightShadowPlan::directional_cascaded(
-        rt,
-        shadow_texture,
-        settings.resolution,
-        cascade_count,
-        cascades,
-        params,
-        extra,
-        union_cull,
-    )))
-}
-
-#[inline]
-fn directional_shadow_center(bounds: BoundsSnap, camera_position: [f32; 3], radius: f32) -> Vec3 {
-    if bounds.radius > radius * 1.25 {
-        let camera = Vec3::new(camera_position[0], camera_position[1], camera_position[2]);
-        // Horizontal camera motion must move the local shadow window, but the
-        // character motor continuously corrects eye/ground height by tiny amounts.
-        // Feeding that Y jitter into texel snapping makes the complete map jump
-        // between neighbouring light-space rows and is perceived as flicker.
-        let stable_y = if bounds.center.y.is_finite() {
-            bounds.center.y
-        } else {
-            camera.y
-        };
-        Vec3::new(camera.x, stable_y, camera.z)
-    } else {
-        bounds.center
-    }
-}
-
-#[inline]
-fn snapped_directional_shadow_center(
-    center: Vec3,
-    light_dir: Vec3,
-    up_hint: Vec3,
-    radius: f32,
-    resolution: u32,
-) -> Vec3 {
-    let texel_world_size = (radius * 2.0) / resolution.max(1) as f32;
-    if texel_world_size <= 0.0 {
-        return center;
-    }
-
-    let forward = light_dir.normalize_or_zero();
-    let mut right = forward.cross(up_hint).normalize_or_zero();
-    if right.length_squared() <= 1.0e-8 {
-        right = forward.cross(Vec3::Z).normalize_or_zero();
-    }
-    if right.length_squared() <= 1.0e-8 {
-        return center;
-    }
-    let up = right.cross(forward).normalize_or_zero();
-    if up.length_squared() <= 1.0e-8 {
-        return center;
-    }
-
-    let snap = |v: f32| (v / texel_world_size).round() * texel_world_size;
-    let x = center.dot(right);
-    let y = center.dot(up);
-    center + right * (snap(x) - x) + up * (snap(y) - y)
-}
-
-#[inline]
-fn csm_split_distances(
-    near: f32,
-    far: f32,
-    cascade_count: u32,
-) -> [f32; MAX_DIRECTIONAL_SHADOW_CASCADES] {
-    let count = cascade_count.clamp(1, MAX_DIRECTIONAL_SHADOW_CASCADES as u32) as usize;
-    let mut out = [far; MAX_DIRECTIONAL_SHADOW_CASCADES];
-    let lambda = 0.68;
-    let near = near.max(0.05);
-    let far = far.max(near + 1.0);
-    for (i, slot) in out.iter_mut().enumerate().take(count) {
-        let p = (i + 1) as f32 / count as f32;
-        let uniform = near + (far - near) * p;
-        let logarithmic = near * (far / near).powf(p);
-        *slot = logarithmic * lambda + uniform * (1.0 - lambda);
-    }
-    out[count - 1] = far;
-    out
-}
-
-#[inline]
-fn csm_cascade_radius(split_near: f32, split_far: f32, max_distance: f32) -> f32 {
-    let span = (split_far - split_near).max(1.0);
-    let radius = (split_far * 0.72).max(span * 0.95).max(8.0);
-    radius.min(max_distance.max(8.0))
-}
-
-#[inline]
-fn csm_tile_viewport_scissor(
-    index: u32,
-    cascade_count: u32,
-    resolution: u32,
-) -> (Viewport, RectI32) {
-    let cascades = cascade_count.clamp(1, MAX_DIRECTIONAL_SHADOW_CASCADES as u32);
-    let columns = if cascades <= 1 { 1 } else { 2 };
-    let x = (index % columns) * resolution;
-    let y = (index / columns) * resolution;
-    (
-        Viewport {
-            x: x as f32,
-            y: y as f32,
-            w: resolution as f32,
-            h: resolution as f32,
-            min_depth: 0.0,
-            max_depth: 1.0,
-        },
-        RectI32::new(x as i32, y as i32, resolution as i32, resolution as i32),
-    )
-}
-
-#[inline]
-fn shadow_rt_extent_key(extent: Extent2D) -> u32 {
-    let w = extent.width.min(0xFFFF);
-    let h = extent.height.min(0xFFFF);
-    (w << 16) | h
-}
-
-#[inline]
-fn ensure_shadow_rt(
-    this: &mut RuntimeRenderController,
-    r: &mut dyn RenderApi,
-    requested_resolution: u32,
-    cascade_count: u32,
-) -> EngineResult<Option<(RenderTargetId, TextureId)>> {
-    let resolution = requested_resolution.clamp(
-        super::super::render_quality::SHADOW_RESOLUTION_MIN,
-        super::super::render_quality::SHADOW_RESOLUTION_MAX,
-    );
-    let cascades = cascade_count.clamp(1, 4);
-    let columns = if cascades <= 1 { 1 } else { 2 };
-    let rows = cascades.div_ceil(columns).max(1);
-    let atlas_extent = Extent2D::new(
-        resolution.saturating_mul(columns),
-        resolution.saturating_mul(rows),
-    );
-    let atlas_key = shadow_rt_extent_key(atlas_extent);
-    let recreate =
-        this.shadows.render_target.is_none() || this.shadows.render_target_resolution != atlas_key;
-
-    if recreate {
-        if let Some(old) = this.shadows.render_target.take() {
-            this.retire_render_target(old);
-        }
-        this.shadows.render_target_resolution = 0;
-        this.invalidate_shadow_cache();
-        let rt = r.create_render_target(
-            RenderTargetDesc::new(
-                atlas_extent,
-                super::super::render_quality::SHADOW_MAP_COLOR_FORMAT,
-            )
-            .with_depth(TextureFormat::Depth32Float)
-            .with_label(if cascades > 1 {
-                format!(
-                    "game_sun_csm_atlas_{}x{}_cascades_{}",
-                    atlas_extent.width, atlas_extent.height, cascades
-                )
-            } else {
-                format!("game_sun_shadow_map_{resolution}")
-            }),
-        )?;
-        this.shadows.render_target = Some(rt);
-        this.shadows.render_target_resolution = atlas_key;
-    }
-
-    let Some(rt) = this.shadows.render_target else {
-        return Ok(None);
-    };
-    let tex = r.render_target_color_texture_id(rt)?;
-    Ok(Some((rt, tex)))
-}
-
-#[inline]
-pub fn retire_shadow_rt(this: &mut RuntimeRenderController) {
-    if let Some(old) = this.shadows.render_target.take() {
-        this.retire_render_target(old);
-    }
-    this.shadows.render_target_resolution = 0;
-    this.invalidate_shadow_cache();
-}
-
-#[inline]
-pub fn warn_unsupported_point_shadow_once(this: &mut RuntimeRenderController) {
-    if this.shadows.unsupported_point_warning_emitted {
-        return;
-    }
-    this.shadows.unsupported_point_warning_emitted = true;
-    newengine_ulog_api::ulog::warn!(
-        "render shadows: PointLight is shadow-capable, but point cube-map shadows are not implemented by this Vulkan path yet; falling back to unshadowed point lighting"
-    );
-}
-
-#[inline]
-pub fn warn_unsupported_spot_shadow_once(this: &mut RuntimeRenderController) {
-    if this.shadows.unsupported_spot_warning_emitted {
-        return;
-    }
-    this.shadows.unsupported_spot_warning_emitted = true;
-    newengine_ulog_api::ulog::warn!(
-        "render shadows: Spot shadow maps are planned, but no SpotLight component/backend path is implemented yet; falling back to unshadowed lighting"
-    );
+    Ok(Some(
+        LightShadowPlan::directional_cascaded(
+            rt,
+            shadow_texture,
+            settings.resolution,
+            cascade_count,
+            cascades,
+            params,
+            extra,
+            union_cull,
+        )
+        .with_pcss(pcss0, pcss1),
+    ))
 }

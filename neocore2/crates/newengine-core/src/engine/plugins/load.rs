@@ -1,5 +1,6 @@
 use super::super::plugin_discovery::PluginDiscoveryScanTask;
 use super::super::{Engine, PluginFaultTolerance};
+use super::bootstrap_preload_deferred;
 
 use crate::error::{EngineError, EngineResult};
 use crate::lifecycle_events::EngineLifecycleEvent;
@@ -8,18 +9,6 @@ use newengine_plugin_host::default_host_api;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
-
-fn bootstrap_preload_deferred() -> bool {
-    std::env::var("NEWENGINE_BOOTSTRAP_PLUGIN_PRELOAD")
-        .ok()
-        .map(|v| {
-            matches!(
-                v.trim().to_ascii_lowercase().as_str(),
-                "0" | "false" | "off" | "defer" | "deferred" | "safe"
-            )
-        })
-        .unwrap_or(false)
-}
 
 static STARTUP_LOGS_EMITTED_AFTER_LOGGER_READY: AtomicBool = AtomicBool::new(false);
 

@@ -16,6 +16,7 @@ newengine-assets = { path = "../newengine-assets" }
 newengine-assets-api = { path = "../newengine-assets-api" }
 newengine-authored-xml = { path = "../newengine-authored-xml" }
 newengine-materials = { path = "../newengine-materials", features = ["serde"] }
+newengine-math = { path = "../newengine-math" }
 newengine-model-domain-api = { path = "../newengine-model-domain-api" }
 newengine-model-import-obj = { path = "../newengine-model-import-obj" }
 newengine-plugin-api = { path = "../newengine-plugin-api" }

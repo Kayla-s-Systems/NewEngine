@@ -44,7 +44,6 @@ fn spawn_item_pickup_internal(
     persistent_id: Option<u64>,
     respawn_seconds: Option<f32>,
 ) -> Result<EntityId, String> {
-    ensure_default_item_catalog(world);
     let definition = world
         .resource::<ItemCatalog>()
         .and_then(|catalog| catalog.get(item))
@@ -318,7 +317,7 @@ fn deactivate_world_item_for_respawn(
     let _ = world.insert(entity, *runtime);
 }
 
-pub(crate) fn try_collect_item_pickup(
+pub fn try_collect_item_pickup(
     world: &mut World,
     owner: EntityId,
     pickup_entity: EntityId,

@@ -2,6 +2,33 @@
   "schema": "northstar.assets.importer_descriptors.v1",
   "importers": [
     {
+      "importer_id": "northstar.importer.blender_map.v1",
+      "label": "Blender discrete map importer",
+      "source_extensions": [
+        "blend"
+      ],
+      "source_content_kinds": [
+        "source.blender.map"
+      ],
+      "runtime_outputs": [
+        ".ymap@map",
+        ".ymap@cell/x/z",
+        ".ytyp@map_static_mesh",
+        ".ydd@drawable"
+      ],
+      "owner_gateway": "engine.assets.maps",
+      "cache_key_inputs": [
+        "source_path",
+        "source_content_hash",
+        "importer_id",
+        "importer_version",
+        "settings_hash",
+        "target_platform"
+      ],
+      "deterministic": true,
+      "version": "1"
+    },
+    {
       "importer_id": "northstar.importer.ytyp_xml.v1",
       "label": "YTYP XML authoring importer",
       "source_extensions": [

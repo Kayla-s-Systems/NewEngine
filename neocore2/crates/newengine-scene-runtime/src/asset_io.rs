@@ -45,11 +45,10 @@ impl EngineSceneGatewayService {
 
         let assets = AssetServiceClient::new(newengine_plugin_host::default_host_api());
         if let Some(mounts) = self.asset_mounts {
-            let roots = newengine_runtime_host::asset_bootstrap::collect_app_asset_roots(
-                mounts.app_dir_name,
-                mounts.app_assets_env,
+            newengine_runtime_host::asset_bootstrap::mount_profile_content_best_effort(
+                &assets,
+                mounts.profile,
             );
-            newengine_runtime_host::asset_bootstrap::mount_asset_roots_best_effort(&assets, &roots);
         }
 
         let bytes = assets.text_v1(&path).map_err(|error| {

@@ -50,6 +50,7 @@ pub fn gameplay_default_listeners() -> Vec<InputActionListenerRegistration> {
                 action::PLAYER_JUMP,
                 action::PLAYER_CROUCH,
                 action::PLAYER_FIRE_PRIMARY,
+                action::PLAYER_LAUNCH_PROJECTILE,
                 action::PLAYER_AIM,
                 action::PLAYER_RELOAD,
                 action::PLAYER_INTERACT,

@@ -35,7 +35,7 @@ impl RuntimeRenderController {
         vp_w: u32,
         vp_h: u32,
     ) -> WorldFrameState {
-        let mut activate_game_ready_play_after_frame = false;
+        let mut activate_world_play_after_frame = false;
         let viewport_bridge = self.bridges.viewport.clone();
         let scene_bridge = self.bridges.scene.clone();
         let selection = scene_bridge.selection();
@@ -47,20 +47,7 @@ impl RuntimeRenderController {
                 "render.world_tick",
             );
 
-            {
-                let prims_lock = scene_bridge.primitives();
-                let mut prims = prims_lock.write();
-                let mats_lock = scene_bridge.materials();
-                let mats = mats_lock.read();
-                crate::scene_bridge::tick_game_ready_static_world_prefabs(
-                    world,
-                    &mut prims,
-                    &mats,
-                    thread_pool,
-                );
-            }
-
-            let world_playable = readiness::update_game_ready_launch_gate(
+            let world_playable = readiness::update_world_activation_gate(
                 self,
                 r,
                 world,
@@ -68,21 +55,15 @@ impl RuntimeRenderController {
                 self.frame.frame_index,
             );
             let gate_released_waiting_activation = world
-                .resource::<crate::gameplay::GameReadyWorldLaunchGate>()
-                .map(|gate| {
-                    gate.is_released()
-                        && !gate.is_play_activated()
-                        && !gate.is_editor_preview_ready()
-                })
+                .resource::<crate::gameplay::WorldActivationState>()
+                .map(|gate| gate.is_ready() && !gate.is_active() && !gate.is_preview_ready())
                 .unwrap_or(false);
 
             let effective_play_mode = if gate_released_waiting_activation {
-                if let Some(gate) =
-                    world.resource_mut::<crate::gameplay::GameReadyWorldLaunchGate>()
-                {
-                    gate.mark_play_activated();
+                if let Some(gate) = world.resource_mut::<crate::gameplay::WorldActivationState>() {
+                    gate.mark_active();
                 }
-                activate_game_ready_play_after_frame = true;
+                activate_world_play_after_frame = true;
                 GameRunMode::Play
             } else if world_playable {
                 play_mode
@@ -94,7 +75,7 @@ impl RuntimeRenderController {
             let mut engine_view_input = EngineViewInput::from(input);
             scene_bridge.prepare_engine_runtime_input(
                 world,
-                engine_view_input,
+                engine_view_input.clone(),
                 effective_play_mode,
                 self.frame.frame_index,
             );
@@ -102,21 +83,24 @@ impl RuntimeRenderController {
             // it in the render-phase packet would cycle camera modes twice in one frame.
             engine_view_input.camera_view = newengine_input_actions_api::CameraViewRequest::None;
 
-            if effective_play_mode.is_runtime() {
-                if runtime_profile.use_runtime_terrain_streaming() {
-                    let mats_lock = scene_bridge.materials();
-                    let mats = mats_lock.read();
-                    crate::scene_bridge::tick_game_ready_streaming_terrain(
-                        world,
-                        &mats,
-                        thread_pool,
-                    );
-                } else {
-                    log_streaming_skip_once();
-                }
-            }
-            if runtime_profile.tick_sky_cycle() {
-                crate::scene_bridge::tick_game_ready_sky_cycle(world, dt);
+            {
+                let prims_lock = scene_bridge.primitives();
+                let mut prims = prims_lock.write();
+                let mats_lock = scene_bridge.materials();
+                let mats = mats_lock.read();
+                self.frame.world_runtime.tick_frame(
+                    world,
+                    &mut prims,
+                    &mats,
+                    thread_pool,
+                    crate::WorldRuntimeFrame {
+                        frame_index: self.frame.frame_index,
+                        dt,
+                        runtime_active: effective_play_mode.is_runtime(),
+                        streaming_enabled: runtime_profile.use_runtime_terrain_streaming(),
+                        environment_cycle_enabled: runtime_profile.tick_sky_cycle(),
+                    },
+                );
             }
 
             if effective_play_mode.runs_physics() && !pause_world {
@@ -168,6 +152,9 @@ impl RuntimeRenderController {
                         ));
                         run_schedule_with_physics_mode_and_telemetry_for_frame(
                             &mut self.frame.sim_schedule,
+                            &mut self.frame.gameplay_content,
+                            &self.frame.gameplay_systems,
+                            &self.frame.gameplay_physics_queries,
                             world,
                             fixed_dt,
                             simulation_tick,
@@ -182,6 +169,10 @@ impl RuntimeRenderController {
                     log_physics_skip_once();
                 }
             }
+
+            // Gameplay systems may change modal UI state during the fixed step.
+            // Synchronize the generic capture contract before camera/input resolution.
+            self.frame.gameplay_ui.sync_modal_state(world);
 
             let bounds = scene::scene_bounds_world(world).unwrap_or_else(scene::default_bounds);
             let bounds = EngineBoundsSnap::new(bounds.center, bounds.radius);
@@ -209,7 +200,7 @@ impl RuntimeRenderController {
             frame
         });
 
-        if activate_game_ready_play_after_frame {
+        if activate_world_play_after_frame {
             self.bridges.scene.activate_profile_play_now();
         }
 
@@ -219,7 +210,6 @@ impl RuntimeRenderController {
 
 static GPU_SAFE_PHYSICS_SKIP_LOGGED: AtomicBool = AtomicBool::new(false);
 static SERVICE_PHYSICS_UNAVAILABLE_LOGGED: AtomicBool = AtomicBool::new(false);
-static GPU_SAFE_STREAMING_SKIP_LOGGED: AtomicBool = AtomicBool::new(false);
 
 fn log_service_physics_unavailable_once() {
     if SERVICE_PHYSICS_UNAVAILABLE_LOGGED
@@ -249,20 +239,6 @@ fn log_physics_skip_once() {
     }
 }
 
-fn log_streaming_skip_once() {
-    if GPU_SAFE_STREAMING_SKIP_LOGGED
-        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
-        .is_ok()
-    {
-        newengine_ulog_api::ulog::warn!(
-            "render world tick: runtime terrain streaming skipped by conservative GPU profile; change plugins.engine.runtime.render.runtime_profile.world.runtime_terrain_streaming to 'enabled' to test the original streaming path"
-        );
-        newengine_core::crash::record_breadcrumb(
-            "render world tick: conservative profile skipped runtime terrain streaming",
-        );
-    }
-}
-
 impl From<&ViewportInputSnap> for EngineViewInput {
     #[inline]
     fn from(input: &ViewportInputSnap) -> Self {
@@ -281,7 +257,7 @@ impl From<&ViewportInputSnap> for EngineViewInput {
             move_mask: input.move_mask,
             speed_scalar: input.speed_scalar,
             camera_view: input.camera_view,
-            gameplay_actions: input.actions.gameplay_actions(),
+            gameplay_actions: input.actions.command_actions(),
         }
     }
 }

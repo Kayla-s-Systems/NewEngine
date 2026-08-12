@@ -13,7 +13,10 @@ fn document_cache_is_bounded_and_promotes_hits() {
     assert_eq!(cache.entries.len(), DOCUMENT_CACHE_CAPACITY);
     assert!(cache.get("asset-0.json").is_none());
     assert!(cache.get("asset-9.json").is_some());
-    assert_eq!(cache.entries.front().unwrap().0, "asset-9.json");
+    assert_eq!(
+        cache.entries.most_recent_key().unwrap().as_str(),
+        "asset-9.json"
+    );
 }
 
 #[test]

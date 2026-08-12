@@ -16,8 +16,8 @@ impl AssetPreviewApi {
             viewport,
             current: Mutex::new(AssetPreviewSnapshot::unavailable("", "no asset selected")),
             render_bundle: RwLock::new(None),
-            bundle_cache: Mutex::new(VecDeque::new()),
-            texture_cache: Mutex::new(VecDeque::new()),
+            bundle_cache: Mutex::new(BoundedCache::new(PREVIEW_BUNDLE_CACHE_CAPACITY)),
+            texture_cache: Mutex::new(BoundedCache::new(PREVIEW_TEXTURE_CACHE_CAPACITY)),
             last_request_cache_hit: AtomicBool::new(false),
             camera: AssetPreviewCameraState::default(),
         }

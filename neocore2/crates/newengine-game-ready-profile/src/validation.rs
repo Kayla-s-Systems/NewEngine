@@ -33,8 +33,7 @@ enum ValidationScenario {
 
 impl ValidationScenario {
     fn from_env() -> Option<Self> {
-        match std::env::var(GAME_READY_VALIDATION_SCENARIO_ENV)
-            .ok()?
+        match crate::env_config::var(GAME_READY_VALIDATION_SCENARIO_ENV)?
             .trim()
             .to_ascii_lowercase()
             .as_str()
@@ -72,15 +71,10 @@ pub(crate) struct GameReadyValidationModule {
 impl GameReadyValidationModule {
     pub(crate) fn from_env() -> Option<Self> {
         let scenario = ValidationScenario::from_env()?;
-        let save_path = std::env::var_os(GAME_READY_VALIDATION_SAVE_PATH_ENV)
-            .map(PathBuf::from)
-            .filter(|path| !path.as_os_str().is_empty())
+        let save_path = crate::env_config::path(GAME_READY_VALIDATION_SAVE_PATH_ENV)
             .unwrap_or_else(|| PathBuf::from("target/smoke/game-ready-world-save.json"));
-        let streaming_steps = std::env::var(GAME_READY_STREAMING_STEPS_ENV)
-            .ok()
-            .and_then(|value| value.trim().parse::<u32>().ok())
-            .unwrap_or(128)
-            .clamp(8, 4096);
+        let streaming_steps =
+            crate::env_config::var_u32(GAME_READY_STREAMING_STEPS_ENV, 128, 8, 4096);
         Some(Self {
             scenario,
             save_path,

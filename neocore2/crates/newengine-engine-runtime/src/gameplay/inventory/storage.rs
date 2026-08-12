@@ -16,6 +16,7 @@ pub struct PlayerInventory {
     pub equipped: BTreeMap<EquipmentSlot, ItemInstanceId>,
     pub active_slot: Option<EquipmentSlot>,
     pub weapon_states: BTreeMap<ItemInstanceId, PlayerWeaponState>,
+    loadout_initialized: bool,
     pub(super) next_instance_serial: u64,
 }
 
@@ -28,6 +29,7 @@ impl Default for PlayerInventory {
             equipped: BTreeMap::new(),
             active_slot: None,
             weapon_states: BTreeMap::new(),
+            loadout_initialized: false,
             next_instance_serial: 1,
         }
     }
@@ -40,6 +42,16 @@ impl PlayerInventory {
             .iter()
             .filter(|entry| entry.item == item)
             .fold(0u32, |total, entry| total.saturating_add(entry.quantity))
+    }
+
+    #[inline]
+    pub const fn loadout_initialized(&self) -> bool {
+        self.loadout_initialized
+    }
+
+    #[inline]
+    pub fn mark_loadout_initialized(&mut self) {
+        self.loadout_initialized = true;
     }
 
     #[inline]
@@ -264,5 +276,36 @@ impl InventoryEventBus {
 
     pub fn drain(&mut self) -> Vec<InventoryEvent> {
         self.events.drain(..).collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn event_bus_keeps_exact_latest_capacity_in_order() {
+        let mut world = World::new();
+        let owner = world.spawn();
+        let item = ItemId::from_name("test.inventory.event").expect("valid test item");
+        let mut bus = InventoryEventBus::default();
+
+        for sequence in 0..2_000u32 {
+            bus.emit(InventoryEvent {
+                kind: InventoryEventKind::ItemAdded,
+                owner,
+                item,
+                instance_id: None,
+                quantity: sequence,
+                slot: None,
+                world_entity: None,
+                message: String::new(),
+            });
+        }
+
+        assert_eq!(bus.events.len(), 512);
+        assert_eq!(bus.events.front().map(|event| event.quantity), Some(1_488));
+        assert_eq!(bus.events.back().map(|event| event.quantity), Some(1_999));
+        assert!(bus.events.iter().map(|event| event.quantity).is_sorted());
     }
 }

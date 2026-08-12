@@ -4,7 +4,7 @@ use super::module_slot::ModuleState;
 use super::Engine;
 
 use crate::lifecycle_events::{EngineLifecycleEvent, EngineReadinessKey, EngineReadinessSnapshot};
-use crate::log_fmt::emit_prefixed_table;
+use newengine_ulog_api::formatting::emit_prefixed_table;
 
 /// Declarative startup readiness graph.
 ///

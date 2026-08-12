@@ -3,6 +3,8 @@
 use crate::host_services::{call_service_v1, describe_service, list_service_ids};
 use newengine_plugin_host::services_generation;
 
+use super::cvar::{global_cvar_registry, CVarRegistry, CVarSnapshot};
+use super::descriptor::{CommandDescriptor, CommandFlags};
 use super::types::{ConsoleCmdEntry, DynCommand, DynPayload, SuggestItem, SuggestResponse};
 
 use newengine_math::collections_prelude::NeBTreeMap as BTreeMap;
@@ -22,6 +24,7 @@ pub struct ConsoleRuntime {
 
     dyn_cmds: Mutex<BTreeMap<String, DynCommand>>,
     method_cache: Mutex<BTreeMap<String, Vec<String>>>,
+    cvars: Arc<CVarRegistry>,
 
     cached_services_gen: AtomicU64,
 }
@@ -79,6 +82,33 @@ impl ConsoleRuntime {
         );
 
         cmds.insert(
+            "cvars",
+            Cmd {
+                help: "List registered typed CVars",
+                usage: "cvars",
+                f: |rt, _| rt.cvars_text(),
+            },
+        );
+
+        cmds.insert(
+            "get",
+            Cmd {
+                help: "Read a typed CVar",
+                usage: "get <cvar_id>",
+                f: |rt, line| rt.cvar_get_cmd(line),
+            },
+        );
+
+        cmds.insert(
+            "set",
+            Cmd {
+                help: "Write a typed CVar",
+                usage: "set <cvar_id> <value>",
+                f: |rt, line| rt.cvar_set_cmd(line),
+            },
+        );
+
+        cmds.insert(
             "quit",
             Cmd {
                 help: "Exit engine",
@@ -94,6 +124,7 @@ impl ConsoleRuntime {
             cmds,
             dyn_cmds: Mutex::new(BTreeMap::new()),
             method_cache: Mutex::new(BTreeMap::new()),
+            cvars: global_cvar_registry(),
             cached_services_gen: AtomicU64::new(0),
         }
     }
@@ -138,6 +169,17 @@ impl ConsoleRuntime {
 
         if let Some(rest) = s.strip_prefix("describe ") {
             return self.complete_service_id(rest.trim());
+        }
+
+        if let Some(rest) = s.strip_prefix("get ") {
+            return self.complete_cvar_id(rest.trim());
+        }
+
+        if let Some(rest) = s.strip_prefix("set ") {
+            let id = rest.split_whitespace().next().unwrap_or("");
+            if !rest[id.len()..].starts_with(char::is_whitespace) {
+                return self.complete_cvar_id(id);
+            }
         }
 
         if let Some(rest) = s.strip_prefix("call ") {
@@ -469,6 +511,7 @@ impl ConsoleRuntime {
                 let help = entry_cmd
                     .help
                     .clone()
+                    .or_else(|| entry_cmd.description.clone())
                     .unwrap_or_else(|| format!("{sid}::{method}"));
 
                 out.insert(
@@ -476,9 +519,12 @@ impl ConsoleRuntime {
                     DynCommand {
                         help,
                         usage,
-                        service_id: sid,
+                        service_id: sid.clone(),
                         method,
                         payload,
+                        args: entry_cmd.args,
+                        flags: entry_cmd.flags,
+                        owner: entry_cmd.owner.unwrap_or(sid),
                     },
                 );
             }
@@ -494,6 +540,74 @@ impl ConsoleRuntime {
 
         self.cached_services_gen
             .store(services_generation(), Ordering::Release);
+    }
+
+    pub fn command_descriptors(&self) -> Vec<CommandDescriptor> {
+        self.refresh_if_services_changed();
+        let mut descriptors = self
+            .cmds
+            .iter()
+            .map(|(id, command)| CommandDescriptor {
+                id: (*id).to_owned(),
+                description: command.help.to_owned(),
+                usage: command.usage.to_owned(),
+                args: Vec::new(),
+                flags: CommandFlags::default(),
+                owner: "newengine-core".to_owned(),
+            })
+            .collect::<Vec<_>>();
+        if let Ok(dynamic) = self.dyn_cmds.lock() {
+            descriptors.extend(dynamic.iter().map(|(id, command)| CommandDescriptor {
+                id: id.clone(),
+                description: command.help.clone(),
+                usage: command.usage.clone(),
+                args: command.args.clone(),
+                flags: command.flags.clone(),
+                owner: command.owner.clone(),
+            }));
+        }
+        descriptors.sort_by(|a, b| a.id.cmp(&b.id));
+        descriptors
+    }
+
+    #[inline]
+    pub fn cvar_snapshots(&self) -> Vec<CVarSnapshot> {
+        self.cvars.snapshots()
+    }
+
+    fn complete_cvar_id(&self, prefix: &str) -> Vec<String> {
+        self.cvars
+            .snapshots()
+            .into_iter()
+            .map(|entry| entry.descriptor.id)
+            .filter(|id| id.starts_with(prefix))
+            .collect()
+    }
+
+    fn cvars_text(&self) -> Result<String, String> {
+        let rows = self.cvars.snapshots();
+        serde_json::to_string_pretty(&rows).map_err(|error| error.to_string())
+    }
+
+    fn cvar_get_cmd(&self, line: &str) -> Result<String, String> {
+        let id = line.split_whitespace().nth(1).unwrap_or("").trim();
+        if id.is_empty() {
+            return Err("usage: get <cvar_id>".to_owned());
+        }
+        Ok(self.cvars.get(id)?.display_value())
+    }
+
+    fn cvar_set_cmd(&self, line: &str) -> Result<String, String> {
+        let mut parts = line
+            .splitn(3, char::is_whitespace)
+            .filter(|part| !part.is_empty());
+        let _ = parts.next();
+        let id = parts.next().unwrap_or("").trim();
+        let value = parts.next().unwrap_or("");
+        if id.is_empty() || value.is_empty() {
+            return Err("usage: set <cvar_id> <value>".to_owned());
+        }
+        Ok(self.cvars.set_from_str(id, value)?.display_value())
     }
 
     fn describe_raw(&self, service_id: &str) -> Result<String, String> {

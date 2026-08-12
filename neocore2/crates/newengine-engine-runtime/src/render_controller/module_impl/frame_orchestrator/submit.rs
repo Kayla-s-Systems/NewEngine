@@ -115,8 +115,13 @@ impl RenderFrameOrchestrator {
             snapshot.camera_position.y,
             snapshot.camera_position.z,
         ];
-        let base_lights =
-            lights::collect_lights(scene.world()).with_camera_position(camera_position);
+        let base_lights = lights::collect_lights(scene.world())
+            .with_camera_position(camera_position)
+            .with_camera_forward([
+                snapshot.camera_forward.x,
+                snapshot.camera_forward.y,
+                snapshot.camera_forward.z,
+            ]);
         let extent = Extent2D::new(scope.vp_w, scope.vp_h);
         let gpu_safe_profile = runtime_profile.gpu_safe_enabled();
         if gpu_safe_profile {

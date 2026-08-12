@@ -23,7 +23,7 @@ pub(super) fn place_spawn_position(base: Vec3, index: usize) -> Vec3 {
 }
 
 #[inline]
-pub(super) fn ensure_primitive_base(
+pub(crate) fn ensure_primitive_base(
     world: &mut newengine_ecs::World,
     entity: EntityId,
     base: MaterialId,
@@ -35,7 +35,7 @@ pub(super) fn ensure_primitive_base(
 }
 
 #[inline]
-pub(super) fn apply_primitive_instance(
+pub(crate) fn apply_primitive_instance(
     world: &mut newengine_ecs::World,
     mats: &MaterialRegistry,
     entity: EntityId,
@@ -51,7 +51,7 @@ pub(super) fn apply_primitive_instance(
 }
 
 #[inline]
-pub(super) fn apply_exact_material(
+pub(crate) fn apply_exact_material(
     world: &mut newengine_ecs::World,
     mats: &MaterialRegistry,
     entity: EntityId,
@@ -68,7 +68,7 @@ pub(super) fn apply_exact_material(
 }
 
 #[inline]
-pub(super) fn ensure_root(scene: &mut Scene) -> EntityId {
+pub(crate) fn ensure_root(scene: &mut Scene) -> EntityId {
     if let Some(root) = scene.root() {
         return root;
     }
@@ -92,7 +92,7 @@ pub(super) fn ensure_root(scene: &mut Scene) -> EntityId {
 }
 
 #[inline]
-pub(super) fn primitive_bounds(reg: &PrimitiveRegistry, id: PrimitiveId) -> Option<Bounds> {
+pub(crate) fn primitive_bounds(reg: &PrimitiveRegistry, id: PrimitiveId) -> Option<Bounds> {
     let mesh = reg.build_mesh(id).ok()?;
     Some(Bounds::from_local_sphere(newengine_bounds::Sphere::new(
         mesh.bounds_center,

@@ -217,11 +217,69 @@ impl RuntimeRenderController {
 
     /// Selects the material domain used by the current lit mesh/shadow passes.
     ///
-    /// This keeps the reusable render controller free from GameReady shader path
+    /// This keeps the reusable render controller free from profile-owned shader path
     /// knowledge: the profile chooses a domain key and registers the provider.
     #[inline]
     pub fn with_primary_lit_material_domain(mut self, key: MaterialGpuPipelineKey) -> Self {
         self.gpu.material.primary_lit_pipeline_key = Some(key);
+        self
+    }
+
+    /// Registers a profile-owned gameplay execution provider.
+    ///
+    /// The reusable runtime owns only phase ordering. Concrete FPS/gameplay
+    /// behavior is selected explicitly by the active application/profile.
+    #[inline]
+    pub fn with_gameplay_system_provider(
+        mut self,
+        provider: Arc<dyn crate::gameplay::GameplaySystemProvider>,
+    ) -> Self {
+        self.frame.gameplay_systems.register_provider(provider);
+        self
+    }
+
+    /// Registers a profile-owned gameplay content provider.
+    #[inline]
+    pub fn with_gameplay_content_provider(
+        mut self,
+        provider: Arc<dyn crate::gameplay::GameplayContentProvider>,
+    ) -> Self {
+        self.frame.gameplay_content.register_provider(provider);
+        self
+    }
+
+    /// Registers a profile-owned gameplay UI provider.
+    #[inline]
+    pub fn with_gameplay_ui_provider(
+        mut self,
+        provider: Arc<dyn crate::gameplay::GameplayUiProvider>,
+    ) -> Self {
+        self.frame.gameplay_ui.register_provider(provider);
+        self
+    }
+
+    /// Registers a profile-owned gameplay physics-query provider.
+    #[inline]
+    pub fn with_gameplay_physics_query_provider(
+        mut self,
+        provider: Arc<dyn crate::gameplay::GameplayPhysicsQueryProvider>,
+    ) -> Self {
+        self.frame
+            .gameplay_physics_queries
+            .register_provider(provider);
+        self
+    }
+
+    /// Registers a profile-owned world runtime provider.
+    ///
+    /// World assembly, streaming and environment policy are application/profile
+    /// contributions. The reusable render loop only schedules this contract.
+    #[inline]
+    pub fn with_world_runtime_provider(
+        mut self,
+        provider: Arc<dyn crate::WorldRuntimeProvider>,
+    ) -> Self {
+        self.frame.world_runtime.register_provider(provider);
         self
     }
 

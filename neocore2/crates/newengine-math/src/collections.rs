@@ -15,6 +15,9 @@
 //! - Escape hatch: `use newengine_math::collections::raw::...;` (implementation-specific APIs)
 
 #[cfg(feature = "collections")]
+mod bounded_cache;
+
+#[cfg(feature = "collections")]
 pub mod policy;
 
 #[cfg(feature = "collections")]
@@ -22,6 +25,9 @@ pub mod prelude;
 
 #[cfg(feature = "collections")]
 pub mod raw;
+
+#[cfg(feature = "collections")]
+pub use bounded_cache::{BoundedCache, CacheStats};
 
 #[cfg(feature = "collections")]
 pub use fxhash::FxHasher;
@@ -42,7 +48,7 @@ pub type FxHashMap<K, V> = HashMap<K, V, FxBuildHasher>;
 ///
 /// ⚠️ Not DoS-resistant. Do not use for untrusted input.
 #[cfg(feature = "collections")]
-pub type FxHashSet<K> = HashSet<K, FxBuildHasher>;
+pub type FxHashSet<T> = HashSet<T, FxBuildHasher>;
 
 /// Secure, randomized hashing for untrusted inputs (network/JSON/modding).
 ///
@@ -56,7 +62,7 @@ pub type SecureHashMap<K, V> = HashMap<K, V, SecureBuildHasher>;
 
 /// Hash set for untrusted/external inputs (secure).
 #[cfg(feature = "collections")]
-pub type SecureHashSet<K> = HashSet<K, SecureBuildHasher>;
+pub type SecureHashSet<T> = HashSet<T, SecureBuildHasher>;
 
 /// Stable-iteration containers.
 #[cfg(feature = "collections")]
@@ -65,7 +71,7 @@ pub type BTreeMap<K, V> = std::collections::BTreeMap<K, V>;
 #[cfg(feature = "collections")]
 pub type BTreeSet<K> = std::collections::BTreeSet<K>;
 
-/// FIFO / LRU queue container routed through the engine foundation.
+/// FIFO queue container routed through the engine foundation.
 #[cfg(feature = "collections")]
 pub type VecDeque<T> = std::collections::VecDeque<T>;
 

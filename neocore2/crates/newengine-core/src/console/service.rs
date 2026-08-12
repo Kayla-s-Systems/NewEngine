@@ -24,7 +24,7 @@ impl ServiceV1 for CommandService {
         RString::from(
             json!({
                 "id": COMMAND_SERVICE_ID,
-                "version": 2,
+                "version": 3,
                 "methods": [
                     { "name": method::EXEC, "payload": "utf8 line", "returns": "json {ok, output?, error?}" },
                     { "name": method::COMPLETE, "payload": "utf8 prefix", "returns": "json {items:[string]}" },
@@ -32,17 +32,12 @@ impl ServiceV1 for CommandService {
                     { "name": method::REFRESH, "payload": "empty", "returns": "json {ok:true}" }
                 ],
                 "console": {
-                    "commands": [
-                        { "name": "help", "help": "List commands", "usage": "help" },
-                        { "name": "services", "help": "List services", "usage": "services" },
-                        { "name": "refresh", "help": "Refresh console commands", "usage": "refresh" },
-                        { "name": "describe", "help": "Describe a service", "usage": "describe <service_id>" },
-                        { "name": "call", "help": "Call a service method", "usage": "call <service_id> <method> [payload]" },
-                        { "name": "quit", "help": "Exit engine", "usage": "quit" }
-                    ]
+                    "contract": "newengine.command-descriptor/v1",
+                    "commands": self.rt.command_descriptors(),
+                    "cvars": self.rt.cvar_snapshots()
                 }
             })
-                .to_string(),
+            .to_string(),
         )
     }
 

@@ -1,22 +1,19 @@
 use std::sync::Arc;
 
+use newengine_runtime_host::asset_bootstrap::ProfileMountSpec;
 use newengine_scene::{SceneAsset, SceneAssetOptions};
 
 use crate::SceneBridge;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SceneGatewayAssetMounts {
-    pub app_dir_name: &'static str,
-    pub app_assets_env: &'static str,
+    pub profile: ProfileMountSpec,
 }
 
 impl SceneGatewayAssetMounts {
     #[inline]
-    pub const fn new(app_dir_name: &'static str, app_assets_env: &'static str) -> Self {
-        Self {
-            app_dir_name,
-            app_assets_env,
-        }
+    pub const fn from_profile(profile: ProfileMountSpec) -> Self {
+        Self { profile }
     }
 }
 

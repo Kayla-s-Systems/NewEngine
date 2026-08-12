@@ -385,7 +385,7 @@ fn default_sun_direction() -> [f32; 3] {
 }
 #[inline]
 fn default_sun_disk_radius() -> f32 {
-    0.018
+    0.0045
 }
 #[inline]
 fn default_sun_flare_strength() -> f32 {

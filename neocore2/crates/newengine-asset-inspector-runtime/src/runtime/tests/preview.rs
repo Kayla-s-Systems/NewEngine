@@ -159,7 +159,10 @@ fn preview_entry_cache_is_bounded_and_promotes_hits() {
     assert_eq!(cache.entries.len(), PREVIEW_ENTRY_CACHE_CAPACITY);
     assert!(cache.get("materials/0.nemat").is_none());
     assert!(cache.get("materials/9.nemat").is_some());
-    assert_eq!(cache.entries.front().unwrap().0, "materials/9.nemat");
+    assert_eq!(
+        cache.entries.most_recent_key().unwrap().as_str(),
+        "materials/9.nemat"
+    );
 }
 
 #[test]

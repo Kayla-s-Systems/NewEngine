@@ -103,6 +103,40 @@ impl InputActionFrameCarrier<'_> {
         *self.pan_drag = false;
     }
 
+    /// Applies profile-owned gameplay capture without collapsing it into an engine-wide modal.
+    ///
+    /// This keeps low-level sampling alive while allowing providers to independently gate
+    /// semantic gameplay actions, camera navigation and player locomotion.
+    pub(crate) fn apply_gameplay_input_capture(
+        &mut self,
+        capture: crate::gameplay::GameplayInputCapture,
+    ) {
+        if capture.pointer || capture.keyboard {
+            *self.ui_busy = true;
+        }
+        if capture.block_gameplay_actions {
+            self.suppress_gameplay_actions();
+        }
+        if capture.block_camera_navigation {
+            *self.sampling_alive = true;
+            *self.camera_navigation_gated = true;
+            *self.dx_px = 0.0;
+            *self.dy_px = 0.0;
+            *self.wheel_y = 0.0;
+            *self.active = false;
+            *self.look_drag = false;
+            *self.pan_drag = false;
+            *self.fly_rmb = false;
+            *self.camera_view = CameraViewRequest::None;
+            self.actions.look_axis = [0.0, 0.0];
+            self.actions.camera_view = CameraViewRequest::None;
+        }
+        if capture.block_player_movement {
+            *self.gameplay_movement_gated = true;
+            self.suppress_gameplay_movement();
+        }
+    }
+
     /// Gate gameplay/camera navigation while keeping the camera listener alive.
     ///
     /// UI may consume pointer/text/navigation intent, but it must not unsubscribe
@@ -166,7 +200,7 @@ mod tests {
     use newengine_input_actions_api::InputActionDispatchEvent;
 
     #[test]
-    fn modal_gate_preserves_inventory_controller_actions() {
+    fn modal_gate_preserves_non_gameplay_controller_actions() {
         let mut dx_px = 0.0;
         let mut dy_px = 0.0;
         let mut wheel_y = 0.0;
@@ -182,10 +216,7 @@ mod tests {
         let mut speed_scalar = 1.0;
         let mut camera_view = CameraViewRequest::None;
         let mut actions = InputActionFrame {
-            actions: vec![
-                "player.fire.primary".into(),
-                "player.inventory.toggle".into(),
-            ],
+            actions: vec!["player.fire.primary".into(), "ui.modal.toggle".into()],
             events: vec![
                 InputActionDispatchEvent {
                     action: "player.fire.primary".into(),
@@ -193,8 +224,8 @@ mod tests {
                     consumed_by: None,
                 },
                 InputActionDispatchEvent {
-                    action: "player.inventory.toggle".into(),
-                    listeners: vec!["newengine-inventory:inventory-controller".into()],
+                    action: "ui.modal.toggle".into(),
+                    listeners: vec!["gameplay-ui:modal-controller".into()],
                     consumed_by: None,
                 },
             ],
@@ -218,7 +249,7 @@ mod tests {
             actions: &mut actions,
         };
         carrier.gate_runtime_navigation_by_ui();
-        assert_eq!(carrier.actions.actions, ["player.inventory.toggle"]);
+        assert_eq!(carrier.actions.actions, ["ui.modal.toggle"]);
         assert_eq!(carrier.actions.events.len(), 1);
     }
 

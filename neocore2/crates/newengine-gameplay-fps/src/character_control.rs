@@ -1,0 +1,153 @@
+#![forbid(unsafe_op_in_unsafe_fn)]
+
+use newengine_ecs::World;
+use newengine_engine_runtime::gameplay::{
+    apply_player_stance_geometry, is_player_controller_enabled, update_player_stance_camera,
+    CharacterBody, CharacterMotionTuning, PlayerCommandFrame, PlayerController, PlayerGroundState,
+    PlayerStanceKind, PlayerStanceState,
+};
+use newengine_gameplay_fps_api::FpsActionFrame;
+use newengine_sim::Velocity;
+
+/// FPS-owned interpretation of generic semantic command transport.
+/// The engine owns stance geometry/motion components; this package owns what jump/crouch mean.
+pub(crate) fn apply_fps_character_commands(world: &mut World, dt: f32, fixed_tick: u64) {
+    let players = world
+        .query2_ids::<PlayerController, PlayerCommandFrame>()
+        .collect::<Vec<_>>();
+
+    for player in players {
+        if !is_player_controller_enabled(world, player) {
+            continue;
+        }
+        let actions = world
+            .get::<PlayerCommandFrame>(player)
+            .map(|commands| FpsActionFrame::from_commands(&commands.actions))
+            .unwrap_or_default();
+        let body = world
+            .get::<CharacterBody>(player)
+            .copied()
+            .unwrap_or_default()
+            .sanitized();
+        let motion = world
+            .get::<CharacterMotionTuning>(player)
+            .copied()
+            .unwrap_or_default()
+            .sanitized();
+        let stance = world
+            .get::<PlayerStanceState>(player)
+            .copied()
+            .unwrap_or_else(|| PlayerStanceState::standing(body.standing_eye_height));
+
+        if actions.crouch_held {
+            if stance.current != PlayerStanceKind::Crouched {
+                let _ = apply_player_stance_geometry(
+                    world,
+                    player,
+                    PlayerStanceKind::Crouched,
+                    fixed_tick,
+                );
+            }
+            if let Some(state) = world.get_mut::<PlayerStanceState>(player) {
+                state.stand_requested = false;
+                state.stand_blocked = false;
+                state.target_eye_height = body.crouched_eye_height;
+            }
+        } else if stance.current == PlayerStanceKind::Crouched {
+            if let Some(state) = world.get_mut::<PlayerStanceState>(player) {
+                state.stand_requested = true;
+                state.target_eye_height = body.crouched_eye_height;
+            }
+        }
+
+        let grounded = world
+            .get::<PlayerGroundState>(player)
+            .map(|state| state.grounded)
+            .unwrap_or(false);
+        if actions.jump_pressed && grounded && motion.jump_speed > 0.0 {
+            let mut velocity = world.get::<Velocity>(player).copied().unwrap_or_default();
+            velocity.0.y = motion.jump_speed;
+            let _ = world.insert(player, velocity);
+            if let Some(state) = world.get_mut::<PlayerGroundState>(player) {
+                state.grounded = false;
+                state.walkable = false;
+                state.ground_entity = None;
+                state.distance = f32::INFINITY;
+            }
+        }
+    }
+
+    update_player_stance_camera(world, dt);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use newengine_engine_runtime::gameplay::{
+        spawn_default_player, CharacterBody, PlayerGroundState, PlayerStanceKind, PlayerStanceState,
+    };
+    use newengine_gameplay_fps_api::action;
+    use newengine_input_actions_api::ActionCommandFrame;
+    use newengine_math::Vec3;
+
+    #[test]
+    fn grounded_fps_jump_sets_vertical_velocity_and_clears_ground_state() {
+        let mut world = World::new();
+        let player = spawn_default_player(&mut world, None, "fps-jump", Vec3::ZERO);
+        let jump_speed = world
+            .get::<CharacterMotionTuning>(player)
+            .copied()
+            .unwrap_or_default()
+            .jump_speed;
+        if let Some(ground) = world.get_mut::<PlayerGroundState>(player) {
+            ground.grounded = true;
+            ground.walkable = true;
+            ground.ground_entity = Some(99);
+        }
+        if let Some(commands) = world.get_mut::<PlayerCommandFrame>(player) {
+            commands.actions = ActionCommandFrame {
+                pressed: vec![action::PLAYER_JUMP.into()],
+                ..ActionCommandFrame::default()
+            };
+        }
+
+        apply_fps_character_commands(&mut world, 1.0 / 60.0, 7);
+
+        assert_eq!(
+            world.get::<Velocity>(player).map(|velocity| velocity.0.y),
+            Some(jump_speed)
+        );
+        assert!(
+            !world
+                .get::<PlayerGroundState>(player)
+                .expect("ground state")
+                .grounded
+        );
+    }
+
+    #[test]
+    fn fps_crouch_policy_drives_generic_stance_geometry() {
+        let mut world = World::new();
+        let player = spawn_default_player(&mut world, None, "fps-crouch", Vec3::ZERO);
+        let body = world
+            .get::<CharacterBody>(player)
+            .copied()
+            .unwrap_or_default()
+            .sanitized();
+        if let Some(commands) = world.get_mut::<PlayerCommandFrame>(player) {
+            commands.actions = ActionCommandFrame {
+                held: vec![action::PLAYER_CROUCH.into()],
+                ..ActionCommandFrame::default()
+            };
+        }
+
+        apply_fps_character_commands(&mut world, 1.0 / 60.0, 11);
+
+        let stance = world
+            .get::<PlayerStanceState>(player)
+            .copied()
+            .expect("stance state");
+        assert_eq!(stance.current, PlayerStanceKind::Crouched);
+        assert_eq!(stance.target_eye_height, body.crouched_eye_height);
+    }
+}

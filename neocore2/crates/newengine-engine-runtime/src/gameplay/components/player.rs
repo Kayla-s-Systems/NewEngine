@@ -1,5 +1,92 @@
 use super::*;
 
+/// Provider-neutral character collision/view envelope.
+///
+/// This component describes physical body/eye/placeholder-visual geometry only. Gameplay
+/// packages may author different values for FPS, third-person, RTS-controlled pawns, NPCs, etc.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct CharacterBody {
+    pub radius: f32,
+    pub standing_half_height: f32,
+    pub crouched_half_height: f32,
+    pub standing_eye_height: f32,
+    pub crouched_eye_height: f32,
+    pub visual_radius: f32,
+    pub visual_half_height: f32,
+}
+
+impl CharacterBody {
+    #[inline]
+    pub fn sanitized(self) -> Self {
+        let standing_half_height = finite_or(self.standing_half_height, 0.45).clamp(0.05, 8.0);
+        Self {
+            radius: finite_or(self.radius, 0.45).clamp(0.05, 5.0),
+            standing_half_height,
+            crouched_half_height: finite_or(self.crouched_half_height, 0.15)
+                .clamp(0.05, standing_half_height),
+            standing_eye_height: finite_or(self.standing_eye_height, 0.72).clamp(0.05, 12.0),
+            crouched_eye_height: finite_or(self.crouched_eye_height, 0.45).clamp(0.05, 12.0),
+            visual_radius: finite_or(self.visual_radius, 0.45).clamp(0.05, 8.0),
+            visual_half_height: finite_or(self.visual_half_height, 0.90).clamp(0.05, 12.0),
+        }
+    }
+}
+
+impl Default for CharacterBody {
+    #[inline]
+    fn default() -> Self {
+        Self {
+            radius: 0.45,
+            standing_half_height: 0.45,
+            crouched_half_height: 0.15,
+            standing_eye_height: 0.72,
+            crouched_eye_height: 0.45,
+            visual_radius: 0.45,
+            visual_half_height: 0.90,
+        }
+    }
+}
+
+/// Provider-neutral motion parameters consumed by generic character/player bridges.
+/// Product-specific rules decide when jump/sprint/stance intents are requested.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct CharacterMotionTuning {
+    pub sprint_multiplier: f32,
+    pub jump_speed: f32,
+    pub stance_camera_speed: f32,
+}
+
+impl CharacterMotionTuning {
+    #[inline]
+    pub fn sanitized(self) -> Self {
+        Self {
+            sprint_multiplier: finite_or(self.sprint_multiplier, 1.75).clamp(1.0, 8.0),
+            jump_speed: finite_or(self.jump_speed, 5.5).clamp(0.0, 30.0),
+            stance_camera_speed: finite_or(self.stance_camera_speed, 12.0).clamp(0.1, 100.0),
+        }
+    }
+}
+
+impl Default for CharacterMotionTuning {
+    #[inline]
+    fn default() -> Self {
+        Self {
+            sprint_multiplier: 1.75,
+            jump_speed: 5.5,
+            stance_camera_speed: 12.0,
+        }
+    }
+}
+
+#[inline]
+fn finite_or(value: f32, fallback: f32) -> f32 {
+    if value.is_finite() {
+        value
+    } else {
+        fallback
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum PlayerControllerKind {
     #[default]
@@ -36,15 +123,15 @@ impl Default for PlayerController {
 
 /// Per-render-frame semantic commands handed from input resolution to the possessed player.
 /// Pulse commands are identified by `source_frame` so fixed-step systems can consume them once.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct PlayerCommandFrame {
     pub source_frame: u64,
-    pub actions: GameplayActionFrame,
+    pub actions: ActionCommandFrame,
 }
 
 impl PlayerCommandFrame {
     #[inline]
-    pub const fn new(source_frame: u64, actions: GameplayActionFrame) -> Self {
+    pub fn new(source_frame: u64, actions: ActionCommandFrame) -> Self {
         Self {
             source_frame,
             actions,
@@ -133,7 +220,7 @@ impl PlayerStanceState {
 
 impl Default for PlayerStanceState {
     fn default() -> Self {
-        Self::standing(FpsPlayerTuning::default().camera_eye_height)
+        Self::standing(CharacterBody::default().standing_eye_height)
     }
 }
 

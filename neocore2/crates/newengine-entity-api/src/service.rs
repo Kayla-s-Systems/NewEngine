@@ -13,6 +13,7 @@ pub const ENTITY_SERVICE_METHOD_INVOKE: &str = newengine_service_api::SERVICE_ME
 pub const ENTITY_SERVICE_METHOD_SHUTDOWN_V1: &str =
     newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1;
 pub const ENTITY_SERVICE_METHOD_LIST_JSON_V1: &str = "list_json_v1";
+pub const ENTITY_SERVICE_METHOD_ARCHETYPES_JSON_V1: &str = "archetypes_json_v1";
 pub const ENTITY_SERVICE_METHOD_EXISTS_JSON_V1: &str = "exists_json_v1";
 pub const ENTITY_SERVICE_METHOD_SPAWN_JSON_V1: &str = "spawn_json_v1";
 pub const ENTITY_SERVICE_METHOD_DESPAWN_JSON_V1: &str = "despawn_json_v1";
@@ -22,6 +23,7 @@ pub const ENTITY_REQUIRED_METHODS_V1: &[&str] = &[
     ENTITY_SERVICE_METHOD_INVOKE,
     ENTITY_SERVICE_METHOD_SHUTDOWN_V1,
     ENTITY_SERVICE_METHOD_LIST_JSON_V1,
+    ENTITY_SERVICE_METHOD_ARCHETYPES_JSON_V1,
     ENTITY_SERVICE_METHOD_EXISTS_JSON_V1,
     ENTITY_SERVICE_METHOD_SPAWN_JSON_V1,
     ENTITY_SERVICE_METHOD_DESPAWN_JSON_V1,
@@ -71,6 +73,7 @@ impl Default for EntityServiceInfo {
                 "entity-list".to_owned(),
                 "entity-exists".to_owned(),
                 "entity-lifecycle".to_owned(),
+                "archetype-factory-registry".to_owned(),
                 "entity-tags".to_owned(),
                 "ownership".to_owned(),
                 "debug-identity".to_owned(),

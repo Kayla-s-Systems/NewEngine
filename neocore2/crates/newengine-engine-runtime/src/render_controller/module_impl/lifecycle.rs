@@ -9,7 +9,7 @@ impl RuntimeRenderController {
         ctx: &mut ModuleCtx<'_, E>,
     ) -> EngineResult<()> {
         self.gpu.lifetimes.resources.subscribe(ctx.events());
-        // Do not build the GameReady lit pipeline at module start. In Editor/Edit
+        // Do not build the profile-owned lit pipeline at module start. In Editor/Edit
         // this was the first visible hitch and it initialized gameplay render work
         // before the user pressed Simulate or Play. The pipeline provider remains
         // lazy: render_controller builds it only when a real scene viewport frame is

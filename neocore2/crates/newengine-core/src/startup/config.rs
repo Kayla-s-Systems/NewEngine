@@ -4,9 +4,9 @@ use newengine_math::collections_prelude::NeHashMap as HashMap;
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 
-use crate::log_fmt::{ellipsize, emit_boxed_kv};
-use crate::path_fmt::{canonicalize_if_exists, display_clean};
 use crate::startup_window::StartupLaunchSettings;
+use newengine_ulog_api::formatting::{ellipsize, emit_boxed_kv};
+use newengine_ulog_api::path_format::{canonicalize_if_exists, display_clean};
 
 #[derive(Debug, Clone)]
 pub enum StartupConfigSource {

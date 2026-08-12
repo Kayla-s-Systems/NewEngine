@@ -10,3 +10,4 @@ newengine-camera-api = { path = "../newengine-camera-api" }
 newengine-input-api = { path = "../newengine-input-api" }
 newengine-input-actions-api = { path = "../newengine-input-actions-api" }
 newengine-input-bindings-api = { path = "../newengine-input-bindings-api" }
+newengine-gameplay-fps-api = { path = "../newengine-gameplay-fps-api" }

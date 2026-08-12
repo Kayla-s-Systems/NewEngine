@@ -57,28 +57,8 @@ impl InventoryLoadoutCatalog {
         self.loadouts.values()
     }
 
-    pub fn fps_defaults() -> Self {
-        let mut loadout =
-            InventoryLoadout::new(DEFAULT_FPS_LOADOUT_NAME).expect("valid built-in loadout name");
-        loadout.entries = vec![
-            InventoryLoadoutEntry {
-                item: default_rifle_item_id(),
-                quantity: 1,
-                equip: true,
-            },
-            InventoryLoadoutEntry {
-                item: default_rifle_ammo_id(),
-                quantity: 90,
-                equip: false,
-            },
-            InventoryLoadoutEntry {
-                item: default_medkit_item_id(),
-                quantity: 2,
-                equip: false,
-            },
-        ];
-        let mut catalog = Self::default();
-        catalog.register(loadout).expect("unique built-in loadout");
-        catalog
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.loadouts.is_empty()
     }
 }

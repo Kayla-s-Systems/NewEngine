@@ -1,6 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use crate::scene_bridge::PreparedTerrainPrimitiveMesh;
+use crate::gameplay::PreparedRenderMesh;
 use newengine_core::render::{RenderApi, TextureFormat};
 use newengine_core::EngineResult;
 use newengine_primitives::{Primitive, PrimitiveId};
@@ -73,7 +73,7 @@ impl RuntimeRenderController {
                     continue;
                 }
 
-                let Some(prepared) = world.get::<PreparedTerrainPrimitiveMesh>(entity) else {
+                let Some(prepared) = world.get::<PreparedRenderMesh>(entity) else {
                     continue;
                 };
 

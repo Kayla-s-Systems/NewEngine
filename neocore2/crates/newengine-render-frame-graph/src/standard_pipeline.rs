@@ -139,6 +139,7 @@ pub fn standard_runtime_frame(desc: StandardRuntimePipelineDesc) -> RenderFrameP
     };
     target.depth_format = TextureFormat::Depth32Float;
     target.hdr_scene_enabled = desc.hdr_scene_enabled;
+    target.offscreen_scene_enabled = desc.hdr_scene_enabled || desc.postfx_enabled;
     target.viewport_render_target = desc.viewport_render_target;
     target.shadow_render_target = desc.shadow_render_target;
 
@@ -204,6 +205,40 @@ mod tests {
             .resources
             .iter()
             .any(|resource| { resource.semantic == RenderGraphResourceSemantic::SceneHdrColor }));
+    }
+
+    #[test]
+    fn ldr_postfx_uses_sampleable_bgra_scene_color_and_depth() {
+        let plan = standard_runtime_frame(
+            StandardRuntimePipelineDesc::new(2, Extent2D::new(1600, 900), Extent2D::new(1600, 900))
+                .viewport_is_surface(true)
+                .hdr_scene(false)
+                .postfx(true)
+                .ui(false)
+                .debug_overlay(false),
+        );
+        let scene = plan
+            .graph
+            .resources
+            .iter()
+            .find(|resource| resource.semantic == RenderGraphResourceSemantic::SceneHdrColor)
+            .expect("LDR postFX still requires a sampleable offscreen scene color");
+        assert_eq!(scene.format, Some(TextureFormat::Bgra8Unorm));
+        assert!(plan.graph.resources.iter().any(|resource| {
+            resource.semantic == RenderGraphResourceSemantic::ViewportDepth
+                && resource.lifetime
+                    == newengine_render_api::RenderGraphResourceLifetime::TransientFrame
+        }));
+        let forward = plan
+            .graph
+            .passes
+            .iter()
+            .find(|pass| pass.kind == newengine_render_api::RenderGraphPassKind::ForwardOpaque)
+            .expect("forward pass");
+        assert!(forward
+            .writes
+            .iter()
+            .any(|write| write.resource == crate::RG_SCENE_HDR_COLOR));
     }
 
     #[test]

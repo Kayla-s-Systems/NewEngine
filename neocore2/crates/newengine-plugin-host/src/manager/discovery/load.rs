@@ -8,11 +8,11 @@ use super::graph::{DiscoveryGraph, LoadPhaseFilter};
 use super::logging::{emit_discovery_logs, emit_selection_table};
 use super::scan::scan_plugins_dir;
 use super::selection::build_load_selection;
-use crate::log_fmt::emit_boxed_kv;
 use crate::manager::types::PluginLoadError;
-use crate::path_fmt::{canonicalize_if_exists, display_clean};
 use crate::paths::{default_plugins_dir, resolve_plugins_dir};
 use crate::PluginManager;
+use newengine_ulog_api::formatting::emit_boxed_kv;
+use newengine_ulog_api::path_format::{canonicalize_if_exists, display_clean};
 
 pub fn resolve_plugin_discovery_dir(dir: Option<&Path>) -> Result<PathBuf, PluginLoadError> {
     let dir = match dir {

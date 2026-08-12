@@ -111,7 +111,10 @@ fn game_profile_resolves_f1_to_hud_visibility_toggle() {
     let frame = profile.resolve(&PressedKeyboardKey(newengine_input_api::key_code::F1));
 
     assert!(frame.contains_action(action::HUD_VISIBILITY_TOGGLE));
-    assert!(frame.gameplay_actions().hud_visibility_toggle_pressed);
+    assert!(
+        newengine_gameplay_fps_api::FpsActionFrame::from_commands(&frame.command_actions())
+            .hud_visibility_toggle_pressed
+    );
     assert!(!frame.contains_action(action::ASSET_CATALOG_UI_TOGGLE));
     assert!(profile.listeners.iter().any(|listener| {
         listener.id == "inventory-controller"

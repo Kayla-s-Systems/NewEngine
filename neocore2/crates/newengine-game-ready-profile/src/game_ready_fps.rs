@@ -104,7 +104,7 @@ pub const GAME_READY_FPS_ENV_POLICY: &[(&str, &str)] = &[
 pub const GAME_READY_GAME_UI_ENV_DEFAULTS: &[(&str, &str)] = GAME_READY_FPS_ENV_POLICY;
 
 pub const GAME_READY_PROFILE_ENV: &str = "NEWENGINE_SCENE_PROFILE";
-pub const GAME_READY_DEFAULT_PROFILE_ASSET: &str = "maps/forest_road_operation.ymap";
+pub const GAME_READY_DEFAULT_PROFILE_ASSET: &str = "maps/white_platform.ymap";
 
 #[derive(Clone)]
 pub struct GameReadyFpsApp {

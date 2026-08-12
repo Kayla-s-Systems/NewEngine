@@ -123,10 +123,14 @@ impl RuntimeRenderController {
                 .bridges
                 .scene
                 .apply_editor_selection_actions(dispatch_frame);
-            let _ = self
-                .bridges
-                .scene
-                .apply_inventory_ui_actions(dispatch_frame);
+            {
+                let scene_lock = self.bridges.scene.scene();
+                let mut scene = scene_lock.write();
+                let _ = self
+                    .frame
+                    .gameplay_ui
+                    .dispatch_actions(scene.world_mut(), dispatch_frame);
+            }
         }
         let in_game_editor = game_profile && self.bridges.scene.in_game_editor_enabled();
         if in_game_editor && scope.vp_w > 0 && scope.vp_h > 0 {
@@ -153,7 +157,15 @@ impl RuntimeRenderController {
             external_ui_capture.merged_with_primary_modal(primary_ui.blocks_gameplay),
             provider_ui_capture.unwrap_or_else(UiInputCaptureState::none),
         );
-        let modal_blocks_gameplay = published_capture.requests_capture() || in_game_editor;
+        let gameplay_capture = {
+            let scene_lock = self.bridges.scene.scene();
+            let scene = scene_lock.read();
+            self.frame
+                .gameplay_ui
+                .aggregate_input_capture(scene.world())
+        };
+        let host_modal_blocks_gameplay = published_capture.requests_capture() || in_game_editor;
+        let pause_world = host_modal_blocks_gameplay || gameplay_capture.pause_simulation;
         if primary_was_open && !primary_ui.blocks_gameplay {
             self.restore_playable_view_after_ui_close();
         }
@@ -163,13 +175,21 @@ impl RuntimeRenderController {
             );
             ctx.request_exit();
         }
+        if self.frame.last_play_mode.is_runtime() && !frame_input.play_mode.is_runtime() {
+            let scene_lock = self.bridges.scene.scene();
+            let mut scene = scene_lock.write();
+            self.frame
+                .gameplay_ui
+                .reset_transient_state(scene.world_mut());
+        }
         {
             let mut carrier = frame_input.input.action_carrier();
             self.frame.input_systems.publish_input_capture_state(
                 self.frame.frame_index,
-                InputCaptureState::modal_ui(modal_blocks_gameplay),
+                InputCaptureState::modal_ui(host_modal_blocks_gameplay),
                 &mut carrier,
             );
+            carrier.apply_gameplay_input_capture(gameplay_capture);
         }
 
         if editor_viewport_runtime_mode(ctx) == Some(UiEditorRuntimeMode::Edit) {
@@ -245,12 +265,18 @@ impl RuntimeRenderController {
             scope.fixed_dt,
             scope.fixed_step_count,
             scope.fixed_tick,
-            modal_blocks_gameplay,
+            pause_world,
             scope.aspect(),
             scope.vp_w,
             scope.vp_h,
         );
-        crate::gameplay::publish_inventory_hud_state(scene.world_mut(), self.frame.frame_index);
+        self.frame
+            .gameplay_ui
+            .publish_frame(scene.world_mut(), self.frame.frame_index);
+        let gameplay_capture_after_tick = self
+            .frame
+            .gameplay_ui
+            .aggregate_input_capture(scene.world());
 
         if !world_frame.view_frame.world_playable {
             let ui_telemetry =
@@ -260,8 +286,8 @@ impl RuntimeRenderController {
             });
         }
 
-        if modal_blocks_gameplay {
-            // Modal UI must visibly release the OS cursor even if runtime-side
+        if host_modal_blocks_gameplay || gameplay_capture_after_tick.release_cursor {
+            // UI capture must visibly release the OS cursor even if runtime-side
             // state already believes it is released. Platform grabs can be lost
             // or retained across focus/UI transitions, so force a release event.
             self.force_cursor_state(ctx, CursorState::released());
@@ -419,7 +445,7 @@ impl RuntimeRenderController {
     ) -> EngineResult<UiRuntimeDebugOverlayTelemetry> {
         let gate_reason = scene
             .world()
-            .resource::<crate::gameplay::GameReadyWorldLaunchGate>()
+            .resource::<crate::gameplay::WorldActivationState>()
             .map(|gate| gate.reason.clone())
             .unwrap_or_else(|| "waiting for scene launch gate".to_owned());
 

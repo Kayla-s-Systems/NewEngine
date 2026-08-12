@@ -1,7 +1,7 @@
 use newengine_plugin_api::{CapabilityKind, CapabilityRole};
 use std::cell::Cell;
 use std::collections::HashMap;
-use std::sync::{atomic::Ordering, Mutex, OnceLock};
+use std::sync::{atomic::Ordering, Arc, Mutex, OnceLock};
 
 use super::state::{
     bump_services_generation, ctx, EngineGatewayRouteSnapshot, GatewayProviderRouteEntry,
@@ -127,7 +127,7 @@ fn build_gateway_registry_snapshot() -> crate::service_gateway::ActiveGatewayReg
     )
 }
 
-fn gateway_registry_snapshot() -> crate::service_gateway::ActiveGatewayRegistry {
+fn gateway_registry_snapshot() -> Arc<crate::service_gateway::ActiveGatewayRegistry> {
     let c = ctx();
 
     loop {
@@ -140,12 +140,12 @@ fn gateway_registry_snapshot() -> crate::service_gateway::ActiveGatewayRegistry 
             };
             if let Some(cache) = cache.as_ref() {
                 if cache.generation == generation_before {
-                    return cache.registry.clone();
+                    return Arc::clone(&cache.registry);
                 }
             }
         }
 
-        let registry = build_gateway_registry_snapshot();
+        let registry = Arc::new(build_gateway_registry_snapshot());
         let generation_after = c.services_generation.load(Ordering::Acquire);
 
         if generation_before != generation_after {
@@ -159,7 +159,7 @@ fn gateway_registry_snapshot() -> crate::service_gateway::ActiveGatewayRegistry 
             };
             *cache = Some(GatewayRegistryCache {
                 generation: generation_after,
-                registry: registry.clone(),
+                registry: Arc::clone(&registry),
             });
         }
 

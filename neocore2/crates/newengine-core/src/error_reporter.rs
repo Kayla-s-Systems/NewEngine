@@ -7,7 +7,7 @@ use crate::startup;
 use std::fmt::Write as _;
 use std::path::PathBuf;
 
-use crate::path_fmt::display_clean;
+use newengine_ulog_api::path_format::display_clean;
 use std::sync::OnceLock;
 
 /// High-level engine error reporting facade.

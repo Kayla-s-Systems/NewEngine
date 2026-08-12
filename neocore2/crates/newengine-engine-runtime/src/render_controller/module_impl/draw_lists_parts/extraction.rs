@@ -258,6 +258,8 @@ impl<'a> newengine_render_feature_api::DrawListBuildCtx for DrawListBuildCtx<'a>
                             &ctx.lights,
                             ctx.runtime,
                             ctx.camera_position,
+                            cascade_index,
+                            cascade.texel_world_size,
                         )
                     })?;
             }
@@ -274,6 +276,8 @@ impl<'a> newengine_render_feature_api::DrawListBuildCtx for DrawListBuildCtx<'a>
                 &ctx.lights,
                 ctx.runtime,
                 ctx.camera_position,
+                0,
+                0.0,
             )
         })?;
         Ok(())

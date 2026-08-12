@@ -1,6 +1,6 @@
 {
   "id": "newengine.gameready.input.profile",
-  "version": 8,
+  "version": 9,
   "device_preference": "hybrid",
   "keys": [
     {
@@ -251,6 +251,13 @@
     {
       "id": "player.fire.primary",
       "label": "Primary fire",
+      "contexts": [],
+      "dispatch": "broadcast",
+      "effects": []
+    },
+    {
+      "id": "player.projectile.launch",
+      "label": "Launch physics sphere",
       "contexts": [],
       "dispatch": "broadcast",
       "effects": []
@@ -595,7 +602,12 @@
         "player.move.right",
         "player.move.up",
         "player.move.down",
-        "player.sprint"
+        "player.sprint",
+        "player.fire.primary",
+        "player.projectile.launch",
+        "player.aim",
+        "player.reload",
+        "player.interact"
       ],
       "context_filter": [],
       "priority": 10,
@@ -897,6 +909,13 @@
       "code": 1,
       "name": null,
       "phase": "Down"
+    },
+    {
+      "action": "player.projectile.launch",
+      "device": "MouseButton",
+      "code": 1,
+      "name": null,
+      "phase": "Pressed"
     },
     {
       "action": "player.aim",

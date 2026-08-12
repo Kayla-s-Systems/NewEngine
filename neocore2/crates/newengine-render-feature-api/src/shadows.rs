@@ -104,6 +104,12 @@ pub struct ShadowFrame {
     pub cascades: [ShadowCascadeFrame; MAX_DIRECTIONAL_SHADOW_CASCADES],
     pub params: [f32; 4],
     pub extra: [f32; 4],
+    /// x=filter mode (0 hard, 1 PCF, 2 PCSS), y=tan(source angular radius),
+    /// z=blocker search radius in texels, w=max filter radius in texels.
+    pub pcss0: [f32; 4],
+    /// x=blocker sample count, y=filter sample count,
+    /// z=min filter radius in texels, w=stable kernel cell size in texels.
+    pub pcss1: [f32; 4],
 }
 
 impl ShadowFrame {
@@ -118,6 +124,8 @@ impl ShadowFrame {
             cascades: [ShadowCascadeFrame::disabled(); MAX_DIRECTIONAL_SHADOW_CASCADES],
             params: [0.0, 0.0, 0.0, 0.0],
             extra: [0.0, 1.0, 0.0, 0.0],
+            pcss0: [0.0; 4],
+            pcss1: [0.0; 4],
         }
     }
 
@@ -163,6 +171,8 @@ impl ShadowFrame {
             cascades,
             params,
             extra: [extra[0], 1.0, extra[2], extra[3]],
+            pcss0: [0.0; 4],
+            pcss1: [0.0; 4],
         }
     }
 
@@ -191,7 +201,16 @@ impl ShadowFrame {
             cascades,
             params,
             extra: [extra[0], count as f32, extra[2], extra[3]],
+            pcss0: [0.0; 4],
+            pcss1: [0.0; 4],
         }
+    }
+
+    #[inline]
+    pub fn with_pcss(mut self, pcss0: [f32; 4], pcss1: [f32; 4]) -> Self {
+        self.pcss0 = pcss0;
+        self.pcss1 = pcss1;
+        self
     }
 
     #[inline]
@@ -279,6 +298,12 @@ impl LightShadowPlan {
             frame: ShadowFrame::cascaded(texture, cascade_count, cascades, params, extra),
             caster_cull,
         }
+    }
+
+    #[inline]
+    pub fn with_pcss(mut self, pcss0: [f32; 4], pcss1: [f32; 4]) -> Self {
+        self.frame = self.frame.with_pcss(pcss0, pcss1);
+        self
     }
 
     #[inline]

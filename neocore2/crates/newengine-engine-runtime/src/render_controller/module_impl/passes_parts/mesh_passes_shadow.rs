@@ -15,6 +15,23 @@ fn shadow_light_view_key(light_viewproj: Mat4) -> u64 {
     h
 }
 
+#[inline]
+fn shadow_caster_projected_radius_visible(
+    cascade_index: usize,
+    cascade_texel_world_size: f32,
+    radius_ws: f32,
+) -> bool {
+    if cascade_index < 2
+        || !cascade_texel_world_size.is_finite()
+        || cascade_texel_world_size <= 1.0e-6
+    {
+        return true;
+    }
+    let projected_radius_texels = radius_ws.abs() / cascade_texel_world_size;
+    let min_radius_texels = if cascade_index >= 3 { 0.90 } else { 0.50 };
+    projected_radius_texels >= min_radius_texels
+}
+
 pub fn draw_procedural_terrain_shadow(
     this: &mut RuntimeRenderController,
     r: &mut dyn newengine_core::render::RenderApi,
@@ -145,6 +162,8 @@ pub fn draw_primitives_shadow(
     lights: &PackedLights,
     runtime: bool,
     camera_position: Vec3,
+    cascade_index: usize,
+    cascade_texel_world_size: f32,
 ) -> newengine_core::EngineResult<()> {
     let world = scene.world();
     let reg_lock = this.bridges.scene.primitives();
@@ -163,9 +182,11 @@ pub fn draw_primitives_shadow(
     let mut shadow_policy_culled = 0usize;
     let mut shadow_distance_culled = 0usize;
     let mut shadow_light_culled = 0usize;
+    let mut shadow_lod_culled = 0usize;
     for (id, prim, gt) in world.query2::<Primitive, GlobalTransform>() {
         shadow_seen = shadow_seen.saturating_add(1);
-        if !display_visible_in_mode(world, id, runtime) || world.get::<SkyDomeRuntime>(id).is_some()
+        if !display_visible_in_mode(world, id, runtime)
+            || world.get::<EnvironmentDomeRenderState>(id).is_some()
         {
             continue;
         }
@@ -192,6 +213,14 @@ pub fn draw_primitives_shadow(
                     shadow_light_culled = shadow_light_culled.saturating_add(1);
                     continue;
                 }
+                if !shadow_caster_projected_radius_visible(
+                    cascade_index,
+                    cascade_texel_world_size,
+                    radius_ws,
+                ) {
+                    shadow_lod_culled = shadow_lod_culled.saturating_add(1);
+                    continue;
+                }
             }
         }
         let key = id.stable_u64();
@@ -208,7 +237,8 @@ pub fn draw_primitives_shadow(
     let shadow_budget = primitive_budget(runtime, true);
     entries.truncate(shadow_budget);
 
-    let mut plan_cache: FxHashMap<PrimitivePlanKey, PrimitiveGpuPlan> = FxHashMap::default();
+    let mut plan_cache: FxHashMap<PrimitivePlanKey, PrimitiveGpuPlan> =
+        FxHashMap::with_capacity_and_hasher(entries.len(), Default::default());
     let mut written_ubos = FxHashSet::<u64>::default();
     let mut batches = InstanceBatchSet::default();
     let mut shadow_submitted = 0usize;
@@ -311,6 +341,13 @@ pub fn draw_primitives_shadow(
         if !shadow_caster_visible(this.shadows_current_cull(), center_ws, radius_ws) {
             continue;
         }
+        if !shadow_caster_projected_radius_visible(
+            cascade_index,
+            cascade_texel_world_size,
+            radius_ws,
+        ) {
+            continue;
+        }
 
         let instance = RenderInstanceRaw::new(
             model,
@@ -348,12 +385,13 @@ pub fn draw_primitives_shadow(
     if batches.is_empty() {
         if shadow_log_due {
             newengine_ulog_api::ulog::debug!(
-                "primitive.draw_list: pass='shadow_casters' seen={} visible={} submitted=0 policy_culled={} distance_culled={} light_culled={} budget={} plans={} shared_ubos={} batches={} instances={} policy='MeshShadowPolicy + stable light-space cull + shared texture-set UBO'",
+                "primitive.draw_list: pass='shadow_casters' seen={} visible={} submitted=0 policy_culled={} distance_culled={} light_culled={} lod_culled={} budget={} plans={} shared_ubos={} batches={} instances={} policy='MeshShadowPolicy + stable light-space cull + shared texture-set UBO'",
                 shadow_seen,
                 shadow_visible,
                 shadow_policy_culled,
                 shadow_distance_culled,
                 shadow_light_culled,
+                shadow_lod_culled,
                 shadow_budget,
                 plan_cache.len(),
                 written_ubos.len(),
@@ -390,13 +428,14 @@ pub fn draw_primitives_shadow(
 
     if shadow_log_due {
         newengine_ulog_api::ulog::debug!(
-            "primitive.draw_list: pass='shadow_casters' seen={} visible={} submitted={} policy_culled={} distance_culled={} light_culled={} budget={} plans={} shared_ubos={} batches={} instances={} upload_writes=1 upload_bytes={} policy='MeshShadowPolicy + stable light-space cull + shared texture-set UBO + packed instance upload'",
+            "primitive.draw_list: pass='shadow_casters' seen={} visible={} submitted={} policy_culled={} distance_culled={} light_culled={} lod_culled={} budget={} plans={} shared_ubos={} batches={} instances={} upload_writes=1 upload_bytes={} policy='MeshShadowPolicy + stable light-space cull + shared texture-set UBO + packed instance upload'",
             shadow_seen,
             shadow_visible,
             shadow_submitted,
             shadow_policy_culled,
             shadow_distance_culled,
             shadow_light_culled,
+            shadow_lod_culled,
             shadow_budget,
             plan_cache.len(),
             written_ubos.len(),
@@ -407,4 +446,25 @@ pub fn draw_primitives_shadow(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod shadow_caster_lod_tests {
+    use super::shadow_caster_projected_radius_visible;
+
+    #[test]
+    fn shadow_caster_lod_keeps_near_and_rejects_subtexel_distant_casters() {
+        assert!(shadow_caster_projected_radius_visible(0, 0.25, 0.05));
+        assert!(shadow_caster_projected_radius_visible(1, 0.25, 0.05));
+        assert!(!shadow_caster_projected_radius_visible(2, 1.0, 0.40));
+        assert!(shadow_caster_projected_radius_visible(2, 1.0, 0.60));
+        assert!(!shadow_caster_projected_radius_visible(3, 1.0, 0.80));
+        assert!(shadow_caster_projected_radius_visible(3, 1.0, 1.00));
+    }
+
+    #[test]
+    fn shadow_caster_lod_disables_itself_without_valid_texel_scale() {
+        assert!(shadow_caster_projected_radius_visible(3, 0.0, 0.01));
+        assert!(shadow_caster_projected_radius_visible(3, f32::NAN, 0.01));
+    }
 }

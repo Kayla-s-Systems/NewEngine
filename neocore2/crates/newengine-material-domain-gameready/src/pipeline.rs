@@ -1,0 +1,463 @@
+use std::time::Instant;
+
+use newengine_material_domain_api::{
+    LitPipeline, MaterialDomainResult, MaterialPipelineBuildProfile, MaterialRenderDevice,
+    LIT_INSTANCE_VERTEX_STRIDE,
+};
+use newengine_primitives::PrimitiveVertex;
+use newengine_render_api::*;
+
+use super::{
+    GameReadyLitMaterialDomainProvider, DEFAULT_SHADER_MANIFEST_PATH, GAME_READY_LIT_PIPELINE_KEY,
+};
+use crate::manifest::GameReadyShaderAssetRef;
+
+impl GameReadyLitMaterialDomainProvider {
+    pub(super) fn build_pipeline(
+        &mut self,
+        profile: MaterialPipelineBuildProfile,
+        r: &mut dyn MaterialRenderDevice,
+    ) -> MaterialDomainResult<LitPipeline> {
+        let started_at = Instant::now();
+        newengine_ulog_api::ulog::info!(
+            "gameready material domain: pipeline build requested key='{}' manifest='{}'",
+            GAME_READY_LIT_PIPELINE_KEY.as_str(),
+            DEFAULT_SHADER_MANIFEST_PATH
+        );
+        let manifest = self.require_manifest()?;
+        newengine_ulog_api::ulog::info!(
+            "gameready material domain: requesting renderer-owned shader builds key='{}' shader_count=9",
+            GAME_READY_LIT_PIPELINE_KEY.as_str()
+        );
+        let vs = create_manifest_shader(
+            r,
+            ShaderStage::Vertex,
+            &manifest.shaders.lit_vs,
+            "gameready_lit_vs",
+        )?;
+        let fs = create_manifest_shader(
+            r,
+            ShaderStage::Fragment,
+            &manifest.shaders.lit_fs,
+            "gameready_lit_fs",
+        )?;
+        let gbuffer_fs = create_manifest_shader(
+            r,
+            ShaderStage::Fragment,
+            &manifest.shaders.gbuffer_fs,
+            "gameready_gbuffer_lit_fs",
+        )?;
+        let gbuffer_terrain_fs = create_manifest_shader(
+            r,
+            ShaderStage::Fragment,
+            &manifest.shaders.gbuffer_terrain_fs,
+            "gameready_gbuffer_terrain_fs",
+        )?;
+        let terrain_fs = create_manifest_shader(
+            r,
+            ShaderStage::Fragment,
+            &manifest.shaders.terrain_fs,
+            "gameready_terrain_surface_fs",
+        )?;
+        let shadow_vs = create_manifest_shader(
+            r,
+            ShaderStage::Vertex,
+            &manifest.shaders.shadow_vs,
+            "gameready_sun_shadow_depth_vs",
+        )?;
+        let shadow_fs = create_manifest_shader(
+            r,
+            ShaderStage::Fragment,
+            &manifest.shaders.shadow_fs,
+            "gameready_sun_shadow_depth_fs",
+        )?;
+        let instanced_vs = create_manifest_shader(
+            r,
+            ShaderStage::Vertex,
+            &manifest.shaders.instanced_vs,
+            "gameready_lit_instanced_vs",
+        )?;
+        let instanced_fs = create_manifest_shader(
+            r,
+            ShaderStage::Fragment,
+            &manifest.shaders.instanced_fs,
+            "gameready_lit_instanced_fs",
+        )?;
+        let shadow_instanced_vs = create_manifest_shader(
+            r,
+            ShaderStage::Vertex,
+            &manifest.shaders.shadow_instanced_vs,
+            "gameready_sun_shadow_instanced_vs",
+        )?;
+        newengine_ulog_api::ulog::info!(
+            "gameready material domain: renderer-owned shader handles ready key='{}' elapsed_ms={:.2}",
+            GAME_READY_LIT_PIPELINE_KEY.as_str(),
+            started_at.elapsed().as_secs_f64() * 1000.0
+        );
+
+        newengine_ulog_api::ulog::info!(
+            "gameready material domain: creating bind resources key='{}'",
+            GAME_READY_LIT_PIPELINE_KEY.as_str()
+        );
+
+        let bgl = r.create_bind_group_layout(
+            BindGroupLayoutDesc::new(vec![
+                BindingKind::UniformBuffer,
+                BindingKind::Texture2D,
+                BindingKind::Texture2D,
+                BindingKind::Texture2D,
+                BindingKind::Texture2D,
+                BindingKind::Sampler,
+            ])
+            .with_label("gameready_lit_bgl"),
+        )?;
+        let white_texture = r.create_texture(
+            TextureDesc::new(
+                Extent2D::new(1, 1),
+                TextureFormat::Rgba8Unorm,
+                TextureUsage::Sampled,
+            )
+            .with_label("gameready_white_tex")
+            .with_data(vec![255, 255, 255, 255]),
+        )?;
+        let flat_normal_texture = r.create_texture(
+            TextureDesc::new(
+                Extent2D::new(1, 1),
+                TextureFormat::Rgba8Unorm,
+                TextureUsage::Sampled,
+            )
+            .with_label("gameready_flat_normal_tex")
+            .with_data(vec![128, 128, 255, 255]),
+        )?;
+        let repeat_sampler = r.create_sampler(
+            SamplerDesc::default()
+                .with_label("gameready_repeat_sampler")
+                .with_repeat(),
+        )?;
+        let clamp_sampler = r.create_sampler(
+            SamplerDesc::default()
+                .with_label("gameready_clamp_sampler")
+                .with_address_u(AddressMode::ClampToEdge)
+                .with_address_v(AddressMode::ClampToEdge)
+                .with_address_w(AddressMode::ClampToEdge),
+        )?;
+        newengine_ulog_api::ulog::info!(
+            "gameready material domain: bind resources created key='{}' elapsed_ms={:.2}",
+            GAME_READY_LIT_PIPELINE_KEY.as_str(),
+            started_at.elapsed().as_secs_f64() * 1000.0
+        );
+
+        let stride = std::mem::size_of::<PrimitiveVertex>() as u32;
+        let layout = VertexLayout::new(
+            stride,
+            vec![
+                VertexAttribute::new(0, 0, VertexFormat::Float32x3),
+                VertexAttribute::new(1, 12, VertexFormat::Float32x3),
+                VertexAttribute::new(2, 24, VertexFormat::Float32x2),
+            ],
+        );
+
+        let instance_layout = VertexLayout::new(
+            LIT_INSTANCE_VERTEX_STRIDE,
+            vec![
+                VertexAttribute::new(5, 0, VertexFormat::Float32x4),
+                VertexAttribute::new(6, 16, VertexFormat::Float32x4),
+                VertexAttribute::new(7, 32, VertexFormat::Float32x4),
+                VertexAttribute::new(8, 48, VertexFormat::Float32x4),
+                VertexAttribute::new(9, 64, VertexFormat::Float32x4),
+                VertexAttribute::new(10, 80, VertexFormat::Float32x4),
+                VertexAttribute::new(11, 96, VertexFormat::Float32x4),
+                VertexAttribute::new(12, 112, VertexFormat::Float32x4),
+                VertexAttribute::new(13, 128, VertexFormat::Float32x4),
+                VertexAttribute::new(14, 144, VertexFormat::Float32x4),
+                VertexAttribute::new(15, 160, VertexFormat::Float32x4),
+                VertexAttribute::new(16, 176, VertexFormat::Float32x4),
+            ],
+        )
+        .per_instance();
+
+        let gbuffer_color_formats = vec![
+            TextureFormat::Rgba8Unorm,
+            TextureFormat::Rgba16Float,
+            TextureFormat::Rgba8Unorm,
+        ];
+
+        let build_deferred_pipelines = profile.deferred_pipelines;
+        let declared_pipeline_count = if build_deferred_pipelines { 14 } else { 10 };
+        newengine_ulog_api::ulog::info!(
+            "gameready material domain: creating GPU pipelines key='{}' pipeline_count={} deferred_pipelines={} policy='forward runtime skips deferred gbuffer pipeline burst'",
+            GAME_READY_LIT_PIPELINE_KEY.as_str(),
+            declared_pipeline_count,
+            build_deferred_pipelines,
+        );
+        let pipeline = r.create_pipeline(
+            PipelineDesc::new(vs, fs, profile.scene_hdr_color_format)
+                .with_label("gameready_lit_pipeline")
+                .with_topology(PrimitiveTopology::TriangleList)
+                .with_vertex_layouts(vec![layout.clone()])
+                .with_bind_group_layouts(vec![bgl])
+                .with_depth(TextureFormat::Depth32Float),
+        )?;
+
+        let double_sided_pipeline = r.create_pipeline(
+            PipelineDesc::new(vs, fs, profile.scene_hdr_color_format)
+                .with_label("gameready_lit_pipeline_double_sided")
+                .with_topology(PrimitiveTopology::TriangleList)
+                .with_vertex_layouts(vec![layout.clone()])
+                .with_bind_group_layouts(vec![bgl])
+                .with_depth(TextureFormat::Depth32Float)
+                .with_cull_mode(RasterCullMode::None),
+        )?;
+
+        let terrain_pipeline = r.create_pipeline(
+            PipelineDesc::new(vs, terrain_fs, profile.scene_hdr_color_format)
+                .with_label("gameready_terrain_surface_pipeline")
+                .with_topology(PrimitiveTopology::TriangleList)
+                .with_vertex_layouts(vec![layout.clone()])
+                .with_bind_group_layouts(vec![bgl])
+                .with_depth(TextureFormat::Depth32Float),
+        )?;
+
+        let (gbuffer_terrain_pipeline, gbuffer_pipeline, gbuffer_double_sided_pipeline) =
+            if build_deferred_pipelines {
+                let gbuffer_terrain_pipeline = r.create_pipeline(
+                    PipelineDesc::new(vs, gbuffer_terrain_fs, TextureFormat::Rgba8Unorm)
+                        .with_label("gameready_gbuffer_terrain_pipeline")
+                        .with_topology(PrimitiveTopology::TriangleList)
+                        .with_vertex_layouts(vec![layout.clone()])
+                        .with_bind_group_layouts(vec![bgl])
+                        .with_color_formats(gbuffer_color_formats.clone())
+                        .with_depth(TextureFormat::Depth32Float),
+                )?;
+
+                let gbuffer_pipeline = r.create_pipeline(
+                    PipelineDesc::new(vs, gbuffer_fs, TextureFormat::Rgba8Unorm)
+                        .with_label("gameready_gbuffer_lit_pipeline")
+                        .with_topology(PrimitiveTopology::TriangleList)
+                        .with_vertex_layouts(vec![layout.clone()])
+                        .with_bind_group_layouts(vec![bgl])
+                        .with_color_formats(gbuffer_color_formats.clone())
+                        .with_depth(TextureFormat::Depth32Float),
+                )?;
+
+                let gbuffer_double_sided_pipeline = r.create_pipeline(
+                    PipelineDesc::new(vs, gbuffer_fs, TextureFormat::Rgba8Unorm)
+                        .with_label("gameready_gbuffer_lit_pipeline_double_sided")
+                        .with_topology(PrimitiveTopology::TriangleList)
+                        .with_vertex_layouts(vec![layout.clone()])
+                        .with_bind_group_layouts(vec![bgl])
+                        .with_color_formats(gbuffer_color_formats.clone())
+                        .with_depth(TextureFormat::Depth32Float)
+                        .with_cull_mode(RasterCullMode::None),
+                )?;
+
+                (
+                    gbuffer_terrain_pipeline,
+                    gbuffer_pipeline,
+                    gbuffer_double_sided_pipeline,
+                )
+            } else {
+                // Forward-only runtime never records GBuffer passes. Keep handles
+                // structurally valid without creating deferred pipelines during the
+                // startup handoff.
+                (terrain_pipeline, pipeline, double_sided_pipeline)
+            };
+
+        let shadow_pipeline = r.create_pipeline(
+            PipelineDesc::new(shadow_vs, shadow_fs, profile.shadow_map_color_format)
+                .with_label("gameready_sun_shadow_depth_pipeline")
+                .with_topology(PrimitiveTopology::TriangleList)
+                .with_vertex_layouts(vec![layout.clone()])
+                .with_bind_group_layouts(vec![bgl])
+                .with_depth(TextureFormat::Depth32Float),
+        )?;
+
+        let shadow_double_sided_pipeline = r.create_pipeline(
+            PipelineDesc::new(shadow_vs, shadow_fs, profile.shadow_map_color_format)
+                .with_label("gameready_sun_shadow_depth_pipeline_double_sided")
+                .with_topology(PrimitiveTopology::TriangleList)
+                .with_vertex_layouts(vec![layout.clone()])
+                .with_bind_group_layouts(vec![bgl])
+                .with_depth(TextureFormat::Depth32Float)
+                .with_cull_mode(RasterCullMode::None),
+        )?;
+
+        let instanced_layouts = vec![layout.clone(), instance_layout.clone()];
+        let instanced_pipeline = r.create_pipeline(
+            PipelineDesc::new(instanced_vs, instanced_fs, profile.scene_hdr_color_format)
+                .with_label("gameready_lit_pipeline_instanced")
+                .with_topology(PrimitiveTopology::TriangleList)
+                .with_vertex_layouts(instanced_layouts.clone())
+                .with_bind_group_layouts(vec![bgl])
+                .with_depth(TextureFormat::Depth32Float),
+        )?;
+
+        let instanced_double_sided_pipeline = r.create_pipeline(
+            PipelineDesc::new(instanced_vs, instanced_fs, profile.scene_hdr_color_format)
+                .with_label("gameready_lit_pipeline_instanced_double_sided")
+                .with_topology(PrimitiveTopology::TriangleList)
+                .with_vertex_layouts(instanced_layouts.clone())
+                .with_bind_group_layouts(vec![bgl])
+                .with_depth(TextureFormat::Depth32Float)
+                .with_cull_mode(RasterCullMode::None),
+        )?;
+
+        let (gbuffer_instanced_pipeline, gbuffer_instanced_double_sided_pipeline) =
+            if build_deferred_pipelines {
+                let gbuffer_instanced_pipeline = r.create_pipeline(
+                    PipelineDesc::new(instanced_vs, gbuffer_fs, TextureFormat::Rgba8Unorm)
+                        .with_label("gameready_gbuffer_lit_pipeline_instanced")
+                        .with_topology(PrimitiveTopology::TriangleList)
+                        .with_vertex_layouts(instanced_layouts.clone())
+                        .with_bind_group_layouts(vec![bgl])
+                        .with_color_formats(gbuffer_color_formats.clone())
+                        .with_depth(TextureFormat::Depth32Float),
+                )?;
+
+                let gbuffer_instanced_double_sided_pipeline = r.create_pipeline(
+                    PipelineDesc::new(instanced_vs, gbuffer_fs, TextureFormat::Rgba8Unorm)
+                        .with_label("gameready_gbuffer_lit_pipeline_instanced_double_sided")
+                        .with_topology(PrimitiveTopology::TriangleList)
+                        .with_vertex_layouts(instanced_layouts.clone())
+                        .with_bind_group_layouts(vec![bgl])
+                        .with_color_formats(gbuffer_color_formats.clone())
+                        .with_depth(TextureFormat::Depth32Float)
+                        .with_cull_mode(RasterCullMode::None),
+                )?;
+
+                (
+                    gbuffer_instanced_pipeline,
+                    gbuffer_instanced_double_sided_pipeline,
+                )
+            } else {
+                (instanced_pipeline, instanced_double_sided_pipeline)
+            };
+
+        let sky_instanced_pipeline = r.create_pipeline(
+            PipelineDesc::new(instanced_vs, instanced_fs, profile.scene_hdr_color_format)
+                .with_label("gameready_sky_pipeline_instanced")
+                .with_topology(PrimitiveTopology::TriangleList)
+                .with_vertex_layouts(instanced_layouts.clone())
+                .with_bind_group_layouts(vec![bgl])
+                .with_depth_state(
+                    TextureFormat::Depth32Float,
+                    PipelineDepthMode::no_write_always(),
+                )
+                .with_cull_mode(RasterCullMode::None),
+        )?;
+
+        let shadow_instanced_pipeline = r.create_pipeline(
+            PipelineDesc::new(
+                shadow_instanced_vs,
+                shadow_fs,
+                profile.shadow_map_color_format,
+            )
+            .with_label("gameready_sun_shadow_depth_pipeline_instanced")
+            .with_topology(PrimitiveTopology::TriangleList)
+            .with_vertex_layouts(instanced_layouts.clone())
+            .with_bind_group_layouts(vec![bgl])
+            .with_depth(TextureFormat::Depth32Float),
+        )?;
+
+        let shadow_instanced_double_sided_pipeline = r.create_pipeline(
+            PipelineDesc::new(
+                shadow_instanced_vs,
+                shadow_fs,
+                profile.shadow_map_color_format,
+            )
+            .with_label("gameready_sun_shadow_depth_pipeline_instanced_double_sided")
+            .with_topology(PrimitiveTopology::TriangleList)
+            .with_vertex_layouts(instanced_layouts)
+            .with_bind_group_layouts(vec![bgl])
+            .with_depth(TextureFormat::Depth32Float)
+            .with_cull_mode(RasterCullMode::None),
+        )?;
+        newengine_ulog_api::ulog::info!(
+            "gameready material domain: pipeline build completed key='{}' elapsed_ms={:.2}",
+            GAME_READY_LIT_PIPELINE_KEY.as_str(),
+            started_at.elapsed().as_secs_f64() * 1000.0
+        );
+
+        Ok(LitPipeline {
+            bgl,
+            white_texture,
+            flat_normal_texture,
+            repeat_sampler,
+            clamp_sampler,
+            vs,
+            fs,
+            terrain_fs,
+            shadow_vs,
+            shadow_fs,
+            pipeline,
+            double_sided_pipeline,
+            terrain_pipeline,
+            gbuffer_terrain_pipeline,
+            gbuffer_pipeline,
+            gbuffer_double_sided_pipeline,
+            gbuffer_instanced_pipeline,
+            gbuffer_instanced_double_sided_pipeline,
+            shadow_pipeline,
+            shadow_double_sided_pipeline,
+            instanced_vs,
+            instanced_fs,
+            shadow_instanced_vs,
+            instanced_pipeline,
+            instanced_double_sided_pipeline,
+            sky_instanced_pipeline,
+            shadow_instanced_pipeline,
+            shadow_instanced_double_sided_pipeline,
+        })
+    }
+}
+
+fn create_manifest_shader(
+    r: &mut dyn MaterialRenderDevice,
+    stage: ShaderStage,
+    shader: &GameReadyShaderAssetRef,
+    label: &str,
+) -> MaterialDomainResult<ShaderId> {
+    let source_kind = shader.source_kind()?;
+    let started_at = Instant::now();
+    newengine_ulog_api::ulog::info!(
+        "gameready material domain: shader build request label='{}' path='{}' stage='{:?}' source_kind='{}' entry='{}' variant='{}'",
+        label,
+        shader.logical_path,
+        stage,
+        source_kind.label(),
+        shader.entry,
+        shader.variant_id
+    );
+    let asset = ShaderAssetDesc::new(shader.logical_path.clone(), source_kind)
+        .with_entry(shader.entry.clone())
+        .with_variant(shader.variant_id.clone());
+    let result = r.create_shader(
+        ShaderDesc::from_asset(
+            stage,
+            shader.entry.clone(),
+            shader.logical_path.clone(),
+            source_kind,
+        )
+        .with_asset(asset)
+        .with_label(label),
+    );
+    match &result {
+        Ok(id) => newengine_ulog_api::ulog::info!(
+            "gameready material domain: shader build accepted label='{}' path='{}' stage='{:?}' shader_id={:?} elapsed_ms={:.2}",
+            label,
+            shader.logical_path,
+            stage,
+            id,
+            started_at.elapsed().as_secs_f64() * 1000.0
+        ),
+        Err(e) => newengine_ulog_api::ulog::error!(
+            "gameready material domain: shader build failed label='{}' path='{}' stage='{:?}' err='{}' elapsed_ms={:.2}",
+            label,
+            shader.logical_path,
+            stage,
+            e,
+            started_at.elapsed().as_secs_f64() * 1000.0
+        ),
+    }
+    result
+}

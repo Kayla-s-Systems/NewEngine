@@ -1,10 +1,10 @@
-use std::collections::VecDeque;
 use std::sync::Arc;
 use std::time::Instant;
 
 use newengine_assets_api::{AssetDocument, AssetDocumentField, AssetPatchResult};
 use newengine_core::{EngineReadinessKey, EngineResult, Module, ModuleCtx};
 use newengine_engine_runtime::{AssetPreviewApi, AssetPreviewKind, AssetPreviewSnapshot};
+use newengine_math::collections::BoundedCache;
 use newengine_ui_api::{UiEventDispatchFrame, UiInputFrame, UiNodeEventTrigger};
 
 use crate::facade::EngineAssetFacade;
@@ -130,33 +130,31 @@ impl TextEditorState {
     }
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 struct DocumentCache {
-    entries: VecDeque<(String, AssetDocument)>,
+    entries: BoundedCache<String, AssetDocument>,
+}
+
+impl Default for DocumentCache {
+    fn default() -> Self {
+        Self {
+            entries: BoundedCache::new(DOCUMENT_CACHE_CAPACITY),
+        }
+    }
 }
 
 impl DocumentCache {
     fn get(&mut self, asset_ref: &str) -> Option<AssetDocument> {
-        let index = self
-            .entries
-            .iter()
-            .position(|(cached_ref, _)| cached_ref == asset_ref)?;
-        let entry = self.entries.remove(index)?;
-        let document = entry.1.clone();
-        self.entries.push_front(entry);
-        Some(document)
+        self.entries.get(asset_ref).cloned()
     }
 
     fn insert(&mut self, document: &AssetDocument) {
-        self.invalidate(&document.asset_ref);
         self.entries
-            .push_front((document.asset_ref.clone(), document.clone()));
-        self.entries.truncate(DOCUMENT_CACHE_CAPACITY);
+            .insert(document.asset_ref.clone(), document.clone());
     }
 
     fn invalidate(&mut self, asset_ref: &str) {
-        self.entries
-            .retain(|(cached_ref, _)| cached_ref != asset_ref);
+        let _ = self.entries.remove(asset_ref);
     }
 
     fn clear(&mut self) {
@@ -164,33 +162,30 @@ impl DocumentCache {
     }
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 struct PreviewEntryCache {
-    entries: VecDeque<(String, Vec<InspectorEntry>)>,
+    entries: BoundedCache<String, Vec<InspectorEntry>>,
+}
+
+impl Default for PreviewEntryCache {
+    fn default() -> Self {
+        Self {
+            entries: BoundedCache::new(PREVIEW_ENTRY_CACHE_CAPACITY),
+        }
+    }
 }
 
 impl PreviewEntryCache {
     fn get(&mut self, source_ref: &str) -> Option<Vec<InspectorEntry>> {
-        let index = self
-            .entries
-            .iter()
-            .position(|(cached_ref, _)| cached_ref == source_ref)?;
-        let entry = self.entries.remove(index)?;
-        let value = entry.1.clone();
-        self.entries.push_front(entry);
-        Some(value)
+        self.entries.get(source_ref).cloned()
     }
 
     fn insert(&mut self, source_ref: &str, entries: &[InspectorEntry]) {
-        self.invalidate(source_ref);
-        self.entries
-            .push_front((source_ref.to_owned(), entries.to_vec()));
-        self.entries.truncate(PREVIEW_ENTRY_CACHE_CAPACITY);
+        self.entries.insert(source_ref.to_owned(), entries.to_vec());
     }
 
     fn invalidate(&mut self, source_ref: &str) {
-        self.entries
-            .retain(|(cached_ref, _)| cached_ref != source_ref);
+        let _ = self.entries.remove(source_ref);
     }
 
     fn clear(&mut self) {
@@ -269,10 +264,7 @@ impl AssetInspectorRuntimeModule {
             facade: EngineAssetFacade::new(),
             preview_api,
             preview_snapshot: None,
-            startup_asset_ref: std::env::var(STARTUP_ASSET_ENV)
-                .ok()
-                .map(|value| value.trim().replace('\\', "/"))
-                .filter(|value| !value.is_empty()),
+            startup_asset_ref: crate::env_config::normalized_logical_ref(STARTUP_ASSET_ENV),
             startup_asset_opened: false,
             startup_asset_attempts: 0,
             last_startup_asset_attempt_frame: None,

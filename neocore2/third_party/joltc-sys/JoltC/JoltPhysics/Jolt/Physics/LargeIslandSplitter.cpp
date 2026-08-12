@@ -19,16 +19,19 @@ JPH_NAMESPACE_BEGIN
 LargeIslandSplitter::EStatus LargeIslandSplitter::Splits::FetchNextBatch(uint32 &outConstraintsBegin, uint32 &outConstraintsEnd, uint32 &outContactsBegin, uint32 &outContactsEnd, bool &outFirstIteration)
 {
 	{
-		// First check if we can get a new batch (doing a relaxed read to avoid hammering an atomic with an atomic subtract)
+		// First check if we can get a new batch (doing a read to avoid hammering an atomic with an atomic subtract)
 		// Note this also avoids overflowing the status counter if we're done but there's still one thread processing items
-		uint64 status = mStatus.load(memory_order_relaxed);
-		if (sGetIteration(status) >= mNumIterations)
-			return EStatus::AllBatchesDone;
+		uint64 status = mStatus.load(memory_order_acquire);
 
 		// Check for special value that indicates that the splits are still being built
 		// (note we do not check for this condition again below as we reset all splits before kicking off jobs that fetch batches of work)
 		if (status == StatusItemMask)
 			return EStatus::WaitingForBatch;
+
+		// Next check if all items have been processed. Note that we do this after checking if the job can be started
+		// as mNumIterations is not initialized until the split is started.
+		if (sGetIteration(status) >= mNumIterations)
+			return EStatus::AllBatchesDone;
 
 		uint item = sGetItem(status);
 		uint split_index = sGetSplit(status);
@@ -185,7 +188,8 @@ void LargeIslandSplitter::Prepare(const IslandBuilder &inIslandBuilder, uint32 i
 	JPH_PROFILE_FUNCTION();
 
 	// Count the total number of constraints and contacts that we will be putting in splits
-	mContactAndConstraintsSize = 0;
+	JPH_ASSERT(mNumSplitIslands == 0);
+	JPH_ASSERT(mContactAndConstraintsSize == 0);
 	for (uint32 island = 0; island < inIslandBuilder.GetNumIslands(); ++island)
 	{
 		// Get the contacts in this island
@@ -282,8 +286,6 @@ uint LargeIslandSplitter::AssignToNonParallelSplit(const Body *inBody)
 
 bool LargeIslandSplitter::SplitIsland(uint32 inIslandIndex, const IslandBuilder &inIslandBuilder, const BodyManager &inBodyManager, const ContactConstraintManager &inContactManager, Constraint **inActiveConstraints, CalculateSolverSteps &ioStepsCalculator)
 {
-	JPH_PROFILE_FUNCTION();
-
 	// Get the contacts in this island
 	uint32 *contacts_start, *contacts_end;
 	inIslandBuilder.GetContactsInIsland(inIslandIndex, contacts_start, contacts_end);
@@ -298,6 +300,9 @@ bool LargeIslandSplitter::SplitIsland(uint32 inIslandIndex, const IslandBuilder 
 	uint island_size = num_contacts_in_island + num_constraints_in_island;
 	if (island_size < cLargeIslandTreshold)
 		return false;
+
+	// Start measuring after the early out
+	JPH_PROFILE_FUNCTION();
 
 	// Get bodies in this island
 	BodyID *bodies_start, *bodies_end;
@@ -447,7 +452,7 @@ bool LargeIslandSplitter::SplitIsland(uint32 inIslandIndex, const IslandBuilder 
 		JPH_ASSERT(constraint_buffer_cur[s] == mContactAndConstraintIndices + split.mConstraintBufferEnd);
 	}
 
-#ifdef _DEBUG
+#ifdef JPH_DEBUG
 	// Validate that the splits are indeed not touching the same body
 	for (uint s = 0; s < splits.mNumSplits; ++s)
 	{
@@ -476,7 +481,7 @@ bool LargeIslandSplitter::SplitIsland(uint32 inIslandIndex, const IslandBuilder 
 			}
 		}
 	}
-#endif // _DEBUG
+#endif // JPH_DEBUG
 #endif // JPH_ENABLE_ASSERTS
 
 	// Allow other threads to pick up this split island now

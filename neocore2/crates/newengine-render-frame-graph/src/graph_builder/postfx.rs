@@ -5,7 +5,10 @@ use newengine_render_api::{
 
 use crate::StandardRenderPhase;
 
-use super::{FrameGraphBuilder, RG_LIT_COLOR, RG_SCENE_HDR_COLOR, RG_SURFACE_COLOR};
+use super::{
+    FrameGraphBuilder, RG_LIT_COLOR, RG_SCENE_HDR_COLOR, RG_SURFACE_COLOR, RG_VIEWPORT_COLOR,
+    RG_VIEWPORT_DEPTH,
+};
 
 impl FrameGraphBuilder {
     pub fn postfx(mut self, enabled: bool) -> Self {
@@ -16,10 +19,17 @@ impl FrameGraphBuilder {
         let Some(input) = self.sampleable_scene_input_resource() else {
             return self;
         };
+        let has_scene_depth = self.has_resource(RG_VIEWPORT_DEPTH);
         self.add_phase_pass(StandardRenderPhase::PostFx, |pass| {
-            pass.with_domain(RenderGraphPassDomain::PostProcess)
-                .reads(input, RenderGraphResourceUsage::SampledTexture)
-                .writes(RG_SURFACE_COLOR, RenderGraphResourceUsage::ColorAttachment)
+            let pass = pass
+                .with_domain(RenderGraphPassDomain::PostProcess)
+                .reads(input, RenderGraphResourceUsage::SampledTexture);
+            let pass = if has_scene_depth {
+                pass.reads(RG_VIEWPORT_DEPTH, RenderGraphResourceUsage::SampledTexture)
+            } else {
+                pass
+            };
+            pass.writes(RG_VIEWPORT_COLOR, RenderGraphResourceUsage::ColorAttachment)
         });
         self
     }
@@ -68,7 +78,7 @@ impl FrameGraphBuilder {
     }
 
     pub(super) fn finalize_surface_output(&mut self) {
-        if !self.target.hdr_scene_enabled || self.has_surface_color_writer() {
+        if !self.target.hdr_scene_enabled || self.has_viewport_color_writer() {
             return;
         }
 
@@ -85,16 +95,16 @@ impl FrameGraphBuilder {
         )
         .with_domain(RenderGraphPassDomain::PostProcess)
         .reads(input, RenderGraphResourceUsage::SampledTexture)
-        .writes(RG_SURFACE_COLOR, RenderGraphResourceUsage::ColorAttachment);
+        .writes(RG_VIEWPORT_COLOR, RenderGraphResourceUsage::ColorAttachment);
         self.graph.passes.push(pass);
     }
 
     #[inline]
-    fn has_surface_color_writer(&self) -> bool {
+    fn has_viewport_color_writer(&self) -> bool {
         self.graph.passes.iter().any(|pass| {
             pass.writes
                 .iter()
-                .any(|write| write.resource == RG_SURFACE_COLOR)
+                .any(|write| write.resource == RG_VIEWPORT_COLOR)
         })
     }
 

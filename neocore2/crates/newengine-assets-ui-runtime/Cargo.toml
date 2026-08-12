@@ -15,6 +15,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
 newengine-assets-api = { path = "../newengine-assets-api" }
+newengine-math = { path = "../newengine-math" }
 newengine-plugin-api = { path = "../newengine-plugin-api" }
 newengine-service-api = { path = "../newengine-service-api" }
 newengine-service-kit = { path = "../newengine-service-kit" }

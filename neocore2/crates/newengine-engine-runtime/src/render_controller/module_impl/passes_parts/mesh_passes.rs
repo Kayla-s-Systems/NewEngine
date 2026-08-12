@@ -24,8 +24,8 @@ use super::mesh_visibility::{
     transform_sphere,
 };
 use crate::gameplay::display_visible_in_mode;
+use crate::gameplay::{EnvironmentDomeRenderState, TerrainMaterialLayers};
 use crate::render_controller::RuntimeRenderController;
-use crate::scene_bridge::{SkyDomeRuntime, TerrainSurfaceLayers};
 use newengine_math::collections::FxHashMap;
 use newengine_model_domain_api::{
     MeshRenderOptions, MeshRenderRole, MeshShadowPolicy, MeshTransformPolicy,
@@ -59,7 +59,7 @@ struct TerrainDrawEntry {
     base_color: [f32; 4],
     model: Mat4,
     material: Option<newengine_materials::MaterialRef>,
-    surface_layers: Option<TerrainSurfaceLayers>,
+    surface_layers: Option<TerrainMaterialLayers>,
     shadow_policy: MeshShadowPolicy,
 }
 
@@ -180,7 +180,7 @@ fn draw_procedural_terrain_for_pass(
             base_color: terrain.base_color,
             model: gt.0,
             material: world.get::<newengine_materials::MaterialRef>(id).copied(),
-            surface_layers: world.get::<TerrainSurfaceLayers>(id).cloned(),
+            surface_layers: world.get::<TerrainMaterialLayers>(id).cloned(),
             shadow_policy: render_options.shadow_policy,
         });
     }

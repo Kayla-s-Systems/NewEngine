@@ -31,6 +31,8 @@ ALLOW_ENV_PREFIXES = (
     pathlib.Path("crates/newengine-plugin-host/src/manager/lifecycle.rs"),
     pathlib.Path("crates/newengine-plugin-host/src/manager/discovery"),
     pathlib.Path("crates/newengine-engine-runtime/src/env_config.rs"),
+    pathlib.Path("crates/newengine-game-ready-profile/src/env_config.rs"),
+    pathlib.Path("crates/newengine-asset-inspector-runtime/src/env_config.rs"),
     pathlib.Path("crates/newengine-core/src/storage_root.rs"),
     pathlib.Path("crates/newengine-core/src/engine/plugins.rs"),
     pathlib.Path("crates/newengine-core/src/startup_window/args.rs"),
@@ -104,18 +106,50 @@ def is_allowed_v2_line(line: str) -> bool:
     )
 
 
+METHOD_V2_CONST_RE = re.compile(r"\b[A-Z][A-Z0-9_]*_V2\b")
+METHOD_V2_FN_RE = re.compile(r"\b[A-Za-z][A-Za-z0-9_]*_v2\s*\(")
+METHOD_V2_LITERAL_RE = re.compile(r"[\"'][A-Za-z0-9_.:-]+_v2[\"']")
+
+
 def has_forbidden_method_v2(line: str) -> bool:
-    if "_v2" not in line:
+    if "_v2" not in line.lower():
         return False
     if is_allowed_v2_line(line):
         return False
-    # Method identifiers usually appear in constants or string literals. Schema/wire
-    # versions stay allowed above; service method suffixes do not.
-    return True
+    # Only service-like identifiers are denied. Asset names such as foo_v2.ytd,
+    # prose and test names containing an internal `_v2_` segment are not service
+    # method identities and must not produce false positives.
+    return bool(
+        METHOD_V2_CONST_RE.search(line)
+        or METHOD_V2_FN_RE.search(line)
+        or METHOD_V2_LITERAL_RE.search(line)
+    )
+
+
+def iter_forbidden_repository_artifacts() -> list[pathlib.Path]:
+    out: list[pathlib.Path] = []
+    skip = {"target", ".git", "docs", "archive", "research", "third_party", "cache"}
+    for path in ROOT.rglob("*"):
+        if any(part in skip for part in path.parts):
+            continue
+        if path.is_dir() and path.name == "__pycache__":
+            out.append(path)
+            continue
+        if not path.is_file():
+            continue
+        if path.suffix == ".pyc" or path.name.endswith(".bak") or ".bak-" in path.name:
+            out.append(path)
+    return out
 
 
 def main() -> int:
     violations: list[str] = []
+    for artifact in iter_forbidden_repository_artifacts():
+        rel = artifact.relative_to(ROOT)
+        violations.append(
+            f"{rel}: repository backup/cache artifact is forbidden; use git history or ignored build cache"
+        )
+
     for path in iter_source_files():
         rel = path.relative_to(ROOT)
         lines = path.read_text(encoding="utf-8", errors="replace").splitlines()

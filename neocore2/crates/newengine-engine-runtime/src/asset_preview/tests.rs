@@ -24,7 +24,10 @@ fn bundle_cache_is_bounded_and_promotes_recent_hit() {
     assert!(!api.activate_cached_bundle("models/0.ydd"));
     assert!(api.activate_cached_bundle("models/4.ydd"));
     assert_eq!(
-        api.bundle_cache.lock().front().unwrap().asset_ref,
+        api.bundle_cache
+            .lock()
+            .most_recent_key()
+            .expect("recent preview key"),
         "models/4.ydd"
     );
 }

@@ -18,9 +18,9 @@ class StreamOut;
 /// - Or if there's no filter for the first object, the second group filter says the objects can collide
 class JPH_EXPORT CollisionGroup
 {
-public:
 	JPH_DECLARE_SERIALIZABLE_NON_VIRTUAL(JPH_EXPORT, CollisionGroup)
 
+public:
 	using GroupID			= uint32;
 	using SubGroupID		= uint32;
 
@@ -32,6 +32,18 @@ public:
 
 	/// Construct with all properties
 							CollisionGroup(const GroupFilter *inFilter, GroupID inGroupID, SubGroupID inSubGroupID) : mGroupFilter(inFilter), mGroupID(inGroupID), mSubGroupID(inSubGroupID) { }
+
+
+	/// Test if two collision groups are equal
+	bool					operator == (const CollisionGroup &inRHS) const
+	{
+		return mGroupFilter == inRHS.mGroupFilter && mGroupID == inRHS.mGroupID && mSubGroupID == inRHS.mSubGroupID;
+	}
+
+	bool					operator != (const CollisionGroup &inRHS) const
+	{
+		return !(*this == inRHS);
+	}
 
 	/// Set the collision group filter
 	inline void				SetGroupFilter(const GroupFilter *inFilter)
@@ -84,6 +96,9 @@ public:
 
 	/// Restore the state of this object from inStream. Does not save group filter.
 	void					RestoreBinaryState(StreamIn &inStream);
+
+	/// An invalid collision group
+	static const CollisionGroup	sInvalid;
 
 private:
 	RefConst<GroupFilter>	mGroupFilter;

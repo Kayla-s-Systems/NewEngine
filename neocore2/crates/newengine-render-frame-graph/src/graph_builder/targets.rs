@@ -31,7 +31,11 @@ pub struct FrameGraphTargetDesc {
     /// Linear scene color format used by HDR-capable world/material shaders.
     pub scene_color_format: TextureFormat,
     pub depth_format: TextureFormat,
+    /// Scene color uses a floating-point format when true.
     pub hdr_scene_enabled: bool,
+    /// Scene color/depth must be provider-owned and sampleable before the surface.
+    /// PostFX needs this even when the authored scene runs in the LDR/BGRA8 tier.
+    pub offscreen_scene_enabled: bool,
 }
 
 impl FrameGraphTargetDesc {
@@ -51,6 +55,7 @@ impl FrameGraphTargetDesc {
             scene_color_format: TextureFormat::Rgba16Float,
             depth_format: TextureFormat::Depth32Float,
             hdr_scene_enabled: true,
+            offscreen_scene_enabled: true,
         }
     }
 
@@ -69,6 +74,12 @@ impl FrameGraphTargetDesc {
     #[inline]
     pub fn with_hdr_scene(mut self, enabled: bool) -> Self {
         self.hdr_scene_enabled = enabled;
+        self
+    }
+
+    #[inline]
+    pub fn with_offscreen_scene(mut self, enabled: bool) -> Self {
+        self.offscreen_scene_enabled = enabled;
         self
     }
 
@@ -92,7 +103,7 @@ impl FrameGraphBuilder {
             .with_semantic(RenderGraphResourceSemantic::SurfaceColor),
         );
 
-        if self.target.hdr_scene_enabled {
+        if self.target.offscreen_scene_enabled {
             self.graph.resources.push(
                 RenderGraphResourceDesc::transient_texture(
                     RG_SCENE_HDR_COLOR,
@@ -104,12 +115,10 @@ impl FrameGraphBuilder {
                 .with_semantic(RenderGraphResourceSemantic::SceneHdrColor),
             );
 
-            // HDR scene rendering is offscreen even when the viewport is the native surface.
-            // The world pass must therefore own a matching depth attachment in the same
-            // native render scope as scene_hdr_color. Binding RG_VIEWPORT_DEPTH to the
-            // swapchain/external depth here makes the forward material pipelines use a
-            // color+depth render pass while the actual offscreen target is color-only,
-            // which can silently produce an empty scene before postFX composition.
+            // Any sampleable scene chain (HDR or LDR+postFX) is offscreen even when the
+            // viewport is the native surface. The world pass must own a matching depth
+            // attachment in the same native scope so contact/AO analysis can reuse the
+            // exact depth produced by the forward pass without a second prepass.
             self.graph.resources.push(
                 RenderGraphResourceDesc::transient_texture(
                     RG_VIEWPORT_DEPTH,
@@ -133,7 +142,7 @@ impl FrameGraphBuilder {
                 )
                 .with_semantic(RenderGraphResourceSemantic::ViewportColor),
             );
-            if !self.target.hdr_scene_enabled {
+            if !self.target.offscreen_scene_enabled {
                 self.graph.resources.push(
                     RenderGraphResourceDesc::external_swapchain(
                         RG_VIEWPORT_DEPTH,
@@ -157,7 +166,7 @@ impl FrameGraphBuilder {
                 )
                 .with_semantic(RenderGraphResourceSemantic::ViewportColor),
             );
-            if !self.target.hdr_scene_enabled {
+            if !self.target.offscreen_scene_enabled {
                 self.graph.resources.push(
                     RenderGraphResourceDesc::external_render_target(
                         RG_VIEWPORT_DEPTH,
@@ -179,7 +188,7 @@ impl FrameGraphBuilder {
                 )
                 .with_semantic(RenderGraphResourceSemantic::ViewportColor),
             );
-            if !self.target.hdr_scene_enabled {
+            if !self.target.offscreen_scene_enabled {
                 self.graph.resources.push(
                     RenderGraphResourceDesc::external(
                         RG_VIEWPORT_DEPTH,

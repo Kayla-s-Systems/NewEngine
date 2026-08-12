@@ -17,6 +17,9 @@ pub use file_types::*;
 mod texture_assets;
 pub use texture_assets::*;
 
+mod map_assets;
+pub use map_assets::*;
+
 mod asset_lifecycle;
 pub use asset_lifecycle::*;
 
@@ -63,6 +66,9 @@ pub const ENGINE_ASSETS_MATERIALS_SERVICE_ID: &str = "engine.assets.materials";
 /// placements and references to `.ytyp` Definition Entries; it does not replace
 /// `.ytyp` as the generic metadata/knowledge source.
 pub const ENGINE_ASSETS_MAPS_SERVICE_ID: &str = "engine.assets.maps";
+pub const MAPS_SERVICE_ID: &str = "maps.api";
+pub const MAPS_BACKEND_CAPABILITY_ID: &str = "assets.maps.backend";
+pub const MAPS_RUNTIME_CONTRACT: &str = "newengine.assets.maps.runtime.v1";
 
 /// Semantic UI dictionary gateway id. `.neui` meaning lives here: XMLcentral validation,
 /// entry selection, binding/action/dependency extraction and authored-to-runtime DTO
@@ -435,6 +441,26 @@ pub const DEFINITIONS_SERVICE_METHODS: &[&str] = &[
     definitions_method::DESCRIBE_SIDE_EFFECTS_V1,
 ];
 
+pub mod maps_method {
+    pub const INFO_JSON: &str = newengine_service_api::SERVICE_METHOD_INFO_JSON;
+    pub const INVOKE_JSON: &str = newengine_service_api::SERVICE_METHOD_INVOKE_JSON;
+    pub const SHUTDOWN_V1: &str = newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1;
+    pub const INDEX_V1: &str = "assets.maps.index_v1";
+    pub const CELL_V1: &str = "assets.maps.cell_v1";
+    pub const VALIDATE_V1: &str = "assets.maps.validate_v1";
+    pub const DEPENDENCIES_V1: &str = "assets.maps.dependencies_v1";
+}
+
+pub const MAPS_SERVICE_METHODS: &[&str] = &[
+    maps_method::INFO_JSON,
+    maps_method::INVOKE_JSON,
+    maps_method::SHUTDOWN_V1,
+    maps_method::INDEX_V1,
+    maps_method::CELL_V1,
+    maps_method::VALIDATE_V1,
+    maps_method::DEPENDENCIES_V1,
+];
+
 pub const TEXTURES_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec =
     newengine_service_api::BackendServiceSpec::new(
         "assets.textures",
@@ -449,6 +475,14 @@ pub const DEFINITIONS_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServic
         ENGINE_ASSETS_DEFINITIONS_SERVICE_ID,
         DEFINITIONS_SERVICE_ID,
         DEFINITIONS_BACKEND_CAPABILITY_ID,
+    );
+
+pub const MAPS_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec =
+    newengine_service_api::BackendServiceSpec::new(
+        "assets.maps",
+        ENGINE_ASSETS_MAPS_SERVICE_ID,
+        MAPS_SERVICE_ID,
+        MAPS_BACKEND_CAPABILITY_ID,
     );
 
 pub const ASSET_GRAPH_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec =
@@ -494,6 +528,20 @@ pub const DEFINITIONS_RUNTIME_REQUIREMENT_SPEC:
         DEFINITIONS_RUNTIME_CONTRACT_SPEC,
         Some(DEFINITIONS_BACKEND_CAPABILITY_ID),
         Some("NEWENGINE_REQUIRE_DEFINITIONS_BACKEND"),
+    );
+
+pub const MAPS_RUNTIME_CONTRACT_SPEC: newengine_service_api::RuntimeServiceContractSpec =
+    newengine_service_api::RuntimeServiceContractSpec::new(
+        ENGINE_ASSETS_MAPS_SERVICE_ID,
+        MAPS_RUNTIME_CONTRACT,
+        MAPS_SERVICE_METHODS,
+    );
+
+pub const MAPS_RUNTIME_REQUIREMENT_SPEC: newengine_service_api::RuntimeServiceRequirementSpec =
+    newengine_service_api::RuntimeServiceRequirementSpec::new(
+        MAPS_RUNTIME_CONTRACT_SPEC,
+        Some(MAPS_BACKEND_CAPABILITY_ID),
+        Some("NEWENGINE_REQUIRE_MAPS_BACKEND"),
     );
 
 pub const ASSET_GRAPH_RUNTIME_CONTRACT_SPEC: newengine_service_api::RuntimeServiceContractSpec =

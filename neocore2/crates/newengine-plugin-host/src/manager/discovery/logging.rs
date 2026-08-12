@@ -1,6 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use crate::log_fmt::{ellipsize, emit_boxed_kv, emit_prefixed_table};
+use newengine_ulog_api::formatting::{ellipsize, emit_boxed_kv, emit_prefixed_table};
 
 use super::graph::{phase_name, DiscoveryGraph, LoadPhaseFilter, ScannedDynlib, ScannedDynlibKind};
 use super::selection::{LoadSelection, SelectionDecision};
@@ -9,7 +9,10 @@ pub(super) fn emit_discovery_logs(graph: &DiscoveryGraph) {
     emit_boxed_kv(
         "PluginDiscovery :: Scan Summary",
         &[
-            ("dir", crate::path_fmt::display_clean(&graph.dir)),
+            (
+                "dir",
+                newengine_ulog_api::path_format::display_clean(&graph.dir),
+            ),
             ("entries_total", graph.entries_total.to_string()),
             ("dynlibs", graph.items.len().to_string()),
             ("skipped_non_dynlib", graph.skipped_non_dynlib.to_string()),

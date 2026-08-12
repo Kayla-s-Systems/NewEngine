@@ -44,6 +44,15 @@ fn build_joltc(target: &BuildTarget) {
 
     config.configure_arg("-DINTERPROCEDURAL_OPTIMIZATION=OFF");
 
+    // Jolt 5.6 enables multiple compute backends by default. The North Star
+    // physics provider currently uses the CPU rigid-body pipeline only, so keep
+    // these optional GPU/compute backends disabled to avoid pulling DX12,
+    // Vulkan/Metal shader toolchains into normal plugin builds.
+    config.configure_arg("-DJPH_USE_DX12=OFF");
+    config.configure_arg("-DJPH_USE_VK=OFF");
+    config.configure_arg("-DJPH_USE_MTL=OFF");
+    config.configure_arg("-DJPH_USE_CPU_COMPUTE=OFF");
+
     if cfg!(feature = "double-precision") {
         config.configure_arg("-DDOUBLE_PRECISION=ON");
     }
@@ -109,7 +118,7 @@ fn emit_bindings(
     flags: &[(&'static str, &'static str)],
 ) -> anyhow::Result<()> {
     // Runtime builds must not require LLVM/libclang to be installed. The C ABI
-    // for the vendored JoltC 5.0.0 wrapper is stable inside this third_party
+    // for the vendored JoltC wrapper over Jolt 5.6.0 is stable inside this third_party
     // directory, so the default path uses a checked-in static binding snapshot.
     // Developers can opt into bindgen explicitly when updating JoltC headers.
     if env_flag("NEWENGINE_JOLTC_BINDGEN") || env_flag("JOLTC_SYS_BINDGEN") {

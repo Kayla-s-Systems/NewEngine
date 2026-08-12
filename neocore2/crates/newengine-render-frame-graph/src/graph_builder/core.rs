@@ -19,7 +19,7 @@ impl FrameGraphBuilder {
 
     #[inline]
     pub(super) fn viewport_color_resource(&mut self) -> RenderGraphResourceId {
-        if self.target.hdr_scene_enabled {
+        if self.target.offscreen_scene_enabled {
             return RG_SCENE_HDR_COLOR;
         }
         if self.target.viewport_is_surface {

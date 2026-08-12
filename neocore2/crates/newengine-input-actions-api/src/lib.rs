@@ -65,23 +65,6 @@ pub mod engine_action {
     pub const ASSET_CATALOG_UI_TOGGLE: &str = "ui.assets.catalog.toggle";
 }
 
-/// Engine-reserved gameplay action ids used by profile bindings and ECS command handoff.
-pub mod gameplay_action {
-    pub const PLAYER_JUMP: &str = "player.jump";
-    pub const PLAYER_CROUCH: &str = "player.crouch";
-    pub const PLAYER_FIRE_PRIMARY: &str = "player.fire.primary";
-    pub const PLAYER_AIM: &str = "player.aim";
-    pub const PLAYER_RELOAD: &str = "player.reload";
-    pub const PLAYER_INTERACT: &str = "player.interact";
-    pub const INVENTORY_TOGGLE: &str = "player.inventory.toggle";
-    pub const HUD_VISIBILITY_TOGGLE: &str = "game.hud.visibility.toggle";
-    pub const EQUIP_PRIMARY: &str = "player.equipment.primary";
-    pub const EQUIP_SECONDARY: &str = "player.equipment.secondary";
-    pub const EQUIP_SIDEARM: &str = "player.equipment.sidearm";
-    pub const EQUIP_MELEE: &str = "player.equipment.melee";
-    pub const EQUIP_THROWABLE: &str = "player.equipment.throwable";
-}
-
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct InputActionListenerRegistration {
     pub owner: String,
@@ -238,6 +221,95 @@ impl InputActionDefinition {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum InputActionPhase {
+    Down,
+    Pressed,
+    Released,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct InputActionSignal {
+    pub action: String,
+    pub phase: InputActionPhase,
+}
+
+/// Generic fixed-step command transport derived from semantic input actions.
+///
+/// It deliberately carries action identities rather than product-specific fields. Held state is
+/// replaced by the latest render frame while pulse edges accumulate until a fixed step consumes
+/// them, preserving short input presses across render/fixed-step cadence differences.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ActionCommandFrame {
+    #[serde(default)]
+    pub held: Vec<String>,
+    #[serde(default)]
+    pub pressed: Vec<String>,
+    #[serde(default)]
+    pub released: Vec<String>,
+}
+
+impl ActionCommandFrame {
+    pub fn from_signals(signals: &[InputActionSignal]) -> Self {
+        let mut out = Self::default();
+        for signal in signals {
+            let dst = match signal.phase {
+                InputActionPhase::Down => &mut out.held,
+                InputActionPhase::Pressed => &mut out.pressed,
+                InputActionPhase::Released => &mut out.released,
+            };
+            push_unique(dst, &signal.action);
+        }
+        out
+    }
+
+    #[inline]
+    pub fn is_held(&self, action: &str) -> bool {
+        self.held.iter().any(|candidate| candidate == action)
+    }
+
+    #[inline]
+    pub fn is_pressed(&self, action: &str) -> bool {
+        self.pressed.iter().any(|candidate| candidate == action)
+    }
+
+    #[inline]
+    pub fn is_released(&self, action: &str) -> bool {
+        self.released.iter().any(|candidate| candidate == action)
+    }
+
+    pub fn merge_pending(&mut self, latest: Self) {
+        self.held = latest.held;
+        for action in latest.pressed {
+            push_unique_owned(&mut self.pressed, action);
+        }
+        for action in latest.released {
+            push_unique_owned(&mut self.released, action);
+        }
+    }
+
+    #[inline]
+    pub fn clear_pulses(&mut self) {
+        self.pressed.clear();
+        self.released.clear();
+    }
+}
+
+#[inline]
+fn push_unique(out: &mut Vec<String>, value: &str) {
+    if !out.iter().any(|candidate| candidate == value) {
+        out.push(value.to_owned());
+    }
+}
+
+#[inline]
+fn push_unique_owned(out: &mut Vec<String>, value: String) {
+    if !out.iter().any(|candidate| candidate == &value) {
+        out.push(value);
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct InputActionFrame {
     #[serde(default)]
@@ -261,6 +333,8 @@ pub struct InputActionFrame {
     #[serde(default)]
     pub actions: Vec<String>,
     #[serde(default)]
+    pub signals: Vec<InputActionSignal>,
+    #[serde(default)]
     pub events: Vec<InputActionDispatchEvent>,
 }
 
@@ -278,53 +352,9 @@ impl Default for InputActionFrame {
             ui_back: false,
             ui_nav: [0, 0],
             actions: Vec::new(),
+            signals: Vec::new(),
             events: Vec::new(),
         }
-    }
-}
-
-/// Compact gameplay command state extracted from a semantic input action frame.
-///
-/// `*_pressed` commands are one-render-frame pulses; held commands remain true for
-/// every frame in which their binding resolves. Fixed-step consumers should use the
-/// enclosing source-frame sequence to consume pulse commands at most once.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct GameplayActionFrame {
-    pub jump_pressed: bool,
-    pub crouch_held: bool,
-    pub fire_primary_held: bool,
-    pub aim_held: bool,
-    pub reload_pressed: bool,
-    pub interact_pressed: bool,
-    pub inventory_toggle_pressed: bool,
-    pub hud_visibility_toggle_pressed: bool,
-    pub equipment_slot_pressed: Option<u8>,
-}
-
-impl GameplayActionFrame {
-    #[inline]
-    pub fn clear_pulses(&mut self) {
-        self.jump_pressed = false;
-        self.reload_pressed = false;
-        self.interact_pressed = false;
-        self.inventory_toggle_pressed = false;
-        self.hud_visibility_toggle_pressed = false;
-        self.equipment_slot_pressed = None;
-    }
-
-    #[inline]
-    pub fn merge_pending(&mut self, latest: Self) {
-        self.jump_pressed |= latest.jump_pressed;
-        self.reload_pressed |= latest.reload_pressed;
-        self.interact_pressed |= latest.interact_pressed;
-        self.inventory_toggle_pressed |= latest.inventory_toggle_pressed;
-        self.hud_visibility_toggle_pressed |= latest.hud_visibility_toggle_pressed;
-        if latest.equipment_slot_pressed.is_some() {
-            self.equipment_slot_pressed = latest.equipment_slot_pressed;
-        }
-        self.crouch_held = latest.crouch_held;
-        self.fire_primary_held = latest.fire_primary_held;
-        self.aim_held = latest.aim_held;
     }
 }
 
@@ -335,31 +365,8 @@ impl InputActionFrame {
     }
 
     #[inline]
-    pub fn gameplay_actions(&self) -> GameplayActionFrame {
-        GameplayActionFrame {
-            jump_pressed: self.contains_action(gameplay_action::PLAYER_JUMP),
-            crouch_held: self.contains_action(gameplay_action::PLAYER_CROUCH),
-            fire_primary_held: self.contains_action(gameplay_action::PLAYER_FIRE_PRIMARY),
-            aim_held: self.contains_action(gameplay_action::PLAYER_AIM),
-            reload_pressed: self.contains_action(gameplay_action::PLAYER_RELOAD),
-            interact_pressed: self.contains_action(gameplay_action::PLAYER_INTERACT),
-            inventory_toggle_pressed: self.contains_action(gameplay_action::INVENTORY_TOGGLE),
-            hud_visibility_toggle_pressed: self
-                .contains_action(gameplay_action::HUD_VISIBILITY_TOGGLE),
-            equipment_slot_pressed: if self.contains_action(gameplay_action::EQUIP_PRIMARY) {
-                Some(1)
-            } else if self.contains_action(gameplay_action::EQUIP_SECONDARY) {
-                Some(2)
-            } else if self.contains_action(gameplay_action::EQUIP_SIDEARM) {
-                Some(3)
-            } else if self.contains_action(gameplay_action::EQUIP_MELEE) {
-                Some(4)
-            } else if self.contains_action(gameplay_action::EQUIP_THROWABLE) {
-                Some(5)
-            } else {
-                None
-            },
-        }
+    pub fn command_actions(&self) -> ActionCommandFrame {
+        ActionCommandFrame::from_signals(&self.signals)
     }
 }
 
@@ -380,15 +387,10 @@ pub trait InputFrameSource {
     fn is_mouse_pressed(&self, button: u32) -> bool;
     fn is_mouse_released(&self, button: u32) -> bool;
 
-    /// Returns true when at least one gamepad is currently visible to the raw input backend.
-    ///
-    /// This is intentionally advisory. Binding profiles use it for diagnostics and fallback
-    /// policy, not for hard device gating; modal capture belongs to `engine.input.contexts`.
     #[inline]
     fn has_gamepad_connected(&self) -> bool {
         false
     }
-
     #[inline]
     fn is_gamepad_button_down(&self, _button: &str) -> bool {
         false
@@ -424,6 +426,7 @@ impl Default for InputActionsServiceInfo {
                 "semantic-action-frame".to_owned(),
                 "action-dispatch-events".to_owned(),
                 "listener-priority-consumption".to_owned(),
+                "phase-preserving-command-transport".to_owned(),
             ],
             methods: vec![
                 INPUT_ACTIONS_METHOD_INFO.to_owned(),
@@ -502,26 +505,49 @@ mod tests {
     use super::*;
 
     #[test]
-    fn gameplay_action_frame_extracts_semantic_commands() {
+    fn command_frame_preserves_action_phases() {
         let input = InputActionFrame {
-            actions: vec![
-                gameplay_action::PLAYER_JUMP.into(),
-                gameplay_action::PLAYER_FIRE_PRIMARY.into(),
-                gameplay_action::PLAYER_AIM.into(),
-                gameplay_action::HUD_VISIBILITY_TOGGLE.into(),
+            signals: vec![
+                InputActionSignal {
+                    action: "game.jump".into(),
+                    phase: InputActionPhase::Pressed,
+                },
+                InputActionSignal {
+                    action: "game.crouch".into(),
+                    phase: InputActionPhase::Down,
+                },
+                InputActionSignal {
+                    action: "game.use".into(),
+                    phase: InputActionPhase::Released,
+                },
             ],
             ..InputActionFrame::default()
         };
+        let commands = input.command_actions();
+        assert!(commands.is_pressed("game.jump"));
+        assert!(commands.is_held("game.crouch"));
+        assert!(commands.is_released("game.use"));
+    }
 
-        assert_eq!(
-            input.gameplay_actions(),
-            GameplayActionFrame {
-                jump_pressed: true,
-                fire_primary_held: true,
-                aim_held: true,
-                hud_visibility_toggle_pressed: true,
-                ..GameplayActionFrame::default()
-            }
-        );
+    #[test]
+    fn pending_pulses_survive_latest_held_state_merge() {
+        let mut pending = ActionCommandFrame {
+            held: vec!["game.forward".into()],
+            pressed: vec!["game.jump".into()],
+            released: Vec::new(),
+        };
+        pending.merge_pending(ActionCommandFrame {
+            held: vec!["game.crouch".into()],
+            pressed: vec!["game.pulse.b".into()],
+            released: vec!["game.use".into()],
+        });
+        assert_eq!(pending.held, ["game.crouch"]);
+        assert!(pending.is_pressed("game.jump"));
+        assert!(pending.is_pressed("game.pulse.b"));
+        assert!(pending.is_released("game.use"));
+        pending.clear_pulses();
+        assert!(pending.pressed.is_empty());
+        assert!(pending.released.is_empty());
+        assert_eq!(pending.held, ["game.crouch"]);
     }
 }
