@@ -79,7 +79,7 @@ pub struct PackedLights {
     pub cloud_shadow_map2: [f32; 4],
     pub cloud_shadow_map3: [f32; 4],
     pub cloud_shadow_map4: [f32; 4],
-    /// xyz = normalized active camera forward direction; w reserved.
+    /// xyz = normalized active camera forward direction; w = receiver diagnostic mode.
     /// Appended to the std140 block so CSM receiver selection can use the exact
     /// same camera-forward depth convention as CPU cascade fitting.
     pub shadow_view_forward: [f32; 4],
@@ -189,6 +189,12 @@ impl PackedLights {
     }
 
     #[inline]
+    pub fn with_shadow_receiver_debug_mode(mut self, mode: f32) -> Self {
+        self.shadow_view_forward[3] = mode.clamp(0.0, 8.0);
+        self
+    }
+
+    #[inline]
     pub fn with_shadow(mut self, light_mvp: Mat4, params: [f32; 4], extra: [f32; 4]) -> Self {
         self.shadow_light_mvp = light_mvp;
         self.shadow_cascade_light_mvp = [light_mvp; MAX_DIRECTIONAL_SHADOW_CASCADES];
@@ -261,6 +267,14 @@ mod cloud_shadow_ubo_tests {
         assert!((packed.shadow_view_forward[1] - 0.6).abs() < 1.0e-6);
         assert!((packed.shadow_view_forward[2] - 0.8).abs() < 1.0e-6);
         assert_eq!(packed.shadow_view_forward[3], 0.0);
+    }
+
+    #[test]
+    fn packed_receiver_debug_mode_uses_reserved_shadow_view_slot() {
+        let packed = PackedLights::default()
+            .with_camera_forward([0.0, 0.0, 1.0])
+            .with_shadow_receiver_debug_mode(7.0);
+        assert_eq!(packed.shadow_view_forward, [0.0, 0.0, 1.0, 7.0]);
     }
 
     #[test]

@@ -7,6 +7,16 @@ impl ScreenProfileRuntimeState {
         {
             return;
         }
+        if clicked_dispatch_action(resources, "editor.runtime.more").is_some() {
+            self.last_menu_click_frame = frame_index;
+            if self.active_menu_id.as_deref() == Some("__runtime_more") {
+                self.active_menu_id = None;
+            } else {
+                self.active_menu_id = Some("__runtime_more".to_owned());
+            }
+            return;
+        }
+
         let Some(action_id) = clicked_dispatch_action(resources, "editor.menu.") else {
             return;
         };
@@ -40,55 +50,124 @@ impl ScreenProfileRuntimeState {
         resources: &mut Resources,
         frame_index: u64,
     ) {
+        install_runtime_session_resources(resources);
+        for command in drain_external_runtime_session_commands() {
+            if matches!(command, RuntimeSessionCommand::ApplyChangesAndStop) {
+                if let Err(error) = stage_apply_changes_from_pie(resources, frame_index) {
+                    newengine_ulog_api::ulog::warn!(
+                        "runtime.apply_changes rejected before stop: {}",
+                        error
+                    );
+                    continue;
+                }
+            }
+            submit_runtime_session_command(
+                resources,
+                frame_index,
+                RUNTIME_SESSION_COMMAND_SOURCE_CONSOLE,
+                command,
+            );
+        }
+
         if self.descriptor.profile != UiScreenProfile::Editor {
+            let needs_play_session = resources
+                .get::<RuntimeSessionState>()
+                .map(|state| state.mode != Some(RuntimeSessionMode::Play) || !state.is_active())
+                .unwrap_or(true);
+            if needs_play_session {
+                submit_runtime_session_command(
+                    resources,
+                    frame_index,
+                    RUNTIME_SESSION_COMMAND_SOURCE_GAME,
+                    RuntimeSessionCommand::Start {
+                        mode: RuntimeSessionMode::Play,
+                    },
+                );
+            }
+            let session = advance_runtime_session(resources, frame_index);
             resources.insert(UiEditorRuntimeState {
                 version: 1,
                 frame_index,
                 mode: UiEditorRuntimeMode::Play,
+                paused: session.paused,
                 source_surface: self.descriptor.surface_id.clone(),
-                reason: "game profile owns runtime presentation".to_owned(),
+                reason: session.last_reason,
             });
             return;
         }
 
-        let dispatch_requested = if self.last_runtime_button_pointer_frame != frame_index {
-            clicked_dispatch_action(resources, "editor.runtime.").and_then(|action_id| {
-                EDITOR_CHROME
-                    .runtime_actions
-                    .iter()
-                    .find(|action| action.action_id == action_id)
-                    .map(|action| action.mode)
-            })
-        } else {
-            None
-        };
-        let requested = dispatch_requested.inspect(|_| {
-            self.last_runtime_button_pointer_frame = frame_index;
-        });
+        if self.last_runtime_command_frame != frame_index {
+            let current = resources
+                .get::<RuntimeSessionState>()
+                .cloned()
+                .unwrap_or_default();
+            let context = editor_command_context(&current);
+            let registry = resources
+                .get::<EditorCommandRegistry>()
+                .cloned()
+                .unwrap_or_else(default_runtime_editor_commands);
 
-        if let Some(mode) = requested.filter(|mode| *mode != self.editor_runtime_mode) {
-            self.editor_runtime_mode = mode;
-            match mode {
-                UiEditorRuntimeMode::Edit => newengine_ulog_api::ulog::info!("editor runtime: mode set to Edit via action route; simulation stopped and viewport remains preview-only"),
-                UiEditorRuntimeMode::Simulate => newengine_ulog_api::ulog::info!("editor runtime: mode set to Simulate via action route; world simulation may run without direct player control"),
-                UiEditorRuntimeMode::Play => newengine_ulog_api::ulog::info!("editor runtime: mode set to Play in Editor via action route; gameplay input may be handed to viewport policy"),
+            let clicked_command =
+                clicked_dispatch_action(resources, "editor.runtime.").filter(|command_id| {
+                    registry
+                        .get(command_id)
+                        .is_some_and(|command| command.enabled(context))
+                });
+            let shortcut_command = resources
+                .get::<UiInputFrame>()
+                .and_then(|input| registry.resolve_pressed(input, context))
+                .map(|command| command.id.clone());
+            let requested_command = clicked_command.or(shortcut_command);
+
+            if let Some(command_id) = requested_command {
+                self.last_runtime_command_frame = frame_index;
+                if self.active_menu_id.as_deref() == Some("__runtime_more") {
+                    self.active_menu_id = None;
+                }
+                if let Some(command) = runtime_session_command_from_editor_command(&command_id) {
+                    let can_submit =
+                        if matches!(command, RuntimeSessionCommand::ApplyChangesAndStop) {
+                            match stage_apply_changes_from_pie(resources, frame_index) {
+                                Ok(()) => true,
+                                Err(error) => {
+                                    newengine_ulog_api::ulog::warn!(
+                                        "editor PIE Apply Changes rejected before stop: {}",
+                                        error
+                                    );
+                                    false
+                                }
+                            }
+                        } else {
+                            true
+                        };
+                    if can_submit {
+                        submit_runtime_session_command(
+                            resources,
+                            frame_index,
+                            RUNTIME_SESSION_COMMAND_SOURCE_EDITOR,
+                            command,
+                        );
+                        newengine_ulog_api::ulog::info!(
+                            "editor command: submitted '{}' to runtime-session controller from session={} phase={:?}",
+                            command_id,
+                            current.session_id.0,
+                            current.phase,
+                        );
+                    }
+                }
             }
         }
 
+        let session = advance_runtime_session(resources, frame_index);
+        sync_editor_pie_world_state(resources, frame_index, &session);
+        let (mode, paused) = editor_runtime_projection(&session);
         resources.insert(UiEditorRuntimeState {
             version: 1,
             frame_index,
-            mode: self.editor_runtime_mode,
+            mode,
+            paused,
             source_surface: self.descriptor.surface_id.clone(),
-            reason: match self.editor_runtime_mode {
-                UiEditorRuntimeMode::Edit => {
-                    "editor boot default: simulation stopped until Simulate or Play".to_owned()
-                }
-                UiEditorRuntimeMode::Simulate => {
-                    "toolbar/shortcut requested simulation preview".to_owned()
-                }
-                UiEditorRuntimeMode::Play => "toolbar/shortcut requested play in editor".to_owned(),
-            },
+            reason: session.last_reason.clone(),
         });
     }
 
@@ -137,6 +216,11 @@ impl ScreenProfileRuntimeState {
             return;
         }
         let layout = editor_layout_metrics(resources, &self.hidden_panels);
+        let session = resources
+            .get::<RuntimeSessionState>()
+            .cloned()
+            .unwrap_or_default();
+        let (runtime_mode, runtime_paused) = editor_runtime_projection(&session);
         resources.insert(UiViewportSlot {
             version: 1,
             frame_index,
@@ -145,9 +229,12 @@ impl ScreenProfileRuntimeState {
             y_px: layout.viewport_y,
             w_px: layout.viewport_w,
             h_px: layout.viewport_h,
-            input_enabled: self.editor_runtime_mode != UiEditorRuntimeMode::Edit,
-            simulation_enabled: self.editor_runtime_mode != UiEditorRuntimeMode::Edit,
-            runtime_mode: self.editor_runtime_mode,
+            input_enabled: runtime_mode != UiEditorRuntimeMode::Edit
+                && !runtime_paused
+                && session.is_possessed(),
+            simulation_enabled: runtime_mode != UiEditorRuntimeMode::Edit && !runtime_paused,
+            paused: runtime_paused,
+            runtime_mode,
         });
         resources.insert(UiDockLayoutState {
             version: 1,
@@ -197,17 +284,17 @@ impl ScreenProfileRuntimeState {
             frame_index,
             notifications: vec![UiToastNotification {
                 id: "editor.boot.mode".to_owned(),
-                title: match self.editor_runtime_mode {
+                title: match runtime_mode {
                     UiEditorRuntimeMode::Edit => "Editor ready".to_owned(),
                     UiEditorRuntimeMode::Simulate => "Simulation running".to_owned(),
                     UiEditorRuntimeMode::Play => "Play In Editor".to_owned(),
                 },
-                detail: match self.editor_runtime_mode {
+                detail: match runtime_mode {
                     UiEditorRuntimeMode::Edit => "World/game bootstrap is deferred; viewport is a preview slot until Simulate or Play.".to_owned(),
                     UiEditorRuntimeMode::Simulate => "Scene bootstrap may run; player possession stays disabled.".to_owned(),
                     UiEditorRuntimeMode::Play => "Scene bootstrap may run and viewport can receive gameplay input.".to_owned(),
                 },
-                progress_permille: if self.editor_runtime_mode == UiEditorRuntimeMode::Edit { Some(1000) } else { None },
+                progress_permille: if runtime_mode == UiEditorRuntimeMode::Edit { Some(1000) } else { None },
                 severity: UiToastSeverity::Info,
                 source: SCREEN_PROFILE_SOURCE.to_owned(),
             }],

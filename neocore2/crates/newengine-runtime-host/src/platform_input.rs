@@ -3,7 +3,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use newengine_core::call_service_v1_optional;
-use newengine_math::collections_prelude::{NeBTreeMap, NeBTreeSet};
+use newengine_math::collections_prelude::NeBTreeMap;
 use newengine_ui_api::{UiInputFrame, UiTextEditOp, UiTextEditOpKind};
 
 /// Engine-facing input gateway id. Consumers call the engine facade; the host
@@ -13,18 +13,17 @@ pub const INPUT_SERVICE_ID: &str = newengine_input_api::ENGINE_INPUT_SERVICE_ID;
 static INPUT_POLL_ONLINE_LOGGED: AtomicBool = AtomicBool::new(false);
 static INPUT_POLL_OFFLINE_LOGGED: AtomicBool = AtomicBool::new(false);
 
-/// Calls a service method returning UTF-8 payload (best-effort).
-pub fn call_service_utf8(service_id: &str, method: &str) -> Option<String> {
-    let bytes = call_service_v1_optional(service_id, method, &[]).ok()??;
-    Some(String::from_utf8_lossy(&bytes).to_string())
-}
-
-/// Polls input snapshot from the canonical INPUT plugin and maps it into UiInputFrame.
+/// Polls one atomic input snapshot from the canonical INPUT provider and maps it
+/// into the UI/runtime DTO. `state_json` owns all one-shot edges, deltas, text and
+/// IME commit data, so the host performs exactly one gateway round-trip per frame.
 pub fn poll_input_frame() -> Option<UiInputFrame> {
-    let Some(state_json) = call_service_utf8(
+    let Some(bytes) = call_service_v1_optional(
         INPUT_SERVICE_ID,
         newengine_input_api::INPUT_METHOD_STATE_JSON,
-    ) else {
+        &[],
+    )
+    .ok()?
+    else {
         if !INPUT_POLL_OFFLINE_LOGGED.swap(true, Ordering::Relaxed) {
             newengine_ulog_api::ulog::warn!(
                 "input systems: raw input polling unavailable service='{}' method='{}'",
@@ -36,148 +35,82 @@ pub fn poll_input_frame() -> Option<UiInputFrame> {
     };
     if !INPUT_POLL_ONLINE_LOGGED.swap(true, Ordering::Relaxed) {
         newengine_ulog_api::ulog::info!(
-            "input systems: raw input polling online service='{}' method='{}'",
+            "input systems: raw input polling online service='{}' method='{}' policy='single atomic typed snapshot'",
             INPUT_SERVICE_ID,
             newengine_input_api::INPUT_METHOD_STATE_JSON,
         );
     }
-    let text_json = call_service_utf8(
-        INPUT_SERVICE_ID,
-        newengine_input_api::INPUT_METHOD_TEXT_TAKE_JSON,
-    )
-    .unwrap_or_else(|| "{}".into());
-    let ime_json = call_service_utf8(
-        INPUT_SERVICE_ID,
-        newengine_input_api::INPUT_METHOD_IME_COMMIT_TAKE_JSON,
-    )
-    .unwrap_or_else(|| "{}".into());
 
-    let mut out = UiInputFrame::default();
-    let st: serde_json::Value = match serde_json::from_str(&state_json) {
+    let st: newengine_input_api::InputStateSnapshot = match serde_json::from_slice(&bytes) {
         Ok(value) => value,
         Err(e) => {
             newengine_ulog_api::ulog::warn!(
-                "input systems: raw input state_json decode failed err='{}'",
+                "input systems: raw input state_json typed decode failed err='{}'",
                 e
             );
             return None;
         }
     };
 
-    if let Some(keys) = st.get("keys") {
-        merge_u32_set(&mut out.keys_down, keys.get("down"));
-        merge_u32_set(&mut out.keys_pressed, keys.get("pressed"));
-        merge_u32_set(&mut out.keys_released, keys.get("released"));
-    }
+    let mut out = UiInputFrame::default();
+    out.keys_down.extend(st.keys.down);
+    out.keys_pressed.extend(st.keys.pressed);
+    out.keys_released.extend(st.keys.released);
 
-    if let Some(mouse) = st.get("mouse") {
-        if let Some(pos) = mouse.get("pos") {
-            let x = pos.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
-            let y = pos.get("y").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
-            out.mouse_pos = Some((x, y));
-        }
-        if let Some(delta) = mouse.get("delta") {
-            out.mouse_delta.0 = delta.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
-            out.mouse_delta.1 = delta.get("y").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
-        }
-        if let Some(wheel) = mouse.get("wheel") {
-            out.mouse_wheel.0 = wheel.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
-            out.mouse_wheel.1 = wheel.get("y").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
-        }
+    out.mouse_pos = Some((st.mouse.pos.x, st.mouse.pos.y));
+    out.mouse_delta = (st.mouse.delta.x, st.mouse.delta.y);
+    out.mouse_wheel = (st.mouse.wheel.x, st.mouse.wheel.y);
+    out.mouse_down.extend(st.mouse.down);
+    out.mouse_pressed.extend(st.mouse.pressed);
+    out.mouse_released.extend(st.mouse.released);
 
-        merge_u32_set(&mut out.mouse_down, mouse.get("down"));
-        merge_u32_set(&mut out.mouse_pressed, mouse.get("pressed"));
-        merge_u32_set(&mut out.mouse_released, mouse.get("released"));
-    }
-
-    let mut state_text_chars = 0usize;
-    let mut state_ime_commit_chars = 0usize;
-    let mut state_ime_preedit_chars = 0usize;
     let mut state_edit_op_count = 0usize;
-    let mut fallback_text_used = false;
-    let mut fallback_ime_used = false;
-
-    if let Some(text) = st.get("text") {
-        if let Some(s) = text.get("buffer").and_then(|x| x.as_str()) {
-            state_text_chars = s.chars().count();
-            out.text.push_str(s);
-        }
-        if let Some(s) = text.get("ime_preedit").and_then(|x| x.as_str()) {
-            state_ime_preedit_chars = s.chars().count();
-            out.ime_preedit.push_str(s);
-        }
-        if let Some(s) = text.get("ime_commit").and_then(|x| x.as_str()) {
-            state_ime_commit_chars = s.chars().count();
-            out.ime_commit.push_str(s);
-        }
-        if let Some(ops) = text.get("edit_ops").and_then(|v| v.as_array()) {
-            for op in ops.iter().filter_map(|value| value.as_str()) {
-                if let Some(kind) = parse_text_edit_op_kind(op) {
-                    state_edit_op_count = state_edit_op_count.saturating_add(1);
-                    out.text_edit_ops
-                        .push(UiTextEditOp::new(kind, "engine.input"));
-                } else {
-                    newengine_ulog_api::ulog::warn!(
-                        "input systems: ignored unknown text edit op op='{}'",
-                        op
-                    );
-                }
-            }
-        }
-    }
-
-    if out.text.is_empty() {
-        if let Ok(v) = serde_json::from_str::<serde_json::Value>(&text_json) {
-            if let Some(s) = v.get("text").and_then(|x| x.as_str()) {
-                fallback_text_used = !s.is_empty();
-                out.text.push_str(s);
-            }
-        }
-    }
-
-    if out.ime_commit.is_empty() {
-        if let Ok(v) = serde_json::from_str::<serde_json::Value>(&ime_json) {
-            if let Some(s) = v.get("ime_commit").and_then(|x| x.as_str()) {
-                fallback_ime_used = !s.is_empty();
-                out.ime_commit.push_str(s);
-            }
-        }
-    }
-
-    if gate_gameplay_text_leak(&mut out) {
-        state_text_chars = 0;
-        state_ime_commit_chars = 0;
-        fallback_text_used = false;
-        fallback_ime_used = false;
-    }
-
-    if let Some(gamepads) = st.get("gamepads").and_then(|v| v.as_object()) {
-        for pad in gamepads.values() {
-            let connected = pad
-                .get("connected")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false);
-            if connected {
-                out.gamepad_connected = out.gamepad_connected.saturating_add(1);
-            }
-            merge_f32_object(&mut out.gamepad_buttons, pad.get("buttons"));
-            merge_f32_object(&mut out.gamepad_axes, pad.get("axes"));
-            merge_string_set(&mut out.gamepad_buttons_pressed, pad.get("buttons_pressed"));
-            merge_string_set(
-                &mut out.gamepad_buttons_released,
-                pad.get("buttons_released"),
+    out.text = st.text.buffer;
+    out.ime_preedit = st.text.ime_preedit;
+    out.ime_commit = st.text.ime_commit;
+    let state_text_chars = out.text.chars().count();
+    let state_ime_commit_chars = out.ime_commit.chars().count();
+    let state_ime_preedit_chars = out.ime_preedit.chars().count();
+    for op in st.text.edit_ops {
+        if let Some(kind) = parse_text_edit_op_kind(&op) {
+            state_edit_op_count = state_edit_op_count.saturating_add(1);
+            out.text_edit_ops
+                .push(UiTextEditOp::new(kind, "engine.input"));
+        } else {
+            newengine_ulog_api::ulog::warn!(
+                "input systems: ignored unknown text edit op op='{}'",
+                op
             );
         }
     }
 
+    for pad in st.gamepads.into_values() {
+        if pad.connected {
+            out.gamepad_connected = out.gamepad_connected.saturating_add(1);
+        }
+        merge_f32_map(&mut out.gamepad_buttons, pad.buttons);
+        merge_f32_map(&mut out.gamepad_axes, pad.axes);
+        out.gamepad_buttons_pressed.extend(pad.buttons_pressed);
+        out.gamepad_buttons_released.extend(pad.buttons_released);
+    }
+
+    let leaked_gameplay_text = gate_gameplay_text_leak(&mut out);
     log_input_frame_summary(
         &out,
-        state_text_chars,
-        state_ime_commit_chars,
+        if leaked_gameplay_text {
+            0
+        } else {
+            state_text_chars
+        },
+        if leaked_gameplay_text {
+            0
+        } else {
+            state_ime_commit_chars
+        },
         state_ime_preedit_chars,
         state_edit_op_count,
-        fallback_text_used,
-        fallback_ime_used,
+        false,
+        false,
     );
 
     Some(out)
@@ -292,37 +225,14 @@ fn preview_text(value: &str) -> String {
         .replace('\t', "\\t")
 }
 
-fn merge_u32_set(target: &mut NeBTreeSet<u32>, value: Option<&serde_json::Value>) {
-    let Some(arr) = value.and_then(|v| v.as_array()) else {
-        return;
-    };
-    for item in arr {
-        if let Some(u) = item.as_u64() {
-            target.insert(u as u32);
-        }
-    }
-}
-
-fn merge_f32_object(target: &mut NeBTreeMap<String, f32>, value: Option<&serde_json::Value>) {
-    let Some(obj) = value.and_then(|v| v.as_object()) else {
-        return;
-    };
-    for (key, raw) in obj {
-        let v = raw.as_f64().unwrap_or(0.0) as f32;
-        let entry = target.entry(key.clone()).or_insert(0.0);
-        if v.abs() > entry.abs() {
-            *entry = v;
-        }
-    }
-}
-
-fn merge_string_set(target: &mut NeBTreeSet<String>, value: Option<&serde_json::Value>) {
-    let Some(arr) = value.and_then(|v| v.as_array()) else {
-        return;
-    };
-    for item in arr {
-        if let Some(s) = item.as_str() {
-            target.insert(s.to_owned());
+fn merge_f32_map(
+    target: &mut NeBTreeMap<String, f32>,
+    values: std::collections::BTreeMap<String, f32>,
+) {
+    for (key, value) in values {
+        let entry = target.entry(key).or_insert(0.0);
+        if value.abs() > entry.abs() {
+            *entry = value;
         }
     }
 }

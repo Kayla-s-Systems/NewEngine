@@ -23,33 +23,41 @@ pub(crate) fn sample_sky_frame(
     let dusk_mix = (twilight * (0.62 + horizon_glow * 0.38)).clamp(0.0, 1.0);
 
     let profile = atmosphere.map(|a| &a.profile);
-    let day_zenith = profile.map(|p| p.day_zenith).unwrap_or([0.23, 0.42, 0.82]);
-    let day_horizon = profile.map(|p| p.day_horizon).unwrap_or([0.64, 0.78, 0.96]);
-    let dusk_zenith = profile.map(|p| p.dusk_zenith).unwrap_or([0.16, 0.20, 0.40]);
+    let defaults = newengine_game_data::default_game_data()
+        .world
+        .sky
+        .atmosphere;
+    let day_zenith = profile.map(|p| p.day_zenith).unwrap_or(defaults.day_zenith);
+    let day_horizon = profile
+        .map(|p| p.day_horizon)
+        .unwrap_or(defaults.day_horizon);
+    let dusk_zenith = profile
+        .map(|p| p.dusk_zenith)
+        .unwrap_or(defaults.dusk_zenith);
     let dusk_horizon = profile
         .map(|p| p.dusk_horizon)
-        .unwrap_or([1.00, 0.47, 0.20]);
+        .unwrap_or(defaults.dusk_horizon);
     let night_zenith = profile
         .map(|p| p.night_zenith)
-        .unwrap_or([0.006, 0.010, 0.030]);
+        .unwrap_or(defaults.night_zenith);
     let night_horizon = profile
         .map(|p| p.night_horizon)
-        .unwrap_or([0.020, 0.024, 0.052]);
-    let cloud_day = profile.map(|p| p.cloud_day).unwrap_or([0.98, 0.96, 0.88]);
+        .unwrap_or(defaults.night_horizon);
+    let cloud_day = profile.map(|p| p.cloud_day).unwrap_or(defaults.cloud_day);
     let cloud_night = profile
         .map(|p| p.cloud_night)
-        .unwrap_or([0.040, 0.050, 0.085]);
+        .unwrap_or(defaults.cloud_night);
     let night_sky_strength = profile
         .map(|p| p.night_sky_strength)
-        .unwrap_or(0.35)
+        .unwrap_or(defaults.night_sky_strength)
         .clamp(0.0, 1.0);
     let cloud_coverage = profile
         .map(|p| p.cloud_coverage)
-        .unwrap_or(0.42)
+        .unwrap_or(defaults.cloud_coverage)
         .clamp(0.0, 1.0);
     let cloud_softness = profile
         .map(|p| p.cloud_softness)
-        .unwrap_or(0.72)
+        .unwrap_or(defaults.cloud_softness)
         .clamp(0.04, 0.98);
 
     let zenith_base = sky_lerp3(night_zenith, day_zenith, day);

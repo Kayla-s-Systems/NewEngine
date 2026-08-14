@@ -19,7 +19,7 @@ use std::time::Instant;
 use super::module_slot::ModuleSlot;
 use super::run_state::{EngineFsm, EngineRunState};
 use super::startup_graph::StartupReadinessGraph;
-use super::{EngineConfig, ModuleFaultTolerance, PluginFaultTolerance};
+use super::{EngineConfig, ModuleFaultTolerance, PluginDiscoveryRoot, PluginFaultTolerance};
 
 pub struct Engine<E: Send + 'static> {
     pub(super) fixed_dt: f32,
@@ -44,6 +44,9 @@ pub struct Engine<E: Send + 'static> {
     pub(super) plugins_loaded: bool,
     pub(super) engine_plugins_loaded: bool,
     pub(super) plugins_dir: Option<PathBuf>,
+    pub(super) plugin_roots: Vec<PluginDiscoveryRoot>,
+    pub(super) required_plugin_ids: Vec<String>,
+    pub(super) plugin_discovery_root_index: usize,
     pub(super) plugin_discovery_scan: Option<super::plugin_discovery::PluginDiscoveryScanTask>,
 
     pub(super) shutdown: ShutdownToken,
@@ -172,6 +175,7 @@ impl<E: Send + 'static> Engine<E> {
 
         init_host_context();
         init_plugin_config_service(config.plugin_overrides.clone());
+        crate::console::init_console_service();
 
         register_engine_builtins(MathRegistry::global())
             .map_err(|e| EngineError::Other(format!("math init failed: {e}")))?;
@@ -198,6 +202,9 @@ impl<E: Send + 'static> Engine<E> {
             plugins_loaded: false,
             engine_plugins_loaded: false,
             plugins_dir: config.plugins_dir,
+            plugin_roots: config.plugin_roots,
+            required_plugin_ids: config.required_plugin_ids,
+            plugin_discovery_root_index: 0,
             plugin_discovery_scan: None,
 
             shutdown,
@@ -208,6 +215,38 @@ impl<E: Send + 'static> Engine<E> {
             last: Instant::now(),
             acc: 0.0,
         })
+    }
+
+    /// Adds an ordered plugin discovery root before plugin bootstrap begins.
+    pub fn add_plugin_discovery_root(&mut self, root: PluginDiscoveryRoot) -> EngineResult<()> {
+        if self.plugins_loaded || self.engine_plugins_loaded || self.plugin_discovery_scan.is_some()
+        {
+            return Err(EngineError::Other(
+                "plugins: discovery roots are immutable after plugin loading begins".to_owned(),
+            ));
+        }
+        self.plugin_roots.push(root);
+        Ok(())
+    }
+
+    /// Declares a plugin id that must be present after all discovery roots complete.
+    pub fn require_plugin_id(&mut self, id: impl Into<String>) -> EngineResult<()> {
+        if self.plugins_loaded || self.engine_plugins_loaded {
+            return Err(EngineError::Other(
+                "plugins: required ids are immutable after plugin loading completes".to_owned(),
+            ));
+        }
+        let id = id.into();
+        let id = id.trim();
+        if id.is_empty() {
+            return Err(EngineError::Other(
+                "plugins: required plugin id is empty".to_owned(),
+            ));
+        }
+        if !self.required_plugin_ids.iter().any(|it| it == id) {
+            self.required_plugin_ids.push(id.to_owned());
+        }
+        Ok(())
     }
 
     #[inline]

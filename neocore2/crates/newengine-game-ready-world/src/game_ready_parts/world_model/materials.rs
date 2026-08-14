@@ -1,7 +1,7 @@
 use super::super::*;
 use newengine_materials::api::MaterialRegistryApi;
 
-const WORLD_MATERIAL_LIBRARY: &str = "materials/world_game_ready.nemat";
+const WORLD_MATERIAL_LIBRARY: &str = newengine_game_data::WORLD_MATERIAL_LIBRARY;
 
 #[derive(Clone, Copy, Debug)]
 pub(super) struct ForestRoadMaterials {

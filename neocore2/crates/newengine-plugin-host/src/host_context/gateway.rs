@@ -414,7 +414,8 @@ where
             "engine-runtime route provider_route_id must start with 'engine.': {provider_route_id}"
         ));
     }
-    if !provider_route_extends_gateway_parent(gateway_id, provider_route_id) {
+    if !crate::service_gateway::provider_route_extends_gateway_parent(gateway_id, provider_route_id)
+    {
         return Err(format!(
             "engine-runtime route must extend its gateway root/provider namespace: gateway='{gateway_id}' provider_route='{provider_route_id}'"
         ));
@@ -531,38 +532,6 @@ where
         provider_owner_id,
         crate::service_gateway::GatewayProviderOrigin::NullProvider,
     )
-}
-
-#[inline]
-fn provider_route_extends_gateway_parent(gateway_id: &str, provider_route_id: &str) -> bool {
-    if provider_route_id == gateway_id {
-        return false;
-    }
-    let gateway_parts = gateway_id.split('.').collect::<Vec<_>>();
-    let provider_parts = provider_route_id.split('.').collect::<Vec<_>>();
-    if gateway_parts.len() < 2 || provider_parts.len() <= gateway_parts.len() {
-        return false;
-    }
-    if gateway_parts.first() != Some(&"engine") || provider_parts.first() != Some(&"engine") {
-        return false;
-    }
-    if gateway_parts.get(1) != provider_parts.get(1) {
-        return false;
-    }
-
-    // Root gateway implementation: engine.camera -> engine.camera.stargazer.
-    if gateway_parts.len() == 2 {
-        return provider_parts.starts_with(&gateway_parts);
-    }
-
-    // Child gateway implementation: engine.assets.textures -> engine.assets.starvault.textures.
-    // The provider name sits immediately below the root gateway, and the remaining
-    // tail must extend the child API instead of inventing another top-level island.
-    let child_tail = &gateway_parts[2..];
-    let Some(provider_tail) = provider_parts.get(3..) else {
-        return false;
-    };
-    provider_tail.starts_with(child_tail)
 }
 
 #[inline]

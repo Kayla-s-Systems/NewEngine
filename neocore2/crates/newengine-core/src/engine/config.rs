@@ -37,10 +37,43 @@ impl Default for PluginFaultTolerance {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PluginDiscoveryRoot {
+    pub dir: PathBuf,
+    pub origin: newengine_plugin_host::PluginLoadOrigin,
+    pub required: bool,
+    pub owner: String,
+}
+
+impl PluginDiscoveryRoot {
+    pub fn new(dir: PathBuf, origin: newengine_plugin_host::PluginLoadOrigin) -> Self {
+        Self {
+            dir,
+            origin,
+            required: false,
+            owner: "runtime-host".to_owned(),
+        }
+    }
+
+    pub fn required(mut self, required: bool) -> Self {
+        self.required = required;
+        self
+    }
+
+    pub fn with_owner(mut self, owner: impl Into<String>) -> Self {
+        self.owner = owner.into();
+        self
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct EngineConfig {
     pub fixed_dt_ms: u32,
     pub plugins_dir: Option<PathBuf>,
+    /// Additional ordered discovery roots. The legacy `plugins_dir` remains root zero.
+    pub plugin_roots: Vec<PluginDiscoveryRoot>,
+    /// Plugin ids that must exist after all discovery roots have been loaded.
+    pub required_plugin_ids: Vec<String>,
 
     /// Per-plugin override objects, taken from `config.json.plugins`.
     ///
@@ -72,6 +105,8 @@ impl Default for EngineConfig {
         Self {
             fixed_dt_ms: 16,
             plugins_dir: None,
+            plugin_roots: Vec::new(),
+            required_plugin_ids: Vec::new(),
             plugin_overrides: HashMap::default(),
             module_fault_tolerance: ModuleFaultTolerance::Resilient,
             plugin_fault_tolerance: PluginFaultTolerance::Resilient,
@@ -87,6 +122,8 @@ impl EngineConfig {
         Self {
             fixed_dt_ms,
             plugins_dir: None,
+            plugin_roots: Vec::new(),
+            required_plugin_ids: Vec::new(),
             plugin_overrides: HashMap::default(),
             module_fault_tolerance: ModuleFaultTolerance::Resilient,
             plugin_fault_tolerance: PluginFaultTolerance::Resilient,
@@ -110,6 +147,30 @@ impl EngineConfig {
     #[inline]
     pub fn with_plugins_dir(mut self, dir: Option<PathBuf>) -> Self {
         self.plugins_dir = dir;
+        self
+    }
+
+    #[inline]
+    pub fn with_plugin_root(mut self, root: PluginDiscoveryRoot) -> Self {
+        self.plugin_roots.push(root);
+        self
+    }
+
+    #[inline]
+    pub fn with_plugin_roots(
+        mut self,
+        roots: impl IntoIterator<Item = PluginDiscoveryRoot>,
+    ) -> Self {
+        self.plugin_roots.extend(roots);
+        self
+    }
+
+    #[inline]
+    pub fn with_required_plugin_id(mut self, id: impl Into<String>) -> Self {
+        let id = id.into();
+        if !id.trim().is_empty() && !self.required_plugin_ids.iter().any(|it| it == &id) {
+            self.required_plugin_ids.push(id);
+        }
         self
     }
 

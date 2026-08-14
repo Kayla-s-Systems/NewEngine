@@ -107,6 +107,46 @@ pub fn encode_scripting_module_load_bytes_response(
     out
 }
 
+#[inline]
+pub fn decode_scripting_response_bytes(
+    bytes: &[u8],
+) -> ScriptingWireResult<ScriptingResponseBytes> {
+    let mut reader = WireReader::new(bytes, RESPONSE_MAGIC)?;
+    let response = ScriptingResponseBytes {
+        request_id: reader.read_string()?,
+        status: response_status_from_u8(reader.read_u8()?)?,
+        payload_bytes: reader.read_bytes()?,
+        diagnostics: reader.read_diagnostics()?,
+        trace_id: reader.read_string()?,
+        metadata: reader.read_string_map()?,
+    };
+    reader.finish()?;
+    Ok(response)
+}
+
+#[inline]
+pub fn decode_scripting_module_load_bytes_response(
+    bytes: &[u8],
+) -> ScriptingWireResult<ScriptingModuleLoadBytesResponse> {
+    let mut reader = WireReader::new(bytes, MODULE_LOAD_RESPONSE_MAGIC)?;
+    let ok = match reader.read_u8()? {
+        0 => false,
+        1 => true,
+        other => {
+            return Err(ScriptingWireError(format!(
+                "invalid scripting module-load response bool value {other}"
+            )))
+        }
+    };
+    let response = ScriptingModuleLoadBytesResponse {
+        ok,
+        module: reader.read_module_record()?,
+        diagnostics: reader.read_diagnostics()?,
+    };
+    reader.finish()?;
+    Ok(response)
+}
+
 fn write_header(out: &mut Vec<u8>, magic: &[u8; 4]) {
     out.extend_from_slice(magic);
     out.extend_from_slice(&VERSION_V1.to_le_bytes());
@@ -202,9 +242,18 @@ impl<'a> WireReader<'a> {
         }
     }
 
+    fn read_u8(&mut self) -> ScriptingWireResult<u8> {
+        Ok(self.read_exact(1)?[0])
+    }
+
     fn read_u32(&mut self) -> ScriptingWireResult<u32> {
         let slice = self.read_exact(4)?;
         Ok(u32::from_le_bytes([slice[0], slice[1], slice[2], slice[3]]))
+    }
+
+    fn read_u64(&mut self) -> ScriptingWireResult<u64> {
+        let slice = self.read_exact(8)?;
+        Ok(u64::from_le_bytes(slice.try_into().expect("8-byte slice")))
     }
 
     fn read_exact(&mut self, len: usize) -> ScriptingWireResult<&'a [u8]> {
@@ -254,6 +303,33 @@ impl<'a> WireReader<'a> {
         Ok(out)
     }
 
+    fn read_diagnostics(&mut self) -> ScriptingWireResult<Vec<ScriptDiagnostic>> {
+        let count = self.read_u32()? as usize;
+        let mut out = Vec::with_capacity(count.min(1024));
+        for _ in 0..count {
+            out.push(ScriptDiagnostic {
+                severity: diagnostic_severity_from_u8(self.read_u8()?)?,
+                code: self.read_string()?,
+                message: self.read_string()?,
+                script_ref: self.read_string()?,
+                payload_bytes: self.read_bytes()?,
+            });
+        }
+        Ok(out)
+    }
+
+    fn read_module_record(&mut self) -> ScriptingWireResult<ScriptingModuleRecord> {
+        Ok(ScriptingModuleRecord {
+            schema: self.read_string()?,
+            module_ref: self.read_module_ref()?,
+            state: module_state_from_u8(self.read_u8()?)?,
+            permissions: self.read_permissions()?,
+            module_bytes_len: self.read_u64()?,
+            metadata: self.read_string_map()?,
+            diagnostics: self.read_diagnostics()?,
+        })
+    }
+
     fn read_module_ref(&mut self) -> ScriptingWireResult<ScriptingModuleRef> {
         Ok(ScriptingModuleRef {
             reference: self.read_string()?,
@@ -270,6 +346,46 @@ fn response_status_to_u8(value: ScriptingResponseStatus) -> u8 {
         ScriptingResponseStatus::Rejected => 2,
         ScriptingResponseStatus::InvalidRequest => 3,
         ScriptingResponseStatus::ProviderError => 4,
+    }
+}
+
+#[inline]
+fn response_status_from_u8(value: u8) -> ScriptingWireResult<ScriptingResponseStatus> {
+    match value {
+        0 => Ok(ScriptingResponseStatus::Ok),
+        1 => Ok(ScriptingResponseStatus::Empty),
+        2 => Ok(ScriptingResponseStatus::Rejected),
+        3 => Ok(ScriptingResponseStatus::InvalidRequest),
+        4 => Ok(ScriptingResponseStatus::ProviderError),
+        other => Err(ScriptingWireError(format!(
+            "invalid scripting response status value {other}"
+        ))),
+    }
+}
+
+#[inline]
+fn diagnostic_severity_from_u8(value: u8) -> ScriptingWireResult<ScriptDiagnosticSeverity> {
+    match value {
+        0 => Ok(ScriptDiagnosticSeverity::Trace),
+        1 => Ok(ScriptDiagnosticSeverity::Info),
+        2 => Ok(ScriptDiagnosticSeverity::Warning),
+        3 => Ok(ScriptDiagnosticSeverity::Error),
+        other => Err(ScriptingWireError(format!(
+            "invalid scripting diagnostic severity value {other}"
+        ))),
+    }
+}
+
+#[inline]
+fn module_state_from_u8(value: u8) -> ScriptingWireResult<ScriptModuleState> {
+    match value {
+        0 => Ok(ScriptModuleState::Declared),
+        1 => Ok(ScriptModuleState::Loaded),
+        2 => Ok(ScriptModuleState::Disabled),
+        3 => Ok(ScriptModuleState::Failed),
+        other => Err(ScriptingWireError(format!(
+            "invalid scripting module state value {other}"
+        ))),
     }
 }
 
@@ -301,7 +417,7 @@ mod tests {
     fn request_wire_roundtrips() {
         let request = ScriptingRequestBytes {
             request_id: "r1".to_owned(),
-            script_ref: "scripts/foo.ysc@main".to_owned(),
+            script_ref: "scripts/foo.ysc".to_owned(),
             operation: "frame".to_owned(),
             payload_bytes: vec![1, 2, 3],
             ..ScriptingRequestBytes::default()
@@ -314,9 +430,50 @@ mod tests {
     }
 
     #[test]
+    fn response_wire_roundtrips() {
+        let response = ScriptingResponseBytes {
+            request_id: "r2".to_owned(),
+            status: ScriptingResponseStatus::Ok,
+            payload_bytes: br#"{\"ok\":true}"#.to_vec(),
+            diagnostics: vec![ScriptDiagnostic::info("TEST", "ok")],
+            trace_id: "trace".to_owned(),
+            metadata: BTreeMap::from([("content_type".to_owned(), "application/json".to_owned())]),
+        };
+        let decoded =
+            decode_scripting_response_bytes(&encode_scripting_response_bytes(&response)).unwrap();
+        assert_eq!(decoded.request_id, response.request_id);
+        assert_eq!(decoded.status, ScriptingResponseStatus::Ok);
+        assert_eq!(decoded.payload_bytes, response.payload_bytes);
+        assert_eq!(decoded.trace_id, response.trace_id);
+        assert_eq!(decoded.diagnostics.len(), 1);
+    }
+
+    #[test]
+    fn module_load_response_wire_roundtrips() {
+        let response = ScriptingModuleLoadBytesResponse {
+            ok: true,
+            module: ScriptingModuleRecord {
+                module_ref: ScriptingModuleRef::new("scripts/foo.ysc"),
+                state: ScriptModuleState::Loaded,
+                module_bytes_len: 123,
+                ..ScriptingModuleRecord::default()
+            },
+            diagnostics: Vec::new(),
+        };
+        let decoded = decode_scripting_module_load_bytes_response(
+            &encode_scripting_module_load_bytes_response(&response),
+        )
+        .unwrap();
+        assert!(decoded.ok);
+        assert_eq!(decoded.module.module_ref.reference, "scripts/foo.ysc");
+        assert_eq!(decoded.module.state, ScriptModuleState::Loaded);
+        assert_eq!(decoded.module.module_bytes_len, 123);
+    }
+
+    #[test]
     fn module_load_wire_roundtrips() {
         let request = ScriptingModuleLoadBytesRequest {
-            module_ref: ScriptingModuleRef::new("scripts/foo.ysc@main"),
+            module_ref: ScriptingModuleRef::new("scripts/foo.ysc"),
             module_bytes: vec![9, 8, 7],
             ..ScriptingModuleLoadBytesRequest::default()
         };

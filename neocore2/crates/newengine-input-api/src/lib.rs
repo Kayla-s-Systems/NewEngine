@@ -13,7 +13,10 @@ pub mod key_identity;
 pub mod mouse_button;
 
 pub use contracts::*;
-pub use snapshot::{InputGamepadSnapshot, InputStateSnapshot};
+pub use snapshot::{
+    InputAxis2Snapshot, InputDeviceSnapshot, InputGamepadSnapshot, InputKeySnapshot,
+    InputMouseSnapshot, InputStateSnapshot, InputTextSnapshot,
+};
 
 #[cfg(test)]
 mod tests;

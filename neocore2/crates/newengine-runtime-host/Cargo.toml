@@ -19,11 +19,23 @@ serde_json = "1.0.149"
 
 newengine-assets = { path = "../newengine-assets" }
 newengine-assets-api = { path = "../newengine-assets-api" }
+newengine-asset-hot-reload-runtime = { path = "../newengine-asset-hot-reload-runtime" }
 newengine-core = { path = "../newengine-core", features = ["startup-window-egui"] }
 newengine-math = { path = "../newengine-math" }
 newengine-platform-api = { path = "../newengine-platform-api" }
+newengine-project-api = { path = "../newengine-project-api" }
+newengine-project-runtime = { path = "../newengine-project-runtime" }
+newengine-game-module-runtime = { path = "../newengine-game-module-runtime" }
+newengine-scripting-api = { path = "../newengine-scripting-api" }
+newengine-scripting-client = { path = "../newengine-scripting-client" }
 newengine-task-api = { path = "../newengine-task-api" }
 newengine-gameplay-runtime = { path = "../newengine-gameplay-runtime" }
+newengine-game-events-runtime = { path = "../newengine-game-events-runtime" }
+newengine-replication-runtime = { path = "../newengine-replication-runtime" }
+newengine-network-runtime = { path = "../newengine-network-runtime" }
+newengine-editor-command-api = { path = "../newengine-editor-command-api" }
+newengine-runtime-session-api = { path = "../newengine-runtime-session-api" }
+newengine-runtime-session-runtime = { path = "../newengine-runtime-session-runtime" }
 newengine-time-runtime = { path = "../newengine-time-runtime" }
 newengine-input-api = { path = "../newengine-input-api" }
 newengine-plugin-api = { path = "../newengine-plugin-api" }
@@ -42,5 +54,6 @@ newengine-plugin-host = { path = "../newengine-plugin-host" }
 newengine-transform = { path = "../newengine-transform", features = ["ecs", "service"], default-features = false }
 newengine-ui = { path = "../newengine-ui", default-features = false }
 newengine-ui-api = { path = "../newengine-ui-api" }
+newengine-world-api = { path = "../newengine-world-api" }
 
 serde = { version = "1.0", features = ["derive"] }

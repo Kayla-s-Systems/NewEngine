@@ -5,7 +5,10 @@ use newengine_plugin_host::PluginSnapshotEntry;
 use newengine_service_api::RuntimeServiceRequirementSpec;
 
 use super::catalog::{runtime_service_user, RUNTIME_SERVICE_CATALOG};
-use super::description::{method_statuses, parse_methods_from_description};
+use super::description::{
+    contract_family_matches, method_statuses, parse_contract_from_description,
+    parse_methods_from_description,
+};
 use super::diagnostics::{provider_for, provider_has_required_capability, service_origin};
 
 #[derive(Debug, Clone)]
@@ -113,6 +116,45 @@ fn validate_one(
             );
         }
     };
+
+    let description_contract = match parse_contract_from_description(&description) {
+        Ok(description_contract) => description_contract,
+        Err(error) => {
+            return finish_violation(
+                requirement,
+                plugins,
+                report,
+                format!(
+                    "service '{}' returned invalid versioned describe() contract: {error}",
+                    contract.service_id
+                ),
+            );
+        }
+    };
+    if description_contract.version != 1 {
+        return finish_violation(
+            requirement,
+            plugins,
+            report,
+            format!(
+                "unsupported service description version {}; expected version=1",
+                description_contract.version
+            ),
+        );
+    }
+    if (description_contract.protocol.is_some() || description_contract.contract.is_some())
+        && !contract_family_matches(contract.expected_contract, &description_contract)
+    {
+        return finish_violation(
+            requirement,
+            plugins,
+            report,
+            format!(
+                "provider protocol/contract family mismatch: protocol={:?} contract={:?}",
+                description_contract.protocol, description_contract.contract,
+            ),
+        );
+    }
 
     let missing = contract
         .required_methods

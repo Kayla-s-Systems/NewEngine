@@ -1,5 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
+use newengine_game_data::default_game_data;
+
 /// Declarative FPS runtime tuning.
 ///
 /// The scene/profile owns these values; runtime systems only consume the resource.
@@ -26,23 +28,24 @@ pub struct FpsPlayerTuning {
 impl Default for FpsPlayerTuning {
     #[inline]
     fn default() -> Self {
+        let data = default_game_data().player.tuning;
         Self {
-            body_radius: 0.45,
-            body_half_height: 0.45,
-            crouched_body_half_height: 0.15,
-            visual_radius: 0.45,
-            visual_half_height: 0.90,
-            camera_eye_height: 0.72,
-            crouched_camera_eye_height: 0.45,
-            crouch_camera_speed: 12.0,
-            sprint_multiplier: 1.75,
-            jump_speed: 5.5,
-            gravity: 9.81,
-            contact_skin: 0.035,
-            ground_probe_distance: 0.25,
-            max_slope_radians: 50.0_f32.to_radians(),
-            footstep_stride: 2.1,
-            landing_speed_threshold: 3.0,
+            body_radius: data.body_radius,
+            body_half_height: data.body_half_height,
+            crouched_body_half_height: data.crouched_body_half_height,
+            visual_radius: data.visual_radius,
+            visual_half_height: data.visual_half_height,
+            camera_eye_height: data.camera_eye_height,
+            crouched_camera_eye_height: data.crouched_camera_eye_height,
+            crouch_camera_speed: data.crouch_camera_speed,
+            sprint_multiplier: data.sprint_multiplier,
+            jump_speed: data.jump_speed,
+            gravity: data.gravity,
+            contact_skin: data.contact_skin,
+            ground_probe_distance: data.ground_probe_distance,
+            max_slope_radians: data.max_slope_degrees.to_radians(),
+            footstep_stride: data.footstep_stride,
+            landing_speed_threshold: data.landing_speed_threshold,
         }
     }
 }
@@ -91,18 +94,16 @@ pub struct FpsDemoRules {
 impl Default for FpsDemoRules {
     #[inline]
     fn default() -> Self {
+        let status = &default_game_data().gameplay.status;
         Self {
-            default_status:
-                "Collect field cores, neutralize targets, avoid hazards, reach extraction."
-                    .to_string(),
-            pickup_status: "Core acquired.".to_string(),
-            target_status: "Target neutralized.".to_string(),
-            hazard_status: "You touched a hazard. Relaunch the demo to retry.".to_string(),
-            goal_locked_status: "Beacon locked: collect all cores first.".to_string(),
-            goal_complete_status: "Extraction complete. Stable runtime loop is playable."
-                .to_string(),
-            failed_progress_label: "FAILED — touch a hazard to retry scene".to_string(),
-            completed_progress_label: "EXTRACTED".to_string(),
+            default_status: status.default_status.clone(),
+            pickup_status: status.pickup_status.clone(),
+            target_status: status.target_status.clone(),
+            hazard_status: status.hazard_status.clone(),
+            goal_locked_status: status.goal_locked_status.clone(),
+            goal_complete_status: status.goal_complete_status.clone(),
+            failed_progress_label: status.failed_progress_label.clone(),
+            completed_progress_label: status.completed_progress_label.clone(),
             player: FpsPlayerTuning::default(),
         }
     }

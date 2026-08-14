@@ -5,6 +5,8 @@
 /// returns `Some(&[...])` owns its startup contract explicitly.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum RuntimeHostBootOption {
+    /// Show the project chooser before any project manifest/content is loaded.
+    ProjectBrowser,
     /// Show/edit the pre-start configuration window before loading config.
     PreStartConfigWindow,
     /// Draw the staged platform/runtime bootstrap loading overlay.
@@ -86,9 +88,10 @@ pub(crate) fn apply_declared_boot_options_env(
     );
 
     newengine_ulog_api::ulog::info!(
-        "{} launcher: boot options declared headless={} pre_start_window={} bootstrap_overlay={} runtime_plugins={} platform={} render={} ui={}",
+        "{} launcher: boot options declared headless={} project_browser={} pre_start_window={} bootstrap_overlay={} runtime_plugins={} platform={} render={} ui={}",
         app_name,
         headless_requested,
+        has(RuntimeHostBootOption::ProjectBrowser) && !headless_requested,
         has(RuntimeHostBootOption::PreStartConfigWindow) && !headless_requested,
         has(RuntimeHostBootOption::RuntimeBootstrapOverlay) && !headless_requested,
         has(RuntimeHostBootOption::RuntimePlugins),

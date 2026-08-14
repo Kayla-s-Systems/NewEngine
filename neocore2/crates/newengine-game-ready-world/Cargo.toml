@@ -13,6 +13,7 @@ flate2 = "1"
 
 newengine-engine-runtime = { path = "../newengine-engine-runtime" }
 newengine-gameplay-fps-api = { path = "../newengine-gameplay-fps-api" }
+newengine-game-data = { path = "../newengine-game-data" }
 newengine-assets = { path = "../newengine-assets" }
 newengine-assets-api = { path = "../newengine-assets-api" }
 newengine-bounds = { path = "../newengine-bounds" }
@@ -39,5 +40,6 @@ parking_lot = "0.12"
 newengine-asset-format-nef8 = { path = "../newengine-asset-format-nef8" }
 newengine-authored-xml = { path = "../newengine-authored-xml" }
 newengine-plugin-api = { path = "../newengine-plugin-api" }
+newengine-project-api = { path = "../newengine-project-api" }
 newengine-render-api = { path = "../newengine-render-api" }
 newengine-sim = { path = "../newengine-sim" }

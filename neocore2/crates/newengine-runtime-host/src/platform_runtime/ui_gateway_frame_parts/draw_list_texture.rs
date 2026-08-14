@@ -106,7 +106,7 @@ fn ensure_loading_texture_payload(
                 mark_loading_texture_resident(texture_id, texture_ref);
             }
             if draw_list.texture_delta.set.len() <= 4 {
-                newengine_ulog_api::ulog::warn!(
+                newengine_ulog_api::ulog::debug!(
                     "engine.ui.loading texture payload bound node_id={} ref='{}' tex_id={} size={}x{} bytes={} cacheable={}",
                     node_id,
                     texture_ref,

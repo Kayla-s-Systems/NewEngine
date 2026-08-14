@@ -46,6 +46,9 @@ pub fn describe_service(service_id: &str) -> Option<String> {
         resolve_service_for_engine_gateway(service_id).unwrap_or_else(|| service_id.to_owned());
 
     let c = ctx();
-    let g = c.services.lock().ok()?;
-    Some(g.get(&routed_id)?.describe_json.clone())
+    let service = {
+        let g = c.services.lock().ok()?;
+        g.get(&routed_id)?.service.clone()
+    };
+    Some(service.describe().to_string())
 }

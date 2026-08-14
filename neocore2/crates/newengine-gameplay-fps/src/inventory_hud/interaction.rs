@@ -61,7 +61,7 @@ pub(super) fn handle_slot_action(
     frame: &UiEventDispatchFrame,
     action: &newengine_ui_api::UiActionDispatch,
 ) -> bool {
-    let Some(source_index) = parse_inventory_slot_index(&action.node_id) else {
+    let Some(source_index) = parse_inventory_slot_index(world, &action.node_id) else {
         return false;
     };
     let source_instance = inventory_instance_at(world, player, source_index);
@@ -121,7 +121,7 @@ pub(super) fn finish_drag(world: &mut World, player: EntityId, target_node: &str
     let Some(drag) = drag else {
         return;
     };
-    if let Some(target_index) = parse_inventory_slot_index(target_node) {
+    if let Some(target_index) = parse_inventory_slot_index(world, target_node) {
         reorder_inventory(world, player, drag.instance_id, target_index);
     } else if let Some(target_slot) = parse_equipment_node(target_node) {
         equip_dragged_instance(world, player, drag.instance_id, target_slot);

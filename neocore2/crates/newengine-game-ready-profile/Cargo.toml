@@ -26,9 +26,10 @@ newengine-input-profile-gameready = { path = "../newengine-input-profile-gamerea
 newengine-material-runtime = { path = "../newengine-material-runtime" }
 newengine-model-runtime = { path = "../newengine-model-runtime" }
 newengine-entity-runtime = { path = "../newengine-entity-runtime" }
-newengine-gameplay-fps = { path = "../newengine-gameplay-fps" }
 newengine-gameplay-runtime = { path = "../newengine-gameplay-runtime" }
 newengine-plugin-api = { path = "../newengine-plugin-api" }
+newengine-project-api = { path = "../newengine-project-api" }
+newengine-project-runtime = { path = "../newengine-project-runtime" }
 newengine-plugin-host = { path = "../newengine-plugin-host" }
 newengine-render-feature-api = { path = "../newengine-render-feature-api" }
 newengine-render-feature-gameready = { path = "../newengine-render-feature-gameready" }
@@ -51,3 +52,6 @@ newengine-ecs = { path = "../newengine-ecs" }
 newengine-materials = { path = "../newengine-materials", features = ["serde"] }
 newengine-primitives = { path = "../newengine-primitives" }
 newengine-game-ready-world = { path = "../newengine-game-ready-world" }
+newengine-game-data = { path = "../newengine-game-data" }
+newengine-game-data-lua = { path = "../newengine-game-data-lua" }
+newengine-game-module-composition = { path = "../newengine-game-module-composition" }

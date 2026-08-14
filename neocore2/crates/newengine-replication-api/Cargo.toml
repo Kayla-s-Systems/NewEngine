@@ -1,0 +1,9 @@
+[package]
+name = "newengine-replication-api"
+version = "0.1.0"
+edition = "2021"
+readme = "README.md"
+description = "Provider-neutral replication descriptors for NewEngine"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }

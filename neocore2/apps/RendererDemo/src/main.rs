@@ -2,8 +2,8 @@
 
 use newengine_core::{Engine, EngineResult, StartupConfig};
 use newengine_game_ready_profile::{
-    GameReadyRuntimeProfile, GAME_APP_ASSETS_DIR_ENV, GAME_FIXED_DT_MS, GAME_READY_APP_DIR_NAME,
-    GAME_READY_DEFAULT_PROFILE_ASSET, GAME_READY_PROFILE_ENV, GAME_READY_RUNTIME_ENV_DEFAULTS,
+    GameReadyRuntimeProfile, RustGameDataProvider, GAME_APP_ASSETS_DIR_ENV, GAME_FIXED_DT_MS,
+    GAME_READY_APP_DIR_NAME, GAME_READY_RUNTIME_ENV_DEFAULTS,
 };
 use newengine_runtime_host::app_launcher::{
     RuntimeHostAppProfile, RuntimeHostBootOption, RuntimeHostLaunchSpec, RuntimeHostLauncher,
@@ -26,7 +26,8 @@ impl Default for RendererDemoApp {
     #[inline]
     fn default() -> Self {
         Self {
-            profile: GameReadyRuntimeProfile::new(),
+            profile: GameReadyRuntimeProfile::new()
+                .with_game_data_provider(std::sync::Arc::new(RustGameDataProvider)),
         }
     }
 }
@@ -44,7 +45,7 @@ impl RendererDemoApp {
             app_assets_env: GAME_APP_ASSETS_DIR_ENV,
             window_title: "RendererDemo: Shaded Lighting Scene",
             early_log_file_name: "renderer-demo-early.log",
-            default_profile_env: Some((GAME_READY_PROFILE_ENV, GAME_READY_DEFAULT_PROFILE_ASSET)),
+            default_profile_env: None,
             env_defaults: GAME_READY_RUNTIME_ENV_DEFAULTS,
         }
     }

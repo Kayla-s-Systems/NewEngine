@@ -60,7 +60,7 @@ pub use config_root::{
 };
 pub use engine::{
     Engine, EngineConfig, EngineFsm, EngineFsmTransition, EngineRunState, ModuleFaultTolerance,
-    PluginFaultTolerance,
+    PluginDiscoveryRoot, PluginFaultTolerance,
 };
 pub use error::{EngineError, EngineResult, ModuleStage};
 pub use error_reporter::{EngineErrorReporter, EngineErrorReporterConfig};

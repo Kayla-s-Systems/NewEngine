@@ -63,6 +63,13 @@ impl HostPlatformRuntime {
         );
 
         if matches!(self.ui_selection.active(), UiProviderKind::Plugin { .. }) {
+            // This path publishes the retained loading surface after engine.step(),
+            // outside step_running's normal overlay cache bookkeeping. Mark it active
+            // so the first inactive/editor-preview frame must publish the hidden +
+            // unmount transition instead of incorrectly assuming it was already cleared.
+            self.loading_surface_inactive_published = false;
+            self.last_published_loading_overlay = Some(overlay.clone());
+            self.last_loading_overlay_publish_at = Some(std::time::Instant::now());
             crate::platform_runtime::ui_gateway_frame::publish_loading_overlay(
                 &overlay,
                 self.ui_provider_binding(),

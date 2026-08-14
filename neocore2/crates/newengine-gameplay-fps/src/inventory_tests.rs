@@ -7,7 +7,8 @@ use newengine_primitives::{builtins as primitive_builtins, Primitive};
 use newengine_sim::{AngularVelocity, Velocity};
 
 fn install_fps_content(world: &mut World) {
-    GameplayContentProvider::install(&FpsContentProvider, world).expect("install FPS content");
+    let content = crate::content::embedded_test_content_provider();
+    GameplayContentProvider::install(&content, world).expect("install FPS content");
 }
 
 fn spawn_fps_player(

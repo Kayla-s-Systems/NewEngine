@@ -17,8 +17,7 @@ mod targets;
 
 use fit::{
     csm_cascade_radius, csm_split_distances, csm_tile_viewport_scissor, directional_shadow_center,
-    directional_shadow_frustum_fit, directional_shadow_stable_fit,
-    snapped_directional_shadow_center, DirectionalShadowFit,
+    directional_shadow_stable_fit, snapped_directional_shadow_center, DirectionalShadowFit,
 };
 use targets::{
     ensure_shadow_rt, retire_shadow_rt, warn_unsupported_point_shadow_once,
@@ -262,43 +261,34 @@ pub fn try_build_directional_shadow_plan(
     if cascade_count <= 1 {
         let fallback_radius = bounds.radius.max(4.0).min(max_distance.max(4.0));
         let fallback_center = directional_shadow_center(bounds, camera_position, fallback_radius);
-        let fit = directional_shadow_frustum_fit(
-            viewproj,
-            camera,
-            camera_forward,
-            0.5,
-            max_distance,
-            dir,
-            up,
-            settings.resolution,
-        )
-        .unwrap_or(DirectionalShadowFit {
-            center: fallback_center,
-            half_x: fallback_radius,
-            half_y: fallback_radius,
-            depth_radius: fallback_radius,
-        });
+        // Single-cascade mode is the stability baseline. Keep the shadow window
+        // camera/world-bounds centered instead of fitting it to the rotating view
+        // frustum. A frustum-centered map moves when only yaw/pitch changes and makes
+        // perfectly static receivers appear to gain/lose dark patches.
+        let texel_guard = (fallback_radius * 2.0 / settings.resolution.max(1) as f32) * 2.0;
+        let stable_half = fallback_radius + texel_guard.max(0.02);
         let center = snapped_directional_shadow_center(
-            fit.center,
+            fallback_center,
             dir,
             up,
-            fit.half_x,
-            fit.half_y,
+            stable_half,
+            stable_half,
             settings.resolution,
         );
-        let depth_radius = fit.depth_radius.max(fit.half_x.max(fit.half_y)).max(4.0);
+        let depth_radius = stable_half.max(4.0);
         let eye = center - dir * (depth_radius * 1.90);
         let view = Mat4::look_at_rh(eye, center, up);
         let near = 0.1;
         let far = depth_radius * 4.20;
-        let proj =
-            Mat4::orthographic_rh(-fit.half_x, fit.half_x, -fit.half_y, fit.half_y, near, far);
-        let caster_cull = Some(ShadowCasterCull::directional(
-            view,
-            fit.half_x.max(fit.half_y),
+        let proj = Mat4::orthographic_rh(
+            -stable_half,
+            stable_half,
+            -stable_half,
+            stable_half,
             near,
             far,
-        ));
+        );
+        let caster_cull = Some(ShadowCasterCull::directional(view, stable_half, near, far));
         return Ok(Some(
             LightShadowPlan::directional(
                 rt,

@@ -3,6 +3,10 @@ use super::*;
 pub(super) fn editor_components(
     descriptor: &UiScreenProfileDescriptor,
     runtime_mode: UiEditorRuntimeMode,
+    runtime_paused: bool,
+    runtime_possessed: bool,
+    runtime_diff_count: usize,
+    command_registry: &EditorCommandRegistry,
     layout: &EditorLayoutMetrics,
     active_menu_id: Option<&str>,
 ) -> Vec<UiComponentNode> {
@@ -17,13 +21,20 @@ pub(super) fn editor_components(
     let menu_h = (layout.menu_h - 8.0).max(20.0);
     let toolbar_y = layout.menu_h + 4.0;
     let toolbar_h = (layout.toolbar_h - 8.0).max(24.0);
-    let chrome_x = 16.0;
+    let chrome_x = if layout.screen_w < 760.0 { 8.0 } else { 16.0 };
+    let compact_chrome = layout.screen_w < 900.0;
+    let identity_w = if compact_chrome { 72.0 } else { 118.0 };
+    let identity_label = if compact_chrome {
+        "NS"
+    } else {
+        EDITOR_CHROME.product_title
+    };
     let mut x = chrome_x;
 
     push_editor_regions(&mut out, layout);
 
     out.push(with_rect(
-        UiComponentNode::row("editor.identity", EDITOR_CHROME.product_title)
+        UiComponentNode::row("editor.identity", identity_label)
             .with_value("Editor")
             .with_detail("engine.ui composition; render viewport is contained")
             .with_tone(UiNodeTone::Accent)
@@ -33,21 +44,28 @@ pub(super) fn editor_components(
             .tagged("menu"),
         x,
         menu_y,
-        118.0,
+        identity_w,
         menu_h,
     ));
-    x += 128.0;
+    x += identity_w + 10.0;
+
+    let natural_menu_width = EDITOR_CHROME
+        .menu
+        .iter()
+        .map(|menu| menu_width(menu.label) + 4.0)
+        .sum::<f32>();
+    let menu_scale = ((layout.screen_w - x - 8.0) / natural_menu_width.max(1.0)).clamp(0.68, 1.0);
 
     let mut active_popup_x = None;
     for menu in EDITOR_CHROME.menu {
         let hovered = hovered_menu(layout, menu.id);
         let active = active_menu_id == Some(menu.id);
-        let menu_w = menu_width(menu.label);
-        let mut row = UiComponentNode::action(
+        let menu_w = menu_width(menu.label) * menu_scale;
+        let mut row = lively_editor_action(UiComponentNode::action(
             format!("editor.menu.{}", menu.id),
             menu.label,
             format!("editor.menu.{}", menu.id),
-        )
+        ))
         .with_tone(if hovered || active {
             UiNodeTone::Accent
         } else {
@@ -107,48 +125,212 @@ pub(super) fn editor_components(
         ));
     }
 
-    let mut toolbar_x = chrome_x;
-    for action in EDITOR_CHROME.runtime_actions {
-        let hovered = layout.hovered_runtime_mode == Some(action.mode);
-        let active = runtime_mode == action.mode;
+    // Compact transport strip: icon-only controls centered in the editor toolbar.
+    // Runtime semantics stay in EditorCommandRegistry/RuntimeSession; this block owns
+    // presentation only. Simulate/Restart remain available through shortcuts, console and the transport overflow.
+    let command_context = EditorCommandContext {
+        runtime_active: runtime_mode != UiEditorRuntimeMode::Edit,
+        runtime_paused,
+        runtime_playing: runtime_mode == UiEditorRuntimeMode::Play,
+        runtime_possessed,
+    };
+    let transport_button_w = 25.0;
+    let transport_gap = 1.0;
+    let transport_pad = 3.0;
+    let transport_count = 5.0;
+    let transport_w = transport_pad * 2.0
+        + transport_button_w * transport_count
+        + transport_gap * (transport_count - 1.0);
+    let transport_h = toolbar_h.min(27.0);
+    let transport_y = toolbar_y + ((toolbar_h - transport_h) * 0.5).max(0.0);
+    let transport_x = ((layout.screen_w - transport_w) * 0.5).max(chrome_x);
+
+    let mut strip = region_panel(
+        "editor.toolbar.transport",
+        "",
+        transport_x,
+        transport_y,
+        transport_w,
+        transport_h,
+        [48, 49, 51, 255],
+    );
+    strip.props.insert(
+        "border_rgba".to_owned(),
+        serde_json::json!([34, 35, 37, 255]),
+    );
+    strip
+        .props
+        .insert("radius_px".to_owned(), serde_json::json!(4.0));
+    strip = strip.tagged("transport-strip");
+    out.push(strip);
+
+    let transport_specs = [
+        (
+            "play",
+            editor_command::RUNTIME_PLAY,
+            "play",
+            Some(UiEditorRuntimeMode::Play),
+            false,
+        ),
+        ("pause", editor_command::RUNTIME_PAUSE, "pause", None, true),
+        ("stop", editor_command::RUNTIME_STOP, "stop", None, false),
+        ("step", editor_command::RUNTIME_STEP, "step", None, false),
+    ];
+    let mut button_x = transport_x + transport_pad;
+    for (id, command_id, icon, mode, pause_toggle) in transport_specs {
+        let command = command_registry.get(command_id);
+        let tooltip = command.map(|it| it.tooltip.as_str()).unwrap_or(command_id);
+        let shortcut = command
+            .and_then(|it| it.shortcut.as_ref())
+            .map(|it| it.display.as_str())
+            .unwrap_or("");
+        let enabled = command
+            .map(|it| it.enabled(command_context))
+            .unwrap_or(false);
+        let active = mode
+            .map(|it| runtime_mode == it)
+            .unwrap_or(pause_toggle && runtime_paused);
+        let tooltip = if shortcut.is_empty() {
+            tooltip.to_owned()
+        } else {
+            format!("{tooltip} ({shortcut})")
+        };
+        let button = lively_editor_action(UiComponentNode::action(
+            format!("editor.toolbar.{id}"),
+            "",
+            command_id,
+        ))
+        .with_tone(if active {
+            UiNodeTone::Accent
+        } else {
+            UiNodeTone::Normal
+        })
+        .with_tooltip(tooltip)
+        .with_prop("transport_icon", serde_json::json!(icon))
+        .with_prop("enabled", serde_json::json!(enabled))
+        .with_prop("fill_rgba", serde_json::json!([58, 59, 61, 255]))
+        .with_prop("hover_fill_rgba", serde_json::json!([70, 71, 74, 255]))
+        .with_prop("pressed_fill_rgba", serde_json::json!([43, 44, 46, 255]))
+        .with_prop("active_fill_rgba", serde_json::json!([64, 65, 67, 255]))
+        .with_prop("disabled_fill_rgba", serde_json::json!([48, 49, 51, 255]))
+        .with_prop("text_rgba", serde_json::json!([166, 168, 172, 255]))
+        .with_prop(
+            "disabled_text_rgba",
+            serde_json::json!([101, 103, 107, 180]),
+        )
+        .with_prop("accent_rgba", serde_json::json!([111, 181, 67, 255]))
+        .with_prop("radius_px", serde_json::json!(2.0))
+        .tagged("toolbar")
+        .tagged("runtime-control")
+        .tagged("transport-button")
+        .tagged(if active { "active" } else { "inactive" })
+        .tagged(if enabled { "enabled" } else { "disabled" });
         out.push(with_rect(
-            UiComponentNode::action(
-                format!("editor.toolbar.{}", action.id),
-                action.label,
-                action.action_id,
-            )
-            .with_value(action.hotkey)
-            .with_detail(action.tooltip)
-            .with_tone(if active {
-                UiNodeTone::Accent
-            } else {
-                UiNodeTone::Normal
-            })
-            .with_tooltip(action.tooltip)
-            .with_prop("hotkey", serde_json::json!(action.hotkey))
-            .tagged("toolbar")
-            .tagged("runtime-control")
-            .tagged(if active { "active" } else { "inactive" })
-            .tagged(if hovered { "hovered" } else { "idle" }),
-            toolbar_x,
-            toolbar_y,
-            104.0,
-            toolbar_h,
+            button,
+            button_x,
+            transport_y + 2.0,
+            transport_button_w,
+            (transport_h - 4.0).max(18.0),
         ));
-        toolbar_x += 112.0;
+        button_x += transport_button_w + transport_gap;
     }
+
+    // Runtime overflow is deliberately independent from the application menu bar.
+    // Transport controls must never mutate File/Edit/Create/Scene/Assets/Tools/Window/Help semantics.
+    let more = lively_editor_action(UiComponentNode::action(
+        "editor.toolbar.more",
+        "",
+        "editor.runtime.more",
+    ))
+    .with_tooltip("More runtime/editor commands")
+    .with_prop("transport_icon", serde_json::json!("more"))
+    .with_prop("enabled", serde_json::json!(true))
+    .with_prop("fill_rgba", serde_json::json!([58, 59, 61, 255]))
+    .with_prop("hover_fill_rgba", serde_json::json!([70, 71, 74, 255]))
+    .with_prop("pressed_fill_rgba", serde_json::json!([43, 44, 46, 255]))
+    .with_prop("text_rgba", serde_json::json!([166, 168, 172, 255]))
+    .with_prop("radius_px", serde_json::json!(2.0))
+    .tagged("toolbar")
+    .tagged("transport-button")
+    .tagged("overflow");
     out.push(with_rect(
-        UiComponentNode::row("editor.toolbar.mode", "Mode")
-            .with_value(runtime_mode.id())
-            .with_detail("Editor boot default keeps simulation stopped")
-            .with_tone(UiNodeTone::Accent)
-            .tagged("toolbar")
-            .tagged("runtime-mode"),
-        toolbar_x + 4.0,
-        toolbar_y,
-        178.0,
-        toolbar_h,
+        more,
+        button_x,
+        transport_y + 2.0,
+        transport_button_w,
+        (transport_h - 4.0).max(18.0),
     ));
+
+    if active_menu_id == Some("__runtime_more") {
+        let overflow_w = 224.0;
+        let overflow_x = (button_x + transport_button_w - overflow_w)
+            .max(8.0)
+            .min((layout.screen_w - overflow_w - 8.0).max(8.0));
+        let mut popup = UiComponentNode::row("editor.runtime_overflow", "Runtime")
+            .with_detail(format!("PIE authored changes: {runtime_diff_count}"))
+            .with_tone(UiNodeTone::Accent)
+            .with_prop("padding_px", serde_json::json!(4.0))
+            .tagged("menu-popup")
+            .tagged("runtime-overflow")
+            .tagged("floating")
+            .with_child(
+                UiComponentNode::action(
+                    "editor.runtime_overflow.simulate",
+                    "Simulate",
+                    editor_command::RUNTIME_SIMULATE,
+                )
+                .tagged("button"),
+            );
+        if runtime_mode == UiEditorRuntimeMode::Play {
+            let (id, label, command_id) = if runtime_possessed {
+                ("eject", "Eject", editor_command::RUNTIME_EJECT)
+            } else {
+                ("possess", "Possess", editor_command::RUNTIME_POSSESS)
+            };
+            popup = popup.with_child(
+                UiComponentNode::action(format!("editor.runtime_overflow.{id}"), label, command_id)
+                    .tagged("button"),
+            );
+        }
+        popup = popup
+            .with_child(
+                UiComponentNode::action(
+                    "editor.runtime_overflow.restart",
+                    "Restart Runtime",
+                    editor_command::RUNTIME_RESTART,
+                )
+                .tagged("button"),
+            )
+            .with_child(
+                UiComponentNode::action(
+                    "editor.runtime_overflow.apply_changes",
+                    if runtime_diff_count == 0 {
+                        "Apply Changes & Stop".to_owned()
+                    } else {
+                        format!("Apply Changes & Stop ({runtime_diff_count})")
+                    },
+                    editor_command::RUNTIME_APPLY_CHANGES,
+                )
+                .tagged("button")
+                .tagged(if runtime_diff_count == 0 {
+                    "no-diff"
+                } else {
+                    "has-diff"
+                }),
+            );
+        let rows = if runtime_mode == UiEditorRuntimeMode::Play {
+            4.0
+        } else {
+            3.0
+        };
+        out.push(with_rect(
+            popup,
+            overflow_x,
+            layout.menu_h + layout.toolbar_h + 2.0,
+            overflow_w,
+            34.0 + rows * 24.0,
+        ));
+    }
 
     let dock_y = layout.viewport_y;
     if layout.left_visible {
@@ -229,7 +411,11 @@ pub(super) fn editor_components(
     out.push(
         with_rect(
             UiComponentNode::row("editor.viewport.preview", EDITOR_CHROME.viewport_title)
-                .with_value(DEFAULT_VIEWPORT_SURFACE)
+                .with_value(if runtime_paused {
+                    format!("{} | PAUSED", DEFAULT_VIEWPORT_SURFACE)
+                } else {
+                    DEFAULT_VIEWPORT_SURFACE.to_owned()
+                })
                 .with_detail(match runtime_mode {
                     UiEditorRuntimeMode::Edit => EDITOR_CHROME.viewport_detail_edit,
                     UiEditorRuntimeMode::Simulate => EDITOR_CHROME.viewport_detail_simulate,
@@ -300,7 +486,7 @@ pub(super) fn editor_components(
         out.push(
             with_rect(
                 UiComponentNode::row("editor.bottom.placeholder", "Editor bottom dock")
-                    .with_value("Asset Browser · Import Queue · Output Log · Profiler/Diagnostics")
+                    .with_value("Asset Browser | Import Queue | Output Log | Profiler/Diagnostics")
                     .with_detail("All panels are UiNodeTreeRequest data and authored .neui surfaces; no provider-special product renderer")
                     .with_tone(UiNodeTone::Normal)
                     .tagged("bottom")
@@ -316,8 +502,14 @@ pub(super) fn editor_components(
 
     out.push(with_rect(
         UiComponentNode::row("editor.status", "Ready")
-            .with_value(format!("mode={}", runtime_mode.id()))
-            .with_detail("1 Stop · 2 Simulate · 3 Play · hover controls for hints")
+            .with_value(format!(
+                "mode={}{}",
+                runtime_mode.id(),
+                if runtime_paused { " paused" } else { "" }
+            ))
+            .with_detail(
+                "1 Stop | 2 Simulate | 3 Play | Space Pause/Resume | hover controls for hints",
+            )
             .with_tone(UiNodeTone::Normal)
             .tagged("status"),
         8.0,
@@ -400,6 +592,37 @@ pub(super) fn push_editor_regions(out: &mut Vec<UiComponentNode>, layout: &Edito
     ));
 }
 
+fn lively_editor_action(mut component: UiComponentNode) -> UiComponentNode {
+    component
+        .props
+        .insert("interactive".to_owned(), serde_json::json!(true));
+    component
+        .props
+        .insert("transition_ms".to_owned(), serde_json::json!(120));
+    component.props.insert(
+        "hover_border_rgba".to_owned(),
+        serde_json::json!([101, 154, 210, 205]),
+    );
+    component.props.insert(
+        "pressed_border_rgba".to_owned(),
+        serde_json::json!([121, 181, 238, 235]),
+    );
+    component
+        .props
+        .insert("underline_hover".to_owned(), serde_json::json!(true));
+    component
+        .props
+        .insert("underline_duration_ms".to_owned(), serde_json::json!(135));
+    component.props.insert(
+        "underline_rgba".to_owned(),
+        serde_json::json!([101, 170, 232, 220]),
+    );
+    component
+        .props
+        .insert("underline_height_px".to_owned(), serde_json::json!(1.0));
+    component
+}
+
 pub(super) fn region_panel(
     id: &str,
     text: &str,
@@ -446,6 +669,13 @@ pub(super) fn with_rect(
 }
 
 pub(super) fn set_rect(component: &mut UiComponentNode, x: f32, y: f32, w: f32, h: f32) {
+    // Generated editor chrome is authored in absolute pixel coordinates. Keep
+    // Aurelia's layout/hit-test model on the same geometry as paint; without
+    // this flag x_px/y_px are treated as flow metadata and visible controls get
+    // hit boxes somewhere else in the document.
+    component
+        .props
+        .insert("position".to_owned(), serde_json::json!("absolute"));
     component
         .props
         .insert("x_px".to_owned(), serde_json::json!(x.max(0.0)));
@@ -500,4 +730,43 @@ pub(super) fn component_layout_number(component: &UiComponentNode, key: &str) ->
 
 pub(super) fn hovered_menu(layout: &EditorLayoutMetrics, id: &str) -> bool {
     layout.hovered_menu_id == Some(id)
+}
+
+#[cfg(test)]
+mod geometry_tests {
+    use super::*;
+
+    #[test]
+    fn set_rect_authors_absolute_geometry_for_provider_hit_testing() {
+        let mut node =
+            UiComponentNode::action("editor.toolbar.play", "", editor_command::RUNTIME_PLAY);
+        set_rect(&mut node, 735.5, 34.0, 25.0, 22.0);
+
+        assert_eq!(
+            node.props
+                .get("position")
+                .and_then(serde_json::Value::as_str),
+            Some("absolute")
+        );
+        assert_eq!(
+            node.props.get("x_px").and_then(serde_json::Value::as_f64),
+            Some(735.5)
+        );
+        assert_eq!(
+            node.props.get("y_px").and_then(serde_json::Value::as_f64),
+            Some(34.0)
+        );
+        assert_eq!(
+            node.props.get("w_px").and_then(serde_json::Value::as_f64),
+            Some(25.0)
+        );
+        assert_eq!(
+            node.props.get("h_px").and_then(serde_json::Value::as_f64),
+            Some(22.0)
+        );
+        assert_eq!(
+            node.action_id.as_deref(),
+            Some(editor_command::RUNTIME_PLAY)
+        );
+    }
 }

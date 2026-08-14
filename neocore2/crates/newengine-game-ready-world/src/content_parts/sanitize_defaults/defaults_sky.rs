@@ -1,64 +1,63 @@
 use super::*;
+use newengine_game_data::default_game_data;
 
 pub(in super::super) fn default_sky_definition_ref() -> String {
-    "definitions/fps/sky_clear_morning.ytyp@sky_clear_morning".to_owned()
+    default_game_data().world.sky.definition_ref.clone()
 }
 pub(in super::super) fn default_sky_radius() -> f32 {
-    220.0
+    default_game_data().world.sky.radius
 }
 pub(in super::super) fn default_skydome_mesh() -> String {
-    String::new()
+    default_game_data().world.sky.mesh.clone()
 }
 pub(in super::super) fn default_sky_follow_camera() -> bool {
-    true
+    default_game_data().world.sky.follow_camera
 }
 pub(in super::super) fn default_cloud_dictionary() -> String {
-    String::new()
+    default_game_data().world.sky.cloud_dictionary.clone()
 }
 pub(in super::super) fn default_cloud_profile() -> String {
-    "clear".to_owned()
+    default_game_data().world.sky.cloud_profile.clone()
 }
 pub(in super::super) fn default_sky_sun_radius() -> f32 {
-    18.0
+    default_game_data().world.sky.sun_radius
 }
 pub(in super::super) fn default_sky_moon_radius() -> f32 {
-    13.5
+    default_game_data().world.sky.moon_radius
 }
 pub(in super::super) fn default_moon_texture() -> String {
-    String::new()
+    default_game_data().world.sky.moon_texture.clone()
 }
 pub(in super::super) fn default_sky_day_zenith() -> ColorRgb {
-    [0.23, 0.42, 0.82]
+    default_game_data().world.sky.atmosphere.day_zenith
 }
 pub(in super::super) fn default_sky_day_horizon() -> ColorRgb {
-    [0.64, 0.78, 0.96]
+    default_game_data().world.sky.atmosphere.day_horizon
 }
 pub(in super::super) fn default_sky_dusk_zenith() -> ColorRgb {
-    [0.16, 0.20, 0.40]
+    default_game_data().world.sky.atmosphere.dusk_zenith
 }
 pub(in super::super) fn default_sky_dusk_horizon() -> ColorRgb {
-    [1.00, 0.47, 0.20]
+    default_game_data().world.sky.atmosphere.dusk_horizon
 }
 pub(in super::super) fn default_sky_night_zenith() -> ColorRgb {
-    [0.006, 0.010, 0.030]
+    default_game_data().world.sky.atmosphere.night_zenith
 }
 pub(in super::super) fn default_sky_night_horizon() -> ColorRgb {
-    [0.020, 0.024, 0.052]
+    default_game_data().world.sky.atmosphere.night_horizon
 }
 pub(in super::super) fn default_sky_cloud_day() -> ColorRgb {
-    // Neutral-cool daylight water droplets; warm coloration comes from the
-    // actual solar path at dawn/dusk rather than a permanently yellow albedo.
-    [0.96, 0.98, 1.00]
+    default_game_data().world.sky.atmosphere.cloud_day
 }
 pub(in super::super) fn default_sky_cloud_night() -> ColorRgb {
-    [0.040, 0.050, 0.085]
+    default_game_data().world.sky.atmosphere.cloud_night
 }
 pub(in super::super) fn default_sky_night_strength() -> f32 {
-    0.35
+    default_game_data().world.sky.atmosphere.night_sky_strength
 }
 pub(in super::super) fn default_sky_cloud_coverage() -> f32 {
-    0.42
+    default_game_data().world.sky.atmosphere.cloud_coverage
 }
 pub(in super::super) fn default_sky_cloud_softness() -> f32 {
-    0.68
+    default_game_data().world.sky.atmosphere.cloud_softness
 }

@@ -4,13 +4,23 @@ use newengine_engine_runtime::gameplay::{
     apply_loadout, GameplayContentProvider, GameplayWorld, InventoryLoadoutCatalog, ItemCatalog,
     ItemId, PlayerController, PlayerInventory,
 };
+use newengine_gameplay_fps_api::{
+    FpsDemoRules, FpsGameplayPolicyProvider, FpsGameplayPolicySnapshot,
+};
+use newengine_gameplay_script_api::ScriptedStateMachineEventRequest;
+use newengine_gameplay_script_runtime::{
+    dispatch_state_machine_event, register_state_machine_instance, ScriptedStateMachineInstance,
+    ScriptedStateMachineStore,
+};
 
-use crate::item_assets::{compiled_embedded_fps_item_package, install_compiled_item_package};
+use crate::item_assets::{
+    compile_authored_item_package, install_compiled_item_package, AuthoredItemPackage,
+};
 
-pub const DEFAULT_RIFLE_ITEM_NAME: &str = "weapon.rifle.standard";
-pub const DEFAULT_RIFLE_AMMO_NAME: &str = "ammo.rifle.standard";
-pub const DEFAULT_MEDKIT_ITEM_NAME: &str = "consumable.medkit.standard";
-pub const DEFAULT_FPS_LOADOUT_NAME: &str = "loadout.fps.default";
+pub use newengine_game_data::{
+    DEFAULT_FPS_LOADOUT_NAME, DEFAULT_MEDKIT_ITEM_NAME, DEFAULT_RIFLE_AMMO_NAME,
+    DEFAULT_RIFLE_ITEM_NAME,
+};
 
 #[inline]
 pub fn default_rifle_item_id() -> ItemId {
@@ -32,61 +42,166 @@ pub fn default_fps_loadout_id() -> ItemId {
     ItemId::from_name(DEFAULT_FPS_LOADOUT_NAME).expect("valid FPS loadout name")
 }
 
-/// Installs authored FPS inventory content. There is deliberately no built-in Rust fallback:
-/// a broken/missing authored package is a content error surfaced by the provider registry.
-pub struct FpsContentProvider;
+/// Installs FPS inventory content produced by the active gameplay-policy provider.
+/// The generic engine inventory remains the execution mechanism; Lua only authors
+/// the data and policy snapshot. There is deliberately no embedded runtime fallback.
+pub struct FpsContentProvider {
+    policy_provider: Arc<dyn FpsGameplayPolicyProvider>,
+}
 
 impl FpsContentProvider {
     #[inline]
-    pub fn shared() -> Arc<Self> {
-        Arc::new(Self)
+    pub fn shared(
+        policy_provider: Arc<dyn FpsGameplayPolicyProvider>,
+    ) -> Arc<dyn GameplayContentProvider> {
+        Arc::new(Self { policy_provider })
+    }
+
+    fn load_compiled_content(
+        &self,
+    ) -> Result<
+        (
+            Arc<FpsGameplayPolicySnapshot>,
+            crate::item_assets::CompiledItemPackage,
+        ),
+        String,
+    > {
+        let policy = self.policy_provider.load_snapshot()?;
+        policy.validate()?;
+        let authored: AuthoredItemPackage = serde_json::from_value(policy.content.clone())
+            .map_err(|error| format!("Lua FPS item package decode failed: {error}"))?;
+        let compiled = compile_authored_item_package(&authored)
+            .map_err(|error| format!("Lua FPS item package compile failed: {error}"))?;
+        validate_required_content(&policy, &compiled)?;
+        Ok((policy, compiled))
     }
 }
 
 impl GameplayContentProvider for FpsContentProvider {
     #[inline]
     fn id(&self) -> &'static str {
-        "newengine.gameplay.fps.content"
+        "newengine.gameplay.fps.content.lua-policy"
     }
 
     fn install(&self, world: &mut GameplayWorld) -> Result<(), String> {
-        let package = compiled_embedded_fps_item_package()?;
-        if package.catalog.find(DEFAULT_RIFLE_ITEM_NAME).is_none() {
-            return Err(format!(
-                "authored FPS item package is missing required item '{}'",
-                DEFAULT_RIFLE_ITEM_NAME
-            ));
-        }
-        if package.catalog.find(DEFAULT_RIFLE_AMMO_NAME).is_none() {
-            return Err(format!(
-                "authored FPS item package is missing required item '{}'",
-                DEFAULT_RIFLE_AMMO_NAME
-            ));
-        }
-        if package.catalog.find(DEFAULT_MEDKIT_ITEM_NAME).is_none() {
-            return Err(format!(
-                "authored FPS item package is missing required item '{}'",
-                DEFAULT_MEDKIT_ITEM_NAME
-            ));
-        }
-        if package.loadouts.get(default_fps_loadout_id()).is_none() {
-            return Err(format!(
-                "authored FPS item package is missing required loadout '{}'",
-                DEFAULT_FPS_LOADOUT_NAME
-            ));
-        }
+        let (policy, package) = self.load_compiled_content()?;
         install_compiled_item_package(world, package);
+        install_policy_resources(world, policy.as_ref());
+        ensure_scripted_mission_state_machine(world, policy.as_ref())?;
+        newengine_ulog_api::ulog::info!(
+            "fps gameplay policy installed provider='{}' schema='{}' version={} items_source='lua structured content' default_loadout='{}' callbacks=[interaction:'{}',hit:'{}',mission:'{}']",
+            self.policy_provider.id(),
+            policy.schema,
+            policy.version,
+            policy.required_content.default_loadout,
+            policy.callbacks.interaction,
+            policy.callbacks.hit,
+            policy.callbacks.mission_event,
+        );
         Ok(())
     }
 
     fn content_is_present(&self, world: &GameplayWorld) -> bool {
+        let Some(policy) = world.resource::<FpsGameplayPolicySnapshot>() else {
+            return false;
+        };
+        let required = &policy.required_content;
         world.resource::<ItemCatalog>().is_some_and(|catalog| {
-            catalog.find(DEFAULT_RIFLE_ITEM_NAME).is_some()
-                && catalog.find(DEFAULT_RIFLE_AMMO_NAME).is_some()
-                && catalog.find(DEFAULT_MEDKIT_ITEM_NAME).is_some()
+            catalog.find(&required.primary_weapon).is_some()
+                && catalog.find(&required.primary_ammo).is_some()
+                && catalog.find(&required.medkit).is_some()
         }) && world
             .resource::<InventoryLoadoutCatalog>()
-            .is_some_and(|loadouts| loadouts.get(default_fps_loadout_id()).is_some())
+            .is_some_and(|loadouts| {
+                ItemId::from_name(&required.default_loadout)
+                    .is_some_and(|id| loadouts.get(id).is_some())
+            })
+    }
+}
+
+fn ensure_scripted_mission_state_machine(
+    world: &mut GameplayWorld,
+    policy: &FpsGameplayPolicySnapshot,
+) -> Result<(), String> {
+    let authored = &policy.mission.state_machine;
+    if !authored.enabled {
+        return Ok(());
+    }
+    if world
+        .resource::<ScriptedStateMachineStore>()
+        .is_some_and(|store| store.get(&authored.instance_id).is_some())
+    {
+        return Ok(());
+    }
+    register_state_machine_instance(
+        world,
+        ScriptedStateMachineInstance::new(
+            authored.instance_id.clone(),
+            authored.machine_id.clone(),
+            authored.initial_state.clone(),
+        ),
+    )?;
+    dispatch_state_machine_event(
+        world,
+        ScriptedStateMachineEventRequest {
+            instance_id: authored.instance_id.clone(),
+            event: authored.activate_event.clone(),
+            context: serde_json::Value::Null,
+        },
+    )?;
+    Ok(())
+}
+
+fn validate_required_content(
+    policy: &FpsGameplayPolicySnapshot,
+    package: &crate::item_assets::CompiledItemPackage,
+) -> Result<(), String> {
+    let required = &policy.required_content;
+    for (label, id) in [
+        ("primary_weapon", &required.primary_weapon),
+        ("primary_ammo", &required.primary_ammo),
+        ("medkit", &required.medkit),
+    ] {
+        if package.catalog.find(id).is_none() {
+            return Err(format!(
+                "Lua FPS item package is missing required {label} item '{id}'"
+            ));
+        }
+    }
+    let loadout = ItemId::from_name(&required.default_loadout).ok_or_else(|| {
+        format!(
+            "invalid Lua FPS default loadout id '{}'",
+            required.default_loadout
+        )
+    })?;
+    if package.loadouts.get(loadout).is_none() {
+        return Err(format!(
+            "Lua FPS item package is missing required loadout '{}'",
+            required.default_loadout
+        ));
+    }
+    Ok(())
+}
+
+fn install_policy_resources(world: &mut GameplayWorld, policy: &FpsGameplayPolicySnapshot) {
+    world.insert_resource(policy.clone());
+    if let Some(rules) = world.resource_mut::<FpsDemoRules>() {
+        let mission = &policy.mission;
+        rules.default_status = mission.default_status.clone();
+        rules.pickup_status = mission.pickup_status.clone();
+        rules.target_status = mission.target_status.clone();
+        rules.hazard_status = mission.hazard_status.clone();
+        rules.goal_locked_status = mission.goal_locked_status.clone();
+        rules.goal_complete_status = mission.goal_complete_status.clone();
+        rules.failed_progress_label = mission.failed_progress_label.clone();
+        rules.completed_progress_label = mission.completed_progress_label.clone();
+    }
+    if let Some(state) = world.resource_mut::<newengine_gameplay_fps_api::FpsDemoState>() {
+        state.failed_progress_label = policy.mission.failed_progress_label.clone();
+        state.completed_progress_label = policy.mission.completed_progress_label.clone();
+        if !state.completed && !state.failed {
+            state.status = policy.mission.default_status.clone();
+        }
     }
 }
 
@@ -96,6 +211,12 @@ pub(crate) fn ensure_fps_player_loadouts(world: &mut GameplayWorld) {
     {
         return;
     }
+    let Some(default_loadout) = world
+        .resource::<FpsGameplayPolicySnapshot>()
+        .and_then(|policy| ItemId::from_name(&policy.required_content.default_loadout))
+    else {
+        return;
+    };
 
     let players = world
         .query::<PlayerController>()
@@ -115,6 +236,47 @@ pub(crate) fn ensure_fps_player_loadouts(world: &mut GameplayWorld) {
             }
             continue;
         }
-        let _ = apply_loadout(world, player, default_fps_loadout_id());
+        let _ = apply_loadout(world, player, default_loadout);
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn embedded_test_policy_provider() -> Arc<dyn FpsGameplayPolicyProvider> {
+    Arc::new(EmbeddedTestPolicyProvider)
+}
+
+#[cfg(test)]
+pub(crate) fn embedded_test_content_provider() -> FpsContentProvider {
+    FpsContentProvider {
+        policy_provider: embedded_test_policy_provider(),
+    }
+}
+
+#[cfg(test)]
+struct EmbeddedTestPolicyProvider;
+
+#[cfg(test)]
+impl FpsGameplayPolicyProvider for EmbeddedTestPolicyProvider {
+    fn id(&self) -> &'static str {
+        "test.fps.embedded-policy"
+    }
+
+    fn load_snapshot(&self) -> Result<Arc<FpsGameplayPolicySnapshot>, String> {
+        let authored = crate::item_assets::test_fps_item_package();
+        let policy = FpsGameplayPolicySnapshot {
+            content: serde_json::to_value(authored)
+                .map_err(|error| format!("test item package JSON encode failed: {error}"))?,
+            ..FpsGameplayPolicySnapshot::default()
+        };
+        policy.validate()?;
+        Ok(Arc::new(policy))
+    }
+
+    fn invoke_event(
+        &self,
+        _export: &str,
+        _event: &newengine_gameplay_fps_api::FpsPolicyEvent,
+    ) -> Result<newengine_gameplay_fps_api::FpsPolicyDecision, String> {
+        Ok(newengine_gameplay_fps_api::FpsPolicyDecision::default())
     }
 }

@@ -62,6 +62,14 @@ impl AssetService for AssetServiceClient {
         self.call_json_value(self.m_import_graph_json_v1.clone(), &payload)
     }
 
+    fn runtime_graph_json_v1(&self) -> Result<crate::AssetRuntimeGraphV1, String> {
+        self.call_json_typed(
+            self.m_runtime_graph_json_v1.clone(),
+            &serde_json::Value::Null,
+            "runtime_graph_json_v1",
+        )
+    }
+
     fn import_diagnostics_json_v1(
         &self,
         payload: serde_json::Value,

@@ -19,10 +19,10 @@ fn baseline_runtime_returns_empty_opaque_response() {
 }
 
 #[test]
-fn validation_requires_ysc_entry_ref() {
+fn validation_requires_ysc_module_ref() {
     let bad = validate_script_module_ref(ScriptModuleRef::new("scripts/foo.source"));
     assert!(!bad.ok);
-    let good = validate_script_module_ref(ScriptModuleRef::new("scripts/foo.ysc@main"));
+    let good = validate_script_module_ref(ScriptModuleRef::new("scripts/foo.ysc"));
     assert!(good.ok);
 }
 
@@ -30,7 +30,7 @@ fn validation_requires_ysc_entry_ref() {
 fn binary_load_stores_opaque_byte_count() {
     let mut state = ScriptingRuntimeState::default();
     let response = state.load_module_bytes(ScriptingModuleLoadBytesRequest {
-        module_ref: ScriptModuleRef::new("scripts/foo.ysc@main"),
+        module_ref: ScriptModuleRef::new("scripts/foo.ysc"),
         module_bytes: vec![1, 2, 3, 4],
         ..ScriptingModuleLoadBytesRequest::default()
     });
@@ -42,7 +42,7 @@ fn binary_load_stores_opaque_byte_count() {
 #[test]
 fn binary_wire_methods_accept_binary_envelopes() {
     let load = ScriptingModuleLoadBytesRequest {
-        module_ref: ScriptModuleRef::new("scripts/foo.ysc@main"),
+        module_ref: ScriptModuleRef::new("scripts/foo.ysc"),
         module_bytes: vec![1, 2, 3],
         ..ScriptingModuleLoadBytesRequest::default()
     };

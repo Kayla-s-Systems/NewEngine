@@ -76,12 +76,12 @@ pub fn scripting_gateway_service() -> newengine_plugin_api::ServiceV1Dyn<'static
     .features([
         "engine-scripting-gateway-v1",
         "binary-request-response-v1",
-        "ysc-entry-bytes-v1",
+        "ysc-module-bytes-v1",
         "provider-owned-interpretation",
         "no-language-whitelist",
         "null-scripting-provider",
     ])
-    .notes("Baseline scripting provider intentionally does not name, embed or whitelist any scripting implementation. It accepts binary .ysc@entry/module envelopes and returns an empty binary response until a real provider overrides engine.scripting.");
+    .notes("Baseline scripting provider intentionally does not name, embed or whitelist any scripting implementation. It accepts binary .ysc module envelopes and returns an empty binary response until a real provider overrides engine.scripting.");
 
     JsonServiceRouter::with_state(SCRIPTING_SERVICE_ID, ScriptingRuntimeState::default())
         .describe_json(&description)

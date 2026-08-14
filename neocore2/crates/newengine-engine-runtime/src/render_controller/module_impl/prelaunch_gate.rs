@@ -4,9 +4,8 @@ use newengine_core::render::{
     UploadPumpDesc, Viewport,
 };
 use newengine_core::{EngineResult, ModuleCtx};
-use newengine_ui_api::{
-    UiDrawList, UiEditorRuntimeMode, UiEditorRuntimeState, UiScreenProfile, UiScreenProfileState,
-};
+use newengine_runtime_session_api::{RuntimeSessionMode, RuntimeSessionState};
+use newengine_ui_api::{UiDrawList, UiEditorRuntimeMode, UiScreenProfile, UiScreenProfileState};
 
 use super::super::controller::RuntimeRenderController;
 use super::launch_loading::scene_launch_loading_status;
@@ -184,11 +183,15 @@ impl RuntimeRenderController {
 
         if editor_preview_ready {
             newengine_ulog_api::ulog::info!(
-                "editor launch gate: preview ready frame={} mode='edit' reason='{}'; simulation remains stopped",
+                "editor launch gate: preview ready frame={} mode='edit' reason='{}'; simulation remains stopped and loading overlay is released",
                 next_frame,
                 gate.reason
             );
-            return Ok(None);
+            // Publish an explicit inactive launch status through the normal caller path.
+            // Returning None leaves the previous active SceneLaunchStatus resource intact,
+            // which keeps engine.ui.loading retained in hit-testing and makes the visible
+            // editor appear completely non-interactive.
+            return Ok(Some(SceneLaunchStatus::inactive()));
         }
 
         self.frame.frame_index = next_frame;
@@ -231,7 +234,7 @@ impl RuntimeRenderController {
                     .iter()
                     .map(|patch| patch.rgba8.len())
                     .sum::<usize>();
-            newengine_ulog_api::ulog::warn!(
+            newengine_ulog_api::ulog::debug!(
                 "render prelaunch loading ui: present frame={} window={}x{} mesh_cmds={} paint_cmds={} paint_images={} tex_set={}/{} patches={}/{} tex_bytes={}/{} reason='{}'",
                 next_frame,
                 window_w,
@@ -399,10 +402,15 @@ fn editor_runtime_mode<E: Send + 'static>(ctx: &ModuleCtx<'_, E>) -> Option<UiEd
         return None;
     }
     Some(
-        ctx.resources()
-            .get::<UiEditorRuntimeState>()
-            .map(|state| state.mode)
-            .unwrap_or(UiEditorRuntimeMode::Edit),
+        match ctx
+            .resources()
+            .get::<RuntimeSessionState>()
+            .and_then(|state| state.mode)
+        {
+            Some(RuntimeSessionMode::Simulate) => UiEditorRuntimeMode::Simulate,
+            Some(RuntimeSessionMode::Play) => UiEditorRuntimeMode::Play,
+            None => UiEditorRuntimeMode::Edit,
+        },
     )
 }
 

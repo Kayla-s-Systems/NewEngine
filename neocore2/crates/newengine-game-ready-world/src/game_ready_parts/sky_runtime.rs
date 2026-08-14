@@ -1,5 +1,7 @@
 use super::*;
 
+const EXPERIMENTAL_SPATIAL_CLOUD_SHADOWS_ENABLED: bool = false;
+
 pub(crate) fn apply_sky_visuals(
     world: &mut newengine_ecs::World,
     frame: SkyFrameSample,
@@ -9,7 +11,7 @@ pub(crate) fn apply_sky_visuals(
     let radius = atmosphere
         .as_ref()
         .map(|a| a.radius)
-        .unwrap_or(220.0)
+        .unwrap_or_else(|| newengine_game_data::default_game_data().world.sky.radius)
         .max(16.0);
 
     let entities = world
@@ -110,12 +112,12 @@ pub fn tick_game_ready_sky_cycle(world: &mut newengine_ecs::World, dt: f32) {
 
     let dynamics = update_sky_dynamics(world, &frame, dt);
     let sky_visual_ready = world.query::<EnvironmentDomeRenderState>().next().is_some();
-    let spatial_shadow = if sky_visual_ready {
+    let spatial_shadow = if EXPERIMENTAL_SPATIAL_CLOUD_SHADOWS_ENABLED && sky_visual_ready {
         spatial_cloud_shadow_from_dynamics(&frame, &dynamics)
     } else {
-        // Cloud visuals and their projected shadow field must be coherent. If the
-        // SkyDome failed admission there is no visible cloud layer, so keep only
-        // broad weather/atmosphere state and disable spatial cloud shadowing.
+        // Experimental projected cloud shadows are currently disabled. Keep the
+        // cloud visual/atmosphere simulation, but send the neutral render state so
+        // world lighting is not modulated by the spatial cloud-shadow field.
         CloudShadowRenderState::default()
     };
     let mut postfx = environment_frame
@@ -135,7 +137,11 @@ pub fn tick_game_ready_sky_cycle(world: &mut newengine_ecs::World, dt: f32) {
 
     if let Some(environment) = environment_frame.as_ref() {
         if environment.frame_id <= 2 || environment.frame_id.is_multiple_of(600) {
-            if !sky_visual_ready {
+            if !EXPERIMENTAL_SPATIAL_CLOUD_SHADOWS_ENABLED {
+                newengine_ulog_api::ulog::debug!(
+                    "game-ready live sky: experimental spatial cloud shadows disabled"
+                );
+            } else if !sky_visual_ready {
                 newengine_ulog_api::ulog::warn!(
                     "game-ready live sky: visual cloud layer unavailable; spatial cloud shadows suppressed policy='visible-clouds-and-cloud-shadows-share-one-admission-state'"
                 );

@@ -21,7 +21,7 @@ use super::super::gpu::PrimitiveGpu;
 /// - 13     : base color
 /// - 14     : UV transform
 /// - 15     : material params
-/// - 16     : emissive radiance + pad
+/// - 16     : emissive radiance + alpha cutoff / opaque diagnostic token
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub(in crate::render_controller) struct RenderInstanceRaw {
@@ -43,6 +43,7 @@ impl RenderInstanceRaw {
         material_params: [f32; 4],
         emissive_radiance: [f32; 3],
         alpha_cutoff: f32,
+        diagnostic_instance_id: u64,
     ) -> Self {
         Self {
             model_cols: mat4_cols(model),
@@ -54,10 +55,30 @@ impl RenderInstanceRaw {
                 emissive_radiance[0],
                 emissive_radiance[1],
                 emissive_radiance[2],
-                alpha_cutoff.max(0.0),
+                diagnostic_alpha_lane(alpha_cutoff, diagnostic_instance_id),
             ],
         }
     }
+}
+
+#[inline]
+pub(in crate::render_controller) fn diagnostic_instance_token(diagnostic_instance_id: u64) -> u32 {
+    let folded = (diagnostic_instance_id as u32) ^ ((diagnostic_instance_id >> 32) as u32);
+    let hashed = folded.wrapping_mul(0x9E37_79B1) ^ folded.rotate_left(13);
+    hashed & 0x00FF_FFFF
+}
+
+fn diagnostic_alpha_lane(alpha_cutoff: f32, diagnostic_instance_id: u64) -> f32 {
+    let alpha_cutoff = alpha_cutoff.max(0.0);
+    if alpha_cutoff > 0.0 {
+        return alpha_cutoff;
+    }
+
+    // Opaque materials do not consume the alpha-cutoff lane. Reuse that one float
+    // as a negative 24-bit per-instance token for receiver diagnostics without
+    // changing the long-lived 192-byte instance-buffer ABI. Integers up to 2^24
+    // are exactly representable in f32; the negative sign keeps alpha testing off.
+    -((diagnostic_instance_token(diagnostic_instance_id) as f32) + 1.0)
 }
 
 #[inline]
@@ -449,5 +470,118 @@ pub(super) fn draw_indexed_instanced_args(
         first_index: 0,
         vertex_offset: 0,
         first_instance: 0,
+    }
+}
+
+#[cfg(test)]
+mod instance_payload_tests {
+    use super::*;
+    use newengine_material_domain_api::LIT_INSTANCE_VERTEX_STRIDE;
+    use newengine_math::Vec3;
+
+    #[test]
+    fn render_instance_raw_matches_shader_abi_stride() {
+        assert_eq!(
+            core::mem::size_of::<RenderInstanceRaw>(),
+            LIT_INSTANCE_VERTEX_STRIDE as usize,
+            "RenderInstanceRaw must stay byte-identical to locations 5..16 in the instanced shader",
+        );
+    }
+
+    #[test]
+    fn material_payload_is_invariant_across_instance_transforms() {
+        let base_color = [0.82, 0.73, 0.61, 1.0];
+        let uv_transform = [1.0, 1.0, 0.125, -0.25];
+        let material_params = [0.0, 0.68, 0.0, 1.0];
+        let emissive = [0.0, 0.0, 0.0];
+
+        let a = RenderInstanceRaw::new(
+            Mat4::IDENTITY,
+            Mat4::IDENTITY,
+            base_color,
+            uv_transform,
+            material_params,
+            emissive,
+            0.0,
+            0x1020_3040,
+        );
+        let translated = Mat4::from_translation(Vec3::new(3.0, 5.0, -2.0));
+        let b = RenderInstanceRaw::new(
+            translated,
+            translated,
+            base_color,
+            uv_transform,
+            material_params,
+            emissive,
+            0.0,
+            0x1020_3040,
+        );
+
+        assert_eq!(a.base_color, b.base_color);
+        assert_eq!(a.uv_transform, b.uv_transform);
+        assert_eq!(a.material_params, b.material_params);
+        assert_eq!(a.emissive_radiance, b.emissive_radiance);
+        assert_eq!(a.emissive_radiance[3], b.emissive_radiance[3]);
+        assert_ne!(a.model_cols, b.model_cols);
+        assert_ne!(a.mvp_cols, b.mvp_cols);
+    }
+
+    #[test]
+    fn opaque_diagnostic_instance_token_preserves_instance_stride_and_alpha_semantics() {
+        let opaque = RenderInstanceRaw::new(
+            Mat4::IDENTITY,
+            Mat4::IDENTITY,
+            [1.0; 4],
+            [1.0, 1.0, 0.0, 0.0],
+            [0.0, 0.68, 0.0, 1.0],
+            [0.0; 3],
+            0.0,
+            0x0123_4567_89AB_CDEF,
+        );
+        assert!(opaque.emissive_radiance[3] < 0.0);
+
+        let cutout = RenderInstanceRaw::new(
+            Mat4::IDENTITY,
+            Mat4::IDENTITY,
+            [1.0; 4],
+            [1.0, 1.0, 0.0, 0.0],
+            [0.0, 0.68, 0.0, 1.0],
+            [0.0; 3],
+            0.42,
+            0x0123_4567_89AB_CDEF,
+        );
+        assert!((cutout.emissive_radiance[3] - 0.42).abs() < 1.0e-6);
+        assert_eq!(core::mem::size_of::<RenderInstanceRaw>(), 192);
+    }
+
+    #[test]
+    fn packed_instance_bytes_are_dense_and_stride_aligned() {
+        let instances = [
+            RenderInstanceRaw::new(
+                Mat4::IDENTITY,
+                Mat4::IDENTITY,
+                [1.0, 1.0, 1.0, 1.0],
+                [1.0, 1.0, 0.0, 0.0],
+                [0.0, 0.68, 0.0, 1.0],
+                [0.0, 0.0, 0.0],
+                0.0,
+                1,
+            ),
+            RenderInstanceRaw::new(
+                Mat4::from_translation(Vec3::new(1.0, 2.0, 3.0)),
+                Mat4::from_translation(Vec3::new(1.0, 2.0, 3.0)),
+                [1.0, 1.0, 1.0, 1.0],
+                [1.0, 1.0, 0.0, 0.0],
+                [0.0, 0.68, 0.0, 1.0],
+                [0.0, 0.0, 0.0],
+                0.0,
+                2,
+            ),
+        ];
+        let bytes = render_instances_as_bytes(&instances);
+        assert_eq!(
+            bytes.len(),
+            instances.len() * LIT_INSTANCE_VERTEX_STRIDE as usize,
+        );
     }
 }

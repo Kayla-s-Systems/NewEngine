@@ -1,202 +1,234 @@
 use super::*;
+use newengine_game_data::default_game_data;
 
 pub(in super::super) fn default_status_text() -> String {
-    String::new()
+    default_game_data().gameplay.status.default_status.clone()
 }
 pub(in super::super) fn default_pickup_status() -> String {
-    String::new()
+    default_game_data().gameplay.status.pickup_status.clone()
 }
 pub(in super::super) fn default_target_status() -> String {
-    "Target neutralized.".to_owned()
+    default_game_data().gameplay.status.target_status.clone()
 }
 pub(in super::super) fn default_hazard_status() -> String {
-    String::new()
+    default_game_data().gameplay.status.hazard_status.clone()
 }
 pub(in super::super) fn default_goal_locked_status() -> String {
-    String::new()
+    default_game_data()
+        .gameplay
+        .status
+        .goal_locked_status
+        .clone()
 }
 pub(in super::super) fn default_goal_complete_status() -> String {
-    String::new()
+    default_game_data()
+        .gameplay
+        .status
+        .goal_complete_status
+        .clone()
 }
 pub(in super::super) fn default_failed_progress_label() -> String {
-    String::new()
+    default_game_data()
+        .gameplay
+        .status
+        .failed_progress_label
+        .clone()
 }
 pub(in super::super) fn default_completed_progress_label() -> String {
-    String::new()
+    default_game_data()
+        .gameplay
+        .status
+        .completed_progress_label
+        .clone()
 }
 pub(in super::super) fn default_player_body_radius() -> f32 {
-    0.45
+    default_game_data().player.tuning.body_radius
 }
 pub(in super::super) fn default_player_body_half_height() -> f32 {
-    0.45
+    default_game_data().player.tuning.body_half_height
 }
 pub(in super::super) fn default_player_visual_radius() -> f32 {
-    0.45
+    default_game_data().player.tuning.visual_radius
 }
 pub(in super::super) fn default_player_visual_half_height() -> f32 {
-    0.90
+    default_game_data().player.tuning.visual_half_height
 }
 pub(in super::super) fn default_camera_eye_height() -> f32 {
-    0.72
+    default_game_data().player.tuning.camera_eye_height
 }
 pub(in super::super) fn default_sprint_multiplier() -> f32 {
-    1.75
+    default_game_data().player.tuning.sprint_multiplier
 }
 pub(in super::super) fn default_gravity() -> f32 {
-    9.81
+    default_game_data().player.tuning.gravity
 }
 pub(in super::super) fn default_contact_skin() -> f32 {
-    0.035
+    default_game_data().player.tuning.contact_skin
 }
 pub(in super::super) fn default_terrain_color() -> ColorRgba {
-    [0.78, 0.86, 0.68, 1.0]
+    default_game_data().world.palette.terrain
 }
 pub(in super::super) fn default_sky_color() -> ColorRgba {
-    [0.08, 0.16, 0.34, 1.0]
+    default_game_data().world.palette.sky
 }
 pub(in super::super) fn default_sky_emissive() -> ColorRgb {
-    [0.07, 0.14, 0.34]
+    default_game_data().world.palette.sky_emissive
 }
 pub(in super::super) fn default_tree_bark_color() -> ColorRgba {
-    [0.38, 0.23, 0.12, 1.0]
+    default_game_data().world.palette.tree_bark
 }
 pub(in super::super) fn default_tree_leaf_color() -> ColorRgba {
-    [0.18, 0.42, 0.16, 1.0]
+    default_game_data().world.palette.tree_leaf
 }
 pub(in super::super) fn default_tree_branch_color() -> ColorRgba {
-    [0.32, 0.20, 0.12, 1.0]
+    default_game_data().world.palette.tree_branch
 }
 pub(in super::super) fn default_uv_scale() -> [f32; 2] {
-    [1.0, 1.0]
+    default_game_data().world.material.uv_scale
 }
 pub(in super::super) fn default_uv_offset() -> [f32; 2] {
-    [0.0, 0.0]
+    default_game_data().world.material.uv_offset
 }
 pub(in super::super) fn default_material_roughness() -> f32 {
-    0.86
+    default_game_data().world.material.roughness
 }
 pub(in super::super) fn default_material_normal_scale() -> f32 {
-    1.0
+    default_game_data().world.material.normal_scale
 }
 pub(in super::super) fn default_material_occlusion_strength() -> f32 {
-    1.0
+    default_game_data().world.material.occlusion_strength
 }
 pub(in super::super) fn default_ambient_color() -> ColorRgb {
-    [0.42, 0.47, 0.56]
+    default_game_data().world.lighting.ambient_color
 }
 pub(in super::super) fn default_ambient_intensity() -> f32 {
-    0.52
+    default_game_data().world.lighting.ambient_intensity
 }
 pub(in super::super) fn default_sun_direction() -> ColorRgb {
-    [-0.55, -0.82, -0.28]
+    default_game_data().world.lighting.sun_direction
 }
 pub(in super::super) fn default_sun_color() -> ColorRgb {
-    [1.0, 0.955, 0.86]
+    default_game_data().world.lighting.sun_color
 }
 pub(in super::super) fn default_sun_intensity() -> f32 {
-    4.60
+    default_game_data().world.lighting.sun_intensity
 }
 pub(in super::super) fn default_day_night_enabled() -> bool {
-    true
+    default_game_data().world.day_night.enabled
 }
 pub(in super::super) fn default_time_of_day_hours() -> f32 {
-    9.35
+    default_game_data().world.day_night.time_of_day_hours
 }
 pub(in super::super) fn default_day_length_seconds() -> f32 {
-    720.0
+    default_game_data().world.day_night.day_length_seconds
 }
 pub(in super::super) fn default_day_of_year() -> u32 {
-    172
+    default_game_data().world.day_night.day_of_year
 }
 pub(in super::super) fn default_sun_latitude_degrees() -> f32 {
-    45.0
+    default_game_data().world.day_night.latitude_degrees
 }
 pub(in super::super) fn default_axial_tilt_degrees() -> f32 {
-    23.44
+    default_game_data().world.day_night.axial_tilt_degrees
 }
 pub(in super::super) fn default_shadow_enabled() -> bool {
-    true
+    default_game_data().world.shadows.enabled
 }
 pub(in super::super) fn default_shadow_resolution() -> u32 {
-    4096
+    default_game_data().world.shadows.resolution
 }
 pub(in super::super) fn default_shadow_cascade_count() -> u32 {
-    4
+    default_game_data().world.shadows.cascade_count
 }
 pub(in super::super) fn default_shadow_max_distance() -> f32 {
-    180.0
+    default_game_data().world.shadows.max_distance
 }
 pub(in super::super) fn default_shadow_softness() -> f32 {
-    1.0
+    default_game_data().world.shadows.softness
 }
 pub(in super::super) fn default_shadow_bias() -> f32 {
-    0.0025
+    default_game_data().world.shadows.bias
 }
 pub(in super::super) fn default_shadow_normal_bias() -> f32 {
-    0.015
+    default_game_data().world.shadows.normal_bias
 }
 pub(in super::super) fn default_shadow_contact_strength() -> f32 {
-    0.58
+    default_game_data().world.shadows.contact_strength
 }
 pub(in super::super) fn default_shadow_filter() -> String {
-    "pcss".to_owned()
+    default_game_data().world.shadows.filter.clone()
 }
 pub(in super::super) fn default_shadow_pcss_light_angular_radius_degrees() -> f32 {
-    0.266
+    default_game_data()
+        .world
+        .shadows
+        .pcss_light_angular_radius_degrees
 }
 pub(in super::super) fn default_shadow_pcss_blocker_search_radius_texels() -> f32 {
-    3.0
+    default_game_data()
+        .world
+        .shadows
+        .pcss_blocker_search_radius_texels
 }
 pub(in super::super) fn default_shadow_pcss_max_filter_radius_texels() -> f32 {
-    5.0
+    default_game_data()
+        .world
+        .shadows
+        .pcss_max_filter_radius_texels
 }
 pub(in super::super) fn default_shadow_pcss_blocker_samples() -> u32 {
-    10
+    default_game_data().world.shadows.pcss_blocker_samples
 }
 pub(in super::super) fn default_shadow_pcss_filter_samples() -> u32 {
-    12
+    default_game_data().world.shadows.pcss_filter_samples
 }
 pub(in super::super) fn default_shadow_pcss_min_filter_radius_texels() -> f32 {
-    0.18
+    default_game_data()
+        .world
+        .shadows
+        .pcss_min_filter_radius_texels
 }
 pub(in super::super) fn default_shadow_pcss_stable_kernel_cell_texels() -> f32 {
-    8.0
+    default_game_data()
+        .world
+        .shadows
+        .pcss_stable_kernel_cell_texels
 }
 pub(in super::super) fn default_foliage_prefab() -> String {
-    String::new()
+    default_game_data().world.foliage.prefab.clone()
 }
 pub(in super::super) fn default_foliage_seed() -> u64 {
-    0x5452_4545_2026
+    default_game_data().world.foliage.seed
 }
 pub(in super::super) fn default_foliage_grid_min() -> i32 {
-    -5
+    default_game_data().world.foliage.grid_min
 }
 pub(in super::super) fn default_foliage_grid_max() -> i32 {
-    5
+    default_game_data().world.foliage.grid_max
 }
 pub(in super::super) fn default_foliage_spacing() -> f32 {
-    6.0
+    default_game_data().world.foliage.spacing
 }
 pub(in super::super) fn default_foliage_jitter() -> f32 {
-    0.45
+    default_game_data().world.foliage.jitter
 }
 pub(in super::super) fn default_foliage_gate_threshold() -> f32 {
-    0.62
+    default_game_data().world.foliage.gate_threshold
 }
 pub(in super::super) fn default_foliage_min_scale() -> f32 {
-    0.85
+    default_game_data().world.foliage.min_scale
 }
 pub(in super::super) fn default_foliage_max_scale() -> f32 {
-    1.35
+    default_game_data().world.foliage.max_scale
 }
 pub(in super::super) fn default_foliage_min_player_distance() -> f32 {
-    5.0
+    default_game_data().world.foliage.min_player_distance
 }
 pub(in super::super) fn default_foliage_edge_margin() -> f32 {
-    4.0
+    default_game_data().world.foliage.edge_margin
 }
 pub(in super::super) fn default_foliage_surface_offset() -> f32 {
-    0.03
+    default_game_data().world.foliage.surface_offset
 }
 pub(in super::super) fn default_prefab_proxy() -> String {
     String::new()

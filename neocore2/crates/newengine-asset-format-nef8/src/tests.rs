@@ -70,3 +70,12 @@ fn published_nef8_content_kind_ids_are_unique() {
         "NEFTD must have a dedicated non-colliding id"
     );
 }
+
+#[test]
+fn ysc_is_a_selectorless_script_module_asset() {
+    let descriptor = descriptor_for_extension("ysc").expect("ysc descriptor");
+    assert_eq!(descriptor.extension, ysc::EXTENSION);
+    assert_eq!(descriptor.asset_kind, ysc::ASSET_KIND);
+    assert_eq!(descriptor.asset_kind, "script_module");
+    assert_eq!(descriptor.selector_syntax, None);
+}

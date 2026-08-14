@@ -28,12 +28,34 @@ use super::running_ui::{
 };
 
 const LOADING_OVERLAY_MIN_PUBLISH_INTERVAL: Duration = Duration::from_millis(50);
+const PROFILER_SAMPLE_TOPIC: &str = "newengine.diagnostics.profiler.sample.v1";
+
+#[inline]
+fn gameplay_input_requires_ui_dispatch(input: &UiInputFrame) -> bool {
+    !input.keys_pressed.is_empty()
+        || !input.keys_released.is_empty()
+        || !input.mouse_pressed.is_empty()
+        || !input.mouse_released.is_empty()
+        || input.mouse_wheel.0.abs() > f32::EPSILON
+        || input.mouse_wheel.1.abs() > f32::EPSILON
+        || !input.text.is_empty()
+        || !input.ime_preedit.is_empty()
+        || !input.ime_commit.is_empty()
+        || !input.text_edit_ops.is_empty()
+        || !input.gamepad_buttons_pressed.is_empty()
+        || !input.gamepad_buttons_released.is_empty()
+}
 
 impl HostPlatformRuntime {
     pub(crate) fn step_running(&mut self, dt_sec: f32) -> EngineResult<PlatformStepResultV1> {
+        let host_frame_started = Instant::now();
         self.ui_frame_index = self.ui_frame_index.wrapping_add(1);
         let ui_frame_index = self.ui_frame_index;
+        let input_poll_started = Instant::now();
         let input_frame = poll_input_frame();
+        let input_poll_ms = input_poll_started.elapsed().as_secs_f64() * 1000.0;
+        let mut ui_provider_dispatch_ms = 0.0_f64;
+        let mut ui_provider_dispatch_used = false;
         if let Some(telemetry) = self
             .engine
             .resources
@@ -51,22 +73,53 @@ impl HostPlatformRuntime {
             self.engine
                 .resources_mut()
                 .insert::<UiInputFrame>(input.clone());
-            match crate::platform_runtime::ui_gateway_frame::dispatch_input_frame(
-                ui_frame_index,
-                &input,
-                [self.surface.width, self.surface.height],
-                self.surface.pixels_per_point,
-            )? {
-                Some(frame) => {
-                    self.engine
-                        .resources_mut()
-                        .insert::<UiEventDispatchFrame>(frame.clone());
-                    Some(frame)
+            let game_profile_active = self
+                .engine
+                .resources
+                .get::<newengine_ui_api::UiScreenProfileState>()
+                .is_some_and(|state| {
+                    state.descriptor.profile == newengine_ui_api::UiScreenProfile::Game
+                });
+            let frontend_presentation_active = self
+                .engine
+                .resources
+                .get::<UiPresentationFlowState>()
+                .is_some_and(|state| state.state_id != "gameplay");
+            let ui_capture_active = self
+                .engine
+                .resources
+                .get::<newengine_ui_api::UiInputCaptureState>()
+                .is_some_and(|capture| capture.requests_capture());
+            let dispatch_to_provider = !game_profile_active
+                || frontend_presentation_active
+                || ui_capture_active
+                || gameplay_input_requires_ui_dispatch(&input);
+            if dispatch_to_provider {
+                ui_provider_dispatch_used = true;
+                let dispatch_started = Instant::now();
+                let dispatch_result =
+                    crate::platform_runtime::ui_gateway_frame::dispatch_input_frame(
+                        ui_frame_index,
+                        &input,
+                        [self.surface.width, self.surface.height],
+                        self.surface.pixels_per_point,
+                    );
+                ui_provider_dispatch_ms = dispatch_started.elapsed().as_secs_f64() * 1000.0;
+                match dispatch_result? {
+                    Some(frame) => {
+                        self.engine
+                            .resources_mut()
+                            .insert::<UiEventDispatchFrame>(frame.clone());
+                        Some(frame)
+                    }
+                    None => {
+                        let _ = self.engine.resources_mut().remove::<UiEventDispatchFrame>();
+                        None
+                    }
                 }
-                None => {
-                    let _ = self.engine.resources_mut().remove::<UiEventDispatchFrame>();
-                    None
-                }
+            } else {
+                let _ = self.engine.resources_mut().remove::<UiEventDispatchFrame>();
+                None
             }
         } else {
             let _ = self.engine.resources_mut().remove::<UiInputFrame>();
@@ -125,12 +178,22 @@ impl HostPlatformRuntime {
             });
         }
 
+        let input_dispatch_ms = host_frame_started.elapsed().as_secs_f64() * 1000.0;
+        let ui_prepare_started = Instant::now();
         let scene_launch_status = self.engine.resources.get::<SceneLaunchStatus>().cloned();
-        let presentation_blocks_world_bootstrap = self
+        let editor_profile_active = self
             .engine
             .resources
-            .get::<UiPresentationFlowState>()
-            .is_some_and(|state| state.blocks_world_bootstrap);
+            .get::<newengine_ui_api::UiScreenProfileState>()
+            .is_some_and(|state| {
+                state.descriptor.profile == newengine_ui_api::UiScreenProfile::Editor
+            });
+        let presentation_blocks_world_bootstrap = !editor_profile_active
+            && self
+                .engine
+                .resources
+                .get::<UiPresentationFlowState>()
+                .is_some_and(|state| state.blocks_world_bootstrap);
         // SceneLaunchStatus can remain active from the final bootstrap handoff. An
         // authored frontend state owns presentation before world bootstrap, so that
         // stale status must not keep engine.ui.loading mounted or restrict the draw
@@ -222,8 +285,10 @@ impl HostPlatformRuntime {
         // provider state; the cached draw-list is refreshed at 15 Hz at a 60 Hz
         // render cadence, immediately for interaction/layout changes, and whenever
         // no valid cache exists.
-        let gameplay_hud_refresh_due =
-            provider_gameplay_hud && (ui_frame_index <= 4 || ui_frame_index % 4 == 1);
+        // Gameplay HUD is retained. Refresh it on real invalidation/animation, not
+        // on a periodic timer; a provider round-trip costs multiple milliseconds and
+        // a fixed every-fourth-frame rebuild creates visible 30/48 ms cadence steps.
+        let gameplay_hud_refresh_due = false;
         let provider_animation_refresh = self
             .cached_provider_ui_draw
             .as_ref()
@@ -235,8 +300,7 @@ impl HostPlatformRuntime {
             || self.ui_build.is_some()
             || self.cached_provider_ui_draw.is_none()
             || provider_animation_refresh
-            || gameplay_hud_refresh_due
-            || ui_frame_index % 120 == 1;
+            || gameplay_hud_refresh_due;
         let allow_cached_provider_ui_draw = provider_gameplay_hud
             || scene_launch_active
             || debug_overlay_active
@@ -328,7 +392,135 @@ impl HostPlatformRuntime {
                 .remove::<newengine_ui_api::UiDrawList>();
         }
 
-        match self.engine.step() {
+        let ui_prepare_ms = ui_prepare_started.elapsed().as_secs_f64() * 1000.0;
+        let engine_step_started = Instant::now();
+        let engine_step_result = self.engine.step();
+        let engine_step_ms = engine_step_started.elapsed().as_secs_f64() * 1000.0;
+        let engine_timing = self
+            .engine
+            .resources
+            .get::<newengine_core::engine::EngineFrameTimingTelemetry>()
+            .cloned();
+        let render_timing = self
+            .engine
+            .resources
+            .get::<newengine_core::render::RenderModuleTimingTelemetry>()
+            .cloned();
+        let host_total_ms = host_frame_started.elapsed().as_secs_f64() * 1000.0;
+
+        let pacing_wait_ms = render_timing
+            .as_ref()
+            .filter(|render| {
+                engine_timing.as_ref().is_some_and(|engine| {
+                    // RenderController maintains its own presentation frame counter,
+                    // which can lead/lag the core frame index by one around launch
+                    // handoff. The resource itself is overwritten during the just-
+                    // completed engine.step(), so a one-frame delta is current; a
+                    // larger delta is stale and must never be subtracted.
+                    render.frame_index.abs_diff(engine.frame_index) <= 1
+                })
+            })
+            .map(|render| {
+                f64::from(render.backend_frame_slot_wait_ms)
+                    + f64::from(render.backend_surface_acquire_ms)
+                    + f64::from(render.backend_image_wait_ms)
+            })
+            .unwrap_or(0.0);
+        let host_active_cpu_ms = (host_total_ms - pacing_wait_ms).max(0.0);
+
+        if let Some(timing) = engine_timing.as_ref() {
+            let active_cpu_ms = (timing.total_ms - pacing_wait_ms).max(0.0);
+            let missed_frame = timing.total_ms >= 20.0;
+            if active_cpu_ms >= 12.0 || missed_frame || timing.frame_index.is_multiple_of(120) {
+                let payload = serde_json::json!({
+                    "schema": "newengine.diagnostics.profiler.sample.v1",
+                    "category": "engine.frame",
+                    "source": "newengine-core",
+                    "name": "engine frame orchestration",
+                    "lane": "main-frame",
+                    "priority": "critical",
+                    "dependency_group": format!("engine.frame.{}", timing.frame_index),
+                    "frame_index": timing.frame_index,
+                    "elapsed_ms": active_cpu_ms,
+                    "wall_elapsed_ms": timing.total_ms,
+                    "pacing_wait_ms": pacing_wait_ms,
+                    "budget_ms": 16.67,
+                    "frame_budget_ms": 16.67,
+                    "exceeded_frame_budget": active_cpu_ms > 16.67,
+                    "missed_wall_frame": missed_frame,
+                    "fixed_steps": timing.fixed_steps,
+                    "time_begin_ms": timing.time_begin_ms,
+                    "plugin_control_ms": timing.plugin_control_ms,
+                    "fixed_time_ms": timing.fixed_time_ms,
+                    "fixed_scheduler_ms": timing.fixed_scheduler_ms,
+                    "fixed_plugins_ms": timing.fixed_plugins_ms,
+                    "fixed_modules_ms": timing.fixed_modules_ms,
+                    "update_scheduler_ms": timing.update_scheduler_ms,
+                    "update_plugins_ms": timing.update_plugins_ms,
+                    "update_modules_ms": timing.update_modules_ms,
+                    "render_scheduler_ms": timing.render_scheduler_ms,
+                    "render_plugins_ms": timing.render_plugins_ms,
+                    "render_modules_ms": timing.render_modules_ms,
+                    "scheduler_end_ms": timing.scheduler_end_ms,
+                    "render_timing_frame_index": render_timing.as_ref().map(|it| it.frame_index),
+                    "render_pre_begin_ms": render_timing.as_ref().map(|it| it.pre_begin_ms),
+                    "render_backend_begin_ms": render_timing.as_ref().map(|it| it.backend_begin_ms),
+                    "render_playable_frame_ms": render_timing.as_ref().map(|it| it.playable_frame_ms),
+                    "render_diagnostics_before_present_ms": render_timing.as_ref().map(|it| it.diagnostics_before_present_ms),
+                    "render_backend_end_ms": render_timing.as_ref().map(|it| it.backend_end_ms),
+                    "backend_reported_begin_ms": render_timing.as_ref().map(|it| it.backend_reported_begin_ms),
+                    "backend_frame_slot_wait_ms": render_timing.as_ref().map(|it| it.backend_frame_slot_wait_ms),
+                    "backend_surface_acquire_ms": render_timing.as_ref().map(|it| it.backend_surface_acquire_ms),
+                    "backend_image_wait_ms": render_timing.as_ref().map(|it| it.backend_image_wait_ms),
+                    "backend_reported_end_ms": render_timing.as_ref().map(|it| it.backend_reported_end_ms),
+                });
+                if let Ok(bytes) = serde_json::to_vec(&payload) {
+                    let _ = newengine_plugin_host::host_context::publish_event(
+                        PROFILER_SAMPLE_TOPIC,
+                        &bytes,
+                    );
+                }
+            }
+        }
+        let host_wall_slow = host_total_ms >= 20.0;
+        if host_active_cpu_ms >= 12.0 || host_wall_slow || ui_frame_index.is_multiple_of(120) {
+            let payload = serde_json::json!({
+                "schema": "newengine.diagnostics.profiler.sample.v1",
+                "category": "host.frame",
+                "source": "newengine-runtime-host",
+                "name": "running host frame",
+                "lane": "main-frame",
+                "priority": "critical",
+                "dependency_group": format!("host.frame.{ui_frame_index}"),
+                "frame_index": ui_frame_index,
+                "elapsed_ms": host_active_cpu_ms,
+                "wall_elapsed_ms": host_total_ms,
+                "pacing_wait_ms": pacing_wait_ms,
+                "budget_ms": 16.67,
+                "frame_budget_ms": 16.67,
+                "exceeded_frame_budget": host_active_cpu_ms > 16.67,
+                "missed_wall_frame": host_wall_slow,
+                "input_dispatch_ms": input_dispatch_ms,
+                "input_poll_ms": input_poll_ms,
+                "ui_provider_dispatch_ms": ui_provider_dispatch_ms,
+                "ui_provider_dispatch_used": ui_provider_dispatch_used,
+                "ui_prepare_ms": ui_prepare_ms,
+                "engine_step_ms": engine_step_ms,
+                "render_timing_frame_index": render_timing.as_ref().map(|it| it.frame_index),
+                "provider_ui_refresh": provider_ui_refresh,
+                "gameplay_hud_refresh_due": gameplay_hud_refresh_due,
+                "ui_dispatch_refresh": ui_dispatch_refresh,
+                "screen_profile_refresh": screen_profile_refresh,
+            });
+            if let Ok(bytes) = serde_json::to_vec(&payload) {
+                let _ = newengine_plugin_host::host_context::publish_event(
+                    PROFILER_SAMPLE_TOPIC,
+                    &bytes,
+                );
+            }
+        }
+
+        match engine_step_result {
             Ok(()) => {
                 // ModuleCtx::request_exit() may be raised during the frame and
                 // converted into the shared shutdown token after Engine::step().

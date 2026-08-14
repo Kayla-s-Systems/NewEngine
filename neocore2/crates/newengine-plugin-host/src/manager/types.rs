@@ -15,6 +15,32 @@ pub(crate) enum PluginState {
     Disabled,
 }
 
+/// Host-assigned trust/origin for a plugin discovery root.
+///
+/// This value is supplied by the launcher/profile layer and never by plugin
+/// descriptor JSON. `Auto` preserves the legacy path-derived classification.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum PluginLoadOrigin {
+    #[default]
+    Auto,
+    FirstPartyPlugin,
+    GamePlugin,
+    UserMod,
+    DevOverride,
+}
+
+impl PluginLoadOrigin {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Auto => "auto",
+            Self::FirstPartyPlugin => "first-party-plugin",
+            Self::GamePlugin => "game-plugin",
+            Self::UserMod => "user-mod",
+            Self::DevOverride => "dev-override",
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct PluginLoadError {
     pub path: PathBuf,

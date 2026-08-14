@@ -11,10 +11,12 @@ mod identity;
 mod service;
 
 pub use dto::{
-    EntityArchetypeDescriptor, EntityArchetypeListResponse, EntityDespawnRequest,
-    EntityDespawnResponse, EntityDespawnResult, EntityExistsRequest, EntityExistsResponse,
-    EntityInvokeRequest, EntityListRequest, EntityListResponse, EntityRecord, EntitySpawnRequest,
-    EntitySpawnResponse, EntitySpawnTransform,
+    EntityArchetypeDefinition, EntityArchetypeDefinitionIdRequest,
+    EntityArchetypeDefinitionMutationResponse, EntityArchetypeDescriptor,
+    EntityArchetypeListResponse, EntityDespawnRequest, EntityDespawnResponse, EntityDespawnResult,
+    EntityExistsRequest, EntityExistsResponse, EntityInvokeRequest, EntityListRequest,
+    EntityListResponse, EntityRecord, EntitySpawnRequest, EntitySpawnResponse,
+    EntitySpawnTransform,
 };
 pub use identity::{EntityHandle, EntityId};
 pub use service::{
@@ -23,5 +25,7 @@ pub use service::{
     ENTITY_RUNTIME_REQUIREMENT_SPEC, ENTITY_SERVICE_ID, ENTITY_SERVICE_METHOD_ARCHETYPES_JSON_V1,
     ENTITY_SERVICE_METHOD_DESPAWN_JSON_V1, ENTITY_SERVICE_METHOD_EXISTS_JSON_V1,
     ENTITY_SERVICE_METHOD_INFO, ENTITY_SERVICE_METHOD_INVOKE, ENTITY_SERVICE_METHOD_LIST_JSON_V1,
-    ENTITY_SERVICE_METHOD_SHUTDOWN_V1, ENTITY_SERVICE_METHOD_SPAWN_JSON_V1,
+    ENTITY_SERVICE_METHOD_REGISTER_ARCHETYPE_DEFINITION_JSON_V1, ENTITY_SERVICE_METHOD_SHUTDOWN_V1,
+    ENTITY_SERVICE_METHOD_SPAWN_JSON_V1,
+    ENTITY_SERVICE_METHOD_UNREGISTER_ARCHETYPE_DEFINITION_JSON_V1,
 };

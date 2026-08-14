@@ -15,6 +15,7 @@ use super::input::ViewportInputSnap;
 use super::{readiness, scene};
 
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Instant;
 
 impl RuntimeRenderController {
     pub(super) fn tick_world_for_render(
@@ -144,12 +145,23 @@ impl RuntimeRenderController {
                     let sim_telemetry =
                         newengine_sim::SimulationJobTelemetry::new(&publish_sim_job);
                     let fixed_dt = fixed_dt.max(0.000_001);
+                    let telemetry_interval = crate::env_config::var_u64(
+                        "NEWENGINE_SIM_TELEMETRY_INTERVAL_TICKS",
+                        120,
+                        1,
+                        60_000,
+                    );
+                    let slow_tick_ms =
+                        crate::env_config::var_f32("NEWENGINE_SIM_SLOW_TICK_MS", 4.0, 0.25, 1000.0);
                     for step_index in 0..fixed_step_count {
                         let remaining_after_step = u64::from(fixed_step_count - step_index - 1);
                         let simulation_tick = fixed_tick.saturating_sub(remaining_after_step);
                         world.insert_resource(crate::gameplay::PhysicsRuntimeFrameIndex(
                             simulation_tick,
                         ));
+                        let detailed_telemetry = simulation_tick <= 4
+                            || simulation_tick.is_multiple_of(telemetry_interval);
+                        let tick_started = Instant::now();
                         run_schedule_with_physics_mode_and_telemetry_for_frame(
                             &mut self.frame.sim_schedule,
                             &mut self.frame.gameplay_content,
@@ -160,9 +172,21 @@ impl RuntimeRenderController {
                             simulation_tick,
                             physics_api,
                             physics_mode,
-                            Some(&sim_telemetry),
+                            detailed_telemetry.then_some(&sim_telemetry),
                             thread_pool,
                         );
+                        let tick_elapsed_ms = tick_started.elapsed().as_secs_f32() * 1000.0;
+                        if detailed_telemetry || tick_elapsed_ms >= slow_tick_ms {
+                            emit_simulation_tick_profile(
+                                simulation_tick,
+                                tick_elapsed_ms,
+                                fixed_dt,
+                                fixed_step_count,
+                                step_index,
+                                physics_mode,
+                                slow_tick_ms,
+                            );
+                        }
                         consume_player_transient_input(world);
                     }
                 } else {
@@ -205,6 +229,43 @@ impl RuntimeRenderController {
         }
 
         WorldFrameState { view_frame }
+    }
+}
+
+const PROFILER_SAMPLE_TOPIC: &str = "newengine.diagnostics.profiler.sample.v1";
+
+#[inline]
+fn emit_simulation_tick_profile(
+    simulation_tick: u64,
+    elapsed_ms: f32,
+    fixed_dt: f32,
+    fixed_step_count: u32,
+    step_index: u32,
+    physics_mode: PhysicsIntegrationMode,
+    slow_tick_ms: f32,
+) {
+    let frame_budget_ms = fixed_dt.max(0.000_001) * 1000.0;
+    let payload = serde_json::json!({
+        "schema": "newengine.diagnostics.profiler.sample.v1",
+        "category": "simulation.tick",
+        "source": "render.world_tick",
+        "name": "simulation fixed tick",
+        "lane": "simulation",
+        "priority": "interactive",
+        "dependency_group": format!("simulation.tick.{simulation_tick}"),
+        "frame_index": simulation_tick,
+        "elapsed_ms": elapsed_ms,
+        "budget_ms": slow_tick_ms,
+        "frame_budget_ms": frame_budget_ms,
+        "exceeded_frame_budget": elapsed_ms > frame_budget_ms,
+        "slow": elapsed_ms >= slow_tick_ms,
+        "fixed_step_count": fixed_step_count,
+        "step_index": step_index,
+        "catch_up": fixed_step_count > 1,
+        "physics_mode": format!("{physics_mode:?}"),
+    });
+    if let Ok(bytes) = serde_json::to_vec(&payload) {
+        let _ = newengine_plugin_host::emit_plugin_event(PROFILER_SAMPLE_TOPIC, &bytes);
     }
 }
 

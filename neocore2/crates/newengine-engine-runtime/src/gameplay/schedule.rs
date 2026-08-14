@@ -1,7 +1,8 @@
 use newengine_ecs::World;
+use newengine_sim::{default_schedule, SimFrame, SimSchedule, SimStage, SimulationJobTelemetry};
+#[cfg(test)]
 use newengine_sim::{
-    default_schedule, SimFrame, SimReadBatchExecutor, SimReadBatchReport, SimReadSnapshot,
-    SimSchedule, SimStage, SimulationJobBatch, SimulationJobTelemetry,
+    SimReadBatchExecutor, SimReadBatchReport, SimReadSnapshot, SimulationJobBatch,
 };
 
 use super::content::GameplayContentProviderRegistry;
@@ -9,39 +10,26 @@ use super::execution::{GameplayExecutionPhase, GameplayFrame, GameplaySystemProv
 use super::physics::step_service_physics;
 use super::physics_queries::GameplayPhysicsQueryProviderRegistry;
 use newengine_core::physics::PhysicsApiRef;
-use newengine_core::{TaskLane, TaskPriority, TaskRequest, ThreadPoolHandle};
+use newengine_core::ThreadPoolHandle;
 
-struct EngineJobsSimReadExecutor<'a> {
-    jobs: &'a ThreadPoolHandle,
-}
+/// Engine-runtime adapter for the simulation read boundary.
+///
+/// The snapshot pass currently produces metadata only; the actual simulation systems
+/// execute immediately afterwards on the world-owner thread. Scheduling this tiny pass
+/// onto `engine.threading` and waiting for it synchronously creates a context-switch,
+/// allocation and lock barrier with no parallel progress, so it stays inline until the
+/// scheduler can return real worker-produced command batches.
+#[cfg(test)]
+struct EngineJobsSimReadExecutor;
 
-impl SimReadBatchExecutor for EngineJobsSimReadExecutor<'_> {
+#[cfg(test)]
+impl SimReadBatchExecutor for EngineJobsSimReadExecutor {
     fn run_read_batch(
         &self,
         batch: &SimulationJobBatch,
         snapshot: SimReadSnapshot,
-        job: Box<dyn FnOnce(SimReadSnapshot) -> SimReadBatchReport + Send + 'static>,
     ) -> SimReadBatchReport {
-        let fallback = SimReadBatchReport::from_snapshot(&snapshot, batch.batch_index);
-        let result = std::sync::Arc::new(parking_lot::Mutex::new(None::<SimReadBatchReport>));
-        let result_for_job = std::sync::Arc::clone(&result);
-        let request = TaskRequest::new("simulation.read-snapshot")
-            .with_source("newengine-engine-runtime.sim")
-            .with_owner("newengine-engine-runtime")
-            .with_category("simulation-read-batch")
-            .with_lane(TaskLane::Simulation)
-            .with_priority(TaskPriority::Interactive)
-            .with_task_id(batch.task_id.clone())
-            .with_frame_id(batch.fixed_tick)
-            .with_dependency_group(batch.event_dependency_group())
-            .with_task_domain(newengine_task_api::task_domain::ENGINE_SIMULATION)
-            .with_task_pass(batch.stage.as_str());
-        let ticket = self.jobs.submit_request(request, move || {
-            *result_for_job.lock() = Some(job(snapshot));
-        });
-        ticket.wait();
-        let mut guard = result.lock();
-        guard.take().unwrap_or(fallback)
+        SimReadBatchReport::from_snapshot(&snapshot, batch.batch_index)
     }
 }
 
@@ -136,10 +124,12 @@ pub fn run_schedule_with_physics_mode_and_telemetry_for_frame(
 ) {
     let frame = SimFrame::new(dt.max(0.0001), frame_index);
     let gameplay_frame = GameplayFrame::from(frame);
-    let sim_executor = thread_pool.map(|jobs| EngineJobsSimReadExecutor { jobs });
-    let sim_executor_ref = sim_executor
-        .as_ref()
-        .map(|executor| executor as &dyn SimReadBatchExecutor);
+    // There is no worker-produced simulation command batch yet. Passing a synthetic
+    // executor here only materializes SimReadSnapshot metadata and then consumes it
+    // inline on the owner thread, adding allocations without parallel progress.
+    // Keep the boundary dormant until a real async executor exists.
+    let _ = thread_pool;
+    let sim_executor_ref = None;
 
     schedule.run_stage_with_telemetry_and_executor(
         world,
@@ -203,4 +193,35 @@ pub fn run_schedule_with_physics_mode_and_telemetry_for_frame(
 #[inline]
 pub fn default_sim_schedule() -> SimSchedule {
     default_schedule()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn simulation_read_boundary_is_inline_and_preserves_batch_metadata() {
+        let batch = SimulationJobBatch::new(
+            SimStage::Controllers,
+            SimFrame::new(0.016, 42),
+            0,
+            1,
+            0,
+            "engine.threading-inline",
+        );
+        let snapshot = SimReadSnapshot {
+            frame: SimFrame::new(0.016, 42),
+            stage: SimStage::Controllers,
+            world: newengine_sim::SimWorldSnapshotHeader::default(),
+            systems: Vec::new(),
+            dependency_group: batch.event_dependency_group(),
+        };
+
+        let report = EngineJobsSimReadExecutor.run_read_batch(&batch, snapshot);
+
+        assert_eq!(report.frame.fixed_tick, 42);
+        assert_eq!(report.batch_index, 0);
+        assert_eq!(report.stage, SimStage::Controllers);
+        assert!(report.worker_safe);
+    }
 }

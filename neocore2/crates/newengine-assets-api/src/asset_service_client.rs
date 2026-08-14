@@ -47,6 +47,7 @@ pub struct AssetServiceClient {
     m_import_dirty_json_v1: MethodName,
     m_import_scan_json_v1: MethodName,
     m_import_graph_json_v1: MethodName,
+    m_runtime_graph_json_v1: MethodName,
     m_import_diagnostics_json_v1: MethodName,
     m_import_thumbnails_json_v1: MethodName,
     m_import_dependencies_json_v1: MethodName,
@@ -65,9 +66,19 @@ impl AssetServiceClient {
     /// Create a client bound to the canonical AssetManager service API.
     #[inline]
     pub fn new(host: HostApiV1) -> Self {
+        Self::for_service(host, ASSET_SERVICE_ID)
+    }
+
+    /// Create a client bound to an explicit service id.
+    ///
+    /// This is intended for host/bootstrap orchestration before the stable
+    /// `engine.assets` gateway has been published. Runtime consumers should
+    /// continue to use [`Self::new`].
+    #[inline]
+    pub fn for_service(host: HostApiV1, service_id: impl Into<RString>) -> Self {
         Self {
             host,
-            service_id: RString::from(ASSET_SERVICE_ID),
+            service_id: service_id.into(),
 
             m_import_v1: MethodName::from(method::IMPORT_V1),
             m_reload: MethodName::from(method::RELOAD_V1),
@@ -95,6 +106,7 @@ impl AssetServiceClient {
             m_import_dirty_json_v1: MethodName::from(method::IMPORT_DIRTY_JSON_V1),
             m_import_scan_json_v1: MethodName::from(method::IMPORT_SCAN_JSON_V1),
             m_import_graph_json_v1: MethodName::from(method::IMPORT_GRAPH_JSON_V1),
+            m_runtime_graph_json_v1: MethodName::from(method::RUNTIME_GRAPH_JSON_V1),
             m_import_diagnostics_json_v1: MethodName::from(method::IMPORT_DIAGNOSTICS_JSON_V1),
             m_import_thumbnails_json_v1: MethodName::from(method::IMPORT_THUMBNAILS_JSON_V1),
             m_import_dependencies_json_v1: MethodName::from(method::IMPORT_DEPENDENCIES_JSON_V1),

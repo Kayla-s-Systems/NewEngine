@@ -57,8 +57,9 @@ mod tests {
     }
 
     #[test]
-    fn embedded_fps_package_installs_multi_weapon_primary_loadout() {
-        let package = compiled_embedded_fps_item_package().expect("embedded package");
+    fn test_fps_package_installs_multi_weapon_primary_loadout() {
+        let package =
+            compile_authored_item_package(&test_fps_item_package()).expect("test package");
         assert!(package.catalog.find("weapon.rifle.standard").is_some());
         assert!(package.catalog.find("weapon.pistol.standard").is_some());
         let mut world = World::new();

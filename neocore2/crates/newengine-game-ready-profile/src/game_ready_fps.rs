@@ -7,6 +7,9 @@
 //! platform runtime execution.
 
 use newengine_core::{Engine, EngineResult, StartupConfig};
+use newengine_game_data::{
+    GAME_READY_FPS_APP_NAME, GAME_READY_FPS_EARLY_LOG_FILE, GAME_READY_FPS_WINDOW_TITLE,
+};
 use newengine_runtime_host::app_launcher::{
     RuntimeHostAppProfile, RuntimeHostBootOption, RuntimeHostLaunchSpec, RuntimeHostLauncher,
 };
@@ -15,10 +18,6 @@ use newengine_ui::{UiBuildFn, UiProviderKind};
 use crate::{
     GameReadyRuntimeProfile, GAME_APP_ASSETS_DIR_ENV, GAME_FIXED_DT_MS, GAME_READY_APP_DIR_NAME,
 };
-
-pub const GAME_READY_FPS_APP_NAME: &str = "game-ready-fps";
-pub const GAME_READY_FPS_WINDOW_TITLE: &str = "North Star Game Ready FPS";
-pub const GAME_READY_FPS_EARLY_LOG_FILE: &str = "game-ready-fps-early.log";
 
 pub const GAME_READY_UI_SCREEN_PROFILE_ENV: &str =
     "NEWENGINE_PLUGIN_ENGINE_RUNTIME__ui__screen_profile__profile";
@@ -34,7 +33,6 @@ pub const GAME_READY_UI_ROOT_SURFACE_GAME: &str = "game.hud";
 pub const GAME_READY_UI_DOCUMENT_REF_GAME: &str = "ui/game/game_hud.neui@surface";
 
 pub const GAME_READY_FPS_BOOT_OPTIONS: &[RuntimeHostBootOption] = &[
-    RuntimeHostBootOption::PreStartConfigWindow,
     RuntimeHostBootOption::RuntimeBootstrapOverlay,
     RuntimeHostBootOption::RuntimePlugins,
     RuntimeHostBootOption::PlatformWindow,
@@ -103,9 +101,6 @@ pub const GAME_READY_FPS_ENV_POLICY: &[(&str, &str)] = &[
 /// Backward-compatible name for the standalone game viewport policy.
 pub const GAME_READY_GAME_UI_ENV_DEFAULTS: &[(&str, &str)] = GAME_READY_FPS_ENV_POLICY;
 
-pub const GAME_READY_PROFILE_ENV: &str = "NEWENGINE_SCENE_PROFILE";
-pub const GAME_READY_DEFAULT_PROFILE_ASSET: &str = "maps/white_platform.ymap";
-
 #[derive(Clone)]
 pub struct GameReadyFpsApp {
     profile: GameReadyRuntimeProfile,
@@ -143,7 +138,7 @@ impl GameReadyFpsApp {
             app_assets_env: GAME_APP_ASSETS_DIR_ENV,
             window_title: GAME_READY_FPS_WINDOW_TITLE,
             early_log_file_name: GAME_READY_FPS_EARLY_LOG_FILE,
-            default_profile_env: Some((GAME_READY_PROFILE_ENV, GAME_READY_DEFAULT_PROFILE_ASSET)),
+            default_profile_env: None,
             env_defaults: GAME_READY_FPS_ENV_POLICY,
         }
     }
@@ -252,10 +247,7 @@ mod tests {
     #[test]
     fn launch_spec_uses_authored_game_ready_scene_by_default() {
         let spec = GameReadyFpsApp::launch_spec();
-        assert_eq!(
-            spec.default_profile_env,
-            Some((GAME_READY_PROFILE_ENV, GAME_READY_DEFAULT_PROFILE_ASSET))
-        );
+        assert_eq!(spec.default_profile_env, None);
         assert_eq!(spec.env_defaults, GAME_READY_FPS_ENV_POLICY);
         assert_eq!(spec.window_title, GAME_READY_FPS_WINDOW_TITLE);
     }

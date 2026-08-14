@@ -7,7 +7,15 @@ pub const INVENTORY_UI_ACTION_SLOT: &str = "game.inventory.slot";
 pub const INVENTORY_UI_ACTION_HOTBAR: &str = "game.inventory.hotbar";
 pub const INVENTORY_UI_ACTION_EQUIPMENT: &str = "game.inventory.equipment";
 pub const INVENTORY_UI_ACTION_DROP: &str = "game.inventory.drop";
-pub(super) const INVENTORY_SLOT_COUNT: usize = 24;
+
+#[inline]
+pub(super) fn inventory_slot_count(world: &World) -> usize {
+    crate::game_data::active_game_data(world)
+        .gameplay
+        .inventory
+        .hud_slots
+        .clamp(1, 256)
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct InventoryDragState {

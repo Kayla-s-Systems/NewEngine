@@ -21,7 +21,7 @@ use newengine_ulog_api::path_format::{canonicalize_if_exists, display_clean};
 
 use super::adapter::ModuleAdapterAny;
 use super::config_patch::config_patch_from_json_merge_patch;
-use super::types::{LoadedPlugin, PluginLoadError, PluginState};
+use super::types::{LoadedPlugin, PluginLoadError, PluginLoadOrigin, PluginState};
 use super::ui_assets::{extract_plugin_icon, PluginIconData};
 use super::PluginManager;
 
@@ -116,6 +116,15 @@ struct LoadTimings {
 
 impl PluginManager {
     pub(crate) fn load_one(&mut self, path: &Path, host: HostApiV1) -> Result<(), PluginLoadError> {
+        self.load_one_with_origin(path, host, PluginLoadOrigin::Auto)
+    }
+
+    pub(crate) fn load_one_with_origin(
+        &mut self,
+        path: &Path,
+        host: HostApiV1,
+        load_origin: PluginLoadOrigin,
+    ) -> Result<(), PluginLoadError> {
         let pretty_path = pretty_abs_path(path);
         newengine_ulog_api::ulog::info!("plugins: loading '{}'", pretty_path.as_str());
 
@@ -194,8 +203,21 @@ impl PluginManager {
         let overrides_non_empty =
             !matches!(overrides, serde_json::Value::Object(ref mm) if mm.is_empty());
 
-        let mut provider_origin =
-            crate::service_gateway::GatewayProviderOrigin::from_plugin_path(path);
+        let mut provider_origin = match load_origin {
+            PluginLoadOrigin::Auto => {
+                crate::service_gateway::GatewayProviderOrigin::from_plugin_path(path)
+            }
+            PluginLoadOrigin::FirstPartyPlugin => {
+                crate::service_gateway::GatewayProviderOrigin::FirstPartyPlugin
+            }
+            PluginLoadOrigin::GamePlugin => {
+                crate::service_gateway::GatewayProviderOrigin::GamePlugin
+            }
+            PluginLoadOrigin::UserMod => crate::service_gateway::GatewayProviderOrigin::UserMod,
+            PluginLoadOrigin::DevOverride => {
+                crate::service_gateway::GatewayProviderOrigin::DevOverride
+            }
+        };
         provider_origin = register_plugin_descriptor(&id_str, descriptor.clone(), provider_origin);
 
         let t = Instant::now();

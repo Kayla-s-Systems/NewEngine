@@ -143,7 +143,6 @@ impl RenderApi for ServiceBackedRenderApi {
     }
 
     fn render_target_ui_tex_id(&self, id: RenderTargetId) -> EngineResult<UiTexId> {
-        self.flush_unit_batch()?;
         match self.command(RenderCommand::RenderTargetUiTexId { id })? {
             RenderCommandResponse::UiTexId(id) => Ok(id),
             other => Err(EngineError::other(format!(
@@ -154,7 +153,6 @@ impl RenderApi for ServiceBackedRenderApi {
     }
 
     fn render_target_color_texture_id(&self, id: RenderTargetId) -> EngineResult<TextureId> {
-        self.flush_unit_batch()?;
         match self.command(RenderCommand::RenderTargetColorTextureId { id })? {
             RenderCommandResponse::TextureId(id) => Ok(id),
             other => Err(EngineError::other(format!(
@@ -406,7 +404,6 @@ impl RenderApi for ServiceBackedRenderApi {
     }
 
     fn texture_residency(&self, id: TextureId) -> EngineResult<TextureResidencySnapshot> {
-        self.flush_unit_batch()?;
         match self.command(RenderCommand::TextureResidency { id })? {
             RenderCommandResponse::TextureResidency(snapshot) => Ok(snapshot),
             other => Err(EngineError::other(format!(
@@ -427,7 +424,6 @@ impl RenderApi for ServiceBackedRenderApi {
     }
 
     fn shader_cache_stats(&self) -> EngineResult<ShaderRuntimeCacheStats> {
-        self.flush_unit_batch()?;
         match self.command(RenderCommand::ShaderCacheStats)? {
             RenderCommandResponse::ShaderCacheStats(stats) => Ok(stats),
             other => Err(EngineError::other(format!(

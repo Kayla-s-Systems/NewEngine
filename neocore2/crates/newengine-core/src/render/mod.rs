@@ -9,6 +9,26 @@ pub const RENDER_API_ID: &str = newengine_render_api::RENDER_SERVICE_ID;
 pub const RENDER_API_VERSION: ApiVersion = ApiVersion::new(0, 4, 0);
 pub const RENDER_API_PROVIDE: ApiProvide = ApiProvide::new(RENDER_API_ID, RENDER_API_VERSION);
 
+/// Coarse CPU timings for one render-controller module frame.
+///
+/// Kept in `newengine-core::render` so both the renderer-facing runtime module
+/// and platform/profiler host can exchange timing data without a crate cycle.
+#[derive(Debug, Clone, Default)]
+pub struct RenderModuleTimingTelemetry {
+    pub frame_index: u64,
+    pub total_ms: f64,
+    pub pre_begin_ms: f64,
+    pub backend_begin_ms: f64,
+    pub playable_frame_ms: f64,
+    pub diagnostics_before_present_ms: f64,
+    pub backend_end_ms: f64,
+    pub backend_reported_begin_ms: f32,
+    pub backend_frame_slot_wait_ms: f32,
+    pub backend_surface_acquire_ms: f32,
+    pub backend_image_wait_ms: f32,
+    pub backend_reported_end_ms: f32,
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct RenderBackendStatus {
     pub degraded: bool,

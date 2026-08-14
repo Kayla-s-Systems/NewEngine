@@ -195,6 +195,7 @@ impl RuntimeRenderController {
                     MaterialTextureGpuResidency::GpuLoading {
                         texture,
                         requested_frame: self.frame.frame_index,
+                        last_residency_poll_frame: None,
                     },
                 );
             }
@@ -401,7 +402,8 @@ impl RuntimeRenderController {
         path: &str,
         status_owner: &'static str,
     ) -> MaterialTextureReadyState {
-        let texture = match self.gpu.material.textures.get(path) {
+        let frame_index = self.frame.frame_index;
+        let texture = match self.gpu.material.textures.get_mut(path) {
             Some(MaterialTextureGpuResidency::Ready { texture }) => {
                 return MaterialTextureReadyState::Ready(*texture)
             }
@@ -418,8 +420,9 @@ impl RuntimeRenderController {
             Some(MaterialTextureGpuResidency::GpuLoading {
                 texture,
                 requested_frame,
+                last_residency_poll_frame,
             }) => {
-                let waited = self.frame.frame_index.saturating_sub(*requested_frame);
+                let waited = frame_index.saturating_sub(*requested_frame);
                 if waited > 180 && waited % 120 == 0 {
                     newengine_ulog_api::ulog::debug!(
                         "render controller: material texture still gpu-loading path='{}' waited_frames={}",
@@ -427,6 +430,10 @@ impl RuntimeRenderController {
                         waited,
                     );
                 }
+                if *last_residency_poll_frame == Some(frame_index) {
+                    return MaterialTextureReadyState::Waiting;
+                }
+                *last_residency_poll_frame = Some(frame_index);
                 *texture
             }
         };

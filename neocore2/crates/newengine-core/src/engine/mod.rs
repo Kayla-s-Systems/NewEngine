@@ -15,6 +15,7 @@ mod run_state;
 mod startup_graph;
 mod timing;
 
-pub use config::{EngineConfig, ModuleFaultTolerance, PluginFaultTolerance};
+pub use config::{EngineConfig, ModuleFaultTolerance, PluginDiscoveryRoot, PluginFaultTolerance};
 pub use core::Engine;
+pub use frame_loop::EngineFrameTimingTelemetry;
 pub use run_state::{EngineFsm, EngineFsmTransition, EngineRunState};

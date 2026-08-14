@@ -35,6 +35,12 @@ fn lock_loading_texture_residency() -> std::sync::MutexGuard<'static, LoadingTex
         .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
+pub(crate) fn reset_loading_texture_session() {
+    let mut state = lock_loading_texture_residency();
+    state.last_frame_index = None;
+    state.resident_refs.clear();
+}
+
 pub(super) fn begin_loading_texture_frame(frame_index: u64) {
     let mut state = lock_loading_texture_residency();
     let starts_new_session = state.last_frame_index.is_some_and(|last| {

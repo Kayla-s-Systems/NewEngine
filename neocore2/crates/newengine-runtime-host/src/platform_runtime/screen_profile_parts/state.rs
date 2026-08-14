@@ -63,9 +63,8 @@ impl ScreenProfileRuntimeState {
             last_right_edit_selection_key: String::new(),
             cached_right_edit_document: None,
             cached_right_edit_error: None,
-            editor_runtime_mode: UiEditorRuntimeMode::Edit,
             hidden_panels: BTreeSet::new(),
-            last_runtime_button_pointer_frame: u64::MAX,
+            last_runtime_command_frame: u64::MAX,
             last_dock_click_frame: u64::MAX,
             last_menu_click_frame: u64::MAX,
             active_menu_id: None,
@@ -73,6 +72,11 @@ impl ScreenProfileRuntimeState {
     }
 
     pub(crate) fn install_initial_resources(&self, resources: &mut Resources) {
+        install_runtime_session_resources(resources);
+        install_editor_pie_world_state(resources);
+        if resources.get::<EditorCommandRegistry>().is_none() {
+            resources.insert(default_runtime_editor_commands());
+        }
         let mut descriptor = self.descriptor.clone();
         descriptor.input_focus_policy = self.active_input_focus_policy();
         resources.insert(UiScreenProfileState {
@@ -91,6 +95,32 @@ impl ScreenProfileRuntimeState {
     /// touch render backend state, scene state or ECS storage; it only publishes
     /// `engine.ui` composition data and provider-safe input-focus policy.
     pub(crate) fn prepare_frame(&mut self, resources: &mut Resources, frame_index: u64) -> bool {
+        if let Some(report) = newengine_asset_hot_reload_runtime::poll_asset_file_watcher(resources)
+        {
+            let failures = report
+                .operations
+                .iter()
+                .filter(|operation| !operation.ok)
+                .count();
+            if failures == 0 {
+                newengine_ulog_api::ulog::info!(
+                    "asset hot reload: changed={} invalidated={} reimported={} cycles={}",
+                    report.changed_refs.len(),
+                    report.plan.invalidation_order.len(),
+                    report.operations.len(),
+                    report.plan.cycles.len(),
+                );
+            } else {
+                newengine_ulog_api::ulog::warn!(
+                    "asset hot reload: changed={} invalidated={} operations={} failures={} cycles={}",
+                    report.changed_refs.len(),
+                    report.plan.invalidation_order.len(),
+                    report.operations.len(),
+                    failures,
+                    report.plan.cycles.len(),
+                );
+            }
+        }
         let presentation_changed = self.update_presentation_flow(resources, frame_index);
         let mut published_descriptor = self.descriptor.clone();
         published_descriptor.input_focus_policy = self.active_input_focus_policy();
@@ -124,9 +154,27 @@ impl ScreenProfileRuntimeState {
                     self.hide_profile_surface(UI_SURFACE_GAME_PRESENTATION, profile_changed);
                 if self.config.publish_editor_shell {
                     let layout = editor_layout_metrics(resources, &self.hidden_panels);
+                    let session = resources
+                        .get::<RuntimeSessionState>()
+                        .cloned()
+                        .unwrap_or_default();
+                    let (runtime_mode, runtime_paused) = editor_runtime_projection(&session);
+                    let runtime_possessed = session.is_possessed();
+                    let runtime_diff_count = resources
+                        .get::<RuntimeWorldDiffV1>()
+                        .map(|diff| diff.change_count)
+                        .unwrap_or(0);
+                    let command_registry = resources
+                        .get::<EditorCommandRegistry>()
+                        .cloned()
+                        .unwrap_or_else(default_runtime_editor_commands);
                     let mut node = EditorScreen::default().surface_node(
                         frame_index,
-                        self.editor_runtime_mode,
+                        runtime_mode,
+                        runtime_paused,
+                        runtime_possessed,
+                        runtime_diff_count,
+                        &command_registry,
                         &layout,
                         self.active_menu_id.as_deref(),
                     );

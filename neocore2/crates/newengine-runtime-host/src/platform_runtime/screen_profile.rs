@@ -6,6 +6,18 @@ use newengine_assets_api::{
 };
 use newengine_core::host_events::WindowInitSize;
 use newengine_core::Resources;
+use newengine_editor_command_api::{
+    default_runtime_editor_commands, editor_command, EditorCommandContext, EditorCommandRegistry,
+};
+use newengine_runtime_session_api::{
+    RuntimeSessionCommand, RuntimeSessionMode, RuntimeSessionState, RuntimeWorldDiffV1,
+    RUNTIME_SESSION_COMMAND_SOURCE_CONSOLE, RUNTIME_SESSION_COMMAND_SOURCE_EDITOR,
+    RUNTIME_SESSION_COMMAND_SOURCE_GAME,
+};
+use newengine_runtime_session_runtime::{
+    advance_runtime_session, drain_external_runtime_session_commands,
+    install_runtime_session_resources, submit_runtime_session_command,
+};
 use newengine_schema_api::ENGINE_SCHEMA_SERVICE_ID;
 use newengine_ui_api::{
     EditorSelectionContext, EditorSelectionKind, UiComponentNode, UiDockLayoutState,
@@ -47,6 +59,8 @@ mod components;
 mod helpers;
 #[path = "screen_profile_parts/panels_and_tests.rs"]
 mod panels_and_tests;
+#[path = "screen_profile_parts/pie.rs"]
+mod pie;
 #[path = "screen_profile_parts/profiles.rs"]
 mod profiles;
 #[path = "screen_profile_parts/state.rs"]
@@ -57,6 +71,7 @@ mod types;
 use self::components::*;
 use self::helpers::*;
 use self::panels_and_tests::*;
+use self::pie::*;
 use self::profiles::*;
 use self::types::*;
 

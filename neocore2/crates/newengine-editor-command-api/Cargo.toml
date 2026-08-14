@@ -1,0 +1,11 @@
+[package]
+name = "newengine-editor-command-api"
+version = "0.1.0"
+edition = "2021"
+readme = "README.md"
+description = "Data-driven editor command and shortcut registry for NewEngine"
+
+[dependencies]
+newengine-input-api = { path = "../newengine-input-api" }
+newengine-ui-api = { path = "../newengine-ui-api" }
+serde = { version = "1", features = ["derive"] }

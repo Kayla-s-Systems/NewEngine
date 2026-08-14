@@ -12,8 +12,8 @@ use super::super::super::gpu::{ensure_primitive_gpu, upload_primitive_mesh, Prim
 use super::super::super::material_bindings::LitMaterialPlan;
 use super::super::draw_bucket::{BucketedIndexedDrawStream, IndexedDrawPacket};
 use super::super::instancing::{
-    draw_indexed_instanced_args, InstanceBatchKey, InstanceBatchSet, InstancedReplayState,
-    RenderInstanceRaw,
+    diagnostic_instance_token, draw_indexed_instanced_args, InstanceBatchKey, InstanceBatchSet,
+    InstancedReplayState, RenderInstanceRaw,
 };
 use super::mesh_visibility::{
     distance_sq_to_camera, forward_sphere_visible, primitive_budget,

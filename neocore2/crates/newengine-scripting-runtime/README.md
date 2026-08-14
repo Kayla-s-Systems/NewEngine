@@ -3,7 +3,7 @@
 Runtime shell for the `engine.scripting` gateway.
 
 This crate intentionally does not embed or name any scripting implementation. It
-registers an engine-runtime baseline provider that accepts opaque `.ysc@entry`
+registers an engine-runtime baseline provider that accepts opaque `.ysc`
 module bytes and opaque scripting request bytes, then returns an empty response
 until a real provider overrides the `engine.scripting` route.
 

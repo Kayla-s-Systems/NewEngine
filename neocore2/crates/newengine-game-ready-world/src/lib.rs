@@ -1,6 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 #![allow(clippy::too_many_arguments)]
 
+use newengine_game_data::GameDataSnapshot;
 use newengine_gameplay_fps_api::{
     FpsDemoGoal, FpsDemoHazard, FpsDemoPickup, FpsDemoRules, FpsDemoState, FpsDemoTarget,
     FpsPlayerTuning,
@@ -66,8 +67,9 @@ use self::content::{
     load_game_ready_map_profile, GameReadyDayNightSpec, GameReadyDefinitionApplyMode,
     GameReadyDefinitionInstanceSpec, GameReadyFoliageSpec, GameReadyGameplaySpec,
     GameReadyLightingSpec, GameReadyMapProfile, GameReadyMaterialSetSpec, GameReadyMaterialSpec,
-    GameReadyMissionSpec, GameReadyPaletteSpec, GameReadyPrefabSpec, GameReadySkyAtmosphereSpec,
-    GameReadySkySpec, GameReadyTerrainHeightmapSpec, GameReadyTerrainSpec,
+    GameReadyMissionSpec, GameReadyPaletteSpec, GameReadyPrefabSpec, GameReadyShadowSpec,
+    GameReadySkyAtmosphereSpec, GameReadySkySpec, GameReadyTerrainHeightmapSpec,
+    GameReadyTerrainSpec,
 };
 use newengine_engine_runtime::world_authoring::{
     apply_exact_material, apply_primitive_material_instance as apply_primitive_instance,
@@ -121,7 +123,23 @@ pub fn bootstrap_world_scene(
     primitives: &mut PrimitiveRegistry,
     materials: &MaterialRegistry,
 ) -> Option<EntityId> {
-    bootstrap_game_ready_world_scene_impl(scene, primitives, materials)
+    bootstrap_world_scene_with_data(
+        scene,
+        primitives,
+        materials,
+        GameDataSnapshot::rust_defaults(),
+    )
+}
+
+/// Assemble the authored world using an immutable provider-produced data snapshot.
+/// This is the Lua-ready entrypoint: the world package does not care who produced the data.
+pub fn bootstrap_world_scene_with_data(
+    scene: &mut Scene,
+    primitives: &mut PrimitiveRegistry,
+    materials: &MaterialRegistry,
+    game_data: GameDataSnapshot,
+) -> Option<EntityId> {
+    bootstrap_game_ready_world_scene_impl(scene, primitives, materials, game_data)
 }
 
 /// Progress launch-blocking world assembly.

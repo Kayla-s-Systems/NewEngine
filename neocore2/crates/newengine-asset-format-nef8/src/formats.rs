@@ -280,10 +280,9 @@ pub mod ysc {
     pub const EXTENSION: &str = "ysc";
     pub const ASSET_KIND: &str = "script_module";
     pub const CONTENT_KIND: u32 = newengine_assets_api::LIST_FILE_CONTENT_KIND_YSC;
-    pub const PURPOSE: &str = "Opaque Script Module Dictionary";
+    pub const PURPOSE: &str = "Opaque Script Module";
     pub const SEMANTIC_GATEWAY: &str = "engine.scripting";
     pub const HANDLER_SERVICE: &str = "asset.codec.listfile.ysc";
-    pub const SELECTOR_SYNTAX: &str = "file.ysc@entry";
     pub const CONSUMER_DOMAINS: &[&str] = &[
         "engine.scripting",
         "engine.scene",

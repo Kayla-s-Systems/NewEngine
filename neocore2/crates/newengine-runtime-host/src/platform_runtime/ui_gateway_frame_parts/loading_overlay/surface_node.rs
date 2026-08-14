@@ -15,7 +15,7 @@ pub(super) fn build_overlay_surface_node(
     let visuals = newengine_core::loading::LoadingVisualRefs::from_last_startup_config_or_default();
     let components = spec.components(status, progress, frame_index, &visuals);
     if !spec.is_error() && frame_index <= 3 {
-        newengine_ulog_api::ulog::warn!(
+        newengine_ulog_api::ulog::debug!(
             "loading overlay production visuals: frame={} source='{}' background={} logo={} spinner={} components={} image_layers={}",
             frame_index,
             visuals.source,

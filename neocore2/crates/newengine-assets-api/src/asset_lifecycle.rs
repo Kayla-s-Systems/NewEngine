@@ -281,6 +281,9 @@ pub trait AssetService: AssetAccess {
     fn import_graph_json_v1(&self, payload: serde_json::Value)
         -> Result<serde_json::Value, String>;
 
+    /// Full provider-neutral runtime graph projection for dependency-aware hot reload.
+    fn runtime_graph_json_v1(&self) -> Result<crate::AssetRuntimeGraphV1, String>;
+
     /// Human-readable import diagnostics.
     fn import_diagnostics_json_v1(
         &self,

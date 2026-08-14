@@ -1,7 +1,7 @@
 use super::foliage::terrain_height;
 use super::*;
 
-const MISSION_MATERIAL_LIBRARY: &str = "materials/world_game_ready.nemat";
+const MISSION_MATERIAL_LIBRARY: &str = newengine_game_data::MISSION_MATERIAL_LIBRARY;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(super) struct GameReadyMissionSpawnSummary {

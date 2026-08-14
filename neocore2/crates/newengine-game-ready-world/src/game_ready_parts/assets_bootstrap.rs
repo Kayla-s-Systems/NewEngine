@@ -7,308 +7,102 @@ use super::terrain_streaming::spawn_procedural_terrain;
 use super::world_model::begin_static_world_prefabs;
 use super::ytyp_metadata::{apply_game_ready_ytyp_metadata, resolve_game_ready_asset_graph};
 use super::*;
+use newengine_game_data::{GameData, GameDataSnapshot};
 
 use self::mesh_assets::ensure_skydome_primitive;
 
 mod mesh_assets;
 
-pub(super) fn spawn_sky_visual(
-    world: &mut newengine_ecs::World,
-    prims: &PrimitiveRegistry,
-    mats: &MaterialRegistry,
-    root: EntityId,
-    material_id: MaterialId,
-    primitive_id: PrimitiveId,
-    spec: &GameReadySkySpec,
-    kind: SkyVisualKind,
-    dome_color: [f32; 4],
-) -> EntityId {
-    let color = kind.initial_color(dome_color);
-    let entity = spawn_game_primitive(
-        world,
-        prims,
-        mats,
-        PrimitiveSpawnSpec {
-            parent: root,
-            primitive_id,
-            material_id,
-            name: kind.entity_name(),
-            position: Vec3::ZERO,
-            scale: Vec3::splat(kind.initial_radius(spec).max(0.1)),
-            color,
-            render_options: spec.render_options.clone(),
-        },
-    );
-    attach_sky_visual_runtime(
-        world,
-        mats,
-        entity,
-        material_id,
-        kind,
-        color,
-        (!spec.definition_ref.trim().is_empty()).then(|| spec.definition_ref.clone()),
-        (!spec.mesh.trim().is_empty()).then(|| spec.mesh.clone()),
-        spec.render_options.clone(),
-    );
-    newengine_engine_runtime::gameplay::attach_scene_element_core(
-        world,
-        entity,
-        newengine_engine_runtime::gameplay::SceneEntityRole::SkyDome,
-        "Scene/Environment/SkyDome",
-        Vec3::ZERO,
-        Vec3::splat(kind.initial_radius(spec).max(0.1)),
-    );
-    entity
-}
+#[path = "assets_bootstrap_definitions.rs"]
+mod definitions;
+#[path = "assets_bootstrap_layout.rs"]
+mod layout;
+#[path = "assets_bootstrap_rules.rs"]
+mod rules;
+#[path = "assets_bootstrap_sky.rs"]
+mod sky_visual;
 
-pub(super) fn spawn_skydome(
-    world: &mut newengine_ecs::World,
-    prims: &mut PrimitiveRegistry,
-    mats: &MaterialRegistry,
-    materials: DemoMaterials,
-    root: EntityId,
-    spec: &GameReadySkySpec,
-    color: [f32; 4],
-) {
-    let Some(primitive_id) = ensure_skydome_primitive(prims, &spec.mesh) else {
-        world.insert_resource(sky_atmosphere_from_spec(spec));
-        tick_game_ready_sky_cycle(world, 0.0);
-        return;
-    };
+use definitions::instantiate_game_ready_definitions;
+use layout::{spawn_authored_terrain_reference, spawn_game_ready_scene_entity_layout};
+use rules::to_fps_demo_rules;
+use sky_visual::spawn_skydome;
 
-    world.insert_resource(sky_atmosphere_from_spec(spec));
-
-    for kind in SKY_VISUAL_SPAWN_ORDER {
-        let material_id = materials.sky_visual_material(kind);
-        let _ = spawn_sky_visual(
-            world,
-            &*prims,
-            mats,
-            root,
-            material_id,
-            kind.primitive_id(primitive_id),
-            spec,
-            kind,
-            color,
-        );
-    }
-
-    tick_game_ready_sky_cycle(world, 0.0);
-
-    newengine_ulog_api::ulog::info!(
-        "game-ready skydome: follow_camera={} radius={:.1} mesh='{}' clouds='{}' profile='{}' celestial_visuals='procedural_in_sky_shader'",
-        spec.follow_camera,
-        spec.radius,
-        spec.mesh,
-        spec.cloud_dictionary,
-        spec.cloud_profile,
-    );
-}
-
-pub(super) fn to_fps_demo_rules(
-    spec: &GameReadyGameplaySpec,
-    model: &self::content::GameReadyPlayerModelSpec,
-) -> FpsDemoRules {
-    let default_player = FpsPlayerTuning::default();
-    let base = FpsPlayerTuning {
-        body_radius: spec.player_collision.radius,
-        body_half_height: spec.player_collision.half_height,
-        crouched_body_half_height: default_player.crouched_body_half_height,
-        visual_radius: spec.player_visual.radius,
-        visual_half_height: spec.player_visual.half_height,
-        camera_eye_height: spec.player_visual.camera_eye_height,
-        crouched_camera_eye_height: default_player.crouched_camera_eye_height,
-        crouch_camera_speed: default_player.crouch_camera_speed,
-        sprint_multiplier: spec.player_visual.sprint_multiplier,
-        jump_speed: default_player.jump_speed,
-        gravity: spec.physics.gravity,
-        contact_skin: spec.physics.contact_skin,
-        ground_probe_distance: default_player.ground_probe_distance,
-        max_slope_radians: default_player.max_slope_radians,
-        footstep_stride: default_player.footstep_stride,
-        landing_speed_threshold: default_player.landing_speed_threshold,
-    }
-    .sanitized();
-    let feet_to_eye = model.target_height * model.eye_height_ratio;
-    let model_eye_offset_from_player_origin =
-        feet_to_eye - (base.body_half_height + base.body_radius);
-    let player = FpsPlayerTuning {
-        camera_eye_height: model_eye_offset_from_player_origin.clamp(0.05, model.target_height),
-        ..base
-    }
-    .sanitized();
-
-    FpsDemoRules {
-        default_status: spec.default_status.clone(),
-        pickup_status: spec.pickup_status.clone(),
-        target_status: spec.target_status.clone(),
-        hazard_status: spec.hazard_status.clone(),
-        goal_locked_status: spec.goal_locked_status.clone(),
-        goal_complete_status: spec.goal_complete_status.clone(),
-        failed_progress_label: spec.failed_progress_label.clone(),
-        completed_progress_label: spec.completed_progress_label.clone(),
-        player,
-    }
-}
-
-#[derive(Clone, Copy, Debug)]
-struct GameReadySceneEntityLayout {
-    environment: EntityId,
-    terrain: EntityId,
-    foliage: EntityId,
-    definitions: EntityId,
-    actors: EntityId,
-    cameras: EntityId,
-}
-
-fn spawn_scene_layout_node(
-    world: &mut newengine_ecs::World,
-    parent: EntityId,
-    name: &'static str,
-    role: newengine_engine_runtime::gameplay::SceneEntityRole,
-) -> EntityId {
-    let entity = spawn_named(world, name);
-    let _ = set_parent(world, entity, Some(parent));
-    newengine_engine_runtime::gameplay::attach_scene_element_core(
-        world,
-        entity,
-        role,
-        name,
-        Vec3::ZERO,
-        Vec3::splat(0.25),
-    );
-    entity
-}
-
-fn spawn_game_ready_scene_entity_layout(
-    world: &mut newengine_ecs::World,
-    root: EntityId,
-) -> GameReadySceneEntityLayout {
-    let layout = GameReadySceneEntityLayout {
-        environment: spawn_scene_layout_node(
-            world,
-            root,
-            "Scene/Environment",
-            newengine_engine_runtime::gameplay::SceneEntityRole::Environment,
-        ),
-        terrain: spawn_scene_layout_node(
-            world,
-            root,
-            "Scene/Terrain",
-            newengine_engine_runtime::gameplay::SceneEntityRole::Terrain,
-        ),
-        foliage: spawn_scene_layout_node(
-            world,
-            root,
-            "Scene/Foliage",
-            newengine_engine_runtime::gameplay::SceneEntityRole::Foliage,
-        ),
-        definitions: spawn_scene_layout_node(
-            world,
-            root,
-            "Scene/Definitions",
-            newengine_engine_runtime::gameplay::SceneEntityRole::Definitions,
-        ),
-        actors: spawn_scene_layout_node(
-            world,
-            root,
-            "Scene/Actors",
-            newengine_engine_runtime::gameplay::SceneEntityRole::Actors,
-        ),
-        cameras: spawn_scene_layout_node(
-            world,
-            root,
-            "Scene/Cameras",
-            newengine_engine_runtime::gameplay::SceneEntityRole::Cameras,
-        ),
-    };
-    newengine_ulog_api::ulog::info!(
-        "game-ready scene layout: all authored scene elements are ordinary ECS entities environment={:?} terrain={:?} foliage={:?} definitions={:?} actors={:?} cameras={:?} policy='no special scene side-channel elements'",
-        layout.environment,
-        layout.terrain,
-        layout.foliage,
-        layout.definitions,
-        layout.actors,
-        layout.cameras
-    );
-    layout
-}
-
-fn spawn_authored_terrain_reference(
-    world: &mut newengine_ecs::World,
-    parent: EntityId,
-    spec: &GameReadyTerrainSpec,
-) -> EntityId {
-    let entity = spawn_named(world, "Scene/Terrain/AuthoredWorldReference");
-    let _ = set_parent(world, entity, Some(parent));
-    let _ = world.insert(
-        entity,
-        Transform {
-            position: Vec3::new(0.0, spec.base_height, 0.0),
-            rotation: Quat::IDENTITY,
-            scale: Vec3::ONE,
-        },
-    );
-    newengine_ulog_api::ulog::info!(
-        "game-ready terrain: procedural terrain disabled; authored world reference entity={:?} base_height={} policy='no default terrain mesh, no default terrain collider'",
-        entity,
-        spec.base_height
-    );
-    entity
-}
-
-pub(super) fn instantiate_game_ready_definitions(
-    world: &mut newengine_ecs::World,
-    root: EntityId,
-    definitions: &[GameReadyDefinitionInstanceSpec],
-) {
-    if definitions.is_empty() {
-        return;
-    }
-    newengine_ulog_api::ulog::debug!(
-        "definitions.runtime: game-ready definition batch count={} policy='.ymap placements declare apply_mode; .ytyp dependencies are graph inputs, not implicit render/spawn commands'",
-        definitions.len()
-    );
-    for spec in definitions {
-        let graph = resolve_game_ready_asset_graph(&spec.definition_ref).unwrap_or_else(|| {
-            newengine_model_domain_api::AssetGraphResolver::resolve_root_ref(&spec.definition_ref)
-        });
-        if matches!(spec.apply_mode, GameReadyDefinitionApplyMode::MetadataOnly) {
-            newengine_ulog_api::ulog::debug!(
-                "definitions.runtime: metadata-only definition_ref='{}' nodes={} missing={} apply_mode='{}' policy='domain systems consume engine.assets.definitions/engine.assets.graph explicitly; no generic ECS/render marker spawned'",
-                spec.definition_ref,
-                graph.nodes.len(),
-                graph.missing_refs.len(),
-                spec.apply_mode.as_str()
-            );
-            continue;
+#[inline]
+fn game_data_color(value: [f32; 3], fallback: [f32; 3]) -> [f32; 3] {
+    let mut out = value;
+    for (channel, fallback_channel) in out.iter_mut().zip(fallback) {
+        if !channel.is_finite() {
+            *channel = fallback_channel;
         }
+        *channel = channel.clamp(0.0, 1.0);
+    }
+    out
+}
 
-        let transform = newengine_engine_runtime::world_authoring::DefinitionInstantiateTransform {
-            translation: [spec.position.x, spec.position.y, spec.position.z],
-            rotation_ypr: spec.rotation_ypr,
-            scale: [spec.scale.x, spec.scale.y, spec.scale.z],
-        };
-        let (entity, trace) = newengine_engine_runtime::world_authoring::instantiate_definition(
-            world,
-            Some(root),
-            spec.definition_ref.clone(),
-            transform,
-            graph,
-        );
-        newengine_ulog_api::ulog::debug!(
-            "definitions.runtime: instantiated marker definition_ref='{}' entity={:?} nodes={} missing={} render_drawables={} materials={} textures={} physics_refs={} result='{}' apply_mode='{}'",
-            trace.definition_ref,
-            entity,
-            trace.resolved_graph.nodes.len(),
-            trace.resolved_graph.missing_refs.len(),
-            trace.render_packet_request.drawable_refs.len(),
-            trace.render_packet_request.material_refs.len(),
-            trace.render_packet_request.texture_refs.len(),
-            trace.physics_declaration.collision_refs.len() + trace.physics_declaration.physics_refs.len(),
-            trace.apply_result,
-            spec.apply_mode.as_str()
-        );
+#[inline]
+fn game_data_direction(value: [f32; 3], fallback: [f32; 3]) -> [f32; 3] {
+    let candidate = Vec3::new(value[0], value[1], value[2]);
+    let direction = if candidate.is_finite() && candidate.length_squared() > 1.0e-6 {
+        candidate.normalize_or_zero()
+    } else {
+        Vec3::new(fallback[0], fallback[1], fallback[2]).normalize_or_zero()
+    };
+    [direction.x, direction.y, direction.z]
+}
+
+#[inline]
+fn game_data_shadow_filter(value: &str) -> newengine_lighting::ShadowFilter {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "hard" | "none" => newengine_lighting::ShadowFilter::Hard,
+        "pcf" => newengine_lighting::ShadowFilter::Pcf,
+        "pcss" => newengine_lighting::ShadowFilter::Pcss,
+        _ => newengine_lighting::ShadowFilter::Pcf,
+    }
+}
+
+/// Provider-produced GameData is authoritative for runtime lighting policy.
+/// YMAP/YTYP still owns scene content/metadata, but built-in GameReady defaults
+/// must not silently replace project shadow/day-night settings.
+#[inline]
+fn game_data_lighting_spec(data: &GameData) -> GameReadyLightingSpec {
+    let lighting = &data.world.lighting;
+    let shadows = &data.world.shadows;
+    let day_night = data.world.day_night;
+    GameReadyLightingSpec {
+        ambient_color: game_data_color(lighting.ambient_color, [0.42, 0.47, 0.56]),
+        ambient_intensity: lighting.ambient_intensity.clamp(0.0, 8.0),
+        sun_direction: game_data_direction(lighting.sun_direction, [-0.55, -0.82, -0.28]),
+        sun_color: game_data_color(lighting.sun_color, [1.0, 0.955, 0.86]),
+        sun_intensity: lighting.sun_intensity.clamp(0.0, 32.0),
+        shadows: GameReadyShadowSpec {
+            enabled: shadows.enabled,
+            resolution: shadows.resolution.clamp(256, 8192),
+            cascade_count: shadows.cascade_count.clamp(1, 4),
+            max_distance: shadows.max_distance.clamp(1.0, 1000.0),
+            softness: shadows.softness.clamp(0.0, 16.0),
+            bias: shadows.bias.clamp(0.0, 0.1),
+            normal_bias: shadows.normal_bias.clamp(0.0, 0.5),
+            contact_strength: shadows.contact_strength.clamp(0.0, 1.0),
+            filter: game_data_shadow_filter(&shadows.filter),
+            pcss: newengine_lighting::ShadowPcssSettings {
+                light_angular_radius_degrees: shadows.pcss_light_angular_radius_degrees,
+                blocker_search_radius_texels: shadows.pcss_blocker_search_radius_texels,
+                max_filter_radius_texels: shadows.pcss_max_filter_radius_texels,
+                blocker_samples: shadows.pcss_blocker_samples,
+                filter_samples: shadows.pcss_filter_samples,
+                min_filter_radius_texels: shadows.pcss_min_filter_radius_texels,
+                stable_kernel_cell_texels: shadows.pcss_stable_kernel_cell_texels,
+            }
+            .sanitized(),
+        },
+        day_night: GameReadyDayNightSpec {
+            enabled: day_night.enabled,
+            time_of_day_hours: day_night.time_of_day_hours.rem_euclid(24.0),
+            day_length_seconds: day_night.day_length_seconds.clamp(30.0, 86_400.0),
+            day_of_year: day_night.day_of_year.clamp(1, 366),
+            latitude_degrees: day_night.latitude_degrees.clamp(-89.0, 89.0),
+            axial_tilt_degrees: day_night.axial_tilt_degrees.clamp(-45.0, 45.0),
+        },
     }
 }
 
@@ -316,6 +110,7 @@ pub(crate) fn bootstrap_game_ready_world_scene_impl(
     scene: &mut Scene,
     prims: &mut PrimitiveRegistry,
     mats: &MaterialRegistry,
+    game_data: GameDataSnapshot,
 ) -> Option<EntityId> {
     *scene = Scene::new();
     bootstrap_runtime_scene(scene);
@@ -337,10 +132,19 @@ pub(crate) fn bootstrap_game_ready_world_scene_impl(
         }
     };
     apply_game_ready_ytyp_metadata(&mut map);
+    // Apply project/provider data before any light or sky entity is constructed.
+    map.lighting = game_data_lighting_spec(game_data.data());
     let materials = register_demo_materials(mats, &map.palette, &map.materials);
     let world = scene.world_mut();
+    newengine_ulog_api::ulog::info!(
+        "game-ready game-data snapshot installed source='{}' schema='{}' version={}",
+        game_data.source_id(),
+        game_data.data().schema,
+        game_data.data().version,
+    );
+    world.insert_resource(game_data.clone());
 
-    let rules = to_fps_demo_rules(&map.gameplay, &map.player.model);
+    let rules = to_fps_demo_rules(&map.gameplay, &map.player.model, game_data.data());
     world.insert_resource(rules.clone());
     world.insert_resource(WorldActivationState::new(
         "waiting for CPU scene assembly and GPU material residency",
@@ -533,4 +337,43 @@ pub(crate) fn bootstrap_game_ready_world_scene_impl(
         );
     }
     Some(player)
+}
+
+#[cfg(test)]
+mod game_data_lighting_tests {
+    use super::*;
+
+    #[test]
+    fn project_game_data_is_authoritative_for_shadow_quality() {
+        let mut data = newengine_game_data::default_game_data().clone();
+        data.world.lighting.sun_intensity = 3.25;
+        data.world.shadows.cascade_count = 1;
+        data.world.shadows.max_distance = 96.0;
+        data.world.shadows.filter = "pcf".to_owned();
+        data.world.day_night.time_of_day_hours = 11.5;
+
+        let spec = game_data_lighting_spec(&data);
+        assert_eq!(spec.shadows.cascade_count, 1);
+        assert_eq!(spec.shadows.max_distance, 96.0);
+        assert_eq!(spec.shadows.filter, newengine_lighting::ShadowFilter::Pcf);
+        assert_eq!(spec.sun_intensity, 3.25);
+        assert_eq!(spec.day_night.time_of_day_hours, 11.5);
+    }
+
+    #[test]
+    fn project_game_data_lighting_is_sanitized_before_runtime_install() {
+        let mut data = newengine_game_data::default_game_data().clone();
+        data.world.shadows.cascade_count = 99;
+        data.world.shadows.max_distance = 50_000.0;
+        data.world.shadows.filter = "unknown".to_owned();
+        data.world.day_night.day_of_year = 999;
+        data.world.day_night.latitude_degrees = 120.0;
+
+        let spec = game_data_lighting_spec(&data);
+        assert_eq!(spec.shadows.cascade_count, 4);
+        assert_eq!(spec.shadows.max_distance, 1000.0);
+        assert_eq!(spec.shadows.filter, newengine_lighting::ShadowFilter::Pcf);
+        assert_eq!(spec.day_night.day_of_year, 366);
+        assert_eq!(spec.day_night.latitude_degrees, 89.0);
+    }
 }

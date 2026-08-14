@@ -23,6 +23,21 @@ macro_rules! listfile_spec {
     };
 }
 
+macro_rules! module_spec {
+    ($format:ident) => {
+        Nef8FormatSpec {
+            extension: $format::EXTENSION,
+            asset_kind: $format::ASSET_KIND,
+            content_kind: Some($format::CONTENT_KIND),
+            semantic_gateway: $format::SEMANTIC_GATEWAY,
+            handler_service: $format::HANDLER_SERVICE,
+            selector_syntax: None,
+            purpose: $format::PURPOSE,
+            consumer_domains: $format::CONSUMER_DOMAINS,
+        }
+    };
+}
+
 macro_rules! package_spec {
     ($format:ident) => {
         Nef8FormatSpec {
@@ -56,7 +71,7 @@ const FORMAT_SPECS: &[Nef8FormatSpec] = &[
     listfile_spec!(ymf),
     listfile_spec!(ymt),
     listfile_spec!(ypdb),
-    listfile_spec!(ysc),
+    module_spec!(ysc),
     listfile_spec!(ytd),
     listfile_spec!(ytf),
     listfile_spec!(ytyp),

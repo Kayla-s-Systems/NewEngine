@@ -3,10 +3,41 @@ use super::Engine;
 use crate::error::{EngineError, EngineResult, ModuleStage};
 use crate::frame::Frame;
 
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 const MAX_ENGINE_FIXED_STEPS_PER_FRAME: u32 = 4;
 const FIXED_CATCHUP_WARN_INTERVAL_FRAMES: u64 = 300;
+
+/// Lightweight per-frame CPU phase timings published through `Resources`.
+///
+/// This intentionally measures coarse engine orchestration boundaries rather
+/// than every module/plugin callback. It keeps the hot path allocation-free
+/// while giving the external profiler enough information to localize frame
+/// pacing spikes.
+#[derive(Debug, Clone, Default)]
+pub struct EngineFrameTimingTelemetry {
+    pub frame_index: u64,
+    pub fixed_steps: u32,
+    pub total_ms: f64,
+    pub time_begin_ms: f64,
+    pub plugin_control_ms: f64,
+    pub fixed_time_ms: f64,
+    pub fixed_scheduler_ms: f64,
+    pub fixed_plugins_ms: f64,
+    pub fixed_modules_ms: f64,
+    pub update_scheduler_ms: f64,
+    pub update_plugins_ms: f64,
+    pub update_modules_ms: f64,
+    pub render_scheduler_ms: f64,
+    pub render_plugins_ms: f64,
+    pub render_modules_ms: f64,
+    pub scheduler_end_ms: f64,
+}
+
+#[inline]
+fn elapsed_ms(started: Instant) -> f64 {
+    started.elapsed().as_secs_f64() * 1000.0
+}
 
 use newengine_time_api::{
     time_method, TimeBeginFrameRequestV1, TimeSnapshotV1, ENGINE_TIME_SERVICE_ID,
@@ -92,7 +123,15 @@ impl<E: Send + 'static> Engine<E> {
             )));
         }
 
+        let engine_frame_started = Instant::now();
+        let mut timing = EngineFrameTimingTelemetry {
+            frame_index: self.frame_index,
+            ..EngineFrameTimingTelemetry::default()
+        };
+
+        let phase_started = Instant::now();
         let time_snapshot = self.begin_time_frame_snapshot()?;
+        timing.time_begin_ms = elapsed_ms(phase_started);
         // Keep the wall-clock anchor read-only until the Engine struct is
         // trimmed; frame time itself is now owned by engine.time.
         let _wall_clock_anchor = self.last;
@@ -104,8 +143,10 @@ impl<E: Send + 'static> Engine<E> {
         self.thread_pool.begin_configured_frame_budget();
         self.scheduler.begin_frame(frame_dt);
 
+        let phase_started = Instant::now();
         self.process_plugin_control()?;
         self.expose_plugins_snapshot();
+        timing.plugin_control_ms = elapsed_ms(phase_started);
 
         let mut steps_to_run = time_snapshot.simulation.ticks_to_run;
         if steps_to_run > MAX_ENGINE_FIXED_STEPS_PER_FRAME {
@@ -131,7 +172,9 @@ impl<E: Send + 'static> Engine<E> {
                 return Err(EngineError::ExitRequested);
             }
 
+            let phase_started = Instant::now();
             let fixed_snapshot = advance_time_fixed_snapshot()?;
+            timing.fixed_time_ms += elapsed_ms(phase_started);
             self.fixed_tick = fixed_snapshot.simulation.tick;
             self.acc = fixed_snapshot.simulation.accumulator_ns as f32 / 1_000_000_000.0;
 
@@ -145,19 +188,26 @@ impl<E: Send + 'static> Engine<E> {
                 fixed_tick: self.fixed_tick,
             };
 
+            let phase_started = Instant::now();
             self.scheduler
                 .run_fixed_update(Duration::from_secs_f32(self.fixed_dt));
+            timing.fixed_scheduler_ms += elapsed_ms(phase_started);
 
+            let phase_started = Instant::now();
             if let Err(e) = self.plugins.fixed_update_all(self.fixed_dt) {
                 return Err(EngineError::Other(format!(
                     "plugins: fixed_update failed: {e}"
                 )));
             }
+            timing.fixed_plugins_ms += elapsed_ms(phase_started);
 
+            let phase_started = Instant::now();
             self.run_stage(&fixed_frame, ModuleStage::FixedUpdate, |m, ctx| {
                 m.fixed_update(ctx)
             })?;
+            timing.fixed_modules_ms += elapsed_ms(phase_started);
         }
+        timing.fixed_steps = steps_to_run;
 
         let frame = Frame {
             frame_index: self.frame_index,
@@ -169,21 +219,39 @@ impl<E: Send + 'static> Engine<E> {
             fixed_tick: self.fixed_tick,
         };
 
+        let phase_started = Instant::now();
         self.scheduler.run_update(frame_dt);
+        timing.update_scheduler_ms = elapsed_ms(phase_started);
 
+        let phase_started = Instant::now();
         if let Err(e) = self.plugins.update_all(dt) {
             return Err(EngineError::Other(format!("plugins: update failed: {e}")));
         }
+        timing.update_plugins_ms = elapsed_ms(phase_started);
+
+        let phase_started = Instant::now();
         self.run_stage(&frame, ModuleStage::Update, |m, ctx| m.update(ctx))?;
+        timing.update_modules_ms = elapsed_ms(phase_started);
 
+        let phase_started = Instant::now();
         self.scheduler.run_render(frame_dt);
+        timing.render_scheduler_ms = elapsed_ms(phase_started);
 
+        let phase_started = Instant::now();
         if let Err(e) = self.plugins.render_all(dt) {
             return Err(EngineError::Other(format!("plugins: render failed: {e}")));
         }
-        self.run_stage(&frame, ModuleStage::Render, |m, ctx| m.render(ctx))?;
+        timing.render_plugins_ms = elapsed_ms(phase_started);
 
+        let phase_started = Instant::now();
+        self.run_stage(&frame, ModuleStage::Render, |m, ctx| m.render(ctx))?;
+        timing.render_modules_ms = elapsed_ms(phase_started);
+
+        let phase_started = Instant::now();
         self.scheduler.end_frame(frame_dt);
+        timing.scheduler_end_ms = elapsed_ms(phase_started);
+        timing.total_ms = elapsed_ms(engine_frame_started);
+        self.resources.insert(timing);
         self.frame_index = self.frame_index.wrapping_add(1);
 
         Ok(frame)

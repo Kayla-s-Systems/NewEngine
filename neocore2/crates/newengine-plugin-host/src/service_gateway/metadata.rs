@@ -1,5 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
+use super::provider_route_extends_gateway_parent;
 use newengine_plugin_api::{CapabilityDesc, CapabilityKind, CapabilityRole, PluginDescriptor};
 use newengine_service_api::{
     engine_gateway_domain, engine_gateway_matches_service_kind, is_engine_service_gateway_id,
@@ -73,27 +74,6 @@ fn service_kind_matches_gateway(
     // identities such as `engine.ui.<provider>` belong in descriptor metadata
     // (`provider_route`), not in the gateway tree.
     engine_gateway_matches_service_kind(gateway_id, service_kind)
-}
-
-#[inline]
-fn provider_route_extends_gateway_parent(gateway_id: &str, provider_route_id: &str) -> bool {
-    if provider_route_id == gateway_id {
-        return false;
-    }
-    let gateway_parts = gateway_id.split('.').collect::<Vec<_>>();
-    let provider_parts = provider_route_id.split('.').collect::<Vec<_>>();
-    if gateway_parts.len() < 2 || provider_parts.len() <= gateway_parts.len() {
-        return false;
-    }
-    if gateway_parts.first() != Some(&"engine") || provider_parts.first() != Some(&"engine") {
-        return false;
-    }
-
-    // Provider route is implementation metadata below the declared engine API
-    // gateway. Both root gateways (`engine.render.vulkan`) and child gateways
-    // (`engine.input.bindings.provider`) must extend the declared gateway, not
-    // reshuffle child-domain segments around a provider name.
-    provider_parts.starts_with(&gateway_parts)
 }
 
 pub(crate) fn gateway_capability_from_capability(

@@ -32,8 +32,8 @@ use publish::publish_inventory_hud_state;
 #[cfg(test)]
 use state::inventory_hud_is_visible;
 use state::{
-    ensure_inventory_hud_state, inventory_hud_is_open, InventoryDragState, InventoryHudState,
-    INVENTORY_HUD_CONTRACT, INVENTORY_HUD_SURFACE_ID, INVENTORY_SLOT_COUNT,
-    INVENTORY_UI_ACTION_DROP, INVENTORY_UI_ACTION_EQUIPMENT, INVENTORY_UI_ACTION_HOTBAR,
-    INVENTORY_UI_ACTION_SLOT, INVENTORY_UI_ACTION_TOGGLE,
+    ensure_inventory_hud_state, inventory_hud_is_open, inventory_slot_count, InventoryDragState,
+    InventoryHudState, INVENTORY_HUD_CONTRACT, INVENTORY_HUD_SURFACE_ID, INVENTORY_UI_ACTION_DROP,
+    INVENTORY_UI_ACTION_EQUIPMENT, INVENTORY_UI_ACTION_HOTBAR, INVENTORY_UI_ACTION_SLOT,
+    INVENTORY_UI_ACTION_TOGGLE,
 };

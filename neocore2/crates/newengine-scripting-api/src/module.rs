@@ -24,7 +24,7 @@ pub type ScriptingModuleState = ScriptModuleState;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ScriptModuleRef {
-    /// Canonical runtime asset selector, usually `scripts/foo.ysc@entry`.
+    /// Canonical runtime script-module asset, usually `scripts/foo.ysc`.
     pub reference: String,
     /// Optional normalized module id used by tooling/runtime caches. It does not
     /// imply any language/runtime identity.
@@ -52,8 +52,9 @@ impl ScriptModuleRef {
     }
 
     #[inline]
-    pub fn is_ysc_entry_ref(&self) -> bool {
-        self.reference.to_ascii_lowercase().contains(".ysc@")
+    pub fn is_ysc_module_ref(&self) -> bool {
+        let reference = self.reference.trim().to_ascii_lowercase();
+        !reference.contains('@') && reference.ends_with(".ysc")
     }
 }
 
@@ -102,7 +103,7 @@ pub type ScriptingPermission = ScriptPermission;
 #[serde(default)]
 pub struct ScriptingModuleLoadBytesRequest {
     pub module_ref: ScriptingModuleRef,
-    /// Raw selected `.ysc@entry` bytes or provider-specific module bytes. Core
+    /// Raw `.ysc` module body bytes or provider-specific module bytes. Core
     /// stores/forwards these bytes and does not interpret them.
     pub module_bytes: Vec<u8>,
     pub permissions: Vec<ScriptingPermission>,

@@ -14,21 +14,27 @@ pub(super) fn editor_layout_metrics(
     let toolbar_h = 34.0;
     let status_h = 20.0;
     let gap = 5.0;
-    let bottom_visible = !hidden_panels.contains("bottom.asset_browser");
-    let left_visible = !hidden_panels.contains("left.scene_tree");
-    let right_visible = !hidden_panels.contains("right.inspector");
+    // Responsive editor chrome. Persistent panel visibility remains user-owned, but
+    // the runtime may temporarily collapse lower-priority docks when the window cannot
+    // fit them without stealing the viewport. Resizing back restores them automatically.
+    let compact_width = w < 1_180.0;
+    let narrow_width = w < 860.0;
+    let short_height = h < 620.0;
+    let bottom_visible = !hidden_panels.contains("bottom.asset_browser") && !short_height;
+    let left_visible = !hidden_panels.contains("left.scene_tree") && !narrow_width;
+    let right_visible = !hidden_panels.contains("right.inspector") && !compact_width;
     let bottom_h = if bottom_visible {
-        (h * 0.24).clamp(176.0, 235.0)
+        (h * 0.24).clamp(148.0, 235.0)
     } else {
         0.0
     };
     let left_w = if left_visible {
-        (w * 0.15).clamp(210.0, 268.0)
+        (w * 0.15).clamp(184.0, 268.0)
     } else {
         0.0
     };
     let right_w = if right_visible {
-        (w * 0.21).clamp(286.0, 362.0)
+        (w * 0.21).clamp(252.0, 362.0)
     } else {
         0.0
     };
@@ -43,17 +49,16 @@ pub(super) fn editor_layout_metrics(
             } else {
                 1.0
             })
-    .max(360.0);
+    .max(1.0);
     let viewport_h = (h
         - menu_h
         - toolbar_h
         - status_h
         - bottom_h
         - gap * if bottom_visible { 3.0 } else { 2.0 })
-    .max(180.0);
+    .max(96.0);
     let bottom_y = h - bottom_h - status_h - gap;
     let hovered_dock_slot = hovered_dock_slot_from_dispatch(resources);
-    let hovered_runtime_mode = hovered_runtime_mode_from_dispatch(resources);
     let hovered_menu_id = hovered_menu_id_from_dispatch(resources);
     EditorLayoutMetrics {
         screen_w: w,
@@ -74,7 +79,6 @@ pub(super) fn editor_layout_metrics(
         right_visible,
         bottom_visible,
         hovered_dock_slot,
-        hovered_runtime_mode,
         hovered_menu_id,
     }
 }
@@ -112,17 +116,6 @@ pub(super) fn hovered_dock_slot_from_dispatch(resources: &Resources) -> Option<&
     ]
     .into_iter()
     .find(|slot| *slot == slot_id)
-}
-
-pub(super) fn hovered_runtime_mode_from_dispatch(
-    resources: &Resources,
-) -> Option<UiEditorRuntimeMode> {
-    let action_id = hovered_action_id(resources)?;
-    EDITOR_CHROME
-        .runtime_actions
-        .iter()
-        .find(|action| action.action_id == action_id)
-        .map(|action| action.mode)
 }
 
 pub(super) fn hovered_menu_id_from_dispatch(resources: &Resources) -> Option<&'static str> {
@@ -311,4 +304,84 @@ pub(super) fn compact_json(value: &Value) -> String {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct EditorScreen {
     pub(super) descriptor: UiScreenProfileDescriptor,
+}
+
+#[inline]
+pub(super) fn editor_runtime_projection(
+    state: &RuntimeSessionState,
+) -> (UiEditorRuntimeMode, bool) {
+    let mode = match state.mode {
+        Some(RuntimeSessionMode::Simulate) => UiEditorRuntimeMode::Simulate,
+        Some(RuntimeSessionMode::Play) => UiEditorRuntimeMode::Play,
+        None => UiEditorRuntimeMode::Edit,
+    };
+    (mode, state.is_paused())
+}
+
+#[inline]
+pub(super) fn editor_command_context(state: &RuntimeSessionState) -> EditorCommandContext {
+    EditorCommandContext {
+        runtime_active: state.is_active(),
+        runtime_paused: state.is_paused(),
+        runtime_playing: state.mode == Some(RuntimeSessionMode::Play),
+        runtime_possessed: state.is_possessed(),
+    }
+}
+
+pub(super) fn runtime_session_command_from_editor_command(
+    command_id: &str,
+) -> Option<RuntimeSessionCommand> {
+    Some(match command_id {
+        editor_command::RUNTIME_STOP => RuntimeSessionCommand::Stop,
+        editor_command::RUNTIME_SIMULATE => RuntimeSessionCommand::Start {
+            mode: RuntimeSessionMode::Simulate,
+        },
+        editor_command::RUNTIME_PLAY => RuntimeSessionCommand::Start {
+            mode: RuntimeSessionMode::Play,
+        },
+        editor_command::RUNTIME_PAUSE => RuntimeSessionCommand::TogglePause,
+        editor_command::RUNTIME_RESTART => RuntimeSessionCommand::Restart,
+        editor_command::RUNTIME_EJECT => RuntimeSessionCommand::Eject,
+        editor_command::RUNTIME_POSSESS => RuntimeSessionCommand::Possess,
+        editor_command::RUNTIME_APPLY_CHANGES => RuntimeSessionCommand::ApplyChangesAndStop,
+        editor_command::RUNTIME_STEP => RuntimeSessionCommand::Step { frames: 1 },
+        _ => return None,
+    })
+}
+
+#[cfg(test)]
+mod responsive_layout_tests {
+    use super::*;
+
+    fn metrics(width: u32, height: u32) -> EditorLayoutMetrics {
+        let mut resources = Resources::default();
+        resources.insert(WindowInitSize { width, height });
+        editor_layout_metrics(&resources, &BTreeSet::new())
+    }
+
+    #[test]
+    fn responsive_editor_layout_keeps_full_docks_on_desktop() {
+        let layout = metrics(1600, 900);
+        assert!(layout.left_visible);
+        assert!(layout.right_visible);
+        assert!(layout.bottom_visible);
+        assert!(layout.viewport_x + layout.viewport_w <= layout.screen_w + 0.01);
+        assert!(layout.viewport_y + layout.viewport_h <= layout.bottom_y + 0.01);
+    }
+
+    #[test]
+    fn responsive_editor_layout_sheds_docks_before_viewport_overflows() {
+        let compact = metrics(1024, 720);
+        assert!(compact.left_visible);
+        assert!(!compact.right_visible);
+        assert!(compact.bottom_visible);
+        assert!(compact.viewport_x + compact.viewport_w <= compact.screen_w + 0.01);
+
+        let narrow = metrics(800, 600);
+        assert!(!narrow.left_visible);
+        assert!(!narrow.right_visible);
+        assert!(!narrow.bottom_visible);
+        assert!(narrow.viewport_x + narrow.viewport_w <= narrow.screen_w + 0.01);
+        assert!(narrow.viewport_y + narrow.viewport_h <= narrow.screen_h - narrow.status_h + 0.01);
+    }
 }

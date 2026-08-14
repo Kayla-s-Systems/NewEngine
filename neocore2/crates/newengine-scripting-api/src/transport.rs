@@ -51,7 +51,7 @@ impl Default for ScriptingServiceInfo {
             backend: "none".to_owned(),
             features: vec![
                 "binary-request-response".to_owned(),
-                "ysc-entry-bytes".to_owned(),
+                "ysc-module-bytes".to_owned(),
                 "provider-owned-interpretation".to_owned(),
                 "no-language-whitelist".to_owned(),
                 "no-direct-world-access".to_owned(),

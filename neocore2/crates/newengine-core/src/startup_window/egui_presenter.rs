@@ -40,7 +40,7 @@ pub(crate) fn present(config_path: &Path, startup: &StartupConfig) -> StartupWin
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_title(format!("{APP_TITLE} — PreStart"))
+            .with_title(format!("{APP_TITLE} - PreStart"))
             .with_inner_size([WINDOW_WIDTH, WINDOW_HEIGHT])
             .with_min_inner_size([MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT])
             .with_resizable(true),

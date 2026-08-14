@@ -18,7 +18,7 @@ runtime applies only accepted engine-facing outputs
 
 The base API must not declare known scripting languages, VM families or provider
 kinds. Provider-specific language/schema/bytecode details belong inside provider
-metadata and provider-owned `.ysc@entry` payloads.
+metadata and provider-owned `.ysc` payloads.
 
 Compatibility note: previous JSON frame/module DTOs remain available as adapters
 while the engine migrates to `*_bytes_v1` methods. They must not reintroduce

@@ -61,6 +61,30 @@ pub(super) fn panel_component(
     );
     component
         .props
+        .insert("interactive".to_owned(), serde_json::json!(true));
+    component
+        .props
+        .insert("transition_ms".to_owned(), serde_json::json!(120));
+    component.props.insert(
+        "hover_fill_rgba".to_owned(),
+        serde_json::json!([31, 48, 70, 235]),
+    );
+    component.props.insert(
+        "pressed_fill_rgba".to_owned(),
+        serde_json::json!([22, 37, 56, 245]),
+    );
+    component
+        .props
+        .insert("underline_hover".to_owned(), serde_json::json!(true));
+    component
+        .props
+        .insert("underline_duration_ms".to_owned(), serde_json::json!(135));
+    component.props.insert(
+        "underline_rgba".to_owned(),
+        serde_json::json!([101, 170, 232, 220]),
+    );
+    component
+        .props
         .insert("visible".to_owned(), serde_json::json!(visible));
     component
         .props
@@ -74,7 +98,7 @@ pub(super) fn panel_component(
     component.props.insert(
         "tooltip".to_owned(),
         serde_json::json!(format!(
-            "{} · {}",
+            "{} | {}",
             panel.source_gateway, panel.data_contract
         )),
     );

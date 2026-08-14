@@ -1,17 +1,21 @@
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::content::ensure_fps_player_loadouts;
-    use crate::{default_rifle_ammo_id, FpsContentProvider};
+    use crate::content::{
+        embedded_test_content_provider, embedded_test_policy_provider, ensure_fps_player_loadouts,
+    };
+    use crate::default_rifle_ammo_id;
     use newengine_engine_runtime::gameplay::{
         drain_interaction_events, drain_weapon_events, inventory_quantity, remove_item,
         spawn_default_player, GameplayContentProvider, PlayerStanceState,
     };
     use newengine_math::Quat;
+    use newengine_gameplay_script_runtime::GameplayCommandExecutor;
     use newengine_physics_api::PhysicsQueryHitDto;
 
     fn spawn_fps_player(world: &mut World, name: &str, position: Vec3) -> EntityId {
-        GameplayContentProvider::install(&FpsContentProvider, world).expect("install FPS content");
+        let content = embedded_test_content_provider();
+        GameplayContentProvider::install(&content, world).expect("install FPS content");
         let player = spawn_default_player(world, None, name, position);
         ensure_fps_player_loadouts(world);
         player
@@ -78,6 +82,8 @@ mod tests {
                 distance: 2.0,
             }],
             &map,
+            embedded_test_policy_provider().as_ref(),
+            &GameplayCommandExecutor::default(),
         );
 
         assert_eq!(world.get::<Health>(target).expect("health").current, 75.0);
@@ -174,6 +180,8 @@ mod tests {
                 distance: 1.0,
             }],
             &map,
+            embedded_test_policy_provider().as_ref(),
+            &GameplayCommandExecutor::default(),
         );
 
         let events = drain_interaction_events(&mut world);

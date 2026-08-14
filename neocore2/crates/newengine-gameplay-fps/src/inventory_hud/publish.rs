@@ -41,7 +41,7 @@ pub(super) fn publish_inventory_hud_state(
             total_weight,
             catalog,
         );
-        for index in 0..INVENTORY_SLOT_COUNT {
+        for index in 0..inventory_slot_count(world) {
             patch = patch_inventory_slot(patch, index, state, inventory, catalog);
         }
         for index in 1..=5u8 {

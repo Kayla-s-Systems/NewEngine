@@ -1,9 +1,17 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 //! Data-only FPS gameplay contracts. Engine input/runtime crates do not depend on this crate;
-//! FPS gameplay and FPS input profiles share it to interpret generic semantic action transport.
+//! FPS gameplay, profiles and script adapters share it to interpret generic semantic transport.
 
+mod policy;
 mod runtime;
+
+pub use policy::{
+    FpsCallbackExports, FpsCombatPolicy, FpsGameplayPolicyProvider, FpsGameplayPolicySnapshot,
+    FpsMissionPolicy, FpsMissionStateMachinePolicy, FpsPlayerPolicy, FpsPolicyDecision,
+    FpsPolicyEvent, FpsRequiredContentPolicy, FPS_GAMEPLAY_POLICY_SCHEMA,
+    FPS_GAMEPLAY_POLICY_VERSION,
+};
 pub use runtime::{
     FpsDemoGoal, FpsDemoHazard, FpsDemoPickup, FpsDemoRules, FpsDemoState, FpsDemoTarget,
     FpsPlayerTuning,

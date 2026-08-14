@@ -1,10 +1,14 @@
 use super::*;
 
 fn launch_blocking_warm_radius(target_radius: i32) -> i32 {
-    const DEFAULT_LAUNCH_WARM_RADIUS: i32 = 1;
+    let default_launch_warm_radius = newengine_game_data::default_game_data()
+        .world
+        .terrain
+        .streaming
+        .launch_warm_radius;
     let requested = crate::env_config::var_i32(
         "NEWENGINE_SCENE_TERRAIN_LAUNCH_WARM_RADIUS",
-        DEFAULT_LAUNCH_WARM_RADIUS,
+        default_launch_warm_radius,
         i32::MIN,
         i32::MAX,
     );

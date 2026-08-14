@@ -2,8 +2,12 @@
 name = "newengine-gameplay-fps-api"
 version = "0.1.0"
 edition = "2021"
-description = "Data-only FPS gameplay action contracts for NewEngine"
+description = "Data-only FPS gameplay action and policy contracts for NewEngine"
 license = "Proprietary"
 
 [dependencies]
 newengine-input-actions-api = { path = "../newengine-input-actions-api" }
+newengine-game-data = { path = "../newengine-game-data" }
+newengine-gameplay-script-api = { path = "../newengine-gameplay-script-api" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

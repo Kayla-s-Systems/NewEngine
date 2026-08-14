@@ -55,3 +55,33 @@ pub fn build_engine_from_startup(
 
     Engine::new_with_config(config, services, bus, shutdown)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn engine_command_service_discovers_runtime_session_commands() {
+        let startup = StartupConfig::default();
+        let _engine = build_engine_from_startup(&startup, 16).expect("engine");
+        newengine_runtime_session_runtime::init_runtime_session_command_service();
+
+        let description =
+            newengine_core::describe_service(newengine_core::console::COMMAND_SERVICE_ID)
+                .expect("engine.command service");
+        let value: serde_json::Value = serde_json::from_str(&description).expect("command json");
+        let commands = value["console"]["commands"]
+            .as_array()
+            .expect("command descriptors");
+        let ids = commands
+            .iter()
+            .filter_map(|command| command["id"].as_str())
+            .collect::<std::collections::BTreeSet<_>>();
+
+        assert!(ids.contains("runtime.play"));
+        assert!(ids.contains("runtime.pause"));
+        assert!(ids.contains("runtime.stop"));
+        assert!(ids.contains("runtime.restart"));
+        assert!(ids.contains("runtime.step"));
+    }
+}

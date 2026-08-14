@@ -4,8 +4,12 @@ use newengine_core::host_events::CursorState;
 use newengine_core::physics::PhysicsApiRef;
 use newengine_core::render::{Extent2D, RenderApi};
 use newengine_core::{EngineResult, ModuleCtx};
+use newengine_runtime_session_api::{RuntimeSessionMode, RuntimeSessionState};
+use newengine_runtime_session_runtime::{
+    begin_runtime_session_frame, record_runtime_session_ticks,
+};
 use newengine_ui_api::{
-    UiDrawCmd, UiDrawList, UiEditorRuntimeMode, UiEditorRuntimeState, UiInputCaptureState, UiRect,
+    UiDrawCmd, UiDrawList, UiEditorRuntimeMode, UiInputCaptureState, UiRect,
     UiRuntimeDebugOverlayTelemetry, UiScreenProfile, UiScreenProfileState, UiSurfaceNode, UiTexId,
     UiVertex, UiViewportSlot,
 };
@@ -133,6 +137,8 @@ impl RuntimeRenderController {
             }
         }
         let in_game_editor = game_profile && self.bridges.scene.in_game_editor_enabled();
+        let editor_staging_preview =
+            editor_viewport_runtime_mode(ctx) == Some(UiEditorRuntimeMode::Edit);
         if in_game_editor && scope.vp_w > 0 && scope.vp_h > 0 {
             self.bridges.viewport.publish_pick_request(
                 (scope.vp_w.saturating_sub(1) as f32) * 0.5,
@@ -164,8 +170,26 @@ impl RuntimeRenderController {
                 .gameplay_ui
                 .aggregate_input_capture(scene.world())
         };
-        let host_modal_blocks_gameplay = published_capture.requests_capture() || in_game_editor;
-        let pause_world = host_modal_blocks_gameplay || gameplay_capture.pause_simulation;
+        let session_frame =
+            begin_runtime_session_frame(ctx.resources_mut(), self.frame.frame_index);
+        let session_ejected = session_frame.active
+            && session_frame.mode == Some(RuntimeSessionMode::Play)
+            && !session_frame.possessed;
+        let host_modal_blocks_gameplay = published_capture.requests_capture()
+            || in_game_editor
+            || editor_staging_preview
+            || session_frame.paused
+            || session_ejected;
+        let pause_world = published_capture.requests_capture()
+            || in_game_editor
+            || editor_staging_preview
+            || gameplay_capture.pause_simulation
+            || (session_frame.paused && !session_frame.step_this_frame);
+        let session_fixed_step_count = if session_frame.step_this_frame {
+            1
+        } else {
+            scope.fixed_step_count
+        };
         if primary_was_open && !primary_ui.blocks_gameplay {
             self.restore_playable_view_after_ui_close();
         }
@@ -192,16 +216,10 @@ impl RuntimeRenderController {
             carrier.apply_gameplay_input_capture(gameplay_capture);
         }
 
-        if editor_viewport_runtime_mode(ctx) == Some(UiEditorRuntimeMode::Edit) {
-            // Editor/Edit is a tooling state, not a playable-world frame. Keep the
-            // viewport slot as UI chrome only and do not tick scene/world, build
-            // game pipelines, run shadow planning, or submit gameplay draw-list
-            // providers. Simulate/Play explicitly re-enable the world path.
-            self.render_ui_only_frame(ctx, r, frame_input.ui, scope)?;
-            return Ok(PlayableFrameOutcome::Continue {
-                frame_debug_snapshot: None,
-            });
-        }
+        // Editor/Edit is a staging-world preview, not a UI-only shell. The authored
+        // scene is rendered through the normal world/material/camera path while
+        // `pause_world` prevents physics/gameplay fixed steps. Simulate/Play only
+        // change runtime ownership; they are not required for the editor to see its map.
 
         if self.app_policy.idle_preview_uses_ui_only(
             self.bridges.viewport.external_extent_owned(),
@@ -263,13 +281,16 @@ impl RuntimeRenderController {
             frame_input.play_mode,
             scope.dt,
             scope.fixed_dt,
-            scope.fixed_step_count,
+            session_fixed_step_count,
             scope.fixed_tick,
             pause_world,
             scope.aspect(),
             scope.vp_w,
             scope.vp_h,
         );
+        if session_frame.active && !pause_world {
+            record_runtime_session_ticks(ctx.resources_mut(), session_fixed_step_count);
+        }
         self.frame
             .gameplay_ui
             .publish_frame(scene.world_mut(), self.frame.frame_index);
@@ -556,10 +577,15 @@ fn editor_viewport_runtime_mode<E: Send + 'static>(
         return None;
     }
     Some(
-        ctx.resources()
-            .get::<UiEditorRuntimeState>()
-            .map(|state| state.mode)
-            .unwrap_or(UiEditorRuntimeMode::Edit),
+        match ctx
+            .resources()
+            .get::<RuntimeSessionState>()
+            .and_then(|state| state.mode)
+        {
+            Some(RuntimeSessionMode::Simulate) => UiEditorRuntimeMode::Simulate,
+            Some(RuntimeSessionMode::Play) => UiEditorRuntimeMode::Play,
+            None => UiEditorRuntimeMode::Edit,
+        },
     )
 }
 
@@ -570,6 +596,19 @@ fn editor_viewport_play_mode<E: Send + 'static>(
     Some(match mode {
         UiEditorRuntimeMode::Edit => crate::gameplay::GameRunMode::Staging,
         UiEditorRuntimeMode::Simulate => crate::gameplay::GameRunMode::Simulate,
-        UiEditorRuntimeMode::Play => crate::gameplay::GameRunMode::Play,
+        UiEditorRuntimeMode::Play => {
+            if ctx
+                .resources()
+                .get::<RuntimeSessionState>()
+                .is_some_and(|state| state.is_possessed())
+            {
+                crate::gameplay::GameRunMode::Play
+            } else {
+                // Eject keeps the same PIE session alive but releases direct player control.
+                // CameraGateway already treats Play -> Simulate as a runtime-to-runtime
+                // transition, so it does not restore the Play snapshot here.
+                crate::gameplay::GameRunMode::Simulate
+            }
+        }
     })
 }

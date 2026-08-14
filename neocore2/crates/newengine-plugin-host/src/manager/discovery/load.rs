@@ -8,7 +8,7 @@ use super::graph::{DiscoveryGraph, LoadPhaseFilter};
 use super::logging::{emit_discovery_logs, emit_selection_table};
 use super::scan::scan_plugins_dir;
 use super::selection::build_load_selection;
-use crate::manager::types::PluginLoadError;
+use crate::manager::types::{PluginLoadError, PluginLoadOrigin};
 use crate::paths::{default_plugins_dir, resolve_plugins_dir};
 use crate::PluginManager;
 use newengine_ulog_api::formatting::emit_boxed_kv;
@@ -104,6 +104,7 @@ pub(crate) struct IncrementalLoadState {
     loaded_ids_before_len: usize,
     load_errors: Vec<PluginLoadError>,
     strict: bool,
+    load_origin: PluginLoadOrigin,
 }
 
 impl PluginManager {
@@ -134,6 +135,7 @@ impl PluginManager {
             host,
             strict,
             LoadPhaseFilter::BootstrapOnly,
+            PluginLoadOrigin::Auto,
         )
     }
 
@@ -144,7 +146,23 @@ impl PluginManager {
         host: HostApiV1,
         strict: bool,
     ) -> Result<(), PluginLoadError> {
-        self.load_from_dir_with_policy_and_filter(dir, host, strict, LoadPhaseFilter::BootstrapOnly)
+        self.load_bootstrap_from_dir_with_origin(dir, host, strict, PluginLoadOrigin::Auto)
+    }
+
+    pub fn load_bootstrap_from_dir_with_origin(
+        &mut self,
+        dir: &Path,
+        host: HostApiV1,
+        strict: bool,
+        load_origin: PluginLoadOrigin,
+    ) -> Result<(), PluginLoadError> {
+        self.load_from_dir_with_policy_and_filter(
+            dir,
+            host,
+            strict,
+            LoadPhaseFilter::BootstrapOnly,
+            load_origin,
+        )
     }
 
     #[inline]
@@ -159,6 +177,7 @@ impl PluginManager {
             host,
             strict,
             LoadPhaseFilter::BootstrapAndEngine,
+            PluginLoadOrigin::Auto,
         )
     }
 
@@ -169,11 +188,22 @@ impl PluginManager {
         host: HostApiV1,
         strict: bool,
     ) -> Result<(), PluginLoadError> {
+        self.load_engine_from_dir_with_origin(dir, host, strict, PluginLoadOrigin::Auto)
+    }
+
+    pub fn load_engine_from_dir_with_origin(
+        &mut self,
+        dir: &Path,
+        host: HostApiV1,
+        strict: bool,
+        load_origin: PluginLoadOrigin,
+    ) -> Result<(), PluginLoadError> {
         self.load_from_dir_with_policy_and_filter(
             dir,
             host,
             strict,
             LoadPhaseFilter::BootstrapAndEngine,
+            load_origin,
         )
     }
 
@@ -188,7 +218,23 @@ impl PluginManager {
         host: HostApiV1,
         strict: bool,
     ) -> Result<(), PluginLoadError> {
-        self.load_from_dir_with_policy_and_filter(dir, host, strict, LoadPhaseFilter::All)
+        self.load_from_dir_with_policy_and_origin(dir, host, strict, PluginLoadOrigin::Auto)
+    }
+
+    pub fn load_from_dir_with_policy_and_origin(
+        &mut self,
+        dir: &Path,
+        host: HostApiV1,
+        strict: bool,
+        load_origin: PluginLoadOrigin,
+    ) -> Result<(), PluginLoadError> {
+        self.load_from_dir_with_policy_and_filter(
+            dir,
+            host,
+            strict,
+            LoadPhaseFilter::All,
+            load_origin,
+        )
     }
 
     #[inline]
@@ -213,11 +259,25 @@ impl PluginManager {
         graph: DiscoveryGraph,
         strict: bool,
     ) {
+        self.begin_engine_incremental_load_from_discovery_graph_with_origin(
+            graph,
+            strict,
+            PluginLoadOrigin::Auto,
+        );
+    }
+
+    pub fn begin_engine_incremental_load_from_discovery_graph_with_origin(
+        &mut self,
+        graph: DiscoveryGraph,
+        strict: bool,
+        load_origin: PluginLoadOrigin,
+    ) {
         self.begin_incremental_load_from_graph(
             graph,
             true,
             LoadPhaseFilter::BootstrapAndEngine,
             strict,
+            load_origin,
         );
     }
 
@@ -227,6 +287,7 @@ impl PluginManager {
         graph_is_new: bool,
         filter: LoadPhaseFilter,
         strict: bool,
+        load_origin: PluginLoadOrigin,
     ) {
         let selection = build_load_selection(&graph, filter, &self.loaded_ids);
         let pending = selection
@@ -268,6 +329,7 @@ impl PluginManager {
             loaded_ids_before_len: self.loaded_ids.len(),
             load_errors: Vec::new(),
             strict,
+            load_origin,
         });
     }
 
@@ -277,6 +339,7 @@ impl PluginManager {
         host: HostApiV1,
         strict: bool,
         filter: LoadPhaseFilter,
+        load_origin: PluginLoadOrigin,
     ) -> Result<(), PluginLoadError> {
         let (graph, graph_is_new) = self.ensure_discovery_graph(dir)?;
         let selection = build_load_selection(&graph, filter, &self.loaded_ids);
@@ -307,7 +370,7 @@ impl PluginManager {
             .iter()
             .chain(selection.engine_candidates.iter())
         {
-            if let Err(e) = self.load_one(path, host.clone()) {
+            if let Err(e) = self.load_one_with_origin(path, host.clone(), load_origin) {
                 newengine_ulog_api::ulog::warn!(
                     "plugins: failed to load '{}': {}",
                     display_clean(path),
@@ -445,7 +508,28 @@ impl PluginManager {
         host: HostApiV1,
         strict: bool,
     ) -> Result<IncrementalLoadOutcome, PluginLoadError> {
-        self.load_from_dir_incremental_step(dir, host, strict, LoadPhaseFilter::BootstrapAndEngine)
+        self.load_engine_from_dir_incremental_step_with_origin(
+            dir,
+            host,
+            strict,
+            PluginLoadOrigin::Auto,
+        )
+    }
+
+    pub fn load_engine_from_dir_incremental_step_with_origin(
+        &mut self,
+        dir: &Path,
+        host: HostApiV1,
+        strict: bool,
+        load_origin: PluginLoadOrigin,
+    ) -> Result<IncrementalLoadOutcome, PluginLoadError> {
+        self.load_from_dir_incremental_step(
+            dir,
+            host,
+            strict,
+            LoadPhaseFilter::BootstrapAndEngine,
+            load_origin,
+        )
     }
 
     fn load_from_dir_incremental_step(
@@ -454,10 +538,17 @@ impl PluginManager {
         host: HostApiV1,
         strict: bool,
         filter: LoadPhaseFilter,
+        load_origin: PluginLoadOrigin,
     ) -> Result<IncrementalLoadOutcome, PluginLoadError> {
         if self.incremental_load.is_none() {
             let (graph, graph_is_new) = self.ensure_discovery_graph(dir)?;
-            self.begin_incremental_load_from_graph(graph, graph_is_new, filter, strict);
+            self.begin_incremental_load_from_graph(
+                graph,
+                graph_is_new,
+                filter,
+                strict,
+                load_origin,
+            );
         }
 
         let Some(mut state) = self.incremental_load.take() else {
@@ -470,7 +561,7 @@ impl PluginManager {
         if state.next_index < pending_total {
             let path = state.pending[state.next_index].clone();
             current_path = Some(path.clone());
-            if let Err(e) = self.load_one(&path, host.clone()) {
+            if let Err(e) = self.load_one_with_origin(&path, host.clone(), state.load_origin) {
                 newengine_ulog_api::ulog::warn!(
                     "plugins: failed to load '{}': {}",
                     display_clean(&path),

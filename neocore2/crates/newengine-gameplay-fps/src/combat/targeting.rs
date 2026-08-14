@@ -30,7 +30,12 @@ pub(super) fn shot_origin_and_direction(
     let eye_height = world
         .get::<PlayerStanceState>(player)
         .map(|stance| stance.current_eye_height)
-        .unwrap_or(1.6);
+        .unwrap_or_else(|| {
+            crate::game_data::active_game_data(world)
+                .player
+                .tuning
+                .camera_eye_height
+        });
     let forward = (transform.rotation * Vec3::new(0.0, 0.0, -1.0)).normalize_or_zero();
     let right = (transform.rotation * Vec3::X).normalize_or_zero();
     let up = (transform.rotation * Vec3::Y).normalize_or_zero();
@@ -60,7 +65,12 @@ pub(super) fn interaction_ray(
     let eye_height = world
         .get::<PlayerStanceState>(player)
         .map(|stance| stance.current_eye_height)
-        .unwrap_or(1.6);
+        .unwrap_or_else(|| {
+            crate::game_data::active_game_data(world)
+                .player
+                .tuning
+                .camera_eye_height
+        });
     let direction = (transform.rotation * Vec3::new(0.0, 0.0, -1.0)).normalize_or_zero();
     if direction.length_squared() <= 1.0e-8 {
         return None;

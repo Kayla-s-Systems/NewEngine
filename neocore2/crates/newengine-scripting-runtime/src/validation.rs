@@ -14,10 +14,10 @@ pub fn validate_script_module_ref(
             "Script module reference must not be empty.",
         ));
     }
-    if !module_ref.is_ysc_entry_ref() {
+    if !module_ref.is_ysc_module_ref() {
         diagnostics.push(ScriptDiagnostic::error(
-            "SCRIPTING_MODULE_REF_NOT_YSC_ENTRY",
-            "Runtime script modules must be addressed as file.ysc@entry.",
+            "SCRIPTING_MODULE_REF_NOT_YSC_MODULE",
+            "Runtime script modules must be addressed as normalized file.ysc assets without selectors.",
         ));
     }
     if reference.contains("..") || reference.contains('\\') || reference.starts_with('/') {

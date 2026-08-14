@@ -454,6 +454,9 @@ impl ConsoleRuntime {
         let services = list_service_ids();
 
         for id in services {
+            if id == super::method::COMMAND_SERVICE_ID {
+                continue;
+            }
             let Some(describe) = describe_service(&id) else {
                 continue;
             };

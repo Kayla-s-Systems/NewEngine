@@ -107,7 +107,6 @@ pub fn host_register_service_impl(svc: ServiceV1Dyn<'static>) -> RResult<(), RSt
             ServiceEntry {
                 owner_plugin_id: owner,
                 service: Arc::from(svc),
-                describe_json: describe_json.clone(),
             },
         );
         crate::host_context::bump_services_generation();

@@ -7,22 +7,25 @@ use newengine_core::{
     render::SceneLaunchStatus, EngineLifecycleEvent, EngineReadinessKey, EngineReadinessSnapshot,
     EngineResult, Module, ModuleCtx, Resources,
 };
+use newengine_game_data::GameDataProvider;
+use newengine_project_api::ProjectContentMountState;
 use newengine_runtime_host::asset_bootstrap::mount_profile_content_best_effort;
-use newengine_ui_api::{
-    UiEditorRuntimeMode, UiEditorRuntimeState, UiPresentationFlowState, UiScreenProfile,
-    UiScreenProfileState,
-};
+use newengine_ui_api::{UiPresentationFlowState, UiScreenProfile, UiScreenProfileState};
 
 use crate::GAME_READY_MOUNT_SPEC;
 
 /// Product-owned adapter for the generic engine scene-bootstrap boundary.
 /// The engine never selects this provider by name; the active application profile injects it.
-pub(crate) struct GameReadyWorldSceneBootstrapProvider;
+pub(crate) struct GameReadyWorldSceneBootstrapProvider {
+    game_data_provider: Arc<dyn GameDataProvider>,
+}
 
 impl GameReadyWorldSceneBootstrapProvider {
     #[inline]
-    pub(crate) fn shared() -> Arc<dyn newengine_engine_runtime::SceneBootstrapProvider> {
-        Arc::new(Self)
+    pub(crate) fn shared(
+        game_data_provider: Arc<dyn GameDataProvider>,
+    ) -> Arc<dyn newengine_engine_runtime::SceneBootstrapProvider> {
+        Arc::new(Self { game_data_provider })
     }
 }
 
@@ -36,10 +39,22 @@ impl newengine_engine_runtime::SceneBootstrapProvider for GameReadyWorldSceneBoo
         &self,
         ctx: &mut newengine_engine_runtime::SceneBootstrapContext<'_>,
     ) -> Result<newengine_engine_runtime::SceneBootstrapResult, String> {
-        let primary = newengine_game_ready_world::bootstrap_world_scene(
+        let provider_id = self.game_data_provider.id();
+        let snapshot = self
+            .game_data_provider
+            .load_snapshot()
+            .map_err(|error| format!("game-data provider '{}' failed: {error}", provider_id))?;
+        snapshot.data().validate().map_err(|error| {
+            format!(
+                "game-data provider '{}' produced invalid snapshot: {error}",
+                provider_id
+            )
+        })?;
+        let primary = newengine_game_ready_world::bootstrap_world_scene_with_data(
             ctx.scene,
             ctx.primitives,
             ctx.materials,
+            snapshot,
         );
         primary
             .map(|entity| newengine_engine_runtime::SceneBootstrapResult::new(Some(entity)))
@@ -56,6 +71,7 @@ pub(crate) struct GameReadySceneBootstrapModule {
     scene: Arc<newengine_scene_runtime::SceneBridge>,
     bootstrapped: bool,
     waiting_logged: bool,
+    project_mount_wait_logged: bool,
     editor_deferred_logged: bool,
     presentation_deferred_logged: bool,
 }
@@ -67,6 +83,7 @@ impl GameReadySceneBootstrapModule {
             scene,
             bootstrapped: false,
             waiting_logged: false,
+            project_mount_wait_logged: false,
             editor_deferred_logged: false,
             presentation_deferred_logged: false,
         }
@@ -95,27 +112,14 @@ impl GameReadySceneBootstrapModule {
             .get::<UiScreenProfileState>()
             .map(|state| state.descriptor.profile)
             .unwrap_or(UiScreenProfile::Editor);
-        if profile != UiScreenProfile::Editor {
-            return true;
-        }
-        let mode = ctx
-            .resources()
-            .get::<UiEditorRuntimeState>()
-            .map(|state| state.mode)
-            .unwrap_or(UiEditorRuntimeMode::Edit);
-        let allowed = matches!(
-            mode,
-            UiEditorRuntimeMode::Simulate | UiEditorRuntimeMode::Play
-        );
-        if !allowed && !self.editor_deferred_logged {
+        if profile == UiScreenProfile::Editor && !self.editor_deferred_logged {
             self.editor_deferred_logged = true;
             newengine_ulog_api::ulog::info!(
-                "game-ready runtime: scene bootstrap deferred by editor profile origin='{}' mode='{}' policy='no game/world load before Simulate or Play'",
+                "game-ready runtime: loading authored startup scene into editor staging world origin='{}'; simulation remains owned by RuntimeSession",
                 origin,
-                mode.id(),
             );
         }
-        allowed
+        true
     }
 
     #[inline]
@@ -124,6 +128,14 @@ impl GameReadySceneBootstrapModule {
         ctx: &ModuleCtx<'_, E>,
         origin: &'static str,
     ) -> bool {
+        let editor_profile = ctx
+            .resources()
+            .get::<UiScreenProfileState>()
+            .map(|state| state.descriptor.profile == UiScreenProfile::Editor)
+            .unwrap_or(false);
+        if editor_profile {
+            return true;
+        }
         if presentation_flow_allows_bootstrap(ctx.resources()) {
             return true;
         }
@@ -150,6 +162,21 @@ impl GameReadySceneBootstrapModule {
         ctx: &mut ModuleCtx<'_, E>,
         origin: &'static str,
     ) -> EngineResult<()> {
+        let project_content_ready = ctx
+            .resources()
+            .get::<ProjectContentMountState>()
+            .map(ProjectContentMountState::ready)
+            .unwrap_or(true);
+        if !project_content_ready {
+            if !self.project_mount_wait_logged {
+                self.project_mount_wait_logged = true;
+                newengine_ulog_api::ulog::info!(
+                    "game-ready runtime: waiting for selected project content mounts before scene bootstrap origin='{}'",
+                    origin,
+                );
+            }
+            return Ok(());
+        }
         if !self.editor_bootstrap_allowed(ctx, origin)
             || !self.presentation_bootstrap_allowed(ctx, origin)
         {

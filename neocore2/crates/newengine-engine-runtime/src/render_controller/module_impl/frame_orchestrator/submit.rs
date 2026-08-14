@@ -1,4 +1,36 @@
 use super::*;
+use std::sync::OnceLock;
+
+fn shadow_receiver_debug_mode() -> f32 {
+    static MODE: OnceLock<f32> = OnceLock::new();
+    *MODE.get_or_init(|| {
+        let raw = std::env::var("NEWENGINE_SHADOW_RECEIVER_DEBUG").unwrap_or_default();
+        let normalized = raw.trim().to_ascii_lowercase();
+        let mode = match normalized.as_str() {
+            "" | "0" | "off" | "none" => 0.0,
+            "1" | "n" | "normal" | "normal_ws" => 1.0,
+            "2" | "ndotl" => 2.0,
+            "3" | "shadow" | "shadow_visibility" => 3.0,
+            "4" | "cloud" | "cloud_shadow" => 4.0,
+            "5" | "direct" => 5.0,
+            "6" | "indirect" | "ambient" => 6.0,
+            "7" | "instance" | "instance_id" => 7.0,
+            "8" | "anomaly" | "composite" => 8.0,
+            _ => normalized
+                .parse::<f32>()
+                .ok()
+                .map(|value| value.clamp(0.0, 8.0))
+                .unwrap_or(0.0),
+        };
+        if mode > 0.0 {
+            newengine_ulog_api::ulog::warn!(
+                "render receiver diagnostic enabled mode={} source=NEWENGINE_SHADOW_RECEIVER_DEBUG",
+                mode
+            );
+        }
+        mode
+    })
+}
 
 impl RenderFrameOrchestrator {
     pub(in super::super) fn submit_scene_viewport_frame(
@@ -121,7 +153,8 @@ impl RenderFrameOrchestrator {
                 snapshot.camera_forward.x,
                 snapshot.camera_forward.y,
                 snapshot.camera_forward.z,
-            ]);
+            ])
+            .with_shadow_receiver_debug_mode(shadow_receiver_debug_mode());
         let extent = Extent2D::new(scope.vp_w, scope.vp_h);
         let gpu_safe_profile = runtime_profile.gpu_safe_enabled();
         if gpu_safe_profile {

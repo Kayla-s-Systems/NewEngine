@@ -536,7 +536,7 @@ fn looks_like_runtime_asset_ref(value: &str) -> bool {
         ".ypdb@",
         ".yvr@",
         ".ywr@",
-        ".ysc@",
+        ".ysc",
         ".ytf@",
         ".nebrain@",
         ".nepat@",

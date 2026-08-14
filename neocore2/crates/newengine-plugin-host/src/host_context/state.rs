@@ -11,7 +11,6 @@ use std::sync::{Arc, Mutex, OnceLock};
 pub(crate) struct ServiceEntry {
     pub owner_plugin_id: Option<String>,
     pub service: Arc<ServiceV1Dyn<'static>>,
-    pub describe_json: String,
 }
 
 #[derive(Clone)]

@@ -1,10 +1,10 @@
 use super::*;
 
 #[test]
-fn module_ref_detects_ysc_entry() {
-    let module_ref = ScriptModuleRef::new("scripts/missions/intro.ysc@main");
-    assert!(module_ref.is_ysc_entry_ref());
-    assert_eq!(module_ref.module_id, "scripts_missions_intro_ysc_main");
+fn module_ref_detects_ysc_module() {
+    let module_ref = ScriptModuleRef::new("scripts/missions/intro.ysc");
+    assert!(module_ref.is_ysc_module_ref());
+    assert_eq!(module_ref.module_id, "scripts_missions_intro_ysc");
 }
 
 #[test]

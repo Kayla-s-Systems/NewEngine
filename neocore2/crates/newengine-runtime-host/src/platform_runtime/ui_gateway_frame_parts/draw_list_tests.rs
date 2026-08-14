@@ -35,3 +35,19 @@ fn cached_loading_spinner_rotates_without_rebuilding_texture_payload() {
     assert!(draw_list.texture_delta.set.is_empty());
     assert!(draw_list.texture_delta.patches.is_empty());
 }
+
+#[test]
+fn loading_texture_session_reset_forces_payload_rebind() {
+    use super::draw_list_state::{
+        loading_texture_is_resident, mark_loading_texture_resident, reset_loading_texture_session,
+    };
+
+    let id = UiTexId(0x1234_5678);
+    let texture_ref = "textures/ui/loading/test.ytd@background";
+    mark_loading_texture_resident(id, texture_ref);
+    assert!(loading_texture_is_resident(id, texture_ref));
+
+    reset_loading_texture_session();
+
+    assert!(!loading_texture_is_resident(id, texture_ref));
+}

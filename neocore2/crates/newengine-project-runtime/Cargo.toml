@@ -1,0 +1,15 @@
+[package]
+name = "newengine-project-runtime"
+version = "0.1.0"
+edition = "2021"
+readme = "README.md"
+description = "Project manifest loading and Asset VFS mount integration for NewEngine"
+
+[dependencies]
+newengine-assets = { path = "../newengine-assets" }
+newengine-project-api = { path = "../newengine-project-api" }
+newengine-loading-api = { path = "../newengine-loading-api" }
+serde_json = "1"
+toml = "0.8"
+
+eframe = { version = "0.29", default-features = false, features = ["default_fonts", "glow", "wayland", "x11"] }

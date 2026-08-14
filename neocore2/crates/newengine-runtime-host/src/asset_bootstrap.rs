@@ -21,7 +21,7 @@ pub struct ContentSetSpec {
     pub mount: &'static str,
     pub include_shared_assets: bool,
     pub include_app_assets: bool,
-    pub include_outer_game_assets: bool,
+    pub include_engine_content: bool,
     pub include_legacy_layouts: bool,
 }
 
@@ -40,7 +40,7 @@ impl ContentSetSpec {
             mount: "",
             include_shared_assets: true,
             include_app_assets: true,
-            include_outer_game_assets: true,
+            include_engine_content: true,
             include_legacy_layouts: true,
         }
     }
@@ -147,10 +147,10 @@ fn push_content_roots_from_base(roots: &mut Vec<PathBuf>, base: &Path, content: 
             }
         }
     }
-    if content.include_outer_game_assets {
-        let game_assets = base.join("gameAssets");
-        if game_assets.is_dir() {
-            roots.push(game_assets);
+    if content.include_engine_content {
+        let engine_content = base.join("Engine").join("Content");
+        if engine_content.is_dir() {
+            roots.push(engine_content);
         }
     }
     if content.include_legacy_layouts {
@@ -227,13 +227,11 @@ fn push_asset_roots_from_base(roots: &mut Vec<PathBuf>, base: &Path, app_dir_nam
         roots.push(app_assets);
     }
 
-    // Canonical outer-root runtime layout: commands may run from the outer
-    // NorthStar directory, from NewEngine, or from an app workspace while game
-    // assets live at NorthStar/gameAssets. This is still a VFS mount, not a
-    // direct asset read.
-    let game_assets = base.join("gameAssets");
-    if game_assets.is_dir() {
-        roots.push(game_assets);
+    // Canonical engine-owned content root. Project content is deliberately not
+    // discovered here: it is mounted only through the selected `game.toml`.
+    let engine_content = base.join("Engine").join("Content");
+    if engine_content.is_dir() {
+        roots.push(engine_content);
     }
 
     // Legacy local layouts kept as explicit compatibility candidates for old

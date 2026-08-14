@@ -84,6 +84,25 @@ impl EditorSelectionContext {
             data_contract: "newengine.assets.document.v1".to_owned(),
         }
     }
+
+
+    #[inline]
+    pub fn entity(
+        reference: impl Into<String>,
+        label: impl Into<String>,
+        source_surface: impl Into<String>,
+    ) -> Self {
+        Self {
+            version: 1,
+            kind: EditorSelectionKind::Entity,
+            reference: reference.into(),
+            label: label.into(),
+            source_surface: source_surface.into(),
+            source_node: String::new(),
+            semantic_gateway: "engine.entity".to_owned(),
+            data_contract: "newengine.entity.inspect.v1".to_owned(),
+        }
+    }
 }
 
 /// Generic UI event model emitted by `engine.ui` hit-testing/focus logic.

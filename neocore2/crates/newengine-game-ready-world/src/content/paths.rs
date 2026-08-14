@@ -1,5 +1,8 @@
 pub(super) const SCENE_PROFILE_ENV: &str = "NEWENGINE_SCENE_PROFILE";
-const PROFILE_ENV_KEYS: [&str; 1] = [SCENE_PROFILE_ENV];
+const PROFILE_ENV_KEYS: [&str; 2] = [
+    newengine_project_api::PROJECT_STARTUP_SCENE_ENV,
+    SCENE_PROFILE_ENV,
+];
 /// Logical AssetManager candidates for the game-ready authored map.
 ///
 /// Environment overrides are treated as logical VFS paths. Absolute filesystem
@@ -29,7 +32,7 @@ pub(super) fn profile_asset_candidates() -> Vec<String> {
 
     if out.is_empty() {
         newengine_ulog_api::ulog::warn!(
-            "scene profile: no authored map profile configured; set NEWENGINE_SCENE_PROFILE to a logical .ymap path from the active profile layer"
+            "scene profile: no authored startup scene configured; set game.toml startup_scene (preferred) or NEWENGINE_SCENE_PROFILE to a logical map asset ref"
         );
     }
 

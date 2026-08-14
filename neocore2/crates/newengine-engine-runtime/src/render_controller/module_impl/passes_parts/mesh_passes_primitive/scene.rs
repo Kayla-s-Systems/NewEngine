@@ -345,6 +345,22 @@ fn draw_primitives_for_pass(
             plan
         };
 
+        if runtime
+            && matches!(pass, SceneMeshPass::Forward)
+            && lights.shadow_view_forward[3] >= 6.5
+            && route_diagnostics_due(this.frame.frame_index)
+        {
+            let cols = model.to_cols_array();
+            newengine_ulog_api::ulog::debug!(
+                "receiver diagnostic instance: primitive_id={} token24={} origin=({:.3},{:.3},{:.3}) base=({:.3},{:.3},{:.3},{:.3}) material_params=({:.3},{:.3},{:.3},{:.3})",
+                prim.id.0,
+                diagnostic_instance_token(prim.id.0),
+                cols[12], cols[13], cols[14],
+                plan.base_color[0], plan.base_color[1], plan.base_color[2], plan.base_color[3],
+                plan.material_params[0], plan.material_params[1], plan.material_params[2], plan.material_params[3],
+            );
+        }
+
         let instance = RenderInstanceRaw::new(
             model,
             viewproj * model,
@@ -353,6 +369,7 @@ fn draw_primitives_for_pass(
             plan.material_params,
             plan.emissive_radiance,
             plan.alpha_cutoff,
+            prim.id.0,
         );
         let batch_key = InstanceBatchKey::new(
             plan.pipeline,

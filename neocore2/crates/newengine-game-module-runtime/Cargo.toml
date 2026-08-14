@@ -1,0 +1,12 @@
+[package]
+name = "newengine-game-module-runtime"
+version = "0.1.0"
+edition = "2021"
+description = "Game-module contract validation and runtime state for NewEngine"
+
+[dependencies]
+newengine-core = { path = "../newengine-core" }
+newengine-game-module-api = { path = "../newengine-game-module-api" }
+newengine-project-runtime = { path = "../newengine-project-runtime" }
+newengine-ulog-api = { path = "../newengine-ulog-api" }
+serde_json = "1"

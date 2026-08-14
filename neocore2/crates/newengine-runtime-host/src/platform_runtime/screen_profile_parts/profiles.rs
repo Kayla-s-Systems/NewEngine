@@ -13,6 +13,10 @@ impl EditorScreen {
         &self,
         frame_index: u64,
         runtime_mode: UiEditorRuntimeMode,
+        runtime_paused: bool,
+        runtime_possessed: bool,
+        runtime_diff_count: usize,
+        command_registry: &EditorCommandRegistry,
         layout: &EditorLayoutMetrics,
         active_menu_id: Option<&str>,
     ) -> UiSurfaceNode {
@@ -20,6 +24,10 @@ impl EditorScreen {
             &self.descriptor,
             frame_index,
             runtime_mode,
+            runtime_paused,
+            runtime_possessed,
+            runtime_diff_count,
+            command_registry,
             layout,
             active_menu_id,
         )
@@ -261,13 +269,18 @@ pub(super) fn editor_screen_surface_node(
     descriptor: &UiScreenProfileDescriptor,
     frame_index: u64,
     runtime_mode: UiEditorRuntimeMode,
+    runtime_paused: bool,
+    runtime_possessed: bool,
+    runtime_diff_count: usize,
+    command_registry: &EditorCommandRegistry,
     layout: &EditorLayoutMetrics,
     active_menu_id: Option<&str>,
 ) -> UiSurfaceNode {
     let body_lines = Vec::new();
     let footer_lines = vec![format!(
-        "mode={} · 1 Edit · 2 Simulate · 3 Play",
-        runtime_mode.id()
+        "mode={}{} · 1 Stop · 2 Simulate · 3 Play · Space Pause/Resume",
+        runtime_mode.id(),
+        if runtime_paused { " (paused)" } else { "" }
     )];
     let mut metrics = screen_metrics(descriptor, frame_index);
     metrics.insert(
@@ -342,7 +355,16 @@ pub(super) fn editor_screen_surface_node(
         theme_id: UI_THEME_NORTHSTAR_EDITOR.to_owned(),
         style_ref: Some(UI_THEME_ASSET_NORTHSTAR_EDITOR.to_owned()),
         component_id: UI_COMPONENT_PANEL.to_owned(),
-        components: editor_components(descriptor, runtime_mode, layout, active_menu_id),
+        components: editor_components(
+            descriptor,
+            runtime_mode,
+            runtime_paused,
+            runtime_possessed,
+            runtime_diff_count,
+            command_registry,
+            layout,
+            active_menu_id,
+        ),
         message: None,
         style: UiSurfaceStyle {
             anchor: UiSurfaceAnchor::TopLeft,

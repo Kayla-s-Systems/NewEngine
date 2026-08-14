@@ -1,0 +1,12 @@
+[package]
+name = "newengine-gameplay-fps-lua"
+version = "0.1.0"
+edition = "2021"
+description = "Lua-backed FPS gameplay policy provider"
+license = "Proprietary"
+
+[dependencies]
+newengine-gameplay-fps-api = { path = "../newengine-gameplay-fps-api" }
+newengine-gameplay-script-api = { path = "../newengine-gameplay-script-api" }
+newengine-scripting-client = { path = "../newengine-scripting-client" }
+serde_json = "1"

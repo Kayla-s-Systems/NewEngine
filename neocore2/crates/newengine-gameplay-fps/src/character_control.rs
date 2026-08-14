@@ -6,12 +6,16 @@ use newengine_engine_runtime::gameplay::{
     CharacterBody, CharacterMotionTuning, PlayerCommandFrame, PlayerController, PlayerGroundState,
     PlayerStanceKind, PlayerStanceState,
 };
-use newengine_gameplay_fps_api::FpsActionFrame;
-use newengine_sim::Velocity;
+use newengine_gameplay_fps_api::{FpsActionFrame, FpsGameplayPolicySnapshot};
+use newengine_sim::{MotorInput, Velocity};
 
 /// FPS-owned interpretation of generic semantic command transport.
 /// The engine owns stance geometry/motion components; this package owns what jump/crouch mean.
 pub(crate) fn apply_fps_character_commands(world: &mut World, dt: f32, fixed_tick: u64) {
+    let player_policy = world
+        .resource::<FpsGameplayPolicySnapshot>()
+        .map(|policy| policy.player)
+        .unwrap_or_default();
     let players = world
         .query2_ids::<PlayerController, PlayerCommandFrame>()
         .collect::<Vec<_>>();
@@ -39,7 +43,13 @@ pub(crate) fn apply_fps_character_commands(world: &mut World, dt: f32, fixed_tic
             .copied()
             .unwrap_or_else(|| PlayerStanceState::standing(body.standing_eye_height));
 
-        if actions.crouch_held {
+        if !player_policy.allow_sprint {
+            if let Some(input) = world.get_mut::<MotorInput>(player) {
+                input.speed_mul = 1.0;
+            }
+        }
+
+        if player_policy.allow_crouch && actions.crouch_held {
             if stance.current != PlayerStanceKind::Crouched {
                 let _ = apply_player_stance_geometry(
                     world,
@@ -64,7 +74,7 @@ pub(crate) fn apply_fps_character_commands(world: &mut World, dt: f32, fixed_tic
             .get::<PlayerGroundState>(player)
             .map(|state| state.grounded)
             .unwrap_or(false);
-        if actions.jump_pressed && grounded && motion.jump_speed > 0.0 {
+        if player_policy.allow_jump && actions.jump_pressed && grounded && motion.jump_speed > 0.0 {
             let mut velocity = world.get::<Velocity>(player).copied().unwrap_or_default();
             velocity.0.y = motion.jump_speed;
             let _ = world.insert(player, velocity);

@@ -4,7 +4,6 @@ use super::*;
 pub(super) struct EditorChromeDescriptor {
     pub(super) product_title: &'static str,
     pub(super) menu: &'static [EditorChromeMenuItem],
-    pub(super) runtime_actions: &'static [EditorRuntimeActionDescriptor],
     pub(super) empty_outliner_title: &'static str,
     pub(super) empty_outliner_detail: &'static str,
     pub(super) empty_inspector_title: &'static str,
@@ -20,16 +19,6 @@ pub(super) struct EditorChromeMenuItem {
     pub(super) id: &'static str,
     pub(super) label: &'static str,
     pub(super) tooltip: &'static str,
-}
-
-#[derive(Clone, Copy, Debug)]
-pub(super) struct EditorRuntimeActionDescriptor {
-    pub(super) id: &'static str,
-    pub(super) label: &'static str,
-    pub(super) action_id: &'static str,
-    pub(super) hotkey: &'static str,
-    pub(super) tooltip: &'static str,
-    pub(super) mode: UiEditorRuntimeMode,
 }
 
 pub(super) const EDITOR_MENUS: &[EditorChromeMenuItem] = &[
@@ -75,45 +64,17 @@ pub(super) const EDITOR_MENUS: &[EditorChromeMenuItem] = &[
     },
 ];
 
-pub(super) const EDITOR_RUNTIME_ACTIONS: &[EditorRuntimeActionDescriptor] = &[
-    EditorRuntimeActionDescriptor {
-        id: "edit",
-        label: "Stop",
-        action_id: "editor.runtime.edit",
-        hotkey: "1",
-        tooltip: "Stop simulation and keep the viewport as an editor preview",
-        mode: UiEditorRuntimeMode::Edit,
-    },
-    EditorRuntimeActionDescriptor {
-        id: "simulate",
-        label: "Simulate",
-        action_id: "editor.runtime.simulate",
-        hotkey: "2",
-        tooltip: "Run world simulation without direct player possession",
-        mode: UiEditorRuntimeMode::Simulate,
-    },
-    EditorRuntimeActionDescriptor {
-        id: "play",
-        label: "Play",
-        action_id: "editor.runtime.play",
-        hotkey: "3",
-        tooltip: "Play in editor through the contained viewport",
-        mode: UiEditorRuntimeMode::Play,
-    },
-];
-
 pub(super) const EDITOR_CHROME: EditorChromeDescriptor = EditorChromeDescriptor {
     product_title: "North Star",
     menu: EDITOR_MENUS,
-    runtime_actions: EDITOR_RUNTIME_ACTIONS,
     empty_outliner_title: "No scene snapshot",
     empty_outliner_detail: "Scene / World Outliner waits for engine.scene or engine.world snapshot DTO",
     empty_inspector_title: "No selection",
     empty_inspector_detail: "Right Edit Window follows EditorSelectionContext from viewport, outliner or Content Browser",
     viewport_title: "Viewport",
-    viewport_detail_edit: "Preview target · simulation stopped",
-    viewport_detail_simulate: "Simulation target · player possession disabled",
-    viewport_detail_play: "Play target · viewport owns gameplay input",
+    viewport_detail_edit: "Preview target | simulation stopped",
+    viewport_detail_simulate: "Simulation target | player possession disabled",
+    viewport_detail_play: "Play target | viewport owns gameplay input",
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -136,7 +97,6 @@ pub(super) struct EditorLayoutMetrics {
     pub(super) right_visible: bool,
     pub(super) bottom_visible: bool,
     pub(super) hovered_dock_slot: Option<&'static str>,
-    pub(super) hovered_runtime_mode: Option<UiEditorRuntimeMode>,
     pub(super) hovered_menu_id: Option<&'static str>,
 }
 
@@ -395,9 +355,8 @@ pub(crate) struct ScreenProfileRuntimeState {
     pub(super) last_right_edit_selection_key: String,
     pub(super) cached_right_edit_document: Option<AssetDocument>,
     pub(super) cached_right_edit_error: Option<String>,
-    pub(super) editor_runtime_mode: UiEditorRuntimeMode,
     pub(super) hidden_panels: BTreeSet<String>,
-    pub(super) last_runtime_button_pointer_frame: u64,
+    pub(super) last_runtime_command_frame: u64,
     pub(super) last_dock_click_frame: u64,
     pub(super) last_menu_click_frame: u64,
     pub(super) active_menu_id: Option<String>,

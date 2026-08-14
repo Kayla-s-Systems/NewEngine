@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use super::*;
 
 impl RuntimeRenderController {
@@ -5,6 +7,7 @@ impl RuntimeRenderController {
         &mut self,
         ctx: &mut ModuleCtx<'_, E>,
     ) -> EngineResult<()> {
+        let render_module_started = Instant::now();
         // Do not consume the UI draw list before the native launch gate.
         // The first provider frame usually carries the font/solid atlas; if the
         // launch gate exits before a presentable frame, removing it here makes
@@ -118,6 +121,8 @@ impl RuntimeRenderController {
                 )
             })
             .unwrap_or((0.016, 0.016, 1, 0));
+        let pre_begin_ms = render_module_started.elapsed().as_secs_f64() * 1000.0;
+        let backend_begin_started = Instant::now();
         let scope_result = self.begin_playable_surface_frame(
             &mut **r,
             ui.is_some(),
@@ -129,6 +134,7 @@ impl RuntimeRenderController {
             fixed_tick,
             trace_frame,
         );
+        let backend_begin_ms = backend_begin_started.elapsed().as_secs_f64() * 1000.0;
         let Some(scope) = (match scope_result {
             Ok(scope) => scope,
             Err(e) if is_backend_device_lost_error(&e) => {
@@ -149,6 +155,7 @@ impl RuntimeRenderController {
         self.gpu.meshes.instance_uploader.begin_frame();
         self.diagnostics.overlay_metrics.begin_frame(scope.dt);
 
+        let playable_started = Instant::now();
         let outcome = match catch_unwind(AssertUnwindSafe(|| {
             self.render_playable_viewport_frame(ctx, &mut **r, plugin_snapshot.as_ref(), ui, scope)
         })) {
@@ -212,6 +219,7 @@ impl RuntimeRenderController {
                 return Ok(());
             }
         };
+        let playable_frame_ms = playable_started.elapsed().as_secs_f64() * 1000.0;
 
         let mut telemetry_to_publish = None;
         let mut ui_telemetry_to_publish = None;
@@ -234,7 +242,15 @@ impl RuntimeRenderController {
             }
         };
 
+        let diagnostics_before_present_ms;
+        let backend_end_ms;
+        let backend_reported_begin_ms;
+        let backend_frame_slot_wait_ms;
+        let backend_surface_acquire_ms;
+        let backend_image_wait_ms;
+        let backend_reported_end_ms;
         {
+            let diagnostics_before_present_started = Instant::now();
             if let Ok(diag) = r.diagnostics_snapshot() {
                 self.diagnostics
                     .overlay_metrics
@@ -254,6 +270,9 @@ impl RuntimeRenderController {
                     self.frame.frame_index
                 ));
             }
+            diagnostics_before_present_ms =
+                diagnostics_before_present_started.elapsed().as_secs_f64() * 1000.0;
+            let backend_end_started = Instant::now();
             if let Err(e) = r.end_frame() {
                 if is_backend_device_lost_error(&e) {
                     self.record_render_backend_error("render.end_frame", e)?;
@@ -264,6 +283,28 @@ impl RuntimeRenderController {
                 }
                 return Err(e);
             }
+            backend_end_ms = backend_end_started.elapsed().as_secs_f64() * 1000.0;
+            let backend_timing_snapshot = r.diagnostics_snapshot().ok();
+            backend_reported_begin_ms = backend_timing_snapshot
+                .as_ref()
+                .map(|diag| diag.frame.last_begin_frame_ms)
+                .unwrap_or(0.0);
+            backend_frame_slot_wait_ms = backend_timing_snapshot
+                .as_ref()
+                .map(|diag| diag.frame.last_frame_slot_wait_ms)
+                .unwrap_or(0.0);
+            backend_surface_acquire_ms = backend_timing_snapshot
+                .as_ref()
+                .map(|diag| diag.frame.last_surface_acquire_ms)
+                .unwrap_or(0.0);
+            backend_image_wait_ms = backend_timing_snapshot
+                .as_ref()
+                .map(|diag| diag.frame.last_image_wait_ms)
+                .unwrap_or(0.0);
+            backend_reported_end_ms = backend_timing_snapshot
+                .as_ref()
+                .map(|diag| diag.frame.last_end_frame_ms)
+                .unwrap_or(0.0);
             self.bridge_render_backend_events(ctx, &mut **r);
 
             if let Some(snapshot) = frame_debug_snapshot.take() {
@@ -298,6 +339,40 @@ impl RuntimeRenderController {
                 .resources_mut()
                 .remove::<UiRuntimeDebugOverlayTelemetry>();
         }
+        let render_timing = newengine_core::render::RenderModuleTimingTelemetry {
+            frame_index: self.frame.frame_index,
+            total_ms: render_module_started.elapsed().as_secs_f64() * 1000.0,
+            pre_begin_ms,
+            backend_begin_ms,
+            playable_frame_ms,
+            diagnostics_before_present_ms,
+            backend_end_ms,
+            backend_reported_begin_ms,
+            backend_frame_slot_wait_ms,
+            backend_surface_acquire_ms,
+            backend_image_wait_ms,
+            backend_reported_end_ms,
+        };
+        if crate::env_config::var_bool("NEWENGINE_RENDER_PHASE_LOG", false)
+            && render_timing.frame_index.is_multiple_of(60)
+        {
+            newengine_ulog_api::ulog::info!(
+                "render phase profile: frame={} total_ms={:.3} pre_begin_ms={:.3} backend_begin_ms={:.3} playable_ms={:.3} diagnostics_ms={:.3} backend_end_ms={:.3} vk_begin_ms={:.3} slot_wait_ms={:.3} acquire_ms={:.3} image_wait_ms={:.3} vk_end_ms={:.3}",
+                render_timing.frame_index,
+                render_timing.total_ms,
+                render_timing.pre_begin_ms,
+                render_timing.backend_begin_ms,
+                render_timing.playable_frame_ms,
+                render_timing.diagnostics_before_present_ms,
+                render_timing.backend_end_ms,
+                render_timing.backend_reported_begin_ms,
+                render_timing.backend_frame_slot_wait_ms,
+                render_timing.backend_surface_acquire_ms,
+                render_timing.backend_image_wait_ms,
+                render_timing.backend_reported_end_ms,
+            );
+        }
+        ctx.resources_mut().insert(render_timing);
         Ok(())
     }
 

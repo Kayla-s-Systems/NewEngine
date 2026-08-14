@@ -13,8 +13,8 @@ mod router;
 mod service;
 
 pub use archetype::{
-    default_entity_archetype_registry, register_entity_archetype, EntityArchetypeFactory,
-    EntityArchetypeRegistry,
+    default_entity_archetype_registry, register_entity_archetype,
+    register_entity_archetype_definition, EntityArchetypeFactory, EntityArchetypeRegistry,
 };
 pub use registration::register_entity_gateway_best_effort;
 pub use router::entity_gateway_service;

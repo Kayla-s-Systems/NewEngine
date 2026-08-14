@@ -10,7 +10,11 @@ use newengine_engine_runtime::gameplay::{
 };
 #[cfg(test)]
 use newengine_gameplay_fps_api::action as fps_action;
-use newengine_gameplay_fps_api::FpsActionFrame;
+use newengine_gameplay_fps_api::{
+    FpsActionFrame, FpsGameplayPolicyProvider, FpsGameplayPolicySnapshot, FpsPolicyDecision,
+    FpsPolicyEvent,
+};
+use newengine_gameplay_script_runtime::GameplayCommandExecutor;
 use newengine_math::{avalanche_u64, Vec3};
 use newengine_physics_api::{PhysicsQueryDto, PhysicsQueryHitDto, PhysicsQueryKindDto};
 use newengine_sim::CharacterMotor;

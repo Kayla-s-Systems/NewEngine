@@ -8,6 +8,8 @@ use std::time::Instant;
 
 impl<E: Send + 'static> Engine<E> {
     pub(crate) fn process_plugin_control(&mut self) -> EngineResult<()> {
+        let resolved_roots = self.resolved_plugin_discovery_roots()?;
+        let required_plugin_ids = self.required_plugin_ids.clone();
         let Some(queue) = self.resources.get_mut::<PluginControlQueue>() else {
             return Ok(());
         };
@@ -30,47 +32,48 @@ impl<E: Send + 'static> Engine<E> {
 
                     self.plugins.invalidate_discovery_cache();
 
-                    let res = match self.plugins_dir.as_deref() {
-                        Some(dir) => {
-                            self.plugins
-                                .load_from_dir_with_policy(dir, host.clone(), strict)
-                        }
-                        None => self.plugins.load_default_with_policy(host.clone(), strict),
-                    };
-
-                    install_forward_logger_once(host);
-
-                    match res {
-                        Ok(()) => {
-                            last_action = Some("plugins: rescan".to_owned());
-                            let loaded = self.plugins.snapshot().len();
-                            Self::log_phase_ok(
-                                "plugins",
-                                phase,
-                                Some(loaded),
+                    let roots = resolved_roots.clone();
+                    let mut rescan_error: Option<String> = None;
+                    for root in roots {
+                        if let Err(error) = self.plugins.load_from_dir_with_policy_and_origin(
+                            &root.dir,
+                            host.clone(),
+                            strict,
+                            root.origin,
+                        ) {
+                            let message = format!(
+                                "plugins: rescan failed owner='{}' origin='{}' root='{}' ({}): {}",
+                                root.owner,
+                                root.origin.as_str(),
+                                root.dir.display(),
                                 Self::elapsed_since(t0),
+                                error,
                             );
-                        }
-                        Err(e) => {
-                            last_error = Some(format!(
-                                "plugins: rescan failed ({}): {e}",
-                                Self::elapsed_since(t0)
-                            ));
-
                             if strict {
-                                return Err(EngineError::Other(
-                                    last_error.clone().unwrap_or_else(|| e.to_string()),
-                                ));
+                                install_forward_logger_once(host);
+                                return Err(EngineError::Other(message));
                             }
-
-                            newengine_ulog_api::ulog::warn!(
-                                "plugins: non-fatal rescan error (phase={} {}): {}",
-                                phase,
-                                Self::elapsed_since(t0),
-                                e
-                            );
+                            newengine_ulog_api::ulog::warn!("{}", message);
+                            rescan_error = Some(message);
                         }
                     }
+
+                    install_forward_logger_once(host);
+                    let missing = required_plugin_ids
+                        .iter()
+                        .filter(|id| !self.plugins.has_plugin(id))
+                        .cloned()
+                        .collect::<Vec<_>>();
+                    if !missing.is_empty() {
+                        return Err(EngineError::Other(format!(
+                            "plugins: required plugin id(s) missing after rescan: [{}]",
+                            missing.join(", ")
+                        )));
+                    }
+                    last_error = rescan_error;
+                    last_action = Some("plugins: rescan all discovery roots".to_owned());
+                    let loaded = self.plugins.snapshot().len();
+                    Self::log_phase_ok("plugins", phase, Some(loaded), Self::elapsed_since(t0));
                 }
 
                 PluginControlCommand::LoadPath(path) => {

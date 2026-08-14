@@ -17,6 +17,10 @@ pub const ENTITY_SERVICE_METHOD_ARCHETYPES_JSON_V1: &str = "archetypes_json_v1";
 pub const ENTITY_SERVICE_METHOD_EXISTS_JSON_V1: &str = "exists_json_v1";
 pub const ENTITY_SERVICE_METHOD_SPAWN_JSON_V1: &str = "spawn_json_v1";
 pub const ENTITY_SERVICE_METHOD_DESPAWN_JSON_V1: &str = "despawn_json_v1";
+pub const ENTITY_SERVICE_METHOD_REGISTER_ARCHETYPE_DEFINITION_JSON_V1: &str =
+    "register_archetype_definition_json_v1";
+pub const ENTITY_SERVICE_METHOD_UNREGISTER_ARCHETYPE_DEFINITION_JSON_V1: &str =
+    "unregister_archetype_definition_json_v1";
 
 pub const ENTITY_REQUIRED_METHODS_V1: &[&str] = &[
     ENTITY_SERVICE_METHOD_INFO,
@@ -27,6 +31,8 @@ pub const ENTITY_REQUIRED_METHODS_V1: &[&str] = &[
     ENTITY_SERVICE_METHOD_EXISTS_JSON_V1,
     ENTITY_SERVICE_METHOD_SPAWN_JSON_V1,
     ENTITY_SERVICE_METHOD_DESPAWN_JSON_V1,
+    ENTITY_SERVICE_METHOD_REGISTER_ARCHETYPE_DEFINITION_JSON_V1,
+    ENTITY_SERVICE_METHOD_UNREGISTER_ARCHETYPE_DEFINITION_JSON_V1,
 ];
 
 /// Generic backend-family declaration for entity providers.
@@ -74,6 +80,8 @@ impl Default for EntityServiceInfo {
                 "entity-exists".to_owned(),
                 "entity-lifecycle".to_owned(),
                 "archetype-factory-registry".to_owned(),
+                "authored-archetype-definitions".to_owned(),
+                "archetype-inheritance".to_owned(),
                 "entity-tags".to_owned(),
                 "ownership".to_owned(),
                 "debug-identity".to_owned(),

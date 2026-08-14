@@ -1,4 +1,5 @@
 use super::*;
+use newengine_game_data::default_game_data;
 
 #[inline]
 fn sanitized_required_id(value: &str) -> Option<String> {
@@ -39,8 +40,16 @@ pub(in super::super) fn sanitize_mission_pickup_spec(
     Some(GameReadyMissionPickupSpec {
         id,
         position: arr3(sanitize_array3_finite(raw.position, [0.0, 0.0, 0.0])),
-        radius: positive_clamped_or(raw.radius, 0.15, 8.0, 0.8),
-        scale: arr3(sanitize_array3_positive(raw.scale, [0.38, 0.38, 0.38])),
+        radius: positive_clamped_or(
+            raw.radius,
+            0.15,
+            8.0,
+            default_game_data().world.mission.pickup_radius,
+        ),
+        scale: arr3(sanitize_array3_positive(
+            raw.scale,
+            default_game_data().world.mission.pickup_scale,
+        )),
     })
 }
 
@@ -51,8 +60,16 @@ pub(in super::super) fn sanitize_mission_target_spec(
     Some(GameReadyMissionTargetSpec {
         id,
         position: arr3(sanitize_array3_finite(raw.position, [0.0, 0.0, 0.0])),
-        health: positive_clamped_or(raw.health, 1.0, 100_000.0, 75.0),
-        scale: arr3(sanitize_array3_positive(raw.scale, [0.55, 1.05, 0.55])),
+        health: positive_clamped_or(
+            raw.health,
+            1.0,
+            100_000.0,
+            default_game_data().world.mission.target_health,
+        ),
+        scale: arr3(sanitize_array3_positive(
+            raw.scale,
+            default_game_data().world.mission.target_scale,
+        )),
     })
 }
 
@@ -63,8 +80,16 @@ pub(in super::super) fn sanitize_mission_hazard_spec(
     Some(GameReadyMissionHazardSpec {
         id,
         position: arr3(sanitize_array3_finite(raw.position, [0.0, 0.0, 0.0])),
-        radius: positive_clamped_or(raw.radius, 0.2, 32.0, 1.5),
-        scale: arr3(sanitize_array3_positive(raw.scale, [1.45, 0.08, 1.45])),
+        radius: positive_clamped_or(
+            raw.radius,
+            0.2,
+            32.0,
+            default_game_data().world.mission.hazard_radius,
+        ),
+        scale: arr3(sanitize_array3_positive(
+            raw.scale,
+            default_game_data().world.mission.hazard_scale,
+        )),
     })
 }
 
@@ -75,8 +100,16 @@ pub(in super::super) fn sanitize_mission_goal_spec(
     Some(GameReadyMissionGoalSpec {
         id,
         position: arr3(sanitize_array3_finite(raw.position, [0.0, 0.0, 0.0])),
-        radius: positive_clamped_or(raw.radius, 0.2, 32.0, 2.0),
-        scale: arr3(sanitize_array3_positive(raw.scale, [1.8, 1.8, 1.8])),
+        radius: positive_clamped_or(
+            raw.radius,
+            0.2,
+            32.0,
+            default_game_data().world.mission.goal_radius,
+        ),
+        scale: arr3(sanitize_array3_positive(
+            raw.scale,
+            default_game_data().world.mission.goal_scale,
+        )),
     })
 }
 

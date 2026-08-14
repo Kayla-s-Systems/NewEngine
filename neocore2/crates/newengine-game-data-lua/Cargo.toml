@@ -1,0 +1,10 @@
+[package]
+name = "newengine-game-data-lua"
+version = "0.1.0"
+edition = "2021"
+description = "GameData provider adapter backed by the engine.scripting gateway"
+
+[dependencies]
+newengine-game-data = { path = "../newengine-game-data" }
+newengine-scripting-client = { path = "../newengine-scripting-client" }
+serde_json = "1"

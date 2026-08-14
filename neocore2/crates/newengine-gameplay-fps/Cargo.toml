@@ -25,3 +25,7 @@ newengine-transform = { path = "../newengine-transform" }
 newengine-ui-api = { path = "../newengine-ui-api" }
 newengine-ulog-api = { path = "../newengine-ulog-api" }
 newengine-gameplay-fps-api = { path = "../newengine-gameplay-fps-api" }
+newengine-game-data = { path = "../newengine-game-data" }
+
+newengine-gameplay-script-api = { path = "../newengine-gameplay-script-api" }
+newengine-gameplay-script-runtime = { path = "../newengine-gameplay-script-runtime" }

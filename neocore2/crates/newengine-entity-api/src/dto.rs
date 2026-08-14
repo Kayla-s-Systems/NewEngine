@@ -122,6 +122,52 @@ impl Default for EntitySpawnRequest {
     }
 }
 
+/// Authored archetype definition layered on top of a concrete composition factory.
+///
+/// Concrete factories remain Rust/plugin mechanisms (`player.fps`, `entity.empty`, future
+/// vehicle/NPC compositions). Game content registers authored ids that inherit a base factory
+/// and provide defaults without adding a new Rust constructor.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct EntityArchetypeDefinition {
+    pub id: String,
+    pub base_archetype: String,
+    pub owner: String,
+    pub description: String,
+    pub definition_ref: Option<String>,
+    pub default_properties: serde_json::Value,
+    pub tags: Vec<String>,
+    pub default_owner: Option<String>,
+}
+
+impl Default for EntityArchetypeDefinition {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            base_archetype: "entity.empty".to_owned(),
+            owner: "authored".to_owned(),
+            description: String::new(),
+            definition_ref: None,
+            default_properties: serde_json::Value::Object(serde_json::Map::new()),
+            tags: Vec::new(),
+            default_owner: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EntityArchetypeDefinitionIdRequest {
+    pub id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EntityArchetypeDefinitionMutationResponse {
+    pub ok: bool,
+    pub id: String,
+    #[serde(default)]
+    pub message: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EntityArchetypeDescriptor {
     pub id: String,
@@ -129,6 +175,12 @@ pub struct EntityArchetypeDescriptor {
     pub owner: String,
     #[serde(default)]
     pub description: String,
+    #[serde(default)]
+    pub source_kind: String,
+    #[serde(default)]
+    pub base_archetype: Option<String>,
+    #[serde(default)]
+    pub definition_ref: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]

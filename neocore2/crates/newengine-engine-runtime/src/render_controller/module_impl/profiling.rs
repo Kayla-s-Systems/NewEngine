@@ -213,15 +213,21 @@ fn emit_profiler_sample(
     if !crate::env_config::var_bool("NEWENGINE_RENDER_PROFILER_SAMPLES", true) {
         return;
     }
+    let frame_budget_ms = warn_ms_threshold();
     let payload = serde_json::json!({
         "schema": "newengine.diagnostics.profiler.sample.v1",
         "category": "render",
         "source": "render_controller",
         "name": label,
         "detail": suffix,
+        "lane": "render-prep",
+        "priority": "interactive",
+        "dependency_group": format!("frame.{frame_index}.render"),
         "frame_index": frame_index,
         "elapsed_ms": total_ms,
-        "budget_ms": warn_ms_threshold(),
+        "budget_ms": frame_budget_ms,
+        "frame_budget_ms": frame_budget_ms,
+        "exceeded_frame_budget": total_ms > frame_budget_ms,
         "slow": slow,
         "breakdown": breakdown,
     });

@@ -65,6 +65,9 @@ impl Default for RenderFramePacingConfig {
 pub struct RenderFrameTiming {
     pub frame_index: u64,
     pub last_begin_frame_ms: f32,
+    pub last_frame_slot_wait_ms: f32,
+    pub last_surface_acquire_ms: f32,
+    pub last_image_wait_ms: f32,
     pub last_end_frame_ms: f32,
     pub last_gpu_submit_ms: f32,
     pub last_blocking_upload_ms: f32,

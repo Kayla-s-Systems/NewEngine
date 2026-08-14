@@ -1,20 +1,18 @@
 use newengine_ecs::{EntityId, World};
-use newengine_gameplay_fps_api::FpsActionFrame;
+use newengine_game_data::default_game_data;
+use newengine_gameplay_fps_api::{FpsActionFrame, FpsGameplayPolicySnapshot};
 use newengine_math::{Quat, Vec3};
 use newengine_primitives::{builtins as prim_builtins, Primitive};
 use newengine_scene::{components::Name, SceneState};
 use newengine_sim::{AngularVelocity, CameraRigComp, Velocity};
 use newengine_transform::Transform;
 
+use crate::game_data::active_game_data;
+
 use newengine_engine_runtime::gameplay::{
     CollisionShapeDesc, DisplayVisibility, GameplayActor, PhysicsBodyDesc, PhysicsSurface,
     PlayerCommandFrame, PlayerController, PlayerStanceState,
 };
-
-const DEFAULT_PROJECTILE_RADIUS: f32 = 0.22;
-const DEFAULT_PROJECTILE_SPEED: f32 = 26.0;
-const DEFAULT_PROJECTILE_LIFETIME_SECONDS: f32 = 12.0;
-const DEFAULT_PROJECTILE_SPAWN_CLEARANCE: f32 = 0.85;
 
 /// Runtime tuning for the simple physics sphere launcher used by the GameReady FPS profile.
 ///
@@ -33,31 +31,65 @@ pub struct ProjectileSphereTuning {
 
 impl Default for ProjectileSphereTuning {
     fn default() -> Self {
+        let data = default_game_data().gameplay.projectile;
         Self {
-            radius: DEFAULT_PROJECTILE_RADIUS,
-            speed: DEFAULT_PROJECTILE_SPEED,
-            lifetime_seconds: DEFAULT_PROJECTILE_LIFETIME_SECONDS,
-            spawn_clearance: DEFAULT_PROJECTILE_SPAWN_CLEARANCE,
-            restitution: 0.42,
-            friction: 0.36,
-            density: 1.0,
+            radius: data.radius,
+            speed: data.speed,
+            lifetime_seconds: data.lifetime_seconds,
+            spawn_clearance: data.spawn_clearance,
+            restitution: data.restitution,
+            friction: data.friction,
+            density: data.density,
         }
     }
 }
 
 impl ProjectileSphereTuning {
     #[inline]
+    pub fn from_data(data: &newengine_game_data::ProjectileData) -> Self {
+        Self {
+            radius: data.radius,
+            speed: data.speed,
+            lifetime_seconds: data.lifetime_seconds,
+            spawn_clearance: data.spawn_clearance,
+            restitution: data.restitution,
+            friction: data.friction,
+            density: data.density,
+        }
+    }
+
+    #[inline]
     pub fn sanitized(self) -> Self {
         Self {
-            radius: finite_or(self.radius, DEFAULT_PROJECTILE_RADIUS).clamp(0.03, 2.0),
-            speed: finite_or(self.speed, DEFAULT_PROJECTILE_SPEED).clamp(0.1, 250.0),
-            lifetime_seconds: finite_or(self.lifetime_seconds, DEFAULT_PROJECTILE_LIFETIME_SECONDS)
-                .clamp(0.25, 120.0),
-            spawn_clearance: finite_or(self.spawn_clearance, DEFAULT_PROJECTILE_SPAWN_CLEARANCE)
-                .clamp(0.05, 8.0),
-            restitution: finite_or(self.restitution, 0.42).clamp(0.0, 1.0),
-            friction: finite_or(self.friction, 0.36).clamp(0.0, 2.0),
-            density: finite_or(self.density, 1.0).clamp(0.01, 1000.0),
+            radius: finite_or(self.radius, default_game_data().gameplay.projectile.radius)
+                .clamp(0.03, 2.0),
+            speed: finite_or(self.speed, default_game_data().gameplay.projectile.speed)
+                .clamp(0.1, 250.0),
+            lifetime_seconds: finite_or(
+                self.lifetime_seconds,
+                default_game_data().gameplay.projectile.lifetime_seconds,
+            )
+            .clamp(0.25, 120.0),
+            spawn_clearance: finite_or(
+                self.spawn_clearance,
+                default_game_data().gameplay.projectile.spawn_clearance,
+            )
+            .clamp(0.05, 8.0),
+            restitution: finite_or(
+                self.restitution,
+                default_game_data().gameplay.projectile.restitution,
+            )
+            .clamp(0.0, 1.0),
+            friction: finite_or(
+                self.friction,
+                default_game_data().gameplay.projectile.friction,
+            )
+            .clamp(0.0, 2.0),
+            density: finite_or(
+                self.density,
+                default_game_data().gameplay.projectile.density,
+            )
+            .clamp(0.01, 1000.0),
         }
     }
 }
@@ -74,18 +106,24 @@ pub struct ProjectileSphereRuntime {
 /// the center of the rendered viewport rather than an approximate character-forward vector.
 pub fn step_projectile_sphere_launcher(world: &mut World, dt: f32) {
     let dt = finite_or(dt, 0.0).clamp(0.0, 0.1);
+    let allow_projectile_launch = world
+        .resource::<FpsGameplayPolicySnapshot>()
+        .map(|policy| policy.player.allow_projectile_launch)
+        .unwrap_or(true);
     let tuning = world
         .resource::<ProjectileSphereTuning>()
         .copied()
-        .unwrap_or_default()
+        .unwrap_or_else(|| {
+            ProjectileSphereTuning::from_data(&active_game_data(world).gameplay.projectile)
+        })
         .sanitized();
 
     let launch_requests = world
         .query2_ids::<PlayerController, PlayerCommandFrame>()
         .filter_map(|player| {
             let commands = world.get::<PlayerCommandFrame>(player)?;
-            FpsActionFrame::from_commands(&commands.actions)
-                .launch_projectile_pressed
+            (allow_projectile_launch
+                && FpsActionFrame::from_commands(&commands.actions).launch_projectile_pressed)
                 .then_some((player, commands.source_frame))
         })
         .collect::<Vec<_>>();
@@ -137,7 +175,7 @@ pub fn spawn_projectile_sphere(
         entity,
         Primitive {
             id: prim_builtins::ID_SPHERE_UV,
-            color: [0.94, 0.97, 1.0, 1.0],
+            color: active_game_data(world).gameplay.projectile.color,
         },
     );
     let _ = world.insert(entity, DisplayVisibility::default());
@@ -153,7 +191,13 @@ pub fn spawn_projectile_sphere(
     let _ = world.insert(entity, body);
     let _ = world.insert(entity, body.to_bounds());
     let _ = world.insert(entity, Velocity(direction * tuning.speed));
-    let _ = world.insert(entity, AngularVelocity(Vec3::new(0.0, 2.5, 0.0)));
+    let _ = world.insert(
+        entity,
+        AngularVelocity({
+            let v = active_game_data(world).gameplay.projectile.angular_velocity;
+            Vec3::new(v[0], v[1], v[2])
+        }),
+    );
     let _ = world.insert(
         entity,
         ProjectileSphereRuntime {
@@ -200,7 +244,7 @@ fn camera_center_ray(world: &World, player: EntityId) -> Option<(Vec3, Vec3)> {
     let eye_height = world
         .get::<PlayerStanceState>(player)
         .map(|stance| stance.current_eye_height)
-        .unwrap_or(1.6);
+        .unwrap_or(active_game_data(world).player.tuning.camera_eye_height);
     let forward = (transform.rotation * -Vec3::Z).normalize_or_zero();
     (forward.length_squared() > 1.0e-8)
         .then_some((transform.position + Vec3::Y * eye_height, forward))

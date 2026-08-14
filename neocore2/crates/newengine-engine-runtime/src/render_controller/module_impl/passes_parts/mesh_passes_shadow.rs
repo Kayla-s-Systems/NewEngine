@@ -357,6 +357,7 @@ pub fn draw_primitives_shadow(
             plan.material_params,
             plan.emissive_radiance,
             plan.alpha_cutoff,
+            prim.id.0,
         );
         let batch_key = InstanceBatchKey::new(
             plan.pipeline,

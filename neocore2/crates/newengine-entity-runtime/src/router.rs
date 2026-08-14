@@ -4,8 +4,10 @@ use newengine_entity_api::{
     EntityServiceInfo, ENGINE_ENTITY_SERVICE_ID, ENTITY_BACKEND_CAPABILITY_ID,
     ENTITY_SERVICE_METHOD_ARCHETYPES_JSON_V1, ENTITY_SERVICE_METHOD_DESPAWN_JSON_V1,
     ENTITY_SERVICE_METHOD_EXISTS_JSON_V1, ENTITY_SERVICE_METHOD_INVOKE,
-    ENTITY_SERVICE_METHOD_LIST_JSON_V1, ENTITY_SERVICE_METHOD_SHUTDOWN_V1,
+    ENTITY_SERVICE_METHOD_LIST_JSON_V1,
+    ENTITY_SERVICE_METHOD_REGISTER_ARCHETYPE_DEFINITION_JSON_V1, ENTITY_SERVICE_METHOD_SHUTDOWN_V1,
     ENTITY_SERVICE_METHOD_SPAWN_JSON_V1,
+    ENTITY_SERVICE_METHOD_UNREGISTER_ARCHETYPE_DEFINITION_JSON_V1,
 };
 use newengine_service_kit::{
     engine_gateway_provider_service_description, ok_empty_blob, JsonServiceRouter,
@@ -32,7 +34,9 @@ pub fn entity_gateway_service(
     let archetypes_service = service.clone();
     let exists_service = service.clone();
     let spawn_service = service.clone();
-    let despawn_service = service;
+    let despawn_service = service.clone();
+    let register_definition_service = service.clone();
+    let unregister_definition_service = service;
 
     JsonServiceRouter::new(ENGINE_ENTITY_SERVICE_ID)
         .describe_json(&description)
@@ -58,6 +62,18 @@ pub fn entity_gateway_service(
         .blob(
             ENTITY_SERVICE_METHOD_DESPAWN_JSON_V1,
             move |_unit, payload| despawn_service.despawn_json_v1(payload),
+        )
+        .blob(
+            ENTITY_SERVICE_METHOD_REGISTER_ARCHETYPE_DEFINITION_JSON_V1,
+            move |_unit, payload| {
+                register_definition_service.register_archetype_definition_json_v1(payload)
+            },
+        )
+        .blob(
+            ENTITY_SERVICE_METHOD_UNREGISTER_ARCHETYPE_DEFINITION_JSON_V1,
+            move |_unit, payload| {
+                unregister_definition_service.unregister_archetype_definition_json_v1(payload)
+            },
         )
         .blob(ENTITY_SERVICE_METHOD_SHUTDOWN_V1, |_unit, _payload| {
             ok_empty_blob()

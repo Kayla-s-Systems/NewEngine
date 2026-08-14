@@ -25,12 +25,12 @@ pub(super) fn inventory_instance_at(
         .map(|entry| entry.instance_id)
 }
 
-pub(super) fn parse_inventory_slot_index(node_id: &str) -> Option<usize> {
+pub(super) fn parse_inventory_slot_index(world: &World, node_id: &str) -> Option<usize> {
     node_id
         .strip_prefix("inventory.slot.")?
         .parse::<usize>()
         .ok()
-        .filter(|index| *index < INVENTORY_SLOT_COUNT)
+        .filter(|index| *index < inventory_slot_count(world))
 }
 
 pub(super) fn parse_hotbar_index(node_id: &str) -> Option<u8> {

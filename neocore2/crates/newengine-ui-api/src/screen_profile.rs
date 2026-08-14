@@ -88,6 +88,7 @@ pub struct UiEditorRuntimeState {
     pub version: u32,
     pub frame_index: u64,
     pub mode: UiEditorRuntimeMode,
+    pub paused: bool,
     pub source_surface: String,
     pub reason: String,
 }
@@ -98,6 +99,7 @@ impl Default for UiEditorRuntimeState {
             version: 1,
             frame_index: 0,
             mode: UiEditorRuntimeMode::Edit,
+            paused: false,
             source_surface: UI_SURFACE_EDITOR_SHELL.to_owned(),
             reason: "editor default: simulation stopped until Simulate or Play".to_owned(),
         }
@@ -121,6 +123,7 @@ pub struct UiViewportSlot {
     pub h_px: f32,
     pub input_enabled: bool,
     pub simulation_enabled: bool,
+    pub paused: bool,
     pub runtime_mode: UiEditorRuntimeMode,
 }
 
@@ -136,6 +139,7 @@ impl Default for UiViewportSlot {
             h_px: 0.0,
             input_enabled: false,
             simulation_enabled: false,
+            paused: false,
             runtime_mode: UiEditorRuntimeMode::Edit,
         }
     }

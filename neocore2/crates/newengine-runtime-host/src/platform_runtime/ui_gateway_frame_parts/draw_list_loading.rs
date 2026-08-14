@@ -105,7 +105,7 @@ pub(super) fn ensure_production_loading_images(
             visuals.spinner.as_deref().unwrap_or(""),
         ));
         if request.frame_index <= 4 || request.frame_index % 120 == 1 {
-            newengine_ulog_api::ulog::warn!(
+            newengine_ulog_api::ulog::debug!(
                 "ui gateway production loading image fallback: frame={} emitted={} paint_images={} source='{}' surface={}x{}",
                 request.frame_index,
                 emitted,

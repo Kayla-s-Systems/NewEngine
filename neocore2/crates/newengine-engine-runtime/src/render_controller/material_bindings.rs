@@ -23,6 +23,9 @@ pub(super) enum MaterialTextureGpuResidency {
     GpuLoading {
         texture: TextureId,
         requested_frame: u64,
+        /// Prevents multiple synchronous residency service calls for the same
+        /// texture when several draw items reference it in one frame.
+        last_residency_poll_frame: Option<u64>,
     },
     Ready {
         texture: TextureId,

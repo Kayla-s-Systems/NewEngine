@@ -12,15 +12,17 @@ pub(super) fn submit_frame_envelope(
     frame: RenderFrameEnvelope,
     trace_frame: bool,
 ) -> EngineResult<RenderGraphSubmitReport> {
-    let graph_label = frame
-        .label
-        .clone()
-        .unwrap_or_else(|| "<unnamed>".to_owned());
+    let graph_label = trace_frame.then(|| {
+        frame
+            .label
+            .clone()
+            .unwrap_or_else(|| "<unnamed>".to_owned())
+    });
     let report = r.submit_frame(frame)?;
     if trace_frame {
         newengine_ulog_api::ulog::debug!(
             "render frame envelope: submitted graph='{}' passes={} executed_native={} skipped_native={} barriers(raw={}, war={}, waw={})",
-            graph_label,
+            graph_label.as_deref().unwrap_or("<unnamed>"),
             report.compile.pass_count,
             report.executed_passes,
             report.skipped_passes,

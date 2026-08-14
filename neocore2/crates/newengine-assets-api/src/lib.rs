@@ -81,7 +81,7 @@ pub const ASSETS_UI_RUNTIME_CONTRACT: &str = "newengine.assets.ui.runtime.v1";
 /// Runtime scene gateway. It consumes resolved map/definition DTOs and mutates the world; it does not own authored map file semantics.
 pub const ENGINE_SCENE_SERVICE_ID: &str = "engine.scene";
 
-/// Runtime scripting gateway. `.ysc` script module entries are opaque to core and
+/// Runtime scripting gateway. `.ysc` script modules are opaque to core and
 /// are routed through this domain; AssetManager still owns VFS bytes and ListFile codec dispatch.
 pub const ENGINE_SCRIPTING_SERVICE_ID: &str = "engine.scripting";
 
@@ -380,6 +380,8 @@ pub mod method {
     pub const IMPORT_DIRTY_JSON_V1: &str = "asset.import_dirty_json_v1";
     pub const IMPORT_SCAN_JSON_V1: &str = "asset.import_scan_json_v1";
     pub const IMPORT_GRAPH_JSON_V1: &str = "asset.import_graph_json_v1";
+    /// Full provider-neutral runtime dependency graph used by hot-reload/invalidation planners.
+    pub const RUNTIME_GRAPH_JSON_V1: &str = "asset.runtime_graph_json_v1";
     pub const IMPORT_DIAGNOSTICS_JSON_V1: &str = "asset.import_diagnostics_json_v1";
     pub const IMPORT_THUMBNAILS_JSON_V1: &str = "asset.import_thumbnails_json_v1";
     pub const IMPORT_DEPENDENCIES_JSON_V1: &str = "asset.import_dependencies_json_v1";
@@ -599,6 +601,7 @@ pub const REQUIRED_RUNTIME_METHODS_V1: &[&str] = &[
     method::IMPORT_DIRTY_JSON_V1,
     method::IMPORT_SCAN_JSON_V1,
     method::IMPORT_GRAPH_JSON_V1,
+    method::RUNTIME_GRAPH_JSON_V1,
     method::IMPORT_DIAGNOSTICS_JSON_V1,
     method::IMPORT_THUMBNAILS_JSON_V1,
     method::IMPORT_DEPENDENCIES_JSON_V1,

@@ -1,6 +1,12 @@
 use super::*;
 
 pub fn step_player_combat(world: &mut World, dt: f32, _fixed_tick: u64) {
+    let gameplay_policy = world
+        .resource::<FpsGameplayPolicySnapshot>()
+        .cloned()
+        .unwrap_or_default();
+    let combat_policy = gameplay_policy.combat;
+    let player_policy = gameplay_policy.player;
     let dt = if dt.is_finite() && dt > 0.0 {
         dt.min(0.1)
     } else {
@@ -70,7 +76,8 @@ pub fn step_player_combat(world: &mut World, dt: f32, _fixed_tick: u64) {
             }
         }
 
-        if actions.reload_pressed
+        if combat_policy.allow_reload
+            && actions.reload_pressed
             && state.reload_remaining <= 0.0
             && state.ammo_in_magazine < tuning.magazine_capacity
             && state.reserve_ammo > 0
@@ -83,7 +90,8 @@ pub fn step_player_combat(world: &mut World, dt: f32, _fixed_tick: u64) {
             ));
         }
 
-        if actions.fire_primary_held
+        if combat_policy.allow_fire
+            && actions.fire_primary_held
             && state.reload_remaining <= 0.0
             && state.cooldown_remaining <= 0.0
         {
@@ -125,14 +133,14 @@ pub fn step_player_combat(world: &mut World, dt: f32, _fixed_tick: u64) {
                     origin,
                     direction,
                     range: tuning.range,
-                    damage: tuning.damage,
+                    damage: tuning.damage * combat_policy.damage_multiplier,
                 };
                 let _ = world.insert(player, pending);
                 apply_recoil(world, player, tuning, shot_sequence);
             }
         }
 
-        if actions.interact_pressed {
+        if player_policy.allow_interact && actions.interact_pressed {
             let interaction_tuning = world
                 .get::<PlayerInteractionTuning>(player)
                 .copied()
@@ -144,7 +152,9 @@ pub fn step_player_combat(world: &mut World, dt: f32, _fixed_tick: u64) {
                         query_seq: interaction_query_seq(player, source_frame),
                         origin,
                         direction,
-                        range: interaction_tuning.range.clamp(0.1, 100.0),
+                        range: (interaction_tuning.range
+                            * combat_policy.interaction_range_multiplier)
+                            .clamp(0.1, 100.0),
                     },
                 );
             }

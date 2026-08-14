@@ -206,8 +206,8 @@ impl SimReadSystemDescriptor {
 /// Canonical boundary:
 ///
 /// ```text
-/// world-owner capture -> SimReadSnapshot DTO -> engine.threading read-only batches
-///                       -> SimCommandBatch -> world-owner apply stage
+/// world-owner capture -> SimReadSnapshot DTO -> host scheduling policy
+///                       -> future worker command batches -> world-owner apply stage
 /// ```
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SimReadSnapshot {
@@ -309,16 +309,17 @@ impl SimReadBatchReport {
     }
 }
 
-/// Host-owned adapter that maps simulation read batches to `engine.threading`.
+/// Host-owned policy boundary for processing immutable simulation read snapshots.
 ///
 /// `newengine-sim` deliberately depends only on this trait, not on
 /// `newengine-core`, so the simulation crate stays provider/runtime agnostic.
+/// Implementations should enqueue work only when it can make independent progress;
+/// a queue-and-immediate-wait round trip adds latency without parallelism.
 pub trait SimReadBatchExecutor {
     fn run_read_batch(
         &self,
         batch: &SimulationJobBatch,
         snapshot: SimReadSnapshot,
-        job: Box<dyn FnOnce(SimReadSnapshot) -> SimReadBatchReport + Send + 'static>,
     ) -> SimReadBatchReport;
 }
 
@@ -462,36 +463,48 @@ fn run_stage_single_thread(
     telemetry: Option<&SimulationJobTelemetry<'_>>,
     executor: Option<&dyn SimReadBatchExecutor>,
 ) {
-    let snapshot = SimReadSnapshot::capture(world, frame, stage, systems);
-    let batch = SimulationJobBatch::new(
-        stage,
-        frame,
-        0,
-        1,
-        systems.len(),
-        if executor.is_some() {
-            "engine.threading"
-        } else {
-            "world-owner-apply-stage"
-        },
-    );
-    if let Some(telemetry) = telemetry {
-        telemetry.publish_batch(&batch, EngineTaskPhase::Scheduled, "Simulation read snapshot captured", format!("SimReadSnapshot captured dependency_group='{}' systems={} entities={} storages={} resources={}; DTO is serializable and worker-safe.", snapshot.dependency_group, snapshot.system_count(), snapshot.world.entity_count, snapshot.world.storage_count, snapshot.world.resource_count), Some(0.0));
+    let batch = (telemetry.is_some() || executor.is_some()).then(|| {
+        SimulationJobBatch::new(
+            stage,
+            frame,
+            0,
+            1,
+            systems.len(),
+            if executor.is_some() {
+                "engine.threading"
+            } else {
+                "world-owner-apply-stage"
+            },
+        )
+    });
+
+    if let (Some(telemetry), Some(batch)) = (telemetry, batch.as_ref()) {
+        telemetry.publish_batch(
+            batch,
+            EngineTaskPhase::Scheduled,
+            "Simulation batch scheduled",
+            format!(
+                "World-owner batch dependency_group='{}' systems={} entities={} storages={} resources={}; read snapshot allocation is skipped unless a real executor consumes it.",
+                batch.event_dependency_group(),
+                systems.len(),
+                world.entity_count(),
+                world.storage_count(),
+                world.resource_count(),
+            ),
+            Some(0.0),
+        );
     }
 
-    if let Some(executor) = executor {
-        let report = executor.run_read_batch(
-            &batch,
-            snapshot.clone(),
-            Box::new(|snapshot| SimReadBatchReport::from_snapshot(&snapshot, 0)),
-        );
+    if let (Some(executor), Some(batch)) = (executor, batch.as_ref()) {
+        let snapshot = SimReadSnapshot::capture(world, frame, stage, systems);
+        let report = executor.run_read_batch(batch, snapshot);
         if let Some(telemetry) = telemetry {
-            telemetry.publish_batch(&batch, EngineTaskPhase::Completed, "Simulation read snapshot processed", format!("engine.threading processed SimReadSnapshot dependency_group='{}' systems={} worker_safe={}; apply stage remains world-owner.", report.dependency_group, report.system_count, report.worker_safe), Some(0.35));
+            telemetry.publish_batch(batch, EngineTaskPhase::Completed, "Simulation read snapshot processed", format!("Simulation read boundary processed dependency_group='{}' systems={} worker_safe={} executor='{}'; apply stage remains world-owner.", report.dependency_group, report.system_count, report.worker_safe, batch.executor), Some(0.35));
         }
     }
 
-    if let Some(telemetry) = telemetry {
-        telemetry.publish_batch(&batch, EngineTaskPhase::Running, "Simulation apply-stage running", "World-owner simulation systems are executing from a captured read boundary; generated command buffers are applied on the owner thread.", None);
+    if let (Some(telemetry), Some(batch)) = (telemetry, batch.as_ref()) {
+        telemetry.publish_batch(batch, EngineTaskPhase::Running, "Simulation apply-stage running", "World-owner simulation systems are executing; generated command buffers are applied on the owner thread.", None);
     }
     for s in systems {
         #[cfg(debug_assertions)]
@@ -507,9 +520,9 @@ fn run_stage_single_thread(
             cb.apply_all(world);
         }
     }
-    if let Some(telemetry) = telemetry {
+    if let (Some(telemetry), Some(batch)) = (telemetry, batch.as_ref()) {
         telemetry.publish_batch(
-            &batch,
+            batch,
             EngineTaskPhase::Completed,
             "Simulation command batch applied",
             "SimCommandBatch apply-stage completed on the world owner thread.",

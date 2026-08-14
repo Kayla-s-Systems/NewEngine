@@ -15,6 +15,7 @@ const LAUNCH_OPTIONAL_TEXTURE_TOKENS: &[&str] = &["sky", "skydome", "cloud", "cl
 #[derive(Clone, Debug, Default)]
 pub(in crate::render_controller::module_impl) struct SceneMaterialLaunchPlan {
     pub(super) critical_paths: Vec<String>,
+    pub(super) optional_paths: Vec<String>,
     pub(super) alpha_critical_paths: FxHashSet<String>,
     pub(super) optional: u32,
 }
@@ -54,13 +55,16 @@ pub(super) fn build_scene_material_launch_plan(
 
     let mut optional = 0_u32;
     let mut critical_paths = Vec::with_capacity(unique_paths.len());
+    let mut optional_paths = Vec::new();
     for path in unique_paths {
         if is_launch_gate_optional_texture(&path) {
             optional = optional.saturating_add(1);
+            optional_paths.push(path);
         } else {
             critical_paths.push(path);
         }
     }
+    optional_paths.sort_unstable();
     alpha_critical_paths.retain(|path| !is_launch_gate_optional_texture(path));
     critical_paths.sort_unstable_by(|a, b| {
         let a_alpha = alpha_critical_paths.contains(a);
@@ -70,6 +74,7 @@ pub(super) fn build_scene_material_launch_plan(
 
     SceneMaterialLaunchPlan {
         critical_paths,
+        optional_paths,
         alpha_critical_paths,
         optional,
     }
@@ -89,6 +94,14 @@ pub(super) fn critical_scene_materials_ready(
     let plan = material_plan
         .or(owned_plan.as_ref())
         .expect("scene launch material plan");
+
+    // Optional environment textures must not block launch, but they should still
+    // start decoding while the loading gate is active. Previously sky/cloud textures
+    // were first requested by the first public world frame, causing worker contention
+    // and upload bursts exactly at handoff.
+    for path in &plan.optional_paths {
+        this.request_material_texture(path);
+    }
 
     let total = plan.critical_paths.len() as u32;
     let mut waiting = 0_u32;

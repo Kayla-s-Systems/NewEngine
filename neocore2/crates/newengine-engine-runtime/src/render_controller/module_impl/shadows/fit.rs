@@ -119,6 +119,7 @@ pub(super) fn directional_shadow_stable_fit(
     })
 }
 
+#[cfg(test)]
 #[inline]
 pub(super) fn directional_shadow_frustum_fit(
     viewproj: Mat4,

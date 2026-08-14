@@ -1,0 +1,8 @@
+[package]
+name = "newengine-game-module-api"
+version = "0.1.0"
+edition = "2021"
+description = "Versioned game-module descriptor contract for NewEngine"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }

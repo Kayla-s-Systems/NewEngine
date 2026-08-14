@@ -1,11 +1,15 @@
 use abi_stable::std_types::{RResult, RString};
 use newengine_entity_api::{
-    EntityArchetypeListResponse, EntityDespawnRequest, EntityDespawnResponse, EntityDespawnResult,
-    EntityExistsRequest, EntityExistsResponse, EntityInvokeRequest, EntityListRequest,
-    EntityListResponse, EntitySpawnRequest, EntitySpawnResponse,
-    ENTITY_SERVICE_METHOD_ARCHETYPES_JSON_V1, ENTITY_SERVICE_METHOD_DESPAWN_JSON_V1,
-    ENTITY_SERVICE_METHOD_EXISTS_JSON_V1, ENTITY_SERVICE_METHOD_LIST_JSON_V1,
+    EntityArchetypeDefinition, EntityArchetypeDefinitionIdRequest,
+    EntityArchetypeDefinitionMutationResponse, EntityArchetypeListResponse, EntityDespawnRequest,
+    EntityDespawnResponse, EntityDespawnResult, EntityExistsRequest, EntityExistsResponse,
+    EntityInvokeRequest, EntityListRequest, EntityListResponse, EntitySpawnRequest,
+    EntitySpawnResponse, ENTITY_SERVICE_METHOD_ARCHETYPES_JSON_V1,
+    ENTITY_SERVICE_METHOD_DESPAWN_JSON_V1, ENTITY_SERVICE_METHOD_EXISTS_JSON_V1,
+    ENTITY_SERVICE_METHOD_LIST_JSON_V1,
+    ENTITY_SERVICE_METHOD_REGISTER_ARCHETYPE_DEFINITION_JSON_V1,
     ENTITY_SERVICE_METHOD_SPAWN_JSON_V1,
+    ENTITY_SERVICE_METHOD_UNREGISTER_ARCHETYPE_DEFINITION_JSON_V1,
 };
 use newengine_math::{Quat, Vec3};
 use newengine_plugin_api::Blob;
@@ -49,6 +53,46 @@ impl EngineEntityGatewayService {
     pub(crate) fn archetypes_json_v1(&self) -> RResult<Blob, RString> {
         ok_json(EntityArchetypeListResponse {
             archetypes: self.archetypes.descriptors(),
+        })
+    }
+
+    pub(crate) fn register_archetype_definition_json_v1(
+        &self,
+        payload: Blob,
+    ) -> RResult<Blob, RString> {
+        let definition = match decode_payload::<EntityArchetypeDefinition>(&payload) {
+            Ok(definition) => definition,
+            Err(error) => return RResult::RErr(error),
+        };
+        let id = definition.id.trim().to_owned();
+        match self.archetypes.register_definition(definition) {
+            Ok(()) => ok_json(EntityArchetypeDefinitionMutationResponse {
+                ok: true,
+                id,
+                message: "authored entity archetype registered".to_owned(),
+            }),
+            Err(error) => RResult::RErr(RString::from(error)),
+        }
+    }
+
+    pub(crate) fn unregister_archetype_definition_json_v1(
+        &self,
+        payload: Blob,
+    ) -> RResult<Blob, RString> {
+        let request = match decode_payload::<EntityArchetypeDefinitionIdRequest>(&payload) {
+            Ok(request) => request,
+            Err(error) => return RResult::RErr(error),
+        };
+        let id = request.id.trim().to_owned();
+        let ok = self.archetypes.unregister_definition(&id);
+        ok_json(EntityArchetypeDefinitionMutationResponse {
+            ok,
+            id,
+            message: if ok {
+                "authored entity archetype unregistered".to_owned()
+            } else {
+                "authored entity archetype not found".to_owned()
+            },
         })
     }
 
@@ -149,6 +193,12 @@ impl EngineEntityGatewayService {
             ENTITY_SERVICE_METHOD_EXISTS_JSON_V1 => self.exists_json_v1(payload),
             ENTITY_SERVICE_METHOD_SPAWN_JSON_V1 => self.spawn_json_v1(payload),
             ENTITY_SERVICE_METHOD_DESPAWN_JSON_V1 => self.despawn_json_v1(payload),
+            ENTITY_SERVICE_METHOD_REGISTER_ARCHETYPE_DEFINITION_JSON_V1 => {
+                self.register_archetype_definition_json_v1(payload)
+            }
+            ENTITY_SERVICE_METHOD_UNREGISTER_ARCHETYPE_DEFINITION_JSON_V1 => {
+                self.unregister_archetype_definition_json_v1(payload)
+            }
             other => RResult::RErr(RString::from(format!(
                 "engine.entity invoke_json unknown target method '{other}'"
             ))),
