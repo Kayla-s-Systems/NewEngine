@@ -8,6 +8,18 @@ use std::time::Instant;
 
 impl<E: Send + 'static> Engine<E> {
     pub(crate) fn process_plugin_control(&mut self) -> EngineResult<()> {
+        let has_pending_control = self
+            .resources
+            .get::<PluginControlQueue>()
+            .map(|queue| !queue.is_empty())
+            .unwrap_or(false);
+        if !has_pending_control {
+            return Ok(());
+        }
+
+        // Discovery/root resolution can touch the filesystem and clone plugin
+        // metadata. Keep it entirely off the per-frame path when the control
+        // plane has no work queued.
         let resolved_roots = self.resolved_plugin_discovery_roots()?;
         let required_plugin_ids = self.required_plugin_ids.clone();
         let Some(queue) = self.resources.get_mut::<PluginControlQueue>() else {
@@ -176,6 +188,10 @@ impl<E: Send + 'static> Engine<E> {
         if did_any {
             queue.result.last_action = last_action;
             queue.result.last_error = last_error;
+            // The plugin snapshot is retained state. Rebuild it only after an
+            // actual control-plane mutation; startup/load paths publish their
+            // own snapshots when loading completes.
+            self.expose_plugins_snapshot();
         }
 
         Ok(())

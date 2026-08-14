@@ -23,7 +23,7 @@ impl RenderFrameOrchestrator {
     pub(in super::super) fn should_publish_render_task_pass_event(frame_index: u64) -> bool {
         let mode = RENDER_JOB_EVENT_MODE.get_or_init(|| {
             crate::env_config::var("NEWENGINE_RENDER_JOB_EVENT_MODE")
-                .unwrap_or_else(|| "sampled".to_owned())
+                .unwrap_or_else(|| "off".to_owned())
                 .trim()
                 .to_ascii_lowercase()
         });

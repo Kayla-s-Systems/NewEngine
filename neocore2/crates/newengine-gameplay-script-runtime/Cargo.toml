@@ -1,0 +1,15 @@
+[package]
+name = "newengine-gameplay-script-runtime"
+version = "0.1.0"
+edition = "2021"
+description = "Transactional native executor for scripted gameplay command buffers"
+license = "Proprietary"
+
+[dependencies]
+newengine-ecs = { path = "../newengine-ecs" }
+newengine-engine-runtime = { path = "../newengine-engine-runtime" }
+newengine-entity-api = { path = "../newengine-entity-api" }
+newengine-entity-runtime = { path = "../newengine-entity-runtime" }
+newengine-gameplay-script-api = { path = "../newengine-gameplay-script-api" }
+newengine-ulog-api = { path = "../newengine-ulog-api" }
+serde_json = "1"

@@ -1,0 +1,9 @@
+[package]
+name = "newengine-project-api"
+version = "0.1.0"
+edition = "2021"
+readme = "README.md"
+description = "Project/game manifest and content mount contracts for NewEngine"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }

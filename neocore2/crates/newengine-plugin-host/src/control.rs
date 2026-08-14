@@ -50,6 +50,11 @@ impl PluginControlQueue {
     }
 
     #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.q.is_empty()
+    }
+
+    #[inline]
     pub fn drain(&mut self) -> impl Iterator<Item = PluginControlCommand> + '_ {
         self.q.drain(..)
     }

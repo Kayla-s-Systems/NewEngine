@@ -1,0 +1,11 @@
+[package]
+name = "newengine-game-module-composition"
+version = "0.1.0"
+edition = "2021"
+description = "In-process game-module provider composition registry for NewEngine"
+
+[dependencies]
+newengine-engine-runtime = { path = "../newengine-engine-runtime" }
+newengine-game-module-api = { path = "../newengine-game-module-api" }
+newengine-project-api = { path = "../newengine-project-api" }
+newengine-project-runtime = { path = "../newengine-project-runtime" }

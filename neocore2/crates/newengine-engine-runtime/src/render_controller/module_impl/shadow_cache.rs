@@ -64,6 +64,8 @@ impl RuntimeRenderController {
                 );
                 return false;
             }
+            self.shadows.cache_cold_refresh_count =
+                self.shadows.cache_cold_refresh_count.saturating_add(1);
             return true;
         }
 
@@ -78,10 +80,21 @@ impl RuntimeRenderController {
             .map(|last| !shadow_frames_match_sample_space(last, plan.frame))
             .unwrap_or(true);
         if shadow_projection_changed {
+            self.shadows.cache_projection_refresh_count = self
+                .shadows
+                .cache_projection_refresh_count
+                .saturating_add(1);
             return true;
         }
 
-        frames_since_refresh >= period
+        if frames_since_refresh >= period {
+            self.shadows.cache_safety_refresh_count =
+                self.shadows.cache_safety_refresh_count.saturating_add(1);
+            return true;
+        }
+
+        self.shadows.cache_reuse_count = self.shadows.cache_reuse_count.saturating_add(1);
+        false
     }
 
     #[inline]

@@ -1,0 +1,9 @@
+[package]
+name = "newengine-game-data"
+version = "0.1.0"
+edition = "2021"
+description = "Central data-only game configuration schema and Rust defaults for future Lua-backed gameplay"
+license = "Proprietary"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }

@@ -1,0 +1,9 @@
+[package]
+name = "newengine-runtime-session-api"
+version = "0.1.0"
+edition = "2021"
+readme = "README.md"
+description = "Provider-neutral runtime/PIE session lifecycle contracts for NewEngine"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }

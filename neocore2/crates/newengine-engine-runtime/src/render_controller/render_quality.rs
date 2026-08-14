@@ -47,9 +47,9 @@ pub(crate) const SHADOW_WARMUP_DEFER_FRAMES: u8 = 0;
 
 #[inline]
 pub(crate) const fn shadow_refresh_period_frames() -> u64 {
-    // Directional-light matrices, camera anchoring and cloud-coupled lighting can
-    // all evolve continuously. Reusing an old map for a dozen low-FPS frames
-    // produces a visible light/dark pulse when the cache eventually refreshes.
-    // Keep the map and the sampling frame coherent every presented frame.
-    1
+    // Projection/light changes invalidate immediately in shadow_cache.rs. This
+    // bounded safety refresh exists only for caster motion that has no cheap
+    // global revision yet. Four frames caps stale dynamic-caster shadows to a
+    // short interval while allowing static shadow maps to be genuinely reused.
+    4
 }

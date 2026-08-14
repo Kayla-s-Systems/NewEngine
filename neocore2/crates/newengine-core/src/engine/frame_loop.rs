@@ -145,7 +145,6 @@ impl<E: Send + 'static> Engine<E> {
 
         let phase_started = Instant::now();
         self.process_plugin_control()?;
-        self.expose_plugins_snapshot();
         timing.plugin_control_ms = elapsed_ms(phase_started);
 
         let mut steps_to_run = time_snapshot.simulation.ticks_to_run;

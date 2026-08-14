@@ -113,6 +113,14 @@ pub(super) fn warn_ms_threshold() -> f32 {
 }
 
 #[inline]
+pub(super) fn profiler_outlier_ms_threshold() -> f32 {
+    // Capture micro-stutter candidates below the full-frame WARN threshold.
+    // This produces only a compact profiler sample; WARN/ulog remains governed
+    // by NEWENGINE_RENDER_WARN_MS.
+    env_f32("NEWENGINE_RENDER_PROFILER_OUTLIER_MS", 8.0, 1.0, 2000.0)
+}
+
+#[inline]
 pub(super) fn slow_profile_log_interval_frames() -> u64 {
     env_u64(
         "NEWENGINE_RENDER_SLOW_PROFILE_INTERVAL_FRAMES",
@@ -148,9 +156,9 @@ pub(super) fn emit_timed_profile(
     let slow = total_ms >= warn_ms_threshold();
     let traceable = trace_frame || total_ms >= trace_ms_threshold();
     let sample_interval = profiler_sample_interval_frames();
-    let should_sample = trace_frame
-        || frame_index.is_multiple_of(sample_interval)
-        || (slow && frame_index.is_multiple_of(slow_profile_log_interval_frames()));
+    let profiler_outlier = total_ms >= profiler_outlier_ms_threshold();
+    let should_sample =
+        trace_frame || frame_index.is_multiple_of(sample_interval) || profiler_outlier;
     if should_sample {
         emit_profiler_sample(
             label,
