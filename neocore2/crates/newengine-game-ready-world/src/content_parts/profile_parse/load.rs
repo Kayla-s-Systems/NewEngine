@@ -169,9 +169,16 @@ struct ResolvedMapDefinitionRefs {
 
 #[derive(Clone, Debug, Default, Deserialize)]
 #[serde(default)]
+struct ResolvedMapDefinitionModelExplanation {
+    collision_policy: String,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(default)]
 struct ResolvedMapDefinitionEntry {
     refs: ResolvedMapDefinitionRefs,
     semantic_tags: Vec<String>,
+    model_explanation: ResolvedMapDefinitionModelExplanation,
 }
 
 fn load_resolved_map_definition(
@@ -296,6 +303,30 @@ fn load_discrete_map_profile(logical_path: &str) -> Result<GameReadyMapProfile, 
             .into_iter()
             .filter(|placement| placement.enabled)
         {
+            let authored_player_spawn = placement.tags.iter().any(|tag| {
+                matches!(
+                    tag.trim().to_ascii_lowercase().as_str(),
+                    "player_spawn" | "info_player_start" | "spawn.player"
+                )
+            }) || matches!(
+                placement.apply_mode.trim().to_ascii_lowercase().as_str(),
+                "player_spawn" | "info_player_start"
+            );
+            if authored_player_spawn {
+                profile.player.start = Vec3::new(
+                    placement.transform.position[0],
+                    placement.transform.position[1],
+                    placement.transform.position[2],
+                );
+                profile.player.yaw = placement.transform.rotation_ypr[0];
+                newengine_ulog_api::ulog::info!(
+                    "game-ready: authored player spawn selected id='{}' position={:?} yaw={:.3} policy='YMAP spawn marker owns map start position'",
+                    placement.id,
+                    profile.player.start,
+                    profile.player.yaw,
+                );
+                continue;
+            }
             let definition = if let Some(existing) = definition_cache.get(&placement.definition_ref)
             {
                 existing.clone()
@@ -362,11 +393,16 @@ fn load_discrete_map_profile(logical_path: &str) -> Result<GameReadyMapProfile, 
                 scale,
             });
 
+            let collision_policy = definition.model_explanation.collision_policy.trim();
             let has_collision = !definition.refs.collision_refs.is_empty()
                 || definition
                     .semantic_tags
                     .iter()
-                    .any(|tag| tag.eq_ignore_ascii_case("collision"));
+                    .any(|tag| tag.eq_ignore_ascii_case("collision"))
+                || matches!(
+                    collision_policy.to_ascii_lowercase().as_str(),
+                    "static_mesh" | "triangle_mesh" | "mesh"
+                );
             if has_collision && !dynamic_physics {
                 profile.prefabs.push(GameReadyPrefabSpec {
                     id: format!("{}#collision", placement.id),

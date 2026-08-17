@@ -2,6 +2,7 @@ use super::physics_queries::GameplayPhysicsQueryProviderRegistry;
 use newengine_core::physics::PhysicsApiRef;
 use newengine_ecs::World;
 use std::collections::BTreeMap;
+use std::time::Instant;
 
 use crate::authority::{
     current_entity_authority_map, current_world_authority_frame, RuntimeWorldAuthorityMode,
@@ -15,6 +16,64 @@ mod util;
 use frame_input::build_frame_input;
 use frame_output::apply_frame_output;
 
+#[derive(Clone, Copy, Debug, Default)]
+pub struct PhysicsStepTimingTelemetry {
+    pub frame_index: u64,
+    pub fixed_tick: u64,
+    pub input_build_ms: f32,
+    pub backend_step_ms: f32,
+    pub output_apply_ms: f32,
+    pub bodies: u32,
+    pub colliders: u32,
+    pub commands: u32,
+    pub queries: u32,
+    pub pose_updates: u32,
+    pub velocity_updates: u32,
+    pub events: u32,
+    pub query_hits: u32,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct PhysicsBackendWarmupState {
+    pub attempted: bool,
+}
+
+/// Forces lazy backend/Jolt initialization while the loading projection owns the
+/// frame. The packet is intentionally empty and uses fixed_tick=0, so no ECS body
+/// state is created or advanced; the first gameplay fixed tick remains tick 1.
+pub(crate) fn prewarm_service_physics_backend(world: &mut World, physics_api: &PhysicsApiRef) {
+    if world
+        .resource::<PhysicsBackendWarmupState>()
+        .map(|state| state.attempted)
+        .unwrap_or(false)
+    {
+        return;
+    }
+    world.insert_resource(PhysicsBackendWarmupState { attempted: true });
+
+    let started = Instant::now();
+    let result = {
+        let mut api = physics_api.lock();
+        api.step_frame(newengine_core::physics::PhysicsFrameInput::empty(
+            0,
+            0,
+            1.0 / 60.0,
+        ))
+    };
+    let elapsed_ms = started.elapsed().as_secs_f32() * 1000.0;
+    match result {
+        Ok(_) => newengine_ulog_api::ulog::info!(
+            "physics backend prewarm: completed under loading gate elapsed_ms={:.2} packet='empty fixed_tick=0' policy='no first-gameplay-tick cold init'",
+            elapsed_ms
+        ),
+        Err(error) => newengine_ulog_api::ulog::warn!(
+            "physics backend prewarm: failed under loading gate elapsed_ms={:.2} err='{}'; gameplay step will retry normal backend path",
+            elapsed_ms,
+            error
+        ),
+    }
+}
+
 /// ECS-side synchronization layer for service-backed physics.
 ///
 /// The backend receives `PhysicsFrameInput` packets and returns
@@ -26,6 +85,7 @@ pub struct PhysicsSyncModule {
     /// Last static-mesh revision acknowledged by the service-backed physics world.
     /// Full triangle arrays cross the service boundary only on add/change.
     static_mesh_revisions: BTreeMap<u64, u64>,
+    step_failure_count: u64,
 }
 
 impl PhysicsSyncModule {
@@ -92,6 +152,7 @@ pub(super) fn step_service_physics(
         }
     }
 
+    let input_started = Instant::now();
     let input = build_frame_input(
         world,
         frame_index,
@@ -100,26 +161,103 @@ pub(super) fn step_service_physics(
         &mut sync.static_mesh_revisions,
         gameplay_queries,
     );
+    let input_build_ms = input_started.elapsed().as_secs_f32() * 1000.0;
+    let bodies = input.bodies.len() as u32;
+    let colliders = input.colliders.len() as u32;
+    let commands = input.commands.len() as u32;
+    let queries = input.queries.len() as u32;
     world.insert_resource(sync);
 
+    let backend_started = Instant::now();
     let output = {
         let mut api = api.lock();
         match api.step_frame(input) {
             Ok(output) => output,
             Err(err) => {
-                if let Some(sync) = world.resource_mut::<PhysicsSyncModule>() {
-                    sync.static_mesh_revisions.clear();
+                let error_text = err.to_string();
+                let update_error = error_text.contains("Jolt update returned error code")
+                    || error_text.contains("body_pair_cache_full")
+                    || error_text.contains("contact_constraints_full")
+                    || error_text.contains("manifold_cache_full");
+                let failure_count = if let Some(sync) = world.resource_mut::<PhysicsSyncModule>() {
+                    sync.step_failure_count = sync.step_failure_count.saturating_add(1);
+                    // Jolt packet sync happens before PhysicsSystem_Update. Update-capacity
+                    // errors do not roll back the already-created bodies, so retaining
+                    // revisions prevents catastrophic full geometry resend on the next tick.
+                    // For non-update/service errors the revision map is cleared so the
+                    // host can safely replay state after recovery.
+                    if !update_error {
+                        sync.static_mesh_revisions.clear();
+                    }
+                    sync.step_failure_count
+                } else {
+                    1
+                };
+                if failure_count <= 3 || failure_count.is_multiple_of(120) {
+                    newengine_ulog_api::ulog::warn!(
+                        "physics sync: engine.physics step failed count={} update_error={} retry_policy='{}': {}",
+                        failure_count,
+                        update_error,
+                        if update_error {
+                            "retain-static-revisions"
+                        } else {
+                            "replay-static-state"
+                        },
+                        error_text
+                    );
                 }
-                newengine_ulog_api::ulog::warn!(
-                    "physics sync: engine.physics step failed: {}; static mesh revisions cleared for retry",
-                    err
-                );
                 return;
             }
         }
     };
+    let backend_step_ms = backend_started.elapsed().as_secs_f32() * 1000.0;
+    if let Some(sync) = world.resource_mut::<PhysicsSyncModule>() {
+        sync.step_failure_count = 0;
+    }
+    let pose_updates = output.pose_updates.len() as u32;
+    let velocity_updates = output.velocity_updates.len() as u32;
+    let events = output.events.len() as u32;
+    let query_hits = output.query_hits.len() as u32;
 
+    let apply_started = Instant::now();
     apply_frame_output(world, output, gameplay_queries);
+    let output_apply_ms = apply_started.elapsed().as_secs_f32() * 1000.0;
+    world.insert_resource(PhysicsStepTimingTelemetry {
+        frame_index,
+        fixed_tick,
+        input_build_ms,
+        backend_step_ms,
+        output_apply_ms,
+        bodies,
+        colliders,
+        commands,
+        queries,
+        pose_updates,
+        velocity_updates,
+        events,
+        query_hits,
+    });
+    if fixed_tick <= 3
+        || (fixed_tick.is_multiple_of(30)
+            && crate::runtime_policy::simulation_runtime_policy().physics_stage_log)
+    {
+        newengine_ulog_api::ulog::info!(
+            "physics.step.profile: frame={} fixed_tick={} input_ms={:.3} backend_ms={:.3} apply_ms={:.3} bodies={} colliders={} commands={} queries={} poses={} velocities={} events={} query_hits={}",
+            frame_index,
+            fixed_tick,
+            input_build_ms,
+            backend_step_ms,
+            output_apply_ms,
+            bodies,
+            colliders,
+            commands,
+            queries,
+            pose_updates,
+            velocity_updates,
+            events,
+            query_hits,
+        );
+    }
 }
 
 fn ensure_sync_module(world: &mut World) -> Option<&mut PhysicsSyncModule> {

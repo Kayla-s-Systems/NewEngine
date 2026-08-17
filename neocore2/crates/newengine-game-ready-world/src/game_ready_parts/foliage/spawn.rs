@@ -253,7 +253,23 @@ pub(crate) fn spawn_foliage_prefabs(
         }
     };
 
-    let placements = collect_tree_placements(world, terrain, foliage, player_start);
+    let placement_spec = effective_foliage_spec(foliage);
+    if placement_spec.max_count != foliage.max_count
+        || placement_spec.grid_min != foliage.grid_min
+        || placement_spec.grid_max != foliage.grid_max
+        || (placement_spec.spacing - foliage.spacing).abs() > f32::EPSILON
+    {
+        newengine_ulog_api::ulog::info!(
+            "game-ready foliage stress override: authored_max_count={} effective_max_count={} grid={}..{} spacing={:.2} gate_threshold={:.2} policy='diagnostic-only; authored asset remains unchanged'",
+            foliage.max_count,
+            placement_spec.max_count,
+            placement_spec.grid_min,
+            placement_spec.grid_max,
+            placement_spec.spacing,
+            placement_spec.gate_threshold,
+        );
+    }
+    let placements = collect_tree_placements(world, terrain, &placement_spec, player_start);
     let count = placements.len();
     if count == 0 {
         log_foliage_prefab_placement(
@@ -263,59 +279,92 @@ pub(crate) fn spawn_foliage_prefabs(
             "static_baked_batch",
             runtime_parts.len(),
             0,
-            foliage.max_count,
-            foliage.grid_min,
-            foliage.grid_max,
-            foliage.spacing,
+            placement_spec.max_count,
+            placement_spec.grid_min,
+            placement_spec.grid_max,
+            placement_spec.spacing,
         );
         return;
     }
 
-    match spawn_runtime_ydd_prefab_batch(
-        world,
-        prims,
-        mats,
-        root,
-        prefab,
-        &runtime_parts,
-        &placements,
-        &foliage.render_options,
+    let placement_mode = if matches!(
+        foliage.render_options.role,
+        newengine_model_domain_api::MeshRenderRole::FoliageInstanced
     ) {
-        Ok(batch_parts) => {
-            newengine_ulog_api::ulog::info!(
-                "game-ready foliage batching: prefab='{}' placements={} source_parts={} ecs_render_entities={} reduction={:.1}x policy='static authored foliage baked into one mesh per material slot'",
-                prefab.id,
-                count,
-                runtime_parts.len(),
-                batch_parts,
-                (count.saturating_mul(runtime_parts.len())) as f32 / batch_parts.max(1) as f32,
+        // `FoliageInstanced` means true renderer instancing: keep one source mesh per material
+        // part and materialize placement transforms as instances. The generic primitive renderer
+        // groups these entities by mesh/material into `InstanceBatchSet` and uploads a compact
+        // instance buffer, so vertex/index geometry is not duplicated per tree.
+        let render_entities = count.saturating_mul(runtime_parts.len());
+        for placement in placements {
+            spawn_runtime_ydd_prefab_instance(
+                world,
+                &*prims,
+                mats,
+                root,
+                &runtime_parts,
+                placement,
+                &foliage.render_options,
             );
         }
-        Err(error) => {
-            newengine_ulog_api::ulog::warn!(
-                "game-ready foliage batching failed prefab='{}' err='{}'; falling back to per-placement entities",
-                prefab.id,
-                error,
-            );
-            for placement in placements {
-                spawn_runtime_ydd_prefab_instance(
-                    world,
-                    &*prims,
-                    mats,
-                    root,
-                    &runtime_parts,
-                    placement,
-                    &foliage.render_options,
+        newengine_ulog_api::ulog::info!(
+            "game-ready foliage instancing: prefab='{}' placements={} source_parts={} ecs_instance_entities={} expected_gpu_batches={} policy='shared source geometry + per-placement transforms; renderer InstanceBatchSet owns hardware instancing'",
+            prefab.id,
+            count,
+            runtime_parts.len(),
+            render_entities,
+            runtime_parts.len(),
+        );
+        "hardware_instanced"
+    } else {
+        match spawn_runtime_ydd_prefab_batch(
+            world,
+            prims,
+            mats,
+            root,
+            prefab,
+            &runtime_parts,
+            &placements,
+            &foliage.render_options,
+        ) {
+            Ok(batch_parts) => {
+                newengine_ulog_api::ulog::info!(
+                    "game-ready foliage batching: prefab='{}' placements={} source_parts={} ecs_render_entities={} reduction={:.1}x policy='explicit non-instanced role baked into one mesh per material slot'",
+                    prefab.id,
+                    count,
+                    runtime_parts.len(),
+                    batch_parts,
+                    (count.saturating_mul(runtime_parts.len())) as f32 / batch_parts.max(1) as f32,
                 );
+                "static_baked_batch"
+            }
+            Err(error) => {
+                newengine_ulog_api::ulog::warn!(
+                    "game-ready foliage batching failed prefab='{}' err='{}'; falling back to per-placement entities",
+                    prefab.id,
+                    error,
+                );
+                for placement in placements {
+                    spawn_runtime_ydd_prefab_instance(
+                        world,
+                        &*prims,
+                        mats,
+                        root,
+                        &runtime_parts,
+                        placement,
+                        &foliage.render_options,
+                    );
+                }
+                "per_placement_fallback"
             }
         }
-    }
+    };
 
     log_foliage_prefab_placement(
         &prefab.id,
         &prefab.source,
         &prefab.proxy,
-        "static_baked_batch",
+        placement_mode,
         runtime_parts.len(),
         count,
         foliage.max_count,

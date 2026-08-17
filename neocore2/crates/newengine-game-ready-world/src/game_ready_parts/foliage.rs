@@ -17,7 +17,7 @@ mod ydd_mesh;
 
 use self::diagnostics::*;
 use self::material_binding::*;
-use self::placement::{choose_foliage_prefab, collect_tree_placements};
+use self::placement::{choose_foliage_prefab, collect_tree_placements, effective_foliage_spec};
 use self::types::*;
 use self::ydd_mesh::*;
 

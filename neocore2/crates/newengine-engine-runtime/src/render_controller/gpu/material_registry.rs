@@ -144,7 +144,9 @@ impl MaterialGpuRegistry {
         if let Some(pending) = self.pending_pipelines.get_mut(&cache_key) {
             let shader_event_observed =
                 pending.shader_event_generation != self.shader_event_generation;
-            let retry_due = pending.last_attempt_at.elapsed() >= Duration::from_millis(100);
+            let staged_warmup = pending.last_error.contains("pipeline warmup pending");
+            let retry_due =
+                staged_warmup || pending.last_attempt_at.elapsed() >= Duration::from_millis(100);
 
             if !shader_event_observed && !retry_due {
                 if !pending.wait_logged {
@@ -272,7 +274,8 @@ fn material_pipeline_cache_key(
 fn is_transient_material_pipeline_error(error: &MaterialDomainError) -> bool {
     let mut text = error.to_string();
     text.make_ascii_lowercase();
-    text.contains("shader compile queued")
+    text.contains("pipeline warmup pending")
+        || text.contains("shader compile queued")
         || text.contains("shader compile pending")
         || text.contains("shader pending")
         || text.contains("shader is not ready yet")

@@ -11,10 +11,6 @@ pub(crate) fn request_ui_draw_list(
     render_surface_ids: &[String],
     policy: &UiGatewayFramePolicy,
 ) -> EngineResult<Option<UiDrawList>> {
-    if !newengine_core::has_engine_gateway_route(ENGINE_UI_SERVICE_ID) {
-        return Ok(None);
-    }
-
     let started = Instant::now();
     let now_ms = loading_animation_now_ms();
     let render_surface_ids: Vec<String> = render_surface_ids
@@ -63,12 +59,9 @@ fn request_ui_draw_list_bin(
     let encode_ms = started.elapsed().as_secs_f32() * 1000.0;
 
     let service_started = Instant::now();
-    let Some(bytes) = newengine_core::call_service_v1_optional(
-        ENGINE_UI_SERVICE_ID,
-        UI_SERVICE_METHOD_DRAW_FRAME_BIN_V1,
-        &payload,
-    )
-    .map_err(|e| e.to_string())?
+    let Some(bytes) = ui_draw_frame_bin_call()
+        .call_optional(&payload)
+        .map_err(|e| e.to_string())?
     else {
         return Ok(None);
     };
@@ -104,12 +97,9 @@ fn request_ui_draw_list_json(
     let encode_ms = started.elapsed().as_secs_f32() * 1000.0;
 
     let service_started = Instant::now();
-    let Some(bytes) = newengine_core::call_service_v1_optional(
-        ENGINE_UI_SERVICE_ID,
-        UI_SERVICE_METHOD_DRAW_FRAME_V1,
-        &payload,
-    )
-    .map_err(newengine_core::EngineError::other)?
+    let Some(bytes) = ui_draw_frame_json_call()
+        .call_optional(&payload)
+        .map_err(newengine_core::EngineError::other)?
     else {
         return Ok(None);
     };

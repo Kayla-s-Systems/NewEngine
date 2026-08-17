@@ -1,6 +1,6 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use newengine_plugin_api::HostApiV1;
+use newengine_plugin_api::{HostApiV1, MethodName};
 use newengine_render_api::{
     decode_json, decode_texture_id_bin, encode_create_texture_bin, encode_json,
     encode_unit_command_batch_bin, RenderBackendInfo, RenderCommand, RenderCommandResponse,
@@ -16,6 +16,8 @@ static TRY_BINARY_CREATE_TEXTURE: AtomicBool = AtomicBool::new(true);
 #[derive(Clone)]
 pub(crate) struct RenderServiceClient {
     service: GenericJsonServiceClient,
+    command_batch_bin_method: MethodName,
+    create_texture_bin_method: MethodName,
 }
 
 impl RenderServiceClient {
@@ -23,6 +25,10 @@ impl RenderServiceClient {
     pub(crate) fn new(host: HostApiV1) -> Self {
         Self {
             service: GenericJsonServiceClient::new(host, ENGINE_RENDER_SERVICE_ID),
+            command_batch_bin_method: MethodName::from(RENDER_SERVICE_METHOD_COMMAND_BATCH_BIN_V1),
+            create_texture_bin_method: MethodName::from(
+                RENDER_SERVICE_METHOD_CREATE_TEXTURE_BIN_V1,
+            ),
         }
     }
 
@@ -47,7 +53,7 @@ impl RenderServiceClient {
             match encode_create_texture_bin(&desc) {
                 Ok(packet) => match self
                     .service
-                    .call_raw(RENDER_SERVICE_METHOD_CREATE_TEXTURE_BIN_V1, packet)
+                    .call_raw_method(&self.create_texture_bin_method, packet)
                 {
                     Ok(response) => return decode_texture_id_bin(&response),
                     Err(err) => {
@@ -113,7 +119,7 @@ impl RenderServiceClient {
             if let Ok(packet) = encode_unit_command_batch_bin(&reqs) {
                 match self
                     .service
-                    .call_raw(RENDER_SERVICE_METHOD_COMMAND_BATCH_BIN_V1, packet)
+                    .call_raw_method(&self.command_batch_bin_method, packet)
                 {
                     Ok(_) => return Ok(vec![RenderCommandResponse::Unit; binary_len]),
                     Err(err) => {

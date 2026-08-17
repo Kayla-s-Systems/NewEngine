@@ -6,10 +6,6 @@ pub(crate) fn dispatch_input_frame(
     surface_size_px: [u32; 2],
     pixels_per_point: f32,
 ) -> EngineResult<Option<UiEventDispatchFrame>> {
-    if !newengine_core::has_engine_gateway_route(ENGINE_UI_SERVICE_ID) {
-        return Ok(None);
-    }
-
     let request = UiDispatchInputRequest {
         frame_index,
         input: input.clone(),
@@ -20,12 +16,9 @@ pub(crate) fn dispatch_input_frame(
     let payload = serde_json::to_vec(&request).map_err(|e| {
         newengine_core::EngineError::other(format!("encode ui dispatch input request failed: {e}"))
     })?;
-    let Some(bytes) = newengine_core::call_service_v1_optional(
-        ENGINE_UI_SERVICE_ID,
-        UI_SERVICE_METHOD_DISPATCH_INPUT_V1,
-        &payload,
-    )
-    .map_err(newengine_core::EngineError::other)?
+    let Some(bytes) = ui_dispatch_input_call()
+        .call_optional(&payload)
+        .map_err(newengine_core::EngineError::other)?
     else {
         return Ok(None);
     };
@@ -41,7 +34,7 @@ pub(crate) fn dispatch_input_frame(
 }
 
 fn apply_ui_state_patches(patches: &[UiStatePatch]) {
-    if patches.is_empty() || !newengine_core::has_engine_gateway_route(ENGINE_UI_SERVICE_ID) {
+    if patches.is_empty() {
         return;
     }
     for patch in patches {
@@ -58,11 +51,7 @@ fn apply_ui_state_patches(patches: &[UiStatePatch]) {
                 continue;
             }
         };
-        if let Err(e) = newengine_core::call_service_v1_optional(
-            ENGINE_UI_SERVICE_ID,
-            UI_SERVICE_METHOD_APPLY_STATE_PATCH_V1,
-            &payload,
-        ) {
+        if let Err(e) = ui_apply_state_patch_call().call_optional(&payload) {
             newengine_ulog_api::ulog::warn!(
                 "ui gateway: state patch apply failed surface='{}' err='{e}'",
                 patch.surface_id

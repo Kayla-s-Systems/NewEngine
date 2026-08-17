@@ -6,19 +6,17 @@ use newengine_materials::api::MaterialRegistryApi;
 use crate::gameplay::{clear_player_input, first_player, GameRunMode, WorldActivationState};
 
 use super::super::RuntimeRenderController;
-use super::materials::{build_scene_material_launch_plan, SceneMaterialLaunchPlan};
+use super::materials::{cached_scene_material_launch_plan, SceneMaterialLaunchPlan};
 use super::residency::critical_scene_residency_ready;
 
-const SCENE_TEXTURE_GATE_SOFT_TIMEOUT_FRAMES: u64 = 1_800;
-const SCENE_TEXTURE_GATE_SOFT_TIMEOUT_MS: u64 = 90_000;
 static SCENE_LAUNCH_EPOCH: OnceLock<Instant> = OnceLock::new();
 
 pub(in crate::render_controller::module_impl) fn prepare_scene_launch_resources(
     this: &mut RuntimeRenderController,
-    world: &newengine_ecs::World,
+    world: &mut newengine_ecs::World,
     materials: &dyn MaterialRegistryApi,
 ) -> SceneMaterialLaunchPlan {
-    let plan = build_scene_material_launch_plan(world, materials);
+    let plan = cached_scene_material_launch_plan(world, materials);
     for path in &plan.critical_paths {
         this.request_material_texture(path);
     }
@@ -155,21 +153,11 @@ fn update_world_activation_gate_impl(
 }
 
 fn scene_texture_gate_soft_timeout_frames() -> u64 {
-    crate::env_config::var_u64(
-        "NEWENGINE_SCENE_TEXTURE_GATE_SOFT_TIMEOUT_FRAMES",
-        SCENE_TEXTURE_GATE_SOFT_TIMEOUT_FRAMES,
-        60,
-        18_000,
-    )
+    crate::runtime_policy::streaming_policy().scene_texture_gate_soft_timeout_frames
 }
 
 fn scene_texture_gate_soft_timeout_ms() -> u64 {
-    crate::env_config::var_u64(
-        "NEWENGINE_SCENE_TEXTURE_GATE_SOFT_TIMEOUT_MS",
-        SCENE_TEXTURE_GATE_SOFT_TIMEOUT_MS,
-        5_000,
-        600_000,
-    )
+    crate::runtime_policy::streaming_policy().scene_texture_gate_soft_timeout_ms
 }
 
 #[inline]

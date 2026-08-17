@@ -144,26 +144,17 @@ impl RuntimeRenderController {
 }
 
 fn terrain_gpu_upload_budget_per_frame() -> u32 {
-    crate::env_config::var_u32("NEWENGINE_TERRAIN_GPU_UPLOADS_PER_FRAME", 8, 0, 32)
+    crate::runtime_policy::streaming_policy().terrain_gpu_uploads_per_frame
 }
 
 fn primitive_gpu_upload_budget_per_frame() -> u32 {
-    crate::env_config::var_u32("NEWENGINE_PRIMITIVE_GPU_UPLOADS_PER_FRAME", 1, 0, 8)
+    crate::runtime_policy::streaming_policy().primitive_gpu_uploads_per_frame
 }
 
 fn primitive_gpu_upload_warn_ms() -> f32 {
-    crate::env_config::var_f32(
-        "NEWENGINE_PRIMITIVE_GPU_UPLOAD_WARN_MS",
-        250.0,
-        16.0,
-        5_000.0,
-    )
+    crate::runtime_policy::streaming_policy().primitive_gpu_upload_warn_ms
 }
 
 fn terrain_gpu_upload_interval_frames() -> u64 {
-    // Terrain visibility should not lag behind streaming by several frames.
-    // Uploads are still explicitly budgeted, but the default pumps residency
-    // every frame so the player does not stare at an empty world while chunks
-    // are already CPU-prepared.
-    crate::env_config::var_u64("NEWENGINE_TERRAIN_GPU_UPLOAD_INTERVAL_FRAMES", 1, 1, 240)
+    crate::runtime_policy::streaming_policy().terrain_gpu_upload_interval_frames
 }

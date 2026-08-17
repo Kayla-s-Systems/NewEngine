@@ -1,8 +1,5 @@
 use super::*;
 
-static RENDER_JOB_EVENT_MODE: OnceLock<String> = OnceLock::new();
-static RENDER_JOB_EVENT_INTERVAL: OnceLock<u64> = OnceLock::new();
-
 impl RenderFrameOrchestrator {
     pub(in super::super) fn render_prep_executor_detail(
         thread_pool: Option<&ThreadPoolHandle>,
@@ -21,25 +18,13 @@ impl RenderFrameOrchestrator {
     }
 
     pub(in super::super) fn should_publish_render_task_pass_event(frame_index: u64) -> bool {
-        let mode = RENDER_JOB_EVENT_MODE.get_or_init(|| {
-            crate::env_config::var("NEWENGINE_RENDER_JOB_EVENT_MODE")
-                .unwrap_or_else(|| "off".to_owned())
-                .trim()
-                .to_ascii_lowercase()
-        });
-        match mode.as_str() {
-            "off" | "none" | "disabled" => false,
-            "full" | "all" | "trace" => true,
-            _ => {
-                let interval = *RENDER_JOB_EVENT_INTERVAL.get_or_init(|| {
-                    crate::env_config::var_u64(
-                        "NEWENGINE_RENDER_JOB_EVENT_INTERVAL_FRAMES",
-                        120,
-                        1,
-                        6000,
-                    )
-                });
-                frame_index <= 3 || frame_index.is_multiple_of(interval)
+        let policy = crate::runtime_policy::diagnostics_policy();
+        match policy.render_job_event_mode {
+            crate::runtime_policy::RenderJobEventMode::Off => false,
+            crate::runtime_policy::RenderJobEventMode::Full => true,
+            crate::runtime_policy::RenderJobEventMode::Sampled => {
+                frame_index <= 3
+                    || frame_index.is_multiple_of(policy.render_job_event_interval_frames)
             }
         }
     }

@@ -170,8 +170,17 @@ pub fn draw_primitives_shadow(
     let reg = reg_lock.read();
     let mats_lock = this.bridges.scene.materials();
     let mats = mats_lock.read();
+    let shadow_max_distance = primitive_shadow_max_distance(runtime);
+    let shadow_max_distance_sq = shadow_max_distance * shadow_max_distance;
 
     let mut entries: Vec<(
+        f32,
+        u64,
+        Primitive,
+        Mat4,
+        Option<newengine_materials::MaterialRef>,
+    )> = Vec::new();
+    let mut foliage_entries: Vec<(
         f32,
         u64,
         Primitive,
@@ -202,10 +211,7 @@ pub fn draw_primitives_shadow(
             if let Some(bounds) = world.get::<Bounds>(id) {
                 let (center_ws, radius_ws) =
                     transform_sphere(gt.0, bounds.local_sphere.center, bounds.local_sphere.radius);
-                if center_ws.distance_squared(camera_position)
-                    > primitive_shadow_max_distance(runtime)
-                        * primitive_shadow_max_distance(runtime)
-                {
+                if center_ws.distance_squared(camera_position) > shadow_max_distance_sq {
                     shadow_distance_culled = shadow_distance_culled.saturating_add(1);
                     continue;
                 }
@@ -224,25 +230,39 @@ pub fn draw_primitives_shadow(
             }
         }
         let key = id.stable_u64();
-        entries.push((
+        let entry = (
             distance_sq_to_camera(gt.0, camera_position),
             key,
             *prim,
             gt.0,
             world.get::<newengine_materials::MaterialRef>(id).copied(),
-        ));
+        );
+        if matches!(
+            render_options.role,
+            newengine_model_domain_api::MeshRenderRole::FoliageInstanced
+        ) {
+            foliage_entries.push(entry);
+        } else {
+            entries.push(entry);
+        }
     }
+    sort_by_distance_then_key(&mut foliage_entries);
     sort_by_distance_then_key(&mut entries);
-    let shadow_visible = entries.len();
+    let shadow_visible = entries.len().saturating_add(foliage_entries.len());
     let shadow_budget = primitive_budget(runtime, true);
+    let foliage_shadow_budget = foliage_instance_budget(runtime, true);
     entries.truncate(shadow_budget);
+    foliage_entries.truncate(foliage_shadow_budget);
 
+    let plan_capacity = entries.len().saturating_add(foliage_entries.len());
     let mut plan_cache: FxHashMap<PrimitivePlanKey, PrimitiveGpuPlan> =
-        FxHashMap::with_capacity_and_hasher(entries.len(), Default::default());
+        FxHashMap::with_capacity_and_hasher(plan_capacity, Default::default());
     let mut written_ubos = FxHashSet::<u64>::default();
     let mut batches = InstanceBatchSet::default();
     let mut shadow_submitted = 0usize;
-    for (_distance_sq, _entity_key, prim, model, material_ref) in entries {
+    for (_distance_sq, _entity_key, prim, model, material_ref) in
+        foliage_entries.into_iter().chain(entries.into_iter())
+    {
         let plan_key = PrimitivePlanKey::new(prim, material_ref, false, true);
         let plan = if let Some(plan) = plan_cache.get(&plan_key).copied() {
             plan
@@ -386,7 +406,7 @@ pub fn draw_primitives_shadow(
     if batches.is_empty() {
         if shadow_log_due {
             newengine_ulog_api::ulog::debug!(
-                "primitive.draw_list: pass='shadow_casters' seen={} visible={} submitted=0 policy_culled={} distance_culled={} light_culled={} lod_culled={} budget={} plans={} shared_ubos={} batches={} instances={} policy='MeshShadowPolicy + stable light-space cull + shared texture-set UBO'",
+                "primitive.draw_list: pass='shadow_casters' seen={} visible={} submitted=0 policy_culled={} distance_culled={} light_culled={} lod_culled={} budget={} foliage_budget={} plans={} shared_ubos={} batches={} instances={} policy='MeshShadowPolicy + stable light-space cull + shared texture-set UBO'",
                 shadow_seen,
                 shadow_visible,
                 shadow_policy_culled,
@@ -394,6 +414,7 @@ pub fn draw_primitives_shadow(
                 shadow_light_culled,
                 shadow_lod_culled,
                 shadow_budget,
+                foliage_shadow_budget,
                 plan_cache.len(),
                 written_ubos.len(),
                 shadow_batch_count,
@@ -429,7 +450,7 @@ pub fn draw_primitives_shadow(
 
     if shadow_log_due {
         newengine_ulog_api::ulog::debug!(
-            "primitive.draw_list: pass='shadow_casters' seen={} visible={} submitted={} policy_culled={} distance_culled={} light_culled={} lod_culled={} budget={} plans={} shared_ubos={} batches={} instances={} upload_writes=1 upload_bytes={} policy='MeshShadowPolicy + stable light-space cull + shared texture-set UBO + packed instance upload'",
+            "primitive.draw_list: pass='shadow_casters' seen={} visible={} submitted={} policy_culled={} distance_culled={} light_culled={} lod_culled={} budget={} foliage_budget={} plans={} shared_ubos={} batches={} instances={} upload_writes=1 upload_bytes={} policy='MeshShadowPolicy + stable light-space cull + shared texture-set UBO + packed instance upload'",
             shadow_seen,
             shadow_visible,
             shadow_submitted,
@@ -438,6 +459,7 @@ pub fn draw_primitives_shadow(
             shadow_light_culled,
             shadow_lod_culled,
             shadow_budget,
+            foliage_shadow_budget,
             plan_cache.len(),
             written_ubos.len(),
             shadow_batch_count,

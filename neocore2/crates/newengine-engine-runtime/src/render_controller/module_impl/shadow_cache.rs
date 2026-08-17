@@ -2,6 +2,12 @@
 
 use super::super::controller::RuntimeRenderController;
 use super::shadows::{LightShadowPlan, ShadowFrame};
+use crate::gameplay::DisplayVisibility;
+use newengine_bounds::Bounds;
+use newengine_materials::MaterialRef;
+use newengine_model_domain_api::MeshRenderOptions;
+use newengine_primitives::Primitive;
+use newengine_procedural_noise::ProceduralTerrain;
 
 const SHADOW_MATRIX_EPSILON: f32 = 2.0e-4;
 const SHADOW_PARAM_EPSILON: f32 = 1.0e-4;
@@ -44,12 +50,75 @@ fn shadow_frames_match_sample_space(a: ShadowFrame, b: ShadowFrame) -> bool {
 
 impl RuntimeRenderController {
     #[inline]
-    pub(super) fn should_render_shadow_map_this_frame(&mut self, plan: LightShadowPlan) -> bool {
+    fn observe_shadow_caster_revision(&mut self, world: &newengine_ecs::World) -> u64 {
+        let since_tick = self.shadows.caster_observed_tick;
+        let first_observation = since_tick == 0;
+        let entity_changed = first_observation || world.entities_changed_since(since_tick);
+        let bounds_changed = first_observation
+            || world.any_changed_since::<Bounds>(since_tick)
+            || world.any_added_since::<Bounds>(since_tick);
+        // `Primitive` contains both immutable geometry identity (`id`) and mutable
+        // visual color. Sky/environment animation legitimately changes color every
+        // frame, so the coarse ECS changed tick is not a shadow-geometry signal.
+        // Runtime geometry replacement is represented by primitive insertion/lifecycle;
+        // procedural terrain has true mutable geometry and keeps full change tracking.
+        let geometry_changed = first_observation
+            || world.any_added_since::<Primitive>(since_tick)
+            || world.any_changed_since::<ProceduralTerrain>(since_tick)
+            || world.any_added_since::<ProceduralTerrain>(since_tick);
+        let material_changed = first_observation
+            || world.any_changed_since::<MeshRenderOptions>(since_tick)
+            || world.any_added_since::<MeshRenderOptions>(since_tick)
+            || world.any_changed_since::<MaterialRef>(since_tick)
+            || world.any_added_since::<MaterialRef>(since_tick);
+        let visibility_changed = first_observation
+            || world.any_changed_since::<DisplayVisibility>(since_tick)
+            || world.any_added_since::<DisplayVisibility>(since_tick);
+        let changed = entity_changed
+            || bounds_changed
+            || geometry_changed
+            || material_changed
+            || visibility_changed;
+
+        self.shadows.caster_observed_tick = world.tick();
+        if changed {
+            self.shadows.caster_revision = self.shadows.caster_revision.saturating_add(1).max(1);
+            self.shadows.caster_entity_change_count = self
+                .shadows
+                .caster_entity_change_count
+                .saturating_add(u64::from(entity_changed));
+            self.shadows.caster_bounds_change_count = self
+                .shadows
+                .caster_bounds_change_count
+                .saturating_add(u64::from(bounds_changed));
+            self.shadows.caster_geometry_change_count = self
+                .shadows
+                .caster_geometry_change_count
+                .saturating_add(u64::from(geometry_changed));
+            self.shadows.caster_material_change_count = self
+                .shadows
+                .caster_material_change_count
+                .saturating_add(u64::from(material_changed));
+            self.shadows.caster_visibility_change_count = self
+                .shadows
+                .caster_visibility_change_count
+                .saturating_add(u64::from(visibility_changed));
+        }
+        self.shadows.caster_revision
+    }
+
+    #[inline]
+    pub(super) fn should_render_shadow_map_this_frame(
+        &mut self,
+        plan: LightShadowPlan,
+        world: &newengine_ecs::World,
+    ) -> bool {
+        let caster_revision = self.observe_shadow_caster_revision(world);
         if !plan.is_active() {
             self.shadows.cache_valid = false;
-            self.shadows.last_refresh_frame = 0;
             self.shadows.current_caster_cull = None;
             self.shadows.cached_shadow_frame = None;
+            self.shadows.cached_caster_revision = 0;
             return false;
         }
 
@@ -69,11 +138,6 @@ impl RuntimeRenderController {
             return true;
         }
 
-        let period = self.shadows.refresh_period_frames.max(1);
-        let frames_since_refresh = self
-            .frame
-            .frame_index
-            .saturating_sub(self.shadows.last_refresh_frame);
         let shadow_projection_changed = self
             .shadows
             .cached_shadow_frame
@@ -87,9 +151,9 @@ impl RuntimeRenderController {
             return true;
         }
 
-        if frames_since_refresh >= period {
-            self.shadows.cache_safety_refresh_count =
-                self.shadows.cache_safety_refresh_count.saturating_add(1);
+        if self.shadows.cached_caster_revision != caster_revision {
+            self.shadows.cache_caster_refresh_count =
+                self.shadows.cache_caster_refresh_count.saturating_add(1);
             return true;
         }
 
@@ -100,8 +164,8 @@ impl RuntimeRenderController {
     #[inline]
     pub(super) fn mark_shadow_map_rendered(&mut self, plan: LightShadowPlan) {
         self.shadows.cache_valid = true;
-        self.shadows.last_refresh_frame = self.frame.frame_index;
         self.shadows.cached_shadow_frame = Some(plan.frame);
+        self.shadows.cached_caster_revision = self.shadows.caster_revision;
     }
 
     #[inline]
@@ -112,11 +176,11 @@ impl RuntimeRenderController {
     #[inline]
     pub(super) fn invalidate_shadow_cache(&mut self) {
         self.shadows.cache_valid = false;
-        self.shadows.last_refresh_frame = 0;
         self.shadows.warmup_defer_frames_remaining =
             super::super::render_quality::SHADOW_WARMUP_DEFER_FRAMES;
         self.shadows.current_caster_cull = None;
         self.shadows.cached_shadow_frame = None;
+        self.shadows.cached_caster_revision = 0;
     }
 }
 

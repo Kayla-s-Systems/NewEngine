@@ -18,6 +18,7 @@ pub(crate) fn sync_physics_world_settings(world: &mut World) {
         PhysicsWorldSettings {
             gravity: tuning.gravity,
             contact_skin: tuning.contact_skin,
+            ..PhysicsWorldSettings::default()
         }
         .sanitized(),
     );

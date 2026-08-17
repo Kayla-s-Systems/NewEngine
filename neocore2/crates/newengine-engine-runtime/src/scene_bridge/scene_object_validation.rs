@@ -1,7 +1,9 @@
 use super::*;
 use crate::gameplay::PreparedRenderMesh;
 use newengine_bounds::Bounds;
+use newengine_math::collections::FxHashMap;
 use newengine_ui_api::UiStatePatch;
+use std::sync::OnceLock;
 
 const SCENE_OBJECT_INVARIANTS_SURFACE_ID: &str = "engine.ui.editor.scene_object_invariants";
 const SCENE_OBJECT_INVARIANTS_SOURCE_GATEWAY: &str = "engine.scene";
@@ -46,27 +48,43 @@ pub(crate) fn validate_scene_object_invariants(
     phase: &'static str,
 ) -> SceneObjectInvariantReport {
     let mut targets = Vec::<SceneObjectTarget>::new();
+    let mut target_indices = FxHashMap::<u64, usize>::default();
 
     for (entity, _) in world.query::<Primitive>() {
         if world
             .get::<crate::gameplay::WorldItemVisualPart>(entity)
             .is_none()
         {
-            add_target(&mut targets, entity, "Primitive");
+            add_target(&mut targets, &mut target_indices, entity, "Primitive");
         }
     }
     for (entity, _) in world.query::<PreparedRenderMesh>() {
-        add_target(&mut targets, entity, "PreparedRenderMesh");
+        add_target(
+            &mut targets,
+            &mut target_indices,
+            entity,
+            "PreparedRenderMesh",
+        );
     }
     for (entity, _) in world.query::<crate::scene_bridge::definitions_runtime::DefinitionInstance>()
     {
-        add_target(&mut targets, entity, "DefinitionInstance");
+        add_target(
+            &mut targets,
+            &mut target_indices,
+            entity,
+            "DefinitionInstance",
+        );
     }
     for (entity, _) in world.query::<crate::gameplay::PlayerVisualPart>() {
-        add_target(&mut targets, entity, "PlayerVisualPart");
+        add_target(
+            &mut targets,
+            &mut target_indices,
+            entity,
+            "PlayerVisualPart",
+        );
     }
     for (entity, anchor) in world.query::<crate::gameplay::SceneEntityAnchor>() {
-        add_target_by_anchor(&mut targets, entity, anchor.role);
+        add_target_by_anchor(&mut targets, &mut target_indices, entity, anchor.role);
     }
 
     let mut report = SceneObjectInvariantReport {
@@ -77,11 +95,12 @@ pub(crate) fn validate_scene_object_invariants(
     for target in targets {
         let missing_transform = world.get::<Transform>(target.entity).is_none();
         let missing_bounds = world.get::<Bounds>(target.entity).is_none();
-        let missing_physics = world
-            .get::<crate::gameplay::PhysicsBodyDesc>(target.entity)
-            .is_none();
+        // Physics is deliberately not a scene-object invariant. Render/model/terrain/player
+        // presentation entities may be non-colliding; collision is authored explicitly through
+        // PhysicsBodyDesc / StaticMeshCollider / terrain collision providers.
+        let missing_physics = false;
 
-        if !(missing_transform || missing_bounds || missing_physics) {
+        if !(missing_transform || missing_bounds) {
             continue;
         }
 
@@ -115,7 +134,7 @@ pub(crate) fn validate_scene_object_invariants(
 
         crate::gameplay::attach_scene_object_core(world, target.entity, position, half_extents);
         newengine_ulog_api::ulog::warn!(
-            "scene object invariant: phase='{}' entity={:?} reasons='{}' repaired_transform={} repaired_bounds={} repaired_physics={} policy='all scene objects require Transform+Bounds+PhysicsBodyDesc'",
+            "scene object invariant: phase='{}' entity={:?} reasons='{}' repaired_transform={} repaired_bounds={} repaired_physics={} policy='scene objects require Transform+Bounds; physics is explicit opt-in'",
             phase,
             target.entity,
             target.reasons.join(","),
@@ -126,7 +145,7 @@ pub(crate) fn validate_scene_object_invariants(
     }
 
     if report.repaired == 0 {
-        newengine_ulog_api::ulog::info!(
+        newengine_ulog_api::ulog::debug!(
             "scene object invariants: phase='{}' status='stable' checked={} policy='render/model/terrain/definition/player scene objects are complete entities'",
             phase,
             report.checked
@@ -154,33 +173,37 @@ pub(crate) fn validate_scene_object_invariants(
 }
 
 fn scene_object_invariants_ui_enabled() -> bool {
-    const OVERRIDE_ENV: &str = "NEWENGINE_SCENE_OBJECT_INVARIANTS_UI";
-    const EDITOR_SHELL_ENV: &str =
-        "NEWENGINE_PLUGIN_ENGINE_RUNTIME__ui__screen_profile__publish_editor_shell";
+    static ENABLED: OnceLock<bool> = OnceLock::new();
+    *ENABLED.get_or_init(|| {
+        const OVERRIDE_ENV: &str = "NEWENGINE_SCENE_OBJECT_INVARIANTS_UI";
+        const EDITOR_SHELL_ENV: &str =
+            "NEWENGINE_PLUGIN_ENGINE_RUNTIME__ui__screen_profile__publish_editor_shell";
 
-    if let Some(value) = crate::env_config::var(OVERRIDE_ENV) {
-        return matches!(
-            value.trim().to_ascii_lowercase().as_str(),
-            "1" | "true" | "yes" | "on"
-        );
-    }
-
-    let editor_shell_enabled = crate::env_config::var(EDITOR_SHELL_ENV)
-        .map(|value| {
-            !matches!(
+        if let Some(value) = crate::env_config::var(OVERRIDE_ENV) {
+            return matches!(
                 value.trim().to_ascii_lowercase().as_str(),
-                "0" | "false" | "no" | "off"
-            )
-        })
-        .unwrap_or(true);
-    let runtime_target = crate::env_config::var("NEWENGINE_PLUGIN_TARGET").is_some_and(|value| {
-        matches!(
-            value.trim().to_ascii_lowercase().as_str(),
-            "runtime" | "game" | "standalone"
-        )
-    });
+                "1" | "true" | "yes" | "on"
+            );
+        }
 
-    editor_shell_enabled && !runtime_target
+        let editor_shell_enabled = crate::env_config::var(EDITOR_SHELL_ENV)
+            .map(|value| {
+                !matches!(
+                    value.trim().to_ascii_lowercase().as_str(),
+                    "0" | "false" | "no" | "off"
+                )
+            })
+            .unwrap_or(true);
+        let runtime_target =
+            crate::env_config::var("NEWENGINE_PLUGIN_TARGET").is_some_and(|value| {
+                matches!(
+                    value.trim().to_ascii_lowercase().as_str(),
+                    "runtime" | "game" | "standalone"
+                )
+            });
+
+        editor_shell_enabled && !runtime_target
+    })
 }
 
 fn publish_scene_object_invariants_state_patch(
@@ -270,25 +293,35 @@ pub(crate) fn scene_object_invariant_snapshot_json(
             "repaired_bounds": record.repaired_bounds,
             "repaired_physics": record.repaired_physics,
         })).collect::<Vec<_>>(),
-        "policy": "all scene objects require Transform + Bounds + PhysicsBodyDesc",
+        "policy": "scene objects require Transform + Bounds; physics is explicit opt-in",
     })
 }
 
-fn add_target(targets: &mut Vec<SceneObjectTarget>, entity: EntityId, reason: &'static str) {
-    if let Some(existing) = targets.iter_mut().find(|target| target.entity == entity) {
+fn add_target(
+    targets: &mut Vec<SceneObjectTarget>,
+    target_indices: &mut FxHashMap<u64, usize>,
+    entity: EntityId,
+    reason: &'static str,
+) {
+    let key = entity.stable_u64();
+    if let Some(&index) = target_indices.get(&key) {
+        let existing = &mut targets[index];
         if !existing.reasons.contains(&reason) {
             existing.reasons.push(reason);
         }
         return;
     }
+    let index = targets.len();
     targets.push(SceneObjectTarget {
         entity,
         reasons: vec![reason],
     });
+    target_indices.insert(key, index);
 }
 
 fn add_target_by_anchor(
     targets: &mut Vec<SceneObjectTarget>,
+    target_indices: &mut FxHashMap<u64, usize>,
     entity: EntityId,
     role: crate::gameplay::SceneEntityRole,
 ) {
@@ -307,5 +340,5 @@ fn add_target_by_anchor(
         SceneEntityRole::Player => "SceneEntityAnchor::Player",
         SceneEntityRole::ActiveCamera => "SceneEntityAnchor::ActiveCamera",
     };
-    add_target(targets, entity, reason);
+    add_target(targets, target_indices, entity, reason);
 }

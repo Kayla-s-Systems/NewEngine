@@ -1,7 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::OnceLock;
 
 use crate::gameplay::GameRunMode;
 use newengine_core::render::{

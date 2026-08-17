@@ -249,6 +249,13 @@ impl RuntimeRenderController {
         let backend_surface_acquire_ms;
         let backend_image_wait_ms;
         let backend_reported_end_ms;
+        let backend_gpu_timestamps_enabled;
+        let backend_gpu_timing_frame_index;
+        let backend_gpu_shadow_ms;
+        let backend_gpu_opaque_ms;
+        let backend_gpu_postfx_ms;
+        let backend_gpu_ui_ms;
+        let backend_gpu_profiled_ms;
         {
             let diagnostics_before_present_started = Instant::now();
             if let Ok(diag) = r.diagnostics_snapshot() {
@@ -305,6 +312,34 @@ impl RuntimeRenderController {
                 .as_ref()
                 .map(|diag| diag.frame.last_end_frame_ms)
                 .unwrap_or(0.0);
+            backend_gpu_timestamps_enabled = backend_timing_snapshot
+                .as_ref()
+                .map(|diag| diag.frame.gpu_timestamps_enabled)
+                .unwrap_or(false);
+            backend_gpu_timing_frame_index = backend_timing_snapshot
+                .as_ref()
+                .map(|diag| diag.frame.last_gpu_timing_frame_index)
+                .unwrap_or(0);
+            backend_gpu_shadow_ms = backend_timing_snapshot
+                .as_ref()
+                .map(|diag| diag.frame.last_gpu_shadow_ms)
+                .unwrap_or(0.0);
+            backend_gpu_opaque_ms = backend_timing_snapshot
+                .as_ref()
+                .map(|diag| diag.frame.last_gpu_opaque_ms)
+                .unwrap_or(0.0);
+            backend_gpu_postfx_ms = backend_timing_snapshot
+                .as_ref()
+                .map(|diag| diag.frame.last_gpu_postfx_ms)
+                .unwrap_or(0.0);
+            backend_gpu_ui_ms = backend_timing_snapshot
+                .as_ref()
+                .map(|diag| diag.frame.last_gpu_ui_ms)
+                .unwrap_or(0.0);
+            backend_gpu_profiled_ms = backend_timing_snapshot
+                .as_ref()
+                .map(|diag| diag.frame.last_gpu_profiled_ms)
+                .unwrap_or(0.0);
             self.bridge_render_backend_events(ctx, &mut **r);
 
             if let Some(snapshot) = frame_debug_snapshot.take() {
@@ -352,8 +387,15 @@ impl RuntimeRenderController {
             backend_surface_acquire_ms,
             backend_image_wait_ms,
             backend_reported_end_ms,
+            backend_gpu_timestamps_enabled,
+            backend_gpu_timing_frame_index,
+            backend_gpu_shadow_ms,
+            backend_gpu_opaque_ms,
+            backend_gpu_postfx_ms,
+            backend_gpu_ui_ms,
+            backend_gpu_profiled_ms,
         };
-        if crate::env_config::var_bool("NEWENGINE_RENDER_PHASE_LOG", false)
+        if crate::runtime_policy::render_runtime_policy().render_phase_log
             && render_timing.frame_index.is_multiple_of(60)
         {
             newengine_ulog_api::ulog::info!(
@@ -382,7 +424,7 @@ impl RuntimeRenderController {
         snapshot: Option<&newengine_plugin_host::PluginsSnapshot>,
     ) {
         if let Some(snap) = snapshot {
-            self.bridges.plugins.publish(snap.clone());
+            let _ = self.bridges.plugins.publish_if_changed(snap);
         }
         if let Some(q) = ctx
             .resources_mut()

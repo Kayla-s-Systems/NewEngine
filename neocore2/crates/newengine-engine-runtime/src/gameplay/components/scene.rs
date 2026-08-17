@@ -84,16 +84,6 @@ pub fn attach_scene_object_core(
             Bounds::from_local_aabb(Aabb::from_center_half_extents(Vec3::ZERO, he)),
         );
     }
-    if world.get::<PhysicsBodyDesc>(entity).is_none() {
-        let he = world
-            .get::<Bounds>(entity)
-            .map(|bounds| sanitized_half_extents(bounds.local_aabb.half_extents()))
-            .unwrap_or_else(|| sanitized_half_extents(half_extents));
-        let shape = CollisionShapeDesc::Box {
-            half_extents: [he.x, he.y, he.z],
-        };
-        let _ = world.insert(entity, PhysicsBodyDesc::trigger(shape));
-    }
 }
 
 #[inline]
@@ -116,4 +106,28 @@ fn sanitized_half_extents(value: Vec3) -> Vec3 {
         value.y.abs().max(0.001),
         value.z.abs().max(0.001),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn scene_object_core_does_not_imply_physics() {
+        let mut world = newengine_ecs::World::new();
+        let entity = world.spawn();
+        attach_scene_object_core(
+            &mut world,
+            entity,
+            Vec3::new(1.0, 2.0, 3.0),
+            Vec3::splat(0.5),
+        );
+
+        assert!(world.get::<Transform>(entity).is_some());
+        assert!(world.get::<Bounds>(entity).is_some());
+        assert!(
+            world.get::<PhysicsBodyDesc>(entity).is_none(),
+            "scene membership must not manufacture collision; physics is explicit opt-in"
+        );
+    }
 }

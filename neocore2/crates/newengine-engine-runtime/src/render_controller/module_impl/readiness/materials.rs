@@ -9,7 +9,6 @@ use super::super::super::material_bindings::LitMaterialPlan;
 use super::super::RuntimeRenderController;
 use super::status::LaunchReadiness;
 
-const SCENE_TEXTURE_LAUNCH_MIN_RATIO_DEFAULT: f32 = 1.00;
 const LAUNCH_OPTIONAL_TEXTURE_TOKENS: &[&str] = &["sky", "skydome", "cloud", "clouds", "moon"];
 
 #[derive(Clone, Debug, Default)]
@@ -18,6 +17,72 @@ pub(in crate::render_controller::module_impl) struct SceneMaterialLaunchPlan {
     pub(super) optional_paths: Vec<String>,
     pub(super) alpha_critical_paths: FxHashSet<String>,
     pub(super) optional: u32,
+}
+
+#[derive(Clone, Debug, Default)]
+struct SceneMaterialLaunchPlanCache {
+    observed_world_tick: u64,
+    material_revision: u64,
+    rebuild_count: u64,
+    plan: SceneMaterialLaunchPlan,
+}
+
+/// Returns the launch material plan derived from the current world/material
+/// revisions. The plan used to rescan every MaterialRef/TerrainMaterialLayers on
+/// each loading frame even when only GPU/upload readiness changed.
+pub(super) fn cached_scene_material_launch_plan(
+    world: &mut newengine_ecs::World,
+    mats: &dyn MaterialRegistryApi,
+) -> SceneMaterialLaunchPlan {
+    let current_tick = world.tick();
+    let material_revision = mats.revision();
+    let (observed_tick, observed_material_revision, cached_plan, rebuild_count) = world
+        .resource::<SceneMaterialLaunchPlanCache>()
+        .map(|cache| {
+            (
+                cache.observed_world_tick,
+                cache.material_revision,
+                cache.plan.clone(),
+                cache.rebuild_count,
+            )
+        })
+        .unwrap_or_default();
+
+    let world_dirty = observed_tick == 0
+        || world.entities_changed_since(observed_tick)
+        || world.any_changed_since::<newengine_materials::MaterialRef>(observed_tick)
+        || world.any_added_since::<newengine_materials::MaterialRef>(observed_tick)
+        || world.any_changed_since::<TerrainMaterialLayers>(observed_tick)
+        || world.any_added_since::<TerrainMaterialLayers>(observed_tick);
+    let material_dirty = observed_material_revision != material_revision;
+
+    let (plan, rebuild_count) = if world_dirty || material_dirty {
+        let plan = build_scene_material_launch_plan(world, mats);
+        let rebuild_count = rebuild_count.saturating_add(1);
+        if rebuild_count <= 4 || rebuild_count.is_multiple_of(32) {
+            newengine_ulog_api::ulog::debug!(
+                "render launch material plan: rebuilt world_tick={} previous_tick={} material_revision={} previous_material_revision={} critical={} optional={} rebuild_count={} policy='revision-driven'",
+                current_tick,
+                observed_tick,
+                material_revision,
+                observed_material_revision,
+                plan.critical_paths.len(),
+                plan.optional_paths.len(),
+                rebuild_count,
+            );
+        }
+        (plan, rebuild_count)
+    } else {
+        (cached_plan, rebuild_count)
+    };
+
+    world.insert_resource(SceneMaterialLaunchPlanCache {
+        observed_world_tick: current_tick,
+        material_revision,
+        rebuild_count,
+        plan: plan.clone(),
+    });
+    plan
 }
 
 pub(super) fn build_scene_material_launch_plan(
@@ -145,13 +210,10 @@ pub(super) fn critical_scene_materials_ready(
     }
 
     let ready_count = total.saturating_sub(waiting).saturating_sub(failed);
-    let configured_min_ready = crate::env_config::var_u32(
-        "NEWENGINE_SCENE_TEXTURE_LAUNCH_MIN_READY",
-        total,
-        0,
-        total.max(1),
-    )
-    .min(total);
+    let configured_min_ready = crate::runtime_policy::streaming_policy()
+        .scene_texture_launch_min_ready
+        .unwrap_or(total)
+        .min(total);
     let visual_floor = scene_texture_launch_visual_floor(total);
     let min_ready = configured_min_ready.max(visual_floor).min(total);
 
@@ -221,12 +283,7 @@ fn scene_texture_launch_visual_floor(total: u32) -> u32 {
     if total <= 1 {
         return total;
     }
-    let ratio = crate::env_config::var_f32(
-        "NEWENGINE_SCENE_TEXTURE_LAUNCH_MIN_RATIO",
-        SCENE_TEXTURE_LAUNCH_MIN_RATIO_DEFAULT,
-        0.50,
-        1.00,
-    );
+    let ratio = crate::runtime_policy::streaming_policy().scene_texture_launch_min_ratio;
     ((total as f32) * ratio).ceil() as u32
 }
 

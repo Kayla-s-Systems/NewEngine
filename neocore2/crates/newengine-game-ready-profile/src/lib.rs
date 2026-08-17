@@ -7,6 +7,7 @@ mod entity_archetypes;
 mod env_config;
 mod game_ready_fps;
 mod profile;
+mod project_editor;
 mod provider_routes;
 mod scene_bootstrap;
 mod validation;
@@ -28,6 +29,10 @@ pub use newengine_game_data::{
     GAME_READY_PROFILE_ENV,
 };
 pub use profile::{GameReadyRuntimeKind, GameReadyRuntimeProfile};
+pub use project_editor::{
+    runtime_profile_registration as project_editor_runtime_profile_registration,
+    PROJECT_EDITOR_RUNTIME_PROFILE_ID,
+};
 
 pub const GAME_READY_RUNTIME_PROFILE_ID: &str = "newengine.runtime-profile.game-ready";
 

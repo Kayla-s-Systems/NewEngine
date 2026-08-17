@@ -78,6 +78,12 @@ fn draw_primitives_for_pass(
     let reg = reg_lock.read();
     let mats_lock = this.bridges.scene.materials();
     let mats = mats_lock.read();
+    let stage_profile = runtime
+        && (this.frame.frame_index <= 3 || this.frame.frame_index.is_multiple_of(30))
+        && crate::runtime_policy::render_runtime_policy().primitive_stage_log;
+    let stage_total_started = stage_profile.then(std::time::Instant::now);
+    let scan_started = stage_profile.then(std::time::Instant::now);
+    let visibility_settings = primitive_visibility_settings(runtime);
 
     type PrimitiveDrawEntry = (
         f32,
@@ -90,6 +96,7 @@ fn draw_primitives_for_pass(
     );
 
     let mut sky_entries: Vec<PrimitiveDrawEntry> = Vec::new();
+    let mut foliage_entries: Vec<PrimitiveDrawEntry> = Vec::new();
     let mut entries: Vec<PrimitiveDrawEntry> = Vec::new();
     let mut sky_seen = 0usize;
     let mut sky_profile_culled = 0usize;
@@ -141,7 +148,7 @@ fn draw_primitives_for_pass(
             }
             continue;
         }
-        if runtime && !follows_view {
+        if runtime && !follows_view && visibility_settings.culling_enabled {
             if let Some(bounds) = world.get::<Bounds>(id) {
                 let (center_ws, radius_ws) =
                     transform_sphere(gt.0, bounds.local_sphere.center, bounds.local_sphere.radius);
@@ -150,14 +157,14 @@ fn draw_primitives_for_pass(
                     camera_forward,
                     center_ws,
                     radius_ws,
-                    primitive_forward_max_distance(runtime),
-                    scene_forward_cone_dot(),
-                    primitive_near_accept_distance(),
+                    visibility_settings.max_distance,
+                    visibility_settings.cone_dot,
+                    visibility_settings.near_accept_distance,
                 ) {
                     continue;
                 }
             } else if distance_sq_to_camera(gt.0, camera_position)
-                > primitive_forward_max_distance(runtime) * primitive_forward_max_distance(runtime)
+                > visibility_settings.max_distance * visibility_settings.max_distance
             {
                 continue;
             }
@@ -178,13 +185,21 @@ fn draw_primitives_for_pass(
         );
         if sky_role {
             sky_entries.push(entry);
+        } else if has_primitive_flag(draw_flags, PRIMITIVE_DRAW_FOLIAGE_ROLE) {
+            foliage_entries.push(entry);
         } else {
             entries.push(entry);
         }
     }
     sort_by_distance_then_key(&mut sky_entries);
+    sort_by_distance_then_key(&mut foliage_entries);
     sort_by_distance_then_key(&mut entries);
+    foliage_entries.truncate(foliage_instance_budget(runtime, false));
     entries.truncate(primitive_budget(runtime, false));
+    let scan_ms = scan_started
+        .map(|started| started.elapsed().as_secs_f64() * 1000.0)
+        .unwrap_or(0.0);
+    let plan_started = stage_profile.then(std::time::Instant::now);
     if runtime && (route_diagnostics_due(this.frame.frame_index)) {
         newengine_ulog_api::ulog::debug!(
             "sky.draw_list: seen={} emitted={} profile_culled={} pass='viewport_forward' depth_write=false shadow=false route='mesh_render_options' opaque_candidates={} opaque_budget={} draw_sky_visuals={}",
@@ -196,12 +211,16 @@ fn draw_primitives_for_pass(
             this.runtime_profile().draw_sky_visuals()
         );
     }
-    let plan_cache_capacity = sky_entries.len().saturating_add(entries.len());
+    let plan_cache_capacity = sky_entries
+        .len()
+        .saturating_add(foliage_entries.len())
+        .saturating_add(entries.len());
     let mut plan_cache: FxHashMap<PrimitivePlanKey, PrimitiveGpuPlan> =
         FxHashMap::with_capacity_and_hasher(plan_cache_capacity, Default::default());
     let mut written_ubos = FxHashSet::<u64>::default();
     let mut sky_background_batches = InstanceBatchSet::default();
     let mut sky_foreground_batches = InstanceBatchSet::default();
+    let mut foliage_batches = InstanceBatchSet::default();
     let mut opaque_batches = InstanceBatchSet::default();
 
     // Keep sky in ordered replay buckets. `InstanceBatchSet` sorts by pipeline / bind
@@ -209,9 +228,13 @@ fn draw_primitives_for_pass(
     // set with sun/moon discs: draw authored dome first, sky foreground discs next,
     // then world opaque batches.
     for (_distance_sq, _entity_key, prim, model, material_ref, draw_flags, sky_runtime) in
-        sky_entries.into_iter().chain(entries.into_iter())
+        sky_entries
+            .into_iter()
+            .chain(foliage_entries.into_iter())
+            .chain(entries.into_iter())
     {
         let follows_view = has_primitive_flag(draw_flags, PRIMITIVE_DRAW_FOLLOW_VIEW);
+        let foliage_role = has_primitive_flag(draw_flags, PRIMITIVE_DRAW_FOLIAGE_ROLE);
         let sky_role = has_primitive_flag(draw_flags, PRIMITIVE_DRAW_SKY_ROLE);
         let background_sky = has_primitive_flag(draw_flags, PRIMITIVE_DRAW_SKY_BACKGROUND);
         let receive_shadows = has_primitive_flag(draw_flags, PRIMITIVE_DRAW_RECEIVE_SHADOWS);
@@ -398,6 +421,14 @@ fn draw_primitives_for_pass(
                 plan.gpu,
                 instance,
             );
+        } else if foliage_role {
+            foliage_batches.push(
+                batch_key,
+                plan.pipeline,
+                plan.bind_group,
+                plan.gpu,
+                instance,
+            );
         } else {
             opaque_batches.push(
                 batch_key,
@@ -414,30 +445,50 @@ fn draw_primitives_for_pass(
 
     if runtime && route_diagnostics_due(this.frame.frame_index) {
         newengine_ulog_api::ulog::debug!(
-            "primitive.batch.plan: pass='{}' plans={} shared_ubos={} batches=[sky_bg:{},sky_fg:{},opaque:{}] instances=[sky_bg:{},sky_fg:{},opaque:{}] policy='UBO keyed by pipeline texture set; mesh transform/material scalars stay in instance data'",
+            "primitive.batch.plan: pass='{}' plans={} shared_ubos={} batches=[sky_bg:{},sky_fg:{},foliage:{},opaque:{}] instances=[sky_bg:{},sky_fg:{},foliage:{},opaque:{}] policy='UBO keyed by pipeline texture set; mesh transform/material scalars stay in instance data'",
             pass.label(),
             plan_cache.len(),
             written_ubos.len(),
             sky_background_batches.batch_count(),
             sky_foreground_batches.batch_count(),
+            foliage_batches.batch_count(),
             opaque_batches.batch_count(),
             sky_background_batches.instance_count(),
             sky_foreground_batches.instance_count(),
+            foliage_batches.instance_count(),
             opaque_batches.instance_count(),
+        );
+    }
+
+    let foliage_batch_count = foliage_batches.batch_count();
+    let foliage_instance_count = foliage_batches.instance_count();
+    if runtime && this.frame.frame_index <= 3 && foliage_instance_count > 0 {
+        newengine_ulog_api::ulog::info!(
+            "foliage.instance_batch: frame={} pass='{}' gpu_batches={} instances={} policy='MeshRenderRole::FoliageInstanced -> shared source mesh + hardware instance buffer'",
+            this.frame.frame_index,
+            pass.label(),
+            foliage_batch_count,
+            foliage_instance_count,
         );
     }
 
     if sky_background_batches.is_empty()
         && sky_foreground_batches.is_empty()
+        && foliage_batches.is_empty()
         && opaque_batches.is_empty()
     {
         return Ok(());
     }
 
+    let plan_ms = plan_started
+        .map(|started| started.elapsed().as_secs_f64() * 1000.0)
+        .unwrap_or(0.0);
+    let upload_started = stage_profile.then(std::time::Instant::now);
     let ordered_batches = sky_background_batches
         .into_sorted_batches()
         .into_iter()
         .chain(sky_foreground_batches.into_sorted_batches())
+        .chain(foliage_batches.into_sorted_batches())
         .chain(opaque_batches.into_sorted_batches())
         .collect::<Vec<_>>();
     let packed_upload = this
@@ -445,6 +496,10 @@ fn draw_primitives_for_pass(
         .meshes
         .instance_uploader
         .upload_batches(r, &ordered_batches)?;
+    let upload_ms = upload_started
+        .map(|started| started.elapsed().as_secs_f64() * 1000.0)
+        .unwrap_or(0.0);
+    let replay_started = stage_profile.then(std::time::Instant::now);
 
     let mut replay = InstancedReplayState::default();
     for (batch, instance_slice) in ordered_batches
@@ -461,6 +516,28 @@ fn draw_primitives_for_pass(
             batch.gpu.index_count,
             instance_count,
         ))?;
+    }
+
+    let replay_ms = replay_started
+        .map(|started| started.elapsed().as_secs_f64() * 1000.0)
+        .unwrap_or(0.0);
+    if stage_profile {
+        let total_ms = stage_total_started
+            .map(|started| started.elapsed().as_secs_f64() * 1000.0)
+            .unwrap_or(0.0);
+        newengine_ulog_api::ulog::info!(
+            "primitive.stage.profile: frame={} pass='{}' total_ms={:.3} scan_ms={:.3} plan_batch_ms={:.3} upload_ms={:.3} replay_ms={:.3} batches={} instances={} bytes={}",
+            this.frame.frame_index,
+            pass.label(),
+            total_ms,
+            scan_ms,
+            plan_ms,
+            upload_ms,
+            replay_ms,
+            packed_upload.slices.len(),
+            packed_upload.instance_count,
+            packed_upload.bytes_written,
+        );
     }
 
     if runtime && route_diagnostics_due(this.frame.frame_index) {

@@ -141,7 +141,7 @@ impl RenderUiNodeSurfaceState {
         self.exit_requested = false;
         self.tick_feedback(dt_sec);
 
-        if !crate::env_config::var_bool("NEWENGINE_PRIMARY_UI_ENABLED", false) {
+        if !crate::runtime_policy::render_runtime_policy().primary_ui_enabled {
             self.open = false;
             self.awaiting_rebind = None;
             self.advance_visual_alpha(dt_sec);

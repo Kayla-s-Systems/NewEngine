@@ -7,6 +7,19 @@ use crate::error::{EngineError, EngineResult, ModuleStage};
 use crate::module::{Module, ModuleCtx};
 
 use std::panic::{self, AssertUnwindSafe};
+use std::sync::OnceLock;
+use std::time::Instant;
+
+#[inline]
+fn module_stage_profile_enabled() -> bool {
+    static ENABLED: OnceLock<bool> = OnceLock::new();
+    *ENABLED.get_or_init(|| {
+        matches!(
+            std::env::var("NEWENGINE_MODULE_STAGE_LOG").ok().as_deref(),
+            Some("1") | Some("true") | Some("TRUE") | Some("on") | Some("ON")
+        )
+    })
+}
 
 impl<E: Send + 'static> Engine<E> {
     #[inline]
@@ -31,6 +44,9 @@ impl<E: Send + 'static> Engine<E> {
 
         let resources = &mut self.resources;
         let scheduler = &mut self.scheduler;
+        let stage_profile = matches!(stage, ModuleStage::Render)
+            && (frame.frame_index <= 3 || frame.frame_index.is_multiple_of(30))
+            && module_stage_profile_enabled();
 
         for s in self.modules.iter_mut() {
             if s.state != ModuleState::Running {
@@ -42,6 +58,7 @@ impl<E: Send + 'static> Engine<E> {
             }
 
             let module_id = s.id();
+            let module_started = stage_profile.then(Instant::now);
 
             let result: EngineResult<()> = {
                 let mut ctx = ModuleCtx::new(
@@ -66,6 +83,17 @@ impl<E: Send + 'static> Engine<E> {
                     call(s.module.as_mut(), &mut ctx)
                 }
             };
+
+            if let Some(started) = module_started {
+                newengine_ulog_api::ulog::info!(
+                    "module.stage.profile: frame={} stage={:?} module='{}' elapsed_ms={:.3} ok={}",
+                    frame.frame_index,
+                    stage,
+                    module_id,
+                    started.elapsed().as_secs_f64() * 1000.0,
+                    result.is_ok(),
+                );
+            }
 
             if let Err(e) = result {
                 match self.module_fault_tolerance {

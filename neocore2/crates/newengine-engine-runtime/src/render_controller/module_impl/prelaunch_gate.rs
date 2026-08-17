@@ -41,6 +41,9 @@ impl RuntimeRenderController {
                 .unwrap_or(false);
 
             if has_pending_gate {
+                let physics_api = newengine_core::physics::require_physics_api(ctx)
+                    .ok()
+                    .cloned();
                 // Prelaunch is a real presented frame. Advance the controller index
                 // before scheduling work so task ids, retry ages and residency
                 // intervals all refer to the frame currently being prepared.
@@ -51,6 +54,10 @@ impl RuntimeRenderController {
                 let mats_lock = self.bridges.scene.materials();
                 let mats = mats_lock.read();
                 let material_plan = scene.run_frame(next_frame, |world| {
+                    if let Some(physics_api) = physics_api.as_ref() {
+                        crate::gameplay::prewarm_service_physics_backend(world, physics_api);
+                    }
+
                     // Static authored world assembly is incremental and must progress
                     // inside the prelaunch path. The normal world tick is intentionally
                     // bypassed while the gate is active, so admitting it only there would

@@ -13,10 +13,12 @@ pub mod ulog_event;
 
 /// A lightweight snapshot of loaded plugins suitable for UI/telemetry.
 ///
-/// This is produced by the host (engine) and stored in `Resources` each frame.
+/// This is produced by the host (engine) only when plugin state changes.
+/// Cloning the snapshot is O(1): plugin entries are retained behind `Arc`.
 #[derive(Clone, Debug, Default)]
 pub struct PluginsSnapshot {
-    pub plugins: Vec<PluginSnapshotEntry>,
+    pub revision: u64,
+    pub plugins: std::sync::Arc<[PluginSnapshotEntry]>,
 }
 
 pub use content_manifest::{

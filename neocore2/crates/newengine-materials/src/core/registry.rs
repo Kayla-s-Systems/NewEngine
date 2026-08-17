@@ -5,6 +5,7 @@ use crate::api::{
 };
 use crate::errors::{MaterialError, MaterialResult};
 use parking_lot::RwLock;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 #[derive(Clone, Debug)]
@@ -29,12 +30,23 @@ struct Entry {
 #[derive(Clone, Default)]
 pub struct MaterialRegistry {
     inner: Arc<RwLock<Vec<Entry>>>,
+    revision: Arc<AtomicU64>,
 }
 
 impl MaterialRegistry {
     #[inline]
     pub fn new() -> Self {
         Self::default()
+    }
+
+    #[inline]
+    pub fn revision(&self) -> u64 {
+        self.revision.load(Ordering::Acquire)
+    }
+
+    #[inline]
+    fn bump_revision(&self) {
+        self.revision.fetch_add(1, Ordering::AcqRel);
     }
 
     #[inline]
@@ -80,6 +92,8 @@ impl MaterialRegistry {
             name: name.to_string(),
             kind: EntryKind::Asset { desc, textures },
         });
+        drop(v);
+        self.bump_revision();
 
         id
     }
@@ -109,7 +123,10 @@ impl MaterialRegistry {
                     }
                     EntryKind::Instance { .. } => {}
                 }
-                return e.id;
+                let id = e.id;
+                drop(v);
+                self.bump_revision();
+                return id;
             }
         }
 
@@ -135,6 +152,8 @@ impl MaterialRegistry {
         match &mut e.kind {
             EntryKind::Asset { desc: cur, .. } => {
                 *cur = desc;
+                drop(v);
+                self.bump_revision();
                 Ok(())
             }
             EntryKind::Instance { .. } => Err(MaterialError::InvalidId),
@@ -159,6 +178,8 @@ impl MaterialRegistry {
         match &mut e.kind {
             EntryKind::Asset { textures: cur, .. } => {
                 *cur = textures;
+                drop(v);
+                self.bump_revision();
                 Ok(())
             }
             EntryKind::Instance { .. } => Err(MaterialError::InvalidId),
@@ -190,6 +211,8 @@ impl MaterialRegistry {
             name: name.to_string(),
             kind: EntryKind::Instance { base, overrides },
         });
+        drop(v);
+        self.bump_revision();
 
         id
     }
@@ -212,7 +235,10 @@ impl MaterialRegistry {
                 }
                 EntryKind::Asset { .. } => {}
             }
-            return e.id;
+            let id = e.id;
+            drop(v);
+            self.bump_revision();
+            return id;
         }
 
         drop(v);
@@ -241,6 +267,8 @@ impl MaterialRegistry {
         match &mut e.kind {
             EntryKind::Instance { overrides: cur, .. } => {
                 *cur = overrides;
+                drop(v);
+                self.bump_revision();
                 Ok(())
             }
             _ => Err(MaterialError::InvalidId),
@@ -259,12 +287,19 @@ impl MaterialRegistry {
         if v.len() == before {
             return Err(MaterialError::NotFound);
         }
+        drop(v);
+        self.bump_revision();
 
         Ok(())
     }
 }
 
 impl MaterialRegistryApi for MaterialRegistry {
+    #[inline]
+    fn revision(&self) -> u64 {
+        MaterialRegistry::revision(self)
+    }
+
     #[inline]
     fn snapshot(&self) -> Vec<MaterialSnapshotItem> {
         self.inner

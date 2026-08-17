@@ -76,6 +76,7 @@ pub(super) const PRIMITIVE_DRAW_FOLLOW_VIEW: u8 = 0x01;
 pub(super) const PRIMITIVE_DRAW_SKY_ROLE: u8 = 0x02;
 pub(super) const PRIMITIVE_DRAW_SKY_BACKGROUND: u8 = 0x04;
 pub(super) const PRIMITIVE_DRAW_RECEIVE_SHADOWS: u8 = 0x08;
+pub(super) const PRIMITIVE_DRAW_FOLIAGE_ROLE: u8 = 0x10;
 #[inline]
 pub(super) fn primitive_mesh_render_options(
     explicit: Option<&MeshRenderOptions>,
@@ -96,6 +97,9 @@ pub(super) fn primitive_draw_flags(options: &MeshRenderOptions) -> u8 {
     }
     if matches!(options.role, MeshRenderRole::SkyBackground) {
         flags |= PRIMITIVE_DRAW_SKY_BACKGROUND;
+    }
+    if matches!(options.role, MeshRenderRole::FoliageInstanced) {
+        flags |= PRIMITIVE_DRAW_FOLIAGE_ROLE;
     }
     if matches!(
         options.shadow_policy,

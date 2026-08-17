@@ -16,6 +16,7 @@ use newengine_material_domain_api::{
     LitPipeline, MaterialDomainResult, MaterialGpuPipeline, MaterialGpuPipelineKey,
     MaterialGpuPipelineProvider, MaterialPipelineBuildProfile, MaterialRenderDevice,
 };
+use pipeline::PendingLitPipelineBuild;
 
 pub const GAME_READY_LIT_PIPELINE_KEY: MaterialGpuPipelineKey =
     MaterialGpuPipelineKey::new("newengine.material_domain.gameready.runtime_lit");
@@ -26,6 +27,7 @@ const DEFAULT_SHADER_MANIFEST_PATH: &str = "shaders/pipelines/gameready_lit.pipe
 pub struct GameReadyLitMaterialDomainProvider {
     manifest: Option<GameReadyLitShaderManifest>,
     pipelines: HashMap<String, LitPipeline>,
+    pending_pipelines: HashMap<String, PendingLitPipelineBuild>,
 }
 
 impl GameReadyLitMaterialDomainProvider {
@@ -60,9 +62,33 @@ impl MaterialGpuPipelineProvider for GameReadyLitMaterialDomainProvider {
             return Ok(MaterialGpuPipeline::Lit(pipeline));
         }
 
-        let pipeline = self.build_pipeline(profile, r)?;
-        self.pipelines.insert(cache_key, pipeline);
-        Ok(MaterialGpuPipeline::Lit(pipeline))
+        if !self.pending_pipelines.contains_key(&cache_key) {
+            let manifest = self.require_manifest()?;
+            self.pending_pipelines.insert(
+                cache_key.clone(),
+                PendingLitPipelineBuild::new(profile, manifest),
+            );
+            newengine_ulog_api::ulog::info!(
+                "gameready material domain: staged pipeline warmup started cache_key='{}' deferred_pipelines={} policy='bounded loading-frame work'",
+                cache_key,
+                profile.deferred_pipelines,
+            );
+        }
+
+        let build = self
+            .pending_pipelines
+            .get_mut(&cache_key)
+            .expect("pending pipeline inserted");
+        match build.advance(r)? {
+            Some(pipeline) => {
+                self.pending_pipelines.remove(&cache_key);
+                self.pipelines.insert(cache_key, pipeline);
+                Ok(MaterialGpuPipeline::Lit(pipeline))
+            }
+            None => Err(newengine_material_domain_api::MaterialDomainError::other(format!(
+                "pipeline warmup pending cache_key='{cache_key}' policy='bounded loading-frame work'"
+            ))),
+        }
     }
 }
 

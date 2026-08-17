@@ -474,6 +474,49 @@ impl HostPlatformRuntime {
                     "backend_image_wait_ms": render_timing.as_ref().map(|it| it.backend_image_wait_ms),
                     "backend_reported_end_ms": render_timing.as_ref().map(|it| it.backend_reported_end_ms),
                 });
+                let mut payload = payload;
+                if let Some(object) = payload.as_object_mut() {
+                    object.insert(
+                        "backend_gpu_timestamps_enabled".to_owned(),
+                        serde_json::json!(render_timing
+                            .as_ref()
+                            .map(|it| it.backend_gpu_timestamps_enabled)),
+                    );
+                    object.insert(
+                        "backend_gpu_timing_frame_index".to_owned(),
+                        serde_json::json!(render_timing
+                            .as_ref()
+                            .map(|it| it.backend_gpu_timing_frame_index)),
+                    );
+                    object.insert(
+                        "backend_gpu_shadow_ms".to_owned(),
+                        serde_json::json!(render_timing
+                            .as_ref()
+                            .map(|it| it.backend_gpu_shadow_ms)),
+                    );
+                    object.insert(
+                        "backend_gpu_opaque_ms".to_owned(),
+                        serde_json::json!(render_timing
+                            .as_ref()
+                            .map(|it| it.backend_gpu_opaque_ms)),
+                    );
+                    object.insert(
+                        "backend_gpu_postfx_ms".to_owned(),
+                        serde_json::json!(render_timing
+                            .as_ref()
+                            .map(|it| it.backend_gpu_postfx_ms)),
+                    );
+                    object.insert(
+                        "backend_gpu_ui_ms".to_owned(),
+                        serde_json::json!(render_timing.as_ref().map(|it| it.backend_gpu_ui_ms)),
+                    );
+                    object.insert(
+                        "backend_gpu_profiled_ms".to_owned(),
+                        serde_json::json!(render_timing
+                            .as_ref()
+                            .map(|it| it.backend_gpu_profiled_ms)),
+                    );
+                }
                 if let Ok(bytes) = serde_json::to_vec(&payload) {
                     let _ = newengine_plugin_host::host_context::publish_event(
                         PROFILER_SAMPLE_TOPIC,

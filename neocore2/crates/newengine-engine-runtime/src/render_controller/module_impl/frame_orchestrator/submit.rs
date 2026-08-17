@@ -192,7 +192,8 @@ impl RenderFrameOrchestrator {
             }
         };
 
-        let render_shadow_map = controller.should_render_shadow_map_this_frame(shadow_plan);
+        let render_shadow_map =
+            controller.should_render_shadow_map_this_frame(shadow_plan, scene.world());
         controller.set_shadow_caster_cull(if render_shadow_map {
             shadow_plan.caster_cull
         } else {

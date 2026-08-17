@@ -65,6 +65,12 @@ fn spawn_item_pickup_internal(
     let _ = world.insert(entity, Name(format!("pickup:{}", definition.name)));
     let _ = world.insert(entity, GameplayActor);
     attach_scene_object_core(world, entity, position, half_extents);
+    let _ = world.insert(
+        entity,
+        PhysicsBodyDesc::trigger(CollisionShapeDesc::Box {
+            half_extents: [half_extents.x, half_extents.y, half_extents.z],
+        }),
+    );
     let mut pickup = ItemPickup::new(item, quantity);
     let effective_respawn = respawn_seconds
         .unwrap_or(world_definition.respawn_seconds)

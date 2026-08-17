@@ -128,9 +128,9 @@ fn critical_terrain_gpu_ready(
         };
     }
 
-    let min_ready =
-        crate::env_config::var_u32("NEWENGINE_TERRAIN_LAUNCH_MIN_READY_PACKETS", 1, 1, 64)
-            .min(prepared_total);
+    let min_ready = crate::runtime_policy::streaming_policy()
+        .terrain_launch_min_ready_packets
+        .min(prepared_total);
 
     if resident >= min_ready {
         // Remaining prepared packets are allowed to continue normal post-launch streaming.

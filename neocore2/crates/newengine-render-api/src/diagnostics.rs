@@ -70,6 +70,15 @@ pub struct RenderFrameTiming {
     pub last_image_wait_ms: f32,
     pub last_end_frame_ms: f32,
     pub last_gpu_submit_ms: f32,
+    /// Diagnostic GPU timestamp queries are opt-in and backend-specific.
+    pub gpu_timestamps_enabled: bool,
+    /// Frame whose completed GPU query results populate the phase fields below.
+    pub last_gpu_timing_frame_index: u64,
+    pub last_gpu_shadow_ms: f32,
+    pub last_gpu_opaque_ms: f32,
+    pub last_gpu_postfx_ms: f32,
+    pub last_gpu_ui_ms: f32,
+    pub last_gpu_profiled_ms: f32,
     pub last_blocking_upload_ms: f32,
     pub last_pipeline_build_ms: f32,
     pub worst_blocking_upload_ms: f32,

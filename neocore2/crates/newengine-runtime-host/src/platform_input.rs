@@ -1,8 +1,9 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::OnceLock;
 
-use newengine_core::call_service_v1_optional;
+use newengine_core::StableServiceCall;
 use newengine_math::collections_prelude::NeBTreeMap;
 use newengine_ui_api::{UiInputFrame, UiTextEditOp, UiTextEditOpKind};
 
@@ -12,18 +13,23 @@ pub const INPUT_SERVICE_ID: &str = newengine_input_api::ENGINE_INPUT_SERVICE_ID;
 
 static INPUT_POLL_ONLINE_LOGGED: AtomicBool = AtomicBool::new(false);
 static INPUT_POLL_OFFLINE_LOGGED: AtomicBool = AtomicBool::new(false);
+static INPUT_STATE_CALL: OnceLock<StableServiceCall> = OnceLock::new();
+
+#[inline]
+fn input_state_call() -> &'static StableServiceCall {
+    INPUT_STATE_CALL.get_or_init(|| {
+        StableServiceCall::new(
+            INPUT_SERVICE_ID,
+            newengine_input_api::INPUT_METHOD_STATE_JSON,
+        )
+    })
+}
 
 /// Polls one atomic input snapshot from the canonical INPUT provider and maps it
 /// into the UI/runtime DTO. `state_json` owns all one-shot edges, deltas, text and
 /// IME commit data, so the host performs exactly one gateway round-trip per frame.
 pub fn poll_input_frame() -> Option<UiInputFrame> {
-    let Some(bytes) = call_service_v1_optional(
-        INPUT_SERVICE_ID,
-        newengine_input_api::INPUT_METHOD_STATE_JSON,
-        &[],
-    )
-    .ok()?
-    else {
+    let Some(bytes) = input_state_call().call_optional(&[]).ok()? else {
         if !INPUT_POLL_OFFLINE_LOGGED.swap(true, Ordering::Relaxed) {
             newengine_ulog_api::ulog::warn!(
                 "input systems: raw input polling unavailable service='{}' method='{}'",

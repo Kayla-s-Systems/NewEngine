@@ -5,8 +5,50 @@ use newengine_plugin_api::{Blob, CapabilityId, MethodName};
 
 use newengine_plugin_host::{
     call_service_v1 as host_call_service_v1, describe_service as host_describe_service,
-    has_service as host_has_service, list_services as host_list_services,
+    list_services as host_list_services,
 };
+
+#[derive(Clone)]
+pub struct StableServiceCall {
+    capability_id: CapabilityId,
+    method: MethodName,
+}
+
+impl StableServiceCall {
+    #[inline]
+    pub fn new(capability_id: &str, method: &str) -> Self {
+        Self {
+            capability_id: RString::from(capability_id),
+            method: RString::from(method),
+        }
+    }
+
+    #[inline]
+    pub fn call(&self, payload: &[u8]) -> Result<Vec<u8>, String> {
+        match host_call_service_v1(
+            self.capability_id.clone(),
+            self.method.clone(),
+            Blob::from(payload.to_vec()),
+        ) {
+            RResult::ROk(value) => Ok(value.into_vec()),
+            RResult::RErr(error) => Err(error.to_string()),
+        }
+    }
+
+    #[inline]
+    pub fn call_optional(&self, payload: &[u8]) -> Result<Option<Vec<u8>>, String> {
+        match self.call(payload) {
+            Ok(value) => Ok(Some(value)),
+            Err(error) if is_missing_service_error(&error) => Ok(None),
+            Err(error) => Err(error),
+        }
+    }
+}
+
+#[inline]
+fn is_missing_service_error(error: &str) -> bool {
+    error.trim_start().starts_with("service not found:")
+}
 
 #[inline]
 pub fn call_service_v1(
@@ -29,11 +71,14 @@ pub fn call_service_v1_optional(
     method: &str,
     payload: &[u8],
 ) -> Result<Option<Vec<u8>>, String> {
-    // Fast path: avoid any allocation if missing.
-    if !host_has_service(capability_id) {
-        return Ok(None);
+    // Successful optional calls are the common runtime path. Avoid the old
+    // `has_service()` preflight, which acquired the service registry before the
+    // actual dispatch and doubled synchronization for input/UI polling.
+    match call_service_v1(capability_id, method, payload) {
+        Ok(value) => Ok(Some(value)),
+        Err(error) if is_missing_service_error(&error) => Ok(None),
+        Err(error) => Err(error),
     }
-    call_service_v1(capability_id, method, payload).map(Some)
 }
 
 pub fn list_service_ids() -> Vec<String> {

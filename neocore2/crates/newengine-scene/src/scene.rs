@@ -10,6 +10,17 @@ use crate::SceneState;
 ///
 /// Entity roles are expressed via components (`SceneRoot`, `ActiveCamera`)
 /// and cached in `SceneState` for strict invariants.
+use std::time::Instant;
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct SceneFrameTimingTelemetry {
+    pub frame_index: u64,
+    pub pre_derive_ms: f32,
+    pub controller_ms: f32,
+    pub post_derive_ms: f32,
+    pub total_ms: f32,
+}
+
 pub struct Scene {
     pub(crate) world: World,
     pub(crate) settings: SceneSettings,
@@ -92,18 +103,33 @@ impl Scene {
         frame_tick: u64,
         controller: F,
     ) -> R {
+        let frame_started = Instant::now();
         self.world.set_tick(frame_tick);
 
         // Pre: derived state for controller logic (bounds/world pose queries).
+        let pre_started = Instant::now();
         crate::update_scene_world(&mut self.world);
+        let pre_derive_ms = pre_started.elapsed().as_secs_f32() * 1000.0;
 
         // Separate phase so writes done by controllers are visible to the post update.
         self.world.advance_tick();
 
+        let controller_started = Instant::now();
         let out = controller(&mut self.world);
+        let controller_ms = controller_started.elapsed().as_secs_f32() * 1000.0;
 
         // Post: derived state for rendering/picking.
+        let post_started = Instant::now();
         crate::update_scene_world(&mut self.world);
+        let post_derive_ms = post_started.elapsed().as_secs_f32() * 1000.0;
+
+        self.world.insert_resource(SceneFrameTimingTelemetry {
+            frame_index: frame_tick,
+            pre_derive_ms,
+            controller_ms,
+            post_derive_ms,
+            total_ms: frame_started.elapsed().as_secs_f32() * 1000.0,
+        });
 
         out
     }

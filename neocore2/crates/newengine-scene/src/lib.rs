@@ -29,7 +29,7 @@ pub use components::{
 #[cfg(feature = "runtime")]
 pub use guid::{ensure_entity_guid, GuidAllocator};
 #[cfg(feature = "runtime")]
-pub use scene::Scene;
+pub use scene::{Scene, SceneFrameTimingTelemetry};
 #[cfg(feature = "runtime")]
 pub use scene_asset::{
     SceneAsset, SceneAssetError, SceneAssetOptions, SceneEntityAsset, TransformAsset,

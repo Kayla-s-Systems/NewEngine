@@ -1,4 +1,5 @@
 use newengine_math::{Mat4, Vec3};
+use std::sync::OnceLock;
 
 /// Runtime draw budgets keep the current non-instanced Vulkan path stable.
 /// They are intentionally deterministic: nearest objects win, ties are stable-key ordered.
@@ -6,10 +7,203 @@ pub(super) const RUNTIME_OPAQUE_PRIMITIVE_BUDGET: usize = 96;
 pub(super) const RUNTIME_SHADOW_PRIMITIVE_BUDGET: usize = 48;
 pub(super) const EDITOR_OPAQUE_PRIMITIVE_BUDGET: usize = 256;
 pub(super) const EDITOR_SHADOW_PRIMITIVE_BUDGET: usize = 160;
+pub(super) const RUNTIME_FOLIAGE_INSTANCE_BUDGET: usize = 16 * 1024;
+pub(super) const EDITOR_FOLIAGE_INSTANCE_BUDGET: usize = 16 * 1024;
 pub(super) const RUNTIME_TERRAIN_FORWARD_BUDGET: usize = 64;
 pub(super) const RUNTIME_TERRAIN_SHADOW_BUDGET: usize = 64;
 pub(super) const EDITOR_TERRAIN_FORWARD_BUDGET: usize = 64;
 pub(super) const EDITOR_TERRAIN_SHADOW_BUDGET: usize = 64;
+
+#[derive(Clone, Copy, Debug)]
+struct MeshRuntimePolicy {
+    primitive_budgets: [[usize; 2]; 2],
+    foliage_budgets: [[usize; 2]; 2],
+    terrain_budgets: [[usize; 2]; 2],
+    terrain_receive_shadows_override: Option<bool>,
+    scene_culling_enabled: bool,
+    terrain_render_distance: f32,
+    primitive_render_distance: [f32; 2],
+    primitive_shadow_distance: [f32; 2],
+    forward_cone_dot: f32,
+    terrain_near_accept_override: Option<f32>,
+    primitive_near_accept_distance: f32,
+}
+
+impl MeshRuntimePolicy {
+    fn from_process_config() -> Self {
+        let usize_var = |name: &str, default: usize, min: usize, max: usize| {
+            crate::env_config::var_u64(name, default as u64, min as u64, max as u64) as usize
+        };
+        let optional_bool = |name: &str| {
+            crate::env_config::var(name).map(|value| {
+                matches!(
+                    value.trim().to_ascii_lowercase().as_str(),
+                    "1" | "true" | "yes" | "on"
+                )
+            })
+        };
+        let optional_f32 = |name: &str, min: f32, max: f32| {
+            crate::env_config::var(name)
+                .and_then(|value| value.trim().parse::<f32>().ok())
+                .map(|value| value.clamp(min, max))
+        };
+
+        Self {
+            primitive_budgets: [
+                [
+                    usize_var(
+                        "NEWENGINE_EDITOR_OPAQUE_PRIMITIVE_BUDGET",
+                        EDITOR_OPAQUE_PRIMITIVE_BUDGET,
+                        8,
+                        512,
+                    ),
+                    usize_var(
+                        "NEWENGINE_EDITOR_SHADOW_PRIMITIVE_BUDGET",
+                        EDITOR_SHADOW_PRIMITIVE_BUDGET,
+                        8,
+                        512,
+                    ),
+                ],
+                [
+                    usize_var(
+                        "NEWENGINE_RUNTIME_OPAQUE_PRIMITIVE_BUDGET",
+                        RUNTIME_OPAQUE_PRIMITIVE_BUDGET,
+                        8,
+                        512,
+                    ),
+                    usize_var(
+                        "NEWENGINE_RUNTIME_SHADOW_PRIMITIVE_BUDGET",
+                        RUNTIME_SHADOW_PRIMITIVE_BUDGET,
+                        8,
+                        512,
+                    ),
+                ],
+            ],
+            foliage_budgets: [
+                [
+                    usize_var(
+                        "NEWENGINE_EDITOR_FOLIAGE_INSTANCE_BUDGET",
+                        EDITOR_FOLIAGE_INSTANCE_BUDGET,
+                        256,
+                        64 * 1024,
+                    ),
+                    usize_var(
+                        "NEWENGINE_EDITOR_SHADOW_FOLIAGE_INSTANCE_BUDGET",
+                        EDITOR_FOLIAGE_INSTANCE_BUDGET,
+                        256,
+                        64 * 1024,
+                    ),
+                ],
+                [
+                    usize_var(
+                        "NEWENGINE_RUNTIME_FOLIAGE_INSTANCE_BUDGET",
+                        RUNTIME_FOLIAGE_INSTANCE_BUDGET,
+                        256,
+                        64 * 1024,
+                    ),
+                    usize_var(
+                        "NEWENGINE_RUNTIME_SHADOW_FOLIAGE_INSTANCE_BUDGET",
+                        RUNTIME_FOLIAGE_INSTANCE_BUDGET,
+                        256,
+                        64 * 1024,
+                    ),
+                ],
+            ],
+            terrain_budgets: [
+                [
+                    usize_var(
+                        "NEWENGINE_EDITOR_TERRAIN_FORWARD_BUDGET",
+                        EDITOR_TERRAIN_FORWARD_BUDGET,
+                        0,
+                        256,
+                    ),
+                    usize_var(
+                        "NEWENGINE_EDITOR_TERRAIN_SHADOW_BUDGET",
+                        EDITOR_TERRAIN_SHADOW_BUDGET,
+                        0,
+                        256,
+                    ),
+                ],
+                [
+                    usize_var(
+                        "NEWENGINE_RUNTIME_TERRAIN_FORWARD_BUDGET",
+                        RUNTIME_TERRAIN_FORWARD_BUDGET,
+                        0,
+                        256,
+                    ),
+                    usize_var(
+                        "NEWENGINE_RUNTIME_TERRAIN_SHADOW_BUDGET",
+                        RUNTIME_TERRAIN_SHADOW_BUDGET,
+                        0,
+                        256,
+                    ),
+                ],
+            ],
+            terrain_receive_shadows_override: optional_bool("NEWENGINE_TERRAIN_RECEIVE_SHADOWS"),
+            scene_culling_enabled: crate::env_config::var_bool(
+                "NEWENGINE_RENDER_SCENE_CULLING",
+                false,
+            ),
+            terrain_render_distance: crate::env_config::var_f32(
+                "NEWENGINE_TERRAIN_RENDER_DISTANCE",
+                96.0,
+                32.0,
+                2048.0,
+            ),
+            primitive_render_distance: [
+                crate::env_config::var_f32(
+                    "NEWENGINE_PRIMITIVE_RENDER_DISTANCE",
+                    180.0,
+                    8.0,
+                    2048.0,
+                ),
+                crate::env_config::var_f32(
+                    "NEWENGINE_PRIMITIVE_RENDER_DISTANCE",
+                    64.0,
+                    8.0,
+                    2048.0,
+                ),
+            ],
+            primitive_shadow_distance: [
+                crate::env_config::var_f32(
+                    "NEWENGINE_PRIMITIVE_SHADOW_DISTANCE",
+                    240.0,
+                    16.0,
+                    4096.0,
+                ),
+                crate::env_config::var_f32(
+                    "NEWENGINE_PRIMITIVE_SHADOW_DISTANCE",
+                    80.0,
+                    16.0,
+                    4096.0,
+                ),
+            ],
+            forward_cone_dot: crate::env_config::var_f32(
+                "NEWENGINE_RENDER_FORWARD_CONE_DOT",
+                -0.12,
+                -0.95,
+                0.95,
+            ),
+            terrain_near_accept_override: optional_f32(
+                "NEWENGINE_TERRAIN_NEAR_ACCEPT_DISTANCE",
+                8.0,
+                2048.0,
+            ),
+            primitive_near_accept_distance: crate::env_config::var_f32(
+                "NEWENGINE_PRIMITIVE_NEAR_ACCEPT_DISTANCE",
+                12.0,
+                1.0,
+                512.0,
+            ),
+        }
+    }
+}
+
+#[inline]
+fn mesh_runtime_policy() -> &'static MeshRuntimePolicy {
+    static POLICY: OnceLock<MeshRuntimePolicy> = OnceLock::new();
+    POLICY.get_or_init(MeshRuntimePolicy::from_process_config)
+}
 
 #[inline]
 pub(super) fn translation_of(model: Mat4) -> Vec3 {
@@ -24,46 +218,17 @@ pub(super) fn distance_sq_to_camera(model: Mat4, camera_position: Vec3) -> f32 {
 
 #[inline]
 pub(super) fn primitive_budget(runtime: bool, shadow_pass: bool) -> usize {
-    let default = match (runtime, shadow_pass) {
-        (true, true) => RUNTIME_SHADOW_PRIMITIVE_BUDGET,
-        (true, false) => RUNTIME_OPAQUE_PRIMITIVE_BUDGET,
-        (false, true) => EDITOR_SHADOW_PRIMITIVE_BUDGET,
-        (false, false) => EDITOR_OPAQUE_PRIMITIVE_BUDGET,
-    };
+    mesh_runtime_policy().primitive_budgets[runtime as usize][shadow_pass as usize]
+}
 
-    let key = match (runtime, shadow_pass) {
-        (true, true) => "NEWENGINE_RUNTIME_SHADOW_PRIMITIVE_BUDGET",
-        (true, false) => "NEWENGINE_RUNTIME_OPAQUE_PRIMITIVE_BUDGET",
-        (false, true) => "NEWENGINE_EDITOR_SHADOW_PRIMITIVE_BUDGET",
-        (false, false) => "NEWENGINE_EDITOR_OPAQUE_PRIMITIVE_BUDGET",
-    };
-
-    crate::env_config::var(key)
-        .and_then(|value| value.trim().parse::<usize>().ok())
-        .map(|value| value.clamp(8, 512))
-        .unwrap_or(default)
+#[inline]
+pub(super) fn foliage_instance_budget(runtime: bool, shadow_pass: bool) -> usize {
+    mesh_runtime_policy().foliage_budgets[runtime as usize][shadow_pass as usize]
 }
 
 #[inline]
 pub(super) fn terrain_budget(runtime: bool, shadow_pass: bool) -> usize {
-    let default = match (runtime, shadow_pass) {
-        (true, true) => RUNTIME_TERRAIN_SHADOW_BUDGET,
-        (true, false) => RUNTIME_TERRAIN_FORWARD_BUDGET,
-        (false, true) => EDITOR_TERRAIN_SHADOW_BUDGET,
-        (false, false) => EDITOR_TERRAIN_FORWARD_BUDGET,
-    };
-
-    let key = match (runtime, shadow_pass) {
-        (true, true) => "NEWENGINE_RUNTIME_TERRAIN_SHADOW_BUDGET",
-        (true, false) => "NEWENGINE_RUNTIME_TERRAIN_FORWARD_BUDGET",
-        (false, true) => "NEWENGINE_EDITOR_TERRAIN_SHADOW_BUDGET",
-        (false, false) => "NEWENGINE_EDITOR_TERRAIN_FORWARD_BUDGET",
-    };
-
-    crate::env_config::var(key)
-        .and_then(|value| value.trim().parse::<usize>().ok())
-        .map(|value| value.clamp(0, 256))
-        .unwrap_or(default)
+    mesh_runtime_policy().terrain_budgets[runtime as usize][shadow_pass as usize]
 }
 
 #[inline]
@@ -76,13 +241,8 @@ pub(super) fn terrain_receive_shadows_enabled(
             | newengine_model_domain_api::MeshShadowPolicy::CastAndReceive
             | newengine_model_domain_api::MeshShadowPolicy::ProfileControlled
     );
-    crate::env_config::var("NEWENGINE_TERRAIN_RECEIVE_SHADOWS")
-        .map(|value| {
-            matches!(
-                value.trim().to_ascii_lowercase().as_str(),
-                "1" | "true" | "yes" | "on"
-            )
-        })
+    mesh_runtime_policy()
+        .terrain_receive_shadows_override
         .unwrap_or(authored)
 }
 
@@ -214,6 +374,24 @@ pub(super) fn shadow_caster_visible(
         .unwrap_or(true)
 }
 
+#[derive(Clone, Copy, Debug)]
+pub(super) struct PrimitiveVisibilitySettings {
+    pub(super) culling_enabled: bool,
+    pub(super) max_distance: f32,
+    pub(super) cone_dot: f32,
+    pub(super) near_accept_distance: f32,
+}
+
+#[inline]
+pub(super) fn primitive_visibility_settings(runtime: bool) -> PrimitiveVisibilitySettings {
+    PrimitiveVisibilitySettings {
+        culling_enabled: render_scene_culling_enabled(),
+        max_distance: primitive_forward_max_distance(runtime),
+        cone_dot: scene_forward_cone_dot(),
+        near_accept_distance: primitive_near_accept_distance(),
+    }
+}
+
 #[inline]
 pub(super) fn render_scene_culling_enabled() -> bool {
     // Do not hide world objects on the CPU extraction path by default. The
@@ -221,12 +399,7 @@ pub(super) fn render_scene_culling_enabled() -> bool {
     // residency. A cheap forward-cone cull is useful as an opt-in stress knob,
     // but as a default it causes visible pop/disappearance while the camera
     // turns, which is not acceptable for gameplay/world presentation.
-    crate::env_config::var_bool("NEWENGINE_RENDER_SCENE_CULLING", false)
-}
-
-#[inline]
-fn env_f32(name: &str, default: f32, min: f32, max: f32) -> f32 {
-    crate::env_config::var_f32(name, default, min, max)
+    mesh_runtime_policy().scene_culling_enabled
 }
 
 /// Conservative forward-visibility test used by the runtime draw lists.
@@ -245,10 +418,8 @@ pub(super) fn forward_sphere_visible(
     cone_dot: f32,
     near_accept_distance: f32,
 ) -> bool {
-    if !render_scene_culling_enabled() {
-        return true;
-    }
-
+    // The caller owns the culling policy snapshot. Keep this predicate pure so
+    // entity extraction never re-enters process configuration in the inner loop.
     let radius = radius_ws.abs().max(0.001);
     let delta = center_ws - camera_position;
     let dist2 = delta.length_squared();
@@ -273,19 +444,17 @@ pub(super) fn forward_sphere_visible(
 
 #[inline]
 pub(super) fn terrain_forward_max_distance() -> f32 {
-    env_f32("NEWENGINE_TERRAIN_RENDER_DISTANCE", 96.0, 32.0, 2048.0)
+    mesh_runtime_policy().terrain_render_distance
 }
 
 #[inline]
 pub(super) fn primitive_forward_max_distance(runtime: bool) -> f32 {
-    let default = if runtime { 64.0 } else { 180.0 };
-    env_f32("NEWENGINE_PRIMITIVE_RENDER_DISTANCE", default, 8.0, 2048.0)
+    mesh_runtime_policy().primitive_render_distance[runtime as usize]
 }
 
 #[inline]
 pub(super) fn primitive_shadow_max_distance(runtime: bool) -> f32 {
-    let default = if runtime { 80.0 } else { 240.0 };
-    env_f32("NEWENGINE_PRIMITIVE_SHADOW_DISTANCE", default, 16.0, 4096.0)
+    mesh_runtime_policy().primitive_shadow_distance[runtime as usize]
 }
 
 #[inline]
@@ -293,20 +462,17 @@ pub(super) fn scene_forward_cone_dot() -> f32 {
     // -0.25 is intentionally wider than a strict camera frustum. It keeps
     // objects around the edges alive while cutting resident cells fully behind
     // the player/camera, matching the reference scene streamer's active buckets.
-    env_f32("NEWENGINE_RENDER_FORWARD_CONE_DOT", -0.12, -0.95, 0.95)
+    mesh_runtime_policy().forward_cone_dot
 }
 
 #[inline]
 pub(super) fn terrain_near_accept_distance(radius_ws: f32) -> f32 {
-    env_f32(
-        "NEWENGINE_TERRAIN_NEAR_ACCEPT_DISTANCE",
-        radius_ws.abs().max(1.0) * 1.20,
-        8.0,
-        2048.0,
-    )
+    mesh_runtime_policy()
+        .terrain_near_accept_override
+        .unwrap_or_else(|| (radius_ws.abs().max(1.0) * 1.20).clamp(8.0, 2048.0))
 }
 
 #[inline]
 pub(super) fn primitive_near_accept_distance() -> f32 {
-    env_f32("NEWENGINE_PRIMITIVE_NEAR_ACCEPT_DISTANCE", 12.0, 1.0, 512.0)
+    mesh_runtime_policy().primitive_near_accept_distance
 }

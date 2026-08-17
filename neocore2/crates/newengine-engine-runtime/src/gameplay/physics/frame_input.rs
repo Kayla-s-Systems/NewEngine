@@ -37,8 +37,12 @@ pub(super) fn build_frame_input(
     bodies.sort_by_key(|body| body.entity);
 
     let mut colliders = collect_terrain_colliders(world, &bodies, physics_world.contact_skin);
-    let (static_colliders, mut static_commands) =
-        collect_static_mesh_colliders(world, static_mesh_revisions, fixed_tick);
+    let (static_colliders, mut static_commands) = collect_static_mesh_colliders(
+        world,
+        static_mesh_revisions,
+        fixed_tick,
+        physics_world.static_collider_batch_size,
+    );
     colliders.extend(static_colliders);
     colliders.sort_by_key(|collider| collider.entity);
     static_commands.sort_by_key(|command| command.seq);
@@ -62,21 +66,52 @@ fn collect_static_mesh_colliders(
     world: &World,
     known_revisions: &mut BTreeMap<u64, u64>,
     fixed_tick: u64,
+    batch_size: usize,
 ) -> (Vec<PhysicsFrameColliderSnapshot>, Vec<PhysicsCommandDto>) {
-    let mut snapshots = Vec::new();
-    let mut current_revisions = BTreeMap::<u64, u64>::new();
-    let mut delta_vertices = 0usize;
-    let mut delta_triangles = 0usize;
-
+    // First collect only cheap revision metadata. Mesh arrays are cloned only for the bounded
+    // batch that actually crosses the service boundary on this fixed tick.
+    let mut current_entities = BTreeSet::<u64>::new();
+    let mut changed = Vec::new();
     for (entity, collider) in world.query::<StaticMeshCollider>() {
         let transform = world.get::<Transform>(entity).copied().unwrap_or_default();
         let entity_key = entity.stable_u64();
         let revision = collider.runtime_revision(transform);
-        current_revisions.insert(entity_key, revision);
-        if known_revisions.get(&entity_key).copied() == Some(revision) {
-            continue;
+        current_entities.insert(entity_key);
+        if known_revisions.get(&entity_key).copied() != Some(revision) {
+            changed.push((entity_key, entity, revision, transform));
         }
+    }
+    changed.sort_by_key(|(entity_key, _, _, _)| *entity_key);
 
+    // Removals are not warmup work: propagate them immediately so stale collision disappears
+    // on the next service step even while a large add/change backlog is being streamed in.
+    let removed = known_revisions
+        .keys()
+        .copied()
+        .filter(|entity| !current_entities.contains(entity))
+        .collect::<Vec<_>>();
+    let mut commands = removed
+        .iter()
+        .copied()
+        .enumerate()
+        .map(|(index, entity)| PhysicsCommandDto {
+            seq: fixed_tick.rotate_left(17) ^ entity ^ index as u64,
+            kind: PhysicsCommandKindDto::DestroyBody { entity },
+        })
+        .collect::<Vec<_>>();
+    commands.sort_by_key(|command| command.seq);
+    for entity in removed {
+        known_revisions.remove(&entity);
+    }
+
+    let pending_before = changed.len();
+    let mut snapshots = Vec::with_capacity(pending_before.min(batch_size));
+    let mut delta_vertices = 0usize;
+    let mut delta_triangles = 0usize;
+    for (entity_key, entity, revision, transform) in changed.into_iter().take(batch_size) {
+        let Some(collider) = world.get::<StaticMeshCollider>(entity) else {
+            continue;
+        };
         let (bounds_min, bounds_max) = rotated_aabb(collider.local_bounds, transform);
         delta_vertices = delta_vertices.saturating_add(collider.vertices.len());
         delta_triangles = delta_triangles.saturating_add(collider.triangles.len());
@@ -102,33 +137,25 @@ fn collect_static_mesh_colliders(
             bounds_min: vec3_to_arr(bounds_min),
             bounds_max: vec3_to_arr(bounds_max),
         });
+        // This revision is acknowledged as sent only for the batch that actually crossed the
+        // service boundary. Unsent entries remain absent/old and are selected next fixed tick.
+        known_revisions.insert(entity_key, revision);
     }
-
-    let current_entities = current_revisions.keys().copied().collect::<BTreeSet<_>>();
-    let mut commands = known_revisions
-        .keys()
-        .copied()
-        .filter(|entity| !current_entities.contains(entity))
-        .enumerate()
-        .map(|(index, entity)| PhysicsCommandDto {
-            seq: fixed_tick.rotate_left(17) ^ entity ^ index as u64,
-            kind: PhysicsCommandKindDto::DestroyBody { entity },
-        })
-        .collect::<Vec<_>>();
-    commands.sort_by_key(|command| command.seq);
 
     if !snapshots.is_empty() || !commands.is_empty() {
         newengine_ulog_api::ulog::info!(
-            "physics sync: static mesh delta fixed_tick={} registered={} removed={} vertices={} triangles={} policy='register-on-change; geometry omitted from steady-state packets'",
+            "physics sync: static mesh delta fixed_tick={} registered={} removed={} pending_before={} pending_after={} batch_limit={} vertices={} triangles={} policy='bounded register-on-change; removals immediate; geometry omitted from steady-state packets'",
             fixed_tick,
             snapshots.len(),
             commands.len(),
+            pending_before,
+            pending_before.saturating_sub(snapshots.len()),
+            batch_size,
             delta_vertices,
             delta_triangles,
         );
     }
 
-    *known_revisions = current_revisions;
     (snapshots, commands)
 }
 
@@ -250,6 +277,44 @@ mod tests {
             second.colliders.is_empty(),
             "unchanged static mesh must not be resent"
         );
+    }
+
+    #[test]
+    fn static_mesh_registration_is_bounded_and_incremental() {
+        let mut world = World::new();
+        for index in 0..130 {
+            let entity = world.spawn();
+            let _ = world.insert(
+                entity,
+                Transform {
+                    position: newengine_math::Vec3::new(index as f32 * 2.0, 0.0, 0.0),
+                    ..Transform::default()
+                },
+            );
+            let _ = world.insert(
+                entity,
+                StaticMeshCollider::new(
+                    vec![[-0.5, 0.0, -0.5], [0.5, 0.0, -0.5], [0.0, 0.0, 0.5]],
+                    vec![[0, 1, 2]],
+                )
+                .unwrap(),
+            );
+        }
+
+        let mut revisions = BTreeMap::new();
+        let queries = GameplayPhysicsQueryProviderRegistry::new();
+        let first = collect_static_mesh_colliders(&world, &mut revisions, 1, 128);
+        assert_eq!(first.0.len(), 128);
+        assert_eq!(revisions.len(), 128);
+
+        let second = collect_static_mesh_colliders(&world, &mut revisions, 2, 128);
+        assert_eq!(second.0.len(), 2);
+        assert_eq!(revisions.len(), 130);
+
+        let third = collect_static_mesh_colliders(&world, &mut revisions, 3, 128);
+        assert!(third.0.is_empty());
+        assert!(third.1.is_empty());
+        let _ = queries;
     }
 
     #[test]

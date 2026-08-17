@@ -48,7 +48,8 @@ pub use inventory::{
     WorldItemDefinition, WorldItemPresentation, WorldItemRuntime, WorldItemVisualPart,
 };
 pub use listeners::{drain_player_events, emit_player_event, sync_player_view_listeners};
-pub use physics::{PhysicsRuntimeFrameIndex, PhysicsSyncModule};
+pub(crate) use physics::prewarm_service_physics_backend;
+pub use physics::{PhysicsRuntimeFrameIndex, PhysicsStepTimingTelemetry, PhysicsSyncModule};
 pub use physics_queries::{GameplayPhysicsQueryProvider, GameplayPhysicsQueryProviderRegistry};
 pub use player::{
     apply_player_command_frame, apply_player_input, apply_player_stance_geometry,

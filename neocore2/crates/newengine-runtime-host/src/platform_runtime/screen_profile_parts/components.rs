@@ -550,6 +550,9 @@ pub(super) fn push_editor_regions(out: &mut Vec<UiComponentNode>, layout: &Edito
             [8, 13, 20, 245],
         ));
     }
+    // The renderer inserts the live UiViewportSlot texture before UI chrome.
+    // Keep the viewport region as a transparent structural/border layer so the
+    // editor shell never obscures the actual world image.
     out.push(region_panel(
         "editor.region.viewport",
         "",
@@ -557,7 +560,7 @@ pub(super) fn push_editor_regions(out: &mut Vec<UiComponentNode>, layout: &Edito
         layout.viewport_y,
         layout.viewport_w,
         layout.viewport_h,
-        [5, 8, 12, 250],
+        [5, 8, 12, 0],
     ));
     if layout.right_visible {
         out.push(region_panel(

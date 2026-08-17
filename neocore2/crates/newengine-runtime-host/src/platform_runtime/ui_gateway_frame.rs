@@ -2,9 +2,10 @@
 
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::OnceLock;
 use std::time::Instant;
 
-use newengine_core::EngineResult;
+use newengine_core::{EngineResult, StableServiceCall};
 use newengine_system_contracts::{ScreenOverlayStatus, ScreenOverlayStatusKind};
 use newengine_system_runtime::loading_surface_projection;
 use newengine_ui::UiProviderBinding;
@@ -24,6 +25,66 @@ use newengine_ui_api::{
 use serde::Deserialize;
 
 static TRY_BINARY_UI_FRAME: AtomicBool = AtomicBool::new(true);
+
+static UI_DRAW_FRAME_BIN_CALL: OnceLock<StableServiceCall> = OnceLock::new();
+static UI_DRAW_FRAME_JSON_CALL: OnceLock<StableServiceCall> = OnceLock::new();
+static UI_DISPATCH_INPUT_CALL: OnceLock<StableServiceCall> = OnceLock::new();
+static UI_APPLY_STATE_PATCH_CALL: OnceLock<StableServiceCall> = OnceLock::new();
+static UI_SURFACE_NODE_CALL: OnceLock<StableServiceCall> = OnceLock::new();
+static UI_APPLY_NODE_REQUEST_CALL: OnceLock<StableServiceCall> = OnceLock::new();
+static UI_UNMOUNT_SURFACE_CALL: OnceLock<StableServiceCall> = OnceLock::new();
+
+#[inline]
+fn stable_ui_call(
+    slot: &'static OnceLock<StableServiceCall>,
+    method: &'static str,
+) -> &'static StableServiceCall {
+    slot.get_or_init(|| StableServiceCall::new(ENGINE_UI_SERVICE_ID, method))
+}
+
+#[inline]
+fn ui_draw_frame_bin_call() -> &'static StableServiceCall {
+    stable_ui_call(&UI_DRAW_FRAME_BIN_CALL, UI_SERVICE_METHOD_DRAW_FRAME_BIN_V1)
+}
+
+#[inline]
+fn ui_draw_frame_json_call() -> &'static StableServiceCall {
+    stable_ui_call(&UI_DRAW_FRAME_JSON_CALL, UI_SERVICE_METHOD_DRAW_FRAME_V1)
+}
+
+#[inline]
+fn ui_dispatch_input_call() -> &'static StableServiceCall {
+    stable_ui_call(&UI_DISPATCH_INPUT_CALL, UI_SERVICE_METHOD_DISPATCH_INPUT_V1)
+}
+
+#[inline]
+fn ui_apply_state_patch_call() -> &'static StableServiceCall {
+    stable_ui_call(
+        &UI_APPLY_STATE_PATCH_CALL,
+        UI_SERVICE_METHOD_APPLY_STATE_PATCH_V1,
+    )
+}
+
+#[inline]
+fn ui_surface_node_call() -> &'static StableServiceCall {
+    stable_ui_call(&UI_SURFACE_NODE_CALL, UI_SERVICE_METHOD_SURFACE_NODE_V1)
+}
+
+#[inline]
+fn ui_apply_node_request_call() -> &'static StableServiceCall {
+    stable_ui_call(
+        &UI_APPLY_NODE_REQUEST_CALL,
+        UI_SERVICE_METHOD_APPLY_NODE_REQUEST_V1,
+    )
+}
+
+#[inline]
+fn ui_unmount_surface_call() -> &'static StableServiceCall {
+    stable_ui_call(
+        &UI_UNMOUNT_SURFACE_CALL,
+        UI_SERVICE_METHOD_UNMOUNT_SURFACE_V1,
+    )
+}
 
 #[derive(Clone, Debug)]
 pub(crate) struct UiGatewayFramePolicy {

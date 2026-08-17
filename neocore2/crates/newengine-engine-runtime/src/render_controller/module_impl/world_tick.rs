@@ -145,14 +145,9 @@ impl RuntimeRenderController {
                     let sim_telemetry =
                         newengine_sim::SimulationJobTelemetry::new(&publish_sim_job);
                     let fixed_dt = fixed_dt.max(0.000_001);
-                    let telemetry_interval = crate::env_config::var_u64(
-                        "NEWENGINE_SIM_TELEMETRY_INTERVAL_TICKS",
-                        120,
-                        1,
-                        60_000,
-                    );
-                    let slow_tick_ms =
-                        crate::env_config::var_f32("NEWENGINE_SIM_SLOW_TICK_MS", 4.0, 0.25, 1000.0);
+                    let simulation_policy = crate::runtime_policy::simulation_runtime_policy();
+                    let telemetry_interval = simulation_policy.telemetry_interval_ticks;
+                    let slow_tick_ms = simulation_policy.slow_tick_ms;
                     for step_index in 0..fixed_step_count {
                         let remaining_after_step = u64::from(fixed_step_count - step_index - 1);
                         let simulation_tick = fixed_tick.saturating_sub(remaining_after_step);
@@ -176,6 +171,9 @@ impl RuntimeRenderController {
                             thread_pool,
                         );
                         let tick_elapsed_ms = tick_started.elapsed().as_secs_f32() * 1000.0;
+                        let physics_timing = world
+                            .resource::<crate::gameplay::PhysicsStepTimingTelemetry>()
+                            .copied();
                         if detailed_telemetry || tick_elapsed_ms >= slow_tick_ms {
                             emit_simulation_tick_profile(
                                 simulation_tick,
@@ -185,6 +183,7 @@ impl RuntimeRenderController {
                                 step_index,
                                 physics_mode,
                                 slow_tick_ms,
+                                physics_timing,
                             );
                         }
                         consume_player_transient_input(world);
@@ -224,6 +223,19 @@ impl RuntimeRenderController {
             frame
         });
 
+        if let Some(timing) = scene
+            .world()
+            .resource::<newengine_scene::SceneFrameTimingTelemetry>()
+        {
+            if timing.total_ms >= 8.0 || timing.frame_index.is_multiple_of(120) {
+                let physics_timing = scene
+                    .world()
+                    .resource::<crate::gameplay::PhysicsStepTimingTelemetry>()
+                    .copied();
+                emit_scene_frame_profile(*timing, physics_timing);
+            }
+        }
+
         if activate_world_play_after_frame {
             self.bridges.scene.activate_profile_play_now();
         }
@@ -235,6 +247,77 @@ impl RuntimeRenderController {
 const PROFILER_SAMPLE_TOPIC: &str = "newengine.diagnostics.profiler.sample.v1";
 
 #[inline]
+fn emit_scene_frame_profile(
+    timing: newengine_scene::SceneFrameTimingTelemetry,
+    physics_timing: Option<crate::gameplay::PhysicsStepTimingTelemetry>,
+) {
+    let mut payload = serde_json::json!({
+        "schema": "newengine.diagnostics.profiler.sample.v1",
+        "category": "scene.frame",
+        "source": "render.world_tick",
+        "name": "scene derived-state frame",
+        "lane": "scene",
+        "priority": "interactive",
+        "dependency_group": format!("scene.frame.{}", timing.frame_index),
+        "frame_index": timing.frame_index,
+        "elapsed_ms": timing.total_ms,
+        "pre_derive_ms": timing.pre_derive_ms,
+        "controller_ms": timing.controller_ms,
+        "post_derive_ms": timing.post_derive_ms,
+        "slow": timing.total_ms >= 8.0,
+    });
+    if let (Some(object), Some(physics)) = (payload.as_object_mut(), physics_timing) {
+        object.insert(
+            "physics_input_build_ms".to_owned(),
+            serde_json::json!(physics.input_build_ms),
+        );
+        object.insert(
+            "physics_backend_step_ms".to_owned(),
+            serde_json::json!(physics.backend_step_ms),
+        );
+        object.insert(
+            "physics_output_apply_ms".to_owned(),
+            serde_json::json!(physics.output_apply_ms),
+        );
+        object.insert(
+            "physics_bodies".to_owned(),
+            serde_json::json!(physics.bodies),
+        );
+        object.insert(
+            "physics_colliders".to_owned(),
+            serde_json::json!(physics.colliders),
+        );
+        object.insert(
+            "physics_commands".to_owned(),
+            serde_json::json!(physics.commands),
+        );
+        object.insert(
+            "physics_queries".to_owned(),
+            serde_json::json!(physics.queries),
+        );
+        object.insert(
+            "physics_pose_updates".to_owned(),
+            serde_json::json!(physics.pose_updates),
+        );
+        object.insert(
+            "physics_velocity_updates".to_owned(),
+            serde_json::json!(physics.velocity_updates),
+        );
+        object.insert(
+            "physics_events".to_owned(),
+            serde_json::json!(physics.events),
+        );
+        object.insert(
+            "physics_query_hits".to_owned(),
+            serde_json::json!(physics.query_hits),
+        );
+    }
+    if let Ok(bytes) = serde_json::to_vec(&payload) {
+        let _ = newengine_plugin_host::emit_plugin_event(PROFILER_SAMPLE_TOPIC, &bytes);
+    }
+}
+
+#[inline]
 fn emit_simulation_tick_profile(
     simulation_tick: u64,
     elapsed_ms: f32,
@@ -243,9 +326,10 @@ fn emit_simulation_tick_profile(
     step_index: u32,
     physics_mode: PhysicsIntegrationMode,
     slow_tick_ms: f32,
+    physics_timing: Option<crate::gameplay::PhysicsStepTimingTelemetry>,
 ) {
     let frame_budget_ms = fixed_dt.max(0.000_001) * 1000.0;
-    let payload = serde_json::json!({
+    let mut payload = serde_json::json!({
         "schema": "newengine.diagnostics.profiler.sample.v1",
         "category": "simulation.tick",
         "source": "render.world_tick",
@@ -264,6 +348,60 @@ fn emit_simulation_tick_profile(
         "catch_up": fixed_step_count > 1,
         "physics_mode": format!("{physics_mode:?}"),
     });
+    if let (Some(object), Some(timing)) = (payload.as_object_mut(), physics_timing) {
+        object.insert(
+            "physics_packet_frame_index".to_owned(),
+            serde_json::json!(timing.frame_index),
+        );
+        object.insert(
+            "physics_packet_fixed_tick".to_owned(),
+            serde_json::json!(timing.fixed_tick),
+        );
+        object.insert(
+            "physics_input_build_ms".to_owned(),
+            serde_json::json!(timing.input_build_ms),
+        );
+        object.insert(
+            "physics_backend_step_ms".to_owned(),
+            serde_json::json!(timing.backend_step_ms),
+        );
+        object.insert(
+            "physics_output_apply_ms".to_owned(),
+            serde_json::json!(timing.output_apply_ms),
+        );
+        object.insert(
+            "physics_bodies".to_owned(),
+            serde_json::json!(timing.bodies),
+        );
+        object.insert(
+            "physics_colliders".to_owned(),
+            serde_json::json!(timing.colliders),
+        );
+        object.insert(
+            "physics_commands".to_owned(),
+            serde_json::json!(timing.commands),
+        );
+        object.insert(
+            "physics_queries".to_owned(),
+            serde_json::json!(timing.queries),
+        );
+        object.insert(
+            "physics_pose_updates".to_owned(),
+            serde_json::json!(timing.pose_updates),
+        );
+        object.insert(
+            "physics_velocity_updates".to_owned(),
+            serde_json::json!(timing.velocity_updates),
+        );
+        object.insert(
+            "physics_events".to_owned(),
+            serde_json::json!(timing.events),
+        );
+        object.insert(
+            "physics_query_hits".to_owned(),
+            serde_json::json!(timing.query_hits),
+        );
+    }
     if let Ok(bytes) = serde_json::to_vec(&payload) {
         let _ = newengine_plugin_host::emit_plugin_event(PROFILER_SAMPLE_TOPIC, &bytes);
     }

@@ -93,56 +93,28 @@ impl TimedBreakdown {
 }
 
 #[inline]
-fn env_f32(name: &str, default: f32, min: f32, max: f32) -> f32 {
-    crate::env_config::var_f32(name, default, min, max)
-}
-
-#[inline]
-fn env_u64(name: &str, default: u64, min: u64, max: u64) -> u64 {
-    crate::env_config::var_u64(name, default, min, max)
-}
-
-#[inline]
 pub(super) fn trace_ms_threshold() -> f32 {
-    env_f32("NEWENGINE_RENDER_TRACE_MS", 16.67, 1.0, 1000.0)
+    crate::runtime_policy::diagnostics_policy().render_trace_ms
 }
 
 #[inline]
 pub(super) fn warn_ms_threshold() -> f32 {
-    env_f32("NEWENGINE_RENDER_WARN_MS", 16.67, 1.0, 2000.0)
+    crate::runtime_policy::diagnostics_policy().render_warn_ms
 }
 
 #[inline]
 pub(super) fn profiler_outlier_ms_threshold() -> f32 {
-    // Capture micro-stutter candidates below the full-frame WARN threshold.
-    // This produces only a compact profiler sample; WARN/ulog remains governed
-    // by NEWENGINE_RENDER_WARN_MS.
-    env_f32("NEWENGINE_RENDER_PROFILER_OUTLIER_MS", 8.0, 1.0, 2000.0)
+    crate::runtime_policy::diagnostics_policy().render_profiler_outlier_ms
 }
 
 #[inline]
 pub(super) fn slow_profile_log_interval_frames() -> u64 {
-    env_u64(
-        "NEWENGINE_RENDER_SLOW_PROFILE_INTERVAL_FRAMES",
-        120,
-        1,
-        6000,
-    )
+    crate::runtime_policy::diagnostics_policy().render_slow_profile_interval_frames
 }
 
 #[inline]
 pub(super) fn profiler_sample_interval_frames() -> u64 {
-    // Profiling must not become the thing that makes gameplay heavy. The old
-    // default sampled every fourth frame and every slow frame; on the current
-    // render path that meant JSON/event traffic every frame. Keep regular
-    // telemetry visible, but sample it at a diagnostics cadence unless the user
-    // explicitly asks for denser profiling.
-    env_u64(
-        "NEWENGINE_RENDER_PROFILER_SAMPLE_INTERVAL_FRAMES",
-        120,
-        1,
-        6000,
-    )
+    crate::runtime_policy::diagnostics_policy().render_profiler_sample_interval_frames
 }
 
 pub(super) fn emit_timed_profile(
@@ -218,7 +190,7 @@ fn emit_profiler_sample(
     suffix: &str,
     slow: bool,
 ) {
-    if !crate::env_config::var_bool("NEWENGINE_RENDER_PROFILER_SAMPLES", true) {
+    if !crate::runtime_policy::diagnostics_policy().render_profiler_samples {
         return;
     }
     let frame_budget_ms = warn_ms_threshold();

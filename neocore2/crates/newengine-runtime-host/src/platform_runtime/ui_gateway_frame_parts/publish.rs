@@ -10,11 +10,7 @@ pub(crate) fn publish_surface_node(node: &UiSurfaceNode) {
             return;
         }
     };
-    match newengine_core::call_service_v1_optional(
-        ENGINE_UI_SERVICE_ID,
-        UI_SERVICE_METHOD_SURFACE_NODE_V1,
-        &payload,
-    ) {
+    match ui_surface_node_call().call_optional(&payload) {
         Ok(Some(_)) => {}
         Ok(None) => newengine_ulog_api::ulog::warn!(
             "ui gateway: engine.ui route unavailable; surface='{}' skipped without native/special renderer",
@@ -35,11 +31,7 @@ pub(crate) fn publish_node_tree_request(request: &UiNodeTreeRequest) {
             return;
         }
     };
-    match newengine_core::call_service_v1_optional(
-        ENGINE_UI_SERVICE_ID,
-        UI_SERVICE_METHOD_APPLY_NODE_REQUEST_V1,
-        &payload,
-    ) {
+    match ui_apply_node_request_call().call_optional(&payload) {
         Ok(Some(_)) => {}
         Ok(None) => newengine_ulog_api::ulog::warn!(
             "ui gateway: engine.ui route unavailable; node tree surface='{}' skipped",
@@ -57,9 +49,6 @@ pub(crate) fn publish_node_tree_request(request: &UiNodeTreeRequest) {
 /// This lives in runtime-host, not render-controller: render produces telemetry
 /// resources, while the host owns service routing to UI providers.
 pub(crate) fn publish_debug_overlay_telemetry(telemetry: &UiRuntimeDebugOverlayTelemetry) {
-    if !newengine_core::has_engine_gateway_route(ENGINE_UI_SERVICE_ID) {
-        return;
-    }
     let mut lines = if telemetry.lines.is_empty() {
         telemetry
             .text

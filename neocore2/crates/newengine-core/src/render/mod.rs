@@ -27,6 +27,13 @@ pub struct RenderModuleTimingTelemetry {
     pub backend_surface_acquire_ms: f32,
     pub backend_image_wait_ms: f32,
     pub backend_reported_end_ms: f32,
+    pub backend_gpu_timestamps_enabled: bool,
+    pub backend_gpu_timing_frame_index: u64,
+    pub backend_gpu_shadow_ms: f32,
+    pub backend_gpu_opaque_ms: f32,
+    pub backend_gpu_postfx_ms: f32,
+    pub backend_gpu_ui_ms: f32,
+    pub backend_gpu_profiled_ms: f32,
 }
 
 #[derive(Debug, Clone, Default)]

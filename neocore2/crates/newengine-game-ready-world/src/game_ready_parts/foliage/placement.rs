@@ -45,6 +45,32 @@ pub(super) fn choose_foliage_prefab<'a>(
     prefabs.iter().find(|p| p.enabled && p.id == id)
 }
 
+pub(super) fn effective_foliage_spec(spec: &GameReadyFoliageSpec) -> GameReadyFoliageSpec {
+    let mut effective = spec.clone();
+    let stress = std::env::var("NEWENGINE_FOLIAGE_STRESS")
+        .ok()
+        .map(|value| {
+            matches!(
+                value.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
+        .unwrap_or(false);
+    if stress && effective.enabled {
+        // Diagnostic-only density override. It keeps the authored terrain/prefab/material chain
+        // intact while generating enough placements to exercise the real instance-buffer path.
+        effective.grid_min = -64;
+        effective.grid_max = 64;
+        effective.spacing = 0.65;
+        effective.jitter = 0.15;
+        effective.gate_threshold = 1.0;
+        effective.max_count = 4096;
+        effective.min_player_distance = 0.0;
+        effective.edge_margin = effective.edge_margin.min(0.5);
+    }
+    effective
+}
+
 pub(super) fn collect_tree_placements(
     world: &newengine_ecs::World,
     terrain: EntityId,

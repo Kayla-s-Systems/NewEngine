@@ -7,6 +7,9 @@ use super::*;
 pub struct PhysicsWorldSettings {
     pub gravity: f32,
     pub contact_skin: f32,
+    /// Maximum changed/new static triangle-mesh colliders registered per fixed tick.
+    /// Bounding registration prevents large authored worlds from creating a single startup spike.
+    pub static_collider_batch_size: usize,
 }
 
 impl PhysicsWorldSettings {
@@ -23,6 +26,7 @@ impl PhysicsWorldSettings {
             } else {
                 0.035
             },
+            static_collider_batch_size: self.static_collider_batch_size.clamp(1, 4096),
         }
     }
 }
@@ -33,6 +37,7 @@ impl Default for PhysicsWorldSettings {
         Self {
             gravity: 9.81,
             contact_skin: 0.035,
+            static_collider_batch_size: 128,
         }
     }
 }

@@ -9,6 +9,7 @@
 //! this layer; they must not create backend resources or Vulkan objects directly.
 mod env_config;
 mod provider_contract;
+mod runtime_policy;
 pub mod world_authoring;
 mod world_runtime_provider;
 

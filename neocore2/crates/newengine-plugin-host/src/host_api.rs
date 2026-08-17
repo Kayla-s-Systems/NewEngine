@@ -5,13 +5,28 @@ use abi_stable::std_types::{RResult, RString};
 use newengine_plugin_api::{
     Blob, CapabilityId, EventSinkV1Dyn, HostApiV1, MethodName, ServiceV1Dyn,
 };
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::Arc;
 use std::time::Instant;
 
+#[derive(Clone)]
+struct CachedServiceDispatch {
+    routed_id: String,
+    service: Arc<ServiceV1Dyn<'static>>,
+    owner_plugin_id: Option<String>,
+}
+
+#[derive(Default)]
+struct ServiceDispatchCache {
+    generation: u64,
+    entries: HashMap<String, CachedServiceDispatch>,
+}
+
 thread_local! {
     static IN_HOST_API_LOG: Cell<bool> = const { Cell::new(false) };
+    static SERVICE_DISPATCH_CACHE: RefCell<ServiceDispatchCache> = RefCell::new(ServiceDispatchCache::default());
 }
 
 #[inline]
@@ -126,9 +141,57 @@ extern "C" fn host_register_service_v1_plain(svc: ServiceV1Dyn<'static>) -> RRes
     host_register_service_impl(svc)
 }
 
-#[inline]
-fn route_host_owned_service(requested_id: &str) -> Option<String> {
-    crate::host_context::resolve_service_for_engine_gateway(requested_id)
+fn resolve_service_dispatch(requested_id: &str) -> Result<CachedServiceDispatch, RString> {
+    let generation = crate::host_context::services_generation();
+
+    if let Some(cached) = SERVICE_DISPATCH_CACHE.with(|cache| {
+        let mut cache = cache.borrow_mut();
+        if cache.generation != generation {
+            cache.generation = generation;
+            cache.entries.clear();
+        }
+        cache.entries.get(requested_id).cloned()
+    }) {
+        return Ok(cached);
+    }
+
+    let routed_id = crate::host_context::resolve_service_for_engine_gateway(requested_id)
+        .unwrap_or_else(|| requested_id.to_owned());
+    let c = ctx();
+    let entry = {
+        let services = c
+            .services
+            .lock()
+            .map_err(|_| RString::from("services mutex poisoned"))?;
+        services.get(&routed_id).cloned()
+    };
+    let Some(entry) = entry else {
+        let message = if routed_id != requested_id {
+            format!("service not found: requested={requested_id} routed={routed_id}")
+        } else {
+            format!("service not found: {routed_id}")
+        };
+        return Err(RString::from(message));
+    };
+
+    let dispatch = CachedServiceDispatch {
+        routed_id,
+        service: entry.service,
+        owner_plugin_id: entry.owner_plugin_id,
+    };
+    SERVICE_DISPATCH_CACHE.with(|cache| {
+        let mut cache = cache.borrow_mut();
+        // A provider may have changed while the slow lookup was in progress. In
+        // that case do not publish the stale route into the fast-path cache.
+        if cache.generation == generation
+            && crate::host_context::services_generation() == generation
+        {
+            cache
+                .entries
+                .insert(requested_id.to_owned(), dispatch.clone());
+        }
+    });
+    Ok(dispatch)
 }
 
 pub extern "C" fn call_service_v1(
@@ -136,30 +199,16 @@ pub extern "C" fn call_service_v1(
     method: MethodName,
     payload: Blob,
 ) -> RResult<Blob, RString> {
-    let requested_id = cap_id.to_string();
-    let id = route_host_owned_service(&requested_id).unwrap_or(requested_id.clone());
-    let c = ctx();
-
-    let (svc, owner) = {
-        let g = match c.services.lock() {
-            Ok(v) => v,
-            Err(_) => return RResult::RErr(RString::from("services mutex poisoned")),
-        };
-
-        match g.get(&id) {
-            Some(v) => (v.service.clone(), v.owner_plugin_id.clone()),
-            None => {
-                if id != requested_id {
-                    return RResult::RErr(RString::from(format!(
-                        "service not found: requested={requested_id} routed={id}"
-                    )));
-                }
-                return RResult::RErr(RString::from(format!("service not found: {id}")));
-            }
-        }
+    let requested_id = cap_id.as_str();
+    let dispatch = match resolve_service_dispatch(requested_id) {
+        Ok(dispatch) => dispatch,
+        Err(error) => return RResult::RErr(error),
     };
+    let id = dispatch.routed_id;
+    let svc = dispatch.service;
+    let owner = dispatch.owner_plugin_id;
 
-    let method_string = method.to_string();
+    let method_name = method.as_str();
     let payload_len = payload.len();
     let started = Instant::now();
 
@@ -183,8 +232,8 @@ pub extern "C" fn call_service_v1(
                 "Service call panicked; auto-unregistering owner",
                 {
                     "service_id": id.as_str(),
-                    "requested_id": requested_id.as_str(),
-                    "method": method_string.as_str(),
+                    "requested_id": requested_id,
+                    "method": method_name,
                     "owner": pid,
                     "auto_unregister": true
                 }
@@ -198,8 +247,8 @@ pub extern "C" fn call_service_v1(
                 "Host-owned service call panicked",
                 {
                     "service_id": id.as_str(),
-                    "requested_id": requested_id.as_str(),
-                    "method": method_string.as_str(),
+                    "requested_id": requested_id,
+                    "method": method_name,
                     "owner": "<host>",
                     "auto_unregister": false
                 }
@@ -217,8 +266,8 @@ pub extern "C" fn call_service_v1(
                     "Slow service call",
                     {
                         "service_id": id.as_str(),
-                        "requested_id": requested_id.as_str(),
-                        "method": method_string.as_str(),
+                        "requested_id": requested_id,
+                        "method": method_name,
                         "owner": owner.as_deref().unwrap_or("<host>"),
                         "payload_bytes": payload_len,
                         "output_bytes": b.len(),
@@ -235,8 +284,8 @@ pub extern "C" fn call_service_v1(
                     "Service call rejected by provider",
                     {
                         "service_id": id.as_str(),
-                        "requested_id": requested_id.as_str(),
-                        "method": method_string.as_str(),
+                        "requested_id": requested_id,
+                        "method": method_name,
                         "owner": owner.as_deref().unwrap_or("<host>"),
                         "payload_bytes": payload_len,
                         "elapsed_ms": elapsed_ms,
@@ -250,8 +299,8 @@ pub extern "C" fn call_service_v1(
                     "Service call returned error",
                     {
                         "service_id": id.as_str(),
-                        "requested_id": requested_id.as_str(),
-                        "method": method_string.as_str(),
+                        "requested_id": requested_id,
+                        "method": method_name,
                         "owner": owner.as_deref().unwrap_or("<host>"),
                         "payload_bytes": payload_len,
                         "elapsed_ms": elapsed_ms,

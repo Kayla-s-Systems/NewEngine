@@ -8,6 +8,9 @@ use super::Engine;
 
 use crate::error::{EngineError, EngineResult};
 use newengine_plugin_host::PluginsSnapshot;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+static PLUGIN_SNAPSHOT_REVISION: AtomicU64 = AtomicU64::new(0);
 
 #[inline]
 fn bootstrap_preload_deferred() -> bool {
@@ -25,8 +28,12 @@ fn bootstrap_preload_deferred() -> bool {
 impl<E: Send + 'static> Engine<E> {
     #[inline]
     pub(crate) fn expose_plugins_snapshot(&mut self) {
+        let revision = PLUGIN_SNAPSHOT_REVISION
+            .fetch_add(1, Ordering::AcqRel)
+            .saturating_add(1);
         self.resources.insert(PluginsSnapshot {
-            plugins: self.plugins.snapshot(),
+            revision,
+            plugins: self.plugins.snapshot().into(),
         });
     }
 

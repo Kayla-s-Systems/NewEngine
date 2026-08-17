@@ -19,6 +19,9 @@ pub trait MaterialProvider: Send + Sync {
 ///
 /// Keep this minimal; the concrete implementation lives in `core`.
 pub trait MaterialRegistryApi: Send + Sync {
+    /// Monotonic revision of registry contents. Derived runtime caches use this
+    /// instead of rescanning material descriptors every frame.
+    fn revision(&self) -> u64;
     fn snapshot(&self) -> Vec<MaterialSnapshotItem>;
     fn get(&self, id: MaterialId) -> Option<MaterialDescriptor>;
     fn textures(&self, id: MaterialId) -> Option<MaterialTextureBindings>;

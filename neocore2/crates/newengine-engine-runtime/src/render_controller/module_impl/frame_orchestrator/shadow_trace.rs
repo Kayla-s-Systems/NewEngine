@@ -17,21 +17,22 @@ impl RenderFrameOrchestrator {
             .map(|kind| kind.label())
             .unwrap_or("none");
         newengine_ulog_api::ulog::debug!(
-            "render shadow plan: kind={} active={} render_this_frame={} cache_valid={} target={:?} resolution={} cache(period={} reuse={} cold={} projection={} safety={})",
+            "render shadow plan: kind={} active={} render_this_frame={} cache_valid={} target={:?} resolution={} cache(caster_revision={} cached_caster_revision={} reuse={} cold={} projection={} caster={})",
             shadow_kind,
             shadow_plan.is_active(),
             render_shadow_map,
             controller.shadows.cache_valid,
             shadow_plan.render_target(),
             shadow_plan.resolution,
-            controller.shadows.refresh_period_frames,
+            controller.shadows.caster_revision,
+            controller.shadows.cached_caster_revision,
             controller.shadows.cache_reuse_count,
             controller.shadows.cache_cold_refresh_count,
             controller.shadows.cache_projection_refresh_count,
-            controller.shadows.cache_safety_refresh_count,
+            controller.shadows.cache_caster_refresh_count,
         );
 
-        if crate::env_config::var_bool("NEWENGINE_RENDER_PROFILER_SAMPLES", true) {
+        if crate::runtime_policy::diagnostics_policy().render_profiler_samples {
             let payload = serde_json::json!({
                 "schema": "newengine.diagnostics.profiler.sample.v1",
                 "category": "shadow-cache",
@@ -45,11 +46,17 @@ impl RenderFrameOrchestrator {
                 "slow": false,
                 "render_shadow_map": render_shadow_map,
                 "cache_valid": controller.shadows.cache_valid,
-                "refresh_period_frames": controller.shadows.refresh_period_frames,
+                "caster_revision": controller.shadows.caster_revision,
+                "cached_caster_revision": controller.shadows.cached_caster_revision,
                 "cache_reuse_count": controller.shadows.cache_reuse_count,
                 "cache_cold_refresh_count": controller.shadows.cache_cold_refresh_count,
                 "cache_projection_refresh_count": controller.shadows.cache_projection_refresh_count,
-                "cache_safety_refresh_count": controller.shadows.cache_safety_refresh_count,
+                "cache_caster_refresh_count": controller.shadows.cache_caster_refresh_count,
+                "caster_entity_change_count": controller.shadows.caster_entity_change_count,
+                "caster_bounds_change_count": controller.shadows.caster_bounds_change_count,
+                "caster_geometry_change_count": controller.shadows.caster_geometry_change_count,
+                "caster_material_change_count": controller.shadows.caster_material_change_count,
+                "caster_visibility_change_count": controller.shadows.caster_visibility_change_count,
                 "resolution": shadow_plan.resolution,
             });
             if let Ok(bytes) = serde_json::to_vec(&payload) {

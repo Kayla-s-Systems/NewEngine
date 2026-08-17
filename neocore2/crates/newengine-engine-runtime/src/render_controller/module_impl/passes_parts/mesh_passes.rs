@@ -16,9 +16,9 @@ use super::super::instancing::{
     InstancedReplayState, RenderInstanceRaw,
 };
 use super::mesh_visibility::{
-    distance_sq_to_camera, forward_sphere_visible, primitive_budget,
-    primitive_cast_shadows_enabled, primitive_forward_max_distance, primitive_near_accept_distance,
-    primitive_shadow_max_distance, scene_forward_cone_dot, shadow_caster_visible,
+    distance_sq_to_camera, foliage_instance_budget, forward_sphere_visible, primitive_budget,
+    primitive_cast_shadows_enabled, primitive_shadow_max_distance, primitive_visibility_settings,
+    render_scene_culling_enabled, scene_forward_cone_dot, shadow_caster_visible,
     sort_by_distance_then_key, terrain_budget, terrain_cast_shadows_enabled,
     terrain_forward_max_distance, terrain_near_accept_distance, terrain_receive_shadows_enabled,
     transform_sphere,
@@ -143,6 +143,9 @@ fn draw_procedural_terrain_for_pass(
     let world = scene.world();
     let mats_lock = this.bridges.scene.materials();
     let mats = mats_lock.read();
+    let terrain_culling_enabled = render_scene_culling_enabled();
+    let terrain_max_distance = terrain_forward_max_distance();
+    let terrain_cone_dot = scene_forward_cone_dot();
 
     let mut entries: Vec<TerrainDrawEntry> = Vec::new();
     for (id, terrain, gt) in world.query2::<ProceduralTerrain, GlobalTransform>() {
@@ -150,7 +153,7 @@ fn draw_procedural_terrain_for_pass(
             continue;
         }
         let mesh_key = terrain.mesh_key();
-        if runtime {
+        if runtime && terrain_culling_enabled {
             let local_bounds = terrain.heightfield.local_bounds();
             let (center_ws, radius_ws) = transform_sphere(
                 gt.0,
@@ -162,8 +165,8 @@ fn draw_procedural_terrain_for_pass(
                 camera_forward,
                 center_ws,
                 radius_ws,
-                terrain_forward_max_distance(),
-                scene_forward_cone_dot(),
+                terrain_max_distance,
+                terrain_cone_dot,
                 terrain_near_accept_distance(radius_ws),
             ) {
                 continue;

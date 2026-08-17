@@ -9,6 +9,13 @@ use newengine_loading_api::bootstrap_ui::{north_star_bootstrap_ui_style, Bootstr
 use newengine_project_api::{ProjectManifest, RuntimeLaunchProfile, PROJECT_MANIFEST_FILE};
 
 #[derive(Clone, Debug)]
+pub struct ProjectBrowserLaunchOption {
+    pub id: String,
+    pub profile: String,
+    pub runtime_profile: Option<String>,
+}
+
+#[derive(Clone, Debug)]
 pub struct ProjectBrowserEntry {
     pub manifest_path: PathBuf,
     pub project_root: PathBuf,
@@ -18,6 +25,7 @@ pub struct ProjectBrowserEntry {
     pub runtime_profile: Option<String>,
     pub launch_profile: Option<String>,
     pub launch_ids: Vec<String>,
+    pub launch_options: Vec<ProjectBrowserLaunchOption>,
     pub default_launch: String,
 }
 
@@ -77,10 +85,39 @@ pub fn discover_game_projects(root: &Path) -> Vec<ProjectBrowserEntry> {
             let launch_id = game_launch_id(&manifest)?;
             entry.launch_profile = Some(RuntimeLaunchProfile::Game.id().to_owned());
             entry.launch_ids = vec![launch_id.clone()];
+            entry.launch_options =
+                manifest
+                    .resolve_launch(Some(&launch_id))
+                    .ok()
+                    .map(|resolved| {
+                        vec![ProjectBrowserLaunchOption {
+                            id: launch_id.clone(),
+                            profile: resolved.profile.id().to_owned(),
+                            runtime_profile: resolved.runtime_profile,
+                        }]
+                    })?;
             entry.default_launch = launch_id;
             Some(entry)
         })
         .collect()
+}
+
+fn preferred_launch_id(manifest: &ProjectManifest) -> String {
+    if let Some(default_launch) = manifest
+        .default_launch
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        return default_launch.to_owned();
+    }
+    if let Some(id) = manifest.launch_ids().into_iter().next() {
+        return id;
+    }
+    manifest
+        .launch_profile
+        .map(|profile| profile.id().to_owned())
+        .unwrap_or_else(|| "game".to_owned())
 }
 
 fn game_launch_id(manifest: &ProjectManifest) -> Option<String> {
@@ -142,6 +179,18 @@ fn discover_recursive(dir: &Path, depth: usize, out: &mut Vec<ProjectBrowserEntr
                     if !launch_ids.iter().any(|id| id == &default_launch) {
                         launch_ids.push(default_launch.clone());
                     }
+                    let launch_options = launch_ids
+                        .iter()
+                        .filter_map(|id| {
+                            manifest.resolve_launch(Some(id)).ok().map(|resolved| {
+                                ProjectBrowserLaunchOption {
+                                    id: id.clone(),
+                                    profile: resolved.profile.id().to_owned(),
+                                    runtime_profile: resolved.runtime_profile,
+                                }
+                            })
+                        })
+                        .collect();
                     out.push(ProjectBrowserEntry {
                         manifest_path,
                         project_root: dir.to_path_buf(),
@@ -157,6 +206,7 @@ fn discover_recursive(dir: &Path, depth: usize, out: &mut Vec<ProjectBrowserEntr
                             .launch_profile
                             .map(|profile| profile.id().to_owned()),
                         launch_ids,
+                        launch_options,
                         default_launch,
                     });
                     return;
@@ -183,10 +233,10 @@ fn discover_recursive(dir: &Path, depth: usize, out: &mut Vec<ProjectBrowserEntr
 }
 
 pub fn present_project_browser(root: &Path) -> Result<ProjectBrowserSelection, String> {
-    let projects = discover_game_projects(root);
+    let projects = discover_projects(root);
     if projects.is_empty() {
         return Err(format!(
-            "no game-capable {PROJECT_MANIFEST_FILE} projects found under '{}'",
+            "no valid {PROJECT_MANIFEST_FILE} projects found under '{}'",
             root.display()
         ));
     }
@@ -284,13 +334,14 @@ impl ProjectBrowserApp {
         if !path.is_file() {
             return;
         }
-        let Some(launch_id) = fs::read_to_string(&path)
+        let Some(manifest) = fs::read_to_string(&path)
             .ok()
             .and_then(|text| toml::from_str::<ProjectManifest>(&text).ok())
-            .and_then(|manifest| game_launch_id(&manifest))
+            .filter(|manifest| manifest.validate().is_ok())
         else {
             return;
         };
+        let launch_id = preferred_launch_id(&manifest);
         if let Ok(mut outcome) = self.outcome.lock() {
             outcome.manifest_path = Some(path.clone());
             outcome.launch_id = Some(launch_id);
@@ -342,13 +393,13 @@ impl eframe::App for ProjectBrowserApp {
                         );
                         ui.add_space(2.0);
                         ui.label(
-                            egui::RichText::new("GAME PROJECTS")
+                            egui::RichText::new("PROJECTS")
                                 .size(12.0)
                                 .strong()
                                 .color(ui_color(palette.blue_bright)),
                         );
                         ui.label(
-                            egui::RichText::new("Choose a game project to launch in NewEngine")
+                            egui::RichText::new("Choose a project to open in NewEngine")
                                 .size(12.0)
                                 .color(ui_color(palette.text_dim)),
                         );
@@ -383,7 +434,7 @@ impl eframe::App for ProjectBrowserApp {
                     );
 
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if primary_button(ui, "LAUNCH GAME", palette.blue).clicked() {
+                        if primary_button(ui, "OPEN PROJECT", palette.blue).clicked() {
                             self.open_selected(ctx);
                         }
                         if secondary_button(ui, "CANCEL", palette).clicked() {
@@ -532,14 +583,49 @@ impl eframe::App for ProjectBrowserApp {
                                 );
                                 ui.add_space(18.0);
 
+                                let launch_options = entry.launch_options.clone();
+                                let selected_profile = launch_options
+                                    .iter()
+                                    .find(|option| option.id == self.selected_launch)
+                                    .map(|option| option.profile.to_ascii_uppercase())
+                                    .unwrap_or_else(|| self.selected_launch.to_ascii_uppercase());
+                                ui.horizontal(|ui| {
+                                    ui.add_sized(
+                                        [86.0, 20.0],
+                                        egui::Label::new(
+                                            egui::RichText::new("PROFILE")
+                                                .size(10.5)
+                                                .strong()
+                                                .color(ui_color(palette.muted)),
+                                        ),
+                                    );
+                                    egui::ComboBox::from_id_salt("project_launch_profile")
+                                        .selected_text(selected_profile)
+                                        .width(220.0)
+                                        .show_ui(ui, |ui| {
+                                            for option in &launch_options {
+                                                let profile = option.profile.to_ascii_uppercase();
+                                                let label = if option.id == option.profile {
+                                                    profile
+                                                } else {
+                                                    format!("{profile} · {}", option.id)
+                                                };
+                                                ui.selectable_value(
+                                                    &mut self.selected_launch,
+                                                    option.id.clone(),
+                                                    label,
+                                                );
+                                            }
+                                        });
+                                });
+                                ui.add_space(6.0);
                                 detail_row(
                                     ui,
-                                    "PROFILE",
-                                    entry.launch_profile.as_deref().unwrap_or("project default"),
+                                    "RUNTIME",
+                                    selected_runtime_label(entry, &self.selected_launch),
                                     palette,
                                 );
-                                detail_row(ui, "RUNTIME", selected_runtime_label(entry), palette);
-                                detail_row(ui, "MODE", "GAME", palette);
+                                detail_row(ui, "DEFAULT", &entry.default_launch, palette);
                                 ui.add_space(12.0);
                                 detail_row(
                                     ui,
@@ -576,7 +662,7 @@ impl eframe::App for ProjectBrowserApp {
                                 }
                             });
                             ui.add_space(18.0);
-                            if primary_button(ui, "LAUNCH SELECTED GAME", palette.blue).clicked() {
+                            if primary_button(ui, "OPEN SELECTED PROJECT", palette.blue).clicked() {
                                 self.open_selected(ctx);
                             }
                         });
@@ -589,10 +675,13 @@ fn ui_color(rgb: BootstrapUiRgb) -> egui::Color32 {
     egui::Color32::from_rgb(rgb.r, rgb.g, rgb.b)
 }
 
-fn selected_runtime_label(entry: &ProjectBrowserEntry) -> &str {
+fn selected_runtime_label<'a>(entry: &'a ProjectBrowserEntry, launch_id: &str) -> &'a str {
     entry
-        .runtime_profile
-        .as_deref()
+        .launch_options
+        .iter()
+        .find(|option| option.id == launch_id)
+        .and_then(|option| option.runtime_profile.as_deref())
+        .or(entry.runtime_profile.as_deref())
         .or(entry.launcher.as_deref())
         .unwrap_or("current NewEngine runtime")
 }
@@ -786,6 +875,21 @@ mod tests {
             },
         );
         assert_eq!(game_launch_id(&manifest), None);
+    }
+
+    #[test]
+    fn preferred_launch_selector_accepts_editor_only_manifest() {
+        let mut manifest = ProjectManifest::default();
+        manifest.launch_profile = Some(RuntimeLaunchProfile::Editor);
+        manifest.default_launch = Some("editor".to_owned());
+        manifest.launch.insert(
+            "editor".to_owned(),
+            newengine_project_api::ProjectLaunchPreset {
+                profile: Some(RuntimeLaunchProfile::Editor),
+                ..Default::default()
+            },
+        );
+        assert_eq!(preferred_launch_id(&manifest), "editor");
     }
 
     #[test]

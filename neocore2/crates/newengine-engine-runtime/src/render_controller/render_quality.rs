@@ -44,12 +44,3 @@ pub(crate) const MATERIAL_TEXTURE_MAX_UPLOADS_PER_FRAME: u32 = 1;
 /// bindings are warm. This mirrors the reference renderer's phased draw-list
 /// warmup instead of doing every heavy pass on frame one.
 pub(crate) const SHADOW_WARMUP_DEFER_FRAMES: u8 = 0;
-
-#[inline]
-pub(crate) const fn shadow_refresh_period_frames() -> u64 {
-    // Projection/light changes invalidate immediately in shadow_cache.rs. This
-    // bounded safety refresh exists only for caster motion that has no cheap
-    // global revision yet. Four frames caps stale dynamic-caster shadows to a
-    // short interval while allowing static shadow maps to be genuinely reused.
-    4
-}
