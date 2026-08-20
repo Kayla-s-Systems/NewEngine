@@ -15,6 +15,12 @@ pub fn draw_primitives(
     camera_forward: Vec3,
     deferred: bool,
 ) -> newengine_core::EngineResult<()> {
+    if this.editor_viewport.is_active()
+        && this.editor_viewport.shading() == newengine_ui_api::UiEditorViewportShading::Wireframe
+    {
+        draw_primitives_wireframe(this, r, scene, viewproj, runtime)?;
+        return draw_editor_viewport_overlays(this, r, scene, viewproj);
+    }
     draw_primitives_for_pass(
         this,
         r,
@@ -28,7 +34,8 @@ pub fn draw_primitives(
         camera_position,
         camera_forward,
         deferred,
-    )
+    )?;
+    draw_editor_viewport_overlays(this, r, scene, viewproj)
 }
 
 pub fn draw_primitives_gbuffer(
@@ -43,6 +50,11 @@ pub fn draw_primitives_gbuffer(
     camera_forward: Vec3,
     deferred: bool,
 ) -> newengine_core::EngineResult<()> {
+    if this.editor_viewport.is_active()
+        && this.editor_viewport.shading() == newengine_ui_api::UiEditorViewportShading::Wireframe
+    {
+        return Ok(());
+    }
     draw_primitives_for_pass(
         this,
         r,
@@ -551,4 +563,215 @@ fn draw_primitives_for_pass(
     }
 
     Ok(())
+}
+
+fn draw_primitives_wireframe(
+    this: &mut RuntimeRenderController,
+    r: &mut dyn newengine_core::render::RenderApi,
+    scene: &newengine_scene::Scene,
+    viewproj: Mat4,
+    runtime: bool,
+) -> newengine_core::EngineResult<()> {
+    use newengine_core::render::{BufferSlice, DrawArgs};
+    use newengine_math::Vec4;
+
+    const MAX_WIREFRAME_VERTICES: usize = 240_000;
+    let world = scene.world();
+    let reg_lock = this.bridges.scene.primitives();
+    let reg = reg_lock.read();
+    let mut bytes = Vec::<u8>::new();
+    let mut vertex_count = 0usize;
+
+    'entities: for (entity, primitive, global) in world.query2::<Primitive, GlobalTransform>() {
+        if !display_visible_in_mode(world, entity, runtime) {
+            continue;
+        }
+        let Ok(mesh) = reg.build_mesh(primitive.id) else {
+            continue;
+        };
+        let color = primitive.color;
+        let model = global.0;
+        for triangle in mesh.indices.chunks_exact(3) {
+            let edges = [
+                (triangle[0], triangle[1]),
+                (triangle[1], triangle[2]),
+                (triangle[2], triangle[0]),
+            ];
+            for (a, b) in edges {
+                if vertex_count + 2 > MAX_WIREFRAME_VERTICES {
+                    break 'entities;
+                }
+                for index in [a, b] {
+                    let Some(vertex) = mesh.vertices.get(index as usize) else {
+                        continue;
+                    };
+                    let position = model.transform_point3(Vec3::new(
+                        vertex.pos[0],
+                        vertex.pos[1],
+                        vertex.pos[2],
+                    ));
+                    let clip = viewproj * Vec4::new(position.x, position.y, position.z, 1.0);
+                    for value in [
+                        clip.x, clip.y, clip.z, clip.w,
+                        color[0], color[1], color[2], color[3],
+                    ] {
+                        bytes.extend_from_slice(&value.to_ne_bytes());
+                    }
+                    vertex_count += 1;
+                }
+            }
+        }
+    }
+
+    if vertex_count < 2 {
+        return Ok(());
+    }
+    let gpu = crate::render_controller::gpu::ensure_debug_line_pipeline(
+        &mut this.gpu.meshes.collision_lines,
+        r,
+        vertex_count as u32,
+    )?;
+    r.write_buffer(gpu.vb, 0, &bytes)?;
+    r.set_pipeline(gpu.pipeline)?;
+    r.set_bind_group(0, gpu.bg)?;
+    r.set_vertex_buffer(0, BufferSlice::new(gpu.vb, 0))?;
+    r.draw(DrawArgs::new(vertex_count as u32))?;
+    Ok(())
+}
+
+fn draw_editor_viewport_overlays(
+    this: &mut RuntimeRenderController,
+    r: &mut dyn newengine_core::render::RenderApi,
+    scene: &newengine_scene::Scene,
+    viewproj: Mat4,
+) -> newengine_core::EngineResult<()> {
+    use newengine_core::render::{BufferSlice, DrawArgs};
+    use newengine_math::Vec4;
+
+    if !this.editor_viewport.is_active() {
+        return Ok(());
+    }
+    let state = this.editor_viewport.state();
+    if !state.show_grid && !state.show_bounds && !state.show_collision {
+        return Ok(());
+    }
+
+    let world = scene.world();
+    let mut bytes = Vec::<u8>::new();
+    let mut vertex_count = 0usize;
+    let mut push_line = |a: Vec3, b: Vec3, color: [f32; 4]| {
+        for position in [a, b] {
+            let clip = viewproj * Vec4::new(position.x, position.y, position.z, 1.0);
+            for value in [
+                clip.x, clip.y, clip.z, clip.w,
+                color[0], color[1], color[2], color[3],
+            ] {
+                bytes.extend_from_slice(&value.to_ne_bytes());
+            }
+            vertex_count += 1;
+        }
+    };
+
+    if state.show_grid {
+        let step = state.translation_snap_units.max(1.0);
+        let half_cells = 20i32;
+        let extent = step * half_cells as f32;
+        let minor = [0.24, 0.26, 0.29, 0.75];
+        let major = [0.38, 0.41, 0.45, 0.92];
+        for cell in -half_cells..=half_cells {
+            let offset = cell as f32 * step;
+            let color = if cell == 0 || cell % 5 == 0 { major } else { minor };
+            push_line(
+                Vec3::new(-extent, 0.0, offset),
+                Vec3::new(extent, 0.0, offset),
+                color,
+            );
+            push_line(
+                Vec3::new(offset, 0.0, -extent),
+                Vec3::new(offset, 0.0, extent),
+                color,
+            );
+        }
+    }
+
+    if state.show_bounds {
+        if let Some(selected) = this.bridges.scene.selection() {
+            if let (Some(bounds), Some(global)) = (
+                world.get::<Bounds>(selected),
+                world.get::<GlobalTransform>(selected),
+            ) {
+                let (center, radius) = transform_sphere(
+                    global.0,
+                    bounds.local_sphere.center,
+                    bounds.local_sphere.radius,
+                );
+                push_wire_cube(&mut push_line, center, Vec3::splat(radius), [1.0, 0.72, 0.12, 1.0]);
+            }
+        }
+    }
+
+    if state.show_collision {
+        for (entity, body, global) in world.query2::<crate::gameplay::PhysicsBodyDesc, GlobalTransform>() {
+            if world.get::<crate::editor_viewport::EditorGizmoAxisComponent>(entity).is_some() {
+                continue;
+            }
+            let bounds = body.to_bounds();
+            let (center, radius) = transform_sphere(
+                global.0,
+                bounds.local_sphere.center,
+                bounds.local_sphere.radius,
+            );
+            push_wire_cube(
+                &mut push_line,
+                center,
+                Vec3::splat(radius),
+                if body.is_trigger() {
+                    [0.85, 0.25, 0.86, 1.0]
+                } else {
+                    [0.20, 0.92, 0.38, 1.0]
+                },
+            );
+        }
+    }
+
+    if vertex_count < 2 {
+        return Ok(());
+    }
+    let gpu = crate::render_controller::gpu::ensure_debug_line_pipeline(
+        &mut this.gpu.meshes.collision_lines,
+        r,
+        vertex_count as u32,
+    )?;
+    r.write_buffer(gpu.vb, 0, &bytes)?;
+    r.set_pipeline(gpu.pipeline)?;
+    r.set_bind_group(0, gpu.bg)?;
+    r.set_vertex_buffer(0, BufferSlice::new(gpu.vb, 0))?;
+    r.draw(DrawArgs::new(vertex_count as u32))?;
+    Ok(())
+}
+
+fn push_wire_cube(
+    push_line: &mut impl FnMut(Vec3, Vec3, [f32; 4]),
+    center: Vec3,
+    half_extents: Vec3,
+    color: [f32; 4],
+) {
+    let h = half_extents;
+    let p = [
+        center + Vec3::new(-h.x, -h.y, -h.z),
+        center + Vec3::new( h.x, -h.y, -h.z),
+        center + Vec3::new( h.x,  h.y, -h.z),
+        center + Vec3::new(-h.x,  h.y, -h.z),
+        center + Vec3::new(-h.x, -h.y,  h.z),
+        center + Vec3::new( h.x, -h.y,  h.z),
+        center + Vec3::new( h.x,  h.y,  h.z),
+        center + Vec3::new(-h.x,  h.y,  h.z),
+    ];
+    for (a, b) in [
+        (0,1),(1,2),(2,3),(3,0),
+        (4,5),(5,6),(6,7),(7,4),
+        (0,4),(1,5),(2,6),(3,7),
+    ] {
+        push_line(p[a], p[b], color);
+    }
 }

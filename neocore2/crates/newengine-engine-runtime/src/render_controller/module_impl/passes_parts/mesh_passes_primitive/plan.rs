@@ -132,7 +132,6 @@ const SKY_MESH_ROLES: &[MeshRenderRole] = &[
 
 const NON_WORLD_VIEWPORT_ROLES: &[MeshRenderRole] = &[
     MeshRenderRole::CollisionProxy,
-    MeshRenderRole::EditorGizmo,
     MeshRenderRole::DebugPrimitive,
 ];
 
@@ -159,6 +158,11 @@ pub(super) fn primitive_role_cull_reason(
     if options.is_sky_role() && !draw_sky_visuals {
         return Some("sky_visuals_disabled_by_runtime_profile");
     }
+    if matches!(options.role, MeshRenderRole::EditorGizmo)
+        && matches!(pass, SceneMeshPass::GBuffer)
+    {
+        return Some("editor_gizmo_forward_only");
+    }
     if deferred
         && matches!(pass, SceneMeshPass::Forward)
         && !matches!(
@@ -168,6 +172,7 @@ pub(super) fn primitive_role_cull_reason(
                 | MeshRenderRole::WeatherVolume
                 | MeshRenderRole::WorldTransparent
                 | MeshRenderRole::FirstPersonViewModel
+                | MeshRenderRole::EditorGizmo
         )
     {
         return Some("opaque_role_routed_to_deferred_gbuffer");

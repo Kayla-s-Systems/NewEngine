@@ -102,10 +102,31 @@ impl RenderFrameOrchestrator {
         let bounds = snapshot.bounds;
         let runtime_profile = controller.runtime_profile().clone();
         let external_preview_target = controller.external_preview_target_active();
-        let hdr_scene_enabled = runtime_profile.hdr_scene_enabled() && !external_preview_target;
-        let deferred_enabled = runtime_profile.deferred_enabled() && !external_preview_target;
-        let postfx_enabled = runtime_profile.postfx_enabled() && !external_preview_target;
-        let shadows_enabled = runtime_profile.shadows_enabled() && !external_preview_target;
+        let editor_active = controller.editor_viewport.is_active();
+        let editor_shading = editor_active.then(|| controller.editor_viewport.shading());
+        let editor_debug_shading = editor_shading.is_some_and(|mode| {
+            mode != newengine_ui_api::UiEditorViewportShading::Lit
+        });
+        let editor_wireframe = editor_shading
+            == Some(newengine_ui_api::UiEditorViewportShading::Wireframe);
+        let editor_show_overlays = editor_active && {
+            let state = controller.editor_viewport.state();
+            state.show_grid || state.show_bounds || state.show_collision
+        };
+        // Editor debug-line overlays use the canonical BGRA viewport pipeline.
+        // Keep authoring viewport LDR so grid/bounds/gizmos never bind an HDR-incompatible pipeline.
+        let hdr_scene_enabled = runtime_profile.hdr_scene_enabled()
+            && !external_preview_target
+            && !editor_active;
+        let deferred_enabled = runtime_profile.deferred_enabled()
+            && !external_preview_target
+            && !editor_debug_shading;
+        let postfx_enabled = runtime_profile.postfx_enabled()
+            && !external_preview_target
+            && !editor_debug_shading;
+        let shadows_enabled = runtime_profile.shadows_enabled()
+            && !external_preview_target
+            && !editor_debug_shading;
         let scene_color_format = if hdr_scene_enabled {
             crate::render_controller::render_quality::SCENE_HDR_COLOR_FORMAT
         } else {
@@ -147,7 +168,7 @@ impl RenderFrameOrchestrator {
             snapshot.camera_position.y,
             snapshot.camera_position.z,
         ];
-        let base_lights = lights::collect_lights(scene.world())
+        let mut base_lights = lights::collect_lights(scene.world())
             .with_camera_position(camera_position)
             .with_camera_forward([
                 snapshot.camera_forward.x,
@@ -155,6 +176,16 @@ impl RenderFrameOrchestrator {
                 snapshot.camera_forward.z,
             ])
             .with_shadow_receiver_debug_mode(shadow_receiver_debug_mode());
+        if editor_debug_shading {
+            // Unlit/Wireframe are editor visualization modes, not alternate world lighting.
+            // Keep texture/material color while neutralizing all scene light contribution.
+            base_lights.ambient = [1.0, 1.0, 1.0, 1.0];
+            base_lights.dir_dir_intensity[3] = 0.0;
+            base_lights.point_count_pad[0] = 0.0;
+            for point in &mut base_lights.point_color_intensity {
+                point[3] = 0.0;
+            }
+        }
         let extent = Extent2D::new(scope.vp_w, scope.vp_h);
         let gpu_safe_profile = runtime_profile.gpu_safe_enabled();
         if gpu_safe_profile {
@@ -246,7 +277,7 @@ impl RenderFrameOrchestrator {
             viewport_extent: snapshot.viewport_extent,
             surface_extent: snapshot.surface_extent,
             runtime: view_frame.effective_play_mode.is_runtime(),
-            debug_overlays: false,
+            debug_overlays: editor_wireframe || editor_show_overlays,
             ui,
         };
 

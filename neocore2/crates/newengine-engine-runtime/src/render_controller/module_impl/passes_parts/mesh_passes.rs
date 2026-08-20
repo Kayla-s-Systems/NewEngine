@@ -86,6 +86,13 @@ pub fn draw_procedural_terrain(
     camera_position: Vec3,
     camera_forward: Vec3,
 ) -> newengine_core::EngineResult<()> {
+    if this.editor_viewport.is_active()
+        && this.editor_viewport.shading() == newengine_ui_api::UiEditorViewportShading::Wireframe
+    {
+        // Terrain wire extraction is provider-owned; suppress the solid terrain pass
+        // rather than mixing filled terrain into an otherwise wireframe viewport.
+        return Ok(());
+    }
     draw_procedural_terrain_for_pass(
         this,
         r,
@@ -112,6 +119,13 @@ pub fn draw_procedural_terrain_gbuffer(
     camera_position: Vec3,
     camera_forward: Vec3,
 ) -> newengine_core::EngineResult<()> {
+    if this.editor_viewport.is_active()
+        && this.editor_viewport.shading() == newengine_ui_api::UiEditorViewportShading::Wireframe
+    {
+        // Terrain wire extraction is provider-owned; suppress the solid terrain pass
+        // rather than mixing filled terrain into an otherwise wireframe viewport.
+        return Ok(());
+    }
     draw_procedural_terrain_for_pass(
         this,
         r,
