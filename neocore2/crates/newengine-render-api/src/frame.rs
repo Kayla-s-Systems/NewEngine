@@ -120,7 +120,7 @@ impl Extent2D {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Viewport {
     pub x: f32,
     pub y: f32,
@@ -144,7 +144,7 @@ impl Viewport {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RectI32 {
     pub x: i32,
     pub y: i32,

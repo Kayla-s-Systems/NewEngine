@@ -1,11 +1,15 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use newengine_lighting::{AmbientLight, DirectionalLight, PointLight};
+use newengine_lighting::{AmbientLight, DirectionalLight, PointLight, SpotLight};
 use newengine_math::{Mat4, Vec3};
 
-use crate::{ShadowFrame, MAX_DIRECTIONAL_SHADOW_CASCADES};
+use crate::{
+    LocalShadowFrame, ShadowFrame, MAX_DIRECTIONAL_SHADOW_CASCADES, MAX_LOCAL_SHADOW_LIGHTS,
+    MAX_LOCAL_SHADOW_VIEWS,
+};
 
 pub const MAX_POINT_LIGHTS: usize = 4;
+pub const MAX_SPOT_LIGHTS: usize = 4;
 
 #[derive(Clone, Copy, Debug)]
 pub struct PointLightSnapshot {
@@ -14,11 +18,19 @@ pub struct PointLightSnapshot {
     pub position: Vec3,
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct SpotLightSnapshot {
+    pub stable_id: u64,
+    pub light: SpotLight,
+    pub position: Vec3,
+}
+
 #[derive(Clone, Debug)]
 pub struct LightSceneSnapshot {
     pub ambient: AmbientLight,
     pub directional: Option<DirectionalLight>,
     pub point_lights: Vec<PointLightSnapshot>,
+    pub spot_lights: Vec<SpotLightSnapshot>,
 }
 
 impl Default for LightSceneSnapshot {
@@ -28,6 +40,7 @@ impl Default for LightSceneSnapshot {
             ambient: AmbientLight::default(),
             directional: None,
             point_lights: Vec::new(),
+            spot_lights: Vec::new(),
         }
     }
 }
@@ -57,6 +70,21 @@ impl LightSceneSnapshot {
         pts.sort_by(|a, b| a.stable_id.cmp(&b.stable_id));
         pts
     }
+
+    #[inline]
+    pub fn primary_spot_light(&self) -> Option<(SpotLight, Vec3)> {
+        self.spot_lights
+            .iter()
+            .min_by_key(|s| s.stable_id)
+            .map(|s| (s.light, s.position))
+    }
+
+    #[inline]
+    pub fn sorted_spot_lights(&self) -> Vec<SpotLightSnapshot> {
+        let mut spots = self.spot_lights.clone();
+        spots.sort_by(|a, b| a.stable_id.cmp(&b.stable_id));
+        spots
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -67,6 +95,20 @@ pub struct PackedLights {
     pub point_pos_range: [[f32; 4]; MAX_POINT_LIGHTS],
     pub point_color_intensity: [[f32; 4]; MAX_POINT_LIGHTS],
     pub point_count_pad: [f32; 4],
+    pub spot_pos_range: [[f32; 4]; MAX_SPOT_LIGHTS],
+    pub spot_dir_outer_cos: [[f32; 4]; MAX_SPOT_LIGHTS],
+    pub spot_color_intensity: [[f32; 4]; MAX_SPOT_LIGHTS],
+    pub spot_inner_cos: [f32; 4],
+    pub spot_count_pad: [f32; 4],
+    pub local_shadow_mvp: [Mat4; MAX_LOCAL_SHADOW_VIEWS],
+    /// xy = atlas scale, zw = atlas offset for each local shadow view.
+    pub local_shadow_tile: [[f32; 4]; MAX_LOCAL_SHADOW_VIEWS],
+    /// x=enabled, y=first view index, z=depth bias, w=normal-bias scale.
+    pub point_shadow_meta: [[f32; 4]; MAX_POINT_LIGHTS],
+    /// x=enabled, y=first view index, z=depth bias, w=normal-bias scale.
+    pub spot_shadow_meta: [[f32; 4]; MAX_SPOT_LIGHTS],
+    /// x=enabled, y=view count, z=global visibility strength, w=reserved.
+    pub local_shadow_atlas: [f32; 4],
     pub shadow_light_mvp: Mat4,
     pub shadow_cascade_light_mvp: [Mat4; MAX_DIRECTIONAL_SHADOW_CASCADES],
     pub shadow_cascade_splits: [f32; MAX_DIRECTIONAL_SHADOW_CASCADES],
@@ -95,6 +137,16 @@ impl Default for PackedLights {
             point_pos_range: [[0.0; 4]; MAX_POINT_LIGHTS],
             point_color_intensity: [[0.0; 4]; MAX_POINT_LIGHTS],
             point_count_pad: [0.0; 4],
+            spot_pos_range: [[0.0; 4]; MAX_SPOT_LIGHTS],
+            spot_dir_outer_cos: [[0.0; 4]; MAX_SPOT_LIGHTS],
+            spot_color_intensity: [[0.0; 4]; MAX_SPOT_LIGHTS],
+            spot_inner_cos: [0.0; 4],
+            spot_count_pad: [0.0; 4],
+            local_shadow_mvp: [Mat4::IDENTITY; MAX_LOCAL_SHADOW_VIEWS],
+            local_shadow_tile: [[0.0; 4]; MAX_LOCAL_SHADOW_VIEWS],
+            point_shadow_meta: [[0.0; 4]; MAX_POINT_LIGHTS],
+            spot_shadow_meta: [[0.0; 4]; MAX_SPOT_LIGHTS],
+            local_shadow_atlas: [0.0; 4],
             shadow_light_mvp: Mat4::IDENTITY,
             shadow_cascade_light_mvp: [Mat4::IDENTITY; MAX_DIRECTIONAL_SHADOW_CASCADES],
             shadow_cascade_splits: [0.0; MAX_DIRECTIONAL_SHADOW_CASCADES],
@@ -113,7 +165,7 @@ impl Default for PackedLights {
 }
 
 impl PackedLights {
-    pub const UBO_SIZE: usize = 880;
+    pub const UBO_SIZE: usize = 3168;
 
     #[inline]
     pub fn from_snapshot(snapshot: &LightSceneSnapshot) -> Self {
@@ -160,6 +212,41 @@ impl PackedLights {
             ];
         }
         out.point_count_pad = [n as f32, 0.0, 0.0, 0.0];
+
+        let spots = snapshot.sorted_spot_lights();
+        if spots.len() > MAX_SPOT_LIGHTS {
+            newengine_ulog_api::ulog::warn!(
+                "render: spot lights truncated: requested={} max={} (deterministic keep=min stable id)",
+                spots.len(),
+                MAX_SPOT_LIGHTS
+            );
+        }
+        let spot_n = spots.len().min(MAX_SPOT_LIGHTS);
+        for (i, s) in spots.iter().enumerate().take(spot_n) {
+            let direction = Vec3::new(
+                s.light.direction_ws[0],
+                s.light.direction_ws[1],
+                s.light.direction_ws[2],
+            )
+            .normalize_or_zero();
+            let outer_angle = s.light.outer_angle_rad.clamp(0.01, 1.553_343);
+            let inner_angle = s.light.inner_angle_rad.clamp(0.0, outer_angle);
+            out.spot_pos_range[i] = [
+                s.position.x,
+                s.position.y,
+                s.position.z,
+                s.light.range.max(1.0e-3),
+            ];
+            out.spot_dir_outer_cos[i] = [direction.x, direction.y, direction.z, outer_angle.cos()];
+            out.spot_color_intensity[i] = [
+                s.light.color[0],
+                s.light.color[1],
+                s.light.color[2],
+                s.light.intensity.max(0.0),
+            ];
+            out.spot_inner_cos[i] = inner_angle.cos();
+        }
+        out.spot_count_pad = [spot_n as f32, 0.0, 0.0, 0.0];
         out
     }
 
@@ -234,6 +321,54 @@ impl PackedLights {
     }
 
     #[inline]
+    pub fn with_local_shadow_frame(mut self, frame: LocalShadowFrame) -> Self {
+        self.local_shadow_mvp = [Mat4::IDENTITY; MAX_LOCAL_SHADOW_VIEWS];
+        self.local_shadow_tile = [[0.0; 4]; MAX_LOCAL_SHADOW_VIEWS];
+        self.point_shadow_meta = [[0.0; 4]; MAX_POINT_LIGHTS];
+        self.spot_shadow_meta = [[0.0; 4]; MAX_SPOT_LIGHTS];
+        self.local_shadow_atlas = [0.0; 4];
+        if !frame.is_active() {
+            return self;
+        }
+
+        let view_count = frame.view_count.min(MAX_LOCAL_SHADOW_VIEWS as u32) as usize;
+        for i in 0..view_count {
+            let view = frame.views[i];
+            self.local_shadow_mvp[i] = view.light_mvp;
+            self.local_shadow_tile[i] = view.atlas_uv_transform(frame.atlas_extent);
+        }
+        let light_count = frame.light_count.min(MAX_LOCAL_SHADOW_LIGHTS as u32) as usize;
+        let mut max_strength = 0.0_f32;
+        for i in 0..light_count {
+            let light = frame.lights[i];
+            let meta = [
+                1.0,
+                light.first_view as f32,
+                light.bias.max(0.0),
+                light.normal_bias.max(0.0),
+            ];
+            max_strength = max_strength.max(light.strength.clamp(0.0, 1.0));
+            match light.light_kind {
+                crate::ShadowLightKind::Point => {
+                    let index = light.packed_light_index as usize;
+                    if index < MAX_POINT_LIGHTS {
+                        self.point_shadow_meta[index] = meta;
+                    }
+                }
+                crate::ShadowLightKind::Spot => {
+                    let index = light.packed_light_index as usize;
+                    if index < MAX_SPOT_LIGHTS {
+                        self.spot_shadow_meta[index] = meta;
+                    }
+                }
+                crate::ShadowLightKind::Directional => {}
+            }
+        }
+        self.local_shadow_atlas = [1.0, view_count as f32, max_strength, 0.0];
+        self
+    }
+
+    #[inline]
     pub fn write_into(&self, bytes: &mut [u8; Self::UBO_SIZE]) {
         let mut off = 160;
         fn write_vec4(dst: &mut [u8], off: &mut usize, v: [f32; 4]) {
@@ -252,6 +387,41 @@ impl PackedLights {
             write_vec4(bytes, &mut off, self.point_color_intensity[i]);
         }
         write_vec4(bytes, &mut off, self.point_count_pad);
+
+        // Append local-light data after the legacy 880-byte block. Keeping the
+        // original offsets intact preserves compatibility with shaders that do not
+        // consume spot lights yet.
+        let mut spot_off = 880usize;
+        for value in self.spot_pos_range {
+            write_vec4(bytes, &mut spot_off, value);
+        }
+        for value in self.spot_dir_outer_cos {
+            write_vec4(bytes, &mut spot_off, value);
+        }
+        for value in self.spot_color_intensity {
+            write_vec4(bytes, &mut spot_off, value);
+        }
+        write_vec4(bytes, &mut spot_off, self.spot_inner_cos);
+        write_vec4(bytes, &mut spot_off, self.spot_count_pad);
+
+        let mut local_off = 1104usize;
+        for matrix in self.local_shadow_mvp {
+            for component in matrix.to_cols_array() {
+                bytes[local_off..local_off + 4].copy_from_slice(&component.to_ne_bytes());
+                local_off += 4;
+            }
+        }
+        for value in self.local_shadow_tile {
+            write_vec4(bytes, &mut local_off, value);
+        }
+        for value in self.point_shadow_meta {
+            write_vec4(bytes, &mut local_off, value);
+        }
+        for value in self.spot_shadow_meta {
+            write_vec4(bytes, &mut local_off, value);
+        }
+        write_vec4(bytes, &mut local_off, self.local_shadow_atlas);
+        debug_assert_eq!(local_off, Self::UBO_SIZE);
     }
 }
 
@@ -262,7 +432,7 @@ mod cloud_shadow_ubo_tests {
     #[test]
     fn packed_camera_forward_is_normalized_for_csm_receiver_depth() {
         let packed = PackedLights::default().with_camera_forward([0.0, 3.0, 4.0]);
-        assert_eq!(PackedLights::UBO_SIZE, 880);
+        assert_eq!(PackedLights::UBO_SIZE, 3168);
         assert!((packed.shadow_view_forward[0] - 0.0).abs() < 1.0e-6);
         assert!((packed.shadow_view_forward[1] - 0.6).abs() < 1.0e-6);
         assert!((packed.shadow_view_forward[2] - 0.8).abs() < 1.0e-6);
@@ -284,7 +454,7 @@ mod cloud_shadow_ubo_tests {
         let frame = ShadowFrame::disabled(newengine_core::render::TextureId::new(1))
             .with_pcss(pcss0, pcss1);
         let packed = PackedLights::default().with_shadow_frame(frame);
-        assert_eq!(PackedLights::UBO_SIZE, 880);
+        assert_eq!(PackedLights::UBO_SIZE, 3168);
         assert_eq!(packed.shadow_pcss0, pcss0);
         assert_eq!(packed.shadow_pcss1, pcss1);
     }
@@ -297,7 +467,7 @@ mod cloud_shadow_ubo_tests {
         let map3 = [0.10, 0.20, 0.31, 0.43];
         let map4 = [0.78, 0.035, 0.17, 96.0];
         let packed = PackedLights::default().with_cloud_shadow(map0, map1, map2, map3, map4);
-        assert_eq!(PackedLights::UBO_SIZE, 880);
+        assert_eq!(PackedLights::UBO_SIZE, 3168);
         assert_eq!(packed.cloud_shadow_map0, map0);
         assert_eq!(packed.cloud_shadow_map1, map1);
         assert_eq!(packed.cloud_shadow_map2, map2);

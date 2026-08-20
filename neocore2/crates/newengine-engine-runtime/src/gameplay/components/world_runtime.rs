@@ -67,3 +67,21 @@ impl PreparedRenderMesh {
         Self { mesh }
     }
 }
+
+/// Authored/runtime scene component identifying an imported model actor.
+///
+/// The component contains only stable model identity. CPU mesh/material bundles and
+/// GPU residency stay in the render runtime; ECS does not own renderer-native state.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct ModelRenderComponent {
+    pub logical_path: String,
+}
+
+impl ModelRenderComponent {
+    #[inline]
+    pub fn new(logical_path: impl Into<String>) -> Self {
+        Self {
+            logical_path: logical_path.into(),
+        }
+    }
+}

@@ -30,13 +30,18 @@ pub use newengine_game_data::{
 };
 pub use profile::{GameReadyRuntimeKind, GameReadyRuntimeProfile};
 pub use project_editor::{
+    launch_registered_project_editor_profile,
     runtime_profile_registration as project_editor_runtime_profile_registration,
     PROJECT_EDITOR_RUNTIME_PROFILE_ID,
 };
 
 pub const GAME_READY_RUNTIME_PROFILE_ID: &str = "newengine.runtime-profile.game-ready";
 
-fn launch_registered_game_ready_profile(manifest_path: &std::path::Path) -> Result<(), String> {
+/// Launches the generic GameReady runtime for a resolved project manifest.
+///
+/// This is intentionally public for ABI plugin wrappers; the launcher itself must not
+/// link this crate directly.
+pub fn launch_registered_game_ready_profile(manifest_path: &std::path::Path) -> Result<(), String> {
     let launch_id = std::env::var(newengine_project_api::PROJECT_LAUNCH_PRESET_ENV)
         .ok()
         .filter(|value| !value.trim().is_empty());

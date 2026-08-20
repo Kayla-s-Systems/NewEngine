@@ -21,6 +21,8 @@ mod materials_terrain;
 mod mission;
 #[path = "game_ready_parts/player_model.rs"]
 mod player_model;
+#[path = "game_ready_parts/shadow_torture.rs"]
+mod shadow_torture;
 #[path = "game_ready_parts/sky.rs"]
 mod sky;
 #[path = "game_ready_parts/terrain_heightmap.rs"]
@@ -167,4 +169,5 @@ pub fn tick_frame(
     if frame.environment_cycle_enabled {
         tick_game_ready_sky_cycle(world, frame.dt);
     }
+    shadow_torture::tick(world, frame.dt);
 }

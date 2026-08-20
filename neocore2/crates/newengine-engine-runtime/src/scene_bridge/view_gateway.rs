@@ -77,6 +77,41 @@ pub(crate) struct EngineViewGatewayFrame {
     pub world_playable: bool,
 }
 
+#[inline]
+fn remove_projection_jitter(
+    projection: Mat4,
+    jitter_px: [f32; 2],
+    viewport_width: u32,
+    viewport_height: u32,
+) -> Mat4 {
+    if viewport_width == 0
+        || viewport_height == 0
+        || !jitter_px[0].is_finite()
+        || !jitter_px[1].is_finite()
+    {
+        return projection;
+    }
+    // CameraFrame::build applies jitter as T(dx,dy,0) * projection. Shadows must
+    // fit the physical camera frustum, not the temporal AA sample, so invert the
+    // same projection-space translation before CSM fitting.
+    let dx = (2.0 * jitter_px[0]) / viewport_width as f32;
+    let dy = (2.0 * jitter_px[1]) / viewport_height as f32;
+    Mat4::from_translation(Vec3::new(-dx, -dy, 0.0)) * projection
+}
+
+impl EngineViewGatewayFrame {
+    #[inline]
+    pub(crate) fn unjittered_view_projection(&self) -> Mat4 {
+        let projection = remove_projection_jitter(
+            self.view.projection,
+            self.camera_snapshot.jitter_px,
+            self.view.viewport_width,
+            self.view.viewport_height,
+        );
+        projection * self.view.view
+    }
+}
+
 impl From<CameraGatewayFrame> for EngineViewGatewayFrame {
     #[inline]
     fn from(frame: CameraGatewayFrame) -> Self {
@@ -223,6 +258,42 @@ pub(crate) fn apply_engine_view_postfx(
         jitter_px: view.jitter_px,
     };
     params
+}
+
+#[cfg(test)]
+mod shadow_view_tests {
+    use super::*;
+
+    #[test]
+    fn remove_projection_jitter_recovers_physical_projection() {
+        let clean = Mat4::perspective_rh(68.0_f32.to_radians(), 16.0 / 9.0, 0.1, 250.0);
+        let jitter_px = [0.375_f32, -0.222_f32];
+        let width = 1920_u32;
+        let height = 1080_u32;
+        let dx = 2.0 * jitter_px[0] / width as f32;
+        let dy = 2.0 * jitter_px[1] / height as f32;
+        let jittered = Mat4::from_translation(Vec3::new(dx, dy, 0.0)) * clean;
+        let recovered = remove_projection_jitter(jittered, jitter_px, width, height);
+        for (actual, expected) in recovered
+            .to_cols_array()
+            .into_iter()
+            .zip(clean.to_cols_array())
+        {
+            assert!(
+                (actual - expected).abs() <= 2.0e-6,
+                "actual={actual} expected={expected}"
+            );
+        }
+    }
+
+    #[test]
+    fn zero_viewport_keeps_projection_unchanged() {
+        let projection = Mat4::perspective_rh(60.0_f32.to_radians(), 1.0, 0.1, 100.0);
+        assert_eq!(
+            remove_projection_jitter(projection, [0.5, 0.5], 0, 1080),
+            projection
+        );
+    }
 }
 
 impl SceneBridge {

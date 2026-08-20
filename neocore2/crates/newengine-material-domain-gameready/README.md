@@ -1,28 +1,5 @@
 # newengine-material-domain-gameready
 
-GameReady/FPS material-domain package.
+Compatibility facade for existing GameReady consumers. The lit material implementation, shader-manifest loading, staged pipeline warmup and cache ownership live in `newengine-material-domain-standard`.
 
-It owns the current runtime-lit shader paths, fallback textures, samplers and
-pipeline presets. Reusable `newengine-engine-runtime` registers this provider
-through `newengine-material-domain-api` instead of hardcoding GameReady material
-assets inside the render controller.
-
-<!-- NORTHSTAR-DIR-README:BEGIN -->
-
-## Directory purpose
-
-**Path:** `NewEngine/neocore2/crates/newengine-material-domain-gameready`
-
-**Role:** Engine repository directory. Keep files here scoped to this directory's domain and avoid cross-domain ownership drift.
-
-**Local contents:** 1 direct subdirectories, 2 direct files.
-
-**Direct file examples:** `Cargo.toml`
-
-## Working rules
-
-- Do not put transient build output in this directory unless the directory is explicitly a runtime output/cache location.
-- Keep runtime assets and editable source assets separate: source assets are packed into runtime formats through explicit tools/manifests.
-- Do not introduce hidden provider/backend coupling here; use declared descriptors, gateways, DTOs, and explicit maintenance scripts.
-
-<!-- NORTHSTAR-DIR-README:END -->
+The historical `GameReadyLitMaterialDomainProvider` and `GAME_READY_LIT_PIPELINE_KEY` remain available so existing profiles and tools do not need an immediate source/API migration.

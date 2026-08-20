@@ -229,6 +229,9 @@ fn parse_header(bytes: &[u8], size_class: u8) -> Result<ListFileHeader, String> 
                     "NEF8 unclaimed bytes between header and body: metadata_len={metadata_len}"
                 ));
             }
+            if metadata_len == 0 && (flags & LIST_FILE_FLAG_HEADER_METADATA) != 0 {
+                return Err("NEF8 metadata flag set but metadata region is empty".to_owned());
+            }
             (
                 body_offset as u64,
                 body_len,
@@ -440,6 +443,58 @@ mod tests {
         );
         assert_eq!(header.stable_file_id, 11);
         assert_eq!(header.import_settings_hash, 12);
+    }
+
+    #[test]
+    fn v2_offsets_keep_type_id_and_flags_distinct() {
+        let metadata = br#"{"schema":"metadata"}"#;
+        let bytes = encode_list_file(ListFileEncodeRequest {
+            content_kind: LIST_FILE_CONTENT_KIND_NEFTD,
+            content_schema_version: 1,
+            entry_count: 5,
+            additional_flags: 0,
+            min_size_class: 4,
+            header_metadata: metadata,
+            body_stored: &[1, 2, 3],
+            body_uncompressed_len: 9,
+            body_raw_hash: None,
+            stable_file_id: None,
+            import_settings_hash: None,
+        })
+        .unwrap();
+        assert_eq!(
+            u16::from_le_bytes([bytes[6], bytes[7]]) as u32,
+            LIST_FILE_CONTENT_KIND_NEFTD
+        );
+        assert_eq!(
+            u16::from_le_bytes([bytes[8], bytes[9]]),
+            LIST_FILE_FLAG_BODY_DEFLATE | LIST_FILE_FLAG_HEADER_METADATA
+        );
+    }
+
+    #[test]
+    fn metadata_flag_requires_a_real_metadata_region() {
+        let mut bytes = encode_list_file(ListFileEncodeRequest {
+            content_kind: LIST_FILE_CONTENT_KIND_YSC,
+            content_schema_version: 1,
+            entry_count: 0,
+            additional_flags: 0,
+            min_size_class: 5,
+            header_metadata: &[],
+            body_stored: &[1, 2, 3],
+            body_uncompressed_len: 9,
+            body_raw_hash: None,
+            stable_file_id: None,
+            import_settings_hash: None,
+        })
+        .unwrap();
+        let flags = LIST_FILE_FLAG_BODY_DEFLATE | LIST_FILE_FLAG_HEADER_METADATA;
+        bytes[8..10].copy_from_slice(&flags.to_le_bytes());
+        let error = parse_list_file_header(&bytes).unwrap_err();
+        assert!(
+            error.contains("metadata flag set"),
+            "unexpected error: {error}"
+        );
     }
 
     #[test]

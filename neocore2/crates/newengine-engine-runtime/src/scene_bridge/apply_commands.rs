@@ -124,24 +124,11 @@ impl SceneBridge {
 
                     let assembler =
                         resolve_asset_assembler(&self.asset_assemblers.read(), &descriptor);
-                    let primitive_id = match assembler.assembly {
-                        SceneImportedAssetAssemblyKind::StaticMeshActor => builtins::ID_CUBE,
-                        SceneImportedAssetAssemblyKind::SceneAnchor => builtins::ID_PLANE,
-                        SceneImportedAssetAssemblyKind::TextureCard => builtins::ID_PLANE,
-                        SceneImportedAssetAssemblyKind::MaterialPreviewSphere => {
-                            builtins::ID_SPHERE_UV
-                        }
-                        SceneImportedAssetAssemblyKind::OpaqueProxy => {
-                            imported_asset_primitive_id(&descriptor)
-                        }
-                    };
-                    let _ = world.insert(
-                        e,
-                        Primitive {
-                            id: primitive_id,
-                            color: descriptor.tint,
-                        },
+                    let static_model_actor = matches!(
+                        assembler.assembly,
+                        SceneImportedAssetAssemblyKind::StaticMeshActor
                     );
+
                     let _ = world.insert(e, descriptor.clone());
                     let _ = world.insert(
                         e,
@@ -149,11 +136,57 @@ impl SceneBridge {
                             mode: descriptor.assembly.display_mode,
                         },
                     );
-                    if let Some(bounds) = primitive_bounds(&prims, primitive_id) {
-                        let _ = world.insert(e, bounds);
+
+                    if static_model_actor {
+                        // Static mesh actors are real model-domain actors. Do not attach a
+                        // Primitive cube proxy: CPU bundle preparation and GPU residency are
+                        // owned by the render runtime through ModelRenderComponent.
+                        let _ = world.insert(
+                            e,
+                            crate::gameplay::ModelRenderComponent::new(
+                                descriptor.logical_path.clone(),
+                            ),
+                        );
+                        let half_extents = Vec3::new(
+                            descriptor.default_scale[0].abs().max(0.5),
+                            descriptor.default_scale[1].abs().max(0.5),
+                            descriptor.default_scale[2].abs().max(0.5),
+                        );
+                        let _ = world.insert(
+                            e,
+                            newengine_bounds::Bounds::from_local_aabb(
+                                newengine_bounds::Aabb::from_center_half_extents(
+                                    Vec3::ZERO,
+                                    half_extents,
+                                ),
+                            ),
+                        );
+                    } else {
+                        let primitive_id = match assembler.assembly {
+                            SceneImportedAssetAssemblyKind::StaticMeshActor => unreachable!(),
+                            SceneImportedAssetAssemblyKind::SceneAnchor => builtins::ID_PLANE,
+                            SceneImportedAssetAssemblyKind::TextureCard => builtins::ID_PLANE,
+                            SceneImportedAssetAssemblyKind::MaterialPreviewSphere => {
+                                builtins::ID_SPHERE_UV
+                            }
+                            SceneImportedAssetAssemblyKind::OpaqueProxy => {
+                                imported_asset_primitive_id(&descriptor)
+                            }
+                        };
+                        let _ = world.insert(
+                            e,
+                            Primitive {
+                                id: primitive_id,
+                                color: descriptor.tint,
+                            },
+                        );
+                        if let Some(bounds) = primitive_bounds(&prims, primitive_id) {
+                            let _ = world.insert(e, bounds);
+                        }
+                        ensure_primitive_base(world, e, default_mat);
+                        apply_primitive_instance(world, &mats, e, default_mat, descriptor.tint);
                     }
-                    ensure_primitive_base(world, e, default_mat);
-                    apply_primitive_instance(world, &mats, e, default_mat, descriptor.tint);
+
                     if let Some(collision) = imported_asset_collision(&descriptor) {
                         let _ = world.insert(e, collision);
                     }
@@ -320,8 +353,55 @@ impl SceneBridge {
         if let Some(mode) = next_mode {
             *self.play_mode.lock() = mode;
         }
+        // Selection publishing reads the scene to resolve authority/inspector data;
+        // release the command writer first to avoid recursive RwLock acquisition.
+        drop(scene);
         if let Some(sel) = pending_selection {
             self.set_selection(sel);
         }
+    }
+}
+
+#[cfg(test)]
+mod imported_model_admission_tests {
+    use super::*;
+    use newengine_bounds::Bounds;
+
+    #[test]
+    fn static_mesh_actor_uses_model_component_not_cube_proxy() {
+        let bridge = SceneBridge::new(Scene::new());
+        bridge.cmd_spawn_imported_asset(
+            SceneImportedAssetDescriptor {
+                logical_path: "models/test_mesh.ydd".to_owned(),
+                import_kind: SceneImportedAssetKind::StaticMesh,
+                representation: SceneImportedAssetRepresentation::PrimitiveCube,
+                assembler_key: "builtin.static_mesh_actor".to_owned(),
+                assembly: SceneImportedAssetAssemblyDescriptor {
+                    assembly: SceneImportedAssetAssemblyKind::StaticMeshActor,
+                    primitive_id: builtins::ID_CUBE,
+                    display_mode: DisplayMode::Both,
+                    with_collision: false,
+                    dynamic_collision: false,
+                },
+                default_scale: [1.0, 1.0, 1.0],
+                tint: [1.0, 1.0, 1.0, 1.0],
+            },
+            "ImportedModel".to_owned(),
+            Vec3::ZERO,
+        );
+        bridge.apply_commands();
+
+        let entity = bridge
+            .selection()
+            .expect("spawned imported model selection");
+        let scene = bridge.scene();
+        let scene = scene.read();
+        let world = scene.world();
+        let model = world
+            .get::<crate::gameplay::ModelRenderComponent>(entity)
+            .expect("ModelRenderComponent");
+        assert_eq!(model.logical_path, "models/test_mesh.ydd");
+        assert!(world.get::<Primitive>(entity).is_none());
+        assert!(world.get::<Bounds>(entity).is_some());
     }
 }

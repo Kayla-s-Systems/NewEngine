@@ -17,6 +17,7 @@ impl RuntimeRenderController {
         normal_texture: TextureId,
         roughness_texture: TextureId,
         shadow_texture: TextureId,
+        local_shadow_texture: TextureId,
         sampler: SamplerId,
     ) -> newengine_core::EngineResult<PerDrawUbo> {
         if let Some(mut e) = self.gpu.material.per_draw_ubo.get(&key).copied() {
@@ -25,6 +26,7 @@ impl RuntimeRenderController {
                 && e.normal_texture == normal_texture
                 && e.roughness_texture == roughness_texture
                 && e.shadow_texture == shadow_texture
+                && e.local_shadow_texture == local_shadow_texture
                 && e.sampler == sampler
             {
                 self.gpu.material.per_draw_ubo.insert(key, e);
@@ -44,7 +46,8 @@ impl RuntimeRenderController {
                     .with_texture1(normal_texture)
                     .with_texture2(roughness_texture)
                     .with_texture3(shadow_texture)
-                    .with_sampler0(sampler),
+                    .with_sampler0(sampler)
+                    .with_texture4(local_shadow_texture),
             )?;
             self.gpu
                 .lifetimes
@@ -55,6 +58,7 @@ impl RuntimeRenderController {
             e.normal_texture = normal_texture;
             e.roughness_texture = roughness_texture;
             e.shadow_texture = shadow_texture;
+            e.local_shadow_texture = local_shadow_texture;
             e.sampler = sampler;
             self.gpu.material.per_draw_ubo.insert(key, e);
             return Ok(e);
@@ -81,7 +85,8 @@ impl RuntimeRenderController {
                 .with_texture1(normal_texture)
                 .with_texture2(roughness_texture)
                 .with_texture3(shadow_texture)
-                .with_sampler0(sampler),
+                .with_sampler0(sampler)
+                .with_texture4(local_shadow_texture),
         )?;
 
         let entry = PerDrawUbo {
@@ -91,6 +96,7 @@ impl RuntimeRenderController {
             normal_texture,
             roughness_texture,
             shadow_texture,
+            local_shadow_texture,
             sampler,
             last_seen_frame: self.frame.frame_index,
         };

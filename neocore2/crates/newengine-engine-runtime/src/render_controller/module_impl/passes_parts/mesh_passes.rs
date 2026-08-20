@@ -82,6 +82,7 @@ pub fn draw_procedural_terrain(
     viewproj: Mat4,
     lights: &PackedLights,
     shadow_texture: TextureId,
+    local_shadow_texture: TextureId,
     runtime: bool,
     camera_position: Vec3,
     camera_forward: Vec3,
@@ -89,9 +90,7 @@ pub fn draw_procedural_terrain(
     if this.editor_viewport.is_active()
         && this.editor_viewport.shading() == newengine_ui_api::UiEditorViewportShading::Wireframe
     {
-        // Terrain wire extraction is provider-owned; suppress the solid terrain pass
-        // rather than mixing filled terrain into an otherwise wireframe viewport.
-        return Ok(());
+        return draw_procedural_terrain_wireframe(this, r, scene, viewproj);
     }
     draw_procedural_terrain_for_pass(
         this,
@@ -102,6 +101,7 @@ pub fn draw_procedural_terrain(
         viewproj,
         lights,
         shadow_texture,
+        local_shadow_texture,
         runtime,
         camera_position,
         camera_forward,
@@ -135,6 +135,7 @@ pub fn draw_procedural_terrain_gbuffer(
         viewproj,
         lights,
         lit.white_texture,
+        lit.white_texture,
         runtime,
         camera_position,
         camera_forward,
@@ -150,6 +151,7 @@ fn draw_procedural_terrain_for_pass(
     viewproj: Mat4,
     lights: &PackedLights,
     shadow_texture: TextureId,
+    local_shadow_texture: TextureId,
     runtime: bool,
     camera_position: Vec3,
     camera_forward: Vec3,
@@ -242,6 +244,11 @@ fn draw_procedural_terrain_for_pass(
         } else {
             shadow_texture
         };
+        let terrain_local_shadow_texture = if pass.is_gbuffer() || !terrain_receive_shadows {
+            lit.white_texture
+        } else {
+            local_shadow_texture
+        };
         let key = entity_key
             ^ 0x7e44_1000_0000_0000u64
             ^ if pass.is_gbuffer() {
@@ -249,7 +256,8 @@ fn draw_procedural_terrain_for_pass(
             } else {
                 0
             }
-            ^ ((terrain_shadow_texture.get() as u64) << 32);
+            ^ ((terrain_shadow_texture.get() as u64) << 32)
+            ^ ((terrain_local_shadow_texture.get() as u64) << 16);
         let (pipeline, base_tex, normal_tex, roughness_tex, sampler, material_params) =
             if let Some(layers) = surface_layers {
                 let forest_tex = this.material_texture_or_default(
@@ -334,6 +342,7 @@ fn draw_procedural_terrain_for_pass(
             normal_tex,
             roughness_tex,
             terrain_shadow_texture,
+            terrain_local_shadow_texture,
             sampler,
         )?;
         per.last_seen_frame = this.frame.frame_index;
@@ -380,4 +389,112 @@ fn draw_procedural_terrain_for_pass(
     stream.emit_sorted(r)?;
 
     Ok(())
+}
+
+fn draw_procedural_terrain_wireframe(
+    this: &mut RuntimeRenderController,
+    r: &mut dyn newengine_core::render::RenderApi,
+    scene: &newengine_scene::Scene,
+    viewproj: Mat4,
+) -> newengine_core::EngineResult<()> {
+    use newengine_core::render::{BufferSlice, DrawArgs};
+
+    const MAX_TERRAIN_WIRE_VERTICES: usize = 160_000;
+    let world = scene.world();
+    let mut bytes = Vec::new();
+    let mut vertex_count = 0usize;
+
+    'terrain: for (_entity, terrain, global) in world.query2::<ProceduralTerrain, GlobalTransform>()
+    {
+        let heightfield = terrain.heightfield.as_ref();
+        let vx = heightfield.vertex_count_x();
+        let vz = heightfield.vertex_count_z();
+        if vx < 2 || vz < 2 {
+            continue;
+        }
+        let edge_count = (vx - 1) * vz + (vz - 1) * vx;
+        let stride = ((edge_count * 2).div_ceil(MAX_TERRAIN_WIRE_VERTICES)).max(1);
+        let color = [
+            terrain.base_color[0].max(0.25),
+            terrain.base_color[1].max(0.25),
+            terrain.base_color[2].max(0.25),
+            0.95,
+        ];
+        let mut edge_index = 0usize;
+        for z in 0..vz {
+            for x in 0..vx - 1 {
+                if edge_index.is_multiple_of(stride) {
+                    if vertex_count + 2 > MAX_TERRAIN_WIRE_VERTICES {
+                        break 'terrain;
+                    }
+                    push_terrain_wire_edge(
+                        &mut bytes,
+                        &mut vertex_count,
+                        viewproj,
+                        global.0,
+                        heightfield.local_position_at_grid(x, z),
+                        heightfield.local_position_at_grid(x + 1, z),
+                        color,
+                    );
+                }
+                edge_index += 1;
+            }
+        }
+        for x in 0..vx {
+            for z in 0..vz - 1 {
+                if edge_index.is_multiple_of(stride) {
+                    if vertex_count + 2 > MAX_TERRAIN_WIRE_VERTICES {
+                        break 'terrain;
+                    }
+                    push_terrain_wire_edge(
+                        &mut bytes,
+                        &mut vertex_count,
+                        viewproj,
+                        global.0,
+                        heightfield.local_position_at_grid(x, z),
+                        heightfield.local_position_at_grid(x, z + 1),
+                        color,
+                    );
+                }
+                edge_index += 1;
+            }
+        }
+    }
+
+    if vertex_count < 2 {
+        return Ok(());
+    }
+    let gpu = crate::render_controller::gpu::ensure_debug_line_pipeline(
+        &mut this.gpu.meshes.collision_lines,
+        r,
+        vertex_count as u32,
+    )?;
+    r.write_buffer(gpu.vb, 0, &bytes)?;
+    r.set_pipeline(gpu.pipeline)?;
+    r.set_bind_group(0, gpu.bg)?;
+    r.set_vertex_buffer(0, BufferSlice::new(gpu.vb, 0))?;
+    r.draw(DrawArgs::new(vertex_count as u32))?;
+    Ok(())
+}
+
+fn push_terrain_wire_edge(
+    bytes: &mut Vec<u8>,
+    vertex_count: &mut usize,
+    viewproj: Mat4,
+    model: Mat4,
+    a: Vec3,
+    b: Vec3,
+    color: [f32; 4],
+) {
+    use newengine_math::Vec4;
+    for local in [a, b] {
+        let position = model.transform_point3(local);
+        let clip = viewproj * Vec4::new(position.x, position.y, position.z, 1.0);
+        for value in [
+            clip.x, clip.y, clip.z, clip.w, color[0], color[1], color[2], color[3],
+        ] {
+            bytes.extend_from_slice(&value.to_ne_bytes());
+        }
+        *vertex_count += 1;
+    }
 }

@@ -146,7 +146,7 @@ fn load_parsed_map(
     let (body, mut transport_warnings) = load_map_body(state, &source)?;
     if !newengine_authored_xml::body_is_xml(&body) {
         return Err(format!(
-            "engine.assets.maps: YMAP v2 semantic body must currently be XML source='{source}' bytes={} schema='newengine.map.definition.v2'",
+            "engine.assets.maps: YMAP semantic body must currently be XML source='{source}' bytes={} schemas='newengine.map.definition.v1|newengine.map.definition.v2'",
             body.len()
         ));
     }
@@ -282,12 +282,13 @@ pub fn maps_gateway_service(
     .protocol(MAPS_RUNTIME_CONTRACT)
     .features([
         "discrete-map-index-v1",
+        "legacy-ymap-v1-placement-projection",
         "independent-cell-addressing",
         "ytyp-only-placements",
         "map-layer-composition",
         "deterministic-validation",
     ])
-    .notes("Semantic YMAP v2 provider. The map is an index plus independently addressable cells; world mutation remains in scene/world apply stages.");
+    .notes("Semantic YMAP provider. Native v2 maps expose discrete cells directly; legacy v1 maps project only top-level map placements into the same DTO. Game/profile extensions are intentionally ignored. World mutation remains in scene/world apply stages.");
 
     JsonServiceRouter::with_state(MAPS_SERVICE_ID, MapsRuntimeState::new(client))
         .describe_json(&description)

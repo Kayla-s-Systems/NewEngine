@@ -13,6 +13,8 @@ pub const RG_SCENE_HDR_COLOR: RenderGraphResourceId = RenderGraphResourceId(4);
 pub const RG_SHADOW_MAP: RenderGraphResourceId = RenderGraphResourceId(10);
 /// Companion fixed-function depth attachment for color-packed shadow visibility maps.
 pub const RG_SHADOW_DEPTH: RenderGraphResourceId = RenderGraphResourceId(11);
+pub const RG_LOCAL_SHADOW_MAP: RenderGraphResourceId = RenderGraphResourceId(12);
+pub const RG_LOCAL_SHADOW_DEPTH: RenderGraphResourceId = RenderGraphResourceId(13);
 pub const RG_GBUFFER_ALBEDO: RenderGraphResourceId = RenderGraphResourceId(20);
 pub const RG_GBUFFER_NORMAL: RenderGraphResourceId = RenderGraphResourceId(21);
 pub const RG_GBUFFER_MATERIAL: RenderGraphResourceId = RenderGraphResourceId(22);
@@ -26,6 +28,8 @@ pub struct FrameGraphTargetDesc {
     pub viewport_is_surface: bool,
     pub viewport_render_target: Option<RenderTargetId>,
     pub shadow_render_target: Option<RenderTargetId>,
+    pub local_shadow_render_target: Option<RenderTargetId>,
+    pub local_shadow_extent: Extent2D,
     /// Final display/swapchain format. Keep LDR unless the platform exposes HDR swapchains.
     pub color_format: TextureFormat,
     /// Linear scene color format used by HDR-capable world/material shaders.
@@ -51,6 +55,8 @@ impl FrameGraphTargetDesc {
             viewport_is_surface,
             viewport_render_target: None,
             shadow_render_target: None,
+            local_shadow_render_target: None,
+            local_shadow_extent: Extent2D::new(1, 1),
             color_format: TextureFormat::Bgra8Unorm,
             scene_color_format: TextureFormat::Rgba16Float,
             depth_format: TextureFormat::Depth32Float,
@@ -68,6 +74,17 @@ impl FrameGraphTargetDesc {
     #[inline]
     pub fn with_shadow_render_target(mut self, target: Option<RenderTargetId>) -> Self {
         self.shadow_render_target = target;
+        self
+    }
+
+    #[inline]
+    pub fn with_local_shadow_render_target(
+        mut self,
+        target: Option<RenderTargetId>,
+        extent: Extent2D,
+    ) -> Self {
+        self.local_shadow_render_target = target;
+        self.local_shadow_extent = extent;
         self
     }
 

@@ -116,6 +116,7 @@ pub enum RenderGraphPassKind {
     DepthPrepass,
     ShadowMap,
     ShadowCascadeMap,
+    LocalShadowMap,
     TessellationPrepare,
     GBuffer,
     DeferredLighting,

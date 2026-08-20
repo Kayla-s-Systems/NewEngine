@@ -1,15 +1,15 @@
 use std::sync::Arc;
 
 use newengine_material_domain_api::{MaterialGpuPipelineKey, MaterialGpuPipelineProvider};
-use newengine_material_domain_gameready::{
-    GameReadyLitMaterialDomainProvider, GAME_READY_LIT_PIPELINE_KEY,
+use newengine_material_domain_standard::{
+    StandardLitMaterialDomainProvider, STANDARD_LIT_PIPELINE_KEY,
 };
 use newengine_render_feature_api::{LightExtractionProvider, RenderDrawListProvider};
 
 #[derive(Default)]
-pub struct GameReadyRenderFeaturePack;
+pub struct StandardRenderFeaturePack;
 
-impl GameReadyRenderFeaturePack {
+impl StandardRenderFeaturePack {
     #[inline]
     pub fn new() -> Self {
         Self
@@ -17,12 +17,12 @@ impl GameReadyRenderFeaturePack {
 
     #[inline]
     pub fn material_pipeline_provider(&self) -> Box<dyn MaterialGpuPipelineProvider> {
-        Box::new(GameReadyLitMaterialDomainProvider::new())
+        Box::new(StandardLitMaterialDomainProvider::new())
     }
 
     #[inline]
     pub fn primary_lit_material_domain(&self) -> MaterialGpuPipelineKey {
-        GAME_READY_LIT_PIPELINE_KEY
+        STANDARD_LIT_PIPELINE_KEY
     }
 
     #[inline]

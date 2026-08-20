@@ -57,6 +57,7 @@ pub struct BindGroupDesc {
     pub texture1: Option<TextureId>,
     pub texture2: Option<TextureId>,
     pub texture3: Option<TextureId>,
+    pub texture4: Option<TextureId>,
     pub sampler0: Option<SamplerId>,
     pub uniform0: Option<BufferBinding>,
     pub storage0: Option<BufferBinding>,
@@ -72,6 +73,7 @@ impl BindGroupDesc {
             texture1: None,
             texture2: None,
             texture3: None,
+            texture4: None,
             sampler0: None,
             uniform0: None,
             storage0: None,
@@ -109,12 +111,19 @@ impl BindGroupDesc {
     }
 
     #[inline]
+    pub fn with_texture4(mut self, tex: TextureId) -> Self {
+        self.texture4 = Some(tex);
+        self
+    }
+
+    #[inline]
     pub fn texture_at(&self, index: usize) -> Option<TextureId> {
         match index {
             0 => self.texture0,
             1 => self.texture1,
             2 => self.texture2,
             3 => self.texture3,
+            4 => self.texture4,
             _ => None,
         }
     }

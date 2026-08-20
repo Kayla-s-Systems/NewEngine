@@ -5,14 +5,16 @@ use newengine_core::EngineResult;
 use newengine_lighting::{ShadowFilter, ShadowMethod, ShadowSettings};
 use newengine_math::{Mat4, Vec3};
 pub(crate) use newengine_render_feature_api::{
-    BoundsSnap, LightExtractionCommand, LightExtractionCtx, LightShadowPlan, ShadowCascadeFrame,
-    ShadowCasterCull, ShadowFrame, ShadowLightKind, MAX_DIRECTIONAL_SHADOW_CASCADES,
+    BoundsSnap, LightExtractionCommand, LightExtractionCtx, LightShadowPlan, LocalShadowFrame,
+    LocalShadowPlan, ShadowCascadeFrame, ShadowCasterCull, ShadowFrame, ShadowLightKind,
+    MAX_DIRECTIONAL_SHADOW_CASCADES,
 };
 
 use super::lights;
 use crate::render_controller::RuntimeRenderController;
 
 mod fit;
+mod local;
 mod targets;
 
 use fit::{
@@ -20,6 +22,7 @@ use fit::{
     directional_shadow_stable_fit_with_padding, snapped_directional_shadow_center,
     DirectionalShadowFit,
 };
+pub(super) use local::build_local_shadow_plan;
 use targets::{
     ensure_shadow_rt, retire_shadow_rt, warn_unsupported_point_shadow_once,
     warn_unsupported_spot_shadow_once,
@@ -262,16 +265,13 @@ pub fn try_build_directional_shadow_plan(
     // stable atlas tile, clamps its taps, and produces a false bright/soft strip.
     let kernel_guard_texels = match settings.filter {
         ShadowFilter::Hard => 2.0,
-        ShadowFilter::Pcf => settings
-            .softness
-            .max(pcss.min_filter_radius_texels)
-            .ceil()
-            + 2.0,
-        ShadowFilter::Pcss => pcss
-            .blocker_search_radius_texels
-            .max(pcss.max_filter_radius_texels)
-            .ceil()
-            + 2.0,
+        ShadowFilter::Pcf => settings.softness.max(pcss.min_filter_radius_texels).ceil() + 2.0,
+        ShadowFilter::Pcss => {
+            pcss.blocker_search_radius_texels
+                .max(pcss.max_filter_radius_texels)
+                .ceil()
+                + 2.0
+        }
     }
     .clamp(2.0, 16.0);
 

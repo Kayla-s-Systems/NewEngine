@@ -1,4 +1,5 @@
 use super::*;
+use newengine_ui_api::UiEditorSceneSnapshot;
 
 pub(super) fn editor_components(
     descriptor: &UiScreenProfileDescriptor,
@@ -8,6 +9,8 @@ pub(super) fn editor_components(
     runtime_diff_count: usize,
     command_registry: &EditorCommandRegistry,
     viewport_state: &UiEditorViewportState,
+    scene_snapshot: &UiEditorSceneSnapshot,
+    inspector_snapshot: &UiEditorInspectorSnapshot,
     layout: &EditorLayoutMetrics,
     active_menu_id: Option<&str>,
 ) -> Vec<UiComponentNode> {
@@ -93,37 +96,84 @@ pub(super) fn editor_components(
             .unwrap_or(chrome_x + 128.0)
             .min(layout.screen_w - 236.0)
             .max(8.0);
-        out.push(with_rect(
-            UiComponentNode::row(
-                format!("editor.menu_popup.{}", active_menu.id),
-                active_menu.label,
-            )
-            .with_detail(active_menu.tooltip)
-            .with_tone(UiNodeTone::Accent)
-            .with_prop("padding_px", serde_json::json!(4.0))
-            .tagged("menu-popup")
-            .tagged("floating")
-            .with_child(
-                UiComponentNode::action(
-                    format!("editor.menu_popup.{}.primary", active_menu.id),
-                    "Open Command Palette",
-                    "editor.command_palette.open",
+        let popup_y = layout.menu_h + 2.0;
+        if active_menu.id == "edit" {
+            let popup = UiComponentNode::row("editor.menu_popup.edit", "Edit")
+                .with_detail("Transaction history and actor editing")
+                .with_tone(UiNodeTone::Accent)
+                .with_prop("padding_px", serde_json::json!(4.0))
+                .tagged("menu-popup")
+                .tagged("floating")
+                .with_child(
+                    UiComponentNode::action(
+                        "editor.menu_popup.edit.undo",
+                        "Undo    Ctrl+Z",
+                        "editor.history.undo",
+                    )
+                    .with_tooltip("Undo the last editor transform transaction")
+                    .tagged("button"),
                 )
-                .tagged("button"),
-            )
-            .with_child(
-                UiComponentNode::action(
-                    format!("editor.menu_popup.{}.settings", active_menu.id),
-                    "Panel Settings",
-                    "editor.panel.settings",
+                .with_child(
+                    UiComponentNode::action(
+                        "editor.menu_popup.edit.redo",
+                        "Redo    Ctrl+Y",
+                        "editor.history.redo",
+                    )
+                    .with_tooltip("Redo the last editor transform transaction")
+                    .tagged("button"),
                 )
-                .tagged("button"),
-            ),
-            popup_x,
-            layout.menu_h + 2.0,
-            224.0,
-            58.0,
-        ));
+                .with_child(
+                    UiComponentNode::action(
+                        "editor.menu_popup.edit.duplicate",
+                        "Duplicate    Ctrl+D",
+                        "editor.actor.duplicate",
+                    )
+                    .with_tooltip("Duplicate selected actor(s)")
+                    .tagged("button"),
+                )
+                .with_child(
+                    UiComponentNode::action(
+                        "editor.menu_popup.edit.delete",
+                        "Delete    Del",
+                        "editor.actor.delete",
+                    )
+                    .with_tooltip("Delete selected actor(s)")
+                    .tagged("button"),
+                );
+            out.push(with_rect(popup, popup_x, popup_y, 224.0, 112.0));
+        } else {
+            out.push(with_rect(
+                UiComponentNode::row(
+                    format!("editor.menu_popup.{}", active_menu.id),
+                    active_menu.label,
+                )
+                .with_detail(active_menu.tooltip)
+                .with_tone(UiNodeTone::Accent)
+                .with_prop("padding_px", serde_json::json!(4.0))
+                .tagged("menu-popup")
+                .tagged("floating")
+                .with_child(
+                    UiComponentNode::action(
+                        format!("editor.menu_popup.{}.primary", active_menu.id),
+                        "Open Command Palette",
+                        "editor.command_palette.open",
+                    )
+                    .tagged("button"),
+                )
+                .with_child(
+                    UiComponentNode::action(
+                        format!("editor.menu_popup.{}.settings", active_menu.id),
+                        "Panel Settings",
+                        "editor.panel.settings",
+                    )
+                    .tagged("button"),
+                ),
+                popup_x,
+                popup_y,
+                224.0,
+                58.0,
+            ));
+        }
     }
 
     // Compact transport strip: icon-only controls centered in the editor toolbar.
@@ -352,24 +402,99 @@ pub(super) fn editor_components(
                 28.0,
             ));
         }
-        out.push(with_rect(
-            UiComponentNode::row(
-                "editor.scene_tree.empty",
-                EDITOR_CHROME.empty_outliner_title,
-            )
-            .with_value(SCENE_TREE_NEUI_REF)
-            .with_detail(EDITOR_CHROME.empty_outliner_detail)
-            .with_tone(UiNodeTone::Normal)
-            .with_tooltip(
-                "Scene Tree renders engine.scene/world snapshot DTO rows; no raw ECS traversal",
-            )
-            .tagged("scene-tree")
-            .tagged("empty-state"),
-            14.0,
-            dock_y + 34.0,
-            (layout.left_w - 24.0).max(120.0),
-            44.0,
-        ));
+        let content_x = 14.0;
+        let content_w = (layout.left_w - 24.0).max(120.0);
+        let content_y = dock_y + 34.0;
+        if scene_snapshot.entities.is_empty() {
+            out.push(with_rect(
+                UiComponentNode::row(
+                    "editor.scene_tree.empty",
+                    EDITOR_CHROME.empty_outliner_title,
+                )
+                .with_value(SCENE_TREE_NEUI_REF)
+                .with_detail(EDITOR_CHROME.empty_outliner_detail)
+                .with_tone(UiNodeTone::Normal)
+                .with_tooltip("World Outliner consumes UiEditorSceneSnapshot; no raw ECS traversal")
+                .tagged("scene-tree")
+                .tagged("empty-state"),
+                content_x,
+                content_y,
+                content_w,
+                44.0,
+            ));
+        } else {
+            let row_h = 24.0;
+            let available_h = (layout.viewport_h - 42.0).max(row_h);
+            let max_rows = (available_h / row_h).floor().max(1.0) as usize;
+            for (index, entity) in scene_snapshot.entities.iter().take(max_rows).enumerate() {
+                let indent = if entity.parent_key.is_some() {
+                    12.0
+                } else {
+                    0.0
+                };
+                let row = lively_editor_action(UiComponentNode::action(
+                    format!("editor.scene_tree.entity.{}", entity.entity_key),
+                    entity.name.clone(),
+                    format!(
+                        "engine.editor.selection.select_entity.{}",
+                        entity.entity_key
+                    ),
+                ))
+                .with_value(entity.kind.clone())
+                .with_detail(if entity.components.is_empty() {
+                    entity.kind.clone()
+                } else {
+                    entity.components.join(" · ")
+                })
+                .with_tone(if entity.selected {
+                    UiNodeTone::Accent
+                } else {
+                    UiNodeTone::Normal
+                })
+                .with_tooltip(format!(
+                    "{} · entity {}{}",
+                    entity.kind,
+                    entity.entity_key,
+                    entity
+                        .parent_key
+                        .map(|parent| format!(" · parent {parent}"))
+                        .unwrap_or_default(),
+                ))
+                .with_prop("selected", serde_json::json!(entity.selected))
+                .with_prop("entity_key", serde_json::json!(entity.entity_key))
+                .with_prop("parent_key", serde_json::json!(entity.parent_key))
+                .tagged("scene-tree")
+                .tagged("world-outliner-row")
+                .tagged(if entity.selected {
+                    "selected"
+                } else {
+                    "unselected"
+                });
+                out.push(with_rect(
+                    row,
+                    content_x + indent,
+                    content_y + index as f32 * row_h,
+                    (content_w - indent).max(80.0),
+                    row_h - 1.0,
+                ));
+            }
+            if scene_snapshot.entities.len() > max_rows {
+                out.push(with_rect(
+                    UiComponentNode::row(
+                        "editor.scene_tree.overflow",
+                        format!("+{} more actors", scene_snapshot.entities.len() - max_rows),
+                    )
+                    .with_detail("Resize the Outliner dock to show more")
+                    .with_tone(UiNodeTone::Normal)
+                    .tagged("scene-tree")
+                    .tagged("overflow"),
+                    content_x,
+                    content_y + max_rows as f32 * row_h,
+                    content_w,
+                    row_h,
+                ));
+            }
+        }
     }
 
     if layout.right_visible {
@@ -391,22 +516,132 @@ pub(super) fn editor_components(
                 28.0,
             ));
         }
-        out.push(
-            with_rect(
-                UiComponentNode::row("editor.inspector.empty", EDITOR_CHROME.empty_inspector_title)
-                    .with_value(INSPECTOR_NEUI_REF)
-                    .with_detail(EDITOR_CHROME.empty_inspector_detail)
-                    .with_tone(UiNodeTone::Normal)
-                    .with_tooltip("Select an entity, asset, asset entry, material or world item to populate this panel")
-                    .tagged("inspector")
-                    .tagged("right")
-                    .tagged("empty-state"),
-                right_x + 6.0,
-                dock_y + 34.0,
-                (layout.right_w - 24.0).max(160.0),
+        let details_x = right_x + 6.0;
+        let details_w = (layout.right_w - 24.0).max(160.0);
+        let mut details_y = dock_y + 34.0;
+        if inspector_snapshot.entity_key.is_none() {
+            out.push(with_rect(
+                UiComponentNode::row(
+                    "editor.inspector.empty",
+                    EDITOR_CHROME.empty_inspector_title,
+                )
+                .with_value(INSPECTOR_NEUI_REF)
+                .with_detail(EDITOR_CHROME.empty_inspector_detail)
+                .with_tone(UiNodeTone::Normal)
+                .with_tooltip("Select an actor in the viewport or World Outliner")
+                .tagged("inspector")
+                .tagged("details")
+                .tagged("empty-state"),
+                details_x,
+                details_y,
+                details_w,
                 44.0,
-            ),
-        );
+            ));
+        } else {
+            out.push(with_rect(
+                UiComponentNode::row("editor.inspector.actor", inspector_snapshot.name.clone())
+                    .with_value(inspector_snapshot.kind.clone())
+                    .with_detail(if inspector_snapshot.selection_count > 1 {
+                        format!(
+                            "{} actors selected · primary",
+                            inspector_snapshot.selection_count
+                        )
+                    } else {
+                        format!(
+                            "Actor {}",
+                            inspector_snapshot.entity_key.unwrap_or_default()
+                        )
+                    })
+                    .with_tone(UiNodeTone::Accent)
+                    .tagged("inspector")
+                    .tagged("details")
+                    .tagged("actor-header"),
+                details_x,
+                details_y,
+                details_w,
+                42.0,
+            ));
+            details_y += 46.0;
+
+            if let Some(transform) = inspector_snapshot.transform.as_ref() {
+                out.push(with_rect(
+                    UiComponentNode::row("editor.inspector.transform.header", "Transform")
+                        .with_detail("Actor transform")
+                        .with_tone(UiNodeTone::Normal)
+                        .tagged("inspector")
+                        .tagged("component-header")
+                        .tagged("transform"),
+                    details_x,
+                    details_y,
+                    details_w,
+                    24.0,
+                ));
+                details_y += 25.0;
+                for (axis, value) in [
+                    ("Location", transform.position),
+                    ("Rotation", transform.rotation_degrees),
+                    ("Scale", transform.scale),
+                ] {
+                    out.push(with_rect(
+                        UiComponentNode::row(
+                            format!("editor.inspector.transform.{}", axis.to_ascii_lowercase()),
+                            axis,
+                        )
+                        .with_value(format!(
+                            "X {:.2}   Y {:.2}   Z {:.2}",
+                            value[0], value[1], value[2]
+                        ))
+                        .with_detail(if axis == "Rotation" { "degrees" } else { "" })
+                        .with_tone(UiNodeTone::Normal)
+                        .tagged("inspector")
+                        .tagged("transform-row"),
+                        details_x + 4.0,
+                        details_y,
+                        (details_w - 8.0).max(120.0),
+                        24.0,
+                    ));
+                    details_y += 25.0;
+                }
+                details_y += 4.0;
+            }
+
+            out.push(with_rect(
+                UiComponentNode::row("editor.inspector.components.header", "Components")
+                    .with_detail(format!("{} attached", inspector_snapshot.components.len()))
+                    .with_tone(UiNodeTone::Normal)
+                    .tagged("inspector")
+                    .tagged("component-header"),
+                details_x,
+                details_y,
+                details_w,
+                24.0,
+            ));
+            details_y += 25.0;
+            let component_budget = (((layout.viewport_y + layout.viewport_h) - details_y) / 23.0)
+                .floor()
+                .max(1.0) as usize;
+            for (index, component) in inspector_snapshot
+                .components
+                .iter()
+                .take(component_budget)
+                .enumerate()
+            {
+                out.push(with_rect(
+                    UiComponentNode::row(
+                        format!("editor.inspector.component.{index}"),
+                        component.clone(),
+                    )
+                    .with_detail("Actor Component")
+                    .with_tone(UiNodeTone::Normal)
+                    .tagged("inspector")
+                    .tagged("component-row"),
+                    details_x + 4.0,
+                    details_y + index as f32 * 23.0,
+                    (details_w - 8.0).max(120.0),
+                    22.0,
+                ));
+            }
+        }
     }
 
     out.push(
@@ -480,10 +715,34 @@ pub(super) fn editor_components(
     viewport_control_x += 68.0;
 
     let transform_controls = [
-        ("select", "Q", UiEditorTransformMode::Select, "editor.viewport.transform.select", "Select tool (Q)"),
-        ("translate", "W", UiEditorTransformMode::Translate, "editor.viewport.transform.translate", "Move/translate tool (W)"),
-        ("rotate", "E", UiEditorTransformMode::Rotate, "editor.viewport.transform.rotate", "Rotate tool (E)"),
-        ("scale", "R", UiEditorTransformMode::Scale, "editor.viewport.transform.scale", "Scale tool (R)"),
+        (
+            "select",
+            "Q",
+            UiEditorTransformMode::Select,
+            "editor.viewport.transform.select",
+            "Select tool (Q)",
+        ),
+        (
+            "translate",
+            "W",
+            UiEditorTransformMode::Translate,
+            "editor.viewport.transform.translate",
+            "Move/translate tool (W)",
+        ),
+        (
+            "rotate",
+            "E",
+            UiEditorTransformMode::Rotate,
+            "editor.viewport.transform.rotate",
+            "Rotate tool (E)",
+        ),
+        (
+            "scale",
+            "R",
+            UiEditorTransformMode::Scale,
+            "editor.viewport.transform.scale",
+            "Scale tool (R)",
+        ),
     ];
     for (id, label, mode, action, tooltip) in transform_controls {
         out.push(with_rect(
@@ -501,6 +760,21 @@ pub(super) fn editor_components(
         ));
         viewport_control_x += 31.0;
     }
+
+    out.push(with_rect(
+        viewport_toolbar_action(
+            "editor.viewport.transform.space",
+            viewport_state.transform_space.label(),
+            "editor.viewport.transform.space",
+            viewport_state.transform_space == UiEditorTransformSpace::Local,
+            "Toggle transform orientation between World and Local",
+        ),
+        viewport_control_x + 4.0,
+        viewport_toolbar_y,
+        52.0,
+        viewport_toolbar_h,
+    ));
+    viewport_control_x += 60.0;
 
     if layout.viewport_w >= 760.0 {
         viewport_control_x += 7.0;
@@ -590,9 +864,8 @@ pub(super) fn editor_components(
     }
 
     if active_menu_id == Some("__viewport_show") {
-        let checked = |enabled: bool, label: &str| {
-            format!("[{}] {label}", if enabled { "x" } else { " " })
-        };
+        let checked =
+            |enabled: bool, label: &str| format!("[{}] {label}", if enabled { "x" } else { " " });
         let popup = UiComponentNode::row("editor.viewport.show_popup", "Show")
             .with_detail("Viewport visualization overlays")
             .with_tone(UiNodeTone::Accent)
@@ -600,26 +873,38 @@ pub(super) fn editor_components(
             .tagged("menu-popup")
             .tagged("viewport-menu")
             .tagged("floating")
-            .with_child(UiComponentNode::action(
-                "editor.viewport.show_popup.grid",
-                checked(viewport_state.show_grid, "Grid"),
-                "editor.viewport.show.grid",
-            ).tagged("button"))
-            .with_child(UiComponentNode::action(
-                "editor.viewport.show_popup.collision",
-                checked(viewport_state.show_collision, "Collision"),
-                "editor.viewport.show.collision",
-            ).tagged("button"))
-            .with_child(UiComponentNode::action(
-                "editor.viewport.show_popup.bounds",
-                checked(viewport_state.show_bounds, "Bounds"),
-                "editor.viewport.show.bounds",
-            ).tagged("button"))
-            .with_child(UiComponentNode::action(
-                "editor.viewport.show_popup.gizmos",
-                checked(viewport_state.gizmo_visible, "Transform Gizmo"),
-                "editor.viewport.show.gizmos",
-            ).tagged("button"));
+            .with_child(
+                UiComponentNode::action(
+                    "editor.viewport.show_popup.grid",
+                    checked(viewport_state.show_grid, "Grid"),
+                    "editor.viewport.show.grid",
+                )
+                .tagged("button"),
+            )
+            .with_child(
+                UiComponentNode::action(
+                    "editor.viewport.show_popup.collision",
+                    checked(viewport_state.show_collision, "Collision"),
+                    "editor.viewport.show.collision",
+                )
+                .tagged("button"),
+            )
+            .with_child(
+                UiComponentNode::action(
+                    "editor.viewport.show_popup.bounds",
+                    checked(viewport_state.show_bounds, "Bounds"),
+                    "editor.viewport.show.bounds",
+                )
+                .tagged("button"),
+            )
+            .with_child(
+                UiComponentNode::action(
+                    "editor.viewport.show_popup.gizmos",
+                    checked(viewport_state.gizmo_visible, "Transform Gizmo"),
+                    "editor.viewport.show.gizmos",
+                )
+                .tagged("button"),
+            );
         out.push(with_rect(
             popup,
             layout.viewport_x + 172.0,
@@ -631,20 +916,31 @@ pub(super) fn editor_components(
 
     if viewport_state.gizmo_visible {
         out.push(with_rect(
-            UiComponentNode::row("editor.viewport.gizmos", viewport_state.transform_mode.label())
-                .with_value(VIEWPORT_GIZMOS_NEUI_REF)
-                .with_detail(format!(
-                    "{} | grid snap {} {:.0} | rotation snap {} {:.0}°",
-                    viewport_state.projection.label(),
-                    if viewport_state.translation_snap_enabled { "on" } else { "off" },
-                    viewport_state.translation_snap_units,
-                    if viewport_state.rotation_snap_enabled { "on" } else { "off" },
-                    viewport_state.rotation_snap_degrees,
-                ))
-                .with_tone(UiNodeTone::Accent)
-                .tagged("viewport")
-                .tagged("viewport-gizmos")
-                .tagged("schema-driven"),
+            UiComponentNode::row(
+                "editor.viewport.gizmos",
+                viewport_state.transform_mode.label(),
+            )
+            .with_value(VIEWPORT_GIZMOS_NEUI_REF)
+            .with_detail(format!(
+                "{} | grid snap {} {:.0} | rotation snap {} {:.0}°",
+                viewport_state.projection.label(),
+                if viewport_state.translation_snap_enabled {
+                    "on"
+                } else {
+                    "off"
+                },
+                viewport_state.translation_snap_units,
+                if viewport_state.rotation_snap_enabled {
+                    "on"
+                } else {
+                    "off"
+                },
+                viewport_state.rotation_snap_degrees,
+            ))
+            .with_tone(UiNodeTone::Accent)
+            .tagged("viewport")
+            .tagged("viewport-gizmos")
+            .tagged("schema-driven"),
             layout.viewport_x + 10.0,
             (layout.viewport_y + layout.viewport_h - 36.0).max(viewport_toolbar_y + 34.0),
             (layout.viewport_w * 0.42).clamp(240.0, 520.0),
@@ -826,7 +1122,11 @@ fn viewport_toolbar_action(
     tooltip: impl Into<String>,
 ) -> UiComponentNode {
     lively_editor_action(UiComponentNode::action(id, label, action_id))
-        .with_tone(if active { UiNodeTone::Accent } else { UiNodeTone::Normal })
+        .with_tone(if active {
+            UiNodeTone::Accent
+        } else {
+            UiNodeTone::Normal
+        })
         .with_tooltip(tooltip)
         .with_prop("fill_rgba", serde_json::json!([29, 34, 40, 238]))
         .with_prop("hover_fill_rgba", serde_json::json!([43, 51, 60, 248]))

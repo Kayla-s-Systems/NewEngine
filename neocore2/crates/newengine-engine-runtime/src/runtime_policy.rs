@@ -45,6 +45,8 @@ pub(crate) struct DiagnosticsPolicy {
 pub(crate) struct StreamingPolicy {
     pub terrain_gpu_uploads_per_frame: u32,
     pub primitive_gpu_uploads_per_frame: u32,
+    pub model_render_prep_jobs: u32,
+    pub model_gpu_uploads_per_frame: u32,
     pub primitive_gpu_upload_warn_ms: f32,
     pub terrain_gpu_upload_interval_frames: u64,
     pub scene_texture_gate_soft_timeout_frames: u64,
@@ -149,6 +151,18 @@ pub(crate) fn streaming_policy() -> &'static StreamingPolicy {
         ),
         primitive_gpu_uploads_per_frame: crate::env_config::var_u32(
             "NEWENGINE_PRIMITIVE_GPU_UPLOADS_PER_FRAME",
+            1,
+            0,
+            8,
+        ),
+        model_render_prep_jobs: crate::env_config::var_u32(
+            "NEWENGINE_MODEL_RENDER_PREP_JOBS",
+            2,
+            1,
+            16,
+        ),
+        model_gpu_uploads_per_frame: crate::env_config::var_u32(
+            "NEWENGINE_MODEL_GPU_UPLOADS_PER_FRAME",
             1,
             0,
             8,

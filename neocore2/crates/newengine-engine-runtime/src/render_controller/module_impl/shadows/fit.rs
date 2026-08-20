@@ -65,6 +65,7 @@ pub(super) struct DirectionalShadowFit {
 }
 
 #[inline]
+#[cfg(test)]
 pub(super) fn directional_shadow_stable_fit(
     viewproj: Mat4,
     camera: Vec3,
@@ -315,11 +316,17 @@ mod shadow_fit_tests {
             .expect("valid frustum slice");
         for corner in &corners[..4] {
             let forward_depth = (*corner - camera).dot(forward);
-            assert!((forward_depth - 3.0).abs() < 0.002, "near depth={forward_depth}");
+            assert!(
+                (forward_depth - 3.0).abs() < 0.002,
+                "near depth={forward_depth}"
+            );
         }
         for corner in &corners[4..] {
             let forward_depth = (*corner - camera).dot(forward);
-            assert!((forward_depth - 25.0).abs() < 0.01, "far depth={forward_depth}");
+            assert!(
+                (forward_depth - 25.0).abs() < 0.01,
+                "far depth={forward_depth}"
+            );
         }
         assert!((corners[4] - camera).length() > 25.1);
     }
@@ -329,7 +336,14 @@ mod shadow_fit_tests {
         let (viewproj, camera, forward) = test_viewproj();
         let light_dir = Vec3::new(0.42, -0.82, 0.31).normalize_or_zero();
         let fit = directional_shadow_frustum_fit(
-            viewproj, camera, forward, 0.5, 30.0, light_dir, Vec3::Y, 4096,
+            viewproj,
+            camera,
+            forward,
+            0.5,
+            30.0,
+            light_dir,
+            Vec3::Y,
+            4096,
         )
         .expect("valid directional fit");
         assert!(fit.center.is_finite());
@@ -348,14 +362,12 @@ mod shadow_fit_tests {
         let forward_b = Vec3::new(0.342, 0.0, -0.940).normalize_or_zero();
         let view_a = Mat4::look_at_rh(camera, camera + forward_a, Vec3::Y);
         let view_b = Mat4::look_at_rh(camera, camera + forward_b, Vec3::Y);
-        let fit_a = directional_shadow_stable_fit(
-            projection * view_a, camera, forward_a, 0.5, 30.0, 4096,
-        )
-        .expect("stable fit A");
-        let fit_b = directional_shadow_stable_fit(
-            projection * view_b, camera, forward_b, 0.5, 30.0, 4096,
-        )
-        .expect("stable fit B");
+        let fit_a =
+            directional_shadow_stable_fit(projection * view_a, camera, forward_a, 0.5, 30.0, 4096)
+                .expect("stable fit A");
+        let fit_b =
+            directional_shadow_stable_fit(projection * view_b, camera, forward_b, 0.5, 30.0, 4096)
+                .expect("stable fit B");
         assert!((fit_a.half_x - fit_b.half_x).abs() < 0.01);
         assert!((fit_a.half_y - fit_b.half_y).abs() < 0.01);
         assert!((fit_a.half_x - fit_a.half_y).abs() < 1.0e-5);
@@ -393,8 +405,14 @@ mod shadow_fit_tests {
         let texel = (half * 2.0) / resolution as f32;
         let x_units = snapped.dot(right) / texel;
         let y_units = snapped.dot(up) / texel;
-        assert!((x_units - x_units.round()).abs() < 2.0e-4, "x_units={x_units}");
-        assert!((y_units - y_units.round()).abs() < 2.0e-4, "y_units={y_units}");
+        assert!(
+            (x_units - x_units.round()).abs() < 2.0e-4,
+            "x_units={x_units}"
+        );
+        assert!(
+            (y_units - y_units.round()).abs() < 2.0e-4,
+            "y_units={y_units}"
+        );
     }
 
     #[test]
@@ -407,11 +425,24 @@ mod shadow_fit_tests {
         let right = light_dir.cross(up_hint).normalize_or_zero();
         let center = Vec3::ZERO;
         let a = snapped_directional_shadow_center(
-            center + right * (texel * 0.10), light_dir, up_hint, half, half, resolution,
+            center + right * (texel * 0.10),
+            light_dir,
+            up_hint,
+            half,
+            half,
+            resolution,
         );
         let b = snapped_directional_shadow_center(
-            center + right * (texel * 0.40), light_dir, up_hint, half, half, resolution,
+            center + right * (texel * 0.40),
+            light_dir,
+            up_hint,
+            half,
+            half,
+            resolution,
         );
-        assert!((a - b).length() < 1.0e-5, "sub-texel motion changed projection: {a:?} -> {b:?}");
+        assert!(
+            (a - b).length() < 1.0e-5,
+            "sub-texel motion changed projection: {a:?} -> {b:?}"
+        );
     }
 }

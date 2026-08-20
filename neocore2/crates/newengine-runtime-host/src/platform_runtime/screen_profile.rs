@@ -21,11 +21,12 @@ use newengine_runtime_session_runtime::{
 use newengine_schema_api::ENGINE_SCHEMA_SERVICE_ID;
 use newengine_ui_api::{
     EditorSelectionContext, EditorSelectionKind, UiComponentNode, UiDockLayoutState,
-    UiDockPanelRuntimeState, UiEditorRuntimeMode, UiEditorRuntimeState, UiEditorTransformMode,
-    UiEditorViewportProjection, UiEditorViewportShading, UiEditorViewportState, UiEventDispatchFrame,
-    UiGameGuiConfig, UiGameLayerCommandKind, UiGameLayerCommandQueue, UiGameLayerKind,
-    UiGameLayerStackState, UiInputCaptureState, UiInputCaptureStateManager, UiInputFrame,
-    UiNodeEventTrigger, UiNodeRequestSourceKind, UiNodeTone, UiNodeTreeRequest,
+    UiDockPanelRuntimeState, UiEditorInspectorSnapshot, UiEditorRuntimeMode, UiEditorRuntimeState,
+    UiEditorSceneSnapshot, UiEditorTransformMode, UiEditorTransformSpace,
+    UiEditorViewportProjection, UiEditorViewportShading, UiEditorViewportState,
+    UiEventDispatchFrame, UiGameGuiConfig, UiGameLayerCommandKind, UiGameLayerCommandQueue,
+    UiGameLayerKind, UiGameLayerStackState, UiInputCaptureState, UiInputCaptureStateManager,
+    UiInputFrame, UiNodeEventTrigger, UiNodeRequestSourceKind, UiNodeTone, UiNodeTreeRequest,
     UiPresentationFlowState, UiScreenInputFocusPolicy, UiScreenPanelDescriptor, UiScreenProfile,
     UiScreenProfileDescriptor, UiScreenProfileState, UiSurfaceAnchor, UiSurfaceNode,
     UiSurfaceStyle, UiToastNotification, UiToastSeverity, UiToastStack, UiViewportSlot,

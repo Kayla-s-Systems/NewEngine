@@ -16,6 +16,7 @@ mod launch_loading;
 mod lifecycle;
 pub(crate) mod light_extraction;
 pub(crate) mod lights;
+mod model_residency;
 pub(crate) mod passes;
 mod passes_ubo;
 mod picking;

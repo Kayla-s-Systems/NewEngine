@@ -75,6 +75,7 @@ pub struct SceneBridge {
     scene: Arc<RwLock<Scene>>,
     queue: Arc<Mutex<SceneQueue>>,
     selection: Arc<Mutex<Option<EntityId>>>,
+    selection_set: Arc<Mutex<Vec<EntityId>>>,
     selection_authority: Arc<Mutex<Option<newengine_entity_api::EntityHandle>>>,
     primitives: Arc<RwLock<PrimitiveRegistry>>,
     materials: Arc<RwLock<MaterialRegistry>>,
@@ -102,6 +103,7 @@ impl SceneBridge {
             scene: Arc::new(RwLock::new(initial)),
             queue: Arc::new(Mutex::new(SceneQueue::default())),
             selection: Arc::new(Mutex::new(initial_selection)),
+            selection_set: Arc::new(Mutex::new(Vec::new())),
             selection_authority: Arc::new(Mutex::new(None)),
             primitives,
             materials,
@@ -188,6 +190,7 @@ impl SceneBridge {
         };
 
         *self.selection.lock() = selected;
+        *self.selection_set.lock() = selected.into_iter().collect();
         *self.selection_authority.lock() = selected_authority;
         self.authority.log_bootstrap_boundary(provider_id);
         // CPU scene assembly is not equivalent to playable-world readiness.

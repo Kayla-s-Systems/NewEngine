@@ -26,9 +26,12 @@ pub(crate) fn parse_discrete_map_xml(source: &str, body: &[u8]) -> Result<Parsed
         ));
     }
     let schema = authored_xml::root_schema(root);
+    if schema == "newengine.map.definition.v1" {
+        return parse_legacy_v1_projection(source, root);
+    }
     if schema != "newengine.map.definition.v2" {
         return Err(format!(
-            "YMAP monolithic/unsupported schema rejected source='{source}' schema='{schema}' expected='newengine.map.definition.v2'"
+            "YMAP unsupported schema source='{source}' schema='{schema}' expected='newengine.map.definition.v1|newengine.map.definition.v2'"
         ));
     }
 
@@ -119,6 +122,153 @@ pub(crate) fn parse_discrete_map_xml(source: &str, body: &[u8]) -> Result<Parsed
     })
 }
 
+fn parse_legacy_v1_projection(
+    source: &str,
+    root: authored_xml::XmlNode<'_, '_>,
+) -> Result<ParsedMapV1, String> {
+    let map = authored_xml::xml_child(root, "map")
+        .ok_or_else(|| format!("YMAP v1 has no <map> source='{source}'"))?;
+    let map_id = authored_xml::xml_attr_any(map, &["id", "name"])
+        .ok_or_else(|| format!("YMAP v1 <map> requires id/name source='{source}'"))?;
+    let cell_size = authored_xml::xml_attr_f32_any(map, &["cell_size", "cellSize"])
+        .unwrap_or(newengine_assets_api::MAP_DEFAULT_CELL_SIZE);
+    if !cell_size.is_finite() || cell_size <= 0.0 {
+        return Err(format!(
+            "YMAP v1 compatibility projection requires finite cell_size > 0 source='{source}' value={cell_size}"
+        ));
+    }
+    let origin = parse_vec3_attr(map, &["origin"], [0.0; 3], "map origin")?;
+
+    let mut index = MapIndexV1 {
+        schema: MAP_INDEX_SCHEMA_V1.to_owned(),
+        map_id,
+        origin,
+        cell_size,
+        tags: authored_xml::xml_tags(map, "tags"),
+        metadata: parse_metadata(map),
+        ..Default::default()
+    };
+    index.metadata.insert(
+        "source_schema".to_owned(),
+        "newengine.map.definition.v1".to_owned(),
+    );
+    index.metadata.insert(
+        "projection".to_owned(),
+        "legacy-v1-top-level-placements-only".to_owned(),
+    );
+
+    let mut cells = BTreeMap::<MapCellCoordV1, MapCellV1>::new();
+    if let Some(placements) = authored_xml::xml_child(map, "placements") {
+        for (ordinal, placement_node) in authored_xml::xml_children_named(placements, "Placement")
+            .into_iter()
+            .enumerate()
+        {
+            let placement = parse_legacy_v1_placement(placement_node, ordinal)?;
+            let coord = world_position_to_cell(origin, cell_size, placement.transform.position)?;
+            let cell = cells.entry(coord).or_insert_with(|| MapCellV1 {
+                schema: MAP_CELL_SCHEMA_V1.to_owned(),
+                coord,
+                ..Default::default()
+            });
+            cell.placements.push(placement);
+        }
+    }
+
+    for cell in cells.values_mut() {
+        cell.normalize();
+        cell.validate().map_err(|errors| {
+            format!(
+                "YMAP v1 compatibility projection produced invalid cell coord={},{} source='{source}' errors=[{}]",
+                cell.coord.x,
+                cell.coord.z,
+                errors.join("; ")
+            )
+        })?;
+        index.cells.push(MapCellRefV1::canonical(cell.coord));
+    }
+
+    index.normalize();
+    index.validate().map_err(|errors| {
+        format!(
+            "YMAP v1 compatibility projection produced invalid map index source='{source}' errors=[{}]",
+            errors.join("; ")
+        )
+    })?;
+
+    let dependencies = collect_dependencies(&index, &cells);
+    Ok(ParsedMapV1 {
+        index,
+        cells,
+        dependencies,
+        warnings: vec![
+            "legacy YMAP v1 compatibility projection active: only top-level <map><placements> are projected into generic discrete-map DTOs; profile/gameplay/mission/player/terrain/sky extensions remain outside engine.assets.maps".to_owned(),
+        ],
+    })
+}
+
+fn parse_legacy_v1_placement(
+    node: authored_xml::XmlNode<'_, '_>,
+    ordinal: usize,
+) -> Result<MapPlacementV1, String> {
+    let definition_ref = authored_xml::xml_attr_any(
+        node,
+        &["definition_ref", "definitionRef", "definition", "ref"],
+    )
+    .unwrap_or_default();
+    let id = authored_xml::xml_attr_any(node, &["id", "name"])
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| format!("legacy-placement-{ordinal:04}"));
+    let mut placement = MapPlacementV1 {
+        id,
+        definition_ref,
+        transform: MapTransformV1 {
+            position: parse_vec3_attr(node, &["position"], [0.0; 3], "placement position")?,
+            rotation_ypr: parse_vec3_attr(
+                node,
+                &["rotation_ypr", "rotationYpr", "rotation"],
+                [0.0; 3],
+                "placement rotation_ypr",
+            )?,
+            scale: parse_vec3_attr(node, &["scale"], [1.0; 3], "placement scale")?,
+        },
+        apply_mode: authored_xml::xml_attr_any(node, &["apply_mode", "applyMode"])
+            .unwrap_or_else(|| "metadata_only".to_owned()),
+        tags: authored_xml::xml_attr_any(node, &["tags"])
+            .map(|value| split_csv(&value))
+            .unwrap_or_default(),
+        enabled: authored_xml::xml_attr_bool_any(node, &["enabled"]).unwrap_or(true),
+    };
+    placement.normalize();
+    placement.validate().map_err(|error| {
+        format!(
+            "YMAP v1 compatibility projection invalid placement ordinal={ordinal} id='{}': {error}",
+            placement.id
+        )
+    })?;
+    Ok(placement)
+}
+
+fn world_position_to_cell(
+    origin: [f32; 3],
+    cell_size: f32,
+    position: [f32; 3],
+) -> Result<MapCellCoordV1, String> {
+    let x = ((position[0] - origin[0]) / cell_size).floor();
+    let z = ((position[2] - origin[2]) / cell_size).floor();
+    if !x.is_finite()
+        || !z.is_finite()
+        || x < i32::MIN as f32
+        || x > i32::MAX as f32
+        || z < i32::MIN as f32
+        || z > i32::MAX as f32
+    {
+        return Err(format!(
+            "YMAP v1 compatibility projection cell coordinate out of range position={position:?} origin={origin:?} cell_size={cell_size}"
+        ));
+    }
+    Ok(MapCellCoordV1::new(x as i32, z as i32))
+}
+
 fn parse_placement(
     node: authored_xml::XmlNode<'_, '_>,
     coord: MapCellCoordV1,
@@ -189,11 +339,12 @@ fn collect_dependencies(
                 continue;
             }
             if seen.insert((placement.definition_ref.clone(), "definition".to_owned())) {
+                let required = !placement.apply_mode.eq_ignore_ascii_case("metadata_only");
                 out.push(AssetDependencyRecord::new(
                     placement.definition_ref.clone(),
                     "definition",
                     newengine_assets_api::ENGINE_ASSETS_DEFINITIONS_SERVICE_ID,
-                    true,
+                    required,
                 ));
             }
         }
@@ -325,9 +476,73 @@ mod tests {
     }
 
     #[test]
-    fn rejects_monolithic_v1_schema() {
-        let body = br#"<YmapMapDefinition schema="newengine.map.definition.v1"><map id="old" /></YmapMapDefinition>"#;
-        let error = parse_discrete_map_xml("maps/old.ymap", body).unwrap_err();
-        assert!(error.contains("monolithic/unsupported schema rejected"));
+    fn projects_legacy_v1_top_level_placements_only() {
+        let body = br#"
+<YmapMapDefinition schema="newengine.map.definition.v1">
+  <map name="legacy_forest">
+    <placements>
+      <Placement definition_ref="definitions/world.ytyp@sky" position="0,0,0" apply_mode="metadata_only" />
+    </placements>
+    <profile>
+      <definitions>
+        <Definition definition_ref="definitions/gameplay.ytyp@player" position="128,0,128" apply_mode="instantiate" />
+      </definitions>
+      <prefabs><Prefab source="models/ignored.ydd@ignored" /></prefabs>
+    </profile>
+  </map>
+</YmapMapDefinition>
+"#;
+        let parsed = parse_discrete_map_xml("maps/legacy.ymap", body).unwrap();
+        assert_eq!(parsed.index.map_id, "legacy_forest");
+        assert_eq!(parsed.cells.len(), 1);
+        let cell = parsed.cells.values().next().unwrap();
+        assert_eq!(cell.placements.len(), 1);
+        assert_eq!(cell.placements[0].id, "legacy-placement-0000");
+        assert_eq!(cell.placements[0].apply_mode, "metadata_only");
+        assert_eq!(
+            cell.placements[0].definition_ref,
+            "definitions/world.ytyp@sky"
+        );
+        assert_eq!(parsed.dependencies.len(), 1);
+        assert!(!parsed.dependencies[0].required);
+        assert!(parsed.warnings[0].contains("top-level <map><placements>"));
+    }
+
+    #[test]
+    fn legacy_v1_projection_groups_placements_into_discrete_cells() {
+        let body = br#"
+<YmapMapDefinition schema="newengine.map.definition.v1">
+  <map name="legacy_cells" cell_size="64">
+    <placements>
+      <Placement id="a" definition_ref="definitions/world.ytyp@a" position="1,0,1" apply_mode="instantiate" />
+      <Placement id="b" definition_ref="definitions/world.ytyp@b" position="70,0,1" apply_mode="metadata_only" />
+    </placements>
+  </map>
+</YmapMapDefinition>
+"#;
+        let parsed = parse_discrete_map_xml("maps/legacy_cells.ymap", body).unwrap();
+        assert_eq!(parsed.cells.len(), 2);
+        assert!(parsed.cells.contains_key(&MapCellCoordV1::new(0, 0)));
+        assert!(parsed.cells.contains_key(&MapCellCoordV1::new(1, 0)));
+        let required = parsed
+            .dependencies
+            .iter()
+            .map(|dependency| (dependency.reference.as_str(), dependency.required))
+            .collect::<BTreeMap<_, _>>();
+        assert!(required["definitions/world.ytyp@a"]);
+        assert!(!required["definitions/world.ytyp@b"]);
+    }
+
+    #[test]
+    fn legacy_v1_projection_rejects_direct_model_placement() {
+        let body = br#"
+<YmapMapDefinition schema="newengine.map.definition.v1">
+  <map name="invalid"><placements>
+    <Placement definition_ref="models/tree.ydd@tree" position="0,0,0" />
+  </placements></map>
+</YmapMapDefinition>
+"#;
+        let error = parse_discrete_map_xml("maps/invalid.ymap", body).unwrap_err();
+        assert!(error.contains("expected .ytyp path"));
     }
 }

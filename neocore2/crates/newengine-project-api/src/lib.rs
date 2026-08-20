@@ -10,6 +10,27 @@ pub const PROJECT_MANIFEST_CONTRACT: &str = "newengine.project.v1";
 pub const PROJECT_STARTUP_SCENE_ENV: &str = "NEWENGINE_PROJECT_STARTUP_SCENE";
 pub const PROJECT_LAUNCH_PRESET_ENV: &str = "NEWENGINE_PROJECT_LAUNCH_PRESET";
 pub const PROJECT_RUNTIME_PROFILE_ABI_V1: &str = "newengine.runtime-profile/v1";
+pub const RUNTIME_PROFILE_LAUNCH_METHOD_V1: &str = "runtime.launch_v1";
+pub const RUNTIME_PROFILE_SERVICE_PREFIX: &str = "engine.runtime-profile.";
+pub const PROJECT_BROWSER_SERVICE_ID: &str = "engine.project-browser";
+pub const PROJECT_BROWSER_PRESENT_METHOD_V1: &str = "project.present_v1";
+
+#[inline]
+pub fn runtime_profile_service_id(profile_id: &str) -> String {
+    format!("{RUNTIME_PROFILE_SERVICE_PREFIX}{}", profile_id.trim())
+}
+
+/// Resolves the ABI service used to launch a concrete runtime composition.
+/// A project game module gets its own service identity so generic GameReady,
+/// FPS, top-down and third-person compositions can coexist in one plugin directory.
+#[inline]
+pub fn runtime_profile_service_id_for_game(profile_id: &str, game_module: Option<&str>) -> String {
+    let base = runtime_profile_service_id(profile_id);
+    match game_module.map(str::trim).filter(|value| !value.is_empty()) {
+        Some(module_id) => format!("{base}.game-module.{module_id}"),
+        None => base,
+    }
+}
 
 #[derive(
     Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,

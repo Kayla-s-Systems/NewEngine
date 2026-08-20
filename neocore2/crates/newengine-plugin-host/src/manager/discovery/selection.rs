@@ -75,6 +75,20 @@ impl SelectionDecision {
 }
 
 #[inline]
+fn plugin_excluded_by_host_policy(id: &str) -> bool {
+    std::env::var("NEWENGINE_PLUGIN_EXCLUDE_IDS")
+        .ok()
+        .map(|value| {
+            value
+                .split(|ch: char| ch == ',' || ch == ';' || ch.is_ascii_whitespace())
+                .map(str::trim)
+                .filter(|entry| !entry.is_empty())
+                .any(|entry| entry == id)
+        })
+        .unwrap_or(false)
+}
+
+#[inline]
 fn runtime_target_plugins_only() -> bool {
     std::env::var("NEWENGINE_PLUGIN_TARGET")
         .map(|v| {
@@ -257,6 +271,10 @@ pub(super) fn build_load_selection(
             } => {
                 if loaded_ids.contains(id) {
                     SelectionDecision::AlreadyLoaded
+                } else if plugin_excluded_by_host_policy(id) {
+                    SelectionDecision::Unsupported {
+                        reason: "plugin id excluded by host composition policy",
+                    }
                 } else if !crate::plugin_config_service::plugin_enabled_by_config(id) {
                     SelectionDecision::DisabledByConfig
                 } else if runtime_only && is_editor_only_plugin(*descriptor_kind) {

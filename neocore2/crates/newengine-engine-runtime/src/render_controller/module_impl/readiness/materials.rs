@@ -145,6 +145,76 @@ pub(super) fn build_scene_material_launch_plan(
     }
 }
 
+fn extend_launch_plan_with_model_materials(
+    this: &RuntimeRenderController,
+    world: &newengine_ecs::World,
+    plan: &mut SceneMaterialLaunchPlan,
+) {
+    let mut critical = plan
+        .critical_paths
+        .iter()
+        .cloned()
+        .collect::<FxHashSet<_>>();
+    let mut optional_paths = plan
+        .optional_paths
+        .iter()
+        .cloned()
+        .collect::<FxHashSet<_>>();
+
+    for (_entity, model) in world.query::<crate::gameplay::ModelRenderComponent>() {
+        let Some(bundle) = this
+            .gpu
+            .meshes
+            .model_bundle_cache
+            .get(model.logical_path.trim())
+        else {
+            continue;
+        };
+        for part in &bundle.parts {
+            let resolved = newengine_materials::MaterialResolved {
+                id: newengine_materials::MaterialId::invalid(),
+                desc: part.material.descriptor,
+                textures: part.material.textures.clone(),
+            };
+            let material =
+                LitMaterialPlan::from_resolved(Some(&resolved), part.material.fallback_color);
+            if material.alpha_cutoff > 0.0 {
+                if let Some(path) = material.base_color_texture {
+                    if !is_launch_gate_optional_texture(path) {
+                        plan.alpha_critical_paths.insert(path.to_owned());
+                    }
+                }
+            }
+            for path in [
+                material.base_color_texture,
+                material.normal_texture,
+                material.roughness_texture,
+            ]
+            .into_iter()
+            .flatten()
+            {
+                if is_launch_gate_optional_texture(path) {
+                    optional_paths.insert(path.to_owned());
+                } else {
+                    critical.insert(path.to_owned());
+                }
+            }
+        }
+    }
+
+    plan.critical_paths = critical.into_iter().collect();
+    plan.optional_paths = optional_paths.into_iter().collect();
+    plan.optional = plan.optional_paths.len() as u32;
+    plan.optional_paths.sort_unstable();
+    plan.alpha_critical_paths
+        .retain(|path| !is_launch_gate_optional_texture(path));
+    plan.critical_paths.sort_unstable_by(|a, b| {
+        let a_alpha = plan.alpha_critical_paths.contains(a);
+        let b_alpha = plan.alpha_critical_paths.contains(b);
+        b_alpha.cmp(&a_alpha).then_with(|| a.cmp(b))
+    });
+}
+
 pub(super) fn critical_scene_materials_ready(
     this: &mut RuntimeRenderController,
     r: &mut dyn RenderApi,
@@ -156,9 +226,12 @@ pub(super) fn critical_scene_materials_ready(
         let mats = mats_lock.read();
         build_scene_material_launch_plan(world, &*mats)
     });
-    let plan = material_plan
-        .or(owned_plan.as_ref())
+    let mut merged_plan = material_plan
+        .cloned()
+        .or(owned_plan)
         .expect("scene launch material plan");
+    extend_launch_plan_with_model_materials(this, world, &mut merged_plan);
+    let plan = &merged_plan;
 
     // Optional environment textures must not block launch, but they should still
     // start decoding while the loading gate is active. Previously sky/cloud textures

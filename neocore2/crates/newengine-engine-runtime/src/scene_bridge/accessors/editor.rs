@@ -1,7 +1,11 @@
 use super::*;
 
 impl SceneBridge {
-    pub fn apply_editor_selection_actions(&self, frame: &UiEventDispatchFrame) -> bool {
+    pub fn apply_editor_selection_actions(
+        &self,
+        frame: &UiEventDispatchFrame,
+        additive: bool,
+    ) -> bool {
         let mut applied = false;
         for action in &frame.actions {
             if action.trigger != UiNodeEventTrigger::Click {
@@ -12,7 +16,12 @@ impl SceneBridge {
             else {
                 continue;
             };
-            if let Some(entity) = self.select_entity_by_stable_key(entity_key) {
+            if let Some(entity) = self.entity_by_stable_key(entity_key) {
+                if additive {
+                    self.toggle_selection(entity);
+                } else {
+                    self.set_selection(Some(entity));
+                }
                 newengine_ulog_api::ulog::info!(
                     "editor selection: selected entity={:?} stable_key={} via action_id='{}' surface='{}' node='{}' route='engine.editor.selection.select_entity'",
                     entity,
@@ -71,6 +80,189 @@ impl SceneBridge {
         applied
     }
 
+    pub fn apply_editor_actor_actions(&self, frame: &UiEventDispatchFrame) -> bool {
+        let mut applied = false;
+        for action in &frame.actions {
+            if action.trigger != UiNodeEventTrigger::Click {
+                continue;
+            }
+            match action.action_id.as_str() {
+                "editor.actor.duplicate" => {
+                    applied |= !self.duplicate_selected_actors().is_empty();
+                }
+                "editor.actor.delete" => {
+                    applied |= self.delete_selected_actors() > 0;
+                }
+                _ => {}
+            }
+        }
+        applied
+    }
+
+    pub fn duplicate_selected_actors(&self) -> Vec<EntityId> {
+        let selected = self.selections();
+        if selected.is_empty() {
+            return Vec::new();
+        }
+
+        let mut scene = self.scene.write();
+        let world = scene.world_mut();
+        let protected_root = world
+            .resource::<newengine_scene::SceneState>()
+            .and_then(|state| state.root);
+        let mut duplicated = Vec::<(EntityId, EntityId, Option<u64>)>::new();
+
+        macro_rules! clone_component {
+            ($source:expr, $target:expr, $ty:ty) => {
+                if let Some(value) = world.get::<$ty>($source).cloned() {
+                    let _ = world.insert($target, value);
+                }
+            };
+        }
+
+        for source in selected {
+            if !world.exists(source)
+                || protected_root == Some(source)
+                || world
+                    .get::<crate::editor_viewport::EditorGizmoAxisComponent>(source)
+                    .is_some()
+                || world.get::<crate::gameplay::PlayerActor>(source).is_some()
+            {
+                continue;
+            }
+
+            let name = world
+                .get::<newengine_scene::components::Name>(source)
+                .map(|name| name.0.clone())
+                .unwrap_or_else(|| format!("Actor {}", source.stable_u64()));
+            let parent_key = world
+                .get::<newengine_transform_api::Parent>(source)
+                .map(|parent| parent.0.stable_id);
+            let target = newengine_scene::spawn_named(world, format!("{name} Copy"));
+
+            clone_component!(source, target, Transform);
+            clone_component!(source, target, Bounds);
+            clone_component!(source, target, Primitive);
+            clone_component!(source, target, MaterialRef);
+            clone_component!(
+                source,
+                target,
+                newengine_model_domain_api::MeshRenderOptions
+            );
+            clone_component!(source, target, PhysicsBodyDesc);
+            clone_component!(source, target, DisplayVisibility);
+            clone_component!(source, target, DirectionalLight);
+            clone_component!(source, target, PointLight);
+            clone_component!(source, target, newengine_lighting::SpotLight);
+            clone_component!(
+                source,
+                target,
+                newengine_procedural_noise::ProceduralTerrain
+            );
+            clone_component!(source, target, SceneImportedAssetDescriptor);
+            clone_component!(source, target, crate::gameplay::ModelRenderComponent);
+            clone_component!(source, target, crate::gameplay::GameplayActor);
+            clone_component!(source, target, crate::gameplay::SceneEntityAnchor);
+            clone_component!(source, target, DefinitionInstance);
+
+            duplicated.push((source, target, parent_key));
+        }
+
+        let remap = duplicated
+            .iter()
+            .map(|(source, target, _)| (source.stable_u64(), *target))
+            .collect::<std::collections::BTreeMap<_, _>>();
+        for (_, target, parent_key) in &duplicated {
+            let Some(parent_key) = *parent_key else {
+                continue;
+            };
+            let parent = remap.get(&parent_key).copied().or_else(|| {
+                world
+                    .iter_entities()
+                    .find(|entity| entity.stable_u64() == parent_key)
+            });
+            let _ = newengine_transform::set_parent(world, *target, parent);
+        }
+
+        let new_selection = duplicated
+            .iter()
+            .map(|(_, target, _)| *target)
+            .collect::<Vec<_>>();
+        drop(scene);
+        self.replace_selections(new_selection.iter().copied());
+        if !new_selection.is_empty() {
+            newengine_ulog_api::ulog::info!(
+                "editor actor duplicate: duplicated={} selection_count={}",
+                new_selection.len(),
+                new_selection.len()
+            );
+        }
+        new_selection
+    }
+
+    pub fn delete_selected_actors(&self) -> usize {
+        let selected = self.selections();
+        if selected.is_empty() {
+            return 0;
+        }
+        let mut scene = self.scene.write();
+        let world = scene.world_mut();
+        let protected_root = world
+            .resource::<newengine_scene::SceneState>()
+            .and_then(|state| state.root);
+        let selected_keys = selected
+            .iter()
+            .filter(|entity| protected_root != Some(**entity))
+            .map(|entity| entity.stable_u64())
+            .collect::<std::collections::BTreeSet<_>>();
+        if selected_keys.is_empty() {
+            return 0;
+        }
+
+        let children_to_detach = world
+            .iter_entities()
+            .filter(|entity| {
+                world
+                    .get::<newengine_transform_api::Parent>(*entity)
+                    .is_some_and(|parent| selected_keys.contains(&parent.0.stable_id))
+                    && !selected_keys.contains(&entity.stable_u64())
+            })
+            .collect::<Vec<_>>();
+        for child in children_to_detach {
+            let _ = newengine_transform::set_parent(world, child, None);
+        }
+
+        let mut deleted = 0usize;
+        for entity in selected {
+            if protected_root == Some(entity) || !world.exists(entity) {
+                continue;
+            }
+            if world
+                .get::<crate::editor_viewport::EditorGizmoAxisComponent>(entity)
+                .is_some()
+            {
+                continue;
+            }
+            let _ = world.despawn(entity);
+            deleted += 1;
+        }
+
+        if let Some(state) = world.resource_mut::<newengine_scene::SceneState>() {
+            if state
+                .active_camera
+                .is_some_and(|camera| selected_keys.contains(&camera.stable_u64()))
+            {
+                state.active_camera = None;
+            }
+        }
+        drop(scene);
+        self.replace_selections(std::iter::empty());
+        if deleted > 0 {
+            newengine_ulog_api::ulog::info!("editor actor delete: deleted={deleted}");
+        }
+        deleted
+    }
+
     fn apply_selected_transform_field(&self, field: TransformEditField, value: f32) -> bool {
         if !value.is_finite() {
             return false;
@@ -97,19 +289,199 @@ impl SceneBridge {
         changed
     }
 
-    fn select_entity_by_stable_key(&self, entity_key: u64) -> Option<EntityId> {
-        let selected = {
-            let scene = self.scene.read();
-            let selected = scene
-                .world()
-                .iter_entities()
-                .find(|entity| entity.stable_u64() == entity_key);
-            selected
-        };
-        if let Some(entity) = selected {
-            self.set_selection(Some(entity));
+    fn entity_by_stable_key(&self, entity_key: u64) -> Option<EntityId> {
+        let scene = self.scene.read();
+        let entity = scene
+            .world()
+            .iter_entities()
+            .find(|entity| entity.stable_u64() == entity_key);
+        entity
+    }
+    pub fn editor_scene_snapshots(
+        &self,
+        frame_index: u64,
+    ) -> (UiEditorSceneSnapshot, UiEditorInspectorSnapshot) {
+        let selected = self.selections();
+        let selected_keys = selected
+            .iter()
+            .map(|entity| entity.stable_u64())
+            .collect::<Vec<_>>();
+        let primary = self.selection();
+        let scene = self.scene.read();
+        let world = scene.world();
+        let mut entities = Vec::new();
+
+        for (entity, name) in world.query::<newengine_scene::components::Name>() {
+            if world
+                .get::<crate::editor_viewport::EditorGizmoAxisComponent>(entity)
+                .is_some()
+            {
+                continue;
+            }
+            let mut components = Vec::new();
+            if world.get::<Transform>(entity).is_some() {
+                components.push("Transform".to_owned());
+            }
+            if world.get::<Primitive>(entity).is_some() {
+                components.push("Static Mesh".to_owned());
+            }
+            if world.get::<PhysicsBodyDesc>(entity).is_some() {
+                components.push("Collision".to_owned());
+            }
+            if world.get::<DirectionalLight>(entity).is_some() {
+                components.push("Directional Light".to_owned());
+            }
+            if world.get::<PointLight>(entity).is_some() {
+                components.push("Point Light".to_owned());
+            }
+            if world.get::<newengine_lighting::SpotLight>(entity).is_some() {
+                components.push("Spot Light".to_owned());
+            }
+            if world
+                .get::<newengine_procedural_noise::ProceduralTerrain>(entity)
+                .is_some()
+            {
+                components.push("Terrain".to_owned());
+            }
+            if world.get::<crate::gameplay::PlayerActor>(entity).is_some() {
+                components.push("Player".to_owned());
+            }
+            if world.get::<SceneImportedAssetDescriptor>(entity).is_some() {
+                components.push("Imported Asset".to_owned());
+            }
+            if world
+                .get::<crate::gameplay::ModelRenderComponent>(entity)
+                .is_some()
+            {
+                components.push("Model Render".to_owned());
+            }
+
+            let kind = if world.get::<DirectionalLight>(entity).is_some() {
+                "Directional Light"
+            } else if world.get::<PointLight>(entity).is_some() {
+                "Point Light"
+            } else if world.get::<newengine_lighting::SpotLight>(entity).is_some() {
+                "Spot Light"
+            } else if world
+                .get::<newengine_procedural_noise::ProceduralTerrain>(entity)
+                .is_some()
+            {
+                "Terrain"
+            } else if world.get::<crate::gameplay::PlayerActor>(entity).is_some() {
+                "Player"
+            } else if world.get::<SceneImportedAssetDescriptor>(entity).is_some() {
+                "Static Mesh Actor"
+            } else if world.get::<Primitive>(entity).is_some() {
+                "Primitive Actor"
+            } else {
+                "Actor"
+            };
+
+            let parent_key = world
+                .get::<newengine_transform_api::Parent>(entity)
+                .map(|parent| parent.0.stable_id);
+            entities.push(UiEditorSceneEntitySnapshot {
+                entity_key: entity.stable_u64(),
+                parent_key,
+                name: name.0.clone(),
+                kind: kind.to_owned(),
+                selected: selected.contains(&entity),
+                components,
+            });
         }
-        selected
+        entities.sort_by(|a, b| {
+            a.name
+                .to_ascii_lowercase()
+                .cmp(&b.name.to_ascii_lowercase())
+                .then(a.entity_key.cmp(&b.entity_key))
+        });
+
+        let scene_snapshot = UiEditorSceneSnapshot {
+            version: 1,
+            frame_index,
+            entities,
+            selected_keys: selected_keys.clone(),
+        };
+
+        let inspector = if let Some(entity) = primary {
+            let name = world
+                .get::<newengine_scene::components::Name>(entity)
+                .map(|name| name.0.clone())
+                .unwrap_or_else(|| format!("Entity {}", entity.stable_u64()));
+            let mut components = Vec::new();
+            if world.get::<Transform>(entity).is_some() {
+                components.push("Transform".to_owned());
+            }
+            if world.get::<Primitive>(entity).is_some() {
+                components.push("Static Mesh".to_owned());
+            }
+            if world.get::<PhysicsBodyDesc>(entity).is_some() {
+                components.push("Collision".to_owned());
+            }
+            if world.get::<DirectionalLight>(entity).is_some() {
+                components.push("Directional Light".to_owned());
+            }
+            if world.get::<PointLight>(entity).is_some() {
+                components.push("Point Light".to_owned());
+            }
+            if world.get::<newengine_lighting::SpotLight>(entity).is_some() {
+                components.push("Spot Light".to_owned());
+            }
+            if world
+                .get::<newengine_procedural_noise::ProceduralTerrain>(entity)
+                .is_some()
+            {
+                components.push("Terrain".to_owned());
+            }
+            if world.get::<crate::gameplay::PlayerActor>(entity).is_some() {
+                components.push("Player".to_owned());
+            }
+            if world.get::<SceneImportedAssetDescriptor>(entity).is_some() {
+                components.push("Imported Asset".to_owned());
+            }
+            if world
+                .get::<crate::gameplay::ModelRenderComponent>(entity)
+                .is_some()
+            {
+                components.push("Model Render".to_owned());
+            }
+
+            let kind = scene_snapshot
+                .entities
+                .iter()
+                .find(|item| item.entity_key == entity.stable_u64())
+                .map(|item| item.kind.clone())
+                .unwrap_or_else(|| "Actor".to_owned());
+            let transform = world.get::<Transform>(entity).map(|transform| {
+                let (yaw, pitch, roll) = transform.rotation.to_euler(EulerRot::YXZ);
+                UiEditorInspectorTransformSnapshot {
+                    position: [
+                        transform.position.x,
+                        transform.position.y,
+                        transform.position.z,
+                    ],
+                    rotation_degrees: [yaw.to_degrees(), pitch.to_degrees(), roll.to_degrees()],
+                    scale: [transform.scale.x, transform.scale.y, transform.scale.z],
+                }
+            });
+            UiEditorInspectorSnapshot {
+                version: 1,
+                frame_index,
+                entity_key: Some(entity.stable_u64()),
+                name,
+                kind,
+                selection_count: selected_keys.len(),
+                transform,
+                components,
+            }
+        } else {
+            UiEditorInspectorSnapshot {
+                frame_index,
+                ..UiEditorInspectorSnapshot::default()
+            }
+        };
+
+        (scene_snapshot, inspector)
     }
 }
 

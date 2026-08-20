@@ -113,3 +113,15 @@ pub(super) fn write_lit_ubo_ex(
 
     r.write_buffer(ubo, 0, &bytes)
 }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn lit_ubo_allocation_matches_packed_lighting_contract() {
+        assert_eq!(
+            newengine_material_domain_api::LIT_UBO_SIZE as usize,
+            newengine_render_feature_api::PackedLights::UBO_SIZE,
+            "material-domain UBO allocation must cover the complete packed lighting ABI",
+        );
+    }
+}

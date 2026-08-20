@@ -110,7 +110,11 @@ impl RuntimeHostAppProfile for ProjectEditorApp {
     }
 }
 
-fn launch_project_editor(manifest_path: &std::path::Path) -> Result<(), String> {
+/// Launches the generic project editor for a resolved project manifest.
+/// Public only for stable-ABI runtime-profile wrappers; NewEngine.exe remains implementation-agnostic.
+pub fn launch_registered_project_editor_profile(
+    manifest_path: &std::path::Path,
+) -> Result<(), String> {
     let launch_id = std::env::var(newengine_project_api::PROJECT_LAUNCH_PRESET_ENV)
         .ok()
         .filter(|value| !value.trim().is_empty());
@@ -133,7 +137,7 @@ pub fn runtime_profile_registration() -> newengine_project_runtime::RuntimeProfi
     newengine_project_runtime::RuntimeProfileRegistration::new(
         PROJECT_EDITOR_RUNTIME_PROFILE_ID,
         "North Star Project Editor",
-        launch_project_editor,
+        launch_registered_project_editor_profile,
     )
 }
 

@@ -3,7 +3,6 @@
 use super::super::controller::RuntimeRenderController;
 use super::shadows::{LightShadowPlan, ShadowFrame};
 use crate::gameplay::DisplayVisibility;
-use newengine_bounds::Bounds;
 use newengine_materials::MaterialRef;
 use newengine_model_domain_api::MeshRenderOptions;
 use newengine_primitives::Primitive;
@@ -29,23 +28,258 @@ fn shadow_matrices_match(a: newengine_math::Mat4, b: newengine_math::Mat4) -> bo
 }
 
 #[inline]
-fn shadow_frames_match_sample_space(a: ShadowFrame, b: ShadowFrame) -> bool {
-    if a.texture != b.texture || a.cascade_count != b.cascade_count {
-        return false;
+fn shadow_viewport_matches(
+    a: newengine_core::render::Viewport,
+    b: newengine_core::render::Viewport,
+) -> bool {
+    a.x.to_bits() == b.x.to_bits()
+        && a.y.to_bits() == b.y.to_bits()
+        && a.w.to_bits() == b.w.to_bits()
+        && a.h.to_bits() == b.h.to_bits()
+        && a.min_depth.to_bits() == b.min_depth.to_bits()
+        && a.max_depth.to_bits() == b.max_depth.to_bits()
+}
+
+#[inline]
+fn shadow_scissor_matches(
+    a: newengine_core::render::RectI32,
+    b: newengine_core::render::RectI32,
+) -> bool {
+    a.x == b.x && a.y == b.y && a.w == b.w && a.h == b.h
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+struct ShadowFrameMismatch {
+    texture: bool,
+    matrix: bool,
+    split: bool,
+    params: bool,
+    extra: bool,
+}
+
+impl ShadowFrameMismatch {
+    #[inline]
+    fn any(self) -> bool {
+        self.texture || self.matrix || self.split || self.params || self.extra
     }
+}
+
+fn shadow_frame_mismatch(a: ShadowFrame, b: ShadowFrame) -> ShadowFrameMismatch {
+    let mut mismatch = ShadowFrameMismatch {
+        texture: a.texture != b.texture || a.cascade_count != b.cascade_count,
+        ..ShadowFrameMismatch::default()
+    };
     let count = a
         .cascade_count
+        .min(b.cascade_count)
         .clamp(1, super::shadows::MAX_DIRECTIONAL_SHADOW_CASCADES as u32) as usize;
     for i in 0..count {
-        if !shadow_matrices_match(a.cascade_light_mvp[i], b.cascade_light_mvp[i]) {
-            return false;
-        }
-        if (a.cascade_splits[i] - b.cascade_splits[i]).abs() > SHADOW_SPLIT_EPSILON {
+        mismatch.matrix |= !shadow_matrices_match(a.cascade_light_mvp[i], b.cascade_light_mvp[i]);
+        mismatch.split |= (a.cascade_splits[i] - b.cascade_splits[i]).abs() > SHADOW_SPLIT_EPSILON;
+    }
+    mismatch.params = !slices_nearly_equal(&a.params, &b.params, SHADOW_PARAM_EPSILON);
+    mismatch.extra = !slices_nearly_equal(&a.extra, &b.extra, SHADOW_PARAM_EPSILON);
+    mismatch
+}
+
+#[inline]
+fn local_shadow_frames_match_sample_space(
+    a: newengine_render_feature_api::LocalShadowFrame,
+    b: newengine_render_feature_api::LocalShadowFrame,
+) -> bool {
+    if a.texture != b.texture
+        || a.atlas_extent != b.atlas_extent
+        || a.light_count != b.light_count
+        || a.view_count != b.view_count
+    {
+        return false;
+    }
+    let light_count =
+        a.light_count
+            .min(newengine_render_feature_api::MAX_LOCAL_SHADOW_LIGHTS as u32) as usize;
+    for i in 0..light_count {
+        let left = a.lights[i];
+        let right = b.lights[i];
+        if left.stable_id != right.stable_id
+            || left.light_kind != right.light_kind
+            || left.packed_light_index != right.packed_light_index
+            || left.first_view != right.first_view
+            || left.view_count != right.view_count
+            || left.resolution != right.resolution
+            || (left.range - right.range).abs() > SHADOW_PARAM_EPSILON
+            || (left.bias - right.bias).abs() > SHADOW_PARAM_EPSILON
+            || (left.normal_bias - right.normal_bias).abs() > SHADOW_PARAM_EPSILON
+            || (left.strength - right.strength).abs() > SHADOW_PARAM_EPSILON
+        {
             return false;
         }
     }
-    slices_nearly_equal(&a.params, &b.params, SHADOW_PARAM_EPSILON)
-        && slices_nearly_equal(&a.extra, &b.extra, SHADOW_PARAM_EPSILON)
+    let view_count =
+        a.view_count
+            .min(newengine_render_feature_api::MAX_LOCAL_SHADOW_VIEWS as u32) as usize;
+    for i in 0..view_count {
+        let left = a.views[i];
+        let right = b.views[i];
+        if !shadow_matrices_match(left.light_mvp, right.light_mvp)
+            || !shadow_viewport_matches(left.viewport, right.viewport)
+            || !shadow_scissor_matches(left.scissor, right.scissor)
+            || left.light_slot != right.light_slot
+            || left.face_index != right.face_index
+            || left.resolution != right.resolution
+        {
+            return false;
+        }
+    }
+    true
+}
+
+#[inline]
+fn render_options_cast_shadows(options: &MeshRenderOptions) -> bool {
+    use newengine_model_domain_api::{MeshRenderRole, MeshShadowPolicy};
+    if matches!(
+        options.role,
+        MeshRenderRole::SkyBackground
+            | MeshRenderRole::CelestialBillboard
+            | MeshRenderRole::WeatherVolume
+            | MeshRenderRole::FirstPersonViewModel
+            | MeshRenderRole::CollisionProxy
+            | MeshRenderRole::EditorGizmo
+            | MeshRenderRole::DebugPrimitive
+    ) {
+        return false;
+    }
+    matches!(
+        options.shadow_policy,
+        MeshShadowPolicy::CastOnly
+            | MeshShadowPolicy::CastAndReceive
+            | MeshShadowPolicy::ProfileControlled
+    )
+}
+
+#[inline]
+fn shadow_caster_entity(world: &newengine_ecs::World, entity: newengine_ecs::EntityId) -> bool {
+    if world
+        .get::<crate::gameplay::EnvironmentDomeRenderState>(entity)
+        .is_some()
+        || world
+            .get::<DisplayVisibility>(entity)
+            .is_some_and(|visibility| !visibility.visible_in_game())
+    {
+        return false;
+    }
+
+    if world.get::<Primitive>(entity).is_some()
+        || world
+            .get::<crate::gameplay::ModelRenderComponent>(entity)
+            .is_some()
+    {
+        let options = world
+            .get::<MeshRenderOptions>(entity)
+            .cloned()
+            .unwrap_or_else(MeshRenderOptions::world_opaque);
+        return render_options_cast_shadows(&options);
+    }
+
+    if world.get::<ProceduralTerrain>(entity).is_some() {
+        let options = world
+            .get::<MeshRenderOptions>(entity)
+            .cloned()
+            .unwrap_or_else(MeshRenderOptions::terrain_patch);
+        return render_options_cast_shadows(&options);
+    }
+
+    false
+}
+
+#[inline]
+fn shadow_pose_change_invalidates(
+    world: &newengine_ecs::World,
+    entity: newengine_ecs::EntityId,
+) -> bool {
+    if !shadow_caster_entity(world, entity) {
+        return false;
+    }
+    // Wind/sway for instanced foliage is intentionally shadow-stable at P0.
+    // Rebuilding the whole directional/local atlas for every per-instance sway
+    // transform destroys caching. Foliage shadows update opportunistically on
+    // the next real light/caster refresh; alpha-cutout shape remains authored.
+    !world
+        .get::<MeshRenderOptions>(entity)
+        .is_some_and(|options| {
+            matches!(
+                options.role,
+                newengine_model_domain_api::MeshRenderRole::FoliageInstanced
+            )
+        })
+}
+
+#[inline]
+fn quantized_shadow_pose_component(value: f32) -> u64 {
+    if !value.is_finite() {
+        return 0;
+    }
+    // Ignore transform-system float noise below 0.1 mm / equivalent matrix delta.
+    // Real gameplay motion remains orders of magnitude larger and invalidates immediately.
+    ((value * 10_000.0).round() as i64) as u64
+}
+
+#[inline]
+fn shadow_caster_pose_hash(world: &newengine_ecs::World) -> u64 {
+    use newengine_math::hash_combine_u64;
+    let mut xor_hash = 0_u64;
+    let mut sum_hash = 0_u64;
+    let mut count = 0_u64;
+    for (entity, global) in world.query::<newengine_transform::GlobalTransform>() {
+        if !shadow_pose_change_invalidates(world, entity) {
+            continue;
+        }
+        let mut h = entity.stable_u64();
+        for value in global.0.to_cols_array() {
+            h = hash_combine_u64(h, quantized_shadow_pose_component(value));
+        }
+        xor_hash ^= h.rotate_left((entity.stable_u64() & 63) as u32);
+        sum_hash = sum_hash.wrapping_add(h.wrapping_mul(0x94d0_49bb_1331_11eb));
+        count = count.saturating_add(1);
+    }
+    hash_combine_u64(hash_combine_u64(count, xor_hash), sum_hash)
+}
+
+#[inline]
+fn shadow_caster_membership_hash(world: &newengine_ecs::World) -> u64 {
+    use newengine_math::hash_combine_u64;
+    let mut xor_hash = 0_u64;
+    let mut sum_hash = 0_u64;
+    let mut count = 0_u64;
+    let mut add = |entity: newengine_ecs::EntityId, geometry_key: u64| {
+        if !shadow_caster_entity(world, entity) {
+            return;
+        }
+        let material_key = world
+            .get::<MaterialRef>(entity)
+            .map(|material| material.id.raw())
+            .unwrap_or(0);
+        let mut h = hash_combine_u64(entity.stable_u64(), geometry_key);
+        h = hash_combine_u64(h, material_key);
+        xor_hash ^= h.rotate_left((entity.stable_u64() & 63) as u32);
+        sum_hash = sum_hash.wrapping_add(h.wrapping_mul(0x9e37_79b9_7f4a_7c15));
+        count = count.saturating_add(1);
+    };
+
+    for (entity, primitive) in world.query::<Primitive>() {
+        add(entity, primitive.id.0 ^ 0x5052_494d_0000_0001);
+    }
+    for (entity, terrain) in world.query::<ProceduralTerrain>() {
+        add(entity, terrain.mesh_key() ^ 0x5445_5252_0000_0002);
+    }
+    for (entity, model) in world.query::<crate::gameplay::ModelRenderComponent>() {
+        add(
+            entity,
+            newengine_materials::api::fnv1a64(model.logical_path.as_bytes())
+                ^ 0x4d4f_444c_0000_0003,
+        );
+    }
+
+    hash_combine_u64(hash_combine_u64(count, xor_hash), sum_hash)
 }
 
 impl RuntimeRenderController {
@@ -53,27 +287,60 @@ impl RuntimeRenderController {
     fn observe_shadow_caster_revision(&mut self, world: &newengine_ecs::World) -> u64 {
         let since_tick = self.shadows.caster_observed_tick;
         let first_observation = since_tick == 0;
-        let entity_changed = first_observation || world.entities_changed_since(since_tick);
-        let bounds_changed = first_observation
-            || world.any_changed_since::<Bounds>(since_tick)
-            || world.any_added_since::<Bounds>(since_tick);
-        // `Primitive` contains both immutable geometry identity (`id`) and mutable
-        // visual color. Sky/environment animation legitimately changes color every
-        // frame, so the coarse ECS changed tick is not a shadow-geometry signal.
-        // Runtime geometry replacement is represented by primitive insertion/lifecycle;
-        // procedural terrain has true mutable geometry and keeps full change tracking.
-        let geometry_changed = first_observation
+
+        let membership_maybe_dirty = first_observation
+            || world.entities_changed_since(since_tick)
+            || world.any_changed_since::<Primitive>(since_tick)
             || world.any_added_since::<Primitive>(since_tick)
             || world.any_changed_since::<ProceduralTerrain>(since_tick)
-            || world.any_added_since::<ProceduralTerrain>(since_tick);
-        let material_changed = first_observation
+            || world.any_added_since::<ProceduralTerrain>(since_tick)
+            || world.any_changed_since::<crate::gameplay::ModelRenderComponent>(since_tick)
+            || world.any_added_since::<crate::gameplay::ModelRenderComponent>(since_tick)
             || world.any_changed_since::<MeshRenderOptions>(since_tick)
             || world.any_added_since::<MeshRenderOptions>(since_tick)
             || world.any_changed_since::<MaterialRef>(since_tick)
-            || world.any_added_since::<MaterialRef>(since_tick);
-        let visibility_changed = first_observation
+            || world.any_added_since::<MaterialRef>(since_tick)
             || world.any_changed_since::<DisplayVisibility>(since_tick)
             || world.any_added_since::<DisplayVisibility>(since_tick);
+
+        let entity_changed = if membership_maybe_dirty {
+            let membership_hash = shadow_caster_membership_hash(world);
+            let changed =
+                first_observation || membership_hash != self.shadows.caster_membership_hash;
+            self.shadows.caster_membership_hash = membership_hash;
+            changed
+        } else {
+            false
+        };
+
+        // Transform propagation marks many static GlobalTransform components changed each
+        // frame. Compare actual caster matrices instead of ECS change ticks, otherwise a
+        // perfectly static scene can never reuse its shadow atlas.
+        let pose_hash = shadow_caster_pose_hash(world);
+        let bounds_changed = first_observation || pose_hash != self.shadows.caster_pose_hash;
+        self.shadows.caster_pose_hash = pose_hash;
+
+        let geometry_changed = entity_changed
+            || world
+                .query_changed::<ProceduralTerrain>(since_tick)
+                .any(|(entity, _)| shadow_caster_entity(world, entity));
+        let material_changed = first_observation
+            || world
+                .query_changed::<MeshRenderOptions>(since_tick)
+                .any(|(entity, _)| shadow_caster_entity(world, entity))
+            || world
+                .query_changed::<MaterialRef>(since_tick)
+                .any(|(entity, _)| shadow_caster_entity(world, entity));
+        let visibility_changed = first_observation
+            || world
+                .query_changed::<DisplayVisibility>(since_tick)
+                .any(|(entity, _)| {
+                    world.get::<Primitive>(entity).is_some()
+                        || world.get::<ProceduralTerrain>(entity).is_some()
+                        || world
+                            .get::<crate::gameplay::ModelRenderComponent>(entity)
+                            .is_some()
+                });
         let changed = entity_changed
             || bounds_changed
             || geometry_changed
@@ -138,16 +405,39 @@ impl RuntimeRenderController {
             return true;
         }
 
-        let shadow_projection_changed = self
+        let shadow_projection_mismatch = self
             .shadows
             .cached_shadow_frame
-            .map(|last| !shadow_frames_match_sample_space(last, plan.frame))
-            .unwrap_or(true);
-        if shadow_projection_changed {
+            .map(|last| shadow_frame_mismatch(last, plan.frame))
+            .unwrap_or(ShadowFrameMismatch {
+                texture: true,
+                ..ShadowFrameMismatch::default()
+            });
+        if shadow_projection_mismatch.any() {
             self.shadows.cache_projection_refresh_count = self
                 .shadows
                 .cache_projection_refresh_count
                 .saturating_add(1);
+            self.shadows.cache_projection_texture_refresh_count = self
+                .shadows
+                .cache_projection_texture_refresh_count
+                .saturating_add(u64::from(shadow_projection_mismatch.texture));
+            self.shadows.cache_projection_matrix_refresh_count = self
+                .shadows
+                .cache_projection_matrix_refresh_count
+                .saturating_add(u64::from(shadow_projection_mismatch.matrix));
+            self.shadows.cache_projection_split_refresh_count = self
+                .shadows
+                .cache_projection_split_refresh_count
+                .saturating_add(u64::from(shadow_projection_mismatch.split));
+            self.shadows.cache_projection_params_refresh_count = self
+                .shadows
+                .cache_projection_params_refresh_count
+                .saturating_add(u64::from(shadow_projection_mismatch.params));
+            self.shadows.cache_projection_extra_refresh_count = self
+                .shadows
+                .cache_projection_extra_refresh_count
+                .saturating_add(u64::from(shadow_projection_mismatch.extra));
             return true;
         }
 
@@ -181,6 +471,63 @@ impl RuntimeRenderController {
         self.shadows.current_caster_cull = None;
         self.shadows.cached_shadow_frame = None;
         self.shadows.cached_caster_revision = 0;
+    }
+}
+
+impl RuntimeRenderController {
+    #[inline]
+    pub(super) fn should_render_local_shadow_map_this_frame(
+        &mut self,
+        plan: newengine_render_feature_api::LocalShadowPlan,
+        world: &newengine_ecs::World,
+    ) -> bool {
+        let caster_revision = self.observe_shadow_caster_revision(world);
+        if !plan.is_active() {
+            self.invalidate_local_shadow_cache();
+            return false;
+        }
+        if !self.shadows.local_cache_valid {
+            self.shadows.local_cache_refresh_count =
+                self.shadows.local_cache_refresh_count.saturating_add(1);
+            return true;
+        }
+        let projection_changed = self
+            .shadows
+            .local_cached_shadow_frame
+            .map(|last| !local_shadow_frames_match_sample_space(last, plan.frame))
+            .unwrap_or(true);
+        if projection_changed || self.shadows.local_cached_caster_revision != caster_revision {
+            self.shadows.local_cache_refresh_count =
+                self.shadows.local_cache_refresh_count.saturating_add(1);
+            return true;
+        }
+        self.shadows.local_cache_reuse_count =
+            self.shadows.local_cache_reuse_count.saturating_add(1);
+        false
+    }
+
+    #[inline]
+    pub(super) fn mark_local_shadow_map_rendered(
+        &mut self,
+        plan: newengine_render_feature_api::LocalShadowPlan,
+    ) {
+        self.shadows.local_cache_valid = true;
+        self.shadows.local_cached_shadow_frame = Some(plan.frame);
+        self.shadows.local_cached_caster_revision = self.shadows.caster_revision;
+    }
+
+    #[inline]
+    pub(super) fn cached_local_shadow_frame(
+        &self,
+    ) -> Option<newengine_render_feature_api::LocalShadowFrame> {
+        self.shadows.local_cached_shadow_frame
+    }
+
+    #[inline]
+    pub(super) fn invalidate_local_shadow_cache(&mut self) {
+        self.shadows.local_cache_valid = false;
+        self.shadows.local_cached_shadow_frame = None;
+        self.shadows.local_cached_caster_revision = 0;
     }
 }
 

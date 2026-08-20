@@ -5,7 +5,9 @@ use newengine_render_api::{
 
 use crate::{DrawListKind, StandardRenderPhase};
 
-use super::{FrameGraphBuilder, RG_SHADOW_DEPTH, RG_SHADOW_MAP};
+use super::{
+    FrameGraphBuilder, RG_LOCAL_SHADOW_DEPTH, RG_LOCAL_SHADOW_MAP, RG_SHADOW_DEPTH, RG_SHADOW_MAP,
+};
 
 impl FrameGraphBuilder {
     pub fn shadow_map(mut self, enabled: bool, resolution: u32) -> Self {
@@ -132,6 +134,46 @@ impl FrameGraphBuilder {
                 pass.writes(RG_SHADOW_DEPTH, RenderGraphResourceUsage::DepthAttachment)
             };
             pass.draw_list(DrawListKind::ShadowCasters)
+        });
+        self
+    }
+
+    #[inline]
+    pub fn local_shadow_atlas(mut self, enabled: bool) -> Self {
+        if !enabled {
+            return self;
+        }
+        let Some(rt) = self.target.local_shadow_render_target else {
+            return self;
+        };
+        let extent = Extent2D::new(
+            self.target.local_shadow_extent.width.max(1),
+            self.target.local_shadow_extent.height.max(1),
+        );
+        if !self.has_resource(RG_LOCAL_SHADOW_MAP) {
+            self.graph.resources.push(
+                RenderGraphResourceDesc::external_render_target(
+                    RG_LOCAL_SHADOW_MAP,
+                    "local_shadow_atlas",
+                    rt,
+                    RenderGraphResourceUsage::ColorAttachment,
+                    extent,
+                    TextureFormat::R32Float,
+                )
+                .with_semantic(RenderGraphResourceSemantic::ShadowMap),
+            );
+        }
+        // The provider-created render target owns its fixed-function depth attachment,
+        // so no separate transient depth texture is required. Keep the logical id
+        // reserved for future transient/local-atlas backends.
+        let _ = RG_LOCAL_SHADOW_DEPTH;
+        self.add_phase_pass(StandardRenderPhase::LocalShadowMap, |pass| {
+            pass.with_domain(RenderGraphPassDomain::Render3d)
+                .writes(
+                    RG_LOCAL_SHADOW_MAP,
+                    RenderGraphResourceUsage::ColorAttachment,
+                )
+                .draw_list(DrawListKind::LocalShadowCasters)
         });
         self
     }

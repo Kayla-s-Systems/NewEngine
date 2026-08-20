@@ -23,7 +23,7 @@ impl RuntimeDrawListSet {
         providers: &[&dyn RenderDrawListProvider],
     ) -> Self {
         let mut this = Self {
-            lists: Vec::with_capacity(5),
+            lists: Vec::with_capacity(6),
         };
         for provider in providers {
             for &kind in provider.provided_draw_lists(ctx) {
@@ -149,6 +149,22 @@ impl<'a> DrawListBuildCtx<'a> {
         let value = super::super::record_render_phase(render, phase, |r| record(controller, r))?;
         Ok(Some(value))
     }
+
+    pub(crate) fn record_local_shadow_phase<T>(
+        &mut self,
+        record: impl FnOnce(&mut RuntimeRenderController, &mut dyn RenderApi) -> EngineResult<T>,
+    ) -> EngineResult<Option<T>> {
+        if !self.lists.contains(RenderDrawListKind::LocalShadowCasters) {
+            return Ok(None);
+        }
+        let controller = &mut *self.controller;
+        let render = &mut *self.render;
+        let value =
+            super::super::record_render_phase(render, RenderGraphPassKind::LocalShadowMap, |r| {
+                record(controller, r)
+            })?;
+        Ok(Some(value))
+    }
 }
 
 impl<'a> newengine_render_feature_api::DrawListBuildCtx for DrawListBuildCtx<'a> {
@@ -192,6 +208,41 @@ impl<'a> newengine_render_feature_api::DrawListBuildCtx for DrawListBuildCtx<'a>
         Ok(())
     }
 
+    fn record_procedural_terrain_local_shadow(
+        &mut self,
+        ctx: &SceneExtractionCtx<'_>,
+    ) -> EngineResult<()> {
+        let count = ctx
+            .local_shadow_frame
+            .view_count
+            .min(newengine_render_feature_api::MAX_LOCAL_SHADOW_VIEWS as u32)
+            as usize;
+        for view_index in 0..count {
+            let view = ctx.local_shadow_frame.views[view_index];
+            let light = ctx.local_shadow_frame.lights[view.light_slot as usize];
+            let mut local_lights = ctx.lights;
+            // Shadow-depth vertex shaders consume shadow_params.y as caster bias.
+            // Override the directional value per local view so a 1024 point/spot
+            // tile never inherits a CSM-tuned bias intended for a different depth span.
+            local_lights.shadow_params[1] = light.bias.max(0.0);
+            let _ = self.record_local_shadow_phase(|this, r| {
+                r.set_viewport(view.viewport)?;
+                r.set_scissor(view.scissor)?;
+                this.set_shadow_caster_cull(Some(view.caster_cull));
+                super::super::passes::draw_procedural_terrain_shadow(
+                    this,
+                    r,
+                    ctx.scene,
+                    ctx.lit,
+                    view.light_mvp,
+                    &local_lights,
+                    ctx.runtime,
+                )
+            })?;
+        }
+        Ok(())
+    }
+
     fn record_procedural_terrain_forward(
         &mut self,
         ctx: &SceneExtractionCtx<'_>,
@@ -205,6 +256,7 @@ impl<'a> newengine_render_feature_api::DrawListBuildCtx for DrawListBuildCtx<'a>
                 ctx.viewproj,
                 &ctx.lights,
                 ctx.shadow_frame.texture,
+                ctx.local_shadow_frame.texture,
                 ctx.runtime,
                 ctx.camera_position,
                 ctx.camera_forward,
@@ -283,6 +335,41 @@ impl<'a> newengine_render_feature_api::DrawListBuildCtx for DrawListBuildCtx<'a>
         Ok(())
     }
 
+    fn record_primitive_mesh_local_shadow(
+        &mut self,
+        ctx: &SceneExtractionCtx<'_>,
+    ) -> EngineResult<()> {
+        let count = ctx
+            .local_shadow_frame
+            .view_count
+            .min(newengine_render_feature_api::MAX_LOCAL_SHADOW_VIEWS as u32)
+            as usize;
+        for view_index in 0..count {
+            let view = ctx.local_shadow_frame.views[view_index];
+            let light = ctx.local_shadow_frame.lights[view.light_slot as usize];
+            let mut local_lights = ctx.lights;
+            local_lights.shadow_params[1] = light.bias.max(0.0);
+            let _ = self.record_local_shadow_phase(|this, r| {
+                r.set_viewport(view.viewport)?;
+                r.set_scissor(view.scissor)?;
+                this.set_shadow_caster_cull(Some(view.caster_cull));
+                super::super::passes::draw_primitives_shadow(
+                    this,
+                    r,
+                    ctx.scene,
+                    ctx.lit,
+                    view.light_mvp,
+                    &local_lights,
+                    ctx.runtime,
+                    ctx.camera_position,
+                    0,
+                    0.0,
+                )
+            })?;
+        }
+        Ok(())
+    }
+
     fn record_primitive_mesh_gbuffer(&mut self, ctx: &SceneExtractionCtx<'_>) -> EngineResult<()> {
         let _ = self.record_shadow_phase(RenderGraphPassKind::GBuffer, |this, r| {
             r.set_viewport(Viewport::full(ctx.viewport_extent))?;
@@ -318,6 +405,7 @@ impl<'a> newengine_render_feature_api::DrawListBuildCtx for DrawListBuildCtx<'a>
                 ctx.viewproj,
                 &ctx.lights,
                 ctx.shadow_frame.texture,
+                ctx.local_shadow_frame.texture,
                 ctx.runtime,
                 ctx.camera_position,
                 ctx.camera_forward,

@@ -37,6 +37,7 @@ pub struct PerDrawUbo {
     pub normal_texture: TextureId,
     pub roughness_texture: TextureId,
     pub shadow_texture: TextureId,
+    pub local_shadow_texture: TextureId,
     pub sampler: SamplerId,
     pub last_seen_frame: u64,
 }
@@ -171,14 +172,24 @@ impl RenderViewportState {
 pub(super) struct RenderShadowRuntimeState {
     pub(super) render_target: Option<RenderTargetId>,
     pub(super) render_target_resolution: u32,
+    pub(super) local_render_target: Option<RenderTargetId>,
+    pub(super) local_render_target_extent_key: u32,
     pub(super) cache_valid: bool,
+    pub(super) local_cache_valid: bool,
     pub(super) warmup_defer_frames_remaining: u8,
     pub(super) caster_observed_tick: u64,
+    pub(super) caster_membership_hash: u64,
+    pub(super) caster_pose_hash: u64,
     pub(super) caster_revision: u64,
     pub(super) cached_caster_revision: u64,
     pub(super) cache_reuse_count: u64,
     pub(super) cache_cold_refresh_count: u64,
     pub(super) cache_projection_refresh_count: u64,
+    pub(super) cache_projection_texture_refresh_count: u64,
+    pub(super) cache_projection_matrix_refresh_count: u64,
+    pub(super) cache_projection_split_refresh_count: u64,
+    pub(super) cache_projection_params_refresh_count: u64,
+    pub(super) cache_projection_extra_refresh_count: u64,
     pub(super) cache_caster_refresh_count: u64,
     pub(super) caster_entity_change_count: u64,
     pub(super) caster_bounds_change_count: u64,
@@ -187,6 +198,10 @@ pub(super) struct RenderShadowRuntimeState {
     pub(super) caster_visibility_change_count: u64,
     pub(super) current_caster_cull: Option<super::module_impl::shadows::ShadowCasterCull>,
     pub(super) cached_shadow_frame: Option<newengine_render_feature_api::ShadowFrame>,
+    pub(super) local_cached_shadow_frame: Option<newengine_render_feature_api::LocalShadowFrame>,
+    pub(super) local_cached_caster_revision: u64,
+    pub(super) local_cache_reuse_count: u64,
+    pub(super) local_cache_refresh_count: u64,
     pub(super) unsupported_point_warning_emitted: bool,
     pub(super) unsupported_spot_warning_emitted: bool,
 }
@@ -197,14 +212,24 @@ impl RenderShadowRuntimeState {
         Self {
             render_target: None,
             render_target_resolution: 0,
+            local_render_target: None,
+            local_render_target_extent_key: 0,
             cache_valid: false,
+            local_cache_valid: false,
             warmup_defer_frames_remaining: super::render_quality::SHADOW_WARMUP_DEFER_FRAMES,
             caster_observed_tick: 0,
+            caster_membership_hash: 0,
+            caster_pose_hash: 0,
             caster_revision: 0,
             cached_caster_revision: 0,
             cache_reuse_count: 0,
             cache_cold_refresh_count: 0,
             cache_projection_refresh_count: 0,
+            cache_projection_texture_refresh_count: 0,
+            cache_projection_matrix_refresh_count: 0,
+            cache_projection_split_refresh_count: 0,
+            cache_projection_params_refresh_count: 0,
+            cache_projection_extra_refresh_count: 0,
             cache_caster_refresh_count: 0,
             caster_entity_change_count: 0,
             caster_bounds_change_count: 0,
@@ -213,6 +238,10 @@ impl RenderShadowRuntimeState {
             caster_visibility_change_count: 0,
             current_caster_cull: None,
             cached_shadow_frame: None,
+            local_cached_shadow_frame: None,
+            local_cached_caster_revision: 0,
+            local_cache_reuse_count: 0,
+            local_cache_refresh_count: 0,
             unsupported_point_warning_emitted: false,
             unsupported_spot_warning_emitted: false,
         }
@@ -270,10 +299,36 @@ impl RenderMaterialGpuState {
     }
 }
 
+type ModelBundleLoadResult =
+    Arc<Mutex<Option<Result<newengine_model_domain_api::ModelAssetBundle, String>>>>;
+
+pub(super) struct ModelBundleLoadJob {
+    pub(super) ticket: TaskTicket,
+    pub(super) result: ModelBundleLoadResult,
+}
+
+impl ModelBundleLoadJob {
+    #[inline]
+    pub(super) fn is_complete(&self) -> bool {
+        self.ticket.is_complete()
+    }
+
+    #[inline]
+    pub(super) fn take_result(
+        &self,
+    ) -> Option<Result<newengine_model_domain_api::ModelAssetBundle, String>> {
+        self.result.lock().take()
+    }
+}
+
 /// Mesh and debug-geometry GPU caches.
 pub(super) struct RenderMeshGpuState {
     pub(super) prim_cache: PrimGpuCache,
     pub(super) terrain_cache: TerrainGpuCache,
+    pub(super) model_bundle_cache:
+        FxHashMap<String, Arc<newengine_model_domain_api::ModelAssetBundle>>,
+    pub(super) model_bundle_jobs: FxHashMap<String, ModelBundleLoadJob>,
+    pub(super) model_bundle_failures: FxHashMap<String, String>,
     pub(super) instance_uploader: InstanceBufferUploader,
     pub(super) collision_lines: Option<DebugLineGpu>,
 }
@@ -284,6 +339,9 @@ impl RenderMeshGpuState {
         Self {
             prim_cache: PrimGpuCache::default(),
             terrain_cache: TerrainGpuCache::default(),
+            model_bundle_cache: FxHashMap::default(),
+            model_bundle_jobs: FxHashMap::default(),
+            model_bundle_failures: FxHashMap::default(),
             instance_uploader: InstanceBufferUploader::default(),
             collision_lines: None,
         }
@@ -387,6 +445,7 @@ pub(super) struct RenderFrameRuntimeState {
     /// Selection produced while the render orchestration holds a scene lock.
     /// Applied by the playable viewport after that lock is released.
     pub(super) pending_pick_selection: Option<Option<newengine_ecs::EntityId>>,
+    pub(super) pending_pick_additive: bool,
     /// Last camera frame observed by render orchestration.
     ///
     /// This is a pure DTO snapshot from the camera contract boundary. Render
@@ -409,6 +468,7 @@ impl RenderFrameRuntimeState {
             frame_index: 0,
             last_pick_seq: 0,
             pending_pick_selection: None,
+            pending_pick_additive: false,
             last_camera_snapshot: None,
             sim_schedule: crate::gameplay::default_sim_schedule(),
             gameplay_systems: crate::gameplay::GameplaySystemProviderRegistry::new(),

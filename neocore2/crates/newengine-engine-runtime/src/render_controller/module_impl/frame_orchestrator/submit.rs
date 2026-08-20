@@ -1,6 +1,25 @@
 use super::*;
 use std::sync::OnceLock;
 
+#[inline]
+fn shadow_torture_acceptance_trace_enabled() -> bool {
+    std::env::var("NEWENGINE_PROJECT_LAUNCH_PRESET")
+        .ok()
+        .is_some_and(|value| value.trim().eq_ignore_ascii_case("shadow_test"))
+        || matches!(
+            std::env::var("NEWENGINE_SHADOW_TORTURE_TEST")
+                .ok()
+                .as_deref(),
+            Some("1")
+                | Some("true")
+                | Some("TRUE")
+                | Some("yes")
+                | Some("YES")
+                | Some("on")
+                | Some("ON")
+        )
+}
+
 fn shadow_receiver_debug_mode() -> f32 {
     static MODE: OnceLock<f32> = OnceLock::new();
     *MODE.get_or_init(|| {
@@ -50,6 +69,10 @@ impl RenderFrameOrchestrator {
         let view_frame = &world_frame.view_frame;
         let view = view_frame.view;
         let viewproj = view.view_projection;
+        // Temporal-AA jitter belongs to receiver rasterization, not to the physical
+        // shadow frustum. Feeding jittered VP into CSM fitting makes cascade matrices
+        // change every frame and defeats both texel snapping and shadow-map caching.
+        let shadow_viewproj = view_frame.unjittered_view_projection();
         passes::publish_camera_spawn(
             &controller.bridges.viewport,
             view.position_ws,
@@ -104,29 +127,24 @@ impl RenderFrameOrchestrator {
         let external_preview_target = controller.external_preview_target_active();
         let editor_active = controller.editor_viewport.is_active();
         let editor_shading = editor_active.then(|| controller.editor_viewport.shading());
-        let editor_debug_shading = editor_shading.is_some_and(|mode| {
-            mode != newengine_ui_api::UiEditorViewportShading::Lit
-        });
-        let editor_wireframe = editor_shading
-            == Some(newengine_ui_api::UiEditorViewportShading::Wireframe);
+        let editor_debug_shading = editor_shading
+            .is_some_and(|mode| mode != newengine_ui_api::UiEditorViewportShading::Lit);
+        let editor_wireframe =
+            editor_shading == Some(newengine_ui_api::UiEditorViewportShading::Wireframe);
         let editor_show_overlays = editor_active && {
             let state = controller.editor_viewport.state();
             state.show_grid || state.show_bounds || state.show_collision
         };
         // Editor debug-line overlays use the canonical BGRA viewport pipeline.
         // Keep authoring viewport LDR so grid/bounds/gizmos never bind an HDR-incompatible pipeline.
-        let hdr_scene_enabled = runtime_profile.hdr_scene_enabled()
-            && !external_preview_target
-            && !editor_active;
-        let deferred_enabled = runtime_profile.deferred_enabled()
-            && !external_preview_target
-            && !editor_debug_shading;
-        let postfx_enabled = runtime_profile.postfx_enabled()
-            && !external_preview_target
-            && !editor_debug_shading;
-        let shadows_enabled = runtime_profile.shadows_enabled()
-            && !external_preview_target
-            && !editor_debug_shading;
+        let hdr_scene_enabled =
+            runtime_profile.hdr_scene_enabled() && !external_preview_target && !editor_active;
+        let deferred_enabled =
+            runtime_profile.deferred_enabled() && !external_preview_target && !editor_debug_shading;
+        let postfx_enabled =
+            runtime_profile.postfx_enabled() && !external_preview_target && !editor_debug_shading;
+        let shadows_enabled =
+            runtime_profile.shadows_enabled() && !external_preview_target && !editor_debug_shading;
         let scene_color_format = if hdr_scene_enabled {
             crate::render_controller::render_quality::SCENE_HDR_COLOR_FORMAT
         } else {
@@ -155,7 +173,7 @@ impl RenderFrameOrchestrator {
         };
         cpu_profile.mark("pipeline");
 
-        if let Err(e) = controller.pump_scene_gpu_residency(r, scene) {
+        if let Err(e) = controller.pump_scene_gpu_residency(r, scene, thread_pool) {
             newengine_ulog_api::ulog::warn!(
                 "render residency: terrain gpu upload budget failed: {}",
                 e
@@ -185,6 +203,10 @@ impl RenderFrameOrchestrator {
             for point in &mut base_lights.point_color_intensity {
                 point[3] = 0.0;
             }
+            base_lights.spot_count_pad[0] = 0.0;
+            for spot in &mut base_lights.spot_color_intensity {
+                spot[3] = 0.0;
+            }
         }
         let extent = Extent2D::new(scope.vp_w, scope.vp_h);
         let gpu_safe_profile = runtime_profile.gpu_safe_enabled();
@@ -200,7 +222,7 @@ impl RenderFrameOrchestrator {
                 scene,
                 bounds,
                 lit,
-                viewproj,
+                shadow_viewproj,
                 camera_position,
                 [
                     snapshot.camera_forward.x,
@@ -238,6 +260,41 @@ impl RenderFrameOrchestrator {
         );
         cpu_profile.mark("shadow_plan");
 
+        let local_shadow_plan = if !shadows_enabled {
+            shadows::LocalShadowPlan::disabled(lit.white_texture)
+        } else {
+            match shadows::build_local_shadow_plan(
+                controller,
+                r,
+                scene.world(),
+                lit,
+                camera_position,
+            ) {
+                Ok(plan) => plan,
+                Err(e) => {
+                    newengine_ulog_api::ulog::warn!(
+                        "render controller: local shadow plan disabled for this frame: {}",
+                        e
+                    );
+                    shadows::LocalShadowPlan::disabled(lit.white_texture)
+                }
+            }
+        };
+        let render_local_shadow_map =
+            controller.should_render_local_shadow_map_this_frame(local_shadow_plan, scene.world());
+        let local_shadow_frame = if local_shadow_plan.is_active()
+            && !render_local_shadow_map
+            && !controller.shadows.local_cache_valid
+        {
+            shadows::LocalShadowFrame::disabled(lit.white_texture)
+        } else if local_shadow_plan.is_active() && !render_local_shadow_map {
+            controller
+                .cached_local_shadow_frame()
+                .unwrap_or(local_shadow_plan.frame)
+        } else {
+            local_shadow_plan.frame
+        };
+
         let shadow_frame = if shadow_plan.is_active()
             && !render_shadow_map
             && !controller.shadows.cache_valid
@@ -261,7 +318,9 @@ impl RenderFrameOrchestrator {
         } else {
             shadow_plan.frame
         };
-        let world_lights = base_lights.with_shadow_frame(shadow_frame);
+        let world_lights = base_lights
+            .with_shadow_frame(shadow_frame)
+            .with_local_shadow_frame(local_shadow_frame);
         let extraction = SceneExtractionCtx {
             scene,
             lit,
@@ -273,6 +332,9 @@ impl RenderFrameOrchestrator {
             shadow_plan,
             shadow_frame,
             render_shadow_map,
+            local_shadow_plan,
+            local_shadow_frame,
+            render_local_shadow_map,
             deferred: deferred_enabled,
             viewport_extent: snapshot.viewport_extent,
             surface_extent: snapshot.surface_extent,
@@ -358,6 +420,11 @@ impl RenderFrameOrchestrator {
                 0
             })
             .shadow_render_target(shadow_rt_for_graph)
+            .local_shadow(
+                render_local_shadow_map && local_shadow_plan.render_target().is_some(),
+                local_shadow_plan.render_target(),
+                local_shadow_frame.atlas_extent,
+            )
             .deferred(deferred_enabled)
             .hdr_scene(hdr_scene_enabled)
             .postfx(postfx_enabled)
@@ -474,6 +541,49 @@ impl RenderFrameOrchestrator {
         );
         if render_shadow_map {
             controller.mark_shadow_map_rendered(shadow_plan);
+        }
+        if render_local_shadow_map {
+            controller.mark_local_shadow_map_rendered(local_shadow_plan);
+        }
+        if shadow_torture_acceptance_trace_enabled()
+            && controller.frame.frame_index.is_multiple_of(120)
+        {
+            newengine_ulog_api::ulog::info!(
+                "shadow torture acceptance: frame={} pass(directional={} local={}) cache(directional_valid={} directional_reuse={} directional_refresh[cold={} projection={} mismatch[texture={} matrix={} split={} params={} extra={}] caster={}] local_valid={} local_reuse={} local_refresh={}) caster_revision={} caster_changes[entity={} bounds={} geometry={} material={} visibility={}] camera=({:.5},{:.5},{:.5}) forward=({:.6},{:.6},{:.6}) light_dir=({:.6},{:.6},{:.6}) jitter=({:.5},{:.5})",
+                controller.frame.frame_index,
+                render_shadow_map,
+                render_local_shadow_map,
+                controller.shadows.cache_valid,
+                controller.shadows.cache_reuse_count,
+                controller.shadows.cache_cold_refresh_count,
+                controller.shadows.cache_projection_refresh_count,
+                controller.shadows.cache_projection_texture_refresh_count,
+                controller.shadows.cache_projection_matrix_refresh_count,
+                controller.shadows.cache_projection_split_refresh_count,
+                controller.shadows.cache_projection_params_refresh_count,
+                controller.shadows.cache_projection_extra_refresh_count,
+                controller.shadows.cache_caster_refresh_count,
+                controller.shadows.local_cache_valid,
+                controller.shadows.local_cache_reuse_count,
+                controller.shadows.local_cache_refresh_count,
+                controller.shadows.caster_revision,
+                controller.shadows.caster_entity_change_count,
+                controller.shadows.caster_bounds_change_count,
+                controller.shadows.caster_geometry_change_count,
+                controller.shadows.caster_material_change_count,
+                controller.shadows.caster_visibility_change_count,
+                view.position_ws.x,
+                view.position_ws.y,
+                view.position_ws.z,
+                view.forward_ws.x,
+                view.forward_ws.y,
+                view.forward_ws.z,
+                base_lights.dir_dir_intensity[0],
+                base_lights.dir_dir_intensity[1],
+                base_lights.dir_dir_intensity[2],
+                view_frame.camera_snapshot.jitter_px[0],
+                view_frame.camera_snapshot.jitter_px[1],
+            );
         }
         controller
             .diagnostics

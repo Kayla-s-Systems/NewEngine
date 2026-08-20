@@ -2,7 +2,7 @@
 
 use crate::gameplay::PreparedRenderMesh;
 use newengine_core::render::{RenderApi, TextureFormat};
-use newengine_core::EngineResult;
+use newengine_core::{EngineResult, ThreadPoolHandle};
 use newengine_primitives::{Primitive, PrimitiveId};
 use newengine_procedural_noise::ProceduralTerrain;
 use newengine_scene::Scene;
@@ -14,11 +14,9 @@ use super::RuntimeRenderController;
 impl RuntimeRenderController {
     /// Warms the immutable scene pipeline while the loading projection is active.
     ///
-    /// Mesh residency is intentionally excluded from this method. Terrain and
-    /// primitive uploads are admitted by `pump_scene_gpu_residency`, which applies
-    /// explicit per-frame budgets. Performing an unbounded terrain sweep during
-    /// the final launch-gate handoff caused a visible freeze immediately before
-    /// the first playable frame.
+    /// Mesh residency is intentionally excluded from this method. Terrain,
+    /// imported-model and primitive uploads are admitted by
+    /// `pump_scene_gpu_residency`, which applies explicit per-frame budgets.
     pub(super) fn prewarm_scene_pipeline(&mut self, r: &mut dyn RenderApi) -> EngineResult<()> {
         let started = std::time::Instant::now();
         let scene_color_format = if self.runtime_profile().hdr_scene_enabled() {
@@ -42,21 +40,20 @@ impl RuntimeRenderController {
         Ok(())
     }
 
-    /// Advances render residency for streamed terrain without doing cold uploads
-    /// inside draw-list extraction.
-    ///
-    /// The scene streamer may create ECS chunks before their GPU buffers are
-    /// resident. This method performs a small, explicit upload budget before
-    /// feature extraction; draw recording then only references already-ready
-    /// mesh handles and skips not-ready chunks for the current frame.
+    /// Advances CPU/GPU residency for imported models, streamed terrain and
+    /// primitive meshes without doing cold model decode/upload work in draw-list
+    /// extraction.
     pub(super) fn pump_scene_gpu_residency(
         &mut self,
         r: &mut dyn RenderApi,
         scene: &Scene,
+        thread_pool: Option<&ThreadPoolHandle>,
     ) -> EngineResult<u32> {
+        let model_uploaded = self.pump_model_residency(r, scene, thread_pool)?;
+
         let interval = terrain_gpu_upload_interval_frames();
         if interval > 1 && !self.frame.frame_index.is_multiple_of(interval) {
-            return Ok(0);
+            return Ok(model_uploaded);
         }
 
         let world = scene.world();
@@ -128,13 +125,17 @@ impl RuntimeRenderController {
             }
         }
 
-        let total_uploaded = terrain_uploaded.saturating_add(primitive_uploaded);
+        let total_uploaded = model_uploaded
+            .saturating_add(terrain_uploaded)
+            .saturating_add(primitive_uploaded);
         if total_uploaded > 0 && newengine_ulog_api::ulog::trace_enabled() {
             newengine_ulog_api::ulog::trace!(
-                "render residency: bounded gpu uploads frame={} terrain={} primitives={} terrain_budget={} primitive_budget={}",
+                "render residency: bounded gpu uploads frame={} models={} terrain={} primitives={} model_budget={} terrain_budget={} primitive_budget={}",
                 self.frame.frame_index,
+                model_uploaded,
                 terrain_uploaded,
                 primitive_uploaded,
+                crate::runtime_policy::streaming_policy().model_gpu_uploads_per_frame,
                 terrain_budget,
                 primitive_budget,
             );

@@ -3,16 +3,8 @@ name = "newengine-material-domain-gameready"
 version = "0.1.0"
 edition = "2021"
 readme = "README.md"
-description = "GameReady runtime lit material-domain provider for NewEngine"
+description = "Compatibility facade for the generic standard lit material-domain provider"
 
 [dependencies]
-newengine-ulog-api = { path = "../newengine-ulog-api" }
-log = "0.4"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-
-newengine-assets = { path = "../newengine-assets" }
-newengine-render-api = { path = "../newengine-render-api" }
 newengine-material-domain-api = { path = "../newengine-material-domain-api" }
-newengine-plugin-host = { path = "../newengine-plugin-host" }
-newengine-primitives = { path = "../newengine-primitives" }
+newengine-material-domain-standard = { path = "../newengine-material-domain-standard" }

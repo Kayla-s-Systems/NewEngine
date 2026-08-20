@@ -240,7 +240,9 @@ fn resolve_game_gui_config(
         return None;
     }
 
-    let document_ref = game_ui_document_ref.map(str::trim).filter(|it| !it.is_empty())?;
+    let document_ref = game_ui_document_ref
+        .map(str::trim)
+        .filter(|it| !it.is_empty())?;
     let surface_id = game_ui_root_surface_id
         .map(str::trim)
         .filter(|it| !it.is_empty())

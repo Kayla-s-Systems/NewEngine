@@ -133,6 +133,7 @@ pub(super) fn build_draw_list_provider_request(
         },
         visibility: VisibilityMask {
             shadow_casters: ctx.visibility().shadow_casters,
+            local_shadow_casters: ctx.visibility().local_shadow_casters,
             opaque_forward: ctx.visibility().opaque_forward,
             transparent: ctx.visibility().transparent,
             ui: ctx.visibility().ui,

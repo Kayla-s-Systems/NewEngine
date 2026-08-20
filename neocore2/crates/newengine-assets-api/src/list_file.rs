@@ -418,6 +418,21 @@ impl ListFileHeader {
     }
 
     #[inline]
+    pub fn has_header_metadata(&self) -> bool {
+        (self.flags & LIST_FILE_FLAG_HEADER_METADATA) != 0
+    }
+
+    #[inline]
+    pub fn has_stable_file_id(&self) -> bool {
+        (self.flags & LIST_FILE_FLAG_STABLE_FILE_ID) != 0
+    }
+
+    #[inline]
+    pub fn has_import_settings_hash(&self) -> bool {
+        (self.flags & LIST_FILE_FLAG_IMPORT_SETTINGS_HASH) != 0
+    }
+
+    #[inline]
     pub fn content_kind_matches(&self, expected: u32) -> bool {
         self.content_kind == expected
     }

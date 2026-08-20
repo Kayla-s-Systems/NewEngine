@@ -125,4 +125,20 @@ pub(crate) fn configure_game_ready_lighting(
         contact_strength: spec.shadows.contact_strength,
         pcss: spec.shadows.pcss,
     });
+
+    world.insert_resource(
+        newengine_lighting::LocalShadowSettings {
+            enabled: spec.shadows.enabled,
+            point_enabled: true,
+            spot_enabled: true,
+            max_shadowed_lights: 4,
+            max_resolution: spec.shadows.resolution.min(2048).max(512),
+            min_resolution: 256,
+            max_distance: spec.shadows.max_distance.min(96.0).max(8.0),
+            bias: (spec.shadows.bias * 0.85).clamp(0.0002, 0.02),
+            normal_bias: spec.shadows.normal_bias.clamp(0.0, 0.25),
+            strength: 1.0,
+        }
+        .sanitized(),
+    );
 }

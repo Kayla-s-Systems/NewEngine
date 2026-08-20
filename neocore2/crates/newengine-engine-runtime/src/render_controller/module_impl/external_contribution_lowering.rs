@@ -307,6 +307,15 @@ fn lower_single_gpu_mesh_instance(
             ctx.shadow_frame.texture
         };
 
+    let local_shadow_texture = if matches!(
+        draw_list,
+        RenderDrawListKind::ShadowCasters | RenderDrawListKind::LocalShadowCasters
+    ) || !material.receive_shadows
+    {
+        lit.white_texture
+    } else {
+        ctx.local_shadow_frame.texture
+    };
     let mut per = this.ensure_per_draw_ubo_with_binding(
         r,
         lit,
@@ -315,6 +324,7 @@ fn lower_single_gpu_mesh_instance(
         normal_tex,
         roughness_tex,
         shadow_texture,
+        local_shadow_texture,
         sampler,
     )?;
     per.last_seen_frame = this.frame.frame_index;

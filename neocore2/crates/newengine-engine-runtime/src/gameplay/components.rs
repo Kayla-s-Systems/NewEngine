@@ -34,4 +34,4 @@ pub use scene::{
     PlayerActor, SceneAnchorFollow, SceneEntityAnchor, SceneEntityRole,
 };
 pub use world_activation::{ResidencyProgress, WorldActivationPhase, WorldActivationState};
-pub use world_runtime::{PreparedRenderMesh, WorldAssemblyProgress};
+pub use world_runtime::{ModelRenderComponent, PreparedRenderMesh, WorldAssemblyProgress};

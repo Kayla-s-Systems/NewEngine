@@ -69,6 +69,55 @@ pub(super) fn ensure_shadow_rt(
 }
 
 #[inline]
+pub(super) fn ensure_local_shadow_rt(
+    this: &mut RuntimeRenderController,
+    r: &mut dyn RenderApi,
+    requested_extent: Extent2D,
+) -> EngineResult<Option<(RenderTargetId, TextureId)>> {
+    let extent = Extent2D::new(
+        requested_extent.width.clamp(128, 8192),
+        requested_extent.height.clamp(128, 8192),
+    );
+    let extent_key = shadow_rt_extent_key(extent);
+    let recreate = this.shadows.local_render_target.is_none()
+        || this.shadows.local_render_target_extent_key != extent_key;
+    if recreate {
+        if let Some(old) = this.shadows.local_render_target.take() {
+            this.retire_render_target(old);
+        }
+        this.shadows.local_render_target_extent_key = 0;
+        this.invalidate_local_shadow_cache();
+        let rt = r.create_render_target(
+            RenderTargetDesc::new(
+                extent,
+                super::super::super::render_quality::SHADOW_MAP_COLOR_FORMAT,
+            )
+            .with_depth(TextureFormat::Depth32Float)
+            .with_label(format!(
+                "game_local_shadow_atlas_{}x{}",
+                extent.width, extent.height
+            )),
+        )?;
+        this.shadows.local_render_target = Some(rt);
+        this.shadows.local_render_target_extent_key = extent_key;
+    }
+    let Some(rt) = this.shadows.local_render_target else {
+        return Ok(None);
+    };
+    let texture = r.render_target_color_texture_id(rt)?;
+    Ok(Some((rt, texture)))
+}
+
+#[inline]
+pub(super) fn retire_local_shadow_rt(this: &mut RuntimeRenderController) {
+    if let Some(old) = this.shadows.local_render_target.take() {
+        this.retire_render_target(old);
+    }
+    this.shadows.local_render_target_extent_key = 0;
+    this.invalidate_local_shadow_cache();
+}
+
+#[inline]
 pub(super) fn retire_shadow_rt(this: &mut RuntimeRenderController) {
     if let Some(old) = this.shadows.render_target.take() {
         this.retire_render_target(old);

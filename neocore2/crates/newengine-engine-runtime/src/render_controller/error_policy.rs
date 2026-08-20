@@ -73,7 +73,9 @@ pub(crate) fn is_transient_shader_pipeline_error(error: &EngineError) -> bool {
         || text.contains("shader compile job is still pending")
         || text.contains("engine.threading shader admission timeout")
         || text.contains("leave_pending_and_retry_later")
-        || text.contains("pipeline pending_event"))
+        || text.contains("pipeline pending_event")
+        || text.contains("pipeline warmup pending")
+        || text.contains("bounded loading-frame work"))
         && !is_backend_device_lost_error(error)
 }
 
@@ -112,5 +114,26 @@ impl RuntimeRenderController {
         }
 
         Err(error)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bounded_pipeline_warmup_is_retryable_not_fatal() {
+        let error = EngineError::other(
+            "render material registry: pipeline warmup pending cache_key='scene=Bgra8Unorm|shadow=R32Float' policy='bounded loading-frame work'",
+        );
+        assert!(is_transient_shader_pipeline_error(&error));
+    }
+
+    #[test]
+    fn device_loss_is_never_classified_as_transient() {
+        let error = EngineError::other(
+            "pipeline warmup pending while Vulkan device lost VK_ERROR_DEVICE_LOST",
+        );
+        assert!(!is_transient_shader_pipeline_error(&error));
     }
 }

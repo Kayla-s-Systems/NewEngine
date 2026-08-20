@@ -158,9 +158,13 @@ pub struct LitPipeline {
 }
 
 /// std140 layout consumed by the current lit shader family.
-/// std140 size of the shared lit UBO. The final 16-byte slot stores the
-/// active camera forward vector for stable CSM receiver selection.
-pub const LIT_UBO_SIZE: u64 = 880;
+///
+/// The first 880 bytes preserve the legacy directional/point/CSM block. Spot-light
+/// data is appended at byte 880, followed by the local-shadow atlas matrices, tile
+/// transforms and point/spot shadow metadata. Keep this value synchronized with
+/// `newengine_render_feature_api::PackedLights::UBO_SIZE`; per-draw buffers are
+/// allocated from this contract before the runtime writes the complete packed block.
+pub const LIT_UBO_SIZE: u64 = 3168;
 
 /// Vertex stride consumed by the current instanced lit shader family.
 ///

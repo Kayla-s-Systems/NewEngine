@@ -10,6 +10,8 @@ use crate::{
 };
 
 pub const MAX_DIRECTIONAL_SHADOW_CASCADES: usize = 4;
+pub const MAX_LOCAL_SHADOW_LIGHTS: usize = 4;
+pub const MAX_LOCAL_SHADOW_VIEWS: usize = MAX_LOCAL_SHADOW_LIGHTS * 6;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ShadowLightKind {
     Directional,
@@ -34,6 +36,9 @@ pub struct ShadowCasterCull {
     pub half_extent_xy: f32,
     pub near: f32,
     pub far: f32,
+    /// 0 for orthographic directional culling; otherwise tan(vertical_fov/2)
+    /// for square perspective local-light shadow views.
+    pub perspective_tan_half_fov: f32,
 }
 
 impl ShadowCasterCull {
@@ -44,6 +49,18 @@ impl ShadowCasterCull {
             half_extent_xy: half_extent_xy.max(0.001),
             near: near.max(0.001),
             far: far.max(near.max(0.001) + 0.001),
+            perspective_tan_half_fov: 0.0,
+        }
+    }
+
+    #[inline]
+    pub fn perspective(light_view: Mat4, tan_half_fov: f32, near: f32, far: f32) -> Self {
+        Self {
+            light_view,
+            half_extent_xy: 0.0,
+            near: near.max(0.001),
+            far: far.max(near.max(0.001) + 0.001),
+            perspective_tan_half_fov: tan_half_fov.abs().max(0.001),
         }
     }
 
@@ -51,6 +68,14 @@ impl ShadowCasterCull {
     pub fn contains_sphere(self, center_ws: Vec3, radius_ws: f32) -> bool {
         let radius_ws = radius_ws.abs().max(0.001);
         let p = self.light_view.transform_point3(center_ws);
+        if self.perspective_tan_half_fov > 0.0 {
+            let depth = -p.z;
+            if depth + radius_ws < self.near || depth - radius_ws > self.far {
+                return false;
+            }
+            let half_extent = depth.max(self.near) * self.perspective_tan_half_fov + radius_ws;
+            return p.x.abs() <= half_extent && p.y.abs() <= half_extent;
+        }
         if p.x.abs() > self.half_extent_xy + radius_ws {
             return false;
         }
@@ -220,6 +245,151 @@ impl ShadowFrame {
             .saturating_sub(1)
             .min((MAX_DIRECTIONAL_SHADOW_CASCADES - 1) as u32) as usize;
         self.cascades[index.min(max)]
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct LocalShadowViewFrame {
+    pub light_mvp: Mat4,
+    pub viewport: Viewport,
+    pub scissor: RectI32,
+    pub light_slot: u32,
+    pub face_index: u32,
+    pub resolution: u32,
+    pub caster_cull: ShadowCasterCull,
+}
+
+impl LocalShadowViewFrame {
+    #[inline]
+    pub fn disabled() -> Self {
+        Self {
+            light_mvp: Mat4::IDENTITY,
+            viewport: Viewport {
+                x: 0.0,
+                y: 0.0,
+                w: 1.0,
+                h: 1.0,
+                min_depth: 0.0,
+                max_depth: 1.0,
+            },
+            scissor: RectI32::new(0, 0, 1, 1),
+            light_slot: 0,
+            face_index: 0,
+            resolution: 1,
+            caster_cull: ShadowCasterCull::perspective(Mat4::IDENTITY, 1.0, 0.1, 1.0),
+        }
+    }
+
+    #[inline]
+    pub fn atlas_uv_transform(self, atlas_extent: Extent2D) -> [f32; 4] {
+        let aw = atlas_extent.width.max(1) as f32;
+        let ah = atlas_extent.height.max(1) as f32;
+        [
+            self.viewport.w / aw,
+            self.viewport.h / ah,
+            self.viewport.x / aw,
+            self.viewport.y / ah,
+        ]
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct LocalShadowLightFrame {
+    pub stable_id: u64,
+    pub light_kind: ShadowLightKind,
+    /// Index in the corresponding PackedLights point/spot array.
+    pub packed_light_index: u32,
+    pub first_view: u32,
+    pub view_count: u32,
+    pub resolution: u32,
+    pub range: f32,
+    pub bias: f32,
+    pub normal_bias: f32,
+    pub strength: f32,
+}
+
+impl LocalShadowLightFrame {
+    #[inline]
+    pub fn disabled() -> Self {
+        Self {
+            stable_id: 0,
+            light_kind: ShadowLightKind::Point,
+            packed_light_index: 0,
+            first_view: 0,
+            view_count: 0,
+            resolution: 1,
+            range: 1.0,
+            bias: 0.0,
+            normal_bias: 0.0,
+            strength: 0.0,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct LocalShadowFrame {
+    pub texture: TextureId,
+    pub atlas_extent: Extent2D,
+    pub light_count: u32,
+    pub view_count: u32,
+    pub lights: [LocalShadowLightFrame; MAX_LOCAL_SHADOW_LIGHTS],
+    pub views: [LocalShadowViewFrame; MAX_LOCAL_SHADOW_VIEWS],
+}
+
+impl LocalShadowFrame {
+    #[inline]
+    pub fn disabled(fallback: TextureId) -> Self {
+        Self {
+            texture: fallback,
+            atlas_extent: Extent2D::new(1, 1),
+            light_count: 0,
+            view_count: 0,
+            lights: [LocalShadowLightFrame::disabled(); MAX_LOCAL_SHADOW_LIGHTS],
+            views: [LocalShadowViewFrame::disabled(); MAX_LOCAL_SHADOW_VIEWS],
+        }
+    }
+
+    #[inline]
+    pub fn is_active(self) -> bool {
+        self.light_count > 0 && self.view_count > 0
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct LocalShadowPlan {
+    pub target: Option<RenderTargetId>,
+    pub frame: LocalShadowFrame,
+}
+
+impl LocalShadowPlan {
+    #[inline]
+    pub fn disabled(fallback: TextureId) -> Self {
+        Self {
+            target: None,
+            frame: LocalShadowFrame::disabled(fallback),
+        }
+    }
+
+    #[inline]
+    pub fn active(target: RenderTargetId, frame: LocalShadowFrame) -> Self {
+        Self {
+            target: Some(target),
+            frame,
+        }
+    }
+
+    #[inline]
+    pub fn is_active(self) -> bool {
+        self.target.is_some() && self.frame.is_active()
+    }
+
+    #[inline]
+    pub fn render_target(self) -> Option<RenderTargetId> {
+        if self.is_active() {
+            self.target
+        } else {
+            None
+        }
     }
 }
 

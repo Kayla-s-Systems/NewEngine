@@ -1,6 +1,9 @@
 use super::*;
 use newengine_bounds::Bounds;
-use newengine_ui_api::{UiEventDispatchFrame, UiNodeEventTrigger, UiStatePatch};
+use newengine_ui_api::{
+    UiEditorInspectorSnapshot, UiEditorInspectorTransformSnapshot, UiEditorSceneEntitySnapshot,
+    UiEditorSceneSnapshot, UiEventDispatchFrame, UiNodeEventTrigger, UiStatePatch,
+};
 
 const EDITOR_INSPECTOR_SURFACE_ID: &str = "engine.ui.editor.inspector";
 const GAME_HUD_SURFACE_ID: &str = "game.hud";

@@ -1,0 +1,14 @@
+[package]
+name = "newengine-render-feature-standard"
+version = "0.1.0"
+edition = "2021"
+readme = "README.md"
+description = "Generic standard render feature pack for NewEngine runtime and editor"
+license = "Proprietary"
+
+[dependencies]
+newengine-core = { path = "../newengine-core" }
+newengine-render-feature-api = { path = "../newengine-render-feature-api" }
+newengine-lighting = { path = "../newengine-lighting" }
+newengine-material-domain-api = { path = "../newengine-material-domain-api" }
+newengine-material-domain-standard = { path = "../newengine-material-domain-standard" }

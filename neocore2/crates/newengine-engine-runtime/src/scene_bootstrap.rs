@@ -1,6 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use newengine_lighting::{AmbientLight, DirectionalLight, ShadowSettings};
+use newengine_lighting::{AmbientLight, DirectionalLight, LocalShadowSettings, ShadowSettings};
 use newengine_math::Vec3;
 use newengine_scene::components::{ActiveCamera, SceneRoot};
 use newengine_scene::{spawn_named, Scene, SceneState};
@@ -31,6 +31,9 @@ pub fn bootstrap_runtime_scene(scene: &mut Scene) {
         }
         if world.resource::<ShadowSettings>().is_none() {
             world.insert_resource(ShadowSettings::default());
+        }
+        if world.resource::<LocalShadowSettings>().is_none() {
+            world.insert_resource(LocalShadowSettings::default());
         }
 
         // Root: reuse when present.

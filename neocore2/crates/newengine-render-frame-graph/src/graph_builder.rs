@@ -114,6 +114,7 @@ impl FrameGraphBuilder {
                     params.shadow_resolution,
                     params.shadow_cascade_count,
                 ),
+                StandardRenderPhase::LocalShadowMap => self.local_shadow_atlas(true),
                 StandardRenderPhase::TessellationPrepare => self.tessellation_prepare(),
                 StandardRenderPhase::DepthPrepass => self.depth_prepass(),
                 StandardRenderPhase::ViewportGBuffer => self.gbuffer(),

@@ -2,7 +2,7 @@ mod project_browser;
 mod runtime_profiles;
 
 pub use project_browser::{
-    default_projects_root, discover_game_projects, discover_projects, present_project_browser,
+    default_projects_root, discover_game_projects, discover_projects, preferred_launch_id,
     ProjectBrowserEntry, ProjectBrowserSelection,
 };
 pub use runtime_profiles::{RuntimeProfileRegistration, RuntimeProfileRegistry};

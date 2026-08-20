@@ -281,6 +281,16 @@ pub(crate) fn bootstrap_game_ready_world_scene_impl(
         &rules,
     ));
 
+    super::shadow_torture::bootstrap_if_requested(
+        world,
+        prims,
+        mats,
+        layout.actors,
+        terrain,
+        materials,
+        map.player.start,
+    );
+
     newengine_ulog_api::ulog::info!(
         "game-ready bootstrap summary: title='{}' objective='{}' player={:?} terrain={:?} camera={:?} player_model_bound={} definitions={} prefabs={} static_world_models={} static_world_parts={} static_world_triangles={} mission_pickups={} mission_targets={} mission_hazards={} mission_goals={} foliage_enabled={} terrain_streaming_enabled={} terrain_chunk_radius={} terrain_unload_radius={} sky_mesh='{}' sky_definition_ref='{}' layout_environment={:?} layout_terrain={:?} layout_foliage={:?} layout_definitions={:?} layout_actors={:?} layout_cameras={:?}",
         map.title,

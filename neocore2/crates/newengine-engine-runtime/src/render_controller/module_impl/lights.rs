@@ -1,8 +1,10 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use newengine_lighting::{AmbientLight, DirectionalLight, PointLight};
+use newengine_lighting::{AmbientLight, DirectionalLight, PointLight, SpotLight};
 use newengine_math::Vec3;
-use newengine_render_feature_api::{LightSceneSnapshot, PackedLights, PointLightSnapshot};
+use newengine_render_feature_api::{
+    LightSceneSnapshot, PackedLights, PointLightSnapshot, SpotLightSnapshot,
+};
 use newengine_transform::GlobalTransform;
 
 #[inline]
@@ -35,10 +37,23 @@ pub(super) fn collect_light_scene_snapshot(world: &newengine_ecs::World) -> Ligh
         });
     }
     point_lights.sort_by(|a, b| a.stable_id.cmp(&b.stable_id));
+
+    let mut spot_lights = Vec::new();
+    for (e, light, gt) in world.query2::<SpotLight, GlobalTransform>() {
+        let m = gt.0;
+        spot_lights.push(SpotLightSnapshot {
+            stable_id: e.stable_u64(),
+            light: *light,
+            position: Vec3::new(m.w_axis.x, m.w_axis.y, m.w_axis.z),
+        });
+    }
+    spot_lights.sort_by(|a, b| a.stable_id.cmp(&b.stable_id));
+
     LightSceneSnapshot {
         ambient,
         directional,
         point_lights,
+        spot_lights,
     }
 }
 

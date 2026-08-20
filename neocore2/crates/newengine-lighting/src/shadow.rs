@@ -168,6 +168,70 @@ impl Default for ShadowSettings {
     }
 }
 
+/// Orthogonal local-light shadow policy.
+///
+/// Directional CSM and local shadows must coexist, so local-light shadowing is not
+/// encoded as another mutually-exclusive `ShadowMethod`. The renderer may build a
+/// directional atlas and a local point/spot atlas in the same frame.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LocalShadowSettings {
+    pub enabled: bool,
+    pub point_enabled: bool,
+    pub spot_enabled: bool,
+    /// Maximum number of local lights admitted into the atlas for one frame.
+    pub max_shadowed_lights: u32,
+    /// Highest per-light tile resolution chosen by the importance budget.
+    pub max_resolution: u32,
+    /// Lowest per-light tile resolution used for low-importance admitted lights.
+    pub min_resolution: u32,
+    /// Camera distance beyond which local lights stop consuming shadow budget.
+    pub max_distance: f32,
+    /// Receiver comparison bias in normalized local-light depth.
+    pub bias: f32,
+    /// Normal-offset bias scale used by local receivers.
+    pub normal_bias: f32,
+    /// Final local-light shadow visibility strength.
+    pub strength: f32,
+}
+
+impl LocalShadowSettings {
+    #[inline]
+    pub fn sanitized(mut self) -> Self {
+        self.max_shadowed_lights = self.max_shadowed_lights.clamp(1, 4);
+        self.min_resolution = self.min_resolution.clamp(128, 2048).next_power_of_two();
+        self.max_resolution = self
+            .max_resolution
+            .clamp(self.min_resolution, 2048)
+            .next_power_of_two();
+        self.max_distance = finite_or(self.max_distance, 48.0).clamp(2.0, 512.0);
+        self.bias = finite_or(self.bias, 0.0020).clamp(0.0, 0.05);
+        self.normal_bias = finite_or(self.normal_bias, 0.01).clamp(0.0, 0.25);
+        self.strength = finite_or(self.strength, 1.0).clamp(0.0, 1.0);
+        if !self.enabled || (!self.point_enabled && !self.spot_enabled) || self.strength <= 0.0 {
+            self.enabled = false;
+        }
+        self
+    }
+}
+
+impl Default for LocalShadowSettings {
+    #[inline]
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            point_enabled: true,
+            spot_enabled: true,
+            max_shadowed_lights: 4,
+            max_resolution: 1024,
+            min_resolution: 256,
+            max_distance: 48.0,
+            bias: 0.0020,
+            normal_bias: 0.01,
+            strength: 1.0,
+        }
+    }
+}
+
 #[inline]
 fn finite_or(v: f32, fallback: f32) -> f32 {
     if v.is_finite() {
@@ -205,5 +269,27 @@ mod tests {
         assert!(pcss.blocker_search_radius_texels <= 32.0);
         assert!(pcss.min_filter_radius_texels <= pcss.max_filter_radius_texels);
         assert!(pcss.stable_kernel_cell_texels >= 1.0);
+    }
+
+    #[test]
+    fn local_shadow_settings_keep_budget_bounded() {
+        let settings = LocalShadowSettings {
+            max_shadowed_lights: 99,
+            max_resolution: 8192,
+            min_resolution: 1,
+            max_distance: f32::INFINITY,
+            bias: -1.0,
+            normal_bias: 99.0,
+            strength: 2.0,
+            ..LocalShadowSettings::default()
+        }
+        .sanitized();
+        assert_eq!(settings.max_shadowed_lights, 4);
+        assert!(settings.min_resolution >= 128);
+        assert!(settings.max_resolution <= 2048);
+        assert!(settings.max_distance <= 512.0);
+        assert_eq!(settings.bias, 0.0);
+        assert!(settings.normal_bias <= 0.25);
+        assert_eq!(settings.strength, 1.0);
     }
 }

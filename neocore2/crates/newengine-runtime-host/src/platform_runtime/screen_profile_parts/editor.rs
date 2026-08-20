@@ -209,11 +209,12 @@ impl ScreenProfileRuntimeState {
                     changed = true;
                 }
                 "editor.viewport.show" => {
-                    self.active_menu_id = if self.active_menu_id.as_deref() == Some("__viewport_show") {
-                        None
-                    } else {
-                        Some("__viewport_show".to_owned())
-                    };
+                    self.active_menu_id =
+                        if self.active_menu_id.as_deref() == Some("__viewport_show") {
+                            None
+                        } else {
+                            Some("__viewport_show".to_owned())
+                        };
                 }
                 "editor.viewport.show.grid" => {
                     state.show_grid = !state.show_grid;
@@ -249,6 +250,13 @@ impl ScreenProfileRuntimeState {
                 "editor.viewport.transform.scale" => {
                     state.transform_mode = UiEditorTransformMode::Scale;
                     self.active_menu_id = None;
+                    changed = true;
+                }
+                "editor.viewport.transform.space" => {
+                    state.transform_space = match state.transform_space {
+                        UiEditorTransformSpace::World => UiEditorTransformSpace::Local,
+                        UiEditorTransformSpace::Local => UiEditorTransformSpace::World,
+                    };
                     changed = true;
                 }
                 "editor.viewport.snap.translate.toggle" => {
@@ -499,6 +507,9 @@ impl ScreenProfileRuntimeState {
 }
 
 fn next_editor_snap_value(current: f32, values: &[f32]) -> f32 {
-    let index = values.iter().position(|value| (*value - current).abs() < f32::EPSILON).unwrap_or(0);
+    let index = values
+        .iter()
+        .position(|value| (*value - current).abs() < f32::EPSILON)
+        .unwrap_or(0);
     values[(index + 1) % values.len()]
 }

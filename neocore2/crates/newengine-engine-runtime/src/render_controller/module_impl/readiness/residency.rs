@@ -1,6 +1,6 @@
 use newengine_procedural_noise::ProceduralTerrain;
 
-use crate::gameplay::{PreparedRenderMesh, WorldAssemblyProgress};
+use crate::gameplay::{ModelRenderComponent, PreparedRenderMesh, WorldAssemblyProgress};
 
 use super::super::RuntimeRenderController;
 use super::materials::{critical_scene_materials_ready, SceneMaterialLaunchPlan};
@@ -15,6 +15,7 @@ pub(super) fn critical_scene_residency_ready(
     let parts = [
         critical_static_world_ready(world),
         critical_primitive_gpu_ready(this, world),
+        critical_model_gpu_ready(this, world),
         critical_scene_materials_ready(this, r, world, material_plan),
         critical_terrain_gpu_ready(this, world),
     ];
@@ -52,6 +53,61 @@ fn critical_primitive_gpu_ready(
             waiting,
             total,
             0,
+        )
+    }
+}
+
+fn critical_model_gpu_ready(
+    this: &RuntimeRenderController,
+    world: &newengine_ecs::World,
+) -> LaunchReadiness {
+    let sources = world
+        .query::<ModelRenderComponent>()
+        .filter_map(|(_, model)| {
+            let source = model.logical_path.trim();
+            (!source.is_empty()).then(|| source.to_owned())
+        })
+        .collect::<std::collections::BTreeSet<_>>();
+    let total = sources.len() as u32;
+    if total == 0 {
+        return LaunchReadiness::ready("no imported model actors declared", 0, 0);
+    }
+
+    let mut resident = 0u32;
+    let mut failed = 0u32;
+    for source in &sources {
+        if this.gpu.meshes.model_bundle_failures.contains_key(source) {
+            failed = failed.saturating_add(1);
+            continue;
+        }
+        let Some(bundle) = this.gpu.meshes.model_bundle_cache.get(source) else {
+            continue;
+        };
+        let all_parts_resident = bundle.parts.iter().enumerate().all(|(part_index, _)| {
+            let id = RuntimeRenderController::model_part_primitive_id(bundle, part_index);
+            this.gpu.meshes.prim_cache.contains_key(&id)
+        });
+        if all_parts_resident {
+            resident = resident.saturating_add(1);
+        }
+    }
+    let waiting = total.saturating_sub(resident).saturating_sub(failed);
+    if waiting == 0 {
+        LaunchReadiness::ready(
+            format!(
+                "imported model residency terminal resident={resident}/{total} failed={failed}"
+            ),
+            total,
+            failed,
+        )
+    } else {
+        LaunchReadiness::pending(
+            format!(
+                "waiting for imported model RenderPrep/GPU residency resident={resident}/{total} waiting={waiting} failed={failed}"
+            ),
+            waiting,
+            total,
+            failed,
         )
     }
 }

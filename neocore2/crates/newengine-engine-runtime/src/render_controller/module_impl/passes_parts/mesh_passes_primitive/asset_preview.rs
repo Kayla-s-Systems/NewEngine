@@ -150,6 +150,7 @@ fn draw_asset_preview_grid_layer(
         lit.flat_normal_texture,
         lit.white_texture,
         lit.white_texture,
+        lit.white_texture,
         lit.clamp_sampler,
     )?;
     per.last_seen_frame = this.frame.frame_index;
@@ -369,6 +370,7 @@ pub fn draw_asset_preview_bundle(
             base_texture,
             normal_texture,
             roughness_texture,
+            lit.white_texture,
             lit.white_texture,
             sampler,
         )?;

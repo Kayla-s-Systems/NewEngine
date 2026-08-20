@@ -69,6 +69,7 @@ pub(super) fn render_graph_pass_kind_tag(kind: RenderGraphPassKind) -> u8 {
         RenderGraphPassKind::DepthPrepass => 1,
         RenderGraphPassKind::ShadowMap => 2,
         RenderGraphPassKind::ShadowCascadeMap => 3,
+        RenderGraphPassKind::LocalShadowMap => 20,
         RenderGraphPassKind::TessellationPrepare => 4,
         RenderGraphPassKind::GBuffer => 5,
         RenderGraphPassKind::DeferredLighting => 6,
@@ -94,6 +95,7 @@ pub(super) fn render_graph_pass_kind_from_tag(tag: u8) -> Result<RenderGraphPass
         1 => Ok(RenderGraphPassKind::DepthPrepass),
         2 => Ok(RenderGraphPassKind::ShadowMap),
         3 => Ok(RenderGraphPassKind::ShadowCascadeMap),
+        20 => Ok(RenderGraphPassKind::LocalShadowMap),
         4 => Ok(RenderGraphPassKind::TessellationPrepare),
         5 => Ok(RenderGraphPassKind::GBuffer),
         6 => Ok(RenderGraphPassKind::DeferredLighting),
@@ -118,6 +120,7 @@ pub(super) fn render_graph_pass_kind_from_tag(tag: u8) -> Result<RenderGraphPass
 pub(super) fn render_draw_list_kind_tag(kind: RenderDrawListKind) -> u8 {
     match kind {
         RenderDrawListKind::ShadowCasters => 1,
+        RenderDrawListKind::LocalShadowCasters => 6,
         RenderDrawListKind::OpaqueForward => 2,
         RenderDrawListKind::Transparent => 3,
         RenderDrawListKind::Ui => 4,
@@ -129,6 +132,7 @@ pub(super) fn render_draw_list_kind_tag(kind: RenderDrawListKind) -> u8 {
 pub(super) fn render_draw_list_kind_from_tag(tag: u8) -> Result<RenderDrawListKind, String> {
     match tag {
         1 => Ok(RenderDrawListKind::ShadowCasters),
+        6 => Ok(RenderDrawListKind::LocalShadowCasters),
         2 => Ok(RenderDrawListKind::OpaqueForward),
         3 => Ok(RenderDrawListKind::Transparent),
         4 => Ok(RenderDrawListKind::Ui),

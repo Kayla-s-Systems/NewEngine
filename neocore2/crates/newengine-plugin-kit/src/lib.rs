@@ -15,7 +15,9 @@ pub mod definition;
 pub mod prelude {
     pub use crate::definition::*;
     pub use crate::plugin_api::*;
-    pub use crate::{export_newengine_plugin, export_newengine_plugin_root};
+    pub use crate::{
+        export_newengine_plugin, export_newengine_plugin_root, export_newengine_plugin_signature,
+    };
 }
 
 /// Export a plugin root from explicitly declared create callbacks.
@@ -29,6 +31,46 @@ macro_rules! export_newengine_plugin_root {
     };
     ($create:path, $ui_assets_v1:path, $editor_extensions_v1:path) => {
         $crate::plugin_api::export_plugin_root!($create, $ui_assets_v1, $editor_extensions_v1);
+    };
+}
+
+/// Exports the lightweight signature consumed by descriptor-first plugin discovery.
+///
+/// This macro is separate from `export_newengine_plugin!` because several legacy
+/// providers already define the symbol manually. New providers should use both macros.
+#[macro_export]
+macro_rules! export_newengine_plugin_signature {
+    (
+        id = $id:expr,
+        name = $name:expr,
+        kind = $kind:expr,
+        phase = $phase:expr $(,)?
+    ) => {
+        $crate::export_newengine_plugin_signature!(
+            id = $id,
+            name = $name,
+            version = env!("CARGO_PKG_VERSION"),
+            kind = $kind,
+            phase = $phase,
+        );
+    };
+    (
+        id = $id:expr,
+        name = $name:expr,
+        version = $version:expr,
+        kind = $kind:expr,
+        phase = $phase:expr $(,)?
+    ) => {
+        #[no_mangle]
+        pub extern "C" fn newengine_plugin_signature_v1() -> $crate::plugin_api::PluginSignatureV1 {
+            $crate::plugin_api::PluginSignatureV1 {
+                id: $crate::abi_stable::std_types::RString::from($id),
+                name: $crate::abi_stable::std_types::RString::from($name),
+                version: $crate::abi_stable::std_types::RString::from($version),
+                kind: $kind,
+                bootstrap_phase: $phase,
+            }
+        }
     };
 }
 

@@ -7,11 +7,11 @@ use newengine_material_domain_api::{
 use newengine_primitives::PrimitiveVertex;
 use newengine_render_api::*;
 
-use crate::manifest::{GameReadyLitShaderManifest, GameReadyShaderAssetRef};
+use crate::manifest::{StandardLitShaderManifest, StandardShaderAssetRef};
 
 const WARMUP_CPU_BUDGET_MS: f32 = 4.0;
 
-/// Incremental GameReady pipeline builder.
+/// Incremental Standard pipeline builder.
 ///
 /// The old builder materialized every shader/resource/pipeline in one call. That
 /// made a cold driver/cache path indistinguishable from a hung loading screen.
@@ -20,7 +20,7 @@ const WARMUP_CPU_BUDGET_MS: f32 = 4.0;
 /// slow stage yields immediately so the event loop can present the loading UI.
 pub(super) struct PendingLitPipelineBuild {
     profile: MaterialPipelineBuildProfile,
-    manifest: GameReadyLitShaderManifest,
+    manifest: StandardLitShaderManifest,
     stage: u8,
 
     vs: Option<ShaderId>,
@@ -60,7 +60,7 @@ pub(super) struct PendingLitPipelineBuild {
 impl PendingLitPipelineBuild {
     pub(super) fn new(
         profile: MaterialPipelineBuildProfile,
-        manifest: GameReadyLitShaderManifest,
+        manifest: StandardLitShaderManifest,
     ) -> Self {
         Self {
             profile,
@@ -111,7 +111,7 @@ impl PendingLitPipelineBuild {
             if self.stage >= 25 {
                 let pipeline = self.finish()?;
                 newengine_ulog_api::ulog::info!(
-                    "gameready material domain: staged pipeline ready stages={} operations_this_frame={} elapsed_ms={:.2} deferred_pipelines={}",
+                    "standard material domain: staged pipeline ready stages={} operations_this_frame={} elapsed_ms={:.2} deferred_pipelines={}",
                     self.stage,
                     operations,
                     frame_started.elapsed().as_secs_f32() * 1000.0,
@@ -126,7 +126,7 @@ impl PendingLitPipelineBuild {
             let op_ms = op_started.elapsed().as_secs_f32() * 1000.0;
             if op_ms >= 8.0 {
                 newengine_ulog_api::ulog::warn!(
-                    "gameready material domain: warmup stage slow stage={} elapsed_ms={:.2} deferred_pipelines={} action='yield_after_stage'",
+                    "standard material domain: warmup stage slow stage={} elapsed_ms={:.2} deferred_pipelines={} action='yield_after_stage'",
                     self.stage.saturating_sub(1),
                     op_ms,
                     self.profile.deferred_pipelines,
@@ -139,7 +139,7 @@ impl PendingLitPipelineBuild {
         }
 
         newengine_ulog_api::ulog::debug!(
-            "gameready material domain: staged warmup progress stage={} previous_stage={} operations={} elapsed_ms={:.2} budget_ms={:.2}",
+            "standard material domain: staged warmup progress stage={} previous_stage={} operations={} elapsed_ms={:.2} budget_ms={:.2}",
             self.stage,
             start_stage,
             operations,
@@ -156,7 +156,7 @@ impl PendingLitPipelineBuild {
                     r,
                     ShaderStage::Vertex,
                     &self.manifest.shaders.lit_vs,
-                    "gameready_lit_vs",
+                    "standard_lit_vs",
                 )?)
             }
             1 => {
@@ -164,7 +164,7 @@ impl PendingLitPipelineBuild {
                     r,
                     ShaderStage::Fragment,
                     &self.manifest.shaders.lit_fs,
-                    "gameready_lit_fs",
+                    "standard_lit_fs",
                 )?)
             }
             2 if self.profile.deferred_pipelines => {
@@ -172,7 +172,7 @@ impl PendingLitPipelineBuild {
                     r,
                     ShaderStage::Fragment,
                     &self.manifest.shaders.gbuffer_fs,
-                    "gameready_gbuffer_lit_fs",
+                    "standard_gbuffer_lit_fs",
                 )?)
             }
             3 if self.profile.deferred_pipelines => {
@@ -180,7 +180,7 @@ impl PendingLitPipelineBuild {
                     r,
                     ShaderStage::Fragment,
                     &self.manifest.shaders.gbuffer_terrain_fs,
-                    "gameready_gbuffer_terrain_fs",
+                    "standard_gbuffer_terrain_fs",
                 )?)
             }
             4 => {
@@ -188,7 +188,7 @@ impl PendingLitPipelineBuild {
                     r,
                     ShaderStage::Fragment,
                     &self.manifest.shaders.terrain_fs,
-                    "gameready_terrain_surface_fs",
+                    "standard_terrain_surface_fs",
                 )?)
             }
             5 => {
@@ -196,7 +196,7 @@ impl PendingLitPipelineBuild {
                     r,
                     ShaderStage::Vertex,
                     &self.manifest.shaders.shadow_vs,
-                    "gameready_sun_shadow_depth_vs",
+                    "standard_sun_shadow_depth_vs",
                 )?)
             }
             6 => {
@@ -204,7 +204,7 @@ impl PendingLitPipelineBuild {
                     r,
                     ShaderStage::Fragment,
                     &self.manifest.shaders.shadow_fs,
-                    "gameready_sun_shadow_depth_fs",
+                    "standard_sun_shadow_depth_fs",
                 )?)
             }
             7 => {
@@ -212,7 +212,7 @@ impl PendingLitPipelineBuild {
                     r,
                     ShaderStage::Vertex,
                     &self.manifest.shaders.instanced_vs,
-                    "gameready_lit_instanced_vs",
+                    "standard_lit_instanced_vs",
                 )?)
             }
             8 => {
@@ -220,7 +220,7 @@ impl PendingLitPipelineBuild {
                     r,
                     ShaderStage::Fragment,
                     &self.manifest.shaders.instanced_fs,
-                    "gameready_lit_instanced_fs",
+                    "standard_lit_instanced_fs",
                 )?)
             }
             9 => {
@@ -228,7 +228,7 @@ impl PendingLitPipelineBuild {
                     r,
                     ShaderStage::Vertex,
                     &self.manifest.shaders.shadow_instanced_vs,
-                    "gameready_sun_shadow_instanced_vs",
+                    "standard_sun_shadow_instanced_vs",
                 )?)
             }
             10 => self.create_bind_resources(r)?,
@@ -305,8 +305,11 @@ impl PendingLitPipelineBuild {
                     BindingKind::Texture2D,
                     BindingKind::Texture2D,
                     BindingKind::Sampler,
+                    // binding 6: local point/spot shadow atlas. Appended after the
+                    // legacy sampler to preserve existing shader binding numbers.
+                    BindingKind::Texture2D,
                 ])
-                .with_label("gameready_lit_bgl"),
+                .with_label("standard_lit_bgl"),
             )?,
         );
         self.white_texture = Some(
@@ -316,7 +319,7 @@ impl PendingLitPipelineBuild {
                     TextureFormat::Rgba8Unorm,
                     TextureUsage::Sampled,
                 )
-                .with_label("gameready_white_tex")
+                .with_label("standard_white_tex")
                 .with_data(vec![255, 255, 255, 255]),
             )?,
         );
@@ -327,21 +330,21 @@ impl PendingLitPipelineBuild {
                     TextureFormat::Rgba8Unorm,
                     TextureUsage::Sampled,
                 )
-                .with_label("gameready_flat_normal_tex")
+                .with_label("standard_flat_normal_tex")
                 .with_data(vec![128, 128, 255, 255]),
             )?,
         );
         self.repeat_sampler = Some(
             r.create_sampler(
                 SamplerDesc::default()
-                    .with_label("gameready_repeat_sampler")
+                    .with_label("standard_repeat_sampler")
                     .with_repeat(),
             )?,
         );
         self.clamp_sampler = Some(
             r.create_sampler(
                 SamplerDesc::default()
-                    .with_label("gameready_clamp_sampler")
+                    .with_label("standard_clamp_sampler")
                     .with_address_u(AddressMode::ClampToEdge)
                     .with_address_v(AddressMode::ClampToEdge)
                     .with_address_w(AddressMode::ClampToEdge),
@@ -373,16 +376,16 @@ impl PendingLitPipelineBuild {
             vec![primitive_vertex_layout()]
         };
         let label = match (double_sided, instanced, sky) {
-            (_, true, true) => "gameready_sky_pipeline_instanced",
-            (true, true, false) => "gameready_lit_pipeline_instanced_double_sided",
-            (false, true, false) => "gameready_lit_pipeline_instanced",
-            (true, false, false) => "gameready_lit_pipeline_double_sided",
-            _ => "gameready_lit_pipeline",
+            (_, true, true) => "standard_sky_pipeline_instanced",
+            (true, true, false) => "standard_lit_pipeline_instanced_double_sided",
+            (false, true, false) => "standard_lit_pipeline_instanced",
+            (true, false, false) => "standard_lit_pipeline_double_sided",
+            _ => "standard_lit_pipeline",
         };
         let mut desc = PipelineDesc::new(vs, fs, self.profile.scene_hdr_color_format)
             .with_label(label)
             .with_cache_key(format!(
-                "gameready:{label}:{:?}",
+                "standard:{label}:{:?}",
                 self.profile.scene_hdr_color_format
             ))
             .as_warmup()
@@ -404,7 +407,7 @@ impl PendingLitPipelineBuild {
     }
 
     fn terrain_pipeline_desc(&self) -> MaterialDomainResult<PipelineDesc> {
-        let label = "gameready_terrain_surface_pipeline";
+        let label = "standard_terrain_surface_pipeline";
         Ok(PipelineDesc::new(
             required(self.vs, "vs")?,
             required(self.terrain_fs, "terrain_fs")?,
@@ -412,7 +415,7 @@ impl PendingLitPipelineBuild {
         )
         .with_label(label)
         .with_cache_key(format!(
-            "gameready:{label}:{:?}",
+            "standard:{label}:{:?}",
             self.profile.scene_hdr_color_format
         ))
         .as_warmup()
@@ -423,14 +426,14 @@ impl PendingLitPipelineBuild {
     }
 
     fn gbuffer_terrain_pipeline_desc(&self) -> MaterialDomainResult<PipelineDesc> {
-        let label = "gameready_gbuffer_terrain_pipeline";
+        let label = "standard_gbuffer_terrain_pipeline";
         Ok(PipelineDesc::new(
             required(self.vs, "vs")?,
             required(self.gbuffer_terrain_fs, "gbuffer_terrain_fs")?,
             TextureFormat::Rgba8Unorm,
         )
         .with_label(label)
-        .with_cache_key(format!("gameready:{label}:gbuffer"))
+        .with_cache_key(format!("standard:{label}:gbuffer"))
         .as_warmup()
         .with_topology(PrimitiveTopology::TriangleList)
         .with_vertex_layouts(vec![primitive_vertex_layout()])
@@ -445,10 +448,10 @@ impl PendingLitPipelineBuild {
         instanced: bool,
     ) -> MaterialDomainResult<PipelineDesc> {
         let label = match (double_sided, instanced) {
-            (true, true) => "gameready_gbuffer_lit_pipeline_instanced_double_sided",
-            (false, true) => "gameready_gbuffer_lit_pipeline_instanced",
-            (true, false) => "gameready_gbuffer_lit_pipeline_double_sided",
-            _ => "gameready_gbuffer_lit_pipeline",
+            (true, true) => "standard_gbuffer_lit_pipeline_instanced_double_sided",
+            (false, true) => "standard_gbuffer_lit_pipeline_instanced",
+            (true, false) => "standard_gbuffer_lit_pipeline_double_sided",
+            _ => "standard_gbuffer_lit_pipeline",
         };
         let vs = if instanced {
             required(self.instanced_vs, "instanced_vs")?
@@ -466,7 +469,7 @@ impl PendingLitPipelineBuild {
             TextureFormat::Rgba8Unorm,
         )
         .with_label(label)
-        .with_cache_key(format!("gameready:{label}:gbuffer"))
+        .with_cache_key(format!("standard:{label}:gbuffer"))
         .as_warmup()
         .with_topology(PrimitiveTopology::TriangleList)
         .with_vertex_layouts(layouts)
@@ -485,10 +488,10 @@ impl PendingLitPipelineBuild {
         instanced: bool,
     ) -> MaterialDomainResult<PipelineDesc> {
         let label = match (double_sided, instanced) {
-            (true, true) => "gameready_sun_shadow_depth_pipeline_instanced_double_sided",
-            (false, true) => "gameready_sun_shadow_depth_pipeline_instanced",
-            (true, false) => "gameready_sun_shadow_depth_pipeline_double_sided",
-            _ => "gameready_sun_shadow_depth_pipeline",
+            (true, true) => "standard_sun_shadow_depth_pipeline_instanced_double_sided",
+            (false, true) => "standard_sun_shadow_depth_pipeline_instanced",
+            (true, false) => "standard_sun_shadow_depth_pipeline_double_sided",
+            _ => "standard_sun_shadow_depth_pipeline",
         };
         let vs = if instanced {
             required(self.shadow_instanced_vs, "shadow_instanced_vs")?
@@ -507,7 +510,7 @@ impl PendingLitPipelineBuild {
         )
         .with_label(label)
         .with_cache_key(format!(
-            "gameready:{label}:{:?}",
+            "standard:{label}:{:?}",
             self.profile.shadow_map_color_format
         ))
         .as_warmup()
@@ -655,7 +658,7 @@ fn gbuffer_color_formats() -> Vec<TextureFormat> {
 fn create_manifest_shader(
     r: &mut dyn MaterialRenderDevice,
     stage: ShaderStage,
-    shader: &GameReadyShaderAssetRef,
+    shader: &StandardShaderAssetRef,
     label: &str,
 ) -> MaterialDomainResult<ShaderId> {
     let source_kind = shader.source_kind()?;
@@ -676,7 +679,7 @@ fn create_manifest_shader(
     let elapsed_ms = started_at.elapsed().as_secs_f64() * 1000.0;
     match &result {
         Ok(id) if elapsed_ms >= 8.0 => newengine_ulog_api::ulog::warn!(
-            "gameready material domain: shader stage exceeded warmup budget label='{}' path='{}' stage='{:?}' shader_id={:?} elapsed_ms={:.2}",
+            "standard material domain: shader stage exceeded warmup budget label='{}' path='{}' stage='{:?}' shader_id={:?} elapsed_ms={:.2}",
             label,
             shader.logical_path,
             stage,
@@ -684,7 +687,7 @@ fn create_manifest_shader(
             elapsed_ms,
         ),
         Err(error) => newengine_ulog_api::ulog::error!(
-            "gameready material domain: shader build failed label='{}' path='{}' stage='{:?}' err='{}' elapsed_ms={:.2}",
+            "standard material domain: shader build failed label='{}' path='{}' stage='{:?}' err='{}' elapsed_ms={:.2}",
             label,
             shader.logical_path,
             stage,

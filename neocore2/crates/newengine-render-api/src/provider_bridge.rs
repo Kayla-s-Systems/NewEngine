@@ -64,6 +64,7 @@ pub struct SceneExtractionSnapshot {
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
 pub struct VisibilityMask {
     pub shadow_casters: bool,
+    pub local_shadow_casters: bool,
     pub opaque_forward: bool,
     pub transparent: bool,
     pub ui: bool,
@@ -75,6 +76,7 @@ impl VisibilityMask {
     pub const fn allows(self, kind: RenderDrawListKind) -> bool {
         match kind {
             RenderDrawListKind::ShadowCasters => self.shadow_casters,
+            RenderDrawListKind::LocalShadowCasters => self.local_shadow_casters,
             RenderDrawListKind::OpaqueForward => self.opaque_forward,
             RenderDrawListKind::Transparent => self.transparent,
             RenderDrawListKind::Ui => self.ui,

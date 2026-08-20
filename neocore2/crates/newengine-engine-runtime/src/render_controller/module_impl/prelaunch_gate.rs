@@ -83,7 +83,7 @@ impl RuntimeRenderController {
                 // Admit bounded terrain/primitive packets before evaluating readiness.
                 // The previous order checked readiness first, so work completed by this
                 // frame's pump could not release Play until the following frame.
-                if let Err(e) = self.pump_scene_gpu_residency(r, &scene) {
+                if let Err(e) = self.pump_scene_gpu_residency(r, &scene, ctx.thread_pool()) {
                     newengine_ulog_api::ulog::warn!(
                         "render prelaunch: scene GPU residency pump failed: {}",
                         e

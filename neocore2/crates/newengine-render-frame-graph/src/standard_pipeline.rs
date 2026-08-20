@@ -13,7 +13,10 @@ pub struct StandardRuntimePipelineDesc {
     pub viewport_is_surface: bool,
     pub viewport_render_target: Option<RenderTargetId>,
     pub shadow_render_target: Option<RenderTargetId>,
+    pub local_shadow_render_target: Option<RenderTargetId>,
+    pub local_shadow_extent: Extent2D,
     pub shadow_enabled: bool,
+    pub local_shadow_enabled: bool,
     pub shadow_resolution: u32,
     pub shadow_cascade_count: u32,
     pub deferred: bool,
@@ -36,7 +39,10 @@ impl StandardRuntimePipelineDesc {
             viewport_is_surface: false,
             viewport_render_target: None,
             shadow_render_target: None,
+            local_shadow_render_target: None,
+            local_shadow_extent: Extent2D::new(1, 1),
             shadow_enabled: true,
+            local_shadow_enabled: false,
             shadow_resolution: 2048,
             shadow_cascade_count: 1,
             deferred: false,
@@ -65,6 +71,19 @@ impl StandardRuntimePipelineDesc {
     #[inline]
     pub fn shadow_render_target(mut self, target: Option<RenderTargetId>) -> Self {
         self.shadow_render_target = target;
+        self
+    }
+
+    #[inline]
+    pub fn local_shadow(
+        mut self,
+        enabled: bool,
+        target: Option<RenderTargetId>,
+        extent: Extent2D,
+    ) -> Self {
+        self.local_shadow_enabled = enabled;
+        self.local_shadow_render_target = target;
+        self.local_shadow_extent = extent;
         self
     }
 
@@ -142,6 +161,8 @@ pub fn standard_runtime_frame(desc: StandardRuntimePipelineDesc) -> RenderFrameP
     target.offscreen_scene_enabled = desc.hdr_scene_enabled || desc.postfx_enabled;
     target.viewport_render_target = desc.viewport_render_target;
     target.shadow_render_target = desc.shadow_render_target;
+    target.local_shadow_render_target = desc.local_shadow_render_target;
+    target.local_shadow_extent = desc.local_shadow_extent;
 
     let features = if desc.deferred {
         RuntimeFrameFeatureSet::deferred(
@@ -151,6 +172,7 @@ pub fn standard_runtime_frame(desc: StandardRuntimePipelineDesc) -> RenderFrameP
             desc.debug_overlay_enabled,
         )
         .with_ui_backdrop_blur(desc.ui_backdrop_blur_enabled)
+        .with_local_shadows(desc.local_shadow_enabled)
     } else {
         RuntimeFrameFeatureSet::forward(
             desc.shadow_enabled,
@@ -159,6 +181,7 @@ pub fn standard_runtime_frame(desc: StandardRuntimePipelineDesc) -> RenderFrameP
             desc.debug_overlay_enabled,
         )
         .with_ui_backdrop_blur(desc.ui_backdrop_blur_enabled)
+        .with_local_shadows(desc.local_shadow_enabled)
     };
     let recipe = RenderFrameRecipe::standard_runtime_with_shadow_mode(
         features,

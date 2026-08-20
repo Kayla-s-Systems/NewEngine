@@ -5,6 +5,7 @@ use crate::StandardRenderPhase;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RuntimeFrameFeatureSet {
     pub shadows: bool,
+    pub local_shadows: bool,
     pub deferred: bool,
     pub postfx: bool,
     pub ui_composite: bool,
@@ -22,6 +23,7 @@ impl RuntimeFrameFeatureSet {
     ) -> Self {
         Self {
             shadows,
+            local_shadows: false,
             deferred: false,
             postfx,
             ui_composite,
@@ -39,6 +41,7 @@ impl RuntimeFrameFeatureSet {
     ) -> Self {
         Self {
             shadows,
+            local_shadows: false,
             deferred: true,
             postfx,
             ui_composite,
@@ -49,6 +52,12 @@ impl RuntimeFrameFeatureSet {
     #[inline]
     pub const fn with_ui_backdrop_blur(mut self, enabled: bool) -> Self {
         self.ui_backdrop_blur = enabled;
+        self
+    }
+
+    #[inline]
+    pub const fn with_local_shadows(mut self, enabled: bool) -> Self {
+        self.local_shadows = enabled;
         self
     }
 }
@@ -106,6 +115,10 @@ impl RenderFrameRecipe {
                 features.shadows,
             ));
         }
+        steps.push(RenderPhaseRecipeStep::optional(
+            StandardRenderPhase::LocalShadowMap,
+            features.local_shadows,
+        ));
         if features.deferred {
             steps.push(RenderPhaseRecipeStep::enabled(
                 StandardRenderPhase::DepthPrepass,

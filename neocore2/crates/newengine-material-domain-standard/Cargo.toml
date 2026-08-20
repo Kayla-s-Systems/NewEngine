@@ -1,0 +1,17 @@
+[package]
+name = "newengine-material-domain-standard"
+version = "0.1.0"
+edition = "2021"
+readme = "README.md"
+description = "Generic standard lit material-domain provider for NewEngine"
+license = "Proprietary"
+
+[dependencies]
+newengine-ulog-api = { path = "../newengine-ulog-api" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+newengine-assets = { path = "../newengine-assets" }
+newengine-render-api = { path = "../newengine-render-api" }
+newengine-material-domain-api = { path = "../newengine-material-domain-api" }
+newengine-plugin-host = { path = "../newengine-plugin-host" }
+newengine-primitives = { path = "../newengine-primitives" }

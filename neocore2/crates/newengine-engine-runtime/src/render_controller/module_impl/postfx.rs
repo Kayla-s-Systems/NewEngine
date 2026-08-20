@@ -47,8 +47,8 @@ pub(super) fn game_sun_postfx_params(
         .copied()
         .unwrap_or_default()
         .sanitized();
-    params.quality.contact_shadows.enabled = shadow_settings.enabled
-        && shadow_settings.contact_strength > 0.0;
+    params.quality.contact_shadows.enabled =
+        shadow_settings.enabled && shadow_settings.contact_strength > 0.0;
     params.quality.contact_shadows.strength = shadow_settings.contact_strength;
 
     let sky_postfx = world

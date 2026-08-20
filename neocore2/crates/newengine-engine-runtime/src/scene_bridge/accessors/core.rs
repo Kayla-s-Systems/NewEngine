@@ -36,19 +36,59 @@ impl SceneBridge {
     }
 
     #[inline]
+    pub fn selections(&self) -> Vec<EntityId> {
+        self.selection_set.lock().clone()
+    }
+
+    #[inline]
     pub fn selection_authority_handle(&self) -> Option<newengine_entity_api::EntityHandle> {
         *self.selection_authority.lock()
     }
 
-    #[inline]
     pub fn set_selection(&self, id: Option<EntityId>) {
-        {
+        let changed = {
             let mut selection = self.selection.lock();
-            if *selection == id {
-                return;
-            }
+            let mut set = self.selection_set.lock();
+            let next_set: Vec<EntityId> = id.into_iter().collect();
+            let changed = *selection != id || *set != next_set;
             *selection = id;
+            *set = next_set;
+            changed
+        };
+        if changed {
+            self.refresh_selection_authority_and_inspector(id);
         }
+    }
+
+    pub fn toggle_selection(&self, id: EntityId) {
+        let primary = {
+            let mut set = self.selection_set.lock();
+            if let Some(index) = set.iter().position(|candidate| *candidate == id) {
+                set.remove(index);
+            } else {
+                set.push(id);
+            }
+            let primary = set.last().copied();
+            *self.selection.lock() = primary;
+            primary
+        };
+        self.refresh_selection_authority_and_inspector(primary);
+    }
+
+    pub fn replace_selections(&self, ids: impl IntoIterator<Item = EntityId>) {
+        let mut unique = Vec::new();
+        for id in ids {
+            if !unique.contains(&id) {
+                unique.push(id);
+            }
+        }
+        let primary = unique.last().copied();
+        *self.selection_set.lock() = unique;
+        *self.selection.lock() = primary;
+        self.refresh_selection_authority_and_inspector(primary);
+    }
+
+    fn refresh_selection_authority_and_inspector(&self, id: Option<EntityId>) {
         let authority = id.and_then(|entity| {
             let scene = self.scene.read();
             crate::authority::current_entity_authority_map(scene.world())
@@ -78,6 +118,7 @@ impl SceneBridge {
         }
         if !enabled {
             *self.selection.lock() = None;
+            self.selection_set.lock().clear();
             *self.selection_authority.lock() = None;
             let snapshot = self.inspector_snapshot_json(None);
             publish_inspector_snapshot_to_surface(&snapshot, GAME_HUD_SURFACE_ID);

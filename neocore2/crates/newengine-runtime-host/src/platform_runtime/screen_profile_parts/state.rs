@@ -197,6 +197,14 @@ impl ScreenProfileRuntimeState {
                         .get::<UiEditorViewportState>()
                         .cloned()
                         .unwrap_or_default();
+                    let scene_snapshot = resources
+                        .get::<UiEditorSceneSnapshot>()
+                        .cloned()
+                        .unwrap_or_default();
+                    let inspector_snapshot = resources
+                        .get::<UiEditorInspectorSnapshot>()
+                        .cloned()
+                        .unwrap_or_default();
                     let mut node = EditorScreen::default().surface_node(
                         frame_index,
                         runtime_mode,
@@ -205,6 +213,8 @@ impl ScreenProfileRuntimeState {
                         runtime_diff_count,
                         &command_registry,
                         &viewport_state,
+                        &scene_snapshot,
+                        &inspector_snapshot,
                         &layout,
                         self.active_menu_id.as_deref(),
                     );

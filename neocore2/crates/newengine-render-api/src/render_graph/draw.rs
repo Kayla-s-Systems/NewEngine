@@ -4,8 +4,10 @@ use super::RenderGraphPassKind;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum RenderDrawListKind {
-    /// Geometry that casts into shadow maps.
+    /// Geometry that casts into directional shadow maps.
     ShadowCasters,
+    /// Geometry recorded for the local point/spot shadow atlas.
+    LocalShadowCasters,
     /// Opaque world geometry for the forward viewport path.
     OpaqueForward,
     /// Transparent world geometry that must be drawn after opaque geometry.
@@ -21,6 +23,7 @@ impl RenderDrawListKind {
     pub const fn label(self) -> &'static str {
         match self {
             Self::ShadowCasters => "shadow_casters",
+            Self::LocalShadowCasters => "local_shadow_casters",
             Self::OpaqueForward => "opaque_forward",
             Self::Transparent => "transparent",
             Self::Ui => "ui",
@@ -32,6 +35,7 @@ impl RenderDrawListKind {
     pub const fn default_pass_kind(self) -> RenderGraphPassKind {
         match self {
             Self::ShadowCasters => RenderGraphPassKind::ShadowMap,
+            Self::LocalShadowCasters => RenderGraphPassKind::LocalShadowMap,
             Self::OpaqueForward => RenderGraphPassKind::ForwardOpaque,
             Self::Transparent => RenderGraphPassKind::Transparent,
             Self::Ui => RenderGraphPassKind::UiComposite,
@@ -48,6 +52,9 @@ impl RenderDrawListKind {
                 RenderGraphPassKind::ShadowMap
                     | RenderGraphPassKind::ShadowCascadeMap
                     | RenderGraphPassKind::DepthPrepass,
+            ) | (
+                Self::LocalShadowCasters,
+                RenderGraphPassKind::LocalShadowMap
             ) | (
                 Self::OpaqueForward,
                 RenderGraphPassKind::ForwardOpaque | RenderGraphPassKind::GBuffer,
@@ -88,6 +95,7 @@ impl RenderMaterialDomain {
                 Self::ShadowCaster,
                 RenderGraphPassKind::ShadowMap
                     | RenderGraphPassKind::ShadowCascadeMap
+                    | RenderGraphPassKind::LocalShadowMap
                     | RenderGraphPassKind::DepthPrepass,
             ) | (
                 Self::OpaqueLit | Self::Terrain | Self::Vegetation,

@@ -88,7 +88,9 @@ pub enum UiEditorViewportProjection {
 }
 
 impl Default for UiEditorViewportProjection {
-    fn default() -> Self { Self::Perspective }
+    fn default() -> Self {
+        Self::Perspective
+    }
 }
 
 impl UiEditorViewportProjection {
@@ -113,7 +115,9 @@ pub enum UiEditorViewportShading {
 }
 
 impl Default for UiEditorViewportShading {
-    fn default() -> Self { Self::Lit }
+    fn default() -> Self {
+        Self::Lit
+    }
 }
 
 impl UiEditorViewportShading {
@@ -137,7 +141,9 @@ pub enum UiEditorTransformMode {
 }
 
 impl Default for UiEditorTransformMode {
-    fn default() -> Self { Self::Translate }
+    fn default() -> Self {
+        Self::Translate
+    }
 }
 
 impl UiEditorTransformMode {
@@ -147,6 +153,27 @@ impl UiEditorTransformMode {
             Self::Translate => "Move",
             Self::Rotate => "Rotate",
             Self::Scale => "Scale",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum UiEditorTransformSpace {
+    World,
+    Local,
+}
+
+impl Default for UiEditorTransformSpace {
+    fn default() -> Self {
+        Self::World
+    }
+}
+
+impl UiEditorTransformSpace {
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::World => "World",
+            Self::Local => "Local",
         }
     }
 }
@@ -162,6 +189,7 @@ pub struct UiEditorViewportState {
     pub projection: UiEditorViewportProjection,
     pub shading: UiEditorViewportShading,
     pub transform_mode: UiEditorTransformMode,
+    pub transform_space: UiEditorTransformSpace,
     pub show_grid: bool,
     pub show_collision: bool,
     pub show_bounds: bool,
@@ -182,6 +210,7 @@ impl Default for UiEditorViewportState {
             projection: UiEditorViewportProjection::Perspective,
             shading: UiEditorViewportShading::Lit,
             transform_mode: UiEditorTransformMode::Translate,
+            transform_space: UiEditorTransformSpace::World,
             show_grid: true,
             show_collision: false,
             show_bounds: false,
@@ -192,6 +221,86 @@ impl Default for UiEditorViewportState {
             rotation_snap_degrees: 10.0,
             scale_snap_enabled: false,
             scale_snap_percent: 1.0,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UiEditorSceneEntitySnapshot {
+    pub entity_key: u64,
+    pub parent_key: Option<u64>,
+    pub name: String,
+    pub kind: String,
+    pub selected: bool,
+    pub components: Vec<String>,
+}
+
+impl Default for UiEditorSceneEntitySnapshot {
+    fn default() -> Self {
+        Self {
+            entity_key: 0,
+            parent_key: None,
+            name: String::new(),
+            kind: "Actor".to_owned(),
+            selected: false,
+            components: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UiEditorSceneSnapshot {
+    pub version: u32,
+    pub frame_index: u64,
+    pub entities: Vec<UiEditorSceneEntitySnapshot>,
+    pub selected_keys: Vec<u64>,
+}
+
+impl Default for UiEditorSceneSnapshot {
+    fn default() -> Self {
+        Self {
+            version: 1,
+            frame_index: 0,
+            entities: Vec::new(),
+            selected_keys: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct UiEditorInspectorTransformSnapshot {
+    pub position: [f32; 3],
+    pub rotation_degrees: [f32; 3],
+    pub scale: [f32; 3],
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UiEditorInspectorSnapshot {
+    pub version: u32,
+    pub frame_index: u64,
+    pub entity_key: Option<u64>,
+    pub name: String,
+    pub kind: String,
+    pub selection_count: usize,
+    pub transform: Option<UiEditorInspectorTransformSnapshot>,
+    pub components: Vec<String>,
+}
+
+impl Default for UiEditorInspectorSnapshot {
+    fn default() -> Self {
+        Self {
+            version: 1,
+            frame_index: 0,
+            entity_key: None,
+            name: String::new(),
+            kind: String::new(),
+            selection_count: 0,
+            transform: None,
+            components: Vec::new(),
         }
     }
 }

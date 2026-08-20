@@ -9,8 +9,7 @@ use newengine_project_api::{
     ContentMountRegistry, ProjectContentMountState, PROJECT_STARTUP_SCENE_ENV,
 };
 use newengine_project_runtime::{
-    apply_resolved_project_launch_env, default_projects_root,
-    load_project_from_request_with_launch, present_project_browser,
+    apply_resolved_project_launch_env, load_project_from_request_with_launch,
     project_launch_request_from_process, project_request_from_process, register_engine_asset_roots,
     ProjectRuntimeContext,
 };
@@ -47,44 +46,20 @@ where
 
         std::env::set_var("NEWENGINE_RUN_ID", &run_id);
         let boot_options = self.profile.boot_options();
-        let explicit_project_request = project_request_from_process();
-        let project_request = if explicit_project_request.is_some() {
-            explicit_project_request
-        } else if boot_option_enabled(
-            boot_options,
-            super::boot_options::RuntimeHostBootOption::ProjectBrowser,
-        ) && !super::env_bool("NEWENGINE_HEADLESS", false)
+        let project_request = project_request_from_process();
+        if project_request.is_none()
+            && boot_option_enabled(
+                boot_options,
+                super::boot_options::RuntimeHostBootOption::ProjectBrowser,
+            )
+            && !super::env_bool("NEWENGINE_HEADLESS", false)
             && !super::env_bool("NEWENGINE_PROJECT_BROWSER_DISABLED", false)
         {
-            let root = default_projects_root().ok_or_else(|| {
-                EngineError::Other(
-                    "project browser requested but no Projects root could be discovered; set NEWENGINE_PROJECTS_ROOT or pass --project".to_owned(),
-                )
-            })?;
-            self.early_log(format_args!("project.browser.open root={}", root.display()));
-            let selection = present_project_browser(&root).map_err(EngineError::Other)?;
-            match selection.manifest_path {
-                Some(path) => {
-                    if let Some(launch_id) = selection.launch_id.as_deref() {
-                        std::env::set_var(
-                            newengine_project_api::PROJECT_LAUNCH_PRESET_ENV,
-                            launch_id,
-                        );
-                    }
-                    self.early_log(format_args!(
-                        "project.browser.selected manifest={} launch={}",
-                        path.display(),
-                        selection.launch_id.as_deref().unwrap_or("project-default")
-                    ));
-                    Some(path)
-                }
-                None => {
-                    return Err(EngineError::Other("project selection cancelled".to_owned()));
-                }
-            }
-        } else {
-            None
-        };
+            return Err(EngineError::Other(
+                "runtime host no longer owns Project Browser UI; launch through NewEngine or pass --project so the runtime receives a resolved game.toml"
+                    .to_owned(),
+            ));
+        }
         let project_launch_request = project_launch_request_from_process();
         let project_context = match project_request {
             Some(request) => {

@@ -1,5 +1,5 @@
 use super::*;
-use crate::gameplay::PreparedRenderMesh;
+use crate::gameplay::{ModelRenderComponent, PreparedRenderMesh};
 use newengine_bounds::Bounds;
 use newengine_math::collections::FxHashMap;
 use newengine_ui_api::UiStatePatch;
@@ -57,6 +57,14 @@ pub(crate) fn validate_scene_object_invariants(
         {
             add_target(&mut targets, &mut target_indices, entity, "Primitive");
         }
+    }
+    for (entity, _) in world.query::<ModelRenderComponent>() {
+        add_target(
+            &mut targets,
+            &mut target_indices,
+            entity,
+            "ModelRenderComponent",
+        );
     }
     for (entity, _) in world.query::<PreparedRenderMesh>() {
         add_target(

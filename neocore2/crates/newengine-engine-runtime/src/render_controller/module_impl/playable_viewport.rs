@@ -113,6 +113,13 @@ impl RuntimeRenderController {
             self.bridges.scene.set_in_game_editor_enabled(false);
         }
 
+        let editor_staging_preview =
+            editor_viewport_runtime_mode(ctx) == Some(UiEditorRuntimeMode::Edit);
+        let editor_shift_additive = frame_input.surface_input.as_ref().is_some_and(|input| {
+            input.is_key_down(newengine_input_api::key_code::SHIFT_LEFT)
+                || input.is_key_down(newengine_input_api::key_code::SHIFT_RIGHT)
+        });
+
         if let Some(dispatch_frame) = ctx
             .resources()
             .get::<newengine_ui_api::UiEventDispatchFrame>()
@@ -126,7 +133,13 @@ impl RuntimeRenderController {
             let _ = self
                 .bridges
                 .scene
-                .apply_editor_selection_actions(dispatch_frame);
+                .apply_editor_selection_actions(dispatch_frame, editor_shift_additive);
+            if editor_staging_preview {
+                let _ = self
+                    .bridges
+                    .scene
+                    .apply_editor_actor_actions(dispatch_frame);
+            }
             {
                 let scene_lock = self.bridges.scene.scene();
                 let mut scene = scene_lock.write();
@@ -137,8 +150,6 @@ impl RuntimeRenderController {
             }
         }
         let in_game_editor = game_profile && self.bridges.scene.in_game_editor_enabled();
-        let editor_staging_preview =
-            editor_viewport_runtime_mode(ctx) == Some(UiEditorRuntimeMode::Edit);
         self.editor_viewport.set_active(editor_staging_preview);
         if editor_staging_preview {
             self.editor_viewport.sync_state(
@@ -171,10 +182,14 @@ impl RuntimeRenderController {
                                 && mouse_x < slot.x_px + slot.w_px
                                 && mouse_y < slot.y_px + slot.h_px;
                             if inside && slot.w_px > 1.0 && slot.h_px > 1.0 {
-                                let local_x = ((mouse_x - slot.x_px) / slot.w_px)
-                                    * scope.vp_w as f32;
-                                let local_y = ((mouse_y - slot.y_px) / slot.h_px)
-                                    * scope.vp_h as f32;
+                                let local_x =
+                                    ((mouse_x - slot.x_px) / slot.w_px) * scope.vp_w as f32;
+                                let local_y =
+                                    ((mouse_y - slot.y_px) / slot.h_px) * scope.vp_h as f32;
+                                self.frame.pending_pick_additive = input
+                                    .is_key_down(newengine_input_api::key_code::SHIFT_LEFT)
+                                    || input
+                                        .is_key_down(newengine_input_api::key_code::SHIFT_RIGHT);
                                 self.bridges.viewport.publish_pick_request(local_x, local_y);
                             }
                         }
@@ -182,6 +197,30 @@ impl RuntimeRenderController {
                 }
             }
         }
+        if editor_staging_preview {
+            if let Some(input) = frame_input.surface_input.as_ref() {
+                let text_input_active = !input.text.is_empty()
+                    || !input.text_edit_ops.is_empty()
+                    || !input.ime_preedit.is_empty();
+                if !text_input_active {
+                    let control_down = input
+                        .is_key_down(newengine_input_api::key_code::CONTROL_LEFT)
+                        || input.is_key_down(newengine_input_api::key_code::CONTROL_RIGHT);
+                    let shift_down = input.is_key_down(newengine_input_api::key_code::SHIFT_LEFT)
+                        || input.is_key_down(newengine_input_api::key_code::SHIFT_RIGHT);
+                    if control_down && input.is_key_pressed(newengine_input_api::key_code::KEY_D) {
+                        let _ = self.bridges.scene.duplicate_selected_actors();
+                    }
+                    if input.is_key_pressed(newengine_input_api::key_code::DELETE) {
+                        let _ = self.bridges.scene.delete_selected_actors();
+                    }
+                    if !control_down && input.is_key_pressed(newengine_input_api::key_code::KEY_F) {
+                        self.bridges.viewport.publish_frame_request(shift_down);
+                    }
+                }
+            }
+        }
+
         if in_game_editor && scope.vp_w > 0 && scope.vp_h > 0 {
             self.bridges.viewport.publish_pick_request(
                 (scope.vp_w.saturating_sub(1) as f32) * 0.5,
@@ -322,6 +361,11 @@ impl RuntimeRenderController {
                 selection_radius,
             );
             let last_camera = self.frame.last_camera_snapshot.as_ref();
+            self.editor_viewport.process_history_actions(
+                scene.world_mut(),
+                ctx.resources()
+                    .get::<newengine_ui_api::UiEventDispatchFrame>(),
+            );
             self.editor_viewport.process_transform_input(
                 scene.world_mut(),
                 selected,
@@ -330,7 +374,8 @@ impl RuntimeRenderController {
                 [scope.vp_w, scope.vp_h],
             );
         } else {
-            self.editor_viewport.clear_runtime_geometry(scene.world_mut());
+            self.editor_viewport
+                .clear_runtime_geometry(scene.world_mut());
         }
         let physics_api = ctx
             .api::<PhysicsApiRef>(newengine_core::physics::PHYSICS_API_ID)
@@ -404,7 +449,22 @@ impl RuntimeRenderController {
             self.bridges.viewport.mark_external_redraw_presented();
         }
         if let Some(picked) = self.frame.pending_pick_selection.take() {
-            self.bridges.scene.set_selection(picked);
+            let additive = core::mem::take(&mut self.frame.pending_pick_additive);
+            if additive {
+                if let Some(entity) = picked {
+                    self.bridges.scene.toggle_selection(entity);
+                }
+            } else {
+                self.bridges.scene.set_selection(picked);
+            }
+        }
+        if editor_staging_preview {
+            let (scene_snapshot, inspector_snapshot) = self
+                .bridges
+                .scene
+                .editor_scene_snapshots(self.frame.frame_index);
+            ctx.resources_mut().insert(scene_snapshot);
+            ctx.resources_mut().insert(inspector_snapshot);
         }
         Ok(outcome)
     }

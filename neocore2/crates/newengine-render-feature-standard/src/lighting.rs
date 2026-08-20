@@ -8,16 +8,16 @@ use newengine_render_feature_api::{
 };
 
 use crate::{
-    GAME_READY_AMBIENT_OCCLUSION_PROVIDER_ID, GAME_READY_DIRECTIONAL_SHADOW_PROVIDER_ID,
-    GAME_READY_POINT_CUBE_SHADOW_PROVIDER_ID, GAME_READY_SPOT_SHADOW_PROVIDER_ID,
+    STANDARD_AMBIENT_OCCLUSION_PROVIDER_ID, STANDARD_DIRECTIONAL_SHADOW_PROVIDER_ID,
+    STANDARD_POINT_CUBE_SHADOW_PROVIDER_ID, STANDARD_SPOT_SHADOW_PROVIDER_ID,
 };
 
 pub(crate) fn providers() -> Vec<Arc<dyn LightExtractionProvider>> {
     vec![
-        Arc::new(GameReadyDirectionalShadowProvider),
-        Arc::new(GameReadyPointCubeShadowProvider),
-        Arc::new(GameReadySpotShadowProvider),
-        Arc::new(GameReadyAmbientOcclusionProvider),
+        Arc::new(StandardDirectionalShadowProvider),
+        Arc::new(StandardPointCubeShadowProvider),
+        Arc::new(StandardSpotShadowProvider),
+        Arc::new(StandardAmbientOcclusionProvider),
     ]
 }
 
@@ -34,17 +34,17 @@ fn unsupported(kind: ShadowLightKind) -> EngineResult<Option<LightExtractionComm
     Ok(Some(LightExtractionCommand::Unsupported(kind)))
 }
 
-struct GameReadyDirectionalShadowProvider;
+struct StandardDirectionalShadowProvider;
 
-impl LightExtractionProvider for GameReadyDirectionalShadowProvider {
+impl LightExtractionProvider for StandardDirectionalShadowProvider {
     #[inline]
     fn id(&self) -> &'static str {
-        GAME_READY_DIRECTIONAL_SHADOW_PROVIDER_ID
+        STANDARD_DIRECTIONAL_SHADOW_PROVIDER_ID
     }
 
     #[inline]
     fn metadata(&self) -> LightExtractionProviderMetadata {
-        feature_metadata(self.id(), "GameReady directional shadow planning")
+        feature_metadata(self.id(), "Standard directional shadow planning")
     }
 
     #[inline]
@@ -64,17 +64,17 @@ impl LightExtractionProvider for GameReadyDirectionalShadowProvider {
     }
 }
 
-struct GameReadyPointCubeShadowProvider;
+struct StandardPointCubeShadowProvider;
 
-impl LightExtractionProvider for GameReadyPointCubeShadowProvider {
+impl LightExtractionProvider for StandardPointCubeShadowProvider {
     #[inline]
     fn id(&self) -> &'static str {
-        GAME_READY_POINT_CUBE_SHADOW_PROVIDER_ID
+        STANDARD_POINT_CUBE_SHADOW_PROVIDER_ID
     }
 
     #[inline]
     fn metadata(&self) -> LightExtractionProviderMetadata {
-        feature_metadata(self.id(), "GameReady point shadow planning")
+        feature_metadata(self.id(), "Standard point shadow planning")
     }
 
     #[inline]
@@ -92,17 +92,17 @@ impl LightExtractionProvider for GameReadyPointCubeShadowProvider {
     }
 }
 
-struct GameReadySpotShadowProvider;
+struct StandardSpotShadowProvider;
 
-impl LightExtractionProvider for GameReadySpotShadowProvider {
+impl LightExtractionProvider for StandardSpotShadowProvider {
     #[inline]
     fn id(&self) -> &'static str {
-        GAME_READY_SPOT_SHADOW_PROVIDER_ID
+        STANDARD_SPOT_SHADOW_PROVIDER_ID
     }
 
     #[inline]
     fn metadata(&self) -> LightExtractionProviderMetadata {
-        feature_metadata(self.id(), "GameReady spot shadow planning")
+        feature_metadata(self.id(), "Standard spot shadow planning")
     }
 
     #[inline]
@@ -119,17 +119,17 @@ impl LightExtractionProvider for GameReadySpotShadowProvider {
     }
 }
 
-struct GameReadyAmbientOcclusionProvider;
+struct StandardAmbientOcclusionProvider;
 
-impl LightExtractionProvider for GameReadyAmbientOcclusionProvider {
+impl LightExtractionProvider for StandardAmbientOcclusionProvider {
     #[inline]
     fn id(&self) -> &'static str {
-        GAME_READY_AMBIENT_OCCLUSION_PROVIDER_ID
+        STANDARD_AMBIENT_OCCLUSION_PROVIDER_ID
     }
 
     #[inline]
     fn metadata(&self) -> LightExtractionProviderMetadata {
-        feature_metadata(self.id(), "GameReady ambient occlusion planning")
+        feature_metadata(self.id(), "Standard ambient occlusion planning")
     }
 
     #[inline]

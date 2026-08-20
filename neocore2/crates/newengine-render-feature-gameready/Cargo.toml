@@ -3,11 +3,11 @@ name = "newengine-render-feature-gameready"
 version = "0.1.0"
 edition = "2021"
 readme = "README.md"
-description = "GameReady profile-owned render feature pack for NewEngine runtime"
+description = "Compatibility facade for the generic standard render feature pack"
 
 [dependencies]
 newengine-core = { path = "../newengine-core" }
-newengine-render-feature-api = { path = "../newengine-render-feature-api" }
-newengine-lighting = { path = "../newengine-lighting" }
 newengine-material-domain-api = { path = "../newengine-material-domain-api" }
 newengine-material-domain-gameready = { path = "../newengine-material-domain-gameready" }
+newengine-render-feature-api = { path = "../newengine-render-feature-api" }
+newengine-render-feature-standard = { path = "../newengine-render-feature-standard" }

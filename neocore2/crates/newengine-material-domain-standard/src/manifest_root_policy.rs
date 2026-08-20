@@ -21,7 +21,7 @@ pub(crate) fn validate_manifest_shader_path(
     }
 
     Err(MaterialDomainError::other(format!(
-        "GameReady shader manifest path='{manifest_path}' field='{field}' references deferred renderer-root shader '{logical_path}', but it is not in REQUIRED_DEFERRED_ROOT_SHADERS; add it to engine-render-vulkan root_internal bundle before using it"
+        "Standard shader manifest path='{manifest_path}' field='{field}' references deferred renderer-root shader '{logical_path}', but it is not in REQUIRED_DEFERRED_ROOT_SHADERS; add it to engine-render-vulkan root_internal bundle before using it"
     )))
 }
 
@@ -30,7 +30,7 @@ mod tests {
     use super::{validate_manifest_shader_path, REQUIRED_DEFERRED_ROOT_SHADERS};
 
     #[test]
-    fn known_gameready_deferred_shaders_are_root_allowed() {
+    fn known_standard_deferred_shaders_are_root_allowed() {
         for path in REQUIRED_DEFERRED_ROOT_SHADERS {
             validate_manifest_shader_path("test_manifest", "test_field", path)
                 .expect("required deferred shader should be allowed");

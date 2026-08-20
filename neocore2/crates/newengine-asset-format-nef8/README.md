@@ -31,7 +31,8 @@ parsed explicitly as little-endian. Unknown extension bytes are skipped up to
 the declared header boundary, while unsupported wire versions are rejected.
 
 `type_id` is a stable enum registry, not a bit mask. Values do not need to be
-powers of two. YBN owns ID `8`; NEFTD owns the distinct ID `22`.
+powers of two. In V2 it is the little-endian `u16` at offset `0x06`; offset
+`0x08` is the flags field. YBN owns ID `8`; NEFTD owns the distinct ID `22`.
 
 Small resources without header metadata may use the 16-byte class. Assets with
 decompressed-length information use 32 bytes; assets retaining a full BLAKE3

@@ -61,6 +61,7 @@ pub(in super::super) fn instance_batch_ubo_key(
     normal_texture: TextureId,
     roughness_texture: TextureId,
     shadow_texture: TextureId,
+    local_shadow_texture: TextureId,
     sampler: SamplerId,
 ) -> u64 {
     let mut h = prefix;
@@ -69,6 +70,7 @@ pub(in super::super) fn instance_batch_ubo_key(
     h = hash_combine_u64(h, normal_texture.get() as u64);
     h = hash_combine_u64(h, roughness_texture.get() as u64);
     h = hash_combine_u64(h, shadow_texture.get() as u64);
+    h = hash_combine_u64(h, local_shadow_texture.get() as u64);
     hash_combine_u64(h, sampler.get() as u64)
 }
 
@@ -158,8 +160,7 @@ pub(super) fn primitive_role_cull_reason(
     if options.is_sky_role() && !draw_sky_visuals {
         return Some("sky_visuals_disabled_by_runtime_profile");
     }
-    if matches!(options.role, MeshRenderRole::EditorGizmo)
-        && matches!(pass, SceneMeshPass::GBuffer)
+    if matches!(options.role, MeshRenderRole::EditorGizmo) && matches!(pass, SceneMeshPass::GBuffer)
     {
         return Some("editor_gizmo_forward_only");
     }

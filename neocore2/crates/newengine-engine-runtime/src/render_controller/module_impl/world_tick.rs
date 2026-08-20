@@ -220,7 +220,8 @@ impl RuntimeRenderController {
         });
 
         if self.editor_viewport.is_active() {
-            let world_bounds = scene::scene_bounds_world(scene.world()).unwrap_or_else(scene::default_bounds);
+            let world_bounds =
+                scene::scene_bounds_world(scene.world()).unwrap_or_else(scene::default_bounds);
             let selection_bounds = scene::selection_bounds_world(scene.world(), selection);
             self.editor_viewport.apply_camera_projection(
                 &mut view_frame,

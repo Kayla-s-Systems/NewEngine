@@ -5,7 +5,7 @@ use newengine_math::{Mat4, Vec3};
 use newengine_primitives::Primitive;
 use newengine_transform::GlobalTransform;
 
-use crate::editor_viewport::{EditorGizmoAxis, EditorGizmoAxisComponent};
+use crate::editor_viewport::{EditorGizmoAxisComponent, EditorGizmoHandle};
 use crate::gameplay::display_visible_in_mode;
 
 use super::RuntimeRenderController;
@@ -26,13 +26,13 @@ pub(super) fn handle_picking(
     let world = scene.world();
     match pick_target(viewproj, vp_w, vp_h, pick_x, pick_y, world) {
         PickTarget::Scene(picked) => {
-            this.editor_viewport.clear_gizmo_axis();
+            this.editor_viewport.clear_gizmo_handle();
             // Rendering currently owns a scene read/write guard while this function runs.
             // Publishing through SceneBridge here would recursively acquire that lock.
             this.frame.pending_pick_selection = Some(picked);
         }
-        PickTarget::Gizmo(axis) => {
-            this.editor_viewport.arm_gizmo_axis(axis);
+        PickTarget::Gizmo(handle) => {
+            this.editor_viewport.arm_gizmo_handle(handle);
             this.frame.pending_pick_selection = None;
         }
     }
@@ -41,7 +41,7 @@ pub(super) fn handle_picking(
 #[derive(Clone, Copy, Debug)]
 enum PickTarget {
     Scene(Option<newengine_ecs::EntityId>),
-    Gizmo(EditorGizmoAxis),
+    Gizmo(EditorGizmoHandle),
 }
 
 #[inline]
@@ -92,8 +92,46 @@ fn pick_target(
             best_t = t;
             best_target = world
                 .get::<EditorGizmoAxisComponent>(entity)
-                .map(|gizmo| PickTarget::Gizmo(gizmo.axis))
+                .map(|gizmo| PickTarget::Gizmo(gizmo.handle))
                 .unwrap_or(PickTarget::Scene(Some(entity)));
+        }
+    }
+
+    // Imported model actors intentionally have no Primitive proxy. Pick them from
+    // their scene bounds so editor selection remains independent from render residency.
+    for (entity, _model, global) in
+        world.query2::<crate::gameplay::ModelRenderComponent, GlobalTransform>()
+    {
+        if !display_visible_in_mode(world, entity, false) {
+            continue;
+        }
+        let hit_t = world
+            .get::<Bounds>(entity)
+            .and_then(|bounds| {
+                let min = bounds.local_aabb.min;
+                let max = bounds.local_aabb.max;
+                let mut world_min = Vec3::splat(f32::INFINITY);
+                let mut world_max = Vec3::splat(f32::NEG_INFINITY);
+                for corner in [
+                    Vec3::new(min.x, min.y, min.z),
+                    Vec3::new(max.x, min.y, min.z),
+                    Vec3::new(min.x, max.y, min.z),
+                    Vec3::new(max.x, max.y, min.z),
+                    Vec3::new(min.x, min.y, max.z),
+                    Vec3::new(max.x, min.y, max.z),
+                    Vec3::new(min.x, max.y, max.z),
+                    Vec3::new(max.x, max.y, max.z),
+                ] {
+                    let corner = global.0.transform_point3(corner);
+                    world_min = world_min.min(corner);
+                    world_max = world_max.max(corner);
+                }
+                ray_aabb_intersection(ray_o, ray_d, world_min, world_max)
+            })
+            .or_else(|| fallback_transform_sphere_intersection(ray_o, ray_d, global));
+        if let Some(t) = hit_t.filter(|t| *t > 0.0 && *t < best_t) {
+            best_t = t;
+            best_target = PickTarget::Scene(Some(entity));
         }
     }
 

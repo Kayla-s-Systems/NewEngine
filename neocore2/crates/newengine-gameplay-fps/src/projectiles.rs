@@ -179,6 +179,11 @@ pub fn spawn_projectile_sphere(
         },
     );
     let _ = world.insert(entity, DisplayVisibility::default());
+    // Projectile spheres are fast transient geometry. Let them receive world shadows,
+    // but do not let every bullet invalidate the whole raster shadow atlas.
+    let mut render_options = newengine_model_domain_api::MeshRenderOptions::world_opaque();
+    render_options.shadow_policy = newengine_model_domain_api::MeshShadowPolicy::ReceiveOnly;
+    let _ = world.insert(entity, render_options);
     let _ = world.insert(entity, GameplayActor);
     let _ = world.insert(entity, PhysicsSurface::default());
 

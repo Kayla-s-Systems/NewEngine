@@ -10,10 +10,10 @@ use newengine_model_domain_api::{
 };
 use newengine_primitives::{builtins, Primitive, PrimitiveId};
 use newengine_scene::{spawn_named, Scene};
-use newengine_transform::Transform;
+use newengine_transform::{GlobalTransform, Transform};
 use newengine_ui_api::{
-    UiEditorTransformMode, UiEditorViewportProjection, UiEditorViewportShading,
-    UiEditorViewportState, UiInputFrame,
+    UiEditorTransformMode, UiEditorTransformSpace, UiEditorViewportProjection,
+    UiEditorViewportShading, UiEditorViewportState, UiInputFrame,
 };
 
 use crate::gameplay::{DisplayMode, DisplayVisibility};
@@ -23,7 +23,7 @@ use crate::scene_bridge::{
 };
 
 const EDITOR_HISTORY_LIMIT: usize = 256;
-const GIZMO_AXIS_COUNT: usize = 3;
+const GIZMO_HANDLE_COUNT: usize = 7;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum EditorGizmoAxis {
@@ -70,11 +70,78 @@ impl EditorGizmoAxis {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum EditorGizmoPlane {
+    XY,
+    XZ,
+    YZ,
+}
+
+impl EditorGizmoPlane {
+    #[inline]
+    const fn basis(self) -> (Vec3, Vec3) {
+        match self {
+            Self::XY => (Vec3::X, Vec3::Y),
+            Self::XZ => (Vec3::X, Vec3::Z),
+            Self::YZ => (Vec3::Y, Vec3::Z),
+        }
+    }
+
+    #[inline]
+    const fn name(self) -> &'static str {
+        match self {
+            Self::XY => "XY",
+            Self::XZ => "XZ",
+            Self::YZ => "YZ",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum EditorGizmoHandle {
+    Axis(EditorGizmoAxis),
+    Plane(EditorGizmoPlane),
+    Center,
+}
+
+impl EditorGizmoHandle {
+    #[inline]
+    const fn index(self) -> usize {
+        match self {
+            Self::Axis(axis) => axis.index(),
+            Self::Plane(EditorGizmoPlane::XY) => 3,
+            Self::Plane(EditorGizmoPlane::XZ) => 4,
+            Self::Plane(EditorGizmoPlane::YZ) => 5,
+            Self::Center => 6,
+        }
+    }
+
+    #[inline]
+    const fn name(self) -> &'static str {
+        match self {
+            Self::Axis(axis) => axis.name(),
+            Self::Plane(plane) => plane.name(),
+            Self::Center => "Center",
+        }
+    }
+
+    #[inline]
+    const fn color(self) -> [f32; 4] {
+        match self {
+            Self::Axis(axis) => axis.color(),
+            Self::Plane(EditorGizmoPlane::XY) => [0.88, 0.78, 0.18, 0.92],
+            Self::Plane(EditorGizmoPlane::XZ) => [0.78, 0.22, 0.82, 0.92],
+            Self::Plane(EditorGizmoPlane::YZ) => [0.16, 0.76, 0.78, 0.92],
+            Self::Center => [0.92, 0.92, 0.92, 1.0],
+        }
+    }
+}
+
 /// Runtime-only component attached to editor gizmo geometry.
 /// It deliberately never becomes authored scene data.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct EditorGizmoAxisComponent {
-    pub(crate) axis: EditorGizmoAxis,
+    pub(crate) handle: EditorGizmoHandle,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -87,19 +154,23 @@ struct TransformTransaction {
 #[derive(Clone, Copy, Debug)]
 struct ActiveTransformDrag {
     entity: EntityId,
-    axis: EditorGizmoAxis,
+    handle: EditorGizmoHandle,
+    axis_vector: Vec3,
+    plane_a: Vec3,
+    plane_b: Vec3,
     before: Transform,
     accumulated: f32,
+    accumulated_world: Vec3,
 }
 
 pub(crate) struct EditorViewportController {
     active: bool,
     state: UiEditorViewportState,
-    armed_axis: Option<EditorGizmoAxis>,
+    armed_handle: Option<EditorGizmoHandle>,
     drag: Option<ActiveTransformDrag>,
     undo: Vec<TransformTransaction>,
     redo: Vec<TransformTransaction>,
-    gizmo_entities: [Option<EntityId>; GIZMO_AXIS_COUNT],
+    gizmo_entities: [Option<EntityId>; GIZMO_HANDLE_COUNT],
     orthographic_half_height: f32,
     last_projection: UiEditorViewportProjection,
     inspector_dirty: bool,
@@ -110,11 +181,11 @@ impl Default for EditorViewportController {
         Self {
             active: false,
             state: UiEditorViewportState::default(),
-            armed_axis: None,
+            armed_handle: None,
             drag: None,
             undo: Vec::new(),
             redo: Vec::new(),
-            gizmo_entities: [None; GIZMO_AXIS_COUNT],
+            gizmo_entities: [None; GIZMO_HANDLE_COUNT],
             orthographic_half_height: 10.0,
             last_projection: UiEditorViewportProjection::Perspective,
             inspector_dirty: false,
@@ -127,7 +198,7 @@ impl EditorViewportController {
     pub(crate) fn set_active(&mut self, active: bool) {
         self.active = active;
         if !active {
-            self.armed_axis = None;
+            self.armed_handle = None;
             self.drag = None;
         }
     }
@@ -141,11 +212,12 @@ impl EditorViewportController {
     pub(crate) fn sync_state(&mut self, state: UiEditorViewportState) {
         if self.last_projection != state.projection {
             self.last_projection = state.projection;
-            self.orthographic_half_height = if state.projection == UiEditorViewportProjection::Perspective {
-                10.0
-            } else {
-                0.0
-            };
+            self.orthographic_half_height =
+                if state.projection == UiEditorViewportProjection::Perspective {
+                    10.0
+                } else {
+                    0.0
+                };
         }
         self.state = state;
     }
@@ -161,14 +233,34 @@ impl EditorViewportController {
     }
 
     #[inline]
-    pub(crate) fn arm_gizmo_axis(&mut self, axis: EditorGizmoAxis) {
-        self.armed_axis = Some(axis);
+    pub(crate) fn arm_gizmo_handle(&mut self, handle: EditorGizmoHandle) {
+        self.armed_handle = Some(handle);
     }
 
     #[inline]
-    pub(crate) fn clear_gizmo_axis(&mut self) {
+    pub(crate) fn clear_gizmo_handle(&mut self) {
         if self.drag.is_none() {
-            self.armed_axis = None;
+            self.armed_handle = None;
+        }
+    }
+
+    pub(crate) fn process_history_actions(
+        &mut self,
+        world: &mut World,
+        dispatch: Option<&newengine_ui_api::UiEventDispatchFrame>,
+    ) {
+        let Some(dispatch) = dispatch else {
+            return;
+        };
+        for action in &dispatch.actions {
+            if action.trigger != newengine_ui_api::UiNodeEventTrigger::Click {
+                continue;
+            }
+            match action.action_id.as_str() {
+                "editor.history.undo" => self.undo(world),
+                "editor.history.redo" => self.redo(world),
+                _ => {}
+            }
         }
     }
 
@@ -183,6 +275,13 @@ impl EditorViewportController {
         let Some(input) = input else {
             return;
         };
+
+        let text_input_active = !input.text.is_empty()
+            || !input.text_edit_ops.is_empty()
+            || !input.ime_preedit.is_empty();
+        if text_input_active && self.drag.is_none() {
+            return;
+        }
 
         let control_down = input.is_key_down(newengine_input_api::key_code::CONTROL_LEFT)
             || input.is_key_down(newengine_input_api::key_code::CONTROL_RIGHT);
@@ -201,13 +300,34 @@ impl EditorViewportController {
         let left_released = input.is_mouse_released(newengine_input_api::mouse_button::LEFT);
 
         if self.drag.is_none() && left_down {
-            if let (Some(entity), Some(axis)) = (selected, self.armed_axis) {
+            if let (Some(entity), Some(handle)) = (selected, self.armed_handle) {
                 if let Some(before) = world.get::<Transform>(entity).copied() {
+                    let rotate_basis = |axis: Vec3| {
+                        match self.state.transform_space {
+                            UiEditorTransformSpace::World => axis,
+                            UiEditorTransformSpace::Local => before.rotation * axis,
+                        }
+                        .normalize_or_zero()
+                    };
+                    let (axis_vector, plane_a, plane_b) = match handle {
+                        EditorGizmoHandle::Axis(axis) => {
+                            (rotate_basis(axis.vector()), Vec3::ZERO, Vec3::ZERO)
+                        }
+                        EditorGizmoHandle::Plane(plane) => {
+                            let (a, b) = plane.basis();
+                            (Vec3::ZERO, rotate_basis(a), rotate_basis(b))
+                        }
+                        EditorGizmoHandle::Center => (Vec3::ZERO, Vec3::ZERO, Vec3::ZERO),
+                    };
                     self.drag = Some(ActiveTransformDrag {
                         entity,
-                        axis,
+                        handle,
+                        axis_vector,
+                        plane_a,
+                        plane_b,
                         before,
                         accumulated: 0.0,
+                        accumulated_world: Vec3::ZERO,
                     });
                 }
             }
@@ -217,21 +337,52 @@ impl EditorViewportController {
             if left_released || !left_down {
                 self.commit_drag(world, drag);
                 self.drag = None;
-                self.armed_axis = None;
+                self.armed_handle = None;
                 return;
             }
 
             if input.mouse_delta != (0.0, 0.0) {
-                let sensitivity = transform_drag_sensitivity(
-                    camera,
-                    drag.before.position,
-                    drag.axis.vector(),
-                    input.mouse_delta,
-                    viewport_size,
-                    self.state.projection,
-                    self.orthographic_half_height,
-                );
-                drag.accumulated += sensitivity;
+                match drag.handle {
+                    EditorGizmoHandle::Axis(_) => {
+                        drag.accumulated += transform_drag_sensitivity(
+                            camera,
+                            drag.before.position,
+                            drag.axis_vector,
+                            input.mouse_delta,
+                            viewport_size,
+                            self.state.projection,
+                            self.orthographic_half_height,
+                        );
+                    }
+                    EditorGizmoHandle::Plane(_) => {
+                        let delta = transform_screen_world_delta(
+                            camera,
+                            drag.before.position,
+                            input.mouse_delta,
+                            viewport_size,
+                            self.state.projection,
+                            self.orthographic_half_height,
+                        );
+                        drag.accumulated_world += drag.plane_a * delta.dot(drag.plane_a)
+                            + drag.plane_b * delta.dot(drag.plane_b);
+                    }
+                    EditorGizmoHandle::Center => match self.state.transform_mode {
+                        UiEditorTransformMode::Translate => {
+                            drag.accumulated_world += transform_screen_world_delta(
+                                camera,
+                                drag.before.position,
+                                input.mouse_delta,
+                                viewport_size,
+                                self.state.projection,
+                                self.orthographic_half_height,
+                            );
+                        }
+                        UiEditorTransformMode::Scale => {
+                            drag.accumulated += (input.mouse_delta.0 - input.mouse_delta.1) * 0.01;
+                        }
+                        _ => {}
+                    },
+                }
                 let next = transformed_from_drag(drag, &self.state);
                 if let Some(transform) = world.get_mut_tracked::<Transform>(drag.entity) {
                     *transform = next;
@@ -263,21 +414,21 @@ impl EditorViewportController {
             "editor transform transaction: committed entity={} mode={} axis={} undo_depth={}",
             drag.entity.stable_u64(),
             self.state.transform_mode.label(),
-            drag.axis.name(),
+            drag.handle.name(),
             self.undo.len(),
         );
     }
 
     fn cancel_drag(&mut self, world: &mut World) {
         let Some(drag) = self.drag.take() else {
-            self.armed_axis = None;
+            self.armed_handle = None;
             return;
         };
         if let Some(transform) = world.get_mut_tracked::<Transform>(drag.entity) {
             *transform = drag.before;
             self.inspector_dirty = true;
         }
-        self.armed_axis = None;
+        self.armed_handle = None;
     }
 
     fn undo(&mut self, world: &mut World) {
@@ -340,11 +491,21 @@ impl EditorViewportController {
             self.remove_gizmos(scene.world_mut());
             return;
         };
+        let (selected_world_position, selected_world_rotation) = scene
+            .world()
+            .get::<GlobalTransform>(selected)
+            .map(|global| {
+                let (_, rotation, translation) = global.0.to_scale_rotation_translation();
+                (translation, rotation)
+            })
+            .unwrap_or((selected_transform.position, selected_transform.rotation));
+        let gizmo_orientation = match self.state.transform_space {
+            UiEditorTransformSpace::World => Quat::IDENTITY,
+            UiEditorTransformSpace::Local => selected_world_rotation,
+        };
 
         let length = (selection_radius.max(0.25) * 1.8).clamp(0.65, 8.0);
         let thickness = (length * 0.045).clamp(0.025, 0.18);
-        let primitive = gizmo_primitive_for_mode(self.state.transform_mode);
-
         let mats_lock = scene_bridge.materials();
         let mats = mats_lock.read();
         let default_mat = mats.register_named(
@@ -355,20 +516,61 @@ impl EditorViewportController {
         let prims = prims_lock.read();
         let world = scene.world_mut();
 
-        for axis in [EditorGizmoAxis::X, EditorGizmoAxis::Y, EditorGizmoAxis::Z] {
-            let index = axis.index();
+        let mut desired_handles = vec![
+            EditorGizmoHandle::Axis(EditorGizmoAxis::X),
+            EditorGizmoHandle::Axis(EditorGizmoAxis::Y),
+            EditorGizmoHandle::Axis(EditorGizmoAxis::Z),
+        ];
+        if self.state.transform_mode == UiEditorTransformMode::Translate {
+            desired_handles.extend([
+                EditorGizmoHandle::Plane(EditorGizmoPlane::XY),
+                EditorGizmoHandle::Plane(EditorGizmoPlane::XZ),
+                EditorGizmoHandle::Plane(EditorGizmoPlane::YZ),
+                EditorGizmoHandle::Center,
+            ]);
+        } else if self.state.transform_mode == UiEditorTransformMode::Scale {
+            desired_handles.push(EditorGizmoHandle::Center);
+        }
+
+        let desired_indices = desired_handles
+            .iter()
+            .map(|handle| handle.index())
+            .collect::<std::collections::BTreeSet<_>>();
+        for (index, slot) in self.gizmo_entities.iter_mut().enumerate() {
+            if desired_indices.contains(&index) {
+                continue;
+            }
+            if let Some(entity) = slot.take() {
+                if world.exists(entity) {
+                    let _ = world.despawn(entity);
+                }
+            }
+        }
+
+        for handle in desired_handles {
+            let index = handle.index();
             let entity = match self.gizmo_entities[index].filter(|entity| world.exists(*entity)) {
                 Some(entity) => entity,
                 None => {
-                    let entity = spawn_named(world, format!("__EditorGizmo{}", axis.name()));
+                    let entity = spawn_named(world, format!("__EditorGizmo{}", handle.name()));
                     self.gizmo_entities[index] = Some(entity);
                     entity
                 }
             };
 
-            let color = axis.color();
-            let _ = world.insert(entity, Primitive { id: primitive, color });
-            let _ = world.insert(entity, EditorGizmoAxisComponent { axis });
+            let primitive = match handle {
+                EditorGizmoHandle::Axis(_) => gizmo_primitive_for_mode(self.state.transform_mode),
+                EditorGizmoHandle::Plane(_) | EditorGizmoHandle::Center => builtins::ID_CUBE,
+            };
+            let color = handle.color();
+            let _ = world.insert(
+                entity,
+                Primitive {
+                    id: primitive,
+                    color,
+                },
+            );
+            let _ = world.insert(entity, EditorGizmoAxisComponent { handle });
             let _ = world.insert(
                 entity,
                 DisplayVisibility {
@@ -382,10 +584,11 @@ impl EditorViewportController {
             ensure_primitive_base(world, entity, default_mat);
             apply_primitive_instance(world, &mats, entity, default_mat, color);
 
-            let transform = gizmo_axis_transform(
+            let transform = gizmo_handle_transform(
                 self.state.transform_mode,
-                axis,
-                selected_transform.position,
+                handle,
+                selected_world_position,
+                gizmo_orientation,
                 length,
                 thickness,
             );
@@ -405,7 +608,7 @@ impl EditorViewportController {
                 }
             }
         }
-        self.armed_axis = None;
+        self.armed_handle = None;
         self.drag = None;
     }
 
@@ -425,14 +628,15 @@ impl EditorViewportController {
 
         let center = selection_center.unwrap_or(world_center);
         let radius = selection_radius.unwrap_or(world_radius).max(0.25);
-        if self.last_projection != self.state.projection || !self.orthographic_half_height.is_finite() {
+        if self.last_projection != self.state.projection
+            || !self.orthographic_half_height.is_finite()
+        {
             self.orthographic_half_height = (radius * 1.75).clamp(0.5, 10_000.0);
             self.last_projection = self.state.projection;
         }
         if wheel_y.abs() > f32::EPSILON {
-            self.orthographic_half_height = (self.orthographic_half_height
-                * (-wheel_y * 0.12).exp())
-                .clamp(0.05, 100_000.0);
+            self.orthographic_half_height =
+                (self.orthographic_half_height * (-wheel_y * 0.12).exp()).clamp(0.05, 100_000.0);
         } else if self.orthographic_half_height <= 0.0 {
             self.orthographic_half_height = (radius * 1.75).max(0.5);
         }
@@ -496,7 +700,10 @@ impl EditorViewportController {
         snapshot.projection.half_height = self.orthographic_half_height;
         snapshot.projection.near = near;
         snapshot.projection.far = far;
-        snapshot.finite = view_projection.to_cols_array().iter().all(|value| value.is_finite());
+        snapshot.finite = view_projection
+            .to_cols_array()
+            .iter()
+            .all(|value| value.is_finite());
     }
 }
 
@@ -520,10 +727,51 @@ fn gizmo_primitive_for_mode(mode: UiEditorTransformMode) -> PrimitiveId {
     }
 }
 
+fn gizmo_handle_transform(
+    mode: UiEditorTransformMode,
+    handle: EditorGizmoHandle,
+    origin: Vec3,
+    orientation: Quat,
+    length: f32,
+    thickness: f32,
+) -> Transform {
+    match handle {
+        EditorGizmoHandle::Axis(axis) => {
+            gizmo_axis_transform(mode, axis, origin, orientation, length, thickness)
+        }
+        EditorGizmoHandle::Plane(plane) => {
+            let (a, b) = plane.basis();
+            let local_center = (a + b) * (length * 0.22);
+            let plane_size = (length * 0.16).max(thickness * 2.0);
+            let thin = (thickness * 0.35).max(0.008);
+            let scale = match plane {
+                EditorGizmoPlane::XY => Vec3::new(plane_size, plane_size, thin),
+                EditorGizmoPlane::XZ => Vec3::new(plane_size, thin, plane_size),
+                EditorGizmoPlane::YZ => Vec3::new(thin, plane_size, plane_size),
+            };
+            Transform {
+                position: origin + orientation * local_center,
+                rotation: orientation,
+                scale,
+            }
+        }
+        EditorGizmoHandle::Center => Transform {
+            position: origin,
+            rotation: orientation,
+            scale: Vec3::splat(if mode == UiEditorTransformMode::Scale {
+                (length * 0.14).max(thickness * 2.4)
+            } else {
+                (length * 0.10).max(thickness * 2.0)
+            }),
+        },
+    }
+}
+
 fn gizmo_axis_transform(
     mode: UiEditorTransformMode,
     axis: EditorGizmoAxis,
     origin: Vec3,
+    orientation: Quat,
     length: f32,
     thickness: f32,
 ) -> Transform {
@@ -535,54 +783,94 @@ fn gizmo_axis_transform(
         };
         return Transform {
             position: origin,
-            rotation,
+            rotation: orientation * rotation,
             scale: Vec3::splat(length * 0.72),
         };
     }
 
     let axis_vec = axis.vector();
+    let world_axis = (orientation * axis_vec).normalize_or_zero();
+    if mode == UiEditorTransformMode::Scale {
+        let scale = match axis {
+            EditorGizmoAxis::X => Vec3::new(length, thickness * 2.4, thickness * 2.4),
+            EditorGizmoAxis::Y => Vec3::new(thickness * 2.4, length, thickness * 2.4),
+            EditorGizmoAxis::Z => Vec3::new(thickness * 2.4, thickness * 2.4, length),
+        };
+        return Transform {
+            position: origin + world_axis * (length * 0.5),
+            rotation: orientation,
+            scale,
+        };
+    }
     let rotation = match axis {
         EditorGizmoAxis::X => Quat::from_rotation_z(-core::f32::consts::FRAC_PI_2),
         EditorGizmoAxis::Y => Quat::IDENTITY,
         EditorGizmoAxis::Z => Quat::from_rotation_x(core::f32::consts::FRAC_PI_2),
     };
-    let scale = if mode == UiEditorTransformMode::Scale {
-        match axis {
-            EditorGizmoAxis::X => Vec3::new(length, thickness * 2.4, thickness * 2.4),
-            EditorGizmoAxis::Y => Vec3::new(thickness * 2.4, length, thickness * 2.4),
-            EditorGizmoAxis::Z => Vec3::new(thickness * 2.4, thickness * 2.4, length),
-        }
-    } else {
-        Vec3::new(thickness, length, thickness)
-    };
     Transform {
-        position: origin + axis_vec * (length * 0.5),
-        rotation,
-        scale,
+        position: origin + world_axis * (length * 0.5),
+        rotation: orientation * rotation,
+        scale: Vec3::new(thickness, length, thickness),
     }
 }
 
 fn transformed_from_drag(drag: ActiveTransformDrag, state: &UiEditorViewportState) -> Transform {
-    let axis = drag.axis.vector();
     match state.transform_mode {
         UiEditorTransformMode::Select => drag.before,
         UiEditorTransformMode::Translate => {
-            let mut distance = drag.accumulated;
-            if state.translation_snap_enabled {
-                distance = snap_scalar(distance, state.translation_snap_units.max(0.0001));
-            }
+            let step = state.translation_snap_units.max(0.0001);
+            let delta = match drag.handle {
+                EditorGizmoHandle::Axis(_) => {
+                    let mut distance = drag.accumulated;
+                    if state.translation_snap_enabled {
+                        distance = snap_scalar(distance, step);
+                    }
+                    drag.axis_vector * distance
+                }
+                EditorGizmoHandle::Plane(_) => {
+                    let mut a = drag.accumulated_world.dot(drag.plane_a);
+                    let mut b = drag.accumulated_world.dot(drag.plane_b);
+                    if state.translation_snap_enabled {
+                        a = snap_scalar(a, step);
+                        b = snap_scalar(b, step);
+                    }
+                    drag.plane_a * a + drag.plane_b * b
+                }
+                EditorGizmoHandle::Center => {
+                    if state.translation_snap_enabled {
+                        Vec3::new(
+                            snap_scalar(drag.accumulated_world.x, step),
+                            snap_scalar(drag.accumulated_world.y, step),
+                            snap_scalar(drag.accumulated_world.z, step),
+                        )
+                    } else {
+                        drag.accumulated_world
+                    }
+                }
+            };
             Transform {
-                position: drag.before.position + axis * distance,
+                position: drag.before.position + delta,
                 ..drag.before
             }
         }
         UiEditorTransformMode::Rotate => {
+            let EditorGizmoHandle::Axis(axis) = drag.handle else {
+                return drag.before;
+            };
             let mut degrees = drag.accumulated;
             if state.rotation_snap_enabled {
                 degrees = snap_scalar(degrees, state.rotation_snap_degrees.max(0.0001));
             }
+            let rotation_axis = match state.transform_space {
+                UiEditorTransformSpace::World => drag.axis_vector,
+                UiEditorTransformSpace::Local => axis.vector(),
+            };
+            let delta = Quat::from_axis_angle(rotation_axis, degrees.to_radians());
             Transform {
-                rotation: Quat::from_axis_angle(axis, degrees.to_radians()) * drag.before.rotation,
+                rotation: match state.transform_space {
+                    UiEditorTransformSpace::World => delta * drag.before.rotation,
+                    UiEditorTransformSpace::Local => drag.before.rotation * delta,
+                },
                 ..drag.before
             }
         }
@@ -591,13 +879,50 @@ fn transformed_from_drag(drag: ActiveTransformDrag, state: &UiEditorViewportStat
             if state.scale_snap_enabled {
                 delta = snap_scalar(delta, (state.scale_snap_percent / 100.0).max(0.0001));
             }
-            let mut scale = drag.before.scale + axis * delta;
+            let mut scale = match drag.handle {
+                EditorGizmoHandle::Axis(axis) => drag.before.scale + axis.vector() * delta,
+                EditorGizmoHandle::Center => drag.before.scale + Vec3::splat(delta),
+                EditorGizmoHandle::Plane(_) => drag.before.scale,
+            };
             scale.x = scale.x.max(0.001);
             scale.y = scale.y.max(0.001);
             scale.z = scale.z.max(0.001);
-            Transform { scale, ..drag.before }
+            Transform {
+                scale,
+                ..drag.before
+            }
         }
     }
+}
+
+fn transform_screen_world_delta(
+    camera: Option<&CameraFrameSnapshot>,
+    object_position: Vec3,
+    mouse_delta: (f32, f32),
+    viewport_size: [u32; 2],
+    projection: UiEditorViewportProjection,
+    orthographic_half_height: f32,
+) -> Vec3 {
+    let Some(camera) = camera else {
+        return Vec3::new(mouse_delta.0, -mouse_delta.1, 0.0) * 0.01;
+    };
+    let right =
+        Vec3::new(camera.right_ws[0], camera.right_ws[1], camera.right_ws[2]).normalize_or_zero();
+    let up = Vec3::new(camera.up_ws[0], camera.up_ws[1], camera.up_ws[2]).normalize_or_zero();
+    let world_per_pixel = match projection {
+        UiEditorViewportProjection::Perspective => {
+            let camera_position = Vec3::new(
+                camera.position_ws[0],
+                camera.position_ws[1],
+                camera.position_ws[2],
+            );
+            let distance = object_position.distance(camera_position).max(0.1);
+            let fovy = camera.projection.fovy.max(1.0_f32.to_radians());
+            2.0 * distance * (fovy * 0.5).tan() / viewport_size[1].max(1) as f32
+        }
+        _ => 2.0 * orthographic_half_height.max(0.01) / viewport_size[1].max(1) as f32,
+    };
+    (right * mouse_delta.0 - up * mouse_delta.1) * world_per_pixel
 }
 
 fn transform_drag_sensitivity(
@@ -612,7 +937,8 @@ fn transform_drag_sensitivity(
     let Some(camera) = camera else {
         return (mouse_delta.0 - mouse_delta.1) * 0.01;
     };
-    let right = Vec3::new(camera.right_ws[0], camera.right_ws[1], camera.right_ws[2]).normalize_or_zero();
+    let right =
+        Vec3::new(camera.right_ws[0], camera.right_ws[1], camera.right_ws[2]).normalize_or_zero();
     let up = Vec3::new(camera.up_ws[0], camera.up_ws[1], camera.up_ws[2]).normalize_or_zero();
     let screen_axis = [axis.dot(right), -axis.dot(up)];
     let screen_len = (screen_axis[0] * screen_axis[0] + screen_axis[1] * screen_axis[1]).sqrt();
@@ -624,16 +950,20 @@ fn transform_drag_sensitivity(
 
     match projection {
         UiEditorViewportProjection::Perspective => {
-            let camera_position = Vec3::new(camera.position_ws[0], camera.position_ws[1], camera.position_ws[2]);
+            let camera_position = Vec3::new(
+                camera.position_ws[0],
+                camera.position_ws[1],
+                camera.position_ws[2],
+            );
             let distance = object_position.distance(camera_position).max(0.1);
             let fovy = camera.projection.fovy.max(1.0_f32.to_radians());
-            let world_per_pixel = 2.0 * distance * (fovy * 0.5).tan()
-                / viewport_size[1].max(1) as f32;
+            let world_per_pixel =
+                2.0 * distance * (fovy * 0.5).tan() / viewport_size[1].max(1) as f32;
             projected_delta * world_per_pixel
         }
         _ => {
-            let world_per_pixel = 2.0 * orthographic_half_height.max(0.01)
-                / viewport_size[1].max(1) as f32;
+            let world_per_pixel =
+                2.0 * orthographic_half_height.max(0.01) / viewport_size[1].max(1) as f32;
             projected_delta * world_per_pixel
         }
     }
@@ -663,9 +993,13 @@ mod tests {
         };
         let drag = ActiveTransformDrag {
             entity: EntityId::default(),
-            axis: EditorGizmoAxis::X,
+            handle: EditorGizmoHandle::Axis(EditorGizmoAxis::X),
+            axis_vector: Vec3::X,
+            plane_a: Vec3::ZERO,
+            plane_b: Vec3::ZERO,
             before,
             accumulated: 14.9,
+            accumulated_world: Vec3::ZERO,
         };
         let state = UiEditorViewportState {
             transform_mode: UiEditorTransformMode::Translate,
@@ -681,9 +1015,13 @@ mod tests {
     fn scale_never_crosses_zero() {
         let drag = ActiveTransformDrag {
             entity: EntityId::default(),
-            axis: EditorGizmoAxis::Y,
+            handle: EditorGizmoHandle::Axis(EditorGizmoAxis::Y),
+            axis_vector: Vec3::Y,
+            plane_a: Vec3::ZERO,
+            plane_b: Vec3::ZERO,
             before: Transform::default(),
             accumulated: -5.0,
+            accumulated_world: Vec3::ZERO,
         };
         let state = UiEditorViewportState {
             transform_mode: UiEditorTransformMode::Scale,
@@ -691,5 +1029,46 @@ mod tests {
         };
         let out = transformed_from_drag(drag, &state);
         assert!(out.scale.y > 0.0);
+    }
+    #[test]
+    fn planar_translation_moves_only_plane_axes() {
+        let drag = ActiveTransformDrag {
+            entity: EntityId::default(),
+            handle: EditorGizmoHandle::Plane(EditorGizmoPlane::XY),
+            axis_vector: Vec3::ZERO,
+            plane_a: Vec3::X,
+            plane_b: Vec3::Y,
+            before: Transform::default(),
+            accumulated: 0.0,
+            accumulated_world: Vec3::new(12.0, -8.0, 99.0),
+        };
+        let state = UiEditorViewportState {
+            transform_mode: UiEditorTransformMode::Translate,
+            translation_snap_enabled: false,
+            ..UiEditorViewportState::default()
+        };
+        let out = transformed_from_drag(drag, &state);
+        assert_eq!(out.position, Vec3::new(12.0, -8.0, 0.0));
+    }
+
+    #[test]
+    fn center_scale_is_uniform() {
+        let drag = ActiveTransformDrag {
+            entity: EntityId::default(),
+            handle: EditorGizmoHandle::Center,
+            axis_vector: Vec3::ZERO,
+            plane_a: Vec3::ZERO,
+            plane_b: Vec3::ZERO,
+            before: Transform::default(),
+            accumulated: 0.5,
+            accumulated_world: Vec3::ZERO,
+        };
+        let state = UiEditorViewportState {
+            transform_mode: UiEditorTransformMode::Scale,
+            scale_snap_enabled: false,
+            ..UiEditorViewportState::default()
+        };
+        let out = transformed_from_drag(drag, &state);
+        assert_eq!(out.scale, Vec3::splat(1.5));
     }
 }
