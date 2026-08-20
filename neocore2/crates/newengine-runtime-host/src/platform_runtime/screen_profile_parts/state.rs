@@ -2,6 +2,7 @@ use super::*;
 
 mod authored_ui;
 mod editor;
+mod game_gui;
 mod presentation;
 mod right_edit;
 
@@ -12,6 +13,20 @@ impl ScreenProfileRuntimeState {
             screen_profile_descriptor(config.profile, config.game_ui_root_surface_id.clone());
         let mut descriptor = descriptor;
         descriptor.game_ui_document_ref = config.game_ui_document_ref.clone();
+        if let Some(game_gui) = config.game_gui.as_ref().filter(|config| config.enabled) {
+            let errors = game_gui.validation_errors();
+            if errors.is_empty() {
+                newengine_ulog_api::ulog::info!(
+                    "screen profile: game_gui enabled layers={} policy='authored .neui layer stack'",
+                    game_gui.layers.len(),
+                );
+            } else {
+                newengine_ulog_api::ulog::warn!(
+                    "screen profile: game_gui config invalid; layer stack disabled errors='{}'",
+                    errors.join("; "),
+                );
+            }
+        }
         let presentation_state_id = config.presentation_flow.as_ref().and_then(|flow| {
             let validation_errors = flow.validation_errors();
             if validation_errors.is_empty() {
@@ -52,6 +67,9 @@ impl ScreenProfileRuntimeState {
             published_surfaces: BTreeSet::new(),
             mounted_game_ui_document_ref: None,
             failed_game_ui_document_ref: None,
+            mounted_game_gui_layers: BTreeMap::new(),
+            failed_game_gui_layers: BTreeSet::new(),
+            game_gui_visibility_overrides: BTreeMap::new(),
             presentation_state_id,
             last_published_presentation_state_id: None,
             presentation_runtime_ready: false,
@@ -77,6 +95,9 @@ impl ScreenProfileRuntimeState {
         if resources.get::<EditorCommandRegistry>().is_none() {
             resources.insert(default_runtime_editor_commands());
         }
+        if resources.get::<UiEditorViewportState>().is_none() {
+            resources.insert(UiEditorViewportState::default());
+        }
         let mut descriptor = self.descriptor.clone();
         descriptor.input_focus_policy = self.active_input_focus_policy();
         resources.insert(UiScreenProfileState {
@@ -87,6 +108,8 @@ impl ScreenProfileRuntimeState {
         if let Some(state) = self.presentation_flow_state(0, "presentation flow initialized") {
             resources.insert(state);
         }
+        resources.insert(self.game_gui_stack_state(0));
+        resources.insert(UiGameLayerCommandQueue::default());
     }
 
     /// Publishes profile DTOs and optional UI surface nodes for the current frame.
@@ -142,11 +165,13 @@ impl ScreenProfileRuntimeState {
 
         self.update_menu_interaction(resources, frame_index);
         self.update_editor_runtime_state(resources, frame_index);
+        self.update_editor_viewport_interaction(resources, frame_index);
         self.update_dock_interaction(resources, frame_index);
         self.publish_editor_layout_state(resources, frame_index);
         self.publish_focus_policy(resources);
         let profile_changed = self.last_published_profile != Some(self.descriptor.profile);
-        let mut refresh_ui = presentation_changed;
+        let game_gui_changed = self.prepare_game_gui(resources, frame_index, profile_changed);
+        let mut refresh_ui = presentation_changed || game_gui_changed;
 
         match self.descriptor.profile {
             UiScreenProfile::Editor => {
@@ -168,6 +193,10 @@ impl ScreenProfileRuntimeState {
                         .get::<EditorCommandRegistry>()
                         .cloned()
                         .unwrap_or_else(default_runtime_editor_commands);
+                    let viewport_state = resources
+                        .get::<UiEditorViewportState>()
+                        .cloned()
+                        .unwrap_or_default();
                     let mut node = EditorScreen::default().surface_node(
                         frame_index,
                         runtime_mode,
@@ -175,6 +204,7 @@ impl ScreenProfileRuntimeState {
                         runtime_possessed,
                         runtime_diff_count,
                         &command_registry,
+                        &viewport_state,
                         &layout,
                         self.active_menu_id.as_deref(),
                     );
@@ -198,6 +228,11 @@ impl ScreenProfileRuntimeState {
                 if self.active_presentation_state().is_some() {
                     refresh_ui |= self
                         .prepare_presentation_flow_surface(profile_changed, presentation_changed);
+                } else if self.has_active_game_gui() {
+                    // Game GUI owns authored HUD/menu/overlay layers. Keep the legacy
+                    // single-document path disabled to avoid mounting the placeholder HUD twice.
+                    refresh_ui |=
+                        self.hide_profile_surface(UI_SURFACE_GAME_PRESENTATION, profile_changed);
                 } else if let Some(document_ref) = self
                     .descriptor
                     .game_ui_document_ref

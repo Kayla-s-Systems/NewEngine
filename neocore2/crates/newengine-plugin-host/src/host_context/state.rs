@@ -109,7 +109,12 @@ pub(crate) struct HostContext {
     pub(crate) services: Mutex<NeHashMap<String, ServiceEntry>>,
     pub(crate) services_generation: AtomicU64,
 
-    pub(crate) event_sinks: Mutex<Vec<EventSinkEntry>>,
+    /// Copy-on-write event-sink snapshot.
+    ///
+    /// Event publication is a hot path while subscribe/unregister are rare lifecycle
+    /// operations. Readers therefore clone one `Arc` and never clone the whole sink
+    /// vector or hold the registry mutex while callbacks execute.
+    pub(crate) event_sinks: Mutex<Arc<[EventSinkEntry]>>,
 
     /// Declared plugin descriptors keyed by plugin id.
     ///
@@ -148,7 +153,7 @@ fn make_default_ctx() -> Arc<HostContext> {
     Arc::new(HostContext {
         services: Mutex::new(NeHashMap::default()),
         services_generation: AtomicU64::new(1),
-        event_sinks: Mutex::new(Vec::new()),
+        event_sinks: Mutex::new(Arc::from(Vec::<EventSinkEntry>::new())),
         plugin_descriptors: Mutex::new(NeHashMap::default()),
         plugin_origins: Mutex::new(NeHashMap::default()),
         external_runtime_plugins: Mutex::new(NeHashMap::default()),

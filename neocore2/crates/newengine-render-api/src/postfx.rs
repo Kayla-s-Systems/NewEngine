@@ -280,6 +280,50 @@ impl Default for SsaoParams {
     }
 }
 
+/// Screen-space directional contact-shadow controls.
+///
+/// This is intentionally independent from SSAO. Contact shadows are a short-range
+/// directional visibility layer that augments raster shadow maps near receivers;
+/// SSAO remains an ambient cavity term.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct ContactShadowParams {
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    #[serde(default = "default_contact_shadow_strength")]
+    pub strength: f32,
+    #[serde(default = "default_contact_shadow_ray_length_px")]
+    pub max_ray_length_px: f32,
+    #[serde(default = "default_contact_shadow_receiver_bias_scale")]
+    pub receiver_bias_scale: f32,
+}
+
+impl Default for ContactShadowParams {
+    #[inline]
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            strength: default_contact_shadow_strength(),
+            max_ray_length_px: default_contact_shadow_ray_length_px(),
+            receiver_bias_scale: default_contact_shadow_receiver_bias_scale(),
+        }
+    }
+}
+
+#[inline]
+fn default_contact_shadow_strength() -> f32 {
+    0.25
+}
+
+#[inline]
+fn default_contact_shadow_ray_length_px() -> f32 {
+    22.0
+}
+
+#[inline]
+fn default_contact_shadow_receiver_bias_scale() -> f32 {
+    1.75
+}
+
 #[inline]
 fn default_ssao_radius_ws() -> f32 {
     0.75
@@ -304,6 +348,8 @@ pub struct PostFxQualityParams {
     #[serde(default)]
     pub ssao: SsaoParams,
     #[serde(default)]
+    pub contact_shadows: ContactShadowParams,
+    #[serde(default)]
     pub color: ColorGradeParams,
     #[serde(default)]
     pub anti_aliasing: AntiAliasingMode,
@@ -317,6 +363,7 @@ impl Default for PostFxQualityParams {
             fxaa: FxaaParams::default(),
             taa: TaaParams::default(),
             ssao: SsaoParams::default(),
+            contact_shadows: ContactShadowParams::default(),
             color: ColorGradeParams::default(),
             anti_aliasing: AntiAliasingMode::Fxaa,
         }

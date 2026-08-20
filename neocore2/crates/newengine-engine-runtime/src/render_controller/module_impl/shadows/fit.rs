@@ -12,10 +12,6 @@ pub(super) fn directional_shadow_center(
 ) -> Vec3 {
     if bounds.radius > radius * 1.25 {
         let camera = Vec3::new(camera_position[0], camera_position[1], camera_position[2]);
-        // Horizontal camera motion must move the local shadow window, but the
-        // character motor continuously corrects eye/ground height by tiny amounts.
-        // Feeding that Y jitter into texel snapping makes the complete map jump
-        // between neighbouring light-space rows and is perceived as flicker.
         let stable_y = if bounds.center.y.is_finite() {
             bounds.center.y
         } else {
@@ -53,8 +49,6 @@ pub(super) fn snapped_directional_shadow_center(
         return center;
     }
 
-    // Deterministic nearest-texel snapping. Using floor(x + 0.5) avoids the
-    // sign-dependent half-way behavior of round() at negative coordinates.
     let snap_x = |v: f32| (v / texel_x + 0.5).floor() * texel_x;
     let snap_y = |v: f32| (v / texel_y + 0.5).floor() * texel_y;
     let x = center.dot(right);
@@ -79,6 +73,27 @@ pub(super) fn directional_shadow_stable_fit(
     split_far: f32,
     resolution: u32,
 ) -> Option<DirectionalShadowFit> {
+    directional_shadow_stable_fit_with_padding(
+        viewproj,
+        camera,
+        camera_forward,
+        split_near,
+        split_far,
+        resolution,
+        2.0,
+    )
+}
+
+#[inline]
+pub(super) fn directional_shadow_stable_fit_with_padding(
+    viewproj: Mat4,
+    camera: Vec3,
+    camera_forward: Vec3,
+    split_near: f32,
+    split_far: f32,
+    resolution: u32,
+    kernel_guard_texels: f32,
+) -> Option<DirectionalShadowFit> {
     let corners =
         camera_frustum_slice_corners(viewproj, camera, camera_forward, split_near, split_far)?;
 
@@ -96,19 +111,21 @@ pub(super) fn directional_shadow_stable_fit(
         return None;
     }
 
-    // Quantize the sphere itself very lightly. Floating point reconstruction of
-    // inverse view-projection can otherwise alter the radius by tiny fractions
-    // between frames. This does not snap camera motion; it only removes numerical
-    // scale breathing from the orthographic projection.
     let tile_resolution = resolution.max(1) as f32;
     let radius_quantum = ((split_far.max(1.0) * 2.0) / tile_resolution * 0.25).max(1.0e-4);
     radius = (radius / radius_quantum).ceil() * radius_quantum;
 
-    // Reserve two texels around the stabilized sphere so PCF/PCSS taps do not
-    // cross the cascade border. The guard is expressed in the same per-tile
-    // resolution used by atlas rendering.
+    // Guard the stable fit by the actual receiver-kernel footprint. A fixed two-
+    // texel border is sufficient for hard/compact PCF, but wider PCSS kernels need
+    // a correspondingly wider world-space safety band or blockers disappear near
+    // cascade edges and the penumbra visibly collapses.
     let texel_world = (radius * 2.0) / tile_resolution;
-    let guard = (texel_world * 2.0).max(0.02);
+    let guard_texels = if kernel_guard_texels.is_finite() {
+        kernel_guard_texels.clamp(2.0, 16.0)
+    } else {
+        2.0
+    };
+    let guard = (texel_world * guard_texels).max(0.02);
     let stable_half = radius + guard;
 
     Some(DirectionalShadowFit {
@@ -173,8 +190,6 @@ pub(super) fn directional_shadow_frustum_fit(
 
     let raw_half_x = ((max_x - min_x) * 0.5).max(0.5);
     let raw_half_y = ((max_y - min_y) * 0.5).max(0.5);
-    // Add only a small guard band. The previous radius heuristic wasted a large
-    // part of each map on empty space, lowering silhouette precision.
     let max_half = raw_half_x.max(raw_half_y);
     let texel_guard = (max_half * 2.0 / resolution.max(1) as f32) * 2.0;
     let guard = (max_half * 0.0125).max(texel_guard).max(0.05);
@@ -224,10 +239,6 @@ fn camera_frustum_slice_corners(
         if !forward_projection.is_finite() || forward_projection <= 1.0e-4 {
             return None;
         }
-        // CSM split distances are camera-forward depths, not Euclidean radii.
-        // Intersect each view ray with the requested near/far depth planes. This
-        // is the canonical frustum-slice construction and keeps the CPU fit
-        // independent from receiver distance at the edge of the field of view.
         out[i] = camera + ray * (near / forward_projection);
         out[i + 4] = camera + ray * (far / forward_projection);
     }
@@ -304,20 +315,12 @@ mod shadow_fit_tests {
             .expect("valid frustum slice");
         for corner in &corners[..4] {
             let forward_depth = (*corner - camera).dot(forward);
-            assert!(
-                (forward_depth - 3.0).abs() < 0.002,
-                "near depth={forward_depth}"
-            );
+            assert!((forward_depth - 3.0).abs() < 0.002, "near depth={forward_depth}");
         }
         for corner in &corners[4..] {
             let forward_depth = (*corner - camera).dot(forward);
-            assert!(
-                (forward_depth - 25.0).abs() < 0.01,
-                "far depth={forward_depth}"
-            );
+            assert!((forward_depth - 25.0).abs() < 0.01, "far depth={forward_depth}");
         }
-        // Off-axis corners are farther from the camera than their split depth.
-        // This guards against accidentally regressing to radial-shell cascades.
         assert!((corners[4] - camera).length() > 25.1);
     }
 
@@ -326,22 +329,13 @@ mod shadow_fit_tests {
         let (viewproj, camera, forward) = test_viewproj();
         let light_dir = Vec3::new(0.42, -0.82, 0.31).normalize_or_zero();
         let fit = directional_shadow_frustum_fit(
-            viewproj,
-            camera,
-            forward,
-            0.5,
-            30.0,
-            light_dir,
-            Vec3::Y,
-            4096,
+            viewproj, camera, forward, 0.5, 30.0, light_dir, Vec3::Y, 4096,
         )
         .expect("valid directional fit");
         assert!(fit.center.is_finite());
         assert!(fit.half_x.is_finite() && fit.half_x > 0.5);
         assert!(fit.half_y.is_finite() && fit.half_y > 0.5);
         assert!(fit.depth_radius.is_finite() && fit.depth_radius > 1.0);
-        // At 30 m and 60-degree FOV a frustum-fitted cascade should remain far
-        // tighter than the old max-distance-sized square.
         assert!(fit.half_x < 45.0, "half_x={}", fit.half_x);
         assert!(fit.half_y < 45.0, "half_y={}", fit.half_y);
     }
@@ -354,20 +348,33 @@ mod shadow_fit_tests {
         let forward_b = Vec3::new(0.342, 0.0, -0.940).normalize_or_zero();
         let view_a = Mat4::look_at_rh(camera, camera + forward_a, Vec3::Y);
         let view_b = Mat4::look_at_rh(camera, camera + forward_b, Vec3::Y);
-        let fit_a =
-            directional_shadow_stable_fit(projection * view_a, camera, forward_a, 0.5, 30.0, 4096)
-                .expect("stable fit A");
-        let fit_b =
-            directional_shadow_stable_fit(projection * view_b, camera, forward_b, 0.5, 30.0, 4096)
-                .expect("stable fit B");
-        assert!(
-            (fit_a.half_x - fit_b.half_x).abs() < 0.01,
-            "rotation changed stable half extent: {} vs {}",
-            fit_a.half_x,
-            fit_b.half_x
-        );
+        let fit_a = directional_shadow_stable_fit(
+            projection * view_a, camera, forward_a, 0.5, 30.0, 4096,
+        )
+        .expect("stable fit A");
+        let fit_b = directional_shadow_stable_fit(
+            projection * view_b, camera, forward_b, 0.5, 30.0, 4096,
+        )
+        .expect("stable fit B");
+        assert!((fit_a.half_x - fit_b.half_x).abs() < 0.01);
         assert!((fit_a.half_y - fit_b.half_y).abs() < 0.01);
         assert!((fit_a.half_x - fit_a.half_y).abs() < 1.0e-5);
+    }
+
+    #[test]
+    fn wider_filter_kernel_reserves_more_stable_fit_padding() {
+        let (viewproj, camera, forward) = test_viewproj();
+        let compact = directional_shadow_stable_fit_with_padding(
+            viewproj, camera, forward, 0.5, 30.0, 2048, 2.0,
+        )
+        .expect("compact fit");
+        let wide = directional_shadow_stable_fit_with_padding(
+            viewproj, camera, forward, 0.5, 30.0, 2048, 8.0,
+        )
+        .expect("wide fit");
+        assert!(wide.half_x > compact.half_x);
+        assert!(wide.half_y > compact.half_y);
+        assert!((wide.depth_radius - compact.depth_radius).abs() < 1.0e-5);
     }
 
     #[test]
@@ -386,15 +393,10 @@ mod shadow_fit_tests {
         let texel = (half * 2.0) / resolution as f32;
         let x_units = snapped.dot(right) / texel;
         let y_units = snapped.dot(up) / texel;
-        assert!(
-            (x_units - x_units.round()).abs() < 2.0e-4,
-            "x_units={x_units}"
-        );
-        assert!(
-            (y_units - y_units.round()).abs() < 2.0e-4,
-            "y_units={y_units}"
-        );
+        assert!((x_units - x_units.round()).abs() < 2.0e-4, "x_units={x_units}");
+        assert!((y_units - y_units.round()).abs() < 2.0e-4, "y_units={y_units}");
     }
+
     #[test]
     fn subtexel_camera_motion_does_not_move_shadow_projection() {
         let light_dir = Vec3::new(0.42, -0.82, 0.31).normalize_or_zero();
@@ -405,24 +407,11 @@ mod shadow_fit_tests {
         let right = light_dir.cross(up_hint).normalize_or_zero();
         let center = Vec3::ZERO;
         let a = snapped_directional_shadow_center(
-            center + right * (texel * 0.10),
-            light_dir,
-            up_hint,
-            half,
-            half,
-            resolution,
+            center + right * (texel * 0.10), light_dir, up_hint, half, half, resolution,
         );
         let b = snapped_directional_shadow_center(
-            center + right * (texel * 0.40),
-            light_dir,
-            up_hint,
-            half,
-            half,
-            resolution,
+            center + right * (texel * 0.40), light_dir, up_hint, half, half, resolution,
         );
-        assert!(
-            (a - b).length() < 1.0e-5,
-            "sub-texel motion changed projection: {a:?} -> {b:?}"
-        );
+        assert!((a - b).length() < 1.0e-5, "sub-texel motion changed projection: {a:?} -> {b:?}");
     }
 }

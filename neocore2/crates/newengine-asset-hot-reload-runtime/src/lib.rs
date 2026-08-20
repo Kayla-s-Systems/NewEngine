@@ -2,6 +2,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
     path::{Path, PathBuf},
+    sync::mpsc::{self, Receiver, TryRecvError},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
@@ -9,7 +10,7 @@ use newengine_assets::{AssetService, AssetServiceClient};
 use newengine_assets_api::{
     plan_asset_invalidation_v1, AssetInvalidationPlanV1, AssetInvalidationRequestV1,
 };
-use newengine_core::Resources;
+use newengine_core::{Resources, TaskLane, TaskPriority, TaskRequest, ThreadPoolHandle};
 use newengine_project_api::{ContentMountNamespace, ContentMountRegistry};
 use serde::{Deserialize, Serialize};
 
@@ -23,8 +24,8 @@ struct FileStamp {
 }
 
 impl FileStamp {
-    fn from_path(path: &Path) -> Option<Self> {
-        let metadata = fs::metadata(path).ok()?;
+    #[inline]
+    fn from_metadata(metadata: &fs::Metadata) -> Option<Self> {
         if !metadata.is_file() {
             return None;
         }
@@ -94,11 +95,18 @@ impl Default for AssetHotReloadReportV1 {
 }
 
 #[derive(Debug)]
+struct ScanBatch {
+    scan_unix_ms: u64,
+    files: BTreeMap<PathBuf, FileStamp>,
+}
+
+#[derive(Debug)]
 pub struct AssetFileWatcherRuntime {
     config: AssetFileWatcherConfig,
-    known: BTreeMap<PathBuf, FileStamp>,
+    known: Option<BTreeMap<PathBuf, FileStamp>>,
     pending: BTreeMap<String, u64>,
-    last_scan_unix_ms: u64,
+    scan_rx: Option<Receiver<ScanBatch>>,
+    next_scan_unix_ms: u64,
     primed: bool,
 }
 
@@ -106,9 +114,10 @@ impl Default for AssetFileWatcherRuntime {
     fn default() -> Self {
         Self {
             config: AssetFileWatcherConfig::default(),
-            known: BTreeMap::new(),
+            known: None,
             pending: BTreeMap::new(),
-            last_scan_unix_ms: 0,
+            scan_rx: None,
+            next_scan_unix_ms: 0,
             primed: false,
         }
     }
@@ -118,51 +127,65 @@ impl AssetFileWatcherRuntime {
     pub fn new(config: AssetFileWatcherConfig) -> Self {
         Self {
             config,
-            ..Self::default()
+            known: None,
+            pending: BTreeMap::new(),
+            scan_rx: None,
+            next_scan_unix_ms: 0,
+            primed: false,
         }
     }
 
-    pub fn prime(&mut self, registry: &ContentMountRegistry) {
-        self.known = scan_watched_files(registry, &self.config);
+    /// Primes hot reload without walking the filesystem on the frame thread.
+    /// All recursive directory/metadata I/O is submitted to the engine-owned
+    /// `AssetIo` lane so it participates in the common CPU budget and profiler.
+    pub fn prime(&mut self, registry: &ContentMountRegistry, jobs: &ThreadPoolHandle) {
+        self.known = None;
         self.pending.clear();
-        self.last_scan_unix_ms = unix_ms_now();
+        self.scan_rx = None;
+        self.next_scan_unix_ms = 0;
         self.primed = true;
+        self.schedule_scan(registry, jobs, unix_ms_now());
     }
 
+    /// Drains completed scan snapshots and returns only debounce-ready logical refs.
+    /// No AssetServiceClient is constructed on the idle frame path.
     pub fn poll(
         &mut self,
         registry: &ContentMountRegistry,
-        assets: &AssetServiceClient,
-    ) -> Option<AssetHotReloadReportV1> {
-        let now = unix_ms_now();
+        jobs: &ThreadPoolHandle,
+    ) -> Option<(Vec<String>, u64)> {
         if !self.primed {
-            self.prime(registry);
+            self.prime(registry, jobs);
             return None;
         }
-        if now.saturating_sub(self.last_scan_unix_ms) < self.config.poll_interval.as_millis() as u64
-        {
-            return None;
-        }
-        self.last_scan_unix_ms = now;
 
-        let next = scan_watched_files(registry, &self.config);
-        let mut changed_paths = BTreeSet::<PathBuf>::new();
-        for (path, stamp) in &next {
-            if self.known.get(path) != Some(stamp) {
-                changed_paths.insert(path.clone());
+        let now = unix_ms_now();
+        let mut scan_finished = false;
+        if let Some(scan_rx) = self.scan_rx.as_ref() {
+            match scan_rx.try_recv() {
+                Ok(batch) => {
+                    scan_finished = true;
+                    if let Some(previous) = self.known.as_ref() {
+                        for path in diff_changed_paths(previous, &batch.files) {
+                            if let Some(logical) = registry.asset_ref_for_physical(&path) {
+                                self.pending.insert(logical, batch.scan_unix_ms);
+                            }
+                        }
+                    }
+                    self.known = Some(batch.files);
+                }
+                Err(TryRecvError::Empty) => {}
+                Err(TryRecvError::Disconnected) => {
+                    scan_finished = true;
+                }
             }
         }
-        for path in self.known.keys() {
-            if !next.contains_key(path) {
-                changed_paths.insert(path.clone());
-            }
+        if scan_finished {
+            self.scan_rx = None;
         }
-        self.known = next;
 
-        for path in changed_paths {
-            if let Some(logical) = registry.asset_ref_for_physical(&path) {
-                self.pending.insert(logical, now);
-            }
+        if self.scan_rx.is_none() && now >= self.next_scan_unix_ms {
+            self.schedule_scan(registry, jobs, now);
         }
 
         let debounce_ms = self.config.debounce.as_millis() as u64;
@@ -178,7 +201,43 @@ impl AssetFileWatcherRuntime {
         for logical in &ready {
             self.pending.remove(logical);
         }
-        Some(execute_hot_reload_batch(assets, ready, now))
+        Some((ready, now))
+    }
+
+    fn schedule_scan(
+        &mut self,
+        registry: &ContentMountRegistry,
+        jobs: &ThreadPoolHandle,
+        now: u64,
+    ) {
+        if self.scan_rx.is_some() {
+            return;
+        }
+
+        let roots = watched_roots(registry, &self.config);
+        let config = self.config.clone();
+        let interval_ms = config.poll_interval.as_millis().max(1) as u64;
+        let (scan_tx, scan_rx) = mpsc::channel::<ScanBatch>();
+        let request = TaskRequest::new("asset-hot-reload-scan")
+            .with_source("newengine-asset-hot-reload-runtime")
+            .with_owner("engine.assets")
+            .with_category("asset-hot-reload-scan")
+            .with_lane(TaskLane::Background)
+            .with_priority(TaskPriority::Background)
+            .with_task_domain("engine.assets")
+            .with_task_pass("hot-reload-scan")
+            .pausable(false)
+            .cancellable(false);
+
+        let _ticket = jobs.submit_request(request, move || {
+            let files = scan_watched_roots(&roots, &config);
+            let _ = scan_tx.send(ScanBatch {
+                scan_unix_ms: unix_ms_now(),
+                files,
+            });
+        });
+        self.scan_rx = Some(scan_rx);
+        self.next_scan_unix_ms = now.saturating_add(interval_ms);
     }
 }
 
@@ -189,8 +248,11 @@ pub fn install_asset_file_watcher(resources: &mut Resources) {
     let Some(registry) = resources.get::<ContentMountRegistry>().cloned() else {
         return;
     };
+    let Some(jobs) = resources.get::<ThreadPoolHandle>().cloned() else {
+        return;
+    };
     let mut watcher = AssetFileWatcherRuntime::default();
-    watcher.prime(&registry);
+    watcher.prime(&registry, &jobs);
     resources.insert(watcher);
 }
 
@@ -199,14 +261,16 @@ pub fn poll_asset_file_watcher(resources: &mut Resources) -> Option<AssetHotRelo
         return None;
     }
     let registry = resources.get::<ContentMountRegistry>()?.clone();
+    let jobs = resources.get::<ThreadPoolHandle>()?.clone();
     let mut watcher = resources.remove::<AssetFileWatcherRuntime>()?;
-    let assets = AssetServiceClient::new(newengine_plugin_host::default_host_api());
-    let report = watcher.poll(&registry, &assets);
+    let ready = watcher.poll(&registry, &jobs);
     resources.insert(watcher);
-    if let Some(report) = report.clone() {
-        resources.insert(report);
-    }
-    report
+
+    let (changed_refs, now) = ready?;
+    let assets = AssetServiceClient::new(newengine_plugin_host::default_host_api());
+    let report = execute_hot_reload_batch(&assets, changed_refs, now);
+    resources.insert(report.clone());
+    Some(report)
 }
 
 fn execute_hot_reload_batch(
@@ -267,11 +331,7 @@ fn execute_hot_reload_batch(
     }
 }
 
-fn scan_watched_files(
-    registry: &ContentMountRegistry,
-    config: &AssetFileWatcherConfig,
-) -> BTreeMap<PathBuf, FileStamp> {
-    let mut out = BTreeMap::new();
+fn watched_roots(registry: &ContentMountRegistry, config: &AssetFileWatcherConfig) -> Vec<PathBuf> {
     let mut roots = BTreeSet::new();
     for mount in registry.mounts() {
         if !config.watch_engine_mounts && mount.namespace == ContentMountNamespace::Engine {
@@ -281,8 +341,25 @@ fn scan_watched_files(
             roots.insert(mount.root.clone());
         }
     }
+    roots.into_iter().collect()
+}
+
+#[cfg(test)]
+fn scan_watched_files(
+    registry: &ContentMountRegistry,
+    config: &AssetFileWatcherConfig,
+) -> BTreeMap<PathBuf, FileStamp> {
+    let roots = watched_roots(registry, config);
+    scan_watched_roots(&roots, config)
+}
+
+fn scan_watched_roots(
+    roots: &[PathBuf],
+    config: &AssetFileWatcherConfig,
+) -> BTreeMap<PathBuf, FileStamp> {
+    let mut out = BTreeMap::new();
     for root in roots {
-        scan_dir(&root, config.max_files, &mut out);
+        scan_dir(root, config.max_files, &mut out);
         if out.len() >= config.max_files {
             break;
         }
@@ -290,27 +367,72 @@ fn scan_watched_files(
     out
 }
 
+fn diff_changed_paths(
+    previous: &BTreeMap<PathBuf, FileStamp>,
+    next: &BTreeMap<PathBuf, FileStamp>,
+) -> Vec<PathBuf> {
+    let mut changed_paths = BTreeSet::<PathBuf>::new();
+    for (path, stamp) in next {
+        if previous.get(path) != Some(stamp) {
+            changed_paths.insert(path.clone());
+        }
+    }
+    for path in previous.keys() {
+        if !next.contains_key(path) {
+            changed_paths.insert(path.clone());
+        }
+    }
+    changed_paths.into_iter().collect()
+}
+
 fn scan_dir(root: &Path, max_files: usize, out: &mut BTreeMap<PathBuf, FileStamp>) {
     if out.len() >= max_files {
         return;
     }
-    let Ok(entries) = fs::read_dir(root) else {
-        return;
-    };
-    for entry in entries.flatten() {
+
+    // Iterative traversal avoids recursive call growth on deeply nested content
+    // trees. More importantly, `DirEntry::file_type` + `DirEntry::metadata`
+    // removes the previous `Path::is_dir()` followed by a second metadata lookup
+    // for every file.
+    let mut pending_dirs = Vec::with_capacity(64);
+    pending_dirs.push(root.to_path_buf());
+
+    while let Some(directory) = pending_dirs.pop() {
         if out.len() >= max_files {
             break;
         }
-        let path = entry.path();
-        let name = entry.file_name();
-        let name = name.to_string_lossy();
-        if name == ".git" || name == "target" || name == ".idea" || name == ".vs" {
+        let Ok(entries) = fs::read_dir(&directory) else {
             continue;
-        }
-        if path.is_dir() {
-            scan_dir(&path, max_files, out);
-        } else if let Some(stamp) = FileStamp::from_path(&path) {
-            out.insert(path, stamp);
+        };
+
+        for entry in entries.flatten() {
+            if out.len() >= max_files {
+                break;
+            }
+
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            if name == ".git" || name == "target" || name == ".idea" || name == ".vs" {
+                continue;
+            }
+
+            let Ok(file_type) = entry.file_type() else {
+                continue;
+            };
+            if file_type.is_dir() {
+                pending_dirs.push(entry.path());
+                continue;
+            }
+            if !file_type.is_file() {
+                continue;
+            }
+
+            let Ok(metadata) = entry.metadata() else {
+                continue;
+            };
+            if let Some(stamp) = FileStamp::from_metadata(&metadata) {
+                out.insert(entry.path(), stamp);
+            }
         }
     }
 }
@@ -360,15 +482,56 @@ mod tests {
             registry.asset_ref_for_physical(&file),
             Some("game/materials/test.nemat".to_owned())
         );
-        let mut watcher = AssetFileWatcherRuntime::new(AssetFileWatcherConfig {
+
+        let config = AssetFileWatcherConfig {
             poll_interval: Duration::ZERO,
             debounce: Duration::ZERO,
             ..Default::default()
-        });
-        watcher.prime(&registry);
+        };
+        let before = scan_watched_files(&registry, &config);
         fs::write(&file, b"changed").unwrap();
-        let next = scan_watched_files(&registry, &watcher.config);
-        assert_ne!(watcher.known.get(&file), next.get(&file));
+        let after = scan_watched_files(&registry, &config);
+        let changed = diff_changed_paths(&before, &after);
+        assert!(changed.contains(&file));
         let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn diff_detects_added_changed_and_removed_paths() {
+        let a = PathBuf::from("a.nemat");
+        let b = PathBuf::from("b.nemat");
+        let c = PathBuf::from("c.nemat");
+        let mut before = BTreeMap::new();
+        before.insert(
+            a.clone(),
+            FileStamp {
+                len: 1,
+                modified_ns: 1,
+            },
+        );
+        before.insert(
+            b.clone(),
+            FileStamp {
+                len: 2,
+                modified_ns: 2,
+            },
+        );
+        let mut after = BTreeMap::new();
+        after.insert(
+            a.clone(),
+            FileStamp {
+                len: 3,
+                modified_ns: 3,
+            },
+        );
+        after.insert(
+            c.clone(),
+            FileStamp {
+                len: 4,
+                modified_ns: 4,
+            },
+        );
+
+        assert_eq!(diff_changed_paths(&before, &after), vec![a, b, c]);
     }
 }

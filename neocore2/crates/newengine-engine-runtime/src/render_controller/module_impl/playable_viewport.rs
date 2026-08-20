@@ -139,6 +139,49 @@ impl RuntimeRenderController {
         let in_game_editor = game_profile && self.bridges.scene.in_game_editor_enabled();
         let editor_staging_preview =
             editor_viewport_runtime_mode(ctx) == Some(UiEditorRuntimeMode::Edit);
+        self.editor_viewport.set_active(editor_staging_preview);
+        if editor_staging_preview {
+            self.editor_viewport.sync_state(
+                ctx.resources()
+                    .get::<newengine_ui_api::UiEditorViewportState>()
+                    .cloned()
+                    .unwrap_or_default(),
+            );
+            if scope.vp_w > 0 && scope.vp_h > 0 {
+                if let (Some(input), Some(slot)) = (
+                    frame_input.surface_input.as_ref(),
+                    ctx.resources().get::<UiViewportSlot>(),
+                ) {
+                    let pointer_over_editor_chrome = ctx
+                        .resources()
+                        .get::<newengine_ui_api::UiEventDispatchFrame>()
+                        .and_then(|dispatch| dispatch.hovered_node.as_ref())
+                        .and_then(|hit| hit.action_id.as_deref())
+                        .is_some_and(|action| {
+                            action.starts_with("editor.viewport.")
+                                || action.starts_with("editor.dock.")
+                                || action.starts_with("editor.content_drawer.")
+                        });
+                    if !pointer_over_editor_chrome
+                        && input.is_mouse_pressed(newengine_input_api::mouse_button::LEFT)
+                    {
+                        if let Some((mouse_x, mouse_y)) = input.mouse_pos {
+                            let inside = mouse_x >= slot.x_px
+                                && mouse_y >= slot.y_px
+                                && mouse_x < slot.x_px + slot.w_px
+                                && mouse_y < slot.y_px + slot.h_px;
+                            if inside && slot.w_px > 1.0 && slot.h_px > 1.0 {
+                                let local_x = ((mouse_x - slot.x_px) / slot.w_px)
+                                    * scope.vp_w as f32;
+                                let local_y = ((mouse_y - slot.y_px) / slot.h_px)
+                                    * scope.vp_h as f32;
+                                self.bridges.viewport.publish_pick_request(local_x, local_y);
+                            }
+                        }
+                    }
+                }
+            }
+        }
         if in_game_editor && scope.vp_w > 0 && scope.vp_h > 0 {
             self.bridges.viewport.publish_pick_request(
                 (scope.vp_w.saturating_sub(1) as f32) * 0.5,
@@ -267,6 +310,28 @@ impl RuntimeRenderController {
         self.bridges.scene.apply_commands();
         let scene_lock = self.bridges.scene.scene();
         let mut scene = scene_lock.write();
+        let selected = self.bridges.scene.selection();
+        if editor_staging_preview {
+            let selection_radius = super::scene::selection_bounds_world(scene.world(), selected)
+                .map(|bounds| bounds.radius)
+                .unwrap_or(0.5);
+            self.editor_viewport.sync_gizmo_geometry(
+                &self.bridges.scene,
+                &mut scene,
+                selected,
+                selection_radius,
+            );
+            let last_camera = self.frame.last_camera_snapshot.as_ref();
+            self.editor_viewport.process_transform_input(
+                scene.world_mut(),
+                selected,
+                frame_input.surface_input.as_ref(),
+                last_camera,
+                [scope.vp_w, scope.vp_h],
+            );
+        } else {
+            self.editor_viewport.clear_runtime_geometry(scene.world_mut());
+        }
         let physics_api = ctx
             .api::<PhysicsApiRef>(newengine_core::physics::PHYSICS_API_ID)
             .cloned();
@@ -330,6 +395,9 @@ impl RuntimeRenderController {
             thread_pool.as_ref(),
         )?;
         drop(scene);
+        if self.editor_viewport.take_inspector_dirty() {
+            self.bridges.scene.refresh_editor_inspector();
+        }
         if matches!(outcome, PlayableFrameOutcome::Continue { .. })
             && self.external_preview_target_active()
         {

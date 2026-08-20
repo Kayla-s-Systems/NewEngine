@@ -6,10 +6,10 @@
 //!
 //! # Jobs policy
 //!
-//! Simulation currently executes deterministically on the caller thread. Future
-//! parallel execution must be routed through `engine.threading`, not through a crate-
-//! local worker pool or `rayon`, so every batch is visible to diagnostics,
-//! profiler, pause/resume and cancellation control.
+//! Simulation keeps deterministic world mutation on the caller thread. Conflict-free
+//! read systems may execute through a host-provided `engine.threading` executor; worker
+//! command buffers are merged and committed in stable `(order, seq)` order. No crate-local
+//! worker pool or `rayon` executor is used.
 mod access;
 mod commands;
 mod components;
@@ -21,7 +21,7 @@ mod systems;
 mod time;
 mod transform_cmd;
 
-pub use access::{AccessMask, Subsystem};
+pub use access::{AccessConflictMask, AccessDomain, AccessMask, Subsystem};
 pub use commands::{Command, CommandBuffer};
 // Re-export simulation components/controllers at crate root for ergonomic use by editor/runtime.
 // Keep explicit re-exports to avoid accidental API disappearance when modules evolve.
@@ -38,9 +38,11 @@ pub use controllers::{
 pub use intent::{ControllerIntentQueue, Intent, IntentBuffer, IntentCommandBufferExt, IntentSink};
 
 pub use schedule::{
-    default_schedule, SimCommandBatch, SimCommandBatchHeader, SimReadBatchExecutor,
-    SimReadBatchReport, SimReadSnapshot, SimReadSystemDescriptor, SimSchedule, SimStage,
-    SimWorldSnapshotHeader, SimulationJobBatch, SimulationJobTelemetry,
+    default_schedule, SimAccessConflictDiagnostic, SimBatchDiagnostics, SimCommandBatch,
+    SimCommandBatchHeader, SimReadBatchExecutor, SimReadBatchReport, SimReadSnapshot,
+    SimReadSystemDescriptor, SimSchedule, SimStage, SimSystemBatchExecutor, SimSystemBatchResult,
+    SimSystemCommandBatch, SimSystemJob, SimWorldSnapshotHeader, SimulationJobBatch,
+    SimulationJobTelemetry,
 };
 pub use time::SimFrame;
 

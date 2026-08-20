@@ -7,6 +7,7 @@ pub(super) fn editor_components(
     runtime_possessed: bool,
     runtime_diff_count: usize,
     command_registry: &EditorCommandRegistry,
+    viewport_state: &UiEditorViewportState,
     layout: &EditorLayoutMetrics,
     active_menu_id: Option<&str>,
 ) -> Vec<UiComponentNode> {
@@ -431,25 +432,231 @@ pub(super) fn editor_components(
             28.0,
         ),
     );
+    let viewport_toolbar_y = layout.viewport_y + 34.0;
+    let viewport_toolbar_h = 25.0;
+    let mut viewport_control_x = layout.viewport_x + 8.0;
+
     out.push(with_rect(
-        UiComponentNode::row("editor.viewport.gizmos", "Viewport Gizmos")
-            .with_value(VIEWPORT_GIZMOS_NEUI_REF)
-            .with_detail("translate/rotate/scale overlay consumes UiViewportSlot + selection DTO")
-            .with_tone(UiNodeTone::Accent)
-            .tagged("viewport")
-            .tagged("viewport-gizmos")
-            .tagged("schema-driven"),
-        layout.viewport_x + 10.0,
-        layout.viewport_y + 38.0,
-        (layout.viewport_w * 0.34).clamp(220.0, 420.0),
-        30.0,
+        viewport_toolbar_action(
+            "editor.viewport.projection",
+            viewport_state.projection.label(),
+            "editor.viewport.projection",
+            viewport_state.projection != UiEditorViewportProjection::Perspective,
+            "Viewport projection: cycle Perspective / Top / Front / Side",
+        ),
+        viewport_control_x,
+        viewport_toolbar_y,
+        92.0,
+        viewport_toolbar_h,
     ));
+    viewport_control_x += 96.0;
+    out.push(with_rect(
+        viewport_toolbar_action(
+            "editor.viewport.shading",
+            viewport_state.shading.label(),
+            "editor.viewport.shading",
+            viewport_state.shading != UiEditorViewportShading::Lit,
+            "Viewport shading: cycle Lit / Unlit / Wireframe",
+        ),
+        viewport_control_x,
+        viewport_toolbar_y,
+        68.0,
+        viewport_toolbar_h,
+    ));
+    viewport_control_x += 72.0;
+    out.push(with_rect(
+        viewport_toolbar_action(
+            "editor.viewport.show",
+            "Show",
+            "editor.viewport.show",
+            active_menu_id == Some("__viewport_show"),
+            "Toggle editor viewport overlays",
+        ),
+        viewport_control_x,
+        viewport_toolbar_y,
+        58.0,
+        viewport_toolbar_h,
+    ));
+    viewport_control_x += 68.0;
+
+    let transform_controls = [
+        ("select", "Q", UiEditorTransformMode::Select, "editor.viewport.transform.select", "Select tool (Q)"),
+        ("translate", "W", UiEditorTransformMode::Translate, "editor.viewport.transform.translate", "Move/translate tool (W)"),
+        ("rotate", "E", UiEditorTransformMode::Rotate, "editor.viewport.transform.rotate", "Rotate tool (E)"),
+        ("scale", "R", UiEditorTransformMode::Scale, "editor.viewport.transform.scale", "Scale tool (R)"),
+    ];
+    for (id, label, mode, action, tooltip) in transform_controls {
+        out.push(with_rect(
+            viewport_toolbar_action(
+                format!("editor.viewport.transform.{id}"),
+                label,
+                action,
+                viewport_state.transform_mode == mode,
+                tooltip,
+            ),
+            viewport_control_x,
+            viewport_toolbar_y,
+            28.0,
+            viewport_toolbar_h,
+        ));
+        viewport_control_x += 31.0;
+    }
+
+    if layout.viewport_w >= 760.0 {
+        viewport_control_x += 7.0;
+        out.push(with_rect(
+            viewport_toolbar_action(
+                "editor.viewport.snap.translate.toggle",
+                "Grid",
+                "editor.viewport.snap.translate.toggle",
+                viewport_state.translation_snap_enabled,
+                "Toggle translation grid snapping",
+            ),
+            viewport_control_x,
+            viewport_toolbar_y,
+            42.0,
+            viewport_toolbar_h,
+        ));
+        viewport_control_x += 45.0;
+        out.push(with_rect(
+            viewport_toolbar_action(
+                "editor.viewport.snap.translate.value",
+                format!("{:.0}", viewport_state.translation_snap_units),
+                "editor.viewport.snap.translate.value",
+                viewport_state.translation_snap_enabled,
+                "Cycle translation snap: 1 / 5 / 10 / 50 / 100 units",
+            ),
+            viewport_control_x,
+            viewport_toolbar_y,
+            38.0,
+            viewport_toolbar_h,
+        ));
+        viewport_control_x += 43.0;
+        out.push(with_rect(
+            viewport_toolbar_action(
+                "editor.viewport.snap.rotate.toggle",
+                "Rot",
+                "editor.viewport.snap.rotate.toggle",
+                viewport_state.rotation_snap_enabled,
+                "Toggle rotation angle snapping",
+            ),
+            viewport_control_x,
+            viewport_toolbar_y,
+            38.0,
+            viewport_toolbar_h,
+        ));
+        viewport_control_x += 41.0;
+        out.push(with_rect(
+            viewport_toolbar_action(
+                "editor.viewport.snap.rotate.value",
+                format!("{:.0}°", viewport_state.rotation_snap_degrees),
+                "editor.viewport.snap.rotate.value",
+                viewport_state.rotation_snap_enabled,
+                "Cycle rotation snap: 5 / 10 / 15 / 30 / 45 / 90 degrees",
+            ),
+            viewport_control_x,
+            viewport_toolbar_y,
+            42.0,
+            viewport_toolbar_h,
+        ));
+        viewport_control_x += 47.0;
+        out.push(with_rect(
+            viewport_toolbar_action(
+                "editor.viewport.snap.scale.toggle",
+                "Scale",
+                "editor.viewport.snap.scale.toggle",
+                viewport_state.scale_snap_enabled,
+                "Toggle scale snapping",
+            ),
+            viewport_control_x,
+            viewport_toolbar_y,
+            48.0,
+            viewport_toolbar_h,
+        ));
+        viewport_control_x += 51.0;
+        out.push(with_rect(
+            viewport_toolbar_action(
+                "editor.viewport.snap.scale.value",
+                format!("{:.0}%", viewport_state.scale_snap_percent),
+                "editor.viewport.snap.scale.value",
+                viewport_state.scale_snap_enabled,
+                "Cycle scale snap: 1 / 5 / 10 / 25 / 50 percent",
+            ),
+            viewport_control_x,
+            viewport_toolbar_y,
+            42.0,
+            viewport_toolbar_h,
+        ));
+    }
+
+    if active_menu_id == Some("__viewport_show") {
+        let checked = |enabled: bool, label: &str| {
+            format!("[{}] {label}", if enabled { "x" } else { " " })
+        };
+        let popup = UiComponentNode::row("editor.viewport.show_popup", "Show")
+            .with_detail("Viewport visualization overlays")
+            .with_tone(UiNodeTone::Accent)
+            .with_prop("padding_px", serde_json::json!(4.0))
+            .tagged("menu-popup")
+            .tagged("viewport-menu")
+            .tagged("floating")
+            .with_child(UiComponentNode::action(
+                "editor.viewport.show_popup.grid",
+                checked(viewport_state.show_grid, "Grid"),
+                "editor.viewport.show.grid",
+            ).tagged("button"))
+            .with_child(UiComponentNode::action(
+                "editor.viewport.show_popup.collision",
+                checked(viewport_state.show_collision, "Collision"),
+                "editor.viewport.show.collision",
+            ).tagged("button"))
+            .with_child(UiComponentNode::action(
+                "editor.viewport.show_popup.bounds",
+                checked(viewport_state.show_bounds, "Bounds"),
+                "editor.viewport.show.bounds",
+            ).tagged("button"))
+            .with_child(UiComponentNode::action(
+                "editor.viewport.show_popup.gizmos",
+                checked(viewport_state.gizmo_visible, "Transform Gizmo"),
+                "editor.viewport.show.gizmos",
+            ).tagged("button"));
+        out.push(with_rect(
+            popup,
+            layout.viewport_x + 172.0,
+            viewport_toolbar_y + viewport_toolbar_h + 2.0,
+            190.0,
+            132.0,
+        ));
+    }
+
+    if viewport_state.gizmo_visible {
+        out.push(with_rect(
+            UiComponentNode::row("editor.viewport.gizmos", viewport_state.transform_mode.label())
+                .with_value(VIEWPORT_GIZMOS_NEUI_REF)
+                .with_detail(format!(
+                    "{} | grid snap {} {:.0} | rotation snap {} {:.0}°",
+                    viewport_state.projection.label(),
+                    if viewport_state.translation_snap_enabled { "on" } else { "off" },
+                    viewport_state.translation_snap_units,
+                    if viewport_state.rotation_snap_enabled { "on" } else { "off" },
+                    viewport_state.rotation_snap_degrees,
+                ))
+                .with_tone(UiNodeTone::Accent)
+                .tagged("viewport")
+                .tagged("viewport-gizmos")
+                .tagged("schema-driven"),
+            layout.viewport_x + 10.0,
+            (layout.viewport_y + layout.viewport_h - 36.0).max(viewport_toolbar_y + 34.0),
+            (layout.viewport_w * 0.42).clamp(240.0, 520.0),
+            28.0,
+        ));
+    }
 
     if layout.bottom_visible {
         let bottom_tabs = [
             (
                 "bottom.asset_browser",
-                "Asset Browser",
+                "Content Browser",
                 ASSET_BROWSER_NEUI_REF,
                 "engine.assets document/catalog DTO",
             ),
@@ -486,7 +693,7 @@ pub(super) fn editor_components(
         out.push(
             with_rect(
                 UiComponentNode::row("editor.bottom.placeholder", "Editor bottom dock")
-                    .with_value("Asset Browser | Import Queue | Output Log | Profiler/Diagnostics")
+                    .with_value("Content Browser | Import Queue | Output Log | Profiler/Diagnostics")
                     .with_detail("All panels are UiNodeTreeRequest data and authored .neui surfaces; no provider-special product renderer")
                     .with_tone(UiNodeTone::Normal)
                     .tagged("bottom")
@@ -498,6 +705,22 @@ pub(super) fn editor_components(
                 38.0,
             ),
         );
+    }
+
+    if !layout.bottom_visible {
+        out.push(with_rect(
+            viewport_toolbar_action(
+                "editor.content_drawer.open",
+                "Content Drawer",
+                "editor.dock.toggle.bottom.asset_browser",
+                false,
+                "Open the Content Browser bottom drawer",
+            ),
+            8.0,
+            (layout.screen_h - layout.status_h - 32.0).max(layout.viewport_y),
+            122.0,
+            24.0,
+        ));
     }
 
     out.push(with_rect(
@@ -593,6 +816,25 @@ pub(super) fn push_editor_regions(out: &mut Vec<UiComponentNode>, layout: &Edito
         layout.status_h,
         [9, 13, 19, 255],
     ));
+}
+
+fn viewport_toolbar_action(
+    id: impl Into<String>,
+    label: impl Into<String>,
+    action_id: impl Into<String>,
+    active: bool,
+    tooltip: impl Into<String>,
+) -> UiComponentNode {
+    lively_editor_action(UiComponentNode::action(id, label, action_id))
+        .with_tone(if active { UiNodeTone::Accent } else { UiNodeTone::Normal })
+        .with_tooltip(tooltip)
+        .with_prop("fill_rgba", serde_json::json!([29, 34, 40, 238]))
+        .with_prop("hover_fill_rgba", serde_json::json!([43, 51, 60, 248]))
+        .with_prop("active_fill_rgba", serde_json::json!([31, 78, 120, 252]))
+        .with_prop("radius_px", serde_json::json!(3.0))
+        .tagged("viewport-toolbar")
+        .tagged("button")
+        .tagged(if active { "active" } else { "inactive" })
 }
 
 fn lively_editor_action(mut component: UiComponentNode) -> UiComponentNode {

@@ -1,6 +1,10 @@
 use crate::{Extent2D, RenderTargetId, TextureFormat, TextureId};
 use serde::{Deserialize, Serialize};
 
+const fn default_sample_count() -> u8 {
+    1
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct RenderGraphResourceId(pub u64);
 
@@ -149,6 +153,14 @@ pub struct RenderGraphResourceDesc {
     pub extent: Option<Extent2D>,
     #[serde(default)]
     pub format: Option<TextureFormat>,
+    /// Physical sample count required by the logical resource. `1` is the
+    /// non-MSAA default and participates in transient-allocation compatibility.
+    #[serde(default = "default_sample_count")]
+    pub sample_count: u8,
+    /// Required allocation size for buffer resources. Texture resources derive
+    /// their allocation shape from `extent` + `format` instead.
+    #[serde(default)]
+    pub byte_size: Option<u64>,
     #[serde(default)]
     pub external: Option<RenderGraphExternalResource>,
 }
@@ -170,6 +182,29 @@ impl RenderGraphResourceDesc {
             lifetime: RenderGraphResourceLifetime::TransientFrame,
             extent: Some(extent),
             format: Some(format),
+            sample_count: 1,
+            byte_size: None,
+            external: None,
+        }
+    }
+
+    #[inline]
+    pub fn transient_buffer(
+        id: RenderGraphResourceId,
+        label: impl Into<String>,
+        usage: RenderGraphResourceUsage,
+        byte_size: u64,
+    ) -> Self {
+        Self {
+            id,
+            label: Some(label.into()),
+            semantic: RenderGraphResourceSemantic::Unknown,
+            usage,
+            lifetime: RenderGraphResourceLifetime::TransientFrame,
+            extent: None,
+            format: None,
+            sample_count: 1,
+            byte_size: Some(byte_size),
             external: None,
         }
     }
@@ -188,6 +223,8 @@ impl RenderGraphResourceDesc {
             lifetime: RenderGraphResourceLifetime::External,
             extent: None,
             format: None,
+            sample_count: 1,
+            byte_size: None,
             external: None,
         }
     }
@@ -208,6 +245,8 @@ impl RenderGraphResourceDesc {
             lifetime: RenderGraphResourceLifetime::External,
             extent: Some(extent),
             format: Some(format),
+            sample_count: 1,
+            byte_size: None,
             external: Some(RenderGraphExternalResource::SwapchainColor),
         }
     }
@@ -229,6 +268,8 @@ impl RenderGraphResourceDesc {
             lifetime: RenderGraphResourceLifetime::External,
             extent: Some(extent),
             format: Some(format),
+            sample_count: 1,
+            byte_size: None,
             external: Some(RenderGraphExternalResource::RenderTarget(render_target)),
         }
     }
@@ -248,6 +289,8 @@ impl RenderGraphResourceDesc {
             lifetime: RenderGraphResourceLifetime::External,
             extent: None,
             format: None,
+            sample_count: 1,
+            byte_size: None,
             external: Some(RenderGraphExternalResource::Texture(texture)),
         }
     }
@@ -255,6 +298,12 @@ impl RenderGraphResourceDesc {
     #[inline]
     pub fn with_semantic(mut self, semantic: RenderGraphResourceSemantic) -> Self {
         self.semantic = semantic;
+        self
+    }
+
+    #[inline]
+    pub fn with_sample_count(mut self, sample_count: u8) -> Self {
+        self.sample_count = sample_count.max(1);
         self
     }
 }

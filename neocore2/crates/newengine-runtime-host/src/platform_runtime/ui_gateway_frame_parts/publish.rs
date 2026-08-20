@@ -20,6 +20,47 @@ pub(crate) fn publish_surface_node(node: &UiSurfaceNode) {
     }
 }
 
+pub(crate) fn set_surface_visible(surface_id: &str, visible: bool) -> bool {
+    let surface_id = surface_id.trim();
+    if surface_id.is_empty() {
+        return false;
+    }
+    let request = UiSurfaceVisibilityRequest {
+        surface_id: surface_id.to_owned(),
+        visible,
+    };
+    let payload = match serde_json::to_vec(&request) {
+        Ok(payload) => payload,
+        Err(error) => {
+            newengine_ulog_api::ulog::warn!(
+                "ui gateway: failed to encode surface visibility surface='{}' err='{}'",
+                surface_id,
+                error
+            );
+            return false;
+        }
+    };
+    match ui_set_surface_visible_call().call_optional(&payload) {
+        Ok(Some(_)) => true,
+        Ok(None) => {
+            newengine_ulog_api::ulog::warn!(
+                "ui gateway: engine.ui route unavailable; visibility surface='{}' skipped",
+                surface_id
+            );
+            false
+        }
+        Err(error) => {
+            newengine_ulog_api::ulog::warn!(
+                "ui gateway: surface visibility failed surface='{}' visible={} err='{}'",
+                surface_id,
+                visible,
+                error
+            );
+            false
+        }
+    }
+}
+
 pub(crate) fn publish_node_tree_request(request: &UiNodeTreeRequest) {
     let payload = match serde_json::to_vec(request) {
         Ok(payload) => payload,

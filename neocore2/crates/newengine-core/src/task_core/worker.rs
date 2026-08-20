@@ -6,7 +6,7 @@ use super::queue::TaskCoreShared;
 pub(super) fn worker_loop(shared: Arc<TaskCoreShared>) {
     loop {
         if let Some(job) = shared.pop_next() {
-            job.run(&shared);
+            shared.run_ready_task(job);
             continue;
         }
 

@@ -7,6 +7,7 @@
 //! UI code: scene bridge, gameplay components/schedules, viewport bridge and the
 //! render controller that talks to `newengine-render-api`. Applications consume
 //! this layer; they must not create backend resources or Vulkan objects directly.
+mod editor_viewport;
 mod env_config;
 mod provider_contract;
 mod runtime_policy;

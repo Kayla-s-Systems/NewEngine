@@ -135,14 +135,24 @@ pub fn unregister_by_owner(owner_plugin_id: &str) {
         );
     }
 
+    // Event publishing uses an Arc snapshot, so unloading only rebuilds the snapshot
+    // once instead of forcing every event publication to clone the full registry.
     let removed_sinks = {
         let mut g = match c.event_sinks.lock() {
             Ok(v) => v,
             Err(e) => e.into_inner(),
         };
         let before = g.len();
-        g.retain(|ent| ent.owner_plugin_id.as_deref() != Some(owner_plugin_id));
-        before.saturating_sub(g.len())
+        let retained = g
+            .iter()
+            .filter(|ent| ent.owner_plugin_id.as_deref() != Some(owner_plugin_id))
+            .cloned()
+            .collect::<Vec<_>>();
+        let removed = before.saturating_sub(retained.len());
+        if removed > 0 {
+            *g = std::sync::Arc::from(retained);
+        }
+        removed
     };
 
     // Also drop declared descriptor to keep metadata consistent with lifecycle.

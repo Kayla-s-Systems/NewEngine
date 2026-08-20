@@ -157,6 +157,7 @@ pub(super) fn screen_metrics(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use newengine_ui_api::UiGameInputMode;
     use serde_json::json;
 
     #[test]
@@ -356,6 +357,44 @@ mod tests {
         assert!(errors
             .iter()
             .any(|error| error.contains("ambiguous runtime_ready transition")));
+    }
+
+    #[test]
+    fn game_gui_layer_stack_is_parsed_as_data_driven_runtime_config() {
+        let parsed = parse_config_value(&json!({
+            "profile": "game",
+            "game_gui": {
+                "enabled": true,
+                "layers": [
+                    {
+                        "id": "hud",
+                        "kind": "hud",
+                        "document_ref": "ui/game/game_hud.neui@surface",
+                        "surface_id": "game.hud",
+                        "visible": true,
+                        "input_mode": "game_only"
+                    },
+                    {
+                        "id": "pause",
+                        "kind": "menu",
+                        "document_ref": "ui/game/pause_menu.neui@surface",
+                        "surface_id": "game.pause",
+                        "visible": false,
+                        "input_mode": "ui_only"
+                    }
+                ]
+            }
+        }))
+        .unwrap();
+
+        let game_gui = parsed.game_gui.expect("game gui config");
+        assert!(game_gui.enabled);
+        assert!(game_gui.is_valid());
+        let layers = game_gui.resolved_layers();
+        assert_eq!(layers[0].id, "hud");
+        assert_eq!(layers[0].z_order, UiGameLayerKind::Hud.default_z_order());
+        assert_eq!(layers[1].id, "pause");
+        assert_eq!(layers[1].input_mode, UiGameInputMode::UiOnly);
     }
 
     #[test]

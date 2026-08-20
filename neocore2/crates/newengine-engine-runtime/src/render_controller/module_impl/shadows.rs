@@ -17,7 +17,8 @@ mod targets;
 
 use fit::{
     csm_cascade_radius, csm_split_distances, csm_tile_viewport_scissor, directional_shadow_center,
-    directional_shadow_stable_fit, snapped_directional_shadow_center, DirectionalShadowFit,
+    directional_shadow_stable_fit_with_padding, snapped_directional_shadow_center,
+    DirectionalShadowFit,
 };
 use targets::{
     ensure_shadow_rt, retire_shadow_rt, warn_unsupported_point_shadow_once,
@@ -232,8 +233,6 @@ pub fn try_build_directional_shadow_plan(
             .clamp(0.0, super::super::render_quality::SHADOW_SOFTNESS_MAX),
     ];
     let extra = [
-        // Keep normal-bias as a dimensionless quality control. The shader converts
-        // it to a per-cascade texel/depth bias, avoiding world-space peter-panning.
         settings.normal_bias.clamp(0.0, 0.5),
         cascade_count as f32,
         settings.resolution as f32,
@@ -258,15 +257,29 @@ pub fn try_build_directional_shadow_plan(
         pcss.stable_kernel_cell_texels,
     ];
 
+    // The cascade projection must reserve at least the receiver kernel footprint.
+    // Otherwise a wide PCSS search/filter kernel reaches the edge of a perfectly
+    // stable atlas tile, clamps its taps, and produces a false bright/soft strip.
+    let kernel_guard_texels = match settings.filter {
+        ShadowFilter::Hard => 2.0,
+        ShadowFilter::Pcf => settings
+            .softness
+            .max(pcss.min_filter_radius_texels)
+            .ceil()
+            + 2.0,
+        ShadowFilter::Pcss => pcss
+            .blocker_search_radius_texels
+            .max(pcss.max_filter_radius_texels)
+            .ceil()
+            + 2.0,
+    }
+    .clamp(2.0, 16.0);
+
     if cascade_count <= 1 {
         let fallback_radius = bounds.radius.max(4.0).min(max_distance.max(4.0));
         let fallback_center = directional_shadow_center(bounds, camera_position, fallback_radius);
-        // Single-cascade mode is the stability baseline. Keep the shadow window
-        // camera/world-bounds centered instead of fitting it to the rotating view
-        // frustum. A frustum-centered map moves when only yaw/pitch changes and makes
-        // perfectly static receivers appear to gain/lose dark patches.
-        let texel_guard = (fallback_radius * 2.0 / settings.resolution.max(1) as f32) * 2.0;
-        let stable_half = fallback_radius + texel_guard.max(0.02);
+        let texel_world = fallback_radius * 2.0 / settings.resolution.max(1) as f32;
+        let stable_half = fallback_radius + (texel_world * kernel_guard_texels).max(0.02);
         let center = snapped_directional_shadow_center(
             fallback_center,
             dir,
@@ -312,23 +325,26 @@ pub fn try_build_directional_shadow_plan(
         let segment_mid = (split_near + split_far) * 0.5;
         let fallback_radius = csm_cascade_radius(split_near, split_far, max_distance);
         let fallback_center = camera + camera_forward * segment_mid;
-        // Stabilized CSM fit: use a rotation-invariant bounding sphere for the
-        // frustum slice. A tight light-space AABB changes half_x/half_y when the
-        // camera rotates, which changes world-units-per-texel and produces visible
-        // shimmer even when the center itself is snapped. The sphere keeps the
-        // projection footprint constant for a fixed split/FOV/aspect.
-        let fit = directional_shadow_stable_fit(
+        let fallback_texel_world = fallback_radius * 2.0 / settings.resolution.max(1) as f32;
+        let fallback_guard = (fallback_texel_world * kernel_guard_texels).max(0.02);
+        let fallback_half = fallback_radius + fallback_guard;
+
+        // Rotation-invariant sphere fit + texel snapping prevents cascade breathing.
+        // Padding is filter-aware, matching the PCF/PCSS receiver footprint rather
+        // than assuming a fixed two-texel kernel.
+        let fit = directional_shadow_stable_fit_with_padding(
             viewproj,
             camera,
             camera_forward,
             split_near,
             split_far,
             settings.resolution,
+            kernel_guard_texels,
         )
         .unwrap_or(DirectionalShadowFit {
             center: fallback_center,
-            half_x: fallback_radius,
-            half_y: fallback_radius,
+            half_x: fallback_half,
+            half_y: fallback_half,
             depth_radius: fallback_radius,
         });
         let snapped_center = snapped_directional_shadow_center(

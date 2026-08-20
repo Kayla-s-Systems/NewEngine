@@ -57,15 +57,21 @@ impl ThreadPoolCoreHandle {
         let ticket = CoreTaskTicket {
             completion: Arc::clone(&completion),
             control: control.clone(),
+            shared: Arc::clone(&self.shared),
         };
         self.shared
             .tasks
             .lock()
             .insert(control.task_id().to_owned(), control.clone());
+        self.shared
+            .completions
+            .lock()
+            .insert(control.task_id().to_owned(), Arc::clone(&completion));
+        self.shared
+            .register_task_hierarchy(control.task_id(), request.parent_task_id.as_deref());
         self.shared.submit(QueuedTask {
             request,
             job: Some(Box::new(f)),
-            completion,
             control,
         });
         ticket

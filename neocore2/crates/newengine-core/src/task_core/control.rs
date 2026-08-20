@@ -6,6 +6,7 @@ use std::sync::{Arc, Condvar, Mutex as StdMutex};
 
 use super::config::{TaskLane, TaskPriority};
 use super::events::publish_task_event;
+use super::queue::TaskCoreShared;
 use super::request::TaskRequest;
 use super::status::CoreTaskRuntimeStatus;
 
@@ -246,6 +247,7 @@ impl CoreTaskControl {
 pub struct CoreTaskTicket {
     pub(super) completion: Arc<TaskCompletion>,
     pub(super) control: CoreTaskControl,
+    pub(super) shared: Arc<TaskCoreShared>,
 }
 
 impl CoreTaskTicket {
@@ -281,7 +283,7 @@ impl CoreTaskTicket {
 
     #[inline]
     pub fn wait(self) {
-        self.completion.wait();
+        self.shared.wait_for_completion(self.completion.as_ref());
     }
 }
 pub(super) struct TaskCompletion {
@@ -301,11 +303,11 @@ impl TaskCompletion {
     }
 
     #[inline]
-    fn is_complete(&self) -> bool {
+    pub(super) fn is_complete(&self) -> bool {
         self.done.load(Ordering::Acquire)
     }
 
-    fn wait(&self) {
+    pub(super) fn wait(&self) {
         if self.is_complete() {
             return;
         }
@@ -314,6 +316,21 @@ impl TaskCompletion {
         while !self.is_complete() {
             guard = self.wake.wait(guard).unwrap_or_else(|e| e.into_inner());
         }
+    }
+
+    pub(super) fn wait_timeout(&self, timeout: std::time::Duration) {
+        if self.is_complete() {
+            return;
+        }
+
+        let guard = self.lock.lock().unwrap_or_else(|e| e.into_inner());
+        if self.is_complete() {
+            return;
+        }
+        let _guard = self
+            .wake
+            .wait_timeout(guard, timeout)
+            .unwrap_or_else(|e| e.into_inner());
     }
 
     pub(super) fn complete(&self) {

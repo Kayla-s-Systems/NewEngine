@@ -12,10 +12,12 @@ pub fn subscribe_event_sink(sink: EventSinkV1Dyn<'static>) -> Result<(), String>
         Err(e) => e.into_inner(),
     };
 
-    g.push(EventSinkEntry {
+    let mut next = g.as_ref().to_vec();
+    next.push(EventSinkEntry {
         owner_plugin_id: current_plugin_id(),
         sink: Arc::new(Mutex::new(sink)),
     });
+    *g = Arc::from(next);
 
     Ok(())
 }
@@ -23,20 +25,25 @@ pub fn subscribe_event_sink(sink: EventSinkV1Dyn<'static>) -> Result<(), String>
 pub fn publish_event(topic: &str, payload: &[u8]) -> Result<(), String> {
     let c = ctx();
 
-    let sinks: Vec<EventSinkEntry> = {
+    // Copy one Arc instead of cloning every EventSinkEntry for every event.
+    // Subscribe/unregister are lifecycle operations and pay the COW cost instead.
+    let sinks: Arc<[EventSinkEntry]> = {
         let g = match c.event_sinks.lock() {
             Ok(v) => v,
             Err(e) => e.into_inner(),
         };
-        g.clone()
+        Arc::clone(&g)
     };
 
-    // Avoid per-sink payload construction by cloning a single Vec.
-    let payload_vec: Vec<u8> = payload.to_vec();
+    if sinks.is_empty() {
+        return Ok(());
+    }
 
+    let topic = RString::from(topic);
+    let payload = Blob::from(payload.to_vec());
     let mut bad_owners: Vec<String> = Vec::new();
 
-    for s in sinks {
+    for s in sinks.iter() {
         let owner = s.owner_plugin_id.clone();
 
         let mut guard = match s.sink.lock() {
@@ -46,13 +53,13 @@ pub fn publish_event(topic: &str, payload: &[u8]) -> Result<(), String> {
                     newengine_ulog_api::ulog::error!(
                         "events: sink mutex poisoned; owner='{}' topic='{}' (auto-unregister)",
                         pid,
-                        topic
+                        topic.as_str()
                     );
                     bad_owners.push(pid);
                 } else {
                     newengine_ulog_api::ulog::error!(
                         "events: sink mutex poisoned; owner=<host> topic='{}'",
-                        topic
+                        topic.as_str()
                     );
                 }
                 continue;
@@ -60,8 +67,9 @@ pub fn publish_event(topic: &str, payload: &[u8]) -> Result<(), String> {
         };
 
         let call = || {
-            // Blob is consumed by on_event(); clone bytes per sink.
-            guard.on_event(RString::from(topic), Blob::from(payload_vec.clone()));
+            // ABI callbacks consume owned values; clone only the ABI payload/topic,
+            // not the whole sink registry snapshot.
+            guard.on_event(topic.clone(), payload.clone());
         };
 
         let r = match owner.as_deref() {
@@ -74,13 +82,13 @@ pub fn publish_event(topic: &str, payload: &[u8]) -> Result<(), String> {
                 newengine_ulog_api::ulog::error!(
                     "events: sink panicked; owner='{}' topic='{}' (auto-unregister)",
                     pid,
-                    topic
+                    topic.as_str()
                 );
                 bad_owners.push(pid);
             } else {
                 newengine_ulog_api::ulog::error!(
                     "events: sink panicked; owner=<host> topic='{}'",
-                    topic
+                    topic.as_str()
                 );
             }
         }

@@ -304,6 +304,7 @@ pub(super) struct ScreenProfileConfig {
     pub(super) profile: UiScreenProfile,
     pub(super) game_ui_root_surface_id: Option<String>,
     pub(super) game_ui_document_ref: Option<String>,
+    pub(super) game_gui: Option<UiGameGuiConfig>,
     pub(super) presentation_flow: Option<ScreenPresentationFlowConfig>,
     #[serde(default = "default_publish_editor_shell")]
     pub(super) publish_editor_shell: bool,
@@ -330,6 +331,7 @@ impl Default for ScreenProfileConfig {
             profile: UiScreenProfile::Editor,
             game_ui_root_surface_id: None,
             game_ui_document_ref: None,
+            game_gui: None,
             presentation_flow: None,
             publish_editor_shell: true,
         }
@@ -344,6 +346,9 @@ pub(crate) struct ScreenProfileRuntimeState {
     pub(super) published_surfaces: BTreeSet<String>,
     pub(super) mounted_game_ui_document_ref: Option<String>,
     pub(super) failed_game_ui_document_ref: Option<String>,
+    pub(super) mounted_game_gui_layers: BTreeMap<String, String>,
+    pub(super) failed_game_gui_layers: BTreeSet<String>,
+    pub(super) game_gui_visibility_overrides: BTreeMap<String, bool>,
     pub(super) presentation_state_id: Option<String>,
     pub(super) last_published_presentation_state_id: Option<String>,
     pub(super) presentation_runtime_ready: bool,

@@ -14,11 +14,12 @@ use newengine_ui_api::{
     UiComponentNode, UiDispatchActionRequest, UiDispatchInputRequest, UiDrawList,
     UiEventDispatchFrame, UiFrameRequest, UiFrameResponse, UiImagePaintCommand, UiInputFrame,
     UiNodeTone, UiNodeTreeRequest, UiPaintCommand, UiPaintNodeRef, UiRuntimeDebugOverlayTelemetry,
-    UiStatePatch, UiSurfaceAnchor, UiSurfaceNode, UiSurfaceRequest, UiSurfaceStyle, UiTexId,
-    ENGINE_UI_SERVICE_ID, UI_COMPONENT_PANEL, UI_SERVICE_METHOD_APPLY_NODE_REQUEST_V1,
-    UI_SERVICE_METHOD_APPLY_STATE_PATCH_V1, UI_SERVICE_METHOD_DISPATCH_ACTION_V1,
-    UI_SERVICE_METHOD_DISPATCH_INPUT_V1, UI_SERVICE_METHOD_DRAW_FRAME_BIN_V1,
-    UI_SERVICE_METHOD_DRAW_FRAME_V1, UI_SERVICE_METHOD_SURFACE_NODE_V1,
+    UiStatePatch, UiSurfaceAnchor, UiSurfaceNode, UiSurfaceRequest, UiSurfaceStyle,
+    UiSurfaceVisibilityRequest, UiTexId, ENGINE_UI_SERVICE_ID, UI_COMPONENT_PANEL,
+    UI_SERVICE_METHOD_APPLY_NODE_REQUEST_V1, UI_SERVICE_METHOD_APPLY_STATE_PATCH_V1,
+    UI_SERVICE_METHOD_DISPATCH_ACTION_V1, UI_SERVICE_METHOD_DISPATCH_INPUT_V1,
+    UI_SERVICE_METHOD_DRAW_FRAME_BIN_V1, UI_SERVICE_METHOD_DRAW_FRAME_V1,
+    UI_SERVICE_METHOD_SET_SURFACE_VISIBLE_V1, UI_SERVICE_METHOD_SURFACE_NODE_V1,
     UI_SERVICE_METHOD_UNMOUNT_SURFACE_V1, UI_SURFACE_ENGINE_ERROR_MODAL, UI_SURFACE_ENGINE_LOADING,
     UI_SURFACE_RUNTIME_DEBUG_OVERLAY, UI_THEME_NORTHSTAR_DEFAULT,
 };
@@ -33,6 +34,7 @@ static UI_APPLY_STATE_PATCH_CALL: OnceLock<StableServiceCall> = OnceLock::new();
 static UI_SURFACE_NODE_CALL: OnceLock<StableServiceCall> = OnceLock::new();
 static UI_APPLY_NODE_REQUEST_CALL: OnceLock<StableServiceCall> = OnceLock::new();
 static UI_UNMOUNT_SURFACE_CALL: OnceLock<StableServiceCall> = OnceLock::new();
+static UI_SET_SURFACE_VISIBLE_CALL: OnceLock<StableServiceCall> = OnceLock::new();
 
 #[inline]
 fn stable_ui_call(
@@ -83,6 +85,14 @@ fn ui_unmount_surface_call() -> &'static StableServiceCall {
     stable_ui_call(
         &UI_UNMOUNT_SURFACE_CALL,
         UI_SERVICE_METHOD_UNMOUNT_SURFACE_V1,
+    )
+}
+
+#[inline]
+fn ui_set_surface_visible_call() -> &'static StableServiceCall {
+    stable_ui_call(
+        &UI_SET_SURFACE_VISIBLE_CALL,
+        UI_SERVICE_METHOD_SET_SURFACE_VISIBLE_V1,
     )
 }
 
@@ -190,4 +200,5 @@ pub(crate) use self::input_dispatch::dispatch_input_frame;
 pub(crate) use self::loading_overlay::{publish_loading_overlay, publish_loading_overlay_inactive};
 pub(crate) use self::publish::{
     publish_debug_overlay_telemetry, publish_node_tree_request, publish_surface_node,
+    set_surface_visible,
 };

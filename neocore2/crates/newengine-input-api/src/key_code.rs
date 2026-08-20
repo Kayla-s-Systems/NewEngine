@@ -19,6 +19,8 @@ pub const KEY_S: u32 = 37;
 pub const KEY_W: u32 = 41;
 pub const KEY_V: u32 = 40;
 pub const KEY_X: u32 = 42;
+pub const KEY_Y: u32 = 43;
+pub const KEY_Z: u32 = 44;
 
 pub const ENTER: u32 = 57;
 pub const SPACE: u32 = 58;

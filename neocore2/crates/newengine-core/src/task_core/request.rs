@@ -12,6 +12,10 @@ pub struct TaskRequest {
     pub parent_task_id: Option<String>,
     pub frame_id: Option<u64>,
     pub dependency_group: Option<String>,
+    /// Explicit task prerequisites. The scheduler will not dispatch this task until
+    /// all referenced task ids have completed. This is execution ordering, unlike
+    /// `dependency_group`, which is diagnostic/trace metadata only.
+    pub prerequisite_task_ids: Vec<String>,
     pub task_domain: &'static str,
     pub task_pass: &'static str,
     pub can_pause: bool,
@@ -32,6 +36,7 @@ impl TaskRequest {
             parent_task_id: None,
             frame_id: None,
             dependency_group: None,
+            prerequisite_task_ids: Vec::new(),
             task_domain: "engine.threading",
             task_pass: "cpu-work",
             can_pause: false,
@@ -78,6 +83,33 @@ impl TaskRequest {
     #[inline]
     pub fn with_dependency_group(mut self, dependency_group: impl Into<String>) -> Self {
         self.dependency_group = Some(dependency_group.into());
+        self
+    }
+
+    /// Adds one prerequisite task id. The task remains queued without occupying a
+    /// worker until the prerequisite completes.
+    #[inline]
+    pub fn after_task(mut self, task_id: impl Into<String>) -> Self {
+        let task_id = task_id.into();
+        if !task_id.trim().is_empty() && !self.prerequisite_task_ids.contains(&task_id) {
+            self.prerequisite_task_ids.push(task_id);
+        }
+        self
+    }
+
+    /// Adds multiple prerequisite task ids, preserving deterministic insertion order.
+    #[inline]
+    pub fn after_tasks<I, S>(mut self, task_ids: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        for task_id in task_ids {
+            let task_id = task_id.into();
+            if !task_id.trim().is_empty() && !self.prerequisite_task_ids.contains(&task_id) {
+                self.prerequisite_task_ids.push(task_id);
+            }
+        }
         self
     }
 

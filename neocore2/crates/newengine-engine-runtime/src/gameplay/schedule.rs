@@ -1,24 +1,28 @@
 use newengine_ecs::World;
-use newengine_sim::{default_schedule, SimFrame, SimSchedule, SimStage, SimulationJobTelemetry};
-#[cfg(test)]
 use newengine_sim::{
-    SimReadBatchExecutor, SimReadBatchReport, SimReadSnapshot, SimulationJobBatch,
+    default_schedule, CommandBuffer, SimFrame, SimSchedule, SimStage, SimSystemBatchExecutor,
+    SimSystemBatchResult, SimSystemCommandBatch, SimSystemJob, SimulationJobBatch,
+    SimulationJobTelemetry,
 };
+#[cfg(test)]
+use newengine_sim::{SimReadBatchExecutor, SimReadBatchReport, SimReadSnapshot};
 
 use super::content::GameplayContentProviderRegistry;
 use super::execution::{GameplayExecutionPhase, GameplayFrame, GameplaySystemProviderRegistry};
 use super::physics::step_service_physics;
 use super::physics_queries::GameplayPhysicsQueryProviderRegistry;
 use newengine_core::physics::PhysicsApiRef;
-use newengine_core::ThreadPoolHandle;
+use newengine_core::{TaskLane, TaskPriority, TaskRequest, ThreadPoolHandle};
+use parking_lot::Mutex;
+use std::sync::{
+    atomic::{AtomicU64, Ordering as AtomicOrdering},
+    Arc,
+};
+use std::time::Instant;
 
-/// Engine-runtime adapter for the simulation read boundary.
-///
-/// The snapshot pass currently produces metadata only; the actual simulation systems
-/// execute immediately afterwards on the world-owner thread. Scheduling this tiny pass
-/// onto `engine.threading` and waiting for it synchronously creates a context-switch,
-/// allocation and lock barrier with no parallel progress, so it stays inline until the
-/// scheduler can return real worker-produced command batches.
+/// Legacy metadata-only simulation read boundary retained for diagnostics/tests.
+/// Real system execution uses `EngineJobsSimSystemExecutor` below and returns typed
+/// command buffers for deterministic owner-thread commit.
 #[cfg(test)]
 struct EngineJobsSimReadExecutor;
 
@@ -30,6 +34,89 @@ impl SimReadBatchExecutor for EngineJobsSimReadExecutor {
         snapshot: SimReadSnapshot,
     ) -> SimReadBatchReport {
         SimReadBatchReport::from_snapshot(&snapshot, batch.batch_index)
+    }
+}
+
+struct EngineJobsSimSystemExecutor<'a> {
+    thread_pool: &'a ThreadPoolHandle,
+}
+
+impl SimSystemBatchExecutor for EngineJobsSimSystemExecutor<'_> {
+    fn run_system_batch(
+        &self,
+        batch: &SimulationJobBatch,
+        world: Arc<World>,
+        frame: SimFrame,
+        systems: Vec<SimSystemJob>,
+    ) -> SimSystemBatchResult {
+        let wall_started = Instant::now();
+        let worker_cpu_ns = Arc::new(AtomicU64::new(0));
+        let results = Arc::new(Mutex::new(Vec::<Option<SimSystemCommandBatch>>::new()));
+        results.lock().resize_with(systems.len(), || None);
+        let mut tickets = Vec::with_capacity(systems.len());
+
+        for (slot, system) in systems.into_iter().enumerate() {
+            let world = Arc::clone(&world);
+            let results = Arc::clone(&results);
+            let worker_cpu_ns = Arc::clone(&worker_cpu_ns);
+            let request = TaskRequest::new("simulation.system")
+                .with_task_id(format!("{}.system.{}", batch.task_id, system.system_index))
+                .with_lane(TaskLane::Simulation)
+                .with_priority(TaskPriority::Critical)
+                .with_source("newengine-engine-runtime.sim")
+                .with_owner("newengine-engine-runtime")
+                .with_category("simulation-system")
+                .with_frame_id(frame.fixed_tick)
+                .with_dependency_group(batch.event_dependency_group())
+                .with_task_domain(newengine_task_api::task_domain::ENGINE_SIMULATION)
+                .with_task_pass(batch.stage.as_str())
+                .cancellable(false);
+
+            tickets.push(self.thread_pool.submit_request(request, move || {
+                let started = Instant::now();
+                let mut commands = CommandBuffer::new();
+                (system.function)(world.as_ref(), frame, &mut commands);
+                let elapsed = started.elapsed().as_nanos().min(u128::from(u64::MAX)) as u64;
+                worker_cpu_ns.fetch_add(elapsed, AtomicOrdering::AcqRel);
+                results.lock()[slot] = Some(SimSystemCommandBatch::new(
+                    system.system_index,
+                    system.name,
+                    commands,
+                ));
+            }));
+        }
+
+        for ticket in tickets {
+            ticket.wait();
+        }
+
+        let worker_wall_time_ns =
+            wall_started.elapsed().as_nanos().min(u128::from(u64::MAX)) as u64;
+        let worker_cpu_time_ns = worker_cpu_ns.load(AtomicOrdering::Acquire);
+        let mut guard = results.lock();
+        let commands = core::mem::take(&mut *guard)
+            .into_iter()
+            .map(|result| {
+                result.expect("simulation worker completed without a command-buffer result")
+            })
+            .collect();
+        SimSystemBatchResult::new(commands, worker_wall_time_ns, worker_cpu_time_ns)
+    }
+}
+
+fn run_sim_stage(
+    schedule: &mut SimSchedule,
+    world: &mut World,
+    stage: SimStage,
+    frame: SimFrame,
+    telemetry: Option<&SimulationJobTelemetry<'_>>,
+    thread_pool: Option<&ThreadPoolHandle>,
+) {
+    if let Some(thread_pool) = thread_pool {
+        let executor = EngineJobsSimSystemExecutor { thread_pool };
+        schedule.run_stage_with_parallel_executor(world, stage, frame, telemetry, &executor);
+    } else {
+        schedule.run_stage_with_telemetry(world, stage, frame, telemetry);
     }
 }
 
@@ -124,26 +211,21 @@ pub fn run_schedule_with_physics_mode_and_telemetry_for_frame(
 ) {
     let frame = SimFrame::new(dt.max(0.0001), frame_index);
     let gameplay_frame = GameplayFrame::from(frame);
-    // There is no worker-produced simulation command batch yet. Passing a synthetic
-    // executor here only materializes SimReadSnapshot metadata and then consumes it
-    // inline on the owner thread, adding allocations without parallel progress.
-    // Keep the boundary dormant until a real async executor exists.
-    let _ = thread_pool;
-    let sim_executor_ref = None;
-
-    schedule.run_stage_with_telemetry_and_executor(
+    run_sim_stage(
+        schedule,
         world,
         SimStage::Input,
         frame,
         telemetry,
-        sim_executor_ref,
+        thread_pool,
     );
-    schedule.run_stage_with_telemetry_and_executor(
+    run_sim_stage(
+        schedule,
         world,
         SimStage::Controllers,
         frame,
         telemetry,
-        sim_executor_ref,
+        thread_pool,
     );
     schedule.run_stage_with_telemetry(world, SimStage::ApplyIntents, frame, telemetry);
 
@@ -167,24 +249,26 @@ pub fn run_schedule_with_physics_mode_and_telemetry_for_frame(
             // Declarative safe-profile fallback: keep gameplay controls responsive
             // without entering the native physics provider path. This is a capability
             // downgrade, not a game-specific shortcut.
-            schedule.run_stage_with_telemetry_and_executor(
+            run_sim_stage(
+                schedule,
                 world,
                 SimStage::Physics,
                 frame,
                 telemetry,
-                sim_executor_ref,
+                thread_pool,
             );
         }
     }
 
     gameplay_systems.run_phase(GameplayExecutionPhase::AfterPhysics, world, gameplay_frame);
 
-    schedule.run_stage_with_telemetry_and_executor(
+    run_sim_stage(
+        schedule,
         world,
         SimStage::Derived,
         frame,
         telemetry,
-        sim_executor_ref,
+        thread_pool,
     );
 
     gameplay_systems.run_phase(GameplayExecutionPhase::AfterDerived, world, gameplay_frame);
@@ -198,6 +282,104 @@ pub fn default_sim_schedule() -> SimSchedule {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    struct ParallelProbe {
+        state: Arc<ParallelProbeState>,
+    }
+
+    struct ParallelProbeState {
+        started: std::sync::Mutex<usize>,
+        wake: std::sync::Condvar,
+        timed_out: std::sync::atomic::AtomicBool,
+    }
+
+    fn parallel_probe_system(world: &World, _frame: SimFrame, _commands: &mut CommandBuffer) {
+        use std::sync::atomic::Ordering;
+        use std::time::Duration;
+
+        let probe = world
+            .resource::<ParallelProbe>()
+            .expect("parallel probe missing");
+        let mut started = probe
+            .state
+            .started
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        *started += 1;
+        probe.state.wake.notify_all();
+        let (started, _) = probe
+            .state
+            .wake
+            .wait_timeout_while(started, Duration::from_millis(500), |started| *started < 2)
+            .unwrap_or_else(|e| e.into_inner());
+        if *started < 2 {
+            probe.state.timed_out.store(true, Ordering::Release);
+        }
+    }
+
+    #[test]
+    fn engine_threading_executor_runs_independent_simulation_jobs_concurrently() {
+        use newengine_core::{ThreadPoolConfig, ThreadPoolManager};
+        use newengine_sim::AccessMask;
+        use std::sync::atomic::Ordering;
+
+        let state = Arc::new(ParallelProbeState {
+            started: std::sync::Mutex::new(0),
+            wake: std::sync::Condvar::new(),
+            timed_out: std::sync::atomic::AtomicBool::new(false),
+        });
+        let mut world = World::new();
+        world.insert_resource(ParallelProbe {
+            state: Arc::clone(&state),
+        });
+
+        let mut pool = ThreadPoolManager::new(ThreadPoolConfig::fixed(2));
+        let handle = pool.handle();
+        let executor = EngineJobsSimSystemExecutor {
+            thread_pool: &handle,
+        };
+        let batch = SimulationJobBatch::new(
+            SimStage::Controllers,
+            SimFrame::new(0.016, 77),
+            0,
+            1,
+            2,
+            "engine.threading",
+        );
+        let systems = vec![
+            SimSystemJob {
+                system_index: 0,
+                order: 10,
+                seq: 1,
+                name: "parallel_probe_gameplay",
+                access: AccessMask::write(0),
+                function: parallel_probe_system,
+            },
+            SimSystemJob {
+                system_index: 1,
+                order: 20,
+                seq: 2,
+                name: "parallel_probe_camera",
+                access: AccessMask::write(1),
+                function: parallel_probe_system,
+            },
+        ];
+
+        let result =
+            executor.run_system_batch(&batch, Arc::new(world), SimFrame::new(0.016, 77), systems);
+
+        assert_eq!(result.commands.len(), 2);
+        assert!(result.worker_wall_time_ns > 0);
+        assert!(result.worker_cpu_time_ns > 0);
+        assert_eq!(*state.started.lock().unwrap_or_else(|e| e.into_inner()), 2);
+        assert!(
+            !state.timed_out.load(Ordering::Acquire),
+            "simulation systems did not overlap on the worker pool"
+        );
+        assert_eq!(handle.pending_for_lane(TaskLane::Simulation), 0);
+
+        pool.shutdown_and_join();
+    }
 
     #[test]
     fn simulation_read_boundary_is_inline_and_preserves_batch_metadata() {

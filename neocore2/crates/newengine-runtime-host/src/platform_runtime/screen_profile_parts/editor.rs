@@ -171,6 +171,169 @@ impl ScreenProfileRuntimeState {
         });
     }
 
+    pub(super) fn update_editor_viewport_interaction(
+        &mut self,
+        resources: &mut Resources,
+        frame_index: u64,
+    ) {
+        if self.descriptor.profile != UiScreenProfile::Editor {
+            return;
+        }
+
+        let mut state = resources
+            .get::<UiEditorViewportState>()
+            .cloned()
+            .unwrap_or_default();
+        state.frame_index = frame_index;
+        let mut changed = false;
+
+        if let Some(action) = clicked_dispatch_action(resources, "editor.viewport.") {
+            match action.as_str() {
+                "editor.viewport.projection" => {
+                    state.projection = match state.projection {
+                        UiEditorViewportProjection::Perspective => UiEditorViewportProjection::Top,
+                        UiEditorViewportProjection::Top => UiEditorViewportProjection::Front,
+                        UiEditorViewportProjection::Front => UiEditorViewportProjection::Side,
+                        UiEditorViewportProjection::Side => UiEditorViewportProjection::Perspective,
+                    };
+                    self.active_menu_id = None;
+                    changed = true;
+                }
+                "editor.viewport.shading" => {
+                    state.shading = match state.shading {
+                        UiEditorViewportShading::Lit => UiEditorViewportShading::Unlit,
+                        UiEditorViewportShading::Unlit => UiEditorViewportShading::Wireframe,
+                        UiEditorViewportShading::Wireframe => UiEditorViewportShading::Lit,
+                    };
+                    self.active_menu_id = None;
+                    changed = true;
+                }
+                "editor.viewport.show" => {
+                    self.active_menu_id = if self.active_menu_id.as_deref() == Some("__viewport_show") {
+                        None
+                    } else {
+                        Some("__viewport_show".to_owned())
+                    };
+                }
+                "editor.viewport.show.grid" => {
+                    state.show_grid = !state.show_grid;
+                    changed = true;
+                }
+                "editor.viewport.show.collision" => {
+                    state.show_collision = !state.show_collision;
+                    changed = true;
+                }
+                "editor.viewport.show.bounds" => {
+                    state.show_bounds = !state.show_bounds;
+                    changed = true;
+                }
+                "editor.viewport.show.gizmos" => {
+                    state.gizmo_visible = !state.gizmo_visible;
+                    changed = true;
+                }
+                "editor.viewport.transform.select" => {
+                    state.transform_mode = UiEditorTransformMode::Select;
+                    self.active_menu_id = None;
+                    changed = true;
+                }
+                "editor.viewport.transform.translate" => {
+                    state.transform_mode = UiEditorTransformMode::Translate;
+                    self.active_menu_id = None;
+                    changed = true;
+                }
+                "editor.viewport.transform.rotate" => {
+                    state.transform_mode = UiEditorTransformMode::Rotate;
+                    self.active_menu_id = None;
+                    changed = true;
+                }
+                "editor.viewport.transform.scale" => {
+                    state.transform_mode = UiEditorTransformMode::Scale;
+                    self.active_menu_id = None;
+                    changed = true;
+                }
+                "editor.viewport.snap.translate.toggle" => {
+                    state.translation_snap_enabled = !state.translation_snap_enabled;
+                    changed = true;
+                }
+                "editor.viewport.snap.translate.value" => {
+                    state.translation_snap_units = next_editor_snap_value(
+                        state.translation_snap_units,
+                        &[1.0, 5.0, 10.0, 50.0, 100.0],
+                    );
+                    changed = true;
+                }
+                "editor.viewport.snap.rotate.toggle" => {
+                    state.rotation_snap_enabled = !state.rotation_snap_enabled;
+                    changed = true;
+                }
+                "editor.viewport.snap.rotate.value" => {
+                    state.rotation_snap_degrees = next_editor_snap_value(
+                        state.rotation_snap_degrees,
+                        &[5.0, 10.0, 15.0, 30.0, 45.0, 90.0],
+                    );
+                    changed = true;
+                }
+                "editor.viewport.snap.scale.toggle" => {
+                    state.scale_snap_enabled = !state.scale_snap_enabled;
+                    changed = true;
+                }
+                "editor.viewport.snap.scale.value" => {
+                    state.scale_snap_percent = next_editor_snap_value(
+                        state.scale_snap_percent,
+                        &[1.0, 5.0, 10.0, 25.0, 50.0],
+                    );
+                    changed = true;
+                }
+                _ => {}
+            }
+        }
+
+        let edit_mode = resources
+            .get::<RuntimeSessionState>()
+            .map(|session| !session.is_active())
+            .unwrap_or(true);
+        if edit_mode {
+            if let Some(input) = resources.get::<UiInputFrame>() {
+                let text_input_active = !input.text.is_empty()
+                    || !input.text_edit_ops.is_empty()
+                    || !input.ime_preedit.is_empty();
+                if !text_input_active {
+                    use newengine_input_api::key_code::{KEY_E, KEY_Q, KEY_R, KEY_W};
+                    let shortcut_mode = if input.is_key_pressed(KEY_Q) {
+                        Some(UiEditorTransformMode::Select)
+                    } else if input.is_key_pressed(KEY_W) {
+                        Some(UiEditorTransformMode::Translate)
+                    } else if input.is_key_pressed(KEY_E) {
+                        Some(UiEditorTransformMode::Rotate)
+                    } else if input.is_key_pressed(KEY_R) {
+                        Some(UiEditorTransformMode::Scale)
+                    } else {
+                        None
+                    };
+                    if let Some(mode) = shortcut_mode {
+                        state.transform_mode = mode;
+                        self.active_menu_id = None;
+                        changed = true;
+                    }
+                }
+            }
+        }
+
+        if changed {
+            newengine_ulog_api::ulog::info!(
+                "editor viewport: projection={} shading={} transform={} grid={} collision={} bounds={} gizmo={}",
+                state.projection.label(),
+                state.shading.label(),
+                state.transform_mode.label(),
+                state.show_grid,
+                state.show_collision,
+                state.show_bounds,
+                state.gizmo_visible,
+            );
+        }
+        resources.insert(state);
+    }
+
     pub(super) fn update_dock_interaction(&mut self, resources: &Resources, frame_index: u64) {
         if self.descriptor.profile != UiScreenProfile::Editor
             || self.last_dock_click_frame == frame_index
@@ -333,4 +496,9 @@ impl ScreenProfileRuntimeState {
             toast_y += 40.0;
         }
     }
+}
+
+fn next_editor_snap_value(current: f32, values: &[f32]) -> f32 {
+    let index = values.iter().position(|value| (*value - current).abs() < f32::EPSILON).unwrap_or(0);
+    values[(index + 1) % values.len()]
 }

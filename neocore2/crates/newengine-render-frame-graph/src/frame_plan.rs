@@ -1,5 +1,5 @@
 use newengine_render_api::{
-    RenderGraphCompileReport, RenderGraphDesc, RenderGraphValidationReport,
+    RenderGraphCompilation, RenderGraphCompileReport, RenderGraphDesc, RenderGraphValidationReport,
 };
 use serde::{Deserialize, Serialize};
 
@@ -64,6 +64,15 @@ impl RenderFramePlan {
     ) -> Result<RenderGraphCompileReport, Vec<newengine_render_api::RenderGraphValidationIssue>>
     {
         newengine_render_api::compile_render_graph(&self.graph)
+    }
+
+    /// Returns the V2 compiled DAG, Phase-2 culling diagnostics and Phase-3
+    /// live resource lifetime intervals in addition to the legacy summary.
+    #[inline]
+    pub fn compile_v2(
+        &self,
+    ) -> Result<RenderGraphCompilation, Vec<newengine_render_api::RenderGraphValidationIssue>> {
+        crate::compile_frame_graph_v2(&self.graph)
     }
 
     pub fn validate_draw_list_routes(&self) -> DrawListRouteValidationReport {

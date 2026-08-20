@@ -77,6 +77,125 @@ impl UiEditorRuntimeMode {
     }
 }
 
+/// Projection preset selected by the editor viewport chrome.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum UiEditorViewportProjection {
+    Perspective,
+    Top,
+    Front,
+    Side,
+}
+
+impl Default for UiEditorViewportProjection {
+    fn default() -> Self { Self::Perspective }
+}
+
+impl UiEditorViewportProjection {
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Perspective => "Perspective",
+            Self::Top => "Top",
+            Self::Front => "Front",
+            Self::Side => "Side",
+        }
+    }
+}
+
+/// View-mode intent for the editor viewport. Render backends may map these
+/// generic modes to their own debug/material pipelines.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum UiEditorViewportShading {
+    Lit,
+    Unlit,
+    Wireframe,
+}
+
+impl Default for UiEditorViewportShading {
+    fn default() -> Self { Self::Lit }
+}
+
+impl UiEditorViewportShading {
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Lit => "Lit",
+            Self::Unlit => "Unlit",
+            Self::Wireframe => "Wireframe",
+        }
+    }
+}
+
+/// Active transform tool in the editor viewport.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum UiEditorTransformMode {
+    Select,
+    Translate,
+    Rotate,
+    Scale,
+}
+
+impl Default for UiEditorTransformMode {
+    fn default() -> Self { Self::Translate }
+}
+
+impl UiEditorTransformMode {
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Select => "Select",
+            Self::Translate => "Move",
+            Self::Rotate => "Rotate",
+            Self::Scale => "Scale",
+        }
+    }
+}
+
+/// Provider-safe editor viewport intent published each frame. UI owns the
+/// interaction state; camera, scene and render gateways consume the DTO without
+/// exposing backend objects to the editor shell.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UiEditorViewportState {
+    pub version: u32,
+    pub frame_index: u64,
+    pub projection: UiEditorViewportProjection,
+    pub shading: UiEditorViewportShading,
+    pub transform_mode: UiEditorTransformMode,
+    pub show_grid: bool,
+    pub show_collision: bool,
+    pub show_bounds: bool,
+    pub gizmo_visible: bool,
+    pub translation_snap_enabled: bool,
+    pub translation_snap_units: f32,
+    pub rotation_snap_enabled: bool,
+    pub rotation_snap_degrees: f32,
+    pub scale_snap_enabled: bool,
+    pub scale_snap_percent: f32,
+}
+
+impl Default for UiEditorViewportState {
+    fn default() -> Self {
+        Self {
+            version: 1,
+            frame_index: 0,
+            projection: UiEditorViewportProjection::Perspective,
+            shading: UiEditorViewportShading::Lit,
+            transform_mode: UiEditorTransformMode::Translate,
+            show_grid: true,
+            show_collision: false,
+            show_bounds: false,
+            gizmo_visible: true,
+            translation_snap_enabled: true,
+            translation_snap_units: 10.0,
+            rotation_snap_enabled: true,
+            rotation_snap_degrees: 10.0,
+            scale_snap_enabled: false,
+            scale_snap_percent: 1.0,
+        }
+    }
+}
+
 /// Resource published by the editor shell each frame.
 ///
 /// The render/world runtime consumes this as an intent boundary: edit mode keeps

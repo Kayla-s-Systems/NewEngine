@@ -17,6 +17,7 @@ impl EditorScreen {
         runtime_possessed: bool,
         runtime_diff_count: usize,
         command_registry: &EditorCommandRegistry,
+        viewport_state: &UiEditorViewportState,
         layout: &EditorLayoutMetrics,
         active_menu_id: Option<&str>,
     ) -> UiSurfaceNode {
@@ -28,6 +29,7 @@ impl EditorScreen {
             runtime_possessed,
             runtime_diff_count,
             command_registry,
+            viewport_state,
             layout,
             active_menu_id,
         )
@@ -130,7 +132,7 @@ pub(super) fn editor_screen_descriptor() -> UiScreenProfileDescriptor {
             ),
             screen_panel(
                 "bottom.asset_browser",
-                "Asset Browser",
+                "Content Browser",
                 "ui.assets.catalog",
                 "engine.assets",
                 "newengine.assets.catalog_ui.asset_document_dto.v1",
@@ -273,6 +275,7 @@ pub(super) fn editor_screen_surface_node(
     runtime_possessed: bool,
     runtime_diff_count: usize,
     command_registry: &EditorCommandRegistry,
+    viewport_state: &UiEditorViewportState,
     layout: &EditorLayoutMetrics,
     active_menu_id: Option<&str>,
 ) -> UiSurfaceNode {
@@ -362,6 +365,7 @@ pub(super) fn editor_screen_surface_node(
             runtime_possessed,
             runtime_diff_count,
             command_registry,
+            viewport_state,
             layout,
             active_menu_id,
         ),

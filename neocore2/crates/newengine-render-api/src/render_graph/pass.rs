@@ -23,6 +23,8 @@ impl Default for RenderGraphPassDomain {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct RenderGraphPassFlags {
+    /// Opt-in dead-pass elimination. False is intentionally conservative for
+    /// compatibility and for passes with side effects not represented as resources.
     #[serde(default)]
     pub allow_culling: bool,
     #[serde(default)]
@@ -96,6 +98,17 @@ impl RenderGraphPassDesc {
         self.writes
             .push(RenderGraphResourceRef::write(resource, usage));
         self
+    }
+
+    #[inline]
+    pub fn with_culling(mut self, allow_culling: bool) -> Self {
+        self.flags.allow_culling = allow_culling;
+        self
+    }
+
+    #[inline]
+    pub fn cullable(self) -> Self {
+        self.with_culling(true)
     }
 
     #[inline]

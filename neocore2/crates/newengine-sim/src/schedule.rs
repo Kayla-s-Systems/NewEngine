@@ -1,12 +1,18 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use core::cmp::Ordering;
+use std::sync::Arc;
+use std::time::Instant;
 
 use newengine_ecs::World;
 use newengine_task_api::{task_domain, task_pass, EngineTaskEvent, EngineTaskPhase};
 use serde::{Deserialize, Serialize};
 
-use crate::{access::AccessMask, commands::CommandBuffer, systems, SimFrame};
+use crate::{
+    access::{AccessConflictMask, AccessDomain, AccessMask},
+    commands::CommandBuffer,
+    systems, SimFrame,
+};
 
 /// Simulation stages.
 #[repr(u8)]
@@ -323,6 +329,97 @@ pub trait SimReadBatchExecutor {
     ) -> SimReadBatchReport;
 }
 
+/// Worker-executable simulation system descriptor. The function itself remains a
+/// static Rust function pointer; ECS ownership is transferred into an `Arc<World>`
+/// only for the duration of one conflict-free batch.
+#[derive(Clone, Copy)]
+pub struct SimSystemJob {
+    pub system_index: usize,
+    pub order: i32,
+    pub seq: u32,
+    pub name: &'static str,
+    pub access: AccessMask,
+    pub function: SystemFn,
+}
+
+/// One worker-produced command buffer. Results are committed by the world-owner
+/// thread in stable system order, never by worker threads.
+pub struct SimSystemCommandBatch {
+    pub system_index: usize,
+    pub system_name: &'static str,
+    pub commands: CommandBuffer,
+}
+
+impl SimSystemCommandBatch {
+    #[inline]
+    pub fn new(system_index: usize, system_name: &'static str, commands: CommandBuffer) -> Self {
+        Self {
+            system_index,
+            system_name,
+            commands,
+        }
+    }
+}
+
+/// Timed result from a host-owned parallel simulation batch.
+pub struct SimSystemBatchResult {
+    pub commands: Vec<SimSystemCommandBatch>,
+    /// Wall-clock interval from first submission until all jobs completed.
+    pub worker_wall_time_ns: u64,
+    /// Sum of time spent inside the system functions across all workers.
+    pub worker_cpu_time_ns: u64,
+}
+
+impl SimSystemBatchResult {
+    #[inline]
+    pub fn new(
+        commands: Vec<SimSystemCommandBatch>,
+        worker_wall_time_ns: u64,
+        worker_cpu_time_ns: u64,
+    ) -> Self {
+        Self {
+            commands,
+            worker_wall_time_ns,
+            worker_cpu_time_ns,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct SimAccessConflictDiagnostic {
+    pub incoming_system: String,
+    pub conflicting_systems: Vec<String>,
+    pub mask: AccessConflictMask,
+    pub named_domains: Vec<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct SimBatchDiagnostics {
+    pub frame: SimFrame,
+    pub stage: SimStage,
+    pub batch_index: usize,
+    pub batch_width: usize,
+    pub conflict_before: Option<SimAccessConflictDiagnostic>,
+    pub worker_wall_time_ns: u64,
+    pub worker_cpu_time_ns: u64,
+    pub owner_commit_time_ns: u64,
+    /// Approximate worker utilization: sum(worker CPU) / (wall * batch width).
+    pub parallel_efficiency_01: f32,
+}
+
+/// Host-owned execution boundary for real simulation work. Implementations must
+/// complete all submitted jobs before returning and must not retain `world`; this
+/// allows the scheduler to reclaim sole ownership and perform deterministic commit.
+pub trait SimSystemBatchExecutor {
+    fn run_system_batch(
+        &self,
+        batch: &SimulationJobBatch,
+        world: Arc<World>,
+        frame: SimFrame,
+        systems: Vec<SimSystemJob>,
+    ) -> SimSystemBatchResult;
+}
+
 /// System function signature.
 ///
 /// Systems must be deterministic and side-effect free outside of the provided command buffer.
@@ -435,6 +532,28 @@ impl SimSchedule {
         run_stage_single_thread(world, stage, systems, frame, telemetry, executor);
     }
 
+    /// Executes conflict-free system batches through the host executor. Systems
+    /// that conflict according to `AccessMask` are separated by an owner-thread
+    /// commit barrier, so later conflicting systems observe earlier writes exactly
+    /// as they did in the serial scheduler.
+    pub fn run_stage_with_parallel_executor(
+        &mut self,
+        world: &mut World,
+        stage: SimStage,
+        frame: SimFrame,
+        telemetry: Option<&SimulationJobTelemetry<'_>>,
+        executor: &dyn SimSystemBatchExecutor,
+    ) -> Vec<SimBatchDiagnostics> {
+        self.sort_if_needed();
+
+        let systems = &self.stages[stage.as_usize()];
+        if systems.is_empty() {
+            return Vec::new();
+        }
+
+        run_stage_parallel(world, stage, systems, frame, telemetry, executor)
+    }
+
     #[inline]
     pub fn run_default_pipeline(&mut self, world: &mut World, frame: SimFrame) {
         self.run_default_pipeline_with_telemetry(world, frame, None);
@@ -452,6 +571,301 @@ impl SimSchedule {
         self.run_stage_with_telemetry(world, SimStage::Physics, frame, telemetry);
         self.run_stage_with_telemetry(world, SimStage::Derived, frame, telemetry);
     }
+}
+
+struct PlannedBatch {
+    indices: Vec<usize>,
+    conflict_before: Option<SimAccessConflictDiagnostic>,
+}
+
+fn named_domains(mask: u128) -> Vec<String> {
+    AccessDomain::all()
+        .into_iter()
+        .filter(|domain| mask & domain.mask() != 0)
+        .map(|domain| domain.as_str().to_owned())
+        .collect()
+}
+
+fn conflict_diagnostic(
+    systems: &[SystemEntry],
+    current: &[usize],
+    incoming_index: usize,
+) -> SimAccessConflictDiagnostic {
+    let incoming = systems[incoming_index];
+    let mut aggregate = AccessConflictMask::default();
+    let mut conflicting_systems = Vec::new();
+
+    for &index in current {
+        let existing = systems[index];
+        let mask = existing.access.conflict_mask(incoming.access);
+        if !mask.is_empty() {
+            aggregate = aggregate.union(mask);
+            conflicting_systems.push(existing.name.to_owned());
+        }
+    }
+
+    SimAccessConflictDiagnostic {
+        incoming_system: incoming.name.to_owned(),
+        conflicting_systems,
+        mask: aggregate,
+        named_domains: named_domains(aggregate.blocking_mask()),
+    }
+}
+
+fn plan_conflict_free_batches(systems: &[SystemEntry]) -> Vec<PlannedBatch> {
+    let mut batches = Vec::<PlannedBatch>::new();
+    let mut current = Vec::<usize>::new();
+    let mut current_access = AccessMask::none();
+    let mut conflict_before = None;
+
+    for (index, system) in systems.iter().enumerate() {
+        if !current.is_empty() && current_access.conflicts(system.access) {
+            let next_conflict = conflict_diagnostic(systems, &current, index);
+            batches.push(PlannedBatch {
+                indices: core::mem::take(&mut current),
+                conflict_before: conflict_before.take(),
+            });
+            current_access = AccessMask::none();
+            conflict_before = Some(next_conflict);
+        }
+        current.push(index);
+        current_access = current_access.union(system.access);
+    }
+
+    if !current.is_empty() {
+        batches.push(PlannedBatch {
+            indices: current,
+            conflict_before,
+        });
+    }
+    batches
+}
+
+#[inline]
+fn elapsed_ns(started: Instant) -> u64 {
+    started.elapsed().as_nanos().min(u128::from(u64::MAX)) as u64
+}
+
+#[inline]
+fn parallel_efficiency(worker_cpu_ns: u64, worker_wall_ns: u64, width: usize) -> f32 {
+    if worker_wall_ns == 0 || width == 0 {
+        return 0.0;
+    }
+    (worker_cpu_ns as f64 / (worker_wall_ns as f64 * width as f64)).clamp(0.0, 1.0) as f32
+}
+
+fn run_owner_system(
+    world: &mut World,
+    stage: SimStage,
+    system: &SystemEntry,
+    frame: SimFrame,
+) -> u64 {
+    let mut cb = CommandBuffer::new();
+    (system.f)(world, frame, &mut cb);
+    #[cfg(debug_assertions)]
+    validate_commands(stage, system.name, &cb);
+    let commit_started = Instant::now();
+    if !cb.is_empty() {
+        cb.apply_all(world);
+    }
+    elapsed_ns(commit_started)
+}
+
+fn run_stage_parallel(
+    world: &mut World,
+    stage: SimStage,
+    systems: &[SystemEntry],
+    frame: SimFrame,
+    telemetry: Option<&SimulationJobTelemetry<'_>>,
+    executor: &dyn SimSystemBatchExecutor,
+) -> Vec<SimBatchDiagnostics> {
+    let plans = plan_conflict_free_batches(systems);
+    let batch_count = plans.len();
+    let mut diagnostics = Vec::with_capacity(batch_count);
+
+    for (batch_index, plan) in plans.into_iter().enumerate() {
+        let indices = plan.indices;
+        let conflict_before = plan.conflict_before;
+        let conflict_detail = conflict_before.as_ref().map(|conflict| {
+            format!(
+                " conflict incoming='{}' blocked_by={:?} domains={:?} ww=0x{:x} wr=0x{:x} rw=0x{:x}",
+                conflict.incoming_system,
+                conflict.conflicting_systems,
+                conflict.named_domains,
+                conflict.mask.write_write,
+                conflict.mask.write_read,
+                conflict.mask.read_write,
+            )
+        }).unwrap_or_default();
+
+        // A singleton cannot make parallel progress. Execute it directly and keep
+        // the worker pool available for genuinely parallel batches.
+        if indices.len() == 1 {
+            let system = &systems[indices[0]];
+            let batch = SimulationJobBatch::new(
+                stage,
+                frame,
+                batch_index,
+                batch_count,
+                1,
+                "world-owner-apply-stage",
+            );
+            if let Some(telemetry) = telemetry {
+                telemetry.publish_batch(
+                    &batch,
+                    EngineTaskPhase::Running,
+                    "Simulation singleton running",
+                    format!(
+                        "System '{}' is serialized by AccessMask boundaries.{}",
+                        system.name, conflict_detail
+                    ),
+                    None,
+                );
+            }
+
+            let owner_time_ns = run_owner_system(world, stage, system, frame);
+            let diagnostic = SimBatchDiagnostics {
+                frame,
+                stage,
+                batch_index,
+                batch_width: 1,
+                conflict_before,
+                worker_wall_time_ns: 0,
+                worker_cpu_time_ns: 0,
+                owner_commit_time_ns: owner_time_ns,
+                parallel_efficiency_01: 0.0,
+            };
+            if let Some(telemetry) = telemetry {
+                telemetry.publish_batch(
+                    &batch,
+                    EngineTaskPhase::Completed,
+                    "Simulation singleton committed",
+                    format!(
+                        "batch_width=1 owner_commit_ns={} worker_wall_ns=0 worker_cpu_ns=0 parallel_efficiency=0.000{}",
+                        owner_time_ns, conflict_detail
+                    ),
+                    Some(1.0),
+                );
+            }
+            diagnostics.push(diagnostic);
+            continue;
+        }
+
+        let batch = SimulationJobBatch::new(
+            stage,
+            frame,
+            batch_index,
+            batch_count,
+            indices.len(),
+            "engine.threading",
+        );
+        if let Some(telemetry) = telemetry {
+            telemetry.publish_batch(
+                &batch,
+                EngineTaskPhase::Scheduled,
+                "Simulation parallel batch scheduled",
+                format!(
+                    "AccessMask admitted batch_width={} independent systems.{}",
+                    indices.len(),
+                    conflict_detail
+                ),
+                Some(0.0),
+            );
+        }
+
+        // `World` is Send + Sync. Move ownership into Arc temporarily so worker
+        // closures can satisfy the engine.threading 'static boundary without raw
+        // pointers or scoped/unsafe lifetime extension.
+        let owned_world = core::mem::take(world);
+        let shared_world = Arc::new(owned_world);
+        let jobs = indices
+            .iter()
+            .map(|&system_index| {
+                let system = systems[system_index];
+                SimSystemJob {
+                    system_index,
+                    order: system.order,
+                    seq: system.seq,
+                    name: system.name,
+                    access: system.access,
+                    function: system.f,
+                }
+            })
+            .collect::<Vec<_>>();
+
+        let mut result = executor.run_system_batch(&batch, Arc::clone(&shared_world), frame, jobs);
+
+        *world = match Arc::try_unwrap(shared_world) {
+            Ok(world) => world,
+            Err(_) => panic!(
+                "sim: parallel executor retained World after batch '{}' returned",
+                batch.task_id
+            ),
+        };
+
+        result
+            .commands
+            .sort_unstable_by_key(|commands| commands.system_index);
+        assert_eq!(
+            result.commands.len(),
+            indices.len(),
+            "sim: executor returned incomplete command batch for '{}'",
+            batch.task_id
+        );
+
+        let commit_started = Instant::now();
+        for (expected_index, command_batch) in
+            indices.iter().copied().zip(result.commands.into_iter())
+        {
+            assert_eq!(
+                command_batch.system_index, expected_index,
+                "sim: executor returned duplicate/out-of-order system result for '{}'",
+                batch.task_id
+            );
+            #[cfg(debug_assertions)]
+            validate_commands(stage, command_batch.system_name, &command_batch.commands);
+            if !command_batch.commands.is_empty() {
+                command_batch.commands.apply_all(world);
+            }
+        }
+        let owner_commit_time_ns = elapsed_ns(commit_started);
+        let efficiency = parallel_efficiency(
+            result.worker_cpu_time_ns,
+            result.worker_wall_time_ns,
+            indices.len(),
+        );
+
+        if let Some(telemetry) = telemetry {
+            telemetry.publish_batch(
+                &batch,
+                EngineTaskPhase::Completed,
+                "Simulation parallel batch committed",
+                format!(
+                    "batch_width={} worker_wall_ns={} worker_cpu_ns={} owner_commit_ns={} parallel_efficiency={:.3}{}",
+                    indices.len(),
+                    result.worker_wall_time_ns,
+                    result.worker_cpu_time_ns,
+                    owner_commit_time_ns,
+                    efficiency,
+                    conflict_detail,
+                ),
+                Some(1.0),
+            );
+        }
+        diagnostics.push(SimBatchDiagnostics {
+            frame,
+            stage,
+            batch_index,
+            batch_width: indices.len(),
+            conflict_before,
+            worker_wall_time_ns: result.worker_wall_time_ns,
+            worker_cpu_time_ns: result.worker_cpu_time_ns,
+            owner_commit_time_ns,
+            parallel_efficiency_01: efficiency,
+        });
+    }
+
+    diagnostics
 }
 
 #[inline]
@@ -531,10 +945,9 @@ fn run_stage_single_thread(
     }
 }
 
-// Parallel simulation is intentionally not implemented through `rayon` here.
-// When this scheduler grows parallel execution again, each batch must be
-// submitted through `engine.threading` so it has a JobId, lane, priority, progress
-// events and cooperative cancellation.
+// Parallel simulation is host-owned: conflict-free batches run through the
+// `SimSystemBatchExecutor` boundary, whose production implementation routes every
+// worker job through `engine.threading`. World mutation remains owner-thread only.
 
 #[cfg(debug_assertions)]
 fn validate_commands(stage: SimStage, system: &'static str, cb: &CommandBuffer) {
@@ -568,6 +981,111 @@ fn validate_commands(stage: SimStage, system: &'static str, cb: &CommandBuffer) 
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct AppendLog(&'static str);
+
+    impl crate::Command for AppendLog {
+        fn apply(self: Box<Self>, world: &mut World) {
+            world
+                .resource_mut::<Vec<&'static str>>()
+                .expect("commit log resource missing")
+                .push(self.0);
+        }
+    }
+
+    fn log_a(_world: &World, _frame: SimFrame, commands: &mut CommandBuffer) {
+        commands.push(Box::new(AppendLog("a")));
+    }
+
+    fn log_b(_world: &World, _frame: SimFrame, commands: &mut CommandBuffer) {
+        commands.push(Box::new(AppendLog("b")));
+    }
+
+    struct ReverseResultExecutor;
+
+    impl SimSystemBatchExecutor for ReverseResultExecutor {
+        fn run_system_batch(
+            &self,
+            _batch: &SimulationJobBatch,
+            world: Arc<World>,
+            frame: SimFrame,
+            systems: Vec<SimSystemJob>,
+        ) -> SimSystemBatchResult {
+            let mut results = systems
+                .into_iter()
+                .map(|system| {
+                    let mut commands = CommandBuffer::new();
+                    (system.function)(world.as_ref(), frame, &mut commands);
+                    SimSystemCommandBatch::new(system.system_index, system.name, commands)
+                })
+                .collect::<Vec<_>>();
+            results.reverse();
+            SimSystemBatchResult::new(results, 100, 180)
+        }
+    }
+
+    #[test]
+    fn parallel_results_commit_in_stable_system_order_even_if_workers_finish_reversed() {
+        let mut schedule = SimSchedule::new();
+        schedule.add_system(SimStage::Derived, 10, "log_a", AccessMask::write(0), log_a);
+        schedule.add_system(SimStage::Derived, 20, "log_b", AccessMask::write(1), log_b);
+
+        let mut world = World::new();
+        world.insert_resource(Vec::<&'static str>::new());
+        let diagnostics = schedule.run_stage_with_parallel_executor(
+            &mut world,
+            SimStage::Derived,
+            SimFrame::new(0.016, 9),
+            None,
+            &ReverseResultExecutor,
+        );
+
+        assert_eq!(diagnostics.len(), 1);
+        assert_eq!(diagnostics[0].batch_width, 2);
+        assert_eq!(diagnostics[0].worker_wall_time_ns, 100);
+        assert_eq!(diagnostics[0].worker_cpu_time_ns, 180);
+        assert!((diagnostics[0].parallel_efficiency_01 - 0.9).abs() < 0.001);
+        assert_eq!(
+            world
+                .resource::<Vec<&'static str>>()
+                .expect("commit log resource missing"),
+            &vec!["a", "b"]
+        );
+    }
+
+    #[test]
+    fn default_controller_stage_forms_access_mask_parallel_then_serial_batches() {
+        let mut schedule = default_schedule();
+        schedule.sort_if_needed();
+        let systems = &schedule.stages[SimStage::Controllers.as_usize()];
+        let batches = plan_conflict_free_batches(systems);
+
+        assert_eq!(batches.len(), 2);
+        assert_eq!(batches[0].indices, vec![0, 1]);
+        assert_eq!(batches[1].indices, vec![2]);
+        let conflict = batches[1]
+            .conflict_before
+            .as_ref()
+            .expect("camera conflict diagnostic missing");
+        assert_eq!(conflict.incoming_system, "camera_follow");
+        assert_eq!(conflict.conflicting_systems, vec!["orbit_camera"]);
+        assert_eq!(
+            conflict.mask.write_write,
+            AccessDomain::CameraControl.mask()
+        );
+        assert_eq!(conflict.mask.write_read, 0);
+        assert_eq!(conflict.mask.read_write, 0);
+        assert!(conflict
+            .named_domains
+            .contains(&"camera-control".to_owned()));
+        assert!(!systems[0].access.conflicts(systems[1].access));
+        assert!(systems[1].access.conflicts(systems[2].access));
+    }
+}
+
 /// A production-lean default schedule.
 ///
 /// You can extend it with gameplay systems without forking the engine.
@@ -580,21 +1098,27 @@ pub fn default_schedule() -> SimSchedule {
         SimStage::Controllers,
         10,
         "character_motor",
-        AccessMask::write(crate::Subsystem::Gameplay as u32),
+        AccessMask::write_domain(AccessDomain::CharacterControl)
+            .union(AccessMask::read_domain(AccessDomain::CharacterInput)),
         systems::sys_character_motor,
     );
     s.add_system(
         SimStage::Controllers,
         20,
         "orbit_camera",
-        AccessMask::write(crate::Subsystem::Camera as u32),
+        AccessMask::write_domain(AccessDomain::CameraControl)
+            .union(AccessMask::read_domain(AccessDomain::CameraInput))
+            .union(AccessMask::read_domain(AccessDomain::CameraRig)),
         systems::sys_orbit_camera,
     );
     s.add_system(
         SimStage::Controllers,
         25,
         "camera_follow",
-        AccessMask::write(crate::Subsystem::Camera as u32),
+        AccessMask::write_domain(AccessDomain::CameraControl)
+            .union(AccessMask::read_domain(AccessDomain::CameraRig))
+            .union(AccessMask::read_domain(AccessDomain::FollowTarget))
+            .union(AccessMask::read_domain(AccessDomain::Transform)),
         systems::sys_camera_follow,
     );
 
@@ -603,18 +1127,17 @@ pub fn default_schedule() -> SimSchedule {
         SimStage::ApplyIntents,
         10,
         "apply_controller_intents",
-        AccessMask::rw(
-            0,
-            (1u128 << (crate::Subsystem::Gameplay as u32))
-                | (1u128 << (crate::Subsystem::Camera as u32)),
-        ),
+        AccessMask::write_domain(AccessDomain::CharacterControl)
+            .union(AccessMask::write_domain(AccessDomain::CameraControl))
+            .union(AccessMask::write_domain(AccessDomain::ControllerIntents)),
         systems::sys_apply_controller_intents,
     );
     s.add_system(
         SimStage::ApplyIntents,
         20,
         "camera_rig_to_transform",
-        AccessMask::write(crate::Subsystem::Camera as u32),
+        AccessMask::read_domain(AccessDomain::CameraRig)
+            .union(AccessMask::write_domain(AccessDomain::Transform)),
         systems::sys_camera_rig_to_transform,
     );
 
@@ -623,7 +1146,9 @@ pub fn default_schedule() -> SimSchedule {
         SimStage::Physics,
         10,
         "integrate_velocities",
-        AccessMask::write(crate::Subsystem::Gameplay as u32),
+        AccessMask::read_domain(AccessDomain::Velocity)
+            .union(AccessMask::write_domain(AccessDomain::Transform))
+            .union(AccessMask::write_domain(AccessDomain::PhysicsState)),
         systems::sys_integrate_velocities,
     );
 

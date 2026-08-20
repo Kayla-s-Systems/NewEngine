@@ -112,6 +112,7 @@ pub struct RuntimeRenderController {
     pub(super) runtime_profile: RenderRuntimeProfileState,
     pub(super) backend_failure: RenderBackendFailureState,
     pub(super) app_policy: RenderRuntimeAppPolicy,
+    pub(super) editor_viewport: crate::editor_viewport::EditorViewportController,
 }
 
 impl RuntimeRenderController {
@@ -350,6 +351,7 @@ impl RuntimeRenderController {
             runtime_profile: RenderRuntimeProfileState::new(),
             backend_failure: RenderBackendFailureState::new(),
             app_policy: RenderRuntimeAppPolicy::from_startup_config(),
+            editor_viewport: crate::editor_viewport::EditorViewportController::default(),
         }
     }
 }

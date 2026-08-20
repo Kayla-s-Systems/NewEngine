@@ -1,7 +1,10 @@
 use crate::UploadPumpReport;
 use serde::{Deserialize, Serialize};
 
-use super::{RenderDrawListKind, RenderGraphPassId, RenderGraphResourceId};
+use super::{
+    RenderDrawListKind, RenderGraphPassId, RenderGraphResourceId, RenderGraphResourceUsage,
+    TransientResourceAllocationPlan,
+};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct RenderGraphLifetimeStats {
@@ -58,6 +61,177 @@ impl RenderGraphValidationIssue {
         self.resource = Some(resource);
         self
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum RenderGraphDependencyKind {
+    ReadAfterWrite,
+    WriteAfterRead,
+    WriteAfterWrite,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RenderGraphDependencyEdge {
+    pub producer: RenderGraphPassId,
+    pub consumer: RenderGraphPassId,
+    pub resource: RenderGraphResourceId,
+    pub kind: RenderGraphDependencyKind,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CompiledRenderGraphPass {
+    pub id: RenderGraphPassId,
+    pub declaration_index: u32,
+    pub producers: Vec<RenderGraphPassId>,
+    pub consumers: Vec<RenderGraphPassId>,
+    #[serde(default)]
+    pub culled: bool,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RenderGraphCompiledDag {
+    /// Raw pass nodes are retained for diagnostics. Culled nodes are marked on
+    /// `CompiledRenderGraphPass`; execution_order contains live passes only.
+    pub passes: Vec<CompiledRenderGraphPass>,
+    pub edges: Vec<RenderGraphDependencyEdge>,
+    pub execution_order: Vec<RenderGraphPassId>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RenderGraphCullingReport {
+    pub roots: Vec<RenderGraphPassId>,
+    pub live_passes: Vec<RenderGraphPassId>,
+    pub culled_passes: Vec<RenderGraphPassId>,
+}
+
+impl RenderGraphCullingReport {
+    #[inline]
+    pub fn live_count(&self) -> usize {
+        self.live_passes.len()
+    }
+
+    #[inline]
+    pub fn culled_count(&self) -> usize {
+        self.culled_passes.len()
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RenderGraphResourceUseKind {
+    Create,
+    Read,
+    Write,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RenderGraphResourceUse {
+    pub execution_index: u32,
+    pub pass: RenderGraphPassId,
+    pub kind: RenderGraphResourceUseKind,
+    #[serde(default)]
+    pub usage: Option<RenderGraphResourceUsage>,
+}
+
+impl RenderGraphResourceUse {
+    #[inline]
+    pub const fn new(
+        execution_index: u32,
+        pass: RenderGraphPassId,
+        kind: RenderGraphResourceUseKind,
+        usage: Option<RenderGraphResourceUsage>,
+    ) -> Self {
+        Self {
+            execution_index,
+            pass,
+            kind,
+            usage,
+        }
+    }
+}
+
+/// Authoritative lifetime interval for one resource in the compiled live DAG.
+///
+/// Indices are positions in `RenderGraphCompiledDag::execution_order` after pass
+/// culling. `history` contains every create/read/write event observed while walking
+/// that live order and is therefore suitable input for later transient allocation,
+/// aliasing and barrier-planning passes.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ResourceLifetimeInterval {
+    pub resource: RenderGraphResourceId,
+    pub first_pass: RenderGraphPassId,
+    pub last_pass: RenderGraphPassId,
+    pub first_execution_index: u32,
+    pub last_execution_index: u32,
+    pub create_count: u32,
+    pub read_count: u32,
+    pub write_count: u32,
+    #[serde(default)]
+    pub history: Vec<RenderGraphResourceUse>,
+}
+
+impl ResourceLifetimeInterval {
+    #[inline]
+    pub const fn execution_span(&self) -> u32 {
+        self.last_execution_index
+            .saturating_sub(self.first_execution_index)
+            .saturating_add(1)
+    }
+
+    #[inline]
+    pub const fn access_count(&self) -> u32 {
+        self.create_count
+            .saturating_add(self.read_count)
+            .saturating_add(self.write_count)
+    }
+
+    #[inline]
+    pub fn first_live_use(&self) -> Option<&RenderGraphResourceUse> {
+        self.history.first()
+    }
+
+    #[inline]
+    pub fn last_live_use(&self) -> Option<&RenderGraphResourceUse> {
+        self.history.last()
+    }
+
+    #[inline]
+    pub const fn overlaps(&self, other: &Self) -> bool {
+        self.first_execution_index <= other.last_execution_index
+            && other.first_execution_index <= self.last_execution_index
+    }
+}
+
+/// Compatibility name kept while downstream providers migrate to the Phase 3 DTO.
+pub type CompiledResourceLifetime = ResourceLifetimeInterval;
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RenderGraphResourceLifetimeReport {
+    /// Live resource intervals in graph declaration order.
+    pub resources: Vec<CompiledResourceLifetime>,
+    /// Declared resources with no create/read/write event in the live execution order.
+    pub unused_resources: Vec<RenderGraphResourceId>,
+}
+
+impl RenderGraphResourceLifetimeReport {
+    #[inline]
+    pub fn get(&self, resource: RenderGraphResourceId) -> Option<&CompiledResourceLifetime> {
+        self.resources
+            .iter()
+            .find(|entry| entry.resource == resource)
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct RenderGraphCompilation {
+    pub dag: RenderGraphCompiledDag,
+    pub report: RenderGraphCompileReport,
+    #[serde(default)]
+    pub culling: RenderGraphCullingReport,
+    #[serde(default)]
+    pub resource_lifetimes: RenderGraphResourceLifetimeReport,
+    #[serde(default)]
+    pub transient_allocation_plan: TransientResourceAllocationPlan,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

@@ -41,7 +41,7 @@ impl RuntimeRenderController {
         let scene_bridge = self.bridges.scene.clone();
         let selection = scene_bridge.selection();
 
-        let view_frame = scene.run_frame(self.frame.frame_index, |world| {
+        let mut view_frame = scene.run_frame(self.frame.frame_index, |world| {
             let _authority_frame = scene_bridge.authority_bridge().publish_frame(
                 world,
                 self.frame.frame_index,
@@ -216,12 +216,26 @@ impl RuntimeRenderController {
                 sel_bounds,
             );
             self.frame.last_play_mode = effective_play_mode;
-            self.frame.last_camera_snapshot = Some(frame.camera_snapshot);
-            self.viewport.last_aspect = frame.view.aspect;
-            self.viewport.last_vp_w = vp_w;
-            self.viewport.last_vp_h = vp_h;
             frame
         });
+
+        if self.editor_viewport.is_active() {
+            let world_bounds = scene::scene_bounds_world(scene.world()).unwrap_or_else(scene::default_bounds);
+            let selection_bounds = scene::selection_bounds_world(scene.world(), selection);
+            self.editor_viewport.apply_camera_projection(
+                &mut view_frame,
+                world_bounds.center,
+                world_bounds.radius,
+                selection_bounds.map(|bounds| bounds.center),
+                selection_bounds.map(|bounds| bounds.radius),
+                input.wheel_y,
+                [vp_w, vp_h],
+            );
+        }
+        self.frame.last_camera_snapshot = Some(view_frame.camera_snapshot);
+        self.viewport.last_aspect = view_frame.view.aspect;
+        self.viewport.last_vp_w = vp_w;
+        self.viewport.last_vp_h = vp_h;
 
         if let Some(timing) = scene
             .world()

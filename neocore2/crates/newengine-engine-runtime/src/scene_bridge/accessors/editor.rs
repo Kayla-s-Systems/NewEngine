@@ -143,6 +143,10 @@ impl SceneBridge {
         }
     }
 
+    pub(crate) fn refresh_editor_inspector(&self) {
+        self.publish_inspector_state(self.selection());
+    }
+
     pub fn inspector_snapshot_json(&self, selected: Option<EntityId>) -> serde_json::Value {
         let Some(entity) = selected else {
             return serde_json::json!({

@@ -5,6 +5,7 @@ use newengine_math::{Mat4, Vec3};
 use newengine_primitives::Primitive;
 use newengine_transform::GlobalTransform;
 
+use crate::editor_viewport::{EditorGizmoAxis, EditorGizmoAxisComponent};
 use crate::gameplay::display_visible_in_mode;
 
 use super::RuntimeRenderController;
@@ -23,23 +24,37 @@ pub(super) fn handle_picking(
     this.frame.last_pick_seq = pick_seq;
 
     let world = scene.world();
-    let picked = pick_entity(viewproj, vp_w, vp_h, pick_x, pick_y, world);
-    // Rendering currently owns a scene read/write guard while this function runs.
-    // Publishing through SceneBridge here would recursively acquire that lock.
-    this.frame.pending_pick_selection = Some(picked);
+    match pick_target(viewproj, vp_w, vp_h, pick_x, pick_y, world) {
+        PickTarget::Scene(picked) => {
+            this.editor_viewport.clear_gizmo_axis();
+            // Rendering currently owns a scene read/write guard while this function runs.
+            // Publishing through SceneBridge here would recursively acquire that lock.
+            this.frame.pending_pick_selection = Some(picked);
+        }
+        PickTarget::Gizmo(axis) => {
+            this.editor_viewport.arm_gizmo_axis(axis);
+            this.frame.pending_pick_selection = None;
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+enum PickTarget {
+    Scene(Option<newengine_ecs::EntityId>),
+    Gizmo(EditorGizmoAxis),
 }
 
 #[inline]
-fn pick_entity(
+fn pick_target(
     viewproj: Mat4,
     vp_w: u32,
     vp_h: u32,
     x_px: f32,
     y_px: f32,
     world: &newengine_ecs::World,
-) -> Option<newengine_ecs::EntityId> {
+) -> PickTarget {
     if vp_w == 0 || vp_h == 0 {
-        return None;
+        return PickTarget::Scene(None);
     }
 
     let inv = viewproj.inverse();
@@ -54,12 +69,12 @@ fn pick_entity(
     let mut ray_d = far3 - near3;
     let len2 = ray_d.length_squared();
     if len2 <= 1e-12 {
-        return None;
+        return PickTarget::Scene(None);
     }
     ray_d *= len2.sqrt().recip();
 
     let mut best_t = f32::INFINITY;
-    let mut best_e = None;
+    let mut best_target = PickTarget::Scene(None);
 
     for (entity, _primitive, global) in world.query2::<Primitive, GlobalTransform>() {
         if !display_visible_in_mode(world, entity, false) {
@@ -75,11 +90,14 @@ fn pick_entity(
 
         if let Some(t) = hit_t.filter(|t| *t > 0.0 && *t < best_t) {
             best_t = t;
-            best_e = Some(entity);
+            best_target = world
+                .get::<EditorGizmoAxisComponent>(entity)
+                .map(|gizmo| PickTarget::Gizmo(gizmo.axis))
+                .unwrap_or(PickTarget::Scene(Some(entity)));
         }
     }
 
-    best_e
+    best_target
 }
 
 #[inline]

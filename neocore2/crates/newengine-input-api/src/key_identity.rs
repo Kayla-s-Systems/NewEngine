@@ -21,6 +21,8 @@ pub const KEY_S: &str = "keyboard.key_s";
 pub const KEY_W: &str = "keyboard.key_w";
 pub const KEY_V: &str = "keyboard.key_v";
 pub const KEY_X: &str = "keyboard.key_x";
+pub const KEY_Y: &str = "keyboard.key_y";
+pub const KEY_Z: &str = "keyboard.key_z";
 
 pub const ENTER: &str = "keyboard.enter";
 pub const SPACE: &str = "keyboard.space";
@@ -66,6 +68,8 @@ pub fn key_code_from_id(id: &str) -> Option<u32> {
         KEY_W => Some(key_code::KEY_W),
         KEY_V => Some(key_code::KEY_V),
         KEY_X => Some(key_code::KEY_X),
+        KEY_Y => Some(key_code::KEY_Y),
+        KEY_Z => Some(key_code::KEY_Z),
         ENTER => Some(key_code::ENTER),
         SPACE => Some(key_code::SPACE),
         SHIFT_LEFT => Some(key_code::SHIFT_LEFT),
@@ -115,6 +119,8 @@ pub fn canonical_id_from_native_physical_name(name: &str) -> Option<&'static str
         "KeyW" => Some(KEY_W),
         "KeyV" => Some(KEY_V),
         "KeyX" => Some(KEY_X),
+        "KeyY" => Some(KEY_Y),
+        "KeyZ" => Some(KEY_Z),
         "Enter" => Some(ENTER),
         "Space" => Some(SPACE),
         "ShiftLeft" => Some(SHIFT_LEFT),
