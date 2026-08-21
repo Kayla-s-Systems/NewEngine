@@ -6,5 +6,5 @@ readme = "README.md"
 description = "Renderer-neutral engine.ui draw-list bridge for NewEngine"
 
 [dependencies]
-newengine-core = { path = "../newengine-core" }
+newengine-core = { path = "../newengine-core", features = ["render-api"] }
 newengine-render-feature-api = { path = "../newengine-render-feature-api" }

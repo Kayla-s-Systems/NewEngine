@@ -1,7 +1,15 @@
 //! Public binary YDD document model and selection helpers.
 
-pub const YDD_BINARY_SCHEMA_VERSION: u32 = 2;
-pub const YDD_BINARY_ENCODING: &str = "newengine.ydd.binary_mesh.v2";
+/// Legacy static-mesh body schema. Kept readable for existing resident assets.
+pub const YDD_BINARY_SCHEMA_VERSION_V2: u32 = 2;
+/// Four-influence skin schema retained for resident assets.
+pub const YDD_BINARY_SCHEMA_VERSION_V3: u32 = 3;
+/// Current body schema. V4 extends the optional skin stream from four to eight
+/// influences while preserving V2/V3 decoding.
+pub const YDD_BINARY_SCHEMA_VERSION: u32 = 4;
+pub const YDD_BINARY_ENCODING: &str = "newengine.ydd.binary_mesh.v4";
+pub const YDD_BINARY_ENCODING_V3: &str = "newengine.ydd.binary_mesh.v3";
+pub const YDD_BINARY_ENCODING_V2: &str = "newengine.ydd.binary_mesh.v2";
 pub const YDD_BINARY_CONTRACT_SPEC: newengine_contract_api::ContractSpec =
     newengine_contract_api::ContractSpec::new(
         "asset.ydd.body",
@@ -19,6 +27,44 @@ pub struct YddBinaryVertex {
     pub uv0: [f32; 2],
 }
 
+/// Eight-influence linear-blend-skinning source for one vertex.
+///
+/// The first quartet is wire-compatible with YDD V3. V4 adds `joints_extra` and
+/// `weights_extra`; V3 decoding initializes that second quartet to zero.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct YddBinarySkinVertex {
+    pub joints: [u16; 4],
+    pub weights: [f32; 4],
+    pub joints_extra: [u16; 4],
+    pub weights_extra: [f32; 4],
+}
+
+impl YddBinarySkinVertex {
+    #[inline]
+    pub const fn four(joints: [u16; 4], weights: [f32; 4]) -> Self {
+        Self {
+            joints,
+            weights,
+            joints_extra: [0; 4],
+            weights_extra: [0.0; 4],
+        }
+    }
+
+    #[inline]
+    pub fn total_weight(&self) -> f32 {
+        self.weights
+            .iter()
+            .chain(self.weights_extra.iter())
+            .copied()
+            .sum()
+    }
+
+    #[inline]
+    pub fn uses_extra_influences(&self) -> bool {
+        self.weights_extra.iter().any(|weight| *weight > 0.0)
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct YddBinaryMesh {
     pub name: String,
@@ -26,6 +72,9 @@ pub struct YddBinaryMesh {
     pub bounds_min: [f32; 3],
     pub bounds_max: [f32; 3],
     pub vertices: Vec<YddBinaryVertex>,
+    /// Optional V3/V4 skin stream. When present, it must contain exactly one record
+    /// for every base vertex.
+    pub skin: Option<Vec<YddBinarySkinVertex>>,
     pub indices: Vec<u32>,
 }
 
@@ -47,6 +96,11 @@ impl YddBinaryMesh {
             name.to_owned()
         }
     }
+
+    #[inline]
+    pub fn is_skinned(&self) -> bool {
+        self.skin.as_ref().is_some_and(|skin| !skin.is_empty())
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -56,6 +110,9 @@ pub struct YddBinaryEntry {
     pub properties_ref: Option<String>,
     pub bounds_min: [f32; 3],
     pub bounds_max: [f32; 3],
+    /// Optional V3 affine transform from the authored skeleton/skin source space
+    /// into the baked model vertex space. Column-major 4x4.
+    pub skin_source_to_model: Option<[f32; 16]>,
     pub meshes: Vec<YddBinaryMesh>,
 }
 

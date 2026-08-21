@@ -55,21 +55,23 @@ impl<E: Send + 'static> Engine<E> {
         &self,
     ) -> EngineResult<Vec<super::PluginDiscoveryRoot>> {
         let mut out = Vec::new();
-        let primary_dir =
-            newengine_plugin_host::resolve_plugin_discovery_dir(self.plugins_dir.as_deref())
-                .map_err(|error| {
-                    EngineError::Other(format!(
-                        "plugins: primary discovery root resolve failed: {error}"
-                    ))
-                })?;
-        out.push(
-            super::PluginDiscoveryRoot::new(
-                primary_dir,
-                newengine_plugin_host::PluginLoadOrigin::FirstPartyPlugin,
-            )
-            .required(true)
-            .with_owner("engine.startup"),
-        );
+        if self.plugins_dir.is_some() || self.implicit_plugin_discovery {
+            let primary_dir =
+                newengine_plugin_host::resolve_plugin_discovery_dir(self.plugins_dir.as_deref())
+                    .map_err(|error| {
+                        EngineError::Other(format!(
+                            "plugins: primary discovery root resolve failed: {error}"
+                        ))
+                    })?;
+            out.push(
+                super::PluginDiscoveryRoot::new(
+                    primary_dir,
+                    newengine_plugin_host::PluginLoadOrigin::FirstPartyPlugin,
+                )
+                .required(true)
+                .with_owner("engine.startup"),
+            );
+        }
 
         for root in &self.plugin_roots {
             if !root.dir.is_dir() {

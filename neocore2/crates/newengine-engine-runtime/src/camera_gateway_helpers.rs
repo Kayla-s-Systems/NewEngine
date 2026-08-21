@@ -115,6 +115,9 @@ pub(super) fn camera_runtime_service_config(
         CameraViewMode::ThirdPersonAim => {
             newengine_camera_runtime::GameplayCameraRunnerKind::ThirdPersonAim
         }
+        CameraViewMode::ThirdPersonOrbit => {
+            newengine_camera_runtime::GameplayCameraRunnerKind::ThirdPersonOrbit
+        }
     };
     config
 }
@@ -151,6 +154,10 @@ pub(super) fn apply_runtime_input(
             Vec2::new(-input.dx_px, -input.dy_px),
             input.active,
             service_config.sprint_multiplier,
+            matches!(
+                service_config.runner,
+                newengine_camera_runtime::GameplayCameraRunnerKind::ThirdPersonAim
+            ),
         );
         emit_player_event(
             world,
@@ -202,6 +209,7 @@ pub(super) fn apply_gameplay_view_lens(
         CameraViewMode::FirstPerson => 68.0_f32.to_radians(),
         CameraViewMode::ThirdPersonFollow => 64.0_f32.to_radians(),
         CameraViewMode::ThirdPersonAim => 54.0_f32.to_radians(),
+        CameraViewMode::ThirdPersonOrbit => 60.0_f32.to_radians(),
     };
     let Projection::Perspective(mut perspective) = frame.projection else {
         return frame;

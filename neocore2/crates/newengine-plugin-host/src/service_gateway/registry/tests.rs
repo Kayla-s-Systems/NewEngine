@@ -649,3 +649,63 @@ fn active_and_shadowed_routes_are_diagnostic_visible() {
         Some("engine.camera.null")
     );
 }
+
+#[test]
+fn provider_abi_survives_active_route_selection() {
+    let descriptor = PluginDescriptor::builder(
+        "test.render.abi",
+        "TestRenderAbi",
+        "1.0.0",
+        PluginKind::Runtime,
+    )
+    .provides_service("render.api", 1, r#"{"methods":["info_json"]}"#)
+    .push(
+        CapabilityDesc::new(
+            "render.backend",
+            CapabilityRole::Provides,
+            CapabilityKind::Other,
+            1,
+        )
+        .with_json(
+            r#"{"service_kind":"render","engine_gateway":"engine.render","provider_route":"engine.render.test_abi","provider_abi":"newengine.render-provider/v1","contract":"render.api","backend_priority":100}"#,
+        ),
+    )
+    .build();
+    let descriptors = vec![PluginDescriptorFact::new(
+        "test.render.abi".to_owned(),
+        descriptor,
+        GatewayProviderOrigin::FirstPartyPlugin,
+    )];
+    let services = vec![service("render.api", Some("test.render.abi"))];
+    let registry = ActiveGatewayRegistry::from_facts(&descriptors, &services, &[]);
+    let route = registry
+        .resolve_route("engine.render")
+        .expect("render route");
+    assert_eq!(
+        route.provider_abi.as_deref(),
+        Some("newengine.render-provider/v1")
+    );
+}
+
+#[test]
+fn legacy_route_without_provider_abi_remains_selectable() {
+    let descriptor = descriptor(
+        "test.render.legacy",
+        "render.legacy.api",
+        "engine.render",
+        "render.backend",
+        "render",
+        10,
+    );
+    let descriptors = vec![PluginDescriptorFact::new(
+        "test.render.legacy".to_owned(),
+        descriptor,
+        GatewayProviderOrigin::GamePlugin,
+    )];
+    let services = vec![service("render.legacy.api", Some("test.render.legacy"))];
+    let registry = ActiveGatewayRegistry::from_facts(&descriptors, &services, &[]);
+    let route = registry
+        .resolve_route("engine.render")
+        .expect("legacy render route");
+    assert_eq!(route.provider_abi, None);
+}

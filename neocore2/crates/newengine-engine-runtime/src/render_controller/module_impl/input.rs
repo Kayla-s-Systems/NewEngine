@@ -107,8 +107,12 @@ impl ViewportInputSnap {
         let actions =
             newengine_input_bindings_runtime::resolve_input_actions(&UiInputSource(input));
 
-        self.dx_px += actions.look_axis[0] * 18.0;
-        self.dy_px += actions.look_axis[1] * 18.0;
+        // Canonical engine.input owns raw mouse deltas for both direct and normal
+        // playable surfaces. ViewportBridge is an optional legacy/editor source, not
+        // the authoritative gameplay mouse stream; relying on it here made gameplay
+        // look depend on surface mode and could silently lose the vertical channel.
+        self.dx_px += input.mouse_delta.0 + actions.look_axis[0] * 18.0;
+        self.dy_px += input.mouse_delta.1 + actions.look_axis[1] * 18.0;
         self.wheel_y += input.mouse_wheel.1;
         self.move_mask |= actions.move_mask;
         if actions.look_axis != [0.0, 0.0] {
@@ -206,5 +210,38 @@ impl InputFrameSource for UiInputSource<'_> {
     #[inline]
     fn gamepad_axis(&self, axis: &str) -> f32 {
         self.0.gamepad_axis(axis)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn normal_playable_surface_merges_canonical_mouse_xy() {
+        let mut snap = ViewportInputSnap::default();
+        let mut frame = UiInputFrame::default();
+        frame.mouse_delta = (7.25, -5.5);
+
+        snap.merge_semantic_actions_from_surface(Some(&frame));
+
+        assert!((snap.dx_px - 7.25).abs() <= f32::EPSILON);
+        assert!((snap.dy_px + 5.5).abs() <= f32::EPSILON);
+    }
+
+    #[test]
+    fn canonical_mouse_delta_is_additive_with_legacy_viewport_packet() {
+        let mut snap = ViewportInputSnap {
+            dx_px: 2.0,
+            dy_px: 3.0,
+            ..ViewportInputSnap::default()
+        };
+        let mut frame = UiInputFrame::default();
+        frame.mouse_delta = (4.0, -8.0);
+
+        snap.merge_semantic_actions_from_surface(Some(&frame));
+
+        assert!((snap.dx_px - 6.0).abs() <= f32::EPSILON);
+        assert!((snap.dy_px + 5.0).abs() <= f32::EPSILON);
     }
 }

@@ -188,6 +188,60 @@ pub struct PlayerLocomotionState {
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum PlayerLocomotionAnimation {
+    #[default]
+    Idle,
+    Walk,
+    Run,
+    Sprint,
+    CrouchIdle,
+    CrouchWalk,
+    Jump,
+    Fall,
+}
+
+impl PlayerLocomotionAnimation {
+    #[inline]
+    pub const fn clip_hint(self) -> &'static str {
+        match self {
+            Self::Idle => "idle",
+            Self::Walk => "walk",
+            Self::Run => "run",
+            Self::Sprint => "sprint",
+            Self::CrouchIdle => "crouch_idle",
+            Self::CrouchWalk => "crouch_walk",
+            Self::Jump => "jump",
+            Self::Fall => "fall",
+        }
+    }
+}
+
+/// Engine-owned locomotion animation state. This is intentionally clip-format neutral:
+/// animation providers may map the semantic state to YCD clips, blend trees, motion
+/// matching, or another backend without changing PlayerActor/controller code.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PlayerAnimationState {
+    pub locomotion: PlayerLocomotionAnimation,
+    pub normalized_speed: f32,
+    pub cycle_phase: f32,
+    pub transition_alpha: f32,
+    pub revision: u64,
+}
+
+impl Default for PlayerAnimationState {
+    #[inline]
+    fn default() -> Self {
+        Self {
+            locomotion: PlayerLocomotionAnimation::Idle,
+            normalized_speed: 0.0,
+            cycle_phase: 0.0,
+            transition_alpha: 1.0,
+            revision: 1,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum PlayerStanceKind {
     #[default]
     Standing,
@@ -224,8 +278,78 @@ impl Default for PlayerStanceState {
     }
 }
 
+/// Desired player avatar assignment. Game/editor code changes this component;
+/// the active world package resolves it to a concrete runtime model binding.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PlayerModelAssignment {
+    pub revision: u64,
+    pub enabled: bool,
+    pub source: String,
+    pub properties_ref: Option<String>,
+    pub texture_dictionary: Option<String>,
+    pub skeleton_source: Option<String>,
+    /// Semantic idle clip reference, e.g. `animations/foo.ycd@idle`.
+    pub idle_animation: Option<String>,
+    pub walk_animation: Option<String>,
+    pub run_animation: Option<String>,
+    pub sprint_animation: Option<String>,
+    pub jump_animation: Option<String>,
+    pub fall_animation: Option<String>,
+    pub target_height: f32,
+    pub eye_height_ratio: f32,
+    pub local_offset: Vec3,
+    pub yaw_offset: f32,
+    pub hide_in_first_person: bool,
+}
+
+impl PlayerModelAssignment {
+    #[inline]
+    pub fn new(source: impl Into<String>) -> Self {
+        Self {
+            revision: 1,
+            enabled: true,
+            source: source.into(),
+            ..Self::default()
+        }
+    }
+
+    #[inline]
+    pub fn next_revision_after(mut self, previous: Option<&Self>) -> Self {
+        self.revision = previous
+            .map(|assignment| assignment.revision.saturating_add(1).max(1))
+            .unwrap_or_else(|| self.revision.max(1));
+        self
+    }
+}
+
+impl Default for PlayerModelAssignment {
+    #[inline]
+    fn default() -> Self {
+        Self {
+            revision: 0,
+            enabled: false,
+            source: String::new(),
+            properties_ref: None,
+            texture_dictionary: None,
+            skeleton_source: None,
+            idle_animation: None,
+            walk_animation: None,
+            run_animation: None,
+            sprint_animation: None,
+            jump_animation: None,
+            fall_animation: None,
+            target_height: 1.80,
+            eye_height_ratio: 0.91,
+            local_offset: Vec3::ZERO,
+            yaw_offset: 0.0,
+            hide_in_first_person: true,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct PlayerModelBinding {
+    pub assignment_revision: u64,
     pub source: String,
     pub skeleton_source: Option<String>,
     pub visual_root: Option<newengine_ecs::EntityId>,
@@ -238,6 +362,7 @@ impl Default for PlayerModelBinding {
     #[inline]
     fn default() -> Self {
         Self {
+            assignment_revision: 0,
             source: String::new(),
             skeleton_source: None,
             visual_root: None,
@@ -261,6 +386,35 @@ pub struct PlayerVisualPart {
     pub part_index: u32,
     pub kind: PlayerVisualKind,
     pub material_slot: String,
+}
+
+/// Eight-influence linear blend skinning vertex payload owned by the engine runtime.
+/// Joint indices address the stable authored skeleton joint table. The first quartet
+/// is backward-compatible with YDD V3; the second is populated by YDD V4 sources.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PlayerSkinVertex {
+    pub joints: [u16; 4],
+    pub weights: [f32; 4],
+    pub joints_extra: [u16; 4],
+    pub weights_extra: [f32; 4],
+}
+
+/// Skin stream attached to one runtime player visual part. The owner points at the
+/// PlayerActor that carries the current palette; source_to_model is retained for
+/// diagnostics/validation and must match the pose binding used to build the palette.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PlayerSkinBinding {
+    pub owner: newengine_ecs::EntityId,
+    pub vertices: Vec<PlayerSkinVertex>,
+    pub source_to_model: [f32; 16],
+}
+
+/// Per-player matrix palette produced once per frame by the animation backend and
+/// consumed by every skinned visual part owned by that player.
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct PlayerSkinPose {
+    pub palette: Vec<newengine_math::Mat4>,
+    pub revision: u64,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -304,7 +458,9 @@ impl Default for PlayerViewVisibility {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PlayerEventKind {
     Spawned,
+    ModelAssignmentChanged,
     ModelBound,
+    AnimationStateChanged,
     Possessed,
     Released,
     InputApplied,

@@ -4,8 +4,13 @@ use super::*;
 
 pub(super) const BODY_HEADER_LEN: usize = 40;
 pub(super) const ENTRY_RECORD_LEN: usize = 80;
-pub(super) const MESH_HEADER_LEN: usize = 40;
+pub(super) const MESH_HEADER_LEN_V2: usize = 40;
+pub(super) const MESH_HEADER_LEN_V3: usize = 48;
 pub(super) const VERTEX_STRIDE: usize = 32;
+pub(super) const SKIN_VERTEX_STRIDE_V3: usize = 24;
+pub(super) const SKIN_VERTEX_STRIDE_V4: usize = 48;
+pub(super) const MESH_FLAG_SKINNED: u32 = 0x0000_0001;
+pub(super) const ENTRY_FLAG_SKIN_SOURCE_TO_MODEL: u32 = 0x0000_0001;
 
 pub fn decode_ydd_binary_body(body: &[u8]) -> Result<YddBinaryDocument, String> {
     if body
@@ -15,7 +20,7 @@ pub fn decode_ydd_binary_body(body: &[u8]) -> Result<YddBinaryDocument, String> 
         == Some(b'{')
     {
         return Err(
-            "JSON YDD geometry is unsupported; migrate the asset to newengine.ydd.binary_mesh.v2"
+            "JSON YDD geometry is unsupported; migrate the asset to newengine.ydd.binary_mesh"
                 .to_owned(),
         );
     }
@@ -26,11 +31,19 @@ pub fn decode_ydd_binary_body(body: &[u8]) -> Result<YddBinaryDocument, String> 
         ));
     }
     let version = read_u32(body, 0)?;
-    if version != YDD_BINARY_SCHEMA_VERSION {
+    if !matches!(
+        version,
+        YDD_BINARY_SCHEMA_VERSION_V2 | YDD_BINARY_SCHEMA_VERSION_V3 | YDD_BINARY_SCHEMA_VERSION
+    ) {
         return Err(format!(
-            "unsupported binary YDD schema version={version} expected={YDD_BINARY_SCHEMA_VERSION}"
+            "unsupported binary YDD schema version={version} supported=[{YDD_BINARY_SCHEMA_VERSION_V2},{YDD_BINARY_SCHEMA_VERSION_V3},{YDD_BINARY_SCHEMA_VERSION}]"
         ));
     }
+    let mesh_header_len = if version >= YDD_BINARY_SCHEMA_VERSION_V3 {
+        MESH_HEADER_LEN_V3
+    } else {
+        MESH_HEADER_LEN_V2
+    };
     let entry_count = read_u32(body, 4)? as usize;
     if entry_count == 0 {
         return Err("binary YDD contains no entries".to_owned());
@@ -81,13 +94,33 @@ pub fn decode_ydd_binary_body(body: &[u8]) -> Result<YddBinaryDocument, String> 
                 "binary YDD mesh count mismatch entry='{name}' declared={declared_mesh_count} payload={mesh_count}"
             ));
         }
+        let entry_flags = read_u32(body, payload_offset + 4)?;
+        if version < YDD_BINARY_SCHEMA_VERSION_V3 && entry_flags != 0 {
+            return Err(format!(
+                "binary YDD v2 entry has non-zero payload flags entry='{name}' flags=0x{entry_flags:08x}"
+            ));
+        }
+        if entry_flags & !ENTRY_FLAG_SKIN_SOURCE_TO_MODEL != 0 {
+            return Err(format!(
+                "binary YDD entry has unsupported payload flags entry='{name}' flags=0x{entry_flags:08x}"
+            ));
+        }
         let mut cursor = payload_offset + 8;
+        let skin_source_to_model = if version >= YDD_BINARY_SCHEMA_VERSION_V3
+            && entry_flags & ENTRY_FLAG_SKIN_SOURCE_TO_MODEL != 0
+        {
+            let matrix = read_mat4(body, cursor)?;
+            cursor += 64;
+            Some(matrix)
+        } else {
+            None
+        };
         let mut meshes = Vec::with_capacity(mesh_count);
         let mut actual_vertex_count = 0usize;
         let mut actual_index_count = 0usize;
         for mesh_index in 0..mesh_count {
-            checked_slice(body, cursor, MESH_HEADER_LEN, "mesh header")?;
-            if cursor + MESH_HEADER_LEN > payload_end {
+            checked_slice(body, cursor, mesh_header_len, "mesh header")?;
+            if cursor + mesh_header_len > payload_end {
                 return Err(format!(
                     "binary YDD mesh header outside entry entry='{name}' mesh={mesh_index}"
                 ));
@@ -98,7 +131,36 @@ pub fn decode_ydd_binary_body(body: &[u8]) -> Result<YddBinaryDocument, String> 
             let index_count = read_u32(body, cursor + 12)? as usize;
             let mesh_bounds_min = read_vec3(body, cursor + 16)?;
             let mesh_bounds_max = read_vec3(body, cursor + 28)?;
-            cursor += MESH_HEADER_LEN;
+            let (mesh_flags, declared_skin_stride) = if version >= YDD_BINARY_SCHEMA_VERSION_V3 {
+                (
+                    read_u32(body, cursor + 40)?,
+                    read_u32(body, cursor + 44)? as usize,
+                )
+            } else {
+                (0, 0)
+            };
+            let has_skin = mesh_flags & MESH_FLAG_SKINNED != 0;
+            if mesh_flags & !MESH_FLAG_SKINNED != 0 {
+                return Err(format!(
+                    "binary YDD mesh has unsupported flags entry='{name}' mesh='{mesh_name}' flags=0x{mesh_flags:08x}"
+                ));
+            }
+            let expected_skin_stride = match version {
+                YDD_BINARY_SCHEMA_VERSION_V3 => SKIN_VERTEX_STRIDE_V3,
+                YDD_BINARY_SCHEMA_VERSION => SKIN_VERTEX_STRIDE_V4,
+                _ => 0,
+            };
+            if has_skin && declared_skin_stride != expected_skin_stride {
+                return Err(format!(
+                    "binary YDD skin stride mismatch entry='{name}' mesh='{mesh_name}' stride={declared_skin_stride} expected={expected_skin_stride} version={version}"
+                ));
+            }
+            if !has_skin && declared_skin_stride != 0 {
+                return Err(format!(
+                    "binary YDD unskinned mesh declares skin stride entry='{name}' mesh='{mesh_name}' stride={declared_skin_stride}"
+                ));
+            }
+            cursor += mesh_header_len;
             if vertex_count == 0 || index_count == 0 {
                 return Err(format!(
                     "binary YDD mesh is empty entry='{name}' mesh='{mesh_name}' vertices={vertex_count} indices={index_count}"
@@ -112,11 +174,19 @@ pub fn decode_ydd_binary_body(body: &[u8]) -> Result<YddBinaryDocument, String> 
             let vertex_bytes = vertex_count
                 .checked_mul(VERTEX_STRIDE)
                 .ok_or("binary YDD vertex byte range overflow")?;
+            let skin_bytes = if has_skin {
+                vertex_count
+                    .checked_mul(declared_skin_stride)
+                    .ok_or("binary YDD skin byte range overflow")?
+            } else {
+                0
+            };
             let index_bytes = index_count
                 .checked_mul(4)
                 .ok_or("binary YDD index byte range overflow")?;
             let mesh_end = cursor
                 .checked_add(vertex_bytes)
+                .and_then(|value| value.checked_add(skin_bytes))
                 .and_then(|value| value.checked_add(index_bytes))
                 .ok_or("binary YDD mesh range overflow")?;
             if mesh_end > payload_end {
@@ -133,6 +203,67 @@ pub fn decode_ydd_binary_body(body: &[u8]) -> Result<YddBinaryDocument, String> 
                 });
                 cursor += VERTEX_STRIDE;
             }
+            let skin = if has_skin {
+                let mut skin = Vec::with_capacity(vertex_count);
+                for _ in 0..vertex_count {
+                    let joints = [
+                        read_u16(body, cursor)?,
+                        read_u16(body, cursor + 2)?,
+                        read_u16(body, cursor + 4)?,
+                        read_u16(body, cursor + 6)?,
+                    ];
+                    let weights = [
+                        read_f32(body, cursor + 8)?,
+                        read_f32(body, cursor + 12)?,
+                        read_f32(body, cursor + 16)?,
+                        read_f32(body, cursor + 20)?,
+                    ];
+                    let (joints_extra, weights_extra) =
+                        if declared_skin_stride == SKIN_VERTEX_STRIDE_V4 {
+                            (
+                                [
+                                    read_u16(body, cursor + 24)?,
+                                    read_u16(body, cursor + 26)?,
+                                    read_u16(body, cursor + 28)?,
+                                    read_u16(body, cursor + 30)?,
+                                ],
+                                [
+                                    read_f32(body, cursor + 32)?,
+                                    read_f32(body, cursor + 36)?,
+                                    read_f32(body, cursor + 40)?,
+                                    read_f32(body, cursor + 44)?,
+                                ],
+                            )
+                        } else {
+                            ([0; 4], [0.0; 4])
+                        };
+                    if weights
+                        .iter()
+                        .chain(weights_extra.iter())
+                        .any(|weight| !weight.is_finite() || *weight < 0.0)
+                    {
+                        return Err(format!(
+                            "binary YDD skin contains invalid weight entry='{name}' mesh='{mesh_name}' weights={weights:?} extra={weights_extra:?}"
+                        ));
+                    }
+                    let sum = weights.iter().chain(weights_extra.iter()).sum::<f32>();
+                    if !sum.is_finite() || (sum - 1.0).abs() > 0.01 {
+                        return Err(format!(
+                            "binary YDD skin weights are not normalized entry='{name}' mesh='{mesh_name}' sum={sum}"
+                        ));
+                    }
+                    skin.push(YddBinarySkinVertex {
+                        joints,
+                        weights,
+                        joints_extra,
+                        weights_extra,
+                    });
+                    cursor += declared_skin_stride;
+                }
+                Some(skin)
+            } else {
+                None
+            };
             let mut indices = Vec::with_capacity(index_count);
             for _ in 0..index_count {
                 let index = read_u32(body, cursor)?;
@@ -158,6 +289,7 @@ pub fn decode_ydd_binary_body(body: &[u8]) -> Result<YddBinaryDocument, String> 
                 bounds_min: mesh_bounds_min,
                 bounds_max: mesh_bounds_max,
                 vertices,
+                skin,
                 indices,
             });
         }
@@ -180,6 +312,7 @@ pub fn decode_ydd_binary_body(body: &[u8]) -> Result<YddBinaryDocument, String> 
             properties_ref,
             bounds_min,
             bounds_max,
+            skin_source_to_model,
             meshes,
         });
     }
@@ -204,6 +337,12 @@ fn checked_slice<'a>(
 #[inline]
 fn usize_from_u64(value: u64, label: &str) -> Result<usize, String> {
     usize::try_from(value).map_err(|_| format!("binary YDD {label} exceeds platform usize"))
+}
+
+#[inline]
+fn read_u16(bytes: &[u8], offset: usize) -> Result<u16, String> {
+    let value = checked_slice(bytes, offset, 2, "u16")?;
+    Ok(u16::from_le_bytes(value.try_into().expect("u16 slice")))
 }
 
 #[inline]
@@ -242,6 +381,15 @@ fn read_vec3(bytes: &[u8], offset: usize) -> Result<[f32; 3], String> {
         read_f32(bytes, offset + 4)?,
         read_f32(bytes, offset + 8)?,
     ])
+}
+
+#[inline]
+fn read_mat4(bytes: &[u8], offset: usize) -> Result<[f32; 16], String> {
+    let mut out = [0.0; 16];
+    for (index, value) in out.iter_mut().enumerate() {
+        *value = read_f32(bytes, offset + index * 4)?;
+    }
+    Ok(out)
 }
 
 fn optional_string(strings: &[u8], offset: u32) -> Result<Option<String>, String> {

@@ -93,7 +93,7 @@ fn gameplay_keyboard_bindings() -> [InputBinding; 19] {
         InputBinding::keyboard_down(action::PLAYER_MOVE_DOWN, keys::KEY_E),
         InputBinding::keyboard_down(action::PLAYER_SPRINT, keys::SHIFT_LEFT),
         InputBinding::keyboard_down(action::PLAYER_SPRINT, keys::SHIFT_RIGHT),
-        InputBinding::keyboard_pressed(action::CAMERA_VIEW_NEXT, keys::KEY_F),
+        InputBinding::keyboard_pressed(action::CAMERA_VIEW_NEXT, keys::KEY_V),
         InputBinding::keyboard_pressed(action::CAMERA_VIEW_FIRST_PERSON, keys::DIGIT1),
         InputBinding::keyboard_pressed(action::CAMERA_VIEW_THIRD_PERSON_FOLLOW, keys::DIGIT2),
         InputBinding::keyboard_pressed(action::CAMERA_VIEW_THIRD_PERSON_AIM, keys::DIGIT3),

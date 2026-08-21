@@ -8,8 +8,8 @@ use newengine_project_api::ProjectScriptRegistry;
 use newengine_project_runtime::ProjectRuntimeContext;
 use newengine_render_feature_gameready::GameReadyRenderFeaturePack;
 use newengine_render_ui_bridge::EngineUiDrawListBridgeProvider;
-use newengine_runtime_host::physics_runtime::PhysicsBackendRuntimeModule;
-use newengine_runtime_host::render_runtime::RenderBackendRuntimeModule;
+use newengine_physics_runtime_adapter::PhysicsBackendRuntimeModule;
+use newengine_render_runtime_adapter::RenderBackendRuntimeModule;
 use newengine_ui::{UiBuildFn, UiProviderKind};
 
 use crate::scene_bootstrap::{GameReadySceneBootstrapModule, GameReadyWorldSceneBootstrapProvider};

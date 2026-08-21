@@ -1,12 +1,11 @@
 use newengine_ecs::World;
-use newengine_math::Quat;
 use newengine_physics_api::{
     MeshColliderDto, PhysicsBodyFlagsDto, PhysicsColliderDto, PhysicsCommandDto,
     PhysicsCommandKindDto, PhysicsFrameBodySnapshot, PhysicsFrameColliderSnapshot,
     PhysicsFrameInput, PhysicsMaterialDto,
 };
 use newengine_physics_contracts::PhysicsBodyDesc;
-use newengine_sim::{CharacterMotor, Velocity};
+use newengine_sim::Velocity;
 use newengine_transform::Transform;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -190,10 +189,9 @@ fn collect_body_snapshots(world: &World) -> Vec<PhysicsFrameBodySnapshot> {
             .map(|b| b.world_aabb)
             .unwrap_or_else(|| translated_shape_aabb(*body, transform.position));
 
-        let physics_rotation = world
-            .get::<CharacterMotor>(entity)
-            .map(|motor| Quat::from_rotation_y(motor.yaw))
-            .unwrap_or(transform.rotation);
+        // CharacterMotor yaw is camera/view orientation. Physics follows the
+        // PlayerActor body transform so free-look cannot rotate the character body.
+        let physics_rotation = transform.rotation;
 
         bodies.push(PhysicsFrameBodySnapshot {
             entity: entity.stable_u64(),
@@ -222,6 +220,7 @@ fn collect_body_snapshots(world: &World) -> Vec<PhysicsFrameBodySnapshot> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use newengine_math::Quat;
 
     #[test]
     fn frame_input_projects_static_mesh_collider() {

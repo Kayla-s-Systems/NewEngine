@@ -10,7 +10,7 @@ use newengine_ui_api::{
 
 use crate::platform_input::poll_input_frame;
 use crate::platform_runtime::bootstrap_overlay::RuntimeBootstrapStage;
-use crate::render_runtime::ResolvedRenderBackendConfig;
+use newengine_render_runtime_adapter::ResolvedRenderBackendConfig;
 
 use super::super::HostPlatformRuntime;
 use super::mapping::render_backend_label_from_id;

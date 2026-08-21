@@ -39,6 +39,28 @@ pub struct ExternalRuntimePluginSnapshot {
     pub disabled_reason: Option<String>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct EngineCapabilitySlotSnapshot {
+    pub gateway_id: String,
+    pub service_kind: String,
+    pub required: bool,
+    pub declared_by: String,
+    /// `empty` when no provider route occupies the slot, otherwise `occupied`.
+    pub state: String,
+    pub provider_service_id: Option<String>,
+    pub provider_owner_id: Option<String>,
+    pub provider_origin: Option<String>,
+    pub backend_capability_id: Option<String>,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct EngineCapabilitySlotEntry {
+    pub(crate) gateway_id: String,
+    pub(crate) service_kind: String,
+    pub(crate) required: bool,
+    pub(crate) declared_by: String,
+}
+
 #[derive(Clone, Debug)]
 pub struct EngineGatewayRouteSnapshot {
     pub gateway_id: String,
@@ -139,6 +161,11 @@ pub(crate) struct HostContext {
     /// same gateway registry and priority rules as plugin routes.
     pub(crate) gateway_provider_routes: Mutex<NeHashMap<String, GatewayProviderRouteEntry>>,
 
+    /// Composition-declared capability slots. A slot is host metadata only: it
+    /// does not construct a provider. Plugins/runtime providers occupy slots by
+    /// publishing normal gateway routes.
+    pub(crate) capability_slots: Mutex<NeHashMap<String, EngineCapabilitySlotEntry>>,
+
     /// Cached active gateway registry. Routing is on the service hot path, so
     /// descriptor/fact folding must happen only when the gateway fact generation
     /// changes, not on every `call_service_v1(engine.*)` call.
@@ -160,6 +187,7 @@ fn make_default_ctx() -> Arc<HostContext> {
         plugin_origins: Mutex::new(NeHashMap::default()),
         external_runtime_plugins: Mutex::new(NeHashMap::default()),
         gateway_provider_routes: Mutex::new(NeHashMap::default()),
+        capability_slots: Mutex::new(NeHashMap::default()),
         gateway_registry_cache: Mutex::new(None),
     })
 }

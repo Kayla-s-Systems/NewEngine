@@ -10,7 +10,10 @@ mod registry;
 
 pub mod ydd_binary;
 
-pub use ydd_binary::{YDD_BINARY_CONTRACT_SPEC, YDD_BINARY_ENCODING, YDD_BINARY_SCHEMA_VERSION};
+pub use ydd_binary::{
+    encode_ydd_binary_body, YDD_BINARY_CONTRACT_SPEC, YDD_BINARY_ENCODING,
+    YDD_BINARY_SCHEMA_VERSION,
+};
 
 pub use descriptor::{Nef8FormatSpec, ASSET_BLOB_OUTPUT, DOMAIN_MANIFEST_OUTPUT, NEF8_MAGIC_HEX};
 pub use registry::{

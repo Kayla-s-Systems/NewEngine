@@ -53,6 +53,7 @@ pub enum CameraModeKind {
     GameplayFirstPerson,
     GameplayThirdPersonFollow,
     GameplayThirdPersonAim,
+    GameplayThirdPersonOrbit,
     Cinematic,
     Scripted,
     Replay,

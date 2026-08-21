@@ -91,6 +91,7 @@ fn preview_geometry_normalization_uses_vertex_aabb_not_coarse_sphere_bounds() {
             bounds_center: Vec3::new(84.0, 136.0, -75.0),
             bounds_radius: 323.0,
         },
+        skin: None,
         material: ModelMaterialBinding::default(),
     }];
 

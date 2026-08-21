@@ -115,15 +115,13 @@ impl HeadlessCliRuntime {
     }
 
     fn install_headless_services(&mut self) {
-        crate::null_providers::register_null_provider_routes_best_effort();
         newengine_time_runtime::register_time_gateway_best_effort();
         newengine_schema_runtime::register_schema_gateway_best_effort();
-        newengine_gameplay_runtime::register_gameplay_foundation_gateways_best_effort();
         register_threading_gateway_service_best_effort(
             self.engine.thread_pool(),
             self.engine.events().clone(),
         );
-        newengine_ulog_api::ulog::info!("headless runtime: engine.time, engine.schema, engine.threading, synthetic engine.platform.headless and visible NullProvider routes registered; loading/status stays an engine.ui projection");
+        newengine_ulog_api::ulog::info!("headless runtime: host-owned engine.time, engine.schema, engine.threading, synthetic engine.platform.headless and visible NullProvider routes registered; engine-domain services remain composition-owned");
     }
 
     fn publish_headless_window_contract(&mut self) -> EngineResult<()> {

@@ -1,4 +1,5 @@
 use newengine_core::{Engine, EngineResult, StartupConfig};
+use newengine_project_runtime::ProjectRuntimeContext;
 use newengine_ui::{UiBuildFn, UiProviderKind};
 
 use super::boot_options::RuntimeHostBootOption;
@@ -46,6 +47,20 @@ pub trait RuntimeHostAppProfile {
     #[inline]
     fn boot_options(&self) -> Option<&'static [RuntimeHostBootOption]> {
         None
+    }
+
+    /// Initializes services owned by the selected runtime composition.
+    ///
+    /// The generic host deliberately does not construct gameplay, replication,
+    /// networking, rendering or other engine-domain services. Concrete profiles
+    /// opt into those domains through this hook or, preferably, plugin routes.
+    #[inline]
+    fn initialize_composition_services(
+        &self,
+        _engine: &mut Engine<()>,
+        _project: Option<&ProjectRuntimeContext>,
+    ) -> EngineResult<()> {
+        Ok(())
     }
 
     #[inline]

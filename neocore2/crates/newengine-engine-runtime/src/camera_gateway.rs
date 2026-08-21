@@ -257,11 +257,18 @@ impl CameraGatewayBridge {
         state.sync_play_mode_transition(world, cam_id, effective_play_mode);
         let service_config = camera_runtime_service_config(world, active_view);
         CameraRuntimeService::apply_pending_director_requests(world, cam_id, service_config);
-        if effective_play_mode.wants_direct_player_control()
-            && matches!(active_view, CameraViewMode::FirstPerson)
-        {
+        if effective_play_mode.wants_direct_player_control() {
             if let Some(player) = player {
-                let _ = CameraRuntimeService::sync_first_person_camera_now(world, cam_id, player);
+                // Gameplay view rotation is sampled at render cadence. Keep every possessed
+                // camera mode on that same cadence instead of quantizing third-person follow
+                // to fixed simulation ticks.
+                let _ = CameraRuntimeService::sync_gameplay_camera_now(
+                    world,
+                    cam_id,
+                    player,
+                    service_config,
+                    camera_dt,
+                );
             }
         }
 

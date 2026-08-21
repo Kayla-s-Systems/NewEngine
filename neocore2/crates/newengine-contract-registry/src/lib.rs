@@ -9,6 +9,9 @@ pub use newengine_contract_api::{
 pub const CORE_CONTRACTS: &[ContractSpec] = &[
     newengine_assets_api::NEF8_WIRE_CONTRACT_SPEC,
     newengine_asset_format_nef8::YDD_BINARY_CONTRACT_SPEC,
+    newengine_asset_format_nef8::ytd::CONTENT_SCHEMA_CONTRACT_SPEC,
+    newengine_asset_format_nef8::nemat::CONTENT_SCHEMA_CONTRACT_SPEC,
+    newengine_asset_format_nef8::neui::CONTENT_SCHEMA_CONTRACT_SPEC,
     newengine_asset_format_nef8::ytyp::CONTENT_SCHEMA_CONTRACT_SPEC,
     newengine_project_api::PROJECT_MANIFEST_CONTRACT_SPEC,
     newengine_project_api::PROJECT_RUNTIME_PROFILE_ABI_CONTRACT_SPEC,
@@ -28,6 +31,13 @@ pub const fn contracts() -> &'static [ContractSpec] {
 
 pub fn contract(key: &str) -> Option<&'static ContractSpec> {
     CORE_CONTRACTS.iter().find(|spec| spec.key == key)
+}
+
+/// Resolve a contract by the stable token advertised on a provider/wire boundary.
+pub fn contract_by_advertised_id(advertised_id: &str) -> Option<&'static ContractSpec> {
+    CORE_CONTRACTS
+        .iter()
+        .find(|spec| spec.advertised_id == Some(advertised_id))
 }
 
 pub fn validate_registry() -> Result<(), Vec<String>> {
@@ -77,6 +87,9 @@ mod tests {
         for key in [
             "asset.nef8.wire",
             "asset.ydd.body",
+            "asset.ytd.schema",
+            "asset.nemat.schema",
+            "asset.neui.schema",
             "asset.ytyp.schema",
             "project.manifest",
             "runtime.profile.abi",
@@ -106,5 +119,12 @@ mod tests {
             contract("scripting.binary.wire").unwrap().version.major,
             newengine_scripting_api::SCRIPTING_WIRE_VERSION_V1
         );
+    }
+    #[test]
+    fn advertised_id_lookup_resolves_provider_abi() {
+        let spec = contract_by_advertised_id(newengine_render_api::RENDER_PROVIDER_ABI_ID)
+            .expect("render provider ABI by advertised id");
+        assert_eq!(spec.key, "render.provider.abi");
+        assert_eq!(spec.kind, ContractKind::Abi);
     }
 }

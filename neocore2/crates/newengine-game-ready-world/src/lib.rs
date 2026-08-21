@@ -162,6 +162,8 @@ pub fn tick_frame(
     thread_pool: Option<&ThreadPoolHandle>,
     frame: newengine_engine_runtime::WorldRuntimeFrame,
 ) {
+    player_model::tick_player_model_assignments(world, primitives, materials);
+    player_model::tick_player_skin_animation(world, frame.dt);
     tick_game_ready_static_world_prefabs(world, primitives, materials, thread_pool);
     if frame.runtime_active && frame.streaming_enabled {
         tick_game_ready_streaming_terrain(world, materials, thread_pool);

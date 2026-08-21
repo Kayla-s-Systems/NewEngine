@@ -142,38 +142,6 @@ where
         let mut engine = self.build_engine(&startup)?;
         newengine_runtime_session_runtime::init_runtime_session_command_service();
 
-        let game_message_registry = newengine_game_events_runtime::GameMessageRegistry::default();
-        let game_message_queue = newengine_game_events_runtime::GameMessageQueue::default();
-        newengine_game_events_runtime::init_game_events_service(
-            game_message_registry.clone(),
-            game_message_queue.clone(),
-        );
-        engine.resources_mut().insert(game_message_registry);
-        engine.resources_mut().insert(game_message_queue);
-        let replication_registry =
-            newengine_replication_runtime::ReplicationDescriptorRegistry::default();
-        if let Some(project) = project_context.as_ref() {
-            let report = newengine_replication_runtime::load_replication_definitions_from_roots(
-                &project.project_root,
-                &project.manifest.definitions,
-                &replication_registry,
-            )
-            .map_err(EngineError::Other)?;
-            if !report.files.is_empty() {
-                self.early_log(format_args!(
-                    "replication.definitions loaded_files={} components={} profiles={} messages={}",
-                    report.files.len(),
-                    report.components,
-                    report.entity_profiles,
-                    report.messages,
-                ));
-            }
-        }
-        let network_runtime =
-            newengine_network_runtime::init_network_service(replication_registry.clone());
-        engine.resources_mut().insert(network_runtime);
-        engine.resources_mut().insert(replication_registry);
-
         if let Some(project) = project_context.as_ref() {
             configure_project_plugin_roots(&mut engine, project)?;
         }
@@ -191,9 +159,6 @@ where
             engine.register_module(Box::new(
                 super::project_content::DeferredProjectContentMountModule::new(asset_roots.clone()),
             ))?;
-            engine.register_module(Box::new(
-                newengine_game_module_runtime::GameModuleContractModule::new(),
-            ))?;
             newengine_asset_hot_reload_runtime::install_asset_file_watcher(engine.resources_mut());
             self.early_log(format_args!(
                 "project.content.bootstrap deferred-module=true mounts={} hot_reload=true",
@@ -204,6 +169,8 @@ where
                 .resources_mut()
                 .insert(ProjectContentMountState::default());
         }
+        self.profile
+            .initialize_composition_services(&mut engine, project_context.as_ref())?;
         self.initialize_profile_and_plugins(&mut engine, &startup, boot_options)?;
 
         let asset_host = newengine_plugin_host::default_host_api();

@@ -70,7 +70,9 @@ pub fn spawn_player_controller(
     ensure_player_inventory(world, e);
     let _ = world.insert(e, PlayerGroundState::default());
     let _ = world.insert(e, PlayerLocomotionState::default());
+    let _ = world.insert(e, PlayerAnimationState::default());
     let _ = world.insert(e, PlayerStanceState::standing(body.standing_eye_height));
+    let _ = world.insert(e, PlayerModelAssignment::default());
     let _ = world.insert(e, PlayerModelBinding::default());
     let _ = world.insert(e, CharacterMotor::default());
     let _ = world.insert(e, MotorInput::default());

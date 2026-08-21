@@ -50,6 +50,9 @@ pub enum CameraViewMode {
     FirstPerson,
     ThirdPersonFollow,
     ThirdPersonAim,
+    /// Centered third-person inspection/orbit view. The player stays framed at
+    /// the center while mouse-look orbits the camera around the stable player root.
+    ThirdPersonOrbit,
 }
 
 impl Default for CameraViewMode {
@@ -65,16 +68,18 @@ impl CameraViewMode {
         match self {
             Self::FirstPerson => Self::ThirdPersonFollow,
             Self::ThirdPersonFollow => Self::ThirdPersonAim,
-            Self::ThirdPersonAim => Self::FirstPerson,
+            Self::ThirdPersonAim => Self::ThirdPersonOrbit,
+            Self::ThirdPersonOrbit => Self::FirstPerson,
         }
     }
 
     #[inline]
     pub const fn previous(self) -> Self {
         match self {
-            Self::FirstPerson => Self::ThirdPersonAim,
+            Self::FirstPerson => Self::ThirdPersonOrbit,
             Self::ThirdPersonFollow => Self::FirstPerson,
             Self::ThirdPersonAim => Self::ThirdPersonFollow,
+            Self::ThirdPersonOrbit => Self::ThirdPersonAim,
         }
     }
 }
@@ -420,6 +425,30 @@ mod tests {
         assert_eq!(decoded.forward_ws, [0.0, 0.0, -1.0]);
         assert_eq!(decoded.position_ws_f64, [0.0, 0.0, 0.0]);
         assert_eq!(decoded.world_origin_ws_f64, [0.0, 0.0, 0.0]);
+    }
+
+    #[test]
+    fn camera_view_cycle_includes_centered_orbit() {
+        assert_eq!(
+            CameraViewMode::FirstPerson.next(),
+            CameraViewMode::ThirdPersonFollow
+        );
+        assert_eq!(
+            CameraViewMode::ThirdPersonFollow.next(),
+            CameraViewMode::ThirdPersonAim
+        );
+        assert_eq!(
+            CameraViewMode::ThirdPersonAim.next(),
+            CameraViewMode::ThirdPersonOrbit
+        );
+        assert_eq!(
+            CameraViewMode::ThirdPersonOrbit.next(),
+            CameraViewMode::FirstPerson
+        );
+        assert_eq!(
+            CameraViewMode::FirstPerson.previous(),
+            CameraViewMode::ThirdPersonOrbit
+        );
     }
 
     #[test]

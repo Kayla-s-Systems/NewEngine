@@ -31,6 +31,9 @@ pub struct MotorInput {
     pub speed_mul: f32,
     /// Mouse wheel / zoom delta.
     pub zoom_delta: f32,
+    /// If true, the character body should turn toward the current view yaw.
+    /// Used by aim/lock-on modes; free-look leaves the body independent.
+    pub face_view: bool,
 }
 
 /// FPS / Free-fly style motor.
@@ -44,6 +47,9 @@ pub struct CharacterMotor {
 
     pub look_sens: f32,
     pub move_speed: f32,
+    /// Maximum body yaw turn rate in radians/sec. View yaw remains unrestricted
+    /// by this value; this only controls the visible/physical character facing.
+    pub body_turn_speed: f32,
 
     pub pitch_limit: f32,
 
@@ -62,6 +68,7 @@ impl Default for CharacterMotor {
             pitch: 0.0,
             look_sens: 0.0025,
             move_speed: 6.0,
+            body_turn_speed: 8.5,
             pitch_limit: 1.54,
             forward_sign_z: -1.0,
         }
@@ -107,9 +114,16 @@ pub struct FollowTargetCameraController {
     pub offset_ls: Vec3,
     /// Optional additional rotation offset applied when `follow_rotation` is true.
     pub rot_offset: newengine_math::Quat,
+    /// Stable look-at anchor in the target body's local space. This is intentionally
+    /// independent from render/skeletal bone motion so animation cannot shake a gameplay camera.
+    /// It is used only when `follow_rotation` is false.
+    pub focus_offset_ls: Vec3,
     /// If true, camera rotation follows target rotation (plus `rot_offset`).
     /// If false, camera will look at the target.
     pub follow_rotation: bool,
+    /// When true, the fixed-step simulation follow system must not author this camera.
+    /// Gameplay cameras use render-cadence synchronization to avoid visible quantization/jitter.
+    pub render_cadence_only: bool,
     /// Smoothing time constant (seconds). 0 => no smoothing.
     pub smooth_time: f32,
     /// Max speed clamp for position smoothing (units/sec). <=0 => unlimited.
@@ -123,7 +137,9 @@ impl Default for FollowTargetCameraController {
             target: EntityId::default(),
             offset_ls: Vec3::new(0.0, 1.6, 4.0),
             rot_offset: newengine_math::Quat::IDENTITY,
+            focus_offset_ls: Vec3::ZERO,
             follow_rotation: false,
+            render_cadence_only: false,
             smooth_time: 0.12,
             max_speed: 0.0,
         }

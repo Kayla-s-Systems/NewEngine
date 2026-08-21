@@ -106,6 +106,27 @@ impl newengine_input_actions_api::InputFrameSource for PressedKeyboardKey {
 }
 
 #[test]
+fn game_profile_resolves_v_to_camera_view_cycle() {
+    let profile = game_ready_game_input_profile();
+    let frame = profile.resolve(&PressedKeyboardKey(newengine_input_api::key_code::KEY_V));
+
+    assert!(frame.contains_action(action::CAMERA_VIEW_NEXT));
+    assert_eq!(
+        frame.camera_view,
+        newengine_input_actions_api::CameraViewRequest::Next
+    );
+    assert!(profile.keys.iter().any(|key| {
+        key.code == newengine_input_api::key_code::KEY_V
+            && key.id == newengine_input_api::key_identity::KEY_V
+    }));
+    assert!(!profile.bindings.iter().any(|binding| {
+        binding.action == action::CAMERA_VIEW_NEXT
+            && binding.device == InputBindingDevice::Keyboard
+            && binding.code == newengine_input_api::key_code::KEY_F
+    }));
+}
+
+#[test]
 fn game_profile_resolves_f1_to_hud_visibility_toggle() {
     let profile = game_ready_game_input_profile();
     let frame = profile.resolve(&PressedKeyboardKey(newengine_input_api::key_code::F1));

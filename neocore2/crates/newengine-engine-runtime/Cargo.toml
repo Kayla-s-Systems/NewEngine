@@ -30,7 +30,7 @@ newengine-camera = { path = "../newengine-camera" }
 newengine-camera-api = { path = "../newengine-camera-api" }
 newengine-camera-contracts = { path = "../newengine-camera-contracts" }
 newengine-camera-runtime = { path = "../newengine-camera-runtime" }
-newengine-core = { path = "../newengine-core" }
+newengine-core = { path = "../newengine-core", features = ["render-api", "physics-api"] }
 newengine-input-actions-api = { path = "../newengine-input-actions-api" }
 newengine-input-api = { path = "../newengine-input-api" }
 newengine-input-bindings-api = { path = "../newengine-input-bindings-api" }
@@ -57,6 +57,8 @@ newengine-render-api = { path = "../newengine-render-api" }
 newengine-primitives = { path = "../newengine-primitives" }
 newengine-procedural-noise = { path = "../newengine-procedural-noise" }
 newengine-runtime-host = { path = "../newengine-runtime-host" }
+newengine-render-runtime-adapter = { path = "../newengine-render-runtime-adapter" }
+newengine-physics-runtime-adapter = { path = "../newengine-physics-runtime-adapter" }
 newengine-runtime-session-api = { path = "../newengine-runtime-session-api" }
 newengine-runtime-session-runtime = { path = "../newengine-runtime-session-runtime" }
 newengine-render-feature-api = { path = "../newengine-render-feature-api" }

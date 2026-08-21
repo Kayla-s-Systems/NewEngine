@@ -149,10 +149,49 @@ pub struct ModelAssetBundle {
     pub dependency_graph: ResolvedAssetGraphV2,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ModelSkinVertex {
+    pub joints: [u16; 4],
+    pub weights: [f32; 4],
+    #[serde(default)]
+    pub joints_extra: [u16; 4],
+    #[serde(default)]
+    pub weights_extra: [f32; 4],
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ModelSkinBinding {
+    pub vertices: Vec<ModelSkinVertex>,
+    /// Column-major affine transform from authored joint/source coordinates to
+    /// the baked model vertex coordinates consumed by the renderer.
+    pub source_to_model: [f32; 16],
+}
+
+impl Default for ModelSkinBinding {
+    fn default() -> Self {
+        Self {
+            vertices: Vec::new(),
+            source_to_model: [
+                1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
+            ],
+        }
+    }
+}
+
+impl ModelSkinBinding {
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.vertices.is_empty()
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ModelMeshPart {
     pub material_slot: String,
     pub mesh: newengine_primitives::PrimitiveMesh,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub skin: Option<ModelSkinBinding>,
     pub material: ModelMaterialBinding,
 }
 

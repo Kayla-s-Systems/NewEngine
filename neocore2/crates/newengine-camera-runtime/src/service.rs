@@ -6,8 +6,8 @@ use newengine_ecs::{EntityId, World};
 use newengine_input_actions_api::move_mask as input_move;
 use newengine_math::{EulerRot, Quat, Vec2, Vec3};
 use newengine_sim::{
-    CameraRigComp, CharacterMotor, FollowTargetCameraController, FollowTargetCameraMotor,
-    MotorInput,
+    step_follow_camera, CameraRigComp, CharacterMotor, FollowTargetCameraController,
+    FollowTargetCameraMotor, MotorInput,
 };
 use newengine_transform::{
     read_entity_world_pose_local_chain, write_entity_local_from_world_pose_local_chain,
@@ -16,6 +16,7 @@ use newengine_transform::{
 use crate::manager::{CameraDirectorRequest, CameraManagerResource};
 use crate::modes::{
     GameplayFirstPersonRunner, GameplayThirdPersonAimRunner, GameplayThirdPersonFollowRunner,
+    GameplayThirdPersonOrbitRunner,
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -23,6 +24,7 @@ pub enum GameplayCameraRunnerKind {
     FirstPerson,
     ThirdPersonFollow,
     ThirdPersonAim,
+    ThirdPersonOrbit,
 }
 
 impl Default for GameplayCameraRunnerKind {
@@ -115,6 +117,9 @@ impl CameraRuntimeService {
             GameplayCameraRunnerKind::ThirdPersonAim => {
                 GameplayThirdPersonAimRunner::default().controller(player)
             }
+            GameplayCameraRunnerKind::ThirdPersonOrbit => {
+                GameplayThirdPersonOrbitRunner::default().controller(player)
+            }
         };
 
         let _ = world.insert(camera, follow);
@@ -176,12 +181,10 @@ impl CameraRuntimeService {
             CharacterMotor::default().pitch_limit
         };
         motor.pitch = motor.pitch.clamp(-pitch_limit, pitch_limit);
-        let rotation = Quat::from_euler(EulerRot::YXZ, motor.yaw, motor.pitch, 0.0);
-        let position = read_entity_world_pose_local_chain(world, player)
-            .map(|(position, _)| position)
-            .unwrap_or(Vec3::ZERO);
+        // Mouse-look owns the view orientation only. Do not write yaw/pitch back to
+        // the PlayerActor transform: that transform represents body facing and is
+        // driven by locomotion/aim at fixed-step cadence.
         let _ = world.insert(player, motor);
-        write_entity_local_from_world_pose_local_chain(world, player, position, rotation);
         true
     }
 
@@ -195,6 +198,7 @@ impl CameraRuntimeService {
         look_delta_px: Vec2,
         look_active: bool,
         sprint_multiplier: f32,
+        face_view: bool,
     ) {
         let mut axis = Vec3::ZERO;
         if input_mask & input_move::FORWARD != 0 {
@@ -233,12 +237,108 @@ impl CameraRuntimeService {
                 1.0
             };
             input.zoom_delta = 0.0;
+            input.face_view = face_view;
         }
     }
 
-    /// Synchronizes the first-person camera to the already updated player
-    /// pose in the same render frame. Fixed-step simulation remains authoritative
-    /// for translation; view rotation no longer waits for the next simulation tick.
+    /// Synchronizes a possessed gameplay camera at render cadence. Character translation
+    /// remains fixed-step authoritative, but view rotation and camera spring integration no
+    /// longer wait for the next simulation tick. This removes third-person mouse-look jitter.
+    pub fn sync_gameplay_camera_now(
+        world: &mut World,
+        camera: EntityId,
+        player: EntityId,
+        config: CameraRuntimeServiceConfig,
+        dt: f32,
+    ) -> bool {
+        let Some(controller) = world.get::<FollowTargetCameraController>(camera).copied() else {
+            return false;
+        };
+        if controller.target != player {
+            return false;
+        }
+        let Some((target_position, target_body_rotation)) =
+            read_entity_world_pose_local_chain(world, player)
+        else {
+            return false;
+        };
+        let target_rotation = world
+            .get::<CharacterMotor>(player)
+            .map(|motor| Quat::from_euler(EulerRot::YXZ, motor.yaw, motor.pitch, 0.0))
+            .unwrap_or(target_body_rotation)
+            .normalize_or_identity();
+        if matches!(config.runner, GameplayCameraRunnerKind::FirstPerson) {
+            // First-person position is anchored to the stable player root/world-up eye height.
+            // Pitch/yaw rotate only the view; they must never orbit the eye point around the body.
+            let eye_height = if config.first_person_eye_height.is_finite() {
+                config.first_person_eye_height.max(0.01)
+            } else {
+                controller.offset_ls.y.max(0.01)
+            };
+            let camera_position = target_position + Vec3::Y * eye_height;
+            let camera_rotation = (target_rotation * controller.rot_offset).normalize_or_identity();
+            let _ = world.insert(
+                camera,
+                CameraRigComp(CameraRig {
+                    position: camera_position,
+                    rotation: camera_rotation,
+                }),
+            );
+            let _ = world.insert(camera, FollowTargetCameraMotor::default());
+            write_entity_local_from_world_pose_local_chain(
+                world,
+                camera,
+                camera_position,
+                camera_rotation,
+            );
+            return true;
+        }
+
+        let focus_position = target_position
+            + target_body_rotation.normalize_or_identity() * controller.focus_offset_ls;
+        let rig = world
+            .get::<CameraRigComp>(camera)
+            .copied()
+            .unwrap_or_default();
+        let follow_motor = world
+            .get::<FollowTargetCameraMotor>(camera)
+            .copied()
+            .unwrap_or_default();
+        let Some(step) = step_follow_camera(
+            rig.0.position,
+            rig.0.rotation,
+            target_position,
+            target_rotation,
+            focus_position,
+            controller.offset_ls,
+            controller.rot_offset,
+            controller.follow_rotation,
+            follow_motor.vel_ws,
+            controller.smooth_time,
+            controller.max_speed,
+            dt,
+        ) else {
+            return false;
+        };
+        let _ = world.insert(
+            camera,
+            CameraRigComp(CameraRig {
+                position: step.next_pos,
+                rotation: step.next_rot,
+            }),
+        );
+        let _ = world.insert(
+            camera,
+            FollowTargetCameraMotor {
+                vel_ws: step.next_vel,
+            },
+        );
+        write_entity_local_from_world_pose_local_chain(world, camera, step.next_pos, step.next_rot);
+        true
+    }
+
+    /// Compatibility wrapper for callers that explicitly require first-person semantics.
+    #[inline]
     pub fn sync_first_person_camera_now(
         world: &mut World,
         camera: EntityId,
@@ -247,32 +347,15 @@ impl CameraRuntimeService {
         let Some(controller) = world.get::<FollowTargetCameraController>(camera).copied() else {
             return false;
         };
-        if controller.target != player || !controller.follow_rotation {
+        if !controller.follow_rotation {
             return false;
         }
-        let Some((target_position, target_rotation)) =
-            read_entity_world_pose_local_chain(world, player)
-        else {
-            return false;
+        let config = CameraRuntimeServiceConfig {
+            runner: GameplayCameraRunnerKind::FirstPerson,
+            first_person_eye_height: controller.offset_ls.y.max(0.01),
+            ..CameraRuntimeServiceConfig::default()
         };
-        let target_rotation = target_rotation.normalize_or_identity();
-        let camera_position = target_position + target_rotation * controller.offset_ls;
-        let camera_rotation = (target_rotation * controller.rot_offset).normalize_or_identity();
-        let _ = world.insert(
-            camera,
-            CameraRigComp(CameraRig {
-                position: camera_position,
-                rotation: camera_rotation,
-            }),
-        );
-        let _ = world.insert(camera, FollowTargetCameraMotor::default());
-        write_entity_local_from_world_pose_local_chain(
-            world,
-            camera,
-            camera_position,
-            camera_rotation,
-        );
-        true
+        Self::sync_gameplay_camera_now(world, camera, player, config, 1.0 / 60.0)
     }
 
     #[inline]

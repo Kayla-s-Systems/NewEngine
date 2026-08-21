@@ -6,7 +6,7 @@ pub fn game_ready_input_profile() -> InputBindingsProfile {
     ensure_required_system_bindings(&mut bindings);
     InputBindingsProfile {
         id: "newengine.gameready.input.profile".to_owned(),
-        version: 7,
+        version: 8,
         device_preference: InputDevicePreference::Hybrid,
         keys: gameplay_default_key_registry(),
         actions: gameplay_default_actions(),

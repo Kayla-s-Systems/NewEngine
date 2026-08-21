@@ -188,7 +188,6 @@ impl HostPlatformRuntime {
         // Null routes are real visible providers with the lowest origin tier.
         // Concrete plugins shadow them automatically; missing domains degrade
         // instead of crashing or constructing hidden fallbacks.
-        crate::null_providers::register_null_provider_routes_best_effort();
 
         // engine.threading is available before the platform provider starts its
         // native bootstrap surface. Platform plugins must submit bootstrap work
@@ -289,10 +288,8 @@ impl HostPlatformRuntime {
 
         self.surface = ready.surface;
         self.display = ready.display;
-        crate::null_providers::register_null_provider_routes_best_effort();
         newengine_time_runtime::register_time_gateway_best_effort();
         newengine_schema_runtime::register_schema_gateway_best_effort();
-        newengine_gameplay_runtime::register_gameplay_foundation_gateways_best_effort();
         register_threading_gateway_service_best_effort(
             self.engine.thread_pool(),
             self.engine.events().clone(),

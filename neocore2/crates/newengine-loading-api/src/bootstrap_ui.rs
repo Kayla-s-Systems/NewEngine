@@ -112,7 +112,7 @@ pub const NORTH_STAR_BOOTSTRAP_UI_STYLE: BootstrapUiStyle = BootstrapUiStyle {
     brand: BootstrapUiBrand {
         product: "North Star Engine",
         prestart_title: "North Star Engine",
-        prestart_subtitle: "PreStart launch configuration workbench",
+        prestart_subtitle: "Display, graphics and launch configuration",
         preload_title: "NORTH STAR ENGINE",
         preload_status: "LOADING ENGINE",
         tagline: "BUILT FOR CREATORS. ENGINEERED FOR WORLDS.",

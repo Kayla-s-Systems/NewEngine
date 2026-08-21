@@ -15,21 +15,26 @@ pub mod lifecycle_events;
 pub mod loading;
 pub mod module;
 pub(crate) mod plugin_forward_logger;
+#[cfg(feature = "render-api")]
 pub mod render;
 pub mod storage_root;
 mod task_core;
+#[cfg(feature = "audio-api")]
 pub mod audio {
     pub use newengine_audio_api::*;
 }
+#[cfg(feature = "camera-api")]
 pub mod camera {
     pub use newengine_camera_api::*;
 }
 pub mod time {
     pub use newengine_time_api::*;
 }
+#[cfg(feature = "ui-api")]
 pub mod ui {
     pub use newengine_ui_api::*;
 }
+#[cfg(feature = "physics-api")]
 pub mod physics;
 pub mod run_id;
 pub mod sched;
@@ -95,11 +100,13 @@ pub use task_core::{
 
 pub use run_id::{init_run_id, run_id};
 
+#[cfg(feature = "render-api")]
 pub use render::{
     BeginFrameDesc, BeginRenderTargetDesc, Color4, RenderApi, RenderApiRef, RenderTargetDesc,
     RenderTargetId, RENDER_API_ID, RENDER_API_PROVIDE, RENDER_API_VERSION,
 };
 
+#[cfg(feature = "physics-api")]
 pub use physics::{
     PhysicsApi, PhysicsApiRef, PHYSICS_API_ID, PHYSICS_API_PROVIDE, PHYSICS_API_VERSION,
 };

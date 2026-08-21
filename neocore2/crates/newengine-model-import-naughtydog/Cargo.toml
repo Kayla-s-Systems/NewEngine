@@ -1,0 +1,11 @@
+[package]
+name = "newengine-model-import-naughtydog"
+version = "0.1.0"
+edition = "2021"
+description = "Offline Naughty Dog TLOU2 PC source importer for NewEngine native model assets"
+
+[dependencies]
+newengine-asset-format-nef8 = { path = "../newengine-asset-format-nef8" }
+newengine-assets-api = { path = "../newengine-assets-api" }
+newengine-math = { path = "../newengine-math" }
+flate2 = "1"

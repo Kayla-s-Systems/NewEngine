@@ -1,55 +1,15 @@
 use super::*;
-use std::sync::OnceLock;
 
-#[inline]
-fn shadow_torture_acceptance_trace_enabled() -> bool {
-    std::env::var("NEWENGINE_PROJECT_LAUNCH_PRESET")
-        .ok()
-        .is_some_and(|value| value.trim().eq_ignore_ascii_case("shadow_test"))
-        || matches!(
-            std::env::var("NEWENGINE_SHADOW_TORTURE_TEST")
-                .ok()
-                .as_deref(),
-            Some("1")
-                | Some("true")
-                | Some("TRUE")
-                | Some("yes")
-                | Some("YES")
-                | Some("on")
-                | Some("ON")
-        )
-}
+#[path = "submit/shadow_debug.rs"]
+mod shadow_debug;
+#[path = "submit/shadow_setup.rs"]
+mod shadow_setup;
+#[path = "submit/finalize.rs"]
+mod finalize;
 
-fn shadow_receiver_debug_mode() -> f32 {
-    static MODE: OnceLock<f32> = OnceLock::new();
-    *MODE.get_or_init(|| {
-        let raw = std::env::var("NEWENGINE_SHADOW_RECEIVER_DEBUG").unwrap_or_default();
-        let normalized = raw.trim().to_ascii_lowercase();
-        let mode = match normalized.as_str() {
-            "" | "0" | "off" | "none" => 0.0,
-            "1" | "n" | "normal" | "normal_ws" => 1.0,
-            "2" | "ndotl" => 2.0,
-            "3" | "shadow" | "shadow_visibility" => 3.0,
-            "4" | "cloud" | "cloud_shadow" => 4.0,
-            "5" | "direct" => 5.0,
-            "6" | "indirect" | "ambient" => 6.0,
-            "7" | "instance" | "instance_id" => 7.0,
-            "8" | "anomaly" | "composite" => 8.0,
-            _ => normalized
-                .parse::<f32>()
-                .ok()
-                .map(|value| value.clamp(0.0, 8.0))
-                .unwrap_or(0.0),
-        };
-        if mode > 0.0 {
-            newengine_ulog_api::ulog::warn!(
-                "render receiver diagnostic enabled mode={} source=NEWENGINE_SHADOW_RECEIVER_DEBUG",
-                mode
-            );
-        }
-        mode
-    })
-}
+use shadow_debug::shadow_receiver_debug_mode;
+use shadow_setup::{prepare_shadow_setup, ShadowSetup};
+use finalize::{finalize_successful_submit, SuccessfulSubmit};
 
 impl RenderFrameOrchestrator {
     pub(in super::super) fn submit_scene_viewport_frame(
@@ -69,10 +29,6 @@ impl RenderFrameOrchestrator {
         let view_frame = &world_frame.view_frame;
         let view = view_frame.view;
         let viewproj = view.view_projection;
-        // Temporal-AA jitter belongs to receiver rasterization, not to the physical
-        // shadow frustum. Feeding jittered VP into CSM fitting makes cascade matrices
-        // change every frame and defeats both texel snapping and shadow-map caching.
-        let shadow_viewproj = view_frame.unjittered_view_projection();
         passes::publish_camera_spawn(
             &controller.bridges.viewport,
             view.position_ws,
@@ -213,114 +169,28 @@ impl RenderFrameOrchestrator {
         if gpu_safe_profile {
             log_gpu_safe_profile_once();
         }
-        let shadow_plan = if !shadows_enabled {
-            shadows::LightShadowPlan::disabled(lit.white_texture)
-        } else {
-            match shadows::build_light_shadow_plan(
-                controller,
-                r,
-                scene,
-                bounds,
-                lit,
-                shadow_viewproj,
-                camera_position,
-                [
-                    snapshot.camera_forward.x,
-                    snapshot.camera_forward.y,
-                    snapshot.camera_forward.z,
-                ],
-                extent,
-                snapshot.surface_extent,
-                plugin_snapshot,
-            ) {
-                Ok(plan) => plan,
-                Err(e) => {
-                    newengine_ulog_api::ulog::warn!(
-                        "render controller: shadow plan disabled for this frame: {}",
-                        e
-                    );
-                    let _ = r.discard_recorded_commands();
-                    shadows::LightShadowPlan::disabled(lit.white_texture)
-                }
-            }
-        };
-
-        let render_shadow_map =
-            controller.should_render_shadow_map_this_frame(shadow_plan, scene.world());
-        controller.set_shadow_caster_cull(if render_shadow_map {
-            shadow_plan.caster_cull
-        } else {
-            None
-        });
-        Self::trace_shadow_plan(
-            controller,
-            scope.trace_frame,
+        let ShadowSetup {
             shadow_plan,
             render_shadow_map,
+            local_shadow_plan,
+            render_local_shadow_map,
+            shadow_frame,
+            local_shadow_frame,
+            world_lights,
+        } = prepare_shadow_setup(
+            controller,
+            r,
+            scene,
+            plugin_snapshot,
+            &snapshot,
+            world_frame,
+            lit,
+            base_lights,
+            shadows_enabled,
+            extent,
+            scope.trace_frame,
         );
-        cpu_profile.mark("shadow_plan");
 
-        let local_shadow_plan = if !shadows_enabled {
-            shadows::LocalShadowPlan::disabled(lit.white_texture)
-        } else {
-            match shadows::build_local_shadow_plan(
-                controller,
-                r,
-                scene.world(),
-                lit,
-                camera_position,
-            ) {
-                Ok(plan) => plan,
-                Err(e) => {
-                    newengine_ulog_api::ulog::warn!(
-                        "render controller: local shadow plan disabled for this frame: {}",
-                        e
-                    );
-                    shadows::LocalShadowPlan::disabled(lit.white_texture)
-                }
-            }
-        };
-        let render_local_shadow_map =
-            controller.should_render_local_shadow_map_this_frame(local_shadow_plan, scene.world());
-        let local_shadow_frame = if local_shadow_plan.is_active()
-            && !render_local_shadow_map
-            && !controller.shadows.local_cache_valid
-        {
-            shadows::LocalShadowFrame::disabled(lit.white_texture)
-        } else if local_shadow_plan.is_active() && !render_local_shadow_map {
-            controller
-                .cached_local_shadow_frame()
-                .unwrap_or(local_shadow_plan.frame)
-        } else {
-            local_shadow_plan.frame
-        };
-
-        let shadow_frame = if shadow_plan.is_active()
-            && !render_shadow_map
-            && !controller.shadows.cache_valid
-        {
-            if scope.trace_frame {
-                newengine_ulog_api::ulog::debug!(
-                    "render shadow cache: using unshadowed fallback until first shadow map is rendered frame={} target={:?}",
-                    controller.frame.frame_index,
-                    shadow_plan.render_target()
-                );
-            }
-            shadows::ShadowFrame::disabled(lit.white_texture)
-        } else if shadow_plan.is_active() && !render_shadow_map {
-            // The cached shadow texture was rendered with the cached light MVP.
-            // Keep sampling with that same frame until the next scheduled shadow
-            // refresh; otherwise a moving sun would sample an old shadow map with
-            // a new light matrix and produce swimming/self-shadowing artefacts.
-            controller
-                .cached_shadow_frame()
-                .unwrap_or(shadow_plan.frame)
-        } else {
-            shadow_plan.frame
-        };
-        let world_lights = base_lights
-            .with_shadow_frame(shadow_frame)
-            .with_local_shadow_frame(local_shadow_frame);
         let extraction = SceneExtractionCtx {
             scene,
             lit,
@@ -539,112 +409,19 @@ impl RenderFrameOrchestrator {
             scope.trace_frame,
             &cpu_profile,
         );
-        if render_shadow_map {
-            controller.mark_shadow_map_rendered(shadow_plan);
-        }
-        if render_local_shadow_map {
-            controller.mark_local_shadow_map_rendered(local_shadow_plan);
-        }
-        if shadow_torture_acceptance_trace_enabled()
-            && controller.frame.frame_index.is_multiple_of(120)
-        {
-            newengine_ulog_api::ulog::info!(
-                "shadow torture acceptance: frame={} pass(directional={} local={}) cache(directional_valid={} directional_reuse={} directional_refresh[cold={} projection={} mismatch[texture={} matrix={} split={} params={} extra={}] caster={}] local_valid={} local_reuse={} local_refresh={}) caster_revision={} caster_changes[entity={} bounds={} geometry={} material={} visibility={}] camera=({:.5},{:.5},{:.5}) forward=({:.6},{:.6},{:.6}) light_dir=({:.6},{:.6},{:.6}) jitter=({:.5},{:.5})",
-                controller.frame.frame_index,
+        Ok(finalize_successful_submit(
+            controller,
+            SuccessfulSubmit {
+                scope,
+                view_frame,
+                base_lights,
                 render_shadow_map,
+                shadow_plan,
                 render_local_shadow_map,
-                controller.shadows.cache_valid,
-                controller.shadows.cache_reuse_count,
-                controller.shadows.cache_cold_refresh_count,
-                controller.shadows.cache_projection_refresh_count,
-                controller.shadows.cache_projection_texture_refresh_count,
-                controller.shadows.cache_projection_matrix_refresh_count,
-                controller.shadows.cache_projection_split_refresh_count,
-                controller.shadows.cache_projection_params_refresh_count,
-                controller.shadows.cache_projection_extra_refresh_count,
-                controller.shadows.cache_caster_refresh_count,
-                controller.shadows.local_cache_valid,
-                controller.shadows.local_cache_reuse_count,
-                controller.shadows.local_cache_refresh_count,
-                controller.shadows.caster_revision,
-                controller.shadows.caster_entity_change_count,
-                controller.shadows.caster_bounds_change_count,
-                controller.shadows.caster_geometry_change_count,
-                controller.shadows.caster_material_change_count,
-                controller.shadows.caster_visibility_change_count,
-                view.position_ws.x,
-                view.position_ws.y,
-                view.position_ws.z,
-                view.forward_ws.x,
-                view.forward_ws.y,
-                view.forward_ws.z,
-                base_lights.dir_dir_intensity[0],
-                base_lights.dir_dir_intensity[1],
-                base_lights.dir_dir_intensity[2],
-                view_frame.camera_snapshot.jitter_px[0],
-                view_frame.camera_snapshot.jitter_px[1],
-            );
-        }
-        controller
-            .diagnostics
-            .overlay_metrics
-            .record_graph_submit(submit_report.clone());
-
-        let mut debug_notes = Vec::new();
-        if let Some(report) = view_frame.diagnostics.clone() {
-            controller
-                .diagnostics
-                .overlay_metrics
-                .record_view_report(report.clone());
-            debug_notes.push(format!(
-                "view director={} mode={} view={} dominant={:?} rendered={} input={} lock={} gate_blocked={} blend_active={} blend_alpha={:.3} events={}",
-                report.active_director,
-                report.active_mode,
-                report.active_view_mode,
-                report.dominant_director,
-                report.rendered_director_count,
-                report.input_context,
-                report.director_lock_input,
-                report.gate_blocked,
-                report.frame_blend_active,
-                report.frame_blend_alpha,
-                report.pending_event_count,
-            ));
-            if report.transition.phase != EngineViewTransitionPhase::Idle {
-                debug_notes.push(format!(
-                    "view transition {:?} {:.2}s target={:?}",
-                    report.transition.phase, report.transition.elapsed_sec, report.target_entity,
-                ));
-            }
-        }
-
-        Ok(PlayableFrameOutcome::Continue {
-            frame_debug_snapshot: Some(RenderFrameDebugSnapshot {
-                frame_index: controller.frame.frame_index,
-                surface_extent: [scope.w, scope.h],
-                viewport_extent: [scope.vp_w, scope.vp_h],
-                direct_surface_viewport: scope.direct_surface_viewport,
-                graph_label: frame_plan
-                    .graph
-                    .label
-                    .clone()
-                    .unwrap_or_else(|| "<unnamed>".to_owned()),
-                phase_order: frame_plan
-                    .phase_order()
-                    .map(|phase| phase.label().to_owned())
-                    .collect(),
-                draw_list_stats: submit_report.draw_list_stats.clone(),
-                executed_passes: submit_report.executed_passes,
-                skipped_passes: submit_report.skipped_passes,
-                cpu_record_ms: submit_report.cpu_record_ms,
-                gpu_submit_ms: submit_report.gpu_submit_ms,
-                queued_upload_jobs: 0,
-                queued_upload_bytes: 0,
-                resource_buffers: 0,
-                resource_textures: 0,
-                resource_pipelines: 0,
-                notes: debug_notes,
-            }),
-        })
+                local_shadow_plan,
+                frame_plan: &frame_plan,
+                submit_report,
+            },
+        ))
     }
 }

@@ -6,7 +6,7 @@ readme = "README.md"
 description = "Compatibility facade for the generic standard render feature pack"
 
 [dependencies]
-newengine-core = { path = "../newengine-core" }
+newengine-core = { path = "../newengine-core", features = ["render-api"] }
 newengine-material-domain-api = { path = "../newengine-material-domain-api" }
 newengine-material-domain-gameready = { path = "../newengine-material-domain-gameready" }
 newengine-render-feature-api = { path = "../newengine-render-feature-api" }

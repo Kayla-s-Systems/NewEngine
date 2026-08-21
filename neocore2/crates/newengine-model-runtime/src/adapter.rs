@@ -5,80 +5,16 @@
 
 use super::*;
 
+mod fallback_humanoid;
+mod projection;
+mod runtime_parts;
+
+use projection::{model_configuration_from_projection, DefinitionEntryProjection};
+
 #[derive(Clone)]
 pub struct ModelAssetAdapter {
     client: AssetServiceClient,
     host: Option<HostApiV1>,
-}
-
-struct LoadedModelParts {
-    parts: Vec<ModelMeshPart>,
-    properties_ref: Option<String>,
-    configuration: ModelRuntimeConfiguration,
-}
-
-#[derive(Clone, Debug, Default, Deserialize)]
-#[serde(default)]
-struct DefinitionEntryProjection {
-    refs: DefinitionRefsProjection,
-    model_explanation: ModelExplanationProjection,
-    arbitrary_metadata: serde_json::Value,
-    warnings: Vec<String>,
-}
-
-#[derive(Clone, Debug, Default, Deserialize)]
-#[serde(default)]
-struct DefinitionRefsProjection {
-    drawable_refs: Vec<String>,
-    material_refs: Vec<String>,
-    texture_refs: Vec<String>,
-    uv_layout_refs: Vec<String>,
-    physics_refs: Vec<String>,
-    collision_refs: Vec<String>,
-    ai_refs: Vec<String>,
-    streaming_refs: Vec<String>,
-    editor_refs: Vec<String>,
-    other_refs: Vec<String>,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-#[serde(default)]
-struct ModelExplanationProjection {
-    model_ref: Option<String>,
-    drawable_ref: Option<String>,
-    material_bindings: Vec<newengine_model_domain_api::MaterialBindingRef>,
-    material_refs: Vec<String>,
-    texture_refs: Vec<String>,
-    uv_layout_refs: Vec<String>,
-    physics_refs: Vec<String>,
-    collision_refs: Vec<String>,
-    render_options: newengine_model_domain_api::MeshRenderOptions,
-    collision_policy: String,
-    uv_policy: String,
-    physics_policy: String,
-    lod_policy: String,
-    streaming_policy: String,
-}
-
-impl Default for ModelExplanationProjection {
-    fn default() -> Self {
-        Self {
-            model_ref: None,
-            drawable_ref: None,
-            material_bindings: Vec::new(),
-            material_refs: Vec::new(),
-            texture_refs: Vec::new(),
-            uv_layout_refs: Vec::new(),
-            physics_refs: Vec::new(),
-            collision_refs: Vec::new(),
-            render_options: newengine_model_domain_api::MeshRenderOptions::world_opaque(),
-            collision_policy: "unspecified".to_owned(),
-            uv_policy: "authored".to_owned(),
-            physics_policy: "unspecified".to_owned(),
-            lod_policy: "unspecified".to_owned(),
-            streaming_policy: "unspecified".to_owned(),
-        }
-    }
 }
 
 impl ModelAssetAdapter {
@@ -202,6 +138,7 @@ impl ModelAssetAdapter {
             parts.push(ModelMeshPart {
                 material_slot: part.material_slot,
                 mesh: part.mesh,
+                skin: None,
                 material,
             });
         }
@@ -386,207 +323,6 @@ impl ModelAssetAdapter {
         self.load_nef8_ymt_skeleton_metadata(&source, target_height, eye_height_ratio)
     }
 
-    fn load_ydd_runtime_parts(
-        &self,
-        source: &str,
-        selector: Option<&str>,
-        request_properties_ref: Option<&str>,
-    ) -> Result<LoadedModelParts, String> {
-        let bytes = self
-            .client
-            .decode_v1(&AssetDecodeRequest {
-                logical_path: source.to_owned(),
-                output_kind: newengine_assets_api::ASSET_LIST_FILE_BODY_OUTPUT.to_owned(),
-                selector: serde_json::Value::Null,
-            })
-            .map_err(|e| {
-                format!(
-                    "engine.assets decode_v1 failed path='{source}' output='{}' err='{e}'",
-                    newengine_assets_api::ASSET_LIST_FILE_BODY_OUTPUT
-                )
-            })?;
-        let document = newengine_asset_format_nef8::ydd_binary::decode_ydd_binary_body(&bytes)
-            .map_err(|error| {
-                format!("model.api: binary .ydd decode failed path='{source}' err='{error}'")
-            })?;
-        let entry = document.select_entry(selector, true).map_err(|error| {
-            format!("model.api: binary .ydd selection failed path='{source}' err='{error}'")
-        })?;
-        let properties_ref = entry
-            .properties_ref
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .map(ToOwned::to_owned)
-            .or_else(|| {
-                request_properties_ref
-                    .map(str::trim)
-                    .filter(|value| !value.is_empty())
-                    .map(ToOwned::to_owned)
-            });
-        let configuration = properties_ref
-            .as_deref()
-            .map(|reference| self.load_model_configuration(reference))
-            .transpose()?
-            .unwrap_or_default();
-        let descriptor_bindings = configuration
-            .material_bindings
-            .iter()
-            .map(|binding| (binding.slot.clone(), binding.material_ref.clone()))
-            .collect::<std::collections::BTreeMap<_, _>>();
-        let mut out = Vec::with_capacity(entry.meshes.len());
-        for source_mesh in &entry.meshes {
-            let material_slot = source_mesh.material_slot();
-            let descriptor_material_ref = descriptor_bindings.get(&material_slot).cloned();
-            let material_ref = descriptor_material_ref.or_else(|| source_mesh.material_ref.clone());
-            let material = match material_ref
-                .as_deref()
-                .and_then(|reference| self.load_material_binding_from_ref(reference))
-            {
-                Some(mut binding) => {
-                    binding.slot = material_slot.clone();
-                    binding
-                }
-                None => ModelMaterialBinding {
-                    slot: material_slot.clone(),
-                    material_ref,
-                    fallback_color: [0.82, 0.78, 0.72, 1.0],
-                    ..ModelMaterialBinding::default()
-                },
-            };
-            let vertices = source_mesh
-                .vertices
-                .iter()
-                .map(|vertex| PrimitiveVertex {
-                    pos: vertex.position,
-                    nrm: vertex.normal,
-                    uv: vertex.uv0,
-                })
-                .collect::<Vec<_>>();
-            let min = Vec3::new(
-                source_mesh.bounds_min[0],
-                source_mesh.bounds_min[1],
-                source_mesh.bounds_min[2],
-            );
-            let max = Vec3::new(
-                source_mesh.bounds_max[0],
-                source_mesh.bounds_max[1],
-                source_mesh.bounds_max[2],
-            );
-            let bounds_center = (min + max) * 0.5;
-            let bounds_radius = recompute_bounds_radius(bounds_center, &vertices);
-            out.push(ModelMeshPart {
-                material_slot,
-                mesh: PrimitiveMesh {
-                    vertices,
-                    indices: source_mesh.indices.clone(),
-                    bounds_center,
-                    bounds_radius,
-                },
-                material,
-            });
-        }
-        if out.is_empty() {
-            return Err(format!(
-                "model.api: binary .ydd selector '{}' produced no mesh parts path='{source}'",
-                selector.unwrap_or("<first>")
-            ));
-        }
-        Ok(LoadedModelParts {
-            parts: out,
-            properties_ref,
-            configuration,
-        })
-    }
-
-    fn load_model_configuration(
-        &self,
-        properties_ref: &str,
-    ) -> Result<ModelRuntimeConfiguration, String> {
-        let host = self.host.as_ref().ok_or_else(|| {
-            format!(
-                "model.api: properties_ref='{properties_ref}' requires engine.assets.definitions host access"
-            )
-        })?;
-        let payload = serde_json::to_vec(&serde_json::json!({
-            "definition_ref": properties_ref,
-        }))
-        .map_err(|e| e.to_string())?;
-        let bytes = (host.call_service_v1)(
-            RString::from(newengine_assets_api::ENGINE_ASSETS_DEFINITIONS_SERVICE_ID),
-            MethodName::from(newengine_assets_api::definitions_method::ENTRY_JSON_V1),
-            Blob::from(payload),
-        )
-        .into_result()
-        .map(|value| value.into_vec())
-        .map_err(|err| err.to_string())?;
-        let projection = serde_json::from_slice::<DefinitionEntryProjection>(&bytes).map_err(|e| {
-            format!(
-                "model.api: .ytyp descriptor returned invalid Definition Entry ref='{properties_ref}' err='{e}'"
-            )
-        })?;
-        model_configuration_from_projection(
-            normalize_logical_path(properties_ref, true)?,
-            projection,
-        )
-    }
-
-    fn load_nef8_ymt_skeleton_metadata(
-        &self,
-        source: &str,
-        target_height: f32,
-        eye_height_ratio: f32,
-    ) -> Result<ModelSkeletonMetadata, String> {
-        let path = source.split('@').next().unwrap_or(source);
-        if !path
-            .to_ascii_lowercase()
-            .ends_with(&format!(".{}", newengine_asset_format_nef8::ymt::EXTENSION))
-        {
-            return Err(format!("model skeleton metadata requires provider-declared NEF8 skeleton metadata source, got '{source}'"));
-        }
-        let bytes = self
-            .client
-            .decode_v1(&AssetDecodeRequest {
-                logical_path: path.to_owned(),
-                output_kind: newengine_assets_api::ASSET_LIST_FILE_BODY_OUTPUT.to_owned(),
-                selector: serde_json::Value::Null,
-            })
-            .map_err(|e| {
-                format!(
-                    "engine.assets decode_v1 failed path='{path}' output='{}' err='{e}'",
-                    newengine_assets_api::ASSET_LIST_FILE_BODY_OUTPUT
-                )
-            })?;
-        let hash = format!("fnv1a64:{:016x}", fnv1a64(&bytes));
-        if let Some(decoded) =
-            crate::skeleton_metadata::decode_skeleton_body(&bytes, target_height, eye_height_ratio)?
-        {
-            return Ok(ModelSkeletonMetadata {
-                source: source.to_owned(),
-                source_format: decoded.source_format,
-                container_magic: "NEF8".to_owned(),
-                byte_len: bytes.len(),
-                content_hash: hash,
-                decode_status: decoded.decode_status,
-                joints: decoded.joints,
-                anchors: decoded.anchors,
-            });
-        }
-
-        Ok(ModelSkeletonMetadata {
-            source: source.to_owned(),
-            source_format: "newengine.ymt.metadata.v1".to_owned(),
-            container_magic: "NEF8".to_owned(),
-            byte_len: bytes.len(),
-            content_hash: hash,
-            decode_status:
-                "legacy metadata-only skeleton; generated humanoid anchors from model target height"
-                    .to_owned(),
-            joints: default_humanoid_joints(target_height),
-            anchors: default_humanoid_anchors(target_height, eye_height_ratio),
-        })
-    }
-
     fn read_bytes(&self, logical_path: &str) -> Result<Vec<u8>, String> {
         let path = normalize_logical_path(logical_path, false)?;
         self.client
@@ -600,45 +336,6 @@ impl ModelAssetAdapter {
         String::from_utf8(bytes)
             .map_err(|e| format!("asset text is not UTF-8 path='{path}' err='{e}'"))
     }
-}
-
-fn model_configuration_from_projection(
-    properties_ref: String,
-    projection: DefinitionEntryProjection,
-) -> Result<ModelRuntimeConfiguration, String> {
-    let explanation = projection.model_explanation;
-    let refs = projection.refs;
-    Ok(ModelRuntimeConfiguration {
-        properties_ref: Some(properties_ref),
-        model_ref: explanation.model_ref,
-        drawable_ref: explanation.drawable_ref,
-        material_bindings: explanation.material_bindings,
-        material_refs: merge_refs(explanation.material_refs, refs.material_refs),
-        texture_refs: merge_refs(explanation.texture_refs, refs.texture_refs),
-        uv_layout_refs: merge_refs(explanation.uv_layout_refs, refs.uv_layout_refs),
-        physics_refs: merge_refs(explanation.physics_refs, refs.physics_refs),
-        collision_refs: merge_refs(explanation.collision_refs, refs.collision_refs),
-        ai_refs: refs.ai_refs,
-        streaming_refs: refs.streaming_refs,
-        editor_refs: refs.editor_refs,
-        other_refs: refs.other_refs,
-        render_options: explanation.render_options,
-        collision_policy: explanation.collision_policy,
-        uv_policy: explanation.uv_policy,
-        physics_policy: explanation.physics_policy,
-        lod_policy: explanation.lod_policy,
-        streaming_policy: explanation.streaming_policy,
-        metadata: projection.arbitrary_metadata,
-        warnings: projection.warnings,
-    })
-}
-
-fn merge_refs(mut primary: Vec<String>, secondary: Vec<String>) -> Vec<String> {
-    primary.extend(secondary);
-    primary.retain(|reference| !reference.trim().is_empty());
-    primary.sort();
-    primary.dedup();
-    primary
 }
 
 fn first_texture_dictionary(texture_refs: &[String]) -> Option<String> {
@@ -656,16 +353,6 @@ fn split_model_selector(source: &str) -> (String, Option<String>) {
         ),
         None => (source.to_owned(), None),
     }
-}
-
-fn recompute_bounds_radius(center: Vec3, vertices: &[PrimitiveVertex]) -> f32 {
-    vertices
-        .iter()
-        .map(|v| {
-            let p = Vec3::new(v.pos[0], v.pos[1], v.pos[2]);
-            (p - center).length()
-        })
-        .fold(0.001, f32::max)
 }
 
 impl ModelAssetAdapter {
@@ -697,89 +384,6 @@ impl ModelAssetAdapter {
     }
 }
 
-fn default_humanoid_joints(
-    target_height: f32,
-) -> Vec<newengine_model_skeleton_api::ModelSkeletonJointMetadata> {
-    use newengine_model_skeleton_api::skeleton_joint_indexed;
-    vec![
-        skeleton_joint_indexed(0, 0, "root", Option::<String>::None, None, [0.0, 0.0, 0.0]),
-        skeleton_joint_indexed(
-            1,
-            0,
-            "hips",
-            Some("root"),
-            Some(0),
-            [0.0, target_height * 0.50, 0.0],
-        ),
-        skeleton_joint_indexed(
-            2,
-            0,
-            "spine",
-            Some("hips"),
-            Some(1),
-            [0.0, target_height * 0.18, 0.0],
-        ),
-        skeleton_joint_indexed(
-            3,
-            0,
-            "head",
-            Some("spine"),
-            Some(2),
-            [0.0, target_height * 0.23, 0.0],
-        ),
-        skeleton_joint_indexed(
-            4,
-            0,
-            "left_hand",
-            Some("spine"),
-            Some(2),
-            [-0.42, -target_height * 0.10, 0.0],
-        ),
-        skeleton_joint_indexed(
-            5,
-            0,
-            "right_hand",
-            Some("spine"),
-            Some(2),
-            [0.42, -target_height * 0.10, 0.0],
-        ),
-        skeleton_joint_indexed(
-            6,
-            0,
-            "left_foot",
-            Some("hips"),
-            Some(1),
-            [-0.16, -target_height * 0.48, 0.0],
-        ),
-        skeleton_joint_indexed(
-            7,
-            0,
-            "right_foot",
-            Some("hips"),
-            Some(1),
-            [0.16, -target_height * 0.48, 0.0],
-        ),
-        skeleton_joint_indexed(8, 0, "eye", Some("head"), Some(3), [0.0, 0.0, -0.08]),
-    ]
-}
-
-fn default_humanoid_anchors(
-    target_height: f32,
-    eye_height_ratio: f32,
-) -> newengine_model_skeleton_api::ModelSkeletonAnchors {
-    newengine_model_skeleton_api::ModelSkeletonAnchors {
-        root: "root".to_owned(),
-        hips: "hips".to_owned(),
-        head: "head".to_owned(),
-        left_hand: "left_hand".to_owned(),
-        right_hand: "right_hand".to_owned(),
-        left_foot: "left_foot".to_owned(),
-        right_foot: "right_foot".to_owned(),
-        eye: "eye".to_owned(),
-        eye_height: target_height * eye_height_ratio.clamp(0.55, 0.98),
-    }
-}
-
 fn has_extension(path: &str, extension: &str) -> bool {
     let expected = extension
         .trim()
@@ -795,6 +399,7 @@ fn has_extension(path: &str, extension: &str) -> bool {
 #[cfg(test)]
 mod runtime_configuration_tests {
     use super::*;
+    use projection::{DefinitionRefsProjection, ModelExplanationProjection};
 
     #[test]
     fn ytyp_projection_preserves_full_runtime_dependency_configuration() {

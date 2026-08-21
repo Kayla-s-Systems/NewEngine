@@ -105,6 +105,9 @@ pub fn sys_camera_follow(world: &World, frame: SimFrame, cmd: &mut CommandBuffer
         let Some(ctrl) = world.get::<FollowTargetCameraController>(id).copied() else {
             continue;
         };
+        if ctrl.render_cadence_only {
+            continue;
+        }
         let Some(rig) = world.get::<CameraRigComp>(id).copied() else {
             continue;
         };

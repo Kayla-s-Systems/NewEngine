@@ -83,6 +83,8 @@ pub enum VertexFormat {
     Float32x2,
     Float32x3,
     Float32x4,
+    /// Four unsigned 16-bit integer components. Used for skeletal joint indices.
+    Uint16x4,
     Unorm8x4,
 }
 

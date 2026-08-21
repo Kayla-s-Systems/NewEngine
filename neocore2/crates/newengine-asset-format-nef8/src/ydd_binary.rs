@@ -6,12 +6,15 @@
 //! the offline packer before they enter a runtime asset catalog.
 
 mod decode;
+mod encode;
 mod types;
 
 pub use decode::decode_ydd_binary_body;
+pub use encode::encode_ydd_binary_body;
 pub use types::{
-    YddBinaryDocument, YddBinaryEntry, YddBinaryMesh, YddBinaryVertex, YDD_BINARY_CONTRACT_SPEC,
-    YDD_BINARY_ENCODING, YDD_BINARY_SCHEMA_VERSION,
+    YddBinaryDocument, YddBinaryEntry, YddBinaryMesh, YddBinarySkinVertex, YddBinaryVertex,
+    YDD_BINARY_CONTRACT_SPEC, YDD_BINARY_ENCODING, YDD_BINARY_ENCODING_V2, YDD_BINARY_ENCODING_V3,
+    YDD_BINARY_SCHEMA_VERSION, YDD_BINARY_SCHEMA_VERSION_V2, YDD_BINARY_SCHEMA_VERSION_V3,
 };
 
 #[cfg(test)]

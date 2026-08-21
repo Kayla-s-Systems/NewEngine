@@ -16,6 +16,7 @@ newengine-gameplay-fps-api = { path = "../newengine-gameplay-fps-api" }
 newengine-game-data = { path = "../newengine-game-data" }
 newengine-assets = { path = "../newengine-assets" }
 newengine-assets-api = { path = "../newengine-assets-api" }
+newengine-animation-runtime = { path = "../newengine-animation-runtime" }
 newengine-bounds = { path = "../newengine-bounds" }
 newengine-core = { path = "../newengine-core" }
 newengine-ecs = { path = "../newengine-ecs" }

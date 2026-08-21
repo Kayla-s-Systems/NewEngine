@@ -13,7 +13,9 @@ pub fn attach_active_camera_to_player(world: &mut World, camera: EntityId, playe
             target: player,
             offset_ls: Vec3::new(0.0, 1.6, 4.5),
             rot_offset: Quat::IDENTITY,
+            focus_offset_ls: Vec3::new(0.0, 0.95, 0.0),
             follow_rotation: false,
+            render_cadence_only: true,
             smooth_time: 0.08,
             max_speed: 0.0,
         });
@@ -31,6 +33,7 @@ pub fn attach_active_camera_to_player(world: &mut World, camera: EntityId, playe
         .unwrap_or_else(|| CharacterBody::default().standing_eye_height);
     next.offset_ls = Vec3::new(0.0, eye_height, 0.0);
     next.rot_offset = Quat::IDENTITY;
+    next.focus_offset_ls = Vec3::ZERO;
     next.follow_rotation = true;
     next.smooth_time = 0.0;
     next.max_speed = 0.0;

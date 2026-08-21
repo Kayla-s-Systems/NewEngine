@@ -7,6 +7,16 @@ pub mod nemat {
     pub const EXTENSION: &str = "nemat";
     pub const ASSET_KIND: &str = "material_library";
     pub const CONTENT_KIND: u32 = newengine_assets_api::LIST_FILE_CONTENT_KIND_NEMAT;
+    pub const CONTENT_SCHEMA_VERSION: u16 = 1;
+    pub const CONTENT_SCHEMA_CONTRACT_SPEC: newengine_contract_api::ContractSpec =
+        newengine_contract_api::ContractSpec::new(
+            "asset.nemat.schema",
+            newengine_contract_api::ContractKind::Schema,
+            newengine_contract_api::ContractVersion::major(CONTENT_SCHEMA_VERSION),
+            newengine_contract_api::ContractCompatibility::Exact,
+            "newengine-asset-format-nef8",
+            None,
+        );
     pub const PURPOSE: &str = "Material Library";
     pub const SEMANTIC_GATEWAY: &str = "engine.materials";
     pub const HANDLER_SERVICE: &str = "asset.codec.listfile.nemat";
@@ -44,6 +54,16 @@ pub mod neui {
     pub const EXTENSION: &str = "neui";
     pub const ASSET_KIND: &str = "ui_dictionary";
     pub const CONTENT_KIND: u32 = newengine_assets_api::LIST_FILE_CONTENT_KIND_NEUI;
+    pub const CONTENT_SCHEMA_VERSION: u16 = 1;
+    pub const CONTENT_SCHEMA_CONTRACT_SPEC: newengine_contract_api::ContractSpec =
+        newengine_contract_api::ContractSpec::new(
+            "asset.neui.schema",
+            newengine_contract_api::ContractKind::Schema,
+            newengine_contract_api::ContractVersion::major(CONTENT_SCHEMA_VERSION),
+            newengine_contract_api::ContractCompatibility::Exact,
+            "newengine-asset-format-nef8",
+            None,
+        );
     pub const PURPOSE: &str = "NewEngine UI Dictionary";
     pub const SEMANTIC_GATEWAY: &str = "engine.assets.ui";
     pub const HANDLER_SERVICE: &str = "asset.codec.listfile.neui";
@@ -111,6 +131,10 @@ pub mod ydd {
     pub const EXTENSION: &str = "ydd";
     pub const ASSET_KIND: &str = "drawable_dictionary";
     pub const CONTENT_KIND: u32 = newengine_assets_api::LIST_FILE_CONTENT_KIND_YDD;
+    /// Read compatibility for resident YDD ListFile envelopes. The binary body
+    /// decoder intentionally remains backward-compatible with V2/V3 while V4
+    /// is the current producer schema.
+    pub const READABLE_CONTENT_SCHEMA_VERSIONS: &[u16] = &[2, 3, 4];
     pub const PURPOSE: &str = "Drawable/Model Dictionary";
     pub const SEMANTIC_GATEWAY: &str = "engine.model";
     pub const HANDLER_SERVICE: &str = "asset.codec.listfile.ydd";
@@ -319,6 +343,21 @@ pub mod ytd {
     pub const EXTENSION: &str = "ytd";
     pub const ASSET_KIND: &str = "texture_dictionary";
     pub const CONTENT_KIND: u32 = newengine_assets_api::LIST_FILE_CONTENT_KIND_YTD;
+    /// Canonical schema emitted by the current first-party YTD producer.
+    /// Historical schema=2 envelopes are migration inputs, not a second current producer contract.
+    pub const CONTENT_SCHEMA_VERSION: u16 = 1;
+    /// V2 remains a readable migration envelope for resident production assets;
+    /// only V1 is emitted by the current first-party producer.
+    pub const READABLE_CONTENT_SCHEMA_VERSIONS: &[u16] = &[1, 2];
+    pub const CONTENT_SCHEMA_CONTRACT_SPEC: newengine_contract_api::ContractSpec =
+        newengine_contract_api::ContractSpec::new(
+            "asset.ytd.schema",
+            newengine_contract_api::ContractKind::Schema,
+            newengine_contract_api::ContractVersion::major(CONTENT_SCHEMA_VERSION),
+            newengine_contract_api::ContractCompatibility::Exact,
+            "newengine-asset-format-nef8",
+            None,
+        );
     pub const PURPOSE: &str = "Texture Dictionary";
     pub const SEMANTIC_GATEWAY: &str = "engine.assets";
     pub const HANDLER_SERVICE: &str = "asset.codec.listfile.ytd";

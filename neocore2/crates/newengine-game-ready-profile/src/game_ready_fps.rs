@@ -160,6 +160,14 @@ impl RuntimeHostAppProfile for GameReadyFpsApp {
     }
 
     #[inline]
+    fn initialize_composition_services(
+        &self,
+        engine: &mut Engine<()>,
+        project: Option<&newengine_project_runtime::ProjectRuntimeContext>,
+    ) -> EngineResult<()> {
+        self.profile.initialize_composition_services(engine, project)
+    }
+
     fn register_engine_provider_routes_best_effort(&self) {
         self.profile.register_engine_provider_routes_best_effort();
     }

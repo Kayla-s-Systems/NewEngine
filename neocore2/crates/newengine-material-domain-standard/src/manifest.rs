@@ -51,6 +51,8 @@ pub(super) struct StandardLitShaderSetManifest {
     pub(super) instanced_vs: StandardShaderAssetRef,
     pub(super) instanced_fs: StandardShaderAssetRef,
     pub(super) shadow_instanced_vs: StandardShaderAssetRef,
+    pub(super) skinned_vs: StandardShaderAssetRef,
+    pub(super) shadow_skinned_vs: StandardShaderAssetRef,
 }
 
 impl StandardLitShaderSetManifest {
@@ -66,6 +68,8 @@ impl StandardLitShaderSetManifest {
             ("instanced_vs", &self.instanced_vs),
             ("instanced_fs", &self.instanced_fs),
             ("shadow_instanced_vs", &self.shadow_instanced_vs),
+            ("skinned_vs", &self.skinned_vs),
+            ("shadow_skinned_vs", &self.shadow_skinned_vs),
         ] {
             shader.validate(manifest_path, field)?;
         }

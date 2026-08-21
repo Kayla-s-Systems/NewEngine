@@ -23,12 +23,14 @@ pub use components::{
     CharacterMotionTuning, CloudShadowRenderState, CollisionShapeDesc, DisplayMode,
     DisplayVisibility, EnvironmentDomeRenderState, EnvironmentPostFxState, GameRunMode,
     GameplayActor, ModelRenderComponent, PhysicsBodyDesc, PhysicsSurface, PhysicsWorldSettings,
-    PlayerActor, PlayerCommandFrame, PlayerController, PlayerControllerKind, PlayerEvent,
-    PlayerEventBus, PlayerEventKind, PlayerGroundState, PlayerLocomotionState, PlayerModelBinding,
-    PlayerStanceKind, PlayerStanceState, PlayerViewVisibility, PlayerViewVisibilityPolicy,
-    PlayerVisualKind, PlayerVisualPart, PreparedRenderMesh, ResidencyProgress, SceneAnchorFollow,
-    SceneEntityAnchor, SceneEntityRole, StaticMeshCollider, TerrainMaterialLayers,
-    WorldActivationPhase, WorldActivationState, WorldAssemblyProgress, WorldClearColor,
+    PlayerActor, PlayerAnimationState, PlayerCommandFrame, PlayerController, PlayerControllerKind,
+    PlayerEvent, PlayerEventBus, PlayerEventKind, PlayerGroundState, PlayerLocomotionAnimation,
+    PlayerLocomotionState, PlayerModelAssignment, PlayerModelBinding, PlayerSkinBinding,
+    PlayerSkinPose, PlayerSkinVertex, PlayerStanceKind, PlayerStanceState, PlayerViewVisibility,
+    PlayerViewVisibilityPolicy, PlayerVisualKind, PlayerVisualPart, PreparedRenderMesh,
+    ResidencyProgress, SceneAnchorFollow, SceneEntityAnchor, SceneEntityRole, StaticMeshCollider,
+    TerrainMaterialLayers, WorldActivationPhase, WorldActivationState, WorldAssemblyProgress,
+    WorldClearColor,
 };
 pub use content::{GameplayContentProvider, GameplayContentProviderRegistry};
 pub use execution::{
@@ -53,10 +55,11 @@ pub use physics::{PhysicsRuntimeFrameIndex, PhysicsStepTimingTelemetry, PhysicsS
 pub use physics_queries::{GameplayPhysicsQueryProvider, GameplayPhysicsQueryProviderRegistry};
 pub use player::{
     apply_player_command_frame, apply_player_input, apply_player_stance_geometry,
-    attach_active_camera_to_player, clear_player_input, consume_player_transient_input,
-    detach_active_camera_from_player, display_visible_in_mode, ensure_physics_body, first_player,
-    is_player_controller_enabled, remove_physics_body, spawn_default_player,
-    spawn_player_controller, update_player_stance_camera,
+    attach_active_camera_to_player, clear_player_input, clear_player_model_assignment,
+    consume_player_transient_input, detach_active_camera_from_player, display_visible_in_mode,
+    ensure_physics_body, first_player, is_player_controller_enabled, remove_physics_body,
+    set_player_model_assignment, spawn_default_player, spawn_player_controller,
+    update_player_animation_states, update_player_stance_camera,
 };
 pub use schedule::{
     default_sim_schedule, run_schedule, run_schedule_with_physics_mode,

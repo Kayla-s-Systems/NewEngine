@@ -272,6 +272,10 @@ pub fn run_schedule_with_physics_mode_and_telemetry_for_frame(
     );
 
     gameplay_systems.run_phase(GameplayExecutionPhase::AfterDerived, world, gameplay_frame);
+
+    // Player locomotion animation state is derived from authoritative post-physics
+    // motion/grounding. The skeletal backend consumes this semantic state separately.
+    crate::gameplay::update_player_animation_states(world, frame.dt);
 }
 
 #[inline]

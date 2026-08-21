@@ -43,30 +43,37 @@ impl RuntimeServiceCatalogEntry {
 /// `*-api` crate). The validator does not contain per-domain `if/else` dispatch
 /// or a second side table for diagnostics ownership.
 pub(crate) const RUNTIME_SERVICE_CATALOG: &[RuntimeServiceCatalogEntry] = &[
+    #[cfg(feature = "runtime-domain-contracts")]
     RuntimeServiceCatalogEntry::new(
         newengine_assets_api::ASSET_RUNTIME_REQUIREMENT_SPEC,
         "engine.assets root / VFS bytes / codec dispatch",
     ),
+    #[cfg(feature = "runtime-domain-contracts")]
     RuntimeServiceCatalogEntry::new(
         newengine_assets_api::ASSET_TYPES_RUNTIME_REQUIREMENT_SPEC,
         "engine.assets.types descriptor registry / VFS navigation",
     ),
+    #[cfg(feature = "runtime-domain-contracts")]
     RuntimeServiceCatalogEntry::new(
         newengine_assets_api::ASSETS_INSPECT_RUNTIME_REQUIREMENT_SPEC,
         "engine.assets.inspect schema-driven AssetDocument DTO / preview / diagnostics",
     ),
+    #[cfg(feature = "runtime-domain-contracts")]
     RuntimeServiceCatalogEntry::new(
         newengine_assets_api::ASSETS_EDIT_RUNTIME_REQUIREMENT_SPEC,
         "engine.assets.edit AssetPatch DTO validation / save / repack routing",
     ),
+    #[cfg(feature = "runtime-domain-contracts")]
     RuntimeServiceCatalogEntry::new(
         newengine_assets_api::TEXTURES_RUNTIME_REQUIREMENT_SPEC,
         "engine.assets.textures semantic .ytd dictionary API / runtime texture packets",
     ),
+    #[cfg(feature = "runtime-domain-contracts")]
     RuntimeServiceCatalogEntry::new(
         newengine_assets_api::DEFINITIONS_RUNTIME_REQUIREMENT_SPEC,
         "engine.assets.definitions semantic .ytyp Definition Entry metadata / dependency declarations",
     ),
+    #[cfg(feature = "runtime-domain-contracts")]
     RuntimeServiceCatalogEntry::new(
         newengine_assets_api::ASSET_GRAPH_RUNTIME_REQUIREMENT_SPEC,
         "engine.assets.graph declarative .ytyp/.ydd/.nemat/.ytd graph resolution",
@@ -75,22 +82,27 @@ pub(crate) const RUNTIME_SERVICE_CATALOG: &[RuntimeServiceCatalogEntry] = &[
         newengine_time_api::TIME_RUNTIME_REQUIREMENT_SPEC,
         "frame clock / simulation tick / fixed timestep / game clock",
     ),
+    #[cfg(feature = "runtime-domain-contracts")]
     RuntimeServiceCatalogEntry::new(
         newengine_materials::MATERIALS_RUNTIME_REQUIREMENT_SPEC,
         "engine.assets.materials material descriptor resolve / material graph validation / render packets",
     ),
+    #[cfg(feature = "runtime-domain-contracts")]
     RuntimeServiceCatalogEntry::new(
         newengine_audio_api::AUDIO_RUNTIME_REQUIREMENT_SPEC,
         "semantic audio events / UI feedback / future mixer backend",
     ),
+    #[cfg(feature = "runtime-domain-contracts")]
     RuntimeServiceCatalogEntry::new(
         newengine_render_api::RENDER_RUNTIME_REQUIREMENT_SPEC,
         "runtime-host render adapter / RuntimeRenderController",
     ),
+    #[cfg(feature = "runtime-domain-contracts")]
     RuntimeServiceCatalogEntry::new(
         newengine_camera_api::CAMERA_RUNTIME_REQUIREMENT_SPEC,
         "CameraGatewayBridge / render view extraction",
     ),
+    #[cfg(feature = "runtime-domain-contracts")]
     RuntimeServiceCatalogEntry::new(
         newengine_ui_api::UI_RUNTIME_REQUIREMENT_SPEC,
         "platform UI bridge / overlays / HUD",
@@ -99,30 +111,37 @@ pub(crate) const RUNTIME_SERVICE_CATALOG: &[RuntimeServiceCatalogEntry] = &[
         newengine_task_api::THREADING_RUNTIME_REQUIREMENT_SPEC,
         "runtime job/task lifecycle / pause-resume-cancel / progress event stream",
     ),
+    #[cfg(feature = "runtime-domain-contracts")]
     RuntimeServiceCatalogEntry::new(
         newengine_scene_io::SCENE_RUNTIME_REQUIREMENT_SPEC,
         "engine.scene authored structure / scene graph / archetype placement declarations",
     ),
+    #[cfg(feature = "runtime-domain-contracts")]
     RuntimeServiceCatalogEntry::new(
         newengine_world_api::WORLD_RUNTIME_REQUIREMENT_SPEC,
         "engine.world living runtime instance / boot / partition / active cells / snapshots",
     ),
+    #[cfg(feature = "runtime-domain-contracts")]
     RuntimeServiceCatalogEntry::new(
         newengine_ecs_api::ECS_RUNTIME_REQUIREMENT_SPEC,
         "ECS gateway / world summary-snapshot-command service",
     ),
+    #[cfg(feature = "runtime-domain-contracts")]
     RuntimeServiceCatalogEntry::new(
         newengine_entity_api::ENTITY_RUNTIME_REQUIREMENT_SPEC,
         "Entity gateway / service-safe identity and lifecycle commands",
     ),
+    #[cfg(feature = "runtime-domain-contracts")]
     RuntimeServiceCatalogEntry::new(
         newengine_input_api::INPUT_RUNTIME_REQUIREMENT_SPEC,
         "platform_input::poll_input_frame / UI input projection",
     ),
+    #[cfg(feature = "runtime-domain-contracts")]
     RuntimeServiceCatalogEntry::new(
         newengine_input_bindings_api::INPUT_BINDINGS_RUNTIME_REQUIREMENT_SPEC,
         "semantic input bindings / camera view and gameplay action projection",
     ),
+    #[cfg(feature = "runtime-domain-contracts")]
     RuntimeServiceCatalogEntry::new(
         newengine_physics_api::PHYSICS_RUNTIME_REQUIREMENT_SPEC,
         "PhysicsSyncModule / gameplay ECS sync",
@@ -131,6 +150,7 @@ pub(crate) const RUNTIME_SERVICE_CATALOG: &[RuntimeServiceCatalogEntry] = &[
         LOG_RUNTIME_REQUIREMENT_SPEC,
         "plugin_forward_logger / host log backend",
     ),
+    #[cfg(feature = "runtime-domain-contracts")]
     RuntimeServiceCatalogEntry::new(
         newengine_platform_api::PLATFORM_RUNTIME_REQUIREMENT_SPEC,
         "platform route / native window or headless surface snapshot",

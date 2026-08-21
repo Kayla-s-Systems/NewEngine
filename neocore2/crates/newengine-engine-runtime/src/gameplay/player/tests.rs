@@ -125,6 +125,53 @@ mod tests {
             world.get::<PlayerStanceState>(player).map(|state| state.current_eye_height),
             Some(stored.standing_eye_height)
         );
+        assert_eq!(
+            world
+                .get::<PlayerModelAssignment>(player)
+                .map(|assignment| (assignment.enabled, assignment.revision)),
+            Some((false, 0))
+        );
+    }
+
+    #[test]
+    fn player_model_assignment_is_revisioned_without_replacing_player_actor() {
+        let mut world = World::new();
+        let player = spawn_default_player(&mut world, None, "model-player", Vec3::ZERO);
+
+        let first_revision = set_player_model_assignment(
+            &mut world,
+            player,
+            PlayerModelAssignment::new(
+                "models/characters/abigail/csb_abigail.ydd@csb_abigail",
+            ),
+        )
+        .expect("first model assignment");
+        assert_eq!(first_revision, 1);
+        assert!(world.get::<PlayerActor>(player).is_some());
+        assert_eq!(
+            world
+                .get::<PlayerModelAssignment>(player)
+                .map(|assignment| assignment.source.as_str()),
+            Some("models/characters/abigail/csb_abigail.ydd@csb_abigail")
+        );
+
+        let second_revision = set_player_model_assignment(
+            &mut world,
+            player,
+            PlayerModelAssignment::new("models/characters/other/hero.ydd@hero"),
+        )
+        .expect("replacement model assignment");
+        assert_eq!(second_revision, 2);
+        assert!(world.get::<PlayerActor>(player).is_some());
+
+        let cleared_revision =
+            clear_player_model_assignment(&mut world, player).expect("clear model assignment");
+        assert_eq!(cleared_revision, 3);
+        let cleared = world
+            .get::<PlayerModelAssignment>(player)
+            .expect("cleared assignment component");
+        assert!(!cleared.enabled);
+        assert!(cleared.source.is_empty());
     }
 
     #[test]

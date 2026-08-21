@@ -193,6 +193,7 @@ impl AssetPreviewApi {
                 parts: vec![ModelMeshPart {
                     material_slot: binding.slot.clone(),
                     mesh,
+                    skin: None,
                     material: binding,
                 }],
                 skeleton: None,

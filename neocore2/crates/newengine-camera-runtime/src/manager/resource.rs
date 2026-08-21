@@ -422,6 +422,7 @@ fn desired_camera_policy(
             CameraViewMode::FirstPerson => CameraRuntimeMode::GameplayFirstPerson,
             CameraViewMode::ThirdPersonFollow => CameraRuntimeMode::GameplayThirdPersonFollow,
             CameraViewMode::ThirdPersonAim => CameraRuntimeMode::GameplayThirdPersonAim,
+            CameraViewMode::ThirdPersonOrbit => CameraRuntimeMode::GameplayThirdPersonOrbit,
         };
         return (
             CameraDirectorKind::Gameplay,
@@ -493,6 +494,7 @@ fn effects_for_mode(mode: CameraRuntimeMode, base: CameraPostEffects) -> CameraP
         | CameraRuntimeMode::RuntimeFly
         | CameraRuntimeMode::GameplayPreview
         | CameraRuntimeMode::GameplayThirdPersonFollow
+        | CameraRuntimeMode::GameplayThirdPersonOrbit
         | CameraRuntimeMode::SwitchBlend
         | CameraRuntimeMode::SyncedScenePlayback
         | CameraRuntimeMode::AnimScenePlayback => {}

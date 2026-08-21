@@ -1,0 +1,11 @@
+[package]
+name = "newengine-host-kernel"
+version = "0.1.0"
+edition = "2021"
+readme = "README.md"
+description = "Minimal NewEngine runtime host kernel: lifecycle, services, scheduler and plugin composition only"
+
+[dependencies]
+crossbeam-channel = "0.5"
+newengine-core = { path = "../newengine-core", default-features = false }
+newengine-plugin-host = { path = "../newengine-plugin-host" }

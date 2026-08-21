@@ -34,6 +34,7 @@ pub enum CameraRuntimeMode {
     GameplayFirstPerson,
     GameplayThirdPersonFollow,
     GameplayThirdPersonAim,
+    GameplayThirdPersonOrbit,
     CinematicPreview,
     ScriptedPreview,
     ReplayPlayback,

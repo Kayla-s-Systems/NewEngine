@@ -17,15 +17,15 @@ pub(crate) const SYSTEM_TAGS_FIELD: &str = "system_tags";
 pub(crate) const TAGS_FIELD: &str = "tags";
 
 #[derive(Debug, Clone)]
-pub(crate) struct EngineGatewayCapability {
-    pub(crate) gateway_id: String,
-    pub(crate) service_kind: String,
-    pub(crate) provider_service_id: Option<String>,
-    pub(crate) provider_route_id: Option<String>,
-    pub(crate) provider_abi: Option<String>,
-    pub(crate) backend_capability_id: String,
-    pub(crate) backend_priority: i32,
-    pub(crate) system_tags: Vec<String>,
+pub struct EngineGatewayCapability {
+    pub gateway_id: String,
+    pub service_kind: String,
+    pub provider_service_id: Option<String>,
+    pub provider_route_id: Option<String>,
+    pub provider_abi: Option<String>,
+    pub backend_capability_id: String,
+    pub backend_priority: i32,
+    pub system_tags: Vec<String>,
 }
 
 #[inline]
@@ -178,7 +178,7 @@ pub(crate) fn gateway_capability_from_capability(
     })
 }
 
-pub(crate) fn descriptor_gateway_capabilities(
+pub fn descriptor_gateway_capabilities(
     descriptor: &PluginDescriptor,
 ) -> Vec<EngineGatewayCapability> {
     let plugin_id = descriptor.id.to_string();

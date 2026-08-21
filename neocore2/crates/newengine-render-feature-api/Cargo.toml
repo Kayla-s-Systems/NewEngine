@@ -9,7 +9,7 @@ description = "Profile-owned render feature provider API for NewEngine"
 newengine-ulog-api = { path = "../newengine-ulog-api" }
 log = "0.4"
 
-newengine-core = { path = "../newengine-core" }
+newengine-core = { path = "../newengine-core", features = ["render-api"] }
 newengine-ecs = { path = "../newengine-ecs" }
 newengine-lighting = { path = "../newengine-lighting" }
 newengine-material-domain-api = { path = "../newengine-material-domain-api" }

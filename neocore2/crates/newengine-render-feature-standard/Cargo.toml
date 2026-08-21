@@ -7,7 +7,7 @@ description = "Generic standard render feature pack for NewEngine runtime and ed
 license = "Proprietary"
 
 [dependencies]
-newengine-core = { path = "../newengine-core" }
+newengine-core = { path = "../newengine-core", features = ["render-api"] }
 newengine-render-feature-api = { path = "../newengine-render-feature-api" }
 newengine-lighting = { path = "../newengine-lighting" }
 newengine-material-domain-api = { path = "../newengine-material-domain-api" }

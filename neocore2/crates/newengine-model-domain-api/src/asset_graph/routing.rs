@@ -1,4 +1,4 @@
-use super::split_ref;
+use super::split_asset_ref;
 use crate::{
     DRAWABLE_DICTIONARY_ASSET_KIND, MATERIAL_LIBRARY_ASSET_KIND,
     OBJECT_TYPE_DEFINITIONS_ASSET_KIND, ROLE_ASSET_PROPERTIES, ROLE_DRAWABLE_DICTIONARY,
@@ -9,7 +9,7 @@ use crate::{
 pub(super) fn classify_ref(
     reference: &str,
 ) -> (&'static str, &'static str, &'static str, &'static str) {
-    let (path, _) = split_ref(reference);
+    let (path, _) = split_asset_ref(reference);
     let ext = path
         .rsplit_once('.')
         .map(|(_, ext)| ext.to_ascii_lowercase())

@@ -5,10 +5,38 @@ readme = "README.md"
 edition = "2021"
 
 [features]
-# The startup configuration presenter is part of newengine-core but remains an
-# explicit build/runtime capability. It is never a separate settings crate and
-# is shown only when the launch contract requests PreStartConfigWindow.
+# Kernel default: host lifecycle/scheduler/services/plugin composition only.
 default = []
+
+# Domain API compatibility surfaces are opt-in. They expose contracts/types to
+# compositions but never select or construct concrete providers.
+render-api = ["dep:newengine-render-api"]
+physics-api = ["dep:newengine-physics-api"]
+audio-api = ["dep:newengine-audio-api"]
+camera-api = ["dep:newengine-camera-api"]
+ui-api = ["dep:newengine-ui-api"]
+
+# Full runtime contract catalog used by maximal game/editor compositions. Empty
+# host builds intentionally omit these domain crates and validate only host-owned
+# contracts plus composition-declared capability slots.
+runtime-domain-contracts = [
+    "dep:newengine-assets-api",
+    "dep:newengine-materials",
+    "audio-api",
+    "render-api",
+    "camera-api",
+    "ui-api",
+    "dep:newengine-scene-io",
+    "dep:newengine-world-api",
+    "dep:newengine-ecs-api",
+    "dep:newengine-entity-api",
+    "dep:newengine-input-api",
+    "dep:newengine-input-bindings-api",
+    "dep:newengine-platform-api",
+    "physics-api",
+]
+
+# The startup configuration presenter is explicit and absent from kernel-only builds.
 startup-window-egui = ["dep:eframe"]
 
 # Optional host diagnostics. Keep disabled by default: diagnostics are explicit.
@@ -23,26 +51,25 @@ raw-window-handle = "0.6.2"
 abi_stable = "0.11"
 newengine-plugin-api = { path = "../newengine-plugin-api" }
 newengine-plugin-host = { path = "../newengine-plugin-host" }
-newengine-platform-api = { path = "../newengine-platform-api" }
+newengine-platform-api = { path = "../newengine-platform-api", optional = true }
 newengine-math = { path = "../newengine-math" }
 newengine-service-api = { path = "../newengine-service-api" }
-newengine-render-api = { path = "../newengine-render-api" }
-newengine-physics-api = { path = "../newengine-physics-api" }
-newengine-assets-api = { path = "../newengine-assets-api" }
-newengine-audio-api = { path = "../newengine-audio-api" }
-newengine-camera-api = { path = "../newengine-camera-api" }
-newengine-ecs-api = { path = "../newengine-ecs-api" }
-newengine-entity-api = { path = "../newengine-entity-api" }
-newengine-ui-api = { path = "../newengine-ui-api" }
+newengine-render-api = { path = "../newengine-render-api", optional = true }
+newengine-physics-api = { path = "../newengine-physics-api", optional = true }
+newengine-assets-api = { path = "../newengine-assets-api", optional = true }
+newengine-audio-api = { path = "../newengine-audio-api", optional = true }
+newengine-camera-api = { path = "../newengine-camera-api", optional = true }
+newengine-ecs-api = { path = "../newengine-ecs-api", optional = true }
+newengine-entity-api = { path = "../newengine-entity-api", optional = true }
+newengine-ui-api = { path = "../newengine-ui-api", optional = true }
 newengine-loading-api = { path = "../newengine-loading-api" }
 newengine-task-api = { path = "../newengine-task-api" }
 newengine-time-api = { path = "../newengine-time-api" }
-newengine-input-api = { path = "../newengine-input-api" }
-newengine-input-bindings-api = { path = "../newengine-input-bindings-api" }
-newengine-scene-io = { path = "../newengine-scene-io" }
-newengine-world-api = { path = "../newengine-world-api" }
-newengine-materials = { path = "../newengine-materials" }
-newengine-ui-draw = { path = "../newengine-ui-draw" }
+newengine-input-api = { path = "../newengine-input-api", optional = true }
+newengine-input-bindings-api = { path = "../newengine-input-bindings-api", optional = true }
+newengine-scene-io = { path = "../newengine-scene-io", optional = true }
+newengine-world-api = { path = "../newengine-world-api", optional = true }
+newengine-materials = { path = "../newengine-materials", optional = true }
 
 
 serde = { version = "1.0.228", features = ["derive"] }

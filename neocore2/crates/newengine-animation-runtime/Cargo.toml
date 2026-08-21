@@ -1,0 +1,10 @@
+[package]
+name = "newengine-animation-runtime"
+version = "0.1.0"
+edition = "2021"
+description = "Runtime clip decoding, sampling and skeletal palette construction"
+license = "Proprietary"
+
+[dependencies]
+newengine-math = { path = "../newengine-math" }
+newengine-model-skeleton-api = { path = "../newengine-model-skeleton-api" }

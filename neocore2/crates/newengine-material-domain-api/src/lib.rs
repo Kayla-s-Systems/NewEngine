@@ -120,6 +120,8 @@ impl MaterialPipelineBuildProfile {
 #[derive(Clone, Copy)]
 pub struct LitPipeline {
     pub bgl: BindGroupLayoutId,
+    /// Separate set=1 storage-buffer layout for skeletal matrix palettes.
+    pub skin_bgl: BindGroupLayoutId,
     pub white_texture: TextureId,
     pub flat_normal_texture: TextureId,
     pub repeat_sampler: SamplerId,
@@ -134,6 +136,10 @@ pub struct LitPipeline {
     pub shadow_vs: ShaderId,
     #[allow(dead_code)]
     pub shadow_fs: ShaderId,
+    #[allow(dead_code)]
+    pub skinned_vs: ShaderId,
+    #[allow(dead_code)]
+    pub shadow_skinned_vs: ShaderId,
     pub pipeline: PipelineId,
     pub double_sided_pipeline: PipelineId,
     pub terrain_pipeline: PipelineId,
@@ -155,6 +161,12 @@ pub struct LitPipeline {
     pub sky_instanced_pipeline: PipelineId,
     pub shadow_instanced_pipeline: PipelineId,
     pub shadow_instanced_double_sided_pipeline: PipelineId,
+    pub skinned_pipeline: PipelineId,
+    pub skinned_double_sided_pipeline: PipelineId,
+    pub gbuffer_skinned_pipeline: PipelineId,
+    pub gbuffer_skinned_double_sided_pipeline: PipelineId,
+    pub shadow_skinned_pipeline: PipelineId,
+    pub shadow_skinned_double_sided_pipeline: PipelineId,
 }
 
 /// std140 layout consumed by the current lit shader family.

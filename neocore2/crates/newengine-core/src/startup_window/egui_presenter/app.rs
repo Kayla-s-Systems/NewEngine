@@ -173,22 +173,22 @@ impl eframe::App for PreStartGraphicsApp {
         let style = north_star_bootstrap_ui_style();
 
         egui::TopBottomPanel::top("newengine_prestart_header")
-            .exact_height(92.0)
+            .exact_height(84.0)
             .frame(
                 egui::Frame::none()
                     .fill(color32(style.palette.bg_deep))
                     .stroke(egui::Stroke::new(1.0, color32(style.palette.edge_soft)))
-                    .inner_margin(egui::Margin::symmetric(22.0, 14.0)),
+                    .inner_margin(egui::Margin::symmetric(20.0, 12.0)),
             )
             .show(ctx, |ui| self.show_header(ui));
 
         egui::TopBottomPanel::bottom("newengine_prestart_footer")
-            .exact_height(72.0)
+            .exact_height(68.0)
             .frame(
                 egui::Frame::none()
                     .fill(color32(style.palette.panel))
                     .stroke(egui::Stroke::new(1.0, color32(style.palette.edge)))
-                    .inner_margin(egui::Margin::symmetric(20.0, 14.0)),
+                    .inner_margin(egui::Margin::symmetric(18.0, 12.0)),
             )
             .show(ctx, |ui| self.show_footer(ui, ctx));
 
@@ -199,7 +199,7 @@ impl eframe::App for PreStartGraphicsApp {
                 egui::Frame::none()
                     .fill(color32(style.palette.bg_deep))
                     .stroke(egui::Stroke::new(1.0, color32(style.palette.edge_soft)))
-                    .inner_margin(egui::Margin::same(16.0)),
+                    .inner_margin(egui::Margin::same(14.0)),
             )
             .show(ctx, |ui| self.show_sidebar(ui));
 
@@ -207,7 +207,7 @@ impl eframe::App for PreStartGraphicsApp {
             .frame(
                 egui::Frame::none()
                     .fill(color32(style.palette.bg))
-                    .inner_margin(egui::Margin::symmetric(24.0, 20.0)),
+                    .inner_margin(egui::Margin::symmetric(22.0, 18.0)),
             )
             .show(ctx, |ui| {
                 self.show_page_header(ui);

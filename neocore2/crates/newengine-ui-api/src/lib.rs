@@ -19,7 +19,8 @@ pub use frame_binary::{
 include!("input.rs");
 include!("events.rs");
 include!("draw_protocol.rs");
-include!("screen_profile.rs");
+mod screen_profile;
+pub use screen_profile::*;
 include!("game_gui.rs");
 include!("actions.rs");
 include!("text.rs");

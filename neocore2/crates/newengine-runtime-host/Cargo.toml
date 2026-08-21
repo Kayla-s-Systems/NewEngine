@@ -5,56 +5,107 @@ readme = "README.md"
 edition = "2021"
 
 [features]
-default = []
+# Compatibility/default product layer. The kernel itself lives in
+# newengine-host-kernel; disabling default features leaves only thin host
+# orchestration helpers and does not pull engine-domain runtimes.
+default = ["full-runtime"]
+full-runtime = [
+    "dep:newengine-ulog-api",
+    "dep:abi_stable",
+    "dep:libloading",
+    "dep:log",
+    "dep:raw-window-handle",
+    "dep:serde_json",
+    "dep:serde",
+    "dep:newengine-assets",
+    "dep:newengine-assets-api",
+    "dep:newengine-asset-hot-reload-runtime",
+    "dep:newengine-math",
+    "dep:newengine-platform-api",
+    "dep:newengine-project-api",
+    "dep:newengine-project-runtime",
+    "dep:newengine-runtime-adapter-core",
+    "dep:newengine-render-runtime-adapter",
+    "dep:newengine-scripting-api",
+    "dep:newengine-scripting-client",
+    "dep:newengine-task-api",
+    "dep:newengine-editor-command-api",
+    "dep:newengine-runtime-session-api",
+    "dep:newengine-runtime-session-runtime",
+    "dep:newengine-time-runtime",
+    "dep:newengine-input-api",
+    "dep:newengine-plugin-api",
+    "dep:newengine-service-api",
+    "dep:newengine-schema-api",
+    "dep:newengine-schema-runtime",
+    "dep:newengine-service-kit",
+    "dep:newengine-scene-io",
+    "dep:newengine-ecs-api",
+    "dep:newengine-entity-api",
+    "dep:newengine-render-api",
+    "dep:newengine-physics-api",
+    "dep:newengine-system-runtime",
+    "dep:newengine-system-contracts",
+    "dep:newengine-plugin-host",
+    "dep:newengine-transform",
+    "dep:newengine-ui",
+    "dep:newengine-ui-api",
+    "dep:newengine-world-api",
+    "newengine-core/render-api",
+    "newengine-core/physics-api",
+]
 window-icon = []
-prestart-window-egui = ["newengine-core/startup-window-egui"]
+prestart-window-egui = ["full-runtime", "newengine-core/startup-window-egui"]
 
 [dependencies]
-newengine-ulog-api = { path = "../newengine-ulog-api" }
-abi_stable = "0.11"
-crossbeam-channel = "0.5"
-libloading = "0.9.0"
-log = "0.4.29"
-raw-window-handle = "0.6.2"
-serde_json = "1.0.149"
+# Minimum host floor.
+newengine-core = { path = "../newengine-core", default-features = false }
+newengine-host-kernel = { path = "../newengine-host-kernel" }
 
-newengine-assets = { path = "../newengine-assets" }
-newengine-assets-api = { path = "../newengine-assets-api" }
-newengine-asset-hot-reload-runtime = { path = "../newengine-asset-hot-reload-runtime" }
-newengine-core = { path = "../newengine-core" }
-newengine-math = { path = "../newengine-math" }
-newengine-platform-api = { path = "../newengine-platform-api" }
-newengine-project-api = { path = "../newengine-project-api" }
-newengine-project-runtime = { path = "../newengine-project-runtime" }
-newengine-game-module-runtime = { path = "../newengine-game-module-runtime" }
-newengine-scripting-api = { path = "../newengine-scripting-api" }
-newengine-scripting-client = { path = "../newengine-scripting-client" }
-newengine-task-api = { path = "../newengine-task-api" }
-newengine-gameplay-runtime = { path = "../newengine-gameplay-runtime" }
-newengine-game-events-runtime = { path = "../newengine-game-events-runtime" }
-newengine-replication-runtime = { path = "../newengine-replication-runtime" }
-newengine-network-runtime = { path = "../newengine-network-runtime" }
-newengine-editor-command-api = { path = "../newengine-editor-command-api" }
-newengine-runtime-session-api = { path = "../newengine-runtime-session-api" }
-newengine-runtime-session-runtime = { path = "../newengine-runtime-session-runtime" }
-newengine-time-runtime = { path = "../newengine-time-runtime" }
-newengine-input-api = { path = "../newengine-input-api" }
-newengine-plugin-api = { path = "../newengine-plugin-api" }
-newengine-service-api = { path = "../newengine-service-api" }
-newengine-schema-api = { path = "../newengine-schema-api" }
-newengine-schema-runtime = { path = "../newengine-schema-runtime" }
-newengine-service-kit = { path = "../newengine-service-kit" }
-newengine-scene-io = { path = "../newengine-scene-io" }
-newengine-ecs-api = { path = "../newengine-ecs-api" }
-newengine-entity-api = { path = "../newengine-entity-api" }
-newengine-render-api = { path = "../newengine-render-api" }
-newengine-physics-api = { path = "../newengine-physics-api" }
-newengine-system-runtime = { path = "../newengine-system-runtime" }
-newengine-system-contracts = { path = "../newengine-system-contracts" }
-newengine-plugin-host = { path = "../newengine-plugin-host" }
-newengine-transform = { path = "../newengine-transform", features = ["ecs", "service"], default-features = false }
-newengine-ui = { path = "../newengine-ui", default-features = false }
-newengine-ui-api = { path = "../newengine-ui-api" }
-newengine-world-api = { path = "../newengine-world-api" }
+# Full runtime/product composition dependencies. None are part of the minimum
+# host graph when default features are disabled.
+newengine-ulog-api = { path = "../newengine-ulog-api", optional = true }
+abi_stable = { version = "0.11", optional = true }
+libloading = { version = "0.9.0", optional = true }
+log = { version = "0.4.29", optional = true }
+raw-window-handle = { version = "0.6.2", optional = true }
+serde_json = { version = "1.0.149", optional = true }
+serde = { version = "1.0", features = ["derive"], optional = true }
 
-serde = { version = "1.0", features = ["derive"] }
+newengine-assets = { path = "../newengine-assets", optional = true }
+newengine-assets-api = { path = "../newengine-assets-api", optional = true }
+newengine-asset-hot-reload-runtime = { path = "../newengine-asset-hot-reload-runtime", optional = true }
+newengine-math = { path = "../newengine-math", optional = true }
+newengine-platform-api = { path = "../newengine-platform-api", optional = true }
+newengine-project-api = { path = "../newengine-project-api", optional = true }
+newengine-project-runtime = { path = "../newengine-project-runtime", optional = true }
+newengine-runtime-adapter-core = { path = "../newengine-runtime-adapter-core", optional = true }
+newengine-render-runtime-adapter = { path = "../newengine-render-runtime-adapter", optional = true }
+newengine-scripting-api = { path = "../newengine-scripting-api", optional = true }
+newengine-scripting-client = { path = "../newengine-scripting-client", optional = true }
+newengine-task-api = { path = "../newengine-task-api", optional = true }
+newengine-editor-command-api = { path = "../newengine-editor-command-api", optional = true }
+newengine-runtime-session-api = { path = "../newengine-runtime-session-api", optional = true }
+newengine-runtime-session-runtime = { path = "../newengine-runtime-session-runtime", optional = true }
+newengine-time-runtime = { path = "../newengine-time-runtime", optional = true }
+newengine-input-api = { path = "../newengine-input-api", optional = true }
+newengine-plugin-api = { path = "../newengine-plugin-api", optional = true }
+newengine-service-api = { path = "../newengine-service-api", optional = true }
+newengine-schema-api = { path = "../newengine-schema-api", optional = true }
+newengine-schema-runtime = { path = "../newengine-schema-runtime", optional = true }
+newengine-service-kit = { path = "../newengine-service-kit", optional = true }
+newengine-scene-io = { path = "../newengine-scene-io", optional = true }
+newengine-ecs-api = { path = "../newengine-ecs-api", optional = true }
+newengine-entity-api = { path = "../newengine-entity-api", optional = true }
+newengine-render-api = { path = "../newengine-render-api", optional = true }
+newengine-physics-api = { path = "../newengine-physics-api", optional = true }
+newengine-system-runtime = { path = "../newengine-system-runtime", optional = true }
+newengine-system-contracts = { path = "../newengine-system-contracts", optional = true }
+newengine-plugin-host = { path = "../newengine-plugin-host", optional = true }
+newengine-transform = { path = "../newengine-transform", features = ["ecs", "service"], default-features = false, optional = true }
+newengine-ui = { path = "../newengine-ui", default-features = false, optional = true }
+newengine-ui-api = { path = "../newengine-ui-api", optional = true }
+newengine-world-api = { path = "../newengine-world-api", optional = true }
+
+[dev-dependencies]
+newengine-contract-conformance = { path = "../newengine-contract-conformance" }

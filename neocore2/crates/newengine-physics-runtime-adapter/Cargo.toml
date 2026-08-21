@@ -1,0 +1,14 @@
+[package]
+name = "newengine-physics-runtime-adapter"
+version = "0.1.0"
+edition = "2021"
+readme = "README.md"
+description = "Service-backed physics capability runtime adapter for NewEngine"
+
+[dependencies]
+newengine-core = { path = "../newengine-core", default-features = false, features = ["physics-api"] }
+newengine-plugin-api = { path = "../newengine-plugin-api" }
+newengine-plugin-host = { path = "../newengine-plugin-host" }
+newengine-physics-api = { path = "../newengine-physics-api" }
+newengine-runtime-adapter-core = { path = "../newengine-runtime-adapter-core" }
+newengine-ulog-api = { path = "../newengine-ulog-api" }

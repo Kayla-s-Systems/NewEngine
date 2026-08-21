@@ -70,6 +70,18 @@ struct RawPlayerModelSpec {
     pub(super) texture_dictionary: Option<String>,
     #[serde(default = "default_player_skeleton")]
     pub(super) skeleton: Option<String>,
+    #[serde(default)]
+    pub(super) idle_animation: Option<String>,
+    #[serde(default)]
+    pub(super) walk_animation: Option<String>,
+    #[serde(default)]
+    pub(super) run_animation: Option<String>,
+    #[serde(default)]
+    pub(super) sprint_animation: Option<String>,
+    #[serde(default)]
+    pub(super) jump_animation: Option<String>,
+    #[serde(default)]
+    pub(super) fall_animation: Option<String>,
     #[serde(default = "default_player_model_height")]
     pub(super) target_height: f32,
     #[serde(default = "default_player_model_eye_height_ratio")]

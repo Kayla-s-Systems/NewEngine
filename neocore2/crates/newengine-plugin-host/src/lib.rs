@@ -28,12 +28,14 @@ pub use content_manifest::{
 pub use control::{PluginControlCommand, PluginControlQueue, PluginControlResult};
 pub use host_api::{call_service_v1, default_host_api, host_register_service_impl};
 pub use host_context::{
-    active_engine_gateway_route, describe_service, engine_gateway_has_capability, has_service,
-    init_host_context, list_engine_gateway_routes, list_external_runtime_descriptors,
-    list_external_runtime_plugins, list_services, register_engine_gateway_provider_route,
-    register_external_runtime_plugin, register_null_engine_gateway_provider_route,
-    register_null_engine_gateway_provider_route_with_abi, resolve_service_for_backend_capability,
-    resolve_service_for_engine_gateway, services_generation, EngineGatewayRouteSnapshot,
+    active_engine_gateway_route, declare_engine_capability_slot, declare_engine_composition, describe_service,
+    engine_gateway_has_capability, has_service, init_host_context, list_engine_capability_slots,
+    list_engine_gateway_routes, list_external_runtime_descriptors, list_external_runtime_plugins,
+    list_services, register_engine_gateway_provider_route, register_external_runtime_plugin,
+    register_null_engine_gateway_provider_route, register_null_engine_gateway_provider_route_with_abi,
+    resolve_service_for_backend_capability, resolve_service_for_engine_gateway, services_generation,
+    validate_required_engine_capability_slots, EngineCapabilitySlotSnapshot,
+    EngineGatewayRouteSnapshot,
 };
 pub use manager::{
     resolve_plugin_discovery_dir, scan_plugin_discovery_graph, IncrementalLoadOutcome,
@@ -47,6 +49,7 @@ pub use root_observers::{
     register_plugin_root_observer, LoadedPluginRootSnapshot, PluginEditorExtensionsExport,
     PluginRootObserver,
 };
+pub use service_gateway::{descriptor_gateway_capabilities, EngineGatewayCapability};
 
 /// Publishes a plugin-host event into all subscribed plugin event sinks.
 ///

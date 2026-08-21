@@ -19,10 +19,12 @@ mod world_runtime;
 pub use display::{DisplayMode, DisplayVisibility};
 pub use physics::{PhysicsSurface, PhysicsWorldSettings, StaticMeshCollider};
 pub use player::{
-    CharacterBody, CharacterMotionTuning, PlayerCommandFrame, PlayerController,
-    PlayerControllerKind, PlayerEvent, PlayerEventBus, PlayerEventKind, PlayerGroundState,
-    PlayerLocomotionState, PlayerModelBinding, PlayerStanceKind, PlayerStanceState,
-    PlayerViewVisibility, PlayerViewVisibilityPolicy, PlayerVisualKind, PlayerVisualPart,
+    CharacterBody, CharacterMotionTuning, PlayerAnimationState, PlayerCommandFrame,
+    PlayerController, PlayerControllerKind, PlayerEvent, PlayerEventBus, PlayerEventKind,
+    PlayerGroundState, PlayerLocomotionAnimation, PlayerLocomotionState, PlayerModelAssignment,
+    PlayerModelBinding, PlayerSkinBinding, PlayerSkinPose, PlayerSkinVertex, PlayerStanceKind,
+    PlayerStanceState, PlayerViewVisibility, PlayerViewVisibilityPolicy, PlayerVisualKind,
+    PlayerVisualPart,
 };
 pub use render_environment::{
     CloudShadowRenderState, EnvironmentDomeRenderState, EnvironmentPostFxState,

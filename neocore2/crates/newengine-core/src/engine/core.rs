@@ -44,6 +44,7 @@ pub struct Engine<E: Send + 'static> {
     pub(super) plugins_loaded: bool,
     pub(super) engine_plugins_loaded: bool,
     pub(super) plugins_dir: Option<PathBuf>,
+    pub(super) implicit_plugin_discovery: bool,
     pub(super) plugin_roots: Vec<PluginDiscoveryRoot>,
     pub(super) required_plugin_ids: Vec<String>,
     pub(super) plugin_discovery_root_index: usize,
@@ -155,7 +156,7 @@ impl<E: Send + 'static> Engine<E> {
         shutdown: ShutdownToken,
     ) -> EngineResult<Self> {
         if let Some(startup) = crate::startup::last_startup_config() {
-            if config.plugins_dir.is_none() {
+            if config.implicit_plugin_discovery && config.plugins_dir.is_none() {
                 config.plugins_dir = Some(startup.modules_dir.clone());
             }
 
@@ -202,6 +203,7 @@ impl<E: Send + 'static> Engine<E> {
             plugins_loaded: false,
             engine_plugins_loaded: false,
             plugins_dir: config.plugins_dir,
+            implicit_plugin_discovery: config.implicit_plugin_discovery,
             plugin_roots: config.plugin_roots,
             required_plugin_ids: config.required_plugin_ids,
             plugin_discovery_root_index: 0,

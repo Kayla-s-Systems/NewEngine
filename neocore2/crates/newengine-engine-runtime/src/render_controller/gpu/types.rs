@@ -2,6 +2,7 @@
 pub struct PrimitiveGpu {
     pub vb: newengine_core::render::BufferId,
     pub ib: newengine_core::render::BufferId,
+    pub vertex_count: u32,
     pub index_count: u32,
     pub bounds_center: newengine_math::Vec3,
     pub bounds_radius: f32,
@@ -22,3 +23,18 @@ pub struct DebugLineGpu {
 }
 
 pub(super) const DEBUG_LINE_UBO_SIZE: u64 = 16;
+
+#[derive(Clone, Copy)]
+pub struct PlayerSkinGpu {
+    pub vb: newengine_core::render::BufferId,
+    pub vertex_count: u32,
+    pub max_joint_index: u16,
+}
+
+#[derive(Clone, Copy)]
+pub struct SkinPaletteGpu {
+    pub buffer: newengine_core::render::BufferId,
+    pub bg: newengine_core::render::BindGroupId,
+    pub capacity_joints: u32,
+    pub revision: u64,
+}

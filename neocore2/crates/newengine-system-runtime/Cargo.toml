@@ -10,7 +10,7 @@ license = "MIT OR Apache-2.0"
 newengine-ulog-api = { path = "../newengine-ulog-api" }
 log = "0.4.29"
 abi_stable = "0.11"
-newengine-core = { path = "../newengine-core" }
+newengine-core = { path = "../newengine-core", features = ["render-api"] }
 newengine-platform-api = { path = "../newengine-platform-api" }
 newengine-system-contracts = { path = "../newengine-system-contracts" }
 newengine-ui = { path = "../newengine-ui", default-features = false }

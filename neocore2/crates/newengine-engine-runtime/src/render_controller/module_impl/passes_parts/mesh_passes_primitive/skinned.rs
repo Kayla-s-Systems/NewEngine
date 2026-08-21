@@ -1,0 +1,182 @@
+use super::*;
+
+/// Draws player-owned skinned primitive parts through a dedicated non-instanced
+/// character path. Static/foliage batching deliberately excludes these entities.
+pub(crate) fn draw_skinned_player_primitives(
+    this: &mut RuntimeRenderController,
+    r: &mut dyn newengine_core::render::RenderApi,
+    scene: &newengine_scene::Scene,
+    lit: newengine_material_domain_api::LitPipeline,
+    pass: SceneMeshPass,
+    viewproj: Mat4,
+    lights: &PackedLights,
+    shadow_texture: TextureId,
+    local_shadow_texture: TextureId,
+    runtime: bool,
+    camera_position: Vec3,
+    camera_forward: Vec3,
+) -> newengine_core::EngineResult<()> {
+    use crate::render_controller::gpu::{ensure_player_skin_gpu, ensure_skin_palette_gpu};
+
+    let world = scene.world();
+    let reg_lock = this.bridges.scene.primitives();
+    let reg = reg_lock.read();
+    let mats_lock = this.bridges.scene.materials();
+    let mats = mats_lock.read();
+    let visibility_settings = primitive_visibility_settings(runtime);
+
+    for (entity, prim, global) in world.query2::<Primitive, GlobalTransform>() {
+        let Some(skin) = world.get::<crate::gameplay::PlayerSkinBinding>(entity) else {
+            continue;
+        };
+        if !display_visible_in_mode(world, entity, runtime) {
+            continue;
+        }
+        let Some(pose) = world.get::<crate::gameplay::PlayerSkinPose>(skin.owner) else {
+            continue;
+        };
+        if pose.palette.is_empty() {
+            continue;
+        }
+
+        if runtime && visibility_settings.culling_enabled {
+            if let Some(bounds) = world.get::<Bounds>(entity) {
+                let (center_ws, radius_ws) = transform_sphere(
+                    global.0,
+                    bounds.local_sphere.center,
+                    bounds.local_sphere.radius,
+                );
+                if !forward_sphere_visible(
+                    camera_position,
+                    camera_forward,
+                    center_ws,
+                    radius_ws,
+                    visibility_settings.max_distance,
+                    visibility_settings.cone_dot,
+                    visibility_settings.near_accept_distance,
+                ) {
+                    continue;
+                }
+            }
+        }
+
+        let gpu = ensure_primitive_gpu(&reg, prim.id, &mut this.gpu.meshes.prim_cache, r)?;
+        let skin_gpu = ensure_player_skin_gpu(
+            &mut this.gpu.meshes.skin_vertex_cache,
+            prim.id,
+            gpu,
+            skin,
+            r,
+        )?;
+        if skin_gpu.max_joint_index as usize >= pose.palette.len() {
+            return Err(newengine_core::EngineError::other(format!(
+                "skinned draw joint index outside palette entity={} primitive={} max_joint={} palette_joints={}",
+                entity.stable_u64(),
+                prim.id.0,
+                skin_gpu.max_joint_index,
+                pose.palette.len(),
+            )));
+        }
+        let palette_gpu = ensure_skin_palette_gpu(
+            &mut this.gpu.meshes.skin_palette_cache,
+            skin.owner.stable_u64(),
+            pose,
+            lit.skin_bgl,
+            r,
+        )?;
+
+        let material_ref = world
+            .get::<newengine_materials::MaterialRef>(entity)
+            .copied();
+        let resolved = material_ref.and_then(|reference| mats.resolve(reference.id));
+        let material_plan = LitMaterialPlan::from_resolved(resolved.as_ref(), prim.color);
+        let base_texture = this.material_texture_or_default(
+            r,
+            material_plan.base_color_texture,
+            lit.white_texture,
+        );
+        let normal_texture = this.material_texture_or_default(
+            r,
+            material_plan.normal_texture,
+            lit.flat_normal_texture,
+        );
+        let roughness_texture =
+            this.material_texture_or_default(r, material_plan.roughness_texture, lit.white_texture);
+        let sampler = if material_plan.alpha_cutoff > 0.0 {
+            lit.clamp_sampler
+        } else if material_plan.has_textures() {
+            lit.repeat_sampler
+        } else {
+            lit.clamp_sampler
+        };
+        let pipeline = match pass {
+            SceneMeshPass::Forward if material_plan.double_sided => {
+                lit.skinned_double_sided_pipeline
+            }
+            SceneMeshPass::Forward => lit.skinned_pipeline,
+            SceneMeshPass::GBuffer if material_plan.double_sided => {
+                lit.gbuffer_skinned_double_sided_pipeline
+            }
+            SceneMeshPass::GBuffer => lit.gbuffer_skinned_pipeline,
+        };
+        let receive_shadow_texture =
+            if matches!(pass, SceneMeshPass::Forward) && material_plan.receive_shadows {
+                shadow_texture
+            } else {
+                lit.white_texture
+            };
+        let receive_local_shadow_texture =
+            if matches!(pass, SceneMeshPass::Forward) && material_plan.receive_shadows {
+                local_shadow_texture
+            } else {
+                lit.white_texture
+            };
+        let ubo_key = instance_batch_ubo_key(
+            0x736b_696e_0000_0000 ^ entity.stable_u64() ^ prim.id.0,
+            pipeline,
+            base_texture,
+            normal_texture,
+            roughness_texture,
+            receive_shadow_texture,
+            receive_local_shadow_texture,
+            sampler,
+        );
+        let mut per = this.ensure_per_draw_ubo_with_binding(
+            r,
+            lit,
+            ubo_key,
+            base_texture,
+            normal_texture,
+            roughness_texture,
+            receive_shadow_texture,
+            receive_local_shadow_texture,
+            sampler,
+        )?;
+        per.last_seen_frame = this.frame.frame_index;
+        this.gpu.material.per_draw_ubo.insert(ubo_key, per);
+        crate::render_controller::module_impl::passes_ubo::write_lit_ubo_ex(
+            r,
+            per.ubo,
+            viewproj * global.0,
+            global.0,
+            material_plan.base_color,
+            material_plan.emissive_radiance,
+            material_plan.alpha_cutoff,
+            material_plan.uv_transform,
+            material_plan.material_params,
+            lights,
+        )?;
+
+        r.set_pipeline(pipeline)?;
+        r.set_bind_group(0, per.bg)?;
+        r.set_bind_group(1, palette_gpu.bg)?;
+        r.set_vertex_buffer(0, BufferSlice::new(gpu.vb, 0))?;
+        r.set_vertex_buffer(1, BufferSlice::new(skin_gpu.vb, 0))?;
+        r.set_index_buffer(BufferSlice::new(gpu.ib, 0), IndexFormat::U32)?;
+        r.draw_indexed(DrawIndexedArgs::new(gpu.index_count))?;
+        this.diagnostics
+            .overlay_metrics
+            .record_indexed_triangles(gpu.index_count);
+    }
+    Ok(())
+}

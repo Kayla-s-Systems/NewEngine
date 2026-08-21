@@ -272,6 +272,16 @@ impl<E: Send + 'static> Engine<E> {
                         e,
                     );
                 }
+                if let Err(reason) = newengine_plugin_host::validate_required_engine_capability_slots() {
+                    return self.fail_incremental_startup(
+                        EngineStartupPhase::PluginStart,
+                        "Required capability slot is empty.",
+                        "The selected composition requires a capability for which no provider route became active.",
+                        0.87,
+                        None,
+                        crate::error::EngineError::Other(reason),
+                    );
+                }
                 self.set_incremental_phase(EngineStartupStepPhase::ValidateRuntimeServiceContracts);
                 let snapshot = self.make_startup_snapshot(
                     EngineStartupPhase::PluginStart,

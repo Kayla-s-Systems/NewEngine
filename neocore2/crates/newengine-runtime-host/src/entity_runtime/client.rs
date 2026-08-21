@@ -7,7 +7,7 @@ use newengine_entity_api::{
 };
 use newengine_plugin_api::HostApiV1;
 
-use crate::service_runtime::GenericJsonServiceClient;
+use newengine_runtime_adapter_core::GenericJsonServiceClient;
 
 /// Host-side JSON client for the `engine.entity` gateway.
 ///

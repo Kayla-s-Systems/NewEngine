@@ -4,8 +4,8 @@ use newengine_ecs::EntityId;
 use newengine_math::{Mat3, Quat, Vec3};
 
 use crate::{
-    CameraRigComp, ControllerCtx, FollowTargetCameraController, FollowTargetCameraMotor, Intent,
-    IntentSink,
+    CameraRigComp, CharacterMotor, ControllerCtx, FollowTargetCameraController,
+    FollowTargetCameraMotor, Intent, IntentSink,
 };
 
 /// Output of a follow-camera motor step.
@@ -109,7 +109,8 @@ fn look_at_rotation_rh(eye: Vec3, center: Vec3, up: Vec3) -> Quat {
 
 /// Pure follow-camera motor step.
 ///
-/// - `target_pos/rot`: target world pose.
+/// - `target_pos/rot`: target world pose used to place/orbit the camera.
+/// - `focus_pos`: stable world-space point used by look-at modes.
 /// - `offset_ls`: offset in target local space.
 /// - `rot_offset`: additional rotation offset (only used when `follow_rotation` is true).
 /// - `follow_rotation`: if false, camera will look at the target.
@@ -121,6 +122,7 @@ pub fn step_follow_camera(
     current_rot: Quat,
     target_pos: Vec3,
     target_rot: Quat,
+    focus_pos: Vec3,
     offset_ls: Vec3,
     rot_offset: Quat,
     follow_rotation: bool,
@@ -147,7 +149,7 @@ pub fn step_follow_camera(
     let desired_rot = if follow_rotation {
         (target_rot * rot_offset).normalize_or_identity()
     } else {
-        look_at_rotation_rh(next_pos, target_pos, Vec3::Y)
+        look_at_rotation_rh(next_pos, focus_pos, Vec3::Y)
     };
 
     // Rotation smoothing: match position smoothing time-constant (exponential decay).
@@ -177,15 +179,33 @@ pub fn run_follow_camera_controller(
     motor: FollowTargetCameraMotor,
     out: &mut impl IntentSink,
 ) {
-    let Some((target_pos, target_rot)) = ctx.read_world_pose(ctrl.target) else {
+    let Some((target_pos, target_body_rot)) = ctx.read_world_pose(ctrl.target) else {
         return;
     };
+    // CharacterMotor yaw/pitch is the authoritative view orientation. The target
+    // transform now represents body facing only, so gameplay cameras must orbit
+    // from the view rotation without forcing the avatar to spin with mouse-look.
+    let target_view_rot = ctx
+        .world()
+        .get::<CharacterMotor>(ctrl.target)
+        .map(|motor| {
+            newengine_math::Quat::from_euler(
+                newengine_math::EulerRot::YXZ,
+                motor.yaw,
+                motor.pitch,
+                0.0,
+            )
+        })
+        .unwrap_or(target_body_rot);
+
+    let focus_pos = target_pos + target_body_rot.normalize_or_identity() * ctrl.focus_offset_ls;
 
     let Some(step) = step_follow_camera(
         rig.0.position,
         rig.0.rotation,
         target_pos,
-        target_rot,
+        target_view_rot,
+        focus_pos,
         ctrl.offset_ls,
         ctrl.rot_offset,
         ctrl.follow_rotation,

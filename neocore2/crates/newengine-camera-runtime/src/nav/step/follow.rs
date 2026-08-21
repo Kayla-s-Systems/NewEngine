@@ -40,11 +40,13 @@ pub(crate) fn try_step_follow_orbit(
         .copied()
         .unwrap_or_default();
 
+    let focus_pos = target_pos + target_rot.normalize_or_identity() * follow.focus_offset_ls;
     let step = step_follow_camera(
         rig.position,
         rig.rotation,
         target_pos,
         target_rot,
+        focus_pos,
         follow.offset_ls,
         follow.rot_offset,
         follow.follow_rotation,

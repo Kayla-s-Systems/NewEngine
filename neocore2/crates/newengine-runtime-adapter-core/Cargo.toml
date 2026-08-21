@@ -1,0 +1,14 @@
+[package]
+name = "newengine-runtime-adapter-core"
+version = "0.1.0"
+edition = "2021"
+readme = "README.md"
+description = "Domain-neutral service-to-runtime adapter helpers for NewEngine capability providers"
+
+[dependencies]
+abi_stable = "0.11"
+serde_json = "1.0"
+newengine-core = { path = "../newengine-core", default-features = false }
+newengine-plugin-api = { path = "../newengine-plugin-api" }
+newengine-plugin-host = { path = "../newengine-plugin-host" }
+newengine-service-api = { path = "../newengine-service-api" }

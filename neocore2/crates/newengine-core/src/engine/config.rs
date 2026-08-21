@@ -70,6 +70,10 @@ impl PluginDiscoveryRoot {
 pub struct EngineConfig {
     pub fixed_dt_ms: u32,
     pub plugins_dir: Option<PathBuf>,
+    /// Whether a missing `plugins_dir` may resolve to the conventional/default
+    /// plugin directory. Kernel-only hosts disable this so `None` means no
+    /// implicit plugin discovery at all.
+    pub implicit_plugin_discovery: bool,
     /// Additional ordered discovery roots. The legacy `plugins_dir` remains root zero.
     pub plugin_roots: Vec<PluginDiscoveryRoot>,
     /// Plugin ids that must exist after all discovery roots have been loaded.
@@ -105,6 +109,7 @@ impl Default for EngineConfig {
         Self {
             fixed_dt_ms: 16,
             plugins_dir: None,
+            implicit_plugin_discovery: true,
             plugin_roots: Vec::new(),
             required_plugin_ids: Vec::new(),
             plugin_overrides: HashMap::default(),
@@ -122,6 +127,7 @@ impl EngineConfig {
         Self {
             fixed_dt_ms,
             plugins_dir: None,
+            implicit_plugin_discovery: true,
             plugin_roots: Vec::new(),
             required_plugin_ids: Vec::new(),
             plugin_overrides: HashMap::default(),
@@ -147,6 +153,12 @@ impl EngineConfig {
     #[inline]
     pub fn with_plugins_dir(mut self, dir: Option<PathBuf>) -> Self {
         self.plugins_dir = dir;
+        self
+    }
+
+    #[inline]
+    pub fn with_implicit_plugin_discovery(mut self, enabled: bool) -> Self {
+        self.implicit_plugin_discovery = enabled;
         self
     }
 

@@ -25,10 +25,10 @@ pub mod plugin_manager;
 pub mod render_controller;
 pub mod runtime;
 pub mod render_runtime {
-    pub use newengine_runtime_host::render_runtime::*;
+    pub use newengine_render_runtime_adapter::*;
 }
 pub mod physics_runtime {
-    pub use newengine_runtime_host::physics_runtime::*;
+    pub use newengine_physics_runtime_adapter::*;
 }
 pub mod replay {
     pub use newengine_replay::*;

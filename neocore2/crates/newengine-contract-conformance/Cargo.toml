@@ -1,0 +1,20 @@
+[package]
+name = "newengine-contract-conformance"
+version = "0.1.0"
+edition = "2021"
+description = "Cross-component contract conformance checks for NewEngine providers"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+newengine-asset-format-nef8 = { path = "../newengine-asset-format-nef8" }
+newengine-assets-api = { path = "../newengine-assets-api" }
+newengine-contract-api = { path = "../newengine-contract-api" }
+newengine-contract-registry = { path = "../newengine-contract-registry" }
+newengine-plugin-api = { path = "../newengine-plugin-api" }
+newengine-plugin-host = { path = "../newengine-plugin-host" }
+newengine-service-api = { path = "../newengine-service-api" }
+
+[dev-dependencies]
+newengine-physics-api = { path = "../newengine-physics-api" }
+newengine-render-api = { path = "../newengine-render-api" }
+newengine-ui-api = { path = "../newengine-ui-api" }

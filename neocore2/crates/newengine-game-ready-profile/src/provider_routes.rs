@@ -1,12 +1,92 @@
 use std::sync::Arc;
 
+use newengine_core::{Engine, EngineError, EngineResult};
+use newengine_project_runtime::ProjectRuntimeContext;
 use newengine_runtime_host::asset_bootstrap::ProfileMountSpec;
 use newengine_scene_runtime::SceneGatewayAssetMounts;
 
 use crate::entity_archetypes::register_game_ready_entity_archetypes_best_effort;
 use crate::{GameReadyRuntimeProfile, GAME_READY_MOUNT_SPEC};
 
+
+const GAME_READY_CAPABILITY_SLOTS: &[newengine_service_api::EngineCapabilitySlotSpec] = &[
+    newengine_service_api::EngineCapabilitySlotSpec::required("engine.assets", "assets"),
+    newengine_service_api::EngineCapabilitySlotSpec::required(
+        "engine.assets.materials",
+        "assets.materials",
+    ),
+    newengine_service_api::EngineCapabilitySlotSpec::required("engine.render", "render"),
+    newengine_service_api::EngineCapabilitySlotSpec::required("engine.physics", "physics"),
+    newengine_service_api::EngineCapabilitySlotSpec::required("engine.input", "input"),
+    newengine_service_api::EngineCapabilitySlotSpec::required("engine.scene", "scene"),
+    newengine_service_api::EngineCapabilitySlotSpec::required("engine.world", "world"),
+    newengine_service_api::EngineCapabilitySlotSpec::required("engine.ui", "ui"),
+    newengine_service_api::EngineCapabilitySlotSpec::optional("engine.time", "time"),
+    newengine_service_api::EngineCapabilitySlotSpec::optional("engine.schema", "schema"),
+    newengine_service_api::EngineCapabilitySlotSpec::optional("engine.scripting", "scripting"),
+];
+
+pub const GAME_READY_COMPOSITION_SPEC: newengine_service_api::EngineCompositionSpec =
+    newengine_service_api::EngineCompositionSpec::new(
+        "newengine.composition.game-ready",
+        GAME_READY_CAPABILITY_SLOTS,
+    );
+
 impl GameReadyRuntimeProfile {
+    pub fn declare_composition_capability_slots(&self) -> EngineResult<()> {
+        newengine_plugin_host::declare_engine_composition(GAME_READY_COMPOSITION_SPEC)
+            .map_err(EngineError::Other)
+    }
+
+    pub fn initialize_composition_services(
+        &self,
+        engine: &mut Engine<()>,
+        project: Option<&ProjectRuntimeContext>,
+    ) -> EngineResult<()> {
+        self.declare_composition_capability_slots()?;
+
+        let game_message_registry = newengine_game_events_runtime::GameMessageRegistry::default();
+        let game_message_queue = newengine_game_events_runtime::GameMessageQueue::default();
+        newengine_game_events_runtime::init_game_events_service(
+            game_message_registry.clone(),
+            game_message_queue.clone(),
+        );
+        engine.resources_mut().insert(game_message_registry);
+        engine.resources_mut().insert(game_message_queue);
+
+        let replication_registry =
+            newengine_replication_runtime::ReplicationDescriptorRegistry::default();
+        if let Some(project) = project {
+            let report = newengine_replication_runtime::load_replication_definitions_from_roots(
+                &project.project_root,
+                &project.manifest.definitions,
+                &replication_registry,
+            )
+            .map_err(EngineError::Other)?;
+            if !report.files.is_empty() {
+                newengine_ulog_api::ulog::info!(
+                    "composition replication definitions: loaded_files={} components={} profiles={} messages={}",
+                    report.files.len(),
+                    report.components,
+                    report.entity_profiles,
+                    report.messages,
+                );
+            }
+        }
+
+        let network_runtime =
+            newengine_network_runtime::init_network_service(replication_registry.clone());
+        engine.resources_mut().insert(network_runtime);
+        engine.resources_mut().insert(replication_registry);
+
+        if project.is_some() {
+            engine.register_module(Box::new(
+                newengine_game_module_runtime::GameModuleContractModule::new(),
+            ))?;
+        }
+        Ok(())
+    }
+
     #[inline]
     pub fn register_engine_provider_routes_best_effort(&self) {
         register_game_ready_entity_archetypes_best_effort();

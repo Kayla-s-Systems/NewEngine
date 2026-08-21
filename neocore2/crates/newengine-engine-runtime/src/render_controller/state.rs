@@ -16,7 +16,7 @@ use crate::viewport_bridge::ViewportBridge;
 
 use super::gpu::{
     DebugLineGpu, LitPipeline, MaterialGpuPipeline, MaterialGpuPipelineKey, MaterialGpuRegistry,
-    MaterialPipelineBuildProfile, PrimitiveGpu,
+    MaterialPipelineBuildProfile, PlayerSkinGpu, PrimitiveGpu, SkinPaletteGpu,
 };
 use super::material_bindings::MaterialTextureGpuResidency;
 use super::metrics::RuntimeOverlayMetrics;
@@ -27,6 +27,8 @@ use super::resource_lifetime::RenderGpuLifetimeQueue;
 use super::runtime_profile::RenderRuntimeProfile;
 
 type PrimGpuCache = FxHashMap<newengine_primitives::PrimitiveId, PrimitiveGpu>;
+type SkinVertexGpuCache = FxHashMap<newengine_primitives::PrimitiveId, PlayerSkinGpu>;
+type SkinPaletteGpuCache = FxHashMap<u64, SkinPaletteGpu>;
 type TerrainGpuCache = FxHashMap<u64, PrimitiveGpu>;
 
 #[derive(Clone, Copy)]
@@ -324,6 +326,8 @@ impl ModelBundleLoadJob {
 /// Mesh and debug-geometry GPU caches.
 pub(super) struct RenderMeshGpuState {
     pub(super) prim_cache: PrimGpuCache,
+    pub(super) skin_vertex_cache: SkinVertexGpuCache,
+    pub(super) skin_palette_cache: SkinPaletteGpuCache,
     pub(super) terrain_cache: TerrainGpuCache,
     pub(super) model_bundle_cache:
         FxHashMap<String, Arc<newengine_model_domain_api::ModelAssetBundle>>,
@@ -338,6 +342,8 @@ impl RenderMeshGpuState {
     pub(super) fn new() -> Self {
         Self {
             prim_cache: PrimGpuCache::default(),
+            skin_vertex_cache: SkinVertexGpuCache::default(),
+            skin_palette_cache: SkinPaletteGpuCache::default(),
             terrain_cache: TerrainGpuCache::default(),
             model_bundle_cache: FxHashMap::default(),
             model_bundle_jobs: FxHashMap::default(),
