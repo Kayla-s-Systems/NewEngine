@@ -189,7 +189,7 @@ where
                 .resources_mut()
                 .insert(ProjectContentMountState::pending());
             engine.register_module(Box::new(
-                super::project_content::DeferredProjectContentMountModule::new(),
+                super::project_content::DeferredProjectContentMountModule::new(asset_roots.clone()),
             ))?;
             engine.register_module(Box::new(
                 newengine_game_module_runtime::GameModuleContractModule::new(),

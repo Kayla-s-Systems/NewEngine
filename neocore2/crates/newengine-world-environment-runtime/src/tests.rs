@@ -183,3 +183,104 @@ fn null_provider_returns_visible_degraded_frame() {
         WORLD_ENVIRONMENT_NULL_PROVIDER_ROUTE
     );
 }
+
+#[test]
+fn cloud_regimes_are_bounded_and_non_cloud_weather_does_not_fake_overcast() {
+    use crate::profile_catalog::pattern_by_id;
+
+    let clear = pattern_by_id("weather.clear.dry_high_pressure");
+    let fair = pattern_by_id("weather.cloudy.fair_cumulus");
+    let overcast = pattern_by_id("weather.overcast.stratus_deck");
+    let fog = pattern_by_id("weather.fog.ground_radiation");
+    let dust = pattern_by_id("weather.dust_storm.front");
+
+    for pattern in [clear, fair, overcast, fog, dust] {
+        assert!(pattern.cloud_floor <= pattern.cloud_ceiling);
+        assert!((0.0..=1.0).contains(&pattern.cloud_floor));
+        assert!((0.0..=1.0).contains(&pattern.cloud_ceiling));
+    }
+    assert!(clear.cloud_ceiling <= 0.32);
+    assert!(fair.cloud_floor < 0.35 && fair.cloud_ceiling < 0.70);
+    assert!(overcast.cloud_floor >= 0.65);
+    assert!(
+        fog.cloud_ceiling <= 0.30,
+        "ground fog must not imply an overcast deck"
+    );
+    assert!(
+        dust.cloud_ceiling <= 0.22,
+        "dust aerosol must not imply an overcast deck"
+    );
+}
+
+#[test]
+fn forest_road_weather_has_real_clear_sky_windows() {
+    let mut clear_frames = 0usize;
+    let mut fair_frames = 0usize;
+    let mut overcast_frames = 0usize;
+    let mut minimum_clear_coverage = 1.0_f32;
+
+    for seed in 0..128_u64 {
+        for normalized_day in [0.25_f64, 8.65_f64 / 24.0, 0.50, 0.75] {
+            let mut req = EnvironmentFrameRequest::default();
+            req.environment_profile.profile_id = "environment.game_ready_forest_road".to_owned();
+            req.seed = seed;
+            req.time.game.day_index = 171;
+            req.time.game.normalized_day = normalized_day;
+            let frame = build_default_environment_frame(
+                "environment.default",
+                WORLD_ENVIRONMENT_DEFAULT_PROVIDER_ROUTE,
+                req,
+            );
+            match frame.global.active_weather_profile.as_str() {
+                "weather.clear.dry_high_pressure" => {
+                    clear_frames += 1;
+                    minimum_clear_coverage = minimum_clear_coverage.min(frame.clouds.coverage);
+                    assert!(
+                        frame.clouds.coverage <= 0.301,
+                        "clear regime escaped its cloud ceiling coverage={}",
+                        frame.clouds.coverage
+                    );
+                    if frame.clouds.coverage < 0.12 {
+                        assert!(
+                            frame
+                                .clouds
+                                .layers
+                                .iter()
+                                .all(|layer| layer.coverage < 0.12),
+                            "sparse clear sky retained a broad cloud layer: {:?}",
+                            frame.clouds.layers
+                        );
+                        assert!(
+                            frame.clouds.layers.iter().all(|layer| layer.density < 0.10),
+                            "sparse clear sky retained optically dense cloud layers: {:?}",
+                            frame.clouds.layers
+                        );
+                    }
+                }
+                "weather.cloudy.fair_cumulus" => {
+                    fair_frames += 1;
+                    assert!((0.259..=0.641).contains(&frame.clouds.coverage));
+                }
+                "weather.overcast.stratus_deck" => {
+                    overcast_frames += 1;
+                    assert!(frame.clouds.coverage >= 0.679);
+                }
+                other => panic!("unexpected ForestRoad weather pattern {other}"),
+            }
+        }
+    }
+
+    assert!(
+        clear_frames > fair_frames,
+        "clear={clear_frames} fair={fair_frames}"
+    );
+    assert!(
+        fair_frames > 100,
+        "fair cumulus disappeared from weather variation"
+    );
+    assert!(overcast_frames > 0, "overcast became unreachable");
+    assert!(
+        minimum_clear_coverage < 0.12,
+        "clear weather never produces a genuinely sparse sky min={minimum_clear_coverage}"
+    );
+}

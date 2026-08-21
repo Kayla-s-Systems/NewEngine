@@ -23,14 +23,12 @@ pub const GAME_READY_UI_SCREEN_PROFILE_ENV: &str =
     "NEWENGINE_PLUGIN_ENGINE_RUNTIME__ui__screen_profile__profile";
 pub const GAME_READY_UI_ROOT_SURFACE_ENV: &str =
     "NEWENGINE_PLUGIN_ENGINE_RUNTIME__ui__screen_profile__game_ui_root_surface_id";
-pub const GAME_READY_UI_DOCUMENT_REF_ENV: &str =
-    "NEWENGINE_PLUGIN_ENGINE_RUNTIME__ui__screen_profile__game_ui_document_ref";
 pub const GAME_READY_UI_PUBLISH_EDITOR_SHELL_ENV: &str =
     "NEWENGINE_PLUGIN_ENGINE_RUNTIME__ui__screen_profile__publish_editor_shell";
 
 pub const GAME_READY_UI_PROFILE_GAME: &str = "game";
+/// Legacy surface id retained as public API; shipping FPS no longer mounts it.
 pub const GAME_READY_UI_ROOT_SURFACE_GAME: &str = "game.hud";
-pub const GAME_READY_UI_DOCUMENT_REF_GAME: &str = "ui/game/game_hud.neui@surface";
 
 pub const GAME_READY_FPS_BOOT_OPTIONS: &[RuntimeHostBootOption] = &[
     RuntimeHostBootOption::RuntimeBootstrapOverlay,
@@ -79,6 +77,9 @@ pub const GAME_READY_FPS_ENV_POLICY: &[(&str, &str)] = &[
     ("NEWENGINE_REQUIRE_ASSET_MANAGER", "1"),
     ("NEWENGINE_REQUIRE_MATERIALS_BACKEND", "1"),
     ("NEWENGINE_REQUIRE_UI_BACKEND", "1"),
+    // Shipping gameplay has no game HUD. Keep only the provider-neutral
+    // technical/FPS overlay in the bottom-right corner.
+    ("NEWENGINE_RUNTIME_DEBUG_OVERLAY", "1"),
     ("NEWENGINE_PLUGIN_TARGET", "runtime"),
     ("NEWENGINE_BOOTSTRAP_PLUGIN_PRELOAD", "deferred"),
     ("NEWENGINE_SHADER_ASYNC_PREBAKED_UNTIL_READY", "1"),
@@ -87,14 +88,8 @@ pub const GAME_READY_FPS_ENV_POLICY: &[(&str, &str)] = &[
     ("NEWENGINE_SCENE_TEXTURE_GATE_SOFT_TIMEOUT_FRAMES", "1800"),
     ("NEWENGINE_SCENE_TEXTURE_GATE_SOFT_TIMEOUT_MS", "90000"),
     (GAME_READY_UI_SCREEN_PROFILE_ENV, GAME_READY_UI_PROFILE_GAME),
-    (
-        GAME_READY_UI_ROOT_SURFACE_ENV,
-        GAME_READY_UI_ROOT_SURFACE_GAME,
-    ),
-    (
-        GAME_READY_UI_DOCUMENT_REF_ENV,
-        GAME_READY_UI_DOCUMENT_REF_GAME,
-    ),
+    // Deliberately omit game_ui_root_surface_id/game_ui_document_ref: the game
+    // profile remains viewport-only and therefore mounts no authored HUD.
     (GAME_READY_UI_PUBLISH_EDITOR_SHELL_ENV, "false"),
 ];
 
@@ -211,24 +206,22 @@ mod tests {
     }
 
     #[test]
-    fn shipping_fps_policy_requires_ui_and_selects_game_surfaces() {
+    fn shipping_fps_policy_keeps_only_the_technical_runtime_overlay() {
         let value = |key: &str| {
             GAME_READY_FPS_ENV_POLICY
                 .iter()
                 .find_map(|(candidate, value)| (*candidate == key).then_some(*value))
         };
         assert_eq!(value("NEWENGINE_REQUIRE_UI_BACKEND"), Some("1"));
+        assert_eq!(value("NEWENGINE_RUNTIME_DEBUG_OVERLAY"), Some("1"));
         assert_eq!(
             value(GAME_READY_UI_SCREEN_PROFILE_ENV),
             Some(GAME_READY_UI_PROFILE_GAME)
         );
+        assert_eq!(value(GAME_READY_UI_ROOT_SURFACE_ENV), None);
         assert_eq!(
-            value(GAME_READY_UI_ROOT_SURFACE_ENV),
-            Some(GAME_READY_UI_ROOT_SURFACE_GAME)
-        );
-        assert_eq!(
-            value(GAME_READY_UI_DOCUMENT_REF_ENV),
-            Some(GAME_READY_UI_DOCUMENT_REF_GAME)
+            value("NEWENGINE_PLUGIN_ENGINE_RUNTIME__ui__screen_profile__game_ui_document_ref"),
+            None
         );
         assert_eq!(value(GAME_READY_UI_PUBLISH_EDITOR_SHELL_ENV), Some("false"));
     }

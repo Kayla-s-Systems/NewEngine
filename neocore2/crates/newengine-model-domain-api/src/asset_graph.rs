@@ -257,8 +257,8 @@ impl AssetGraphResolver {
                 &definition_ref,
                 ROLE_DEFINITION_ENTRIES,
                 &object.definition.asset_kind,
-                "engine.definitions",
-                "definitions.entry_json_v1",
+                newengine_assets_api::ENGINE_ASSETS_DEFINITIONS_SERVICE_ID,
+                newengine_assets_api::definitions_method::ENTRY_JSON_V1,
             );
             if let Some(drawable) = object.drawable.as_ref() {
                 let drawable_ref = normalize_asset_ref(&drawable.logical_path);

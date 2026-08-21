@@ -6,4 +6,5 @@ readme = "README.md"
 description = "Project/game manifest and content mount contracts for NewEngine"
 
 [dependencies]
+newengine-contract-api = { path = "../newengine-contract-api" }
 serde = { version = "1", features = ["derive"] }

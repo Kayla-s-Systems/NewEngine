@@ -135,6 +135,12 @@ pub(crate) struct SkyFrameSample {
     pub(crate) cloud_shadow_strength: f32,
     pub(crate) haze_amount: f32,
     pub(crate) cloud_advection: Vec2,
+    /// Stable environment-owned seed used to reconstruct the procedural cloud
+    /// field at runtime startup instead of resetting every session to phase zero.
+    pub(crate) cloud_field_seed: u64,
+    /// Absolute environment/world time used only to establish the initial cloud
+    /// phase. Subsequent frames integrate dt so weather changes remain continuous.
+    pub(crate) cloud_world_time_seconds: f64,
     pub(crate) rayleigh_strength: f32,
     pub(crate) mie_strength: f32,
     pub(crate) star_intensity: f32,

@@ -42,6 +42,7 @@ pub struct PluginServiceDefinition {
 pub struct PluginBackendRouteDefinition {
     pub capability_id: &'static str,
     pub spec: BackendServiceSpec,
+    pub provider_abi: Option<&'static str>,
     pub provider_route: Option<&'static str>,
     pub backend: Option<&'static str>,
     pub mode: Option<&'static str>,
@@ -116,6 +117,35 @@ pub const fn optional_backend_route(
     PluginBackendRouteDefinition {
         capability_id,
         spec,
+        provider_abi: None,
+        provider_route,
+        backend,
+        mode,
+        priority,
+        features,
+        system_tags,
+        metadata_json,
+    }
+}
+
+#[inline]
+#[allow(clippy::too_many_arguments)]
+pub const fn optional_backend_route_with_abi(
+    capability_id: &'static str,
+    spec: BackendServiceSpec,
+    provider_abi: &'static str,
+    provider_route: Option<&'static str>,
+    backend: Option<&'static str>,
+    mode: Option<&'static str>,
+    priority: i32,
+    features: &'static [&'static str],
+    system_tags: &'static [&'static str],
+    metadata_json: &'static [PluginMetadataJson],
+) -> PluginBackendRouteDefinition {
+    PluginBackendRouteDefinition {
+        capability_id,
+        spec,
+        provider_abi: Some(provider_abi),
         provider_route,
         backend,
         mode,
@@ -140,6 +170,9 @@ pub fn descriptor_from_definition(def: PluginDefinition) -> PluginDescriptor {
 
     for route in def.backend_routes {
         let mut desc = BackendRouteDescriptor::new(route.spec).priority(route.priority);
+        if let Some(provider_abi) = route.provider_abi {
+            desc = desc.provider_abi(provider_abi);
+        }
         if let Some(provider_route) = route.provider_route {
             desc = desc.provider_route(provider_route);
         }

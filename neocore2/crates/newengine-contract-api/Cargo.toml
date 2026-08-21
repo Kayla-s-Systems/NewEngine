@@ -1,0 +1,8 @@
+[package]
+name = "newengine-contract-api"
+version = "0.1.0"
+edition = "2021"
+description = "Typed version/compatibility primitives for NewEngine public contracts"
+license = "MIT OR Apache-2.0"
+
+[dependencies]

@@ -13,6 +13,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
 newengine-assets-api = { path = "../newengine-assets-api" }
+newengine-authored-xml = { path = "../newengine-authored-xml" }
 newengine-material-runtime = { path = "../newengine-material-runtime" }
 newengine-materials = { path = "../newengine-materials", features = ["serde"] }
 newengine-model-collision-runtime = { path = "../newengine-model-collision-runtime" }

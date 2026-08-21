@@ -10,6 +10,24 @@ pub const PROJECT_MANIFEST_CONTRACT: &str = "newengine.project.v1";
 pub const PROJECT_STARTUP_SCENE_ENV: &str = "NEWENGINE_PROJECT_STARTUP_SCENE";
 pub const PROJECT_LAUNCH_PRESET_ENV: &str = "NEWENGINE_PROJECT_LAUNCH_PRESET";
 pub const PROJECT_RUNTIME_PROFILE_ABI_V1: &str = "newengine.runtime-profile/v1";
+pub const PROJECT_MANIFEST_CONTRACT_SPEC: newengine_contract_api::ContractSpec =
+    newengine_contract_api::ContractSpec::new(
+        "project.manifest",
+        newengine_contract_api::ContractKind::Manifest,
+        newengine_contract_api::ContractVersion::major(1),
+        newengine_contract_api::ContractCompatibility::Exact,
+        "newengine-project-api",
+        Some(PROJECT_MANIFEST_CONTRACT),
+    );
+pub const PROJECT_RUNTIME_PROFILE_ABI_CONTRACT_SPEC: newengine_contract_api::ContractSpec =
+    newengine_contract_api::ContractSpec::new(
+        "runtime.profile.abi",
+        newengine_contract_api::ContractKind::Abi,
+        newengine_contract_api::ContractVersion::major(1),
+        newengine_contract_api::ContractCompatibility::Exact,
+        "newengine-project-api",
+        Some(PROJECT_RUNTIME_PROFILE_ABI_V1),
+    );
 pub const RUNTIME_PROFILE_LAUNCH_METHOD_V1: &str = "runtime.launch_v1";
 pub const RUNTIME_PROFILE_SERVICE_PREFIX: &str = "engine.runtime-profile.";
 pub const PROJECT_BROWSER_SERVICE_ID: &str = "engine.project-browser";

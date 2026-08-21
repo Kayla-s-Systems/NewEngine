@@ -10,8 +10,8 @@ mod types;
 
 pub use decode::decode_ydd_binary_body;
 pub use types::{
-    YddBinaryDocument, YddBinaryEntry, YddBinaryMesh, YddBinaryVertex, YDD_BINARY_ENCODING,
-    YDD_BINARY_SCHEMA_VERSION,
+    YddBinaryDocument, YddBinaryEntry, YddBinaryMesh, YddBinaryVertex, YDD_BINARY_CONTRACT_SPEC,
+    YDD_BINARY_ENCODING, YDD_BINARY_SCHEMA_VERSION,
 };
 
 #[cfg(test)]

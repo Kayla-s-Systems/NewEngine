@@ -1,5 +1,57 @@
 use super::*;
 
+// Procedural cloud coordinates are dimensionless. At the old 0.00012 scale a
+// 4 m/s fair-weather wind needed minutes to move one broad macro lobe across
+// the solar line of sight. 0.00075 maps ordinary 3-5 m/s advection to roughly
+// 40-90 second cumulus crossing times while keeping the motion visually massive.
+const SKY_CLOUD_ADVECTION_COORDS_PER_METER: f32 = 0.00075;
+
+#[inline]
+fn sky_cloud_seed_u64(mut value: u64) -> u64 {
+    // SplitMix64 finalizer: deterministic, cheap and stable across platforms.
+    value = value.wrapping_add(0x9E37_79B9_7F4A_7C15);
+    value = (value ^ (value >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    value = (value ^ (value >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    value ^ (value >> 31)
+}
+
+#[inline]
+fn sky_cloud_seed_unit(seed: u64, lane: u64) -> f32 {
+    let bits = sky_cloud_seed_u64(seed ^ lane.wrapping_mul(0xD1B5_4A32_D192_ED03));
+    ((bits >> 40) as u32 as f32) * (1.0 / 16_777_216.0)
+}
+
+#[inline]
+fn sky_cloud_seeded_offset(frame: &SkyFrameSample, wind: Vec2) -> Vec2 {
+    let seed = frame.cloud_field_seed;
+    // Spread starts over many procedural periods so separate environment seeds
+    // do not all begin in the same macro lobe.
+    let base_x = sky_cloud_seed_unit(seed, 0) as f64 * 64.0;
+    let base_y = sky_cloud_seed_unit(seed, 1) as f64 * 64.0;
+    let time = if frame.cloud_world_time_seconds.is_finite() {
+        frame.cloud_world_time_seconds.max(0.0)
+    } else {
+        0.0
+    };
+    Vec2::new(
+        (base_x + wind.x as f64 * time * SKY_CLOUD_ADVECTION_COORDS_PER_METER as f64)
+            .rem_euclid(1024.0) as f32,
+        (base_y + wind.y as f64 * time * SKY_CLOUD_ADVECTION_COORDS_PER_METER as f64)
+            .rem_euclid(1024.0) as f32,
+    )
+}
+
+#[inline]
+fn sky_cloud_seeded_phase(seed: u64, lane: u64, world_time_seconds: f64, rate: f32) -> f32 {
+    let base = sky_cloud_seed_unit(seed, lane) as f64;
+    let time = if world_time_seconds.is_finite() {
+        world_time_seconds.max(0.0)
+    } else {
+        0.0
+    };
+    (base + time * rate as f64).rem_euclid(1.0) as f32
+}
+
 #[inline]
 fn sky_rotate2(value: Vec2, angle: f32) -> Vec2 {
     let (s, c) = angle.sin_cos();
@@ -52,21 +104,23 @@ pub(super) fn sky_cloud_sun_density(
     let evolution_sin = (evolution_phase * TAU).sin();
     let live_coverage =
         (coverage + (lifecycle - 0.5) * 0.10 + evolution_sin * 0.018).clamp(0.0, 1.0);
-    let threshold = 0.77 + (0.47 - 0.77) * live_coverage;
-    let edge_width = (0.032 + (0.115 - 0.032) * softness.clamp(0.04, 0.98))
+    let overcast = frame.cloud_overcast.clamp(0.0, 1.0);
+
+    // Match the dome shader's meteorological coverage curve, but remain
+    // deliberately conservative: CPU has the macro field only, while the dome
+    // owns the actual texture FBM/cirrus samples. Global cloud coverage must not
+    // become fake line-of-sight occlusion of the solar disc.
+    let threshold = (0.79 + (0.46 - 0.79) * live_coverage - overcast * 0.022).clamp(0.43, 0.82);
+    let edge_width = (0.030 + (0.116 - 0.030) * softness.clamp(0.04, 0.98))
         * (0.92 + (1.10 - 0.92) * lifecycle.clamp(0.0, 1.0));
-    let macro_density = sky_smoothstep(
-        threshold - edge_width * 1.25,
-        threshold + edge_width * 0.85,
+    let dense_core = sky_smoothstep(
+        threshold - edge_width * 0.62,
+        threshold + edge_width * 0.98,
         macro_field,
     );
+    let cloud_presence = sky_smoothstep(0.10, 0.24, live_coverage);
     let altitude_mask = sky_smoothstep(-0.025, 0.12, frame.to_sun.y);
-    let cirrus = sky_smoothstep(
-        0.18,
-        0.72,
-        coverage + frame.haze_amount.clamp(0.0, 1.0) * 0.24,
-    ) * 0.18;
-    (macro_density * altitude_mask + cirrus * (1.0 - macro_density) * altitude_mask).clamp(0.0, 1.0)
+    (dense_core * cloud_presence * altitude_mask).clamp(0.0, 1.0)
 }
 
 #[inline]
@@ -396,6 +450,26 @@ pub(super) fn update_sky_dynamics(
         dynamics.smoothed_softness = frame.cloud_softness.clamp(0.04, 0.98);
         dynamics.smoothed_shadow = frame.cloud_shadow_strength.clamp(0.0, 1.0);
         dynamics.smoothed_haze = frame.haze_amount.clamp(0.0, 1.0);
+        dynamics.cloud_offset = sky_cloud_seeded_offset(frame, target_wind);
+
+        let initial_wind_speed = target_wind.length().clamp(0.0, 24.0);
+        let initial_overcast = frame.cloud_overcast.clamp(0.0, 1.0);
+        let initial_absorption = frame.cloud_light_absorption.clamp(0.0, 1.0);
+        let evolution_rate = 0.0022 + initial_wind_speed * 0.00018 + initial_overcast * 0.0011;
+        let lifecycle_rate = 0.00085 + initial_overcast * 0.00075 + initial_absorption * 0.00045;
+        dynamics.evolution_phase = sky_cloud_seeded_phase(
+            frame.cloud_field_seed,
+            2,
+            frame.cloud_world_time_seconds,
+            evolution_rate,
+        );
+        dynamics.lifecycle_phase = sky_cloud_seeded_phase(
+            frame.cloud_field_seed,
+            3,
+            frame.cloud_world_time_seconds,
+            lifecycle_rate,
+        );
+        dynamics.gust_phase = sky_cloud_seed_unit(frame.cloud_field_seed, 4) * TAU;
     }
 
     let wind_alpha = sky_exp_alpha(dt, 7.5);
@@ -425,7 +499,8 @@ pub(super) fn update_sky_dynamics(
     // Integrate wind velocity rather than multiplying the current wind by total
     // elapsed time. This prevents visible cloud teleporting when the weather
     // provider changes direction or speed.
-    dynamics.cloud_offset += dynamics.smoothed_wind * (dt * 0.00012 * gust_factor);
+    dynamics.cloud_offset +=
+        dynamics.smoothed_wind * (dt * SKY_CLOUD_ADVECTION_COORDS_PER_METER * gust_factor);
     // Keep the phase bounded without the visible 0..1 discontinuity that
     // appears when non-integer octave coefficients are used by the cloud field.
     dynamics.cloud_offset.x = dynamics.cloud_offset.x.rem_euclid(1024.0);

@@ -5,4 +5,5 @@ edition = "2021"
 description = "Versioned game-module descriptor contract for NewEngine"
 
 [dependencies]
+newengine-contract-api = { path = "../newengine-contract-api" }
 serde = { version = "1", features = ["derive"] }

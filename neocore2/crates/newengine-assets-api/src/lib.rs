@@ -28,7 +28,7 @@ pub use asset_lifecycle::*;
 /// Runtime and provider plugins must request assets through this stable host-owned
 /// gateway, not through a concrete AssetManager/provider service id. The host
 /// resolves this gateway to the active asset backend by declared capability.
-pub const ENGINE_ASSET_SERVICE_ID: &str = "engine.assets";
+pub const ENGINE_ASSET_SERVICE_ID: &str = newengine_service_api::ENGINE_ASSETS_GATEWAY_ID;
 
 /// Canonical client-facing service id for asset access.
 pub const ASSET_SERVICE_ID: &str = ENGINE_ASSET_SERVICE_ID;
@@ -49,23 +49,28 @@ pub const ASSET_METHOD_PREFIX: &str = "asset.";
 /// Semantic texture dictionary runtime gateway id. File-type descriptors route `.ytd`
 /// meaning here. `engine.assets.textures` owns validation, manifest semantics and runtime
 /// texture packets; `engine.assets` remains the byte/VFS/codec-dispatch owner.
-pub const ENGINE_ASSETS_TEXTURES_SERVICE_ID: &str = "engine.assets.textures";
+pub const ENGINE_ASSETS_TEXTURES_SERVICE_ID: &str =
+    newengine_service_api::ENGINE_ASSETS_TEXTURES_GATEWAY_ID;
 pub const TEXTURES_SERVICE_ID: &str = "textures.api";
 pub const TEXTURES_BACKEND_CAPABILITY_ID: &str = "assets.textures.backend";
 pub const TEXTURES_RUNTIME_CONTRACT: &str = "newengine.assets.textures.runtime.v1";
 /// Semantic definition/archetype metadata gateway id. File-type descriptors route
 /// `.ytyp` meaning here; scene/world systems may consume definitions later, but
 /// do not own the file type.
-pub const ENGINE_ASSETS_DEFINITIONS_SERVICE_ID: &str = "engine.assets.definitions";
+pub const ENGINE_ASSETS_DEFINITIONS_SERVICE_ID: &str =
+    newengine_service_api::ENGINE_ASSETS_DEFINITIONS_GATEWAY_ID;
 pub const DEFINITIONS_SERVICE_ID: &str = "definitions.api";
 pub const DEFINITIONS_BACKEND_CAPABILITY_ID: &str = "assets.definitions.backend";
 pub const DEFINITIONS_RUNTIME_CONTRACT: &str = "newengine.assets.definitions.runtime.v1";
-pub const ENGINE_ASSETS_MODELS_SERVICE_ID: &str = "engine.assets.models";
-pub const ENGINE_ASSETS_MATERIALS_SERVICE_ID: &str = "engine.assets.materials";
+pub const ENGINE_ASSETS_MODELS_SERVICE_ID: &str =
+    newengine_service_api::ENGINE_ASSETS_MODELS_GATEWAY_ID;
+pub const ENGINE_ASSETS_MATERIALS_SERVICE_ID: &str =
+    newengine_service_api::ENGINE_ASSETS_MATERIALS_GATEWAY_ID;
 /// Semantic authored map/world placement gateway id. `.ymap` owns map composition,
 /// placements and references to `.ytyp` Definition Entries; it does not replace
 /// `.ytyp` as the generic metadata/knowledge source.
-pub const ENGINE_ASSETS_MAPS_SERVICE_ID: &str = "engine.assets.maps";
+pub const ENGINE_ASSETS_MAPS_SERVICE_ID: &str =
+    newengine_service_api::ENGINE_ASSETS_MAPS_GATEWAY_ID;
 pub const MAPS_SERVICE_ID: &str = "maps.api";
 pub const MAPS_BACKEND_CAPABILITY_ID: &str = "assets.maps.backend";
 pub const MAPS_RUNTIME_CONTRACT: &str = "newengine.assets.maps.runtime.v1";
@@ -73,22 +78,23 @@ pub const MAPS_RUNTIME_CONTRACT: &str = "newengine.assets.maps.runtime.v1";
 /// Semantic UI dictionary gateway id. `.neui` meaning lives here: XMLcentral validation,
 /// entry selection, binding/action/dependency extraction and authored-to-runtime DTO
 /// compilation. `engine.assets` remains byte/VFS/codec owner; `engine.ui` remains live runtime.
-pub const ENGINE_ASSETS_UI_SERVICE_ID: &str = "engine.assets.ui";
+pub const ENGINE_ASSETS_UI_SERVICE_ID: &str = newengine_service_api::ENGINE_ASSETS_UI_GATEWAY_ID;
 pub const ASSETS_UI_SERVICE_ID: &str = "assets.ui.api";
 pub const ASSETS_UI_BACKEND_CAPABILITY_ID: &str = "assets.ui.backend";
 pub const ASSETS_UI_RUNTIME_CONTRACT: &str = "newengine.assets.ui.runtime.v1";
 
 /// Runtime scene gateway. It consumes resolved map/definition DTOs and mutates the world; it does not own authored map file semantics.
-pub const ENGINE_SCENE_SERVICE_ID: &str = "engine.scene";
+pub const ENGINE_SCENE_SERVICE_ID: &str = newengine_service_api::ENGINE_SCENE_GATEWAY_ID;
 
 /// Runtime scripting gateway. `.ysc` script modules are opaque to core and
 /// are routed through this domain; AssetManager still owns VFS bytes and ListFile codec dispatch.
-pub const ENGINE_SCRIPTING_SERVICE_ID: &str = "engine.scripting";
+pub const ENGINE_SCRIPTING_SERVICE_ID: &str = newengine_service_api::ENGINE_SCRIPTING_GATEWAY_ID;
 
 /// Semantic asset graph gateway id. This resolver owns declarative dependency
 /// graph expansion over .ytyp/.ydd/.nemat/.ytd refs; it uses engine.assets only
 /// for VFS bytes and codec dispatch.
-pub const ENGINE_ASSETS_GRAPH_SERVICE_ID: &str = "engine.assets.graph";
+pub const ENGINE_ASSETS_GRAPH_SERVICE_ID: &str =
+    newengine_service_api::ENGINE_ASSETS_GRAPH_GATEWAY_ID;
 pub const ASSET_GRAPH_SERVICE_ID: &str = "asset_graph.api";
 pub const ASSET_GRAPH_BACKEND_CAPABILITY_ID: &str = "assets.graph.backend";
 pub const ASSET_GRAPH_RUNTIME_CONTRACT: &str = "newengine.assets.graph.runtime.v1";
@@ -98,22 +104,25 @@ pub const ASSET_GRAPH_RUNTIME_CONTRACT: &str = "newengine.assets.graph.runtime.v
 /// These are Godot-inspired lifecycle surfaces, but they do not adopt Godot's
 /// `.tres/.res` resource model. `engine.assets` remains the byte/VFS/codec host;
 /// these sub-gateways expose inspectable editor/import read-model slices.
-pub const ENGINE_ASSETS_UID_SERVICE_ID: &str = "engine.assets.uid";
+pub const ENGINE_ASSETS_UID_SERVICE_ID: &str = newengine_service_api::ENGINE_ASSETS_UID_GATEWAY_ID;
 pub const ASSETS_UID_SERVICE_ID: &str = "assets.uid.api";
 pub const ASSETS_UID_BACKEND_CAPABILITY_ID: &str = "assets.uid.backend";
 pub const ASSETS_UID_RUNTIME_CONTRACT: &str = "newengine.assets.uid.v1";
 
-pub const ENGINE_ASSETS_DEPENDENCIES_SERVICE_ID: &str = "engine.assets.dependencies";
+pub const ENGINE_ASSETS_DEPENDENCIES_SERVICE_ID: &str =
+    newengine_service_api::ENGINE_ASSETS_DEPENDENCIES_GATEWAY_ID;
 pub const ASSETS_DEPENDENCIES_SERVICE_ID: &str = "assets.dependencies.api";
 pub const ASSETS_DEPENDENCIES_BACKEND_CAPABILITY_ID: &str = "assets.dependencies.backend";
 pub const ASSETS_DEPENDENCIES_RUNTIME_CONTRACT: &str = "newengine.assets.dependencies.v1";
 
-pub const ENGINE_ASSETS_IMPORT_QUEUE_SERVICE_ID: &str = "engine.assets.import_queue";
+pub const ENGINE_ASSETS_IMPORT_QUEUE_SERVICE_ID: &str =
+    newengine_service_api::ENGINE_ASSETS_IMPORT_QUEUE_GATEWAY_ID;
 pub const ASSETS_IMPORT_QUEUE_SERVICE_ID: &str = "assets.import_queue.api";
 pub const ASSETS_IMPORT_QUEUE_BACKEND_CAPABILITY_ID: &str = "assets.import_queue.backend";
 pub const ASSETS_IMPORT_QUEUE_RUNTIME_CONTRACT: &str = "newengine.assets.import_queue.v1";
 
-pub const ENGINE_ASSETS_PACKAGE_WRITER_SERVICE_ID: &str = "engine.assets.package_writer";
+pub const ENGINE_ASSETS_PACKAGE_WRITER_SERVICE_ID: &str =
+    newengine_service_api::ENGINE_ASSETS_PACKAGE_WRITER_GATEWAY_ID;
 pub const ASSETS_PACKAGE_WRITER_SERVICE_ID: &str = "assets.package_writer.api";
 pub const ASSETS_PACKAGE_WRITER_CAPABILITY_ID: &str = "assets.package_writer";
 pub const ASSETS_PACKAGE_WRITER_RUNTIME_CONTRACT: &str = "newengine.assets.package_writer.v1";

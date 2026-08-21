@@ -557,3 +557,154 @@ fn sky_postfx_sanitizer_rejects_extreme_authoring_values() {
     assert_eq!(sanitized.bloom_intensity, 0.30);
     assert_eq!(sanitized.sun_ray_scale, 0.0);
 }
+
+#[test]
+fn fair_cumulus_does_not_keep_sun_permanently_occluded() {
+    let mut frame = sample_sky_frame(&test_cycle(), None, Vec3::new(0.22, 0.82, 0.53).normalize());
+    frame.cloud_coverage = 0.38;
+    frame.cloud_overcast = 0.12;
+    frame.cloud_light_absorption = 0.16;
+    frame.cloud_shadow_strength = 0.48;
+    frame.cloud_softness = 0.70;
+
+    let mut clearest = 0.0_f32;
+    let mut darkest = 1.0_f32;
+    for x in 0..16 {
+        for y in 0..16 {
+            let offset = Vec2::new(x as f32 * 0.137, y as f32 * 0.113);
+            let density = sky_cloud_sun_density(&frame, 0.38, 0.70, offset, 0.37, 0.58);
+            let optical = sky_cloud_occlusion_from_density(&frame, density, density);
+            clearest = clearest.max(optical.transmittance);
+            darkest = darkest.min(optical.transmittance);
+        }
+    }
+
+    assert!(
+        clearest > 0.94,
+        "fair-cumulus sky never exposes a clear solar line of sight max_transmittance={clearest}"
+    );
+    assert!(
+        darkest < 0.78,
+        "fair-cumulus field no longer has any cloud capable of crossing the Sun min_transmittance={darkest}"
+    );
+}
+
+#[test]
+fn cloud_field_startup_is_seeded_from_world_time_instead_of_phase_zero() {
+    let mut frame = sample_sky_frame(
+        &test_cycle(),
+        None,
+        Vec3::new(0.22, 0.78, 0.586).normalize(),
+    );
+    frame.cloud_advection = Vec2::new(3.95, 1.34);
+    frame.cloud_field_seed = 0x45A1_92D7_B38C_0F11;
+    frame.cloud_world_time_seconds = 171.0 * 86_400.0 + 9.36 * 3_600.0;
+
+    let mut a = newengine_ecs::World::new();
+    let mut b = newengine_ecs::World::new();
+    let first_a = update_sky_dynamics(&mut a, &frame, 0.0);
+    let first_b = update_sky_dynamics(&mut b, &frame, 0.0);
+    assert_eq!(first_a.cloud_offset, first_b.cloud_offset);
+    assert_eq!(first_a.evolution_phase, first_b.evolution_phase);
+    assert!(
+        first_a.cloud_offset.length() > 0.01,
+        "seeded cloud field unexpectedly reset to phase zero offset={:?}",
+        first_a.cloud_offset
+    );
+
+    frame.cloud_world_time_seconds += 60.0;
+    let mut later_world = newengine_ecs::World::new();
+    let later = update_sky_dynamics(&mut later_world, &frame, 0.0);
+    assert!(
+        (later.cloud_offset - first_a.cloud_offset).length() > 0.05,
+        "absolute world time failed to advance startup cloud field first={:?} later={:?}",
+        first_a.cloud_offset,
+        later.cloud_offset
+    );
+}
+
+#[test]
+fn fair_cumulus_temporal_trajectory_exposes_sun_on_gameplay_timescale() {
+    let mut frame = sample_sky_frame(
+        &test_cycle(),
+        None,
+        Vec3::new(0.22, 0.78, 0.586).normalize(),
+    );
+    frame.cloud_coverage = 0.48;
+    frame.cloud_overcast = 0.09;
+    frame.cloud_light_absorption = 0.16;
+    frame.cloud_shadow_strength = 0.48;
+    frame.cloud_softness = 0.70;
+    frame.cloud_advection = Vec2::new(3.95, 1.34);
+    frame.cloud_world_time_seconds = 171.0 * 86_400.0 + 9.36 * 3_600.0;
+
+    let mut trajectories_with_clear_window = 0usize;
+    let mut trajectories_with_dense_crossing = 0usize;
+    let seed_count = 24usize;
+    for seed_index in 0..seed_count {
+        frame.cloud_field_seed =
+            0xA076_1D64_78BD_642F_u64 ^ (seed_index as u64).wrapping_mul(0xE703_7ED1_A0B4_28DB);
+        let mut world = newengine_ecs::World::new();
+        let mut clearest = 0.0_f32;
+        let mut darkest = 1.0_f32;
+        for _ in 0..(90 * 60) {
+            let dynamics = update_sky_dynamics(&mut world, &frame, 1.0 / 60.0);
+            clearest = clearest.max(dynamics.sun_occlusion.transmittance);
+            darkest = darkest.min(dynamics.sun_occlusion.transmittance);
+        }
+        if clearest > 0.78 {
+            trajectories_with_clear_window += 1;
+        }
+        if darkest < 0.35 {
+            trajectories_with_dense_crossing += 1;
+        }
+    }
+
+    assert!(
+        trajectories_with_clear_window >= seed_count * 3 / 4,
+        "fair-cumulus advection leaves too many solar lines pinned behind one macro lobe clear={trajectories_with_clear_window}/{seed_count}"
+    );
+    assert!(
+        trajectories_with_dense_crossing >= seed_count / 3,
+        "fair-cumulus no longer produces enough real cloud crossings dense={trajectories_with_dense_crossing}/{seed_count}"
+    );
+}
+
+#[test]
+fn sparse_cloud_cover_has_no_global_cirrus_occlusion_floor() {
+    let mut frame = sample_sky_frame(&test_cycle(), None, Vec3::new(0.18, 0.86, 0.48).normalize());
+    frame.cloud_coverage = 0.08;
+    frame.cloud_overcast = 0.0;
+    frame.cloud_light_absorption = 0.08;
+    frame.cloud_shadow_strength = 0.24;
+    frame.haze_amount = 0.18;
+
+    let mut worst_density = 0.0_f32;
+    for x in 0..12 {
+        for y in 0..12 {
+            let density = sky_cloud_sun_density(
+                &frame,
+                0.08,
+                0.74,
+                Vec2::new(x as f32 * 0.149, y as f32 * 0.127),
+                0.29,
+                0.54,
+            );
+            worst_density = worst_density.max(density);
+        }
+    }
+    assert!(
+        worst_density < 0.10,
+        "sparse coverage still creates a global solar occlusion floor density={worst_density}"
+    );
+}
+
+#[test]
+fn authored_clear_fallback_is_actually_sparse() {
+    let frame = sample_sky_frame(&test_cycle(), None, Vec3::new(0.15, 0.84, 0.52).normalize());
+    assert!(
+        frame.cloud_coverage <= 0.20,
+        "clear authored fallback booted into broken-cloud coverage={}",
+        frame.cloud_coverage
+    );
+}

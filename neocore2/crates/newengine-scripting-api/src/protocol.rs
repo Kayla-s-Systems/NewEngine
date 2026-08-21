@@ -4,7 +4,7 @@
 /// scripting provider by descriptor/capability metadata. The engine does not
 /// know which scripting language, VM, graph runtime or bytecode format is used
 /// behind this gateway.
-pub const ENGINE_SCRIPTING_SERVICE_ID: &str = "engine.scripting";
+pub const ENGINE_SCRIPTING_SERVICE_ID: &str = newengine_service_api::ENGINE_SCRIPTING_GATEWAY_ID;
 
 /// Generic provider service id for the opaque scripting contract.
 pub const SCRIPTING_SERVICE_ID: &str = "scripting.api";
@@ -12,6 +12,17 @@ pub const SCRIPTING_SERVICE_ID: &str = "scripting.api";
 /// Generic backend capability root. Provider implementation details stay
 /// provider-owned and opaque to core/runtime.
 pub const SCRIPTING_BACKEND_CAPABILITY_ID: &str = "scripting.backend";
+pub const SCRIPTING_BINARY_PROTOCOL_VERSION: u16 = 1;
+pub const SCRIPTING_BINARY_PROTOCOL_ID: &str = "newengine.scripting-api/binary-opaque-v1";
+pub const SCRIPTING_BINARY_PROTOCOL_CONTRACT_SPEC: newengine_contract_api::ContractSpec =
+    newengine_contract_api::ContractSpec::new(
+        "scripting.binary.protocol",
+        newengine_contract_api::ContractKind::Protocol,
+        newengine_contract_api::ContractVersion::major(SCRIPTING_BINARY_PROTOCOL_VERSION),
+        newengine_contract_api::ContractCompatibility::Exact,
+        "newengine-scripting-api",
+        Some(SCRIPTING_BINARY_PROTOCOL_ID),
+    );
 
 pub const SCRIPTING_SERVICE_METHOD_INFO: &str = newengine_service_api::SERVICE_METHOD_INFO_JSON;
 pub const SCRIPTING_SERVICE_METHOD_INVOKE: &str = newengine_service_api::SERVICE_METHOD_INVOKE_JSON;

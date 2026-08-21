@@ -79,3 +79,57 @@ fn ysc_is_a_selectorless_script_module_asset() {
     assert_eq!(descriptor.asset_kind, "script_module");
     assert_eq!(descriptor.selector_syntax, None);
 }
+
+#[test]
+fn content_kind_lookup_and_default_routes_are_canonical() {
+    let spec = spec_for_content_kind(ytyp::CONTENT_KIND).expect("YTYP spec by content kind");
+    assert_eq!(spec.extension, ytyp::EXTENSION);
+    assert_eq!(spec.handler_service, ytyp::HANDLER_SERVICE);
+
+    let route =
+        default_entry_route_for_content_kind(ytyp::CONTENT_KIND).expect("YTYP default entry route");
+    assert_eq!(
+        route.gateway,
+        newengine_assets_api::ENGINE_ASSETS_DEFINITIONS_SERVICE_ID
+    );
+    assert_eq!(
+        route.method,
+        newengine_assets_api::definitions_method::ENTRY_JSON_V1
+    );
+    assert_eq!(route.semantic_owner, "definition");
+
+    assert!(spec_for_content_kind(0).is_none());
+    assert!(default_entry_route_for_content_kind(0).is_none());
+}
+
+#[test]
+fn yft_is_registered_and_keeps_frozen_content_kind() {
+    let descriptor = descriptor_for_extension("yft").expect("YFT descriptor");
+    assert_eq!(
+        descriptor.content_kind,
+        Some(newengine_assets_api::LIST_FILE_CONTENT_KIND_YFT)
+    );
+    assert_eq!(descriptor.content_kind, Some(7));
+    assert_eq!(descriptor.semantic_gateway, "engine.model");
+}
+
+#[test]
+fn registry_covers_every_published_content_kind_exactly_once() {
+    let registered = specs()
+        .iter()
+        .filter_map(|spec| spec.content_kind)
+        .collect::<std::collections::BTreeSet<_>>();
+    let published = newengine_assets_api::LIST_FILE_PUBLISHED_CONTENT_KINDS
+        .iter()
+        .copied()
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(
+        registered, published,
+        "newengine-asset-format-nef8 must cover the complete engine-owned content-kind contract"
+    );
+    assert_eq!(
+        registered.len(),
+        newengine_assets_api::LIST_FILE_PUBLISHED_CONTENT_KINDS.len(),
+        "published content-kind ids must be unique"
+    );
+}

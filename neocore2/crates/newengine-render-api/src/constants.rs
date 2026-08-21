@@ -1,14 +1,27 @@
 /// Engine-facing render service gateway id. Consumers call this facade; the host
 /// resolves it to the active renderer provider service by descriptor metadata.
-pub const ENGINE_RENDER_SERVICE_ID: &str = "engine.render";
+pub const ENGINE_RENDER_SERVICE_ID: &str = newengine_service_api::ENGINE_RENDER_GATEWAY_ID;
 /// Third-level render domain for post-process/effect stack providers.
-pub const ENGINE_RENDER_EFFECTS_SERVICE_ID: &str = "engine.render.effects";
+pub const ENGINE_RENDER_EFFECTS_SERVICE_ID: &str =
+    newengine_service_api::ENGINE_RENDER_EFFECTS_GATEWAY_ID;
 /// Third-level render domain for material system providers.
-pub const ENGINE_RENDER_MATERIALS_SERVICE_ID: &str = "engine.render.materials";
+pub const ENGINE_RENDER_MATERIALS_SERVICE_ID: &str =
+    newengine_service_api::ENGINE_RENDER_MATERIALS_GATEWAY_ID;
 
 /// Default/first-party provider service id for render backends.
 pub const RENDER_SERVICE_ID: &str = "render.api";
 pub const RENDER_BACKEND_CAPABILITY_ID: &str = "render.backend";
+pub const RENDER_PROVIDER_ABI_VERSION: u16 = 1;
+pub const RENDER_PROVIDER_ABI_ID: &str = "newengine.render-provider/v1";
+pub const RENDER_PROVIDER_ABI_CONTRACT_SPEC: newengine_contract_api::ContractSpec =
+    newengine_contract_api::ContractSpec::new(
+        "render.provider.abi",
+        newengine_contract_api::ContractKind::Abi,
+        newengine_contract_api::ContractVersion::major(RENDER_PROVIDER_ABI_VERSION),
+        newengine_contract_api::ContractCompatibility::Exact,
+        "newengine-render-api",
+        Some(RENDER_PROVIDER_ABI_ID),
+    );
 pub const RENDER_EFFECTS_SERVICE_ID: &str = "render.effects.api";
 pub const RENDER_EFFECTS_BACKEND_CAPABILITY_ID: &str = "render.effects.backend";
 pub const RENDER_MATERIALS_SERVICE_ID: &str = "render.materials.api";

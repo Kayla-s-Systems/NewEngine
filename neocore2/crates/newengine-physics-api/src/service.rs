@@ -1,11 +1,24 @@
 /// Engine-facing physics service gateway ids.
-pub const ENGINE_PHYSICS_SERVICE_ID: &str = "engine.physics";
-pub const ENGINE_PHYSICS_CONTACTS_SERVICE_ID: &str = "engine.physics.contacts";
-pub const ENGINE_PHYSICS_CONSTRAINTS_SERVICE_ID: &str = "engine.physics.constraints";
+pub const ENGINE_PHYSICS_SERVICE_ID: &str = newengine_service_api::ENGINE_PHYSICS_GATEWAY_ID;
+pub const ENGINE_PHYSICS_CONTACTS_SERVICE_ID: &str =
+    newengine_service_api::ENGINE_PHYSICS_CONTACTS_GATEWAY_ID;
+pub const ENGINE_PHYSICS_CONSTRAINTS_SERVICE_ID: &str =
+    newengine_service_api::ENGINE_PHYSICS_CONSTRAINTS_GATEWAY_ID;
 
 /// Default/first-party provider service ids and capabilities.
 pub const PHYSICS_SERVICE_ID: &str = "physics.api";
 pub const PHYSICS_BACKEND_CAPABILITY_ID: &str = "physics.backend";
+pub const PHYSICS_PROVIDER_ABI_VERSION: u16 = 1;
+pub const PHYSICS_PROVIDER_ABI_ID: &str = "newengine.physics-provider/v1";
+pub const PHYSICS_PROVIDER_ABI_CONTRACT_SPEC: newengine_contract_api::ContractSpec =
+    newengine_contract_api::ContractSpec::new(
+        "physics.provider.abi",
+        newengine_contract_api::ContractKind::Abi,
+        newengine_contract_api::ContractVersion::major(PHYSICS_PROVIDER_ABI_VERSION),
+        newengine_contract_api::ContractCompatibility::Exact,
+        "newengine-physics-api",
+        Some(PHYSICS_PROVIDER_ABI_ID),
+    );
 pub const PHYSICS_CONTACTS_SERVICE_ID: &str = "physics.contacts.api";
 pub const PHYSICS_CONTACTS_BACKEND_CAPABILITY_ID: &str = "physics.contacts.backend";
 pub const PHYSICS_CONSTRAINTS_SERVICE_ID: &str = "physics.constraints.api";

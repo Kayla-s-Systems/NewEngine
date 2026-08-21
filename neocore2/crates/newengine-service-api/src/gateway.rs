@@ -5,6 +5,44 @@
 /// descriptor table and never by domain-specific branches.
 pub const ENGINE_SERVICE_GATEWAY_PREFIX: &str = "engine.";
 
+// Canonical host-owned engine gateway vocabulary for cross-domain contracts.
+// Domain API crates may re-export these under domain-specific names, but must
+// not own independent string literals for the same gateway.
+pub const ENGINE_ASSETS_GATEWAY_ID: &str = "engine.assets";
+pub const ENGINE_ASSETS_VFS_GATEWAY_ID: &str = "engine.assets.vfs";
+pub const ENGINE_ASSETS_TYPES_GATEWAY_ID: &str = "engine.assets.types";
+pub const ENGINE_ASSETS_INSPECT_GATEWAY_ID: &str = "engine.assets.inspect";
+pub const ENGINE_ASSETS_EDIT_GATEWAY_ID: &str = "engine.assets.edit";
+pub const ENGINE_ASSETS_PACKAGES_GATEWAY_ID: &str = "engine.assets.packages";
+pub const ENGINE_ASSETS_LISTFILES_GATEWAY_ID: &str = "engine.assets.listfiles";
+pub const ENGINE_ASSETS_UID_GATEWAY_ID: &str = "engine.assets.uid";
+pub const ENGINE_ASSETS_DEPENDENCIES_GATEWAY_ID: &str = "engine.assets.dependencies";
+pub const ENGINE_ASSETS_IMPORT_QUEUE_GATEWAY_ID: &str = "engine.assets.import_queue";
+pub const ENGINE_ASSETS_PACKAGE_WRITER_GATEWAY_ID: &str = "engine.assets.package_writer";
+pub const ENGINE_ASSETS_MAPS_GATEWAY_ID: &str = "engine.assets.maps";
+pub const ENGINE_ASSETS_VALIDATION_GATEWAY_ID: &str = "engine.assets.validation";
+pub const ENGINE_ASSETS_UI_GATEWAY_ID: &str = "engine.assets.ui";
+pub const ENGINE_ASSETS_MATERIALS_GATEWAY_ID: &str = "engine.assets.materials";
+pub const ENGINE_ASSETS_TEXTURES_GATEWAY_ID: &str = "engine.assets.textures";
+pub const ENGINE_ASSETS_DEFINITIONS_GATEWAY_ID: &str = "engine.assets.definitions";
+pub const ENGINE_ASSETS_GRAPH_GATEWAY_ID: &str = "engine.assets.graph";
+pub const ENGINE_ASSETS_MODELS_GATEWAY_ID: &str = "engine.assets.models";
+pub const ENGINE_ASSETS_MODELS_SKELETONS_GATEWAY_ID: &str = "engine.assets.models.skeletons";
+pub const ENGINE_ASSETS_MODELS_MATERIALS_GATEWAY_ID: &str = "engine.assets.models.materials";
+pub const ENGINE_ASSETS_MODELS_COLLISIONS_GATEWAY_ID: &str = "engine.assets.models.collisions";
+
+pub const ENGINE_RENDER_GATEWAY_ID: &str = "engine.render";
+pub const ENGINE_RENDER_EFFECTS_GATEWAY_ID: &str = "engine.render.effects";
+pub const ENGINE_RENDER_MATERIALS_GATEWAY_ID: &str = "engine.render.materials";
+pub const ENGINE_PHYSICS_GATEWAY_ID: &str = "engine.physics";
+pub const ENGINE_PHYSICS_CONTACTS_GATEWAY_ID: &str = "engine.physics.contacts";
+pub const ENGINE_PHYSICS_CONSTRAINTS_GATEWAY_ID: &str = "engine.physics.constraints";
+pub const ENGINE_UI_GATEWAY_ID: &str = "engine.ui";
+pub const ENGINE_UI_TEXT_GATEWAY_ID: &str = "engine.ui.text";
+pub const ENGINE_UI_DEBUG_GATEWAY_ID: &str = "engine.ui.debug";
+pub const ENGINE_SCRIPTING_GATEWAY_ID: &str = "engine.scripting";
+pub const ENGINE_SCENE_GATEWAY_ID: &str = "engine.scene";
+
 #[inline]
 pub fn is_engine_service_gateway_id(value: &str) -> bool {
     normalize_engine_gateway_id(value).is_some()

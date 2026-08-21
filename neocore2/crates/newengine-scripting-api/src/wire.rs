@@ -5,7 +5,16 @@ use crate::{
 };
 use std::collections::BTreeMap;
 
-const VERSION_V1: u16 = 1;
+pub const SCRIPTING_WIRE_VERSION_V1: u16 = 1;
+pub const SCRIPTING_WIRE_CONTRACT_SPEC: newengine_contract_api::ContractSpec =
+    newengine_contract_api::ContractSpec::new(
+        "scripting.binary.wire",
+        newengine_contract_api::ContractKind::Wire,
+        newengine_contract_api::ContractVersion::major(SCRIPTING_WIRE_VERSION_V1),
+        newengine_contract_api::ContractCompatibility::Exact,
+        "newengine-scripting-api",
+        None,
+    );
 const REQUEST_MAGIC: &[u8; 4] = b"NSCR";
 const MODULE_LOAD_MAGIC: &[u8; 4] = b"NSML";
 const RESPONSE_MAGIC: &[u8; 4] = b"NSRS";
@@ -149,7 +158,7 @@ pub fn decode_scripting_module_load_bytes_response(
 
 fn write_header(out: &mut Vec<u8>, magic: &[u8; 4]) {
     out.extend_from_slice(magic);
-    out.extend_from_slice(&VERSION_V1.to_le_bytes());
+    out.extend_from_slice(&SCRIPTING_WIRE_VERSION_V1.to_le_bytes());
     out.extend_from_slice(&0u16.to_le_bytes());
 }
 
@@ -222,7 +231,7 @@ impl<'a> WireReader<'a> {
             ));
         }
         let version = u16::from_le_bytes([bytes[4], bytes[5]]);
-        if version != VERSION_V1 {
+        if version != SCRIPTING_WIRE_VERSION_V1 {
             return Err(ScriptingWireError(format!(
                 "unsupported scripting binary envelope version {version}"
             )));

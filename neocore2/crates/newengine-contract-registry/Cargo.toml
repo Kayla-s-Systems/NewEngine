@@ -1,0 +1,17 @@
+[package]
+name = "newengine-contract-registry"
+version = "0.1.0"
+edition = "2021"
+description = "Aggregated authoritative ABI/wire/schema registry for NewEngine"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+newengine-physics-api = { path = "../newengine-physics-api" }
+newengine-render-api = { path = "../newengine-render-api" }
+newengine-contract-api = { path = "../newengine-contract-api" }
+newengine-assets-api = { path = "../newengine-assets-api" }
+newengine-asset-format-nef8 = { path = "../newengine-asset-format-nef8" }
+newengine-project-api = { path = "../newengine-project-api" }
+newengine-game-module-api = { path = "../newengine-game-module-api" }
+newengine-ui-api = { path = "../newengine-ui-api" }
+newengine-scripting-api = { path = "../newengine-scripting-api" }

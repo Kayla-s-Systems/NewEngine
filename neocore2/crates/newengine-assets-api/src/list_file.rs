@@ -336,6 +336,15 @@ fn fnv1a64(bytes: &[u8]) -> u64 {
 pub const LIST_FILE_MAGIC_NEF8: [u8; 4] = *b"NEF8";
 /// Current self-describing variable-header wire version.
 pub const LIST_FILE_VERSION: u16 = 2;
+pub const NEF8_WIRE_CONTRACT_SPEC: newengine_contract_api::ContractSpec =
+    newengine_contract_api::ContractSpec::new(
+        "asset.nef8.wire",
+        newengine_contract_api::ContractKind::Wire,
+        newengine_contract_api::ContractVersion::major(LIST_FILE_VERSION),
+        newengine_contract_api::ContractCompatibility::Exact,
+        "newengine-assets-api",
+        None,
+    );
 pub const LIST_FILE_HEADER_SIZE_CLASS_MIN: u8 = 4;
 pub const LIST_FILE_HEADER_SIZE_CLASS_MAX: u8 = 8;
 pub const LIST_FILE_HEADER_LEN_MIN: usize = 16;
@@ -377,6 +386,37 @@ pub const LIST_FILE_CONTENT_KIND_YTYD: u32 = 21;
 pub const LIST_FILE_CONTENT_KIND_NEUI: u32 = 32;
 /// NewEngine authored item/inventory definition package.
 pub const LIST_FILE_CONTENT_KIND_NEITEMS: u32 = 33;
+
+/// Frozen, publicly assigned NEF8/ListFile content-kind identifiers.
+///
+/// This is the authoritative coverage set for first-party format registries and
+/// conformance tests. `UNKNOWN=0` is intentionally excluded.
+pub const LIST_FILE_PUBLISHED_CONTENT_KINDS: &[u32] = &[
+    LIST_FILE_CONTENT_KIND_YTD,
+    LIST_FILE_CONTENT_KIND_YDD,
+    LIST_FILE_CONTENT_KIND_YTYP,
+    LIST_FILE_CONTENT_KIND_NEMAT,
+    LIST_FILE_CONTENT_KIND_YMAP,
+    LIST_FILE_CONTENT_KIND_YDR,
+    LIST_FILE_CONTENT_KIND_YFT,
+    LIST_FILE_CONTENT_KIND_YBN,
+    LIST_FILE_CONTENT_KIND_YMF,
+    LIST_FILE_CONTENT_KIND_YMT,
+    LIST_FILE_CONTENT_KIND_YCD,
+    LIST_FILE_CONTENT_KIND_YED,
+    LIST_FILE_CONTENT_KIND_YFD,
+    LIST_FILE_CONTENT_KIND_YLD,
+    LIST_FILE_CONTENT_KIND_YPDB,
+    LIST_FILE_CONTENT_KIND_YVR,
+    LIST_FILE_CONTENT_KIND_YWR,
+    LIST_FILE_CONTENT_KIND_YSC,
+    LIST_FILE_CONTENT_KIND_YBD,
+    LIST_FILE_CONTENT_KIND_YTF,
+    LIST_FILE_CONTENT_KIND_YTYD,
+    LIST_FILE_CONTENT_KIND_NEFTD,
+    LIST_FILE_CONTENT_KIND_NEUI,
+    LIST_FILE_CONTENT_KIND_NEITEMS,
+];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ListFileHeader {

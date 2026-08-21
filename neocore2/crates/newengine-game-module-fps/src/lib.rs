@@ -11,7 +11,7 @@ use newengine_game_module_composition::{
     register_game_module_factory, GameModuleBootstrapRegistration, GameModuleComposition,
     GameModuleFactoryRegistration, GameModuleProviderSet, GameModuleTarget,
 };
-use newengine_gameplay_fps::{FpsContentProvider, FpsGameplayProvider, FpsInventoryHudProvider};
+use newengine_gameplay_fps::{FpsContentProvider, FpsGameplayProvider};
 use newengine_gameplay_fps_api::FpsGameplayPolicyProvider;
 use newengine_gameplay_fps_lua::{LuaFpsGameplayPolicyProvider, LUA_FPS_GAMEPLAY_PROVIDER_ID};
 use newengine_gameplay_script_api::ScriptedGameplayProvider;
@@ -53,12 +53,6 @@ fn descriptor_v1() -> GameModuleDescriptorV1 {
                 interface: "newengine.gameplay.IGameplayPhysicsQueryProvider.v1".to_owned(),
                 required: true,
             },
-            GameModuleProviderRef {
-                role: Some(GameModuleProviderRole::GameplayUi),
-                provider_id: "newengine.gameplay.fps.inventory-hud".to_owned(),
-                interface: "newengine.gameplay.IGameplayUiProvider.v1".to_owned(),
-                required: false,
-            },
         ],
     }
 }
@@ -72,7 +66,7 @@ impl GameModuleComposition for FpsGameModule {
         descriptor_v1()
     }
 
-    fn providers(&self, target: GameModuleTarget) -> Result<GameModuleProviderSet, String> {
+    fn providers(&self, _target: GameModuleTarget) -> Result<GameModuleProviderSet, String> {
         let policy_for_content: Arc<dyn FpsGameplayPolicyProvider> = self.policy.clone();
         let policy_for_system: Arc<dyn FpsGameplayPolicyProvider> = self.policy.clone();
         let policy_for_queries: Arc<dyn FpsGameplayPolicyProvider> = self.policy.clone();
@@ -94,16 +88,8 @@ impl GameModuleComposition for FpsGameModule {
                 scripts_for_queries,
             ));
 
-        match target {
-            GameModuleTarget::Editor | GameModuleTarget::Client => {
-                providers
-                    .gameplay_ui
-                    .push(FpsInventoryHudProvider::shared());
-            }
-            GameModuleTarget::Server | GameModuleTarget::Test => {
-                // Shared gameplay/content/physics remain active; client HUD is intentionally absent.
-            }
-        }
+        // FPS gameplay is intentionally HUD-free for every target. Client/editor
+        // presentation is limited to the provider-neutral runtime technical overlay.
         Ok(providers)
     }
 }
@@ -213,5 +199,9 @@ mod tests {
             .providers
             .iter()
             .any(|provider| provider.role == Some(GameModuleProviderRole::GameplaySystem)));
+        assert!(descriptor
+            .providers
+            .iter()
+            .all(|provider| provider.role != Some(GameModuleProviderRole::GameplayUi)));
     }
 }

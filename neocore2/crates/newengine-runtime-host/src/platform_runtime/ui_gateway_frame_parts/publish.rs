@@ -89,7 +89,7 @@ pub(crate) fn publish_node_tree_request(request: &UiNodeTreeRequest) {
 ///
 /// This lives in runtime-host, not render-controller: render produces telemetry
 /// resources, while the host owns service routing to UI providers.
-pub(crate) fn publish_debug_overlay_telemetry(telemetry: &UiRuntimeDebugOverlayTelemetry) {
+fn debug_overlay_surface_node(telemetry: &UiRuntimeDebugOverlayTelemetry) -> UiSurfaceNode {
     let mut lines = if telemetry.lines.is_empty() {
         telemetry
             .text
@@ -115,42 +115,67 @@ pub(crate) fn publish_debug_overlay_telemetry(telemetry: &UiRuntimeDebugOverlayT
         source: telemetry.source.clone(),
         visible: true,
         modal: false,
-        z_order: -10_000,
-        title: "RUNTIME DEBUG".to_owned(),
-        subtitle: telemetry.source.clone(),
+        // Above ordinary runtime/game surfaces but below loading/error overlays.
+        z_order: 800,
+        title: String::new(),
+        subtitle: String::new(),
         body_lines: lines.clone(),
-        footer_lines: vec![
-            "Runtime Debug is a bottom-layer surface; other UI may cover it.".to_owned(),
-        ],
+        footer_lines: Vec::new(),
         style_tags: vec![
             "retained".to_owned(),
             "runtime-debug".to_owned(),
-            "bottom-layer".to_owned(),
+            "technical-overlay".to_owned(),
+            "bottom-right".to_owned(),
         ],
         theme_id: UI_THEME_NORTHSTAR_DEFAULT.to_owned(),
         style_ref: None,
         component_id: UI_COMPONENT_PANEL.to_owned(),
-        components: std::iter::once(
-            UiComponentNode::action("debug.toggle", "Show/Hide", "runtime.debug.toggle")
-                .with_detail("Toggle Runtime Debug visibility")
-                .with_tone(UiNodeTone::Accent)
-                .tagged("debug-toggle"),
-        )
-        .chain(lines.iter().enumerate().map(|(index, line)| {
-            UiComponentNode::text(format!("debug.line.{index}"), line.clone())
-        }))
-        .collect(),
+        components: lines
+            .iter()
+            .enumerate()
+            .map(|(index, line)| UiComponentNode::text(format!("debug.line.{index}"), line.clone()))
+            .collect(),
         message: None,
         style: UiSurfaceStyle {
-            anchor: UiSurfaceAnchor::BottomLeft,
-            min_size_px: [360.0, 180.0],
-            max_size_px: [620.0, 520.0],
+            anchor: UiSurfaceAnchor::BottomRight,
+            min_size_px: [360.0, 88.0],
+            max_size_px: [640.0, 300.0],
             margin_px: [12.0, 12.0],
-            row_pitch_px: 22.0,
+            padding_px: [10.0, 10.0, 10.0, 10.0],
+            row_pitch_px: 18.0,
             ..UiSurfaceStyle::default()
         },
         admission_policy: Default::default(),
         metrics: telemetry.metrics.clone(),
     };
+    node
+}
+
+pub(crate) fn publish_debug_overlay_telemetry(telemetry: &UiRuntimeDebugOverlayTelemetry) {
+    let node = debug_overlay_surface_node(telemetry);
     publish_surface_node(&node);
+}
+
+#[cfg(test)]
+mod technical_overlay_tests {
+    use super::*;
+
+    #[test]
+    fn technical_overlay_is_bottom_right_and_chrome_free() {
+        let telemetry = UiRuntimeDebugOverlayTelemetry::new(
+            42,
+            "FPS 60.0 | TRI 1234 | DRAWS 12
+RG pass 8/0 | cpu 1.20ms | gpu 0.80ms",
+        );
+        let node = debug_overlay_surface_node(&telemetry);
+        assert_eq!(node.surface_id, UI_SURFACE_RUNTIME_DEBUG_OVERLAY);
+        assert_eq!(node.style.anchor, UiSurfaceAnchor::BottomRight);
+        assert_eq!(node.z_order, 800);
+        assert!(node.title.is_empty());
+        assert!(node.subtitle.is_empty());
+        assert!(node.footer_lines.is_empty());
+        assert_eq!(node.components.len(), 2);
+        assert!(node.style_tags.iter().any(|tag| tag == "technical-overlay"));
+        assert!(node.style_tags.iter().any(|tag| tag == "bottom-right"));
+    }
 }

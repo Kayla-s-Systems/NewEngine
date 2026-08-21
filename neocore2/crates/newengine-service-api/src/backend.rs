@@ -55,6 +55,11 @@ pub struct BackendRouteDescriptor {
     pub engine_gateway: &'static str,
     pub contract: &'static str,
     pub backend_priority: i32,
+    /// Versioned provider ABI advertised by the domain owner, if this backend
+    /// family has a frozen ABI contract. Absence remains valid for legacy and
+    /// domains that have not frozen an ABI yet.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provider_abi: Option<&'static str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub provider_route: Option<&'static str>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -82,6 +87,7 @@ impl BackendRouteDescriptor {
             engine_gateway: spec.engine_gateway_id,
             contract: spec.provider_service_id,
             backend_priority: 0,
+            provider_abi: None,
             provider_route: None,
             backend: None,
             mode: None,
@@ -100,6 +106,12 @@ impl BackendRouteDescriptor {
     #[inline]
     pub fn engine_gateway(mut self, engine_gateway: &'static str) -> Self {
         self.engine_gateway = engine_gateway;
+        self
+    }
+
+    #[inline]
+    pub fn provider_abi(mut self, provider_abi: &'static str) -> Self {
+        self.provider_abi = Some(provider_abi);
         self
     }
 
@@ -173,5 +185,30 @@ impl BackendRouteDescriptor {
     #[inline]
     pub fn to_json_string(&self) -> String {
         serde_json::to_string(self).expect("BackendRouteDescriptor must serialize to JSON")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const TEST_SPEC: BackendServiceSpec =
+        BackendServiceSpec::new("render", "engine.render", "render.api", "render.backend");
+
+    #[test]
+    fn backend_route_provider_abi_is_optional_and_serialized_when_present() {
+        let legacy = BackendRouteDescriptor::new(TEST_SPEC).to_json_string();
+        assert!(!legacy.contains("provider_abi"));
+
+        let versioned = BackendRouteDescriptor::new(TEST_SPEC)
+            .provider_abi("newengine.render-provider/v1")
+            .to_json_string();
+        let value: serde_json::Value = serde_json::from_str(&versioned).unwrap();
+        assert_eq!(
+            value
+                .get("provider_abi")
+                .and_then(serde_json::Value::as_str),
+            Some("newengine.render-provider/v1")
+        );
     }
 }

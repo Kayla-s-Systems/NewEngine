@@ -476,7 +476,9 @@ impl Default for GameData {
                         cloud_day: [0.96, 0.98, 1.00],
                         cloud_night: [0.040, 0.050, 0.085],
                         night_sky_strength: 0.35,
-                        cloud_coverage: 0.42,
+                        // Authored fallback is the neutral clear-sky baseline.
+                        // Broken/overcast coverage belongs to the environment/weather provider.
+                        cloud_coverage: 0.16,
                         cloud_softness: 0.68,
                     },
                 },

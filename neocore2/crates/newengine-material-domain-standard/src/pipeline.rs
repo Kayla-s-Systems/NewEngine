@@ -11,6 +11,11 @@ use crate::manifest::{StandardLitShaderManifest, StandardShaderAssetRef};
 
 const WARMUP_CPU_BUDGET_MS: f32 = 4.0;
 
+#[inline]
+const fn sky_depth_mode() -> PipelineDepthMode {
+    PipelineDepthMode::new(true, false, PipelineDepthCompare::LessOrEqual)
+}
+
 /// Incremental Standard pipeline builder.
 ///
 /// The old builder materialized every shader/resource/pipeline in one call. That
@@ -393,10 +398,10 @@ impl PendingLitPipelineBuild {
             .with_vertex_layouts(layouts)
             .with_bind_group_layouts(vec![bgl]);
         desc = if sky {
-            desc.with_depth_state(
-                TextureFormat::Depth32Float,
-                PipelineDepthMode::no_write_always(),
-            )
+            // Sky is replayed after terrain/world opaque batches. It must remain
+            // read-only in depth, but still test against the scene depth so the
+            // dome only fills pixels where no nearer world geometry was drawn.
+            desc.with_depth_state(TextureFormat::Depth32Float, sky_depth_mode())
         } else {
             desc.with_depth(TextureFormat::Depth32Float)
         };
@@ -697,4 +702,20 @@ fn create_manifest_shader(
         _ => {}
     }
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sky_depth_is_read_only_and_occlusion_aware() {
+        let depth = sky_depth_mode();
+        assert!(
+            depth.test,
+            "sky must respect depth written by world geometry"
+        );
+        assert!(!depth.write, "sky must never overwrite scene depth");
+        assert_eq!(depth.compare, PipelineDepthCompare::LessOrEqual);
+    }
 }

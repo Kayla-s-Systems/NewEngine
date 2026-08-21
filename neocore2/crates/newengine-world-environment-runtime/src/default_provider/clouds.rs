@@ -14,19 +14,24 @@ pub(super) fn cloud_layers(
     } else {
         1200.0
     };
+    let low_coverage = clamp01_f32(cloud_coverage * (0.66 + overcast * 0.22));
+    let high_coverage =
+        clamp01_f32(cloud_coverage * (0.24 + pressure.clamp(0.0, 1.0) * 0.24) + overcast * 0.08);
     vec![
         CloudLayerDto {
             altitude_min_meters: low_layer_base,
             altitude_max_meters: low_layer_base + 1100.0,
-            coverage: clamp01_f32(cloud_coverage * 0.70 + overcast * 0.20),
-            density: 0.16 + cloud_coverage * 0.30 + precipitation * 0.10,
+            coverage: low_coverage,
+            // Density must disappear with coverage. The old constant 0.16 made
+            // a nominally clear layer remain optically present forever.
+            density: clamp01_f32(low_coverage * 0.44 + precipitation * 0.14),
             wind_velocity: wind.cloud_advection,
         },
         CloudLayerDto {
             altitude_min_meters: 2800.0,
             altitude_max_meters: 5200.0,
-            coverage: clamp01_f32(cloud_coverage * 0.45 + pressure * 0.18),
-            density: 0.10 + cloud_coverage * 0.20,
+            coverage: high_coverage,
+            density: clamp01_f32(high_coverage * 0.34 + overcast * 0.06),
             wind_velocity: Vec3Dto::new(
                 wind.cloud_advection.x * 1.35,
                 0.0,

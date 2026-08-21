@@ -3,11 +3,33 @@
 
 /// Engine-facing UI service gateway id. Runtime consumers call this facade;
 /// the host resolves it to the active UI provider by descriptor metadata.
-pub const ENGINE_UI_SERVICE_ID: &str = "engine.ui";
+pub const ENGINE_UI_SERVICE_ID: &str = newengine_service_api::ENGINE_UI_GATEWAY_ID;
 
 /// Default/first-party provider service id for UI backends.
 pub const UI_SERVICE_ID: &str = "ui.api";
 pub const UI_BACKEND_CAPABILITY_ID: &str = "ui.backend";
+pub const UI_PROVIDER_ABI_VERSION: u16 = 1;
+pub const UI_PROVIDER_ABI_ID: &str = "newengine.ui-provider/v1";
+pub const UI_PROVIDER_ABI_CONTRACT_SPEC: newengine_contract_api::ContractSpec =
+    newengine_contract_api::ContractSpec::new(
+        "ui.provider.abi",
+        newengine_contract_api::ContractKind::Abi,
+        newengine_contract_api::ContractVersion::major(UI_PROVIDER_ABI_VERSION),
+        newengine_contract_api::ContractCompatibility::Exact,
+        "newengine-ui-api",
+        Some(UI_PROVIDER_ABI_ID),
+    );
+pub const UI_PROTOCOL_VERSION: u16 = 1;
+pub const UI_PROTOCOL_ID: &str = "newengine.ui-api/v1";
+pub const UI_PROTOCOL_CONTRACT_SPEC: newengine_contract_api::ContractSpec =
+    newengine_contract_api::ContractSpec::new(
+        "ui.provider.protocol",
+        newengine_contract_api::ContractKind::Protocol,
+        newengine_contract_api::ContractVersion::major(UI_PROTOCOL_VERSION),
+        newengine_contract_api::ContractCompatibility::Exact,
+        "newengine-ui-api",
+        Some(UI_PROTOCOL_ID),
+    );
 
 pub const UI_SERVICE_METHOD_INFO: &str = newengine_service_api::SERVICE_METHOD_INFO_JSON;
 pub const UI_SERVICE_METHOD_INVOKE: &str = newengine_service_api::SERVICE_METHOD_INVOKE_JSON;
@@ -137,7 +159,7 @@ impl Default for UiServiceInfo {
     #[inline]
     fn default() -> Self {
         Self {
-            protocol: "newengine.ui-api/v1".to_owned(),
+            protocol: UI_PROTOCOL_ID.to_owned(),
             features: vec![
                 "provider-owned-layout".to_owned(),
                 "declarative-actions".to_owned(),

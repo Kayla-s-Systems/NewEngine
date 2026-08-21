@@ -4,18 +4,23 @@ use newengine_project_api::{
     ContentMountNamespace, ContentMountRegistry, ProjectContentMountState, ProjectScriptRegistry,
 };
 use newengine_project_runtime::{mount_content_registry_best_effort, ProjectRuntimeContext};
+use std::path::PathBuf;
 
 pub(super) struct DeferredProjectContentMountModule {
     assets: AssetServiceClient,
+    engine_asset_roots: Vec<PathBuf>,
+    engine_roots_mounted: bool,
     mounts_ready: bool,
     entrypoint_loaded: bool,
     last_attempt_frame: Option<u64>,
 }
 
 impl DeferredProjectContentMountModule {
-    pub(super) fn new() -> Self {
+    pub(super) fn new(engine_asset_roots: Vec<PathBuf>) -> Self {
         Self {
             assets: AssetServiceClient::new(newengine_plugin_host::default_host_api()),
+            engine_asset_roots,
+            engine_roots_mounted: false,
             mounts_ready: false,
             entrypoint_loaded: false,
             last_attempt_frame: None,
@@ -29,6 +34,22 @@ impl DeferredProjectContentMountModule {
 
         if self.assets.vfs_list_json_v1("").is_err() {
             return Ok(());
+        }
+
+        // Runtime-host may discover engine-owned roots before the AssetManager
+        // provider is registered. The eager bootstrap attempt is intentionally
+        // best-effort, so replay those roots exactly once after EnginePluginsReady
+        // instead of making engine content availability depend on plugin load order.
+        if !self.engine_roots_mounted {
+            crate::asset_bootstrap::mount_asset_roots_best_effort(
+                &self.assets,
+                &self.engine_asset_roots,
+            );
+            self.engine_roots_mounted = true;
+            newengine_ulog_api::ulog::info!(
+                "engine content: deferred VFS roots mounted roots={}",
+                self.engine_asset_roots.len()
+            );
         }
 
         let registry = ctx

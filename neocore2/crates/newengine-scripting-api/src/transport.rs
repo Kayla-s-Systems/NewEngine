@@ -3,7 +3,8 @@ use std::collections::BTreeMap;
 
 use crate::{
     ScriptingDiagnostic, ScriptingModuleRecord, ScriptingPermission, ENGINE_SCRIPTING_SERVICE_ID,
-    SCRIPTING_BACKEND_CAPABILITY_ID, SCRIPTING_SERVICE_ID, SCRIPTING_SERVICE_METHODS,
+    SCRIPTING_BACKEND_CAPABILITY_ID, SCRIPTING_BINARY_PROTOCOL_ID, SCRIPTING_SERVICE_ID,
+    SCRIPTING_SERVICE_METHODS,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -44,7 +45,7 @@ impl Default for ScriptingServiceInfo {
     #[inline]
     fn default() -> Self {
         Self {
-            protocol: "newengine.scripting-api/binary-opaque-v1".to_owned(),
+            protocol: SCRIPTING_BINARY_PROTOCOL_ID.to_owned(),
             gateway: ENGINE_SCRIPTING_SERVICE_ID.to_owned(),
             provider: SCRIPTING_SERVICE_ID.to_owned(),
             backend_capability: SCRIPTING_BACKEND_CAPABILITY_ID.to_owned(),

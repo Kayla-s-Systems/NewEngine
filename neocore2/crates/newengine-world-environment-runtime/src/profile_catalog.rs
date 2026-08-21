@@ -50,7 +50,12 @@ pub(crate) struct WeatherPatternDescriptor {
     pub weather_visual_ref: &'static str,
     pub intensity_min: f32,
     pub intensity_max: f32,
+    /// Minimum fractional sky coverage for this meteorological regime.
     pub cloud_floor: f32,
+    /// Maximum fractional sky coverage for this regime. Coverage is resolved
+    /// continuously inside `[cloud_floor, cloud_ceiling]`; the floor is not a
+    /// global clamp on an unrelated baseline signal.
+    pub cloud_ceiling: f32,
     pub overcast_bias: f32,
     pub precipitation_kind: PrecipitationKind,
     pub precipitation_factor: f32,

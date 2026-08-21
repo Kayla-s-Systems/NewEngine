@@ -11,6 +11,7 @@ pub(crate) const ENGINE_GATEWAY_FIELD: &str = "engine_gateway";
 pub(crate) const SERVICE_KIND_FIELD: &str = "service_kind";
 pub(crate) const CONTRACT_FIELD: &str = "contract";
 pub(crate) const PROVIDER_ROUTE_FIELD: &str = "provider_route";
+pub(crate) const PROVIDER_ABI_FIELD: &str = "provider_abi";
 pub(crate) const BACKEND_PRIORITY_FIELD: &str = "backend_priority";
 pub(crate) const SYSTEM_TAGS_FIELD: &str = "system_tags";
 pub(crate) const TAGS_FIELD: &str = "tags";
@@ -21,6 +22,7 @@ pub(crate) struct EngineGatewayCapability {
     pub(crate) service_kind: String,
     pub(crate) provider_service_id: Option<String>,
     pub(crate) provider_route_id: Option<String>,
+    pub(crate) provider_abi: Option<String>,
     pub(crate) backend_capability_id: String,
     pub(crate) backend_priority: i32,
     pub(crate) system_tags: Vec<String>,
@@ -169,6 +171,7 @@ pub(crate) fn gateway_capability_from_capability(
         service_kind,
         provider_service_id: json_field_string(&value, CONTRACT_FIELD),
         provider_route_id,
+        provider_abi: json_field_string(&value, PROVIDER_ABI_FIELD),
         backend_capability_id: capability.id.to_string(),
         backend_priority: json_field_i32(&value, BACKEND_PRIORITY_FIELD).unwrap_or(0),
         system_tags,
@@ -184,4 +187,40 @@ pub(crate) fn descriptor_gateway_capabilities(
         .iter()
         .filter_map(|capability| gateway_capability_from_capability(&plugin_id, capability))
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn capability(json: &str) -> CapabilityDesc {
+        CapabilityDesc::new(
+            "render.backend",
+            CapabilityRole::Provides,
+            CapabilityKind::Other,
+            1,
+        )
+        .with_json(json)
+    }
+
+    #[test]
+    fn provider_abi_is_optional_for_legacy_descriptor_metadata() {
+        let cap = capability(
+            r#"{"service_kind":"render","engine_gateway":"engine.render","provider_route":"engine.render.test","contract":"render.api","backend_priority":1}"#,
+        );
+        let parsed = gateway_capability_from_capability("test.render", &cap).unwrap();
+        assert_eq!(parsed.provider_abi, None);
+    }
+
+    #[test]
+    fn provider_abi_is_preserved_when_advertised() {
+        let cap = capability(
+            r#"{"service_kind":"render","engine_gateway":"engine.render","provider_route":"engine.render.test","provider_abi":"newengine.render-provider/v1","contract":"render.api","backend_priority":1}"#,
+        );
+        let parsed = gateway_capability_from_capability("test.render", &cap).unwrap();
+        assert_eq!(
+            parsed.provider_abi.as_deref(),
+            Some("newengine.render-provider/v1")
+        );
+    }
 }

@@ -182,6 +182,26 @@ pub mod neftd {
     ];
 }
 
+pub mod yft {
+    pub const EXTENSION: &str = "yft";
+    pub const ASSET_KIND: &str = "fragment";
+    pub const CONTENT_KIND: u32 = newengine_assets_api::LIST_FILE_CONTENT_KIND_YFT;
+    pub const PURPOSE: &str = "Fragment / Vehicle Model";
+    pub const SEMANTIC_GATEWAY: &str = "engine.model";
+    pub const HANDLER_SERVICE: &str = "asset.codec.listfile.yft";
+    pub const SELECTOR_SYNTAX: &str = "file.yft@fragment_entry";
+    pub const CONSUMER_DOMAINS: &[&str] = &[
+        "engine.model",
+        "engine.assets.definitions",
+        "engine.assets.graph",
+        "engine.scene",
+        "engine.materials",
+        "engine.physics",
+        "engine.render",
+        "engine.editor",
+    ];
+}
+
 pub mod yld {
     pub const EXTENSION: &str = "yld";
     pub const ASSET_KIND: &str = "cloth_dictionary";
@@ -337,7 +357,18 @@ pub mod ytyp {
     pub const EXTENSION: &str = "ytyp";
     pub const ASSET_KIND: &str = "archetype_metadata_dictionary";
     pub const CONTENT_KIND: u32 = newengine_assets_api::LIST_FILE_CONTENT_KIND_YTYP;
-    pub const PURPOSE: &str = "JSON Archetype Metadata Dictionary";
+    pub const CONTENT_SCHEMA_VERSION: u16 = 1;
+    pub const PROPERTIES_SCHEMA_ID: &str = "newengine.ytyp.properties.v1";
+    pub const CONTENT_SCHEMA_CONTRACT_SPEC: newengine_contract_api::ContractSpec =
+        newengine_contract_api::ContractSpec::new(
+            "asset.ytyp.schema",
+            newengine_contract_api::ContractKind::Schema,
+            newengine_contract_api::ContractVersion::major(CONTENT_SCHEMA_VERSION),
+            newengine_contract_api::ContractCompatibility::Exact,
+            "newengine-asset-format-nef8",
+            Some(PROPERTIES_SCHEMA_ID),
+        );
+    pub const PURPOSE: &str = "Y-Type Properties / Archetype Metadata Dictionary";
     pub const SEMANTIC_GATEWAY: &str = "engine.assets.definitions";
     pub const HANDLER_SERVICE: &str = "asset.codec.listfile.ytyp";
     pub const SELECTOR_SYNTAX: &str = "file.ytyp@metadata_entry";

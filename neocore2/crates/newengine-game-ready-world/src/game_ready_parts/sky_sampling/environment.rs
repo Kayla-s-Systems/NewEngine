@@ -109,6 +109,8 @@ pub(crate) fn sample_sky_frame_from_environment(
         cloud_shadow_strength,
         haze_amount: haze,
         cloud_advection: Vec2::new(adv.x, adv.z),
+        cloud_field_seed: environment.global.environment_seed,
+        cloud_world_time_seconds: environment.world_time_seconds,
         rayleigh_strength: ((1.08 - haze * 0.22)
             * (1.0 + (preset.rayleigh_scale - 1.0) * preset_blend))
             .clamp(0.50, 1.20),

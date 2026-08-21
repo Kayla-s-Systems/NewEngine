@@ -107,6 +107,7 @@ fn build_gateway_registry_snapshot() -> crate::service_gateway::ActiveGatewayReg
                     entry.service_kind.clone(),
                     entry.provider_service_id.clone(),
                     entry.provider_route_id.clone(),
+                    entry.provider_abi.clone(),
                     entry.provider_owner_id.clone(),
                     entry.backend_capability_id.clone(),
                     entry.backend_priority,
@@ -182,6 +183,7 @@ fn emit_gateway_route_selected(
                 "gateway_id": gateway_id,
                 "provider_service_id": route.provider_service_id,
                 "provider_route_id": route.provider_route_id,
+                "provider_abi": route.provider_abi,
                 "provider_owner_id": route.provider_owner_id,
                 "backend_capability_id": route.backend_capability_id,
                 "backend_priority": route.backend_priority,
@@ -220,6 +222,7 @@ fn emit_gateway_route_shadowed(
                 "gateway_id": route.gateway_id,
                 "provider_service_id": route.provider_service_id,
                 "provider_route_id": route.provider_route_id,
+                "provider_abi": route.provider_abi,
                 "provider_owner_id": route.provider_owner_id,
                 "backend_capability_id": route.backend_capability_id,
                 "active_provider_service_id": active.provider_service_id,
@@ -329,6 +332,7 @@ pub fn list_engine_gateway_routes() -> Vec<EngineGatewayRouteSnapshot> {
                 service_kind: route.service_kind.as_str().to_owned(),
                 provider_service_id: route.provider_service_id.clone(),
                 provider_route_id: route.provider_route_id.clone(),
+                provider_abi: route.provider_abi.clone(),
                 provider_owner_id: route.provider_owner_id.clone(),
                 backend_capability_id: route.backend_capability_id.clone(),
                 backend_priority: route.backend_priority,
@@ -353,6 +357,7 @@ pub fn active_engine_gateway_route(gateway_id: &str) -> Option<EngineGatewayRout
                 service_kind: route.service_kind.as_str().to_owned(),
                 provider_service_id: route.provider_service_id.clone(),
                 provider_route_id: route.provider_route_id.clone(),
+                provider_abi: route.provider_abi.clone(),
                 provider_owner_id: route.provider_owner_id.clone(),
                 backend_capability_id: route.backend_capability_id.clone(),
                 backend_priority: route.backend_priority,
@@ -377,6 +382,7 @@ fn register_engine_gateway_provider_route_with_origin<S>(
     service_kind: S,
     provider_service_id: &str,
     provider_route_id: &str,
+    provider_abi: Option<&str>,
     backend_capability_id: &str,
     backend_priority: i32,
     provider_owner_id: &str,
@@ -461,6 +467,10 @@ where
             service_kind: service_kind.clone(),
             provider_service_id: provider_service_id.to_owned(),
             provider_route_id: provider_route_id.to_owned(),
+            provider_abi: provider_abi
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(str::to_owned),
             provider_owner_id: if provider_owner_id.trim().is_empty() {
                 "engine".to_owned()
             } else {
@@ -504,6 +514,7 @@ where
         service_kind,
         provider_service_id,
         provider_route_id,
+        None,
         backend_capability_id,
         backend_priority,
         provider_owner_id,
@@ -527,6 +538,32 @@ where
         service_kind,
         provider_service_id,
         provider_route_id,
+        None,
+        backend_capability_id,
+        -10_000,
+        provider_owner_id,
+        crate::service_gateway::GatewayProviderOrigin::NullProvider,
+    )
+}
+
+pub fn register_null_engine_gateway_provider_route_with_abi<S>(
+    gateway_id: &str,
+    service_kind: S,
+    provider_service_id: &str,
+    provider_route_id: &str,
+    provider_abi: &str,
+    backend_capability_id: &str,
+    provider_owner_id: &str,
+) -> Result<(), String>
+where
+    S: AsRef<str>,
+{
+    register_engine_gateway_provider_route_with_origin(
+        gateway_id,
+        service_kind,
+        provider_service_id,
+        provider_route_id,
+        Some(provider_abi),
         backend_capability_id,
         -10_000,
         provider_owner_id,

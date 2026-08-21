@@ -5,6 +5,7 @@ edition = "2021"
 readme = "README.md"
 
 [dependencies]
+newengine-contract-api = { path = "../newengine-contract-api" }
 newengine-assets-api = { path = "../newengine-assets-api" }
 
 [features]

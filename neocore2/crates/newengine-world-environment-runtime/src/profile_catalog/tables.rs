@@ -64,18 +64,18 @@ pub(super) const FOREST_ROAD_WEATHER_BANDS: &[WeatherBandDescriptor] = &[
     WeatherBandDescriptor {
         pattern_id: "weather.clear.dry_high_pressure",
         pressure_min: 0.00,
-        pressure_max: 0.64,
+        pressure_max: 0.72,
         time_center: None,
         time_half_width: 0.0,
-        score_bias: 0.15,
+        score_bias: 0.19,
     },
     WeatherBandDescriptor {
         pattern_id: "weather.cloudy.fair_cumulus",
-        pressure_min: 0.28,
-        pressure_max: 0.88,
+        pressure_min: 0.36,
+        pressure_max: 0.90,
         time_center: None,
         time_half_width: 0.0,
-        score_bias: 0.12,
+        score_bias: 0.07,
     },
     WeatherBandDescriptor {
         pattern_id: "weather.overcast.stratus_deck",

@@ -113,6 +113,9 @@ pub(crate) fn sample_sky_frame(
         cloud_shadow_strength: (cloud_coverage * 0.38).clamp(0.0, 0.55),
         haze_amount: (0.08 + horizon_glow * 0.12).clamp(0.0, 0.35),
         cloud_advection: Vec2::new(2.1, 0.65),
+        cloud_field_seed: cycle.day_index.wrapping_mul(0x9E37_79B9_7F4A_7C15),
+        cloud_world_time_seconds: cycle.day_index as f64 * 86_400.0
+            + cycle.time_of_day_hours as f64 * 3_600.0,
         rayleigh_strength: 1.0,
         mie_strength: (0.56 + horizon_glow * 0.34).clamp(0.35, 1.2),
         star_intensity: (night * night_sky_strength * 0.9).clamp(0.0, 1.0),

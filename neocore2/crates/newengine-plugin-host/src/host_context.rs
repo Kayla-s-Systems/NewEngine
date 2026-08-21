@@ -12,7 +12,8 @@ pub use events::{emit_plugin_event, publish_event, subscribe_event_sink};
 pub use gateway::{
     active_engine_gateway_route, engine_gateway_has_capability, list_engine_gateway_routes,
     register_engine_gateway_provider_route, register_null_engine_gateway_provider_route,
-    resolve_service_for_backend_capability, resolve_service_for_engine_gateway,
+    register_null_engine_gateway_provider_route_with_abi, resolve_service_for_backend_capability,
+    resolve_service_for_engine_gateway,
 };
 pub use lifecycle::{shutdown_services_by_owner, unregister_by_owner};
 pub use resources::{

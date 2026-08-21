@@ -2,6 +2,15 @@
 
 pub const YDD_BINARY_SCHEMA_VERSION: u32 = 2;
 pub const YDD_BINARY_ENCODING: &str = "newengine.ydd.binary_mesh.v2";
+pub const YDD_BINARY_CONTRACT_SPEC: newengine_contract_api::ContractSpec =
+    newengine_contract_api::ContractSpec::new(
+        "asset.ydd.body",
+        newengine_contract_api::ContractKind::Schema,
+        newengine_contract_api::ContractVersion::major(YDD_BINARY_SCHEMA_VERSION as u16),
+        newengine_contract_api::ContractCompatibility::Exact,
+        "newengine-asset-format-nef8",
+        Some(YDD_BINARY_ENCODING),
+    );
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct YddBinaryVertex {

@@ -1,11 +1,11 @@
 //! Static format registry and descriptor lookup helpers.
 
-use newengine_assets_api::AssetFileTypeDescriptor;
+use newengine_assets_api::{AssetFileTypeDescriptor, AssetGatewayRoute};
 
 use super::descriptor::Nef8FormatSpec;
 use super::formats::{
-    neftd, neitems, nemat, nepak, neui, ybd, ybn, ycd, ydd, ydr, yed, yfd, yld, ymap, ymf, ymt,
-    ypdb, ysc, ytd, ytf, ytyd, ytyp, yvr, ywr,
+    neftd, neitems, nemat, nepak, neui, ybd, ybn, ycd, ydd, ydr, yed, yfd, yft, yld, ymap, ymf,
+    ymt, ypdb, ysc, ytd, ytf, ytyd, ytyp, yvr, ywr,
 };
 
 macro_rules! listfile_spec {
@@ -65,6 +65,7 @@ const FORMAT_SPECS: &[Nef8FormatSpec] = &[
     listfile_spec!(ydr),
     listfile_spec!(yed),
     listfile_spec!(yfd),
+    listfile_spec!(yft),
     listfile_spec!(neftd),
     listfile_spec!(yld),
     listfile_spec!(ymap),
@@ -100,4 +101,59 @@ pub fn descriptor_for_extension(extension: &str) -> Option<AssetFileTypeDescript
         .copied()
         .find(|spec| spec.extension == key)
         .map(Nef8FormatSpec::descriptor)
+}
+
+pub fn spec_for_content_kind(content_kind: u32) -> Option<Nef8FormatSpec> {
+    FORMAT_SPECS
+        .iter()
+        .copied()
+        .find(|spec| spec.content_kind == Some(content_kind))
+}
+
+/// Canonical default semantic route for a synthesized ListFile entry.
+///
+/// Format-specific producers may emit more precise per-entry routes (for
+/// example YMAP cells versus the map index), but generic writers must use this
+/// projection instead of maintaining their own content-kind routing table.
+pub fn default_entry_route_for_content_kind(content_kind: u32) -> Option<AssetGatewayRoute> {
+    let spec = spec_for_content_kind(content_kind)?;
+    let (gateway, method, semantic_owner) = match spec.extension {
+        "ytd" => (
+            newengine_assets_api::ENGINE_ASSETS_TEXTURES_SERVICE_ID,
+            newengine_assets_api::textures_method::ENTRY_RUNTIME_V1,
+            "texture_dictionary",
+        ),
+        "ydd" => (
+            "engine.model",
+            "model.resolve_drawable_v1",
+            "drawable_dictionary",
+        ),
+        "ytyp" => (
+            newengine_assets_api::ENGINE_ASSETS_DEFINITIONS_SERVICE_ID,
+            newengine_assets_api::definitions_method::ENTRY_JSON_V1,
+            "definition",
+        ),
+        "nemat" => (
+            "engine.materials",
+            "materials.load_descriptor_v1",
+            "material_library",
+        ),
+        "ymap" => (
+            newengine_assets_api::ENGINE_ASSETS_MAPS_SERVICE_ID,
+            "assets.maps.index_v1",
+            "map",
+        ),
+        "neui" => (
+            newengine_assets_api::ENGINE_ASSETS_UI_SERVICE_ID,
+            newengine_assets_api::assets_ui_method::DOCUMENT_V1,
+            "ui_dictionary",
+        ),
+        "neitems" => (
+            "engine.gameplay.inventory",
+            "items.package_v1",
+            "item_definition_dictionary",
+        ),
+        _ => (spec.semantic_gateway, "asset.decode_v1", spec.asset_kind),
+    };
+    Some(AssetGatewayRoute::new(gateway, method, semantic_owner))
 }

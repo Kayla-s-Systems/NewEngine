@@ -12,6 +12,8 @@ pub struct EngineGatewayProviderServiceDescription {
     pub methods: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub protocol: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provider_abi: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub features: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -40,6 +42,7 @@ impl EngineGatewayProviderServiceDescription {
             capability: capability.into(),
             methods: methods.into_iter().map(Into::into).collect(),
             protocol: None,
+            provider_abi: None,
             features: Vec::new(),
             gateway: None,
             notes: None,
@@ -55,6 +58,12 @@ impl EngineGatewayProviderServiceDescription {
     #[inline]
     pub fn protocol(mut self, protocol: impl Into<String>) -> Self {
         self.protocol = Some(protocol.into());
+        self
+    }
+
+    #[inline]
+    pub fn provider_abi(mut self, provider_abi: impl Into<String>) -> Self {
+        self.provider_abi = Some(provider_abi.into());
         self
     }
 

@@ -155,7 +155,12 @@ pub(super) fn build_exposure_intent(
     ExposureIntentDto {
         night_adaptation_hint: time_of_day.night_blend,
         storm_darkening: weather.thunder.probability * 0.65 + overcast * 0.16,
-        sun_glare_hint: sun.intensity_lux_hint / 105_000.0 * (1.0 - cloud_coverage * 0.75),
+        // Fractional coverage is not visibility along the Sun ray. Scattered
+        // cumulus elsewhere in the sky should not globally suppress glare;
+        // local sky/cloud sampling owns actual solar-disc occlusion.
+        sun_glare_hint: sun.intensity_lux_hint / 105_000.0
+            * (1.0 - overcast * 0.70)
+            * (1.0 - cloud_coverage * 0.08),
         interior_exterior_bias: 0.0,
     }
 }

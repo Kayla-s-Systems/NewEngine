@@ -33,8 +33,11 @@ use newengine_ui_api::{
 };
 
 const NULL_RENDER_SERVICE: &str = "null.render.api";
+const NULL_RENDER_ROUTE: &str = "engine.render.null";
 const NULL_PHYSICS_SERVICE: &str = "null.physics.api";
+const NULL_PHYSICS_ROUTE: &str = "engine.physics.null";
 const NULL_UI_SERVICE: &str = "null.ui.api";
+const NULL_UI_ROUTE: &str = "engine.ui.null";
 const NULL_AI_SERVICE: &str = "null.ai.api";
 
 static NULL_PROVIDERS_REGISTERED: OnceLock<()> = OnceLock::new();
@@ -61,7 +64,7 @@ impl NullRenderState {
 
 fn null_render_info() -> RenderBackendInfo {
     RenderBackendInfo {
-        backend_id: "engine.render.null".to_owned(),
+        backend_id: NULL_RENDER_ROUTE.to_owned(),
         backend_name: "NullRenderer".to_owned(),
         backend_version: "0.1.0".to_owned(),
         debug_text: "North Star | NullRenderer (degraded)".to_owned(),
@@ -181,6 +184,7 @@ fn null_render_command_batch_bin(
 }
 
 fn register_null_render_provider() {
+    let spec = newengine_render_api::RENDER_BACKEND_SERVICE_SPEC;
     let methods = [
         newengine_service_api::SERVICE_METHOD_INFO_JSON,
         newengine_service_api::SERVICE_METHOD_INVOKE_JSON,
@@ -189,12 +193,13 @@ fn register_null_render_provider() {
     ];
     let description = engine_gateway_provider_service_description(
         NULL_RENDER_SERVICE,
-        "engine.render.null",
-        "render.backend",
+        NULL_RENDER_ROUTE,
+        spec.backend_capability_id,
         methods,
     )
-    .gateway("engine.render")
+    .gateway(spec.engine_gateway_id)
     .protocol("newengine.render-api/null-v1")
+    .provider_abi(newengine_render_api::RENDER_PROVIDER_ABI_ID)
     .features(["degraded", "no-gpu-submit", "visible-null-provider"])
     .notes("Fallback is a real NullProvider route, not a hidden runtime branch.");
     let service = JsonServiceRouter::with_state(NULL_RENDER_SERVICE, NullRenderState::default())
@@ -213,12 +218,13 @@ fn register_null_render_provider() {
 
     register_null_engine_gateway_provider_service_dynamic_best_effort(
         NullEngineGatewayProviderDeclDynamic {
-            gateway: "engine.render",
-            service_kind: "render",
+            gateway: spec.engine_gateway_id,
+            service_kind: spec.domain,
             provider_service: NULL_RENDER_SERVICE,
-            provider_route: "engine.render.null",
-            capability: "render.backend",
-            owner: "engine.render.null",
+            provider_route: NULL_RENDER_ROUTE,
+            provider_abi: Some(newengine_render_api::RENDER_PROVIDER_ABI_ID),
+            capability: spec.backend_capability_id,
+            owner: NULL_RENDER_ROUTE,
             service,
         },
     );
@@ -226,7 +232,7 @@ fn register_null_render_provider() {
 
 fn null_physics_info() -> newengine_physics_api::PhysicsBackendInfo {
     newengine_physics_api::PhysicsBackendInfo {
-        backend_id: "engine.physics.null".to_owned(),
+        backend_id: NULL_PHYSICS_ROUTE.to_owned(),
         backend_name: "NullPhysics".to_owned(),
         backend_version: "0.1.0".to_owned(),
         debug_text: "North Star | NullPhysics (degraded)".to_owned(),
@@ -273,6 +279,7 @@ fn null_physics_invoke(_state: &mut (), payload: Blob) -> RResult<Blob, RString>
 }
 
 fn register_null_physics_provider() {
+    let spec = newengine_physics_api::PHYSICS_BACKEND_SERVICE_SPEC;
     let methods = [
         newengine_service_api::SERVICE_METHOD_INFO_JSON,
         newengine_service_api::SERVICE_METHOD_INVOKE_JSON,
@@ -280,12 +287,13 @@ fn register_null_physics_provider() {
     ];
     let description = engine_gateway_provider_service_description(
         NULL_PHYSICS_SERVICE,
-        "engine.physics.null",
-        "physics.backend",
+        NULL_PHYSICS_ROUTE,
+        spec.backend_capability_id,
         methods,
     )
-    .gateway("engine.physics")
+    .gateway(spec.engine_gateway_id)
     .protocol("newengine.physics-api/null-v1")
+    .provider_abi(newengine_physics_api::PHYSICS_PROVIDER_ABI_ID)
     .features(["degraded", "no-contacts", "visible-null-provider"])
     .notes("Fallback is a real NullProvider route, not a hidden runtime branch.");
     let service = JsonServiceRouter::new(NULL_PHYSICS_SERVICE)
@@ -300,12 +308,13 @@ fn register_null_physics_provider() {
 
     register_null_engine_gateway_provider_service_dynamic_best_effort(
         NullEngineGatewayProviderDeclDynamic {
-            gateway: "engine.physics",
-            service_kind: "physics",
+            gateway: spec.engine_gateway_id,
+            service_kind: spec.domain,
             provider_service: NULL_PHYSICS_SERVICE,
-            provider_route: "engine.physics.null",
-            capability: "physics.backend",
-            owner: "engine.physics.null",
+            provider_route: NULL_PHYSICS_ROUTE,
+            provider_abi: Some(newengine_physics_api::PHYSICS_PROVIDER_ABI_ID),
+            capability: spec.backend_capability_id,
+            owner: NULL_PHYSICS_ROUTE,
             service,
         },
     );
@@ -326,19 +335,21 @@ fn null_ui_frame_bin(_state: &mut (), payload: Blob) -> RResult<Blob, RString> {
 }
 
 fn null_ui_ack(_state: &mut (), _value: serde_json::Value) -> Result<serde_json::Value, String> {
-    serde_json::to_value(UiAck::ok("engine.ui.null")).map_err(|e| e.to_string())
+    serde_json::to_value(UiAck::ok(NULL_UI_ROUTE)).map_err(|e| e.to_string())
 }
 
 fn register_null_ui_provider() {
+    let spec = newengine_ui_api::UI_BACKEND_SERVICE_SPEC;
     let methods = newengine_ui_api::ui_service_methods();
     let description = engine_gateway_provider_service_description(
         NULL_UI_SERVICE,
-        "engine.ui.null",
-        "ui.backend",
+        NULL_UI_ROUTE,
+        spec.backend_capability_id,
         methods.iter().copied(),
     )
-    .gateway("engine.ui")
+    .gateway(spec.engine_gateway_id)
     .protocol("newengine.ui-api/null-v1")
+    .provider_abi(newengine_ui_api::UI_PROVIDER_ABI_ID)
     .features(["degraded", "empty-draw-list", "visible-null-provider"])
     .notes("Fallback is a real NullProvider route, not a hidden runtime branch.");
     let info = || {
@@ -351,15 +362,15 @@ fn register_null_ui_provider() {
         .info(info)
         .get_json(UI_SERVICE_METHOD_DRAW_FRAME_V1, |_state| null_ui_frame_json())
         .blob(UI_SERVICE_METHOD_DRAW_FRAME_BIN_V1, null_ui_frame_bin)
-        .get_json(UI_SERVICE_METHOD_SURFACE_MANIFEST_V1, |_state| serde_json::json!({"surfaces": [], "provider": "engine.ui.null", "degraded": true}))
-        .get_json(UI_SERVICE_METHOD_SURFACE_CATALOG_V1, |_state| serde_json::json!({"surfaces": [], "provider": "engine.ui.null", "degraded": true}))
-        .get_json(UI_SERVICE_METHOD_LAYOUT_MANIFEST_V1, |_state| serde_json::json!({"layouts": [], "provider": "engine.ui.null", "degraded": true}))
-        .get_json(UI_SERVICE_METHOD_ACTION_MANIFEST_V1, |_state| serde_json::json!({"actions": [], "provider": "engine.ui.null", "degraded": true}))
-        .get_json(UI_SERVICE_METHOD_LOADING_SHELL_V1, |_state| serde_json::json!({"provider": "engine.ui.null", "degraded": true}))
-        .get_json(UI_SERVICE_METHOD_DEBUG_TELEMETRY_SCHEMA, |_state| serde_json::json!({"schema": null, "provider": "engine.ui.null", "degraded": true}))
-        .get_json(UI_SERVICE_METHOD_DOCUMENT_XML_V1, |_state| serde_json::json!({"xml": "", "provider": "engine.ui.null", "degraded": true}))
-        .get_json(UI_SERVICE_METHOD_DEBUG_TREE_V1, |_state| serde_json::json!({"nodes": [], "provider": "engine.ui.null", "degraded": true}))
-        .get_json(UI_SERVICE_METHOD_DEBUG_BINDINGS_V1, |_state| serde_json::json!({"bindings": [], "provider": "engine.ui.null", "degraded": true}))
+        .get_json(UI_SERVICE_METHOD_SURFACE_MANIFEST_V1, |_state| serde_json::json!({"surfaces": [], "provider": NULL_UI_ROUTE, "degraded": true}))
+        .get_json(UI_SERVICE_METHOD_SURFACE_CATALOG_V1, |_state| serde_json::json!({"surfaces": [], "provider": NULL_UI_ROUTE, "degraded": true}))
+        .get_json(UI_SERVICE_METHOD_LAYOUT_MANIFEST_V1, |_state| serde_json::json!({"layouts": [], "provider": NULL_UI_ROUTE, "degraded": true}))
+        .get_json(UI_SERVICE_METHOD_ACTION_MANIFEST_V1, |_state| serde_json::json!({"actions": [], "provider": NULL_UI_ROUTE, "degraded": true}))
+        .get_json(UI_SERVICE_METHOD_LOADING_SHELL_V1, |_state| serde_json::json!({"provider": NULL_UI_ROUTE, "degraded": true}))
+        .get_json(UI_SERVICE_METHOD_DEBUG_TELEMETRY_SCHEMA, |_state| serde_json::json!({"schema": null, "provider": NULL_UI_ROUTE, "degraded": true}))
+        .get_json(UI_SERVICE_METHOD_DOCUMENT_XML_V1, |_state| serde_json::json!({"xml": "", "provider": NULL_UI_ROUTE, "degraded": true}))
+        .get_json(UI_SERVICE_METHOD_DEBUG_TREE_V1, |_state| serde_json::json!({"nodes": [], "provider": NULL_UI_ROUTE, "degraded": true}))
+        .get_json(UI_SERVICE_METHOD_DEBUG_BINDINGS_V1, |_state| serde_json::json!({"bindings": [], "provider": NULL_UI_ROUTE, "degraded": true}))
         .json_value_result(UI_SERVICE_METHOD_SURFACE_NODE_V1, null_ui_ack)
         .json_value_result(UI_SERVICE_METHOD_REGISTRY_LOAD_V1, null_ui_ack)
         .json_value_result(UI_SERVICE_METHOD_MOUNT_SURFACE_V1, null_ui_ack)
@@ -375,12 +386,13 @@ fn register_null_ui_provider() {
 
     register_null_engine_gateway_provider_service_dynamic_best_effort(
         NullEngineGatewayProviderDeclDynamic {
-            gateway: "engine.ui",
-            service_kind: "ui",
+            gateway: spec.engine_gateway_id,
+            service_kind: spec.domain,
             provider_service: NULL_UI_SERVICE,
-            provider_route: "engine.ui.null",
-            capability: "ui.backend",
-            owner: "engine.ui.null",
+            provider_route: NULL_UI_ROUTE,
+            provider_abi: Some(newengine_ui_api::UI_PROVIDER_ABI_ID),
+            capability: spec.backend_capability_id,
+            owner: NULL_UI_ROUTE,
             service,
         },
     );
@@ -432,6 +444,7 @@ fn register_null_ai_provider() {
             service_kind: "ai",
             provider_service: NULL_AI_SERVICE,
             provider_route: "engine.ai.null",
+            provider_abi: None,
             capability: "ai.backend",
             owner: "engine.ai.null",
             service,

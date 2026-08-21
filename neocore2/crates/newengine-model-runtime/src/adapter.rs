@@ -558,14 +558,30 @@ impl ModelAssetAdapter {
                 )
             })?;
         let hash = format!("fnv1a64:{:016x}", fnv1a64(&bytes));
+        if let Some(decoded) =
+            crate::skeleton_metadata::decode_skeleton_body(&bytes, target_height, eye_height_ratio)?
+        {
+            return Ok(ModelSkeletonMetadata {
+                source: source.to_owned(),
+                source_format: decoded.source_format,
+                container_magic: "NEF8".to_owned(),
+                byte_len: bytes.len(),
+                content_hash: hash,
+                decode_status: decoded.decode_status,
+                joints: decoded.joints,
+                anchors: decoded.anchors,
+            });
+        }
+
         Ok(ModelSkeletonMetadata {
             source: source.to_owned(),
             source_format: "newengine.ymt.metadata.v1".to_owned(),
             container_magic: "NEF8".to_owned(),
             byte_len: bytes.len(),
             content_hash: hash,
-            decode_status: "metadata-only skeleton anchors generated from model target height"
-                .to_owned(),
+            decode_status:
+                "legacy metadata-only skeleton; generated humanoid anchors from model target height"
+                    .to_owned(),
             joints: default_humanoid_joints(target_height),
             anchors: default_humanoid_anchors(target_height, eye_height_ratio),
         })
@@ -684,25 +700,66 @@ impl ModelAssetAdapter {
 fn default_humanoid_joints(
     target_height: f32,
 ) -> Vec<newengine_model_skeleton_api::ModelSkeletonJointMetadata> {
-    use newengine_model_skeleton_api::skeleton_joint;
+    use newengine_model_skeleton_api::skeleton_joint_indexed;
     vec![
-        skeleton_joint("root", Option::<String>::None, [0.0, 0.0, 0.0]),
-        skeleton_joint("hips", Some("root"), [0.0, target_height * 0.50, 0.0]),
-        skeleton_joint("spine", Some("hips"), [0.0, target_height * 0.68, 0.0]),
-        skeleton_joint("head", Some("spine"), [0.0, target_height * 0.91, 0.0]),
-        skeleton_joint(
+        skeleton_joint_indexed(0, 0, "root", Option::<String>::None, None, [0.0, 0.0, 0.0]),
+        skeleton_joint_indexed(
+            1,
+            0,
+            "hips",
+            Some("root"),
+            Some(0),
+            [0.0, target_height * 0.50, 0.0],
+        ),
+        skeleton_joint_indexed(
+            2,
+            0,
+            "spine",
+            Some("hips"),
+            Some(1),
+            [0.0, target_height * 0.18, 0.0],
+        ),
+        skeleton_joint_indexed(
+            3,
+            0,
+            "head",
+            Some("spine"),
+            Some(2),
+            [0.0, target_height * 0.23, 0.0],
+        ),
+        skeleton_joint_indexed(
+            4,
+            0,
             "left_hand",
             Some("spine"),
-            [-0.42, target_height * 0.58, 0.0],
+            Some(2),
+            [-0.42, -target_height * 0.10, 0.0],
         ),
-        skeleton_joint(
+        skeleton_joint_indexed(
+            5,
+            0,
             "right_hand",
             Some("spine"),
-            [0.42, target_height * 0.58, 0.0],
+            Some(2),
+            [0.42, -target_height * 0.10, 0.0],
         ),
-        skeleton_joint("left_foot", Some("hips"), [-0.16, 0.02, 0.0]),
-        skeleton_joint("right_foot", Some("hips"), [0.16, 0.02, 0.0]),
-        skeleton_joint("eye", Some("head"), [0.0, target_height * 0.91, -0.08]),
+        skeleton_joint_indexed(
+            6,
+            0,
+            "left_foot",
+            Some("hips"),
+            Some(1),
+            [-0.16, -target_height * 0.48, 0.0],
+        ),
+        skeleton_joint_indexed(
+            7,
+            0,
+            "right_foot",
+            Some("hips"),
+            Some(1),
+            [0.16, -target_height * 0.48, 0.0],
+        ),
+        skeleton_joint_indexed(8, 0, "eye", Some("head"), Some(3), [0.0, 0.0, -0.08]),
     ]
 }
 

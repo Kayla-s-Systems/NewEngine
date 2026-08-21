@@ -6,6 +6,15 @@ use std::collections::BTreeSet;
 pub const GAME_MODULE_SERVICE_ID: &str = "engine.game.module";
 pub const GAME_MODULE_DESCRIBE_METHOD_V1: &str = "game.describe_v1";
 pub const GAME_MODULE_CONTRACT_V1: &str = "newengine.game-module/v1";
+pub const GAME_MODULE_CONTRACT_SPEC: newengine_contract_api::ContractSpec =
+    newengine_contract_api::ContractSpec::new(
+        "game.module.contract",
+        newengine_contract_api::ContractKind::Abi,
+        newengine_contract_api::ContractVersion::major(1),
+        newengine_contract_api::ContractCompatibility::Exact,
+        "newengine-game-module-api",
+        Some(GAME_MODULE_CONTRACT_V1),
+    );
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

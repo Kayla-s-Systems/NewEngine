@@ -4,7 +4,7 @@ mod inputs;
 
 use crate::celestial::{moon_body, moon_phase, sun_body, time_of_day_state};
 use crate::consumer_packets::build_consumer_packets;
-use crate::math::{clamp01_f32, unit_noise};
+use crate::math::{clamp01_f32, range_lerp, unit_noise};
 use crate::phenomena::{build_environment_objects, environment_object_cells};
 use crate::profile_catalog::profile_by_id;
 use crate::weather_profile::{enrich_weather_tags, evaluate_weather, WeatherEvaluation};
@@ -15,7 +15,7 @@ use components::{
 };
 pub(crate) use inputs::deterministic_key;
 use inputs::{
-    baseline_cloud_coverage, deterministic_key_for_day, normalized_day_from_time,
+    cloud_coverage_signal, deterministic_key_for_day, normalized_day_from_time,
     normalized_profile_id, profile_warning, weather_pressure,
 };
 use newengine_world_environment_api::{
@@ -53,6 +53,7 @@ pub(crate) fn build_default_environment_frame(
         pattern,
         mut weather,
         cloud_floor,
+        cloud_ceiling,
         overcast_bias,
         fog_bias,
         haze_bias,
@@ -64,8 +65,12 @@ pub(crate) fn build_default_environment_frame(
     } = evaluate_weather(profile, tod, pressure, cloud_seed);
     let visual_assets = profile.visual_assets;
 
-    let baseline_coverage = baseline_cloud_coverage(req.seed, day_index_u64, tod, profile);
-    let cloud_coverage = baseline_coverage.max(cloud_floor).clamp(0.0, 1.0);
+    let cloud_variability = cloud_coverage_signal(req.seed, day_index_u64, tod, profile);
+    let cloud_coverage = range_lerp(
+        cloud_floor.clamp(0.0, 1.0),
+        cloud_ceiling.clamp(cloud_floor, 1.0),
+        cloud_variability,
+    );
     let overcast =
         clamp01_f32((cloud_coverage - 0.55) * 1.9 + weather.intensity * 0.20 + overcast_bias);
     let precipitation = weather.precipitation.intensity;
@@ -258,7 +263,7 @@ pub(crate) fn build_default_environment_frame(
             reasons: vec![
                 format!("profile={} profile_found={} weather_table={}", profile.id, profile_found, profile.weather_table_ref),
                 format!("time_of_day phase={:?} normalized={:.4}", time_of_day_state.phase, tod),
-                format!("weather_pattern={} intensity={:.3} coverage={:.3}", pattern.id, weather_intensity, cloud_coverage),
+                format!("weather_pattern={} intensity={:.3} cloud_range=[{:.3},{:.3}] variability={:.3} coverage={:.3}", pattern.id, weather_intensity, cloud_floor, cloud_ceiling, cloud_variability, cloud_coverage),
                 format!("visual_assets group='{}' dictionary='{}' sky='{}' sun='{}' moon='{}' cloud_density='{}'", visual_assets.id, visual_assets.texture_dictionary_ref, visual_assets.sky_texture_ref, visual_assets.sun_disk_texture_ref, visual_assets.moon_disk_texture_ref, visual_assets.cloud_density_texture_ref),
                 format!("environment_objects={}", environment_object_count),
                 "engine.time provides clock authority".to_owned(),

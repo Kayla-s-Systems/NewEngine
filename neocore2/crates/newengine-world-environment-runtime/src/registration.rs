@@ -32,6 +32,7 @@ pub fn register_world_environment_gateway_best_effort() {
                 service_kind: "world.environment",
                 provider_service: WORLD_ENVIRONMENT_NULL_SERVICE_ID,
                 provider_route: WORLD_ENVIRONMENT_NULL_PROVIDER_ROUTE,
+                provider_abi: None,
                 capability: WORLD_ENVIRONMENT_BACKEND_CAPABILITY_ID,
                 owner: WORLD_ENVIRONMENT_GATEWAY_OWNER,
                 service: null_service,

@@ -32,8 +32,8 @@ pub use host_context::{
     init_host_context, list_engine_gateway_routes, list_external_runtime_descriptors,
     list_external_runtime_plugins, list_services, register_engine_gateway_provider_route,
     register_external_runtime_plugin, register_null_engine_gateway_provider_route,
-    resolve_service_for_backend_capability, resolve_service_for_engine_gateway,
-    services_generation, EngineGatewayRouteSnapshot,
+    register_null_engine_gateway_provider_route_with_abi, resolve_service_for_backend_capability,
+    resolve_service_for_engine_gateway, services_generation, EngineGatewayRouteSnapshot,
 };
 pub use manager::{
     resolve_plugin_discovery_dir, scan_plugin_discovery_graph, IncrementalLoadOutcome,
