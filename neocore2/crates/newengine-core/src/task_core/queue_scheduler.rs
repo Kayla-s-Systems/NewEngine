@@ -229,7 +229,13 @@ impl TaskCoreShared {
     }
 
     pub(in crate::task_core) fn pop_next(&self) -> Option<QueuedTask> {
-        let over_budget = self.frame_over_budget();
+        // Shutdown is a drain phase, not a frame-budgeted phase. If the final
+        // runtime frame exhausted the soft CPU budget, keeping that budget
+        // active here can strand ready AssetIo/Streaming/Background work:
+        // workers see pending > 0, but no queue is eligible, so join() can
+        // never complete. Once shutdown is requested, drain every ready lane
+        // regardless of the last frame's budget state.
+        let over_budget = !self.shutdown.load(Ordering::Acquire) && self.frame_over_budget();
         for priority in TaskPriority::service_order() {
             for lane in TaskLane::all() {
                 if over_budget && !Self::allowed_when_over_budget(priority, lane) {

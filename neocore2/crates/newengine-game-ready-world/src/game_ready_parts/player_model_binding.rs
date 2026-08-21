@@ -1,6 +1,5 @@
 use super::*;
 
-
 use super::animation::{prepare_player_animation_binding, PlayerAnimationRuntimeBinding};
 use super::assets::ensure_player_runtime_model_parts;
 

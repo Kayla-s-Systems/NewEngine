@@ -122,6 +122,31 @@ pub(super) fn camera_runtime_service_config(
     config
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct RoutedPlayerInput {
+    move_mask: u64,
+    look_delta: Vec2,
+    look_active: bool,
+}
+
+#[inline]
+fn route_player_input_channels(
+    input: &CameraGatewayInput,
+    gameplay_capture: crate::gameplay::GameplayInputCapture,
+) -> RoutedPlayerInput {
+    let movement_blocked = input.gameplay_movement_gated || gameplay_capture.block_player_movement;
+    let look_blocked = input.camera_navigation_gated || gameplay_capture.block_camera_navigation;
+    RoutedPlayerInput {
+        move_mask: if movement_blocked { 0 } else { input.move_mask },
+        look_delta: if look_blocked {
+            Vec2::ZERO
+        } else {
+            Vec2::new(-input.dx_px, -input.dy_px)
+        },
+        look_active: input.active && !look_blocked,
+    }
+}
+
 pub(super) fn apply_runtime_input(
     world: &mut World,
     input: CameraGatewayInput,
@@ -135,8 +160,7 @@ pub(super) fn apply_runtime_input(
     let controller_active = effective_play_mode.wants_direct_player_control()
         && is_player_controller_enabled(world, player);
     let gameplay_capture = crate::gameplay::gameplay_input_capture(world);
-    let movement_blocked = input.gameplay_movement_gated || gameplay_capture.block_player_movement;
-    let direct_control = controller_active && !movement_blocked;
+    let routed = route_player_input_channels(&input, gameplay_capture);
     let command_actions = if controller_active {
         input.gameplay_actions
     } else {
@@ -144,15 +168,17 @@ pub(super) fn apply_runtime_input(
     };
     apply_player_command_frame(world, player, frame_index, command_actions);
 
-    if movement_blocked {
-        CameraRuntimeService::clear_player_input(world, player);
-    } else if direct_control {
+    if controller_active {
+        // Movement and camera look are independent gameplay channels. A dialogue/menu layer
+        // may deliberately freeze locomotion while preserving free look; conversely a scripted
+        // camera may suppress look without cancelling WASD. Do not collapse either policy into
+        // a total player-input gate.
         CameraRuntimeService::apply_player_input(
             world,
             player,
-            input.move_mask,
-            Vec2::new(-input.dx_px, -input.dy_px),
-            input.active,
+            routed.move_mask,
+            routed.look_delta,
+            routed.look_active,
             service_config.sprint_multiplier,
             matches!(
                 service_config.runner,
@@ -289,4 +315,43 @@ fn mat4_from_cols(cols: [[f32; 4]; 4]) -> Mat4 {
 #[inline]
 fn arr_vec3(v: [f32; 3]) -> Vec3 {
     Vec3::new(v[0], v[1], v[2])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn movement_gate_preserves_free_look_xy() {
+        let input = CameraGatewayInput {
+            dx_px: 12.0,
+            dy_px: -7.5,
+            active: true,
+            gameplay_movement_gated: true,
+            move_mask: 0x0f,
+            ..CameraGatewayInput::default()
+        };
+        let routed =
+            route_player_input_channels(&input, crate::gameplay::GameplayInputCapture::none());
+        assert_eq!(routed.move_mask, 0);
+        assert_eq!(routed.look_delta, Vec2::new(-12.0, 7.5));
+        assert!(routed.look_active);
+    }
+
+    #[test]
+    fn camera_gate_blocks_look_without_cancelling_movement() {
+        let input = CameraGatewayInput {
+            dx_px: 12.0,
+            dy_px: -7.5,
+            active: true,
+            camera_navigation_gated: true,
+            move_mask: 0x03,
+            ..CameraGatewayInput::default()
+        };
+        let routed =
+            route_player_input_channels(&input, crate::gameplay::GameplayInputCapture::none());
+        assert_eq!(routed.move_mask, 0x03);
+        assert_eq!(routed.look_delta, Vec2::ZERO);
+        assert!(!routed.look_active);
+    }
 }

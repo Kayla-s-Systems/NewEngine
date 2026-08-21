@@ -1,10 +1,11 @@
 use super::*;
 
 use newengine_animation_runtime::{
-    build_skin_palette, decode_ycd_body, AnimationClip, JointLocalPose,
+    build_skin_palette, build_skin_palette_from_local_pose, decode_ycd_body, AnimationClip,
+    JointLocalPose,
 };
 use newengine_assets::{AssetDecodeRequest, AssetServiceClient, ASSET_LIST_FILE_BODY_OUTPUT};
-use newengine_math::Mat4;
+use newengine_math::{Mat4, Quat, Vec3};
 use newengine_model_skeleton_api::ModelSkeletonMetadata;
 
 #[derive(Clone, Debug)]
@@ -21,7 +22,11 @@ pub(super) struct PlayerAnimationRuntimeBinding {
     skeleton: ModelSkeletonMetadata,
     source_to_model: [f32; 16],
     time_seconds: f32,
-    sampled_locals: Vec<JointLocalPose>,
+    /// Pose currently visible on the character. This is preserved when a new
+    /// locomotion state interrupts an in-flight cross-fade.
+    current_locals: Vec<JointLocalPose>,
+    sampled_target_locals: Vec<JointLocalPose>,
+    transition_from_locals: Vec<JointLocalPose>,
     palette_scratch: Vec<Mat4>,
 }
 
@@ -76,6 +81,47 @@ impl PlayerAnimationRuntimeBinding {
             .find(|slot| self.clips[*slot].is_some())
             .unwrap_or(0)
     }
+}
+
+fn blend_local_poses(
+    from: &[JointLocalPose],
+    to: &[JointLocalPose],
+    alpha: f32,
+    out: &mut Vec<JointLocalPose>,
+) -> Result<(), String> {
+    if from.len() != to.len() {
+        return Err(format!(
+            "animation transition pose count mismatch from={} to={}",
+            from.len(),
+            to.len()
+        ));
+    }
+    let alpha = if alpha.is_finite() {
+        alpha.clamp(0.0, 1.0)
+    } else {
+        1.0
+    };
+    out.clear();
+    out.reserve(to.len());
+    for (a, b) in from.iter().zip(to.iter()) {
+        let translation = Vec3::new(a.translation[0], a.translation[1], a.translation[2]).lerp(
+            Vec3::new(b.translation[0], b.translation[1], b.translation[2]),
+            alpha,
+        );
+        let qa = Quat::from_xyzw(a.rotation[0], a.rotation[1], a.rotation[2], a.rotation[3])
+            .normalize_or_identity();
+        let mut qb = Quat::from_xyzw(b.rotation[0], b.rotation[1], b.rotation[2], b.rotation[3])
+            .normalize_or_identity();
+        if qa.dot(qb) < 0.0 {
+            qb = Quat::from_xyzw(-qb.x, -qb.y, -qb.z, -qb.w);
+        }
+        let q = qa.slerp(qb, alpha).normalize_or_identity();
+        out.push(JointLocalPose {
+            translation: [translation.x, translation.y, translation.z],
+            rotation: [q.x, q.y, q.z, q.w],
+        });
+    }
+    Ok(())
 }
 
 fn split_animation_ref(reference: &str) -> Result<(String, Option<String>), String> {
@@ -222,16 +268,18 @@ pub(super) fn prepare_player_animation_binding(
     let idle = clips[locomotion_slot(L::Idle)]
         .as_ref()
         .expect("idle clip was inserted above");
-    let mut sampled_locals = Vec::with_capacity(skeleton.joints.len());
+    let mut current_locals = Vec::with_capacity(skeleton.joints.len());
     let mut palette_scratch = Vec::with_capacity(skeleton.joints.len());
     build_skin_palette(
         &idle.clip,
         skeleton,
         source_to_model,
         0.0,
-        &mut sampled_locals,
+        &mut current_locals,
         &mut palette_scratch,
     )?;
+    let sampled_target_locals = current_locals.clone();
+    let transition_from_locals = current_locals.clone();
 
     Ok(Some(PlayerAnimationRuntimeBinding {
         clips,
@@ -240,7 +288,9 @@ pub(super) fn prepare_player_animation_binding(
         skeleton: skeleton.clone(),
         source_to_model,
         time_seconds: 0.0,
-        sampled_locals,
+        current_locals,
+        sampled_target_locals,
+        transition_from_locals,
         palette_scratch,
     }))
 }
@@ -268,6 +318,12 @@ pub(crate) fn tick_player_skin_animation(world: &mut newengine_ecs::World, dt: f
             let transitioned = binding.active_state != animation_state.locomotion
                 || binding.active_slot != desired_slot;
             if transitioned {
+                // Cross-fade from the pose that was actually visible, not merely from
+                // the previous clip. This keeps hands/forearms continuous even if the
+                // player changes locomotion state again before the prior fade finishes.
+                binding
+                    .transition_from_locals
+                    .clone_from(&binding.current_locals);
                 binding.active_state = animation_state.locomotion;
                 binding.active_slot = desired_slot;
                 binding.time_seconds = 0.0;
@@ -289,26 +345,52 @@ pub(crate) fn tick_player_skin_animation(world: &mut newengine_ecs::World, dt: f
 
             let active_slot = binding.active_slot;
             let active_state = binding.active_state;
-            let PlayerAnimationRuntimeBinding {
-                clips,
-                skeleton,
-                source_to_model,
-                time_seconds,
-                sampled_locals,
-                palette_scratch,
-                ..
-            } = binding;
-            let active_clip = clips[active_slot]
+            let active_clip = binding.clips[active_slot]
                 .as_ref()
                 .expect("resolved player animation slot must contain a clip");
             let clip_ref = active_clip.clip_ref.clone();
-            if let Err(error) = build_skin_palette(
-                &active_clip.clip,
-                skeleton,
-                *source_to_model,
-                *time_seconds,
-                sampled_locals,
-                palette_scratch,
+            if let Err(error) = active_clip
+                .clip
+                .sample_local_pose(binding.time_seconds, &mut binding.sampled_target_locals)
+            {
+                newengine_ulog_api::ulog::warn!(
+                    "game-ready: player animation sample failed player={} state='{}' clip='{}': {}",
+                    player.stable_u64(),
+                    active_state.clip_hint(),
+                    clip_ref,
+                    error
+                );
+                continue;
+            }
+
+            let alpha = animation_state.transition_alpha.clamp(0.0, 1.0);
+            if alpha < 1.0 {
+                if let Err(error) = blend_local_poses(
+                    &binding.transition_from_locals,
+                    &binding.sampled_target_locals,
+                    alpha,
+                    &mut binding.current_locals,
+                ) {
+                    newengine_ulog_api::ulog::warn!(
+                        "game-ready: player animation transition failed player={} state='{}' clip='{}': {}",
+                        player.stable_u64(),
+                        active_state.clip_hint(),
+                        clip_ref,
+                        error
+                    );
+                    continue;
+                }
+            } else {
+                binding
+                    .current_locals
+                    .clone_from(&binding.sampled_target_locals);
+            }
+
+            if let Err(error) = build_skin_palette_from_local_pose(
+                &binding.skeleton,
+                binding.source_to_model,
+                &binding.current_locals,
+                &mut binding.palette_scratch,
             ) {
                 newengine_ulog_api::ulog::warn!(
                     "game-ready: player skin palette update failed player={} state='{}' clip='{}': {}",
@@ -320,8 +402,8 @@ pub(crate) fn tick_player_skin_animation(world: &mut newengine_ecs::World, dt: f
                 continue;
             }
             if let Err(error) = super::validation::validate_player_palette(
-                palette_scratch,
-                skeleton.joints.len(),
+                &binding.palette_scratch,
+                binding.skeleton.joints.len(),
                 &format!("animated clip {clip_ref}"),
             ) {
                 newengine_ulog_api::ulog::warn!(
@@ -333,7 +415,7 @@ pub(crate) fn tick_player_skin_animation(world: &mut newengine_ecs::World, dt: f
                 );
                 continue;
             }
-            (palette_scratch.clone(), clip_ref, active_state)
+            (binding.palette_scratch.clone(), clip_ref, active_state)
         };
 
         if let Some(pose) =
@@ -362,5 +444,33 @@ pub(crate) fn tick_player_skin_animation(world: &mut newengine_ecs::World, dt: f
                 clip_ref
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod transition_tests {
+    use super::*;
+
+    #[test]
+    fn local_pose_crossfade_preserves_endpoints_and_shortest_quaternion_path() {
+        let from = [JointLocalPose {
+            translation: [0.0, 0.0, 0.0],
+            rotation: [0.0, 0.0, 0.0, 1.0],
+        }];
+        let to = [JointLocalPose {
+            translation: [2.0, 4.0, 6.0],
+            // Same identity rotation with opposite quaternion sign.
+            rotation: [0.0, 0.0, 0.0, -1.0],
+        }];
+        let mut out = Vec::new();
+        blend_local_poses(&from, &to, 0.5, &mut out).expect("blend");
+        assert_eq!(out.len(), 1);
+        assert!((out[0].translation[0] - 1.0).abs() <= 1.0e-6);
+        assert!((out[0].translation[1] - 2.0).abs() <= 1.0e-6);
+        assert!((out[0].translation[2] - 3.0).abs() <= 1.0e-6);
+        assert!(out[0].rotation[0].abs() <= 1.0e-6);
+        assert!(out[0].rotation[1].abs() <= 1.0e-6);
+        assert!(out[0].rotation[2].abs() <= 1.0e-6);
+        assert!((out[0].rotation[3].abs() - 1.0).abs() <= 1.0e-6);
     }
 }

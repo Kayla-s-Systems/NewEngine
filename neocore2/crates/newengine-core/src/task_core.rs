@@ -503,4 +503,45 @@ mod tests {
 
         jobs.shutdown_and_join();
     }
+    #[test]
+    fn shutdown_drains_ready_work_even_when_last_frame_is_over_budget() {
+        use std::sync::mpsc;
+        use std::time::Duration;
+
+        let mut jobs = ThreadPoolCore::new(ThreadPoolCoreConfig {
+            worker_threads: 1,
+            frame_cpu_budget_ms: 1,
+        });
+        let handle = jobs.handle();
+        handle.begin_frame_budget(Duration::from_millis(1));
+
+        let burn = handle.submit_request(
+            TaskRequest::new("shutdown-budget-burn")
+                .with_lane(TaskLane::Background)
+                .with_priority(TaskPriority::Critical),
+            || std::thread::sleep(Duration::from_millis(3)),
+        );
+        burn.wait();
+        assert!(jobs.snapshot().frame_cpu_used_ns >= jobs.snapshot().frame_cpu_budget_ns);
+
+        let (tx, rx) = mpsc::channel();
+        let _deferred = handle.submit_request(
+            TaskRequest::new("shutdown-deferred-asset")
+                .with_lane(TaskLane::AssetIo)
+                .with_priority(TaskPriority::Interactive),
+            move || {
+                let _ = tx.send(());
+            },
+        );
+        assert!(rx.recv_timeout(Duration::from_millis(50)).is_err());
+        assert!(jobs.snapshot().pending_jobs > 0);
+
+        // Shutdown must ignore the exhausted frame budget and drain ready work;
+        // otherwise worker join deadlocks forever with pending > 0.
+        jobs.shutdown_and_join();
+
+        assert!(rx.recv_timeout(Duration::from_secs(1)).is_ok());
+        assert_eq!(jobs.snapshot().pending_jobs, 0);
+        assert_eq!(jobs.snapshot().running_jobs, 0);
+    }
 }

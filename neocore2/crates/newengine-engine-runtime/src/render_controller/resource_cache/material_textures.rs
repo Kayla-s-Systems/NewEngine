@@ -303,14 +303,15 @@ impl RuntimeRenderController {
     }
 
     pub(in crate::render_controller) fn request_material_texture(&mut self, path: &str) {
-        if self.gpu.material.textures.contains_key(path) {
+        let path = path.trim();
+        if path.is_empty() || self.gpu.material.textures.contains_key(path) {
             return;
         }
         self.gpu
             .material
             .textures
-            .insert(path.to_string(), MaterialTextureGpuResidency::Requested);
-        self.enqueue_material_texture_path(path.to_string());
+            .insert(path.to_owned(), MaterialTextureGpuResidency::Requested);
+        self.enqueue_material_texture_path(path.to_owned());
     }
 
     pub(in crate::render_controller) fn pump_material_texture_requests(

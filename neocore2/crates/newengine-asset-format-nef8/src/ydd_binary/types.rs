@@ -20,7 +20,7 @@ pub const YDD_BINARY_CONTRACT_SPEC: newengine_contract_api::ContractSpec =
         Some(YDD_BINARY_ENCODING),
     );
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct YddBinaryVertex {
     pub position: [f32; 3],
     pub normal: [f32; 3],
@@ -31,7 +31,7 @@ pub struct YddBinaryVertex {
 ///
 /// The first quartet is wire-compatible with YDD V3. V4 adds `joints_extra` and
 /// `weights_extra`; V3 decoding initializes that second quartet to zero.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct YddBinarySkinVertex {
     pub joints: [u16; 4],
     pub weights: [f32; 4],
@@ -65,7 +65,7 @@ impl YddBinarySkinVertex {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct YddBinaryMesh {
     pub name: String,
     pub material_ref: Option<String>,
@@ -103,7 +103,7 @@ impl YddBinaryMesh {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct YddBinaryEntry {
     pub name: String,
     pub source_path: String,
@@ -116,7 +116,7 @@ pub struct YddBinaryEntry {
     pub meshes: Vec<YddBinaryMesh>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct YddBinaryDocument {
     pub entries: Vec<YddBinaryEntry>,
 }

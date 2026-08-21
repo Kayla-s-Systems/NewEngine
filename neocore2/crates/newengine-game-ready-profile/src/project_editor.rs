@@ -96,9 +96,10 @@ impl RuntimeHostAppProfile for ProjectEditorApp {
     fn initialize_composition_services(
         &self,
         engine: &mut Engine<()>,
-        project: Option<&newengine_project_runtime::ProjectRuntimeContext>,
+        runtime: Option<&newengine_project_runtime::RuntimeCompositionContext>,
     ) -> EngineResult<()> {
-        self.profile.initialize_composition_services(engine, project)
+        self.profile
+            .initialize_composition_services(engine, runtime)
     }
 
     fn register_engine_provider_routes_best_effort(&self) {

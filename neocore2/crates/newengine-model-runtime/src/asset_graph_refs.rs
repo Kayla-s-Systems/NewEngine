@@ -69,6 +69,62 @@ pub(super) fn definition_entry_refs_to_edges(
     edges
 }
 
+pub(super) fn list_file_manifest_dependency_edges(
+    value: &serde_json::Value,
+    default_role: &str,
+) -> Vec<(String, String, bool)> {
+    fn collect_array(
+        value: Option<&serde_json::Value>,
+        default_role: &str,
+        out: &mut Vec<(String, String, bool)>,
+    ) {
+        let Some(items) = value.and_then(serde_json::Value::as_array) else {
+            return;
+        };
+        for item in items {
+            let Some(object) = item.as_object() else {
+                continue;
+            };
+            let Some(reference) = object
+                .get("reference")
+                .and_then(serde_json::Value::as_str)
+                .map(normalize_asset_ref)
+                .filter(|reference| !reference.is_empty())
+            else {
+                continue;
+            };
+            let role = object
+                .get("role")
+                .or_else(|| object.get("kind"))
+                .and_then(serde_json::Value::as_str)
+                .map(str::trim)
+                .filter(|role| !role.is_empty())
+                .unwrap_or(default_role)
+                .to_owned();
+            let required = object
+                .get("required")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(true);
+            out.push((reference, role, required));
+        }
+    }
+
+    let mut edges = Vec::new();
+    collect_array(value.get("dependencies"), default_role, &mut edges);
+    if let Some(entries) = value.get("entries").and_then(serde_json::Value::as_array) {
+        for entry in entries {
+            collect_array(entry.get("dependencies"), default_role, &mut edges);
+        }
+    }
+    edges.sort_by(|a, b| {
+        a.0.cmp(&b.0)
+            .then_with(|| a.1.cmp(&b.1))
+            .then_with(|| a.2.cmp(&b.2))
+    });
+    edges.dedup();
+    edges
+}
+
 pub(super) fn collect_ref_strings(value: &serde_json::Value) -> Vec<String> {
     let mut refs = Vec::new();
     collect_ref_strings_into(value, &mut refs);
@@ -161,5 +217,44 @@ pub(super) fn collect_metadata_namespaces(
         for key in side_effects.keys() {
             attach_metadata_namespace(graph, owner_ref, format!("side_effect:{key}"));
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn listfile_dependencies_do_not_scrape_policy_strings() {
+        let manifest = serde_json::json!({
+            "dependencies": [{
+                "reference": "models/characters/abby/abby.ymt@abby",
+                "role": "skeleton",
+                "required": true
+            }],
+            "entries": [{
+                "dependencies": [{
+                    "reference": "animations/characters/abby/idle.ycd@idle",
+                    "role": "animation/idle",
+                    "required": true
+                }]
+            }],
+            "policy": [
+                "YCD entries are addressed as file.ycd@clip",
+                "documentation may mention textures/example.ytd@entry without declaring a dependency"
+            ],
+            "warnings": ["missing demo/example.ydd@mesh is only diagnostic text"]
+        });
+        let edges = list_file_manifest_dependency_edges(&manifest, "listfile_dependency");
+        assert_eq!(edges.len(), 2);
+        assert!(edges
+            .iter()
+            .any(|edge| edge.0 == "models/characters/abby/abby.ymt@abby"));
+        assert!(edges
+            .iter()
+            .any(|edge| edge.0 == "animations/characters/abby/idle.ycd@idle"));
+        assert!(!edges.iter().any(|edge| edge.0.contains("file.ycd")));
+        assert!(!edges.iter().any(|edge| edge.0.contains("example.ytd")));
+        assert!(!edges.iter().any(|edge| edge.0.contains("example.ydd")));
     }
 }

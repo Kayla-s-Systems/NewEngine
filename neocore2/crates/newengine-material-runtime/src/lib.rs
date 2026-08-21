@@ -18,6 +18,7 @@ pub use service::{
     MaterialsServiceInfo,
 };
 
+pub use nemat::decode_nemat_material_library_from_body;
 pub(crate) use nemat::{
     collect_texture_refs, decode_material_entry_payload, material_cache_key,
     material_response_from_authored, normalize_material_logical_path,

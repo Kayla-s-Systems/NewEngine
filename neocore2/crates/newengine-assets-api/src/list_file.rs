@@ -3,7 +3,9 @@
 use std::{collections::BTreeMap, ops::Range};
 
 mod nef8;
-pub use nef8::{encode_list_file, ListFileEncodeRequest};
+pub use nef8::{
+    decode_list_file_envelope, encode_list_file, DecodedListFileEnvelope, ListFileEncodeRequest,
+};
 
 /// Canonical manifest schema returned by dictionary/container codecs for the
 /// data-driven asset world.

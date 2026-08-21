@@ -19,4 +19,6 @@ pub mod platform_input;
 #[cfg(feature = "full-runtime")]
 pub mod platform_runtime;
 #[cfg(feature = "full-runtime")]
+pub mod runtime_config;
+#[cfg(feature = "full-runtime")]
 pub mod world_authority;

@@ -1,11 +1,11 @@
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct TextureDictionaryManifest {
     pub version: u16,
     pub default_format: String,
     pub entries: Vec<TextureEntryMeta>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct TextureEntryMeta {
     pub name: String,
     pub name_hash: u64,
@@ -19,7 +19,7 @@ pub struct TextureEntryMeta {
     pub mips: Vec<TextureMipMeta>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct TextureMipMeta {
     pub level: u32,
     pub width: u32,

@@ -111,3 +111,20 @@ fn authored_uv_transform_populates_texture_bindings() {
         .flags
         .contains(MaterialFlags::DOUBLE_SIDED));
 }
+
+#[test]
+fn canonical_xmltype_schema_is_runtime_readable() {
+    let body = br#"<NematMaterialLibrary schema="newengine.nemat.xmltype.v1" version="1"><Material name="p4" shader="pbr.default" /></NematMaterialLibrary>"#;
+    let library = crate::decode_nemat_material_library_from_body(body)
+        .expect("canonical NEMAT XMLtype schema");
+    assert_eq!(library.materials.len(), 1);
+    assert_eq!(library.materials[0].name, "p4");
+}
+
+#[test]
+fn legacy_material_library_xml_schema_remains_runtime_readable() {
+    let body = br#"<NematMaterialLibrary schema="newengine.nemat.material_library.v1" version="1"><Material name="legacy" shader="pbr.default" /></NematMaterialLibrary>"#;
+    let library = crate::decode_nemat_material_library_from_body(body)
+        .expect("legacy NEMAT authored XML schema");
+    assert_eq!(library.materials[0].name, "legacy");
+}

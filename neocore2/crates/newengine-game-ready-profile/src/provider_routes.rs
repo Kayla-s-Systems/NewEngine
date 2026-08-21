@@ -1,13 +1,12 @@
 use std::sync::Arc;
 
 use newengine_core::{Engine, EngineError, EngineResult};
-use newengine_project_runtime::ProjectRuntimeContext;
+use newengine_project_runtime::RuntimeCompositionContext;
 use newengine_runtime_host::asset_bootstrap::ProfileMountSpec;
 use newengine_scene_runtime::SceneGatewayAssetMounts;
 
 use crate::entity_archetypes::register_game_ready_entity_archetypes_best_effort;
 use crate::{GameReadyRuntimeProfile, GAME_READY_MOUNT_SPEC};
-
 
 const GAME_READY_CAPABILITY_SLOTS: &[newengine_service_api::EngineCapabilitySlotSpec] = &[
     newengine_service_api::EngineCapabilitySlotSpec::required("engine.assets", "assets"),
@@ -41,7 +40,7 @@ impl GameReadyRuntimeProfile {
     pub fn initialize_composition_services(
         &self,
         engine: &mut Engine<()>,
-        project: Option<&ProjectRuntimeContext>,
+        runtime: Option<&RuntimeCompositionContext>,
     ) -> EngineResult<()> {
         self.declare_composition_capability_slots()?;
 
@@ -56,10 +55,10 @@ impl GameReadyRuntimeProfile {
 
         let replication_registry =
             newengine_replication_runtime::ReplicationDescriptorRegistry::default();
-        if let Some(project) = project {
+        if let Some(runtime) = runtime {
             let report = newengine_replication_runtime::load_replication_definitions_from_roots(
-                &project.project_root,
-                &project.manifest.definitions,
+                &runtime.runtime_root,
+                &runtime.definitions,
                 &replication_registry,
             )
             .map_err(EngineError::Other)?;
@@ -79,7 +78,7 @@ impl GameReadyRuntimeProfile {
         engine.resources_mut().insert(network_runtime);
         engine.resources_mut().insert(replication_registry);
 
-        if project.is_some() {
+        if runtime.is_some() {
             engine.register_module(Box::new(
                 newengine_game_module_runtime::GameModuleContractModule::new(),
             ))?;

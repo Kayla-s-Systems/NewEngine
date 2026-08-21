@@ -37,6 +37,29 @@ pub(crate) fn split_nemat_selector(
     Ok((source, selector.to_owned()))
 }
 
+pub fn decode_nemat_material_library_from_body(
+    bytes: &[u8],
+) -> Result<AuthoredMaterialLibrary, String> {
+    let text = std::str::from_utf8(bytes).map_err(|_| {
+        "NEMAT payload must be UTF-8 XML material library inside the NEF8 ListFile body".to_owned()
+    })?;
+    if !authored_xml::text_is_xml(text) {
+        return Err(
+            "NEMAT body must be XML <NematMaterialLibrary>; JSON material bodies are forbidden in authored .nemat files"
+                .to_owned(),
+        );
+    }
+    let library = decode_nemat_material_library_xml(text)?;
+    let validation = validate_authored_material_library(&library);
+    if !validation.valid {
+        return Err(format!(
+            "invalid XML material library: {}",
+            validation.errors.join("; ")
+        ));
+    }
+    Ok(library)
+}
+
 pub(crate) fn preview_material_name_from_body(bytes: &[u8]) -> Result<String, String> {
     let text = std::str::from_utf8(bytes).map_err(|_| {
         "NEMAT payload must be UTF-8 XML material library inside the NEF8 ListFile body".to_owned()
@@ -145,8 +168,17 @@ fn decode_nemat_material_library_xml(text: &str) -> Result<AuthoredMaterialLibra
         ));
     }
     let schema = authored_xml::root_schema(root);
-    if !schema.is_empty() && schema != "newengine.nemat.material_library.v1" {
-        return Err(format!("unsupported NEMAT XML schema '{schema}', expected 'newengine.nemat.material_library.v1'"));
+    if !schema.is_empty()
+        && schema != newengine_asset_format_nef8::nemat::AUTHORED_XML_SCHEMA
+        && !newengine_asset_format_nef8::nemat::LEGACY_AUTHORED_XML_SCHEMAS
+            .iter()
+            .any(|legacy| *legacy == schema)
+    {
+        return Err(format!(
+            "unsupported NEMAT authored XML schema '{schema}', expected '{}' or readable legacy [{}]",
+            newengine_asset_format_nef8::nemat::AUTHORED_XML_SCHEMA,
+            newengine_asset_format_nef8::nemat::LEGACY_AUTHORED_XML_SCHEMAS.join(",")
+        ));
     }
     let mut library = AuthoredMaterialLibrary {
         version: authored_xml::xml_attr_u32_any(root, &["version"]).unwrap_or(1),

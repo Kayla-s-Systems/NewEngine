@@ -1,5 +1,5 @@
-use super::*;
 use super::shadow_debug::shadow_torture_acceptance_trace_enabled;
+use super::*;
 
 pub(super) struct SuccessfulSubmit<'a> {
     pub scope: RenderFrameScope,
@@ -37,8 +37,7 @@ pub(super) fn finalize_successful_submit(
     }
 
     let view = view_frame.view;
-    if shadow_torture_acceptance_trace_enabled()
-        && controller.frame.frame_index.is_multiple_of(120)
+    if shadow_torture_acceptance_trace_enabled() && controller.frame.frame_index.is_multiple_of(120)
     {
         newengine_ulog_api::ulog::info!(
             "shadow torture acceptance: frame={} pass(directional={} local={}) cache(directional_valid={} directional_reuse={} directional_refresh[cold={} projection={} mismatch[texture={} matrix={} split={} params={} extra={}] caster={}] local_valid={} local_reuse={} local_refresh={}) caster_revision={} caster_changes[entity={} bounds={} geometry={} material={} visibility={}] camera=({:.5},{:.5},{:.5}) forward=({:.6},{:.6},{:.6}) light_dir=({:.6},{:.6},{:.6}) jitter=({:.5},{:.5})",

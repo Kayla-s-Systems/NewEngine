@@ -8,6 +8,11 @@ pub mod nemat {
     pub const ASSET_KIND: &str = "material_library";
     pub const CONTENT_KIND: u32 = newengine_assets_api::LIST_FILE_CONTENT_KIND_NEMAT;
     pub const CONTENT_SCHEMA_VERSION: u16 = 1;
+    /// Canonical authored XML schema emitted by the first-party NEMAT producer.
+    /// This is distinct from the material-domain DTO schema.
+    pub const AUTHORED_XML_SCHEMA: &str = "newengine.nemat.xmltype.v1";
+    /// Existing assets authored before the XMLtype name was frozen remain readable.
+    pub const LEGACY_AUTHORED_XML_SCHEMAS: &[&str] = &["newengine.nemat.material_library.v1"];
     pub const CONTENT_SCHEMA_CONTRACT_SPEC: newengine_contract_api::ContractSpec =
         newengine_contract_api::ContractSpec::new(
             "asset.nemat.schema",

@@ -230,6 +230,30 @@ pub(super) fn apply_player_model_from_ytyp(
         profile.player.model.skeleton = Some(skeleton);
         applied += 1;
     }
+    if let Some(reference) = value_path(model, &["idle_animation"]).and_then(value_string) {
+        profile.player.model.idle_animation = Some(reference);
+        applied += 1;
+    }
+    if let Some(reference) = value_path(model, &["walk_animation"]).and_then(value_string) {
+        profile.player.model.walk_animation = Some(reference);
+        applied += 1;
+    }
+    if let Some(reference) = value_path(model, &["run_animation"]).and_then(value_string) {
+        profile.player.model.run_animation = Some(reference);
+        applied += 1;
+    }
+    if let Some(reference) = value_path(model, &["sprint_animation"]).and_then(value_string) {
+        profile.player.model.sprint_animation = Some(reference);
+        applied += 1;
+    }
+    if let Some(reference) = value_path(model, &["jump_animation"]).and_then(value_string) {
+        profile.player.model.jump_animation = Some(reference);
+        applied += 1;
+    }
+    if let Some(reference) = value_path(model, &["fall_animation"]).and_then(value_string) {
+        profile.player.model.fall_animation = Some(reference);
+        applied += 1;
+    }
     if let Some(visibility) = value_path(model, &["visibility"]).and_then(value_string) {
         let visibility = visibility.to_ascii_lowercase();
         profile.player.model.hide_in_first_person = visibility.contains("hide_in_first_person")

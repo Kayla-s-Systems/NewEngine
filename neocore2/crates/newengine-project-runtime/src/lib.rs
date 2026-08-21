@@ -12,8 +12,8 @@ use std::path::{Path, PathBuf};
 use newengine_assets::{AssetService, AssetServiceClient};
 use newengine_project_api::{
     ContentMountDescriptor, ContentMountNamespace, ContentMountRegistry, ProjectManifest,
-    ProjectScriptRegistry, ResolvedProjectLaunch, RuntimeLaunchProfile, PROJECT_LAUNCH_PRESET_ENV,
-    PROJECT_MANIFEST_FILE,
+    ProjectScriptRegistry, ResolvedProjectLaunch, RuntimeLaunchProfile, GAME_MANIFEST_ENV,
+    PROJECT_LAUNCH_PRESET_ENV, PROJECT_MANIFEST_FILE,
 };
 
 pub const UI_SCREEN_PROFILE_ENV: &str =
@@ -80,6 +80,68 @@ pub struct ProjectRuntimeContext {
     pub launch: ResolvedProjectLaunch,
     pub mounts: ContentMountRegistry,
     pub scripts: ProjectScriptRegistry,
+}
+
+#[derive(Clone, Debug)]
+pub struct RuntimeCompositionContext {
+    pub manifest_path: PathBuf,
+    pub runtime_root: PathBuf,
+    pub runtime_profile: String,
+    pub game_module: Option<String>,
+    pub launch_profile: RuntimeLaunchProfile,
+    pub startup_scene: Option<String>,
+    pub startup_presentation_state: Option<String>,
+    pub definitions: Vec<PathBuf>,
+    pub mounts: ContentMountRegistry,
+    pub scripts: ProjectScriptRegistry,
+}
+
+impl RuntimeCompositionContext {
+    pub fn from_project(project: &ProjectRuntimeContext) -> Self {
+        Self {
+            manifest_path: project.manifest_path.clone(),
+            runtime_root: project.project_root.clone(),
+            runtime_profile: project
+                .launch
+                .runtime_profile
+                .clone()
+                .or_else(|| project.manifest.runtime_profile.clone())
+                .unwrap_or_default(),
+            game_module: project.manifest.game_module.clone(),
+            launch_profile: project.launch.profile,
+            startup_scene: project.launch.startup_scene.clone(),
+            startup_presentation_state: project.launch.startup_presentation_state.clone(),
+            definitions: project.manifest.definitions.clone(),
+            mounts: project.mounts.clone(),
+            scripts: project.scripts.clone(),
+        }
+    }
+}
+
+pub fn game_manifest_request_from_process() -> Option<PathBuf> {
+    let mut args = std::env::args_os().skip(1);
+    while let Some(arg) = args.next() {
+        if arg == "--game-manifest" {
+            return args.next().map(PathBuf::from);
+        }
+        if let Some(text) = arg.to_str() {
+            if let Some(value) = text.strip_prefix("--game-manifest=") {
+                if !value.trim().is_empty() {
+                    return Some(PathBuf::from(value));
+                }
+            }
+        }
+    }
+    std::env::var_os(GAME_MANIFEST_ENV)
+        .map(PathBuf::from)
+        .or_else(project_request_from_process)
+        .or_else(adjacent_game_manifest_from_exe)
+}
+
+pub fn adjacent_game_manifest_from_exe() -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    let candidate = exe.parent()?.join(PROJECT_MANIFEST_FILE);
+    candidate.is_file().then_some(candidate)
 }
 
 pub fn project_request_from_process() -> Option<PathBuf> {

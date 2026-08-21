@@ -1,6 +1,175 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use super::*;
+use flate2::read::DeflateDecoder;
+use std::{collections::BTreeSet, io::Read};
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DecodedListFileEnvelope {
+    pub header: ListFileHeader,
+    pub metadata: ListFileHeaderMetadata,
+    pub body: Vec<u8>,
+}
+
+/// Canonical NEF8/ListFile envelope decode owned by `newengine-assets-api`.
+///
+/// Domain runtimes must consume `body`; they must not reimplement header ranges,
+/// DEFLATE handling, metadata defaults or raw-body hash verification.
+pub fn decode_list_file_envelope(
+    source: &[u8],
+    expected_kind: u32,
+    logical_path: &str,
+) -> Result<DecodedListFileEnvelope, String> {
+    let header = parse_list_file_header(source)?;
+    if !header.content_kind_matches(expected_kind) {
+        return Err(format!(
+            "NEF8 content_kind mismatch path='{}' expected='{}' actual='{}'",
+            logical_path,
+            list_file_content_kind_label(expected_kind),
+            header.content_kind_label()
+        ));
+    }
+
+    let metadata = read_header_metadata(source, &header, logical_path)?;
+    validate_metadata_entries(&metadata, logical_path)?;
+    let body_slice = read_range(
+        source,
+        header.body_offset,
+        header.body_len,
+        "body",
+        logical_path,
+    )?;
+    if !header.is_deflate_body() {
+        return Err(format!(
+            "NEF8 body must be deflate-compressed path='{logical_path}'"
+        ));
+    }
+    let mut decoder = DeflateDecoder::new(body_slice);
+    let mut body = Vec::with_capacity(header.body_uncompressed_len.min(usize::MAX as u64) as usize);
+    decoder.read_to_end(&mut body).map_err(|error| {
+        format!("NEF8 deflate body decode failed path='{logical_path}' err='{error}'")
+    })?;
+    if header.body_uncompressed_len != 0 && body.len() as u64 != header.body_uncompressed_len {
+        return Err(format!(
+            "NEF8 body raw_len mismatch path='{}' expected={} actual={}",
+            logical_path,
+            header.body_uncompressed_len,
+            body.len()
+        ));
+    }
+    if header.has_body_raw_hash() {
+        let actual = blake3::hash(&body);
+        if actual.as_bytes() != &header.body_raw_hash {
+            return Err(format!(
+                "NEF8 body hash mismatch path='{}' expected={} actual={}",
+                logical_path,
+                hex_hash32(&header.body_raw_hash),
+                actual.to_hex()
+            ));
+        }
+    }
+
+    Ok(DecodedListFileEnvelope {
+        header,
+        metadata,
+        body,
+    })
+}
+
+fn read_header_metadata(
+    source: &[u8],
+    header: &ListFileHeader,
+    logical_path: &str,
+) -> Result<ListFileHeaderMetadata, String> {
+    if header.header_metadata_len == 0 {
+        return Ok(ListFileHeaderMetadata {
+            logical_path: logical_path.to_owned(),
+            content_kind: header.content_kind_label().to_owned(),
+            ..ListFileHeaderMetadata::default()
+        });
+    }
+    let bytes = read_range(
+        source,
+        header.header_metadata_offset,
+        header.header_metadata_len,
+        "header metadata",
+        logical_path,
+    )?;
+    let mut metadata: ListFileHeaderMetadata = serde_json::from_slice(bytes).map_err(|error| {
+        format!("NEF8 header metadata JSON parse failed path='{logical_path}' err='{error}'")
+    })?;
+    if metadata.logical_path.trim().is_empty() {
+        metadata.logical_path = logical_path.to_owned();
+    }
+    if metadata.content_kind.trim().is_empty() {
+        metadata.content_kind = header.content_kind_label().to_owned();
+    }
+    Ok(metadata)
+}
+
+fn validate_metadata_entries(
+    metadata: &ListFileHeaderMetadata,
+    logical_path: &str,
+) -> Result<(), String> {
+    let mut names = BTreeSet::<String>::new();
+    let mut stable_ids = BTreeSet::<String>::new();
+    for entry in &metadata.entries {
+        let name = entry.name.trim();
+        if name.is_empty() {
+            return Err(format!(
+                "NEF8 metadata entry has empty name path='{logical_path}'"
+            ));
+        }
+        if !names.insert(name.to_ascii_lowercase()) {
+            return Err(format!(
+                "NEF8 duplicate metadata entry name path='{logical_path}' name='{name}'"
+            ));
+        }
+        let stable_id = entry.stable_id.trim();
+        if stable_id.is_empty() {
+            return Err(format!(
+                "NEF8 metadata entry has empty stable_id path='{logical_path}' name='{name}'"
+            ));
+        }
+        if !stable_ids.insert(stable_id.to_ascii_lowercase()) {
+            return Err(format!(
+                "NEF8 duplicate metadata entry hash path='{logical_path}' stable_id='{stable_id}'"
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn read_range<'a>(
+    source: &'a [u8],
+    offset: u64,
+    len: u64,
+    label: &str,
+    logical_path: &str,
+) -> Result<&'a [u8], String> {
+    let offset = usize::try_from(offset)
+        .map_err(|_| format!("NEF8 {label} offset too large path='{logical_path}'"))?;
+    let len = usize::try_from(len)
+        .map_err(|_| format!("NEF8 {label} len too large path='{logical_path}'"))?;
+    let end = offset
+        .checked_add(len)
+        .ok_or_else(|| format!("NEF8 {label} range overflow path='{logical_path}'"))?;
+    source.get(offset..end).ok_or_else(|| {
+        format!(
+            "NEF8 {label} truncated path='{logical_path}' need={end} have={}",
+            source.len()
+        )
+    })
+}
+
+fn hex_hash32(hash: &[u8; 32]) -> String {
+    let mut out = String::with_capacity(64);
+    for byte in hash {
+        use std::fmt::Write as _;
+        let _ = write!(&mut out, "{byte:02x}");
+    }
+    out
+}
 
 const BASE_HEADER_LEN: usize = 16;
 const LENGTHS_HEADER_LEN: usize = 32;

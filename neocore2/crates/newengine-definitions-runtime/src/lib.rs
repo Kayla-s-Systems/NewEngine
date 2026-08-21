@@ -48,6 +48,23 @@ pub use service::{
     register_definitions_gateway_best_effort, DefinitionsRuntimeState,
 };
 
+/// Pure YTYP semantic decode used by P4 parity and runtime-owned definition projection.
+/// Envelope/VFS ownership remains in engine.assets; callers pass the canonical inflated body.
+pub fn decode_ytyp_definition_entries_from_body(
+    source: &str,
+    body: &[u8],
+) -> Result<Vec<DefinitionEntryV1>, String> {
+    let (raw_entries, warnings) = if authored_xml::body_is_xml(body) {
+        parse_ytyp_xml_document(source, body)?
+    } else {
+        parse_ytyp_json_document(source, body)?
+    };
+    raw_entries
+        .into_iter()
+        .map(|raw| build_entry(source, raw, &warnings))
+        .collect()
+}
+
 pub const DEFINITIONS_GATEWAY_OWNER: &str = "newengine-definitions-runtime.engine-runtime-provider";
 
 #[cfg(test)]

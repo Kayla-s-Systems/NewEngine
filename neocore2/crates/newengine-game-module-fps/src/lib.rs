@@ -16,7 +16,7 @@ use newengine_gameplay_fps_api::FpsGameplayPolicyProvider;
 use newengine_gameplay_fps_lua::{LuaFpsGameplayPolicyProvider, LUA_FPS_GAMEPLAY_PROVIDER_ID};
 use newengine_gameplay_script_api::ScriptedGameplayProvider;
 use newengine_plugin_api::{Blob, CapabilityId, MethodName, ServiceV1, ServiceV1Dyn};
-use newengine_project_runtime::ProjectRuntimeContext;
+use newengine_project_runtime::RuntimeCompositionContext;
 
 pub const FPS_GAME_MODULE_ID: &str = "newengine.game-module.fps";
 pub const FPS_GAME_MODULE_VERSION: &str = "1.0.0";
@@ -95,21 +95,21 @@ impl GameModuleComposition for FpsGameModule {
 }
 
 fn create_fps_module(
-    project: &ProjectRuntimeContext,
+    runtime: &RuntimeCompositionContext,
     _target: GameModuleTarget,
 ) -> Result<Arc<dyn GameModuleComposition>, String> {
-    let binding = project
+    let binding = runtime
         .scripts
         .binding(LUA_FPS_GAMEPLAY_PROVIDER_ID)
         .ok_or_else(|| {
             format!(
-                "FPS game module requires project scripting binding for consumer '{}'",
+                "FPS game module requires runtime scripting binding for consumer '{}'",
                 LUA_FPS_GAMEPLAY_PROVIDER_ID
             )
         })?;
     let operation = binding.operation.ok_or_else(|| {
         format!(
-            "project scripting binding '{}' must declare an operation",
+            "runtime scripting binding '{}' must declare an operation",
             LUA_FPS_GAMEPLAY_PROVIDER_ID
         )
     })?;

@@ -341,7 +341,9 @@ pub fn build_bind_pose_palette(
         let palette = source_to_model * (bind * bind.inverse()) * model_to_source;
         let values = palette.to_cols_array();
         if values.iter().any(|value| !value.is_finite()) {
-            return Err(format!("bind-pose palette contains non-finite value joint={index}"));
+            return Err(format!(
+                "bind-pose palette contains non-finite value joint={index}"
+            ));
         }
         let identity = Mat4::IDENTITY.to_cols_array();
         let error = values
@@ -400,6 +402,35 @@ pub fn build_skin_palette(
         }
     }
     clip.sample_local_pose(time_seconds, sampled_locals)?;
+    build_skin_palette_from_local_pose(skeleton, source_to_model, sampled_locals, out_palette)
+}
+
+/// Builds a model-space skin palette from an already sampled/blended local pose.
+///
+/// This is the composition point used by locomotion cross-fades: animation sampling
+/// and pose blending stay separate from inverse-bind palette construction, so callers
+/// never have to interpolate skin matrices directly.
+pub fn build_skin_palette_from_local_pose(
+    skeleton: &ModelSkeletonMetadata,
+    source_to_model: [f32; 16],
+    sampled_locals: &[JointLocalPose],
+    out_palette: &mut Vec<Mat4>,
+) -> Result<(), String> {
+    let joint_count = skeleton.joints.len();
+    if sampled_locals.len() != joint_count {
+        return Err(format!(
+            "animation local pose count mismatch poses={} skeleton={joint_count}",
+            sampled_locals.len()
+        ));
+    }
+    for (index, joint) in skeleton.joints.iter().enumerate() {
+        if joint.index as usize != index {
+            return Err(format!(
+                "skeleton joint indices must be dense index={} authored={}",
+                index, joint.index
+            ));
+        }
+    }
     let bind_locals = skeleton
         .joints
         .iter()
@@ -424,8 +455,14 @@ pub fn build_skin_palette(
         }
         let source_palette = animated_globals[index] * bind.inverse();
         let palette = source_to_model * source_palette * model_to_source;
-        if palette.to_cols_array().iter().any(|value| !value.is_finite()) {
-            return Err(format!("animated skin palette contains non-finite value joint={index}"));
+        if palette
+            .to_cols_array()
+            .iter()
+            .any(|value| !value.is_finite())
+        {
+            return Err(format!(
+                "animated skin palette contains non-finite value joint={index}"
+            ));
         }
         out_palette.push(palette);
     }
@@ -670,7 +707,9 @@ mod tests {
         assert_eq!(palette.len(), 1);
         let actual = palette[0].to_cols_array();
         let expected = Mat4::IDENTITY.to_cols_array();
-        assert!(actual.iter().zip(expected.iter()).all(|(a, b)| (a - b).abs() < 1.0e-5));
+        assert!(actual
+            .iter()
+            .zip(expected.iter())
+            .all(|(a, b)| (a - b).abs() < 1.0e-5));
     }
-
 }

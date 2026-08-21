@@ -2,7 +2,7 @@ use super::*;
 
 use super::refs::{
     collect_metadata_namespaces, collect_ref_strings, definition_entry_refs_to_edges,
-    extension_of_ref, refs_to_edges,
+    extension_of_ref, list_file_manifest_dependency_edges, refs_to_edges,
 };
 use super::vfs::vfs_source_from_trace;
 
@@ -345,7 +345,7 @@ impl RuntimeAssetGraphResolver {
         };
         match self.client.decode_v1(&request) {
             Ok(bytes) => match serde_json::from_slice::<serde_json::Value>(&bytes) {
-                Ok(value) => refs_to_edges(collect_ref_strings(&value), role),
+                Ok(value) => list_file_manifest_dependency_edges(&value, role),
                 Err(err) => {
                     graph.metadata_warnings.push(format!(
                         "{asset_ref}: generic manifest decode returned non-json: {err}"

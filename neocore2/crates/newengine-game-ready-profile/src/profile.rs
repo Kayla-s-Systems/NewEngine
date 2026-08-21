@@ -3,13 +3,13 @@ use std::sync::Arc;
 use newengine_core::{Engine, EngineError, EngineResult, StartupConfig};
 use newengine_game_data::{GameDataProvider, RustGameDataProvider};
 use newengine_game_data_lua::{LuaGameDataProvider, LUA_GAME_DATA_PROVIDER_ID};
-use newengine_game_module_composition::{resolve_project_game_module, GameModuleTarget};
-use newengine_project_api::ProjectScriptRegistry;
-use newengine_project_runtime::ProjectRuntimeContext;
-use newengine_render_feature_gameready::GameReadyRenderFeaturePack;
-use newengine_render_ui_bridge::EngineUiDrawListBridgeProvider;
+use newengine_game_module_composition::{resolve_runtime_game_module, GameModuleTarget};
 use newengine_physics_runtime_adapter::PhysicsBackendRuntimeModule;
+use newengine_project_api::ProjectScriptRegistry;
+use newengine_project_runtime::RuntimeCompositionContext;
+use newengine_render_feature_gameready::GameReadyRenderFeaturePack;
 use newengine_render_runtime_adapter::RenderBackendRuntimeModule;
+use newengine_render_ui_bridge::EngineUiDrawListBridgeProvider;
 use newengine_ui::{UiBuildFn, UiProviderKind};
 
 use crate::scene_bootstrap::{GameReadySceneBootstrapModule, GameReadyWorldSceneBootstrapProvider};
@@ -115,49 +115,47 @@ impl GameReadyRuntimeProfile {
     ) -> EngineResult<()> {
         self.register_input_bindings_gateway_best_effort();
 
-        let project_scripts = engine
+        let scripts = engine
             .resources_mut()
             .get::<ProjectScriptRegistry>()
             .cloned();
-        let project_context = engine
+        let runtime_context = engine
             .resources_mut()
-            .get::<ProjectRuntimeContext>()
+            .get::<RuntimeCompositionContext>()
             .cloned();
-        let game_module = if let Some(project) = project_context.as_ref() {
-            resolve_project_game_module(project, GameModuleTarget::from(project.launch.profile))
+        let game_module = if let Some(runtime) = runtime_context.as_ref() {
+            resolve_runtime_game_module(runtime, GameModuleTarget::from(runtime.launch_profile))
                 .map_err(EngineError::Other)?
         } else {
             None
         };
-        let project_game_data_binding = project_scripts
+        let game_data_binding = scripts
             .as_ref()
             .and_then(|registry| registry.binding(LUA_GAME_DATA_PROVIDER_ID));
-        let game_data_provider: Arc<dyn GameDataProvider> = if let Some(binding) =
-            project_game_data_binding
+        let game_data_provider: Arc<dyn GameDataProvider> = if let Some(binding) = game_data_binding
         {
             let operation = binding.operation.ok_or_else(|| {
                 EngineError::Other(format!(
-                    "project scripting binding '{}' must declare an operation",
+                    "runtime scripting binding '{}' must declare an operation",
                     LUA_GAME_DATA_PROVIDER_ID
                 ))
             })?;
             Arc::new(LuaGameDataProvider::new(binding.script_ref).with_operation(operation))
         } else if let Some(provider) = self.game_data_provider.clone() {
             provider
-        } else if project_context.as_ref().is_some_and(|project| {
-            project
-                .manifest
+        } else if runtime_context.as_ref().is_some_and(|runtime| {
+            runtime
                 .game_module
                 .as_deref()
                 .is_none_or(|id| id.trim().is_empty())
         }) {
             newengine_ulog_api::ulog::info!(
-                "world/render profile: content-only project has no authored game-data binding; using immutable Rust defaults"
+                "world/render profile: content-only runtime has no authored game-data binding; using immutable Rust defaults"
             );
             Arc::new(RustGameDataProvider)
         } else {
             return Err(EngineError::Other(format!(
-                "world/render profile requires a project scripting binding for '{}' or an explicitly injected GameDataProvider",
+                "world/render profile requires runtime scripting binding for '{}' or an explicitly injected GameDataProvider",
                 LUA_GAME_DATA_PROVIDER_ID
             )));
         };
@@ -185,9 +183,9 @@ impl GameReadyRuntimeProfile {
 
         if let Some(game_module) = game_module.as_ref() {
             let descriptor = game_module.descriptor();
-            let target = project_context
+            let target = runtime_context
                 .as_ref()
-                .map(|project| GameModuleTarget::from(project.launch.profile))
+                .map(|runtime| GameModuleTarget::from(runtime.launch_profile))
                 .unwrap_or(GameModuleTarget::Client);
             let providers = game_module.providers(target).map_err(EngineError::Other)?;
             providers
@@ -229,7 +227,7 @@ impl GameReadyRuntimeProfile {
             ))))?;
         } else if matches!(self.kind, GameReadyRuntimeKind::StandaloneGame) {
             return Err(EngineError::Other(
-                "standalone game launch requires game.toml startup_scene; no implicit scene fallback exists"
+                "standalone game requires startup_scene from game.toml or its packaged game descriptor"
                     .to_owned(),
             ));
         } else {

@@ -1,15 +1,15 @@
 use super::*;
 
+#[path = "submit/finalize.rs"]
+mod finalize;
 #[path = "submit/shadow_debug.rs"]
 mod shadow_debug;
 #[path = "submit/shadow_setup.rs"]
 mod shadow_setup;
-#[path = "submit/finalize.rs"]
-mod finalize;
 
+use finalize::{finalize_successful_submit, SuccessfulSubmit};
 use shadow_debug::shadow_receiver_debug_mode;
 use shadow_setup::{prepare_shadow_setup, ShadowSetup};
-use finalize::{finalize_successful_submit, SuccessfulSubmit};
 
 impl RenderFrameOrchestrator {
     pub(in super::super) fn submit_scene_viewport_frame(

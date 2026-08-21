@@ -9,9 +9,10 @@ use newengine_project_api::{
     ContentMountRegistry, ProjectContentMountState, PROJECT_STARTUP_SCENE_ENV,
 };
 use newengine_project_runtime::{
-    apply_resolved_project_launch_env, load_project_from_request_with_launch,
-    project_launch_request_from_process, project_request_from_process, register_engine_asset_roots,
-    ProjectRuntimeContext,
+    apply_resolved_project_launch_env, game_manifest_request_from_process,
+    load_project_from_request_with_launch, project_launch_request_from_process,
+    project_request_from_process, register_engine_asset_roots, ProjectRuntimeContext,
+    RuntimeCompositionContext,
 };
 
 use crate::{
@@ -46,8 +47,9 @@ where
 
         std::env::set_var("NEWENGINE_RUN_ID", &run_id);
         let boot_options = self.profile.boot_options();
-        let project_request = project_request_from_process();
-        if project_request.is_none()
+        let editor_project_request = project_request_from_process();
+        let game_request = game_manifest_request_from_process();
+        if game_request.is_none()
             && boot_option_enabled(
                 boot_options,
                 super::boot_options::RuntimeHostBootOption::ProjectBrowser,
@@ -56,12 +58,12 @@ where
             && !super::env_bool("NEWENGINE_PROJECT_BROWSER_DISABLED", false)
         {
             return Err(EngineError::Other(
-                "runtime host no longer owns Project Browser UI; launch through NewEngine or pass --project so the runtime receives a resolved game.toml"
+                "runtime host does not discover projects; editor must resolve game.toml before runtime launch"
                     .to_owned(),
             ));
         }
         let project_launch_request = project_launch_request_from_process();
-        let project_context = match project_request {
+        let game_context = match game_request {
             Some(request) => {
                 let context = load_project_from_request_with_launch(
                     &request,
@@ -69,12 +71,21 @@ where
                 )
                 .map_err(|error| {
                     EngineError::Other(format!(
-                        "project load failed request='{}': {error}",
+                        "game manifest load failed request='{}': {error}",
                         request.display()
                     ))
                 })?;
-                std::env::set_var("NEWENGINE_PROJECT_ROOT", &context.project_root);
-                std::env::set_var("NEWENGINE_PROJECT_MANIFEST", &context.manifest_path);
+                let editor_owned = editor_project_request.is_some();
+                if editor_owned {
+                    std::env::set_var("NEWENGINE_PROJECT_ROOT", &context.project_root);
+                    std::env::set_var("NEWENGINE_PROJECT_MANIFEST", &context.manifest_path);
+                } else {
+                    std::env::set_var("NEWENGINE_GAME_ROOT", &context.project_root);
+                    std::env::set_var(
+                        newengine_project_api::GAME_MANIFEST_ENV,
+                        &context.manifest_path,
+                    );
+                }
                 if let Some(startup_scene) = context
                     .launch
                     .startup_scene
@@ -88,7 +99,7 @@ where
                 }
                 apply_resolved_project_launch_env(&context.launch);
                 self.early_log(format_args!(
-                    "project.loaded id={} root={} manifest={} mounts={} launch={} launch_profile={} runtime_profile={}",
+                    "game.manifest.loaded id={} root={} manifest={} mounts={} launch={} launch_profile={} runtime_profile={} editor_owned={}",
                     context.manifest.id,
                     context.project_root.display(),
                     context.manifest_path.display(),
@@ -96,11 +107,15 @@ where
                     context.launch.preset_id,
                     context.launch.profile.id(),
                     context.launch.runtime_profile.as_deref().unwrap_or("app-default"),
+                    editor_owned,
                 ));
                 Some(context)
             }
             None => None,
         };
+        let runtime_context = game_context
+            .as_ref()
+            .map(RuntimeCompositionContext::from_project);
         self.spec.apply_env_defaults();
         apply_declared_boot_options_env(self.spec.app_name, boot_options);
         self.install_error_reporter();
@@ -131,8 +146,8 @@ where
         let mut content_mount_registry = ContentMountRegistry::default();
         register_engine_asset_roots(&mut content_mount_registry, &asset_roots)
             .map_err(EngineError::Other)?;
-        if let Some(project) = project_context.as_ref() {
-            for mount in project.mounts.mounts() {
+        if let Some(runtime) = runtime_context.as_ref() {
+            for mount in runtime.mounts.mounts() {
                 content_mount_registry
                     .register(mount.clone())
                     .map_err(EngineError::Other)?;
@@ -142,27 +157,37 @@ where
         let mut engine = self.build_engine(&startup)?;
         newengine_runtime_session_runtime::init_runtime_session_command_service();
 
-        if let Some(project) = project_context.as_ref() {
-            configure_project_plugin_roots(&mut engine, project)?;
+        if let Some(game) = game_context.as_ref() {
+            configure_game_plugin_roots(&mut engine, game)?;
         }
         engine
             .resources_mut()
             .insert(content_mount_registry.clone());
-        if let Some(project) = project_context.clone() {
-            engine.resources_mut().insert(project.scripts.clone());
+        if let Some(runtime) = runtime_context.clone() {
+            engine.resources_mut().insert(runtime.scripts.clone());
             engine
                 .resources_mut()
-                .insert::<ProjectRuntimeContext>(project);
+                .insert::<RuntimeCompositionContext>(runtime);
+            if editor_project_request.is_some() {
+                if let Some(project) = game_context.clone() {
+                    engine
+                        .resources_mut()
+                        .insert::<ProjectRuntimeContext>(project);
+                    newengine_asset_hot_reload_runtime::install_asset_file_watcher(
+                        engine.resources_mut(),
+                    );
+                }
+            }
             engine
                 .resources_mut()
                 .insert(ProjectContentMountState::pending());
             engine.register_module(Box::new(
                 super::project_content::DeferredProjectContentMountModule::new(asset_roots.clone()),
             ))?;
-            newengine_asset_hot_reload_runtime::install_asset_file_watcher(engine.resources_mut());
             self.early_log(format_args!(
-                "project.content.bootstrap deferred-module=true mounts={} hot_reload=true",
+                "runtime.content.bootstrap deferred-module=true mounts={} project_hot_reload={}",
                 content_mount_registry.mounts().len(),
+                editor_project_request.is_some(),
             ));
         } else {
             engine
@@ -170,7 +195,7 @@ where
                 .insert(ProjectContentMountState::default());
         }
         self.profile
-            .initialize_composition_services(&mut engine, project_context.as_ref())?;
+            .initialize_composition_services(&mut engine, runtime_context.as_ref())?;
         self.initialize_profile_and_plugins(&mut engine, &startup, boot_options)?;
 
         let asset_host = newengine_plugin_host::default_host_api();
@@ -207,7 +232,7 @@ where
                 "asset_roots.mount.requested count={} registry_mounts={} project={} project_mounts=deferred-module",
                 asset_roots.len(),
                 content_mount_registry.mounts().len(),
-                project_context.is_some(),
+                editor_project_request.is_some(),
             ));
         } else {
             newengine_ulog_api::ulog::warn!(
@@ -239,11 +264,12 @@ where
     }
 
     fn load_startup_config(&self) -> EngineResult<Arc<StartupConfig>> {
-        let paths = ConfigPaths::from_startup_str(self.spec.startup_config_path);
-        self.early_log(format_args!(
-            "startup.load.begin path={}",
-            self.spec.startup_config_path
-        ));
+        let startup_path = std::env::var(crate::runtime_config::ENGINE_STARTUP_CONFIG_ENV)
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or_else(|| self.spec.startup_config_path.to_owned());
+        let paths = ConfigPaths::from_startup_str(&startup_path);
+        self.early_log(format_args!("startup.load.begin path={}", startup_path));
         let (startup, _report) = StartupLoader::load_json(&paths)?;
         self.early_log(format_args!(
             "startup.load.ok modules_dir={} cache_files={} config={}",
@@ -266,7 +292,7 @@ where
     }
 }
 
-fn configure_project_plugin_roots(
+fn configure_game_plugin_roots(
     engine: &mut Engine<()>,
     project: &ProjectRuntimeContext,
 ) -> EngineResult<()> {
@@ -324,7 +350,7 @@ fn configure_project_plugin_roots(
         .filter(|id| !id.is_empty())
     {
         newengine_ulog_api::ulog::info!(
-            "project game-module boundary: module id='{}' project='{}' resolution='engine.game.module + composition registry'",
+            "game-module boundary: module id='{}' project='{}' resolution='engine.game.module + composition registry'",
             game_module,
             project.manifest.id,
         );

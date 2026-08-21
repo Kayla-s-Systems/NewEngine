@@ -12,6 +12,7 @@ pub use mounts::*;
 pub use scripting::*;
 
 pub const PROJECT_MANIFEST_FILE: &str = "game.toml";
+pub const GAME_MANIFEST_ENV: &str = "NEWENGINE_GAME_MANIFEST";
 pub const PROJECT_MANIFEST_CONTRACT: &str = "newengine.project.v1";
 pub const PROJECT_STARTUP_SCENE_ENV: &str = "NEWENGINE_PROJECT_STARTUP_SCENE";
 pub const PROJECT_LAUNCH_PRESET_ENV: &str = "NEWENGINE_PROJECT_LAUNCH_PRESET";

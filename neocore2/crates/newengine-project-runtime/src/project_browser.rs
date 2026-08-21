@@ -176,6 +176,12 @@ fn discover_recursive(dir: &Path, depth: usize, out: &mut Vec<ProjectBrowserEntr
                     if !launch_ids.iter().any(|id| id == &default_launch) {
                         launch_ids.push(default_launch.clone());
                     }
+                    // Editor is an engine tooling capability, not project-owned game data.
+                    // Every valid project can therefore be opened through the synthetic
+                    // standard `editor` launch even when game.toml does not declare it.
+                    if !launch_ids.iter().any(|id| id == "editor") {
+                        launch_ids.push("editor".to_owned());
+                    }
                     let launch_options = launch_ids
                         .iter()
                         .filter_map(|id| {
@@ -268,6 +274,49 @@ mod tests {
             },
         );
         assert_eq!(preferred_launch_id(&manifest), "editor");
+    }
+
+    #[test]
+    fn discovered_project_always_exposes_editor_as_tooling_launch() {
+        let unique = format!(
+            "newengine-project-browser-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        );
+        let root = std::env::temp_dir().join(unique);
+        let project = root.join("GameOnly");
+        std::fs::create_dir_all(&project).unwrap();
+        std::fs::write(
+            project.join(PROJECT_MANIFEST_FILE),
+            r#"format_version = 1
+id = "game-only"
+name = "Game Only"
+launch_profile = "game"
+default_launch = "game"
+
+[launch.game]
+profile = "game"
+"#,
+        )
+        .unwrap();
+
+        let entries = discover_projects(&root);
+        let entry = entries
+            .iter()
+            .find(|entry| entry.id == "game-only")
+            .unwrap();
+        assert_eq!(entry.default_launch, "game");
+        assert!(entry.launch_options.iter().any(|option| {
+            option.id == "game" && option.profile == RuntimeLaunchProfile::Game.id()
+        }));
+        assert!(entry.launch_options.iter().any(|option| {
+            option.id == "editor" && option.profile == RuntimeLaunchProfile::Editor.id()
+        }));
+
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]

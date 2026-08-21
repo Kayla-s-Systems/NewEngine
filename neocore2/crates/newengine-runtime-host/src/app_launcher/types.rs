@@ -1,5 +1,5 @@
 use newengine_core::{Engine, EngineResult, StartupConfig};
-use newengine_project_runtime::ProjectRuntimeContext;
+use newengine_project_runtime::RuntimeCompositionContext;
 use newengine_ui::{UiBuildFn, UiProviderKind};
 
 use super::boot_options::RuntimeHostBootOption;
@@ -58,7 +58,7 @@ pub trait RuntimeHostAppProfile {
     fn initialize_composition_services(
         &self,
         _engine: &mut Engine<()>,
-        _project: Option<&ProjectRuntimeContext>,
+        _runtime: Option<&RuntimeCompositionContext>,
     ) -> EngineResult<()> {
         Ok(())
     }

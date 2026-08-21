@@ -13,8 +13,15 @@ newengine-contract-registry = { path = "../newengine-contract-registry" }
 newengine-plugin-api = { path = "../newengine-plugin-api" }
 newengine-plugin-host = { path = "../newengine-plugin-host" }
 newengine-service-api = { path = "../newengine-service-api" }
+serde_json = "1.0"
+
+newengine-definitions-runtime = { path = "../newengine-definitions-runtime" }
+newengine-model-domain-api = { path = "../newengine-model-domain-api" }
+newengine-texture-container = { path = "../newengine-texture-container" }
+newengine-materials = { path = "../newengine-materials", features = ["serde"] }
+newengine-ui-api = { path = "../newengine-ui-api" }
+serde = { version = "1", features = ["derive"] }
 
 [dev-dependencies]
 newengine-physics-api = { path = "../newengine-physics-api" }
 newengine-render-api = { path = "../newengine-render-api" }
-newengine-ui-api = { path = "../newengine-ui-api" }

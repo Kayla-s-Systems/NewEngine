@@ -58,8 +58,16 @@ pub(super) fn validate_player_asset_family(
                 "Abby asset chain rejected foreign Abigail reference role={role} ref='{reference}'"
             ));
         }
-        if matches!(role, "skeleton" | "idle_animation" | "walk_animation" | "run_animation" | "sprint_animation" | "jump_animation" | "fall_animation")
-            && !is_abby_ref(reference)
+        if matches!(
+            role,
+            "skeleton"
+                | "idle_animation"
+                | "walk_animation"
+                | "run_animation"
+                | "sprint_animation"
+                | "jump_animation"
+                | "fall_animation"
+        ) && !is_abby_ref(reference)
         {
             return Err(format!(
                 "Abby asset chain requires Abby-owned reference role={role} ref='{reference}'"
@@ -123,7 +131,9 @@ pub(super) fn validate_player_skin_contract(
             ));
         }
         if skin.vertices.is_empty() {
-            return Err(format!("skinned player model has empty skin stream part={part_index}"));
+            return Err(format!(
+                "skinned player model has empty skin stream part={part_index}"
+            ));
         }
         for (vertex_index, vertex) in skin.vertices.iter().enumerate() {
             let mut sum = 0.0_f32;
@@ -159,7 +169,6 @@ pub(super) fn validate_player_skin_contract(
     Ok(Some(source_to_model))
 }
 
-
 pub(super) fn validate_player_palette(
     palette: &[Mat4],
     expected_joints: usize,
@@ -178,7 +187,10 @@ pub(super) fn validate_player_palette(
                 "player skin palette contains non-finite matrix context='{context}' joint={joint}"
             ));
         }
-        let max_abs = values.iter().map(|value| value.abs()).fold(0.0_f32, f32::max);
+        let max_abs = values
+            .iter()
+            .map(|value| value.abs())
+            .fold(0.0_f32, f32::max);
         if max_abs > 10_000.0 {
             return Err(format!(
                 "player skin palette contains unstable transform context='{context}' joint={joint} max_abs={max_abs}"

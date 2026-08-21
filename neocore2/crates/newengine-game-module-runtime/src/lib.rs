@@ -4,7 +4,7 @@ use newengine_core::{EngineError, EngineReadinessKey, EngineResult, Module, Modu
 use newengine_game_module_api::{
     GameModuleDescriptorV1, GAME_MODULE_DESCRIBE_METHOD_V1, GAME_MODULE_SERVICE_ID,
 };
-use newengine_project_runtime::ProjectRuntimeContext;
+use newengine_project_runtime::RuntimeCompositionContext;
 
 #[derive(Clone, Debug, Default)]
 pub struct GameModuleRuntimeState {
@@ -25,8 +25,8 @@ impl GameModuleContractModule {
     fn validate_contract<E: Send + 'static>(&self, ctx: &mut ModuleCtx<'_, E>) -> EngineResult<()> {
         let required_module_id = ctx
             .resources()
-            .get::<ProjectRuntimeContext>()
-            .and_then(|project| project.manifest.game_module.clone())
+            .get::<RuntimeCompositionContext>()
+            .and_then(|runtime| runtime.game_module.clone())
             .filter(|value| !value.trim().is_empty());
         let Some(required_module_id) = required_module_id else {
             ctx.resources_mut()
@@ -50,7 +50,7 @@ impl GameModuleContractModule {
         .map_err(|error| EngineError::Other(format!("game-module describe call failed: {error}")))?
         .ok_or_else(|| {
             EngineError::Other(format!(
-                "project requires game_module '{}' but service '{}' is unavailable after EnginePluginsReady",
+                "game runtime requires game_module '{}' but service '{}' is unavailable after EnginePluginsReady",
                 required_module_id, GAME_MODULE_SERVICE_ID
             ))
         })?;
@@ -67,7 +67,7 @@ impl GameModuleContractModule {
         }
         if descriptor.module_id != required_module_id {
             return Err(EngineError::Other(format!(
-                "game-module identity mismatch project requires='{}' provider returned='{}'",
+                "game-module identity mismatch runtime requires='{}' provider returned='{}'",
                 required_module_id, descriptor.module_id
             )));
         }

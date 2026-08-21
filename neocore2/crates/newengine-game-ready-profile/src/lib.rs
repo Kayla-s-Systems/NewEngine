@@ -37,28 +37,25 @@ pub use project_editor::{
 
 pub const GAME_READY_RUNTIME_PROFILE_ID: &str = "newengine.runtime-profile.game-ready";
 
-/// Launches the generic GameReady runtime for a resolved project manifest.
+/// Launches the generic GameReady runtime for a resolved game manifest.
 ///
-/// This is intentionally public for ABI plugin wrappers; the launcher itself must not
-/// link this crate directly.
+/// Editor may pass a project-owned `game.toml`; packaged game/server builds place the
+/// same game descriptor next to the runtime executable. Engine `runtime.toml` is not
+/// a game descriptor and is never parsed here.
 pub fn launch_registered_game_ready_profile(manifest_path: &std::path::Path) -> Result<(), String> {
     let launch_id = std::env::var(newengine_project_api::PROJECT_LAUNCH_PRESET_ENV)
         .ok()
         .filter(|value| !value.trim().is_empty());
-    let project = newengine_project_runtime::load_project_from_request_with_launch(
+    let game = newengine_project_runtime::load_project_from_request_with_launch(
         manifest_path,
         launch_id.as_deref(),
     )?;
-    if project.launch.profile != newengine_project_api::RuntimeLaunchProfile::Game {
-        return Err(format!(
-            "GameReady is compiled in game-only mode; launch '{}' resolved profile '{}'",
-            project.launch.preset_id,
-            project.launch.profile.id()
-        ));
+    if game.launch.profile == newengine_project_api::RuntimeLaunchProfile::Editor {
+        return Err("GameReady standalone runtime cannot select the editor launch profile".to_owned());
     }
-    let profile = GameReadyRuntimeProfile::standalone_game();
-    std::env::set_var("NEWENGINE_PROJECT", manifest_path);
-    GameReadyFpsApp::with_profile(profile).run_process()
+    std::env::set_var(newengine_project_api::GAME_MANIFEST_ENV, manifest_path);
+    std::env::remove_var("NEWENGINE_PROJECT");
+    GameReadyFpsApp::with_profile(GameReadyRuntimeProfile::standalone_game()).run_process()
 }
 
 /// Registration consumed by the generic NewEngine runtime-profile registry.

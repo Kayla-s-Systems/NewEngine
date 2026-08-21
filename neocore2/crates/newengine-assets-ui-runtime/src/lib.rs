@@ -14,15 +14,12 @@
 
 use abi_stable::std_types::{RResult, RString};
 
-use flate2::read::DeflateDecoder;
-
 use newengine_assets_api::AssetServiceClient;
 
 use newengine_assets_api::{
-    assets_ui_method, list_file_content_kind_label as content_kind_label, parse_list_file_header,
-    ASSETS_UI_BACKEND_CAPABILITY_ID, ASSETS_UI_RUNTIME_CONTRACT, ASSETS_UI_SERVICE_ID,
-    ASSETS_UI_SERVICE_METHODS, ENGINE_ASSETS_UI_SERVICE_ID, ENGINE_ASSET_SERVICE_ID,
-    LIST_FILE_CONTENT_KIND_NEUI,
+    assets_ui_method, ASSETS_UI_BACKEND_CAPABILITY_ID, ASSETS_UI_RUNTIME_CONTRACT,
+    ASSETS_UI_SERVICE_ID, ASSETS_UI_SERVICE_METHODS, ENGINE_ASSETS_UI_SERVICE_ID,
+    ENGINE_ASSET_SERVICE_ID, LIST_FILE_CONTENT_KIND_NEUI,
 };
 
 use newengine_plugin_api::Blob;
@@ -56,8 +53,6 @@ use newengine_ui_navigation_api::{
 use serde::{Deserialize, Serialize};
 
 use std::collections::BTreeMap;
-
-use std::io::Read;
 
 pub const ASSETS_UI_GATEWAY_OWNER: &str = "newengine-assets-ui-runtime.engine-runtime-provider";
 

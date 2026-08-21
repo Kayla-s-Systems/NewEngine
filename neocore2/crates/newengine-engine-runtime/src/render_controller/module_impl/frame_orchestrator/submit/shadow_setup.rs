@@ -78,13 +78,7 @@ pub(super) fn prepare_shadow_setup(
     let local_shadow_plan = if !shadows_enabled {
         shadows::LocalShadowPlan::disabled(lit.white_texture)
     } else {
-        match shadows::build_local_shadow_plan(
-            controller,
-            r,
-            scene.world(),
-            lit,
-            camera_position,
-        ) {
+        match shadows::build_local_shadow_plan(controller, r, scene.world(), lit, camera_position) {
             Ok(plan) => plan,
             Err(e) => {
                 newengine_ulog_api::ulog::warn!(

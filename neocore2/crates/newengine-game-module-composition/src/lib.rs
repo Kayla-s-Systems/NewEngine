@@ -14,7 +14,7 @@ use newengine_engine_runtime::{
 };
 use newengine_game_module_api::GameModuleDescriptorV1;
 use newengine_project_api::RuntimeLaunchProfile;
-use newengine_project_runtime::ProjectRuntimeContext;
+use newengine_project_runtime::{ProjectRuntimeContext, RuntimeCompositionContext};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum GameModuleTarget {
@@ -122,7 +122,7 @@ pub trait GameModuleComposition: Send + Sync {
 }
 
 pub type GameModuleFactory =
-    fn(&ProjectRuntimeContext, GameModuleTarget) -> Result<Arc<dyn GameModuleComposition>, String>;
+    fn(&RuntimeCompositionContext, GameModuleTarget) -> Result<Arc<dyn GameModuleComposition>, String>;
 
 #[derive(Clone, Copy)]
 pub struct GameModuleFactoryRegistration {
@@ -165,12 +165,11 @@ pub fn register_game_module_factory(
     }
 }
 
-pub fn resolve_project_game_module(
-    project: &ProjectRuntimeContext,
+pub fn resolve_runtime_game_module(
+    runtime: &RuntimeCompositionContext,
     target: GameModuleTarget,
 ) -> Result<Option<Arc<dyn GameModuleComposition>>, String> {
-    let Some(module_id) = project
-        .manifest
+    let Some(module_id) = runtime
         .game_module
         .as_deref()
         .map(str::trim)
@@ -185,21 +184,28 @@ pub fn resolve_project_game_module(
         .copied()
         .ok_or_else(|| {
             format!(
-            "project requires game_module '{module_id}', but no composition factory is registered"
-        )
+                "runtime requires game_module '{module_id}', but no composition factory is registered"
+            )
         })?;
-    let module = (registration.factory)(project, target)?;
+    let module = (registration.factory)(runtime, target)?;
     let descriptor = module.descriptor();
     descriptor
         .validate()
         .map_err(|errors| format!("game-module descriptor invalid: {}", errors.join("; ")))?;
     if descriptor.module_id != module_id {
         return Err(format!(
-            "game-module composition identity mismatch project='{}' factory='{}'",
+            "game-module composition identity mismatch runtime='{}' factory='{}'",
             module_id, descriptor.module_id
         ));
     }
     Ok(Some(module))
+}
+
+pub fn resolve_project_game_module(
+    project: &ProjectRuntimeContext,
+    target: GameModuleTarget,
+) -> Result<Option<Arc<dyn GameModuleComposition>>, String> {
+    resolve_runtime_game_module(&RuntimeCompositionContext::from_project(project), target)
 }
 
 #[derive(Clone, Copy)]

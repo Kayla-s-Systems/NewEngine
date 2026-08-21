@@ -4,6 +4,11 @@ use newengine_contract_api::{ContractKind, ContractSpec};
 use newengine_plugin_api::{CapabilityKind, CapabilityRole, PluginDescriptor};
 use newengine_service_api::BackendServiceSpec;
 
+mod dto_parity;
+mod tool_runtime;
+pub use dto_parity::*;
+pub use tool_runtime::*;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProviderAbiConformance {
     pub gateway_id: String,
@@ -525,28 +530,29 @@ mod tests {
             );
         }
         let mut errors = Vec::new();
-        let mut validate_group = |
-            files: &[std::path::PathBuf],
-            kind: u32,
-            spec: ContractSpec,
-            readable_legacy_schema_versions: &[u16],
-        | {
-            for path in files {
-                match std::fs::read(path) {
-                    Ok(bytes) => {
-                        if let Err(items) = validate_list_file_contract_with_read_compatibility(
-                            &bytes,
-                            kind,
-                            spec,
-                            readable_legacy_schema_versions,
-                        ) {
-                            errors.push(format!("{}: {}", path.display(), items.join("; ")));
+        let mut validate_group =
+            |files: &[std::path::PathBuf],
+             kind: u32,
+             spec: ContractSpec,
+             readable_legacy_schema_versions: &[u16]| {
+                for path in files {
+                    match std::fs::read(path) {
+                        Ok(bytes) => {
+                            if let Err(items) = validate_list_file_contract_with_read_compatibility(
+                                &bytes,
+                                kind,
+                                spec,
+                                readable_legacy_schema_versions,
+                            ) {
+                                errors.push(format!("{}: {}", path.display(), items.join("; ")));
+                            }
+                        }
+                        Err(error) => {
+                            errors.push(format!("{}: read failed: {error}", path.display()))
                         }
                     }
-                    Err(error) => errors.push(format!("{}: read failed: {error}", path.display())),
                 }
-            }
-        };
+            };
         validate_group(
             &ytd,
             newengine_asset_format_nef8::ytd::CONTENT_KIND,

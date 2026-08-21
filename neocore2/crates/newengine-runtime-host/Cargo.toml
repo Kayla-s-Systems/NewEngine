@@ -17,6 +17,7 @@ full-runtime = [
     "dep:raw-window-handle",
     "dep:serde_json",
     "dep:serde",
+    "dep:toml",
     "dep:newengine-assets",
     "dep:newengine-assets-api",
     "dep:newengine-asset-hot-reload-runtime",
@@ -71,6 +72,7 @@ log = { version = "0.4.29", optional = true }
 raw-window-handle = { version = "0.6.2", optional = true }
 serde_json = { version = "1.0.149", optional = true }
 serde = { version = "1.0", features = ["derive"], optional = true }
+toml = { version = "0.8", optional = true }
 
 newengine-assets = { path = "../newengine-assets", optional = true }
 newengine-assets-api = { path = "../newengine-assets-api", optional = true }

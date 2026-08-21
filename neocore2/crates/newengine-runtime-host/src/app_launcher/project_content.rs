@@ -3,7 +3,7 @@ use newengine_core::{EngineError, EngineReadinessKey, EngineResult, Module, Modu
 use newengine_project_api::{
     ContentMountNamespace, ContentMountRegistry, ProjectContentMountState, ProjectScriptRegistry,
 };
-use newengine_project_runtime::{mount_content_registry_best_effort, ProjectRuntimeContext};
+use newengine_project_runtime::{mount_content_registry_best_effort, RuntimeCompositionContext};
 use std::path::PathBuf;
 
 pub(super) struct DeferredProjectContentMountModule {
@@ -128,24 +128,24 @@ impl DeferredProjectContentMountModule {
             return Ok(());
         }
 
-        let project_id = ctx
+        let runtime_id = ctx
             .resources()
-            .get::<ProjectRuntimeContext>()
-            .map(|project| project.manifest.id.as_str())
-            .unwrap_or("project");
+            .get::<RuntimeCompositionContext>()
+            .and_then(|runtime| runtime.game_module.as_deref())
+            .unwrap_or("game");
         newengine_scripting_client::AssetBackedScriptClient::new(
             entrypoint.clone(),
-            format!("project-entrypoint:{project_id}"),
+            format!("game-entrypoint:{runtime_id}"),
         )
         .load_module()
         .map_err(|error| {
             EngineError::Other(format!(
-                "project scripting entrypoint load failed ref='{entrypoint}': {error}"
+                "game scripting entrypoint load failed ref='{entrypoint}': {error}"
             ))
         })?;
         self.entrypoint_loaded = true;
         newengine_ulog_api::ulog::info!(
-            "project scripting: entrypoint loaded ref='{}' runtime='{}'",
+            "game scripting: entrypoint loaded ref='{}' runtime='{}'",
             entrypoint,
             scripts.runtime().unwrap_or("provider-selected")
         );
