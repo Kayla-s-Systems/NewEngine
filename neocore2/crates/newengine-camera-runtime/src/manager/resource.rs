@@ -109,18 +109,39 @@ impl CameraManagerResource {
             desired_camera_policy(state);
 
         let view_changed = self.view_mode != state.view_mode;
-        let changed = self.active_director != desired_director
+        let director_changed = self.active_director != desired_director;
+        let input_context_changed = self.input_context != desired_context;
+        let gate_changed = self.gate_blocked != state.gate_blocked;
+        let changed = director_changed
             || self.active_mode != desired_mode
             || view_changed
-            || self.input_context != desired_context
-            || self.gate_blocked != state.gate_blocked;
+            || input_context_changed
+            || gate_changed;
+
+        // Gameplay view switches are already spatially reconciled by the possessed camera
+        // service (follow/aim spring or analytic orbit). Running the manager's frame blend on
+        // top of that creates two interpolation owners with different moving targets and can
+        // pull the presented camera laterally between the old and new rigs. Keep the controller
+        // reconfiguration below, but cut only the manager-level blend for a pure view change.
+        let gameplay_view_only_change = view_changed
+            && !director_changed
+            && !input_context_changed
+            && !gate_changed
+            && self.active_director == CameraDirectorKind::Gameplay
+            && desired_director == CameraDirectorKind::Gameplay
+            && self.target_entity == desired_target
+            && desired_target.is_some();
 
         if changed {
-            let duration = transition_duration_from_settings(
-                &self.settings,
-                self.active_director,
-                desired_director,
-            );
+            let duration = if gameplay_view_only_change {
+                0.0
+            } else {
+                transition_duration_from_settings(
+                    &self.settings,
+                    self.active_director,
+                    desired_director,
+                )
+            };
             self.begin_transition(CameraTransitionPlan {
                 from_director: self.active_director,
                 to_director: desired_director,
@@ -548,5 +569,118 @@ fn director_id(kind: CameraDirectorKind) -> u64 {
         CameraDirectorKind::AnimScene => 9,
         CameraDirectorKind::Marketing => 10,
         CameraDirectorKind::Debug => 11,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn direct_gameplay_state(
+        player: newengine_ecs::EntityId,
+        view_mode: CameraViewMode,
+    ) -> CameraRuntimeWorldState {
+        CameraRuntimeWorldState {
+            runtime_requested: true,
+            public_runtime_active: true,
+            wants_direct_player_control: true,
+            gate_blocked: false,
+            player: Some(player),
+            view_mode,
+            ..CameraRuntimeWorldState::default()
+        }
+    }
+
+    #[test]
+    fn gameplay_view_switch_cuts_manager_blend_but_reconfigures_possession() {
+        let player = newengine_ecs::EntityId::default();
+        let mut manager = CameraManagerResource::default();
+        manager.active_director = CameraDirectorKind::Gameplay;
+        manager.active_mode = CameraRuntimeMode::GameplayFirstPerson;
+        manager.view_mode = CameraViewMode::FirstPerson;
+        manager.input_context = CameraInputContext::GameplayLook;
+        manager.target_entity = Some(player);
+        manager.transition = CameraTransitionState::default();
+        manager.frame_blend.begin(CameraFrameBlendPlan::cut());
+
+        manager.sync_world_state(direct_gameplay_state(
+            player,
+            CameraViewMode::ThirdPersonFollow,
+        ));
+
+        let report = manager.report();
+        assert_eq!(report.active_director, CameraDirectorKind::Gameplay);
+        assert_eq!(
+            report.active_mode,
+            CameraRuntimeMode::GameplayThirdPersonFollow
+        );
+        assert_eq!(report.transition.phase, CameraTransitionPhase::Idle);
+        assert!(!report.frame_blend_active);
+        assert_eq!(
+            manager.take_pending_request(),
+            Some(CameraDirectorRequest::PossessPlayer { player })
+        );
+    }
+
+    #[test]
+    fn all_possessed_gameplay_view_switches_have_single_transition_owner() {
+        let player = newengine_ecs::EntityId::default();
+        let mut manager = CameraManagerResource::default();
+        manager.active_director = CameraDirectorKind::Gameplay;
+        manager.active_mode = CameraRuntimeMode::GameplayFirstPerson;
+        manager.view_mode = CameraViewMode::FirstPerson;
+        manager.input_context = CameraInputContext::GameplayLook;
+        manager.target_entity = Some(player);
+        manager.transition = CameraTransitionState::default();
+        manager.frame_blend.begin(CameraFrameBlendPlan::cut());
+
+        for (view, mode) in [
+            (
+                CameraViewMode::ThirdPersonFollow,
+                CameraRuntimeMode::GameplayThirdPersonFollow,
+            ),
+            (
+                CameraViewMode::ThirdPersonAim,
+                CameraRuntimeMode::GameplayThirdPersonAim,
+            ),
+            (
+                CameraViewMode::ThirdPersonOrbit,
+                CameraRuntimeMode::GameplayThirdPersonOrbit,
+            ),
+            (
+                CameraViewMode::FirstPerson,
+                CameraRuntimeMode::GameplayFirstPerson,
+            ),
+            (
+                CameraViewMode::ThirdPersonOrbit,
+                CameraRuntimeMode::GameplayThirdPersonOrbit,
+            ),
+        ] {
+            manager.sync_world_state(direct_gameplay_state(player, view));
+            let report = manager.report();
+            assert_eq!(report.active_mode, mode);
+            assert_eq!(report.transition.phase, CameraTransitionPhase::Idle);
+            assert!(!report.frame_blend_active);
+            assert_eq!(
+                manager.take_pending_request(),
+                Some(CameraDirectorRequest::PossessPlayer { player })
+            );
+        }
+    }
+
+    #[test]
+    fn director_change_still_uses_configured_manager_blend() {
+        let player = newengine_ecs::EntityId::default();
+        let mut manager = CameraManagerResource::default();
+
+        manager.sync_world_state(direct_gameplay_state(
+            player,
+            CameraViewMode::ThirdPersonFollow,
+        ));
+
+        let report = manager.report();
+        assert_eq!(report.active_director, CameraDirectorKind::Gameplay);
+        assert_eq!(report.transition.phase, CameraTransitionPhase::Pending);
+        assert!(report.frame_blend_active);
     }
 }

@@ -160,7 +160,8 @@ mod tests {
 
         let mut state = CameraNavState::default();
         let mut input = CameraNavInput::default();
-        input.navigation_gated = true;
+        input.gate_navigation();
+        assert!(input.navigation_gated);
         let params = CameraNavParams {
             dt: 1.0 / 60.0,
             viewport: newengine_camera::CameraViewport::from_size(1280, 720),

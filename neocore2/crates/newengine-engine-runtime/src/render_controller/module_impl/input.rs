@@ -71,14 +71,15 @@ impl ViewportInputSnap {
         };
         let actions =
             newengine_input_bindings_runtime::resolve_input_actions(&UiInputSource(input));
+        let middle_drag = input.is_mouse_down(newengine_input_api::mouse_button::MIDDLE);
 
         Self {
             dx_px: input.mouse_delta.0 + actions.look_axis[0] * 18.0,
             dy_px: input.mouse_delta.1 + actions.look_axis[1] * 18.0,
             wheel_y: input.mouse_wheel.1,
             active: true,
-            look_drag: true,
-            pan_drag: false,
+            look_drag: !middle_drag,
+            pan_drag: middle_drag,
             ui_busy: false,
             fly_rmb: false,
             sampling_alive: true,
@@ -100,24 +101,54 @@ impl ViewportInputSnap {
     /// composed every frame; otherwise gameplay can run, but modal UI actions only work
     /// in direct-surface debug paths.
     #[inline]
-    pub(super) fn merge_semantic_actions_from_surface(&mut self, input: Option<&UiInputFrame>) {
+    pub(super) fn merge_semantic_actions_from_surface(
+        &mut self,
+        input: Option<&UiInputFrame>,
+        canonical_mouse_authoritative: bool,
+    ) {
         let Some(input) = input else {
             return;
         };
         let actions =
             newengine_input_bindings_runtime::resolve_input_actions(&UiInputSource(input));
+        let middle_drag = input.is_mouse_down(newengine_input_api::mouse_button::MIDDLE);
+        self.pan_drag = middle_drag;
+        if middle_drag {
+            // MMB owns the mouse delta for camera dolly in gameplay Orbit. Do not let the
+            // same packet simultaneously rotate the camera.
+            self.look_drag = false;
+        }
 
         // Canonical engine.input owns raw mouse deltas for both direct and normal
-        // playable surfaces. ViewportBridge is an optional legacy/editor source, not
-        // the authoritative gameplay mouse stream; relying on it here made gameplay
-        // look depend on surface mode and could silently lose the vertical channel.
-        self.dx_px += input.mouse_delta.0 + actions.look_axis[0] * 18.0;
-        self.dy_px += input.mouse_delta.1 + actions.look_axis[1] * 18.0;
+        // playable surfaces. ViewportBridge is a legacy/editor fallback. Adding both
+        // packets double-counted identical events and, with opposite Y conventions,
+        // could cancel pitch while yaw still worked. Canonical mouse motion therefore
+        // replaces the legacy packet whenever it is present; gamepad look is additive.
+        let canonical_dx = if input.mouse_delta.0.is_finite() {
+            input.mouse_delta.0
+        } else {
+            0.0
+        };
+        let canonical_dy = if input.mouse_delta.1.is_finite() {
+            input.mouse_delta.1
+        } else {
+            0.0
+        };
+        let raw_mouse_look = canonical_dx.abs() > f32::EPSILON
+            || canonical_dy.abs() > f32::EPSILON;
+        if canonical_mouse_authoritative || raw_mouse_look {
+            self.dx_px = canonical_dx;
+            self.dy_px = canonical_dy;
+        }
+        self.dx_px += actions.look_axis[0] * 18.0;
+        self.dy_px += actions.look_axis[1] * 18.0;
         self.wheel_y += input.mouse_wheel.1;
         self.move_mask |= actions.move_mask;
-        if actions.look_axis != [0.0, 0.0] {
+        if raw_mouse_look || actions.look_axis != [0.0, 0.0] {
             self.active = true;
-            self.look_drag = true;
+            if !middle_drag {
+                self.look_drag = true;
+            }
         }
         if !matches!(actions.camera_view, CameraViewRequest::None) {
             self.camera_view = actions.camera_view;
@@ -135,7 +166,9 @@ impl ViewportInputSnap {
         }
         if policy.force_gameplay_look {
             self.active = true;
-            self.look_drag = true;
+            if !self.pan_drag {
+                self.look_drag = true;
+            }
             self.ui_busy = false;
             self.fly_rmb = policy.capture_cursor_on_play;
         }
@@ -223,14 +256,33 @@ mod tests {
         let mut frame = UiInputFrame::default();
         frame.mouse_delta = (7.25, -5.5);
 
-        snap.merge_semantic_actions_from_surface(Some(&frame));
+        snap.merge_semantic_actions_from_surface(Some(&frame), true);
 
         assert!((snap.dx_px - 7.25).abs() <= f32::EPSILON);
         assert!((snap.dy_px + 5.5).abs() <= f32::EPSILON);
+        assert!(snap.active, "raw mouse motion must activate gameplay look");
+        assert!(
+            snap.look_drag,
+            "raw mouse motion must own look even without semantic stick input"
+        );
     }
 
     #[test]
-    fn canonical_mouse_delta_is_additive_with_legacy_viewport_packet() {
+    fn pure_vertical_raw_mouse_delta_activates_look_without_x_motion() {
+        let mut snap = ViewportInputSnap::default();
+        let mut frame = UiInputFrame::default();
+        frame.mouse_delta = (0.0, -8.0);
+
+        snap.merge_semantic_actions_from_surface(Some(&frame), true);
+
+        assert!(snap.dx_px.abs() <= f32::EPSILON);
+        assert!((snap.dy_px + 8.0).abs() <= f32::EPSILON);
+        assert!(snap.active);
+        assert!(snap.look_drag);
+    }
+
+    #[test]
+    fn canonical_mouse_delta_overrides_duplicate_legacy_viewport_packet() {
         let mut snap = ViewportInputSnap {
             dx_px: 2.0,
             dy_px: 3.0,
@@ -239,9 +291,55 @@ mod tests {
         let mut frame = UiInputFrame::default();
         frame.mouse_delta = (4.0, -8.0);
 
-        snap.merge_semantic_actions_from_surface(Some(&frame));
+        snap.merge_semantic_actions_from_surface(Some(&frame), true);
 
-        assert!((snap.dx_px - 6.0).abs() <= f32::EPSILON);
-        assert!((snap.dy_px + 5.0).abs() <= f32::EPSILON);
+        assert!((snap.dx_px - 4.0).abs() <= f32::EPSILON);
+        assert!((snap.dy_px + 8.0).abs() <= f32::EPSILON);
+    }
+    #[test]
+    fn gameplay_canonical_zero_clears_stale_legacy_mouse_packet() {
+        let mut snap = ViewportInputSnap {
+            dx_px: 42.0,
+            dy_px: -35.0,
+            ..ViewportInputSnap::default()
+        };
+        let frame = UiInputFrame::default();
+
+        snap.merge_semantic_actions_from_surface(Some(&frame), true);
+
+        assert_eq!(snap.dx_px, 0.0);
+        assert_eq!(snap.dy_px, 0.0);
+    }
+
+    #[test]
+    fn editor_zero_canonical_mouse_preserves_legacy_viewport_packet() {
+        let mut snap = ViewportInputSnap {
+            dx_px: 7.0,
+            dy_px: -3.0,
+            ..ViewportInputSnap::default()
+        };
+        let frame = UiInputFrame::default();
+
+        snap.merge_semantic_actions_from_surface(Some(&frame), false);
+
+        assert_eq!(snap.dx_px, 7.0);
+        assert_eq!(snap.dy_px, -3.0);
+    }
+
+    #[test]
+    fn middle_mouse_drag_is_preserved_as_dolly_channel() {
+        let mut snap = ViewportInputSnap::default();
+        let mut frame = UiInputFrame::default();
+        frame.mouse_delta = (4.0, -12.0);
+        frame
+            .mouse_down
+            .insert(newengine_input_api::mouse_button::MIDDLE);
+
+        snap.merge_semantic_actions_from_surface(Some(&frame), true);
+
+        assert!(snap.pan_drag);
+        assert!(!snap.look_drag);
+        assert_eq!(snap.dx_px, 4.0);
+        assert_eq!(snap.dy_px, -12.0);
     }
 }

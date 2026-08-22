@@ -53,6 +53,7 @@ pub(super) fn draw_primitives_for_pass(
         if !display_visible_in_mode(world, id, runtime) {
             continue;
         }
+        let render_model = crate::gameplay::player_render_model_matrix(world, id, gt.0);
         let sky_dome_runtime = world.get::<EnvironmentDomeRenderState>(id);
         let asset_label = sky_dome_runtime
             .and_then(|sky| sky.asset_ref.as_deref())
@@ -99,8 +100,11 @@ pub(super) fn draw_primitives_for_pass(
         }
         if runtime && !follows_view && visibility_settings.culling_enabled {
             if let Some(bounds) = world.get::<Bounds>(id) {
-                let (center_ws, radius_ws) =
-                    transform_sphere(gt.0, bounds.local_sphere.center, bounds.local_sphere.radius);
+                let (center_ws, radius_ws) = transform_sphere(
+                    render_model,
+                    bounds.local_sphere.center,
+                    bounds.local_sphere.radius,
+                );
                 if !forward_sphere_visible(
                     camera_position,
                     camera_forward,
@@ -112,7 +116,7 @@ pub(super) fn draw_primitives_for_pass(
                 ) {
                     continue;
                 }
-            } else if distance_sq_to_camera(gt.0, camera_position)
+            } else if distance_sq_to_camera(render_model, camera_position)
                 > visibility_settings.max_distance * visibility_settings.max_distance
             {
                 continue;
@@ -123,11 +127,11 @@ pub(super) fn draw_primitives_for_pass(
             if follows_view || sky_role {
                 0.0
             } else {
-                distance_sq_to_camera(gt.0, camera_position)
+                distance_sq_to_camera(render_model, camera_position)
             },
             key,
             *prim,
-            gt.0,
+            render_model,
             world.get::<newengine_materials::MaterialRef>(id).copied(),
             draw_flags,
             sky_dome_runtime.cloned(),

@@ -21,10 +21,10 @@ pub use physics::{PhysicsSurface, PhysicsWorldSettings, StaticMeshCollider};
 pub use player::{
     CharacterBody, CharacterMotionTuning, PlayerAnimationState, PlayerCommandFrame,
     PlayerController, PlayerControllerKind, PlayerEvent, PlayerEventBus, PlayerEventKind,
-    PlayerGroundState, PlayerLocomotionAnimation, PlayerLocomotionState, PlayerModelAssignment,
-    PlayerModelBinding, PlayerSkinBinding, PlayerSkinPose, PlayerSkinVertex, PlayerStanceKind,
-    PlayerStanceState, PlayerViewVisibility, PlayerViewVisibilityPolicy, PlayerVisualKind,
-    PlayerVisualPart,
+    PlayerFixedPoseHistory, PlayerGroundState, PlayerLocomotionAnimation, PlayerLocomotionState,
+    PlayerModelAssignment, PlayerModelBinding, PlayerRenderPose, PlayerSkinBinding, PlayerSkinPose,
+    PlayerSkinVertex, PlayerStanceKind, PlayerStanceState, PlayerViewVisibility,
+    PlayerViewVisibilityPolicy, PlayerVisualKind, PlayerVisualPart,
 };
 pub use render_environment::{
     CloudShadowRenderState, EnvironmentDomeRenderState, EnvironmentPostFxState,

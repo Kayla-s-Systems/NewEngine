@@ -110,17 +110,18 @@ impl RuntimeRenderController {
         let ui: Option<UiDrawList> = ctx.resources_mut().remove::<UiDrawList>();
         self.apply_editor_viewport_slot(ctx, w, h);
         let mut r = api.lock();
-        let (dt, fixed_dt, fixed_step_count, fixed_tick) = ctx
+        let (dt, fixed_dt, fixed_alpha, fixed_step_count, fixed_tick) = ctx
             .frame()
             .map(|frame| {
                 (
                     frame.dt,
                     frame.fixed_dt,
+                    frame.fixed_alpha,
                     frame.fixed_step_count,
                     frame.fixed_tick,
                 )
             })
-            .unwrap_or((0.016, 0.016, 1, 0));
+            .unwrap_or((0.016, 0.016, 0.0, 1, 0));
         let pre_begin_ms = render_module_started.elapsed().as_secs_f64() * 1000.0;
         let backend_begin_started = Instant::now();
         let scope_result = self.begin_playable_surface_frame(
@@ -130,6 +131,7 @@ impl RuntimeRenderController {
             h,
             dt,
             fixed_dt,
+            fixed_alpha,
             fixed_step_count,
             fixed_tick,
             trace_frame,
@@ -466,6 +468,7 @@ impl RuntimeRenderController {
         h: u32,
         dt: f32,
         fixed_dt: f32,
+        fixed_alpha: f32,
         fixed_step_count: u32,
         fixed_tick: u64,
         trace_frame: bool,
@@ -513,6 +516,7 @@ impl RuntimeRenderController {
             trace_frame,
             dt,
             fixed_dt,
+            fixed_alpha,
             fixed_step_count,
             fixed_tick,
         }))

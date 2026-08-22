@@ -9,6 +9,9 @@ use super::types::{PlayerSkinGpu, PrimitiveGpu, SkinPaletteGpu};
 
 const MIN_SKIN_PALETTE_CAPACITY: usize = 256;
 const MAX_SKIN_PALETTE_JOINTS: usize = 4096;
+// Four palette slots prevent host-visible writes from racing in-flight GPU skinning.
+// The current Vulkan backend uses two frames in flight; four slots leave extra reuse margin.
+const SKIN_PALETTE_RING_SIZE: u64 = 4;
 
 pub fn ensure_player_skin_gpu(
     cache: &mut FxHashMap<PrimitiveId, PlayerSkinGpu>,
@@ -104,10 +107,12 @@ pub fn ensure_player_skin_gpu(
 }
 
 pub fn ensure_skin_palette_gpu(
-    cache: &mut FxHashMap<u64, SkinPaletteGpu>,
+    cache: &mut FxHashMap<(u64, u8), SkinPaletteGpu>,
     owner_key: u64,
+    pose_generation: u64,
     pose: &PlayerSkinPose,
     skin_bgl: BindGroupLayoutId,
+    frame_index: u64,
     r: &mut dyn newengine_core::render::RenderApi,
 ) -> EngineResult<SkinPaletteGpu> {
     let joint_count = pose.palette.len();
@@ -118,7 +123,10 @@ pub fn ensure_skin_palette_gpu(
         )));
     }
 
-    if !cache.contains_key(&owner_key) {
+    let ring_slot = (frame_index % SKIN_PALETTE_RING_SIZE) as u8;
+    let cache_key = (owner_key, ring_slot);
+
+    if !cache.contains_key(&cache_key) {
         let capacity = joint_count
             .max(MIN_SKIN_PALETTE_CAPACITY)
             .next_power_of_two()
@@ -134,24 +142,25 @@ pub fn ensure_skin_palette_gpu(
                 .with_storage0(BufferBinding::new(buffer, 0, size)),
         )?;
         cache.insert(
-            owner_key,
+            cache_key,
             SkinPaletteGpu {
                 buffer,
                 bg,
                 capacity_joints: capacity as u32,
+                generation: u64::MAX,
                 revision: 0,
             },
         );
     }
 
-    let mut gpu = cache[&owner_key];
+    let mut gpu = cache[&cache_key];
     if joint_count > gpu.capacity_joints as usize {
         return Err(EngineError::other(format!(
             "player skin palette exceeded persistent GPU capacity owner={} joints={} capacity={} action='model swap requires palette cache retirement'",
             owner_key, joint_count, gpu.capacity_joints
         )));
     }
-    if gpu.revision != pose.revision {
+    if gpu.generation != pose_generation || gpu.revision != pose.revision {
         let mut bytes = Vec::with_capacity(joint_count * 64);
         for matrix in &pose.palette {
             for value in matrix.to_cols_array() {
@@ -165,8 +174,9 @@ pub fn ensure_skin_palette_gpu(
             }
         }
         r.write_buffer(gpu.buffer, 0, &bytes)?;
+        gpu.generation = pose_generation;
         gpu.revision = pose.revision;
-        cache.insert(owner_key, gpu);
+        cache.insert(cache_key, gpu);
     }
     Ok(gpu)
 }

@@ -347,6 +347,56 @@ impl Default for PlayerModelAssignment {
     }
 }
 
+/// Two authoritative fixed-step poses retained for render interpolation.
+/// Simulation/physics continue to own `Transform`; this component is presentation history only.
+#[derive(Clone, Copy, Debug)]
+pub struct PlayerFixedPoseHistory {
+    pub previous_position: Vec3,
+    pub previous_rotation: newengine_math::Quat,
+    pub current_position: Vec3,
+    pub current_rotation: newengine_math::Quat,
+    pub current_fixed_tick: u64,
+    pub initialized: bool,
+}
+
+impl Default for PlayerFixedPoseHistory {
+    fn default() -> Self {
+        Self {
+            previous_position: Vec3::ZERO,
+            previous_rotation: newengine_math::Quat::IDENTITY,
+            current_position: Vec3::ZERO,
+            current_rotation: newengine_math::Quat::IDENTITY,
+            current_fixed_tick: 0,
+            initialized: false,
+        }
+    }
+}
+
+/// Render-cadence player pose sampled between the two latest fixed simulation poses.
+/// Camera and player visuals consume the same value so third-person framing cannot jitter.
+#[derive(Clone, Copy, Debug)]
+pub struct PlayerRenderPose {
+    pub position: Vec3,
+    pub rotation: newengine_math::Quat,
+    pub simulation_position: Vec3,
+    pub simulation_rotation: newengine_math::Quat,
+    pub fixed_alpha: f32,
+    pub source_fixed_tick: u64,
+}
+
+impl Default for PlayerRenderPose {
+    fn default() -> Self {
+        Self {
+            position: Vec3::ZERO,
+            rotation: newengine_math::Quat::IDENTITY,
+            simulation_position: Vec3::ZERO,
+            simulation_rotation: newengine_math::Quat::IDENTITY,
+            fixed_alpha: 0.0,
+            source_fixed_tick: 0,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct PlayerModelBinding {
     pub assignment_revision: u64,

@@ -46,6 +46,7 @@ impl CameraNavInput {
 
     #[inline]
     pub fn gate_navigation(&mut self) {
+        self.navigation_gated = true;
         self.look_drag = false;
         self.pan_drag = false;
         self.fly_rmb = false;

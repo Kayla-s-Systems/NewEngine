@@ -13,9 +13,10 @@ use super::listeners::emit_player_event;
 use super::{
     ensure_player_inventory, CharacterBody, CharacterMotionTuning, CollisionShapeDesc, DisplayMode,
     DisplayVisibility, GameplayActor, Health, PhysicsBodyDesc, PhysicsSurface, PlayerActor,
-    PlayerAnimationState, PlayerCommandFrame, PlayerController, PlayerEventKind, PlayerGroundState,
-    PlayerLocomotionAnimation, PlayerLocomotionState, PlayerModelAssignment, PlayerModelBinding,
-    PlayerStanceKind, PlayerStanceState, PlayerViewVisibility, PlayerVisualKind, PlayerVisualPart,
+    PlayerAnimationState, PlayerCommandFrame, PlayerController, PlayerEventKind,
+    PlayerFixedPoseHistory, PlayerGroundState, PlayerLocomotionAnimation, PlayerLocomotionState,
+    PlayerModelAssignment, PlayerModelBinding, PlayerRenderPose, PlayerStanceKind,
+    PlayerStanceState, PlayerViewVisibility, PlayerVisualKind, PlayerVisualPart,
 };
 
 #[path = "player/animation.rs"]
@@ -26,6 +27,8 @@ mod camera;
 mod input;
 #[path = "player/model_assignment.rs"]
 mod model_assignment;
+#[path = "player/presentation.rs"]
+mod presentation;
 #[path = "player/spawn.rs"]
 mod spawn;
 #[path = "player/stance.rs"]
@@ -40,6 +43,9 @@ pub use input::{
     consume_player_transient_input, first_player, is_player_controller_enabled,
 };
 pub use model_assignment::{clear_player_model_assignment, set_player_model_assignment};
+pub use presentation::{
+    capture_player_fixed_poses, player_render_model_matrix, publish_player_render_poses,
+};
 pub use spawn::{
     ensure_physics_body, remove_physics_body, spawn_default_player, spawn_player_controller,
 };

@@ -32,6 +32,7 @@ pub(crate) fn draw_skinned_player_primitives(
         if !display_visible_in_mode(world, entity, runtime) {
             continue;
         }
+        let render_model = crate::gameplay::player_render_model_matrix(world, entity, global.0);
         let Some(pose) = world.get::<crate::gameplay::PlayerSkinPose>(skin.owner) else {
             continue;
         };
@@ -42,7 +43,7 @@ pub(crate) fn draw_skinned_player_primitives(
         if runtime && visibility_settings.culling_enabled {
             if let Some(bounds) = world.get::<Bounds>(entity) {
                 let (center_ws, radius_ws) = transform_sphere(
-                    global.0,
+                    render_model,
                     bounds.local_sphere.center,
                     bounds.local_sphere.radius,
                 );
@@ -77,11 +78,17 @@ pub(crate) fn draw_skinned_player_primitives(
                 pose.palette.len(),
             )));
         }
+        let pose_generation = world
+            .get::<crate::gameplay::PlayerModelBinding>(skin.owner)
+            .map(|binding| binding.assignment_revision)
+            .unwrap_or(0);
         let palette_gpu = ensure_skin_palette_gpu(
             &mut this.gpu.meshes.skin_palette_cache,
             skin.owner.stable_u64(),
+            pose_generation,
             pose,
             lit.skin_bgl,
+            this.frame.frame_index,
             r,
         )?;
 
@@ -131,8 +138,12 @@ pub(crate) fn draw_skinned_player_primitives(
             } else {
                 lit.white_texture
             };
+        // Per-draw UBOs are host-visible and may still be read by an in-flight frame.
+        // Ring the cache key exactly like the skin palette so one character part cannot
+        // overwrite the matrix/material UBO that the previous GPU frame is consuming.
+        let frame_slot_key = (this.frame.frame_index & 3).wrapping_mul(0x9e37_79b9_7f4a_7c15);
         let ubo_key = instance_batch_ubo_key(
-            0x736b_696e_0000_0000 ^ entity.stable_u64() ^ prim.id.0,
+            0x736b_696e_0000_0000 ^ entity.stable_u64() ^ prim.id.0 ^ frame_slot_key,
             pipeline,
             base_texture,
             normal_texture,
@@ -157,8 +168,8 @@ pub(crate) fn draw_skinned_player_primitives(
         crate::render_controller::module_impl::passes_ubo::write_lit_ubo_ex(
             r,
             per.ubo,
-            viewproj * global.0,
-            global.0,
+            viewproj * render_model,
+            render_model,
             material_plan.base_color,
             material_plan.emissive_radiance,
             material_plan.alpha_cutoff,

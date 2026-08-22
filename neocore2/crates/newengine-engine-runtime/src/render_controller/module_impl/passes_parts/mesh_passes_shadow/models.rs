@@ -25,6 +25,7 @@ pub(super) fn draw_model_components_shadow(
         if !display_visible_in_mode(world, entity, runtime) {
             continue;
         }
+        let render_model = crate::gameplay::player_render_model_matrix(world, entity, global.0);
         let Some(bundle) = this.cached_model_bundle(&model_component.logical_path) else {
             continue;
         };
@@ -43,7 +44,7 @@ pub(super) fn draw_model_components_shadow(
                         .map(|bounds| (bounds.local_sphere.center, bounds.local_sphere.radius))
                 });
             if let Some((center, radius)) = model_bounds {
-                let (center_ws, radius_ws) = transform_sphere(global.0, center, radius);
+                let (center_ws, radius_ws) = transform_sphere(render_model, center, radius);
                 if center_ws.distance_squared(camera_position) > shadow_max_distance_sq
                     || !shadow_caster_visible(this.shadows_current_cull(), center_ws, radius_ws)
                     || !shadow_caster_projected_radius_visible(
@@ -123,8 +124,8 @@ pub(super) fn draw_model_components_shadow(
             crate::render_controller::module_impl::passes_ubo::write_lit_ubo_ex(
                 r,
                 per.ubo,
-                light_viewproj * global.0,
-                global.0,
+                light_viewproj * render_model,
+                render_model,
                 material_plan.base_color,
                 material_plan.emissive_radiance,
                 material_plan.alpha_cutoff,

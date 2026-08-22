@@ -11,11 +11,16 @@ impl RuntimeRenderController {
             .resources()
             .get::<newengine_ui_api::UiInputFrame>()
             .cloned();
+        let play_mode =
+            editor_viewport_play_mode(ctx).unwrap_or_else(|| self.bridges.scene.play_mode());
         let mut input = if scope.direct_surface_viewport {
             ViewportInputSnap::read_direct_surface(surface_input.as_ref())
         } else {
             let mut input = ViewportInputSnap::read(&self.bridges.viewport);
-            input.merge_semantic_actions_from_surface(surface_input.as_ref());
+            input.merge_semantic_actions_from_surface(
+                surface_input.as_ref(),
+                play_mode.wants_direct_player_control(),
+            );
             input
         };
         {
@@ -26,8 +31,6 @@ impl RuntimeRenderController {
                 &mut carrier,
             );
         }
-        let play_mode =
-            editor_viewport_play_mode(ctx).unwrap_or_else(|| self.bridges.scene.play_mode());
         if play_mode.wants_direct_player_control() {
             input.apply_gameplay_input_handoff(&self.runtime_profile().input);
         }

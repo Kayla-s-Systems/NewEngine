@@ -52,6 +52,7 @@ pub(super) fn draw_primitives_shadow_body(
         {
             continue;
         }
+        let render_model = crate::gameplay::player_render_model_matrix(world, id, gt.0);
         let render_options = world
             .get::<MeshRenderOptions>(id)
             .cloned()
@@ -62,8 +63,11 @@ pub(super) fn draw_primitives_shadow_body(
         }
         if runtime {
             if let Some(bounds) = world.get::<Bounds>(id) {
-                let (center_ws, radius_ws) =
-                    transform_sphere(gt.0, bounds.local_sphere.center, bounds.local_sphere.radius);
+                let (center_ws, radius_ws) = transform_sphere(
+                    render_model,
+                    bounds.local_sphere.center,
+                    bounds.local_sphere.radius,
+                );
                 if center_ws.distance_squared(camera_position) > shadow_max_distance_sq {
                     shadow_distance_culled = shadow_distance_culled.saturating_add(1);
                     continue;
@@ -84,10 +88,10 @@ pub(super) fn draw_primitives_shadow_body(
         }
         let key = id.stable_u64();
         let entry = (
-            distance_sq_to_camera(gt.0, camera_position),
+            distance_sq_to_camera(render_model, camera_position),
             key,
             *prim,
-            gt.0,
+            render_model,
             world.get::<newengine_materials::MaterialRef>(id).copied(),
         );
         if matches!(

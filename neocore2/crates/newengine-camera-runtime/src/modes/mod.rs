@@ -111,9 +111,9 @@ impl Default for GameplayThirdPersonOrbitRunner {
     #[inline]
     fn default() -> Self {
         Self {
-            // Centered inspection framing: no shoulder bias and enough distance to
-            // keep the whole 1.7-1.9m player comfortably visible.
-            orbit_offset: Vec3::new(0.0, 1.30, 4.8),
+            // Orbit is a pure radius around a separate character-center pivot.
+            // Do not bake shoulder/height bias into the arm or the subject drifts off-center.
+            orbit_offset: Vec3::new(0.0, 0.0, 4.8),
             smooth_time: 0.06,
             max_speed: 0.0,
         }

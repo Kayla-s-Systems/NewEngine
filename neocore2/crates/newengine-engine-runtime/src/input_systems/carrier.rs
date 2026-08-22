@@ -137,30 +137,32 @@ impl InputActionFrameCarrier<'_> {
         }
     }
 
-    /// Gate gameplay/camera navigation while keeping the camera listener alive.
-    ///
-    /// UI may consume pointer/text/navigation intent, but it must not unsubscribe
-    /// camera sampling. The camera receives an input-state frame every tick and
-    /// decides from `ui_busy` plus zeroed navigation deltas whether to apply
-    /// movement. This prevents the old modal path where opening UI made camera
-    /// listeners look dead until another UI toggle accidentally woke input again.
-    pub(super) fn gate_runtime_navigation_by_ui(&mut self) {
+    /// Gate camera navigation while keeping raw sampling/listeners alive.
+    pub(super) fn gate_camera_navigation_by_ui(&mut self) {
         *self.sampling_alive = true;
         *self.camera_navigation_gated = true;
-        *self.gameplay_movement_gated = true;
         *self.dx_px = 0.0;
         *self.dy_px = 0.0;
         *self.wheel_y = 0.0;
         *self.ui_busy = true;
         *self.fly_rmb = false;
-        *self.move_mask = 0;
-        *self.speed_scalar = 1.0;
         *self.camera_view = CameraViewRequest::None;
-        self.actions.move_mask = 0;
-        self.actions.move_axis = [0.0, 0.0, 0.0];
         self.actions.look_axis = [0.0, 0.0];
-        self.actions.sprint = false;
         self.actions.camera_view = CameraViewRequest::None;
+    }
+
+    /// Gate player locomotion without consuming camera look.
+    pub(super) fn gate_gameplay_movement_by_ui(&mut self) {
+        *self.sampling_alive = true;
+        *self.gameplay_movement_gated = true;
+        *self.ui_busy = true;
+        self.suppress_gameplay_movement();
+    }
+
+    /// Full modal gate: both navigation channels are blocked, while UI actions survive.
+    pub(super) fn gate_runtime_navigation_by_ui(&mut self) {
+        self.gate_camera_navigation_by_ui();
+        self.gate_gameplay_movement_by_ui();
         self.suppress_gameplay_actions();
     }
 }

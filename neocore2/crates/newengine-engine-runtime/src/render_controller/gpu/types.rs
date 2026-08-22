@@ -36,5 +36,8 @@ pub struct SkinPaletteGpu {
     pub buffer: newengine_core::render::BufferId,
     pub bg: newengine_core::render::BindGroupId,
     pub capacity_joints: u32,
+    /// Player-model assignment generation. Prevents a pose revision reset on avatar
+    /// replacement from reusing stale palette bytes.
+    pub generation: u64,
     pub revision: u64,
 }

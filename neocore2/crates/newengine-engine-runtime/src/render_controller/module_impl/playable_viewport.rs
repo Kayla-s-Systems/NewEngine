@@ -75,12 +75,34 @@ impl RuntimeRenderController {
         let session_ejected = session_frame.active
             && session_frame.mode == Some(RuntimeSessionMode::Play)
             && !session_frame.possessed;
-        let host_modal_blocks_gameplay = published_capture.requests_capture()
-            || in_game_editor
-            || editor_staging_preview
-            || session_frame.paused
-            || session_ejected;
-        let pause_world = published_capture.requests_capture()
+        // Preserve the UI capture contract channel-by-channel. A movement-only widget
+        // must not kill camera look, and a pointer/camera capture must not implicitly
+        // disable locomotion. Only true modal/editor/session ownership gates both.
+        let force_full_runtime_gate =
+            in_game_editor || editor_staging_preview || session_frame.paused || session_ejected;
+        let host_capture = InputCaptureState {
+            sampling_alive: true,
+            camera_navigation_gated: force_full_runtime_gate
+                || published_capture.modal
+                || published_capture.camera_navigation_gated,
+            gameplay_movement_gated: force_full_runtime_gate
+                || published_capture.modal
+                || published_capture.gameplay_movement_gated,
+            reason: if force_full_runtime_gate {
+                "engine.host.runtime-ownership"
+            } else if published_capture.modal {
+                "engine.ui.modal"
+            } else if published_capture.camera_navigation_gated
+                || published_capture.gameplay_movement_gated
+            {
+                "engine.ui.selective-capture"
+            } else {
+                "clear"
+            },
+        };
+        // Selective input capture is not a simulation pause. Pausing on any capture made
+        // transient hover/focus states freeze the world and made the camera appear locked.
+        let pause_world = published_capture.modal
             || in_game_editor
             || editor_staging_preview
             || gameplay_capture.pause_simulation
@@ -110,7 +132,7 @@ impl RuntimeRenderController {
             let mut carrier = frame_input.input.action_carrier();
             self.frame.input_systems.publish_input_capture_state(
                 self.frame.frame_index,
-                InputCaptureState::modal_ui(host_modal_blocks_gameplay),
+                host_capture,
                 &mut carrier,
             );
             carrier.apply_gameplay_input_capture(gameplay_capture);
@@ -209,6 +231,7 @@ impl RuntimeRenderController {
             frame_input.play_mode,
             scope.dt,
             scope.fixed_dt,
+            scope.fixed_alpha,
             session_fixed_step_count,
             scope.fixed_tick,
             pause_world,
@@ -235,7 +258,7 @@ impl RuntimeRenderController {
             });
         }
 
-        if host_modal_blocks_gameplay || gameplay_capture_after_tick.release_cursor {
+        if host_capture.camera_navigation_gated || gameplay_capture_after_tick.release_cursor {
             // UI capture must visibly release the OS cursor even if runtime-side
             // state already believes it is released. Platform grabs can be lost
             // or retained across focus/UI transitions, so force a release event.

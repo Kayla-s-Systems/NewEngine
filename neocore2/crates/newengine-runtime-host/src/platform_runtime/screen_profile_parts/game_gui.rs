@@ -258,7 +258,10 @@ fn game_gui_input_capture(state: &UiGameLayerStackState) -> Option<UiInputCaptur
         .find(|layer| layer.visible && layer.input_mode.requests_ui_focus())?;
     let mut capture = UiInputCaptureState::none();
     capture.gameplay_movement_gated = layer.input_mode.blocks_gameplay();
-    capture.camera_navigation_gated = layer.input_mode.blocks_gameplay();
+    // Non-modal UI may own keyboard/gameplay movement without stealing the possessed camera.
+    // Camera look is gated only by a true modal layer.
+    capture.camera_navigation_gated =
+        layer.kind == UiGameLayerKind::Modal && layer.input_mode.blocks_gameplay();
     capture.modal = layer.kind == UiGameLayerKind::Modal;
     capture.draw_refresh_requested = true;
     capture.reason = format!(
@@ -312,6 +315,16 @@ mod tests {
         assert!(capture.camera_navigation_gated);
         assert!(capture.modal);
         assert_eq!(capture.surfaces, vec!["game.test"]);
+    }
+
+    #[test]
+    fn non_modal_ui_only_overlay_preserves_camera_look() {
+        let capture =
+            game_gui_input_capture(&state(UiGameLayerKind::Overlay, UiGameInputMode::UiOnly))
+                .expect("ui-only overlay should own UI focus");
+        assert!(capture.gameplay_movement_gated);
+        assert!(!capture.camera_navigation_gated);
+        assert!(!capture.modal);
     }
 
     #[test]

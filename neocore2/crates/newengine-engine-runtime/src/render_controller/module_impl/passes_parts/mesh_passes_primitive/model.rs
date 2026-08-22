@@ -27,6 +27,7 @@ pub(crate) fn draw_model_components(
         if !display_visible_in_mode(world, entity, runtime) {
             continue;
         }
+        let render_model = crate::gameplay::player_render_model_matrix(world, entity, global.0);
         let Some(bundle) = this.cached_model_bundle(&model_component.logical_path) else {
             continue;
         };
@@ -53,7 +54,7 @@ pub(crate) fn draw_model_components(
                         .map(|bounds| (bounds.local_sphere.center, bounds.local_sphere.radius))
                 });
             if let Some((center, radius)) = model_bounds {
-                let (center_ws, radius_ws) = transform_sphere(global.0, center, radius);
+                let (center_ws, radius_ws) = transform_sphere(render_model, center, radius);
                 if !forward_sphere_visible(
                     camera_position,
                     camera_forward,
@@ -65,7 +66,7 @@ pub(crate) fn draw_model_components(
                 ) {
                     continue;
                 }
-            } else if distance_sq_to_camera(global.0, camera_position)
+            } else if distance_sq_to_camera(render_model, camera_position)
                 > visibility_settings.max_distance * visibility_settings.max_distance
             {
                 continue;
@@ -191,8 +192,8 @@ pub(crate) fn draw_model_components(
             crate::render_controller::module_impl::passes_ubo::write_lit_ubo_ex(
                 r,
                 per.ubo,
-                viewproj * global.0,
-                global.0,
+                viewproj * render_model,
+                render_model,
                 material_plan.base_color,
                 material_plan.emissive_radiance,
                 material_plan.alpha_cutoff,
@@ -235,6 +236,7 @@ pub(crate) fn draw_model_components_wireframe(
         if !display_visible_in_mode(world, entity, runtime) {
             continue;
         }
+        let render_model = crate::gameplay::player_render_model_matrix(world, entity, global.0);
         let Some(bundle) = this.cached_model_bundle(&model_component.logical_path) else {
             continue;
         };
@@ -267,7 +269,7 @@ pub(crate) fn draw_model_components_wireframe(
                         continue;
                     };
                     for vertex in [a, b] {
-                        let position = global.0.transform_point3(Vec3::new(
+                        let position = render_model.transform_point3(Vec3::new(
                             vertex.pos[0],
                             vertex.pos[1],
                             vertex.pos[2],

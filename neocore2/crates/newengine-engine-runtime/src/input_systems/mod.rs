@@ -303,12 +303,25 @@ impl InputRuntimeSystems {
             );
         }
 
+        if capture.camera_navigation_gated {
+            input.gate_camera_navigation_by_ui();
+        }
+        if capture.gameplay_movement_gated {
+            input.gate_gameplay_movement_by_ui();
+        }
+        // A true full gate is modal from the engine-input point of view and must also
+        // suppress gameplay dispatch. Selective gates deliberately leave the other
+        // channel and unrelated gameplay actions intact.
+        if capture.camera_navigation_gated && capture.gameplay_movement_gated {
+            input.suppress_gameplay_actions();
+        }
         if capture.has_runtime_gate() {
-            input.gate_runtime_navigation_by_ui();
             if changed {
                 newengine_ulog_api::ulog::debug!(
-                    "input systems: runtime navigation gated frame={} reason='{}' contract='listener-alive/navigation-gated'",
+                    "input systems: runtime navigation gated frame={} camera={} movement={} reason='{}' contract='listener-alive/selective-navigation-gate'",
                     frame_index,
+                    capture.camera_navigation_gated,
+                    capture.gameplay_movement_gated,
                     capture.reason,
                 );
             }

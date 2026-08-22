@@ -25,6 +25,8 @@ impl HostPlatformRuntime {
             return cursor_poll_from_state(self.last_platform_cursor);
         }
 
-        PlatformCursorPollV1::default()
+        // Cursor ownership is state, not an edge. Re-publish the last desired state
+        // every platform frame so winit can restore a lost OS grab after focus/UI churn.
+        cursor_poll_from_state(self.last_platform_cursor)
     }
 }

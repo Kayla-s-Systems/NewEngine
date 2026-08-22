@@ -2,6 +2,7 @@
 
 pub mod api_bridge;
 pub mod blend;
+pub mod constraints;
 pub mod director;
 pub mod events;
 pub mod manager;
@@ -13,6 +14,7 @@ pub mod viewport;
 
 pub use api_bridge::*;
 pub use blend::*;
+pub use constraints::*;
 pub use director::*;
 pub use events::*;
 pub use manager::*;

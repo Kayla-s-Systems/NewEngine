@@ -17,6 +17,7 @@ pub(super) struct RenderFrameScope {
     pub trace_frame: bool,
     pub dt: f32,
     pub fixed_dt: f32,
+    pub fixed_alpha: f32,
     pub fixed_step_count: u32,
     pub fixed_tick: u64,
 }

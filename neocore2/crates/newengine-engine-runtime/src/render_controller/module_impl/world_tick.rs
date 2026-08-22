@@ -4,8 +4,8 @@ use newengine_scene::Scene;
 
 use crate::engine_bounds::EngineBoundsSnap;
 use crate::gameplay::{
-    consume_player_transient_input, run_schedule_with_physics_mode_and_telemetry_for_frame,
-    GameRunMode, PhysicsIntegrationMode,
+    capture_player_fixed_poses, consume_player_transient_input, publish_player_render_poses,
+    run_schedule_with_physics_mode_and_telemetry_for_frame, GameRunMode, PhysicsIntegrationMode,
 };
 use crate::scene_bridge::EngineViewInput;
 
@@ -29,6 +29,7 @@ impl RuntimeRenderController {
         play_mode: GameRunMode,
         dt: f32,
         fixed_dt: f32,
+        fixed_alpha: f32,
         fixed_step_count: u32,
         fixed_tick: u64,
         pause_world: bool,
@@ -170,6 +171,9 @@ impl RuntimeRenderController {
                             detailed_telemetry.then_some(&sim_telemetry),
                             thread_pool,
                         );
+                        // Capture the completed fixed pose before the next simulation step. The
+                        // render stage interpolates this pair using Frame::fixed_alpha.
+                        capture_player_fixed_poses(world, simulation_tick);
                         let tick_elapsed_ms = tick_started.elapsed().as_secs_f32() * 1000.0;
                         let physics_timing = world
                             .resource::<crate::gameplay::PhysicsStepTimingTelemetry>()
@@ -196,6 +200,11 @@ impl RuntimeRenderController {
             // Gameplay systems may change modal UI state during the fixed step.
             // Synchronize the generic capture contract before camera/input resolution.
             self.frame.gameplay_ui.sync_modal_state(world);
+
+            // Render presentation is decoupled from fixed-step Transform. Camera and player
+            // visuals consume this same interpolated pose, eliminating 60 Hz stepping at
+            // higher render rates without mutating simulation/physics state.
+            publish_player_render_poses(world, fixed_alpha, dt);
 
             let bounds = scene::scene_bounds_world(world).unwrap_or_else(scene::default_bounds);
             let bounds = EngineBoundsSnap::new(bounds.center, bounds.radius);

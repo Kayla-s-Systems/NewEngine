@@ -19,7 +19,8 @@ use newengine_camera_runtime::{
     camera_frame_snapshot_for_view, cursor_state_for_nav, step_camera_nav,
     BoundsSphere as CamBoundsSphere, CameraManagerResource, CameraNavFrameRequest, CameraNavInput,
     CameraNavParams, CameraRuntimeReport, CameraRuntimeService, CameraRuntimeServiceConfig,
-    CameraRuntimeWorldState, CameraTransitionPhase as RuntimeCameraTransitionPhase,
+    CameraRuntimeWorldState, CameraSpringArmAabbCollider, CameraSpringArmCollisionWorld,
+    CameraSpringArmMeshCollider, CameraTransitionPhase as RuntimeCameraTransitionPhase,
 };
 use newengine_core::host_events::CursorState;
 use newengine_core::render::{
@@ -52,7 +53,10 @@ static CAMERA_GATEWAY_REGISTERED: AtomicBool = AtomicBool::new(false);
 mod camera_gateway_helpers;
 use self::camera_gateway_helpers::{
     apply_gameplay_view_lens, apply_runtime_input, camera_nav_input, camera_report_snapshot,
-    camera_runtime_service_config, sanitize_camera_dt, view_postfx_from_camera_snapshot,
+    camera_runtime_service_config, follow_controller_offset_z,
+    refresh_camera_spring_arm_collision_world, route_player_input_channels, sanitize_camera_dt,
+    trace_gameplay_camera_frame,
+    view_postfx_from_camera_snapshot,
 };
 pub use self::camera_gateway_helpers::{
     apply_view_postfx, CameraRuntimeOverlayReport, CameraTransitionOverlayReport,
@@ -236,6 +240,8 @@ impl CameraGatewayBridge {
             .unwrap_or(RuntimeNavMode::Orbit);
         let player = first_player(world);
         let gate_blocked = play_mode.is_runtime() && !world_playable;
+        let mut controller_z_phases = [f32::NAN; 5];
+        controller_z_phases[0] = follow_controller_offset_z(world, cam_id);
 
         let suppress_game_nav = {
             let manager = world
@@ -257,11 +263,52 @@ impl CameraGatewayBridge {
         state.sync_play_mode_transition(world, cam_id, effective_play_mode);
         let service_config = camera_runtime_service_config(world, active_view);
         CameraRuntimeService::apply_pending_director_requests(world, cam_id, service_config);
+        controller_z_phases[1] = follow_controller_offset_z(world, cam_id);
+        let gameplay_capture = crate::gameplay::gameplay_input_capture(world);
+        let mut routed_camera_input_for_trace = None;
         if effective_play_mode.wants_direct_player_control() {
             if let Some(player) = player {
-                // Gameplay view rotation is sampled at render cadence. Keep every possessed
-                // camera mode on that same cadence instead of quantizing third-person follow
-                // to fixed simulation ticks.
+                let routed_camera_input = route_player_input_channels(&input, gameplay_capture);
+                routed_camera_input_for_trace = Some(routed_camera_input);
+                refresh_camera_spring_arm_collision_world(world, player);
+                let orbit_dolly_drag = matches!(
+                    service_config.runner,
+                    newengine_camera_runtime::GameplayCameraRunnerKind::ThirdPersonOrbit
+                ) && input.pan_drag;
+                if !orbit_dolly_drag {
+                    let _ = CameraRuntimeService::apply_gameplay_camera_orbit_look(
+                        world,
+                        cam_id,
+                        player,
+                        service_config,
+                        routed_camera_input.look_delta,
+                        routed_camera_input.look_active,
+                    );
+                }
+
+                // Wheel/MMB dolly are gameplay-camera channels. Runtime navigation is deliberately
+                // gated while the player owns the camera, so consume the wheel here before the
+                // generic nav path zeros it. UI/script camera capture still blocks the zoom.
+                if !input.camera_navigation_gated && !gameplay_capture.block_camera_navigation {
+                    let _ = CameraRuntimeService::apply_gameplay_camera_zoom(
+                        world,
+                        cam_id,
+                        service_config,
+                        input.wheel_y,
+                    );
+                    if orbit_dolly_drag {
+                        let _ = CameraRuntimeService::apply_gameplay_camera_drag_zoom(
+                            world,
+                            cam_id,
+                            service_config,
+                            input.dy_px,
+                        );
+                    }
+                }
+
+                // Gameplay view rotation is sampled at render cadence. Third-person cameras
+                // smooth only their player anchor; angular orbit remains render-cadence direct.
+                controller_z_phases[2] = follow_controller_offset_z(world, cam_id);
                 let _ = CameraRuntimeService::sync_gameplay_camera_now(
                     world,
                     cam_id,
@@ -269,6 +316,7 @@ impl CameraGatewayBridge {
                     service_config,
                     camera_dt,
                 );
+                controller_z_phases[3] = follow_controller_offset_z(world, cam_id);
             }
         }
 
@@ -295,7 +343,6 @@ impl CameraGatewayBridge {
             all: viewport.read_frame_all(),
         };
 
-        let gameplay_capture = crate::gameplay::gameplay_input_capture(world);
         if suppress_game_nav
             || effective_play_mode.wants_direct_player_control()
             || nav_input.navigation_gated
@@ -312,8 +359,9 @@ impl CameraGatewayBridge {
             params,
             frame_req,
         );
+        controller_z_phases[4] = follow_controller_offset_z(world, cam_id);
 
-        let (snapshot, report) =
+        let (snapshot, report, resolved_frame) =
             if let Some(manager) = world.resource_mut::<CameraManagerResource>() {
                 manager.sync_runtime_nav_mode_from_controller(out.controller.mode);
                 manager.set_last_cursor(out.cursor);
@@ -323,13 +371,30 @@ impl CameraGatewayBridge {
                 (
                     camera_frame_snapshot_for_view(frame, effects, manager.active_view_mode()),
                     Some(camera_report_snapshot(manager.report())),
+                    frame,
                 )
             } else {
                 (
                     camera_frame_snapshot_for_view(out.frame, Default::default(), active_view),
                     None,
+                    out.frame,
                 )
             };
+
+        trace_gameplay_camera_frame(
+            frame_index,
+            dt,
+            &input,
+            routed_camera_input_for_trace,
+            active_view,
+            world,
+            player,
+            cam_id,
+            out.frame,
+            resolved_frame,
+            report.as_ref(),
+            controller_z_phases,
+        );
 
         state.last_snapshot = Some(snapshot);
         let view = EngineViewFrame::from_camera_snapshot(snapshot);
@@ -372,16 +437,30 @@ struct CameraGatewayState {
     active_view: CameraViewMode,
 }
 
+fn parse_camera_start_view(raw: Option<&str>) -> CameraViewMode {
+    match raw.map(str::trim).map(str::to_ascii_lowercase).as_deref() {
+        Some("follow" | "thirdpersonfollow" | "third_person_follow") => {
+            CameraViewMode::ThirdPersonFollow
+        }
+        Some("aim" | "thirdpersonaim" | "third_person_aim") => CameraViewMode::ThirdPersonAim,
+        Some("orbit" | "thirdpersonorbit" | "third_person_orbit") => {
+            CameraViewMode::ThirdPersonOrbit
+        }
+        _ => CameraViewMode::FirstPerson,
+    }
+}
+
 impl Default for CameraGatewayState {
     #[inline]
     fn default() -> Self {
+        let start_view = std::env::var("NEWENGINE_CAMERA_START_VIEW").ok();
         Self {
             nav: newengine_camera_runtime::CameraNavState::default(),
             last_play_mode: GameRunMode::Staging,
             play_session: None,
             runtime_session: None,
             last_snapshot: None,
-            active_view: CameraViewMode::FirstPerson,
+            active_view: parse_camera_start_view(start_view.as_deref()),
         }
     }
 }
@@ -505,4 +584,27 @@ pub struct EngineViewFrame {
     pub viewport_width: u32,
     pub viewport_height: u32,
     pub aspect: f32,
+}
+
+#[cfg(test)]
+mod camera_gateway_start_view_tests {
+    use super::*;
+
+    #[test]
+    fn camera_start_view_defaults_to_first_person() {
+        assert_eq!(parse_camera_start_view(None), CameraViewMode::FirstPerson);
+        assert_eq!(parse_camera_start_view(Some("unknown")), CameraViewMode::FirstPerson);
+    }
+
+    #[test]
+    fn camera_start_view_can_force_orbit_for_runtime_diagnostics() {
+        assert_eq!(
+            parse_camera_start_view(Some("orbit")),
+            CameraViewMode::ThirdPersonOrbit
+        );
+        assert_eq!(
+            parse_camera_start_view(Some("third_person_orbit")),
+            CameraViewMode::ThirdPersonOrbit
+        );
+    }
 }
