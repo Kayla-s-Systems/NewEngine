@@ -25,6 +25,36 @@ pub(super) fn merge_system_tags(
 }
 
 #[inline]
+pub(super) fn route_blocked_by_selection_policy(
+    route_tags: &[String],
+    policy: Option<&GatewayPolicyFact>,
+) -> bool {
+    policy.is_some_and(|policy| {
+        policy
+            .forbidden_system_tags
+            .iter()
+            .any(|forbidden| route_tags.iter().any(|tag| tag == forbidden))
+    })
+}
+
+#[inline]
+pub(super) fn selection_policy_score_bonus(
+    route_tags: &[String],
+    policy: Option<&GatewayPolicyFact>,
+) -> i64 {
+    let Some(policy) = policy else { return 0; };
+    if policy.preference_bonus <= 0 {
+        return 0;
+    }
+    let matched = policy
+        .preferred_system_tags
+        .iter()
+        .filter(|preferred| route_tags.iter().any(|tag| tag == *preferred))
+        .count() as i64;
+    matched * i64::from(policy.preference_bonus)
+}
+
+#[inline]
 pub(super) fn route_gateway_matches_declared_kind(
     gateway_id: &str,
     service_kind: &str,
@@ -85,9 +115,21 @@ impl ActiveGatewayRoute {
             return None;
         }
 
+        if route_blocked_by_selection_policy(&route_tags, policy) {
+            newengine_ulog_api::ulog::info!(
+                "gateways: route blocked by host capability policy gateway='{}' service='{}' owner='{}' tags='{}' policy_owner='{}'",
+                gateway_id,
+                provider_service_id,
+                provider_owner_id,
+                route_tags.join(","),
+                policy.map(|policy| policy.owner_id.as_str()).unwrap_or("<none>"),
+            );
+            return None;
+        }
+        let selection_bonus = selection_policy_score_bonus(&route_tags, policy);
         let system_tags = merge_system_tags(route_tags, policy);
         let override_mode = policy
-            .map(|policy| policy.override_mode)
+            .and_then(|policy| policy.override_mode)
             .or_else(|| GatewayOverrideMode::from_system_tags(&system_tags))
             .unwrap_or(GatewayOverrideMode::Open);
 
@@ -105,7 +147,7 @@ impl ActiveGatewayRoute {
             return None;
         }
 
-        let active_score = origin.origin_bias() + i64::from(backend_priority);
+        let active_score = origin.origin_bias() + i64::from(backend_priority) + selection_bonus;
         Some(Self {
             gateway_id,
             service_kind,

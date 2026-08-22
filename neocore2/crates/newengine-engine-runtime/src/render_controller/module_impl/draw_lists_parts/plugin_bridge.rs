@@ -82,7 +82,6 @@ fn parse_draw_list_kind(value: &str) -> Option<RenderDrawListKind> {
         "shadow_casters" | "ShadowCasters" | "shadow" => Some(RenderDrawListKind::ShadowCasters),
         "opaque_forward" | "OpaqueForward" | "opaque" => Some(RenderDrawListKind::OpaqueForward),
         "transparent" | "Transparent" => Some(RenderDrawListKind::Transparent),
-        "ui" | "Ui" | "UI" => Some(RenderDrawListKind::Ui),
         "debug" | "Debug" => Some(RenderDrawListKind::Debug),
         _ => None,
     }
@@ -136,7 +135,6 @@ pub(super) fn build_draw_list_provider_request(
             local_shadow_casters: ctx.visibility().local_shadow_casters,
             opaque_forward: ctx.visibility().opaque_forward,
             transparent: ctx.visibility().transparent,
-            ui: ctx.visibility().ui,
             debug: ctx.visibility().debug,
         },
         routes,

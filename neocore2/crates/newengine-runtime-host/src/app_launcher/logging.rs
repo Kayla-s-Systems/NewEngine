@@ -9,7 +9,7 @@ use std::{
 use newengine_core::StartupConfig;
 
 use super::types::{RuntimeHostAppProfile, RuntimeHostLauncher};
-use crate::asset_bootstrap::shard_log_path_by_run_id;
+use newengine_asset_bootstrap_runtime::shard_log_path_by_run_id;
 
 static APP_LAUNCH_EARLY_SEQ: AtomicU64 = AtomicU64::new(1);
 const CHRONICLE_PLUGIN_ID: &str = "engine.logging.chronicle";

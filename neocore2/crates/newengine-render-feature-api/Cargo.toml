@@ -18,4 +18,3 @@ newengine-plugin-api = { path = "../newengine-plugin-api" }
 newengine-math = { path = "../newengine-math" }
 newengine-scene = { path = "../newengine-scene", features = ["runtime"] }
 newengine-transform = { path = "../newengine-transform", features = ["ecs"], default-features = false }
-newengine-ui = { path = "../newengine-ui", default-features = false }

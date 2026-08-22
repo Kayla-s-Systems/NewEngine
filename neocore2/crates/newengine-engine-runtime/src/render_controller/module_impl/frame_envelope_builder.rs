@@ -2,8 +2,9 @@
 
 use newengine_core::render::{
     Extent2D, PostFxFrameParams, RenderEffectStack, RenderFrameDomainIntent, RenderFrameEnvelope,
+    UiLayerDrawPacketSet,
 };
-use newengine_render_frame_graph::{DrawListDesc, RenderFramePlan};
+use newengine_render_frame_graph::{ui_layer_only_frame, DrawListDesc, RenderFramePlan};
 
 /// Builds the backend-facing envelope from an engine-side frame plan.
 ///
@@ -18,6 +19,7 @@ pub(super) fn build_runtime_frame_envelope(
     frame_plan: &RenderFramePlan,
     draw_list_descs: &[DrawListDesc],
     postfx: PostFxFrameParams,
+    ui_layers: UiLayerDrawPacketSet,
     trace_frame: bool,
 ) -> RenderFrameEnvelope {
     if trace_frame {
@@ -51,4 +53,40 @@ pub(super) fn build_runtime_frame_envelope(
     .with_domain_intent(domains)
     .with_effect_stack(RenderEffectStack::aaa_default())
     .with_draw_lists(draw_list_descs.iter().map(|desc| desc.kind))
+    .with_ui_layers(ui_layers)
+}
+
+/// Builds a renderer-facing envelope for bootstrap, editor/tool UI-only and degraded frames.
+///
+/// There is intentionally no `legacy singleton UI draw path` compatibility path
+/// here. Even frames without world rendering cross the same typed layer-packet/RenderGraph
+/// boundary as normal playable frames.
+pub(super) fn build_ui_layer_frame_envelope(
+    frame_index: u64,
+    clear_color: [f32; 4],
+    surface_extent: Extent2D,
+    ui_layers: UiLayerDrawPacketSet,
+) -> RenderFrameEnvelope {
+    let frame_plan = ui_layer_only_frame(
+        frame_index,
+        surface_extent,
+        ui_layers.packets.iter().map(|packet| packet.domain),
+    );
+    let domains = RenderFrameDomainIntent {
+        render3d_enabled: false,
+        render2d_enabled: true,
+        ui_postprocess_enabled: false,
+    };
+
+    RenderFrameEnvelope::new(
+        frame_index,
+        clear_color,
+        surface_extent,
+        surface_extent,
+        true,
+        frame_plan.graph,
+    )
+    .with_domain_intent(domains)
+    .with_effect_stack(RenderEffectStack::default())
+    .with_ui_layers(ui_layers)
 }

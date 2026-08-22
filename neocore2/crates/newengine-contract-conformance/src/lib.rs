@@ -386,9 +386,10 @@ mod tests {
             newengine_render_api::RENDER_PROVIDER_ABI_CONTRACT_SPEC,
         )
         .unwrap_err();
-        assert!(errors
-            .iter()
-            .any(|e| e.contains("expected='newengine.render-provider/v1'")));
+        assert!(errors.iter().any(|e| e.contains(&format!(
+            "expected='{}'",
+            newengine_render_api::RENDER_PROVIDER_ABI_ID
+        ))));
     }
 
     #[test]

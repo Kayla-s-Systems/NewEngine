@@ -17,7 +17,7 @@ impl RenderFrameOrchestrator {
         r: &mut dyn RenderApi,
         scene: &Scene,
         plugin_snapshot: Option<&newengine_plugin_host::PluginsSnapshot>,
-        ui: Option<&UiDrawList>,
+        ui_layers: UiLayerDrawPacketSet,
         _requested_play_mode: GameRunMode,
         rt: Option<RenderTargetId>,
         scope: RenderFrameScope,
@@ -67,7 +67,7 @@ impl RenderFrameOrchestrator {
             view.forward_ws,
             Extent2D::new(scope.vp_w, scope.vp_h),
             Extent2D::new(scope.w, scope.h),
-            ui.is_some(),
+            !ui_layers.is_empty(),
             plugin_snapshot.is_some(),
         );
         Self::publish_render_task_pass_event(
@@ -116,14 +116,20 @@ impl RenderFrameOrchestrator {
                 Self::end_viewport_after_transient_pipeline_wait(
                     controller,
                     r,
-                    ui.cloned(),
+                    Some(ui_layers.clone()),
                     scope,
                     e,
                 )?;
                 return Ok(PlayableFrameOutcome::EndedEarly { ui_telemetry: None });
             }
             Err(e) => {
-                Self::end_viewport_after_pipeline_failure(controller, r, ui.cloned(), scope, e)?;
+                Self::end_viewport_after_pipeline_failure(
+                    controller,
+                    r,
+                    Some(ui_layers.clone()),
+                    scope,
+                    e,
+                )?;
                 return Ok(PlayableFrameOutcome::EndedEarly { ui_telemetry: None });
             }
         };
@@ -210,7 +216,6 @@ impl RenderFrameOrchestrator {
             surface_extent: snapshot.surface_extent,
             runtime: view_frame.effective_play_mode.is_runtime(),
             debug_overlays: editor_wireframe || editor_show_overlays,
-            ui,
         };
 
         Self::publish_render_task_pass_event(
@@ -239,7 +244,12 @@ impl RenderFrameOrchestrator {
             Ok(features) => features,
             Err(e) => {
                 controller.disable_viewport_pass("draw_list.provider_extraction", &e);
-                Self::end_viewport_after_draw_failure(controller, r, ui.cloned(), scope)?;
+                Self::end_viewport_after_draw_failure(
+                    controller,
+                    r,
+                    Some(ui_layers.clone()),
+                    scope,
+                )?;
                 return Ok(PlayableFrameOutcome::EndedEarly { ui_telemetry: None });
             }
         };
@@ -248,7 +258,7 @@ impl RenderFrameOrchestrator {
             scope.trace_frame,
             features.profile_total_ms(),
             &features.profile_breakdown(),
-            ui,
+            &ui_layers,
         );
         Self::publish_render_task_pass_event(
             controller.frame.frame_index,
@@ -271,7 +281,7 @@ impl RenderFrameOrchestrator {
         };
         let draw_list_descs = features.draw_list_descs().to_vec();
         let ui_backdrop = controller.ui.primary.ui_backdrop_postfx();
-        let ui_enabled = scope.ui_enabled || ui.is_some();
+        let ui_enabled = scope.ui_enabled || !ui_layers.is_empty();
         let frame_plan = standard_runtime_frame(
             StandardRuntimePipelineDesc::new(
                 controller.frame.frame_index,
@@ -299,6 +309,7 @@ impl RenderFrameOrchestrator {
             .hdr_scene(hdr_scene_enabled)
             .postfx(postfx_enabled)
             .ui(ui_enabled)
+            .ui_layers(ui_layers.packets.iter().map(|packet| packet.domain))
             .ui_backdrop_blur(
                 ui_enabled && ui_backdrop.enabled && ui_backdrop.blur_radius_px > 0.05,
             )
@@ -311,15 +322,8 @@ impl RenderFrameOrchestrator {
             let mut build_ctx = DrawListBuildCtx::new(controller, r, features.draw_lists());
             features.extract_external_providers(&extraction, &frame_plan, &mut build_ctx)?;
         }
-        if let Some(ui_draw_list) = ui {
-            // Stage the provider-owned UI packet directly at the renderer boundary as well as
-            // through the draw-list route. This keeps modal UI visible even when the active
-            // frame profile temporarily has no Ui draw-list provider, or when a graph compile
-            // path skips the UI composite pass while the cursor/focus policy already switched
-            // to modal mode. The call stays provider-neutral: it targets RenderApi, not Vulkan,
-            // a concrete UI provider, or any other backend implementation.
-            r.set_ui_draw_list(ui_draw_list.clone());
-        }
+        // UI domain draw streams travel inside RenderFrameEnvelope.ui_layers.
+        // No renderer state is mutated out-of-band before graph submission.
         cpu_profile.mark("frame_plan_external");
 
         let mut postfx = apply_engine_view_postfx(
@@ -344,6 +348,7 @@ impl RenderFrameOrchestrator {
             &frame_plan,
             &draw_list_descs,
             postfx,
+            ui_layers,
             scope.trace_frame,
         );
         Self::publish_render_task_pass_event(
@@ -367,13 +372,10 @@ impl RenderFrameOrchestrator {
         let submit_report = match submit_frame_envelope(r, frame_envelope, scope.trace_frame) {
             Ok(report) => report,
             Err(e) if is_transient_shader_pipeline_error(&e) => {
-                Self::end_viewport_after_transient_pipeline_wait(
-                    controller,
-                    r,
-                    ui.cloned(),
-                    scope,
-                    e,
-                )?;
+                // The envelope has already transferred packet ownership into the backend.
+                // A backend may still present staged layer packets during end_frame(); avoid
+                // cloning every healthy frame solely to retain a generic error-path copy.
+                Self::end_viewport_after_transient_pipeline_wait(controller, r, None, scope, e)?;
                 return Ok(PlayableFrameOutcome::EndedEarly { ui_telemetry: None });
             }
             Err(e) => {

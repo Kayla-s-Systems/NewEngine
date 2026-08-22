@@ -1,3 +1,4 @@
+use newengine_asset_bootstrap_runtime::{collect_app_asset_roots, mount_asset_roots_best_effort};
 use std::{path::Path, sync::Arc};
 
 use newengine_assets::AssetServiceClient;
@@ -16,18 +17,22 @@ use newengine_project_runtime::{
 };
 
 use crate::{
-    asset_bootstrap::{collect_app_asset_roots, mount_asset_roots_best_effort},
     engine_factory::build_engine_from_startup,
 };
 
 use super::boot_options::{apply_declared_boot_options_env, boot_option_enabled};
-use super::types::{RuntimeHostAppProfile, RuntimeHostLauncher};
+use super::types::{
+    RuntimeHostAppProfile, RuntimeHostFrontend, RuntimeHostFrontendContext, RuntimeHostLauncher,
+};
 
 impl<P> RuntimeHostLauncher<P>
 where
     P: RuntimeHostAppProfile,
 {
-    pub fn run(&self) -> EngineResult<()> {
+    pub fn run_with_frontend<F>(&self, frontend: &F) -> EngineResult<()>
+    where
+        F: RuntimeHostFrontend<P>,
+    {
         self.early_log(format_args!("run.begin app={}", self.spec.app_name));
         let run_id = newengine_core::init_run_id().to_owned();
         self.bind_early_log_to_run(&run_id);
@@ -46,7 +51,16 @@ where
         ));
 
         std::env::set_var("NEWENGINE_RUN_ID", &run_id);
+        self.spec.apply_env_defaults();
         let boot_options = self.profile.boot_options();
+        apply_declared_boot_options_env(self.spec.app_name, boot_options);
+        self.install_error_reporter();
+
+        // Void Engine Host PreInit is deliberately before project/runtime composition.
+        // OS/hardware discovery produces immutable DTOs and installs only generic
+        // gateway-selection policy; no game module or concrete runtime exists yet.
+        let host_preinit = crate::preinit::run_host_preinit();
+
         let editor_project_request = project_request_from_process();
         let game_request = game_manifest_request_from_process();
         if game_request.is_none()
@@ -116,10 +130,7 @@ where
         let runtime_context = game_context
             .as_ref()
             .map(RuntimeCompositionContext::from_project);
-        self.spec.apply_env_defaults();
-        apply_declared_boot_options_env(self.spec.app_name, boot_options);
-        self.install_error_reporter();
-
+        frontend.prepare_startup(&self.profile, &self.spec)?;
         let mut startup = self.load_startup_config()?;
         newengine_core::crash::record_breadcrumb(format!(
             "{} launcher: startup config loaded",
@@ -155,6 +166,9 @@ where
         }
 
         let mut engine = self.build_engine(&startup)?;
+        // Runtime consumers receive an immutable snapshot. Provider selection has
+        // already consumed the derived generic policy; systems never re-probe OS hardware.
+        engine.resources_mut().insert(Arc::clone(&host_preinit));
         newengine_runtime_session_runtime::init_runtime_session_command_service();
 
         if let Some(game) = game_context.as_ref() {
@@ -194,8 +208,11 @@ where
                 .resources_mut()
                 .insert(ProjectContentMountState::default());
         }
-        self.profile
-            .initialize_composition_services(&mut engine, runtime_context.as_ref())?;
+        self.profile.initialize_composition_services(
+            &mut engine,
+            host_preinit.as_ref(),
+            runtime_context.as_ref(),
+        )?;
         self.initialize_profile_and_plugins(&mut engine, &startup, boot_options)?;
 
         let asset_host = newengine_plugin_host::default_host_api();
@@ -245,7 +262,23 @@ where
             ));
         }
 
-        self.launch_runtime(engine, &startup, assets_available, &assets, &asset_roots)
+        frontend.launch(
+            &self.profile,
+            engine,
+            RuntimeHostFrontendContext {
+                launch_spec: &self.spec,
+                startup: &startup,
+                assets_available,
+                assets: &assets,
+                asset_roots: &asset_roots,
+            },
+        )
+    }
+
+    /// Generic runtime-host default: platformless/headless control plane. Windowed
+    /// products must explicitly provide `newengine-windowed-host-runtime`.
+    pub fn run(&self) -> EngineResult<()> {
+        self.run_with_frontend(&crate::HeadlessRuntimeFrontend)
     }
 
     fn install_error_reporter(&self) {

@@ -135,29 +135,45 @@ fn null_render_invoke(state: &mut NullRenderState, payload: Blob) -> RResult<Blo
         Err(e) => return RResult::RErr(RString::from(e)),
     };
     let response = match request {
-        RenderServiceRequest::Command(command) => RenderServiceResponse::Command(null_render_command(state, command)),
-        RenderServiceRequest::CommandBatch(commands) => {
-            RenderServiceResponse::CommandBatch(commands.into_iter().map(|cmd| null_render_command(state, cmd)).collect())
+        RenderServiceRequest::Command(command) => {
+            RenderServiceResponse::Command(null_render_command(state, command))
         }
-        RenderServiceRequest::CompileRenderGraph(_graph) => RenderServiceResponse::GraphCompileReport(Default::default()),
-        RenderServiceRequest::ValidateRenderGraph(_graph) => RenderServiceResponse::GraphValidationReport(Default::default()),
+        RenderServiceRequest::CommandBatch(commands) => RenderServiceResponse::CommandBatch(
+            commands
+                .into_iter()
+                .map(|cmd| null_render_command(state, cmd))
+                .collect(),
+        ),
+        RenderServiceRequest::CompileRenderGraph(_graph) => {
+            RenderServiceResponse::GraphCompileReport(Default::default())
+        }
+        RenderServiceRequest::ValidateRenderGraph(_graph) => {
+            RenderServiceResponse::GraphValidationReport(Default::default())
+        }
         RenderServiceRequest::SubmitRenderGraph(_) | RenderServiceRequest::SubmitFrame(_) => {
             RenderServiceResponse::GraphSubmitReport(RenderGraphSubmitReport::default())
         }
-        RenderServiceRequest::PumpUploads(_) => RenderServiceResponse::UploadPumpReport(Default::default()),
-        RenderServiceRequest::DrainBackendEvents => RenderServiceResponse::BackendEvents(Vec::new()),
-        RenderServiceRequest::DiagnosticsSnapshot => RenderServiceResponse::DiagnosticsSnapshot(Box::default()),
-        RenderServiceRequest::Negotiate(req) => RenderServiceResponse::Negotiation(newengine_render_api::RenderCapabilityNegotiationResponse {
-            accepted_version: req.preferred_version,
-            backend_version: Default::default(),
-            ok: req.required_features.is_empty(),
-            enabled_features: Vec::new(),
-            missing_required_features: req.required_features,
-            notices: vec![newengine_render_api::RenderProtocolNotice::new(
+        RenderServiceRequest::PumpUploads(_) => {
+            RenderServiceResponse::UploadPumpReport(Default::default())
+        }
+        RenderServiceRequest::DrainBackendEvents => {
+            RenderServiceResponse::BackendEvents(Vec::new())
+        }
+        RenderServiceRequest::DiagnosticsSnapshot => {
+            RenderServiceResponse::DiagnosticsSnapshot(Box::default())
+        }
+        RenderServiceRequest::Negotiate(req) => {
+            let mut negotiation = newengine_render_api::negotiate_render_capabilities(
+                req,
+                newengine_render_api::RenderApiVersion::default(),
+                &newengine_render_api::RenderBackendCapabilities::headless_default(),
+            );
+            negotiation.notices.push(newengine_render_api::RenderProtocolNotice::new(
                 "null-renderer",
-                "No concrete render backend route is active; NullRenderer accepted degraded operation.",
-            )],
-        }),
+                "No concrete render backend route is active; NullRenderer provides degraded operation only.",
+            ));
+            RenderServiceResponse::Negotiation(negotiation)
+        }
         RenderServiceRequest::SetRenderPhase { .. }
         | RenderServiceRequest::SetDrawListKind { .. }
         | RenderServiceRequest::DiscardRecordedCommands
@@ -189,7 +205,7 @@ fn register_null_render_provider() {
         newengine_service_api::SERVICE_METHOD_INFO_JSON,
         newengine_service_api::SERVICE_METHOD_INVOKE_JSON,
         newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1,
-        newengine_render_api::RENDER_SERVICE_METHOD_COMMAND_BATCH_BIN_V1,
+        newengine_render_api::RENDER_SERVICE_METHOD_COMMAND_BATCH_BIN_V2,
     ];
     let description = engine_gateway_provider_service_description(
         NULL_RENDER_SERVICE,
@@ -198,7 +214,7 @@ fn register_null_render_provider() {
         methods,
     )
     .gateway(spec.engine_gateway_id)
-    .protocol("newengine.render-api/null-v1")
+    .protocol("newengine.render-api/null-v2")
     .provider_abi(newengine_render_api::RENDER_PROVIDER_ABI_ID)
     .features(["degraded", "no-gpu-submit", "visible-null-provider"])
     .notes("Fallback is a real NullProvider route, not a hidden runtime branch.");
@@ -210,7 +226,7 @@ fn register_null_render_provider() {
             null_render_invoke,
         )
         .blob(
-            newengine_render_api::RENDER_SERVICE_METHOD_COMMAND_BATCH_BIN_V1,
+            newengine_render_api::RENDER_SERVICE_METHOD_COMMAND_BATCH_BIN_V2,
             null_render_command_batch_bin,
         )
         .shutdown()
@@ -455,6 +471,36 @@ fn register_null_ai_provider() {
 #[cfg(test)]
 mod contract_conformance_tests {
     use super::*;
+
+    #[test]
+    fn null_render_provider_rejects_v1_protocol_negotiation() {
+        let request = RenderServiceRequest::Negotiate(
+            newengine_render_api::RenderCapabilityNegotiationRequest {
+                preferred_version: newengine_render_api::RenderApiVersion::new(1, 0, 0),
+                required_features: Vec::new(),
+                optional_features: Vec::new(),
+            },
+        );
+        let payload = Blob::from(encode_render_json(&request).expect("encode negotiation request"));
+        let mut state = NullRenderState::default();
+        let response = match null_render_invoke(&mut state, payload) {
+            RResult::ROk(bytes) => decode_render_json::<RenderServiceResponse>(bytes.as_slice())
+                .expect("decode negotiation response"),
+            RResult::RErr(error) => panic!("null render negotiation failed: {error}"),
+        };
+        let RenderServiceResponse::Negotiation(response) = response else {
+            panic!("expected render negotiation response");
+        };
+        assert!(!response.ok);
+        assert_eq!(
+            response.accepted_version,
+            newengine_render_api::RenderApiVersion::new(2, 0, 0)
+        );
+        assert!(response
+            .notices
+            .iter()
+            .any(|notice| notice.code == "render.protocol.major_mismatch"));
+    }
 
     #[test]
     fn loaded_null_provider_routes_conform_to_registered_abis() {

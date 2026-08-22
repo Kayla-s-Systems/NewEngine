@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use super::*;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct SsaoParams {
@@ -190,4 +190,3 @@ fn default_sun_flare_strength() -> f32 {
 fn default_sun_ray_strength() -> f32 {
     0.16
 }
-

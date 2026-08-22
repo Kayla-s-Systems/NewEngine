@@ -1,0 +1,21 @@
+[package]
+name = "newengine-host-capabilities-runtime"
+version = "0.1.0"
+edition = "2021"
+readme = "README.md"
+description = "Host-owned OS and hardware discovery for NewEngine PreInit"
+
+[dependencies]
+newengine-host-capabilities-api = { path = "../newengine-host-capabilities-api" }
+newengine-ulog-api = { path = "../newengine-ulog-api" }
+sysinfo = { version = "0.38.3", default-features = true }
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.62.2", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Dxgi",
+    "Win32_Graphics_Dxgi_Common",
+    "Win32_Graphics_Direct3D",
+    "Win32_Graphics_Direct3D12",
+    "Win32_UI_WindowsAndMessaging",
+] }

@@ -12,8 +12,6 @@ pub enum RenderDrawListKind {
     OpaqueForward,
     /// Transparent world geometry that must be drawn after opaque geometry.
     Transparent,
-    /// UI draw commands and UI-provider composite work.
-    Ui,
     /// Editor/runtime debug primitives and overlays.
     Debug,
 }
@@ -26,7 +24,6 @@ impl RenderDrawListKind {
             Self::LocalShadowCasters => "local_shadow_casters",
             Self::OpaqueForward => "opaque_forward",
             Self::Transparent => "transparent",
-            Self::Ui => "ui",
             Self::Debug => "debug",
         }
     }
@@ -38,7 +35,6 @@ impl RenderDrawListKind {
             Self::LocalShadowCasters => RenderGraphPassKind::LocalShadowMap,
             Self::OpaqueForward => RenderGraphPassKind::ForwardOpaque,
             Self::Transparent => RenderGraphPassKind::Transparent,
-            Self::Ui => RenderGraphPassKind::UiComposite,
             Self::Debug => RenderGraphPassKind::DebugOverlay,
         }
     }
@@ -59,8 +55,7 @@ impl RenderDrawListKind {
                 Self::OpaqueForward,
                 RenderGraphPassKind::ForwardOpaque | RenderGraphPassKind::GBuffer,
             ) | (Self::Transparent, RenderGraphPassKind::Transparent)
-                | (Self::Ui, RenderGraphPassKind::UiComposite)
-                | (Self::Debug, RenderGraphPassKind::DebugOverlay)
+                                | (Self::Debug, RenderGraphPassKind::DebugOverlay)
         )
     }
 }

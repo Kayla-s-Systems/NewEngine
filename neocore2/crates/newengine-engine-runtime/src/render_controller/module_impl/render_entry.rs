@@ -3,12 +3,11 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::OnceLock;
 
 use crate::gameplay::WorldClearColor;
-use newengine_core::render::{
-    require_render_api, BeginFrameDesc, Extent2D, RectI32, SceneLaunchStatus, Viewport,
-};
+use newengine_core::render::{require_render_api, BeginFrameDesc, Extent2D, SceneLaunchStatus};
 use newengine_core::{EngineResult, ModuleCtx};
 use newengine_ui_api::{
-    UiDrawList, UiPresentationFlowState, UiRuntimeDebugOverlayTelemetry, UiViewportSlot,
+    UiLayerCompositionPlan, UiLayerDomain, UiLayerDrawPacketSet, UiPresentationFlowState,
+    UiRuntimeDebugOverlayTelemetry, UiScreenProfile, UiScreenProfileState, UiViewportSlot,
 };
 
 use super::super::controller::RuntimeRenderController;

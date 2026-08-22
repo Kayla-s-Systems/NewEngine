@@ -13,6 +13,15 @@ pub mod nemat {
     pub const AUTHORED_XML_SCHEMA: &str = "newengine.nemat.xmltype.v1";
     /// Existing assets authored before the XMLtype name was frozen remain readable.
     pub const LEGACY_AUTHORED_XML_SCHEMAS: &[&str] = &["newengine.nemat.material_library.v1"];
+    pub const AUTHORED_XML_CONTRACT_SPEC: newengine_contract_api::ContractSpec =
+        newengine_contract_api::ContractSpec::new(
+            "asset.nemat.authored_xml",
+            newengine_contract_api::ContractKind::Schema,
+            newengine_contract_api::ContractVersion::major(1),
+            newengine_contract_api::ContractCompatibility::Exact,
+            "newengine-asset-format-nef8",
+            Some(AUTHORED_XML_SCHEMA),
+        );
     pub const CONTENT_SCHEMA_CONTRACT_SPEC: newengine_contract_api::ContractSpec =
         newengine_contract_api::ContractSpec::new(
             "asset.nemat.schema",

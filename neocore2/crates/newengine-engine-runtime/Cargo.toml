@@ -56,7 +56,7 @@ newengine-replay = { path = "../newengine-replay" }
 newengine-render-api = { path = "../newengine-render-api" }
 newengine-primitives = { path = "../newengine-primitives" }
 newengine-procedural-noise = { path = "../newengine-procedural-noise" }
-newengine-runtime-host = { path = "../newengine-runtime-host" }
+newengine-world-authority-runtime = { path = "../newengine-world-authority-runtime" }
 newengine-render-runtime-adapter = { path = "../newengine-render-runtime-adapter" }
 newengine-physics-runtime-adapter = { path = "../newengine-physics-runtime-adapter" }
 newengine-runtime-session-api = { path = "../newengine-runtime-session-api" }

@@ -10,6 +10,7 @@ use newengine_gameplay_fps_api::action as fps_action;
 use newengine_gameplay_fps_api::{FpsActionFrame, FpsDemoState};
 use newengine_ui_api::{UiEventDispatchFrame, UiNodeEventTrigger, UiStatePatch};
 
+mod character_variants;
 mod commands;
 mod helpers;
 mod interaction;
@@ -21,19 +22,23 @@ mod tests;
 
 pub(crate) use commands::step_inventory_commands;
 pub use provider::FpsInventoryHudProvider;
+pub(crate) use state::character_select_is_open;
 
+use character_variants::{
+    selected_variant, variant_from_action, PlayableCharacterSelection, PLAYABLE_CHARACTER_VARIANTS,
+};
 use helpers::*;
-use interaction::apply_inventory_ui_actions;
 #[cfg(test)]
 use interaction::{
     activate_inventory_instance, drop_instance_quantity, equip_dragged_instance, reorder_inventory,
 };
+use interaction::{apply_inventory_ui_actions, select_playable_character};
 use publish::publish_inventory_hud_state;
 #[cfg(test)]
 use state::inventory_hud_is_visible;
 use state::{
     ensure_inventory_hud_state, inventory_hud_is_open, inventory_slot_count, InventoryDragState,
-    InventoryHudState, INVENTORY_HUD_CONTRACT, INVENTORY_HUD_SURFACE_ID, INVENTORY_UI_ACTION_DROP,
-    INVENTORY_UI_ACTION_EQUIPMENT, INVENTORY_UI_ACTION_HOTBAR, INVENTORY_UI_ACTION_SLOT,
-    INVENTORY_UI_ACTION_TOGGLE,
+    InventoryHudState, CHARACTER_UI_ACTION_TOGGLE, INVENTORY_HUD_CONTRACT,
+    INVENTORY_HUD_SURFACE_ID, INVENTORY_UI_ACTION_DROP, INVENTORY_UI_ACTION_EQUIPMENT,
+    INVENTORY_UI_ACTION_HOTBAR, INVENTORY_UI_ACTION_SLOT, INVENTORY_UI_ACTION_TOGGLE,
 };

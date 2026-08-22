@@ -709,3 +709,108 @@ fn legacy_route_without_provider_abi_remains_selectable() {
         .expect("legacy render route");
     assert_eq!(route.provider_abi, None);
 }
+
+
+#[test]
+fn host_capability_policy_prefers_matching_backend_tag() {
+    let make_render = |plugin_id: &str, service_id: &str, backend: &str, priority: i32| {
+        PluginDescriptor::builder(plugin_id, plugin_id, "1.0.0", PluginKind::Runtime)
+            .provides_service(service_id, 1, r#"{"methods":["info_json"]}"#)
+            .push(
+                CapabilityDesc::new(
+                    "render.backend",
+                    CapabilityRole::Provides,
+                    CapabilityKind::Other,
+                    1,
+                )
+                .with_json(format!(
+                    r#"{{"service_kind":"render","engine_gateway":"engine.render","provider_route":"engine.render.{}","contract":"{}","backend_priority":{},"backend":"{}"}}"#,
+                    plugin_id.replace('.', "_"), service_id, priority, backend
+                )),
+            )
+            .build()
+    };
+    let descriptors = vec![
+        PluginDescriptorFact::new(
+            "render.vulkan".to_owned(),
+            make_render("render.vulkan", "render.vulkan.api", "vulkan", 10),
+            GatewayProviderOrigin::FirstPartyPlugin,
+        ),
+        PluginDescriptorFact::new(
+            "render.d3d12".to_owned(),
+            make_render("render.d3d12", "render.d3d12.api", "d3d12", 100),
+            GatewayProviderOrigin::FirstPartyPlugin,
+        ),
+    ];
+    let services = vec![
+        service("render.vulkan.api", Some("render.vulkan")),
+        service("render.d3d12.api", Some("render.d3d12")),
+    ];
+    let policies = vec![GatewayPolicyFact {
+        gateway_id: "engine.render".to_owned(),
+        override_mode: None,
+        system_tags: Vec::new(),
+        preferred_system_tags: vec!["backend.vulkan".to_owned()],
+        forbidden_system_tags: Vec::new(),
+        preference_bonus: 2_000,
+        owner_id: "host.preinit".to_owned(),
+    }];
+
+    let registry = ActiveGatewayRegistry::from_facts_with_policy(
+        &descriptors,
+        &services,
+        &[],
+        &policies,
+    );
+    let route = registry.resolve_route("engine.render").expect("render route");
+
+    assert_eq!(route.provider_service_id, "render.vulkan.api");
+    assert_eq!(route.active_score, 22_010);
+    assert!(route.system_tags.iter().any(|tag| tag == "backend.vulkan"));
+}
+
+#[test]
+fn host_capability_policy_can_forbid_incompatible_backend_tag() {
+    let descriptor = PluginDescriptor::builder(
+        "render.software",
+        "render.software",
+        "1.0.0",
+        PluginKind::Runtime,
+    )
+    .provides_service("render.software.api", 1, r#"{"methods":["info_json"]}"#)
+    .push(
+        CapabilityDesc::new(
+            "render.backend",
+            CapabilityRole::Provides,
+            CapabilityKind::Other,
+            1,
+        )
+        .with_json(
+            r#"{"service_kind":"render","engine_gateway":"engine.render","provider_route":"engine.render.software","contract":"render.software.api","backend_priority":9999,"backend":"software"}"#,
+        ),
+    )
+    .build();
+    let descriptors = vec![PluginDescriptorFact::new(
+        "render.software".to_owned(),
+        descriptor,
+        GatewayProviderOrigin::FirstPartyPlugin,
+    )];
+    let services = vec![service("render.software.api", Some("render.software"))];
+    let policies = vec![GatewayPolicyFact {
+        gateway_id: "engine.render".to_owned(),
+        override_mode: None,
+        system_tags: Vec::new(),
+        preferred_system_tags: Vec::new(),
+        forbidden_system_tags: vec!["backend.software".to_owned()],
+        preference_bonus: 0,
+        owner_id: "host.preinit".to_owned(),
+    }];
+
+    let registry = ActiveGatewayRegistry::from_facts_with_policy(
+        &descriptors,
+        &services,
+        &[],
+        &policies,
+    );
+    assert!(registry.resolve_route("engine.render").is_none());
+}

@@ -15,6 +15,7 @@ pub(crate) struct GatewayRouteDiagnostics {
 }
 
 impl ActiveGatewayRegistry {
+    #[cfg(test)]
     pub(crate) fn from_facts(
         descriptors: &[PluginDescriptorFact],
         services: &[RegisteredServiceFact],

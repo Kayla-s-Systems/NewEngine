@@ -1,6 +1,5 @@
-use serde::{Deserialize, Serialize};
 use super::*;
-
+use serde::{Deserialize, Serialize};
 
 /// Input focus policy attached to a screen profile.
 ///

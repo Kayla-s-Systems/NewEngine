@@ -4,7 +4,7 @@ use std::path::PathBuf;
 ///
 /// Startup logging, launcher bootstrapping and future tool hosts must share this
 /// exact policy so paths do not diverge depending on which subsystem starts first.
-pub(crate) fn find_neocore2_root() -> PathBuf {
+pub fn find_neocore2_root() -> PathBuf {
     if let Ok(cwd) = std::env::current_dir() {
         if is_neocore2_dir(&cwd) {
             return cwd;

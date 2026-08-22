@@ -1,8 +1,11 @@
-use newengine_render_api::{Extent2D, RenderTargetId, TextureFormat};
+use newengine_render_api::{
+    Extent2D, RenderGraphPassId, RenderTargetId, TextureFormat, UiLayerDomain,
+};
 
 use crate::{
     DrawListDesc, FrameGraphBuilder, FrameGraphTargetDesc, FramePlanExecutionMode, RenderFramePlan,
-    RenderFrameRecipe, RuntimeFrameFeatureSet, RuntimeRecipeBuildParams,
+    RenderFrameRecipe, RenderPhaseDesc, RuntimeFrameFeatureSet, RuntimeRecipeBuildParams,
+    StandardRenderPhase,
 };
 
 #[derive(Debug, Clone)]
@@ -23,6 +26,8 @@ pub struct StandardRuntimePipelineDesc {
     pub hdr_scene_enabled: bool,
     pub postfx_enabled: bool,
     pub ui_enabled: bool,
+    /// Ordered renderer-owned UI domains. Empty keeps the legacy single UI pass.
+    pub ui_layers: Vec<UiLayerDomain>,
     pub ui_backdrop_blur_enabled: bool,
     pub debug_overlay_enabled: bool,
     pub execution_mode: FramePlanExecutionMode,
@@ -49,6 +54,7 @@ impl StandardRuntimePipelineDesc {
             hdr_scene_enabled: true,
             postfx_enabled: true,
             ui_enabled: true,
+            ui_layers: Vec::new(),
             ui_backdrop_blur_enabled: false,
             debug_overlay_enabled: true,
             execution_mode: FramePlanExecutionMode::ImmediateCallbacks,
@@ -125,6 +131,12 @@ impl StandardRuntimePipelineDesc {
     }
 
     #[inline]
+    pub fn ui_layers(mut self, domains: impl IntoIterator<Item = UiLayerDomain>) -> Self {
+        self.ui_layers = normalized_ui_domains(domains);
+        self
+    }
+
+    #[inline]
     pub fn ui_backdrop_blur(mut self, enabled: bool) -> Self {
         self.ui_backdrop_blur_enabled = enabled;
         self
@@ -189,7 +201,7 @@ pub fn standard_runtime_frame(desc: StandardRuntimePipelineDesc) -> RenderFrameP
     );
     let label = recipe.label.clone();
 
-    FrameGraphBuilder::new(label, desc.frame_index, target)
+    let mut plan = FrameGraphBuilder::new(label, desc.frame_index, target)
         .execution_mode(desc.execution_mode)
         .draw_lists(desc.draw_lists)
         .apply_runtime_recipe(
@@ -197,7 +209,92 @@ pub fn standard_runtime_frame(desc: StandardRuntimePipelineDesc) -> RenderFrameP
             RuntimeRecipeBuildParams::new(desc.shadow_resolution)
                 .with_shadow_cascade_count(desc.shadow_cascade_count),
         )
-        .submit()
+        .submit();
+    expand_ui_composite_layers(&mut plan, &desc.ui_layers);
+    plan
+}
+
+/// Minimal presentation graph used by bootstrap, UI-only tools and degraded recovery.
+///
+/// This deliberately skips scene/depth/postfx construction. Retained UI domains are still
+/// expanded into the same `ui_composite.<domain>` passes used by normal playable frames,
+/// so there is no separate renderer-side singleton UI path.
+#[inline]
+pub fn ui_layer_only_frame(
+    frame_index: u64,
+    surface_extent: Extent2D,
+    domains: impl IntoIterator<Item = UiLayerDomain>,
+) -> RenderFramePlan {
+    let domains = normalized_ui_domains(domains);
+    let mut target = FrameGraphTargetDesc::new(surface_extent, surface_extent, true)
+        .with_hdr_scene(false)
+        .with_offscreen_scene(false)
+        .with_scene_color_format(TextureFormat::Bgra8Unorm);
+    target.color_format = TextureFormat::Bgra8Unorm;
+    target.depth_format = TextureFormat::Depth32Float;
+
+    let mut plan = FrameGraphBuilder::new("ui_layer_only", frame_index, target)
+        .ui_composite(!domains.is_empty())
+        .submit();
+    expand_ui_composite_layers(&mut plan, &domains);
+    plan
+}
+
+fn normalized_ui_domains(domains: impl IntoIterator<Item = UiLayerDomain>) -> Vec<UiLayerDomain> {
+    let mut domains = domains.into_iter().collect::<Vec<_>>();
+    domains.sort();
+    domains.dedup();
+    domains.sort_by_key(|domain| domain.default_composition_order());
+    domains
+}
+
+fn expand_ui_composite_layers(plan: &mut RenderFramePlan, domains: &[UiLayerDomain]) {
+    if domains.is_empty() {
+        return;
+    }
+    let Some(pass_index) = plan
+        .graph
+        .passes
+        .iter()
+        .position(|pass| pass.kind == newengine_render_api::RenderGraphPassKind::UiComposite)
+    else {
+        return;
+    };
+
+    let base_pass = plan.graph.passes[pass_index].clone();
+    let layer_passes = domains
+        .iter()
+        .enumerate()
+        .map(|(index, domain)| {
+            let mut pass = base_pass.clone();
+            pass.id = RenderGraphPassId(900 + index as u64);
+            pass.label = format!("ui_composite.{}", domain.as_str());
+            // UiLayerDrawPacket is an envelope payload, not a recorded command draw-list.
+            // Layered UI therefore never participates in scene draw-list routing.
+            pass.draw_lists.clear();
+            pass
+        })
+        .collect::<Vec<_>>();
+    plan.graph
+        .passes
+        .splice(pass_index..=pass_index, layer_passes);
+
+    if let Some(phase_index) = plan
+        .phases
+        .iter()
+        .position(|phase| phase.phase == StandardRenderPhase::UiComposite)
+    {
+        let phases = domains
+            .iter()
+            .enumerate()
+            .map(|(index, domain)| RenderPhaseDesc {
+                phase: StandardRenderPhase::UiComposite,
+                pass_id: Some(RenderGraphPassId(900 + index as u64)),
+                label: format!("ui_composite.{}", domain.as_str()),
+            })
+            .collect::<Vec<_>>();
+        plan.phases.splice(phase_index..=phase_index, phases);
+    }
 }
 
 #[cfg(test)]
@@ -278,5 +375,80 @@ mod tests {
             .find(|resource| resource.semantic == RenderGraphResourceSemantic::SceneHdrColor)
             .expect("HDR scene color resource");
         assert_eq!(scene.format, Some(TextureFormat::Rgba16Float));
+    }
+
+    #[test]
+    fn layered_ui_expands_to_ordered_render_graph_composite_passes() {
+        let plan = standard_runtime_frame(
+            StandardRuntimePipelineDesc::new(
+                12,
+                Extent2D::new(1600, 900),
+                Extent2D::new(1600, 900),
+            )
+            .viewport_is_surface(true)
+            .shadow(false, 1)
+            .postfx(false)
+            .ui(true)
+            .ui_layers([
+                UiLayerDomain::Debug,
+                UiLayerDomain::System,
+                UiLayerDomain::GameViewport,
+                UiLayerDomain::Editor,
+            ])
+            .debug_overlay(false),
+        );
+
+        let ui_passes = plan
+            .graph
+            .passes
+            .iter()
+            .filter(|pass| pass.kind == newengine_render_api::RenderGraphPassKind::UiComposite)
+            .collect::<Vec<_>>();
+        assert_eq!(ui_passes.len(), 4);
+        assert_eq!(
+            ui_passes
+                .iter()
+                .map(|pass| pass.label.as_str())
+                .collect::<Vec<_>>(),
+            vec![
+                "ui_composite.game_viewport",
+                "ui_composite.editor",
+                "ui_composite.system",
+                "ui_composite.debug",
+            ]
+        );
+        assert_eq!(
+            ui_passes.iter().map(|pass| pass.id.0).collect::<Vec<_>>(),
+            vec![900, 901, 902, 903]
+        );
+        assert!(ui_passes.iter().all(|pass| pass.draw_lists.is_empty()));
+    }
+
+    #[test]
+    fn ui_layer_only_frame_has_no_scene_passes_and_keeps_domain_order() {
+        let plan = ui_layer_only_frame(
+            23,
+            Extent2D::new(1280, 720),
+            [UiLayerDomain::Debug, UiLayerDomain::System],
+        );
+        assert!(plan.graph.passes.iter().all(|pass| {
+            matches!(
+                pass.kind,
+                newengine_render_api::RenderGraphPassKind::UiComposite
+            )
+        }));
+        assert_eq!(
+            plan.graph
+                .passes
+                .iter()
+                .map(|pass| pass.label.as_str())
+                .collect::<Vec<_>>(),
+            vec!["ui_composite.system", "ui_composite.debug"]
+        );
+        assert!(!plan
+            .graph
+            .resources
+            .iter()
+            .any(|resource| { resource.semantic == RenderGraphResourceSemantic::SceneHdrColor }));
     }
 }

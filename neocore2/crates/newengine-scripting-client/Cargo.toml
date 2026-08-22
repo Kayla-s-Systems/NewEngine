@@ -8,7 +8,7 @@ license = "Proprietary"
 [dependencies]
 newengine-assets = { path = "../newengine-assets" }
 newengine-assets-api = { path = "../newengine-assets-api" }
-newengine-core = { path = "../newengine-core", features = ["host-probe"] }
+newengine-core = { path = "../newengine-core" }
 newengine-plugin-host = { path = "../newengine-plugin-host" }
 newengine-scripting-api = { path = "../newengine-scripting-api" }
 serde = { version = "1", features = ["derive"] }

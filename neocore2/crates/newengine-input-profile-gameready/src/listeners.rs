@@ -59,6 +59,7 @@ pub fn gameplay_default_listeners() -> Vec<InputActionListenerRegistration> {
         InputActionListenerRegistration::new("newengine-inventory", "inventory-controller")
             .with_actions([
                 action::INVENTORY_TOGGLE,
+                action::CHARACTER_SELECT_TOGGLE,
                 action::EQUIP_PRIMARY,
                 action::EQUIP_SECONDARY,
                 action::EQUIP_SIDEARM,

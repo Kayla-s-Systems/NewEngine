@@ -13,6 +13,8 @@ pub(crate) const CONTRACT_FIELD: &str = "contract";
 pub(crate) const PROVIDER_ROUTE_FIELD: &str = "provider_route";
 pub(crate) const PROVIDER_ABI_FIELD: &str = "provider_abi";
 pub(crate) const BACKEND_PRIORITY_FIELD: &str = "backend_priority";
+pub(crate) const BACKEND_FIELD: &str = "backend";
+pub(crate) const FEATURES_FIELD: &str = "features";
 pub(crate) const SYSTEM_TAGS_FIELD: &str = "system_tags";
 pub(crate) const TAGS_FIELD: &str = "tags";
 
@@ -61,9 +63,41 @@ fn json_string_list(value: &serde_json::Value, field: &str) -> Vec<String> {
 fn json_system_tags(value: &serde_json::Value) -> Vec<String> {
     let mut out = json_string_list(value, SYSTEM_TAGS_FIELD);
     out.extend(json_string_list(value, TAGS_FIELD));
+    if let Some(backend) = json_field_string(value, BACKEND_FIELD) {
+        if let Some(tag) = normalize_system_tag(&format!("backend.{}", metadata_tag_slug(&backend))) {
+            out.push(tag);
+        }
+    }
+    match value.get(FEATURES_FIELD) {
+        Some(serde_json::Value::Array(features)) => {
+            for feature in features.iter().filter_map(|value| value.as_str()) {
+                if let Some(tag) = normalize_system_tag(&format!("feature.{}", metadata_tag_slug(feature))) {
+                    out.push(tag);
+                }
+            }
+        }
+        Some(serde_json::Value::String(feature)) => {
+            if let Some(tag) = normalize_system_tag(&format!("feature.{}", metadata_tag_slug(feature))) {
+                out.push(tag);
+            }
+        }
+        _ => {}
+    }
     out.sort();
     out.dedup();
     out
+}
+
+fn metadata_tag_slug(value: &str) -> String {
+    value
+        .trim()
+        .chars()
+        .map(|ch| if ch.is_ascii_alphanumeric() { ch.to_ascii_lowercase() } else { '.' })
+        .collect::<String>()
+        .split('.')
+        .filter(|segment| !segment.is_empty())
+        .collect::<Vec<_>>()
+        .join(".")
 }
 
 #[inline]

@@ -58,6 +58,11 @@ impl StartupLoader {
             Err(e) => return Err(e),
         }
 
+        // Browser/CLI launch graphics overrides are applied after persisted config
+        // but before any optional PreStart presenter and before the active settings
+        // snapshot is published. This keeps one authoritative core settings path.
+        apply_graphics_process_overrides(&mut cfg, &mut report);
+
         // Present/record PreStart loading only after config.json is known, so
         // consumer-owned `plugins.engine.loading` manifests can assign bg/logo/spinner.
         let startup_window = crate::startup_window::present_before_startup_if_needed(paths, &cfg);
@@ -145,6 +150,104 @@ impl StartupLoader {
         crate::startup::set_last_load_report(report.clone());
         crate::startup::set_last_startup_config(cfg.clone());
         Ok((cfg, report))
+    }
+
+    /// Loads only the persisted startup launch settings without presenting the
+    /// PreStart UI or publishing process/global state. Used by the editor-owned
+    /// Project Browser to seed its Settings tab before a project is selected.
+    pub fn load_launch_settings_preview(
+        paths: &ConfigPaths,
+    ) -> EngineResult<crate::startup_window::StartupLaunchSettings> {
+        let mut settings = crate::startup_window::StartupLaunchSettings::default();
+        if let Some((resolved, _)) = resolve_startup_file_optional(paths, paths.startup_path())? {
+            let data = fs::read_to_string(&resolved).map_err(|e| {
+                EngineError::Other(format!(
+                    "startup config preview read failed: path={:?} err={}",
+                    resolved, e
+                ))
+            })?;
+            let parsed: RootJson = serde_json::from_str(&data).map_err(|e| {
+                EngineError::Other(format!(
+                    "startup config preview parse failed (json): path={:?} err={}",
+                    resolved, e
+                ))
+            })?;
+            if let Some(mut persisted) = parsed.startup_settings {
+                persisted.normalize();
+                settings = persisted;
+            }
+        }
+        apply_graphics_process_overrides_to_settings(&mut settings, None);
+        Ok(settings)
+    }
+
+    /// Persists only the core-owned `startup_settings` object while preserving
+    /// unrelated startup config keys. Used after the Project Browser Settings tab
+    /// is confirmed so the next launch starts from the same values.
+    pub fn persist_launch_settings(
+        paths: &ConfigPaths,
+        settings: &crate::startup_window::StartupLaunchSettings,
+    ) -> EngineResult<()> {
+        let target = resolve_startup_file_optional(paths, paths.startup_path())?
+            .map(|(path, _)| path)
+            .unwrap_or_else(|| PathBuf::from(paths.startup_path()));
+        let mut root = if target.is_file() {
+            let text = fs::read_to_string(&target).map_err(|e| {
+                EngineError::Other(format!(
+                    "startup config settings persist read failed: path={:?} err={}",
+                    target, e
+                ))
+            })?;
+            serde_json::from_str::<serde_json::Value>(&text).map_err(|e| {
+                EngineError::Other(format!(
+                    "startup config settings persist parse failed: path={:?} err={}",
+                    target, e
+                ))
+            })?
+        } else {
+            serde_json::json!({})
+        };
+        let Some(object) = root.as_object_mut() else {
+            return Err(EngineError::Other(format!(
+                "startup config settings persist requires a JSON object: path={:?}",
+                target
+            )));
+        };
+        let mut normalized = settings.clone();
+        normalized.normalize();
+        object.insert(
+            "startup_settings".to_owned(),
+            serde_json::to_value(&normalized).map_err(|e| {
+                EngineError::Other(format!("encode startup settings for persistence: {e}"))
+            })?,
+        );
+        if let Some(parent) = target.parent() {
+            fs::create_dir_all(parent).map_err(|e| {
+                EngineError::Other(format!(
+                    "startup config settings persist create dir failed: path={:?} err={}",
+                    parent, e
+                ))
+            })?;
+        }
+        let bytes = serde_json::to_vec_pretty(&root)
+            .map_err(|e| EngineError::Other(format!("encode startup config persistence: {e}")))?;
+        let temp = target.with_extension("json.newengine-settings.tmp");
+        fs::write(&temp, bytes).map_err(|e| {
+            EngineError::Other(format!(
+                "startup config settings persist stage failed: path={:?} err={}",
+                temp, e
+            ))
+        })?;
+        if target.exists() {
+            let _ = fs::remove_file(&target);
+        }
+        fs::rename(&temp, &target).map_err(|e| {
+            EngineError::Other(format!(
+                "startup config settings persist commit failed: from={:?} to={:?} err={}",
+                temp, target, e
+            ))
+        })?;
+        Ok(())
     }
 }
 
@@ -303,6 +406,74 @@ fn apply_root(cfg: &mut StartupConfig, report: &mut StartupLoadReport, mut src: 
                 ),
             });
         }
+    }
+}
+
+fn apply_graphics_process_overrides(cfg: &mut StartupConfig, report: &mut StartupLoadReport) {
+    let overrides =
+        apply_graphics_process_overrides_to_settings(&mut cfg.launch_settings, Some(report));
+    if overrides > 0 {
+        cfg.launch_settings_explicit = true;
+    }
+}
+
+fn apply_graphics_process_overrides_to_settings(
+    settings: &mut crate::startup_window::StartupLaunchSettings,
+    mut report: Option<&mut StartupLoadReport>,
+) -> usize {
+    use crate::startup_window::{
+        ENV_LOD_DISTANCE_SCALE, ENV_SHADOWS_ENABLED, ENV_SHADOW_CASCADE_COUNT,
+        ENV_SHADOW_MAP_RESOLUTION,
+    };
+
+    let mut changed = 0usize;
+    let mut record = |key: &'static str, from: String, to: String| {
+        changed += 1;
+        if let Some(report) = report.as_deref_mut() {
+            report.overrides.push(StartupOverride { key, from, to });
+        }
+    };
+
+    if let Ok(raw) = std::env::var(ENV_LOD_DISTANCE_SCALE) {
+        if let Ok(value) = raw.trim().parse::<f32>() {
+            let from = settings.graphics.lod_distance_scale.to_string();
+            settings.graphics.lod_distance_scale = value;
+            record(ENV_LOD_DISTANCE_SCALE, from, raw);
+        }
+    }
+    if let Ok(raw) = std::env::var(ENV_SHADOWS_ENABLED) {
+        if let Some(value) = parse_process_bool(&raw) {
+            let from = settings.graphics.shadows_enabled.to_string();
+            settings.graphics.shadows_enabled = value;
+            record(ENV_SHADOWS_ENABLED, from, raw);
+        }
+    }
+    if let Ok(raw) = std::env::var(ENV_SHADOW_CASCADE_COUNT) {
+        if let Ok(value) = raw.trim().parse::<u32>() {
+            let from = settings.graphics.shadow_cascade_count.to_string();
+            settings.graphics.shadow_cascade_count = value;
+            record(ENV_SHADOW_CASCADE_COUNT, from, raw);
+        }
+    }
+    if let Ok(raw) = std::env::var(ENV_SHADOW_MAP_RESOLUTION) {
+        if let Ok(value) = raw.trim().parse::<u32>() {
+            let from = settings.graphics.shadow_map_resolution.to_string();
+            settings.graphics.shadow_map_resolution = value;
+            record(ENV_SHADOW_MAP_RESOLUTION, from, raw);
+        }
+    }
+    if changed > 0 {
+        settings.graphics.mark_custom();
+        settings.normalize();
+    }
+    changed
+}
+
+fn parse_process_bool(value: &str) -> Option<bool> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "1" | "true" | "yes" | "on" => Some(true),
+        "0" | "false" | "no" | "off" => Some(false),
+        _ => None,
     }
 }
 

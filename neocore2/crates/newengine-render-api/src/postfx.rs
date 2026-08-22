@@ -5,10 +5,10 @@ pub(super) fn default_true() -> bool {
 
 #[path = "postfx/display.rs"]
 mod display;
-#[path = "postfx/lighting.rs"]
-mod lighting;
 #[path = "postfx/frame.rs"]
 mod frame;
+#[path = "postfx/lighting.rs"]
+mod lighting;
 #[path = "postfx/pipeline.rs"]
 mod pipeline;
 

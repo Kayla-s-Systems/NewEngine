@@ -13,7 +13,7 @@ impl EngineWorldGatewayService {
     pub(crate) fn authority_json(&self) -> serde_json::Value {
         let snapshot = self.scene.authority_snapshot();
         let route_json =
-            |route: &newengine_runtime_host::world_authority::WorldAuthorityGatewayRoute| {
+            |route: &newengine_world_authority_runtime::WorldAuthorityGatewayRoute| {
                 serde_json::json!({
                     "gateway": route.gateway_id,
                     "kind": route.service_kind,

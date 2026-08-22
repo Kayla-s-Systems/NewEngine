@@ -131,14 +131,14 @@ fn validate_one(
             );
         }
     };
-    if description_contract.version != 1 {
+    if !service_description_version_supported(contract.service_id, description_contract.version) {
         return finish_violation(
             requirement,
             plugins,
             report,
             format!(
-                "unsupported service description version {}; expected version=1",
-                description_contract.version
+                "unsupported service description version {} for service '{}'",
+                description_contract.version, contract.service_id,
             ),
         );
     }
@@ -207,6 +207,14 @@ fn validate_one(
     }
 
     (report, None)
+}
+
+#[inline]
+fn service_description_version_supported(service_id: &str, version: u32) -> bool {
+    // V1 is the common describe() envelope. Render V2 keeps the same id/methods fields
+    // and only extends backend metadata/method inventory (command-batch v2), so it remains
+    // contract-checkable by this validator. Do not globally accept unknown future envelopes.
+    version == 1 || (service_id == "engine.render" && version == 2)
 }
 
 fn finish_violation(
@@ -385,4 +393,17 @@ fn env_flag(name: &str) -> bool {
         std::env::var(name).ok().as_deref(),
         Some("1") | Some("true") | Some("TRUE") | Some("yes") | Some("YES")
     )
+}
+
+#[cfg(test)]
+mod service_description_version_tests {
+    use super::*;
+
+    #[test]
+    fn render_service_description_v2_is_supported() {
+        assert!(service_description_version_supported("engine.render", 2));
+        assert!(service_description_version_supported("engine.physics", 1));
+        assert!(!service_description_version_supported("engine.physics", 2));
+        assert!(!service_description_version_supported("engine.render", 3));
+    }
 }

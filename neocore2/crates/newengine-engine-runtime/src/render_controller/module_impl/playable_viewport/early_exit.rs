@@ -1,17 +1,16 @@
 use super::*;
 
 impl RuntimeRenderController {
-    pub(super) fn end_frame_after_viewport_rt_failure(
+    pub(super) fn end_frame_after_viewport_rt_failure<E: Send + 'static>(
         &mut self,
+        ctx: &ModuleCtx<'_, E>,
         r: &mut dyn RenderApi,
-        ui: Option<UiDrawList>,
+        ui_layers: UiLayerDrawPacketSet,
         scope: RenderFrameScope,
         error: impl std::fmt::Display,
     ) -> EngineResult<()> {
         self.disable_viewport_pass("ensure_viewport_rt", error);
-        if let Some(ui) = ui {
-            r.set_ui_draw_list(ui);
-        }
+        self.render_ui_only_frame(ctx, r, ui_layers, scope)?;
         self.gc_per_draw_ubos(r);
         self.gc_deferred_rts(r);
         if scope.trace_frame {
@@ -28,7 +27,7 @@ impl RuntimeRenderController {
         ctx: &ModuleCtx<'_, E>,
         r: &mut dyn RenderApi,
         scene: &newengine_scene::Scene,
-        ui: Option<UiDrawList>,
+        ui_layers: UiLayerDrawPacketSet,
         scope: RenderFrameScope,
     ) -> EngineResult<UiRuntimeDebugOverlayTelemetry> {
         let gate_reason = scene
@@ -39,11 +38,8 @@ impl RuntimeRenderController {
 
         self.sync_cursor_state(ctx, CursorState::released());
         let _ = r.discard_recorded_commands();
-        // The scene launch gate is an early-return path: it does not go through
-        // the normal frame-envelope UI composite pass. Reuse the UI-only submit
-        // path so retained loading visuals with UiPaintCommand::Image are staged
-        // with a valid viewport/scissor and can be composited before end_frame().
-        self.render_ui_only_frame(ctx, r, ui, scope)?;
+        // Gated world frames still present through the normal typed layer-packet envelope.
+        self.render_ui_only_frame(ctx, r, ui_layers, scope)?;
         let ui_telemetry = UiRuntimeDebugOverlayTelemetry::new(
             self.frame.frame_index,
             format!("NewEngine | Loading scene\n{}", gate_reason),

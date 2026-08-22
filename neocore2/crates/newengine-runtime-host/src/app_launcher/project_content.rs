@@ -41,7 +41,7 @@ impl DeferredProjectContentMountModule {
         // best-effort, so replay those roots exactly once after EnginePluginsReady
         // instead of making engine content availability depend on plugin load order.
         if !self.engine_roots_mounted {
-            crate::asset_bootstrap::mount_asset_roots_best_effort(
+            newengine_asset_bootstrap_runtime::mount_asset_roots_best_effort(
                 &self.assets,
                 &self.engine_asset_roots,
             );

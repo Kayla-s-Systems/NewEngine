@@ -1,7 +1,7 @@
 use crate::scene_bridge::EngineViewGatewayFrame;
 use newengine_core::render::RenderFrameDebugSnapshot;
 use newengine_ui_api::UiRuntimeDebugOverlayTelemetry;
-use newengine_ui_api::{UiDrawList, UiInputFrame};
+use newengine_ui_api::{UiInputFrame, UiLayerDomain, UiLayerDrawPacketSet};
 
 use super::input::ViewportInputSnap;
 use crate::gameplay::GameRunMode;
@@ -30,7 +30,11 @@ impl RenderFrameScope {
 }
 
 pub(super) struct ViewportFrameInput {
-    pub ui: Option<UiDrawList>,
+    /// Complete ordered retained domain packet set carried to RenderFrameEnvelope.
+    /// Primary-domain interaction mutates the packet directly; there is no singleton
+    /// `UiDrawList` shadow copy in the frame lifecycle.
+    pub ui_layers: UiLayerDrawPacketSet,
+    pub primary_ui_domain: UiLayerDomain,
     pub input: ViewportInputSnap,
     pub surface_input: Option<UiInputFrame>,
     pub play_mode: GameRunMode,

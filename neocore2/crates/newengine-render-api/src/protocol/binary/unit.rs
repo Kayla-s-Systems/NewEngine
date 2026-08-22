@@ -4,7 +4,7 @@ use crate::{
     BindGroupId, BufferId, BufferSlice, DrawArgs, DrawIndexedArgs, PipelineId, RectI32, Viewport,
 };
 
-const COMMAND_BATCH_BIN_MAGIC: &[u8; 8] = b"NECB\x01\0\0\0";
+const COMMAND_BATCH_BIN_MAGIC: &[u8; 8] = b"NECB\x02\0\0\0";
 
 /// Encodes frame-local unit render commands into a compact binary packet.
 ///
@@ -104,21 +104,16 @@ fn encode_unit_command(out: &mut Vec<u8>, command: &RenderCommand) -> Result<(),
             put_i32(out, args.vertex_offset);
             put_u32(out, args.first_instance);
         }
-        RenderCommand::SetUiDrawList(ui) => {
-            put_u8(out, 10);
-            let ui_bytes = newengine_ui_draw::encode_ui_draw_list_bin(ui)?;
-            put_bytes(out, &ui_bytes, "ui draw-list binary payload")?;
-        }
         RenderCommand::SetRenderPhase { phase } => {
-            put_u8(out, 11);
+            put_u8(out, 10);
             put_optional_render_graph_pass_kind(out, *phase);
         }
         RenderCommand::SetDrawListKind { kind } => {
-            put_u8(out, 12);
+            put_u8(out, 11);
             put_optional_render_draw_list_kind(out, *kind);
         }
         RenderCommand::DiscardRecordedCommands => {
-            put_u8(out, 13);
+            put_u8(out, 12);
         }
         _ => {
             return Err(format!(
@@ -180,19 +175,13 @@ fn decode_unit_command(r: &mut BinReader<'_>) -> Result<RenderCommand, String> {
             vertex_offset: r.i32()?,
             first_instance: r.u32()?,
         })),
-        10 => {
-            let ui_bytes = r.bytes_vec()?;
-            Ok(RenderCommand::SetUiDrawList(Box::new(
-                newengine_ui_draw::decode_ui_draw_list_bin(&ui_bytes)?,
-            )))
-        }
-        11 => Ok(RenderCommand::SetRenderPhase {
+        10 => Ok(RenderCommand::SetRenderPhase {
             phase: r.optional_render_graph_pass_kind()?,
         }),
-        12 => Ok(RenderCommand::SetDrawListKind {
+        11 => Ok(RenderCommand::SetDrawListKind {
             kind: r.optional_render_draw_list_kind()?,
         }),
-        13 => Ok(RenderCommand::DiscardRecordedCommands),
+        12 => Ok(RenderCommand::DiscardRecordedCommands),
         tag => Err(format!("unknown render command batch binary tag {tag}")),
     }
 }

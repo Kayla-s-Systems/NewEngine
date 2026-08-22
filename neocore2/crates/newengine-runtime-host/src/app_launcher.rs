@@ -8,14 +8,16 @@
 mod boot_options;
 mod bootstrap;
 mod logging;
-mod platform;
 mod plugins;
 mod project_content;
 mod shutdown;
 mod types;
 
 pub use boot_options::RuntimeHostBootOption;
-pub use types::{RuntimeHostAppProfile, RuntimeHostLaunchSpec, RuntimeHostLauncher};
+pub use types::{
+    RuntimeHostAppProfile, RuntimeHostFrontend, RuntimeHostFrontendContext, RuntimeHostLaunchSpec,
+    RuntimeHostLauncher,
+};
 
 #[inline]
 fn env_bool(name: &str, default: bool) -> bool {

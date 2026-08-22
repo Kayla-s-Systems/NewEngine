@@ -41,6 +41,66 @@ pub(super) fn publish_inventory_hud_state(
             total_weight,
             catalog,
         );
+        let selected = selected_variant(world, player);
+        let fallback_source = world
+            .get::<newengine_engine_runtime::gameplay::PlayerModelBinding>(player)
+            .map(|binding| binding.source.as_str())
+            .unwrap_or("");
+        patch = patch
+            .with_change(
+                "character",
+                "open",
+                serde_json::json!(state.character_select_open),
+            )
+            .with_change(
+                "character",
+                "selected",
+                serde_json::json!(selected
+                    .map(|variant| variant.display_name)
+                    .unwrap_or(fallback_source)),
+            )
+            .with_change(
+                "character",
+                "selected_id",
+                serde_json::json!(selected.map(|variant| variant.id).unwrap_or("unknown")),
+            )
+            .with_change(
+                "character",
+                "selected_family",
+                serde_json::json!(selected
+                    .map(|variant| variant.family.label())
+                    .unwrap_or("Unknown")),
+            )
+            .with_change(
+                "character",
+                "selected_rig",
+                serde_json::json!(selected
+                    .map(|variant| variant.rig_label)
+                    .unwrap_or("Unspecified rig")),
+            )
+            .with_change(
+                "character",
+                "selected_description",
+                serde_json::json!(selected
+                    .map(|variant| variant.subtitle)
+                    .unwrap_or("External player model assignment")),
+            )
+            .with_change(
+                "character",
+                "selected_status",
+                serde_json::json!(selected
+                    .map(|variant| variant.availability.label())
+                    .unwrap_or("External assignment")),
+            );
+        for (index, variant) in PLAYABLE_CHARACTER_VARIANTS.iter().enumerate() {
+            patch = patch.with_change(
+                "character",
+                format!("nav_{}", variant.id),
+                serde_json::json!(
+                    state.character_select_open && state.character_nav_index == index
+                ),
+            );
+        }
         for index in 0..inventory_slot_count(world) {
             patch = patch_inventory_slot(patch, index, state, inventory, catalog);
         }
@@ -60,14 +120,26 @@ pub(super) fn publish_inventory_hud_state(
         (patch, state.visible)
     };
 
+    let visibility_changed = world
+        .resource::<InventoryHudState>()
+        .is_none_or(|state| state.last_published_visible != Some(visible));
     if let Some(state) = world.resource_mut::<InventoryHudState>() {
         state.last_published_hash = fingerprint;
         state.last_published_frame = frame_index;
+        if visibility_changed {
+            state.last_published_visible = Some(visible);
+        }
     }
 
-    GameplayUiFrameOutput::default()
-        .with_patch(patch, "gameplay.fps.inventory", INVENTORY_HUD_CONTRACT)
-        .with_surface_visibility(INVENTORY_HUD_SURFACE_ID, visible)
+    let mut output = GameplayUiFrameOutput::default().with_patch(
+        patch,
+        "gameplay.fps.inventory",
+        INVENTORY_HUD_CONTRACT,
+    );
+    if visibility_changed {
+        output = output.with_surface_visibility(INVENTORY_HUD_SURFACE_ID, visible);
+    }
+    output
 }
 
 fn base_patch(
@@ -320,6 +392,8 @@ pub(super) fn inventory_hud_fingerprint(world: &World, player: EntityId) -> u64 
     if let Some(state) = world.resource::<InventoryHudState>() {
         push(state.visible as u64);
         push(state.open as u64);
+        push(state.character_select_open as u64);
+        push(state.character_nav_index as u64);
         push(state.revision);
         push(state.selected_instance.map_or(0, |instance| instance.0));
         push(state.drag.map_or(0, |drag| drag.instance_id.0));
@@ -336,6 +410,19 @@ pub(super) fn inventory_hud_fingerprint(world: &World, player: EntityId) -> u64 
         for (slot, instance) in &inventory.equipped {
             push(equipment_slot_code(*slot));
             push(instance.0);
+        }
+    }
+    if let Some(binding) =
+        world.get::<newengine_engine_runtime::gameplay::PlayerModelBinding>(player)
+    {
+        push(binding.assignment_revision);
+        for byte in binding.source.as_bytes() {
+            push(u64::from(*byte));
+        }
+    }
+    if let Some(selection) = world.get::<PlayableCharacterSelection>(player) {
+        for byte in selection.variant_id.as_bytes() {
+            push(u64::from(*byte));
         }
     }
     if let Some(weapon) = world.get::<PlayerWeaponState>(player) {

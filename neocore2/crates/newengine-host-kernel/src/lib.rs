@@ -70,6 +70,10 @@ mod tests {
     fn empty_host_constructs_without_domain_features() {
         let engine = build_empty_host(16).expect("empty host kernel");
         assert_eq!(engine.run_state(), newengine_core::EngineRunState::Created);
+        assert!(
+            !newengine_plugin_host::has_service("engine.command"),
+            "empty Void Host must not construct the optional command console provider"
+        );
     }
 
     #[test]

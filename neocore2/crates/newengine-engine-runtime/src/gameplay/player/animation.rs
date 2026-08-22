@@ -10,21 +10,12 @@ fn sanitized_dt(dt: f32) -> f32 {
 }
 
 #[inline]
-fn select_locomotion_animation(
-    grounded: bool,
+fn select_ground_locomotion_animation(
     crouched: bool,
     horizontal_speed: f32,
     normalized_speed: f32,
-    vertical_speed: f32,
     sprinting: bool,
 ) -> PlayerLocomotionAnimation {
-    if !grounded {
-        return if vertical_speed > 0.15 {
-            PlayerLocomotionAnimation::Jump
-        } else {
-            PlayerLocomotionAnimation::Fall
-        };
-    }
     if crouched {
         return if horizontal_speed > 0.08 {
             PlayerLocomotionAnimation::CrouchWalk
@@ -41,6 +32,51 @@ fn select_locomotion_animation(
     } else {
         PlayerLocomotionAnimation::Walk
     }
+}
+
+#[inline]
+fn select_locomotion_animation(
+    grounded: bool,
+    crouched: bool,
+    horizontal_speed: f32,
+    normalized_speed: f32,
+    vertical_speed: f32,
+    sprinting: bool,
+    airborne_time: f32,
+    jump_started: bool,
+) -> PlayerLocomotionAnimation {
+    let ground_locomotion =
+        select_ground_locomotion_animation(crouched, horizontal_speed, normalized_speed, sprinting);
+    if grounded {
+        return ground_locomotion;
+    }
+
+    // The character controller can report one or more ground-probe misses while its
+    // vertical correction velocity oscillates around zero. Treating every miss as an
+    // airborne state caused idle/walk/run to thrash into jump/fall many times per second.
+    // Airborne animation therefore requires sustained separation plus meaningful Y speed.
+    let airborne_time = if airborne_time.is_finite() {
+        airborne_time.max(0.0)
+    } else {
+        0.0
+    };
+    if jump_started {
+        if !vertical_speed.is_finite() || vertical_speed > -0.45 || airborne_time < 0.08 {
+            return PlayerLocomotionAnimation::Jump;
+        }
+        return PlayerLocomotionAnimation::Fall;
+    }
+    // A rigid character capsule can receive short positive/negative Y impulses from
+    // uneven terrain. They are physics correction, not jump/fall intent. Walking off
+    // a ledge therefore requires sustained, meaningful downward motion before Fall.
+    if vertical_speed.is_finite() && vertical_speed < -2.5 && airborne_time >= 0.35 {
+        return PlayerLocomotionAnimation::Fall;
+    }
+
+    // Ground-contact uncertainty is presentation-only. Physics remains authoritative;
+    // locomotion animation holds the appropriate grounded pose until a true jump/fall
+    // has enough temporal/velocity evidence to be visually stable.
+    ground_locomotion
 }
 
 #[inline]
@@ -84,6 +120,10 @@ pub fn update_player_animation_states(world: &mut World, dt: f32) {
             .get::<PlayerStanceState>(player)
             .is_some_and(|state| matches!(state.current, PlayerStanceKind::Crouched));
         let input = world.get::<MotorInput>(player).copied().unwrap_or_default();
+        let locomotion_state = world
+            .get::<PlayerLocomotionState>(player)
+            .copied()
+            .unwrap_or_default();
         let sprinting = input.speed_mul > 1.05 && horizontal_speed > 0.08;
         let base_speed = world
             .get::<CharacterMotor>(player)
@@ -97,6 +137,8 @@ pub fn update_player_animation_states(world: &mut World, dt: f32) {
             normalized_speed,
             velocity.y,
             sprinting,
+            locomotion_state.airborne_time,
+            locomotion_state.jump_started,
         );
 
         let mut changed = false;
@@ -158,35 +200,67 @@ mod tests {
     #[test]
     fn locomotion_semantics_cover_ground_crouch_and_air() {
         assert_eq!(
-            select_locomotion_animation(true, false, 0.0, 0.0, 0.0, false),
+            select_locomotion_animation(true, false, 0.0, 0.0, 0.0, false, 0.0, false),
             PlayerLocomotionAnimation::Idle
         );
         assert_eq!(
-            select_locomotion_animation(true, false, 2.0, 0.33, 0.0, false),
+            select_locomotion_animation(true, false, 2.0, 0.33, 0.0, false, 0.0, false),
             PlayerLocomotionAnimation::Walk
         );
         assert_eq!(
-            select_locomotion_animation(true, false, 4.0, 0.7, 0.0, false),
+            select_locomotion_animation(true, false, 4.0, 0.7, 0.0, false, 0.0, false),
             PlayerLocomotionAnimation::Run
         );
         assert_eq!(
-            select_locomotion_animation(true, false, 6.0, 1.0, 0.0, true),
+            select_locomotion_animation(true, false, 6.0, 1.0, 0.0, true, 0.0, false),
             PlayerLocomotionAnimation::Sprint
         );
         assert_eq!(
-            select_locomotion_animation(true, true, 0.0, 0.0, 0.0, false),
+            select_locomotion_animation(true, true, 0.0, 0.0, 0.0, false, 0.0, false),
             PlayerLocomotionAnimation::CrouchIdle
         );
         assert_eq!(
-            select_locomotion_animation(true, true, 1.0, 0.2, 0.0, false),
+            select_locomotion_animation(true, true, 1.0, 0.2, 0.0, false, 0.0, false),
             PlayerLocomotionAnimation::CrouchWalk
         );
         assert_eq!(
-            select_locomotion_animation(false, false, 1.0, 0.2, 1.0, false),
+            select_locomotion_animation(false, false, 1.0, 0.2, 5.0, false, 0.05, true),
             PlayerLocomotionAnimation::Jump
         );
         assert_eq!(
-            select_locomotion_animation(false, false, 1.0, 0.2, -1.0, false),
+            select_locomotion_animation(false, false, 1.0, 0.2, -3.0, false, 0.20, true),
+            PlayerLocomotionAnimation::Fall
+        );
+    }
+
+    #[test]
+    fn ground_probe_glitches_do_not_force_fall_animation() {
+        assert_eq!(
+            select_locomotion_animation(false, false, 0.0, 0.0, -0.12, false, 0.016, false),
+            PlayerLocomotionAnimation::Idle
+        );
+        assert_eq!(
+            select_locomotion_animation(false, false, 3.0, 0.50, 0.28, false, 0.032, false),
+            PlayerLocomotionAnimation::Walk
+        );
+    }
+
+    #[test]
+    fn terrain_contact_upward_impulse_does_not_synthesize_jump() {
+        assert_eq!(
+            select_locomotion_animation(false, false, 7.3, 1.0, 4.2, false, 1.0, false),
+            PlayerLocomotionAnimation::Run
+        );
+    }
+
+    #[test]
+    fn sustained_airborne_motion_enters_jump_and_fall() {
+        assert_eq!(
+            select_locomotion_animation(false, false, 1.0, 0.2, 5.0, false, 0.016, true),
+            PlayerLocomotionAnimation::Jump
+        );
+        assert_eq!(
+            select_locomotion_animation(false, false, 1.0, 0.2, -3.0, false, 0.20, true),
             PlayerLocomotionAnimation::Fall
         );
     }

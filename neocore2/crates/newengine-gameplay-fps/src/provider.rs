@@ -19,7 +19,7 @@ use crate::character_physics::{
     sync_physics_world_settings,
 };
 use crate::content::ensure_fps_player_loadouts;
-use crate::inventory_hud::step_inventory_commands;
+use crate::inventory_hud::{character_select_is_open, step_inventory_commands};
 use crate::{step_fps_demo_gameplay, step_player_combat, step_projectile_sphere_launcher};
 
 /// FPS gameplay execution package selected by a runtime profile. The provider
@@ -66,11 +66,17 @@ impl GameplaySystemProvider for FpsGameplayProvider {
                     self.script_provider.as_ref(),
                     &self.command_executor,
                 );
-                apply_fps_character_commands(world, frame.dt, frame.fixed_tick);
+                // Inventory/UI commands run first so opening the character selector on this
+                // exact input sample immediately owns gameplay input. Mouse clicks used by the
+                // selector must never leak through into fire/projectile/character commands.
                 step_inventory_commands(world, frame.fixed_tick);
+                let character_selector_open = character_select_is_open(world);
+                if !character_selector_open {
+                    apply_fps_character_commands(world, frame.dt, frame.fixed_tick);
+                    step_player_combat(world, frame.dt, frame.fixed_tick);
+                    step_projectile_sphere_launcher(world, frame.dt);
+                }
                 step_world_items(world, frame.dt);
-                step_player_combat(world, frame.dt, frame.fixed_tick);
-                step_projectile_sphere_launcher(world, frame.dt);
             }
             GameplayExecutionPhase::AfterPhysics => {
                 step_character_locomotion(world, frame.dt);

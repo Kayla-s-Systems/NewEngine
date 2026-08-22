@@ -19,7 +19,6 @@ fn emit_startup_logs_after_logger_ready() {
 
     let rid = crate::run_id::run_id().unwrap_or("<unknown>");
     newengine_ulog_api::ulog::info!("startup: Run ID: {}", rid);
-    crate::startup::SystemProbe::probe().emit_table("startup");
     if let Some(r) = crate::startup::last_load_report() {
         r.emit_logs();
     }

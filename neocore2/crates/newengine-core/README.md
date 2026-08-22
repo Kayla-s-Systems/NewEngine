@@ -25,3 +25,10 @@ This crate is part of the North Star Engine host/plugin architecture. Runtime-fa
 - Do not introduce hidden provider/backend coupling here; use declared descriptors, gateways, DTOs, and explicit maintenance scripts.
 
 <!-- NORTHSTAR-DIR-README:END -->
+
+## Void Host boundary
+
+The core does not construct command-console, renderer, physics, UI, asset,
+world or gameplay implementations. The optional `engine.command` capability is
+owned by `newengine-console-api` plus `newengine-console-runtime` and is
+installed only by an explicit upper runtime composition.

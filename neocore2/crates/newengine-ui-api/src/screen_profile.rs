@@ -1,7 +1,7 @@
-#[path = "screen_profile/editor.rs"]
-mod editor;
 #[path = "screen_profile/dock_toast.rs"]
 mod dock_toast;
+#[path = "screen_profile/editor.rs"]
+mod editor;
 #[path = "screen_profile/presentation.rs"]
 mod presentation;
 

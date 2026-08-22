@@ -1,0 +1,50 @@
+[package]
+name = "newengine-windowed-host-runtime"
+version = "0.1.0"
+edition = "2021"
+readme = "README.md"
+description = "Window/input/platform/UI frontend composition above the Void Engine runtime host"
+
+[features]
+default = []
+window-icon = ["newengine-asset-bootstrap-runtime/window-icon"]
+prestart-window-egui = ["dep:newengine-startup-window-egui"]
+
+[dependencies]
+newengine-runtime-host = { path = "../newengine-runtime-host", default-features = false, features = ["full-runtime"] }
+newengine-core = { path = "../newengine-core", features = ["render-api", "physics-api"] }
+newengine-ulog-api = { path = "../newengine-ulog-api" }
+newengine-asset-bootstrap-runtime = { path = "../newengine-asset-bootstrap-runtime" }
+newengine-asset-hot-reload-runtime = { path = "../newengine-asset-hot-reload-runtime" }
+newengine-assets = { path = "../newengine-assets" }
+newengine-assets-api = { path = "../newengine-assets-api" }
+newengine-editor-command-api = { path = "../newengine-editor-command-api" }
+newengine-input-api = { path = "../newengine-input-api" }
+newengine-math = { path = "../newengine-math" }
+newengine-physics-api = { path = "../newengine-physics-api" }
+newengine-platform-api = { path = "../newengine-platform-api" }
+newengine-plugin-api = { path = "../newengine-plugin-api" }
+newengine-plugin-host = { path = "../newengine-plugin-host" }
+newengine-render-runtime-adapter = { path = "../newengine-render-runtime-adapter" }
+newengine-runtime-session-api = { path = "../newengine-runtime-session-api" }
+newengine-runtime-session-runtime = { path = "../newengine-runtime-session-runtime" }
+newengine-schema-api = { path = "../newengine-schema-api" }
+newengine-schema-runtime = { path = "../newengine-schema-runtime" }
+newengine-service-api = { path = "../newengine-service-api" }
+newengine-service-kit = { path = "../newengine-service-kit" }
+newengine-system-contracts = { path = "../newengine-system-contracts" }
+newengine-system-runtime = { path = "../newengine-system-runtime" }
+newengine-task-api = { path = "../newengine-task-api" }
+newengine-time-runtime = { path = "../newengine-time-runtime" }
+newengine-ui = { path = "../newengine-ui", default-features = false }
+newengine-ui-api = { path = "../newengine-ui-api" }
+newengine-world-api = { path = "../newengine-world-api" }
+newengine-startup-window-egui = { path = "../newengine-startup-window-egui", optional = true }
+abi_stable = "0.11"
+libloading = "0.9.0"
+raw-window-handle = "0.6.2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[dev-dependencies]
+newengine-contract-conformance = { path = "../newengine-contract-conformance" }

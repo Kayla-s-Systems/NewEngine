@@ -144,6 +144,61 @@ pub const UI_RUNTIME_REQUIREMENT_SPEC: newengine_service_api::RuntimeServiceRequ
         Some("NEWENGINE_REQUIRE_UI_BACKEND"),
     );
 
+/// Host-visible retained UI invalidation epochs.
+///
+/// Invalidation is domain-scoped: gameplay HUD mutations must not rebuild editor/system
+/// UI, and an engine loading/error surface change must not destroy the game-viewport cache.
+/// `revision` is the aggregate epoch retained for diagnostics/backward compatibility.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UiDrawInvalidationState {
+    pub revision: u64,
+    pub frame_index: u64,
+    pub system_revision: u64,
+    pub game_viewport_revision: u64,
+    pub editor_revision: u64,
+    pub debug_revision: u64,
+}
+
+impl UiDrawInvalidationState {
+    #[inline]
+    pub const fn revision_for(self, domain: UiLayerDomain) -> u64 {
+        match domain {
+            UiLayerDomain::System => self.system_revision,
+            UiLayerDomain::GameViewport => self.game_viewport_revision,
+            UiLayerDomain::Editor => self.editor_revision,
+            UiLayerDomain::Debug => self.debug_revision,
+        }
+    }
+
+    #[inline]
+    pub const fn invalidate(mut self, domain: UiLayerDomain, frame_index: u64) -> Self {
+        self.revision = self.revision.wrapping_add(1);
+        self.frame_index = frame_index;
+        match domain {
+            UiLayerDomain::System => {
+                self.system_revision = self.system_revision.wrapping_add(1);
+            }
+            UiLayerDomain::GameViewport => {
+                self.game_viewport_revision = self.game_viewport_revision.wrapping_add(1);
+            }
+            UiLayerDomain::Editor => {
+                self.editor_revision = self.editor_revision.wrapping_add(1);
+            }
+            UiLayerDomain::Debug => {
+                self.debug_revision = self.debug_revision.wrapping_add(1);
+            }
+        }
+        self
+    }
+
+    /// Compatibility helper for the first consumer of this resource: gameplay UI.
+    #[inline]
+    pub const fn next(self, frame_index: u64) -> Self {
+        self.invalidate(UiLayerDomain::GameViewport, frame_index)
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UiServiceInfo {
     pub protocol: String,
@@ -173,6 +228,9 @@ impl Default for UiServiceInfo {
                 "ui-theme-font-tokens-v1".to_owned(),
                 "ui-component-catalog-v1".to_owned(),
                 "retained-component-node-tree-v1".to_owned(),
+                "retained-ui-layer-domain-v1".to_owned(),
+                "ui-layer-composition-plan-v1".to_owned(),
+                "domain-scoped-draw-invalidation-v1".to_owned(),
                 "runtime-ui-node-request-v1".to_owned(),
                 "generative-ui-tree-v1".to_owned(),
                 "same-foundation-ui-node-v1".to_owned(),

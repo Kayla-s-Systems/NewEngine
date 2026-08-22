@@ -86,6 +86,7 @@ pub(super) fn directional_shadow_stable_fit(
 }
 
 #[inline]
+#[cfg(test)]
 pub(super) fn directional_shadow_stable_fit_with_padding(
     viewproj: Mat4,
     camera: Vec3,
@@ -131,6 +132,49 @@ pub(super) fn directional_shadow_stable_fit_with_padding(
 
     Some(DirectionalShadowFit {
         center,
+        half_x: stable_half,
+        half_y: stable_half,
+        depth_radius: radius.max(1.0),
+    })
+}
+
+/// Rotation-invariant CSM fit. The cascade follows camera translation but not
+/// camera yaw/pitch: its center is the camera position and only the radius is
+/// derived from the frustum slice. This behaves like a directional shadow clipmap
+/// and prevents a stationary camera rotation from walking the shadow projection
+/// across the light-space texel grid.
+#[inline]
+pub(super) fn directional_shadow_rotation_invariant_fit_with_padding(
+    viewproj: Mat4,
+    camera: Vec3,
+    camera_forward: Vec3,
+    split_near: f32,
+    split_far: f32,
+    resolution: u32,
+    kernel_guard_texels: f32,
+) -> Option<DirectionalShadowFit> {
+    let corners =
+        camera_frustum_slice_corners(viewproj, camera, camera_forward, split_near, split_far)?;
+    let mut radius = 0.0_f32;
+    for corner in corners {
+        radius = radius.max((corner - camera).length());
+    }
+    if !radius.is_finite() || radius <= 0.0 {
+        return None;
+    }
+
+    let tile_resolution = resolution.max(1) as f32;
+    let radius_quantum = ((split_far.max(1.0) * 2.0) / tile_resolution * 0.25).max(1.0e-4);
+    radius = (radius / radius_quantum).ceil() * radius_quantum;
+    let texel_world = (radius * 2.0) / tile_resolution;
+    let guard_texels = if kernel_guard_texels.is_finite() {
+        kernel_guard_texels.clamp(2.0, 16.0)
+    } else {
+        2.0
+    };
+    let stable_half = radius + (texel_world * guard_texels).max(0.02);
+    Some(DirectionalShadowFit {
+        center: camera,
         half_x: stable_half,
         half_y: stable_half,
         depth_radius: radius.max(1.0),
@@ -265,13 +309,6 @@ pub(super) fn csm_split_distances(
     }
     out[count - 1] = far;
     out
-}
-
-#[inline]
-pub(super) fn csm_cascade_radius(split_near: f32, split_far: f32, max_distance: f32) -> f32 {
-    let span = (split_far - split_near).max(1.0);
-    let radius = (split_far * 0.72).max(span * 0.95).max(8.0);
-    radius.min(max_distance.max(8.0))
 }
 
 #[inline]
@@ -415,6 +452,43 @@ mod shadow_fit_tests {
         );
     }
 
+    #[test]
+    fn rotation_invariant_fit_keeps_center_and_extent_when_only_view_yaw_changes() {
+        let camera = Vec3::new(4.0, 2.0, -7.0);
+        let projection = Mat4::perspective_rh(60.0_f32.to_radians(), 16.0 / 9.0, 0.1, 250.0);
+        let forward_a = Vec3::Z;
+        let forward_b = Vec3::new(0.82, 0.0, 0.57).normalize_or_zero();
+        let view_a = Mat4::look_at_rh(camera, camera + forward_a, Vec3::Y);
+        let view_b = Mat4::look_at_rh(camera, camera + forward_b, Vec3::Y);
+        let a = directional_shadow_rotation_invariant_fit_with_padding(
+            projection * view_a,
+            camera,
+            forward_a,
+            0.5,
+            24.0,
+            2048,
+            6.0,
+        )
+        .expect("fit a");
+        let b = directional_shadow_rotation_invariant_fit_with_padding(
+            projection * view_b,
+            camera,
+            forward_b,
+            0.5,
+            24.0,
+            2048,
+            6.0,
+        )
+        .expect("fit b");
+        assert!((a.center - b.center).length() < 1.0e-6);
+        assert!(
+            (a.half_x - b.half_x).abs() < 1.0e-3,
+            "{} vs {}",
+            a.half_x,
+            b.half_x
+        );
+        assert!((a.half_y - b.half_y).abs() < 1.0e-3);
+    }
     #[test]
     fn subtexel_camera_motion_does_not_move_shadow_projection() {
         let light_dir = Vec3::new(0.42, -0.82, 0.31).normalize_or_zero();

@@ -3,18 +3,6 @@
 use newengine_core::{
     Engine, EngineConfig, EngineResult, ModuleFaultTolerance, PluginFaultTolerance, StartupConfig,
 };
-#[cfg(feature = "full-runtime")]
-use newengine_ui::UiProviderKind;
-
-#[cfg(feature = "full-runtime")]
-#[inline]
-pub fn ui_provider_kind_from_startup(_startup: &StartupConfig) -> UiProviderKind {
-    // UI provider selection is discovery-driven. Startup config must not bind
-    // a concrete UI backend; the runtime host will bind the first registered
-    // UI-provider service, or `none` when no provider exists.
-    UiProviderKind::Null
-}
-
 pub fn build_engine_from_startup(
     startup: &StartupConfig,
     fixed_dt_ms: u32,
@@ -26,17 +14,18 @@ pub fn build_engine_from_startup(
         .with_plugin_fault_tolerance(PluginFaultTolerance::Strict);
 
     #[cfg(feature = "full-runtime")]
-    {
-        return newengine_host_kernel::build_kernel_engine_with_registry(config, |registry| {
-            // Transform is an upper runtime composition service, not part of the kernel.
-            newengine_transform::service::register(registry);
-        });
-    }
+    let engine = newengine_host_kernel::build_kernel_engine_with_registry(config, |registry| {
+        // Transform is an upper runtime composition service, not part of the kernel.
+        newengine_transform::service::register(registry);
+    })?;
 
     #[cfg(not(feature = "full-runtime"))]
-    {
-        newengine_host_kernel::build_kernel_engine(config)
-    }
+    let engine = newengine_host_kernel::build_kernel_engine(config)?;
+
+    #[cfg(feature = "command-console")]
+    let _ = newengine_console_runtime::install_console_provider();
+
+    Ok(engine)
 }
 
 #[cfg(all(test, feature = "full-runtime"))]
@@ -50,7 +39,7 @@ mod tests {
         newengine_runtime_session_runtime::init_runtime_session_command_service();
 
         let description =
-            newengine_core::describe_service(newengine_core::console::COMMAND_SERVICE_ID)
+            newengine_core::describe_service(newengine_console_runtime::ENGINE_COMMAND_GATEWAY_ID)
                 .expect("engine.command service");
         let value: serde_json::Value = serde_json::from_str(&description).expect("command json");
         let commands = value["console"]["commands"]

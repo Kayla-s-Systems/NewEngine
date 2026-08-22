@@ -11,7 +11,7 @@ use newengine_game_module_composition::{
     register_game_module_factory, GameModuleBootstrapRegistration, GameModuleComposition,
     GameModuleFactoryRegistration, GameModuleProviderSet, GameModuleTarget,
 };
-use newengine_gameplay_fps::{FpsContentProvider, FpsGameplayProvider};
+use newengine_gameplay_fps::{FpsContentProvider, FpsGameplayProvider, FpsInventoryHudProvider};
 use newengine_gameplay_fps_api::FpsGameplayPolicyProvider;
 use newengine_gameplay_fps_lua::{LuaFpsGameplayPolicyProvider, LUA_FPS_GAMEPLAY_PROVIDER_ID};
 use newengine_gameplay_script_api::ScriptedGameplayProvider;
@@ -28,6 +28,7 @@ fn descriptor_v1() -> GameModuleDescriptorV1 {
         version: FPS_GAME_MODULE_VERSION.to_owned(),
         capabilities: vec![
             "gameplay.fps".to_owned(),
+            "gameplay.ui".to_owned(),
             "gameplay.script-policy".to_owned(),
             "target.editor".to_owned(),
             "target.client".to_owned(),
@@ -48,6 +49,12 @@ fn descriptor_v1() -> GameModuleDescriptorV1 {
                 required: true,
             },
             GameModuleProviderRef {
+                role: Some(GameModuleProviderRole::GameplayUi),
+                provider_id: "newengine.gameplay.fps.inventory-hud".to_owned(),
+                interface: "newengine.gameplay.IGameplayUiProvider.v1".to_owned(),
+                required: false,
+            },
+            GameModuleProviderRef {
                 role: Some(GameModuleProviderRole::GameplayPhysicsQueries),
                 provider_id: "newengine.gameplay.fps.physics-queries".to_owned(),
                 interface: "newengine.gameplay.IGameplayPhysicsQueryProvider.v1".to_owned(),
@@ -66,7 +73,7 @@ impl GameModuleComposition for FpsGameModule {
         descriptor_v1()
     }
 
-    fn providers(&self, _target: GameModuleTarget) -> Result<GameModuleProviderSet, String> {
+    fn providers(&self, target: GameModuleTarget) -> Result<GameModuleProviderSet, String> {
         let policy_for_content: Arc<dyn FpsGameplayPolicyProvider> = self.policy.clone();
         let policy_for_system: Arc<dyn FpsGameplayPolicyProvider> = self.policy.clone();
         let policy_for_queries: Arc<dyn FpsGameplayPolicyProvider> = self.policy.clone();
@@ -87,9 +94,12 @@ impl GameModuleComposition for FpsGameModule {
                 policy_for_queries,
                 scripts_for_queries,
             ));
+        if !matches!(target, GameModuleTarget::Server) {
+            providers
+                .gameplay_ui
+                .push(FpsInventoryHudProvider::shared());
+        }
 
-        // FPS gameplay is intentionally HUD-free for every target. Client/editor
-        // presentation is limited to the provider-neutral runtime technical overlay.
         Ok(providers)
     }
 }
@@ -167,11 +177,12 @@ impl ServiceV1 for FpsGameModuleDescriptorService {
     }
 }
 
+pub const fn factory_registration() -> GameModuleFactoryRegistration {
+    GameModuleFactoryRegistration::new(FPS_GAME_MODULE_ID, create_fps_module)
+}
+
 pub fn activate() -> Result<(), String> {
-    register_game_module_factory(GameModuleFactoryRegistration::new(
-        FPS_GAME_MODULE_ID,
-        create_fps_module,
-    ))?;
+    register_game_module_factory(factory_registration())?;
     let service = ServiceV1Dyn::from_value(
         FpsGameModuleDescriptorService,
         abi_stable::sabi_trait::TD_Opaque,
@@ -191,7 +202,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn fps_descriptor_is_valid_and_declares_shared_gameplay_providers() {
+    fn fps_descriptor_declares_gameplay_ui_provider() {
         let descriptor = descriptor_v1();
         descriptor.validate().unwrap();
         assert_eq!(descriptor.module_id, FPS_GAME_MODULE_ID);
@@ -199,9 +210,55 @@ mod tests {
             .providers
             .iter()
             .any(|provider| provider.role == Some(GameModuleProviderRole::GameplaySystem)));
-        assert!(descriptor
-            .providers
-            .iter()
-            .all(|provider| provider.role != Some(GameModuleProviderRole::GameplayUi)));
+        assert!(descriptor.providers.iter().any(|provider| provider.role
+            == Some(GameModuleProviderRole::GameplayUi)
+            && provider.provider_id == "newengine.gameplay.fps.inventory-hud"));
+    }
+
+    #[test]
+    fn fps_factory_resolves_authored_runtime_scripting_binding() {
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock before unix epoch")
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!(
+            "newengine-fps-binding-regression-{}-{nonce}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&root).expect("create temporary project root");
+        let manifest_path = root.join("game.toml");
+        std::fs::write(
+            &manifest_path,
+            r#"
+format_version = 1
+id = "fps-binding-regression"
+name = "FPS Binding Regression"
+launch_profile = "game"
+runtime_profile = "newengine.runtime-profile.game-ready"
+game_module = "newengine.game-module.fps"
+
+[scripting]
+runtime = "lua"
+
+[scripting.modules]
+fps_runtime = "scripts:/fps_gameplay.ysc"
+
+[scripting.bindings."newengine.gameplay.fps.lua-policy"]
+module = "fps_runtime"
+operation = "gameplay_policy"
+"#,
+        )
+        .expect("write temporary game manifest");
+
+        let project = newengine_project_runtime::load_project_from_request(&manifest_path)
+            .expect("load project with FPS scripting binding");
+        let runtime = RuntimeCompositionContext::from_project(&project);
+        let module = create_fps_module(&runtime, GameModuleTarget::Client)
+            .expect("FPS module should resolve scripting binding from runtime context");
+
+        assert_eq!(module.descriptor().module_id, FPS_GAME_MODULE_ID);
+        let _ = std::fs::remove_dir_all(root);
     }
 }

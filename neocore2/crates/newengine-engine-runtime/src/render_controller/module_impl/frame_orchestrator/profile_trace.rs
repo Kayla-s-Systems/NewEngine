@@ -6,11 +6,25 @@ impl RenderFrameOrchestrator {
         trace_frame: bool,
         feature_ms: f32,
         breakdown: &str,
-        ui: Option<&UiDrawList>,
+        ui_layers: &UiLayerDrawPacketSet,
     ) {
-        let ui_stats = ui
-            .map(Self::ui_draw_list_stats)
-            .unwrap_or_else(|| "ui=none".to_owned());
+        let ui_stats = if ui_layers.is_empty() {
+            "ui_layers=none".to_owned()
+        } else {
+            let domains = ui_layers
+                .packets
+                .iter()
+                .map(|packet| {
+                    format!(
+                        "{}:{}",
+                        packet.domain.as_str(),
+                        Self::ui_draw_list_stats(&packet.draw_list)
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(" | ");
+            format!("ui_layers(count={} {})", ui_layers.packets.len(), domains)
+        };
         emit_timed_profile(
             "render feature profile",
             frame_index,

@@ -47,6 +47,14 @@ impl MeshRuntimePolicy {
                 .and_then(|value| value.trim().parse::<f32>().ok())
                 .map(|value| value.clamp(min, max))
         };
+        let lod_distance_scale = crate::env_config::var_f32(
+            newengine_core::startup_window::ENV_LOD_DISTANCE_SCALE,
+            1.0,
+            0.5,
+            2.0,
+        );
+        let lod_scaled =
+            |value: f32, min: f32, max: f32| (value * lod_distance_scale).clamp(min, max);
 
         Self {
             primitive_budgets: [
@@ -144,37 +152,52 @@ impl MeshRuntimePolicy {
                 "NEWENGINE_RENDER_SCENE_CULLING",
                 false,
             ),
-            terrain_render_distance: crate::env_config::var_f32(
-                "NEWENGINE_TERRAIN_RENDER_DISTANCE",
-                96.0,
-                32.0,
-                2048.0,
+            terrain_render_distance: lod_scaled(
+                crate::env_config::var_f32("NEWENGINE_TERRAIN_RENDER_DISTANCE", 96.0, 32.0, 2048.0),
+                16.0,
+                4096.0,
             ),
             primitive_render_distance: [
-                crate::env_config::var_f32(
-                    "NEWENGINE_PRIMITIVE_RENDER_DISTANCE",
-                    180.0,
-                    8.0,
-                    2048.0,
+                lod_scaled(
+                    crate::env_config::var_f32(
+                        "NEWENGINE_PRIMITIVE_RENDER_DISTANCE",
+                        180.0,
+                        8.0,
+                        2048.0,
+                    ),
+                    4.0,
+                    4096.0,
                 ),
-                crate::env_config::var_f32(
-                    "NEWENGINE_PRIMITIVE_RENDER_DISTANCE",
-                    64.0,
-                    8.0,
-                    2048.0,
+                lod_scaled(
+                    crate::env_config::var_f32(
+                        "NEWENGINE_PRIMITIVE_RENDER_DISTANCE",
+                        64.0,
+                        8.0,
+                        2048.0,
+                    ),
+                    4.0,
+                    4096.0,
                 ),
             ],
             primitive_shadow_distance: [
-                crate::env_config::var_f32(
-                    "NEWENGINE_PRIMITIVE_SHADOW_DISTANCE",
-                    240.0,
-                    16.0,
+                lod_scaled(
+                    crate::env_config::var_f32(
+                        "NEWENGINE_PRIMITIVE_SHADOW_DISTANCE",
+                        240.0,
+                        16.0,
+                        4096.0,
+                    ),
+                    8.0,
                     4096.0,
                 ),
-                crate::env_config::var_f32(
-                    "NEWENGINE_PRIMITIVE_SHADOW_DISTANCE",
-                    80.0,
-                    16.0,
+                lod_scaled(
+                    crate::env_config::var_f32(
+                        "NEWENGINE_PRIMITIVE_SHADOW_DISTANCE",
+                        80.0,
+                        16.0,
+                        4096.0,
+                    ),
+                    8.0,
                     4096.0,
                 ),
             ],
@@ -197,6 +220,12 @@ impl MeshRuntimePolicy {
             ),
         }
     }
+}
+
+#[inline]
+#[cfg(test)]
+fn scale_lod_distance(value: f32, scale: f32, min: f32, max: f32) -> f32 {
+    (value * scale.clamp(0.5, 2.0)).clamp(min, max)
 }
 
 #[inline]
@@ -475,4 +504,17 @@ pub(super) fn terrain_near_accept_distance(radius_ws: f32) -> f32 {
 #[inline]
 pub(super) fn primitive_near_accept_distance() -> f32 {
     mesh_runtime_policy().primitive_near_accept_distance
+}
+
+#[cfg(test)]
+mod startup_lod_scale_tests {
+    use super::scale_lod_distance;
+
+    #[test]
+    fn lod_distance_scale_preserves_and_scales_runtime_ranges() {
+        assert_eq!(scale_lod_distance(100.0, 1.0, 8.0, 4096.0), 100.0);
+        assert_eq!(scale_lod_distance(100.0, 0.75, 8.0, 4096.0), 75.0);
+        assert_eq!(scale_lod_distance(100.0, 1.5, 8.0, 4096.0), 150.0);
+        assert_eq!(scale_lod_distance(3000.0, 2.0, 8.0, 4096.0), 4096.0);
+    }
 }

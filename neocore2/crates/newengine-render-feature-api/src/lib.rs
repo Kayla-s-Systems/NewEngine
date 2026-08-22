@@ -15,7 +15,6 @@ pub use shadows::*;
 use newengine_core::render::{Extent2D, RenderDrawListKind};
 use newengine_core::EngineResult;
 use newengine_math::{Mat4, Vec3};
-use newengine_ui::draw::UiDrawList;
 
 pub const PROVIDER_TAG_FEATURE: &str = "feature";
 pub const PROVIDER_CAP_DRAW_LISTS: &str =
@@ -39,7 +38,6 @@ const ALL_SHADOWS_AND_OPAQUE: &[RenderDrawListKind] = &[
     RenderDrawListKind::LocalShadowCasters,
     RenderDrawListKind::OpaqueForward,
 ];
-const UI_LIST: &[RenderDrawListKind] = &[RenderDrawListKind::Ui];
 
 #[derive(Clone, Copy, Debug)]
 pub struct RuntimeVisibilityPlan {
@@ -47,24 +45,17 @@ pub struct RuntimeVisibilityPlan {
     pub local_shadow_casters: bool,
     pub opaque_forward: bool,
     pub transparent: bool,
-    pub ui: bool,
     pub debug: bool,
 }
 
 impl RuntimeVisibilityPlan {
     #[inline]
-    pub fn standard(
-        shadow_casters: bool,
-        local_shadow_casters: bool,
-        ui: bool,
-        debug: bool,
-    ) -> Self {
+    pub fn standard(shadow_casters: bool, local_shadow_casters: bool, debug: bool) -> Self {
         Self {
             shadow_casters,
             local_shadow_casters,
             opaque_forward: true,
             transparent: false,
-            ui,
             debug,
         }
     }
@@ -76,7 +67,6 @@ impl RuntimeVisibilityPlan {
             RenderDrawListKind::LocalShadowCasters => self.local_shadow_casters,
             RenderDrawListKind::OpaqueForward => self.opaque_forward,
             RenderDrawListKind::Transparent => self.transparent,
-            RenderDrawListKind::Ui => self.ui,
             RenderDrawListKind::Debug => self.debug,
         }
     }
@@ -110,7 +100,6 @@ pub struct SceneExtractionCtx<'a> {
     pub surface_extent: Extent2D,
     pub runtime: bool,
     pub debug_overlays: bool,
-    pub ui: Option<&'a UiDrawList>,
 }
 
 impl<'a> SceneExtractionCtx<'a> {
@@ -119,7 +108,6 @@ impl<'a> SceneExtractionCtx<'a> {
         RuntimeVisibilityPlan::standard(
             self.render_shadow_map,
             self.render_local_shadow_map,
-            self.ui.is_some(),
             self.debug_overlays,
         )
     }
@@ -190,7 +178,6 @@ pub trait DrawListBuildCtx {
     ) -> EngineResult<()> {
         Ok(())
     }
-    fn record_ui(&mut self, ctx: &SceneExtractionCtx<'_>) -> EngineResult<()>;
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -251,15 +238,6 @@ pub const fn shadow_lists_and_opaque(
 pub const fn opaque_list(active: bool) -> &'static [RenderDrawListKind] {
     if active {
         OPAQUE_FORWARD
-    } else {
-        EMPTY_LISTS
-    }
-}
-
-#[inline]
-pub const fn ui_list(active: bool) -> &'static [RenderDrawListKind] {
-    if active {
-        UI_LIST
     } else {
         EMPTY_LISTS
     }

@@ -13,6 +13,7 @@ pub const KEY_D: u32 = 22;
 pub const KEY_E: u32 = 23;
 pub const KEY_F: u32 = 24;
 pub const KEY_I: u32 = 27;
+pub const KEY_M: u32 = 31;
 pub const KEY_Q: u32 = 35;
 pub const KEY_R: u32 = 36;
 pub const KEY_S: u32 = 37;

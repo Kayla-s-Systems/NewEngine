@@ -67,7 +67,6 @@ pub struct VisibilityMask {
     pub local_shadow_casters: bool,
     pub opaque_forward: bool,
     pub transparent: bool,
-    pub ui: bool,
     pub debug: bool,
 }
 
@@ -79,7 +78,6 @@ impl VisibilityMask {
             RenderDrawListKind::LocalShadowCasters => self.local_shadow_casters,
             RenderDrawListKind::OpaqueForward => self.opaque_forward,
             RenderDrawListKind::Transparent => self.transparent,
-            RenderDrawListKind::Ui => self.ui,
             RenderDrawListKind::Debug => self.debug,
         }
     }

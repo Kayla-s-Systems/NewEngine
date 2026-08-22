@@ -115,5 +115,4 @@ impl GameReadyValidationModule {
         }
         Ok(false)
     }
-
 }

@@ -37,10 +37,8 @@ runtime-domain-contracts = [
 ]
 
 # The startup configuration presenter is explicit and absent from kernel-only builds.
-startup-window-egui = ["dep:eframe"]
 
 # Optional host diagnostics. Keep disabled by default: diagnostics are explicit.
-host-probe = ["dep:sysinfo", "dep:windows"]
 native-crash-handlers = ["dep:windows"]
 
 [dependencies]
@@ -75,16 +73,10 @@ newengine-materials = { path = "../newengine-materials", optional = true }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
 parking_lot = "0.12.5"
-eframe = { version = "0.29", optional = true, default-features = false, features = ["default_fonts", "glow", "wayland", "x11"] }
-sysinfo = { version = "0.38.3", default-features = true, optional = true }
 
 # Windows-only GPU/DX probe
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.62.2", optional = true, features = [
     "Win32_Foundation",
-    "Win32_Graphics_Dxgi",
-    "Win32_Graphics_Dxgi_Common",
-    "Win32_Graphics_Direct3D",
-    "Win32_Graphics_Direct3D12",
     "Win32_System_Diagnostics_Debug",
 ] }

@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use newengine_core::{Engine, EngineError, EngineResult};
 use newengine_project_runtime::RuntimeCompositionContext;
-use newengine_runtime_host::asset_bootstrap::ProfileMountSpec;
+use newengine_asset_bootstrap_runtime::ProfileMountSpec;
 use newengine_scene_runtime::SceneGatewayAssetMounts;
 
 use crate::entity_archetypes::register_game_ready_entity_archetypes_best_effort;
@@ -40,9 +40,17 @@ impl GameReadyRuntimeProfile {
     pub fn initialize_composition_services(
         &self,
         engine: &mut Engine<()>,
+        host_preinit: &newengine_runtime_host::HostPreInitSnapshot,
         runtime: Option<&RuntimeCompositionContext>,
     ) -> EngineResult<()> {
         self.declare_composition_capability_slots()?;
+        newengine_ulog_api::ulog::info!(
+            "composition host capabilities: logical_cores={} gpu={} preferred_gpu='{}' provider_hints={}",
+            host_preinit.capabilities.cpu.logical_cores.map(|value| value.to_string()).unwrap_or_else(|| "<unknown>".to_owned()),
+            host_preinit.capabilities.gpu.len(),
+            host_preinit.runtime_policy.preferred_gpu_stable_id.as_deref().unwrap_or("<none>"),
+            host_preinit.runtime_policy.provider_hints.len(),
+        );
 
         let game_message_registry = newengine_game_events_runtime::GameMessageRegistry::default();
         let game_message_queue = newengine_game_events_runtime::GameMessageQueue::default();

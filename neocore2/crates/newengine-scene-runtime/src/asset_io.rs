@@ -45,7 +45,7 @@ impl EngineSceneGatewayService {
 
         let assets = AssetServiceClient::new(newengine_plugin_host::default_host_api());
         if let Some(mounts) = self.asset_mounts {
-            newengine_runtime_host::asset_bootstrap::mount_profile_content_best_effort(
+            newengine_asset_bootstrap_runtime::mount_profile_content_best_effort(
                 &assets,
                 mounts.profile,
             );

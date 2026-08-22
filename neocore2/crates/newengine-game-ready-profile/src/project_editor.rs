@@ -8,6 +8,7 @@ use newengine_runtime_host::app_launcher::{
     RuntimeHostAppProfile, RuntimeHostBootOption, RuntimeHostLaunchSpec, RuntimeHostLauncher,
 };
 use newengine_ui::{UiBuildFn, UiProviderKind};
+use newengine_windowed_host_runtime::{WindowedHostFrontend, WindowedRuntimeHostProfile};
 
 use crate::{
     GameReadyRuntimeProfile, GAME_APP_ASSETS_DIR_ENV, GAME_FIXED_DT_MS, GAME_READY_APP_DIR_NAME,
@@ -68,7 +69,6 @@ impl ProjectEditorApp {
             fixed_dt_ms: GAME_FIXED_DT_MS,
             app_dir_name: GAME_READY_APP_DIR_NAME,
             app_assets_env: GAME_APP_ASSETS_DIR_ENV,
-            window_title: "North Star Editor",
             early_log_file_name: "newengine-project-editor-early.log",
             default_profile_env: None,
             env_defaults: PROJECT_EDITOR_ENV_POLICY,
@@ -76,7 +76,8 @@ impl ProjectEditorApp {
     }
 
     fn run_process(self) -> ! {
-        RuntimeHostLauncher::new(Self::launch_spec(), self).run_process()
+        RuntimeHostLauncher::new(Self::launch_spec(), self)
+            .run_process_with_frontend(WindowedHostFrontend::new("North Star Editor"))
     }
 }
 
@@ -96,10 +97,11 @@ impl RuntimeHostAppProfile for ProjectEditorApp {
     fn initialize_composition_services(
         &self,
         engine: &mut Engine<()>,
+        host_preinit: &newengine_runtime_host::HostPreInitSnapshot,
         runtime: Option<&newengine_project_runtime::RuntimeCompositionContext>,
     ) -> EngineResult<()> {
         self.profile
-            .initialize_composition_services(engine, runtime)
+            .initialize_composition_services(engine, host_preinit, runtime)
     }
 
     fn register_engine_provider_routes_best_effort(&self) {
@@ -110,6 +112,9 @@ impl RuntimeHostAppProfile for ProjectEditorApp {
         self.profile.bootstrap_content_best_effort();
     }
 
+}
+
+impl WindowedRuntimeHostProfile for ProjectEditorApp {
     fn ui_build_from_startup(&self, startup: &StartupConfig) -> Option<Box<dyn UiBuildFn>> {
         self.profile.ui_build_from_startup(startup)
     }

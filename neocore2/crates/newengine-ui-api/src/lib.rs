@@ -3,10 +3,11 @@ use serde::{Deserialize, Serialize};
 
 pub use newengine_ui_draw::{
     reserved, TextureRef, UiBorderPaintCommand, UiClipPaintCommand, UiDrawCmd, UiDrawList,
-    UiIconPaintCommand, UiImagePaintCommand, UiImageRef, UiLayerPaintCommand, UiMesh,
-    UiPaintCommand, UiPaintList, UiPaintNodeRef, UiRect, UiRectPaintCommand,
-    UiRoundedRectPaintCommand, UiScopePaintCommand, UiTexId, UiTextPaintCommand, UiTexture,
-    UiTextureDelta, UiTexturePatch, UiVectorPaintCommand, UiVertex, VectorRef,
+    UiIconPaintCommand, UiImagePaintCommand, UiImageRef, UiLayerDomain, UiLayerDrawPacket,
+    UiLayerDrawPacketSet, UiLayerPaintCommand, UiMesh, UiPaintCommand, UiPaintList, UiPaintNodeRef,
+    UiRect, UiRectPaintCommand, UiRoundedRectPaintCommand, UiScopePaintCommand, UiTexId,
+    UiTextPaintCommand, UiTexture, UiTextureDelta, UiTexturePatch, UiVectorPaintCommand, UiVertex,
+    VectorRef,
 };
 use std::collections::BTreeMap;
 
@@ -18,6 +19,7 @@ pub use frame_binary::{
 
 include!("input.rs");
 include!("events.rs");
+include!("layer.rs");
 include!("draw_protocol.rs");
 mod screen_profile;
 pub use screen_profile::*;
@@ -58,6 +60,23 @@ mod tests {
     }
 
     #[test]
+    fn ui_service_info_advertises_retained_layer_domains() {
+        let info = UiServiceInfo::default();
+        assert!(info
+            .features
+            .iter()
+            .any(|feature| feature == "retained-ui-layer-domain-v1"));
+        assert!(info
+            .features
+            .iter()
+            .any(|feature| feature == "ui-layer-composition-plan-v1"));
+        assert!(info
+            .features
+            .iter()
+            .any(|feature| feature == "domain-scoped-draw-invalidation-v1"));
+    }
+
+    #[test]
     fn ui_service_methods_include_draw_frame() {
         assert!(ui_service_methods().contains(&UI_SERVICE_METHOD_DRAW_FRAME_V1));
     }
@@ -92,6 +111,19 @@ mod tests {
         assert_eq!(node.surface_id, "engine.ui.test.generated");
         assert_eq!(node.components.len(), 1);
         assert_eq!(node.components[0].component_id, UI_COMPONENT_ACTION);
+    }
+
+    #[test]
+    fn retained_ui_invalidation_is_domain_scoped() {
+        let state = UiDrawInvalidationState::default()
+            .invalidate(UiLayerDomain::GameViewport, 10)
+            .invalidate(UiLayerDomain::Debug, 11);
+        assert_eq!(state.revision, 2);
+        assert_eq!(state.revision_for(UiLayerDomain::GameViewport), 1);
+        assert_eq!(state.revision_for(UiLayerDomain::Debug), 1);
+        assert_eq!(state.revision_for(UiLayerDomain::System), 0);
+        assert_eq!(state.revision_for(UiLayerDomain::Editor), 0);
+        assert_eq!(state.frame_index, 11);
     }
 
     #[test]

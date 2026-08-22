@@ -28,7 +28,7 @@ use super::runtime_profile::RenderRuntimeProfile;
 
 type PrimGpuCache = FxHashMap<newengine_primitives::PrimitiveId, PrimitiveGpu>;
 type SkinVertexGpuCache = FxHashMap<newengine_primitives::PrimitiveId, PlayerSkinGpu>;
-type SkinPaletteGpuCache = FxHashMap<u64, SkinPaletteGpu>;
+type SkinPaletteGpuCache = FxHashMap<(u64, u8), SkinPaletteGpu>;
 type TerrainGpuCache = FxHashMap<u64, PrimitiveGpu>;
 
 #[derive(Clone, Copy)]
@@ -182,6 +182,10 @@ pub(super) struct RenderShadowRuntimeState {
     pub(super) caster_observed_tick: u64,
     pub(super) caster_membership_hash: u64,
     pub(super) caster_pose_hash: u64,
+    /// Animated skin palettes are render-cadence shadow geometry. Tracking their
+    /// revision prevents a cached atlas from holding an old skeletal silhouette
+    /// until an unrelated transform/light invalidation happens.
+    pub(super) caster_skin_pose_hash: u64,
     pub(super) caster_revision: u64,
     pub(super) cached_caster_revision: u64,
     pub(super) cache_reuse_count: u64,
@@ -222,6 +226,7 @@ impl RenderShadowRuntimeState {
             caster_observed_tick: 0,
             caster_membership_hash: 0,
             caster_pose_hash: 0,
+            caster_skin_pose_hash: 0,
             caster_revision: 0,
             cached_caster_revision: 0,
             cache_reuse_count: 0,

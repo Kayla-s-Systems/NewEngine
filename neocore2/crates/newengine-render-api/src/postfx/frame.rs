@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use super::*;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct ViewDepthOfFieldFrameParams {
@@ -141,4 +141,3 @@ impl Default for PostFxFrameParams {
         }
     }
 }
-

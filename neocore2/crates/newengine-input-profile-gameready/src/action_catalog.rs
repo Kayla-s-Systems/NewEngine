@@ -48,6 +48,8 @@ pub fn gameplay_default_actions() -> Vec<InputActionDefinition> {
         InputActionDefinition::new(action::PLAYER_RELOAD).with_label("Reload"),
         InputActionDefinition::new(action::PLAYER_INTERACT).with_label("Interact"),
         InputActionDefinition::new(action::INVENTORY_TOGGLE).with_label("Toggle inventory"),
+        InputActionDefinition::new(action::CHARACTER_SELECT_TOGGLE)
+            .with_label("Playable character"),
         InputActionDefinition::new(action::EQUIP_PRIMARY).with_label("Equip primary weapon"),
         InputActionDefinition::new(action::EQUIP_SECONDARY).with_label("Equip secondary weapon"),
         InputActionDefinition::new(action::EQUIP_SIDEARM).with_label("Equip sidearm"),

@@ -204,15 +204,8 @@ impl UiGameGuiConfig {
         self
     }
 
-    pub fn simple_hud(
-        document_ref: impl Into<String>,
-        surface_id: impl Into<String>,
-    ) -> Self {
-        Self::enabled().with_layer(UiGameLayerDescriptor::hud(
-            "hud",
-            document_ref,
-            surface_id,
-        ))
+    pub fn simple_hud(document_ref: impl Into<String>, surface_id: impl Into<String>) -> Self {
+        Self::enabled().with_layer(UiGameLayerDescriptor::hud("hud", document_ref, surface_id))
     }
 
     pub fn validation_errors(&self) -> Vec<String> {
@@ -319,6 +312,7 @@ pub struct UiGameLayerStackState {
     pub layers: Vec<UiGameLayerDescriptor>,
     pub active_input_mode: UiGameInputMode,
     pub top_visible_layer_id: Option<String>,
+    pub input_owner_surface_id: Option<String>,
     pub top_modal_surface_id: Option<String>,
 }
 
@@ -332,6 +326,7 @@ impl Default for UiGameLayerStackState {
             layers: Vec::new(),
             active_input_mode: UiGameInputMode::GameOnly,
             top_visible_layer_id: None,
+            input_owner_surface_id: None,
             top_modal_surface_id: None,
         }
     }
@@ -368,12 +363,14 @@ impl UiGameLayerStackState {
             .rev()
             .find(|layer| layer.visible)
             .map(|layer| layer.id.clone());
-        let top_input = layers
+        let top_input_layer = layers
             .iter()
             .rev()
-            .find(|layer| layer.visible && layer.input_mode.requests_ui_focus())
+            .find(|layer| layer.visible && layer.input_mode.requests_ui_focus());
+        let top_input = top_input_layer
             .map(|layer| layer.input_mode)
             .unwrap_or(UiGameInputMode::GameOnly);
+        let input_owner_surface_id = top_input_layer.map(|layer| layer.surface_id.clone());
         let top_modal_surface_id = layers
             .iter()
             .rev()
@@ -388,7 +385,36 @@ impl UiGameLayerStackState {
             layers,
             active_input_mode: top_input,
             top_visible_layer_id,
+            input_owner_surface_id,
             top_modal_surface_id,
+        }
+    }
+
+    /// Resolve this authored/runtime stack into the generic engine presentation-layer plan.
+    /// Runtime-host consumes the plan; it no longer needs Game-HUD-specific surface filtering.
+    pub fn composition_plan(&self, invalidation_revision: u64) -> UiLayerCompositionPlan {
+        if !self.enabled {
+            return UiLayerCompositionPlan::disabled(
+                UiLayerDomain::GameViewport,
+                self.viewport_surface_id.clone(),
+                self.frame_index,
+            );
+        }
+        UiLayerCompositionPlan {
+            version: 1,
+            frame_index: self.frame_index,
+            domain: UiLayerDomain::GameViewport,
+            target_surface_id: self.viewport_surface_id.clone(),
+            surface_ids: self
+                .layers
+                .iter()
+                .filter(|layer| layer.visible)
+                .map(|layer| layer.surface_id.clone())
+                .filter(|surface_id| !surface_id.trim().is_empty())
+                .collect(),
+            invalidation_revision,
+            input_owner_surface_id: self.input_owner_surface_id.clone(),
+            modal_surface_id: self.top_modal_surface_id.clone(),
         }
     }
 }
@@ -397,7 +423,11 @@ impl UiGameLayerStackState {
 mod game_gui_tests {
     use super::*;
 
-    fn layer(id: &str, kind: UiGameLayerKind, input_mode: UiGameInputMode) -> UiGameLayerDescriptor {
+    fn layer(
+        id: &str,
+        kind: UiGameLayerKind,
+        input_mode: UiGameInputMode,
+    ) -> UiGameLayerDescriptor {
         UiGameLayerDescriptor {
             id: id.to_owned(),
             kind,
@@ -415,7 +445,11 @@ mod game_gui_tests {
             layers: vec![
                 layer("pause", UiGameLayerKind::Menu, UiGameInputMode::UiOnly),
                 layer("hud", UiGameLayerKind::Hud, UiGameInputMode::GameOnly),
-                layer("overlay", UiGameLayerKind::Overlay, UiGameInputMode::GameAndUi),
+                layer(
+                    "overlay",
+                    UiGameLayerKind::Overlay,
+                    UiGameInputMode::GameAndUi,
+                ),
             ],
         };
         let state = UiGameLayerStackState::from_config(&config, 7);
@@ -424,6 +458,7 @@ mod game_gui_tests {
         assert_eq!(state.layers[2].id, "pause");
         assert_eq!(state.top_visible_layer_id.as_deref(), Some("pause"));
         assert_eq!(state.active_input_mode, UiGameInputMode::UiOnly);
+        assert_eq!(state.input_owner_surface_id.as_deref(), Some("game.pause"));
     }
 
     #[test]
@@ -438,12 +473,8 @@ mod game_gui_tests {
 
     #[test]
     fn menu_builder_defaults_to_ui_only_and_can_start_hidden() {
-        let menu = UiGameLayerDescriptor::menu(
-            "pause",
-            "ui/game/pause.neui@surface",
-            "game.pause",
-        )
-        .initially_hidden();
+        let menu = UiGameLayerDescriptor::menu("pause", "ui/game/pause.neui@surface", "game.pause")
+            .initially_hidden();
         assert_eq!(menu.kind, UiGameLayerKind::Menu);
         assert_eq!(menu.input_mode, UiGameInputMode::UiOnly);
         assert!(!menu.visible);
@@ -457,10 +488,7 @@ mod game_gui_tests {
             "engine.render.viewport.player0",
             9,
         );
-        assert_eq!(
-            state.viewport_surface_id,
-            "engine.render.viewport.player0"
-        );
+        assert_eq!(state.viewport_surface_id, "engine.render.viewport.player0");
     }
 
     #[test]
@@ -473,6 +501,28 @@ mod game_gui_tests {
         assert_eq!(queue.commands[0].kind, UiGameLayerCommandKind::Show);
         assert_eq!(queue.commands[1].kind, UiGameLayerCommandKind::Toggle);
         assert_eq!(queue.commands[2].kind, UiGameLayerCommandKind::Hide);
+    }
+
+    #[test]
+    fn game_stack_builds_engine_layer_composition_plan() {
+        let config = UiGameGuiConfig {
+            enabled: true,
+            layers: vec![
+                layer("hud", UiGameLayerKind::Hud, UiGameInputMode::GameOnly),
+                layer("pause", UiGameLayerKind::Menu, UiGameInputMode::UiOnly),
+            ],
+        };
+        let state = UiGameLayerStackState::from_config_for_viewport(
+            &config,
+            "engine.render.viewport.player0",
+            42,
+        );
+        let plan = state.composition_plan(9);
+        assert_eq!(plan.domain, UiLayerDomain::GameViewport);
+        assert_eq!(plan.target_surface_id, "engine.render.viewport.player0");
+        assert_eq!(plan.surface_ids, vec!["game.hud", "game.pause"]);
+        assert_eq!(plan.invalidation_revision, 9);
+        assert_eq!(plan.input_owner_surface_id.as_deref(), Some("game.pause"));
     }
 
     #[test]

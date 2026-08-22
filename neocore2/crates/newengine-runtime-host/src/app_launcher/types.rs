@@ -1,10 +1,15 @@
+use std::path::PathBuf;
+
+use newengine_assets::AssetServiceClient;
 use newengine_core::{Engine, EngineResult, StartupConfig};
 use newengine_project_runtime::RuntimeCompositionContext;
-use newengine_ui::{UiBuildFn, UiProviderKind};
 
 use super::boot_options::RuntimeHostBootOption;
 
-/// Product/application declaration for a standalone runtime-host launch.
+/// Generic process/control-plane launch declaration.
+///
+/// Window titles, UI toolkit hooks and platform runtime policy deliberately live
+/// above this contract in `newengine-windowed-host-runtime`.
 #[derive(Clone, Debug)]
 pub struct RuntimeHostLaunchSpec {
     pub product_name: &'static str,
@@ -14,7 +19,6 @@ pub struct RuntimeHostLaunchSpec {
     pub fixed_dt_ms: u32,
     pub app_dir_name: &'static str,
     pub app_assets_env: &'static str,
-    pub window_title: &'static str,
     pub early_log_file_name: &'static str,
     pub default_profile_env: Option<(&'static str, &'static str)>,
     pub env_defaults: &'static [(&'static str, &'static str)],
@@ -58,6 +62,7 @@ pub trait RuntimeHostAppProfile {
     fn initialize_composition_services(
         &self,
         _engine: &mut Engine<()>,
+        _host_preinit: &crate::HostPreInitSnapshot,
         _runtime: Option<&RuntimeCompositionContext>,
     ) -> EngineResult<()> {
         Ok(())
@@ -68,16 +73,33 @@ pub trait RuntimeHostAppProfile {
 
     #[inline]
     fn bootstrap_content_best_effort(&self) {}
+}
 
+/// Neutral handoff from process/control-plane bootstrap to a concrete runtime
+/// frontend. This is the only point where a windowed host, headless host, remote
+/// host or future console host takes ownership of the already-composed Engine.
+pub struct RuntimeHostFrontendContext<'a> {
+    pub launch_spec: &'a RuntimeHostLaunchSpec,
+    pub startup: &'a StartupConfig,
+    pub assets_available: bool,
+    pub assets: &'a AssetServiceClient,
+    pub asset_roots: &'a [PathBuf],
+}
+
+pub trait RuntimeHostFrontend<P: RuntimeHostAppProfile> {
+    /// Called before startup config is loaded. Concrete frontends may install a
+    /// startup presenter, but the runtime host itself remains toolkit-agnostic.
     #[inline]
-    fn ui_build_from_startup(&self, _startup: &StartupConfig) -> Option<Box<dyn UiBuildFn>> {
-        None
+    fn prepare_startup(&self, _profile: &P, _spec: &RuntimeHostLaunchSpec) -> EngineResult<()> {
+        Ok(())
     }
 
-    #[inline]
-    fn ui_provider_kind_from_startup(&self, startup: &StartupConfig) -> UiProviderKind {
-        crate::engine_factory::ui_provider_kind_from_startup(startup)
-    }
+    fn launch(
+        &self,
+        profile: &P,
+        engine: Engine<()>,
+        context: RuntimeHostFrontendContext<'_>,
+    ) -> EngineResult<()>;
 }
 
 pub struct RuntimeHostLauncher<P> {
@@ -92,5 +114,15 @@ where
     #[inline]
     pub fn new(spec: RuntimeHostLaunchSpec, profile: P) -> Self {
         Self { spec, profile }
+    }
+
+    #[inline]
+    pub fn launch_spec(&self) -> &RuntimeHostLaunchSpec {
+        &self.spec
+    }
+
+    #[inline]
+    pub fn profile(&self) -> &P {
+        &self.profile
     }
 }

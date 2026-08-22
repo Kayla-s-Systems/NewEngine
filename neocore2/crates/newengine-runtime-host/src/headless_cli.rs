@@ -12,7 +12,7 @@ use std::time::Instant;
 use newengine_core::host_events::{HostEvent, WindowHostEvent, WindowInitSize};
 use newengine_core::{Engine, EngineError, EngineResult, EngineRunState};
 
-use crate::platform_runtime::register_threading_gateway_service_best_effort;
+use crate::register_threading_gateway_service_best_effort;
 
 const DEFAULT_HEADLESS_WIDTH: u32 = 1;
 const DEFAULT_HEADLESS_HEIGHT: u32 = 1;
@@ -62,7 +62,7 @@ mod console_window {
     }
 }
 
-pub(crate) struct HeadlessCliRuntime {
+pub struct HeadlessCliRuntime {
     engine: Engine<()>,
     fixed_dt_sec: f32,
     startup_step_limit: u32,
@@ -70,7 +70,7 @@ pub(crate) struct HeadlessCliRuntime {
 }
 
 impl HeadlessCliRuntime {
-    pub(crate) fn new(engine: Engine<()>, fixed_dt_ms: u32) -> Self {
+    pub fn new(engine: Engine<()>, fixed_dt_ms: u32) -> Self {
         Self {
             engine,
             fixed_dt_sec: (fixed_dt_ms.max(1) as f32) / 1000.0,
@@ -82,7 +82,7 @@ impl HeadlessCliRuntime {
         }
     }
 
-    pub(crate) fn run(mut self, reason: impl AsRef<str>) -> EngineResult<()> {
+    pub fn run(mut self, reason: impl AsRef<str>) -> EngineResult<()> {
         let reason = reason.as_ref();
         std::env::set_var("NEWENGINE_HEADLESS", "1");
         console_window::ensure_open(reason);
@@ -288,4 +288,23 @@ fn env_bool(name: &str, default: bool) -> bool {
             )
         })
         .unwrap_or(default)
+}
+
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct HeadlessRuntimeFrontend;
+
+impl<P> crate::app_launcher::RuntimeHostFrontend<P> for HeadlessRuntimeFrontend
+where
+    P: crate::app_launcher::RuntimeHostAppProfile,
+{
+    fn launch(
+        &self,
+        _profile: &P,
+        engine: Engine<()>,
+        context: crate::app_launcher::RuntimeHostFrontendContext<'_>,
+    ) -> EngineResult<()> {
+        HeadlessCliRuntime::new(engine, context.launch_spec.fixed_dt_ms)
+            .run("generic runtime-host headless frontend")
+    }
 }

@@ -18,7 +18,7 @@ use parking_lot::RwLock;
 use newengine_ecs::{EntityId, World};
 use newengine_ecs_api::{EcsCommand, EcsCommandRequest};
 use newengine_entity_api::{EntityHandle, EntitySpawnRequest};
-use newengine_runtime_host::world_authority::{WorldAuthorityClient, WorldAuthoritySnapshot};
+use newengine_world_authority_runtime::{WorldAuthorityClient, WorldAuthoritySnapshot};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RuntimeWorldAuthorityMode {
@@ -333,7 +333,7 @@ pub fn current_entity_authority_map(world: &World) -> Option<&RuntimeEntityAutho
 #[cfg(test)]
 mod tests {
     use super::*;
-    use newengine_runtime_host::world_authority::WorldAuthorityGatewayRoute;
+    use newengine_world_authority_runtime::WorldAuthorityGatewayRoute;
 
     fn route(gateway: &str, owner: &str, origin: &str) -> WorldAuthorityGatewayRoute {
         WorldAuthorityGatewayRoute {

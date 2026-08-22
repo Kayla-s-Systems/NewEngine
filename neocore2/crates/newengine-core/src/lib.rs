@@ -1,7 +1,6 @@
 pub mod bus;
 pub mod cache_files;
 pub mod config_root;
-pub mod console;
 pub mod core_invariants;
 pub mod crash;
 pub mod engine;

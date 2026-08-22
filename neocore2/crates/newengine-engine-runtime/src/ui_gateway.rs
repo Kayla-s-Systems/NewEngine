@@ -357,9 +357,8 @@ fn request_frame_output_json(request: &UiFrameRequest) -> EngineResult<Option<Ui
 }
 
 fn response_to_frame_output(response: UiFrameResponse) -> Option<UiFrameOutput> {
-    // Empty draw-lists are valid clear packets. Returning None would keep the
-    // previous retained modal/menu UI alive in render backends that consume UI
-    // through RenderCommand::SetUiDrawList.
+    // Empty draw-lists are valid clear payloads for the owning retained UI layer. Returning
+    // None would keep the previous modal/menu packet alive in the domain cache.
     Some(UiFrameOutput {
         draw_list: response.draw_list,
         input_capture: response.input_capture,

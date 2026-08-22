@@ -8,7 +8,13 @@ use newengine_model_domain_api::MeshRenderOptions;
 use newengine_primitives::Primitive;
 use newengine_procedural_noise::ProceduralTerrain;
 
-const SHADOW_MATRIX_EPSILON: f32 = 2.0e-4;
+// Directional sun motion is render-cadence input. A loose matrix epsilon makes the
+// atlas hold several frames and then jump, which is visible as shadow stepping/flicker.
+// Keep only a machine-noise guard here; static texel-snapped projections remain bit-stable.
+const SHADOW_DIRECTIONAL_MATRIX_EPSILON: f32 = 1.0e-6;
+// Local-light atlases retain a looser threshold because small point/spot transform noise
+// would otherwise fan out into six perspective redraws per light.
+const SHADOW_LOCAL_MATRIX_EPSILON: f32 = 2.0e-4;
 const SHADOW_PARAM_EPSILON: f32 = 1.0e-4;
 const SHADOW_SPLIT_EPSILON: f32 = 1.0e-3;
 
@@ -21,10 +27,10 @@ fn slices_nearly_equal(a: &[f32], b: &[f32], epsilon: f32) -> bool {
 }
 
 #[inline]
-fn shadow_matrices_match(a: newengine_math::Mat4, b: newengine_math::Mat4) -> bool {
+fn shadow_matrices_match(a: newengine_math::Mat4, b: newengine_math::Mat4, epsilon: f32) -> bool {
     let a_cols = a.to_cols_array();
     let b_cols = b.to_cols_array();
-    slices_nearly_equal(&a_cols, &b_cols, SHADOW_MATRIX_EPSILON)
+    slices_nearly_equal(&a_cols, &b_cols, epsilon)
 }
 
 #[inline]
@@ -74,7 +80,11 @@ fn shadow_frame_mismatch(a: ShadowFrame, b: ShadowFrame) -> ShadowFrameMismatch 
         .min(b.cascade_count)
         .clamp(1, super::shadows::MAX_DIRECTIONAL_SHADOW_CASCADES as u32) as usize;
     for i in 0..count {
-        mismatch.matrix |= !shadow_matrices_match(a.cascade_light_mvp[i], b.cascade_light_mvp[i]);
+        mismatch.matrix |= !shadow_matrices_match(
+            a.cascade_light_mvp[i],
+            b.cascade_light_mvp[i],
+            SHADOW_DIRECTIONAL_MATRIX_EPSILON,
+        );
         mismatch.split |= (a.cascade_splits[i] - b.cascade_splits[i]).abs() > SHADOW_SPLIT_EPSILON;
     }
     mismatch.params = !slices_nearly_equal(&a.params, &b.params, SHADOW_PARAM_EPSILON);
@@ -120,7 +130,7 @@ fn local_shadow_frames_match_sample_space(
     for i in 0..view_count {
         let left = a.views[i];
         let right = b.views[i];
-        if !shadow_matrices_match(left.light_mvp, right.light_mvp)
+        if !shadow_matrices_match(left.light_mvp, right.light_mvp, SHADOW_LOCAL_MATRIX_EPSILON)
             || !shadow_viewport_matches(left.viewport, right.viewport)
             || !shadow_scissor_matches(left.scissor, right.scissor)
             || left.light_slot != right.light_slot
@@ -245,6 +255,35 @@ fn shadow_caster_pose_hash(world: &newengine_ecs::World) -> u64 {
 }
 
 #[inline]
+fn shadow_skin_pose_hash(world: &newengine_ecs::World) -> u64 {
+    use newengine_math::hash_combine_u64;
+    let mut xor_hash = 0_u64;
+    let mut sum_hash = 0_u64;
+    let mut count = 0_u64;
+    for (entity, skin) in world.query::<crate::gameplay::PlayerSkinBinding>() {
+        if !shadow_caster_entity(world, entity) {
+            continue;
+        }
+        let Some(pose) = world.get::<crate::gameplay::PlayerSkinPose>(skin.owner) else {
+            continue;
+        };
+        // `PlayerSkinPose.revision` is a publication counter and advances every render
+        // frame even when the resulting palette is numerically unchanged. Hash the
+        // quantized palette itself so shadow refresh follows real deformation, not cadence.
+        let mut h = hash_combine_u64(entity.stable_u64(), skin.owner.stable_u64());
+        h = hash_combine_u64(h, pose.palette.len() as u64);
+        for matrix in &pose.palette {
+            for value in matrix.to_cols_array() {
+                h = hash_combine_u64(h, quantized_shadow_pose_component(value));
+            }
+        }
+        xor_hash ^= h.rotate_left((entity.stable_u64() & 63) as u32);
+        sum_hash = sum_hash.wrapping_add(h.wrapping_mul(0xd6e8_feb8_6659_fd93));
+        count = count.saturating_add(1);
+    }
+    hash_combine_u64(hash_combine_u64(count, xor_hash), sum_hash)
+}
+
 fn shadow_caster_membership_hash(world: &newengine_ecs::World) -> u64 {
     use newengine_math::hash_combine_u64;
     let mut xor_hash = 0_u64;
@@ -320,6 +359,14 @@ impl RuntimeRenderController {
         let bounds_changed = first_observation || pose_hash != self.shadows.caster_pose_hash;
         self.shadows.caster_pose_hash = pose_hash;
 
+        // Skin deformation changes shadow geometry without changing the entity GlobalTransform.
+        // Compare quantized palette content so actual deformation refreshes the atlas while a
+        // publication-only revision bump cannot force a full CSM redraw.
+        let skin_pose_hash = shadow_skin_pose_hash(world);
+        let skin_pose_changed =
+            first_observation || skin_pose_hash != self.shadows.caster_skin_pose_hash;
+        self.shadows.caster_skin_pose_hash = skin_pose_hash;
+
         let geometry_changed = entity_changed
             || world
                 .query_changed::<ProceduralTerrain>(since_tick)
@@ -343,6 +390,7 @@ impl RuntimeRenderController {
                 });
         let changed = entity_changed
             || bounds_changed
+            || skin_pose_changed
             || geometry_changed
             || material_changed
             || visibility_changed;
@@ -543,5 +591,87 @@ impl RuntimeRenderController {
     #[inline]
     pub(super) fn shadows_current_cull(&self) -> Option<super::shadows::ShadowCasterCull> {
         self.shadows.current_caster_cull
+    }
+}
+
+#[cfg(test)]
+mod temporal_shadow_cache_tests {
+    use super::*;
+
+    #[test]
+    fn directional_matrix_cache_tracks_real_sub_old_epsilon_motion() {
+        let stable = newengine_math::Mat4::IDENTITY;
+        let machine_noise = newengine_math::Mat4::from_translation(newengine_math::Vec3::new(
+            SHADOW_DIRECTIONAL_MATRIX_EPSILON * 0.25,
+            0.0,
+            0.0,
+        ));
+        let real_motion =
+            newengine_math::Mat4::from_translation(newengine_math::Vec3::new(1.0e-5, 0.0, 0.0));
+        assert!(shadow_matrices_match(
+            stable,
+            machine_noise,
+            SHADOW_DIRECTIONAL_MATRIX_EPSILON,
+        ));
+        assert!(!shadow_matrices_match(
+            stable,
+            real_motion,
+            SHADOW_DIRECTIONAL_MATRIX_EPSILON,
+        ));
+        assert!(shadow_matrices_match(
+            stable,
+            real_motion,
+            SHADOW_LOCAL_MATRIX_EPSILON,
+        ));
+    }
+
+    #[test]
+    fn skin_shadow_hash_tracks_palette_content_not_publication_revision() {
+        let mut world = newengine_ecs::World::new();
+        let owner = world.spawn();
+        let visual = world.spawn();
+        let _ = world.insert(
+            owner,
+            crate::gameplay::PlayerSkinPose {
+                palette: vec![newengine_math::Mat4::IDENTITY],
+                revision: 1,
+            },
+        );
+        let _ = world.insert(
+            visual,
+            newengine_primitives::Primitive {
+                id: newengine_primitives::builtins::ID_CUBE,
+                color: [1.0; 4],
+            },
+        );
+        let _ = world.insert(
+            visual,
+            crate::gameplay::PlayerSkinBinding {
+                owner,
+                vertices: Vec::new(),
+                source_to_model: newengine_math::Mat4::IDENTITY.to_cols_array(),
+            },
+        );
+
+        let baseline = shadow_skin_pose_hash(&world);
+        world
+            .get_mut::<crate::gameplay::PlayerSkinPose>(owner)
+            .expect("skin pose")
+            .revision = 2;
+        let revision_only = shadow_skin_pose_hash(&world);
+        assert_eq!(
+            baseline, revision_only,
+            "publication revision alone must not redraw CSM"
+        );
+        world
+            .get_mut::<crate::gameplay::PlayerSkinPose>(owner)
+            .expect("skin pose")
+            .palette[0] =
+            newengine_math::Mat4::from_translation(newengine_math::Vec3::new(0.02, 0.0, 0.0));
+        let deformed = shadow_skin_pose_hash(&world);
+        assert_ne!(
+            baseline, deformed,
+            "actual skin deformation must invalidate shadow geometry"
+        );
     }
 }

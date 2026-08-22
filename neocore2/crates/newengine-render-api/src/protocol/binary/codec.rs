@@ -123,7 +123,6 @@ pub(super) fn render_draw_list_kind_tag(kind: RenderDrawListKind) -> u8 {
         RenderDrawListKind::LocalShadowCasters => 6,
         RenderDrawListKind::OpaqueForward => 2,
         RenderDrawListKind::Transparent => 3,
-        RenderDrawListKind::Ui => 4,
         RenderDrawListKind::Debug => 5,
     }
 }
@@ -135,7 +134,6 @@ pub(super) fn render_draw_list_kind_from_tag(tag: u8) -> Result<RenderDrawListKi
         6 => Ok(RenderDrawListKind::LocalShadowCasters),
         2 => Ok(RenderDrawListKind::OpaqueForward),
         3 => Ok(RenderDrawListKind::Transparent),
-        4 => Ok(RenderDrawListKind::Ui),
         5 => Ok(RenderDrawListKind::Debug),
         _ => Err(format!("invalid render draw-list kind tag {tag}")),
     }

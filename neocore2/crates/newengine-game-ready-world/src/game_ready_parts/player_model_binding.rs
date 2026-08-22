@@ -165,7 +165,7 @@ fn bind_player_model_assignment(
     let (model_source, parts, skeleton) =
         ensure_player_runtime_model_parts(prims, mats, assignment)?;
     let validated_skin_source_to_model =
-        super::validation::validate_player_skin_contract(&parts, skeleton.as_ref())?;
+        super::validation::validate_player_skin_contract(assignment, &parts, skeleton.as_ref())?;
     let animation_binding =
         prepare_player_animation_binding(assignment, &parts, skeleton.as_ref())?;
 
@@ -286,7 +286,7 @@ fn bind_player_model_assignment(
     if let Some(animation_binding) = animation_binding {
         let initial_palette = animation_binding.initial_palette();
         let clip_refs = animation_binding.clip_refs_csv();
-        let joint_count = initial_palette.len();
+        let joint_count = animation_binding.expected_palette_joints();
         super::validation::validate_player_palette(
             &initial_palette,
             joint_count,

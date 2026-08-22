@@ -3,7 +3,7 @@
 use newengine_core::render::{RenderApi, RenderTargetId};
 use newengine_core::{EngineResult, ThreadPoolHandle};
 use newengine_scene::Scene;
-use newengine_ui_api::UiDrawList;
+use newengine_ui_api::UiLayerDrawPacketSet;
 
 use super::super::controller::RuntimeRenderController;
 use super::frame_orchestrator::RenderFrameOrchestrator;
@@ -16,7 +16,7 @@ impl RuntimeRenderController {
         r: &mut dyn RenderApi,
         scene: &Scene,
         plugin_snapshot: Option<&newengine_plugin_host::PluginsSnapshot>,
-        ui: Option<&UiDrawList>,
+        ui_layers: UiLayerDrawPacketSet,
         requested_play_mode: GameRunMode,
         rt: Option<RenderTargetId>,
         scope: RenderFrameScope,
@@ -28,7 +28,7 @@ impl RuntimeRenderController {
             r,
             scene,
             plugin_snapshot,
-            ui,
+            ui_layers,
             requested_play_mode,
             rt,
             scope,

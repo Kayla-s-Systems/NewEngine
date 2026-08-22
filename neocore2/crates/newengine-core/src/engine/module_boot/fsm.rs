@@ -272,7 +272,9 @@ impl<E: Send + 'static> Engine<E> {
                         e,
                     );
                 }
-                if let Err(reason) = newengine_plugin_host::validate_required_engine_capability_slots() {
+                if let Err(reason) =
+                    newengine_plugin_host::validate_required_engine_capability_slots()
+                {
                     return self.fail_incremental_startup(
                         EngineStartupPhase::PluginStart,
                         "Required capability slot is empty.",

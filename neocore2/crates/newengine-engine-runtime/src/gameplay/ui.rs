@@ -227,9 +227,14 @@ impl GameplayUiProviderRegistry {
         consumed
     }
 
-    pub fn publish_frame(&self, world: &mut GameplayWorld, frame_index: u64) {
+    /// Publishes retained gameplay UI mutations and returns whether provider draw
+    /// state changed. The caller uses this edge to invalidate the host-side game
+    /// UI layer cache on the next platform frame.
+    pub fn publish_frame(&self, world: &mut GameplayWorld, frame_index: u64) -> bool {
+        let mut changed = false;
         for provider in &self.providers {
             let output = provider.publish_frame(world, frame_index);
+            changed |= !output.patches.is_empty() || !output.surface_visibility.is_empty();
             for patch in output.patches {
                 crate::ui_gateway::publish_state_patch(
                     &patch.patch,
@@ -242,6 +247,7 @@ impl GameplayUiProviderRegistry {
             }
         }
         self.sync_modal_state(world);
+        changed
     }
 
     pub fn aggregate_input_capture(&self, world: &GameplayWorld) -> GameplayInputCapture {

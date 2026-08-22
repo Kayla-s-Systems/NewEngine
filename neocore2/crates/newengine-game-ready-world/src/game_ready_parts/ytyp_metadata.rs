@@ -268,6 +268,10 @@ pub(super) fn apply_player_model_from_ytyp(
         profile.player.model.eye_height_ratio = eye_height_ratio.clamp(0.55, 0.98);
         applied += 1;
     }
+    if let Some(yaw_offset) = value_path(model, &["yaw_offset"]).and_then(value_f32) {
+        profile.player.model.yaw_offset = yaw_offset;
+        applied += 1;
+    }
     if applied > 0 {
         newengine_ulog_api::ulog::info!(
             "game-ready ytyp metadata: player model descriptor source='{}' properties_ref={:?} policy='.ytyp connects model source to material bindings'",

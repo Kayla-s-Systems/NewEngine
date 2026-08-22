@@ -4,7 +4,7 @@ use newengine_ecs::World;
 use newengine_engine_runtime::gameplay::{
     apply_player_stance_geometry, is_player_controller_enabled, update_player_stance_camera,
     CharacterBody, CharacterMotionTuning, PlayerCommandFrame, PlayerController, PlayerGroundState,
-    PlayerStanceKind, PlayerStanceState,
+    PlayerLocomotionState, PlayerStanceKind, PlayerStanceState,
 };
 use newengine_gameplay_fps_api::{FpsActionFrame, FpsGameplayPolicySnapshot};
 use newengine_sim::{MotorInput, Velocity};
@@ -24,9 +24,14 @@ pub(crate) fn apply_fps_character_commands(world: &mut World, dt: f32, fixed_tic
         if !is_player_controller_enabled(world, player) {
             continue;
         }
-        let actions = world
+        let (source_frame, actions) = world
             .get::<PlayerCommandFrame>(player)
-            .map(|commands| FpsActionFrame::from_commands(&commands.actions))
+            .map(|commands| {
+                (
+                    commands.source_frame,
+                    FpsActionFrame::from_commands(&commands.actions),
+                )
+            })
             .unwrap_or_default();
         let body = world
             .get::<CharacterBody>(player)
@@ -74,7 +79,23 @@ pub(crate) fn apply_fps_character_commands(world: &mut World, dt: f32, fixed_tic
             .get::<PlayerGroundState>(player)
             .map(|state| state.grounded)
             .unwrap_or(false);
-        if player_policy.allow_jump && actions.jump_pressed && grounded && motion.jump_speed > 0.0 {
+        let jump_pressed = if actions.jump_pressed {
+            let already_consumed = world
+                .get::<PlayerLocomotionState>(player)
+                .and_then(|state| state.last_jump_command_source_frame)
+                == Some(source_frame);
+            if already_consumed {
+                false
+            } else {
+                if let Some(state) = world.get_mut::<PlayerLocomotionState>(player) {
+                    state.last_jump_command_source_frame = Some(source_frame);
+                }
+                true
+            }
+        } else {
+            false
+        };
+        if player_policy.allow_jump && jump_pressed && grounded && motion.jump_speed > 0.0 {
             let mut velocity = world.get::<Velocity>(player).copied().unwrap_or_default();
             velocity.0.y = motion.jump_speed;
             let _ = world.insert(player, velocity);
@@ -83,6 +104,11 @@ pub(crate) fn apply_fps_character_commands(world: &mut World, dt: f32, fixed_tic
                 state.walkable = false;
                 state.ground_entity = None;
                 state.distance = f32::INFINITY;
+            }
+            if let Some(state) = world.get_mut::<PlayerLocomotionState>(player) {
+                state.jump_started = true;
+                state.airborne_time = 0.0;
+                state.max_downward_speed = 0.0;
             }
         }
     }
@@ -133,6 +159,62 @@ mod tests {
                 .expect("ground state")
                 .grounded
         );
+        assert!(
+            world
+                .get::<PlayerLocomotionState>(player)
+                .expect("locomotion state")
+                .jump_started,
+            "gameplay jump must publish explicit airborne origin for animation semantics"
+        );
+    }
+
+    #[test]
+    fn jump_edge_is_consumed_once_per_input_source_frame() {
+        let mut world = World::new();
+        let player = spawn_default_player(&mut world, None, "fps-jump-once", Vec3::ZERO);
+        if let Some(ground) = world.get_mut::<PlayerGroundState>(player) {
+            ground.grounded = true;
+            ground.walkable = true;
+            ground.ground_entity = Some(99);
+        }
+        if let Some(commands) = world.get_mut::<PlayerCommandFrame>(player) {
+            commands.source_frame = 77;
+            commands.actions = ActionCommandFrame {
+                pressed: vec![action::PLAYER_JUMP.into()],
+                ..ActionCommandFrame::default()
+            };
+        }
+        apply_fps_character_commands(&mut world, 1.0 / 60.0, 7);
+        assert_eq!(
+            world
+                .get::<PlayerLocomotionState>(player)
+                .and_then(|state| state.last_jump_command_source_frame),
+            Some(77)
+        );
+
+        // Simulate a later fixed tick seeing the exact same sampled input frame after a
+        // physics/contact update restored grounding. It must not jump a second time.
+        if let Some(ground) = world.get_mut::<PlayerGroundState>(player) {
+            ground.grounded = true;
+            ground.walkable = true;
+        }
+        if let Some(velocity) = world.get_mut::<Velocity>(player) {
+            velocity.0.y = 0.0;
+        }
+        apply_fps_character_commands(&mut world, 1.0 / 60.0, 8);
+        assert_eq!(
+            world.get::<Velocity>(player).map(|velocity| velocity.0.y),
+            Some(0.0)
+        );
+
+        // A genuinely new input sample is allowed to initiate the next jump.
+        if let Some(commands) = world.get_mut::<PlayerCommandFrame>(player) {
+            commands.source_frame = 78;
+        }
+        apply_fps_character_commands(&mut world, 1.0 / 60.0, 9);
+        assert!(world
+            .get::<Velocity>(player)
+            .is_some_and(|velocity| velocity.0.y > 0.0));
     }
 
     #[test]

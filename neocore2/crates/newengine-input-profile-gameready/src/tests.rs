@@ -147,6 +147,22 @@ fn game_profile_resolves_f1_to_hud_visibility_toggle() {
 }
 
 #[test]
+fn game_profile_resolves_m_to_playable_character_selector() {
+    let profile = game_ready_game_input_profile();
+    let frame = profile.resolve(&PressedKeyboardKey(newengine_input_api::key_code::KEY_M));
+
+    assert!(frame.contains_action(action::CHARACTER_SELECT_TOGGLE));
+    assert!(
+        newengine_gameplay_fps_api::FpsActionFrame::from_commands(&frame.command_actions())
+            .character_select_toggle_pressed
+    );
+    assert!(profile.keys.iter().any(|key| {
+        key.code == newengine_input_api::key_code::KEY_M
+            && key.id == newengine_input_api::key_identity::KEY_M
+    }));
+}
+
+#[test]
 fn game_profile_excludes_editor_asset_browser() {
     let profile = game_ready_game_input_profile();
     assert!(profile.listeners.iter().any(|l| l.id == "ui-navigation"));

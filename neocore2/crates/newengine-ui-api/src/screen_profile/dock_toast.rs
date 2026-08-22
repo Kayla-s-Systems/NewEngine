@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
 
-
 /// Per-panel dock state for the editor shell.
 ///
 /// It is intentionally a DTO: panels remain UI compositions, while consumers can

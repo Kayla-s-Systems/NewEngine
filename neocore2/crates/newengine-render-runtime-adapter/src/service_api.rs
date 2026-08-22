@@ -8,7 +8,7 @@ use newengine_core::render::{
     RenderGraphCompileReport, RenderGraphDesc, RenderGraphPassKind, RenderGraphSubmitReport,
     RenderGraphValidationReport, RenderTargetDesc, RenderTargetId, RenderWorkBudget, SamplerDesc,
     SamplerId, ShaderDesc, ShaderId, ShaderRuntimeCacheStats, TextureDesc, TextureId,
-    TextureResidencySnapshot, UiDrawList, UiTexId, UploadPumpDesc, UploadPumpReport, Viewport,
+    TextureResidencySnapshot, UiTexId, UploadPumpDesc, UploadPumpReport, Viewport,
 };
 use newengine_core::{EngineError, EngineResult};
 use newengine_render_api::{
@@ -105,13 +105,6 @@ impl ServiceBackedRenderApi {
 impl RenderApi for ServiceBackedRenderApi {
     fn begin_frame(&mut self, desc: BeginFrameDesc) -> EngineResult<()> {
         self.unit(RenderCommand::BeginFrame(desc))
-    }
-
-    fn set_ui_draw_list(&mut self, ui: UiDrawList) {
-        // UI draw lists can be large enough that the JSON command path becomes
-        // a frame-time bottleneck. Queue it with the other unit commands so it
-        // travels through command_batch_bin_v1 when the active renderer supports it.
-        let _ = self.queue_unit(RenderCommand::SetUiDrawList(Box::new(ui)));
     }
 
     fn set_debug_text(&mut self, text: String) {

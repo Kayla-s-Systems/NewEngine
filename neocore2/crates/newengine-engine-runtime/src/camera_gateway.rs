@@ -55,8 +55,7 @@ use self::camera_gateway_helpers::{
     apply_gameplay_view_lens, apply_runtime_input, camera_nav_input, camera_report_snapshot,
     camera_runtime_service_config, follow_controller_offset_z,
     refresh_camera_spring_arm_collision_world, route_player_input_channels, sanitize_camera_dt,
-    trace_gameplay_camera_frame,
-    view_postfx_from_camera_snapshot,
+    trace_gameplay_camera_frame, view_postfx_from_camera_snapshot,
 };
 pub use self::camera_gateway_helpers::{
     apply_view_postfx, CameraRuntimeOverlayReport, CameraTransitionOverlayReport,
@@ -593,7 +592,10 @@ mod camera_gateway_start_view_tests {
     #[test]
     fn camera_start_view_defaults_to_first_person() {
         assert_eq!(parse_camera_start_view(None), CameraViewMode::FirstPerson);
-        assert_eq!(parse_camera_start_view(Some("unknown")), CameraViewMode::FirstPerson);
+        assert_eq!(
+            parse_camera_start_view(Some("unknown")),
+            CameraViewMode::FirstPerson
+        );
     }
 
     #[test]

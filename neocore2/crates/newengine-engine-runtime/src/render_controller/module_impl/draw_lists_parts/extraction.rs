@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 
 use newengine_core::render::{
-    Extent2D, RectI32, RenderApi, RenderDrawListKind, RenderGraphPassKind, Viewport,
+    RectI32, RenderApi, RenderDrawListKind, RenderGraphPassKind, Viewport,
 };
 use newengine_core::EngineResult;
 use newengine_render_feature_api::{
@@ -430,25 +430,6 @@ impl<'a> newengine_render_feature_api::DrawListBuildCtx for DrawListBuildCtx<'a>
                 ctx.viewport_extent,
                 view,
             )
-        })?;
-        Ok(())
-    }
-
-    fn record_ui(&mut self, ctx: &SceneExtractionCtx<'_>) -> EngineResult<()> {
-        let Some(ui) = ctx.ui else {
-            return Ok(());
-        };
-        let extent: Extent2D = ctx.surface_extent;
-        let _ = self.record(RenderDrawListKind::Ui, |_this, r| {
-            r.set_viewport(Viewport::full(extent))?;
-            r.set_scissor(RectI32::new(
-                0,
-                0,
-                extent.width as i32,
-                extent.height as i32,
-            ))?;
-            r.set_ui_draw_list(ui.clone());
-            Ok(())
         })?;
         Ok(())
     }

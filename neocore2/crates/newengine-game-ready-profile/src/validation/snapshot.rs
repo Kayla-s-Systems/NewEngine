@@ -26,7 +26,9 @@ impl GameReadyValidationModule {
         })
     }
 
-    pub(super) fn normalized_snapshot(mut snapshot: WorldSnapshotResponse) -> WorldSnapshotResponse {
+    pub(super) fn normalized_snapshot(
+        mut snapshot: WorldSnapshotResponse,
+    ) -> WorldSnapshotResponse {
         snapshot.state.notes.clear();
         snapshot.state.tick = 0;
         snapshot
@@ -119,7 +121,6 @@ impl GameReadyValidationModule {
         );
         Ok(())
     }
-
 
     pub(super) fn run_snapshot_validation(&self) -> Result<(), String> {
         if !newengine_plugin_host::has_service(ENGINE_WORLD_SERVICE_ID) {

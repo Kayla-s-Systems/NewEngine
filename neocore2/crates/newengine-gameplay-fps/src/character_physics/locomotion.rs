@@ -95,6 +95,7 @@ fn update_player_locomotion(world: &mut World, key_to_entity: &BTreeMap<u64, Ent
                 }
                 state.airborne_time = 0.0;
                 state.max_downward_speed = 0.0;
+                state.jump_started = false;
             } else {
                 if state.was_grounded {
                     emitted.push((PlayerEventKind::GroundStateChanged, "airborne".to_owned()));
@@ -103,6 +104,9 @@ fn update_player_locomotion(world: &mut World, key_to_entity: &BTreeMap<u64, Ent
                 state.airborne_time += dt;
                 if velocity.y.is_finite() {
                     state.max_downward_speed = state.max_downward_speed.max((-velocity.y).max(0.0));
+                    if state.jump_started && state.airborne_time > 2.5 && velocity.y.abs() < 1.0 {
+                        state.jump_started = false;
+                    }
                 }
             }
             state.was_grounded = ground.grounded;

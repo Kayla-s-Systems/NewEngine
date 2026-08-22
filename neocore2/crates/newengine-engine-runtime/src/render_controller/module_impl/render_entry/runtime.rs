@@ -8,11 +8,6 @@ impl RuntimeRenderController {
         ctx: &mut ModuleCtx<'_, E>,
     ) -> EngineResult<()> {
         let render_module_started = Instant::now();
-        // Do not consume the UI draw list before the native launch gate.
-        // The first provider frame usually carries the font/solid atlas; if the
-        // launch gate exits before a presentable frame, removing it here makes
-        // subsequent atlas-free HUD frames invisible. Consume UI only when this
-        // module is actually going to submit a playable/UI frame.
         let plugin_snapshot = ctx
             .resources()
             .get::<newengine_plugin_host::PluginsSnapshot>()
@@ -29,9 +24,6 @@ impl RuntimeRenderController {
                 cfg.work_budget
             });
 
-        // A minimized native window commonly reports 0x0. This is not a renderer
-        // failure and must never reach begin_frame/create_swapchain. Keep the last
-        // valid extent and retain the UI draw list; restore will force one resize.
         if w == 0 || h == 0 {
             self.suspend_zero_sized_surface(w, h);
             return Ok(());
@@ -94,9 +86,6 @@ impl RuntimeRenderController {
             return Ok(());
         }
 
-        // Normal interactive frames pump material work once. The prelaunch path
-        // owns its own loading-specific pump and budget, so doing this before the
-        // gate duplicated queue scans and could start twice the configured jobs.
         self.pump_material_texture_requests(
             &mut **r,
             thread_pool.as_ref(),
@@ -107,7 +96,26 @@ impl RuntimeRenderController {
         self.resize_if_needed(&mut **r, w, h)?;
         drop(r);
 
-        let ui: Option<UiDrawList> = ctx.resources_mut().remove::<UiDrawList>();
+        let ui_layers = ctx
+            .resources_mut()
+            .remove::<UiLayerDrawPacketSet>()
+            .unwrap_or_else(|| UiLayerDrawPacketSet::new(self.frame.frame_index));
+        let primary_ui_domain = ctx
+            .resources()
+            .get::<UiLayerCompositionPlan>()
+            .map(|plan| plan.domain)
+            .unwrap_or_else(|| {
+                match ctx
+                    .resources()
+                    .get::<UiScreenProfileState>()
+                    .map(|state| state.descriptor.profile)
+                    .unwrap_or_default()
+                {
+                    UiScreenProfile::Game => UiLayerDomain::GameViewport,
+                    UiScreenProfile::Editor => UiLayerDomain::Editor,
+                    _ => UiLayerDomain::System,
+                }
+            });
         self.apply_editor_viewport_slot(ctx, w, h);
         let mut r = api.lock();
         let (dt, fixed_dt, fixed_alpha, fixed_step_count, fixed_tick) = ctx
@@ -126,7 +134,7 @@ impl RuntimeRenderController {
         let backend_begin_started = Instant::now();
         let scope_result = self.begin_playable_surface_frame(
             &mut **r,
-            ui.is_some(),
+            !ui_layers.is_empty(),
             w,
             h,
             dt,
@@ -159,7 +167,14 @@ impl RuntimeRenderController {
 
         let playable_started = Instant::now();
         let outcome = match catch_unwind(AssertUnwindSafe(|| {
-            self.render_playable_viewport_frame(ctx, &mut **r, plugin_snapshot.as_ref(), ui, scope)
+            self.render_playable_viewport_frame(
+                ctx,
+                &mut **r,
+                plugin_snapshot.as_ref(),
+                ui_layers,
+                primary_ui_domain,
+                scope,
+            )
         })) {
             Ok(Ok(outcome)) => outcome,
             Ok(Err(e)) => {
@@ -474,11 +489,6 @@ impl RuntimeRenderController {
         trace_frame: bool,
     ) -> EngineResult<Option<RenderFrameScope>> {
         let (requested_vp_w, requested_vp_h) = self.bridges.viewport.read_extent();
-        // UI is an overlay/service output and must not change world viewport selection.
-        // A zero viewport bridge extent means "render directly to the current surface"
-        // regardless of whether an engine.ui draw list is present. The previous
-        // UI-gated condition turned this into 0x0 once UI provider output existed,
-        // clearing the surface and drawing only UI.
         let direct_surface_viewport = requested_vp_w == 0 && requested_vp_h == 0 && w > 0 && h > 0;
         let (vp_w, vp_h) = if direct_surface_viewport {
             (w, h)

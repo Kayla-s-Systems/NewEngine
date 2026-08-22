@@ -8,8 +8,10 @@ use newengine_math::collections::FxHashMap;
 
 mod binary;
 pub mod binary_codec;
+mod layer;
 mod paint;
 pub use binary::{decode_ui_draw_list_bin, encode_ui_draw_list_bin, encode_ui_draw_list_bin_into};
+pub use layer::{UiLayerDomain, UiLayerDrawPacket, UiLayerDrawPacketSet};
 pub use paint::{
     TextureRef, UiBorderPaintCommand, UiClipPaintCommand, UiIconPaintCommand, UiImagePaintCommand,
     UiImageRef, UiLayerPaintCommand, UiPaintCommand, UiPaintList, UiPaintNodeRef,

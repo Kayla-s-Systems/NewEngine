@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use super::*;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PostFxPassKind {
@@ -82,4 +82,3 @@ pub struct PostFxPassStats {
     pub last_postfx_ms: f32,
     pub hdr_scene_color: bool,
 }
-

@@ -5,7 +5,7 @@ use newengine_render_api::{
     decode_json, decode_texture_id_bin, encode_create_texture_bin, encode_json,
     encode_unit_command_batch_bin, RenderBackendInfo, RenderCommand, RenderCommandResponse,
     RenderServiceRequest, RenderServiceResponse, TextureDesc, TextureId, ENGINE_RENDER_SERVICE_ID,
-    RENDER_SERVICE_METHOD_COMMAND_BATCH_BIN_V1, RENDER_SERVICE_METHOD_CREATE_TEXTURE_BIN_V1,
+    RENDER_SERVICE_METHOD_COMMAND_BATCH_BIN_V2, RENDER_SERVICE_METHOD_CREATE_TEXTURE_BIN_V1,
 };
 
 use newengine_runtime_adapter_core::GenericJsonServiceClient;
@@ -25,7 +25,7 @@ impl RenderServiceClient {
     pub(crate) fn new(host: HostApiV1) -> Self {
         Self {
             service: GenericJsonServiceClient::new(host, ENGINE_RENDER_SERVICE_ID),
-            command_batch_bin_method: MethodName::from(RENDER_SERVICE_METHOD_COMMAND_BATCH_BIN_V1),
+            command_batch_bin_method: MethodName::from(RENDER_SERVICE_METHOD_COMMAND_BATCH_BIN_V2),
             create_texture_bin_method: MethodName::from(
                 RENDER_SERVICE_METHOD_CREATE_TEXTURE_BIN_V1,
             ),
@@ -36,6 +36,24 @@ impl RenderServiceClient {
     pub(crate) fn info(&self) -> Result<RenderBackendInfo, String> {
         let bytes = self.service.info_json()?;
         decode_json(&bytes)
+    }
+
+    #[inline]
+    pub(crate) fn negotiate(
+        &self,
+        request: newengine_render_api::RenderCapabilityNegotiationRequest,
+    ) -> Result<newengine_render_api::RenderCapabilityNegotiationResponse, String> {
+        match self.invoke(RenderServiceRequest::Negotiate(request))? {
+            RenderServiceResponse::Negotiation(response) => Ok(response),
+            RenderServiceResponse::Problem(problem) => Err(format!(
+                "render protocol negotiation failed {}: {}",
+                problem.code, problem.detail
+            )),
+            other => Err(format!(
+                "render service protocol error: expected Negotiation, got {:?}",
+                other
+            )),
+        }
     }
 
     #[inline]

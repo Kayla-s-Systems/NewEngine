@@ -49,7 +49,22 @@ pub fn apply_inventory_ui_actions(world: &mut World, frame: &UiEventDispatchFram
                     consumed |= drop_selected_or_dragged(world, player);
                 }
             }
-            _ => {}
+            CHARACTER_UI_ACTION_TOGGLE => {
+                if action.trigger == UiNodeEventTrigger::Click {
+                    if let Some(state) = world.resource_mut::<InventoryHudState>() {
+                        state.toggle_character_select();
+                    }
+                    consumed = true;
+                }
+            }
+            _ => {
+                if action.trigger == UiNodeEventTrigger::Click {
+                    if let Some(variant) = variant_from_action(&action.action_id) {
+                        suppress_character_selector_pointer_leak(world, player);
+                        consumed |= select_playable_character(world, player, variant);
+                    }
+                }
+            }
         }
     }
     consumed
@@ -250,5 +265,78 @@ pub(super) fn drop_instance_quantity(
             }
         }
         touch_hud_state(world);
+    }
+}
+
+fn suppress_character_selector_pointer_leak(world: &mut World, player: EntityId) {
+    let Some(commands) = world.get_mut::<PlayerCommandFrame>(player) else {
+        return;
+    };
+    // The same physical left click that selects a retained-mode UI button can already
+    // be present in the semantic gameplay command frame. Because selection closes the
+    // selector immediately, the subsequent FPS phase must not reinterpret that click
+    // as fire/projectile/aim input.
+    commands.actions.held.retain(|action| {
+        action != newengine_gameplay_fps_api::action::PLAYER_FIRE_PRIMARY
+            && action != newengine_gameplay_fps_api::action::PLAYER_AIM
+    });
+    commands.actions.pressed.retain(|action| {
+        action != newengine_gameplay_fps_api::action::PLAYER_FIRE_PRIMARY
+            && action != newengine_gameplay_fps_api::action::PLAYER_LAUNCH_PROJECTILE
+    });
+}
+
+pub(super) fn select_playable_character(
+    world: &mut World,
+    player: EntityId,
+    variant: &character_variants::PlayableCharacterVariantDescriptor,
+) -> bool {
+    // Selection is terminal for this modal: close first so changing avatar never
+    // leaves the character picker covering the newly selected character.
+    if let Some(state) = world.resource_mut::<InventoryHudState>() {
+        state.close_character_select();
+        newengine_ulog_api::ulog::info!(
+            "character selector closing for selection variant={}",
+            variant.id
+        );
+    }
+    let Some(assignment) = variant.assignment() else {
+        newengine_ulog_api::ulog::warn!(
+            "playable character variant is not runtime-ready id={} family={} availability={} source={}",
+            variant.id,
+            variant.family.label(),
+            variant.availability.label(),
+            variant.source_provenance,
+        );
+        return false;
+    };
+    match newengine_engine_runtime::gameplay::set_player_model_assignment(world, player, assignment)
+    {
+        Ok(revision) => {
+            let _ = world.insert(
+                player,
+                PlayableCharacterSelection {
+                    variant_id: variant.id.to_owned(),
+                },
+            );
+            newengine_ulog_api::ulog::info!(
+                "playable character selected variant={} family={} rig={} player={} revision={}",
+                variant.id,
+                variant.family.label(),
+                variant.rig_label,
+                player.stable_u64(),
+                revision
+            );
+            true
+        }
+        Err(error) => {
+            newengine_ulog_api::ulog::warn!(
+                "playable character selection rejected variant={} player={}: {}",
+                variant.id,
+                player.stable_u64(),
+                error
+            );
+            false
+        }
     }
 }

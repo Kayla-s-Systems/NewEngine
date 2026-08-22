@@ -10,7 +10,7 @@ Renderer plugins expose one service id and two JSON methods:
 - `info_json` — returns `RenderBackendInfo`
 - `invoke_json` — accepts `RenderServiceRequest` and returns `RenderServiceResponse`
 
-The runtime submits complete frames through `RenderFrameEnvelope`: frame index, clear color, surface extent, viewport extent, graph, draw-list declarations and optional work budget travel together as one backend-facing packet.
+The runtime submits complete frames through `RenderFrameEnvelope`: frame index, clear color, surface extent, viewport extent, graph, draw-list declarations, ordered `UiLayerDrawPacketSet` and optional work budget travel together as one backend-facing packet. Render provider ABI v2 intentionally has no singleton UI command or UI draw-list kind.
 
 ## Modules
 
@@ -21,6 +21,8 @@ The runtime submits complete frames through `RenderFrameEnvelope`: frame index, 
 - `diagnostics` — backend capabilities, residency, upload pacing and runtime diagnostics.
 
 The renderer contract intentionally has no versioned fallback endpoints. Renderer/plugin/runtime mismatches must be fixed by rebuilding and resyncing the matching module set.
+
+Render protocol v2 uses strict-major negotiation: clients and providers must have the same `RenderApiVersion.major`. Minor/patch differences may select the backend stable version, but v1 and v3 peers are rejected by a v2 backend before `RenderApiRef` is published.
 
 ## PostFX and shadow feature contract
 

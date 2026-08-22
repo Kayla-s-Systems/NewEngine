@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 use std::sync::{OnceLock, RwLock};
 
-pub const STARTUP_SETTINGS_SCHEMA_VERSION: u32 = 1;
+pub const STARTUP_SETTINGS_SCHEMA_VERSION: u32 = 2;
 
 pub const ENV_GRAPHICS_PRESET: &str = "NEWENGINE_GRAPHICS_PRESET";
 pub const ENV_RENDER_SCALE: &str = "NEWENGINE_GRAPHICS_RENDER_SCALE";
@@ -31,6 +31,9 @@ pub const ENV_MOTION_BLUR_ENABLED: &str = "NEWENGINE_GRAPHICS_MOTION_BLUR_ENABLE
 pub const ENV_SUN_RAYS_ENABLED: &str = "NEWENGINE_GRAPHICS_SUN_RAYS_ENABLED";
 pub const ENV_SHADOWS_ENABLED: &str = "NEWENGINE_GRAPHICS_SHADOWS_ENABLED";
 pub const ENV_SHADOW_QUALITY: &str = "NEWENGINE_GRAPHICS_SHADOW_QUALITY";
+pub const ENV_SHADOW_CASCADE_COUNT: &str = "NEWENGINE_GRAPHICS_SHADOW_CASCADE_COUNT";
+pub const ENV_SHADOW_MAP_RESOLUTION: &str = "NEWENGINE_GRAPHICS_SHADOW_MAP_RESOLUTION";
+pub const ENV_LOD_DISTANCE_SCALE: &str = "NEWENGINE_GRAPHICS_LOD_DISTANCE_SCALE";
 pub const ENV_TEXTURE_QUALITY: &str = "NEWENGINE_GRAPHICS_TEXTURE_QUALITY";
 pub const ENV_ANISOTROPY: &str = "NEWENGINE_GRAPHICS_ANISOTROPY";
 pub const ENV_WINDOW_MODE: &str = "NEWENGINE_DISPLAY_WINDOW_MODE";
@@ -308,6 +311,12 @@ pub struct StartupGraphicsSettings {
     pub sun_rays_enabled: bool,
     pub shadows_enabled: bool,
     pub shadow_quality: ShadowQuality,
+    /// 0 keeps the scene-authored cascade count; 1..=4 overrides it for this launch.
+    pub shadow_cascade_count: u32,
+    /// 0 keeps the scene-authored map size; otherwise a 256..=4096 power-of-two override.
+    pub shadow_map_resolution: u32,
+    /// Global distance multiplier used by runtime visibility/LOD policy. 1.0 preserves authored/default distances.
+    pub lod_distance_scale: f32,
     pub texture_quality: TextureQuality,
     pub anisotropy: u8,
 }
@@ -340,6 +349,9 @@ impl Default for StartupGraphicsSettings {
             sun_rays_enabled: true,
             shadows_enabled: true,
             shadow_quality: ShadowQuality::Balanced,
+            shadow_cascade_count: 0,
+            shadow_map_resolution: 0,
+            lod_distance_scale: 1.0,
             texture_quality: TextureQuality::High,
             anisotropy: 8,
         };
@@ -365,6 +377,9 @@ impl StartupGraphicsSettings {
                 self.sun_rays_enabled = false;
                 self.shadows_enabled = true;
                 self.shadow_quality = ShadowQuality::Performance;
+                self.shadow_cascade_count = 0;
+                self.shadow_map_resolution = 0;
+                self.lod_distance_scale = 0.75;
                 self.texture_quality = TextureQuality::Low;
                 self.anisotropy = 2;
             }
@@ -381,6 +396,9 @@ impl StartupGraphicsSettings {
                 self.sun_rays_enabled = true;
                 self.shadows_enabled = true;
                 self.shadow_quality = ShadowQuality::Balanced;
+                self.shadow_cascade_count = 0;
+                self.shadow_map_resolution = 0;
+                self.lod_distance_scale = 1.0;
                 self.texture_quality = TextureQuality::High;
                 self.anisotropy = 8;
             }
@@ -397,6 +415,9 @@ impl StartupGraphicsSettings {
                 self.sun_rays_enabled = true;
                 self.shadows_enabled = true;
                 self.shadow_quality = ShadowQuality::Quality;
+                self.shadow_cascade_count = 0;
+                self.shadow_map_resolution = 0;
+                self.lod_distance_scale = 1.25;
                 self.texture_quality = TextureQuality::High;
                 self.anisotropy = 8;
             }
@@ -413,6 +434,9 @@ impl StartupGraphicsSettings {
                 self.sun_rays_enabled = true;
                 self.shadows_enabled = true;
                 self.shadow_quality = ShadowQuality::Cinematic;
+                self.shadow_cascade_count = 0;
+                self.shadow_map_resolution = 0;
+                self.lod_distance_scale = 1.5;
                 self.texture_quality = TextureQuality::Ultra;
                 self.anisotropy = 16;
             }
@@ -442,6 +466,12 @@ impl StartupGraphicsSettings {
         self.bloom_knee = self.bloom_knee.clamp(0.0, 5.0);
         self.bloom_intensity = self.bloom_intensity.clamp(0.0, 5.0);
         self.bloom_radius = self.bloom_radius.clamp(0.1, 5.0);
+        self.lod_distance_scale = self.lod_distance_scale.clamp(0.5, 2.0);
+        self.shadow_cascade_count = match self.shadow_cascade_count {
+            0 => 0,
+            value => value.clamp(1, 4),
+        };
+        self.shadow_map_resolution = normalize_shadow_map_resolution(self.shadow_map_resolution);
         if !self.shadows_enabled {
             self.shadow_quality = ShadowQuality::Off;
         } else if matches!(self.shadow_quality, ShadowQuality::Off) {
@@ -563,6 +593,18 @@ impl StartupLaunchSettings {
             bool_text(value.graphics.shadows_enabled),
         );
         set_env(ENV_SHADOW_QUALITY, value.graphics.shadow_quality.as_str());
+        set_env(
+            ENV_SHADOW_CASCADE_COUNT,
+            value.graphics.shadow_cascade_count.to_string(),
+        );
+        set_env(
+            ENV_SHADOW_MAP_RESOLUTION,
+            value.graphics.shadow_map_resolution.to_string(),
+        );
+        set_env(
+            ENV_LOD_DISTANCE_SCALE,
+            value.graphics.lod_distance_scale.to_string(),
+        );
         set_env(ENV_TEXTURE_QUALITY, value.graphics.texture_quality.as_str());
         set_env(ENV_ANISOTROPY, value.graphics.anisotropy.to_string());
         set_env(ENV_WINDOW_MODE, value.display.window_mode.as_str());
@@ -593,6 +635,20 @@ pub(crate) fn set_startup_launch_settings(mut settings: StartupLaunchSettings) {
     *lock
         .write()
         .unwrap_or_else(|poisoned| poisoned.into_inner()) = settings;
+}
+
+#[inline]
+fn normalize_shadow_map_resolution(value: u32) -> u32 {
+    if value == 0 {
+        return 0;
+    }
+    match value {
+        0..=256 => 256,
+        257..=512 => 512,
+        513..=1024 => 1024,
+        1025..=2048 => 2048,
+        _ => 4096,
+    }
 }
 
 #[inline]
@@ -638,6 +694,20 @@ mod tests {
         settings.graphics.shadow_quality = ShadowQuality::Cinematic;
         settings.normalize();
         assert_eq!(settings.graphics.shadow_quality, ShadowQuality::Off);
+    }
+
+    #[test]
+    fn normalizes_lod_and_shadow_overrides_without_forcing_scene_defaults() {
+        let mut settings = StartupLaunchSettings::default();
+        assert_eq!(settings.graphics.shadow_cascade_count, 0);
+        assert_eq!(settings.graphics.shadow_map_resolution, 0);
+        settings.graphics.lod_distance_scale = 9.0;
+        settings.graphics.shadow_cascade_count = 99;
+        settings.graphics.shadow_map_resolution = 3000;
+        settings.normalize();
+        assert_eq!(settings.graphics.lod_distance_scale, 2.0);
+        assert_eq!(settings.graphics.shadow_cascade_count, 4);
+        assert_eq!(settings.graphics.shadow_map_resolution, 4096);
     }
 
     #[test]

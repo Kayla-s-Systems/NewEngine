@@ -3,13 +3,14 @@ use std::sync::Arc;
 use newengine_core::{Engine, EngineError, EngineResult, StartupConfig};
 use newengine_game_data::{GameDataProvider, RustGameDataProvider};
 use newengine_game_data_lua::{LuaGameDataProvider, LUA_GAME_DATA_PROVIDER_ID};
-use newengine_game_module_composition::{resolve_runtime_game_module, GameModuleTarget};
+use newengine_game_module_composition::{
+    resolve_runtime_game_module, GameModuleFactoryRegistration, GameModuleTarget,
+};
 use newengine_physics_runtime_adapter::PhysicsBackendRuntimeModule;
 use newengine_project_api::ProjectScriptRegistry;
 use newengine_project_runtime::RuntimeCompositionContext;
 use newengine_render_feature_gameready::GameReadyRenderFeaturePack;
 use newengine_render_runtime_adapter::RenderBackendRuntimeModule;
-use newengine_render_ui_bridge::EngineUiDrawListBridgeProvider;
 use newengine_ui::{UiBuildFn, UiProviderKind};
 
 use crate::scene_bootstrap::{GameReadySceneBootstrapModule, GameReadyWorldSceneBootstrapProvider};
@@ -35,6 +36,7 @@ pub struct GameReadyRuntimeProfile {
     pub(crate) plugins: Arc<newengine_engine_runtime::PluginManagerBridge>,
     pub(crate) scene: Arc<newengine_scene_runtime::SceneBridge>,
     game_data_provider: Option<Arc<dyn GameDataProvider>>,
+    game_module_factory: Option<GameModuleFactoryRegistration>,
     kind: GameReadyRuntimeKind,
 }
 
@@ -56,6 +58,7 @@ impl GameReadyRuntimeProfile {
             plugins: Arc::new(newengine_engine_runtime::PluginManagerBridge::new()),
             scene,
             game_data_provider: None,
+            game_module_factory: None,
             kind: GameReadyRuntimeKind::StandaloneGame,
         }
     }
@@ -84,6 +87,13 @@ impl GameReadyRuntimeProfile {
                 Arc::clone(&provider),
             ));
         self.game_data_provider = Some(provider);
+        self
+    }
+
+    /// Pins a game-owned composition factory to this runtime instance.
+    /// This avoids relying on process-global registries across a dynamic plugin ABI boundary.
+    pub fn with_game_module_factory(mut self, factory: GameModuleFactoryRegistration) -> Self {
+        self.game_module_factory = Some(factory);
         self
     }
 
@@ -123,9 +133,45 @@ impl GameReadyRuntimeProfile {
             .resources_mut()
             .get::<RuntimeCompositionContext>()
             .cloned();
+        // RuntimeCompositionContext is the authoritative project-composition snapshot.
+        // Keep the standalone ProjectScriptRegistry resource as a fast path, but do not
+        // turn a missed/late resource insertion into a fatal loss of authored bindings.
+        let scripts = scripts.or_else(|| {
+            runtime_context
+                .as_ref()
+                .map(|runtime| runtime.scripts.clone())
+        });
+        eprintln!(
+            "GameReady profile composition probe: explicit_factory={} runtime_game_module={}",
+            self.game_module_factory.is_some(),
+            runtime_context
+                .as_ref()
+                .and_then(|runtime| runtime.game_module.as_deref())
+                .unwrap_or("<none>")
+        );
         let game_module = if let Some(runtime) = runtime_context.as_ref() {
-            resolve_runtime_game_module(runtime, GameModuleTarget::from(runtime.launch_profile))
-                .map_err(EngineError::Other)?
+            let target = GameModuleTarget::from(runtime.launch_profile);
+            if let Some(factory) = self.game_module_factory {
+                let requested = runtime
+                    .game_module
+                    .as_deref()
+                    .map(str::trim)
+                    .unwrap_or_default();
+                if !requested.is_empty() && requested != factory.module_id {
+                    return Err(EngineError::Other(format!(
+                        "explicit game-module factory {} does not match runtime game_module {}",
+                        factory.module_id, requested
+                    )));
+                }
+                newengine_ulog_api::ulog::info!(
+                    "game module composition: resolving explicit factory module={} target={:?} policy=game-plugin-owned-factory",
+                    factory.module_id,
+                    target,
+                );
+                Some((factory.factory)(runtime, target).map_err(EngineError::Other)?)
+            } else {
+                resolve_runtime_game_module(runtime, target).map_err(EngineError::Other)?
+            }
         } else {
             None
         };
@@ -204,8 +250,6 @@ impl GameReadyRuntimeProfile {
             render_controller = providers.apply_to_render_controller(render_controller);
         }
 
-        render_controller =
-            render_controller.with_draw_list_provider(EngineUiDrawListBridgeProvider::shared());
         for provider in render_features.draw_list_providers() {
             render_controller = render_controller.with_draw_list_provider(provider);
         }

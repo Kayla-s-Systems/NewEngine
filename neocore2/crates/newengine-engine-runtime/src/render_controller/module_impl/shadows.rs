@@ -17,9 +17,87 @@ mod fit;
 mod local;
 mod targets;
 
+#[inline]
+fn apply_startup_shadow_overrides(settings: ShadowSettings) -> ShadowSettings {
+    let graphics = newengine_core::startup_launch_settings().graphics;
+    apply_shadow_graphics_overrides(settings, &graphics)
+}
+
+#[inline]
+fn apply_shadow_graphics_overrides(
+    mut settings: ShadowSettings,
+    graphics: &newengine_core::StartupGraphicsSettings,
+) -> ShadowSettings {
+    if !graphics.shadows_enabled
+        || matches!(graphics.shadow_quality, newengine_core::ShadowQuality::Off)
+    {
+        settings.enabled = false;
+        settings.method = ShadowMethod::None;
+        return settings.sanitized();
+    }
+
+    // PreStartSettings owns the runtime shadow-quality tier. Cascade count and map
+    // resolution remain independent explicit controls below; the quality tier only
+    // selects reconstruction quality/sample budget so project-authored cascade layout
+    // is never silently replaced by a preset.
+    match graphics.shadow_quality {
+        newengine_core::ShadowQuality::Off => unreachable!(),
+        newengine_core::ShadowQuality::Performance => {
+            settings.filter = ShadowFilter::Pcf;
+            settings.softness = settings.softness.min(0.85);
+            settings.pcss.blocker_samples = settings.pcss.blocker_samples.min(6);
+            settings.pcss.filter_samples = settings.pcss.filter_samples.min(8);
+            settings.pcss.max_filter_radius_texels =
+                settings.pcss.max_filter_radius_texels.min(3.0);
+        }
+        newengine_core::ShadowQuality::Balanced => {
+            settings.filter = ShadowFilter::Pcss;
+            settings.pcss.blocker_samples = settings.pcss.blocker_samples.max(8);
+            settings.pcss.filter_samples = settings.pcss.filter_samples.max(12);
+            settings.pcss.max_filter_radius_texels =
+                settings.pcss.max_filter_radius_texels.max(4.0);
+        }
+        newengine_core::ShadowQuality::Quality => {
+            settings.filter = ShadowFilter::Pcss;
+            settings.pcss.blocker_samples = settings.pcss.blocker_samples.max(12);
+            settings.pcss.filter_samples = settings.pcss.filter_samples.max(16);
+            settings.pcss.blocker_search_radius_texels =
+                settings.pcss.blocker_search_radius_texels.max(3.5);
+            settings.pcss.max_filter_radius_texels =
+                settings.pcss.max_filter_radius_texels.max(6.0);
+            settings.pcss.min_filter_radius_texels =
+                settings.pcss.min_filter_radius_texels.max(0.20);
+        }
+        newengine_core::ShadowQuality::Cinematic => {
+            settings.filter = ShadowFilter::Pcss;
+            settings.pcss.blocker_samples = 16;
+            settings.pcss.filter_samples = 16;
+            settings.pcss.blocker_search_radius_texels =
+                settings.pcss.blocker_search_radius_texels.max(4.5);
+            settings.pcss.max_filter_radius_texels =
+                settings.pcss.max_filter_radius_texels.max(8.0);
+            settings.pcss.min_filter_radius_texels =
+                settings.pcss.min_filter_radius_texels.max(0.24);
+        }
+    }
+
+    if graphics.shadow_map_resolution != 0 {
+        settings.resolution = graphics.shadow_map_resolution.clamp(256, 4096);
+    }
+    if graphics.shadow_cascade_count != 0 {
+        settings.cascade_count = graphics.shadow_cascade_count.clamp(1, 4);
+        settings.method = if settings.cascade_count > 1 {
+            ShadowMethod::CascadedShadowMaps
+        } else {
+            ShadowMethod::DirectionalDepthMap
+        };
+    }
+    settings.sanitized()
+}
+
 use fit::{
-    csm_cascade_radius, csm_split_distances, csm_tile_viewport_scissor, directional_shadow_center,
-    directional_shadow_stable_fit_with_padding, snapped_directional_shadow_center,
+    csm_split_distances, csm_tile_viewport_scissor, directional_shadow_center,
+    directional_shadow_rotation_invariant_fit_with_padding, snapped_directional_shadow_center,
     DirectionalShadowFit,
 };
 pub(super) use local::build_local_shadow_plan;
@@ -43,11 +121,13 @@ pub(super) fn build_light_shadow_plan(
     plugin_snapshot: Option<&newengine_plugin_host::PluginsSnapshot>,
 ) -> EngineResult<LightShadowPlan> {
     let world = scene.world();
-    let settings = world
-        .resource::<ShadowSettings>()
-        .copied()
-        .unwrap_or_default()
-        .sanitized();
+    let settings = apply_startup_shadow_overrides(
+        world
+            .resource::<ShadowSettings>()
+            .copied()
+            .unwrap_or_default()
+            .sanitized(),
+    );
 
     if !settings.enabled || matches!(settings.method, ShadowMethod::None) {
         retire_shadow_rt(this);
@@ -322,17 +402,15 @@ pub fn try_build_directional_shadow_plan(
     for i in 0..cascade_count as usize {
         let split_near = if i == 0 { 0.5 } else { splits[i - 1] };
         let split_far = splits[i].max(split_near + 0.1);
-        let segment_mid = (split_near + split_far) * 0.5;
-        let fallback_radius = csm_cascade_radius(split_near, split_far, max_distance);
-        let fallback_center = camera + camera_forward * segment_mid;
+        // Directional cascades behave like camera-centered clipmaps. Rotation only
+        // changes which receivers are visible; it must not translate the sun-shadow
+        // projection itself. This removes angle-dependent texel-grid walking/flicker.
+        let fallback_radius = (split_far * 1.85).max(8.0);
+        let fallback_center = camera;
         let fallback_texel_world = fallback_radius * 2.0 / settings.resolution.max(1) as f32;
         let fallback_guard = (fallback_texel_world * kernel_guard_texels).max(0.02);
         let fallback_half = fallback_radius + fallback_guard;
-
-        // Rotation-invariant sphere fit + texel snapping prevents cascade breathing.
-        // Padding is filter-aware, matching the PCF/PCSS receiver footprint rather
-        // than assuming a fixed two-texel kernel.
-        let fit = directional_shadow_stable_fit_with_padding(
+        let fit = directional_shadow_rotation_invariant_fit_with_padding(
             viewproj,
             camera,
             camera_forward,
@@ -392,4 +470,65 @@ pub fn try_build_directional_shadow_plan(
         )
         .with_pcss(pcss0, pcss1),
     ))
+}
+
+#[cfg(test)]
+mod startup_shadow_override_tests {
+    use super::*;
+
+    #[test]
+    fn auto_shadow_overrides_preserve_scene_values() {
+        let scene = ShadowSettings {
+            resolution: 1024,
+            cascade_count: 2,
+            method: ShadowMethod::CascadedShadowMaps,
+            ..ShadowSettings::default()
+        };
+        let graphics = newengine_core::StartupGraphicsSettings::default();
+        let resolved = apply_shadow_graphics_overrides(scene, &graphics);
+        assert_eq!(resolved.resolution, 1024);
+        assert_eq!(resolved.cascade_count, 2);
+        assert_eq!(resolved.method, ShadowMethod::CascadedShadowMaps);
+    }
+
+    #[test]
+    fn explicit_shadow_overrides_control_cascades_and_map_size() {
+        let scene = ShadowSettings::default();
+        let mut graphics = newengine_core::StartupGraphicsSettings::default();
+        graphics.shadow_cascade_count = 4;
+        graphics.shadow_map_resolution = 4096;
+        let resolved = apply_shadow_graphics_overrides(scene, &graphics);
+        assert_eq!(resolved.resolution, 4096);
+        assert_eq!(resolved.cascade_count, 4);
+        assert_eq!(resolved.method, ShadowMethod::CascadedShadowMaps);
+    }
+
+    #[test]
+    fn prestart_shadow_quality_controls_filter_without_overriding_auto_cascades() {
+        let scene = ShadowSettings {
+            cascade_count: 3,
+            method: ShadowMethod::CascadedShadowMaps,
+            filter: ShadowFilter::Pcf,
+            ..ShadowSettings::default()
+        };
+        let mut graphics = newengine_core::StartupGraphicsSettings::default();
+        graphics.shadow_quality = newengine_core::ShadowQuality::Quality;
+        graphics.shadow_cascade_count = 0;
+        let resolved = apply_shadow_graphics_overrides(scene, &graphics);
+        assert_eq!(resolved.cascade_count, 3);
+        assert_eq!(resolved.method, ShadowMethod::CascadedShadowMaps);
+        assert_eq!(resolved.filter, ShadowFilter::Pcss);
+        assert!(resolved.pcss.blocker_samples >= 12);
+        assert!(resolved.pcss.filter_samples >= 16);
+    }
+
+    #[test]
+    fn startup_shadow_gate_disables_scene_and_local_shadow_family() {
+        let scene = ShadowSettings::default();
+        let mut graphics = newengine_core::StartupGraphicsSettings::default();
+        graphics.shadows_enabled = false;
+        let resolved = apply_shadow_graphics_overrides(scene, &graphics);
+        assert!(!resolved.enabled);
+        assert_eq!(resolved.method, ShadowMethod::None);
+    }
 }

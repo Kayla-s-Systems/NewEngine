@@ -191,11 +191,19 @@ pub fn build_local_shadow_plan(
     lit: newengine_material_domain_api::LitPipeline,
     camera_position: [f32; 3],
 ) -> EngineResult<LocalShadowPlan> {
-    let settings = world
+    let mut settings = world
         .resource::<LocalShadowSettings>()
         .copied()
         .unwrap_or_default()
         .sanitized();
+    let startup_graphics = newengine_core::startup_launch_settings().graphics;
+    if !startup_graphics.shadows_enabled {
+        settings.enabled = false;
+    }
+    if startup_graphics.shadow_map_resolution != 0 {
+        settings.max_resolution = startup_graphics.shadow_map_resolution.clamp(256, 2048);
+    }
+    settings = settings.sanitized();
     if !settings.enabled {
         retire_local_shadow_rt(this);
         return Ok(LocalShadowPlan::disabled(lit.white_texture));

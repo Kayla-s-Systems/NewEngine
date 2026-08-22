@@ -3,7 +3,7 @@ use std::{env, fs, path::PathBuf, process};
 fn main() {
     let mut args = env::args().skip(1);
     let path = args.next().map(PathBuf::from).unwrap_or_else(|| {
-        eprintln!("usage: p4_decode_native_dto <artifact> <logical-path>");
+        eprintln!("usage: p4_decode_ytyp_native_dto <artifact> <logical-path>");
         process::exit(2);
     });
     let logical_path = args.next().unwrap_or_else(|| "fixture.ytyp".to_owned());
@@ -20,16 +20,13 @@ fn main() {
         eprintln!("canonical NEF8 decode failed: {error}");
         process::exit(1);
     });
-    let entries = newengine_definitions_runtime::decode_ytyp_definition_entries_from_body(
+    let dto = newengine_definitions_runtime::decode_ytyp_definition_entries_from_body(
         &logical_path,
         &decoded.body,
     )
     .unwrap_or_else(|error| {
-        eprintln!("YTYP runtime semantic decode failed: {error}");
+        eprintln!("YTYP runtime domain decode failed: {error}");
         process::exit(1);
     });
-    println!(
-        "{}",
-        serde_json::to_string(&entries).expect("serialize YTYP runtime DTO")
-    );
+    println!("{}", serde_json::to_string(&dto).expect("serialize YTYP runtime DTO"));
 }

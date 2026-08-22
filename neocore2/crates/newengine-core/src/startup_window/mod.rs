@@ -2,10 +2,9 @@
 
 //! Core-owned PreStart launch configuration.
 //!
-//! The feature is compiled into `newengine-core` through the optional
-//! `startup-window-egui` feature and is requested at runtime through the
-//! runtime-host `PreStartConfigWindow` boot option. No separate settings crate
-//! is involved.
+//! `newengine-core` owns the typed settings/report contract and a presenter port.
+//! Concrete presentation toolkits are upper-layer host providers; an empty/Void
+//! Engine host links no Egui, windowing presenter, or product UI implementation.
 //!
 //! Core owns the typed settings model, validation, persistence contract,
 //! process variables and the launch/cancel decision. Platform and render
@@ -13,12 +12,15 @@
 
 mod args;
 mod config_path;
-#[cfg(feature = "startup-window-egui")]
-mod egui_presenter;
 mod loading_handoff;
+mod presenter_port;
 mod report;
 mod settings;
 
+pub use presenter_port::{
+    install_startup_window_presenter, startup_window_presenter_registered,
+    StartupWindowPresenterFn,
+};
 pub use report::{
     StartupLoadingAssignmentReport, StartupWindowDecision, StartupWindowReport,
     StartupWindowSelection,
@@ -26,14 +28,15 @@ pub use report::{
 pub use settings::{
     startup_launch_settings, GraphicsPreset, ShadowQuality, StartupDisplaySettings,
     StartupGraphicsSettings, StartupHdrMode, StartupLaunchSettings, StartupWindowMode,
-    TextureQuality, STARTUP_SETTINGS_SCHEMA_VERSION,
+    TextureQuality, ENV_LOD_DISTANCE_SCALE, ENV_SHADOWS_ENABLED, ENV_SHADOW_CASCADE_COUNT,
+    ENV_SHADOW_MAP_RESOLUTION, STARTUP_SETTINGS_SCHEMA_VERSION,
 };
 
 use crate::startup::{ConfigPaths, StartupConfig};
 
-/// Presents the core-owned PreStart settings window before Engine creation when
-/// the launch contract requests it. Closing or cancelling returns
-/// `StartupWindowDecision::Cancelled` and never persists editor state.
+/// Presents the core-owned PreStart settings contract before Engine creation.
+/// A concrete presenter is supplied by the upper host composition. Closing or
+/// cancelling returns `StartupWindowDecision::Cancelled` and never persists editor state.
 pub fn present_before_startup_if_needed(
     paths: &ConfigPaths,
     startup: &StartupConfig,
@@ -52,14 +55,11 @@ pub fn present_before_startup_if_needed(
     };
 
     let loading_handoff = loading_handoff::present(&config_path, startup);
-
-    #[cfg(feature = "startup-window-egui")]
-    let mut report = egui_presenter::present(&config_path, startup);
-
-    #[cfg(not(feature = "startup-window-egui"))]
-    let mut report = StartupWindowReport::unavailable(
-        "PreStart configuration was requested, but newengine-core was built without the 'startup-window-egui' feature",
-    );
+    let mut report = presenter_port::present(&config_path, startup).unwrap_or_else(|| {
+        StartupWindowReport::unavailable(
+            "PreStart configuration was requested, but no startup-window presenter provider is registered",
+        )
+    });
 
     report.attach_loading_handoff(loading_handoff);
     report

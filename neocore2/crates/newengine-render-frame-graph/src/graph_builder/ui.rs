@@ -27,9 +27,11 @@ impl FrameGraphBuilder {
             return self;
         }
         self.add_phase_pass(StandardRenderPhase::UiComposite, |pass| {
+            // UI composition consumes UiLayerDrawPacket payloads attached to the
+            // frame envelope. It is not a scene draw-list and must not recreate
+            // the removed singleton UI draw-list compatibility funnel.
             pass.with_domain(RenderGraphPassDomain::Render2d)
                 .writes(RG_SURFACE_COLOR, RenderGraphResourceUsage::ColorAttachment)
-                .draw_list(DrawListKind::Ui)
         });
         self
     }

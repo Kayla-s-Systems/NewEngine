@@ -6,7 +6,7 @@ use crate::{
     RenderBackendCapabilities, RenderDiagnosticsSnapshot, RenderDrawListKind, RenderGraphPassKind,
     RenderTargetDesc, RenderTargetId, RenderWorkBudget, SamplerDesc, SamplerId, ShaderDesc,
     ShaderId, ShaderRuntimeCacheStats, TextureDesc, TextureId, TextureResidencySnapshot,
-    UiDrawList, UiTexId, UploadPumpDesc, UploadPumpReport, Viewport,
+    UiTexId, UploadPumpDesc, UploadPumpReport, Viewport,
 };
 use serde::{Deserialize, Serialize};
 
@@ -45,7 +45,6 @@ impl RenderBackendInfo {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum RenderCommand {
     BeginFrame(BeginFrameDesc),
-    SetUiDrawList(Box<UiDrawList>),
     SetDebugText(String),
     SetRenderPhase {
         phase: Option<RenderGraphPassKind>,

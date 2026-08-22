@@ -122,10 +122,34 @@ mod tests {
         assert_eq!(grounded.ground_entity, Some(ground_key));
         assert_eq!(grounded.last_fixed_tick, 11);
 
+        for fixed_tick in [12_u64, 13] {
+            apply_frame_output(
+                &mut world,
+                PhysicsFrameOutput {
+                    fixed_tick,
+                    ..PhysicsFrameOutput::default()
+                },
+                &GameplayPhysicsQueryProviderRegistry::new(),
+            );
+            let retained = world
+                .get::<PlayerGroundState>(player)
+                .copied()
+                .expect("ground state");
+            assert!(
+                retained.grounded,
+                "single/double probe miss must retain contact"
+            );
+            assert_eq!(retained.ground_entity, Some(ground_key));
+            assert_eq!(
+                retained.last_fixed_tick, 11,
+                "misses are not contact observations"
+            );
+        }
+
         apply_frame_output(
             &mut world,
             PhysicsFrameOutput {
-                fixed_tick: 12,
+                fixed_tick: 14,
                 ..PhysicsFrameOutput::default()
             },
             &GameplayPhysicsQueryProviderRegistry::new(),
@@ -136,7 +160,10 @@ mod tests {
             .expect("ground state");
         assert!(!cleared.grounded);
         assert_eq!(cleared.ground_entity, None);
-        assert_eq!(cleared.last_fixed_tick, 12);
+        assert_eq!(
+            cleared.last_fixed_tick, 11,
+            "last contact tick remains diagnostic truth"
+        );
     }
 
     #[test]

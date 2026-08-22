@@ -19,9 +19,9 @@ mod descriptor;
 
 pub(crate) use active::ActiveGatewayRegistry;
 pub(crate) use descriptor::{descriptor_engine_gateways, descriptor_max_gateway_priority};
-pub(crate) use facts::{GatewayProviderOrigin, GatewayProviderRouteFact, PluginDescriptorFact, RegisteredServiceFact};
+pub(crate) use facts::{GatewayPolicyFact, GatewayProviderOrigin, GatewayProviderRouteFact, PluginDescriptorFact, RegisteredServiceFact};
 #[cfg(test)]
-pub(crate) use facts::{GatewayOverrideMode, GatewayPolicyFact};
+pub(crate) use facts::GatewayOverrideMode;
 pub(crate) use route_model::ActiveGatewayRoute;
 
 #[cfg(test)]

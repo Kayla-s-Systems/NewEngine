@@ -10,7 +10,7 @@ use newengine_core::{EngineResult, ThreadPoolHandle};
 use newengine_render_feature_api::SceneExtractionCtx;
 use newengine_render_frame_graph::{standard_runtime_frame, StandardRuntimePipelineDesc};
 use newengine_scene::Scene;
-use newengine_ui_api::{UiDrawList, UiPaintCommand};
+use newengine_ui_api::{UiDrawList, UiLayerDrawPacketSet, UiPaintCommand};
 
 use super::super::controller::RuntimeRenderController;
 use super::super::error_policy::{

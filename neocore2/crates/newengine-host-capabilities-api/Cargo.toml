@@ -1,0 +1,9 @@
+[package]
+name = "newengine-host-capabilities-api"
+version = "0.1.0"
+edition = "2021"
+readme = "README.md"
+description = "Immutable host PreInit environment and hardware capability contracts for NewEngine"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }

@@ -29,7 +29,20 @@ impl GameplayUiProvider for FpsInventoryHudProvider {
 
     #[inline]
     fn input_capture(&self, world: &GameplayWorld) -> GameplayInputCapture {
-        if inventory_hud_is_open(world) {
+        if character_select_is_open(world) {
+            // The selector is pointer-modal for the world, but keyboard sampling must
+            // stay available so the same M action can close the selector again.
+            // Gameplay movement/camera/fire actions are still gated below.
+            GameplayInputCapture {
+                pointer: true,
+                keyboard: false,
+                block_gameplay_actions: true,
+                block_camera_navigation: true,
+                block_player_movement: true,
+                release_cursor: true,
+                pause_simulation: false,
+            }
+        } else if inventory_hud_is_open(world) {
             GameplayInputCapture::modal()
         } else {
             GameplayInputCapture::none()

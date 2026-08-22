@@ -1,4 +1,5 @@
 use super::*;
+use crate::render_controller::module_impl::frame_envelope_builder::build_ui_layer_frame_envelope;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum DegradedViewportEnd {
@@ -37,18 +38,24 @@ impl RenderFrameOrchestrator {
     pub(in super::super) fn end_viewport_after_transient_pipeline_wait(
         controller: &mut RuntimeRenderController,
         r: &mut dyn RenderApi,
-        ui: Option<UiDrawList>,
+        ui_layers: Option<UiLayerDrawPacketSet>,
         scope: RenderFrameScope,
         error: impl std::fmt::Display,
     ) -> EngineResult<()> {
         log_transient_pipeline_wait_once(controller.frame.frame_index, &error.to_string());
-        Self::end_degraded_viewport(controller, r, ui, scope, DegradedViewportEnd::PipelineWait)
+        Self::end_degraded_viewport(
+            controller,
+            r,
+            ui_layers,
+            scope,
+            DegradedViewportEnd::PipelineWait,
+        )
     }
 
     pub(in super::super) fn end_viewport_after_pipeline_failure(
         controller: &mut RuntimeRenderController,
         r: &mut dyn RenderApi,
-        ui: Option<UiDrawList>,
+        ui_layers: Option<UiLayerDrawPacketSet>,
         scope: RenderFrameScope,
         error: impl std::fmt::Display,
     ) -> EngineResult<()> {
@@ -57,7 +64,7 @@ impl RenderFrameOrchestrator {
         Self::end_degraded_viewport(
             controller,
             r,
-            ui,
+            ui_layers,
             scope,
             DegradedViewportEnd::PipelineFailure,
         )
@@ -66,16 +73,22 @@ impl RenderFrameOrchestrator {
     pub(in super::super) fn end_viewport_after_draw_failure(
         controller: &mut RuntimeRenderController,
         r: &mut dyn RenderApi,
-        ui: Option<UiDrawList>,
+        ui_layers: Option<UiLayerDrawPacketSet>,
         scope: RenderFrameScope,
     ) -> EngineResult<()> {
-        Self::end_degraded_viewport(controller, r, ui, scope, DegradedViewportEnd::DrawFailure)
+        Self::end_degraded_viewport(
+            controller,
+            r,
+            ui_layers,
+            scope,
+            DegradedViewportEnd::DrawFailure,
+        )
     }
 
     fn end_degraded_viewport(
         controller: &mut RuntimeRenderController,
         r: &mut dyn RenderApi,
-        ui: Option<UiDrawList>,
+        ui_layers: Option<UiLayerDrawPacketSet>,
         scope: RenderFrameScope,
         mode: DegradedViewportEnd,
     ) -> EngineResult<()> {
@@ -86,8 +99,14 @@ impl RenderFrameOrchestrator {
             r.set_viewport(Viewport::full(Extent2D::new(scope.w, scope.h)))?;
             r.set_scissor(RectI32::new(0, 0, scope.w as i32, scope.h as i32))?;
         }
-        if let Some(ui) = ui {
-            r.set_ui_draw_list(ui);
+        if let Some(ui_layers) = ui_layers.filter(|layers| !layers.is_empty()) {
+            let envelope = build_ui_layer_frame_envelope(
+                controller.frame.frame_index,
+                controller.viewport.clear_color,
+                Extent2D::new(scope.w, scope.h),
+                ui_layers,
+            );
+            let _ = r.submit_frame(envelope)?;
         }
         if mode.collect_garbage() {
             controller.gc_per_draw_ubos(r);

@@ -9,7 +9,7 @@ use newengine_core::{
 };
 use newengine_game_data::GameDataProvider;
 use newengine_project_api::ProjectContentMountState;
-use newengine_runtime_host::asset_bootstrap::mount_profile_content_best_effort;
+use newengine_asset_bootstrap_runtime::mount_profile_content_best_effort;
 use newengine_ui_api::{UiPresentationFlowState, UiScreenProfile, UiScreenProfileState};
 
 use crate::GAME_READY_MOUNT_SPEC;

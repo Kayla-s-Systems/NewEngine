@@ -150,8 +150,11 @@ impl GatewayProviderRouteFact {
 #[derive(Debug, Clone)]
 pub(crate) struct GatewayPolicyFact {
     pub(crate) gateway_id: String,
-    pub(crate) override_mode: GatewayOverrideMode,
+    pub(crate) override_mode: Option<GatewayOverrideMode>,
     pub(crate) system_tags: Vec<String>,
+    pub(crate) preferred_system_tags: Vec<String>,
+    pub(crate) forbidden_system_tags: Vec<String>,
+    pub(crate) preference_bonus: i32,
     pub(crate) owner_id: String,
 }
 
@@ -176,8 +179,11 @@ impl GatewayPolicyFact {
         system_tags.dedup();
         Self {
             gateway_id,
-            override_mode,
+            override_mode: Some(override_mode),
             system_tags,
+            preferred_system_tags: Vec::new(),
+            forbidden_system_tags: Vec::new(),
+            preference_bonus: 0,
             owner_id,
         }
     }

@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use super::*;
+use serde::{Deserialize, Serialize};
 
 // Split from lib.rs to keep the UI API DTO surface navigable.
 // This file is included flat from lib.rs to preserve the existing public API.

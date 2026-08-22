@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use super::*;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ToneMapOperator {
@@ -253,4 +253,3 @@ fn default_local_contrast_strength() -> f32 {
 fn default_dither_strength() -> f32 {
     1.0
 }
-

@@ -2,10 +2,11 @@
 
 pub use newengine_ui_draw::{
     TextureRef, UiBorderPaintCommand, UiClipPaintCommand, UiDrawCmd, UiDrawList,
-    UiIconPaintCommand, UiImagePaintCommand, UiImageRef, UiLayerPaintCommand, UiMesh,
-    UiPaintCommand, UiPaintList, UiPaintNodeRef, UiRect, UiRectPaintCommand,
-    UiRoundedRectPaintCommand, UiScopePaintCommand, UiTexId, UiTextPaintCommand, UiTexture,
-    UiTextureDelta, UiTexturePatch, UiVectorPaintCommand, UiVertex, VectorRef,
+    UiIconPaintCommand, UiImagePaintCommand, UiImageRef, UiLayerDomain, UiLayerDrawPacket,
+    UiLayerDrawPacketSet, UiLayerPaintCommand, UiMesh, UiPaintCommand, UiPaintList, UiPaintNodeRef,
+    UiRect, UiRectPaintCommand, UiRoundedRectPaintCommand, UiScopePaintCommand, UiTexId,
+    UiTextPaintCommand, UiTexture, UiTextureDelta, UiTexturePatch, UiVectorPaintCommand, UiVertex,
+    VectorRef,
 };
 
 pub mod reserved_textures {

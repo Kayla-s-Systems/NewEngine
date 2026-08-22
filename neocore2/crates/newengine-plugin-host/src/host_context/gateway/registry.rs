@@ -117,10 +117,30 @@ fn build_gateway_registry_snapshot() -> crate::service_gateway::ActiveGatewayReg
             .collect::<Vec<_>>()
     };
 
-    crate::service_gateway::ActiveGatewayRegistry::from_facts(
+    let selection_policies = {
+        let policies = match c.gateway_selection_policies.lock() {
+            Ok(value) => value,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        policies
+            .values()
+            .map(|policy| crate::service_gateway::GatewayPolicyFact {
+                gateway_id: policy.gateway_id.clone(),
+                override_mode: None,
+                system_tags: Vec::new(),
+                preferred_system_tags: policy.preferred_system_tags.clone(),
+                forbidden_system_tags: policy.forbidden_system_tags.clone(),
+                preference_bonus: policy.preference_bonus,
+                owner_id: policy.owner_id.clone(),
+            })
+            .collect::<Vec<_>>()
+    };
+
+    crate::service_gateway::ActiveGatewayRegistry::from_facts_with_policy(
         &descriptors,
         &services,
         &gateway_provider_routes,
+        &selection_policies,
     )
 }
 

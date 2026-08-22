@@ -37,8 +37,7 @@ pub struct StartupWindowReport {
 }
 
 impl StartupWindowReport {
-    #[cfg(feature = "startup-window-egui")]
-    pub(crate) fn presented_with_selection(
+    pub fn presented_with_selection(
         config_path: PathBuf,
         details: impl Into<String>,
         warnings: Vec<String>,
@@ -95,8 +94,7 @@ impl StartupWindowReport {
         }
     }
 
-    #[cfg(feature = "startup-window-egui")]
-    pub(crate) fn cancelled(config_path: PathBuf, details: impl Into<String>) -> Self {
+    pub fn cancelled(config_path: PathBuf, details: impl Into<String>) -> Self {
         Self {
             decision: StartupWindowDecision::Cancelled,
             config_path: Some(config_path),
@@ -109,7 +107,7 @@ impl StartupWindowReport {
         }
     }
 
-    pub(crate) fn unavailable(details: impl Into<String>) -> Self {
+    pub fn unavailable(details: impl Into<String>) -> Self {
         Self {
             decision: StartupWindowDecision::Unavailable,
             config_path: None,

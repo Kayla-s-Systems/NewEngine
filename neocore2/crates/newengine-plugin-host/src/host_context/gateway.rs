@@ -1,10 +1,12 @@
 mod capability;
 mod registry;
+mod policy;
 mod routes;
 mod slots;
 
 pub use capability::resolve_service_for_backend_capability;
 pub(crate) use registry::active_engine_gateways;
+pub use policy::{clear_engine_gateway_selection_policies, install_engine_gateway_selection_policy, EngineGatewaySelectionPolicy};
 pub use routes::{
     active_engine_gateway_route, engine_gateway_has_capability, list_engine_gateway_routes,
     register_engine_gateway_provider_route, register_null_engine_gateway_provider_route,

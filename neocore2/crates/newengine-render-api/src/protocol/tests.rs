@@ -1,6 +1,7 @@
 use super::*;
 use crate::{
-    Extent2D, RenderDrawListKind, RenderGraphPassKind, TextureDesc, TextureId, UiDrawList,
+    Extent2D, RenderDrawListKind, RenderFrameEnvelope, RenderGraphDesc, RenderGraphPassKind,
+    TextureDesc, TextureId, UiDrawList, UiLayerDomain, UiLayerDrawPacket, UiLayerDrawPacketSet,
 };
 use std::num::NonZeroU32;
 
@@ -72,18 +73,15 @@ fn binary_create_texture_roundtrips_payload_and_response() {
 }
 
 #[test]
-fn binary_unit_batch_roundtrips_ui_draw_list() {
-    let mut ui = UiDrawList::new();
-    ui.screen_size_px = [320, 200];
-    ui.pixels_per_point = 1.0;
+fn render_protocol_v2_rejects_v1_binary_command_batches() {
+    assert_eq!(RenderApiVersion::default(), RenderApiVersion::new(2, 0, 0));
+    let encoded = encode_unit_command_batch_bin(&[RenderCommand::DiscardRecordedCommands]).unwrap();
+    assert_eq!(&encoded[..8], b"NECB\x02\0\0\0");
 
-    let encoded =
-        encode_unit_command_batch_bin(&[RenderCommand::SetUiDrawList(Box::new(ui))]).unwrap();
-    let decoded = decode_unit_command_batch_bin(&encoded).unwrap();
-    match &decoded[0] {
-        RenderCommand::SetUiDrawList(list) => assert_eq!(list.screen_size_px, [320, 200]),
-        other => panic!("expected SetUiDrawList, got {other:?}"),
-    }
+    let mut legacy = encoded.clone();
+    legacy[4] = 1;
+    let error = decode_unit_command_batch_bin(&legacy).expect_err("v1 binary batch must be rejected");
+    assert!(error.contains("invalid magic"));
 }
 
 #[test]
@@ -118,4 +116,51 @@ fn binary_unit_batch_roundtrips_recording_scope_commands() {
         RenderCommand::SetDrawListKind { kind: None }
     ));
     assert!(matches!(decoded[3], RenderCommand::DiscardRecordedCommands));
+}
+
+#[test]
+fn frame_envelope_roundtrips_ordered_ui_layer_packets() {
+    let mut packets = UiLayerDrawPacketSet::new(41);
+    let mut debug = UiDrawList::new();
+    debug.screen_size_px = [1920, 1080];
+    let mut game = UiDrawList::new();
+    game.screen_size_px = [1920, 1080];
+    packets.push(
+        UiLayerDrawPacket::new(UiLayerDomain::Debug, 41, debug)
+            .with_target("engine.render.surface.primary")
+            .with_surfaces(["runtime.debug_overlay".to_owned()]),
+    );
+    packets.push(
+        UiLayerDrawPacket::new(UiLayerDomain::GameViewport, 41, game)
+            .with_target("engine.render.viewport.primary")
+            .with_surfaces(["game.hud".to_owned()])
+            .with_invalidation_revision(9),
+    );
+
+    let frame = RenderFrameEnvelope::new(
+        41,
+        [0.0, 0.0, 0.0, 1.0],
+        Extent2D::new(1920, 1080),
+        Extent2D::new(1920, 1080),
+        true,
+        RenderGraphDesc::new("layered-ui"),
+    )
+    .with_ui_layers(packets);
+    let encoded = serde_json::to_vec(&frame).expect("serialize frame envelope");
+    let decoded: RenderFrameEnvelope =
+        serde_json::from_slice(&encoded).expect("deserialize frame envelope");
+
+    assert_eq!(decoded.ui_layers.frame_index, 41);
+    assert_eq!(decoded.ui_layers.packets.len(), 2);
+    assert_eq!(
+        decoded.ui_layers.packets[0].domain,
+        UiLayerDomain::GameViewport
+    );
+    assert_eq!(decoded.ui_layers.packets[0].surface_ids, vec!["game.hud"]);
+    assert_eq!(decoded.ui_layers.packets[0].invalidation_revision, 9);
+    assert_eq!(decoded.ui_layers.packets[1].domain, UiLayerDomain::Debug);
+    assert_eq!(
+        decoded.ui_layers.packets[1].surface_ids,
+        vec!["runtime.debug_overlay"]
+    );
 }

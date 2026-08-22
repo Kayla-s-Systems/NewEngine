@@ -1,6 +1,6 @@
 use crate::{
     Color4, Extent2D, PostFxFrameParams, RenderDrawListKind, RenderEffectStack, RenderGraphDesc,
-    RenderWorkBudget,
+    RenderWorkBudget, UiLayerDrawPacketSet,
 };
 use serde::{Deserialize, Serialize};
 
@@ -51,6 +51,9 @@ pub struct RenderFrameEnvelope {
     pub graph: RenderGraphDesc,
     #[serde(default)]
     pub draw_lists: Vec<RenderDrawListKind>,
+    /// Ordered retained UI domain packets consumed by RenderGraph UI composite passes.
+    #[serde(default)]
+    pub ui_layers: UiLayerDrawPacketSet,
     #[serde(default)]
     pub work_budget: Option<RenderWorkBudget>,
 }
@@ -77,6 +80,7 @@ impl RenderFrameEnvelope {
             domains: RenderFrameDomainIntent::default(),
             graph,
             draw_lists: Vec::new(),
+            ui_layers: UiLayerDrawPacketSet::new(frame_index),
             work_budget: None,
         }
     }
@@ -105,6 +109,17 @@ impl RenderFrameEnvelope {
         draw_lists: impl IntoIterator<Item = RenderDrawListKind>,
     ) -> Self {
         self.draw_lists = draw_lists.into_iter().collect();
+        self
+    }
+
+    #[inline]
+    pub fn with_ui_layers(mut self, mut ui_layers: UiLayerDrawPacketSet) -> Self {
+        ui_layers.frame_index = self.frame_index;
+        for packet in &mut ui_layers.packets {
+            packet.frame_index = self.frame_index;
+        }
+        ui_layers.sort_for_composite();
+        self.ui_layers = ui_layers;
         self
     }
 

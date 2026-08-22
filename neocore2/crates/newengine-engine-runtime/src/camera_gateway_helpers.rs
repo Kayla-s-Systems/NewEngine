@@ -245,34 +245,44 @@ pub(super) fn trace_gameplay_camera_frame(
     };
 
     let telemetry = CameraRuntimeService::gameplay_camera_telemetry(world, camera);
-    let (runner, yaw, pitch, anchor, pivot, desired, collision_target, collision_current, rig, zoom_z) =
-        if let Some(t) = telemetry {
-            (
-                format!("{:?}", t.runner),
-                t.orbit_yaw,
-                t.orbit_pitch,
-                t.anchor_ws,
-                t.pivot_ws,
-                t.desired_camera_ws,
-                t.collision_target_distance,
-                t.collision_distance,
-                t.rig_position_ws,
-                t.zoom_z,
-            )
-        } else {
-            (
-                "None".to_owned(),
-                nan,
-                nan,
-                Vec3::splat(nan),
-                Vec3::splat(nan),
-                Vec3::splat(nan),
-                nan,
-                nan,
-                Vec3::splat(nan),
-                nan,
-            )
-        };
+    let (
+        runner,
+        yaw,
+        pitch,
+        anchor,
+        pivot,
+        desired,
+        collision_target,
+        collision_current,
+        rig,
+        zoom_z,
+    ) = if let Some(t) = telemetry {
+        (
+            format!("{:?}", t.runner),
+            t.orbit_yaw,
+            t.orbit_pitch,
+            t.anchor_ws,
+            t.pivot_ws,
+            t.desired_camera_ws,
+            t.collision_target_distance,
+            t.collision_distance,
+            t.rig_position_ws,
+            t.zoom_z,
+        )
+    } else {
+        (
+            "None".to_owned(),
+            nan,
+            nan,
+            Vec3::splat(nan),
+            Vec3::splat(nan),
+            Vec3::splat(nan),
+            nan,
+            nan,
+            Vec3::splat(nan),
+            nan,
+        )
+    };
     let routed = routed.unwrap_or(RoutedPlayerInput {
         move_mask: 0,
         look_delta: Vec2::ZERO,

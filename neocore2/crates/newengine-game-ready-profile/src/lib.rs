@@ -13,14 +13,15 @@ mod scene_bootstrap;
 mod validation;
 mod world_runtime;
 
-use newengine_runtime_host::asset_bootstrap::{ContentSetSpec, ProfileMountSpec};
+use newengine_asset_bootstrap_runtime::{ContentSetSpec, ProfileMountSpec};
 
 pub use game_ready_fps::{
-    run_game_ready_fps_process, GameReadyFpsApp, GAME_READY_CORE_ENV_POLICY,
-    GAME_READY_FPS_BOOT_OPTIONS, GAME_READY_FPS_ENV_POLICY, GAME_READY_GAME_UI_ENV_DEFAULTS,
-    GAME_READY_RUNTIME_ENV_DEFAULTS, GAME_READY_UI_PROFILE_GAME,
-    GAME_READY_UI_PUBLISH_EDITOR_SHELL_ENV, GAME_READY_UI_ROOT_SURFACE_ENV,
-    GAME_READY_UI_ROOT_SURFACE_GAME, GAME_READY_UI_SCREEN_PROFILE_ENV,
+    apply_game_ready_fps_env_policy, run_game_ready_fps_process, GameReadyFpsApp,
+    GAME_READY_CORE_ENV_POLICY, GAME_READY_FPS_BOOT_OPTIONS, GAME_READY_FPS_ENV_POLICY,
+    GAME_READY_GAME_UI_ENV_DEFAULTS, GAME_READY_RUNTIME_ENV_DEFAULTS, GAME_READY_UI_DOCUMENT_ENV,
+    GAME_READY_UI_PROFILE_GAME, GAME_READY_UI_PUBLISH_EDITOR_SHELL_ENV,
+    GAME_READY_UI_ROOT_SURFACE_ENV, GAME_READY_UI_ROOT_SURFACE_GAME,
+    GAME_READY_UI_SCREEN_PROFILE_ENV,
 };
 pub use newengine_game_data::{
     GameData, GameDataProvider, GameDataSnapshot, RustGameDataProvider, GAME_APP_ASSETS_DIR_ENV,
@@ -42,7 +43,10 @@ pub const GAME_READY_RUNTIME_PROFILE_ID: &str = "newengine.runtime-profile.game-
 /// Editor may pass a project-owned `game.toml`; packaged game/server builds place the
 /// same game descriptor next to the runtime executable. Engine `runtime.toml` is not
 /// a game descriptor and is never parsed here.
-pub fn launch_registered_game_ready_profile(manifest_path: &std::path::Path) -> Result<(), String> {
+pub fn launch_game_ready_profile_with(
+    manifest_path: &std::path::Path,
+    profile: GameReadyRuntimeProfile,
+) -> Result<(), String> {
     let launch_id = std::env::var(newengine_project_api::PROJECT_LAUNCH_PRESET_ENV)
         .ok()
         .filter(|value| !value.trim().is_empty());
@@ -51,11 +55,18 @@ pub fn launch_registered_game_ready_profile(manifest_path: &std::path::Path) -> 
         launch_id.as_deref(),
     )?;
     if game.launch.profile == newengine_project_api::RuntimeLaunchProfile::Editor {
-        return Err("GameReady standalone runtime cannot select the editor launch profile".to_owned());
+        return Err(
+            "GameReady standalone runtime cannot select the editor launch profile".to_owned(),
+        );
     }
     std::env::set_var(newengine_project_api::GAME_MANIFEST_ENV, manifest_path);
     std::env::remove_var("NEWENGINE_PROJECT");
-    GameReadyFpsApp::with_profile(GameReadyRuntimeProfile::standalone_game()).run_process()
+    apply_game_ready_fps_env_policy();
+    GameReadyFpsApp::with_profile(profile).run_process()
+}
+
+pub fn launch_registered_game_ready_profile(manifest_path: &std::path::Path) -> Result<(), String> {
+    launch_game_ready_profile_with(manifest_path, GameReadyRuntimeProfile::standalone_game())
 }
 
 /// Registration consumed by the generic NewEngine runtime-profile registry.

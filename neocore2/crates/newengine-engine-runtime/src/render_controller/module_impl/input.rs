@@ -134,8 +134,7 @@ impl ViewportInputSnap {
         } else {
             0.0
         };
-        let raw_mouse_look = canonical_dx.abs() > f32::EPSILON
-            || canonical_dy.abs() > f32::EPSILON;
+        let raw_mouse_look = canonical_dx.abs() > f32::EPSILON || canonical_dy.abs() > f32::EPSILON;
         if canonical_mouse_authoritative || raw_mouse_look {
             self.dx_px = canonical_dx;
             self.dy_px = canonical_dy;

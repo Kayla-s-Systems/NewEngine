@@ -18,7 +18,7 @@ newengine-plugin-api = { path = "../newengine-plugin-api" }
 newengine-plugin-host = { path = "../newengine-plugin-host" }
 newengine-scene = { path = "../newengine-scene", features = ["runtime"] }
 newengine-scene-runtime = { path = "../newengine-scene-runtime" }
-newengine-runtime-host = { path = "../newengine-runtime-host" }
+newengine-world-authority-runtime = { path = "../newengine-world-authority-runtime" }
 newengine-service-api = { path = "../newengine-service-api" }
 newengine-service-kit = { path = "../newengine-service-kit" }
 newengine-world-api = { path = "../newengine-world-api" }

@@ -1,13 +1,16 @@
 use newengine_core::EngineError;
 
-use super::types::{RuntimeHostAppProfile, RuntimeHostLauncher};
+use super::types::{RuntimeHostAppProfile, RuntimeHostFrontend, RuntimeHostLauncher};
 
 impl<P> RuntimeHostLauncher<P>
 where
     P: RuntimeHostAppProfile,
 {
-    /// Run the app and terminate the process with the correct code.
-    pub fn run_process(self) -> ! {
+    /// Run the app with an explicit frontend and terminate the process with the correct code.
+    pub fn run_process_with_frontend<F>(self, frontend: F) -> !
+    where
+        F: RuntimeHostFrontend<P>,
+    {
         self.prepare_early_log_session();
         self.early_log(format_args!(
             "process.entry exe={:?} cwd={:?}",
@@ -19,7 +22,7 @@ where
             self.spec.app_name
         ));
 
-        match self.run() {
+        match self.run_with_frontend(&frontend) {
             Ok(()) | Err(EngineError::ExitRequested) => {
                 newengine_core::crash::record_breadcrumb(format!(
                     "{} launcher: exit requested",
@@ -49,5 +52,11 @@ where
                 std::process::exit(1);
             }
         }
+    }
+
+    /// Generic Host default is intentionally headless. Windowed products opt into
+    /// `newengine-windowed-host-runtime` and call `run_process_with_frontend`.
+    pub fn run_process(self) -> ! {
+        self.run_process_with_frontend(crate::HeadlessRuntimeFrontend)
     }
 }

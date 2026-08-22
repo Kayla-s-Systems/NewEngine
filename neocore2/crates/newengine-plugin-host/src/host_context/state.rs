@@ -166,6 +166,11 @@ pub(crate) struct HostContext {
     /// publishing normal gateway routes.
     pub(crate) capability_slots: Mutex<NeHashMap<String, EngineCapabilitySlotEntry>>,
 
+    /// Host-owned selection policy derived before runtime composition (for example
+    /// from immutable PreInit hardware capabilities). Plugins cannot mutate it.
+    pub(crate) gateway_selection_policies:
+        Mutex<NeHashMap<String, crate::host_context::gateway::EngineGatewaySelectionPolicy>>,
+
     /// Cached active gateway registry. Routing is on the service hot path, so
     /// descriptor/fact folding must happen only when the gateway fact generation
     /// changes, not on every `call_service_v1(engine.*)` call.
@@ -188,6 +193,7 @@ fn make_default_ctx() -> Arc<HostContext> {
         external_runtime_plugins: Mutex::new(NeHashMap::default()),
         gateway_provider_routes: Mutex::new(NeHashMap::default()),
         capability_slots: Mutex::new(NeHashMap::default()),
+        gateway_selection_policies: Mutex::new(NeHashMap::default()),
         gateway_registry_cache: Mutex::new(None),
     })
 }

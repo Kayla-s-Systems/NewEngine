@@ -18,6 +18,7 @@ pub fn gameplay_default_key_registry() -> Vec<InputKeyRegistration> {
         InputKeyRegistration::new(keys::KEY_E, key_identity::KEY_E, "E"),
         InputKeyRegistration::new(keys::KEY_F, key_identity::KEY_F, "F"),
         InputKeyRegistration::new(keys::KEY_I, key_identity::KEY_I, "I"),
+        InputKeyRegistration::new(keys::KEY_M, key_identity::KEY_M, "M"),
         InputKeyRegistration::new(keys::KEY_V, key_identity::KEY_V, "V"),
         InputKeyRegistration::new(keys::KEY_Q, key_identity::KEY_Q, "Q"),
         InputKeyRegistration::new(keys::KEY_R, key_identity::KEY_R, "R"),

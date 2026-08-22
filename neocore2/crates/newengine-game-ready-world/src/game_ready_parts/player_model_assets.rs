@@ -52,8 +52,8 @@ pub(super) fn ensure_player_runtime_model_parts(
         // A character may legitimately have multiple geometries using the same material slot
         // (a character may legitimately have multiple geometries for one material slot). Part index is therefore part of the stable mesh id.
         let primitive_id = PrimitiveId(fnv1a_64(&format!(
-            "player-model:{}:{}:{}",
-            bundle.source, part_index, part.material_slot
+            "player-model:{}:revision={}:{}:{}",
+            bundle.source, assignment.revision, part_index, part.material_slot
         )));
         let material_name = part
             .material

@@ -14,6 +14,7 @@ use newengine_runtime_host::app_launcher::{
     RuntimeHostAppProfile, RuntimeHostBootOption, RuntimeHostLaunchSpec, RuntimeHostLauncher,
 };
 use newengine_ui::{UiBuildFn, UiProviderKind};
+use newengine_windowed_host_runtime::{WindowedHostFrontend, WindowedRuntimeHostProfile};
 
 use crate::{
     GameReadyRuntimeProfile, GAME_APP_ASSETS_DIR_ENV, GAME_FIXED_DT_MS, GAME_READY_APP_DIR_NAME,
@@ -23,11 +24,13 @@ pub const GAME_READY_UI_SCREEN_PROFILE_ENV: &str =
     "NEWENGINE_PLUGIN_ENGINE_RUNTIME__ui__screen_profile__profile";
 pub const GAME_READY_UI_ROOT_SURFACE_ENV: &str =
     "NEWENGINE_PLUGIN_ENGINE_RUNTIME__ui__screen_profile__game_ui_root_surface_id";
+pub const GAME_READY_UI_DOCUMENT_ENV: &str =
+    "NEWENGINE_PLUGIN_ENGINE_RUNTIME__ui__screen_profile__game_ui_document_ref";
 pub const GAME_READY_UI_PUBLISH_EDITOR_SHELL_ENV: &str =
     "NEWENGINE_PLUGIN_ENGINE_RUNTIME__ui__screen_profile__publish_editor_shell";
 
 pub const GAME_READY_UI_PROFILE_GAME: &str = "game";
-/// Legacy surface id retained as public API; shipping FPS no longer mounts it.
+/// Canonical authored gameplay HUD surface mounted by the shipping FPS profile.
 pub const GAME_READY_UI_ROOT_SURFACE_GAME: &str = "game.hud";
 
 pub const GAME_READY_FPS_BOOT_OPTIONS: &[RuntimeHostBootOption] = &[
@@ -77,8 +80,8 @@ pub const GAME_READY_FPS_ENV_POLICY: &[(&str, &str)] = &[
     ("NEWENGINE_REQUIRE_ASSET_MANAGER", "1"),
     ("NEWENGINE_REQUIRE_MATERIALS_BACKEND", "1"),
     ("NEWENGINE_REQUIRE_UI_BACKEND", "1"),
-    // Shipping gameplay has no game HUD. Keep only the provider-neutral
-    // technical/FPS overlay in the bottom-right corner.
+    // Shipping gameplay mounts the project-authored HUD. Keep the technical/FPS
+    // overlay independent so diagnostics can coexist with gameplay UI.
     ("NEWENGINE_RUNTIME_DEBUG_OVERLAY", "1"),
     ("NEWENGINE_PLUGIN_TARGET", "runtime"),
     ("NEWENGINE_BOOTSTRAP_PLUGIN_PRELOAD", "deferred"),
@@ -88,13 +91,27 @@ pub const GAME_READY_FPS_ENV_POLICY: &[(&str, &str)] = &[
     ("NEWENGINE_SCENE_TEXTURE_GATE_SOFT_TIMEOUT_FRAMES", "1800"),
     ("NEWENGINE_SCENE_TEXTURE_GATE_SOFT_TIMEOUT_MS", "90000"),
     (GAME_READY_UI_SCREEN_PROFILE_ENV, GAME_READY_UI_PROFILE_GAME),
-    // Deliberately omit game_ui_root_surface_id/game_ui_document_ref: the game
-    // profile remains viewport-only and therefore mounts no authored HUD.
+    (
+        GAME_READY_UI_ROOT_SURFACE_ENV,
+        GAME_READY_UI_ROOT_SURFACE_GAME,
+    ),
+    (GAME_READY_UI_DOCUMENT_ENV, "ui/game/game_hud.neui@surface"),
     (GAME_READY_UI_PUBLISH_EDITOR_SHELL_ENV, "false"),
 ];
 
 /// Backward-compatible name for the standalone game viewport policy.
 pub const GAME_READY_GAME_UI_ENV_DEFAULTS: &[(&str, &str)] = GAME_READY_FPS_ENV_POLICY;
+
+/// Applies the shipping GameReady policy before a registered runtime-profile handoff.
+/// Explicit caller/project environment values win; profile defaults fill only missing keys.
+#[inline]
+pub fn apply_game_ready_fps_env_policy() {
+    for &(key, value) in GAME_READY_FPS_ENV_POLICY {
+        if std::env::var_os(key).is_none() {
+            std::env::set_var(key, value);
+        }
+    }
+}
 
 #[derive(Clone)]
 pub struct GameReadyFpsApp {
@@ -131,7 +148,6 @@ impl GameReadyFpsApp {
             fixed_dt_ms: GAME_FIXED_DT_MS,
             app_dir_name: GAME_READY_APP_DIR_NAME,
             app_assets_env: GAME_APP_ASSETS_DIR_ENV,
-            window_title: GAME_READY_FPS_WINDOW_TITLE,
             early_log_file_name: GAME_READY_FPS_EARLY_LOG_FILE,
             default_profile_env: None,
             env_defaults: GAME_READY_FPS_ENV_POLICY,
@@ -140,7 +156,8 @@ impl GameReadyFpsApp {
 
     #[inline]
     pub fn run_process(self) -> ! {
-        RuntimeHostLauncher::new(Self::launch_spec(), self).run_process()
+        RuntimeHostLauncher::new(Self::launch_spec(), self)
+            .run_process_with_frontend(WindowedHostFrontend::new(GAME_READY_FPS_WINDOW_TITLE))
     }
 }
 
@@ -163,10 +180,11 @@ impl RuntimeHostAppProfile for GameReadyFpsApp {
     fn initialize_composition_services(
         &self,
         engine: &mut Engine<()>,
+        host_preinit: &newengine_runtime_host::HostPreInitSnapshot,
         runtime: Option<&newengine_project_runtime::RuntimeCompositionContext>,
     ) -> EngineResult<()> {
         self.profile
-            .initialize_composition_services(engine, runtime)
+            .initialize_composition_services(engine, host_preinit, runtime)
     }
 
     fn register_engine_provider_routes_best_effort(&self) {
@@ -178,6 +196,9 @@ impl RuntimeHostAppProfile for GameReadyFpsApp {
         self.profile.bootstrap_content_best_effort();
     }
 
+}
+
+impl WindowedRuntimeHostProfile for GameReadyFpsApp {
     #[inline]
     fn ui_build_from_startup(&self, startup: &StartupConfig) -> Option<Box<dyn UiBuildFn>> {
         self.profile.ui_build_from_startup(startup)
@@ -215,7 +236,7 @@ mod tests {
     }
 
     #[test]
-    fn shipping_fps_policy_keeps_only_the_technical_runtime_overlay() {
+    fn shipping_fps_policy_mounts_authored_game_hud() {
         let value = |key: &str| {
             GAME_READY_FPS_ENV_POLICY
                 .iter()
@@ -227,10 +248,13 @@ mod tests {
             value(GAME_READY_UI_SCREEN_PROFILE_ENV),
             Some(GAME_READY_UI_PROFILE_GAME)
         );
-        assert_eq!(value(GAME_READY_UI_ROOT_SURFACE_ENV), None);
         assert_eq!(
-            value("NEWENGINE_PLUGIN_ENGINE_RUNTIME__ui__screen_profile__game_ui_document_ref"),
-            None
+            value(GAME_READY_UI_ROOT_SURFACE_ENV),
+            Some(GAME_READY_UI_ROOT_SURFACE_GAME)
+        );
+        assert_eq!(
+            value(GAME_READY_UI_DOCUMENT_ENV),
+            Some("ui/game/game_hud.neui@surface")
         );
         assert_eq!(value(GAME_READY_UI_PUBLISH_EDITOR_SHELL_ENV), Some("false"));
     }
@@ -251,6 +275,6 @@ mod tests {
         let spec = GameReadyFpsApp::launch_spec();
         assert_eq!(spec.default_profile_env, None);
         assert_eq!(spec.env_defaults, GAME_READY_FPS_ENV_POLICY);
-        assert_eq!(spec.window_title, GAME_READY_FPS_WINDOW_TITLE);
+        assert!(!GAME_READY_FPS_WINDOW_TITLE.is_empty());
     }
 }

@@ -97,13 +97,12 @@ impl GameReadyValidationModule {
             .get::<UiPresentationFlowState>()
             .map(|flow| flow.state_id.clone())
     }
-
 }
 
-#[path = "validation/snapshot.rs"]
-mod snapshot;
 #[path = "validation/input.rs"]
 mod input;
+#[path = "validation/snapshot.rs"]
+mod snapshot;
 #[path = "validation/streaming.rs"]
 mod streaming;
 

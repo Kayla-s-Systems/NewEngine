@@ -28,6 +28,13 @@ pub mod action {
     pub const PLAYER_RELOAD: &str = "player.reload";
     pub const PLAYER_INTERACT: &str = "player.interact";
     pub const INVENTORY_TOGGLE: &str = "player.inventory.toggle";
+    pub const CHARACTER_SELECT_TOGGLE: &str = "player.character.select.toggle";
+    pub const UI_ACCEPT: &str = "ui.accept";
+    pub const UI_BACK: &str = "ui.back";
+    pub const UI_NAV_UP: &str = "ui.nav.up";
+    pub const UI_NAV_DOWN: &str = "ui.nav.down";
+    pub const UI_NAV_LEFT: &str = "ui.nav.left";
+    pub const UI_NAV_RIGHT: &str = "ui.nav.right";
     pub const HUD_VISIBILITY_TOGGLE: &str = "game.hud.visibility.toggle";
     pub const EQUIP_PRIMARY: &str = "player.equipment.primary";
     pub const EQUIP_SECONDARY: &str = "player.equipment.secondary";
@@ -46,6 +53,13 @@ pub struct FpsActionFrame {
     pub reload_pressed: bool,
     pub interact_pressed: bool,
     pub inventory_toggle_pressed: bool,
+    pub character_select_toggle_pressed: bool,
+    pub ui_accept_pressed: bool,
+    pub ui_back_pressed: bool,
+    pub ui_nav_up_pressed: bool,
+    pub ui_nav_down_pressed: bool,
+    pub ui_nav_left_pressed: bool,
+    pub ui_nav_right_pressed: bool,
     pub hud_visibility_toggle_pressed: bool,
     pub equipment_slot_pressed: Option<u8>,
 }
@@ -62,6 +76,13 @@ impl FpsActionFrame {
             reload_pressed: commands.is_pressed(action::PLAYER_RELOAD),
             interact_pressed: commands.is_pressed(action::PLAYER_INTERACT),
             inventory_toggle_pressed: commands.is_pressed(action::INVENTORY_TOGGLE),
+            character_select_toggle_pressed: commands.is_pressed(action::CHARACTER_SELECT_TOGGLE),
+            ui_accept_pressed: commands.is_pressed(action::UI_ACCEPT),
+            ui_back_pressed: commands.is_pressed(action::UI_BACK),
+            ui_nav_up_pressed: commands.is_pressed(action::UI_NAV_UP),
+            ui_nav_down_pressed: commands.is_pressed(action::UI_NAV_DOWN),
+            ui_nav_left_pressed: commands.is_pressed(action::UI_NAV_LEFT),
+            ui_nav_right_pressed: commands.is_pressed(action::UI_NAV_RIGHT),
             hud_visibility_toggle_pressed: commands.is_pressed(action::HUD_VISIBILITY_TOGGLE),
             equipment_slot_pressed: [
                 action::EQUIP_PRIMARY,

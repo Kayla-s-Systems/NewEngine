@@ -1,6 +1,5 @@
 use super::*;
 
-
 #[test]
 fn presentation_flow_gates_bootstrap_and_input_independently() {
     let state = UiPresentationFlowState {

@@ -78,6 +78,7 @@ pub(super) fn validate_player_asset_family(
 }
 
 pub(super) fn validate_player_skin_contract(
+    assignment: &newengine_engine_runtime::gameplay::PlayerModelAssignment,
     parts: &[PlayerRuntimeModelPart],
     skeleton: Option<&ModelSkeletonMetadata>,
 ) -> Result<Option<[f32; 16]>, String> {
@@ -93,9 +94,16 @@ pub(super) fn validate_player_skin_contract(
     let skeleton = skeleton
         .ok_or_else(|| "skinned player model requires authored skeleton metadata".to_owned())?;
     let joint_count = skeleton.joints.len();
-    if joint_count == 0 || joint_count > 4096 {
+    const ABBY_BRAID_SOFT_BODY_JOINTS: usize = 18;
+    let supplemental_joint_count = if is_abby_ref(&assignment.source) {
+        ABBY_BRAID_SOFT_BODY_JOINTS
+    } else {
+        0
+    };
+    let palette_joint_count = joint_count + supplemental_joint_count;
+    if joint_count == 0 || palette_joint_count > 4096 {
         return Err(format!(
-            "skinned player skeleton joint count outside runtime range joints={joint_count} supported=1..=4096"
+            "skinned player skeleton/palette joint count outside runtime range joints={joint_count} supplemental={supplemental_joint_count} supported=1..=4096"
         ));
     }
     for (index, joint) in skeleton.joints.iter().enumerate() {
@@ -135,6 +143,8 @@ pub(super) fn validate_player_skin_contract(
                 "skinned player model has empty skin stream part={part_index}"
             ));
         }
+        let mut part_uses_supplemental_palette = false;
+        let mut part_uses_skeleton_palette = false;
         for (vertex_index, vertex) in skin.vertices.iter().enumerate() {
             let mut sum = 0.0_f32;
             let mut positive = 0usize;
@@ -151,10 +161,16 @@ pub(super) fn validate_player_skin_contract(
                 }
                 if weight > 0.0 {
                     positive += 1;
-                    if joint as usize >= joint_count {
+                    let joint = joint as usize;
+                    if joint >= palette_joint_count {
                         return Err(format!(
-                            "skinned player joint outside skeleton part={part_index} vertex={vertex_index} joint={joint} joints={joint_count}"
+                            "skinned player joint outside palette part={part_index} vertex={vertex_index} joint={joint} skeleton_joints={joint_count} supplemental_joints={supplemental_joint_count}"
                         ));
+                    }
+                    if joint >= joint_count {
+                        part_uses_supplemental_palette = true;
+                    } else {
+                        part_uses_skeleton_palette = true;
                     }
                 }
                 sum += weight;
@@ -164,6 +180,16 @@ pub(super) fn validate_player_skin_contract(
                     "skinned player weights are not normalized part={part_index} vertex={vertex_index} influences={positive} sum={sum}"
                 ));
             }
+        }
+        if part_uses_supplemental_palette && part_uses_skeleton_palette {
+            return Err(format!(
+                "skinned player part mixes skeletal and supplemental soft-body palettes part={part_index}"
+            ));
+        }
+        if part_uses_supplemental_palette && supplemental_joint_count == 0 {
+            return Err(format!(
+                "skinned player supplemental palette is only valid for authored Abby soft-body parts part={part_index}"
+            ));
         }
     }
     Ok(Some(source_to_model))

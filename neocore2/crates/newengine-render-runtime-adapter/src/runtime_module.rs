@@ -51,6 +51,56 @@ impl<E: Send + 'static> Module<E> for RenderBackendRuntimeModule {
             }
         };
         let protocol_version = info.protocol_version;
+        let expected_protocol = newengine_core::render::RenderApiVersion::default();
+        if !expected_protocol.is_major_compatible_with(protocol_version) {
+            newengine_ulog_api::ulog::error!(
+                "render backend: refusing incompatible provider protocol=v{}.{}.{} engine=v{}.{}.{} provider='{}'",
+                protocol_version.major,
+                protocol_version.minor,
+                protocol_version.patch,
+                expected_protocol.major,
+                expected_protocol.minor,
+                expected_protocol.patch,
+                selection.provider_plugin_id,
+            );
+            return Ok(());
+        }
+        let negotiation = match client
+            .negotiate(newengine_core::render::RenderCapabilityNegotiationRequest::default())
+        {
+            Ok(response) => response,
+            Err(error) => {
+                newengine_ulog_api::ulog::error!(
+                    "render backend: protocol negotiation failed provider='{}': {}",
+                    selection.provider_plugin_id,
+                    error
+                );
+                return Ok(());
+            }
+        };
+        if !negotiation.ok
+            || !expected_protocol.is_major_compatible_with(negotiation.accepted_version)
+            || !expected_protocol.is_major_compatible_with(negotiation.backend_version)
+        {
+            let notices = negotiation
+                .notices
+                .iter()
+                .map(|notice| format!("{}: {}", notice.code, notice.message))
+                .collect::<Vec<_>>()
+                .join("; ");
+            newengine_ulog_api::ulog::error!(
+                "render backend: negotiation rejected provider='{}' accepted=v{}.{}.{} backend=v{}.{}.{} notices='{}'",
+                selection.provider_plugin_id,
+                negotiation.accepted_version.major,
+                negotiation.accepted_version.minor,
+                negotiation.accepted_version.patch,
+                negotiation.backend_version.major,
+                negotiation.backend_version.minor,
+                negotiation.backend_version.patch,
+                notices
+            );
+            return Ok(());
+        }
 
         newengine_ulog_api::ulog::info!(
             "render backend: service bridge bound id='{}' name='{}' version='{}' provider='{}' provider_state='{}' matched_by='{}' debug_text='{}' protocol=v{}.{}.{} features={} hardware_tier={:?} upload_budget={}MB/frame",

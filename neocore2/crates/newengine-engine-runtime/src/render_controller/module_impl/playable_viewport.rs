@@ -9,9 +9,9 @@ use newengine_runtime_session_runtime::{
     begin_runtime_session_frame, record_runtime_session_ticks,
 };
 use newengine_ui_api::{
-    UiDrawCmd, UiDrawList, UiEditorRuntimeMode, UiInputCaptureState, UiRect,
-    UiRuntimeDebugOverlayTelemetry, UiScreenProfile, UiScreenProfileState, UiSurfaceNode, UiTexId,
-    UiVertex, UiViewportSlot,
+    UiDrawCmd, UiDrawInvalidationState, UiDrawList, UiEditorRuntimeMode, UiInputCaptureState,
+    UiLayerDomain, UiLayerDrawPacketSet, UiRect, UiRuntimeDebugOverlayTelemetry, UiScreenProfile,
+    UiScreenProfileState, UiSurfaceNode, UiTexId, UiVertex, UiViewportSlot,
 };
 
 use super::super::controller::RuntimeRenderController;
@@ -31,10 +31,12 @@ impl RuntimeRenderController {
         ctx: &mut ModuleCtx<'_, E>,
         r: &mut dyn RenderApi,
         plugin_snapshot: Option<&newengine_plugin_host::PluginsSnapshot>,
-        ui: Option<UiDrawList>,
+        ui_layers: UiLayerDrawPacketSet,
+        primary_ui_domain: UiLayerDomain,
         scope: RenderFrameScope,
     ) -> EngineResult<PlayableFrameOutcome> {
-        let mut frame_input = self.read_viewport_frame_input(ctx, ui, scope);
+        let mut frame_input =
+            self.read_viewport_frame_input(ctx, ui_layers, primary_ui_domain, scope);
         let primary_was_open = self.ui.primary.is_open();
         let primary_ui = self.ui.primary.update(
             frame_input.surface_input.as_ref(),
@@ -53,7 +55,8 @@ impl RuntimeRenderController {
             .unwrap_or_else(UiInputCaptureState::none);
         let provider_ui_capture = self.refresh_modal_ui_draw_list(
             ctx,
-            &mut frame_input.ui,
+            &mut frame_input.ui_layers,
+            frame_input.primary_ui_domain,
             &primary_ui.state,
             primary_was_open,
             &external_ui_capture,
@@ -152,14 +155,14 @@ impl RuntimeRenderController {
             // explicitly owns the offscreen extent for a real 3D preview. Once
             // its warmup/redraw budget is exhausted, UI keeps sampling the cached
             // target while the expensive world/render path sleeps.
-            self.render_ui_only_frame(ctx, r, frame_input.ui, scope)?;
+            self.render_ui_only_frame(ctx, r, frame_input.ui_layers, scope)?;
             return Ok(PlayableFrameOutcome::Continue {
                 frame_debug_snapshot: None,
             });
         }
 
         if scope.vp_w == 0 || scope.vp_h == 0 || self.viewport.pass_disabled {
-            self.render_ui_only_frame(ctx, r, frame_input.ui, scope)?;
+            self.render_ui_only_frame(ctx, r, frame_input.ui_layers, scope)?;
             return Ok(PlayableFrameOutcome::Continue {
                 frame_debug_snapshot: None,
             });
@@ -172,7 +175,13 @@ impl RuntimeRenderController {
             match self.ensure_viewport_rt(r, extent) {
                 Ok(rt) => Some(rt),
                 Err(e) => {
-                    self.end_frame_after_viewport_rt_failure(r, frame_input.ui, scope, &e)?;
+                    self.end_frame_after_viewport_rt_failure(
+                        ctx,
+                        r,
+                        frame_input.ui_layers,
+                        scope,
+                        &e,
+                    )?;
                     return Ok(PlayableFrameOutcome::EndedEarly { ui_telemetry: None });
                 }
             }
@@ -181,8 +190,13 @@ impl RuntimeRenderController {
         if rt.is_some() {
             let slot = ctx.resources().get::<UiViewportSlot>().cloned();
             let viewport_tex = self.bridges.viewport.read_tex_user() as u32;
-            if let (Some(slot), Some(ui)) = (slot.as_ref(), frame_input.ui.as_mut()) {
-                prepend_viewport_slot_quad(ui, slot, viewport_tex);
+            if let Some(slot) = slot.as_ref() {
+                if let Some(ui) = frame_input
+                    .ui_layers
+                    .draw_list_mut(frame_input.primary_ui_domain)
+                {
+                    prepend_viewport_slot_quad(ui, slot, viewport_tex);
+                }
             }
         }
 
@@ -242,9 +256,19 @@ impl RuntimeRenderController {
         if session_frame.active && !pause_world {
             record_runtime_session_ticks(ctx.resources_mut(), session_fixed_step_count);
         }
-        self.frame
+        let gameplay_ui_changed = self
+            .frame
             .gameplay_ui
             .publish_frame(scene.world_mut(), self.frame.frame_index);
+        if gameplay_ui_changed {
+            let next = ctx
+                .resources()
+                .get::<UiDrawInvalidationState>()
+                .copied()
+                .unwrap_or_default()
+                .invalidate(UiLayerDomain::GameViewport, self.frame.frame_index);
+            ctx.resources_mut().insert(next);
+        }
         let gameplay_capture_after_tick = self
             .frame
             .gameplay_ui
@@ -252,7 +276,7 @@ impl RuntimeRenderController {
 
         if !world_frame.view_frame.world_playable {
             let ui_telemetry =
-                self.end_frame_for_unplayable_world(ctx, r, &scene, frame_input.ui, scope)?;
+                self.end_frame_for_unplayable_world(ctx, r, &scene, frame_input.ui_layers, scope)?;
             return Ok(PlayableFrameOutcome::EndedEarly {
                 ui_telemetry: Some(ui_telemetry),
             });
@@ -273,7 +297,7 @@ impl RuntimeRenderController {
             r,
             &scene,
             plugin_snapshot,
-            frame_input.ui.as_ref(),
+            frame_input.ui_layers,
             frame_input.play_mode,
             rt,
             scope,

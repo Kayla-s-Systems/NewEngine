@@ -72,8 +72,9 @@ pub(super) fn prepend_viewport_slot_quad(
 impl RuntimeRenderController {
     pub(super) fn refresh_modal_ui_draw_list<E: Send + 'static>(
         &self,
-        _ctx: &ModuleCtx<'_, E>,
-        ui: &mut Option<UiDrawList>,
+        ctx: &ModuleCtx<'_, E>,
+        ui_layers: &mut UiLayerDrawPacketSet,
+        primary_domain: UiLayerDomain,
         primary_state: &UiSurfaceNode,
         primary_was_open: bool,
         external_capture: &UiInputCaptureState,
@@ -105,11 +106,23 @@ impl RuntimeRenderController {
         ) {
             Ok(Some(output)) => {
                 provider_capture = Some(output.input_capture);
-                *ui = Some(output.draw_list);
+                set_primary_domain_draw_list(
+                    ctx,
+                    ui_layers,
+                    primary_domain,
+                    self.frame.frame_index,
+                    output.draw_list,
+                );
             }
             Ok(None) => {
                 if needs_clear_packet {
-                    *ui = Some(clear_ui_draw_list([scope.w, scope.h]));
+                    set_primary_domain_draw_list(
+                        ctx,
+                        ui_layers,
+                        primary_domain,
+                        self.frame.frame_index,
+                        clear_ui_draw_list([scope.w, scope.h]),
+                    );
                 }
             }
             Err(e) => {
@@ -117,13 +130,42 @@ impl RuntimeRenderController {
                     "modal ui: same-frame draw-list refresh failed: {e}"
                 );
                 if needs_clear_packet {
-                    *ui = Some(clear_ui_draw_list([scope.w, scope.h]));
+                    set_primary_domain_draw_list(
+                        ctx,
+                        ui_layers,
+                        primary_domain,
+                        self.frame.frame_index,
+                        clear_ui_draw_list([scope.w, scope.h]),
+                    );
                 }
             }
         }
 
         Ok(provider_capture)
     }
+}
+
+fn set_primary_domain_draw_list<E: Send + 'static>(
+    ctx: &ModuleCtx<'_, E>,
+    ui_layers: &mut UiLayerDrawPacketSet,
+    primary_domain: UiLayerDomain,
+    frame_index: u64,
+    draw_list: UiDrawList,
+) {
+    if let Some(existing) = ui_layers.draw_list_mut(primary_domain) {
+        *existing = draw_list;
+        return;
+    }
+
+    let packet = ctx
+        .resources()
+        .get::<newengine_ui_api::UiLayerCompositionPlan>()
+        .filter(|plan| plan.domain == primary_domain)
+        .map(|plan| plan.draw_packet(draw_list.clone()))
+        .unwrap_or_else(|| {
+            newengine_ui_api::UiLayerDrawPacket::new(primary_domain, frame_index, draw_list)
+        });
+    ui_layers.push(packet);
 }
 
 pub(super) fn merge_ui_input_capture(

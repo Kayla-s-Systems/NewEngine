@@ -1,0 +1,9 @@
+[package]
+name = "newengine-console-api"
+version = "0.1.0"
+edition = "2021"
+readme = "README.md"
+description = "Provider-neutral command console contract for NewEngine"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }

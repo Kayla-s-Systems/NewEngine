@@ -11,8 +11,8 @@ pub const ENGINE_RENDER_MATERIALS_SERVICE_ID: &str =
 /// Default/first-party provider service id for render backends.
 pub const RENDER_SERVICE_ID: &str = "render.api";
 pub const RENDER_BACKEND_CAPABILITY_ID: &str = "render.backend";
-pub const RENDER_PROVIDER_ABI_VERSION: u16 = 1;
-pub const RENDER_PROVIDER_ABI_ID: &str = "newengine.render-provider/v1";
+pub const RENDER_PROVIDER_ABI_VERSION: u16 = 2;
+pub const RENDER_PROVIDER_ABI_ID: &str = "newengine.render-provider/v2";
 pub const RENDER_PROVIDER_ABI_CONTRACT_SPEC: newengine_contract_api::ContractSpec =
     newengine_contract_api::ContractSpec::new(
         "render.provider.abi",
@@ -36,7 +36,7 @@ pub const RENDER_SERVICE_METHOD_SHUTDOWN_V1: &str =
 /// method is intentionally narrow: it carries only unit commands such as
 /// write_buffer/set_pipeline/draw so draw-list extraction does not serialize
 /// byte payloads as JSON arrays on every frame.
-pub const RENDER_SERVICE_METHOD_COMMAND_BATCH_BIN_V1: &str = "command_batch_bin_v1";
+pub const RENDER_SERVICE_METHOD_COMMAND_BATCH_BIN_V2: &str = "command_batch_bin_v2";
 /// Binary allocation path for texture descriptors carrying large mip payloads.
 /// This avoids JSON byte-array expansion on the render thread.
 pub const RENDER_SERVICE_METHOD_CREATE_TEXTURE_BIN_V1: &str = "create_texture_bin_v1";

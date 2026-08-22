@@ -4,7 +4,8 @@ impl RuntimeRenderController {
     pub(super) fn read_viewport_frame_input<E: Send + 'static>(
         &mut self,
         ctx: &ModuleCtx<'_, E>,
-        ui: Option<UiDrawList>,
+        ui_layers: UiLayerDrawPacketSet,
+        primary_ui_domain: UiLayerDomain,
         scope: RenderFrameScope,
     ) -> ViewportFrameInput {
         let surface_input = ctx
@@ -35,7 +36,8 @@ impl RuntimeRenderController {
             input.apply_gameplay_input_handoff(&self.runtime_profile().input);
         }
         ViewportFrameInput {
-            ui,
+            ui_layers,
+            primary_ui_domain,
             input,
             surface_input,
             play_mode,
@@ -89,9 +91,6 @@ pub(super) fn editor_viewport_play_mode<E: Send + 'static>(
             {
                 crate::gameplay::GameRunMode::Play
             } else {
-                // Eject keeps the same PIE session alive but releases direct player control.
-                // CameraGateway already treats Play -> Simulate as a runtime-to-runtime
-                // transition, so it does not restore the Play snapshot here.
                 crate::gameplay::GameRunMode::Simulate
             }
         }

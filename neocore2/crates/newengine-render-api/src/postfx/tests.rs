@@ -1,6 +1,5 @@
-use super::*;
 use super::frame::default_dof_far_plane;
-
+use super::*;
 
 #[test]
 fn postfx_frame_params_accept_old_payload_without_quality() {

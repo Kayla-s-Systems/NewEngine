@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use newengine_runtime_host::asset_bootstrap::ProfileMountSpec;
+use newengine_asset_bootstrap_runtime::ProfileMountSpec;
 use newengine_scene::{SceneAsset, SceneAssetOptions};
 
 use crate::SceneBridge;

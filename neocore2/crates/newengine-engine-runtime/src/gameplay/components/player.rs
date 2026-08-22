@@ -167,15 +167,30 @@ impl Default for PlayerGroundState {
 }
 
 impl PlayerGroundState {
+    /// Number of consecutive fixed-step probe misses tolerated after a confirmed walkable hit.
+    /// This is presentation/control contact hysteresis, not coyote-time: an explicit jump clears
+    /// `grounded` immediately and therefore never receives this retention path.
+    pub const PROBE_MISS_GRACE_TICKS: u64 = 2;
+
     #[inline]
     pub fn clear_for_tick(&mut self, fixed_tick: u64) {
+        let contact_age = fixed_tick.saturating_sub(self.last_fixed_tick);
+        if self.grounded
+            && self.walkable
+            && self.last_fixed_tick != 0
+            && contact_age <= Self::PROBE_MISS_GRACE_TICKS
+        {
+            return;
+        }
+
         self.grounded = false;
         self.walkable = false;
         self.ground_entity = None;
         self.distance = f32::INFINITY;
         self.normal = Vec3::Y;
         self.slope_radians = core::f32::consts::FRAC_PI_2;
-        self.last_fixed_tick = fixed_tick;
+        // `last_fixed_tick` is intentionally the last confirmed contact tick. A missing
+        // probe must not masquerade as a new contact observation; valid query hits update it.
     }
 }
 
@@ -185,6 +200,12 @@ pub struct PlayerLocomotionState {
     pub step_distance: f32,
     pub airborne_time: f32,
     pub max_downward_speed: f32,
+    /// True only when gameplay explicitly initiated a jump. Physics contact correction
+    /// may create positive Y velocity on uneven terrain and must not synthesize Jump.
+    pub jump_started: bool,
+    /// Last input sample that consumed the edge-triggered jump command. Fixed-step catch-up
+    /// may execute several ticks against one sampled command frame; the jump edge is one-shot.
+    pub last_jump_command_source_frame: Option<u64>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

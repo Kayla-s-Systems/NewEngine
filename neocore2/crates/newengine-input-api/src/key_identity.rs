@@ -15,6 +15,7 @@ pub const KEY_D: &str = "keyboard.key_d";
 pub const KEY_E: &str = "keyboard.key_e";
 pub const KEY_F: &str = "keyboard.key_f";
 pub const KEY_I: &str = "keyboard.key_i";
+pub const KEY_M: &str = "keyboard.key_m";
 pub const KEY_Q: &str = "keyboard.key_q";
 pub const KEY_R: &str = "keyboard.key_r";
 pub const KEY_S: &str = "keyboard.key_s";
@@ -62,6 +63,7 @@ pub fn key_code_from_id(id: &str) -> Option<u32> {
         KEY_E => Some(key_code::KEY_E),
         KEY_F => Some(key_code::KEY_F),
         KEY_I => Some(key_code::KEY_I),
+        KEY_M => Some(key_code::KEY_M),
         KEY_Q => Some(key_code::KEY_Q),
         KEY_R => Some(key_code::KEY_R),
         KEY_S => Some(key_code::KEY_S),
@@ -113,6 +115,7 @@ pub fn canonical_id_from_native_physical_name(name: &str) -> Option<&'static str
         "KeyE" => Some(KEY_E),
         "KeyF" => Some(KEY_F),
         "KeyI" => Some(KEY_I),
+        "KeyM" => Some(KEY_M),
         "KeyQ" => Some(KEY_Q),
         "KeyR" => Some(KEY_R),
         "KeyS" => Some(KEY_S),

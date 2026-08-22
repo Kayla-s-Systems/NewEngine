@@ -1,0 +1,17 @@
+[package]
+name = "newengine-migration-registry"
+version = "0.1.0"
+edition = "2021"
+description = "Typed legacy-to-canonical migration registry and migration primitives for NewEngine contracts"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+blake3 = "1"
+flate2 = "1"
+roxmltree = "0.21"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+newengine-assets-api = { path = "../newengine-assets-api" }
+newengine-asset-format-nef8 = { path = "../newengine-asset-format-nef8" }
+newengine-contract-api = { path = "../newengine-contract-api" }
+newengine-contract-registry = { path = "../newengine-contract-registry" }

@@ -176,7 +176,6 @@ impl<E: Send + 'static> Engine<E> {
 
         init_host_context();
         init_plugin_config_service(config.plugin_overrides.clone());
-        crate::console::init_console_service();
 
         register_engine_builtins(MathRegistry::global())
             .map_err(|e| EngineError::Other(format!("math init failed: {e}")))?;

@@ -1,13 +1,16 @@
 use newengine_core::host_events::CursorState;
 use newengine_core::render::{
-    BeginFrameDesc, Extent2D, RectI32, RenderApi, RenderWorkBudget, SceneLaunchStatus,
-    UploadPumpDesc, Viewport,
+    BeginFrameDesc, Extent2D, RenderApi, RenderWorkBudget, SceneLaunchStatus, UploadPumpDesc,
 };
 use newengine_core::{EngineResult, ModuleCtx};
+use newengine_math::collections::FxHashMap;
 use newengine_runtime_session_api::{RuntimeSessionMode, RuntimeSessionState};
-use newengine_ui_api::{UiDrawList, UiEditorRuntimeMode, UiScreenProfile, UiScreenProfileState};
+use newengine_ui_api::{
+    UiDrawList, UiEditorRuntimeMode, UiLayerDrawPacketSet, UiScreenProfile, UiScreenProfileState,
+};
 
 use super::super::controller::RuntimeRenderController;
+use super::frame_envelope_builder::build_ui_layer_frame_envelope;
 use super::launch_loading::scene_launch_loading_status;
 use super::readiness;
 
@@ -44,9 +47,6 @@ impl RuntimeRenderController {
                 let physics_api = newengine_core::physics::require_physics_api(ctx)
                     .ok()
                     .cloned();
-                // Prelaunch is a real presented frame. Advance the controller index
-                // before scheduling work so task ids, retry ages and residency
-                // intervals all refer to the frame currently being prepared.
                 self.frame.frame_index = next_frame;
                 let requested_play_mode = self.bridges.scene.play_mode();
                 let prims_lock = self.bridges.scene.primitives();
@@ -57,11 +57,6 @@ impl RuntimeRenderController {
                     if let Some(physics_api) = physics_api.as_ref() {
                         crate::gameplay::prewarm_service_physics_backend(world, physics_api);
                     }
-
-                    // Static authored world assembly is incremental and must progress
-                    // inside the prelaunch path. The normal world tick is intentionally
-                    // bypassed while the gate is active, so admitting it only there would
-                    // starve the queue until the soft timeout.
                     self.frame.world_runtime.tick_prelaunch(
                         world,
                         &mut prims,
@@ -69,20 +64,11 @@ impl RuntimeRenderController {
                         ctx.thread_pool(),
                         next_frame,
                     );
-
-                    // Queue only launch-critical textures, with alpha-tested base
-                    // textures first. Optional environment maps remain post-launch
-                    // streaming work and cannot consume the limited decode slots.
                     readiness::prepare_scene_launch_resources(self, world, &*mats)
                 });
-                // The residency pump below reads the primitive/material registries.
-                // Release static-world admission guards first to avoid self-deadlock.
                 drop(prims);
                 drop(mats);
 
-                // Admit bounded terrain/primitive packets before evaluating readiness.
-                // The previous order checked readiness first, so work completed by this
-                // frame's pump could not release Play until the following frame.
                 if let Err(e) = self.pump_scene_gpu_residency(r, &scene, ctx.thread_pool()) {
                     newengine_ulog_api::ulog::warn!(
                         "render prelaunch: scene GPU residency pump failed: {}",
@@ -137,9 +123,6 @@ impl RuntimeRenderController {
                     }
                 }
 
-                // Pipeline construction belongs under the loading projection, not
-                // in the first public gameplay frame. Mesh uploads remain bounded by
-                // pump_scene_gpu_residency and are never swept synchronously here.
                 if let Err(e) = self.prewarm_scene_pipeline(r) {
                     if next_frame <= 4 || next_frame.is_multiple_of(120) {
                         newengine_ulog_api::ulog::warn!(
@@ -150,8 +133,6 @@ impl RuntimeRenderController {
                     }
                 }
 
-                // Evaluate against the resource state produced by this same frame's
-                // CPU decode, GPU upload and pipeline warmup work.
                 let world_playable = scene.run_frame(next_frame, |world| {
                     readiness::update_world_activation_gate_with_material_plan(
                         self,
@@ -194,10 +175,6 @@ impl RuntimeRenderController {
                 next_frame,
                 gate.reason
             );
-            // Publish an explicit inactive launch status through the normal caller path.
-            // Returning None leaves the previous active SceneLaunchStatus resource intact,
-            // which keeps engine.ui.loading retained in hit-testing and makes the visible
-            // editor appear completely non-interactive.
             return Ok(Some(SceneLaunchStatus::inactive()));
         }
 
@@ -205,61 +182,35 @@ impl RuntimeRenderController {
         self.sync_cursor_state(ctx, CursorState::released());
         let _ = r.discard_recorded_commands();
 
-        // This prelaunch gate returns before `render_runtime_module` consumes the
-        // provider-owned UiDrawList and before the normal frame envelope can run.
-        // Present a minimal UI-only frame here so `engine.ui.loading` image paints
-        // are actually composited while scene texture residency is blocking Play.
-        if let Some(mut ui) = ctx.resources().get::<UiDrawList>().cloned() {
-            let paint_images = ui
-                .paint
-                .commands
-                .iter()
-                .filter(|cmd| matches!(cmd, newengine_ui_api::UiPaintCommand::Image(_)))
-                .count();
-            let original_set = ui.texture_delta.set.len();
-            let original_patches = ui.texture_delta.patches.len();
-            let original_bytes = ui
-                .texture_delta
-                .set
-                .values()
-                .map(|texture| texture.rgba8.len())
-                .sum::<usize>()
-                + ui.texture_delta
-                    .patches
-                    .iter()
-                    .map(|patch| patch.rgba8.len())
-                    .sum::<usize>();
-            self.filter_redundant_prelaunch_texture_delta(&mut ui);
-            let submitted_bytes = ui
-                .texture_delta
-                .set
-                .values()
-                .map(|texture| texture.rgba8.len())
-                .sum::<usize>()
-                + ui.texture_delta
-                    .patches
-                    .iter()
-                    .map(|patch| patch.rgba8.len())
-                    .sum::<usize>();
+        if let Some(mut ui_layers) = ctx
+            .resources()
+            .get::<UiLayerDrawPacketSet>()
+            .cloned()
+            .filter(|layers| !layers.is_empty())
+        {
+            let original = ui_layer_payload_stats(&ui_layers);
+            self.filter_redundant_prelaunch_texture_delta(&mut ui_layers);
+            let submitted = ui_layer_payload_stats(&ui_layers);
             newengine_ulog_api::ulog::debug!(
-                "render prelaunch loading ui: present frame={} window={}x{} mesh_cmds={} paint_cmds={} paint_images={} tex_set={}/{} patches={}/{} tex_bytes={}/{} reason='{}'",
+                "render prelaunch loading ui: present frame={} window={}x{} layers={} mesh_cmds={} paint_cmds={} paint_images={} tex_set={}/{} patches={}/{} tex_bytes={}/{} reason='{}'",
                 next_frame,
                 window_w,
                 window_h,
-                ui.mesh.cmds.len(),
-                ui.paint.commands.len(),
-                paint_images,
-                ui.texture_delta.set.len(),
-                original_set,
-                ui.texture_delta.patches.len(),
-                original_patches,
-                submitted_bytes,
-                original_bytes,
+                ui_layers.packets.len(),
+                submitted.mesh_cmds,
+                submitted.paint_cmds,
+                submitted.paint_images,
+                submitted.texture_sets,
+                original.texture_sets,
+                submitted.texture_patches,
+                original.texture_patches,
+                submitted.texture_bytes,
+                original.texture_bytes,
                 gate.reason
             );
             present_prelaunch_loading_ui_frame(
                 r,
-                ui,
+                ui_layers,
                 self.viewport.clear_color,
                 next_frame,
                 window_w,
@@ -267,7 +218,7 @@ impl RuntimeRenderController {
             )?;
         } else {
             newengine_ulog_api::ulog::warn!(
-                "render prelaunch loading ui: missing UiDrawList in resources frame={} reason='{}'",
+                "render prelaunch loading ui: missing UiLayerDrawPacketSet in resources frame={} reason='{}'",
                 next_frame,
                 gate.reason
             );
@@ -279,11 +230,6 @@ impl RuntimeRenderController {
             newengine_ulog_api::ulog::info!(
                 "render controller: scene launch gate released; loading overlay deactivated; deferring first world present to next frame"
             );
-            // The launch gate is released at this point. Returning another active
-            // loading status keeps engine.ui.loading alive for the next runtime
-            // frame and can leave a small loading menu over the first gameplay
-            // presents. The next frame is intentionally deferred, but the loading
-            // overlay lifecycle must already be inactive.
             SceneLaunchStatus::inactive()
         } else {
             if trace_frame {
@@ -299,41 +245,88 @@ impl RuntimeRenderController {
         Ok(Some(status))
     }
 
-    fn filter_redundant_prelaunch_texture_delta(&mut self, ui: &mut UiDrawList) {
-        for id in &ui.texture_delta.free {
-            self.ui.prelaunch_texture_fingerprints.remove(&id.0);
-            self.ui
-                .prelaunch_patch_fingerprints
-                .retain(|key, _| key.0 != id.0);
-        }
-
-        ui.texture_delta.set.retain(|id, texture| {
-            let fingerprint = ui_payload_fingerprint(texture.size, &texture.rgba8);
-            !matches!(
-                self.ui
-                    .prelaunch_texture_fingerprints
-                    .insert(id.0, fingerprint),
-                Some(previous) if previous == fingerprint
-            )
-        });
-
-        ui.texture_delta.patches.retain(|patch| {
-            let key = (
-                patch.id.0,
-                patch.origin[0],
-                patch.origin[1],
-                patch.size[0],
-                patch.size[1],
+    fn filter_redundant_prelaunch_texture_delta(&mut self, ui_layers: &mut UiLayerDrawPacketSet) {
+        for packet in &mut ui_layers.packets {
+            filter_redundant_draw_texture_delta(
+                &mut self.ui.prelaunch_texture_fingerprints,
+                &mut self.ui.prelaunch_patch_fingerprints,
+                &mut packet.draw_list,
             );
-            let fingerprint = ui_payload_fingerprint(patch.size, &patch.rgba8);
-            !matches!(
-                self.ui
-                    .prelaunch_patch_fingerprints
-                    .insert(key, fingerprint),
-                Some(previous) if previous == fingerprint
-            )
-        });
+        }
     }
+}
+
+fn filter_redundant_draw_texture_delta(
+    texture_fingerprints: &mut FxHashMap<u32, u64>,
+    patch_fingerprints: &mut FxHashMap<(u32, u32, u32, u32, u32), u64>,
+    ui: &mut UiDrawList,
+) {
+    for id in &ui.texture_delta.free {
+        texture_fingerprints.remove(&id.0);
+        patch_fingerprints.retain(|key, _| key.0 != id.0);
+    }
+
+    ui.texture_delta.set.retain(|id, texture| {
+        let fingerprint = ui_payload_fingerprint(texture.size, &texture.rgba8);
+        !matches!(
+            texture_fingerprints.insert(id.0, fingerprint),
+            Some(previous) if previous == fingerprint
+        )
+    });
+
+    ui.texture_delta.patches.retain(|patch| {
+        let key = (
+            patch.id.0,
+            patch.origin[0],
+            patch.origin[1],
+            patch.size[0],
+            patch.size[1],
+        );
+        let fingerprint = ui_payload_fingerprint(patch.size, &patch.rgba8);
+        !matches!(
+            patch_fingerprints.insert(key, fingerprint),
+            Some(previous) if previous == fingerprint
+        )
+    });
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+struct UiLayerPayloadStats {
+    mesh_cmds: usize,
+    paint_cmds: usize,
+    paint_images: usize,
+    texture_sets: usize,
+    texture_patches: usize,
+    texture_bytes: usize,
+}
+
+fn ui_layer_payload_stats(ui_layers: &UiLayerDrawPacketSet) -> UiLayerPayloadStats {
+    let mut stats = UiLayerPayloadStats::default();
+    for packet in &ui_layers.packets {
+        let ui = &packet.draw_list;
+        stats.mesh_cmds += ui.mesh.cmds.len();
+        stats.paint_cmds += ui.paint.commands.len();
+        stats.paint_images += ui
+            .paint
+            .commands
+            .iter()
+            .filter(|cmd| matches!(cmd, newengine_ui_api::UiPaintCommand::Image(_)))
+            .count();
+        stats.texture_sets += ui.texture_delta.set.len();
+        stats.texture_patches += ui.texture_delta.patches.len();
+        stats.texture_bytes += ui
+            .texture_delta
+            .set
+            .values()
+            .map(|texture| texture.rgba8.len())
+            .sum::<usize>()
+            + ui.texture_delta
+                .patches
+                .iter()
+                .map(|patch| patch.rgba8.len())
+                .sum::<usize>();
+    }
+    stats
 }
 
 #[inline]
@@ -348,21 +341,27 @@ fn ui_payload_fingerprint(size: [u32; 2], rgba8: &[u8]) -> u64 {
 
 fn present_prelaunch_loading_ui_frame(
     r: &mut dyn RenderApi,
-    ui: UiDrawList,
+    ui_layers: UiLayerDrawPacketSet,
     clear_color: [f32; 4],
     frame_index: u64,
     window_w: u32,
     window_h: u32,
 ) -> EngineResult<()> {
-    if window_w == 0 || window_h == 0 {
+    if window_w == 0 || window_h == 0 || ui_layers.is_empty() {
         return Ok(());
     }
 
+    // `RenderApi::submit_frame` is an envelope submission contract, not a universal
+    // begin-frame contract. Open the bootstrap frame explicitly so non-Vulkan backends
+    // do not depend on Vulkan's defensive `if !in_frame { begin_frame(...) }` behavior.
     r.begin_frame(BeginFrameDesc::new(clear_color).with_frame_index(frame_index))?;
-    let extent = Extent2D::new(window_w, window_h);
-    r.set_viewport(Viewport::full(extent))?;
-    r.set_scissor(RectI32::new(0, 0, window_w as i32, window_h as i32))?;
-    r.set_ui_draw_list(ui);
+    let envelope = build_ui_layer_frame_envelope(
+        frame_index,
+        clear_color,
+        Extent2D::new(window_w, window_h),
+        ui_layers,
+    );
+    let _ = r.submit_frame(envelope)?;
     r.end_frame()
 }
 
@@ -440,5 +439,27 @@ mod loading_budget_tests {
             prelaunch_material_decode_jobs(u32::MAX),
             super::super::super::render_quality::MATERIAL_TEXTURE_MAX_ASYNC_DECODE_JOBS as u32
         );
+    }
+
+    #[test]
+    fn prelaunch_payload_stats_cover_all_layer_packets() {
+        let mut layers = UiLayerDrawPacketSet::new(4);
+        let mut system = UiDrawList::new();
+        system.screen_size_px = [1280, 720];
+        let mut debug = UiDrawList::new();
+        debug.screen_size_px = [1280, 720];
+        layers.push(newengine_ui_api::UiLayerDrawPacket::new(
+            newengine_ui_api::UiLayerDomain::System,
+            4,
+            system,
+        ));
+        layers.push(newengine_ui_api::UiLayerDrawPacket::new(
+            newengine_ui_api::UiLayerDomain::Debug,
+            4,
+            debug,
+        ));
+        let stats = ui_layer_payload_stats(&layers);
+        assert_eq!(layers.packets.len(), 2);
+        assert_eq!(stats.texture_bytes, 0);
     }
 }
