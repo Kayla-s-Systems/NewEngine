@@ -24,5 +24,8 @@ fn main() {
         eprintln!("YTD runtime domain decode failed: {error}");
         process::exit(1);
     });
-    println!("{}", serde_json::to_string(dictionary.manifest()).expect("serialize YTD runtime DTO"));
+    println!(
+        "{}",
+        serde_json::to_string(dictionary.manifest()).expect("serialize YTD runtime DTO")
+    );
 }

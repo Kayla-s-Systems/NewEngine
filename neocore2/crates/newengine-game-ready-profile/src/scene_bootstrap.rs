@@ -2,6 +2,7 @@
 
 use std::{any::Any, sync::Arc};
 
+use newengine_asset_bootstrap_runtime::mount_profile_content_best_effort;
 use newengine_assets::AssetServiceClient;
 use newengine_core::{
     render::SceneLaunchStatus, EngineLifecycleEvent, EngineReadinessKey, EngineReadinessSnapshot,
@@ -9,7 +10,6 @@ use newengine_core::{
 };
 use newengine_game_data::GameDataProvider;
 use newengine_project_api::ProjectContentMountState;
-use newengine_asset_bootstrap_runtime::mount_profile_content_best_effort;
 use newengine_ui_api::{UiPresentationFlowState, UiScreenProfile, UiScreenProfileState};
 
 use crate::GAME_READY_MOUNT_SPEC;
@@ -70,6 +70,7 @@ const GAME_READY_SCENE_BOOTSTRAP_REQUIRES: &[EngineReadinessKey] =
 pub(crate) struct GameReadySceneBootstrapModule {
     scene: Arc<newengine_scene_runtime::SceneBridge>,
     bootstrapped: bool,
+    failed_services_generation: Option<u64>,
     waiting_logged: bool,
     project_mount_wait_logged: bool,
     editor_deferred_logged: bool,
@@ -82,6 +83,7 @@ impl GameReadySceneBootstrapModule {
         Self {
             scene,
             bootstrapped: false,
+            failed_services_generation: None,
             waiting_logged: false,
             project_mount_wait_logged: false,
             editor_deferred_logged: false,
@@ -191,7 +193,12 @@ impl GameReadySceneBootstrapModule {
         ctx: &mut ModuleCtx<'_, E>,
         origin: &'static str,
     ) -> EngineResult<()> {
-        if self.bootstrapped {
+        let services_generation = newengine_plugin_host::services_generation();
+        if !bootstrap_attempt_allowed(
+            self.bootstrapped,
+            self.failed_services_generation,
+            services_generation,
+        ) {
             return Ok(());
         }
 
@@ -205,6 +212,7 @@ impl GameReadySceneBootstrapModule {
 
         match self.scene.bootstrap_profile_scene_now() {
             Some(player) => {
+                self.failed_services_generation = None;
                 self.bootstrapped = true;
                 let selected_player_authority = self.scene.selection_authority_handle();
                 newengine_ulog_api::ulog::info!(
@@ -215,9 +223,11 @@ impl GameReadySceneBootstrapModule {
                 );
             }
             None => {
+                self.failed_services_generation = Some(services_generation);
                 newengine_ulog_api::ulog::warn!(
-                    "game-ready runtime: scene bootstrap failed after readiness dispatch origin='{}'; publishing engine.ui loading failure overlay",
-                    origin
+                    "game-ready runtime: scene bootstrap failed after readiness dispatch origin='{}' service_generation={}; publishing engine.ui loading failure overlay and suspending retry until the capability graph changes",
+                    origin,
+                    services_generation
                 );
                 ctx.resources_mut().insert(SceneLaunchStatus::loading(
                     "Scene bootstrap failed",
@@ -230,6 +240,14 @@ impl GameReadySceneBootstrapModule {
 
         Ok(())
     }
+}
+
+fn bootstrap_attempt_allowed(
+    bootstrapped: bool,
+    failed_services_generation: Option<u64>,
+    current_services_generation: u64,
+) -> bool {
+    !bootstrapped && failed_services_generation != Some(current_services_generation)
 }
 
 impl<E: Send + 'static> Module<E> for GameReadySceneBootstrapModule {
@@ -303,6 +321,14 @@ fn presentation_flow_allows_bootstrap(resources: &Resources) -> bool {
 #[cfg(test)]
 mod presentation_flow_tests {
     use super::*;
+
+    #[test]
+    fn failed_bootstrap_retries_only_after_service_graph_revision() {
+        assert!(bootstrap_attempt_allowed(false, None, 10));
+        assert!(!bootstrap_attempt_allowed(false, Some(10), 10));
+        assert!(bootstrap_attempt_allowed(false, Some(10), 11));
+        assert!(!bootstrap_attempt_allowed(true, Some(10), 11));
+    }
 
     #[test]
     fn absent_presentation_flow_keeps_legacy_bootstrap_behavior() {

@@ -4,6 +4,8 @@ Product profile for the Game Ready FPS vertical slice.
 
 This crate owns module composition and product launch policy only. Runtime-hosted scene/ECS/entity gateway services live in dedicated runtime crates and are installed by this profile when selected.
 
+The profile consumes required `engine.assets.maps` and `engine.assets.textures` capabilities through stable gateways. It does not link or register concrete map/texture providers; `MapsRuntime`, `TexturesRuntime`, or compatible third-party plugins may provide, replace, or override those capabilities.
+
 <!-- NORTHSTAR-DIR-README:BEGIN -->
 
 ## Directory purpose

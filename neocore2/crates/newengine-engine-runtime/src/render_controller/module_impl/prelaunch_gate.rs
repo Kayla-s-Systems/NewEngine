@@ -64,6 +64,9 @@ impl RuntimeRenderController {
                         ctx.thread_pool(),
                         next_frame,
                     );
+                    if let Some(physics_api) = physics_api.as_ref() {
+                        crate::gameplay::sync_prelaunch_service_physics(world, physics_api);
+                    }
                     readiness::prepare_scene_launch_resources(self, world, &*mats)
                 });
                 drop(prims);

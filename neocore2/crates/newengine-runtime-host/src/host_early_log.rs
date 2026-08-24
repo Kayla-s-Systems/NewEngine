@@ -30,11 +30,15 @@ pub(crate) fn write(args: fmt::Arguments<'_>) {
         },
         "fields": { "pid": pid, "sequence": seq }
     });
-    let Ok(line) = serde_json::to_string(&payload) else { return; };
+    let Ok(line) = serde_json::to_string(&payload) else {
+        return;
+    };
     let mut wrote = false;
     for path in candidate_paths() {
         if let Some(parent) = path.parent() {
-            if create_dir_all(parent).is_err() { continue; }
+            if create_dir_all(parent).is_err() {
+                continue;
+            }
         }
         if let Ok(mut f) = OpenOptions::new().create(true).append(true).open(&path) {
             let _ = writeln!(f, "{line}");
@@ -42,11 +46,15 @@ pub(crate) fn write(args: fmt::Arguments<'_>) {
             wrote = true;
         }
     }
-    if !wrote { eprintln!("{line}"); }
+    if !wrote {
+        eprintln!("{line}");
+    }
 }
 
 fn candidate_paths() -> Vec<PathBuf> {
-    if let Some(path) = std::env::var_os("NEWENGINE_PLATFORM_EARLY_LOG").filter(|value| !value.is_empty()) {
+    if let Some(path) =
+        std::env::var_os("NEWENGINE_PLATFORM_EARLY_LOG").filter(|value| !value.is_empty())
+    {
         return vec![PathBuf::from(path)];
     }
     let mut paths = Vec::new();
@@ -54,9 +62,18 @@ fn candidate_paths() -> Vec<PathBuf> {
         .or_else(|| std::env::var_os("CACHE_FILES"))
         .filter(|v| !v.as_os_str().is_empty())
     {
-        paths.push(PathBuf::from(cache).join("logs").join("current.ulog.ndjson"));
+        paths.push(
+            PathBuf::from(cache)
+                .join("logs")
+                .join("current.ulog.ndjson"),
+        );
     }
-    paths.push(crate::path_resolver::find_neocore2_root().join("cache").join("logs").join("current.ulog.ndjson"));
+    paths.push(
+        crate::path_resolver::find_neocore2_root()
+            .join("cache")
+            .join("logs")
+            .join("current.ulog.ndjson"),
+    );
     paths.sort();
     paths.dedup();
     paths

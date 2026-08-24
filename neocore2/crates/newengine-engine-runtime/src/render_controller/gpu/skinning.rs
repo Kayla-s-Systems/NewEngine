@@ -4,6 +4,7 @@ use newengine_math::collections::FxHashMap;
 use newengine_primitives::PrimitiveId;
 
 use crate::gameplay::{PlayerSkinBinding, PlayerSkinPose};
+use crate::render_controller::resource_lifetime::RenderGpuLifetimeQueue;
 
 use super::types::{PlayerSkinGpu, PrimitiveGpu, SkinPaletteGpu};
 
@@ -12,6 +13,63 @@ const MAX_SKIN_PALETTE_JOINTS: usize = 4096;
 // Four palette slots prevent host-visible writes from racing in-flight GPU skinning.
 // The current Vulkan backend uses two frames in flight; four slots leave extra reuse margin.
 const SKIN_PALETTE_RING_SIZE: u64 = 4;
+
+#[inline]
+fn required_skin_palette_capacity(joint_count: usize) -> usize {
+    debug_assert!((1..=MAX_SKIN_PALETTE_JOINTS).contains(&joint_count));
+    joint_count
+        .max(MIN_SKIN_PALETTE_CAPACITY)
+        .next_power_of_two()
+        .min(MAX_SKIN_PALETTE_JOINTS)
+}
+
+#[inline]
+fn skin_palette_growth_capacity(
+    current_capacity: Option<usize>,
+    joint_count: usize,
+) -> Option<usize> {
+    match current_capacity {
+        Some(capacity) if capacity >= joint_count => None,
+        _ => Some(required_skin_palette_capacity(joint_count)),
+    }
+}
+
+fn allocate_skin_palette_gpu(
+    owner_key: u64,
+    ring_slot: u8,
+    capacity: usize,
+    skin_bgl: BindGroupLayoutId,
+    r: &mut dyn newengine_core::render::RenderApi,
+) -> EngineResult<SkinPaletteGpu> {
+    let size = capacity as u64 * 64;
+    let buffer = r.create_buffer(
+        BufferDesc::new(size, BufferUsage::Storage, MemoryHint::CpuToGpu).with_label(format!(
+            "player_skin_palette_{}_slot_{}_capacity_{}",
+            owner_key, ring_slot, capacity
+        )),
+    )?;
+    let bg = match r.create_bind_group(
+        BindGroupDesc::new(skin_bgl)
+            .with_label(format!(
+                "player_skin_palette_{}_slot_{}_bg",
+                owner_key, ring_slot
+            ))
+            .with_storage0(BufferBinding::new(buffer, 0, size)),
+    ) {
+        Ok(bg) => bg,
+        Err(error) => {
+            r.destroy_buffer(buffer);
+            return Err(error);
+        }
+    };
+    Ok(SkinPaletteGpu {
+        buffer,
+        bg,
+        capacity_joints: capacity as u32,
+        generation: u64::MAX,
+        revision: 0,
+    })
+}
 
 pub fn ensure_player_skin_gpu(
     cache: &mut FxHashMap<PrimitiveId, PlayerSkinGpu>,
@@ -108,6 +166,7 @@ pub fn ensure_player_skin_gpu(
 
 pub fn ensure_skin_palette_gpu(
     cache: &mut FxHashMap<(u64, u8), SkinPaletteGpu>,
+    lifetimes: &mut RenderGpuLifetimeQueue,
     owner_key: u64,
     pose_generation: u64,
     pose: &PlayerSkinPose,
@@ -126,40 +185,33 @@ pub fn ensure_skin_palette_gpu(
     let ring_slot = (frame_index % SKIN_PALETTE_RING_SIZE) as u8;
     let cache_key = (owner_key, ring_slot);
 
-    if !cache.contains_key(&cache_key) {
-        let capacity = joint_count
-            .max(MIN_SKIN_PALETTE_CAPACITY)
-            .next_power_of_two()
-            .min(MAX_SKIN_PALETTE_JOINTS);
-        let size = capacity as u64 * 64;
-        let buffer = r.create_buffer(
-            BufferDesc::new(size, BufferUsage::Storage, MemoryHint::CpuToGpu)
-                .with_label(format!("player_skin_palette_{}", owner_key)),
-        )?;
-        let bg = r.create_bind_group(
-            BindGroupDesc::new(skin_bgl)
-                .with_label(format!("player_skin_palette_{}_bg", owner_key))
-                .with_storage0(BufferBinding::new(buffer, 0, size)),
-        )?;
-        cache.insert(
-            cache_key,
-            SkinPaletteGpu {
-                buffer,
-                bg,
-                capacity_joints: capacity as u32,
-                generation: u64::MAX,
-                revision: 0,
-            },
-        );
+    let current_capacity = cache
+        .get(&cache_key)
+        .map(|gpu| gpu.capacity_joints as usize);
+    if let Some(capacity) = skin_palette_growth_capacity(current_capacity, joint_count) {
+        let replacement = allocate_skin_palette_gpu(owner_key, ring_slot, capacity, skin_bgl, r)?;
+        if let Some(retired) = cache.insert(cache_key, replacement) {
+            lifetimes.retire_bind_group_after_frame(retired.bg, frame_index);
+            lifetimes.retire_buffer_after_frame(retired.buffer, frame_index);
+            newengine_ulog_api::ulog::info!(
+                "render skin palette: persistent cache grown owner={} ring_slot={} joints={} capacity={} -> {} generation={} retirement_after_frame={}",
+                owner_key,
+                ring_slot,
+                joint_count,
+                retired.capacity_joints,
+                capacity,
+                pose_generation,
+                frame_index,
+            );
+        }
     }
 
-    let mut gpu = cache[&cache_key];
-    if joint_count > gpu.capacity_joints as usize {
-        return Err(EngineError::other(format!(
-            "player skin palette exceeded persistent GPU capacity owner={} joints={} capacity={} action='model swap requires palette cache retirement'",
-            owner_key, joint_count, gpu.capacity_joints
-        )));
-    }
+    let mut gpu = cache.get(&cache_key).copied().ok_or_else(|| {
+        EngineError::other(format!(
+            "player skin palette allocation missing owner={} ring_slot={}",
+            owner_key, ring_slot
+        ))
+    })?;
     if gpu.generation != pose_generation || gpu.revision != pose.revision {
         let mut bytes = Vec::with_capacity(joint_count * 64);
         for matrix in &pose.palette {
@@ -179,4 +231,26 @@ pub fn ensure_skin_palette_gpu(
         cache.insert(cache_key, gpu);
     }
     Ok(gpu)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn palette_capacity_grows_across_large_small_large_character_swaps() {
+        assert_eq!(skin_palette_growth_capacity(None, 727), Some(1024));
+        assert_eq!(skin_palette_growth_capacity(Some(1024), 125), None);
+        assert_eq!(skin_palette_growth_capacity(None, 125), Some(256));
+        assert_eq!(skin_palette_growth_capacity(Some(256), 727), Some(1024));
+        assert_eq!(skin_palette_growth_capacity(Some(1024), 727), None);
+    }
+
+    #[test]
+    fn palette_capacity_is_bounded_by_supported_joint_limit() {
+        assert_eq!(
+            required_skin_palette_capacity(MAX_SKIN_PALETTE_JOINTS),
+            MAX_SKIN_PALETTE_JOINTS
+        );
+    }
 }

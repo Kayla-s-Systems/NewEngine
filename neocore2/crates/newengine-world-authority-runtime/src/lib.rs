@@ -12,4 +12,6 @@ mod world_authority;
 
 pub use ecs_runtime::EcsServiceClient;
 pub use entity_runtime::EntityServiceClient;
-pub use world_authority::{WorldAuthorityClient, WorldAuthorityGatewayRoute, WorldAuthoritySnapshot};
+pub use world_authority::{
+    WorldAuthorityClient, WorldAuthorityGatewayRoute, WorldAuthoritySnapshot,
+};

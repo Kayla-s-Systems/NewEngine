@@ -4,6 +4,21 @@ use serde::{Deserialize, Serialize};
 
 pub const HOST_CAPABILITIES_SCHEMA_VERSION: u32 = 1;
 
+pub const ENGINE_HOST_CAPABILITIES_GATEWAY_ID: &str = "engine.host.capabilities";
+pub const HOST_CAPABILITIES_PROVIDER_SERVICE_ID: &str =
+    "newengine.host.capabilities.native";
+pub const HOST_CAPABILITIES_PROVIDER_ROUTE: &str =
+    "newengine.host.capabilities.runtime";
+pub const HOST_CAPABILITIES_BACKEND_CAPABILITY_ID: &str =
+    "host.capabilities.backend";
+pub const HOST_CAPABILITIES_SERVICE_KIND: &str = "host.capabilities";
+pub const HOST_CAPABILITIES_RUNTIME_CONTRACT: &str =
+    "newengine.host.capabilities.runtime.v1";
+
+pub mod method {
+    pub const SNAPSHOT: &str = "host.capabilities.snapshot_v1";
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HostEnvironmentSnapshot {
     pub executable: Option<String>,
@@ -117,7 +132,8 @@ pub struct HostCapabilities {
 impl HostCapabilities {
     #[inline]
     pub fn preferred_gpu(&self) -> Option<&GpuCapabilities> {
-        self.preferred_gpu_index.and_then(|index| self.gpu.get(index))
+        self.preferred_gpu_index
+            .and_then(|index| self.gpu.get(index))
     }
 }
 
@@ -156,5 +172,32 @@ impl Default for HostPreInitSnapshot {
             capabilities: HostCapabilities::default(),
             runtime_policy: RuntimeCapabilityPolicy::default(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn public_gateway_and_native_provider_identity_are_distinct() {
+        assert!(ENGINE_HOST_CAPABILITIES_GATEWAY_ID.starts_with("engine."));
+        assert!(HOST_CAPABILITIES_PROVIDER_SERVICE_ID.starts_with("newengine."));
+        assert_ne!(
+            ENGINE_HOST_CAPABILITIES_GATEWAY_ID,
+            HOST_CAPABILITIES_PROVIDER_SERVICE_ID
+        );
+        assert_ne!(
+            ENGINE_HOST_CAPABILITIES_GATEWAY_ID,
+            HOST_CAPABILITIES_PROVIDER_ROUTE
+        );
+    }
+
+    #[test]
+    fn neutral_snapshot_keeps_the_contract_version() {
+        assert_eq!(
+            HostPreInitSnapshot::default().schema_version,
+            HOST_CAPABILITIES_SCHEMA_VERSION
+        );
     }
 }

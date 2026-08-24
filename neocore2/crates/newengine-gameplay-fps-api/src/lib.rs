@@ -47,6 +47,7 @@ pub mod action {
 pub struct FpsActionFrame {
     pub jump_pressed: bool,
     pub crouch_held: bool,
+    pub fire_primary_pressed: bool,
     pub fire_primary_held: bool,
     pub launch_projectile_pressed: bool,
     pub aim_held: bool,
@@ -70,6 +71,7 @@ impl FpsActionFrame {
         Self {
             jump_pressed: commands.is_pressed(action::PLAYER_JUMP),
             crouch_held: commands.is_held(action::PLAYER_CROUCH),
+            fire_primary_pressed: commands.is_pressed(action::PLAYER_FIRE_PRIMARY),
             fire_primary_held: commands.is_held(action::PLAYER_FIRE_PRIMARY),
             launch_projectile_pressed: commands.is_pressed(action::PLAYER_LAUNCH_PROJECTILE),
             aim_held: commands.is_held(action::PLAYER_AIM),

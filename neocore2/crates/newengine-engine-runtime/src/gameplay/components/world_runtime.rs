@@ -20,7 +20,9 @@ pub struct WorldAssemblyProgress {
 impl WorldAssemblyProgress {
     #[inline]
     pub const fn is_ready(&self) -> bool {
-        self.pending == 0
+        // A terminal decode/admission failure is not a playable world. The launch gate
+        // must stay closed instead of treating "nothing left pending" as success.
+        self.pending == 0 && self.failed == 0
     }
 
     #[inline]
@@ -83,5 +85,24 @@ impl ModelRenderComponent {
         Self {
             logical_path: logical_path.into(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn world_assembly_failures_are_not_ready() {
+        assert!(WorldAssemblyProgress::ready(4).is_ready());
+        assert!(!WorldAssemblyProgress {
+            total: 4,
+            completed: 3,
+            failed: 1,
+            pending: 0,
+            parts: 0,
+            triangles: 0,
+        }
+        .is_ready());
     }
 }

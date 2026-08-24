@@ -80,7 +80,8 @@ fn render_protocol_v2_rejects_v1_binary_command_batches() {
 
     let mut legacy = encoded.clone();
     legacy[4] = 1;
-    let error = decode_unit_command_batch_bin(&legacy).expect_err("v1 binary batch must be rejected");
+    let error =
+        decode_unit_command_batch_bin(&legacy).expect_err("v1 binary batch must be rejected");
     assert!(error.contains("invalid magic"));
 }
 

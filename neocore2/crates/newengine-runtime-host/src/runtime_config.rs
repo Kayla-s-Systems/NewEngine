@@ -151,27 +151,40 @@ pub fn load_engine_runtime_config() -> Result<(PathBuf, EngineRuntimeConfig), St
 pub fn engine_runtime_config_path() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
     let exe_dir = exe.parent()?;
+
+    // Cargo development binaries live under `<workspace>/target/{debug,release}`. A copied
+    // runtime.toml next to such a binary must not change the meaning of relative paths such
+    // as `startup_config = "config.json"`: the authoritative development runtime/config pair
+    // lives at the workspace root. Prefer that pair whenever the executable is inside the
+    // workspace target tree. Installed/packaged binaries continue to use adjacent runtime.toml.
+    if let Some(workspace) = cargo_workspace_ancestor(exe_dir) {
+        if exe_dir.starts_with(workspace.join("target")) {
+            let candidate = workspace.join(ENGINE_RUNTIME_CONFIG_FILE);
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+    }
+
     let adjacent = exe_dir.join(ENGINE_RUNTIME_CONFIG_FILE);
     if adjacent.is_file() {
         return Some(adjacent);
     }
 
-    // Development-only workspace fallback: target/{debug,release}/NewEngine.exe
-    // may live below the engine root. Never scan Projects or arbitrary user paths.
-    let mut cursor = Some(exe_dir);
-    for _ in 0..5 {
-        let Some(dir) = cursor else { break };
-        if dir.file_name().and_then(|name| name.to_str()) == Some("neocore2")
+    // Development workspace fallback for unusual launcher layouts below neocore2.
+    cargo_workspace_ancestor(exe_dir)
+        .map(|workspace| workspace.join(ENGINE_RUNTIME_CONFIG_FILE))
+        .filter(|candidate| candidate.is_file())
+}
+
+fn cargo_workspace_ancestor(start: &Path) -> Option<PathBuf> {
+    start.ancestors().take(10).find_map(|dir| {
+        (dir.file_name().and_then(|name| name.to_str()) == Some("neocore2")
             && dir.join("Cargo.toml").is_file()
-        {
-            let candidate = dir.join(ENGINE_RUNTIME_CONFIG_FILE);
-            if candidate.is_file() {
-                return Some(candidate);
-            }
-        }
-        cursor = dir.parent();
-    }
-    None
+            && dir.join("crates").is_dir()
+            && dir.join("apps").is_dir())
+        .then(|| dir.to_path_buf())
+    })
 }
 
 #[cfg(test)]

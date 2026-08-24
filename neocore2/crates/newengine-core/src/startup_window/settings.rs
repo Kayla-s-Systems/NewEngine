@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 use std::sync::{OnceLock, RwLock};
 
-pub const STARTUP_SETTINGS_SCHEMA_VERSION: u32 = 2;
+pub const STARTUP_SETTINGS_SCHEMA_VERSION: u32 = 3;
 
 pub const ENV_GRAPHICS_PRESET: &str = "NEWENGINE_GRAPHICS_PRESET";
 pub const ENV_RENDER_SCALE: &str = "NEWENGINE_GRAPHICS_RENDER_SCALE";
@@ -33,6 +33,25 @@ pub const ENV_SHADOWS_ENABLED: &str = "NEWENGINE_GRAPHICS_SHADOWS_ENABLED";
 pub const ENV_SHADOW_QUALITY: &str = "NEWENGINE_GRAPHICS_SHADOW_QUALITY";
 pub const ENV_SHADOW_CASCADE_COUNT: &str = "NEWENGINE_GRAPHICS_SHADOW_CASCADE_COUNT";
 pub const ENV_SHADOW_MAP_RESOLUTION: &str = "NEWENGINE_GRAPHICS_SHADOW_MAP_RESOLUTION";
+pub const ENV_SHADOW_FILTER: &str = "NEWENGINE_GRAPHICS_SHADOW_FILTER";
+pub const ENV_SHADOW_MAX_DISTANCE: &str = "NEWENGINE_GRAPHICS_SHADOW_MAX_DISTANCE";
+pub const ENV_SHADOW_SOFTNESS: &str = "NEWENGINE_GRAPHICS_SHADOW_SOFTNESS";
+pub const ENV_SHADOW_BIAS: &str = "NEWENGINE_GRAPHICS_SHADOW_BIAS";
+pub const ENV_SHADOW_NORMAL_BIAS: &str = "NEWENGINE_GRAPHICS_SHADOW_NORMAL_BIAS";
+pub const ENV_SHADOW_CONTACT_STRENGTH: &str = "NEWENGINE_GRAPHICS_SHADOW_CONTACT_STRENGTH";
+pub const ENV_SHADOW_PCSS_LIGHT_RADIUS_DEGREES: &str =
+    "NEWENGINE_GRAPHICS_SHADOW_PCSS_LIGHT_RADIUS_DEGREES";
+pub const ENV_SHADOW_PCSS_BLOCKER_RADIUS_TEXELS: &str =
+    "NEWENGINE_GRAPHICS_SHADOW_PCSS_BLOCKER_RADIUS_TEXELS";
+pub const ENV_SHADOW_PCSS_MAX_FILTER_RADIUS_TEXELS: &str =
+    "NEWENGINE_GRAPHICS_SHADOW_PCSS_MAX_FILTER_RADIUS_TEXELS";
+pub const ENV_SHADOW_PCSS_BLOCKER_SAMPLES: &str = "NEWENGINE_GRAPHICS_SHADOW_PCSS_BLOCKER_SAMPLES";
+pub const ENV_SHADOW_PCSS_FILTER_SAMPLES: &str = "NEWENGINE_GRAPHICS_SHADOW_PCSS_FILTER_SAMPLES";
+pub const ENV_SHADOW_PCSS_MIN_FILTER_RADIUS_TEXELS: &str =
+    "NEWENGINE_GRAPHICS_SHADOW_PCSS_MIN_FILTER_RADIUS_TEXELS";
+pub const ENV_SHADOW_PCSS_STABLE_KERNEL_TEXELS: &str =
+    "NEWENGINE_GRAPHICS_SHADOW_PCSS_STABLE_KERNEL_TEXELS";
+pub const ENV_LOD_QUALITY: &str = "NEWENGINE_GRAPHICS_LOD_QUALITY";
 pub const ENV_LOD_DISTANCE_SCALE: &str = "NEWENGINE_GRAPHICS_LOD_DISTANCE_SCALE";
 pub const ENV_TEXTURE_QUALITY: &str = "NEWENGINE_GRAPHICS_TEXTURE_QUALITY";
 pub const ENV_ANISOTROPY: &str = "NEWENGINE_GRAPHICS_ANISOTROPY";
@@ -137,6 +156,99 @@ impl Default for ShadowQuality {
     #[inline]
     fn default() -> Self {
         Self::Balanced
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ShadowFilterMode {
+    Hard,
+    Pcf,
+    Pcss,
+}
+
+impl ShadowFilterMode {
+    pub const ALL: [Self; 3] = [Self::Hard, Self::Pcf, Self::Pcss];
+    #[inline]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Hard => "hard",
+            Self::Pcf => "pcf",
+            Self::Pcss => "pcss",
+        }
+    }
+    #[inline]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Hard => "Hard",
+            Self::Pcf => "PCF",
+            Self::Pcss => "PCSS",
+        }
+    }
+}
+impl Default for ShadowFilterMode {
+    fn default() -> Self {
+        Self::Pcss
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LodQuality {
+    Low,
+    Medium,
+    High,
+    Ultra,
+    Cinematic,
+    Custom,
+}
+
+impl LodQuality {
+    pub const ALL: [Self; 6] = [
+        Self::Low,
+        Self::Medium,
+        Self::High,
+        Self::Ultra,
+        Self::Cinematic,
+        Self::Custom,
+    ];
+    #[inline]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Low => "low",
+            Self::Medium => "medium",
+            Self::High => "high",
+            Self::Ultra => "ultra",
+            Self::Cinematic => "cinematic",
+            Self::Custom => "custom",
+        }
+    }
+    #[inline]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Low => "Low",
+            Self::Medium => "Medium",
+            Self::High => "High",
+            Self::Ultra => "Ultra",
+            Self::Cinematic => "Cinematic",
+            Self::Custom => "Custom",
+        }
+    }
+    #[inline]
+    pub const fn distance_scale(self) -> Option<f32> {
+        match self {
+            Self::Low => Some(0.65),
+            Self::Medium => Some(0.85),
+            Self::High => Some(1.0),
+            Self::Ultra => Some(1.35),
+            Self::Cinematic => Some(1.75),
+            Self::Custom => None,
+        }
+    }
+}
+impl Default for LodQuality {
+    fn default() -> Self {
+        Self::High
     }
 }
 
@@ -313,8 +425,23 @@ pub struct StartupGraphicsSettings {
     pub shadow_quality: ShadowQuality,
     /// 0 keeps the scene-authored cascade count; 1..=4 overrides it for this launch.
     pub shadow_cascade_count: u32,
-    /// 0 keeps the scene-authored map size; otherwise a 256..=4096 power-of-two override.
+    /// 0 keeps the scene-authored map size; otherwise one of the supported 256..=16284 launch overrides.
     pub shadow_map_resolution: u32,
+    pub shadow_advanced_override: bool,
+    pub shadow_filter: ShadowFilterMode,
+    pub shadow_max_distance: f32,
+    pub shadow_softness: f32,
+    pub shadow_bias: f32,
+    pub shadow_normal_bias: f32,
+    pub shadow_contact_strength: f32,
+    pub shadow_pcss_light_radius_degrees: f32,
+    pub shadow_pcss_blocker_radius_texels: f32,
+    pub shadow_pcss_max_filter_radius_texels: f32,
+    pub shadow_pcss_blocker_samples: u32,
+    pub shadow_pcss_filter_samples: u32,
+    pub shadow_pcss_min_filter_radius_texels: f32,
+    pub shadow_pcss_stable_kernel_texels: f32,
+    pub lod_quality: LodQuality,
     /// Global distance multiplier used by runtime visibility/LOD policy. 1.0 preserves authored/default distances.
     pub lod_distance_scale: f32,
     pub texture_quality: TextureQuality,
@@ -323,7 +450,7 @@ pub struct StartupGraphicsSettings {
 
 impl Default for StartupGraphicsSettings {
     fn default() -> Self {
-        let mut value = Self {
+        let value = Self {
             preset: GraphicsPreset::Balanced,
             msaa_samples: 0,
             fxaa_enabled: true,
@@ -351,11 +478,27 @@ impl Default for StartupGraphicsSettings {
             shadow_quality: ShadowQuality::Balanced,
             shadow_cascade_count: 0,
             shadow_map_resolution: 0,
+            shadow_advanced_override: false,
+            shadow_filter: ShadowFilterMode::Pcss,
+            shadow_max_distance: 80.0,
+            shadow_softness: 1.0,
+            shadow_bias: 0.0025,
+            shadow_normal_bias: 0.015,
+            shadow_contact_strength: 0.25,
+            shadow_pcss_light_radius_degrees: 0.266,
+            shadow_pcss_blocker_radius_texels: 3.0,
+            shadow_pcss_max_filter_radius_texels: 5.0,
+            shadow_pcss_blocker_samples: 10,
+            shadow_pcss_filter_samples: 12,
+            shadow_pcss_min_filter_radius_texels: 0.18,
+            shadow_pcss_stable_kernel_texels: 8.0,
+            lod_quality: LodQuality::High,
             lod_distance_scale: 1.0,
             texture_quality: TextureQuality::High,
             anisotropy: 8,
         };
-        value.apply_preset(GraphicsPreset::Balanced);
+        // Default launch settings preserve scene-authored cascade/map topology. Quality
+        // presets become authoritative only when the user explicitly selects one.
         value
     }
 }
@@ -365,6 +508,7 @@ impl StartupGraphicsSettings {
         self.preset = preset;
         match preset {
             GraphicsPreset::Low => {
+                self.shadow_advanced_override = false;
                 self.msaa_samples = 0;
                 self.fxaa_enabled = true;
                 self.taa_enabled = false;
@@ -377,13 +521,28 @@ impl StartupGraphicsSettings {
                 self.sun_rays_enabled = false;
                 self.shadows_enabled = true;
                 self.shadow_quality = ShadowQuality::Performance;
-                self.shadow_cascade_count = 0;
-                self.shadow_map_resolution = 0;
-                self.lod_distance_scale = 0.75;
+                self.shadow_cascade_count = 2;
+                self.shadow_map_resolution = 512;
+                self.lod_distance_scale = 0.65;
                 self.texture_quality = TextureQuality::Low;
                 self.anisotropy = 2;
+                self.shadow_filter = ShadowFilterMode::Pcf;
+                self.shadow_max_distance = 48.0;
+                self.shadow_softness = 0.7;
+                self.shadow_bias = 0.0025;
+                self.shadow_normal_bias = 0.015;
+                self.shadow_contact_strength = 0.10;
+                self.shadow_pcss_light_radius_degrees = 0.266;
+                self.shadow_pcss_blocker_radius_texels = 2.0;
+                self.shadow_pcss_max_filter_radius_texels = 3.0;
+                self.shadow_pcss_blocker_samples = 6;
+                self.shadow_pcss_filter_samples = 8;
+                self.shadow_pcss_min_filter_radius_texels = 0.18;
+                self.shadow_pcss_stable_kernel_texels = 8.0;
+                self.lod_quality = LodQuality::Low;
             }
             GraphicsPreset::Balanced => {
+                self.shadow_advanced_override = false;
                 self.msaa_samples = 0;
                 self.fxaa_enabled = true;
                 self.taa_enabled = false;
@@ -396,13 +555,28 @@ impl StartupGraphicsSettings {
                 self.sun_rays_enabled = true;
                 self.shadows_enabled = true;
                 self.shadow_quality = ShadowQuality::Balanced;
-                self.shadow_cascade_count = 0;
-                self.shadow_map_resolution = 0;
-                self.lod_distance_scale = 1.0;
+                self.shadow_cascade_count = 3;
+                self.shadow_map_resolution = 1024;
+                self.lod_distance_scale = 0.85;
                 self.texture_quality = TextureQuality::High;
                 self.anisotropy = 8;
+                self.shadow_filter = ShadowFilterMode::Pcss;
+                self.shadow_max_distance = 80.0;
+                self.shadow_softness = 1.0;
+                self.shadow_bias = 0.0025;
+                self.shadow_normal_bias = 0.015;
+                self.shadow_contact_strength = 0.25;
+                self.shadow_pcss_light_radius_degrees = 0.266;
+                self.shadow_pcss_blocker_radius_texels = 3.0;
+                self.shadow_pcss_max_filter_radius_texels = 5.0;
+                self.shadow_pcss_blocker_samples = 8;
+                self.shadow_pcss_filter_samples = 12;
+                self.shadow_pcss_min_filter_radius_texels = 0.18;
+                self.shadow_pcss_stable_kernel_texels = 8.0;
+                self.lod_quality = LodQuality::Medium;
             }
             GraphicsPreset::High => {
+                self.shadow_advanced_override = false;
                 self.msaa_samples = 2;
                 self.fxaa_enabled = true;
                 self.taa_enabled = false;
@@ -415,13 +589,28 @@ impl StartupGraphicsSettings {
                 self.sun_rays_enabled = true;
                 self.shadows_enabled = true;
                 self.shadow_quality = ShadowQuality::Quality;
-                self.shadow_cascade_count = 0;
-                self.shadow_map_resolution = 0;
-                self.lod_distance_scale = 1.25;
+                self.shadow_cascade_count = 4;
+                self.shadow_map_resolution = 2048;
+                self.lod_distance_scale = 1.0;
                 self.texture_quality = TextureQuality::High;
                 self.anisotropy = 8;
+                self.shadow_filter = ShadowFilterMode::Pcss;
+                self.shadow_max_distance = 140.0;
+                self.shadow_softness = 1.0;
+                self.shadow_bias = 0.0025;
+                self.shadow_normal_bias = 0.015;
+                self.shadow_contact_strength = 0.25;
+                self.shadow_pcss_light_radius_degrees = 0.266;
+                self.shadow_pcss_blocker_radius_texels = 3.0;
+                self.shadow_pcss_max_filter_radius_texels = 5.0;
+                self.shadow_pcss_blocker_samples = 12;
+                self.shadow_pcss_filter_samples = 16;
+                self.shadow_pcss_min_filter_radius_texels = 0.18;
+                self.shadow_pcss_stable_kernel_texels = 8.0;
+                self.lod_quality = LodQuality::High;
             }
             GraphicsPreset::Ultra => {
+                self.shadow_advanced_override = false;
                 self.msaa_samples = 4;
                 self.fxaa_enabled = true;
                 self.taa_enabled = true;
@@ -434,11 +623,25 @@ impl StartupGraphicsSettings {
                 self.sun_rays_enabled = true;
                 self.shadows_enabled = true;
                 self.shadow_quality = ShadowQuality::Cinematic;
-                self.shadow_cascade_count = 0;
-                self.shadow_map_resolution = 0;
-                self.lod_distance_scale = 1.5;
+                self.shadow_cascade_count = 4;
+                self.shadow_map_resolution = 4096;
+                self.lod_distance_scale = 1.35;
                 self.texture_quality = TextureQuality::Ultra;
                 self.anisotropy = 16;
+                self.shadow_filter = ShadowFilterMode::Pcss;
+                self.shadow_max_distance = 240.0;
+                self.shadow_softness = 1.0;
+                self.shadow_bias = 0.0025;
+                self.shadow_normal_bias = 0.015;
+                self.shadow_contact_strength = 0.25;
+                self.shadow_pcss_light_radius_degrees = 0.266;
+                self.shadow_pcss_blocker_radius_texels = 3.0;
+                self.shadow_pcss_max_filter_radius_texels = 8.0;
+                self.shadow_pcss_blocker_samples = 16;
+                self.shadow_pcss_filter_samples = 16;
+                self.shadow_pcss_min_filter_radius_texels = 0.18;
+                self.shadow_pcss_stable_kernel_texels = 8.0;
+                self.lod_quality = LodQuality::Ultra;
             }
             GraphicsPreset::Custom => {}
         }
@@ -467,6 +670,24 @@ impl StartupGraphicsSettings {
         self.bloom_intensity = self.bloom_intensity.clamp(0.0, 5.0);
         self.bloom_radius = self.bloom_radius.clamp(0.1, 5.0);
         self.lod_distance_scale = self.lod_distance_scale.clamp(0.5, 2.0);
+        self.shadow_max_distance = self.shadow_max_distance.clamp(4.0, 2048.0);
+        self.shadow_softness = self.shadow_softness.clamp(0.0, 8.0);
+        self.shadow_bias = self.shadow_bias.clamp(0.0, 0.1);
+        self.shadow_normal_bias = self.shadow_normal_bias.clamp(0.0, 0.5);
+        self.shadow_contact_strength = self.shadow_contact_strength.clamp(0.0, 1.0);
+        self.shadow_pcss_light_radius_degrees =
+            self.shadow_pcss_light_radius_degrees.clamp(0.001, 5.0);
+        self.shadow_pcss_blocker_radius_texels =
+            self.shadow_pcss_blocker_radius_texels.clamp(0.5, 32.0);
+        self.shadow_pcss_max_filter_radius_texels =
+            self.shadow_pcss_max_filter_radius_texels.clamp(0.5, 64.0);
+        self.shadow_pcss_blocker_samples = self.shadow_pcss_blocker_samples.clamp(4, 16);
+        self.shadow_pcss_filter_samples = self.shadow_pcss_filter_samples.clamp(4, 16);
+        self.shadow_pcss_min_filter_radius_texels = self
+            .shadow_pcss_min_filter_radius_texels
+            .clamp(0.0, self.shadow_pcss_max_filter_radius_texels);
+        self.shadow_pcss_stable_kernel_texels =
+            self.shadow_pcss_stable_kernel_texels.clamp(1.0, 32.0);
         self.shadow_cascade_count = match self.shadow_cascade_count {
             0 => 0,
             value => value.clamp(1, 4),
@@ -477,6 +698,14 @@ impl StartupGraphicsSettings {
         } else if matches!(self.shadow_quality, ShadowQuality::Off) {
             self.shadow_quality = ShadowQuality::Balanced;
         }
+    }
+
+    pub fn apply_lod_quality(&mut self, quality: LodQuality) {
+        self.lod_quality = quality;
+        if let Some(scale) = quality.distance_scale() {
+            self.lod_distance_scale = scale;
+        }
+        self.mark_custom();
     }
 
     #[inline]
@@ -601,6 +830,59 @@ impl StartupLaunchSettings {
             ENV_SHADOW_MAP_RESOLUTION,
             value.graphics.shadow_map_resolution.to_string(),
         );
+        set_env(ENV_SHADOW_FILTER, value.graphics.shadow_filter.as_str());
+        set_env(
+            ENV_SHADOW_MAX_DISTANCE,
+            value.graphics.shadow_max_distance.to_string(),
+        );
+        set_env(
+            ENV_SHADOW_SOFTNESS,
+            value.graphics.shadow_softness.to_string(),
+        );
+        set_env(ENV_SHADOW_BIAS, value.graphics.shadow_bias.to_string());
+        set_env(
+            ENV_SHADOW_NORMAL_BIAS,
+            value.graphics.shadow_normal_bias.to_string(),
+        );
+        set_env(
+            ENV_SHADOW_CONTACT_STRENGTH,
+            value.graphics.shadow_contact_strength.to_string(),
+        );
+        set_env(
+            ENV_SHADOW_PCSS_LIGHT_RADIUS_DEGREES,
+            value.graphics.shadow_pcss_light_radius_degrees.to_string(),
+        );
+        set_env(
+            ENV_SHADOW_PCSS_BLOCKER_RADIUS_TEXELS,
+            value.graphics.shadow_pcss_blocker_radius_texels.to_string(),
+        );
+        set_env(
+            ENV_SHADOW_PCSS_MAX_FILTER_RADIUS_TEXELS,
+            value
+                .graphics
+                .shadow_pcss_max_filter_radius_texels
+                .to_string(),
+        );
+        set_env(
+            ENV_SHADOW_PCSS_BLOCKER_SAMPLES,
+            value.graphics.shadow_pcss_blocker_samples.to_string(),
+        );
+        set_env(
+            ENV_SHADOW_PCSS_FILTER_SAMPLES,
+            value.graphics.shadow_pcss_filter_samples.to_string(),
+        );
+        set_env(
+            ENV_SHADOW_PCSS_MIN_FILTER_RADIUS_TEXELS,
+            value
+                .graphics
+                .shadow_pcss_min_filter_radius_texels
+                .to_string(),
+        );
+        set_env(
+            ENV_SHADOW_PCSS_STABLE_KERNEL_TEXELS,
+            value.graphics.shadow_pcss_stable_kernel_texels.to_string(),
+        );
+        set_env(ENV_LOD_QUALITY, value.graphics.lod_quality.as_str());
         set_env(
             ENV_LOD_DISTANCE_SCALE,
             value.graphics.lod_distance_scale.to_string(),
@@ -647,7 +929,9 @@ fn normalize_shadow_map_resolution(value: u32) -> u32 {
         257..=512 => 512,
         513..=1024 => 1024,
         1025..=2048 => 2048,
-        _ => 4096,
+        2049..=4096 => 4096,
+        4097..=8192 => 8192,
+        _ => 16284,
     }
 }
 
@@ -708,6 +992,10 @@ mod tests {
         assert_eq!(settings.graphics.lod_distance_scale, 2.0);
         assert_eq!(settings.graphics.shadow_cascade_count, 4);
         assert_eq!(settings.graphics.shadow_map_resolution, 4096);
+
+        settings.graphics.shadow_map_resolution = 16284;
+        settings.normalize();
+        assert_eq!(settings.graphics.shadow_map_resolution, 16284);
     }
 
     #[test]

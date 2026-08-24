@@ -31,7 +31,7 @@ impl PakFile {
     pub fn parse(bytes: Vec<u8>) -> Result<Self, String> {
         if read_u32(&bytes, 0)? != TLOU2_PC_MAGIC {
             return Err(format!(
-                "Naughty Dog importer supports TLOU2 PC magic={} only, got {}",
+                "North Star importer supports TLOU2 PC magic={} only, got {}",
                 TLOU2_PC_MAGIC,
                 read_u32(&bytes, 0)?
             ));
@@ -42,7 +42,7 @@ impl PakFile {
         let page_table = read_u32(&bytes, 20)? as usize;
         let fixup_table = read_u32(&bytes, 28)? as usize;
         if page_count == 0 || page_count > 4096 {
-            return Err(format!("invalid Naughty Dog page count {page_count}"));
+            return Err(format!("invalid North Star page count {page_count}"));
         }
         let mut pages = Vec::with_capacity(page_count);
         for index in 0..page_count {

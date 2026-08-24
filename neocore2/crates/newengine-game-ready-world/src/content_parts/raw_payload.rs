@@ -52,6 +52,14 @@ struct RawPlayerSpec {
     pub(super) yaw: f32,
     #[serde(default = "default_move_speed")]
     pub(super) move_speed: f32,
+    #[serde(default)]
+    pub(super) walk_speed: Option<f32>,
+    #[serde(default)]
+    pub(super) run_speed: Option<f32>,
+    #[serde(default)]
+    pub(super) sprint_speed: Option<f32>,
+    #[serde(default)]
+    pub(super) crouch_speed: Option<f32>,
     #[serde(default = "default_look_sens")]
     pub(super) look_sens: f32,
     #[serde(default)]
@@ -78,6 +86,10 @@ struct RawPlayerModelSpec {
     pub(super) run_animation: Option<String>,
     #[serde(default)]
     pub(super) sprint_animation: Option<String>,
+    #[serde(default)]
+    pub(super) crouch_idle_animation: Option<String>,
+    #[serde(default)]
+    pub(super) crouch_walk_animation: Option<String>,
     #[serde(default)]
     pub(super) jump_animation: Option<String>,
     #[serde(default)]
@@ -307,7 +319,15 @@ struct RawMissionPickupSpec {
     #[serde(default)]
     pub(super) id: String,
     #[serde(default)]
+    pub(super) item: String,
+    #[serde(default)]
+    pub(super) quantity: u32,
+    #[serde(default)]
+    pub(super) auto_equip: bool,
+    #[serde(default)]
     pub(super) position: [f32; 3],
+    #[serde(default)]
+    pub(super) rotation_ypr: [f32; 3],
     #[serde(default)]
     pub(super) radius: f32,
     #[serde(default)]

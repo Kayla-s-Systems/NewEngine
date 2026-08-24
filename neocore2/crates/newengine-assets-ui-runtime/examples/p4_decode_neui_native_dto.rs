@@ -12,14 +12,14 @@ fn main() {
         process::exit(2);
     });
     let document_ref = format!("{logical_path}@surface");
-    let root = newengine_assets_ui_runtime::compile_neui_bytes_surface_root(
-        &bytes,
-        &document_ref,
-        None,
-    )
-    .unwrap_or_else(|error| {
-        eprintln!("NEUI runtime semantic compile failed: {error}");
-        process::exit(1);
-    });
-    println!("{}", serde_json::to_string(&root).expect("serialize NEUI runtime DTO"));
+    let root =
+        newengine_assets_ui_runtime::compile_neui_bytes_surface_root(&bytes, &document_ref, None)
+            .unwrap_or_else(|error| {
+                eprintln!("NEUI runtime semantic compile failed: {error}");
+                process::exit(1);
+            });
+    println!(
+        "{}",
+        serde_json::to_string(&root).expect("serialize NEUI runtime DTO")
+    );
 }

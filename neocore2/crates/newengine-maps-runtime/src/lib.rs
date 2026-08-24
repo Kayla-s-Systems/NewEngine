@@ -20,17 +20,15 @@ use newengine_assets_api::{
     MAPS_SERVICE_METHODS, MAP_INDEX_ENTRY,
 };
 use newengine_plugin_api::Blob;
-use newengine_service_api::EngineServiceKind;
 use newengine_service_kit::{
     engine_gateway_provider_service_description, ok_empty_blob, ok_json, payload_json,
-    register_engine_gateway_provider_service_best_effort, EngineGatewayProviderDecl,
     JsonServiceRouter,
 };
 use serde::Serialize;
 
 use parsing::{parse_discrete_map_xml, ParsedMapV1};
 
-pub const MAPS_GATEWAY_OWNER: &str = "newengine-maps-runtime.engine-runtime-provider";
+pub const MAPS_GATEWAY_OWNER: &str = "newengine-maps-runtime.semantic-service";
 
 #[derive(Clone)]
 pub struct MapsRuntimeState {
@@ -308,18 +306,6 @@ pub fn maps_gateway_service(
         .into_service_v1()
 }
 
-pub fn register_maps_gateway_best_effort(client: AssetServiceClient) -> bool {
-    register_engine_gateway_provider_service_best_effort(EngineGatewayProviderDecl {
-        gateway: ENGINE_ASSETS_MAPS_SERVICE_ID,
-        service_kind: EngineServiceKind::AssetMaps,
-        provider_service: MAPS_SERVICE_ID,
-        provider_route: "engine.assets.starvault.maps",
-        capability: MAPS_BACKEND_CAPABILITY_ID,
-        priority: 0,
-        owner: MAPS_GATEWAY_OWNER,
-        service: maps_gateway_service(client),
-    })
-}
 
 #[cfg(test)]
 mod tests {

@@ -4,9 +4,10 @@ use newengine_ecs::{EntityId, World};
 use newengine_engine_runtime::gameplay::{
     consume_equipped_ammo, equipped_reserve_ammo, persist_equipped_weapon_state,
     sync_equipped_weapon_runtime, try_collect_item_pickup, EquippedWeaponBinding, Health,
-    HitscanWeaponTuning, Interactable, InteractionEvent, InteractionEventBus, PendingHitscan,
-    PendingInteraction, PlayerCommandFrame, PlayerController, PlayerInteractionTuning,
-    PlayerStanceState, PlayerWeaponState, WeaponEvent, WeaponEventBus, WeaponEventKind,
+    HitscanWeaponTuning, Interactable, InteractionEvent, InteractionEventBus, ItemPickup,
+    PendingHitscan, PendingInteraction, PlayerCommandFrame, PlayerController,
+    PlayerInteractionTuning, PlayerStanceState, PlayerWeaponState, WeaponEvent, WeaponEventBus,
+    WeaponEventKind, WeaponFireMode,
 };
 #[cfg(test)]
 use newengine_gameplay_fps_api::action as fps_action;
@@ -19,6 +20,58 @@ use newengine_math::{avalanche_u64, Vec3};
 use newengine_physics_api::{PhysicsQueryDto, PhysicsQueryHitDto, PhysicsQueryKindDto};
 use newengine_sim::CharacterMotor;
 use newengine_transform::Transform;
+
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+struct UnarmedMeleeState {
+    sequence: u64,
+    cooldown_remaining: f32,
+}
+
+const UNARMED_MELEE_DAMAGE: f32 = 18.0;
+const UNARMED_MELEE_RANGE: f32 = 1.75;
+const UNARMED_MELEE_COOLDOWN_SECONDS: f32 = 0.48;
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct PendingFocusedItemInteraction {
+    target: EntityId,
+    point: Vec3,
+}
+
+/// Chooses the nearest enabled inventory pickup inside the same interaction radius used by
+/// the player. World-item pickup UX is intentionally proximity based: a long/thin weapon
+/// lying at the player's feet must not require pixel-perfect ray intersection to advertise
+/// or collect it. Generic non-item interactables remain ray targeted.
+pub(crate) fn focused_item_pickup(world: &World, player: EntityId) -> Option<EntityId> {
+    let player_transform = world.get::<Transform>(player)?;
+    let range = world
+        .get::<PlayerInteractionTuning>(player)
+        .copied()
+        .unwrap_or_default()
+        .range
+        .clamp(0.1, 100.0);
+    let range_sq = range * range;
+
+    world
+        .query::<ItemPickup>()
+        .filter_map(|(entity, pickup)| {
+            if !pickup.enabled || pickup.quantity == 0 {
+                return None;
+            }
+            let interactable = world.get::<Interactable>(entity)?;
+            if !interactable.enabled {
+                return None;
+            }
+            let target = world.get::<Transform>(entity)?;
+            let delta = target.position - player_transform.position;
+            let distance_sq = delta.length_squared();
+            if !distance_sq.is_finite() || distance_sq > range_sq {
+                return None;
+            }
+            Some((entity, distance_sq))
+        })
+        .min_by(|(_, a), (_, b)| a.total_cmp(b))
+        .map(|(entity, _)| entity)
+}
 
 #[path = "combat/queries.rs"]
 mod queries;
@@ -34,8 +87,8 @@ pub use runtime::step_player_combat;
 use runtime::apply_recoil;
 use runtime::{emit_interaction_event, emit_weapon_event};
 use targeting::{
-    hitscan_query_seq, interaction_query_seq, interaction_ray, shot_origin_and_direction,
-    signed_unit,
+    hitscan_query_seq, interaction_query_seq, interaction_ray, melee_query_seq,
+    shot_origin_and_direction, signed_unit,
 };
 
 #[cfg(test)]

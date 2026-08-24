@@ -137,7 +137,7 @@ impl ShadowSettings {
             self.enabled = false;
             self.method = ShadowMethod::None;
         }
-        self.resolution = self.resolution.clamp(256, 8192);
+        self.resolution = self.resolution.clamp(256, 16284);
         self.cascade_count = self.cascade_count.clamp(1, 4);
         self.max_distance = finite_or(self.max_distance, 80.0).clamp(4.0, 2048.0);
         self.softness = finite_or(self.softness, 1.0).clamp(0.0, 8.0);

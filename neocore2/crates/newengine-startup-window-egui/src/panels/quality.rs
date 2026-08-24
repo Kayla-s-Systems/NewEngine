@@ -203,7 +203,7 @@ impl PreStartGraphicsApp {
                                 .width(210.0)
                                 .selected_text(shadow_map_label(before))
                                 .show_ui(ui, |ui| {
-                                    for value in [0_u32, 256, 512, 1024, 2048, 4096] {
+                                    for value in [0_u32, 256, 512, 1024, 2048, 4096, 8192, 16284] {
                                         ui.selectable_value(
                                             &mut self.settings.graphics.shadow_map_resolution,
                                             value,

@@ -34,10 +34,18 @@ pub(super) fn scene_launch_loading_status(
         )
     };
 
-    SceneLaunchStatus::loading(
-        "NEWENGINE // LOADING WORLD",
-        "Preparing playable world...",
-        detail,
-        progress,
-    )
+    let status = if gate.reason.contains("physics provider")
+        || gate.reason.contains("physics collision")
+        || gate.reason.contains("collision registration")
+    {
+        "Preparing world collision..."
+    } else if gate.reason.contains("static world") {
+        "Streaming world geometry..."
+    } else if gate.reason.contains("material") || gate.reason.contains("texture") {
+        "Loading world materials..."
+    } else {
+        "Preparing playable world..."
+    };
+
+    SceneLaunchStatus::loading("NEWENGINE // LOADING WORLD", status, detail, progress)
 }

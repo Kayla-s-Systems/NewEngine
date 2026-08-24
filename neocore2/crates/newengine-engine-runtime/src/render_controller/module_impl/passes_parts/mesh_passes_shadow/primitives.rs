@@ -26,6 +26,7 @@ pub(super) fn draw_primitives_shadow_body(
         Primitive,
         Mat4,
         Option<newengine_materials::MaterialRef>,
+        Option<newengine_model_domain_api::FoliageInstanceRuntime>,
     )> = Vec::new();
     let mut foliage_entries: Vec<(
         f32,
@@ -33,6 +34,7 @@ pub(super) fn draw_primitives_shadow_body(
         Primitive,
         Mat4,
         Option<newengine_materials::MaterialRef>,
+        Option<newengine_model_domain_api::FoliageInstanceRuntime>,
     )> = Vec::new();
     let mut shadow_seen = 0usize;
     let mut shadow_policy_culled = 0usize;
@@ -60,6 +62,21 @@ pub(super) fn draw_primitives_shadow_body(
         if !primitive_cast_shadows_enabled(&render_options) {
             shadow_policy_culled = shadow_policy_culled.saturating_add(1);
             continue;
+        }
+        let foliage_role = matches!(
+            render_options.role,
+            newengine_model_domain_api::MeshRenderRole::FoliageInstanced
+        );
+        if foliage_role {
+            if let Some(foliage) =
+                world.get::<newengine_model_domain_api::FoliageInstanceRuntime>(id)
+            {
+                let distance = distance_sq_to_camera(render_model, camera_position).sqrt();
+                if !foliage.is_visible(distance, true) {
+                    shadow_distance_culled = shadow_distance_culled.saturating_add(1);
+                    continue;
+                }
+            }
         }
         if runtime {
             if let Some(bounds) = world.get::<Bounds>(id) {
@@ -93,11 +110,11 @@ pub(super) fn draw_primitives_shadow_body(
             *prim,
             render_model,
             world.get::<newengine_materials::MaterialRef>(id).copied(),
+            world
+                .get::<newengine_model_domain_api::FoliageInstanceRuntime>(id)
+                .copied(),
         );
-        if matches!(
-            render_options.role,
-            newengine_model_domain_api::MeshRenderRole::FoliageInstanced
-        ) {
+        if foliage_role {
             foliage_entries.push(entry);
         } else {
             entries.push(entry);
@@ -117,10 +134,10 @@ pub(super) fn draw_primitives_shadow_body(
     let mut written_ubos = FxHashSet::<u64>::default();
     let mut batches = InstanceBatchSet::default();
     let mut shadow_submitted = 0usize;
-    for (_distance_sq, _entity_key, prim, model, material_ref) in
+    for (_distance_sq, _entity_key, prim, model, material_ref, foliage_runtime) in
         foliage_entries.into_iter().chain(entries.into_iter())
     {
-        let plan_key = PrimitivePlanKey::new(prim, material_ref, false, true);
+        let plan_key = PrimitivePlanKey::new(prim, material_ref, false, false, true);
         let plan = if let Some(plan) = plan_cache.get(&plan_key).copied() {
             plan
         } else {
@@ -142,11 +159,19 @@ pub(super) fn draw_primitives_shadow_body(
                 lit.shadow_instanced_pipeline
             };
             let base_texture = if material_plan.alpha_cutoff > 0.0 {
-                this.material_texture_or_default(
-                    r,
-                    material_plan.base_color_texture,
-                    lit.white_texture,
-                )
+                let Some(path) = material_plan.base_color_texture else {
+                    // An alpha-tested material without its authored opacity/base
+                    // texture cannot produce a valid cutout silhouette.
+                    continue;
+                };
+                let Some(texture) =
+                    this.material_texture_if_ready(r, path, "render.shadow_foliage")
+                else {
+                    // Never cast a full rectangular card from the white fallback
+                    // while a leaf/grass atlas is still streaming.
+                    continue;
+                };
+                texture
             } else {
                 lit.white_texture
             };
@@ -238,6 +263,11 @@ pub(super) fn draw_primitives_shadow_body(
             plan.alpha_cutoff,
             prim.id.0,
         );
+        let instance = if let Some(wind) = foliage_runtime {
+            instance.with_foliage_wind(wind.wind_enabled, wind.wind_direction, wind.wind_strength)
+        } else {
+            instance
+        };
         let batch_key = InstanceBatchKey::new(
             plan.pipeline,
             plan.bind_group,

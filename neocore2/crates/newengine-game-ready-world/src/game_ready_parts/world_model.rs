@@ -12,6 +12,9 @@ const DYNAMIC_WORLD_PROXY: &str = "world_dynamic_ydd";
 const COLLISION_WORLD_PROXY: &str = "world_collision_ydd";
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(super) struct GroundPlacementSurface;
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(super) struct StaticWorldSpawnSummary {
     pub models: u32,
     pub parts: u32,

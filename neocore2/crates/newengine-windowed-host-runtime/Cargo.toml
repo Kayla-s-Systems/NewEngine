@@ -38,6 +38,7 @@ newengine-task-api = { path = "../newengine-task-api" }
 newengine-time-runtime = { path = "../newengine-time-runtime" }
 newengine-ui = { path = "../newengine-ui", default-features = false }
 newengine-ui-api = { path = "../newengine-ui-api" }
+newengine-ui-notify-runtime = { path = "../newengine-ui-notify-runtime" }
 newengine-world-api = { path = "../newengine-world-api" }
 newengine-startup-window-egui = { path = "../newengine-startup-window-egui", optional = true }
 abi_stable = "0.11"

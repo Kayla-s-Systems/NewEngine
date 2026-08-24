@@ -14,8 +14,19 @@ pub(super) fn build_overlay_surface_node(
     let style_tags = spec.style_tags();
     let visuals = newengine_core::loading::LoadingVisualRefs::from_last_startup_config_or_default();
     let components = spec.components(status, progress, frame_index, &visuals);
-    if !spec.is_error() && frame_index <= 3 {
-        newengine_ulog_api::ulog::debug!(
+    static LOADING_VISUALS_LOGGED: std::sync::atomic::AtomicBool =
+        std::sync::atomic::AtomicBool::new(false);
+    if !spec.is_error()
+        && LOADING_VISUALS_LOGGED
+            .compare_exchange(
+                false,
+                true,
+                std::sync::atomic::Ordering::AcqRel,
+                std::sync::atomic::Ordering::Acquire,
+            )
+            .is_ok()
+    {
+        newengine_ulog_api::ulog::info!(
             "loading overlay production visuals: frame={} source='{}' background={} logo={} spinner={} components={} image_layers={}",
             frame_index,
             visuals.source,

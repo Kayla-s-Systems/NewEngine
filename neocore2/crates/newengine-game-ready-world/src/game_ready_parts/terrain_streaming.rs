@@ -13,6 +13,7 @@ mod types;
 
 pub(crate) use newengine_engine_runtime::gameplay::TerrainMaterialLayers;
 pub(crate) use tick::tick_game_ready_streaming_terrain;
+pub(crate) use types::TerrainSurfaceSampler;
 
 pub(crate) use bootstrap::spawn_procedural_terrain;
 

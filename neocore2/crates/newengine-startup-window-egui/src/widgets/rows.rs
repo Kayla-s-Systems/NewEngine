@@ -7,11 +7,7 @@ use super::super::style::color32;
 
 const GRID_SETTING_LABEL_WIDTH: f32 = 220.0;
 
-pub(crate) fn setting_label(
-    ui: &mut egui::Ui,
-    title: &str,
-    detail: &str,
-) {
+pub(crate) fn setting_label(ui: &mut egui::Ui, title: &str, detail: &str) {
     let style = north_star_bootstrap_ui_style();
     ui.vertical(|ui| {
         // Egui Grid otherwise sizes this cell from the short title and then wraps
@@ -86,10 +82,7 @@ pub(crate) fn value_caption(ui: &mut egui::Ui, label: &str) {
     );
 }
 
-pub(crate) fn setting_group_label(
-    ui: &mut egui::Ui,
-    label: &str,
-) {
+pub(crate) fn setting_group_label(ui: &mut egui::Ui, label: &str) {
     let palette = north_star_bootstrap_ui_style().palette;
     ui.label(
         egui::RichText::new(label)
@@ -100,11 +93,7 @@ pub(crate) fn setting_group_label(
     );
     ui.add_space(5.0);
 }
-pub(crate) fn diagnostic_row(
-    ui: &mut egui::Ui,
-    label: &str,
-    value: &str,
-) {
+pub(crate) fn diagnostic_row(ui: &mut egui::Ui, label: &str, value: &str) {
     let palette = north_star_bootstrap_ui_style().palette;
     ui.label(
         egui::RichText::new(label)
@@ -151,11 +140,7 @@ pub(crate) fn integer_parameter_row(
     ui.end_row();
     changed
 }
-pub(crate) fn variable_row(
-    ui: &mut egui::Ui,
-    name: &str,
-    value: &str,
-) {
+pub(crate) fn variable_row(ui: &mut egui::Ui, name: &str, value: &str) {
     let palette = north_star_bootstrap_ui_style().palette;
     ui.label(
         egui::RichText::new(name)

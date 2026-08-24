@@ -2,11 +2,14 @@
 mod dock_toast;
 #[path = "screen_profile/editor.rs"]
 mod editor;
+#[path = "screen_profile/notify.rs"]
+mod notify;
 #[path = "screen_profile/presentation.rs"]
 mod presentation;
 
 pub use dock_toast::*;
 pub use editor::*;
+pub use notify::*;
 pub use presentation::*;
 
 #[cfg(test)]

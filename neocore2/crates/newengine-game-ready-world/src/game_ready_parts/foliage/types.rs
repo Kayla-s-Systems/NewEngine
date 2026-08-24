@@ -1,5 +1,6 @@
 use super::*;
 
+#[derive(Clone, Copy, Debug)]
 pub(crate) struct TreePlacement {
     pub(crate) index: u32,
     pub(crate) position: Vec3,
@@ -25,3 +26,16 @@ pub(crate) struct DecodedPrefabMeshPart {
 
 pub(crate) const SKYDOME_PRIMITIVE_ID: PrimitiveId =
     PrimitiveId(fnv1a_64("kalitech.asset.skydome.high.v1"));
+
+#[derive(Clone)]
+pub(crate) struct DeferredFoliageSpawn {
+    pub(crate) root: EntityId,
+    pub(crate) terrain: EntityId,
+    pub(crate) terrain_surface: Option<TerrainSurfaceSampler>,
+    pub(crate) materials: DemoMaterials,
+    pub(crate) material_specs: GameReadyMaterialSetSpec,
+    pub(crate) palette: GameReadyPaletteSpec,
+    pub(crate) foliage: GameReadyFoliageSpec,
+    pub(crate) prefabs: Vec<GameReadyPrefabSpec>,
+    pub(crate) player_start: Vec3,
+}

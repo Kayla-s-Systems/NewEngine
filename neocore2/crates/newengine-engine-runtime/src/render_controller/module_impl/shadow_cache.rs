@@ -337,6 +337,11 @@ impl RuntimeRenderController {
             || world.any_added_since::<crate::gameplay::ModelRenderComponent>(since_tick)
             || world.any_changed_since::<MeshRenderOptions>(since_tick)
             || world.any_added_since::<MeshRenderOptions>(since_tick)
+            || world.any_changed_since::<newengine_model_domain_api::FoliageInstanceRuntime>(
+                since_tick,
+            )
+            || world
+                .any_added_since::<newengine_model_domain_api::FoliageInstanceRuntime>(since_tick)
             || world.any_changed_since::<MaterialRef>(since_tick)
             || world.any_added_since::<MaterialRef>(since_tick)
             || world.any_changed_since::<DisplayVisibility>(since_tick)
@@ -387,7 +392,10 @@ impl RuntimeRenderController {
                         || world
                             .get::<crate::gameplay::ModelRenderComponent>(entity)
                             .is_some()
-                });
+                })
+            || world
+                .query_changed::<newengine_model_domain_api::FoliageInstanceRuntime>(since_tick)
+                .any(|(entity, _)| shadow_caster_entity(world, entity));
         let changed = entity_changed
             || bounds_changed
             || skin_pose_changed

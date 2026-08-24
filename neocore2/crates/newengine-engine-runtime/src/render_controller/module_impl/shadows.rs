@@ -81,8 +81,34 @@ fn apply_shadow_graphics_overrides(
         }
     }
 
+    // Quality is the baseline. Exact filtering/bias/PCSS controls become authoritative
+    // only after a manual advanced edit; this avoids persisted defaults silently defeating
+    // the selected quality tier.
+    if graphics.shadow_advanced_override {
+        settings.filter = match graphics.shadow_filter {
+            newengine_core::ShadowFilterMode::Hard => ShadowFilter::Hard,
+            newengine_core::ShadowFilterMode::Pcf => ShadowFilter::Pcf,
+            newengine_core::ShadowFilterMode::Pcss => ShadowFilter::Pcss,
+        };
+        settings.max_distance = graphics.shadow_max_distance;
+        settings.softness = graphics.shadow_softness;
+        settings.bias = graphics.shadow_bias;
+        settings.normal_bias = graphics.shadow_normal_bias;
+        settings.contact_strength = graphics.shadow_contact_strength;
+        settings.pcss.light_angular_radius_degrees = graphics.shadow_pcss_light_radius_degrees;
+        settings.pcss.blocker_search_radius_texels = graphics.shadow_pcss_blocker_radius_texels;
+        settings.pcss.max_filter_radius_texels = graphics.shadow_pcss_max_filter_radius_texels;
+        settings.pcss.blocker_samples = graphics.shadow_pcss_blocker_samples;
+        settings.pcss.filter_samples = graphics.shadow_pcss_filter_samples;
+        settings.pcss.min_filter_radius_texels = graphics.shadow_pcss_min_filter_radius_texels;
+        settings.pcss.stable_kernel_cell_texels = graphics.shadow_pcss_stable_kernel_texels;
+    }
+
     if graphics.shadow_map_resolution != 0 {
-        settings.resolution = graphics.shadow_map_resolution.clamp(256, 4096);
+        settings.resolution = graphics.shadow_map_resolution.clamp(
+            super::super::render_quality::SHADOW_RESOLUTION_MIN,
+            super::super::render_quality::SHADOW_RESOLUTION_MAX,
+        );
     }
     if graphics.shadow_cascade_count != 0 {
         settings.cascade_count = graphics.shadow_cascade_count.clamp(1, 4);
@@ -277,7 +303,8 @@ pub fn try_build_directional_shadow_plan(
         1
     };
 
-    let Some((rt, shadow_texture)) = ensure_shadow_rt(this, r, settings.resolution, cascade_count)?
+    let Some((rt, shadow_texture, shadow_resolution)) =
+        ensure_shadow_rt(this, r, settings.resolution, cascade_count)?
     else {
         return Ok(None);
     };
@@ -318,7 +345,7 @@ pub fn try_build_directional_shadow_plan(
     let extra = [
         settings.normal_bias.clamp(0.0, 0.5),
         cascade_count as f32,
-        settings.resolution as f32,
+        shadow_resolution as f32,
         max_distance,
     ];
     let pcss = settings.pcss.sanitized();
@@ -358,7 +385,7 @@ pub fn try_build_directional_shadow_plan(
     if cascade_count <= 1 {
         let fallback_radius = bounds.radius.max(4.0).min(max_distance.max(4.0));
         let fallback_center = directional_shadow_center(bounds, camera_position, fallback_radius);
-        let texel_world = fallback_radius * 2.0 / settings.resolution.max(1) as f32;
+        let texel_world = fallback_radius * 2.0 / shadow_resolution.max(1) as f32;
         let stable_half = fallback_radius + (texel_world * kernel_guard_texels).max(0.02);
         let center = snapped_directional_shadow_center(
             fallback_center,
@@ -366,7 +393,7 @@ pub fn try_build_directional_shadow_plan(
             up,
             stable_half,
             stable_half,
-            settings.resolution,
+            shadow_resolution,
         );
         let depth_radius = stable_half.max(4.0);
         let eye = center - dir * (depth_radius * 1.90);
@@ -386,7 +413,7 @@ pub fn try_build_directional_shadow_plan(
             LightShadowPlan::directional(
                 rt,
                 shadow_texture,
-                settings.resolution,
+                shadow_resolution,
                 proj * view,
                 params,
                 extra,
@@ -407,7 +434,7 @@ pub fn try_build_directional_shadow_plan(
         // projection itself. This removes angle-dependent texel-grid walking/flicker.
         let fallback_radius = (split_far * 1.85).max(8.0);
         let fallback_center = camera;
-        let fallback_texel_world = fallback_radius * 2.0 / settings.resolution.max(1) as f32;
+        let fallback_texel_world = fallback_radius * 2.0 / shadow_resolution.max(1) as f32;
         let fallback_guard = (fallback_texel_world * kernel_guard_texels).max(0.02);
         let fallback_half = fallback_radius + fallback_guard;
         let fit = directional_shadow_rotation_invariant_fit_with_padding(
@@ -416,7 +443,7 @@ pub fn try_build_directional_shadow_plan(
             camera_forward,
             split_near,
             split_far,
-            settings.resolution,
+            shadow_resolution,
             kernel_guard_texels,
         )
         .unwrap_or(DirectionalShadowFit {
@@ -431,7 +458,7 @@ pub fn try_build_directional_shadow_plan(
             up,
             fit.half_x,
             fit.half_y,
-            settings.resolution,
+            shadow_resolution,
         );
         let depth_radius = fit.depth_radius.max(fit.half_x.max(fit.half_y)).max(4.0);
         let eye = snapped_center - dir * (depth_radius * 1.95);
@@ -443,7 +470,7 @@ pub fn try_build_directional_shadow_plan(
         let cull = ShadowCasterCull::directional(view, fit.half_x.max(fit.half_y), near, far);
         union_cull = Some(cull);
         let (viewport, scissor) =
-            csm_tile_viewport_scissor(i as u32, cascade_count, settings.resolution);
+            csm_tile_viewport_scissor(i as u32, cascade_count, shadow_resolution);
         cascades[i] = ShadowCascadeFrame {
             light_mvp: proj * view,
             viewport,
@@ -451,7 +478,7 @@ pub fn try_build_directional_shadow_plan(
             split_near,
             split_far,
             texel_world_size: ((fit.half_x.max(fit.half_y) * 2.0)
-                / settings.resolution.max(1) as f32)
+                / shadow_resolution.max(1) as f32)
                 .max(1.0e-6),
             caster_cull: cull,
         };
@@ -461,7 +488,7 @@ pub fn try_build_directional_shadow_plan(
         LightShadowPlan::directional_cascaded(
             rt,
             shadow_texture,
-            settings.resolution,
+            shadow_resolution,
             cascade_count,
             cascades,
             params,
@@ -489,6 +516,30 @@ mod startup_shadow_override_tests {
         assert_eq!(resolved.resolution, 1024);
         assert_eq!(resolved.cascade_count, 2);
         assert_eq!(resolved.method, ShadowMethod::CascadedShadowMaps);
+    }
+
+    #[test]
+    fn advanced_prestart_shadow_controls_override_scene_settings() {
+        let scene = ShadowSettings::default();
+        let mut graphics = newengine_core::StartupGraphicsSettings::default();
+        graphics.shadow_advanced_override = true;
+        graphics.shadow_filter = newengine_core::ShadowFilterMode::Hard;
+        graphics.shadow_max_distance = 333.0;
+        graphics.shadow_softness = 2.25;
+        graphics.shadow_bias = 0.004;
+        graphics.shadow_normal_bias = 0.031;
+        graphics.shadow_contact_strength = 0.72;
+        graphics.shadow_pcss_blocker_samples = 14;
+        graphics.shadow_pcss_filter_samples = 15;
+        let resolved = apply_shadow_graphics_overrides(scene, &graphics);
+        assert_eq!(resolved.filter, ShadowFilter::Hard);
+        assert_eq!(resolved.max_distance, 333.0);
+        assert_eq!(resolved.softness, 2.25);
+        assert_eq!(resolved.bias, 0.004);
+        assert_eq!(resolved.normal_bias, 0.031);
+        assert_eq!(resolved.contact_strength, 0.72);
+        assert_eq!(resolved.pcss.blocker_samples, 14);
+        assert_eq!(resolved.pcss.filter_samples, 15);
     }
 
     #[test]

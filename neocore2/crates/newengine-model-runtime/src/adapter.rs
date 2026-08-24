@@ -31,6 +31,29 @@ impl ModelAssetAdapter {
         }
     }
 
+    /// Enqueue an opaque SpeedTree SRT/SPM source through AssetManager.
+    ///
+    /// No SDK/parser code lives here: the active AssetImporterV1 provider owns
+    /// source decoding, cache keys and compiled runtime outputs.
+    pub fn import_foliage_source(
+        &self,
+        request: &FoliageImportRequestV1,
+    ) -> Result<FoliageImportResponseV1, String> {
+        let settings = request.settings.clone().sanitized()?;
+        let runtime_asset_ref = settings.runtime_asset_ref()?;
+        let importer_id = settings.importer_id()?.to_owned();
+        let asset_id = self.client.import_v1(&settings.canonical_path)?;
+        Ok(FoliageImportResponseV1 {
+            accepted: true,
+            canonical_source_ref: settings.canonical_path,
+            runtime_asset_ref,
+            importer_id,
+            asset_id,
+            queue_status: "accepted".to_owned(),
+            ..FoliageImportResponseV1::default()
+        })
+    }
+
     pub fn load_bundle(&self, request: &ModelAssetRequest) -> Result<ModelAssetBundle, String> {
         let request = self.resolve_request(request)?;
         let target_height = request.target_height.clamp(0.25, 3.0);

@@ -32,7 +32,18 @@ pub(super) fn build_frame_input(
         .unwrap_or_default()
         .sanitized();
 
-    let mut bodies = collect_body_snapshots(world);
+    // Launch readiness is allowed to advance static collision while gameplay bodies stay
+    // dormant. Without this gate a character can start integrating gravity before streamed
+    // authored collision has crossed the physics service boundary and fall through the map.
+    let gameplay_bodies_active = world
+        .resource::<crate::gameplay::WorldActivationState>()
+        .map(|gate| gate.is_ready())
+        .unwrap_or(true);
+    let mut bodies = if gameplay_bodies_active {
+        collect_body_snapshots(world)
+    } else {
+        Vec::new()
+    };
     bodies.sort_by_key(|body| body.entity);
 
     let mut colliders = collect_terrain_colliders(world, &bodies, physics_world.contact_skin);
@@ -221,6 +232,47 @@ fn collect_body_snapshots(world: &World) -> Vec<PhysicsFrameBodySnapshot> {
 mod tests {
     use super::*;
     use newengine_math::Quat;
+
+    #[test]
+    fn prelaunch_gate_streams_static_collision_without_dynamic_bodies() {
+        let mut world = World::new();
+        world.insert_resource(crate::gameplay::WorldActivationState::new(
+            "waiting for authored collision",
+        ));
+
+        let body_entity = world.spawn();
+        let _ = world.insert(body_entity, Transform::default());
+        let _ = world.insert(
+            body_entity,
+            PhysicsBodyDesc::dynamic_solid(newengine_physics_contracts::CollisionShapeDesc::Box {
+                half_extents: [0.5, 0.5, 0.5],
+            }),
+        );
+
+        let collider_entity = world.spawn();
+        let _ = world.insert(collider_entity, Transform::default());
+        let _ = world.insert(
+            collider_entity,
+            StaticMeshCollider::new(
+                vec![[-1.0, 0.0, -1.0], [1.0, 0.0, -1.0], [0.0, 0.0, 1.0]],
+                vec![[0, 1, 2]],
+            )
+            .unwrap(),
+        );
+
+        let mut revisions = BTreeMap::new();
+        let queries = GameplayPhysicsQueryProviderRegistry::new();
+        let prelaunch = build_frame_input(&world, 1, 1, 1.0 / 60.0, &mut revisions, &queries);
+        assert!(prelaunch.bodies.is_empty());
+        assert_eq!(prelaunch.colliders.len(), 1);
+
+        world
+            .resource_mut::<crate::gameplay::WorldActivationState>()
+            .unwrap()
+            .mark_ready(2, "collision ready");
+        let active = build_frame_input(&world, 2, 2, 1.0 / 60.0, &mut revisions, &queries);
+        assert_eq!(active.bodies.len(), 1);
+    }
 
     #[test]
     fn frame_input_projects_static_mesh_collider() {

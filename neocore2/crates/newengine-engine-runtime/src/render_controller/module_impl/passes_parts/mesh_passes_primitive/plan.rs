@@ -7,6 +7,7 @@ pub(in super::super) struct PrimitivePlanKey {
     material_id: u64,
     color: [u32; 4],
     sky_pipeline: bool,
+    decal_pipeline: bool,
     shadow_pass: bool,
 }
 
@@ -16,6 +17,7 @@ impl PrimitivePlanKey {
         prim: Primitive,
         material_ref: Option<newengine_materials::MaterialRef>,
         sky_pipeline: bool,
+        decal_pipeline: bool,
         shadow_pass: bool,
     ) -> Self {
         Self {
@@ -30,6 +32,7 @@ impl PrimitivePlanKey {
                 prim.color[3].to_bits(),
             ],
             sky_pipeline,
+            decal_pipeline,
             shadow_pass,
         }
     }
@@ -79,6 +82,7 @@ pub(super) const PRIMITIVE_DRAW_SKY_ROLE: u8 = 0x02;
 pub(super) const PRIMITIVE_DRAW_SKY_BACKGROUND: u8 = 0x04;
 pub(super) const PRIMITIVE_DRAW_RECEIVE_SHADOWS: u8 = 0x08;
 pub(super) const PRIMITIVE_DRAW_FOLIAGE_ROLE: u8 = 0x10;
+pub(super) const PRIMITIVE_DRAW_DECAL_ROLE: u8 = 0x20;
 #[inline]
 pub(super) fn primitive_mesh_render_options(
     explicit: Option<&MeshRenderOptions>,
@@ -102,6 +106,9 @@ pub(super) fn primitive_draw_flags(options: &MeshRenderOptions) -> u8 {
     }
     if matches!(options.role, MeshRenderRole::FoliageInstanced) {
         flags |= PRIMITIVE_DRAW_FOLIAGE_ROLE;
+    }
+    if matches!(options.role, MeshRenderRole::Decal) {
+        flags |= PRIMITIVE_DRAW_DECAL_ROLE;
     }
     if matches!(
         options.shadow_policy,
@@ -132,6 +139,8 @@ const SKY_MESH_ROLES: &[MeshRenderRole] = &[
     MeshRenderRole::WeatherVolume,
 ];
 
+const FORWARD_ONLY_OVERLAY_ROLES: &[MeshRenderRole] = &[MeshRenderRole::Decal];
+
 const NON_WORLD_VIEWPORT_ROLES: &[MeshRenderRole] = &[
     MeshRenderRole::CollisionProxy,
     MeshRenderRole::DebugPrimitive,
@@ -142,6 +151,11 @@ const PRIMITIVE_PASS_ROLE_CULL_RULES: &[PrimitivePassRoleCullRule] = &[
         pass: SceneMeshPass::GBuffer,
         roles: SKY_MESH_ROLES,
         reason: "sky_role_not_allowed_in_gbuffer",
+    },
+    PrimitivePassRoleCullRule {
+        pass: SceneMeshPass::GBuffer,
+        roles: FORWARD_ONLY_OVERLAY_ROLES,
+        reason: "decal_overlay_forward_only",
     },
     PrimitivePassRoleCullRule {
         pass: SceneMeshPass::Forward,
@@ -172,6 +186,7 @@ pub(super) fn primitive_role_cull_reason(
                 | MeshRenderRole::CelestialBillboard
                 | MeshRenderRole::WeatherVolume
                 | MeshRenderRole::WorldTransparent
+                | MeshRenderRole::Decal
                 | MeshRenderRole::FirstPersonViewModel
                 | MeshRenderRole::EditorGizmo
         )

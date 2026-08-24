@@ -15,8 +15,8 @@ use super::{
     DisplayVisibility, GameplayActor, Health, PhysicsBodyDesc, PhysicsSurface, PlayerActor,
     PlayerAnimationState, PlayerCommandFrame, PlayerController, PlayerEventKind,
     PlayerFixedPoseHistory, PlayerGroundState, PlayerLocomotionAnimation, PlayerLocomotionState,
-    PlayerModelAssignment, PlayerModelBinding, PlayerRenderPose, PlayerStanceKind,
-    PlayerStanceState, PlayerViewVisibility, PlayerVisualKind, PlayerVisualPart,
+    PlayerModelAssignment, PlayerModelBinding, PlayerMovementSpeeds, PlayerRenderPose,
+    PlayerStanceKind, PlayerStanceState, PlayerViewVisibility, PlayerVisualKind, PlayerVisualPart,
 };
 
 #[path = "player/animation.rs"]

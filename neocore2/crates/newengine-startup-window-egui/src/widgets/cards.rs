@@ -98,11 +98,7 @@ pub(crate) fn warning_banner(ui: &mut egui::Ui, text: &str) {
             );
         });
 }
-pub(crate) fn summary_metric(
-    ui: &mut egui::Ui,
-    label: &str,
-    value: &str,
-) {
+pub(crate) fn summary_metric(ui: &mut egui::Ui, label: &str, value: &str) {
     let palette = north_star_bootstrap_ui_style().palette;
     ui.vertical(|ui| {
         ui.label(

@@ -31,6 +31,11 @@ impl FrameGraphBuilder {
             // frame envelope. It is not a scene draw-list and must not recreate
             // the removed singleton UI draw-list compatibility funnel.
             pass.with_domain(RenderGraphPassDomain::Render2d)
+                // UI is a post-scene presentation overlay: preserve the already resolved
+                // surface color, then blend the retained UI domain into that same target.
+                // Expressing the read explicitly prevents graph scheduling/lifetime analysis
+                // from treating UI as a fresh scene color producer.
+                .reads(RG_SURFACE_COLOR, RenderGraphResourceUsage::ColorAttachment)
                 .writes(RG_SURFACE_COLOR, RenderGraphResourceUsage::ColorAttachment)
         });
         self

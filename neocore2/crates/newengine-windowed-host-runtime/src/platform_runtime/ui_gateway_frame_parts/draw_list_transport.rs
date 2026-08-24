@@ -1,6 +1,5 @@
 use super::draw_list_diagnostics::log_ui_gateway_frame;
-use super::draw_list_loading::{animate_loading_draw_list, ensure_production_loading_images};
-use super::draw_list_state::loading_animation_now_ms;
+use super::draw_list_state::ui_frame_now_ms;
 use super::*;
 
 pub(crate) fn request_ui_draw_list(
@@ -12,7 +11,7 @@ pub(crate) fn request_ui_draw_list(
     policy: &UiGatewayFramePolicy,
 ) -> EngineResult<Option<UiDrawList>> {
     let started = Instant::now();
-    let now_ms = loading_animation_now_ms();
+    let now_ms = ui_frame_now_ms();
     let render_surface_ids: Vec<String> = render_surface_ids
         .iter()
         .map(|surface_id| surface_id.trim().to_owned())
@@ -68,11 +67,9 @@ fn request_ui_draw_list_bin(
     let service_ms = service_started.elapsed().as_secs_f32() * 1000.0;
 
     let decode_started = Instant::now();
-    let mut response = decode_ui_frame_response_bin(&bytes)
+    let response = decode_ui_frame_response_bin(&bytes)
         .map_err(|e| format!("decode binary ui frame response failed: {e}"))?;
     let decode_ms = decode_started.elapsed().as_secs_f32() * 1000.0;
-    ensure_production_loading_images(request, &mut response.draw_list);
-    animate_loading_draw_list(&mut response.draw_list, request.frame_input.now_ms);
 
     log_ui_gateway_frame(
         "bin",
@@ -106,12 +103,10 @@ fn request_ui_draw_list_json(
     let service_ms = service_started.elapsed().as_secs_f32() * 1000.0;
 
     let decode_started = Instant::now();
-    let mut response: UiFrameResponse = serde_json::from_slice(&bytes).map_err(|e| {
+    let response: UiFrameResponse = serde_json::from_slice(&bytes).map_err(|e| {
         newengine_core::EngineError::other(format!("decode ui frame response failed: {e}"))
     })?;
     let decode_ms = decode_started.elapsed().as_secs_f32() * 1000.0;
-    ensure_production_loading_images(request, &mut response.draw_list);
-    animate_loading_draw_list(&mut response.draw_list, request.frame_input.now_ms);
 
     log_ui_gateway_frame(
         "json",

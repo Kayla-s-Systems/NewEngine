@@ -12,6 +12,7 @@ mod construction;
 mod data_driven;
 mod definition;
 mod drawable;
+mod foliage;
 mod mesh_render;
 mod texture_dictionary;
 mod uv_layout;
@@ -22,6 +23,7 @@ pub use construction::*;
 pub use data_driven::*;
 pub use definition::*;
 pub use drawable::*;
+pub use foliage::*;
 pub use mesh_render::*;
 pub use texture_dictionary::*;
 pub use uv_layout::*;
@@ -58,6 +60,7 @@ pub const DRAWABLE_DICTIONARY_MANIFEST_SCHEMA: &str = "newengine.drawable_dictio
 pub const MODEL_SERVICE_METHOD_DRAWABLE_DICTIONARY_MANIFEST_JSON_V1: &str =
     "assets.models.drawable_manifest_v1";
 pub const MODEL_SERVICE_METHOD_RESOLVE_DRAWABLE_V1: &str = "assets.models.resolve_drawable_v1";
+pub const MODEL_SERVICE_METHOD_IMPORT_FOLIAGE_V1: &str = "assets.models.import_foliage_v1";
 
 /// Texture dictionary role consumed after graph/material resolution.
 pub const TEXTURE_DICTIONARY_EXTENSION: &str = "ytd";
@@ -107,6 +110,8 @@ pub const MODEL_FEATURE_DOMAINS: &[&str] = &[
     "drawable.resolve",
     "properties.ytyp",
     "uv_layout.ytyd",
+    "foliage.srt",
+    "foliage.nefoliage",
 ];
 
 pub const MODEL_SERVICE_METHODS: &[&str] = &[
@@ -117,6 +122,7 @@ pub const MODEL_SERVICE_METHODS: &[&str] = &[
     MODEL_SERVICE_METHOD_VALIDATE_JSON_V1,
     MODEL_SERVICE_METHOD_DRAWABLE_DICTIONARY_MANIFEST_JSON_V1,
     MODEL_SERVICE_METHOD_RESOLVE_DRAWABLE_V1,
+    MODEL_SERVICE_METHOD_IMPORT_FOLIAGE_V1,
 ];
 
 pub const MODEL_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec =
@@ -196,6 +202,9 @@ mod tests {
         assert!(MODEL_FEATURE_DOMAINS.contains(&"package.nepak"));
         assert!(!MODEL_FEATURE_DOMAINS.contains(&"texture.noncanonical.runtime"));
         assert!(MODEL_SERVICE_METHODS.contains(&MODEL_SERVICE_METHOD_RESOLVE_DRAWABLE_V1));
+        assert!(MODEL_SERVICE_METHODS.contains(&MODEL_SERVICE_METHOD_IMPORT_FOLIAGE_V1));
+        assert!(MODEL_FEATURE_DOMAINS.contains(&"foliage.srt"));
+        assert!(MODEL_FEATURE_DOMAINS.contains(&"foliage.nefoliage"));
     }
 
     #[test]

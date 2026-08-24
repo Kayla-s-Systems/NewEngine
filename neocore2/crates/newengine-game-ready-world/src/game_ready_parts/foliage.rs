@@ -22,6 +22,8 @@ use self::types::*;
 use self::ydd_mesh::*;
 
 pub(super) use self::placement::terrain_height;
-pub(super) use self::spawn::spawn_foliage_prefabs;
+pub(super) use self::spawn::{
+    defer_foliage_prefabs, spawn_foliage_prefabs, tick_deferred_foliage_prefabs,
+};
 pub(super) use self::types::{DecodedPrefabMeshPart, SKYDOME_PRIMITIVE_ID};
 pub(super) use self::ydd_mesh::decode_runtime_ydd_prefab;

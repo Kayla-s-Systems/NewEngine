@@ -110,10 +110,12 @@ pub fn host_register_service_impl(svc: ServiceV1Dyn<'static>) -> RResult<(), RSt
             Err(_) => return RResult::RErr(RString::from("services mutex poisoned")),
         };
 
-        if g.contains_key(&service_id) {
+        if let Some(existing) = g.get(&service_id) {
             return RResult::RErr(RString::from(format!(
-                "service already registered: {}",
-                service_id
+                "service already registered: {} owner='{}' contender='{}'",
+                service_id,
+                existing.owner_plugin_id.as_deref().unwrap_or("<none>"),
+                owner_for_log,
             )));
         }
 

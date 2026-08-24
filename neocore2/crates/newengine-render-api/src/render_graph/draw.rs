@@ -55,7 +55,7 @@ impl RenderDrawListKind {
                 Self::OpaqueForward,
                 RenderGraphPassKind::ForwardOpaque | RenderGraphPassKind::GBuffer,
             ) | (Self::Transparent, RenderGraphPassKind::Transparent)
-                                | (Self::Debug, RenderGraphPassKind::DebugOverlay)
+                | (Self::Debug, RenderGraphPassKind::DebugOverlay)
         )
     }
 }

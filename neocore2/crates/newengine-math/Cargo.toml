@@ -16,7 +16,6 @@ collections = ["dep:hashbrown", "dep:slotmap", "dep:fxhash"]
 
 [dependencies]
 newengine-ulog-api = { path = "../newengine-ulog-api" }
-log = "0.4"
 once_cell = "1"
 parking_lot = "0.12"
 serde = { version = "1", features = ["derive"], optional = true }

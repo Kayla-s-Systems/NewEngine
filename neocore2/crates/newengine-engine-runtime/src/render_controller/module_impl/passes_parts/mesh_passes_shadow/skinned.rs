@@ -89,6 +89,7 @@ pub(super) fn draw_skinned_player_primitives_shadow(
             .unwrap_or(0);
         let palette_gpu = ensure_skin_palette_gpu(
             &mut this.gpu.meshes.skin_palette_cache,
+            &mut this.gpu.lifetimes.resources,
             skin.owner.stable_u64(),
             pose_generation,
             pose,

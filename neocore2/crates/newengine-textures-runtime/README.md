@@ -1,6 +1,8 @@
 # newengine-textures-runtime
 
-Runtime-hosted `engine.assets.textures` runtime service for `.ytd` texture dictionaries.
+Provider-neutral `textures.api` semantic service implementation for `.ytd` texture dictionaries.
+
+This crate builds the service but does not register a Host route. `PluginsSrc/TexturesRuntime` owns first-party plugin identity, backend priority and `engine.assets.textures` route metadata, allowing a compatible plugin to replace the implementation without rebuilding GameReady or AssetInspector.
 
 Boundary rule:
 
@@ -16,7 +18,7 @@ renderer/UI/materials consume texture packets or validation DTOs, never raw .ytd
 
 **Path:** `NewEngine/neocore2/crates/newengine-textures-runtime`
 
-**Role:** Text shaping, text rendering, or font-related implementation.
+**Role:** Texture dictionary semantic service factory; no Host registration ownership.
 
 **Local contents:** 1 direct subdirectories, 2 direct files.
 

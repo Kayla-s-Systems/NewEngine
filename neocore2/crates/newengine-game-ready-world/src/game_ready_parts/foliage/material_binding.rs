@@ -51,12 +51,39 @@ pub(super) fn foliage_role_for_material_ref(
 }
 
 pub(super) fn material_for_slot(
+    mats: &MaterialRegistry,
     slot: &str,
     material_ref: Option<&str>,
     materials: DemoMaterials,
     material_specs: &GameReadyMaterialSetSpec,
     palette: &GameReadyPaletteSpec,
 ) -> (MaterialId, [f32; 4]) {
+    // YDD material selectors are authoritative. This is required for imported
+    // SpeedTree assets: the generated branch/leaf/atlas parts must keep their own
+    // NEMAT/YTD chain rather than being silently rebound to the map's generic tree
+    // materials.
+    if let Some(reference) = material_ref.filter(|value| is_nemat_entry_ref(value)) {
+        if let Some(mut response) = load_material_descriptor_asset(reference) {
+            response.descriptor.sanitize_in_place();
+            let material_name = if response.name.trim().is_empty() {
+                format!("foliage:{}", slot)
+            } else {
+                response.name
+            };
+            let id = mats.upsert_named_with_textures(
+                &material_name,
+                response.descriptor,
+                response.textures.sanitized(),
+            );
+            return (id, [1.0, 1.0, 1.0, 1.0]);
+        }
+        newengine_ulog_api::ulog::warn!(
+            "game-ready foliage material exact selector unresolved ref='{}' slot='{}'; using role fallback",
+            reference,
+            slot,
+        );
+    }
+
     let role = material_ref
         .and_then(|reference| foliage_role_for_material_ref(reference, material_specs))
         .unwrap_or_else(|| foliage_role_for_slot(slot));

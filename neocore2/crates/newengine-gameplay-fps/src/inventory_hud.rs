@@ -2,13 +2,15 @@ use newengine_ecs::{EntityId, World};
 use newengine_engine_runtime::gameplay::{
     drop_item, equip_item_instance, first_player, select_equipment_slot, use_item, EquipmentSlot,
     EquippedWeaponBinding, GameplayInputCapture, GameplayUiFrameOutput, GameplayUiProvider,
-    GameplayWorld, ItemCatalog, ItemInstanceId, ItemKind, PlayerCommandFrame, PlayerController,
-    PlayerInventory, PlayerWeaponState,
+    GameplayWorld, Interactable, ItemCatalog, ItemInstanceId, ItemKind, ItemPickup,
+    PlayerCommandFrame, PlayerController, PlayerInventory, PlayerWeaponState,
 };
 #[cfg(test)]
 use newengine_gameplay_fps_api::action as fps_action;
 use newengine_gameplay_fps_api::{FpsActionFrame, FpsDemoState};
 use newengine_ui_api::{UiEventDispatchFrame, UiNodeEventTrigger, UiStatePatch};
+
+use crate::combat::focused_item_pickup;
 
 mod character_variants;
 mod commands;

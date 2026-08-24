@@ -3,7 +3,10 @@ use std::time::Instant;
 
 use newengine_materials::api::MaterialRegistryApi;
 
-use crate::gameplay::{clear_player_input, first_player, GameRunMode, WorldActivationState};
+use crate::gameplay::{
+    clear_player_input, first_player, GameRunMode, PhysicsStaticColliderSyncProgress,
+    StaticMeshCollider, WorldActivationState, WorldAssemblyProgress,
+};
 
 use super::super::RuntimeRenderController;
 use super::materials::{cached_scene_material_launch_plan, SceneMaterialLaunchPlan};
@@ -69,6 +72,23 @@ fn update_world_activation_gate_impl(
 
     let now_ms = launch_gate_millis();
     let readiness = critical_scene_residency_ready(this, r, world, material_plan);
+    // A soft renderer timeout may substitute textures/meshes with fallbacks, but it must
+    // never release gameplay while authored world assembly (especially collision) is pending.
+    let authored_world_pending = world
+        .resource::<WorldAssemblyProgress>()
+        .map(|progress| !progress.is_ready())
+        .unwrap_or(false);
+    let static_collision_total = world
+        .query::<StaticMeshCollider>()
+        .count()
+        .min(u32::MAX as usize) as u32;
+    let static_collision_declared = static_collision_total > 0;
+    let physics_collision_pending = static_collision_declared
+        && world
+            .resource::<PhysicsStaticColliderSyncProgress>()
+            .map(|progress| !progress.is_ready() || progress.registered < static_collision_total)
+            .unwrap_or(true);
+    let launch_critical_pending = authored_world_pending || physics_collision_pending;
     let mut release: Option<(bool, u64, u64, String)> = None;
 
     if let Some(gate) = world.resource_mut::<WorldActivationState>() {
@@ -91,7 +111,7 @@ fn update_world_activation_gate_impl(
         if readiness.ready {
             gate.mark_ready(frame_index, readiness.reason);
             release = Some((false, waited_frames, waited_ms, gate.reason.clone()));
-        } else if soft_timeout {
+        } else if soft_timeout && !launch_critical_pending {
             let fallback_reason = format!(
                 "soft timeout released with renderer fallbacks waited_ms={waited_ms} waited_frames={waited_frames} waiting={} total={} failed={} last='{}'",
                 readiness.waiting, readiness.total, readiness.failed, readiness.reason

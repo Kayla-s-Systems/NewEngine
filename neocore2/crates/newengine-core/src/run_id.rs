@@ -31,7 +31,7 @@ pub fn run_id() -> Option<&'static str> {
     RUN_IDS.get().map(|v| v.run_id.as_str())
 }
 
-/// Initializes and returns the human-readable Run Tag (NaughtyDog-style).
+/// Initializes and returns the human-readable Run Tag (NorthStar-style).
 ///
 /// Format: `FFFF-FFFF-FFFF-FFFF` (uppercase hex).
 pub fn init_run_tag() -> &'static str {

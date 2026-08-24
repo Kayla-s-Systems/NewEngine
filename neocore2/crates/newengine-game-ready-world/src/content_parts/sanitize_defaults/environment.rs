@@ -101,9 +101,87 @@ pub(in super::super) fn sanitize_foliage_spec(raw: RawFoliageSpec) -> GameReadyF
         (raw.grid_max, raw.grid_min)
     };
 
+    let defaults = newengine_model_domain_api::FoliageSettings::default();
+    let settings = newengine_model_domain_api::FoliageSettings {
+        canonical_path: raw.canonical_path.clone(),
+        scale: newengine_model_domain_api::FoliageScaleSettings {
+            min: min_scale,
+            max: max_scale,
+        },
+        wind: newengine_model_domain_api::FoliageWindSettings {
+            enabled: raw.wind_enabled.unwrap_or(defaults.wind.enabled),
+            strength: raw.wind_strength.unwrap_or(defaults.wind.strength),
+            gust_frequency: raw
+                .wind_gust_frequency
+                .unwrap_or(defaults.wind.gust_frequency),
+            direction: [
+                raw.wind_direction_x.unwrap_or(defaults.wind.direction[0]),
+                raw.wind_direction_y.unwrap_or(defaults.wind.direction[1]),
+                raw.wind_direction_z.unwrap_or(defaults.wind.direction[2]),
+            ],
+        },
+        lod: newengine_model_domain_api::FoliageLodSettings {
+            mesh_distances: vec![
+                raw.lod0_distance.unwrap_or(defaults.lod.mesh_distances[0]),
+                raw.lod1_distance.unwrap_or(defaults.lod.mesh_distances[1]),
+                raw.lod2_distance.unwrap_or(defaults.lod.mesh_distances[2]),
+            ],
+            impostor_distance: raw
+                .impostor_distance
+                .unwrap_or(defaults.lod.impostor_distance),
+            crossfade_width: raw
+                .lod_crossfade_width
+                .unwrap_or(defaults.lod.crossfade_width),
+        },
+        cull: newengine_model_domain_api::FoliageCullSettings {
+            max_distance: raw.cull_distance.unwrap_or(defaults.cull.max_distance),
+            shadow_max_distance: raw
+                .shadow_cull_distance
+                .unwrap_or(defaults.cull.shadow_max_distance),
+        },
+        density: raw.density.unwrap_or(defaults.density),
+        material_variant: non_empty_or(
+            raw.material_variant.clone(),
+            defaults.material_variant.clone(),
+        ),
+        seed: raw.seed,
+        prefer_gpu_culling: raw
+            .prefer_gpu_culling
+            .unwrap_or(defaults.prefer_gpu_culling),
+    }
+    .sanitized_policy()
+    .unwrap_or_else(|_| newengine_model_domain_api::FoliageSettings {
+        canonical_path: String::new(),
+        seed: raw.seed,
+        ..defaults
+    });
+
     GameReadyFoliageSpec {
         enabled: raw.enabled && raw.max_count > 0,
+        settings,
         prefab: non_empty_or(raw.prefab, default_foliage_prefab()),
+        alternate_prefab: raw.alternate_prefab.trim().to_owned(),
+        alternate_canonical_path: raw.alternate_canonical_path.trim().to_owned(),
+        alternate_weight: raw.alternate_weight.unwrap_or(0.0).clamp(0.0, 1.0),
+        alternate_collision_radius: raw
+            .alternate_collision_radius
+            .unwrap_or(raw.collision_radius.unwrap_or(0.55))
+            .clamp(0.05, 8.0),
+        alternate_collision_half_height: raw
+            .alternate_collision_half_height
+            .unwrap_or(raw.collision_half_height.unwrap_or(2.25))
+            .clamp(0.05, 24.0),
+        alternate_collision_center: Vec3::new(
+            raw.alternate_collision_center_x
+                .unwrap_or(raw.collision_center_x.unwrap_or(0.0))
+                .clamp(-16.0, 16.0),
+            raw.alternate_collision_center_y
+                .unwrap_or(raw.collision_center_y.unwrap_or(2.8))
+                .clamp(-8.0, 32.0),
+            raw.alternate_collision_center_z
+                .unwrap_or(raw.collision_center_z.unwrap_or(0.0))
+                .clamp(-16.0, 16.0),
+        ),
         seed: raw.seed,
         grid_min: grid_min.clamp(-512, 512),
         grid_max: grid_max.clamp(-512, 512),
@@ -116,6 +194,14 @@ pub(in super::super) fn sanitize_foliage_spec(raw: RawFoliageSpec) -> GameReadyF
         min_player_distance: raw.min_player_distance.clamp(0.0, 256.0),
         edge_margin: raw.edge_margin.clamp(0.0, 512.0),
         surface_offset: raw.surface_offset.clamp(-4.0, 8.0),
+        collision_enabled: raw.collision_enabled,
+        collision_radius: raw.collision_radius.unwrap_or(0.55).clamp(0.05, 8.0),
+        collision_half_height: raw.collision_half_height.unwrap_or(2.25).clamp(0.05, 24.0),
+        collision_center: Vec3::new(
+            raw.collision_center_x.unwrap_or(0.0).clamp(-16.0, 16.0),
+            raw.collision_center_y.unwrap_or(2.8).clamp(-8.0, 32.0),
+            raw.collision_center_z.unwrap_or(0.0).clamp(-16.0, 16.0),
+        ),
         render_options: newengine_model_domain_api::MeshRenderOptions::foliage_instanced(),
     }
 }

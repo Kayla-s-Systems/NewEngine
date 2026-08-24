@@ -11,13 +11,43 @@ impl RawGameReadyPayload {
             newengine_scene::SceneStreamingBudget::MAX_UNLOAD_RADIUS,
         );
 
+        let legacy_run_speed = self.player.move_speed.clamp(0.05, 50.0);
+        let run_speed = self
+            .player
+            .run_speed
+            .filter(|value| value.is_finite())
+            .unwrap_or(legacy_run_speed)
+            .clamp(0.05, 50.0);
+        let walk_speed = self
+            .player
+            .walk_speed
+            .filter(|value| value.is_finite())
+            .unwrap_or(run_speed)
+            .clamp(0.05, run_speed);
+        let sprint_speed = self
+            .player
+            .sprint_speed
+            .filter(|value| value.is_finite())
+            .unwrap_or(run_speed * 1.75)
+            .clamp(run_speed, 75.0);
+        let crouch_speed = self
+            .player
+            .crouch_speed
+            .filter(|value| value.is_finite())
+            .unwrap_or(walk_speed)
+            .clamp(0.05, run_speed);
+
         GameReadyMapProfile {
             title: self.title,
             objective: self.objective,
             player: GameReadyPlayerSpec {
                 start: arr3(self.player.start),
                 yaw: self.player.yaw,
-                move_speed: self.player.move_speed,
+                move_speed: run_speed,
+                walk_speed,
+                run_speed,
+                sprint_speed,
+                crouch_speed,
                 look_sens: self.player.look_sens,
                 model: GameReadyPlayerModelSpec {
                     enabled: self.player.model.enabled
@@ -34,6 +64,12 @@ impl RawGameReadyPayload {
                     walk_animation: sanitize_asset_path(self.player.model.walk_animation),
                     run_animation: sanitize_asset_path(self.player.model.run_animation),
                     sprint_animation: sanitize_asset_path(self.player.model.sprint_animation),
+                    crouch_idle_animation: sanitize_asset_path(
+                        self.player.model.crouch_idle_animation,
+                    ),
+                    crouch_walk_animation: sanitize_asset_path(
+                        self.player.model.crouch_walk_animation,
+                    ),
                     jump_animation: sanitize_asset_path(self.player.model.jump_animation),
                     fall_animation: sanitize_asset_path(self.player.model.fall_animation),
                     target_height: self.player.model.target_height.clamp(0.25, 3.0),

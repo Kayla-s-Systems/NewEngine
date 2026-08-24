@@ -24,7 +24,7 @@ pub(crate) fn spawn_procedural_terrain(
     spec: &GameReadyTerrainSpec,
     color: [f32; 4],
     initial_center: TerrainChunkCoord,
-) -> EntityId {
+) -> (EntityId, TerrainSurfaceSampler) {
     newengine_ulog_api::ulog::info!(
         "game-ready: terrain generator id='{}' seed={} cells={}x{} chunk_size={}x{} streaming={} radius={} unload_radius={} surface_mode='multi_textured' layer_count={} heightmap_enabled={} surface_layers=[forest='{}', sand='{}', rock='{}']",
         spec.generator.id,
@@ -93,6 +93,7 @@ pub(crate) fn spawn_procedural_terrain(
         heightmap.as_deref(),
     );
     let terrain_entity = record.terrain;
+    let terrain_sampler = record.sampler.clone();
     newengine_ulog_api::ulog::info!(
         "game-ready terrain anchor: terrain_entity={:?} streaming_anchor={:?} parent={:?} policy='terrain streaming target is an ordinary ECS entity anchor'",
         terrain_entity,
@@ -167,5 +168,5 @@ pub(crate) fn spawn_procedural_terrain(
         world.insert_resource(state);
     }
 
-    terrain_entity
+    (terrain_entity, terrain_sampler)
 }

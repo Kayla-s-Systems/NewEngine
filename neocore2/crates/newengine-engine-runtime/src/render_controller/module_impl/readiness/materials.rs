@@ -244,6 +244,7 @@ pub(super) fn critical_scene_materials_ready(
     let total = plan.critical_paths.len() as u32;
     let mut waiting = 0_u32;
     let mut failed = 0_u32;
+    let mut failed_paths = Vec::<String>::new();
     let mut alpha_waiting = 0_u32;
     let mut alpha_failed = 0_u32;
 
@@ -254,8 +255,16 @@ pub(super) fn critical_scene_materials_ready(
             MaterialTextureReadyState::Ready(_) => {}
             MaterialTextureReadyState::Failed => {
                 failed = failed.saturating_add(1);
+                failed_paths.push(path.clone());
                 if alpha_critical {
                     alpha_failed = alpha_failed.saturating_add(1);
+                }
+                if this.frame.frame_index <= 4 || this.frame.frame_index.is_multiple_of(120) {
+                    newengine_ulog_api::ulog::warn!(
+                        "render launch texture failed path='{}' alpha_critical={} policy='failed material texture must remain diagnosable'",
+                        path,
+                        alpha_critical,
+                    );
                 }
             }
             MaterialTextureReadyState::Waiting => {
@@ -310,7 +319,7 @@ pub(super) fn critical_scene_materials_ready(
                 format!("scene material textures ready total={total}")
             } else {
                 format!(
-                    "scene material textures ready with fallbacks total={total} failed={failed}"
+                    "scene material textures ready with fallbacks total={total} failed={failed} paths={failed_paths:?}"
                 )
             },
             total,
@@ -322,7 +331,7 @@ pub(super) fn critical_scene_materials_ready(
         LaunchReadiness {
             ready: true,
             reason: format!(
-                "scene material textures partially resident ready={ready_count}/{total} waiting={waiting} failed={failed} min_ready={min_ready} policy='NEWENGINE_SCENE_TEXTURE_LAUNCH_MIN_READY/NEWENGINE_SCENE_TEXTURE_LAUNCH_MIN_RATIO'"
+                "scene material textures partially resident ready={ready_count}/{total} waiting={waiting} failed={failed} paths={failed_paths:?} min_ready={min_ready} policy='NEWENGINE_SCENE_TEXTURE_LAUNCH_MIN_READY/NEWENGINE_SCENE_TEXTURE_LAUNCH_MIN_RATIO'"
             ),
             waiting,
             total,
@@ -331,7 +340,7 @@ pub(super) fn critical_scene_materials_ready(
     } else {
         LaunchReadiness::pending(
             format!(
-                "waiting for scene texture residency ready={ready_count}/{total} waiting={waiting} failed={failed} min_ready={min_ready}"
+                "waiting for scene texture residency ready={ready_count}/{total} waiting={waiting} failed={failed} paths={failed_paths:?} min_ready={min_ready}"
             ),
             waiting,
             total,

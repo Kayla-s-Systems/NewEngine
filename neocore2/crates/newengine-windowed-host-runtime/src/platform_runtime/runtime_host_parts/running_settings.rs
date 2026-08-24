@@ -80,9 +80,17 @@ pub(super) fn persist_frontend_settings() -> Result<usize, String> {
         return Ok(0);
     }
 
-    let config_path = std::env::current_dir()
-        .map_err(|error| format!("resolve current directory: {error}"))?
-        .join("config.json");
+    let config_path =
+        std::env::var(newengine_runtime_host::runtime_config::ENGINE_STARTUP_CONFIG_ENV)
+            .ok()
+            .map(|value| value.trim().to_owned())
+            .filter(|value| !value.is_empty())
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| {
+                std::env::current_dir()
+                    .unwrap_or_else(|_| std::path::PathBuf::from("."))
+                    .join("config.json")
+            });
     let source = std::fs::read_to_string(&config_path)
         .map_err(|error| format!("read '{}': {error}", config_path.display()))?;
     let mut document: serde_json::Value = serde_json::from_str(&source)

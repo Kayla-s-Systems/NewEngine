@@ -55,6 +55,7 @@ pub enum ItemUseEffect {
 #[derive(Clone, Debug, PartialEq)]
 pub struct WorldItemDefinition {
     pub model_ref: Option<String>,
+    pub material_library_ref: Option<String>,
     pub fallback_primitive: PrimitiveId,
     pub scale: [f32; 3],
     pub color: [f32; 4],
@@ -67,6 +68,7 @@ impl WorldItemDefinition {
         match kind {
             ItemKind::Weapon => Self {
                 model_ref: None,
+                material_library_ref: None,
                 fallback_primitive: primitive_builtins::ID_CUBE,
                 scale: [0.42, 0.12, 0.10],
                 color: [0.22, 0.27, 0.32, 1.0],
@@ -75,6 +77,7 @@ impl WorldItemDefinition {
             },
             ItemKind::Ammo => Self {
                 model_ref: None,
+                material_library_ref: None,
                 fallback_primitive: primitive_builtins::ID_CUBE,
                 scale: [0.18, 0.10, 0.14],
                 color: [0.72, 0.52, 0.18, 1.0],
@@ -83,6 +86,7 @@ impl WorldItemDefinition {
             },
             ItemKind::Consumable => Self {
                 model_ref: None,
+                material_library_ref: None,
                 fallback_primitive: primitive_builtins::ID_CUBE,
                 scale: [0.20, 0.14, 0.22],
                 color: [0.74, 0.18, 0.22, 1.0],
@@ -91,6 +95,7 @@ impl WorldItemDefinition {
             },
             ItemKind::Key | ItemKind::Quest => Self {
                 model_ref: None,
+                material_library_ref: None,
                 fallback_primitive: primitive_builtins::ID_TORUS,
                 scale: [0.16, 0.16, 0.05],
                 color: [0.25, 0.70, 0.92, 1.0],
@@ -99,6 +104,7 @@ impl WorldItemDefinition {
             },
             ItemKind::Generic | ItemKind::Component => Self {
                 model_ref: None,
+                material_library_ref: None,
                 fallback_primitive: primitive_builtins::ID_SPHERE_UV,
                 scale: [0.16, 0.16, 0.16],
                 color: [0.48, 0.55, 0.65, 1.0],
@@ -121,6 +127,11 @@ impl WorldItemDefinition {
         self.respawn_seconds = sanitize_non_negative(self.respawn_seconds).min(86_400.0);
         self.model_ref = self
             .model_ref
+            .take()
+            .map(|value| value.trim().replace('\\', "/"))
+            .filter(|value| !value.is_empty());
+        self.material_library_ref = self
+            .material_library_ref
             .take()
             .map(|value| value.trim().replace('\\', "/"))
             .filter(|value| !value.is_empty());
@@ -193,16 +204,25 @@ impl WorldItemRuntime {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum WeaponFireMode {
+    #[default]
+    SemiAuto,
+    Automatic,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct WeaponItemDefinition {
     pub tuning: HitscanWeaponTuning,
     pub ammo_item: ItemId,
+    pub fire_mode: WeaponFireMode,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ItemDefinition {
     pub id: ItemId,
     pub name: String,
+    pub definition_ref: Option<String>,
     pub display_name: String,
     pub description: String,
     pub icon_ref: Option<String>,
@@ -230,6 +250,7 @@ impl ItemDefinition {
         Ok(Self {
             id,
             name,
+            definition_ref: None,
             display_name: display_name.into(),
             description: String::new(),
             icon_ref: None,
@@ -250,6 +271,7 @@ impl ItemDefinition {
         slot: EquipmentSlot,
         tuning: HitscanWeaponTuning,
         ammo_item: ItemId,
+        fire_mode: WeaponFireMode,
         unit_weight: f32,
     ) -> Result<Self, String> {
         let mut item = Self::stackable(name, display_name, ItemKind::Weapon, 1, unit_weight)?;
@@ -257,8 +279,16 @@ impl ItemDefinition {
         item.weapon = Some(WeaponItemDefinition {
             tuning: tuning.sanitized(),
             ammo_item,
+            fire_mode,
         });
         Ok(item)
+    }
+
+    #[inline]
+    pub fn with_definition_ref(mut self, definition_ref: impl Into<String>) -> Self {
+        let value = definition_ref.into().trim().replace('\\', "/");
+        self.definition_ref = (!value.is_empty()).then_some(value);
+        self
     }
 
     #[inline]

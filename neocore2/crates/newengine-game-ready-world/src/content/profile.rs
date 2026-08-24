@@ -24,7 +24,13 @@ pub(crate) struct GameReadyMapProfile {
 pub(crate) struct GameReadyPlayerSpec {
     pub(crate) start: Vec3,
     pub(crate) yaw: f32,
+    /// Legacy base movement scalar. Kept for old map payload compatibility; `run_speed`
+    /// is the authoritative authored locomotion target after YTYP hydration.
     pub(crate) move_speed: f32,
+    pub(crate) walk_speed: f32,
+    pub(crate) run_speed: f32,
+    pub(crate) sprint_speed: f32,
+    pub(crate) crouch_speed: f32,
     pub(crate) look_sens: f32,
     pub(crate) model: GameReadyPlayerModelSpec,
 }
@@ -40,6 +46,8 @@ pub(crate) struct GameReadyPlayerModelSpec {
     pub(crate) walk_animation: Option<String>,
     pub(crate) run_animation: Option<String>,
     pub(crate) sprint_animation: Option<String>,
+    pub(crate) crouch_idle_animation: Option<String>,
+    pub(crate) crouch_walk_animation: Option<String>,
     pub(crate) jump_animation: Option<String>,
     pub(crate) fall_animation: Option<String>,
     pub(crate) target_height: f32,
@@ -231,7 +239,14 @@ pub(crate) struct GameReadyShadowSpec {
 #[derive(Clone, Debug)]
 pub(crate) struct GameReadyFoliageSpec {
     pub(crate) enabled: bool,
+    pub(crate) settings: newengine_model_domain_api::FoliageSettings,
     pub(crate) prefab: String,
+    pub(crate) alternate_prefab: String,
+    pub(crate) alternate_canonical_path: String,
+    pub(crate) alternate_weight: f32,
+    pub(crate) alternate_collision_radius: f32,
+    pub(crate) alternate_collision_half_height: f32,
+    pub(crate) alternate_collision_center: Vec3,
     pub(crate) seed: u64,
     pub(crate) grid_min: i32,
     pub(crate) grid_max: i32,
@@ -244,6 +259,10 @@ pub(crate) struct GameReadyFoliageSpec {
     pub(crate) min_player_distance: f32,
     pub(crate) edge_margin: f32,
     pub(crate) surface_offset: f32,
+    pub(crate) collision_enabled: bool,
+    pub(crate) collision_radius: f32,
+    pub(crate) collision_half_height: f32,
+    pub(crate) collision_center: Vec3,
     pub(crate) render_options: MeshRenderOptions,
 }
 
@@ -325,7 +344,11 @@ pub(crate) struct GameReadyMissionSpec {
 #[derive(Clone, Debug)]
 pub(crate) struct GameReadyMissionPickupSpec {
     pub(crate) id: String,
+    pub(crate) item: Option<String>,
+    pub(crate) quantity: u32,
+    pub(crate) auto_equip: bool,
     pub(crate) position: Vec3,
+    pub(crate) rotation_ypr: Vec3,
     pub(crate) radius: f32,
     pub(crate) scale: Vec3,
 }

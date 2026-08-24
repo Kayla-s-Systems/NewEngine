@@ -114,6 +114,24 @@ pub(super) fn register_authored_prefab_material(
 }
 
 #[inline]
+pub(super) fn static_world_decal_slot(slot: &str) -> bool {
+    let slot = slot.trim().to_ascii_lowercase();
+    if slot.ends_with("dirt_road") && !slot.ends_with("dirt_road_bare") {
+        return true;
+    }
+    [
+        "dirt_road_trails",
+        "puddle_streaks",
+        "road_edge_gravel",
+        "rock_decal",
+        "fallen_generic_leaves",
+        "fallen_maple_leaves",
+    ]
+    .iter()
+    .any(|tag| slot.contains(tag))
+}
+
+#[inline]
 pub(super) fn static_world_receive_only_shadow_slot(slot: &str) -> bool {
     let slot = slot.trim().to_ascii_lowercase();
     [
@@ -123,6 +141,16 @@ pub(super) fn static_world_receive_only_shadow_slot(slot: &str) -> bool {
         "aerial_grass",
         "grass_close",
         "cobblestone",
+        // Thin overlay/decal-like meshes must never cast a second nearly
+        // coplanar shadow over their supporting road/terrain surface. Their
+        // visible color can receive the world shadow, but suppressing them as
+        // casters removes camera-dependent shadow acne/flicker.
+        "dirt_road_trails",
+        "puddle_streaks",
+        "road_edge_gravel",
+        "rock_decal",
+        "fallen_generic_leaves",
+        "fallen_maple_leaves",
     ]
     .iter()
     .any(|tag| slot.contains(tag))

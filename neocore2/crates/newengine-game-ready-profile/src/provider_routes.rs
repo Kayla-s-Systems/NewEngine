@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
+use newengine_asset_bootstrap_runtime::ProfileMountSpec;
 use newengine_core::{Engine, EngineError, EngineResult};
 use newengine_project_runtime::RuntimeCompositionContext;
-use newengine_asset_bootstrap_runtime::ProfileMountSpec;
 use newengine_scene_runtime::SceneGatewayAssetMounts;
 
 use crate::entity_archetypes::register_game_ready_entity_archetypes_best_effort;
@@ -10,6 +10,14 @@ use crate::{GameReadyRuntimeProfile, GAME_READY_MOUNT_SPEC};
 
 const GAME_READY_CAPABILITY_SLOTS: &[newengine_service_api::EngineCapabilitySlotSpec] = &[
     newengine_service_api::EngineCapabilitySlotSpec::required("engine.assets", "assets"),
+    newengine_service_api::EngineCapabilitySlotSpec::required(
+        "engine.assets.maps",
+        "assets.maps",
+    ),
+    newengine_service_api::EngineCapabilitySlotSpec::required(
+        "engine.assets.textures",
+        "assets.textures",
+    ),
     newengine_service_api::EngineCapabilitySlotSpec::required(
         "engine.assets.materials",
         "assets.materials",
@@ -20,6 +28,8 @@ const GAME_READY_CAPABILITY_SLOTS: &[newengine_service_api::EngineCapabilitySlot
     newengine_service_api::EngineCapabilitySlotSpec::required("engine.scene", "scene"),
     newengine_service_api::EngineCapabilitySlotSpec::required("engine.world", "world"),
     newengine_service_api::EngineCapabilitySlotSpec::required("engine.ui", "ui"),
+    newengine_service_api::EngineCapabilitySlotSpec::optional("engine.audio", "audio"),
+    newengine_service_api::EngineCapabilitySlotSpec::optional("engine.ui.notify", "ui.notify"),
     newengine_service_api::EngineCapabilitySlotSpec::optional("engine.time", "time"),
     newengine_service_api::EngineCapabilitySlotSpec::optional("engine.schema", "schema"),
     newengine_service_api::EngineCapabilitySlotSpec::optional("engine.scripting", "scripting"),
@@ -54,9 +64,10 @@ impl GameReadyRuntimeProfile {
 
         let game_message_registry = newengine_game_events_runtime::GameMessageRegistry::default();
         let game_message_queue = newengine_game_events_runtime::GameMessageQueue::default();
-        newengine_game_events_runtime::init_game_events_service(
+        newengine_game_events_runtime::init_game_events_service_with_event_hub(
             game_message_registry.clone(),
             game_message_queue.clone(),
+            engine.events().clone(),
         );
         engine.resources_mut().insert(game_message_registry);
         engine.resources_mut().insert(game_message_queue);
@@ -97,6 +108,7 @@ impl GameReadyRuntimeProfile {
     #[inline]
     pub fn register_engine_provider_routes_best_effort(&self) {
         register_game_ready_entity_archetypes_best_effort();
+        newengine_audio_runtime::register_native_audio_provider_best_effort();
         let asset_mounts = SceneGatewayAssetMounts::from_profile(GAME_READY_MOUNT_SPEC);
         newengine_scene_runtime::register_scene_gateway_best_effort(
             Arc::clone(&self.scene),
@@ -134,11 +146,9 @@ impl GameReadyRuntimeProfile {
             asset_document_routes_ok
         );
         let asset_client = newengine_assets::AssetServiceClient::new(host_api.clone());
-        newengine_textures_runtime::register_textures_gateway_best_effort(asset_client.clone());
         newengine_definitions_runtime::register_definitions_gateway_best_effort(
             asset_client.clone(),
         );
-        newengine_maps_runtime::register_maps_gateway_best_effort(asset_client.clone());
         newengine_assets_ui_runtime::register_assets_ui_gateway_best_effort(asset_client.clone());
         newengine_material_runtime::register_materials_gateway_best_effort_with_host(
             Some(host_api.clone()),

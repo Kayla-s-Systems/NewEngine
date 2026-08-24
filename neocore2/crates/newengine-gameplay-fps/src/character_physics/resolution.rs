@@ -9,7 +9,7 @@ use newengine_math::Vec3;
 use newengine_physics_api::PhysicsQueryHitDto;
 use newengine_sim::{CharacterMotor, Velocity};
 
-use super::queries::stand_probe_owner;
+use super::queries::{ground_probe_max_t, stand_probe_owner};
 use super::tuning::tuning;
 use crate::game_data::active_game_data;
 
@@ -80,7 +80,7 @@ fn apply_ground_query_hit(
         return;
     }
     let tuning = tuning(world);
-    let max_distance = tuning.contact_skin + tuning.ground_probe_distance;
+    let max_distance = ground_probe_max_t(tuning.contact_skin, tuning.ground_probe_distance);
     if !hit.distance.is_finite() || !(0.0..=max_distance).contains(&hit.distance) {
         return;
     }

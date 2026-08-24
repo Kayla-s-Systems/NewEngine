@@ -1,0 +1,21 @@
+[package]
+name = "newengine-ui-notify-runtime"
+version = "0.1.0"
+edition = "2021"
+readme = "README.md"
+description = "Bounded message-pipeline subscriber and provider for the engine.ui.notify gateway"
+
+[dependencies]
+abi_stable = "0.11"
+parking_lot = "0.12"
+serde_json = "1"
+
+newengine-core = { path = "../newengine-core" }
+newengine-game-events-api = { path = "../newengine-game-events-api" }
+newengine-game-events-runtime = { path = "../newengine-game-events-runtime" }
+newengine-plugin-api = { path = "../newengine-plugin-api" }
+newengine-plugin-host = { path = "../newengine-plugin-host" }
+newengine-service-api = { path = "../newengine-service-api" }
+newengine-service-kit = { path = "../newengine-service-kit" }
+newengine-ui-api = { path = "../newengine-ui-api" }
+newengine-ulog-api = { path = "../newengine-ulog-api" }

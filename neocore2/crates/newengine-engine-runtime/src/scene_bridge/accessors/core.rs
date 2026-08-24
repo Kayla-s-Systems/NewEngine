@@ -24,9 +24,7 @@ impl SceneBridge {
     }
 
     #[inline]
-    pub fn authority_snapshot(
-        &self,
-    ) -> newengine_world_authority_runtime::WorldAuthoritySnapshot {
+    pub fn authority_snapshot(&self) -> newengine_world_authority_runtime::WorldAuthoritySnapshot {
         self.authority.detect()
     }
 

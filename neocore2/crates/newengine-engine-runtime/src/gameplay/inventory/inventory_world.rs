@@ -268,22 +268,27 @@ fn restore_respawned_world_item(world: &mut World, entity: EntityId, runtime: Wo
     let _ = world.remove::<AngularVelocity>(entity);
 }
 
+fn world_item_visual_entities(world: &World, owner: EntityId) -> Vec<EntityId> {
+    world
+        .query::<WorldItemVisualPart>()
+        .filter_map(|(entity, part)| (part.owner == owner).then_some(entity))
+        .collect()
+}
+
 fn set_world_item_visibility(world: &mut World, entity: EntityId, mode: DisplayMode) {
-    let visual_entity = world
-        .get::<WorldItemPresentation>(entity)
-        .map(|presentation| presentation.visual_entity);
     let _ = world.insert(entity, DisplayVisibility { mode });
-    if let Some(visual_entity) = visual_entity.filter(|visual| world.exists(*visual)) {
-        let _ = world.insert(visual_entity, DisplayVisibility { mode });
+    for visual_entity in world_item_visual_entities(world, entity) {
+        if world.exists(visual_entity) {
+            let _ = world.insert(visual_entity, DisplayVisibility { mode });
+        }
     }
 }
 
 fn despawn_world_item(world: &mut World, entity: EntityId) {
-    let visual_entity = world
-        .get::<WorldItemPresentation>(entity)
-        .map(|presentation| presentation.visual_entity);
-    if let Some(visual_entity) = visual_entity.filter(|visual| world.exists(*visual)) {
-        let _ = world.despawn(visual_entity);
+    for visual_entity in world_item_visual_entities(world, entity) {
+        if world.exists(visual_entity) {
+            let _ = world.despawn(visual_entity);
+        }
     }
     let _ = world.despawn(entity);
 }
@@ -372,7 +377,50 @@ pub fn try_collect_item_pickup(
 
     pickup.quantity -= mutation.accepted;
     if pickup.auto_equip {
-        let _ = equip_first_item(world, owner, pickup.item);
+        let instance = mutation
+            .touched_instances
+            .last()
+            .copied()
+            .ok_or_else(|| "auto-equip pickup produced no inventory instance".to_owned());
+        let equip_result =
+            instance.and_then(|instance| equip_item_instance(world, owner, instance));
+        if let Err(error) = equip_result {
+            newengine_ulog_api::ulog::error!(
+                "inventory pickup auto-equip failed owner={} item={:016x} world_entity={} err='{}'",
+                owner.stable_u64(),
+                pickup.item.raw(),
+                pickup_entity.stable_u64(),
+                error,
+            );
+            emit_inventory_event(
+                world,
+                InventoryEvent {
+                    kind: InventoryEventKind::PickupRejected,
+                    owner,
+                    item: pickup.item,
+                    instance_id: mutation.touched_instances.last().copied(),
+                    quantity: mutation.accepted,
+                    slot: None,
+                    world_entity: Some(pickup_entity),
+                    message: format!("pickup transferred but auto-equip failed: {error}"),
+                },
+            );
+            // Do not hide/despawn an authored auto-equip pickup while its equipment contract is
+            // broken. Remove the transferred quantity so the player can retry after the fault.
+            let _ = remove_item(world, owner, pickup.item, mutation.accepted);
+            return false;
+        }
+        sync_equipped_weapon_runtime(world, owner);
+        if world.get::<EquippedWeaponBinding>(owner).is_none() {
+            newengine_ulog_api::ulog::error!(
+                "inventory pickup auto-equip produced no active weapon binding owner={} item={:016x} world_entity={}",
+                owner.stable_u64(),
+                pickup.item.raw(),
+                pickup_entity.stable_u64(),
+            );
+            let _ = remove_item(world, owner, pickup.item, mutation.accepted);
+            return false;
+        }
     }
     emit_inventory_event(
         world,

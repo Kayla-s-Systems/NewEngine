@@ -65,6 +65,7 @@ pub fn spawn_player_controller(
     let _ = world.insert(e, PlayerCommandFrame::default());
     let _ = world.insert(e, body);
     let _ = world.insert(e, motion);
+    let _ = world.insert(e, PlayerMovementSpeeds::default());
     let _ = world.insert(e, Health::default());
     // Inventory storage is generic. Concrete catalogs/loadouts are installed by gameplay providers.
     ensure_player_inventory(world, e);

@@ -38,6 +38,7 @@ pub const UI_SERVICE_METHOD_SURFACE_MANIFEST_V1: &str = "surface_manifest_v1";
 pub const UI_SERVICE_METHOD_SURFACE_CATALOG_V1: &str = "surface_catalog_v1";
 pub const UI_SERVICE_METHOD_LAYOUT_MANIFEST_V1: &str = "layout_manifest_v1";
 pub const UI_SERVICE_METHOD_ACTION_MANIFEST_V1: &str = "action_manifest_v1";
+/// Legacy compatibility token. First-party providers must not advertise or implement a loading shell.
 pub const UI_SERVICE_METHOD_LOADING_SHELL_V1: &str = "loading_shell_v1";
 pub const UI_SERVICE_METHOD_DEBUG_TELEMETRY_SCHEMA: &str = "debug_telemetry_schema";
 /// Generic retained UI surface/node state. Runtime publishes state only; provider owns layout/rendering.
@@ -68,6 +69,8 @@ pub const UI_SERVICE_METHOD_NAVIGATE_V1: &str = "ui.navigate_v1";
 pub const UI_SERVICE_METHOD_DEBUG_TREE_V1: &str = "ui.debug_tree_v1";
 pub const UI_SERVICE_METHOD_DEBUG_BINDINGS_V1: &str = "ui.debug_bindings_v1";
 
+/// Legacy/semantic loading surface id. Loading presentation is owned exclusively by engine.platform/winit.
+/// First-party engine.ui providers must not advertise, mount, or render this surface.
 pub const UI_SURFACE_ENGINE_LOADING: &str = "engine.ui.loading";
 pub const UI_SURFACE_ENGINE_ERROR_MODAL: &str = "engine.error_modal";
 pub const UI_SURFACE_RUNTIME_OVERLAY: &str = "runtime.overlay";
@@ -271,7 +274,6 @@ impl Default for UiServiceInfo {
                 .map(|it| (*it).to_owned())
                 .collect(),
             surfaces: vec![
-                UI_SURFACE_ENGINE_LOADING.to_owned(),
                 UI_SURFACE_ENGINE_ERROR_MODAL.to_owned(),
                 UI_SURFACE_RUNTIME_OVERLAY.to_owned(),
                 UI_SURFACE_RUNTIME_DEBUG_OVERLAY.to_owned(),
@@ -289,7 +291,6 @@ pub const UI_SERVICE_METHODS: &[&str] = &[
     UI_SERVICE_METHOD_SURFACE_CATALOG_V1,
     UI_SERVICE_METHOD_LAYOUT_MANIFEST_V1,
     UI_SERVICE_METHOD_ACTION_MANIFEST_V1,
-    UI_SERVICE_METHOD_LOADING_SHELL_V1,
     UI_SERVICE_METHOD_DEBUG_TELEMETRY_SCHEMA,
     UI_SERVICE_METHOD_SURFACE_NODE_V1,
     UI_SERVICE_METHOD_DRAW_FRAME_V1,
@@ -601,5 +602,24 @@ impl UiAck {
             provider: Some(provider.into()),
             message: None,
         }
+    }
+}
+
+#[cfg(test)]
+mod loading_presenter_contract_tests {
+    use super::*;
+
+    #[test]
+    fn default_ui_service_info_does_not_advertise_loading_presenter() {
+        let info = UiServiceInfo::default();
+        assert!(!info
+            .surfaces
+            .iter()
+            .any(|it| it == UI_SURFACE_ENGINE_LOADING));
+        assert!(!info
+            .methods
+            .iter()
+            .any(|it| it == UI_SERVICE_METHOD_LOADING_SHELL_V1));
+        assert!(!ui_service_methods().contains(&UI_SERVICE_METHOD_LOADING_SHELL_V1));
     }
 }

@@ -159,3 +159,4 @@ impl Default for UiScreenProfileState {
 pub const UI_SURFACE_SCREEN_ROOT: &str = "engine.ui.screen";
 pub const UI_SURFACE_EDITOR_SHELL: &str = "engine.ui.screen.editor";
 pub const UI_SURFACE_GAME_PRESENTATION: &str = "engine.ui.screen.game";
+pub const UI_SURFACE_SYSTEM_NOTIFICATIONS: &str = "engine.ui.system.notifications";

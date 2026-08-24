@@ -65,9 +65,18 @@ impl ScreenProfileRuntimeState {
             let mut changed = false;
             if was_enabled || profile_changed {
                 for surface_id in self.mounted_game_gui_layers.values() {
-                    changed |= crate::platform_runtime::ui_gateway_frame::set_surface_visible(
-                        surface_id, false,
-                    );
+                    if self
+                        .game_gui_applied_visibility
+                        .get(surface_id)
+                        .copied()
+                        .unwrap_or(false)
+                    {
+                        changed |= crate::platform_runtime::ui_gateway_frame::set_surface_visible(
+                            surface_id, false,
+                        );
+                        self.game_gui_applied_visibility
+                            .insert(surface_id.clone(), false);
+                    }
                 }
             }
             remove_input_capture_contribution(resources, GAME_GUI_CAPTURE_OWNER, None);
@@ -140,11 +149,18 @@ impl ScreenProfileRuntimeState {
 
             if let Some(surface_id) = actual_surface {
                 layer.surface_id = surface_id.clone();
-                if profile_changed || refresh {
-                    refresh |= crate::platform_runtime::ui_gateway_frame::set_surface_visible(
+                let visibility_changed = self.game_gui_applied_visibility.get(&surface_id).copied()
+                    != Some(layer.visible);
+                if visibility_changed {
+                    let applied = crate::platform_runtime::ui_gateway_frame::set_surface_visible(
                         &surface_id,
                         layer.visible,
                     );
+                    if applied {
+                        self.game_gui_applied_visibility
+                            .insert(surface_id.clone(), layer.visible);
+                        refresh = true;
+                    }
                 }
             }
         }

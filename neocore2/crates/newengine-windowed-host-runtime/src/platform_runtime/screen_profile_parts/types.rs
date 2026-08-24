@@ -349,6 +349,8 @@ pub(crate) struct ScreenProfileRuntimeState {
     pub(super) mounted_game_gui_layers: BTreeMap<String, String>,
     pub(super) failed_game_gui_layers: BTreeSet<String>,
     pub(super) game_gui_visibility_overrides: BTreeMap<String, bool>,
+    /// Last visibility actually sent to engine.ui; suppresses redundant retained-layer invalidation.
+    pub(super) game_gui_applied_visibility: BTreeMap<String, bool>,
     pub(super) presentation_state_id: Option<String>,
     pub(super) last_published_presentation_state_id: Option<String>,
     pub(super) presentation_runtime_ready: bool,
@@ -365,4 +367,6 @@ pub(crate) struct ScreenProfileRuntimeState {
     pub(super) last_dock_click_frame: u64,
     pub(super) last_menu_click_frame: u64,
     pub(super) active_menu_id: Option<String>,
+    pub(super) last_toast_surface_version: Option<u32>,
+    pub(super) last_toast_surface_extent: [u32; 2],
 }

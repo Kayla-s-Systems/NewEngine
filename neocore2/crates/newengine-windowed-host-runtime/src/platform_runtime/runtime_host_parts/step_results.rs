@@ -5,7 +5,6 @@ use newengine_system_runtime::{
     overlay_from_engine_startup_snapshot, overlay_from_render_backend_status,
     overlay_to_step_result_with_provider, startup_status_mapper::bootstrap_loading_with_subsystems,
 };
-use newengine_ui::UiProviderKind;
 
 use super::super::HostPlatformRuntime;
 use crate::platform_runtime::bootstrap_overlay::{
@@ -61,33 +60,10 @@ impl HostPlatformRuntime {
             self.bootstrap_spinner_phase,
             self.surface,
         );
-
-        if matches!(self.ui_selection.active(), UiProviderKind::Plugin { .. }) {
-            // This path publishes the retained loading surface after engine.step(),
-            // outside step_running's normal overlay cache bookkeeping. Mark it active
-            // so the first inactive/editor-preview frame must publish the hidden +
-            // unmount transition instead of incorrectly assuming it was already cleared.
-            self.loading_surface_inactive_published = false;
-            self.last_published_loading_overlay = Some(overlay.clone());
-            self.last_loading_overlay_publish_at = Some(std::time::Instant::now());
-            crate::platform_runtime::ui_gateway_frame::publish_loading_overlay(
-                &overlay,
-                self.ui_provider_binding(),
-                self.bootstrap_spinner_phase as u64,
-            );
-            if self.bootstrap_spinner_phase % 120 == 1 {
-                newengine_ulog_api::ulog::info!(
-                "platform loading overlay: source=engine.loading presenter=engine.platform.boot_presenter runtime_ui_adapter=engine.ui.loading provider='{}'",
-                self.ui_provider_binding().id()
-            );
-            }
-            return step;
-        }
-
         if self.bootstrap_spinner_phase % 120 == 1 {
-            newengine_ulog_api::ulog::warn!(
-            "platform loading overlay: runtime UI adapter unavailable; platform boot presenter remains active"
-        );
+            newengine_ulog_api::ulog::debug!(
+                "platform loading overlay: presenter=native-platform retained_ui_loading=disabled"
+            );
         }
         step
     }
@@ -135,37 +111,20 @@ impl HostPlatformRuntime {
         if !self.runtime_bootstrap_overlay_enabled {
             if spinner_phase % 120 == 1 {
                 newengine_ulog_api::ulog::debug!(
-                "bootstrap loading overlay: disabled by runtime host boot option; startup continues without visual bootstrap surface"
-            );
+                    "bootstrap loading overlay: disabled by runtime host boot option; startup continues without visual bootstrap surface"
+                );
             }
             return PlatformStepResultV1::default();
         }
 
-        let step = crate::platform_runtime::boot_presenter::overlay_to_boot_step_result(
+        // Loading presentation has exactly one owner: the platform-native loader.
+        // The host emits semantic progress/subsystem telemetry only; engine.ui never
+        // mounts an alternative fullscreen loading surface.
+        crate::platform_runtime::boot_presenter::overlay_to_boot_step_result(
             overlay,
             spinner_phase,
             self.surface,
-        );
-
-        if newengine_core::has_engine_gateway_route(newengine_ui_api::ENGINE_UI_SERVICE_ID) {
-            crate::platform_runtime::ui_gateway_frame::publish_loading_overlay(
-                overlay,
-                self.overlay_provider_binding(),
-                spinner_phase as u64,
-            );
-            if spinner_phase % 120 == 1 {
-                newengine_ulog_api::ulog::info!(
-                "bootstrap loading overlay: source=engine.loading presenter=engine.platform.boot_presenter runtime_ui_adapter=engine.ui.loading provider='{}'",
-                self.overlay_provider_binding().id()
-            );
-            }
-        } else if spinner_phase % 120 == 1 {
-            newengine_ulog_api::ulog::warn!(
-            "bootstrap loading overlay: runtime UI adapter unavailable; platform boot presenter remains active"
-        );
-        }
-
-        step
+        )
     }
 
     pub(crate) fn loading_step_result(&self) -> PlatformStepResultV1 {

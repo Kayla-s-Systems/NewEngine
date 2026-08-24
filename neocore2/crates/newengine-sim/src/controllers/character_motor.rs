@@ -138,9 +138,7 @@ pub fn step_character_motor(
 
     // Body facing is independent from view. While moving, face travel direction.
     // In explicit aim/lock-on mode, face the view yaw even while stationary.
-    let (current_body_yaw, _, _) = current_rot
-        .normalize_or_identity()
-        .to_euler(EulerRot::YXZ);
+    let (current_body_yaw, _, _) = current_rot.normalize_or_identity().to_euler(EulerRot::YXZ);
     let horizontal_velocity = Vec3::new(velocity_ws.x, 0.0, velocity_ws.z);
     let target_body_yaw = if input.face_view {
         motor.yaw
@@ -261,8 +259,8 @@ mod tests {
             ..MotorInput::default()
         };
 
-        let step = step_character_motor(motor, input, current_body, 1.0 / 60.0)
-            .expect("motor step");
+        let step =
+            step_character_motor(motor, input, current_body, 1.0 / 60.0).expect("motor step");
         let (body_yaw, body_pitch, _) = step.body_rotation.to_euler(EulerRot::YXZ);
         assert!((body_yaw - 0.35).abs() <= 1.0e-5);
         assert!(body_pitch.abs() <= 1.0e-6);
@@ -281,8 +279,8 @@ mod tests {
             speed_mul: 1.0,
             ..MotorInput::default()
         };
-        let step = step_character_motor(motor, input, Quat::IDENTITY, 1.0 / 60.0)
-            .expect("motor step");
+        let step =
+            step_character_motor(motor, input, Quat::IDENTITY, 1.0 / 60.0).expect("motor step");
         let body_forward = (step.body_rotation * -Vec3::Z).normalize_or_zero();
         let travel = Vec3::new(step.velocity_ws.x, 0.0, step.velocity_ws.z).normalize_or_zero();
         assert!(body_forward.dot(travel) > 0.999);

@@ -10,11 +10,12 @@ edition = "2021"
 # full-runtime control-plane orchestration explicitly at their dependency site.
 default = []
 command-console = ["dep:newengine-console-runtime"]
+host-capabilities-native = ["dep:newengine-host-capabilities-runtime"]
 full-runtime = [
     "command-console",
     "dep:newengine-ulog-api",
     "dep:newengine-host-capabilities-api",
-    "dep:newengine-host-capabilities-runtime",
+    "host-capabilities-native",
     "dep:abi_stable",
     "dep:serde_json",
     "dep:serde",

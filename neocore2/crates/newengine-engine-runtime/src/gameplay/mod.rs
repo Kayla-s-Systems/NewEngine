@@ -26,11 +26,11 @@ pub use components::{
     PlayerActor, PlayerAnimationState, PlayerCommandFrame, PlayerController, PlayerControllerKind,
     PlayerEvent, PlayerEventBus, PlayerEventKind, PlayerFixedPoseHistory, PlayerGroundState,
     PlayerLocomotionAnimation, PlayerLocomotionState, PlayerModelAssignment, PlayerModelBinding,
-    PlayerRenderPose, PlayerSkinBinding, PlayerSkinPose, PlayerSkinVertex, PlayerStanceKind,
-    PlayerStanceState, PlayerViewVisibility, PlayerViewVisibilityPolicy, PlayerVisualKind,
-    PlayerVisualPart, PreparedRenderMesh, ResidencyProgress, SceneAnchorFollow, SceneEntityAnchor,
-    SceneEntityRole, StaticMeshCollider, TerrainMaterialLayers, WorldActivationPhase,
-    WorldActivationState, WorldAssemblyProgress, WorldClearColor,
+    PlayerMovementSpeeds, PlayerRenderPose, PlayerSkinBinding, PlayerSkinPose, PlayerSkinVertex,
+    PlayerStanceKind, PlayerStanceState, PlayerViewVisibility, PlayerViewVisibilityPolicy,
+    PlayerVisualKind, PlayerVisualPart, PreparedRenderMesh, ResidencyProgress, SceneAnchorFollow,
+    SceneEntityAnchor, SceneEntityRole, StaticMeshCollider, TerrainMaterialLayers,
+    WorldActivationPhase, WorldActivationState, WorldAssemblyProgress, WorldClearColor,
 };
 pub use content::{GameplayContentProvider, GameplayContentProviderRegistry};
 pub use execution::{
@@ -46,12 +46,15 @@ pub use inventory::{
     use_item, EquipmentSlot, EquippedWeaponBinding, InventoryEntry, InventoryEvent,
     InventoryEventBus, InventoryEventKind, InventoryLoadout, InventoryLoadoutCatalog,
     InventoryLoadoutEntry, InventoryMutation, ItemCatalog, ItemDefinition, ItemId, ItemInstanceId,
-    ItemKind, ItemPickup, ItemUseEffect, PlayerInventory, WeaponItemDefinition,
+    ItemKind, ItemPickup, ItemUseEffect, PlayerInventory, WeaponFireMode, WeaponItemDefinition,
     WorldItemDefinition, WorldItemPresentation, WorldItemRuntime, WorldItemVisualPart,
 };
 pub use listeners::{drain_player_events, emit_player_event, sync_player_view_listeners};
-pub(crate) use physics::prewarm_service_physics_backend;
-pub use physics::{PhysicsRuntimeFrameIndex, PhysicsStepTimingTelemetry, PhysicsSyncModule};
+pub(crate) use physics::{prewarm_service_physics_backend, sync_prelaunch_service_physics};
+pub use physics::{
+    PhysicsRuntimeFrameIndex, PhysicsStaticColliderSyncProgress, PhysicsStepTimingTelemetry,
+    PhysicsSyncModule,
+};
 pub use physics_queries::{GameplayPhysicsQueryProvider, GameplayPhysicsQueryProviderRegistry};
 pub use player::{
     apply_player_command_frame, apply_player_input, apply_player_stance_geometry,

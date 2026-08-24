@@ -16,6 +16,19 @@ pub enum RasterCullMode {
     Back,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PipelineBlendMode {
+    Opaque,
+    Alpha,
+}
+
+impl Default for PipelineBlendMode {
+    #[inline]
+    fn default() -> Self {
+        Self::Opaque
+    }
+}
+
 impl Default for RasterCullMode {
     #[inline]
     fn default() -> Self {
@@ -210,6 +223,14 @@ pub struct PipelineDesc {
     #[serde(default)]
     pub cull_mode: RasterCullMode,
     #[serde(default)]
+    pub blend_mode: PipelineBlendMode,
+    #[serde(default)]
+    pub depth_bias_constant: f32,
+    #[serde(default)]
+    pub depth_bias_slope: f32,
+    #[serde(default)]
+    pub depth_bias_clamp: f32,
+    #[serde(default)]
     pub cache_key: Option<String>,
     #[serde(default)]
     pub tessellation: TessellationDesc,
@@ -232,6 +253,10 @@ impl PipelineDesc {
             depth_format: None,
             depth_mode: PipelineDepthMode::default(),
             cull_mode: RasterCullMode::Back,
+            blend_mode: PipelineBlendMode::Opaque,
+            depth_bias_constant: 0.0,
+            depth_bias_slope: 0.0,
+            depth_bias_clamp: 0.0,
             cache_key: None,
             tessellation: TessellationDesc::default(),
             warmup: false,
@@ -304,6 +329,20 @@ impl PipelineDesc {
     #[inline]
     pub fn with_cull_mode(mut self, cull_mode: RasterCullMode) -> Self {
         self.cull_mode = cull_mode;
+        self
+    }
+
+    #[inline]
+    pub fn with_blend_mode(mut self, blend_mode: PipelineBlendMode) -> Self {
+        self.blend_mode = blend_mode;
+        self
+    }
+
+    #[inline]
+    pub fn with_depth_bias(mut self, constant: f32, slope: f32, clamp: f32) -> Self {
+        self.depth_bias_constant = constant;
+        self.depth_bias_slope = slope;
+        self.depth_bias_clamp = clamp;
         self
     }
 

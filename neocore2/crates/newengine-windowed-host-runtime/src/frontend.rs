@@ -173,23 +173,26 @@ where
             }
             Err(err) => return Err(err),
         };
-        let mut resolved_platform =
-            match self.resolve_platform_runtime(app_name, context.startup, &runtime_path) {
-                Ok(resolved) => resolved,
-                Err(err) if self.platform_missing_can_fallback_to_headless(&err) => {
-                    newengine_ulog_api::ulog::warn!(
+        let mut resolved_platform = match self.resolve_platform_runtime(
+            app_name,
+            context.startup,
+            &runtime_path,
+        ) {
+            Ok(resolved) => resolved,
+            Err(err) if self.platform_missing_can_fallback_to_headless(&err) => {
+                newengine_ulog_api::ulog::warn!(
                         "{} launcher: platform runtime could not be resolved; falling back to generic headless frontend: {}",
                         app_name,
                         err
                     );
-                    return newengine_runtime_host::HeadlessCliRuntime::new(
-                        engine,
-                        context.launch_spec.fixed_dt_ms,
-                    )
-                    .run(err.to_string());
-                }
-                Err(err) => return Err(err),
-            };
+                return newengine_runtime_host::HeadlessCliRuntime::new(
+                    engine,
+                    context.launch_spec.fixed_dt_ms,
+                )
+                .run(err.to_string());
+            }
+            Err(err) => return Err(err),
+        };
 
         newengine_ulog_api::ulog::info!(
             "{} launcher: windowed host runtime plugin id='{}' path='{}'",

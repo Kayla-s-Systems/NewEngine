@@ -35,6 +35,7 @@ pub(super) fn draw_primitives_for_pass(
         Mat4,
         Option<newengine_materials::MaterialRef>,
         u8,
+        Option<newengine_model_domain_api::FoliageInstanceRuntime>,
         Option<EnvironmentDomeRenderState>,
     );
 
@@ -98,6 +99,16 @@ pub(super) fn draw_primitives_for_pass(
             }
             continue;
         }
+        if has_primitive_flag(draw_flags, PRIMITIVE_DRAW_FOLIAGE_ROLE) {
+            if let Some(foliage) =
+                world.get::<newengine_model_domain_api::FoliageInstanceRuntime>(id)
+            {
+                let distance = distance_sq_to_camera(render_model, camera_position).sqrt();
+                if !foliage.is_visible(distance, false) {
+                    continue;
+                }
+            }
+        }
         if runtime && !follows_view && visibility_settings.culling_enabled {
             if let Some(bounds) = world.get::<Bounds>(id) {
                 let (center_ws, radius_ws) = transform_sphere(
@@ -134,6 +145,9 @@ pub(super) fn draw_primitives_for_pass(
             render_model,
             world.get::<newengine_materials::MaterialRef>(id).copied(),
             draw_flags,
+            world
+                .get::<newengine_model_domain_api::FoliageInstanceRuntime>(id)
+                .copied(),
             sky_dome_runtime.cloned(),
         );
         if sky_role {
@@ -180,14 +194,23 @@ pub(super) fn draw_primitives_for_pass(
     // group / mesh for performance, so the dome must not share the same unordered
     // set with sun/moon discs: draw authored dome first, sky foreground discs next,
     // then world opaque batches.
-    for (_distance_sq, _entity_key, prim, model, material_ref, draw_flags, sky_runtime) in
-        sky_entries
-            .into_iter()
-            .chain(foliage_entries.into_iter())
-            .chain(entries.into_iter())
+    for (
+        _distance_sq,
+        _entity_key,
+        prim,
+        model,
+        material_ref,
+        draw_flags,
+        foliage_runtime,
+        sky_runtime,
+    ) in sky_entries
+        .into_iter()
+        .chain(foliage_entries.into_iter())
+        .chain(entries.into_iter())
     {
         let follows_view = has_primitive_flag(draw_flags, PRIMITIVE_DRAW_FOLLOW_VIEW);
         let foliage_role = has_primitive_flag(draw_flags, PRIMITIVE_DRAW_FOLIAGE_ROLE);
+        let decal_role = has_primitive_flag(draw_flags, PRIMITIVE_DRAW_DECAL_ROLE);
         let sky_role = has_primitive_flag(draw_flags, PRIMITIVE_DRAW_SKY_ROLE);
         let background_sky = has_primitive_flag(draw_flags, PRIMITIVE_DRAW_SKY_BACKGROUND);
         let receive_shadows = has_primitive_flag(draw_flags, PRIMITIVE_DRAW_RECEIVE_SHADOWS);
@@ -199,7 +222,8 @@ pub(super) fn draw_primitives_for_pass(
         if pass.is_gbuffer() && sky_role {
             continue;
         }
-        let plan_key = PrimitivePlanKey::new(prim, material_ref, sky_role, pass.is_gbuffer());
+        let plan_key =
+            PrimitivePlanKey::new(prim, material_ref, sky_role, decal_role, pass.is_gbuffer());
         let plan = if let Some(plan) = plan_cache.get(&plan_key).copied() {
             plan
         } else {
@@ -212,11 +236,24 @@ pub(super) fn draw_primitives_for_pass(
                 material_plan.emissive_radiance = runtime.emissive_params;
             }
 
-            let base_tex = this.material_texture_or_default(
-                r,
-                material_plan.base_color_texture,
-                lit.white_texture,
-            );
+            let base_tex = if let Some(path) = material_plan.base_color_texture {
+                if foliage_role || material_plan.alpha_cutoff > 0.0 {
+                    let Some(texture) =
+                        this.material_texture_if_ready(r, path, "render.world_foliage")
+                    else {
+                        // Never expose the generic white fallback through leaf/grass
+                        // alpha cards. It turns transparent atlas texels into opaque
+                        // white geometry and makes foliage appear to bleach when a
+                        // camera turn reveals a batch before its texture is resident.
+                        continue;
+                    };
+                    texture
+                } else {
+                    this.material_texture_or_default(r, Some(path), lit.white_texture)
+                }
+            } else {
+                lit.white_texture
+            };
             let normal_tex = this.material_texture_or_default(
                 r,
                 material_plan.normal_texture,
@@ -227,12 +264,22 @@ pub(super) fn draw_primitives_for_pass(
                 material_plan.roughness_texture,
                 lit.white_texture,
             );
+            let speedtree_authored_texture = material_plan
+                .base_color_texture
+                .map(|path| {
+                    path.contains("/foliage/speedtree/") || path.contains("\\foliage\\speedtree\\")
+                })
+                .unwrap_or(false);
             let sampler = if sky_role {
                 // Procedural SkyDome noise is tiled in a projected cloud plane.
                 lit.repeat_sampler
+            } else if speedtree_authored_texture {
+                // SpeedTree generated/source UVs intentionally cross the 0..1 boundary
+                // on bark and some leaf/cluster cards. Clamp smears the outer texel
+                // across those triangles and exposes the card plane.
+                lit.repeat_sampler
             } else if material_plan.alpha_cutoff > 0.0 {
-                // Alpha-card atlases must not wrap transparent border texels onto
-                // the opposite edge. Repeat sampling creates foliage/card seams.
+                // Generic packed alpha atlases keep clamp semantics.
                 lit.clamp_sampler
             } else if material_plan.has_textures() {
                 lit.repeat_sampler
@@ -259,6 +306,10 @@ pub(super) fn draw_primitives_for_pass(
                 }
             } else if sky_role {
                 lit.sky_instanced_pipeline
+            } else if decal_role && material_plan.double_sided {
+                lit.decal_instanced_double_sided_pipeline
+            } else if decal_role {
+                lit.decal_instanced_pipeline
             } else if material_plan.double_sided {
                 lit.instanced_double_sided_pipeline
             } else {
@@ -355,6 +406,12 @@ pub(super) fn draw_primitives_for_pass(
             plan.alpha_cutoff,
             prim.id.0,
         );
+        let instance = if foliage_role {
+            let wind = foliage_runtime.unwrap_or_default();
+            instance.with_foliage_wind(wind.wind_enabled, wind.wind_direction, wind.wind_strength)
+        } else {
+            instance
+        };
         let batch_key = InstanceBatchKey::new(
             plan.pipeline,
             plan.bind_group,
@@ -423,7 +480,10 @@ pub(super) fn draw_primitives_for_pass(
 
     let foliage_batch_count = foliage_batches.batch_count();
     let foliage_instance_count = foliage_batches.instance_count();
-    if runtime && this.frame.frame_index <= 3 && foliage_instance_count > 0 {
+    if runtime
+        && foliage_instance_count > 0
+        && (this.frame.frame_index <= 3 || route_diagnostics_due(this.frame.frame_index))
+    {
         newengine_ulog_api::ulog::info!(
             "foliage.instance_batch: frame={} pass='{}' gpu_batches={} instances={} policy='MeshRenderRole::FoliageInstanced -> shared source mesh + hardware instance buffer'",
             this.frame.frame_index,

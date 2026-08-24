@@ -1,5 +1,9 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
+mod service;
+
+pub use service::native_host_capabilities_service;
+
 use newengine_host_capabilities_api::{
     CpuCapabilities, CpuFeatureSet, DisplayCapabilities, GpuCapabilities, HostAffinityPolicy,
     HostCapabilities, HostEnvironmentSnapshot, HostPlatformServices, HostPreInitSnapshot,
@@ -130,7 +134,9 @@ fn discover_cpu() -> CpuCapabilities {
         .filter(|value| !value.is_empty())
         .or_else(|| std::env::var("PROCESSOR_IDENTIFIER").ok());
     let logical_cores = match sys.cpus().len() {
-        0 => std::thread::available_parallelism().ok().map(|n| n.get() as u32),
+        0 => std::thread::available_parallelism()
+            .ok()
+            .map(|n| n.get() as u32),
         count => Some(count as u32),
     };
     let physical_cores = System::physical_core_count().map(|count| count as u32);
@@ -317,7 +323,11 @@ fn stable_id_slug(value: &str) -> String {
         }
     }
     let trimmed = out.trim_matches('-');
-    if trimmed.is_empty() { "adapter".to_owned() } else { trimmed.to_owned() }
+    if trimmed.is_empty() {
+        "adapter".to_owned()
+    } else {
+        trimmed.to_owned()
+    }
 }
 
 #[cfg(windows)]
@@ -335,9 +345,13 @@ fn discover_windows_gpu() -> Vec<GpuCapabilities> {
         };
         let desc = match unsafe { adapter.GetDesc1() } {
             Ok(desc) => desc,
-            Err(_) => { index = index.wrapping_add(1); continue; }
+            Err(_) => {
+                index = index.wrapping_add(1);
+                continue;
+            }
         };
-        let name = wide_to_string(&desc.Description).unwrap_or_else(|| format!("DXGI Adapter {index}"));
+        let name =
+            wide_to_string(&desc.Description).unwrap_or_else(|| format!("DXGI Adapter {index}"));
         let dedicated_vram_mb = bytes_to_mb_option(desc.DedicatedVideoMemory as u64);
         let is_software = (desc.Flags & 0x2) != 0;
         adapters.push(GpuCapabilities {
@@ -399,7 +413,9 @@ fn bytes_to_mb_option(bytes: u64) -> Option<u64> {
 
 #[cfg(windows)]
 fn discover_displays() -> Vec<DisplayCapabilities> {
-    use windows::Win32::UI::WindowsAndMessaging::{GetSystemMetrics, SM_CMONITORS, SM_CXSCREEN, SM_CYSCREEN};
+    use windows::Win32::UI::WindowsAndMessaging::{
+        GetSystemMetrics, SM_CMONITORS, SM_CXSCREEN, SM_CYSCREEN,
+    };
     let count = unsafe { GetSystemMetrics(SM_CMONITORS) }.max(1) as u32;
     let width = unsafe { GetSystemMetrics(SM_CXSCREEN) }.max(0) as u32;
     let height = unsafe { GetSystemMetrics(SM_CYSCREEN) }.max(0) as u32;
@@ -417,7 +433,9 @@ fn discover_displays() -> Vec<DisplayCapabilities> {
 }
 
 #[cfg(not(windows))]
-fn discover_displays() -> Vec<DisplayCapabilities> { Vec::new() }
+fn discover_displays() -> Vec<DisplayCapabilities> {
+    Vec::new()
+}
 
 #[cfg(windows)]
 fn discover_input() -> InputCapabilities {
@@ -448,11 +466,17 @@ fn discover_input() -> InputCapabilities {
 }
 
 fn opt_u32(value: Option<u32>) -> String {
-    value.map(|value| value.to_string()).unwrap_or_else(|| "<unknown>".to_owned())
+    value
+        .map(|value| value.to_string())
+        .unwrap_or_else(|| "<unknown>".to_owned())
 }
 
 fn opt_bool(value: Option<bool>) -> &'static str {
-    match value { Some(true) => "1", Some(false) => "0", None => "?" }
+    match value {
+        Some(true) => "1",
+        Some(false) => "0",
+        None => "?",
+    }
 }
 
 #[cfg(test)]
@@ -475,18 +499,41 @@ mod tests {
     #[test]
     fn preferred_gpu_chooses_discrete_vram() {
         let gpus = vec![
-            GpuCapabilities { index: 0, name: "Integrated".to_owned(), stable_id: "a".to_owned(), ..Default::default() },
-            GpuCapabilities { index: 1, name: "Discrete".to_owned(), stable_id: "b".to_owned(), dedicated_vram_mb: Some(8192), is_discrete: true, ..Default::default() },
+            GpuCapabilities {
+                index: 0,
+                name: "Integrated".to_owned(),
+                stable_id: "a".to_owned(),
+                ..Default::default()
+            },
+            GpuCapabilities {
+                index: 1,
+                name: "Discrete".to_owned(),
+                stable_id: "b".to_owned(),
+                dedicated_vram_mb: Some(8192),
+                is_discrete: true,
+                ..Default::default()
+            },
         ];
         assert_eq!(select_preferred_gpu(&gpus), Some(1));
     }
 
     #[test]
     fn runtime_policy_is_immutable_data_derived_from_snapshot() {
-        let environment = HostEnvironmentSnapshot { os: "windows".to_owned(), ..Default::default() };
+        let environment = HostEnvironmentSnapshot {
+            os: "windows".to_owned(),
+            ..Default::default()
+        };
         let capabilities = HostCapabilities {
-            cpu: CpuCapabilities { logical_cores: Some(20), ..Default::default() },
-            gpu: vec![GpuCapabilities { index: 0, stable_id: "gpu0".to_owned(), graphics_api: Some("D3D12 feature_level=12_2".to_owned()), ..Default::default() }],
+            cpu: CpuCapabilities {
+                logical_cores: Some(20),
+                ..Default::default()
+            },
+            gpu: vec![GpuCapabilities {
+                index: 0,
+                stable_id: "gpu0".to_owned(),
+                graphics_api: Some("D3D12 feature_level=12_2".to_owned()),
+                ..Default::default()
+            }],
             preferred_gpu_index: Some(0),
             ..Default::default()
         };
@@ -498,7 +545,13 @@ mod tests {
             .iter()
             .find(|hint| hint.gateway_id == "engine.render")
             .expect("render policy");
-        assert!(render.preferred_system_tags.iter().any(|tag| tag == "backend.d3d12"));
-        assert!(render.forbidden_system_tags.iter().any(|tag| tag == "backend.metal"));
+        assert!(render
+            .preferred_system_tags
+            .iter()
+            .any(|tag| tag == "backend.d3d12"));
+        assert!(render
+            .forbidden_system_tags
+            .iter()
+            .any(|tag| tag == "backend.metal"));
     }
 }

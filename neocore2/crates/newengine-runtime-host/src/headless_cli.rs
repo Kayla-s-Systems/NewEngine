@@ -290,7 +290,6 @@ fn env_bool(name: &str, default: bool) -> bool {
         .unwrap_or(default)
 }
 
-
 #[derive(Clone, Copy, Debug, Default)]
 pub struct HeadlessRuntimeFrontend;
 

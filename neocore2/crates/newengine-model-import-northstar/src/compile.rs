@@ -10,17 +10,27 @@ use newengine_asset_format_nef8::ydd_binary::{
 use newengine_assets_api::{
     encode_list_file, ListFileEncodeRequest, LIST_FILE_CONTENT_KIND_YDD, LIST_FILE_CONTENT_KIND_YMT,
 };
+use newengine_math::{Mat4, Quat, Vec3};
 
 use crate::geometry::{decode_geometry_lod0, SkinLossStats};
 use crate::pak::PakFile;
-use crate::skeleton::{decode_skeleton, DecodedSkeleton};
+use crate::skeleton::{decode_skeleton_with_profile, DecodedSkeleton, SkeletonProfile};
 
 #[derive(Clone, Debug)]
 pub struct CharacterCompileRequest {
     pub name: String,
     pub package_paths: Vec<PathBuf>,
     pub skeleton_path: PathBuf,
+    pub skeleton_profile: SkeletonProfile,
     pub output_dir: PathBuf,
+    /// Optional canonical NEMAT reference. When set, imported LOD0 meshes are
+    /// bound deterministically as @m00, @m01, ... in package/mesh order.
+    pub material_library_ref: Option<String>,
+    /// Optional per-package mesh prefixes. If a package has one or more entries here,
+    /// only meshes whose decoded name starts with one of those prefixes are imported.
+    pub package_mesh_prefixes: Vec<(PathBuf, String)>,
+    /// Optional mesh-prefix to canonical material-ref overrides. Longest prefix wins.
+    pub material_overrides: Vec<(String, String)>,
 }
 
 #[derive(Clone, Debug)]
@@ -44,7 +54,7 @@ pub fn compile_character(
         return Err("character import requires at least one geometry package".to_owned());
     }
     let skeleton_pak = PakFile::parse(read_file(&request.skeleton_path)?)?;
-    let skeleton = decode_skeleton(&skeleton_pak)?;
+    let skeleton = decode_skeleton_with_profile(&skeleton_pak, request.skeleton_profile)?;
 
     let mut meshes = Vec::new();
     let mut skin_loss = SkinLossStats::default();
@@ -53,7 +63,20 @@ pub fn compile_character(
         let decoded =
             decode_geometry_lod0(&pak).map_err(|error| format!("{}: {error}", path.display()))?;
         skin_loss.merge(decoded.skin_loss);
+        let package_filters = request
+            .package_mesh_prefixes
+            .iter()
+            .filter(|(filter_path, _)| filter_path == path)
+            .map(|(_, prefix)| prefix.as_str())
+            .collect::<Vec<_>>();
         for mesh in decoded.meshes {
+            if !package_filters.is_empty()
+                && !package_filters
+                    .iter()
+                    .any(|prefix| mesh.name.starts_with(prefix))
+            {
+                continue;
+            }
             validate_skin_joint_range(&mesh, skeleton.joints.len(), path)?;
             meshes.push(mesh);
         }
@@ -61,6 +84,7 @@ pub fn compile_character(
     if meshes.is_empty() {
         return Err("character import produced no LOD0 meshes".to_owned());
     }
+    validate_native_eye_contract(&meshes, &skeleton)?;
 
     let bounds_min = [
         meshes
@@ -92,9 +116,21 @@ pub fn compile_character(
     ];
     let native_meshes = meshes
         .iter()
-        .map(|mesh| YddBinaryMesh {
+        .enumerate()
+        .map(|(index, mesh)| YddBinaryMesh {
             name: mesh.name.clone(),
-            material_ref: None,
+            material_ref: request
+                .material_overrides
+                .iter()
+                .filter(|(prefix, _)| mesh.name.starts_with(prefix))
+                .max_by_key(|(prefix, _)| prefix.len())
+                .map(|(_, reference)| reference.clone())
+                .or_else(|| {
+                    request
+                        .material_library_ref
+                        .as_ref()
+                        .map(|library| format!("{}@m{:02}", library.trim_end_matches('@'), index))
+                }),
             bounds_min: mesh.bounds_min,
             bounds_max: mesh.bounds_max,
             vertices: mesh.vertices.clone(),
@@ -117,7 +153,7 @@ pub fn compile_character(
     let document = YddBinaryDocument {
         entries: vec![YddBinaryEntry {
             name: request.name.clone(),
-            source_path: format!("naughtydog.tlou2.pc://{source_path}"),
+            source_path: format!("northstar.tlou2.pc://{source_path}"),
             properties_ref: None,
             bounds_min,
             bounds_max,
@@ -160,6 +196,156 @@ pub fn compile_character(
         joint_count: skeleton.joints.len(),
         skin_loss,
     })
+}
+
+fn validate_native_eye_contract(
+    meshes: &[crate::geometry::ImportMesh],
+    skeleton: &DecodedSkeleton,
+) -> Result<(), String> {
+    let Some(eye_mesh) = meshes.iter().find(|mesh| {
+        let name = mesh.name.to_ascii_lowercase();
+        let material = mesh
+            .source_material
+            .as_deref()
+            .unwrap_or_default()
+            .to_ascii_lowercase();
+        name.contains("abby_eyes_") || material.contains("/abby/abby-eyes:")
+    }) else {
+        return Ok(());
+    };
+
+    let joint_index = |name: &str| {
+        skeleton
+            .joints
+            .iter()
+            .position(|joint| joint.name == name)
+            .ok_or_else(|| format!("native Abby eye mesh requires skeleton joint '{name}'"))
+    };
+    let left = joint_index("l_eyeball")?;
+    let right = joint_index("r_eyeball")?;
+    if skeleton.joints[left].parent_index != skeleton.joints[right].parent_index {
+        return Err("native Abby eyeballs do not share the same authored parent".to_owned());
+    }
+
+    let mut globals = vec![Mat4::IDENTITY; skeleton.joints.len()];
+    for (index, joint) in skeleton.joints.iter().enumerate() {
+        let local = Mat4::from_scale_rotation_translation(
+            Vec3::new(joint.scale_ls[0], joint.scale_ls[1], joint.scale_ls[2]),
+            Quat::from_xyzw(
+                joint.rotation_ls[0],
+                joint.rotation_ls[1],
+                joint.rotation_ls[2],
+                joint.rotation_ls[3],
+            )
+            .normalize_or_identity(),
+            Vec3::new(joint.position_ls[0], joint.position_ls[1], joint.position_ls[2]),
+        );
+        globals[index] = joint
+            .parent_index
+            .map(|parent| globals[parent as usize] * local)
+            .unwrap_or(local);
+    }
+
+    let (left_scale, left_rotation, left_center) = globals[left].to_scale_rotation_translation();
+    let (right_scale, right_rotation, right_center) = globals[right].to_scale_rotation_translation();
+    if !left_scale.is_finite()
+        || !right_scale.is_finite()
+        || !left_rotation.is_finite()
+        || !right_rotation.is_finite()
+        || !left_center.is_finite()
+        || !right_center.is_finite()
+    {
+        return Err("native Abby eye bind basis contains non-finite values".to_owned());
+    }
+    let scale_delta_vec = left_scale - right_scale;
+    let scale_delta = scale_delta_vec.x.abs().max(scale_delta_vec.y.abs()).max(scale_delta_vec.z.abs());
+    let basis_dot = left_rotation
+        .normalize_or_identity()
+        .dot(right_rotation.normalize_or_identity())
+        .abs();
+    if scale_delta > 1.0e-4 || basis_dot < 0.9999 {
+        return Err(format!(
+            "native Abby eye bind bases diverge scale_delta={scale_delta:.8} rotation_dot={basis_dot:.8}"
+        ));
+    }
+
+    let Some(skin) = eye_mesh.skin.as_deref() else {
+        return Err("native Abby eye mesh has no skin stream".to_owned());
+    };
+    if skin.len() != eye_mesh.vertices.len() {
+        return Err(format!(
+            "native Abby eye skin/vertex count mismatch skin={} vertices={}",
+            skin.len(),
+            eye_mesh.vertices.len()
+        ));
+    }
+
+    let mut uv_min = [f32::INFINITY; 2];
+    let mut uv_max = [f32::NEG_INFINITY; 2];
+    let mut max_non_eye_weight = 0.0_f32;
+    let mut left_vertices = 0usize;
+    let mut right_vertices = 0usize;
+    let mut max_center_distance = [0.0_f32; 2];
+    for (vertex, skin) in eye_mesh.vertices.iter().zip(skin.iter()) {
+        for component in 0..2 {
+            if !vertex.uv0[component].is_finite() {
+                return Err("native Abby eye UV0 contains non-finite values".to_owned());
+            }
+            uv_min[component] = uv_min[component].min(vertex.uv0[component]);
+            uv_max[component] = uv_max[component].max(vertex.uv0[component]);
+        }
+
+        let mut left_weight = 0.0_f32;
+        let mut right_weight = 0.0_f32;
+        for (&joint, &weight) in skin
+            .joints
+            .iter()
+            .chain(skin.joints_extra.iter())
+            .zip(skin.weights.iter().chain(skin.weights_extra.iter()))
+        {
+            if usize::from(joint) == left {
+                left_weight += weight;
+            } else if usize::from(joint) == right {
+                right_weight += weight;
+            }
+        }
+        let non_eye_weight = (1.0 - left_weight - right_weight).max(0.0);
+        max_non_eye_weight = max_non_eye_weight.max(non_eye_weight);
+        let position = Vec3::new(vertex.position[0], vertex.position[1], vertex.position[2]);
+        if left_weight >= right_weight {
+            left_vertices += 1;
+            max_center_distance[0] = max_center_distance[0].max(position.distance(left_center));
+        } else {
+            right_vertices += 1;
+            max_center_distance[1] = max_center_distance[1].max(position.distance(right_center));
+        }
+    }
+
+    let uv_span = [uv_max[0] - uv_min[0], uv_max[1] - uv_min[1]];
+    if uv_span[0] < 0.75 || uv_span[1] < 0.75 {
+        return Err(format!(
+            "native Abby eye UV0 collapsed/squashed u=[{:.6},{:.6}] v=[{:.6},{:.6}] span=[{:.6},{:.6}]",
+            uv_min[0], uv_max[0], uv_min[1], uv_max[1], uv_span[0], uv_span[1]
+        ));
+    }
+    if max_non_eye_weight > 1.0e-3 {
+        return Err(format!(
+            "native Abby eye mesh leaks skin weight outside l/r eyeball joints max_non_eye_weight={max_non_eye_weight:.8}"
+        ));
+    }
+    if left_vertices == 0 || right_vertices == 0 {
+        return Err(format!(
+            "native Abby eye mesh did not resolve both eyeballs left_vertices={left_vertices} right_vertices={right_vertices}"
+        ));
+    }
+    if max_center_distance[0] > 0.03 || max_center_distance[1] > 0.03 {
+        return Err(format!(
+            "native Abby eye geometry is displaced from authored bind centers left_max={:.6} right_max={:.6}",
+            max_center_distance[0], max_center_distance[1]
+        ));
+    }
+
+    Ok(())
 }
 
 fn validate_skin_joint_range(
@@ -273,7 +459,7 @@ fn encode_nef8(
 fn encode_skeleton_xml(skeleton: &DecodedSkeleton) -> Vec<u8> {
     let mut out = String::from("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<Metadata>\n");
     out.push_str(&format!(
-        "  <Skeleton source_format=\"naughtydog.tlou2.pc.joint_hierarchy.v1\" name=\"{}\">\n",
+        "  <Skeleton source_format=\"northstar.tlou2.pc.joint_hierarchy.v1\" name=\"{}\">\n",
         xml_escape(&skeleton.name)
     ));
     for joint in &skeleton.joints {

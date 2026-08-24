@@ -117,6 +117,27 @@ pub fn canonical_asset_format_ownership() -> Vec<AssetFormatOwnership> {
             runtime_rule: ".ytd is a NEF8/ListFile texture dictionary; render receives runtime texture packets".to_owned(),
         },
         AssetFormatOwnership {
+            extension: "srt".to_owned(),
+            role: "speedtree_canonical_source".to_owned(),
+            byte_owner_gateway: crate::ENGINE_ASSET_SERVICE_ID.to_owned(),
+            semantic_owner_gateway: crate::ENGINE_ASSETS_MODELS_SERVICE_ID.to_owned(),
+            runtime_rule: ".srt stays an opaque canonical source; a selected AssetImporterV1 capability produces engine-owned foliage runtime assets".to_owned(),
+        },
+        AssetFormatOwnership {
+            extension: "spm".to_owned(),
+            role: "speedtree_modeler_source".to_owned(),
+            byte_owner_gateway: crate::ENGINE_ASSET_SERVICE_ID.to_owned(),
+            semantic_owner_gateway: crate::ENGINE_ASSETS_MODELS_SERVICE_ID.to_owned(),
+            runtime_rule: ".spm stays an opaque SpeedTree Modeler authoring source; a selected AssetImporterV1 capability produces engine-owned foliage runtime assets".to_owned(),
+        },
+        AssetFormatOwnership {
+            extension: "nefoliage".to_owned(),
+            role: "compiled_foliage_runtime".to_owned(),
+            byte_owner_gateway: crate::ENGINE_ASSET_SERVICE_ID.to_owned(),
+            semantic_owner_gateway: crate::ENGINE_ASSETS_MODELS_SERVICE_ID.to_owned(),
+            runtime_rule: ".nefoliage contains validated LOD/material/impostor metadata; render receives extracted handles and instance commands, never source bytes".to_owned(),
+        },
+        AssetFormatOwnership {
             extension: "nepak".to_owned(),
             role: "vfs_package".to_owned(),
             byte_owner_gateway: crate::ENGINE_ASSET_SERVICE_ID.to_owned(),
@@ -142,6 +163,7 @@ pub struct ImporterDescriptorV1 {
     pub source_content_kinds: Vec<String>,
     pub runtime_outputs: Vec<String>,
     pub owner_gateway: String,
+    pub required_capability: Option<String>,
     pub cache_key_inputs: Vec<String>,
     pub deterministic: bool,
 }
@@ -155,6 +177,7 @@ impl Default for ImporterDescriptorV1 {
             source_content_kinds: Vec::new(),
             runtime_outputs: Vec::new(),
             owner_gateway: crate::ENGINE_ASSET_SERVICE_ID.to_owned(),
+            required_capability: None,
             cache_key_inputs: vec![
                 "source_path".to_owned(),
                 "source_content_hash".to_owned(),

@@ -107,6 +107,59 @@ pub fn resolve_combat_queries(
         let _ = world.remove::<PendingHitscan>(shooter);
     }
 
+    let focused_item_interactions = world
+        .query::<PendingFocusedItemInteraction>()
+        .map(|(player, pending)| (player, *pending))
+        .collect::<Vec<_>>();
+    for (player, pending) in focused_item_interactions {
+        if world.exists(pending.target) {
+            if let Some(interactable) = world.get::<Interactable>(pending.target).cloned() {
+                if interactable.enabled {
+                    let event = FpsPolicyEvent::Interaction {
+                        player: player.stable_u64(),
+                        target: pending.target.stable_u64(),
+                        prompt: interactable.prompt.clone(),
+                        fixed_tick,
+                        point: vec3_to_array(pending.point),
+                    };
+                    let mut decision = invoke_policy_event_fail_closed(
+                        policy_provider,
+                        &policy.callbacks.interaction,
+                        &event,
+                        "interaction",
+                    );
+                    if let Err(error) = execute_policy_commands(
+                        world,
+                        command_executor,
+                        &decision.commands,
+                        "interaction",
+                    ) {
+                        decision.allow_default = false;
+                        decision.status =
+                            Some(format!("Gameplay command transaction failed: {error}"));
+                    }
+                    apply_callback_status(world, decision.status.clone());
+                    if decision.allow_default {
+                        emit_interaction_event(
+                            world,
+                            InteractionEvent {
+                                player,
+                                target: pending.target,
+                                prompt: interactable.prompt,
+                                fixed_tick,
+                                point: pending.point,
+                            },
+                        );
+                        if decision.collect_item.unwrap_or(true) {
+                            let _ = try_collect_item_pickup(world, player, pending.target);
+                        }
+                    }
+                }
+            }
+        }
+        let _ = world.remove::<PendingFocusedItemInteraction>(player);
+    }
+
     let pending_interactions = world
         .query::<PendingInteraction>()
         .map(|(entity, pending)| (entity, *pending))

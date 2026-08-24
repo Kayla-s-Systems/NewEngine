@@ -14,7 +14,7 @@ impl FrameGraphBuilder {
         if !enabled {
             return self;
         }
-        let resolution = resolution.clamp(256, 8192);
+        let resolution = resolution.clamp(256, 16284);
         let shadow_extent = Extent2D::new(resolution, resolution);
         let shadow_resource = if let Some(rt) = self.target.shadow_render_target {
             RenderGraphResourceDesc::external_render_target(
@@ -74,7 +74,7 @@ impl FrameGraphBuilder {
         if !enabled {
             return self;
         }
-        let resolution = resolution.clamp(256, 8192);
+        let resolution = resolution.clamp(256, 16284);
         let cascades = cascade_count.clamp(1, 8);
         let atlas_cols = if cascades <= 1 {
             1

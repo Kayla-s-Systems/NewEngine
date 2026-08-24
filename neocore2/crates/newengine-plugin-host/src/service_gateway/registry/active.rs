@@ -1,6 +1,6 @@
-use super::*;
 use super::facts::GatewayPolicyFact;
 use super::route_model::route_matches_query;
+use super::*;
 
 #[derive(Debug, Clone, Default)]
 pub(crate) struct ActiveGatewayRegistry {

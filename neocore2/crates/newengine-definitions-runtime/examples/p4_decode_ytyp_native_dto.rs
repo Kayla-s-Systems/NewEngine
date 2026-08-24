@@ -28,5 +28,8 @@ fn main() {
         eprintln!("YTYP runtime domain decode failed: {error}");
         process::exit(1);
     });
-    println!("{}", serde_json::to_string(&dto).expect("serialize YTYP runtime DTO"));
+    println!(
+        "{}",
+        serde_json::to_string(&dto).expect("serialize YTYP runtime DTO")
+    );
 }

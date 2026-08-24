@@ -16,9 +16,7 @@ use newengine_project_runtime::{
     RuntimeCompositionContext,
 };
 
-use crate::{
-    engine_factory::build_engine_from_startup,
-};
+use crate::engine_factory::build_engine_from_startup;
 
 use super::boot_options::{apply_declared_boot_options_env, boot_option_enabled};
 use super::types::{
@@ -55,6 +53,13 @@ where
         let boot_options = self.profile.boot_options();
         apply_declared_boot_options_env(self.spec.app_name, boot_options);
         self.install_error_reporter();
+
+        // PreInit providers are composition-owned. A profile may register an
+        // alternative engine.host.capabilities route before the native fallback
+        // is considered.
+        newengine_plugin_host::init_host_context();
+        self.profile
+            .register_preinit_provider_routes_best_effort();
 
         // Void Engine Host PreInit is deliberately before project/runtime composition.
         // OS/hardware discovery produces immutable DTOs and installs only generic

@@ -20,10 +20,14 @@ fn main() {
         eprintln!("canonical NEF8 decode failed: {error}");
         process::exit(1);
     });
-    let library = newengine_material_runtime::decode_nemat_material_library_from_body(&decoded.body)
-        .unwrap_or_else(|error| {
-            eprintln!("NEMAT runtime domain decode failed: {error}");
-            process::exit(1);
-        });
-    println!("{}", serde_json::to_string(&library).expect("serialize NEMAT runtime DTO"));
+    let library =
+        newengine_material_runtime::decode_nemat_material_library_from_body(&decoded.body)
+            .unwrap_or_else(|error| {
+                eprintln!("NEMAT runtime domain decode failed: {error}");
+                process::exit(1);
+            });
+    println!(
+        "{}",
+        serde_json::to_string(&library).expect("serialize NEMAT runtime DTO")
+    );
 }

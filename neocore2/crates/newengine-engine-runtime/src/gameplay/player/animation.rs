@@ -13,7 +13,7 @@ fn sanitized_dt(dt: f32) -> f32 {
 fn select_ground_locomotion_animation(
     crouched: bool,
     horizontal_speed: f32,
-    normalized_speed: f32,
+    walk_run_threshold: f32,
     sprinting: bool,
 ) -> PlayerLocomotionAnimation {
     if crouched {
@@ -27,7 +27,7 @@ fn select_ground_locomotion_animation(
         PlayerLocomotionAnimation::Idle
     } else if sprinting {
         PlayerLocomotionAnimation::Sprint
-    } else if normalized_speed >= 0.55 {
+    } else if horizontal_speed >= walk_run_threshold {
         PlayerLocomotionAnimation::Run
     } else {
         PlayerLocomotionAnimation::Walk
@@ -39,14 +39,18 @@ fn select_locomotion_animation(
     grounded: bool,
     crouched: bool,
     horizontal_speed: f32,
-    normalized_speed: f32,
+    walk_run_threshold: f32,
     vertical_speed: f32,
     sprinting: bool,
     airborne_time: f32,
     jump_started: bool,
 ) -> PlayerLocomotionAnimation {
-    let ground_locomotion =
-        select_ground_locomotion_animation(crouched, horizontal_speed, normalized_speed, sprinting);
+    let ground_locomotion = select_ground_locomotion_animation(
+        crouched,
+        horizontal_speed,
+        walk_run_threshold,
+        sprinting,
+    );
     if grounded {
         return ground_locomotion;
     }
@@ -125,16 +129,17 @@ pub fn update_player_animation_states(world: &mut World, dt: f32) {
             .copied()
             .unwrap_or_default();
         let sprinting = input.speed_mul > 1.05 && horizontal_speed > 0.08;
-        let base_speed = world
-            .get::<CharacterMotor>(player)
-            .map(|motor| motor.move_speed.max(0.01))
-            .unwrap_or(6.0);
-        let normalized_speed = (horizontal_speed / base_speed).clamp(0.0, 2.0);
+        let movement = world
+            .get::<PlayerMovementSpeeds>(player)
+            .copied()
+            .unwrap_or_default()
+            .sanitized();
+        let normalized_speed = (horizontal_speed / movement.run).clamp(0.0, 2.0);
         let desired = select_locomotion_animation(
             grounded,
             crouched,
             horizontal_speed,
-            normalized_speed,
+            movement.walk_run_threshold(),
             velocity.y,
             sprinting,
             locomotion_state.airborne_time,
@@ -200,35 +205,35 @@ mod tests {
     #[test]
     fn locomotion_semantics_cover_ground_crouch_and_air() {
         assert_eq!(
-            select_locomotion_animation(true, false, 0.0, 0.0, 0.0, false, 0.0, false),
+            select_locomotion_animation(true, false, 0.0, 2.15, 0.0, false, 0.0, false),
             PlayerLocomotionAnimation::Idle
         );
         assert_eq!(
-            select_locomotion_animation(true, false, 2.0, 0.33, 0.0, false, 0.0, false),
+            select_locomotion_animation(true, false, 2.0, 2.15, 0.0, false, 0.0, false),
             PlayerLocomotionAnimation::Walk
         );
         assert_eq!(
-            select_locomotion_animation(true, false, 4.0, 0.7, 0.0, false, 0.0, false),
+            select_locomotion_animation(true, false, 4.0, 2.15, 0.0, false, 0.0, false),
             PlayerLocomotionAnimation::Run
         );
         assert_eq!(
-            select_locomotion_animation(true, false, 6.0, 1.0, 0.0, true, 0.0, false),
+            select_locomotion_animation(true, false, 6.0, 2.15, 0.0, true, 0.0, false),
             PlayerLocomotionAnimation::Sprint
         );
         assert_eq!(
-            select_locomotion_animation(true, true, 0.0, 0.0, 0.0, false, 0.0, false),
+            select_locomotion_animation(true, true, 0.0, 2.15, 0.0, false, 0.0, false),
             PlayerLocomotionAnimation::CrouchIdle
         );
         assert_eq!(
-            select_locomotion_animation(true, true, 1.0, 0.2, 0.0, false, 0.0, false),
+            select_locomotion_animation(true, true, 1.0, 2.15, 0.0, false, 0.0, false),
             PlayerLocomotionAnimation::CrouchWalk
         );
         assert_eq!(
-            select_locomotion_animation(false, false, 1.0, 0.2, 5.0, false, 0.05, true),
+            select_locomotion_animation(false, false, 1.0, 2.15, 5.0, false, 0.05, true),
             PlayerLocomotionAnimation::Jump
         );
         assert_eq!(
-            select_locomotion_animation(false, false, 1.0, 0.2, -3.0, false, 0.20, true),
+            select_locomotion_animation(false, false, 1.0, 2.15, -3.0, false, 0.20, true),
             PlayerLocomotionAnimation::Fall
         );
     }
@@ -236,11 +241,11 @@ mod tests {
     #[test]
     fn ground_probe_glitches_do_not_force_fall_animation() {
         assert_eq!(
-            select_locomotion_animation(false, false, 0.0, 0.0, -0.12, false, 0.016, false),
+            select_locomotion_animation(false, false, 0.0, 2.15, -0.12, false, 0.016, false),
             PlayerLocomotionAnimation::Idle
         );
         assert_eq!(
-            select_locomotion_animation(false, false, 3.0, 0.50, 0.28, false, 0.032, false),
+            select_locomotion_animation(false, false, 3.0, 2.15, 0.28, false, 0.032, false),
             PlayerLocomotionAnimation::Walk
         );
     }
@@ -248,7 +253,7 @@ mod tests {
     #[test]
     fn terrain_contact_upward_impulse_does_not_synthesize_jump() {
         assert_eq!(
-            select_locomotion_animation(false, false, 7.3, 1.0, 4.2, false, 1.0, false),
+            select_locomotion_animation(false, false, 7.3, 2.15, 4.2, false, 1.0, false),
             PlayerLocomotionAnimation::Run
         );
     }
@@ -256,11 +261,11 @@ mod tests {
     #[test]
     fn sustained_airborne_motion_enters_jump_and_fall() {
         assert_eq!(
-            select_locomotion_animation(false, false, 1.0, 0.2, 5.0, false, 0.016, true),
+            select_locomotion_animation(false, false, 1.0, 2.15, 5.0, false, 0.016, true),
             PlayerLocomotionAnimation::Jump
         );
         assert_eq!(
-            select_locomotion_animation(false, false, 1.0, 0.2, -3.0, false, 0.20, true),
+            select_locomotion_animation(false, false, 1.0, 2.15, -3.0, false, 0.20, true),
             PlayerLocomotionAnimation::Fall
         );
     }

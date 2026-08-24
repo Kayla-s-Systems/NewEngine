@@ -5,6 +5,7 @@ mod editor;
 mod game_gui;
 mod presentation;
 mod right_edit;
+mod toasts;
 
 impl ScreenProfileRuntimeState {
     pub(crate) fn load() -> Self {
@@ -70,6 +71,7 @@ impl ScreenProfileRuntimeState {
             mounted_game_gui_layers: BTreeMap::new(),
             failed_game_gui_layers: BTreeSet::new(),
             game_gui_visibility_overrides: BTreeMap::new(),
+            game_gui_applied_visibility: BTreeMap::new(),
             presentation_state_id,
             last_published_presentation_state_id: None,
             presentation_runtime_ready: false,
@@ -86,6 +88,8 @@ impl ScreenProfileRuntimeState {
             last_dock_click_frame: u64::MAX,
             last_menu_click_frame: u64::MAX,
             active_menu_id: None,
+            last_toast_surface_version: None,
+            last_toast_surface_extent: [0, 0],
         }
     }
 
@@ -219,7 +223,6 @@ impl ScreenProfileRuntimeState {
                         self.active_menu_id.as_deref(),
                     );
                     self.append_right_edit_window(resources, &mut node, &layout);
-                    self.append_toast_components(resources, &mut node, &layout);
                     sort_components_by_layout_y(&mut node.components);
                     publish_screen_node_tree_request(&UiNodeTreeRequest::from_surface_node(
                         &node,
@@ -292,6 +295,8 @@ impl ScreenProfileRuntimeState {
                     self.hide_profile_surface(UI_SURFACE_GAME_PRESENTATION, profile_changed);
             }
         }
+
+        refresh_ui |= self.prepare_toast_surface(resources, frame_index, profile_changed);
 
         if profile_changed {
             newengine_ulog_api::ulog::info!(

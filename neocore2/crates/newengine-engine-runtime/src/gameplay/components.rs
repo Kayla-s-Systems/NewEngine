@@ -22,9 +22,9 @@ pub use player::{
     CharacterBody, CharacterMotionTuning, PlayerAnimationState, PlayerCommandFrame,
     PlayerController, PlayerControllerKind, PlayerEvent, PlayerEventBus, PlayerEventKind,
     PlayerFixedPoseHistory, PlayerGroundState, PlayerLocomotionAnimation, PlayerLocomotionState,
-    PlayerModelAssignment, PlayerModelBinding, PlayerRenderPose, PlayerSkinBinding, PlayerSkinPose,
-    PlayerSkinVertex, PlayerStanceKind, PlayerStanceState, PlayerViewVisibility,
-    PlayerViewVisibilityPolicy, PlayerVisualKind, PlayerVisualPart,
+    PlayerModelAssignment, PlayerModelBinding, PlayerMovementSpeeds, PlayerRenderPose,
+    PlayerSkinBinding, PlayerSkinPose, PlayerSkinVertex, PlayerStanceKind, PlayerStanceState,
+    PlayerViewVisibility, PlayerViewVisibilityPolicy, PlayerVisualKind, PlayerVisualPart,
 };
 pub use render_environment::{
     CloudShadowRenderState, EnvironmentDomeRenderState, EnvironmentPostFxState,

@@ -2,10 +2,16 @@
 
 use abi_stable::std_types::RResult;
 use newengine_audio_api::{
-    AudioFeedbackAck, AudioFeedbackDrain, AudioFeedbackEvent, AudioFeedbackKind, AudioServiceInfo,
-    AUDIO_BACKEND_CAPABILITY_ID, AUDIO_SERVICE_METHOD_DRAIN_EVENTS_JSON_V1,
-    AUDIO_SERVICE_METHOD_INVOKE, AUDIO_SERVICE_METHOD_PLAY_EVENT_JSON_V1,
-    AUDIO_SERVICE_METHOD_SHUTDOWN_V1, ENGINE_AUDIO_SERVICE_ID,
+    AudioBusGainAck, AudioBusGainRequest, AudioDiagnostics, AudioFeedbackAck, AudioFeedbackDrain,
+    AudioFeedbackEvent, AudioFeedbackKind, AudioListenerState, AudioPlayAck, AudioPlayRequest,
+    AudioPreloadAck, AudioPreloadRequest, AudioServiceInfo, AudioStopVoiceRequest, AudioVoiceAck,
+    AudioVoiceUpdateRequest, AUDIO_BACKEND_CAPABILITY_ID, AUDIO_SERVICE_METHOD_DIAGNOSTICS_JSON_V1,
+    AUDIO_SERVICE_METHOD_DRAIN_EVENTS_JSON_V1, AUDIO_SERVICE_METHOD_INFO,
+    AUDIO_SERVICE_METHOD_INVOKE, AUDIO_SERVICE_METHOD_PLAY_CLIP_JSON_V1,
+    AUDIO_SERVICE_METHOD_PLAY_EVENT_JSON_V1, AUDIO_SERVICE_METHOD_PRELOAD_CLIP_JSON_V1,
+    AUDIO_SERVICE_METHOD_SET_BUS_GAIN_JSON_V1, AUDIO_SERVICE_METHOD_SET_LISTENER_JSON_V1,
+    AUDIO_SERVICE_METHOD_SET_VOICE_JSON_V1, AUDIO_SERVICE_METHOD_SHUTDOWN_V1,
+    AUDIO_SERVICE_METHOD_STOP_VOICE_JSON_V1, ENGINE_AUDIO_SERVICE_ID,
 };
 use newengine_service_kit::{
     decode_json_payload, engine_gateway_provider_service_description, ok_empty_blob, ok_json,
@@ -63,7 +69,7 @@ fn audio_gateway_service(
     )
     .protocol(info.protocol.clone())
     .features(info.features.clone())
-    .gateway("engine.audio.echo semantic event queue")
+    .gateway(ENGINE_AUDIO_SERVICE_ID)
     .notes("Null/queue provider until a mixer plugin overrides engine.audio");
 
     JsonServiceRouter::with_shared_state(ENGINE_AUDIO_SERVICE_ID, state)
@@ -163,4 +169,86 @@ pub fn emit_audio_feedback(kind: AudioFeedbackKind, frame_index: u64) {
         Ok(Some(_)) | Ok(None) => {}
         Err(_e) => {}
     }
+}
+
+fn call_audio_json<I, O>(method: &str, request: &I) -> Result<Option<O>, String>
+where
+    I: serde::Serialize,
+    O: serde::de::DeserializeOwned,
+{
+    let payload = serde_json::to_vec(request).map_err(|error| error.to_string())?;
+    let Some(bytes) =
+        newengine_core::call_service_v1_optional(ENGINE_AUDIO_SERVICE_ID, method, &payload)?
+    else {
+        return Ok(None);
+    };
+    serde_json::from_slice(&bytes)
+        .map(Some)
+        .map_err(|error| format!("engine.audio method '{method}' returned invalid JSON: {error}"))
+}
+
+fn call_audio_get_json<O>(method: &str) -> Result<Option<O>, String>
+where
+    O: serde::de::DeserializeOwned,
+{
+    let Some(bytes) =
+        newengine_core::call_service_v1_optional(ENGINE_AUDIO_SERVICE_ID, method, &[])?
+    else {
+        return Ok(None);
+    };
+    serde_json::from_slice(&bytes)
+        .map(Some)
+        .map_err(|error| format!("engine.audio method '{method}' returned invalid JSON: {error}"))
+}
+
+/// Returns the active audio provider contract exposed by `engine.audio`.
+pub fn audio_service_info() -> Result<Option<AudioServiceInfo>, String> {
+    call_audio_get_json(AUDIO_SERVICE_METHOD_INFO)
+}
+
+/// True only when the active provider exposes the complete playback-v1 surface.
+pub fn audio_playback_available() -> Result<bool, String> {
+    Ok(audio_service_info()?.is_some_and(|info| info.supports_playback()))
+}
+
+/// Preloads an authored clip into the active playback provider cache.
+pub fn preload_audio_clip(
+    request: &AudioPreloadRequest,
+) -> Result<Option<AudioPreloadAck>, String> {
+    call_audio_json(AUDIO_SERVICE_METHOD_PRELOAD_CLIP_JSON_V1, request)
+}
+
+/// Starts a 2D or spatial voice. `voice_id` in the acknowledgement is the stable
+/// handle for subsequent stop/update calls.
+pub fn play_audio_clip(request: &AudioPlayRequest) -> Result<Option<AudioPlayAck>, String> {
+    call_audio_json(AUDIO_SERVICE_METHOD_PLAY_CLIP_JSON_V1, request)
+}
+
+pub fn stop_audio_voice(voice_id: u64) -> Result<Option<AudioVoiceAck>, String> {
+    call_audio_json(
+        AUDIO_SERVICE_METHOD_STOP_VOICE_JSON_V1,
+        &AudioStopVoiceRequest { voice_id },
+    )
+}
+
+pub fn update_audio_voice(
+    request: &AudioVoiceUpdateRequest,
+) -> Result<Option<AudioVoiceAck>, String> {
+    call_audio_json(AUDIO_SERVICE_METHOD_SET_VOICE_JSON_V1, request)
+}
+
+pub fn set_audio_listener(
+    listener: &AudioListenerState,
+) -> Result<Option<AudioListenerState>, String> {
+    call_audio_json(AUDIO_SERVICE_METHOD_SET_LISTENER_JSON_V1, listener)
+}
+
+pub fn set_audio_bus_gain(
+    request: &AudioBusGainRequest,
+) -> Result<Option<AudioBusGainAck>, String> {
+    call_audio_json(AUDIO_SERVICE_METHOD_SET_BUS_GAIN_JSON_V1, request)
+}
+
+pub fn audio_diagnostics() -> Result<Option<AudioDiagnostics>, String> {
+    call_audio_get_json(AUDIO_SERVICE_METHOD_DIAGNOSTICS_JSON_V1)
 }

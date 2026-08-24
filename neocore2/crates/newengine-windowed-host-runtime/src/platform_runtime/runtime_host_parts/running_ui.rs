@@ -1,5 +1,4 @@
 use newengine_core::render::SceneLaunchStatus;
-use newengine_system_contracts::ScreenOverlayStatus;
 
 pub(super) fn provider_draw_has_active_animation(draw: &newengine_ui_api::UiDrawList) -> bool {
     draw.paint.commands.iter().any(|command| match command {
@@ -7,18 +6,6 @@ pub(super) fn provider_draw_has_active_animation(draw: &newengine_ui_api::UiDraw
             rect.node.role == "hover-underline-animated"
         }
         _ => false,
-    })
-}
-
-pub(super) fn loading_overlay_requires_immediate_publish(
-    previous: Option<&ScreenOverlayStatus>,
-    next: &ScreenOverlayStatus,
-) -> bool {
-    previous.is_none_or(|previous| {
-        previous.kind != next.kind
-            || previous.reason != next.reason
-            || previous.title != next.title
-            || previous.terminal != next.terminal
     })
 }
 

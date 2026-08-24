@@ -133,6 +133,10 @@ impl RuntimeRenderController {
         &mut self,
         capabilities: &RenderBackendCapabilities,
     ) {
+        self.shadows.max_texture_dimension_2d = capabilities
+            .limits
+            .max_texture_dimension_2d
+            .max(super::render_quality::SHADOW_RESOLUTION_MIN);
         self.runtime_profile
             .apply_hardware_tier_once(capabilities.hardware_tier);
     }

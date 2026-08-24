@@ -69,11 +69,15 @@ pub(crate) fn standalone_fps_bindings() -> Vec<InputBinding> {
         InputBinding::keyboard_pressed(action::EQUIP_MELEE, keys::DIGIT4),
         InputBinding::keyboard_pressed(action::EQUIP_THROWABLE, keys::DIGIT5),
         InputBinding::mouse_button_down(action::PLAYER_FIRE_PRIMARY, mouse_button::LEFT),
-        InputBinding::mouse_button_pressed(action::PLAYER_LAUNCH_PROJECTILE, mouse_button::LEFT),
+        InputBinding::mouse_button_pressed(action::PLAYER_FIRE_PRIMARY, mouse_button::LEFT),
         InputBinding::mouse_button_down(action::PLAYER_AIM, mouse_button::RIGHT),
         InputBinding::gamepad_button_pressed(action::PLAYER_JUMP, gamepad_button::SOUTH),
         InputBinding::gamepad_button_down(action::PLAYER_CROUCH, gamepad_button::RIGHT_THUMB),
         InputBinding::gamepad_button_down(
+            action::PLAYER_FIRE_PRIMARY,
+            gamepad_button::RIGHT_TRIGGER_2,
+        ),
+        InputBinding::gamepad_button_pressed(
             action::PLAYER_FIRE_PRIMARY,
             gamepad_button::RIGHT_TRIGGER_2,
         ),

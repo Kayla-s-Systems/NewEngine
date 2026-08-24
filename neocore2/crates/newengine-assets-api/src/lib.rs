@@ -46,6 +46,19 @@ pub const ASSET_BACKEND_CAPABILITY_ID: &str = "asset_manager.backend";
 /// Wire method namespace for asset-domain service calls.
 pub const ASSET_METHOD_PREFIX: &str = "asset.";
 
+/// Canonical provider-neutral VFS selection rule. Providers may implement the
+/// storage and codecs differently, but a compiled candidate for one logical
+/// asset id must be considered before its authoring-source candidate.
+pub const ASSET_RESOLUTION_POLICY_COMPILED_FIRST_SOURCE_FALLBACK_V1: &str =
+    "compiled_first_source_fallback.v1";
+
+/// Stable JSON values accepted by asset.mount_source_json_v1 in asset_role.
+pub mod asset_source_role {
+    pub const COMPILED: &str = "compiled";
+    pub const RUNTIME: &str = "runtime";
+    pub const SOURCE: &str = "source";
+}
+
 /// Semantic texture dictionary runtime gateway id. File-type descriptors route `.ytd`
 /// meaning here. `engine.assets.textures` owns validation, manifest semantics and runtime
 /// texture packets; `engine.assets` remains the byte/VFS/codec-dispatch owner.
@@ -371,6 +384,8 @@ pub mod method {
     /// Rebuild/repack a NEF8 ListFile after an editor-side entry update/delete/rename.
     /// Payload is JSON and write-back is performed only through a writable VFS source.
     pub const LIST_FILE_REPACK_JSON_V1: &str = "asset.list_file_repack_json_v1";
+    /// Mount payload accepts asset_role and aliases [{ logical_path, source_path }].
+    /// All compiled mounts precede source mounts regardless of numeric priority.
     pub const MOUNT_SOURCE_JSON_V1: &str = "asset.mount_source_json_v1";
 
     // Debug/diagnostics.

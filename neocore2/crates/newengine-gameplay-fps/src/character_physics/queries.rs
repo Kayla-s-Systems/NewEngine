@@ -23,7 +23,7 @@ pub(crate) fn collect_character_queries(world: &World) -> Vec<PhysicsQueryDto> {
 fn collect_ground_queries(world: &World, tuning: FpsPlayerTuning) -> Vec<PhysicsQueryDto> {
     let tuning = tuning.sanitized();
     let epsilon = ground_probe_origin_epsilon(tuning.contact_skin);
-    let max_t = (tuning.contact_skin + tuning.ground_probe_distance).max(0.01);
+    let max_t = ground_probe_max_t(tuning.contact_skin, tuning.ground_probe_distance);
     let mut queries = Vec::new();
 
     for entity in world.query2_ids::<CharacterMotor, PhysicsBodyDesc>() {
@@ -45,7 +45,12 @@ fn collect_ground_queries(world: &World, tuning: FpsPlayerTuning) -> Vec<Physics
             kind: PhysicsQueryKindDto::Ray {
                 origin: [
                     transform.position.x,
-                    transform.position.y - vertical_extent - epsilon,
+                    // The physics backend does not preserve `contact_skin` as a physical
+                    // separation margin. At steady-state the capsule sole can sit exactly on
+                    // the surface, so starting below the sole puts the ray behind the plane.
+                    // Owner-seq queries exclude the player body in Gravitas/Jolt, therefore
+                    // the robust origin is a tiny distance *inside/above* the sole.
+                    transform.position.y - vertical_extent + epsilon,
                     transform.position.z,
                 ],
                 dir: [0.0, -1.0, 0.0],
@@ -133,8 +138,24 @@ fn collect_stand_clearance_queries(world: &World, tuning: FpsPlayerTuning) -> Ve
 }
 
 #[inline]
-fn ground_probe_origin_epsilon(contact_skin: f32) -> f32 {
+pub(super) fn ground_probe_origin_epsilon(contact_skin: f32) -> f32 {
     (contact_skin.abs() * 0.25).clamp(0.001, 0.01)
+}
+
+#[inline]
+pub(super) fn ground_probe_max_t(contact_skin: f32, ground_probe_distance: f32) -> f32 {
+    let skin = if contact_skin.is_finite() {
+        contact_skin.max(0.0)
+    } else {
+        0.0
+    };
+    let probe = if ground_probe_distance.is_finite() {
+        ground_probe_distance.max(0.0)
+    } else {
+        0.0
+    };
+    // Origin moved epsilon above the sole, so preserve the authored reach below the sole.
+    (skin + probe + ground_probe_origin_epsilon(skin)).max(0.01)
 }
 
 #[inline]

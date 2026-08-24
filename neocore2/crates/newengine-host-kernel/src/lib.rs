@@ -57,9 +57,7 @@ where
 /// It can load plugins if the caller later adds discovery roots, but contains no
 /// render/physics/assets/UI/input/world/gameplay requirement by itself.
 pub fn build_empty_host(fixed_dt_ms: u32) -> EngineResult<Engine<()>> {
-    build_kernel_engine(
-        EngineConfig::new(fixed_dt_ms).with_implicit_plugin_discovery(false),
-    )
+    build_kernel_engine(EngineConfig::new(fixed_dt_ms).with_implicit_plugin_discovery(false))
 }
 
 #[cfg(test)]

@@ -10,11 +10,7 @@ pub struct EngineCapabilitySlotSpec {
 
 impl EngineCapabilitySlotSpec {
     #[inline]
-    pub const fn new(
-        gateway_id: &'static str,
-        service_kind: &'static str,
-        required: bool,
-    ) -> Self {
+    pub const fn new(gateway_id: &'static str, service_kind: &'static str, required: bool) -> Self {
         Self {
             gateway_id,
             service_kind,

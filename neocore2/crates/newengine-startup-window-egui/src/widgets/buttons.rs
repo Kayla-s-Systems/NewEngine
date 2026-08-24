@@ -37,11 +37,7 @@ pub(crate) fn nav_button(ui: &mut egui::Ui, page: SettingsPage, selected: bool) 
         .rounding(egui::Rounding::same(8.0)),
     )
 }
-pub(crate) fn engine_toggle(
-    ui: &mut egui::Ui,
-    value: &mut bool,
-    label: &str,
-) -> bool {
+pub(crate) fn engine_toggle(ui: &mut egui::Ui, value: &mut bool, label: &str) -> bool {
     ui.checkbox(value, label).changed()
 }
 pub(crate) fn compact_choice_button(
@@ -113,10 +109,7 @@ pub(crate) fn preset_choice_button(
         .rounding(egui::Rounding::same(9.0)),
     )
 }
-pub(crate) fn primary_button(
-    ui: &mut egui::Ui,
-    label: &str,
-) -> egui::Response {
+pub(crate) fn primary_button(ui: &mut egui::Ui, label: &str) -> egui::Response {
     let palette = north_star_bootstrap_ui_style().palette;
     ui.add_sized(
         [166.0, 38.0],
@@ -131,10 +124,7 @@ pub(crate) fn primary_button(
         .rounding(egui::Rounding::same(8.0)),
     )
 }
-pub(crate) fn secondary_button(
-    ui: &mut egui::Ui,
-    label: &str,
-) -> egui::Response {
+pub(crate) fn secondary_button(ui: &mut egui::Ui, label: &str) -> egui::Response {
     let palette = north_star_bootstrap_ui_style().palette;
     ui.add_sized(
         [112.0, 36.0],

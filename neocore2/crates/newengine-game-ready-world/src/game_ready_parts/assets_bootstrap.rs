@@ -1,4 +1,6 @@
-use super::foliage::{spawn_foliage_prefabs, terrain_height, SKYDOME_PRIMITIVE_ID};
+use super::foliage::{
+    defer_foliage_prefabs, spawn_foliage_prefabs, terrain_height, SKYDOME_PRIMITIVE_ID,
+};
 use super::materials_terrain::register_demo_materials;
 use super::mission::spawn_game_ready_mission;
 use super::player_model::spawn_game_ready_player_model;
@@ -159,8 +161,8 @@ pub(crate) fn bootstrap_game_ready_world_scene_impl(
         map.terrain.size_x,
         map.terrain.size_z,
     );
-    let terrain = if map.terrain.enabled {
-        spawn_procedural_terrain(
+    let (terrain, terrain_surface) = if map.terrain.enabled {
+        let (entity, sampler) = spawn_procedural_terrain(
             world,
             mats,
             layout.terrain,
@@ -168,24 +170,47 @@ pub(crate) fn bootstrap_game_ready_world_scene_impl(
             &map.terrain,
             map.palette.terrain,
             initial_terrain_center,
-        )
+        );
+        (entity, Some(sampler))
     } else {
-        spawn_authored_terrain_reference(world, layout.terrain, &map.terrain)
+        let entity = spawn_authored_terrain_reference(world, layout.terrain, &map.terrain);
+        let sampler = TerrainSurfaceSampler::flat(
+            Vec3::new(0.0, map.terrain.base_height, 0.0),
+            map.terrain.size_x,
+            map.terrain.size_z,
+        );
+        (entity, Some(sampler))
     };
     let static_world = begin_static_world_prefabs(world, mats, layout.terrain, &map.prefabs);
-    spawn_foliage_prefabs(
-        world,
-        prims,
-        mats,
-        layout.foliage,
-        terrain,
-        materials,
-        &map.materials,
-        &map.palette,
-        &map.foliage,
-        &map.prefabs,
-        map.player.start,
-    );
+    if map.terrain.enabled {
+        spawn_foliage_prefabs(
+            world,
+            prims,
+            mats,
+            layout.foliage,
+            terrain,
+            terrain_surface.as_ref(),
+            materials,
+            &map.materials,
+            &map.palette,
+            &map.foliage,
+            &map.prefabs,
+            map.player.start,
+        );
+    } else {
+        defer_foliage_prefabs(
+            world,
+            layout.foliage,
+            terrain,
+            terrain_surface.clone(),
+            materials,
+            &map.materials,
+            &map.palette,
+            &map.foliage,
+            &map.prefabs,
+            map.player.start,
+        );
+    }
     spawn_skydome(
         world,
         prims,
@@ -200,7 +225,10 @@ pub(crate) fn bootstrap_game_ready_world_scene_impl(
     let start_x = map.player.start.x;
     let start_z = map.player.start.z;
     let player_tuning = rules.player.sanitized();
-    let start_y = terrain_height(world, terrain, start_x, start_z)
+    let start_y = terrain_surface
+        .as_ref()
+        .map(|surface| surface.sample_world_height(start_x, start_z))
+        .unwrap_or_else(|| terrain_height(world, terrain, start_x, start_z))
         + map.player.start.y
         + player_tuning.body_half_height
         + player_tuning.body_radius
@@ -240,8 +268,22 @@ pub(crate) fn bootstrap_game_ready_world_scene_impl(
             "game-ready: player runtime model disabled or unavailable; player visual was not spawned because authored model data is required"
         );
     }
+    let movement_speeds = newengine_engine_runtime::gameplay::PlayerMovementSpeeds {
+        walk: map.player.walk_speed,
+        run: map.player.run_speed,
+        sprint: map.player.sprint_speed,
+        crouch: map.player.crouch_speed,
+    }
+    .sanitized();
+    let _ = world.insert(player, movement_speeds);
+    if let Some(motion) =
+        world.get_mut::<newengine_engine_runtime::gameplay::CharacterMotionTuning>(player)
+    {
+        // Keep legacy consumers (camera/debug bridges) coherent with the authored absolute speeds.
+        motion.sprint_multiplier = movement_speeds.sprint_multiplier();
+    }
     if let Some(motor) = world.get_mut::<newengine_sim::CharacterMotor>(player) {
-        motor.move_speed = map.player.move_speed;
+        motor.move_speed = movement_speeds.run;
         motor.look_sens = map.player.look_sens;
         motor.yaw = map.player.yaw;
     }
@@ -292,7 +334,7 @@ pub(crate) fn bootstrap_game_ready_world_scene_impl(
     );
 
     newengine_ulog_api::ulog::info!(
-        "game-ready bootstrap summary: title='{}' objective='{}' player={:?} terrain={:?} camera={:?} player_model_bound={} definitions={} prefabs={} static_world_models={} static_world_parts={} static_world_triangles={} mission_pickups={} mission_targets={} mission_hazards={} mission_goals={} foliage_enabled={} terrain_streaming_enabled={} terrain_chunk_radius={} terrain_unload_radius={} sky_mesh='{}' sky_definition_ref='{}' layout_environment={:?} layout_terrain={:?} layout_foliage={:?} layout_definitions={:?} layout_actors={:?} layout_cameras={:?}",
+        "game-ready bootstrap summary: title='{}' objective='{}' player={:?} terrain={:?} camera={:?} player_model_bound={} definitions={} prefabs={} static_world_models={} static_world_parts={} static_world_triangles={} mission_pickups={} inventory_item_pickups={} mission_targets={} mission_hazards={} mission_goals={} foliage_enabled={} terrain_streaming_enabled={} terrain_chunk_radius={} terrain_unload_radius={} sky_mesh='{}' sky_definition_ref='{}' layout_environment={:?} layout_terrain={:?} layout_foliage={:?} layout_definitions={:?} layout_actors={:?} layout_cameras={:?}",
         map.title,
         map.objective,
         player,
@@ -305,6 +347,7 @@ pub(crate) fn bootstrap_game_ready_world_scene_impl(
         static_world.parts,
         static_world.triangles,
         mission.pickups,
+        mission.item_pickups,
         mission.targets,
         mission.hazards,
         mission.goals,

@@ -21,13 +21,15 @@ impl EngineGatewaySelectionPolicy {
     }
 
     pub fn prefer_tags(mut self, tags: impl IntoIterator<Item = impl Into<String>>) -> Self {
-        self.preferred_system_tags.extend(tags.into_iter().map(Into::into));
+        self.preferred_system_tags
+            .extend(tags.into_iter().map(Into::into));
         normalize(&mut self.preferred_system_tags);
         self
     }
 
     pub fn forbid_tags(mut self, tags: impl IntoIterator<Item = impl Into<String>>) -> Self {
-        self.forbidden_system_tags.extend(tags.into_iter().map(Into::into));
+        self.forbidden_system_tags
+            .extend(tags.into_iter().map(Into::into));
         normalize(&mut self.forbidden_system_tags);
         self
     }
@@ -43,7 +45,10 @@ pub fn install_engine_gateway_selection_policy(
 ) -> Result<(), String> {
     let gateway_id = policy.gateway_id.trim().to_owned();
     if !newengine_service_api::is_engine_service_gateway_id(&gateway_id) {
-        return Err(format!("selection policy gateway id is invalid: '{}'", policy.gateway_id));
+        return Err(format!(
+            "selection policy gateway id is invalid: '{}'",
+            policy.gateway_id
+        ));
     }
     let owner_id = policy.owner_id.trim().to_owned();
     if owner_id.is_empty() {

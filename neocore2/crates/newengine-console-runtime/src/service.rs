@@ -4,13 +4,11 @@ use super::runtime::ConsoleRuntime;
 use super::types::SuggestResponse;
 
 use newengine_console_api::{
-    method, COMMAND_BACKEND_CAPABILITY_ID, COMMAND_DESCRIPTOR_CONTRACT_ID,
-    COMMAND_PROVIDER_ROUTE, COMMAND_PROVIDER_SERVICE_ID, COMMAND_SERVICE_KIND,
-    ENGINE_COMMAND_GATEWAY_ID,
+    method, COMMAND_BACKEND_CAPABILITY_ID, COMMAND_DESCRIPTOR_CONTRACT_ID, COMMAND_PROVIDER_ROUTE,
+    COMMAND_PROVIDER_SERVICE_ID, COMMAND_SERVICE_KIND, ENGINE_COMMAND_GATEWAY_ID,
 };
 use newengine_service_kit::{
-    register_engine_gateway_provider_service_dynamic_best_effort,
-    EngineGatewayProviderDeclDynamic,
+    register_engine_gateway_provider_service_dynamic_best_effort, EngineGatewayProviderDeclDynamic,
 };
 
 use abi_stable::std_types::{RResult, RString};
@@ -97,16 +95,14 @@ pub fn install_console_provider() -> bool {
     let svc = CommandService { rt };
     let dyn_svc = ServiceV1Dyn::from_value(svc, abi_stable::sabi_trait::TD_Opaque);
 
-    register_engine_gateway_provider_service_dynamic_best_effort(
-        EngineGatewayProviderDeclDynamic {
-            gateway: ENGINE_COMMAND_GATEWAY_ID,
-            service_kind: COMMAND_SERVICE_KIND,
-            provider_service: COMMAND_PROVIDER_SERVICE_ID,
-            provider_route: COMMAND_PROVIDER_ROUTE,
-            capability: COMMAND_BACKEND_CAPABILITY_ID,
-            priority: 0,
-            owner: "newengine-console-runtime",
-            service: dyn_svc,
-        },
-    )
+    register_engine_gateway_provider_service_dynamic_best_effort(EngineGatewayProviderDeclDynamic {
+        gateway: ENGINE_COMMAND_GATEWAY_ID,
+        service_kind: COMMAND_SERVICE_KIND,
+        provider_service: COMMAND_PROVIDER_SERVICE_ID,
+        provider_route: COMMAND_PROVIDER_ROUTE,
+        capability: COMMAND_BACKEND_CAPABILITY_ID,
+        priority: 0,
+        owner: "newengine-console-runtime",
+        service: dyn_svc,
+    })
 }

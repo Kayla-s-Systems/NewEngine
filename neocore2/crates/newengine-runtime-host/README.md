@@ -42,15 +42,15 @@ Windowed/product compositions execute a host-owned PreInit before `Engine` const
 ```text
 Executable
     -> Host Bootstrap
-    -> Environment Snapshot
-    -> Platform Services
-    -> Hardware Discovery
+    -> PreInit provider selection
+    -> engine.host.capabilities
+    -> Immutable snapshot
     -> Capability Resolution
     -> Engine construction
     -> Runtime Composition
     -> Game Module
 ```
 
-`newengine-host-capabilities-api` owns only immutable DTOs. `newengine-host-capabilities-runtime` owns OS/hardware probing. `newengine-runtime-host` derives and installs generic gateway-selection policy before provider resolution, then inserts `Arc<HostPreInitSnapshot>` into Engine resources and passes `&HostPreInitSnapshot` explicitly to the runtime-composition hook. Runtime/domain code must consume that snapshot instead of probing hardware again.
+`newengine-host-capabilities-api` owns immutable DTOs plus the `engine.host.capabilities` gateway contract. `newengine-host-capabilities-runtime` is only the optional native provider. Before PreInit, a runtime profile may register a different provider route; the Host installs the native provider only when the gateway has no route. Missing or failed providers produce a neutral versioned snapshot instead of forcing hardware probing into the Host. The resolved snapshot is inserted as `Arc<HostPreInitSnapshot>` and passed explicitly to runtime composition. Runtime/domain code must consume it instead of probing hardware again.
 
 Provider selection uses normalized metadata tags such as `backend.vulkan` / `backend.d3d12`; the Host may prefer or reject tags based on OS/hardware compatibility without naming a concrete provider plugin.

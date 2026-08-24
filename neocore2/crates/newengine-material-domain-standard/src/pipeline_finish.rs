@@ -11,6 +11,12 @@ impl PendingLitPipelineBuild {
             self.instanced_double_sided_pipeline,
             "instanced_double_sided_pipeline",
         )?;
+        let decal_instanced_pipeline =
+            required(self.decal_instanced_pipeline, "decal_instanced_pipeline")?;
+        let decal_instanced_double_sided_pipeline = required(
+            self.decal_instanced_double_sided_pipeline,
+            "decal_instanced_double_sided_pipeline",
+        )?;
         let skinned_pipeline = required(self.skinned_pipeline, "skinned_pipeline")?;
         let skinned_double_sided_pipeline = required(
             self.skinned_double_sided_pipeline,
@@ -77,6 +83,8 @@ impl PendingLitPipelineBuild {
             shadow_instanced_vs: required(self.shadow_instanced_vs, "shadow_instanced_vs")?,
             instanced_pipeline,
             instanced_double_sided_pipeline,
+            decal_instanced_pipeline,
+            decal_instanced_double_sided_pipeline,
             sky_instanced_pipeline: required(
                 self.sky_instanced_pipeline,
                 "sky_instanced_pipeline",

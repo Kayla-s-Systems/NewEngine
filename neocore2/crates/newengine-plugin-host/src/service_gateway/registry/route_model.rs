@@ -1,5 +1,5 @@
-use super::*;
 use super::facts::{GatewayOverrideMode, GatewayPolicyFact, GatewayProviderOrigin};
+use super::*;
 
 #[inline]
 pub(super) fn route_allowed_by_policy(
@@ -42,7 +42,9 @@ pub(super) fn selection_policy_score_bonus(
     route_tags: &[String],
     policy: Option<&GatewayPolicyFact>,
 ) -> i64 {
-    let Some(policy) = policy else { return 0; };
+    let Some(policy) = policy else {
+        return 0;
+    };
     if policy.preference_bonus <= 0 {
         return 0;
     }

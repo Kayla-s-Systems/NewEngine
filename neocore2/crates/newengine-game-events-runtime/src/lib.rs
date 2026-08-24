@@ -218,6 +218,7 @@ mod tests {
 struct GameEventsService {
     registry: GameMessageRegistry,
     queue: GameMessageQueue,
+    events: Option<EventHub>,
 }
 
 impl newengine_plugin_api::ServiceV1 for GameEventsService {
@@ -334,7 +335,18 @@ impl newengine_plugin_api::ServiceV1 for GameEventsService {
                     Err(error) => return abi_stable::std_types::RResult::RErr(error),
                 };
                 match self.queue.publish(&self.registry, envelope) {
-                    Ok(published) => ok_json(&published),
+                    Ok(published) => {
+                        if let Some(events) = self.events.as_ref() {
+                            if let Err(error) = events.publish(published.clone()) {
+                                newengine_ulog_api::ulog::warn!(
+                                    "game events: native EventHub bridge publish failed id='{}' err='{}'",
+                                    published.id,
+                                    error
+                                );
+                            }
+                        }
+                        ok_json(&published)
+                    }
                     Err(error) => abi_stable::std_types::RResult::RErr(
                         abi_stable::std_types::RString::from(error),
                     ),
@@ -359,8 +371,28 @@ impl newengine_plugin_api::ServiceV1 for GameEventsService {
 }
 
 pub fn init_game_events_service(registry: GameMessageRegistry, queue: GameMessageQueue) {
+    init_game_events_service_inner(registry, queue, None);
+}
+
+pub fn init_game_events_service_with_event_hub(
+    registry: GameMessageRegistry,
+    queue: GameMessageQueue,
+    events: EventHub,
+) {
+    init_game_events_service_inner(registry, queue, Some(events));
+}
+
+fn init_game_events_service_inner(
+    registry: GameMessageRegistry,
+    queue: GameMessageQueue,
+    events: Option<EventHub>,
+) {
     let service = newengine_plugin_api::ServiceV1Dyn::from_value(
-        GameEventsService { registry, queue },
+        GameEventsService {
+            registry,
+            queue,
+            events,
+        },
         abi_stable::sabi_trait::TD_Opaque,
     );
     let _ = newengine_plugin_host::host_register_service_impl(service);
@@ -373,9 +405,12 @@ mod service_tests {
 
     #[test]
     fn service_registers_and_publishes_versioned_message() {
+        let events = EventHub::new();
+        let subscription = events.subscribe::<GameMessageEnvelope>();
         let service = GameEventsService {
             registry: GameMessageRegistry::default(),
             queue: GameMessageQueue::new(8),
+            events: Some(events),
         };
         let descriptor = newengine_game_events_api::GameMessageDescriptor {
             id: "game.test.message".to_owned(),
@@ -402,5 +437,8 @@ mod service_tests {
         );
         assert!(result.is_ok());
         assert_eq!(service.queue.drain(8).messages.len(), 1);
+        let bridged = subscription.try_recv().expect("bridged game message");
+        assert_eq!(bridged.id, "game.test.message");
+        assert_eq!(bridged.sequence, 1);
     }
 }

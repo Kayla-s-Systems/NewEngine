@@ -5,9 +5,8 @@ use newengine_assets_api::{
 
 use crate::dto::TexturesServiceInfo;
 
-pub const TEXTURES_GATEWAY_OWNER: &str = "newengine-textures-runtime.engine-runtime-provider";
-pub(crate) const TEXTURES_PROVIDER_NAME: &str = "StarVaultTexturesRuntimeProvider";
-pub(crate) const TEXTURES_PROVIDER_ROUTE: &str = "engine.assets.starvault.textures";
+pub const TEXTURES_GATEWAY_OWNER: &str = "newengine-textures-runtime.semantic-service";
+pub(crate) const TEXTURES_PROVIDER_NAME: &str = "NorthStarYtdTextureSemanticService";
 
 pub fn textures_service_info() -> TexturesServiceInfo {
     TexturesServiceInfo {

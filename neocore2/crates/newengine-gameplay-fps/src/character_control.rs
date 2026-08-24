@@ -218,6 +218,41 @@ mod tests {
     }
 
     #[test]
+    fn held_crouch_does_not_request_stand_until_release() {
+        let mut world = World::new();
+        let player = spawn_default_player(&mut world, None, "fps-crouch-held", Vec3::ZERO);
+
+        for (fixed_tick, source_frame) in [(21_u64, 100_u64), (22, 101), (23, 102), (24, 103)] {
+            if let Some(commands) = world.get_mut::<PlayerCommandFrame>(player) {
+                commands.source_frame = source_frame;
+                commands.actions = ActionCommandFrame {
+                    held: vec![action::PLAYER_CROUCH.into()],
+                    ..ActionCommandFrame::default()
+                };
+            }
+            apply_fps_character_commands(&mut world, 1.0 / 60.0, fixed_tick);
+            let stance = world.get::<PlayerStanceState>(player).expect("stance");
+            assert_eq!(stance.current, PlayerStanceKind::Crouched);
+            assert!(
+                !stance.stand_requested,
+                "held crouch requested stand on source_frame={source_frame}"
+            );
+        }
+
+        if let Some(commands) = world.get_mut::<PlayerCommandFrame>(player) {
+            commands.source_frame = 104;
+            commands.actions = ActionCommandFrame::default();
+        }
+        apply_fps_character_commands(&mut world, 1.0 / 60.0, 25);
+        let stance = world.get::<PlayerStanceState>(player).expect("stance");
+        assert_eq!(stance.current, PlayerStanceKind::Crouched);
+        assert!(
+            stance.stand_requested,
+            "release must request a clearance-tested stand"
+        );
+    }
+
+    #[test]
     fn fps_crouch_policy_drives_generic_stance_geometry() {
         let mut world = World::new();
         let player = spawn_default_player(&mut world, None, "fps-crouch", Vec3::ZERO);

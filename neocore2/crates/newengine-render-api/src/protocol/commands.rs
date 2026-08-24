@@ -5,8 +5,8 @@ use crate::{
     IndexFormat, PipelineDesc, PipelineId, PipelineWarmupDesc, PipelineWarmupReport, RectI32,
     RenderBackendCapabilities, RenderDiagnosticsSnapshot, RenderDrawListKind, RenderGraphPassKind,
     RenderTargetDesc, RenderTargetId, RenderWorkBudget, SamplerDesc, SamplerId, ShaderDesc,
-    ShaderId, ShaderRuntimeCacheStats, TextureDesc, TextureId, TextureResidencySnapshot,
-    UiTexId, UploadPumpDesc, UploadPumpReport, Viewport,
+    ShaderId, ShaderRuntimeCacheStats, TextureDesc, TextureId, TextureResidencySnapshot, UiTexId,
+    UploadPumpDesc, UploadPumpReport, Viewport,
 };
 use serde::{Deserialize, Serialize};
 

@@ -13,7 +13,7 @@ pub(crate) const SHADOW_MAP_COLOR_FORMAT: TextureFormat = TextureFormat::R32Floa
 pub(crate) const SHADOW_STRENGTH_MAX: f32 = 0.82;
 pub(crate) const SHADOW_SOFTNESS_MAX: f32 = 1.25;
 pub(crate) const SHADOW_RESOLUTION_MIN: u32 = 256;
-pub(crate) const SHADOW_RESOLUTION_MAX: u32 = 4096;
+pub(crate) const SHADOW_RESOLUTION_MAX: u32 = 16284;
 
 /// Loading-screen budget for starting material texture decode jobs.
 ///

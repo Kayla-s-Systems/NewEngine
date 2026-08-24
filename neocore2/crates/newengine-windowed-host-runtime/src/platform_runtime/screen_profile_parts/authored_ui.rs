@@ -34,7 +34,8 @@ impl ScreenProfileRuntimeState {
         // compilation never depends on a later world tick or the process CWD.
         let assets =
             newengine_assets::AssetServiceClient::new(newengine_plugin_host::default_host_api());
-        let roots = newengine_asset_bootstrap_runtime::collect_app_asset_roots("", "NEWENGINE_APP_ASSETS");
+        let roots =
+            newengine_asset_bootstrap_runtime::collect_app_asset_roots("", "NEWENGINE_APP_ASSETS");
         newengine_asset_bootstrap_runtime::mount_asset_roots_best_effort(&assets, &roots);
 
         let payload = serde_json::to_vec(&serde_json::json!({

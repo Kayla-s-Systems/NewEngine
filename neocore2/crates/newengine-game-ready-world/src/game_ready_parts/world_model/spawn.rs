@@ -1,11 +1,29 @@
 use super::super::foliage::DecodedPrefabMeshPart;
 use super::super::*;
 use super::materials::{
-    register_authored_prefab_material, resolve_prefab_part_material,
+    register_authored_prefab_material, resolve_prefab_part_material, static_world_decal_slot,
     static_world_receive_only_shadow_slot, ForestRoadMaterials,
 };
 use newengine_physics_contracts::{CollisionShapeDesc, PhysicsBodyDesc};
 use newengine_sim::{AngularVelocity, Velocity};
+
+#[inline]
+fn supports_foliage_ground_placement(prefab: &GameReadyPrefabSpec) -> bool {
+    let id = prefab.id.trim().to_ascii_lowercase();
+    [
+        "dirt_road",
+        "ground_dirt",
+        "mud_pile",
+        "sloped_rock",
+        "terrain_far",
+        "tall_cliff",
+        "cobblestone",
+        "grass_close",
+        "broken_rocks",
+    ]
+    .iter()
+    .any(|token| id.contains(token))
+}
 
 #[inline]
 fn ensure_ydd_prefab_source(prefab: &GameReadyPrefabSpec, role: &str) -> Result<(), String> {
@@ -75,6 +93,9 @@ pub(super) fn spawn_collision_ydd_prefab_from_decoded(
     );
     let _ = world.insert(entity, Bounds::from_local_aabb(local_bounds));
     let _ = world.insert(entity, collider);
+    if supports_foliage_ground_placement(prefab) {
+        let _ = world.insert(entity, super::GroundPlacementSurface);
+    }
     let _ = world.insert(
         entity,
         newengine_engine_runtime::gameplay::PhysicsSurface {
@@ -265,7 +286,12 @@ pub(super) fn spawn_static_ydd_prefab_from_decoded(
         }
         let (material_id, mut render_options) =
             resolve_prefab_part_material(mats, authored_material, materials, &part.material_slot);
-        if static_world_receive_only_shadow_slot(&part.material_slot) {
+        if static_world_decal_slot(&part.material_slot) {
+            render_options.role = newengine_model_domain_api::MeshRenderRole::Decal;
+            render_options.depth_policy = newengine_model_domain_api::MeshDepthPolicy::ReadOnly;
+            render_options.shadow_policy =
+                newengine_model_domain_api::MeshShadowPolicy::ReceiveOnly;
+        } else if static_world_receive_only_shadow_slot(&part.material_slot) {
             render_options.shadow_policy =
                 newengine_model_domain_api::MeshShadowPolicy::ReceiveOnly;
         }

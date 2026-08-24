@@ -174,6 +174,12 @@ impl RenderViewportState {
 pub(super) struct RenderShadowRuntimeState {
     pub(super) render_target: Option<RenderTargetId>,
     pub(super) render_target_resolution: u32,
+    pub(super) render_target_tile_resolution: u32,
+    pub(super) render_target_requested_resolution: u32,
+    pub(super) render_target_cascade_count: u32,
+    /// Negotiated backend 2D texture extent. CSM tiles must fit the complete atlas
+    /// inside this limit; otherwise viewport/scissor and allocation disagree.
+    pub(super) max_texture_dimension_2d: u32,
     pub(super) local_render_target: Option<RenderTargetId>,
     pub(super) local_render_target_extent_key: u32,
     pub(super) cache_valid: bool,
@@ -218,6 +224,11 @@ impl RenderShadowRuntimeState {
         Self {
             render_target: None,
             render_target_resolution: 0,
+            render_target_tile_resolution: 0,
+            render_target_requested_resolution: 0,
+            render_target_cascade_count: 0,
+            max_texture_dimension_2d: newengine_render_api::RenderLimits::default()
+                .max_texture_dimension_2d,
             local_render_target: None,
             local_render_target_extent_key: 0,
             cache_valid: false,

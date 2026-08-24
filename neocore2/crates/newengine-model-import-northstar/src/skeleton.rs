@@ -13,6 +13,12 @@ pub struct ImportedJoint {
     pub scale_ls: [f32; 3],
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SkeletonProfile {
+    Humanoid,
+    Generic,
+}
+
 #[derive(Clone, Debug)]
 pub struct DecodedSkeleton {
     pub name: String,
@@ -29,6 +35,13 @@ pub struct DecodedSkeleton {
 }
 
 pub fn decode_skeleton(pak: &PakFile) -> Result<DecodedSkeleton, String> {
+    decode_skeleton_with_profile(pak, SkeletonProfile::Humanoid)
+}
+
+pub fn decode_skeleton_with_profile(
+    pak: &PakFile,
+    profile: SkeletonProfile,
+) -> Result<DecodedSkeleton, String> {
     let resource = pak
         .resource("JOINT_HIERARCHY")
         .ok_or_else(|| "package contains no JOINT_HIERARCHY resource".to_owned())?;
@@ -36,7 +49,7 @@ pub fn decode_skeleton(pak: &PakFile) -> Result<DecodedSkeleton, String> {
     let node_count = pak.read_u32(payload + 20)? as usize;
     if node_count == 0 || node_count > 4096 {
         return Err(format!(
-            "invalid Naughty Dog skeleton node count {node_count}"
+            "invalid North Star skeleton node count {node_count}"
         ));
     }
     let joints_info = pak
@@ -134,21 +147,44 @@ pub fn decode_skeleton(pak: &PakFile) -> Result<DecodedSkeleton, String> {
 
     validate_bind_reconstruction(&joints, &globals)?;
 
-    let root = required_anchor(&node_names, &["root"])?;
-    let hips = required_anchor(&node_names, &["pelvis"])?;
-    let head = required_anchor(&node_names, &["headb", "heada"])?;
-    let left_hand = required_anchor(&node_names, &["l_wrist", "l_palm"])?;
-    let right_hand = required_anchor(&node_names, &["r_wrist", "r_palm"])?;
-    let left_foot = required_anchor(&node_names, &["l_ankle", "l_ball"])?;
-    let right_foot = required_anchor(&node_names, &["r_ankle", "r_ball"])?;
-    let eye = required_anchor(&node_names, &["l_eyeball", "r_eyeball", "headb"])?;
-    let eye_index = node_names
-        .iter()
-        .position(|name| name == &eye)
-        .ok_or("eye anchor disappeared")?;
-    let eye_height = globals[eye_index]
-        .transform_point3(newengine_math::Vec3::ZERO)
-        .y;
+    let (root, hips, head, left_hand, right_hand, left_foot, right_foot, eye, eye_height) =
+        match profile {
+            SkeletonProfile::Humanoid => {
+                let root = required_anchor(&node_names, &["root"])?;
+                let hips = required_anchor(&node_names, &["pelvis"])?;
+                let head = required_anchor(&node_names, &["headb", "heada"])?;
+                let left_hand = required_anchor(&node_names, &["l_wrist", "l_palm"])?;
+                let right_hand = required_anchor(&node_names, &["r_wrist", "r_palm"])?;
+                let left_foot = required_anchor(&node_names, &["l_ankle", "l_ball"])?;
+                let right_foot = required_anchor(&node_names, &["r_ankle", "r_ball"])?;
+                let eye = required_anchor(&node_names, &["l_eyeball", "r_eyeball", "headb"])?;
+                let eye_index = node_names
+                    .iter()
+                    .position(|name| name == &eye)
+                    .ok_or("eye anchor disappeared")?;
+                let eye_height = globals[eye_index]
+                    .transform_point3(newengine_math::Vec3::ZERO)
+                    .y;
+                (
+                    root, hips, head, left_hand, right_hand, left_foot, right_foot, eye, eye_height,
+                )
+            }
+            SkeletonProfile::Generic => {
+                let root_index = parents.iter().position(Option::is_none).unwrap_or(0);
+                let root = node_names[root_index].clone();
+                (
+                    root.clone(),
+                    root.clone(),
+                    root.clone(),
+                    root.clone(),
+                    root.clone(),
+                    root.clone(),
+                    root.clone(),
+                    root,
+                    0.0,
+                )
+            }
+        };
 
     Ok(DecodedSkeleton {
         name: resource.name.clone(),

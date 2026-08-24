@@ -494,6 +494,25 @@ impl RuntimeRenderController {
         }
     }
 
+    /// Resolve an authored material texture only when the real GPU resource is resident.
+    ///
+    /// World alpha cards must never be drawn against the generic white fallback: a
+    /// pending leaf/grass atlas would turn every transparent texel into an opaque
+    /// white quad. Opaque textured world meshes also use this path when callers
+    /// prefer a one-frame omission over a camera-dependent white flash.
+    pub(in crate::render_controller) fn material_texture_if_ready(
+        &mut self,
+        r: &mut dyn newengine_core::render::RenderApi,
+        path: &str,
+        status_owner: &'static str,
+    ) -> Option<TextureId> {
+        self.request_material_texture(path);
+        match self.material_texture_ready_state(r, path, status_owner) {
+            MaterialTextureReadyState::Ready(texture) => Some(texture),
+            MaterialTextureReadyState::Waiting | MaterialTextureReadyState::Failed => None,
+        }
+    }
+
     #[inline]
     pub(in crate::render_controller) fn material_texture_or_default(
         &mut self,

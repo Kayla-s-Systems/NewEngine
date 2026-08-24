@@ -17,6 +17,8 @@ fn assignment_from_spec(
         walk_animation: spec.walk_animation.clone(),
         run_animation: spec.run_animation.clone(),
         sprint_animation: spec.sprint_animation.clone(),
+        crouch_idle_animation: spec.crouch_idle_animation.clone(),
+        crouch_walk_animation: spec.crouch_walk_animation.clone(),
         jump_animation: spec.jump_animation.clone(),
         fall_animation: spec.fall_animation.clone(),
         target_height: spec.target_height,
@@ -286,6 +288,8 @@ fn bind_player_model_assignment(
     if let Some(animation_binding) = animation_binding {
         let initial_palette = animation_binding.initial_palette();
         let clip_refs = animation_binding.clip_refs_csv();
+        let skeleton_joint_count = animation_binding.skeleton_joint_count();
+        let supplemental_joint_count = animation_binding.supplemental_palette_joint_count();
         let joint_count = animation_binding.expected_palette_joints();
         super::validation::validate_player_palette(
             &initial_palette,
@@ -301,10 +305,12 @@ fn bind_player_model_assignment(
         );
         let _ = world.insert(player, animation_binding);
         newengine_ulog_api::ulog::info!(
-            "game-ready: player skeletal animation set bound player={} clips='{}' joints={} policy='semantic locomotion -> YCD -> local pose -> global -> inverse-bind -> model-space palette'",
+            "game-ready: player skeletal animation set bound player={} clips='{}' skeleton_joints={} palette_joints={} supplemental_joints={} policy='semantic locomotion -> YCD -> local pose -> global -> inverse-bind -> model-space palette'",
             player.stable_u64(),
             clip_refs,
+            skeleton_joint_count,
             joint_count,
+            supplemental_joint_count,
         );
     } else if parts.iter().any(|part| part.skin.is_some()) {
         let skeleton = skeleton
@@ -375,10 +381,51 @@ fn bind_player_model_assignment(
 
 #[inline]
 fn player_capsule_ground_offset_y(world: &newengine_ecs::World, player: EntityId) -> f32 {
+    if let Some(body) = world.get::<newengine_engine_runtime::gameplay::PhysicsBodyDesc>(player) {
+        if let newengine_engine_runtime::gameplay::CollisionShapeDesc::Capsule {
+            radius,
+            half_height,
+        } = body.shape.sanitized()
+        {
+            return -(half_height + radius);
+        }
+    }
     world
         .get::<newengine_engine_runtime::gameplay::CharacterBody>(player)
-        .map(|body| -(body.standing_half_height + body.radius))
+        .map(|body| {
+            let body = body.sanitized();
+            -(body.standing_half_height + body.radius)
+        })
         .unwrap_or(0.0)
+}
+
+/// Keeps the authored avatar root anchored to the capsule sole while stance geometry changes.
+///
+/// `apply_player_stance_geometry` moves the capsule center when half-height changes so the
+/// physics sole stays on the same support plane. A model root parented to that center must use
+/// the *current* capsule extent as its inverse local offset; a standing-only offset makes the
+/// whole avatar follow the crouched center below the floor.
+pub(crate) fn tick_player_model_grounding(world: &mut newengine_ecs::World) {
+    let players = world
+        .query::<newengine_engine_runtime::gameplay::PlayerModelBinding>()
+        .filter_map(|(player, binding)| binding.visual_root.map(|root| (player, root)))
+        .collect::<Vec<_>>();
+
+    for (player, visual_root) in players {
+        if !world.exists(visual_root) {
+            continue;
+        }
+        let local_offset = world
+            .get::<newengine_engine_runtime::gameplay::PlayerModelAssignment>(player)
+            .map(|assignment| assignment.local_offset)
+            .unwrap_or(Vec3::ZERO);
+        let grounded_local_y = local_offset.y + player_capsule_ground_offset_y(world, player);
+        if let Some(transform) = world.get_mut::<Transform>(visual_root) {
+            transform.position.x = local_offset.x;
+            transform.position.y = grounded_local_y;
+            transform.position.z = local_offset.z;
+        }
+    }
 }
 
 /// Applies runtime model assignment changes without replacing the PlayerActor.
@@ -465,5 +512,101 @@ pub(crate) fn spawn_game_ready_player_model(
             );
             false
         }
+    }
+}
+
+#[cfg(test)]
+mod grounding_tests {
+    use super::*;
+    use newengine_engine_runtime::gameplay::{
+        apply_player_stance_geometry, spawn_default_player, PlayerModelAssignment,
+        PlayerModelBinding, PlayerStanceKind,
+    };
+
+    #[test]
+    fn visual_root_preserves_world_foot_plane_when_crouching() {
+        let mut world = newengine_ecs::World::new();
+        let player = spawn_default_player(
+            &mut world,
+            None,
+            "crouch-grounding",
+            Vec3::new(2.0, 3.0, -4.0),
+        );
+        let visual_root = world.spawn();
+        let local_offset = Vec3::new(0.15, 0.08, -0.12);
+        let _ = world.insert(
+            visual_root,
+            Transform {
+                position: Vec3::ZERO,
+                rotation: Quat::IDENTITY,
+                scale: Vec3::ONE,
+            },
+        );
+        set_parent(&mut world, visual_root, Some(player));
+        let _ = world.insert(
+            player,
+            PlayerModelAssignment {
+                enabled: true,
+                revision: 1,
+                local_offset,
+                ..PlayerModelAssignment::default()
+            },
+        );
+        let _ = world.insert(
+            player,
+            PlayerModelBinding {
+                assignment_revision: 1,
+                visual_root: Some(visual_root),
+                ..PlayerModelBinding::default()
+            },
+        );
+
+        tick_player_model_grounding(&mut world);
+        let standing_center_y = world
+            .get::<Transform>(player)
+            .expect("player transform")
+            .position
+            .y;
+        let standing_root_y = world
+            .get::<Transform>(visual_root)
+            .expect("visual transform")
+            .position
+            .y;
+        let standing_world_anchor_y = standing_center_y + standing_root_y;
+
+        assert!(
+            apply_player_stance_geometry(&mut world, player, PlayerStanceKind::Crouched, 41),
+            "crouch geometry must apply"
+        );
+        tick_player_model_grounding(&mut world);
+
+        let crouched_center_y = world
+            .get::<Transform>(player)
+            .expect("player transform")
+            .position
+            .y;
+        let crouched_root_y = world
+            .get::<Transform>(visual_root)
+            .expect("visual transform")
+            .position
+            .y;
+        let crouched_world_anchor_y = crouched_center_y + crouched_root_y;
+
+        assert!(
+            (standing_world_anchor_y - crouched_world_anchor_y).abs() <= 1.0e-5,
+            "visual root moved through support plane standing={standing_world_anchor_y} crouched={crouched_world_anchor_y}"
+        );
+        assert!(
+            crouched_root_y > standing_root_y,
+            "shorter crouch capsule must raise child local root to compensate the lowered capsule center"
+        );
+        assert!(
+            (world.get::<Transform>(visual_root).unwrap().position.x - local_offset.x).abs()
+                <= 1.0e-6
+        );
+        assert!(
+            (world.get::<Transform>(visual_root).unwrap().position.z - local_offset.z).abs()
+                <= 1.0e-6
+        );
     }
 }

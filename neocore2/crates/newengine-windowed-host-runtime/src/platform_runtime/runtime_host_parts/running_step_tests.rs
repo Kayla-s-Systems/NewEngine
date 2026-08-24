@@ -10,13 +10,13 @@ mod presentation_loading_lifecycle_tests {
     }
 
     #[test]
-    fn loading_state_reactivates_runtime_preloader_after_start() {
+    fn scene_launch_status_remains_semantically_active_without_retained_preloader() {
         let status = SceneLaunchStatus::loading("Loading", "Preparing", "active", 0.95);
         assert!(effective_scene_launch_active(Some(&status), false));
     }
 
     #[test]
-    fn inactive_scene_status_never_opens_loading_surface() {
+    fn inactive_scene_status_never_activates_scene_launch_gate() {
         let status = SceneLaunchStatus::inactive();
         assert!(!effective_scene_launch_active(Some(&status), false));
         assert!(!effective_scene_launch_active(None, false));

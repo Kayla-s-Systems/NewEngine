@@ -15,5 +15,4 @@ newengine-assets = { path = "../newengine-assets" }
 newengine-assets-api = { path = "../newengine-assets-api" }
 newengine-authored-xml = { path = "../newengine-authored-xml" }
 newengine-plugin-api = { path = "../newengine-plugin-api" }
-newengine-service-api = { path = "../newengine-service-api" }
 newengine-service-kit = { path = "../newengine-service-kit" }

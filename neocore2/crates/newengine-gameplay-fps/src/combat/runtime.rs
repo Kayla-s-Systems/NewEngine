@@ -17,8 +17,8 @@ pub fn step_player_combat(world: &mut World, dt: f32, _fixed_tick: u64) {
         .collect::<Vec<_>>();
 
     for player in players {
-        // Equipment is authoritative for the active weapon and reserve ammunition.
-        // Legacy direct weapon components remain supported when no inventory binding exists.
+        // Inventory/equipment is the only authority for firearm availability. Never synthesize
+        // the old demo rifle state when the player has no equipped weapon.
         sync_equipped_weapon_runtime(world, player);
         let actions = world
             .get::<PlayerCommandFrame>(player)
@@ -28,140 +28,196 @@ pub fn step_player_combat(world: &mut World, dt: f32, _fixed_tick: u64) {
             .get::<PlayerCommandFrame>(player)
             .map(|commands| commands.source_frame)
             .unwrap_or(0);
-        let tuning = world
-            .get::<HitscanWeaponTuning>(player)
-            .copied()
-            .unwrap_or_default()
-            .sanitized();
-        if world.get::<PlayerWeaponState>(player).is_none() {
-            let _ = world.insert(player, PlayerWeaponState::loaded(tuning));
-        }
 
-        let inventory_backed = world.get::<EquippedWeaponBinding>(player).is_some();
-        let mut state = world
-            .get::<PlayerWeaponState>(player)
-            .copied()
-            .unwrap_or_else(|| PlayerWeaponState::loaded(tuning));
-        if let Some(reserve) = equipped_reserve_ammo(world, player) {
-            state.reserve_ammo = reserve;
-        }
-
-        let mut events = Vec::<WeaponEvent>::new();
-        let mut fire_request = None;
-        state.aiming = actions.aim_held;
-        state.cooldown_remaining = (state.cooldown_remaining - dt).max(0.0);
-
-        if state.reload_remaining > 0.0 {
-            state.reload_remaining = (state.reload_remaining - dt).max(0.0);
-            if state.reload_remaining == 0.0 {
-                let needed = tuning
-                    .magazine_capacity
-                    .saturating_sub(state.ammo_in_magazine);
-                let moved = if inventory_backed {
-                    consume_equipped_ammo(world, player, needed)
-                } else {
-                    needed.min(state.reserve_ammo)
-                };
-                state.ammo_in_magazine += moved;
-                if inventory_backed {
-                    state.reserve_ammo = equipped_reserve_ammo(world, player).unwrap_or(0);
-                } else {
-                    state.reserve_ammo -= moved;
-                }
-                events.push(weapon_event(
-                    WeaponEventKind::ReloadCompleted,
-                    player,
-                    state.shot_sequence,
-                ));
+        if world.get::<EquippedWeaponBinding>(player).is_some() {
+            let tuning = world
+                .get::<HitscanWeaponTuning>(player)
+                .copied()
+                .unwrap_or_default()
+                .sanitized();
+            if world.get::<PlayerWeaponState>(player).is_none() {
+                let _ = world.insert(player, PlayerWeaponState::loaded(tuning));
             }
-        }
 
-        if combat_policy.allow_reload
-            && actions.reload_pressed
-            && state.reload_remaining <= 0.0
-            && state.ammo_in_magazine < tuning.magazine_capacity
-            && state.reserve_ammo > 0
-        {
-            state.reload_remaining = tuning.reload_duration;
-            events.push(weapon_event(
-                WeaponEventKind::ReloadStarted,
-                player,
-                state.shot_sequence,
-            ));
-        }
+            let mut state = world
+                .get::<PlayerWeaponState>(player)
+                .copied()
+                .unwrap_or_else(|| PlayerWeaponState::loaded(tuning));
+            if let Some(reserve) = equipped_reserve_ammo(world, player) {
+                state.reserve_ammo = reserve;
+            }
 
-        if combat_policy.allow_fire
-            && actions.fire_primary_held
-            && state.reload_remaining <= 0.0
-            && state.cooldown_remaining <= 0.0
-        {
-            if state.ammo_in_magazine == 0 {
-                if !state.empty_latched {
+            let mut events = Vec::<WeaponEvent>::new();
+            let mut fire_request = None;
+            state.aiming = actions.aim_held;
+            state.cooldown_remaining = (state.cooldown_remaining - dt).max(0.0);
+
+            if state.reload_remaining > 0.0 {
+                state.reload_remaining = (state.reload_remaining - dt).max(0.0);
+                if state.reload_remaining == 0.0 {
+                    let needed = tuning
+                        .magazine_capacity
+                        .saturating_sub(state.ammo_in_magazine);
+                    let moved = consume_equipped_ammo(world, player, needed);
+                    state.ammo_in_magazine += moved;
+                    state.reserve_ammo = equipped_reserve_ammo(world, player).unwrap_or(0);
                     events.push(weapon_event(
-                        WeaponEventKind::Empty,
+                        WeaponEventKind::ReloadCompleted,
                         player,
                         state.shot_sequence,
                     ));
-                    state.empty_latched = true;
                 }
-            } else {
-                state.ammo_in_magazine -= 1;
-                state.shot_sequence = state.shot_sequence.wrapping_add(1);
-                state.cooldown_remaining = tuning.fire_interval;
-                state.empty_latched = false;
-                fire_request = Some((state.shot_sequence, state.aiming));
+            }
+
+            if combat_policy.allow_reload
+                && actions.reload_pressed
+                && state.reload_remaining <= 0.0
+                && state.ammo_in_magazine < tuning.magazine_capacity
+                && state.reserve_ammo > 0
+            {
+                state.reload_remaining = tuning.reload_duration;
                 events.push(weapon_event(
-                    WeaponEventKind::Fired,
+                    WeaponEventKind::ReloadStarted,
                     player,
                     state.shot_sequence,
                 ));
             }
-        } else if !actions.fire_primary_held {
-            state.empty_latched = false;
-        }
 
-        let _ = world.insert(player, state);
-        persist_equipped_weapon_state(world, player);
+            let fire_mode = world
+                .get::<EquippedWeaponBinding>(player)
+                .and_then(|binding| {
+                    world
+                        .resource::<newengine_engine_runtime::gameplay::ItemCatalog>()
+                        .and_then(|catalog| catalog.get(binding.item))
+                })
+                .and_then(|definition| definition.weapon)
+                .map(|weapon| weapon.fire_mode)
+                .unwrap_or(WeaponFireMode::SemiAuto);
+            let trigger_active = match fire_mode {
+                WeaponFireMode::SemiAuto => actions.fire_primary_pressed,
+                WeaponFireMode::Automatic => actions.fire_primary_held,
+            };
 
-        if let Some((shot_sequence, aiming)) = fire_request {
-            if let Some((origin, direction)) =
-                shot_origin_and_direction(world, player, tuning, aiming, shot_sequence)
+            if combat_policy.allow_fire
+                && trigger_active
+                && state.reload_remaining <= 0.0
+                && state.cooldown_remaining <= 0.0
             {
-                let pending = PendingHitscan {
-                    query_seq: hitscan_query_seq(player, shot_sequence),
-                    shot_sequence,
-                    origin,
-                    direction,
-                    range: tuning.range,
-                    damage: tuning.damage * combat_policy.damage_multiplier,
-                };
-                let _ = world.insert(player, pending);
-                apply_recoil(world, player, tuning, shot_sequence);
+                if state.ammo_in_magazine == 0 {
+                    if !state.empty_latched {
+                        events.push(weapon_event(
+                            WeaponEventKind::Empty,
+                            player,
+                            state.shot_sequence,
+                        ));
+                        state.empty_latched = true;
+                    }
+                } else {
+                    state.ammo_in_magazine -= 1;
+                    state.shot_sequence = state.shot_sequence.wrapping_add(1);
+                    state.cooldown_remaining = tuning.fire_interval;
+                    state.empty_latched = false;
+                    fire_request = Some((state.shot_sequence, state.aiming));
+                    events.push(weapon_event(
+                        WeaponEventKind::Fired,
+                        player,
+                        state.shot_sequence,
+                    ));
+                }
+            } else if !actions.fire_primary_held {
+                state.empty_latched = false;
             }
+
+            let _ = world.insert(player, state);
+            persist_equipped_weapon_state(world, player);
+
+            if let Some((shot_sequence, aiming)) = fire_request {
+                if let Some((origin, direction)) =
+                    shot_origin_and_direction(world, player, tuning, aiming, shot_sequence)
+                {
+                    let pending = PendingHitscan {
+                        query_seq: hitscan_query_seq(player, shot_sequence),
+                        shot_sequence,
+                        origin,
+                        direction,
+                        range: tuning.range,
+                        damage: tuning.damage * combat_policy.damage_multiplier,
+                    };
+                    let _ = world.insert(player, pending);
+                    apply_recoil(world, player, tuning, shot_sequence);
+                }
+            }
+
+            for event in events {
+                emit_weapon_event(world, event);
+            }
+        } else {
+            // LMB without a firearm is an edge-triggered unarmed strike. This uses the same
+            // authoritative physics-query + Lua hit-policy pipeline as firearm damage, but with
+            // close range and no projectile, ammo, recoil, reload, or synthetic weapon state.
+            let mut melee = world
+                .get::<UnarmedMeleeState>(player)
+                .copied()
+                .unwrap_or_default();
+            melee.cooldown_remaining = (melee.cooldown_remaining - dt).max(0.0);
+            if combat_policy.allow_fire
+                && actions.fire_primary_pressed
+                && melee.cooldown_remaining <= 0.0
+            {
+                melee.sequence = melee.sequence.wrapping_add(1).max(1);
+                melee.cooldown_remaining = UNARMED_MELEE_COOLDOWN_SECONDS;
+                let tuning = PlayerInteractionTuning {
+                    range: UNARMED_MELEE_RANGE,
+                    ray_origin_forward_offset: 0.20,
+                };
+                if let Some((origin, direction)) = interaction_ray(world, player, tuning) {
+                    let _ = world.insert(
+                        player,
+                        PendingHitscan {
+                            query_seq: melee_query_seq(player, melee.sequence),
+                            shot_sequence: melee.sequence,
+                            origin,
+                            direction,
+                            range: UNARMED_MELEE_RANGE,
+                            damage: UNARMED_MELEE_DAMAGE * combat_policy.damage_multiplier,
+                        },
+                    );
+                }
+            }
+            let _ = world.insert(player, melee);
         }
 
         if player_policy.allow_interact && actions.interact_pressed {
-            let interaction_tuning = world
-                .get::<PlayerInteractionTuning>(player)
-                .copied()
-                .unwrap_or_default();
-            if let Some((origin, direction)) = interaction_ray(world, player, interaction_tuning) {
-                let _ = world.insert(
-                    player,
-                    PendingInteraction {
-                        query_seq: interaction_query_seq(player, source_frame),
-                        origin,
-                        direction,
-                        range: (interaction_tuning.range
-                            * combat_policy.interaction_range_multiplier)
-                            .clamp(0.1, 100.0),
-                    },
-                );
+            if let Some(target) = focused_item_pickup(world, player) {
+                let point = world
+                    .get::<Transform>(target)
+                    .map(|transform| transform.position)
+                    .unwrap_or_default();
+                let _ = world.insert(player, PendingFocusedItemInteraction { target, point });
+                // A focused inventory item owns this interaction edge. Remove any stale generic
+                // ray request so one key press cannot trigger both a pickup and a door/terminal.
+                let _ = world.remove::<PendingInteraction>(player);
+            } else {
+                let interaction_tuning = world
+                    .get::<PlayerInteractionTuning>(player)
+                    .copied()
+                    .unwrap_or_default();
+                if let Some((origin, direction)) =
+                    interaction_ray(world, player, interaction_tuning)
+                {
+                    let _ = world.insert(
+                        player,
+                        PendingInteraction {
+                            query_seq: interaction_query_seq(player, source_frame),
+                            origin,
+                            direction,
+                            range: (interaction_tuning.range
+                                * combat_policy.interaction_range_multiplier)
+                                .clamp(0.1, 100.0),
+                        },
+                    );
+                }
             }
-        }
-
-        for event in events {
-            emit_weapon_event(world, event);
         }
     }
 }

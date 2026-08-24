@@ -1,3 +1,7 @@
 # newengine-host-capabilities-runtime
 
-Concrete Void Engine Host `PreInit` discovery. It runs before Engine/runtime composition and produces an immutable `HostPreInitSnapshot` from the contract crate.
+Optional native provider for `engine.host.capabilities`.
+
+It discovers OS and hardware state and returns an immutable
+`HostPreInitSnapshot`. The runtime host installs this provider only when a
+profile has not already supplied another PreInit provider route.

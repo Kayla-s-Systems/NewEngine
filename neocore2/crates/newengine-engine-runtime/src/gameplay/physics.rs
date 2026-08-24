@@ -1,6 +1,8 @@
 use super::physics_queries::GameplayPhysicsQueryProviderRegistry;
 use newengine_core::physics::PhysicsApiRef;
 use newengine_ecs::World;
+
+use crate::gameplay::StaticMeshCollider;
 use std::collections::BTreeMap;
 use std::time::Instant;
 
@@ -37,6 +39,20 @@ pub struct PhysicsStepTimingTelemetry {
 pub struct PhysicsBackendWarmupState {
     pub attempted: bool,
 }
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct PhysicsStaticColliderSyncProgress {
+    pub total: u32,
+    pub registered: u32,
+    pub pending: u32,
+    pub failed: u32,
+}
+
+impl PhysicsStaticColliderSyncProgress {
+    #[inline]
+    pub const fn is_ready(self) -> bool {
+        self.pending == 0 && self.failed == 0
+    }
+}
 
 /// Forces lazy backend/Jolt initialization while the loading projection owns the
 /// frame. The packet is intentionally empty and uses fixed_tick=0, so no ECS body
@@ -71,6 +87,90 @@ pub(crate) fn prewarm_service_physics_backend(world: &mut World, physics_api: &P
             elapsed_ms,
             error
         ),
+    }
+}
+/// Streams authored static-mesh collision into the external physics provider while the
+/// loading screen owns the frame. Dynamic/gameplay bodies are intentionally omitted until
+/// `WorldActivationState` becomes ready, so the player cannot integrate gravity before the
+/// collision world exists in the provider.
+pub(crate) fn sync_prelaunch_service_physics(world: &mut World, physics_api: &PhysicsApiRef) {
+    let total = world
+        .query::<StaticMeshCollider>()
+        .count()
+        .min(u32::MAX as usize) as u32;
+    let mut sync = world
+        .remove_resource::<PhysicsSyncModule>()
+        .unwrap_or_default();
+    let queries = GameplayPhysicsQueryProviderRegistry::new();
+    let input = build_frame_input(
+        world,
+        0,
+        0,
+        1.0 / 60.0,
+        &mut sync.static_mesh_revisions,
+        &queries,
+    );
+    let submitted = input.colliders.len() as u32;
+    let commands = input.commands.len() as u32;
+
+    if submitted == 0 && commands == 0 {
+        let registered = sync.static_mesh_revisions.len().min(u32::MAX as usize) as u32;
+        world.insert_resource(sync);
+        world.insert_resource(PhysicsStaticColliderSyncProgress {
+            total,
+            registered: registered.min(total),
+            pending: total.saturating_sub(registered),
+            failed: 0,
+        });
+        return;
+    }
+
+    let result = {
+        let mut api = physics_api.lock();
+        api.step_frame(input)
+    };
+    match result {
+        Ok(_) => {
+            sync.step_failure_count = 0;
+            let registered = sync.static_mesh_revisions.len().min(u32::MAX as usize) as u32;
+            let progress = PhysicsStaticColliderSyncProgress {
+                total,
+                registered: registered.min(total),
+                pending: total.saturating_sub(registered),
+                failed: 0,
+            };
+            if submitted > 0 {
+                newengine_ulog_api::ulog::info!(
+                    "physics prelaunch collision sync: submitted={} registered={}/{} pending={} policy='loading-screen; collision-before-gameplay'",
+                    submitted,
+                    progress.registered,
+                    progress.total,
+                    progress.pending,
+                );
+            }
+            world.insert_resource(sync);
+            world.insert_resource(progress);
+        }
+        Err(error) => {
+            sync.static_mesh_revisions.clear();
+            sync.step_failure_count = sync.step_failure_count.saturating_add(1);
+            let failure_count = sync.step_failure_count;
+            world.insert_resource(sync);
+            world.insert_resource(PhysicsStaticColliderSyncProgress {
+                total,
+                registered: 0,
+                pending: total,
+                failed: 1,
+            });
+            if failure_count <= 3 || failure_count.is_multiple_of(120) {
+                newengine_ulog_api::ulog::warn!(
+                    "physics prelaunch collision sync failed count={} colliders={} err='{}'; loading gate remains closed",
+                    failure_count,
+                    total,
+                    error,
+                );
+            }
+        }
     }
 }
 

@@ -710,7 +710,6 @@ fn legacy_route_without_provider_abi_remains_selectable() {
     assert_eq!(route.provider_abi, None);
 }
 
-
 #[test]
 fn host_capability_policy_prefers_matching_backend_tag() {
     let make_render = |plugin_id: &str, service_id: &str, backend: &str, priority: i32| {
@@ -756,13 +755,11 @@ fn host_capability_policy_prefers_matching_backend_tag() {
         owner_id: "host.preinit".to_owned(),
     }];
 
-    let registry = ActiveGatewayRegistry::from_facts_with_policy(
-        &descriptors,
-        &services,
-        &[],
-        &policies,
-    );
-    let route = registry.resolve_route("engine.render").expect("render route");
+    let registry =
+        ActiveGatewayRegistry::from_facts_with_policy(&descriptors, &services, &[], &policies);
+    let route = registry
+        .resolve_route("engine.render")
+        .expect("render route");
 
     assert_eq!(route.provider_service_id, "render.vulkan.api");
     assert_eq!(route.active_score, 22_010);
@@ -806,11 +803,7 @@ fn host_capability_policy_can_forbid_incompatible_backend_tag() {
         owner_id: "host.preinit".to_owned(),
     }];
 
-    let registry = ActiveGatewayRegistry::from_facts_with_policy(
-        &descriptors,
-        &services,
-        &[],
-        &policies,
-    );
+    let registry =
+        ActiveGatewayRegistry::from_facts_with_policy(&descriptors, &services, &[], &policies);
     assert!(registry.resolve_route("engine.render").is_none());
 }

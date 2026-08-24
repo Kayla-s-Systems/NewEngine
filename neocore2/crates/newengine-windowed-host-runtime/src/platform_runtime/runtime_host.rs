@@ -1,6 +1,3 @@
-use std::path::Path;
-use std::time::Instant;
-
 use abi_stable::std_types::RString;
 use libloading::Library;
 use newengine_core::events::EventSub;
@@ -14,9 +11,9 @@ use newengine_platform_api::{
     PlatformStepResultV1, PlatformSurfaceMetricsV1, PlatformWindowReadyV1,
 };
 use newengine_plugin_api::PluginInfo;
-use newengine_system_contracts::ScreenOverlayStatus;
 use newengine_ui::{create_provider, UiBuildFn, UiProvider, UiProviderKind, UiProviderOptions};
 use newengine_ui_api::UiLayerDomain;
+use std::path::Path;
 
 use crate::platform_runtime::bootstrap_overlay::{
     RuntimeBootstrapOverlayState, RuntimeBootstrapStage,
@@ -32,13 +29,13 @@ use crate::platform_runtime::shutdown_watchdog::ShutdownWatchdog;
 use crate::platform_runtime::snapshot_service::{
     register_platform_window_service_best_effort, update_platform_window_snapshot,
 };
-use newengine_runtime_host::register_threading_gateway_service_best_effort;
 use crate::platform_runtime::types::ResolvedPlatformRuntimeConfig;
 use crate::platform_runtime::ui_gateway_frame::UiGatewayFramePolicy;
 use crate::platform_runtime::ui_layer_cache::RetainedUiLayerCache;
 use crate::platform_runtime::ui_provider_selection::{
     log_ui_provider_selection, UiProviderSelection,
 };
+use newengine_runtime_host::register_threading_gateway_service_best_effort;
 
 #[path = "runtime_host_parts/mod.rs"]
 mod runtime_host_parts;
@@ -75,9 +72,6 @@ pub struct HostPlatformRuntime {
     game_ui_cache: RetainedUiLayerCache,
     editor_ui_cache: RetainedUiLayerCache,
     debug_ui_cache: RetainedUiLayerCache,
-    last_published_loading_overlay: Option<ScreenOverlayStatus>,
-    last_loading_overlay_publish_at: Option<Instant>,
-    loading_surface_inactive_published: bool,
     ui_frame_policy: UiGatewayFramePolicy,
     runtime_bootstrap_overlay_enabled: bool,
 }
@@ -92,6 +86,12 @@ impl HostPlatformRuntime {
         let ui_selection = UiProviderSelection::new(ui_kind);
         log_ui_provider_selection("initial", ui_selection.active());
         let active_ui_kind = ui_selection.active().clone();
+        if let Err(error) = newengine_ui_notify_runtime::install_ui_notify_runtime(&mut engine) {
+            newengine_ulog_api::ulog::warn!(
+                "windowed host: engine.ui.notify runtime unavailable; notifications degrade to no-op: {}",
+                error
+            );
+        }
         let screen_profile = ScreenProfileRuntimeState::load();
         screen_profile.install_initial_resources(engine.resources_mut());
 
@@ -127,12 +127,6 @@ impl HostPlatformRuntime {
             game_ui_cache: RetainedUiLayerCache::new(UiLayerDomain::GameViewport),
             editor_ui_cache: RetainedUiLayerCache::new(UiLayerDomain::Editor),
             debug_ui_cache: RetainedUiLayerCache::new(UiLayerDomain::Debug),
-            last_published_loading_overlay: None,
-            last_loading_overlay_publish_at: None,
-            // Bootstrap may have mounted engine.ui.loading before the running loop
-            // starts. The first non-loading frame must therefore publish an explicit
-            // inactive state even though the running-loop cache is still empty.
-            loading_surface_inactive_published: false,
             ui_frame_policy: UiGatewayFramePolicy::from_startup_config(
                 newengine_core::startup::last_startup_config(),
             ),

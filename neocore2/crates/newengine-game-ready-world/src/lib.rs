@@ -11,6 +11,8 @@ use newengine_gameplay_fps_api::{
 mod assets_bootstrap;
 mod content;
 mod env_config;
+#[path = "game_ready_parts/equipment_visual.rs"]
+mod equipment_visual;
 #[path = "game_ready_parts/foliage.rs"]
 mod foliage;
 #[path = "game_ready_parts/material_source.rs"]
@@ -111,8 +113,10 @@ pub(crate) fn character_motion_from_fps_tuning(
     .sanitized()
 }
 
+use self::foliage::tick_deferred_foliage_prefabs;
+use self::mission::tick_deferred_item_pickups;
 use self::sky::{tick_game_ready_sky_cycle, SkyVisualKind};
-use self::terrain_streaming::tick_game_ready_streaming_terrain;
+use self::terrain_streaming::{tick_game_ready_streaming_terrain, TerrainSurfaceSampler};
 use self::world_model::tick_game_ready_static_world_prefabs;
 
 use self::material_source::*;
@@ -152,6 +156,8 @@ pub fn tick_prelaunch(
     thread_pool: Option<&ThreadPoolHandle>,
 ) {
     tick_game_ready_static_world_prefabs(world, primitives, materials, thread_pool);
+    tick_deferred_foliage_prefabs(world, primitives, materials);
+    tick_deferred_item_pickups(world, primitives, materials);
 }
 
 /// Progress normal GameReady world streaming/environment work.
@@ -163,8 +169,12 @@ pub fn tick_frame(
     frame: newengine_engine_runtime::WorldRuntimeFrame,
 ) {
     player_model::tick_player_model_assignments(world, primitives, materials);
+    player_model::tick_player_model_grounding(world);
     player_model::tick_player_skin_animation(world, frame.dt);
+    equipment_visual::tick_equipped_weapon_visuals(world, primitives, materials);
     tick_game_ready_static_world_prefabs(world, primitives, materials, thread_pool);
+    tick_deferred_foliage_prefabs(world, primitives, materials);
+    tick_deferred_item_pickups(world, primitives, materials);
     if frame.runtime_active && frame.streaming_enabled {
         tick_game_ready_streaming_terrain(world, materials, thread_pool);
     }

@@ -212,3 +212,30 @@ fn game_profile_excludes_editor_asset_browser() {
             && binding.code == mouse_button::LEFT
     }));
 }
+
+#[test]
+fn game_profile_primary_fire_has_click_edge_without_demo_projectile_binding() {
+    let profile = game_ready_game_input_profile();
+    assert!(profile.bindings.iter().any(|binding| {
+        binding.action == action::PLAYER_FIRE_PRIMARY
+            && binding.device == InputBindingDevice::MouseButton
+            && binding.code == mouse_button::LEFT
+            && binding.phase == InputBindingPhase::Down
+    }));
+    assert!(profile.bindings.iter().any(|binding| {
+        binding.action == action::PLAYER_FIRE_PRIMARY
+            && binding.device == InputBindingDevice::MouseButton
+            && binding.code == mouse_button::LEFT
+            && binding.phase == InputBindingPhase::Pressed
+    }));
+    assert!(!profile.bindings.iter().any(|binding| {
+        binding.action == action::PLAYER_LAUNCH_PROJECTILE
+            && binding.device == InputBindingDevice::MouseButton
+            && binding.code == mouse_button::LEFT
+    }));
+    assert!(
+        !newengine_gameplay_fps_api::FpsGameplayPolicySnapshot::default()
+            .player
+            .allow_projectile_launch
+    );
+}

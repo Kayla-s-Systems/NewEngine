@@ -4,10 +4,12 @@ mod tests {
     use crate::content::{
         embedded_test_content_provider, embedded_test_policy_provider, ensure_fps_player_loadouts,
     };
-    use crate::default_rifle_ammo_id;
+    use crate::{default_rifle_ammo_id, default_rifle_item_id};
     use newengine_engine_runtime::gameplay::{
         drain_interaction_events, drain_weapon_events, inventory_quantity, remove_item,
-        spawn_default_player, GameplayContentProvider, PlayerStanceState,
+        spawn_default_player, spawn_persistent_item_pickup, EquipmentSlot, EquippedWeaponBinding,
+        GameplayContentProvider, ItemCatalog, ItemDefinition, ItemId, ItemPickup, PlayerInventory,
+        PlayerStanceState, WeaponFireMode, select_equipment_slot,
     };
     use newengine_math::Quat;
     use newengine_gameplay_script_runtime::GameplayCommandExecutor;
@@ -59,6 +61,7 @@ mod tests {
         let _ = world.insert(shooter, HitscanWeaponTuning::default());
         let _ = world.insert(shooter, PlayerWeaponState::default());
         if let Some(commands) = world.get_mut::<PlayerCommandFrame>(shooter) {
+            commands.actions.pressed.push(fps_action::PLAYER_FIRE_PRIMARY.into());
             commands.actions.held.push(fps_action::PLAYER_FIRE_PRIMARY.into());
         }
 
@@ -148,6 +151,224 @@ mod tests {
         assert!(events
             .iter()
             .any(|event| event.kind == WeaponEventKind::ReloadCompleted));
+    }
+
+    #[test]
+    fn unarmed_primary_attack_is_close_range_melee_not_firearm_or_projectile() {
+        let mut world = World::new();
+        let player = spawn_fps_player(&mut world, "unarmed-player", Vec3::ZERO);
+        let target = world.spawn();
+        let _ = world.insert(target, Health::new(100.0));
+        let _ = world.insert(target, Transform::default());
+
+        // Simulate ForestRoad's weaponless start. Inventory contents may exist, but no equipment
+        // slot is active and therefore firearm runtime components must disappear.
+        if let Some(inventory) = world.get_mut::<PlayerInventory>(player) {
+            inventory.equipped.clear();
+            inventory.active_slot = None;
+            inventory.weapon_states.clear();
+        }
+        sync_equipped_weapon_runtime(&mut world, player);
+        assert!(world.get::<EquippedWeaponBinding>(player).is_none());
+        assert!(world.get::<PlayerWeaponState>(player).is_none());
+        assert!(world.get::<HitscanWeaponTuning>(player).is_none());
+
+        if let Some(commands) = world.get_mut::<PlayerCommandFrame>(player) {
+            commands.source_frame = 41;
+            commands.actions.pressed.push(fps_action::PLAYER_FIRE_PRIMARY.into());
+            commands.actions.held.push(fps_action::PLAYER_FIRE_PRIMARY.into());
+        }
+        step_player_combat(&mut world, 1.0 / 60.0, 20);
+
+        assert!(world.get::<EquippedWeaponBinding>(player).is_none());
+        assert!(world.get::<PlayerWeaponState>(player).is_none());
+        assert!(world.get::<HitscanWeaponTuning>(player).is_none());
+        let pending = world
+            .get::<PendingHitscan>(player)
+            .copied()
+            .expect("unarmed melee query");
+        assert!((pending.range - UNARMED_MELEE_RANGE).abs() < 1.0e-6);
+        assert!((pending.damage - UNARMED_MELEE_DAMAGE).abs() < 1.0e-6);
+        assert_eq!(pending.shot_sequence, 1);
+
+        let map = BTreeMap::from([
+            (player.stable_u64(), player),
+            (target.stable_u64(), target),
+        ]);
+        resolve_combat_queries(
+            &mut world,
+            20,
+            &[PhysicsQueryHitDto {
+                seq: pending.query_seq,
+                entity: target.stable_u64(),
+                position: [0.0, 0.7, -1.0],
+                normal: [0.0, 0.0, 1.0],
+                distance: 1.0,
+            }],
+            &map,
+            embedded_test_policy_provider().as_ref(),
+            &GameplayCommandExecutor::default(),
+        );
+        assert_eq!(
+            world.get::<Health>(target).expect("target health").current,
+            100.0 - UNARMED_MELEE_DAMAGE
+        );
+
+        // Holding LMB must not generate another punch during cooldown.
+        if let Some(commands) = world.get_mut::<PlayerCommandFrame>(player) {
+            commands.actions.pressed.clear();
+        }
+        step_player_combat(&mut world, 0.05, 21);
+        assert!(world.get::<PendingHitscan>(player).is_none());
+    }
+
+    #[test]
+    fn semi_auto_weapon_fires_once_per_press_not_continuously_while_held() {
+        let mut world = World::new();
+        let player = spawn_fps_player(&mut world, "semi-auto-player", Vec3::ZERO);
+        if let Some(commands) = world.get_mut::<PlayerCommandFrame>(player) {
+            commands.actions.pressed.push(fps_action::PLAYER_FIRE_PRIMARY.into());
+            commands.actions.held.push(fps_action::PLAYER_FIRE_PRIMARY.into());
+        }
+        step_player_combat(&mut world, 1.0 / 60.0, 1);
+        let first = world.get::<PlayerWeaponState>(player).copied().expect("weapon state");
+        assert_eq!(first.shot_sequence, 1);
+
+        if let Some(commands) = world.get_mut::<PlayerCommandFrame>(player) {
+            commands.actions.pressed.clear();
+        }
+        // Let the fire interval expire while keeping LMB held: semi-auto must not fire again.
+        for tick in 2..24 {
+            step_player_combat(&mut world, 1.0 / 60.0, tick);
+        }
+        let held = world.get::<PlayerWeaponState>(player).copied().expect("weapon state");
+        assert_eq!(held.shot_sequence, 1);
+
+        if let Some(commands) = world.get_mut::<PlayerCommandFrame>(player) {
+            commands.actions.pressed.push(fps_action::PLAYER_FIRE_PRIMARY.into());
+        }
+        step_player_combat(&mut world, 1.0 / 60.0, 24);
+        let second = world.get::<PlayerWeaponState>(player).copied().expect("weapon state");
+        assert_eq!(second.shot_sequence, 2);
+    }
+
+    #[test]
+    fn automatic_weapon_repeats_while_trigger_is_held() {
+        let mut world = World::new();
+        let content = embedded_test_content_provider();
+        GameplayContentProvider::install(&content, &mut world).expect("install FPS content");
+        let player = spawn_default_player(&mut world, None, "auto-player", Vec3::ZERO);
+
+        let ammo = ItemId::from_name("ammo.rifle.standard").expect("ammo id");
+        let weapon_id = ItemId::from_name("weapon.auto.test").expect("weapon id");
+        let weapon = ItemDefinition::weapon(
+            "weapon.auto.test",
+            "Automatic Test Weapon",
+            EquipmentSlot::Primary,
+            HitscanWeaponTuning {
+                magazine_capacity: 30,
+                fire_interval: 0.02,
+                ..HitscanWeaponTuning::default()
+            },
+            ammo,
+            WeaponFireMode::Automatic,
+            3.0,
+        )
+        .expect("weapon definition");
+        world.resource_mut::<ItemCatalog>().expect("catalog").register(weapon).expect("register auto weapon");
+        newengine_engine_runtime::gameplay::give_item(&mut world, player, weapon_id, 1).expect("give weapon");
+        newengine_engine_runtime::gameplay::give_item(&mut world, player, ammo, 30).expect("give ammo");
+        newengine_engine_runtime::gameplay::equip_first_item(&mut world, player, weapon_id).expect("equip auto weapon");
+
+        if let Some(commands) = world.get_mut::<PlayerCommandFrame>(player) {
+            commands.actions.held.push(fps_action::PLAYER_FIRE_PRIMARY.into());
+        }
+        for tick in 1..=8 {
+            step_player_combat(&mut world, 0.02, tick);
+        }
+        let state = world.get::<PlayerWeaponState>(player).copied().expect("weapon state");
+        assert!(state.shot_sequence >= 4, "automatic trigger should repeat, state={state:?}");
+    }
+
+    #[test]
+    fn reload_works_for_sidearm_and_consumes_its_own_ammo_type() {
+        let mut world = World::new();
+        let player = spawn_fps_player(&mut world, "sidearm-reload-player", Vec3::ZERO);
+        select_equipment_slot(&mut world, player, EquipmentSlot::Sidearm).expect("select sidearm");
+        sync_equipped_weapon_runtime(&mut world, player);
+        let binding = world.get::<EquippedWeaponBinding>(player).copied().expect("sidearm binding");
+        assert_eq!(binding.slot, EquipmentSlot::Sidearm);
+        let tuning = world.get::<HitscanWeaponTuning>(player).copied().expect("sidearm tuning");
+        let reserve_before = inventory_quantity(&world, player, binding.ammo_item);
+        let _ = world.insert(player, PlayerWeaponState {
+            ammo_in_magazine: 0,
+            reserve_ammo: reserve_before,
+            ..PlayerWeaponState::loaded(tuning)
+        });
+        if let Some(commands) = world.get_mut::<PlayerCommandFrame>(player) {
+            commands.actions.pressed.push(fps_action::PLAYER_RELOAD.into());
+        }
+        step_player_combat(&mut world, 0.01, 1);
+        if let Some(commands) = world.get_mut::<PlayerCommandFrame>(player) {
+            commands.actions.pressed.clear();
+        }
+        step_player_combat(&mut world, tuning.reload_duration + 0.01, 2);
+        let state = world.get::<PlayerWeaponState>(player).copied().expect("weapon state");
+        let expected = tuning.magazine_capacity.min(reserve_before);
+        assert_eq!(state.ammo_in_magazine, expected);
+        assert_eq!(inventory_quantity(&world, player, binding.ammo_item), reserve_before - expected);
+    }
+
+    #[test]
+    fn nearby_item_pickup_is_focused_and_collected_without_thin_ray_hit() {
+        let mut world = World::new();
+        let player = spawn_fps_player(&mut world, "pickup-focus-player", Vec3::ZERO);
+        let rifle = default_rifle_item_id();
+        while inventory_quantity(&world, player, rifle) > 0 {
+            remove_item(&mut world, player, rifle, 1).expect("remove default rifle");
+        }
+        let _ = world.remove::<EquippedWeaponBinding>(player);
+        let _ = world.remove::<PlayerWeaponState>(player);
+
+        let pickup = spawn_persistent_item_pickup(
+            &mut world,
+            None,
+            rifle,
+            1,
+            Vec3::new(0.8, 0.0, 0.4),
+            "test.rifle.focus",
+            0.0,
+        )
+        .expect("spawn focused rifle pickup");
+        world.get_mut::<ItemPickup>(pickup).expect("pickup").auto_equip = true;
+
+        assert_eq!(focused_item_pickup(&world, player), Some(pickup));
+        if let Some(commands) = world.get_mut::<PlayerCommandFrame>(player) {
+            commands.source_frame = 19;
+            commands.actions.pressed.push(fps_action::PLAYER_INTERACT.into());
+        }
+        step_player_combat(&mut world, 1.0 / 60.0, 10);
+        assert!(world.get::<PendingFocusedItemInteraction>(player).is_some());
+        assert!(world.get::<PendingInteraction>(player).is_none());
+
+        let map = BTreeMap::from([(player.stable_u64(), player), (pickup.stable_u64(), pickup)]);
+        resolve_combat_queries(
+            &mut world,
+            10,
+            &[],
+            &map,
+            embedded_test_policy_provider().as_ref(),
+            &GameplayCommandExecutor::default(),
+        );
+
+        assert_eq!(inventory_quantity(&world, player, rifle), 1);
+        let binding = world.get::<EquippedWeaponBinding>(player).expect("equipped rifle");
+        assert_eq!(binding.item, rifle);
+        assert_eq!(binding.slot, EquipmentSlot::Primary);
+        assert!(!world.get::<ItemPickup>(pickup).expect("pickup").enabled);
+        let events = drain_interaction_events(&mut world);
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].target, pickup);
     }
 
     #[test]

@@ -124,7 +124,7 @@ impl Default for FpsPlayerPolicy {
             allow_crouch: true,
             allow_sprint: true,
             allow_interact: true,
-            allow_projectile_launch: true,
+            allow_projectile_launch: false,
         }
     }
 }

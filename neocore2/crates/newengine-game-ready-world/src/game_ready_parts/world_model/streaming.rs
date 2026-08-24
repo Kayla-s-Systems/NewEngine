@@ -55,16 +55,18 @@ pub(in super::super) fn begin_static_world_prefabs(
         })
         .cloned()
         .collect::<Vec<_>>();
-    // Keep visual/collision declarations for the same source adjacent so the
-    // decoded mesh packet can be reused without another AssetManager/JSON pass.
+    // Collision is launch-critical and is admitted before render-only static geometry.
+    // Decoded source packets remain cached for the later visual declaration.
     candidates.sort_by(|a, b| {
+        let a_collision = a.proxy.trim().eq_ignore_ascii_case(COLLISION_WORLD_PROXY);
+        let b_collision = b.proxy.trim().eq_ignore_ascii_case(COLLISION_WORLD_PROXY);
         let a_source = a.source.trim().replace('\\', "/");
         let b_source = b.source.trim().replace('\\', "/");
-        a_source.cmp(&b_source).then_with(|| {
-            let a_collision = a.proxy.trim().eq_ignore_ascii_case(COLLISION_WORLD_PROXY);
-            let b_collision = b.proxy.trim().eq_ignore_ascii_case(COLLISION_WORLD_PROXY);
-            a_collision.cmp(&b_collision)
-        })
+        // Collision is launch-critical: admit it before render-only static geometry.
+        // Within the same role retain deterministic source order for cache locality.
+        b_collision
+            .cmp(&a_collision)
+            .then_with(|| a_source.cmp(&b_source))
     });
 
     let total = candidates.len() as u32;

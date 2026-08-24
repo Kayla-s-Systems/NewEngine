@@ -68,6 +68,15 @@ pub trait RuntimeHostAppProfile {
         Ok(())
     }
 
+    /// Registers providers that must be selectable before Engine construction.
+    ///
+    /// Implementations may supply an alternative `engine.host.capabilities`
+    /// route here. The runtime host installs its native provider only when no
+    /// route is present, so product and platform compositions can replace
+    /// hardware discovery without patching the Host.
+    #[inline]
+    fn register_preinit_provider_routes_best_effort(&self) {}
+
     #[inline]
     fn register_engine_provider_routes_best_effort(&self) {}
 

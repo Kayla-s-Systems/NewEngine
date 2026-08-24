@@ -9,7 +9,7 @@ use crate::schema::{
 };
 use crate::surface::{
     UiProviderManifest, UI_FEATURE_EXTERNAL_PLUGIN_PROVIDER, UI_SURFACE_ENGINE_ERROR_MODAL,
-    UI_SURFACE_ENGINE_LOADING, UI_SURFACE_RUNTIME_OVERLAY,
+    UI_SURFACE_RUNTIME_OVERLAY,
 };
 use newengine_ui_api::UiDocumentSourceKind;
 use std::any::Any;
@@ -61,7 +61,6 @@ impl UiProvider for PluginUiProvider {
             provider: self.binding(),
             version: 1,
             surfaces: vec![
-                UI_SURFACE_ENGINE_LOADING.to_owned(),
                 UI_SURFACE_ENGINE_ERROR_MODAL.to_owned(),
                 UI_SURFACE_RUNTIME_OVERLAY.to_owned(),
                 UI_SURFACE_GAME_HUD.to_owned(),
@@ -76,24 +75,6 @@ impl UiProvider for PluginUiProvider {
         let manifest = self.manifest();
         let mut catalog = UiProviderCatalog::from_manifest(manifest);
         catalog.layouts = vec![
-            UiLayoutDeclaration {
-                id: "engine.ui.loading.ksystems".to_owned(),
-                surface_id: UI_SURFACE_ENGINE_LOADING.to_owned(),
-                document: "assets/ui/engine/loading.neui@surface".to_owned(),
-                style_document: Some("assets/ui/themes/north_star_dark.neuis@theme".to_owned()),
-                document_source: UiDocumentSourceKind::Asset,
-                hot_reload: true,
-                fallback_document: None,
-            },
-            UiLayoutDeclaration {
-                id: "engine.ui.loading.subsystem_card.ksystems".to_owned(),
-                surface_id: UI_SURFACE_ENGINE_LOADING.to_owned(),
-                document: "assets/ui/engine/loading.neui@layout.subsystem_cards".to_owned(),
-                style_document: Some("assets/ui/themes/north_star_dark.neuis@theme".to_owned()),
-                document_source: UiDocumentSourceKind::Asset,
-                hot_reload: true,
-                fallback_document: None,
-            },
             UiLayoutDeclaration {
                 id: "engine.error_modal.ksystems".to_owned(),
                 surface_id: UI_SURFACE_ENGINE_ERROR_MODAL.to_owned(),
@@ -151,5 +132,31 @@ impl UiProvider for PluginUiProvider {
         let mut ctx = ();
         build.build(&mut ctx);
         UiFrameOutput::empty()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::surface::UI_SURFACE_ENGINE_LOADING;
+
+    #[test]
+    fn plugin_provider_does_not_advertise_retained_loading_surface() {
+        let provider = PluginUiProvider::new("engine.ui.test");
+        let manifest = provider.manifest();
+        assert!(!manifest
+            .surfaces
+            .iter()
+            .any(|surface| surface == UI_SURFACE_ENGINE_LOADING));
+
+        let catalog = provider.catalog();
+        assert!(!catalog
+            .layouts
+            .iter()
+            .any(|layout| layout.surface_id == UI_SURFACE_ENGINE_LOADING));
+        assert!(!catalog
+            .layouts
+            .iter()
+            .any(|layout| layout.document.contains("engine/loading.neui")));
     }
 }

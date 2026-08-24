@@ -150,6 +150,10 @@ pub(super) fn spawn_generated_terrain_chunk(
 ) -> TerrainChunkRecord {
     let center = coord.center(spec.size_x, spec.size_z);
     let terrain = generated.terrain;
+    let sampler = TerrainSurfaceSampler {
+        origin: center,
+        heightfield: Arc::clone(&terrain.heightfield),
+    };
     let bounds = Bounds::from_local_aabb(terrain.heightfield.local_bounds());
     let entity = spawn_named(world, format!("Terrain/Chunk[{:+},{:+}]", coord.x, coord.z));
     let _ = newengine_transform::set_parent(world, entity, Some(root));
@@ -179,7 +183,10 @@ pub(super) fn spawn_generated_terrain_chunk(
     let _ = world.insert(entity, surface.clone());
     let _ = apply_exact_material(world, mats, entity, material, material, color);
 
-    TerrainChunkRecord { terrain: entity }
+    TerrainChunkRecord {
+        terrain: entity,
+        sampler,
+    }
 }
 
 pub(super) fn spawn_streamed_terrain_chunk(

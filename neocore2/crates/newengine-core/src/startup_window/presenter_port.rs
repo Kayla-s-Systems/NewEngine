@@ -23,10 +23,7 @@ pub fn startup_window_presenter_registered() -> bool {
     STARTUP_WINDOW_PRESENTER.get().is_some()
 }
 
-pub(crate) fn present(
-    config_path: &Path,
-    startup: &StartupConfig,
-) -> Option<StartupWindowReport> {
+pub(crate) fn present(config_path: &Path, startup: &StartupConfig) -> Option<StartupWindowReport> {
     STARTUP_WINDOW_PRESENTER
         .get()
         .copied()

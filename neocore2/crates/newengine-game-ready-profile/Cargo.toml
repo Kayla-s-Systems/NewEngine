@@ -15,10 +15,10 @@ abi_stable = "0.11"
 newengine-assets = { path = "../newengine-assets" }
 newengine-asset-bootstrap-runtime = { path = "../newengine-asset-bootstrap-runtime" }
 newengine-assets-ui-runtime = { path = "../newengine-assets-ui-runtime" }
+newengine-audio-runtime = { path = "../newengine-audio-runtime" }
 newengine-assets-catalog-ui-runtime = { path = "../newengine-assets-catalog-ui-runtime" }
 newengine-core = { path = "../newengine-core", features = ["runtime-domain-contracts"] }
 newengine-definitions-runtime = { path = "../newengine-definitions-runtime" }
-newengine-maps-runtime = { path = "../newengine-maps-runtime" }
 newengine-ecs-runtime = { path = "../newengine-ecs-runtime" }
 newengine-engine-runtime = { path = "../newengine-engine-runtime" }
 newengine-input-api = { path = "../newengine-input-api" }
@@ -44,7 +44,6 @@ newengine-physics-runtime-adapter = { path = "../newengine-physics-runtime-adapt
 newengine-time-runtime = { path = "../newengine-time-runtime" }
 newengine-schema-runtime = { path = "../newengine-schema-runtime" }
 newengine-service-api = { path = "../newengine-service-api" }
-newengine-textures-runtime = { path = "../newengine-textures-runtime" }
 newengine-scene = { path = "../newengine-scene", features = ["runtime"] }
 newengine-scene-runtime = { path = "../newengine-scene-runtime" }
 newengine-world-api = { path = "../newengine-world-api" }

@@ -63,9 +63,7 @@ fn apply_ui_state_patches(patches: &[UiStatePatch]) {
 fn is_runtime_overlay_surface(surface_id: &str) -> bool {
     matches!(
         surface_id,
-        UI_SURFACE_ENGINE_LOADING
-            | UI_SURFACE_ENGINE_ERROR_MODAL
-            | UI_SURFACE_RUNTIME_DEBUG_OVERLAY
+        UI_SURFACE_ENGINE_ERROR_MODAL | UI_SURFACE_RUNTIME_DEBUG_OVERLAY
     )
 }
 

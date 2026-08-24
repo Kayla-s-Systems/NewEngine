@@ -23,7 +23,7 @@ mod storage;
 
 pub use catalog::ItemCatalog;
 pub use definitions::{
-    EquipmentSlot, ItemDefinition, ItemId, ItemInstanceId, ItemKind, ItemUseEffect,
+    EquipmentSlot, ItemDefinition, ItemId, ItemInstanceId, ItemKind, ItemUseEffect, WeaponFireMode,
     WeaponItemDefinition, WorldItemDefinition, WorldItemPresentation, WorldItemRuntime,
     WorldItemVisualPart,
 };

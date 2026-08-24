@@ -78,20 +78,24 @@ pub fn apply_player_input(
         axis.y -= 1.0;
     }
 
-    let sprint_multiplier = world
-        .get::<CharacterMotionTuning>(player)
+    let movement = world
+        .get::<PlayerMovementSpeeds>(player)
         .copied()
         .unwrap_or_default()
-        .sanitized()
-        .sprint_multiplier;
+        .sanitized();
+    let crouched = world
+        .get::<PlayerStanceState>(player)
+        .is_some_and(|state| matches!(state.current, PlayerStanceKind::Crouched));
 
     let mut applied = false;
     if let Some(input) = world.get_mut::<MotorInput>(player) {
         input.move_axis = axis;
         input.look_delta += look_delta_px;
         input.look_active = look_active;
-        input.speed_mul = if input_mask & input_move::SPRINT != 0 {
-            sprint_multiplier
+        input.speed_mul = if crouched {
+            movement.crouch_multiplier()
+        } else if input_mask & input_move::SPRINT != 0 {
+            movement.sprint_multiplier()
         } else {
             1.0
         };

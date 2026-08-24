@@ -59,6 +59,30 @@ impl RenderInstanceRaw {
             ],
         }
     }
+
+    #[inline]
+    pub(in crate::render_controller) fn with_foliage_wind(
+        mut self,
+        enabled: bool,
+        direction: [f32; 3],
+        strength: f32,
+    ) -> Self {
+        let horizontal_len = (direction[0] * direction[0] + direction[2] * direction[2]).sqrt();
+        let (dir_x, dir_z) = if horizontal_len > 1.0e-5 {
+            (direction[0] / horizontal_len, direction[2] / horizontal_len)
+        } else {
+            (1.0, 0.0)
+        };
+        self.emissive_radiance[0] = dir_x;
+        self.emissive_radiance[1] = dir_z;
+        self.emissive_radiance[2] = if enabled { strength.max(0.0) } else { 0.0 };
+        if self.emissive_radiance[3] > 0.0 {
+            self.emissive_radiance[3] += 10.0;
+        } else {
+            self.emissive_radiance[3] -= 20_000_000.0;
+        }
+        self
+    }
 }
 
 #[inline]

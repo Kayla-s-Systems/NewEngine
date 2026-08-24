@@ -37,9 +37,14 @@ pub(in super::super) fn sanitize_mission_pickup_spec(
     raw: RawMissionPickupSpec,
 ) -> Option<GameReadyMissionPickupSpec> {
     let id = sanitized_required_id(&raw.id)?;
+    let item = raw.item.trim().replace('\\', "/");
     Some(GameReadyMissionPickupSpec {
         id,
+        item: (!item.is_empty()).then_some(item),
+        quantity: raw.quantity.max(1).min(10_000),
+        auto_equip: raw.auto_equip,
         position: arr3(sanitize_array3_finite(raw.position, [0.0, 0.0, 0.0])),
+        rotation_ypr: arr3(sanitize_array3_finite(raw.rotation_ypr, [0.0, 0.0, 0.0])),
         radius: positive_clamped_or(
             raw.radius,
             0.15,

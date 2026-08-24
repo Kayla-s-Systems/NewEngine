@@ -2,7 +2,7 @@ use super::*;
 use newengine_engine_runtime::gameplay::{
     apply_loadout, give_item, spawn_default_player, EquipmentSlot, HitscanWeaponTuning,
     InventoryLoadout, InventoryLoadoutCatalog, InventoryLoadoutEntry, ItemCatalog, ItemDefinition,
-    ItemId, ItemKind, ItemUseEffect,
+    ItemId, ItemKind, ItemUseEffect, WeaponFireMode,
 };
 use newengine_math::Vec3;
 
@@ -26,6 +26,7 @@ fn install_test_content(world: &mut World) {
         EquipmentSlot::Primary,
         HitscanWeaponTuning::default(),
         ammo_id,
+        WeaponFireMode::SemiAuto,
         1.0,
     )
     .expect("test primary");
@@ -35,6 +36,7 @@ fn install_test_content(world: &mut World) {
         EquipmentSlot::Sidearm,
         HitscanWeaponTuning::default(),
         ammo_id,
+        WeaponFireMode::SemiAuto,
         0.5,
     )
     .expect("test sidearm");

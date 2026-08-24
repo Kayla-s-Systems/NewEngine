@@ -1,11 +1,17 @@
 use super::*;
 
 const HITSCAN_QUERY_SALT: u64 = 0x243f_6a88_85a3_08d3;
+const MELEE_QUERY_SALT: u64 = 0xa409_3822_299f_31d0;
 const INTERACTION_QUERY_SALT: u64 = 0x1319_8a2e_0370_7344;
 
 #[inline]
 pub(super) fn hitscan_query_seq(player: EntityId, shot_sequence: u64) -> u64 {
     avalanche_u64(player.stable_u64() ^ HITSCAN_QUERY_SALT ^ shot_sequence.rotate_left(17))
+}
+
+#[inline]
+pub(super) fn melee_query_seq(player: EntityId, attack_sequence: u64) -> u64 {
+    avalanche_u64(player.stable_u64() ^ MELEE_QUERY_SALT ^ attack_sequence.rotate_left(23))
 }
 
 #[inline]

@@ -11,8 +11,12 @@ mod binding;
 #[path = "player_model_validation.rs"]
 mod validation;
 
-pub(crate) use animation::tick_player_skin_animation;
-pub(crate) use binding::{spawn_game_ready_player_model, tick_player_model_assignments};
+pub(crate) use animation::{
+    player_left_hand_prop_frame, player_right_hand_prop_frame, tick_player_skin_animation,
+};
+pub(crate) use binding::{
+    spawn_game_ready_player_model, tick_player_model_assignments, tick_player_model_grounding,
+};
 
 #[derive(Clone, Debug)]
 pub(super) struct PlayerRuntimeModelPart {

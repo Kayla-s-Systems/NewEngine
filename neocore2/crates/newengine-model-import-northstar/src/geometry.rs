@@ -148,13 +148,23 @@ pub fn decode_geometry_lod0(pak: &PakFile) -> Result<DecodedGeometry, String> {
             .collect::<Result<Vec<_>, _>>()?;
         let position_stream = streams
             .iter()
-            .find(|stream| stream.kind == 64)
-            .ok_or_else(|| format!("submesh '{name}' has no TLOU2 position stream type=64"))?;
-        let positions = decode_quantized_stream(pak, position_stream, vertex_count, 3)?;
+            .find(|stream| stream.kind == 64 || stream.kind == 0)
+            .ok_or_else(|| {
+                format!("submesh '{name}' has no supported TLOU2 position stream type=64/0")
+            })?;
+        let positions = match position_stream.kind {
+            64 => decode_quantized_stream(pak, position_stream, vertex_count, 3)?,
+            0 => decode_raw_f32_stream(pak, position_stream, vertex_count, 3)?,
+            _ => unreachable!(),
+        };
         let uv0 = streams
             .iter()
-            .find(|stream| stream.kind == 65)
-            .map(|stream| decode_quantized_stream(pak, stream, vertex_count, 2))
+            .find(|stream| stream.kind == 65 || stream.kind == 1)
+            .map(|stream| match stream.kind {
+                65 => decode_quantized_stream(pak, stream, vertex_count, 2),
+                1 => decode_raw_f16_stream(pak, stream, vertex_count, 2),
+                _ => unreachable!(),
+            })
             .transpose()?
             .unwrap_or_else(|| vec![[0.0, 0.0, 0.0, 0.0]; vertex_count]);
         let indices = decode_indices(pak, index_buffer, index_count, vertex_count, &name)?;
@@ -274,6 +284,131 @@ fn decode_stream_desc(pak: &PakFile, at: usize) -> Result<StreamDesc, String> {
         q_scale,
         q_offset,
     })
+}
+
+fn decode_raw_f32_stream(
+    pak: &PakFile,
+    stream: &StreamDesc,
+    vertex_count: usize,
+    wanted_components: usize,
+) -> Result<Vec<[f32; 4]>, String> {
+    if wanted_components == 0 || wanted_components > 4 {
+        return Err(format!(
+            "invalid raw f32 component count {wanted_components}"
+        ));
+    }
+    if stream.num_vertices < vertex_count {
+        return Err(format!(
+            "raw f32 stream shorter than submesh stream_vertices={} mesh_vertices={vertex_count}",
+            stream.num_vertices
+        ));
+    }
+    let stride = wanted_components
+        .checked_mul(4)
+        .ok_or("raw f32 vertex stride overflow")?;
+    let required = vertex_count
+        .checked_mul(stride)
+        .ok_or("raw f32 byte range overflow")?;
+    if stream.buffer_size < required {
+        return Err(format!(
+            "raw f32 stream buffer too small bytes={} required={required}",
+            stream.buffer_size
+        ));
+    }
+    let bytes = pak.slice(stream.buffer, required)?;
+    let mut out = Vec::with_capacity(vertex_count);
+    for vertex in 0..vertex_count {
+        let mut value = [0.0f32; 4];
+        let base = vertex * stride;
+        for component in 0..wanted_components {
+            let at = base + component * 4;
+            value[component] =
+                f32::from_le_bytes(bytes[at..at + 4].try_into().expect("raw f32 component"));
+        }
+        if value[..wanted_components]
+            .iter()
+            .any(|component| !component.is_finite())
+        {
+            return Err("raw f32 vertex stream produced non-finite value".to_owned());
+        }
+        out.push(value);
+    }
+    Ok(out)
+}
+
+fn decode_raw_f16_stream(
+    pak: &PakFile,
+    stream: &StreamDesc,
+    vertex_count: usize,
+    wanted_components: usize,
+) -> Result<Vec<[f32; 4]>, String> {
+    if wanted_components == 0 || wanted_components > 4 {
+        return Err(format!(
+            "invalid raw f16 component count {wanted_components}"
+        ));
+    }
+    if stream.num_vertices < vertex_count {
+        return Err(format!(
+            "raw f16 stream shorter than submesh stream_vertices={} mesh_vertices={vertex_count}",
+            stream.num_vertices
+        ));
+    }
+    let stride = wanted_components
+        .checked_mul(2)
+        .ok_or("raw f16 vertex stride overflow")?;
+    let required = vertex_count
+        .checked_mul(stride)
+        .ok_or("raw f16 byte range overflow")?;
+    if stream.buffer_size < required {
+        return Err(format!(
+            "raw f16 stream buffer too small bytes={} required={required}",
+            stream.buffer_size
+        ));
+    }
+    let bytes = pak.slice(stream.buffer, required)?;
+    let mut out = Vec::with_capacity(vertex_count);
+    for vertex in 0..vertex_count {
+        let mut value = [0.0f32; 4];
+        let base = vertex * stride;
+        for component in 0..wanted_components {
+            let at = base + component * 2;
+            let bits = u16::from_le_bytes([bytes[at], bytes[at + 1]]);
+            value[component] = f16_to_f32(bits);
+        }
+        if value[..wanted_components]
+            .iter()
+            .any(|component| !component.is_finite())
+        {
+            return Err("raw f16 vertex stream produced non-finite value".to_owned());
+        }
+        out.push(value);
+    }
+    Ok(out)
+}
+
+fn f16_to_f32(bits: u16) -> f32 {
+    let sign = ((bits & 0x8000) as u32) << 16;
+    let exponent = ((bits >> 10) & 0x1f) as u32;
+    let mantissa = (bits & 0x03ff) as u32;
+    let raw = match exponent {
+        0 => {
+            if mantissa == 0 {
+                sign
+            } else {
+                let mut mantissa = mantissa;
+                let mut exponent = 113u32;
+                while mantissa & 0x0400 == 0 {
+                    mantissa <<= 1;
+                    exponent -= 1;
+                }
+                mantissa &= 0x03ff;
+                sign | (exponent << 23) | (mantissa << 13)
+            }
+        }
+        0x1f => sign | 0x7f80_0000 | (mantissa << 13),
+        _ => sign | ((exponent + 112) << 23) | (mantissa << 13),
+    };
+    f32::from_bits(raw)
 }
 
 fn decode_quantized_stream(

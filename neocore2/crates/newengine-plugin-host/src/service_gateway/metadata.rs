@@ -64,20 +64,25 @@ fn json_system_tags(value: &serde_json::Value) -> Vec<String> {
     let mut out = json_string_list(value, SYSTEM_TAGS_FIELD);
     out.extend(json_string_list(value, TAGS_FIELD));
     if let Some(backend) = json_field_string(value, BACKEND_FIELD) {
-        if let Some(tag) = normalize_system_tag(&format!("backend.{}", metadata_tag_slug(&backend))) {
+        if let Some(tag) = normalize_system_tag(&format!("backend.{}", metadata_tag_slug(&backend)))
+        {
             out.push(tag);
         }
     }
     match value.get(FEATURES_FIELD) {
         Some(serde_json::Value::Array(features)) => {
             for feature in features.iter().filter_map(|value| value.as_str()) {
-                if let Some(tag) = normalize_system_tag(&format!("feature.{}", metadata_tag_slug(feature))) {
+                if let Some(tag) =
+                    normalize_system_tag(&format!("feature.{}", metadata_tag_slug(feature)))
+                {
                     out.push(tag);
                 }
             }
         }
         Some(serde_json::Value::String(feature)) => {
-            if let Some(tag) = normalize_system_tag(&format!("feature.{}", metadata_tag_slug(feature))) {
+            if let Some(tag) =
+                normalize_system_tag(&format!("feature.{}", metadata_tag_slug(feature)))
+            {
                 out.push(tag);
             }
         }
@@ -92,7 +97,13 @@ fn metadata_tag_slug(value: &str) -> String {
     value
         .trim()
         .chars()
-        .map(|ch| if ch.is_ascii_alphanumeric() { ch.to_ascii_lowercase() } else { '.' })
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() {
+                ch.to_ascii_lowercase()
+            } else {
+                '.'
+            }
+        })
         .collect::<String>()
         .split('.')
         .filter(|segment| !segment.is_empty())

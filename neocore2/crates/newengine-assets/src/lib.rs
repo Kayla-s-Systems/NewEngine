@@ -15,14 +15,15 @@ pub use asset_type_registry::{
     register_asset_type_descriptor_best_effort, register_asset_types_gateway_best_effort,
 };
 pub use newengine_assets_api::{
-    assets_ui_method, definitions_method, require_asset_reference_extension, wait_ready,
-    AssetAccess, AssetDecodeRequest, AssetEntryDependency, AssetEntryManifest, AssetError,
-    AssetErrorKind, AssetFileManifest, AssetFileTypeDescriptor, AssetFileTypeManifest,
+    asset_source_role, assets_ui_method, definitions_method, require_asset_reference_extension,
+    wait_ready, AssetAccess, AssetDecodeRequest, AssetEntryDependency, AssetEntryManifest,
+    AssetError, AssetErrorKind, AssetFileManifest, AssetFileTypeDescriptor, AssetFileTypeManifest,
     AssetFileTypeProbeRequest, AssetFileTypeProbeResult, AssetFileTypeRegisterRequest,
     AssetGatewayRoute, AssetReference, AssetResult, AssetService, AssetState, Rgba8TextureAsset,
     RuntimeTextureAsset, RuntimeTextureFormat, RuntimeTextureMip, RuntimeTextureMipLayout,
     WaitReadyError, ASSETS_UI_BACKEND_CAPABILITY_ID, ASSETS_UI_RUNTIME_CONTRACT,
     ASSETS_UI_SERVICE_ID, ASSETS_UI_SERVICE_METHODS, ASSET_LIST_FILE_BODY_OUTPUT,
+    ASSET_RESOLUTION_POLICY_COMPILED_FIRST_SOURCE_FALLBACK_V1,
     ENGINE_ASSETS_DEFINITIONS_SERVICE_ID, ENGINE_ASSETS_MATERIALS_SERVICE_ID,
     ENGINE_ASSETS_MODELS_SERVICE_ID, ENGINE_ASSETS_TEXTURES_SERVICE_ID,
     ENGINE_ASSETS_UI_SERVICE_ID, ENGINE_ASSET_SERVICE_ID,

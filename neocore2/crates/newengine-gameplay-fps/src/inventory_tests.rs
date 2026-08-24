@@ -121,6 +121,49 @@ fn pickup_collection_transfers_item_and_dormants_source_entity() {
 }
 
 #[test]
+fn auto_equip_weapon_pickup_transfers_and_activates_primary_weapon() {
+    let mut world = World::new();
+    install_fps_content(&mut world);
+    let owner = world.spawn();
+    ensure_player_inventory(&mut world, owner);
+    let rifle = default_rifle_item_id();
+    assert_eq!(inventory_quantity(&world, owner, rifle), 0);
+    assert!(world.get::<EquippedWeaponBinding>(owner).is_none());
+
+    let pickup = spawn_persistent_item_pickup(
+        &mut world,
+        None,
+        rifle,
+        1,
+        Vec3::new(1.0, 0.5, 2.0),
+        "test.pickup.rifle.auto-equip",
+        0.0,
+    )
+    .expect("spawn rifle pickup");
+    world
+        .get_mut::<ItemPickup>(pickup)
+        .expect("rifle pickup component")
+        .auto_equip = true;
+
+    assert!(try_collect_item_pickup(&mut world, owner, pickup));
+    assert_eq!(inventory_quantity(&world, owner, rifle), 1);
+    let binding = world
+        .get::<EquippedWeaponBinding>(owner)
+        .expect("auto-equipped rifle binding");
+    assert_eq!(binding.item, rifle);
+    assert_eq!(binding.slot, EquipmentSlot::Primary);
+    assert!(world.get::<PlayerWeaponState>(owner).is_some());
+    assert!(!world.get::<ItemPickup>(pickup).expect("pickup").enabled);
+    assert_eq!(
+        world
+            .get::<DisplayVisibility>(pickup)
+            .expect("pickup visibility")
+            .mode,
+        DisplayMode::RuntimeHidden
+    );
+}
+
+#[test]
 fn loadout_reset_and_active_weapon_drop_leave_no_orphan_weapon_state() {
     let mut world = World::new();
     install_fps_content(&mut world);

@@ -9,6 +9,8 @@ pub const LEGACY_ABBY_SEATTLE_SOURCE_ACTION: &str = "game.character.select.abby_
 pub const LEGACY_ABBY_SANTA_BARBARA_SOURCE_ACTION: &str =
     "game.character.select.abby_santa_barbara_source_709";
 
+// Compatibility IDs retained so saved selections/actions survive the native-rig cutover.
+// They no longer describe the runtime rig: all four Abby variants use the 1033-joint native skeleton.
 pub const ABBY_WLF_DEFAULT_709_ID: &str = "abby_wlf_default_709";
 pub const ABBY_SEATTLE_709_ID: &str = "abby_seattle_709";
 pub const ABBY_SANTA_BARBARA_709_ID: &str = "abby_santa_barbara_709";
@@ -108,12 +110,12 @@ const ABBY_PROPERTIES: &str = "definitions/fps/player_abby.ytyp@player_abby";
 const ABBY_TEXTURES: &str = "textures/characters/abby.ytd";
 const ABBY_SKELETON: &str = "models/characters/abby/abby.ymt@abby";
 const ABBY_ANIMS: [Option<&str>; 6] = [
-    Some("animations/characters/abby/idle.ycd@idle"),
-    Some("animations/characters/abby/walk.ycd@walk"),
-    Some("animations/characters/abby/run.ycd@run"),
-    Some("animations/characters/abby/sprint.ycd@sprint"),
-    Some("animations/characters/abby/jump.ycd@jump"),
-    Some("animations/characters/abby/fall.ycd@fall"),
+    Some("animations/characters/abby/mm-explore.ycd@abby-mm-explore-idle"),
+    Some("animations/characters/abby/mm-explore.ycd@abby-mm-explore-walk-loop-fw"),
+    Some("animations/characters/abby/mm-explore.ycd@abby-mm-explore-run-loop-fw"),
+    Some("animations/characters/abby/mm-explore.ycd@abby-mm-explore-sprint-loop-fw"),
+    None,
+    None,
 ];
 
 pub const PLAYABLE_CHARACTER_VARIANTS: &[PlayableCharacterVariantDescriptor] = &[
@@ -121,10 +123,10 @@ pub const PLAYABLE_CHARACTER_VARIANTS: &[PlayableCharacterVariantDescriptor] = &
         id: ABBY_WLF_DEFAULT_709_ID,
         family: PlayableCharacterFamily::Abby,
         display_name: "Abby — WLF / Default Jacket",
-        subtitle: "Accepted TLOU II PAK head, hair and WLF/default outfit on the 709-joint Abby rig",
+        subtitle: "Native TLOU II PAK geometry, native braid skin and 1033-joint JOINT_HIERARCHY with OrbisAnim locomotion",
         availability: PlayableCharacterVariantAvailability::RuntimeReady,
-        rig_label: "Abby_rig / 709 joints",
-        source_provenance: "naughtydog.tlou2.pak_mesh + gltf2.Abby_Vyet3D_v.0.2.0.rig",
+        rig_label: "North Star JOINT_HIERARCHY / 1033 joints",
+        source_provenance: "northstar.tlou2.pc GEOMETRY_1 + JOINT_HIERARCHY + native braid",
         runtime_model_ref: Some(ABBY_WLF_MODEL),
         properties_ref: Some(ABBY_PROPERTIES),
         texture_dictionary: Some(ABBY_TEXTURES),
@@ -137,11 +139,11 @@ pub const PLAYABLE_CHARACTER_VARIANTS: &[PlayableCharacterVariantDescriptor] = &
         id: ABBY_SEATTLE_709_ID,
         family: PlayableCharacterFamily::Abby,
         display_name: "Abby — Seattle",
-        subtitle: "Seattle boots, pants and tank top over complete glTF torso/arms/legs with the accepted PAK head/hair and the same 709-joint rig",
+        subtitle: "Seattle outfit geometry remapped into the native 1033-joint Abby skeleton with native OrbisAnim locomotion and braid chain",
         availability: PlayableCharacterVariantAvailability::RuntimeReady,
-        rig_label: "Abby_rig / 709 joints",
+        rig_label: "North Star JOINT_HIERARCHY / 1033 joints",
         source_provenance:
-            "pak head/hair + gltf2 AA_Torso + AA_Arms + AA_Legs + Seattle_boots + Seattle_pants + Seattle_Tank_top",
+            "pak head/hair + gltf2 outfit/body geometry remapped 709->native1033 + native braid joints",
         runtime_model_ref: Some(ABBY_SEATTLE_MODEL),
         properties_ref: Some(ABBY_PROPERTIES),
         texture_dictionary: Some(ABBY_TEXTURES),
@@ -154,11 +156,11 @@ pub const PLAYABLE_CHARACTER_VARIANTS: &[PlayableCharacterVariantDescriptor] = &
         id: ABBY_SANTA_BARBARA_709_ID,
         family: PlayableCharacterFamily::Abby,
         display_name: "Abby — Santa Barbara",
-        subtitle: "Santa Barbara pants, shirt and frayed details with complete glTF arms/legs on the accepted PAK head/hair and 709-joint rig",
+        subtitle: "Santa Barbara outfit geometry remapped into the native 1033-joint Abby skeleton with native OrbisAnim locomotion and braid chain",
         availability: PlayableCharacterVariantAvailability::RuntimeReady,
-        rig_label: "Abby_rig / 709 joints",
+        rig_label: "North Star JOINT_HIERARCHY / 1033 joints",
         source_provenance:
-            "pak head/hair + gltf2 AA_Arms + AA_Legs + Abby_SB_pants + Abby_SB_tshirt + fray/seam meshes",
+            "pak head/hair + gltf2 Santa Barbara geometry remapped 709->native1033 + native braid joints",
         runtime_model_ref: Some(ABBY_SANTA_BARBARA_MODEL),
         properties_ref: Some(ABBY_PROPERTIES),
         texture_dictionary: Some(ABBY_TEXTURES),
@@ -171,11 +173,11 @@ pub const PLAYABLE_CHARACTER_VARIANTS: &[PlayableCharacterVariantDescriptor] = &
         id: ABBY_SEATTLE_DINA_TANK_709_ID,
         family: PlayableCharacterFamily::Abby,
         display_name: "Abby — Seattle / Alternate Tank",
-        subtitle: "Seattle boots and pants with the alternate Tank_Abby_Dina top over complete glTF torso/arms/legs and the 709-joint rig",
+        subtitle: "Alternate Seattle tank outfit remapped into the native 1033-joint Abby skeleton with native OrbisAnim locomotion and braid chain",
         availability: PlayableCharacterVariantAvailability::RuntimeReady,
-        rig_label: "Abby_rig / 709 joints",
+        rig_label: "North Star JOINT_HIERARCHY / 1033 joints",
         source_provenance:
-            "pak head/hair + gltf2 AA_Torso + AA_Arms + AA_Legs + Seattle_boots + Seattle_pants + Tank_Abby_Dina",
+            "pak head/hair + gltf2 alternate tank geometry remapped 709->native1033 + native braid joints",
         runtime_model_ref: Some(ABBY_SEATTLE_DINA_TANK_MODEL),
         properties_ref: Some(ABBY_PROPERTIES),
         texture_dictionary: Some(ABBY_TEXTURES),
@@ -298,11 +300,11 @@ mod tests {
                 assignment.walk_animation.as_deref(),
                 assignment.run_animation.as_deref(),
                 assignment.sprint_animation.as_deref(),
-                assignment.jump_animation.as_deref(),
-                assignment.fall_animation.as_deref(),
             ] {
                 assert!(clip.is_some_and(|value| value.contains("/characters/abby/")));
             }
+            assert!(assignment.jump_animation.is_none());
+            assert!(assignment.fall_animation.is_none());
         }
     }
 

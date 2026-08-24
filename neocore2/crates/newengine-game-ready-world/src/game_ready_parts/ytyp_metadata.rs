@@ -33,7 +33,11 @@ pub(super) fn value_string(value: &serde_json::Value) -> Option<String> {
 
 #[inline]
 pub(super) fn value_f32(value: &serde_json::Value) -> Option<f32> {
-    value.as_f64().map(|v| v as f32).filter(|v| v.is_finite())
+    value
+        .as_f64()
+        .map(|v| v as f32)
+        .or_else(|| value.as_str().and_then(|v| v.trim().parse::<f32>().ok()))
+        .filter(|v| v.is_finite())
 }
 
 #[inline]
@@ -246,6 +250,14 @@ pub(super) fn apply_player_model_from_ytyp(
         profile.player.model.sprint_animation = Some(reference);
         applied += 1;
     }
+    if let Some(reference) = value_path(model, &["crouch_idle_animation"]).and_then(value_string) {
+        profile.player.model.crouch_idle_animation = Some(reference);
+        applied += 1;
+    }
+    if let Some(reference) = value_path(model, &["crouch_walk_animation"]).and_then(value_string) {
+        profile.player.model.crouch_walk_animation = Some(reference);
+        applied += 1;
+    }
     if let Some(reference) = value_path(model, &["jump_animation"]).and_then(value_string) {
         profile.player.model.jump_animation = Some(reference);
         applied += 1;
@@ -254,6 +266,29 @@ pub(super) fn apply_player_model_from_ytyp(
         profile.player.model.fall_animation = Some(reference);
         applied += 1;
     }
+    let player_values = player_node.unwrap_or(model);
+    if let Some(value) = value_path(player_values, &["walk_speed"]).and_then(value_f32) {
+        profile.player.walk_speed = value.clamp(0.05, 50.0);
+        applied += 1;
+    }
+    if let Some(value) = value_path(player_values, &["run_speed"]).and_then(value_f32) {
+        profile.player.run_speed = value.clamp(0.05, 50.0);
+        profile.player.move_speed = profile.player.run_speed;
+        applied += 1;
+    }
+    if let Some(value) = value_path(player_values, &["sprint_speed"]).and_then(value_f32) {
+        profile.player.sprint_speed = value.clamp(0.05, 75.0);
+        applied += 1;
+    }
+    if let Some(value) = value_path(player_values, &["crouch_speed"]).and_then(value_f32) {
+        profile.player.crouch_speed = value.clamp(0.05, 50.0);
+        applied += 1;
+    }
+    // Sanitize the set as one unit so an authored typo cannot invert movement modes.
+    profile.player.walk_speed = profile.player.walk_speed.min(profile.player.run_speed);
+    profile.player.sprint_speed = profile.player.sprint_speed.max(profile.player.run_speed);
+    profile.player.crouch_speed = profile.player.crouch_speed.min(profile.player.run_speed);
+
     if let Some(visibility) = value_path(model, &["visibility"]).and_then(value_string) {
         let visibility = visibility.to_ascii_lowercase();
         profile.player.model.hide_in_first_person = visibility.contains("hide_in_first_person")
@@ -278,6 +313,56 @@ pub(super) fn apply_player_model_from_ytyp(
             profile.player.model.source,
             profile.player.model.properties_ref
         );
+    }
+    applied
+}
+
+pub(super) fn apply_gameplay_constants_from_ytyp(
+    profile: &mut GameReadyMapProfile,
+    metadata: &serde_json::Value,
+) -> usize {
+    let mut applied = 0usize;
+    if let Some(radius) =
+        value_path(metadata, &["gameplay", "player_collision", "radius"]).and_then(value_f32)
+    {
+        profile.gameplay.player_collision.radius = radius.clamp(0.15, 1.0);
+        applied += 1;
+    }
+    if let Some(half_height) =
+        value_path(metadata, &["gameplay", "player_collision", "half_height"]).and_then(value_f32)
+    {
+        profile.gameplay.player_collision.half_height = half_height.clamp(0.15, 1.5);
+        applied += 1;
+    }
+    if let Some(radius) =
+        value_path(metadata, &["gameplay", "player_visual", "radius"]).and_then(value_f32)
+    {
+        profile.gameplay.player_visual.radius = radius.clamp(0.15, 1.0);
+        applied += 1;
+    }
+    if let Some(half_height) =
+        value_path(metadata, &["gameplay", "player_visual", "half_height"]).and_then(value_f32)
+    {
+        profile.gameplay.player_visual.half_height = half_height.clamp(0.15, 1.5);
+        applied += 1;
+    }
+    if let Some(camera_eye_height) = value_path(
+        metadata,
+        &["gameplay", "player_visual", "camera_eye_height"],
+    )
+    .and_then(value_f32)
+    {
+        profile.gameplay.player_visual.camera_eye_height = camera_eye_height.clamp(0.05, 2.5);
+        applied += 1;
+    }
+    if let Some(sprint_multiplier) = value_path(
+        metadata,
+        &["gameplay", "player_visual", "sprint_multiplier"],
+    )
+    .and_then(value_f32)
+    {
+        profile.gameplay.player_visual.sprint_multiplier = sprint_multiplier.clamp(1.0, 4.0);
+        applied += 1;
     }
     applied
 }
@@ -500,6 +585,7 @@ pub(crate) fn apply_game_ready_ytyp_metadata(profile: &mut GameReadyMapProfile) 
             + apply_material_refs_from_ytyp(profile, metadata, definition_ref)
             + apply_texture_refs_from_ytyp(profile, metadata, definition_ref)
             + apply_player_model_from_ytyp(profile, metadata, definition_ref)
+            + apply_gameplay_constants_from_ytyp(profile, metadata)
             + apply_sky_constants_from_ytyp(profile, metadata)
             + apply_time_constants_from_ytyp(profile, metadata);
         applied_total += applied;

@@ -41,6 +41,34 @@ pub(super) fn publish_inventory_hud_state(
             total_weight,
             catalog,
         );
+        let focused_pickup = focused_item_pickup(world, player);
+        let focused_item_name = focused_pickup
+            .and_then(|entity| world.get::<ItemPickup>(entity))
+            .and_then(|pickup| catalog.get(pickup.item))
+            .map(|definition| definition.display_name.as_str())
+            .unwrap_or("");
+        let focused_prompt = focused_pickup
+            .and_then(|entity| world.get::<Interactable>(entity))
+            .map(|interactable| interactable.prompt.as_str())
+            .unwrap_or("");
+        patch = patch
+            .with_change(
+                "interaction",
+                "visible",
+                serde_json::json!(focused_pickup.is_some()),
+            )
+            .with_change(
+                "interaction",
+                "action_label",
+                serde_json::json!("Взять предмет"),
+            )
+            .with_change("interaction", "key_label", serde_json::json!("E"))
+            .with_change(
+                "interaction",
+                "item_name",
+                serde_json::json!(focused_item_name),
+            )
+            .with_change("interaction", "prompt", serde_json::json!(focused_prompt));
         let selected = selected_variant(world, player);
         let fallback_source = world
             .get::<newengine_engine_runtime::gameplay::PlayerModelBinding>(player)
@@ -412,6 +440,7 @@ pub(super) fn inventory_hud_fingerprint(world: &World, player: EntityId) -> u64 
             push(instance.0);
         }
     }
+    push(focused_item_pickup(world, player).map_or(0, EntityId::stable_u64));
     if let Some(binding) =
         world.get::<newengine_engine_runtime::gameplay::PlayerModelBinding>(player)
     {

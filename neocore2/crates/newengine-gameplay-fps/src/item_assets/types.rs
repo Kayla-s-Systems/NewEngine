@@ -24,6 +24,7 @@ impl Default for AuthoredItemPackage {
 #[serde(default)]
 pub struct AuthoredItemDefinition {
     pub id: String,
+    pub definition_ref: String,
     pub display_name: String,
     pub description: String,
     pub icon: String,
@@ -41,6 +42,7 @@ impl Default for AuthoredItemDefinition {
     fn default() -> Self {
         Self {
             id: String::new(),
+            definition_ref: String::new(),
             display_name: String::new(),
             description: String::new(),
             icon: String::new(),
@@ -60,6 +62,7 @@ impl Default for AuthoredItemDefinition {
 #[serde(default)]
 pub struct AuthoredWeaponDefinition {
     pub ammo: String,
+    pub fire_mode: String,
     pub magazine_capacity: u32,
     pub reserve_capacity: u32,
     pub fire_interval: f32,
@@ -78,6 +81,7 @@ impl Default for AuthoredWeaponDefinition {
         let tuning = HitscanWeaponTuning::default();
         Self {
             ammo: String::new(),
+            fire_mode: "semi_auto".to_owned(),
             magazine_capacity: tuning.magazine_capacity,
             reserve_capacity: tuning.reserve_capacity,
             fire_interval: tuning.fire_interval,
@@ -94,6 +98,20 @@ impl Default for AuthoredWeaponDefinition {
 }
 
 impl AuthoredWeaponDefinition {
+    pub(super) fn fire_mode(&self) -> Result<WeaponFireMode, String> {
+        match self
+            .fire_mode
+            .trim()
+            .to_ascii_lowercase()
+            .replace('-', "_")
+            .as_str()
+        {
+            "" | "semi" | "semi_auto" | "semiauto" => Ok(WeaponFireMode::SemiAuto),
+            "auto" | "automatic" | "full_auto" | "fullauto" => Ok(WeaponFireMode::Automatic),
+            other => Err(format!("unsupported weapon fire_mode '{other}'")),
+        }
+    }
+
     pub(super) fn tuning(&self) -> HitscanWeaponTuning {
         HitscanWeaponTuning {
             magazine_capacity: self.magazine_capacity,
@@ -132,6 +150,7 @@ impl Default for AuthoredUseEffect {
 #[serde(default)]
 pub struct AuthoredWorldItemDefinition {
     pub model: String,
+    pub material_library: String,
     pub fallback_primitive: String,
     pub scale: [f32; 3],
     pub color_rgba: [f32; 4],
@@ -143,6 +162,7 @@ impl Default for AuthoredWorldItemDefinition {
     fn default() -> Self {
         Self {
             model: String::new(),
+            material_library: String::new(),
             fallback_primitive: "cube".to_owned(),
             scale: [0.2, 0.2, 0.2],
             color_rgba: [0.55, 0.60, 0.68, 1.0],
@@ -168,6 +188,8 @@ impl AuthoredWorldItemDefinition {
         let mut definition = WorldItemDefinition::for_kind(kind);
         definition.model_ref =
             (!self.model.trim().is_empty()).then(|| self.model.trim().to_owned());
+        definition.material_library_ref = (!self.material_library.trim().is_empty())
+            .then(|| self.material_library.trim().to_owned());
         definition.fallback_primitive = fallback_primitive;
         definition.scale = self.scale;
         definition.color = self.color_rgba;

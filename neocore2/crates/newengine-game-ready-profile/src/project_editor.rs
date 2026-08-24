@@ -111,7 +111,6 @@ impl RuntimeHostAppProfile for ProjectEditorApp {
     fn bootstrap_content_best_effort(&self) {
         self.profile.bootstrap_content_best_effort();
     }
-
 }
 
 impl WindowedRuntimeHostProfile for ProjectEditorApp {

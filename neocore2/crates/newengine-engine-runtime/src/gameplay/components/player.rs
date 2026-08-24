@@ -78,6 +78,68 @@ impl Default for CharacterMotionTuning {
     }
 }
 
+/// Authored locomotion targets in metres per second.
+///
+/// `CharacterMotor.move_speed` remains the low-level motor scalar and is projected from
+/// `run`. The remaining targets are semantic authoring data used to derive stance/sprint
+/// speed ratios and animation thresholds without baking product-specific constants into
+/// the generic engine runtime.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PlayerMovementSpeeds {
+    pub walk: f32,
+    pub run: f32,
+    pub sprint: f32,
+    pub crouch: f32,
+}
+
+impl PlayerMovementSpeeds {
+    #[inline]
+    pub fn sanitized(self) -> Self {
+        let run = finite_or(self.run, 6.0).clamp(0.05, 50.0);
+        let walk = finite_or(self.walk, run).clamp(0.05, run);
+        let sprint = finite_or(self.sprint, run * 1.75).clamp(run, 75.0);
+        let crouch = finite_or(self.crouch, walk).clamp(0.05, run);
+        Self {
+            walk,
+            run,
+            sprint,
+            crouch,
+        }
+    }
+
+    #[inline]
+    pub fn sprint_multiplier(self) -> f32 {
+        let value = self.sanitized();
+        value.sprint / value.run
+    }
+
+    #[inline]
+    pub fn crouch_multiplier(self) -> f32 {
+        let value = self.sanitized();
+        value.crouch / value.run
+    }
+
+    #[inline]
+    pub fn walk_run_threshold(self) -> f32 {
+        let value = self.sanitized();
+        (value.walk + value.run) * 0.5
+    }
+}
+
+impl Default for PlayerMovementSpeeds {
+    #[inline]
+    fn default() -> Self {
+        // Preserve the pre-authored generic controller behaviour. Product profiles/YTYP
+        // definitions supply character-specific values.
+        Self {
+            walk: 6.0,
+            run: 6.0,
+            sprint: 10.5,
+            crouch: 6.0,
+        }
+    }
+}
+
 #[inline]
 fn finite_or(value: f32, fallback: f32) -> f32 {
     if value.is_finite() {
@@ -314,6 +376,8 @@ pub struct PlayerModelAssignment {
     pub walk_animation: Option<String>,
     pub run_animation: Option<String>,
     pub sprint_animation: Option<String>,
+    pub crouch_idle_animation: Option<String>,
+    pub crouch_walk_animation: Option<String>,
     pub jump_animation: Option<String>,
     pub fall_animation: Option<String>,
     pub target_height: f32,
@@ -357,6 +421,8 @@ impl Default for PlayerModelAssignment {
             walk_animation: None,
             run_animation: None,
             sprint_animation: None,
+            crouch_idle_animation: None,
+            crouch_walk_animation: None,
             jump_animation: None,
             fall_animation: None,
             target_height: 1.80,
@@ -449,6 +515,7 @@ pub enum PlayerVisualKind {
     #[default]
     RuntimeModelPart,
     FallbackCapsule,
+    EquippedWeapon,
 }
 
 #[derive(Clone, Debug, PartialEq)]

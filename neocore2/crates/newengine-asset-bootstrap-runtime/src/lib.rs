@@ -273,6 +273,7 @@ fn try_mount_with_policy(
         "kind": "filesystem",
         "priority": priority,
         "mount": mount,
+        "asset_role": newengine_assets::asset_source_role::COMPILED,
         "config": { "root": path_string }
     })) {
         newengine_ulog_api::ulog::warn!(

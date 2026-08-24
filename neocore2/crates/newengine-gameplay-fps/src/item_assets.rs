@@ -9,7 +9,7 @@ use newengine_ecs::World;
 use newengine_engine_runtime::gameplay::{
     EquipmentSlot, HitscanWeaponTuning, InventoryEventBus, InventoryLoadout,
     InventoryLoadoutCatalog, InventoryLoadoutEntry, ItemCatalog, ItemDefinition, ItemId, ItemKind,
-    ItemUseEffect, WorldItemDefinition,
+    ItemUseEffect, WeaponFireMode, WorldItemDefinition,
 };
 use newengine_primitives::builtins as primitive_builtins;
 use serde::{Deserialize, Serialize};

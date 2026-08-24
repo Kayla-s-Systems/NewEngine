@@ -294,12 +294,29 @@ pub fn request_frame_output(
     surface_size_px: [u32; 2],
     pixels_per_point: f32,
 ) -> EngineResult<Option<UiFrameOutput>> {
+    request_frame_output_for_surfaces(frame_index, dt_sec, surface_size_px, pixels_per_point, &[])
+}
+
+/// Request a same-frame provider draw scoped to the surfaces owned by one UI layer.
+///
+/// A provider may be queried multiple times for the same engine frame (GameViewport,
+/// Editor/System and Debug). The surface set is therefore part of request identity and
+/// must never be dropped on an in-step refresh, otherwise one domain can be rendered into
+/// another domain packet and be composited twice.
+pub fn request_frame_output_for_surfaces(
+    frame_index: u64,
+    dt_sec: f32,
+    surface_size_px: [u32; 2],
+    pixels_per_point: f32,
+    render_surface_ids: &[String],
+) -> EngineResult<Option<UiFrameOutput>> {
     if !newengine_core::has_engine_gateway_route(ENGINE_UI_SERVICE_ID) {
         log_missing_ui_route_once("request_frame_output");
         return Ok(None);
     }
 
-    let request = UiFrameRequest::new(frame_index, dt_sec, surface_size_px, pixels_per_point);
+    let request = UiFrameRequest::new(frame_index, dt_sec, surface_size_px, pixels_per_point)
+        .with_render_surface_ids(render_surface_ids.to_vec());
 
     if TRY_BINARY_UI_DRAW_FRAME.load(Ordering::Relaxed) {
         match request_frame_output_bin(&request) {

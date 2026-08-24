@@ -121,8 +121,10 @@ pub trait GameModuleComposition: Send + Sync {
     }
 }
 
-pub type GameModuleFactory =
-    fn(&RuntimeCompositionContext, GameModuleTarget) -> Result<Arc<dyn GameModuleComposition>, String>;
+pub type GameModuleFactory = fn(
+    &RuntimeCompositionContext,
+    GameModuleTarget,
+) -> Result<Arc<dyn GameModuleComposition>, String>;
 
 #[derive(Clone, Copy)]
 pub struct GameModuleFactoryRegistration {

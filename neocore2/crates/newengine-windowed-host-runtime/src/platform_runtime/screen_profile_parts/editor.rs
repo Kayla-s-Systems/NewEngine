@@ -450,26 +450,6 @@ impl ScreenProfileRuntimeState {
                 dock_state("center.viewport_gizmos", true, false, false),
             ],
         });
-        resources.insert(UiToastStack {
-            version: 1,
-            frame_index,
-            notifications: vec![UiToastNotification {
-                id: "editor.boot.mode".to_owned(),
-                title: match runtime_mode {
-                    UiEditorRuntimeMode::Edit => "Editor ready".to_owned(),
-                    UiEditorRuntimeMode::Simulate => "Simulation running".to_owned(),
-                    UiEditorRuntimeMode::Play => "Play In Editor".to_owned(),
-                },
-                detail: match runtime_mode {
-                    UiEditorRuntimeMode::Edit => "World/game bootstrap is deferred; viewport is a preview slot until Simulate or Play.".to_owned(),
-                    UiEditorRuntimeMode::Simulate => "Scene bootstrap may run; player possession stays disabled.".to_owned(),
-                    UiEditorRuntimeMode::Play => "Scene bootstrap may run and viewport can receive gameplay input.".to_owned(),
-                },
-                progress_permille: if runtime_mode == UiEditorRuntimeMode::Edit { Some(1000) } else { None },
-                severity: UiToastSeverity::Info,
-                source: SCREEN_PROFILE_SOURCE.to_owned(),
-            }],
-        });
     }
 
     pub(super) fn append_toast_components(
@@ -481,12 +461,15 @@ impl ScreenProfileRuntimeState {
         let Some(stack) = resources.get::<UiToastStack>() else {
             return;
         };
-        let toast_w = 320.0_f32.min((layout.screen_w * 0.32).max(220.0));
-        let toast_x = (layout.screen_w - toast_w - 16.0).max(8.0);
-        let mut toast_y = layout.menu_h + layout.toolbar_h + 12.0;
+        let toast_w = 360.0_f32.min((layout.screen_w * 0.34).max(260.0));
+        let toast_x = 0.0;
+        let mut toast_y = 0.0;
         for toast in stack.notifications.iter().take(4) {
             let mut component = UiComponentNode::row(
-                format!("editor.toast.{}", component_id_fragment(&toast.id)),
+                format!(
+                    "engine.ui.notify.toast.{}",
+                    component_id_fragment(&toast.id)
+                ),
                 toast.title.clone(),
             )
             .with_detail(toast.detail.clone())
@@ -495,13 +478,19 @@ impl ScreenProfileRuntimeState {
                 UiToastSeverity::Warning | UiToastSeverity::Error => UiNodeTone::Danger,
             })
             .tagged("toast")
-            .tagged("notification");
+            .tagged("notification")
+            .tagged(match toast.severity {
+                UiToastSeverity::Info => "info",
+                UiToastSeverity::Success => "success",
+                UiToastSeverity::Warning => "warning",
+                UiToastSeverity::Error => "error",
+            });
             if let Some(progress) = toast.progress_permille {
                 component.value = Some(format!("{}%", progress as f32 / 10.0));
             }
             node.components
-                .push(with_rect(component, toast_x, toast_y, toast_w, 34.0));
-            toast_y += 40.0;
+                .push(with_rect(component, toast_x, toast_y, toast_w, 52.0));
+            toast_y += 60.0;
         }
     }
 }

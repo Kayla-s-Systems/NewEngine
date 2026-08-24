@@ -97,12 +97,21 @@ impl RuntimeRenderController {
         let needs_clear_packet = (!primary_state.visible && primary_was_open)
             || (external_capture.draw_refresh_requested && !external_capture.requests_capture());
 
+        let render_surface_ids = primary_domain_refresh_surface_ids(
+            ctx,
+            ui_layers,
+            primary_domain,
+            primary_state,
+            primary_was_open,
+        );
+
         let mut provider_capture = None;
-        match ui_gateway::request_frame_output(
+        match ui_gateway::request_frame_output_for_surfaces(
             self.frame.frame_index,
             scope.dt,
             [scope.w, scope.h],
             1.0,
+            &render_surface_ids,
         ) {
             Ok(Some(output)) => {
                 provider_capture = Some(output.input_capture);
@@ -111,6 +120,7 @@ impl RuntimeRenderController {
                     ui_layers,
                     primary_domain,
                     self.frame.frame_index,
+                    &render_surface_ids,
                     output.draw_list,
                 );
             }
@@ -121,6 +131,7 @@ impl RuntimeRenderController {
                         ui_layers,
                         primary_domain,
                         self.frame.frame_index,
+                        &render_surface_ids,
                         clear_ui_draw_list([scope.w, scope.h]),
                     );
                 }
@@ -135,6 +146,7 @@ impl RuntimeRenderController {
                         ui_layers,
                         primary_domain,
                         self.frame.frame_index,
+                        &render_surface_ids,
                         clear_ui_draw_list([scope.w, scope.h]),
                     );
                 }
@@ -145,15 +157,54 @@ impl RuntimeRenderController {
     }
 }
 
+fn primary_domain_refresh_surface_ids<E: Send + 'static>(
+    ctx: &ModuleCtx<'_, E>,
+    ui_layers: &UiLayerDrawPacketSet,
+    primary_domain: UiLayerDomain,
+    primary_state: &UiSurfaceNode,
+    primary_was_open: bool,
+) -> Vec<String> {
+    let mut surface_ids = ui_layers
+        .packets
+        .iter()
+        .find(|packet| packet.domain == primary_domain)
+        .map(|packet| packet.surface_ids.clone())
+        .or_else(|| {
+            ctx.resources()
+                .get::<newengine_ui_api::UiLayerCompositionPlan>()
+                .filter(|plan| plan.domain == primary_domain)
+                .map(|plan| plan.surface_ids.clone())
+        })
+        .unwrap_or_default();
+
+    if primary_state.visible || primary_was_open {
+        let primary_surface_id = primary_state.surface_id.trim();
+        if !primary_surface_id.is_empty()
+            && !surface_ids
+                .iter()
+                .any(|surface_id| surface_id == primary_surface_id)
+        {
+            surface_ids.push(primary_surface_id.to_owned());
+        }
+    }
+    surface_ids
+}
+
 fn set_primary_domain_draw_list<E: Send + 'static>(
     ctx: &ModuleCtx<'_, E>,
     ui_layers: &mut UiLayerDrawPacketSet,
     primary_domain: UiLayerDomain,
     frame_index: u64,
+    surface_ids: &[String],
     draw_list: UiDrawList,
 ) {
-    if let Some(existing) = ui_layers.draw_list_mut(primary_domain) {
-        *existing = draw_list;
+    if let Some(existing) = ui_layers
+        .packets
+        .iter_mut()
+        .find(|packet| packet.domain == primary_domain)
+    {
+        existing.surface_ids = surface_ids.to_vec();
+        existing.draw_list = draw_list;
         return;
     }
 
@@ -161,9 +212,14 @@ fn set_primary_domain_draw_list<E: Send + 'static>(
         .resources()
         .get::<newengine_ui_api::UiLayerCompositionPlan>()
         .filter(|plan| plan.domain == primary_domain)
-        .map(|plan| plan.draw_packet(draw_list.clone()))
+        .map(|plan| {
+            let mut plan = plan.clone();
+            plan.surface_ids = surface_ids.to_vec();
+            plan.draw_packet(draw_list.clone())
+        })
         .unwrap_or_else(|| {
             newengine_ui_api::UiLayerDrawPacket::new(primary_domain, frame_index, draw_list)
+                .with_surfaces(surface_ids.iter().cloned())
         });
     ui_layers.push(packet);
 }

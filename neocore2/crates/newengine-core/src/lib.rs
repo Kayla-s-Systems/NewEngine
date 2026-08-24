@@ -115,8 +115,8 @@ pub use startup::{
     StartupOverride, StartupResolvedFrom, StartupStorageRootKind, WindowPlacement,
 };
 pub use startup_window::{
-    startup_launch_settings, GraphicsPreset, ShadowQuality, StartupDisplaySettings,
-    StartupGraphicsSettings, StartupHdrMode, StartupLaunchSettings, StartupWindowDecision,
-    StartupWindowMode, StartupWindowReport, StartupWindowSelection, TextureQuality,
-    STARTUP_SETTINGS_SCHEMA_VERSION,
+    startup_launch_settings, GraphicsPreset, LodQuality, ShadowFilterMode, ShadowQuality,
+    StartupDisplaySettings, StartupGraphicsSettings, StartupHdrMode, StartupLaunchSettings,
+    StartupWindowDecision, StartupWindowMode, StartupWindowReport, StartupWindowSelection,
+    TextureQuality, STARTUP_SETTINGS_SCHEMA_VERSION,
 };

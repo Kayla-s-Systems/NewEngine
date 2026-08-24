@@ -97,6 +97,7 @@ fn compile_item_definition(authored: &AuthoredItemDefinition) -> Result<ItemDefi
                 parse_equipment_slot(&authored.equipment_slot)?,
                 weapon.tuning(),
                 ammo_item,
+                weapon.fire_mode()?,
                 authored.unit_weight,
             )?
         }
@@ -118,6 +119,9 @@ fn compile_item_definition(authored: &AuthoredItemDefinition) -> Result<ItemDefi
     definition = definition
         .with_description(authored.description.trim())
         .with_tags(authored.tags.clone());
+    if !authored.definition_ref.trim().is_empty() {
+        definition = definition.with_definition_ref(authored.definition_ref.trim());
+    }
     if !authored.icon.trim().is_empty() {
         definition = definition.with_icon(authored.icon.trim());
     }

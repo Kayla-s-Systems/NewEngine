@@ -195,7 +195,6 @@ impl RuntimeHostAppProfile for GameReadyFpsApp {
     fn bootstrap_content_best_effort(&self) {
         self.profile.bootstrap_content_best_effort();
     }
-
 }
 
 impl WindowedRuntimeHostProfile for GameReadyFpsApp {

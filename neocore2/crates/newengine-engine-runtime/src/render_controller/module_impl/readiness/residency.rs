@@ -14,6 +14,7 @@ pub(super) fn critical_scene_residency_ready(
 ) -> LaunchReadiness {
     let parts = [
         critical_static_world_ready(world),
+        critical_physics_collision_ready(world),
         critical_primitive_gpu_ready(this, world),
         critical_model_gpu_ready(this, world),
         critical_scene_materials_ready(this, r, world, material_plan),
@@ -128,17 +129,68 @@ fn critical_static_world_ready(world: &newengine_ecs::World) -> LaunchReadiness 
             residency.failed(),
         )
     } else {
-        LaunchReadiness::pending(
+        let waiting = residency.pending().max(residency.failed());
+        let reason = if residency.pending() == 0 && residency.failed() > 0 {
+            format!(
+                "static world assembly failed completed={}/{} failed={} policy='do-not-enter-playable-world'",
+                residency.completed(),
+                residency.total(),
+                residency.failed(),
+            )
+        } else {
             format!(
                 "waiting for incremental static world completed={}/{} pending={} failed={}",
                 residency.completed(),
                 residency.total(),
                 residency.pending(),
                 residency.failed(),
+            )
+        };
+        LaunchReadiness::pending(reason, waiting, residency.total(), residency.failed())
+    }
+}
+
+fn critical_physics_collision_ready(world: &newengine_ecs::World) -> LaunchReadiness {
+    let static_total = world
+        .query::<crate::gameplay::StaticMeshCollider>()
+        .count()
+        .min(u32::MAX as usize) as u32;
+    if static_total == 0 {
+        return LaunchReadiness::ready("no authored static collision declared", 0, 0);
+    }
+
+    let Some(progress) = world
+        .resource::<crate::gameplay::PhysicsStaticColliderSyncProgress>()
+        .copied()
+    else {
+        return LaunchReadiness::pending(
+            format!("waiting for physics collision registration ready=0/{static_total}"),
+            static_total,
+            static_total,
+            0,
+        );
+    };
+
+    if progress.is_ready() && progress.registered >= static_total {
+        LaunchReadiness::ready(
+            format!(
+                "physics collision resident registered={}/{}",
+                progress.registered, static_total
             ),
-            residency.pending(),
-            residency.total(),
-            residency.failed(),
+            static_total,
+            progress.failed,
+        )
+    } else {
+        LaunchReadiness::pending(
+            format!(
+                "registering collision in physics provider ready={}/{} pending={} failed={}",
+                progress.registered, static_total, progress.pending, progress.failed,
+            ),
+            progress
+                .pending
+                .max(static_total.saturating_sub(progress.registered)),
+            static_total,
+            progress.failed,
         )
     }
 }

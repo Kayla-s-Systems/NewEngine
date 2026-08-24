@@ -12,19 +12,18 @@ use crate::{payload::decode_blob, service::EngineWorldGatewayService};
 impl EngineWorldGatewayService {
     pub(crate) fn authority_json(&self) -> serde_json::Value {
         let snapshot = self.scene.authority_snapshot();
-        let route_json =
-            |route: &newengine_world_authority_runtime::WorldAuthorityGatewayRoute| {
-                serde_json::json!({
-                    "gateway": route.gateway_id,
-                    "kind": route.service_kind,
-                    "provider_service": route.provider_service_id,
-                    "provider_owner": route.provider_owner_id,
-                    "capability": route.backend_capability_id,
-                    "origin": route.origin,
-                    "priority": route.backend_priority,
-                    "score": route.active_score,
-                })
-            };
+        let route_json = |route: &newengine_world_authority_runtime::WorldAuthorityGatewayRoute| {
+            serde_json::json!({
+                "gateway": route.gateway_id,
+                "kind": route.service_kind,
+                "provider_service": route.provider_service_id,
+                "provider_owner": route.provider_owner_id,
+                "capability": route.backend_capability_id,
+                "origin": route.origin,
+                "priority": route.backend_priority,
+                "score": route.active_score,
+            })
+        };
         serde_json::json!({
             "authority": snapshot.authority_label(),
             "split": snapshot.has_split_world_authority(),

@@ -2,10 +2,7 @@
 
 use newengine_core::startup_window::StartupLaunchSettings;
 
-pub(crate) fn mark_custom_if_changed(
-    settings: &mut StartupLaunchSettings,
-    changed: bool,
-) {
+pub(crate) fn mark_custom_if_changed(settings: &mut StartupLaunchSettings, changed: bool) {
     if changed {
         settings.graphics.mark_custom();
     }

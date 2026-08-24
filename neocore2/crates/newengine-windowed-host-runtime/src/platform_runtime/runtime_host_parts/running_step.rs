@@ -1,4 +1,4 @@
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use newengine_core::render::{RenderBackendStatus, SceneLaunchStatus};
 use newengine_core::{EngineError, EngineResult};
@@ -8,7 +8,7 @@ use newengine_ui_api::{
     UiDrawInvalidationState, UiEventDispatchFrame, UiGameLayerStackState, UiInputFrame,
     UiLayerCompositionPlan, UiLayerDomain, UiLayerDrawPacketSet, UiPresentationFlowState,
     UiScreenProfile, UiScreenProfileState, UI_PRESENTATION_TARGET_PRIMARY,
-    UI_SURFACE_ENGINE_LOADING, UI_SURFACE_RUNTIME_DEBUG_OVERLAY,
+    UI_SURFACE_RUNTIME_DEBUG_OVERLAY,
 };
 
 use crate::platform_input::poll_input_frame;
@@ -25,12 +25,8 @@ use super::running_settings::{
     frontend_settings_apply_requested, frontend_settings_debounce_due, persist_frontend_settings,
     stage_frontend_setting_actions,
 };
-use super::running_ui::{
-    effective_scene_launch_active, loading_overlay_requires_immediate_publish,
-    provider_draw_has_active_animation,
-};
+use super::running_ui::{effective_scene_launch_active, provider_draw_has_active_animation};
 
-const LOADING_OVERLAY_MIN_PUBLISH_INTERVAL: Duration = Duration::from_millis(50);
 const PROFILER_SAMPLE_TOPIC: &str = "newengine.diagnostics.profiler.sample.v1";
 
 #[inline]
@@ -199,50 +195,10 @@ impl HostPlatformRuntime {
         );
         let provider_ui_active =
             matches!(self.ui_selection.active(), UiProviderKind::Plugin { .. });
-        let loading_surface_state_changed = if provider_ui_active && scene_launch_active {
-            let status = scene_launch_status
-                .as_ref()
-                .expect("active scene launch status");
-            let overlay = self.scene_launch_overlay(status);
-            let now = Instant::now();
-            let changed = self
-                .last_published_loading_overlay
-                .as_ref()
-                .is_none_or(|previous| previous != &overlay);
-            let immediate = loading_overlay_requires_immediate_publish(
-                self.last_published_loading_overlay.as_ref(),
-                &overlay,
-            );
-            let interval_elapsed = self.last_loading_overlay_publish_at.is_none_or(|last| {
-                now.saturating_duration_since(last) >= LOADING_OVERLAY_MIN_PUBLISH_INTERVAL
-            });
-
-            self.loading_surface_inactive_published = false;
-            if changed && (immediate || interval_elapsed) {
-                crate::platform_runtime::ui_gateway_frame::publish_loading_overlay(
-                    &overlay,
-                    self.ui_provider_binding(),
-                    ui_frame_index,
-                );
-                self.last_published_loading_overlay = Some(overlay);
-                self.last_loading_overlay_publish_at = Some(now);
-                true
-            } else {
-                false
-            }
-        } else {
-            let had_running_overlay = self.last_published_loading_overlay.take().is_some();
-            self.last_loading_overlay_publish_at = None;
-            if provider_ui_active && !self.loading_surface_inactive_published {
-                crate::platform_runtime::ui_gateway_frame::publish_loading_overlay_inactive(
-                    ui_frame_index,
-                );
-                self.loading_surface_inactive_published = true;
-                true
-            } else {
-                had_running_overlay
-            }
-        };
+        // Scene-launch progress is presented exclusively by the platform-native
+        // loader. The retained UI system must never mount or animate a second
+        // fullscreen loading surface in parallel.
+        let loading_surface_state_changed = false;
 
         let screen_profile_refresh = {
             let screen_profile = &mut self.screen_profile;
@@ -295,10 +251,6 @@ impl HostPlatformRuntime {
             ui_frame_index,
         );
         shell_ui_plan.invalidation_revision = invalidation.revision_for(shell_domain);
-        if scene_launch_active {
-            shell_ui_plan.surface_ids = vec![UI_SURFACE_ENGINE_LOADING.to_owned()];
-        }
-
         let mut debug_ui_plan = UiLayerCompositionPlan::disabled(
             UiLayerDomain::Debug,
             UI_PRESENTATION_TARGET_PRIMARY,
@@ -309,10 +261,8 @@ impl HostPlatformRuntime {
             debug_ui_plan.surface_ids = vec![UI_SURFACE_RUNTIME_DEBUG_OVERLAY.to_owned()];
         }
 
-        let provider_ui_needed = self.ui_build.is_some()
-            || scene_launch_active
-            || screen_profile_refresh
-            || ui_dispatch_refresh;
+        let provider_ui_needed =
+            self.ui_build.is_some() || screen_profile_refresh || ui_dispatch_refresh;
         let provider_gameplay_hud = provider_ui_active
             && !scene_launch_active
             && !self.minimized
@@ -373,7 +323,6 @@ impl HostPlatformRuntime {
         );
         let provider_ui_refresh = game_ui_refresh || shell_ui_refresh || debug_ui_refresh;
         let allow_cached_shell_draw = provider_gameplay_hud
-            || scene_launch_active
             || screen_profile_refresh
             || ui_dispatch_refresh
             || self.ui_build.is_some();
@@ -401,6 +350,18 @@ impl HostPlatformRuntime {
             } else {
                 self.game_ui_cache.cloned_draw()
             };
+        }
+
+        if game_ui_layer_active {
+            newengine_ulog_api::ulog::info!(
+                "host.ui.game active_state surfaces={:?} refresh={} force_refresh={} invalidation={} cached={} draw_present={}",
+                game_ui_plan.surface_ids,
+                game_ui_refresh,
+                game_force_refresh,
+                game_ui_plan.invalidation_revision,
+                self.game_ui_cache.draw().is_some(),
+                game_ui_draw.is_some(),
+            );
         }
 
         let shell_requested = provider_ui_active
@@ -493,14 +454,6 @@ impl HostPlatformRuntime {
             }
         }
 
-        if scene_launch_active {
-            if let Some(draw_list) = shell_ui_draw.as_mut() {
-                crate::platform_runtime::ui_gateway_frame::animate_loading_draw_list(
-                    draw_list,
-                    crate::platform_runtime::ui_gateway_frame::loading_animation_now_ms(),
-                );
-            }
-        }
         if let Some(draw_list) = shell_ui_draw.as_mut() {
             animate_frontend_keycap_feedback(draw_list);
         }

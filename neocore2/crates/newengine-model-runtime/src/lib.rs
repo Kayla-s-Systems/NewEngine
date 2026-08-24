@@ -13,13 +13,14 @@ use newengine_model_domain_api::{
     attach_content_hash, attach_metadata_namespace, attach_node_warning, attach_vfs_source,
     finalize_graph, fnv1a64, normalize_asset_ref, push_manifest_dependency, split_asset_ref,
     AssetGraphResolver, AssetGraphVfsSource, DrawableDictionaryManifest, DrawableDictionaryRequest,
-    ModelAssetBundle, ModelAssetRequest, ModelConstructionManifest, ModelConstructionValidation,
+    FoliageImportRequestV1, FoliageImportResponseV1, ModelAssetBundle, ModelAssetRequest, ModelConstructionManifest, ModelConstructionValidation,
     ModelMaterialBinding, ModelMeshPart, ModelRuntimeConfiguration, ModelSkinBinding,
     ModelSkinVertex, ResolvedAssetGraphV2, DRAWABLE_DICTIONARY_EXTENSION,
     ENGINE_ASSETS_MODELS_SERVICE_ID, MODEL_BACKEND_CAPABILITY_ID, MODEL_FEATURE_DOMAINS,
     MODEL_SERVICE_ID, MODEL_SERVICE_METHODS, MODEL_SERVICE_METHOD_ASSEMBLE_JSON_V1,
-    MODEL_SERVICE_METHOD_DRAWABLE_DICTIONARY_MANIFEST_JSON_V1, MODEL_SERVICE_METHOD_INVOKE,
-    MODEL_SERVICE_METHOD_RESOLVE_DRAWABLE_V1, MODEL_SERVICE_METHOD_VALIDATE_JSON_V1,
+    MODEL_SERVICE_METHOD_DRAWABLE_DICTIONARY_MANIFEST_JSON_V1, MODEL_SERVICE_METHOD_IMPORT_FOLIAGE_V1,
+    MODEL_SERVICE_METHOD_INVOKE, MODEL_SERVICE_METHOD_RESOLVE_DRAWABLE_V1,
+    MODEL_SERVICE_METHOD_VALIDATE_JSON_V1,
 };
 use newengine_model_import_obj::normalize_logical_path;
 use newengine_model_skeleton_api::ModelSkeletonMetadata;
@@ -103,6 +104,17 @@ impl ModelGatewayClient {
         let bytes = self.call_raw(MODEL_SERVICE_METHOD_RESOLVE_DRAWABLE_V1, payload)?;
         serde_json::from_slice::<DrawableDictionaryManifest>(&bytes).map_err(|e| {
             format!("engine.assets.models returned invalid resolved drawable JSON: {e}")
+        })
+    }
+
+    pub fn import_foliage(
+        &self,
+        request: &FoliageImportRequestV1,
+    ) -> Result<FoliageImportResponseV1, String> {
+        let payload = serde_json::to_vec(request).map_err(|e| e.to_string())?;
+        let bytes = self.call_raw(MODEL_SERVICE_METHOD_IMPORT_FOLIAGE_V1, payload)?;
+        serde_json::from_slice::<FoliageImportResponseV1>(&bytes).map_err(|e| {
+            format!("engine.assets.models returned invalid foliage import response JSON: {e}")
         })
     }
 
@@ -194,6 +206,21 @@ impl ModelRuntimeState {
                     Err(e) => RResult::RErr(RString::from(e)),
                 }
             }
+            MODEL_SERVICE_METHOD_IMPORT_FOLIAGE_V1 => {
+                let request =
+                    match serde_json::from_value::<FoliageImportRequestV1>(envelope.request) {
+                        Ok(request) => request,
+                        Err(e) => {
+                            return RResult::RErr(RString::from(format!(
+                                "model.api: invalid foliage import request: {e}"
+                            )))
+                        }
+                    };
+                match self.adapter.import_foliage_source(&request) {
+                    Ok(response) => ok_json(response),
+                    Err(e) => RResult::RErr(RString::from(e)),
+                }
+            }
             other => RResult::RErr(RString::from(format!(
                 "model.api: unknown invoke method '{other}'"
             ))),
@@ -246,6 +273,10 @@ pub fn model_gateway_service(
         .post_json_result::<DrawableDictionaryRequest, DrawableDictionaryManifest, _>(
             MODEL_SERVICE_METHOD_RESOLVE_DRAWABLE_V1,
             |state, request| state.adapter.resolve_drawable(&request),
+        )
+        .post_json_result::<FoliageImportRequestV1, FoliageImportResponseV1, _>(
+            MODEL_SERVICE_METHOD_IMPORT_FOLIAGE_V1,
+            |state, request| state.adapter.import_foliage_source(&request),
         )
         .blob(
             newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1,
