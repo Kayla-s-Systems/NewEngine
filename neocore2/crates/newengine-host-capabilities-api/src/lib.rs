@@ -5,15 +5,11 @@ use serde::{Deserialize, Serialize};
 pub const HOST_CAPABILITIES_SCHEMA_VERSION: u32 = 1;
 
 pub const ENGINE_HOST_CAPABILITIES_GATEWAY_ID: &str = "engine.host.capabilities";
-pub const HOST_CAPABILITIES_PROVIDER_SERVICE_ID: &str =
-    "newengine.host.capabilities.native";
-pub const HOST_CAPABILITIES_PROVIDER_ROUTE: &str =
-    "newengine.host.capabilities.runtime";
-pub const HOST_CAPABILITIES_BACKEND_CAPABILITY_ID: &str =
-    "host.capabilities.backend";
+pub const HOST_CAPABILITIES_PROVIDER_SERVICE_ID: &str = "newengine.host.capabilities.native";
+pub const HOST_CAPABILITIES_PROVIDER_ROUTE: &str = "newengine.host.capabilities.runtime";
+pub const HOST_CAPABILITIES_BACKEND_CAPABILITY_ID: &str = "host.capabilities.backend";
 pub const HOST_CAPABILITIES_SERVICE_KIND: &str = "host.capabilities";
-pub const HOST_CAPABILITIES_RUNTIME_CONTRACT: &str =
-    "newengine.host.capabilities.runtime.v1";
+pub const HOST_CAPABILITIES_RUNTIME_CONTRACT: &str = "newengine.host.capabilities.runtime.v1";
 
 pub mod method {
     pub const SNAPSHOT: &str = "host.capabilities.snapshot_v1";

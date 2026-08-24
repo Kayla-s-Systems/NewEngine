@@ -5,7 +5,7 @@ use newengine_assets_api::{AssetFileTypeDescriptor, AssetGatewayRoute};
 use super::descriptor::Nef8FormatSpec;
 use super::formats::{
     neftd, neitems, nemat, nepak, neui, ybd, ybn, ycd, ydd, ydr, yed, yfd, yft, yld, ymap, ymf,
-    ymt, ypdb, ysc, ytd, ytf, ytyd, ytyp, yvr, ywr,
+    ymt, ypdb, ysc, yscd, ytd, ytf, ytyd, ytyp, yvr, ywr,
 };
 
 macro_rules! listfile_spec {
@@ -73,6 +73,7 @@ const FORMAT_SPECS: &[Nef8FormatSpec] = &[
     listfile_spec!(ymt),
     listfile_spec!(ypdb),
     module_spec!(ysc),
+    listfile_spec!(yscd),
     listfile_spec!(ytd),
     listfile_spec!(ytf),
     listfile_spec!(ytyp),
@@ -152,6 +153,11 @@ pub fn default_entry_route_for_content_kind(content_kind: u32) -> Option<AssetGa
             "engine.gameplay.inventory",
             "items.package_v1",
             "item_definition_dictionary",
+        ),
+        "yscd" => (
+            "engine.audio",
+            "audio.sound_cue_dictionary_v1",
+            "sound_cue_dictionary",
         ),
         _ => (spec.semantic_gateway, "asset.decode_v1", spec.asset_kind),
     };

@@ -202,6 +202,10 @@ impl Default for GameplayCameraRunnerKind {
 pub struct CameraRuntimeServiceConfig {
     pub runner: GameplayCameraRunnerKind,
     pub first_person_eye_height: f32,
+    /// Optional animated eye-center anchor supplied by the active avatar provider.
+    pub first_person_anchor_ws: Option<Vec3>,
+    /// Forward clearance from the eye center. This keeps the near plane in front of face geometry.
+    pub first_person_forward_clearance: f32,
     /// Visual character center relative to the PlayerActor root.
     /// ThirdPersonOrbit uses this exact point as both orbit pivot and look-at target.
     pub third_person_orbit_pivot_offset_ls: Vec3,
@@ -217,6 +221,8 @@ impl Default for CameraRuntimeServiceConfig {
         Self {
             runner: GameplayCameraRunnerKind::FirstPerson,
             first_person_eye_height: 1.6,
+            first_person_anchor_ws: None,
+            first_person_forward_clearance: 0.055,
             third_person_orbit_pivot_offset_ls: Vec3::ZERO,
             third_person_render_position_ws: None,
             third_person_render_rotation_ws: None,
@@ -671,9 +677,19 @@ impl CameraRuntimeService {
             } else {
                 controller.offset_ls.y.max(0.01)
             };
-            let camera_position = target_position + Vec3::Y * eye_height;
+            let eye_center = config
+                .first_person_anchor_ws
+                .filter(|position| position.is_finite())
+                .unwrap_or(target_position + Vec3::Y * eye_height);
             let camera_rotation =
                 (player_view_rotation * controller.rot_offset).normalize_or_identity();
+            let forward_clearance = if config.first_person_forward_clearance.is_finite() {
+                config.first_person_forward_clearance.clamp(0.0, 0.20)
+            } else {
+                0.055
+            };
+            let camera_position =
+                eye_center + (camera_rotation * -Vec3::Z).normalize_or_zero() * forward_clearance;
             let _ = world.insert(
                 camera,
                 CameraRigComp(CameraRig {

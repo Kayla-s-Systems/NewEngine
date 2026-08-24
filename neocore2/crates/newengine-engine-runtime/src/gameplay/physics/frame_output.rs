@@ -5,7 +5,7 @@ use newengine_physics_api::{
     PhysicsBodyPoseUpdate, PhysicsBodyVelocityUpdate, PhysicsFrameOutput, PhysicsStepReportDto,
 };
 use newengine_physics_contracts::{PhysicsContactEvent, PhysicsEvent, PhysicsStepReport};
-use newengine_sim::{CharacterMotor, Velocity};
+use newengine_sim::{AngularVelocity, CharacterMotor, Velocity};
 use newengine_transform::Transform;
 
 use crate::gameplay::GameplayPhysicsQueryProviderRegistry;

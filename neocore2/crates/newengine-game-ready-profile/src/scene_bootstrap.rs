@@ -10,7 +10,7 @@ use newengine_core::{
 };
 use newengine_game_data::GameDataProvider;
 use newengine_project_api::ProjectContentMountState;
-use newengine_ui_api::{UiPresentationFlowState, UiScreenProfile, UiScreenProfileState};
+use newengine_ui_api::UiPresentationFlowState;
 
 use crate::GAME_READY_MOUNT_SPEC;
 
@@ -73,7 +73,6 @@ pub(crate) struct GameReadySceneBootstrapModule {
     failed_services_generation: Option<u64>,
     waiting_logged: bool,
     project_mount_wait_logged: bool,
-    editor_deferred_logged: bool,
     presentation_deferred_logged: bool,
 }
 
@@ -86,7 +85,6 @@ impl GameReadySceneBootstrapModule {
             failed_services_generation: None,
             waiting_logged: false,
             project_mount_wait_logged: false,
-            editor_deferred_logged: false,
             presentation_deferred_logged: false,
         }
     }
@@ -104,40 +102,11 @@ impl GameReadySceneBootstrapModule {
     }
 
     #[inline]
-    fn editor_bootstrap_allowed<E: Send + 'static>(
-        &mut self,
-        ctx: &ModuleCtx<'_, E>,
-        origin: &'static str,
-    ) -> bool {
-        let profile = ctx
-            .resources()
-            .get::<UiScreenProfileState>()
-            .map(|state| state.descriptor.profile)
-            .unwrap_or(UiScreenProfile::Editor);
-        if profile == UiScreenProfile::Editor && !self.editor_deferred_logged {
-            self.editor_deferred_logged = true;
-            newengine_ulog_api::ulog::info!(
-                "game-ready runtime: loading authored startup scene into editor staging world origin='{}'; simulation remains owned by RuntimeSession",
-                origin,
-            );
-        }
-        true
-    }
-
-    #[inline]
     fn presentation_bootstrap_allowed<E: Send + 'static>(
         &mut self,
         ctx: &ModuleCtx<'_, E>,
         origin: &'static str,
     ) -> bool {
-        let editor_profile = ctx
-            .resources()
-            .get::<UiScreenProfileState>()
-            .map(|state| state.descriptor.profile == UiScreenProfile::Editor)
-            .unwrap_or(false);
-        if editor_profile {
-            return true;
-        }
         if presentation_flow_allows_bootstrap(ctx.resources()) {
             return true;
         }
@@ -179,9 +148,7 @@ impl GameReadySceneBootstrapModule {
             }
             return Ok(());
         }
-        if !self.editor_bootstrap_allowed(ctx, origin)
-            || !self.presentation_bootstrap_allowed(ctx, origin)
-        {
+        if !self.presentation_bootstrap_allowed(ctx, origin) {
             return Ok(());
         }
         self.try_bootstrap(ctx, origin)
@@ -288,7 +255,6 @@ impl<E: Send + 'static> Module<E> for GameReadySceneBootstrapModule {
             }
             EngineLifecycleEvent::EngineStartCompleted { .. } => {
                 if self.bootstrapped
-                    || !self.editor_bootstrap_allowed(ctx, "engine-start-completed")
                     || !self.presentation_bootstrap_allowed(ctx, "engine-start-completed")
                 {
                     Ok(())

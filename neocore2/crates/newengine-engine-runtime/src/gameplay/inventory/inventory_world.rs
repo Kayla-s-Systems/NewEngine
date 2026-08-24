@@ -96,13 +96,22 @@ fn spawn_item_pickup_internal(
             ..Transform::default()
         },
     );
-    let _ = world.insert(
-        visual_entity,
-        Primitive {
-            id: world_definition.fallback_primitive,
-            color: world_definition.color,
-        },
-    );
+    let authored_model = world_definition
+        .model_ref
+        .as_deref()
+        .is_some_and(|value| !value.trim().is_empty());
+    // A model-backed world item must never become a visible unmaterialed cube while the
+    // production YDD/NEMAT/YTD path is still resolving. Keep only a staging transform root;
+    // GameReady admission will attach the authored mesh hierarchy atomically.
+    if !authored_model {
+        let _ = world.insert(
+            visual_entity,
+            Primitive {
+                id: world_definition.fallback_primitive,
+                color: world_definition.color,
+            },
+        );
+    }
     let _ = world.insert(visual_entity, DisplayVisibility::default());
     let _ = world.insert(visual_entity, WorldItemVisualPart { owner: entity });
     let _ = set_parent(world, visual_entity, Some(entity));
@@ -115,6 +124,7 @@ fn spawn_item_pickup_internal(
             scale,
             color: world_definition.color,
             pickup_half_extents: half_extents,
+            authored_visual_admitted: !authored_model,
         },
     );
     let stable_id = persistent_id

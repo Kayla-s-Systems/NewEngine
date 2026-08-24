@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use newengine_asset_bootstrap_runtime::ProfileMountSpec;
-use newengine_core::{Engine, EngineError, EngineResult};
+use newengine_core::{Engine, EngineError, EngineResult, Module, ModuleCtx};
 use newengine_project_runtime::RuntimeCompositionContext;
 use newengine_scene_runtime::SceneGatewayAssetMounts;
 
@@ -10,10 +10,7 @@ use crate::{GameReadyRuntimeProfile, GAME_READY_MOUNT_SPEC};
 
 const GAME_READY_CAPABILITY_SLOTS: &[newengine_service_api::EngineCapabilitySlotSpec] = &[
     newengine_service_api::EngineCapabilitySlotSpec::required("engine.assets", "assets"),
-    newengine_service_api::EngineCapabilitySlotSpec::required(
-        "engine.assets.maps",
-        "assets.maps",
-    ),
+    newengine_service_api::EngineCapabilitySlotSpec::required("engine.assets.maps", "assets.maps"),
     newengine_service_api::EngineCapabilitySlotSpec::required(
         "engine.assets.textures",
         "assets.textures",
@@ -108,7 +105,6 @@ impl GameReadyRuntimeProfile {
     #[inline]
     pub fn register_engine_provider_routes_best_effort(&self) {
         register_game_ready_entity_archetypes_best_effort();
-        newengine_audio_runtime::register_native_audio_provider_best_effort();
         let asset_mounts = SceneGatewayAssetMounts::from_profile(GAME_READY_MOUNT_SPEC);
         newengine_scene_runtime::register_scene_gateway_best_effort(
             Arc::clone(&self.scene),
@@ -164,6 +160,37 @@ impl GameReadyRuntimeProfile {
     #[inline]
     pub fn bootstrap_content_best_effort(&self) {
         // Game scenes are assembled by GameReadySceneBootstrapModule during engine.start().
+    }
+}
+
+/// Startup-phase barrier for provider routes that depend on engine plugins such as
+/// AssetManager already being loaded. RuntimeHost loads engine plugins before module
+/// init, so this is the first safe point for definitions/audio publication.
+pub(crate) struct GameReadyProviderBootstrapModule {
+    profile: GameReadyRuntimeProfile,
+}
+
+impl GameReadyProviderBootstrapModule {
+    #[inline]
+    pub(crate) fn new(profile: GameReadyRuntimeProfile) -> Self {
+        Self { profile }
+    }
+}
+
+impl<E: Send + 'static> Module<E> for GameReadyProviderBootstrapModule {
+    fn id(&self) -> &'static str {
+        "engine.provider-routes.gameready"
+    }
+
+    fn init(&mut self, _ctx: &mut ModuleCtx<'_, E>) -> EngineResult<()> {
+        // Safe control-plane routes can be refreshed during init. The physical audio gateway is
+        // intentionally excluded here: publishing a new host service while the startup FSM is
+        // executing Module::init() can re-enter the service registry and deadlock the main thread.
+        self.profile.register_engine_provider_routes_best_effort();
+        newengine_ulog_api::ulog::info!(
+            "game-ready provider bootstrap: phase='init' routes_refreshed=true audio_provider='plugin-owned'"
+        );
+        Ok(())
     }
 }
 

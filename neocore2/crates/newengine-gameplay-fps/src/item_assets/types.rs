@@ -34,6 +34,7 @@ pub struct AuthoredItemDefinition {
     pub unit_weight: f32,
     pub equipment_slot: String,
     pub weapon: Option<AuthoredWeaponDefinition>,
+    pub weapon_audio: Option<AuthoredWeaponAudioDefinition>,
     pub use_effect: Option<AuthoredUseEffect>,
     pub world: Option<AuthoredWorldItemDefinition>,
 }
@@ -52,6 +53,7 @@ impl Default for AuthoredItemDefinition {
             unit_weight: 0.0,
             equipment_slot: String::new(),
             weapon: None,
+            weapon_audio: None,
             use_effect: None,
             world: None,
         }
@@ -125,6 +127,37 @@ impl AuthoredWeaponDefinition {
             recoil_pitch_radians: self.recoil_pitch_degrees.to_radians(),
             recoil_yaw_radians: self.recoil_yaw_degrees.to_radians(),
             muzzle_forward_offset: self.muzzle_forward_offset,
+        }
+        .sanitized()
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Default)]
+#[serde(default)]
+pub struct AuthoredWeaponAudioDefinition {
+    pub fire: String,
+    pub reload_start: String,
+    pub reload_complete: String,
+    pub equip: String,
+    pub unequip: String,
+    pub empty: String,
+    pub shell_eject: String,
+}
+
+impl AuthoredWeaponAudioDefinition {
+    pub(super) fn compile(&self) -> WeaponAudioDefinition {
+        fn clip(value: &str) -> Option<String> {
+            let value = value.trim().replace('\\', "/");
+            (!value.is_empty()).then_some(value)
+        }
+        WeaponAudioDefinition {
+            fire: clip(&self.fire),
+            reload_start: clip(&self.reload_start),
+            reload_complete: clip(&self.reload_complete),
+            equip: clip(&self.equip),
+            unequip: clip(&self.unequip),
+            empty: clip(&self.empty),
+            shell_eject: clip(&self.shell_eject),
         }
         .sanitized()
     }

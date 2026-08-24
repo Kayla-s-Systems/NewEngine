@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NewEngine | Kayla's Systems. All rights reserved.
+// Copyright (c) 2026 NewEngine | Take Some(). All rights reserved.
 //! Engine-wide collections prelude (the normal API).
 //!
 //! # Contract

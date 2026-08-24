@@ -14,7 +14,8 @@ use newengine_gameplay_script_runtime::{
 };
 
 use crate::item_assets::{
-    compile_authored_item_package, install_compiled_item_package, AuthoredItemPackage,
+    compile_authored_item_package, hydrate_item_package_from_ytyp, install_compiled_item_package,
+    AuthoredItemPackage,
 };
 
 pub use newengine_game_data::{
@@ -68,10 +69,19 @@ impl FpsContentProvider {
     > {
         let policy = self.policy_provider.load_snapshot()?;
         policy.validate()?;
-        let authored: AuthoredItemPackage = serde_json::from_value(policy.content.clone())
+        let mut authored: AuthoredItemPackage = serde_json::from_value(policy.content.clone())
             .map_err(|error| format!("Lua FPS item package decode failed: {error}"))?;
-        let compiled = compile_authored_item_package(&authored)
-            .map_err(|error| format!("Lua FPS item package compile failed: {error}"))?;
+        let hydrated = hydrate_item_package_from_ytyp(&mut authored)
+            .map_err(|error| format!("FPS item YTYP hydration failed: {error}"))?;
+        let compiled = compile_authored_item_package(&authored).map_err(|error| {
+            format!("FPS item package compile failed after YTYP hydration: {error}")
+        })?;
+        if hydrated > 0 {
+            newengine_ulog_api::ulog::info!(
+                "fps gameplay content hydrated {} item definition(s) from engine.assets.definitions/.ytyp",
+                hydrated
+            );
+        }
         validate_required_content(&policy, &compiled)?;
         Ok((policy, compiled))
     }

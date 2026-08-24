@@ -15,7 +15,7 @@ const LAUNCH_OPTIONAL_TEXTURE_TOKENS: &[&str] = &["sky", "skydome", "cloud", "cl
 pub(in crate::render_controller::module_impl) struct SceneMaterialLaunchPlan {
     pub(super) critical_paths: Vec<String>,
     pub(super) optional_paths: Vec<String>,
-    pub(super) alpha_critical_paths: FxHashSet<String>,
+    pub(super) fallback_forbidden_paths: FxHashSet<String>,
     pub(super) optional: u32,
 }
 
@@ -90,14 +90,41 @@ pub(super) fn build_scene_material_launch_plan(
     mats: &dyn MaterialRegistryApi,
 ) -> SceneMaterialLaunchPlan {
     let mut unique_paths = FxHashSet::<String>::default();
-    let mut alpha_critical_paths = FxHashSet::<String>::default();
+    let mut fallback_forbidden_paths = FxHashSet::<String>::default();
 
     for (_entity, material_ref) in world.query::<newengine_materials::MaterialRef>() {
         let resolved = mats.resolve(material_ref.id);
         let plan = LitMaterialPlan::from_resolved(resolved.as_ref(), [1.0, 1.0, 1.0, 1.0]);
         if plan.alpha_cutoff > 0.0 {
             if let Some(path) = plan.base_color_texture {
-                alpha_critical_paths.insert(path.to_owned());
+                fallback_forbidden_paths.insert(path.to_owned());
+            }
+        }
+        let player_skin = world
+            .get::<crate::gameplay::PlayerSkinBinding>(_entity)
+            .is_some();
+        let equipped_weapon = world
+            .get::<crate::gameplay::PlayerVisualPart>(_entity)
+            .is_some_and(|part| part.kind == crate::gameplay::PlayerVisualKind::EquippedWeapon);
+        if player_skin {
+            if let Some(path) = plan.base_color_texture {
+                // Character albedo must never be represented by the generic white fallback.
+                fallback_forbidden_paths.insert(path.to_owned());
+            }
+        }
+        if equipped_weapon {
+            // Equipped solid objects are admitted as a complete authored PBR surface. Avoid a
+            // one-frame white albedo, flat normal, or white roughness stage while late bindings
+            // stream after inventory/equipment creation.
+            for path in [
+                plan.base_color_texture,
+                plan.normal_texture,
+                plan.roughness_texture,
+            ]
+            .into_iter()
+            .flatten()
+            {
+                fallback_forbidden_paths.insert(path.to_owned());
             }
         }
         for path in [
@@ -130,17 +157,17 @@ pub(super) fn build_scene_material_launch_plan(
         }
     }
     optional_paths.sort_unstable();
-    alpha_critical_paths.retain(|path| !is_launch_gate_optional_texture(path));
+    fallback_forbidden_paths.retain(|path| !is_launch_gate_optional_texture(path));
     critical_paths.sort_unstable_by(|a, b| {
-        let a_alpha = alpha_critical_paths.contains(a);
-        let b_alpha = alpha_critical_paths.contains(b);
-        b_alpha.cmp(&a_alpha).then_with(|| a.cmp(b))
+        let a_hard = fallback_forbidden_paths.contains(a);
+        let b_hard = fallback_forbidden_paths.contains(b);
+        b_hard.cmp(&a_hard).then_with(|| a.cmp(b))
     });
 
     SceneMaterialLaunchPlan {
         critical_paths,
         optional_paths,
-        alpha_critical_paths,
+        fallback_forbidden_paths,
         optional,
     }
 }
@@ -181,7 +208,7 @@ fn extend_launch_plan_with_model_materials(
             if material.alpha_cutoff > 0.0 {
                 if let Some(path) = material.base_color_texture {
                     if !is_launch_gate_optional_texture(path) {
-                        plan.alpha_critical_paths.insert(path.to_owned());
+                        plan.fallback_forbidden_paths.insert(path.to_owned());
                     }
                 }
             }
@@ -206,12 +233,12 @@ fn extend_launch_plan_with_model_materials(
     plan.optional_paths = optional_paths.into_iter().collect();
     plan.optional = plan.optional_paths.len() as u32;
     plan.optional_paths.sort_unstable();
-    plan.alpha_critical_paths
+    plan.fallback_forbidden_paths
         .retain(|path| !is_launch_gate_optional_texture(path));
     plan.critical_paths.sort_unstable_by(|a, b| {
-        let a_alpha = plan.alpha_critical_paths.contains(a);
-        let b_alpha = plan.alpha_critical_paths.contains(b);
-        b_alpha.cmp(&a_alpha).then_with(|| a.cmp(b))
+        let a_hard = plan.fallback_forbidden_paths.contains(a);
+        let b_hard = plan.fallback_forbidden_paths.contains(b);
+        b_hard.cmp(&a_hard).then_with(|| a.cmp(b))
     });
 }
 
@@ -245,32 +272,32 @@ pub(super) fn critical_scene_materials_ready(
     let mut waiting = 0_u32;
     let mut failed = 0_u32;
     let mut failed_paths = Vec::<String>::new();
-    let mut alpha_waiting = 0_u32;
-    let mut alpha_failed = 0_u32;
+    let mut fallback_forbidden_waiting = 0_u32;
+    let mut fallback_forbidden_failed = 0_u32;
 
     for path in &plan.critical_paths {
         this.request_material_texture(path);
-        let alpha_critical = plan.alpha_critical_paths.contains(path);
+        let fallback_forbidden = plan.fallback_forbidden_paths.contains(path);
         match this.material_texture_ready_state(r, path, "render.launch_gate") {
             MaterialTextureReadyState::Ready(_) => {}
             MaterialTextureReadyState::Failed => {
                 failed = failed.saturating_add(1);
                 failed_paths.push(path.clone());
-                if alpha_critical {
-                    alpha_failed = alpha_failed.saturating_add(1);
+                if fallback_forbidden {
+                    fallback_forbidden_failed = fallback_forbidden_failed.saturating_add(1);
                 }
                 if this.frame.frame_index <= 4 || this.frame.frame_index.is_multiple_of(120) {
                     newengine_ulog_api::ulog::warn!(
-                        "render launch texture failed path='{}' alpha_critical={} policy='failed material texture must remain diagnosable'",
+                        "render launch texture failed path='{}' fallback_forbidden={} policy='failed material texture must remain diagnosable'",
                         path,
-                        alpha_critical,
+                        fallback_forbidden,
                     );
                 }
             }
             MaterialTextureReadyState::Waiting => {
                 waiting = waiting.saturating_add(1);
-                if alpha_critical {
-                    alpha_waiting = alpha_waiting.saturating_add(1);
+                if fallback_forbidden {
+                    fallback_forbidden_waiting = fallback_forbidden_waiting.saturating_add(1);
                 }
             }
         }
@@ -299,15 +326,15 @@ pub(super) fn critical_scene_materials_ready(
     let visual_floor = scene_texture_launch_visual_floor(total);
     let min_ready = configured_min_ready.max(visual_floor).min(total);
 
-    if alpha_waiting > 0 || alpha_failed > 0 {
-        let alpha_total = plan.alpha_critical_paths.len() as u32;
+    if fallback_forbidden_waiting > 0 || fallback_forbidden_failed > 0 {
+        let fallback_forbidden_total = plan.fallback_forbidden_paths.len() as u32;
         LaunchReadiness::pending(
             format!(
-                "waiting for alpha-critical texture residency ready={}/{} waiting={} failed={} policy='Masked base textures never use opaque fallback'",
-                alpha_total.saturating_sub(alpha_waiting).saturating_sub(alpha_failed),
-                alpha_total,
-                alpha_waiting,
-                alpha_failed,
+                "waiting for fallback-forbidden texture residency ready={}/{} waiting={} failed={} policy='masked, skinned-character, and equipped-weapon base textures never use generic white fallback'",
+                fallback_forbidden_total.saturating_sub(fallback_forbidden_waiting).saturating_sub(fallback_forbidden_failed),
+                fallback_forbidden_total,
+                fallback_forbidden_waiting,
+                fallback_forbidden_failed,
             ),
             waiting,
             total,

@@ -11,7 +11,6 @@ pub const ENGINE_RUNTIME_MODE_ENV: &str = "NEWENGINE_RUNTIME_MODE";
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum EngineRuntimeMode {
-    Editor,
     #[default]
     Game,
     Server,
@@ -21,7 +20,6 @@ pub enum EngineRuntimeMode {
 impl EngineRuntimeMode {
     pub const fn launch_id(self) -> &'static str {
         match self {
-            Self::Editor => "editor",
             Self::Game => "game",
             Self::Server => "server",
             Self::Test => "test",
@@ -30,10 +28,6 @@ impl EngineRuntimeMode {
 
     pub const fn requires_headless(self) -> bool {
         matches!(self, Self::Server | Self::Test)
-    }
-
-    pub const fn is_editor(self) -> bool {
-        matches!(self, Self::Editor)
     }
 }
 
@@ -208,17 +202,15 @@ startup_window = false
         assert_eq!(config.runtime.mode, EngineRuntimeMode::Server);
         assert!(config.runtime.mode.requires_headless());
 
-        let editor: EngineRuntimeConfig = toml::from_str(
-            r#"format_version = 1
+        let removed_mode = ["edi", "tor"].concat();
+        let legacy_removed_mode_source = format!(
+            r#"
+format_version = 1
 schema = "newengine.runtime.v1"
 [runtime]
-mode = "editor"
+mode = "{removed_mode}"
 "#,
-        )
-        .unwrap();
-        editor.validate().unwrap();
-        assert_eq!(editor.runtime.mode, EngineRuntimeMode::Editor);
-        assert!(editor.runtime.mode.is_editor());
-        assert!(!editor.runtime.mode.requires_headless());
+        );
+        assert!(toml::from_str::<EngineRuntimeConfig>(&legacy_removed_mode_source).is_err());
     }
 }

@@ -72,11 +72,11 @@ impl<E: Send + 'static> Module<E> for AssetsCatalogUiRuntimeModule {
             .map(|size| [size.width.max(1), size.height.max(1)])
             .unwrap_or(DEFAULT_SURFACE_SIZE_PX);
         let toggled = action_frame_contains(&actions, engine_action::ASSET_CATALOG_UI_TOGGLE);
-        let editor_profile_active = is_editor_screen_profile(ctx.resources());
+        let editing_tools_active = editing_tools_available(ctx.resources());
 
         if toggled && self.last_toggle_frame != frame_index {
             self.last_toggle_frame = frame_index;
-            if editor_profile_active {
+            if editing_tools_active {
                 newengine_ulog_api::ulog::info!(
                     "asset browser UI: toggle consumed by editor dock surface; profile='editor' visible=true modal=false"
                 );
@@ -99,7 +99,7 @@ impl<E: Send + 'static> Module<E> for AssetsCatalogUiRuntimeModule {
             .get::<UiDockLayoutState>()
             .map(|layout| layout.panel_visible("bottom.content_browser"))
             .unwrap_or(true);
-        let visible = (editor_profile_active && docked_browser_visible) || self.open;
+        let visible = (editing_tools_active && docked_browser_visible) || self.open;
         if visible {
             let stale = frame_index.saturating_sub(self.last_refresh_frame) >= 30;
             if stale || self.cached_node.is_none() || self.last_toggle_frame == frame_index {
@@ -121,7 +121,7 @@ impl<E: Send + 'static> Module<E> for AssetsCatalogUiRuntimeModule {
             if let Some(node) = self.cached_node.clone() {
                 self.publish_surface(node);
             }
-            if editor_profile_active {
+            if editing_tools_active {
                 // In Editor profile the Content Browser is a docked editor panel.
                 // The global screen profile capture already gates gameplay input;
                 // the browser must not become a second modal owner and fight the editor shell.

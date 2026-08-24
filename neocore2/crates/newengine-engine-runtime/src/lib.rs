@@ -15,7 +15,11 @@ pub mod world_authoring;
 mod world_runtime_provider;
 
 pub mod asset_preview;
+pub mod audio_ambience;
+pub mod audio_environment;
 pub mod audio_gateway;
+pub mod audio_occlusion;
+pub mod audio_scene;
 pub mod authority;
 pub mod camera_gateway;
 pub mod engine_bounds;
@@ -39,11 +43,24 @@ mod ui_gateway;
 pub mod viewport_bridge;
 
 pub use asset_preview::{AssetPreviewApi, AssetPreviewKind, AssetPreviewSnapshot};
+pub use audio_ambience::{AudioAmbienceBedRuntime, AudioAmbienceRuntimeModule};
+pub use audio_environment::{
+    AudioEnvironmentFrame, AudioEnvironmentResolution, AudioEnvironmentRuntimeState,
+};
 pub use audio_gateway::register_audio_gateway_best_effort;
+pub use audio_occlusion::{
+    acoustic_material_profile_for_surface, AudioListenerRuntimeState, AudioOcclusionObservation,
+    AudioOcclusionPhysicsQueryProvider,
+};
+pub use audio_scene::{
+    AcousticSurface, AudioEmitter, AudioEmitterRuntime, AudioEnvironmentZone, AudioPortal,
+    AudioSceneRuntimeModule,
+};
 pub use authority::{
     RuntimeWorldAuthorityBridge, RuntimeWorldAuthorityFrame, RuntimeWorldAuthorityMode,
     RuntimeWorldAuthorityResource,
 };
+pub use newengine_audio_api::AudioAmbienceBed;
 
 pub use gameplay::{CollisionShapeDesc, GameRunMode, GameplayActor, PhysicsBodyDesc, PlayerActor};
 pub use plugin_manager::PluginManagerBridge;

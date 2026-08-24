@@ -24,6 +24,17 @@ impl AssetServiceClient {
         )
     }
 
+    /// Read a bounded byte range from the AssetManager VFS without materializing the full asset.
+    pub fn raw_range_v1(
+        &self,
+        request: &crate::AssetRawRangeRequest,
+    ) -> Result<crate::AssetRawRangeResponse, String> {
+        let request = request.clone().sanitized()?;
+        let payload = serde_json::to_vec(&request).map_err(|error| error.to_string())?;
+        let wire = self.call_raw(self.m_raw_range_v1.clone(), payload)?;
+        crate::decode_asset_raw_range_response(&wire)
+    }
+
     /// Read UTF-8/text asset bytes directly through the AssetManager v1 text method.
     #[inline]
     pub fn text_v1(&self, logical_path: &str) -> Result<Vec<u8>, String> {

@@ -7,8 +7,7 @@ use newengine_ui::{UiFrameDesc, UiProviderKind};
 use newengine_ui_api::{
     UiDrawInvalidationState, UiEventDispatchFrame, UiGameLayerStackState, UiInputFrame,
     UiLayerCompositionPlan, UiLayerDomain, UiLayerDrawPacketSet, UiPresentationFlowState,
-    UiScreenProfile, UiScreenProfileState, UI_PRESENTATION_TARGET_PRIMARY,
-    UI_SURFACE_RUNTIME_DEBUG_OVERLAY,
+    UI_PRESENTATION_TARGET_PRIMARY, UI_SURFACE_RUNTIME_DEBUG_OVERLAY,
 };
 
 use crate::platform_input::poll_input_frame;
@@ -176,19 +175,18 @@ impl HostPlatformRuntime {
         let input_dispatch_ms = host_frame_started.elapsed().as_secs_f64() * 1000.0;
         let ui_prepare_started = Instant::now();
         let scene_launch_status = self.engine.resources.get::<SceneLaunchStatus>().cloned();
-        let editor_profile_active = self
+        let editing_tools_active = self
             .engine
             .resources
-            .get::<newengine_ui_api::UiScreenProfileState>()
-            .is_some_and(|state| {
-                state.descriptor.profile == newengine_ui_api::UiScreenProfile::Editor
+            .get::<newengine_plugin_host::PluginsSnapshot>()
+            .is_some_and(|snapshot| {
+                snapshot.has_running_capability(newengine_plugin_api::CAPABILITY_ID_EDITING_TOOLS)
             });
-        let presentation_blocks_world_bootstrap = !editor_profile_active
-            && self
-                .engine
-                .resources
-                .get::<UiPresentationFlowState>()
-                .is_some_and(|state| state.blocks_world_bootstrap);
+        let presentation_blocks_world_bootstrap = self
+            .engine
+            .resources
+            .get::<UiPresentationFlowState>()
+            .is_some_and(|state| state.blocks_world_bootstrap);
         let scene_launch_active = effective_scene_launch_active(
             scene_launch_status.as_ref(),
             presentation_blocks_world_bootstrap,
@@ -232,15 +230,9 @@ impl HostPlatformRuntime {
                 )
             });
 
-        let screen_profile = self
-            .engine
-            .resources
-            .get::<UiScreenProfileState>()
-            .map(|state| state.descriptor.profile)
-            .unwrap_or_default();
         let shell_domain = if scene_launch_active {
             UiLayerDomain::System
-        } else if screen_profile == UiScreenProfile::Editor {
+        } else if editing_tools_active {
             UiLayerDomain::Editor
         } else {
             UiLayerDomain::System

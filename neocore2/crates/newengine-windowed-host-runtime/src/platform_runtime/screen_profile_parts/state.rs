@@ -95,7 +95,6 @@ impl ScreenProfileRuntimeState {
 
     pub(crate) fn install_initial_resources(&self, resources: &mut Resources) {
         install_runtime_session_resources(resources);
-        install_editor_pie_world_state(resources);
         if resources.get::<EditorCommandRegistry>().is_none() {
             resources.insert(default_runtime_editor_commands());
         }
@@ -178,66 +177,7 @@ impl ScreenProfileRuntimeState {
         let mut refresh_ui = presentation_changed || game_gui_changed;
 
         match self.descriptor.profile {
-            UiScreenProfile::Editor => {
-                refresh_ui |=
-                    self.hide_profile_surface(UI_SURFACE_GAME_PRESENTATION, profile_changed);
-                if self.config.publish_editor_shell {
-                    let layout = editor_layout_metrics(resources, &self.hidden_panels);
-                    let session = resources
-                        .get::<RuntimeSessionState>()
-                        .cloned()
-                        .unwrap_or_default();
-                    let (runtime_mode, runtime_paused) = editor_runtime_projection(&session);
-                    let runtime_possessed = session.is_possessed();
-                    let runtime_diff_count = resources
-                        .get::<RuntimeWorldDiffV1>()
-                        .map(|diff| diff.change_count)
-                        .unwrap_or(0);
-                    let command_registry = resources
-                        .get::<EditorCommandRegistry>()
-                        .cloned()
-                        .unwrap_or_else(default_runtime_editor_commands);
-                    let viewport_state = resources
-                        .get::<UiEditorViewportState>()
-                        .cloned()
-                        .unwrap_or_default();
-                    let scene_snapshot = resources
-                        .get::<UiEditorSceneSnapshot>()
-                        .cloned()
-                        .unwrap_or_default();
-                    let inspector_snapshot = resources
-                        .get::<UiEditorInspectorSnapshot>()
-                        .cloned()
-                        .unwrap_or_default();
-                    let mut node = EditorScreen::default().surface_node(
-                        frame_index,
-                        runtime_mode,
-                        runtime_paused,
-                        runtime_possessed,
-                        runtime_diff_count,
-                        &command_registry,
-                        &viewport_state,
-                        &scene_snapshot,
-                        &inspector_snapshot,
-                        &layout,
-                        self.active_menu_id.as_deref(),
-                    );
-                    self.append_right_edit_window(resources, &mut node, &layout);
-                    sort_components_by_layout_y(&mut node.components);
-                    publish_screen_node_tree_request(&UiNodeTreeRequest::from_surface_node(
-                        &node,
-                        UiNodeRequestSourceKind::Generated,
-                    ));
-                    self.published_surfaces
-                        .insert(UI_SURFACE_EDITOR_SHELL.to_owned());
-                    refresh_ui = true;
-                } else {
-                    refresh_ui |=
-                        self.hide_profile_surface(UI_SURFACE_EDITOR_SHELL, profile_changed);
-                }
-            }
             UiScreenProfile::Game => {
-                refresh_ui |= self.hide_profile_surface(UI_SURFACE_EDITOR_SHELL, profile_changed);
                 if self.active_presentation_state().is_some() {
                     refresh_ui |= self
                         .prepare_presentation_flow_surface(profile_changed, presentation_changed);
@@ -288,6 +228,7 @@ impl ScreenProfileRuntimeState {
                     refresh_ui |=
                         self.hide_profile_surface(UI_SURFACE_GAME_PRESENTATION, profile_changed);
                 }
+                refresh_ui |= self.prepare_editing_overlay(resources, frame_index, profile_changed);
             }
             UiScreenProfile::Headless => {
                 refresh_ui |= self.hide_profile_surface(UI_SURFACE_EDITOR_SHELL, profile_changed);

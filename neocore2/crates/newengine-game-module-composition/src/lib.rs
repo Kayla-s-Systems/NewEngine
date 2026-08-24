@@ -18,7 +18,6 @@ use newengine_project_runtime::{ProjectRuntimeContext, RuntimeCompositionContext
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum GameModuleTarget {
-    Editor,
     Client,
     Server,
     Test,
@@ -27,7 +26,6 @@ pub enum GameModuleTarget {
 impl From<RuntimeLaunchProfile> for GameModuleTarget {
     fn from(value: RuntimeLaunchProfile) -> Self {
         match value {
-            RuntimeLaunchProfile::Editor => Self::Editor,
             RuntimeLaunchProfile::Game => Self::Client,
             RuntimeLaunchProfile::Server => Self::Server,
             RuntimeLaunchProfile::Test => Self::Test,
@@ -270,8 +268,8 @@ mod tests {
     #[test]
     fn launch_profiles_map_to_distinct_game_module_targets() {
         assert_eq!(
-            GameModuleTarget::from(RuntimeLaunchProfile::Editor),
-            GameModuleTarget::Editor
+            GameModuleTarget::from(RuntimeLaunchProfile::Test),
+            GameModuleTarget::Test
         );
         assert_eq!(
             GameModuleTarget::from(RuntimeLaunchProfile::Game),

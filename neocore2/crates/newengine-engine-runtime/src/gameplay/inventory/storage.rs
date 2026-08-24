@@ -212,6 +212,26 @@ pub struct EquippedWeaponBinding {
     pub ammo_item: ItemId,
 }
 
+/// Latest world-space muzzle pose published by the equipped-weapon presentation.
+///
+/// Gameplay remains authoritative for ammo/damage, while the rendered weapon owns the physical
+/// barrel pose. Publishing this small component lets hitscan, shot audio and transient VFX start
+/// from the same point without coupling the generic combat runtime to a specific rifle rig.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct EquippedWeaponMuzzle {
+    pub position: Vec3,
+    pub forward: Vec3,
+}
+
+impl EquippedWeaponMuzzle {
+    #[inline]
+    pub fn new(position: Vec3, forward: Vec3) -> Option<Self> {
+        let forward = forward.normalize_or_zero();
+        (position.is_finite() && forward.length_squared() > 1.0e-8)
+            .then_some(Self { position, forward })
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ItemPickup {
     pub item: ItemId,

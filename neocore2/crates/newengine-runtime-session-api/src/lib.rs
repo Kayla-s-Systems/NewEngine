@@ -33,7 +33,6 @@ pub enum RuntimeSessionPhase {
     Running,
     Paused,
     Stopping,
-    Restoring,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -47,7 +46,6 @@ pub enum RuntimeSessionCommand {
     Restart,
     Eject,
     Possess,
-    ApplyChangesAndStop,
     Step { frames: u32 },
 }
 
@@ -85,13 +83,10 @@ pub struct RuntimeSessionState {
     pub mode: Option<RuntimeSessionMode>,
     pub paused: bool,
     pub control_mode: RuntimeSessionControlMode,
-    pub apply_changes_requested: bool,
     pub frame_index: u64,
     pub phase_frame_index: u64,
     pub simulation_tick: u64,
     pub step_budget: u32,
-    pub pending_start_mode: Option<RuntimeSessionMode>,
-    pub world_snapshot_id: Option<String>,
     pub last_reason: String,
 }
 
@@ -105,13 +100,10 @@ impl Default for RuntimeSessionState {
             mode: None,
             paused: false,
             control_mode: RuntimeSessionControlMode::Possessed,
-            apply_changes_requested: false,
             frame_index: 0,
             phase_frame_index: 0,
             simulation_tick: 0,
             step_budget: 0,
-            pending_start_mode: None,
-            world_snapshot_id: None,
             last_reason: "runtime session idle".to_owned(),
         }
     }
@@ -150,53 +142,6 @@ pub struct RuntimeSessionFrameDecision {
     pub possessed: bool,
     pub mode: Option<RuntimeSessionMode>,
 }
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum RuntimeWorldChangeKind {
-    Added,
-    Removed,
-    #[default]
-    Modified,
-}
-
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(default)]
-pub struct RuntimeWorldChangeV1 {
-    pub path: String,
-    pub kind: RuntimeWorldChangeKind,
-    pub before_json: Option<String>,
-    pub after_json: Option<String>,
-}
-
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(default)]
-pub struct RuntimeWorldDiffV1 {
-    pub version: u32,
-    pub session_id: RuntimeSessionId,
-    pub frame_index: u64,
-    pub change_count: usize,
-    pub changes: Vec<RuntimeWorldChangeV1>,
-    pub truncated: bool,
-    pub reason: String,
-}
-
-impl RuntimeWorldDiffV1 {
-    pub fn empty(
-        session_id: RuntimeSessionId,
-        frame_index: u64,
-        reason: impl Into<String>,
-    ) -> Self {
-        Self {
-            version: 1,
-            session_id,
-            frame_index,
-            reason: reason.into(),
-            ..Self::default()
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

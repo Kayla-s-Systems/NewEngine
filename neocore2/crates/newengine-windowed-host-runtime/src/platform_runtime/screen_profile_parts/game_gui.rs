@@ -414,7 +414,7 @@ mod tests {
     #[test]
     fn legacy_adapter_is_game_profile_only() {
         assert!(resolve_game_gui_config(
-            UiScreenProfile::Editor,
+            UiScreenProfile::Headless,
             None,
             false,
             Some("ui/game/game_hud.neui@surface"),

@@ -1140,10 +1140,13 @@ pub(super) struct PlayerAnimationRuntimeBinding {
     helper_mirror_pairs: Vec<(usize, usize)>,
     /// Imported Rigify control/face branches need the authored constraint order restored:
     /// deform body -> animated neck/head controls -> face/eyes deform branches.
+    eye_contract: Option<AbbyEyeRuntimeContract>,
     head_follow: Option<DetachedHeadFollowRig>,
     braid_soft_body: Option<AbbyBraidSoftBodyRuntime>,
     equipped_rifle_basepose: Option<PlayerAnimationRuntimeClip>,
+    equipped_rifle_reload: Option<PlayerAnimationRuntimeClip>,
     equipment_overlay_locals: Vec<JointLocalPose>,
+    rifle_ik: Option<AbbyRifleIkRig>,
 }
 
 #[inline]
@@ -1218,44 +1221,442 @@ impl PlayerAnimationRuntimeBinding {
     }
 }
 
-const ABBY_RIFLE_BASEPOSE_REF: &str = "animations/characters/abby/moveset.ycd@fob-car-ride-rifle-vepr-crouch-reload-front-left-basepose";
-const ABBY_RIFLE_ARM_JOINTS: &[&str] = &[
-    "l_clavicle",
-    "r_clavicle",
-    "l_shoulder",
-    "r_shoulder",
-    "l_elbow",
-    "r_elbow",
-    "l_wrist",
-    "r_wrist",
-    "l_palm",
-    "r_palm",
-    "l_hand_prop",
-    "r_hand_prop",
-    "l_hand_prop_attachment",
-    "r_hand_prop_attachment",
+const ABBY_RIFLE_BASEPOSE_REF: &str = "animations/characters/abby/moveset.ycd@fob-car-ride-abby-moveset-truck-rear-aim-00bw-aim--abby";
+const ABBY_RIFLE_RELOAD_REF: &str = "animations/characters/abby/moveset.ycd@fob-car-ride-rifle-vepr-crouch-reload-rear-part";
+/// ReadyHold weapon/chest calibration was recovered from frame 24 of this 51-frame authored aim
+/// cycle. Sampling the same phase keeps authored arm rotation style while the standing weapon
+/// placement itself remains governed by the anatomical ReadyHold contract.
+const ABBY_RIFLE_READY_SAMPLE_PHASE: f32 = 0.48;
+/// Rotation-only ready-hold overlay. Car-ride translations must never be copied into standing
+/// locomotion: doing so changes shoulder/arm chain geometry and makes the runtime solve a seated pose.
+const ABBY_RIFLE_READY_ROTATION_WEIGHTS: &[(&str, f32)] = &[
+    ("spineb", 0.22),
+    ("spinec", 0.38),
+    ("spined", 0.52),
+    ("l_clavicle", 0.78),
+    ("r_clavicle", 0.78),
+    ("l_shoulder", 0.92),
+    ("r_shoulder", 0.92),
+    ("l_elbow", 1.0),
+    ("r_elbow", 1.0),
+    ("l_wrist", 1.0),
+    ("r_wrist", 1.0),
+    ("l_palm", 1.0),
+    ("r_palm", 1.0),
+];
+/// The original Abby rifle reload drives the complete upper-body manipulation. Translation
+/// channels stay excluded because this source was authored in vehicle/crouch space; its local
+/// joint rotations are the reusable semantic content. Right-hand IK later keeps the firing hand
+/// on the receiver while the left arm remains intentionally free to manipulate the magazine.
+const ABBY_RIFLE_RELOAD_ROTATION_WEIGHTS: &[(&str, f32)] = &[
+    ("spineb", 0.28),
+    ("spinec", 0.48),
+    ("spined", 0.68),
+    ("l_clavicle", 1.0),
+    ("r_clavicle", 0.92),
+    ("l_shoulder", 1.0),
+    ("r_shoulder", 1.0),
+    ("l_elbow", 1.0),
+    ("r_elbow", 1.0),
+    ("l_wrist", 1.0),
+    ("r_wrist", 1.0),
+    ("l_palm", 1.0),
+    ("r_palm", 1.0),
 ];
 
-fn apply_equipped_rifle_arm_overlay(
+#[inline]
+fn blend_joint_rotation_only(dst: &mut JointLocalPose, src: &JointLocalPose, weight: f32) {
+    let weight = if weight.is_finite() {
+        weight.clamp(0.0, 1.0)
+    } else {
+        1.0
+    };
+    let from = Quat::from_xyzw(
+        dst.rotation[0],
+        dst.rotation[1],
+        dst.rotation[2],
+        dst.rotation[3],
+    )
+    .normalize_or_identity();
+    let mut to = Quat::from_xyzw(
+        src.rotation[0],
+        src.rotation[1],
+        src.rotation[2],
+        src.rotation[3],
+    )
+    .normalize_or_identity();
+    if from.dot(to) < 0.0 {
+        to = Quat::from_xyzw(-to.x, -to.y, -to.z, -to.w);
+    }
+    let rotation = from.slerp(to, weight).normalize_or_identity();
+    dst.rotation = [rotation.x, rotation.y, rotation.z, rotation.w];
+}
+
+fn apply_equipped_rifle_rotation_overlay(
     clip: Option<&PlayerAnimationRuntimeClip>,
     skeleton: &ModelSkeletonMetadata,
     scratch: &mut Vec<JointLocalPose>,
     target: &mut [JointLocalPose],
+    normalized_phase: f32,
+    weights: &[(&str, f32)],
 ) -> Result<(), String> {
     let Some(clip) = clip else {
         return Ok(());
     };
+    let phase = if normalized_phase.is_finite() {
+        normalized_phase.clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    let sample_time = (clip.clip.duration_seconds * phase)
+        .clamp(0.0, clip.clip.duration_seconds.max(0.0));
     clip.clip
-        .sample_local_pose_for_skeleton(0.0, skeleton, scratch)?;
-    for name in ABBY_RIFLE_ARM_JOINTS {
+        .sample_local_pose_for_skeleton(sample_time, skeleton, scratch)?;
+    for (name, weight) in weights {
         let Some(index) = skeleton.joints.iter().position(|joint| joint.name == *name) else {
             continue;
         };
         if let (Some(dst), Some(src)) = (target.get_mut(index), scratch.get(index)) {
-            *dst = *src;
+            blend_joint_rotation_only(dst, src, *weight);
         }
     }
     Ok(())
+}
+
+#[derive(Clone, Copy, Debug)]
+struct AbbyRifleIkRig {
+    chest: usize,
+    right_shoulder: usize,
+    right_elbow: usize,
+    right_wrist: usize,
+    right_palm: usize,
+    left_shoulder: usize,
+    left_elbow: usize,
+    left_wrist: usize,
+    left_palm: usize,
+}
+
+fn build_abby_rifle_ik_rig(skeleton: &ModelSkeletonMetadata) -> Option<AbbyRifleIkRig> {
+    let find = |name: &str| skeleton.joints.iter().position(|joint| joint.name == name);
+    Some(AbbyRifleIkRig {
+        chest: find("spined")?,
+        right_shoulder: find("r_shoulder")?,
+        right_elbow: find("r_elbow")?,
+        right_wrist: find("r_wrist")?,
+        right_palm: find("r_palm")?,
+        left_shoulder: find("l_shoulder")?,
+        left_elbow: find("l_elbow")?,
+        left_wrist: find("l_wrist")?,
+        left_palm: find("l_palm")?,
+    })
+}
+
+fn rebuild_model_joint_frames(
+    skeleton: &ModelSkeletonMetadata,
+    source_to_model: [f32; 16],
+    pose: &[JointLocalPose],
+    frames: &mut Vec<Mat4>,
+) -> Result<(), String> {
+    frames.clear();
+    build_model_joint_frames_from_local_pose(skeleton, source_to_model, pose, frames)
+}
+
+fn rotate_pose_joint_toward(
+    skeleton: &ModelSkeletonMetadata,
+    pose: &mut [JointLocalPose],
+    frames: &[Mat4],
+    joint_index: usize,
+    end_effector_index: usize,
+    target: Vec3,
+    correction_weight: f32,
+) -> Result<(), String> {
+    let joint_frame = *frames
+        .get(joint_index)
+        .ok_or_else(|| format!("rifle IK joint frame missing index={joint_index}"))?;
+    let end_frame = *frames
+        .get(end_effector_index)
+        .ok_or_else(|| format!("rifle IK end frame missing index={end_effector_index}"))?;
+    let joint_position = joint_frame.transform_point3(Vec3::ZERO);
+    let end_position = end_frame.transform_point3(Vec3::ZERO);
+    let to_end = end_position - joint_position;
+    let to_target = target - joint_position;
+    if !to_end.is_finite()
+        || !to_target.is_finite()
+        || to_end.length_squared() <= 1.0e-10
+        || to_target.length_squared() <= 1.0e-10
+    {
+        return Ok(());
+    }
+
+    let full_delta =
+        Quat::from_rotation_arc(to_end.normalize(), to_target.normalize()).normalize_or_identity();
+    let correction_weight = if correction_weight.is_finite() {
+        correction_weight.clamp(0.0, 1.0)
+    } else {
+        0.5
+    };
+    let delta = Quat::IDENTITY
+        .slerp(full_delta, correction_weight)
+        .normalize_or_identity();
+    let (_, joint_global_rotation, _) = joint_frame.to_scale_rotation_translation();
+    let parent_global_rotation = skeleton.joints[joint_index]
+        .parent_index
+        .and_then(|parent| frames.get(parent as usize).copied())
+        .map(|frame| frame.to_scale_rotation_translation().1)
+        .unwrap_or(Quat::IDENTITY);
+    let desired_global = (delta * joint_global_rotation).normalize_or_identity();
+    let local_rotation =
+        (parent_global_rotation.inverse() * desired_global).normalize_or_identity();
+    let local = pose
+        .get_mut(joint_index)
+        .ok_or_else(|| format!("rifle IK local pose missing index={joint_index}"))?;
+    local.rotation = [
+        local_rotation.x,
+        local_rotation.y,
+        local_rotation.z,
+        local_rotation.w,
+    ];
+    Ok(())
+}
+
+fn solve_two_bone_arm_with_pole(
+    skeleton: &ModelSkeletonMetadata,
+    pose: &mut [JointLocalPose],
+    frames: &mut Vec<Mat4>,
+    source_to_model: [f32; 16],
+    shoulder: usize,
+    elbow: usize,
+    palm: usize,
+    target: Vec3,
+    pole: Vec3,
+) -> Result<(), String> {
+    rebuild_model_joint_frames(skeleton, source_to_model, pose, frames)?;
+    let shoulder_position = frames
+        .get(shoulder)
+        .copied()
+        .ok_or("rifle IK shoulder frame missing")?
+        .transform_point3(Vec3::ZERO);
+    let elbow_position = frames
+        .get(elbow)
+        .copied()
+        .ok_or("rifle IK elbow frame missing")?
+        .transform_point3(Vec3::ZERO);
+    let palm_position = frames
+        .get(palm)
+        .copied()
+        .ok_or("rifle IK palm frame missing")?
+        .transform_point3(Vec3::ZERO);
+    let upper_len = (elbow_position - shoulder_position).length();
+    let lower_len = (palm_position - elbow_position).length();
+    let raw_to_target = target - shoulder_position;
+    let raw_distance = raw_to_target.length();
+    if !upper_len.is_finite()
+        || !lower_len.is_finite()
+        || !raw_distance.is_finite()
+        || upper_len <= 1.0e-5
+        || lower_len <= 1.0e-5
+        || raw_distance <= 1.0e-5
+    {
+        return Ok(());
+    }
+
+    let direction = raw_to_target / raw_distance;
+    let min_reach = (upper_len - lower_len).abs() + 1.0e-4;
+    let max_reach = (upper_len + lower_len - 1.0e-4).max(min_reach);
+    let distance = raw_distance.clamp(min_reach, max_reach);
+    let reachable_target = shoulder_position + direction * distance;
+
+    let pole_vector = pole - shoulder_position;
+    let mut bend_direction = pole_vector - direction * pole_vector.dot(direction);
+    if bend_direction.length_squared() <= 1.0e-8 {
+        let current_bend = elbow_position - shoulder_position;
+        bend_direction = current_bend - direction * current_bend.dot(direction);
+    }
+    bend_direction = bend_direction.normalize_or_zero();
+    if bend_direction.length_squared() <= 1.0e-8 {
+        return Ok(());
+    }
+
+    let along = ((upper_len * upper_len - lower_len * lower_len + distance * distance)
+        / (2.0 * distance))
+        .clamp(0.0, upper_len);
+    let height = (upper_len * upper_len - along * along).max(0.0).sqrt();
+    let desired_elbow = shoulder_position + direction * along + bend_direction * height;
+
+    // First orient the upper arm into the preferred elbow plane, then close the forearm onto the
+    // palm target. No free CCD iterations remain, so the elbow cannot flip to another plane.
+    rotate_pose_joint_toward(skeleton, pose, frames, shoulder, elbow, desired_elbow, 1.0)?;
+    rebuild_model_joint_frames(skeleton, source_to_model, pose, frames)?;
+    rotate_pose_joint_toward(skeleton, pose, frames, elbow, palm, reachable_target, 1.0)?;
+    rebuild_model_joint_frames(skeleton, source_to_model, pose, frames)?;
+    Ok(())
+}
+
+fn orient_wrist_for_palm_basis(
+    skeleton: &ModelSkeletonMetadata,
+    pose: &mut [JointLocalPose],
+    frames: &[Mat4],
+    wrist: usize,
+    palm: usize,
+    desired_palm_global: Quat,
+    max_correction_radians: f32,
+) -> Result<(), String> {
+    let current_wrist = frames
+        .get(wrist)
+        .copied()
+        .ok_or("rifle wrist frame missing")?
+        .to_scale_rotation_translation()
+        .1
+        .normalize_or_identity();
+    let palm_local = pose
+        .get(palm)
+        .ok_or("rifle palm local pose missing")?
+        .rotation;
+    let palm_local = Quat::from_xyzw(palm_local[0], palm_local[1], palm_local[2], palm_local[3])
+        .normalize_or_identity();
+    let desired_wrist = (desired_palm_global * palm_local.inverse()).normalize_or_identity();
+    let dot = current_wrist.dot(desired_wrist).abs().clamp(0.0, 1.0);
+    let angle = 2.0 * dot.acos();
+    let weight = if angle.is_finite() && angle > max_correction_radians.max(1.0e-4) {
+        (max_correction_radians / angle).clamp(0.0, 1.0)
+    } else {
+        1.0
+    };
+    let limited = current_wrist
+        .slerp(desired_wrist, weight)
+        .normalize_or_identity();
+    set_pose_joint_global_rotation(skeleton, pose, frames, wrist, limited)
+}
+
+fn set_pose_joint_global_rotation(
+    skeleton: &ModelSkeletonMetadata,
+    pose: &mut [JointLocalPose],
+    frames: &[Mat4],
+    joint_index: usize,
+    desired_global: Quat,
+) -> Result<(), String> {
+    let parent_global = skeleton.joints[joint_index]
+        .parent_index
+        .and_then(|parent| frames.get(parent as usize).copied())
+        .map(|frame| frame.to_scale_rotation_translation().1)
+        .unwrap_or(Quat::IDENTITY)
+        .normalize_or_identity();
+    let local_rotation = (parent_global.inverse() * desired_global).normalize_or_identity();
+    let local = pose
+        .get_mut(joint_index)
+        .ok_or_else(|| format!("rifle ready local pose missing index={joint_index}"))?;
+    local.rotation = [
+        local_rotation.x,
+        local_rotation.y,
+        local_rotation.z,
+        local_rotation.w,
+    ];
+    Ok(())
+}
+
+/// ReadyHold is stock/shoulder-anchored because the current native corpus has no standalone standing rifle
+/// clip. The weapon is placed from `spined`; both arms solve to calibrated palm-center contacts.
+/// left palm follows the canonical rifle `l_grip`; it never feeds back into weapon transform.
+fn apply_equipped_rifle_support_ik(
+    rig: Option<&AbbyRifleIkRig>,
+    skeleton: &ModelSkeletonMetadata,
+    source_to_model: [f32; 16],
+    pose: &mut Vec<JointLocalPose>,
+    frames: &mut Vec<Mat4>,
+    view_forward_model: Option<Vec3>,
+    aim_alpha: f32,
+    recoil_alpha: f32,
+    support_left_hand: bool,
+) -> Result<Option<f32>, String> {
+    let Some(rig) = rig else {
+        return Ok(None);
+    };
+    rebuild_model_joint_frames(skeleton, source_to_model, pose, frames)?;
+    let chest = *frames
+        .get(rig.chest)
+        .ok_or("rifle ReadyHold chest frame is unavailable")?;
+    let right_shoulder = *frames
+        .get(rig.right_shoulder)
+        .ok_or("rifle ReadyHold right shoulder frame is unavailable")?;
+    let left_shoulder = *frames
+        .get(rig.left_shoulder)
+        .ok_or("rifle ReadyHold left shoulder frame is unavailable")?;
+    let contract = crate::weapon_grip::rifle_ready_solve_contract_presented(
+        chest,
+        right_shoulder,
+        left_shoulder,
+        view_forward_model,
+        aim_alpha,
+        recoil_alpha,
+    )
+    .ok_or("rifle ReadyHold could not resolve anatomical solve contract")?;
+    let right_target = crate::weapon_grip::rifle_ready_right_palm_position(contract.root);
+    let left_target = crate::weapon_grip::rifle_ready_left_palm_position(contract.root);
+
+    solve_two_bone_arm_with_pole(
+        skeleton,
+        pose,
+        frames,
+        source_to_model,
+        rig.right_shoulder,
+        rig.right_elbow,
+        rig.right_palm,
+        right_target,
+        contract.right_elbow_pole,
+    )?;
+    if support_left_hand {
+        solve_two_bone_arm_with_pole(
+            skeleton,
+            pose,
+            frames,
+            source_to_model,
+            rig.left_shoulder,
+            rig.left_elbow,
+            rig.left_palm,
+            left_target,
+            contract.left_elbow_pole,
+        )?;
+    }
+
+    // Wrist orientation is a separate constrained pass. The palm contact calibration supplies the
+    // desired grip basis, while a maximum correction prevents the wrist from absorbing an entire
+    // arm-plane mismatch as twist.
+    rebuild_model_joint_frames(skeleton, source_to_model, pose, frames)?;
+    orient_wrist_for_palm_basis(
+        skeleton,
+        pose,
+        frames,
+        rig.right_wrist,
+        rig.right_palm,
+        crate::weapon_grip::rifle_ready_right_palm_rotation(contract.root),
+        35.0_f32.to_radians(),
+    )?;
+    if support_left_hand {
+        rebuild_model_joint_frames(skeleton, source_to_model, pose, frames)?;
+        orient_wrist_for_palm_basis(
+            skeleton,
+            pose,
+            frames,
+            rig.left_wrist,
+            rig.left_palm,
+            crate::weapon_grip::rifle_ready_left_palm_rotation(contract.root),
+            40.0_f32.to_radians(),
+        )?;
+    }
+
+    rebuild_model_joint_frames(skeleton, source_to_model, pose, frames)?;
+    let right_error = (frames[rig.right_palm].transform_point3(Vec3::ZERO) - right_target).length();
+    let left_error = if support_left_hand {
+        (frames[rig.left_palm].transform_point3(Vec3::ZERO) - left_target).length()
+    } else {
+        0.0
+    };
+    let stock_error = (contract.stock_contact - contract.shoulder_pocket).length();
+    let error = right_error.max(left_error).max(stock_error);
+    if !error.is_finite() {
+        return Err("rifle ReadyHold IK produced non-finite contact error".to_owned());
+    }
+    Ok(Some(error))
 }
 
 fn build_helper_mirror_pairs(skeleton: &ModelSkeletonMetadata) -> Vec<(usize, usize)> {
@@ -1285,6 +1686,165 @@ fn synchronize_helper_pose(pairs: &[(usize, usize)], pose: &mut [JointLocalPose]
         if helper_index < pose.len() && primary_index < pose.len() {
             pose[helper_index] = pose[primary_index];
         }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+struct AbbyEyeRuntimeContract {
+    left: usize,
+    right: usize,
+    parent: usize,
+}
+
+fn build_abby_eye_runtime_contract(
+    skeleton: &ModelSkeletonMetadata,
+) -> Option<AbbyEyeRuntimeContract> {
+    let left = skeleton
+        .joints
+        .iter()
+        .position(|joint| joint.name == "l_eyeball")?;
+    let right = skeleton
+        .joints
+        .iter()
+        .position(|joint| joint.name == "r_eyeball")?;
+    let parent = skeleton.joints.get(left)?.parent_index? as usize;
+    if skeleton
+        .joints
+        .get(right)?
+        .parent_index
+        .map(|value| value as usize)
+        != Some(parent)
+        || skeleton.joints.get(parent)?.name != "headb"
+    {
+        return None;
+    }
+    Some(AbbyEyeRuntimeContract {
+        left,
+        right,
+        parent,
+    })
+}
+
+fn stabilize_abby_eye_locals(
+    contract: Option<&AbbyEyeRuntimeContract>,
+    skeleton: &ModelSkeletonMetadata,
+    pose: &mut [JointLocalPose],
+) -> Result<(), String> {
+    let Some(contract) = contract else {
+        return Ok(());
+    };
+    for index in [contract.left, contract.right] {
+        let joint = skeleton
+            .joints
+            .get(index)
+            .ok_or_else(|| format!("Abby eye joint outside skeleton index={index}"))?;
+        let dst = pose
+            .get_mut(index)
+            .ok_or_else(|| format!("Abby eye joint outside sampled pose index={index}"))?;
+        *dst = JointLocalPose {
+            translation: joint.position_ls,
+            rotation: joint.rotation_ls,
+            scale: Some(joint.scale_ls),
+        };
+    }
+    Ok(())
+}
+
+#[inline]
+fn matrix_max_abs_delta(a: Mat4, b: Mat4) -> f32 {
+    a.to_cols_array()
+        .into_iter()
+        .zip(b.to_cols_array())
+        .map(|(a, b)| (a - b).abs())
+        .fold(0.0_f32, f32::max)
+}
+
+fn validate_abby_eye_palette(
+    contract: Option<&AbbyEyeRuntimeContract>,
+    palette: &[Mat4],
+) -> Result<(), String> {
+    let Some(contract) = contract else {
+        return Ok(());
+    };
+    let parent = *palette
+        .get(contract.parent)
+        .ok_or_else(|| "Abby eye parent outside skin palette".to_owned())?;
+    for (side, index) in [("left", contract.left), ("right", contract.right)] {
+        let eye = *palette
+            .get(index)
+            .ok_or_else(|| format!("Abby {side} eye outside skin palette index={index}"))?;
+        let drift = matrix_max_abs_delta(eye, parent);
+        // With authored bind-local eyes, A_eye=A_parent*Lbind and B_eye=B_parent*Lbind,
+        // therefore A_eye*inverse(B_eye) must reduce to the exact parent deformation.
+        if !drift.is_finite() || drift > 5.0e-4 {
+            return Err(format!(
+                "Abby {side} eye palette drift violates animated_global*inverse_bind contract index={index} parent={} max_abs_delta={drift:.8}",
+                contract.parent
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn debug_dump_abby_eye_matrices(
+    contract: Option<&AbbyEyeRuntimeContract>,
+    bind_joint_frames: &[Mat4],
+    current_locals: &[JointLocalPose],
+    palette: &[Mat4],
+    context: &str,
+) {
+    let Some(contract) = contract else {
+        return;
+    };
+    if std::env::var_os("NORTHSTAR_DEBUG_ABBY_EYES").is_none() {
+        return;
+    }
+    let Some(parent_bind_global) = bind_joint_frames.get(contract.parent).copied() else {
+        return;
+    };
+    let Some(parent_palette) = palette.get(contract.parent).copied() else {
+        return;
+    };
+    let parent_global = parent_palette * parent_bind_global;
+    for (side, index) in [("left", contract.left), ("right", contract.right)] {
+        let (Some(bind_global), Some(local), Some(palette_matrix)) = (
+            bind_joint_frames.get(index).copied(),
+            current_locals.get(index),
+            palette.get(index).copied(),
+        ) else {
+            continue;
+        };
+        let scale = local.scale.unwrap_or([1.0, 1.0, 1.0]);
+        let animated_local = Mat4::from_scale_rotation_translation(
+            Vec3::new(scale[0], scale[1], scale[2]),
+            Quat::from_xyzw(
+                local.rotation[0],
+                local.rotation[1],
+                local.rotation[2],
+                local.rotation[3],
+            )
+            .normalize_or_identity(),
+            Vec3::new(
+                local.translation[0],
+                local.translation[1],
+                local.translation[2],
+            ),
+        );
+        let animated_global = palette_matrix * bind_global;
+        newengine_ulog_api::ulog::info!(
+            "ABBY_EYE_MATRIX context='{}' side={} joint={} parent={} bind_global={:?} parent_global={:?} animated_local={:?} animated_global={:?} palette_matrix={:?} parent_palette={:?} palette_parent_drift={:.8}",
+            context,
+            side,
+            index,
+            contract.parent,
+            bind_global,
+            parent_global,
+            animated_local,
+            animated_global,
+            palette_matrix,
+            parent_palette,
+            matrix_max_abs_delta(palette_matrix, parent_palette),
+        );
     }
 }
 
@@ -1748,6 +2308,7 @@ pub(super) fn prepare_player_animation_binding(
         .expect("idle clip was inserted above");
     let helper_mirror_pairs = build_helper_mirror_pairs(skeleton);
     let head_follow = build_detached_head_follow(skeleton);
+    let eye_contract = build_abby_eye_runtime_contract(skeleton);
     let bind_locals = skeleton
         .joints
         .iter()
@@ -1768,6 +2329,7 @@ pub(super) fn prepare_player_animation_binding(
     idle.clip
         .sample_local_pose_for_skeleton(0.0, skeleton, &mut current_locals)?;
     synchronize_helper_pose(&helper_mirror_pairs, &mut current_locals);
+    stabilize_abby_eye_locals(eye_contract.as_ref(), skeleton, &mut current_locals)?;
     let mut palette_scratch = Vec::with_capacity(skeleton.joints.len());
     build_skin_palette_from_local_pose(
         skeleton,
@@ -1776,6 +2338,14 @@ pub(super) fn prepare_player_animation_binding(
         &mut palette_scratch,
     )?;
     apply_detached_head_follow_palette(head_follow.as_ref(), &mut palette_scratch)?;
+    validate_abby_eye_palette(eye_contract.as_ref(), &palette_scratch)?;
+    debug_dump_abby_eye_matrices(
+        eye_contract.as_ref(),
+        &bind_joint_frames,
+        &current_locals,
+        &palette_scratch,
+        "initial",
+    );
     let braid_soft_body =
         prepare_abby_braid_soft_body(assignment, parts, skeleton, &bind_joint_frames)?;
     let normalized_assignment_source = assignment
@@ -1783,9 +2353,9 @@ pub(super) fn prepare_player_animation_binding(
         .trim()
         .replace('\\', "/")
         .to_ascii_lowercase();
-    let equipped_rifle_basepose = if normalized_assignment_source.contains("/characters/abby/")
-        || normalized_assignment_source.contains("@abby")
-    {
+    let is_abby = normalized_assignment_source.contains("/characters/abby/")
+        || normalized_assignment_source.contains("@abby");
+    let equipped_rifle_basepose = if is_abby {
         Some(load_runtime_animation_clip(
             ABBY_RIFLE_BASEPOSE_REF,
             assignment,
@@ -1794,6 +2364,16 @@ pub(super) fn prepare_player_animation_binding(
     } else {
         None
     };
+    let equipped_rifle_reload = if is_abby {
+        Some(load_runtime_animation_clip(
+            ABBY_RIFLE_RELOAD_REF,
+            assignment,
+            skeleton,
+        )?)
+    } else {
+        None
+    };
+    let rifle_ik = build_abby_rifle_ik_rig(skeleton);
     if let Some(braid) = braid_soft_body.as_ref() {
         newengine_ulog_api::ulog::info!(
             "game-ready: Abby braid soft-body ready mode='{}' particles={} body_collision='8 authored capsules + torso OBB + swept CCD' palette_policy='native joints stay inside skeleton palette'",
@@ -1818,6 +2398,14 @@ pub(super) fn prepare_player_animation_binding(
             rig.face_followers.len(),
         );
     }
+    if let Some(eyes) = eye_contract.as_ref() {
+        newengine_ulog_api::ulog::info!(
+            "game-ready: Abby native eye contract left={} right={} parent={} policy='body locomotion keeps authored eye-local bind; eye palette must equal headb deformation until EyeLookController owns eye-local rotation'",
+            eyes.left,
+            eyes.right,
+            eyes.parent,
+        );
+    }
 
     Ok(Some(PlayerAnimationRuntimeBinding {
         clips,
@@ -1833,11 +2421,54 @@ pub(super) fn prepare_player_animation_binding(
         bind_joint_frames,
         joint_frames_scratch,
         helper_mirror_pairs,
+        eye_contract,
         head_follow,
         braid_soft_body,
         equipped_rifle_basepose,
+        equipped_rifle_reload,
         equipment_overlay_locals: bind_locals,
+        rifle_ik,
     }))
+}
+
+/// Current gameplay view direction converted into avatar/model-local space. Full-body first
+/// person and explicit third-person aim use this for both rendered rifle and arm IK, so the weapon
+/// and visible hands cannot diverge from the gameplay view axis.
+pub(crate) fn player_rifle_view_forward_model(
+    world: &newengine_ecs::World,
+    player: EntityId,
+) -> Option<Vec3> {
+    let visual_root = world
+        .get::<newengine_engine_runtime::gameplay::PlayerModelBinding>(player)?
+        .visual_root
+        .filter(|entity| world.exists(*entity))?;
+    let (_, visual_rotation) =
+        newengine_transform::read_entity_world_pose_local_chain(world, visual_root)?;
+
+    let active_camera = world
+        .resource::<newengine_scene::SceneState>()
+        .and_then(|state| state.active_camera.or(state.root));
+    let camera_rot_offset = active_camera
+        .and_then(|camera| world.get::<newengine_sim::FollowTargetCameraController>(camera))
+        .filter(|controller| controller.target == player)
+        .map(|controller| controller.rot_offset)
+        .unwrap_or(Quat::IDENTITY)
+        .normalize_or_identity();
+    let view_rotation = world
+        .get::<newengine_sim::CharacterMotor>(player)
+        .map(|motor| {
+            (Quat::from_euler(EulerRot::YXZ, motor.yaw, motor.pitch, 0.0) * camera_rot_offset)
+                .normalize_or_identity()
+        })
+        .or_else(|| {
+            active_camera
+                .and_then(|camera| world.get::<newengine_sim::CameraRigComp>(camera))
+                .map(|rig| rig.0.rotation.normalize_or_identity())
+        })?;
+    let forward_ws = (view_rotation * -Vec3::Z).normalize_or_zero();
+    let forward_model = visual_rotation.normalize_or_identity().inverse() * forward_ws;
+    (forward_model.is_finite() && forward_model.length_squared() > 1.0e-8)
+        .then_some(forward_model.normalize())
 }
 
 fn player_prop_frame(
@@ -1865,41 +2496,170 @@ fn player_prop_frame(
     None
 }
 
-/// Current authored right-hand weapon socket in player-model local space.
+const MAX_PROP_SOCKET_TO_HAND_DISTANCE: f32 = 0.12;
+
+fn stable_hand_grip_frame(
+    world: &newengine_ecs::World,
+    player: EntityId,
+    prop_candidates: &[&str],
+    physical_candidates: &[&str],
+) -> Option<Mat4> {
+    let physical = player_prop_frame(world, player, physical_candidates)?;
+    let Some(prop) = player_prop_frame(world, player, prop_candidates) else {
+        return Some(physical);
+    };
+    let prop_position = prop.transform_point3(Vec3::ZERO);
+    let physical_position = physical.transform_point3(Vec3::ZERO);
+    let delta = prop_position - physical_position;
+    if delta.is_finite() && delta.length_squared() <= MAX_PROP_SOCKET_TO_HAND_DISTANCE.powi(2) {
+        Some(prop)
+    } else {
+        // Naughty Dog prop-attachment joints can be animation/constraint targets rather than
+        // literal palm centers. A stale target may move far away from the hand; never drag an
+        // equipped weapon there. Fall back to the animated palm/wrist frame.
+        Some(physical)
+    }
+}
+
+/// Physical right-hand master frame for held weapons. Constraint/prop targets are forbidden.
+pub(crate) fn player_right_hand_weapon_frame(
+    world: &newengine_ecs::World,
+    player: EntityId,
+) -> Option<Mat4> {
+    player_prop_frame(
+        world,
+        player,
+        &["r_palm", "r_wrist", "DEF-hand.R", "hand.R"],
+    )
+}
+
+/// Physical left-hand frame used for support diagnostics. Weapon transform never depends on it.
+pub(crate) fn player_left_hand_weapon_frame(
+    world: &newengine_ecs::World,
+    player: EntityId,
+) -> Option<Mat4> {
+    player_prop_frame(
+        world,
+        player,
+        &["l_palm", "l_wrist", "DEF-hand.L", "hand.L"],
+    )
+}
+
+/// Anatomical frames used by third-person rifle ReadyHold. The solve contract deliberately needs
+/// both shoulders: Naughty Dog `spined` axes are not body-forward/body-up, so a stable body frame
+/// is reconstructed from the shoulder line instead of trusting the spine joint basis.
+pub(crate) fn player_rifle_ready_body_frames(
+    world: &newengine_ecs::World,
+    player: EntityId,
+) -> Option<(Mat4, Mat4, Mat4)> {
+    let chest = player_prop_frame(
+        world,
+        player,
+        &["spined", "DEF-spine.003", "spine_fk.003", "DEF-spine.004"],
+    )?;
+    let right_shoulder = player_prop_frame(
+        world,
+        player,
+        &["r_shoulder", "DEF-upper_arm.R", "upper_arm.R"],
+    )?;
+    let left_shoulder = player_prop_frame(
+        world,
+        player,
+        &["l_shoulder", "DEF-upper_arm.L", "upper_arm.L"],
+    )?;
+    Some((chest, right_shoulder, left_shoulder))
+}
+
+/// Stable right-hand weapon grip in player-model local space.
 pub(crate) fn player_right_hand_prop_frame(
     world: &newengine_ecs::World,
     player: EntityId,
 ) -> Option<Mat4> {
-    player_prop_frame(
+    stable_hand_grip_frame(
         world,
         player,
-        &[
-            "r_hand_prop_attachment",
-            "r_hand_prop",
-            "r_wrist",
-            "DEF-hand.R",
-            "hand.R",
-        ],
+        &["r_hand_prop_attachment", "r_hand_prop"],
+        &["r_palm", "r_wrist", "DEF-hand.R", "hand.R"],
     )
 }
 
-/// Current authored left-hand support socket in player-model local space. Native Abby's rifle
-/// stance publishes `l_hand_prop_attachment`; fallback names keep imported rigs inspectable.
-pub(crate) fn player_left_hand_prop_frame(
-    world: &newengine_ecs::World,
-    player: EntityId,
-) -> Option<Mat4> {
-    player_prop_frame(
-        world,
-        player,
-        &[
-            "l_hand_prop_attachment",
-            "l_hand_prop",
-            "l_wrist",
-            "DEF-hand.L",
-            "hand.L",
-        ],
-    )
+pub(crate) fn publish_player_first_person_camera_anchors(world: &mut newengine_ecs::World) {
+    const EYE_FORWARD_CLEARANCE_M: f32 = 0.055;
+    let players = world
+        .query::<PlayerAnimationRuntimeBinding>()
+        .map(|(player, _)| player)
+        .collect::<Vec<_>>();
+
+    for player in players {
+        let eye_center_model = {
+            let Some(binding) = world.get::<PlayerAnimationRuntimeBinding>(player) else {
+                continue;
+            };
+            if let Some(eyes) = binding.eye_contract.as_ref() {
+                let frame_at = |index: usize| {
+                    binding
+                        .joint_frames_scratch
+                        .get(index)
+                        .copied()
+                        .or_else(|| binding.bind_joint_frames.get(index).copied())
+                };
+                match (frame_at(eyes.left), frame_at(eyes.right)) {
+                    (Some(left), Some(right)) => {
+                        let left = left.transform_point3(Vec3::ZERO);
+                        let right = right.transform_point3(Vec3::ZERO);
+                        ((left + right) * 0.5)
+                            .is_finite()
+                            .then_some((left + right) * 0.5)
+                    }
+                    _ => None,
+                }
+            } else {
+                let anchor = binding.skeleton.anchors.eye.as_str();
+                let frame = binding
+                    .skeleton
+                    .joints
+                    .iter()
+                    .position(|joint| joint.name == anchor)
+                    .and_then(|index| {
+                        binding
+                            .joint_frames_scratch
+                            .get(index)
+                            .copied()
+                            .or_else(|| binding.bind_joint_frames.get(index).copied())
+                    });
+                frame
+                    .map(|frame| frame.transform_point3(Vec3::ZERO))
+                    .filter(|position| position.is_finite())
+            }
+        };
+        let Some(eye_center_model) = eye_center_model else {
+            continue;
+        };
+        let Some(visual_root) = world
+            .get::<newengine_engine_runtime::gameplay::PlayerModelBinding>(player)
+            .and_then(|binding| binding.visual_root)
+            .filter(|entity| world.exists(*entity))
+        else {
+            continue;
+        };
+        let Some((visual_position, visual_rotation)) =
+            newengine_transform::read_entity_world_pose_local_chain(world, visual_root)
+        else {
+            continue;
+        };
+        let eye_center_ws =
+            visual_position + visual_rotation.normalize_or_identity() * eye_center_model;
+        if !eye_center_ws.is_finite() {
+            continue;
+        }
+        let _ = world.insert(
+            player,
+            newengine_engine_runtime::gameplay::PlayerFirstPersonCameraAnchor {
+                eye_center_ws,
+                forward_clearance: EYE_FORWARD_CLEARANCE_M,
+            },
+        );
+    }
 }
 
 pub(crate) fn tick_player_skin_animation(world: &mut newengine_ecs::World, dt: f32) {
@@ -1927,6 +2687,18 @@ pub(crate) fn tick_player_skin_animation(world: &mut newengine_ecs::World, dt: f
         let root_velocity_local = root_transform.rotation.inverse() * world_velocity;
         let root_position = root_transform.position;
         let root_rotation = root_transform.rotation;
+        let rifle_aim_alpha = super::equipment_visual::equipped_rifle_aim_alpha(world, player);
+        let rifle_recoil_alpha = super::equipment_visual::equipped_rifle_recoil_alpha(world, player);
+        let first_person_active = world
+            .resource::<newengine_engine_runtime::gameplay::PlayerViewState>()
+            .copied()
+            .unwrap_or_default()
+            .first_person_active;
+        let rifle_view_forward_model = if first_person_active || rifle_aim_alpha > 0.001 {
+            player_rifle_view_forward_model(world, player)
+        } else {
+            None
+        };
         let has_equipped_rifle = world
             .get::<newengine_engine_runtime::gameplay::EquippedWeaponBinding>(player)
             .and_then(|binding| {
@@ -1936,8 +2708,24 @@ pub(crate) fn tick_player_skin_animation(world: &mut newengine_ecs::World, dt: f
             })
             .and_then(|definition| definition.world.model_ref.as_deref())
             .is_some_and(|model_ref| {
-                model_ref.eq_ignore_ascii_case("models/weapon/rifle/rifle.ydd@rifle")
+                model_ref.eq_ignore_ascii_case(crate::weapon_grip::RIFLE_MODEL_REF)
             });
+        let rifle_reload_progress = if has_equipped_rifle {
+            world
+                .get::<newengine_engine_runtime::gameplay::PlayerWeaponState>(player)
+                .and_then(|state| {
+                    (state.reload_remaining > 0.0).then(|| {
+                        let duration = world
+                            .get::<newengine_engine_runtime::gameplay::HitscanWeaponTuning>(player)
+                            .map(|tuning| tuning.sanitized().reload_duration)
+                            .filter(|duration| *duration > 1.0e-4)
+                            .unwrap_or(2.0);
+                        (1.0 - state.reload_remaining / duration).clamp(0.0, 1.0)
+                    })
+                })
+        } else {
+            None
+        };
         let (palette, clip_ref, active_state) = {
             let Some(binding) = world.get_mut::<PlayerAnimationRuntimeBinding>(player) else {
                 continue;
@@ -2017,16 +2805,34 @@ pub(crate) fn tick_player_skin_animation(world: &mut newengine_ecs::World, dt: f
             }
 
             if has_equipped_rifle {
-                if let Err(error) = apply_equipped_rifle_arm_overlay(
-                    binding.equipped_rifle_basepose.as_ref(),
+                let (overlay, phase, weights, overlay_ref) = if let Some(progress) = rifle_reload_progress {
+                    (
+                        binding.equipped_rifle_reload.as_ref(),
+                        progress,
+                        ABBY_RIFLE_RELOAD_ROTATION_WEIGHTS,
+                        ABBY_RIFLE_RELOAD_REF,
+                    )
+                } else {
+                    (
+                        binding.equipped_rifle_basepose.as_ref(),
+                        ABBY_RIFLE_READY_SAMPLE_PHASE,
+                        ABBY_RIFLE_READY_ROTATION_WEIGHTS,
+                        ABBY_RIFLE_BASEPOSE_REF,
+                    )
+                };
+                if let Err(error) = apply_equipped_rifle_rotation_overlay(
+                    overlay,
                     &binding.skeleton,
                     &mut binding.equipment_overlay_locals,
                     &mut binding.sampled_target_locals,
+                    phase,
+                    weights,
                 ) {
                     newengine_ulog_api::ulog::warn!(
-                        "game-ready: Abby rifle arm overlay failed player={} ref='{}': {}",
+                        "game-ready: Abby rifle upper-body overlay failed player={} ref='{}' phase={:.3}: {}",
                         player.stable_u64(),
-                        ABBY_RIFLE_BASEPOSE_REF,
+                        overlay_ref,
+                        phase,
                         error,
                     );
                 }
@@ -2065,7 +2871,49 @@ pub(crate) fn tick_player_skin_animation(world: &mut newengine_ecs::World, dt: f
                     .clone_from(&binding.sampled_target_locals);
             }
 
+            if has_equipped_rifle {
+                match apply_equipped_rifle_support_ik(
+                    binding.rifle_ik.as_ref(),
+                    &binding.skeleton,
+                    binding.source_to_model,
+                    &mut binding.current_locals,
+                    &mut binding.joint_frames_scratch,
+                    rifle_view_forward_model,
+                    rifle_aim_alpha,
+                    rifle_recoil_alpha,
+                    rifle_reload_progress.is_none(),
+                ) {
+                    Ok(Some(error)) if error > 0.025 => {
+                        newengine_ulog_api::ulog::warn!(
+                            "game-ready: Abby rifle support IK residual player={} error_m={:.5}",
+                            player.stable_u64(),
+                            error,
+                        );
+                    }
+                    Ok(_) => {}
+                    Err(error) => {
+                        newengine_ulog_api::ulog::warn!(
+                            "game-ready: Abby rifle support IK failed player={}: {}",
+                            player.stable_u64(),
+                            error,
+                        );
+                    }
+                }
+            }
             synchronize_helper_pose(&binding.helper_mirror_pairs, &mut binding.current_locals);
+            if let Err(error) = stabilize_abby_eye_locals(
+                binding.eye_contract.as_ref(),
+                &binding.skeleton,
+                &mut binding.current_locals,
+            ) {
+                newengine_ulog_api::ulog::warn!(
+                    "game-ready: Abby eye-local stabilization failed player={} clip='{}': {}",
+                    player.stable_u64(),
+                    clip_ref,
+                    error
+                );
+                continue;
+            }
 
             if let Err(error) = build_skin_palette_from_local_pose(
                 &binding.skeleton,
@@ -2093,6 +2941,26 @@ pub(crate) fn tick_player_skin_animation(world: &mut newengine_ecs::World, dt: f
                     error
                 );
                 continue;
+            }
+            if let Err(error) =
+                validate_abby_eye_palette(binding.eye_contract.as_ref(), &binding.palette_scratch)
+            {
+                newengine_ulog_api::ulog::warn!(
+                    "game-ready: Abby eye palette rejected player={} clip='{}': {}",
+                    player.stable_u64(),
+                    clip_ref,
+                    error
+                );
+                continue;
+            }
+            if transitioned {
+                debug_dump_abby_eye_matrices(
+                    binding.eye_contract.as_ref(),
+                    &binding.bind_joint_frames,
+                    &binding.current_locals,
+                    &binding.palette_scratch,
+                    &format!("transition:{clip_ref}"),
+                );
             }
             binding.joint_frames_scratch.clear();
             binding
@@ -2185,12 +3053,156 @@ mod transition_tests {
     use super::*;
 
     #[test]
-    fn rifle_equipment_overlay_joint_allowlist_is_arm_only() {
-        assert!(ABBY_RIFLE_ARM_JOINTS.contains(&"r_hand_prop_attachment"));
-        assert!(ABBY_RIFLE_ARM_JOINTS.contains(&"l_wrist"));
-        assert!(!ABBY_RIFLE_ARM_JOINTS.contains(&"pelvis"));
-        assert!(!ABBY_RIFLE_ARM_JOINTS.contains(&"spinea"));
-        assert!(!ABBY_RIFLE_ARM_JOINTS.contains(&"headb"));
+    fn rifle_ready_pole_ik_converges_without_moving_stock_anchored_weapon() {
+        use newengine_model_skeleton_api::{ModelSkeletonAnchors, ModelSkeletonJointMetadata};
+
+        let names = [
+            "root",
+            "spined",
+            "r_shoulder",
+            "r_elbow",
+            "r_wrist",
+            "r_palm",
+            "l_shoulder",
+            "l_elbow",
+            "l_wrist",
+            "l_palm",
+        ];
+        let joint = |index: u32, parent_index: Option<u32>, position_ls: [f32; 3]| {
+            ModelSkeletonJointMetadata {
+                index,
+                tag: index,
+                name: names[index as usize].to_owned(),
+                parent: parent_index.map(|parent| names[parent as usize].to_owned()),
+                parent_index,
+                position_ls,
+                rotation_ls: [0.0, 0.0, 0.0, 1.0],
+                scale_ls: [1.0, 1.0, 1.0],
+                flags: Vec::new(),
+            }
+        };
+        let skeleton = ModelSkeletonMetadata {
+            source: "test".to_owned(),
+            source_format: "test".to_owned(),
+            container_magic: "TEST".to_owned(),
+            byte_len: 0,
+            content_hash: String::new(),
+            decode_status: "ok".to_owned(),
+            joints: vec![
+                joint(0, None, [0.0, 0.0, 0.0]),
+                joint(1, Some(0), [0.0, 1.285_745, 0.0]),
+                joint(2, Some(1), [-0.17, 0.06, 0.0]),
+                // Real Abby arm lengths are roughly 0.26 m upper arm and 0.25 m forearm/hand.
+                joint(3, Some(2), [0.0, -0.26, 0.0]),
+                joint(4, Some(3), [0.0, -0.24, 0.0]),
+                joint(5, Some(4), [0.0, -0.015, 0.0]),
+                joint(6, Some(1), [0.17, 0.06, 0.0]),
+                joint(7, Some(6), [0.0, -0.26, 0.0]),
+                joint(8, Some(7), [0.0, -0.24, 0.0]),
+                joint(9, Some(8), [0.0, -0.015, 0.0]),
+            ],
+            anchors: ModelSkeletonAnchors {
+                root: "root".to_owned(),
+                hips: "root".to_owned(),
+                head: "spined".to_owned(),
+                left_hand: "l_palm".to_owned(),
+                right_hand: "r_palm".to_owned(),
+                left_foot: "root".to_owned(),
+                right_foot: "root".to_owned(),
+                eye: "spined".to_owned(),
+                eye_height: 0.0,
+            },
+        };
+        let mut pose = skeleton
+            .joints
+            .iter()
+            .map(|joint| JointLocalPose {
+                translation: joint.position_ls,
+                rotation: joint.rotation_ls,
+                scale: Some(joint.scale_ls),
+            })
+            .collect::<Vec<_>>();
+        let rig = build_abby_rifle_ik_rig(&skeleton).expect("rifle IK rig");
+        let source_to_model = [
+            1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
+        ];
+        let mut frames = Vec::new();
+        rebuild_model_joint_frames(&skeleton, source_to_model, &pose, &mut frames)
+            .expect("initial frames");
+        let contract_before = crate::weapon_grip::rifle_ready_solve_contract(
+            frames[rig.chest],
+            frames[rig.right_shoulder],
+            frames[rig.left_shoulder],
+        )
+        .expect("ReadyHold solve contract");
+        let root_before = contract_before.root;
+        let right_target = crate::weapon_grip::rifle_ready_right_palm_position(root_before);
+        let left_target = crate::weapon_grip::rifle_ready_left_palm_position(root_before);
+        let initial_error = (
+            (frames[rig.right_palm].transform_point3(Vec3::ZERO) - right_target).length(),
+            (frames[rig.left_palm].transform_point3(Vec3::ZERO) - left_target).length(),
+        );
+
+        let final_error = apply_equipped_rifle_support_ik(
+            Some(&rig),
+            &skeleton,
+            source_to_model,
+            &mut pose,
+            &mut frames,
+            None,
+            0.0,
+            0.0,
+            true,
+        )
+        .expect("bilateral ReadyHold IK")
+        .expect("IK enabled");
+
+        let final_right =
+            (frames[rig.right_palm].transform_point3(Vec3::ZERO) - right_target).length();
+        let final_left =
+            (frames[rig.left_palm].transform_point3(Vec3::ZERO) - left_target).length();
+        assert!(
+            final_right < initial_error.0,
+            "right initial={} final={final_right}",
+            initial_error.0
+        );
+        assert!(
+            final_left < initial_error.1,
+            "left initial={} final={final_left}",
+            initial_error.1
+        );
+        assert!(final_error < 0.035, "final={final_error}");
+
+        let contract_after = crate::weapon_grip::rifle_ready_solve_contract(
+            frames[rig.chest],
+            frames[rig.right_shoulder],
+            frames[rig.left_shoulder],
+        )
+        .expect("ReadyHold solve contract after IK");
+        let root_after = contract_after.root;
+        assert!((root_before.position - root_after.position).length() < 1.0e-6);
+        assert!(root_before.rotation.dot(root_after.rotation).abs() > 0.999_999);
+        assert!((contract_after.stock_contact - contract_after.shoulder_pocket).length() < 1.0e-6);
+    }
+
+    #[test]
+    fn rifle_ready_overlay_is_rotation_only_upper_body_and_uses_stable_aim_phase() {
+        let names = ABBY_RIFLE_READY_ROTATION_WEIGHTS
+            .iter()
+            .map(|(name, _)| *name)
+            .collect::<Vec<_>>();
+        assert!(names.contains(&"spinec"));
+        assert!(names.contains(&"spined"));
+        assert!(names.contains(&"l_wrist"));
+        assert!(names.contains(&"r_palm"));
+        assert!(!names.contains(&"r_hand_prop_attachment"));
+        assert!(!names.contains(&"l_hand_prop"));
+        assert!(!names.contains(&"pelvis"));
+        assert!(!names.contains(&"spinea"));
+        assert!(!names.contains(&"headb"));
+        assert!((ABBY_RIFLE_READY_SAMPLE_PHASE - 0.48).abs() < 1.0e-6);
+        assert!(ABBY_RIFLE_BASEPOSE_REF.contains("rear-aim-00bw-aim"));
+        assert!(!ABBY_RIFLE_BASEPOSE_REF.contains("reload"));
     }
 
     #[test]
@@ -2218,6 +3230,31 @@ mod transition_tests {
         assert!((face.x - 0.2).abs() < 1.0e-5);
         assert!((face.y - 0.13).abs() < 1.0e-5);
         assert!((face.z + 0.3).abs() < 1.0e-5);
+    }
+
+    #[test]
+    fn native_abby_eye_palette_enforces_parent_deformation_invariant() {
+        let contract = AbbyEyeRuntimeContract {
+            parent: 0,
+            left: 1,
+            right: 2,
+        };
+        let head_delta = Mat4::from_scale_rotation_translation(
+            Vec3::new(1.0, 1.0, 1.0),
+            Quat::from_rotation_y(0.25),
+            Vec3::new(0.2, 0.1, -0.3),
+        );
+        let mut palette = vec![head_delta, head_delta, head_delta];
+        validate_abby_eye_palette(Some(&contract), &palette).expect("stable eyes");
+
+        palette[contract.left] = Mat4::from_scale_rotation_translation(
+            Vec3::new(1.0, 1.0, 1.0),
+            Quat::from_rotation_x(0.08),
+            Vec3::ZERO,
+        ) * palette[contract.left];
+        let error = validate_abby_eye_palette(Some(&contract), &palette)
+            .expect_err("extra eye deformation must be rejected");
+        assert!(error.contains("eye palette drift"));
     }
 
     fn test_braid_rig() -> AbbyBraidCollisionRig {

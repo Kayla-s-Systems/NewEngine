@@ -73,6 +73,14 @@ impl AssetAccess for AssetServiceClient {
         AssetServiceClient::raw_bytes_v1(self, logical_path)
     }
 
+    #[inline]
+    fn raw_range_v1(
+        &self,
+        request: &crate::AssetRawRangeRequest,
+    ) -> Result<crate::AssetRawRangeResponse, String> {
+        AssetServiceClient::raw_range_v1(self, request)
+    }
+
     fn blob_wire_v1(&self, id_hex32: &str) -> Result<(String, Vec<u8>), String> {
         // Contract payload: utf8 id_u128_hex32
         let bytes = self.call_raw(self.m_blob_wire_v1.clone(), id_hex32.as_bytes().to_vec())?;

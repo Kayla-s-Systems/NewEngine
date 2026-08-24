@@ -31,6 +31,8 @@ mod sky;
 mod terrain_heightmap;
 #[path = "game_ready_parts/terrain_streaming.rs"]
 mod terrain_streaming;
+#[path = "game_ready_parts/weapon_grip.rs"]
+mod weapon_grip;
 #[path = "game_ready_parts/world_model.rs"]
 mod world_model;
 #[path = "game_ready_parts/ytyp_metadata.rs"]
@@ -114,7 +116,7 @@ pub(crate) fn character_motion_from_fps_tuning(
 }
 
 use self::foliage::tick_deferred_foliage_prefabs;
-use self::mission::tick_deferred_item_pickups;
+use self::mission::{tick_deferred_item_pickups, tick_runtime_world_item_visuals};
 use self::sky::{tick_game_ready_sky_cycle, SkyVisualKind};
 use self::terrain_streaming::{tick_game_ready_streaming_terrain, TerrainSurfaceSampler};
 use self::world_model::tick_game_ready_static_world_prefabs;
@@ -158,6 +160,7 @@ pub fn tick_prelaunch(
     tick_game_ready_static_world_prefabs(world, primitives, materials, thread_pool);
     tick_deferred_foliage_prefabs(world, primitives, materials);
     tick_deferred_item_pickups(world, primitives, materials);
+    tick_runtime_world_item_visuals(world, primitives, materials);
 }
 
 /// Progress normal GameReady world streaming/environment work.
@@ -170,11 +173,14 @@ pub fn tick_frame(
 ) {
     player_model::tick_player_model_assignments(world, primitives, materials);
     player_model::tick_player_model_grounding(world);
+    equipment_visual::tick_equipped_weapon_presentation_input(world, frame.dt);
     player_model::tick_player_skin_animation(world, frame.dt);
-    equipment_visual::tick_equipped_weapon_visuals(world, primitives, materials);
+    player_model::publish_player_first_person_camera_anchors(world);
+    equipment_visual::tick_equipped_weapon_visuals(world, primitives, materials, frame.dt);
     tick_game_ready_static_world_prefabs(world, primitives, materials, thread_pool);
     tick_deferred_foliage_prefabs(world, primitives, materials);
     tick_deferred_item_pickups(world, primitives, materials);
+    tick_runtime_world_item_visuals(world, primitives, materials);
     if frame.runtime_active && frame.streaming_enabled {
         tick_game_ready_streaming_terrain(world, materials, thread_pool);
     }

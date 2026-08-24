@@ -43,18 +43,28 @@ fn u32_value(value: &serde_json::Value, object: &str, key: &str) -> Option<u32> 
 
 fn vec3(value: &serde_json::Value, object: &str, key: &str) -> Option<[f32; 3]> {
     let value = get(value, object, key)?;
-    let values = value.as_array()?;
-    if values.len() != 3 {
-        return None;
-    }
-    let mut out = [0.0; 3];
-    for (index, value) in values.iter().enumerate() {
-        out[index] = value.as_f64()? as f32;
-        if !out[index].is_finite() {
+    if let Some(values) = value.as_array() {
+        if values.len() != 3 {
             return None;
         }
+        let mut out = [0.0; 3];
+        for (index, value) in values.iter().enumerate() {
+            out[index] = value.as_f64()? as f32;
+            if !out[index].is_finite() {
+                return None;
+            }
+        }
+        return Some(out);
     }
-    Some(out)
+    let raw = value.as_str()?;
+    let values = raw
+        .split(',')
+        .map(str::trim)
+        .map(str::parse::<f32>)
+        .collect::<Result<Vec<_>, _>>()
+        .ok()?;
+    (values.len() == 3 && values.iter().all(|value| value.is_finite()))
+        .then(|| [values[0], values[1], values[2]])
 }
 
 pub(super) fn apply_weapon_ytyp_namespace(
@@ -65,8 +75,8 @@ pub(super) fn apply_weapon_ytyp_namespace(
         let mut weapon = authored.weapon.take().unwrap_or_default();
         weapon.ammo = string(namespace, "weapon", "ammo")
             .ok_or_else(|| format!("weapon YTYP '{}' has no ammo", authored.definition_ref))?;
-        weapon.fire_mode = string(namespace, "weapon", "fire_mode")
-            .unwrap_or_else(|| "semi_auto".to_owned());
+        weapon.fire_mode =
+            string(namespace, "weapon", "fire_mode").unwrap_or_else(|| "semi_auto".to_owned());
         if let Some(value) = u32_value(namespace, "weapon", "magazine_capacity") {
             weapon.magazine_capacity = value;
         }
@@ -105,6 +115,26 @@ pub(super) fn apply_weapon_ytyp_namespace(
             .fire_mode()
             .map_err(|error| format!("weapon YTYP '{}': {error}", authored.definition_ref))?;
         authored.weapon = Some(weapon);
+
+        let audio = AuthoredWeaponAudioDefinition {
+            fire: string(namespace, "audio", "fire").unwrap_or_default(),
+            reload_start: string(namespace, "audio", "reload_start").unwrap_or_default(),
+            reload_complete: string(namespace, "audio", "reload_complete").unwrap_or_default(),
+            equip: string(namespace, "audio", "equip").unwrap_or_default(),
+            unequip: string(namespace, "audio", "unequip").unwrap_or_default(),
+            empty: string(namespace, "audio", "empty").unwrap_or_default(),
+            shell_eject: string(namespace, "audio", "shell_eject").unwrap_or_default(),
+        };
+        let has_audio = !audio.fire.trim().is_empty()
+            || !audio.reload_start.trim().is_empty()
+            || !audio.reload_complete.trim().is_empty()
+            || !audio.equip.trim().is_empty()
+            || !audio.unequip.trim().is_empty()
+            || !audio.empty.trim().is_empty()
+            || !audio.shell_eject.trim().is_empty();
+        if has_audio {
+            authored.weapon_audio = Some(audio);
+        }
     }
 
     let mut world = authored.world.take().unwrap_or_default();
@@ -124,7 +154,7 @@ pub(super) fn apply_weapon_ytyp_namespace(
     Ok(())
 }
 
-pub(super) fn hydrate_item_package_from_ytyp(
+pub(crate) fn hydrate_item_package_from_ytyp(
     package: &mut AuthoredItemPackage,
 ) -> Result<usize, String> {
     let mut hydrated = 0usize;
@@ -200,6 +230,13 @@ mod tests {
                 "recoil_yaw_degrees": 0.3,
                 "muzzle_forward_offset": 0.51
             },
+            "audio": {
+                "fire": "shared/audio/weapon/test/fire.wav",
+                "reload_start": "shared/audio/weapon/test/reload.wav",
+                "equip": "shared/audio/weapon/test/equip.wav",
+                "empty": "shared/audio/weapon/test/empty.wav",
+                "shell_eject": "shared/audio/weapon/test/shell.wav"
+            },
             "world": {
                 "model": "models/weapon/test.ydd@test",
                 "material_library": "materials/test.nemat",
@@ -213,6 +250,10 @@ mod tests {
         assert_eq!(weapon.magazine_capacity, 32);
         assert!((weapon.reload_duration - 1.42).abs() < 1.0e-6);
         assert!((weapon.damage - 19.0).abs() < 1.0e-6);
+        let audio = item.weapon_audio.expect("weapon audio");
+        assert_eq!(audio.fire, "shared/audio/weapon/test/fire.wav");
+        assert_eq!(audio.reload_start, "shared/audio/weapon/test/reload.wav");
+        assert_eq!(audio.shell_eject, "shared/audio/weapon/test/shell.wav");
         let world = item.world.expect("world");
         assert_eq!(world.model, "models/weapon/test.ydd@test");
         assert_eq!(world.material_library, "materials/test.nemat");

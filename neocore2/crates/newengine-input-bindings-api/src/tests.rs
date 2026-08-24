@@ -68,3 +68,63 @@ fn display_labels_use_canonical_device_names() {
         "PAD SOUTH"
     );
 }
+
+struct PressedMouse(u32);
+
+impl InputFrameSource for PressedMouse {
+    fn is_key_down(&self, _key: u32) -> bool {
+        false
+    }
+    fn is_key_pressed(&self, _key: u32) -> bool {
+        false
+    }
+    fn is_key_released(&self, _key: u32) -> bool {
+        false
+    }
+    fn is_mouse_down(&self, button: u32) -> bool {
+        button == self.0
+    }
+    fn is_mouse_pressed(&self, button: u32) -> bool {
+        button == self.0
+    }
+    fn is_mouse_released(&self, _button: u32) -> bool {
+        false
+    }
+}
+
+#[test]
+fn profile_preserves_down_and_pressed_phases_for_same_action() {
+    let mut profile = InputBindingsProfile::empty("phase-regression");
+    profile
+        .register_action(InputActionDefinition::new("player.fire.primary"))
+        .unwrap();
+    profile
+        .register_binding(InputBindingRegistration::new(
+            InputBinding::mouse_button_down(
+                "player.fire.primary",
+                newengine_input_api::mouse_button::LEFT,
+            ),
+        ))
+        .unwrap();
+    profile
+        .register_binding(InputBindingRegistration::new(
+            InputBinding::mouse_button_pressed(
+                "player.fire.primary",
+                newengine_input_api::mouse_button::LEFT,
+            ),
+        ))
+        .unwrap();
+
+    let frame = profile.resolve(&PressedMouse(newengine_input_api::mouse_button::LEFT));
+    let commands = frame.command_actions();
+    assert!(commands.is_held("player.fire.primary"));
+    assert!(commands.is_pressed("player.fire.primary"));
+    assert_eq!(
+        frame
+            .actions
+            .iter()
+            .filter(|id| id.as_str() == "player.fire.primary")
+            .count(),
+        1
+    );
+}

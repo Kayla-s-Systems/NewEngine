@@ -10,6 +10,10 @@ pub use newengine_service_api::{BackendRouteDescriptor, BackendServiceSpec};
 pub const CAPABILITY_TAG_RETIRED: &str = "retired";
 pub const CAPABILITY_TAG_RENDER: &str = "render";
 pub const CAPABILITY_TAG_RUNTIME: &str = "runtime";
+/// Marks capabilities that enable live authoring/editing tooling.
+pub const CAPABILITY_TAG_EDITING: &str = "editing";
+/// Optional capability that makes editor/live-authoring tools available over the current runtime world.
+pub const CAPABILITY_ID_EDITING_TOOLS: &str = "engine.editing.tools";
 pub const CAPABILITY_ID_RENDER_DRAW_LIST_PROVIDER: &str = "render.draw_list_provider";
 pub const CAPABILITY_ID_RENDER_LIGHT_EXTRACTION_PROVIDER: &str = "render.light_extraction_provider";
 /// Optional importer that turns opaque SpeedTree .srt sources into engine runtime assets.

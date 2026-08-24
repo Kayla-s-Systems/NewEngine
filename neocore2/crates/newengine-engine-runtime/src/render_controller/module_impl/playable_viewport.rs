@@ -4,13 +4,13 @@ use newengine_core::host_events::CursorState;
 use newengine_core::physics::PhysicsApiRef;
 use newengine_core::render::{Extent2D, RenderApi};
 use newengine_core::{EngineResult, ModuleCtx};
-use newengine_runtime_session_api::{RuntimeSessionMode, RuntimeSessionState};
+use newengine_runtime_session_api::RuntimeSessionMode;
 use newengine_runtime_session_runtime::{
     begin_runtime_session_frame, record_runtime_session_ticks,
 };
 use newengine_ui_api::{
-    UiDrawCmd, UiDrawInvalidationState, UiDrawList, UiEditorRuntimeMode, UiInputCaptureState,
-    UiLayerDomain, UiLayerDrawPacketSet, UiRect, UiRuntimeDebugOverlayTelemetry, UiScreenProfile,
+    UiDrawCmd, UiDrawInvalidationState, UiDrawList, UiInputCaptureState, UiLayerDomain,
+    UiLayerDrawPacketSet, UiRect, UiRuntimeDebugOverlayTelemetry, UiScreenProfile,
     UiScreenProfileState, UiSurfaceNode, UiTexId, UiVertex, UiViewportSlot,
 };
 
@@ -45,7 +45,7 @@ impl RuntimeRenderController {
             scope.dt,
             self.frame.frame_index,
         );
-        let (editor_staging_preview, in_game_editor) =
+        let (live_editing_active, in_game_editor) =
             self.prepare_editor_interaction(ctx, &frame_input, scope);
 
         let external_ui_capture = ctx
@@ -82,7 +82,7 @@ impl RuntimeRenderController {
         // must not kill camera look, and a pointer/camera capture must not implicitly
         // disable locomotion. Only true modal/editor/session ownership gates both.
         let force_full_runtime_gate =
-            in_game_editor || editor_staging_preview || session_frame.paused || session_ejected;
+            in_game_editor || live_editing_active || session_frame.paused || session_ejected;
         let host_capture = InputCaptureState {
             sampling_alive: true,
             camera_navigation_gated: force_full_runtime_gate
@@ -106,8 +106,6 @@ impl RuntimeRenderController {
         // Selective input capture is not a simulation pause. Pausing on any capture made
         // transient hover/focus states freeze the world and made the camera appear locked.
         let pause_world = published_capture.modal
-            || in_game_editor
-            || editor_staging_preview
             || gameplay_capture.pause_simulation
             || (session_frame.paused && !session_frame.step_this_frame);
         let session_fixed_step_count = if session_frame.step_this_frame {
@@ -204,7 +202,7 @@ impl RuntimeRenderController {
         let scene_lock = self.bridges.scene.scene();
         let mut scene = scene_lock.write();
         let selected = self.bridges.scene.selection();
-        if editor_staging_preview {
+        if live_editing_active {
             let selection_radius = super::scene::selection_bounds_world(scene.world(), selected)
                 .map(|bounds| bounds.radius)
                 .unwrap_or(0.5);
@@ -323,7 +321,7 @@ impl RuntimeRenderController {
                 self.bridges.scene.set_selection(picked);
             }
         }
-        if editor_staging_preview {
+        if live_editing_active {
             let (scene_snapshot, inspector_snapshot) = self
                 .bridges
                 .scene

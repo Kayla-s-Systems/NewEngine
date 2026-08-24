@@ -25,6 +25,18 @@ pub(super) fn signed_unit(seed: u64) -> f32 {
     (value as f32 / 0x00ff_ffffu32 as f32) * 2.0 - 1.0
 }
 
+#[inline]
+fn player_view_pose(world: &World, player: EntityId) -> Option<(Vec3, Quat)> {
+    let (position, body_rotation) =
+        newengine_transform::read_entity_world_pose_local_chain(world, player)?;
+    let rotation = world
+        .get::<CharacterMotor>(player)
+        .map(|motor| Quat::from_euler(EulerRot::YXZ, motor.yaw, motor.pitch, 0.0))
+        .unwrap_or(body_rotation)
+        .normalize_or_identity();
+    Some((position, rotation))
+}
+
 pub(super) fn shot_origin_and_direction(
     world: &World,
     player: EntityId,
@@ -32,7 +44,7 @@ pub(super) fn shot_origin_and_direction(
     aiming: bool,
     shot_sequence: u64,
 ) -> Option<(Vec3, Vec3)> {
-    let transform = world.get::<Transform>(player).copied()?;
+    let (player_position, view_rotation) = player_view_pose(world, player)?;
     let eye_height = world
         .get::<PlayerStanceState>(player)
         .map(|stance| stance.current_eye_height)
@@ -42,12 +54,21 @@ pub(super) fn shot_origin_and_direction(
                 .tuning
                 .camera_eye_height
         });
-    let forward = (transform.rotation * Vec3::new(0.0, 0.0, -1.0)).normalize_or_zero();
-    let right = (transform.rotation * Vec3::X).normalize_or_zero();
-    let up = (transform.rotation * Vec3::Y).normalize_or_zero();
-    if forward.length_squared() <= 1.0e-8 {
+    let camera_forward = (view_rotation * -Vec3::Z).normalize_or_zero();
+    let right = (view_rotation * Vec3::X).normalize_or_zero();
+    let up = (view_rotation * Vec3::Y).normalize_or_zero();
+    if camera_forward.length_squared() <= 1.0e-8 {
         return None;
     }
+
+    // The equipped visual publishes the real barrel pose every presentation frame. Use its +Z
+    // axis as the ballistic origin/direction so hip fire and ADS visibly leave the barrel. The
+    // camera path remains a deterministic fallback for headless simulation and early startup.
+    let muzzle = world.get::<EquippedWeaponMuzzle>(player).copied();
+    let forward = muzzle
+        .map(|muzzle| muzzle.forward.normalize_or_zero())
+        .filter(|forward| forward.length_squared() > 1.0e-8)
+        .unwrap_or(camera_forward);
 
     let spread = if aiming {
         tuning.aim_spread_radians
@@ -58,7 +79,9 @@ pub(super) fn shot_origin_and_direction(
     let offset_x = signed_unit(shot_sequence ^ 0x9e37_79b9) * spread_scale;
     let offset_y = signed_unit(shot_sequence ^ 0x7f4a_7c15) * spread_scale;
     let direction = (forward + right * offset_x + up * offset_y).normalize_or_zero();
-    let origin = transform.position + Vec3::Y * eye_height + forward * tuning.muzzle_forward_offset;
+    let origin = muzzle
+        .map(|muzzle| muzzle.position + forward * 0.008)
+        .unwrap_or(player_position + Vec3::Y * eye_height + forward * tuning.muzzle_forward_offset);
     Some((origin, direction))
 }
 
@@ -67,7 +90,7 @@ pub(super) fn interaction_ray(
     player: EntityId,
     tuning: PlayerInteractionTuning,
 ) -> Option<(Vec3, Vec3)> {
-    let transform = world.get::<Transform>(player).copied()?;
+    let (player_position, view_rotation) = player_view_pose(world, player)?;
     let eye_height = world
         .get::<PlayerStanceState>(player)
         .map(|stance| stance.current_eye_height)
@@ -77,12 +100,12 @@ pub(super) fn interaction_ray(
                 .tuning
                 .camera_eye_height
         });
-    let direction = (transform.rotation * Vec3::new(0.0, 0.0, -1.0)).normalize_or_zero();
+    let direction = (view_rotation * -Vec3::Z).normalize_or_zero();
     if direction.length_squared() <= 1.0e-8 {
         return None;
     }
     Some((
-        transform.position + Vec3::Y * eye_height + direction * tuning.ray_origin_forward_offset,
+        player_position + Vec3::Y * eye_height + direction * tuning.ray_origin_forward_offset,
         direction,
     ))
 }

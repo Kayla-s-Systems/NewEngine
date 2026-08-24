@@ -1,13 +1,20 @@
 use std::{env, fs, path::PathBuf};
 
 use newengine_math::{Mat4, Quat, Vec3};
-use newengine_model_import_northstar::{decode_geometry_lod0, decode_skeleton, ImportedJoint, PakFile};
+use newengine_model_import_northstar::{
+    decode_geometry_lod0, decode_skeleton, ImportedJoint, PakFile,
+};
 
 fn local_matrix(j: &ImportedJoint) -> Mat4 {
     Mat4::from_scale_rotation_translation(
         Vec3::new(j.scale_ls[0], j.scale_ls[1], j.scale_ls[2]),
-        Quat::from_xyzw(j.rotation_ls[0], j.rotation_ls[1], j.rotation_ls[2], j.rotation_ls[3])
-            .normalize_or_identity(),
+        Quat::from_xyzw(
+            j.rotation_ls[0],
+            j.rotation_ls[1],
+            j.rotation_ls[2],
+            j.rotation_ls[3],
+        )
+        .normalize_or_identity(),
         Vec3::new(j.position_ls[0], j.position_ls[1], j.position_ls[2]),
     )
 }
@@ -50,6 +57,11 @@ struct GroupStats {
     iris_count: usize,
     iris_min: Vec3,
     iris_max: Vec3,
+    uv_sum: [f64; 2],
+    pos_sum: [f64; 2],
+    pos_axis_sq: [f64; 2],
+    uv_axis_sq: [f64; 2],
+    pos_uv_cross: [f64; 2],
 }
 
 impl GroupStats {
@@ -68,6 +80,20 @@ impl GroupStats {
         self.sum += position;
         self.min = self.min.min(position);
         self.max = self.max.max(position);
+        let x = position.x as f64;
+        let y = position.y as f64;
+        let u = uv[0] as f64;
+        let v = uv[1] as f64;
+        self.uv_sum[0] += u;
+        self.uv_sum[1] += v;
+        self.pos_sum[0] += x;
+        self.pos_sum[1] += y;
+        self.pos_axis_sq[0] += x * x;
+        self.pos_axis_sq[1] += y * y;
+        self.uv_axis_sq[0] += u * u;
+        self.uv_axis_sq[1] += v * v;
+        self.pos_uv_cross[0] += x * u;
+        self.pos_uv_cross[1] += y * v;
         let du = uv[0] - 0.5;
         let dv = uv[1] - 0.5;
         let d2 = du * du + dv * dv;
@@ -87,8 +113,28 @@ impl GroupStats {
             return;
         }
         let mean = self.sum / self.count as f32;
-        let center_uv = (self.uv_center_count > 0)
-            .then(|| self.uv_center_sum / self.uv_center_count as f32);
+        let center_uv =
+            (self.uv_center_count > 0).then(|| self.uv_center_sum / self.uv_center_count as f32);
+        let n = self.count as f64;
+        let mean_x = self.pos_sum[0] / n;
+        let mean_y = self.pos_sum[1] / n;
+        let mean_u = self.uv_sum[0] / n;
+        let mean_v = self.uv_sum[1] / n;
+        let cov_xu = self.pos_uv_cross[0] / n - mean_x * mean_u;
+        let cov_yv = self.pos_uv_cross[1] / n - mean_y * mean_v;
+        let var_x = (self.pos_axis_sq[0] / n - mean_x * mean_x).max(0.0);
+        let var_y = (self.pos_axis_sq[1] / n - mean_y * mean_y).max(0.0);
+        let var_u = (self.uv_axis_sq[0] / n - mean_u * mean_u).max(0.0);
+        let var_v = (self.uv_axis_sq[1] / n - mean_v * mean_v).max(0.0);
+        let corr_xu = cov_xu / (var_x * var_u).sqrt().max(1.0e-12);
+        let corr_yv = cov_yv / (var_y * var_v).sqrt().max(1.0e-12);
+        println!(
+            "EYE_UV_ORIENTATION side={} corr_position_x_uv_u={:.6} corr_position_y_uv_v={:.6} v_flipped={}",
+            label,
+            corr_xu,
+            corr_yv,
+            corr_yv < 0.0,
+        );
         println!(
             "EYE_GEOMETRY side={} vertices={} min={:?} max={:?} mean={:?} joint_center={:?} mean_minus_joint={:?} uv_center_vertices={} uv_center_mean={:?} uv_center_minus_joint={:?}",
             label,
@@ -115,7 +161,10 @@ impl GroupStats {
 
 fn main() -> Result<(), String> {
     let mut args = env::args().skip(1);
-    let skeleton_path = PathBuf::from(args.next().ok_or("usage: diagnose_abby_eyes SKELETON.pak GEOMETRY.pak...")?);
+    let skeleton_path = PathBuf::from(
+        args.next()
+            .ok_or("usage: diagnose_abby_eyes SKELETON.pak GEOMETRY.pak...")?,
+    );
     let package_paths = args.map(PathBuf::from).collect::<Vec<_>>();
     if package_paths.is_empty() {
         return Err("at least one geometry PAK is required".to_owned());
@@ -141,9 +190,15 @@ fn main() -> Result<(), String> {
     for index in [left_eye, right_eye] {
         let j = &skeleton.joints[index];
         let center = globals[index].transform_point3(Vec3::ZERO);
-        let forward_x = globals[index].transform_vector3(Vec3::X).normalize_or_zero();
-        let forward_y = globals[index].transform_vector3(Vec3::Y).normalize_or_zero();
-        let forward_z = globals[index].transform_vector3(Vec3::Z).normalize_or_zero();
+        let forward_x = globals[index]
+            .transform_vector3(Vec3::X)
+            .normalize_or_zero();
+        let forward_y = globals[index]
+            .transform_vector3(Vec3::Y)
+            .normalize_or_zero();
+        let forward_z = globals[index]
+            .transform_vector3(Vec3::Z)
+            .normalize_or_zero();
         println!(
             "EYE_BIND index={} name={} parent={:?} parent_name={:?} T={:?} Q={:?} S={:?} global_center={:?} axes[X={:?} Y={:?} Z={:?}]",
             index,
@@ -160,14 +215,18 @@ fn main() -> Result<(), String> {
         );
     }
     for (index, joint) in skeleton.joints.iter().enumerate().take(12) {
-        println!("BIND_CHAIN index={} name={} parent={:?}", index, joint.name, joint.parent_index);
+        println!(
+            "BIND_CHAIN index={} name={} parent={:?}",
+            index, joint.name, joint.parent_index
+        );
     }
 
     let left_center = globals[left_eye].transform_point3(Vec3::ZERO);
     let right_center = globals[right_eye].transform_point3(Vec3::ZERO);
     let mut global_mesh_index = 0usize;
     for path in package_paths {
-        let bytes = fs::read(&path).map_err(|e| format!("failed to read {}: {e}", path.display()))?;
+        let bytes =
+            fs::read(&path).map_err(|e| format!("failed to read {}: {e}", path.display()))?;
         let pak = PakFile::parse(bytes)?;
         let decoded = decode_geometry_lod0(&pak)?;
         println!("PACKAGE {} meshes={}", path.display(), decoded.meshes.len());
@@ -186,7 +245,11 @@ fn main() -> Result<(), String> {
                 }
             }
             let span = [uv_max[0] - uv_min[0], uv_max[1] - uv_min[1]];
-            let uv_aspect = if span[1].abs() > 1.0e-8 { span[0] / span[1] } else { f32::INFINITY };
+            let uv_aspect = if span[1].abs() > 1.0e-8 {
+                span[0] / span[1]
+            } else {
+                f32::INFINITY
+            };
             let mut left_dominant = 0usize;
             let mut right_dominant = 0usize;
             let mut eye_weighted = 0usize;
@@ -202,10 +265,16 @@ fn main() -> Result<(), String> {
                         .chain(sv.joints_extra.iter())
                         .zip(sv.weights.iter().chain(sv.weights_extra.iter()))
                     {
-                        if joint as usize == left_eye { lw += weight; }
-                        if joint as usize == right_eye { rw += weight; }
+                        if joint as usize == left_eye {
+                            lw += weight;
+                        }
+                        if joint as usize == right_eye {
+                            rw += weight;
+                        }
                     }
-                    if lw + rw > 0.001 { eye_weighted += 1; }
+                    if lw + rw > 0.001 {
+                        eye_weighted += 1;
+                    }
                     let v = &mesh.vertices[vertex_index];
                     let p = Vec3::new(v.position[0], v.position[1], v.position[2]);
                     if lw > 0.5 {

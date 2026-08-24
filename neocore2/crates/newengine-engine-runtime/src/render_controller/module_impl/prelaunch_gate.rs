@@ -4,10 +4,7 @@ use newengine_core::render::{
 };
 use newengine_core::{EngineResult, ModuleCtx};
 use newengine_math::collections::FxHashMap;
-use newengine_runtime_session_api::{RuntimeSessionMode, RuntimeSessionState};
-use newengine_ui_api::{
-    UiDrawList, UiEditorRuntimeMode, UiLayerDrawPacketSet, UiScreenProfile, UiScreenProfileState,
-};
+use newengine_ui_api::{UiDrawList, UiLayerDrawPacketSet};
 
 use super::super::controller::RuntimeRenderController;
 use super::frame_envelope_builder::build_ui_layer_frame_envelope;
@@ -28,10 +25,6 @@ impl RuntimeRenderController {
         let next_frame = self.frame.frame_index.saturating_add(1).max(1);
         let mut prelaunch_gate = None;
         let mut prelaunch_released = false;
-        let mut editor_preview_ready = false;
-        let editor_runtime_mode = editor_runtime_mode(ctx);
-        let editor_preview_blocks_auto_play =
-            editor_runtime_mode == Some(UiEditorRuntimeMode::Edit);
 
         self.bridges.scene.apply_commands();
         {
@@ -152,16 +145,8 @@ impl RuntimeRenderController {
                     .resource_mut::<crate::gameplay::WorldActivationState>()
                 {
                     if world_playable && !gate.is_active() {
-                        if editor_preview_blocks_auto_play {
-                            gate.mark_preview_ready(
-                                next_frame,
-                                "editor preview ready; simulation stopped until Simulate or Play",
-                            );
-                            editor_preview_ready = true;
-                        } else {
-                            gate.mark_active();
-                            prelaunch_released = true;
-                        }
+                        gate.mark_active();
+                        prelaunch_released = true;
                     }
                     prelaunch_gate = Some(gate.clone());
                 }
@@ -171,15 +156,6 @@ impl RuntimeRenderController {
         let Some(gate) = prelaunch_gate else {
             return Ok(None);
         };
-
-        if editor_preview_ready {
-            newengine_ulog_api::ulog::info!(
-                "editor launch gate: preview ready frame={} mode='edit' reason='{}'; simulation remains stopped and loading overlay is released",
-                next_frame,
-                gate.reason
-            );
-            return Ok(Some(SceneLaunchStatus::inactive()));
-        }
 
         self.frame.frame_index = next_frame;
         self.sync_cursor_state(ctx, CursorState::released());
@@ -399,28 +375,6 @@ fn loading_screen_work_budget(base: Option<RenderWorkBudget>) -> RenderWorkBudge
         6.0
     };
     budget
-}
-
-fn editor_runtime_mode<E: Send + 'static>(ctx: &ModuleCtx<'_, E>) -> Option<UiEditorRuntimeMode> {
-    let screen_profile = ctx
-        .resources()
-        .get::<UiScreenProfileState>()
-        .map(|state| state.descriptor.profile)
-        .unwrap_or_default();
-    if screen_profile != UiScreenProfile::Editor {
-        return None;
-    }
-    Some(
-        match ctx
-            .resources()
-            .get::<RuntimeSessionState>()
-            .and_then(|state| state.mode)
-        {
-            Some(RuntimeSessionMode::Simulate) => UiEditorRuntimeMode::Simulate,
-            Some(RuntimeSessionMode::Play) => UiEditorRuntimeMode::Play,
-            None => UiEditorRuntimeMode::Edit,
-        },
-    )
 }
 
 #[cfg(test)]

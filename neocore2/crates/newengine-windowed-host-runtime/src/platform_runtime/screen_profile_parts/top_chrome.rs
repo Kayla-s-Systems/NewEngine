@@ -33,7 +33,6 @@ pub(super) fn push_top_chrome(
     runtime_mode: UiEditorRuntimeMode,
     runtime_paused: bool,
     runtime_possessed: bool,
-    runtime_diff_count: usize,
     command_registry: &EditorCommandRegistry,
     layout: &EditorLayoutMetrics,
     active_menu_id: Option<&str>,
@@ -314,7 +313,6 @@ pub(super) fn push_top_chrome(
             .max(8.0)
             .min((layout.screen_w - overflow_w - 8.0).max(8.0));
         let mut popup = UiComponentNode::row("editor.runtime_overflow", "Runtime")
-            .with_detail(format!("PIE authored changes: {runtime_diff_count}"))
             .with_tone(UiNodeTone::Accent)
             .with_prop("padding_px", serde_json::json!(4.0))
             .tagged("menu-popup")
@@ -339,36 +337,18 @@ pub(super) fn push_top_chrome(
                     .tagged("button"),
             );
         }
-        popup = popup
-            .with_child(
-                UiComponentNode::action(
-                    "editor.runtime_overflow.restart",
-                    "Restart Runtime",
-                    editor_command::RUNTIME_RESTART,
-                )
-                .tagged("button"),
+        popup = popup.with_child(
+            UiComponentNode::action(
+                "editor.runtime_overflow.restart",
+                "Restart Runtime",
+                editor_command::RUNTIME_RESTART,
             )
-            .with_child(
-                UiComponentNode::action(
-                    "editor.runtime_overflow.apply_changes",
-                    if runtime_diff_count == 0 {
-                        "Apply Changes & Stop".to_owned()
-                    } else {
-                        format!("Apply Changes & Stop ({runtime_diff_count})")
-                    },
-                    editor_command::RUNTIME_APPLY_CHANGES,
-                )
-                .tagged("button")
-                .tagged(if runtime_diff_count == 0 {
-                    "no-diff"
-                } else {
-                    "has-diff"
-                }),
-            );
+            .tagged("button"),
+        );
         let rows = if runtime_mode == UiEditorRuntimeMode::Play {
-            4.0
-        } else {
             3.0
+        } else {
+            2.0
         };
         out.push(with_rect(
             popup,

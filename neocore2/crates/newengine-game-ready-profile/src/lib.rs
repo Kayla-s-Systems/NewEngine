@@ -7,7 +7,6 @@ mod entity_archetypes;
 mod env_config;
 mod game_ready_fps;
 mod profile;
-mod project_editor;
 mod provider_routes;
 mod scene_bootstrap;
 mod validation;
@@ -29,18 +28,13 @@ pub use newengine_game_data::{
     GAME_READY_FPS_APP_NAME, GAME_READY_FPS_EARLY_LOG_FILE, GAME_READY_FPS_WINDOW_TITLE,
     GAME_READY_PROFILE_ENV,
 };
-pub use profile::{GameReadyRuntimeKind, GameReadyRuntimeProfile};
-pub use project_editor::{
-    launch_registered_project_editor_profile,
-    runtime_profile_registration as project_editor_runtime_profile_registration,
-    PROJECT_EDITOR_RUNTIME_PROFILE_ID,
-};
+pub use profile::GameReadyRuntimeProfile;
 
 pub const GAME_READY_RUNTIME_PROFILE_ID: &str = "newengine.runtime-profile.game-ready";
 
 /// Launches the generic GameReady runtime for a resolved game manifest.
 ///
-/// Editor may pass a project-owned `game.toml`; packaged game/server builds place the
+/// Development tooling may pass a project-owned `game.toml`; packaged game/server builds place the
 /// same game descriptor next to the runtime executable. Engine `runtime.toml` is not
 /// a game descriptor and is never parsed here.
 pub fn launch_game_ready_profile_with(
@@ -50,15 +44,10 @@ pub fn launch_game_ready_profile_with(
     let launch_id = std::env::var(newengine_project_api::PROJECT_LAUNCH_PRESET_ENV)
         .ok()
         .filter(|value| !value.trim().is_empty());
-    let game = newengine_project_runtime::load_project_from_request_with_launch(
+    newengine_project_runtime::load_project_from_request_with_launch(
         manifest_path,
         launch_id.as_deref(),
     )?;
-    if game.launch.profile == newengine_project_api::RuntimeLaunchProfile::Editor {
-        return Err(
-            "GameReady standalone runtime cannot select the editor launch profile".to_owned(),
-        );
-    }
     std::env::set_var(newengine_project_api::GAME_MANIFEST_ENV, manifest_path);
     std::env::remove_var("NEWENGINE_PROJECT");
     apply_game_ready_fps_env_policy();

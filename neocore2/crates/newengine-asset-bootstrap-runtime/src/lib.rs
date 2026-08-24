@@ -134,6 +134,13 @@ fn collect_content_set_roots(content: ContentSetSpec) -> Vec<PathBuf> {
 
 fn push_content_roots_from_base(roots: &mut Vec<PathBuf>, base: &Path, content: ContentSetSpec) {
     if content.include_shared_assets {
+        // Canonical cross-project compiled content. It is mounted under the
+        // `shared/` VFS namespace rather than leaking its physical location.
+        let shared_content = base.join("Shared").join("Content");
+        if shared_content.is_dir() {
+            roots.push(shared_content);
+        }
+        // Historical unnamespaced shared asset root retained for compatibility.
         let shared = base.join("assets");
         if shared.is_dir() {
             roots.push(shared);
@@ -217,6 +224,11 @@ pub fn collect_app_asset_roots(app_dir_name: &str, env_var: &str) -> Vec<PathBuf
 }
 
 fn push_asset_roots_from_base(roots: &mut Vec<PathBuf>, base: &Path, app_dir_name: &str) {
+    let shared_content = base.join("Shared").join("Content");
+    if shared_content.is_dir() {
+        roots.push(shared_content);
+    }
+
     let shared_assets = base.join("assets");
     if shared_assets.is_dir() {
         roots.push(shared_assets);
@@ -269,10 +281,11 @@ fn try_mount_with_policy(
     }
 
     let path_string = path.to_string_lossy().to_string();
+    let effective_mount = effective_mount_for_root(path, mount);
     if let Err(e) = assets.mount_source_json_v1(serde_json::json!({
         "kind": "filesystem",
         "priority": priority,
-        "mount": mount,
+        "mount": effective_mount,
         "asset_role": newengine_assets::asset_source_role::COMPILED,
         "config": { "root": path_string }
     })) {
@@ -282,6 +295,28 @@ fn try_mount_with_policy(
             path.display(),
             e
         );
+    }
+}
+
+fn is_shared_content_root(path: &Path) -> bool {
+    let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+        return false;
+    };
+    let Some(parent) = path
+        .parent()
+        .and_then(Path::file_name)
+        .and_then(|name| name.to_str())
+    else {
+        return false;
+    };
+    name.eq_ignore_ascii_case("Content") && parent.eq_ignore_ascii_case("Shared")
+}
+
+fn effective_mount_for_root<'a>(path: &Path, requested_mount: &'a str) -> &'a str {
+    if requested_mount.trim().is_empty() && is_shared_content_root(path) {
+        "shared"
+    } else {
+        requested_mount
     }
 }
 
@@ -375,4 +410,24 @@ pub fn shard_log_path_by_run_id(original: &str, run_id: &str) -> Option<String> 
             .map(|dir| dir.join(&new_file).to_string_lossy().to_string())
             .unwrap_or(new_file),
     )
+}
+
+#[cfg(test)]
+mod shared_content_mount_tests {
+    use super::*;
+
+    #[test]
+    fn canonical_shared_content_uses_shared_namespace() {
+        let root = Path::new(r"C:\repo\NorthStar\Shared\Content");
+        assert!(is_shared_content_root(root));
+        assert_eq!(effective_mount_for_root(root, ""), "shared");
+        assert_eq!(effective_mount_for_root(root, "custom"), "custom");
+    }
+
+    #[test]
+    fn ordinary_content_root_keeps_requested_mount() {
+        let root = Path::new(r"C:\repo\NorthStar\Engine\Content");
+        assert!(!is_shared_content_root(root));
+        assert_eq!(effective_mount_for_root(root, ""), "");
+    }
 }

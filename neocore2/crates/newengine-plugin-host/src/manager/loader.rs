@@ -133,13 +133,25 @@ impl PluginManager {
         let mut tm = LoadTimings::default();
 
         let t = Instant::now();
+        newengine_ulog_api::ulog::info!(
+            "plugins: load stage='dlopen-begin' path='{}'",
+            pretty_path.as_str()
+        );
         let lib = unsafe { Library::new(path) }.map_err(|e| PluginLoadError {
             path: path.to_path_buf(),
             message: format!("Library::new failed: {e}"),
         })?;
         tm.dlopen_ms = t.elapsed().as_millis();
+        newengine_ulog_api::ulog::info!(
+            "plugins: load stage='dlopen-done' path='{}'",
+            pretty_path.as_str()
+        );
 
         let t = Instant::now();
+        newengine_ulog_api::ulog::info!(
+            "plugins: load stage='root-symbol-begin' path='{}'",
+            pretty_path.as_str()
+        );
         let sym: libloading::Symbol<unsafe extern "C" fn() -> PluginRootV1Ref> =
             unsafe { lib.get(PLUGIN_ROOT_SYMBOL_BYTES_NUL) }.map_err(|e| {
                 let has_legacy_root = unsafe {
@@ -161,14 +173,39 @@ impl PluginManager {
                 }
             })?;
         tm.sym_ms = t.elapsed().as_millis();
+        newengine_ulog_api::ulog::info!(
+            "plugins: load stage='root-symbol-done' path='{}'",
+            pretty_path.as_str()
+        );
 
         let t = Instant::now();
+        newengine_ulog_api::ulog::info!(
+            "plugins: load stage='root-call-begin' path='{}'",
+            pretty_path.as_str()
+        );
         let root = unsafe { sym() };
+        newengine_ulog_api::ulog::info!(
+            "plugins: load stage='root-call-done' path='{}'",
+            pretty_path.as_str()
+        );
         let editor_extensions_v1 = root.editor_extensions_v1();
+        newengine_ulog_api::ulog::info!(
+            "plugins: load stage='ui-assets-done' path='{}'",
+            pretty_path.as_str()
+        );
         tm.root_ms = t.elapsed().as_millis();
 
         let t = Instant::now();
+        newengine_ulog_api::ulog::info!(
+            "plugins: load stage='module-create-begin' path='{}'",
+            pretty_path.as_str()
+        );
         let (mut module_any, info, descriptor, icon_small) = select_module(root);
+        newengine_ulog_api::ulog::info!(
+            "plugins: load stage='module-create-done' id='{}' path='{}'",
+            info.id,
+            pretty_path.as_str()
+        );
         tm.module_create_ms = t.elapsed().as_millis();
 
         let id_str = info.id.to_string();

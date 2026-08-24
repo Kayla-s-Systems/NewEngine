@@ -2,8 +2,8 @@ mod project_browser;
 mod runtime_profiles;
 
 pub use project_browser::{
-    default_projects_root, discover_game_projects, discover_projects, preferred_launch_id,
-    ProjectBrowserEntry, ProjectBrowserSelection,
+    default_projects_root, discover_game_projects, discover_projects, preferred_game_launch_id,
+    preferred_launch_id, ProjectBrowserEntry, ProjectBrowserSelection,
 };
 pub use runtime_profiles::{RuntimeProfileRegistration, RuntimeProfileRegistry};
 
@@ -19,8 +19,6 @@ use newengine_project_api::{
 
 pub const UI_SCREEN_PROFILE_ENV: &str =
     "NEWENGINE_PLUGIN_ENGINE_RUNTIME__ui__screen_profile__profile";
-pub const UI_PUBLISH_EDITOR_SHELL_ENV: &str =
-    "NEWENGINE_PLUGIN_ENGINE_RUNTIME__ui__screen_profile__publish_editor_shell";
 pub const UI_PRESENTATION_INITIAL_STATE_ENV: &str =
     "NEWENGINE_PLUGIN_ENGINE_RUNTIME__ui__screen_profile__presentation_flow__initial_state";
 
@@ -33,26 +31,18 @@ fn set_default_env(key: &str, value: &str) {
 pub fn apply_project_launch_profile_env(profile: RuntimeLaunchProfile) {
     set_default_env("NEWENGINE_LAUNCH_PROFILE", profile.id());
     match profile {
-        RuntimeLaunchProfile::Editor => {
-            set_default_env("NEWENGINE_HEADLESS", "0");
-            set_default_env(UI_SCREEN_PROFILE_ENV, "editor");
-            set_default_env(UI_PUBLISH_EDITOR_SHELL_ENV, "true");
-        }
         RuntimeLaunchProfile::Game => {
             set_default_env("NEWENGINE_HEADLESS", "0");
             set_default_env(UI_SCREEN_PROFILE_ENV, "game");
-            set_default_env(UI_PUBLISH_EDITOR_SHELL_ENV, "false");
         }
         RuntimeLaunchProfile::Server => {
             set_default_env("NEWENGINE_HEADLESS", "1");
             set_default_env(UI_SCREEN_PROFILE_ENV, "headless");
-            set_default_env(UI_PUBLISH_EDITOR_SHELL_ENV, "false");
             set_default_env("NEWENGINE_PLUGIN_TARGET", "runtime");
         }
         RuntimeLaunchProfile::Test => {
             set_default_env("NEWENGINE_HEADLESS", "1");
             set_default_env(UI_SCREEN_PROFILE_ENV, "headless");
-            set_default_env(UI_PUBLISH_EDITOR_SHELL_ENV, "false");
             set_default_env("NEWENGINE_HEADLESS_FRAMES", "1");
             set_default_env("NEWENGINE_PLUGIN_TARGET", "runtime");
         }

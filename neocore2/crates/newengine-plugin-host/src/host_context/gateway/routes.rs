@@ -239,6 +239,12 @@ where
         },
     );
 
+    // Never call logging or any gateway-resolving code while the provider-route mutex is held.
+    // Structured logging can itself dispatch through engine.logging, which rebuilds the active
+    // gateway registry and needs this same mutex. Keeping the guard alive here caused a
+    // deterministic self-deadlock for late providers such as engine.audio.
+    drop(gateways);
+
     bump_services_generation();
     newengine_ulog_api::ulog::info!(
         "gateways: registered provider route gateway='{}' service='{}' provider_route='{}' kind='{}' capability='{}' priority={} owner='{}' origin='{}'",

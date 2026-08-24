@@ -5,7 +5,6 @@ use crate::validation::ensure_optional_non_blank;
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RuntimeLaunchProfile {
-    Editor,
     #[default]
     Game,
     Server,
@@ -15,7 +14,6 @@ pub enum RuntimeLaunchProfile {
 impl RuntimeLaunchProfile {
     pub const fn id(self) -> &'static str {
         match self {
-            Self::Editor => "editor",
             Self::Game => "game",
             Self::Server => "server",
             Self::Test => "test",
@@ -24,7 +22,6 @@ impl RuntimeLaunchProfile {
 
     pub fn parse(value: &str) -> Option<Self> {
         match value.trim().to_ascii_lowercase().as_str() {
-            "editor" | "edit" => Some(Self::Editor),
             "game" | "play" => Some(Self::Game),
             "server" | "dedicated" | "headless" => Some(Self::Server),
             "test" | "smoke" => Some(Self::Test),

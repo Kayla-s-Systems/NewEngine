@@ -1,5 +1,14 @@
-use super::input::{editor_viewport_runtime_mode, is_game_screen_profile};
+use super::input::is_game_screen_profile;
 use super::*;
+
+#[inline]
+fn editing_tools_available<E: Send + 'static>(ctx: &ModuleCtx<'_, E>) -> bool {
+    ctx.resources()
+        .get::<newengine_plugin_host::PluginsSnapshot>()
+        .is_some_and(|snapshot| {
+            snapshot.has_running_capability(newengine_plugin_api::CAPABILITY_ID_EDITING_TOOLS)
+        })
+}
 
 impl RuntimeRenderController {
     pub(super) fn prepare_editor_interaction<E: Send + 'static>(
@@ -9,19 +18,23 @@ impl RuntimeRenderController {
         scope: RenderFrameScope,
     ) -> (bool, bool) {
         let game_profile = is_game_screen_profile(ctx);
-        if game_profile
+        let editing_tools_available = editing_tools_available(ctx);
+        if editing_tools_available
+            && game_profile
             && frame_input
                 .surface_input
                 .as_ref()
                 .is_some_and(|input| input.is_key_pressed(newengine_input_api::key_code::F2))
         {
             self.bridges.scene.toggle_in_game_editor();
-        } else if !game_profile && self.bridges.scene.in_game_editor_enabled() {
+        } else if (!editing_tools_available || !game_profile)
+            && self.bridges.scene.in_game_editor_enabled()
+        {
             self.bridges.scene.set_in_game_editor_enabled(false);
         }
 
-        let editor_staging_preview =
-            editor_viewport_runtime_mode(ctx) == Some(UiEditorRuntimeMode::Edit);
+        let live_editing_active =
+            editing_tools_available && game_profile && self.bridges.scene.in_game_editor_enabled();
         let editor_shift_additive = frame_input.surface_input.as_ref().is_some_and(|input| {
             input.is_key_down(newengine_input_api::key_code::SHIFT_LEFT)
                 || input.is_key_down(newengine_input_api::key_code::SHIFT_RIGHT)
@@ -31,17 +44,19 @@ impl RuntimeRenderController {
             .resources()
             .get::<newengine_ui_api::UiEventDispatchFrame>()
         {
-            if game_profile {
+            if editing_tools_available && game_profile {
                 let _ = self
                     .bridges
                     .scene
                     .apply_in_game_editor_actions(dispatch_frame);
             }
-            let _ = self
-                .bridges
-                .scene
-                .apply_editor_selection_actions(dispatch_frame, editor_shift_additive);
-            if editor_staging_preview {
+            if editing_tools_available {
+                let _ = self
+                    .bridges
+                    .scene
+                    .apply_editor_selection_actions(dispatch_frame, editor_shift_additive);
+            }
+            if live_editing_active {
                 let _ = self
                     .bridges
                     .scene
@@ -56,9 +71,9 @@ impl RuntimeRenderController {
                     .dispatch_actions(scene.world_mut(), dispatch_frame);
             }
         }
-        let in_game_editor = game_profile && self.bridges.scene.in_game_editor_enabled();
-        self.editor_viewport.set_active(editor_staging_preview);
-        if editor_staging_preview {
+        let in_game_editor = live_editing_active;
+        self.editor_viewport.set_active(live_editing_active);
+        if live_editing_active {
             self.editor_viewport.sync_state(
                 ctx.resources()
                     .get::<newengine_ui_api::UiEditorViewportState>()
@@ -104,7 +119,7 @@ impl RuntimeRenderController {
                 }
             }
         }
-        if editor_staging_preview {
+        if live_editing_active {
             if let Some(input) = frame_input.surface_input.as_ref() {
                 let text_input_active = !input.text.is_empty()
                     || !input.text_edit_ops.is_empty()
@@ -134,6 +149,6 @@ impl RuntimeRenderController {
                 (scope.vp_h.saturating_sub(1) as f32) * 0.5,
             );
         }
-        (editor_staging_preview, in_game_editor)
+        (live_editing_active, in_game_editor)
     }
 }

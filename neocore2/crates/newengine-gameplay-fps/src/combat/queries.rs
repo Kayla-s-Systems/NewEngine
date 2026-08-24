@@ -13,9 +13,10 @@ fn vec3_from_array(value: [f32; 3]) -> Vec3 {
 
 pub fn collect_combat_queries(world: &World) -> Vec<PhysicsQueryDto> {
     let mut queries = Vec::new();
-    for (_, pending) in world.query::<PendingHitscan>() {
+    for (entity, pending) in world.query::<PendingHitscan>() {
         queries.push(PhysicsQueryDto {
             seq: pending.query_seq,
+            ignore_entity: Some(entity.stable_u64()),
             kind: PhysicsQueryKindDto::Ray {
                 origin: vec3_to_array(pending.origin),
                 dir: vec3_to_array(pending.direction),
@@ -26,6 +27,7 @@ pub fn collect_combat_queries(world: &World) -> Vec<PhysicsQueryDto> {
     for (_, pending) in world.query::<PendingInteraction>() {
         queries.push(PhysicsQueryDto {
             seq: pending.query_seq,
+            ignore_entity: None,
             kind: PhysicsQueryKindDto::Ray {
                 origin: vec3_to_array(pending.origin),
                 dir: vec3_to_array(pending.direction),
@@ -59,6 +61,13 @@ pub fn resolve_combat_queries(
     for (shooter, pending) in pending_shots {
         consumed.insert(pending.query_seq);
         if let Some(hit) = hits.iter().find(|hit| hit.seq == pending.query_seq) {
+            let hit_point = vec3_from_array(hit.position);
+            crate::projectiles::clamp_weapon_shot_fx_to_hit(
+                world,
+                shooter,
+                pending.shot_sequence,
+                hit_point,
+            );
             let target = key_to_entity.get(&hit.entity).copied();
             let event = FpsPolicyEvent::Hit {
                 shooter: shooter.stable_u64(),

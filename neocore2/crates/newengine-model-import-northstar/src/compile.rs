@@ -226,6 +226,21 @@ fn validate_native_eye_contract(
     if skeleton.joints[left].parent_index != skeleton.joints[right].parent_index {
         return Err("native Abby eyeballs do not share the same authored parent".to_owned());
     }
+    let parent = skeleton.joints[left]
+        .parent_index
+        .ok_or_else(|| "native Abby eyeballs have no authored parent".to_owned())?
+        as usize;
+    let parent_name = skeleton
+        .joints
+        .get(parent)
+        .map(|joint| joint.name.as_str())
+        .ok_or_else(|| format!("native Abby eyeball parent outside skeleton index={parent}"))?;
+    if parent_name != "headb" {
+        return Err(format!(
+            "native Abby eyeballs must remain direct children of headb parent={} name='{}'",
+            parent, parent_name
+        ));
+    }
 
     let mut globals = vec![Mat4::IDENTITY; skeleton.joints.len()];
     for (index, joint) in skeleton.joints.iter().enumerate() {
@@ -238,7 +253,11 @@ fn validate_native_eye_contract(
                 joint.rotation_ls[3],
             )
             .normalize_or_identity(),
-            Vec3::new(joint.position_ls[0], joint.position_ls[1], joint.position_ls[2]),
+            Vec3::new(
+                joint.position_ls[0],
+                joint.position_ls[1],
+                joint.position_ls[2],
+            ),
         );
         globals[index] = joint
             .parent_index
@@ -247,7 +266,8 @@ fn validate_native_eye_contract(
     }
 
     let (left_scale, left_rotation, left_center) = globals[left].to_scale_rotation_translation();
-    let (right_scale, right_rotation, right_center) = globals[right].to_scale_rotation_translation();
+    let (right_scale, right_rotation, right_center) =
+        globals[right].to_scale_rotation_translation();
     if !left_scale.is_finite()
         || !right_scale.is_finite()
         || !left_rotation.is_finite()
@@ -258,7 +278,11 @@ fn validate_native_eye_contract(
         return Err("native Abby eye bind basis contains non-finite values".to_owned());
     }
     let scale_delta_vec = left_scale - right_scale;
-    let scale_delta = scale_delta_vec.x.abs().max(scale_delta_vec.y.abs()).max(scale_delta_vec.z.abs());
+    let scale_delta = scale_delta_vec
+        .x
+        .abs()
+        .max(scale_delta_vec.y.abs())
+        .max(scale_delta_vec.z.abs());
     let basis_dot = left_rotation
         .normalize_or_identity()
         .dot(right_rotation.normalize_or_identity())
@@ -266,6 +290,21 @@ fn validate_native_eye_contract(
     if scale_delta > 1.0e-4 || basis_dot < 0.9999 {
         return Err(format!(
             "native Abby eye bind bases diverge scale_delta={scale_delta:.8} rotation_dot={basis_dot:.8}"
+        ));
+    }
+    let canonical_basis_dot = left_rotation
+        .normalize_or_identity()
+        .dot(Quat::IDENTITY)
+        .abs()
+        .min(
+            right_rotation
+                .normalize_or_identity()
+                .dot(Quat::IDENTITY)
+                .abs(),
+        );
+    if canonical_basis_dot < 0.9999 {
+        return Err(format!(
+            "native Abby eye global basis no longer matches authored canonical XYZ basis rotation_dot={canonical_basis_dot:.8}"
         ));
     }
 
@@ -326,6 +365,13 @@ fn validate_native_eye_contract(
         return Err(format!(
             "native Abby eye UV0 collapsed/squashed u=[{:.6},{:.6}] v=[{:.6},{:.6}] span=[{:.6},{:.6}]",
             uv_min[0], uv_max[0], uv_min[1], uv_max[1], uv_span[0], uv_span[1]
+        ));
+    }
+    let uv_aspect = uv_span[0] / uv_span[1].max(1.0e-8);
+    if !(0.90..=1.10).contains(&uv_aspect) {
+        return Err(format!(
+            "native Abby eye UV0 anisotropy exceeds diagnostic contract aspect={uv_aspect:.6} span=[{:.6},{:.6}]",
+            uv_span[0], uv_span[1]
         ));
     }
     if max_non_eye_weight > 1.0e-3 {

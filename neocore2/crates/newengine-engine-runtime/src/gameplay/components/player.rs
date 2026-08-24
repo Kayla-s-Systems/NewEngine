@@ -510,6 +510,27 @@ impl Default for PlayerModelBinding {
     }
 }
 
+/// Provider-neutral first-person camera anchor published by the active avatar/runtime model.
+/// The position is the current animated eye center in world space. Camera orientation remains
+/// input-owned (CharacterMotor yaw/pitch); the anchor only supplies where the player's eyes are.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PlayerFirstPersonCameraAnchor {
+    pub eye_center_ws: Vec3,
+    /// Small clearance along the current camera-forward axis so the near plane sits just in front
+    /// of the face instead of inside eye/head geometry.
+    pub forward_clearance: f32,
+}
+
+impl Default for PlayerFirstPersonCameraAnchor {
+    #[inline]
+    fn default() -> Self {
+        Self {
+            eye_center_ws: Vec3::ZERO,
+            forward_clearance: 0.055,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum PlayerVisualKind {
     #[default]
@@ -557,8 +578,8 @@ pub struct PlayerSkinPose {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum PlayerViewVisibilityPolicy {
-    AlwaysVisible,
     #[default]
+    AlwaysVisible,
     HideInFirstPerson,
 }
 
@@ -568,12 +589,31 @@ pub struct PlayerViewVisibility {
     pub policy: PlayerViewVisibilityPolicy,
 }
 
+/// Presentation signal published by the camera gateway for systems that need to distinguish
+/// first-person view-model presentation from world/third-person attachment. This deliberately
+/// carries no camera implementation types across the gameplay boundary.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PlayerViewState {
+    pub first_person_active: bool,
+}
+
+impl Default for PlayerViewState {
+    #[inline]
+    fn default() -> Self {
+        // CameraViewMode defaults to FirstPerson, so startup presentation must agree before the
+        // first camera-gateway frame publishes an explicit state.
+        Self {
+            first_person_active: true,
+        }
+    }
+}
+
 impl PlayerViewVisibility {
     #[inline]
     pub const fn runtime_model_default() -> Self {
         Self {
             base_mode: DisplayMode::GameOnly,
-            policy: PlayerViewVisibilityPolicy::HideInFirstPerson,
+            policy: PlayerViewVisibilityPolicy::AlwaysVisible,
         }
     }
 

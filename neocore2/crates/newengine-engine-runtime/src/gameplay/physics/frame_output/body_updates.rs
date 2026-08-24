@@ -36,6 +36,12 @@ pub(super) fn apply_velocity_update(
         physics_velocity
     };
     let _ = world.insert(entity, Velocity(next));
+    if !is_directly_controlled_body(world, entity) {
+        let _ = world.insert(
+            entity,
+            AngularVelocity(arr_to_vec3(update.angular_velocity)),
+        );
+    }
 }
 
 #[inline]

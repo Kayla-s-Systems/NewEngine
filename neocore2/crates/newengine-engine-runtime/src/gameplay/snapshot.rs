@@ -1,3 +1,5 @@
+use crate::audio_scene::{AcousticSurface, AudioEmitter, AudioEnvironmentZone, AudioPortal};
+use newengine_audio_api::AudioAmbienceBed;
 use newengine_bounds::Bounds;
 use newengine_ecs::{Component, EntityId, World};
 use newengine_math::collections::FxHashSet;
@@ -23,6 +25,11 @@ use super::{
 pub struct RuntimeEntitySnapshot {
     pub entity: EntityId,
     pub transform: Option<Transform>,
+    pub audio_emitter: Option<AudioEmitter>,
+    pub acoustic_surface: Option<AcousticSurface>,
+    pub audio_environment_zone: Option<AudioEnvironmentZone>,
+    pub audio_portal: Option<AudioPortal>,
+    pub audio_ambience_bed: Option<AudioAmbienceBed>,
     pub velocity: Option<Velocity>,
     pub angular_velocity: Option<AngularVelocity>,
     pub motor_input: Option<MotorInput>,
@@ -71,6 +78,11 @@ pub fn capture_runtime_world_snapshot(world: &World) -> RuntimeWorldSnapshot {
         .map(|entity| RuntimeEntitySnapshot {
             entity,
             transform: world.get::<Transform>(entity).copied(),
+            audio_emitter: world.get::<AudioEmitter>(entity).cloned(),
+            acoustic_surface: world.get::<AcousticSurface>(entity).cloned(),
+            audio_environment_zone: world.get::<AudioEnvironmentZone>(entity).cloned(),
+            audio_portal: world.get::<AudioPortal>(entity).cloned(),
+            audio_ambience_bed: world.get::<AudioAmbienceBed>(entity).cloned(),
             velocity: world.get::<Velocity>(entity).copied(),
             angular_velocity: world.get::<AngularVelocity>(entity).copied(),
             motor_input: world.get::<MotorInput>(entity).copied(),
@@ -176,6 +188,14 @@ pub fn restore_runtime_world_snapshot(world: &mut World, snapshot: RuntimeWorldS
         }
 
         restore_component_opt(world, entry.entity, entry.transform);
+        restore_component_clone(world, entry.entity, entry.audio_emitter);
+        restore_component_clone(world, entry.entity, entry.acoustic_surface);
+        restore_component_clone(world, entry.entity, entry.audio_environment_zone);
+        restore_component_clone(world, entry.entity, entry.audio_portal);
+        restore_component_clone(world, entry.entity, entry.audio_ambience_bed);
+        let _ = world.remove::<crate::audio_ambience::AudioAmbienceBedRuntime>(entry.entity);
+        let _ = world.remove::<crate::audio_scene::AudioEmitterRuntime>(entry.entity);
+        let _ = world.remove::<crate::audio_occlusion::AudioOcclusionObservation>(entry.entity);
         restore_component_opt(world, entry.entity, entry.velocity);
         restore_component_opt(world, entry.entity, entry.angular_velocity);
         restore_component_opt(world, entry.entity, entry.motor_input);
@@ -244,6 +264,7 @@ mod tests {
             EquipmentSlot::Primary,
             HitscanWeaponTuning::default(),
             ammo.id,
+            crate::gameplay::WeaponFireMode::SemiAuto,
             1.0,
         )
         .expect("weapon");

@@ -48,11 +48,12 @@ pub(crate) fn breadcrumb_path_from_action(
     hit_breadcrumb_path(snapshot, local_x, 0.0, width)
 }
 
-pub(crate) fn is_editor_screen_profile(resources: &Resources) -> bool {
+pub(crate) fn editing_tools_available(resources: &Resources) -> bool {
     resources
-        .get::<UiScreenProfileState>()
-        .map(|state| state.descriptor.profile == UiScreenProfile::Editor)
-        .unwrap_or(false)
+        .get::<newengine_plugin_host::PluginsSnapshot>()
+        .is_some_and(|snapshot| {
+            snapshot.has_running_capability(newengine_plugin_api::CAPABILITY_ID_EDITING_TOOLS)
+        })
 }
 
 pub(crate) fn set_input_capture_contribution(

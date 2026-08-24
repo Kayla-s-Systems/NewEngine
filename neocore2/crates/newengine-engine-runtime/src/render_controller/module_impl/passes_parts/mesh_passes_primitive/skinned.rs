@@ -98,11 +98,20 @@ pub(crate) fn draw_skinned_player_primitives(
             .copied();
         let resolved = material_ref.and_then(|reference| mats.resolve(reference.id));
         let material_plan = LitMaterialPlan::from_resolved(resolved.as_ref(), prim.color);
-        let base_texture = this.material_texture_or_default(
-            r,
-            material_plan.base_color_texture,
-            lit.white_texture,
-        );
+        let base_texture = if let Some(path) = material_plan.base_color_texture {
+            let Some(texture) = this.material_texture_if_ready(r, path, "render.skinned_character")
+            else {
+                // A declared character albedo is semantic content, not an optional detail.
+                // Drawing it with the generic white texture turns skin/eyes into a grey PBR
+                // fallback and hides residency failures. Omit this part until the authored
+                // base texture is genuinely resident; neutral normal/roughness fallbacks are
+                // still safe below because they do not replace the character's color identity.
+                continue;
+            };
+            texture
+        } else {
+            lit.white_texture
+        };
         let normal_texture = this.material_texture_or_default(
             r,
             material_plan.normal_texture,

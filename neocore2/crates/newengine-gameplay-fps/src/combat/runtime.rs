@@ -12,6 +12,7 @@ pub fn step_player_combat(world: &mut World, dt: f32, _fixed_tick: u64) {
     } else {
         0.0
     };
+    crate::projectiles::step_weapon_shot_fx(world, dt);
     let players = world
         .query2_ids::<PlayerController, PlayerCommandFrame>()
         .collect::<Vec<_>>();
@@ -144,11 +145,51 @@ pub fn step_player_combat(world: &mut World, dt: f32, _fixed_tick: u64) {
                         damage: tuning.damage * combat_policy.damage_multiplier,
                     };
                     let _ = world.insert(player, pending);
+                    crate::projectiles::spawn_weapon_shot_fx(
+                        world,
+                        player,
+                        shot_sequence,
+                        origin,
+                        direction,
+                        tuning.range,
+                    );
+                    newengine_ulog_api::ulog::info!(
+                        "weapon fire: shooter={} shot={} ammo_after={} origin={:?} direction={:?} muzzle_published={} fx='muzzle_flash+point_light+tracer'",
+                        player.stable_u64(),
+                        shot_sequence,
+                        state.ammo_in_magazine,
+                        origin,
+                        direction,
+                        world.get::<EquippedWeaponMuzzle>(player).is_some(),
+                    );
                     apply_recoil(world, player, tuning, shot_sequence);
+                } else {
+                    newengine_ulog_api::ulog::warn!(
+                        "weapon fire rejected after ammo consume: shooter={} shot={} reason='unable to resolve shot origin/direction'",
+                        player.stable_u64(),
+                        shot_sequence,
+                    );
                 }
             }
 
             for event in events {
+                let action = match event.kind {
+                    WeaponEventKind::Fired => Some(WeaponAudioAction::Fire),
+                    WeaponEventKind::Empty => Some(WeaponAudioAction::Empty),
+                    WeaponEventKind::ReloadStarted => Some(WeaponAudioAction::ReloadStart),
+                    WeaponEventKind::ReloadCompleted => Some(WeaponAudioAction::ReloadComplete),
+                    WeaponEventKind::Hit => None,
+                };
+                if let Some(action) = action {
+                    play_equipped_weapon_audio(world, event.shooter, action);
+                    if event.kind == WeaponEventKind::Fired {
+                        play_equipped_weapon_audio(
+                            world,
+                            event.shooter,
+                            WeaponAudioAction::ShellEject,
+                        );
+                    }
+                }
                 emit_weapon_event(world, event);
             }
         } else {

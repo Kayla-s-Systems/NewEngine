@@ -58,8 +58,7 @@ where
         // alternative engine.host.capabilities route before the native fallback
         // is considered.
         newengine_plugin_host::init_host_context();
-        self.profile
-            .register_preinit_provider_routes_best_effort();
+        self.profile.register_preinit_provider_routes_best_effort();
 
         // Void Engine Host PreInit is deliberately before project/runtime composition.
         // OS/hardware discovery produces immutable DTOs and installs only generic

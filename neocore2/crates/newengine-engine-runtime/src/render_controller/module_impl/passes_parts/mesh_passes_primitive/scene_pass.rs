@@ -63,7 +63,18 @@ pub(super) fn draw_primitives_for_pass(
             .and_then(|sky| sky.definition_ref.as_deref())
             .unwrap_or("<none>");
         let mesh_render_options = primitive_mesh_render_options(world.get::<MeshRenderOptions>(id));
-        let draw_flags = primitive_draw_flags(&mesh_render_options);
+        let mut draw_flags = primitive_draw_flags(&mesh_render_options);
+        let equipped_weapon = world
+            .get::<crate::gameplay::PlayerVisualPart>(id)
+            .is_some_and(|part| part.kind == crate::gameplay::PlayerVisualKind::EquippedWeapon);
+        let authored_world_item = world
+            .get::<crate::gameplay::WorldItemVisualPart>(id)
+            .and_then(|part| world.get::<crate::gameplay::WorldItemPresentation>(part.owner))
+            .and_then(|presentation| presentation.model_ref.as_deref())
+            .is_some_and(|model_ref| !model_ref.trim().is_empty());
+        if equipped_weapon || authored_world_item {
+            draw_flags |= PRIMITIVE_DRAW_AUTHORED_BASE_REQUIRED;
+        }
         let follows_view = has_primitive_flag(draw_flags, PRIMITIVE_DRAW_FOLLOW_VIEW);
         let sky_role = has_primitive_flag(draw_flags, PRIMITIVE_DRAW_SKY_ROLE);
         let background_sky = has_primitive_flag(draw_flags, PRIMITIVE_DRAW_SKY_BACKGROUND);
@@ -214,6 +225,8 @@ pub(super) fn draw_primitives_for_pass(
         let sky_role = has_primitive_flag(draw_flags, PRIMITIVE_DRAW_SKY_ROLE);
         let background_sky = has_primitive_flag(draw_flags, PRIMITIVE_DRAW_SKY_BACKGROUND);
         let receive_shadows = has_primitive_flag(draw_flags, PRIMITIVE_DRAW_RECEIVE_SHADOWS);
+        let authored_pbr_required =
+            has_primitive_flag(draw_flags, PRIMITIVE_DRAW_AUTHORED_BASE_REQUIRED);
         let model = if follows_view {
             recenter_model_translation(model, camera_position)
         } else {
@@ -236,15 +249,24 @@ pub(super) fn draw_primitives_for_pass(
                 material_plan.emissive_radiance = runtime.emissive_params;
             }
 
+            if authored_pbr_required && material_plan.base_color_texture.is_none() {
+                // An authored weapon/world-item surface without its base texture is incomplete.
+                // Do not expose the generic white texture as a successful production material.
+                continue;
+            }
             let base_tex = if let Some(path) = material_plan.base_color_texture {
-                if foliage_role || material_plan.alpha_cutoff > 0.0 {
-                    let Some(texture) =
-                        this.material_texture_if_ready(r, path, "render.world_foliage")
+                if foliage_role || material_plan.alpha_cutoff > 0.0 || authored_pbr_required {
+                    let status_owner = if authored_pbr_required {
+                        "render.authored_pbr_object"
+                    } else {
+                        "render.world_foliage"
+                    };
+                    let Some(texture) = this.material_texture_if_ready(r, path, status_owner)
                     else {
-                        // Never expose the generic white fallback through leaf/grass
-                        // alpha cards. It turns transparent atlas texels into opaque
-                        // white geometry and makes foliage appear to bleach when a
-                        // camera turn reveals a batch before its texture is resident.
+                        // Never expose the generic white fallback through leaf/grass alpha
+                        // cards or an authored PBR object with authored albedo. For foliage it turns
+                        // transparent atlas texels opaque; for weapons/world items it produces a
+                        // conspicuous solid-white model while the real YTD is loading or failed.
                         continue;
                     };
                     texture
@@ -254,16 +276,48 @@ pub(super) fn draw_primitives_for_pass(
             } else {
                 lit.white_texture
             };
-            let normal_tex = this.material_texture_or_default(
-                r,
-                material_plan.normal_texture,
-                lit.flat_normal_texture,
-            );
-            let roughness_tex = this.material_texture_or_default(
-                r,
-                material_plan.roughness_texture,
-                lit.white_texture,
-            );
+            let normal_tex = if authored_pbr_required {
+                match material_plan.normal_texture {
+                    Some(path) => {
+                        let Some(texture) = this.material_texture_if_ready(
+                            r,
+                            path,
+                            "render.equipped_weapon.normal",
+                        ) else {
+                            continue;
+                        };
+                        texture
+                    }
+                    None => continue,
+                }
+            } else {
+                this.material_texture_or_default(
+                    r,
+                    material_plan.normal_texture,
+                    lit.flat_normal_texture,
+                )
+            };
+            let roughness_tex = if authored_pbr_required {
+                match material_plan.roughness_texture {
+                    Some(path) => {
+                        let Some(texture) = this.material_texture_if_ready(
+                            r,
+                            path,
+                            "render.equipped_weapon.roughness",
+                        ) else {
+                            continue;
+                        };
+                        texture
+                    }
+                    None => continue,
+                }
+            } else {
+                this.material_texture_or_default(
+                    r,
+                    material_plan.roughness_texture,
+                    lit.white_texture,
+                )
+            };
             let speedtree_authored_texture = material_plan
                 .base_color_texture
                 .map(|path| {

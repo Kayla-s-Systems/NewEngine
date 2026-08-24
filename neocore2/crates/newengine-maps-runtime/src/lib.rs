@@ -306,7 +306,6 @@ pub fn maps_gateway_service(
         .into_service_v1()
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

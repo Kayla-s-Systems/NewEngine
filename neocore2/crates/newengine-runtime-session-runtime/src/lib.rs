@@ -43,22 +43,6 @@ pub fn advance_runtime_session(resources: &mut Resources, frame_index: u64) -> R
         .expect("runtime session state installed");
     state.frame_index = frame_index;
 
-    if state.phase == RuntimeSessionPhase::Restoring
-        && frame_index > state.phase_frame_index
-        && commands.is_empty()
-    {
-        if let Some(mode) = state.pending_start_mode.take() {
-            start_session(
-                state,
-                frame_index,
-                mode,
-                "restart completed after restore frame",
-            );
-        } else {
-            enter_idle(state, frame_index, "restore completed");
-        }
-    }
-
     for command in commands {
         apply_command(state, frame_index, command);
     }
@@ -148,37 +132,26 @@ fn apply_command(
         }
         RuntimeSessionCommand::Restart => {
             if let Some(mode) = state.mode {
-                state.phase = RuntimeSessionPhase::Restoring;
-                state.phase_frame_index = frame_index;
-                state.paused = false;
-                state.step_budget = 0;
-                state.pending_start_mode = Some(mode);
-                state.mode = None;
-                state.last_reason =
-                    "runtime session restart requested; restore frame pending".to_owned();
+                start_session(
+                    state,
+                    frame_index,
+                    mode,
+                    "runtime session restarted in the live world",
+                );
             }
         }
         RuntimeSessionCommand::Eject => {
             if state.is_active() && state.mode == Some(RuntimeSessionMode::Play) {
                 state.control_mode = RuntimeSessionControlMode::Ejected;
                 state.last_reason =
-                    "player ejected from PIE possession; simulation continues".to_owned();
+                    "player ejected from live runtime possession; simulation continues".to_owned();
             }
         }
         RuntimeSessionCommand::Possess => {
             if state.is_active() && state.mode == Some(RuntimeSessionMode::Play) {
                 state.control_mode = RuntimeSessionControlMode::Possessed;
-                state.last_reason = "player possession restored in active PIE session".to_owned();
-            }
-        }
-        RuntimeSessionCommand::ApplyChangesAndStop => {
-            if state.is_active() {
-                enter_idle(
-                    state,
-                    frame_index,
-                    "runtime session stopped with apply-changes request",
-                );
-                state.apply_changes_requested = true;
+                state.last_reason =
+                    "player possession restored in active live runtime session".to_owned();
             }
         }
         RuntimeSessionCommand::Step { frames } => {
@@ -210,12 +183,10 @@ fn start_session(
     } else {
         RuntimeSessionControlMode::Ejected
     };
-    state.apply_changes_requested = false;
     state.frame_index = frame_index;
     state.phase_frame_index = frame_index;
     state.simulation_tick = 0;
     state.step_budget = 0;
-    state.pending_start_mode = None;
     state.last_reason = reason.to_owned();
 }
 
@@ -224,19 +195,10 @@ fn enter_idle(state: &mut RuntimeSessionState, frame_index: u64, reason: &str) {
     state.mode = None;
     state.paused = false;
     state.control_mode = RuntimeSessionControlMode::Possessed;
-    state.apply_changes_requested = false;
     state.frame_index = frame_index;
     state.phase_frame_index = frame_index;
     state.step_budget = 0;
-    state.pending_start_mode = None;
-    state.world_snapshot_id = None;
     state.last_reason = reason.to_owned();
-}
-
-pub fn acknowledge_apply_changes_request(resources: &mut Resources) {
-    if let Some(state) = resources.get_mut::<RuntimeSessionState>() {
-        state.apply_changes_requested = false;
-    }
 }
 
 #[cfg(test)]
@@ -280,70 +242,6 @@ mod tests {
         submit_runtime_session_command(&mut resources, 5, "test", RuntimeSessionCommand::Stop);
         assert!(!advance_runtime_session(&mut resources, 5).is_active());
     }
-
-    #[test]
-    fn restart_exposes_one_restore_frame_before_new_session() {
-        let mut resources = Resources::default();
-        submit_runtime_session_command(
-            &mut resources,
-            1,
-            "test",
-            RuntimeSessionCommand::Start {
-                mode: RuntimeSessionMode::Simulate,
-            },
-        );
-        let first = advance_runtime_session(&mut resources, 1);
-        submit_runtime_session_command(&mut resources, 2, "test", RuntimeSessionCommand::Restart);
-        let restoring = advance_runtime_session(&mut resources, 2);
-        assert_eq!(restoring.phase, RuntimeSessionPhase::Restoring);
-        assert_eq!(restoring.mode, None);
-        let restarted = advance_runtime_session(&mut resources, 3);
-        assert_eq!(restarted.mode, Some(RuntimeSessionMode::Simulate));
-        assert!(restarted.session_id.0 > first.session_id.0);
-    }
-
-    #[test]
-    fn eject_possess_and_apply_changes_keep_pie_semantics_explicit() {
-        let mut resources = Resources::default();
-        submit_runtime_session_command(
-            &mut resources,
-            1,
-            "test",
-            RuntimeSessionCommand::Start {
-                mode: RuntimeSessionMode::Play,
-            },
-        );
-        let playing = advance_runtime_session(&mut resources, 1);
-        assert!(playing.is_active());
-        assert!(playing.is_possessed());
-
-        submit_runtime_session_command(&mut resources, 2, "test", RuntimeSessionCommand::Eject);
-        let ejected = advance_runtime_session(&mut resources, 2);
-        assert!(ejected.is_active());
-        assert_eq!(ejected.mode, Some(RuntimeSessionMode::Play));
-        assert!(!ejected.is_possessed());
-
-        submit_runtime_session_command(&mut resources, 3, "test", RuntimeSessionCommand::Possess);
-        let possessed = advance_runtime_session(&mut resources, 3);
-        assert!(possessed.is_possessed());
-
-        submit_runtime_session_command(
-            &mut resources,
-            4,
-            "test",
-            RuntimeSessionCommand::ApplyChangesAndStop,
-        );
-        let stopped = advance_runtime_session(&mut resources, 4);
-        assert!(!stopped.is_active());
-        assert!(stopped.apply_changes_requested);
-        acknowledge_apply_changes_request(&mut resources);
-        assert!(
-            !resources
-                .get::<RuntimeSessionState>()
-                .expect("runtime session state")
-                .apply_changes_requested
-        );
-    }
 }
 
 pub const RUNTIME_SESSION_COMMAND_SERVICE_ID: &str = "engine.runtime.session.commands";
@@ -357,7 +255,6 @@ pub mod runtime_session_command_method {
     pub const RESTART: &str = "runtime_session.restart_v1";
     pub const EJECT: &str = "runtime_session.eject_v1";
     pub const POSSESS: &str = "runtime_session.possess_v1";
-    pub const APPLY_CHANGES_AND_STOP: &str = "runtime_session.apply_changes_and_stop_v1";
     pub const STEP: &str = "runtime_session.step_v1";
 }
 
@@ -406,21 +303,19 @@ impl newengine_plugin_api::ServiceV1 for RuntimeSessionCommandService {
                     { "name": method::RESTART, "payload": "empty" },
                     { "name": method::EJECT, "payload": "empty" },
                     { "name": method::POSSESS, "payload": "empty" },
-                    { "name": method::APPLY_CHANGES_AND_STOP, "payload": "empty" },
                     { "name": method::STEP, "payload": "utf8 optional frame count" }
                 ],
                 "console": {
                     "contract": "newengine.command-descriptor/v1",
                     "commands": [
-                        console_command("runtime.play", "Start Play In Editor/runtime play session", method::PLAY, "empty", "runtime.play"),
+                        console_command("runtime.play", "Start the live runtime play session", method::PLAY, "empty", "runtime.play"),
                         console_command("runtime.simulate", "Start simulation without player possession", method::SIMULATE, "empty", "runtime.simulate"),
                         console_command("runtime.pause", "Pause the active runtime session", method::PAUSE, "empty", "runtime.pause"),
                         console_command("runtime.resume", "Resume the active runtime session", method::RESUME, "empty", "runtime.resume"),
-                        console_command("runtime.stop", "Stop the runtime session and restore editor state", method::STOP, "empty", "runtime.stop"),
+                        console_command("runtime.stop", "Stop runtime control without replacing the live world", method::STOP, "empty", "runtime.stop"),
                         console_command("runtime.restart", "Restart the active runtime session", method::RESTART, "empty", "runtime.restart"),
-                        console_command("runtime.eject", "Eject editor camera while PIE keeps running", method::EJECT, "empty", "runtime.eject"),
-                        console_command("runtime.possess", "Return player possession to active PIE", method::POSSESS, "empty", "runtime.possess"),
-                        console_command("runtime.apply_changes", "Apply authored PIE world changes and stop", method::APPLY_CHANGES_AND_STOP, "empty", "runtime.apply_changes"),
+                        console_command("runtime.eject", "Eject player controls while the live world keeps running", method::EJECT, "empty", "runtime.eject"),
+                        console_command("runtime.possess", "Return player possession to the active live runtime", method::POSSESS, "empty", "runtime.possess"),
                         console_command("runtime.step", "Advance paused simulation by N fixed steps", method::STEP, "raw", "runtime.step [frames]")
                     ]
                 }
@@ -450,7 +345,6 @@ impl newengine_plugin_api::ServiceV1 for RuntimeSessionCommandService {
             m::RESTART => RuntimeSessionCommand::Restart,
             m::EJECT => RuntimeSessionCommand::Eject,
             m::POSSESS => RuntimeSessionCommand::Possess,
-            m::APPLY_CHANGES_AND_STOP => RuntimeSessionCommand::ApplyChangesAndStop,
             m::STEP => {
                 let raw = String::from_utf8_lossy(payload.as_slice());
                 let frames = if raw.trim().is_empty() {
@@ -513,48 +407,4 @@ pub fn init_runtime_session_command_service() {
     let dyn_service =
         newengine_plugin_api::ServiceV1Dyn::from_value(service, abi_stable::sabi_trait::TD_Opaque);
     let _ = newengine_plugin_host::host_register_service_impl(dyn_service);
-}
-
-#[cfg(test)]
-mod command_service_tests {
-    use super::*;
-    use newengine_plugin_api::ServiceV1;
-
-    #[test]
-    fn command_service_describes_console_commands_and_queues_step() {
-        let service = RuntimeSessionCommandService;
-        let description: serde_json::Value =
-            serde_json::from_str(service.describe().as_str()).expect("description json");
-        let commands = description["console"]["commands"]
-            .as_array()
-            .expect("console commands");
-        assert!(commands
-            .iter()
-            .any(|command| command["name"] == "runtime.step"));
-        assert!(commands
-            .iter()
-            .any(|command| command["name"] == "runtime.eject"));
-        assert!(commands
-            .iter()
-            .any(|command| command["name"] == "runtime.possess"));
-        assert!(commands
-            .iter()
-            .any(|command| command["name"] == "runtime.apply_changes"));
-        let methods = description["methods"].as_array().expect("methods");
-        for method in [
-            runtime_session_command_method::EJECT,
-            runtime_session_command_method::POSSESS,
-            runtime_session_command_method::APPLY_CHANGES_AND_STOP,
-        ] {
-            assert!(methods.iter().any(|row| row["name"] == method));
-        }
-
-        let result = service.call(
-            abi_stable::std_types::RString::from(runtime_session_command_method::STEP),
-            newengine_plugin_api::Blob::from(b"2".to_vec()),
-        );
-        assert!(result.is_ok());
-        let queued = drain_external_runtime_session_commands();
-        assert_eq!(queued, vec![RuntimeSessionCommand::Step { frames: 2 }]);
-    }
 }

@@ -784,7 +784,11 @@ mod tests {
             ([0.0f32, 0.0, 0.0], [0.0f32, 0.0, 0.0, 1.0]),
             ([1.0f32, 0.0, 0.0], [0.0f32, 0.0, 0.0, 1.0]),
         ] {
-            for value in translation.into_iter().chain(rotation).chain([1.0f32, 1.0, 1.0]) {
+            for value in translation
+                .into_iter()
+                .chain(rotation)
+                .chain([1.0f32, 1.0, 1.0])
+            {
                 out.extend_from_slice(&value.to_le_bytes());
             }
         }

@@ -106,6 +106,21 @@ pub(super) fn camera_runtime_service_config(
                 .unwrap_or(body.standing_eye_height);
         }
 
+        if matches!(active_view, CameraViewMode::FirstPerson) {
+            if let Some(anchor) = world
+                .get::<crate::gameplay::PlayerFirstPersonCameraAnchor>(player)
+                .copied()
+                .filter(|anchor| anchor.eye_center_ws.is_finite())
+            {
+                config.first_person_anchor_ws = Some(anchor.eye_center_ws);
+                config.first_person_forward_clearance = if anchor.forward_clearance.is_finite() {
+                    anchor.forward_clearance.clamp(0.0, 0.20)
+                } else {
+                    0.055
+                };
+            }
+        }
+
         // PlayerActor is the physics-capsule center, not the avatar's feet. A bound runtime
         // model has its own child visual_root (normally lowered by the capsule ground offset),
         // so deriving Orbit from CharacterBody::visual_half_height aims too high. Resolve the
@@ -509,7 +524,8 @@ pub(super) fn apply_runtime_input(
             service_config.runner,
             matches!(
                 service_config.runner,
-                newengine_camera_runtime::GameplayCameraRunnerKind::ThirdPersonAim
+                newengine_camera_runtime::GameplayCameraRunnerKind::FirstPerson
+                    | newengine_camera_runtime::GameplayCameraRunnerKind::ThirdPersonAim
             ),
         );
         emit_player_event(
@@ -555,10 +571,12 @@ pub(super) fn camera_nav_input(
 pub(super) fn apply_gameplay_view_lens(
     frame: CameraFrame,
     active_view: CameraViewMode,
+    first_person_aiming: bool,
 ) -> CameraFrame {
     let target_fov_y = match active_view {
-        // 68 degrees vertical is approximately 100 degrees horizontal at 16:9.
-        // It increases peripheral motion cues without becoming a distorted ultra-wide view.
+        // RMB/ADS narrows the lens while the view-model moves onto the sight line. Hip-fire keeps
+        // the wider ~100-degree horizontal presentation used by normal first-person traversal.
+        CameraViewMode::FirstPerson if first_person_aiming => 45.0_f32.to_radians(),
         CameraViewMode::FirstPerson => 68.0_f32.to_radians(),
         CameraViewMode::ThirdPersonFollow => 64.0_f32.to_radians(),
         CameraViewMode::ThirdPersonAim => 54.0_f32.to_radians(),

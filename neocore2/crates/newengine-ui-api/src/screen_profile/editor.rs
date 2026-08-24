@@ -12,9 +12,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum UiScreenProfile {
-    /// Full editor shell: viewport slot plus editor panels and diagnostics.
-    Editor,
-    /// Clean runtime presentation: game viewport plus game-authored UI roots only.
+    /// Runtime presentation. Editing tools, when installed, are plugin overlays on this same live world.
     Game,
     /// No visual presentation; useful for future server/test runners.
     Headless,
@@ -31,7 +29,6 @@ impl UiScreenProfile {
     #[inline]
     pub const fn id(self) -> &'static str {
         match self {
-            Self::Editor => "editor",
             Self::Game => "game",
             Self::Headless => "headless",
         }
@@ -40,7 +37,6 @@ impl UiScreenProfile {
     #[inline]
     pub fn parse(value: &str) -> Option<Self> {
         match value.trim().to_ascii_lowercase().as_str() {
-            "editor" | "editor_screen" | "editor-screen" => Some(Self::Editor),
             "game" | "game_screen" | "game-screen" | "runtime" => Some(Self::Game),
             "headless" | "server" | "none" => Some(Self::Headless),
             _ => None,

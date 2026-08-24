@@ -7,12 +7,12 @@ mod tests {
     use crate::{default_rifle_ammo_id, default_rifle_item_id};
     use newengine_engine_runtime::gameplay::{
         drain_interaction_events, drain_weapon_events, inventory_quantity, remove_item,
-        spawn_default_player, spawn_persistent_item_pickup, EquipmentSlot, EquippedWeaponBinding,
-        GameplayContentProvider, ItemCatalog, ItemDefinition, ItemId, ItemPickup, PlayerInventory,
-        PlayerStanceState, WeaponFireMode, select_equipment_slot,
+        select_equipment_slot, spawn_default_player, spawn_persistent_item_pickup, EquipmentSlot,
+        EquippedWeaponBinding, GameplayContentProvider, ItemCatalog, ItemDefinition, ItemId,
+        ItemPickup, PlayerInventory, PlayerStanceState, WeaponFireMode,
     };
-    use newengine_math::Quat;
     use newengine_gameplay_script_runtime::GameplayCommandExecutor;
+    use newengine_math::Quat;
     use newengine_physics_api::PhysicsQueryHitDto;
 
     fn spawn_fps_player(world: &mut World, name: &str, position: Vec3) -> EntityId {
@@ -61,8 +61,14 @@ mod tests {
         let _ = world.insert(shooter, HitscanWeaponTuning::default());
         let _ = world.insert(shooter, PlayerWeaponState::default());
         if let Some(commands) = world.get_mut::<PlayerCommandFrame>(shooter) {
-            commands.actions.pressed.push(fps_action::PLAYER_FIRE_PRIMARY.into());
-            commands.actions.held.push(fps_action::PLAYER_FIRE_PRIMARY.into());
+            commands
+                .actions
+                .pressed
+                .push(fps_action::PLAYER_FIRE_PRIMARY.into());
+            commands
+                .actions
+                .held
+                .push(fps_action::PLAYER_FIRE_PRIMARY.into());
         }
 
         step_player_combat(&mut world, 1.0 / 60.0, 1);
@@ -128,12 +134,18 @@ mod tests {
             },
         );
         if let Some(commands) = world.get_mut::<PlayerCommandFrame>(player) {
-            commands.actions.pressed.push(fps_action::PLAYER_RELOAD.into());
+            commands
+                .actions
+                .pressed
+                .push(fps_action::PLAYER_RELOAD.into());
         }
 
         step_player_combat(&mut world, 0.01, 1);
         if let Some(commands) = world.get_mut::<PlayerCommandFrame>(player) {
-            commands.actions.pressed.retain(|action| action != fps_action::PLAYER_RELOAD);
+            commands
+                .actions
+                .pressed
+                .retain(|action| action != fps_action::PLAYER_RELOAD);
         }
         step_player_combat(&mut world, 0.02, 2);
 
@@ -175,8 +187,14 @@ mod tests {
 
         if let Some(commands) = world.get_mut::<PlayerCommandFrame>(player) {
             commands.source_frame = 41;
-            commands.actions.pressed.push(fps_action::PLAYER_FIRE_PRIMARY.into());
-            commands.actions.held.push(fps_action::PLAYER_FIRE_PRIMARY.into());
+            commands
+                .actions
+                .pressed
+                .push(fps_action::PLAYER_FIRE_PRIMARY.into());
+            commands
+                .actions
+                .held
+                .push(fps_action::PLAYER_FIRE_PRIMARY.into());
         }
         step_player_combat(&mut world, 1.0 / 60.0, 20);
 
@@ -191,10 +209,7 @@ mod tests {
         assert!((pending.damage - UNARMED_MELEE_DAMAGE).abs() < 1.0e-6);
         assert_eq!(pending.shot_sequence, 1);
 
-        let map = BTreeMap::from([
-            (player.stable_u64(), player),
-            (target.stable_u64(), target),
-        ]);
+        let map = BTreeMap::from([(player.stable_u64(), player), (target.stable_u64(), target)]);
         resolve_combat_queries(
             &mut world,
             20,
@@ -227,11 +242,20 @@ mod tests {
         let mut world = World::new();
         let player = spawn_fps_player(&mut world, "semi-auto-player", Vec3::ZERO);
         if let Some(commands) = world.get_mut::<PlayerCommandFrame>(player) {
-            commands.actions.pressed.push(fps_action::PLAYER_FIRE_PRIMARY.into());
-            commands.actions.held.push(fps_action::PLAYER_FIRE_PRIMARY.into());
+            commands
+                .actions
+                .pressed
+                .push(fps_action::PLAYER_FIRE_PRIMARY.into());
+            commands
+                .actions
+                .held
+                .push(fps_action::PLAYER_FIRE_PRIMARY.into());
         }
         step_player_combat(&mut world, 1.0 / 60.0, 1);
-        let first = world.get::<PlayerWeaponState>(player).copied().expect("weapon state");
+        let first = world
+            .get::<PlayerWeaponState>(player)
+            .copied()
+            .expect("weapon state");
         assert_eq!(first.shot_sequence, 1);
 
         if let Some(commands) = world.get_mut::<PlayerCommandFrame>(player) {
@@ -241,14 +265,23 @@ mod tests {
         for tick in 2..24 {
             step_player_combat(&mut world, 1.0 / 60.0, tick);
         }
-        let held = world.get::<PlayerWeaponState>(player).copied().expect("weapon state");
+        let held = world
+            .get::<PlayerWeaponState>(player)
+            .copied()
+            .expect("weapon state");
         assert_eq!(held.shot_sequence, 1);
 
         if let Some(commands) = world.get_mut::<PlayerCommandFrame>(player) {
-            commands.actions.pressed.push(fps_action::PLAYER_FIRE_PRIMARY.into());
+            commands
+                .actions
+                .pressed
+                .push(fps_action::PLAYER_FIRE_PRIMARY.into());
         }
         step_player_combat(&mut world, 1.0 / 60.0, 24);
-        let second = world.get::<PlayerWeaponState>(player).copied().expect("weapon state");
+        let second = world
+            .get::<PlayerWeaponState>(player)
+            .copied()
+            .expect("weapon state");
         assert_eq!(second.shot_sequence, 2);
     }
 
@@ -275,19 +308,35 @@ mod tests {
             3.0,
         )
         .expect("weapon definition");
-        world.resource_mut::<ItemCatalog>().expect("catalog").register(weapon).expect("register auto weapon");
-        newengine_engine_runtime::gameplay::give_item(&mut world, player, weapon_id, 1).expect("give weapon");
-        newengine_engine_runtime::gameplay::give_item(&mut world, player, ammo, 30).expect("give ammo");
-        newengine_engine_runtime::gameplay::equip_first_item(&mut world, player, weapon_id).expect("equip auto weapon");
+        world
+            .resource_mut::<ItemCatalog>()
+            .expect("catalog")
+            .register(weapon)
+            .expect("register auto weapon");
+        newengine_engine_runtime::gameplay::give_item(&mut world, player, weapon_id, 1)
+            .expect("give weapon");
+        newengine_engine_runtime::gameplay::give_item(&mut world, player, ammo, 30)
+            .expect("give ammo");
+        newengine_engine_runtime::gameplay::equip_first_item(&mut world, player, weapon_id)
+            .expect("equip auto weapon");
 
         if let Some(commands) = world.get_mut::<PlayerCommandFrame>(player) {
-            commands.actions.held.push(fps_action::PLAYER_FIRE_PRIMARY.into());
+            commands
+                .actions
+                .held
+                .push(fps_action::PLAYER_FIRE_PRIMARY.into());
         }
         for tick in 1..=8 {
             step_player_combat(&mut world, 0.02, tick);
         }
-        let state = world.get::<PlayerWeaponState>(player).copied().expect("weapon state");
-        assert!(state.shot_sequence >= 4, "automatic trigger should repeat, state={state:?}");
+        let state = world
+            .get::<PlayerWeaponState>(player)
+            .copied()
+            .expect("weapon state");
+        assert!(
+            state.shot_sequence >= 4,
+            "automatic trigger should repeat, state={state:?}"
+        );
     }
 
     #[test]
@@ -296,27 +345,51 @@ mod tests {
         let player = spawn_fps_player(&mut world, "sidearm-reload-player", Vec3::ZERO);
         select_equipment_slot(&mut world, player, EquipmentSlot::Sidearm).expect("select sidearm");
         sync_equipped_weapon_runtime(&mut world, player);
-        let binding = world.get::<EquippedWeaponBinding>(player).copied().expect("sidearm binding");
+        let binding = world
+            .get::<EquippedWeaponBinding>(player)
+            .copied()
+            .expect("sidearm binding");
         assert_eq!(binding.slot, EquipmentSlot::Sidearm);
-        let tuning = world.get::<HitscanWeaponTuning>(player).copied().expect("sidearm tuning");
+        let tuning = world
+            .get::<HitscanWeaponTuning>(player)
+            .copied()
+            .expect("sidearm tuning");
         let reserve_before = inventory_quantity(&world, player, binding.ammo_item);
-        let _ = world.insert(player, PlayerWeaponState {
+        let empty_state = PlayerWeaponState {
             ammo_in_magazine: 0,
             reserve_ammo: reserve_before,
             ..PlayerWeaponState::loaded(tuning)
-        });
+        };
+        world
+            .get_mut::<PlayerInventory>(player)
+            .expect("player inventory")
+            .weapon_states
+            .insert(binding.instance_id, empty_state);
+        let _ = world.insert(player, empty_state);
         if let Some(commands) = world.get_mut::<PlayerCommandFrame>(player) {
-            commands.actions.pressed.push(fps_action::PLAYER_RELOAD.into());
+            commands
+                .actions
+                .pressed
+                .push(fps_action::PLAYER_RELOAD.into());
         }
         step_player_combat(&mut world, 0.01, 1);
         if let Some(commands) = world.get_mut::<PlayerCommandFrame>(player) {
             commands.actions.pressed.clear();
         }
-        step_player_combat(&mut world, tuning.reload_duration + 0.01, 2);
-        let state = world.get::<PlayerWeaponState>(player).copied().expect("weapon state");
+        let reload_steps = (tuning.reload_duration / 0.1).ceil() as u64 + 2;
+        for tick in 2..=reload_steps + 1 {
+            step_player_combat(&mut world, 0.1, tick);
+        }
+        let state = world
+            .get::<PlayerWeaponState>(player)
+            .copied()
+            .expect("weapon state");
         let expected = tuning.magazine_capacity.min(reserve_before);
         assert_eq!(state.ammo_in_magazine, expected);
-        assert_eq!(inventory_quantity(&world, player, binding.ammo_item), reserve_before - expected);
+        assert_eq!(
+            inventory_quantity(&world, player, binding.ammo_item),
+            reserve_before - expected
+        );
     }
 
     #[test]
@@ -340,12 +413,18 @@ mod tests {
             0.0,
         )
         .expect("spawn focused rifle pickup");
-        world.get_mut::<ItemPickup>(pickup).expect("pickup").auto_equip = true;
+        world
+            .get_mut::<ItemPickup>(pickup)
+            .expect("pickup")
+            .auto_equip = true;
 
         assert_eq!(focused_item_pickup(&world, player), Some(pickup));
         if let Some(commands) = world.get_mut::<PlayerCommandFrame>(player) {
             commands.source_frame = 19;
-            commands.actions.pressed.push(fps_action::PLAYER_INTERACT.into());
+            commands
+                .actions
+                .pressed
+                .push(fps_action::PLAYER_INTERACT.into());
         }
         step_player_combat(&mut world, 1.0 / 60.0, 10);
         assert!(world.get::<PendingFocusedItemInteraction>(player).is_some());
@@ -362,7 +441,9 @@ mod tests {
         );
 
         assert_eq!(inventory_quantity(&world, player, rifle), 1);
-        let binding = world.get::<EquippedWeaponBinding>(player).expect("equipped rifle");
+        let binding = world
+            .get::<EquippedWeaponBinding>(player)
+            .expect("equipped rifle");
         assert_eq!(binding.item, rifle);
         assert_eq!(binding.slot, EquipmentSlot::Primary);
         assert!(!world.get::<ItemPickup>(pickup).expect("pickup").enabled);
@@ -380,7 +461,10 @@ mod tests {
         let _ = world.insert(target, Transform::default());
         if let Some(commands) = world.get_mut::<PlayerCommandFrame>(player) {
             commands.source_frame = 7;
-            commands.actions.pressed.push(fps_action::PLAYER_INTERACT.into());
+            commands
+                .actions
+                .pressed
+                .push(fps_action::PLAYER_INTERACT.into());
         }
         let _ = world.insert(player, PlayerStanceState::standing(0.72));
 
@@ -411,4 +495,68 @@ mod tests {
         assert_eq!(events[0].target, target);
         assert_eq!(events[0].prompt, "Open terminal");
     }
+}
+
+#[test]
+fn hitscan_direction_tracks_mouse_look_pitch() {
+    let mut world = World::new();
+    let player = world.spawn();
+    let _ = world.insert(player, Transform::default());
+    let mut motor = CharacterMotor::default();
+    motor.yaw = 0.61;
+    motor.pitch = -0.37;
+    let _ = world.insert(player, motor);
+    let _ = world.insert(
+        player,
+        PlayerStanceState {
+            current_eye_height: 1.62,
+            ..PlayerStanceState::default()
+        },
+    );
+    let mut tuning = HitscanWeaponTuning::default();
+    tuning.hip_spread_radians = 0.0;
+    tuning.aim_spread_radians = 0.0;
+
+    let (_, direction) =
+        shot_origin_and_direction(&world, player, tuning, true, 1).expect("view-aligned hitscan");
+    let expected = (Quat::from_euler(EulerRot::YXZ, motor.yaw, motor.pitch, 0.0) * -Vec3::Z)
+        .normalize_or_zero();
+    assert!(direction.dot(expected) > 0.999_999);
+    assert!(direction.y.abs() > 0.1, "pitch must affect shot direction");
+}
+
+#[test]
+fn hitscan_uses_published_weapon_muzzle_pose_when_available() {
+    let mut world = World::new();
+    let player = world.spawn();
+    let _ = world.insert(player, Transform::default());
+    let _ = world.insert(player, CharacterMotor::default());
+    let muzzle = EquippedWeaponMuzzle::new(Vec3::new(4.0, 1.25, -2.0), Vec3::new(1.0, 0.0, 0.0))
+        .expect("valid muzzle");
+    let _ = world.insert(player, muzzle);
+    let mut tuning = HitscanWeaponTuning::default();
+    tuning.hip_spread_radians = 0.0;
+    tuning.aim_spread_radians = 0.0;
+
+    let (origin, direction) =
+        shot_origin_and_direction(&world, player, tuning, true, 9).expect("muzzle hitscan");
+    assert!((origin - (muzzle.position + muzzle.forward * 0.008)).length() < 1.0e-6);
+    assert!(direction.dot(muzzle.forward) > 0.999_999);
+}
+
+#[test]
+fn interaction_ray_tracks_mouse_look_pitch() {
+    let mut world = World::new();
+    let player = world.spawn();
+    let _ = world.insert(player, Transform::default());
+    let mut motor = CharacterMotor::default();
+    motor.yaw = -0.42;
+    motor.pitch = 0.29;
+    let _ = world.insert(player, motor);
+
+    let (_, direction) = interaction_ray(&world, player, PlayerInteractionTuning::default())
+        .expect("view-aligned interaction ray");
+    let expected = (Quat::from_euler(EulerRot::YXZ, motor.yaw, motor.pitch, 0.0) * -Vec3::Z)
+        .normalize_or_zero();
+    assert!(direction.dot(expected) > 0.999_999);
 }

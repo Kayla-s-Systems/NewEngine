@@ -311,11 +311,11 @@ pub(super) struct ScreenProfileConfig {
 }
 
 pub(super) fn default_screen_profile() -> UiScreenProfile {
-    UiScreenProfile::Editor
+    UiScreenProfile::Game
 }
 
 pub(super) fn default_publish_editor_shell() -> bool {
-    true
+    false
 }
 
 pub(super) fn default_ui_surface_focus_policy() -> UiScreenInputFocusPolicy {
@@ -325,15 +325,14 @@ pub(super) fn default_ui_surface_focus_policy() -> UiScreenInputFocusPolicy {
 impl Default for ScreenProfileConfig {
     fn default() -> Self {
         Self {
-            // The North Star desktop host is an editor-first runtime. Game presentation
-            // remains available through explicit profile config, but the default boot
-            // surface must expose the editor shell, content browser and right edit window.
-            profile: UiScreenProfile::Editor,
+            // Runtime-first invariant: the host boots the real game/runtime surface.
+            // Editing tools are an optional plugin capability layered onto this live world.
+            profile: UiScreenProfile::Game,
             game_ui_root_surface_id: None,
             game_ui_document_ref: None,
             game_gui: None,
             presentation_flow: None,
-            publish_editor_shell: true,
+            publish_editor_shell: false,
         }
     }
 }

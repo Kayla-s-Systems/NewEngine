@@ -2,9 +2,7 @@ use super::*;
 
 impl ScreenProfileRuntimeState {
     pub(super) fn update_menu_interaction(&mut self, resources: &Resources, frame_index: u64) {
-        if self.descriptor.profile != UiScreenProfile::Editor
-            || self.last_menu_click_frame == frame_index
-        {
+        if !editing_tools_available(resources) || self.last_menu_click_frame == frame_index {
             return;
         }
         if clicked_dispatch_action(resources, "editor.runtime.more").is_some() {
@@ -52,15 +50,6 @@ impl ScreenProfileRuntimeState {
     ) {
         install_runtime_session_resources(resources);
         for command in drain_external_runtime_session_commands() {
-            if matches!(command, RuntimeSessionCommand::ApplyChangesAndStop) {
-                if let Err(error) = stage_apply_changes_from_pie(resources, frame_index) {
-                    newengine_ulog_api::ulog::warn!(
-                        "runtime.apply_changes rejected before stop: {}",
-                        error
-                    );
-                    continue;
-                }
-            }
             submit_runtime_session_command(
                 resources,
                 frame_index,
@@ -69,21 +58,22 @@ impl ScreenProfileRuntimeState {
             );
         }
 
-        if self.descriptor.profile != UiScreenProfile::Editor {
-            let needs_play_session = resources
-                .get::<RuntimeSessionState>()
-                .map(|state| state.mode != Some(RuntimeSessionMode::Play) || !state.is_active())
-                .unwrap_or(true);
-            if needs_play_session {
-                submit_runtime_session_command(
-                    resources,
-                    frame_index,
-                    RUNTIME_SESSION_COMMAND_SOURCE_GAME,
-                    RuntimeSessionCommand::Start {
-                        mode: RuntimeSessionMode::Play,
-                    },
-                );
-            }
+        let needs_play_session = resources
+            .get::<RuntimeSessionState>()
+            .map(|state| state.mode != Some(RuntimeSessionMode::Play) || !state.is_active())
+            .unwrap_or(true);
+        if needs_play_session {
+            submit_runtime_session_command(
+                resources,
+                frame_index,
+                RUNTIME_SESSION_COMMAND_SOURCE_GAME,
+                RuntimeSessionCommand::Start {
+                    mode: RuntimeSessionMode::Play,
+                },
+            );
+        }
+
+        if !editing_tools_available(resources) {
             let session = advance_runtime_session(resources, frame_index);
             resources.insert(UiEditorRuntimeState {
                 version: 1,
@@ -125,41 +115,23 @@ impl ScreenProfileRuntimeState {
                     self.active_menu_id = None;
                 }
                 if let Some(command) = runtime_session_command_from_editor_command(&command_id) {
-                    let can_submit =
-                        if matches!(command, RuntimeSessionCommand::ApplyChangesAndStop) {
-                            match stage_apply_changes_from_pie(resources, frame_index) {
-                                Ok(()) => true,
-                                Err(error) => {
-                                    newengine_ulog_api::ulog::warn!(
-                                        "editor PIE Apply Changes rejected before stop: {}",
-                                        error
-                                    );
-                                    false
-                                }
-                            }
-                        } else {
-                            true
-                        };
-                    if can_submit {
-                        submit_runtime_session_command(
-                            resources,
-                            frame_index,
-                            RUNTIME_SESSION_COMMAND_SOURCE_EDITOR,
-                            command,
-                        );
-                        newengine_ulog_api::ulog::info!(
-                            "editor command: submitted '{}' to runtime-session controller from session={} phase={:?}",
-                            command_id,
-                            current.session_id.0,
-                            current.phase,
-                        );
-                    }
+                    submit_runtime_session_command(
+                        resources,
+                        frame_index,
+                        RUNTIME_SESSION_COMMAND_SOURCE_EDITOR,
+                        command,
+                    );
+                    newengine_ulog_api::ulog::info!(
+                        "editing tools command: submitted '{}' to live runtime-session controller from session={} phase={:?}",
+                        command_id,
+                        current.session_id.0,
+                        current.phase,
+                    );
                 }
             }
         }
 
         let session = advance_runtime_session(resources, frame_index);
-        sync_editor_pie_world_state(resources, frame_index, &session);
         let (mode, paused) = editor_runtime_projection(&session);
         resources.insert(UiEditorRuntimeState {
             version: 1,
@@ -176,7 +148,7 @@ impl ScreenProfileRuntimeState {
         resources: &mut Resources,
         frame_index: u64,
     ) {
-        if self.descriptor.profile != UiScreenProfile::Editor {
+        if !editing_tools_available(resources) {
             return;
         }
 
@@ -343,9 +315,7 @@ impl ScreenProfileRuntimeState {
     }
 
     pub(super) fn update_dock_interaction(&mut self, resources: &Resources, frame_index: u64) {
-        if self.descriptor.profile != UiScreenProfile::Editor
-            || self.last_dock_click_frame == frame_index
-        {
+        if !editing_tools_available(resources) || self.last_dock_click_frame == frame_index {
             return;
         }
         let Some(action_id) = clicked_dispatch_action(resources, "editor.dock.toggle.") else {
@@ -377,7 +347,7 @@ impl ScreenProfileRuntimeState {
     }
 
     pub(super) fn publish_editor_layout_state(&self, resources: &mut Resources, frame_index: u64) {
-        if self.descriptor.profile != UiScreenProfile::Editor {
+        if !editing_tools_available(resources) {
             resources.insert(UiDockLayoutState {
                 version: 1,
                 frame_index,
@@ -450,6 +420,62 @@ impl ScreenProfileRuntimeState {
                 dock_state("center.viewport_gizmos", true, false, false),
             ],
         });
+    }
+
+    pub(super) fn prepare_editing_overlay(
+        &mut self,
+        resources: &Resources,
+        frame_index: u64,
+        profile_changed: bool,
+    ) -> bool {
+        if !self.config.publish_editor_shell || !editing_tools_available(resources) {
+            return self.hide_profile_surface(UI_SURFACE_EDITOR_SHELL, profile_changed);
+        }
+
+        let layout = editor_layout_metrics(resources, &self.hidden_panels);
+        let session = resources
+            .get::<RuntimeSessionState>()
+            .cloned()
+            .unwrap_or_default();
+        let (runtime_mode, runtime_paused) = editor_runtime_projection(&session);
+        let runtime_possessed = session.is_possessed();
+        let command_registry = resources
+            .get::<EditorCommandRegistry>()
+            .cloned()
+            .unwrap_or_else(default_runtime_editor_commands);
+        let viewport_state = resources
+            .get::<UiEditorViewportState>()
+            .cloned()
+            .unwrap_or_default();
+        let scene_snapshot = resources
+            .get::<UiEditorSceneSnapshot>()
+            .cloned()
+            .unwrap_or_default();
+        let inspector_snapshot = resources
+            .get::<UiEditorInspectorSnapshot>()
+            .cloned()
+            .unwrap_or_default();
+        let mut node = EditorScreen::default().surface_node(
+            frame_index,
+            runtime_mode,
+            runtime_paused,
+            runtime_possessed,
+            &command_registry,
+            &viewport_state,
+            &scene_snapshot,
+            &inspector_snapshot,
+            &layout,
+            self.active_menu_id.as_deref(),
+        );
+        self.append_right_edit_window(resources, &mut node, &layout);
+        sort_components_by_layout_y(&mut node.components);
+        publish_screen_node_tree_request(&UiNodeTreeRequest::from_surface_node(
+            &node,
+            UiNodeRequestSourceKind::Generated,
+        ));
+        self.published_surfaces
+            .insert(UI_SURFACE_EDITOR_SHELL.to_owned());
+        true
     }
 
     pub(super) fn append_toast_components(

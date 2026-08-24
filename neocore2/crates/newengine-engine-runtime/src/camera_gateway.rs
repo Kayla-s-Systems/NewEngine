@@ -39,10 +39,9 @@ use newengine_transform::Transform;
 
 use crate::engine_bounds::EngineBoundsSnap;
 use crate::gameplay::{
-    apply_player_command_frame, capture_runtime_world_snapshot, emit_player_event, first_player,
-    is_player_controller_enabled, restore_runtime_world_snapshot, sync_player_view_listeners,
-    CharacterBody, CharacterMotionTuning, GameRunMode, PlayerEventKind, PlayerStanceState,
-    RuntimeWorldSnapshot,
+    apply_player_command_frame, emit_player_event, first_player, is_player_controller_enabled,
+    sync_player_view_listeners, CharacterBody, CharacterMotionTuning, GameRunMode,
+    PlayerCommandFrame, PlayerEventKind, PlayerStanceState, PlayerWeaponState,
 };
 use crate::viewport_bridge::ViewportBridge;
 
@@ -196,6 +195,10 @@ impl CameraGatewayBridge {
             .state
             .lock()
             .apply_input_view_request(input.camera_view);
+        // World-runtime presentation (including the first-person weapon) runs before
+        // `tick_world_frame`. Publish the active view here as well so the viewmodel never consumes
+        // a stale third-person/first-person state for the current render frame.
+        sync_player_view_listeners(world, matches!(active_view, CameraViewMode::FirstPerson));
         let service_config = camera_runtime_service_config(world, active_view);
         apply_runtime_input(
             world,
@@ -360,25 +363,38 @@ impl CameraGatewayBridge {
         );
         controller_z_phases[4] = follow_controller_offset_z(world, cam_id);
 
-        let (snapshot, report, resolved_frame) =
-            if let Some(manager) = world.resource_mut::<CameraManagerResource>() {
-                manager.sync_runtime_nav_mode_from_controller(out.controller.mode);
-                manager.set_last_cursor(out.cursor);
-                let frame = manager.resolve_camera_frame(out.frame, dt);
-                let frame = apply_gameplay_view_lens(frame, manager.active_view_mode());
-                let effects = manager.last_post_effects().unwrap_or_default();
-                (
-                    camera_frame_snapshot_for_view(frame, effects, manager.active_view_mode()),
-                    Some(camera_report_snapshot(manager.report())),
-                    frame,
-                )
-            } else {
-                (
-                    camera_frame_snapshot_for_view(out.frame, Default::default(), active_view),
-                    None,
-                    out.frame,
-                )
-            };
+        let first_person_aiming = player.is_some_and(|player| {
+            // Camera resolution happens after the command transport is sampled, but fixed-step
+            // combat may not have run on every render frame. Prefer the current semantic RMB
+            // command and retain PlayerWeaponState as a compatibility fallback.
+            world
+                .get::<PlayerCommandFrame>(player)
+                .is_some_and(|commands| commands.actions.is_held("player.aim"))
+                || world
+                    .get::<PlayerWeaponState>(player)
+                    .is_some_and(|state| state.aiming)
+        });
+        let (snapshot, report, resolved_frame) = if let Some(manager) =
+            world.resource_mut::<CameraManagerResource>()
+        {
+            manager.sync_runtime_nav_mode_from_controller(out.controller.mode);
+            manager.set_last_cursor(out.cursor);
+            let frame = manager.resolve_camera_frame(out.frame, dt);
+            let frame =
+                apply_gameplay_view_lens(frame, manager.active_view_mode(), first_person_aiming);
+            let effects = manager.last_post_effects().unwrap_or_default();
+            (
+                camera_frame_snapshot_for_view(frame, effects, manager.active_view_mode()),
+                Some(camera_report_snapshot(manager.report())),
+                frame,
+            )
+        } else {
+            (
+                camera_frame_snapshot_for_view(out.frame, Default::default(), active_view),
+                None,
+                out.frame,
+            )
+        };
 
         trace_gameplay_camera_frame(
             frame_index,
@@ -395,6 +411,14 @@ impl CameraGatewayBridge {
             controller_z_phases,
         );
 
+        if let Some(listener) = crate::audio_gateway::audio_listener_from_camera_snapshot(&snapshot)
+        {
+            world.insert_resource(crate::audio_occlusion::AudioListenerRuntimeState {
+                listener,
+                frame_index,
+            });
+        }
+        crate::audio_gateway::sync_audio_listener_from_camera_snapshot(&snapshot);
         state.last_snapshot = Some(snapshot);
         let view = EngineViewFrame::from_camera_snapshot(snapshot);
         let cursor = if effective_play_mode.wants_direct_player_control()
@@ -431,7 +455,6 @@ struct CameraGatewayState {
     nav: newengine_camera_runtime::CameraNavState,
     last_play_mode: GameRunMode,
     play_session: Option<CameraPlaySessionSnapshot>,
-    runtime_session: Option<RuntimeWorldSnapshot>,
     last_snapshot: Option<CameraFrameSnapshot>,
     active_view: CameraViewMode,
 }
@@ -457,7 +480,6 @@ impl Default for CameraGatewayState {
             nav: newengine_camera_runtime::CameraNavState::default(),
             last_play_mode: GameRunMode::Staging,
             play_session: None,
-            runtime_session: None,
             last_snapshot: None,
             active_view: parse_camera_start_view(start_view.as_deref()),
         }
@@ -493,10 +515,6 @@ impl CameraGatewayState {
             return;
         }
 
-        if !self.last_play_mode.is_runtime() && effective_play_mode.is_runtime() {
-            self.runtime_session = Some(capture_runtime_world_snapshot(world));
-        }
-
         if self.last_play_mode.wants_direct_player_control() {
             if let Some(player) = first_player(world) {
                 CameraRuntimeService::clear_player_input(world, player);
@@ -522,11 +540,6 @@ impl CameraGatewayState {
             });
         }
 
-        if self.last_play_mode.is_runtime() && !effective_play_mode.is_runtime() {
-            if let Some(snapshot) = self.runtime_session.take() {
-                restore_runtime_world_snapshot(world, snapshot);
-            }
-        }
         self.last_play_mode = effective_play_mode;
     }
 }

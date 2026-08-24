@@ -167,17 +167,15 @@ mod tests {
     }
 
     #[test]
-    fn object_profile_can_select_editor() {
-        let parsed = parse_config_value(&json!({"profile":"editor"})).unwrap();
-        assert_eq!(parsed.profile, UiScreenProfile::Editor);
-        assert!(parsed.publish_editor_shell);
+    fn object_profile_rejects_removed_editor_profile() {
+        assert!(parse_config_value(&json!({"profile":"editor"})).is_err());
     }
 
     #[test]
-    fn empty_object_profile_defaults_to_editor_shell() {
+    fn empty_object_profile_defaults_to_runtime_game() {
         let parsed = parse_config_value(&json!({})).unwrap();
-        assert_eq!(parsed.profile, UiScreenProfile::Editor);
-        assert!(parsed.publish_editor_shell);
+        assert_eq!(parsed.profile, UiScreenProfile::Game);
+        assert!(!parsed.publish_editor_shell);
     }
 
     #[test]

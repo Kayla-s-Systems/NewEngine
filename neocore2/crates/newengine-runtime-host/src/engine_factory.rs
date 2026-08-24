@@ -36,7 +36,22 @@ mod tests {
     fn engine_command_service_discovers_runtime_session_commands() {
         let startup = StartupConfig::default();
         let _engine = build_engine_from_startup(&startup, 16).expect("engine");
+        let console_install = newengine_console_runtime::install_console_provider();
+        eprintln!(
+            "console_install={console_install} services={:?} route={:?}",
+            newengine_core::list_service_ids(),
+            newengine_core::resolve_service_for_engine_gateway(
+                newengine_console_runtime::ENGINE_COMMAND_GATEWAY_ID
+            )
+        );
         newengine_runtime_session_runtime::init_runtime_session_command_service();
+        eprintln!(
+            "after_session services={:?} route={:?}",
+            newengine_core::list_service_ids(),
+            newengine_core::resolve_service_for_engine_gateway(
+                newengine_console_runtime::ENGINE_COMMAND_GATEWAY_ID
+            )
+        );
 
         let description =
             newengine_core::describe_service(newengine_console_runtime::ENGINE_COMMAND_GATEWAY_ID)

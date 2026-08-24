@@ -120,6 +120,8 @@ pub struct PhysicsFrameBodySnapshot {
     pub position: PhysicsVec3,
     pub rotation: PhysicsQuat,
     pub linear_velocity: PhysicsVec3,
+    #[serde(default)]
+    pub angular_velocity: PhysicsVec3,
     pub bounds_min: PhysicsVec3,
     pub bounds_max: PhysicsVec3,
 }

@@ -13,14 +13,15 @@ use newengine_model_domain_api::{
     attach_content_hash, attach_metadata_namespace, attach_node_warning, attach_vfs_source,
     finalize_graph, fnv1a64, normalize_asset_ref, push_manifest_dependency, split_asset_ref,
     AssetGraphResolver, AssetGraphVfsSource, DrawableDictionaryManifest, DrawableDictionaryRequest,
-    FoliageImportRequestV1, FoliageImportResponseV1, ModelAssetBundle, ModelAssetRequest, ModelConstructionManifest, ModelConstructionValidation,
-    ModelMaterialBinding, ModelMeshPart, ModelRuntimeConfiguration, ModelSkinBinding,
-    ModelSkinVertex, ResolvedAssetGraphV2, DRAWABLE_DICTIONARY_EXTENSION,
-    ENGINE_ASSETS_MODELS_SERVICE_ID, MODEL_BACKEND_CAPABILITY_ID, MODEL_FEATURE_DOMAINS,
-    MODEL_SERVICE_ID, MODEL_SERVICE_METHODS, MODEL_SERVICE_METHOD_ASSEMBLE_JSON_V1,
-    MODEL_SERVICE_METHOD_DRAWABLE_DICTIONARY_MANIFEST_JSON_V1, MODEL_SERVICE_METHOD_IMPORT_FOLIAGE_V1,
-    MODEL_SERVICE_METHOD_INVOKE, MODEL_SERVICE_METHOD_RESOLVE_DRAWABLE_V1,
-    MODEL_SERVICE_METHOD_VALIDATE_JSON_V1,
+    FoliageImportRequestV1, FoliageImportResponseV1, ModelAssetBundle, ModelAssetRequest,
+    ModelConstructionManifest, ModelConstructionValidation, ModelMaterialBinding, ModelMeshPart,
+    ModelRuntimeConfiguration, ModelSkinBinding, ModelSkinVertex, ResolvedAssetGraphV2,
+    DRAWABLE_DICTIONARY_EXTENSION, ENGINE_ASSETS_MODELS_SERVICE_ID, MODEL_BACKEND_CAPABILITY_ID,
+    MODEL_FEATURE_DOMAINS, MODEL_SERVICE_ID, MODEL_SERVICE_METHODS,
+    MODEL_SERVICE_METHOD_ASSEMBLE_JSON_V1,
+    MODEL_SERVICE_METHOD_DRAWABLE_DICTIONARY_MANIFEST_JSON_V1,
+    MODEL_SERVICE_METHOD_IMPORT_FOLIAGE_V1, MODEL_SERVICE_METHOD_INVOKE,
+    MODEL_SERVICE_METHOD_RESOLVE_DRAWABLE_V1, MODEL_SERVICE_METHOD_VALIDATE_JSON_V1,
 };
 use newengine_model_import_obj::normalize_logical_path;
 use newengine_model_skeleton_api::ModelSkeletonMetadata;

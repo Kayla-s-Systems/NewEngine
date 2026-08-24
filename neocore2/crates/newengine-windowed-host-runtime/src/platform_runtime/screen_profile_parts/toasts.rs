@@ -38,13 +38,13 @@ impl ScreenProfileRuntimeState {
         let gap = 8.0;
         let total_h =
             toast_count as f32 * row_h + toast_count.saturating_sub(1) as f32 * gap + 16.0;
-        let top_margin = if self.descriptor.profile == UiScreenProfile::Editor {
+        let top_margin = if editing_tools_available(resources) {
             layout.menu_h + layout.toolbar_h + 12.0
         } else {
             16.0
         };
 
-        let theme_id = if self.descriptor.profile == UiScreenProfile::Editor {
+        let theme_id = if editing_tools_available(resources) {
             UI_THEME_NORTHSTAR_EDITOR
         } else {
             UI_THEME_NORTHSTAR_DEFAULT

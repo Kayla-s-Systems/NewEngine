@@ -7,9 +7,9 @@ use newengine_assets_api::{
 };
 use newengine_ecs::World;
 use newengine_engine_runtime::gameplay::{
-    EquipmentSlot, HitscanWeaponTuning, InventoryEventBus, InventoryLoadout,
-    InventoryLoadoutCatalog, InventoryLoadoutEntry, ItemCatalog, ItemDefinition, ItemId, ItemKind,
-    ItemUseEffect, WeaponFireMode, WorldItemDefinition,
+    preload_weapon_audio_definition, EquipmentSlot, HitscanWeaponTuning, InventoryEventBus,
+    InventoryLoadout, InventoryLoadoutCatalog, InventoryLoadoutEntry, ItemCatalog, ItemDefinition,
+    ItemId, ItemKind, ItemUseEffect, WeaponAudioDefinition, WeaponFireMode, WorldItemDefinition,
 };
 use newengine_primitives::builtins as primitive_builtins;
 use serde::{Deserialize, Serialize};
@@ -24,6 +24,8 @@ mod compile;
 mod nef8;
 #[path = "item_assets/types.rs"]
 mod types;
+#[path = "item_assets/ytyp.rs"]
+mod ytyp;
 
 pub use compile::{
     compile_authored_item_package, install_compiled_item_package, parse_authored_item_package_json,
@@ -32,9 +34,12 @@ pub use nef8::{
     decode_authored_item_package, decode_authored_item_package_nef8,
     encode_authored_item_package_nef8,
 };
+pub(crate) use ytyp::hydrate_item_package_from_ytyp;
+
 pub use types::{
     AuthoredItemDefinition, AuthoredItemPackage, AuthoredLoadoutDefinition, AuthoredLoadoutEntry,
-    AuthoredUseEffect, AuthoredWeaponDefinition, CompiledItemPackage,
+    AuthoredUseEffect, AuthoredWeaponAudioDefinition, AuthoredWeaponDefinition,
+    AuthoredWorldItemDefinition, CompiledItemPackage,
 };
 
 use compile::validate_package_header;
@@ -66,6 +71,13 @@ pub(crate) fn test_fps_item_package() -> AuthoredItemPackage {
                     ammo: "ammo.rifle.standard".to_owned(),
                     damage: 25.0,
                     ..AuthoredWeaponDefinition::default()
+                }),
+                world: Some(AuthoredWorldItemDefinition {
+                    model: "shared/models/weapon/rifle/rifle.ydd@rifle".to_owned(),
+                    material_library: "shared/materials/weapon_rifle.nemat".to_owned(),
+                    scale: [1.0, 1.0, 1.0],
+                    pickup_half_extents: [0.14, 0.55, 0.14],
+                    ..AuthoredWorldItemDefinition::default()
                 }),
                 ..AuthoredItemDefinition::default()
             },

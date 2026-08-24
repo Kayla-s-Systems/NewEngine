@@ -13,22 +13,10 @@ use newengine_render_feature_gameready::GameReadyRenderFeaturePack;
 use newengine_render_runtime_adapter::RenderBackendRuntimeModule;
 use newengine_ui::{UiBuildFn, UiProviderKind};
 
+use crate::provider_routes::GameReadyProviderBootstrapModule;
 use crate::scene_bootstrap::{GameReadySceneBootstrapModule, GameReadyWorldSceneBootstrapProvider};
 use crate::validation::GameReadyValidationModule;
 use crate::world_runtime::GameReadyWorldRuntimeProvider;
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum GameReadyRuntimeKind {
-    StandaloneGame,
-    ProjectEditor,
-}
-
-impl Default for GameReadyRuntimeKind {
-    #[inline]
-    fn default() -> Self {
-        Self::StandaloneGame
-    }
-}
 
 #[derive(Clone)]
 pub struct GameReadyRuntimeProfile {
@@ -37,7 +25,6 @@ pub struct GameReadyRuntimeProfile {
     pub(crate) scene: Arc<newengine_scene_runtime::SceneBridge>,
     game_data_provider: Option<Arc<dyn GameDataProvider>>,
     game_module_factory: Option<GameModuleFactoryRegistration>,
-    kind: GameReadyRuntimeKind,
 }
 
 impl Default for GameReadyRuntimeProfile {
@@ -59,24 +46,12 @@ impl GameReadyRuntimeProfile {
             scene,
             game_data_provider: None,
             game_module_factory: None,
-            kind: GameReadyRuntimeKind::StandaloneGame,
         }
     }
 
     #[inline]
     pub fn standalone_game() -> Self {
-        Self::new().with_kind(GameReadyRuntimeKind::StandaloneGame)
-    }
-
-    #[inline]
-    pub fn editor_tools() -> Self {
-        Self::new().with_kind(GameReadyRuntimeKind::ProjectEditor)
-    }
-
-    #[inline]
-    pub fn with_kind(mut self, kind: GameReadyRuntimeKind) -> Self {
-        self.kind = kind;
-        self
+        Self::new()
     }
 
     /// Replaces the active authored game-data source without changing gameplay/world systems.
@@ -102,11 +77,6 @@ impl GameReadyRuntimeProfile {
         self.game_data_provider
             .as_ref()
             .map(|provider| provider.id())
-    }
-
-    #[inline]
-    pub const fn kind(&self) -> GameReadyRuntimeKind {
-        self.kind
     }
 
     #[inline]
@@ -210,12 +180,22 @@ impl GameReadyRuntimeProfile {
                 Arc::clone(&game_data_provider),
             ));
 
+        engine.register_module(Box::new(GameReadyProviderBootstrapModule::new(
+            self.clone(),
+        )))?;
         engine.register_module(Box::new(PhysicsBackendRuntimeModule::new(
             startup.modules_dir.clone(),
         )))?;
         engine.register_module(Box::new(RenderBackendRuntimeModule::new(
             startup.modules_dir.clone(),
         )))?;
+
+        engine.register_module(Box::new(
+            newengine_engine_runtime::AudioSceneRuntimeModule::new(Arc::clone(&self.scene)),
+        ))?;
+        engine.register_module(Box::new(
+            newengine_engine_runtime::AudioAmbienceRuntimeModule::new(Arc::clone(&self.scene)),
+        ))?;
 
         let render_features = GameReadyRenderFeaturePack::new();
         let mut render_controller = newengine_engine_runtime::RuntimeRenderController::new(
@@ -224,6 +204,9 @@ impl GameReadyRuntimeProfile {
             Arc::clone(&self.scene),
         )
         .with_world_runtime_provider(GameReadyWorldRuntimeProvider::shared())
+        .with_gameplay_physics_query_provider(
+            newengine_engine_runtime::AudioOcclusionPhysicsQueryProvider::shared(),
+        )
         .with_material_pipeline_provider(render_features.material_pipeline_provider())
         .with_primary_lit_material_domain(render_features.primary_lit_material_domain());
 
@@ -269,15 +252,11 @@ impl GameReadyRuntimeProfile {
             engine.register_module(Box::new(GameReadySceneBootstrapModule::new(Arc::clone(
                 &self.scene,
             ))))?;
-        } else if matches!(self.kind, GameReadyRuntimeKind::StandaloneGame) {
+        } else {
             return Err(EngineError::Other(
-                "standalone game requires startup_scene from game.toml or its packaged game descriptor"
+                "GameReady runtime requires startup_scene from game.toml or its packaged game descriptor"
                     .to_owned(),
             ));
-        } else {
-            newengine_ulog_api::ulog::info!(
-                "project editor: no startup_scene declared; opening empty staging world"
-            );
         }
         if let Some(validation) = GameReadyValidationModule::from_env() {
             engine.register_module(Box::new(validation))?;
@@ -319,18 +298,6 @@ mod tests {
     fn default_profile_has_no_hardcoded_game_data_provider() {
         let profile = GameReadyRuntimeProfile::new();
         assert_eq!(profile.game_data_provider_id(), None);
-    }
-
-    #[test]
-    fn runtime_profile_has_no_built_in_gameplay_module_switch() {
-        assert_eq!(
-            GameReadyRuntimeProfile::new().kind(),
-            GameReadyRuntimeKind::StandaloneGame
-        );
-        assert_eq!(
-            GameReadyRuntimeProfile::standalone_game().kind(),
-            GameReadyRuntimeKind::StandaloneGame
-        );
     }
 
     #[test]

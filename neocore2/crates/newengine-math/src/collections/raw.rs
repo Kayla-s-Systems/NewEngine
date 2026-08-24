@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NewEngine | Kayla's Systems. All rights reserved.
+// Copyright (c) 2026 NewEngine | Take Some(). All rights reserved.
 //! Escape hatch to raw container implementations.
 //!
 //! ⚠️ NOT the normal API.

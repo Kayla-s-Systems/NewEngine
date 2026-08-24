@@ -32,7 +32,7 @@ pub use schema::{
     UI_SURFACE_DEBUG_OVERLAY, UI_SURFACE_GAME_HUD, UI_SURFACE_MAIN_MENU, UI_SURFACE_PRIMARY,
 };
 pub use screen_profile::{
-    editor_screen_descriptor, game_screen_descriptor, headless_screen_descriptor,
+    editing_overlay_descriptor, game_screen_descriptor, headless_screen_descriptor,
     screen_profile_descriptor, EditorScreen, GameScreen,
 };
 

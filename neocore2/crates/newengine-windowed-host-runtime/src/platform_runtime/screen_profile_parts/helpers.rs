@@ -343,7 +343,6 @@ pub(super) fn runtime_session_command_from_editor_command(
         editor_command::RUNTIME_RESTART => RuntimeSessionCommand::Restart,
         editor_command::RUNTIME_EJECT => RuntimeSessionCommand::Eject,
         editor_command::RUNTIME_POSSESS => RuntimeSessionCommand::Possess,
-        editor_command::RUNTIME_APPLY_CHANGES => RuntimeSessionCommand::ApplyChangesAndStop,
         editor_command::RUNTIME_STEP => RuntimeSessionCommand::Step { frames: 1 },
         _ => return None,
     })

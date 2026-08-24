@@ -353,6 +353,35 @@ pub mod ysc {
     ];
 }
 
+pub mod yscd {
+    pub const EXTENSION: &str = "yscd";
+    pub const ASSET_KIND: &str = "sound_cue_dictionary";
+    pub const CONTENT_KIND: u32 = newengine_assets_api::LIST_FILE_CONTENT_KIND_YSCD;
+    pub const CONTENT_SCHEMA_VERSION: u16 = 1;
+    pub const CONTENT_SCHEMA_CONTRACT_SPEC: newengine_contract_api::ContractSpec =
+        newengine_contract_api::ContractSpec::new(
+            "asset.yscd.schema",
+            newengine_contract_api::ContractKind::Schema,
+            newengine_contract_api::ContractVersion::major(CONTENT_SCHEMA_VERSION),
+            newengine_contract_api::ContractCompatibility::Exact,
+            "newengine-asset-format-nef8",
+            Some("newengine.yscd.binary.v1"),
+        );
+    pub const PURPOSE: &str = "Y Sound Cue Dictionary / Embedded Audio";
+    pub const SEMANTIC_GATEWAY: &str = "engine.audio";
+    pub const HANDLER_SERVICE: &str = "asset.codec.listfile.yscd";
+    pub const SELECTOR_SYNTAX: &str = "file.yscd@cue";
+    pub const CONSUMER_DOMAINS: &[&str] = &[
+        "engine.audio",
+        "engine.assets.graph",
+        "engine.gameplay",
+        "engine.scene",
+        "engine.ui",
+        "engine.editor",
+        "engine.streaming",
+    ];
+}
+
 pub mod ytd {
     pub const EXTENSION: &str = "ytd";
     pub const ASSET_KIND: &str = "texture_dictionary";

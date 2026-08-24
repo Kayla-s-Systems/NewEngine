@@ -153,6 +153,9 @@ pub struct WorldItemPresentation {
     pub scale: Vec3,
     pub color: [f32; 4],
     pub pickup_half_extents: Vec3,
+    /// True only after the authored model/material hierarchy has been admitted.
+    /// Authored items intentionally do not expose the generic fallback primitive while false.
+    pub authored_visual_admitted: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -218,6 +221,60 @@ pub struct WeaponItemDefinition {
     pub fire_mode: WeaponFireMode,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum WeaponAudioAction {
+    #[default]
+    Fire,
+    ReloadStart,
+    ReloadComplete,
+    Equip,
+    Unequip,
+    Empty,
+    ShellEject,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct WeaponAudioDefinition {
+    pub fire: Option<String>,
+    pub reload_start: Option<String>,
+    pub reload_complete: Option<String>,
+    pub equip: Option<String>,
+    pub unequip: Option<String>,
+    pub empty: Option<String>,
+    pub shell_eject: Option<String>,
+}
+
+impl WeaponAudioDefinition {
+    pub fn sanitized(mut self) -> Self {
+        fn clean(value: Option<String>) -> Option<String> {
+            value
+                .map(|value| value.trim().replace('\\', "/"))
+                .filter(|value| !value.is_empty())
+        }
+        self.fire = clean(self.fire);
+        self.reload_start = clean(self.reload_start);
+        self.reload_complete = clean(self.reload_complete);
+        self.equip = clean(self.equip);
+        self.unequip = clean(self.unequip);
+        self.empty = clean(self.empty);
+        self.shell_eject = clean(self.shell_eject);
+        self
+    }
+
+    #[inline]
+    pub fn clip(&self, action: WeaponAudioAction) -> Option<&str> {
+        match action {
+            WeaponAudioAction::Fire => self.fire.as_deref(),
+            WeaponAudioAction::ReloadStart => self.reload_start.as_deref(),
+            WeaponAudioAction::ReloadComplete => self.reload_complete.as_deref(),
+            WeaponAudioAction::Equip => self.equip.as_deref(),
+            WeaponAudioAction::Unequip => self.unequip.as_deref(),
+            WeaponAudioAction::Empty => self.empty.as_deref(),
+            WeaponAudioAction::ShellEject => self.shell_eject.as_deref(),
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct ItemDefinition {
     pub id: ItemId,
@@ -232,6 +289,7 @@ pub struct ItemDefinition {
     pub unit_weight: f32,
     pub equipment_slot: Option<EquipmentSlot>,
     pub weapon: Option<WeaponItemDefinition>,
+    pub weapon_audio: WeaponAudioDefinition,
     pub use_effect: ItemUseEffect,
     pub world: WorldItemDefinition,
 }
@@ -260,6 +318,7 @@ impl ItemDefinition {
             unit_weight: sanitize_non_negative(unit_weight),
             equipment_slot: None,
             weapon: None,
+            weapon_audio: WeaponAudioDefinition::default(),
             use_effect: ItemUseEffect::None,
             world: WorldItemDefinition::for_kind(kind),
         })
@@ -282,6 +341,12 @@ impl ItemDefinition {
             fire_mode,
         });
         Ok(item)
+    }
+
+    #[inline]
+    pub fn with_weapon_audio(mut self, audio: WeaponAudioDefinition) -> Self {
+        self.weapon_audio = audio.sanitized();
+        self
     }
 
     #[inline]

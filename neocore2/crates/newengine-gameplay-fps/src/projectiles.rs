@@ -1,7 +1,8 @@
 use newengine_ecs::{EntityId, World};
 use newengine_game_data::default_game_data;
 use newengine_gameplay_fps_api::{FpsActionFrame, FpsGameplayPolicySnapshot};
-use newengine_math::{Quat, Vec3};
+use newengine_lighting::PointLight;
+use newengine_math::{EulerRot, Quat, Vec3};
 use newengine_primitives::{builtins as prim_builtins, Primitive};
 use newengine_scene::{components::Name, SceneState};
 use newengine_sim::{AngularVelocity, CameraRigComp, Velocity};
@@ -99,6 +100,338 @@ pub struct ProjectileSphereRuntime {
     pub owner: EntityId,
     pub source_frame: u64,
     pub remaining_seconds: f32,
+}
+
+const WEAPON_TRACER_SPEED_MPS: f32 = 320.0;
+const WEAPON_TRACER_HALF_LENGTH_M: f32 = 0.12;
+const MUZZLE_FLASH_LIFETIME_SECONDS: f32 = 0.042;
+const MUZZLE_CORE_LIFETIME_SECONDS: f32 = 0.030;
+const SHELL_CASING_LIFETIME_SECONDS: f32 = 1.35;
+const SHELL_CASING_GRAVITY_MPS2: f32 = 9.81;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum WeaponShotFxKind {
+    MuzzleFlash,
+    MuzzleCore,
+    Tracer,
+    ShellCasing,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct WeaponShotFxRuntime {
+    owner: EntityId,
+    shot_sequence: u64,
+    kind: WeaponShotFxKind,
+    origin: Vec3,
+    velocity: Vec3,
+    spin_radians_per_second: Vec3,
+    traveled: f32,
+    max_distance: f32,
+    remaining_seconds: f32,
+}
+
+#[inline]
+fn weapon_fx_render_options() -> newengine_model_domain_api::MeshRenderOptions {
+    let mut render = newengine_model_domain_api::MeshRenderOptions::world_opaque();
+    render.shadow_policy = newengine_model_domain_api::MeshShadowPolicy::None;
+    render
+}
+
+/// Spawns presentation-only firing effects from the already-resolved physical muzzle. Damage and
+/// collision stay authoritative in the hitscan query path. The composition mirrors a shouldered
+/// semi-auto rifle: compact directional muzzle flame, hot core/light pulse, subtle tracer and a
+/// receiver-side brass casing. No presentation entity participates in ballistic collision.
+pub(crate) fn spawn_weapon_shot_fx(
+    world: &mut World,
+    owner: EntityId,
+    shot_sequence: u64,
+    origin: Vec3,
+    direction: Vec3,
+    range: f32,
+) {
+    let direction = direction.normalize_or_zero();
+    if !origin.is_finite() || direction.length_squared() <= 1.0e-8 {
+        return;
+    }
+    let tracer_rotation = Quat::from_rotation_arc(Vec3::Z, direction).normalize_or_identity();
+    let cone_rotation = Quat::from_rotation_arc(Vec3::Y, direction).normalize_or_identity();
+
+    // Directional flame: cone base sits close to the crown, apex extends downrange.
+    let flash = world.spawn();
+    let _ = world.insert(
+        flash,
+        Name(format!(
+            "WeaponFx/MuzzleFlash/{:016x}/{shot_sequence}",
+            owner.stable_u64()
+        )),
+    );
+    let _ = world.insert(
+        flash,
+        Transform {
+            position: origin + direction * 0.085,
+            rotation: cone_rotation,
+            scale: Vec3::new(0.075, 0.17, 0.075),
+        },
+    );
+    let _ = world.insert(
+        flash,
+        Primitive {
+            id: prim_builtins::ID_CONE,
+            color: [1.0, 0.54, 0.10, 1.0],
+        },
+    );
+    let _ = world.insert(flash, DisplayVisibility::default());
+    let _ = world.insert(flash, GameplayActor);
+    let _ = world.insert(flash, weapon_fx_render_options());
+    let _ = world.insert(
+        flash,
+        WeaponShotFxRuntime {
+            owner,
+            shot_sequence,
+            kind: WeaponShotFxKind::MuzzleFlash,
+            origin,
+            velocity: Vec3::ZERO,
+            spin_radians_per_second: Vec3::ZERO,
+            traveled: 0.0,
+            max_distance: 0.0,
+            remaining_seconds: MUZZLE_FLASH_LIFETIME_SECONDS,
+        },
+    );
+
+    // Compact white-hot core also owns the light pulse. Keeping this much smaller than the old
+    // sphere avoids the debug-ball silhouette while preserving a strong flash in dark scenes.
+    let core = world.spawn();
+    let _ = world.insert(
+        core,
+        Name(format!(
+            "WeaponFx/MuzzleCore/{:016x}/{shot_sequence}",
+            owner.stable_u64()
+        )),
+    );
+    let _ = world.insert(
+        core,
+        Transform {
+            position: origin + direction * 0.018,
+            rotation: tracer_rotation,
+            scale: Vec3::new(0.040, 0.040, 0.065),
+        },
+    );
+    let _ = world.insert(
+        core,
+        Primitive {
+            id: prim_builtins::ID_SPHERE_UV,
+            color: [1.0, 0.86, 0.48, 1.0],
+        },
+    );
+    let _ = world.insert(core, DisplayVisibility::default());
+    let _ = world.insert(core, GameplayActor);
+    let _ = world.insert(core, weapon_fx_render_options());
+    let _ = world.insert(
+        core,
+        PointLight {
+            color: [1.0, 0.58, 0.18],
+            intensity: 34.0,
+            range: 3.8,
+        },
+    );
+    let _ = world.insert(
+        core,
+        WeaponShotFxRuntime {
+            owner,
+            shot_sequence,
+            kind: WeaponShotFxKind::MuzzleCore,
+            origin,
+            velocity: Vec3::ZERO,
+            spin_radians_per_second: Vec3::ZERO,
+            traveled: 0.0,
+            max_distance: 0.0,
+            remaining_seconds: MUZZLE_CORE_LIFETIME_SECONDS,
+        },
+    );
+
+    let max_distance = if range.is_finite() {
+        range.clamp(0.1, 100_000.0)
+    } else {
+        120.0
+    };
+    let tracer = world.spawn();
+    let _ = world.insert(
+        tracer,
+        Name(format!(
+            "WeaponFx/Tracer/{:016x}/{shot_sequence}",
+            owner.stable_u64()
+        )),
+    );
+    let _ = world.insert(
+        tracer,
+        Transform {
+            position: origin + direction * WEAPON_TRACER_HALF_LENGTH_M,
+            rotation: tracer_rotation,
+            scale: Vec3::new(0.004, 0.004, WEAPON_TRACER_HALF_LENGTH_M * 2.0),
+        },
+    );
+    let _ = world.insert(
+        tracer,
+        Primitive {
+            id: prim_builtins::ID_CUBE,
+            color: [1.0, 0.72, 0.24, 1.0],
+        },
+    );
+    let _ = world.insert(tracer, DisplayVisibility::default());
+    let _ = world.insert(tracer, GameplayActor);
+    let _ = world.insert(tracer, weapon_fx_render_options());
+    let _ = world.insert(
+        tracer,
+        WeaponShotFxRuntime {
+            owner,
+            shot_sequence,
+            kind: WeaponShotFxKind::Tracer,
+            origin,
+            velocity: direction * WEAPON_TRACER_SPEED_MPS,
+            spin_radians_per_second: Vec3::ZERO,
+            traveled: WEAPON_TRACER_HALF_LENGTH_M,
+            max_distance,
+            remaining_seconds: (max_distance / WEAPON_TRACER_SPEED_MPS + 0.06).clamp(0.06, 0.8),
+        },
+    );
+
+    // Ejection basis is reconstructed from the muzzle ray. The casing originates near the
+    // receiver (~43 cm behind this rifle's muzzle) and is thrown outward/up, never from the crown.
+    let mut right = direction.cross(Vec3::Y).normalize_or_zero();
+    if right.length_squared() <= 1.0e-8 {
+        right = Vec3::X;
+    }
+    let up = right.cross(direction).normalize_or_zero();
+    let jitter = (((shot_sequence.wrapping_mul(1_103_515_245).wrapping_add(12_345) >> 8)
+        & 0xffff) as f32
+        / 65_535.0)
+        - 0.5;
+    let casing_origin = origin - direction * 0.43 + right * 0.050 + up * 0.025;
+    let casing_velocity = right * (1.85 + jitter * 0.35)
+        + up * (1.25 + jitter.abs() * 0.25)
+        - direction * 0.22;
+    let casing_axis = (right * 0.85 + up * 0.15).normalize_or_zero();
+    let casing = world.spawn();
+    let _ = world.insert(
+        casing,
+        Name(format!(
+            "WeaponFx/ShellCasing/{:016x}/{shot_sequence}",
+            owner.stable_u64()
+        )),
+    );
+    let _ = world.insert(
+        casing,
+        Transform {
+            position: casing_origin,
+            rotation: Quat::from_rotation_arc(Vec3::Y, casing_axis).normalize_or_identity(),
+            scale: Vec3::new(0.010, 0.026, 0.010),
+        },
+    );
+    let _ = world.insert(
+        casing,
+        Primitive {
+            id: prim_builtins::ID_CYLINDER,
+            color: [0.72, 0.48, 0.18, 1.0],
+        },
+    );
+    let _ = world.insert(casing, DisplayVisibility::default());
+    let _ = world.insert(casing, GameplayActor);
+    let _ = world.insert(casing, weapon_fx_render_options());
+    let _ = world.insert(
+        casing,
+        WeaponShotFxRuntime {
+            owner,
+            shot_sequence,
+            kind: WeaponShotFxKind::ShellCasing,
+            origin: casing_origin,
+            velocity: casing_velocity,
+            spin_radians_per_second: Vec3::new(18.0 + jitter * 4.0, 11.0, 23.0 - jitter * 5.0),
+            traveled: 0.0,
+            max_distance: 0.0,
+            remaining_seconds: SHELL_CASING_LIFETIME_SECONDS,
+        },
+    );
+}
+
+/// Narrows an already spawned tracer to the authoritative hitscan impact. The tracer continues
+/// travelling visually, but it can no longer pass through the wall/target that the shot hit.
+pub(crate) fn clamp_weapon_shot_fx_to_hit(
+    world: &mut World,
+    owner: EntityId,
+    shot_sequence: u64,
+    point: Vec3,
+) {
+    if !point.is_finite() {
+        return;
+    }
+    let effects = world
+        .query::<WeaponShotFxRuntime>()
+        .filter_map(|(entity, runtime)| {
+            (runtime.owner == owner
+                && runtime.shot_sequence == shot_sequence
+                && runtime.kind == WeaponShotFxKind::Tracer)
+                .then_some((entity, *runtime))
+        })
+        .collect::<Vec<_>>();
+    for (entity, mut runtime) in effects {
+        let hit_distance = (point - runtime.origin).length();
+        if hit_distance.is_finite() {
+            runtime.max_distance = runtime.max_distance.min(hit_distance.max(0.0));
+            let _ = world.insert(entity, runtime);
+        }
+    }
+}
+
+pub(crate) fn step_weapon_shot_fx(world: &mut World, dt: f32) {
+    let dt = finite_or(dt, 0.0).clamp(0.0, 0.1);
+    if dt <= 0.0 {
+        return;
+    }
+    let effects = world
+        .query::<WeaponShotFxRuntime>()
+        .map(|(entity, runtime)| (entity, *runtime))
+        .collect::<Vec<_>>();
+    for (entity, mut runtime) in effects {
+        runtime.remaining_seconds = (runtime.remaining_seconds - dt).max(0.0);
+        let mut expire = runtime.remaining_seconds <= 0.0;
+        match runtime.kind {
+            WeaponShotFxKind::Tracer if !expire => {
+                let speed = runtime.velocity.length();
+                let direction = runtime.velocity.normalize_or_zero();
+                if speed <= 1.0e-6 || direction.length_squared() <= 1.0e-8 {
+                    expire = true;
+                } else {
+                    let remaining_distance = (runtime.max_distance - runtime.traveled).max(0.0);
+                    let advance = (speed * dt).min(remaining_distance);
+                    if let Some(transform) = world.get_mut::<Transform>(entity) {
+                        transform.position += direction * advance;
+                    }
+                    runtime.traveled += advance;
+                    if runtime.traveled + 1.0e-4 >= runtime.max_distance {
+                        expire = true;
+                    }
+                }
+            }
+            WeaponShotFxKind::ShellCasing if !expire => {
+                runtime.velocity.y -= SHELL_CASING_GRAVITY_MPS2 * dt;
+                if let Some(transform) = world.get_mut::<Transform>(entity) {
+                    transform.position += runtime.velocity * dt;
+                    let spin = runtime.spin_radians_per_second * dt;
+                    transform.rotation = (
+                        Quat::from_euler(EulerRot::XYZ, spin.x, spin.y, spin.z)
+                            * transform.rotation
+                    )
+                        .normalize_or_identity();
+                }
+            }
+            _ => {}
+        }
+        if expire {
+            let _ = world.despawn(entity);
+        } else {
+            let _ = world.insert(entity, runtime);
+        }
+    }
 }
 
 /// Consumes the semantic `player.projectile.launch` pulse and launches exactly one sphere per
@@ -337,6 +670,63 @@ mod tests {
             world.get::<PhysicsBodyDesc>(entity).map(|body| body.shape),
             Some(CollisionShapeDesc::Sphere { .. })
         ));
+    }
+
+    #[test]
+    fn weapon_shot_fx_starts_at_muzzle_and_stops_at_hitscan_impact() {
+        let mut world = World::new();
+        let owner = world.spawn();
+        let origin = Vec3::new(1.0, 1.5, 2.0);
+        let direction = -Vec3::Z;
+        spawn_weapon_shot_fx(&mut world, owner, 17, origin, direction, 120.0);
+
+        let effects = world
+            .query::<WeaponShotFxRuntime>()
+            .map(|(entity, runtime)| (entity, *runtime))
+            .collect::<Vec<_>>();
+        assert_eq!(effects.len(), 4);
+        let (tracer, tracer_runtime) = effects
+            .iter()
+            .copied()
+            .find(|(_, runtime)| runtime.kind == WeaponShotFxKind::Tracer)
+            .expect("tracer");
+        let tracer_transform = world
+            .get::<Transform>(tracer)
+            .copied()
+            .expect("tracer transform");
+        assert!((tracer_runtime.origin - origin).length() < 1.0e-6);
+        assert!(tracer_runtime.velocity.normalize_or_zero().dot(direction) > 0.999_999);
+        assert!(tracer_transform.position.z < origin.z);
+        let (casing, casing_runtime) = effects
+            .iter()
+            .copied()
+            .find(|(_, runtime)| runtime.kind == WeaponShotFxKind::ShellCasing)
+            .expect("shell casing");
+        let casing_before = world.get::<Transform>(casing).copied().expect("casing transform");
+        assert!(casing_runtime.velocity.length() > 1.0);
+        step_weapon_shot_fx(&mut world, 0.0005);
+        let casing_after = world.get::<Transform>(casing).copied().expect("moving casing");
+        assert!((casing_after.position - casing_before.position).length() > 0.001);
+
+        let hit = origin + direction * 1.0;
+        clamp_weapon_shot_fx_to_hit(&mut world, owner, 17, hit);
+        let clamped = world
+            .get::<WeaponShotFxRuntime>(tracer)
+            .copied()
+            .expect("clamped tracer");
+        assert!((clamped.max_distance - 1.0).abs() < 1.0e-6);
+
+        step_weapon_shot_fx(&mut world, 0.002);
+        let after = world
+            .get::<Transform>(tracer)
+            .copied()
+            .expect("travelling tracer");
+        assert!((after.position - origin).length() <= 1.0 + WEAPON_TRACER_HALF_LENGTH_M + 1.0e-4);
+        step_weapon_shot_fx(&mut world, 0.01);
+        assert!(
+            !world.exists(tracer),
+            "tracer must terminate at authoritative hit range"
+        );
     }
 
     #[test]

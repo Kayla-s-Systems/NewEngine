@@ -239,3 +239,37 @@ fn game_profile_primary_fire_has_click_edge_without_demo_projectile_binding() {
             .allow_projectile_launch
     );
 }
+
+struct HeldMouseButton(u32);
+
+impl newengine_input_actions_api::InputFrameSource for HeldMouseButton {
+    fn is_key_down(&self, _key: u32) -> bool {
+        false
+    }
+    fn is_key_pressed(&self, _key: u32) -> bool {
+        false
+    }
+    fn is_key_released(&self, _key: u32) -> bool {
+        false
+    }
+    fn is_mouse_down(&self, button: u32) -> bool {
+        button == self.0
+    }
+    fn is_mouse_pressed(&self, _button: u32) -> bool {
+        false
+    }
+    fn is_mouse_released(&self, _button: u32) -> bool {
+        false
+    }
+}
+
+#[test]
+fn game_profile_resolves_rmb_to_held_aim_command() {
+    let profile = game_ready_game_input_profile();
+    let frame = profile.resolve(&HeldMouseButton(newengine_input_api::mouse_button::RIGHT));
+    assert!(frame.contains_action(action::PLAYER_AIM));
+    let commands = frame.command_actions();
+    assert!(commands.is_held(action::PLAYER_AIM));
+    let fps = newengine_gameplay_fps_api::FpsActionFrame::from_commands(&commands);
+    assert!(fps.aim_held);
+}

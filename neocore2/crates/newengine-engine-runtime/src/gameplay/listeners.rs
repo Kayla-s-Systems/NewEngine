@@ -1,8 +1,8 @@
 use newengine_ecs::{EntityId, World};
 
 use super::{
-    DisplayMode, DisplayVisibility, PlayerEventBus, PlayerEventKind, PlayerViewVisibility,
-    PlayerViewVisibilityPolicy, PlayerVisualPart,
+    DisplayMode, DisplayVisibility, PlayerEventBus, PlayerEventKind, PlayerViewState,
+    PlayerViewVisibility, PlayerViewVisibilityPolicy, PlayerVisualPart,
 };
 
 #[inline]
@@ -31,6 +31,10 @@ fn effective_display_mode(binding: PlayerViewVisibility, first_person_active: bo
 /// input signal; the system does not know about a special player singleton and
 /// does not reach into renderer state.
 pub fn sync_player_view_listeners(world: &mut World, first_person_active: bool) {
+    world.insert_resource(PlayerViewState {
+        first_person_active,
+    });
+
     let mut updates: Vec<(EntityId, DisplayMode, EntityId)> = Vec::new();
     for (entity, visual, visibility) in world.query2::<PlayerVisualPart, PlayerViewVisibility>() {
         let mode = effective_display_mode(*visibility, first_person_active);

@@ -3,7 +3,7 @@ use super::*;
 impl Default for EditorScreen {
     fn default() -> Self {
         Self {
-            descriptor: editor_screen_descriptor(),
+            descriptor: editing_overlay_descriptor(),
         }
     }
 }
@@ -15,7 +15,6 @@ impl EditorScreen {
         runtime_mode: UiEditorRuntimeMode,
         runtime_paused: bool,
         runtime_possessed: bool,
-        runtime_diff_count: usize,
         command_registry: &EditorCommandRegistry,
         viewport_state: &UiEditorViewportState,
         scene_snapshot: &UiEditorSceneSnapshot,
@@ -29,7 +28,6 @@ impl EditorScreen {
             runtime_mode,
             runtime_paused,
             runtime_possessed,
-            runtime_diff_count,
             command_registry,
             viewport_state,
             scene_snapshot,
@@ -45,16 +43,15 @@ pub(super) fn screen_profile_descriptor(
     game_ui_root: Option<String>,
 ) -> UiScreenProfileDescriptor {
     match profile {
-        UiScreenProfile::Editor => editor_screen_descriptor(),
         UiScreenProfile::Game => game_screen_descriptor(game_ui_root),
         UiScreenProfile::Headless => headless_screen_descriptor(),
     }
 }
 
-pub(super) fn editor_screen_descriptor() -> UiScreenProfileDescriptor {
+pub(super) fn editing_overlay_descriptor() -> UiScreenProfileDescriptor {
     UiScreenProfileDescriptor {
         version: 1,
-        profile: UiScreenProfile::Editor,
+        profile: UiScreenProfile::Game,
         layout_id: EDITOR_LAYOUT_ID.to_owned(),
         surface_id: UI_SURFACE_EDITOR_SHELL.to_owned(),
         viewport_surface_id: DEFAULT_VIEWPORT_SURFACE.to_owned(),
@@ -217,9 +214,9 @@ pub(super) fn editor_screen_descriptor() -> UiScreenProfileDescriptor {
             ),
         ],
         diagnostics: vec![
-            "EditorScreen is a UI composition profile, not a backend domain.".to_owned(),
+            "Editing overlay is optional plugin tooling over the live Game runtime.".to_owned(),
             "Panels must consume DTOs/snapshots and opaque handles only.".to_owned(),
-            "Render backend selection is untouched by screen profile selection.".to_owned(),
+            "Editing tooling never selects another world or runtime profile.".to_owned(),
         ],
     }
 }
@@ -277,7 +274,6 @@ pub(super) fn editor_screen_surface_node(
     runtime_mode: UiEditorRuntimeMode,
     runtime_paused: bool,
     runtime_possessed: bool,
-    runtime_diff_count: usize,
     command_registry: &EditorCommandRegistry,
     viewport_state: &UiEditorViewportState,
     scene_snapshot: &UiEditorSceneSnapshot,
@@ -369,7 +365,6 @@ pub(super) fn editor_screen_surface_node(
             runtime_mode,
             runtime_paused,
             runtime_possessed,
-            runtime_diff_count,
             command_registry,
             viewport_state,
             scene_snapshot,

@@ -12,8 +12,7 @@ impl RuntimeRenderController {
             .resources()
             .get::<newengine_ui_api::UiInputFrame>()
             .cloned();
-        let play_mode =
-            editor_viewport_play_mode(ctx).unwrap_or_else(|| self.bridges.scene.play_mode());
+        let play_mode = self.bridges.scene.play_mode();
         let mut input = if scope.direct_surface_viewport {
             ViewportInputSnap::read_direct_surface(surface_input.as_ref())
         } else {
@@ -50,49 +49,4 @@ pub(super) fn is_game_screen_profile<E: Send + 'static>(ctx: &ModuleCtx<'_, E>) 
         .get::<UiScreenProfileState>()
         .map(|state| state.descriptor.profile == UiScreenProfile::Game)
         .unwrap_or(true)
-}
-
-pub(super) fn editor_viewport_runtime_mode<E: Send + 'static>(
-    ctx: &ModuleCtx<'_, E>,
-) -> Option<UiEditorRuntimeMode> {
-    let profile = ctx
-        .resources()
-        .get::<UiScreenProfileState>()
-        .map(|state| state.descriptor.profile)
-        .unwrap_or_default();
-    if profile != UiScreenProfile::Editor {
-        return None;
-    }
-    Some(
-        match ctx
-            .resources()
-            .get::<RuntimeSessionState>()
-            .and_then(|state| state.mode)
-        {
-            Some(RuntimeSessionMode::Simulate) => UiEditorRuntimeMode::Simulate,
-            Some(RuntimeSessionMode::Play) => UiEditorRuntimeMode::Play,
-            None => UiEditorRuntimeMode::Edit,
-        },
-    )
-}
-
-pub(super) fn editor_viewport_play_mode<E: Send + 'static>(
-    ctx: &ModuleCtx<'_, E>,
-) -> Option<crate::gameplay::GameRunMode> {
-    let mode = editor_viewport_runtime_mode(ctx)?;
-    Some(match mode {
-        UiEditorRuntimeMode::Edit => crate::gameplay::GameRunMode::Staging,
-        UiEditorRuntimeMode::Simulate => crate::gameplay::GameRunMode::Simulate,
-        UiEditorRuntimeMode::Play => {
-            if ctx
-                .resources()
-                .get::<RuntimeSessionState>()
-                .is_some_and(|state| state.is_possessed())
-            {
-                crate::gameplay::GameRunMode::Play
-            } else {
-                crate::gameplay::GameRunMode::Simulate
-            }
-        }
-    })
 }

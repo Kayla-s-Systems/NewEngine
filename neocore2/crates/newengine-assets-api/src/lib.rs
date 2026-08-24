@@ -1,4 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
+
+mod raw_range;
+pub use raw_range::*;
 mod asset_error;
 pub use asset_error::*;
 
@@ -368,6 +371,8 @@ pub mod method {
     pub const PUMP_V1: &str = "asset.pump_v1";
     /// Raw VFS bytes by logical path. This bypasses codecs but still resolves exclusively through AssetManager mounts.
     pub const RAW_BYTES_V1: &str = "asset.raw_bytes_v1";
+    /// Bounded raw VFS byte range. Request is JSON `AssetRawRangeRequest`; response is NARR v1 binary.
+    pub const RAW_RANGE_V1: &str = "asset.raw_range_v1";
     /// Raw UTF-8 text by logical path resolved through AssetManager mounts.
     pub const TEXT_V1: &str = "asset.text_v1";
     // Fast-path / batch APIs.
@@ -608,6 +613,7 @@ pub const REQUIRED_RUNTIME_METHODS_V1: &[&str] = &[
     method::INVOKE_JSON,
     method::SHUTDOWN_V1,
     method::RAW_BYTES_V1,
+    method::RAW_RANGE_V1,
     method::TEXT_V1,
     method::IMPORT_V1,
     method::TEXTURE_RGBA8_V1,

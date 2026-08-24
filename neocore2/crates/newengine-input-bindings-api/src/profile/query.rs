@@ -4,9 +4,7 @@ impl InputBindingsProfile {
     pub fn resolve<T: InputFrameSource>(&self, input: &T) -> InputActionFrame {
         let mut out = InputActionFrame::default();
         for binding in &self.bindings {
-            if !binding_matches(binding, input)
-                || out.actions.iter().any(|action| action == &binding.action)
-            {
+            if !binding_matches(binding, input) {
                 continue;
             }
             let phase = match binding.phase {
@@ -18,14 +16,33 @@ impl InputBindingsProfile {
                     newengine_input_actions_api::InputActionPhase::Released
                 }
             };
+            if out
+                .signals
+                .iter()
+                .any(|signal| signal.action == binding.action && signal.phase == phase)
+            {
+                continue;
+            }
+            let action_already_dispatched =
+                out.actions.iter().any(|action| action == &binding.action);
             if let Some(definition) = self
                 .actions
                 .iter()
                 .find(|definition| definition.id == binding.action)
             {
-                dispatch_action_definition(&mut out, definition, &self.listeners, phase);
+                if action_already_dispatched {
+                    out.signals
+                        .push(newengine_input_actions_api::InputActionSignal {
+                            action: binding.action.clone(),
+                            phase,
+                        });
+                } else {
+                    dispatch_action_definition(&mut out, definition, &self.listeners, phase);
+                }
             } else {
-                out.actions.push(binding.action.clone());
+                if !action_already_dispatched {
+                    out.actions.push(binding.action.clone());
+                }
                 out.signals
                     .push(newengine_input_actions_api::InputActionSignal {
                         action: binding.action.clone(),

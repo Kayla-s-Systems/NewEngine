@@ -42,6 +42,7 @@ fn collect_ground_queries(world: &World, tuning: FpsPlayerTuning) -> Vec<Physics
         let vertical_extent = collision_shape_vertical_extent(body.shape);
         queries.push(PhysicsQueryDto {
             seq: entity.stable_u64(),
+            ignore_entity: Some(entity.stable_u64()),
             kind: PhysicsQueryKindDto::Ray {
                 origin: [
                     transform.position.x,
@@ -122,6 +123,7 @@ fn collect_stand_clearance_queries(world: &World, tuning: FpsPlayerTuning) -> Ve
         for (sample_index, [offset_x, offset_z]) in offsets.into_iter().enumerate() {
             queries.push(PhysicsQueryDto {
                 seq: stand_probe_query_seq(player.stable_u64(), sample_index),
+                ignore_entity: Some(player.stable_u64()),
                 kind: PhysicsQueryKindDto::Ray {
                     origin: [
                         transform.position.x + offset_x,

@@ -1,6 +1,158 @@
 use super::operations::emit_inventory_event;
 use super::*;
 
+pub fn preload_weapon_audio_definition(audio: &WeaponAudioDefinition) {
+    for action in [
+        WeaponAudioAction::Fire,
+        WeaponAudioAction::ReloadStart,
+        WeaponAudioAction::ReloadComplete,
+        WeaponAudioAction::Equip,
+        WeaponAudioAction::Unequip,
+        WeaponAudioAction::Empty,
+        WeaponAudioAction::ShellEject,
+    ] {
+        let Some(reference) = audio.clip(action) else {
+            continue;
+        };
+        let result = if is_yscd_cue_reference(reference) {
+            crate::audio_gateway::preload_audio_cue(&newengine_audio_api::AudioCuePreloadRequest {
+                cue: newengine_audio_api::SoundCueRef::new(reference.to_owned()),
+            })
+        } else {
+            crate::audio_gateway::preload_audio_clip(&newengine_audio_api::AudioPreloadRequest {
+                clip: newengine_audio_api::AudioClipRef::new(reference.to_owned()),
+            })
+        };
+        match result {
+            Ok(Some(ack)) if ack.accepted => {
+                newengine_ulog_api::ulog::info!(
+                    "weapon audio preload: action={:?} ref='{}' kind='{}' provider='{}' bytes={} cached={} status='ready'",
+                    action,
+                    reference,
+                    if is_yscd_cue_reference(reference) { "yscd-cue" } else { "clip" },
+                    ack.provider,
+                    ack.bytes,
+                    ack.cached,
+                );
+            }
+            Ok(Some(ack)) => newengine_ulog_api::ulog::warn!(
+                "weapon audio preload rejected: action={:?} ref='{}' provider='{}'",
+                action,
+                reference,
+                ack.provider,
+            ),
+            Ok(None) => newengine_ulog_api::ulog::warn!(
+                "weapon audio preload unavailable: action={:?} ref='{}' reason='engine.audio returned no provider response'",
+                action,
+                reference,
+            ),
+            Err(error) => newengine_ulog_api::ulog::warn!(
+                "weapon audio preload failed: action={:?} ref='{}' err='{}'",
+                action,
+                reference,
+                error,
+            ),
+        }
+    }
+}
+
+#[inline]
+fn is_yscd_cue_reference(reference: &str) -> bool {
+    newengine_assets_api::parse_asset_reference(reference)
+        .map(|reference| {
+            reference.has_extension("yscd")
+                && reference
+                    .entry
+                    .as_deref()
+                    .is_some_and(|entry| !entry.trim().is_empty())
+        })
+        .unwrap_or(false)
+}
+
+pub fn play_weapon_item_audio(
+    world: &World,
+    owner: EntityId,
+    item: ItemId,
+    action: WeaponAudioAction,
+) {
+    let Some(reference) = world
+        .resource::<ItemCatalog>()
+        .and_then(|catalog| catalog.get(item))
+        .and_then(|definition| definition.weapon_audio.clip(action))
+        .map(ToOwned::to_owned)
+    else {
+        return;
+    };
+    let spatial_position = match action {
+        WeaponAudioAction::Fire | WeaponAudioAction::ShellEject => world
+            .get::<EquippedWeaponMuzzle>(owner)
+            .map(|muzzle| muzzle.position)
+            .or_else(|| {
+                world
+                    .get::<Transform>(owner)
+                    .map(|transform| transform.position)
+            }),
+        _ => world
+            .get::<Transform>(owner)
+            .map(|transform| transform.position),
+    };
+
+    let is_cue = is_yscd_cue_reference(&reference);
+    let result = if is_cue {
+        let mut request = newengine_audio_api::AudioCuePlayRequest::new(reference.clone());
+        request.position = spatial_position.map(|position| [position.x, position.y, position.z]);
+        crate::audio_gateway::play_audio_cue(&request)
+    } else {
+        let mut request = newengine_audio_api::AudioPlayRequest::new(reference.clone());
+        request.spatial =
+            spatial_position.map(|position| newengine_audio_api::AudioSpatialParams {
+                position: [position.x, position.y, position.z],
+            });
+        crate::audio_gateway::play_audio_clip(&request)
+    };
+
+    match result {
+        Ok(Some(ack)) if ack.accepted => {
+            if matches!(action, WeaponAudioAction::Fire | WeaponAudioAction::Empty) {
+                newengine_ulog_api::ulog::info!(
+                    "weapon audio play: action={:?} ref='{}' kind='{}' provider='{}' voice_id={:?} virtualized={} status='accepted'",
+                    action,
+                    reference,
+                    if is_cue { "yscd-cue" } else { "clip" },
+                    ack.provider,
+                    ack.voice_id,
+                    ack.virtualized,
+                );
+            }
+        }
+        Ok(Some(ack)) => newengine_ulog_api::ulog::warn!(
+            "weapon audio play rejected: action={:?} ref='{}' provider='{}' message='{}'",
+            action,
+            reference,
+            ack.provider,
+            ack.message,
+        ),
+        Ok(None) => newengine_ulog_api::ulog::warn!(
+            "weapon audio play unavailable: action={:?} ref='{}' reason='engine.audio returned no provider response'",
+            action,
+            reference,
+        ),
+        Err(error) => newengine_ulog_api::ulog::warn!(
+            "weapon audio play failed: action={:?} ref='{}' err='{}'",
+            action,
+            reference,
+            error,
+        ),
+    }
+}
+
+pub fn play_equipped_weapon_audio(world: &World, owner: EntityId, action: WeaponAudioAction) {
+    let Some(binding) = world.get::<EquippedWeaponBinding>(owner) else {
+        return;
+    };
+    play_weapon_item_audio(world, owner, binding.item, action);
+}
+
 pub fn equip_first_item(world: &mut World, owner: EntityId, item: ItemId) -> Result<(), String> {
     let instance = world
         .get::<PlayerInventory>(owner)
@@ -83,6 +235,12 @@ pub fn equip_item_instance(
         },
     );
     sync_equipped_weapon_runtime(world, owner);
+    if let Some(previous_item) = previous_item.filter(|previous_item| *previous_item != item) {
+        play_weapon_item_audio(world, owner, previous_item, WeaponAudioAction::Unequip);
+    }
+    if definition.kind == ItemKind::Weapon {
+        play_weapon_item_audio(world, owner, item, WeaponAudioAction::Equip);
+    }
     Ok(())
 }
 
@@ -92,6 +250,9 @@ pub fn select_equipment_slot(
     slot: EquipmentSlot,
 ) -> Result<(), String> {
     persist_equipped_weapon_state(world, owner);
+    let previous_item = world
+        .get::<EquippedWeaponBinding>(owner)
+        .map(|binding| binding.item);
     let instance = world
         .get::<PlayerInventory>(owner)
         .and_then(|inventory| inventory.equipped_instance(slot))
@@ -126,6 +287,12 @@ pub fn select_equipment_slot(
         },
     );
     sync_equipped_weapon_runtime(world, owner);
+    if previous_item != Some(item) {
+        if let Some(previous_item) = previous_item {
+            play_weapon_item_audio(world, owner, previous_item, WeaponAudioAction::Unequip);
+        }
+        play_weapon_item_audio(world, owner, item, WeaponAudioAction::Equip);
+    }
     Ok(())
 }
 
@@ -160,6 +327,7 @@ pub fn unequip_slot(world: &mut World, owner: EntityId, slot: EquipmentSlot) -> 
         },
     );
     sync_equipped_weapon_runtime(world, owner);
+    play_weapon_item_audio(world, owner, item, WeaponAudioAction::Unequip);
     Ok(())
 }
 

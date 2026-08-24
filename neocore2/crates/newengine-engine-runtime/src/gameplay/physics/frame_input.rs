@@ -5,7 +5,7 @@ use newengine_physics_api::{
     PhysicsFrameInput, PhysicsMaterialDto,
 };
 use newengine_physics_contracts::PhysicsBodyDesc;
-use newengine_sim::Velocity;
+use newengine_sim::{AngularVelocity, Velocity};
 use newengine_transform::Transform;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -195,6 +195,10 @@ fn collect_body_snapshots(world: &World) -> Vec<PhysicsFrameBodySnapshot> {
     for (entity, body) in world.query::<PhysicsBodyDesc>() {
         let transform = world.get::<Transform>(entity).copied().unwrap_or_default();
         let velocity = world.get::<Velocity>(entity).copied().unwrap_or_default();
+        let angular_velocity = world
+            .get::<AngularVelocity>(entity)
+            .copied()
+            .unwrap_or_default();
         let bounds = world
             .get::<newengine_bounds::Bounds>(entity)
             .map(|b| b.world_aabb)
@@ -221,6 +225,7 @@ fn collect_body_snapshots(world: &World) -> Vec<PhysicsFrameBodySnapshot> {
             position: vec3_to_arr(transform.position),
             rotation: quat_to_arr(physics_rotation),
             linear_velocity: vec3_to_arr(velocity.0),
+            angular_velocity: vec3_to_arr(angular_velocity.0),
             bounds_min: vec3_to_arr(bounds.min),
             bounds_max: vec3_to_arr(bounds.max),
         });
@@ -272,6 +277,30 @@ mod tests {
             .mark_ready(2, "collision ready");
         let active = build_frame_input(&world, 2, 2, 1.0 / 60.0, &mut revisions, &queries);
         assert_eq!(active.bodies.len(), 1);
+    }
+
+    #[test]
+    fn frame_input_preserves_dynamic_body_angular_velocity() {
+        let mut world = World::new();
+        let entity = world.spawn();
+        let _ = world.insert(entity, Transform::default());
+        let _ = world.insert(
+            entity,
+            PhysicsBodyDesc::dynamic_solid(newengine_physics_contracts::CollisionShapeDesc::Box {
+                half_extents: [0.1, 0.1, 0.5],
+            }),
+        );
+        let _ = world.insert(entity, Velocity(newengine_math::Vec3::new(1.0, 2.0, 3.0)));
+        let _ = world.insert(
+            entity,
+            AngularVelocity(newengine_math::Vec3::new(1.8, 3.2, 0.9)),
+        );
+        let snapshot = collect_body_snapshots(&world)
+            .into_iter()
+            .find(|snapshot| snapshot.entity == entity.stable_u64())
+            .expect("dynamic body snapshot");
+        assert_eq!(snapshot.linear_velocity, [1.0, 2.0, 3.0]);
+        assert_eq!(snapshot.angular_velocity, [1.8, 3.2, 0.9]);
     }
 
     #[test]

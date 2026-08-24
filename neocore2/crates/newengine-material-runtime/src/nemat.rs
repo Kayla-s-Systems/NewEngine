@@ -324,9 +324,12 @@ pub(crate) fn material_response_from_authored(
     } else {
         material.name
     };
+    let canonical_source = format!("{source}@{selector}");
     Ok(MaterialLoadResponse {
-        source: format!("{source}@{selector}"),
-        id: material_id_from_name(&name),
+        source: canonical_source.clone(),
+        // Entry names such as `m00` are only library-local. Stable runtime identity must include
+        // the NEMAT source to prevent collisions across unrelated material libraries.
+        id: material_id_from_name(&canonical_source),
         name,
         descriptor,
         textures,
@@ -496,4 +499,24 @@ pub(crate) fn normalize_material_logical_path(path: &str) -> Result<String, Stri
         return Err("materials: logical path is empty".to_owned());
     }
     Ok(s)
+}
+
+#[cfg(test)]
+mod canonical_identity_tests {
+    use super::*;
+
+    #[test]
+    fn nemat_material_id_is_scoped_by_canonical_source() {
+        let material = AuthoredMaterialDescriptor {
+            name: "m00".to_owned(),
+            ..AuthoredMaterialDescriptor::default()
+        };
+        let a =
+            material_response_from_authored("shared/materials/a.nemat", "m00", material.clone())
+                .expect("material a");
+        let b = material_response_from_authored("shared/materials/b.nemat", "m00", material)
+            .expect("material b");
+        assert_ne!(a.id, b.id);
+        assert_eq!(a.source, "shared/materials/a.nemat@m00");
+    }
 }

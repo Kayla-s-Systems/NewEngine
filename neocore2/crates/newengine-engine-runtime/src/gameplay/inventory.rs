@@ -23,9 +23,9 @@ mod storage;
 
 pub use catalog::ItemCatalog;
 pub use definitions::{
-    EquipmentSlot, ItemDefinition, ItemId, ItemInstanceId, ItemKind, ItemUseEffect, WeaponFireMode,
-    WeaponItemDefinition, WorldItemDefinition, WorldItemPresentation, WorldItemRuntime,
-    WorldItemVisualPart,
+    EquipmentSlot, ItemDefinition, ItemId, ItemInstanceId, ItemKind, ItemUseEffect,
+    WeaponAudioAction, WeaponAudioDefinition, WeaponFireMode, WeaponItemDefinition,
+    WorldItemDefinition, WorldItemPresentation, WorldItemRuntime, WorldItemVisualPart,
 };
 pub use loadouts::{InventoryLoadout, InventoryLoadoutCatalog, InventoryLoadoutEntry};
 pub use operations::{
@@ -33,13 +33,14 @@ pub use operations::{
     give_item, inventory_quantity, remove_item,
 };
 pub use storage::{
-    EquippedWeaponBinding, InventoryEntry, InventoryEvent, InventoryEventBus, InventoryEventKind,
-    InventoryMutation, ItemPickup, PlayerInventory,
+    EquippedWeaponBinding, EquippedWeaponMuzzle, InventoryEntry, InventoryEvent, InventoryEventBus,
+    InventoryEventKind, InventoryMutation, ItemPickup, PlayerInventory,
 };
 
 pub use inventory_equipment::{
     consume_equipped_ammo, equip_first_item, equip_item_instance, equipped_reserve_ammo,
-    persist_equipped_weapon_state, select_equipment_slot, sync_equipped_weapon_runtime,
+    persist_equipped_weapon_state, play_equipped_weapon_audio, play_weapon_item_audio,
+    preload_weapon_audio_definition, select_equipment_slot, sync_equipped_weapon_runtime,
     unequip_slot, use_item,
 };
 pub use inventory_world::try_collect_item_pickup;

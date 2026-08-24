@@ -3,11 +3,12 @@ use std::collections::{BTreeMap, BTreeSet};
 use newengine_ecs::{EntityId, World};
 use newengine_engine_runtime::gameplay::{
     consume_equipped_ammo, equipped_reserve_ammo, persist_equipped_weapon_state,
-    sync_equipped_weapon_runtime, try_collect_item_pickup, EquippedWeaponBinding, Health,
-    HitscanWeaponTuning, Interactable, InteractionEvent, InteractionEventBus, ItemPickup,
-    PendingHitscan, PendingInteraction, PlayerCommandFrame, PlayerController,
-    PlayerInteractionTuning, PlayerStanceState, PlayerWeaponState, WeaponEvent, WeaponEventBus,
-    WeaponEventKind, WeaponFireMode,
+    play_equipped_weapon_audio, sync_equipped_weapon_runtime, try_collect_item_pickup,
+    EquippedWeaponBinding, EquippedWeaponMuzzle, Health, HitscanWeaponTuning, Interactable,
+    InteractionEvent, InteractionEventBus, ItemPickup, PendingHitscan, PendingInteraction,
+    PlayerCommandFrame, PlayerController, PlayerInteractionTuning, PlayerStanceState,
+    PlayerWeaponState, WeaponAudioAction, WeaponEvent, WeaponEventBus, WeaponEventKind,
+    WeaponFireMode,
 };
 #[cfg(test)]
 use newengine_gameplay_fps_api::action as fps_action;
@@ -16,7 +17,7 @@ use newengine_gameplay_fps_api::{
     FpsPolicyEvent,
 };
 use newengine_gameplay_script_runtime::GameplayCommandExecutor;
-use newengine_math::{avalanche_u64, Vec3};
+use newengine_math::{avalanche_u64, EulerRot, Quat, Vec3};
 use newengine_physics_api::{PhysicsQueryDto, PhysicsQueryHitDto, PhysicsQueryKindDto};
 use newengine_sim::CharacterMotor;
 use newengine_transform::Transform;

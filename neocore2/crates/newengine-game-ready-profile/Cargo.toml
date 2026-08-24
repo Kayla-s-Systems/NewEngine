@@ -15,7 +15,6 @@ abi_stable = "0.11"
 newengine-assets = { path = "../newengine-assets" }
 newengine-asset-bootstrap-runtime = { path = "../newengine-asset-bootstrap-runtime" }
 newengine-assets-ui-runtime = { path = "../newengine-assets-ui-runtime" }
-newengine-audio-runtime = { path = "../newengine-audio-runtime" }
 newengine-assets-catalog-ui-runtime = { path = "../newengine-assets-catalog-ui-runtime" }
 newengine-core = { path = "../newengine-core", features = ["runtime-domain-contracts"] }
 newengine-definitions-runtime = { path = "../newengine-definitions-runtime" }

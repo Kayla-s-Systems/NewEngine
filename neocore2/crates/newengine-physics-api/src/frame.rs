@@ -50,6 +50,8 @@ pub struct PhysicsBodyPoseUpdate {
 pub struct PhysicsBodyVelocityUpdate {
     pub entity: PhysicsEntityKey,
     pub linear_velocity: PhysicsVec3,
+    #[serde(default)]
+    pub angular_velocity: PhysicsVec3,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]

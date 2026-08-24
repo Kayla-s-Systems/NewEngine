@@ -12,7 +12,6 @@ pub mod editor_command {
     pub const RUNTIME_STEP: &str = "editor.runtime.step";
     pub const RUNTIME_EJECT: &str = "editor.runtime.eject";
     pub const RUNTIME_POSSESS: &str = "editor.runtime.possess";
-    pub const RUNTIME_APPLY_CHANGES: &str = "editor.runtime.apply_changes";
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -218,7 +217,7 @@ pub fn default_runtime_editor_commands() -> EditorCommandRegistry {
             id: RUNTIME_EJECT.to_owned(),
             label: "Eject".to_owned(),
             category: "Runtime".to_owned(),
-            tooltip: "Release player possession and continue PIE with the editor camera".to_owned(),
+            tooltip: "Release player possession while the live runtime continues".to_owned(),
             priority: 95,
             shortcut: None,
             enable_policy: EditorCommandEnablePolicy::RuntimePossessed,
@@ -227,21 +226,10 @@ pub fn default_runtime_editor_commands() -> EditorCommandRegistry {
             id: RUNTIME_POSSESS.to_owned(),
             label: "Possess".to_owned(),
             category: "Runtime".to_owned(),
-            tooltip: "Return control from the editor camera to the PIE player".to_owned(),
+            tooltip: "Return control to the player in the active live runtime".to_owned(),
             priority: 95,
             shortcut: None,
             enable_policy: EditorCommandEnablePolicy::RuntimeEjected,
-        },
-        EditorCommandDescriptor {
-            id: RUNTIME_APPLY_CHANGES.to_owned(),
-            label: "Apply Changes & Stop".to_owned(),
-            category: "Runtime".to_owned(),
-            tooltip:
-                "Keep authored scene changes made during PIE, then restore editor runtime state"
-                    .to_owned(),
-            priority: 80,
-            shortcut: None,
-            enable_policy: EditorCommandEnablePolicy::RuntimeActive,
         },
     ];
     for command in commands {

@@ -6,21 +6,19 @@ Project/game manifest, launch-plan and logical content-mount contracts for NewEn
 
 ## Launch presets
 
-A single project may be opened in different runtime modes without using a different executable:
+A project launches a real runtime world through Game, Server or Test. Editing is not a launch profile; it is an optional capability supplied by a configured tools plugin to the same live runtime.
 
 ```toml
 format_version = 1
 id = "my-game"
 name = "My Game"
-runtime_profile = "my.runtime-profile"
+runtime_profile = "newengine.runtime-profile.game-ready"
 startup_scene = "maps/start.ymap"
-default_launch = "editor"
-
-[launch.editor]
-profile = "editor"
+default_launch = "game"
 
 [launch.game]
 profile = "game"
+runtime_profile = "newengine.runtime-profile.game-ready"
 startup_presentation_state = "gameplay"
 
 [[content]]
@@ -33,7 +31,7 @@ required = true
 owner = "project:my-game"
 ```
 
-The launcher resolves a `ResolvedProjectLaunch` from project defaults plus the selected preset. `--launch <id>` and `NEWENGINE_PROJECT_LAUNCH_PRESET` select a preset explicitly.
+The launcher resolves a `ResolvedProjectLaunch` from project defaults plus the selected Game/Server/Test preset. `--launch <id>` and `NEWENGINE_PROJECT_LAUNCH_PRESET` select a preset explicitly. If the loaded plugin composition provides `engine.editing.tools`, hierarchy, inspector, gizmos and other authoring tools operate on that same live runtime world.
 
 ## Game module boundary
 

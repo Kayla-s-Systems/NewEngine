@@ -180,6 +180,12 @@ pub trait AssetAccess {
     /// filesystem paths or bypass mounts.
     fn raw_bytes_v1(&self, logical_path: &str) -> Result<Vec<u8>, String>;
 
+    /// Read a bounded raw byte range through the same VFS ownership/resolution policy.
+    fn raw_range_v1(
+        &self,
+        request: &crate::AssetRawRangeRequest,
+    ) -> Result<crate::AssetRawRangeResponse, String>;
+
     /// Read asset payload using a stable wire format.
     ///
     /// Returns `(meta_json, payload_bytes)`.

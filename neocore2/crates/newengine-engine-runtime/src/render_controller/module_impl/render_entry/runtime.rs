@@ -112,8 +112,7 @@ impl RuntimeRenderController {
                     .unwrap_or_default()
                 {
                     UiScreenProfile::Game => UiLayerDomain::GameViewport,
-                    UiScreenProfile::Editor => UiLayerDomain::Editor,
-                    _ => UiLayerDomain::System,
+                    UiScreenProfile::Headless => UiLayerDomain::System,
                 }
             });
         self.apply_editor_viewport_slot(ctx, w, h);

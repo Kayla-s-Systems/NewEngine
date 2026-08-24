@@ -101,6 +101,7 @@ mod tests {
                 velocity_updates: vec![PhysicsBodyVelocityUpdate {
                     entity: player.stable_u64(),
                     linear_velocity: [0.0, 0.0, 0.0],
+                    angular_velocity: [0.0, 0.0, 0.0],
                 }],
                 query_hits: vec![PhysicsQueryHitDto {
                     seq: player.stable_u64(),
@@ -211,6 +212,7 @@ mod tests {
                 velocity_updates: vec![PhysicsBodyVelocityUpdate {
                     entity: player.stable_u64(),
                     linear_velocity: [0.0, 0.0, 0.0],
+                    angular_velocity: [0.0, 0.0, 0.0],
                 }],
                 query_hits: vec![PhysicsQueryHitDto {
                     seq: player.stable_u64(),
@@ -252,6 +254,7 @@ mod tests {
                 velocity_updates: vec![PhysicsBodyVelocityUpdate {
                     entity: player.stable_u64(),
                     linear_velocity: [0.0, 0.0, 0.0],
+                    angular_velocity: [0.0, 0.0, 0.0],
                 }],
                 query_hits: vec![PhysicsQueryHitDto {
                     seq: player.stable_u64(),
@@ -390,6 +393,7 @@ mod tests {
                 velocity_updates: vec![PhysicsBodyVelocityUpdate {
                     entity: player.stable_u64(),
                     linear_velocity: [0.0, 5.5, 0.0],
+                    angular_velocity: [0.0, 0.0, 0.0],
                 }],
                 query_hits: vec![PhysicsQueryHitDto {
                     seq: player.stable_u64(),

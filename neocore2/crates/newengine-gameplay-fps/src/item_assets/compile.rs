@@ -65,6 +65,11 @@ pub fn compile_authored_item_package(
 }
 
 pub fn install_compiled_item_package(world: &mut World, package: CompiledItemPackage) {
+    for definition in package.catalog.definitions() {
+        if definition.kind == ItemKind::Weapon {
+            preload_weapon_audio_definition(&definition.weapon_audio);
+        }
+    }
     world.insert_resource(package.catalog);
     world.insert_resource(package.loadouts);
     if world.resource::<InventoryEventBus>().is_none() {
@@ -127,6 +132,9 @@ fn compile_item_definition(authored: &AuthoredItemDefinition) -> Result<ItemDefi
     }
     if kind != ItemKind::Weapon && !authored.equipment_slot.trim().is_empty() {
         definition.equipment_slot = Some(parse_equipment_slot(&authored.equipment_slot)?);
+    }
+    if let Some(audio) = authored.weapon_audio.as_ref() {
+        definition = definition.with_weapon_audio(audio.compile());
     }
     if let Some(world) = authored.world.as_ref() {
         definition = definition.with_world_definition(world.compile(kind)?);

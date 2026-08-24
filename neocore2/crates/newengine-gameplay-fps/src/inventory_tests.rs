@@ -199,7 +199,7 @@ fn loadout_reset_and_active_weapon_drop_leave_no_orphan_weapon_state() {
 }
 
 #[test]
-fn world_pickup_uses_authored_visual_metadata_and_renderable_fallback() {
+fn model_backed_world_pickup_uses_invisible_staging_root_until_authored_admission() {
     let mut world = World::new();
     install_fps_content(&mut world);
     let pickup = spawn_item_pickup(
@@ -215,10 +215,14 @@ fn world_pickup_uses_authored_visual_metadata_and_renderable_fallback() {
         .expect("world presentation");
     assert_eq!(
         presentation.model_ref.as_deref(),
-        Some("models/weapons/service_rifle.ydd@service_rifle")
+        Some("shared/models/weapon/rifle/rifle.ydd@rifle")
     );
     assert_eq!(presentation.fallback_primitive, primitive_builtins::ID_CUBE);
-    assert!(world.get::<Primitive>(presentation.visual_entity).is_some());
+    assert!(!presentation.authored_visual_admitted);
+    assert!(
+        world.get::<Primitive>(presentation.visual_entity).is_none(),
+        "model-backed world items must not expose an unmaterialed fallback primitive"
+    );
     assert_eq!(
         world
             .get::<WorldItemVisualPart>(presentation.visual_entity)

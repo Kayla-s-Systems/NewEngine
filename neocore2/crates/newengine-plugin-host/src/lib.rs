@@ -21,6 +21,22 @@ pub struct PluginsSnapshot {
     pub plugins: std::sync::Arc<[PluginSnapshotEntry]>,
 }
 
+impl PluginsSnapshot {
+    /// True only when a currently running plugin explicitly provides `capability_id`.
+    /// Tool availability must be derived from composition state, never launch-profile names.
+    pub fn has_running_capability(&self, capability_id: &str) -> bool {
+        let capability_id = capability_id.trim();
+        !capability_id.is_empty()
+            && self.plugins.iter().any(|plugin| {
+                plugin.state == "running"
+                    && plugin.capabilities.iter().any(|capability| {
+                        capability.role == newengine_plugin_api::CapabilityRole::Provides
+                            && capability.id.as_str() == capability_id
+                    })
+            })
+    }
+}
+
 pub use content_manifest::{
     load_plugin_content_catalog_default, load_plugin_content_catalog_from_dir, PluginContentBlob,
     PluginContentCatalog, PluginContentLoadReport,

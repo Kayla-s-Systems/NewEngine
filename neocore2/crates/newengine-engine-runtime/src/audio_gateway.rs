@@ -2,16 +2,19 @@
 
 use abi_stable::std_types::RResult;
 use newengine_audio_api::{
-    AudioBusGainAck, AudioBusGainRequest, AudioDiagnostics, AudioFeedbackAck, AudioFeedbackDrain,
-    AudioFeedbackEvent, AudioFeedbackKind, AudioListenerState, AudioPlayAck, AudioPlayRequest,
-    AudioPreloadAck, AudioPreloadRequest, AudioServiceInfo, AudioStopVoiceRequest, AudioVoiceAck,
+    AudioBusGainAck, AudioBusGainRequest, AudioCuePlayRequest, AudioCuePreloadRequest,
+    AudioDiagnostics, AudioFeedbackAck, AudioFeedbackDrain, AudioFeedbackEvent, AudioFeedbackKind,
+    AudioListenerState, AudioPlayAck, AudioPlayRequest, AudioPreloadAck, AudioPreloadRequest,
+    AudioServiceInfo, AudioStopVoiceRequest, AudioStreamPlayRequest, AudioVoiceAck,
     AudioVoiceUpdateRequest, AUDIO_BACKEND_CAPABILITY_ID, AUDIO_SERVICE_METHOD_DIAGNOSTICS_JSON_V1,
     AUDIO_SERVICE_METHOD_DRAIN_EVENTS_JSON_V1, AUDIO_SERVICE_METHOD_INFO,
     AUDIO_SERVICE_METHOD_INVOKE, AUDIO_SERVICE_METHOD_PLAY_CLIP_JSON_V1,
-    AUDIO_SERVICE_METHOD_PLAY_EVENT_JSON_V1, AUDIO_SERVICE_METHOD_PRELOAD_CLIP_JSON_V1,
-    AUDIO_SERVICE_METHOD_SET_BUS_GAIN_JSON_V1, AUDIO_SERVICE_METHOD_SET_LISTENER_JSON_V1,
-    AUDIO_SERVICE_METHOD_SET_VOICE_JSON_V1, AUDIO_SERVICE_METHOD_SHUTDOWN_V1,
-    AUDIO_SERVICE_METHOD_STOP_VOICE_JSON_V1, ENGINE_AUDIO_SERVICE_ID,
+    AUDIO_SERVICE_METHOD_PLAY_CUE_JSON_V1, AUDIO_SERVICE_METHOD_PLAY_EVENT_JSON_V1,
+    AUDIO_SERVICE_METHOD_PLAY_STREAM_JSON_V1, AUDIO_SERVICE_METHOD_PRELOAD_CLIP_JSON_V1,
+    AUDIO_SERVICE_METHOD_PRELOAD_CUE_JSON_V1, AUDIO_SERVICE_METHOD_SET_BUS_GAIN_JSON_V1,
+    AUDIO_SERVICE_METHOD_SET_LISTENER_JSON_V1, AUDIO_SERVICE_METHOD_SET_VOICE_JSON_V1,
+    AUDIO_SERVICE_METHOD_SHUTDOWN_V1, AUDIO_SERVICE_METHOD_STOP_VOICE_JSON_V1,
+    ENGINE_AUDIO_SERVICE_ID,
 };
 use newengine_service_kit::{
     decode_json_payload, engine_gateway_provider_service_description, ok_empty_blob, ok_json,
@@ -218,10 +221,27 @@ pub fn preload_audio_clip(
     call_audio_json(AUDIO_SERVICE_METHOD_PRELOAD_CLIP_JSON_V1, request)
 }
 
+/// Preloads a VFS-backed SoundCue and every referenced clip.
+pub fn preload_audio_cue(
+    request: &AudioCuePreloadRequest,
+) -> Result<Option<AudioPreloadAck>, String> {
+    call_audio_json(AUDIO_SERVICE_METHOD_PRELOAD_CUE_JSON_V1, request)
+}
+
+/// Resolves and plays a VFS-backed SoundCue through the active provider.
+pub fn play_audio_cue(request: &AudioCuePlayRequest) -> Result<Option<AudioPlayAck>, String> {
+    call_audio_json(AUDIO_SERVICE_METHOD_PLAY_CUE_JSON_V1, request)
+}
+
 /// Starts a 2D or spatial voice. `voice_id` in the acknowledgement is the stable
 /// handle for subsequent stop/update calls.
 pub fn play_audio_clip(request: &AudioPlayRequest) -> Result<Option<AudioPlayAck>, String> {
     call_audio_json(AUDIO_SERVICE_METHOD_PLAY_CLIP_JSON_V1, request)
+}
+
+/// Starts a long-form stream backed by a provider-owned bounded PCM ring buffer.
+pub fn play_audio_stream(request: &AudioStreamPlayRequest) -> Result<Option<AudioPlayAck>, String> {
+    call_audio_json(AUDIO_SERVICE_METHOD_PLAY_STREAM_JSON_V1, request)
 }
 
 pub fn stop_audio_voice(voice_id: u64) -> Result<Option<AudioVoiceAck>, String> {
@@ -249,6 +269,71 @@ pub fn set_audio_bus_gain(
     call_audio_json(AUDIO_SERVICE_METHOD_SET_BUS_GAIN_JSON_V1, request)
 }
 
+/// Converts the canonical resolved camera frame into the audio listener pose.
+/// The camera gateway calls this at render cadence after final camera smoothing,
+/// so spatial audio follows the exact view presented to the player.
+pub fn audio_listener_from_camera_snapshot(
+    snapshot: &newengine_camera_contracts::CameraFrameSnapshot,
+) -> Option<AudioListenerState> {
+    if !snapshot.finite
+        || !snapshot.position_ws.iter().all(|value| value.is_finite())
+        || !snapshot.forward_ws.iter().all(|value| value.is_finite())
+        || !snapshot.up_ws.iter().all(|value| value.is_finite())
+    {
+        return None;
+    }
+    Some(
+        AudioListenerState {
+            position: snapshot.position_ws,
+            forward: snapshot.forward_ws,
+            up: snapshot.up_ws,
+            ..AudioListenerState::default()
+        }
+        .sanitized(),
+    )
+}
+
+pub fn sync_audio_listener_from_camera_snapshot(
+    snapshot: &newengine_camera_contracts::CameraFrameSnapshot,
+) {
+    let Some(listener) = audio_listener_from_camera_snapshot(snapshot) else {
+        return;
+    };
+    if let Err(error) = set_audio_listener(&listener) {
+        newengine_ulog_api::ulog::trace!("audio listener sync skipped provider_error='{}'", error);
+    }
+}
+
 pub fn audio_diagnostics() -> Result<Option<AudioDiagnostics>, String> {
     call_audio_get_json(AUDIO_SERVICE_METHOD_DIAGNOSTICS_JSON_V1)
+}
+
+#[cfg(test)]
+mod audio_gateway_tests {
+    use super::*;
+
+    #[test]
+    fn camera_snapshot_maps_to_audio_listener() {
+        let snapshot = newengine_camera_contracts::CameraFrameSnapshot {
+            position_ws: [3.0, 4.0, 5.0],
+            forward_ws: [0.0, 0.0, -1.0],
+            up_ws: [0.0, 1.0, 0.0],
+            finite: true,
+            ..Default::default()
+        };
+        let listener = audio_listener_from_camera_snapshot(&snapshot).expect("listener");
+        assert_eq!(listener.position, [3.0, 4.0, 5.0]);
+        assert_eq!(listener.forward, [0.0, 0.0, -1.0]);
+        assert_eq!(listener.up, [0.0, 1.0, 0.0]);
+    }
+
+    #[test]
+    fn non_finite_camera_snapshot_is_not_published() {
+        let snapshot = newengine_camera_contracts::CameraFrameSnapshot {
+            position_ws: [f32::NAN, 0.0, 0.0],
+            finite: true,
+            ..Default::default()
+        };
+        assert!(audio_listener_from_camera_snapshot(&snapshot).is_none());
+    }
 }

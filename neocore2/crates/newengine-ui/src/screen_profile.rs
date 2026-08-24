@@ -29,7 +29,7 @@ pub struct EditorScreen {
 impl Default for EditorScreen {
     fn default() -> Self {
         Self {
-            descriptor: editor_screen_descriptor(),
+            descriptor: editing_overlay_descriptor(),
         }
     }
 }
@@ -100,16 +100,15 @@ pub fn screen_profile_descriptor(
     game_ui_root: Option<String>,
 ) -> UiScreenProfileDescriptor {
     match profile {
-        UiScreenProfile::Editor => editor_screen_descriptor(),
         UiScreenProfile::Game => game_screen_descriptor(game_ui_root),
         UiScreenProfile::Headless => headless_screen_descriptor(),
     }
 }
 
-pub fn editor_screen_descriptor() -> UiScreenProfileDescriptor {
+pub fn editing_overlay_descriptor() -> UiScreenProfileDescriptor {
     UiScreenProfileDescriptor {
         version: 1,
-        profile: UiScreenProfile::Editor,
+        profile: UiScreenProfile::Game,
         layout_id: EDITOR_LAYOUT_ID.to_owned(),
         surface_id: UI_SURFACE_EDITOR_SHELL.to_owned(),
         viewport_surface_id: DEFAULT_VIEWPORT_SURFACE.to_owned(),
@@ -236,9 +235,9 @@ pub fn editor_screen_descriptor() -> UiScreenProfileDescriptor {
             ),
         ],
         diagnostics: vec![
-            "EditorScreen is a UI composition profile, not a backend domain.".to_owned(),
+            "Editing overlay is plugin-owned UI composition over the live Game runtime.".to_owned(),
             "Panels must consume DTOs/snapshots and opaque handles only.".to_owned(),
-            "Render backend selection is untouched by screen profile selection.".to_owned(),
+            "Editing capability never selects a different world, render backend, or runtime profile.".to_owned(),
         ],
     }
 }
@@ -534,38 +533,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn editor_screen_declares_required_editor_panels() {
-        let descriptor = editor_screen_descriptor();
-        let slots = descriptor
-            .panels
-            .iter()
-            .map(|p| p.slot_id.as_str())
-            .collect::<Vec<_>>();
-        assert!(slots.contains(&"center.viewport"));
-        assert!(slots.contains(&"left.outliner"));
-        assert!(slots.contains(&"right.edit_window"));
-        assert!(slots.contains(&"bottom.content_browser"));
-        assert!(slots.contains(&"bottom.gateway_diagnostics"));
-        let content_browser = descriptor
-            .panels
-            .iter()
-            .find(|p| p.slot_id == "bottom.content_browser")
-            .unwrap();
-        assert_eq!(content_browser.surface_id, "ui.assets.catalog");
-        assert_eq!(content_browser.source_gateway, "engine.assets");
-        assert_ne!(content_browser.source_gateway, content_browser.surface_id);
-        assert!(content_browser
-            .tags
-            .iter()
-            .any(|tag| tag == "ui-composition"));
-        assert_eq!(descriptor.profile, UiScreenProfile::Editor);
-        assert_eq!(
-            descriptor.input_focus_policy,
-            UiScreenInputFocusPolicy::EditorShell
-        );
-    }
-
-    #[test]
     fn game_screen_has_no_editor_panels_by_default() {
         let descriptor = game_screen_descriptor(None);
         assert_eq!(descriptor.profile, UiScreenProfile::Game);
@@ -578,8 +545,8 @@ mod tests {
     }
 
     #[test]
-    fn right_edit_window_contract_uses_selection_context_not_native_entity_id() {
-        let descriptor = editor_screen_descriptor();
+    fn editing_overlay_contract_uses_selection_context_not_native_entity_id() {
+        let descriptor = editing_overlay_descriptor();
         let edit_window = descriptor
             .panels
             .iter()

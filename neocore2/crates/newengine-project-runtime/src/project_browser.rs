@@ -79,7 +79,7 @@ pub fn discover_game_projects(root: &Path) -> Vec<ProjectBrowserEntry> {
         .filter_map(|mut entry| {
             let source = fs::read_to_string(&entry.manifest_path).ok()?;
             let manifest = toml::from_str::<ProjectManifest>(&source).ok()?;
-            let launch_id = game_launch_id(&manifest)?;
+            let launch_id = preferred_game_launch_id(&manifest)?;
             entry.launch_profile = Some(RuntimeLaunchProfile::Game.id().to_owned());
             entry.launch_ids = vec![launch_id.clone()];
             entry.launch_options =
@@ -117,7 +117,7 @@ pub fn preferred_launch_id(manifest: &ProjectManifest) -> String {
         .unwrap_or_else(|| "game".to_owned())
 }
 
-fn game_launch_id(manifest: &ProjectManifest) -> Option<String> {
+pub fn preferred_game_launch_id(manifest: &ProjectManifest) -> Option<String> {
     let profile_for = |id: &str| {
         manifest
             .launch
@@ -175,12 +175,6 @@ fn discover_recursive(dir: &Path, depth: usize, out: &mut Vec<ProjectBrowserEntr
                     let mut launch_ids = manifest.launch_ids();
                     if !launch_ids.iter().any(|id| id == &default_launch) {
                         launch_ids.push(default_launch.clone());
-                    }
-                    // Editor is an engine tooling capability, not project-owned game data.
-                    // Every valid project can therefore be opened through the synthetic
-                    // standard `editor` launch even when game.toml does not declare it.
-                    if !launch_ids.iter().any(|id| id == "editor") {
-                        launch_ids.push("editor".to_owned());
                     }
                     let launch_options = launch_ids
                         .iter()
@@ -247,82 +241,9 @@ mod tests {
     }
 
     #[test]
-    fn game_launch_selector_rejects_editor_only_manifest() {
-        let mut manifest = ProjectManifest::default();
-        manifest.launch_profile = Some(RuntimeLaunchProfile::Editor);
-        manifest.default_launch = Some("editor".to_owned());
-        manifest.launch.insert(
-            "editor".to_owned(),
-            newengine_project_api::ProjectLaunchPreset {
-                profile: Some(RuntimeLaunchProfile::Editor),
-                ..Default::default()
-            },
-        );
-        assert_eq!(game_launch_id(&manifest), None);
-    }
-
-    #[test]
-    fn preferred_launch_selector_accepts_editor_only_manifest() {
-        let mut manifest = ProjectManifest::default();
-        manifest.launch_profile = Some(RuntimeLaunchProfile::Editor);
-        manifest.default_launch = Some("editor".to_owned());
-        manifest.launch.insert(
-            "editor".to_owned(),
-            newengine_project_api::ProjectLaunchPreset {
-                profile: Some(RuntimeLaunchProfile::Editor),
-                ..Default::default()
-            },
-        );
-        assert_eq!(preferred_launch_id(&manifest), "editor");
-    }
-
-    #[test]
-    fn discovered_project_always_exposes_editor_as_tooling_launch() {
-        let unique = format!(
-            "newengine-project-browser-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        );
-        let root = std::env::temp_dir().join(unique);
-        let project = root.join("GameOnly");
-        std::fs::create_dir_all(&project).unwrap();
-        std::fs::write(
-            project.join(PROJECT_MANIFEST_FILE),
-            r#"format_version = 1
-id = "game-only"
-name = "Game Only"
-launch_profile = "game"
-default_launch = "game"
-
-[launch.game]
-profile = "game"
-"#,
-        )
-        .unwrap();
-
-        let entries = discover_projects(&root);
-        let entry = entries
-            .iter()
-            .find(|entry| entry.id == "game-only")
-            .unwrap();
-        assert_eq!(entry.default_launch, "game");
-        assert!(entry.launch_options.iter().any(|option| {
-            option.id == "game" && option.profile == RuntimeLaunchProfile::Game.id()
-        }));
-        assert!(entry.launch_options.iter().any(|option| {
-            option.id == "editor" && option.profile == RuntimeLaunchProfile::Editor.id()
-        }));
-
-        let _ = std::fs::remove_dir_all(root);
-    }
-
-    #[test]
     fn game_launch_selector_prefers_declared_game_preset() {
         let mut manifest = ProjectManifest::default();
-        manifest.launch_profile = Some(RuntimeLaunchProfile::Editor);
+        manifest.launch_profile = Some(RuntimeLaunchProfile::Game);
         manifest.default_launch = Some("editor".to_owned());
         manifest.launch.insert(
             "game".to_owned(),
@@ -331,6 +252,6 @@ profile = "game"
                 ..Default::default()
             },
         );
-        assert_eq!(game_launch_id(&manifest).as_deref(), Some("game"));
+        assert_eq!(preferred_game_launch_id(&manifest).as_deref(), Some("game"));
     }
 }

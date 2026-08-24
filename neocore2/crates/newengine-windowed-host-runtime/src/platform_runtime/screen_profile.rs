@@ -10,7 +10,7 @@ use newengine_editor_command_api::{
     default_runtime_editor_commands, editor_command, EditorCommandContext, EditorCommandRegistry,
 };
 use newengine_runtime_session_api::{
-    RuntimeSessionCommand, RuntimeSessionMode, RuntimeSessionState, RuntimeWorldDiffV1,
+    RuntimeSessionCommand, RuntimeSessionMode, RuntimeSessionState,
     RUNTIME_SESSION_COMMAND_SOURCE_CONSOLE, RUNTIME_SESSION_COMMAND_SOURCE_EDITOR,
     RUNTIME_SESSION_COMMAND_SOURCE_GAME,
 };
@@ -43,6 +43,15 @@ const SCREEN_PROFILE_CAPTURE_REASON: &str = "screen_profile.editor_shell";
 const SCREEN_PROFILE_CAPTURE_OWNER: &str = "screen_profile.editor_shell";
 const RIGHT_EDIT_WINDOW_OWNER: &str = "engine.ui.editor.right_edit_window";
 
+#[inline]
+fn editing_tools_available(resources: &Resources) -> bool {
+    resources
+        .get::<newengine_plugin_host::PluginsSnapshot>()
+        .is_some_and(|snapshot| {
+            snapshot.has_running_capability(newengine_plugin_api::CAPABILITY_ID_EDITING_TOOLS)
+        })
+}
+
 const SCREEN_PROFILE_SOURCE: &str = "engine.ui.screen_profile";
 const EDITOR_LAYOUT_ID: &str = "engine.ui.screen.editor.v1";
 const GAME_LAYOUT_ID: &str = "engine.ui.screen.game.v1";
@@ -63,8 +72,6 @@ mod components;
 mod helpers;
 #[path = "screen_profile_parts/panels_and_tests.rs"]
 mod panels_and_tests;
-#[path = "screen_profile_parts/pie.rs"]
-mod pie;
 #[path = "screen_profile_parts/profiles.rs"]
 mod profiles;
 #[path = "screen_profile_parts/state.rs"]
@@ -75,7 +82,6 @@ mod types;
 use self::components::*;
 use self::helpers::*;
 use self::panels_and_tests::*;
-use self::pie::*;
 use self::profiles::*;
 use self::types::*;
 

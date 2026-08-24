@@ -133,3 +133,12 @@ fn registry_covers_every_published_content_kind_exactly_once() {
         "published content-kind ids must be unique"
     );
 }
+
+#[test]
+fn yscd_is_registered_as_embedded_sound_cue_dictionary() {
+    let descriptor = descriptor_for_extension("yscd").expect("YSCD descriptor");
+    assert_eq!(descriptor.content_kind, Some(34));
+    assert_eq!(descriptor.asset_kind, "sound_cue_dictionary");
+    assert_eq!(descriptor.semantic_gateway, "engine.audio");
+    assert_eq!(descriptor.selector_syntax.as_deref(), Some("file.yscd@cue"));
+}

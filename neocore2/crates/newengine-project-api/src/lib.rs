@@ -118,7 +118,7 @@ mod tests {
             launch: BTreeMap::from([(
                 "editor".to_owned(),
                 ProjectLaunchPreset {
-                    profile: Some(RuntimeLaunchProfile::Editor),
+                    profile: Some(RuntimeLaunchProfile::Game),
                     runtime_profile: None,
                     startup_scene: Some("maps/edit.ymap".to_owned()),
                     startup_presentation_state: None,
@@ -127,7 +127,7 @@ mod tests {
             ..ProjectManifest::default()
         };
         let resolved = manifest.resolve_launch(Some("editor")).unwrap();
-        assert_eq!(resolved.profile, RuntimeLaunchProfile::Editor);
+        assert_eq!(resolved.profile, RuntimeLaunchProfile::Game);
         assert_eq!(resolved.runtime_profile.as_deref(), Some("runtime.default"));
         assert_eq!(resolved.startup_scene.as_deref(), Some("maps/edit.ymap"));
     }

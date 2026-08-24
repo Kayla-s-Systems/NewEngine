@@ -9,10 +9,16 @@ mod formats;
 mod registry;
 
 pub mod ydd_binary;
+pub mod yscd_binary;
 
 pub use ydd_binary::{
     encode_ydd_binary_body, YDD_BINARY_CONTRACT_SPEC, YDD_BINARY_ENCODING,
     YDD_BINARY_SCHEMA_VERSION,
+};
+
+pub use yscd_binary::{
+    decode_yscd_binary_body, decode_yscd_nef8, YscdAttenuation, YscdClip, YscdCue,
+    YscdCueDescriptor, YscdDictionary, YSCD_BINARY_MAGIC, YSCD_BINARY_SCHEMA_VERSION,
 };
 
 pub use descriptor::{Nef8FormatSpec, ASSET_BLOB_OUTPUT, DOMAIN_MANIFEST_OUTPUT, NEF8_MAGIC_HEX};
@@ -40,6 +46,7 @@ pub use formats::ymf;
 pub use formats::ymt;
 pub use formats::ypdb;
 pub use formats::ysc;
+pub use formats::yscd;
 pub use formats::ytd;
 pub use formats::ytf;
 pub use formats::ytyd;

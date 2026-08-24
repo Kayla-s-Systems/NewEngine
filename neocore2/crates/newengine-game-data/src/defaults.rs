@@ -241,7 +241,7 @@ impl Default for GameData {
                     eye_height_ratio: 0.91,
                     local_offset: [0.0, 0.0, 0.0],
                     yaw_offset: 0.0,
-                    hide_in_first_person: true,
+                    hide_in_first_person: false,
                 },
                 tuning: PlayerTuningData {
                     body_radius: 0.45,

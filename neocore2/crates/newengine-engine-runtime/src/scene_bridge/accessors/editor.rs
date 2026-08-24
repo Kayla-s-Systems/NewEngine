@@ -161,6 +161,11 @@ impl SceneBridge {
             );
             clone_component!(source, target, SceneImportedAssetDescriptor);
             clone_component!(source, target, crate::gameplay::ModelRenderComponent);
+            clone_component!(source, target, crate::AudioEmitter);
+            clone_component!(source, target, crate::AcousticSurface);
+            clone_component!(source, target, crate::AudioEnvironmentZone);
+            clone_component!(source, target, crate::AudioPortal);
+            clone_component!(source, target, crate::AudioAmbienceBed);
             clone_component!(source, target, crate::gameplay::GameplayActor);
             clone_component!(source, target, crate::gameplay::SceneEntityAnchor);
             clone_component!(source, target, DefinitionInstance);
@@ -355,6 +360,21 @@ impl SceneBridge {
             {
                 components.push("Model Render".to_owned());
             }
+            if world.get::<crate::AudioEmitter>(entity).is_some() {
+                components.push("Audio Emitter".to_owned());
+            }
+            if world.get::<crate::AcousticSurface>(entity).is_some() {
+                components.push("Acoustic Surface".to_owned());
+            }
+            if world.get::<crate::AudioEnvironmentZone>(entity).is_some() {
+                components.push("Audio Environment Zone".to_owned());
+            }
+            if world.get::<crate::AudioPortal>(entity).is_some() {
+                components.push("Audio Portal".to_owned());
+            }
+            if world.get::<crate::AudioAmbienceBed>(entity).is_some() {
+                components.push("Audio Ambience Bed".to_owned());
+            }
 
             let kind = if world.get::<DirectionalLight>(entity).is_some() {
                 "Directional Light"
@@ -362,6 +382,14 @@ impl SceneBridge {
                 "Point Light"
             } else if world.get::<newengine_lighting::SpotLight>(entity).is_some() {
                 "Spot Light"
+            } else if world.get::<crate::AudioEnvironmentZone>(entity).is_some() {
+                "Audio Environment Zone Actor"
+            } else if world.get::<crate::AudioPortal>(entity).is_some() {
+                "Audio Portal Actor"
+            } else if world.get::<crate::AudioAmbienceBed>(entity).is_some() {
+                "Audio Ambience Bed Actor"
+            } else if world.get::<crate::AudioEmitter>(entity).is_some() {
+                "Audio Emitter Actor"
             } else if world
                 .get::<newengine_procedural_noise::ProceduralTerrain>(entity)
                 .is_some()
@@ -444,6 +472,9 @@ impl SceneBridge {
                 .is_some()
             {
                 components.push("Model Render".to_owned());
+            }
+            if world.get::<crate::AudioEmitter>(entity).is_some() {
+                components.push("Audio Emitter".to_owned());
             }
 
             let kind = scene_snapshot

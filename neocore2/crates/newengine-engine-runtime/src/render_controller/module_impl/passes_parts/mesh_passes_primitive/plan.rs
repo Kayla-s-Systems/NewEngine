@@ -83,6 +83,7 @@ pub(super) const PRIMITIVE_DRAW_SKY_BACKGROUND: u8 = 0x04;
 pub(super) const PRIMITIVE_DRAW_RECEIVE_SHADOWS: u8 = 0x08;
 pub(super) const PRIMITIVE_DRAW_FOLIAGE_ROLE: u8 = 0x10;
 pub(super) const PRIMITIVE_DRAW_DECAL_ROLE: u8 = 0x20;
+pub(super) const PRIMITIVE_DRAW_AUTHORED_BASE_REQUIRED: u8 = 0x40;
 #[inline]
 pub(super) fn primitive_mesh_render_options(
     explicit: Option<&MeshRenderOptions>,
