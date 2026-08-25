@@ -10,25 +10,16 @@ pub(super) fn editor_components(
     descriptor: &UiScreenProfileDescriptor,
     runtime_mode: UiEditorRuntimeMode,
     runtime_paused: bool,
-    runtime_possessed: bool,
-    command_registry: &EditorCommandRegistry,
     viewport_state: &UiEditorViewportState,
     scene_snapshot: &UiEditorSceneSnapshot,
     inspector_snapshot: &UiEditorInspectorSnapshot,
+    authoring_state: &UiInGameEditorState,
     layout: &EditorLayoutMetrics,
     active_menu_id: Option<&str>,
 ) -> Vec<UiComponentNode> {
     let mut out = Vec::new();
     push_editor_regions(&mut out, layout);
-    top_chrome::push_top_chrome(
-        &mut out,
-        runtime_mode,
-        runtime_paused,
-        runtime_possessed,
-        command_registry,
-        layout,
-        active_menu_id,
-    );
+    top_chrome::push_top_chrome(&mut out, authoring_state, layout, active_menu_id);
     docks::push_editor_docks(
         &mut out,
         descriptor,
@@ -44,7 +35,7 @@ pub(super) fn editor_components(
         layout,
         active_menu_id,
     );
-    bottom::push_bottom_and_status(&mut out, descriptor, runtime_mode, runtime_paused, layout);
+    bottom::push_bottom_and_status(&mut out, descriptor, authoring_state, layout);
     out
 }
 
@@ -322,5 +313,109 @@ mod geometry_tests {
             node.action_id.as_deref(),
             Some(editor_command::RUNTIME_PLAY)
         );
+    }
+
+    fn desktop_editor_layout() -> EditorLayoutMetrics {
+        EditorLayoutMetrics {
+            screen_w: 1600.0,
+            screen_h: 900.0,
+            menu_h: 28.0,
+            toolbar_h: 40.0,
+            status_h: 24.0,
+            bottom_h: 220.0,
+            left_w: 280.0,
+            right_w: 340.0,
+            gap: 6.0,
+            viewport_x: 286.0,
+            viewport_y: 68.0,
+            viewport_w: 968.0,
+            viewport_h: 588.0,
+            bottom_y: 656.0,
+            left_visible: true,
+            right_visible: true,
+            bottom_visible: true,
+            hovered_dock_slot: None,
+            hovered_menu_id: None,
+        }
+    }
+
+    #[test]
+    fn live_world_toolbar_has_save_exit_and_no_runtime_transport() {
+        let layout = desktop_editor_layout();
+        let state = UiInGameEditorState {
+            enabled: true,
+            dirty_placements: 3,
+            pending_creates: 1,
+            pending_deletes: 1,
+            ..UiInGameEditorState::default()
+        };
+        let mut nodes = Vec::new();
+
+        top_chrome::push_top_chrome(&mut nodes, &state, &layout, None);
+
+        assert!(nodes
+            .iter()
+            .any(|node| node.id == "editor.toolbar.live_world"));
+        assert!(nodes.iter().any(|node| {
+            node.id == "editor.toolbar.save_map"
+                && node.text == "Save (3)"
+                && node.action_id.as_deref() == Some("game.editor.save")
+        }));
+        assert!(nodes.iter().any(|node| {
+            node.id == "editor.toolbar.exit"
+                && node.action_id.as_deref() == Some("game.editor.close")
+        }));
+        assert!(!nodes.iter().any(|node| {
+            node.state_tags.iter().any(|tag| tag == "runtime-control")
+                || matches!(
+                    node.id.as_str(),
+                    "editor.toolbar.play"
+                        | "editor.toolbar.pause"
+                        | "editor.toolbar.stop"
+                        | "editor.toolbar.step"
+                )
+        }));
+    }
+
+    #[test]
+    fn details_transform_publishes_nine_numeric_value_actions() {
+        let layout = desktop_editor_layout();
+        let descriptor = editing_overlay_descriptor();
+        let scene = UiEditorSceneSnapshot::default();
+        let inspector = UiEditorInspectorSnapshot {
+            entity_key: Some(7),
+            name: "Oak".to_owned(),
+            kind: "Actor".to_owned(),
+            transform: Some(newengine_ui_api::UiEditorInspectorTransformSnapshot {
+                position: [1.0, 2.0, 3.0],
+                rotation_degrees: [4.0, 5.0, 6.0],
+                scale: [1.0, 1.0, 1.0],
+            }),
+            ..UiEditorInspectorSnapshot::default()
+        };
+        let mut nodes = Vec::new();
+
+        docks::push_editor_docks(&mut nodes, &descriptor, &scene, &inspector, &layout);
+
+        let inputs = nodes
+            .iter()
+            .filter(|node| {
+                node.action_id
+                    .as_deref()
+                    .is_some_and(|id| id.starts_with("game.editor.transform."))
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(inputs.len(), 9);
+        assert!(inputs
+            .iter()
+            .all(|node| node.component_id == UI_COMPONENT_INPUT));
+        assert!(inputs.iter().any(|node| {
+            node.action_id.as_deref() == Some("game.editor.transform.position.x")
+                && node.value.as_deref() == Some("1.000")
+        }));
+        assert!(inputs.iter().any(|node| {
+            node.action_id.as_deref() == Some("game.editor.transform.rotation.z")
+                && node.value.as_deref() == Some("6.000")
+        }));
     }
 }

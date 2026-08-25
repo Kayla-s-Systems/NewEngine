@@ -157,12 +157,13 @@ impl EditorViewportController {
                     *transform = next;
                     self.inspector_dirty = true;
                 }
+                sync_authored_map_placement_replicas(world, drag.entity);
                 self.drag = Some(drag);
             }
         }
     }
 
-    fn commit_drag(&mut self, world: &World, drag: ActiveTransformDrag) {
+    fn commit_drag(&mut self, world: &mut World, drag: ActiveTransformDrag) {
         let Some(after) = world.get::<Transform>(drag.entity).copied() else {
             return;
         };
@@ -178,6 +179,7 @@ impl EditorViewportController {
             after,
         });
         self.redo.clear();
+        let _ = world.insert(drag.entity, crate::gameplay::AuthoredMapPlacementDirty);
         self.inspector_dirty = true;
         newengine_ulog_api::ulog::info!(
             "editor transform transaction: committed entity={} mode={} axis={} undo_depth={}",
@@ -197,6 +199,7 @@ impl EditorViewportController {
             *transform = drag.before;
             self.inspector_dirty = true;
         }
+        sync_authored_map_placement_replicas(world, drag.entity);
         self.armed_handle = None;
     }
 
@@ -207,6 +210,11 @@ impl EditorViewportController {
         if let Some(transform) = world.get_mut_tracked::<Transform>(transaction.entity) {
             *transform = transaction.before;
             self.redo.push(transaction);
+            let _ = world.insert(
+                transaction.entity,
+                crate::gameplay::AuthoredMapPlacementDirty,
+            );
+            sync_authored_map_placement_replicas(world, transaction.entity);
             self.inspector_dirty = true;
             newengine_ulog_api::ulog::info!(
                 "editor transform transaction: undo entity={} undo_depth={} redo_depth={}",
@@ -224,6 +232,11 @@ impl EditorViewportController {
         if let Some(transform) = world.get_mut_tracked::<Transform>(transaction.entity) {
             *transform = transaction.after;
             self.undo.push(transaction);
+            let _ = world.insert(
+                transaction.entity,
+                crate::gameplay::AuthoredMapPlacementDirty,
+            );
+            sync_authored_map_placement_replicas(world, transaction.entity);
             self.inspector_dirty = true;
             newengine_ulog_api::ulog::info!(
                 "editor transform transaction: redo entity={} undo_depth={} redo_depth={}",
@@ -237,6 +250,111 @@ impl EditorViewportController {
     #[inline]
     pub(crate) fn take_inspector_dirty(&mut self) -> bool {
         core::mem::take(&mut self.inspector_dirty)
+    }
+}
+
+#[inline]
+fn min_vec3_component(value: Vec3) -> f32 {
+    value.x.min(value.y).min(value.z)
+}
+
+#[inline]
+fn max_abs_vec3_component(value: Vec3) -> f32 {
+    value.x.abs().max(value.y.abs()).max(value.z.abs())
+}
+
+pub(crate) fn sync_authored_map_placement_replicas(world: &mut World, primary: EntityId) {
+    use crate::gameplay::{
+        AuthoredMapPlacement, AuthoredMapPlacementReplicaScaleState, AuthoredMapPlacementSource,
+        StaticMeshCollider,
+    };
+    use newengine_bounds::Bounds;
+
+    let Some(authored) = world.get::<AuthoredMapPlacement>(primary).cloned() else {
+        return;
+    };
+    if !authored.primary || authored.source != AuthoredMapPlacementSource::DiscretePlacement {
+        return;
+    }
+    let Some(primary_transform) = world.get::<Transform>(primary).copied() else {
+        return;
+    };
+    if !primary_transform.position.is_finite()
+        || !primary_transform.rotation.is_finite()
+        || !primary_transform.scale.is_finite()
+        || min_vec3_component(primary_transform.scale) <= 0.000_001
+    {
+        return;
+    }
+
+    let replicas = world
+        .query::<AuthoredMapPlacement>()
+        .filter_map(|(entity, candidate)| {
+            (!candidate.primary
+                && candidate.source == authored.source
+                && candidate.map_ref == authored.map_ref
+                && candidate.placement_id == authored.placement_id)
+                .then_some(entity)
+        })
+        .collect::<Vec<_>>();
+
+    for replica in replicas {
+        if let Some(transform) = world.get_mut_tracked::<Transform>(replica) {
+            transform.position = primary_transform.position;
+            transform.rotation = primary_transform.rotation;
+        }
+
+        let Some(scale_state) = world
+            .get::<AuthoredMapPlacementReplicaScaleState>(replica)
+            .copied()
+        else {
+            continue;
+        };
+        let previous = scale_state.last_authored_scale;
+        if !previous.is_finite() || min_vec3_component(previous) <= 0.000_001 {
+            continue;
+        }
+        let ratio = Vec3::new(
+            primary_transform.scale.x / previous.x,
+            primary_transform.scale.y / previous.y,
+            primary_transform.scale.z / previous.z,
+        );
+        if !ratio.is_finite() || min_vec3_component(ratio) <= 0.000_001 {
+            continue;
+        }
+        if max_abs_vec3_component(ratio - Vec3::ONE) <= 1.0e-6 {
+            continue;
+        }
+
+        let Some(collider) = world.get::<StaticMeshCollider>(replica).cloned() else {
+            continue;
+        };
+        let vertices = collider
+            .vertices
+            .iter()
+            .map(|vertex| {
+                [
+                    vertex[0] * ratio.x,
+                    vertex[1] * ratio.y,
+                    vertex[2] * ratio.z,
+                ]
+            })
+            .collect::<Vec<_>>();
+        let triangles = collider.triangles.as_ref().to_vec();
+        let Ok(rescaled) = StaticMeshCollider::new(vertices, triangles)
+            .map(|value| value.with_material(collider.friction, collider.restitution))
+        else {
+            continue;
+        };
+        let local_bounds = rescaled.local_bounds;
+        let _ = world.insert(replica, rescaled);
+        let _ = world.insert(replica, Bounds::from_local_aabb(local_bounds));
+        let _ = world.insert(
+            replica,
+            AuthoredMapPlacementReplicaScaleState {
+                last_authored_scale: primary_transform.scale,
+            },
+        );
     }
 }
 

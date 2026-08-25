@@ -182,13 +182,6 @@ pub fn step_player_combat(world: &mut World, dt: f32, _fixed_tick: u64) {
                 };
                 if let Some(action) = action {
                     play_equipped_weapon_audio(world, event.shooter, action);
-                    if event.kind == WeaponEventKind::Fired {
-                        play_equipped_weapon_audio(
-                            world,
-                            event.shooter,
-                            WeaponAudioAction::ShellEject,
-                        );
-                    }
                 }
                 emit_weapon_event(world, event);
             }

@@ -8,4 +8,5 @@ description = "Offline North Star TLOU2 PC source importer for NewEngine native 
 newengine-asset-format-nef8 = { path = "../newengine-asset-format-nef8" }
 newengine-assets-api = { path = "../newengine-assets-api" }
 newengine-math = { path = "../newengine-math" }
+newengine-texture-container = { path = "../newengine-texture-container" }
 flate2 = "1"

@@ -245,7 +245,7 @@ mod tests {
             PlayerLocomotionAnimation::Idle
         );
         assert_eq!(
-            select_locomotion_animation(false, false, 3.0, 2.15, 0.28, false, 0.032, false),
+            select_locomotion_animation(false, false, 2.0, 2.15, 0.28, false, 0.032, false),
             PlayerLocomotionAnimation::Walk
         );
     }

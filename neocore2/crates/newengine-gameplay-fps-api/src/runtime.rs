@@ -1,7 +1,5 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use newengine_game_data::default_game_data;
-
 /// Declarative FPS runtime tuning.
 ///
 /// The scene/profile owns these values; runtime systems only consume the resource.
@@ -28,24 +26,25 @@ pub struct FpsPlayerTuning {
 impl Default for FpsPlayerTuning {
     #[inline]
     fn default() -> Self {
-        let data = default_game_data().player.tuning;
+        // Mechanics-safe schema defaults only. Product/player tuning is authored by the
+        // active project and installed as `FpsDemoRules` during scene bootstrap.
         Self {
-            body_radius: data.body_radius,
-            body_half_height: data.body_half_height,
-            crouched_body_half_height: data.crouched_body_half_height,
-            visual_radius: data.visual_radius,
-            visual_half_height: data.visual_half_height,
-            camera_eye_height: data.camera_eye_height,
-            crouched_camera_eye_height: data.crouched_camera_eye_height,
-            crouch_camera_speed: data.crouch_camera_speed,
-            sprint_multiplier: data.sprint_multiplier,
-            jump_speed: data.jump_speed,
-            gravity: data.gravity,
-            contact_skin: data.contact_skin,
-            ground_probe_distance: data.ground_probe_distance,
-            max_slope_radians: data.max_slope_degrees.to_radians(),
-            footstep_stride: data.footstep_stride,
-            landing_speed_threshold: data.landing_speed_threshold,
+            body_radius: 0.35,
+            body_half_height: 0.55,
+            crouched_body_half_height: 0.30,
+            visual_radius: 0.35,
+            visual_half_height: 0.90,
+            camera_eye_height: 0.62,
+            crouched_camera_eye_height: 0.35,
+            crouch_camera_speed: 8.0,
+            sprint_multiplier: 1.5,
+            jump_speed: 5.0,
+            gravity: 9.81,
+            contact_skin: 0.03,
+            ground_probe_distance: 0.12,
+            max_slope_radians: core::f32::consts::FRAC_PI_4,
+            footstep_stride: 1.4,
+            landing_speed_threshold: 4.0,
         }
     }
 }
@@ -94,16 +93,15 @@ pub struct FpsDemoRules {
 impl Default for FpsDemoRules {
     #[inline]
     fn default() -> Self {
-        let status = &default_game_data().gameplay.status;
         Self {
-            default_status: status.default_status.clone(),
-            pickup_status: status.pickup_status.clone(),
-            target_status: status.target_status.clone(),
-            hazard_status: status.hazard_status.clone(),
-            goal_locked_status: status.goal_locked_status.clone(),
-            goal_complete_status: status.goal_complete_status.clone(),
-            failed_progress_label: status.failed_progress_label.clone(),
-            completed_progress_label: status.completed_progress_label.clone(),
+            default_status: String::new(),
+            pickup_status: String::new(),
+            target_status: String::new(),
+            hazard_status: String::new(),
+            goal_locked_status: String::new(),
+            goal_complete_status: String::new(),
+            failed_progress_label: String::new(),
+            completed_progress_label: String::new(),
             player: FpsPlayerTuning::default(),
         }
     }
@@ -126,6 +124,35 @@ pub struct FpsDemoHazard {
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct FpsDemoTarget;
+
+/// Persistent physical brass ejected by an FPS weapon shot. The gameplay layer owns motion and
+/// collision; product world packages may attach an authored visual selected by `variant`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct WeaponShellCasing {
+    pub owner_stable_id: u64,
+    pub shot_sequence: u64,
+    /// Stable `ItemId::raw()` of the weapon whose authored definition owns this casing.
+    pub weapon_item_id: u64,
+    /// Zero-based authored variant index resolved from the equipped weapon definition.
+    pub variant: u16,
+}
+
+impl WeaponShellCasing {
+    #[inline]
+    pub const fn new(
+        owner_stable_id: u64,
+        shot_sequence: u64,
+        weapon_item_id: u64,
+        variant: u16,
+    ) -> Self {
+        Self {
+            owner_stable_id,
+            shot_sequence,
+            weapon_item_id,
+            variant,
+        }
+    }
+}
 
 #[allow(dead_code)]
 #[derive(Clone, Debug)]
@@ -150,8 +177,8 @@ impl FpsDemoState {
     pub fn new(pickups_total: u32) -> Self {
         Self::from_rules(
             pickups_total,
-            "KAYLA FPS: Extraction Yard",
-            "Collect cores and reach the extraction beacon",
+            String::new(),
+            String::new(),
             &FpsDemoRules::default(),
         )
     }

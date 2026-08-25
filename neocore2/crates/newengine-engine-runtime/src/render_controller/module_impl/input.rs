@@ -173,6 +173,64 @@ impl ViewportInputSnap {
         }
     }
 
+    /// Reclaims only the viewport-navigation channel for unified Editor Mode.
+    /// Gameplay actions stay capture-gated, while RMB+WASD/QE drives the generic
+    /// camera-runtime Fly controller. Fly has no physics body, so this is also the
+    /// editor's noclip implementation rather than a gameplay cheat toggle.
+    pub(super) fn apply_editor_fly_navigation(
+        &mut self,
+        input: Option<&UiInputFrame>,
+        pointer_in_viewport: bool,
+        camera_allowed: bool,
+    ) {
+        let Some(input) = input else {
+            self.fly_rmb = false;
+            self.look_drag = false;
+            self.move_mask = 0;
+            return;
+        };
+        if !pointer_in_viewport || !camera_allowed {
+            self.fly_rmb = false;
+            self.look_drag = false;
+            self.pan_drag = false;
+            self.move_mask = 0;
+            return;
+        }
+
+        let actions =
+            newengine_input_bindings_runtime::resolve_input_actions(&UiInputSource(input));
+        let rmb = input.is_mouse_down(newengine_input_api::mouse_button::RIGHT);
+        self.active = true;
+        self.camera_navigation_gated = false;
+        self.gameplay_movement_gated = true;
+        self.fly_rmb = rmb;
+        self.look_drag = rmb;
+        self.pan_drag = false;
+        self.ui_busy = !rmb;
+        self.camera_view = CameraViewRequest::None;
+        self.speed_scalar = 1.0;
+        self.move_mask = if rmb { actions.move_mask } else { 0 };
+        if rmb {
+            let canonical_dx = if input.mouse_delta.0.is_finite() {
+                input.mouse_delta.0
+            } else {
+                0.0
+            };
+            let canonical_dy = if input.mouse_delta.1.is_finite() {
+                input.mouse_delta.1
+            } else {
+                0.0
+            };
+            self.dx_px = canonical_dx + actions.look_axis[0] * 18.0;
+            self.dy_px = canonical_dy + actions.look_axis[1] * 18.0;
+            self.wheel_y = input.mouse_wheel.1;
+        } else {
+            self.dx_px = 0.0;
+            self.dy_px = 0.0;
+            self.wheel_y = 0.0;
+        }
+    }
+
     #[inline]
     pub(super) fn action_carrier(&mut self) -> InputActionFrameCarrier<'_> {
         InputActionFrameCarrier {
@@ -340,5 +398,41 @@ mod tests {
         assert!(!snap.look_drag);
         assert_eq!(snap.dx_px, 4.0);
         assert_eq!(snap.dy_px, -12.0);
+    }
+
+    #[test]
+    fn editor_fly_reclaims_camera_motion_but_keeps_gameplay_gated() {
+        let mut snap = ViewportInputSnap {
+            camera_navigation_gated: true,
+            gameplay_movement_gated: true,
+            ..ViewportInputSnap::default()
+        };
+        let mut frame = UiInputFrame::default();
+        frame.mouse_delta = (6.0, -4.0);
+        frame
+            .mouse_down
+            .insert(newengine_input_api::mouse_button::RIGHT);
+
+        snap.apply_editor_fly_navigation(Some(&frame), true, true);
+
+        assert!(snap.fly_rmb);
+        assert!(snap.look_drag);
+        assert!(!snap.camera_navigation_gated);
+        assert!(snap.gameplay_movement_gated);
+        assert_eq!(snap.dx_px, 6.0);
+        assert_eq!(snap.dy_px, -4.0);
+    }
+
+    #[test]
+    fn editor_fly_does_not_capture_outside_viewport() {
+        let mut snap = ViewportInputSnap::default();
+        let mut frame = UiInputFrame::default();
+        frame
+            .mouse_down
+            .insert(newengine_input_api::mouse_button::RIGHT);
+        snap.apply_editor_fly_navigation(Some(&frame), false, true);
+        assert!(!snap.fly_rmb);
+        assert!(!snap.look_drag);
+        assert_eq!(snap.move_mask, 0);
     }
 }

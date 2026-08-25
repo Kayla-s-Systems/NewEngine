@@ -201,30 +201,50 @@ pub(super) fn push_editor_docks(
                     24.0,
                 ));
                 details_y += 25.0;
-                for (axis, value) in [
-                    ("Location", transform.position),
-                    ("Rotation", transform.rotation_degrees),
-                    ("Scale", transform.scale),
+                for (group_id, label, value, unit, step) in [
+                    (
+                        "position",
+                        "Location",
+                        transform.position,
+                        "world units",
+                        0.1,
+                    ),
+                    (
+                        "rotation",
+                        "Rotation",
+                        transform.rotation_degrees,
+                        "degrees",
+                        1.0,
+                    ),
+                    ("scale", "Scale", transform.scale, "ratio", 0.01),
                 ] {
+                    let label_w = 66.0;
+                    let gap = 4.0;
+                    let input_w = ((details_w - label_w - gap * 4.0) / 3.0).max(38.0);
                     out.push(with_rect(
                         UiComponentNode::row(
-                            format!("editor.inspector.transform.{}", axis.to_ascii_lowercase()),
-                            axis,
+                            format!("editor.inspector.transform.{group_id}.label"),
+                            label,
                         )
-                        .with_value(format!(
-                            "X {:.2}   Y {:.2}   Z {:.2}",
-                            value[0], value[1], value[2]
-                        ))
-                        .with_detail(if axis == "Rotation" { "degrees" } else { "" })
+                        .with_detail(unit)
                         .with_tone(UiNodeTone::Normal)
                         .tagged("inspector")
-                        .tagged("transform-row"),
+                        .tagged("transform-label"),
                         details_x + 4.0,
                         details_y,
-                        (details_w - 8.0).max(120.0),
-                        24.0,
+                        label_w,
+                        26.0,
                     ));
-                    details_y += 25.0;
+                    for (index, axis) in ["x", "y", "z"].into_iter().enumerate() {
+                        out.push(with_rect(
+                            transform_numeric_input(group_id, axis, value[index], step, unit),
+                            details_x + label_w + gap * 2.0 + index as f32 * (input_w + gap),
+                            details_y,
+                            input_w,
+                            26.0,
+                        ));
+                    }
+                    details_y += 29.0;
                 }
                 details_y += 4.0;
             }
@@ -267,4 +287,48 @@ pub(super) fn push_editor_docks(
             }
         }
     }
+}
+
+fn transform_numeric_input(
+    group_id: &str,
+    axis: &str,
+    value: f32,
+    step: f32,
+    unit: &str,
+) -> UiComponentNode {
+    let mut input = lively_editor_action(
+        UiComponentNode::action(
+            format!("editor.inspector.transform.{group_id}.{axis}"),
+            axis.to_ascii_uppercase(),
+            format!("game.editor.transform.{group_id}.{axis}"),
+        )
+        .with_value(format!("{value:.3}"))
+        .with_detail(unit)
+        .with_tone(UiNodeTone::Normal)
+        .with_tooltip(format!(
+            "Edit {} {} and press Enter",
+            group_id,
+            axis.to_ascii_uppercase()
+        ))
+        .tagged("inspector")
+        .tagged("transform-input")
+        .tagged("numeric-input"),
+    );
+    input.component_id = UI_COMPONENT_INPUT.to_owned();
+    input
+        .props
+        .insert("numeric".to_owned(), serde_json::json!(true));
+    input
+        .props
+        .insert("step".to_owned(), serde_json::json!(step));
+    input
+        .props
+        .insert("commit_on_enter".to_owned(), serde_json::json!(true));
+    input
+        .props
+        .insert("select_all_on_focus".to_owned(), serde_json::json!(true));
+    input
+        .props
+        .insert("text_align".to_owned(), serde_json::json!("right"));
+    input
 }

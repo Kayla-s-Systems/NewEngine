@@ -4,6 +4,7 @@ use newengine_engine_runtime::gameplay::{
     InventoryLoadout, InventoryLoadoutCatalog, InventoryLoadoutEntry, ItemCatalog, ItemDefinition,
     ItemId, ItemKind, ItemUseEffect, WeaponFireMode,
 };
+use newengine_gameplay_fps_api::{FpsGameplayPolicySnapshot, FpsPlayableCharacterPolicy};
 use newengine_math::Vec3;
 
 const TEST_AMMO_NAME: &str = "test.ammo.primary";
@@ -11,12 +12,37 @@ const TEST_PRIMARY_NAME: &str = "test.weapon.primary";
 const TEST_SIDEARM_NAME: &str = "test.weapon.sidearm";
 const TEST_MEDKIT_NAME: &str = "test.consumable.medkit";
 const TEST_LOADOUT_NAME: &str = "test.loadout.hud";
+const TEST_CHARACTER_A: &str = "test.character.alpha";
+const TEST_CHARACTER_B: &str = "test.character.beta";
+
+fn test_character(id: &str, model: &str) -> FpsPlayableCharacterPolicy {
+    FpsPlayableCharacterPolicy {
+        id: id.to_owned(),
+        family: "Test".to_owned(),
+        display_name: id.to_owned(),
+        runtime_ready: true,
+        runtime_model_ref: Some(model.to_owned()),
+        target_height: 1.75,
+        hide_in_first_person: true,
+        ..FpsPlayableCharacterPolicy::default()
+    }
+}
+
+fn install_test_character_policy(world: &mut World) {
+    let mut policy = FpsGameplayPolicySnapshot::default();
+    policy.characters = vec![
+        test_character(TEST_CHARACTER_A, "models/test/alpha.ydd@alpha"),
+        test_character(TEST_CHARACTER_B, "models/test/beta.ydd@beta"),
+    ];
+    world.insert_resource(policy);
+}
 
 fn item_id(name: &str) -> ItemId {
     ItemId::from_name(name).expect("valid test item id")
 }
 
 fn install_test_content(world: &mut World) {
+    install_test_character_policy(world);
     let ammo = ItemDefinition::stackable(TEST_AMMO_NAME, "Test Ammo", ItemKind::Ammo, 240, 0.01)
         .expect("test ammo");
     let ammo_id = ammo.id;
@@ -307,8 +333,8 @@ fn character_selector_arrow_navigation_and_enter_selects_focused_variant() {
         .expect("inventory HUD");
     assert!(!state.character_select_open);
     assert_eq!(
-        selected_variant(&world, player).map(|variant| variant.id),
-        Some(character_variants::ABBY_SEATTLE_709_ID)
+        selected_variant(&world, player).map(|variant| variant.id.as_str()),
+        Some(TEST_CHARACTER_B)
     );
 }
 
@@ -337,7 +363,7 @@ fn character_selector_arrow_up_wraps_and_escape_closes_without_selection() {
             .resource::<InventoryHudState>()
             .expect("inventory HUD")
             .character_nav_index,
-        PLAYABLE_CHARACTER_VARIANTS.len() - 1
+        playable_character_variants(&world).len() - 1
     );
 
     if let Some(commands) = world.get_mut::<PlayerCommandFrame>(player) {
@@ -466,9 +492,10 @@ fn selecting_another_playable_character_closes_selector() {
         .expect("inventory HUD")
         .character_select_open = true;
 
-    let variant = character_variants::variant_by_id(character_variants::ABIGAIL_LEGACY_ID)
-        .expect("legacy alternate character");
-    assert!(select_playable_character(&mut world, player, variant));
+    let variant = character_variants::variant_by_id(&world, TEST_CHARACTER_B)
+        .expect("project-authored alternate character")
+        .clone();
+    assert!(select_playable_character(&mut world, player, &variant));
 
     assert!(
         !world
@@ -477,8 +504,8 @@ fn selecting_another_playable_character_closes_selector() {
             .character_select_open
     );
     assert_eq!(
-        selected_variant(&world, player).map(|variant| variant.id),
-        Some(character_variants::ABIGAIL_LEGACY_ID)
+        selected_variant(&world, player).map(|variant| variant.id.as_str()),
+        Some(TEST_CHARACTER_B)
     );
 }
 
@@ -507,8 +534,8 @@ fn dropdown_character_selection_dispatch_closes_menu() {
     let frame = UiEventDispatchFrame {
         actions: vec![newengine_ui_api::UiActionDispatch {
             surface_id: INVENTORY_HUD_SURFACE_ID.to_owned(),
-            node_id: "character.option.abigail.legacy".to_owned(),
-            action_id: "game.character.select.abigail_legacy".to_owned(),
+            node_id: "character.option.test.beta".to_owned(),
+            action_id: format!("game.character.select.{TEST_CHARACTER_B}"),
             trigger: UiNodeEventTrigger::Click,
             ..Default::default()
         }],
@@ -523,8 +550,8 @@ fn dropdown_character_selection_dispatch_closes_menu() {
             .character_select_open
     );
     assert_eq!(
-        selected_variant(&world, player).map(|variant| variant.id),
-        Some(character_variants::ABIGAIL_LEGACY_ID)
+        selected_variant(&world, player).map(|variant| variant.id.as_str()),
+        Some(TEST_CHARACTER_B)
     );
     let commands = world
         .get::<PlayerCommandFrame>(player)

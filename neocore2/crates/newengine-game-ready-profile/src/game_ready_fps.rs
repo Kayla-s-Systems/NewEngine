@@ -91,12 +91,6 @@ pub const GAME_READY_FPS_ENV_POLICY: &[(&str, &str)] = &[
     ("NEWENGINE_SCENE_TEXTURE_GATE_SOFT_TIMEOUT_FRAMES", "1800"),
     ("NEWENGINE_SCENE_TEXTURE_GATE_SOFT_TIMEOUT_MS", "90000"),
     (GAME_READY_UI_SCREEN_PROFILE_ENV, GAME_READY_UI_PROFILE_GAME),
-    (
-        GAME_READY_UI_ROOT_SURFACE_ENV,
-        GAME_READY_UI_ROOT_SURFACE_GAME,
-    ),
-    (GAME_READY_UI_DOCUMENT_ENV, "ui/game/game_hud.neui@surface"),
-    (GAME_READY_UI_PUBLISH_EDITOR_SHELL_ENV, "false"),
 ];
 
 /// Backward-compatible name for the standalone game viewport policy.
@@ -247,15 +241,9 @@ mod tests {
             value(GAME_READY_UI_SCREEN_PROFILE_ENV),
             Some(GAME_READY_UI_PROFILE_GAME)
         );
-        assert_eq!(
-            value(GAME_READY_UI_ROOT_SURFACE_ENV),
-            Some(GAME_READY_UI_ROOT_SURFACE_GAME)
-        );
-        assert_eq!(
-            value(GAME_READY_UI_DOCUMENT_ENV),
-            Some("ui/game/game_hud.neui@surface")
-        );
-        assert_eq!(value(GAME_READY_UI_PUBLISH_EDITOR_SHELL_ENV), Some("false"));
+        assert_eq!(value(GAME_READY_UI_ROOT_SURFACE_ENV), None);
+        assert_eq!(value(GAME_READY_UI_DOCUMENT_ENV), None);
+        assert_eq!(value(GAME_READY_UI_PUBLISH_EDITOR_SHELL_ENV), None);
     }
 
     #[test]

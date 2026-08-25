@@ -59,9 +59,9 @@ pub fn apply_inventory_ui_actions(world: &mut World, frame: &UiEventDispatchFram
             }
             _ => {
                 if action.trigger == UiNodeEventTrigger::Click {
-                    if let Some(variant) = variant_from_action(&action.action_id) {
+                    if let Some(variant) = variant_from_action(world, &action.action_id).cloned() {
                         suppress_character_selector_pointer_leak(world, player);
-                        consumed |= select_playable_character(world, player, variant);
+                        consumed |= select_playable_character(world, player, &variant);
                     }
                 }
             }
@@ -289,7 +289,7 @@ fn suppress_character_selector_pointer_leak(world: &mut World, player: EntityId)
 pub(super) fn select_playable_character(
     world: &mut World,
     player: EntityId,
-    variant: &character_variants::PlayableCharacterVariantDescriptor,
+    variant: &FpsPlayableCharacterPolicy,
 ) -> bool {
     // Selection is terminal for this modal: close first so changing avatar never
     // leaves the character picker covering the newly selected character.
@@ -300,12 +300,12 @@ pub(super) fn select_playable_character(
             variant.id
         );
     }
-    let Some(assignment) = variant.assignment() else {
+    let Some(assignment) = character_variants::assignment(variant) else {
         newengine_ulog_api::ulog::warn!(
             "playable character variant is not runtime-ready id={} family={} availability={} source={}",
             variant.id,
-            variant.family.label(),
-            variant.availability.label(),
+            variant.family,
+            availability_label(variant),
             variant.source_provenance,
         );
         return false;
@@ -322,7 +322,7 @@ pub(super) fn select_playable_character(
             newengine_ulog_api::ulog::info!(
                 "playable character selected variant={} family={} rig={} player={} revision={}",
                 variant.id,
-                variant.family.label(),
+                variant.family,
                 variant.rig_label,
                 player.stable_u64(),
                 revision

@@ -7,7 +7,7 @@ use newengine_engine_runtime::gameplay::{
 };
 #[cfg(test)]
 use newengine_gameplay_fps_api::action as fps_action;
-use newengine_gameplay_fps_api::{FpsActionFrame, FpsDemoState};
+use newengine_gameplay_fps_api::{FpsActionFrame, FpsDemoState, FpsPlayableCharacterPolicy};
 use newengine_ui_api::{UiEventDispatchFrame, UiNodeEventTrigger, UiStatePatch};
 
 use crate::combat::focused_item_pickup;
@@ -27,7 +27,8 @@ pub use provider::FpsInventoryHudProvider;
 pub(crate) use state::character_select_is_open;
 
 use character_variants::{
-    selected_variant, variant_from_action, PlayableCharacterSelection, PLAYABLE_CHARACTER_VARIANTS,
+    availability_label, playable_character_variants, selected_variant, variant_from_action,
+    PlayableCharacterSelection,
 };
 use helpers::*;
 #[cfg(test)]

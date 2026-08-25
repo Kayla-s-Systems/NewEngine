@@ -14,11 +14,10 @@ impl EditorScreen {
         frame_index: u64,
         runtime_mode: UiEditorRuntimeMode,
         runtime_paused: bool,
-        runtime_possessed: bool,
-        command_registry: &EditorCommandRegistry,
         viewport_state: &UiEditorViewportState,
         scene_snapshot: &UiEditorSceneSnapshot,
         inspector_snapshot: &UiEditorInspectorSnapshot,
+        authoring_state: &UiInGameEditorState,
         layout: &EditorLayoutMetrics,
         active_menu_id: Option<&str>,
     ) -> UiSurfaceNode {
@@ -27,11 +26,10 @@ impl EditorScreen {
             frame_index,
             runtime_mode,
             runtime_paused,
-            runtime_possessed,
-            command_registry,
             viewport_state,
             scene_snapshot,
             inspector_snapshot,
+            authoring_state,
             layout,
             active_menu_id,
         )
@@ -273,20 +271,16 @@ pub(super) fn editor_screen_surface_node(
     frame_index: u64,
     runtime_mode: UiEditorRuntimeMode,
     runtime_paused: bool,
-    runtime_possessed: bool,
-    command_registry: &EditorCommandRegistry,
     viewport_state: &UiEditorViewportState,
     scene_snapshot: &UiEditorSceneSnapshot,
     inspector_snapshot: &UiEditorInspectorSnapshot,
+    authoring_state: &UiInGameEditorState,
     layout: &EditorLayoutMetrics,
     active_menu_id: Option<&str>,
 ) -> UiSurfaceNode {
     let body_lines = Vec::new();
-    let footer_lines = vec![format!(
-        "mode={}{} · 1 Stop · 2 Simulate · 3 Play · Space Pause/Resume",
-        runtime_mode.id(),
-        if runtime_paused { " (paused)" } else { "" }
-    )];
+    let footer_lines =
+        vec!["Live World Editor · Hold RMB to Fly · Ctrl+S Save · F2 Exit".to_owned()];
     let mut metrics = screen_metrics(descriptor, frame_index);
     metrics.insert(
         "editor_panel_count".to_owned(),
@@ -345,7 +339,7 @@ pub(super) fn editor_screen_surface_node(
         modal: false,
         z_order: 100,
         title: EDITOR_CHROME.product_title.to_owned(),
-        subtitle: "Editor shell · viewport contained inside UI · simulation stopped until command"
+        subtitle: "Live World Editor · same running World · simulation paused while authoring"
             .to_owned(),
         body_lines,
         footer_lines,
@@ -364,11 +358,10 @@ pub(super) fn editor_screen_surface_node(
             descriptor,
             runtime_mode,
             runtime_paused,
-            runtime_possessed,
-            command_registry,
             viewport_state,
             scene_snapshot,
             inspector_snapshot,
+            authoring_state,
             layout,
             active_menu_id,
         ),

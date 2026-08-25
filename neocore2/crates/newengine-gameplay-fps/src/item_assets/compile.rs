@@ -133,8 +133,17 @@ fn compile_item_definition(authored: &AuthoredItemDefinition) -> Result<ItemDefi
     if kind != ItemKind::Weapon && !authored.equipment_slot.trim().is_empty() {
         definition.equipment_slot = Some(parse_equipment_slot(&authored.equipment_slot)?);
     }
+    if let Some(animation) = authored.weapon_animation.as_ref() {
+        definition = definition.with_weapon_animation(animation.compile());
+    }
     if let Some(audio) = authored.weapon_audio.as_ref() {
         definition = definition.with_weapon_audio(audio.compile());
+    }
+    if let Some(presentation) = authored.weapon_presentation.as_ref() {
+        definition = definition.with_weapon_presentation(presentation.compile());
+    }
+    if let Some(casing) = authored.weapon_casing.as_ref() {
+        definition = definition.with_weapon_casing(casing.compile());
     }
     if let Some(world) = authored.world.as_ref() {
         definition = definition.with_world_definition(world.compile(kind)?);

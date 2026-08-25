@@ -275,11 +275,23 @@ impl RenderUiNodeSurfaceState {
         }
 
         self.document_last_attempt_frame = Some(frame_index);
-        match document::try_load_primary_ui_document() {
+        let Some(document_ref) =
+            std::env::var(newengine_ui_navigation_api::ENGINE_PRIMARY_UI_DOCUMENT_REF_ENV)
+                .ok()
+                .map(|value| value.trim().to_owned())
+                .filter(|value| !value.is_empty())
+        else {
+            self.document_load_error = Some(
+                "primary UI enabled without NEWENGINE_PRIMARY_UI_DOCUMENT_REF; project frontends belong in game.toml ui.presentation_flow"
+                    .to_owned(),
+            );
+            return false;
+        };
+        match document::try_load_primary_ui_document(&document_ref) {
             Ok(navigation) => {
                 newengine_ulog_api::ulog::info!(
                     "engine.ui.primary: compiled .neui UI surface available through engine.ui ref='{}'",
-                    newengine_ui_navigation_api::ENGINE_PRIMARY_UI_SURFACE_REF
+                    document_ref
                 );
                 self.document_load_error = None;
                 self.navigation = Some(navigation);
@@ -288,7 +300,7 @@ impl RenderUiNodeSurfaceState {
             Err(err) => {
                 newengine_ulog_api::ulog::warn!(
                     "engine.ui.primary: compiled .neui UI surface unavailable ref='{}' err='{}'",
-                    newengine_ui_navigation_api::ENGINE_PRIMARY_UI_SURFACE_REF,
+                    document_ref,
                     err
                 );
                 self.document_load_error = Some(err);

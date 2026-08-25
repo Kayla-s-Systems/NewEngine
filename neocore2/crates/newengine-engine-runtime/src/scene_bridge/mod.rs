@@ -9,6 +9,7 @@ mod definitions_runtime;
 mod helpers;
 mod imported_assets;
 mod material_application;
+mod project_save;
 mod queue;
 mod scene_object_validation;
 mod view_gateway;
@@ -84,6 +85,7 @@ pub struct SceneBridge {
     authority: Arc<RuntimeWorldAuthorityBridge>,
     play_mode: Arc<Mutex<GameRunMode>>,
     in_game_editor_enabled: Arc<Mutex<bool>>,
+    authored_map_edits: Arc<Mutex<project_save::AuthoredMapEditJournal>>,
     scene_bootstrap_provider: Arc<RwLock<Option<Arc<dyn SceneBootstrapProvider>>>>,
 }
 impl SceneBridge {
@@ -112,6 +114,9 @@ impl SceneBridge {
             authority: Arc::new(RuntimeWorldAuthorityBridge::new()),
             play_mode: Arc::new(Mutex::new(initial_mode)),
             in_game_editor_enabled: Arc::new(Mutex::new(false)),
+            authored_map_edits: Arc::new(Mutex::new(
+                project_save::AuthoredMapEditJournal::default(),
+            )),
             scene_bootstrap_provider: Arc::new(RwLock::new(None)),
         }
     }

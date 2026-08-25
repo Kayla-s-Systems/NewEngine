@@ -19,14 +19,15 @@ use newengine_audio_api::{
     AudioListenerState, AudioPlayAck, AudioPlayRequest, AudioPreloadAck, AudioPreloadRequest,
     AudioReverbSend, AudioServiceInfo, AudioSpatialParams, AudioStopVoiceRequest,
     AudioStreamBufferConfig, AudioStreamPlayRequest, AudioVoiceAck, AudioVoiceUpdateRequest,
-    SoundCue, SoundCueSpatialPolicy, AUDIO_BACKEND_CAPABILITY_ID, AUDIO_PROVIDER_ABI_ID,
-    AUDIO_SERVICE_ID, AUDIO_SERVICE_METHOD_DIAGNOSTICS_JSON_V1, AUDIO_SERVICE_METHOD_INVOKE,
-    AUDIO_SERVICE_METHOD_PLAY_CLIP_JSON_V1, AUDIO_SERVICE_METHOD_PLAY_CUE_JSON_V1,
-    AUDIO_SERVICE_METHOD_PLAY_EVENT_JSON_V1, AUDIO_SERVICE_METHOD_PLAY_STREAM_JSON_V1,
-    AUDIO_SERVICE_METHOD_PRELOAD_CLIP_JSON_V1, AUDIO_SERVICE_METHOD_PRELOAD_CUE_JSON_V1,
-    AUDIO_SERVICE_METHOD_SET_BUS_GAIN_JSON_V1, AUDIO_SERVICE_METHOD_SET_LISTENER_JSON_V1,
-    AUDIO_SERVICE_METHOD_SET_VOICE_JSON_V1, AUDIO_SERVICE_METHOD_SHUTDOWN_V1,
-    AUDIO_SERVICE_METHOD_STOP_VOICE_JSON_V1, ENGINE_AUDIO_SERVICE_ID,
+    SoundCue, SoundCueClip, SoundCueSpatialPolicy, AUDIO_BACKEND_CAPABILITY_ID,
+    AUDIO_PROVIDER_ABI_ID, AUDIO_SERVICE_ID, AUDIO_SERVICE_METHOD_DIAGNOSTICS_JSON_V1,
+    AUDIO_SERVICE_METHOD_INVOKE, AUDIO_SERVICE_METHOD_PLAY_CLIP_JSON_V1,
+    AUDIO_SERVICE_METHOD_PLAY_CUE_JSON_V1, AUDIO_SERVICE_METHOD_PLAY_EVENT_JSON_V1,
+    AUDIO_SERVICE_METHOD_PLAY_STREAM_JSON_V1, AUDIO_SERVICE_METHOD_PRELOAD_CLIP_JSON_V1,
+    AUDIO_SERVICE_METHOD_PRELOAD_CUE_JSON_V1, AUDIO_SERVICE_METHOD_SET_BUS_GAIN_JSON_V1,
+    AUDIO_SERVICE_METHOD_SET_LISTENER_JSON_V1, AUDIO_SERVICE_METHOD_SET_VOICE_JSON_V1,
+    AUDIO_SERVICE_METHOD_SHUTDOWN_V1, AUDIO_SERVICE_METHOD_STOP_VOICE_JSON_V1,
+    ENGINE_AUDIO_SERVICE_ID,
 };
 use newengine_plugin_api::Blob;
 use newengine_service_kit::{
@@ -50,6 +51,9 @@ const DEFAULT_UI_TONE_GAIN: f32 = 0.10;
 const DEFAULT_MAX_PHYSICAL_VOICES: usize = 64;
 const MAX_CONFIGURED_PHYSICAL_VOICES: usize = 512;
 const MIN_PHYSICAL_AUDIBILITY: f32 = 1.0e-4;
+/// Symphonia-backed decoders can reject sub-frame/sub-packet random access near zero.
+/// A voice promoted this early is perceptually equivalent to starting at sample zero.
+const MIN_MATERIALIZE_SEEK_MS: u64 = 50;
 const UI_FEEDBACK_PRIORITY: i32 = 10_000;
 
 static AUDIO_RUNTIME_REGISTERED: AtomicBool = AtomicBool::new(false);
@@ -72,6 +76,23 @@ struct EmbeddedYscdClipLocator {
     dictionary_path: String,
     cue_name: String,
     clip_index: usize,
+}
+
+#[derive(Clone, Debug)]
+struct YscdRuntimeLayer {
+    name: String,
+    role: String,
+    clips: Vec<SoundCueClip>,
+    gain: f32,
+    pitch: f32,
+    attenuation: Option<AudioAttenuationSettings>,
+}
+
+#[derive(Clone, Debug)]
+struct YscdRuntimeMeta {
+    dictionary_path: String,
+    cue_name: String,
+    embedded_bytes: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -790,7 +811,10 @@ pub struct AudioRuntimeState {
     bus_gains: BTreeMap<AudioBus, f32>,
     clips: HashMap<String, CachedClip>,
     cues: HashMap<String, SoundCue>,
+    cue_layers: HashMap<String, Vec<YscdRuntimeLayer>>,
+    cue_meta: HashMap<String, YscdRuntimeMeta>,
     embedded_yscd_clips: HashMap<String, EmbeddedYscdClipLocator>,
+    materialization_errors: HashMap<u64, String>,
     cached_bytes: usize,
     cache_limit_bytes: usize,
     max_physical_voices: usize,
@@ -818,7 +842,10 @@ impl AudioRuntimeState {
             bus_gains,
             clips: HashMap::new(),
             cues: HashMap::new(),
+            cue_layers: HashMap::new(),
+            cue_meta: HashMap::new(),
             embedded_yscd_clips: HashMap::new(),
+            materialization_errors: HashMap::new(),
             cached_bytes: 0,
             cache_limit_bytes: cache_limit_bytes_from_env(),
             max_physical_voices: max_physical_voices_from_env(),
@@ -907,6 +934,7 @@ impl AudioRuntimeState {
     }
 
     fn remove_voice(&mut self, voice_id: u64) -> Option<VoiceEntry> {
+        self.materialization_errors.remove(&voice_id);
         let voice = self.voices.remove(&voice_id)?;
         if let Some(control) = voice.control.as_ref() {
             control.stop();
@@ -957,11 +985,6 @@ impl AudioRuntimeState {
     }
 
     fn preload(&mut self, request: AudioPreloadRequest) -> Result<AudioPreloadAck, String> {
-        if is_yscd_cue_reference(&request.clip.uri) {
-            return self.preload_cue(AudioCuePreloadRequest {
-                cue: newengine_audio_api::SoundCueRef::new(request.clip.uri),
-            });
-        }
         let uri = normalize_vfs_path(&request.clip.uri)?;
         if let Some(existing) = self.clips.get(&uri) {
             return Ok(AudioPreloadAck {
@@ -969,6 +992,7 @@ impl AudioRuntimeState {
                 cached: true,
                 bytes: existing.len(),
                 provider: NATIVE_AUDIO_PROVIDER_ROUTE.to_owned(),
+                diagnostics: Vec::new(),
             });
         }
 
@@ -989,6 +1013,7 @@ impl AudioRuntimeState {
                 cached: true,
                 bytes: existing.len(),
                 provider: NATIVE_AUDIO_PROVIDER_ROUTE.to_owned(),
+                diagnostics: Vec::new(),
             });
         }
         if bytes.is_empty() {
@@ -1017,6 +1042,7 @@ impl AudioRuntimeState {
             cached: false,
             bytes: len,
             provider: NATIVE_AUDIO_PROVIDER_ROUTE.to_owned(),
+            diagnostics: Vec::new(),
         })
     }
 
@@ -1060,6 +1086,8 @@ impl AudioRuntimeState {
         // in the shared asset/VFS layer rather than leaking into the provider API.
         self.clips.clear();
         self.cues.clear();
+        self.cue_layers.clear();
+        self.cue_meta.clear();
         self.cached_bytes = 0;
     }
 
@@ -1103,15 +1131,6 @@ impl AudioRuntimeState {
     }
 
     fn play_clip(&mut self, request: AudioPlayRequest) -> Result<AudioPlayAck, String> {
-        if is_yscd_cue_reference(&request.clip.uri) {
-            let request = request.sanitized();
-            let mut cue_request = AudioCuePlayRequest::new(request.clip.uri);
-            cue_request.position = request.spatial.map(|spatial| spatial.position);
-            cue_request.gain = request.gain;
-            cue_request.acoustic = request.acoustic;
-            cue_request.environment = request.environment;
-            return self.play_cue(cue_request);
-        }
         self.play_clip_with_policy(request, String::new(), 0)
     }
 
@@ -1141,6 +1160,7 @@ impl AudioRuntimeState {
                         "concurrency group '{concurrency_group}' is occupied by a higher-priority voice"
                     ),
                     virtualized: false,
+                    diagnostics: Vec::new(),
                 });
             }
             for (voice_id, _) in conflicts {
@@ -1187,6 +1207,7 @@ impl AudioRuntimeState {
                 message: "physical voice budget exhausted for a non-virtualizable source"
                     .to_owned(),
                 virtualized: false,
+                diagnostics: Vec::new(),
             });
         };
         Ok(AudioPlayAck {
@@ -1199,6 +1220,7 @@ impl AudioRuntimeState {
                 String::new()
             },
             virtualized: voice.is_virtual(),
+            diagnostics: Vec::new(),
         })
     }
 
@@ -1234,6 +1256,7 @@ impl AudioRuntimeState {
                         request.concurrency_group
                     ),
                     virtualized: false,
+                    diagnostics: Vec::new(),
                 });
             }
             for (voice_id, _) in conflicts {
@@ -1276,6 +1299,7 @@ impl AudioRuntimeState {
                 voice_id: None,
                 message: "physical voice budget exhausted for streaming source".to_owned(),
                 virtualized: false,
+                diagnostics: Vec::new(),
             });
         };
         Ok(AudioPlayAck {
@@ -1284,6 +1308,7 @@ impl AudioRuntimeState {
             voice_id: Some(voice_id),
             message: String::new(),
             virtualized: voice.is_virtual(),
+            diagnostics: Vec::new(),
         })
     }
 
@@ -1322,6 +1347,7 @@ impl AudioRuntimeState {
         })?;
 
         let mut clips = Vec::with_capacity(authored.clips.len());
+        let mut clips_by_name = HashMap::<String, SoundCueClip>::new();
         for (clip_index, clip) in authored.clips.iter().enumerate() {
             let key = embedded_yscd_clip_key(&canonical, clip_index, &clip.codec);
             self.embedded_yscd_clips.insert(
@@ -1335,11 +1361,46 @@ impl AudioRuntimeState {
             if !self.clips.contains_key(&key) {
                 let _ = self.cache_clip_bytes(key.clone(), clip.bytes.clone())?;
             }
-            clips.push(newengine_audio_api::SoundCueClip {
+            let runtime_clip = SoundCueClip {
                 clip: newengine_audio_api::AudioClipRef::new(key),
                 weight: clip.weight,
                 gain: clip.gain,
                 pitch: clip.pitch,
+            };
+            clips_by_name.insert(clip.name.trim().to_ascii_lowercase(), runtime_clip.clone());
+            clips.push(runtime_clip);
+        }
+
+        let mut runtime_layers = Vec::with_capacity(authored.descriptor.layers.len());
+        for layer in &authored.descriptor.layers {
+            let mut layer_clips = Vec::with_capacity(layer.clip_names.len());
+            for clip_name in &layer.clip_names {
+                let key = clip_name.trim().to_ascii_lowercase();
+                let clip = clips_by_name.get(&key).cloned().ok_or_else(|| {
+                    format!(
+                        "YSCD cue '{}' layer '{}' references unknown clip '{}'",
+                        authored.name, layer.name, clip_name
+                    )
+                })?;
+                layer_clips.push(clip);
+            }
+            if layer_clips.is_empty() {
+                return Err(format!(
+                    "YSCD cue '{}' layer '{}' resolved no clips",
+                    authored.name, layer.name
+                ));
+            }
+            runtime_layers.push(YscdRuntimeLayer {
+                name: layer.name.trim().to_owned(),
+                role: layer.role.trim().to_ascii_lowercase(),
+                clips: layer_clips,
+                gain: sanitize_gain(layer.gain),
+                pitch: sanitize_speed(layer.pitch),
+                attenuation: layer
+                    .attenuation
+                    .as_ref()
+                    .map(audio_attenuation_from_yscd)
+                    .transpose()?,
             });
         }
 
@@ -1349,12 +1410,12 @@ impl AudioRuntimeState {
             .map(|clip| clip.bytes.len())
             .sum::<usize>();
         newengine_ulog_api::ulog::info!(
-            "audio YSCD cue resolved: ref='{}' dictionary='{}' cue='{}' clips={} embedded_bytes={} source='engine.assets.raw_bytes_v1' body='NEF8/YSCD-v1'",
-            canonical,
+            "YSCD resolve dictionary='{}' cue='{}' embedded_clip_bytes={} clips={} layers={} source='engine.assets.raw_bytes_v1' body='NEF8/YSCD-v1'",
             reference.logical_path,
             authored.name,
-            authored.clips.len(),
             embedded_bytes,
+            authored.clips.len(),
+            runtime_layers.len(),
         );
 
         let cue = SoundCue {
@@ -1377,12 +1438,31 @@ impl AudioRuntimeState {
                 .transpose()?,
         }
         .sanitized()?;
+        self.cue_layers.insert(canonical.clone(), runtime_layers);
+        self.cue_meta.insert(
+            canonical.clone(),
+            YscdRuntimeMeta {
+                dictionary_path: reference.logical_path.clone(),
+                cue_name: authored.name.clone(),
+                embedded_bytes,
+            },
+        );
         self.cues.insert(canonical, cue.clone());
         Ok(cue)
     }
 
     fn preload_cue(&mut self, request: AudioCuePreloadRequest) -> Result<AudioPreloadAck, String> {
+        let parsed = newengine_assets_api::parse_asset_reference(&request.cue.logical_path)
+            .map_err(|error| {
+                format!(
+                    "audio cue reference invalid '{}': {error}",
+                    request.cue.logical_path
+                )
+            })?;
+        let canonical = parsed.canonical.clone();
         let cue = self.load_cue(&request.cue.logical_path)?;
+        let clip_count = cue.clips.len();
+        let layer_count = self.cue_layers.get(&canonical).map_or(0, Vec::len);
         let mut bytes = 0usize;
         let mut all_cached = true;
         for entry in cue.clips {
@@ -1390,11 +1470,50 @@ impl AudioRuntimeState {
             bytes = bytes.saturating_add(ack.bytes);
             all_cached &= ack.cached;
         }
+
+        // Device creation remains forbidden during DLL/plugin initialization, but cue
+        // preload runs on the normal runtime loading path. Starting the async worker
+        // here hides first-shot device latency without blocking the loading thread.
+        self.start_output_init();
+        self.poll_output_init();
+
+        let mut diagnostics = self
+            .cue_meta
+            .get(&canonical)
+            .map(|meta| {
+                vec![format!(
+                    "YSCD resolve dictionary='{}' cue='{}' embedded_clip_bytes={} clips={} layers={}",
+                    meta.dictionary_path,
+                    meta.cue_name,
+                    meta.embedded_bytes,
+                    clip_count,
+                    layer_count,
+                )]
+            })
+            .unwrap_or_default();
+        let device_state = if self.output.is_some() {
+            "ready"
+        } else if self.output_error.is_some() {
+            "failed"
+        } else if self.output_init_started {
+            "initializing"
+        } else {
+            "idle"
+        };
+        diagnostics.push(format!(
+            "audio device prewarm state='{}' init_started={} output_ready={} error='{}'",
+            device_state,
+            self.output_init_started,
+            self.output.is_some(),
+            self.output_error.as_deref().unwrap_or(""),
+        ));
+
         Ok(AudioPreloadAck {
             accepted: true,
             cached: all_cached,
             bytes,
             provider: NATIVE_AUDIO_PROVIDER_ROUTE.to_owned(),
+            diagnostics,
         })
     }
 
@@ -1406,22 +1525,21 @@ impl AudioRuntimeState {
                 request.version
             ));
         }
+        let parsed = newengine_assets_api::parse_asset_reference(&request.cue.logical_path)
+            .map_err(|error| {
+                format!(
+                    "audio cue reference invalid '{}': {error}",
+                    request.cue.logical_path
+                )
+            })?;
+        let canonical = parsed.canonical.clone();
         let cue = self.load_cue(&request.cue.logical_path)?;
+        let layers = self.cue_layers.get(&canonical).cloned().unwrap_or_default();
         let seed = request.seed.unwrap_or_else(|| {
             let seed = self.cue_counter;
             self.cue_counter = self.cue_counter.wrapping_add(1).max(1);
             seed
         }) ^ stable_text_hash(&request.cue.logical_path);
-        let random_a = splitmix64(seed);
-        let random_b = splitmix64(random_a);
-        let random_c = splitmix64(random_b);
-        let selected = select_weighted_clip(&cue, unit_f32(random_a))
-            .ok_or_else(|| "SoundCue weighted selection produced no clip".to_owned())?;
-        let gain = sanitize_gain(
-            request.gain * selected.gain * sample_range(cue.gain_range, unit_f32(random_b)),
-        );
-        let speed =
-            sanitize_speed(selected.pitch * sample_range(cue.pitch_range, unit_f32(random_c)));
         let spatial = match cue.spatial_policy {
             SoundCueSpatialPolicy::NonSpatial => None,
             SoundCueSpatialPolicy::Spatial => Some(AudioSpatialParams {
@@ -1436,22 +1554,187 @@ impl AudioRuntimeState {
                 .position
                 .map(|position| AudioSpatialParams { position }),
         };
-        self.play_clip_with_policy(
-            AudioPlayRequest {
-                version: 1,
-                clip: selected.clip.clone(),
-                bus: cue.bus,
-                gain,
-                speed,
-                looping: cue.looping,
-                spatial,
-                attenuation: cue.attenuation.clone(),
-                acoustic: request.acoustic,
-                environment: request.environment,
-            },
-            cue.concurrency_group,
-            cue.priority,
-        )
+
+        if layers.is_empty() {
+            let random_a = splitmix64(seed);
+            let random_b = splitmix64(random_a);
+            let random_c = splitmix64(random_b);
+            let selected = select_weighted_clip(&cue, unit_f32(random_a))
+                .cloned()
+                .ok_or_else(|| "SoundCue weighted selection produced no clip".to_owned())?;
+            let gain = sanitize_gain(
+                request.gain * selected.gain * sample_range(cue.gain_range, unit_f32(random_b)),
+            );
+            let speed =
+                sanitize_speed(selected.pitch * sample_range(cue.pitch_range, unit_f32(random_c)));
+            let ack = self.play_clip_with_policy(
+                AudioPlayRequest {
+                    version: 1,
+                    clip: selected.clip.clone(),
+                    bus: cue.bus,
+                    gain,
+                    speed,
+                    looping: cue.looping,
+                    spatial,
+                    attenuation: cue.attenuation.clone(),
+                    acoustic: request.acoustic,
+                    environment: request.environment,
+                },
+                cue.concurrency_group.clone(),
+                cue.priority,
+            )?;
+            let mut ack = ack;
+            if let Some(diagnostic) = self.yscd_play_diagnostic(&canonical, "body", &selected, &ack)
+            {
+                ack.diagnostics.push(diagnostic);
+            }
+            return Ok(ack);
+        }
+
+        let mut primary: Option<AudioPlayAck> = None;
+        let mut accepted_layers = 0usize;
+        let mut diagnostics = Vec::with_capacity(layers.len());
+        for (index, layer) in layers.iter().enumerate() {
+            let layer_seed = splitmix64(seed ^ stable_text_hash(&layer.name) ^ index as u64);
+            let random_a = splitmix64(layer_seed);
+            let random_b = splitmix64(random_a);
+            let random_c = splitmix64(random_b);
+            let selected = select_weighted_clips(&layer.clips, unit_f32(random_a))
+                .cloned()
+                .ok_or_else(|| {
+                    format!(
+                        "YSCD layer '{}' weighted selection produced no clip",
+                        layer.name
+                    )
+                })?;
+            let gain = sanitize_gain(
+                request.gain
+                    * layer.gain
+                    * selected.gain
+                    * sample_range(cue.gain_range, unit_f32(random_b)),
+            );
+            let speed = sanitize_speed(
+                layer.pitch * selected.pitch * sample_range(cue.pitch_range, unit_f32(random_c)),
+            );
+            let concurrency_group = if cue.concurrency_group.trim().is_empty() {
+                String::new()
+            } else {
+                format!("{}#{}", cue.concurrency_group, layer.name)
+            };
+            let ack = self.play_clip_with_policy(
+                AudioPlayRequest {
+                    version: 1,
+                    clip: selected.clip.clone(),
+                    bus: cue.bus,
+                    gain,
+                    speed,
+                    looping: cue.looping,
+                    spatial,
+                    attenuation: layer
+                        .attenuation
+                        .clone()
+                        .or_else(|| cue.attenuation.clone()),
+                    acoustic: request.acoustic,
+                    environment: request.environment,
+                },
+                concurrency_group,
+                cue.priority,
+            )?;
+            if let Some(diagnostic) =
+                self.yscd_play_diagnostic(&canonical, &layer.name, &selected, &ack)
+            {
+                diagnostics.push(diagnostic);
+            }
+            if ack.accepted {
+                accepted_layers = accepted_layers.saturating_add(1);
+                let preferred_primary = matches!(layer.role.as_str(), "body" | "near");
+                if primary.is_none() || preferred_primary {
+                    primary = Some(ack.clone());
+                }
+            }
+        }
+
+        if let Some(mut ack) = primary {
+            ack.message = format!("YSCD layered cue accepted layers={accepted_layers}");
+            ack.diagnostics = diagnostics;
+            return Ok(ack);
+        }
+        Ok(AudioPlayAck {
+            accepted: false,
+            provider: NATIVE_AUDIO_PROVIDER_ROUTE.to_owned(),
+            voice_id: None,
+            message: "YSCD layered cue produced no accepted voices".to_owned(),
+            virtualized: false,
+            diagnostics,
+        })
+    }
+
+    fn yscd_play_diagnostic(
+        &self,
+        canonical: &str,
+        layer: &str,
+        selected: &SoundCueClip,
+        ack: &AudioPlayAck,
+    ) -> Option<String> {
+        let meta = self.cue_meta.get(canonical)?;
+        let clip_bytes = self
+            .clips
+            .get(&selected.clip.uri)
+            .map(CachedClip::len)
+            .unwrap_or(0);
+        let voice = ack.voice_id.and_then(|voice_id| self.voices.get(&voice_id));
+        let physical_voice = voice.is_some_and(VoiceEntry::is_physical);
+        let arbiter_selected = ack
+            .voice_id
+            .is_some_and(|voice_id| self.desired_physical_voices().contains(&voice_id));
+        let audibility = voice
+            .map(|voice| self.voice_audibility(voice))
+            .unwrap_or(0.0);
+        let distance = voice
+            .map(|voice| voice.distance_to(self.listener))
+            .unwrap_or(0.0);
+        let attenuation_gain = voice
+            .map(|voice| voice.attenuation_gain(self.listener))
+            .unwrap_or(0.0);
+        let bus_gain = voice.map(|voice| self.bus_gain(voice.bus)).unwrap_or(0.0);
+        let transmission_gain = voice
+            .map(|voice| voice.acoustic.sanitized().transmission_gain)
+            .unwrap_or(0.0);
+        let output_state = if self.output.is_some() {
+            "ready"
+        } else if self.output_error.is_some() {
+            "failed"
+        } else if self.output_init_started {
+            "initializing"
+        } else {
+            "idle"
+        };
+        let materialize_error = ack
+            .voice_id
+            .and_then(|voice_id| self.materialization_errors.get(&voice_id))
+            .map(String::as_str)
+            .unwrap_or("");
+        Some(format!(
+            "YSCD play dictionary='{}' cue='{}' layer='{}' embedded_clip_bytes={} dictionary_embedded_bytes={} physical_voice={} virtualized={} voice_id={:?} output_state='{}' arbiter_selected={} audibility={:.6} distance={:.3} attenuation_gain={:.6} bus_gain={:.3} transmission_gain={:.3} max_physical_voices={} output_error='{}' materialize_error='{}'",
+            meta.dictionary_path,
+            meta.cue_name,
+            layer,
+            clip_bytes,
+            meta.embedded_bytes,
+            physical_voice,
+            ack.virtualized,
+            ack.voice_id,
+            output_state,
+            arbiter_selected,
+            audibility,
+            distance,
+            attenuation_gain,
+            bus_gain,
+            transmission_gain,
+            self.max_physical_voices,
+            self.output_error.as_deref().unwrap_or(""),
+            materialize_error,
+        ))
     }
 
     fn play_feedback(&mut self, event: AudioFeedbackEvent) -> AudioFeedbackAck {
@@ -1783,7 +2066,7 @@ impl AudioRuntimeState {
                         spectral: Some(spectral),
                         environment: Some(environment),
                     };
-                    if !seek_position.is_zero() {
+                    if should_seek_materialized_voice(seek_position) {
                         control.try_seek(seek_position)?;
                     }
                     control.set_paused(paused);
@@ -1809,7 +2092,7 @@ impl AudioRuntimeState {
                         spectral: Some(spectral),
                         environment: Some(environment),
                     };
-                    if !seek_position.is_zero() {
+                    if should_seek_materialized_voice(seek_position) {
                         control.try_seek(seek_position)?;
                     }
                     control.set_paused(paused);
@@ -1937,12 +2220,18 @@ impl AudioRuntimeState {
             })
             .collect::<Vec<_>>();
         for voice_id in promote {
-            if let Err(error) = self.materialize_voice(voice_id, now) {
-                newengine_ulog_api::ulog::warn!(
-                    "audio virtualization: promote failed voice_id={} err='{}'",
-                    voice_id,
-                    error
-                );
+            match self.materialize_voice(voice_id, now) {
+                Ok(()) => {
+                    self.materialization_errors.remove(&voice_id);
+                }
+                Err(error) => {
+                    self.materialization_errors.insert(voice_id, error.clone());
+                    newengine_ulog_api::ulog::warn!(
+                        "audio virtualization: promote failed voice_id={} err='{}'",
+                        voice_id,
+                        error
+                    );
+                }
             }
         }
 
@@ -2076,6 +2365,8 @@ impl AudioRuntimeState {
         self.voices.clear();
         self.clips.clear();
         self.cues.clear();
+        self.cue_layers.clear();
+        self.cue_meta.clear();
         self.cached_bytes = 0;
     }
 }
@@ -2294,35 +2585,23 @@ fn normalize_vfs_path(uri: &str) -> Result<String, String> {
     Ok(reference.logical_path)
 }
 
-fn select_weighted_clip(cue: &SoundCue, unit: f32) -> Option<&newengine_audio_api::SoundCueClip> {
-    let total = cue
-        .clips
-        .iter()
-        .map(|clip| clip.weight.max(0.0))
-        .sum::<f32>();
+fn select_weighted_clip(cue: &SoundCue, unit: f32) -> Option<&SoundCueClip> {
+    select_weighted_clips(&cue.clips, unit)
+}
+
+fn select_weighted_clips(clips: &[SoundCueClip], unit: f32) -> Option<&SoundCueClip> {
+    let total = clips.iter().map(|clip| clip.weight.max(0.0)).sum::<f32>();
     if !(total.is_finite() && total > 0.0) {
         return None;
     }
     let mut cursor = unit.clamp(0.0, 0.999_999_94) * total;
-    for clip in &cue.clips {
+    for clip in clips {
         cursor -= clip.weight.max(0.0);
         if cursor <= 0.0 {
             return Some(clip);
         }
     }
-    cue.clips.last()
-}
-
-fn is_yscd_cue_reference(value: &str) -> bool {
-    newengine_assets_api::parse_asset_reference(value)
-        .map(|reference| {
-            reference.has_extension(newengine_asset_format_nef8::yscd::EXTENSION)
-                && reference
-                    .entry
-                    .as_deref()
-                    .is_some_and(|entry| !entry.trim().is_empty())
-        })
-        .unwrap_or(false)
+    clips.last()
 }
 
 fn embedded_yscd_clip_key(cue_reference: &str, clip_index: usize, codec: &str) -> String {
@@ -2428,6 +2707,11 @@ fn distance3(a: [f32; 3], b: [f32; 3]) -> f32 {
     (dx * dx + dy * dy + dz * dz).sqrt()
 }
 
+#[inline]
+fn should_seek_materialized_voice(position: Duration) -> bool {
+    position >= Duration::from_millis(MIN_MATERIALIZE_SEEK_MS)
+}
+
 fn max_physical_voices_from_env() -> usize {
     std::env::var("NEWENGINE_AUDIO_MAX_PHYSICAL_VOICES")
         .ok()
@@ -2481,6 +2765,15 @@ mod tests {
     use super::*;
 
     #[test]
+    fn materialization_suppresses_near_zero_decoder_seek() {
+        assert!(!should_seek_materialized_voice(Duration::ZERO));
+        assert!(!should_seek_materialized_voice(Duration::from_millis(1)));
+        assert!(!should_seek_materialized_voice(Duration::from_millis(49)));
+        assert!(should_seek_materialized_voice(Duration::from_millis(50)));
+        assert!(should_seek_materialized_voice(Duration::from_secs(1)));
+    }
+
+    #[test]
     fn feedback_tones_are_bounded() {
         for event in [
             "ui.open",
@@ -2506,6 +2799,7 @@ mod tests {
         assert!(normalize_vfs_path("C:/audio/test.wav").is_err());
         assert!(normalize_vfs_path("../audio/test.wav").is_err());
         assert!(normalize_vfs_path("shared/audio/clip.wav@entry").is_err());
+        assert!(normalize_vfs_path("shared/audio/weapon/rifle/rifle.yscd@fire").is_err());
     }
 
     #[test]

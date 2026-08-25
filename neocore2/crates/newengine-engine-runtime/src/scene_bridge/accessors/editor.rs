@@ -59,6 +59,19 @@ impl SceneBridge {
                         applied = true;
                         continue;
                     }
+                    IN_GAME_EDITOR_SAVE_ACTION if self.in_game_editor_enabled() => {
+                        match self.save_authored_project_world() {
+                            Ok(count) => newengine_ulog_api::ulog::info!(
+                                "in-game editor: project save complete placements={count}"
+                            ),
+                            Err(error) => newengine_ulog_api::ulog::error!(
+                                "in-game editor: project save failed err='{}'",
+                                error
+                            ),
+                        }
+                        applied = true;
+                        continue;
+                    }
                     _ => {}
                 }
             }
@@ -110,7 +123,8 @@ impl SceneBridge {
         let protected_root = world
             .resource::<newengine_scene::SceneState>()
             .and_then(|state| state.root);
-        let mut duplicated = Vec::<(EntityId, EntityId, Option<u64>)>::new();
+        let roots = canonical_editor_actor_roots(world, &selected, protected_root);
+        let mut duplicated_roots = Vec::new();
 
         macro_rules! clone_component {
             ($source:expr, $target:expr, $ty:ty) => {
@@ -120,89 +134,157 @@ impl SceneBridge {
             };
         }
 
-        for source in selected {
-            if !world.exists(source)
-                || protected_root == Some(source)
-                || world
-                    .get::<crate::editor_viewport::EditorGizmoAxisComponent>(source)
-                    .is_some()
-                || world.get::<crate::gameplay::PlayerActor>(source).is_some()
-            {
-                continue;
+        for source_root in roots {
+            let source_authored = world
+                .get::<crate::gameplay::AuthoredMapPlacement>(source_root)
+                .cloned()
+                .filter(|authored| authored.primary);
+            let duplicate_authored = source_authored
+                .as_ref()
+                .and_then(|authored| self.prepare_authored_duplicate(world, source_root, authored));
+
+            let mut clone_roots = vec![source_root];
+            if let Some(authored) = source_authored.as_ref() {
+                clone_roots.extend(
+                    world
+                        .query::<crate::gameplay::AuthoredMapPlacement>()
+                        .filter_map(|(entity, candidate)| {
+                            (!candidate.primary
+                                && candidate.map_ref == authored.map_ref
+                                && candidate.placement_id == authored.placement_id
+                                && candidate.source == authored.source)
+                                .then_some(entity)
+                        }),
+                );
+            }
+            clone_roots.sort_by_key(|entity| entity.stable_u64());
+            clone_roots.dedup();
+
+            let sources = collect_editor_actor_subtree(world, &clone_roots);
+            let root_keys = clone_roots
+                .iter()
+                .map(|entity| entity.stable_u64())
+                .collect::<std::collections::BTreeSet<_>>();
+            let mut remap = std::collections::BTreeMap::<u64, EntityId>::new();
+
+            for source in &sources {
+                let name = world
+                    .get::<newengine_scene::components::Name>(*source)
+                    .map(|name| name.0.clone())
+                    .unwrap_or_else(|| format!("Actor {}", source.stable_u64()));
+                let copied_name = if root_keys.contains(&source.stable_u64()) {
+                    format!("{name} Copy")
+                } else {
+                    name
+                };
+                let target = newengine_scene::spawn_named(world, copied_name);
+
+                clone_component!(*source, target, Transform);
+                clone_component!(*source, target, Bounds);
+                clone_component!(*source, target, Primitive);
+                clone_component!(*source, target, MaterialRef);
+                clone_component!(
+                    *source,
+                    target,
+                    newengine_model_domain_api::MeshRenderOptions
+                );
+                clone_component!(*source, target, PhysicsBodyDesc);
+                clone_component!(*source, target, crate::gameplay::StaticMeshCollider);
+                clone_component!(*source, target, crate::gameplay::PhysicsSurface);
+                clone_component!(*source, target, DisplayVisibility);
+                clone_component!(*source, target, DirectionalLight);
+                clone_component!(*source, target, PointLight);
+                clone_component!(*source, target, newengine_lighting::SpotLight);
+                clone_component!(
+                    *source,
+                    target,
+                    newengine_procedural_noise::ProceduralTerrain
+                );
+                clone_component!(*source, target, SceneImportedAssetDescriptor);
+                clone_component!(*source, target, PrimitiveMaterialBase);
+                clone_component!(*source, target, crate::gameplay::ModelRenderComponent);
+                clone_component!(*source, target, crate::AudioEmitter);
+                clone_component!(*source, target, crate::AcousticSurface);
+                clone_component!(*source, target, crate::AudioEnvironmentZone);
+                clone_component!(*source, target, crate::AudioPortal);
+                clone_component!(*source, target, crate::AudioAmbienceBed);
+                clone_component!(*source, target, crate::gameplay::GameplayActor);
+                clone_component!(*source, target, crate::gameplay::SceneEntityAnchor);
+                clone_component!(*source, target, DefinitionInstance);
+                clone_component!(*source, target, newengine_sim::Velocity);
+                clone_component!(*source, target, newengine_sim::AngularVelocity);
+                clone_component!(
+                    *source,
+                    target,
+                    crate::gameplay::AuthoredMapPlacementReplicaScaleState
+                );
+
+                if let (
+                    Some(original_identity),
+                    Some((new_primary_identity, clone_origin)),
+                    Some(source_identity),
+                ) = (
+                    source_authored.as_ref(),
+                    duplicate_authored.as_ref(),
+                    world
+                        .get::<crate::gameplay::AuthoredMapPlacement>(*source)
+                        .cloned(),
+                ) {
+                    if source_identity.map_ref == original_identity.map_ref
+                        && source_identity.placement_id == original_identity.placement_id
+                        && source_identity.source == original_identity.source
+                    {
+                        let _ = world.insert(
+                            target,
+                            crate::gameplay::AuthoredMapPlacement::new(
+                                new_primary_identity.map_ref.clone(),
+                                new_primary_identity.placement_id.clone(),
+                                new_primary_identity.source,
+                                source_identity.primary,
+                            ),
+                        );
+                        if source_identity.primary {
+                            let _ = world.insert(target, clone_origin.clone());
+                            let _ =
+                                world.insert(target, crate::gameplay::AuthoredMapPlacementDirty);
+                        }
+                    }
+                }
+
+                remap.insert(source.stable_u64(), target);
             }
 
-            let name = world
-                .get::<newengine_scene::components::Name>(source)
-                .map(|name| name.0.clone())
-                .unwrap_or_else(|| format!("Actor {}", source.stable_u64()));
-            let parent_key = world
-                .get::<newengine_transform_api::Parent>(source)
-                .map(|parent| parent.0.stable_id);
-            let target = newengine_scene::spawn_named(world, format!("{name} Copy"));
+            for source in &sources {
+                let Some(target) = remap.get(&source.stable_u64()).copied() else {
+                    continue;
+                };
+                let parent_key = world
+                    .get::<newengine_transform_api::Parent>(*source)
+                    .map(|parent| parent.0.stable_id);
+                let parent = parent_key.and_then(|parent_key| {
+                    remap.get(&parent_key).copied().or_else(|| {
+                        world
+                            .iter_entities()
+                            .find(|entity| entity.stable_u64() == parent_key)
+                    })
+                });
+                let _ = newengine_transform::set_parent(world, target, parent);
+            }
 
-            clone_component!(source, target, Transform);
-            clone_component!(source, target, Bounds);
-            clone_component!(source, target, Primitive);
-            clone_component!(source, target, MaterialRef);
-            clone_component!(
-                source,
-                target,
-                newengine_model_domain_api::MeshRenderOptions
-            );
-            clone_component!(source, target, PhysicsBodyDesc);
-            clone_component!(source, target, DisplayVisibility);
-            clone_component!(source, target, DirectionalLight);
-            clone_component!(source, target, PointLight);
-            clone_component!(source, target, newengine_lighting::SpotLight);
-            clone_component!(
-                source,
-                target,
-                newengine_procedural_noise::ProceduralTerrain
-            );
-            clone_component!(source, target, SceneImportedAssetDescriptor);
-            clone_component!(source, target, crate::gameplay::ModelRenderComponent);
-            clone_component!(source, target, crate::AudioEmitter);
-            clone_component!(source, target, crate::AcousticSurface);
-            clone_component!(source, target, crate::AudioEnvironmentZone);
-            clone_component!(source, target, crate::AudioPortal);
-            clone_component!(source, target, crate::AudioAmbienceBed);
-            clone_component!(source, target, crate::gameplay::GameplayActor);
-            clone_component!(source, target, crate::gameplay::SceneEntityAnchor);
-            clone_component!(source, target, DefinitionInstance);
-
-            duplicated.push((source, target, parent_key));
+            if let Some(target_root) = remap.get(&source_root.stable_u64()).copied() {
+                duplicated_roots.push(target_root);
+            }
         }
 
-        let remap = duplicated
-            .iter()
-            .map(|(source, target, _)| (source.stable_u64(), *target))
-            .collect::<std::collections::BTreeMap<_, _>>();
-        for (_, target, parent_key) in &duplicated {
-            let Some(parent_key) = *parent_key else {
-                continue;
-            };
-            let parent = remap.get(&parent_key).copied().or_else(|| {
-                world
-                    .iter_entities()
-                    .find(|entity| entity.stable_u64() == parent_key)
-            });
-            let _ = newengine_transform::set_parent(world, *target, parent);
-        }
-
-        let new_selection = duplicated
-            .iter()
-            .map(|(_, target, _)| *target)
-            .collect::<Vec<_>>();
         drop(scene);
-        self.replace_selections(new_selection.iter().copied());
-        if !new_selection.is_empty() {
+        self.replace_selections(duplicated_roots.iter().copied());
+        if !duplicated_roots.is_empty() {
             newengine_ulog_api::ulog::info!(
-                "editor actor duplicate: duplicated={} selection_count={}",
-                new_selection.len(),
-                new_selection.len()
+                "editor actor duplicate: actors={} deep_clone=true authored_create_journal=true",
+                duplicated_roots.len(),
             );
         }
-        new_selection
+        duplicated_roots
     }
 
     pub fn delete_selected_actors(&self) -> usize {
@@ -210,62 +292,95 @@ impl SceneBridge {
         if selected.is_empty() {
             return 0;
         }
+
         let mut scene = self.scene.write();
         let world = scene.world_mut();
         let protected_root = world
             .resource::<newengine_scene::SceneState>()
             .and_then(|state| state.root);
-        let selected_keys = selected
-            .iter()
-            .filter(|entity| protected_root != Some(**entity))
-            .map(|entity| entity.stable_u64())
-            .collect::<std::collections::BTreeSet<_>>();
-        if selected_keys.is_empty() {
+        let actor_roots = canonical_editor_actor_roots(world, &selected, protected_root);
+        if actor_roots.is_empty() {
             return 0;
         }
 
-        let children_to_detach = world
-            .iter_entities()
-            .filter(|entity| {
+        let mut delete_roots = actor_roots.clone();
+        let mut authored_deletions = Vec::new();
+        for root in &actor_roots {
+            let Some(authored) = world
+                .get::<crate::gameplay::AuthoredMapPlacement>(*root)
+                .cloned()
+                .filter(|authored| authored.primary)
+            else {
+                continue;
+            };
+
+            if world
+                .get::<crate::gameplay::AuthoredMapPlacementCloneSource>(*root)
+                .is_none()
+            {
+                authored_deletions.push(authored.clone());
+            }
+            delete_roots.extend(
                 world
-                    .get::<newengine_transform_api::Parent>(*entity)
-                    .is_some_and(|parent| selected_keys.contains(&parent.0.stable_id))
-                    && !selected_keys.contains(&entity.stable_u64())
+                    .query::<crate::gameplay::AuthoredMapPlacement>()
+                    .filter_map(|(entity, candidate)| {
+                        (!candidate.primary
+                            && candidate.map_ref == authored.map_ref
+                            && candidate.placement_id == authored.placement_id
+                            && candidate.source == authored.source)
+                            .then_some(entity)
+                    }),
+            );
+        }
+        delete_roots.sort_by_key(|entity| entity.stable_u64());
+        delete_roots.dedup();
+
+        let mut deletion_order = collect_editor_actor_subtree(world, &delete_roots)
+            .into_iter()
+            .map(|entity| {
+                (
+                    editor_entity_depth_in_set(world, entity, &delete_roots),
+                    entity,
+                )
             })
             .collect::<Vec<_>>();
-        for child in children_to_detach {
-            let _ = newengine_transform::set_parent(world, child, None);
-        }
-
-        let mut deleted = 0usize;
-        for entity in selected {
-            if protected_root == Some(entity) || !world.exists(entity) {
-                continue;
-            }
-            if world
-                .get::<crate::editor_viewport::EditorGizmoAxisComponent>(entity)
-                .is_some()
-            {
-                continue;
-            }
-            let _ = world.despawn(entity);
-            deleted += 1;
-        }
+        deletion_order.sort_by(|a, b| {
+            b.0.cmp(&a.0)
+                .then_with(|| b.1.stable_u64().cmp(&a.1.stable_u64()))
+        });
+        let deleted_keys = deletion_order
+            .iter()
+            .map(|(_, entity)| entity.stable_u64())
+            .collect::<std::collections::BTreeSet<_>>();
 
         if let Some(state) = world.resource_mut::<newengine_scene::SceneState>() {
             if state
                 .active_camera
-                .is_some_and(|camera| selected_keys.contains(&camera.stable_u64()))
+                .is_some_and(|camera| deleted_keys.contains(&camera.stable_u64()))
             {
                 state.active_camera = None;
             }
         }
-        drop(scene);
-        self.replace_selections(std::iter::empty());
-        if deleted > 0 {
-            newengine_ulog_api::ulog::info!("editor actor delete: deleted={deleted}");
+
+        let mut deleted_entities = 0usize;
+        for (_, entity) in deletion_order {
+            if world.exists(entity) {
+                let _ = world.despawn(entity);
+                deleted_entities = deleted_entities.saturating_add(1);
+            }
         }
-        deleted
+        drop(scene);
+
+        for authored in authored_deletions {
+            self.record_authored_deletion(&authored);
+        }
+        self.replace_selections(std::iter::empty());
+        newengine_ulog_api::ulog::info!(
+            "editor actor delete: actors={} entities={} authored_delete_journal=true",
+            actor_roots.len(),
+            deleted_entities,
+        );
+        actor_roots.len()
     }
 
     fn apply_selected_transform_field(&self, field: TransformEditField, value: f32) -> bool {
@@ -283,6 +398,12 @@ impl SceneBridge {
             field.apply(transform, value)
         };
         if changed {
+            {
+                let mut scene = self.scene.write();
+                let world = scene.world_mut();
+                let _ = world.insert(entity, crate::gameplay::AuthoredMapPlacementDirty);
+                crate::editor_viewport::sync_authored_map_placement_replicas(world, entity);
+            }
             self.publish_inspector_state(Some(entity));
             newengine_ulog_api::ulog::info!(
                 "in-game editor: transform changed entity_key={} field={:?} value={:.4}",
@@ -516,6 +637,162 @@ impl SceneBridge {
     }
 }
 
+fn canonical_editor_actor_roots(
+    world: &newengine_ecs::World,
+    selected: &[EntityId],
+    protected_root: Option<EntityId>,
+) -> Vec<EntityId> {
+    let mut roots = selected
+        .iter()
+        .copied()
+        .filter(|entity| world.exists(*entity))
+        .map(|entity| authored_editor_actor_root(world, entity).unwrap_or(entity))
+        .filter(|entity| {
+            protected_root != Some(*entity)
+                && world
+                    .get::<crate::editor_viewport::EditorGizmoAxisComponent>(*entity)
+                    .is_none()
+                && world.get::<crate::gameplay::PlayerActor>(*entity).is_none()
+        })
+        .collect::<Vec<_>>();
+    roots.sort_by_key(|entity| entity.stable_u64());
+    roots.dedup();
+
+    let root_keys = roots
+        .iter()
+        .map(|entity| entity.stable_u64())
+        .collect::<std::collections::BTreeSet<_>>();
+    roots.retain(|entity| {
+        let mut cursor = world
+            .get::<newengine_transform_api::Parent>(*entity)
+            .map(|parent| parent.0.stable_id);
+        let mut depth = 0usize;
+        while let Some(parent_key) = cursor {
+            if root_keys.contains(&parent_key) {
+                return false;
+            }
+            let Some(parent) = world
+                .iter_entities()
+                .find(|candidate| candidate.stable_u64() == parent_key)
+            else {
+                break;
+            };
+            cursor = world
+                .get::<newengine_transform_api::Parent>(parent)
+                .map(|next| next.0.stable_id);
+            depth += 1;
+            if depth >= 128 {
+                break;
+            }
+        }
+        true
+    });
+    roots
+}
+
+fn authored_editor_actor_root(world: &newengine_ecs::World, entity: EntityId) -> Option<EntityId> {
+    let mut cursor = Some(entity);
+    let mut depth = 0usize;
+    while let Some(current) = cursor {
+        if world.get::<crate::gameplay::PlayerActor>(current).is_some() {
+            return Some(current);
+        }
+        if let Some(authored) = world.get::<crate::gameplay::AuthoredMapPlacement>(current) {
+            if authored.primary {
+                return Some(current);
+            }
+            if let Some(primary) = world
+                .query::<crate::gameplay::AuthoredMapPlacement>()
+                .find_map(|(candidate, identity)| {
+                    (identity.primary
+                        && identity.map_ref == authored.map_ref
+                        && identity.placement_id == authored.placement_id
+                        && identity.source == authored.source)
+                        .then_some(candidate)
+                })
+            {
+                return Some(primary);
+            }
+        }
+        let parent_key = world
+            .get::<newengine_transform_api::Parent>(current)
+            .map(|parent| parent.0.stable_id);
+        cursor = parent_key.and_then(|key| {
+            world
+                .iter_entities()
+                .find(|candidate| candidate.stable_u64() == key)
+        });
+        depth += 1;
+        if depth >= 128 {
+            break;
+        }
+    }
+    None
+}
+
+fn collect_editor_actor_subtree(world: &newengine_ecs::World, roots: &[EntityId]) -> Vec<EntityId> {
+    let mut keys = roots
+        .iter()
+        .filter(|entity| world.exists(**entity))
+        .map(|entity| entity.stable_u64())
+        .collect::<std::collections::BTreeSet<_>>();
+    loop {
+        let mut changed = false;
+        for entity in world.iter_entities() {
+            if keys.contains(&entity.stable_u64()) {
+                continue;
+            }
+            if world
+                .get::<newengine_transform_api::Parent>(entity)
+                .is_some_and(|parent| keys.contains(&parent.0.stable_id))
+            {
+                changed |= keys.insert(entity.stable_u64());
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+
+    let mut entities = world
+        .iter_entities()
+        .filter(|entity| keys.contains(&entity.stable_u64()))
+        .collect::<Vec<_>>();
+    entities.sort_by_key(|entity| entity.stable_u64());
+    entities
+}
+
+fn editor_entity_depth_in_set(
+    world: &newengine_ecs::World,
+    entity: EntityId,
+    roots: &[EntityId],
+) -> usize {
+    let root_keys = roots
+        .iter()
+        .map(|root| root.stable_u64())
+        .collect::<std::collections::BTreeSet<_>>();
+    let mut depth = 0usize;
+    let mut cursor = Some(entity);
+    while let Some(current) = cursor {
+        if root_keys.contains(&current.stable_u64()) {
+            return depth;
+        }
+        let parent_key = world
+            .get::<newengine_transform_api::Parent>(current)
+            .map(|parent| parent.0.stable_id);
+        cursor = parent_key.and_then(|key| {
+            world
+                .iter_entities()
+                .find(|candidate| candidate.stable_u64() == key)
+        });
+        depth += 1;
+        if depth >= 128 {
+            break;
+        }
+    }
+    depth
+}
+
 impl SceneBridge {
     pub(super) fn publish_in_game_editor_state(&self, enabled: bool) {
         let patch = UiStatePatch::new(0, GAME_HUD_SURFACE_ID)
@@ -529,9 +806,9 @@ impl SceneBridge {
                 "ingame_editor",
                 "hint",
                 serde_json::json!(if enabled {
-                    "Center reticle selects an object. Edit Transform on the right. F2 exits."
+                    "World Editor: hold RMB for WASD/Q/E free-fly (Shift boost); release RMB for Q/W/E/R tools; Ctrl+S save; F2 exit."
                 } else {
-                    "F2 opens the in-game object editor."
+                    "F2 opens the World Editor with free-fly, noclip and authoring tools."
                 }),
             );
         crate::ui_gateway::publish_state_patch(&patch, "engine.scene", IN_GAME_EDITOR_CONTRACT);

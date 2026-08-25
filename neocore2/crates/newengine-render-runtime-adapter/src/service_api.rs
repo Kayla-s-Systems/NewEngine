@@ -367,8 +367,31 @@ impl RenderApi for ServiceBackedRenderApi {
         &mut self,
         frame: RenderFrameEnvelope,
     ) -> EngineResult<RenderGraphSubmitReport> {
+        let trace_ui_only =
+            frame.label.as_deref() == Some("ui_layer_only") && frame.frame_index <= 2;
+        if trace_ui_only {
+            newengine_ulog_api::ulog::info!(
+                "render service adapter: submit_frame begin frame={} graph_passes={} ui_packets={} payload_mesh_vertices={} payload_mesh_indices={}",
+                frame.frame_index,
+                frame.graph.passes.len(),
+                frame.ui_layers.packets.len(),
+                frame.ui_layers.packets.iter().map(|packet| packet.draw_list.mesh.vertices.len()).sum::<usize>(),
+                frame.ui_layers.packets.iter().map(|packet| packet.draw_list.mesh.indices.len()).sum::<usize>(),
+            );
+        }
         match self.invoke_service(RenderServiceRequest::SubmitFrame(Box::new(frame)))? {
-            RenderServiceResponse::GraphSubmitReport(report) => Ok(report),
+            RenderServiceResponse::GraphSubmitReport(report) => {
+                if trace_ui_only {
+                    newengine_ulog_api::ulog::info!(
+                        "render service adapter: submit_frame complete executed_passes={} skipped_passes={} compile_passes={} execution_order={}",
+                        report.executed_passes,
+                        report.skipped_passes,
+                        report.compile.pass_count,
+                        report.compile.execution_order.len(),
+                    );
+                }
+                Ok(report)
+            }
             other => Err(EngineError::other(format!(
                 "render service protocol error: expected GraphSubmitReport, got {:?}",
                 other

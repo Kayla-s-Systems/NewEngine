@@ -8,69 +8,55 @@ fn normalized_ref(value: &str) -> String {
     value.trim().replace('\\', "/").to_ascii_lowercase()
 }
 
-#[inline]
-fn is_abby_ref(value: &str) -> bool {
-    let value = normalized_ref(value);
-    value.contains("/characters/abby/") || value.contains("@abby") || value.ends_with("/abby")
+fn character_asset_owner(value: &str) -> Option<String> {
+    let normalized = normalized_ref(value);
+    let path = normalized.split('@').next().unwrap_or(&normalized);
+    let parts = path.split('/').collect::<Vec<_>>();
+    parts.windows(2).find_map(|pair| {
+        (pair[0] == "characters" && !pair[1].is_empty()).then(|| pair[1].to_owned())
+    })
 }
 
 pub(super) fn validate_player_asset_family(
     assignment: &newengine_engine_runtime::gameplay::PlayerModelAssignment,
 ) -> Result<(), String> {
-    if !is_abby_ref(&assignment.source) {
+    let Some(model_owner) = character_asset_owner(&assignment.source) else {
         return Ok(());
+    };
+    let skeleton = assignment.skeleton_source.as_deref().unwrap_or_default();
+    if skeleton.trim().is_empty() {
+        return Err(format!(
+            "character asset chain requires authored skeleton owner='{model_owner}' model='{}'",
+            assignment.source
+        ));
     }
-    let mut refs = Vec::<(&str, &str, bool)>::new();
-    refs.push((
-        "skeleton",
-        assignment.skeleton_source.as_deref().unwrap_or_default(),
-        true,
-    ));
+
     for (role, reference) in [
+        ("skeleton", Some(skeleton)),
         ("idle_animation", assignment.idle_animation.as_deref()),
         ("walk_animation", assignment.walk_animation.as_deref()),
         ("run_animation", assignment.run_animation.as_deref()),
         ("sprint_animation", assignment.sprint_animation.as_deref()),
+        (
+            "crouch_idle_animation",
+            assignment.crouch_idle_animation.as_deref(),
+        ),
+        (
+            "crouch_walk_animation",
+            assignment.crouch_walk_animation.as_deref(),
+        ),
         ("jump_animation", assignment.jump_animation.as_deref()),
         ("fall_animation", assignment.fall_animation.as_deref()),
     ] {
-        if let Some(reference) = reference {
-            refs.push((role, reference, false));
-        }
-    }
-    if let Some(properties_ref) = assignment.properties_ref.as_deref() {
-        refs.push(("properties", properties_ref, false));
-    }
-
-    for (role, reference, required) in refs {
-        let normalized = normalized_ref(reference);
-        if required && normalized.is_empty() {
+        let Some(reference) = reference else { continue };
+        let Some(reference_owner) = character_asset_owner(reference) else {
             return Err(format!(
-                "Abby asset chain requires authored {role}; model='{}'",
-                assignment.source
+                "character asset reference has no characters/<owner> namespace model_owner='{model_owner}' role='{role}' ref='{reference}'"
             ));
-        }
-        if normalized.is_empty() {
-            continue;
-        }
-        if normalized.contains("abigail") {
+        };
+        if reference_owner != model_owner {
             return Err(format!(
-                "Abby asset chain rejected foreign Abigail reference role={role} ref='{reference}'"
-            ));
-        }
-        if matches!(
-            role,
-            "skeleton"
-                | "idle_animation"
-                | "walk_animation"
-                | "run_animation"
-                | "sprint_animation"
-                | "jump_animation"
-                | "fall_animation"
-        ) && !is_abby_ref(reference)
-        {
-            return Err(format!(
-                "Abby asset chain requires Abby-owned reference role={role} ref='{reference}'"
+                "character asset ownership mismatch model_owner='{model_owner}' reference_owner='{reference_owner}' role='{role}' ref='{reference}'"
             ));
         }
     }
@@ -78,7 +64,7 @@ pub(super) fn validate_player_asset_family(
 }
 
 pub(super) fn validate_player_skin_contract(
-    assignment: &newengine_engine_runtime::gameplay::PlayerModelAssignment,
+    _assignment: &newengine_engine_runtime::gameplay::PlayerModelAssignment,
     parts: &[PlayerRuntimeModelPart],
     skeleton: Option<&ModelSkeletonMetadata>,
 ) -> Result<Option<[f32; 16]>, String> {
@@ -94,16 +80,9 @@ pub(super) fn validate_player_skin_contract(
     let skeleton = skeleton
         .ok_or_else(|| "skinned player model requires authored skeleton metadata".to_owned())?;
     let joint_count = skeleton.joints.len();
-    const ABBY_BRAID_SOFT_BODY_JOINTS: usize = 18;
-    let supplemental_joint_count = if is_abby_ref(&assignment.source) {
-        ABBY_BRAID_SOFT_BODY_JOINTS
-    } else {
-        0
-    };
-    let palette_joint_count = joint_count + supplemental_joint_count;
-    if joint_count == 0 || palette_joint_count > 4096 {
+    if joint_count == 0 || joint_count > 4096 {
         return Err(format!(
-            "skinned player skeleton/palette joint count outside runtime range joints={joint_count} supplemental={supplemental_joint_count} supported=1..=4096"
+            "skinned player skeleton joint count outside runtime range joints={joint_count} supported=1..=4096"
         ));
     }
     for (index, joint) in skeleton.joints.iter().enumerate() {
@@ -143,8 +122,6 @@ pub(super) fn validate_player_skin_contract(
                 "skinned player model has empty skin stream part={part_index}"
             ));
         }
-        let mut part_uses_supplemental_palette = false;
-        let mut part_uses_skeleton_palette = false;
         for (vertex_index, vertex) in skin.vertices.iter().enumerate() {
             let mut sum = 0.0_f32;
             let mut positive = 0usize;
@@ -162,15 +139,10 @@ pub(super) fn validate_player_skin_contract(
                 if weight > 0.0 {
                     positive += 1;
                     let joint = joint as usize;
-                    if joint >= palette_joint_count {
-                        return Err(format!(
-                            "skinned player joint outside palette part={part_index} vertex={vertex_index} joint={joint} skeleton_joints={joint_count} supplemental_joints={supplemental_joint_count}"
-                        ));
-                    }
                     if joint >= joint_count {
-                        part_uses_supplemental_palette = true;
-                    } else {
-                        part_uses_skeleton_palette = true;
+                        return Err(format!(
+                            "skinned player joint outside authored skeleton part={part_index} vertex={vertex_index} joint={joint} skeleton_joints={joint_count}; supplemental game-specific palettes are not a runtime fallback"
+                        ));
                     }
                 }
                 sum += weight;
@@ -180,16 +152,6 @@ pub(super) fn validate_player_skin_contract(
                     "skinned player weights are not normalized part={part_index} vertex={vertex_index} influences={positive} sum={sum}"
                 ));
             }
-        }
-        if part_uses_supplemental_palette && part_uses_skeleton_palette {
-            return Err(format!(
-                "skinned player part mixes skeletal and supplemental soft-body palettes part={part_index}"
-            ));
-        }
-        if part_uses_supplemental_palette && supplemental_joint_count == 0 {
-            return Err(format!(
-                "skinned player supplemental palette is only valid for authored Abby soft-body parts part={part_index}"
-            ));
         }
     }
     Ok(Some(source_to_model))
@@ -240,28 +202,28 @@ mod tests {
     use super::*;
     use newengine_engine_runtime::gameplay::PlayerModelAssignment;
 
-    fn abby_assignment() -> PlayerModelAssignment {
+    fn owner_a_assignment() -> PlayerModelAssignment {
         PlayerModelAssignment {
             enabled: true,
-            source: "models/characters/abby/abby.ydd@abby".to_owned(),
-            skeleton_source: Some("models/characters/abby/abby.ymt@abby".to_owned()),
-            idle_animation: Some("animations/characters/abby/idle.ycd@idle".to_owned()),
+            source: "models/characters/owner_a/body.ydd@body".to_owned(),
+            skeleton_source: Some("models/characters/owner_a/body.ymt@body".to_owned()),
+            idle_animation: Some("animations/characters/owner_a/locomotion.ycd@idle".to_owned()),
             ..PlayerModelAssignment::default()
         }
     }
 
     #[test]
-    fn abby_asset_chain_accepts_only_abby_skeleton_and_clips() {
-        validate_player_asset_family(&abby_assignment()).expect("Abby chain");
-        let mut mixed = abby_assignment();
-        mixed.idle_animation = Some("animations/characters/abigail/idle.ycd@idle".to_owned());
+    fn character_asset_chain_rejects_cross_owner_skeleton_or_clips() {
+        validate_player_asset_family(&owner_a_assignment()).expect("owned chain");
+        let mut mixed = owner_a_assignment();
+        mixed.idle_animation = Some("animations/characters/owner_b/locomotion.ycd@idle".to_owned());
         let error = validate_player_asset_family(&mixed).expect_err("foreign clip must fail");
-        assert!(error.contains("Abigail"));
+        assert!(error.contains("ownership mismatch"), "{error}");
     }
 
     #[test]
-    fn abby_asset_chain_requires_abby_skeleton() {
-        let mut missing = abby_assignment();
+    fn namespaced_character_asset_chain_requires_skeleton() {
+        let mut missing = owner_a_assignment();
         missing.skeleton_source = None;
         assert!(validate_player_asset_family(&missing).is_err());
     }

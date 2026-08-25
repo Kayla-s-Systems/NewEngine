@@ -315,7 +315,7 @@ pub(super) fn default_screen_profile() -> UiScreenProfile {
 }
 
 pub(super) fn default_publish_editor_shell() -> bool {
-    false
+    true
 }
 
 pub(super) fn default_ui_surface_focus_policy() -> UiScreenInputFocusPolicy {
@@ -332,7 +332,7 @@ impl Default for ScreenProfileConfig {
             game_ui_document_ref: None,
             game_gui: None,
             presentation_flow: None,
-            publish_editor_shell: false,
+            publish_editor_shell: true,
         }
     }
 }

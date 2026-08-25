@@ -116,6 +116,7 @@ where
                     std::env::remove_var(PROJECT_STARTUP_SCENE_ENV);
                 }
                 apply_resolved_project_launch_env(&context.launch);
+                newengine_project_runtime::apply_project_ui_env(&context.manifest);
                 self.early_log(format_args!(
                     "game.manifest.loaded id={} root={} manifest={} mounts={} launch={} launch_profile={} runtime_profile={} editor_owned={}",
                     context.manifest.id,

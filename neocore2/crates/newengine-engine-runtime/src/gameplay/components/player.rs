@@ -361,6 +361,43 @@ impl Default for PlayerStanceState {
     }
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct PlayerJointRotationWeight {
+    pub joint: String,
+    pub weight: f32,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct PlayerCharacterPresentation {
+    pub detached_head_follow: bool,
+    pub eye_parent_follow: bool,
+    pub equipment_ready_animation: Option<String>,
+    pub equipment_aim_animation: Option<String>,
+    pub equipment_reload_animation: Option<String>,
+    pub equipment_ready_sample_phase: f32,
+    pub equipment_ready_rotation_weights: Vec<PlayerJointRotationWeight>,
+    pub equipment_aim_rotation_weights: Vec<PlayerJointRotationWeight>,
+    pub equipment_reload_rotation_weights: Vec<PlayerJointRotationWeight>,
+    pub equipment_arm_ik: bool,
+}
+
+impl Default for PlayerCharacterPresentation {
+    fn default() -> Self {
+        Self {
+            detached_head_follow: false,
+            eye_parent_follow: false,
+            equipment_ready_animation: None,
+            equipment_aim_animation: None,
+            equipment_reload_animation: None,
+            equipment_ready_sample_phase: 0.0,
+            equipment_ready_rotation_weights: Vec::new(),
+            equipment_aim_rotation_weights: Vec::new(),
+            equipment_reload_rotation_weights: Vec::new(),
+            equipment_arm_ik: false,
+        }
+    }
+}
+
 /// Desired player avatar assignment. Game/editor code changes this component;
 /// the active world package resolves it to a concrete runtime model binding.
 #[derive(Clone, Debug, PartialEq)]
@@ -380,6 +417,7 @@ pub struct PlayerModelAssignment {
     pub crouch_walk_animation: Option<String>,
     pub jump_animation: Option<String>,
     pub fall_animation: Option<String>,
+    pub presentation: PlayerCharacterPresentation,
     pub target_height: f32,
     pub eye_height_ratio: f32,
     pub local_offset: Vec3,
@@ -425,6 +463,7 @@ impl Default for PlayerModelAssignment {
             crouch_walk_animation: None,
             jump_animation: None,
             fall_animation: None,
+            presentation: PlayerCharacterPresentation::default(),
             target_height: 1.80,
             eye_height_ratio: 0.91,
             local_offset: Vec3::ZERO,

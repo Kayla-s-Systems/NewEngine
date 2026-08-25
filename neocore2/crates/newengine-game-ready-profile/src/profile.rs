@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use newengine_core::{Engine, EngineError, EngineResult, StartupConfig};
-use newengine_game_data::{GameDataProvider, RustGameDataProvider};
+use newengine_game_data::GameDataProvider;
 use newengine_game_data_lua::{LuaGameDataProvider, LUA_GAME_DATA_PROVIDER_ID};
 use newengine_game_module_composition::{
     resolve_runtime_game_module, GameModuleFactoryRegistration, GameModuleTarget,
@@ -159,19 +159,9 @@ impl GameReadyRuntimeProfile {
             Arc::new(LuaGameDataProvider::new(binding.script_ref).with_operation(operation))
         } else if let Some(provider) = self.game_data_provider.clone() {
             provider
-        } else if runtime_context.as_ref().is_some_and(|runtime| {
-            runtime
-                .game_module
-                .as_deref()
-                .is_none_or(|id| id.trim().is_empty())
-        }) {
-            newengine_ulog_api::ulog::info!(
-                "world/render profile: content-only runtime has no authored game-data binding; using immutable Rust defaults"
-            );
-            Arc::new(RustGameDataProvider)
         } else {
             return Err(EngineError::Other(format!(
-                "world/render profile requires runtime scripting binding for '{}' or an explicitly injected GameDataProvider",
+                "GameReady runtime requires project-authored game data binding '{}' (or an explicitly injected test/tool provider); built-in game-data fallback is forbidden",
                 LUA_GAME_DATA_PROVIDER_ID
             )));
         };

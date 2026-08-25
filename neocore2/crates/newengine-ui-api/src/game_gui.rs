@@ -235,9 +235,24 @@ impl UiGameGuiConfig {
         errors
     }
 
-    #[inline]
     pub fn is_valid(&self) -> bool {
-        self.validation_errors().is_empty()
+        if !self.enabled {
+            return true;
+        }
+        for (index, layer) in self.layers.iter().enumerate() {
+            let id = layer.id.trim();
+            let surface_id = layer.surface_id.trim();
+            if id.is_empty()
+                || layer.document_ref.trim().is_empty()
+                || surface_id.is_empty()
+                || self.layers[..index]
+                    .iter()
+                    .any(|other| other.id.trim() == id || other.surface_id.trim() == surface_id)
+            {
+                return false;
+            }
+        }
+        true
     }
 
     pub fn resolved_layers(&self) -> Vec<UiGameLayerDescriptor> {
@@ -357,37 +372,42 @@ impl UiGameLayerStackState {
             };
         }
 
-        let layers = config.resolved_layers();
-        let top_visible_layer_id = layers
-            .iter()
-            .rev()
-            .find(|layer| layer.visible)
-            .map(|layer| layer.id.clone());
-        let top_input_layer = layers
-            .iter()
-            .rev()
-            .find(|layer| layer.visible && layer.input_mode.requests_ui_focus());
-        let top_input = top_input_layer
-            .map(|layer| layer.input_mode)
-            .unwrap_or(UiGameInputMode::GameOnly);
-        let input_owner_surface_id = top_input_layer.map(|layer| layer.surface_id.clone());
-        let top_modal_surface_id = layers
-            .iter()
-            .rev()
-            .find(|layer| layer.visible && layer.kind == UiGameLayerKind::Modal)
-            .map(|layer| layer.surface_id.clone());
-
-        Self {
+        let mut state = Self {
             version: 1,
             frame_index,
             enabled: true,
             viewport_surface_id,
-            layers,
-            active_input_mode: top_input,
-            top_visible_layer_id,
-            input_owner_surface_id,
-            top_modal_surface_id,
-        }
+            layers: config.resolved_layers(),
+            ..Self::default()
+        };
+        state.refresh_derived_state();
+        state
+    }
+
+    /// Recompute focus/modal metadata after runtime visibility or authored surface
+    /// identity changes. Layer validation and ordering remain configuration-time work.
+    pub fn refresh_derived_state(&mut self) {
+        self.top_visible_layer_id = self
+            .layers
+            .iter()
+            .rev()
+            .find(|layer| layer.visible)
+            .map(|layer| layer.id.clone());
+        let (active_input_mode, input_owner_surface_id) = self
+            .layers
+            .iter()
+            .rev()
+            .find(|layer| layer.visible && layer.input_mode.requests_ui_focus())
+            .map(|layer| (layer.input_mode, Some(layer.surface_id.clone())))
+            .unwrap_or((UiGameInputMode::GameOnly, None));
+        self.active_input_mode = active_input_mode;
+        self.input_owner_surface_id = input_owner_surface_id;
+        self.top_modal_surface_id = self
+            .layers
+            .iter()
+            .rev()
+            .find(|layer| layer.visible && layer.kind == UiGameLayerKind::Modal)
+            .map(|layer| layer.surface_id.clone());
     }
 
     /// Resolve this authored/runtime stack into the generic engine presentation-layer plan.
@@ -523,6 +543,27 @@ mod game_gui_tests {
         assert_eq!(plan.surface_ids, vec!["game.hud", "game.pause"]);
         assert_eq!(plan.invalidation_revision, 9);
         assert_eq!(plan.input_owner_surface_id.as_deref(), Some("game.pause"));
+    }
+
+    #[test]
+    fn runtime_visibility_refresh_updates_input_owner_without_rebuilding_config() {
+        let config = UiGameGuiConfig {
+            enabled: true,
+            layers: vec![
+                layer("hud", UiGameLayerKind::Hud, UiGameInputMode::GameOnly),
+                layer("pause", UiGameLayerKind::Menu, UiGameInputMode::UiOnly).initially_hidden(),
+            ],
+        };
+        let mut state = UiGameLayerStackState::from_config(&config, 3);
+        state
+            .layers
+            .iter_mut()
+            .find(|layer| layer.id == "pause")
+            .expect("pause layer")
+            .visible = true;
+        state.refresh_derived_state();
+        assert_eq!(state.active_input_mode, UiGameInputMode::UiOnly);
+        assert_eq!(state.input_owner_surface_id.as_deref(), Some("game.pause"));
     }
 
     #[test]

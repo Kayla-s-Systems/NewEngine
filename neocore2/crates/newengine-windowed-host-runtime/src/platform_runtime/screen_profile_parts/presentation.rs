@@ -294,6 +294,18 @@ impl ScreenProfileRuntimeState {
     }
 
     pub(super) fn publish_focus_policy(&self, resources: &mut Resources) {
+        if editing_tools_available(resources) && in_game_editor_active(resources) {
+            // Unified Editor Mode owns gameplay input, but camera navigation is intentionally
+            // not gated here. The render controller reclaims only RMB+WASD/QE inside the
+            // viewport for the noclip Fly camera.
+            let mut capture = UiInputCaptureState::none();
+            capture.gameplay_movement_gated = true;
+            capture.draw_refresh_requested = true;
+            capture.reason = SCREEN_PROFILE_CAPTURE_REASON.to_owned();
+            capture.surfaces = vec![UI_SURFACE_EDITOR_SHELL.to_owned()];
+            set_input_capture_contribution(resources, SCREEN_PROFILE_CAPTURE_OWNER, capture);
+            return;
+        }
         match self.active_input_focus_policy() {
             UiScreenInputFocusPolicy::EditorShell => {
                 let mut capture = UiInputCaptureState::none();

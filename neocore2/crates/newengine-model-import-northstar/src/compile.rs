@@ -31,6 +31,9 @@ pub struct CharacterCompileRequest {
     pub package_mesh_prefixes: Vec<(PathBuf, String)>,
     /// Optional mesh-prefix to canonical material-ref overrides. Longest prefix wins.
     pub material_overrides: Vec<(String, String)>,
+    /// Optional rigid affine transform from decoded PAK source space into canonical model space.
+    /// The same matrix is persisted as YDD `skin_source_to_model`, preserving native skinning.
+    pub source_to_model: Option<[f32; 16]>,
 }
 
 #[derive(Clone, Debug)]
@@ -42,6 +45,89 @@ pub struct CharacterCompileReport {
     pub index_count: usize,
     pub joint_count: usize,
     pub skin_loss: SkinLossStats,
+}
+
+/// Offline extraction of rigid pieces authored as joints inside one skinned TLOU2 PC geometry.
+/// This is used for weapon debris such as the five `rifle-shell-group` casing variants: source
+/// skinning is consumed by the importer and runtime receives ordinary rigid YDD entries.
+#[derive(Clone, Debug)]
+pub struct RigidJointVariantsCompileRequest {
+    pub name: String,
+    pub package_path: PathBuf,
+    pub joints: Vec<String>,
+    pub output_path: PathBuf,
+    pub material_ref: Option<String>,
+}
+
+#[derive(Clone, Debug)]
+pub struct RigidJointVariantsCompileReport {
+    pub ydd_path: PathBuf,
+    pub entry_count: usize,
+    pub mesh_count: usize,
+    pub vertex_count: usize,
+    pub index_count: usize,
+}
+
+fn validate_rigid_source_to_model(matrix: [f32; 16]) -> Result<Mat4, String> {
+    if matrix.iter().any(|value| !value.is_finite()) {
+        return Err("source_to_model contains non-finite values".to_owned());
+    }
+    let transform = Mat4::from_cols_array(&matrix);
+    let x = transform.transform_vector3(Vec3::X);
+    let y = transform.transform_vector3(Vec3::Y);
+    let z = transform.transform_vector3(Vec3::Z);
+    let epsilon = 2.0e-4;
+    for (label, axis) in [("x", x), ("y", y), ("z", z)] {
+        if (axis.length() - 1.0).abs() > epsilon {
+            return Err(format!(
+                "source_to_model must be rigid: {label}-axis length={}",
+                axis.length()
+            ));
+        }
+    }
+    if x.dot(y).abs() > epsilon || x.dot(z).abs() > epsilon || y.dot(z).abs() > epsilon {
+        return Err("source_to_model basis is not orthogonal".to_owned());
+    }
+    let origin = transform.transform_point3(Vec3::ZERO);
+    if !origin.is_finite() {
+        return Err("source_to_model translation is non-finite".to_owned());
+    }
+    Ok(transform)
+}
+
+fn transform_mesh_to_model_space(
+    mesh: &mut crate::geometry::ImportMesh,
+    transform: Mat4,
+) -> Result<(), String> {
+    let mut bounds_min = Vec3::splat(f32::INFINITY);
+    let mut bounds_max = Vec3::splat(f32::NEG_INFINITY);
+    for vertex in &mut mesh.vertices {
+        let source_position = Vec3::new(vertex.position[0], vertex.position[1], vertex.position[2]);
+        let source_normal = Vec3::new(vertex.normal[0], vertex.normal[1], vertex.normal[2]);
+        let position = transform.transform_point3(source_position);
+        let normal = transform
+            .transform_vector3(source_normal)
+            .normalize_or_zero();
+        if !position.is_finite() || !normal.is_finite() || normal.length_squared() <= 1.0e-10 {
+            return Err(format!(
+                "source_to_model produced invalid vertex mesh='{}'",
+                mesh.name
+            ));
+        }
+        vertex.position = [position.x, position.y, position.z];
+        vertex.normal = [normal.x, normal.y, normal.z];
+        bounds_min = bounds_min.min(position);
+        bounds_max = bounds_max.max(position);
+    }
+    if !bounds_min.is_finite() || !bounds_max.is_finite() {
+        return Err(format!(
+            "source_to_model produced invalid bounds mesh='{}'",
+            mesh.name
+        ));
+    }
+    mesh.bounds_min = [bounds_min.x, bounds_min.y, bounds_min.z];
+    mesh.bounds_max = [bounds_max.x, bounds_max.y, bounds_max.z];
+    Ok(())
 }
 
 pub fn compile_character(
@@ -83,6 +169,15 @@ pub fn compile_character(
     }
     if meshes.is_empty() {
         return Err("character import produced no LOD0 meshes".to_owned());
+    }
+    let source_to_model = request
+        .source_to_model
+        .map(validate_rigid_source_to_model)
+        .transpose()?;
+    if let Some(transform) = source_to_model {
+        for mesh in &mut meshes {
+            transform_mesh_to_model_space(mesh, transform)?;
+        }
     }
     validate_native_eye_contract(&meshes, &skeleton)?;
 
@@ -157,10 +252,11 @@ pub fn compile_character(
             properties_ref: None,
             bounds_min,
             bounds_max,
-            // Geometry and JOINT_HIERARCHY are decoded in one authored source space.
-            skin_source_to_model: Some([
+            // Geometry is optionally canonicalized while JOINT_HIERARCHY remains in native
+            // source space. Skinning conjugates the native palette by this exact matrix.
+            skin_source_to_model: Some(request.source_to_model.unwrap_or([
                 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
-            ]),
+            ])),
             meshes: native_meshes,
         }],
     };
@@ -195,6 +291,269 @@ pub fn compile_character(
         index_count,
         joint_count: skeleton.joints.len(),
         skin_loss,
+    })
+}
+
+fn imported_joint_local_matrix(joint: &crate::skeleton::ImportedJoint) -> Mat4 {
+    Mat4::from_scale_rotation_translation(
+        Vec3::new(joint.scale_ls[0], joint.scale_ls[1], joint.scale_ls[2]),
+        Quat::from_xyzw(
+            joint.rotation_ls[0],
+            joint.rotation_ls[1],
+            joint.rotation_ls[2],
+            joint.rotation_ls[3],
+        )
+        .normalize_or_identity(),
+        Vec3::new(
+            joint.position_ls[0],
+            joint.position_ls[1],
+            joint.position_ls[2],
+        ),
+    )
+}
+
+fn imported_joint_globals(skeleton: &DecodedSkeleton) -> Result<Vec<Mat4>, String> {
+    let mut globals = vec![Mat4::IDENTITY; skeleton.joints.len()];
+    let mut done = vec![false; skeleton.joints.len()];
+    let mut remaining = skeleton.joints.len();
+    while remaining > 0 {
+        let mut progress = false;
+        for (index, joint) in skeleton.joints.iter().enumerate() {
+            if done[index] {
+                continue;
+            }
+            if joint
+                .parent_index
+                .is_some_and(|parent| !done[parent as usize])
+            {
+                continue;
+            }
+            let local = imported_joint_local_matrix(joint);
+            globals[index] = joint
+                .parent_index
+                .map(|parent| globals[parent as usize] * local)
+                .unwrap_or(local);
+            done[index] = true;
+            remaining -= 1;
+            progress = true;
+        }
+        if !progress {
+            return Err(
+                "rigid-joint extraction found an unresolvable skeleton hierarchy".to_owned(),
+            );
+        }
+    }
+    Ok(globals)
+}
+
+#[inline]
+fn dominant_skin_joint(
+    vertex: &newengine_asset_format_nef8::ydd_binary::YddBinarySkinVertex,
+) -> u16 {
+    vertex
+        .joints
+        .iter()
+        .chain(vertex.joints_extra.iter())
+        .copied()
+        .zip(
+            vertex
+                .weights
+                .iter()
+                .chain(vertex.weights_extra.iter())
+                .copied(),
+        )
+        .max_by(|a, b| a.1.total_cmp(&b.1))
+        .map(|(joint, _)| joint)
+        .unwrap_or(0)
+}
+
+pub fn compile_rigid_joint_variants(
+    request: &RigidJointVariantsCompileRequest,
+) -> Result<RigidJointVariantsCompileReport, String> {
+    if request.name.trim().is_empty() {
+        return Err("rigid-joint asset name must not be empty".to_owned());
+    }
+    if request.joints.is_empty() {
+        return Err("rigid-joint extraction requires at least one joint".to_owned());
+    }
+    let pak = PakFile::parse(read_file(&request.package_path)?)?;
+    let geometry = decode_geometry_lod0(&pak)?;
+    let skeleton = decode_skeleton_with_profile(&pak, SkeletonProfile::Generic)?;
+    let globals = imported_joint_globals(&skeleton)?;
+    let mut entries = Vec::with_capacity(request.joints.len());
+    let mut total_meshes = 0usize;
+    let mut total_vertices = 0usize;
+    let mut total_indices = 0usize;
+
+    for requested_name in &request.joints {
+        let requested_name = requested_name.trim();
+        if requested_name.is_empty() {
+            return Err("rigid-joint extraction contains an empty joint name".to_owned());
+        }
+        let joint_index = skeleton
+            .joints
+            .iter()
+            .position(|joint| joint.name == requested_name)
+            .ok_or_else(|| format!("rigid-joint source has no joint '{requested_name}'"))?;
+        let joint_to_local = globals[joint_index].inverse();
+        if joint_to_local
+            .to_cols_array()
+            .iter()
+            .any(|value| !value.is_finite())
+        {
+            return Err(format!(
+                "rigid-joint '{requested_name}' bind transform is not invertible"
+            ));
+        }
+
+        let mut entry_meshes = Vec::new();
+        let mut entry_min = Vec3::splat(f32::INFINITY);
+        let mut entry_max = Vec3::splat(f32::NEG_INFINITY);
+        for source_mesh in &geometry.meshes {
+            let skin = source_mesh.skin.as_ref().ok_or_else(|| {
+                format!(
+                    "rigid-joint source mesh '{}' has no skin stream",
+                    source_mesh.name
+                )
+            })?;
+            if skin.len() != source_mesh.vertices.len() {
+                return Err(format!(
+                    "rigid-joint skin/vertex mismatch mesh='{}' skin={} vertices={}",
+                    source_mesh.name,
+                    skin.len(),
+                    source_mesh.vertices.len()
+                ));
+            }
+            let dominant = skin.iter().map(dominant_skin_joint).collect::<Vec<_>>();
+            let mut remap = std::collections::BTreeMap::<u32, u32>::new();
+            let mut vertices = Vec::new();
+            let mut indices = Vec::new();
+            for triangle in source_mesh.indices.chunks_exact(3) {
+                if !triangle.iter().all(|index| {
+                    dominant
+                        .get(*index as usize)
+                        .is_some_and(|joint| *joint as usize == joint_index)
+                }) {
+                    continue;
+                }
+                for source_index in triangle {
+                    let target_index = if let Some(existing) = remap.get(source_index) {
+                        *existing
+                    } else {
+                        let source = source_mesh
+                            .vertices
+                            .get(*source_index as usize)
+                            .ok_or("rigid-joint source index outside vertex stream")?;
+                        let source_position =
+                            Vec3::new(source.position[0], source.position[1], source.position[2]);
+                        let source_normal =
+                            Vec3::new(source.normal[0], source.normal[1], source.normal[2]);
+                        let position = joint_to_local.transform_point3(source_position);
+                        let normal = joint_to_local
+                            .transform_vector3(source_normal)
+                            .normalize_or_zero();
+                        if !position.is_finite()
+                            || !normal.is_finite()
+                            || normal.length_squared() <= 1.0e-10
+                        {
+                            return Err(format!(
+                                "rigid-joint '{requested_name}' produced invalid vertex"
+                            ));
+                        }
+                        entry_min = entry_min.min(position);
+                        entry_max = entry_max.max(position);
+                        let target = vertices.len() as u32;
+                        vertices.push(newengine_asset_format_nef8::ydd_binary::YddBinaryVertex {
+                            position: [position.x, position.y, position.z],
+                            normal: [normal.x, normal.y, normal.z],
+                            uv0: source.uv0,
+                        });
+                        remap.insert(*source_index, target);
+                        target
+                    };
+                    indices.push(target_index);
+                }
+            }
+            if vertices.is_empty() {
+                continue;
+            }
+            let mesh_min = vertices
+                .iter()
+                .fold(Vec3::splat(f32::INFINITY), |min, vertex| {
+                    min.min(Vec3::new(
+                        vertex.position[0],
+                        vertex.position[1],
+                        vertex.position[2],
+                    ))
+                });
+            let mesh_max = vertices
+                .iter()
+                .fold(Vec3::splat(f32::NEG_INFINITY), |max, vertex| {
+                    max.max(Vec3::new(
+                        vertex.position[0],
+                        vertex.position[1],
+                        vertex.position[2],
+                    ))
+                });
+            total_vertices += vertices.len();
+            total_indices += indices.len();
+            total_meshes += 1;
+            entry_meshes.push(YddBinaryMesh {
+                name: requested_name.to_owned(),
+                material_ref: request.material_ref.clone(),
+                bounds_min: [mesh_min.x, mesh_min.y, mesh_min.z],
+                bounds_max: [mesh_max.x, mesh_max.y, mesh_max.z],
+                vertices,
+                skin: None,
+                indices,
+            });
+        }
+        if entry_meshes.is_empty() {
+            return Err(format!(
+                "rigid-joint '{requested_name}' selected no complete source triangles"
+            ));
+        }
+        entries.push(YddBinaryEntry {
+            name: requested_name.to_owned(),
+            source_path: format!(
+                "northstar.tlou2.pc://{}#joint={requested_name}",
+                request
+                    .package_path
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .unwrap_or("source.pak")
+            ),
+            properties_ref: None,
+            bounds_min: [entry_min.x, entry_min.y, entry_min.z],
+            bounds_max: [entry_max.x, entry_max.y, entry_max.z],
+            skin_source_to_model: None,
+            meshes: entry_meshes,
+        });
+    }
+
+    let document = YddBinaryDocument { entries };
+    let body = encode_ydd_binary_body(&document)?;
+    let file = encode_nef8(
+        &body,
+        LIST_FILE_CONTENT_KIND_YDD,
+        YDD_BINARY_SCHEMA_VERSION as u16,
+        document.entries.len() as u32,
+    )?;
+    if let Some(parent) = request.output_path.parent() {
+        fs::create_dir_all(parent).map_err(|error| {
+            format!(
+                "failed to create output directory '{}': {error}",
+                parent.display()
+            )
+        })?;
+    }
+    write_atomic(&request.output_path, &file)?;
+    Ok(RigidJointVariantsCompileReport {
+        ydd_path: request.output_path.clone(),
+        entry_count: document.entries.len(),
+        mesh_count: total_meshes,
+        vertex_count: total_vertices,
+        index_count: total_indices,
     })
 }
 
@@ -474,7 +833,7 @@ fn validate_skin_contract(
     Ok(())
 }
 
-fn encode_nef8(
+pub(crate) fn encode_nef8(
     raw_body: &[u8],
     content_kind: u32,
     schema_version: u16,

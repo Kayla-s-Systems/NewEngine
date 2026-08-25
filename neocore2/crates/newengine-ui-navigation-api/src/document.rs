@@ -4,11 +4,10 @@ use crate::normalization::{normalize_non_empty_strings, normalize_optional_strin
 use crate::UiNodeActionRoute;
 
 pub const ENGINE_PRIMARY_UI_DOCUMENT_ID: &str = "engine.ui.primary";
-/// Canonical authored primary UI source. The preferred path is asset-backed `.neui`
-/// compiled by `engine.assets.ui`; runtime may also provide a generated/streamed
-/// `UiNodeNavigationDocument` through the same DTO contract when the asset is absent.
-/// Runtime JSON navigation assets are intentionally not supported as compatibility fallback.
-pub const ENGINE_PRIMARY_UI_SURFACE_REF: &str = "assets/ui/engine/main_menu.neui@surface";
+/// Optional legacy primary-UI document source. The engine never assigns a game menu here;
+/// projects should prefer `game.toml [ui.presentation_flow]`. This environment contract
+/// exists only for products that intentionally opt into the generic primary-navigation node.
+pub const ENGINE_PRIMARY_UI_DOCUMENT_REF_ENV: &str = "NEWENGINE_PRIMARY_UI_DOCUMENT_REF";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

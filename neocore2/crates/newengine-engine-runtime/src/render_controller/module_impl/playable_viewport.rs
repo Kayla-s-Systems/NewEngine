@@ -37,6 +37,24 @@ impl RuntimeRenderController {
     ) -> EngineResult<PlayableFrameOutcome> {
         let mut frame_input =
             self.read_viewport_frame_input(ctx, ui_layers, primary_ui_domain, scope);
+
+        // A project-owned presentation state that blocks world bootstrap is a true UI-only
+        // frame. Do not enter the playable/world/material path: there is intentionally no
+        // admitted scene yet, and the retained frontend must still reach the swapchain.
+        // This also prevents expensive gameplay shader warmup while Title/Profile/Lobby own
+        // presentation. States that release bootstrap (CharacterSelect/Loading/Game) continue
+        // through the normal playable path.
+        let presentation_blocks_world_bootstrap = ctx
+            .resources()
+            .get::<newengine_ui_api::UiPresentationFlowState>()
+            .is_some_and(|state| state.blocks_world_bootstrap);
+        if presentation_blocks_world_bootstrap {
+            self.render_ui_only_frame(ctx, r, frame_input.ui_layers, scope)?;
+            return Ok(PlayableFrameOutcome::Continue {
+                frame_debug_snapshot: None,
+            });
+        }
+
         let primary_was_open = self.ui.primary.is_open();
         let primary_ui = self.ui.primary.update(
             frame_input.surface_input.as_ref(),
@@ -81,17 +99,23 @@ impl RuntimeRenderController {
         // Preserve the UI capture contract channel-by-channel. A movement-only widget
         // must not kill camera look, and a pointer/camera capture must not implicitly
         // disable locomotion. Only true modal/editor/session ownership gates both.
-        let force_full_runtime_gate =
+        // Editor Mode owns gameplay input but deliberately leaves the editor camera channel
+        // available. RMB+WASD is routed to the generic Fly camera after capture below; the
+        // possessed player never receives those movement/actions.
+        let force_camera_gate = session_frame.paused || session_ejected;
+        let force_gameplay_gate =
             in_game_editor || live_editing_active || session_frame.paused || session_ejected;
         let host_capture = InputCaptureState {
             sampling_alive: true,
-            camera_navigation_gated: force_full_runtime_gate
+            camera_navigation_gated: force_camera_gate
                 || published_capture.modal
                 || published_capture.camera_navigation_gated,
-            gameplay_movement_gated: force_full_runtime_gate
+            gameplay_movement_gated: force_gameplay_gate
                 || published_capture.modal
                 || published_capture.gameplay_movement_gated,
-            reason: if force_full_runtime_gate {
+            reason: if in_game_editor || live_editing_active {
+                "engine.editor.input-ownership"
+            } else if force_camera_gate || force_gameplay_gate {
                 "engine.host.runtime-ownership"
             } else if published_capture.modal {
                 "engine.ui.modal"
@@ -105,7 +129,8 @@ impl RuntimeRenderController {
         };
         // Selective input capture is not a simulation pause. Pausing on any capture made
         // transient hover/focus states freeze the world and made the camera appear locked.
-        let pause_world = published_capture.modal
+        let pause_world = in_game_editor
+            || published_capture.modal
             || gameplay_capture.pause_simulation
             || (session_frame.paused && !session_frame.step_this_frame);
         let session_fixed_step_count = if session_frame.step_this_frame {
@@ -137,6 +162,24 @@ impl RuntimeRenderController {
                 &mut carrier,
             );
             carrier.apply_gameplay_input_capture(gameplay_capture);
+        }
+        if in_game_editor {
+            let pointer_in_viewport = frame_input
+                .surface_input
+                .as_ref()
+                .and_then(|input| input.mouse_pos)
+                .zip(ctx.resources().get::<UiViewportSlot>())
+                .map(|((x, y), slot)| slot.contains(x, y))
+                // First F2 frame precedes editor-slot publication. Treat the live
+                // render extent as the viewport for that one transition frame.
+                .unwrap_or(scope.vp_w > 0 && scope.vp_h > 0);
+            let camera_allowed =
+                !published_capture.modal && !gameplay_capture.block_camera_navigation;
+            frame_input.input.apply_editor_fly_navigation(
+                frame_input.surface_input.as_ref(),
+                pointer_in_viewport,
+                camera_allowed,
+            );
         }
 
         // Editor/Edit is a staging-world preview, not a UI-only shell. The authored

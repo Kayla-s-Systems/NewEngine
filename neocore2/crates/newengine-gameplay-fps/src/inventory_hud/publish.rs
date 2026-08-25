@@ -84,43 +84,45 @@ pub(super) fn publish_inventory_hud_state(
                 "character",
                 "selected",
                 serde_json::json!(selected
-                    .map(|variant| variant.display_name)
+                    .map(|variant| variant.display_name.as_str())
                     .unwrap_or(fallback_source)),
             )
             .with_change(
                 "character",
                 "selected_id",
-                serde_json::json!(selected.map(|variant| variant.id).unwrap_or("unknown")),
+                serde_json::json!(selected
+                    .map(|variant| variant.id.as_str())
+                    .unwrap_or("unknown")),
             )
             .with_change(
                 "character",
                 "selected_family",
                 serde_json::json!(selected
-                    .map(|variant| variant.family.label())
+                    .map(|variant| variant.family.as_str())
                     .unwrap_or("Unknown")),
             )
             .with_change(
                 "character",
                 "selected_rig",
                 serde_json::json!(selected
-                    .map(|variant| variant.rig_label)
+                    .map(|variant| variant.rig_label.as_str())
                     .unwrap_or("Unspecified rig")),
             )
             .with_change(
                 "character",
                 "selected_description",
                 serde_json::json!(selected
-                    .map(|variant| variant.subtitle)
+                    .map(|variant| variant.subtitle.as_str())
                     .unwrap_or("External player model assignment")),
             )
             .with_change(
                 "character",
                 "selected_status",
                 serde_json::json!(selected
-                    .map(|variant| variant.availability.label())
+                    .map(availability_label)
                     .unwrap_or("External assignment")),
             );
-        for (index, variant) in PLAYABLE_CHARACTER_VARIANTS.iter().enumerate() {
+        for (index, variant) in playable_character_variants(world).iter().enumerate() {
             patch = patch.with_change(
                 "character",
                 format!("nav_{}", variant.id),

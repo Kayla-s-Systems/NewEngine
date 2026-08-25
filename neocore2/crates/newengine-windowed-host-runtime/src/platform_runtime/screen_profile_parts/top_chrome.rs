@@ -1,39 +1,8 @@
 use super::*;
 
-fn style_transport_button(
-    component: UiComponentNode,
-    icon: &str,
-    active: bool,
-    enabled: bool,
-) -> UiComponentNode {
-    lively_editor_action(component)
-        .with_tone(if active {
-            UiNodeTone::Accent
-        } else {
-            UiNodeTone::Normal
-        })
-        .with_prop("transport_icon", serde_json::json!(icon))
-        .with_prop("enabled", serde_json::json!(enabled))
-        .with_prop("fill_rgba", serde_json::json!([58, 59, 61, 255]))
-        .with_prop("hover_fill_rgba", serde_json::json!([70, 71, 74, 255]))
-        .with_prop("pressed_fill_rgba", serde_json::json!([43, 44, 46, 255]))
-        .with_prop("active_fill_rgba", serde_json::json!([64, 65, 67, 255]))
-        .with_prop("disabled_fill_rgba", serde_json::json!([48, 49, 51, 255]))
-        .with_prop("text_rgba", serde_json::json!([166, 168, 172, 255]))
-        .with_prop(
-            "disabled_text_rgba",
-            serde_json::json!([101, 103, 107, 180]),
-        )
-        .with_prop("accent_rgba", serde_json::json!([111, 181, 67, 255]))
-        .with_prop("radius_px", serde_json::json!(2.0))
-}
-
 pub(super) fn push_top_chrome(
     out: &mut Vec<UiComponentNode>,
-    runtime_mode: UiEditorRuntimeMode,
-    runtime_paused: bool,
-    runtime_possessed: bool,
-    command_registry: &EditorCommandRegistry,
+    authoring_state: &UiInGameEditorState,
     layout: &EditorLayoutMetrics,
     active_menu_id: Option<&str>,
 ) {
@@ -195,167 +164,136 @@ pub(super) fn push_top_chrome(
         }
     }
 
-    // Compact transport strip: icon-only controls centered in the editor toolbar.
-    // Runtime semantics stay in EditorCommandRegistry/RuntimeSession; this block owns
-    // presentation only. Simulate/Restart remain available through shortcuts, console and the transport overflow.
-    let command_context = EditorCommandContext {
-        runtime_active: runtime_mode != UiEditorRuntimeMode::Edit,
-        runtime_paused,
-        runtime_playing: runtime_mode == UiEditorRuntimeMode::Play,
-        runtime_possessed,
-    };
-    let transport_button_w = 25.0;
-    let transport_gap = 1.0;
-    let transport_pad = 3.0;
-    let transport_count = 5.0;
-    let transport_w = transport_pad * 2.0
-        + transport_button_w * transport_count
-        + transport_gap * (transport_count - 1.0);
-    let transport_h = toolbar_h.min(27.0);
-    let transport_y = toolbar_y + ((toolbar_h - transport_h) * 0.5).max(0.0);
-    let transport_x = ((layout.screen_w - transport_w) * 0.5).max(chrome_x);
-
-    let mut strip = region_panel(
-        "editor.toolbar.transport",
-        "",
-        transport_x,
-        transport_y,
-        transport_w,
-        transport_h,
-        [48, 49, 51, 255],
-    );
-    strip.props.insert(
-        "border_rgba".to_owned(),
-        serde_json::json!([34, 35, 37, 255]),
-    );
-    strip
-        .props
-        .insert("radius_px".to_owned(), serde_json::json!(4.0));
-    strip = strip.tagged("transport-strip");
-    out.push(strip);
-
-    let transport_specs = [
+    // This is one paused live World, not a PIE clone or a second editor runtime.
+    // Keep that invariant visible in the toolbar so entering the editor is never
+    // mistaken for switching the game into another transport state.
+    let save_failed = authoring_state.last_save_succeeded == Some(false);
+    let unsaved_changes = authoring_state.dirty_placements;
+    let (live_value, live_tone) = if save_failed {
+        ("SAVE FAILED".to_owned(), UiNodeTone::Danger)
+    } else if unsaved_changes > 0 {
         (
-            "play",
-            editor_command::RUNTIME_PLAY,
-            "play",
-            Some(UiEditorRuntimeMode::Play),
-            false,
-        ),
-        ("pause", editor_command::RUNTIME_PAUSE, "pause", None, true),
-        ("stop", editor_command::RUNTIME_STOP, "stop", None, false),
-        ("step", editor_command::RUNTIME_STEP, "step", None, false),
-    ];
-    let mut button_x = transport_x + transport_pad;
-    for (id, command_id, icon, mode, pause_toggle) in transport_specs {
-        let command = command_registry.get(command_id);
-        let tooltip = command.map(|it| it.tooltip.as_str()).unwrap_or(command_id);
-        let shortcut = command
-            .and_then(|it| it.shortcut.as_ref())
-            .map(|it| it.display.as_str())
-            .unwrap_or("");
-        let enabled = command
-            .map(|it| it.enabled(command_context))
-            .unwrap_or(false);
-        let active = mode
-            .map(|it| runtime_mode == it)
-            .unwrap_or(pause_toggle && runtime_paused);
-        let tooltip = if shortcut.is_empty() {
-            tooltip.to_owned()
-        } else {
-            format!("{tooltip} ({shortcut})")
-        };
-        let button = style_transport_button(
-            UiComponentNode::action(format!("editor.toolbar.{id}"), "", command_id),
-            icon,
-            active,
-            enabled,
+            format!("{unsaved_changes} UNSAVED CHANGE(S)"),
+            UiNodeTone::Accent,
         )
-        .with_tooltip(tooltip)
-        .tagged("toolbar")
-        .tagged("runtime-control")
-        .tagged("transport-button")
-        .tagged(if active { "active" } else { "inactive" })
-        .tagged(if enabled { "enabled" } else { "disabled" });
-        out.push(with_rect(
-            button,
-            button_x,
-            transport_y + 2.0,
-            transport_button_w,
-            (transport_h - 4.0).max(18.0),
-        ));
-        button_x += transport_button_w + transport_gap;
-    }
-
-    // Runtime overflow is deliberately independent from the application menu bar.
-    // Transport controls must never mutate File/Edit/Create/Scene/Assets/Tools/Window/Help semantics.
-    let more = style_transport_button(
-        UiComponentNode::action("editor.toolbar.more", "", "editor.runtime.more"),
-        "more",
-        false,
-        true,
-    )
-    .with_tooltip("More runtime/editor commands")
-    .tagged("toolbar")
-    .tagged("transport-button")
-    .tagged("overflow");
+    } else {
+        ("ALL CHANGES SAVED".to_owned(), UiNodeTone::Normal)
+    };
+    let live_w = if layout.screen_w < 980.0 {
+        200.0
+    } else {
+        290.0
+    };
+    let live_x = ((layout.screen_w - live_w) * 0.5).max(chrome_x);
     out.push(with_rect(
-        more,
-        button_x,
-        transport_y + 2.0,
-        transport_button_w,
-        (transport_h - 4.0).max(18.0),
+        UiComponentNode::row("editor.toolbar.live_world", "LIVE WORLD EDITOR")
+            .with_value(live_value)
+            .with_detail("Simulation paused · same running World")
+            .with_tone(live_tone)
+            .with_tooltip("Edits apply directly to the current game World; Ctrl+S writes authored map sources")
+            .tagged("toolbar")
+            .tagged("live-world")
+            .tagged("authoring"),
+        live_x,
+        toolbar_y,
+        live_w,
+        toolbar_h,
     ));
 
-    if active_menu_id == Some("__runtime_more") {
-        let overflow_w = 224.0;
-        let overflow_x = (button_x + transport_button_w - overflow_w)
-            .max(8.0)
-            .min((layout.screen_w - overflow_w - 8.0).max(8.0));
-        let mut popup = UiComponentNode::row("editor.runtime_overflow", "Runtime")
-            .with_tone(UiNodeTone::Accent)
-            .with_prop("padding_px", serde_json::json!(4.0))
-            .tagged("menu-popup")
-            .tagged("runtime-overflow")
-            .tagged("floating")
-            .with_child(
-                UiComponentNode::action(
-                    "editor.runtime_overflow.simulate",
-                    "Simulate",
-                    editor_command::RUNTIME_SIMULATE,
-                )
-                .tagged("button"),
-            );
-        if runtime_mode == UiEditorRuntimeMode::Play {
-            let (id, label, command_id) = if runtime_possessed {
-                ("eject", "Eject", editor_command::RUNTIME_EJECT)
-            } else {
-                ("possess", "Possess", editor_command::RUNTIME_POSSESS)
-            };
-            popup = popup.with_child(
-                UiComponentNode::action(format!("editor.runtime_overflow.{id}"), label, command_id)
-                    .tagged("button"),
-            );
-        }
-        popup = popup.with_child(
-            UiComponentNode::action(
-                "editor.runtime_overflow.restart",
-                "Restart Runtime",
-                editor_command::RUNTIME_RESTART,
-            )
-            .tagged("button"),
-        );
-        let rows = if runtime_mode == UiEditorRuntimeMode::Play {
-            3.0
+    // Unified Editor Mode controls live on the right side of the primary toolbar.
+    // Save/Exit are always visible so the user never has to guess whether changes
+    // are transient or how to return to gameplay. Fly and noclip are mode status,
+    // not separate debug toggles.
+    let exit_w = 82.0;
+    let save_w = 92.0;
+    let button_gap = 6.0;
+    let exit_x = (layout.screen_w - 12.0 - exit_w).max(8.0);
+    let save_x = (exit_x - button_gap - save_w).max(8.0);
+    let save_label = if unsaved_changes > 0 {
+        format!("Save ({unsaved_changes})")
+    } else {
+        "Save".to_owned()
+    };
+    let save_tooltip = if authoring_state.last_save_message.trim().is_empty() {
+        "Save authored map changes (Ctrl+S)".to_owned()
+    } else {
+        format!(
+            "Save authored map changes (Ctrl+S) · {}",
+            authoring_state.last_save_message
+        )
+    };
+    let mut save_button = lively_editor_action(UiComponentNode::action(
+        "editor.toolbar.save_map",
+        save_label,
+        "game.editor.save",
+    ))
+    .with_tone(if save_failed {
+        UiNodeTone::Danger
+    } else {
+        UiNodeTone::Accent
+    })
+    .with_tooltip(save_tooltip)
+    .tagged("toolbar")
+    .tagged("authoring")
+    .tagged("save")
+    .tagged(if unsaved_changes > 0 {
+        "dirty"
+    } else {
+        "clean"
+    });
+    save_button.props.insert(
+        "enabled".to_owned(),
+        serde_json::json!(authoring_state.save_available),
+    );
+    out.push(with_rect(save_button, save_x, toolbar_y, save_w, toolbar_h));
+    out.push(with_rect(
+        lively_editor_action(UiComponentNode::action(
+            "editor.toolbar.exit",
+            "Exit F2",
+            "game.editor.close",
+        ))
+        .with_tooltip("Exit World Editor and return to gameplay (F2)")
+        .tagged("toolbar")
+        .tagged("authoring")
+        .tagged("exit"),
+        exit_x,
+        toolbar_y,
+        exit_w,
+        toolbar_h,
+    ));
+
+    if layout.screen_w >= 1180.0 {
+        let status_w = 236.0;
+        let status_x = (save_x - 10.0 - status_w).max(8.0);
+        let fly_label = if authoring_state.free_fly {
+            "FLY ACTIVE"
         } else {
-            2.0
+            "FLY OFF"
+        };
+        let noclip_label = if authoring_state.noclip {
+            "NOCLIP ACTIVE"
+        } else {
+            "NOCLIP OFF"
         };
         out.push(with_rect(
-            popup,
-            overflow_x,
-            layout.menu_h + layout.toolbar_h + 2.0,
-            overflow_w,
-            34.0 + rows * 24.0,
+            UiComponentNode::row("editor.toolbar.navigation_status", fly_label)
+                .with_value(noclip_label)
+                .with_detail("Hold RMB + WASD/Q/E · Shift faster")
+                .with_tone(if authoring_state.free_fly && authoring_state.noclip {
+                    UiNodeTone::Accent
+                } else {
+                    UiNodeTone::Danger
+                })
+                .with_tooltip(
+                    "Editor camera is detached from player physics and gameplay collision",
+                )
+                .tagged("toolbar")
+                .tagged("editor-camera")
+                .tagged("noclip"),
+            status_x,
+            toolbar_y,
+            status_w,
+            toolbar_h,
         ));
     }
 }

@@ -29,7 +29,10 @@ fn update_player_locomotion(world: &mut World, key_to_entity: &BTreeMap<u64, Ent
         0.0
     };
     let tuning = tuning(world);
-    let player_data = active_game_data(world).player.tuning;
+    let Some(game_data) = active_game_data(world) else {
+        return;
+    };
+    let player_data = game_data.player.tuning;
     let min_horizontal_speed = player_data.locomotion_min_horizontal_speed;
     let landing_min_airborne_seconds = player_data.landing_min_airborne_seconds;
     let players = world

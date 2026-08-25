@@ -18,26 +18,31 @@ use crate::item_assets::{
     AuthoredItemPackage,
 };
 
+#[cfg(test)]
 pub use newengine_game_data::{
     DEFAULT_FPS_LOADOUT_NAME, DEFAULT_MEDKIT_ITEM_NAME, DEFAULT_RIFLE_AMMO_NAME,
     DEFAULT_RIFLE_ITEM_NAME,
 };
 
+#[cfg(test)]
 #[inline]
 pub fn default_rifle_item_id() -> ItemId {
     ItemId::from_name(DEFAULT_RIFLE_ITEM_NAME).expect("valid FPS item name")
 }
 
+#[cfg(test)]
 #[inline]
 pub fn default_rifle_ammo_id() -> ItemId {
     ItemId::from_name(DEFAULT_RIFLE_AMMO_NAME).expect("valid FPS ammo name")
 }
 
+#[cfg(test)]
 #[inline]
 pub fn default_medkit_item_id() -> ItemId {
     ItemId::from_name(DEFAULT_MEDKIT_ITEM_NAME).expect("valid FPS item name")
 }
 
+#[cfg(test)]
 #[inline]
 pub fn default_fps_loadout_id() -> ItemId {
     ItemId::from_name(DEFAULT_FPS_LOADOUT_NAME).expect("valid FPS loadout name")
@@ -276,6 +281,28 @@ impl FpsGameplayPolicyProvider for EmbeddedTestPolicyProvider {
         let policy = FpsGameplayPolicySnapshot {
             content: serde_json::to_value(authored)
                 .map_err(|error| format!("test item package JSON encode failed: {error}"))?,
+            required_content: newengine_gameplay_fps_api::FpsRequiredContentPolicy {
+                default_loadout: DEFAULT_FPS_LOADOUT_NAME.to_owned(),
+                primary_weapon: DEFAULT_RIFLE_ITEM_NAME.to_owned(),
+                primary_ammo: DEFAULT_RIFLE_AMMO_NAME.to_owned(),
+                medkit: DEFAULT_MEDKIT_ITEM_NAME.to_owned(),
+            },
+            mission: newengine_gameplay_fps_api::FpsMissionPolicy {
+                default_status: "test mission".to_owned(),
+                pickup_status: "test pickup".to_owned(),
+                target_status: "test target".to_owned(),
+                hazard_status: "test hazard".to_owned(),
+                goal_locked_status: "test goal locked".to_owned(),
+                goal_complete_status: "test goal complete".to_owned(),
+                failed_progress_label: "test failed".to_owned(),
+                completed_progress_label: "test completed".to_owned(),
+                ..newengine_gameplay_fps_api::FpsMissionPolicy::default()
+            },
+            callbacks: newengine_gameplay_fps_api::FpsCallbackExports {
+                interaction: "on_interaction".to_owned(),
+                hit: "on_hit".to_owned(),
+                mission_event: "on_mission_event".to_owned(),
+            },
             ..FpsGameplayPolicySnapshot::default()
         };
         policy.validate()?;

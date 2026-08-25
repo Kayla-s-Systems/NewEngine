@@ -61,8 +61,32 @@ impl RenderServiceClient {
         &self,
         req: RenderServiceRequest,
     ) -> Result<RenderServiceResponse, String> {
+        let trace_frame = match &req {
+            RenderServiceRequest::SubmitFrame(frame) if frame.frame_index <= 2 => {
+                Some(frame.frame_index)
+            }
+            _ => None,
+        };
+        let encode_started = std::time::Instant::now();
         let payload = encode_json(&req)?;
+        if let Some(frame_index) = trace_frame {
+            newengine_ulog_api::ulog::info!(
+                "render service client: submit_frame encoded frame={} bytes={} encode_ms={:.3}",
+                frame_index,
+                payload.len(),
+                encode_started.elapsed().as_secs_f64() * 1000.0,
+            );
+        }
+        let call_started = std::time::Instant::now();
         let bytes = self.service.invoke_json(payload)?;
+        if let Some(frame_index) = trace_frame {
+            newengine_ulog_api::ulog::info!(
+                "render service client: submit_frame service returned frame={} bytes={} call_ms={:.3}",
+                frame_index,
+                bytes.len(),
+                call_started.elapsed().as_secs_f64() * 1000.0,
+            );
+        }
         decode_json(&bytes)
     }
 

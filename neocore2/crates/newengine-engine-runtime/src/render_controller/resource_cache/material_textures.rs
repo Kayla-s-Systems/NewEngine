@@ -18,6 +18,7 @@ use super::super::material_bindings::MaterialTextureGpuResidency;
 use super::super::state::MaterialTextureDecodeJob;
 
 const MATERIAL_TEXTURE_ASSET_RETRY_FRAMES: u64 = 4;
+const MATERIAL_TEXTURE_ALLOCATION_STALL_WARN_MS: f32 = 16.67;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(in crate::render_controller) enum MaterialTextureReadyState {
@@ -85,7 +86,6 @@ impl RuntimeRenderController {
                 .insert(path, MaterialTextureGpuResidency::Failed { message });
             return;
         };
-
         let worker_path = path.clone();
         let result = Arc::new(Mutex::new(None));
         let result_out = Arc::clone(&result);
@@ -128,19 +128,22 @@ impl RuntimeRenderController {
         path: String,
         texture_asset: RuntimeTextureAsset,
     ) {
-        let extent = Extent2D::new(texture_asset.width, texture_asset.height);
+        let texture_width = texture_asset.width;
+        let texture_height = texture_asset.height;
+        let texture_format = texture_asset.format;
+        let extent = Extent2D::new(texture_width, texture_height);
         let mip_levels = NonZeroU32::new(texture_asset.mips.len().max(1) as u32)
             .expect("runtime texture mip count is non-zero");
-        let (payload, layout) = texture_asset.concatenated_payload_and_layout();
+        let (payload, layout) = texture_asset.into_concatenated_payload_and_layout();
         let payload_bytes = payload.len();
         if payload_bytes > super::super::render_quality::MATERIAL_TEXTURE_MAX_UPLOAD_PAYLOAD_BYTES {
             let message = format!(
                 "texture upload payload exceeds runtime safety limit bytes={} limit={} format={:?} extent={}x{}; use BC-compressed runtime assets",
                 payload_bytes,
                 super::super::render_quality::MATERIAL_TEXTURE_MAX_UPLOAD_PAYLOAD_BYTES,
-                texture_asset.format,
-                texture_asset.width,
-                texture_asset.height,
+                texture_format,
+                texture_width,
+                texture_height,
             );
             newengine_ulog_api::ulog::warn!(
                 "render controller: material texture rejected path='{}' err='{}'",
@@ -164,7 +167,7 @@ impl RuntimeRenderController {
         match r.create_texture(
             TextureDesc::new(
                 extent,
-                render_texture_format_from_runtime(texture_asset.format),
+                render_texture_format_from_runtime(texture_format),
                 TextureUsage::Sampled,
             )
             .with_label(format!("material_tex:{path}"))
@@ -179,11 +182,20 @@ impl RuntimeRenderController {
                     self.frame.frame_index
                 );
                 let upload_elapsed_ms = upload_started.elapsed().as_secs_f32() * 1000.0;
-                if upload_elapsed_ms
+                if upload_elapsed_ms >= MATERIAL_TEXTURE_ALLOCATION_STALL_WARN_MS {
+                    newengine_ulog_api::ulog::warn!(
+                        "render controller: texture allocation exceeded frame budget path='{}' bytes={} elapsed_ms={:.2} budget_ms={:.2} stall_warn_ms={:.2}",
+                        path,
+                        payload_bytes,
+                        upload_elapsed_ms,
+                        super::super::render_quality::MATERIAL_TEXTURE_DECODE_PUMP_BUDGET_MS,
+                        MATERIAL_TEXTURE_ALLOCATION_STALL_WARN_MS,
+                    );
+                } else if upload_elapsed_ms
                     >= super::super::render_quality::MATERIAL_TEXTURE_DECODE_PUMP_BUDGET_MS
                 {
-                    newengine_ulog_api::ulog::warn!(
-                        "render controller: texture allocation exceeded frame budget path='{}' bytes={} elapsed_ms={:.2} budget_ms={:.2}",
+                    newengine_ulog_api::ulog::debug!(
+                        "render controller: texture allocation above pump target path='{}' bytes={} elapsed_ms={:.2} budget_ms={:.2}",
                         path,
                         payload_bytes,
                         upload_elapsed_ms,

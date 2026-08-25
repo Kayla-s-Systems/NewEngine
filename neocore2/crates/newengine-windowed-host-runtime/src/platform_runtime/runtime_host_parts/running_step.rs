@@ -5,9 +5,10 @@ use newengine_core::{EngineError, EngineResult};
 use newengine_platform_api::PlatformStepResultV1;
 use newengine_ui::{UiFrameDesc, UiProviderKind};
 use newengine_ui_api::{
-    UiDrawInvalidationState, UiEventDispatchFrame, UiGameLayerStackState, UiInputFrame,
-    UiLayerCompositionPlan, UiLayerDomain, UiLayerDrawPacketSet, UiPresentationFlowState,
-    UI_PRESENTATION_TARGET_PRIMARY, UI_SURFACE_RUNTIME_DEBUG_OVERLAY,
+    UiDrawInvalidationState, UiEventDispatchFrame, UiGameLayerStackState, UiInGameEditorState,
+    UiInputFrame, UiLayerCompositionPlan, UiLayerDomain, UiLayerDrawPacketSet,
+    UiPresentationFlowState, UiScreenInputFocusPolicy, UiScreenProfileState,
+    UI_PRESENTATION_TARGET_PRIMARY, UI_SURFACE_EDITOR_SHELL, UI_SURFACE_RUNTIME_DEBUG_OVERLAY,
 };
 
 use crate::platform_input::poll_input_frame;
@@ -44,6 +45,39 @@ fn gameplay_input_requires_ui_dispatch(input: &UiInputFrame) -> bool {
         || !input.gamepad_buttons_released.is_empty()
 }
 
+#[inline]
+fn should_request_shell_ui(
+    provider_ui_active: bool,
+    scene_launch_active: bool,
+    provider_ui_needed: bool,
+    provider_surface_ready: bool,
+    game_ui_layer_active: bool,
+    editor_overlay_active: bool,
+) -> bool {
+    provider_ui_active
+        && !scene_launch_active
+        && (provider_ui_needed || provider_surface_ready)
+        && (editor_overlay_active || !game_ui_layer_active)
+}
+
+#[inline]
+fn presentation_surface_domain(focus: UiScreenInputFocusPolicy) -> Option<UiLayerDomain> {
+    match focus {
+        UiScreenInputFocusPolicy::UiSurface => Some(UiLayerDomain::System),
+        UiScreenInputFocusPolicy::GameViewport => Some(UiLayerDomain::GameViewport),
+        UiScreenInputFocusPolicy::EditorShell => Some(UiLayerDomain::Editor),
+        UiScreenInputFocusPolicy::Headless => None,
+    }
+}
+
+#[inline]
+fn append_surface_once(plan: &mut UiLayerCompositionPlan, surface_id: &str) {
+    let surface_id = surface_id.trim();
+    if !surface_id.is_empty() && !plan.surface_ids.iter().any(|id| id == surface_id) {
+        plan.surface_ids.push(surface_id.to_owned());
+    }
+}
+
 impl HostPlatformRuntime {
     pub(crate) fn step_running(&mut self, dt_sec: f32) -> EngineResult<PlatformStepResultV1> {
         let host_frame_started = Instant::now();
@@ -54,6 +88,15 @@ impl HostPlatformRuntime {
         let input_poll_ms = input_poll_started.elapsed().as_secs_f64() * 1000.0;
         let mut ui_provider_dispatch_ms = 0.0_f64;
         let mut ui_provider_dispatch_used = false;
+        // Preserve the prior provider interaction before this frame replaces the
+        // retained dispatch resource. Hover enter/leave is a visual invalidation
+        // edge even when no action/state patch is emitted.
+        let previous_ui_hover = self
+            .engine
+            .resources
+            .get::<UiEventDispatchFrame>()
+            .and_then(|frame| frame.hovered_node.as_ref())
+            .map(|hit| (hit.surface_id.clone(), hit.node_id.clone()));
         if let Some(telemetry) = self
             .engine
             .resources
@@ -91,12 +134,20 @@ impl HostPlatformRuntime {
             if dispatch_to_provider {
                 ui_provider_dispatch_used = true;
                 let dispatch_started = Instant::now();
+                let dispatch_surface_id = self
+                    .engine
+                    .resources
+                    .get::<UiPresentationFlowState>()
+                    .and_then(|state| state.active_surface_id.as_deref())
+                    .map(str::trim)
+                    .filter(|id| !id.is_empty());
                 let dispatch_result =
                     crate::platform_runtime::ui_gateway_frame::dispatch_input_frame(
                         ui_frame_index,
                         &input,
                         [self.surface.width, self.surface.height],
                         self.surface.pixels_per_point,
+                        dispatch_surface_id,
                     );
                 ui_provider_dispatch_ms = dispatch_started.elapsed().as_secs_f64() * 1000.0;
                 match dispatch_result? {
@@ -149,10 +200,19 @@ impl HostPlatformRuntime {
             ui_dispatch_frame.as_ref(),
             presentation_state_id,
         );
+        let current_ui_hover = ui_dispatch_frame
+            .as_ref()
+            .and_then(|frame| frame.hovered_node.as_ref())
+            .map(|hit| (hit.surface_id.clone(), hit.node_id.clone()));
+        let pointer_button_edge = input_frame.as_ref().is_some_and(|input| {
+            !input.mouse_pressed.is_empty() || !input.mouse_released.is_empty()
+        });
+        let ui_interaction_refresh = previous_ui_hover != current_ui_hover || pointer_button_edge;
         let ui_dispatch_refresh = ui_dispatch_frame
             .as_ref()
             .map(|frame| !frame.actions.is_empty() || !frame.state_patches.is_empty())
-            .unwrap_or(false);
+            .unwrap_or(false)
+            || ui_interaction_refresh;
         let escape_requests_main_exit = input_frame.as_ref().is_some_and(|input| {
             input.is_key_pressed(newengine_ui_api::keys::ESCAPE)
                 && presentation_state_id == Some("main_menu")
@@ -175,7 +235,7 @@ impl HostPlatformRuntime {
         let input_dispatch_ms = host_frame_started.elapsed().as_secs_f64() * 1000.0;
         let ui_prepare_started = Instant::now();
         let scene_launch_status = self.engine.resources.get::<SceneLaunchStatus>().cloned();
-        let editing_tools_active = self
+        let editing_tools_available = self
             .engine
             .resources
             .get::<newengine_plugin_host::PluginsSnapshot>()
@@ -203,6 +263,16 @@ impl HostPlatformRuntime {
             let resources = self.engine.resources_mut();
             screen_profile.prepare_frame(resources, ui_frame_index)
         };
+        let editor_overlay_active = !scene_launch_active
+            && editing_tools_available
+            && self
+                .engine
+                .resources
+                .get::<UiInGameEditorState>()
+                .is_some_and(|state| state.enabled);
+        if !editor_overlay_active {
+            self.editor_ui_cache.clear();
+        }
 
         let debug_overlay_active = self
             .engine
@@ -216,8 +286,22 @@ impl HostPlatformRuntime {
             .copied()
             .unwrap_or_default();
 
+        let presentation_surface = self
+            .engine
+            .resources
+            .get::<UiPresentationFlowState>()
+            .and_then(|state| state.active_surface_id.as_deref())
+            .map(str::trim)
+            .filter(|surface| !surface.is_empty())
+            .map(str::to_owned);
+        let presentation_focus = self
+            .engine
+            .resources
+            .get::<UiScreenProfileState>()
+            .map(|state| state.descriptor.input_focus_policy);
+
         let game_ui_invalidation_revision = invalidation.revision_for(UiLayerDomain::GameViewport);
-        let game_ui_plan = self
+        let mut game_ui_plan = self
             .engine
             .resources
             .get::<UiGameLayerStackState>()
@@ -229,13 +313,21 @@ impl HostPlatformRuntime {
                     ui_frame_index,
                 )
             });
+        if presentation_focus.and_then(presentation_surface_domain)
+            == Some(UiLayerDomain::GameViewport)
+        {
+            if let Some(surface_id) = presentation_surface.as_deref() {
+                append_surface_once(&mut game_ui_plan, surface_id);
+            }
+        }
 
-        let shell_domain = if scene_launch_active {
-            UiLayerDomain::System
-        } else if editing_tools_active {
+        let shell_domain = if !scene_launch_active && editor_overlay_active {
             UiLayerDomain::Editor
         } else {
-            UiLayerDomain::System
+            presentation_focus
+                .and_then(presentation_surface_domain)
+                .filter(|domain| *domain != UiLayerDomain::GameViewport)
+                .unwrap_or(UiLayerDomain::System)
         };
         let mut shell_ui_plan = UiLayerCompositionPlan::disabled(
             shell_domain,
@@ -243,6 +335,28 @@ impl HostPlatformRuntime {
             ui_frame_index,
         );
         shell_ui_plan.invalidation_revision = invalidation.revision_for(shell_domain);
+        if editor_overlay_active {
+            shell_ui_plan.surface_ids = vec![UI_SURFACE_EDITOR_SHELL.to_owned()];
+        } else if presentation_focus
+            .and_then(presentation_surface_domain)
+            .is_some_and(|domain| domain == shell_domain)
+        {
+            if let Some(surface_id) = presentation_surface.as_deref() {
+                append_surface_once(&mut shell_ui_plan, surface_id);
+            }
+        }
+        if screen_profile_refresh.shell_ui {
+            newengine_ulog_api::ulog::info!(
+                "platform runtime: presentation render plan surface={:?} focus={:?} shell_domain={:?} shell_surfaces={:?} provider_ui_active={} scene_launch_active={} editor_overlay_active={}",
+                presentation_surface,
+                presentation_focus,
+                shell_domain,
+                shell_ui_plan.surface_ids,
+                provider_ui_active,
+                scene_launch_active,
+                editor_overlay_active,
+            );
+        }
         let mut debug_ui_plan = UiLayerCompositionPlan::disabled(
             UiLayerDomain::Debug,
             UI_PRESENTATION_TARGET_PRIMARY,
@@ -254,13 +368,13 @@ impl HostPlatformRuntime {
         }
 
         let provider_ui_needed =
-            self.ui_build.is_some() || screen_profile_refresh || ui_dispatch_refresh;
-        let provider_gameplay_hud = provider_ui_active
+            self.ui_build.is_some() || screen_profile_refresh.any() || ui_dispatch_refresh;
+        let provider_surface_ready = provider_ui_active
             && !scene_launch_active
             && !self.minimized
             && self.surface.width > 0
             && self.surface.height > 0;
-        let game_ui_layer_active = provider_gameplay_hud && game_ui_plan.is_active();
+        let game_ui_layer_active = provider_surface_ready && game_ui_plan.is_active();
 
         let gameplay_hud_refresh_due = false;
         let game_ui_animation_refresh = self
@@ -283,9 +397,9 @@ impl HostPlatformRuntime {
             .is_some_and(provider_draw_has_active_animation);
 
         let game_force_refresh =
-            screen_profile_refresh || ui_dispatch_refresh || gameplay_hud_refresh_due;
+            screen_profile_refresh.game_ui || ui_dispatch_refresh || gameplay_hud_refresh_due;
         let shell_force_refresh = loading_surface_state_changed
-            || screen_profile_refresh
+            || screen_profile_refresh.shell_ui
             || ui_dispatch_refresh
             || self.ui_build.is_some()
             || gameplay_hud_refresh_due;
@@ -314,8 +428,8 @@ impl HostPlatformRuntime {
             debug_ui_animation_refresh,
         );
         let provider_ui_refresh = game_ui_refresh || shell_ui_refresh || debug_ui_refresh;
-        let allow_cached_shell_draw = provider_gameplay_hud
-            || screen_profile_refresh
+        let allow_cached_shell_draw = provider_surface_ready
+            || screen_profile_refresh.shell_ui
             || ui_dispatch_refresh
             || self.ui_build.is_some();
 
@@ -344,21 +458,14 @@ impl HostPlatformRuntime {
             };
         }
 
-        if game_ui_layer_active {
-            newengine_ulog_api::ulog::info!(
-                "host.ui.game active_state surfaces={:?} refresh={} force_refresh={} invalidation={} cached={} draw_present={}",
-                game_ui_plan.surface_ids,
-                game_ui_refresh,
-                game_force_refresh,
-                game_ui_plan.invalidation_revision,
-                self.game_ui_cache.draw().is_some(),
-                game_ui_draw.is_some(),
-            );
-        }
-
-        let shell_requested = provider_ui_active
-            && !game_ui_layer_active
-            && (provider_ui_needed || provider_gameplay_hud);
+        let shell_requested = should_request_shell_ui(
+            provider_ui_active,
+            scene_launch_active,
+            provider_ui_needed,
+            provider_surface_ready,
+            game_ui_layer_active,
+            editor_overlay_active,
+        );
         let mut shell_ui_draw = if shell_requested {
             if shell_ui_refresh {
                 let requested = crate::platform_runtime::ui_gateway_frame::request_ui_draw_list(
@@ -402,6 +509,18 @@ impl HostPlatformRuntime {
         } else {
             None
         };
+
+        if screen_profile_refresh.shell_ui {
+            newengine_ulog_api::ulog::info!(
+                "platform runtime: presentation draw result requested={} refresh={} draw_present={} mesh_vertices={} mesh_indices={} paint_commands={}",
+                shell_requested,
+                shell_ui_refresh,
+                shell_ui_draw.is_some(),
+                shell_ui_draw.as_ref().map(|draw| draw.mesh.vertices.len()).unwrap_or(0),
+                shell_ui_draw.as_ref().map(|draw| draw.mesh.indices.len()).unwrap_or(0),
+                shell_ui_draw.as_ref().map(|draw| draw.paint.commands.len()).unwrap_or(0),
+            );
+        }
 
         let mut debug_ui_draw = if provider_ui_active && debug_overlay_active {
             if debug_ui_refresh {
@@ -454,10 +573,10 @@ impl HostPlatformRuntime {
         }
 
         let mut ui_layers = UiLayerDrawPacketSet::new(ui_frame_index);
-        if let Some(draw_list) = game_ui_draw.clone() {
+        if let Some(draw_list) = game_ui_draw.take() {
             ui_layers.push(game_ui_plan.draw_packet(draw_list));
         }
-        if let Some(draw_list) = shell_ui_draw.clone() {
+        if let Some(draw_list) = shell_ui_draw.take() {
             ui_layers.push(shell_ui_plan.draw_packet(draw_list));
         }
         if let Some(draw_list) = built_system_ui_draw {
@@ -651,7 +770,9 @@ impl HostPlatformRuntime {
                 "ui_layer_invalidation_revision": active_ui_invalidation_revision,
                 "gameplay_hud_refresh_due": gameplay_hud_refresh_due,
                 "ui_dispatch_refresh": ui_dispatch_refresh,
-                "screen_profile_refresh": screen_profile_refresh,
+                "screen_profile_refresh": screen_profile_refresh.any(),
+                "screen_profile_game_refresh": screen_profile_refresh.game_ui,
+                "screen_profile_shell_refresh": screen_profile_refresh.shell_ui,
             });
             if let Ok(bytes) = serde_json::to_vec(&payload) {
                 let _ = newengine_plugin_host::host_context::publish_event(
@@ -717,7 +838,7 @@ mod game_ui_layer_tests {
     use newengine_ui_api::{UiGameGuiConfig, UiGameLayerDescriptor};
 
     #[test]
-    fn game_and_debug_domains_remain_separate_packets() {
+    fn game_editor_and_debug_domains_remain_separate_packets() {
         let mut config = UiGameGuiConfig::simple_hud("ui/game/hud.neui@surface", "game.hud");
         config.layers.push(
             UiGameLayerDescriptor::menu("pause", "ui/game/pause.neui@surface", "game.pause")
@@ -735,8 +856,16 @@ mod game_ui_layer_tests {
         );
         debug_plan.surface_ids = vec![UI_SURFACE_RUNTIME_DEBUG_OVERLAY.to_owned()];
 
+        let mut editor_plan = UiLayerCompositionPlan::disabled(
+            UiLayerDomain::Editor,
+            UI_PRESENTATION_TARGET_PRIMARY,
+            9,
+        );
+        editor_plan.surface_ids = vec![UI_SURFACE_EDITOR_SHELL.to_owned()];
+
         let mut packets = UiLayerDrawPacketSet::new(9);
         packets.push(game_plan.draw_packet(newengine_ui_api::UiDrawList::new()));
+        packets.push(editor_plan.draw_packet(newengine_ui_api::UiDrawList::new()));
         packets.push(debug_plan.draw_packet(newengine_ui_api::UiDrawList::new()));
         assert_eq!(
             packets
@@ -744,7 +873,55 @@ mod game_ui_layer_tests {
                 .iter()
                 .map(|packet| packet.domain)
                 .collect::<Vec<_>>(),
-            vec![UiLayerDomain::GameViewport, UiLayerDomain::Debug]
+            vec![
+                UiLayerDomain::GameViewport,
+                UiLayerDomain::Editor,
+                UiLayerDomain::Debug,
+            ]
+        );
+    }
+
+    #[test]
+    fn active_editor_shell_is_not_suppressed_by_game_hud() {
+        assert!(should_request_shell_ui(
+            true, false, false, true, true, true,
+        ));
+        assert!(!should_request_shell_ui(
+            true, false, false, true, true, false,
+        ));
+        assert!(!should_request_shell_ui(
+            true, true, true, true, false, true,
+        ));
+    }
+
+    #[test]
+    fn project_presentation_surface_routes_to_system_lane_for_frontend() {
+        assert_eq!(
+            presentation_surface_domain(UiScreenInputFocusPolicy::UiSurface),
+            Some(UiLayerDomain::System)
+        );
+    }
+
+    #[test]
+    fn project_presentation_surface_routes_to_game_lane_for_hud() {
+        assert_eq!(
+            presentation_surface_domain(UiScreenInputFocusPolicy::GameViewport),
+            Some(UiLayerDomain::GameViewport)
+        );
+    }
+
+    #[test]
+    fn presentation_surface_is_deduplicated_in_composition_plan() {
+        let mut plan = UiLayerCompositionPlan::disabled(
+            UiLayerDomain::System,
+            UI_PRESENTATION_TARGET_PRIMARY,
+            1,
+        );
+        append_surface_once(&mut plan, "forest-road.frontend.title");
+        append_surface_once(&mut plan, "forest-road.frontend.title");
+        assert_eq!(
+            plan.surface_ids,
+            vec!["forest-road.frontend.title".to_owned()]
         );
     }
 

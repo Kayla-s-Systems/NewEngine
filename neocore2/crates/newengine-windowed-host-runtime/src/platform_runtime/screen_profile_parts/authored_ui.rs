@@ -126,7 +126,7 @@ mod authored_ui_diagnostic_tests {
             ".neui dialect loaded ref='ui/dialects/runtime.neui@dialect'",
             ".neui theme library resolved ref='ui/themes/default.neui@theme'",
             ".neui component library resolved ref='ui/components/common.neui@library'",
-            ".neui live root compiled source='ui/engine/main_menu.neui@surface'",
+            ".neui live root compiled source='ui/frontend/main_menu.neui@surface'",
         ] {
             assert!(authored_ui_compile_message_is_info(message), "{message}");
         }

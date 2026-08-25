@@ -380,6 +380,10 @@ fn load_discrete_map_profile(logical_path: &str) -> Result<GameReadyMapProfile, 
                 .eq_ignore_ascii_case("dynamic_physics");
             profile.prefabs.push(GameReadyPrefabSpec {
                 id: placement.id.clone(),
+                authored_map_ref: logical_path.to_owned(),
+                authored_placement_id: placement.id.clone(),
+                authored_discrete_placement: true,
+                authored_primary: true,
                 source: drawable_ref.clone(),
                 proxy: if dynamic_physics {
                     "world_dynamic_ydd".to_owned()
@@ -406,6 +410,10 @@ fn load_discrete_map_profile(logical_path: &str) -> Result<GameReadyMapProfile, 
             if has_collision && !dynamic_physics {
                 profile.prefabs.push(GameReadyPrefabSpec {
                     id: format!("{}#collision", placement.id),
+                    authored_map_ref: logical_path.to_owned(),
+                    authored_placement_id: placement.id.clone(),
+                    authored_discrete_placement: true,
+                    authored_primary: false,
                     source: drawable_ref,
                     proxy: "world_collision_ydd".to_owned(),
                     material: String::new(),

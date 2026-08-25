@@ -8,13 +8,13 @@ mod runtime;
 
 pub use policy::{
     FpsCallbackExports, FpsCombatPolicy, FpsGameplayPolicyProvider, FpsGameplayPolicySnapshot,
-    FpsMissionPolicy, FpsMissionStateMachinePolicy, FpsPlayerPolicy, FpsPolicyDecision,
-    FpsPolicyEvent, FpsRequiredContentPolicy, FPS_GAMEPLAY_POLICY_SCHEMA,
-    FPS_GAMEPLAY_POLICY_VERSION,
+    FpsMissionPolicy, FpsMissionStateMachinePolicy, FpsPlayableCharacterAnimations,
+    FpsPlayableCharacterPolicy, FpsPlayerPolicy, FpsPolicyDecision, FpsPolicyEvent,
+    FpsRequiredContentPolicy, FPS_GAMEPLAY_POLICY_SCHEMA, FPS_GAMEPLAY_POLICY_VERSION,
 };
 pub use runtime::{
     FpsDemoGoal, FpsDemoHazard, FpsDemoPickup, FpsDemoRules, FpsDemoState, FpsDemoTarget,
-    FpsPlayerTuning,
+    FpsPlayerTuning, WeaponShellCasing,
 };
 
 use newengine_input_actions_api::ActionCommandFrame;

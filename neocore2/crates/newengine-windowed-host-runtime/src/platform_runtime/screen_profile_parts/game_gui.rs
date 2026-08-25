@@ -165,16 +165,10 @@ impl ScreenProfileRuntimeState {
             }
         }
 
-        // Re-resolve z-order/input ownership after authored documents have supplied
-        // their actual runtime surface identities. Keep the screen profile's logical
-        // viewport binding intact; no physical render resource escapes this boundary.
-        let mut resolved_config = config.clone();
-        resolved_config.layers = state.layers;
-        state = UiGameLayerStackState::from_config_for_viewport(
-            &resolved_config,
-            self.descriptor.viewport_surface_id.clone(),
-            frame_index,
-        );
+        // Refresh input/modal ownership after authored documents have supplied
+        // runtime surface identities. Rebuilding and revalidating the whole config
+        // here duplicated layer clones and sorting on every host frame.
+        state.refresh_derived_state();
         self.publish_game_gui_input_capture(resources, &state);
         resources.insert(state);
         refresh

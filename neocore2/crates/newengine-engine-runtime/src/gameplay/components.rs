@@ -19,13 +19,14 @@ mod world_runtime;
 pub use display::{DisplayMode, DisplayVisibility};
 pub use physics::{PhysicsSurface, PhysicsWorldSettings, StaticMeshCollider};
 pub use player::{
-    CharacterBody, CharacterMotionTuning, PlayerAnimationState, PlayerCommandFrame,
-    PlayerController, PlayerControllerKind, PlayerEvent, PlayerEventBus, PlayerEventKind,
-    PlayerFirstPersonCameraAnchor, PlayerFixedPoseHistory, PlayerGroundState,
-    PlayerLocomotionAnimation, PlayerLocomotionState, PlayerModelAssignment, PlayerModelBinding,
-    PlayerMovementSpeeds, PlayerRenderPose, PlayerSkinBinding, PlayerSkinPose, PlayerSkinVertex,
-    PlayerStanceKind, PlayerStanceState, PlayerViewState, PlayerViewVisibility,
-    PlayerViewVisibilityPolicy, PlayerVisualKind, PlayerVisualPart,
+    CharacterBody, CharacterMotionTuning, PlayerAnimationState, PlayerCharacterPresentation,
+    PlayerCommandFrame, PlayerController, PlayerControllerKind, PlayerEvent, PlayerEventBus,
+    PlayerEventKind, PlayerFirstPersonCameraAnchor, PlayerFixedPoseHistory, PlayerGroundState,
+    PlayerJointRotationWeight, PlayerLocomotionAnimation, PlayerLocomotionState,
+    PlayerModelAssignment, PlayerModelBinding, PlayerMovementSpeeds, PlayerRenderPose,
+    PlayerSkinBinding, PlayerSkinPose, PlayerSkinVertex, PlayerStanceKind, PlayerStanceState,
+    PlayerViewState, PlayerViewVisibility, PlayerViewVisibilityPolicy, PlayerVisualKind,
+    PlayerVisualPart,
 };
 pub use render_environment::{
     CloudShadowRenderState, EnvironmentDomeRenderState, EnvironmentPostFxState,
@@ -33,8 +34,10 @@ pub use render_environment::{
 };
 pub use run_mode::GameRunMode;
 pub use scene::{
-    attach_scene_element_core, attach_scene_object_core, scene_entity_by_role, GameplayActor,
-    PlayerActor, SceneAnchorFollow, SceneEntityAnchor, SceneEntityRole,
+    attach_scene_element_core, attach_scene_object_core, scene_entity_by_role,
+    AuthoredMapPlacement, AuthoredMapPlacementCloneSource, AuthoredMapPlacementDirty,
+    AuthoredMapPlacementReplicaScaleState, AuthoredMapPlacementSource, GameplayActor, PlayerActor,
+    SceneAnchorFollow, SceneEntityAnchor, SceneEntityRole,
 };
 pub use world_activation::{ResidencyProgress, WorldActivationPhase, WorldActivationState};
 pub use world_runtime::{ModelRenderComponent, PreparedRenderMesh, WorldAssemblyProgress};

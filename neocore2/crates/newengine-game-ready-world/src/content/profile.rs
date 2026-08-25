@@ -269,6 +269,10 @@ pub(crate) struct GameReadyFoliageSpec {
 #[derive(Clone, Debug)]
 pub(crate) struct GameReadyPrefabSpec {
     pub(crate) id: String,
+    pub(crate) authored_map_ref: String,
+    pub(crate) authored_placement_id: String,
+    pub(crate) authored_discrete_placement: bool,
+    pub(crate) authored_primary: bool,
     pub(crate) source: String,
     pub(crate) proxy: String,
     pub(crate) material: String,

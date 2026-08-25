@@ -2,7 +2,10 @@ use super::*;
 
 impl ScreenProfileRuntimeState {
     pub(super) fn update_menu_interaction(&mut self, resources: &Resources, frame_index: u64) {
-        if !editing_tools_available(resources) || self.last_menu_click_frame == frame_index {
+        if !editing_tools_available(resources)
+            || !in_game_editor_active(resources)
+            || self.last_menu_click_frame == frame_index
+        {
             return;
         }
         if clicked_dispatch_action(resources, "editor.runtime.more").is_some() {
@@ -148,7 +151,7 @@ impl ScreenProfileRuntimeState {
         resources: &mut Resources,
         frame_index: u64,
     ) {
-        if !editing_tools_available(resources) {
+        if !editing_tools_available(resources) || !in_game_editor_active(resources) {
             return;
         }
 
@@ -268,16 +271,19 @@ impl ScreenProfileRuntimeState {
             }
         }
 
-        let edit_mode = resources
-            .get::<RuntimeSessionState>()
-            .map(|session| !session.is_active())
-            .unwrap_or(true);
+        let edit_mode = in_game_editor_active(resources)
+            || resources
+                .get::<RuntimeSessionState>()
+                .map(|session| !session.is_active())
+                .unwrap_or(true);
         if edit_mode {
             if let Some(input) = resources.get::<UiInputFrame>() {
                 let text_input_active = !input.text.is_empty()
                     || !input.text_edit_ops.is_empty()
                     || !input.ime_preedit.is_empty();
-                if !text_input_active {
+                let fly_navigation_active =
+                    input.is_mouse_down(newengine_input_api::mouse_button::RIGHT);
+                if !text_input_active && !fly_navigation_active {
                     use newengine_input_api::key_code::{KEY_E, KEY_Q, KEY_R, KEY_W};
                     let shortcut_mode = if input.is_key_pressed(KEY_Q) {
                         Some(UiEditorTransformMode::Select)
@@ -315,7 +321,10 @@ impl ScreenProfileRuntimeState {
     }
 
     pub(super) fn update_dock_interaction(&mut self, resources: &Resources, frame_index: u64) {
-        if !editing_tools_available(resources) || self.last_dock_click_frame == frame_index {
+        if !editing_tools_available(resources)
+            || !in_game_editor_active(resources)
+            || self.last_dock_click_frame == frame_index
+        {
             return;
         }
         let Some(action_id) = clicked_dispatch_action(resources, "editor.dock.toggle.") else {
@@ -347,7 +356,7 @@ impl ScreenProfileRuntimeState {
     }
 
     pub(super) fn publish_editor_layout_state(&self, resources: &mut Resources, frame_index: u64) {
-        if !editing_tools_available(resources) {
+        if !editing_tools_available(resources) || !in_game_editor_active(resources) {
             resources.insert(UiDockLayoutState {
                 version: 1,
                 frame_index,
@@ -357,11 +366,7 @@ impl ScreenProfileRuntimeState {
             return;
         }
         let layout = editor_layout_metrics(resources, &self.hidden_panels);
-        let session = resources
-            .get::<RuntimeSessionState>()
-            .cloned()
-            .unwrap_or_default();
-        let (runtime_mode, runtime_paused) = editor_runtime_projection(&session);
+        let runtime_mode = UiEditorRuntimeMode::Edit;
         resources.insert(UiViewportSlot {
             version: 1,
             frame_index,
@@ -370,11 +375,11 @@ impl ScreenProfileRuntimeState {
             y_px: layout.viewport_y,
             w_px: layout.viewport_w,
             h_px: layout.viewport_h,
-            input_enabled: runtime_mode != UiEditorRuntimeMode::Edit
-                && !runtime_paused
-                && session.is_possessed(),
-            simulation_enabled: runtime_mode != UiEditorRuntimeMode::Edit && !runtime_paused,
-            paused: runtime_paused,
+            // Editor viewport input remains live while simulation is paused: RMB+WASD
+            // is camera navigation and never possession/gameplay movement.
+            input_enabled: true,
+            simulation_enabled: false,
+            paused: true,
             runtime_mode,
         });
         resources.insert(UiDockLayoutState {
@@ -428,21 +433,20 @@ impl ScreenProfileRuntimeState {
         frame_index: u64,
         profile_changed: bool,
     ) -> bool {
-        if !self.config.publish_editor_shell || !editing_tools_available(resources) {
+        if !self.config.publish_editor_shell
+            || !editing_tools_available(resources)
+            || !in_game_editor_active(resources)
+        {
             return self.hide_profile_surface(UI_SURFACE_EDITOR_SHELL, profile_changed);
         }
 
         let layout = editor_layout_metrics(resources, &self.hidden_panels);
-        let session = resources
-            .get::<RuntimeSessionState>()
+        let runtime_mode = UiEditorRuntimeMode::Edit;
+        let runtime_paused = true;
+        let authoring_state = resources
+            .get::<UiInGameEditorState>()
             .cloned()
             .unwrap_or_default();
-        let (runtime_mode, runtime_paused) = editor_runtime_projection(&session);
-        let runtime_possessed = session.is_possessed();
-        let command_registry = resources
-            .get::<EditorCommandRegistry>()
-            .cloned()
-            .unwrap_or_else(default_runtime_editor_commands);
         let viewport_state = resources
             .get::<UiEditorViewportState>()
             .cloned()
@@ -459,15 +463,27 @@ impl ScreenProfileRuntimeState {
             frame_index,
             runtime_mode,
             runtime_paused,
-            runtime_possessed,
-            &command_registry,
             &viewport_state,
             &scene_snapshot,
             &inspector_snapshot,
+            &authoring_state,
             &layout,
             self.active_menu_id.as_deref(),
         );
-        self.append_right_edit_window(resources, &mut node, &layout);
+        let asset_document_selected =
+            resources
+                .get::<EditorSelectionContext>()
+                .is_some_and(|selection| {
+                    matches!(
+                        selection.kind,
+                        EditorSelectionKind::Asset
+                            | EditorSelectionKind::AssetEntry
+                            | EditorSelectionKind::Material
+                    )
+                });
+        if asset_document_selected {
+            self.append_right_edit_window(resources, &mut node, &layout);
+        }
         sort_components_by_layout_y(&mut node.components);
         publish_screen_node_tree_request(&UiNodeTreeRequest::from_surface_node(
             &node,

@@ -12,6 +12,226 @@ use crate::{
     ProjectScriptingManifest, ResolvedProjectLaunch, RuntimeLaunchProfile,
 };
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProjectUiInputFocusPolicy {
+    EditorShell,
+    #[default]
+    UiSurface,
+    GameViewport,
+    Headless,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ProjectUiPresentationStateManifest {
+    pub id: String,
+    pub document_ref: Option<String>,
+    pub surface_id: Option<String>,
+    pub input_focus_policy: ProjectUiInputFocusPolicy,
+    pub blocks_world_bootstrap: bool,
+    pub blocks_gameplay_input: bool,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ProjectUiPresentationTransitionManifest {
+    pub from: String,
+    pub to: String,
+    pub on_action: Option<String>,
+    pub on_runtime_ready: bool,
+    pub reset_runtime_ready: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ProjectUiPresentationFlowManifest {
+    pub enabled: bool,
+    pub id: String,
+    pub initial_state: String,
+    pub states: Vec<ProjectUiPresentationStateManifest>,
+    pub transitions: Vec<ProjectUiPresentationTransitionManifest>,
+}
+
+impl Default for ProjectUiPresentationFlowManifest {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            id: String::new(),
+            initial_state: String::new(),
+            states: Vec::new(),
+            transitions: Vec::new(),
+        }
+    }
+}
+
+impl ProjectUiPresentationFlowManifest {
+    fn has_state(&self, state_id: &str) -> bool {
+        let state_id = state_id.trim();
+        self.states.iter().any(|state| state.id.trim() == state_id)
+    }
+
+    fn validate(&self, errors: &mut Vec<String>) {
+        if !self.enabled {
+            return;
+        }
+        if self.id.trim().is_empty() {
+            errors.push("project ui.presentation_flow.id must not be empty".to_owned());
+        }
+        let initial = self.initial_state.trim();
+        if initial.is_empty() {
+            errors.push("project ui.presentation_flow.initial_state must not be empty".to_owned());
+        }
+
+        let mut state_ids = BTreeSet::new();
+        for (index, state) in self.states.iter().enumerate() {
+            let id = state.id.trim();
+            if id.is_empty() {
+                errors.push(format!(
+                    "project ui.presentation_flow.states[{index}].id must not be empty"
+                ));
+                continue;
+            }
+            if !state_ids.insert(id.to_owned()) {
+                errors.push(format!(
+                    "project ui.presentation_flow contains duplicate state '{id}'"
+                ));
+            }
+            let document = state
+                .document_ref
+                .as_deref()
+                .map(str::trim)
+                .filter(|v| !v.is_empty());
+            let surface = state
+                .surface_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|v| !v.is_empty());
+            if state.document_ref.is_some() && document.is_none() {
+                errors.push(format!(
+                    "project ui presentation state '{id}' has blank document_ref"
+                ));
+            }
+            if state.surface_id.is_some() && surface.is_none() {
+                errors.push(format!(
+                    "project ui presentation state '{id}' has blank surface_id"
+                ));
+            }
+            if document.is_some() != surface.is_some() {
+                errors.push(format!("project ui presentation state '{id}' must declare document_ref and surface_id together"));
+            }
+            if let Some(document) = document {
+                let normalized = document.replace('\\', "/").to_ascii_lowercase();
+                if normalized.starts_with("ui/engine/")
+                    || normalized.starts_with("assets/ui/engine/")
+                {
+                    errors.push(format!("project ui presentation state '{id}' references engine-owned UI '{document}'; game frontend documents must be project-owned"));
+                }
+            }
+            if state.input_focus_policy == ProjectUiInputFocusPolicy::GameViewport
+                && state.blocks_gameplay_input
+            {
+                errors.push(format!("project ui presentation state '{id}' uses game_viewport focus while blocking gameplay input"));
+            }
+        }
+        if !initial.is_empty() && !state_ids.contains(initial) {
+            errors.push(format!(
+                "project ui.presentation_flow.initial_state '{initial}' is not declared"
+            ));
+        }
+
+        let mut action_triggers = BTreeSet::new();
+        let mut ready_triggers = BTreeSet::new();
+        for (index, transition) in self.transitions.iter().enumerate() {
+            let from = transition.from.trim();
+            let to = transition.to.trim();
+            if from.is_empty() || !state_ids.contains(from) {
+                errors.push(format!(
+                    "project ui presentation transition[{index}] has unknown from state '{from}'"
+                ));
+            }
+            if to.is_empty() || !state_ids.contains(to) {
+                errors.push(format!(
+                    "project ui presentation transition[{index}] has unknown to state '{to}'"
+                ));
+            }
+            let action = transition
+                .on_action
+                .as_deref()
+                .map(str::trim)
+                .filter(|v| !v.is_empty());
+            if transition.on_action.is_some() && action.is_none() {
+                errors.push(format!(
+                    "project ui presentation transition[{index}] has blank on_action"
+                ));
+            }
+            if action.is_some() == transition.on_runtime_ready {
+                errors.push(format!("project ui presentation transition[{index}] must declare exactly one trigger: on_action or on_runtime_ready"));
+            }
+            if let Some(action) = action {
+                if !action_triggers.insert((from.to_owned(), action.to_owned())) {
+                    errors.push(format!("project ui presentation flow has ambiguous action '{action}' from state '{from}'"));
+                }
+            }
+            if transition.on_runtime_ready && !ready_triggers.insert(from.to_owned()) {
+                errors.push(format!("project ui presentation flow has multiple runtime-ready transitions from '{from}'"));
+            }
+        }
+
+        if errors.is_empty() && !state_ids.is_empty() {
+            let mut reachable = BTreeSet::new();
+            let mut pending = vec![initial.to_owned()];
+            while let Some(current) = pending.pop() {
+                if !reachable.insert(current.clone()) {
+                    continue;
+                }
+                for transition in &self.transitions {
+                    if transition.from.trim() == current {
+                        pending.push(transition.to.trim().to_owned());
+                    }
+                }
+            }
+            for state in state_ids.difference(&reachable) {
+                errors.push(format!(
+                    "project ui presentation state '{state}' is unreachable from '{initial}'"
+                ));
+            }
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ProjectUiManifest {
+    /// Generic engine screen-profile id (for example `game` or `headless`).
+    pub screen_profile: Option<String>,
+    /// Project-owned root UI surface id.
+    pub root_surface: Option<String>,
+    /// Project asset reference for the root UI document.
+    pub document: Option<String>,
+    /// Project-owned frontend/presentation state graph. The engine only executes this graph.
+    pub presentation_flow: Option<ProjectUiPresentationFlowManifest>,
+    /// Whether runtime should publish the editor shell alongside project UI.
+    pub publish_editor_shell: Option<bool>,
+}
+
+impl ProjectUiManifest {
+    fn validate(&self, errors: &mut Vec<String>) {
+        for (field, value) in [
+            ("screen_profile", self.screen_profile.as_deref()),
+            ("root_surface", self.root_surface.as_deref()),
+            ("document", self.document.as_deref()),
+        ] {
+            collect_optional_non_blank(errors, value, || {
+                format!("project ui.{field} must be non-empty when specified")
+            });
+        }
+        if let Some(flow) = self.presentation_flow.as_ref() {
+            flow.validate(errors);
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ProjectManifest {
@@ -32,6 +252,8 @@ pub struct ProjectManifest {
     /// Examples: `main_menu`, `gameplay`, `loading`. The project stays data-driven;
     /// runtime-host only projects this value into the generic screen-profile config.
     pub startup_presentation_state: Option<String>,
+    /// Project-owned runtime UI composition. Runtime profiles must not hardcode game HUD assets.
+    pub ui: ProjectUiManifest,
     /// Optional named launch preset selected when no explicit `--launch` request is supplied.
     pub default_launch: Option<String>,
     /// Named project launch presets. Typical ids are `editor`, `game`, `server`, and `test`,
@@ -56,6 +278,7 @@ impl Default for ProjectManifest {
             startup_scene: None,
             launch_profile: None,
             startup_presentation_state: None,
+            ui: ProjectUiManifest::default(),
             default_launch: None,
             launch: BTreeMap::new(),
             scripting: ProjectScriptingManifest::default(),
@@ -157,6 +380,32 @@ impl ProjectManifest {
             self.startup_presentation_state.as_deref(),
             || "project startup_presentation_state must be non-empty when specified".to_owned(),
         );
+        self.ui.validate(&mut errors);
+        if let Some(flow) = self
+            .ui
+            .presentation_flow
+            .as_ref()
+            .filter(|flow| flow.enabled)
+        {
+            if let Some(state) = self.startup_presentation_state.as_deref() {
+                if !flow.has_state(state) {
+                    errors.push(format!(
+                        "project startup_presentation_state '{}' is not declared by ui.presentation_flow",
+                        state.trim()
+                    ));
+                }
+            }
+            for (launch_id, preset) in &self.launch {
+                if let Some(state) = preset.startup_presentation_state.as_deref() {
+                    if !flow.has_state(state) {
+                        errors.push(format!(
+                            "project launch '{launch_id}' startup_presentation_state '{}' is not declared by ui.presentation_flow",
+                            state.trim()
+                        ));
+                    }
+                }
+            }
+        }
         collect_optional_non_blank(&mut errors, self.default_launch.as_deref(), || {
             "project default_launch must be non-empty when specified".to_owned()
         });

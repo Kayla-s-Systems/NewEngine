@@ -24,6 +24,28 @@ fn string(value: &serde_json::Value, object: &str, key: &str) -> Option<String> 
         .map(ToOwned::to_owned)
 }
 
+fn string_list(value: &serde_json::Value, object: &str, key: &str) -> Option<Vec<String>> {
+    let value = get(value, object, key)?;
+    let values = if let Some(values) = value.as_array() {
+        values
+            .iter()
+            .filter_map(|value| value.as_str())
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToOwned::to_owned)
+            .collect::<Vec<_>>()
+    } else {
+        value
+            .as_str()?
+            .split(',')
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToOwned::to_owned)
+            .collect::<Vec<_>>()
+    };
+    (!values.is_empty()).then_some(values)
+}
+
 fn f32_value(value: &serde_json::Value, object: &str, key: &str) -> Option<f32> {
     let value = get(value, object, key)?;
     value
@@ -65,6 +87,38 @@ fn vec3(value: &serde_json::Value, object: &str, key: &str) -> Option<[f32; 3]> 
         .ok()?;
     (values.len() == 3 && values.iter().all(|value| value.is_finite()))
         .then(|| [values[0], values[1], values[2]])
+}
+
+fn vec4(value: &serde_json::Value, object: &str, key: &str) -> Option<[f32; 4]> {
+    let value = get(value, object, key)?;
+    let values = if let Some(values) = value.as_array() {
+        values
+            .iter()
+            .map(|value| value.as_f64().map(|v| v as f32))
+            .collect::<Option<Vec<_>>>()?
+    } else {
+        value
+            .as_str()?
+            .split(',')
+            .map(str::trim)
+            .map(str::parse::<f32>)
+            .collect::<Result<Vec<_>, _>>()
+            .ok()?
+    };
+    (values.len() == 4 && values.iter().all(|value| value.is_finite()))
+        .then(|| [values[0], values[1], values[2], values[3]])
+}
+
+fn bool_value(value: &serde_json::Value, object: &str, key: &str) -> Option<bool> {
+    let value = get(value, object, key)?;
+    value.as_bool().or_else(|| {
+        let raw = value.as_str()?.trim().to_ascii_lowercase();
+        match raw.as_str() {
+            "1" | "true" | "yes" | "on" => Some(true),
+            "0" | "false" | "no" | "off" => Some(false),
+            _ => None,
+        }
+    })
 }
 
 pub(super) fn apply_weapon_ytyp_namespace(
@@ -134,6 +188,119 @@ pub(super) fn apply_weapon_ytyp_namespace(
             || !audio.shell_eject.trim().is_empty();
         if has_audio {
             authored.weapon_audio = Some(audio);
+        }
+
+        if namespace.get("presentation").is_some() {
+            let mut presentation = AuthoredWeaponPresentationDefinition::default();
+            presentation.enabled = bool_value(namespace, "presentation", "enabled").unwrap_or(true);
+            macro_rules! v3 {
+                ($field:ident) => {
+                    if let Some(value) = vec3(namespace, "presentation", stringify!($field)) {
+                        presentation.$field = value;
+                    }
+                };
+            }
+            macro_rules! v4 {
+                ($field:ident) => {
+                    if let Some(value) = vec4(namespace, "presentation", stringify!($field)) {
+                        presentation.$field = value;
+                    }
+                };
+            }
+            v3!(handle_from_root);
+            v3!(muzzle_from_root);
+            v3!(left_grip_from_handle);
+            v3!(stock_contact_from_handle);
+            v3!(ready_shoulder_pocket_offset);
+            v3!(ads_shoulder_pocket_offset);
+            v3!(ready_right_elbow_pole_offset);
+            v3!(ready_left_elbow_pole_offset);
+            v3!(ready_left_palm_to_left_grip);
+            v3!(right_palm_to_handle);
+            v3!(first_person_hip_handle_offset);
+            v3!(ads_rear_sight_from_handle);
+            v3!(ads_front_sight_from_handle);
+            v3!(ads_camera_to_rear_sight);
+            v4!(ready_body_to_root_rotation);
+            v4!(ready_right_palm_to_weapon);
+            v4!(ready_left_palm_to_weapon);
+            v4!(right_palm_to_native_rig);
+            v4!(native_rig_to_runtime_basis);
+            v4!(first_person_view_basis);
+            if let Some(value) = f32_value(namespace, "presentation", "fire_kick_duration_seconds")
+            {
+                presentation.fire_kick_duration_seconds = value;
+            }
+            if let Some(value) = f32_value(namespace, "presentation", "fire_kick_pitch_radians") {
+                presentation.fire_kick_pitch_radians = value;
+            }
+            if let Some(value) =
+                f32_value(namespace, "presentation", "first_person_hip_convergence_m")
+            {
+                presentation.first_person_hip_convergence_m = value;
+            }
+            authored.weapon_presentation = Some(presentation);
+        }
+
+        if namespace.get("casing").is_some() {
+            let mut casing = AuthoredWeaponCasingDefinition::default();
+            casing.model_dictionary =
+                string(namespace, "casing", "model_dictionary").unwrap_or_default();
+            casing.variants = string_list(namespace, "casing", "variants").unwrap_or_default();
+            casing.material_ref = string(namespace, "casing", "material_ref").unwrap_or_default();
+            if let Some(value) = vec3(namespace, "casing", "half_extents") {
+                casing.half_extents = value;
+            }
+            if let Some(value) = f32_value(namespace, "casing", "ejection_delay_seconds") {
+                casing.ejection_delay_seconds = value;
+            }
+            if let Some(value) = vec3(namespace, "casing", "origin_local") {
+                casing.origin_local = value;
+            }
+            if let Some(value) = vec3(namespace, "casing", "velocity_local") {
+                casing.velocity_local = value;
+            }
+            if let Some(value) = vec3(namespace, "casing", "velocity_jitter") {
+                casing.velocity_jitter = value;
+            }
+            if let Some(value) = vec3(namespace, "casing", "axis_local") {
+                casing.axis_local = value;
+            }
+            if let Some(value) = vec3(namespace, "casing", "angular_velocity") {
+                casing.angular_velocity = value;
+            }
+            if let Some(value) = vec3(namespace, "casing", "angular_velocity_jitter") {
+                casing.angular_velocity_jitter = value;
+            }
+            if let Some(value) = f32_value(namespace, "casing", "friction") {
+                casing.friction = value;
+            }
+            if let Some(value) = f32_value(namespace, "casing", "restitution") {
+                casing.restitution = value;
+            }
+            if let Some(value) = f32_value(namespace, "casing", "density") {
+                casing.density = value;
+            }
+            authored.weapon_casing = Some(casing);
+        }
+
+        let animation = AuthoredWeaponAnimationDefinition {
+            skeleton: string(namespace, "world", "skeleton").unwrap_or_default(),
+            animation_dictionary: string(namespace, "world", "animation_dictionary")
+                .unwrap_or_default(),
+            idle: string(namespace, "animations", "idle").unwrap_or_default(),
+            fire: string(namespace, "animations", "fire").unwrap_or_default(),
+            reload: string(namespace, "animations", "reload").unwrap_or_default(),
+            spawn_pose: string(namespace, "animations", "spawn_pose").unwrap_or_default(),
+        };
+        let has_animation = !animation.skeleton.trim().is_empty()
+            || !animation.animation_dictionary.trim().is_empty()
+            || !animation.idle.trim().is_empty()
+            || !animation.fire.trim().is_empty()
+            || !animation.reload.trim().is_empty()
+            || !animation.spawn_pose.trim().is_empty();
+        if has_animation {
+            authored.weapon_animation = Some(animation);
         }
     }
 
@@ -237,6 +404,22 @@ mod tests {
                 "empty": "shared/audio/weapon/test/empty.wav",
                 "shell_eject": "shared/audio/weapon/test/shell.wav"
             },
+            "casing": {
+                "model_dictionary": "models/weapon/test_shells.ydd",
+                "variants": "a,b,c",
+                "material_ref": "materials/test_shell.nemat@metal",
+                "half_extents": "0.01,0.02,0.03",
+                "ejection_delay_seconds": 0.04,
+                "origin_local": "0.1,0.2,-0.3",
+                "velocity_local": "1.0,2.0,-0.2",
+                "velocity_jitter": "0.2,0.1,0.0",
+                "axis_local": "0.9,0.1,0.0",
+                "angular_velocity": "10,20,30",
+                "angular_velocity_jitter": "1,2,3",
+                "friction": 0.3,
+                "restitution": 0.2,
+                "density": 7.5
+            },
             "world": {
                 "model": "models/weapon/test.ydd@test",
                 "material_library": "materials/test.nemat",
@@ -254,6 +437,12 @@ mod tests {
         assert_eq!(audio.fire, "shared/audio/weapon/test/fire.wav");
         assert_eq!(audio.reload_start, "shared/audio/weapon/test/reload.wav");
         assert_eq!(audio.shell_eject, "shared/audio/weapon/test/shell.wav");
+        let casing = item.weapon_casing.expect("weapon casing");
+        assert_eq!(casing.model_dictionary, "models/weapon/test_shells.ydd");
+        assert_eq!(casing.variants, vec!["a", "b", "c"]);
+        assert_eq!(casing.half_extents, [0.01, 0.02, 0.03]);
+        assert!((casing.ejection_delay_seconds - 0.04).abs() < 1.0e-6);
+        assert_eq!(casing.axis_local, [0.9, 0.1, 0.0]);
         let world = item.world.expect("world");
         assert_eq!(world.model, "models/weapon/test.ydd@test");
         assert_eq!(world.material_library, "materials/test.nemat");

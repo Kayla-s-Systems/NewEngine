@@ -4,9 +4,7 @@ use newengine_assets_api::{assets_ui_method, ENGINE_ASSETS_UI_SERVICE_ID};
 use newengine_ui_api::{
     UiCompiledDocument, UiMountSurfaceRequest, UI_SERVICE_METHOD_MOUNT_SURFACE_V1,
 };
-use newengine_ui_navigation_api::{
-    UiNodeNavigationDocument, UiNodeNavigationRuntime, ENGINE_PRIMARY_UI_SURFACE_REF,
-};
+use newengine_ui_navigation_api::{UiNodeNavigationDocument, UiNodeNavigationRuntime};
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize, Default)]
@@ -30,8 +28,10 @@ struct AssetsUiCompileResponse {
 ///
 /// If the authored `.neui` is not present, the runtime emits diagnostics and
 /// leaves the surface unavailable. It must not invent a hardcoded UI document.
-pub(super) fn try_load_primary_ui_document() -> Result<UiNodeNavigationRuntime, String> {
-    let response = compile_primary_surface().map_err(|err| {
+pub(super) fn try_load_primary_ui_document(
+    document_ref: &str,
+) -> Result<UiNodeNavigationRuntime, String> {
+    let response = compile_primary_surface(document_ref).map_err(|err| {
         newengine_ulog_api::ulog::warn!(
             "engine.ui.primary: authored .neui document unavailable; no generated or special UI renderer will be used: {err}"
         );
@@ -68,9 +68,9 @@ fn navigation_from_compiled_response(
     UiNodeNavigationRuntime::new(document)
 }
 
-fn compile_primary_surface() -> Result<AssetsUiCompileResponse, String> {
+fn compile_primary_surface(document_ref: &str) -> Result<AssetsUiCompileResponse, String> {
     let payload = serde_json::to_vec(&serde_json::json!({
-        "document_ref": ENGINE_PRIMARY_UI_SURFACE_REF,
+        "document_ref": document_ref,
         "source_kind": "asset",
         "mount_runtime": false
     }))
@@ -85,7 +85,7 @@ fn compile_primary_surface() -> Result<AssetsUiCompileResponse, String> {
         None => {
             return Err(format!(
                 "engine.assets.ui service is not registered; cannot compile '{}'",
-                ENGINE_PRIMARY_UI_SURFACE_REF
+                document_ref
             ));
         }
     };
@@ -93,7 +93,7 @@ fn compile_primary_surface() -> Result<AssetsUiCompileResponse, String> {
     serde_json::from_slice::<AssetsUiCompileResponse>(&bytes).map_err(|e| {
         format!(
             "engine.assets.ui returned non-compile response for '{}': {}",
-            ENGINE_PRIMARY_UI_SURFACE_REF, e
+            document_ref, e
         )
     })
 }

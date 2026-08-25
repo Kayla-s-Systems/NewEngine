@@ -3,7 +3,7 @@
 //! Profile-owned FPS gameplay package.
 //!
 //! `newengine-engine-runtime` owns generic execution/UI boundaries and shared runtime
-//! contracts. This crate owns FPS-only behavior, authored content and HUD policy.
+//! contracts. This crate owns reusable FPS mechanics and policy interpretation; authored game data is project-owned.
 
 mod character_control;
 mod character_physics;
@@ -18,10 +18,12 @@ mod provider;
 mod script_commands;
 
 pub use combat::step_player_combat;
+pub use content::FpsContentProvider;
+#[cfg(test)]
 pub use content::{
     default_fps_loadout_id, default_medkit_item_id, default_rifle_ammo_id, default_rifle_item_id,
-    FpsContentProvider, DEFAULT_FPS_LOADOUT_NAME, DEFAULT_MEDKIT_ITEM_NAME,
-    DEFAULT_RIFLE_AMMO_NAME, DEFAULT_RIFLE_ITEM_NAME,
+    DEFAULT_FPS_LOADOUT_NAME, DEFAULT_MEDKIT_ITEM_NAME, DEFAULT_RIFLE_AMMO_NAME,
+    DEFAULT_RIFLE_ITEM_NAME,
 };
 pub use fps_demo::step_fps_demo_gameplay;
 pub use inventory_hud::FpsInventoryHudProvider;
@@ -31,7 +33,6 @@ pub use item_assets::{
     parse_authored_item_package_json, AuthoredItemDefinition, AuthoredItemPackage,
     AuthoredLoadoutDefinition, AuthoredLoadoutEntry, AuthoredUseEffect, AuthoredWeaponDefinition,
     CompiledItemPackage, AUTHORED_ITEM_PACKAGE_SCHEMA, AUTHORED_ITEM_PACKAGE_VERSION,
-    NEITEMS_LOGICAL_PATH,
 };
 pub use newengine_gameplay_fps_api::{
     action as fps_action, FpsActionFrame, FpsDemoGoal, FpsDemoHazard, FpsDemoPickup, FpsDemoRules,

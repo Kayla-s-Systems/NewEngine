@@ -195,7 +195,7 @@ impl RuntimeRenderController {
                 window_w,
                 window_h,
             )?;
-        } else {
+        } else if next_frame <= 4 || next_frame.is_multiple_of(120) {
             newengine_ulog_api::ulog::warn!(
                 "render prelaunch loading ui: missing UiLayerDrawPacketSet in resources frame={} reason='{}'",
                 next_frame,

@@ -145,6 +145,76 @@ mod tests {
     }
 
     #[test]
+    fn project_owned_presentation_flow_accepts_project_documents() {
+        let manifest = ProjectManifest {
+            id: "frontend-game".to_owned(),
+            name: "Frontend Game".to_owned(),
+            ui: ProjectUiManifest {
+                presentation_flow: Some(ProjectUiPresentationFlowManifest {
+                    id: "frontend".to_owned(),
+                    initial_state: "menu".to_owned(),
+                    states: vec![
+                        ProjectUiPresentationStateManifest {
+                            id: "menu".to_owned(),
+                            document_ref: Some("ui/frontend/main_menu.neui@surface".to_owned()),
+                            surface_id: Some("game.frontend.main_menu".to_owned()),
+                            blocks_world_bootstrap: true,
+                            blocks_gameplay_input: true,
+                            ..ProjectUiPresentationStateManifest::default()
+                        },
+                        ProjectUiPresentationStateManifest {
+                            id: "gameplay".to_owned(),
+                            input_focus_policy: ProjectUiInputFocusPolicy::GameViewport,
+                            ..ProjectUiPresentationStateManifest::default()
+                        },
+                    ],
+                    transitions: vec![ProjectUiPresentationTransitionManifest {
+                        from: "menu".to_owned(),
+                        to: "gameplay".to_owned(),
+                        on_action: Some("game.start".to_owned()),
+                        ..ProjectUiPresentationTransitionManifest::default()
+                    }],
+                    ..ProjectUiPresentationFlowManifest::default()
+                }),
+                ..ProjectUiManifest::default()
+            },
+            ..ProjectManifest::default()
+        };
+        manifest
+            .validate()
+            .expect("project-owned frontend is valid");
+    }
+
+    #[test]
+    fn project_owned_presentation_flow_rejects_engine_menu_assets() {
+        let manifest = ProjectManifest {
+            id: "bad-frontend".to_owned(),
+            name: "Bad Frontend".to_owned(),
+            ui: ProjectUiManifest {
+                presentation_flow: Some(ProjectUiPresentationFlowManifest {
+                    id: "frontend".to_owned(),
+                    initial_state: "menu".to_owned(),
+                    states: vec![ProjectUiPresentationStateManifest {
+                        id: "menu".to_owned(),
+                        document_ref: Some("ui/engine/main_menu.neui@surface".to_owned()),
+                        surface_id: Some("game.frontend.main_menu".to_owned()),
+                        blocks_world_bootstrap: true,
+                        blocks_gameplay_input: true,
+                        ..ProjectUiPresentationStateManifest::default()
+                    }],
+                    ..ProjectUiPresentationFlowManifest::default()
+                }),
+                ..ProjectUiManifest::default()
+            },
+            ..ProjectManifest::default()
+        };
+        let errors = manifest
+            .validate()
+            .expect_err("engine-owned menu must be rejected");
+        assert!(errors.iter().any(|error| error.contains("engine-owned UI")));
+    }
+
+    #[test]
     fn registry_resolves_namespace_paths_by_priority_order() {
         let mut registry = ContentMountRegistry::default();
         registry

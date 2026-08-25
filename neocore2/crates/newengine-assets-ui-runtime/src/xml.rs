@@ -208,11 +208,19 @@ pub(crate) fn parse_attrs(open: &str) -> BTreeMap<String, String> {
         {
             i += 1;
         }
+        // Malformed XML must never stall the runtime parser. If the current
+        // byte cannot begin an attribute key, consume it before continuing.
+        if i == key_start {
+            i += 1;
+            continue;
+        }
         let key = open[key_start..i].trim();
         while i < bytes.len() && bytes[i].is_ascii_whitespace() {
             i += 1;
         }
         if i >= bytes.len() || bytes[i] != b'=' {
+            // We already consumed a non-empty key, so this path always makes
+            // forward progress. Skip the malformed token and continue scanning.
             continue;
         }
         i += 1;
@@ -220,6 +228,16 @@ pub(crate) fn parse_attrs(open: &str) -> BTreeMap<String, String> {
             i += 1;
         }
         if i >= bytes.len() || (bytes[i] != b'\"' && bytes[i] != b'\'') {
+            // XMLcentral requires quoted attribute values. Skip the complete
+            // unquoted token so commas or punctuation inside it cannot trap the
+            // scanner on the same byte forever.
+            while i < bytes.len()
+                && !bytes[i].is_ascii_whitespace()
+                && bytes[i] != b'>'
+                && bytes[i] != b'/'
+            {
+                i += 1;
+            }
             continue;
         }
         let quote = bytes[i];
@@ -253,4 +271,25 @@ pub(crate) fn first_non_empty<const N: usize>(values: [&str; N]) -> String {
         }
     }
     String::new()
+}
+
+#[cfg(test)]
+mod malformed_attribute_progress_tests {
+    use super::parse_attrs;
+
+    #[test]
+    fn malformed_unquoted_attribute_never_stalls_parser() {
+        let attrs =
+            parse_attrs(r#"<Button id="action.0" hover_fill_rgba=21,36,31,248 text="ENTER">"#);
+        assert_eq!(attrs.get("id").map(String::as_str), Some("action.0"));
+        assert_eq!(attrs.get("text").map(String::as_str), Some("ENTER"));
+        assert!(!attrs.contains_key("hover_fill_rgba"));
+    }
+
+    #[test]
+    fn punctuation_between_attributes_never_stalls_parser() {
+        let attrs = parse_attrs(r#"<Button id="action.0" , text="ENTER">"#);
+        assert_eq!(attrs.get("id").map(String::as_str), Some("action.0"));
+        assert_eq!(attrs.get("text").map(String::as_str), Some("ENTER"));
+    }
 }

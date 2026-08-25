@@ -166,6 +166,30 @@ fn upsert_loaded_material(
     )
 }
 
+/// Strict authored material registration from an already-resolved canonical `.nemat@entry`.
+/// Used by runtime model parts whose YDD directly carries its material dependency.
+#[inline]
+pub(super) fn register_required_material_ref(
+    mats: &NeMaterialRegistry,
+    name: &str,
+    flags: NeMaterialFlags,
+    asset_path: &str,
+) -> Result<NeMaterialId, String> {
+    let asset_path = asset_path.trim();
+    if asset_path.is_empty() {
+        return Err(format!(
+            "required material '{name}' has an empty asset reference"
+        ));
+    }
+    let response = load_material_descriptor_asset(asset_path).ok_or_else(|| {
+        format!(
+            "required material descriptor unavailable name='{}' asset='{}' gateway='engine.assets.materials'",
+            name, asset_path
+        )
+    })?;
+    Ok(upsert_loaded_material(mats, name, flags, response))
+}
+
 /// Strict authored material registration used by visuals that must never persist with a
 /// diagnostic/fallback surface. A temporarily unavailable material gateway is a deferred spawn,
 /// not a valid black/white material.

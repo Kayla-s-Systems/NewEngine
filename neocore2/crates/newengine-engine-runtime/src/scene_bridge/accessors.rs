@@ -11,6 +11,7 @@ const INSPECTOR_CONTRACT: &str = "newengine.scene.selected_entity_inspector.snap
 const IN_GAME_EDITOR_CONTRACT: &str = "newengine.scene.ingame_editor.state.v1";
 const IN_GAME_EDITOR_TOGGLE_ACTION: &str = "game.editor.toggle";
 const IN_GAME_EDITOR_CLOSE_ACTION: &str = "game.editor.close";
+const IN_GAME_EDITOR_SAVE_ACTION: &str = "game.editor.save";
 const IN_GAME_EDITOR_TRANSFORM_PREFIX: &str = "game.editor.transform.";
 
 #[path = "accessors/core.rs"]

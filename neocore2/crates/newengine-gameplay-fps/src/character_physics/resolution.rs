@@ -88,12 +88,11 @@ fn apply_ground_query_hit(
         .get::<Velocity>(player)
         .map(|velocity| velocity.0.y)
         .unwrap_or(0.0);
+    let Some(game_data) = active_game_data(world) else {
+        return;
+    };
     if !vertical_velocity.is_finite()
-        || vertical_velocity
-            > active_game_data(world)
-                .player
-                .tuning
-                .ground_probe_max_upward_velocity
+        || vertical_velocity > game_data.player.tuning.ground_probe_max_upward_velocity
     {
         return;
     }

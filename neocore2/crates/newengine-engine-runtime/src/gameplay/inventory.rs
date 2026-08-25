@@ -24,8 +24,9 @@ mod storage;
 pub use catalog::ItemCatalog;
 pub use definitions::{
     EquipmentSlot, ItemDefinition, ItemId, ItemInstanceId, ItemKind, ItemUseEffect,
-    WeaponAudioAction, WeaponAudioDefinition, WeaponFireMode, WeaponItemDefinition,
-    WorldItemDefinition, WorldItemPresentation, WorldItemRuntime, WorldItemVisualPart,
+    WeaponAnimationDefinition, WeaponAudioAction, WeaponAudioDefinition, WeaponCasingDefinition,
+    WeaponFireMode, WeaponItemDefinition, WeaponPresentationDefinition, WorldItemDefinition,
+    WorldItemPresentation, WorldItemRuntime, WorldItemVisualPart,
 };
 pub use loadouts::{InventoryLoadout, InventoryLoadoutCatalog, InventoryLoadoutEntry};
 pub use operations::{

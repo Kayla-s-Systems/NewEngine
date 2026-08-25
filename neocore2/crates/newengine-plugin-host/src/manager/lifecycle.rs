@@ -275,6 +275,7 @@ impl PluginManager {
         }
 
         let id = self.loaded[idx].info.id.to_string();
+        crate::root_observers::forget_loaded_plugin_root(&id);
         shutdown_services_by_owner(&id, "plugin-manager.unload_at");
         self.safe_shutdown_one_reason(idx, "plugin-manager.unload_at");
         unregister_by_owner(&id);

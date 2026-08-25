@@ -199,6 +199,19 @@ impl PakFile {
         &self.resources
     }
 
+    /// Absolute file offset where the package VRAM region starts. TLOU2 PC stores
+    /// texture payloads immediately after the final resource page; individual
+    /// `VRAM_DESC` records address this region with a package-relative offset.
+    pub fn vram_data_base(&self) -> Result<usize, String> {
+        let page = self
+            .pages
+            .last()
+            .ok_or_else(|| "package contains no resource pages".to_owned())?;
+        page.offset
+            .checked_add(page.size)
+            .ok_or_else(|| "VRAM data base overflow".to_owned())
+    }
+
     pub fn resource(&self, kind: &str) -> Option<&PakResource> {
         self.resources.iter().find(|resource| resource.kind == kind)
     }

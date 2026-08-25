@@ -21,7 +21,11 @@ pub(in super::super) fn sanitize_prefab_spec(raw: RawPrefabSpec) -> Option<GameR
     let id = sanitized_required_id(&raw.id)?;
 
     Some(GameReadyPrefabSpec {
+        authored_placement_id: id.clone(),
         id,
+        authored_map_ref: String::new(),
+        authored_discrete_placement: false,
+        authored_primary: true,
         source: raw.source.trim().to_owned(),
         proxy: non_empty_or(raw.proxy, default_prefab_proxy()),
         material: raw.material.trim().replace('\\', "/"),

@@ -65,8 +65,8 @@ pub use plugin_config_service::{
     get_plugin_overrides_with_env, init_plugin_config_service, CONFIG_SERVICE_ID,
 };
 pub use root_observers::{
-    register_plugin_root_observer, LoadedPluginRootSnapshot, PluginEditorExtensionsExport,
-    PluginRootObserver,
+    editor_extensions_snapshot_v1, register_plugin_root_observer, LoadedPluginRootSnapshot,
+    PluginEditorExtensionsExport, PluginRootObserver,
 };
 pub use service_gateway::{descriptor_gateway_capabilities, EngineGatewayCapability};
 

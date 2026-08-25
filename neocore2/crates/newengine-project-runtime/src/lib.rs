@@ -21,6 +21,14 @@ pub const UI_SCREEN_PROFILE_ENV: &str =
     "NEWENGINE_PLUGIN_ENGINE_RUNTIME__ui__screen_profile__profile";
 pub const UI_PRESENTATION_INITIAL_STATE_ENV: &str =
     "NEWENGINE_PLUGIN_ENGINE_RUNTIME__ui__screen_profile__presentation_flow__initial_state";
+pub const UI_PRESENTATION_FLOW_ENV: &str =
+    "NEWENGINE_PLUGIN_ENGINE_RUNTIME__ui__screen_profile__presentation_flow";
+pub const UI_ROOT_SURFACE_ENV: &str =
+    "NEWENGINE_PLUGIN_ENGINE_RUNTIME__ui__screen_profile__game_ui_root_surface_id";
+pub const UI_DOCUMENT_ENV: &str =
+    "NEWENGINE_PLUGIN_ENGINE_RUNTIME__ui__screen_profile__game_ui_document_ref";
+pub const UI_PUBLISH_EDITOR_SHELL_ENV: &str =
+    "NEWENGINE_PLUGIN_ENGINE_RUNTIME__ui__screen_profile__publish_editor_shell";
 
 fn set_default_env(key: &str, value: &str) {
     if std::env::var_os(key).is_none() {
@@ -53,6 +61,59 @@ pub fn apply_project_startup_presentation_state_env(state: &str) {
     let state = state.trim();
     if !state.is_empty() {
         set_default_env(UI_PRESENTATION_INITIAL_STATE_ENV, state);
+    }
+}
+
+pub fn apply_project_ui_env(manifest: &ProjectManifest) {
+    if let Some(value) = manifest
+        .ui
+        .screen_profile
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+    {
+        std::env::set_var(UI_SCREEN_PROFILE_ENV, value);
+    }
+    if let Some(value) = manifest
+        .ui
+        .root_surface
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+    {
+        std::env::set_var(UI_ROOT_SURFACE_ENV, value);
+    }
+    if let Some(value) = manifest
+        .ui
+        .document
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+    {
+        std::env::set_var(UI_DOCUMENT_ENV, value);
+    }
+    if let Some(flow) = manifest.ui.presentation_flow.as_ref() {
+        let mut flow = flow.clone();
+        // A launch preset may select another authored initial state. Fold that override
+        // into the project-owned object so environment iteration order cannot replace
+        // the complete flow with a scalar subtree later.
+        if let Some(initial_state) = std::env::var(UI_PRESENTATION_INITIAL_STATE_ENV)
+            .ok()
+            .map(|value| value.trim().to_owned())
+            .filter(|value| !value.is_empty())
+        {
+            flow.initial_state = initial_state;
+            std::env::remove_var(UI_PRESENTATION_INITIAL_STATE_ENV);
+        }
+        if let Ok(encoded) = serde_json::to_string(&flow) {
+            std::env::set_var(UI_PRESENTATION_FLOW_ENV, encoded);
+        }
+    }
+    if let Some(value) = manifest.ui.publish_editor_shell {
+        std::env::set_var(
+            UI_PUBLISH_EDITOR_SHELL_ENV,
+            if value { "true" } else { "false" },
+        );
     }
 }
 

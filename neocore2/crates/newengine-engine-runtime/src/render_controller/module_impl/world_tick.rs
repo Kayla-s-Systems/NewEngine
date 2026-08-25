@@ -74,11 +74,19 @@ impl RuntimeRenderController {
             };
 
             let runtime_profile = self.runtime_profile().clone();
+            // Unified Editor Mode keeps the live authored world loaded but gives camera
+            // ownership to the generic viewport navigator. Staging is the camera-only
+            // control policy: it never routes WASD to the possessed PlayerActor.
+            let camera_play_mode = if self.editor_viewport.is_active() {
+                GameRunMode::Staging
+            } else {
+                effective_play_mode
+            };
             let mut engine_view_input = EngineViewInput::from(input);
             scene_bridge.prepare_engine_runtime_input(
                 world,
                 engine_view_input.clone(),
-                effective_play_mode,
+                camera_play_mode,
                 self.frame.frame_index,
             );
             // The view request was consumed in the pre-simulation input phase. Keeping
@@ -215,7 +223,7 @@ impl RuntimeRenderController {
                 &viewport_bridge,
                 engine_view_input,
                 play_mode,
-                effective_play_mode,
+                camera_play_mode,
                 world_playable,
                 self.frame.frame_index,
                 dt,

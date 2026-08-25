@@ -23,6 +23,68 @@ pub enum SceneEntityRole {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AuthoredMapPlacementSource {
+    ProfilePrefab,
+    DiscretePlacement,
+}
+
+/// Runtime-only authoring marker. It is attached only by editor mutations and
+/// is cleared after a successful project save. Simulation must never set it.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct AuthoredMapPlacementDirty;
+
+/// Marks a live actor as a newly-created authored placement cloned from an
+/// existing source element. It survives until the first successful project save,
+/// after which the new placement becomes canonical and this marker is removed.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AuthoredMapPlacementCloneSource {
+    pub placement_id: String,
+}
+
+impl AuthoredMapPlacementCloneSource {
+    #[inline]
+    pub fn new(placement_id: impl Into<String>) -> Self {
+        Self {
+            placement_id: placement_id.into(),
+        }
+    }
+}
+
+/// Runtime-only scale state for a derived collider/replica that shares an authored
+/// placement with a primary visual actor. Static mesh collider scale is baked into
+/// vertices, so the editor uses this state to apply incremental authored scale deltas.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct AuthoredMapPlacementReplicaScaleState {
+    pub last_authored_scale: Vec3,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AuthoredMapPlacement {
+    pub map_ref: String,
+    pub placement_id: String,
+    pub source: AuthoredMapPlacementSource,
+    /// True for the actor that owns authoring. False for runtime replicas such as
+    /// a collision companion generated from the same authored placement.
+    pub primary: bool,
+}
+
+impl AuthoredMapPlacement {
+    pub fn new(
+        map_ref: impl Into<String>,
+        placement_id: impl Into<String>,
+        source: AuthoredMapPlacementSource,
+        primary: bool,
+    ) -> Self {
+        Self {
+            map_ref: map_ref.into(),
+            placement_id: placement_id.into(),
+            source,
+            primary,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SceneEntityAnchor {
     pub role: SceneEntityRole,
     pub label: &'static str,

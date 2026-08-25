@@ -114,7 +114,7 @@ fn compiles_neui_surface_layout_into_root_node_request() {
     let root = compile_surface_root(
         xml,
         &surface,
-        "assets/ui/engine/main_menu.neui@surface",
+        "assets/ui/frontend/main_menu.neui@surface",
         surface.theme.as_deref(),
         &dialect,
     )

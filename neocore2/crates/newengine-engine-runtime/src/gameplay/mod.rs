@@ -19,13 +19,16 @@ pub use combat::{
     PlayerInteractionTuning, PlayerWeaponState, WeaponEvent, WeaponEventBus, WeaponEventKind,
 };
 pub use components::{
-    attach_scene_element_core, attach_scene_object_core, scene_entity_by_role, CharacterBody,
+    attach_scene_element_core, attach_scene_object_core, scene_entity_by_role,
+    AuthoredMapPlacement, AuthoredMapPlacementCloneSource, AuthoredMapPlacementDirty,
+    AuthoredMapPlacementReplicaScaleState, AuthoredMapPlacementSource, CharacterBody,
     CharacterMotionTuning, CloudShadowRenderState, CollisionShapeDesc, DisplayMode,
     DisplayVisibility, EnvironmentDomeRenderState, EnvironmentPostFxState, GameRunMode,
     GameplayActor, ModelRenderComponent, PhysicsBodyDesc, PhysicsSurface, PhysicsWorldSettings,
-    PlayerActor, PlayerAnimationState, PlayerCommandFrame, PlayerController, PlayerControllerKind,
-    PlayerEvent, PlayerEventBus, PlayerEventKind, PlayerFirstPersonCameraAnchor,
-    PlayerFixedPoseHistory, PlayerGroundState, PlayerLocomotionAnimation, PlayerLocomotionState,
+    PlayerActor, PlayerAnimationState, PlayerCharacterPresentation, PlayerCommandFrame,
+    PlayerController, PlayerControllerKind, PlayerEvent, PlayerEventBus, PlayerEventKind,
+    PlayerFirstPersonCameraAnchor, PlayerFixedPoseHistory, PlayerGroundState,
+    PlayerJointRotationWeight, PlayerLocomotionAnimation, PlayerLocomotionState,
     PlayerModelAssignment, PlayerModelBinding, PlayerMovementSpeeds, PlayerRenderPose,
     PlayerSkinBinding, PlayerSkinPose, PlayerSkinVertex, PlayerStanceKind, PlayerStanceState,
     PlayerViewState, PlayerViewVisibility, PlayerViewVisibilityPolicy, PlayerVisualKind,
@@ -49,8 +52,9 @@ pub use inventory::{
     InventoryEvent, InventoryEventBus, InventoryEventKind, InventoryLoadout,
     InventoryLoadoutCatalog, InventoryLoadoutEntry, InventoryMutation, ItemCatalog, ItemDefinition,
     ItemId, ItemInstanceId, ItemKind, ItemPickup, ItemUseEffect, PlayerInventory,
-    WeaponAudioAction, WeaponAudioDefinition, WeaponFireMode, WeaponItemDefinition,
-    WorldItemDefinition, WorldItemPresentation, WorldItemRuntime, WorldItemVisualPart,
+    WeaponAnimationDefinition, WeaponAudioAction, WeaponAudioDefinition, WeaponCasingDefinition,
+    WeaponFireMode, WeaponItemDefinition, WeaponPresentationDefinition, WorldItemDefinition,
+    WorldItemPresentation, WorldItemRuntime, WorldItemVisualPart,
 };
 pub use listeners::{drain_player_events, emit_player_event, sync_player_view_listeners};
 pub(crate) use physics::{prewarm_service_physics_backend, sync_prelaunch_service_physics};

@@ -45,15 +45,15 @@ pub(super) fn shot_origin_and_direction(
     shot_sequence: u64,
 ) -> Option<(Vec3, Vec3)> {
     let (player_position, view_rotation) = player_view_pose(world, player)?;
-    let eye_height = world
-        .get::<PlayerStanceState>(player)
-        .map(|stance| stance.current_eye_height)
-        .unwrap_or_else(|| {
-            crate::game_data::active_game_data(world)
+    let eye_height = match world.get::<PlayerStanceState>(player) {
+        Some(stance) => stance.current_eye_height,
+        None => {
+            crate::game_data::active_game_data(world)?
                 .player
                 .tuning
                 .camera_eye_height
-        });
+        }
+    };
     let camera_forward = (view_rotation * -Vec3::Z).normalize_or_zero();
     let right = (view_rotation * Vec3::X).normalize_or_zero();
     let up = (view_rotation * Vec3::Y).normalize_or_zero();
@@ -91,15 +91,15 @@ pub(super) fn interaction_ray(
     tuning: PlayerInteractionTuning,
 ) -> Option<(Vec3, Vec3)> {
     let (player_position, view_rotation) = player_view_pose(world, player)?;
-    let eye_height = world
-        .get::<PlayerStanceState>(player)
-        .map(|stance| stance.current_eye_height)
-        .unwrap_or_else(|| {
-            crate::game_data::active_game_data(world)
+    let eye_height = match world.get::<PlayerStanceState>(player) {
+        Some(stance) => stance.current_eye_height,
+        None => {
+            crate::game_data::active_game_data(world)?
                 .player
                 .tuning
                 .camera_eye_height
-        });
+        }
+    };
     let direction = (view_rotation * -Vec3::Z).normalize_or_zero();
     if direction.length_squared() <= 1.0e-8 {
         return None;

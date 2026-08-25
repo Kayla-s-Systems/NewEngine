@@ -90,7 +90,10 @@ pub(super) fn parse_payload(
 ) -> Result<GameReadyMapProfile, String> {
     let raw: RawGameReadyPayload = serde_json::from_value(value)
         .map_err(|e| format!("map payload parse failed source='{source_label}': {e}"))?;
-    let profile = raw.into_profile();
+    let mut profile = raw.into_profile();
+    for prefab in &mut profile.prefabs {
+        prefab.authored_map_ref = logical_path.to_owned();
+    }
     log_loaded_profile_summary(logical_path, source_label, &profile);
     Ok(profile)
 }

@@ -264,10 +264,17 @@ static STORE: OnceLock<PluginConfigStore> = OnceLock::new();
 
 #[inline]
 pub fn get_plugin_overrides_with_env(plugin_id: &str) -> Value {
-    STORE
-        .get()
-        .map(|store| store.resolve_plugin_overrides(plugin_id))
-        .unwrap_or_else(empty_object)
+    if let Some(store) = STORE.get() {
+        return store.resolve_plugin_overrides(plugin_id);
+    }
+
+    // Dynamic-library consumers may have their own statically linked copy of
+    // newengine-plugin-host whose local config store has not been initialized.
+    // Process environment is still shared across the composition boundary, so
+    // project/runtime overrides must remain observable before local store init.
+    let mut resolved = empty_object();
+    apply_env_overrides(plugin_id, &mut resolved);
+    resolved
 }
 
 #[inline]

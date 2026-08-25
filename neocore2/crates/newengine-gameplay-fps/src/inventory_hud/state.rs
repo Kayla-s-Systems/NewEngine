@@ -12,10 +12,8 @@ pub const CHARACTER_UI_ACTION_TOGGLE: &str = "game.character.toggle";
 #[inline]
 pub(super) fn inventory_slot_count(world: &World) -> usize {
     crate::game_data::active_game_data(world)
-        .gameplay
-        .inventory
-        .hud_slots
-        .clamp(1, 256)
+        .map(|data| data.gameplay.inventory.hud_slots.clamp(1, 256))
+        .unwrap_or(0)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

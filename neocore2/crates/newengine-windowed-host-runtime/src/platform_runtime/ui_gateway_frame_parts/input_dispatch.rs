@@ -5,9 +5,15 @@ pub(crate) fn dispatch_input_frame(
     input: &UiInputFrame,
     surface_size_px: [u32; 2],
     pixels_per_point: f32,
+    surface_id: Option<&str>,
 ) -> EngineResult<Option<UiEventDispatchFrame>> {
     let request = UiDispatchInputRequest {
         frame_index,
+        surface_id: surface_id
+            .map(str::trim)
+            .filter(|id| !id.is_empty())
+            .unwrap_or_default()
+            .to_owned(),
         input: input.clone(),
         surface_size_px,
         pixels_per_point,

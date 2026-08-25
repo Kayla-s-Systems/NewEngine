@@ -95,6 +95,8 @@ impl EditorViewportController {
     }
 }
 
+pub(crate) use transform::sync_authored_map_placement_replicas;
+
 #[cfg(test)]
 use transform::transformed_from_drag;
 

@@ -4,8 +4,9 @@ use super::*;
 use newengine_engine_runtime::gameplay::{
     CharacterBody, DisplayMode, DisplayVisibility, EquippedWeaponBinding, EquippedWeaponMuzzle,
     HitscanWeaponTuning, ItemCatalog, PlayerCommandFrame, PlayerModelAssignment,
-    PlayerModelBinding, PlayerStanceState, PlayerViewState, PlayerViewVisibility,
-    PlayerViewVisibilityPolicy, PlayerVisualKind, PlayerVisualPart, PlayerWeaponState,
+    PlayerModelBinding, PlayerSkinBinding, PlayerSkinVertex, PlayerStanceState, PlayerViewState,
+    PlayerViewVisibility, PlayerViewVisibilityPolicy, PlayerVisualKind, PlayerVisualPart,
+    PlayerWeaponState,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -23,6 +24,26 @@ struct EquippedWeaponVisualRoot {
 struct EquippedWeaponVisualPart {
     owner: EntityId,
     root: EntityId,
+}
+
+fn validate_canonical_rifle_visual_space(min: Vec3, max: Vec3) -> Result<(), String> {
+    let center = (min + max) * 0.5;
+    let extent = max - min;
+    let canonical = center.x.abs() <= 0.20
+        && center.y.abs() <= 0.20
+        && center.z.abs() <= 0.30
+        && extent.x > 0.05
+        && extent.x <= 0.40
+        && extent.y > 0.05
+        && extent.y <= 0.40
+        && extent.z >= 0.75
+        && extent.z <= 1.25;
+    if !canonical {
+        return Err(format!(
+            "canonical rifle visual-space rejected min={min:?} max={max:?} center={center:?} extent={extent:?}; expected handle-centered +X/+Y/+Z weapon space"
+        ));
+    }
+    Ok(())
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -46,46 +67,19 @@ fn decoded_model_bounds(decoded: &[DecodedPrefabMeshPart]) -> Result<(Vec3, Vec3
     Ok((min, max))
 }
 
-fn validate_canonical_rifle_visual_space(min: Vec3, max: Vec3) -> Result<(), String> {
-    let center = (min + max) * 0.5;
-    let extent = max - min;
-    // `rifle.gltf` is authored in handle-centered weapon space: +X right, +Y up, +Z muzzle.
-    // The previous runtime YDD was stale crowd/character-space geometry with center.y ~= 1.086 m.
-    // Reject that artifact class instead of silently drawing the weapon above the character.
-    let canonical = center.x.abs() <= 0.20
-        && center.y.abs() <= 0.20
-        && center.z.abs() <= 0.30
-        && extent.x > 0.05
-        && extent.x <= 0.40
-        && extent.y > 0.05
-        && extent.y <= 0.40
-        && extent.z >= 0.75
-        && extent.z <= 1.25;
-    if !canonical {
-        return Err(format!(
-            "canonical rifle visual-space rejected min={min:?} max={max:?} center={center:?} extent={extent:?}; expected handle-centered +X/+Y/+Z weapon space"
-        ));
-    }
-    Ok(())
-}
-
 fn weapon_visual_alignment(
-    model_ref: &str,
     decoded: &[DecodedPrefabMeshPart],
+    authored_presentation: bool,
 ) -> Result<WeaponVisualAlignment, String> {
     let (min, max) = decoded_model_bounds(decoded)?;
-    if model_ref.eq_ignore_ascii_case(crate::weapon_grip::RIFLE_MODEL_REF) {
-        validate_canonical_rifle_visual_space(min, max)?;
-        // Geometry produced by `export_rifle_source_gltf.py` already subtracts the recovered
-        // crowd grip pivot before writing POSITION. Therefore mesh origin == pistol grip/handle.
-        // `RIFLE_HANDLE_LOCAL` belongs to the authored skeleton hierarchy and must not be applied
-        // a second time to the visual geometry.
-        return Ok(WeaponVisualAlignment {
-            grip_pivot: Vec3::ZERO,
-        });
-    }
     Ok(WeaponVisualAlignment {
-        grip_pivot: (min + max) * 0.5,
+        // Presentation-enabled assets are authored in their definition-owned root/handle space.
+        // Generic uncalibrated assets retain the geometric-center fallback.
+        grip_pivot: if authored_presentation {
+            Vec3::ZERO
+        } else {
+            (min + max) * 0.5
+        },
     })
 }
 
@@ -118,12 +112,19 @@ fn sync_equipped_weapon_render_policy(
         .filter_map(|(entity, part)| (part.root == root).then_some(entity))
         .collect::<Vec<_>>();
     for entity in parts {
+        let mut desired_for_part = desired.clone();
+        // Skinned equipped geometry uses receive-only world shadows to avoid invalidating the
+        // shadow atlas with rapidly animated first-person/equipment skinning.
+        if world.get::<PlayerSkinBinding>(entity).is_some() && !first_person_active {
+            desired_for_part.shadow_policy =
+                newengine_model_domain_api::MeshShadowPolicy::ReceiveOnly;
+        }
         let needs_update = world
             .get::<newengine_model_domain_api::MeshRenderOptions>(entity)
-            .map(|current| current != &desired)
+            .map(|current| current != &desired_for_part)
             .unwrap_or(true);
         if needs_update {
-            let _ = world.insert(entity, desired.clone());
+            let _ = world.insert(entity, desired_for_part);
         }
     }
 }
@@ -236,6 +237,213 @@ fn existing_visual(
         .find_map(|(entity, root)| (root.owner == owner).then_some((entity, *root)))
 }
 
+fn spawn_skinned_equipped_weapon_visual(
+    world: &mut newengine_ecs::World,
+    prims: &mut PrimitiveRegistry,
+    mats: &MaterialRegistry,
+    owner: EntityId,
+    binding: EquippedWeaponBinding,
+    definition: &newengine_engine_runtime::gameplay::ItemDefinition,
+    world_definition: &newengine_engine_runtime::gameplay::WorldItemDefinition,
+    model_ref: &str,
+    avatar_root: EntityId,
+) -> Result<EntityId, String> {
+    let skeleton_ref = definition
+        .weapon_animation
+        .skeleton
+        .as_deref()
+        .ok_or("skinned rifle has no authored skeleton reference")?;
+    let request = newengine_model_domain_api::ModelAssetRequest::new(model_ref.to_owned())
+        .with_skeleton(skeleton_ref.to_owned());
+    let constructor =
+        newengine_model_runtime::ModelGatewayClient::new(newengine_plugin_host::default_host_api());
+    let bundle = constructor.assemble_bundle(&request).map_err(|error| {
+        format!("equipped skinned rifle bundle failed model='{model_ref}': {error}")
+    })?;
+    let skeleton = bundle
+        .skeleton
+        .ok_or_else(|| format!("equipped skinned rifle has no skeleton model='{model_ref}'"))?;
+    if bundle.parts.is_empty() {
+        return Err(format!(
+            "equipped skinned rifle contains no parts model='{model_ref}'"
+        ));
+    }
+
+    let mut min = Vec3::splat(f32::INFINITY);
+    let mut max = Vec3::splat(f32::NEG_INFINITY);
+    let mut source_to_model = None;
+    for part in &bundle.parts {
+        for vertex in &part.mesh.vertices {
+            let point = Vec3::new(vertex.pos[0], vertex.pos[1], vertex.pos[2]);
+            min = min.min(point);
+            max = max.max(point);
+        }
+        let skin = part.skin.as_ref().ok_or_else(|| {
+            format!(
+                "equipped rifle native part '{}' has no skin stream",
+                part.material_slot
+            )
+        })?;
+        if skin.vertices.len() != part.mesh.vertices.len() {
+            return Err(format!(
+                "equipped rifle skin/mesh vertex mismatch slot='{}' skin={} vertices={}",
+                part.material_slot,
+                skin.vertices.len(),
+                part.mesh.vertices.len()
+            ));
+        }
+        match source_to_model {
+            Some(existing) if existing != skin.source_to_model => {
+                return Err("equipped rifle parts disagree on skin_source_to_model".to_owned());
+            }
+            None => source_to_model = Some(skin.source_to_model),
+            _ => {}
+        }
+    }
+    validate_canonical_rifle_visual_space(min, max)?;
+    let source_to_model = source_to_model.ok_or("equipped rifle has no skin source_to_model")?;
+
+    let root = spawn_named(world, format!("Player/EquippedWeapon/{}", definition.name));
+    let _ = world.insert(root, Transform::default());
+    let last_shot_sequence = world
+        .get::<PlayerWeaponState>(owner)
+        .map(|state| state.shot_sequence)
+        .unwrap_or(0);
+    let _ = world.insert(
+        root,
+        EquippedWeaponVisualRoot {
+            owner,
+            instance_id: binding.instance_id,
+            item: binding.item,
+            grip_debug_emitted: false,
+            aim_alpha: 0.0,
+            last_shot_sequence,
+            recoil_alpha: 0.0,
+        },
+    );
+    let _ = world.insert(
+        root,
+        DisplayVisibility {
+            mode: DisplayMode::GameOnly,
+        },
+    );
+    let _ = set_parent(world, root, Some(avatar_root));
+
+    let authored_scale = Vec3::new(
+        world_definition.scale[0],
+        world_definition.scale[1],
+        world_definition.scale[2],
+    );
+    for (part_index, part) in bundle.parts.into_iter().enumerate() {
+        let primitive_id = PrimitiveId(fnv1a_64(&format!(
+            "equipped-skinned:{}:revision={}:part={}:slot={}",
+            bundle.source, binding.instance_id.0, part_index, part.material_slot
+        )));
+        if !prims.is_registered(primitive_id) {
+            prims.register_mesh(
+                primitive_id,
+                format!(
+                    "EquippedWeapon/Skinned/{}:{}",
+                    definition.name, part.material_slot
+                ),
+                part.mesh,
+            );
+        }
+        let material_name = part.material.material_ref.clone().unwrap_or_else(|| {
+            format!("EquippedWeapon/{}/{}", definition.name, part.material_slot)
+        });
+        let material_id = mats.upsert_named_with_textures(
+            &material_name,
+            part.material.descriptor,
+            part.material.textures.clone().sanitized(),
+        );
+        let entity = spawn_game_primitive(
+            world,
+            &*prims,
+            mats,
+            PrimitiveSpawnSpec {
+                parent: root,
+                primitive_id,
+                material_id,
+                name: &format!(
+                    "Player/EquippedWeapon/{}/{}-{part_index}",
+                    definition.name, part.material_slot
+                ),
+                position: Vec3::ZERO,
+                scale: authored_scale,
+                color: [1.0, 1.0, 1.0, 1.0],
+                render_options: equipped_weapon_render_options(),
+            },
+        );
+        let skin = part.skin.expect("skin was validated above");
+        let _ = world.insert(
+            entity,
+            PlayerSkinBinding {
+                owner: root,
+                vertices: skin
+                    .vertices
+                    .into_iter()
+                    .map(|vertex| PlayerSkinVertex {
+                        joints: vertex.joints,
+                        weights: vertex.weights,
+                        joints_extra: vertex.joints_extra,
+                        weights_extra: vertex.weights_extra,
+                    })
+                    .collect(),
+                source_to_model: skin.source_to_model,
+            },
+        );
+        let _ = world.insert(
+            entity,
+            DisplayVisibility {
+                mode: DisplayMode::RuntimeHidden,
+            },
+        );
+        let _ = world.insert(entity, EquippedWeaponVisualPart { owner, root });
+        let _ = world.insert(
+            entity,
+            PlayerVisualPart {
+                owner,
+                part_index: part_index as u32,
+                kind: PlayerVisualKind::EquippedWeapon,
+                material_slot: part.material_slot,
+            },
+        );
+        let _ = world.insert(
+            entity,
+            PlayerViewVisibility {
+                base_mode: DisplayMode::GameOnly,
+                policy: PlayerViewVisibilityPolicy::AlwaysVisible,
+            },
+        );
+    }
+
+    if let Err(error) = crate::weapon_animation::bind_equipped_weapon_animation(
+        world,
+        root,
+        owner,
+        skeleton,
+        source_to_model,
+        &definition.weapon_animation,
+        last_shot_sequence,
+    ) {
+        clear_equipped_weapon_visual(world, owner);
+        return Err(format!(
+            "equipped weapon animation admission failed: {error}"
+        ));
+    }
+    newengine_ulog_api::ulog::info!(
+        "game-ready: equipped weapon native skin bound player={} item='{}' model='{}' joints={} policy='authored weapon skin + YCD palette; character and weapon reload share PlayerWeaponState'",
+        owner.stable_u64(),
+        definition.name,
+        model_ref,
+        world.get::<newengine_engine_runtime::gameplay::PlayerSkinPose>(root)
+            .map(|pose| pose.palette.len())
+            .unwrap_or(0),
+    );
+    Ok(root)
+}
+
 fn spawn_equipped_weapon_visual(
     world: &mut newengine_ecs::World,
     prims: &mut PrimitiveRegistry,
@@ -260,9 +468,51 @@ fn spawn_equipped_weapon_visual(
         .and_then(|binding| binding.visual_root)
         .filter(|root| world.exists(*root))
         .ok_or_else(|| "player avatar visual root is not ready".to_owned())?;
+    if definition.weapon_animation.skeleton.is_some() {
+        let admission = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            spawn_skinned_equipped_weapon_visual(
+                world,
+                prims,
+                mats,
+                owner,
+                binding,
+                &definition,
+                &world_definition,
+                model_ref,
+                avatar_root,
+            )
+        }));
+        return match admission {
+            Ok(result) => result,
+            Err(payload) => {
+                let panic_message = payload
+                    .downcast_ref::<&str>()
+                    .copied()
+                    .or_else(|| payload.downcast_ref::<String>().map(String::as_str))
+                    .unwrap_or("<non-string panic payload>");
+                eprintln!(
+                    "GAME_READY_SKINNED_WEAPON_PANIC owner={} item='{}' model='{}': {}",
+                    owner.stable_u64(),
+                    definition.name,
+                    model_ref,
+                    panic_message,
+                );
+                newengine_ulog_api::ulog::error!(
+                    "game-ready: skinned weapon admission panicked owner={} item='{}' model='{}': {}",
+                    owner.stable_u64(),
+                    definition.name,
+                    model_ref,
+                    panic_message,
+                );
+                Err(format!(
+                    "equipped skinned weapon admission panicked: {panic_message}"
+                ))
+            }
+        };
+    }
     let decoded = decode_runtime_ydd_prefab(model_ref)
         .map_err(|error| format!("equipped weapon model decode failed '{model_ref}': {error}"))?;
-    let alignment = weapon_visual_alignment(model_ref, &decoded)?;
+    let alignment = weapon_visual_alignment(&decoded, definition.weapon_presentation.enabled)?;
     // Resolve every authored material before admitting the visual. A temporary materials-service
     // gap must defer the whole weapon instead of freezing one or more parts on diagnostic black.
     let material_ids = decoded
@@ -376,8 +626,6 @@ fn spawn_equipped_weapon_visual(
 }
 
 const FIRST_PERSON_AIM_RESPONSE_HZ: f32 = 18.0;
-const RIFLE_RECOIL_RECOVERY_HZ: f32 =
-    3.0 / crate::weapon_grip::RIFLE_FIRE_KICK_DURATION_SECONDS;
 
 #[inline]
 fn first_person_aim_held(world: &newengine_ecs::World, owner: EntityId) -> bool {
@@ -416,14 +664,14 @@ fn smooth_first_person_aim_alpha(current: f32, target: f32, dt: f32) -> f32 {
     (current + (target - current) * alpha).clamp(0.0, 1.0)
 }
 
-pub(crate) fn equipped_rifle_aim_alpha(world: &newengine_ecs::World, owner: EntityId) -> f32 {
+pub(crate) fn equipped_weapon_aim_alpha(world: &newengine_ecs::World, owner: EntityId) -> f32 {
     world
         .query::<EquippedWeaponVisualRoot>()
         .find_map(|(_, visual)| (visual.owner == owner).then_some(visual.aim_alpha.clamp(0.0, 1.0)))
         .unwrap_or(0.0)
 }
 
-pub(crate) fn equipped_rifle_recoil_alpha(world: &newengine_ecs::World, owner: EntityId) -> f32 {
+pub(crate) fn equipped_weapon_recoil_alpha(world: &newengine_ecs::World, owner: EntityId) -> f32 {
     world
         .query::<EquippedWeaponVisualRoot>()
         .find_map(|(_, visual)| {
@@ -439,21 +687,36 @@ pub(crate) fn tick_equipped_weapon_presentation_input(world: &mut newengine_ecs:
         .query::<EquippedWeaponVisualRoot>()
         .map(|(entity, visual)| (entity, *visual))
         .collect::<Vec<_>>();
-    let dt = if dt.is_finite() && dt > 0.0 { dt.min(0.1) } else { 0.0 };
+    let dt = if dt.is_finite() && dt > 0.0 {
+        dt.min(0.1)
+    } else {
+        0.0
+    };
     for (root, visual) in roots {
         // RMB is a weapon state, not a first-person-only state. Third-person aim must drive the
         // same ReadyHold/ADS contract as full-body first person.
-        let aim_target = if first_person_aim_held(world, visual.owner) { 1.0 } else { 0.0 };
+        let aim_target = if first_person_aim_held(world, visual.owner) {
+            1.0
+        } else {
+            0.0
+        };
         let aim_alpha = smooth_first_person_aim_alpha(visual.aim_alpha, aim_target, dt);
         let shot_sequence = world
             .get::<PlayerWeaponState>(visual.owner)
             .map(|state| state.shot_sequence)
             .unwrap_or(visual.last_shot_sequence);
         let new_shot = shot_sequence != visual.last_shot_sequence;
+        let recoil_recovery_hz = world
+            .resource::<ItemCatalog>()
+            .and_then(|catalog| catalog.get(visual.item))
+            .map(|definition| definition.weapon_presentation.clone().sanitized())
+            .filter(|presentation| presentation.enabled)
+            .map(|presentation| 3.0 / presentation.fire_kick_duration_seconds.max(0.001))
+            .unwrap_or(18.0);
         let recoil_alpha = if new_shot {
             1.0
         } else if dt > 0.0 {
-            (visual.recoil_alpha * (-RIFLE_RECOIL_RECOVERY_HZ * dt).exp()).clamp(0.0, 1.0)
+            (visual.recoil_alpha * (-recoil_recovery_hz * dt).exp()).clamp(0.0, 1.0)
         } else {
             visual.recoil_alpha
         };
@@ -465,10 +728,11 @@ pub(crate) fn tick_equipped_weapon_presentation_input(world: &mut newengine_ecs:
     }
 }
 
-fn first_person_rifle_local_transform(
+fn first_person_weapon_local_transform(
     world: &newengine_ecs::World,
     owner: EntityId,
     visual_parent: EntityId,
+    presentation: &newengine_engine_runtime::gameplay::WeaponPresentationDefinition,
     aim_alpha: f32,
 ) -> Option<(Vec3, Quat)> {
     let (player_position, player_body_rotation) =
@@ -514,7 +778,8 @@ fn first_person_rifle_local_transform(
         .map(|rig| rig.position)
         .unwrap_or(player_position + Vec3::Y * eye_height);
 
-    let desired = crate::weapon_grip::rifle_root_from_first_person_view(
+    let desired = crate::weapon_grip::weapon_root_from_first_person_view(
+        presentation,
         camera_position,
         view_rotation,
         aim_alpha,
@@ -542,12 +807,15 @@ fn update_weapon_attachment(
     let Some(visual) = world.get::<EquippedWeaponVisualRoot>(root).copied() else {
         return;
     };
-    let model_ref = world
+    let weapon_definition = world
         .resource::<ItemCatalog>()
         .and_then(|catalog| catalog.get(visual.item))
-        .and_then(|definition| definition.world.model_ref.as_deref())
-        .unwrap_or_default();
-    let is_rifle = model_ref.eq_ignore_ascii_case(crate::weapon_grip::RIFLE_MODEL_REF);
+        .cloned();
+    let presentation = weapon_definition
+        .as_ref()
+        .map(|definition| definition.weapon_presentation.clone().sanitized())
+        .filter(|presentation| presentation.enabled);
+    let authored_weapon_presentation = presentation.is_some();
     let first_person_active = world
         .resource::<PlayerViewState>()
         .copied()
@@ -562,7 +830,7 @@ fn update_weapon_attachment(
 
     let mut right_frame_for_debug = None;
     let mut ready_body_frames_for_debug = None;
-    let resolved = if is_rifle && legacy_viewmodel_active {
+    let resolved = if authored_weapon_presentation && legacy_viewmodel_active {
         // Explicit legacy hidden-body mode keeps the old camera-owned viewmodel path. Full-body
         // first person must never enter this branch because visible hands/body need one shared
         // shoulder-owned rifle transform.
@@ -571,10 +839,16 @@ fn update_weapon_attachment(
             .and_then(|binding| binding.visual_root)
             .filter(|entity| world.exists(*entity));
         visual_parent.and_then(|visual_parent| {
-            first_person_rifle_local_transform(world, owner, visual_parent, aim_alpha)
+            first_person_weapon_local_transform(
+                world,
+                owner,
+                visual_parent,
+                presentation.as_ref().expect("authored presentation"),
+                aim_alpha,
+            )
         })
-    } else if is_rifle {
-        // Full-body ReadyHold: stock owns translation, view direction owns aiming rotation, and
+    } else if authored_weapon_presentation {
+        // Authored ReadyHold: stock owns translation, view direction owns aiming rotation, and
         // both arms solve against this exact root in player_model_animation.
         let body_frames = super::player_model::player_rifle_ready_body_frames(world, owner);
         let right_frame = super::player_model::player_right_hand_weapon_frame(world, owner);
@@ -587,7 +861,8 @@ fn update_weapon_attachment(
         ready_body_frames_for_debug = body_frames;
         right_frame_for_debug = right_frame;
         body_frames.and_then(|(chest, right_shoulder, left_shoulder)| {
-            crate::weapon_grip::rifle_ready_solve_contract_presented(
+            crate::weapon_grip::weapon_ready_solve_contract_presented(
+                presentation.as_ref().expect("authored presentation"),
                 chest,
                 right_shoulder,
                 left_shoulder,
@@ -627,14 +902,14 @@ fn update_weapon_attachment(
         newengine_transform::read_entity_world_pose_local_chain(world, root)
     {
         let weapon_rotation = weapon_rotation.normalize_or_identity();
-        let (muzzle_position, muzzle_forward) = if is_rifle {
-            let rifle_root = crate::weapon_grip::RifleRootTransform {
+        let (muzzle_position, muzzle_forward) = if let Some(presentation) = presentation.as_ref() {
+            let weapon_root = crate::weapon_grip::WeaponRootTransform {
                 position: weapon_position,
                 rotation: weapon_rotation,
             };
             (
-                crate::weapon_grip::rifle_muzzle_position(rifle_root),
-                crate::weapon_grip::rifle_muzzle_forward(rifle_root),
+                crate::weapon_grip::weapon_muzzle_position(presentation, weapon_root),
+                crate::weapon_grip::weapon_muzzle_forward(weapon_root),
             )
         } else {
             let forward = (weapon_rotation * Vec3::Z).normalize_or_zero();
@@ -651,7 +926,7 @@ fn update_weapon_attachment(
         }
     }
 
-    if is_rifle
+    if authored_weapon_presentation
         && !legacy_viewmodel_active
         && !visual.grip_debug_emitted
         && std::env::var_os("NORTHSTAR_DEBUG_WEAPON_GRIP").is_some()
@@ -666,18 +941,23 @@ fn update_weapon_attachment(
         };
         let right_palm = right_frame.transform_point3(Vec3::ZERO);
         let chest = chest_frame.transform_point3(Vec3::ZERO);
-        let Some(contract) = crate::weapon_grip::rifle_ready_solve_contract(
+        let presentation = presentation.as_ref().expect("authored presentation");
+        let Some(contract) = crate::weapon_grip::weapon_ready_solve_contract(
+            presentation,
             chest_frame,
             right_shoulder_frame,
             left_shoulder_frame,
         ) else {
             return;
         };
-        let rifle_root = contract.root;
-        let handle = crate::weapon_grip::rifle_handle_position(rifle_root);
-        let left_grip = crate::weapon_grip::rifle_ready_left_grip_position(rifle_root);
-        let right_target = crate::weapon_grip::rifle_ready_right_palm_position(rifle_root);
-        let left_target = crate::weapon_grip::rifle_ready_left_palm_position(rifle_root);
+        let weapon_root = contract.root;
+        let handle = crate::weapon_grip::weapon_handle_position(presentation, weapon_root);
+        let left_grip =
+            crate::weapon_grip::weapon_ready_left_grip_position(presentation, weapon_root);
+        let right_target =
+            crate::weapon_grip::weapon_ready_right_palm_position(presentation, weapon_root);
+        let left_target =
+            crate::weapon_grip::weapon_ready_left_palm_position(presentation, weapon_root);
         if let Some(left_frame) = super::player_model::player_left_hand_weapon_frame(world, owner) {
             let left_palm = left_frame.transform_point3(Vec3::ZERO);
             let right_error = (right_palm - right_target).length();

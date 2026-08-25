@@ -1,8 +1,7 @@
 use newengine_ecs::{EntityId, World};
-use newengine_game_data::default_game_data;
-use newengine_gameplay_fps_api::{FpsActionFrame, FpsGameplayPolicySnapshot};
+use newengine_gameplay_fps_api::{FpsActionFrame, FpsGameplayPolicySnapshot, WeaponShellCasing};
 use newengine_lighting::PointLight;
-use newengine_math::{EulerRot, Quat, Vec3};
+use newengine_math::{Quat, Vec3};
 use newengine_primitives::{builtins as prim_builtins, Primitive};
 use newengine_scene::{components::Name, SceneState};
 use newengine_sim::{AngularVelocity, CameraRigComp, Velocity};
@@ -11,8 +10,9 @@ use newengine_transform::Transform;
 use crate::game_data::active_game_data;
 
 use newengine_engine_runtime::gameplay::{
-    CollisionShapeDesc, DisplayVisibility, GameplayActor, PhysicsBodyDesc, PhysicsSurface,
-    PlayerCommandFrame, PlayerController, PlayerStanceState,
+    play_equipped_weapon_audio, CollisionShapeDesc, DisplayVisibility, EquippedWeaponBinding,
+    EquippedWeaponMuzzle, GameplayActor, ItemCatalog, ItemId, PhysicsBodyDesc, PhysicsSurface,
+    PlayerCommandFrame, PlayerController, PlayerStanceState, WeaponAudioAction,
 };
 
 /// Runtime tuning for the simple physics sphere launcher used by the GameReady FPS profile.
@@ -32,15 +32,16 @@ pub struct ProjectileSphereTuning {
 
 impl Default for ProjectileSphereTuning {
     fn default() -> Self {
-        let data = default_game_data().gameplay.projectile;
+        // Mechanics-safe values for explicit tests/tools only. Production launcher tuning is
+        // materialized from the active project's `GameDataSnapshot`.
         Self {
-            radius: data.radius,
-            speed: data.speed,
-            lifetime_seconds: data.lifetime_seconds,
-            spawn_clearance: data.spawn_clearance,
-            restitution: data.restitution,
-            friction: data.friction,
-            density: data.density,
+            radius: 0.12,
+            speed: 24.0,
+            lifetime_seconds: 5.0,
+            spawn_clearance: 0.35,
+            restitution: 0.2,
+            friction: 0.4,
+            density: 1.0,
         }
     }
 }
@@ -61,36 +62,17 @@ impl ProjectileSphereTuning {
 
     #[inline]
     pub fn sanitized(self) -> Self {
+        let fallback = Self::default();
         Self {
-            radius: finite_or(self.radius, default_game_data().gameplay.projectile.radius)
-                .clamp(0.03, 2.0),
-            speed: finite_or(self.speed, default_game_data().gameplay.projectile.speed)
-                .clamp(0.1, 250.0),
-            lifetime_seconds: finite_or(
-                self.lifetime_seconds,
-                default_game_data().gameplay.projectile.lifetime_seconds,
-            )
-            .clamp(0.25, 120.0),
-            spawn_clearance: finite_or(
-                self.spawn_clearance,
-                default_game_data().gameplay.projectile.spawn_clearance,
-            )
-            .clamp(0.05, 8.0),
-            restitution: finite_or(
-                self.restitution,
-                default_game_data().gameplay.projectile.restitution,
-            )
-            .clamp(0.0, 1.0),
-            friction: finite_or(
-                self.friction,
-                default_game_data().gameplay.projectile.friction,
-            )
-            .clamp(0.0, 2.0),
-            density: finite_or(
-                self.density,
-                default_game_data().gameplay.projectile.density,
-            )
-            .clamp(0.01, 1000.0),
+            radius: finite_or(self.radius, fallback.radius).clamp(0.03, 2.0),
+            speed: finite_or(self.speed, fallback.speed).clamp(0.1, 250.0),
+            lifetime_seconds: finite_or(self.lifetime_seconds, fallback.lifetime_seconds)
+                .clamp(0.25, 120.0),
+            spawn_clearance: finite_or(self.spawn_clearance, fallback.spawn_clearance)
+                .clamp(0.05, 8.0),
+            restitution: finite_or(self.restitution, fallback.restitution).clamp(0.0, 1.0),
+            friction: finite_or(self.friction, fallback.friction).clamp(0.0, 2.0),
+            density: finite_or(self.density, fallback.density).clamp(0.01, 1000.0),
         }
     }
 }
@@ -106,15 +88,12 @@ const WEAPON_TRACER_SPEED_MPS: f32 = 320.0;
 const WEAPON_TRACER_HALF_LENGTH_M: f32 = 0.12;
 const MUZZLE_FLASH_LIFETIME_SECONDS: f32 = 0.042;
 const MUZZLE_CORE_LIFETIME_SECONDS: f32 = 0.030;
-const SHELL_CASING_LIFETIME_SECONDS: f32 = 1.35;
-const SHELL_CASING_GRAVITY_MPS2: f32 = 9.81;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum WeaponShotFxKind {
     MuzzleFlash,
     MuzzleCore,
     Tracer,
-    ShellCasing,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -124,9 +103,18 @@ struct WeaponShotFxRuntime {
     kind: WeaponShotFxKind,
     origin: Vec3,
     velocity: Vec3,
-    spin_radians_per_second: Vec3,
     traveled: f32,
     max_distance: f32,
+    remaining_seconds: f32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct PendingWeaponShellEjection {
+    owner: EntityId,
+    shot_sequence: u64,
+    weapon_item_id: u64,
+    shot_origin: Vec3,
+    shot_direction: Vec3,
     remaining_seconds: f32,
 }
 
@@ -138,9 +126,9 @@ fn weapon_fx_render_options() -> newengine_model_domain_api::MeshRenderOptions {
 }
 
 /// Spawns presentation-only firing effects from the already-resolved physical muzzle. Damage and
-/// collision stay authoritative in the hitscan query path. The composition mirrors a shouldered
-/// semi-auto rifle: compact directional muzzle flame, hot core/light pulse, subtle tracer and a
-/// receiver-side brass casing. No presentation entity participates in ballistic collision.
+/// collision stay authoritative in the hitscan query path. The generic composition provides a
+/// compact directional muzzle flame, hot core/light pulse and tracer; an equipped weapon may also
+/// author a physical casing contract. No presentation entity participates in ballistic collision.
 pub(crate) fn spawn_weapon_shot_fx(
     world: &mut World,
     owner: EntityId,
@@ -191,7 +179,6 @@ pub(crate) fn spawn_weapon_shot_fx(
             kind: WeaponShotFxKind::MuzzleFlash,
             origin,
             velocity: Vec3::ZERO,
-            spin_radians_per_second: Vec3::ZERO,
             traveled: 0.0,
             max_distance: 0.0,
             remaining_seconds: MUZZLE_FLASH_LIFETIME_SECONDS,
@@ -242,7 +229,6 @@ pub(crate) fn spawn_weapon_shot_fx(
             kind: WeaponShotFxKind::MuzzleCore,
             origin,
             velocity: Vec3::ZERO,
-            spin_radians_per_second: Vec3::ZERO,
             traveled: 0.0,
             max_distance: 0.0,
             remaining_seconds: MUZZLE_CORE_LIFETIME_SECONDS,
@@ -288,29 +274,112 @@ pub(crate) fn spawn_weapon_shot_fx(
             kind: WeaponShotFxKind::Tracer,
             origin,
             velocity: direction * WEAPON_TRACER_SPEED_MPS,
-            spin_radians_per_second: Vec3::ZERO,
             traveled: WEAPON_TRACER_HALF_LENGTH_M,
             max_distance,
             remaining_seconds: (max_distance / WEAPON_TRACER_SPEED_MPS + 0.06).clamp(0.06, 0.8),
         },
     );
 
-    // Ejection basis is reconstructed from the muzzle ray. The casing originates near the
-    // receiver (~43 cm behind this rifle's muzzle) and is thrown outward/up, never from the crown.
+    // Physical casing behavior belongs to the equipped weapon definition. Weapons without an
+    // authored casing contract simply do not schedule a casing entity.
+    let casing_contract = world
+        .get::<EquippedWeaponBinding>(owner)
+        .copied()
+        .and_then(|binding| {
+            world
+                .resource::<ItemCatalog>()?
+                .get(binding.item)
+                .map(|definition| {
+                    (
+                        binding.item.raw(),
+                        definition.weapon_casing.clone().sanitized(),
+                    )
+                })
+        })
+        .filter(|(_, casing)| casing.enabled());
+    if let Some((weapon_item_id, casing)) = casing_contract {
+        let pending = world.spawn();
+        let _ = world.insert(
+            pending,
+            Name(format!(
+                "WeaponFx/ShellEjectionPending/{:016x}/{shot_sequence}",
+                owner.stable_u64()
+            )),
+        );
+        let _ = world.insert(
+            pending,
+            PendingWeaponShellEjection {
+                owner,
+                shot_sequence,
+                weapon_item_id,
+                shot_origin: origin,
+                shot_direction: direction,
+                remaining_seconds: casing.ejection_delay_seconds,
+            },
+        );
+    }
+}
+
+fn spawn_persistent_shell_casing(
+    world: &mut World,
+    owner: EntityId,
+    shot_sequence: u64,
+    weapon_item_id: u64,
+    fallback_origin: Vec3,
+    fallback_direction: Vec3,
+) -> Option<EntityId> {
+    let casing_definition = world
+        .resource::<ItemCatalog>()?
+        .get(ItemId(weapon_item_id))?
+        .weapon_casing
+        .clone()
+        .sanitized();
+    if !casing_definition.enabled() {
+        return None;
+    }
+    let (origin, direction) = world
+        .get::<EquippedWeaponMuzzle>(owner)
+        .copied()
+        .map(|muzzle| (muzzle.position, muzzle.forward.normalize_or_zero()))
+        .filter(|(position, forward)| position.is_finite() && forward.length_squared() > 1.0e-8)
+        .unwrap_or((fallback_origin, fallback_direction.normalize_or_zero()));
+    if !origin.is_finite() || direction.length_squared() <= 1.0e-8 {
+        return None;
+    }
+
     let mut right = direction.cross(Vec3::Y).normalize_or_zero();
     if right.length_squared() <= 1.0e-8 {
         right = Vec3::X;
     }
     let up = right.cross(direction).normalize_or_zero();
-    let jitter = (((shot_sequence.wrapping_mul(1_103_515_245).wrapping_add(12_345) >> 8)
+    let jitter = (((shot_sequence
+        .wrapping_mul(1_103_515_245)
+        .wrapping_add(12_345)
+        >> 8)
         & 0xffff) as f32
         / 65_535.0)
         - 0.5;
-    let casing_origin = origin - direction * 0.43 + right * 0.050 + up * 0.025;
-    let casing_velocity = right * (1.85 + jitter * 0.35)
-        + up * (1.25 + jitter.abs() * 0.25)
-        - direction * 0.22;
-    let casing_axis = (right * 0.85 + up * 0.15).normalize_or_zero();
+    let local_vector = |value: [f32; 3]| right * value[0] + up * value[1] + direction * value[2];
+    let casing_origin = origin + local_vector(casing_definition.origin_local);
+    let velocity_local = [
+        casing_definition.velocity_local[0] + jitter * casing_definition.velocity_jitter[0],
+        casing_definition.velocity_local[1] + jitter * casing_definition.velocity_jitter[1],
+        casing_definition.velocity_local[2] + jitter * casing_definition.velocity_jitter[2],
+    ];
+    let casing_velocity = local_vector(velocity_local);
+    let casing_axis = local_vector(casing_definition.axis_local).normalize_or_zero();
+    let casing_axis = if casing_axis.length_squared() > 1.0e-8 {
+        casing_axis
+    } else {
+        right
+    };
+    let casing_rotation = Quat::from_rotation_arc(Vec3::Z, casing_axis).normalize_or_identity();
+    let variant_count = casing_definition
+        .variants
+        .len()
+        .min(u16::MAX as usize)
+        .max(1);
+    let variant = (shot_sequence % variant_count as u64) as u16;
     let casing = world.spawn();
     let _ = world.insert(
         casing,
@@ -323,34 +392,50 @@ pub(crate) fn spawn_weapon_shot_fx(
         casing,
         Transform {
             position: casing_origin,
-            rotation: Quat::from_rotation_arc(Vec3::Y, casing_axis).normalize_or_identity(),
-            scale: Vec3::new(0.010, 0.026, 0.010),
+            rotation: casing_rotation,
+            scale: Vec3::ONE,
         },
     );
-    let _ = world.insert(
-        casing,
-        Primitive {
-            id: prim_builtins::ID_CYLINDER,
-            color: [0.72, 0.48, 0.18, 1.0],
-        },
-    );
+    // Model-backed casings use an invisible staging root. The world presentation provider admits
+    // the authored model/material hierarchy atomically, so no generic brass-colored cube leaks in.
     let _ = world.insert(casing, DisplayVisibility::default());
     let _ = world.insert(casing, GameplayActor);
-    let _ = world.insert(casing, weapon_fx_render_options());
+    let _ = world.insert(casing, PhysicsSurface::default());
+
+    let mut body = PhysicsBodyDesc::dynamic_solid(CollisionShapeDesc::Box {
+        half_extents: casing_definition.half_extents,
+    });
+    body.material.friction = casing_definition.friction;
+    body.material.restitution = casing_definition.restitution;
+    body.material.density = casing_definition.density;
+    let _ = world.insert(casing, body);
+    let _ = world.insert(casing, body.to_bounds());
+    let _ = world.insert(casing, Velocity(casing_velocity));
+    let angular_local = [
+        casing_definition.angular_velocity[0]
+            + jitter * casing_definition.angular_velocity_jitter[0],
+        casing_definition.angular_velocity[1]
+            + jitter * casing_definition.angular_velocity_jitter[1],
+        casing_definition.angular_velocity[2]
+            + jitter * casing_definition.angular_velocity_jitter[2],
+    ];
+    let _ = world.insert(casing, AngularVelocity(local_vector(angular_local)));
     let _ = world.insert(
         casing,
-        WeaponShotFxRuntime {
-            owner,
-            shot_sequence,
-            kind: WeaponShotFxKind::ShellCasing,
-            origin: casing_origin,
-            velocity: casing_velocity,
-            spin_radians_per_second: Vec3::new(18.0 + jitter * 4.0, 11.0, 23.0 - jitter * 5.0),
-            traveled: 0.0,
-            max_distance: 0.0,
-            remaining_seconds: SHELL_CASING_LIFETIME_SECONDS,
-        },
+        WeaponShellCasing::new(owner.stable_u64(), shot_sequence, weapon_item_id, variant),
     );
+    play_equipped_weapon_audio(world, owner, WeaponAudioAction::ShellEject);
+    newengine_ulog_api::ulog::info!(
+        "weapon casing ejected entity={} owner={} shot={} weapon_item={:016x} variant={} delay_ms={:.3} collider_half_extents={:?} physics='dynamic' persistence='world' visual='authored-definition'",
+        casing.stable_u64(),
+        owner.stable_u64(),
+        shot_sequence,
+        weapon_item_id,
+        variant,
+        casing_definition.ejection_delay_seconds * 1000.0,
+        casing_definition.half_extents,
+    );
+    Some(casing)
 }
 
 /// Narrows an already spawned tracer to the authoritative hitscan impact. The tracer continues
@@ -387,6 +472,28 @@ pub(crate) fn step_weapon_shot_fx(world: &mut World, dt: f32) {
     if dt <= 0.0 {
         return;
     }
+
+    let pending_ejections = world
+        .query::<PendingWeaponShellEjection>()
+        .map(|(entity, pending)| (entity, *pending))
+        .collect::<Vec<_>>();
+    for (entity, mut pending) in pending_ejections {
+        pending.remaining_seconds -= dt;
+        if pending.remaining_seconds <= 0.0 {
+            let _ = spawn_persistent_shell_casing(
+                world,
+                pending.owner,
+                pending.shot_sequence,
+                pending.weapon_item_id,
+                pending.shot_origin,
+                pending.shot_direction,
+            );
+            let _ = world.despawn(entity);
+        } else {
+            let _ = world.insert(entity, pending);
+        }
+    }
+
     let effects = world
         .query::<WeaponShotFxRuntime>()
         .map(|(entity, runtime)| (entity, *runtime))
@@ -412,18 +519,6 @@ pub(crate) fn step_weapon_shot_fx(world: &mut World, dt: f32) {
                     }
                 }
             }
-            WeaponShotFxKind::ShellCasing if !expire => {
-                runtime.velocity.y -= SHELL_CASING_GRAVITY_MPS2 * dt;
-                if let Some(transform) = world.get_mut::<Transform>(entity) {
-                    transform.position += runtime.velocity * dt;
-                    let spin = runtime.spin_radians_per_second * dt;
-                    transform.rotation = (
-                        Quat::from_euler(EulerRot::XYZ, spin.x, spin.y, spin.z)
-                            * transform.rotation
-                    )
-                        .normalize_or_identity();
-                }
-            }
             _ => {}
         }
         if expire {
@@ -443,12 +538,13 @@ pub fn step_projectile_sphere_launcher(world: &mut World, dt: f32) {
         .resource::<FpsGameplayPolicySnapshot>()
         .map(|policy| policy.player.allow_projectile_launch)
         .unwrap_or(true);
+    let Some(game_data) = active_game_data(world) else {
+        return;
+    };
     let tuning = world
         .resource::<ProjectileSphereTuning>()
         .copied()
-        .unwrap_or_else(|| {
-            ProjectileSphereTuning::from_data(&active_game_data(world).gameplay.projectile)
-        })
+        .unwrap_or_else(|| ProjectileSphereTuning::from_data(&game_data.gameplay.projectile))
         .sanitized();
 
     let launch_requests = world
@@ -479,6 +575,9 @@ pub fn spawn_projectile_sphere(
     tuning: ProjectileSphereTuning,
 ) -> Option<EntityId> {
     let tuning = tuning.sanitized();
+    let game_data = active_game_data(world)?;
+    let projectile_color = game_data.gameplay.projectile.color;
+    let projectile_angular_velocity = game_data.gameplay.projectile.angular_velocity;
     let direction = camera_forward.normalize_or_zero();
     if direction.length_squared() <= 1.0e-8 || !camera_origin.is_finite() {
         return None;
@@ -508,7 +607,7 @@ pub fn spawn_projectile_sphere(
         entity,
         Primitive {
             id: prim_builtins::ID_SPHERE_UV,
-            color: active_game_data(world).gameplay.projectile.color,
+            color: projectile_color,
         },
     );
     let _ = world.insert(entity, DisplayVisibility::default());
@@ -532,7 +631,7 @@ pub fn spawn_projectile_sphere(
     let _ = world.insert(
         entity,
         AngularVelocity({
-            let v = active_game_data(world).gameplay.projectile.angular_velocity;
+            let v = projectile_angular_velocity;
             Vec3::new(v[0], v[1], v[2])
         }),
     );
@@ -579,10 +678,10 @@ fn camera_center_ray(world: &World, player: EntityId) -> Option<(Vec3, Vec3)> {
 
     // Safe first-person fallback for tests/headless simulation without an active camera entity.
     let transform = world.get::<Transform>(player).copied()?;
-    let eye_height = world
-        .get::<PlayerStanceState>(player)
-        .map(|stance| stance.current_eye_height)
-        .unwrap_or(active_game_data(world).player.tuning.camera_eye_height);
+    let eye_height = match world.get::<PlayerStanceState>(player) {
+        Some(stance) => stance.current_eye_height,
+        None => active_game_data(world)?.player.tuning.camera_eye_height,
+    };
     let forward = (transform.rotation * -Vec3::Z).normalize_or_zero();
     (forward.length_squared() > 1.0e-8)
         .then_some((transform.position + Vec3::Y * eye_height, forward))
@@ -675,7 +774,31 @@ mod tests {
     #[test]
     fn weapon_shot_fx_starts_at_muzzle_and_stops_at_hitscan_impact() {
         let mut world = World::new();
+        let package = crate::item_assets::compile_authored_item_package(
+            &crate::item_assets::test_fps_item_package(),
+        )
+        .expect("compile test item package");
+        crate::item_assets::install_compiled_item_package(&mut world, package);
+        let (rifle_id, ammo_id) = {
+            let catalog = world.resource::<ItemCatalog>().expect("item catalog");
+            (
+                catalog
+                    .find("weapon.rifle.standard")
+                    .expect("test rifle")
+                    .id,
+                catalog.find("ammo.rifle.standard").expect("test ammo").id,
+            )
+        };
         let owner = world.spawn();
+        let _ = world.insert(
+            owner,
+            EquippedWeaponBinding {
+                instance_id: newengine_engine_runtime::gameplay::ItemInstanceId(1),
+                item: rifle_id,
+                slot: newengine_engine_runtime::gameplay::EquipmentSlot::Primary,
+                ammo_item: ammo_id,
+            },
+        );
         let origin = Vec3::new(1.0, 1.5, 2.0);
         let direction = -Vec3::Z;
         spawn_weapon_shot_fx(&mut world, owner, 17, origin, direction, 120.0);
@@ -684,7 +807,7 @@ mod tests {
             .query::<WeaponShotFxRuntime>()
             .map(|(entity, runtime)| (entity, *runtime))
             .collect::<Vec<_>>();
-        assert_eq!(effects.len(), 4);
+        assert_eq!(effects.len(), 3);
         let (tracer, tracer_runtime) = effects
             .iter()
             .copied()
@@ -697,16 +820,16 @@ mod tests {
         assert!((tracer_runtime.origin - origin).length() < 1.0e-6);
         assert!(tracer_runtime.velocity.normalize_or_zero().dot(direction) > 0.999_999);
         assert!(tracer_transform.position.z < origin.z);
-        let (casing, casing_runtime) = effects
-            .iter()
-            .copied()
-            .find(|(_, runtime)| runtime.kind == WeaponShotFxKind::ShellCasing)
-            .expect("shell casing");
-        let casing_before = world.get::<Transform>(casing).copied().expect("casing transform");
-        assert!(casing_runtime.velocity.length() > 1.0);
-        step_weapon_shot_fx(&mut world, 0.0005);
-        let casing_after = world.get::<Transform>(casing).copied().expect("moving casing");
-        assert!((casing_after.position - casing_before.position).length() > 0.001);
+        assert_eq!(
+            world.query::<WeaponShellCasing>().count(),
+            0,
+            "casing must not eject on ignition frame; native slide has not moved yet"
+        );
+        assert_eq!(
+            world.query::<PendingWeaponShellEjection>().count(),
+            1,
+            "shot must schedule one native frame-1 casing ejection"
+        );
 
         let hit = origin + direction * 1.0;
         clamp_weapon_shot_fx_to_hit(&mut world, owner, 17, hit);
@@ -726,6 +849,41 @@ mod tests {
         assert!(
             !world.exists(tracer),
             "tracer must terminate at authoritative hit range"
+        );
+        assert_eq!(
+            world.query::<WeaponShellCasing>().count(),
+            0,
+            "12 ms is still before the recovered frame-1 ejection boundary"
+        );
+        step_weapon_shot_fx(&mut world, 0.010);
+        assert_eq!(world.query::<WeaponShellCasing>().count(), 0);
+        step_weapon_shot_fx(&mut world, 0.012);
+        let casings = world
+            .query::<WeaponShellCasing>()
+            .map(|(entity, casing)| (entity, *casing))
+            .collect::<Vec<_>>();
+        assert_eq!(casings.len(), 1);
+        assert_eq!(world.query::<PendingWeaponShellEjection>().count(), 0);
+        let (casing, casing_semantic) = casings[0];
+        assert_eq!(casing_semantic.owner_stable_id, owner.stable_u64());
+        assert_eq!(casing_semantic.shot_sequence, 17);
+        assert_eq!(casing_semantic.weapon_item_id, rifle_id.raw());
+        assert!(casing_semantic.variant < 5);
+        assert!(world
+            .get::<Velocity>(casing)
+            .is_some_and(|value| value.0.length() > 1.0));
+        assert!(world.get::<AngularVelocity>(casing).is_some());
+        assert!(matches!(
+            world.get::<PhysicsBodyDesc>(casing).map(|body| body.shape),
+            Some(CollisionShapeDesc::Box { .. })
+        ));
+        // Presentation FX may expire, but physical brass is deliberately persistent.
+        for _ in 0..30 {
+            step_weapon_shot_fx(&mut world, 0.1);
+        }
+        assert!(
+            world.exists(casing),
+            "spent casing must remain in the world after settling"
         );
     }
 

@@ -333,6 +333,46 @@ impl Default for UiEditorRuntimeState {
     }
 }
 
+/// Shared activation contract for the live in-game world editor.
+///
+/// This is intentionally a UI/runtime intent DTO: the editing-tools plugin and
+/// engine runtime own the behavior, while screen composition consumes only this
+/// state to show or hide editor chrome. Free-fly and noclip are part of the
+/// unified Editor Mode so the user never has to discover separate debug toggles.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UiInGameEditorState {
+    pub version: u32,
+    pub frame_index: u64,
+    pub enabled: bool,
+    pub free_fly: bool,
+    pub noclip: bool,
+    pub save_available: bool,
+    pub dirty_placements: usize,
+    pub pending_creates: usize,
+    pub pending_deletes: usize,
+    pub last_save_succeeded: Option<bool>,
+    pub last_save_message: String,
+}
+
+impl Default for UiInGameEditorState {
+    fn default() -> Self {
+        Self {
+            version: 1,
+            frame_index: 0,
+            enabled: false,
+            free_fly: true,
+            noclip: true,
+            save_available: true,
+            dirty_placements: 0,
+            pending_creates: 0,
+            pending_deletes: 0,
+            last_save_succeeded: None,
+            last_save_message: String::new(),
+        }
+    }
+}
+
 /// Pixel-space viewport slot published by the editor shell.
 ///
 /// The renderer consumes this DTO to render the world into an offscreen viewport

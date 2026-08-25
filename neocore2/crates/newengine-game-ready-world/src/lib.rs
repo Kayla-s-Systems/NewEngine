@@ -31,6 +31,10 @@ mod sky;
 mod terrain_heightmap;
 #[path = "game_ready_parts/terrain_streaming.rs"]
 mod terrain_streaming;
+#[path = "game_ready_parts/weapon_animation.rs"]
+mod weapon_animation;
+#[path = "game_ready_parts/weapon_casing.rs"]
+mod weapon_casing;
 #[path = "game_ready_parts/weapon_grip.rs"]
 mod weapon_grip;
 #[path = "game_ready_parts/world_model.rs"]
@@ -125,20 +129,6 @@ use self::material_source::*;
 use self::materials_terrain::*;
 use self::sky::*;
 
-/// Assemble the authored GameReady world through the product-owned world package.
-pub fn bootstrap_world_scene(
-    scene: &mut Scene,
-    primitives: &mut PrimitiveRegistry,
-    materials: &MaterialRegistry,
-) -> Option<EntityId> {
-    bootstrap_world_scene_with_data(
-        scene,
-        primitives,
-        materials,
-        GameDataSnapshot::rust_defaults(),
-    )
-}
-
 /// Assemble the authored world using an immutable provider-produced data snapshot.
 /// This is the Lua-ready entrypoint: the world package does not care who produced the data.
 pub fn bootstrap_world_scene_with_data(
@@ -177,6 +167,8 @@ pub fn tick_frame(
     player_model::tick_player_skin_animation(world, frame.dt);
     player_model::publish_player_first_person_camera_anchors(world);
     equipment_visual::tick_equipped_weapon_visuals(world, primitives, materials, frame.dt);
+    weapon_casing::tick_weapon_shell_casing_visuals(world, primitives, materials);
+    weapon_animation::tick_equipped_weapon_animations(world, frame.dt);
     tick_game_ready_static_world_prefabs(world, primitives, materials, thread_pool);
     tick_deferred_foliage_prefabs(world, primitives, materials);
     tick_deferred_item_pickups(world, primitives, materials);

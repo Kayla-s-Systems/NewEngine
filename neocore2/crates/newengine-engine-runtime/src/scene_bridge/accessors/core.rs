@@ -44,6 +44,7 @@ impl SceneBridge {
     }
 
     pub fn set_selection(&self, id: Option<EntityId>) {
+        let id = id.map(|entity| self.authored_actor_selection_root(entity));
         let changed = {
             let mut selection = self.selection.lock();
             let mut set = self.selection_set.lock();
@@ -59,6 +60,7 @@ impl SceneBridge {
     }
 
     pub fn toggle_selection(&self, id: EntityId) {
+        let id = self.authored_actor_selection_root(id);
         let primary = {
             let mut set = self.selection_set.lock();
             if let Some(index) = set.iter().position(|candidate| *candidate == id) {
@@ -76,6 +78,7 @@ impl SceneBridge {
     pub fn replace_selections(&self, ids: impl IntoIterator<Item = EntityId>) {
         let mut unique = Vec::new();
         for id in ids {
+            let id = self.authored_actor_selection_root(id);
             if !unique.contains(&id) {
                 unique.push(id);
             }
@@ -84,6 +87,37 @@ impl SceneBridge {
         *self.selection_set.lock() = unique;
         *self.selection.lock() = primary;
         self.refresh_selection_authority_and_inspector(primary);
+    }
+
+    fn authored_actor_selection_root(&self, entity: EntityId) -> EntityId {
+        let scene = self.scene.read();
+        let world = scene.world();
+        let mut current = entity;
+        for _ in 0..64 {
+            if world
+                .get::<crate::gameplay::AuthoredMapPlacement>(current)
+                .is_some_and(|authored| authored.primary)
+            {
+                return current;
+            }
+            let Some(parent_key) = world
+                .get::<newengine_transform_api::Parent>(current)
+                .map(|parent| parent.0.stable_id)
+            else {
+                break;
+            };
+            let Some(parent) = world
+                .iter_entities()
+                .find(|candidate| candidate.stable_u64() == parent_key)
+            else {
+                break;
+            };
+            if parent == current {
+                break;
+            }
+            current = parent;
+        }
+        entity
     }
 
     fn refresh_selection_authority_and_inspector(&self, id: Option<EntityId>) {
@@ -114,6 +148,12 @@ impl SceneBridge {
         if !changed {
             return enabled;
         }
+
+        // Editor Mode owns the screen as one product mode. Hiding the gameplay HUD
+        // prevents crosshair/ammo overlays from leaking into the authoring viewport.
+        // Visibility is restored when F2 exits back to gameplay.
+        let _ = crate::ui_gateway::set_surface_visible(GAME_HUD_SURFACE_ID, !enabled);
+
         if !enabled {
             *self.selection.lock() = None;
             self.selection_set.lock().clear();
@@ -128,8 +168,10 @@ impl SceneBridge {
             self.publish_inspector_state(self.selection());
         }
         newengine_ulog_api::ulog::info!(
-            "in-game editor: mode={} source='engine.scene' center_pick={} gameplay_input_gated={}",
+            "in-game editor: mode={} source='engine.scene' center_pick={} gameplay_input_gated={} free_fly={} noclip={}",
             if enabled { "edit" } else { "play" },
+            enabled,
+            enabled,
             enabled,
             enabled,
         );

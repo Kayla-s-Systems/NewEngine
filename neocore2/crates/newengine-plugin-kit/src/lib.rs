@@ -77,6 +77,25 @@ macro_rules! export_newengine_plugin_signature {
 /// Export the common case where one module type implements `PluginModule`.
 #[macro_export]
 macro_rules! export_newengine_plugin {
+    (module = $module:expr, editor_extensions_v1 = $editor_extensions:path $(, icon_png = $icon:path)? $(,)?) => {
+        extern "C" fn create_module() -> $crate::plugin_api::PluginModuleDyn<'static> {
+            $crate::plugin_api::PluginModule_TO::from_value(
+                $module,
+                $crate::abi_stable::sabi_trait::TD_Opaque,
+            )
+        }
+
+        extern "C" fn ui_assets_v1() -> $crate::plugin_api::PluginUiAssetsV1 {
+            $crate::export_newengine_plugin!(@ui_assets $($icon)?)
+        }
+
+        $crate::plugin_api::export_plugin_root!(
+            create_module,
+            ui_assets_v1,
+            $editor_extensions
+        );
+    };
+
     (module = $module:expr $(, icon_png = $icon:path)? $(,)?) => {
         extern "C" fn create_module() -> $crate::plugin_api::PluginModuleDyn<'static> {
             $crate::plugin_api::PluginModule_TO::from_value(

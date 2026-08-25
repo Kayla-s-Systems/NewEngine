@@ -1,6 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use std::sync::Arc;
+use std::{collections::BTreeSet, sync::Arc};
 
 use newengine_gameplay_script_api::GameplayCommandBuffer;
 use serde::{Deserialize, Serialize};
@@ -17,6 +17,8 @@ pub struct FpsGameplayPolicySnapshot {
     /// conversion from this DTO into generic engine inventory components.
     pub content: serde_json::Value,
     pub required_content: FpsRequiredContentPolicy,
+    /// Project-authored playable character catalog. The FPS runtime only applies these descriptors.
+    pub characters: Vec<FpsPlayableCharacterPolicy>,
     pub player: FpsPlayerPolicy,
     pub combat: FpsCombatPolicy,
     pub mission: FpsMissionPolicy,
@@ -35,6 +37,7 @@ impl Default for FpsGameplayPolicySnapshot {
                 "loadouts": []
             }),
             required_content: FpsRequiredContentPolicy::default(),
+            characters: Vec::new(),
             player: FpsPlayerPolicy::default(),
             combat: FpsCombatPolicy::default(),
             mission: FpsMissionPolicy::default(),
@@ -61,6 +64,27 @@ impl FpsGameplayPolicySnapshot {
             return Err("FPS gameplay policy content must be an item-package object".to_owned());
         }
         self.required_content.validate()?;
+        let mut character_ids = BTreeSet::new();
+        let mut character_aliases = BTreeSet::new();
+        for character in &self.characters {
+            character.validate()?;
+            let id_key = character.id.trim().to_ascii_lowercase();
+            if !character_ids.insert(id_key.clone()) {
+                return Err(format!(
+                    "duplicate FPS playable character id '{}'",
+                    character.id
+                ));
+            }
+            for alias in &character.aliases {
+                let alias_key = alias.trim().to_ascii_lowercase();
+                if alias_key == id_key || !character_aliases.insert(alias_key.clone()) {
+                    return Err(format!(
+                        "duplicate/ambiguous FPS playable character alias '{}'",
+                        alias
+                    ));
+                }
+            }
+        }
         self.player.validate()?;
         self.combat.validate()?;
         self.mission.validate()?;
@@ -81,10 +105,10 @@ pub struct FpsRequiredContentPolicy {
 impl Default for FpsRequiredContentPolicy {
     fn default() -> Self {
         Self {
-            default_loadout: "loadout.fps.default".to_owned(),
-            primary_weapon: "weapon.rifle.standard".to_owned(),
-            primary_ammo: "ammo.rifle.standard".to_owned(),
-            medkit: "consumable.medkit.standard".to_owned(),
+            default_loadout: String::new(),
+            primary_weapon: String::new(),
+            primary_ammo: String::new(),
+            medkit: String::new(),
         }
     }
 }
@@ -105,6 +129,277 @@ impl FpsRequiredContentPolicy {
         }
         Ok(())
     }
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct FpsPlayableCharacterAnimations {
+    pub idle: Option<String>,
+    pub walk: Option<String>,
+    pub run: Option<String>,
+    pub sprint: Option<String>,
+    pub crouch_idle: Option<String>,
+    pub crouch_walk: Option<String>,
+    pub jump: Option<String>,
+    pub fall: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct FpsJointRotationWeightPolicy {
+    pub joint: String,
+    pub weight: f32,
+}
+
+impl Default for FpsJointRotationWeightPolicy {
+    fn default() -> Self {
+        Self {
+            joint: String::new(),
+            weight: 0.0,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct FpsCharacterPresentationPolicy {
+    /// Compatibility reconstruction for rigs whose authored control/face branches are detached
+    /// from the primary deform hierarchy. Enabled only by project-authored character data.
+    pub detached_head_follow: bool,
+    pub eye_parent_follow: bool,
+    /// Optional upper-body equipment pose clips authored for this character rig.
+    pub equipment_ready_animation: Option<String>,
+    pub equipment_aim_animation: Option<String>,
+    pub equipment_reload_animation: Option<String>,
+    pub equipment_ready_sample_phase: f32,
+    pub equipment_ready_rotation_weights: Vec<FpsJointRotationWeightPolicy>,
+    pub equipment_aim_rotation_weights: Vec<FpsJointRotationWeightPolicy>,
+    pub equipment_reload_rotation_weights: Vec<FpsJointRotationWeightPolicy>,
+    /// Allows the generic two-arm equipment IK stage for compatible humanoid joint names.
+    pub equipment_arm_ik: bool,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct FpsPlayableCharacterPolicy {
+    pub id: String,
+    /// Project-owned grouping label shown by UI. The runtime does not interpret it.
+    pub family: String,
+    pub display_name: String,
+    pub subtitle: String,
+    pub rig_label: String,
+    pub source_provenance: String,
+    /// Alias tokens accepted after `game.character.select.` for save/action compatibility.
+    pub aliases: Vec<String>,
+    pub runtime_ready: bool,
+    pub runtime_model_ref: Option<String>,
+    pub properties_ref: Option<String>,
+    pub texture_dictionary: Option<String>,
+    pub skeleton_ref: Option<String>,
+    pub animations: FpsPlayableCharacterAnimations,
+    pub presentation: FpsCharacterPresentationPolicy,
+    pub target_height: f32,
+    pub yaw_offset: f32,
+    pub hide_in_first_person: bool,
+}
+
+impl Default for FpsPlayableCharacterPolicy {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            family: String::new(),
+            display_name: String::new(),
+            subtitle: String::new(),
+            rig_label: String::new(),
+            source_provenance: String::new(),
+            aliases: Vec::new(),
+            runtime_ready: false,
+            runtime_model_ref: None,
+            properties_ref: None,
+            texture_dictionary: None,
+            skeleton_ref: None,
+            animations: FpsPlayableCharacterAnimations::default(),
+            presentation: FpsCharacterPresentationPolicy::default(),
+            target_height: 0.0,
+            yaw_offset: 0.0,
+            hide_in_first_person: false,
+        }
+    }
+}
+
+impl FpsPlayableCharacterPolicy {
+    fn validate(&self) -> Result<(), String> {
+        for (label, value) in [
+            ("id", self.id.as_str()),
+            ("family", self.family.as_str()),
+            ("display_name", self.display_name.as_str()),
+        ] {
+            if value.trim().is_empty() {
+                return Err(format!(
+                    "FPS playable character '{label}' must not be empty"
+                ));
+            }
+        }
+        for alias in &self.aliases {
+            let alias = alias.trim();
+            if alias.is_empty()
+                || alias.contains('@')
+                || alias.contains('/')
+                || alias.contains('\\')
+                || alias.starts_with("game.character.select.")
+            {
+                return Err(format!(
+                    "FPS playable character alias must be a stable action token, got '{alias}'"
+                ));
+            }
+        }
+        if !self.yaw_offset.is_finite() {
+            return Err(format!(
+                "FPS playable character '{}' yaw_offset must be finite",
+                self.id
+            ));
+        }
+        if self.runtime_ready {
+            let source = self.runtime_model_ref.as_deref().unwrap_or_default().trim();
+            if source.is_empty() {
+                return Err(format!(
+                    "runtime-ready FPS playable character '{}' requires runtime_model_ref",
+                    self.id
+                ));
+            }
+            if !self.target_height.is_finite() || !(0.1..=10.0).contains(&self.target_height) {
+                return Err(format!(
+                    "runtime-ready FPS playable character '{}' target_height must be finite in [0.1, 10.0]",
+                    self.id
+                ));
+            }
+        }
+        let animation_refs = [
+            ("idle", self.animations.idle.as_deref()),
+            ("walk", self.animations.walk.as_deref()),
+            ("run", self.animations.run.as_deref()),
+            ("sprint", self.animations.sprint.as_deref()),
+            ("crouch_idle", self.animations.crouch_idle.as_deref()),
+            ("crouch_walk", self.animations.crouch_walk.as_deref()),
+            ("jump", self.animations.jump.as_deref()),
+            ("fall", self.animations.fall.as_deref()),
+        ];
+        for (label, value) in animation_refs {
+            if value.is_some_and(|value| value.trim().is_empty()) {
+                return Err(format!(
+                    "FPS playable character '{}' animation '{label}' must not be blank",
+                    self.id
+                ));
+            }
+        }
+
+        // A character whose runtime model lives in `models/characters/<owner>/...` owns
+        // its animation namespace as well. This makes cross-character retarget/fallback
+        // impossible to author accidentally (e.g. Ellie -> Abby YCD) while still allowing
+        // non-character legacy/test models that do not use the character namespace.
+        if let Some(model_ref) = self.runtime_model_ref.as_deref() {
+            if let Some(owner) = character_asset_owner(model_ref) {
+                for (label, reference) in animation_refs {
+                    let Some(reference) = reference else { continue };
+                    let animation_owner = character_asset_owner(reference).ok_or_else(|| {
+                        format!(
+                            "FPS playable character '{}' animation '{label}' must live under animations/characters/{owner}/..., got '{reference}'",
+                            self.id
+                        )
+                    })?;
+                    if animation_owner != owner {
+                        return Err(format!(
+                            "FPS playable character '{}' animation '{label}' crosses character ownership model_owner='{owner}' animation_owner='{animation_owner}' ref='{reference}'",
+                            self.id
+                        ));
+                    }
+                }
+                if let Some(skeleton_ref) = self.skeleton_ref.as_deref() {
+                    if let Some(skeleton_owner) = character_asset_owner(skeleton_ref) {
+                        if skeleton_owner != owner {
+                            return Err(format!(
+                                "FPS playable character '{}' skeleton crosses character ownership model_owner='{owner}' skeleton_owner='{skeleton_owner}' ref='{skeleton_ref}'",
+                                self.id
+                            ));
+                        }
+                    }
+                }
+                for (label, reference) in [
+                    (
+                        "equipment_ready_animation",
+                        self.presentation.equipment_ready_animation.as_deref(),
+                    ),
+                    (
+                        "equipment_reload_animation",
+                        self.presentation.equipment_reload_animation.as_deref(),
+                    ),
+                ] {
+                    let Some(reference) = reference else { continue };
+                    let animation_owner = character_asset_owner(reference).ok_or_else(|| {
+                        format!(
+                            "FPS playable character '{}' presentation '{label}' must live under animations/characters/{owner}/..., got '{reference}'",
+                            self.id
+                        )
+                    })?;
+                    if animation_owner != owner {
+                        return Err(format!(
+                            "FPS playable character '{}' presentation '{label}' crosses character ownership model_owner='{owner}' animation_owner='{animation_owner}' ref='{reference}'",
+                            self.id
+                        ));
+                    }
+                }
+            }
+        }
+        if !self.presentation.equipment_ready_sample_phase.is_finite()
+            || !(0.0..=1.0).contains(&self.presentation.equipment_ready_sample_phase)
+        {
+            return Err(format!(
+                "FPS playable character '{}' equipment_ready_sample_phase must be finite in [0,1]",
+                self.id
+            ));
+        }
+        for (label, weights) in [
+            (
+                "equipment_ready_rotation_weights",
+                self.presentation
+                    .equipment_ready_rotation_weights
+                    .as_slice(),
+            ),
+            (
+                "equipment_reload_rotation_weights",
+                self.presentation
+                    .equipment_reload_rotation_weights
+                    .as_slice(),
+            ),
+        ] {
+            for item in weights {
+                if item.joint.trim().is_empty()
+                    || !item.weight.is_finite()
+                    || !(0.0..=1.0).contains(&item.weight)
+                {
+                    return Err(format!(
+                        "FPS playable character '{}' {label} contains invalid joint/weight joint='{}' weight={}",
+                        self.id, item.joint, item.weight
+                    ));
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+fn character_asset_owner(reference: &str) -> Option<String> {
+    let path = reference
+        .split('@')
+        .next()
+        .unwrap_or(reference)
+        .trim()
+        .replace('\\', "/")
+        .to_ascii_lowercase();
+    let parts = path.split('/').collect::<Vec<_>>();
+    parts.windows(2).find_map(|pair| {
+        (pair[0] == "characters" && !pair[1].is_empty()).then(|| pair[1].to_owned())
+    })
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq)]
@@ -242,22 +537,19 @@ pub struct FpsMissionPolicy {
 impl Default for FpsMissionPolicy {
     fn default() -> Self {
         Self {
-            require_pickups: true,
-            require_targets: true,
-            hazard_fails: true,
-            goal_requires_objectives: true,
+            require_pickups: false,
+            require_targets: false,
+            hazard_fails: false,
+            goal_requires_objectives: false,
             state_machine: FpsMissionStateMachinePolicy::default(),
-            default_status:
-                "Collect field cores, neutralize targets, avoid hazards, reach extraction."
-                    .to_owned(),
-            pickup_status: "Core acquired.".to_owned(),
-            target_status: "Target neutralized.".to_owned(),
-            hazard_status: "You touched a hazard. Relaunch the demo to retry.".to_owned(),
-            goal_locked_status: "Beacon locked: collect all cores first.".to_owned(),
-            goal_complete_status: "Extraction complete. Stable runtime loop is playable."
-                .to_owned(),
-            failed_progress_label: "FAILED - touch a hazard to retry scene".to_owned(),
-            completed_progress_label: "EXTRACTED".to_owned(),
+            default_status: String::new(),
+            pickup_status: String::new(),
+            target_status: String::new(),
+            hazard_status: String::new(),
+            goal_locked_status: String::new(),
+            goal_complete_status: String::new(),
+            failed_progress_label: String::new(),
+            completed_progress_label: String::new(),
         }
     }
 }
@@ -294,9 +586,9 @@ pub struct FpsCallbackExports {
 impl Default for FpsCallbackExports {
     fn default() -> Self {
         Self {
-            interaction: "on_interaction".to_owned(),
-            hit: "on_hit".to_owned(),
-            mission_event: "on_mission_event".to_owned(),
+            interaction: String::new(),
+            hit: String::new(),
+            mission_event: String::new(),
         }
     }
 }
@@ -308,6 +600,9 @@ impl FpsCallbackExports {
             ("hit", &self.hit),
             ("mission_event", &self.mission_event),
         ] {
+            if value.trim().is_empty() {
+                return Err(format!("FPS callback export '{label}' must not be empty"));
+            }
             if value.contains('@') || value.contains('/') || value.contains('\\') {
                 return Err(format!(
                     "FPS callback export '{label}' must be an operation name, not a script selector/path: '{value}'"
@@ -417,15 +712,91 @@ mod tests {
     use super::*;
 
     #[test]
-    fn default_policy_contract_is_valid() {
-        FpsGameplayPolicySnapshot::default().validate().unwrap();
+    fn default_policy_is_schema_only_and_requires_project_authored_content() {
+        let policy = FpsGameplayPolicySnapshot::default();
+        assert_eq!(policy.schema, FPS_GAMEPLAY_POLICY_SCHEMA);
+        assert!(policy.characters.is_empty());
+        assert!(policy.validate().is_err());
+    }
+
+    #[test]
+    fn character_animation_namespace_rejects_cross_character_refs() {
+        let character = FpsPlayableCharacterPolicy {
+            id: "ellie_default_native".to_owned(),
+            family: "Ellie".to_owned(),
+            display_name: "Ellie".to_owned(),
+            runtime_ready: true,
+            runtime_model_ref: Some("models/characters/ellie/ellie.ydd@ellie".to_owned()),
+            skeleton_ref: Some("models/characters/ellie/ellie.ymt@ellie".to_owned()),
+            animations: FpsPlayableCharacterAnimations {
+                idle: Some(
+                    "animations/characters/abby/mm-explore.ycd@abby-mm-explore-idle".to_owned(),
+                ),
+                ..FpsPlayableCharacterAnimations::default()
+            },
+            target_height: 1.70,
+            ..FpsPlayableCharacterPolicy::default()
+        };
+        let error = character
+            .validate()
+            .expect_err("Ellie must reject Abby animation refs");
+        assert!(error.contains("crosses character ownership"), "{error}");
+    }
+
+    #[test]
+    fn character_animation_namespace_accepts_fully_owned_ellie_locomotion() {
+        let character = FpsPlayableCharacterPolicy {
+            id: "ellie_default_native".to_owned(),
+            family: "Ellie".to_owned(),
+            display_name: "Ellie".to_owned(),
+            runtime_ready: true,
+            runtime_model_ref: Some("models/characters/ellie/ellie.ydd@ellie".to_owned()),
+            skeleton_ref: Some("models/characters/ellie/ellie.ymt@ellie".to_owned()),
+            animations: FpsPlayableCharacterAnimations {
+                idle: Some(
+                    "animations/characters/ellie/mm-explore.ycd@ellie-mm-explore-idle".to_owned(),
+                ),
+                walk: Some(
+                    "animations/characters/ellie/mm-explore.ycd@ellie-mm-explore-walk-loop-fw"
+                        .to_owned(),
+                ),
+                run: Some(
+                    "animations/characters/ellie/mm-explore.ycd@ellie-mm-explore-run-loop-fw"
+                        .to_owned(),
+                ),
+                sprint: Some(
+                    "animations/characters/ellie/mm-explore.ycd@ellie-mm-explore-sprint-loop-fw"
+                        .to_owned(),
+                ),
+                crouch_idle: Some(
+                    "animations/characters/ellie/mm-crouch.ycd@ellie-mm-crouch-idle".to_owned(),
+                ),
+                crouch_walk: Some(
+                    "animations/characters/ellie/mm-crouch.ycd@ellie-mm-strafe-crouch-loop-fw"
+                        .to_owned(),
+                ),
+                jump: Some(
+                    "animations/characters/ellie/traversal.ycd@ellie-jump-ground-run-leap"
+                        .to_owned(),
+                ),
+                fall: Some("animations/characters/ellie/traversal.ycd@ellie-fall-med".to_owned()),
+            },
+            target_height: 1.70,
+            ..FpsPlayableCharacterPolicy::default()
+        };
+        character
+            .validate()
+            .expect("Ellie-owned animation refs must validate");
     }
 
     #[test]
     fn callback_export_is_not_a_ysc_selector() {
-        let mut policy = FpsGameplayPolicySnapshot::default();
-        policy.callbacks.hit = "scripts/foo.ysc@on_hit".to_owned();
-        assert!(policy.validate().is_err());
+        let callbacks = FpsCallbackExports {
+            interaction: "on_interaction".to_owned(),
+            hit: "scripts/foo.ysc@on_hit".to_owned(),
+            mission_event: "on_mission_event".to_owned(),
+        };
+        assert!(callbacks.validate().is_err());
     }
 
     #[test]

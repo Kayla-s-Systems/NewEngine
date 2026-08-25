@@ -3,8 +3,7 @@ use super::*;
 pub(super) fn push_bottom_and_status(
     out: &mut Vec<UiComponentNode>,
     descriptor: &UiScreenProfileDescriptor,
-    runtime_mode: UiEditorRuntimeMode,
-    runtime_paused: bool,
+    authoring_state: &UiInGameEditorState,
     layout: &EditorLayoutMetrics,
 ) {
     if layout.bottom_visible {
@@ -45,21 +44,19 @@ pub(super) fn push_bottom_and_status(
                 tab_x += 212.0;
             }
         }
-        out.push(
-            with_rect(
-                UiComponentNode::row("editor.bottom.placeholder", "Editor bottom dock")
-                    .with_value("Content Browser | Import Queue | Output Log | Profiler/Diagnostics")
-                    .with_detail("All panels are UiNodeTreeRequest data and authored .neui surfaces; no provider-special product renderer")
-                    .with_tone(UiNodeTone::Normal)
-                    .tagged("bottom")
-                    .tagged("editor-panels")
-                    .tagged("neui-backed"),
-                14.0,
-                layout.bottom_y + 34.0,
-                (layout.screen_w - 28.0).max(260.0),
-                38.0,
-            ),
-        );
+        out.push(with_rect(
+            UiComponentNode::row("editor.bottom.placeholder", "Editor bottom dock")
+                .with_value("Content Browser | Import Queue | Output Log | Profiler/Diagnostics")
+                .with_detail("Live editor panels consume engine DTOs and authored .neui surfaces")
+                .with_tone(UiNodeTone::Normal)
+                .tagged("bottom")
+                .tagged("editor-panels")
+                .tagged("neui-backed"),
+            14.0,
+            layout.bottom_y + 34.0,
+            (layout.screen_w - 28.0).max(260.0),
+            38.0,
+        ));
     }
 
     if !layout.bottom_visible {
@@ -78,18 +75,38 @@ pub(super) fn push_bottom_and_status(
         ));
     }
 
+    let save_failed = authoring_state.last_save_succeeded == Some(false);
+    let creates = authoring_state.pending_creates;
+    let deletes = authoring_state.pending_deletes;
+    let modifies = authoring_state
+        .dirty_placements
+        .saturating_sub(creates)
+        .saturating_sub(deletes);
+    let (status_label, status_tone) = if save_failed {
+        ("Save failed", UiNodeTone::Danger)
+    } else if authoring_state.dirty_placements > 0 {
+        ("Unsaved map changes", UiNodeTone::Accent)
+    } else {
+        ("Live World ready", UiNodeTone::Normal)
+    };
+    let status_tooltip = if authoring_state.last_save_message.trim().is_empty() {
+        "Map changes are saved back to authored sources and rebuilt for runtime".to_owned()
+    } else {
+        authoring_state.last_save_message.clone()
+    };
+
     out.push(with_rect(
-        UiComponentNode::row("editor.status", "Ready")
+        UiComponentNode::row("editor.status", status_label)
             .with_value(format!(
-                "mode={}{}",
-                runtime_mode.id(),
-                if runtime_paused { " paused" } else { "" }
+                "Create {creates} · Modify {modifies} · Delete {deletes}"
             ))
             .with_detail(
-                "1 Stop | 2 Simulate | 3 Play | Space Pause/Resume | hover controls for hints",
+                "Hold RMB: WASD/Q/E Fly · Release RMB: Q/W/E/R Tools · Ctrl+S Save · F2 Exit",
             )
-            .with_tone(UiNodeTone::Normal)
-            .tagged("status"),
+            .with_tone(status_tone)
+            .with_tooltip(status_tooltip)
+            .tagged("status")
+            .tagged("live-world"),
         8.0,
         (layout.screen_h - layout.status_h - 4.0).max(0.0),
         (layout.screen_w - 16.0).max(32.0),

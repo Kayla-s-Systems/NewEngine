@@ -790,6 +790,10 @@ pub struct AudioPlayAck {
     /// mixer slot. It may be promoted later by the provider's voice arbiter.
     #[serde(default)]
     pub virtualized: bool,
+    /// Provider-authored semantic trace lines. This stays optional at the JSON
+    /// boundary so older providers/consumers remain wire-compatible.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub diagnostics: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -804,6 +808,9 @@ pub struct AudioPreloadAck {
     pub bytes: usize,
     #[serde(default)]
     pub provider: String,
+    /// Provider-authored semantic trace lines, e.g. YSCD dictionary resolution.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub diagnostics: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]

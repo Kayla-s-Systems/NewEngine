@@ -21,6 +21,7 @@ fn assignment_from_spec(
         crouch_walk_animation: spec.crouch_walk_animation.clone(),
         jump_animation: spec.jump_animation.clone(),
         fall_animation: spec.fall_animation.clone(),
+        presentation: newengine_engine_runtime::gameplay::PlayerCharacterPresentation::default(),
         target_height: spec.target_height,
         eye_height_ratio: spec.eye_height_ratio,
         local_offset: spec.local_offset,

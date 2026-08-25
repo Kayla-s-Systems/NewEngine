@@ -117,10 +117,14 @@ impl ScreenProfileRuntimeState {
 
     /// Publishes profile DTOs and optional UI surface nodes for the current frame.
     ///
-    /// Returns true when provider UI should be refreshed this frame. This does not
-    /// touch render backend state, scene state or ECS storage; it only publishes
+    /// Returns domain-specific provider refresh requests. This does not touch
+    /// render backend state, scene state or ECS storage; it only publishes
     /// `engine.ui` composition data and provider-safe input-focus policy.
-    pub(crate) fn prepare_frame(&mut self, resources: &mut Resources, frame_index: u64) -> bool {
+    pub(crate) fn prepare_frame(
+        &mut self,
+        resources: &mut Resources,
+        frame_index: u64,
+    ) -> ScreenProfileRefresh {
         if let Some(report) = newengine_asset_hot_reload_runtime::poll_asset_file_watcher(resources)
         {
             let failures = report
@@ -174,17 +178,20 @@ impl ScreenProfileRuntimeState {
         self.publish_focus_policy(resources);
         let profile_changed = self.last_published_profile != Some(self.descriptor.profile);
         let game_gui_changed = self.prepare_game_gui(resources, frame_index, profile_changed);
-        let mut refresh_ui = presentation_changed || game_gui_changed;
+        let mut refresh = ScreenProfileRefresh {
+            game_ui: game_gui_changed,
+            shell_ui: presentation_changed,
+        };
 
         match self.descriptor.profile {
             UiScreenProfile::Game => {
                 if self.active_presentation_state().is_some() {
-                    refresh_ui |= self
+                    refresh.shell_ui |= self
                         .prepare_presentation_flow_surface(profile_changed, presentation_changed);
                 } else if self.has_active_game_gui() {
                     // Game GUI owns authored HUD/menu/overlay layers. Keep the legacy
                     // single-document path disabled to avoid mounting the placeholder HUD twice.
-                    refresh_ui |=
+                    refresh.shell_ui |=
                         self.hide_profile_surface(UI_SURFACE_GAME_PRESENTATION, profile_changed);
                 } else if let Some(document_ref) = self
                     .descriptor
@@ -205,7 +212,7 @@ impl ScreenProfileRuntimeState {
                                 self.published_surfaces.insert(surface_id);
                                 self.mounted_game_ui_document_ref = Some(document_ref.clone());
                                 self.failed_game_ui_document_ref = None;
-                                refresh_ui = true;
+                                refresh.shell_ui = true;
                             }
                             Err(error) => {
                                 self.failed_game_ui_document_ref = Some(document_ref.clone());
@@ -217,7 +224,7 @@ impl ScreenProfileRuntimeState {
                             }
                         }
                     }
-                    refresh_ui |=
+                    refresh.shell_ui |=
                         self.hide_profile_surface(UI_SURFACE_GAME_PRESENTATION, profile_changed);
                 } else {
                     if profile_changed {
@@ -225,19 +232,21 @@ impl ScreenProfileRuntimeState {
                             "screen profile: game profile has no authored game_ui_document_ref or presentation_flow; no generated gameplay UI fallback is allowed"
                         );
                     }
-                    refresh_ui |=
+                    refresh.shell_ui |=
                         self.hide_profile_surface(UI_SURFACE_GAME_PRESENTATION, profile_changed);
                 }
-                refresh_ui |= self.prepare_editing_overlay(resources, frame_index, profile_changed);
+                refresh.shell_ui |=
+                    self.prepare_editing_overlay(resources, frame_index, profile_changed);
             }
             UiScreenProfile::Headless => {
-                refresh_ui |= self.hide_profile_surface(UI_SURFACE_EDITOR_SHELL, profile_changed);
-                refresh_ui |=
+                refresh.shell_ui |=
+                    self.hide_profile_surface(UI_SURFACE_EDITOR_SHELL, profile_changed);
+                refresh.shell_ui |=
                     self.hide_profile_surface(UI_SURFACE_GAME_PRESENTATION, profile_changed);
             }
         }
 
-        refresh_ui |= self.prepare_toast_surface(resources, frame_index, profile_changed);
+        refresh.shell_ui |= self.prepare_toast_surface(resources, frame_index, profile_changed);
 
         if profile_changed {
             newengine_ulog_api::ulog::info!(
@@ -248,9 +257,9 @@ impl ScreenProfileRuntimeState {
                 self.descriptor.panels.len(),
             );
             self.last_published_profile = Some(self.descriptor.profile);
-            refresh_ui = true;
+            refresh = ScreenProfileRefresh::all();
         }
 
-        refresh_ui
+        refresh
     }
 }

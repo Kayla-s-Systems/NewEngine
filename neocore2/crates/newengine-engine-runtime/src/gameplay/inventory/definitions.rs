@@ -234,6 +234,33 @@ pub enum WeaponAudioAction {
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct WeaponAnimationDefinition {
+    pub skeleton: Option<String>,
+    pub animation_dictionary: Option<String>,
+    pub idle: Option<String>,
+    pub fire: Option<String>,
+    pub reload: Option<String>,
+    pub spawn_pose: Option<String>,
+}
+
+impl WeaponAnimationDefinition {
+    pub fn sanitized(mut self) -> Self {
+        fn clean(value: Option<String>) -> Option<String> {
+            value
+                .map(|value| value.trim().replace('\\', "/"))
+                .filter(|value| !value.is_empty())
+        }
+        self.skeleton = clean(self.skeleton);
+        self.animation_dictionary = clean(self.animation_dictionary);
+        self.idle = clean(self.idle);
+        self.fire = clean(self.fire);
+        self.reload = clean(self.reload);
+        self.spawn_pose = clean(self.spawn_pose);
+        self
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct WeaponAudioDefinition {
     pub fire: Option<String>,
     pub reload_start: Option<String>,
@@ -276,6 +303,304 @@ impl WeaponAudioDefinition {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+pub struct WeaponPresentationDefinition {
+    pub enabled: bool,
+    pub handle_from_root: [f32; 3],
+    pub muzzle_from_root: [f32; 3],
+    pub left_grip_from_handle: [f32; 3],
+    pub stock_contact_from_handle: [f32; 3],
+    pub ready_shoulder_pocket_offset: [f32; 3],
+    pub ads_shoulder_pocket_offset: [f32; 3],
+    pub fire_kick_duration_seconds: f32,
+    pub fire_kick_pitch_radians: f32,
+    pub ready_body_to_root_rotation: [f32; 4],
+    pub ready_right_elbow_pole_offset: [f32; 3],
+    pub ready_left_elbow_pole_offset: [f32; 3],
+    pub ready_left_palm_to_left_grip: [f32; 3],
+    pub ready_right_palm_to_weapon: [f32; 4],
+    pub ready_left_palm_to_weapon: [f32; 4],
+    pub right_palm_to_handle: [f32; 3],
+    pub right_palm_to_native_rig: [f32; 4],
+    pub native_rig_to_runtime_basis: [f32; 4],
+    pub first_person_view_basis: [f32; 4],
+    pub first_person_hip_handle_offset: [f32; 3],
+    pub ads_rear_sight_from_handle: [f32; 3],
+    pub ads_front_sight_from_handle: [f32; 3],
+    pub ads_camera_to_rear_sight: [f32; 3],
+    pub first_person_hip_convergence_m: f32,
+}
+
+impl Default for WeaponPresentationDefinition {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            handle_from_root: [0.0; 3],
+            muzzle_from_root: [0.0, 0.0, 0.5],
+            left_grip_from_handle: [0.0, 0.0, 0.25],
+            stock_contact_from_handle: [0.0, 0.0, -0.25],
+            ready_shoulder_pocket_offset: [0.0, -0.1, -0.04],
+            ads_shoulder_pocket_offset: [0.0, -0.08, -0.03],
+            fire_kick_duration_seconds: 0.15,
+            fire_kick_pitch_radians: 0.0,
+            ready_body_to_root_rotation: [0.0, 0.0, 0.0, 1.0],
+            ready_right_elbow_pole_offset: [-0.15, -0.14, 0.06],
+            ready_left_elbow_pole_offset: [0.15, -0.16, 0.08],
+            ready_left_palm_to_left_grip: [0.0; 3],
+            ready_right_palm_to_weapon: [0.0, 0.0, 0.0, 1.0],
+            ready_left_palm_to_weapon: [0.0, 0.0, 0.0, 1.0],
+            right_palm_to_handle: [0.0; 3],
+            right_palm_to_native_rig: [0.0, 0.0, 0.0, 1.0],
+            native_rig_to_runtime_basis: [0.0, 0.0, 0.0, 1.0],
+            first_person_view_basis: [0.0, 0.0, 0.0, 1.0],
+            first_person_hip_handle_offset: [0.2, -0.2, -0.5],
+            ads_rear_sight_from_handle: [0.0; 3],
+            ads_front_sight_from_handle: [0.0, 0.0, 0.4],
+            ads_camera_to_rear_sight: [0.0, 0.0, -0.075],
+            first_person_hip_convergence_m: 12.0,
+        }
+    }
+}
+
+impl WeaponPresentationDefinition {
+    pub fn sanitized(mut self) -> Self {
+        fn vec3(value: [f32; 3], fallback: [f32; 3], limit: f32) -> [f32; 3] {
+            let mut out = value;
+            for (index, component) in out.iter_mut().enumerate() {
+                if !component.is_finite() || component.abs() > limit {
+                    *component = fallback[index];
+                }
+            }
+            out
+        }
+        fn quat(value: [f32; 4]) -> [f32; 4] {
+            let len2 = value.iter().map(|value| value * value).sum::<f32>();
+            if value.iter().all(|value| value.is_finite()) && len2 > 1.0e-8 {
+                let inv = len2.sqrt().recip();
+                [
+                    value[0] * inv,
+                    value[1] * inv,
+                    value[2] * inv,
+                    value[3] * inv,
+                ]
+            } else {
+                [0.0, 0.0, 0.0, 1.0]
+            }
+        }
+        let fallback = Self::default();
+        self.handle_from_root = vec3(self.handle_from_root, fallback.handle_from_root, 10.0);
+        self.muzzle_from_root = vec3(self.muzzle_from_root, fallback.muzzle_from_root, 10.0);
+        self.left_grip_from_handle = vec3(
+            self.left_grip_from_handle,
+            fallback.left_grip_from_handle,
+            10.0,
+        );
+        self.stock_contact_from_handle = vec3(
+            self.stock_contact_from_handle,
+            fallback.stock_contact_from_handle,
+            10.0,
+        );
+        self.ready_shoulder_pocket_offset = vec3(
+            self.ready_shoulder_pocket_offset,
+            fallback.ready_shoulder_pocket_offset,
+            5.0,
+        );
+        self.ads_shoulder_pocket_offset = vec3(
+            self.ads_shoulder_pocket_offset,
+            fallback.ads_shoulder_pocket_offset,
+            5.0,
+        );
+        self.ready_right_elbow_pole_offset = vec3(
+            self.ready_right_elbow_pole_offset,
+            fallback.ready_right_elbow_pole_offset,
+            5.0,
+        );
+        self.ready_left_elbow_pole_offset = vec3(
+            self.ready_left_elbow_pole_offset,
+            fallback.ready_left_elbow_pole_offset,
+            5.0,
+        );
+        self.ready_left_palm_to_left_grip = vec3(
+            self.ready_left_palm_to_left_grip,
+            fallback.ready_left_palm_to_left_grip,
+            5.0,
+        );
+        self.right_palm_to_handle = vec3(
+            self.right_palm_to_handle,
+            fallback.right_palm_to_handle,
+            5.0,
+        );
+        self.first_person_hip_handle_offset = vec3(
+            self.first_person_hip_handle_offset,
+            fallback.first_person_hip_handle_offset,
+            5.0,
+        );
+        self.ads_rear_sight_from_handle = vec3(
+            self.ads_rear_sight_from_handle,
+            fallback.ads_rear_sight_from_handle,
+            5.0,
+        );
+        self.ads_front_sight_from_handle = vec3(
+            self.ads_front_sight_from_handle,
+            fallback.ads_front_sight_from_handle,
+            5.0,
+        );
+        self.ads_camera_to_rear_sight = vec3(
+            self.ads_camera_to_rear_sight,
+            fallback.ads_camera_to_rear_sight,
+            5.0,
+        );
+        self.ready_body_to_root_rotation = quat(self.ready_body_to_root_rotation);
+        self.ready_right_palm_to_weapon = quat(self.ready_right_palm_to_weapon);
+        self.ready_left_palm_to_weapon = quat(self.ready_left_palm_to_weapon);
+        self.right_palm_to_native_rig = quat(self.right_palm_to_native_rig);
+        self.native_rig_to_runtime_basis = quat(self.native_rig_to_runtime_basis);
+        self.first_person_view_basis = quat(self.first_person_view_basis);
+        self.fire_kick_duration_seconds = if self.fire_kick_duration_seconds.is_finite() {
+            self.fire_kick_duration_seconds.clamp(0.001, 10.0)
+        } else {
+            fallback.fire_kick_duration_seconds
+        };
+        self.fire_kick_pitch_radians = if self.fire_kick_pitch_radians.is_finite() {
+            self.fire_kick_pitch_radians.clamp(-3.14, 3.14)
+        } else {
+            0.0
+        };
+        self.first_person_hip_convergence_m = if self.first_person_hip_convergence_m.is_finite() {
+            self.first_person_hip_convergence_m.clamp(0.1, 10_000.0)
+        } else {
+            fallback.first_person_hip_convergence_m
+        };
+        self
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct WeaponCasingDefinition {
+    /// Runtime model dictionary; `variants` are entry selectors inside this dictionary.
+    pub model_dictionary: Option<String>,
+    pub variants: Vec<String>,
+    pub material_ref: Option<String>,
+    /// Dynamic rigid-body box half extents in metres.
+    pub half_extents: [f32; 3],
+    /// Delay from the shot event to physical casing spawn.
+    pub ejection_delay_seconds: f32,
+    /// Local basis coefficients `[right, up, forward]` relative to the muzzle pose.
+    pub origin_local: [f32; 3],
+    pub velocity_local: [f32; 3],
+    /// Signed scalar jitter is multiplied component-wise by this vector.
+    pub velocity_jitter: [f32; 3],
+    /// Local axis used to orient the casing model; interpreted in `[right, up, forward]`.
+    pub axis_local: [f32; 3],
+    pub angular_velocity: [f32; 3],
+    pub angular_velocity_jitter: [f32; 3],
+    pub friction: f32,
+    pub restitution: f32,
+    pub density: f32,
+}
+
+impl Default for WeaponCasingDefinition {
+    fn default() -> Self {
+        // Disabled schema default. A concrete weapon must author its casing contract.
+        Self {
+            model_dictionary: None,
+            variants: Vec::new(),
+            material_ref: None,
+            half_extents: [0.01, 0.01, 0.01],
+            ejection_delay_seconds: 0.0,
+            origin_local: [0.0; 3],
+            velocity_local: [0.0; 3],
+            velocity_jitter: [0.0; 3],
+            axis_local: [1.0, 0.0, 0.0],
+            angular_velocity: [0.0; 3],
+            angular_velocity_jitter: [0.0; 3],
+            friction: 0.4,
+            restitution: 0.1,
+            density: 1.0,
+        }
+    }
+}
+
+impl WeaponCasingDefinition {
+    pub fn sanitized(mut self) -> Self {
+        fn clean(value: Option<String>) -> Option<String> {
+            value
+                .map(|value| value.trim().replace('\\', "/"))
+                .filter(|value| !value.is_empty())
+        }
+        fn finite_vec3(mut value: [f32; 3], fallback: [f32; 3], limit: f32) -> [f32; 3] {
+            for index in 0..3 {
+                value[index] = if value[index].is_finite() {
+                    value[index].clamp(-limit, limit)
+                } else {
+                    fallback[index]
+                };
+            }
+            value
+        }
+        self.model_dictionary = clean(self.model_dictionary);
+        self.material_ref = clean(self.material_ref);
+        self.variants = self
+            .variants
+            .into_iter()
+            .map(|value| value.trim().trim_start_matches('@').to_owned())
+            .filter(|value| !value.is_empty() && !value.contains('/') && !value.contains('\\'))
+            .collect();
+        self.variants.sort();
+        self.variants.dedup();
+        self.half_extents = sanitize_positive_vec3(self.half_extents, 0.0005, 1.0);
+        self.ejection_delay_seconds = if self.ejection_delay_seconds.is_finite() {
+            self.ejection_delay_seconds.clamp(0.0, 2.0)
+        } else {
+            0.0
+        };
+        self.origin_local = finite_vec3(self.origin_local, [0.0; 3], 10.0);
+        self.velocity_local = finite_vec3(self.velocity_local, [0.0; 3], 100.0);
+        self.velocity_jitter = finite_vec3(self.velocity_jitter, [0.0; 3], 100.0);
+        self.axis_local = finite_vec3(self.axis_local, [1.0, 0.0, 0.0], 1.0);
+        if self
+            .axis_local
+            .iter()
+            .map(|value| value * value)
+            .sum::<f32>()
+            <= 1.0e-8
+        {
+            self.axis_local = [1.0, 0.0, 0.0];
+        }
+        self.angular_velocity = finite_vec3(self.angular_velocity, [0.0; 3], 500.0);
+        self.angular_velocity_jitter = finite_vec3(self.angular_velocity_jitter, [0.0; 3], 500.0);
+        self.friction = if self.friction.is_finite() {
+            self.friction.clamp(0.0, 2.0)
+        } else {
+            0.4
+        };
+        self.restitution = if self.restitution.is_finite() {
+            self.restitution.clamp(0.0, 1.0)
+        } else {
+            0.1
+        };
+        self.density = if self.density.is_finite() {
+            self.density.clamp(0.01, 1000.0)
+        } else {
+            1.0
+        };
+        self
+    }
+
+    #[inline]
+    pub fn enabled(&self) -> bool {
+        self.model_dictionary.is_some() && !self.variants.is_empty()
+    }
+
+    pub fn model_ref(&self, variant_index: usize) -> Option<String> {
+        let dictionary = self.model_dictionary.as_deref()?;
+        let selector = self
+            .variants
+            .get(variant_index % self.variants.len().max(1))?;
+        Some(format!("{dictionary}@{selector}"))
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub struct ItemDefinition {
     pub id: ItemId,
     pub name: String,
@@ -289,7 +614,10 @@ pub struct ItemDefinition {
     pub unit_weight: f32,
     pub equipment_slot: Option<EquipmentSlot>,
     pub weapon: Option<WeaponItemDefinition>,
+    pub weapon_presentation: WeaponPresentationDefinition,
+    pub weapon_animation: WeaponAnimationDefinition,
     pub weapon_audio: WeaponAudioDefinition,
+    pub weapon_casing: WeaponCasingDefinition,
     pub use_effect: ItemUseEffect,
     pub world: WorldItemDefinition,
 }
@@ -318,7 +646,10 @@ impl ItemDefinition {
             unit_weight: sanitize_non_negative(unit_weight),
             equipment_slot: None,
             weapon: None,
+            weapon_presentation: WeaponPresentationDefinition::default(),
+            weapon_animation: WeaponAnimationDefinition::default(),
             weapon_audio: WeaponAudioDefinition::default(),
+            weapon_casing: WeaponCasingDefinition::default(),
             use_effect: ItemUseEffect::None,
             world: WorldItemDefinition::for_kind(kind),
         })
@@ -344,8 +675,26 @@ impl ItemDefinition {
     }
 
     #[inline]
+    #[inline]
+    pub fn with_weapon_presentation(mut self, presentation: WeaponPresentationDefinition) -> Self {
+        self.weapon_presentation = presentation.sanitized();
+        self
+    }
+
+    pub fn with_weapon_animation(mut self, animation: WeaponAnimationDefinition) -> Self {
+        self.weapon_animation = animation.sanitized();
+        self
+    }
+
+    #[inline]
     pub fn with_weapon_audio(mut self, audio: WeaponAudioDefinition) -> Self {
         self.weapon_audio = audio.sanitized();
+        self
+    }
+
+    #[inline]
+    pub fn with_weapon_casing(mut self, casing: WeaponCasingDefinition) -> Self {
+        self.weapon_casing = casing.sanitized();
         self
     }
 

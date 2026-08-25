@@ -9,14 +9,14 @@ use newengine_ecs::World;
 use newengine_engine_runtime::gameplay::{
     preload_weapon_audio_definition, EquipmentSlot, HitscanWeaponTuning, InventoryEventBus,
     InventoryLoadout, InventoryLoadoutCatalog, InventoryLoadoutEntry, ItemCatalog, ItemDefinition,
-    ItemId, ItemKind, ItemUseEffect, WeaponAudioDefinition, WeaponFireMode, WorldItemDefinition,
+    ItemId, ItemKind, ItemUseEffect, WeaponAnimationDefinition, WeaponAudioDefinition,
+    WeaponCasingDefinition, WeaponFireMode, WeaponPresentationDefinition, WorldItemDefinition,
 };
 use newengine_primitives::builtins as primitive_builtins;
 use serde::{Deserialize, Serialize};
 
 pub const AUTHORED_ITEM_PACKAGE_SCHEMA: &str = "newengine.items.package.v1";
 pub const AUTHORED_ITEM_PACKAGE_VERSION: u32 = 1;
-pub const NEITEMS_LOGICAL_PATH: &str = newengine_game_data::DEFAULT_ITEM_PACKAGE_ASSET;
 
 #[path = "item_assets/compile.rs"]
 mod compile;
@@ -38,7 +38,8 @@ pub(crate) use ytyp::hydrate_item_package_from_ytyp;
 
 pub use types::{
     AuthoredItemDefinition, AuthoredItemPackage, AuthoredLoadoutDefinition, AuthoredLoadoutEntry,
-    AuthoredUseEffect, AuthoredWeaponAudioDefinition, AuthoredWeaponDefinition,
+    AuthoredUseEffect, AuthoredWeaponAnimationDefinition, AuthoredWeaponAudioDefinition,
+    AuthoredWeaponCasingDefinition, AuthoredWeaponDefinition, AuthoredWeaponPresentationDefinition,
     AuthoredWorldItemDefinition, CompiledItemPackage,
 };
 
@@ -71,6 +72,28 @@ pub(crate) fn test_fps_item_package() -> AuthoredItemPackage {
                     ammo: "ammo.rifle.standard".to_owned(),
                     damage: 25.0,
                     ..AuthoredWeaponDefinition::default()
+                }),
+                weapon_casing: Some(AuthoredWeaponCasingDefinition {
+                    model_dictionary: "test/models/rifle_shells.ydd".to_owned(),
+                    variants: vec![
+                        "shell_a".to_owned(),
+                        "shell_b".to_owned(),
+                        "shell_c".to_owned(),
+                        "shell_d".to_owned(),
+                        "shell_e".to_owned(),
+                    ],
+                    material_ref: "test/materials/rifle_shell.nemat@brass".to_owned(),
+                    half_extents: [0.00635, 0.00625, 0.02940],
+                    ejection_delay_seconds: 1.0 / 30.0,
+                    origin_local: [0.050, 0.025, -0.430],
+                    velocity_local: [1.85, 1.25, -0.22],
+                    velocity_jitter: [0.35, 0.25, 0.0],
+                    axis_local: [0.85, 0.15, 0.0],
+                    angular_velocity: [18.0, 11.0, 23.0],
+                    angular_velocity_jitter: [4.0, 0.0, -5.0],
+                    friction: 0.38,
+                    restitution: 0.22,
+                    density: 8.5,
                 }),
                 world: Some(AuthoredWorldItemDefinition {
                     model: "shared/models/weapon/rifle/rifle.ydd@rifle".to_owned(),

@@ -175,7 +175,10 @@ mod tests {
     fn empty_object_profile_defaults_to_runtime_game() {
         let parsed = parse_config_value(&json!({})).unwrap();
         assert_eq!(parsed.profile, UiScreenProfile::Game);
-        assert!(!parsed.publish_editor_shell);
+        assert!(
+            parsed.publish_editor_shell,
+            "game profile should allow the editor shell capability; UiInGameEditorState still gates actual F2 visibility"
+        );
     }
 
     #[test]
@@ -189,7 +192,7 @@ mod tests {
                 "states": [
                     {
                         "id": "main_menu",
-                        "document_ref": "ui/engine/main_menu.neui@surface",
+                        "document_ref": "ui/frontend/main_menu.neui@surface",
                         "surface_id": "engine.main_menu",
                         "input_focus_policy": "ui_surface",
                         "blocks_world_bootstrap": true,
@@ -319,7 +322,7 @@ mod tests {
                 "initial_state": "main_menu",
                 "states": [{
                     "id": "main_menu",
-                    "document_ref": "ui/engine/main_menu.neui@surface"
+                    "document_ref": "ui/frontend/main_menu.neui@surface"
                 }],
                 "transitions": []
             }

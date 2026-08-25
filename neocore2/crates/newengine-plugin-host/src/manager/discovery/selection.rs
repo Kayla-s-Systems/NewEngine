@@ -88,23 +88,6 @@ fn plugin_excluded_by_host_policy(id: &str) -> bool {
         .unwrap_or(false)
 }
 
-#[inline]
-fn runtime_target_plugins_only() -> bool {
-    std::env::var("NEWENGINE_PLUGIN_TARGET")
-        .map(|v| {
-            matches!(
-                v.trim().to_ascii_lowercase().as_str(),
-                "runtime" | "game" | "standalone"
-            )
-        })
-        .unwrap_or(false)
-}
-
-#[inline]
-fn is_editor_only_plugin(kind: Option<newengine_plugin_api::PluginKind>) -> bool {
-    matches!(kind, Some(newengine_plugin_api::PluginKind::Editor))
-}
-
 fn headless_mode_enabled() -> bool {
     std::env::var("NEWENGINE_HEADLESS")
         .ok()
@@ -217,7 +200,6 @@ pub(super) fn build_load_selection(
     emit_headless_skip_summary_once(graph);
 
     let mut out = LoadSelection::default();
-    let runtime_only = runtime_target_plugins_only();
     let mut winners_by_id: HashMap<&str, &super::graph::ScannedDynlib> = HashMap::default();
 
     // First pass: choose one deterministic winner per plugin id.
@@ -227,7 +209,7 @@ pub(super) fn build_load_selection(
         let ScannedDynlibKind::Plugin {
             id,
             phase,
-            descriptor_kind,
+            descriptor_kind: _,
             service_gateways,
             ..
         } = &item.kind
@@ -237,7 +219,6 @@ pub(super) fn build_load_selection(
         if loaded_ids.contains(id)
             || !crate::plugin_config_service::plugin_enabled_by_config(id)
             || !filter.allows(*phase)
-            || (runtime_only && is_editor_only_plugin(*descriptor_kind))
             || headless_skips_native_provider(id, service_gateways)
         {
             continue;
@@ -265,7 +246,7 @@ pub(super) fn build_load_selection(
             ScannedDynlibKind::Plugin {
                 id,
                 phase,
-                descriptor_kind,
+                descriptor_kind: _,
                 service_gateways,
                 ..
             } => {
@@ -277,10 +258,6 @@ pub(super) fn build_load_selection(
                     }
                 } else if !crate::plugin_config_service::plugin_enabled_by_config(id) {
                     SelectionDecision::DisabledByConfig
-                } else if runtime_only && is_editor_only_plugin(*descriptor_kind) {
-                    SelectionDecision::Unsupported {
-                        reason: "editor plugin disabled for runtime target",
-                    }
                 } else if headless_skips_native_provider(id, service_gateways) {
                     SelectionDecision::Unsupported {
                         reason: "headless mode owns platform/render/ui/input/logging through host or null routes",
@@ -424,6 +401,63 @@ fn semver_rank(version: &str) -> (u64, u64, u64, u64) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn editor_tooling_plugin_remains_selectable_for_game_runtime_target() {
+        static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        let _guard = ENV_LOCK.lock().unwrap();
+        let previous_target = std::env::var_os("NEWENGINE_PLUGIN_TARGET");
+        let previous_headless = std::env::var_os("NEWENGINE_HEADLESS");
+        std::env::set_var("NEWENGINE_PLUGIN_TARGET", "game");
+        std::env::remove_var("NEWENGINE_HEADLESS");
+
+        let path = PathBuf::from("editing-tools-0.3.0-release.dll");
+        let graph = DiscoveryGraph {
+            dir: PathBuf::from("pluginsRuntime"),
+            entries_total: 1,
+            skipped_non_dynlib: 0,
+            items: vec![super::super::graph::ScannedDynlib {
+                path: path.clone(),
+                file_name: "editing-tools-0.3.0-release.dll".to_owned(),
+                kind: ScannedDynlibKind::Plugin {
+                    id: "newengine.editing.tools".to_owned(),
+                    version: "0.3.0".to_owned(),
+                    phase: newengine_plugin_api::PluginBootstrapPhase::Engine,
+                    descriptor_kind: Some(newengine_plugin_api::PluginKind::Editor),
+                    declared_capabilities: Some(1),
+                    service_gateways: Vec::new(),
+                    backend_priority: 0,
+                },
+            }],
+            scan_errors: Vec::new(),
+            platform_runtime_count: 0,
+            bootstrap_total: 0,
+            engine_total: 1,
+            unknown_dynlibs: Vec::new(),
+        };
+        let selection = build_load_selection(
+            &graph,
+            LoadPhaseFilter::BootstrapAndEngine,
+            &NeHashSet::default(),
+        );
+
+        if let Some(value) = previous_target {
+            std::env::set_var("NEWENGINE_PLUGIN_TARGET", value);
+        } else {
+            std::env::remove_var("NEWENGINE_PLUGIN_TARGET");
+        }
+        if let Some(value) = previous_headless {
+            std::env::set_var("NEWENGINE_HEADLESS", value);
+        } else {
+            std::env::remove_var("NEWENGINE_HEADLESS");
+        }
+
+        assert!(selection.engine_candidates.contains(&path));
+        assert!(selection
+            .decisions
+            .get(&path)
+            .is_some_and(SelectionDecision::is_selected));
+    }
 
     #[test]
     fn signature_only_native_provider_ids_are_skipped_in_headless_mode() {

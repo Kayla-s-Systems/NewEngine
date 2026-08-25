@@ -37,6 +37,34 @@ fn ensure_ydd_prefab_source(prefab: &GameReadyPrefabSpec, role: &str) -> Result<
         })
 }
 
+fn attach_authored_map_placement(
+    world: &mut newengine_ecs::World,
+    entity: EntityId,
+    prefab: &GameReadyPrefabSpec,
+) {
+    if prefab.authored_map_ref.trim().is_empty() || prefab.authored_placement_id.trim().is_empty() {
+        return;
+    }
+    let source = if prefab.authored_discrete_placement {
+        newengine_engine_runtime::gameplay::AuthoredMapPlacementSource::DiscretePlacement
+    } else {
+        newengine_engine_runtime::gameplay::AuthoredMapPlacementSource::ProfilePrefab
+    };
+    let _ = world.insert(
+        entity,
+        newengine_engine_runtime::gameplay::AuthoredMapPlacement::new(
+            prefab.authored_map_ref.clone(),
+            prefab.authored_placement_id.clone(),
+            source,
+            prefab.authored_primary
+                && !prefab
+                    .proxy
+                    .trim()
+                    .eq_ignore_ascii_case("world_collision_ydd"),
+        ),
+    );
+}
+
 pub(super) fn spawn_collision_ydd_prefab_from_decoded(
     world: &mut newengine_ecs::World,
     parent: EntityId,
@@ -91,6 +119,15 @@ pub(super) fn spawn_collision_ydd_prefab_from_decoded(
             scale: Vec3::ONE,
         },
     );
+    attach_authored_map_placement(world, entity, prefab);
+    if prefab.authored_discrete_placement && !prefab.authored_primary {
+        let _ = world.insert(
+            entity,
+            newengine_engine_runtime::gameplay::AuthoredMapPlacementReplicaScaleState {
+                last_authored_scale: prefab.scale,
+            },
+        );
+    }
     let _ = world.insert(entity, Bounds::from_local_aabb(local_bounds));
     let _ = world.insert(entity, collider);
     if supports_foliage_ground_placement(prefab) {
@@ -178,6 +215,7 @@ pub(super) fn spawn_dynamic_ydd_prefab_from_decoded(
         },
     );
     let half_extents = dynamic_prefab_half_extents(decoded, prefab.scale);
+    attach_authored_map_placement(world, root, prefab);
     newengine_engine_runtime::gameplay::attach_scene_object_core(
         world,
         root,
@@ -263,6 +301,7 @@ pub(super) fn spawn_static_ydd_prefab_from_decoded(
             scale: prefab.scale,
         },
     );
+    attach_authored_map_placement(world, root, prefab);
     newengine_engine_runtime::gameplay::attach_scene_object_core(
         world,
         root,

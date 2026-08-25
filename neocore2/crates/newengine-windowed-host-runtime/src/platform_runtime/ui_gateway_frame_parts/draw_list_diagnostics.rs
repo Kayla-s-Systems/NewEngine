@@ -14,11 +14,7 @@ pub(super) fn log_ui_gateway_frame(
     let frame_index = request.frame_index;
     let total_ms = started.elapsed().as_secs_f32() * 1000.0;
     let warn_slow = total_ms >= 33.3;
-    let sampled = frame_index % 240 == 1;
-    let has_provider_diagnostics = !response.diagnostics.diagnostics.is_empty()
-        || !response.diagnostics.font_resolve.is_empty()
-        || response.diagnostics.caret_visible.is_some();
-    if !warn_slow && !sampled && !has_provider_diagnostics {
+    if !should_log_ui_gateway_frame(frame_index, total_ms) {
         return;
     }
 
@@ -29,7 +25,7 @@ pub(super) fn log_ui_gateway_frame(
         String::new()
     };
     let log_line = format!(
-        "ui gateway frame: frame={} now_ms={} codec={} total_ms={:.2} service={:.2}ms response_bytes={} provider='{}' caret={:?} font_diags={}{}",
+        "ui gateway frame: frame={} now_ms={} codec={} total_ms={:.2} service={:.2}ms response_bytes={} provider='{}' caret={:?} provider_diags={} font_diags={}{}",
         frame_index,
         live.now_ms,
         codec,
@@ -38,6 +34,7 @@ pub(super) fn log_ui_gateway_frame(
         response_bytes,
         response.diagnostics.provider,
         response.diagnostics.caret_visible,
+        response.diagnostics.diagnostics.len(),
         response.diagnostics.font_resolve.len(),
         stats,
     );
@@ -46,6 +43,13 @@ pub(super) fn log_ui_gateway_frame(
     } else {
         newengine_ulog_api::ulog::debug!("{}", log_line);
     }
+}
+
+#[inline]
+fn should_log_ui_gateway_frame(frame_index: u64, total_ms: f32) -> bool {
+    // Provider diagnostics are often continuous telemetry (mesh counts, caret state,
+    // and similar data), not exceptional events. They must not bypass sampling.
+    total_ms >= 33.3 || frame_index % 240 == 1
 }
 
 fn ui_draw_list_stats(draw_list: &UiDrawList) -> String {
@@ -123,4 +127,16 @@ fn ui_draw_list_stats(draw_list: &UiDrawList) -> String {
         patch_bytes,
         draw_list.texture_delta.free.len(),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::should_log_ui_gateway_frame;
+
+    #[test]
+    fn routine_ui_frames_are_sampled_instead_of_logged_continuously() {
+        assert!(!should_log_ui_gateway_frame(2, 4.0));
+        assert!(should_log_ui_gateway_frame(241, 4.0));
+        assert!(should_log_ui_gateway_frame(2, 33.3));
+    }
 }

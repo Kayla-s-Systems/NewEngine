@@ -66,18 +66,23 @@ pub fn step_inventory_commands(world: &mut World, _fixed_tick: u64) {
             }
         }
         if character_toggle_edge {
+            let variants = playable_character_variants(world);
+            let variant_count = variants.len();
             let selected_index = selected_variant(world, player)
                 .and_then(|selected| {
-                    PLAYABLE_CHARACTER_VARIANTS
+                    variants
                         .iter()
                         .position(|variant| variant.id == selected.id)
                 })
                 .unwrap_or(0);
             if let Some(state) = world.resource_mut::<InventoryHudState>() {
-                state.toggle_character_select();
+                if variant_count == 0 {
+                    state.close_character_select();
+                } else {
+                    state.toggle_character_select();
+                }
                 if state.character_select_open {
-                    state
-                        .set_character_nav_index(selected_index, PLAYABLE_CHARACTER_VARIANTS.len());
+                    state.set_character_nav_index(selected_index, variant_count);
                 }
                 newengine_ulog_api::ulog::info!(
                     "character selector toggled open={} source='player.character.select.toggle'",
@@ -89,14 +94,15 @@ pub fn step_inventory_commands(world: &mut World, _fixed_tick: u64) {
         if character_select_is_open(world) {
             let previous = actions.ui_nav_up_pressed || actions.ui_nav_left_pressed;
             let next = actions.ui_nav_down_pressed || actions.ui_nav_right_pressed;
+            let variant_count = playable_character_variants(world).len();
             if previous {
                 if let Some(state) = world.resource_mut::<InventoryHudState>() {
-                    state.navigate_character_select(-1, PLAYABLE_CHARACTER_VARIANTS.len());
+                    state.navigate_character_select(-1, variant_count);
                 }
             }
             if next {
                 if let Some(state) = world.resource_mut::<InventoryHudState>() {
-                    state.navigate_character_select(1, PLAYABLE_CHARACTER_VARIANTS.len());
+                    state.navigate_character_select(1, variant_count);
                 }
             }
             if actions.ui_back_pressed {
@@ -108,8 +114,9 @@ pub fn step_inventory_commands(world: &mut World, _fixed_tick: u64) {
                     .resource::<InventoryHudState>()
                     .map(|state| state.character_nav_index)
                     .unwrap_or(0)
-                    .min(PLAYABLE_CHARACTER_VARIANTS.len().saturating_sub(1));
-                if let Some(variant) = PLAYABLE_CHARACTER_VARIANTS.get(index) {
+                    .min(playable_character_variants(world).len().saturating_sub(1));
+                let variant = playable_character_variants(world).get(index).cloned();
+                if let Some(variant) = variant.as_ref() {
                     let _ = select_playable_character(world, player, variant);
                 }
             }

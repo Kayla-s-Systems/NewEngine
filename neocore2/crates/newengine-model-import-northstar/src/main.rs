@@ -21,6 +21,7 @@ fn run() -> Result<(), String> {
     let mut packages = Vec::new();
     let mut package_mesh_prefixes = Vec::new();
     let mut material_overrides = Vec::new();
+    let mut source_to_model = None;
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--name" => name = args.next(),
@@ -49,6 +50,25 @@ fn run() -> Result<(), String> {
                     return Err("--package-mesh-prefix prefix must not be empty".to_owned());
                 }
                 package_mesh_prefixes.push((PathBuf::from(path), prefix.to_owned()));
+            }
+            "--source-to-model" => {
+                let raw = args
+                    .next()
+                    .ok_or("--source-to-model requires 16 comma-separated f32 values")?;
+                let values = raw
+                    .split(',')
+                    .map(str::trim)
+                    .map(str::parse::<f32>)
+                    .collect::<Result<Vec<_>, _>>()
+                    .map_err(|error| format!("invalid --source-to-model: {error}"))?;
+                if values.len() != 16 || values.iter().any(|value| !value.is_finite()) {
+                    return Err(
+                        "--source-to-model requires exactly 16 finite f32 values".to_owned()
+                    );
+                }
+                let mut matrix = [0.0_f32; 16];
+                matrix.copy_from_slice(&values);
+                source_to_model = Some(matrix);
             }
             "--material-override" => {
                 let spec = args
@@ -80,6 +100,7 @@ fn run() -> Result<(), String> {
         material_library_ref,
         package_mesh_prefixes,
         material_overrides,
+        source_to_model,
     };
     let report = compile_character(&request)?;
     println!(
@@ -107,6 +128,6 @@ fn run() -> Result<(), String> {
 
 fn print_help() {
     println!(
-        "Usage: newengine-model-import-northstar --name NAME --skeleton FILE [--skeleton-profile humanoid|weapon] --package FILE [--package FILE...] [--package-mesh-prefix PATH::PREFIX] [--material-override PREFIX=REF] --output-dir DIR [--material-library REF]"
+        "Usage: newengine-model-import-northstar --name NAME --skeleton FILE [--skeleton-profile humanoid|weapon] --package FILE [--package FILE...] [--package-mesh-prefix PATH::PREFIX] [--material-override PREFIX=REF] [--source-to-model M00,...,M33] --output-dir DIR [--material-library REF]"
     );
 }

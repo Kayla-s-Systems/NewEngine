@@ -154,6 +154,56 @@ impl RuntimeTextureAsset {
         }
         (data, layout)
     }
+
+    #[inline]
+    pub fn into_concatenated_payload_and_layout(self) -> (Vec<u8>, Vec<RuntimeTextureMipLayout>) {
+        let mut mips = self.mips.into_iter();
+        let Some(first) = mips.next() else {
+            return (Vec::new(), Vec::new());
+        };
+        let mip_count = mips.len() + 1;
+        let remaining_bytes = mips
+            .as_slice()
+            .iter()
+            .map(|mip| mip.bytes.len())
+            .sum::<usize>();
+        let RuntimeTextureMip {
+            level,
+            width,
+            height,
+            bytes,
+        } = first;
+        let first_byte_len = bytes.len() as u64;
+        let mut data = bytes;
+        data.reserve(remaining_bytes);
+        let mut layout = Vec::with_capacity(mip_count);
+        layout.push(RuntimeTextureMipLayout {
+            level,
+            width,
+            height,
+            offset: 0,
+            byte_len: first_byte_len,
+        });
+        for mip in mips {
+            let RuntimeTextureMip {
+                level,
+                width,
+                height,
+                mut bytes,
+            } = mip;
+            let offset = data.len() as u64;
+            let byte_len = bytes.len() as u64;
+            data.append(&mut bytes);
+            layout.push(RuntimeTextureMipLayout {
+                level,
+                width,
+                height,
+                offset,
+                byte_len,
+            });
+        }
+        (data, layout)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -205,5 +255,28 @@ mod tests {
         assert_eq!(layout.len(), 2);
         assert_eq!((layout[0].offset, layout[0].byte_len), (0, 4));
         assert_eq!((layout[1].offset, layout[1].byte_len), (4, 2));
+    }
+
+    #[test]
+    fn owned_single_mip_payload_reuses_source_allocation() {
+        let texture = RuntimeTextureAsset {
+            width: 4,
+            height: 4,
+            format: RuntimeTextureFormat::Rgba8Unorm,
+            mips: vec![RuntimeTextureMip {
+                level: 0,
+                width: 4,
+                height: 4,
+                bytes: vec![1, 2, 3, 4],
+            }],
+        };
+        let source_ptr = texture.mips[0].bytes.as_ptr();
+
+        let (payload, layout) = texture.into_concatenated_payload_and_layout();
+
+        assert_eq!(payload, vec![1, 2, 3, 4]);
+        assert_eq!(payload.as_ptr(), source_ptr);
+        assert_eq!(layout.len(), 1);
+        assert_eq!((layout[0].offset, layout[0].byte_len), (0, 4));
     }
 }

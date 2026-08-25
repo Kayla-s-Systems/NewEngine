@@ -34,6 +34,9 @@ pub fn preload_weapon_audio_definition(audio: &WeaponAudioDefinition) {
                     ack.bytes,
                     ack.cached,
                 );
+                for diagnostic in &ack.diagnostics {
+                    newengine_ulog_api::ulog::info!("{}", diagnostic);
+                }
             }
             Ok(Some(ack)) => newengine_ulog_api::ulog::warn!(
                 "weapon audio preload rejected: action={:?} ref='{}' provider='{}'",
@@ -123,6 +126,9 @@ pub fn play_weapon_item_audio(
                     ack.voice_id,
                     ack.virtualized,
                 );
+            }
+            for diagnostic in &ack.diagnostics {
+                newengine_ulog_api::ulog::info!("{}", diagnostic);
             }
         }
         Ok(Some(ack)) => newengine_ulog_api::ulog::warn!(

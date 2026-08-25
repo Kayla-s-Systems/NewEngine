@@ -172,20 +172,28 @@ pub(super) fn material_for_slot(materials: ForestRoadMaterials, slot: &str) -> M
 pub(super) fn resolve_prefab_part_material(
     mats: &MaterialRegistry,
     authored_material: Option<MaterialId>,
-    fallbacks: ForestRoadMaterials,
+    profile_materials: ForestRoadMaterials,
     material_slot: &str,
 ) -> (MaterialId, newengine_model_domain_api::MeshRenderOptions) {
-    let material_id =
-        authored_material.unwrap_or_else(|| material_for_slot(fallbacks, material_slot));
-    let render_options = mats
-        .resolve(material_id)
-        .map(|material| {
-            if material.desc.flags.contains(MaterialFlags::ALPHA_TEST) {
-                newengine_model_domain_api::MeshRenderOptions::world_masked()
-            } else {
-                newengine_model_domain_api::MeshRenderOptions::world_opaque()
-            }
-        })
-        .unwrap_or_else(newengine_model_domain_api::MeshRenderOptions::world_opaque);
+    // The profile owns the no-authored-material policy explicitly. This is not an
+    // asset-loading fallback: ForestRoad registers the complete slot material set
+    // before prefab admission and selects one deterministically here.
+    let material_id = match authored_material {
+        Some(material_id) => material_id,
+        None => material_for_slot(profile_materials, material_slot),
+    };
+    let render_options = match mats.resolve(material_id) {
+        Some(material) if material.desc.flags.contains(MaterialFlags::ALPHA_TEST) => {
+            newengine_model_domain_api::MeshRenderOptions::world_masked()
+        }
+        Some(_) => newengine_model_domain_api::MeshRenderOptions::world_opaque(),
+        None => {
+            newengine_ulog_api::ulog::error!(
+                "static world material registry invariant failed for slot='{}'; using explicit opaque recovery policy",
+                material_slot,
+            );
+            newengine_model_domain_api::MeshRenderOptions::world_opaque()
+        }
+    };
     (material_id, render_options)
 }
