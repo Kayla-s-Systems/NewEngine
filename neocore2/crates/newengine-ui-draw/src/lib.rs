@@ -14,12 +14,13 @@ pub use binary::{decode_ui_draw_list_bin, encode_ui_draw_list_bin, encode_ui_dra
 pub use layer::{UiLayerDomain, UiLayerDrawPacket, UiLayerDrawPacketSet};
 pub use paint::{
     TextureRef, UiBorderPaintCommand, UiClipPaintCommand, UiIconPaintCommand, UiImagePaintCommand,
-    UiImageRef, UiLayerPaintCommand, UiPaintCommand, UiPaintList, UiPaintNodeRef,
-    UiRectPaintCommand, UiRoundedRectPaintCommand, UiScopePaintCommand, UiTextPaintCommand,
-    UiVectorPaintCommand, VectorRef,
+    UiImageRef, UiLayerPaintCommand, UiMaterialParamValue, UiMaterialQuadPaintCommand,
+    UiPaintCommand, UiPaintList, UiPaintNodeRef, UiPaintPhase, UiRectPaintCommand,
+    UiRoundedRectPaintCommand, UiScopePaintCommand, UiSurfaceEffectPaintCommand,
+    UiTextPaintCommand, UiTextureMode, UiVectorPaintCommand, VectorRef,
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[repr(transparent)]
 pub struct UiTexId(pub u32);
 
@@ -31,6 +32,9 @@ pub mod reserved {
     /// tessellation for rects, borders and temporary vector stubs.
     pub const SOLID_WHITE: UiTexId = UiTexId(15);
     pub const USER_BEGIN: u32 = 16;
+    /// Stable engine-managed namespace for asset-backed UI textures resolved from `.ytd@entry`.
+    /// Kept separate from provider-created atlas ids and external GPU render targets.
+    pub const ASSET_REF_BEGIN: u32 = 0x4000_0000;
 
     /// Reserved range for external GPU-owned textures.
     ///
@@ -48,6 +52,16 @@ pub mod reserved {
     #[inline]
     pub const fn is_external(id: UiTexId) -> bool {
         (id.0 & EXTERNAL_BEGIN) != 0
+    }
+
+    #[inline]
+    pub const fn asset_ref_from_u32(local: u32) -> UiTexId {
+        UiTexId(ASSET_REF_BEGIN | (local & 0x3FFF_FFFF))
+    }
+
+    #[inline]
+    pub const fn is_asset_ref(id: UiTexId) -> bool {
+        (id.0 & 0xC000_0000) == ASSET_REF_BEGIN
     }
 }
 impl UiTexId {

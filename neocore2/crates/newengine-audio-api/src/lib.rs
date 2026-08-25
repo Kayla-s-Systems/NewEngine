@@ -14,7 +14,17 @@ pub const ENGINE_AUDIO_SERVICE_ID: &str = "engine.audio";
 /// First-party/default provider service id for audio backends.
 pub const AUDIO_SERVICE_ID: &str = "audio.api";
 pub const AUDIO_BACKEND_CAPABILITY_ID: &str = "audio.backend";
+pub const AUDIO_PROVIDER_ABI_VERSION: u16 = 1;
 pub const AUDIO_PROVIDER_ABI_ID: &str = "newengine.audio.provider.v1";
+pub const AUDIO_PROVIDER_ABI_CONTRACT_SPEC: newengine_contract_api::ContractSpec =
+    newengine_contract_api::ContractSpec::new(
+        "audio.provider.abi",
+        newengine_contract_api::ContractKind::Abi,
+        newengine_contract_api::ContractVersion::major(AUDIO_PROVIDER_ABI_VERSION),
+        newengine_contract_api::ContractCompatibility::Exact,
+        "newengine-audio-api",
+        Some(AUDIO_PROVIDER_ABI_ID),
+    );
 pub const AUDIO_EMITTER_COMPONENT_TYPE: &str = "audio.emitter";
 pub const AUDIO_ACOUSTIC_SURFACE_COMPONENT_TYPE: &str = "audio.acoustic_surface";
 

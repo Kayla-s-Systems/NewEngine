@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use serde::Serialize;
 
-use crate::system_tag;
+use crate::{system_tag, CapabilityId};
 
 /// Common declaration for a backend service family.
 ///
@@ -17,12 +17,8 @@ pub struct BackendServiceSpec {
     /// Stable engine-facing gateway id consumers call, e.g. `engine.render`.
     pub engine_gateway_id: &'static str,
     /// First-party/default provider service id, e.g. `render.api`.
-    ///
-    /// Third-party providers may use a different service id when their backend
-    /// capability metadata declares the same `engine_gateway` and points its
-    /// `contract` field at the registered provider service.
     pub provider_service_id: &'static str,
-    /// Backend capability id declared by provider plugins.
+    /// Logical backend capability id declared by provider plugins.
     pub backend_capability_id: &'static str,
 }
 
@@ -41,23 +37,26 @@ impl BackendServiceSpec {
             backend_capability_id,
         }
     }
+
+    /// Returns the logical composition capability bound to this backend contract.
+    /// Product profiles use this instead of repeating gateway/service-kind strings.
+    #[inline]
+    pub const fn capability(self) -> CapabilityId {
+        CapabilityId::new(
+            self.backend_capability_id,
+            self.engine_gateway_id,
+            self.domain,
+        )
+    }
 }
 
 /// Typed provider route metadata serialized into backend capability JSON.
-///
-/// This is the structured form of the descriptor fragment consumed by the
-/// gateway registry. Providers should build this from their domain
-/// `BackendServiceSpec` instead of hand-writing JSON strings for
-/// `service_kind`, `engine_gateway`, `contract` and `backend_priority`.
 #[derive(Debug, Clone, Serialize)]
 pub struct BackendRouteDescriptor {
     pub service_kind: &'static str,
     pub engine_gateway: &'static str,
     pub contract: &'static str,
     pub backend_priority: i32,
-    /// Versioned provider ABI advertised by the domain owner, if this backend
-    /// family has a frozen ABI contract. Absence remains valid for legacy and
-    /// domains that have not frozen an ABI yet.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub provider_abi: Option<&'static str>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -123,11 +122,6 @@ impl BackendRouteDescriptor {
         self
     }
 
-    /// Marks this backend route as a concrete provider implementation.
-    ///
-    /// This is intentionally metadata only. The `engine_gateway` field must remain
-    /// the root engine API gateway (for example `engine.ui`), while the personal
-    /// implementation identity should be stored with `provider_route()`.
     pub fn provider_implementation_route(mut self) -> Self {
         self.system_tags
             .push(system_tag::PROVIDER_IMPLEMENTATION_ROUTE);
@@ -194,6 +188,14 @@ mod tests {
 
     const TEST_SPEC: BackendServiceSpec =
         BackendServiceSpec::new("render", "engine.render", "render.api", "render.backend");
+
+    #[test]
+    fn backend_spec_exposes_logical_composition_capability() {
+        let capability = TEST_SPEC.capability();
+        assert_eq!(capability.as_str(), "render.backend");
+        assert_eq!(capability.gateway_id(), "engine.render");
+        assert_eq!(capability.service_kind(), "render");
+    }
 
     #[test]
     fn backend_route_provider_abi_is_optional_and_serialized_when_present() {

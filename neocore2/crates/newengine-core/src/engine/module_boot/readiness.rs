@@ -94,7 +94,9 @@ impl<E: Send + 'static> Engine<E> {
                     &mut self.scheduler,
                     self.shutdown.clone(),
                 );
-                self.modules[i].module.start(&mut ctx)
+                newengine_plugin_host::with_host_module_callback(module_id, || {
+                    self.modules[i].module.start(&mut ctx)
+                })
             };
 
             if let Err(err) = start_res {

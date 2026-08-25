@@ -69,7 +69,7 @@ fn route_snapshot(
 #[inline]
 fn active_selection_reason(route: &crate::service_gateway::ActiveGatewayRoute) -> String {
     format!(
-        "selected_by_registry score={} origin='{}' priority={}",
+        "selected_by_composition_solver score={} origin='{}' priority={}",
         route.active_score,
         route.origin.as_str(),
         route.backend_priority
@@ -187,6 +187,71 @@ where
         return Err("engine-runtime route backend_capability_id is empty".to_owned());
     }
 
+    let normalized_owner = if provider_owner_id.trim().is_empty() {
+        "engine".to_owned()
+    } else {
+        provider_owner_id.to_owned()
+    };
+    let key = format!("{}::{}", gateway_id, provider_service_id);
+    let entry = GatewayProviderRouteEntry {
+        gateway_id: gateway_id.to_owned(),
+        service_kind: service_kind.clone(),
+        provider_service_id: provider_service_id.to_owned(),
+        provider_route_id: provider_route_id.to_owned(),
+        provider_abi: provider_abi
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_owned),
+        provider_owner_id: normalized_owner.clone(),
+        backend_capability_id: backend_capability_id.to_owned(),
+        backend_priority,
+        origin,
+    };
+
+    match crate::host_context::stage_gateway_route_registration(key.clone(), entry.clone()) {
+        Ok(true) => {
+            newengine_ulog_api::ulog::debug!(
+                "gateways: staged provider route gateway='{}' service='{}' provider_route='{}' owner='{}'",
+                gateway_id,
+                provider_service_id,
+                provider_route_id,
+                normalized_owner
+            );
+            return Ok(());
+        }
+        Ok(false) => {
+            if let Some(plugin_id) = crate::host_context::current_plugin_id() {
+                return Err(format!(
+                    "plugin-owned gateway route publication requires provider transaction: plugin='{}' route='{}'",
+                    plugin_id, provider_route_id
+                ));
+            }
+            crate::host_context::reject_topology_mutation_from_host_callback(
+                "register_gateway_provider_route",
+            )?;
+        }
+        Err(error) => return Err(error),
+    }
+
+    if let Some(provider_abi) = entry.provider_abi.as_deref() {
+        let contract = crate::host_context::runtime_contract_by_advertised_id(provider_abi)
+            .ok_or_else(|| {
+                format!(
+                    "engine-runtime route '{}' advertises unknown provider ABI '{}'; publish it through Runtime Contract Catalog or use a normative Engine contract",
+                    provider_route_id, provider_abi
+                )
+            })?;
+        if contract.spec.kind != newengine_runtime_contract_catalog::ContractKind::Abi {
+            return Err(format!(
+                "engine-runtime route '{}' provider ABI '{}' resolves to contract '{}' kind='{}', expected kind='abi'",
+                provider_route_id,
+                provider_abi,
+                contract.spec.key,
+                contract.spec.kind.as_str()
+            ));
+        }
+    }
+
     let c = ctx();
     {
         let services = match c.services.lock() {
@@ -194,13 +259,17 @@ where
             Err(e) => e.into_inner(),
         };
         match services.get(provider_service_id) {
-            Some(entry) if entry.owner_plugin_id.is_none() => {}
-            Some(entry) => {
+            Some(service_entry)
+                if service_entry.owner_plugin_id.is_none()
+                    || service_entry.owner_plugin_id.as_deref()
+                        == Some(normalized_owner.as_str()) => {}
+            Some(service_entry) => {
                 return Err(format!(
-                    "engine-runtime route '{}' cannot route to plugin-owned service '{}' owner='{}'",
+                    "engine-runtime route '{}' cannot route to service '{}' owned by '{}' while route owner is '{}'",
                     gateway_id,
                     provider_service_id,
-                    entry.owner_plugin_id.as_deref().unwrap_or("<unknown>")
+                    service_entry.owner_plugin_id.as_deref().unwrap_or("<host>"),
+                    normalized_owner
                 ));
             }
             None => {
@@ -212,32 +281,11 @@ where
         }
     }
 
-    let key = format!("{}::{}", gateway_id, provider_service_id);
     let mut gateways = match c.gateway_provider_routes.lock() {
         Ok(v) => v,
         Err(e) => e.into_inner(),
     };
-    gateways.insert(
-        key,
-        GatewayProviderRouteEntry {
-            gateway_id: gateway_id.to_owned(),
-            service_kind: service_kind.clone(),
-            provider_service_id: provider_service_id.to_owned(),
-            provider_route_id: provider_route_id.to_owned(),
-            provider_abi: provider_abi
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-                .map(str::to_owned),
-            provider_owner_id: if provider_owner_id.trim().is_empty() {
-                "engine".to_owned()
-            } else {
-                provider_owner_id.to_owned()
-            },
-            backend_capability_id: backend_capability_id.to_owned(),
-            backend_priority,
-            origin,
-        },
-    );
+    gateways.insert(key, entry);
 
     // Never call logging or any gateway-resolving code while the provider-route mutex is held.
     // Structured logging can itself dispatch through engine.logging, which rebuilds the active
@@ -254,7 +302,7 @@ where
         service_kind,
         backend_capability_id,
         backend_priority,
-        provider_owner_id,
+        normalized_owner,
         origin.as_str(),
     );
     Ok(())

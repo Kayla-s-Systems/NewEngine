@@ -1,20 +1,15 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Mutex, OnceLock};
+use std::sync::atomic::Ordering;
 use std::time::Instant;
 
-use newengine_math::collections_prelude::NeHashMap as HashMap;
 use newengine_task_api::{
     EngineTaskEnvelopeV1, EngineTaskEvent, EngineTaskPhase, TaskExecutorKind,
     ENGINE_TASK_ENVELOPE_TOPIC_V1, ENGINE_TASK_EVENT_TOPIC_V1,
 };
 
-static HOST_JOB_SEQ: AtomicU64 = AtomicU64::new(1);
-static ACTIVE_HOST_JOBS: OnceLock<Mutex<HashMap<String, PluginHostJobRecord>>> = OnceLock::new();
-
 #[derive(Clone, Debug)]
-struct PluginHostJobRecord {
+pub(crate) struct PluginHostJobRecord {
     task_id: String,
     name: String,
     category: String,
@@ -74,14 +69,10 @@ impl PluginHostJobRecord {
 pub(crate) struct PluginHostJobBridge;
 
 impl PluginHostJobBridge {
-    #[inline]
-    fn active_jobs() -> &'static Mutex<HashMap<String, PluginHostJobRecord>> {
-        ACTIVE_HOST_JOBS.get_or_init(|| Mutex::new(HashMap::default()))
-    }
-
     fn begin(value: serde_json::Value) {
         let record = PluginHostJobRecord::from_json(&value);
-        if let Ok(mut active) = Self::active_jobs().lock() {
+        let context = crate::host_context::ctx();
+        if let Ok(mut active) = context.active_host_jobs.lock() {
             active.insert(record.task_id.clone(), record.clone());
         }
         let detail = str_field(
@@ -107,7 +98,9 @@ impl PluginHostJobBridge {
 
     fn end(value: serde_json::Value) {
         let task_id = str_field(&value, "id", "host.task.unknown").to_owned();
-        let record = Self::active_jobs()
+        let context = crate::host_context::ctx();
+        let record = context
+            .active_host_jobs
             .lock()
             .ok()
             .and_then(|mut active| active.remove(task_id.as_str()))
@@ -159,7 +152,9 @@ pub(crate) fn next_job_id(prefix: &str) -> String {
     format!(
         "{}.{}",
         prefix,
-        HOST_JOB_SEQ.fetch_add(1, Ordering::Relaxed)
+        crate::host_context::ctx()
+            .host_job_seq
+            .fetch_add(1, Ordering::Relaxed)
     )
 }
 

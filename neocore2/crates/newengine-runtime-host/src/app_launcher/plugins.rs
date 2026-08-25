@@ -13,6 +13,9 @@ where
         startup: &StartupConfig,
         boot_options: Option<&'static [RuntimeHostBootOption]>,
     ) -> EngineResult<()> {
+        if let Some(composition) = self.profile.composition_spec() {
+            super::runtime_units::materialize_declared_runtime_units(engine, startup, composition)?;
+        }
         self.profile.register_modules(engine, startup)?;
         if boot_option_enabled(boot_options, RuntimeHostBootOption::RuntimePlugins) {
             engine.preload_bootstrap_plugins()?;

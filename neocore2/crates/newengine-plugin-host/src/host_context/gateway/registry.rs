@@ -1,10 +1,10 @@
 use std::cell::Cell;
-use std::collections::HashMap;
-use std::sync::{atomic::Ordering, Arc, Mutex, OnceLock};
+use std::sync::{atomic::Ordering, Arc};
 
 use super::super::state::{ctx, GatewayRegistryCache};
 
 thread_local! {
+    // Pure recursion guard. Unlike semantic diagnostics state, this is execution-local.
     static IN_GATEWAY_DIAGNOSTIC: Cell<bool> = const { Cell::new(false) };
 }
 
@@ -26,11 +26,9 @@ pub(super) fn emit_gateway_diagnostic(f: impl FnOnce()) {
     });
 }
 
-static GATEWAY_RESOLUTION_DIAGNOSTICS: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
-
 pub(super) fn should_emit_gateway_resolution(gateway_id: &str, resolution: &str) -> bool {
-    let state = GATEWAY_RESOLUTION_DIAGNOSTICS.get_or_init(|| Mutex::new(HashMap::new()));
-    let mut state = match state.lock() {
+    let context = ctx();
+    let mut state = match context.gateway_resolution_diagnostics.lock() {
         Ok(state) => state,
         Err(poisoned) => poisoned.into_inner(),
     };
@@ -75,12 +73,17 @@ fn build_gateway_registry_snapshot() -> crate::service_gateway::ActiveGatewayReg
             Ok(v) => v,
             Err(e) => e.into_inner(),
         };
+        let descriptors_v2 = match c.plugin_descriptors_v2.lock() {
+            Ok(v) => v,
+            Err(e) => e.into_inner(),
+        };
         descriptors
             .iter()
             .map(|(plugin_id, descriptor)| {
-                crate::service_gateway::PluginDescriptorFact::new(
+                crate::service_gateway::PluginDescriptorFact::new_with_v2(
                     plugin_id.clone(),
                     descriptor.clone(),
+                    descriptors_v2.get(plugin_id).cloned(),
                     plugin_origins
                         .get(plugin_id)
                         .copied()
@@ -136,20 +139,36 @@ fn build_gateway_registry_snapshot() -> crate::service_gateway::ActiveGatewayReg
             .collect::<Vec<_>>()
     };
 
-    crate::service_gateway::ActiveGatewayRegistry::from_facts_with_policy(
+    let capability_matrix = {
+        let requirements = match c.capability_slots.lock() {
+            Ok(value) => value,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        newengine_service_api::CapabilityMatrix::new(
+            requirements
+                .values()
+                .map(|entry| entry.requirement.clone())
+                .collect(),
+        )
+    };
+
+    crate::service_gateway::ActiveGatewayRegistry::from_facts_with_policy_and_matrix(
         &descriptors,
         &services,
         &gateway_provider_routes,
         &selection_policies,
+        capability_matrix,
     )
 }
 
 pub(super) fn gateway_registry_snapshot() -> Arc<crate::service_gateway::ActiveGatewayRegistry> {
     let c = ctx();
-
     loop {
         let generation_before = c.services_generation.load(Ordering::Acquire);
-
+        if generation_before & 1 != 0 {
+            std::thread::yield_now();
+            continue;
+        }
         {
             let cache = match c.gateway_registry_cache.lock() {
                 Ok(v) => v,
@@ -164,11 +183,9 @@ pub(super) fn gateway_registry_snapshot() -> Arc<crate::service_gateway::ActiveG
 
         let registry = Arc::new(build_gateway_registry_snapshot());
         let generation_after = c.services_generation.load(Ordering::Acquire);
-
-        if generation_before != generation_after {
+        if generation_before != generation_after || generation_after & 1 != 0 {
             continue;
         }
-
         {
             let mut cache = match c.gateway_registry_cache.lock() {
                 Ok(v) => v,
@@ -179,7 +196,6 @@ pub(super) fn gateway_registry_snapshot() -> Arc<crate::service_gateway::ActiveG
                 registry: Arc::clone(&registry),
             });
         }
-
         return registry;
     }
 }
@@ -253,4 +269,44 @@ pub(super) fn emit_gateway_route_shadowed(
 
 pub(crate) fn active_engine_gateways() -> Vec<String> {
     gateway_registry_snapshot().gateway_ids()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn gateway_resolution_deduplication_is_instance_scoped() {
+        let a = crate::host_context::create_host_context();
+        let b = crate::host_context::create_host_context();
+
+        crate::host_context::with_host_context(&a, || {
+            assert!(should_emit_gateway_resolution(
+                "engine.render",
+                "provider-a"
+            ));
+            assert!(!should_emit_gateway_resolution(
+                "engine.render",
+                "provider-a"
+            ));
+        });
+
+        crate::host_context::with_host_context(&b, || {
+            assert!(should_emit_gateway_resolution(
+                "engine.render",
+                "provider-a"
+            ));
+            assert!(!should_emit_gateway_resolution(
+                "engine.render",
+                "provider-a"
+            ));
+        });
+
+        crate::host_context::with_host_context(&a, || {
+            assert!(should_emit_gateway_resolution(
+                "engine.render",
+                "provider-b"
+            ));
+        });
+    }
 }

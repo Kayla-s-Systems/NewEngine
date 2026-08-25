@@ -1,10 +1,11 @@
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use flate2::{write::DeflateEncoder, Compression};
 use newengine_asset_format_nef8::ydd_binary::{
-    encode_ydd_binary_body, YddBinaryDocument, YddBinaryEntry, YddBinaryMesh,
+    encode_ydd_binary_body, YddBinaryDocument, YddBinaryEntry, YddBinaryMesh, YddBinarySkinVertex,
     YDD_BINARY_SCHEMA_VERSION,
 };
 use newengine_assets_api::{
@@ -26,11 +27,19 @@ pub struct CharacterCompileRequest {
     /// Optional canonical NEMAT reference. When set, imported LOD0 meshes are
     /// bound deterministically as @m00, @m01, ... in package/mesh order.
     pub material_library_ref: Option<String>,
+    /// Resolve default material slots from sorted native source-material identity.
+    pub material_by_source_identity: bool,
     /// Optional per-package mesh prefixes. If a package has one or more entries here,
     /// only meshes whose decoded name starts with one of those prefixes are imported.
     pub package_mesh_prefixes: Vec<(PathBuf, String)>,
     /// Optional mesh-prefix to canonical material-ref overrides. Longest prefix wins.
     pub material_overrides: Vec<(String, String)>,
+    /// Build-time completeness contract: every prefix must match at least one imported LOD0 mesh.
+    pub required_mesh_prefixes: Vec<String>,
+    /// Explicit fallback for packages whose skin domain is not the master skeleton. The listed
+    /// master joints are used to produce a stable proximity-weighted skeletal approximation until
+    /// the source cloth simulation-node domain has a dedicated runtime.
+    pub package_skin_fallback_joints: Vec<(PathBuf, Vec<String>)>,
     /// Optional rigid affine transform from decoded PAK source space into canonical model space.
     /// The same matrix is persisted as YDD `skin_source_to_model`, preserving native skinning.
     pub source_to_model: Option<[f32; 16]>,
@@ -45,6 +54,16 @@ pub struct CharacterCompileReport {
     pub index_count: usize,
     pub joint_count: usize,
     pub skin_loss: SkinLossStats,
+    pub material_slots: Vec<(String, String)>,
+    pub skin_fallbacks: Vec<SkinFallbackReport>,
+}
+
+#[derive(Clone, Debug)]
+pub struct SkinFallbackReport {
+    pub package: PathBuf,
+    pub mesh: String,
+    pub source_joint_domain_size: usize,
+    pub target_joints: Vec<String>,
 }
 
 /// Offline extraction of rigid pieces authored as joints inside one skinned TLOU2 PC geometry.
@@ -130,6 +149,135 @@ fn transform_mesh_to_model_space(
     Ok(())
 }
 
+fn resolve_master_fallback_joints(
+    skeleton: &DecodedSkeleton,
+    names: &[String],
+    package: &Path,
+) -> Result<Vec<u16>, String> {
+    if names.is_empty() {
+        return Err(format!(
+            "non-skeletal skin fallback has no master joints package='{}'",
+            package.display()
+        ));
+    }
+    let mut resolved = Vec::with_capacity(names.len());
+    for name in names {
+        let name = name.trim();
+        if name.is_empty() {
+            return Err(format!(
+                "non-skeletal skin fallback contains an empty master joint package='{}'",
+                package.display()
+            ));
+        }
+        let index = skeleton
+            .joints
+            .iter()
+            .position(|joint| joint.name == name)
+            .ok_or_else(|| {
+                format!(
+                    "non-skeletal skin fallback master joint not found package='{}' joint='{name}'",
+                    package.display()
+                )
+            })?;
+        let index = u16::try_from(index).map_err(|_| {
+            format!(
+                "non-skeletal skin fallback joint index exceeds u16 package='{}' joint='{name}' index={index}",
+                package.display()
+            )
+        })?;
+        if !resolved.contains(&index) {
+            resolved.push(index);
+        }
+    }
+    Ok(resolved)
+}
+
+fn rebind_mesh_skin_to_master_joints(
+    mesh: &mut crate::geometry::ImportMesh,
+    skeleton_globals: &[Mat4],
+    joint_indices: &[u16],
+) -> Result<(), String> {
+    let Some(source_skin) = mesh.skin.as_ref() else {
+        return Err(format!(
+            "non-skeletal skin fallback requested for unskinned mesh='{}'",
+            mesh.name
+        ));
+    };
+    if source_skin.len() != mesh.vertices.len() {
+        return Err(format!(
+            "non-skeletal skin fallback vertex/skin mismatch mesh='{}' vertices={} skin={}",
+            mesh.name,
+            mesh.vertices.len(),
+            source_skin.len()
+        ));
+    }
+    if joint_indices.is_empty() {
+        return Err(format!(
+            "non-skeletal skin fallback has no resolved joints mesh='{}'",
+            mesh.name
+        ));
+    }
+
+    let anchors = joint_indices
+        .iter()
+        .map(|joint| {
+            let transform = skeleton_globals.get(*joint as usize).ok_or_else(|| {
+                format!(
+                    "non-skeletal skin fallback joint outside master palette mesh='{}' joint={joint}",
+                    mesh.name
+                )
+            })?;
+            Ok((*joint, transform.transform_point3(Vec3::ZERO)))
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+
+    let mut rebound = Vec::with_capacity(mesh.vertices.len());
+    for vertex in &mesh.vertices {
+        let position = Vec3::new(vertex.position[0], vertex.position[1], vertex.position[2]);
+        let mut ranked = anchors
+            .iter()
+            .map(|(joint, anchor)| (*joint, (position - *anchor).length_squared()))
+            .collect::<Vec<_>>();
+        ranked.sort_by(|a, b| a.1.total_cmp(&b.1));
+        ranked.truncate(4);
+
+        let mut joints = [0_u16; 4];
+        let mut weights = [0.0_f32; 4];
+        if ranked[0].1 <= 1.0e-10 {
+            joints[0] = ranked[0].0;
+            weights[0] = 1.0;
+        } else {
+            // Five-centimetre regularization keeps the approximation smooth across jacket seams
+            // while still making sleeves follow shoulder/elbow anchors rather than the torso.
+            const DISTANCE_REGULARIZER_SQ: f32 = 0.0025;
+            let mut total = 0.0_f32;
+            for (slot, (joint, distance_sq)) in ranked.iter().enumerate() {
+                let weight = 1.0 / (distance_sq + DISTANCE_REGULARIZER_SQ);
+                joints[slot] = *joint;
+                weights[slot] = weight;
+                total += weight;
+            }
+            if !total.is_finite() || total <= 0.0 {
+                return Err(format!(
+                    "non-skeletal skin fallback produced invalid weights mesh='{}'",
+                    mesh.name
+                ));
+            }
+            for weight in &mut weights {
+                *weight /= total;
+            }
+        }
+        rebound.push(YddBinarySkinVertex {
+            joints,
+            weights,
+            joints_extra: [0; 4],
+            weights_extra: [0.0; 4],
+        });
+    }
+    mesh.skin = Some(rebound);
+    Ok(())
+}
+
 pub fn compile_character(
     request: &CharacterCompileRequest,
 ) -> Result<CharacterCompileReport, String> {
@@ -141,9 +289,26 @@ pub fn compile_character(
     }
     let skeleton_pak = PakFile::parse(read_file(&request.skeleton_path)?)?;
     let skeleton = decode_skeleton_with_profile(&skeleton_pak, request.skeleton_profile)?;
+    let skeleton_globals = imported_joint_globals(&skeleton)?;
+
+    for (package, joints) in &request.package_skin_fallback_joints {
+        if !request.package_paths.contains(package) {
+            return Err(format!(
+                "non-skeletal skin fallback references a package outside this character build package='{}'",
+                package.display()
+            ));
+        }
+        if joints.is_empty() {
+            return Err(format!(
+                "non-skeletal skin fallback has no joints package='{}'",
+                package.display()
+            ));
+        }
+    }
 
     let mut meshes = Vec::new();
     let mut skin_loss = SkinLossStats::default();
+    let mut skin_fallbacks = Vec::new();
     for path in &request.package_paths {
         let pak = PakFile::parse(read_file(path)?)?;
         let decoded =
@@ -155,13 +320,56 @@ pub fn compile_character(
             .filter(|(filter_path, _)| filter_path == path)
             .map(|(_, prefix)| prefix.as_str())
             .collect::<Vec<_>>();
-        for mesh in decoded.meshes {
+        let fallback_rules = request
+            .package_skin_fallback_joints
+            .iter()
+            .filter(|(package, _)| package == path)
+            .collect::<Vec<_>>();
+        if fallback_rules.len() > 1 {
+            return Err(format!(
+                "multiple non-skeletal skin fallback rules target package='{}'",
+                path.display()
+            ));
+        }
+        let fallback = fallback_rules.first().map(|(_, joints)| joints.as_slice());
+        let resolved_fallback = fallback
+            .map(|joints| resolve_master_fallback_joints(&skeleton, joints, path))
+            .transpose()?;
+
+        for mut mesh in decoded.meshes {
             if !package_filters.is_empty()
                 && !package_filters
                     .iter()
                     .any(|prefix| mesh.name.starts_with(prefix))
             {
                 continue;
+            }
+            if let Some(source_domain) = mesh.source_skin_joint_domain_size {
+                if mesh.skin.is_some() && source_domain != skeleton.joints.len() {
+                    let target_joints = fallback.ok_or_else(|| {
+                        format!(
+                            "non-skeletal skin domain cannot be emitted as master-skeleton skin package='{}' mesh='{}' source_domain={} master_joints={}; configure an explicit package skin fallback or a dedicated cloth runtime",
+                            path.display(),
+                            mesh.name,
+                            source_domain,
+                            skeleton.joints.len()
+                        )
+                    })?;
+                    let resolved = resolved_fallback.as_deref().ok_or_else(|| {
+                        format!(
+                            "non-skeletal skin fallback failed to resolve package='{}' mesh='{}'",
+                            path.display(),
+                            mesh.name
+                        )
+                    })?;
+                    rebind_mesh_skin_to_master_joints(&mut mesh, &skeleton_globals, resolved)?;
+                    skin_fallbacks.push(SkinFallbackReport {
+                        package: path.clone(),
+                        mesh: mesh.name.clone(),
+                        source_joint_domain_size: source_domain,
+                        target_joints: target_joints.to_vec(),
+                    });
+                }
             }
             validate_skin_joint_range(&mesh, skeleton.joints.len(), path)?;
             meshes.push(mesh);
@@ -170,6 +378,18 @@ pub fn compile_character(
     if meshes.is_empty() {
         return Err("character import produced no LOD0 meshes".to_owned());
     }
+    for prefix in &request.required_mesh_prefixes {
+        let prefix = prefix.trim();
+        if prefix.is_empty() {
+            return Err("required mesh prefix must not be empty".to_owned());
+        }
+        if !meshes.iter().any(|mesh| mesh.name.starts_with(prefix)) {
+            return Err(format!(
+                "character completeness contract missing required LOD0 mesh prefix='{prefix}'"
+            ));
+        }
+    }
+    validate_geometry_sanity(&meshes)?;
     let source_to_model = request
         .source_to_model
         .map(validate_rigid_source_to_model)
@@ -209,6 +429,30 @@ pub fn compile_character(
             .map(|mesh| mesh.bounds_max[2])
             .fold(f32::NEG_INFINITY, f32::max),
     ];
+    let source_material_slots = if request.material_by_source_identity {
+        let identities = meshes
+            .iter()
+            .map(|mesh| {
+                mesh.source_material
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                    .ok_or_else(|| {
+                        format!(
+                            "source-material identity mode requires material metadata mesh='{}'",
+                            mesh.name
+                        )
+                    })
+            })
+            .collect::<Result<BTreeSet<_>, _>>()?;
+        identities
+            .into_iter()
+            .enumerate()
+            .map(|(index, identity)| (identity.to_owned(), index))
+            .collect::<BTreeMap<_, _>>()
+    } else {
+        BTreeMap::new()
+    };
     let native_meshes = meshes
         .iter()
         .enumerate()
@@ -221,10 +465,20 @@ pub fn compile_character(
                 .max_by_key(|(prefix, _)| prefix.len())
                 .map(|(_, reference)| reference.clone())
                 .or_else(|| {
-                    request
-                        .material_library_ref
-                        .as_ref()
-                        .map(|library| format!("{}@m{:02}", library.trim_end_matches('@'), index))
+                    request.material_library_ref.as_ref().map(|library| {
+                        let material_index = if request.material_by_source_identity {
+                            let identity = mesh
+                                .source_material
+                                .as_deref()
+                                .expect("validated source-material identity");
+                            *source_material_slots
+                                .get(identity)
+                                .expect("source material slot must exist")
+                        } else {
+                            index
+                        };
+                        format!("{}@m{:02}", library.trim_end_matches('@'), material_index)
+                    })
                 }),
             bounds_min: mesh.bounds_min,
             bounds_max: mesh.bounds_max,
@@ -291,7 +545,63 @@ pub fn compile_character(
         index_count,
         joint_count: skeleton.joints.len(),
         skin_loss,
+        material_slots: source_material_slots
+            .iter()
+            .map(|(identity, index)| (format!("m{index:02}"), identity.clone()))
+            .collect(),
+        skin_fallbacks,
     })
+}
+
+fn validate_geometry_sanity(meshes: &[crate::geometry::ImportMesh]) -> Result<(), String> {
+    const MAX_CHARACTER_EXTENT: f32 = 100.0;
+    for mesh in meshes {
+        if mesh.vertices.is_empty() || mesh.indices.is_empty() || mesh.indices.len() % 3 != 0 {
+            return Err(format!(
+                "invalid runtime geometry mesh='{}' vertices={} indices={}",
+                mesh.name,
+                mesh.vertices.len(),
+                mesh.indices.len()
+            ));
+        }
+        if mesh
+            .bounds_min
+            .iter()
+            .chain(mesh.bounds_max.iter())
+            .any(|value| !value.is_finite())
+        {
+            return Err(format!("non-finite runtime bounds mesh='{}'", mesh.name));
+        }
+        let extent = [
+            mesh.bounds_max[0] - mesh.bounds_min[0],
+            mesh.bounds_max[1] - mesh.bounds_min[1],
+            mesh.bounds_max[2] - mesh.bounds_min[2],
+        ];
+        if extent
+            .iter()
+            .any(|value| !value.is_finite() || *value < 0.0 || *value > MAX_CHARACTER_EXTENT)
+        {
+            return Err(format!(
+                "implausible runtime bounds mesh='{}' min={:?} max={:?}",
+                mesh.name, mesh.bounds_min, mesh.bounds_max
+            ));
+        }
+        for (vertex_index, vertex) in mesh.vertices.iter().enumerate() {
+            if vertex
+                .position
+                .iter()
+                .chain(vertex.normal.iter())
+                .chain(vertex.uv0.iter())
+                .any(|value| !value.is_finite())
+            {
+                return Err(format!(
+                    "non-finite runtime vertex mesh='{}' vertex={vertex_index}",
+                    mesh.name
+                ));
+            }
+        }
+    }
+    Ok(())
 }
 
 fn imported_joint_local_matrix(joint: &crate::skeleton::ImportedJoint) -> Mat4 {

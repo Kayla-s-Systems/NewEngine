@@ -7,7 +7,7 @@ use newengine_math::collections_prelude::{NeBTreeSet as BTreeSet, NeHashMap as H
 use newengine_plugin_api::{Blob, CapabilityId, MethodName, ServiceV1, ServiceV1Dyn};
 use serde_json::{json, Map, Value};
 use std::env;
-use std::sync::OnceLock;
+use std::sync::Arc;
 
 pub const CONFIG_SERVICE_ID: &str = "newengine.config.v1";
 
@@ -93,15 +93,27 @@ fn collect_override_ids_inner(
 }
 
 #[derive(Debug, Clone)]
-struct PluginConfigStore {
+pub(crate) struct PluginConfigStore {
     /// Raw `config.json.plugins` content keyed by top-level root or exact plugin id.
     overrides: HashMap<String, Value>,
+    /// Environment snapshot captured for this Engine instance.
+    environment: HashMap<String, String>,
 }
 
 impl PluginConfigStore {
     #[inline]
     fn new(overrides: HashMap<String, Value>) -> Self {
-        Self { overrides }
+        Self::new_with_environment(overrides, env::vars().collect())
+    }
+
+    fn new_with_environment(
+        overrides: HashMap<String, Value>,
+        environment: HashMap<String, String>,
+    ) -> Self {
+        Self {
+            overrides,
+            environment,
+        }
     }
 
     fn resolve_plugin_overrides(&self, plugin_id: &str) -> Value {
@@ -115,7 +127,7 @@ impl PluginConfigStore {
             merge_missing_fields(&mut resolved, nested);
         }
 
-        apply_env_overrides(plugin_id, &mut resolved);
+        apply_env_overrides_from(&self.environment, plugin_id, &mut resolved);
         resolved
     }
 
@@ -206,7 +218,7 @@ fn lookup_path_flexible<'a>(value: &'a Value, parts: &[&str]) -> Option<&'a Valu
 }
 
 struct ConfigService {
-    store: &'static PluginConfigStore,
+    store: Arc<PluginConfigStore>,
 }
 
 impl ServiceV1 for ConfigService {
@@ -260,20 +272,18 @@ impl ServiceV1 for ConfigService {
     }
 }
 
-static STORE: OnceLock<PluginConfigStore> = OnceLock::new();
-
 #[inline]
 pub fn get_plugin_overrides_with_env(plugin_id: &str) -> Value {
-    if let Some(store) = STORE.get() {
-        return store.resolve_plugin_overrides(plugin_id);
+    let context = crate::host_context::ctx();
+    if let Ok(store) = context.plugin_config_store.lock() {
+        if let Some(store) = store.as_ref() {
+            return store.resolve_plugin_overrides(plugin_id);
+        }
     }
 
-    // Dynamic-library consumers may have their own statically linked copy of
-    // newengine-plugin-host whose local config store has not been initialized.
-    // Process environment is still shared across the composition boundary, so
-    // project/runtime overrides must remain observable before local store init.
+    let environment = crate::host_context::environment_snapshot_utf8();
     let mut resolved = empty_object();
-    apply_env_overrides(plugin_id, &mut resolved);
+    apply_env_overrides_from(&environment, plugin_id, &mut resolved);
     resolved
 }
 
@@ -288,13 +298,8 @@ pub fn plugin_enabled_by_config(plugin_id: &str) -> bool {
         .unwrap_or(true)
 }
 
-/// Registers a core service that exposes per-plugin override objects.
-///
-/// Resolution order:
-/// 1. exact flat plugin id: `plugins["engine.logging.chronicle"]`
-/// 2. nested domain path: `plugins.engine.logging.chronicle`
-/// 3. dotted leaf under a domain root: `plugins.newengine["platform.winit"]`
-/// 4. environment overrides
+/// Registers an instance-owned config service. Each Engine universe receives its
+/// own startup override and environment snapshot.
 pub fn init_plugin_config_service(overrides: HashMap<String, Value>) {
     if overrides.is_empty() {
         newengine_ulog_api::ulog::info!("config: no plugin overrides in startup config");
@@ -303,7 +308,6 @@ pub fn init_plugin_config_service(overrides: HashMap<String, Value>) {
         for (root, value) in &overrides {
             collect_override_ids(root, value, &mut ids);
         }
-
         newengine_ulog_api::ulog::info!(
             "config: plugin overrides loaded (count={}): {}",
             ids.len(),
@@ -311,7 +315,15 @@ pub fn init_plugin_config_service(overrides: HashMap<String, Value>) {
         );
     }
 
-    let store = STORE.get_or_init(|| PluginConfigStore::new(overrides));
+    let store = Arc::new(PluginConfigStore::new_with_environment(
+        overrides,
+        crate::host_context::environment_snapshot_utf8(),
+    ));
+    let context = crate::host_context::ctx();
+    match context.plugin_config_store.lock() {
+        Ok(mut slot) => *slot = Some(Arc::clone(&store)),
+        Err(poisoned) => *poisoned.into_inner() = Some(Arc::clone(&store)),
+    }
     let service = ConfigService { store };
     let dyn_service = ServiceV1Dyn::from_value(service, abi_stable::sabi_trait::TD_Opaque);
     let _ = host_api::host_register_service_impl(dyn_service);
@@ -367,11 +379,15 @@ fn set_path(root: &mut Value, path: &[&str], value: Value) {
     }
 }
 
-fn apply_env_overrides(plugin_id: &str, root: &mut Value) {
+fn apply_env_overrides_from(
+    environment: &HashMap<String, String>,
+    plugin_id: &str,
+    root: &mut Value,
+) {
     let sanitized_id = sanitize_plugin_id_for_env(plugin_id);
     let prefix = format!("{ENV_PLUGIN_PREFIX}{sanitized_id}{ENV_PATH_SEPARATOR}");
 
-    for (key, raw_value) in env::vars() {
+    for (key, raw_value) in environment {
         if !key.starts_with(&prefix) {
             continue;
         }
@@ -387,7 +403,7 @@ fn apply_env_overrides(plugin_id: &str, root: &mut Value) {
             continue;
         }
 
-        let parsed_value = parse_env_value(&raw_value);
+        let parsed_value = parse_env_value(raw_value);
 
         newengine_ulog_api::ulog::debug!(
             "config: env override plugin='{}' key='{}' value='{}'",
@@ -629,6 +645,33 @@ mod tests {
 
         assert_eq!(got["clear_color"], json!([0.02, 0.025, 0.035, 1.0]));
         assert_eq!(got["debug_text"], json!("Exact"));
+    }
+
+    #[test]
+    fn plugin_config_store_is_isolated_per_host_context() {
+        let a = crate::host_context::create_host_context();
+        let b = crate::host_context::create_host_context();
+
+        let mut overrides_a = HashMap::default();
+        overrides_a.insert("engine.render.vulkan".to_owned(), json!({"marker": "A"}));
+        let mut overrides_b = HashMap::default();
+        overrides_b.insert("engine.render.vulkan".to_owned(), json!({"marker": "B"}));
+
+        crate::host_context::with_host_context(&a, || init_plugin_config_service(overrides_a));
+        crate::host_context::with_host_context(&b, || init_plugin_config_service(overrides_b));
+
+        crate::host_context::with_host_context(&a, || {
+            assert_eq!(
+                get_plugin_overrides_with_env("engine.render.vulkan")["marker"],
+                json!("A")
+            );
+        });
+        crate::host_context::with_host_context(&b, || {
+            assert_eq!(
+                get_plugin_overrides_with_env("engine.render.vulkan")["marker"],
+                json!("B")
+            );
+        });
     }
 
     #[test]

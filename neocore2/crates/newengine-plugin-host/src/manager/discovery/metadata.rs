@@ -4,7 +4,8 @@ use std::path::Path;
 
 use libloading::Library;
 use newengine_plugin_api::{
-    PluginBootstrapPhase, PluginDescriptor, PluginInfo, PluginRootV1Ref, PluginSignatureV1,
+    PluginBootstrapPhase, PluginDescriptor, PluginDescriptorV2, PluginInfo, PluginRootV1Ref,
+    PluginSignatureV1, PLUGIN_DESCRIPTOR_V2_SYMBOL_BYTES,
 };
 
 use super::graph::ScannedDynlibKind;
@@ -20,6 +21,7 @@ pub(super) struct ScanPluginProbe {
     pub(super) signature: Option<PluginSignatureV1>,
     pub(super) info: Option<PluginInfo>,
     pub(super) descriptor: Option<PluginDescriptor>,
+    pub(super) descriptor_v2: Option<PluginDescriptorV2>,
     pub(super) has_canonical_root: bool,
     pub(super) has_legacy_root: bool,
 }
@@ -31,6 +33,12 @@ pub(super) fn probe_plugin_metadata(lib: &Library) -> Result<ScanPluginProbe, St
         unsafe { lib.get::<unsafe extern "C" fn() -> PluginSignatureV1>(PLUGIN_SIGNATURE_SYMBOL) }
     {
         out.signature = Some(unsafe { sym() });
+    }
+
+    if let Ok(sym) = unsafe {
+        lib.get::<unsafe extern "C" fn() -> PluginDescriptorV2>(PLUGIN_DESCRIPTOR_V2_SYMBOL_BYTES)
+    } {
+        out.descriptor_v2 = Some(unsafe { sym() });
     }
 
     out.has_canonical_root =
@@ -62,6 +70,13 @@ fn probe_identity_from_probe(probe: &ScanPluginProbe) -> (Option<String>, Option
         .filter(|v| !v.trim().is_empty())
         .or_else(|| {
             probe
+                .descriptor_v2
+                .as_ref()
+                .map(|d| d.id.to_string())
+                .filter(|v| !v.trim().is_empty())
+        })
+        .or_else(|| {
+            probe
                 .descriptor
                 .as_ref()
                 .map(|d| d.id.to_string())
@@ -80,6 +95,13 @@ fn probe_identity_from_probe(probe: &ScanPluginProbe) -> (Option<String>, Option
         .as_ref()
         .map(|s| s.version.to_string())
         .filter(|v| !v.trim().is_empty())
+        .or_else(|| {
+            probe
+                .descriptor_v2
+                .as_ref()
+                .map(|d| d.version.to_string())
+                .filter(|v| !v.trim().is_empty())
+        })
         .or_else(|| {
             probe
                 .descriptor
@@ -114,7 +136,11 @@ pub(super) fn build_scanned_plugin_kind(probe: &ScanPluginProbe) -> Option<Scann
         return None;
     }
 
-    if probe.signature.is_none() && probe.info.is_none() && probe.descriptor.is_none() {
+    if probe.signature.is_none()
+        && probe.info.is_none()
+        && probe.descriptor.is_none()
+        && probe.descriptor_v2.is_none()
+    {
         return None;
     }
 
@@ -130,22 +156,39 @@ pub(super) fn build_scanned_plugin_kind(probe: &ScanPluginProbe) -> Option<Scann
         .unwrap_or(PluginBootstrapPhase::Engine);
 
     let descriptor_kind = probe
-        .descriptor
+        .descriptor_v2
         .as_ref()
         .map(|d| d.kind)
+        .or_else(|| probe.descriptor.as_ref().map(|d| d.kind))
         .or_else(|| probe.signature.as_ref().map(|s| s.kind));
 
-    let declared_capabilities = probe.descriptor.as_ref().map(|d| d.capabilities.len());
-    let service_gateways = probe
-        .descriptor
+    let declared_capabilities = probe
+        .descriptor_v2
         .as_ref()
-        .map(crate::service_gateway::descriptor_engine_gateways)
+        .map(|d| d.capabilities.len())
+        .or_else(|| probe.descriptor.as_ref().map(|d| d.capabilities.len()));
+    let service_gateways = probe
+        .descriptor_v2
+        .as_ref()
+        .map(crate::service_gateway::descriptor_engine_gateways_v2)
+        .or_else(|| {
+            probe
+                .descriptor
+                .as_ref()
+                .map(crate::service_gateway::descriptor_engine_gateways)
+        })
         .unwrap_or_default();
 
     let backend_priority = probe
-        .descriptor
+        .descriptor_v2
         .as_ref()
-        .map(crate::service_gateway::descriptor_max_gateway_priority)
+        .map(crate::service_gateway::descriptor_max_gateway_priority_v2)
+        .or_else(|| {
+            probe
+                .descriptor
+                .as_ref()
+                .map(crate::service_gateway::descriptor_max_gateway_priority)
+        })
         .unwrap_or(0);
 
     Some(ScannedDynlibKind::Plugin {

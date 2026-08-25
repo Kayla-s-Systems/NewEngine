@@ -1,6 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use std::sync::{Arc, OnceLock, RwLock};
+use std::sync::Arc;
 
 use newengine_plugin_api::EditorExtensionsV1;
 
@@ -15,20 +15,17 @@ pub struct LoadedPluginRootSnapshot {
 pub type PluginRootObserver = Arc<dyn Fn(&LoadedPluginRootSnapshot) + Send + Sync + 'static>;
 
 #[derive(Default)]
-struct PluginRootObserverState {
+pub(crate) struct PluginRootObserverState {
     observers: Vec<PluginRootObserver>,
     loaded: Vec<LoadedPluginRootSnapshot>,
-}
-
-fn state() -> &'static RwLock<PluginRootObserverState> {
-    static STATE: OnceLock<RwLock<PluginRootObserverState>> = OnceLock::new();
-    STATE.get_or_init(|| RwLock::new(PluginRootObserverState::default()))
 }
 
 #[inline]
 pub fn register_plugin_root_observer(observer: PluginRootObserver, replay_existing: bool) {
     let replay = {
-        let mut guard = state()
+        let context = crate::host_context::ctx();
+        let mut guard = context
+            .plugin_root_observers
             .write()
             .expect("plugin root observer state poisoned");
         let replay = if replay_existing {
@@ -48,7 +45,9 @@ pub fn register_plugin_root_observer(observer: PluginRootObserver, replay_existi
 #[inline]
 pub(crate) fn record_loaded_plugin_root(snapshot: LoadedPluginRootSnapshot) {
     let observers = {
-        let mut guard = state()
+        let context = crate::host_context::ctx();
+        let mut guard = context
+            .plugin_root_observers
             .write()
             .expect("plugin root observer state poisoned");
         if let Some(existing) = guard
@@ -68,13 +67,31 @@ pub(crate) fn record_loaded_plugin_root(snapshot: LoadedPluginRootSnapshot) {
     }
 }
 
+#[inline]
+pub(crate) fn loaded_plugin_root_snapshot(plugin_id: &str) -> Option<LoadedPluginRootSnapshot> {
+    let context = crate::host_context::ctx();
+    let guard = context
+        .plugin_root_observers
+        .read()
+        .expect("plugin root observer state poisoned");
+    guard
+        .loaded
+        .iter()
+        .find(|entry| entry.plugin_id == plugin_id)
+        .cloned()
+}
+
 /// Aggregates editor extensions exported by all currently loaded plugin roots.
 ///
 /// Export callbacks are copied while holding the observer lock and invoked only
 /// after releasing it. Plugin code therefore never executes under host locks.
 pub fn editor_extensions_snapshot_v1() -> EditorExtensionsV1 {
     let exports = {
-        let guard = state().read().expect("plugin root observer state poisoned");
+        let context = crate::host_context::ctx();
+        let guard = context
+            .plugin_root_observers
+            .read()
+            .expect("plugin root observer state poisoned");
         guard
             .loaded
             .iter()
@@ -112,7 +129,9 @@ fn merge_editor_extensions(target: &mut EditorExtensionsV1, source: EditorExtens
 /// Keeping an ABI function pointer after `Library` destruction would make hot reload
 /// of editing tools unsound.
 pub(crate) fn forget_loaded_plugin_root(plugin_id: &str) {
-    let mut guard = state()
+    let context = crate::host_context::ctx();
+    let mut guard = context
+        .plugin_root_observers
         .write()
         .expect("plugin root observer state poisoned");
     guard.loaded.retain(|entry| entry.plugin_id != plugin_id);

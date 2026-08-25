@@ -15,7 +15,9 @@ use super::state::{
     RenderFrameRuntimeState, RenderGpuSceneState, RenderRuntimeProfileState,
     RenderShadowRuntimeState, RenderUiSurfaceRuntimeState, RenderViewportState,
 };
-use newengine_core::render::{RenderBackendCapabilities, RenderBackendStatus};
+use newengine_core::render::{
+    RenderBackendCapabilities, RenderBackendStatus, RenderExecutionCapabilities,
+};
 use newengine_render_feature_api::{LightExtractionProvider, RenderDrawListProvider};
 
 /// Engine-side render composition root.
@@ -111,6 +113,7 @@ pub struct RuntimeRenderController {
     pub(super) ui: RenderUiSurfaceRuntimeState,
     pub(super) runtime_profile: RenderRuntimeProfileState,
     pub(super) backend_failure: RenderBackendFailureState,
+    pub(super) backend_execution: RenderExecutionCapabilities,
     pub(super) app_policy: RenderRuntimeAppPolicy,
     pub(super) editor_viewport: crate::editor_viewport::EditorViewportController,
 }
@@ -139,6 +142,7 @@ impl RuntimeRenderController {
             .max(super::render_quality::SHADOW_RESOLUTION_MIN);
         self.runtime_profile
             .apply_hardware_tier_once(capabilities.hardware_tier);
+        self.backend_execution = capabilities.execution;
     }
 
     pub(crate) fn backend_status_snapshot(&self) -> RenderBackendStatus {
@@ -354,6 +358,7 @@ impl RuntimeRenderController {
             ui: RenderUiSurfaceRuntimeState::new(),
             runtime_profile: RenderRuntimeProfileState::new(),
             backend_failure: RenderBackendFailureState::new(),
+            backend_execution: RenderExecutionCapabilities::default(),
             app_policy: RenderRuntimeAppPolicy::from_startup_config(),
             editor_viewport: crate::editor_viewport::EditorViewportController::default(),
         }

@@ -1,16 +1,12 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use std::collections::HashSet;
-use std::sync::{Mutex, OnceLock};
-
-use newengine_plugin_api::{CapabilityKind, CapabilityRole, PluginDescriptor};
+use newengine_plugin_api::{CapabilityKind, CapabilityRole, PluginDescriptor, PluginDescriptorV2};
 
 use super::metadata::EngineGatewayCapability;
 
 fn warn_once(key: String, message: impl FnOnce()) {
-    static WARNED_INVALID_GATEWAY_ROUTES: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
-    let warned = WARNED_INVALID_GATEWAY_ROUTES.get_or_init(|| Mutex::new(HashSet::new()));
-    let should_log = match warned.lock() {
+    let context = crate::host_context::ctx();
+    let should_log = match context.invalid_gateway_route_warnings.lock() {
         Ok(mut set) => set.insert(key),
         Err(poisoned) => poisoned.into_inner().insert(key),
     };
@@ -28,6 +24,29 @@ pub(crate) fn descriptor_declares_service(descriptor: &PluginDescriptor, service
 }
 
 pub(crate) fn descriptor_provided_services(descriptor: &PluginDescriptor) -> Vec<String> {
+    let mut out: Vec<String> = descriptor
+        .capabilities
+        .iter()
+        .filter(|cap| cap.role == CapabilityRole::Provides && cap.kind == CapabilityKind::ServiceV1)
+        .map(|cap| cap.id.to_string())
+        .collect();
+    out.sort();
+    out.dedup();
+    out
+}
+
+pub(crate) fn descriptor_v2_declares_service(
+    descriptor: &PluginDescriptorV2,
+    service_id: &str,
+) -> bool {
+    descriptor.capabilities.iter().any(|cap| {
+        cap.role == CapabilityRole::Provides
+            && cap.kind == CapabilityKind::ServiceV1
+            && cap.id.as_str() == service_id
+    })
+}
+
+pub(crate) fn descriptor_v2_provided_services(descriptor: &PluginDescriptorV2) -> Vec<String> {
     let mut out: Vec<String> = descriptor
         .capabilities
         .iter()
@@ -107,5 +126,23 @@ pub(crate) fn gateway_provider_service_id(
             );
             None
         }
+    }
+}
+
+pub(crate) fn gateway_provider_service_id_v2(
+    descriptor: &PluginDescriptorV2,
+    gateway: &EngineGatewayCapability,
+) -> Option<String> {
+    if let Some(service_id) = gateway.provider_service_id.as_deref() {
+        if descriptor_v2_declares_service(descriptor, service_id) {
+            return Some(service_id.to_owned());
+        }
+        return None;
+    }
+
+    let services = descriptor_v2_provided_services(descriptor);
+    match services.as_slice() {
+        [single] => Some(single.clone()),
+        _ => None,
     }
 }

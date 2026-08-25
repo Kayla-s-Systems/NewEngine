@@ -331,8 +331,8 @@ fn present_prelaunch_loading_ui_frame(
     }
 
     // `RenderApi::submit_frame` is an envelope submission contract, not a universal
-    // begin-frame contract. Open the bootstrap frame explicitly so non-Vulkan backends
-    // do not depend on Vulkan's defensive `if !in_frame { begin_frame(...) }` behavior.
+    // begin-frame contract. Open the bootstrap frame explicitly so non-backend backends
+    // do not depend on backend's defensive `if !in_frame { begin_frame(...) }` behavior.
     r.begin_frame(BeginFrameDesc::new(clear_color).with_frame_index(frame_index))?;
     let envelope = build_ui_layer_frame_envelope(
         frame_index,

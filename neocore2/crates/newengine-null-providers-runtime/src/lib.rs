@@ -69,7 +69,7 @@ fn null_render_info() -> RenderBackendInfo {
         backend_version: "0.1.0".to_owned(),
         debug_text: "North Star | NullRenderer (degraded)".to_owned(),
         clear_color: [0.0, 0.0, 0.0, 1.0],
-        capabilities: RenderBackendCapabilities::default(),
+        capabilities: RenderBackendCapabilities::headless_default(),
         work_budget: RenderWorkBudget::default(),
         protocol_version: Default::default(),
     }

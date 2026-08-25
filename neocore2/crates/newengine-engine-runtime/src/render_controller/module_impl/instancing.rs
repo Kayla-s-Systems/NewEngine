@@ -129,7 +129,7 @@ pub(super) fn render_instances_as_bytes(instances: &[RenderInstanceRaw]) -> &[u8
 ///
 /// The buffer is intentionally reused across frames. It grows when capacity is
 /// insufficient and keeps a cursor for sub-allocation. This avoids one buffer per
-/// batch and keeps ownership inside the render controller instead of the Vulkan
+/// batch and keeps ownership inside the render controller instead of the backend
 /// plugin.
 #[derive(Debug)]
 pub(in crate::render_controller) struct PackedInstanceUpload {

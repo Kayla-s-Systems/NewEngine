@@ -7,13 +7,14 @@ use abi_stable::std_types::RVec;
 use libloading::Library;
 
 use newengine_plugin_api::{
-    ConfigDiagLevelV1, ConfigPatchV1, HostApiV1, PluginDescriptor, PluginInfo, PluginRootV1Ref,
-    LEGACY_PLUGIN_ROOT_SYMBOL_BYTES_NUL, LEGACY_PLUGIN_ROOT_SYMBOL_NAME,
-    PLUGIN_ROOT_SYMBOL_BYTES_NUL, PLUGIN_ROOT_SYMBOL_NAME,
+    ConfigDiagLevelV1, ConfigPatchV1, HostApiV1, PluginDescriptor, PluginDescriptorV2, PluginInfo,
+    PluginRootV1Ref, LEGACY_PLUGIN_ROOT_SYMBOL_BYTES_NUL, LEGACY_PLUGIN_ROOT_SYMBOL_NAME,
+    PLUGIN_DESCRIPTOR_V2_SYMBOL_BYTES_NUL, PLUGIN_ROOT_SYMBOL_BYTES_NUL, PLUGIN_ROOT_SYMBOL_NAME,
 };
 
 use crate::host_context::{
-    register_plugin_descriptor, unregister_by_owner, with_current_plugin_id,
+    begin_provider_transaction, commit_provider_transaction, register_plugin_descriptor,
+    rollback_provider_transaction, validate_provider_transaction, with_current_plugin_id,
 };
 use crate::plugin_config_service::get_plugin_overrides_with_env;
 use crate::root_observers::{record_loaded_plugin_root, LoadedPluginRootSnapshot};
@@ -125,6 +126,7 @@ impl PluginManager {
         host: HostApiV1,
         load_origin: PluginLoadOrigin,
     ) -> Result<(), PluginLoadError> {
+        crate::host_context::activate_host_context(&self.host);
         let pretty_path = pretty_abs_path(path);
         newengine_ulog_api::ulog::info!("plugins: loading '{}'", pretty_path.as_str());
 
@@ -177,6 +179,13 @@ impl PluginManager {
             "plugins: load stage='root-symbol-done' path='{}'",
             pretty_path.as_str()
         );
+        let descriptor_v2 = unsafe {
+            lib.get::<unsafe extern "C" fn() -> PluginDescriptorV2>(
+                PLUGIN_DESCRIPTOR_V2_SYMBOL_BYTES_NUL,
+            )
+        }
+        .ok()
+        .map(|symbol| unsafe { symbol() });
 
         let t = Instant::now();
         newengine_ulog_api::ulog::info!(
@@ -223,6 +232,20 @@ impl PluginManager {
             shutdown_adapter_any(module_any);
             return Err(e);
         }
+        if let Some(typed) = descriptor_v2.as_ref() {
+            let typed_id = typed.id.as_str();
+            let typed_version = typed.version.as_str();
+            if typed_id != id_str || typed_version != ver_str || typed.kind != descriptor.kind {
+                shutdown_adapter_any(module_any);
+                return Err(PluginLoadError {
+                    path: path.to_path_buf(),
+                    message: format!(
+                        "typed descriptor V2 identity mismatch v1={{id:'{}', version:'{}', kind:{:?}}} v2={{id:'{}', version:'{}', kind:{:?}}}",
+                        id_str, ver_str, descriptor.kind, typed_id, typed_version, typed.kind
+                    ),
+                });
+            }
+        }
 
         if self.loaded_ids.contains(&id_str) {
             newengine_ulog_api::ulog::warn!(
@@ -255,20 +278,52 @@ impl PluginManager {
                 crate::service_gateway::GatewayProviderOrigin::DevOverride
             }
         };
-        provider_origin = register_plugin_descriptor(&id_str, descriptor.clone(), provider_origin);
+        begin_provider_transaction(&id_str).map_err(|e| PluginLoadError {
+            path: path.to_path_buf(),
+            message: format!("provider transaction begin failed: {e}"),
+        })?;
+        provider_origin = register_plugin_descriptor(
+            &id_str,
+            descriptor.clone(),
+            descriptor_v2.clone(),
+            provider_origin,
+        );
 
         let t = Instant::now();
-        let init_breakdown = init_with_overrides(
+        let init_breakdown = match init_with_overrides(
             &mut module_any,
             &id_str,
             host.clone(),
             overrides_non_empty,
             &overrides,
-        )
-        .map_err(|e| PluginLoadError {
-            path: path.to_path_buf(),
-            message: format!("init failed: {e}"),
-        })?;
+        ) {
+            Ok(value) => value,
+            Err(error) => {
+                rollback_provider_transaction(&id_str);
+                return Err(PluginLoadError {
+                    path: path.to_path_buf(),
+                    message: format!("init failed: {error}"),
+                });
+            }
+        };
+        if let Err(error) = validate_provider_transaction(&id_str) {
+            rollback_provider_transaction(&id_str);
+            shutdown_after_failed_init(&id_str, &mut module_any);
+            return Err(PluginLoadError {
+                path: path.to_path_buf(),
+                message: format!("provider transaction validation failed: {error}"),
+            });
+        }
+        let committed_services =
+            commit_provider_transaction(&id_str).map_err(|error| PluginLoadError {
+                path: path.to_path_buf(),
+                message: format!("provider transaction commit failed: {error}"),
+            })?;
+        newengine_ulog_api::ulog::debug!(
+            "plugins: provider transaction committed id='{}' services={}",
+            id_str,
+            committed_services
+        );
         tm.init_total_ms = t.elapsed().as_millis();
         tm.init_breakdown = Some(init_breakdown);
         tm.total_ms = t_total.elapsed().as_millis();
@@ -301,11 +356,15 @@ impl PluginManager {
         }
 
         self.loaded_ids.insert(id_str.clone());
+        let descriptor_v2 =
+            descriptor_v2.unwrap_or_else(|| PluginDescriptorV2::from_legacy(&descriptor));
         self.loaded.push(LoadedPlugin {
             path: path.to_path_buf(),
+            loaded_binary_path: path.to_path_buf(),
             module: module_any,
             info,
             descriptor: Some(descriptor),
+            descriptor_v2: Some(descriptor_v2),
             state: PluginState::Registered,
             disabled_reason: None,
             icon_small,
@@ -477,12 +536,10 @@ fn init_with_overrides(
     match init_res {
         Ok(Ok(t)) => Ok(t),
         Ok(Err(e)) => {
-            unregister_by_owner(id_str);
             shutdown_after_failed_init(id_str, module_any);
             Err(e)
         }
         Err(_) => {
-            unregister_by_owner(id_str);
             shutdown_after_failed_init(id_str, module_any);
             Err("init panicked".to_string())
         }

@@ -95,6 +95,7 @@ pub(super) fn draw_skinned_player_primitives_shadow(
             pose,
             lit.skin_bgl,
             this.frame.frame_index,
+            this.backend_execution.host_visible_ring_slots(),
             r,
         )?;
         let base_texture = if material_plan.alpha_cutoff > 0.0 {

@@ -109,7 +109,9 @@ impl<E: Send + 'static> Engine<E> {
 
                 if catch_panics {
                     match panic::catch_unwind(AssertUnwindSafe(|| {
-                        s.module.on_event(&mut ctx, event_any)
+                        newengine_plugin_host::with_host_module_callback(module_id, || {
+                            s.module.on_event(&mut ctx, event_any)
+                        })
                     })) {
                         Ok(r) => r,
                         Err(payload) => Err(EngineError::Other(format!(
@@ -119,7 +121,9 @@ impl<E: Send + 'static> Engine<E> {
                         ))),
                     }
                 } else {
-                    s.module.on_event(&mut ctx, event_any)
+                    newengine_plugin_host::with_host_module_callback(module_id, || {
+                        s.module.on_event(&mut ctx, event_any)
+                    })
                 }
             };
 
@@ -151,7 +155,10 @@ impl<E: Send + 'static> Engine<E> {
                                 scheduler,
                                 shutdown.clone(),
                             );
-                            let _ = s.module.shutdown(&mut ctx);
+                            let _ =
+                                newengine_plugin_host::with_host_module_callback(module_id, || {
+                                    s.module.shutdown(&mut ctx)
+                                });
                             s.shutdown_called = true;
                             s.state = ModuleState::Disabled;
                         }

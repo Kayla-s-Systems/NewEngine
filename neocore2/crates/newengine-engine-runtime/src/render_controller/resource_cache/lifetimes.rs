@@ -7,7 +7,10 @@ impl RuntimeRenderController {
         &mut self,
         r: &mut dyn newengine_core::render::RenderApi,
     ) {
-        self.gpu.lifetimes.resources.collect(r);
+        self.gpu
+            .lifetimes
+            .resources
+            .collect(r, self.frame.frame_index, self.backend_execution);
     }
 
     pub(in crate::render_controller) fn retire_render_target(&mut self, rt: RenderTargetId) {

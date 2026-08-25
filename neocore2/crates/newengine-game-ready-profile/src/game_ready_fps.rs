@@ -80,9 +80,8 @@ pub const GAME_READY_FPS_ENV_POLICY: &[(&str, &str)] = &[
     ("NEWENGINE_REQUIRE_ASSET_MANAGER", "1"),
     ("NEWENGINE_REQUIRE_MATERIALS_BACKEND", "1"),
     ("NEWENGINE_REQUIRE_UI_BACKEND", "1"),
-    // Shipping gameplay mounts the project-authored HUD. Keep the technical/FPS
-    // overlay independent so diagnostics can coexist with gameplay UI.
-    ("NEWENGINE_RUNTIME_DEBUG_OVERLAY", "1"),
+    // Shipping gameplay presents only project-authored UI. Render diagnostics stay
+    // available through telemetry/logging and are never mounted as a game HUD layer.
     ("NEWENGINE_PLUGIN_TARGET", "runtime"),
     ("NEWENGINE_BOOTSTRAP_PLUGIN_PRELOAD", "deferred"),
     ("NEWENGINE_SHADER_ASYNC_PREBAKED_UNTIL_READY", "1"),
@@ -156,6 +155,11 @@ impl GameReadyFpsApp {
 }
 
 impl RuntimeHostAppProfile for GameReadyFpsApp {
+    #[inline]
+    fn composition_spec(&self) -> Option<newengine_service_api::EngineCompositionSpec> {
+        Some(crate::provider_routes::GAME_READY_COMPOSITION_SPEC)
+    }
+
     #[inline]
     fn register_modules(
         &self,
@@ -236,7 +240,7 @@ mod tests {
                 .find_map(|(candidate, value)| (*candidate == key).then_some(*value))
         };
         assert_eq!(value("NEWENGINE_REQUIRE_UI_BACKEND"), Some("1"));
-        assert_eq!(value("NEWENGINE_RUNTIME_DEBUG_OVERLAY"), Some("1"));
+        assert_eq!(value("NEWENGINE_RUNTIME_DEBUG_OVERLAY"), None);
         assert_eq!(
             value(GAME_READY_UI_SCREEN_PROFILE_ENV),
             Some(GAME_READY_UI_PROFILE_GAME)

@@ -1,9 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use std::{
-    collections::BTreeMap,
-    sync::{Arc, OnceLock, RwLock},
-};
+use std::{collections::BTreeMap, sync::Arc};
 
 use newengine_engine_runtime::{
     gameplay::{
@@ -136,76 +133,101 @@ impl GameModuleFactoryRegistration {
     }
 }
 
-static FACTORIES: OnceLock<RwLock<BTreeMap<&'static str, GameModuleFactoryRegistration>>> =
-    OnceLock::new();
-
-fn factories() -> &'static RwLock<BTreeMap<&'static str, GameModuleFactoryRegistration>> {
-    FACTORIES.get_or_init(|| RwLock::new(BTreeMap::new()))
+#[derive(Clone, Default)]
+pub struct GameModuleFactoryRegistry {
+    entries: BTreeMap<&'static str, GameModuleFactoryRegistration>,
 }
 
-pub fn register_game_module_factory(
-    registration: GameModuleFactoryRegistration,
-) -> Result<(), String> {
-    if registration.module_id.trim().is_empty() {
-        return Err("game-module factory id must not be empty".to_owned());
-    }
-    let mut registry = factories()
-        .write()
-        .map_err(|_| "game-module factory registry poisoned".to_owned())?;
-    match registry.get(registration.module_id) {
-        Some(existing) if existing.factory as usize == registration.factory as usize => Ok(()),
-        Some(_) => Err(format!(
-            "game-module factory '{}' already registered by another producer",
-            registration.module_id
-        )),
-        None => {
-            registry.insert(registration.module_id, registration);
-            Ok(())
+impl GameModuleFactoryRegistry {
+    pub fn register(&mut self, registration: GameModuleFactoryRegistration) -> Result<(), String> {
+        if registration.module_id.trim().is_empty() {
+            return Err("game-module factory id must not be empty".to_owned());
         }
+        match self.entries.get(registration.module_id) {
+            Some(existing) if existing.factory as usize == registration.factory as usize => Ok(()),
+            Some(_) => Err(format!(
+                "game-module factory '{}' already registered by another producer",
+                registration.module_id
+            )),
+            None => {
+                self.entries.insert(registration.module_id, registration);
+                Ok(())
+            }
+        }
+    }
+
+    #[inline]
+    pub fn contains(&self, module_id: &str) -> bool {
+        self.entries.contains_key(module_id.trim())
+    }
+
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
+    pub fn resolve_runtime(
+        &self,
+        runtime: &RuntimeCompositionContext,
+        target: GameModuleTarget,
+    ) -> Result<Option<Arc<dyn GameModuleComposition>>, String> {
+        let Some(module_id) = runtime
+            .game_module
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        else {
+            return Ok(None);
+        };
+        let registration = self.entries.get(module_id).copied().ok_or_else(|| {
+            let available = self.entries.keys().copied().collect::<Vec<_>>().join(", ");
+            format!(
+                "runtime requires game_module '{module_id}', but this Engine instance has no matching composition factory; available=[{available}]"
+            )
+        })?;
+        let module = (registration.factory)(runtime, target)?;
+        let descriptor = module.descriptor();
+        descriptor
+            .validate()
+            .map_err(|errors| format!("game-module descriptor invalid: {}", errors.join("; ")))?;
+        if descriptor.module_id != module_id {
+            return Err(format!(
+                "game-module composition identity mismatch runtime='{}' factory='{}'",
+                module_id, descriptor.module_id
+            ));
+        }
+        Ok(Some(module))
+    }
+
+    #[inline]
+    pub fn resolve_project(
+        &self,
+        project: &ProjectRuntimeContext,
+        target: GameModuleTarget,
+    ) -> Result<Option<Arc<dyn GameModuleComposition>>, String> {
+        self.resolve_runtime(&RuntimeCompositionContext::from_project(project), target)
     }
 }
 
 pub fn resolve_runtime_game_module(
+    registry: &GameModuleFactoryRegistry,
     runtime: &RuntimeCompositionContext,
     target: GameModuleTarget,
 ) -> Result<Option<Arc<dyn GameModuleComposition>>, String> {
-    let Some(module_id) = runtime
-        .game_module
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    else {
-        return Ok(None);
-    };
-    let registration = factories()
-        .read()
-        .map_err(|_| "game-module factory registry poisoned".to_owned())?
-        .get(module_id)
-        .copied()
-        .ok_or_else(|| {
-            format!(
-                "runtime requires game_module '{module_id}', but no composition factory is registered"
-            )
-        })?;
-    let module = (registration.factory)(runtime, target)?;
-    let descriptor = module.descriptor();
-    descriptor
-        .validate()
-        .map_err(|errors| format!("game-module descriptor invalid: {}", errors.join("; ")))?;
-    if descriptor.module_id != module_id {
-        return Err(format!(
-            "game-module composition identity mismatch runtime='{}' factory='{}'",
-            module_id, descriptor.module_id
-        ));
-    }
-    Ok(Some(module))
+    registry.resolve_runtime(runtime, target)
 }
 
 pub fn resolve_project_game_module(
+    registry: &GameModuleFactoryRegistry,
     project: &ProjectRuntimeContext,
     target: GameModuleTarget,
 ) -> Result<Option<Arc<dyn GameModuleComposition>>, String> {
-    resolve_runtime_game_module(&RuntimeCompositionContext::from_project(project), target)
+    registry.resolve_project(project, target)
 }
 
 #[derive(Clone, Copy)]
@@ -279,5 +301,30 @@ mod tests {
             GameModuleTarget::from(RuntimeLaunchProfile::Server),
             GameModuleTarget::Server
         );
+    }
+
+    fn rejected_test_factory(
+        _runtime: &RuntimeCompositionContext,
+        _target: GameModuleTarget,
+    ) -> Result<Arc<dyn GameModuleComposition>, String> {
+        Err("test factory is not intended to resolve".to_owned())
+    }
+
+    #[test]
+    fn factory_registries_are_instance_scoped() {
+        let mut engine_a = GameModuleFactoryRegistry::default();
+        let engine_b = GameModuleFactoryRegistry::default();
+
+        engine_a
+            .register(GameModuleFactoryRegistration::new(
+                "test.module.a",
+                rejected_test_factory,
+            ))
+            .unwrap();
+
+        assert!(engine_a.contains("test.module.a"));
+        assert!(!engine_b.contains("test.module.a"));
+        assert_eq!(engine_a.len(), 1);
+        assert_eq!(engine_b.len(), 0);
     }
 }

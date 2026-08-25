@@ -2,7 +2,9 @@ use std::path::PathBuf;
 
 use abi_stable::std_types::RResult;
 use libloading::Library;
-use newengine_plugin_api::{CapabilityDesc, PluginDescriptor, PluginInfo, PluginKind};
+use newengine_plugin_api::{
+    CapabilityDesc, PluginDescriptor, PluginDescriptorV2, PluginInfo, PluginKind,
+};
 
 use super::adapter::ModuleAdapterAny;
 use super::ui_assets::PluginIconData;
@@ -75,10 +77,15 @@ pub struct PluginSnapshotEntry {
 }
 
 pub(crate) struct LoadedPlugin {
+    /// Stable source path used for discovery and subsequent rebuild/reload operations.
     pub(crate) path: PathBuf,
+    /// Actual mapped binary path. Hot reload uses a unique shadow copy on platforms
+    /// where loading the same DLL path would return the already-mapped module.
+    pub(crate) loaded_binary_path: PathBuf,
     pub(crate) module: ModuleAdapterAny,
     pub(crate) info: PluginInfo,
     pub(crate) descriptor: Option<PluginDescriptor>,
+    pub(crate) descriptor_v2: Option<PluginDescriptorV2>,
     pub(crate) state: PluginState,
     pub(crate) disabled_reason: Option<String>,
     pub(crate) icon_small: Option<PluginIconData>,
@@ -138,10 +145,12 @@ impl LoadedPlugin {
     /// races on Windows while preserving explicit unload for hot-reload paths.
     pub(crate) fn drop_with_library_policy(self, retain_library: bool) {
         let LoadedPlugin {
-            path: _,
+            path,
+            loaded_binary_path,
             module,
             info: _,
             descriptor: _,
+            descriptor_v2: _,
             state: _,
             disabled_reason: _,
             icon_small: _,
@@ -151,6 +160,20 @@ impl LoadedPlugin {
         drop(module);
         if retain_library {
             std::mem::forget(_lib);
+            return;
+        }
+
+        drop(_lib);
+        if loaded_binary_path != path {
+            if let Err(error) = std::fs::remove_file(&loaded_binary_path) {
+                if error.kind() != std::io::ErrorKind::NotFound {
+                    newengine_ulog_api::ulog::debug!(
+                        "plugins: hot-reload shadow cleanup deferred path='{}' err='{}'",
+                        loaded_binary_path.display(),
+                        error
+                    );
+                }
+            }
         }
     }
 }

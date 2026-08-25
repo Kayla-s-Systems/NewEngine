@@ -1,0 +1,9 @@
+[package]
+name = "newengine-runtime-contract-catalog"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+newengine-contract-api = { path = "../newengine-contract-api" }
+newengine-contract-registry = { path = "../newengine-contract-registry" }
+newengine-plugin-api = { path = "../newengine-plugin-api" }

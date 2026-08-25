@@ -16,7 +16,8 @@ pub use routes::{
     register_null_engine_gateway_provider_route_with_abi, resolve_service_for_engine_gateway,
 };
 pub use slots::{
-    declare_engine_capability_slot, declare_engine_composition, list_engine_capability_slots,
+    declare_engine_capability_requirement, declare_engine_capability_slot,
+    declare_engine_composition, list_engine_capability_slots,
     validate_required_engine_capability_slots,
 };
 
@@ -66,6 +67,10 @@ mod gateway_diagnostic_tests {
             .expect("declared capability slot");
         assert_eq!(slot.state, "empty");
         assert!(!slot.required);
+        assert_eq!(
+            slot.requirement_level,
+            newengine_service_api::CapabilityRequirementLevel::Optional
+        );
         assert!(slot.provider_service_id.is_none());
     }
 }

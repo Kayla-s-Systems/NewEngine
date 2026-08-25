@@ -88,6 +88,22 @@ const MY_BACKEND_ROUTES: &[PluginBackendRouteDefinition] = &[optional_backend_ro
 const MY_CAPABILITIES: &[PluginCapabilityDefinition] = &[
     provided_capability("example.write", CapabilityKind::Other, 1, ""),
 ];
+
+// Optional extension contracts are an overlay; they do not modify the
+// normative Engine Contract Registry or the PluginDefinition source layout.
+const MY_CONTRACTS: &[PluginContractDefinition] = &[
+    plugin_contract(
+        "example.streaming.protocol",
+        ContractKind::Protocol,
+        ContractVersion::major(1),
+        ContractCompatibility::SameMajor,
+        Some("example.streaming/v1"),
+    ),
+];
+
+fn descriptor() -> PluginDescriptor {
+    PLUGIN_DEFINITION.with_contracts(MY_CONTRACTS).descriptor()
+}
 ```
 
 //----------------------------------------------//
@@ -100,7 +116,7 @@ Do not mix descriptor declaration with runtime behavior.
 Good:
 
 ```text
-plugin_definition.rs    -> identity, services, routes, capabilities
+plugin_definition.rs    -> identity, services, routes, capabilities, optional contracts
 service.rs              -> ServiceV1 method handling
 commands.rs             -> command handlers
 device.rs/runtime.rs    -> provider-owned state and backend implementation
@@ -142,7 +158,7 @@ Practical North Star layout:
 
 ```text
 src/
-  plugin_definition.rs    # identity, services, routes, capabilities
+  plugin_definition.rs    # identity, services, routes, capabilities, optional contracts
   module.rs or lib.rs      # thin PluginModule bridge
   service.rs               # ServiceV1 implementation
   commands.rs              # optional command handlers

@@ -7,8 +7,9 @@
 //! owns descriptor construction and ABI boilerplate.
 
 use crate::plugin_api::{
-    BackendRouteDescriptor, BackendServiceSpec, CapabilityDesc, CapabilityKind, CapabilityRole,
-    PluginDescriptor, PluginKind,
+    BackendRouteDescriptor, BackendServiceSpec, CapabilityDesc, CapabilityDescV2, CapabilityKind,
+    CapabilityRole, ContractCompatibility, ContractKind, ContractVersion, PluginDescriptor,
+    PluginDescriptorV2, PluginKind, RuntimeContractDeclaration,
 };
 use abi_stable::std_types::RString;
 use serde_json::Value;
@@ -28,6 +29,75 @@ impl PluginDefinition {
     #[inline]
     pub fn descriptor(self) -> PluginDescriptor {
         descriptor_from_definition(self)
+    }
+
+    #[inline]
+    pub fn descriptor_v2(self) -> PluginDescriptorV2 {
+        descriptor_v2_from_definition(self)
+    }
+
+    /// Adds runtime extension contracts without changing the stable PluginDefinition
+    /// layout used by existing plugin source. The returned wrapper exposes the same
+    /// descriptor()/descriptor_v2() authoring surface.
+    #[inline]
+    pub const fn with_contracts(
+        self,
+        contracts: &'static [PluginContractDefinition],
+    ) -> PluginDefinitionWithContracts {
+        PluginDefinitionWithContracts {
+            definition: self,
+            contracts,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct PluginDefinitionWithContracts {
+    pub definition: PluginDefinition,
+    pub contracts: &'static [PluginContractDefinition],
+}
+
+impl PluginDefinitionWithContracts {
+    #[inline]
+    pub fn descriptor(self) -> PluginDescriptor {
+        descriptor_with_contracts(self.definition, self.contracts)
+    }
+
+    #[inline]
+    pub fn descriptor_v2(self) -> PluginDescriptorV2 {
+        let mut descriptor = descriptor_v2_from_definition(self.definition);
+        for contract in self.contracts {
+            descriptor
+                .capabilities
+                .push(contract_capability(*contract).to_v2_compat());
+        }
+        descriptor
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct PluginContractDefinition {
+    pub key: &'static str,
+    pub kind: ContractKind,
+    pub version: ContractVersion,
+    pub compatibility: ContractCompatibility,
+    pub advertised_id: Option<&'static str>,
+}
+
+#[inline]
+pub const fn plugin_contract(
+    key: &'static str,
+    kind: ContractKind,
+    version: ContractVersion,
+    compatibility: ContractCompatibility,
+    advertised_id: Option<&'static str>,
+) -> PluginContractDefinition {
+    PluginContractDefinition {
+        key,
+        kind,
+        version,
+        compatibility,
+        advertised_id,
     }
 }
 
@@ -205,7 +275,116 @@ pub fn descriptor_from_definition(def: PluginDefinition) -> PluginDescriptor {
     builder.build()
 }
 
+pub fn descriptor_with_contracts(
+    def: PluginDefinition,
+    contracts: &[PluginContractDefinition],
+) -> PluginDescriptor {
+    let mut descriptor = descriptor_from_definition(def);
+    for contract in contracts {
+        descriptor.capabilities.push(contract_capability(*contract));
+    }
+    descriptor
+}
+
+fn contract_capability(contract: PluginContractDefinition) -> CapabilityDesc {
+    let mut declaration = RuntimeContractDeclaration::new(
+        contract.key,
+        contract.kind,
+        contract.version,
+        contract.compatibility,
+    );
+    if let Some(advertised_id) = contract.advertised_id {
+        declaration = declaration.advertised_id(advertised_id);
+    }
+    declaration.into_capability()
+}
+
+pub fn descriptor_v2_from_definition(def: PluginDefinition) -> PluginDescriptorV2 {
+    let legacy = descriptor_from_definition(def);
+    let mut typed = PluginDescriptorV2::from_legacy(&legacy);
+
+    // Backend routes are available as typed source data in PluginDefinition, so
+    // replace their compatibility-normalized copies with direct V2 descriptors.
+    for route in def.backend_routes {
+        let mut desc = BackendRouteDescriptor::new(route.spec).priority(route.priority);
+        if let Some(provider_abi) = route.provider_abi {
+            desc = desc.provider_abi(provider_abi);
+        }
+        if let Some(provider_route) = route.provider_route {
+            desc = desc.provider_route(provider_route);
+        }
+        if let Some(backend) = route.backend {
+            desc = desc.backend(backend);
+        }
+        if let Some(mode) = route.mode {
+            desc = desc.mode(mode);
+        }
+        if !route.features.is_empty() {
+            desc = desc.features(route.features.iter().copied());
+        }
+        if !route.system_tags.is_empty() {
+            desc = desc.system_tags(route.system_tags.iter().copied());
+        }
+        for item in route.metadata_json {
+            desc = desc.metadata_json(item.key, parse_metadata_value(item.key, item.value_json));
+        }
+        let direct = CapabilityDescV2::backend_route(route.capability_id, 1, desc);
+        if let Some(slot) = typed.capabilities.iter_mut().find(|cap| {
+            cap.id.as_str() == route.capability_id && cap.role == CapabilityRole::Provides
+        }) {
+            *slot = direct;
+        } else {
+            typed.capabilities.push(direct);
+        }
+    }
+    typed
+}
+
 fn parse_metadata_value(key: &str, raw: &str) -> Value {
     serde_json::from_str(raw)
         .unwrap_or_else(|e| panic!("invalid plugin metadata JSON for key '{key}': {e}: {raw}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const SERVICES: &[PluginServiceDefinition] = &[];
+    const ROUTES: &[PluginBackendRouteDefinition] = &[];
+    const CAPABILITIES: &[PluginCapabilityDefinition] = &[];
+    const CONTRACTS: &[PluginContractDefinition] = &[plugin_contract(
+        "acme.extension.protocol",
+        ContractKind::Protocol,
+        ContractVersion::major(1),
+        ContractCompatibility::SameMajor,
+        Some("acme.extension/v1"),
+    )];
+    const DEFINITION: PluginDefinition = PluginDefinition {
+        id: "acme.plugin",
+        name: "Acme",
+        version: "1.0.0",
+        kind: PluginKind::Runtime,
+        services: SERVICES,
+        backend_routes: ROUTES,
+        capabilities: CAPABILITIES,
+    };
+
+    #[test]
+    fn definition_with_contracts_preserves_legacy_definition_shape() {
+        let descriptor = DEFINITION.with_contracts(CONTRACTS).descriptor();
+        let contracts = descriptor
+            .capabilities
+            .iter()
+            .filter_map(|capability| {
+                crate::plugin_api::runtime_contract_declaration(capability).transpose()
+            })
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert_eq!(contracts.len(), 1);
+        assert_eq!(contracts[0].key, "acme.extension.protocol");
+        assert_eq!(
+            contracts[0].advertised_id.as_deref(),
+            Some("acme.extension/v1")
+        );
+    }
 }

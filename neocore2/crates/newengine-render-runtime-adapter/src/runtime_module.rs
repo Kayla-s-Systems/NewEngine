@@ -102,8 +102,9 @@ impl<E: Send + 'static> Module<E> for RenderBackendRuntimeModule {
             return Ok(());
         }
 
+        let negotiated_capabilities = negotiation.capabilities.clone();
         newengine_ulog_api::ulog::info!(
-            "render backend: service bridge bound id='{}' name='{}' version='{}' provider='{}' provider_state='{}' matched_by='{}' debug_text='{}' protocol=v{}.{}.{} features={} hardware_tier={:?} upload_budget={}MB/frame",
+            "render backend: service bridge bound id='{}' name='{}' version='{}' provider='{}' provider_state='{}' matched_by='{}' debug_text='{}' protocol=v{}.{}.{} features={} hardware_tier={:?} frames_in_flight={} completion_events={} device_loss={:?} device_recreate={} resource_replay={} upload_budget={}MB/frame",
             info.backend_id,
             info.backend_name,
             info.backend_version,
@@ -114,8 +115,13 @@ impl<E: Send + 'static> Module<E> for RenderBackendRuntimeModule {
             protocol_version.major,
             protocol_version.minor,
             protocol_version.patch,
-            info.capabilities.features.len(),
-            info.capabilities.hardware_tier,
+            negotiated_capabilities.features.len(),
+            negotiated_capabilities.hardware_tier,
+            negotiated_capabilities.execution.normalized_frames_in_flight(),
+            negotiated_capabilities.execution.frame_completion_events,
+            negotiated_capabilities.execution.device_loss,
+            negotiated_capabilities.execution.recovery.device_recreate,
+            negotiated_capabilities.execution.recovery.resource_replay,
             info.work_budget.max_upload_bytes_per_frame / (1024 * 1024)
         );
 
@@ -123,7 +129,7 @@ impl<E: Send + 'static> Module<E> for RenderBackendRuntimeModule {
             backend_id: info.backend_id,
             clear_color: info.clear_color,
             debug_text: info.debug_text,
-            capabilities: info.capabilities,
+            capabilities: negotiated_capabilities,
             work_budget: info.work_budget,
         };
 

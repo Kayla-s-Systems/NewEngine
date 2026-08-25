@@ -8,49 +8,67 @@ use newengine_scene_runtime::SceneGatewayAssetMounts;
 use crate::entity_archetypes::register_game_ready_entity_archetypes_best_effort;
 use crate::{GameReadyRuntimeProfile, GAME_READY_MOUNT_SPEC};
 
-const GAME_READY_CAPABILITY_SLOTS: &[newengine_service_api::EngineCapabilitySlotSpec] = &[
-    newengine_service_api::EngineCapabilitySlotSpec::required("engine.assets", "assets"),
-    newengine_service_api::EngineCapabilitySlotSpec::required("engine.assets.maps", "assets.maps"),
-    newengine_service_api::EngineCapabilitySlotSpec::required(
-        "engine.assets.textures",
-        "assets.textures",
+const GAME_READY_REQUIREMENTS: &[newengine_service_api::CapabilityRequirement] = &[
+    newengine_service_api::CapabilityRequirement::required(
+        newengine_assets_api::ASSET_BACKEND_SERVICE_SPEC.capability(),
     ),
-    newengine_service_api::EngineCapabilitySlotSpec::required(
-        "engine.assets.materials",
-        "assets.materials",
+    newengine_service_api::CapabilityRequirement::required(
+        newengine_assets_api::MAPS_BACKEND_SERVICE_SPEC.capability(),
     ),
-    newengine_service_api::EngineCapabilitySlotSpec::required("engine.render", "render"),
-    newengine_service_api::EngineCapabilitySlotSpec::required("engine.physics", "physics"),
-    newengine_service_api::EngineCapabilitySlotSpec::required("engine.input", "input"),
-    newengine_service_api::EngineCapabilitySlotSpec::required("engine.scene", "scene"),
-    newengine_service_api::EngineCapabilitySlotSpec::required("engine.world", "world"),
-    newengine_service_api::EngineCapabilitySlotSpec::required("engine.ui", "ui"),
-    newengine_service_api::EngineCapabilitySlotSpec::optional("engine.audio", "audio"),
-    newengine_service_api::EngineCapabilitySlotSpec::optional("engine.ui.notify", "ui.notify"),
-    newengine_service_api::EngineCapabilitySlotSpec::optional("engine.time", "time"),
-    newengine_service_api::EngineCapabilitySlotSpec::optional("engine.schema", "schema"),
-    newengine_service_api::EngineCapabilitySlotSpec::optional("engine.scripting", "scripting"),
+    newengine_service_api::CapabilityRequirement::required(
+        newengine_assets_api::TEXTURES_BACKEND_SERVICE_SPEC.capability(),
+    ),
+    newengine_service_api::CapabilityRequirement::required(
+        newengine_materials::MATERIALS_BACKEND_SERVICE_SPEC.capability(),
+    ),
+    newengine_service_api::CapabilityRequirement::required(
+        newengine_render_api::RENDER_BACKEND_SERVICE_SPEC.capability(),
+    ),
+    newengine_service_api::CapabilityRequirement::required(
+        newengine_physics_api::PHYSICS_BACKEND_SERVICE_SPEC.capability(),
+    ),
+    newengine_service_api::CapabilityRequirement::required(
+        newengine_input_api::INPUT_BACKEND_SERVICE_SPEC.capability(),
+    ),
+    newengine_service_api::CapabilityRequirement::required(
+        newengine_scene_io::SCENE_BACKEND_SERVICE_SPEC.capability(),
+    ),
+    newengine_service_api::CapabilityRequirement::required(
+        newengine_world_api::WORLD_BACKEND_SERVICE_SPEC.capability(),
+    ),
+    newengine_service_api::CapabilityRequirement::required(
+        newengine_ui_api::UI_BACKEND_SERVICE_SPEC.capability(),
+    ),
+    newengine_service_api::CapabilityRequirement::optional(
+        newengine_audio_api::AUDIO_BACKEND_SERVICE_SPEC.capability(),
+    ),
+    newengine_service_api::CapabilityRequirement::optional(
+        newengine_ui_api::UI_NOTIFY_BACKEND_SERVICE_SPEC.capability(),
+    ),
+    newengine_service_api::CapabilityRequirement::optional(
+        newengine_time_api::TIME_BACKEND_SERVICE_SPEC.capability(),
+    ),
+    newengine_service_api::CapabilityRequirement::optional(
+        newengine_schema_api::SCHEMA_BACKEND_SERVICE_SPEC.capability(),
+    ),
+    newengine_service_api::CapabilityRequirement::optional(
+        newengine_scripting_api::SCRIPTING_BACKEND_SERVICE_SPEC.capability(),
+    ),
 ];
 
 pub const GAME_READY_COMPOSITION_SPEC: newengine_service_api::EngineCompositionSpec =
     newengine_service_api::EngineCompositionSpec::new(
         "newengine.composition.game-ready",
-        GAME_READY_CAPABILITY_SLOTS,
+        GAME_READY_REQUIREMENTS,
     );
 
 impl GameReadyRuntimeProfile {
-    pub fn declare_composition_capability_slots(&self) -> EngineResult<()> {
-        newengine_plugin_host::declare_engine_composition(GAME_READY_COMPOSITION_SPEC)
-            .map_err(EngineError::Other)
-    }
-
     pub fn initialize_composition_services(
         &self,
         engine: &mut Engine<()>,
         host_preinit: &newengine_runtime_host::HostPreInitSnapshot,
         runtime: Option<&RuntimeCompositionContext>,
     ) -> EngineResult<()> {
-        self.declare_composition_capability_slots()?;
         newengine_ulog_api::ulog::info!(
             "composition host capabilities: logical_cores={} gpu={} preferred_gpu='{}' provider_hints={}",
             host_preinit.capabilities.cpu.logical_cores.map(|value| value.to_string()).unwrap_or_else(|| "<unknown>".to_owned()),
@@ -183,12 +201,28 @@ impl<E: Send + 'static> Module<E> for GameReadyProviderBootstrapModule {
     }
 
     fn init(&mut self, _ctx: &mut ModuleCtx<'_, E>) -> EngineResult<()> {
-        // Safe control-plane routes can be refreshed during init. The physical audio gateway is
-        // intentionally excluded here: publishing a new host service while the startup FSM is
-        // executing Module::init() can re-enter the service registry and deadlock the main thread.
+        // Core executes Module::init() inside ProviderRegistrationTransaction. Every service/route
+        // published here is staged, validated, and committed as one topology epoch after init returns.
         self.profile.register_engine_provider_routes_best_effort();
+
+        let audio_provider =
+            if newengine_plugin_host::has_service(newengine_audio_runtime::NATIVE_AUDIO_SERVICE_ID)
+            {
+                "already-available"
+            } else {
+                let host_api = newengine_plugin_host::default_host_api();
+                let asset_client = newengine_assets::AssetServiceClient::new(host_api);
+                if newengine_audio_runtime::register_native_audio_provider_best_effort(asset_client)
+                {
+                    "native-staged"
+                } else {
+                    "fallback-only"
+                }
+            };
+
         newengine_ulog_api::ulog::info!(
-            "game-ready provider bootstrap: phase='init' routes_refreshed=true audio_provider='plugin-owned'"
+            "game-ready provider bootstrap: phase='init' routes_staged=true audio_provider='{}' transaction='stage-validate-commit'",
+            audio_provider
         );
         Ok(())
     }
@@ -196,3 +230,54 @@ impl<E: Send + 'static> Module<E> for GameReadyProviderBootstrapModule {
 
 #[allow(dead_code)]
 const _: Option<ProfileMountSpec> = None;
+
+#[cfg(test)]
+mod composition_architecture_tests {
+    use super::*;
+    use newengine_service_api::RequirementStrength;
+
+    #[test]
+    fn game_ready_composition_is_the_product_backend_specification() {
+        let actual = GAME_READY_REQUIREMENTS
+            .iter()
+            .map(|requirement| (requirement.capability.as_str(), requirement.strength))
+            .collect::<Vec<_>>();
+        let expected = vec![
+            ("asset_manager.backend", RequirementStrength::Required),
+            ("assets.maps.backend", RequirementStrength::Required),
+            ("assets.textures.backend", RequirementStrength::Required),
+            ("assets.materials.backend", RequirementStrength::Required),
+            ("render.backend", RequirementStrength::Required),
+            ("physics.backend", RequirementStrength::Required),
+            ("input.backend", RequirementStrength::Required),
+            ("scene.backend", RequirementStrength::Required),
+            ("world.backend", RequirementStrength::Required),
+            ("ui.backend", RequirementStrength::Required),
+            ("audio.backend", RequirementStrength::Optional),
+            ("ui.notify.backend", RequirementStrength::Optional),
+            ("time.backend", RequirementStrength::Optional),
+            ("schema.registry", RequirementStrength::Optional),
+            ("scripting.backend", RequirementStrength::Optional),
+        ];
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn game_ready_profile_does_not_name_backend_runtime_modules() {
+        let source = include_str!("profile.rs");
+        let render_module = ["RenderBackend", "RuntimeModule"].concat();
+        let physics_module = ["PhysicsBackend", "RuntimeModule"].concat();
+        assert!(!source.contains(&render_module));
+        assert!(!source.contains(&physics_module));
+    }
+
+    #[test]
+    fn game_ready_manifest_has_no_backend_adapter_dependencies() {
+        let manifest = include_str!("../Cargo.toml");
+        let render_dependency = ["newengine-render-runtime", "-adapter ="].concat();
+        let physics_dependency = ["newengine-physics-runtime", "-adapter ="].concat();
+        assert!(!manifest.contains(&render_dependency));
+        assert!(!manifest.contains(&physics_dependency));
+        assert!(manifest.contains("features = [\"full-runtime\"]"));
+    }
+}

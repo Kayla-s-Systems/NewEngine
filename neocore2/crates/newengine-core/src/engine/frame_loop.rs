@@ -111,6 +111,7 @@ impl<E: Send + 'static> Engine<E> {
     }
 
     pub fn begin_frame(&mut self) -> EngineResult<Frame> {
+        self.activate_host_context();
         self.sync_shutdown_state();
         if self.is_shutdown_requested() {
             return Err(EngineError::ExitRequested);

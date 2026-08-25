@@ -6,7 +6,9 @@ pub use newengine_contract_api::{
     ContractCompatibility, ContractKind, ContractSpec, ContractVersion,
 };
 
-pub const CORE_CONTRACTS: &[ContractSpec] = &[
+/// Normative compile-time Engine contract set. Runtime/plugin-owned contracts belong
+/// in `newengine-runtime-contract-catalog` and must never mutate this trust root.
+pub const ENGINE_CONTRACTS: &[ContractSpec] = &[
     newengine_assets_api::NEF8_WIRE_CONTRACT_SPEC,
     newengine_asset_format_nef8::YDD_BINARY_CONTRACT_SPEC,
     newengine_asset_format_nef8::ytd::CONTENT_SCHEMA_CONTRACT_SPEC,
@@ -17,6 +19,7 @@ pub const CORE_CONTRACTS: &[ContractSpec] = &[
     newengine_project_api::PROJECT_MANIFEST_CONTRACT_SPEC,
     newengine_project_api::PROJECT_RUNTIME_PROFILE_ABI_CONTRACT_SPEC,
     newengine_game_module_api::GAME_MODULE_CONTRACT_SPEC,
+    newengine_audio_api::AUDIO_PROVIDER_ABI_CONTRACT_SPEC,
     newengine_render_api::RENDER_PROVIDER_ABI_CONTRACT_SPEC,
     newengine_physics_api::PHYSICS_PROVIDER_ABI_CONTRACT_SPEC,
     newengine_ui_api::UI_PROVIDER_ABI_CONTRACT_SPEC,
@@ -25,18 +28,21 @@ pub const CORE_CONTRACTS: &[ContractSpec] = &[
     newengine_scripting_api::SCRIPTING_WIRE_CONTRACT_SPEC,
 ];
 
+/// Backward-compatible name for the normative Engine Contract Registry.
+pub const CORE_CONTRACTS: &[ContractSpec] = ENGINE_CONTRACTS;
+
 #[inline]
 pub const fn contracts() -> &'static [ContractSpec] {
-    CORE_CONTRACTS
+    ENGINE_CONTRACTS
 }
 
 pub fn contract(key: &str) -> Option<&'static ContractSpec> {
-    CORE_CONTRACTS.iter().find(|spec| spec.key == key)
+    ENGINE_CONTRACTS.iter().find(|spec| spec.key == key)
 }
 
 /// Resolve a contract by the stable token advertised on a provider/wire boundary.
 pub fn contract_by_advertised_id(advertised_id: &str) -> Option<&'static ContractSpec> {
-    CORE_CONTRACTS
+    ENGINE_CONTRACTS
         .iter()
         .find(|spec| spec.advertised_id == Some(advertised_id))
 }
@@ -45,7 +51,7 @@ pub fn validate_registry() -> Result<(), Vec<String>> {
     let mut errors = Vec::new();
     let mut keys = BTreeSet::new();
     let mut advertised = BTreeSet::new();
-    for spec in CORE_CONTRACTS {
+    for spec in ENGINE_CONTRACTS {
         if spec.key.trim().is_empty() {
             errors.push("contract registry contains empty key".to_owned());
         } else if !keys.insert(spec.key) {
@@ -96,6 +102,7 @@ mod tests {
             "project.manifest",
             "runtime.profile.abi",
             "game.module.contract",
+            "audio.provider.abi",
             "render.provider.abi",
             "physics.provider.abi",
             "ui.provider.abi",
@@ -120,6 +127,10 @@ mod tests {
         assert_eq!(
             contract("scripting.binary.wire").unwrap().version.major,
             newengine_scripting_api::SCRIPTING_WIRE_VERSION_V1
+        );
+        assert_eq!(
+            contract("audio.provider.abi").unwrap().version.major,
+            newengine_audio_api::AUDIO_PROVIDER_ABI_VERSION
         );
     }
     #[test]

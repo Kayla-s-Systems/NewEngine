@@ -52,17 +52,46 @@ impl<E: Send + 'static> Engine<E> {
             self.publish_startup_snapshot(before);
 
             let init_started = std::time::Instant::now();
-            let init_result = {
-                let mut ctx = ModuleCtx::new(
-                    self.services.as_ref(),
-                    &mut self.resources,
-                    &self.bus,
-                    &self.events,
-                    &mut self.scheduler,
-                    self.shutdown.clone(),
-                );
-                self.modules[index].module.init(&mut ctx)
-            };
+            let init_result =
+                match newengine_plugin_host::ProviderRegistrationTransaction::begin_host(format!(
+                    "module:{module_id}"
+                )) {
+                    Ok(transaction) => {
+                        let module_result = {
+                            let mut ctx = ModuleCtx::new(
+                                self.services.as_ref(),
+                                &mut self.resources,
+                                &self.bus,
+                                &self.events,
+                                &mut self.scheduler,
+                                self.shutdown.clone(),
+                            );
+                            self.modules[index].module.init(&mut ctx)
+                        };
+                        match module_result {
+                        Ok(()) => match transaction.validate() {
+                            Ok(()) => transaction.commit().map(|_| ()).map_err(|error| {
+                                EngineError::other(format!(
+                                    "provider transaction commit failed for module '{module_id}': {error}"
+                                ))
+                            }),
+                            Err(error) => {
+                                transaction.rollback();
+                                Err(EngineError::other(format!(
+                                    "provider transaction validation failed for module '{module_id}': {error}"
+                                )))
+                            }
+                        },
+                        Err(error) => {
+                            transaction.rollback();
+                            Err(error)
+                        }
+                    }
+                    }
+                    Err(error) => Err(EngineError::other(format!(
+                        "provider transaction begin failed for module '{module_id}': {error}"
+                    ))),
+                };
             let init_ms = init_started.elapsed().as_millis();
 
             match init_result {
@@ -176,6 +205,7 @@ impl<E: Send + 'static> Engine<E> {
         if self.modules[index].shutdown_called {
             return;
         }
+        let module_id = self.modules[index].id();
         let mut ctx = ModuleCtx::new(
             self.services.as_ref(),
             &mut self.resources,
@@ -184,7 +214,9 @@ impl<E: Send + 'static> Engine<E> {
             &mut self.scheduler,
             self.shutdown.clone(),
         );
-        let _ = self.modules[index].module.shutdown(&mut ctx);
+        let _ = newengine_plugin_host::with_host_module_callback(module_id, || {
+            self.modules[index].module.shutdown(&mut ctx)
+        });
         self.modules[index].shutdown_called = true;
         self.modules[index].state = ModuleState::Disabled;
     }

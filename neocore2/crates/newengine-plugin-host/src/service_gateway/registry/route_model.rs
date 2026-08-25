@@ -1,5 +1,6 @@
 use super::facts::{GatewayOverrideMode, GatewayPolicyFact, GatewayProviderOrigin};
 use super::*;
+use newengine_service_api::CompositionSolver;
 
 #[inline]
 pub(super) fn route_allowed_by_policy(
@@ -62,9 +63,6 @@ pub(super) fn route_gateway_matches_declared_kind(
     service_kind: &str,
     _system_tags: &[String],
 ) -> bool {
-    // Provider implementation names are metadata, not API domains.
-    // A render provider may publish `provider_route = engine.render.vulkan`,
-    // but the service route consumed by the engine remains `engine.render`.
     engine_gateway_matches_service_kind(gateway_id, service_kind)
 }
 
@@ -86,7 +84,9 @@ pub(crate) struct ActiveGatewayRoute {
     pub(crate) origin: GatewayProviderOrigin,
     pub(crate) override_mode: GatewayOverrideMode,
     pub(crate) active_score: i64,
+    pub(crate) selection_bonus: i64,
     pub(crate) system_tags: Vec<String>,
+    pub(crate) selection_key: String,
 }
 
 impl ActiveGatewayRoute {
@@ -118,14 +118,6 @@ impl ActiveGatewayRoute {
         }
 
         if route_blocked_by_selection_policy(&route_tags, policy) {
-            newengine_ulog_api::ulog::info!(
-                "gateways: route blocked by host capability policy gateway='{}' service='{}' owner='{}' tags='{}' policy_owner='{}'",
-                gateway_id,
-                provider_service_id,
-                provider_owner_id,
-                route_tags.join(","),
-                policy.map(|policy| policy.owner_id.as_str()).unwrap_or("<none>"),
-            );
             return None;
         }
         let selection_bonus = selection_policy_score_bonus(&route_tags, policy);
@@ -136,20 +128,18 @@ impl ActiveGatewayRoute {
             .unwrap_or(GatewayOverrideMode::Open);
 
         if !route_allowed_by_policy(override_mode, origin) {
-            newengine_ulog_api::ulog::warn!(
-                "gateways: ignoring route blocked by override policy gateway='{}' service='{}' owner='{}' origin='{}' mode='{}' policy_owner='{}' tags='{}'",
-                gateway_id,
-                provider_service_id,
-                provider_owner_id,
-                origin.as_str(),
-                override_mode.as_str(),
-                policy.map(|policy| policy.owner_id.as_str()).unwrap_or("<route-tags>"),
-                system_tags.join(","),
-            );
             return None;
         }
 
-        let active_score = origin.origin_bias() + i64::from(backend_priority) + selection_bonus;
+        let active_score =
+            CompositionSolver::score(origin.origin_bias(), backend_priority, selection_bonus);
+        let selection_key = format!(
+            "{}\u{1f}{}\u{1f}{}\u{1f}{}",
+            gateway_id,
+            provider_service_id,
+            provider_route_id.as_deref().unwrap_or(""),
+            provider_owner_id,
+        );
         Some(Self {
             gateway_id,
             service_kind,
@@ -162,7 +152,9 @@ impl ActiveGatewayRoute {
             origin,
             override_mode,
             active_score,
+            selection_bonus,
             system_tags,
+            selection_key,
         })
     }
 }

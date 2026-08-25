@@ -72,7 +72,11 @@ impl<E: Send + 'static> Engine<E> {
                 ctx.set_frame(frame);
 
                 if self.catch_panics {
-                    match panic::catch_unwind(AssertUnwindSafe(|| call(s.module.as_mut(), &mut ctx))) {
+                    match panic::catch_unwind(AssertUnwindSafe(|| {
+                        newengine_plugin_host::with_host_module_callback(module_id, || {
+                            call(s.module.as_mut(), &mut ctx)
+                        })
+                    })) {
                         Ok(r) => r,
                         Err(payload) => Err(EngineError::Other(format!(
                             "panic in module callback (module='{module_id}' stage={stage:?} msg='{}')",
@@ -80,7 +84,9 @@ impl<E: Send + 'static> Engine<E> {
                         ))),
                     }
                 } else {
-                    call(s.module.as_mut(), &mut ctx)
+                    newengine_plugin_host::with_host_module_callback(module_id, || {
+                        call(s.module.as_mut(), &mut ctx)
+                    })
                 }
             };
 
@@ -122,7 +128,10 @@ impl<E: Send + 'static> Engine<E> {
                             );
                             ctx.set_frame(frame);
 
-                            let _ = s.module.shutdown(&mut ctx);
+                            let _ =
+                                newengine_plugin_host::with_host_module_callback(module_id, || {
+                                    s.module.shutdown(&mut ctx)
+                                });
                             s.shutdown_called = true;
                             s.state = ModuleState::Disabled;
                         }
@@ -141,6 +150,7 @@ impl<E: Send + 'static> Engine<E> {
     }
 
     pub fn shutdown(&mut self) -> EngineResult<()> {
+        self.activate_host_context();
         self.sync_shutdown_state();
         self.set_run_state(EngineRunState::ShutdownGame);
 
@@ -170,10 +180,10 @@ impl<E: Send + 'static> Engine<E> {
             crate::crash::record_breadcrumb(format!(
                 "engine shutdown: module shutdown begin id={module_id}"
             ));
-            let _ = s
-                .module
-                .shutdown(&mut ctx)
-                .map_err(|e| EngineError::with_module_stage(module_id, ModuleStage::Shutdown, e));
+            let _ = newengine_plugin_host::with_host_module_callback(module_id, || {
+                s.module.shutdown(&mut ctx)
+            })
+            .map_err(|e| EngineError::with_module_stage(module_id, ModuleStage::Shutdown, e));
 
             newengine_ulog_api::ulog::debug!(
                 "engine shutdown: module shutdown completed id='{}'",

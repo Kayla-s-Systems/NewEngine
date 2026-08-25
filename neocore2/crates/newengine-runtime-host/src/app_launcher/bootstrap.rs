@@ -16,7 +16,7 @@ use newengine_project_runtime::{
     RuntimeCompositionContext,
 };
 
-use crate::engine_factory::build_engine_from_startup;
+use crate::engine_factory::build_engine_from_startup_with_host;
 
 use super::boot_options::{apply_declared_boot_options_env, boot_option_enabled};
 use super::types::{
@@ -57,7 +57,7 @@ where
         // PreInit providers are composition-owned. A profile may register an
         // alternative engine.host.capabilities route before the native fallback
         // is considered.
-        newengine_plugin_host::init_host_context();
+        let host_context = newengine_plugin_host::create_host_context();
         self.profile.register_preinit_provider_routes_best_effort();
 
         // Void Engine Host PreInit is deliberately before project/runtime composition.
@@ -170,7 +170,7 @@ where
             }
         }
 
-        let mut engine = self.build_engine(&startup)?;
+        let mut engine = self.build_engine(&startup, host_context.clone())?;
         // Runtime consumers receive an immutable snapshot. Provider selection has
         // already consumed the derived generic policy; systems never re-probe OS hardware.
         engine.resources_mut().insert(Arc::clone(&host_preinit));
@@ -212,6 +212,26 @@ where
             engine
                 .resources_mut()
                 .insert(ProjectContentMountState::default());
+        }
+        if let Some(composition) = self.profile.composition_spec() {
+            if composition.schema_version
+                != newengine_service_api::EngineCompositionSpec::SCHEMA_VERSION
+            {
+                return Err(EngineError::Other(format!(
+                    "unsupported engine composition schema={} id='{}' expected={}",
+                    composition.schema_version,
+                    composition.id,
+                    newengine_service_api::EngineCompositionSpec::SCHEMA_VERSION,
+                )));
+            }
+            newengine_plugin_host::declare_engine_composition(composition)
+                .map_err(EngineError::Other)?;
+            self.early_log(format_args!(
+                "composition.declared id='{}' schema={} requirements={}",
+                composition.id,
+                composition.schema_version,
+                composition.requirements.len(),
+            ));
         }
         self.profile.initialize_composition_services(
             &mut engine,
@@ -318,9 +338,13 @@ where
         Ok(Arc::new(startup))
     }
 
-    fn build_engine(&self, startup: &StartupConfig) -> EngineResult<Engine<()>> {
+    fn build_engine(
+        &self,
+        startup: &StartupConfig,
+        host: newengine_plugin_host::HostContextHandle,
+    ) -> EngineResult<Engine<()>> {
         self.early_log(format_args!("engine.build.begin"));
-        let engine = build_engine_from_startup(startup, self.spec.fixed_dt_ms)?;
+        let engine = build_engine_from_startup_with_host(startup, self.spec.fixed_dt_ms, host)?;
         self.early_log(format_args!("engine.build.ok"));
         newengine_core::crash::record_breadcrumb(format!(
             "{} launcher: host engine constructed",

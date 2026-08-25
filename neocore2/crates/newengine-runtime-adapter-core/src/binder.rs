@@ -10,7 +10,7 @@ use super::{
 ///
 /// The domain supplies the already-decoded `info_json` result. The framework handles
 /// uniform error reporting and validates the active provider through
-/// `ActiveGatewayRegistry`; backend ids in info packets are diagnostic only and must
+/// the host’s immutable `CompositionPlan`; backend ids in info packets are diagnostic only and must
 /// not participate in provider selection.
 pub fn bind_backend_info<E, I>(
     ctx: &ModuleCtx<'_, E>,

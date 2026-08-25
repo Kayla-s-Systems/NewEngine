@@ -6,6 +6,15 @@ readme = "README.md"
 description = "Game Ready FPS runtime profile composition for NewEngine"
 
 [dependencies]
+newengine-assets-api = { path = "../newengine-assets-api" }
+newengine-audio-api = { path = "../newengine-audio-api" }
+newengine-audio-runtime = { path = "../newengine-audio-runtime" }
+newengine-physics-api = { path = "../newengine-physics-api" }
+newengine-render-api = { path = "../newengine-render-api" }
+newengine-schema-api = { path = "../newengine-schema-api" }
+newengine-scene-io = { path = "../newengine-scene-io" }
+newengine-scripting-api = { path = "../newengine-scripting-api" }
+newengine-time-api = { path = "../newengine-time-api" }
 newengine-ulog-api = { path = "../newengine-ulog-api" }
 newengine-asset-format-nef8 = { path = "../newengine-asset-format-nef8" }
 log = "0.4"
@@ -38,8 +47,6 @@ newengine-render-feature-api = { path = "../newengine-render-feature-api" }
 newengine-render-feature-gameready = { path = "../newengine-render-feature-gameready" }
 newengine-runtime-host = { path = "../newengine-runtime-host", default-features = false, features = ["full-runtime"] }
 newengine-windowed-host-runtime = { path = "../newengine-windowed-host-runtime", default-features = false, features = ["prestart-window-egui", "window-icon"] }
-newengine-render-runtime-adapter = { path = "../newengine-render-runtime-adapter" }
-newengine-physics-runtime-adapter = { path = "../newengine-physics-runtime-adapter" }
 newengine-time-runtime = { path = "../newengine-time-runtime" }
 newengine-schema-runtime = { path = "../newengine-schema-runtime" }
 newengine-service-api = { path = "../newengine-service-api" }

@@ -45,24 +45,27 @@ impl RenderBackendFailureState {
     }
 }
 
+/// Provider-neutral device-loss classification.
+///
+/// The runtime deliberately recognizes only the stable semantic phrase/code. Any
+/// native API error mapping belongs to the provider, which should surface
+/// `render.backend.device_lost` or an equivalent `device_lost` diagnostic.
 #[inline]
 pub(crate) fn is_backend_device_lost_error(error: &EngineError) -> bool {
     let mut text = error.to_string();
     text.make_ascii_lowercase();
     text.contains("device lost")
         || text.contains("device has been lost")
-        || text.contains("error_device_lost")
-        || text.contains("vk_error_device_lost")
-        || text.contains("vulkan device lost")
+        || text.contains("device_lost")
+        || text.contains("render.backend.device_lost")
 }
 
 /// Returns true for a transient render-material failure caused by an async
 /// shader compile job that has been queued through `engine.threading` but has not
-/// admitted SPIR-V into the renderer cache yet.
+/// admitted backend shader code into the renderer cache yet.
 ///
-/// This is not a fatal GPU/backend error: the next frames must keep pumping
-/// jobs and retry pipeline admission instead of permanently disabling the
-/// playable viewport.
+/// This is not a fatal backend error: the next frames must keep pumping jobs and
+/// retry pipeline admission instead of permanently disabling the playable viewport.
 pub(crate) fn is_transient_shader_pipeline_error(error: &EngineError) -> bool {
     let mut text = error.to_string();
     text.make_ascii_lowercase();
@@ -91,25 +94,41 @@ impl RuntimeRenderController {
         error: EngineError,
     ) -> EngineResult<()> {
         if is_backend_device_lost_error(&error) {
+            if self.backend_execution.can_recover_device_loss() {
+                newengine_ulog_api::ulog::warn!(
+                    "render controller: provider-owned device recovery requested phase='{}' frames_in_flight={} resource_replay={} err='{}'; route remains active for retry",
+                    phase,
+                    self.backend_execution.normalized_frames_in_flight(),
+                    self.backend_execution.recovery.resource_replay,
+                    error
+                );
+                newengine_core::crash::record_breadcrumb(format!(
+                    "render controller: provider-owned device recovery phase='{}' err='{}'",
+                    phase, error
+                ));
+                return Ok(());
+            }
+
             let first = self.backend_failure.mark_disabled(phase, &error);
             self.viewport.pass_disabled = true;
 
             if first {
                 newengine_ulog_api::ulog::error!(
-                    "render controller: backend disabled after fatal GPU error phase='{}' err='{}'",
+                    "render controller: backend disabled after non-recoverable device loss phase='{}' policy={:?} err='{}'",
                     phase,
+                    self.backend_execution.device_loss,
                     error
                 );
                 newengine_core::crash::record_breadcrumb(format!(
-                    "render controller: backend disabled after fatal GPU error phase='{}' err='{}'",
+                    "render controller: backend disabled after non-recoverable device loss phase='{}' err='{}'",
                     phase, error
                 ));
                 crate::ui_gateway::publish_render_backend_error_modal(phase, &error.to_string());
             }
 
-            // Device loss is fatal for the backend, but not for the process. Keep the
-            // platform/event loop alive and stop issuing GPU work until the app exits
-            // or the renderer plugin is recreated by a future hot-reload path.
+            // This provider declared device loss non-recoverable in-place. Keep the
+            // process/event loop alive, quiesce rendering, and leave replacement to
+            // composition/hot-reload rather than guessing a backend-specific recovery path.
             return Ok(());
         }
 
@@ -131,9 +150,13 @@ mod tests {
 
     #[test]
     fn device_loss_is_never_classified_as_transient() {
-        let error = EngineError::other(
-            "pipeline warmup pending while Vulkan device lost VK_ERROR_DEVICE_LOST",
-        );
+        let error = EngineError::other("pipeline warmup pending while render backend device_lost");
         assert!(!is_transient_shader_pipeline_error(&error));
+    }
+
+    #[test]
+    fn native_api_names_are_not_required_for_device_loss_classification() {
+        let error = EngineError::other("render.backend.device_lost: provider quiesced");
+        assert!(is_backend_device_lost_error(&error));
     }
 }

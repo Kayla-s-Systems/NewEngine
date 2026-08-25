@@ -38,7 +38,7 @@ pub(super) fn game_sun_postfx_params(
     params.quality.ssao.quality_steps = launch_graphics.ssao_quality_steps;
     params.quality.ssao.half_resolution = launch_graphics.ssao_half_resolution;
 
-    // Contact shadows belong to the shadow authoring policy, not to the Vulkan
+    // Contact shadows belong to the shadow authoring policy, not to the backend
     // backend. Bridge the scene-level ShadowSettings into the renderer-facing
     // postfx DTO so the screen-space contact layer tracks the same authored
     // strength as CSM/PCSS instead of using a backend hard-coded constant.

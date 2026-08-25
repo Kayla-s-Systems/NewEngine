@@ -8,8 +8,8 @@ use newengine_game_module_api::{
     GAME_MODULE_DESCRIBE_METHOD_V1, GAME_MODULE_SERVICE_ID,
 };
 use newengine_game_module_composition::{
-    register_game_module_factory, GameModuleBootstrapRegistration, GameModuleComposition,
-    GameModuleFactoryRegistration, GameModuleProviderSet, GameModuleTarget,
+    GameModuleBootstrapRegistration, GameModuleComposition, GameModuleFactoryRegistration,
+    GameModuleProviderSet, GameModuleTarget,
 };
 use newengine_gameplay_fps::{FpsContentProvider, FpsGameplayProvider, FpsInventoryHudProvider};
 use newengine_gameplay_fps_api::FpsGameplayPolicyProvider;
@@ -182,7 +182,6 @@ pub const fn factory_registration() -> GameModuleFactoryRegistration {
 }
 
 pub fn activate() -> Result<(), String> {
-    register_game_module_factory(factory_registration())?;
     let service = ServiceV1Dyn::from_value(
         FpsGameModuleDescriptorService,
         abi_stable::sabi_trait::TD_Opaque,

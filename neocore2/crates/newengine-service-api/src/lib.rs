@@ -7,6 +7,7 @@ mod gateway;
 mod identity;
 mod kind;
 mod methods;
+mod resolver;
 
 pub use backend::*;
 pub use composition::*;
@@ -15,6 +16,7 @@ pub use gateway::*;
 pub use identity::*;
 pub use kind::*;
 pub use methods::*;
+pub use resolver::*;
 
 #[cfg(test)]
 mod tests;

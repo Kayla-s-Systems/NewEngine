@@ -20,6 +20,7 @@ impl RegisteredServiceFact {
 pub(crate) struct PluginDescriptorFact {
     pub(crate) plugin_id: String,
     pub(crate) descriptor: PluginDescriptor,
+    pub(crate) descriptor_v2: Option<newengine_plugin_api::PluginDescriptorV2>,
     pub(crate) origin: GatewayProviderOrigin,
 }
 
@@ -30,9 +31,19 @@ impl PluginDescriptorFact {
         descriptor: PluginDescriptor,
         origin: GatewayProviderOrigin,
     ) -> Self {
+        Self::new_with_v2(plugin_id, descriptor, None, origin)
+    }
+
+    pub(crate) fn new_with_v2(
+        plugin_id: String,
+        descriptor: PluginDescriptor,
+        descriptor_v2: Option<newengine_plugin_api::PluginDescriptorV2>,
+        origin: GatewayProviderOrigin,
+    ) -> Self {
         Self {
             plugin_id,
             descriptor,
+            descriptor_v2,
             origin,
         }
     }
@@ -193,7 +204,7 @@ impl GatewayPolicyFact {
 ///
 /// Plugins must not be trusted to self-declare this value in descriptor JSON.
 /// The host/loader assigns it from the load source, profile metadata or dev
-/// override policy before descriptor facts enter `ActiveGatewayRegistry`.
+/// override policy before descriptor facts are materialized into the host composition inventory.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) enum GatewayProviderOrigin {
     NullProvider,

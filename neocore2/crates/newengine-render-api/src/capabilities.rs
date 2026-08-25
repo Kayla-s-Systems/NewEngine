@@ -62,6 +62,98 @@ impl Default for RenderThreadingModel {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RenderDeviceLossPolicy {
+    /// No device exists, so device-loss semantics do not apply.
+    NotApplicable,
+    /// The provider cannot recreate its device in-place. The runtime must quiesce
+    /// rendering until composition replaces/restarts the provider.
+    Fatal,
+    /// The provider owns in-place recovery. The runtime keeps the route alive and
+    /// retries subsequent frames while the provider rebuilds its native state.
+    Recoverable,
+}
+
+impl Default for RenderDeviceLossPolicy {
+    #[inline]
+    fn default() -> Self {
+        Self::Fatal
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct RenderRecoveryCapabilities {
+    #[serde(default)]
+    pub surface_recreate: bool,
+    #[serde(default)]
+    pub device_recreate: bool,
+    #[serde(default)]
+    pub resource_replay: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RenderExecutionCapabilities {
+    /// Maximum number of backend-owned frames that may still be in flight while
+    /// the host prepares a newer frame. Zero is normalized to one.
+    #[serde(default = "default_frames_in_flight")]
+    pub frames_in_flight: u8,
+    /// True when `drain_backend_events()` publishes authoritative frame-completion
+    /// events. Host resource lifetime code must prefer these events over frame-age guesses.
+    #[serde(default)]
+    pub frame_completion_events: bool,
+    #[serde(default)]
+    pub device_loss: RenderDeviceLossPolicy,
+    #[serde(default)]
+    pub recovery: RenderRecoveryCapabilities,
+}
+
+const fn default_frames_in_flight() -> u8 {
+    1
+}
+
+impl Default for RenderExecutionCapabilities {
+    #[inline]
+    fn default() -> Self {
+        Self {
+            frames_in_flight: default_frames_in_flight(),
+            frame_completion_events: false,
+            device_loss: RenderDeviceLossPolicy::Fatal,
+            recovery: RenderRecoveryCapabilities::default(),
+        }
+    }
+}
+
+impl RenderExecutionCapabilities {
+    #[inline]
+    pub const fn normalized_frames_in_flight(self) -> u8 {
+        if self.frames_in_flight == 0 {
+            1
+        } else {
+            self.frames_in_flight
+        }
+    }
+
+    /// Conservative host-visible write ring derived from backend execution depth.
+    /// Two spare slots preserve the previous safety margin without encoding any
+    /// concrete graphics API's frame count in engine runtime code.
+    #[inline]
+    pub const fn host_visible_ring_slots(self) -> u64 {
+        let slots = self.normalized_frames_in_flight() as u64 + 2;
+        if slots > u8::MAX as u64 {
+            u8::MAX as u64
+        } else {
+            slots
+        }
+    }
+
+    #[inline]
+    pub const fn can_recover_device_loss(self) -> bool {
+        matches!(self.device_loss, RenderDeviceLossPolicy::Recoverable)
+            && self.recovery.device_recreate
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum RenderFeature {
     Swapchain,
@@ -158,6 +250,10 @@ pub struct RenderBackendCapabilities {
     pub limits: RenderLimits,
     #[serde(default)]
     pub hardware_tier: RenderHardwareTier,
+    /// Backend-owned execution semantics. Runtime code must consume these values
+    /// instead of assuming a concrete graphics API's queue/frame behavior.
+    #[serde(default)]
+    pub execution: RenderExecutionCapabilities,
 }
 
 impl RenderBackendCapabilities {
@@ -227,6 +323,7 @@ impl RenderBackendCapabilities {
             ],
             limits: RenderLimits::default(),
             hardware_tier: RenderHardwareTier::Unknown,
+            execution: RenderExecutionCapabilities::default(),
         }
     }
 
@@ -238,6 +335,12 @@ impl RenderBackendCapabilities {
             features: Vec::new(),
             limits: RenderLimits::default(),
             hardware_tier: RenderHardwareTier::Headless,
+            execution: RenderExecutionCapabilities {
+                frames_in_flight: 1,
+                frame_completion_events: false,
+                device_loss: RenderDeviceLossPolicy::NotApplicable,
+                recovery: RenderRecoveryCapabilities::default(),
+            },
         }
     }
 

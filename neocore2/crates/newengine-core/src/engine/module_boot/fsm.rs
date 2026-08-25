@@ -13,6 +13,7 @@ impl<E: Send + 'static> Engine<E> {
     /// `start_incremental_step()` so the engine.ui loading projection can be published
     /// between expensive systems/modules.
     pub fn start(&mut self) -> EngineResult<()> {
+        self.activate_host_context();
         loop {
             let outcome = self.start_incremental_step()?;
             if outcome.finished {
@@ -27,6 +28,7 @@ impl<E: Send + 'static> Engine<E> {
     /// the core FSM state, current startup phase, current module, plugin count
     /// and exact failure context.
     pub fn start_incremental_step(&mut self) -> EngineResult<EngineStartupStepOutcome> {
+        self.activate_host_context();
         if self.run_state().is_running() {
             let snapshot = EngineStartupSnapshot::complete(
                 self.run_state().as_str(),

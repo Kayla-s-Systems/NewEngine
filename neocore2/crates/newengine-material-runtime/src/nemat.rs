@@ -202,6 +202,8 @@ fn decode_nemat_material_xml(
         name: authored_xml::xml_attr_any(node, &["name", "id"]).unwrap_or_default(),
         shader: authored_xml::xml_attr_any(node, &["shader", "shader_id", "shaderId"])
             .unwrap_or_else(|| "pbr.default".to_owned()),
+        domain: authored_xml::xml_attr_any(node, &["domain", "material_domain", "materialDomain"])
+            .unwrap_or_else(|| "surface".to_owned()),
         ..AuthoredMaterialDescriptor::default()
     };
     if material.name.trim().is_empty() {
@@ -331,15 +333,30 @@ pub(crate) fn material_response_from_authored(
         // the NEMAT source to prevent collisions across unrelated material libraries.
         id: material_id_from_name(&canonical_source),
         name,
+        shader: material.shader,
         descriptor,
         textures,
+        params: material.params,
     })
 }
 
 fn descriptor_from_authored(material: &AuthoredMaterialDescriptor) -> MaterialDescriptor {
+    let domain = match material
+        .domain
+        .trim()
+        .to_ascii_lowercase()
+        .replace('-', "_")
+        .as_str()
+    {
+        "ui" | "user_interface" | "userinterface" => MaterialDomain::Ui,
+        "post" | "postprocess" | "post_process" => MaterialDomain::PostProcess,
+        _ => MaterialDomain::Surface,
+    };
     let mut descriptor = MaterialDescriptor {
-        domain: MaterialDomain::Surface,
-        shading_model: if material.shader.to_ascii_lowercase().contains("unlit") {
+        domain,
+        shading_model: if domain != MaterialDomain::Surface
+            || material.shader.to_ascii_lowercase().contains("unlit")
+        {
             ShadingModel::Unlit
         } else {
             ShadingModel::PbrMetallicRoughness

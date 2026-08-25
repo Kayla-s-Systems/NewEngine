@@ -4,10 +4,11 @@ use serde::{Deserialize, Serialize};
 pub use newengine_ui_draw::{
     reserved, TextureRef, UiBorderPaintCommand, UiClipPaintCommand, UiDrawCmd, UiDrawList,
     UiIconPaintCommand, UiImagePaintCommand, UiImageRef, UiLayerDomain, UiLayerDrawPacket,
-    UiLayerDrawPacketSet, UiLayerPaintCommand, UiMesh, UiPaintCommand, UiPaintList, UiPaintNodeRef,
-    UiRect, UiRectPaintCommand, UiRoundedRectPaintCommand, UiScopePaintCommand, UiTexId,
-    UiTextPaintCommand, UiTexture, UiTextureDelta, UiTexturePatch, UiVectorPaintCommand, UiVertex,
-    VectorRef,
+    UiLayerDrawPacketSet, UiLayerPaintCommand, UiMaterialParamValue, UiMaterialQuadPaintCommand,
+    UiMesh, UiPaintCommand, UiPaintList, UiPaintNodeRef, UiPaintPhase, UiRect, UiRectPaintCommand,
+    UiRoundedRectPaintCommand, UiScopePaintCommand, UiSurfaceEffectPaintCommand, UiTexId,
+    UiTextPaintCommand, UiTexture, UiTextureDelta, UiTextureMode, UiTexturePatch,
+    UiVectorPaintCommand, UiVertex, VectorRef,
 };
 use std::collections::BTreeMap;
 

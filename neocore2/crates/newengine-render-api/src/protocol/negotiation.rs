@@ -77,6 +77,11 @@ pub struct RenderCapabilityNegotiationResponse {
     pub accepted_version: RenderApiVersion,
     pub backend_version: RenderApiVersion,
     pub ok: bool,
+    /// Full backend-neutral capability snapshot accepted for this protocol session.
+    /// Runtime consumers use this as the authority for limits and execution semantics
+    /// instead of reconstructing behavior from a backend id or implementation name.
+    #[serde(default)]
+    pub capabilities: crate::RenderBackendCapabilities,
     pub enabled_features: Vec<RenderFeature>,
     pub missing_required_features: Vec<RenderFeature>,
     #[serde(default)]
@@ -147,6 +152,7 @@ pub fn negotiate_render_capabilities(
         accepted_version: backend_version,
         backend_version,
         ok: major_compatible && missing_required_features.is_empty(),
+        capabilities: capabilities.clone(),
         enabled_features,
         missing_required_features,
         notices,

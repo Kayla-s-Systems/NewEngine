@@ -2,9 +2,10 @@
 
 use newengine_math::collections_prelude::NeHashMap as HashMap;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::Ordering;
 
 use newengine_math::collections::prelude::NeHashSet;
+use newengine_service_api::{CompositionCandidate, CompositionPlan, CompositionSolver};
 
 use super::graph::{DiscoveryGraph, LoadPhaseFilter, ScannedDynlibKind};
 
@@ -100,8 +101,6 @@ fn headless_mode_enabled() -> bool {
         .unwrap_or(false)
 }
 
-static HEADLESS_PROVIDER_SKIP_MESSAGE_PRINTED: AtomicBool = AtomicBool::new(false);
-
 #[inline]
 fn is_concrete_provider_id(id: &str) -> bool {
     let id = id.to_ascii_lowercase();
@@ -151,7 +150,9 @@ fn headless_skips_native_provider_for_mode(
 
 fn emit_headless_skip_summary_once(graph: &DiscoveryGraph) {
     if !headless_mode_enabled()
-        || HEADLESS_PROVIDER_SKIP_MESSAGE_PRINTED.swap(true, Ordering::AcqRel)
+        || crate::host_context::ctx()
+            .headless_provider_skip_message_printed
+            .swap(true, Ordering::AcqRel)
     {
         return;
     }
@@ -192,6 +193,11 @@ fn headless_skips_native_provider(id: &str, service_gateways: &[String]) -> bool
     headless_skips_native_provider_for_mode(headless_mode_enabled(), id, service_gateways)
 }
 
+/// Converts discovery inventory into a load set.
+///
+/// Discovery itself never chooses a gateway provider. Duplicate binary identity
+/// is resolved here as an artifact concern; gateway provider winner selection is
+/// delegated exclusively to CompositionSolver.
 pub(super) fn build_load_selection(
     graph: &DiscoveryGraph,
     filter: LoadPhaseFilter,
@@ -202,9 +208,9 @@ pub(super) fn build_load_selection(
     let mut out = LoadSelection::default();
     let mut winners_by_id: HashMap<&str, &super::graph::ScannedDynlib> = HashMap::default();
 
-    // First pass: choose one deterministic winner per plugin id.
-    // The scan order is filesystem-dependent, so duplicate descriptors must be
-    // resolved deterministically by descriptor version and build profile.
+    // First pass only deduplicates physical artifacts for one logical plugin id.
+    // Provider priority is intentionally NOT part of this rank; that belongs to
+    // CompositionSolver and nowhere else.
     for item in &graph.items {
         let ScannedDynlibKind::Plugin {
             id,
@@ -217,6 +223,7 @@ pub(super) fn build_load_selection(
             continue;
         };
         if loaded_ids.contains(id)
+            || plugin_excluded_by_host_policy(id)
             || !crate::plugin_config_service::plugin_enabled_by_config(id)
             || !filter.allows(*phase)
             || headless_skips_native_provider(id, service_gateways)
@@ -235,7 +242,7 @@ pub(super) fn build_load_selection(
         }
     }
 
-    let selected_gateway_provider_paths = select_gateway_provider_paths(&winners_by_id);
+    let composition_plan = resolve_preload_composition_plan(&winners_by_id);
 
     for item in &graph.items {
         let decision = match &item.kind {
@@ -266,13 +273,9 @@ pub(super) fn build_load_selection(
                     SelectionDecision::Filtered {
                         filter_label: filter.label(),
                     }
-                } else if service_gateways.iter().any(|gateway| {
-                    selected_gateway_provider_paths
-                        .get(gateway.as_str())
-                        .is_some_and(|selected_path| selected_path != &item.path)
-                }) {
+                } else if preload_provider_is_shadowed(&composition_plan, item, service_gateways) {
                     SelectionDecision::Filtered {
-                        filter_label: "gateway-provider-selection",
+                        filter_label: "composition-plan",
                     }
                 } else if let Some(winner) = winners_by_id.get(id.as_str()).copied() {
                     if winner.path == item.path {
@@ -303,45 +306,62 @@ pub(super) fn build_load_selection(
     out
 }
 
-fn select_gateway_provider_paths(
+/// Resolve provider hints captured by discovery inventory through the same
+/// `CompositionSolver` that produces the live registry's immutable plan. Signature-only discovery
+/// legitimately produces no gateway candidates; in that case the plan is empty
+/// and the loader does not guess a winner from filenames or plugin ids.
+fn resolve_preload_composition_plan(
     winners_by_id: &HashMap<&str, &super::graph::ScannedDynlib>,
-) -> HashMap<String, std::path::PathBuf> {
-    let mut by_gateway: HashMap<String, Vec<&super::graph::ScannedDynlib>> = HashMap::default();
-
-    for item in winners_by_id.values().copied() {
+) -> CompositionPlan {
+    let candidates = winners_by_id.values().copied().flat_map(|item| {
         let ScannedDynlibKind::Plugin {
-            service_gateways, ..
+            id,
+            service_gateways,
+            backend_priority,
+            ..
         } = &item.kind
         else {
-            continue;
+            return Vec::new().into_iter();
         };
-        for gateway in service_gateways {
-            by_gateway.entry(gateway.clone()).or_default().push(item);
-        }
-    }
 
-    let mut selected = HashMap::default();
-    for (gateway, mut candidates) in by_gateway {
-        candidates.sort_by(|a, b| {
-            backend_provider_priority(a)
-                .cmp(&backend_provider_priority(b))
-                .then_with(|| plugin_candidate_rank(a).cmp(&plugin_candidate_rank(b)))
-        });
-        if let Some(item) = candidates.last() {
-            selected.insert(gateway, item.path.clone());
-        }
-    }
+        let origin = crate::service_gateway::GatewayProviderOrigin::from_plugin_path(&item.path);
+        let candidate_id = item.path.to_string_lossy().into_owned();
+        service_gateways
+            .iter()
+            .map(|gateway| {
+                CompositionCandidate::new(
+                    gateway.clone(),
+                    candidate_id.clone(),
+                    id.clone(),
+                    *backend_priority,
+                    origin.origin_bias(),
+                    0,
+                )
+            })
+            .collect::<Vec<_>>()
+            .into_iter()
+    });
 
-    selected
+    CompositionSolver::resolve(candidates)
 }
 
-fn backend_provider_priority(item: &super::graph::ScannedDynlib) -> i32 {
-    match &item.kind {
-        ScannedDynlibKind::Plugin {
-            backend_priority, ..
-        } => *backend_priority,
-        _ => 0,
+#[inline]
+fn preload_provider_is_shadowed(
+    plan: &CompositionPlan,
+    item: &super::graph::ScannedDynlib,
+    service_gateways: &[String],
+) -> bool {
+    if service_gateways.is_empty() {
+        return false;
     }
+    let candidate_id = item.path.to_string_lossy();
+    // A DLL can publish more than one gateway. It must remain loadable when it
+    // wins at least one of them; otherwise pre-load filtering could remove a
+    // provider that the immutable plan actually selected for another gateway.
+    !service_gateways.iter().any(|gateway| {
+        plan.selected(gateway)
+            .is_some_and(|selected| selected.candidate_id.as_str() == candidate_id.as_ref())
+    })
 }
 
 fn is_better_plugin_candidate(
@@ -355,26 +375,20 @@ fn is_better_plugin_candidate(
 
 fn plugin_candidate_rank(
     item: &super::graph::ScannedDynlib,
-) -> ((u64, u64, u64, u64), i32, usize, String) {
-    let (version, backend_priority, declared_capabilities) = match &item.kind {
+) -> ((u64, u64, u64, u64), usize, String) {
+    let (version, declared_capabilities) = match &item.kind {
         ScannedDynlibKind::Plugin {
             version,
-            backend_priority,
             declared_capabilities,
             ..
-        } => (
-            semver_rank(version),
-            *backend_priority,
-            declared_capabilities.unwrap_or(0),
-        ),
-        _ => ((0, 0, 0, 0), 0, 0),
+        } => (semver_rank(version), declared_capabilities.unwrap_or(0)),
+        _ => ((0, 0, 0, 0), 0),
     };
 
-    // The final path string is only a deterministic tie-breaker for two descriptors
-    // with equal id/version/capability metadata. It is not used for plugin identity.
+    // The final path string is only a deterministic tie-breaker for two artifacts
+    // with equal id/version/capability metadata. It is not provider selection.
     (
         version,
-        backend_priority,
         declared_capabilities,
         item.path.to_string_lossy().to_string(),
     )
@@ -401,6 +415,27 @@ fn semver_rank(version: &str) -> (u64, u64, u64, u64) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn plugin_item(
+        path: &str,
+        id: &str,
+        gateway: Option<&str>,
+        priority: i32,
+    ) -> super::super::graph::ScannedDynlib {
+        super::super::graph::ScannedDynlib {
+            path: PathBuf::from(path),
+            file_name: path.to_owned(),
+            kind: ScannedDynlibKind::Plugin {
+                id: id.to_owned(),
+                version: "1.0.0".to_owned(),
+                phase: newengine_plugin_api::PluginBootstrapPhase::Engine,
+                descriptor_kind: Some(newengine_plugin_api::PluginKind::Runtime),
+                declared_capabilities: gateway.map(|_| 1),
+                service_gateways: gateway.into_iter().map(str::to_owned).collect(),
+                backend_priority: priority,
+            },
+        }
+    }
 
     #[test]
     fn editor_tooling_plugin_remains_selectable_for_game_runtime_target() {
@@ -457,6 +492,130 @@ mod tests {
             .decisions
             .get(&path)
             .is_some_and(SelectionDecision::is_selected));
+    }
+
+    #[test]
+    fn preload_gateway_provider_selection_uses_composition_solver() {
+        let low = plugin_item(
+            "plugins/engine.render.low-1.0.0.dll",
+            "engine.render.low",
+            Some("engine.render"),
+            10,
+        );
+        let high = plugin_item(
+            "plugins/engine.render.high-1.0.0.dll",
+            "engine.render.high",
+            Some("engine.render"),
+            20,
+        );
+        let high_path = high.path.clone();
+        let low_path = low.path.clone();
+        let graph = DiscoveryGraph {
+            dir: PathBuf::from("pluginsRuntime"),
+            entries_total: 2,
+            skipped_non_dynlib: 0,
+            items: vec![low, high],
+            scan_errors: Vec::new(),
+            platform_runtime_count: 0,
+            bootstrap_total: 0,
+            engine_total: 2,
+            unknown_dynlibs: Vec::new(),
+        };
+
+        let selection = build_load_selection(
+            &graph,
+            LoadPhaseFilter::BootstrapAndEngine,
+            &NeHashSet::default(),
+        );
+
+        assert!(selection.engine_candidates.contains(&high_path));
+        assert!(!selection.engine_candidates.contains(&low_path));
+        assert!(matches!(
+            selection.decisions.get(&low_path),
+            Some(SelectionDecision::Filtered {
+                filter_label: "composition-plan"
+            })
+        ));
+    }
+
+    #[test]
+    fn multi_gateway_plugin_stays_loadable_when_plan_selects_any_route() {
+        let multi_path = PathBuf::from("plugins/multi-provider.dll");
+        let render_path = PathBuf::from("plugins/render-specialist.dll");
+        let multi = super::super::graph::ScannedDynlib {
+            path: multi_path.clone(),
+            file_name: "multi-provider.dll".to_owned(),
+            kind: ScannedDynlibKind::Plugin {
+                id: "engine.multi.provider".to_owned(),
+                version: "1.0.0".to_owned(),
+                phase: newengine_plugin_api::PluginBootstrapPhase::Engine,
+                descriptor_kind: Some(newengine_plugin_api::PluginKind::Runtime),
+                declared_capabilities: Some(2),
+                service_gateways: vec!["engine.render".to_owned(), "engine.audio".to_owned()],
+                backend_priority: 20,
+            },
+        };
+        let render = plugin_item(
+            "plugins/render-specialist.dll",
+            "engine.render.specialist",
+            Some("engine.render"),
+            30,
+        );
+        let graph = DiscoveryGraph {
+            dir: PathBuf::from("pluginsRuntime"),
+            entries_total: 2,
+            skipped_non_dynlib: 0,
+            items: vec![multi, render],
+            scan_errors: Vec::new(),
+            platform_runtime_count: 0,
+            bootstrap_total: 0,
+            engine_total: 2,
+            unknown_dynlibs: Vec::new(),
+        };
+
+        let selection = build_load_selection(
+            &graph,
+            LoadPhaseFilter::BootstrapAndEngine,
+            &NeHashSet::default(),
+        );
+
+        assert!(selection.engine_candidates.contains(&multi_path));
+        assert!(selection.engine_candidates.contains(&render_path));
+    }
+
+    #[test]
+    fn duplicate_artifact_rank_does_not_use_provider_priority() {
+        let low_priority_newer = super::super::graph::ScannedDynlib {
+            path: PathBuf::from("provider-2.0.0.dll"),
+            file_name: "provider-2.0.0.dll".to_owned(),
+            kind: ScannedDynlibKind::Plugin {
+                id: "engine.render.provider".to_owned(),
+                version: "2.0.0".to_owned(),
+                phase: newengine_plugin_api::PluginBootstrapPhase::Engine,
+                descriptor_kind: Some(newengine_plugin_api::PluginKind::Runtime),
+                declared_capabilities: Some(1),
+                service_gateways: vec!["engine.render".to_owned()],
+                backend_priority: -100,
+            },
+        };
+        let high_priority_older = super::super::graph::ScannedDynlib {
+            path: PathBuf::from("provider-1.0.0.dll"),
+            file_name: "provider-1.0.0.dll".to_owned(),
+            kind: ScannedDynlibKind::Plugin {
+                id: "engine.render.provider".to_owned(),
+                version: "1.0.0".to_owned(),
+                phase: newengine_plugin_api::PluginBootstrapPhase::Engine,
+                descriptor_kind: Some(newengine_plugin_api::PluginKind::Runtime),
+                declared_capabilities: Some(1),
+                service_gateways: vec!["engine.render".to_owned()],
+                backend_priority: 10_000,
+            },
+        };
+
+        assert!(is_better_plugin_candidate(
+            &low_priority_newer,
+            &high_priority_older
+        ));
     }
 
     #[test]

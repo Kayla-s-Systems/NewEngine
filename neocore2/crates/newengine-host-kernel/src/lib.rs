@@ -33,6 +33,16 @@ pub fn build_kernel_engine(config: EngineConfig) -> EngineResult<Engine<()>> {
     build_kernel_engine_with_registry(config, |_| {})
 }
 
+/// Constructs a kernel Engine inside an already-created host universe. This is
+/// used by editor/PIE/preview orchestration that performs preinit before Engine
+/// construction.
+pub fn build_kernel_engine_with_host(
+    config: EngineConfig,
+    host: newengine_plugin_host::HostContextHandle,
+) -> EngineResult<Engine<()>> {
+    build_kernel_engine_with_registry_and_host(config, host, |_| {})
+}
+
 /// Constructs the kernel while allowing an upper composition layer to register
 /// host-local service adapters before the engine takes ownership of the registry.
 /// The kernel itself still does not know which domains those adapters implement.
@@ -43,13 +53,25 @@ pub fn build_kernel_engine_with_registry<F>(
 where
     F: FnOnce(&ServiceRegistry),
 {
-    newengine_plugin_host::init_host_context();
+    let host = newengine_plugin_host::create_host_context();
+    build_kernel_engine_with_registry_and_host(config, host, configure)
+}
+
+pub fn build_kernel_engine_with_registry_and_host<F>(
+    config: EngineConfig,
+    host: newengine_plugin_host::HostContextHandle,
+    configure: F,
+) -> EngineResult<Engine<()>>
+where
+    F: FnOnce(&ServiceRegistry),
+{
+    newengine_plugin_host::activate_host_context(&host);
     let (tx, rx) = unbounded::<()>();
     let bus = Bus::new(tx, rx);
     let services = KernelServices::new();
     configure(services.service_registry());
     let services: Box<dyn Services> = Box::new(services);
-    Engine::new_with_config(config, services, bus, ShutdownToken::new())
+    Engine::new_with_config_and_host(config, services, bus, ShutdownToken::new(), host)
 }
 
 /// Smallest runnable NewEngine host assembly.

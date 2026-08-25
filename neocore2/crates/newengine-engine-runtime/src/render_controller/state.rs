@@ -170,7 +170,7 @@ impl RenderViewportState {
 }
 
 /// Shadow cache and refresh state. Kept separate from graph/backend adapter state
-/// so future shadow providers can be replaced without touching Vulkan.
+/// so future shadow providers can be replaced without touching backend.
 pub(super) struct RenderShadowRuntimeState {
     pub(super) render_target: Option<RenderTargetId>,
     pub(super) render_target_resolution: u32,
@@ -520,7 +520,7 @@ impl RenderDiagnosticsRuntimeState {
 pub(super) struct RenderUiSurfaceRuntimeState {
     pub(super) primary: super::module_impl::ui_node_surface::RenderUiNodeSurfaceState,
     /// Full provider image payloads may be repeated every loading frame. Keep a
-    /// content fingerprint so only changed UI textures reach Vulkan again.
+    /// content fingerprint so only changed UI textures reach backend again.
     pub(super) prelaunch_texture_fingerprints: FxHashMap<u32, u64>,
     pub(super) prelaunch_patch_fingerprints: FxHashMap<(u32, u32, u32, u32, u32), u64>,
 }

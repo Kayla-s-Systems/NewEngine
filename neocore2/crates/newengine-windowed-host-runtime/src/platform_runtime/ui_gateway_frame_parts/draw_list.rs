@@ -1,5 +1,6 @@
 use super::*;
 
+mod draw_list_assets;
 mod draw_list_diagnostics;
 mod draw_list_state;
 mod draw_list_transport;

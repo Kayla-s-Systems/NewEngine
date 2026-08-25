@@ -6,6 +6,7 @@ readme = "README.md"
 description = "Service-backed render capability runtime adapter for NewEngine"
 
 [dependencies]
+newengine-service-api = { path = "../newengine-service-api" }
 newengine-core = { path = "../newengine-core", default-features = false, features = ["render-api"] }
 newengine-plugin-api = { path = "../newengine-plugin-api" }
 newengine-plugin-host = { path = "../newengine-plugin-host" }

@@ -97,6 +97,7 @@ pub(crate) fn draw_skinned_player_primitives(
             pose,
             lit.skin_bgl,
             this.frame.frame_index,
+            this.backend_execution.host_visible_ring_slots(),
             r,
         )?;
 

@@ -10,6 +10,7 @@ mod bootstrap;
 mod logging;
 mod plugins;
 mod project_content;
+mod runtime_units;
 mod shutdown;
 mod types;
 

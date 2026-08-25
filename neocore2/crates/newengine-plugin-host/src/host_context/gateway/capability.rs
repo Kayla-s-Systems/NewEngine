@@ -3,11 +3,11 @@ use newengine_plugin_api::{CapabilityKind, CapabilityRole};
 use super::super::state::ctx;
 use super::registry::emit_gateway_diagnostic;
 
-fn parse_backend_priority(json: &str) -> i64 {
-    serde_json::from_str::<serde_json::Value>(json)
-        .ok()
-        .and_then(|v| v.get("backend_priority").and_then(|x| x.as_i64()))
-        .unwrap_or(0)
+fn backend_priority(capability: &newengine_plugin_api::CapabilityDesc) -> i64 {
+    match capability.to_v2_compat().route {
+        abi_stable::std_types::ROption::RSome(route) => i64::from(route.backend_priority),
+        abi_stable::std_types::ROption::RNone => 0,
+    }
 }
 
 fn emit_capability_active(
@@ -144,7 +144,7 @@ pub fn resolve_service_for_backend_capability(capability_id: &str) -> Option<Str
             continue;
         }
 
-        let backend_priority = parse_backend_priority(backend_capability.describe_json.as_str());
+        let backend_priority = backend_priority(backend_capability);
         let origin = plugin_origins
             .get(owner)
             .copied()

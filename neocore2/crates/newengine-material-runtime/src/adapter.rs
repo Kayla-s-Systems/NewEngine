@@ -223,8 +223,10 @@ impl MaterialAssetGatewayAdapter {
         let response = MaterialDescriptorLoadResponse {
             source: loaded.source,
             name: loaded.name,
+            shader: loaded.shader,
             descriptor: loaded.descriptor,
             textures: loaded.textures,
+            params: loaded.params,
         };
         if let Ok(mut caches) = self.caches.lock() {
             caches.descriptors.insert(cache_key, response.clone());
@@ -288,8 +290,10 @@ impl MaterialAssetGatewayAdapter {
         let mut graph = ResolvedMaterialGraph {
             source: loaded.source,
             name: loaded.name,
+            shader: loaded.shader,
             descriptor: loaded.descriptor,
             textures: loaded.textures,
+            params: loaded.params,
             ..Default::default()
         };
         for texture in collect_texture_refs(&graph.textures) {
@@ -327,8 +331,10 @@ impl MaterialAssetGatewayAdapter {
         Ok(RenderMaterialPacket {
             source: graph.source,
             name: graph.name,
+            shader: graph.shader,
             descriptor: graph.descriptor,
             textures: graph.textures,
+            params: graph.params,
             ..Default::default()
         })
     }

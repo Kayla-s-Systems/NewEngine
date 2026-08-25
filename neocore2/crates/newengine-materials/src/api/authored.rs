@@ -34,6 +34,8 @@ impl Default for AuthoredMaterialLibrary {
 pub struct AuthoredMaterialDescriptor {
     pub name: String,
     pub shader: String,
+    /// Authored routing domain: `surface`, `ui`, or `post_process`.
+    pub domain: String,
     pub surface: AuthoredMaterialSurface,
     /// Semantic texture slots. Values must be `.ytd@entry` selectors.
     pub textures: BTreeMap<String, String>,
@@ -46,6 +48,7 @@ impl Default for AuthoredMaterialDescriptor {
         Self {
             name: String::new(),
             shader: "pbr.default".to_owned(),
+            domain: "surface".to_owned(),
             surface: AuthoredMaterialSurface::default(),
             textures: BTreeMap::new(),
             params: BTreeMap::new(),

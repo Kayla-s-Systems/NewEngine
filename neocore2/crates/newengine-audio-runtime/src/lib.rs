@@ -5,7 +5,7 @@ mod streaming_pcm;
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::io::Cursor;
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{mpsc, Arc, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -55,8 +55,6 @@ const MIN_PHYSICAL_AUDIBILITY: f32 = 1.0e-4;
 /// A voice promoted this early is perceptually equivalent to starting at sample zero.
 const MIN_MATERIALIZE_SEEK_MS: u64 = 50;
 const UI_FEEDBACK_PRIORITY: i32 = 10_000;
-
-static AUDIO_RUNTIME_REGISTERED: AtomicBool = AtomicBool::new(false);
 
 #[derive(Debug)]
 struct CachedClip {
@@ -2514,10 +2512,9 @@ pub fn register_native_audio_provider_best_effort(assets: AssetServiceClient) ->
         return false;
     }
 
-    if AUDIO_RUNTIME_REGISTERED
-        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
-        .is_err()
-    {
+    // Registration ownership is HostContext-scoped. A process-global one-shot guard would
+    // survive transaction rollback and would incorrectly couple multiple Engine instances.
+    if newengine_plugin_host::has_service(NATIVE_AUDIO_SERVICE_ID) {
         newengine_ulog_api::ulog::info!("audio provider bootstrap: step='already-registered'");
         return true;
     }
@@ -2526,7 +2523,6 @@ pub fn register_native_audio_provider_best_effort(assets: AssetServiceClient) ->
     let state = match AudioRuntimeState::open_default(assets) {
         Ok(state) => state,
         Err(error) => {
-            AUDIO_RUNTIME_REGISTERED.store(false, Ordering::Release);
             newengine_ulog_api::ulog::warn!(
                 "audio provider unavailable route='{}' err='{}'; engine.audio fallback remains active",
                 NATIVE_AUDIO_PROVIDER_ROUTE,
@@ -2560,9 +2556,8 @@ pub fn register_native_audio_provider_best_effort(assets: AssetServiceClient) ->
             true
         }
         Err(error) => {
-            // The service may already have been registered before a route-level
-            // validation failure. Keep the one-shot guard set to avoid duplicate
-            // service registration on a later best-effort call.
+            // Transactional publication leaves no partial live topology on failure; callers may
+            // safely retry in the same HostContext after the owning transaction rolls back.
             newengine_ulog_api::ulog::warn!(
                 "audio provider registration failed route='{}' err='{}'",
                 NATIVE_AUDIO_PROVIDER_ROUTE,

@@ -20,6 +20,7 @@ use newengine_math::collections::prelude::*;
 use self::types::LoadedPlugin;
 
 pub struct PluginManager {
+    host: crate::host_context::HostContextHandle,
     loaded: Vec<LoadedPlugin>,
     loaded_ids: NeHashSet<String>,
     discovery_cache: Option<discovery::DiscoveryGraph>,
@@ -29,12 +30,23 @@ pub struct PluginManager {
 impl PluginManager {
     #[inline]
     pub fn new() -> Self {
+        Self::new_with_host(crate::host_context::create_host_context())
+    }
+
+    #[inline]
+    pub fn new_with_host(host: crate::host_context::HostContextHandle) -> Self {
         Self {
+            host,
             loaded: Vec::new(),
             loaded_ids: NeHashSet::default(),
             discovery_cache: None,
             incremental_load: None,
         }
+    }
+
+    #[inline]
+    pub fn host_context(&self) -> &crate::host_context::HostContextHandle {
+        &self.host
     }
 
     #[inline]
@@ -49,24 +61,26 @@ impl PluginManager {
 
     #[inline]
     pub fn snapshot(&self) -> Vec<PluginSnapshotEntry> {
-        let mut out = types::snapshot_impl(&self.loaded);
-        out.extend(
-            crate::host_context::list_external_runtime_plugins()
-                .into_iter()
-                .map(|p| PluginSnapshotEntry {
-                    path: p.path,
-                    id: p.id,
-                    name: p.name,
-                    version: p.version,
-                    kind: p.kind,
-                    capabilities: p.capabilities,
-                    state: p.state,
-                    disabled_reason: p.disabled_reason,
-                    icon_small: None,
-                }),
-        );
-        out.sort_by(|a, b| a.id.cmp(&b.id));
-        out
+        crate::host_context::with_host_context(&self.host, || {
+            let mut out = types::snapshot_impl(&self.loaded);
+            out.extend(
+                crate::host_context::list_external_runtime_plugins()
+                    .into_iter()
+                    .map(|p| PluginSnapshotEntry {
+                        path: p.path,
+                        id: p.id,
+                        name: p.name,
+                        version: p.version,
+                        kind: p.kind,
+                        capabilities: p.capabilities,
+                        state: p.state,
+                        disabled_reason: p.disabled_reason,
+                        icon_small: None,
+                    }),
+            );
+            out.sort_by(|a, b| a.id.cmp(&b.id));
+            out
+        })
     }
 }
 

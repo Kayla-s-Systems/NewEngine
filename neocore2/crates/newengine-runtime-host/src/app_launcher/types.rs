@@ -42,6 +42,14 @@ impl RuntimeHostLaunchSpec {
 
 /// Game/profile-specific hooks used by the generic runtime-host launcher.
 pub trait RuntimeHostAppProfile {
+    /// Pure declarative engine shape requested by this product/profile.
+    /// The generic host declares the requirements and materializes matching
+    /// runtime bridge units; profiles must not instantiate backend adapters.
+    #[inline]
+    fn composition_spec(&self) -> Option<newengine_service_api::EngineCompositionSpec> {
+        None
+    }
+
     fn register_modules(
         &self,
         engine: &mut Engine<()>,

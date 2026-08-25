@@ -76,7 +76,7 @@ impl RuntimeRenderController {
 
         // The render backend is initialized from the platform window snapshot before the
         // first runtime/game frame. Replaying the initial size through RenderApi::resize
-        // can push Vulkan through a redundant swapchain teardown before the first acquire.
+        // can push backend through a redundant swapchain teardown before the first acquire.
         if self.viewport.last_w == 0 || self.viewport.last_h == 0 {
             self.viewport.last_w = w;
             self.viewport.last_h = h;

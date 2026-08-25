@@ -132,12 +132,8 @@ fn capability_engine_gateway(capability: &newengine_plugin_api::CapabilityDesc) 
     if capability.role != newengine_plugin_api::CapabilityRole::Provides {
         return None;
     }
-    serde_json::from_str::<serde_json::Value>(capability.describe_json.as_str())
-        .ok()
-        .and_then(|value| {
-            value
-                .get("engine_gateway")
-                .and_then(|v| v.as_str())
-                .map(str::to_owned)
-        })
+    match capability.to_v2_compat().route {
+        abi_stable::std_types::ROption::RSome(route) => Some(route.engine_gateway.to_string()),
+        abi_stable::std_types::ROption::RNone => None,
+    }
 }

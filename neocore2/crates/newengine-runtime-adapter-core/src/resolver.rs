@@ -15,7 +15,7 @@ pub(crate) fn resolve_backend_provider(
             .map(|snapshot| service_backend_candidates(snapshot, spec).join(", "))
             .unwrap_or_else(|| "<plugin snapshot unavailable>".to_owned());
         return Err(format!(
-            "active {} gateway route '{}' is unavailable; provider selection must be resolved through ActiveGatewayRegistry, not backend_id; available {} providers=[{}]",
+            "active {} gateway route '{}' is unavailable; provider selection must come from the host’s immutable CompositionPlan, not backend_id; available {} providers=[{}]",
             spec.domain,
             spec.engine_gateway_id,
             spec.domain,
@@ -172,15 +172,13 @@ pub(crate) fn plugin_declares_service_for_spec(
         if cap.role != CapabilityRole::Provides || cap.id.as_str() != spec.backend_capability_id {
             return false;
         }
-        serde_json::from_str::<serde_json::Value>(cap.describe_json.as_str())
-            .ok()
-            .and_then(|value| {
-                value
-                    .get("contract")
-                    .and_then(|v| v.as_str())
-                    .map(str::to_owned)
-            })
-            .is_some_and(|service_id| plugin_declares_service(plugin, &service_id))
+        match cap.to_v2_compat().route {
+            abi_stable::std_types::ROption::RSome(route) => {
+                let service_id = route.provider_service_id.as_str();
+                !service_id.trim().is_empty() && plugin_declares_service(plugin, service_id)
+            }
+            abi_stable::std_types::ROption::RNone => false,
+        }
     })
 }
 

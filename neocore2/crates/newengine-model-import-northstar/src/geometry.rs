@@ -66,6 +66,12 @@ pub struct ImportMesh {
     pub bounds_max: [f32; 3],
     pub vertices: Vec<YddBinaryVertex>,
     pub skin: Option<Vec<YddBinarySkinVertex>>,
+    /// Size of the native skin joint domain declared by this submesh. For ordinary
+    /// character geometry this matches the master JOINT_HIERARCHY size. Cloth-backed
+    /// geometry can instead address a package-local simulation-node domain and must
+    /// never be interpreted as master skeleton indices.
+    pub source_skin_joint_domain_size: Option<usize>,
+    pub skin_loss: SkinLossStats,
     pub indices: Vec<u32>,
 }
 
@@ -139,6 +145,18 @@ pub fn decode_geometry_lod0(pak: &PakFile) -> Result<DecodedGeometry, String> {
             .resolve_pointer(sub + 64)?
             .ok_or_else(|| format!("submesh '{name}' has no index buffer"))?;
         let skin_header = pak.resolve_pointer(sub + 88)?;
+        let source_skin_joint_domain_size = if skin_header.is_some() && stride == PC_SUBMESH_STRIDE
+        {
+            let domain_size = pak.read_u32(sub + 152)? as usize;
+            if domain_size == 0 || domain_size > 100_000 {
+                return Err(format!(
+                    "invalid native skin joint domain name='{name}' size={domain_size}"
+                ));
+            }
+            Some(domain_size)
+        } else {
+            None
+        };
         let material_header = pak.resolve_pointer(sub + 72)?;
 
         let streams = (0..stream_count)
@@ -167,11 +185,17 @@ pub fn decode_geometry_lod0(pak: &PakFile) -> Result<DecodedGeometry, String> {
             })
             .transpose()?
             .unwrap_or_else(|| vec![[0.0, 0.0, 0.0, 0.0]; vertex_count]);
-        let indices = decode_indices(pak, index_buffer, index_count, vertex_count, &name)?;
+        let source_indices = decode_indices(pak, index_buffer, index_count, vertex_count, &name)?;
+        // Naughty Dog packages can retain dead source vertices after mesh partitioning. Some of
+        // those vertices intentionally have no skin weight record. They are not renderable data:
+        // compact strictly to vertices referenced by the triangle index buffer before skin decode.
+        // A zero-weight vertex that is actually referenced still fails in `decode_skin` below.
+        let (positions, uv0, indices, source_vertex_indices) =
+            compact_indexed_vertex_streams(&positions, &uv0, &source_indices, &name)?;
         let normals = recalculate_normals(&positions, &indices);
         let (skin, skin_loss) = match skin_header {
             Some(header) => {
-                let (skin, stats) = decode_skin(pak, header, vertex_count, &name)?;
+                let (skin, stats) = decode_skin(pak, header, &source_vertex_indices, &name)?;
                 (Some(skin), stats)
             }
             None => (None, SkinLossStats::default()),
@@ -207,6 +231,8 @@ pub fn decode_geometry_lod0(pak: &PakFile) -> Result<DecodedGeometry, String> {
             ],
             vertices,
             skin,
+            source_skin_joint_domain_size,
+            skin_loss,
             indices,
         });
     }
@@ -478,10 +504,77 @@ fn decode_indices(
     Ok(out)
 }
 
+fn compact_indexed_vertex_streams(
+    positions: &[[f32; 4]],
+    uv0: &[[f32; 4]],
+    source_indices: &[u32],
+    mesh_name: &str,
+) -> Result<(Vec<[f32; 4]>, Vec<[f32; 4]>, Vec<u32>, Vec<usize>), String> {
+    if positions.len() != uv0.len() {
+        return Err(format!(
+            "vertex stream length mismatch mesh='{mesh_name}' positions={} uv0={}",
+            positions.len(),
+            uv0.len()
+        ));
+    }
+    let mut referenced = vec![false; positions.len()];
+    for &index in source_indices {
+        let source = usize::try_from(index).map_err(|_| {
+            format!("source index conversion failed mesh='{mesh_name}' index={index}")
+        })?;
+        let Some(flag) = referenced.get_mut(source) else {
+            return Err(format!(
+                "source index outside vertex stream mesh='{mesh_name}' index={source} vertices={}",
+                positions.len()
+            ));
+        };
+        *flag = true;
+    }
+    let source_vertex_indices = referenced
+        .iter()
+        .enumerate()
+        .filter_map(|(index, used)| used.then_some(index))
+        .collect::<Vec<_>>();
+    if source_vertex_indices.is_empty() {
+        return Err(format!(
+            "indexed mesh references no vertices mesh='{mesh_name}'"
+        ));
+    }
+    let mut remap = vec![u32::MAX; positions.len()];
+    let mut compact_positions = Vec::with_capacity(source_vertex_indices.len());
+    let mut compact_uv0 = Vec::with_capacity(source_vertex_indices.len());
+    for (dense, &source) in source_vertex_indices.iter().enumerate() {
+        remap[source] = u32::try_from(dense)
+            .map_err(|_| format!("dense vertex index overflow mesh='{mesh_name}'"))?;
+        compact_positions.push(positions[source]);
+        compact_uv0.push(uv0[source]);
+    }
+    let indices = source_indices
+        .iter()
+        .map(|&source| {
+            let source = usize::try_from(source)
+                .map_err(|_| format!("source index conversion failed mesh='{mesh_name}'"))?;
+            remap
+                .get(source)
+                .copied()
+                .filter(|value| *value != u32::MAX)
+                .ok_or_else(|| {
+                    format!("source index was not remapped mesh='{mesh_name}' index={source}")
+                })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok((
+        compact_positions,
+        compact_uv0,
+        indices,
+        source_vertex_indices,
+    ))
+}
+
 fn decode_skin(
     pak: &PakFile,
     header: usize,
-    vertex_count: usize,
+    source_vertex_indices: &[usize],
     mesh_name: &str,
 ) -> Result<(Vec<YddBinarySkinVertex>, SkinLossStats), String> {
     let map = pak
@@ -490,9 +583,15 @@ fn decode_skin(
     let weights = pak
         .resolve_pointer(header + 24)?
         .ok_or_else(|| format!("skin weights missing mesh='{mesh_name}'"))?;
-    let mut out = Vec::with_capacity(vertex_count);
+    let profile = pak.read_u32(header + 8)?;
+    if profile > 1 {
+        return Err(format!(
+            "unsupported source skin profile mesh='{mesh_name}' profile={profile}"
+        ));
+    }
+    let mut out = Vec::with_capacity(source_vertex_indices.len());
     let mut stats = SkinLossStats::default();
-    for vertex in 0..vertex_count {
+    for &vertex in source_vertex_indices {
         let count = pak.read_u32(map + vertex * 8)? as usize;
         let relative = pak.read_u32(map + vertex * 8 + 4)? as usize;
         if count == 0 || count > 12 {
@@ -502,14 +601,44 @@ fn decode_skin(
         }
         let mut combined = BTreeMap::<u16, f32>::new();
         for influence in 0..count {
-            let packed = pak.read_u32(
-                weights
-                    .checked_add(relative)
-                    .and_then(|value| value.checked_add(influence * 4))
-                    .ok_or("skin weight address overflow")?,
-            )?;
-            let joint = (packed >> 22) as u16;
-            let weight = (packed & PACKED_WEIGHT_MASK) as f32 / PACKED_WEIGHT_DENOMINATOR;
+            let base = weights
+                .checked_add(relative)
+                .ok_or("skin weight address overflow")?;
+            let (joint, weight) = match profile {
+                0 => {
+                    let packed = pak.read_u32(
+                        base.checked_add(influence * 4)
+                            .ok_or("packed skin weight address overflow")?,
+                    )?;
+                    (
+                        (packed >> 22) as u16,
+                        (packed & PACKED_WEIGHT_MASK) as f32 / PACKED_WEIGHT_DENOMINATOR,
+                    )
+                }
+                1 => {
+                    // TLOU2 PC also uses an explicit 8-byte influence representation:
+                    // f32 weight followed by u32 joint index. The profile bit at skin_header+8
+                    // selects this layout. Treating these words as the packed 22/10-bit profile
+                    // corrupts both weights and joints (notably Ellie backpack cloth/straps).
+                    let influence_base = base
+                        .checked_add(influence * 8)
+                        .ok_or("explicit skin influence address overflow")?;
+                    let weight = pak.read_f32(influence_base)?;
+                    let joint = pak.read_u32(influence_base + 4)?;
+                    let joint = u16::try_from(joint).map_err(|_| {
+                        format!(
+                            "explicit source skin joint exceeds u16 mesh='{mesh_name}' vertex={vertex} joint={joint}"
+                        )
+                    })?;
+                    (joint, weight)
+                }
+                _ => unreachable!(),
+            };
+            if !weight.is_finite() || weight < 0.0 {
+                return Err(format!(
+                    "invalid source skin influence mesh='{mesh_name}' vertex={vertex} joint={joint} weight={weight}"
+                ));
+            }
             *combined.entry(joint).or_insert(0.0) += weight;
         }
         let mut influences = combined.into_iter().collect::<Vec<_>>();
@@ -637,6 +766,24 @@ mod tests {
         assert_eq!(bits.read(4).unwrap(), 0b0010);
         assert_eq!(bits.read(4).unwrap(), 0b1011);
         assert_eq!(bits.read(2).unwrap(), 0b11);
+    }
+
+    #[test]
+    fn indexed_compaction_discards_only_dead_vertices() {
+        let positions = vec![
+            [0.0, 0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0, 0.0],
+            [9.0, 9.0, 9.0, 0.0],
+            [0.0, 1.0, 0.0, 0.0],
+        ];
+        let uv0 = positions.clone();
+        let (p, uv, indices, source) =
+            compact_indexed_vertex_streams(&positions, &uv0, &[0, 1, 3], "test").unwrap();
+        assert_eq!(source, vec![0, 1, 3]);
+        assert_eq!(indices, vec![0, 1, 2]);
+        assert_eq!(p.len(), 3);
+        assert_eq!(uv.len(), 3);
+        assert_eq!(p[2], positions[3]);
     }
 
     #[test]

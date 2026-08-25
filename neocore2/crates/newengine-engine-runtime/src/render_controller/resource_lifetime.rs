@@ -2,7 +2,8 @@
 
 use newengine_core::events::EventSub;
 use newengine_core::render::{
-    BindGroupId, BufferId, RenderApi, RenderBackendEvent, RenderBackendEventKind, RenderTargetId,
+    BindGroupId, BufferId, RenderApi, RenderBackendEvent, RenderBackendEventKind,
+    RenderExecutionCapabilities, RenderTargetId,
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -76,8 +77,23 @@ impl RenderGpuLifetimeQueue {
         self.latest_completed_frame = latest_completed_frame;
     }
 
-    pub(super) fn collect(&mut self, r: &mut dyn RenderApi) {
-        self.drain_events();
+    pub(super) fn collect(
+        &mut self,
+        r: &mut dyn RenderApi,
+        current_frame: u64,
+        execution: RenderExecutionCapabilities,
+    ) {
+        if execution.frame_completion_events {
+            // Provider completion events are authoritative when advertised.
+            self.drain_events();
+        } else {
+            // Backends without completion events still have a defined lifetime model:
+            // retain one extra frame beyond their declared in-flight depth before
+            // treating a host frame as safe for destruction.
+            self.latest_completed_frame = self
+                .latest_completed_frame
+                .max(fallback_completed_frame(current_frame, execution));
+        }
         if self.latest_completed_frame == 0 {
             return;
         }
@@ -94,6 +110,11 @@ impl RenderGpuLifetimeQueue {
     }
 }
 
+#[inline]
+fn fallback_completed_frame(current_frame: u64, execution: RenderExecutionCapabilities) -> u64 {
+    current_frame.saturating_sub(execution.normalized_frames_in_flight() as u64 + 1)
+}
+
 impl RetiredGpuResourceEntry {
     #[inline]
     fn destroy(self, r: &mut dyn RenderApi) {
@@ -102,5 +123,24 @@ impl RetiredGpuResourceEntry {
             RetiredGpuResource::BindGroup(id) => r.destroy_bind_group(id),
             RetiredGpuResource::Buffer(id) => r.destroy_buffer(id),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn frame_age_fallback_is_derived_from_backend_execution_depth() {
+        let one = RenderExecutionCapabilities {
+            frames_in_flight: 1,
+            ..Default::default()
+        };
+        let three = RenderExecutionCapabilities {
+            frames_in_flight: 3,
+            ..Default::default()
+        };
+        assert_eq!(fallback_completed_frame(10, one), 8);
+        assert_eq!(fallback_completed_frame(10, three), 6);
     }
 }

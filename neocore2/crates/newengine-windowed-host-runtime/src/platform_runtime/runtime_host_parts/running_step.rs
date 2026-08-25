@@ -78,6 +78,11 @@ fn append_surface_once(plan: &mut UiLayerCompositionPlan, surface_id: &str) {
     }
 }
 
+#[inline]
+fn runtime_debug_overlay_allowed(game_profile_active: bool) -> bool {
+    !game_profile_active
+}
+
 impl HostPlatformRuntime {
     pub(crate) fn step_running(&mut self, dt_sec: f32) -> EngineResult<PlatformStepResultV1> {
         let host_frame_started = Instant::now();
@@ -97,26 +102,32 @@ impl HostPlatformRuntime {
             .get::<UiEventDispatchFrame>()
             .and_then(|frame| frame.hovered_node.as_ref())
             .map(|hit| (hit.surface_id.clone(), hit.node_id.clone()));
-        if let Some(telemetry) = self
+        let game_profile_active = self
             .engine
             .resources
-            .get::<newengine_ui_api::UiRuntimeDebugOverlayTelemetry>()
-            .cloned()
-        {
-            crate::platform_runtime::ui_gateway_frame::publish_debug_overlay_telemetry(&telemetry);
+            .get::<newengine_ui_api::UiScreenProfileState>()
+            .is_some_and(|state| {
+                state.descriptor.profile == newengine_ui_api::UiScreenProfile::Game
+            });
+        // Technical render telemetry is never presented as a retained surface in
+        // the shipping Game profile. It belongs to profiler/logging, not game HUD.
+        if !game_profile_active {
+            if let Some(telemetry) = self
+                .engine
+                .resources
+                .get::<newengine_ui_api::UiRuntimeDebugOverlayTelemetry>()
+                .cloned()
+            {
+                crate::platform_runtime::ui_gateway_frame::publish_debug_overlay_telemetry(
+                    &telemetry,
+                );
+            }
         }
 
         let ui_dispatch_frame = if let Some(input) = input_frame.clone() {
             self.engine
                 .resources_mut()
                 .insert::<UiInputFrame>(input.clone());
-            let game_profile_active = self
-                .engine
-                .resources
-                .get::<newengine_ui_api::UiScreenProfileState>()
-                .is_some_and(|state| {
-                    state.descriptor.profile == newengine_ui_api::UiScreenProfile::Game
-                });
             let frontend_presentation_active = self
                 .engine
                 .resources
@@ -274,11 +285,12 @@ impl HostPlatformRuntime {
             self.editor_ui_cache.clear();
         }
 
-        let debug_overlay_active = self
-            .engine
-            .resources
-            .get::<newengine_ui_api::UiRuntimeDebugOverlayTelemetry>()
-            .is_some();
+        let debug_overlay_active = runtime_debug_overlay_allowed(game_profile_active)
+            && self
+                .engine
+                .resources
+                .get::<newengine_ui_api::UiRuntimeDebugOverlayTelemetry>()
+                .is_some();
         let invalidation = self
             .engine
             .resources
@@ -879,6 +891,12 @@ mod game_ui_layer_tests {
                 UiLayerDomain::Debug,
             ]
         );
+    }
+
+    #[test]
+    fn shipping_game_profile_never_composites_runtime_debug_overlay() {
+        assert!(!runtime_debug_overlay_allowed(true));
+        assert!(runtime_debug_overlay_allowed(false));
     }
 
     #[test]

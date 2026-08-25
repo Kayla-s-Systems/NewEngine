@@ -42,13 +42,26 @@ pub fn list_services() -> Vec<String> {
 /// Returns the `describe()` JSON for the given service id, if present.
 #[inline]
 pub fn describe_service(service_id: &str) -> Option<String> {
-    let routed_id =
-        resolve_service_for_engine_gateway(service_id).unwrap_or_else(|| service_id.to_owned());
-
-    let c = ctx();
-    let service = {
-        let g = c.services.lock().ok()?;
-        g.get(&routed_id)?.service.clone()
-    };
-    Some(service.describe().to_string())
+    loop {
+        let generation = super::state::services_generation();
+        if generation & 1 != 0 {
+            std::thread::yield_now();
+            continue;
+        }
+        let routed_id =
+            resolve_service_for_engine_gateway(service_id).unwrap_or_else(|| service_id.to_owned());
+        let c = ctx();
+        let entry = {
+            let g = c.services.lock().ok()?;
+            g.get(&routed_id)?.clone()
+        };
+        let lease = entry.lifecycle.try_acquire()?;
+        if super::state::services_generation() != generation {
+            drop(lease);
+            continue;
+        }
+        let description = entry.service.describe().to_string();
+        drop(lease);
+        return Some(description);
+    }
 }

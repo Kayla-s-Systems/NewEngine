@@ -7,6 +7,15 @@ pub fn build_engine_from_startup(
     startup: &StartupConfig,
     fixed_dt_ms: u32,
 ) -> EngineResult<Engine<()>> {
+    let host = newengine_plugin_host::create_host_context();
+    build_engine_from_startup_with_host(startup, fixed_dt_ms, host)
+}
+
+pub fn build_engine_from_startup_with_host(
+    startup: &StartupConfig,
+    fixed_dt_ms: u32,
+    host: newengine_plugin_host::HostContextHandle,
+) -> EngineResult<Engine<()>> {
     let config = EngineConfig::new(fixed_dt_ms)
         .with_plugins_dir(Some(startup.modules_dir.clone()))
         .with_plugin_overrides(startup.plugins.clone())
@@ -14,13 +23,17 @@ pub fn build_engine_from_startup(
         .with_plugin_fault_tolerance(PluginFaultTolerance::Strict);
 
     #[cfg(feature = "full-runtime")]
-    let engine = newengine_host_kernel::build_kernel_engine_with_registry(config, |registry| {
-        // Transform is an upper runtime composition service, not part of the kernel.
-        newengine_transform::service::register(registry);
-    })?;
+    let engine = newengine_host_kernel::build_kernel_engine_with_registry_and_host(
+        config,
+        host.clone(),
+        |registry| {
+            // Transform is an upper runtime composition service, not part of the kernel.
+            newengine_transform::service::register(registry);
+        },
+    )?;
 
     #[cfg(not(feature = "full-runtime"))]
-    let engine = newengine_host_kernel::build_kernel_engine(config)?;
+    let engine = newengine_host_kernel::build_kernel_engine_with_host(config, host.clone())?;
 
     #[cfg(feature = "command-console")]
     let _ = newengine_console_runtime::install_console_provider();

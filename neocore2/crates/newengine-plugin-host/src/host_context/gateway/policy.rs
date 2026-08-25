@@ -43,6 +43,9 @@ impl EngineGatewaySelectionPolicy {
 pub fn install_engine_gateway_selection_policy(
     mut policy: EngineGatewaySelectionPolicy,
 ) -> Result<(), String> {
+    crate::host_context::reject_topology_mutation_from_host_callback(
+        "install_gateway_selection_policy",
+    )?;
     let gateway_id = policy.gateway_id.trim().to_owned();
     if !newengine_service_api::is_engine_service_gateway_id(&gateway_id) {
         return Err(format!(
@@ -72,6 +75,12 @@ pub fn install_engine_gateway_selection_policy(
 }
 
 pub fn clear_engine_gateway_selection_policies() {
+    if let Err(error) = crate::host_context::reject_topology_mutation_from_host_callback(
+        "clear_gateway_selection_policies",
+    ) {
+        newengine_ulog_api::ulog::warn!("{}", error);
+        return;
+    }
     let c = ctx();
     let mut policies = match c.gateway_selection_policies.lock() {
         Ok(value) => value,

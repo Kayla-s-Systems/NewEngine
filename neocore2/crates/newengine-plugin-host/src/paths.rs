@@ -95,7 +95,7 @@ fn current_exe_dir() -> Result<PathBuf, PluginLoadError> {
 }
 
 fn env_dir(name: &str) -> Option<PathBuf> {
-    let raw = std::env::var_os(name)?;
+    let raw = crate::host_context::environment_var_os(name)?;
     let path = PathBuf::from(raw);
     if path.as_os_str().is_empty() {
         None

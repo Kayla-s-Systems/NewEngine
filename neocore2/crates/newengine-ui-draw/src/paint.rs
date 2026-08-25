@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 
 use crate::UiTexId;
@@ -21,6 +23,52 @@ pub struct VectorRef {
 pub enum UiImageRef {
     Texture(TextureRef),
     Vector(VectorRef),
+}
+
+/// Ordering phase for renderer-aware UI presentation commands.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum UiPaintPhase {
+    /// Behind the provider's semantic/content mesh (backgrounds, control skins).
+    #[default]
+    Underlay,
+    /// Normal content phase for provider-neutral paint primitives.
+    Content,
+    /// Above semantic/content mesh (scanlines, highlights, decorative overlays).
+    Overlay,
+    /// Final surface-level effect hook. Backends may execute this as a separate pass.
+    Post,
+}
+
+/// Sampling/layout policy for `.ytd@entry` UI textures.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum UiTextureMode {
+    #[default]
+    Stretch,
+    Fit,
+    Cover,
+    Tile,
+}
+
+/// Typed material parameter override carried by a UI paint command.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "type", content = "value", rename_all = "snake_case")]
+pub enum UiMaterialParamValue {
+    Float(f32),
+    Float2([f32; 2]),
+    Float3([f32; 3]),
+    Float4([f32; 4]),
+    Int(i32),
+    Bool(bool),
+    Color([f32; 4]),
+    TextureRef(String),
+}
+
+impl Default for UiMaterialParamValue {
+    fn default() -> Self {
+        Self::Float(0.0)
+    }
 }
 
 /// Renderer-neutral paint stream emitted by UI providers before backend-specific batching.
@@ -78,6 +126,8 @@ pub enum UiPaintCommand {
     Border(UiBorderPaintCommand),
     Text(UiTextPaintCommand),
     Image(UiImagePaintCommand),
+    MaterialQuad(UiMaterialQuadPaintCommand),
+    SurfaceEffect(UiSurfaceEffectPaintCommand),
     Vector(UiVectorPaintCommand),
     Icon(UiIconPaintCommand),
     ClipBegin(UiClipPaintCommand),
@@ -235,6 +285,68 @@ impl Default for UiImagePaintCommand {
             uv_rect: [0.0, 0.0, 1.0, 1.0],
             tint_rgba: 0xffff_ffff,
             rotation_radians: 0.0,
+            clip_rect: None,
+        }
+    }
+}
+
+/// Renderer-aware quad used for project-owned UI skins and material-backed panels.
+/// `texture_ref` is always a canonical `.ytd@entry` reference when present.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct UiMaterialQuadPaintCommand {
+    pub node: UiPaintNodeRef,
+    pub phase: UiPaintPhase,
+    pub rect: [f32; 4],
+    pub texture_id: Option<UiTexId>,
+    pub texture_ref: Option<String>,
+    pub texture_mode: UiTextureMode,
+    pub uv_rect: [f32; 4],
+    pub tint_rgba: u32,
+    /// Selected `.nemat@entry` material. Empty means standard textured/solid UI pipeline.
+    pub material_ref: Option<String>,
+    pub material_params: BTreeMap<String, UiMaterialParamValue>,
+    pub clip_rect: Option<[f32; 4]>,
+}
+
+impl Default for UiMaterialQuadPaintCommand {
+    fn default() -> Self {
+        Self {
+            node: UiPaintNodeRef::default(),
+            phase: UiPaintPhase::Underlay,
+            rect: [0.0, 0.0, 0.0, 0.0],
+            texture_id: None,
+            texture_ref: None,
+            texture_mode: UiTextureMode::Stretch,
+            uv_rect: [0.0, 0.0, 1.0, 1.0],
+            tint_rgba: 0xffff_ffff,
+            material_ref: None,
+            material_params: BTreeMap::new(),
+            clip_rect: None,
+        }
+    }
+}
+
+/// Surface-level renderer effect hook (background/overlay/post).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct UiSurfaceEffectPaintCommand {
+    pub node: UiPaintNodeRef,
+    pub phase: UiPaintPhase,
+    pub rect: [f32; 4],
+    pub material_ref: String,
+    pub material_params: BTreeMap<String, UiMaterialParamValue>,
+    pub clip_rect: Option<[f32; 4]>,
+}
+
+impl Default for UiSurfaceEffectPaintCommand {
+    fn default() -> Self {
+        Self {
+            node: UiPaintNodeRef::default(),
+            phase: UiPaintPhase::Overlay,
+            rect: [0.0, 0.0, 0.0, 0.0],
+            material_ref: String::new(),
+            material_params: BTreeMap::new(),
             clip_rect: None,
         }
     }

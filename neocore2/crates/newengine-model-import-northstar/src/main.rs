@@ -18,9 +18,12 @@ fn run() -> Result<(), String> {
     let mut output_dir = None;
     let mut skeleton_profile = SkeletonProfile::Humanoid;
     let mut material_library_ref = None;
+    let mut material_by_source_identity = false;
     let mut packages = Vec::new();
     let mut package_mesh_prefixes = Vec::new();
     let mut material_overrides = Vec::new();
+    let mut required_mesh_prefixes = Vec::new();
+    let mut package_skin_fallback_joints = Vec::new();
     let mut source_to_model = None;
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -82,6 +85,34 @@ fn run() -> Result<(), String> {
                 }
                 material_overrides.push((prefix.to_owned(), reference.to_owned()));
             }
+            "--require-mesh-prefix" => {
+                let prefix = args.next().ok_or("--require-mesh-prefix requires PREFIX")?;
+                if prefix.trim().is_empty() {
+                    return Err("--require-mesh-prefix must not be empty".to_owned());
+                }
+                required_mesh_prefixes.push(prefix);
+            }
+            "--package-skin-fallback" => {
+                let spec = args
+                    .next()
+                    .ok_or("--package-skin-fallback requires PATH::JOINT[,JOINT...]")?;
+                let (path, joints) = spec
+                    .split_once("::")
+                    .ok_or("--package-skin-fallback requires PATH::JOINT[,JOINT...]")?;
+                let joints = joints
+                    .split(',')
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                    .map(ToOwned::to_owned)
+                    .collect::<Vec<_>>();
+                if path.trim().is_empty() || joints.is_empty() {
+                    return Err(
+                        "--package-skin-fallback PATH and JOINT list must not be empty".to_owned(),
+                    );
+                }
+                package_skin_fallback_joints.push((PathBuf::from(path), joints));
+            }
+            "--material-by-source-identity" => material_by_source_identity = true,
             "--output-dir" => output_dir = args.next().map(PathBuf::from),
             "--material-library" => material_library_ref = args.next(),
             "-h" | "--help" => {
@@ -98,8 +129,11 @@ fn run() -> Result<(), String> {
         skeleton_profile,
         output_dir: output_dir.ok_or("--output-dir is required")?,
         material_library_ref,
+        material_by_source_identity,
         package_mesh_prefixes,
         material_overrides,
+        required_mesh_prefixes,
+        package_skin_fallback_joints,
         source_to_model,
     };
     let report = compile_character(&request)?;
@@ -121,6 +155,18 @@ fn run() -> Result<(), String> {
         report.skin_loss.average_top8_loss() * 100.0,
         report.skin_loss.top8_loss_max * 100.0,
     );
+    for (slot, identity) in &report.material_slots {
+        println!("material-slot {slot} source='{identity}'");
+    }
+    for fallback in &report.skin_fallbacks {
+        println!(
+            "skin-fallback package='{}' mesh='{}' source_domain={} master_joints='{}'",
+            fallback.package.display(),
+            fallback.mesh,
+            fallback.source_joint_domain_size,
+            fallback.target_joints.join(",")
+        );
+    }
     println!("ydd={}", report.ydd_path.display());
     println!("ymt={}", report.ymt_path.display());
     Ok(())
@@ -128,6 +174,6 @@ fn run() -> Result<(), String> {
 
 fn print_help() {
     println!(
-        "Usage: newengine-model-import-northstar --name NAME --skeleton FILE [--skeleton-profile humanoid|weapon] --package FILE [--package FILE...] [--package-mesh-prefix PATH::PREFIX] [--material-override PREFIX=REF] [--source-to-model M00,...,M33] --output-dir DIR [--material-library REF]"
+        "Usage: newengine-model-import-northstar --name NAME --skeleton FILE [--skeleton-profile humanoid|weapon] --package FILE [--package FILE...] [--package-mesh-prefix PATH::PREFIX] [--material-override PREFIX=REF] [--require-mesh-prefix PREFIX] [--package-skin-fallback PATH::JOINT[,JOINT...]] [--material-by-source-identity] [--source-to-model M00,...,M33] --output-dir DIR [--material-library REF]"
     );
 }

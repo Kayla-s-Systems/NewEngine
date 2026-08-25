@@ -1,6 +1,8 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use crate::api::{MaterialDescriptor, MaterialId, MaterialTextureBindings};
+use std::collections::BTreeMap;
+
+use crate::api::{MaterialDescriptor, MaterialId, MaterialParamValue, MaterialTextureBindings};
 use crate::texture_refs::MaterialTextureReference;
 
 pub const ENGINE_ASSETS_MATERIALS_SERVICE_ID: &str = "engine.assets.materials";
@@ -73,8 +75,10 @@ pub struct MaterialLoadResponse {
     pub source: String,
     pub name: String,
     pub id: MaterialId,
+    pub shader: String,
     pub descriptor: MaterialDescriptor,
     pub textures: MaterialTextureBindings,
+    pub params: BTreeMap<String, MaterialParamValue>,
 }
 
 impl Default for MaterialLoadResponse {
@@ -83,8 +87,10 @@ impl Default for MaterialLoadResponse {
             source: String::new(),
             name: String::new(),
             id: MaterialId::invalid(),
+            shader: "pbr.default".to_owned(),
             descriptor: MaterialDescriptor::default(),
             textures: MaterialTextureBindings::default(),
+            params: BTreeMap::new(),
         }
     }
 }
@@ -167,8 +173,10 @@ impl Default for MaterialsManifest {
 pub struct MaterialDescriptorLoadResponse {
     pub source: String,
     pub name: String,
+    pub shader: String,
     pub descriptor: MaterialDescriptor,
     pub textures: MaterialTextureBindings,
+    pub params: BTreeMap<String, MaterialParamValue>,
 }
 #[derive(Clone, Debug, PartialEq, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -196,6 +204,7 @@ pub struct ResolvedMaterialGraph {
     pub shader: String,
     pub descriptor: MaterialDescriptor,
     pub textures: MaterialTextureBindings,
+    pub params: BTreeMap<String, MaterialParamValue>,
     pub texture_refs: Vec<MaterialTextureRefInfo>,
     pub warnings: Vec<String>,
 }
@@ -208,6 +217,7 @@ impl Default for ResolvedMaterialGraph {
             shader: "pbr.default".to_owned(),
             descriptor: MaterialDescriptor::default(),
             textures: MaterialTextureBindings::default(),
+            params: BTreeMap::new(),
             texture_refs: Vec::new(),
             warnings: Vec::new(),
         }
@@ -221,8 +231,10 @@ pub struct RenderMaterialPacket {
     pub schema: String,
     pub source: String,
     pub name: String,
+    pub shader: String,
     pub descriptor: MaterialDescriptor,
     pub textures: MaterialTextureBindings,
+    pub params: BTreeMap<String, MaterialParamValue>,
     pub packet_kind: String,
 }
 impl Default for RenderMaterialPacket {
@@ -231,8 +243,10 @@ impl Default for RenderMaterialPacket {
             schema: "newengine.assets.materials.render_packet.v1".to_owned(),
             source: String::new(),
             name: String::new(),
+            shader: "pbr.default".to_owned(),
             descriptor: MaterialDescriptor::default(),
             textures: MaterialTextureBindings::default(),
+            params: BTreeMap::new(),
             packet_kind: "renderer_agnostic_material_packet".to_owned(),
         }
     }

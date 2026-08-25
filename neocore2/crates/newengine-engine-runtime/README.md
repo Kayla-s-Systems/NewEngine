@@ -10,7 +10,7 @@ This crate owns systems that are engine runtime responsibilities, not applicatio
 - render controller that talks only to `newengine-render-api`;
 - material/texture residency orchestration above the render backend.
 
-Standalone games depend on this crate through product profiles such as `newengine-game-ready-profile`. They must not call Vulkan, create pipelines, upload textures, build shadow passes or assemble postFX directly.
+Standalone games depend on this crate through product profiles such as `newengine-game-ready-profile`. They must not call a native graphics API, create pipelines, upload textures, build shadow passes or assemble postFX directly.
 
 <!-- NORTHSTAR-DIR-README:BEGIN -->
 

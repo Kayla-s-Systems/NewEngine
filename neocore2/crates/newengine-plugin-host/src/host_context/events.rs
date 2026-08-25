@@ -6,19 +6,35 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::{Arc, Mutex};
 
 pub fn subscribe_event_sink(sink: EventSinkV1Dyn<'static>) -> Result<(), String> {
+    let entry = EventSinkEntry {
+        owner_plugin_id: current_plugin_id(),
+        sink: Arc::new(Mutex::new(sink)),
+        lifecycle: Arc::new(super::state::ServiceLifecycle::new()),
+    };
+    match crate::host_context::stage_event_sink_registration(entry.clone()) {
+        Ok(true) => return Ok(()),
+        Ok(false) => {
+            if let Some(plugin_id) = entry.owner_plugin_id.as_deref() {
+                return Err(format!(
+                    "plugin-owned event subscription requires provider transaction: plugin='{}'",
+                    plugin_id
+                ));
+            }
+            crate::host_context::reject_topology_mutation_from_host_callback(
+                "subscribe_events_v1",
+            )?;
+        }
+        Err(error) => return Err(error),
+    }
+
     let c = ctx();
     let mut g = match c.event_sinks.lock() {
         Ok(v) => v,
         Err(e) => e.into_inner(),
     };
-
     let mut next = g.as_ref().to_vec();
-    next.push(EventSinkEntry {
-        owner_plugin_id: current_plugin_id(),
-        sink: Arc::new(Mutex::new(sink)),
-    });
+    next.push(entry);
     *g = Arc::from(next);
-
     Ok(())
 }
 
@@ -45,6 +61,9 @@ pub fn publish_event(topic: &str, payload: &[u8]) -> Result<(), String> {
 
     for s in sinks.iter() {
         let owner = s.owner_plugin_id.clone();
+        let Some(lease) = s.lifecycle.try_acquire() else {
+            continue;
+        };
 
         let mut guard = match s.sink.lock() {
             Ok(v) => v,
@@ -92,6 +111,7 @@ pub fn publish_event(topic: &str, payload: &[u8]) -> Result<(), String> {
                 );
             }
         }
+        drop(lease);
     }
 
     if !bad_owners.is_empty() {

@@ -20,7 +20,10 @@ mod facts;
 mod route_model;
 
 pub(crate) use active::ActiveGatewayRegistry;
-pub(crate) use descriptor::{descriptor_engine_gateways, descriptor_max_gateway_priority};
+pub(crate) use descriptor::{
+    descriptor_engine_gateways, descriptor_engine_gateways_v2, descriptor_max_gateway_priority,
+    descriptor_max_gateway_priority_v2,
+};
 #[cfg(test)]
 pub(crate) use facts::GatewayOverrideMode;
 pub(crate) use facts::{

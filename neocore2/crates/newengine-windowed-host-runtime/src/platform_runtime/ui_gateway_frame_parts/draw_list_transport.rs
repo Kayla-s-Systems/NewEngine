@@ -1,3 +1,4 @@
+use super::draw_list_assets::hydrate_ui_asset_textures;
 use super::draw_list_diagnostics::log_ui_gateway_frame;
 use super::draw_list_state::ui_frame_now_ms;
 use super::*;
@@ -30,7 +31,10 @@ pub(crate) fn request_ui_draw_list(
 
     if TRY_BINARY_UI_FRAME.load(Ordering::Relaxed) || policy.binary_frame_required {
         match request_ui_draw_list_bin(&request, started) {
-            Ok(Some(draw_list)) => return Ok(Some(draw_list)),
+            Ok(Some(mut draw_list)) => {
+                hydrate_ui_asset_textures(&mut draw_list);
+                return Ok(Some(draw_list));
+            }
             Ok(None) if policy.binary_frame_required => {
                 return Err(newengine_core::EngineError::other(
                     "ui gateway: binary draw-frame path required by engine.ui policy but active provider returned no response",
@@ -46,7 +50,12 @@ pub(crate) fn request_ui_draw_list(
         }
     }
 
-    request_ui_draw_list_json(&request, started)
+    let mut draw_list = match request_ui_draw_list_json(&request, started)? {
+        Some(draw_list) => draw_list,
+        None => return Ok(None),
+    };
+    hydrate_ui_asset_textures(&mut draw_list);
+    Ok(Some(draw_list))
 }
 
 fn request_ui_draw_list_bin(

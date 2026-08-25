@@ -6,7 +6,8 @@ use crate::startup_status::{EngineIncrementalStartupState, EngineStartupSnapshot
 use crate::sync::ShutdownToken;
 use crate::threading::{ThreadPoolHandle, ThreadPoolManager, ThreadPoolSnapshot};
 use newengine_plugin_host::{
-    init_host_context, init_plugin_config_service, PluginControlQueue, PluginManager,
+    create_host_context, init_plugin_config_service, HostContextHandle, PluginControlQueue,
+    PluginManager,
 };
 
 use newengine_math::{register_engine_builtins, MathRegistry};
@@ -40,6 +41,8 @@ pub struct Engine<E: Send + 'static> {
     pub(super) startup_snapshot: EngineStartupSnapshot,
     pub(super) incremental_startup: Option<EngineIncrementalStartupState>,
 
+    /// Host/service universe owned by this Engine instance.
+    pub(super) host: HostContextHandle,
     pub(super) plugins: PluginManager,
     pub(super) plugins_loaded: bool,
     pub(super) engine_plugins_loaded: bool,
@@ -126,6 +129,19 @@ impl<E: Send + 'static> Engine<E> {
         self.thread_pool.snapshot()
     }
 
+    /// Explicit instance handle for host services, gateways and plugin state.
+    #[inline]
+    pub fn host_context(&self) -> &HostContextHandle {
+        &self.host
+    }
+
+    /// Binds this Engine universe to the current thread for legacy HostApiV1
+    /// callbacks. Ownership remains on `self`; this is only an ABI bridge.
+    #[inline]
+    pub fn activate_host_context(&self) {
+        newengine_plugin_host::activate_host_context(&self.host);
+    }
+
     pub fn emit<T>(&self, event: T) -> EngineResult<()>
     where
         T: Any + Send + 'static + Sync,
@@ -150,10 +166,23 @@ impl<E: Send + 'static> Engine<E> {
     }
 
     pub fn new_with_config(
+        config: EngineConfig,
+        services: Box<dyn Services>,
+        bus: Bus<E>,
+        shutdown: ShutdownToken,
+    ) -> EngineResult<Self> {
+        let host = create_host_context();
+        Self::new_with_config_and_host(config, services, bus, shutdown, host)
+    }
+
+    /// Constructs an Engine around an explicitly owned HostContext. This is the
+    /// composition/preinit path used when several Engine universes share a process.
+    pub fn new_with_config_and_host(
         mut config: EngineConfig,
         services: Box<dyn Services>,
         bus: Bus<E>,
         shutdown: ShutdownToken,
+        host: HostContextHandle,
     ) -> EngineResult<Self> {
         if let Some(startup) = crate::startup::last_startup_config() {
             if config.implicit_plugin_discovery && config.plugins_dir.is_none() {
@@ -174,7 +203,7 @@ impl<E: Send + 'static> Engine<E> {
         let thread_pool = ThreadPoolManager::new_with_event_hub(config.thread_pool, events.clone());
         resources.insert(thread_pool.handle());
 
-        init_host_context();
+        newengine_plugin_host::activate_host_context(&host);
         init_plugin_config_service(config.plugin_overrides.clone());
 
         register_engine_builtins(MathRegistry::global())
@@ -198,7 +227,8 @@ impl<E: Send + 'static> Engine<E> {
             startup_snapshot: EngineStartupSnapshot::idle(EngineRunState::Created.as_str()),
             incremental_startup: None,
 
-            plugins: PluginManager::new(),
+            host: host.clone(),
+            plugins: PluginManager::new_with_host(host),
             plugins_loaded: false,
             engine_plugins_loaded: false,
             plugins_dir: config.plugins_dir,

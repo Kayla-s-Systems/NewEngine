@@ -10,9 +10,6 @@ use super::types::{PlayerSkinGpu, PrimitiveGpu, SkinPaletteGpu};
 
 const MIN_SKIN_PALETTE_CAPACITY: usize = 256;
 const MAX_SKIN_PALETTE_JOINTS: usize = 4096;
-// Four palette slots prevent host-visible writes from racing in-flight GPU skinning.
-// The current Vulkan backend uses two frames in flight; four slots leave extra reuse margin.
-const SKIN_PALETTE_RING_SIZE: u64 = 4;
 
 #[inline]
 fn required_skin_palette_capacity(joint_count: usize) -> usize {
@@ -172,6 +169,7 @@ pub fn ensure_skin_palette_gpu(
     pose: &PlayerSkinPose,
     skin_bgl: BindGroupLayoutId,
     frame_index: u64,
+    host_visible_ring_slots: u64,
     r: &mut dyn newengine_core::render::RenderApi,
 ) -> EngineResult<SkinPaletteGpu> {
     let joint_count = pose.palette.len();
@@ -182,7 +180,7 @@ pub fn ensure_skin_palette_gpu(
         )));
     }
 
-    let ring_slot = (frame_index % SKIN_PALETTE_RING_SIZE) as u8;
+    let ring_slot = (frame_index % host_visible_ring_slots.max(1)) as u8;
     let cache_key = (owner_key, ring_slot);
 
     let current_capacity = cache

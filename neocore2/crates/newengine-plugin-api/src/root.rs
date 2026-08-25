@@ -15,6 +15,11 @@ pub const PLUGIN_ROOT_SYMBOL_BYTES_NUL: &[u8] = b"newengine_plugin_root_v1\0";
 pub const LEGACY_PLUGIN_ROOT_SYMBOL_BYTES: &[u8] = b"export_plugin_root";
 pub const LEGACY_PLUGIN_ROOT_SYMBOL_BYTES_NUL: &[u8] = b"export_plugin_root\0";
 
+pub const PLUGIN_DESCRIPTOR_V2_SYMBOL_NAME: &str = "newengine_plugin_descriptor_v2";
+pub const PLUGIN_DESCRIPTOR_V2_SYMBOL_BYTES: &[u8] = b"newengine_plugin_descriptor_v2";
+pub const PLUGIN_DESCRIPTOR_V2_SYMBOL_BYTES_NUL: &[u8] = b"newengine_plugin_descriptor_v2\0";
+pub type PluginDescriptorV2Fn = extern "C" fn() -> crate::capability::PluginDescriptorV2;
+
 #[repr(C)]
 #[derive(StableAbi)]
 #[sabi(kind(Prefix(prefix_ref = PluginRootV1Ref)))]
@@ -68,6 +73,18 @@ macro_rules! export_plugin_root {
                     editor_extensions_v1: $editor_extensions_v1,
                 },
             )
+        }
+    };
+}
+
+/// Exports typed capability metadata independently from the V1 module trait.
+/// This lets discovery read composition metadata without constructing a plugin.
+#[macro_export]
+macro_rules! export_plugin_descriptor_v2 {
+    ($descriptor:path) => {
+        #[no_mangle]
+        pub extern "C" fn newengine_plugin_descriptor_v2() -> $crate::PluginDescriptorV2 {
+            $descriptor()
         }
     };
 }

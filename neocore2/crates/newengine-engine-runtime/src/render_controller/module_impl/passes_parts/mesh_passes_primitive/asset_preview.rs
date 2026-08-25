@@ -288,7 +288,7 @@ pub fn draw_asset_preview_bundle(
     );
     let camera_position = camera_target + asset_preview_camera_position(preview_view);
     let view = Mat4::look_at_rh(camera_position, camera_target, Vec3::Y);
-    // The authored UI samples a Vulkan render target as an image. Vulkan's
+    // The authored UI samples a backend render target as an image. backend's
     // framebuffer Y direction is opposite to the mathematical camera space;
     // flip clip-space Y here so the preview texture is displayed upright.
     let mut projection = Mat4::perspective_rh(45.0_f32.to_radians(), aspect, 0.05, 100.0);

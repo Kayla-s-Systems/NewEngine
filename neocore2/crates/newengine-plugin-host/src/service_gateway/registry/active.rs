@@ -1,10 +1,17 @@
 use super::facts::GatewayPolicyFact;
 use super::route_model::route_matches_query;
 use super::*;
+use newengine_service_api::{
+    parse_versioned_contract_id, CapabilityMatrix, CompositionCandidate, CompositionPlan,
+    CompositionSolver, CompositionSolverInput,
+};
 
 #[derive(Debug, Clone, Default)]
 pub(crate) struct ActiveGatewayRegistry {
     routes: Vec<ActiveGatewayRoute>,
+    /// Immutable provider-selection result. The registry is only a materialized
+    /// route view over this plan and never performs independent selection.
+    plan: CompositionPlan,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -30,14 +37,42 @@ impl ActiveGatewayRegistry {
         gateway_provider_routes: &[GatewayProviderRouteFact],
         policy_facts: &[GatewayPolicyFact],
     ) -> Self {
+        Self::from_facts_with_policy_and_matrix(
+            descriptors,
+            services,
+            gateway_provider_routes,
+            policy_facts,
+            CapabilityMatrix::default(),
+        )
+    }
+
+    pub(crate) fn from_facts_with_policy_and_matrix(
+        descriptors: &[PluginDescriptorFact],
+        services: &[RegisteredServiceFact],
+        gateway_provider_routes: &[GatewayProviderRouteFact],
+        policy_facts: &[GatewayPolicyFact],
+        capability_matrix: CapabilityMatrix,
+    ) -> Self {
         let mut routes = Vec::new();
         let mut skipped_unregistered = 0usize;
 
         for descriptor_fact in descriptors {
-            for gateway in descriptor_gateway_capabilities(&descriptor_fact.descriptor) {
-                let Some(provider_service_id) =
-                    gateway_provider_service_id(&descriptor_fact.descriptor, &gateway)
-                else {
+            let gateways = descriptor_fact
+                .descriptor_v2
+                .as_ref()
+                .map(crate::service_gateway::metadata::descriptor_gateway_capabilities_v2)
+                .unwrap_or_else(|| descriptor_gateway_capabilities(&descriptor_fact.descriptor));
+            for gateway in gateways {
+                let provider_service_id =
+                    if let Some(descriptor_v2) = descriptor_fact.descriptor_v2.as_ref() {
+                        crate::service_gateway::provider::gateway_provider_service_id_v2(
+                            descriptor_v2,
+                            &gateway,
+                        )
+                    } else {
+                        gateway_provider_service_id(&descriptor_fact.descriptor, &gateway)
+                    };
+                let Some(provider_service_id) = provider_service_id else {
                     continue;
                 };
 
@@ -48,13 +83,6 @@ impl ActiveGatewayRegistry {
                 });
                 if !registered {
                     skipped_unregistered += 1;
-                    newengine_ulog_api::ulog::trace!(
-                        "gateways: plugin route skipped because service is not registered plugin='{}' gateway='{}' service='{}' capability='{}'",
-                        descriptor_fact.plugin_id,
-                        gateway.gateway_id,
-                        provider_service_id,
-                        gateway.backend_capability_id
-                    );
                     continue;
                 }
 
@@ -86,12 +114,6 @@ impl ActiveGatewayRegistry {
             });
             if !registered {
                 skipped_unregistered += 1;
-                newengine_ulog_api::ulog::trace!(
-                    "gateways: engine-runtime route skipped because service is not registered gateway='{}' service='{}' owner='{}'",
-                    gateway.gateway_id,
-                    gateway.provider_service_id,
-                    gateway.provider_owner_id
-                );
                 continue;
             }
 
@@ -115,62 +137,55 @@ impl ActiveGatewayRegistry {
             }
         }
 
+        let candidates = routes
+            .iter()
+            .map(|route| {
+                let mut candidate = CompositionCandidate::new(
+                    route.gateway_id.clone(),
+                    route.selection_key.clone(),
+                    route.provider_owner_id.clone(),
+                    route.backend_priority,
+                    route.origin.origin_bias(),
+                    route.selection_bonus,
+                )
+                .with_capability(route.backend_capability_id.clone())
+                .with_tags(route.system_tags.clone());
+                if let Some((contract_id, version)) = route
+                    .provider_abi
+                    .as_deref()
+                    .and_then(parse_versioned_contract_id)
+                {
+                    candidate = candidate.with_contract(contract_id, version);
+                }
+                candidate
+            })
+            .collect();
+
+        let plan = CompositionSolver::resolve_input(CompositionSolverInput {
+            candidates,
+            capability_matrix,
+        });
+
+        // Diagnostics-only ordering. The plan above remains the only authority.
         routes.sort_by(|a, b| {
             a.gateway_id
                 .cmp(&b.gateway_id)
                 .then_with(|| b.active_score.cmp(&a.active_score))
-                .then_with(|| b.backend_priority.cmp(&a.backend_priority))
-                .then_with(|| b.origin.origin_bias().cmp(&a.origin.origin_bias()))
-                .then_with(|| a.service_kind.cmp(&b.service_kind))
-                .then_with(|| a.provider_service_id.cmp(&b.provider_service_id))
-                .then_with(|| a.provider_owner_id.cmp(&b.provider_owner_id))
+                .then_with(|| a.selection_key.cmp(&b.selection_key))
         });
 
-        let registry = Self { routes };
+        let registry = Self { routes, plan };
         newengine_ulog_api::ulog::debug!(
-            "gateways: registry rebuilt descriptors={} services={} host_routes={} policy_facts={} routes={} skipped_unregistered={}",
+            "gateways: composition plan rebuilt descriptors={} services={} host_routes={} policy_facts={} routes={} gateways={} unsatisfied={} skipped_unregistered={}",
             descriptors.len(),
             services.len(),
             gateway_provider_routes.len(),
             policy_facts.len(),
             registry.routes.len(),
+            registry.plan.gateway_ids().len(),
+            registry.plan.unsatisfied().len(),
             skipped_unregistered
         );
-        for gateway_id in registry.gateway_ids() {
-            let diagnostics = registry.route_diagnostics(&gateway_id);
-            if let Some(route) = diagnostics.active_route.as_ref() {
-                newengine_ulog_api::ulog::trace!(
-                    "gateways: active route gateway='{}' service='{}' provider_route='{}' owner='{}' kind='{}' origin='{}' mode='{}' prio={} score={} tags='{}' shadowed={}",
-                    diagnostics.gateway_id,
-                    route.provider_service_id,
-                    route.provider_route_id.as_deref().unwrap_or("<provider-route-unset>"),
-                    route.provider_owner_id,
-                    route.service_kind,
-                    route.origin.as_str(),
-                    route.override_mode.as_str(),
-                    route.backend_priority,
-                    route.active_score,
-                    route.system_tags.join(","),
-                    diagnostics.shadowed_routes.len()
-                );
-            }
-            for shadowed in diagnostics.shadowed_routes.iter() {
-                newengine_ulog_api::ulog::trace!(
-                    "gateways: shadowed route gateway='{}' service='{}' provider_route='{}' owner='{}' kind='{}' origin='{}' mode='{}' prio={} score={} tags='{}'",
-                    diagnostics.gateway_id,
-                    shadowed.provider_service_id,
-                    shadowed.provider_route_id.as_deref().unwrap_or("<provider-route-unset>"),
-                    shadowed.provider_owner_id,
-                    shadowed.service_kind,
-                    shadowed.origin.as_str(),
-                    shadowed.override_mode.as_str(),
-                    shadowed.backend_priority,
-                    shadowed.active_score,
-                    shadowed.system_tags.join(",")
-                );
-            }
-        }
-
         registry
     }
 
@@ -185,11 +200,9 @@ impl ActiveGatewayRegistry {
             .iter()
             .filter(|route| route_matches_query(route, gateway_id))
             .filter(|route| {
-                active_route.as_ref().is_none_or(|active| {
-                    route.provider_service_id != active.provider_service_id
-                        || route.provider_route_id != active.provider_route_id
-                        || route.provider_owner_id != active.provider_owner_id
-                })
+                active_route
+                    .as_ref()
+                    .is_none_or(|active| route.selection_key != active.selection_key)
             })
             .cloned()
             .collect::<Vec<_>>();
@@ -202,28 +215,18 @@ impl ActiveGatewayRegistry {
     }
 
     pub(crate) fn gateway_ids(&self) -> Vec<String> {
-        let mut out = self
-            .routes
-            .iter()
-            .map(|route| route.gateway_id.clone())
-            .collect::<Vec<_>>();
-        out.sort();
-        out.dedup();
-        out
+        self.plan.gateway_ids()
     }
 
     pub(crate) fn resolve_route(&self, gateway_id: &str) -> Option<&ActiveGatewayRoute> {
+        let selected = self.plan.selected(gateway_id)?;
         self.routes
             .iter()
-            .filter(|route| route_matches_query(route, gateway_id))
-            .max_by(|a, b| {
-                a.active_score
-                    .cmp(&b.active_score)
-                    .then_with(|| a.backend_priority.cmp(&b.backend_priority))
-                    .then_with(|| a.origin.origin_bias().cmp(&b.origin.origin_bias()))
-                    .then_with(|| b.provider_service_id.cmp(&a.provider_service_id))
-                    .then_with(|| b.provider_owner_id.cmp(&a.provider_owner_id))
-            })
+            .find(|route| route.selection_key == selected.candidate_id)
+    }
+
+    pub(crate) fn validate_required_requirements(&self) -> Result<(), String> {
+        self.plan.validate_required()
     }
 
     pub(crate) fn has_gateway_capability(&self, gateway_id: &str, capability_id: &str) -> bool {
