@@ -1,0 +1,14 @@
+format_version = 1
+schema = "newengine.runtime.v1"
+
+# Engine process mode only. Project/game configuration remains in game.toml.
+# editor -> Project Browser / EditorRuntime
+# game   -> adjacent game.toml, no Projects discovery
+# server -> adjacent game.toml, headless
+# test   -> adjacent game.toml, bounded headless validation
+[runtime]
+mode = "game"
+startup_config = "config.json"
+plugin_target = "runtime"
+headless = false
+startup_window = true

@@ -262,7 +262,7 @@ def main() -> int:
             print(f"PROCESS pid={process.pid}")
 
             wait_for(
-                "authored game .neui mounted ref='ui/engine/main_menu.neui@surface'",
+                "authored game .neui mounted ref='ui/frontend/main_menu.neui@surface'",
                 args.startup_timeout,
                 "main menu mounted",
             )

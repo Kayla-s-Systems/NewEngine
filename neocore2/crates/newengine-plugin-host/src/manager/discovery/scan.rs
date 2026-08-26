@@ -336,11 +336,8 @@ mod tests {
             };
             let sidecar =
                 dll.with_extension(newengine_plugin_api::PLUGIN_DISCOVERY_MANIFEST_SUFFIX);
-            std::fs::write(
-                sidecar,
-                serde_json::to_vec_pretty(&manifest).expect("json"),
-            )
-            .expect("sidecar");
+            std::fs::write(sidecar, serde_json::to_vec_pretty(&manifest).expect("json"))
+                .expect("sidecar");
         };
 
         write_fixture(

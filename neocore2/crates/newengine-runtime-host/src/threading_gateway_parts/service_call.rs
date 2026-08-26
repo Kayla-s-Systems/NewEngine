@@ -49,6 +49,19 @@ fn service_call_task_request(request: &TaskServiceCallRequestV1) -> TaskRequest 
     job
 }
 
+fn resolve_target_service_id(target_gateway: &str) -> Result<String, String> {
+    if target_gateway.starts_with("engine.") {
+        return newengine_plugin_host::resolve_service_for_engine_gateway(target_gateway)
+            .ok_or_else(|| {
+                format!(
+                    "engine gateway '{}' has no active provider route in the current composition",
+                    target_gateway
+                )
+            });
+    }
+    Ok(target_gateway.to_owned())
+}
+
 pub(crate) fn submit_service_call_task(
     thread_pool: &ThreadPoolHandle,
     request: TaskServiceCallRequestV1,
@@ -71,53 +84,92 @@ pub(crate) fn submit_service_call_task(
         };
     }
 
+    // HostContext is deliberately thread-local. Engine worker threads must never
+    // construct an implicit empty context: capture the submitting Engine instance
+    // and re-bind it only for this service-call task.
+    let host_context = newengine_plugin_host::current_host_context();
     let ticket = thread_pool.submit_controlled(job, move |control| {
-        if !control.checkpoint() {
+        newengine_plugin_host::with_host_context(&host_context, || {
+            if !control.checkpoint() {
+                control.publish_progress(
+                    1.0,
+                    "Service call task cancelled",
+                    "Task was cancelled before invoking the target service.",
+                );
+                return;
+            }
+
+            let target_service = match resolve_target_service_id(&target_gateway) {
+                Ok(service_id) => service_id,
+                Err(error) => {
+                    control.publish_progress(1.0, "Target service unavailable", error.clone());
+                    newengine_ulog_api::ulog::error!(
+                        "engine.threading service-call route resolution failed gateway='{}' method='{}' err='{}'",
+                        target_gateway,
+                        target_method,
+                        error
+                    );
+                    return;
+                }
+            };
+
             control.publish_progress(
-                1.0,
-                "Service call task cancelled",
-                "Task was cancelled before invoking the target service.",
+                0.20,
+                "Invoking target service",
+                format!(
+                    "Calling {target_gateway}/{target_method} via provider service '{target_service}' through engine threading worker."
+                ),
             );
-            return;
-        }
 
-        control.publish_progress(
-            0.20,
-            "Invoking target service",
-            format!("Calling {target_gateway}/{target_method} through engine threading worker."),
-        );
+            let payload = match serde_json::to_vec(&payload_json) {
+                Ok(bytes) => Blob::from(bytes),
+                Err(error) => {
+                    control.publish_progress(
+                        1.0,
+                        "Service call task failed",
+                        format!("Failed to serialize target payload: {error}"),
+                    );
+                    newengine_ulog_api::ulog::error!(
+                        "engine.threading service-call payload serialization failed gateway='{}' method='{}' err='{}'",
+                        target_gateway,
+                        target_method,
+                        error
+                    );
+                    return;
+                }
+            };
 
-        let payload = match serde_json::to_vec(&payload_json) {
-            Ok(bytes) => Blob::from(bytes),
-            Err(e) => {
-                control.publish_progress(
-                    1.0,
-                    "Service call task failed",
-                    format!("Failed to serialize target payload: {e}"),
-                );
-                panic!("engine.threading service-call payload serialization failed: {e}");
+            let response = newengine_plugin_host::call_service_v1(
+                newengine_plugin_api::CapabilityId::from(target_service.as_str()),
+                newengine_plugin_api::MethodName::from(target_method.as_str()),
+                payload,
+            );
+
+            match response.into_result() {
+                Ok(blob) => {
+                    control.publish_progress(
+                        1.0,
+                        "Target service completed",
+                        format!(
+                            "Service call completed gateway='{}' provider='{}' output_bytes={}",
+                            target_gateway,
+                            target_service,
+                            blob.len()
+                        ),
+                    );
+                }
+                Err(error) => {
+                    control.publish_progress(1.0, "Target service failed", error.to_string());
+                    newengine_ulog_api::ulog::error!(
+                        "engine.threading service-call target failed gateway='{}' provider='{}' method='{}' err='{}'",
+                        target_gateway,
+                        target_service,
+                        target_method,
+                        error
+                    );
+                }
             }
-        };
-
-        let response = newengine_plugin_host::call_service_v1(
-            newengine_plugin_api::CapabilityId::from(target_gateway.as_str()),
-            newengine_plugin_api::MethodName::from(target_method.as_str()),
-            payload,
-        );
-
-        match response.into_result() {
-            Ok(blob) => {
-                control.publish_progress(
-                    1.0,
-                    "Target service completed",
-                    format!("Service call completed output_bytes={}", blob.len()),
-                );
-            }
-            Err(e) => {
-                control.publish_progress(1.0, "Target service failed", e.to_string());
-                panic!("engine.threading service-call target failed: {e}");
-            }
-        }
+        });
     });
 
     let task_id = ticket.task_id().to_owned();
@@ -128,6 +180,6 @@ pub(crate) fn submit_service_call_task(
         gateway: request.target.gateway,
         method: request.target.method,
         status: "scheduled".to_owned(),
-        detail: "Service call scheduled on the engine-runtime thread pool; no plugin-owned background worker was created.".to_owned(),
+        detail: "Service call scheduled on the engine-runtime thread pool; Engine HostContext and gateway routing are rebound on the worker for this task.".to_owned(),
     }
 }

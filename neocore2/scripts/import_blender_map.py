@@ -27,6 +27,14 @@ import zlib
 from pathlib import Path
 from typing import Any
 
+# Reuse the canonical first-party Python NEF8 wire helper instead of duplicating
+# V2 offsets in this importer.
+_NORTHSTAR_ROOT = Path(__file__).resolve().parents[3]
+_MAINTENANCE_DIR = _NORTHSTAR_ROOT / "tools" / "maintenance"
+if str(_MAINTENANCE_DIR) not in sys.path:
+    sys.path.insert(0, str(_MAINTENANCE_DIR))
+from nef8_wire import encode_deflated
+
 PLAN_SCHEMA = "northstar.native_asset_build_plan.v1"
 IMPORT_SCHEMA = "northstar.blender_map_import.v1"
 
@@ -506,28 +514,17 @@ def write_nef8(
     entry_count: int,
     header_metadata: dict[str, Any] | None = None,
 ) -> None:
-    """Write a canonical class-5 NEF8 envelope atomically."""
-    compressor = zlib.compressobj(level=9, wbits=-zlib.MAX_WBITS)
-    stored = compressor.compress(body) + compressor.flush()
-    metadata_bytes = (
-        json.dumps(header_metadata, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
-        if header_metadata
-        else b""
+    """Write a canonical NEF8 V2 envelope atomically."""
+    encoded = encode_deflated(
+        body,
+        type_id=content_kind,
+        content_schema_version=schema_version,
+        entry_count=entry_count,
+        header_metadata=header_metadata,
     )
-    header = bytearray(32)
-    header[0:4] = b"NEF8"
-    header[4] = 2
-    header[5] = 5
-    struct.pack_into("<H", header, 6, content_kind)
-    flags = 0x0001 | (0x0002 if metadata_bytes else 0)
-    struct.pack_into("<H", header, 8, flags)
-    struct.pack_into("<H", header, 10, schema_version)
-    struct.pack_into("<I", header, 12, entry_count)
-    struct.pack_into("<Q", header, 16, len(stored))
-    struct.pack_into("<Q", header, 24, len(body))
     output.parent.mkdir(parents=True, exist_ok=True)
     temporary = output.with_name(f".{output.name}.importing")
-    temporary.write_bytes(bytes(header) + metadata_bytes + stored)
+    temporary.write_bytes(encoded)
     os.replace(temporary, output)
 
 

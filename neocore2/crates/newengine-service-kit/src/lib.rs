@@ -8,6 +8,8 @@ pub mod provider_metadata;
 pub use gateway_provider_route::{
     register_engine_gateway_provider_service, register_engine_gateway_provider_service_best_effort,
     register_engine_gateway_provider_service_dynamic,
+    register_engine_gateway_provider_service_dynamic_atomic,
+    register_engine_gateway_provider_service_dynamic_atomic_best_effort,
     register_engine_gateway_provider_service_dynamic_best_effort,
     register_null_engine_gateway_provider_service_dynamic,
     register_null_engine_gateway_provider_service_dynamic_best_effort, EngineGatewayProviderDecl,

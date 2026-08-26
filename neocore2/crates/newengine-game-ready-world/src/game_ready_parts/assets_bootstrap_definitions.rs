@@ -1,5 +1,10 @@
 use super::*;
 
+#[inline]
+fn definition_requires_graph_resolution(mode: GameReadyDefinitionApplyMode) -> bool {
+    matches!(mode, GameReadyDefinitionApplyMode::InstantiateMarker)
+}
+
 pub(super) fn instantiate_game_ready_definitions(
     world: &mut newengine_ecs::World,
     root: EntityId,
@@ -13,20 +18,22 @@ pub(super) fn instantiate_game_ready_definitions(
         definitions.len()
     );
     for spec in definitions {
-        let graph = resolve_game_ready_asset_graph(&spec.definition_ref).unwrap_or_else(|| {
-            newengine_model_domain_api::AssetGraphResolver::resolve_root_ref(&spec.definition_ref)
-        });
-        if matches!(spec.apply_mode, GameReadyDefinitionApplyMode::MetadataOnly) {
+        if !definition_requires_graph_resolution(spec.apply_mode) {
+            // MetadataOnly is already consumed by the owning domain during profile bootstrap.
+            // Resolving the full dependency graph here is both redundant and potentially huge
+            // (for example a player definition can expand into dozens of NEMAT/YTD nodes).
+            // Generic instantiation must not turn descriptive metadata into launch-blocking I/O.
             newengine_ulog_api::ulog::debug!(
-                "definitions.runtime: metadata-only definition_ref='{}' nodes={} missing={} apply_mode='{}' policy='domain systems consume engine.assets.definitions/engine.assets.graph explicitly; no generic ECS/render marker spawned'",
+                "definitions.runtime: metadata-only definition_ref='{}' graph_resolution='skipped' apply_mode='{}' policy='domain metadata already consumed; no generic ECS/render marker and no recursive graph hydration'",
                 spec.definition_ref,
-                graph.nodes.len(),
-                graph.missing_refs.len(),
                 spec.apply_mode.as_str()
             );
             continue;
         }
 
+        let graph = resolve_game_ready_asset_graph(&spec.definition_ref).unwrap_or_else(|| {
+            newengine_model_domain_api::AssetGraphResolver::resolve_root_ref(&spec.definition_ref)
+        });
         let transform = newengine_engine_runtime::world_authoring::DefinitionInstantiateTransform {
             translation: [spec.position.x, spec.position.y, spec.position.z],
             rotation_ypr: spec.rotation_ypr,
@@ -52,5 +59,20 @@ pub(super) fn instantiate_game_ready_definitions(
             trace.apply_result,
             spec.apply_mode.as_str()
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn metadata_only_definitions_skip_full_graph_resolution() {
+        assert!(!definition_requires_graph_resolution(
+            GameReadyDefinitionApplyMode::MetadataOnly
+        ));
+        assert!(definition_requires_graph_resolution(
+            GameReadyDefinitionApplyMode::InstantiateMarker
+        ));
     }
 }

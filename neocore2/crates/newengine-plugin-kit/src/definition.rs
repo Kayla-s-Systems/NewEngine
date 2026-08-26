@@ -67,7 +67,9 @@ impl PluginDefinitionWithContracts {
     pub fn descriptor_v2(self) -> PluginDescriptorV2 {
         let mut descriptor = descriptor_v2_from_definition(self.definition);
         for contract in self.contracts {
-            descriptor.capabilities.push(contract_capability_v2(*contract));
+            descriptor
+                .capabilities
+                .push(contract_capability_v2(*contract));
         }
         descriptor
     }
@@ -329,10 +331,8 @@ pub fn descriptor_v2_from_definition(def: PluginDefinition) -> PluginDescriptorV
             descriptor = descriptor.system_tags(route.system_tags.iter().copied());
         }
         for item in route.metadata_json {
-            descriptor = descriptor.metadata_json(
-                item.key,
-                parse_metadata_value(item.key, item.value_json),
-            );
+            descriptor =
+                descriptor.metadata_json(item.key, parse_metadata_value(item.key, item.value_json));
         }
         builder = builder.push(CapabilityDescV2::backend_route(
             route.capability_id,
@@ -386,7 +386,11 @@ fn contract_capability_v2(contract: PluginContractDefinition) -> CapabilityDescV
         }
     });
     CapabilityDescV2::new(
-        format!("{}{}", crate::plugin_api::RUNTIME_CONTRACT_CAPABILITY_PREFIX, key),
+        format!(
+            "{}{}",
+            crate::plugin_api::RUNTIME_CONTRACT_CAPABILITY_PREFIX,
+            key
+        ),
         CapabilityRole::Provides,
         CapabilityKind::Other,
         1,

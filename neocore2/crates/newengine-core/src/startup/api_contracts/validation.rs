@@ -4,7 +4,7 @@ use crate::error::{EngineError, EngineResult};
 use newengine_plugin_host::PluginSnapshotEntry;
 use newengine_service_api::RuntimeServiceRequirementSpec;
 
-use super::catalog::{RUNTIME_SERVICE_CATALOG, runtime_service_user};
+use super::catalog::{runtime_service_user, RUNTIME_SERVICE_CATALOG};
 use super::description::{
     contract_family_matches, method_statuses, parse_contract_from_description,
     parse_methods_from_description,

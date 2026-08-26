@@ -189,8 +189,15 @@ def build_package(output: Path, copy_bytes: bool) -> dict[str, Any]:
     source_config = workspace_root / "config.json"
     source_plugins = northstar_root / "pluginsRuntime"
     source_assets = northstar_root / "gameAssets"
+    source_shared_content = northstar_root / "Shared" / "Content"
 
-    for required in (source_exe, source_config, source_plugins, source_assets):
+    for required in (
+        source_exe,
+        source_config,
+        source_plugins,
+        source_assets,
+        source_shared_content,
+    ):
         if not required.exists():
             raise FileNotFoundError(f"required package source is missing: {required}")
 
@@ -215,7 +222,12 @@ def build_package(output: Path, copy_bytes: bool) -> dict[str, Any]:
         output / "gameAssets",
         copy_bytes,
     )
-    for modes in (plugin_modes, asset_modes):
+    shared_count, shared_bytes, shared_modes = transfer_tree(
+        source_shared_content,
+        output / "Shared" / "Content",
+        copy_bytes,
+    )
+    for modes in (plugin_modes, asset_modes, shared_modes):
         for key, value in modes.items():
             transfer_modes[key] = transfer_modes.get(key, 0) + value
 
@@ -257,12 +269,17 @@ def build_package(output: Path, copy_bytes: bool) -> dict[str, Any]:
                 "count": asset_count,
                 "logical_bytes": asset_bytes,
             },
+            "shared_content": {
+                "count": shared_count,
+                "logical_bytes": shared_bytes,
+            },
         },
     }
     required_runtime_assets = [
         output / "gameAssets" / "maps" / "forest_road_operation.ymap",
         output / "gameAssets" / "ui" / "engine" / "main_menu.neui",
         output / "gameAssets" / "ui" / "engine" / "pause_menu.neui",
+        output / "Shared" / "Content" / "textures" / "highres" / "vegetation.ytd",
     ]
     missing_runtime_assets = [str(path) for path in required_runtime_assets if not path.is_file()]
     if missing_runtime_assets:
@@ -352,7 +369,7 @@ def main() -> int:
                 "PACKAGE_BUILT "
                 f"root={output} plugins={files['plugins']['count']} "
                 f"assets={files['assets']['count']} "
-                f"logical_bytes={files['plugins']['logical_bytes'] + files['assets']['logical_bytes']} "
+                f"logical_bytes={files['plugins']['logical_bytes'] + files['assets']['logical_bytes'] + files['shared_content']['logical_bytes']} "
                 f"modes={manifest['transfer_modes']}"
             )
         elif not (output / "package-manifest.json").is_file():

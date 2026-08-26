@@ -258,7 +258,7 @@ pub(crate) fn capability_provider_candidates() -> Vec<newengine_service_api::Com
 
     for service_id in services
         .into_iter()
-        .chain(["host.services.v1".to_owned(), "host.events.v1".to_owned()])
+        .chain(std::iter::once("host.services.v1".to_owned()))
     {
         out.push(
             newengine_service_api::CompositionCandidate::new(
@@ -273,6 +273,18 @@ pub(crate) fn capability_provider_candidates() -> Vec<newengine_service_api::Com
             .with_capability_version(1),
         );
     }
+    out.push(
+        newengine_service_api::CompositionCandidate::new(
+            capability_composition_key("host.events.v1", CapabilityKind::EventsV1),
+            "host-events::host.events.v1",
+            "host",
+            0,
+            0,
+            0,
+        )
+        .with_capability("host.events.v1")
+        .with_capability_version(1),
+    );
     out
 }
 
@@ -411,6 +423,32 @@ mod typed_requirement_tests {
             capabilities: RVec::from(capabilities),
             extension_json: RString::new(),
         }
+    }
+
+    #[test]
+    fn host_events_requirement_uses_events_capability_kind() {
+        let consumer = descriptor_v2(
+            "consumer.host-events",
+            vec![CapabilityDescV2::new(
+                "host.events.v1",
+                CapabilityRole::Requires,
+                CapabilityKind::EventsV1,
+                1,
+            )],
+        );
+        let candidates = capability_provider_candidates();
+        assert!(
+            missing_typed_descriptor_requirements(&consumer, &candidates).is_empty(),
+            "host.events.v1 must satisfy EventsV1 requirements"
+        );
+        assert!(candidates.iter().any(|candidate| {
+            candidate.gateway_id
+                == capability_composition_key("host.events.v1", CapabilityKind::EventsV1)
+                && candidate
+                    .capability_ids
+                    .iter()
+                    .any(|capability| capability == "host.events.v1")
+        }));
     }
 
     #[test]

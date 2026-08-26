@@ -231,7 +231,7 @@
         "info_json",
         "invoke_json",
         "shutdown_v1",
-        "command_batch_bin_v1"
+        "command_batch_bin_v2"
       ],
       "test_cases": [
         "registers_expected_service",

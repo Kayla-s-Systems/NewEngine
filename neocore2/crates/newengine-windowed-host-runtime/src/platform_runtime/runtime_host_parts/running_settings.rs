@@ -35,8 +35,8 @@ fn clear_frontend_settings_changed_at() {
         .unwrap_or_else(|poisoned| poisoned.into_inner()) = None;
 }
 
-fn lock_frontend_settings_pending()
--> std::sync::MutexGuard<'static, BTreeMap<String, serde_json::Value>> {
+fn lock_frontend_settings_pending(
+) -> std::sync::MutexGuard<'static, BTreeMap<String, serde_json::Value>> {
     frontend_settings_pending()
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())

@@ -91,7 +91,11 @@ impl PlatformRuntimeDescriptorV1 {
             .collect::<Vec<_>>();
         tags.sort();
         tags.dedup();
-        self.system_tags = tags.into_iter().map(RString::from).collect::<Vec<_>>().into();
+        self.system_tags = tags
+            .into_iter()
+            .map(RString::from)
+            .collect::<Vec<_>>()
+            .into();
         self
     }
 }

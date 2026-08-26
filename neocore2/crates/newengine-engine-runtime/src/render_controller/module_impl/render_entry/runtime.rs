@@ -161,7 +161,10 @@ impl RuntimeRenderController {
         };
 
         self.frame.frame_index = self.frame.frame_index.saturating_add(1).max(1);
-        self.gpu.meshes.instance_uploader.begin_frame();
+        self.gpu
+            .meshes
+            .instance_uploader
+            .begin_frame(self.frame.frame_index);
         self.diagnostics.overlay_metrics.begin_frame(scope.dt);
 
         let playable_started = Instant::now();
@@ -307,6 +310,14 @@ impl RuntimeRenderController {
                 return Err(e);
             }
             backend_end_ms = backend_end_started.elapsed().as_secs_f64() * 1000.0;
+
+            // Successful frames are the common path, so resource retirement must be
+            // serviced here as well as in degraded/early-exit paths. Collect only
+            // after end_frame: backend completion events can now prove which old
+            // per-draw buffers, bind groups, and deferred targets are safe to destroy.
+            self.gc_per_draw_ubos(&mut **r);
+            self.gc_deferred_rts(&mut **r);
+
             let backend_timing_snapshot = r.diagnostics_snapshot().ok();
             backend_reported_begin_ms = backend_timing_snapshot
                 .as_ref()

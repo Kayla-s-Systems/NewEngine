@@ -9,6 +9,9 @@ use newengine_runtime_host::app_launcher::{
     RuntimeHostAppProfile, RuntimeHostBootOption, RuntimeHostLaunchSpec, RuntimeHostLauncher,
 };
 use newengine_ui::{UiBuildFn, UiProviderKind};
+use newengine_windowed_host_runtime::{WindowedHostFrontend, WindowedRuntimeHostProfile};
+
+const WINDOW_TITLE: &str = "RendererDemo: Shaded Lighting Scene";
 
 const BOOT_OPTIONS: &[RuntimeHostBootOption] = &[
     RuntimeHostBootOption::RuntimeBootstrapOverlay,
@@ -43,7 +46,6 @@ impl RendererDemoApp {
             fixed_dt_ms: GAME_FIXED_DT_MS,
             app_dir_name: GAME_READY_APP_DIR_NAME,
             app_assets_env: GAME_APP_ASSETS_DIR_ENV,
-            window_title: "RendererDemo: Shaded Lighting Scene",
             early_log_file_name: "renderer-demo-early.log",
             default_profile_env: None,
             env_defaults: GAME_READY_RUNTIME_ENV_DEFAULTS,
@@ -52,7 +54,8 @@ impl RendererDemoApp {
 
     #[inline]
     fn run_process(self) -> ! {
-        RuntimeHostLauncher::new(Self::launch_spec(), self).run_process()
+        RuntimeHostLauncher::new(Self::launch_spec(), self)
+            .run_process_with_frontend(WindowedHostFrontend::new(WINDOW_TITLE))
     }
 }
 
@@ -80,7 +83,9 @@ impl RuntimeHostAppProfile for RendererDemoApp {
     fn bootstrap_content_best_effort(&self) {
         self.profile.bootstrap_content_best_effort();
     }
+}
 
+impl WindowedRuntimeHostProfile for RendererDemoApp {
     #[inline]
     fn ui_build_from_startup(&self, startup: &StartupConfig) -> Option<Box<dyn UiBuildFn>> {
         self.profile.ui_build_from_startup(startup)

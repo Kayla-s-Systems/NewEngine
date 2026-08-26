@@ -422,8 +422,8 @@ fn apply_graphics_process_overrides_to_settings(
     mut report: Option<&mut StartupLoadReport>,
 ) -> usize {
     use crate::startup_window::{
-        ENV_LOD_DISTANCE_SCALE, ENV_SHADOW_CASCADE_COUNT, ENV_SHADOW_MAP_RESOLUTION,
-        ENV_SHADOWS_ENABLED,
+        ENV_LOD_DISTANCE_SCALE, ENV_SHADOWS_ENABLED, ENV_SHADOW_CASCADE_COUNT,
+        ENV_SHADOW_MAP_RESOLUTION,
     };
 
     let mut changed = 0usize;

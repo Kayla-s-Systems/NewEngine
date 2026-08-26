@@ -86,10 +86,7 @@ fn verify_manifest_identity_and_size(
     Ok(())
 }
 
-fn verify_artifact_hash(
-    path: &Path,
-    manifest: &PluginDiscoveryManifestV1,
-) -> Result<(), String> {
+fn verify_artifact_hash(path: &Path, manifest: &PluginDiscoveryManifestV1) -> Result<(), String> {
     let actual_hash = sha256_file(path)?;
     if !actual_hash.eq_ignore_ascii_case(manifest.artifact_sha256.trim()) {
         return Err(format!(

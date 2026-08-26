@@ -138,20 +138,43 @@ pub(in crate::render_controller) struct PackedInstanceUpload {
     pub(in crate::render_controller) bytes_written: u64,
 }
 
+const INSTANCE_UPLOAD_FRAME_SLOTS: usize = 4;
+
 #[derive(Debug, Default)]
-pub(in crate::render_controller) struct InstanceBufferUploader {
+struct InstanceUploadFrameSlot {
     buffer: Option<BufferId>,
     capacity_bytes: u64,
     cursor_bytes: u64,
+}
+
+#[derive(Debug)]
+pub(in crate::render_controller) struct InstanceBufferUploader {
+    /// One persistent upload arena per CPU/GPU frame slot. A single mapped buffer
+    /// cannot be rewound while an older submitted frame may still read it: Vulkan
+    /// vertex bindings reference memory, they do not snapshot bytes at draw-record time.
+    /// Four engine slots exceed the current first-party backend depth (Vulkan = 2).
+    frame_slots: [InstanceUploadFrameSlot; INSTANCE_UPLOAD_FRAME_SLOTS],
+    active_slot: usize,
     /// Reused CPU staging storage. After the first peak frame, packed instance
     /// uploads no longer allocate a flattening vector for every render pass.
     staging_instances: Vec<RenderInstanceRaw>,
 }
 
+impl Default for InstanceBufferUploader {
+    fn default() -> Self {
+        Self {
+            frame_slots: std::array::from_fn(|_| InstanceUploadFrameSlot::default()),
+            active_slot: 0,
+            staging_instances: Vec::new(),
+        }
+    }
+}
+
 impl InstanceBufferUploader {
     #[inline]
-    pub(in crate::render_controller) fn begin_frame(&mut self) {
-        self.cursor_bytes = 0;
+    pub(in crate::render_controller) fn begin_frame(&mut self, frame_index: u64) {
+        self.active_slot = frame_index as usize % INSTANCE_UPLOAD_FRAME_SLOTS;
+        self.frame_slots[self.active_slot].cursor_bytes = 0;
     }
 
     /// Uploads all sorted instance batches with one backend buffer write.
@@ -182,13 +205,14 @@ impl InstanceBufferUploader {
 
         let stride = core::mem::size_of::<RenderInstanceRaw>() as u64;
         let byte_len = (instance_count as u64).saturating_mul(stride);
-        let required_end = self.cursor_bytes.saturating_add(byte_len);
+        let cursor_bytes = self.frame_slots[self.active_slot].cursor_bytes;
+        let required_end = cursor_bytes.saturating_add(byte_len);
         self.ensure_capacity(r, required_end)?;
 
-        let buffer = self
+        let buffer = self.frame_slots[self.active_slot]
             .buffer
             .expect("instance buffer exists after ensure_capacity");
-        let base_offset = self.cursor_bytes;
+        let base_offset = cursor_bytes;
         self.staging_instances.clear();
         self.staging_instances
             .reserve(instance_count.saturating_sub(self.staging_instances.capacity()));
@@ -207,7 +231,7 @@ impl InstanceBufferUploader {
             base_offset,
             render_instances_as_bytes(&self.staging_instances),
         )?;
-        self.cursor_bytes = align_up(required_end, 256);
+        self.frame_slots[self.active_slot].cursor_bytes = align_up(required_end, 256);
 
         Ok(PackedInstanceUpload {
             slices,
@@ -217,24 +241,28 @@ impl InstanceBufferUploader {
     }
 
     fn ensure_capacity(&mut self, r: &mut dyn RenderApi, required_bytes: u64) -> EngineResult<()> {
-        if self.buffer.is_some() && self.capacity_bytes >= required_bytes {
+        let slot = &self.frame_slots[self.active_slot];
+        if slot.buffer.is_some() && slot.capacity_bytes >= required_bytes {
             return Ok(());
         }
 
         let new_capacity = next_capacity(required_bytes.max(64 * 1024));
-        // Do not destroy the previous instance buffer here. Commands already
-        // recorded earlier in this frame may still reference it, and backends
-        // may have multiple frames in flight. The uploader is grow-only for now;
-        // a future resource lifetime queue can retire old buffers after fences.
-        self.buffer = None;
-
+        // Do not destroy the previous instance buffer here. Commands recorded in
+        // this slot's previous use can still exist until the backend fence retires it.
+        // The slot is grow-only until buffer-generation retirement is exposed via RenderApi.
         let buffer = r.create_buffer(
-            BufferDesc::new(new_capacity, BufferUsage::Vertex, MemoryHint::CpuToGpu)
-                .with_label(format!("runtime_instance_buffer:{}kb", new_capacity / 1024)),
+            BufferDesc::new(new_capacity, BufferUsage::Vertex, MemoryHint::CpuToGpu).with_label(
+                format!(
+                    "runtime_instance_buffer:slot{}:{}kb",
+                    self.active_slot,
+                    new_capacity / 1024
+                ),
+            ),
         )?;
-        self.buffer = Some(buffer);
-        self.capacity_bytes = new_capacity;
-        self.cursor_bytes = 0;
+        let slot = &mut self.frame_slots[self.active_slot];
+        slot.buffer = Some(buffer);
+        slot.capacity_bytes = new_capacity;
+        slot.cursor_bytes = 0;
         Ok(())
     }
 }
@@ -510,6 +538,24 @@ mod instance_payload_tests {
             LIT_INSTANCE_VERTEX_STRIDE as usize,
             "RenderInstanceRaw must stay byte-identical to locations 5..16 in the instanced shader",
         );
+    }
+
+    #[test]
+    fn frame_upload_arena_rotates_without_rewinding_adjacent_gpu_frames() {
+        let mut uploader = InstanceBufferUploader::default();
+        uploader.begin_frame(1);
+        let first = uploader.active_slot;
+        uploader.frame_slots[first].cursor_bytes = 4096;
+
+        uploader.begin_frame(2);
+        let second = uploader.active_slot;
+        assert_ne!(first, second);
+        assert_eq!(uploader.frame_slots[first].cursor_bytes, 4096);
+        assert_eq!(uploader.frame_slots[second].cursor_bytes, 0);
+
+        uploader.begin_frame(1 + INSTANCE_UPLOAD_FRAME_SLOTS as u64);
+        assert_eq!(uploader.active_slot, first);
+        assert_eq!(uploader.frame_slots[first].cursor_bytes, 0);
     }
 
     #[test]

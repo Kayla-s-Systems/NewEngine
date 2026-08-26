@@ -23,14 +23,30 @@
       "layers": [
         {
           "dir": null,
+          "mount": "shared",
+          "path": "../../Shared/Content/",
+          "pattern": null,
+          "priority": 230,
+          "type": "dir"
+        },
+        {
+          "dir": "../../Shared/Content/",
+          "mount": "shared",
+          "path": null,
+          "pattern": "*",
+          "priority": 210,
+          "type": "container_glob"
+        },
+        {
+          "dir": null,
           "mount": "",
-          "path": "../../gameAssets/",
+          "path": "../../Engine/Content/",
           "pattern": null,
           "priority": 240,
           "type": "dir"
         },
         {
-          "dir": "../../gameAssets/",
+          "dir": "../../Engine/Content/",
           "mount": "",
           "path": null,
           "pattern": "*",
@@ -110,7 +126,7 @@
         "console": {
           "colors": true,
           "enabled": true,
-          "level": "info",
+          "level": "debug",
           "target": "stderr"
         },
         "file": {
@@ -239,139 +255,8 @@
       },
       "ui": {
         "screen_profile": {
-          "game_ui_document_ref": "ui/game/game_hud.neui@surface",
-          "game_ui_root_surface_id": "game.hud",
-          "presentation_flow": {
-            "enabled": true,
-            "id": "game.frontend",
-            "initial_state": "main_menu",
-            "states": [
-              {
-                "blocks_gameplay_input": true,
-                "blocks_world_bootstrap": true,
-                "document_ref": "ui/engine/main_menu.neui@surface",
-                "id": "main_menu",
-                "input_focus_policy": "ui_surface",
-                "surface_id": "engine.main_menu"
-              },
-              {
-                "blocks_gameplay_input": true,
-                "blocks_world_bootstrap": true,
-                "document_ref": "ui/engine/settings.neui@surface",
-                "id": "settings",
-                "input_focus_policy": "ui_surface",
-                "surface_id": "engine.settings"
-              },
-              {
-                "blocks_gameplay_input": true,
-                "blocks_world_bootstrap": true,
-                "document_ref": "ui/engine/credits.neui@surface",
-                "id": "credits",
-                "input_focus_policy": "ui_surface",
-                "surface_id": "engine.credits"
-              },
-              {
-                "blocks_gameplay_input": true,
-                "blocks_world_bootstrap": false,
-                "id": "loading",
-                "input_focus_policy": "ui_surface"
-              },
-              {
-                "blocks_gameplay_input": false,
-                "blocks_world_bootstrap": false,
-                "document_ref": "ui/game/game_hud.neui@surface",
-                "id": "gameplay",
-                "input_focus_policy": "game_viewport",
-                "surface_id": "game.hud"
-              },
-              {
-                "blocks_gameplay_input": true,
-                "blocks_world_bootstrap": false,
-                "document_ref": "ui/engine/pause_menu.neui@surface",
-                "id": "pause",
-                "input_focus_policy": "ui_surface",
-                "surface_id": "engine.pause_menu"
-              },
-              {
-                "blocks_gameplay_input": true,
-                "blocks_world_bootstrap": false,
-                "document_ref": "ui/engine/settings.neui@surface",
-                "id": "pause_settings",
-                "input_focus_policy": "ui_surface",
-                "surface_id": "engine.settings"
-              }
-            ],
-            "transitions": [
-              {
-                "from": "main_menu",
-                "on_action": "engine.settings.open",
-                "to": "settings"
-              },
-              {
-                "from": "settings",
-                "on_action": "settings.apply",
-                "to": "main_menu"
-              },
-              {
-                "from": "settings",
-                "on_action": "ui.back",
-                "to": "main_menu"
-              },
-              {
-                "from": "main_menu",
-                "on_action": "game.credits",
-                "to": "credits"
-              },
-              {
-                "from": "credits",
-                "on_action": "ui.back",
-                "to": "main_menu"
-              },
-              {
-                "from": "main_menu",
-                "on_action": "game.start",
-                "reset_runtime_ready": true,
-                "to": "loading"
-              },
-              {
-                "from": "loading",
-                "on_runtime_ready": true,
-                "to": "gameplay"
-              },
-              {
-                "from": "gameplay",
-                "on_action": "engine.ui.primary.toggle",
-                "to": "pause"
-              },
-              {
-                "from": "pause",
-                "on_action": "engine.ui.primary.toggle",
-                "to": "gameplay"
-              },
-              {
-                "from": "pause",
-                "on_action": "game.resume",
-                "to": "gameplay"
-              },
-              {
-                "from": "pause",
-                "on_action": "engine.settings.open",
-                "to": "pause_settings"
-              },
-              {
-                "from": "pause_settings",
-                "on_action": "settings.apply",
-                "to": "pause"
-              },
-              {
-                "from": "pause_settings",
-                "on_action": "ui.back",
-                "to": "pause"
-              }
-            ]
-          },
           "profile": "game",
-          "publish_editor_shell": false
+          "publish_editor_shell": true
         }
       }
     },
@@ -1358,7 +1243,7 @@
                 "console": {
                   "colors": true,
                   "enabled": true,
-                  "level": "info",
+                  "level": "debug",
                   "style": "auto",
                   "target": "stderr"
                 },
@@ -1520,35 +1405,53 @@
       "window_mode": "windowed"
     },
     "graphics": {
-      "anisotropy": 16,
-      "bloom_enabled": false,
+      "anisotropy": 8,
+      "bloom_enabled": true,
       "bloom_intensity": 0.08500000089406967,
       "bloom_knee": 0.3499999940395355,
       "bloom_radius": 1.0,
       "bloom_threshold": 0.8500000238418579,
-      "depth_of_field_enabled": true,
+      "depth_of_field_enabled": false,
       "fxaa_edge_threshold": 0.125,
       "fxaa_edge_threshold_min": 0.031199999153614044,
-      "fxaa_enabled": false,
+      "fxaa_enabled": true,
       "fxaa_subpixel_quality": 0.75,
+      "lod_distance_scale": 1.75,
+      "lod_quality": "cinematic",
       "motion_blur_enabled": false,
-      "msaa_samples": 8,
+      "msaa_samples": 0,
       "preset": "custom",
+      "shadow_advanced_override": false,
+      "shadow_bias": 0.0024999999441206455,
+      "shadow_cascade_count": 4,
+      "shadow_contact_strength": 0.44999998807907104,
+      "shadow_filter": "pcss",
+      "shadow_map_resolution": 4096,
+      "shadow_max_distance": 240.0,
+      "shadow_normal_bias": 0.014999999664723873,
+      "shadow_pcss_blocker_radius_texels": 4.5,
+      "shadow_pcss_blocker_samples": 16,
+      "shadow_pcss_filter_samples": 16,
+      "shadow_pcss_light_radius_degrees": 0.26600000262260437,
+      "shadow_pcss_max_filter_radius_texels": 8.0,
+      "shadow_pcss_min_filter_radius_texels": 0.18000000715255737,
+      "shadow_pcss_stable_kernel_texels": 8.0,
       "shadow_quality": "cinematic",
+      "shadow_softness": 1.149999976158142,
       "shadows_enabled": true,
-      "ssao_enabled": true,
-      "ssao_half_resolution": false,
+      "ssao_enabled": false,
+      "ssao_half_resolution": true,
       "ssao_intensity": 0.8199999928474426,
-      "ssao_quality_steps": 32,
+      "ssao_quality_steps": 16,
       "ssao_radius_ws": 0.75,
-      "sun_rays_enabled": false,
+      "sun_rays_enabled": true,
       "taa_enabled": false,
       "taa_feedback": 0.9200000166893005,
       "taa_jitter_scale": 1.0,
       "taa_neighborhood_clamping": 1.0,
-      "texture_quality": "ultra"
+      "texture_quality": "high"
     },
-    "schema_version": 1
+    "schema_version": 3
   },
   "window": {
     "display": {

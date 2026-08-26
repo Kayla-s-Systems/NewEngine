@@ -6,6 +6,12 @@ use super::super::state::PerDrawUbo;
 
 const PER_DRAW_UBO_GC_INTERVAL_FRAMES: u64 = 120;
 const PER_DRAW_UBO_IDLE_FRAMES: u64 = 240;
+const PER_DRAW_UBO_FRAME_SLOTS: u64 = 4;
+
+#[inline]
+fn per_draw_ubo_cache_key(logical_key: u64, frame_index: u64) -> (u64, u8) {
+    (logical_key, (frame_index % PER_DRAW_UBO_FRAME_SLOTS) as u8)
+}
 
 impl RuntimeRenderController {
     pub(in crate::render_controller) fn ensure_per_draw_ubo_with_binding(
@@ -20,7 +26,12 @@ impl RuntimeRenderController {
         local_shadow_texture: TextureId,
         sampler: SamplerId,
     ) -> newengine_core::EngineResult<PerDrawUbo> {
-        if let Some(mut e) = self.gpu.material.per_draw_ubo.get(&key).copied() {
+        // Uniform-buffer writes are visible to the GPU asynchronously. Reusing the same
+        // host-visible UBO on the next CPU frame races any older frame still in flight.
+        // Keep one physical UBO/bind-group generation per frame slot, just like the
+        // instance uploader. Four slots exceed the current first-party backend depth.
+        let cache_key = per_draw_ubo_cache_key(key, self.frame.frame_index);
+        if let Some(mut e) = self.gpu.material.per_draw_ubo.get(&cache_key).copied() {
             e.last_seen_frame = self.frame.frame_index;
             if e.base_texture == base_texture
                 && e.normal_texture == normal_texture
@@ -29,7 +40,7 @@ impl RuntimeRenderController {
                 && e.local_shadow_texture == local_shadow_texture
                 && e.sampler == sampler
             {
-                self.gpu.material.per_draw_ubo.insert(key, e);
+                self.gpu.material.per_draw_ubo.insert(cache_key, e);
                 return Ok(e);
             }
 
@@ -60,7 +71,7 @@ impl RuntimeRenderController {
             e.shadow_texture = shadow_texture;
             e.local_shadow_texture = local_shadow_texture;
             e.sampler = sampler;
-            self.gpu.material.per_draw_ubo.insert(key, e);
+            self.gpu.material.per_draw_ubo.insert(cache_key, e);
             return Ok(e);
         }
 
@@ -100,7 +111,7 @@ impl RuntimeRenderController {
             sampler,
             last_seen_frame: self.frame.frame_index,
         };
-        self.gpu.material.per_draw_ubo.insert(key, entry);
+        self.gpu.material.per_draw_ubo.insert(cache_key, entry);
         Ok(entry)
     }
 
@@ -149,4 +160,20 @@ impl RuntimeRenderController {
             PER_DRAW_UBO_IDLE_FRAMES,
         );
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn per_draw_ubo_cache_rotates_physical_frame_slots() {
+        let logical = 0xABCD_EF01_2345_6789;
+        assert_eq!(per_draw_ubo_cache_key(logical, 0), (logical, 0));
+        assert_eq!(per_draw_ubo_cache_key(logical, 1), (logical, 1));
+        assert_eq!(per_draw_ubo_cache_key(logical, 3), (logical, 3));
+        assert_eq!(per_draw_ubo_cache_key(logical, 4), (logical, 0));
+        assert_eq!(per_draw_ubo_cache_key(logical, 9), (logical, 1));
+    }
+
 }

@@ -39,9 +39,21 @@ fn runtime_identity(runtime_path: &Path) -> (String, String, String) {
         let name = descriptor.name.to_string();
         let version = descriptor.version.to_string();
         return (
-            if id.trim().is_empty() { GENERIC_PLATFORM_RUNTIME_ID.to_owned() } else { id },
-            if name.trim().is_empty() { GENERIC_PLATFORM_RUNTIME_NAME.to_owned() } else { name },
-            if version.trim().is_empty() { platform_runtime_version_from_path(runtime_path) } else { version },
+            if id.trim().is_empty() {
+                GENERIC_PLATFORM_RUNTIME_ID.to_owned()
+            } else {
+                id
+            },
+            if name.trim().is_empty() {
+                GENERIC_PLATFORM_RUNTIME_NAME.to_owned()
+            } else {
+                name
+            },
+            if version.trim().is_empty() {
+                platform_runtime_version_from_path(runtime_path)
+            } else {
+                version
+            },
         );
     }
     (
@@ -138,7 +150,11 @@ pub fn resolve_platform_runtime_config(
     let module = root.create()();
     let raw_descriptor = module.descriptor();
     let manifest = newengine_plugin_host::read_verified_plugin_discovery_manifest(runtime_path)
-        .map_err(|e| EngineError::other(format!("platform runtime discovery metadata verification failed: {e}")))?;
+        .map_err(|e| {
+            EngineError::other(format!(
+                "platform runtime discovery metadata verification failed: {e}"
+            ))
+        })?;
     let planned_descriptor = manifest.descriptor.ok_or_else(|| {
         EngineError::other(format!(
             "platform runtime sidecar has no plugin descriptor for '{}'",
@@ -146,7 +162,8 @@ pub fn resolve_platform_runtime_config(
         ))
     })?;
     let live_descriptor_v2 = newengine_plugin_api::PluginDescriptorV2::from_legacy(&raw_descriptor);
-    let live_projection = newengine_plugin_api::PluginDiscoveryDescriptorV1::from_descriptor_v2(&live_descriptor_v2);
+    let live_projection =
+        newengine_plugin_api::PluginDiscoveryDescriptorV1::from_descriptor_v2(&live_descriptor_v2);
     if planned_descriptor != live_projection {
         return Err(EngineError::other(format!(
             "platform runtime plugin descriptor does not match frozen discovery metadata path='{}'",

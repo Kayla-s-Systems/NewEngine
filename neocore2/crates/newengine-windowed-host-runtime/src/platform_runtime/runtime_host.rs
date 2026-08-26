@@ -159,23 +159,37 @@ impl HostPlatformRuntime {
         })?;
         crate::platform_early_log!("host.dll.load.ok path='{}'", runtime_path.display());
 
-        let planned_descriptor = crate::platform_runtime::discovery::try_read_runtime_descriptor(runtime_path)
-            .ok_or_else(|| EngineError::other(format!(
-                "platform runtime verified discovery metadata disappeared for '{}'",
-                runtime_path.display()
-            )))?;
-        let live_descriptor_fn: libloading::Symbol<PlatformRuntimeDescriptorV1Fn> = unsafe {
-            lib.get(PLATFORM_RUNTIME_DESCRIPTOR_V1_SYMBOL_BYTES_NUL)
-        }
-        .map_err(|e| EngineError::other(format!(
-            "platform runtime descriptor symbol missing after selection: {e}"
-        )))?;
+        let planned_descriptor =
+            crate::platform_runtime::discovery::try_read_runtime_descriptor(runtime_path)
+                .ok_or_else(|| {
+                    EngineError::other(format!(
+                        "platform runtime verified discovery metadata disappeared for '{}'",
+                        runtime_path.display()
+                    ))
+                })?;
+        let live_descriptor_fn: libloading::Symbol<PlatformRuntimeDescriptorV1Fn> =
+            unsafe { lib.get(PLATFORM_RUNTIME_DESCRIPTOR_V1_SYMBOL_BYTES_NUL) }.map_err(|e| {
+                EngineError::other(format!(
+                    "platform runtime descriptor symbol missing after selection: {e}"
+                ))
+            })?;
         let live_descriptor = live_descriptor_fn();
-        let mut planned_tags = planned_descriptor.system_tags.iter().map(|v| v.to_string()).collect::<Vec<_>>();
-        let mut live_tags = live_descriptor.system_tags.iter().map(|v| v.to_string()).collect::<Vec<_>>();
-        planned_tags.sort(); planned_tags.dedup();
-        live_tags.sort(); live_tags.dedup();
-        if live_descriptor.schema_version != newengine_platform_api::PlatformRuntimeDescriptorV1::SCHEMA_VERSION
+        let mut planned_tags = planned_descriptor
+            .system_tags
+            .iter()
+            .map(|v| v.to_string())
+            .collect::<Vec<_>>();
+        let mut live_tags = live_descriptor
+            .system_tags
+            .iter()
+            .map(|v| v.to_string())
+            .collect::<Vec<_>>();
+        planned_tags.sort();
+        planned_tags.dedup();
+        live_tags.sort();
+        live_tags.dedup();
+        if live_descriptor.schema_version
+            != newengine_platform_api::PlatformRuntimeDescriptorV1::SCHEMA_VERSION
             || live_descriptor.id != planned_descriptor.id
             || live_descriptor.name != planned_descriptor.name
             || live_descriptor.version != planned_descriptor.version
@@ -187,7 +201,10 @@ impl HostPlatformRuntime {
                 runtime_path.display()
             )));
         }
-        crate::platform_early_log!("host.dll.metadata.verify.ok path='{}'", runtime_path.display());
+        crate::platform_early_log!(
+            "host.dll.metadata.verify.ok path='{}'",
+            runtime_path.display()
+        );
 
         crate::platform_early_log!(
             "host.symbol.resolve.begin symbol='{}'",

@@ -191,7 +191,7 @@ def main()->int:
         with stdout_path.open('w',encoding='utf-8') as out, stderr_path.open('w',encoding='utf-8') as err:
             process=subprocess.Popen([str(exe),'--no-startup-window'],cwd=root,env=env,stdout=out,stderr=err,text=True)
             print(f'PROCESS pid={process.pid}',flush=True)
-            wait_for("authored game .neui mounted ref='ui/engine/main_menu.neui@surface'",opt.startup_timeout,'main menu mounted')
+            wait_for("authored game .neui mounted ref='ui/frontend/main_menu.neui@surface'",opt.startup_timeout,'main menu mounted')
             hwnd,_=game_window(); click(hwnd,240,336)
             wait_for(transition('main_menu','loading','game.start'),10,'main menu -> loading')
             wait_for(transition('loading','gameplay','runtime_ready'),opt.gameplay_timeout,'loading -> gameplay')

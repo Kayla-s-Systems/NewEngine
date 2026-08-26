@@ -15,28 +15,6 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 SKIP_DIRS = {"target", ".git", "docs", "archive", "research", "third_party", "assets", "cache"}
 SKIP_SUFFIXES = {".md", ".txt", ".log"}
 SOURCE_SUFFIXES = {".rs", ".toml", ".json", ".yml", ".yaml", ".py", ".cmd", ".ps1"}
-ALLOW_ENV_PREFIXES = (
-    pathlib.Path("build-support"),
-    pathlib.Path("scripts"),
-    pathlib.Path("crates/newengine-core/src/startup"),
-    pathlib.Path("crates/newengine-core/src/crash.rs"),
-    pathlib.Path("crates/newengine-runtime-host/src/platform_runtime/config.rs"),
-    pathlib.Path("crates/newengine-runtime-host/src/platform_runtime/discovery.rs"),
-    pathlib.Path("crates/newengine-runtime-host/src/platform_runtime/early_log.rs"),
-    pathlib.Path("crates/newengine-runtime-host/src/platform_runtime/shutdown_watchdog.rs"),
-    pathlib.Path("crates/newengine-runtime-host/src/app_launcher.rs"),
-    pathlib.Path("crates/newengine-runtime-host/src/headless_cli.rs"),
-    pathlib.Path("crates/newengine-runtime-host/src/asset_bootstrap.rs"),
-    pathlib.Path("crates/newengine-plugin-host/src/paths.rs"),
-    pathlib.Path("crates/newengine-plugin-host/src/manager/lifecycle.rs"),
-    pathlib.Path("crates/newengine-plugin-host/src/manager/discovery"),
-    pathlib.Path("crates/newengine-engine-runtime/src/env_config.rs"),
-    pathlib.Path("crates/newengine-game-ready-profile/src/env_config.rs"),
-    pathlib.Path("crates/newengine-asset-inspector-runtime/src/env_config.rs"),
-    pathlib.Path("crates/newengine-core/src/storage_root.rs"),
-    pathlib.Path("crates/newengine-core/src/engine/plugins.rs"),
-    pathlib.Path("crates/newengine-core/src/startup_window/args.rs"),
-)
 DENY = [
     (re.compile(r"#\[deprecated"), "deprecated attribute is forbidden"),
     (re.compile(r"#\[allow\(deprecated\)\]"), "allow(deprecated) is forbidden"),
@@ -91,39 +69,46 @@ def iter_source_files() -> list[pathlib.Path]:
     return out
 
 
-def is_allowed_env_var_read(rel: pathlib.Path) -> bool:
-    return any(rel == prefix or rel.is_relative_to(prefix) for prefix in ALLOW_ENV_PREFIXES)
+
+def is_versioned_api_constant_path(rel: pathlib.Path) -> bool:
+    parts = rel.parts
+    if len(parts) >= 2 and parts[0] == "crates":
+        crate = parts[1]
+        return crate.endswith("-api") or crate.endswith("-contracts")
+    return False
 
 
-def is_allowed_v2_line(line: str) -> bool:
-    upper = line.upper()
+def is_allowed_v2_line(line: str, rel: pathlib.Path) -> bool:
+    stripped = line.strip()
+    upper = stripped.upper()
+    # Versioned schema/wire names are first-class vocabulary. Versioned method/symbol
+    # constants are legal only at an owning API/contracts boundary, not in runtime code.
+    if stripped.startswith(("pub const ", "const ", "pub static ", "static ")):
+        return is_versioned_api_constant_path(rel)
     return (
         "WIRE_V2" in upper
         or "SCHEMA_V2" in upper
         or "VERSION_" in upper
-        or "TEXTUREDICTIONARYPAYLOADV2" in upper
-        or "V2" in upper and ("CONTENT_SCHEMA" in upper or "FORMAT_VERSION" in upper)
+        or "CONTENT_SCHEMA" in upper
+        or "FORMAT_VERSION" in upper
     )
 
 
-METHOD_V2_CONST_RE = re.compile(r"\b[A-Z][A-Z0-9_]*_V2\b")
-METHOD_V2_FN_RE = re.compile(r"\b[A-Za-z][A-Za-z0-9_]*_v2\s*\(")
-METHOD_V2_LITERAL_RE = re.compile(r"[\"'][A-Za-z0-9_.:-]+_v2[\"']")
+METHOD_V2_LITERAL_RE = re.compile(r'["\'][A-Za-z0-9_.:-]+_v2["\']', re.IGNORECASE)
+AD_HOC_METHOD_CONTEXT_RE = re.compile(
+    r"call_service|invoke|router|\.blob\s*\(|\.post_json\s*\(|method\s*[=:]",
+    re.IGNORECASE,
+)
 
 
-def has_forbidden_method_v2(line: str) -> bool:
-    if "_v2" not in line.lower():
+def has_forbidden_method_v2(line: str, rel: pathlib.Path) -> bool:
+    if "_v2" not in line.lower() or is_allowed_v2_line(line, rel):
         return False
-    if is_allowed_v2_line(line):
-        return False
-    # Only service-like identifiers are denied. Asset names such as foo_v2.ytd,
-    # prose and test names containing an internal `_v2_` segment are not service
-    # method identities and must not produce false positives.
-    return bool(
-        METHOD_V2_CONST_RE.search(line)
-        or METHOD_V2_FN_RE.search(line)
-        or METHOD_V2_LITERAL_RE.search(line)
-    )
+    # Type/function/API symbol names such as PluginDescriptorV2, compile_v2 and
+    # newengine_plugin_descriptor_v2 are legitimate versioned APIs. Only an inline
+    # service-method string literal in a call/router context is migration debt; such
+    # identities must come from an owning API/contract constant instead.
+    return bool(METHOD_V2_LITERAL_RE.search(line) and AD_HOC_METHOD_CONTEXT_RE.search(line))
 
 
 def iter_forbidden_repository_artifacts() -> list[pathlib.Path]:
@@ -157,10 +142,8 @@ def main() -> int:
             for pattern, message in DENY:
                 if pattern.search(line):
                     violations.append(f"{rel}:{line_no}: {message}: {line.strip()}")
-            if has_forbidden_method_v2(line):
+            if has_forbidden_method_v2(line, rel):
                 violations.append(f"{rel}:{line_no}: _v2 service method identifiers are forbidden outside schema/wire constants: {line.strip()}")
-            if ("std::env::var(" in line or "std::env::var_os(" in line) and not is_allowed_env_var_read(rel):
-                violations.append(f"{rel}:{line_no}: std::env reads are allowed only in bootstrap/config/build/tool-launcher layers: {line.strip()}")
 
     if violations:
         print("no-legacy scan failed:")
@@ -168,7 +151,7 @@ def main() -> int:
             print(f"  {item}")
         return 1
 
-    print("no-legacy scan passed: deprecated adapters, runtime aliases and hidden env reads are clean.")
+    print("no-legacy scan passed: deprecated adapters, runtime aliases and repository backup/cache artifacts are clean.")
     return 0
 
 

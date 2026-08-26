@@ -43,7 +43,7 @@
     { "reference_archive": "PhysX3.zip", "mapped_systems": ["engine.physics", "engine.assets.models.collisions"], "northstar_status": "external_reference", "production_gaps_visible": true, "gap_summary": ["third-party physics corpus", "do not import code directly", "use as behavioral/API reference only"] },
     { "reference_archive": "performance.zip", "mapped_systems": ["engine.threading", "engine.scheduler_core", "engine.logging"], "northstar_status": "visible_gap", "production_gaps_visible": true, "gap_summary": ["jobs foundation exists", "budget/profiler/performance policy parity incomplete"] },
     { "reference_archive": "framework.zip", "mapped_systems": ["engine.plugin_host", "engine.abi", "engine.gateway_registry", "engine.scheduler_core"], "northstar_status": "visible_gap", "production_gaps_visible": true, "gap_summary": ["host/gateway architecture exists", "framework breadth still split across staged gaps"] },
-    { "reference_archive": "SpeedTree.zip", "mapped_systems": ["engine.render.terrain", "engine.assets.models", "engine.assets.materials"], "northstar_status": "visible_gap", "production_gaps_visible": true, "gap_summary": ["foliage/vegetation provider parity missing"] },
+    { "reference_archive": "SpeedTree.zip", "mapped_systems": ["engine.render.terrain", "engine.assets.models", "engine.assets.materials"], "northstar_status": "visible_gap", "production_gaps_visible": true, "gap_summary": [".srt/.spm source ownership and import contracts, deterministic CPU extraction and GPU capability seam implemented", "licensed/provider-side SpeedTree binary importer, wind vertex ABI and hardware smoke still required"] },
     { "reference_archive": "pro-shaders.zip", "mapped_systems": ["engine.render", "engine.render.materials", "engine.render.postfx"], "northstar_status": "visible_gap", "production_gaps_visible": true, "gap_summary": ["shader graph/variant registry exists", "production shader library parity missing"] },
     { "reference_archive": "scaleform.zip", "mapped_systems": ["engine.ui", "engine.ui.text", "engine.assets.ui"], "northstar_status": "external_reference", "production_gaps_visible": true, "gap_summary": ["legacy UI middleware reference", "do not mirror API", "use to benchmark UI/text/render behavior"] },
     { "reference_archive": "cloth.zip", "mapped_systems": ["engine.physics", "engine.animation", "engine.assets.models"], "northstar_status": "visible_gap", "production_gaps_visible": true, "gap_summary": ["cloth simulation/import/provider parity missing"] },
@@ -105,7 +105,7 @@
       "northstar_gateways": ["engine.render", "engine.render.shadows", "engine.render.lighting", "engine.render.postfx", "engine.render.vfx", "engine.render.terrain", "engine.render.debug"],
       "required_capabilities": ["render.backend", "render.shadow_system", "render.lighting_stack", "render.postfx_stack", "render.vfx.particles", "render.terrain", "render.debug.overlays"],
       "required_conformance_families": ["render", "render.maturity"],
-      "required_workspace_crates": ["crates/newengine-render-api", "crates/newengine-render-feature-api", "crates/newengine-render-feature-gameready", "crates/newengine-render-frame-graph", "crates/newengine-render-ui-bridge"],
+      "required_workspace_crates": ["crates/newengine-render-api", "crates/newengine-render-feature-api", "crates/newengine-render-feature-gameready", "crates/newengine-render-frame-graph"],
       "required_source_tokens": [
         { "path": "crates/newengine-render-api/src/maturity.rs", "tokens": ["RenderDebugOverlayKind", "LightingStackDescriptorDto", "ShadowSystemDescriptorDto", "VfxSystemDescriptorDto"] },
         { "path": "crates/newengine-render-feature-gameready/src/lib.rs", "tokens": ["GameReadyRenderFeaturePack", "GameReadyDirectionalShadowProvider", "GameReadyAmbientOcclusionProvider"] },
@@ -169,7 +169,7 @@
       "required_workspace_crates": ["crates/newengine-scripting-api", "crates/newengine-scripting-runtime", "crates/newengine-schema-api", "crates/newengine-schema-runtime"],
       "required_source_tokens": [
         { "path": "crates/newengine-scripting-api/src/lib.rs", "tokens": ["SCRIPTING_SERVICE_METHOD_LOAD_MODULE_BYTES_V1", "SCRIPTING_SERVICE_METHOD_BINDING_MANIFEST_JSON_V1", "ScriptModuleRef"] },
-        { "path": "crates/newengine-scripting-runtime/src/lib.rs", "tokens": ["binary-request-response", "ysc-entry-bytes", "no script implementation is embedded"] }
+        { "path": "crates/newengine-scripting-runtime/src/lib.rs", "tokens": ["binary-request-response", "ysc-module-bytes", "no script implementation is embedded"] }
       ],
       "reference_buckets": ["command families", "script handler", "script manager", "resources", "metadata", "task types", "network handler"],
       "implemented_baseline": ["opaque binary scripting boundary", "module load/invoke/frame DTO", "schema binding manifest", "baseline nullstar provider"],

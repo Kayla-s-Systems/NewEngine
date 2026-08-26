@@ -364,6 +364,18 @@ fn descriptor_from_authored(material: &AuthoredMaterialDescriptor) -> MaterialDe
         },
         ..MaterialDescriptor::default()
     };
+    // Authored surface PBR participates in world lighting by default. NEMAT previously
+    // left both bits clear because MaterialDescriptor::default() is renderer-neutral;
+    // that made the forward pass replace a valid CSM atlas with the white fallback for
+    // every ordinary authored material. Unlit/UI/post-process domains remain shadowless.
+    if descriptor.domain == MaterialDomain::Surface
+        && descriptor.shading_model != ShadingModel::Unlit
+    {
+        descriptor.flags = descriptor
+            .flags
+            .union(MaterialFlags::CAST_SHADOWS)
+            .union(MaterialFlags::RECEIVE_SHADOWS);
+    }
     if material.surface.two_sided {
         descriptor.flags = descriptor.flags.union(MaterialFlags::DOUBLE_SIDED);
     }

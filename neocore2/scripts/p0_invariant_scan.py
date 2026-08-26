@@ -9,8 +9,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import pathlib
 import re
+import subprocess
 import sys
 from dataclasses import dataclass
 from typing import Iterable
@@ -37,18 +39,19 @@ PROVIDER_IDS = (
     "ai.api",
 )
 
-API_ID_CONSTANT_FILES = (
-    "newengine-render-api/src/constants.rs",
-    "newengine-physics-api/src/lib.rs",
-    "newengine-ui-api/src/draw_protocol.rs",
-    "newengine-assets-api/src/lib.rs",
-    "newengine-time-api/src/lib.rs",
-    "newengine-materials/src/service.rs",
-    "newengine-model-domain-api/src/lib.rs",
-    "newengine-ecs-api/src/lib.rs",
-    "newengine-entity-api/src/lib.rs",
-    "newengine-ai-api/src/lib.rs",
-)
+
+API_ID_CONSTANT_CRATES = {
+    "newengine-render-api",
+    "newengine-physics-api",
+    "newengine-ui-api",
+    "newengine-assets-api",
+    "newengine-time-api",
+    "newengine-materials",
+    "newengine-model-domain-api",
+    "newengine-ecs-api",
+    "newengine-entity-api",
+    "newengine-ai-api",
+}
 
 ALLOW_PROVIDER_ID_PARTS = (
     pathlib.Path("tools/scripts/northstar_bridge"),  # diagnostic tooling scans provider/gateway ids as data
@@ -129,26 +132,25 @@ def rel(path: pathlib.Path) -> pathlib.Path:
     return path.relative_to(REPO_ROOT)
 
 
+def iter_files_with_suffixes(root: pathlib.Path, suffixes: set[str]) -> Iterable[pathlib.Path]:
+    # Prune ignored build/cache trees before descent. pathlib.rglob() still walks those
+    # trees and only lets us discard entries afterwards, which made this CI gate scale
+    # with generated output rather than architecture source.
+    for dirpath, dirnames, filenames in os.walk(root, topdown=True):
+        dirnames[:] = [name for name in dirnames if name not in SKIP_DIRS]
+        base = pathlib.Path(dirpath)
+        for name in filenames:
+            path = base / name
+            if path.suffix.lower() in suffixes:
+                yield path
+
+
 def iter_text_files() -> Iterable[pathlib.Path]:
-    for path in REPO_ROOT.rglob("*"):
-        if not path.is_file():
-            continue
-        if any(part in SKIP_DIRS for part in path.parts):
-            continue
-        if path.suffix.lower() not in TEXT_SUFFIXES:
-            continue
-        yield path
+    yield from iter_files_with_suffixes(REPO_ROOT, TEXT_SUFFIXES)
 
 
 def iter_code_files() -> Iterable[pathlib.Path]:
-    for path in REPO_ROOT.rglob("*"):
-        if not path.is_file():
-            continue
-        if any(part in SKIP_DIRS for part in path.parts):
-            continue
-        if path.suffix.lower() not in CODE_SUFFIXES:
-            continue
-        yield path
+    yield from iter_files_with_suffixes(REPO_ROOT, CODE_SUFFIXES)
 
 
 def is_relative_to(path: pathlib.Path, parent: pathlib.Path) -> bool:
@@ -161,7 +163,15 @@ def is_relative_to(path: pathlib.Path, parent: pathlib.Path) -> bool:
 
 def is_provider_id_allowed(rel_path: pathlib.Path) -> bool:
     normalized = rel_path.as_posix()
-    if any(normalized.endswith(suffix) for suffix in API_ID_CONSTANT_FILES):
+    parts = rel_path.parts
+    # Provider/service identity constants may move between modules inside their canonical
+    # API crate; architecture policy follows crate ownership, not a historical file path.
+    if "crates" in parts:
+        crate_index = parts.index("crates") + 1
+        if crate_index < len(parts) and parts[crate_index] in API_ID_CONSTANT_CRATES:
+            return True
+    # Generated deployed provider metadata is inventory evidence, never consumer source.
+    if parts and parts[0] == "pluginsRuntime" and rel_path.name.endswith(".nspmeta.json"):
         return True
     if any(rel_path == p or is_relative_to(rel_path, p) for p in ALLOW_PROVIDER_ID_PARTS):
         return True
@@ -176,7 +186,7 @@ def is_provider_id_allowed(rel_path: pathlib.Path) -> bool:
 
 def is_provider_impl_path(rel_path: pathlib.Path) -> bool:
     parts = rel_path.parts
-    return bool(parts and parts[0] in {"Plugins", "Importers"})
+    return bool(parts and parts[0] in {"Plugins", "PluginsSrc", "Importers"})
 
 
 def scan_public_neytd() -> list[Finding]:
@@ -202,7 +212,16 @@ def scan_direct_provider_ids() -> list[Finding]:
     for path in iter_code_files():
         rp = rel(path)
         lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+        # Provider IDs are legitimate fixture data. Most Rust source keeps its cfg(test)
+        # module at EOF; exclude that test region and dedicated tests.rs files from the
+        # consumer-hardcoding invariant rather than accumulating path-specific allowlists.
+        test_region_start = next(
+            (idx for idx, line in enumerate(lines, start=1) if line.strip() == "#[cfg(test)]"),
+            None,
+        )
         for idx, line in enumerate(lines, start=1):
+            if path.name == "tests.rs" or (test_region_start is not None and idx >= test_region_start):
+                continue
             if direct_call.search(line):
                 findings.append(Finding("ERROR", "direct-provider-id", rp, idx, "consumer calls provider service id directly; use engine.* gateway", line))
                 continue
@@ -268,31 +287,52 @@ def scan_large_files(strict: bool, fail_tracked: bool) -> tuple[list[Finding], i
     findings: list[Finding] = []
     ledger = load_large_debt_ledger()
     tracked_count = 0
-    for suffix in ("*.rs", "*.py"):
-        for path in REPO_ROOT.rglob(suffix):
-            if any(part in SKIP_DIRS for part in path.parts):
+    for path in iter_files_with_suffixes(REPO_ROOT, {".rs", ".py"}):
+        rp = rel(path)
+        if any(rp.as_posix().endswith(s) for s in LARGE_FILE_ALLOW_SUFFIXES):
+            continue
+        try:
+            loc = sum(1 for _ in path.open(encoding="utf-8", errors="replace"))
+        except OSError:
+            continue
+        if loc > LARGE_FILE_LIMIT:
+            key = rp.as_posix()
+            if key in ledger:
+                tracked_count += 1
+                if fail_tracked:
+                    findings.append(Finding("ERROR", "large-module", rp, 0, f"{loc} LOC > {LARGE_FILE_LIMIT}; tracked debt owner_wave={ledger[key].get('owner_wave', '<unknown>')}"))
                 continue
-            rp = rel(path)
-            if any(rp.as_posix().endswith(s) for s in LARGE_FILE_ALLOW_SUFFIXES):
-                continue
-            try:
-                loc = sum(1 for _ in path.open(encoding="utf-8", errors="replace"))
-            except OSError:
-                continue
-            if loc > LARGE_FILE_LIMIT:
-                key = rp.as_posix()
-                if key in ledger:
-                    tracked_count += 1
-                    if fail_tracked:
-                        findings.append(Finding("ERROR", "large-module", rp, 0, f"{loc} LOC > {LARGE_FILE_LIMIT}; tracked debt owner_wave={ledger[key].get('owner_wave', '<unknown>')}"))
-                    continue
-                sev = "ERROR" if strict else "WARN"
-                findings.append(Finding(sev, "large-module", rp, 0, f"{loc} LOC > {LARGE_FILE_LIMIT}; untracked split debt; add ownership split or explicit ledger entry"))
+            sev = "ERROR" if strict else "WARN"
+            findings.append(Finding(sev, "large-module", rp, 0, f"{loc} LOC > {LARGE_FILE_LIMIT}; untracked split debt; add ownership split or explicit ledger entry"))
     return findings, tracked_count
+
+
+def scan_environment_isolation() -> list[Finding]:
+    gate = SCRIPT_ROOT / 'environment_isolation_gate.py'
+    result = subprocess.run(
+        [sys.executable, str(gate)],
+        cwd=ENGINE_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode == 0:
+        return []
+    detail = (result.stdout + result.stderr).strip() or 'environment isolation gate failed'
+    return [
+        Finding(
+            'ERROR',
+            'environment-isolation',
+            pathlib.Path('NewEngine/neocore2'),
+            0,
+            detail,
+        )
+    ]
 
 
 def run_checks(strict_large_files: bool, strict_boundaries: bool, fail_tracked_large_debt: bool) -> tuple[list[Finding], int]:
     findings: list[Finding] = []
+    findings.extend(scan_environment_isolation())
     findings.extend(scan_public_neytd())
     findings.extend(scan_direct_provider_ids())
     findings.extend(scan_hidden_fallbacks())

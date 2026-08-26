@@ -180,11 +180,9 @@ mod tests {
             .join("AssetInspector");
         let normalized = normalize_path(PathBuf::from("../../cache/asset-inspector"), Some(&base));
         assert!(normalized.is_absolute());
-        assert!(
-            !normalized
-                .components()
-                .any(|component| matches!(component, Component::ParentDir | Component::CurDir))
-        );
+        assert!(!normalized
+            .components()
+            .any(|component| matches!(component, Component::ParentDir | Component::CurDir)));
         assert!(normalized.ends_with(Path::new("cache/asset-inspector")));
     }
 
@@ -201,10 +199,8 @@ mod tests {
         );
         let child = resolve_under_root(spec, &root, Path::new("shaders/../shaders/vulkan"));
         assert!(child.ends_with(Path::new("cache/asset-inspector/shaders/vulkan")));
-        assert!(
-            !child
-                .components()
-                .any(|component| matches!(component, Component::ParentDir | Component::CurDir))
-        );
+        assert!(!child
+            .components()
+            .any(|component| matches!(component, Component::ParentDir | Component::CurDir)));
     }
 }

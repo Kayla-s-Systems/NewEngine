@@ -334,7 +334,7 @@ fn draw_procedural_terrain_for_pass(
                 )
             };
 
-        let mut per = this.ensure_per_draw_ubo_with_binding(
+        let per = this.ensure_per_draw_ubo_with_binding(
             r,
             lit,
             key,
@@ -345,8 +345,6 @@ fn draw_procedural_terrain_for_pass(
             terrain_local_shadow_texture,
             sampler,
         )?;
-        per.last_seen_frame = this.frame.frame_index;
-        this.gpu.material.per_draw_ubo.insert(key, per);
 
         super::super::passes_ubo::write_lit_ubo_ex(
             r,

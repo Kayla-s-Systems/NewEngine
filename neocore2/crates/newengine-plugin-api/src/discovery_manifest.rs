@@ -5,7 +5,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     BackendRouteDescriptorV2, CapabilityDescV2, CapabilityKind, CapabilityRequirementDescV2,
-    CapabilityRole, ContractRefV2, PluginBootstrapPhase, PluginDescriptorV2, PluginKind, SystemTagV2,
+    CapabilityRole, ContractRefV2, PluginBootstrapPhase, PluginDescriptorV2, PluginKind,
+    SystemTagV2,
 };
 
 pub const PLUGIN_DISCOVERY_MANIFEST_SCHEMA_VERSION: u32 = 1;
@@ -282,7 +283,6 @@ fn cap_kind_from_u8(v: u8) -> Result<CapabilityKind, String> {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -321,10 +321,13 @@ mod tests {
 
         let projection = PluginDiscoveryDescriptorV1::from_descriptor_v2(&descriptor);
         let json = serde_json::to_string(&projection).expect("serialize");
-        let decoded: PluginDiscoveryDescriptorV1 = serde_json::from_str(&json).expect("deserialize");
+        let decoded: PluginDiscoveryDescriptorV1 =
+            serde_json::from_str(&json).expect("deserialize");
         assert_eq!(decoded, projection);
 
-        let restored = decoded.to_descriptor_v2().expect("restore typed descriptor");
+        let restored = decoded
+            .to_descriptor_v2()
+            .expect("restore typed descriptor");
         assert_eq!(
             PluginDiscoveryDescriptorV1::from_descriptor_v2(&restored),
             projection

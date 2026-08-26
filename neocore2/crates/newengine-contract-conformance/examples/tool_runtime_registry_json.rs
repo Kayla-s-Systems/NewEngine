@@ -24,6 +24,15 @@ fn main() {
                 "output_relative": spec.output_relative,
                 "content_kind": spec.content_kind,
                 "schema_contract_key": spec.schema_contract_key,
+                "authored_schema": spec.authored_schema.map(|authored| {
+                    let contract = newengine_contract_registry::contract(authored.contract_key)
+                        .expect("validated authored schema contract");
+                    serde_json::json!({
+                        "contract_key": authored.contract_key,
+                        "schema_id": contract.advertised_id,
+                        "declaration_attribute": authored.declaration_attribute,
+                    })
+                }),
                 "readable_legacy_schema_versions": spec.readable_legacy_schema_versions,
                 "commands": commands,
                 "asset_manager_decode": spec.asset_manager_decode.map(|decode| serde_json::json!({

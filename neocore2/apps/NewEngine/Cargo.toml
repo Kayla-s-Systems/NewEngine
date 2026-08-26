@@ -1,0 +1,29 @@
+[package]
+name = "newengine"
+version = "0.1.0"
+build = "build.rs"
+edition = "2021"
+description = "North Star standalone engine/runtime launcher"
+authors = ["Take Some()"]
+license = "Proprietary"
+
+[package.metadata.newengine.winres]
+icon = "../../../../Engine/Content/logo.ico"
+product_name = "North Star NewEngine"
+original_filename = "NewEngine.exe"
+
+[[bin]]
+name = "NewEngine"
+path = "src/main.rs"
+
+[dependencies]
+newengine-project-api = { path = "../../crates/newengine-project-api" }
+newengine-project-runtime = { path = "../../crates/newengine-project-runtime" }
+newengine-plugin-api = { path = "../../crates/newengine-plugin-api" }
+newengine-plugin-host = { path = "../../crates/newengine-plugin-host" }
+newengine-runtime-host = { path = "../../crates/newengine-runtime-host", default-features = false, features = ["full-runtime"] }
+newengine-core = { path = "../../crates/newengine-core" }
+serde_json = "1"
+
+[build-dependencies]
+embed-resource = "2"

@@ -53,9 +53,11 @@ fn should_request_shell_ui(
     provider_surface_ready: bool,
     game_ui_layer_active: bool,
     editor_overlay_active: bool,
+    shell_plan_active: bool,
 ) -> bool {
     provider_ui_active
         && !scene_launch_active
+        && shell_plan_active
         && (provider_ui_needed || provider_surface_ready)
         && (editor_overlay_active || !game_ui_layer_active)
 }
@@ -359,11 +361,12 @@ impl HostPlatformRuntime {
         }
         if screen_profile_refresh.shell_ui {
             newengine_ulog_api::ulog::info!(
-                "platform runtime: presentation render plan surface={:?} focus={:?} shell_domain={:?} shell_surfaces={:?} provider_ui_active={} scene_launch_active={} editor_overlay_active={}",
+                "platform runtime: presentation render plan surface={:?} focus={:?} shell_domain={:?} shell_surfaces={:?} shell_surface_count={} provider_ui_active={} scene_launch_active={} editor_overlay_active={}",
                 presentation_surface,
                 presentation_focus,
                 shell_domain,
                 shell_ui_plan.surface_ids,
+                shell_ui_plan.surface_ids.len(),
                 provider_ui_active,
                 scene_launch_active,
                 editor_overlay_active,
@@ -477,6 +480,7 @@ impl HostPlatformRuntime {
             provider_surface_ready,
             game_ui_layer_active,
             editor_overlay_active,
+            !shell_ui_plan.surface_ids.is_empty(),
         );
         let mut shell_ui_draw = if shell_requested {
             if shell_ui_refresh {
@@ -902,13 +906,27 @@ mod game_ui_layer_tests {
     #[test]
     fn active_editor_shell_is_not_suppressed_by_game_hud() {
         assert!(should_request_shell_ui(
-            true, false, false, true, true, true,
+            true, false, false, true, true, true, true,
         ));
         assert!(!should_request_shell_ui(
-            true, false, false, true, true, false,
+            true, false, false, true, true, false, true,
         ));
         assert!(!should_request_shell_ui(
-            true, true, true, true, false, true,
+            true, true, true, true, false, true, true,
+        ));
+    }
+
+    #[test]
+    fn game_viewport_without_shell_surface_never_requests_empty_shell_draw() {
+        assert!(!should_request_shell_ui(
+            true, false, true, true, false, false, false,
+        ));
+    }
+
+    #[test]
+    fn active_frontend_surface_still_requests_shell_draw() {
+        assert!(should_request_shell_ui(
+            true, false, true, true, false, false, true,
         ));
     }
 

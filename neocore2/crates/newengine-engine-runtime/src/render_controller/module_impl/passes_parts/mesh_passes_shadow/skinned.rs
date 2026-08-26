@@ -115,7 +115,7 @@ pub(super) fn draw_skinned_player_primitives_shadow(
         ubo_key = hash_combine_u64(ubo_key, base_texture.get() as u64);
         ubo_key = hash_combine_u64(ubo_key, pipeline.get() as u64);
         ubo_key = hash_combine_u64(ubo_key, this.frame.frame_index & 3);
-        let mut per = this.ensure_per_draw_ubo_with_binding(
+        let per = this.ensure_per_draw_ubo_with_binding(
             r,
             lit,
             ubo_key,
@@ -126,8 +126,6 @@ pub(super) fn draw_skinned_player_primitives_shadow(
             lit.white_texture,
             lit.clamp_sampler,
         )?;
-        per.last_seen_frame = this.frame.frame_index;
-        this.gpu.material.per_draw_ubo.insert(ubo_key, per);
         crate::render_controller::module_impl::passes_ubo::write_lit_ubo_ex(
             r,
             per.ubo,

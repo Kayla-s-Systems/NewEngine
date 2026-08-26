@@ -316,7 +316,7 @@ fn lower_single_gpu_mesh_instance(
     } else {
         ctx.local_shadow_frame.texture
     };
-    let mut per = this.ensure_per_draw_ubo_with_binding(
+    let per = this.ensure_per_draw_ubo_with_binding(
         r,
         lit,
         key,
@@ -327,8 +327,6 @@ fn lower_single_gpu_mesh_instance(
         local_shadow_texture,
         sampler,
     )?;
-    per.last_seen_frame = this.frame.frame_index;
-    this.gpu.material.per_draw_ubo.insert(key, per);
 
     let mvp = if matches!(draw_list, RenderDrawListKind::ShadowCasters) {
         ctx.shadow_frame.light_mvp * model

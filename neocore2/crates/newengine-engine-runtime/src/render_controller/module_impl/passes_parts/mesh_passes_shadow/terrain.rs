@@ -76,7 +76,7 @@ pub fn draw_procedural_terrain_shadow(
         };
 
         let key = hash_combine_u64(entity_key ^ 0x5a44_1000_0000_0000u64, shadow_view_key);
-        let mut per = this.ensure_per_draw_ubo_with_binding(
+        let per = this.ensure_per_draw_ubo_with_binding(
             r,
             lit,
             key,
@@ -87,8 +87,6 @@ pub fn draw_procedural_terrain_shadow(
             lit.white_texture,
             lit.clamp_sampler,
         )?;
-        per.last_seen_frame = this.frame.frame_index;
-        this.gpu.material.per_draw_ubo.insert(key, per);
 
         let mvp = light_viewproj * model;
         crate::render_controller::module_impl::passes_ubo::write_lit_ubo_ex(

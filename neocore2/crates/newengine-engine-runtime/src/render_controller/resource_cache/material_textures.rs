@@ -104,9 +104,12 @@ impl RuntimeRenderController {
             .with_task_domain(task_domain::ENGINE_ASSETS)
             .with_task_pass(task_pass::TEXTURE_DECODE)
             .with_task_id(format!("render.material.texture.decode.{task_path}"));
+        let host_context = newengine_plugin_host::current_host_context();
         let ticket = thread_pool.submit_request(request, move || {
-            let assets = AssetServiceClient::new(default_host_api());
-            let decoded = assets.textures_entry_runtime_ref_v1_typed(&worker_path);
+            let decoded = newengine_plugin_host::with_host_context(&host_context, || {
+                let assets = AssetServiceClient::new(default_host_api());
+                assets.textures_entry_runtime_ref_v1_typed(&worker_path)
+            });
             *result_out.lock() = Some(decoded);
         });
 

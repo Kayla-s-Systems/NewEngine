@@ -1,6 +1,6 @@
 use std::io::{BufReader, Read, Seek, SeekFrom};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 

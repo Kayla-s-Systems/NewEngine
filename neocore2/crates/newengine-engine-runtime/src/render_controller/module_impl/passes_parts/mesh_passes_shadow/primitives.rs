@@ -187,7 +187,7 @@ pub(super) fn draw_primitives_shadow_body(
                 lit.clamp_sampler,
             );
 
-            let mut per = this.ensure_per_draw_ubo_with_binding(
+            let per = this.ensure_per_draw_ubo_with_binding(
                 r,
                 lit,
                 ubo_key,
@@ -198,8 +198,6 @@ pub(super) fn draw_primitives_shadow_body(
                 lit.white_texture,
                 lit.clamp_sampler,
             )?;
-            per.last_seen_frame = this.frame.frame_index;
-            this.gpu.material.per_draw_ubo.insert(ubo_key, per);
 
             // The light-view transform is instance data, not UBO data. Keep
             // this key stable across shadow refreshes and share it between meshes

@@ -19,7 +19,7 @@ impl SceneMeshPass {
     }
 }
 
-const ROUTE_DIAGNOSTIC_EARLY_FRAMES: u64 = 32;
+const ROUTE_DIAGNOSTIC_EARLY_FRAMES: u64 = 3;
 const ROUTE_DIAGNOSTIC_INTERVAL_FRAMES: u64 = 240;
 
 #[inline]

@@ -299,7 +299,7 @@ pub(super) struct RenderMaterialGpuState {
     pub(super) texture_queue: VecDeque<String>,
     pub(super) texture_queued: FxHashSet<String>,
     pub(super) texture_decode_jobs: FxHashMap<String, MaterialTextureDecodeJob>,
-    pub(super) per_draw_ubo: FxHashMap<u64, PerDrawUbo>,
+    pub(super) per_draw_ubo: FxHashMap<(u64, u8), PerDrawUbo>,
 }
 
 impl RenderMaterialGpuState {

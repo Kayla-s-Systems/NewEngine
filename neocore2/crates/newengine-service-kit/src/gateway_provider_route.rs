@@ -100,6 +100,62 @@ pub fn register_engine_gateway_provider_service_dynamic(
     )
 }
 
+/// Publishes one host-owned dynamic service and its gateway route in a single topology
+/// generation. If service registration, route staging, validation, or commit fails,
+/// the transaction is rolled back and neither half becomes visible.
+pub fn register_engine_gateway_provider_service_dynamic_atomic(
+    decl: EngineGatewayProviderDeclDynamic,
+) -> Result<(), String> {
+    let transaction_owner = format!(
+        "gateway-provider:{}:{}",
+        decl.gateway, decl.provider_service
+    );
+    let transaction =
+        newengine_plugin_host::ProviderRegistrationTransaction::begin_host(transaction_owner)?;
+
+    if let Err(error) = register_engine_gateway_provider_service_dynamic(decl) {
+        transaction.rollback();
+        return Err(error);
+    }
+    if let Err(error) = transaction.validate() {
+        transaction.rollback();
+        return Err(error);
+    }
+    transaction.commit().map(|_| ())
+}
+
+pub fn register_engine_gateway_provider_service_dynamic_atomic_best_effort(
+    decl: EngineGatewayProviderDeclDynamic,
+) -> bool {
+    let gateway = decl.gateway;
+    let capability = decl.capability;
+    let provider_route = decl.provider_route;
+    let owner = decl.owner;
+    match register_engine_gateway_provider_service_dynamic_atomic(decl) {
+        Ok(()) => {
+            newengine_ulog_api::ulog::info!(
+                "engine-runtime route atomically registered gateway='{}' provider_route='{}' capability='{}' owner='{}'",
+                gateway,
+                provider_route,
+                capability,
+                owner
+            );
+            true
+        }
+        Err(e) => {
+            newengine_ulog_api::ulog::warn!(
+                "engine-runtime atomic route registration skipped gateway='{}' provider_route='{}' capability='{}' owner='{}' err='{}'",
+                gateway,
+                provider_route,
+                capability,
+                owner,
+                e
+            );
+            false
+        }
+    }
+}
+
 pub fn register_null_engine_gateway_provider_service_dynamic(
     decl: NullEngineGatewayProviderDeclDynamic,
 ) -> Result<(), String> {

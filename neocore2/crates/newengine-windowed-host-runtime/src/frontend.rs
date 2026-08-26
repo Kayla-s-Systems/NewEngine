@@ -9,8 +9,8 @@ use newengine_runtime_host::app_launcher::{
 use newengine_ui::{UiBuildFn, UiProviderKind};
 
 use crate::platform_runtime::{
-    HostPlatformRuntime, ResolvedPlatformRuntimeConfig, detect_platform_runtime_path,
-    resolve_platform_runtime_config,
+    detect_platform_runtime_path, resolve_platform_runtime_config, HostPlatformRuntime,
+    ResolvedPlatformRuntimeConfig,
 };
 
 /// UI/window-specific extension of the generic runtime-host product profile.

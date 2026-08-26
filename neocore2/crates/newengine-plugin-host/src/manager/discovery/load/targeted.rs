@@ -21,6 +21,13 @@ impl PluginManager {
 
     /// Loads exactly one descriptor-selected plugin id from the default runtime
     /// plugin directory without initializing unrelated providers.
+    ///
+    /// A default-runtime targeted load is authoritative: callers use this path only
+    /// after selecting a concrete plugin id (runtime composition, project browser,
+    /// etc.). Returning `Ok(false)` here used to hide discovery failures and later
+    /// surface as an empty composition graph. Fail closed with the selected id and
+    /// resolved directory instead; the lower-level directory API retains `bool` for
+    /// callers that intentionally probe optional plugin presence.
     pub fn load_plugin_id_default_with_origin(
         &mut self,
         plugin_id: &str,
@@ -28,7 +35,19 @@ impl PluginManager {
         load_origin: PluginLoadOrigin,
     ) -> Result<bool, PluginLoadError> {
         let dir = default_plugins_dir()?;
-        self.load_plugin_id_from_dir_with_origin(&dir, plugin_id, host, load_origin)
+        let loaded =
+            self.load_plugin_id_from_dir_with_origin(&dir, plugin_id, host, load_origin)?;
+        if loaded {
+            return Ok(true);
+        }
+
+        Err(PluginLoadError {
+            path: dir,
+            message: format!(
+                "targeted discovery did not find selected plugin id '{}'; verify the DLL and its .nspmeta.json sidecar are both present and finalized",
+                plugin_id.trim()
+            ),
+        })
     }
 
     /// Loads exactly one descriptor-selected plugin id from a discovery directory.

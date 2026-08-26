@@ -3,6 +3,7 @@ use std::sync::Arc;
 use newengine_core::{Engine, EngineResult, StartupConfig};
 use newengine_runtime_host::app_launcher::{RuntimeHostAppProfile, RuntimeHostBootOption};
 use newengine_ui::{UiBuildFn, UiProviderKind};
+use newengine_windowed_host_runtime::WindowedRuntimeHostProfile;
 
 use crate::options::BOOT_OPTIONS;
 use crate::surface_module::AureliaUiTestSurfaceModule;
@@ -40,7 +41,7 @@ impl RuntimeHostAppProfile for AureliaUiTestApp {
         startup: &StartupConfig,
     ) -> EngineResult<()> {
         engine.register_module(Box::new(
-            newengine_runtime_host::render_runtime::RenderBackendRuntimeModule::new(
+            newengine_render_runtime_adapter::RenderBackendRuntimeModule::new(
                 startup.modules_dir.clone(),
             ),
         ))?;
@@ -49,9 +50,6 @@ impl RuntimeHostAppProfile for AureliaUiTestApp {
             Arc::clone(&self.viewport),
             Arc::clone(&self.plugins),
             Arc::clone(&self.scene),
-        )
-        .with_draw_list_provider(
-            newengine_render_ui_bridge::EngineUiDrawListBridgeProvider::shared(),
         );
 
         engine.register_module(Box::new(render_controller))?;
@@ -71,7 +69,9 @@ impl RuntimeHostAppProfile for AureliaUiTestApp {
         let _registered =
             newengine_assets_ui_runtime::register_assets_ui_gateway_best_effort(asset_client);
     }
+}
 
+impl WindowedRuntimeHostProfile for AureliaUiTestApp {
     #[inline]
     fn ui_build_from_startup(&self, _startup: &StartupConfig) -> Option<Box<dyn UiBuildFn>> {
         None

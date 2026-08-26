@@ -22,11 +22,17 @@ REPO_ROOT = ENGINE_ROOT.parents[1]
 
 CAPABILITY_MATRIX = ENGINE_ROOT / "config" / "capabilities" / "engine_capability_matrix.v1.json"
 CONFORMANCE_MATRIX = ENGINE_ROOT / "config" / "conformance" / "provider_conformance_matrix.v1.json"
-SERVICE_API = ENGINE_ROOT / "crates" / "newengine-service-api" / "src" / "lib.rs"
+SERVICE_GATEWAYS = ENGINE_ROOT / "crates" / "newengine-service-api" / "src" / "gateway.rs"
+SERVICE_KINDS = ENGINE_ROOT / "crates" / "newengine-service-api" / "src" / "kind.rs"
+RENDER_API = ENGINE_ROOT / "crates" / "newengine-render-api" / "src" / "constants.rs"
+PHYSICS_API = ENGINE_ROOT / "crates" / "newengine-physics-api" / "src" / "service.rs"
+UI_API = ENGINE_ROOT / "crates" / "newengine-ui-api" / "src" / "draw_protocol.rs"
+SCRIPTING_API = ENGINE_ROOT / "crates" / "newengine-scripting-api" / "src" / "protocol.rs"
+ASSETS_API = ENGINE_ROOT / "crates" / "newengine-assets-api" / "src" / "lib.rs"
 PLUGIN_HOST_STATE = ENGINE_ROOT / "crates" / "newengine-plugin-host" / "src" / "host_context" / "state.rs"
-PLUGIN_HOST_GATEWAY = ENGINE_ROOT / "crates" / "newengine-plugin-host" / "src" / "host_context" / "gateway.rs"
-CORE_PLUGIN_DIAGNOSTICS = ENGINE_ROOT / "crates" / "newengine-core" / "src" / "engine" / "plugins.rs"
-NULL_PROVIDERS = ENGINE_ROOT / "crates" / "newengine-runtime-host" / "src" / "null_providers.rs"
+PLUGIN_HOST_GATEWAY = ENGINE_ROOT / "crates" / "newengine-plugin-host" / "src" / "host_context" / "gateway" / "routes.rs"
+CORE_PLUGIN_DIAGNOSTICS = ENGINE_ROOT / "crates" / "newengine-core" / "src" / "engine" / "plugins" / "diagnostics.rs"
+NULL_PROVIDERS = ENGINE_ROOT / "crates" / "newengine-null-providers-runtime" / "src" / "lib.rs"
 REGISTRY_TESTS = ENGINE_ROOT / "crates" / "newengine-plugin-host" / "src" / "service_gateway" / "registry" / "tests.rs"
 ASSET_BROWSER_PRESENTATION = ENGINE_ROOT / "crates" / "newengine-assets-catalog-ui-runtime" / "src" / "entry_presentation.rs"
 
@@ -102,13 +108,76 @@ def load_json(path: pathlib.Path) -> tuple[dict, list[Finding]]:
         return {}, [Finding("ERROR", "p1-matrix", path, f"invalid JSON: {exc}")]
 
 
-def rust_engine_gateways() -> set[str]:
-    text = SERVICE_API.read_text(encoding="utf-8", errors="replace") if SERVICE_API.exists() else ""
-    # Parse the match arms in EngineServiceKind::engine_gateway_id. This keeps
-    # the P1 matrix tied to the engine's declared gateway vocabulary without
-    # requiring a Rust build in workspace tools.
-    return set(re.findall(r'Self::[A-Za-z0-9_]+\s*=>\s*"(engine\.[^"]+)"', text))
+def rust_const_str(path: pathlib.Path, name: str) -> str | None:
+    text = path.read_text(encoding="utf-8", errors="replace") if path.exists() else ""
+    match = re.search(
+        rf'pub\s+const\s+{re.escape(name)}\s*:\s*&str\s*=\s*"([^"]+)"',
+        text,
+    )
+    return match.group(1) if match else None
 
+
+def rust_engine_gateways() -> set[str]:
+    gateway_text = (
+        SERVICE_GATEWAYS.read_text(encoding="utf-8", errors="replace")
+        if SERVICE_GATEWAYS.exists()
+        else ""
+    )
+    kind_text = (
+        SERVICE_KINDS.read_text(encoding="utf-8", errors="replace")
+        if SERVICE_KINDS.exists()
+        else ""
+    )
+    canonical = set(
+        re.findall(
+            r'pub\s+const\s+ENGINE_[A-Z0-9_]+_GATEWAY_ID\s*:\s*&str\s*=\s*"(engine\.[^"]+)"',
+            gateway_text,
+        )
+    )
+    # Keep literals from EngineServiceKind for domains that have not yet migrated
+    # to named gateway constants. This makes the gate useful during P1 migration
+    # instead of silently dropping legacy declarations.
+    legacy = set(
+        re.findall(
+            r'Self::[A-Za-z0-9_]+\s*=>\s*"(engine\.[^"]+)"',
+            kind_text,
+        )
+    )
+    return canonical | legacy
+
+
+def provider_family_authorities() -> dict[str, tuple[str, str, str]]:
+    rows = {
+        "render": (
+            rust_const_str(SERVICE_GATEWAYS, "ENGINE_RENDER_GATEWAY_ID"),
+            rust_const_str(RENDER_API, "RENDER_BACKEND_CAPABILITY_ID"),
+            rust_const_str(RENDER_API, "RENDER_SERVICE_ID"),
+        ),
+        "physics": (
+            rust_const_str(SERVICE_GATEWAYS, "ENGINE_PHYSICS_GATEWAY_ID"),
+            rust_const_str(PHYSICS_API, "PHYSICS_BACKEND_CAPABILITY_ID"),
+            rust_const_str(PHYSICS_API, "PHYSICS_SERVICE_ID"),
+        ),
+        "ui": (
+            rust_const_str(SERVICE_GATEWAYS, "ENGINE_UI_GATEWAY_ID"),
+            rust_const_str(UI_API, "UI_BACKEND_CAPABILITY_ID"),
+            rust_const_str(UI_API, "UI_SERVICE_ID"),
+        ),
+        "scripting": (
+            rust_const_str(SERVICE_GATEWAYS, "ENGINE_SCRIPTING_GATEWAY_ID"),
+            rust_const_str(SCRIPTING_API, "SCRIPTING_BACKEND_CAPABILITY_ID"),
+            rust_const_str(SCRIPTING_API, "SCRIPTING_SERVICE_ID"),
+        ),
+        "assets": (
+            rust_const_str(SERVICE_GATEWAYS, "ENGINE_ASSETS_GATEWAY_ID"),
+            rust_const_str(ASSETS_API, "ASSET_BACKEND_CAPABILITY_ID"),
+            rust_const_str(ASSETS_API, "ASSET_PROVIDER_SERVICE_ID"),
+        ),
+    }
+    return {
+        family: (gateway or "", capability or "", service or "")
+        for family, (gateway, capability, service) in rows.items()
+    }
 
 def scan_capability_matrix() -> list[Finding]:
     matrix, findings = load_json(CAPABILITY_MATRIX)
@@ -191,19 +260,62 @@ def scan_null_providers() -> list[Finding]:
     out: list[Finding] = []
     text = NULL_PROVIDERS.read_text(encoding="utf-8", errors="replace") if NULL_PROVIDERS.exists() else ""
     required = {
-        "NullRenderer": ("NULL_RENDER_SERVICE", "register_null_render_provider", "engine.render.null", "render.backend"),
-        "NullPhysics": ("NULL_PHYSICS_SERVICE", "register_null_physics_provider", "engine.physics.null", "physics.backend"),
-        "NullUI": ("NULL_UI_SERVICE", "register_null_ui_provider", "engine.ui.null", "ui.backend"),
-        "NullAI": ("NULL_AI_SERVICE", "register_null_ai_provider", "engine.ai.null", "ai.backend"),
+        "NullRenderer": (
+            "NULL_RENDER_SERVICE",
+            "NULL_RENDER_ROUTE",
+            "register_null_render_provider",
+            "RENDER_BACKEND_SERVICE_SPEC",
+            "spec.engine_gateway_id",
+            "spec.backend_capability_id",
+            "service_kind: spec.domain",
+        ),
+        "NullPhysics": (
+            "NULL_PHYSICS_SERVICE",
+            "NULL_PHYSICS_ROUTE",
+            "register_null_physics_provider",
+            "PHYSICS_BACKEND_SERVICE_SPEC",
+            "spec.engine_gateway_id",
+            "spec.backend_capability_id",
+            "service_kind: spec.domain",
+        ),
+        "NullUI": (
+            "NULL_UI_SERVICE",
+            "NULL_UI_ROUTE",
+            "register_null_ui_provider",
+            "UI_BACKEND_SERVICE_SPEC",
+            "spec.engine_gateway_id",
+            "spec.backend_capability_id",
+            "service_kind: spec.domain",
+        ),
+        "NullAI": (
+            "NULL_AI_SERVICE",
+            "register_null_ai_provider",
+            "engine.ai.null",
+            "ai.backend",
+        ),
     }
     for name, tokens in required.items():
         for token in tokens:
             if token not in text:
-                out.append(Finding("ERROR", "null-provider", NULL_PROVIDERS, f"{name} must be a visible registered NullProvider route", token))
+                out.append(
+                    Finding(
+                        "ERROR",
+                        "null-provider",
+                        NULL_PROVIDERS,
+                        f"{name} must consume its canonical provider contract and expose a visible null route",
+                        token,
+                    )
+                )
     if "register_null_engine_gateway_provider_service_dynamic_best_effort" not in text:
-        out.append(Finding("ERROR", "null-provider", NULL_PROVIDERS, "null providers must register through null-provider gateway helper"))
+        out.append(
+            Finding(
+                "ERROR",
+                "null-provider",
+                NULL_PROVIDERS,
+                "null providers must register through null-provider gateway helper",
+            )
+        )
     return out
-
 
 def scan_conformance_matrix() -> list[Finding]:
     matrix, findings = load_json(CONFORMANCE_MATRIX)
@@ -240,6 +352,97 @@ def scan_conformance_matrix() -> list[Finding]:
     return out
 
 
+def scan_api_contract_ownership() -> list[Finding]:
+    out: list[Finding] = []
+    conformance, conformance_findings = load_json(CONFORMANCE_MATRIX)
+    capability, capability_findings = load_json(CAPABILITY_MATRIX)
+    if conformance_findings or capability_findings:
+        return conformance_findings + capability_findings
+
+    families = {
+        str(row.get("family", "")).strip(): row
+        for row in conformance.get("families", [])
+        if isinstance(row, dict)
+    }
+    records = {
+        str(row.get("engine_gateway", "")).strip(): row
+        for row in capability.get("records", [])
+        if isinstance(row, dict)
+    }
+
+    for family, (gateway, capability_id, service_id) in provider_family_authorities().items():
+        if not gateway or not capability_id or not service_id:
+            out.append(
+                Finding(
+                    "ERROR",
+                    "api-contract-owner",
+                    SERVICE_GATEWAYS,
+                    f"failed to resolve Rust authority for provider family '{family}'",
+                    f"gateway={gateway!r} capability={capability_id!r} service={service_id!r}",
+                )
+            )
+            continue
+
+        family_row = families.get(family)
+        if family_row is None:
+            out.append(
+                Finding(
+                    "ERROR",
+                    "api-contract-owner",
+                    CONFORMANCE_MATRIX,
+                    "provider family missing from conformance matrix",
+                    family,
+                )
+            )
+        else:
+            for field, expected in (
+                ("gateway", gateway),
+                ("capability", capability_id),
+                ("service", service_id),
+            ):
+                actual = str(family_row.get(field, "")).strip()
+                if actual != expected:
+                    out.append(
+                        Finding(
+                            "ERROR",
+                            "api-contract-owner",
+                            CONFORMANCE_MATRIX,
+                            f"{family}.{field} drifted from Rust API owner",
+                            f"expected={expected} actual={actual}",
+                        )
+                    )
+
+        capability_row = records.get(gateway)
+        if capability_row is None:
+            out.append(
+                Finding(
+                    "ERROR",
+                    "api-contract-owner",
+                    CAPABILITY_MATRIX,
+                    "API-owned provider gateway missing from capability matrix",
+                    gateway,
+                )
+            )
+        else:
+            for field, expected in (
+                ("capability_id", capability_id),
+                ("owner_service", service_id),
+                ("contract", service_id),
+            ):
+                actual = str(capability_row.get(field, "")).strip()
+                if actual != expected:
+                    out.append(
+                        Finding(
+                            "ERROR",
+                            "api-contract-owner",
+                            CAPABILITY_MATRIX,
+                            f"{family}.{field} drifted from Rust API owner",
+                            f"expected={expected} actual={actual}",
+                        )
+                    )
+    return out
+
+
 def scan_asset_browser_contract_policy() -> list[Finding]:
     """Forbid Asset Browser from guessing semantics by extension/name/hash.
 
@@ -272,6 +475,7 @@ def run_checks() -> list[Finding]:
     findings.extend(scan_diagnostics_visibility())
     findings.extend(scan_null_providers())
     findings.extend(scan_conformance_matrix())
+    findings.extend(scan_api_contract_ownership())
     findings.extend(scan_asset_browser_contract_policy())
     return findings
 

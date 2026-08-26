@@ -76,7 +76,7 @@ def main()->int:
  try:
   with out_path.open('w',encoding='utf-8') as out,err_path.open('w',encoding='utf-8') as err:
    proc=subprocess.Popen([str(exe),'--no-startup-window'],cwd=root,env=env,stdout=out,stderr=err)
-   wait_for("authored game .neui mounted ref='ui/engine/main_menu.neui@surface'",45,'main menu mounted')
+   wait_for("authored game .neui mounted ref='ui/frontend/main_menu.neui@surface'",45,'main menu mounted')
    hwnd=game_window(); resize_client(hwnd,1280,720); wait_boot('size=1280x720')
    click_design(hwnd,240,336); wait_for(transition('main_menu','loading','game.start'),10,'scaled main-menu hit test')
    wait_for(transition('loading','gameplay','runtime_ready'),120,'loading -> gameplay')

@@ -157,8 +157,12 @@ fn submit_static_world_decode_jobs(
                 "scene.static-world.decode.{:016x}",
                 newengine_primitives::fnv1a_64(&source)
             ));
+        let host_context = newengine_plugin_host::current_host_context();
         let ticket = thread_pool.submit_request(request, move || {
-            *result_out.lock() = Some(decode_runtime_ydd_prefab(&worker_source));
+            let decoded = newengine_plugin_host::with_host_context(&host_context, || {
+                decode_runtime_ydd_prefab(&worker_source)
+            });
+            *result_out.lock() = Some(decoded);
         });
         state
             .decode_jobs

@@ -100,6 +100,62 @@
         "target_platform"
       ],
       "deterministic": true
+    },
+    {
+      "importer_id": "northstar.importer.speedtree_srt.v1",
+      "version": "1",
+      "label": "SpeedTree SRT foliage importer adapter",
+      "source_extensions": [
+        "srt"
+      ],
+      "source_content_kinds": [
+        "source.foliage.speedtree_srt"
+      ],
+      "runtime_outputs": [
+        ".nefoliage@foliage_runtime",
+        ".ydd@drawable_lods",
+        ".nemat@material_library",
+        ".ytd@texture_dictionary"
+      ],
+      "owner_gateway": "engine.assets.models",
+      "required_capability": "assets.models.foliage.srt_importer",
+      "cache_key_inputs": [
+        "source_path",
+        "source_content_hash",
+        "importer_id",
+        "importer_version",
+        "settings_hash",
+        "target_platform"
+      ],
+      "deterministic": true
+    },
+    {
+      "importer_id": "northstar.importer.speedtree_spm.v1",
+      "version": "1",
+      "label": "SpeedTree Modeler SPM foliage importer adapter",
+      "source_extensions": [
+        "spm"
+      ],
+      "source_content_kinds": [
+        "source.foliage.speedtree_spm"
+      ],
+      "runtime_outputs": [
+        ".nefoliage@foliage_runtime",
+        ".ydd@drawable_lods",
+        ".nemat@material_library",
+        ".ytd@texture_dictionary"
+      ],
+      "owner_gateway": "engine.assets.models",
+      "required_capability": "assets.models.foliage.spm_importer",
+      "cache_key_inputs": [
+        "source_path",
+        "source_content_hash",
+        "importer_id",
+        "importer_version",
+        "settings_hash",
+        "target_platform"
+      ],
+      "deterministic": true
     }
   ]
 }

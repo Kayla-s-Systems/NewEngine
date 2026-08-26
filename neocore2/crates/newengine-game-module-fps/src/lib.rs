@@ -285,12 +285,8 @@ mod tests {
             .iter()
             .any(|provider| provider.role == GameModuleGameplayProviderRole::GameplaySystem));
         assert!(descriptor.providers.iter().any(|provider| provider.role
-            == Some(GameModuleGameplayProviderRole::GameplayUi)
+            == GameModuleGameplayProviderRole::GameplayUi
             && provider.provider_id == "newengine.gameplay.fps.inventory-hud"));
-        assert!(descriptor
-            .providers
-            .iter()
-            .all(|provider| provider.role.is_some()));
         let requirements = descriptor.runtime_unit_requirements();
         for capability in [
             newengine_game_module_api::GAME_SCENE_BOOTSTRAP_CAPABILITY,

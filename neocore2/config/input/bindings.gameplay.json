@@ -1,6 +1,6 @@
 {
   "id": "newengine.gameready.input.profile",
-  "version": 9,
+  "version": 12,
   "device_preference": "hybrid",
   "keys": [
     {
@@ -74,6 +74,11 @@
       "label": "I"
     },
     {
+      "code": 31,
+      "id": "keyboard.key_m",
+      "label": "keyboard.key_m"
+    },
+    {
       "code": 35,
       "id": "keyboard.key_q",
       "label": "Q"
@@ -87,6 +92,11 @@
       "code": 37,
       "id": "keyboard.key_s",
       "label": "S"
+    },
+    {
+      "code": 40,
+      "id": "keyboard.key_v",
+      "label": "V"
     },
     {
       "code": 41,
@@ -286,6 +296,13 @@
     {
       "id": "player.inventory.toggle",
       "label": "Toggle inventory",
+      "contexts": [],
+      "dispatch": "broadcast",
+      "effects": []
+    },
+    {
+      "id": "player.character.select.toggle",
+      "label": "Playable character",
       "contexts": [],
       "dispatch": "broadcast",
       "effects": []
@@ -526,7 +543,14 @@
         "player.equipment.sidearm",
         "player.equipment.melee",
         "player.equipment.throwable",
-        "game.hud.visibility.toggle"
+        "game.hud.visibility.toggle",
+        "player.character.select.toggle",
+        "ui.accept",
+        "ui.back",
+        "ui.nav.up",
+        "ui.nav.down",
+        "ui.nav.left",
+        "ui.nav.right"
       ],
       "context_filter": [],
       "priority": 120,
@@ -908,13 +932,6 @@
       "device": "MouseButton",
       "code": 1,
       "name": null,
-      "phase": "Down"
-    },
-    {
-      "action": "player.projectile.launch",
-      "device": "MouseButton",
-      "code": 1,
-      "name": null,
       "phase": "Pressed"
     },
     {
@@ -944,6 +961,13 @@
       "code": 0,
       "name": "RightTrigger2",
       "phase": "Down"
+    },
+    {
+      "action": "player.fire.primary",
+      "device": "GamepadButton",
+      "code": 0,
+      "name": "RightTrigger2",
+      "phase": "Pressed"
     },
     {
       "action": "player.aim",
@@ -1014,6 +1038,27 @@
       "code": 159,
       "name": null,
       "phase": "Pressed"
+    },
+    {
+      "action": "camera.view.next",
+      "device": "Keyboard",
+      "code": 40,
+      "name": null,
+      "phase": "Pressed"
+    },
+    {
+      "action": "player.character.select.toggle",
+      "device": "Keyboard",
+      "code": 31,
+      "name": null,
+      "phase": "Pressed"
+    },
+    {
+      "action": "player.fire.primary",
+      "device": "MouseButton",
+      "code": 1,
+      "name": null,
+      "phase": "Down"
     }
   ],
   "gamepad_axes": [

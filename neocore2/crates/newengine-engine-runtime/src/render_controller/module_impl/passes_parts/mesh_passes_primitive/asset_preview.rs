@@ -142,7 +142,7 @@ fn draw_asset_preview_grid_layer(
         "asset.preview.grid.ubo:{identity}:{}",
         pipeline.get()
     ));
-    let mut per = this.ensure_per_draw_ubo_with_binding(
+    let per = this.ensure_per_draw_ubo_with_binding(
         r,
         lit,
         key,
@@ -153,8 +153,6 @@ fn draw_asset_preview_grid_layer(
         lit.white_texture,
         lit.clamp_sampler,
     )?;
-    per.last_seen_frame = this.frame.frame_index;
-    this.gpu.material.per_draw_ubo.insert(key, per);
     crate::render_controller::module_impl::passes_ubo::write_lit_ubo_ex(
         r,
         per.ubo,
@@ -363,7 +361,7 @@ pub fn draw_asset_preview_bundle(
             normal_texture.get(),
             roughness_texture.get(),
         ));
-        let mut per = this.ensure_per_draw_ubo_with_binding(
+        let per = this.ensure_per_draw_ubo_with_binding(
             r,
             lit,
             key,
@@ -374,8 +372,6 @@ pub fn draw_asset_preview_bundle(
             lit.white_texture,
             sampler,
         )?;
-        per.last_seen_frame = this.frame.frame_index;
-        this.gpu.material.per_draw_ubo.insert(key, per);
         crate::render_controller::module_impl::passes_ubo::write_lit_ubo_ex(
             r,
             per.ubo,

@@ -3,19 +3,18 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use newengine_asset_bootstrap_runtime::{collect_app_asset_roots, mount_asset_roots_best_effort};
 use newengine_assets::AssetServiceClient;
 use newengine_core::{Engine, EngineReadinessKey, EngineResult, Module, ModuleCtx, StartupConfig};
-use newengine_render_ui_bridge::EngineUiDrawListBridgeProvider;
+use newengine_render_runtime_adapter::RenderBackendRuntimeModule;
 use newengine_runtime_host::app_launcher::{
     RuntimeHostAppProfile, RuntimeHostBootOption, RuntimeHostLaunchSpec, RuntimeHostLauncher,
 };
-use newengine_runtime_host::asset_bootstrap::{
-    collect_app_asset_roots, mount_asset_roots_best_effort,
-};
-use newengine_runtime_host::render_runtime::RenderBackendRuntimeModule;
 use newengine_ui::{UiBuildFn, UiProviderKind};
+use newengine_windowed_host_runtime::{WindowedHostFrontend, WindowedRuntimeHostProfile};
 
 const APP_NAME: &str = "asset-inspector";
+const WINDOW_TITLE: &str = "North Star Asset Inspector";
 const APP_DIR_NAME: &str = "AssetInspector";
 const APP_ASSETS_ENV: &str = newengine_asset_inspector_runtime::ASSET_INSPECTOR_ASSETS_ENV;
 const INSPECTOR_UI_ASSET: &str = "ui/tools/asset_inspector.neui";
@@ -136,7 +135,6 @@ impl AssetInspectorApp {
             fixed_dt_ms: 16,
             app_dir_name: APP_DIR_NAME,
             app_assets_env: APP_ASSETS_ENV,
-            window_title: "North Star Asset Inspector",
             early_log_file_name: "asset-inspector-early.log",
             default_profile_env: None,
             env_defaults: ENV_POLICY,
@@ -173,8 +171,7 @@ impl RuntimeHostAppProfile for AssetInspectorApp {
         .with_primary_lit_material_domain(
             newengine_material_domain_gameready::GAME_READY_LIT_PIPELINE_KEY,
         )
-        .with_draw_list_provider(preview_draw_lists)
-        .with_draw_list_provider(EngineUiDrawListBridgeProvider::shared());
+        .with_draw_list_provider(preview_draw_lists);
         engine.register_module(Box::new(render))?;
         Ok(())
     }
@@ -192,7 +189,6 @@ impl RuntimeHostAppProfile for AssetInspectorApp {
         }
 
         let assets = newengine_assets::AssetServiceClient::new(host.clone());
-        let _ = newengine_textures_runtime::register_textures_gateway_best_effort(assets.clone());
         let _ = newengine_material_runtime::register_materials_gateway_best_effort_with_host(
             Some(host.clone()),
             assets.clone(),
@@ -214,7 +210,9 @@ impl RuntimeHostAppProfile for AssetInspectorApp {
         let _ = newengine_assets::register_asset_document_gateways_best_effort(host);
         newengine_assets_ui_runtime::register_assets_ui_gateway_best_effort(assets);
     }
+}
 
+impl WindowedRuntimeHostProfile for AssetInspectorApp {
     fn ui_build_from_startup(&self, _startup: &StartupConfig) -> Option<Box<dyn UiBuildFn>> {
         None
     }
@@ -229,5 +227,5 @@ fn main() {
         AssetInspectorApp::launch_spec(),
         AssetInspectorApp::default(),
     )
-    .run_process();
+    .run_process_with_frontend(WindowedHostFrontend::new(WINDOW_TITLE));
 }

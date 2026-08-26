@@ -8,7 +8,9 @@
 use std::sync::Arc;
 
 use newengine_core::{Engine, EngineError, EngineResult, Module, ModuleCtx, StartupConfig};
-use newengine_service_api::{EngineRuntimeUnitKind, EngineRuntimeUnitSpec, RuntimeUnitRequirementSpec};
+use newengine_service_api::{
+    EngineRuntimeUnitKind, EngineRuntimeUnitSpec, RuntimeUnitRequirementSpec,
+};
 
 pub type StaticRuntimeUnitFactory =
     fn(&mut Engine<()>, &StartupConfig) -> EngineResult<Option<Box<dyn Module<()>>>>;
@@ -510,7 +512,9 @@ pub const STANDARD_GAME_RUNTIME_UNITS: &[EngineRuntimeUnitSpec] = &[
 pub const STANDARD_GAME_RUNTIME_UNIT_REQUIREMENTS: &[RuntimeUnitRequirementSpec] = &[
     RuntimeUnitRequirementSpec::required(newengine_scene_io::SCENE_BACKEND_CAPABILITY_ID),
     RuntimeUnitRequirementSpec::required(newengine_world_api::WORLD_BACKEND_CAPABILITY_ID),
-    RuntimeUnitRequirementSpec::required(newengine_world_environment_api::WORLD_ENVIRONMENT_BACKEND_CAPABILITY_ID),
+    RuntimeUnitRequirementSpec::required(
+        newengine_world_environment_api::WORLD_ENVIRONMENT_BACKEND_CAPABILITY_ID,
+    ),
     RuntimeUnitRequirementSpec::required(newengine_ecs_api::ECS_BACKEND_CAPABILITY_ID),
     RuntimeUnitRequirementSpec::required(newengine_entity_api::ENTITY_BACKEND_CAPABILITY_ID),
     RuntimeUnitRequirementSpec::required(newengine_time_api::TIME_BACKEND_CAPABILITY_ID),
@@ -519,16 +523,22 @@ pub const STANDARD_GAME_RUNTIME_UNIT_REQUIREMENTS: &[RuntimeUnitRequirementSpec]
     RuntimeUnitRequirementSpec::required(newengine_tags_api::TAGS_REGISTRY_CAPABILITY_ID),
     RuntimeUnitRequirementSpec::required(newengine_tasks_api::TASKS_BACKEND_CAPABILITY_ID),
     RuntimeUnitRequirementSpec::required(newengine_animation_api::ANIMATION_BACKEND_CAPABILITY_ID),
-    RuntimeUnitRequirementSpec::required(newengine_navigation_api::NAVIGATION_BACKEND_CAPABILITY_ID),
+    RuntimeUnitRequirementSpec::required(
+        newengine_navigation_api::NAVIGATION_BACKEND_CAPABILITY_ID,
+    ),
     RuntimeUnitRequirementSpec::required(newengine_ai_api::AI_BACKEND_CAPABILITY_ID),
     RuntimeUnitRequirementSpec::required(newengine_assets_api::ASSET_TYPES_BACKEND_CAPABILITY_ID),
-    RuntimeUnitRequirementSpec::required(newengine_assets_api::ASSETS_INSPECT_BACKEND_CAPABILITY_ID),
+    RuntimeUnitRequirementSpec::required(
+        newengine_assets_api::ASSETS_INSPECT_BACKEND_CAPABILITY_ID,
+    ),
     RuntimeUnitRequirementSpec::required(newengine_assets_api::ASSETS_EDIT_BACKEND_CAPABILITY_ID),
     RuntimeUnitRequirementSpec::required(newengine_assets_api::DEFINITIONS_BACKEND_CAPABILITY_ID),
     RuntimeUnitRequirementSpec::required(newengine_assets_api::ASSETS_UI_BACKEND_CAPABILITY_ID),
     RuntimeUnitRequirementSpec::required(newengine_materials::MATERIALS_BACKEND_CAPABILITY_ID),
     RuntimeUnitRequirementSpec::required(newengine_model_domain_api::MODEL_BACKEND_CAPABILITY_ID),
-    RuntimeUnitRequirementSpec::required(newengine_model_domain_api::ASSET_GRAPH_BACKEND_CAPABILITY_ID),
+    RuntimeUnitRequirementSpec::required(
+        newengine_model_domain_api::ASSET_GRAPH_BACKEND_CAPABILITY_ID,
+    ),
     RuntimeUnitRequirementSpec::required("engine.runtime.audio-native"),
     RuntimeUnitRequirementSpec::required("engine.runtime.audio-scene"),
     RuntimeUnitRequirementSpec::required("engine.runtime.audio-ambience"),

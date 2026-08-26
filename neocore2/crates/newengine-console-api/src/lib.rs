@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 pub const ENGINE_COMMAND_GATEWAY_ID: &str = "engine.command";
 pub const COMMAND_PROVIDER_SERVICE_ID: &str = "newengine.console.command";
-pub const COMMAND_PROVIDER_ROUTE: &str = "newengine.console.runtime";
+pub const COMMAND_PROVIDER_ROUTE: &str = "engine.command.console";
 pub const COMMAND_BACKEND_CAPABILITY_ID: &str = "newengine.console.command.v1";
 pub const COMMAND_SERVICE_KIND: &str = "command";
 pub const COMMAND_DESCRIPTOR_CONTRACT_ID: &str = "newengine.command-descriptor/v1";
@@ -65,5 +65,7 @@ mod tests {
         assert_eq!(ENGINE_COMMAND_GATEWAY_ID, COMMAND_SERVICE_ID);
         assert_ne!(ENGINE_COMMAND_GATEWAY_ID, COMMAND_PROVIDER_SERVICE_ID);
         assert!(COMMAND_PROVIDER_SERVICE_ID.starts_with("newengine."));
+        assert_eq!(COMMAND_PROVIDER_ROUTE, "engine.command.console");
+        assert!(COMMAND_PROVIDER_ROUTE.starts_with(ENGINE_COMMAND_GATEWAY_ID));
     }
 }

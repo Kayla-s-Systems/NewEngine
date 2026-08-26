@@ -110,6 +110,14 @@ fn authored_uv_transform_populates_texture_bindings() {
         .descriptor
         .flags
         .contains(MaterialFlags::DOUBLE_SIDED));
+    assert!(response
+        .descriptor
+        .flags
+        .contains(MaterialFlags::CAST_SHADOWS));
+    assert!(response
+        .descriptor
+        .flags
+        .contains(MaterialFlags::RECEIVE_SHADOWS));
 }
 
 #[test]

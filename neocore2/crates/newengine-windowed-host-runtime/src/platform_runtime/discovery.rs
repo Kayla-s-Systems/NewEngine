@@ -73,9 +73,7 @@ fn is_platform_runtime_filename_candidate(path: &Path) -> bool {
         .unwrap_or(false)
 }
 
-pub(crate) fn try_read_runtime_descriptor(
-    path: &Path,
-) -> Option<PlatformRuntimeDescriptorV1> {
+pub(crate) fn try_read_runtime_descriptor(path: &Path) -> Option<PlatformRuntimeDescriptorV1> {
     let manifest = newengine_plugin_host::read_verified_plugin_discovery_manifest(path).ok()?;
     let platform = manifest.platform_runtime?;
     Some(
@@ -339,7 +337,11 @@ fn runtime_candidate_rank(path: &Path, desired_profile: &'static str) -> (u8, i3
     let priority_rank = try_read_runtime_descriptor(path)
         .map(|descriptor| descriptor.backend_priority.saturating_neg())
         .unwrap_or(0);
-    (profile_rank, priority_rank, path.to_string_lossy().to_string())
+    (
+        profile_rank,
+        priority_rank,
+        path.to_string_lossy().to_string(),
+    )
 }
 
 fn push_ancestor_plugin_dirs(out: &mut Vec<PathBuf>, start: &Path) {

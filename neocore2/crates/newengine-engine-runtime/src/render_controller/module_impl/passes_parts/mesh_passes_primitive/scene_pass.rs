@@ -381,7 +381,7 @@ pub(super) fn draw_primitives_for_pass(
                 sampler,
             );
 
-            let mut per = this.ensure_per_draw_ubo_with_binding(
+            let per = this.ensure_per_draw_ubo_with_binding(
                 r,
                 lit,
                 ubo_key,
@@ -392,8 +392,6 @@ pub(super) fn draw_primitives_for_pass(
                 material_local_shadow_texture,
                 sampler,
             )?;
-            per.last_seen_frame = this.frame.frame_index;
-            this.gpu.material.per_draw_ubo.insert(ubo_key, per);
 
             // Instance transforms and material scalars live in the instance
             // buffer. The UBO depends only on the pipeline texture set and frame

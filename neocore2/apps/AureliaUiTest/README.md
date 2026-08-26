@@ -10,7 +10,7 @@ AureliaUiTest surface module
   -> AureliaUI provider route
   -> ui.draw_frame_bin_v1
   -> UiDrawList
-  -> EngineUiDrawListBridgeProvider
+  -> UiLayerDrawPacketSet / RenderFrameEnvelope.ui_layers
   -> engine.render
 ```
 

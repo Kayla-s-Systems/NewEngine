@@ -326,7 +326,7 @@ pub(super) fn critical_scene_materials_ready(
     let visual_floor = scene_texture_launch_visual_floor(total);
     let min_ready = configured_min_ready.max(visual_floor).min(total);
 
-    if fallback_forbidden_waiting > 0 || fallback_forbidden_failed > 0 {
+    if fallback_forbidden_waiting > 0 {
         let fallback_forbidden_total = plan.fallback_forbidden_paths.len() as u32;
         LaunchReadiness::pending(
             format!(
@@ -337,6 +337,23 @@ pub(super) fn critical_scene_materials_ready(
                 fallback_forbidden_failed,
             ),
             waiting,
+            total,
+            failed,
+        )
+    } else if fallback_forbidden_failed > 0 {
+        // A permanent decode/upload failure is not pending work. Keeping the launch gate
+        // closed here only spins until the global soft timeout even though waiting==0.
+        // Preserve the strict visual contract by leaving failed textures unavailable
+        // (never substitute generic white), but let the runtime enter Play in a degraded,
+        // diagnosable state so the OS/event loop is not held hostage by an impossible wait.
+        let fallback_forbidden_total = plan.fallback_forbidden_paths.len() as u32;
+        LaunchReadiness::ready(
+            format!(
+                "fallback-forbidden texture loads failed permanently ready={}/{} failed={} paths={failed_paths:?} policy='no generic white fallback; affected visuals remain unavailable/diagnosable; no impossible launch wait'",
+                fallback_forbidden_total.saturating_sub(fallback_forbidden_failed),
+                fallback_forbidden_total,
+                fallback_forbidden_failed,
+            ),
             total,
             failed,
         )

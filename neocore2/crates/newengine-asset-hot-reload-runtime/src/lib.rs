@@ -8,7 +8,7 @@ use std::{
 
 use newengine_assets::{AssetService, AssetServiceClient};
 use newengine_assets_api::{
-    AssetInvalidationPlanV1, AssetInvalidationRequestV1, plan_asset_invalidation_v1,
+    plan_asset_invalidation_v1, AssetInvalidationPlanV1, AssetInvalidationRequestV1,
 };
 use newengine_core::{Resources, TaskLane, TaskPriority, TaskRequest, ThreadPoolHandle};
 use newengine_project_api::{ContentMountNamespace, ContentMountRegistry};

@@ -151,6 +151,24 @@ impl RuntimeDecodeSpec {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct AuthoredSchemaSpec {
+    pub contract_key: &'static str,
+    pub declaration_attribute: &'static str,
+}
+
+impl AuthoredSchemaSpec {
+    pub const fn xml_attribute(
+        contract_key: &'static str,
+        declaration_attribute: &'static str,
+    ) -> Self {
+        Self {
+            contract_key,
+            declaration_attribute,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CanonicalProjection {
     YtypDefinitionEntriesV1,
     YddDrawableDictionaryV1,
@@ -184,6 +202,10 @@ pub struct ToolRuntimeConformanceSpec {
     pub output_relative: &'static str,
     pub content_kind: u32,
     pub schema_contract_key: &'static str,
+    /// Optional schema contract carried by the authored source fixture rather than
+    /// by the produced runtime artifact. This prevents authored XML schemas from
+    /// being misclassified as standalone runtime formats/producers.
+    pub authored_schema: Option<AuthoredSchemaSpec>,
     pub readable_legacy_schema_versions: &'static [u16],
     pub commands: &'static [ToolRuntimeCommandSpec],
     pub asset_manager_decode: Option<AssetManagerDecodeSpec>,
@@ -238,6 +260,7 @@ pub const TOOL_RUNTIME_CONFORMANCE_SPECS: &[ToolRuntimeConformanceSpec] = &[
         output_relative: "Content/p3_ytyp_fixture.ytyp",
         content_kind: newengine_asset_format_nef8::ytyp::CONTENT_KIND,
         schema_contract_key: newengine_asset_format_nef8::ytyp::CONTENT_SCHEMA_CONTRACT_SPEC.key,
+        authored_schema: None,
         readable_legacy_schema_versions: &[],
         commands: YTYP_COMMANDS,
         asset_manager_decode: Some(AssetManagerDecodeSpec::new(
@@ -259,6 +282,7 @@ pub const TOOL_RUNTIME_CONFORMANCE_SPECS: &[ToolRuntimeConformanceSpec] = &[
         output_relative: "Content/p3_ydd_fixture.ydd",
         content_kind: newengine_asset_format_nef8::ydd::CONTENT_KIND,
         schema_contract_key: newengine_asset_format_nef8::YDD_BINARY_CONTRACT_SPEC.key,
+        authored_schema: None,
         readable_legacy_schema_versions:
             newengine_asset_format_nef8::ydd::READABLE_CONTENT_SCHEMA_VERSIONS,
         commands: YDD_COMMANDS,
@@ -281,6 +305,7 @@ pub const TOOL_RUNTIME_CONFORMANCE_SPECS: &[ToolRuntimeConformanceSpec] = &[
         output_relative: "Content/p3_ytd_fixture.ytd",
         content_kind: newengine_asset_format_nef8::ytd::CONTENT_KIND,
         schema_contract_key: newengine_asset_format_nef8::ytd::CONTENT_SCHEMA_CONTRACT_SPEC.key,
+        authored_schema: None,
         readable_legacy_schema_versions:
             newengine_asset_format_nef8::ytd::READABLE_CONTENT_SCHEMA_VERSIONS,
         commands: YTD_COMMANDS,
@@ -306,6 +331,10 @@ pub const TOOL_RUNTIME_CONFORMANCE_SPECS: &[ToolRuntimeConformanceSpec] = &[
         output_relative: "Content/p3_nemat_fixture.nemat",
         content_kind: newengine_asset_format_nef8::nemat::CONTENT_KIND,
         schema_contract_key: newengine_asset_format_nef8::nemat::CONTENT_SCHEMA_CONTRACT_SPEC.key,
+        authored_schema: Some(AuthoredSchemaSpec::xml_attribute(
+            newengine_asset_format_nef8::nemat::AUTHORED_XML_CONTRACT_SPEC.key,
+            "schema",
+        )),
         readable_legacy_schema_versions: &[],
         commands: NEMAT_COMMANDS,
         asset_manager_decode: Some(AssetManagerDecodeSpec::new(
@@ -330,6 +359,7 @@ pub const TOOL_RUNTIME_CONFORMANCE_SPECS: &[ToolRuntimeConformanceSpec] = &[
         output_relative: "Content/p3_neui_fixture.neui",
         content_kind: newengine_asset_format_nef8::neui::CONTENT_KIND,
         schema_contract_key: newengine_asset_format_nef8::neui::CONTENT_SCHEMA_CONTRACT_SPEC.key,
+        authored_schema: None,
         readable_legacy_schema_versions: &[],
         commands: NEUI_COMMANDS,
         asset_manager_decode: Some(AssetManagerDecodeSpec::new(
@@ -360,7 +390,7 @@ pub fn tool_runtime_conformance_spec(id: &str) -> Option<&'static ToolRuntimeCon
 pub fn validate_tool_runtime_registry() -> Result<(), Vec<String>> {
     let mut errors = Vec::new();
     let mut ids = BTreeSet::new();
-    let mut schema_keys = BTreeSet::new();
+    let mut schema_semantic_keys = BTreeSet::new();
     const ALLOWED_PLACEHOLDERS: &[&str] = &[
         "{root}",
         "{source}",
@@ -414,11 +444,53 @@ pub fn validate_tool_runtime_registry() -> Result<(), Vec<String>> {
                 contract.kind.as_str()
             ));
         }
-        if !schema_keys.insert(spec.schema_contract_key) {
+        if !schema_semantic_keys.insert(spec.schema_contract_key) {
             errors.push(format!(
                 "schema contract '{}' has multiple tool/runtime producers",
                 spec.schema_contract_key
             ));
+        }
+        if let Some(authored) = spec.authored_schema {
+            let Some(contract) = newengine_contract_registry::contract(authored.contract_key)
+            else {
+                errors.push(format!(
+                    "tool/runtime '{}' references unregistered authored schema contract '{}'",
+                    spec.id, authored.contract_key
+                ));
+                continue;
+            };
+            if contract.kind != ContractKind::Schema {
+                errors.push(format!(
+                    "tool/runtime '{}' authored contract '{}' is kind '{}', expected schema",
+                    spec.id,
+                    contract.key,
+                    contract.kind.as_str()
+                ));
+            }
+            if contract.advertised_id.is_none() {
+                errors.push(format!(
+                    "tool/runtime '{}' authored schema contract '{}' has no advertised schema id",
+                    spec.id, contract.key
+                ));
+            }
+            if authored.declaration_attribute.trim().is_empty() {
+                errors.push(format!(
+                    "tool/runtime '{}' authored schema has empty declaration attribute",
+                    spec.id
+                ));
+            }
+            if spec.fixture.kind != ToolRuntimeFixtureKind::File {
+                errors.push(format!(
+                    "tool/runtime '{}' authored schema requires a file fixture",
+                    spec.id
+                ));
+            }
+            if !schema_semantic_keys.insert(authored.contract_key) {
+                errors.push(format!(
+                    "schema contract '{}' has multiple tool/runtime semantics",
+                    authored.contract_key
+                ));
+            }
         }
         let has_produce = spec
             .commands
@@ -512,9 +584,9 @@ pub fn validate_tool_runtime_registry() -> Result<(), Vec<String>> {
             contract.kind == ContractKind::Schema && contract.key.starts_with("asset.")
         })
     {
-        if !schema_keys.contains(contract.key) {
+        if !schema_semantic_keys.contains(contract.key) {
             errors.push(format!(
-                "registered asset schema '{}' has no ToolRuntimeConformanceSpec",
+                "registered asset schema '{}' has no ToolRuntimeConformanceSpec semantic owner",
                 contract.key
             ));
         }
@@ -569,9 +641,25 @@ mod tests {
             .collect::<BTreeSet<_>>();
         let actual = TOOL_RUNTIME_CONFORMANCE_SPECS
             .iter()
-            .map(|spec| spec.schema_contract_key)
+            .flat_map(|spec| {
+                std::iter::once(spec.schema_contract_key)
+                    .chain(spec.authored_schema.map(|schema| schema.contract_key))
+            })
             .collect::<BTreeSet<_>>();
         assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn nemat_declares_authored_xml_schema_semantics() {
+        let spec = tool_runtime_conformance_spec("nemat").expect("NEMAT ToolRuntime spec");
+        let authored = spec
+            .authored_schema
+            .expect("NEMAT authored schema semantic");
+        assert_eq!(
+            authored.contract_key,
+            newengine_asset_format_nef8::nemat::AUTHORED_XML_CONTRACT_SPEC.key
+        );
+        assert_eq!(authored.declaration_attribute, "schema");
     }
 
     #[test]

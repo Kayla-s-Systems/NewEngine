@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 #[cfg(feature = "window-icon")]
 use abi_stable::std_types::RVec;
 #[cfg(feature = "window-icon")]
-use newengine_assets::{AssetAccess, wait_ready};
+use newengine_assets::{wait_ready, AssetAccess};
 use newengine_assets::{AssetService, AssetServiceClient};
 use newengine_platform_api::PlatformAppIconV1;
 #[cfg(feature = "window-icon")]

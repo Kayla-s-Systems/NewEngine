@@ -3,15 +3,16 @@ name = "aurelia-ui-test"
 version = "0.1.0"
 edition = "2021"
 description = "North Star Engine minimal Aurelia UI runtime test application"
-authors = ["Kayla's Systems"]
+authors = ["Take Some()"]
 license = "Proprietary"
 
 [dependencies]
 newengine-ulog-api = { path = "../../crates/newengine-ulog-api" }
 newengine-core = { path = "../../crates/newengine-core" }
 newengine-engine-runtime = { path = "../../crates/newengine-engine-runtime" }
-newengine-render-ui-bridge = { path = "../../crates/newengine-render-ui-bridge" }
-newengine-runtime-host = { path = "../../crates/newengine-runtime-host" }
+newengine-runtime-host = { path = "../../crates/newengine-runtime-host", default-features = false, features = ["full-runtime"] }
+newengine-windowed-host-runtime = { path = "../../crates/newengine-windowed-host-runtime", default-features = false, features = ["prestart-window-egui", "window-icon"] }
+newengine-render-runtime-adapter = { path = "../../crates/newengine-render-runtime-adapter" }
 newengine-scene = { path = "../../crates/newengine-scene" }
 newengine-scene-runtime = { path = "../../crates/newengine-scene-runtime" }
 newengine-ui = { path = "../../crates/newengine-ui" }

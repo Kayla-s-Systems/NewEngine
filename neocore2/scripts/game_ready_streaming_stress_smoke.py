@@ -134,7 +134,7 @@ def main() -> int:
             deadline = time.monotonic() + 45.0
             while time.monotonic() < deadline:
                 text = stderr_path.read_text(encoding="utf-8", errors="replace") if stderr_path.exists() else ""
-                if "authored game .neui mounted ref='ui/engine/main_menu.neui@surface'" in text:
+                if "authored game .neui mounted ref='ui/frontend/main_menu.neui@surface'" in text:
                     break
                 if process.poll() is not None:
                     raise RuntimeError(f"process exited {process.returncode} before main menu")
