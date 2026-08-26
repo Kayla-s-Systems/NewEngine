@@ -8,7 +8,7 @@ use newengine_engine_runtime::gameplay::{
     InteractionEvent, InteractionEventBus, ItemPickup, PendingHitscan, PendingInteraction,
     PlayerCommandFrame, PlayerController, PlayerInteractionTuning, PlayerStanceState,
     PlayerWeaponState, WeaponAudioAction, WeaponEvent, WeaponEventBus, WeaponEventKind,
-    WeaponFireMode,
+    WeaponFireMode, WeaponObstructionState,
 };
 #[cfg(test)]
 use newengine_gameplay_fps_api::action as fps_action;
@@ -36,6 +36,15 @@ const UNARMED_MELEE_COOLDOWN_SECONDS: f32 = 0.48;
 struct PendingFocusedItemInteraction {
     target: EntityId,
     point: Vec3,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct PendingWeaponObstructionProbe {
+    query_seq: u64,
+    origin: Vec3,
+    direction: Vec3,
+    muzzle_distance: f32,
+    muzzle_position: Vec3,
 }
 
 /// Chooses the nearest enabled inventory pickup inside the same interaction radius used by
@@ -89,7 +98,7 @@ use runtime::apply_recoil;
 use runtime::{emit_interaction_event, emit_weapon_event};
 use targeting::{
     hitscan_query_seq, interaction_query_seq, interaction_ray, melee_query_seq,
-    shot_origin_and_direction, signed_unit,
+    queue_weapon_obstruction_probe, shot_origin_and_direction, signed_unit,
 };
 
 #[cfg(test)]

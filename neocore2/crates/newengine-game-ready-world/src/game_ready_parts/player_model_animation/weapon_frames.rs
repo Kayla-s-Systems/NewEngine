@@ -88,18 +88,6 @@ fn stable_hand_grip_frame(
     }
 }
 
-/// Physical right-hand master frame for held weapons. Constraint/prop targets are forbidden.
-pub(crate) fn player_right_hand_weapon_frame(
-    world: &newengine_ecs::World,
-    player: EntityId,
-) -> Option<Mat4> {
-    player_prop_frame(
-        world,
-        player,
-        &["r_palm", "r_wrist", "DEF-hand.R", "hand.R"],
-    )
-}
-
 /// Physical left-hand frame used for support diagnostics. Weapon transform never depends on it.
 pub(crate) fn player_left_hand_weapon_frame(
     world: &newengine_ecs::World,
@@ -142,12 +130,29 @@ pub(crate) fn player_right_hand_prop_frame(
     world: &newengine_ecs::World,
     player: EntityId,
 ) -> Option<Mat4> {
-    stable_hand_grip_frame(
-        world,
-        player,
-        &["r_hand_prop_attachment", "r_hand_prop"],
-        &["r_palm", "r_wrist", "DEF-hand.R", "hand.R"],
-    )
+    let authored_equipment_contact = world
+        .get::<PlayerAnimationRuntimeBinding>(player)
+        .is_some_and(|binding| {
+            binding.equipment_ready_pose.is_some()
+                || binding.equipment_aim_pose.is_some()
+                || binding.equipment_reload_pose.is_some()
+        });
+    if authored_equipment_contact {
+        stable_hand_grip_frame(
+            world,
+            player,
+            &["r_hand_prop_attachment", "r_hand_prop"],
+            &["r_palm", "r_wrist", "DEF-hand.R", "hand.R"],
+        )
+    } else {
+        // Before the project character policy has installed its authored equipment clip, prop
+        // channels are ordinary locomotion/constraint targets and are not a valid weapon socket.
+        player_prop_frame(
+            world,
+            player,
+            &["r_palm", "r_wrist", "DEF-hand.R", "hand.R"],
+        )
+    }
 }
 
 pub(crate) fn publish_player_first_person_camera_anchors(world: &mut newengine_ecs::World) {

@@ -17,6 +17,12 @@ pub(crate) fn tick_player_skin_animation(world: &mut newengine_ecs::World, dt: f
         let rifle_aim_alpha = super::equipment_visual::equipped_weapon_aim_alpha(world, player);
         let rifle_recoil_alpha =
             super::equipment_visual::equipped_weapon_recoil_alpha(world, player);
+        let rifle_recoil_yaw_radians =
+            super::equipment_visual::equipped_weapon_recoil_yaw_radians(world, player);
+        let rifle_obstruction_alpha = world
+            .get::<newengine_engine_runtime::gameplay::WeaponObstructionState>(player)
+            .map(|state| state.alpha.clamp(0.0, 1.0))
+            .unwrap_or(0.0);
         let first_person_active = world
             .resource::<newengine_engine_runtime::gameplay::PlayerViewState>()
             .copied()
@@ -257,6 +263,8 @@ pub(crate) fn tick_player_skin_animation(world: &mut newengine_ecs::World, dt: f
                     rifle_view_forward_model,
                     rifle_aim_alpha,
                     rifle_recoil_alpha,
+                    rifle_recoil_yaw_radians,
+                    rifle_obstruction_alpha,
                     rifle_reload_progress
                         .map(|progress| progress <= 0.08 || progress >= 0.92)
                         .unwrap_or(true),

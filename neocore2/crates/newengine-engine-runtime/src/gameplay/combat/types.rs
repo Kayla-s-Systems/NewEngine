@@ -88,6 +88,41 @@ impl Default for PlayerWeaponState {
     }
 }
 
+/// Latest fixed-step weapon/body obstruction probe. The equipped-weapon presentation consumes
+/// this as a physical constraint: the firing hand remains the primary joint, while the barrel is
+/// raised/retracted before it can cross solid world geometry. Ballistics also use `safe_muzzle_position`
+/// so a muzzle that was visually beyond a wall can never spawn a ray on the far side of it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct WeaponObstructionState {
+    pub blocked: bool,
+    /// Normalized penetration/clearance pressure in `[0, 1]`.
+    pub alpha: f32,
+    pub hit_position: Vec3,
+    pub hit_normal: Vec3,
+    pub safe_muzzle_position: Vec3,
+    pub fixed_tick: u64,
+}
+
+impl WeaponObstructionState {
+    #[inline]
+    pub fn clear(muzzle_position: Vec3, fixed_tick: u64) -> Self {
+        Self {
+            blocked: false,
+            alpha: 0.0,
+            hit_position: muzzle_position,
+            hit_normal: Vec3::ZERO,
+            safe_muzzle_position: muzzle_position,
+            fixed_tick,
+        }
+    }
+}
+
+impl Default for WeaponObstructionState {
+    fn default() -> Self {
+        Self::clear(Vec3::ZERO, 0)
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Health {
     pub current: f32,

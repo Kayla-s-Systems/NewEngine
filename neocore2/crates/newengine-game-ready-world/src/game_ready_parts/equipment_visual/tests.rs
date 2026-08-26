@@ -34,9 +34,12 @@ mod alignment_tests {
 
     #[test]
     fn rifle_recoil_recovery_is_fast_and_monotonic() {
+        let presentation =
+            newengine_engine_runtime::gameplay::WeaponPresentationDefinition::default().sanitized();
+        let recovery_hz = 3.0 / presentation.fire_kick_duration_seconds.max(0.001);
         let mut value = 1.0_f32;
         for _ in 0..12 {
-            let next = value * (-RIFLE_RECOIL_RECOVERY_HZ * (1.0 / 60.0)).exp();
+            let next = value * (-recovery_hz * (1.0 / 60.0)).exp();
             assert!(next >= 0.0 && next < value);
             value = next;
         }

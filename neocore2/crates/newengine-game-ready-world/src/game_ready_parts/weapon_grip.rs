@@ -96,6 +96,7 @@ pub(crate) fn weapon_ready_solve_contract_aimed(
         view_forward_model,
         aim_alpha,
         0.0,
+        0.0,
     )
 }
 
@@ -107,6 +108,7 @@ pub(crate) fn weapon_ready_solve_contract_presented(
     view_forward_model: Option<Vec3>,
     aim_alpha: f32,
     fire_recoil_alpha: f32,
+    fire_recoil_yaw_radians: f32,
 ) -> Option<WeaponReadySolveContract> {
     let presentation = presentation.clone().sanitized();
     if !presentation.enabled {
@@ -125,6 +127,11 @@ pub(crate) fn weapon_ready_solve_contract_presented(
     };
     let fire_recoil_alpha = if fire_recoil_alpha.is_finite() {
         fire_recoil_alpha.clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    let fire_recoil_yaw_radians = if fire_recoil_yaw_radians.is_finite() {
+        fire_recoil_yaw_radians.clamp(-0.5, 0.5)
     } else {
         0.0
     };
@@ -160,17 +167,23 @@ pub(crate) fn weapon_ready_solve_contract_presented(
             }
         })
         .unwrap_or(base_rotation);
-    let rotation = if fire_recoil_alpha > 0.0 {
+    let rotation = if fire_recoil_alpha > 0.0 || fire_recoil_yaw_radians.abs() > 1.0e-6 {
         let pitch_axis = (body_rotation * Vec3::X).normalize_or_zero();
-        if pitch_axis.length_squared() > 1.0e-8 {
-            (Quat::from_axis_angle(
+        let yaw_axis = (body_rotation * Vec3::Y).normalize_or_zero();
+        let pitch = if pitch_axis.length_squared() > 1.0e-8 {
+            Quat::from_axis_angle(
                 pitch_axis,
                 -presentation.fire_kick_pitch_radians * fire_recoil_alpha,
-            ) * rotation)
-                .normalize_or_identity()
+            )
         } else {
-            rotation
-        }
+            Quat::IDENTITY
+        };
+        let yaw = if yaw_axis.length_squared() > 1.0e-8 {
+            Quat::from_axis_angle(yaw_axis, fire_recoil_yaw_radians)
+        } else {
+            Quat::IDENTITY
+        };
+        (yaw * pitch * rotation).normalize_or_identity()
     } else {
         rotation
     };
@@ -200,6 +213,115 @@ pub(crate) fn weapon_ready_solve_contract_presented(
         right_elbow_pole,
         left_elbow_pole,
     })
+}
+
+/// Reconcile an authored ReadyHold with the character's live contact points. The firing-hand
+/// contact is the primary kinematic joint and therefore owns weapon translation. Stock/shoulder
+/// and support-hand contacts only contribute bounded angular corrections around that handle. This
+/// mirrors the original layered grip graph: animation establishes the pose, constraints remove
+/// small contact error, and no bilateral IK stage is allowed to drag the rifle away from the hand.
+pub(crate) fn weapon_ready_contract_with_contacts(
+    presentation: &WeaponPresentationDefinition,
+    mut contract: WeaponReadySolveContract,
+    handle_anchor: Option<Vec3>,
+    support_anchor: Option<Vec3>,
+    aim_alpha: f32,
+    obstruction_alpha: f32,
+) -> Option<WeaponReadySolveContract> {
+    let presentation = presentation.clone().sanitized();
+    let aim_alpha = if aim_alpha.is_finite() {
+        aim_alpha.clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    let obstruction_alpha = if obstruction_alpha.is_finite() {
+        obstruction_alpha.clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+
+    let Some(handle_anchor) = handle_anchor.filter(|anchor| anchor.is_finite()) else {
+        return Some(contract);
+    };
+
+    fn rotate_about_handle(
+        presentation: &WeaponPresentationDefinition,
+        contract: &mut WeaponReadySolveContract,
+        delta: Quat,
+        handle: Vec3,
+    ) {
+        contract.root.rotation = (delta * contract.root.rotation).normalize_or_identity();
+        contract.root.position =
+            handle - contract.root.rotation * v3(presentation.handle_from_root);
+        contract.stock_contact =
+            handle + contract.root.rotation * v3(presentation.stock_contact_from_handle);
+    }
+
+    fn bounded_arc(from: Vec3, to: Vec3, max_angle: f32, weight: f32) -> Option<Quat> {
+        let from = from.normalize_or_zero();
+        let to = to.normalize_or_zero();
+        if from.length_squared() <= 1.0e-8 || to.length_squared() <= 1.0e-8 {
+            return None;
+        }
+        let full = Quat::from_rotation_arc(from, to).normalize_or_identity();
+        let angle = 2.0 * full.w.abs().clamp(0.0, 1.0).acos();
+        if !angle.is_finite() || angle <= 1.0e-6 {
+            return None;
+        }
+        let t = (weight.clamp(0.0, 1.0) * (max_angle.max(0.0) / angle).min(1.0)).clamp(0.0, 1.0);
+        Some(Quat::IDENTITY.slerp(full, t).normalize_or_identity())
+    }
+
+    // First put the weapon handle exactly on the authored firing-hand contact.
+    contract.root.position =
+        handle_anchor - contract.root.rotation * v3(presentation.handle_from_root);
+    contract.stock_contact =
+        handle_anchor + contract.root.rotation * v3(presentation.stock_contact_from_handle);
+
+    // Shoulder stock is a soft rotational constraint, never a positional owner. At full ADS the
+    // view axis has priority, so the shoulder correction is intentionally weaker.
+    let stock_vector = contract.root.rotation * v3(presentation.stock_contact_from_handle);
+    let shoulder_vector = contract.shoulder_pocket - handle_anchor;
+    if let Some(delta) = bounded_arc(
+        stock_vector,
+        shoulder_vector,
+        18.0_f32.to_radians(),
+        0.58 * (1.0 - aim_alpha * 0.55),
+    ) {
+        rotate_about_handle(&presentation, &mut contract, delta, handle_anchor);
+    }
+
+    // The support hand contributes only a small angular correction. Large disagreement is left to
+    // the authored character clip instead of twisting the rifle/arms into a rubber IK pose.
+    if let Some(support_anchor) = support_anchor.filter(|anchor| anchor.is_finite()) {
+        let grip_vector = contract.root.rotation * v3(presentation.left_grip_from_handle);
+        let support_vector = support_anchor - handle_anchor;
+        if let Some(delta) = bounded_arc(
+            grip_vector,
+            support_vector,
+            12.0_f32.to_radians(),
+            0.42 * (1.0 - aim_alpha * 0.35),
+        ) {
+            rotate_about_handle(&presentation, &mut contract, delta, handle_anchor);
+        }
+    }
+
+    // Original long-gun graphs have explicit aim-blocked add/sub layers. Until those exact clips
+    // are composed, reproduce their physical invariant procedurally: pivot the barrel upward about
+    // the firing hand, never translate the weapon through the obstacle.
+    if obstruction_alpha > 0.0 {
+        let local_right = (contract.root.rotation * Vec3::X).normalize_or_zero();
+        if local_right.length_squared() > 1.0e-8 {
+            let delta =
+                Quat::from_axis_angle(local_right, -50.0_f32.to_radians() * obstruction_alpha);
+            rotate_about_handle(&presentation, &mut contract, delta, handle_anchor);
+        }
+    }
+
+    (contract.root.position.is_finite()
+        && contract.root.rotation.is_finite()
+        && contract.stock_contact.is_finite())
+    .then_some(contract)
 }
 
 pub(crate) fn weapon_root_from_first_person_view(
@@ -359,6 +481,78 @@ mod tests {
         let left = Mat4::from_translation(Vec3::new(0.20, 1.48, 0.02));
         let contract = weapon_ready_solve_contract(&p, chest, right, left).expect("contract");
         assert!((contract.stock_contact - contract.shoulder_pocket).length() < 1.0e-5);
+    }
+
+    #[test]
+    fn authored_weapon_handle_anchor_owns_readyhold_translation() {
+        let p = fixture();
+        let chest = Mat4::from_translation(Vec3::new(0.0, 1.25, 0.0));
+        let right = Mat4::from_translation(Vec3::new(-0.20, 1.48, 0.02));
+        let left = Mat4::from_translation(Vec3::new(0.20, 1.48, 0.02));
+        let contract = weapon_ready_solve_contract(&p, chest, right, left).expect("contract");
+        let anchor = Vec3::new(-0.31, 1.36, 0.41);
+        let anchored = weapon_ready_contract_with_contacts(
+            &p,
+            contract,
+            Some(anchor),
+            None,
+            0.0,
+            0.0,
+        )
+        .expect("anchored contract");
+        let handle = weapon_handle_position(&p, anchored.root);
+        assert!((handle - anchor).length() < 1.0e-5);
+    }
+
+    #[test]
+    fn authored_contact_constraints_never_break_firing_handle_anchor() {
+        let p = fixture();
+        let chest = Mat4::from_translation(Vec3::new(0.0, 1.25, 0.0));
+        let right = Mat4::from_translation(Vec3::new(-0.20, 1.48, 0.02));
+        let left = Mat4::from_translation(Vec3::new(0.20, 1.48, 0.02));
+        let raw = weapon_ready_solve_contract(&p, chest, right, left).expect("raw contract");
+        let handle_anchor = Vec3::new(-0.25, 1.31, 0.18);
+        let support_anchor = Vec3::new(0.02, 1.28, 0.37);
+        let constrained = weapon_ready_contract_with_contacts(
+            &p,
+            raw,
+            Some(handle_anchor),
+            Some(support_anchor),
+            0.35,
+            0.0,
+        )
+        .expect("contact contract");
+        let handle = weapon_handle_position(&p, constrained.root);
+        assert!(
+            (handle - handle_anchor).length() < 1.0e-5,
+            "firing hand is the primary kinematic joint"
+        );
+    }
+
+    #[test]
+    fn aim_blocked_pivots_barrel_without_translating_firing_handle() {
+        let p = fixture();
+        let chest = Mat4::from_translation(Vec3::new(0.0, 1.25, 0.0));
+        let right = Mat4::from_translation(Vec3::new(-0.20, 1.48, 0.02));
+        let left = Mat4::from_translation(Vec3::new(0.20, 1.48, 0.02));
+        let raw = weapon_ready_solve_contract(&p, chest, right, left).expect("raw contract");
+        let handle_anchor = Vec3::new(-0.25, 1.31, 0.18);
+        let clear =
+            weapon_ready_contract_with_contacts(&p, raw, Some(handle_anchor), None, 0.0, 0.0)
+                .expect("clear contract");
+        let blocked =
+            weapon_ready_contract_with_contacts(&p, raw, Some(handle_anchor), None, 0.0, 0.8)
+                .expect("blocked contract");
+        let clear_handle = weapon_handle_position(&p, clear.root);
+        let blocked_handle = weapon_handle_position(&p, blocked.root);
+        assert!((clear_handle - handle_anchor).length() < 1.0e-5);
+        assert!((blocked_handle - handle_anchor).length() < 1.0e-5);
+        let clear_forward = weapon_muzzle_forward(clear.root);
+        let blocked_forward = weapon_muzzle_forward(blocked.root);
+        assert!(
+            clear_forward.dot(blocked_forward) < 0.98,
+            "aim-blocked must visibly pivot the barrel"
+        );
     }
 
     #[test]

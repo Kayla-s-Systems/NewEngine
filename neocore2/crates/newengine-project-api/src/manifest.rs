@@ -200,6 +200,46 @@ impl ProjectUiPresentationFlowManifest {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ProjectUiSharedManifest {
+    /// Enables the suite-owned Shared UI composition for this project.
+    pub enabled: bool,
+    /// Adds the canonical Shared ESC/pause menu to playable game states.
+    pub pause_menu: bool,
+    /// Supplies the canonical Shared HUD only when the project does not author one.
+    pub hud_fallback: bool,
+    /// Optional Shared pause document override. Omitted values use the runtime convention.
+    pub pause_document_ref: Option<String>,
+    /// Optional Shared HUD document override. Omitted values use the runtime convention.
+    pub hud_document_ref: Option<String>,
+}
+
+impl Default for ProjectUiSharedManifest {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            pause_menu: true,
+            hud_fallback: true,
+            pause_document_ref: None,
+            hud_document_ref: None,
+        }
+    }
+}
+
+impl ProjectUiSharedManifest {
+    fn validate(&self, errors: &mut Vec<String>) {
+        for (field, value) in [
+            ("pause_document_ref", self.pause_document_ref.as_deref()),
+            ("hud_document_ref", self.hud_document_ref.as_deref()),
+        ] {
+            collect_optional_non_blank(errors, value, || {
+                format!("project ui.shared.{field} must be non-empty when specified")
+            });
+        }
+    }
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ProjectUiManifest {
@@ -211,6 +251,8 @@ pub struct ProjectUiManifest {
     pub document: Option<String>,
     /// Project-owned frontend/presentation state graph. The engine only executes this graph.
     pub presentation_flow: Option<ProjectUiPresentationFlowManifest>,
+    /// Suite-owned Shared UI inherited by projects unless explicitly disabled.
+    pub shared: ProjectUiSharedManifest,
     /// Whether runtime should publish the editor shell alongside project UI.
     pub publish_editor_shell: Option<bool>,
 }
@@ -229,6 +271,7 @@ impl ProjectUiManifest {
         if let Some(flow) = self.presentation_flow.as_ref() {
             flow.validate(errors);
         }
+        self.shared.validate(errors);
     }
 }
 

@@ -1,5 +1,12 @@
 mod project_browser;
 mod runtime_profiles;
+mod shared_ui;
+
+pub use shared_ui::{
+    effective_project_ui_presentation_flow, SHARED_UI_HUD_DOCUMENT_REF, SHARED_UI_HUD_SURFACE_ID,
+    SHARED_UI_PAUSE_DOCUMENT_REF, SHARED_UI_PAUSE_SURFACE_ID, SHARED_UI_PRIMARY_TOGGLE_ACTION,
+    SHARED_UI_RESUME_ACTION,
+};
 
 pub use project_browser::{
     default_projects_root, discover_game_projects, discover_projects, preferred_game_launch_id,
@@ -92,22 +99,21 @@ pub fn apply_project_ui_env(manifest: &ProjectManifest) {
     {
         std::env::set_var(UI_DOCUMENT_ENV, value);
     }
-    if let Some(flow) = manifest.ui.presentation_flow.as_ref() {
-        let mut flow = flow.clone();
-        // A launch preset may select another authored initial state. Fold that override
-        // into the project-owned object so environment iteration order cannot replace
-        // the complete flow with a scalar subtree later.
-        if let Some(initial_state) = std::env::var(UI_PRESENTATION_INITIAL_STATE_ENV)
-            .ok()
-            .map(|value| value.trim().to_owned())
-            .filter(|value| !value.is_empty())
-        {
-            flow.initial_state = initial_state;
-            std::env::remove_var(UI_PRESENTATION_INITIAL_STATE_ENV);
-        }
+    let requested_initial_state = std::env::var(UI_PRESENTATION_INITIAL_STATE_ENV)
+        .ok()
+        .map(|value| value.trim().to_owned())
+        .filter(|value| !value.is_empty());
+    if let Some(flow) =
+        effective_project_ui_presentation_flow(manifest, requested_initial_state.as_deref())
+    {
+        // Fold launch-state overrides into the complete authored/shared graph so
+        // environment iteration order cannot replace the object with a scalar subtree.
+        std::env::remove_var(UI_PRESENTATION_INITIAL_STATE_ENV);
         if let Ok(encoded) = serde_json::to_string(&flow) {
             std::env::set_var(UI_PRESENTATION_FLOW_ENV, encoded);
         }
+    } else {
+        std::env::remove_var(UI_PRESENTATION_FLOW_ENV);
     }
     if let Some(value) = manifest.ui.publish_editor_shell {
         std::env::set_var(

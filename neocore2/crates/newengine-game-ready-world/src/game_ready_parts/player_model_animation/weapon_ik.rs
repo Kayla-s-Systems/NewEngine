@@ -5,6 +5,8 @@ struct WeaponArmIkRig {
     right_elbow: usize,
     right_wrist: usize,
     right_palm: usize,
+    right_hand_prop: Option<usize>,
+    right_hand_prop_attachment: Option<usize>,
     left_shoulder: usize,
     left_elbow: usize,
     left_wrist: usize,
@@ -19,11 +21,37 @@ fn build_weapon_arm_ik_rig(skeleton: &ModelSkeletonMetadata) -> Option<WeaponArm
         right_elbow: find("r_elbow")?,
         right_wrist: find("r_wrist")?,
         right_palm: find("r_palm")?,
+        right_hand_prop: find("r_hand_prop"),
+        right_hand_prop_attachment: find("r_hand_prop_attachment"),
         left_shoulder: find("l_shoulder")?,
         left_elbow: find("l_elbow")?,
         left_wrist: find("l_wrist")?,
         left_palm: find("l_palm")?,
     })
+}
+
+fn native_firing_handle_anchor(rig: &WeaponArmIkRig, frames: &[Mat4]) -> Option<Vec3> {
+    const MAX_PROP_TO_PALM_DISTANCE_M: f32 = 0.12;
+    let palm = frames.get(rig.right_palm)?.transform_point3(Vec3::ZERO);
+    if !palm.is_finite() {
+        return None;
+    }
+    for candidate in [rig.right_hand_prop_attachment, rig.right_hand_prop] {
+        let Some(index) = candidate else { continue };
+        let Some(frame) = frames.get(index) else { continue };
+        let anchor = frame.transform_point3(Vec3::ZERO);
+        let delta = anchor - palm;
+        if anchor.is_finite()
+            && delta.is_finite()
+            && delta.length_squared() <= MAX_PROP_TO_PALM_DISTANCE_M.powi(2)
+        {
+            return Some(anchor);
+        }
+    }
+    // The original long-gun graph is firing-hand owned. A missing/stale prop constraint therefore
+    // falls back to the actual animated palm, never to a stock-owned weapon solve that would make
+    // the arm chase the gun.
+    Some(palm)
 }
 
 fn rebuild_model_joint_frames(
@@ -229,10 +257,9 @@ fn set_pose_joint_global_rotation(
     Ok(())
 }
 
-/// ReadyHold keeps one stock/shoulder-owned weapon transform while native standing rifle overlays
-/// provide authored upper-body style. Outside the authored reload manipulation window, bilateral
-/// IK enforces the physical firing-hand and support-hand contacts without feeding either hand back
-/// into weapon placement.
+/// Native long-gun overlays own the firing arm. The weapon is pinned to that authored firing-hand
+/// contact; stock/shoulder are soft constraints and only the support arm receives bounded IK.
+/// Reload manipulation can temporarily release support-hand correction.
 fn apply_equipped_weapon_support_ik(
     presentation: &newengine_engine_runtime::gameplay::WeaponPresentationDefinition,
     rig: Option<&WeaponArmIkRig>,
@@ -243,6 +270,8 @@ fn apply_equipped_weapon_support_ik(
     view_forward_model: Option<Vec3>,
     aim_alpha: f32,
     recoil_alpha: f32,
+    recoil_yaw_radians: f32,
+    obstruction_alpha: f32,
     support_right_hand: bool,
     support_left_hand: bool,
 ) -> Result<Option<f32>, String> {
@@ -259,6 +288,11 @@ fn apply_equipped_weapon_support_ik(
     let left_shoulder = *frames
         .get(rig.left_shoulder)
         .ok_or("weapon ReadyHold left shoulder frame is unavailable")?;
+    let handle_anchor = native_firing_handle_anchor(rig, frames);
+    let authored_left_palm = frames
+        .get(rig.left_palm)
+        .map(|frame| frame.transform_point3(Vec3::ZERO))
+        .filter(|position| position.is_finite());
     let contract = crate::weapon_grip::weapon_ready_solve_contract_presented(
         presentation,
         chest,
@@ -267,14 +301,42 @@ fn apply_equipped_weapon_support_ik(
         view_forward_model,
         aim_alpha,
         recoil_alpha,
+        recoil_yaw_radians,
     )
-    .ok_or("weapon ReadyHold could not resolve anatomical solve contract")?;
+    .and_then(|contract| {
+        crate::weapon_grip::weapon_ready_contract_with_contacts(
+            presentation,
+            contract,
+            handle_anchor,
+            authored_left_palm,
+            aim_alpha,
+            obstruction_alpha,
+        )
+    })
+    .ok_or("weapon ReadyHold could not resolve authored contact constraint")?;
+    // `native_firing_handle_anchor` falls back to the physical palm, so a valid humanoid rifle rig
+    // always has a firing-hand master. Keep the fallback branch only for malformed/incomplete rigs.
+    let solve_right_hand = support_right_hand && handle_anchor.is_none();
     let right_target =
         crate::weapon_grip::weapon_ready_right_palm_position(presentation, contract.root);
     let left_target =
         crate::weapon_grip::weapon_ready_left_palm_position(presentation, contract.root);
 
-    if support_right_hand {
+    let limited_target = |current: Vec3, target: Vec3, max_delta: f32| {
+        let delta = target - current;
+        let distance = delta.length();
+        if distance.is_finite() && distance > max_delta && distance > 1.0e-6 {
+            current + delta * (max_delta / distance)
+        } else {
+            target
+        }
+    };
+    let current_right_palm = frames[rig.right_palm].transform_point3(Vec3::ZERO);
+    let current_left_palm = frames[rig.left_palm].transform_point3(Vec3::ZERO);
+    let right_target = limited_target(current_right_palm, right_target, 0.07);
+    let left_target = limited_target(current_left_palm, left_target, 0.10);
+
+    if solve_right_hand {
         solve_two_bone_arm_with_pole(
             skeleton,
             pose,
@@ -305,7 +367,7 @@ fn apply_equipped_weapon_support_ik(
     // desired grip basis, while a maximum correction prevents the wrist from absorbing an entire
     // arm-plane mismatch as twist.
     rebuild_model_joint_frames(skeleton, source_to_model, pose, frames)?;
-    if support_right_hand {
+    if solve_right_hand {
         orient_wrist_for_palm_basis(
             skeleton,
             pose,
@@ -313,7 +375,7 @@ fn apply_equipped_weapon_support_ik(
             rig.right_wrist,
             rig.right_palm,
             crate::weapon_grip::weapon_ready_right_palm_rotation(presentation, contract.root),
-            35.0_f32.to_radians(),
+            24.0_f32.to_radians(),
         )?;
     }
     if support_left_hand {
@@ -325,12 +387,14 @@ fn apply_equipped_weapon_support_ik(
             rig.left_wrist,
             rig.left_palm,
             crate::weapon_grip::weapon_ready_left_palm_rotation(presentation, contract.root),
-            40.0_f32.to_radians(),
+            30.0_f32.to_radians(),
         )?;
     }
 
     rebuild_model_joint_frames(skeleton, source_to_model, pose, frames)?;
-    let right_error = if support_right_hand {
+    let right_error = if let Some(anchor) = handle_anchor {
+        (crate::weapon_grip::weapon_handle_position(presentation, contract.root) - anchor).length()
+    } else if solve_right_hand {
         (frames[rig.right_palm].transform_point3(Vec3::ZERO) - right_target).length()
     } else {
         0.0
@@ -340,8 +404,10 @@ fn apply_equipped_weapon_support_ik(
     } else {
         0.0
     };
-    let stock_error = (contract.stock_contact - contract.shoulder_pocket).length();
-    let error = right_error.max(left_error).max(stock_error);
+    // Stock/shoulder is intentionally a soft angular constraint. It must not be promoted to a
+    // hard IK failure because different authored body proportions legitimately leave a few cm of
+    // stock compression/clearance. Hand contact residual is the hard invariant.
+    let error = right_error.max(left_error);
     if !error.is_finite() {
         return Err("weapon ReadyHold IK produced non-finite contact error".to_owned());
     }

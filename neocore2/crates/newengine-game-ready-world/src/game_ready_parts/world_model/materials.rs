@@ -174,14 +174,41 @@ pub(super) fn resolve_prefab_part_material(
     authored_material: Option<MaterialId>,
     profile_materials: ForestRoadMaterials,
     material_slot: &str,
+    material_ref: Option<&str>,
 ) -> (MaterialId, newengine_model_domain_api::MeshRenderOptions) {
+    // YDD mesh material selectors are authoritative for imported static worlds, exactly
+    // as they already are for foliage. This keeps the canonical
+    // YMAP -> YTYP -> YDD -> NEMAT -> YTD chain intact instead of repainting a whole
+    // prefab with the YTYP-level convenience material.
+    let static_flags = MaterialFlags::CAST_SHADOWS.union(MaterialFlags::RECEIVE_SHADOWS);
+    let exact_material = material_ref
+        .map(str::trim)
+        .filter(|reference| is_nemat_entry_ref(reference))
+        .and_then(|reference| {
+            match register_required_material_ref(
+                mats,
+                &format!("World/Static/{material_slot}"),
+                static_flags,
+                reference,
+            ) {
+                Ok(material_id) => Some(material_id),
+                Err(error) => {
+                    newengine_ulog_api::ulog::warn!(
+                        "static world exact material unavailable slot='{}' ref='{}' err='{}'; using authored/profile material policy",
+                        material_slot, reference, error,
+                    );
+                    None
+                }
+            }
+        });
+
     // The profile owns the no-authored-material policy explicitly. This is not an
     // asset-loading fallback: ForestRoad registers the complete slot material set
     // before prefab admission and selects one deterministically here.
-    let material_id = match authored_material {
+    let material_id = exact_material.unwrap_or_else(|| match authored_material {
         Some(material_id) => material_id,
         None => material_for_slot(profile_materials, material_slot),
-    };
+    });
     let render_options = match mats.resolve(material_id) {
         Some(material) if material.desc.flags.contains(MaterialFlags::ALPHA_TEST) => {
             newengine_model_domain_api::MeshRenderOptions::world_masked()

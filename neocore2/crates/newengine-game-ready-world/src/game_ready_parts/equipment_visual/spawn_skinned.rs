@@ -80,6 +80,7 @@ fn spawn_skinned_equipped_weapon_visual(
             aim_alpha: 0.0,
             last_shot_sequence,
             recoil_alpha: 0.0,
+            recoil_yaw_radians: 0.0,
         },
     );
     let _ = world.insert(
@@ -193,6 +194,24 @@ fn spawn_skinned_equipped_weapon_visual(
             "equipped weapon animation admission failed: {error}"
         ));
     }
+
+    // Skinned weapon parts stay quarantined while skeleton/YCD admission is incomplete. Once the
+    // binding succeeds, reveal the whole weapon atomically. Previously these entities remained
+    // RuntimeHidden forever, so the rifle could be fully simulated/animated while rendering no
+    // geometry at all.
+    let admitted_parts = world
+        .query::<EquippedWeaponVisualPart>()
+        .filter_map(|(entity, part)| (part.root == root).then_some(entity))
+        .collect::<Vec<_>>();
+    for entity in admitted_parts {
+        let _ = world.insert(
+            entity,
+            DisplayVisibility {
+                mode: DisplayMode::GameOnly,
+            },
+        );
+    }
+
     newengine_ulog_api::ulog::info!(
         "game-ready: equipped weapon native skin bound player={} item='{}' model='{}' joints={} policy='authored weapon skin + YCD palette; character and weapon reload share PlayerWeaponState'",
         owner.stable_u64(),

@@ -3,6 +3,7 @@ use super::*;
 const HITSCAN_QUERY_SALT: u64 = 0x243f_6a88_85a3_08d3;
 const MELEE_QUERY_SALT: u64 = 0xa409_3822_299f_31d0;
 const INTERACTION_QUERY_SALT: u64 = 0x1319_8a2e_0370_7344;
+const WEAPON_OBSTRUCTION_QUERY_SALT: u64 = 0x082e_fa98_ec4e_6c89;
 
 #[inline]
 pub(super) fn hitscan_query_seq(player: EntityId, shot_sequence: u64) -> u64 {
@@ -17,6 +18,59 @@ pub(super) fn melee_query_seq(player: EntityId, attack_sequence: u64) -> u64 {
 #[inline]
 pub(super) fn interaction_query_seq(player: EntityId, source_frame: u64) -> u64 {
     avalanche_u64(player.stable_u64() ^ INTERACTION_QUERY_SALT ^ source_frame.rotate_left(29))
+}
+
+#[inline]
+fn weapon_obstruction_query_seq(player: EntityId, fixed_tick: u64) -> u64 {
+    avalanche_u64(player.stable_u64() ^ WEAPON_OBSTRUCTION_QUERY_SALT ^ fixed_tick.rotate_left(11))
+}
+
+/// Queue one short body-to-muzzle ray every fixed step while a firearm is equipped. This is the
+/// gameplay-side equivalent of Naughty Dog's aim-blocked layer: it detects when the authored
+/// barrel would cross solid geometry before the shot query is created.
+pub(super) fn queue_weapon_obstruction_probe(world: &mut World, player: EntityId, fixed_tick: u64) {
+    let Some(muzzle) = world.get::<EquippedWeaponMuzzle>(player).copied() else {
+        let _ = world.remove::<PendingWeaponObstructionProbe>(player);
+        let _ = world.remove::<WeaponObstructionState>(player);
+        return;
+    };
+    let Some((player_position, _)) = player_view_pose(world, player) else {
+        return;
+    };
+    let eye_height = world
+        .get::<PlayerStanceState>(player)
+        .map(|stance| stance.current_eye_height)
+        .or_else(|| {
+            crate::game_data::active_game_data(world)
+                .map(|data| data.player.tuning.camera_eye_height)
+        })
+        .unwrap_or(1.6)
+        .max(0.2);
+
+    // Shoulder/chest origin instead of camera origin. A wall between the body and muzzle is a
+    // genuine weapon obstruction even when a third-person camera can still see around it.
+    let origin = player_position + Vec3::Y * (eye_height * 0.72);
+    let to_muzzle = muzzle.position - origin;
+    let distance = to_muzzle.length();
+    if !distance.is_finite() || !(0.12..=1.60).contains(&distance) {
+        let _ = world.remove::<PendingWeaponObstructionProbe>(player);
+        let _ = world.insert(
+            player,
+            WeaponObstructionState::clear(muzzle.position, fixed_tick),
+        );
+        return;
+    }
+    let direction = to_muzzle / distance;
+    let _ = world.insert(
+        player,
+        PendingWeaponObstructionProbe {
+            query_seq: weapon_obstruction_query_seq(player, fixed_tick),
+            origin,
+            direction,
+            muzzle_distance: distance,
+            muzzle_position: muzzle.position,
+        },
+    );
 }
 
 #[inline]
@@ -61,14 +115,59 @@ pub(super) fn shot_origin_and_direction(
         return None;
     }
 
-    // The equipped visual publishes the real barrel pose every presentation frame. Use its +Z
-    // axis as the ballistic origin/direction so hip fire and ADS visibly leave the barrel. The
-    // camera path remains a deterministic fallback for headless simulation and early startup.
+    // Third-person shooting is camera-targeted but physically originates at the barrel. Resolve a
+    // convergence point on the view axis, then shoot from the real/safe muzzle toward that point.
+    // This keeps the reticle and ballistic path coherent without allowing a camera ray to shoot
+    // through cover that the barrel itself cannot clear.
+    let active_camera_position = world
+        .resource::<newengine_scene::SceneState>()
+        .and_then(|state| state.active_camera.or(state.root))
+        .and_then(|camera| world.get::<newengine_sim::CameraRigComp>(camera))
+        .map(|rig| rig.0.position)
+        .filter(|position| position.is_finite());
+    let view_origin = active_camera_position.unwrap_or(player_position + Vec3::Y * eye_height);
+
     let muzzle = world.get::<EquippedWeaponMuzzle>(player).copied();
-    let forward = muzzle
-        .map(|muzzle| muzzle.forward.normalize_or_zero())
-        .filter(|forward| forward.length_squared() > 1.0e-8)
-        .unwrap_or(camera_forward);
+    let obstruction = world
+        .get::<WeaponObstructionState>(player)
+        .copied()
+        .filter(|state| state.blocked && state.alpha > 0.001);
+    let muzzle_origin = obstruction
+        .map(|state| state.safe_muzzle_position)
+        .filter(|position| position.is_finite())
+        .or_else(|| {
+            muzzle.map(|muzzle| muzzle.position + muzzle.forward.normalize_or_zero() * 0.008)
+        })
+        .unwrap_or(
+            player_position + Vec3::Y * eye_height + camera_forward * tuning.muzzle_forward_offset,
+        );
+
+    let hip_convergence = world
+        .get::<EquippedWeaponBinding>(player)
+        .and_then(|binding| {
+            world
+                .resource::<newengine_engine_runtime::gameplay::ItemCatalog>()
+                .and_then(|catalog| catalog.get(binding.item))
+        })
+        .map(|definition| definition.weapon_presentation.clone().sanitized())
+        .filter(|presentation| presentation.enabled)
+        .map(|presentation| presentation.first_person_hip_convergence_m)
+        .unwrap_or(12.0);
+    let convergence_distance = if aiming {
+        tuning.range.min(80.0).max(12.0)
+    } else {
+        hip_convergence.clamp(4.0, tuning.range.max(4.0))
+    };
+    let aim_point = view_origin + camera_forward * convergence_distance;
+    let ballistic_forward = (aim_point - muzzle_origin).normalize_or_zero();
+    let forward = if ballistic_forward.length_squared() > 1.0e-8 {
+        ballistic_forward
+    } else {
+        muzzle
+            .map(|muzzle| muzzle.forward.normalize_or_zero())
+            .filter(|forward| forward.length_squared() > 1.0e-8)
+            .unwrap_or(camera_forward)
+    };
 
     let spread = if aiming {
         tuning.aim_spread_radians
@@ -79,10 +178,7 @@ pub(super) fn shot_origin_and_direction(
     let offset_x = signed_unit(shot_sequence ^ 0x9e37_79b9) * spread_scale;
     let offset_y = signed_unit(shot_sequence ^ 0x7f4a_7c15) * spread_scale;
     let direction = (forward + right * offset_x + up * offset_y).normalize_or_zero();
-    let origin = muzzle
-        .map(|muzzle| muzzle.position + forward * 0.008)
-        .unwrap_or(player_position + Vec3::Y * eye_height + forward * tuning.muzzle_forward_offset);
-    Some((origin, direction))
+    Some((muzzle_origin, direction))
 }
 
 pub(super) fn interaction_ray(

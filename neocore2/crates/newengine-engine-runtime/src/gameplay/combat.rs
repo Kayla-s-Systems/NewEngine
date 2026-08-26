@@ -6,7 +6,7 @@ mod types;
 pub use types::{
     Health, HitscanWeaponTuning, Interactable, InteractionEvent, InteractionEventBus,
     PendingHitscan, PendingInteraction, PlayerInteractionTuning, PlayerWeaponState, WeaponEvent,
-    WeaponEventBus, WeaponEventKind,
+    WeaponEventBus, WeaponEventKind, WeaponObstructionState,
 };
 
 pub fn drain_weapon_events(world: &mut World) -> Vec<WeaponEvent> {

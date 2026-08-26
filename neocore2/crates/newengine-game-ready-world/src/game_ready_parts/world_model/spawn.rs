@@ -240,8 +240,13 @@ pub(super) fn spawn_dynamic_ydd_prefab_from_decoded(
         if !prims.is_registered(primitive_id) {
             prims.register_mesh(primitive_id, part.name.clone(), part.mesh.clone());
         }
-        let (material_id, render_options) =
-            resolve_prefab_part_material(mats, authored_material, materials, &part.material_slot);
+        let (material_id, render_options) = resolve_prefab_part_material(
+            mats,
+            authored_material,
+            materials,
+            &part.material_slot,
+            part.material_ref.as_deref(),
+        );
         let _ = spawn_game_primitive(
             world,
             &*prims,
@@ -323,8 +328,13 @@ pub(super) fn spawn_static_ydd_prefab_from_decoded(
         if !prims.is_registered(primitive_id) {
             prims.register_mesh(primitive_id, part.name.clone(), part.mesh.clone());
         }
-        let (material_id, mut render_options) =
-            resolve_prefab_part_material(mats, authored_material, materials, &part.material_slot);
+        let (material_id, mut render_options) = resolve_prefab_part_material(
+            mats,
+            authored_material,
+            materials,
+            &part.material_slot,
+            part.material_ref.as_deref(),
+        );
         if static_world_decal_slot(&part.material_slot) {
             render_options.role = newengine_model_domain_api::MeshRenderRole::Decal;
             render_options.depth_policy = newengine_model_domain_api::MeshDepthPolicy::ReadOnly;

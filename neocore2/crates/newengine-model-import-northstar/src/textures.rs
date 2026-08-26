@@ -84,7 +84,10 @@ impl ImportedTextureFormat {
         // Morton 8x8 microtiles; corpus validation on character and VFX textures showed that the
         // apparent "tiles" were actually row padding. 128-bit BC5/BC7 remain intentionally
         // rejected until their physical row/storage contract is validated independently.
-        matches!(self, Self::Bc1Unorm | Self::Bc1Srgb | Self::Bc4Unorm)
+        matches!(
+            self,
+            Self::Bc1Unorm | Self::Bc1Srgb | Self::Bc4Unorm | Self::Bc5Unorm
+        )
     }
 }
 
@@ -189,6 +192,13 @@ impl ImportedVramTexture {
             ImportedTextureFormat::Bc4Unorm => {
                 decode_bc4_alpha_rgba8(self.width, self.height, &linear)
             }
+            ImportedTextureFormat::Bc5Unorm => newengine_texture_container::decode_bcn_to_rgba8(
+                newengine_texture_container::PIXEL_FORMAT_BC5_RG_UNORM,
+                self.width,
+                self.height,
+                &linear,
+            )
+            .map_err(|error| format!("BC5 decode failed path='{}': {error}", self.source_path)),
             _ => Err(format!(
                 "RGBA8 decode is not validated for DXGI={} path='{}'",
                 self.format.dxgi(),
@@ -397,7 +407,7 @@ mod tests {
 
     #[test]
     fn unvalidated_128_bit_formats_are_rejected_explicitly() {
-        assert!(!ImportedTextureFormat::Bc5Unorm.validated_pitched_linearization());
+        assert!(ImportedTextureFormat::Bc5Unorm.validated_pitched_linearization());
         assert!(!ImportedTextureFormat::Bc7Srgb.validated_pitched_linearization());
         assert!(ImportedTextureFormat::Bc1Srgb.validated_pitched_linearization());
         assert!(ImportedTextureFormat::Bc4Unorm.validated_pitched_linearization());

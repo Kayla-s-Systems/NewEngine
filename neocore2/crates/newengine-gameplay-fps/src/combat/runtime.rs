@@ -1,6 +1,6 @@
 use super::*;
 
-pub fn step_player_combat(world: &mut World, dt: f32, _fixed_tick: u64) {
+pub fn step_player_combat(world: &mut World, dt: f32, fixed_tick: u64) {
     let gameplay_policy = world
         .resource::<FpsGameplayPolicySnapshot>()
         .cloned()
@@ -31,6 +31,10 @@ pub fn step_player_combat(world: &mut World, dt: f32, _fixed_tick: u64) {
             .unwrap_or(0);
 
         if world.get::<EquippedWeaponBinding>(player).is_some() {
+            // Keep a fixed-step body-to-muzzle obstruction probe alive even when the trigger is
+            // idle. Presentation consumes the previous resolved state, so the gun raises away from
+            // a wall before the player fires rather than correcting after penetration.
+            queue_weapon_obstruction_probe(world, player, fixed_tick);
             let tuning = world
                 .get::<HitscanWeaponTuning>(player)
                 .copied()

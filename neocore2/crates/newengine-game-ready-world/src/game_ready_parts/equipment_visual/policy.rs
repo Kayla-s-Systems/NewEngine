@@ -7,6 +7,7 @@ struct EquippedWeaponVisualRoot {
     aim_alpha: f32,
     last_shot_sequence: u64,
     recoil_alpha: f32,
+    recoil_yaw_radians: f32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

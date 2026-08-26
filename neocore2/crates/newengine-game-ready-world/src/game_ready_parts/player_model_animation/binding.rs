@@ -106,6 +106,30 @@ impl PlayerAnimationRuntimeBinding {
 }
 
 #[inline]
+fn equipment_overlay_uses_authored_translation(name: &str) -> bool {
+    matches!(
+        name,
+        "l_hand_prop"
+            | "r_hand_prop"
+            | "l_hand_prop_attachment"
+            | "r_hand_prop_attachment"
+    )
+}
+
+#[inline]
+fn blend_joint_translation_only(dst: &mut JointLocalPose, src: &JointLocalPose, weight: f32) {
+    let weight = if weight.is_finite() {
+        weight.clamp(0.0, 1.0)
+    } else {
+        1.0
+    };
+    let from = Vec3::new(dst.translation[0], dst.translation[1], dst.translation[2]);
+    let to = Vec3::new(src.translation[0], src.translation[1], src.translation[2]);
+    let translation = from.lerp(to, weight);
+    dst.translation = [translation.x, translation.y, translation.z];
+}
+
+#[inline]
 fn blend_joint_rotation_only(dst: &mut JointLocalPose, src: &JointLocalPose, weight: f32) {
     let weight = if weight.is_finite() {
         weight.clamp(0.0, 1.0)
@@ -163,7 +187,15 @@ fn apply_equipment_rotation_overlay(
             continue;
         };
         if let (Some(dst), Some(src)) = (target.get_mut(index), scratch.get(index)) {
-            blend_joint_rotation_only(dst, src, (*weight * weight_scale).clamp(0.0, 1.0));
+            let effective_weight = (*weight * weight_scale).clamp(0.0, 1.0);
+            blend_joint_rotation_only(dst, src, effective_weight);
+            // Naughty Dog hand-prop joints are animated constraint/contact frames. Keeping only
+            // their rotation leaves the weapon contact at bind-pose translation and visibly
+            // detaches the rifle from the authored hand pose. Only these dedicated prop channels
+            // inherit translation; torso/locomotion translation remains owned by the base clip.
+            if equipment_overlay_uses_authored_translation(name) {
+                blend_joint_translation_only(dst, src, effective_weight);
+            }
         }
     }
     Ok(())

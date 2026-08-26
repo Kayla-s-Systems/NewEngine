@@ -22,6 +22,7 @@ mod state;
 #[cfg(test)]
 mod tests;
 
+pub(crate) use character_variants::reconcile_existing_player_assignments_with_policy;
 pub(crate) use commands::step_inventory_commands;
 pub use provider::FpsInventoryHudProvider;
 pub(crate) use state::character_select_is_open;

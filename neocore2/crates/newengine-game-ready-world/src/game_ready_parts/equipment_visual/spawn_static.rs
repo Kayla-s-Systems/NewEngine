@@ -99,6 +99,7 @@ fn spawn_equipped_weapon_visual(
             aim_alpha: 0.0,
             last_shot_sequence,
             recoil_alpha: 0.0,
+            recoil_yaw_radians: 0.0,
         },
     );
     let _ = world.insert(

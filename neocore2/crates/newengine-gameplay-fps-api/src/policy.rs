@@ -330,6 +330,10 @@ impl FpsPlayableCharacterPolicy {
                         self.presentation.equipment_ready_animation.as_deref(),
                     ),
                     (
+                        "equipment_aim_animation",
+                        self.presentation.equipment_aim_animation.as_deref(),
+                    ),
+                    (
                         "equipment_reload_animation",
                         self.presentation.equipment_reload_animation.as_deref(),
                     ),
@@ -364,6 +368,10 @@ impl FpsPlayableCharacterPolicy {
                 self.presentation
                     .equipment_ready_rotation_weights
                     .as_slice(),
+            ),
+            (
+                "equipment_aim_rotation_weights",
+                self.presentation.equipment_aim_rotation_weights.as_slice(),
             ),
             (
                 "equipment_reload_rotation_weights",

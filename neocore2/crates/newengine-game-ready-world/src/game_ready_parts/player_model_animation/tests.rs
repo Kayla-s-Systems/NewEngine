@@ -3,7 +3,7 @@ mod transition_tests {
     use super::*;
 
     #[test]
-    fn rifle_ready_pole_ik_converges_without_moving_stock_anchored_weapon() {
+    fn authored_rifle_grip_preserves_firing_hand_and_bounds_support_ik() {
         use newengine_model_skeleton_api::{ModelSkeletonAnchors, ModelSkeletonJointMetadata};
 
         let names = [
@@ -42,7 +42,6 @@ mod transition_tests {
                 joint(0, None, [0.0, 0.0, 0.0]),
                 joint(1, Some(0), [0.0, 1.285_745, 0.0]),
                 joint(2, Some(1), [-0.17, 0.06, 0.0]),
-                // Real Abby arm lengths are roughly 0.26 m upper arm and 0.25 m forearm/hand.
                 joint(3, Some(2), [0.0, -0.26, 0.0]),
                 joint(4, Some(3), [0.0, -0.24, 0.0]),
                 joint(5, Some(4), [0.0, -0.015, 0.0]),
@@ -76,24 +75,27 @@ mod transition_tests {
         let source_to_model = [
             1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
         ];
+        let presentation = newengine_engine_runtime::gameplay::WeaponPresentationDefinition {
+            enabled: true,
+            handle_from_root: [0.0, 0.014, -0.030],
+            left_grip_from_handle: [-0.021, 0.043, 0.306],
+            stock_contact_from_handle: [-0.020, 0.053, -0.341],
+            ready_body_to_root_rotation: [0.036, 0.608, -0.041, 0.792],
+            ready_left_palm_to_left_grip: [0.003, 0.101, 0.006],
+            ready_right_palm_to_weapon: [-0.656, 0.722, 0.174, 0.133],
+            ready_left_palm_to_weapon: [-0.023, -0.459, -0.303, 0.835],
+            right_palm_to_handle: [0.019, 0.033, -0.083],
+            ..Default::default()
+        }
+        .sanitized();
         let mut frames = Vec::new();
         rebuild_model_joint_frames(&skeleton, source_to_model, &pose, &mut frames)
             .expect("initial frames");
-        let contract_before = crate::weapon_grip::rifle_ready_solve_contract(
-            frames[rig.chest],
-            frames[rig.right_shoulder],
-            frames[rig.left_shoulder],
-        )
-        .expect("ReadyHold solve contract");
-        let root_before = contract_before.root;
-        let right_target = crate::weapon_grip::weapon_ready_right_palm_position(root_before);
-        let left_target = crate::weapon_grip::weapon_ready_left_palm_position(root_before);
-        let initial_error = (
-            (frames[rig.right_palm].transform_point3(Vec3::ZERO) - right_target).length(),
-            (frames[rig.left_palm].transform_point3(Vec3::ZERO) - left_target).length(),
-        );
+        let right_before = frames[rig.right_palm].transform_point3(Vec3::ZERO);
+        let left_before = frames[rig.left_palm].transform_point3(Vec3::ZERO);
 
-        let final_error = apply_equipped_rifle_support_ik(
+        let final_error = apply_equipped_weapon_support_ik(
+            &presentation,
             Some(&rig),
             &skeleton,
             source_to_model,
@@ -102,37 +104,25 @@ mod transition_tests {
             None,
             0.0,
             0.0,
+            0.0,
+            0.0,
+            true,
             true,
         )
-        .expect("bilateral ReadyHold IK")
+        .expect("authored rifle support IK")
         .expect("IK enabled");
 
-        let final_right =
-            (frames[rig.right_palm].transform_point3(Vec3::ZERO) - right_target).length();
-        let final_left =
-            (frames[rig.left_palm].transform_point3(Vec3::ZERO) - left_target).length();
+        let right_after = frames[rig.right_palm].transform_point3(Vec3::ZERO);
+        let left_after = frames[rig.left_palm].transform_point3(Vec3::ZERO);
         assert!(
-            final_right < initial_error.0,
-            "right initial={} final={final_right}",
-            initial_error.0
+            (right_after - right_before).length() < 1.0e-5,
+            "firing hand must remain authored: before={right_before:?} after={right_after:?}"
         );
         assert!(
-            final_left < initial_error.1,
-            "left initial={} final={final_left}",
-            initial_error.1
+            (left_after - left_before).length() <= 0.115,
+            "support IK must remain bounded: before={left_before:?} after={left_after:?}"
         );
-        assert!(final_error < 0.035, "final={final_error}");
-
-        let contract_after = crate::weapon_grip::rifle_ready_solve_contract(
-            frames[rig.chest],
-            frames[rig.right_shoulder],
-            frames[rig.left_shoulder],
-        )
-        .expect("ReadyHold solve contract after IK");
-        let root_after = contract_after.root;
-        assert!((root_before.position - root_after.position).length() < 1.0e-6);
-        assert!(root_before.rotation.dot(root_after.rotation).abs() > 0.999_999);
-        assert!((contract_after.stock_contact - contract_after.shoulder_pocket).length() < 1.0e-6);
+        assert!(final_error.is_finite() && final_error <= 0.115);
     }
 
     #[test]

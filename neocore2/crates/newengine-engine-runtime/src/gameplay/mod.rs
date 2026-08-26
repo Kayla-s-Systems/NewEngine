@@ -17,6 +17,7 @@ pub use combat::{
     drain_interaction_events, drain_weapon_events, Health, HitscanWeaponTuning, Interactable,
     InteractionEvent, InteractionEventBus, PendingHitscan, PendingInteraction,
     PlayerInteractionTuning, PlayerWeaponState, WeaponEvent, WeaponEventBus, WeaponEventKind,
+    WeaponObstructionState,
 };
 pub use components::{
     attach_scene_element_core, attach_scene_object_core, scene_entity_by_role,

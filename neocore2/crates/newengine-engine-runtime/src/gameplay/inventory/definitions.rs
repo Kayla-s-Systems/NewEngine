@@ -675,7 +675,7 @@ impl ItemDefinition {
     }
 
     #[inline]
-    #[inline]
+    
     pub fn with_weapon_presentation(mut self, presentation: WeaponPresentationDefinition) -> Self {
         self.weapon_presentation = presentation.sanitized();
         self

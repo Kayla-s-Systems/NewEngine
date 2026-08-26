@@ -61,6 +61,99 @@ pub fn selected_variant<'a>(
     })
 }
 
+fn assignment_payload_matches(
+    current: &PlayerModelAssignment,
+    desired: &PlayerModelAssignment,
+) -> bool {
+    let mut current = current.clone();
+    let mut desired = desired.clone();
+    current.revision = 0;
+    desired.revision = 0;
+    current == desired
+}
+
+/// The game-ready scene may bootstrap the default avatar before the FPS Lua policy is installed.
+/// Reconcile that provisional assignment with the project-authored character descriptor once the
+/// policy becomes available, even when the YDD path itself did not change. Presentation data
+/// (native equipment clips, rig policies, offsets) is part of the assignment contract and must
+/// therefore advance the assignment revision.
+pub(crate) fn reconcile_existing_player_assignments_with_policy(
+    world: &mut World,
+    policy: &FpsGameplayPolicySnapshot,
+) -> usize {
+    let players = world
+        .query::<PlayerModelAssignment>()
+        .map(|(entity, assignment)| (entity, assignment.clone()))
+        .collect::<Vec<_>>();
+    let mut reconciled = 0usize;
+
+    for (player, current) in players {
+        let selected_id = world
+            .get::<PlayableCharacterSelection>(player)
+            .map(|selection| selection.variant_id.as_str());
+        let variant = selected_id
+            .and_then(|id| {
+                policy.characters.iter().find(|variant| {
+                    variant.id.eq_ignore_ascii_case(id)
+                        || variant
+                            .aliases
+                            .iter()
+                            .any(|alias| alias.eq_ignore_ascii_case(id))
+                })
+            })
+            .or_else(|| {
+                policy.characters.iter().find(|variant| {
+                    variant.runtime_ready
+                        && variant.runtime_model_ref.as_deref().is_some_and(|source| {
+                            source.trim().eq_ignore_ascii_case(current.source.trim())
+                        })
+                })
+            });
+        let Some(variant) = variant else {
+            continue;
+        };
+        let Some(desired) = assignment(variant) else {
+            continue;
+        };
+        if assignment_payload_matches(&current, &desired) {
+            continue;
+        }
+        match newengine_engine_runtime::gameplay::set_player_model_assignment(
+            world, player, desired,
+        ) {
+            Ok(revision) => {
+                reconciled += 1;
+                newengine_ulog_api::ulog::info!(
+                    "fps character assignment reconciled after policy install player={} variant='{}' revision={} source='{}' ready_clip='{}' aim_clip='{}'",
+                    player.stable_u64(),
+                    variant.id,
+                    revision,
+                    variant.runtime_model_ref.as_deref().unwrap_or(""),
+                    variant
+                        .presentation
+                        .equipment_ready_animation
+                        .as_deref()
+                        .unwrap_or("none"),
+                    variant
+                        .presentation
+                        .equipment_aim_animation
+                        .as_deref()
+                        .unwrap_or("none"),
+                );
+            }
+            Err(error) => {
+                newengine_ulog_api::ulog::warn!(
+                    "fps character assignment reconciliation failed player={} variant='{}': {}",
+                    player.stable_u64(),
+                    variant.id,
+                    error,
+                );
+            }
+        }
+    }
+    reconciled
+}
+
 pub fn assignment(variant: &FpsPlayableCharacterPolicy) -> Option<PlayerModelAssignment> {
     if !variant.runtime_ready {
         return None;
@@ -160,6 +253,51 @@ mod tests {
         ];
         world.insert_resource(policy);
         world
+    }
+
+    #[test]
+    fn policy_reconciliation_revisions_same_model_when_presentation_changes() {
+        let mut world = World::new();
+        let player = newengine_engine_runtime::gameplay::spawn_default_player(
+            &mut world,
+            None,
+            "policy-reconcile-test",
+            newengine_math::Vec3::ZERO,
+        );
+        let mut variant = character(
+            "ellie",
+            "ellie_latest",
+            "models/characters/ellie/ellie.ydd@ellie",
+        );
+        variant.presentation.equipment_ready_animation = Some(
+            "animations/characters/ellie/movement-combat.ycd@ellie-idle-fb-hr-aim-guns-rifle-ref"
+                .to_owned(),
+        );
+        let current = PlayerModelAssignment {
+            revision: 4,
+            enabled: true,
+            source: "models/characters/ellie/ellie.ydd@ellie".to_owned(),
+            target_height: variant.target_height,
+            hide_in_first_person: variant.hide_in_first_person,
+            ..PlayerModelAssignment::default()
+        };
+        let _ = world.insert(player, current);
+        let mut policy = FpsGameplayPolicySnapshot::default();
+        policy.characters = vec![variant];
+
+        assert_eq!(
+            reconcile_existing_player_assignments_with_policy(&mut world, &policy),
+            1
+        );
+        let assignment = world
+            .get::<PlayerModelAssignment>(player)
+            .expect("assignment");
+        assert_eq!(assignment.revision, 5);
+        assert!(assignment
+            .presentation
+            .equipment_ready_animation
+            .as_deref()
+            .is_some_and(|value| value.contains("ellie-idle-fb-hr-aim-guns-rifle-ref")));
     }
 
     #[test]

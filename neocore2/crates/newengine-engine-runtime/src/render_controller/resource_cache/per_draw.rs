@@ -175,5 +175,4 @@ mod tests {
         assert_eq!(per_draw_ubo_cache_key(logical, 4), (logical, 0));
         assert_eq!(per_draw_ubo_cache_key(logical, 9), (logical, 1));
     }
-
 }

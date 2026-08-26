@@ -486,21 +486,20 @@ fn apply_project_environment(
     {
         host.set_environment_var(newengine_project_runtime::UI_DOCUMENT_ENV, value);
     }
-    if let Some(flow) = ui.presentation_flow.as_ref() {
-        let mut flow = flow.clone();
-        if let Some(initial_state) = host
-            .environment_var(newengine_project_runtime::UI_PRESENTATION_INITIAL_STATE_ENV)
-            .map(|value| value.trim().to_owned())
-            .filter(|value| !value.is_empty())
-        {
-            flow.initial_state = initial_state;
-            host.remove_environment_var(
-                newengine_project_runtime::UI_PRESENTATION_INITIAL_STATE_ENV,
-            );
-        }
+    let requested_initial_state = host
+        .environment_var(newengine_project_runtime::UI_PRESENTATION_INITIAL_STATE_ENV)
+        .map(|value| value.trim().to_owned())
+        .filter(|value| !value.is_empty());
+    if let Some(flow) = newengine_project_runtime::effective_project_ui_presentation_flow(
+        &context.manifest,
+        requested_initial_state.as_deref(),
+    ) {
+        host.remove_environment_var(newengine_project_runtime::UI_PRESENTATION_INITIAL_STATE_ENV);
         if let Ok(encoded) = serde_json::to_string(&flow) {
             host.set_environment_var(newengine_project_runtime::UI_PRESENTATION_FLOW_ENV, encoded);
         }
+    } else {
+        host.remove_environment_var(newengine_project_runtime::UI_PRESENTATION_FLOW_ENV);
     }
     if let Some(value) = ui.publish_editor_shell {
         host.set_environment_var(

@@ -495,6 +495,95 @@ mod tests {
         assert_eq!(events[0].target, target);
         assert_eq!(events[0].prompt, "Open terminal");
     }
+
+    #[test]
+    fn weapon_obstruction_probe_clamps_safe_muzzle_before_wall() {
+        let mut world = World::new();
+        let player = spawn_fps_player(&mut world, "obstruction-player", Vec3::ZERO);
+        let muzzle = EquippedWeaponMuzzle::new(
+            Vec3::new(0.0, 1.20, -0.72),
+            Vec3::new(0.0, 0.0, -1.0),
+        )
+        .expect("muzzle");
+        let _ = world.insert(player, muzzle);
+        let _ = world.insert(player, PlayerStanceState::standing(0.72));
+
+        queue_weapon_obstruction_probe(&mut world, player, 44);
+        let pending = world
+            .get::<PendingWeaponObstructionProbe>(player)
+            .copied()
+            .expect("obstruction probe");
+        let queries = collect_combat_queries(&world);
+        let query = queries
+            .iter()
+            .find(|query| query.seq == pending.query_seq)
+            .expect("physics query");
+        assert_eq!(query.ignore_entity, Some(player.stable_u64()));
+
+        let wall = world.spawn();
+        let hit_distance = pending.muzzle_distance * 0.55;
+        let hit_position = pending.origin + pending.direction * hit_distance;
+        let map = BTreeMap::from([(player.stable_u64(), player), (wall.stable_u64(), wall)]);
+        resolve_combat_queries(
+            &mut world,
+            44,
+            &[PhysicsQueryHitDto {
+                seq: pending.query_seq,
+                entity: wall.stable_u64(),
+                position: [hit_position.x, hit_position.y, hit_position.z],
+                normal: [0.0, 0.0, 1.0],
+                distance: hit_distance,
+            }],
+            &map,
+            embedded_test_policy_provider().as_ref(),
+            &GameplayCommandExecutor::default(),
+        );
+
+        let obstruction = world
+            .get::<WeaponObstructionState>(player)
+            .copied()
+            .expect("obstruction state");
+        assert!(obstruction.blocked);
+        assert!(obstruction.alpha > 0.0);
+        let safe_distance = (obstruction.safe_muzzle_position - pending.origin).length();
+        assert!(safe_distance < hit_distance);
+        assert!(hit_distance - safe_distance >= 0.024);
+        assert!(world.get::<PendingWeaponObstructionProbe>(player).is_none());
+    }
+
+    #[test]
+    fn clear_weapon_obstruction_probe_restores_real_muzzle() {
+        let mut world = World::new();
+        let player = spawn_fps_player(&mut world, "clear-obstruction-player", Vec3::ZERO);
+        let muzzle = EquippedWeaponMuzzle::new(
+            Vec3::new(0.0, 1.20, -0.64),
+            Vec3::new(0.0, 0.0, -1.0),
+        )
+        .expect("muzzle");
+        let _ = world.insert(player, muzzle);
+        let _ = world.insert(player, PlayerStanceState::standing(0.72));
+        queue_weapon_obstruction_probe(&mut world, player, 45);
+        let pending = world
+            .get::<PendingWeaponObstructionProbe>(player)
+            .copied()
+            .expect("obstruction probe");
+
+        resolve_combat_queries(
+            &mut world,
+            45,
+            &[],
+            &BTreeMap::new(),
+            embedded_test_policy_provider().as_ref(),
+            &GameplayCommandExecutor::default(),
+        );
+        let obstruction = world
+            .get::<WeaponObstructionState>(player)
+            .copied()
+            .expect("clear obstruction state");
+        assert!(!obstruction.blocked);
+        assert_eq!(obstruction.alpha, 0.0);
+        assert!((obstruction.safe_muzzle_position - pending.muzzle_position).length() < 1.0e-6);
+    }
 }
 
 #[test]
@@ -526,13 +615,17 @@ fn hitscan_direction_tracks_mouse_look_pitch() {
 }
 
 #[test]
-fn hitscan_uses_published_weapon_muzzle_pose_when_available() {
+fn hitscan_origin_is_physical_muzzle_while_direction_converges_to_view_axis() {
     let mut world = World::new();
     let player = world.spawn();
     let _ = world.insert(player, Transform::default());
     let _ = world.insert(player, CharacterMotor::default());
-    let muzzle = EquippedWeaponMuzzle::new(Vec3::new(4.0, 1.25, -2.0), Vec3::new(1.0, 0.0, 0.0))
-        .expect("valid muzzle");
+    let _ = world.insert(player, PlayerStanceState::standing(0.72));
+    let muzzle = EquippedWeaponMuzzle::new(
+        Vec3::new(0.35, 1.25, -0.65),
+        Vec3::new(0.0, 0.0, -1.0),
+    )
+    .expect("valid muzzle");
     let _ = world.insert(player, muzzle);
     let mut tuning = HitscanWeaponTuning::default();
     tuning.hip_spread_radians = 0.0;
@@ -541,7 +634,46 @@ fn hitscan_uses_published_weapon_muzzle_pose_when_available() {
     let (origin, direction) =
         shot_origin_and_direction(&world, player, tuning, true, 9).expect("muzzle hitscan");
     assert!((origin - (muzzle.position + muzzle.forward * 0.008)).length() < 1.0e-6);
-    assert!(direction.dot(muzzle.forward) > 0.999_999);
+    let view_origin = Vec3::Y * 0.72;
+    let camera_forward = -Vec3::Z;
+    let target = view_origin + camera_forward * tuning.range.min(80.0).max(12.0);
+    let expected = (target - origin).normalize_or_zero();
+    assert!(direction.dot(expected) > 0.999_999);
+    assert!(direction.x < 0.0, "off-axis muzzle must converge toward reticle axis");
+}
+
+#[test]
+fn blocked_hitscan_uses_safe_muzzle_on_player_side_of_obstacle() {
+    let mut world = World::new();
+    let player = world.spawn();
+    let _ = world.insert(player, Transform::default());
+    let _ = world.insert(player, CharacterMotor::default());
+    let _ = world.insert(player, PlayerStanceState::standing(0.72));
+    let muzzle = EquippedWeaponMuzzle::new(
+        Vec3::new(0.0, 1.20, -0.75),
+        Vec3::new(0.0, 0.0, -1.0),
+    )
+    .expect("valid muzzle");
+    let _ = world.insert(player, muzzle);
+    let safe = Vec3::new(0.0, 1.15, -0.31);
+    let _ = world.insert(
+        player,
+        WeaponObstructionState {
+            blocked: true,
+            alpha: 0.8,
+            hit_position: Vec3::new(0.0, 1.15, -0.34),
+            hit_normal: Vec3::Z,
+            safe_muzzle_position: safe,
+            fixed_tick: 7,
+        },
+    );
+    let mut tuning = HitscanWeaponTuning::default();
+    tuning.hip_spread_radians = 0.0;
+    tuning.aim_spread_radians = 0.0;
+    let (origin, _) =
+        shot_origin_and_direction(&world, player, tuning, true, 10).expect("blocked hitscan");
+    assert!((origin - safe).length() < 1.0e-6);
+    assert!(origin.z > -0.34, "shot must originate on player side of wall");
 }
 
 #[test]

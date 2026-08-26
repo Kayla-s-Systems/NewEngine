@@ -53,6 +53,17 @@ pub(crate) fn equipped_weapon_recoil_alpha(world: &newengine_ecs::World, owner: 
         .unwrap_or(0.0)
 }
 
+pub(crate) fn equipped_weapon_recoil_yaw_radians(
+    world: &newengine_ecs::World,
+    owner: EntityId,
+) -> f32 {
+    world
+        .query::<EquippedWeaponVisualRoot>()
+        .find_map(|(_, visual)| (visual.owner == owner).then_some(visual.recoil_yaw_radians))
+        .filter(|value| value.is_finite())
+        .unwrap_or(0.0)
+}
+
 /// Samples RMB/aim once before animation so body IK and rendered rifle consume the exact same
 /// presentation alpha in the same world-runtime frame.
 pub(crate) fn tick_equipped_weapon_presentation_input(world: &mut newengine_ecs::World, dt: f32) {
@@ -68,8 +79,14 @@ pub(crate) fn tick_equipped_weapon_presentation_input(world: &mut newengine_ecs:
     for (root, visual) in roots {
         // RMB is a weapon state, not a first-person-only state. Third-person aim must drive the
         // same ReadyHold/ADS contract as full-body first person.
+        let obstruction_alpha = world
+            .get::<WeaponObstructionState>(visual.owner)
+            .map(|state| state.alpha.clamp(0.0, 1.0))
+            .unwrap_or(0.0);
         let aim_target = if first_person_aim_held(world, visual.owner) {
-            1.0
+            // Aim-blocked keeps the intention to aim, but physically relaxes the weapon out of
+            // full ADS as the barrel approaches geometry. This mirrors the original add/sub layer.
+            (1.0 - obstruction_alpha * 0.82).clamp(0.0, 1.0)
         } else {
             0.0
         };
@@ -93,10 +110,27 @@ pub(crate) fn tick_equipped_weapon_presentation_input(world: &mut newengine_ecs:
         } else {
             visual.recoil_alpha
         };
+        let recoil_yaw_radians = if new_shot {
+            let tuning = world
+                .get::<HitscanWeaponTuning>(visual.owner)
+                .copied()
+                .unwrap_or_default()
+                .sanitized();
+            let sign = if shot_sequence.is_multiple_of(2) { 1.0 } else { -1.0 };
+            let noise = ((newengine_math::avalanche_u64(shot_sequence ^ 0xa409_3822) >> 40)
+                as u32) as f32
+                / 0x00ff_ffffu32 as f32;
+            tuning.recoil_yaw_radians * sign * (0.55 + noise.clamp(0.0, 1.0) * 0.45)
+        } else if dt > 0.0 {
+            visual.recoil_yaw_radians * (-recoil_recovery_hz * dt).exp()
+        } else {
+            visual.recoil_yaw_radians
+        };
         if let Some(state) = world.get_mut::<EquippedWeaponVisualRoot>(root) {
             state.aim_alpha = aim_alpha;
             state.last_shot_sequence = shot_sequence;
             state.recoil_alpha = recoil_alpha;
+            state.recoil_yaw_radians = recoil_yaw_radians;
         }
     }
 }
@@ -180,6 +214,16 @@ fn update_weapon_attachment(
     let Some(visual) = world.get::<EquippedWeaponVisualRoot>(root).copied() else {
         return;
     };
+    // Character presentation/policy changes can rebuild the avatar visual root without replacing
+    // the inventory weapon instance. Keep the equipped weapon attached to the current avatar, not
+    // to a stale/despawned root from the previous model binding.
+    if let Some(avatar_root) = world
+        .get::<PlayerModelBinding>(owner)
+        .and_then(|binding| binding.visual_root)
+        .filter(|entity| world.exists(*entity))
+    {
+        let _ = set_parent(world, root, Some(avatar_root));
+    }
     let weapon_definition = world
         .resource::<ItemCatalog>()
         .and_then(|catalog| catalog.get(visual.item))
@@ -200,6 +244,10 @@ fn update_weapon_attachment(
             .is_some_and(|assignment| assignment.hide_in_first_person);
     sync_equipped_weapon_render_policy(world, root, legacy_viewmodel_active);
     let aim_alpha = visual.aim_alpha.clamp(0.0, 1.0);
+    let obstruction_alpha = world
+        .get::<WeaponObstructionState>(owner)
+        .map(|state| state.alpha.clamp(0.0, 1.0))
+        .unwrap_or(0.0);
 
     let mut right_frame_for_debug = None;
     let mut ready_body_frames_for_debug = None;
@@ -221,28 +269,51 @@ fn update_weapon_attachment(
             )
         })
     } else if authored_weapon_presentation {
-        // Authored ReadyHold: stock owns translation, view direction owns aiming rotation, and
-        // both arms solve against this exact root in player_model_animation.
+        // Authored ReadyHold: the native firing-hand contact owns handle translation, while the
+        // anatomical solve owns base/aim rotation. Support-hand IK consumes this exact same root.
         let body_frames = super::player_model::player_rifle_ready_body_frames(world, owner);
-        let right_frame = super::player_model::player_right_hand_weapon_frame(world, owner);
+        // Prefer the authored firing-hand prop contact when it remains physically close to the
+        // palm. The helper falls back to the anatomical palm/wrist for rigs/clips without a valid
+        // prop target. This keeps the rendered weapon attached to the same hand pose the player sees.
+        let right_frame = super::player_model::player_right_hand_prop_frame(world, owner);
+        let left_frame = super::player_model::player_left_hand_weapon_frame(world, owner);
         let view_forward_model = if first_person_active || aim_alpha > 0.001 {
             super::player_model::player_rifle_view_forward_model(world, owner)
         } else {
             None
         };
         let recoil_alpha = visual.recoil_alpha.clamp(0.0, 1.0);
+        let recoil_yaw_radians = visual.recoil_yaw_radians;
         ready_body_frames_for_debug = body_frames;
         right_frame_for_debug = right_frame;
         body_frames.and_then(|(chest, right_shoulder, left_shoulder)| {
+            let presentation = presentation.as_ref().expect("authored presentation");
+            let handle_anchor = right_frame
+                .map(|frame| frame.transform_point3(Vec3::ZERO))
+                .filter(|position| position.is_finite());
+            let support_anchor = left_frame
+                .map(|frame| frame.transform_point3(Vec3::ZERO))
+                .filter(|position| position.is_finite());
             crate::weapon_grip::weapon_ready_solve_contract_presented(
-                presentation.as_ref().expect("authored presentation"),
+                presentation,
                 chest,
                 right_shoulder,
                 left_shoulder,
                 view_forward_model,
                 aim_alpha,
                 recoil_alpha,
+                recoil_yaw_radians,
             )
+            .and_then(|contract| {
+                crate::weapon_grip::weapon_ready_contract_with_contacts(
+                    presentation,
+                    contract,
+                    handle_anchor,
+                    support_anchor,
+                    aim_alpha,
+                    obstruction_alpha,
+                )
+            })
             .map(|contract| (contract.root.position, contract.root.rotation))
         })
     } else {
@@ -313,6 +384,9 @@ fn update_weapon_attachment(
             return;
         };
         let right_palm = right_frame.transform_point3(Vec3::ZERO);
+        let left_palm = super::player_model::player_left_hand_weapon_frame(world, owner)
+            .map(|frame| frame.transform_point3(Vec3::ZERO))
+            .filter(|position| position.is_finite());
         let chest = chest_frame.transform_point3(Vec3::ZERO);
         let presentation = presentation.as_ref().expect("authored presentation");
         let Some(contract) = crate::weapon_grip::weapon_ready_solve_contract(
@@ -320,7 +394,17 @@ fn update_weapon_attachment(
             chest_frame,
             right_shoulder_frame,
             left_shoulder_frame,
-        ) else {
+        )
+        .and_then(|contract| {
+            crate::weapon_grip::weapon_ready_contract_with_contacts(
+                presentation,
+                contract,
+                Some(right_palm),
+                left_palm,
+                aim_alpha,
+                obstruction_alpha,
+            )
+        }) else {
             return;
         };
         let weapon_root = contract.root;
@@ -336,7 +420,7 @@ fn update_weapon_attachment(
             let right_error = (right_palm - right_target).length();
             let left_error = (left_palm - left_target).length();
             newengine_ulog_api::ulog::info!(
-                "WEAPON_GRIP player={} space='player_model' chest={:?} right_palm={:?} right_target={:?} right_error_m={:.5} handle={:?} stock={:?} shoulder_pocket={:?} stock_error_m={:.5} left_palm={:?} left_target={:?} left_error_m={:.5} l_grip={:?} policy='ReadyHold stock->shoulder anchor; pole-vector bilateral IK; constrained wrist basis'",
+                "WEAPON_GRIP player={} space='player_model' chest={:?} right_palm={:?} right_target={:?} right_error_m={:.5} handle={:?} stock={:?} shoulder_pocket={:?} stock_error_m={:.5} left_palm={:?} left_target={:?} left_error_m={:.5} l_grip={:?} policy='authored firing-hand master; soft stock/support constraints; bounded support IK; aim-blocked barrel pivot'",
                 owner.stable_u64(),
                 chest,
                 right_palm,

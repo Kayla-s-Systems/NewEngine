@@ -6,7 +6,7 @@ use newengine_engine_runtime::gameplay::{
     HitscanWeaponTuning, ItemCatalog, PlayerCommandFrame, PlayerModelAssignment,
     PlayerModelBinding, PlayerSkinBinding, PlayerSkinVertex, PlayerStanceState, PlayerViewState,
     PlayerViewVisibility, PlayerViewVisibilityPolicy, PlayerVisualKind, PlayerVisualPart,
-    PlayerWeaponState,
+    PlayerWeaponState, WeaponObstructionState,
 };
 
 // Equipment rendering is decomposed by policy, spawn path, and presentation update.

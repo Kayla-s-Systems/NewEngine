@@ -374,28 +374,33 @@ fn load_discrete_map_profile(logical_path: &str) -> Result<GameReadyMapProfile, 
                 placement.transform.rotation_ypr[1],
                 placement.transform.rotation_ypr[2],
             );
-            let dynamic_physics = placement
-                .apply_mode
-                .trim()
-                .eq_ignore_ascii_case("dynamic_physics");
-            profile.prefabs.push(GameReadyPrefabSpec {
-                id: placement.id.clone(),
-                authored_map_ref: logical_path.to_owned(),
-                authored_placement_id: placement.id.clone(),
-                authored_discrete_placement: true,
-                authored_primary: true,
-                source: drawable_ref.clone(),
-                proxy: if dynamic_physics {
-                    "world_dynamic_ydd".to_owned()
-                } else {
-                    "world_static_ydd".to_owned()
-                },
-                material: material_ref,
-                enabled: true,
-                position,
-                rotation_ypr,
-                scale,
-            });
+            let apply_mode = placement.apply_mode.trim();
+            let dynamic_physics = apply_mode.eq_ignore_ascii_case("dynamic_physics");
+            let collision_only = apply_mode.eq_ignore_ascii_case("collision_only")
+                || placement
+                    .tags
+                    .iter()
+                    .any(|tag| tag.eq_ignore_ascii_case("collision_only"));
+            if !collision_only {
+                profile.prefabs.push(GameReadyPrefabSpec {
+                    id: placement.id.clone(),
+                    authored_map_ref: logical_path.to_owned(),
+                    authored_placement_id: placement.id.clone(),
+                    authored_discrete_placement: true,
+                    authored_primary: true,
+                    source: drawable_ref.clone(),
+                    proxy: if dynamic_physics {
+                        "world_dynamic_ydd".to_owned()
+                    } else {
+                        "world_static_ydd".to_owned()
+                    },
+                    material: material_ref,
+                    enabled: true,
+                    position,
+                    rotation_ypr,
+                    scale,
+                });
+            }
 
             let collision_policy = definition.model_explanation.collision_policy.trim();
             let has_collision = !definition.refs.collision_refs.is_empty()
@@ -408,13 +413,23 @@ fn load_discrete_map_profile(logical_path: &str) -> Result<GameReadyMapProfile, 
                     "static_mesh" | "triangle_mesh" | "mesh"
                 );
             if has_collision && !dynamic_physics {
+                let collision_source = definition
+                    .refs
+                    .collision_refs
+                    .first()
+                    .cloned()
+                    .unwrap_or(drawable_ref);
                 profile.prefabs.push(GameReadyPrefabSpec {
-                    id: format!("{}#collision", placement.id),
+                    id: if collision_only {
+                        placement.id.clone()
+                    } else {
+                        format!("{}#collision", placement.id)
+                    },
                     authored_map_ref: logical_path.to_owned(),
                     authored_placement_id: placement.id.clone(),
                     authored_discrete_placement: true,
                     authored_primary: false,
-                    source: drawable_ref,
+                    source: collision_source,
                     proxy: "world_collision_ydd".to_owned(),
                     material: String::new(),
                     enabled: true,
@@ -422,6 +437,11 @@ fn load_discrete_map_profile(logical_path: &str) -> Result<GameReadyMapProfile, 
                     rotation_ypr,
                     scale,
                 });
+            } else if collision_only {
+                return Err(format!(
+                    "discrete YMAF placement '{}' is collision_only but definition_ref='{}' declares no collision",
+                  placement.id, placement.definition_ref
+                ));
             }
 
             profile.definitions.push(GameReadyDefinitionInstanceSpec {

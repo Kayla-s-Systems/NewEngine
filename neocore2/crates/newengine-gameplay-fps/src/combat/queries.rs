@@ -24,6 +24,17 @@ pub fn collect_combat_queries(world: &World) -> Vec<PhysicsQueryDto> {
             },
         });
     }
+    for (entity, pending) in world.query::<PendingWeaponObstructionProbe>() {
+        queries.push(PhysicsQueryDto {
+            seq: pending.query_seq,
+            ignore_entity: Some(entity.stable_u64()),
+            kind: PhysicsQueryKindDto::Ray {
+                origin: vec3_to_array(pending.origin),
+                dir: vec3_to_array(pending.direction),
+                max_t: pending.muzzle_distance,
+            },
+        });
+    }
     for (_, pending) in world.query::<PendingInteraction>() {
         queries.push(PhysicsQueryDto {
             seq: pending.query_seq,
@@ -53,6 +64,43 @@ pub fn resolve_combat_queries(
         .cloned()
         .unwrap_or_default();
     let mut consumed = BTreeSet::new();
+
+    let obstruction_probes = world
+        .query::<PendingWeaponObstructionProbe>()
+        .map(|(player, pending)| (player, *pending))
+        .collect::<Vec<_>>();
+    for (player, pending) in obstruction_probes {
+        consumed.insert(pending.query_seq);
+        let state = if let Some(hit) = hits.iter().find(|hit| hit.seq == pending.query_seq) {
+            let hit_distance = if hit.distance.is_finite() {
+                hit.distance.clamp(0.0, pending.muzzle_distance)
+            } else {
+                pending.muzzle_distance
+            };
+            // Leave a small safety shell on the player's side of the contact plane. The alpha is
+            // proportional to how much of the authored barrel would have crossed the obstacle.
+            let overhang = (pending.muzzle_distance - hit_distance).max(0.0);
+            let blocked = overhang > 0.015;
+            let alpha = if blocked {
+                (overhang / 0.28).clamp(0.0, 1.0)
+            } else {
+                0.0
+            };
+            let safe_t = (hit_distance - 0.025).max(0.0);
+            WeaponObstructionState {
+                blocked,
+                alpha,
+                hit_position: vec3_from_array(hit.position),
+                hit_normal: vec3_from_array(hit.normal),
+                safe_muzzle_position: pending.origin + pending.direction * safe_t,
+                fixed_tick,
+            }
+        } else {
+            WeaponObstructionState::clear(pending.muzzle_position, fixed_tick)
+        };
+        let _ = world.insert(player, state);
+        let _ = world.remove::<PendingWeaponObstructionProbe>(player);
+    }
 
     let pending_shots = world
         .query::<PendingHitscan>()

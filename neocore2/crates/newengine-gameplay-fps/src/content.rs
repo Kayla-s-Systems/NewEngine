@@ -200,6 +200,14 @@ fn validate_required_content(
 
 fn install_policy_resources(world: &mut GameplayWorld, policy: &FpsGameplayPolicySnapshot) {
     world.insert_resource(policy.clone());
+    let reconciled =
+        crate::inventory_hud::reconcile_existing_player_assignments_with_policy(world, policy);
+    if reconciled > 0 {
+        newengine_ulog_api::ulog::info!(
+            "fps gameplay policy reconciled character presentation assignments count={}",
+            reconciled
+        );
+    }
     if let Some(rules) = world.resource_mut::<FpsDemoRules>() {
         let mission = &policy.mission;
         rules.default_status = mission.default_status.clone();
