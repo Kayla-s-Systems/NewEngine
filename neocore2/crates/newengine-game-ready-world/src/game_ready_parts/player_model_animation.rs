@@ -664,7 +664,7 @@ fn debug_dump_eye_matrices(
     let Some(contract) = contract else {
         return;
     };
-    if std::env::var_os("NORTHSTAR_DEBUG_ABBY_EYES").is_none() {
+    if crate::env_config::var_os("NORTHSTAR_DEBUG_ABBY_EYES").is_none() {
         return;
     }
     let Some(parent_bind_global) = bind_joint_frames.get(contract.parent).copied() else {

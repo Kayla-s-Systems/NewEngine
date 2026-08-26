@@ -4,7 +4,7 @@ use crate::error::{EngineError, EngineResult};
 use newengine_plugin_host::PluginSnapshotEntry;
 use newengine_service_api::RuntimeServiceRequirementSpec;
 
-use super::catalog::{runtime_service_user, RUNTIME_SERVICE_CATALOG};
+use super::catalog::{RUNTIME_SERVICE_CATALOG, runtime_service_user};
 use super::description::{
     contract_family_matches, method_statuses, parse_contract_from_description,
     parse_methods_from_description,
@@ -377,10 +377,7 @@ fn contract_error(
     let provider = provider_for(plugins, contract.service_id);
     EngineError::Other(format!(
         "FATAL: runtime service contract mismatch. service='{}' provider='{}' expected='{}' {}; rebuild/copy the matching plugin DLL before scene bootstrap.",
-        contract.service_id,
-        provider,
-        contract.expected_contract,
-        reason,
+        contract.service_id, provider, contract.expected_contract, reason,
     ))
 }
 
@@ -390,7 +387,9 @@ fn is_required(requirement: RuntimeServiceRequirementSpec) -> bool {
 
 fn env_flag(name: &str) -> bool {
     matches!(
-        std::env::var(name).ok().as_deref(),
+        newengine_plugin_host::current_host_context()
+            .environment_var(name)
+            .as_deref(),
         Some("1") | Some("true") | Some("TRUE") | Some("yes") | Some("YES")
     )
 }

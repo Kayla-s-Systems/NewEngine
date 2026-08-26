@@ -6,4 +6,8 @@ description = "Versioned game-module descriptor contract for NewEngine"
 
 [dependencies]
 newengine-contract-api = { path = "../newengine-contract-api" }
+newengine-service-api = { path = "../newengine-service-api" }
 serde = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+serde_json = "1"

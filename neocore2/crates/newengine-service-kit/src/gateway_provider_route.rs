@@ -42,6 +42,7 @@ pub struct NullEngineGatewayProviderDeclDynamic {
     pub provider_abi: Option<&'static str>,
     pub capability: &'static str,
     pub owner: &'static str,
+    pub system_tags: &'static [&'static str],
     pub service: ServiceV1Dyn<'static>,
 }
 
@@ -117,7 +118,7 @@ pub fn register_null_engine_gateway_provider_service_dynamic(
 
     match decl.provider_abi {
         Some(provider_abi) => {
-            newengine_plugin_host::register_null_engine_gateway_provider_route_with_abi(
+            newengine_plugin_host::register_null_engine_gateway_provider_route_with_abi_and_tags(
                 decl.gateway,
                 decl.service_kind,
                 decl.provider_service,
@@ -125,15 +126,17 @@ pub fn register_null_engine_gateway_provider_service_dynamic(
                 provider_abi,
                 decl.capability,
                 decl.owner,
+                decl.system_tags,
             )
         }
-        None => newengine_plugin_host::register_null_engine_gateway_provider_route(
+        None => newengine_plugin_host::register_null_engine_gateway_provider_route_with_tags(
             decl.gateway,
             decl.service_kind,
             decl.provider_service,
             decl.provider_route,
             decl.capability,
             decl.owner,
+            decl.system_tags,
         ),
     }
 }

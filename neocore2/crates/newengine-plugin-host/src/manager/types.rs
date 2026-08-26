@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use abi_stable::std_types::RResult;
 use libloading::Library;
@@ -39,6 +39,21 @@ impl PluginLoadOrigin {
             Self::GamePlugin => "game-plugin",
             Self::UserMod => "user-mod",
             Self::DevOverride => "dev-override",
+        }
+    }
+
+    pub(crate) fn gateway_origin(
+        self,
+        path: &Path,
+    ) -> crate::service_gateway::GatewayProviderOrigin {
+        match self {
+            Self::Auto => crate::service_gateway::GatewayProviderOrigin::from_plugin_path(path),
+            Self::FirstPartyPlugin => {
+                crate::service_gateway::GatewayProviderOrigin::FirstPartyPlugin
+            }
+            Self::GamePlugin => crate::service_gateway::GatewayProviderOrigin::GamePlugin,
+            Self::UserMod => crate::service_gateway::GatewayProviderOrigin::UserMod,
+            Self::DevOverride => crate::service_gateway::GatewayProviderOrigin::DevOverride,
         }
     }
 }

@@ -41,7 +41,7 @@ fn main() -> Result<(), String> {
     }
     let supported = textures
         .iter()
-        .filter(|t| t.format.validated_1d_thin_detile())
+        .filter(|t| t.format.validated_pitched_linearization())
         .count();
     let bc5 = textures
         .iter()

@@ -170,7 +170,9 @@ impl RuntimeCompositionContext {
     }
 }
 
-pub fn game_manifest_request_from_process() -> Option<PathBuf> {
+pub fn game_manifest_request_from_environment(
+    mut environment_var_os: impl FnMut(&str) -> Option<std::ffi::OsString>,
+) -> Option<PathBuf> {
     let mut args = std::env::args_os().skip(1);
     while let Some(arg) = args.next() {
         if arg == "--game-manifest" {
@@ -184,10 +186,14 @@ pub fn game_manifest_request_from_process() -> Option<PathBuf> {
             }
         }
     }
-    std::env::var_os(GAME_MANIFEST_ENV)
+    environment_var_os(GAME_MANIFEST_ENV)
         .map(PathBuf::from)
-        .or_else(project_request_from_process)
+        .or_else(|| project_request_from_environment_lookup(&mut environment_var_os))
         .or_else(adjacent_game_manifest_from_exe)
+}
+
+pub fn game_manifest_request_from_process() -> Option<PathBuf> {
+    game_manifest_request_from_environment(|name| std::env::var_os(name))
 }
 
 pub fn adjacent_game_manifest_from_exe() -> Option<PathBuf> {
@@ -196,7 +202,9 @@ pub fn adjacent_game_manifest_from_exe() -> Option<PathBuf> {
     candidate.is_file().then_some(candidate)
 }
 
-pub fn project_request_from_process() -> Option<PathBuf> {
+fn project_request_from_environment_lookup(
+    environment_var_os: &mut impl FnMut(&str) -> Option<std::ffi::OsString>,
+) -> Option<PathBuf> {
     let mut args = std::env::args_os().skip(1);
     while let Some(arg) = args.next() {
         if arg == "--project" {
@@ -210,10 +218,22 @@ pub fn project_request_from_process() -> Option<PathBuf> {
             }
         }
     }
-    std::env::var_os("NEWENGINE_PROJECT").map(PathBuf::from)
+    environment_var_os("NEWENGINE_PROJECT").map(PathBuf::from)
 }
 
-pub fn project_launch_request_from_process() -> Option<String> {
+pub fn project_request_from_environment(
+    mut environment_var_os: impl FnMut(&str) -> Option<std::ffi::OsString>,
+) -> Option<PathBuf> {
+    project_request_from_environment_lookup(&mut environment_var_os)
+}
+
+pub fn project_request_from_process() -> Option<PathBuf> {
+    project_request_from_environment(|name| std::env::var_os(name))
+}
+
+pub fn project_launch_request_from_environment(
+    mut environment_var: impl FnMut(&str) -> Option<String>,
+) -> Option<String> {
     let mut args = std::env::args_os().skip(1);
     while let Some(arg) = args.next() {
         if arg == "--launch" || arg == "--launch-profile" {
@@ -232,10 +252,13 @@ pub fn project_launch_request_from_process() -> Option<String> {
             }
         }
     }
-    std::env::var(PROJECT_LAUNCH_PRESET_ENV)
-        .ok()
+    environment_var(PROJECT_LAUNCH_PRESET_ENV)
         .map(|value| value.trim().to_owned())
         .filter(|value| !value.is_empty())
+}
+
+pub fn project_launch_request_from_process() -> Option<String> {
+    project_launch_request_from_environment(|name| std::env::var(name).ok())
 }
 
 pub fn load_project_from_request(request: &Path) -> Result<ProjectRuntimeContext, String> {

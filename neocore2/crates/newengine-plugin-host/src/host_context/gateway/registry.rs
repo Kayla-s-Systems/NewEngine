@@ -1,7 +1,9 @@
 use std::cell::Cell;
 use std::sync::{atomic::Ordering, Arc};
 
-use super::super::state::{ctx, GatewayRegistryCache};
+use super::super::state::{
+    ctx, current_host_context, services_generation, GatewayRegistryCache, HostContext,
+};
 
 thread_local! {
     // Pure recursion guard. Unlike semantic diagnostics state, this is execution-local.
@@ -41,41 +43,106 @@ pub(super) fn should_emit_gateway_resolution(gateway_id: &str, resolution: &str)
     }
 }
 
+fn registered_services_snapshot(
+    c: &HostContext,
+) -> Vec<crate::service_gateway::RegisteredServiceFact> {
+    let services = match c.services.lock() {
+        Ok(value) => value,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    services
+        .iter()
+        .map(|(service_id, entry)| {
+            crate::service_gateway::RegisteredServiceFact::new(
+                service_id.clone(),
+                entry.owner_plugin_id.clone(),
+            )
+        })
+        .collect::<Vec<_>>()
+}
+
+fn gateway_provider_routes_snapshot(
+    c: &HostContext,
+) -> Vec<crate::service_gateway::GatewayProviderRouteFact> {
+    let gateways = match c.gateway_provider_routes.lock() {
+        Ok(value) => value,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    gateways
+        .values()
+        .map(|entry| {
+            crate::service_gateway::GatewayProviderRouteFact::new_dynamic_with_origin(
+                entry.gateway_id.clone(),
+                entry.service_kind.clone(),
+                entry.provider_service_id.clone(),
+                entry.provider_route_id.clone(),
+                entry.provider_abi.clone(),
+                entry.provider_owner_id.clone(),
+                entry.backend_capability_id.clone(),
+                entry.backend_priority,
+                entry.origin,
+                entry.system_tags.clone(),
+            )
+        })
+        .collect::<Vec<_>>()
+}
+
+fn selection_policies_snapshot(c: &HostContext) -> Vec<crate::service_gateway::GatewayPolicyFact> {
+    let policies = match c.gateway_selection_policies.lock() {
+        Ok(value) => value,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    policies
+        .values()
+        .map(|policy| crate::service_gateway::GatewayPolicyFact {
+            gateway_id: policy.gateway_id.clone(),
+            override_mode: None,
+            system_tags: Vec::new(),
+            preferred_system_tags: policy.preferred_system_tags.clone(),
+            forbidden_system_tags: policy.forbidden_system_tags.clone(),
+            preference_bonus: policy.preference_bonus,
+            owner_id: policy.owner_id.clone(),
+        })
+        .collect::<Vec<_>>()
+}
+
+#[derive(Clone)]
+pub(crate) struct CompositionPlanningSnapshot {
+    pub(crate) services: Vec<crate::service_gateway::RegisteredServiceFact>,
+    pub(crate) gateway_provider_routes: Vec<crate::service_gateway::GatewayProviderRouteFact>,
+    pub(crate) selection_policies: Vec<crate::service_gateway::GatewayPolicyFact>,
+    pub(crate) capability_matrix: newengine_service_api::CapabilityMatrix,
+}
+
+pub(crate) fn composition_planning_snapshot() -> CompositionPlanningSnapshot {
+    let c = ctx();
+    CompositionPlanningSnapshot {
+        services: registered_services_snapshot(&c),
+        gateway_provider_routes: gateway_provider_routes_snapshot(&c),
+        selection_policies: selection_policies_snapshot(&c),
+        capability_matrix: super::slots::declared_engine_composition_matrix(),
+    }
+}
+
 fn build_gateway_registry_snapshot() -> crate::service_gateway::ActiveGatewayRegistry {
     let c = ctx();
-
-    let services = {
-        let services = match c.services.lock() {
-            Ok(v) => v,
-            Err(e) => e.into_inner(),
-        };
-        services
-            .iter()
-            .map(|(service_id, entry)| {
-                crate::service_gateway::RegisteredServiceFact::new(
-                    service_id.clone(),
-                    entry.owner_plugin_id.clone(),
-                )
-            })
-            .collect::<Vec<_>>()
-    };
+    let planning = composition_planning_snapshot();
 
     let plugin_origins = {
         let origins = match c.plugin_origins.lock() {
-            Ok(v) => v,
-            Err(e) => e.into_inner(),
+            Ok(value) => value,
+            Err(poisoned) => poisoned.into_inner(),
         };
         origins.clone()
     };
-
     let descriptors = {
         let descriptors = match c.plugin_descriptors.lock() {
-            Ok(v) => v,
-            Err(e) => e.into_inner(),
+            Ok(value) => value,
+            Err(poisoned) => poisoned.into_inner(),
         };
         let descriptors_v2 = match c.plugin_descriptors_v2.lock() {
-            Ok(v) => v,
-            Err(e) => e.into_inner(),
+            Ok(value) => value,
+            Err(poisoned) => poisoned.into_inner(),
         };
         descriptors
             .iter()
@@ -92,73 +159,31 @@ fn build_gateway_registry_snapshot() -> crate::service_gateway::ActiveGatewayReg
             })
             .collect::<Vec<_>>()
     };
-
-    let gateway_provider_routes = {
-        let gateways = match c.gateway_provider_routes.lock() {
-            Ok(v) => v,
-            Err(e) => e.into_inner(),
-        };
-        gateways
-            .values()
-            .map(|entry| {
-                crate::service_gateway::GatewayProviderRouteFact::new_dynamic_with_origin(
-                    entry.gateway_id.clone(),
-                    entry.service_kind.clone(),
-                    entry.provider_service_id.clone(),
-                    entry.provider_route_id.clone(),
-                    entry.provider_abi.clone(),
-                    entry.provider_owner_id.clone(),
-                    entry.backend_capability_id.clone(),
-                    entry.backend_priority,
-                    entry.origin,
-                    [
-                        newengine_service_api::system_tag::ENGINE_DOMAIN,
-                        newengine_service_api::system_tag::PROVIDER_BACKEND,
-                    ],
-                )
-            })
-            .collect::<Vec<_>>()
-    };
-
-    let selection_policies = {
-        let policies = match c.gateway_selection_policies.lock() {
+    let frozen_plan = {
+        let slot = match c.frozen_composition_plan.read() {
             Ok(value) => value,
             Err(poisoned) => poisoned.into_inner(),
         };
-        policies
-            .values()
-            .map(|policy| crate::service_gateway::GatewayPolicyFact {
-                gateway_id: policy.gateway_id.clone(),
-                override_mode: None,
-                system_tags: Vec::new(),
-                preferred_system_tags: policy.preferred_system_tags.clone(),
-                forbidden_system_tags: policy.forbidden_system_tags.clone(),
-                preference_bonus: policy.preference_bonus,
-                owner_id: policy.owner_id.clone(),
-            })
-            .collect::<Vec<_>>()
+        slot.clone()
     };
 
-    let capability_matrix = {
-        let requirements = match c.capability_slots.lock() {
+    let contract_catalog = {
+        let catalog = match c.runtime_contract_catalog.lock() {
             Ok(value) => value,
             Err(poisoned) => poisoned.into_inner(),
         };
-        newengine_service_api::CapabilityMatrix::new(
-            requirements
-                .values()
-                .map(|entry| entry.requirement.clone())
-                .collect(),
-        )
+        catalog.clone()
     };
 
-    crate::service_gateway::ActiveGatewayRegistry::from_facts_with_policy_and_matrix(
+    crate::service_gateway::ActiveGatewayRegistry::from_facts_with_policy_matrix_and_plan(
         &descriptors,
-        &services,
-        &gateway_provider_routes,
-        &selection_policies,
-        capability_matrix,
+        &planning.services,
+        &planning.gateway_provider_routes,
+        &planning.selection_policies,
+        planning.capability_matrix,
+        frozen_plan.as_deref(),
     )
+    .with_contract_catalog(&contract_catalog)
 }
 
 pub(super) fn gateway_registry_snapshot() -> Arc<crate::service_gateway::ActiveGatewayRegistry> {
@@ -267,6 +292,65 @@ pub(super) fn emit_gateway_route_shadowed(
     });
 }
 
+pub fn engine_composition_explanation() -> newengine_service_api::CompositionExplanationGraph {
+    gateway_registry_snapshot()
+        .composition_explanation()
+        .clone()
+}
+
+pub fn explain_engine_gateway_composition(
+    gateway_id: &str,
+) -> Option<newengine_service_api::GatewayCompositionExplanation> {
+    gateway_registry_snapshot()
+        .composition_explanation()
+        .gateway(gateway_id)
+        .cloned()
+}
+
+pub fn engine_composition_snapshot_v1() -> newengine_service_api::CompositionSnapshotV1 {
+    loop {
+        let context = current_host_context();
+        let generation_before = services_generation();
+        if generation_before & 1 != 0 {
+            std::thread::yield_now();
+            continue;
+        }
+        let registry = gateway_registry_snapshot();
+        let frozen = {
+            let context_state = ctx();
+            let slot = match context_state.frozen_composition_plan.read() {
+                Ok(value) => value,
+                Err(poisoned) => poisoned.into_inner(),
+            };
+            slot.is_some()
+        };
+        let generation_after = services_generation();
+        if generation_before != generation_after || generation_after & 1 != 0 {
+            continue;
+        }
+        let provenance = if frozen {
+            newengine_service_api::CompositionSnapshotProvenanceV1::frozen(
+                "host.frozen_composition_plan",
+            )
+        } else {
+            newengine_service_api::CompositionSnapshotProvenanceV1::live("host.gateway_registry")
+        };
+        return newengine_service_api::CompositionSnapshotV1::from_plan(
+            context.instance_id(),
+            generation_after / 2,
+            generation_after,
+            provenance,
+            registry.composition_plan(),
+        );
+    }
+}
+
+pub fn engine_composition_snapshot_v1_json() -> Result<String, String> {
+    engine_composition_snapshot_v1()
+        .to_json()
+        .map_err(|error| format!("composition.snapshot_v1 serialization failed: {error}"))
+}
+
 pub(crate) fn active_engine_gateways() -> Vec<String> {
     gateway_registry_snapshot().gateway_ids()
 }
@@ -274,6 +358,49 @@ pub(crate) fn active_engine_gateways() -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn composition_snapshot_v1_tracks_instance_epoch_generation_and_provenance() {
+        let handle = crate::host_context::create_host_context_with_environment_snapshot(Vec::<(
+            std::ffi::OsString,
+            std::ffi::OsString,
+        )>::new(
+        ));
+        crate::host_context::with_host_context(&handle, || {
+            let live = engine_composition_snapshot_v1();
+            assert_eq!(
+                live.schema,
+                newengine_service_api::COMPOSITION_SNAPSHOT_SCHEMA_V1
+            );
+            assert_eq!(live.instance_id, handle.instance_id());
+            assert_eq!(live.composition_epoch, live.topology_generation / 2);
+            assert_eq!(live.topology_generation & 1, 0);
+            assert_eq!(
+                live.provenance.mode,
+                newengine_service_api::CompositionPlanModeV1::Live
+            );
+
+            let frozen_plan = newengine_service_api::CompositionSolver::resolve(Vec::<
+                newengine_service_api::CompositionCandidate,
+            >::new(
+            ));
+            handle
+                .freeze_composition_plan(frozen_plan)
+                .expect("freeze composition plan");
+            let frozen = engine_composition_snapshot_v1();
+            assert_eq!(frozen.instance_id, live.instance_id);
+            assert!(frozen.composition_epoch > live.composition_epoch);
+            assert!(frozen.topology_generation > live.topology_generation);
+            assert_eq!(
+                frozen.provenance.mode,
+                newengine_service_api::CompositionPlanModeV1::Frozen
+            );
+            let json = engine_composition_snapshot_v1_json().expect("snapshot json");
+            let decoded = newengine_service_api::CompositionSnapshotV1::from_json(&json)
+                .expect("decode runtime snapshot");
+            assert_eq!(decoded, frozen);
+        });
+    }
 
     #[test]
     fn gateway_resolution_deduplication_is_instance_scoped() {

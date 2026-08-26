@@ -9,9 +9,11 @@ mod loader;
 mod types;
 mod ui_assets;
 
+pub(crate) use discovery::read_verified_manifest;
 pub use discovery::{
     resolve_plugin_discovery_dir, scan_plugin_discovery_graph,
     DiscoveryGraph as PluginDiscoveryGraph, IncrementalLoadOutcome,
+    PluginRuntimeUnitInventoryEntry,
 };
 pub use types::{PluginIconSnapshot, PluginLoadError, PluginLoadOrigin, PluginSnapshotEntry};
 
@@ -24,6 +26,7 @@ pub struct PluginManager {
     loaded: Vec<LoadedPlugin>,
     loaded_ids: NeHashSet<String>,
     discovery_cache: Option<discovery::DiscoveryGraph>,
+    frozen_composition_plan: Option<discovery::FrozenPluginCompositionPlan>,
     incremental_load: Option<discovery::IncrementalLoadState>,
 }
 
@@ -40,6 +43,7 @@ impl PluginManager {
             loaded: Vec::new(),
             loaded_ids: NeHashSet::default(),
             discovery_cache: None,
+            frozen_composition_plan: None,
             incremental_load: None,
         }
     }

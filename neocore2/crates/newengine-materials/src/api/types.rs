@@ -30,6 +30,9 @@ pub enum ShadingModel {
     Unlit = 0,
     /// PBR metallic-roughness model.
     PbrMetallicRoughness = 1,
+    /// Layered dielectric eye model. The renderer preserves true-black pupil texels and
+    /// treats the roughness map as pupil/iris/sclera optical zoning.
+    Eye = 2,
 }
 
 impl Default for ShadingModel {

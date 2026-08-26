@@ -19,6 +19,9 @@ pub struct EngineGatewayCapability {
     pub provider_route_id: Option<String>,
     pub provider_abi: Option<String>,
     pub backend_capability_id: String,
+    pub capability_version: u32,
+    pub contract_id: Option<String>,
+    pub contract_version: Option<u32>,
     pub backend_priority: i32,
     pub system_tags: Vec<String>,
 }
@@ -125,6 +128,14 @@ pub(crate) fn gateway_capability_from_typed(
         _ => None,
     };
 
+    let (contract_id, contract_version) = match capability.contract.clone() {
+        ROption::RSome(contract) if !contract.id.trim().is_empty() => (
+            Some(contract.id.to_string()),
+            contract.version.into_option(),
+        ),
+        _ => (None, None),
+    };
+
     Some(EngineGatewayCapability {
         gateway_id,
         service_kind,
@@ -132,6 +143,9 @@ pub(crate) fn gateway_capability_from_typed(
         provider_route_id,
         provider_abi,
         backend_capability_id: capability.id.to_string(),
+        capability_version: capability.version,
+        contract_id,
+        contract_version,
         backend_priority: route.backend_priority,
         system_tags,
     })

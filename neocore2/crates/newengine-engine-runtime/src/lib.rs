@@ -10,6 +10,7 @@
 mod editor_viewport;
 mod env_config;
 mod provider_contract;
+mod runtime_composition;
 mod runtime_policy;
 pub mod world_authoring;
 mod world_runtime_provider;
@@ -70,6 +71,7 @@ pub use provider_contract::{
     I_SCENE_BOOTSTRAP_PROVIDER_V1, I_WORLD_RUNTIME_PROVIDER_V1, PROVIDER_CONTRACT_V1,
 };
 pub use render_controller::RuntimeRenderController;
+pub use runtime_composition::RuntimeRenderContributionRegistry;
 pub use scene_bridge::{
     SceneBootstrapContext, SceneBootstrapProvider, SceneBootstrapResult, SceneBridge,
 };

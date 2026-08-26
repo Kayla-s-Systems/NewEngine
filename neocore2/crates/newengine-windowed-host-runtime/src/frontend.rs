@@ -9,8 +9,8 @@ use newengine_runtime_host::app_launcher::{
 use newengine_ui::{UiBuildFn, UiProviderKind};
 
 use crate::platform_runtime::{
-    detect_platform_runtime_path, resolve_platform_runtime_config, HostPlatformRuntime,
-    ResolvedPlatformRuntimeConfig,
+    HostPlatformRuntime, ResolvedPlatformRuntimeConfig, detect_platform_runtime_path,
+    resolve_platform_runtime_config,
 };
 
 /// UI/window-specific extension of the generic runtime-host product profile.
@@ -95,7 +95,11 @@ impl WindowedHostFrontend {
         if platform_required() {
             return false;
         }
-        if std::env::var_os("NEWENGINE_PLATFORM_RUNTIME").is_some() && !headless_requested {
+        if newengine_plugin_host::current_host_context()
+            .environment_var_os("NEWENGINE_PLATFORM_RUNTIME")
+            .is_some()
+            && !headless_requested
+        {
             return false;
         }
         if headless_requested {
@@ -181,10 +185,10 @@ where
             Ok(resolved) => resolved,
             Err(err) if self.platform_missing_can_fallback_to_headless(&err) => {
                 newengine_ulog_api::ulog::warn!(
-                        "{} launcher: platform runtime could not be resolved; falling back to generic headless frontend: {}",
-                        app_name,
-                        err
-                    );
+                    "{} launcher: platform runtime could not be resolved; falling back to generic headless frontend: {}",
+                    app_name,
+                    err
+                );
                 return newengine_runtime_host::HeadlessCliRuntime::new(
                     engine,
                     context.launch_spec.fixed_dt_ms,
@@ -241,8 +245,8 @@ fn platform_required() -> bool {
 
 #[inline]
 fn env_bool(name: &str, default: bool) -> bool {
-    std::env::var(name)
-        .ok()
+    newengine_plugin_host::current_host_context()
+        .environment_var(name)
         .map(|value| {
             matches!(
                 value.trim().to_ascii_lowercase().as_str(),

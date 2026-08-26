@@ -71,12 +71,14 @@ pub(super) fn strip_host_only_platform_keys(value: &Value) -> Value {
 
 #[inline]
 fn env_flag(key: &str) -> Option<bool> {
-    std::env::var(key).ok().map(|value| {
-        matches!(
-            value.trim().to_ascii_lowercase().as_str(),
-            "1" | "true" | "yes" | "on"
-        )
-    })
+    newengine_plugin_host::current_host_context()
+        .environment_var(key)
+        .map(|value| {
+            matches!(
+                value.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
 }
 
 #[inline]

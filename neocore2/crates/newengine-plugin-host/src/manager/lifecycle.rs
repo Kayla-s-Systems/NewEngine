@@ -14,18 +14,14 @@ use super::{PluginLoadError, PluginManager};
 
 fn runtime_dll_unload_enabled() -> bool {
     matches!(
-        std::env::var("NEWENGINE_UNLOAD_RUNTIME_DLLS")
-            .ok()
-            .as_deref(),
+        crate::host_context::environment_var("NEWENGINE_UNLOAD_RUNTIME_DLLS").as_deref(),
         Some("1") | Some("true") | Some("TRUE") | Some("yes") | Some("YES")
     )
 }
 
 fn plugin_module_shutdown_enabled() -> bool {
     !matches!(
-        std::env::var("NEWENGINE_DISABLE_PLUGIN_MODULE_SHUTDOWN")
-            .ok()
-            .as_deref(),
+        crate::host_context::environment_var("NEWENGINE_DISABLE_PLUGIN_MODULE_SHUTDOWN").as_deref(),
         Some("1") | Some("true") | Some("TRUE") | Some("yes") | Some("YES")
     )
 }

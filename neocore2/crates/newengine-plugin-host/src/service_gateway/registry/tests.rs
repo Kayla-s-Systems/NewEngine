@@ -648,6 +648,31 @@ fn active_and_shadowed_routes_are_diagnostic_visible() {
         diagnostics.shadowed_routes[0].provider_route_id.as_deref(),
         Some("engine.camera.null")
     );
+
+    let explanation = registry
+        .composition_explanation()
+        .gateway("engine.camera")
+        .expect("shared engine.camera explanation");
+    let selected = explanation
+        .candidates
+        .iter()
+        .find(|candidate| {
+            candidate.disposition
+                == newengine_service_api::CompositionCandidateDisposition::Selected
+        })
+        .expect("selected explanation");
+    let shadowed = explanation
+        .candidates
+        .iter()
+        .find(|candidate| {
+            candidate.disposition
+                == newengine_service_api::CompositionCandidateDisposition::Shadowed
+        })
+        .expect("shadowed explanation");
+    assert_eq!(selected.rank, Some(1));
+    assert_eq!(shadowed.rank, Some(2));
+    assert_eq!(shadowed.outranked_by, vec![selected.candidate_id.clone()]);
+    assert!(shadowed.rejection_reasons.is_empty());
 }
 
 #[test]

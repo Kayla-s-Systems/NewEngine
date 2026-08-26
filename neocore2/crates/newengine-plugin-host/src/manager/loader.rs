@@ -127,6 +127,12 @@ impl PluginManager {
         load_origin: PluginLoadOrigin,
     ) -> Result<(), PluginLoadError> {
         crate::host_context::activate_host_context(&self.host);
+        let frozen_plan_present = self.frozen_composition_plan.is_some();
+        let frozen_manifest = self
+            .frozen_composition_plan
+            .as_ref()
+            .and_then(|plan| plan.artifact_manifest(path))
+            .cloned();
         let pretty_path = pretty_abs_path(path);
         newengine_ulog_api::ulog::info!("plugins: loading '{}'", pretty_path.as_str());
 
@@ -247,6 +253,29 @@ impl PluginManager {
             }
         }
 
+        let normalized_descriptor_v2 = descriptor_v2
+            .clone()
+            .unwrap_or_else(|| PluginDescriptorV2::from_legacy(&descriptor));
+        let discovery_verification = match frozen_manifest.as_ref() {
+            Some(manifest) => super::discovery::verify_live_descriptor_against_manifest(
+                path,
+                &normalized_descriptor_v2,
+                manifest,
+            ),
+            None if frozen_plan_present => Err(format!(
+                "artifact '{}' is absent from the frozen discovery manifest inventory",
+                path.display()
+            )),
+            None => super::discovery::verify_live_descriptor(path, &normalized_descriptor_v2),
+        };
+        if let Err(error) = discovery_verification {
+            shutdown_adapter_any(module_any);
+            return Err(PluginLoadError {
+                path: path.to_path_buf(),
+                message: format!("frozen discovery metadata verification failed: {error}"),
+            });
+        }
+
         if self.loaded_ids.contains(&id_str) {
             newengine_ulog_api::ulog::warn!(
                 "plugins: duplicate id='{}' from '{}' ignored (already loaded)",
@@ -263,21 +292,7 @@ impl PluginManager {
         let overrides_non_empty =
             !matches!(overrides, serde_json::Value::Object(ref mm) if mm.is_empty());
 
-        let mut provider_origin = match load_origin {
-            PluginLoadOrigin::Auto => {
-                crate::service_gateway::GatewayProviderOrigin::from_plugin_path(path)
-            }
-            PluginLoadOrigin::FirstPartyPlugin => {
-                crate::service_gateway::GatewayProviderOrigin::FirstPartyPlugin
-            }
-            PluginLoadOrigin::GamePlugin => {
-                crate::service_gateway::GatewayProviderOrigin::GamePlugin
-            }
-            PluginLoadOrigin::UserMod => crate::service_gateway::GatewayProviderOrigin::UserMod,
-            PluginLoadOrigin::DevOverride => {
-                crate::service_gateway::GatewayProviderOrigin::DevOverride
-            }
-        };
+        let mut provider_origin = load_origin.gateway_origin(path);
         begin_provider_transaction(&id_str).map_err(|e| PluginLoadError {
             path: path.to_path_buf(),
             message: format!("provider transaction begin failed: {e}"),
@@ -356,8 +371,7 @@ impl PluginManager {
         }
 
         self.loaded_ids.insert(id_str.clone());
-        let descriptor_v2 =
-            descriptor_v2.unwrap_or_else(|| PluginDescriptorV2::from_legacy(&descriptor));
+        let descriptor_v2 = normalized_descriptor_v2;
         self.loaded.push(LoadedPlugin {
             path: path.to_path_buf(),
             loaded_binary_path: path.to_path_buf(),

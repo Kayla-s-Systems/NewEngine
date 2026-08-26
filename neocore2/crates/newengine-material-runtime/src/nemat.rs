@@ -352,12 +352,13 @@ fn descriptor_from_authored(material: &AuthoredMaterialDescriptor) -> MaterialDe
         "post" | "postprocess" | "post_process" => MaterialDomain::PostProcess,
         _ => MaterialDomain::Surface,
     };
+    let shader_key = material.shader.trim().to_ascii_lowercase();
     let mut descriptor = MaterialDescriptor {
         domain,
-        shading_model: if domain != MaterialDomain::Surface
-            || material.shader.to_ascii_lowercase().contains("unlit")
-        {
+        shading_model: if domain != MaterialDomain::Surface || shader_key.contains("unlit") {
             ShadingModel::Unlit
+        } else if shader_key == "pbr.eye" || shader_key.ends_with(".eye") {
+            ShadingModel::Eye
         } else {
             ShadingModel::PbrMetallicRoughness
         },

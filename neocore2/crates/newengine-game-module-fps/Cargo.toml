@@ -15,4 +15,5 @@ newengine-gameplay-script-api = { path = "../newengine-gameplay-script-api" }
 newengine-plugin-api = { path = "../newengine-plugin-api" }
 newengine-plugin-host = { path = "../newengine-plugin-host" }
 newengine-project-runtime = { path = "../newengine-project-runtime" }
+newengine-service-api = { path = "../newengine-service-api" }
 serde_json = "1"

@@ -7,8 +7,9 @@ use newengine_core::host_events::{
 use newengine_core::{Engine, EngineError, EngineResult};
 use newengine_platform_api::{
     PlatformDisplayConfigV1, PlatformHostApiV1, PlatformHostJobCallbackV1,
-    PlatformHostTaskRequestV1, PlatformHostTaskTicketV1, PlatformRuntimeRunFnV1,
-    PlatformStepResultV1, PlatformSurfaceMetricsV1, PlatformWindowReadyV1,
+    PlatformHostTaskRequestV1, PlatformHostTaskTicketV1, PlatformRuntimeDescriptorV1Fn,
+    PlatformRuntimeRunFnV1, PlatformStepResultV1, PlatformSurfaceMetricsV1, PlatformWindowReadyV1,
+    PLATFORM_RUNTIME_DESCRIPTOR_V1_SYMBOL_BYTES_NUL,
 };
 use newengine_plugin_api::PluginInfo;
 use newengine_ui::{create_provider, UiBuildFn, UiProvider, UiProviderKind, UiProviderOptions};
@@ -148,14 +149,6 @@ impl HostPlatformRuntime {
             version: RString::from(resolved.plugin_version.clone()),
         };
 
-        newengine_plugin_host::register_external_runtime_plugin(
-            runtime_path.to_path_buf(),
-            info,
-            resolved.descriptor.clone(),
-            "running",
-        )
-        .map_err(EngineError::other)?;
-
         crate::platform_early_log!("host.run.enter runtime_path='{}'", runtime_path.display());
         newengine_ulog_api::ulog::info!("platform runtime: loading '{}'", runtime_path.display());
 
@@ -165,6 +158,36 @@ impl HostPlatformRuntime {
             EngineError::other(format!("platform runtime load failed: {e}"))
         })?;
         crate::platform_early_log!("host.dll.load.ok path='{}'", runtime_path.display());
+
+        let planned_descriptor = crate::platform_runtime::discovery::try_read_runtime_descriptor(runtime_path)
+            .ok_or_else(|| EngineError::other(format!(
+                "platform runtime verified discovery metadata disappeared for '{}'",
+                runtime_path.display()
+            )))?;
+        let live_descriptor_fn: libloading::Symbol<PlatformRuntimeDescriptorV1Fn> = unsafe {
+            lib.get(PLATFORM_RUNTIME_DESCRIPTOR_V1_SYMBOL_BYTES_NUL)
+        }
+        .map_err(|e| EngineError::other(format!(
+            "platform runtime descriptor symbol missing after selection: {e}"
+        )))?;
+        let live_descriptor = live_descriptor_fn();
+        let mut planned_tags = planned_descriptor.system_tags.iter().map(|v| v.to_string()).collect::<Vec<_>>();
+        let mut live_tags = live_descriptor.system_tags.iter().map(|v| v.to_string()).collect::<Vec<_>>();
+        planned_tags.sort(); planned_tags.dedup();
+        live_tags.sort(); live_tags.dedup();
+        if live_descriptor.schema_version != newengine_platform_api::PlatformRuntimeDescriptorV1::SCHEMA_VERSION
+            || live_descriptor.id != planned_descriptor.id
+            || live_descriptor.name != planned_descriptor.name
+            || live_descriptor.version != planned_descriptor.version
+            || live_descriptor.backend_priority != planned_descriptor.backend_priority
+            || live_tags != planned_tags
+        {
+            return Err(EngineError::other(format!(
+                "platform runtime live descriptor does not match frozen discovery metadata path='{}'",
+                runtime_path.display()
+            )));
+        }
+        crate::platform_early_log!("host.dll.metadata.verify.ok path='{}'", runtime_path.display());
 
         crate::platform_early_log!(
             "host.symbol.resolve.begin symbol='{}'",
@@ -179,6 +202,14 @@ impl HostPlatformRuntime {
             "host.symbol.resolve.ok symbol='{}'",
             "newengine_platform_runtime_run_v1"
         );
+
+        newengine_plugin_host::register_external_runtime_plugin(
+            runtime_path.to_path_buf(),
+            info,
+            resolved.descriptor.clone(),
+            "running",
+        )
+        .map_err(EngineError::other)?;
 
         newengine_ulog_api::ulog::info!(
             "platform runtime: entry resolved symbol='{}' title='{}' size={}x{}",

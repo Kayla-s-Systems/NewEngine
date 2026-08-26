@@ -12,28 +12,33 @@ use crate::startup::StartupLoggingConfig;
 pub fn apply_startup_logging_env(cfg: &StartupLoggingConfig) {
     fn set_opt(key: &str, v: Option<&str>) {
         match v.map(str::trim).filter(|s| !s.is_empty()) {
-            Some(val) => std::env::set_var(key, val),
-            None => std::env::remove_var(key),
+            Some(val) => {
+                newengine_plugin_host::current_host_context().set_environment_var(key, val)
+            }
+            None => newengine_plugin_host::current_host_context().remove_environment_var(key),
         }
     }
 
     fn set_bool(key: &str, v: bool) {
-        std::env::set_var(key, if v { "true" } else { "false" });
+        newengine_plugin_host::current_host_context()
+            .set_environment_var(key, if v { "true" } else { "false" });
     }
 
     fn set_u64_opt(key: &str, v: Option<u64>) {
         match v {
-            Some(x) => std::env::set_var(key, x.to_string()),
-            None => std::env::remove_var(key),
+            Some(x) => newengine_plugin_host::current_host_context()
+                .set_environment_var(key, x.to_string()),
+            None => newengine_plugin_host::current_host_context().remove_environment_var(key),
         }
     }
 
     fn set_usize(key: &str, v: usize) {
-        std::env::set_var(key, v.to_string());
+        newengine_plugin_host::current_host_context().set_environment_var(key, v.to_string());
     }
 
     set_opt("NEWENGINE_LOG", cfg.filter.as_deref());
-    std::env::set_var("NEWENGINE_LOG_LEVEL", cfg.level.trim());
+    newengine_plugin_host::current_host_context()
+        .set_environment_var("NEWENGINE_LOG_LEVEL", cfg.level.trim());
 
     set_opt("NEWENGINE_LOG_STYLE", cfg.style.as_deref());
     set_bool("NEWENGINE_LOG_COLORS", cfg.colors);
@@ -47,8 +52,10 @@ pub fn apply_startup_logging_env(cfg: &StartupLoggingConfig) {
     set_opt("NEWENGINE_LOG_TIMESTAMP", cfg.timestamp.as_deref());
 
     match cfg.indent {
-        Some(n) => std::env::set_var("NEWENGINE_LOG_INDENT", n.to_string()),
-        None => std::env::remove_var("NEWENGINE_LOG_INDENT"),
+        Some(n) => newengine_plugin_host::current_host_context()
+            .set_environment_var("NEWENGINE_LOG_INDENT", n.to_string()),
+        None => newengine_plugin_host::current_host_context()
+            .remove_environment_var("NEWENGINE_LOG_INDENT"),
     }
 
     set_opt("NEWENGINE_LOG_TARGET", cfg.console_target.as_deref());
@@ -59,7 +66,9 @@ pub fn apply_startup_logging_env(cfg: &StartupLoggingConfig) {
     set_usize("NEWENGINE_LOG_ROLL_MAX_FILES", cfg.roll_max_files);
 
     match cfg.roll_keep_days {
-        Some(n) => std::env::set_var("NEWENGINE_LOG_ROLL_KEEP_DAYS", n.to_string()),
-        None => std::env::remove_var("NEWENGINE_LOG_ROLL_KEEP_DAYS"),
+        Some(n) => newengine_plugin_host::current_host_context()
+            .set_environment_var("NEWENGINE_LOG_ROLL_KEEP_DAYS", n.to_string()),
+        None => newengine_plugin_host::current_host_context()
+            .remove_environment_var("NEWENGINE_LOG_ROLL_KEEP_DAYS"),
     }
 }

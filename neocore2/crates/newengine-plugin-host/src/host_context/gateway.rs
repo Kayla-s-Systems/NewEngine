@@ -9,15 +9,24 @@ pub use policy::{
     clear_engine_gateway_selection_policies, install_engine_gateway_selection_policy,
     EngineGatewaySelectionPolicy,
 };
-pub(crate) use registry::active_engine_gateways;
+pub(crate) use registry::{
+    active_engine_gateways, composition_planning_snapshot, CompositionPlanningSnapshot,
+};
+pub use registry::{
+    engine_composition_explanation, engine_composition_snapshot_v1,
+    engine_composition_snapshot_v1_json, explain_engine_gateway_composition,
+};
 pub use routes::{
     active_engine_gateway_route, engine_gateway_has_capability, list_engine_gateway_routes,
     register_engine_gateway_provider_route, register_null_engine_gateway_provider_route,
-    register_null_engine_gateway_provider_route_with_abi, resolve_service_for_engine_gateway,
+    register_null_engine_gateway_provider_route_with_abi,
+    register_null_engine_gateway_provider_route_with_abi_and_tags,
+    register_null_engine_gateway_provider_route_with_tags, resolve_service_for_engine_gateway,
 };
 pub use slots::{
     declare_engine_capability_requirement, declare_engine_capability_slot,
-    declare_engine_composition, list_engine_capability_slots,
+    declare_engine_composition, engine_composition_allows_system_tags,
+    engine_composition_has_forbidden_system_tags, list_engine_capability_slots,
     validate_required_engine_capability_slots,
 };
 

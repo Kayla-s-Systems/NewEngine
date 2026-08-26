@@ -53,6 +53,17 @@ impl<E: Send + 'static> Engine<E> {
         let host = default_host_api();
 
         let roots = self.resolved_plugin_discovery_roots()?;
+        let composition_roots = roots
+            .iter()
+            .map(|root| (root.dir.clone(), root.origin, root.required))
+            .collect::<Vec<_>>();
+        self.plugins
+            .freeze_composition_plan_for_roots(&composition_roots, strict)
+            .map_err(|error| {
+                EngineError::Other(format!(
+                    "plugins: authoritative composition freeze failed: {error}"
+                ))
+            })?;
         for root in roots {
             if let Err(error) = self.plugins.load_bootstrap_from_dir_with_origin(
                 &root.dir,
@@ -96,6 +107,17 @@ impl<E: Send + 'static> Engine<E> {
         let host = default_host_api();
 
         let roots = self.resolved_plugin_discovery_roots()?;
+        let composition_roots = roots
+            .iter()
+            .map(|root| (root.dir.clone(), root.origin, root.required))
+            .collect::<Vec<_>>();
+        self.plugins
+            .freeze_composition_plan_for_roots(&composition_roots, strict)
+            .map_err(|error| {
+                EngineError::Other(format!(
+                    "plugins: authoritative composition freeze failed: {error}"
+                ))
+            })?;
         for root in roots {
             if let Err(error) = self.plugins.load_engine_from_dir_with_origin(
                 &root.dir,
@@ -176,6 +198,17 @@ impl<E: Send + 'static> Engine<E> {
         let strict = matches!(self.plugin_fault_tolerance, PluginFaultTolerance::Strict);
         let host = default_host_api();
         let roots = self.resolved_plugin_discovery_roots()?;
+        let composition_roots = roots
+            .iter()
+            .map(|root| (root.dir.clone(), root.origin, root.required))
+            .collect::<Vec<_>>();
+        self.plugins
+            .freeze_composition_plan_for_roots(&composition_roots, strict)
+            .map_err(|error| {
+                EngineError::Other(format!(
+                    "plugins: authoritative composition freeze failed: {error}"
+                ))
+            })?;
         if roots.is_empty() {
             return Err(EngineError::Other(
                 "plugins: no discovery roots resolved for incremental load".to_owned(),
@@ -362,6 +395,17 @@ impl<E: Send + 'static> Engine<E> {
         let host = default_host_api();
 
         let roots = self.resolved_plugin_discovery_roots()?;
+        let composition_roots = roots
+            .iter()
+            .map(|root| (root.dir.clone(), root.origin, root.required))
+            .collect::<Vec<_>>();
+        self.plugins
+            .freeze_composition_plan_for_roots(&composition_roots, strict)
+            .map_err(|error| {
+                EngineError::Other(format!(
+                    "plugins: authoritative composition freeze failed: {error}"
+                ))
+            })?;
         for root in roots {
             if let Err(error) = self.plugins.load_from_dir_with_policy_and_origin(
                 &root.dir,

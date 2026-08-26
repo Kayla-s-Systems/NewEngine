@@ -2,13 +2,10 @@ use std::sync::OnceLock;
 
 #[inline]
 pub(super) fn shadow_torture_acceptance_trace_enabled() -> bool {
-    std::env::var("NEWENGINE_PROJECT_LAUNCH_PRESET")
-        .ok()
+    crate::env_config::var("NEWENGINE_PROJECT_LAUNCH_PRESET")
         .is_some_and(|value| value.trim().eq_ignore_ascii_case("shadow_test"))
         || matches!(
-            std::env::var("NEWENGINE_SHADOW_TORTURE_TEST")
-                .ok()
-                .as_deref(),
+            crate::env_config::var("NEWENGINE_SHADOW_TORTURE_TEST").as_deref(),
             Some("1")
                 | Some("true")
                 | Some("TRUE")
@@ -22,7 +19,7 @@ pub(super) fn shadow_torture_acceptance_trace_enabled() -> bool {
 pub(super) fn shadow_receiver_debug_mode() -> f32 {
     static MODE: OnceLock<f32> = OnceLock::new();
     *MODE.get_or_init(|| {
-        let raw = std::env::var("NEWENGINE_SHADOW_RECEIVER_DEBUG").unwrap_or_default();
+        let raw = crate::env_config::var("NEWENGINE_SHADOW_RECEIVER_DEBUG").unwrap_or_default();
         let normalized = raw.trim().to_ascii_lowercase();
         let mode = match normalized.as_str() {
             "" | "0" | "off" | "none" => 0.0,

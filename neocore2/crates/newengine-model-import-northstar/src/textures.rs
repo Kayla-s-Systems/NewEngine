@@ -78,10 +78,12 @@ impl ImportedTextureFormat {
     }
 
     #[inline]
-    pub const fn validated_1d_thin_detile(self) -> bool {
-        // The 64-bit BC block route was validated on eight independent TLOU2 PC VFX textures.
-        // 128-bit BC5/BC7 source resources demonstrably require an additional layout rule and
-        // remain intentionally rejected until that rule is proven from corpus/native tooling.
+    pub const fn validated_pitched_linearization(self) -> bool {
+        // TLOU2 PC VRAM_DESC type=1 64-bit block-compressed resources use linear block rows with
+        // a 256-byte physical row pitch. Earlier tooling incorrectly treated these resources as
+        // Morton 8x8 microtiles; corpus validation on character and VFX textures showed that the
+        // apparent "tiles" were actually row padding. 128-bit BC5/BC7 remain intentionally
+        // rejected until their physical row/storage contract is validated independently.
         matches!(self, Self::Bc1Unorm | Self::Bc1Srgb | Self::Bc4Unorm)
     }
 }
@@ -113,11 +115,17 @@ impl ImportedVramTexture {
     }
 
     pub fn base_linear_bytes(&self, pak: &PakFile) -> Result<Vec<u8>, String> {
-        if !self.format.validated_1d_thin_detile() {
+        if !self.format.validated_pitched_linearization() {
             return Err(format!(
-                "TLOU2 1D-thin base detile is not validated for DXGI={} path='{}'",
+                "TLOU2 pitched base linearization is not validated for DXGI={} path='{}'",
                 self.format.dxgi(),
                 self.source_path
+            ));
+        }
+        if self.texture_type != 1 || self.stream_flags & 0x2 == 0 {
+            return Err(format!(
+                "TLOU2 VRAM layout is not validated for type={} stream_flags=0x{:x} path='{}'",
+                self.texture_type, self.stream_flags, self.source_path
             ));
         }
         let block_extent = self.format.block_extent().ok_or_else(|| {
@@ -136,20 +144,27 @@ impl ImportedVramTexture {
         })?;
         let element_width = self.width.div_ceil(block_extent) as usize;
         let element_height = self.height.div_ceil(block_extent) as usize;
-        let padded_width = element_width.div_ceil(8) * 8;
-        let padded_height = element_height.div_ceil(8) * 8;
-        let tiled_len = padded_width
-            .checked_mul(padded_height)
-            .and_then(|v| v.checked_mul(bytes_per_element))
+        let row_bytes = element_width
+            .checked_mul(bytes_per_element)
+            .ok_or("TLOU2 base row size overflow")?;
+        let row_pitch = align_up(row_bytes, 256)?;
+        let physical_base_len = row_pitch
+            .checked_mul(element_height)
             .ok_or("TLOU2 base texture allocation overflow")?;
-        if tiled_len > self.vram_size as usize {
+        if physical_base_len > self.vram_size as usize {
             return Err(format!(
                 "TLOU2 base texture allocation exceeds VRAM descriptor path='{}' base_bytes={} vram_size={}",
-                self.source_path, tiled_len, self.vram_size
+                self.source_path, physical_base_len, self.vram_size
             ));
         }
-        let source = pak.slice(self.absolute_data_offset, tiled_len)?;
-        detile_1d_thin_non_displayable(source, element_width, element_height, bytes_per_element)
+        let source = pak.slice(self.absolute_data_offset, physical_base_len)?;
+        linearize_pitched_rows(
+            source,
+            element_width,
+            element_height,
+            bytes_per_element,
+            256,
+        )
     }
 
     /// Decode the validated base level into RGBA8 for canonical mip generation. BC4 is treated as
@@ -241,53 +256,47 @@ pub fn decode_vram_textures(pak: &PakFile) -> Result<Vec<ImportedVramTexture>, S
     Ok(out)
 }
 
-fn detile_1d_thin_non_displayable(
+fn align_up(value: usize, alignment: usize) -> Result<usize, String> {
+    if alignment == 0 {
+        return Err("alignment must be non-zero".to_owned());
+    }
+    value
+        .checked_add(alignment - 1)
+        .map(|v| (v / alignment) * alignment)
+        .ok_or_else(|| "alignment overflow".to_owned())
+}
+
+fn linearize_pitched_rows(
     source: &[u8],
     width: usize,
     height: usize,
     bytes_per_element: usize,
+    pitch_alignment: usize,
 ) -> Result<Vec<u8>, String> {
-    if bytes_per_element != 8 {
-        return Err(format!(
-            "validated TLOU2 1D-thin detiler currently accepts 64-bit elements only, got {} bits",
-            bytes_per_element * 8
-        ));
-    }
-    let padded_width = width.div_ceil(8) * 8;
-    let padded_height = height.div_ceil(8) * 8;
-    let required = padded_width
-        .checked_mul(padded_height)
-        .and_then(|v| v.checked_mul(bytes_per_element))
-        .ok_or("1D-thin source size overflow")?;
+    let row_bytes = width
+        .checked_mul(bytes_per_element)
+        .ok_or("pitched row byte size overflow")?;
+    let row_pitch = align_up(row_bytes, pitch_alignment)?;
+    let required = row_pitch
+        .checked_mul(height)
+        .ok_or("pitched source size overflow")?;
     if source.len() < required {
         return Err(format!(
-            "1D-thin source is truncated bytes={} required={required}",
+            "pitched source is truncated bytes={} required={required}",
             source.len()
         ));
     }
-    let tiles_per_row = padded_width / 8;
-    let mut out = vec![0u8; width * height * bytes_per_element];
+    let output_len = row_bytes
+        .checked_mul(height)
+        .ok_or("linear output size overflow")?;
+    let mut out = vec![0u8; output_len];
     for y in 0..height {
-        for x in 0..width {
-            let tile = (y / 8) * tiles_per_row + (x / 8);
-            let within = morton_8x8(x & 7, y & 7);
-            let source_offset = (tile * 64 + within) * bytes_per_element;
-            let target_offset = (y * width + x) * bytes_per_element;
-            out[target_offset..target_offset + bytes_per_element]
-                .copy_from_slice(&source[source_offset..source_offset + bytes_per_element]);
-        }
+        let source_start = y * row_pitch;
+        let target_start = y * row_bytes;
+        out[target_start..target_start + row_bytes]
+            .copy_from_slice(&source[source_start..source_start + row_bytes]);
     }
     Ok(out)
-}
-
-#[inline]
-fn morton_8x8(x: usize, y: usize) -> usize {
-    ((x & 1) << 0)
-        | ((y & 1) << 1)
-        | (((x >> 1) & 1) << 2)
-        | (((y >> 1) & 1) << 3)
-        | (((x >> 2) & 1) << 4)
-        | (((y >> 2) & 1) << 5)
 }
 
 fn decode_bc4_alpha_rgba8(width: u32, height: u32, blocks: &[u8]) -> Result<Vec<u8>, String> {
@@ -353,31 +362,24 @@ mod tests {
     use super::*;
 
     #[test]
-    fn morton_microtile_covers_every_slot_once() {
-        let mut slots = [false; 64];
-        for y in 0..8 {
-            for x in 0..8 {
-                let slot = morton_8x8(x, y);
-                assert!(slot < 64);
-                assert!(!slots[slot]);
-                slots[slot] = true;
+    fn pitched_rows_strip_physical_padding_without_touching_payload() {
+        let width = 16usize;
+        let height = 4usize;
+        let bytes_per_element = 8usize;
+        let row_bytes = width * bytes_per_element;
+        let row_pitch = 256usize;
+        let mut source = vec![0xCD; row_pitch * height];
+        for y in 0..height {
+            for x in 0..width {
+                let value = (y * width + x) as u64;
+                let at = y * row_pitch + x * bytes_per_element;
+                source[at..at + 8].copy_from_slice(&value.to_le_bytes());
             }
         }
-        assert!(slots.into_iter().all(|value| value));
-    }
-
-    #[test]
-    fn detile_non_displayable_roundtrips_known_microtile_coordinates() {
-        let mut tiled = vec![0u8; 64 * 8];
-        for y in 0..8usize {
-            for x in 0..8usize {
-                let slot = morton_8x8(x, y);
-                let value = (y * 8 + x) as u64;
-                tiled[slot * 8..slot * 8 + 8].copy_from_slice(&value.to_le_bytes());
-            }
-        }
-        let linear = detile_1d_thin_non_displayable(&tiled, 8, 8, 8).expect("detile");
-        for index in 0..64usize {
+        let linear = linearize_pitched_rows(&source, width, height, bytes_per_element, 256)
+            .expect("linearize pitched rows");
+        assert_eq!(linear.len(), row_bytes * height);
+        for index in 0..width * height {
             let at = index * 8;
             assert_eq!(
                 u64::from_le_bytes(linear[at..at + 8].try_into().unwrap()),
@@ -387,10 +389,17 @@ mod tests {
     }
 
     #[test]
+    fn pitched_row_alignment_matches_tlou2_bc1_tail_layout() {
+        assert_eq!(align_up(16 * 8, 256).unwrap(), 256);
+        assert_eq!(align_up(32 * 8, 256).unwrap(), 256);
+        assert_eq!(align_up(33 * 8, 256).unwrap(), 512);
+    }
+
+    #[test]
     fn unvalidated_128_bit_formats_are_rejected_explicitly() {
-        assert!(!ImportedTextureFormat::Bc5Unorm.validated_1d_thin_detile());
-        assert!(!ImportedTextureFormat::Bc7Srgb.validated_1d_thin_detile());
-        assert!(ImportedTextureFormat::Bc1Srgb.validated_1d_thin_detile());
-        assert!(ImportedTextureFormat::Bc4Unorm.validated_1d_thin_detile());
+        assert!(!ImportedTextureFormat::Bc5Unorm.validated_pitched_linearization());
+        assert!(!ImportedTextureFormat::Bc7Srgb.validated_pitched_linearization());
+        assert!(ImportedTextureFormat::Bc1Srgb.validated_pitched_linearization());
+        assert!(ImportedTextureFormat::Bc4Unorm.validated_pitched_linearization());
     }
 }

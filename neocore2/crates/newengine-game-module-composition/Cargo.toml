@@ -9,3 +9,4 @@ newengine-engine-runtime = { path = "../newengine-engine-runtime" }
 newengine-game-module-api = { path = "../newengine-game-module-api" }
 newengine-project-api = { path = "../newengine-project-api" }
 newengine-project-runtime = { path = "../newengine-project-runtime" }
+newengine-service-api = { path = "../newengine-service-api" }

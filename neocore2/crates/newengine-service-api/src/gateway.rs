@@ -92,6 +92,18 @@ pub mod system_tag {
     pub const TRUST_ROOT: &str = "trust.root";
     /// Runtime-facing service, not an authoring-only/tooling surface.
     pub const RUNTIME: &str = "runtime";
+    /// Provider requires an interactive/headful presentation environment.
+    pub const HEADFUL: &str = "headful";
+    /// Provider is suitable for a headless/server composition.
+    pub const HEADLESS: &str = "headless";
+    /// Provider participates in presentation/output.
+    pub const PRESENTATION: &str = "presentation";
+    /// Provider owns or requires GPU execution.
+    pub const GPU: &str = "gpu";
+    /// Provider owns or requires native windowing.
+    pub const WINDOWING: &str = "windowing";
+    /// Provider behavior is deterministic for equivalent inputs.
+    pub const DETERMINISTIC: &str = "deterministic";
 }
 
 #[inline]

@@ -2,7 +2,8 @@ use super::facts::GatewayPolicyFact;
 use super::route_model::route_matches_query;
 use super::*;
 use newengine_service_api::{
-    parse_versioned_contract_id, CapabilityMatrix, CompositionCandidate, CompositionPlan,
+    CapabilityMatrix, CompositionCandidateDisposition, CompositionContractResolution,
+    CompositionContractResolutionSubject, CompositionExplanationGraph, CompositionPlan,
     CompositionSolver, CompositionSolverInput,
 };
 
@@ -19,6 +20,140 @@ pub(crate) struct GatewayRouteDiagnostics {
     pub(crate) gateway_id: String,
     pub(crate) active_route: Option<ActiveGatewayRoute>,
     pub(crate) shadowed_routes: Vec<ActiveGatewayRoute>,
+}
+
+pub(crate) fn descriptor_composition_candidates(
+    descriptor: &newengine_plugin_api::PluginDescriptor,
+    origin: GatewayProviderOrigin,
+    policy_facts: &[GatewayPolicyFact],
+) -> Vec<newengine_service_api::CompositionCandidate> {
+    crate::service_gateway::metadata::descriptor_gateway_capabilities(descriptor)
+        .into_iter()
+        .filter_map(|gateway| {
+            let provider_service_id = gateway_provider_service_id(descriptor, &gateway)?;
+            let policy = policy_facts
+                .iter()
+                .find(|policy| policy.gateway_id == gateway.gateway_id);
+            ActiveGatewayRoute::new(
+                gateway.gateway_id,
+                gateway.service_kind,
+                provider_service_id,
+                gateway.provider_route_id,
+                gateway.provider_abi,
+                descriptor.id.to_string(),
+                gateway.backend_capability_id,
+                Some(gateway.capability_version),
+                gateway.contract_id,
+                gateway.contract_version,
+                gateway.backend_priority,
+                origin,
+                gateway.system_tags,
+                policy,
+            )
+        })
+        .map(|route| route.composition_candidate())
+        .collect()
+}
+
+pub(crate) fn descriptor_v2_composition_candidates(
+    descriptor: &newengine_plugin_api::PluginDescriptorV2,
+    origin: GatewayProviderOrigin,
+    policy_facts: &[GatewayPolicyFact],
+) -> Vec<newengine_service_api::CompositionCandidate> {
+    crate::service_gateway::metadata::descriptor_gateway_capabilities_v2(descriptor)
+        .into_iter()
+        .filter_map(|gateway| {
+            let provider_service_id =
+                crate::service_gateway::provider::gateway_provider_service_id_v2(
+                    descriptor, &gateway,
+                )?;
+            let policy = policy_facts
+                .iter()
+                .find(|policy| policy.gateway_id == gateway.gateway_id);
+            ActiveGatewayRoute::new(
+                gateway.gateway_id,
+                gateway.service_kind,
+                provider_service_id,
+                gateway.provider_route_id,
+                gateway.provider_abi,
+                descriptor.id.to_string(),
+                gateway.backend_capability_id,
+                Some(gateway.capability_version),
+                gateway.contract_id,
+                gateway.contract_version,
+                gateway.backend_priority,
+                origin,
+                gateway.system_tags,
+                policy,
+            )
+        })
+        .map(|route| route.composition_candidate())
+        .collect()
+}
+
+pub(crate) fn host_route_composition_candidates(
+    services: &[RegisteredServiceFact],
+    gateway_provider_routes: &[GatewayProviderRouteFact],
+    policy_facts: &[GatewayPolicyFact],
+) -> Vec<newengine_service_api::CompositionCandidate> {
+    gateway_provider_routes
+        .iter()
+        .filter(|gateway| {
+            services.iter().any(|service| {
+                service.service_id == gateway.provider_service_id
+                    && service.owner_plugin_id.is_none()
+            })
+        })
+        .filter_map(|gateway| {
+            let policy = policy_facts
+                .iter()
+                .find(|policy| policy.gateway_id == gateway.gateway_id);
+            ActiveGatewayRoute::new(
+                gateway.gateway_id.clone(),
+                gateway.service_kind.clone(),
+                gateway.provider_service_id.clone(),
+                Some(gateway.provider_route_id.clone()),
+                gateway.provider_abi.clone(),
+                gateway.provider_owner_id.clone(),
+                gateway.backend_capability_id.clone(),
+                None,
+                None,
+                None,
+                gateway.backend_priority,
+                gateway.origin,
+                gateway.system_tags.clone(),
+                policy,
+            )
+        })
+        .map(|route| route.composition_candidate())
+        .collect()
+}
+fn runtime_contract_resolution(
+    subject: CompositionContractResolutionSubject,
+    gateway_id: &str,
+    candidate_id: Option<String>,
+    capability_id: String,
+    reference: &str,
+    entry: &newengine_runtime_contract_catalog::RuntimeContractEntry,
+    min_version: u32,
+    max_version: Option<u32>,
+) -> CompositionContractResolution {
+    CompositionContractResolution {
+        subject,
+        gateway_id: gateway_id.to_owned(),
+        candidate_id,
+        capability_id,
+        reference: reference.to_owned(),
+        canonical_id: entry.spec.key.clone(),
+        min_version,
+        max_version,
+        authority: match entry.authority {
+            newengine_runtime_contract_catalog::RuntimeContractAuthority::Engine => "engine",
+            newengine_runtime_contract_catalog::RuntimeContractAuthority::Plugin => "plugin",
+        }
+        .to_owned(),
+        owner: entry.spec.owner.clone(),
+    }
 }
 
 impl ActiveGatewayRegistry {
@@ -52,6 +187,24 @@ impl ActiveGatewayRegistry {
         gateway_provider_routes: &[GatewayProviderRouteFact],
         policy_facts: &[GatewayPolicyFact],
         capability_matrix: CapabilityMatrix,
+    ) -> Self {
+        Self::from_facts_with_policy_matrix_and_plan(
+            descriptors,
+            services,
+            gateway_provider_routes,
+            policy_facts,
+            capability_matrix,
+            None,
+        )
+    }
+
+    pub(crate) fn from_facts_with_policy_matrix_and_plan(
+        descriptors: &[PluginDescriptorFact],
+        services: &[RegisteredServiceFact],
+        gateway_provider_routes: &[GatewayProviderRouteFact],
+        policy_facts: &[GatewayPolicyFact],
+        capability_matrix: CapabilityMatrix,
+        frozen_plan: Option<&CompositionPlan>,
     ) -> Self {
         let mut routes = Vec::new();
         let mut skipped_unregistered = 0usize;
@@ -97,6 +250,9 @@ impl ActiveGatewayRegistry {
                     gateway.provider_abi,
                     descriptor_fact.plugin_id.clone(),
                     gateway.backend_capability_id,
+                    Some(gateway.capability_version),
+                    gateway.contract_id,
+                    gateway.contract_version,
                     gateway.backend_priority,
                     descriptor_fact.origin,
                     gateway.system_tags,
@@ -128,6 +284,9 @@ impl ActiveGatewayRegistry {
                 gateway.provider_abi.clone(),
                 gateway.provider_owner_id.clone(),
                 gateway.backend_capability_id.clone(),
+                None,
+                None,
+                None,
                 gateway.backend_priority,
                 gateway.origin,
                 gateway.system_tags.clone(),
@@ -139,31 +298,14 @@ impl ActiveGatewayRegistry {
 
         let candidates = routes
             .iter()
-            .map(|route| {
-                let mut candidate = CompositionCandidate::new(
-                    route.gateway_id.clone(),
-                    route.selection_key.clone(),
-                    route.provider_owner_id.clone(),
-                    route.backend_priority,
-                    route.origin.origin_bias(),
-                    route.selection_bonus,
-                )
-                .with_capability(route.backend_capability_id.clone())
-                .with_tags(route.system_tags.clone());
-                if let Some((contract_id, version)) = route
-                    .provider_abi
-                    .as_deref()
-                    .and_then(parse_versioned_contract_id)
-                {
-                    candidate = candidate.with_contract(contract_id, version);
-                }
-                candidate
-            })
+            .map(ActiveGatewayRoute::composition_candidate)
             .collect();
 
-        let plan = CompositionSolver::resolve_input(CompositionSolverInput {
-            candidates,
-            capability_matrix,
+        let plan = frozen_plan.cloned().unwrap_or_else(|| {
+            CompositionSolver::resolve_input(CompositionSolverInput {
+                candidates,
+                capability_matrix,
+            })
         });
 
         // Diagnostics-only ordering. The plan above remains the only authority.
@@ -189,21 +331,103 @@ impl ActiveGatewayRegistry {
         registry
     }
 
+    pub(crate) fn with_contract_catalog(
+        mut self,
+        catalog: &newengine_runtime_contract_catalog::RuntimeContractCatalog,
+    ) -> Self {
+        let mut resolutions = Vec::new();
+        for route in &self.routes {
+            let (reference, version) = match (route.contract_id.as_deref(), route.contract_version)
+            {
+                (Some(reference), version) => (Some(reference.to_owned()), version),
+                (None, None) => route
+                    .provider_abi
+                    .as_deref()
+                    .and_then(newengine_service_api::parse_versioned_contract_id)
+                    .map(|(reference, version)| (Some(reference), Some(version)))
+                    .unwrap_or((None, None)),
+                _ => (None, None),
+            };
+            let Some(reference) = reference else {
+                continue;
+            };
+            let Some(entry) = catalog.resolve_contract_reference(&reference) else {
+                continue;
+            };
+            resolutions.push(runtime_contract_resolution(
+                CompositionContractResolutionSubject::Candidate,
+                &route.gateway_id,
+                Some(route.selection_key.clone()),
+                route.backend_capability_id.clone(),
+                &reference,
+                entry,
+                version.unwrap_or(0),
+                version,
+            ));
+        }
+        for gateway in self.plan.explanation().gateways() {
+            for requirement in &gateway.requirements {
+                let Some(reference) = requirement.contract_id.as_deref() else {
+                    continue;
+                };
+                let Some(entry) = catalog.resolve_contract_reference(reference) else {
+                    continue;
+                };
+                resolutions.push(runtime_contract_resolution(
+                    CompositionContractResolutionSubject::Requirement,
+                    &gateway.gateway_id,
+                    None,
+                    requirement.capability_id.clone(),
+                    reference,
+                    entry,
+                    requirement.min_contract_version,
+                    requirement.max_contract_version,
+                ));
+            }
+        }
+        self.plan = std::mem::take(&mut self.plan).with_contract_resolutions(resolutions);
+        self
+    }
+
+    pub(crate) fn composition_explanation(&self) -> &CompositionExplanationGraph {
+        self.plan.explanation()
+    }
+
+    pub(crate) fn composition_plan(&self) -> &CompositionPlan {
+        &self.plan
+    }
+
     pub(crate) fn routes(&self) -> &[ActiveGatewayRoute] {
         &self.routes
     }
 
     pub(crate) fn route_diagnostics(&self, gateway_id: &str) -> GatewayRouteDiagnostics {
-        let active_route = self.resolve_route(gateway_id).cloned();
+        let explanation = self.plan.explanation().gateway(gateway_id);
+        let active_key = explanation.and_then(|gateway| {
+            gateway
+                .candidates
+                .iter()
+                .find(|candidate| {
+                    candidate.disposition == CompositionCandidateDisposition::Selected
+                })
+                .map(|candidate| candidate.candidate_id.as_str())
+        });
+        let shadowed_keys = explanation
+            .into_iter()
+            .flat_map(|gateway| gateway.candidates.iter())
+            .filter(|candidate| candidate.disposition == CompositionCandidateDisposition::Shadowed)
+            .map(|candidate| candidate.candidate_id.as_str())
+            .collect::<std::collections::BTreeSet<_>>();
+        let active_route = active_key.and_then(|key| {
+            self.routes
+                .iter()
+                .find(|route| route.selection_key == key)
+                .cloned()
+        });
         let shadowed_routes = self
             .routes
             .iter()
-            .filter(|route| route_matches_query(route, gateway_id))
-            .filter(|route| {
-                active_route
-                    .as_ref()
-                    .is_none_or(|active| route.selection_key != active.selection_key)
-            })
+            .filter(|route| shadowed_keys.contains(route.selection_key.as_str()))
             .cloned()
             .collect::<Vec<_>>();
 

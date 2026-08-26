@@ -422,8 +422,8 @@ fn apply_graphics_process_overrides_to_settings(
     mut report: Option<&mut StartupLoadReport>,
 ) -> usize {
     use crate::startup_window::{
-        ENV_LOD_DISTANCE_SCALE, ENV_SHADOWS_ENABLED, ENV_SHADOW_CASCADE_COUNT,
-        ENV_SHADOW_MAP_RESOLUTION,
+        ENV_LOD_DISTANCE_SCALE, ENV_SHADOW_CASCADE_COUNT, ENV_SHADOW_MAP_RESOLUTION,
+        ENV_SHADOWS_ENABLED,
     };
 
     let mut changed = 0usize;
@@ -434,28 +434,36 @@ fn apply_graphics_process_overrides_to_settings(
         }
     };
 
-    if let Ok(raw) = std::env::var(ENV_LOD_DISTANCE_SCALE) {
+    if let Some(raw) =
+        newengine_plugin_host::current_host_context().environment_var(ENV_LOD_DISTANCE_SCALE)
+    {
         if let Ok(value) = raw.trim().parse::<f32>() {
             let from = settings.graphics.lod_distance_scale.to_string();
             settings.graphics.lod_distance_scale = value;
             record(ENV_LOD_DISTANCE_SCALE, from, raw);
         }
     }
-    if let Ok(raw) = std::env::var(ENV_SHADOWS_ENABLED) {
+    if let Some(raw) =
+        newengine_plugin_host::current_host_context().environment_var(ENV_SHADOWS_ENABLED)
+    {
         if let Some(value) = parse_process_bool(&raw) {
             let from = settings.graphics.shadows_enabled.to_string();
             settings.graphics.shadows_enabled = value;
             record(ENV_SHADOWS_ENABLED, from, raw);
         }
     }
-    if let Ok(raw) = std::env::var(ENV_SHADOW_CASCADE_COUNT) {
+    if let Some(raw) =
+        newengine_plugin_host::current_host_context().environment_var(ENV_SHADOW_CASCADE_COUNT)
+    {
         if let Ok(value) = raw.trim().parse::<u32>() {
             let from = settings.graphics.shadow_cascade_count.to_string();
             settings.graphics.shadow_cascade_count = value;
             record(ENV_SHADOW_CASCADE_COUNT, from, raw);
         }
     }
-    if let Ok(raw) = std::env::var(ENV_SHADOW_MAP_RESOLUTION) {
+    if let Some(raw) =
+        newengine_plugin_host::current_host_context().environment_var(ENV_SHADOW_MAP_RESOLUTION)
+    {
         if let Ok(value) = raw.trim().parse::<u32>() {
             let from = settings.graphics.shadow_map_resolution.to_string();
             settings.graphics.shadow_map_resolution = value;

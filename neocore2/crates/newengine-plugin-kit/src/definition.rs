@@ -67,9 +67,7 @@ impl PluginDefinitionWithContracts {
     pub fn descriptor_v2(self) -> PluginDescriptorV2 {
         let mut descriptor = descriptor_v2_from_definition(self.definition);
         for contract in self.contracts {
-            descriptor
-                .capabilities
-                .push(contract_capability(*contract).to_v2_compat());
+            descriptor.capabilities.push(contract_capability_v2(*contract));
         }
         descriptor
     }
@@ -300,44 +298,100 @@ fn contract_capability(contract: PluginContractDefinition) -> CapabilityDesc {
 }
 
 pub fn descriptor_v2_from_definition(def: PluginDefinition) -> PluginDescriptorV2 {
-    let legacy = descriptor_from_definition(def);
-    let mut typed = PluginDescriptorV2::from_legacy(&legacy);
+    let mut builder = PluginDescriptorV2::builder(def.id, def.name, def.version, def.kind);
 
-    // Backend routes are available as typed source data in PluginDefinition, so
-    // replace their compatibility-normalized copies with direct V2 descriptors.
+    for service in def.services {
+        builder = builder.provides_service(
+            service.id,
+            service.version,
+            RString::from(service.describe_json),
+        );
+    }
+
     for route in def.backend_routes {
-        let mut desc = BackendRouteDescriptor::new(route.spec).priority(route.priority);
+        let mut descriptor = BackendRouteDescriptor::new(route.spec).priority(route.priority);
         if let Some(provider_abi) = route.provider_abi {
-            desc = desc.provider_abi(provider_abi);
+            descriptor = descriptor.provider_abi(provider_abi);
         }
         if let Some(provider_route) = route.provider_route {
-            desc = desc.provider_route(provider_route);
+            descriptor = descriptor.provider_route(provider_route);
         }
         if let Some(backend) = route.backend {
-            desc = desc.backend(backend);
+            descriptor = descriptor.backend(backend);
         }
         if let Some(mode) = route.mode {
-            desc = desc.mode(mode);
+            descriptor = descriptor.mode(mode);
         }
         if !route.features.is_empty() {
-            desc = desc.features(route.features.iter().copied());
+            descriptor = descriptor.features(route.features.iter().copied());
         }
         if !route.system_tags.is_empty() {
-            desc = desc.system_tags(route.system_tags.iter().copied());
+            descriptor = descriptor.system_tags(route.system_tags.iter().copied());
         }
         for item in route.metadata_json {
-            desc = desc.metadata_json(item.key, parse_metadata_value(item.key, item.value_json));
+            descriptor = descriptor.metadata_json(
+                item.key,
+                parse_metadata_value(item.key, item.value_json),
+            );
         }
-        let direct = CapabilityDescV2::backend_route(route.capability_id, 1, desc);
-        if let Some(slot) = typed.capabilities.iter_mut().find(|cap| {
-            cap.id.as_str() == route.capability_id && cap.role == CapabilityRole::Provides
-        }) {
-            *slot = direct;
-        } else {
-            typed.capabilities.push(direct);
-        }
+        builder = builder.push(CapabilityDescV2::backend_route(
+            route.capability_id,
+            1,
+            descriptor,
+        ));
     }
-    typed
+
+    for capability in def.capabilities {
+        builder = builder.push(
+            CapabilityDescV2::new(
+                capability.id,
+                capability.role,
+                capability.kind,
+                capability.version,
+            )
+            .with_extension_json(RString::from(capability.describe_json)),
+        );
+    }
+
+    builder.build()
+}
+
+fn contract_capability_v2(contract: PluginContractDefinition) -> CapabilityDescV2 {
+    let declaration = RuntimeContractDeclaration::new(
+        contract.key,
+        contract.kind,
+        contract.version,
+        contract.compatibility,
+    );
+    let declaration = if let Some(advertised_id) = contract.advertised_id {
+        declaration.advertised_id(advertised_id)
+    } else {
+        declaration
+    };
+    let key = declaration.key.trim();
+    let metadata = serde_json::json!({
+        "runtime_contract": {
+            "kind": declaration.kind.as_str(),
+            "version": {
+                "major": declaration.version.major,
+                "minor": declaration.version.minor,
+                "patch": declaration.version.patch,
+            },
+            "compatibility": match declaration.compatibility {
+                ContractCompatibility::Exact => "exact",
+                ContractCompatibility::SameMajor => "same_major",
+                ContractCompatibility::AtLeast => "at_least",
+            },
+            "advertised_id": declaration.advertised_id,
+        }
+    });
+    CapabilityDescV2::new(
+        format!("{}{}", crate::plugin_api::RUNTIME_CONTRACT_CAPABILITY_PREFIX, key),
+        CapabilityRole::Provides,
+        CapabilityKind::Other,
+        1,
+    )
+    .with_extension_json(metadata.to_string())
 }
 
 fn parse_metadata_value(key: &str, raw: &str) -> Value {

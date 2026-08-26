@@ -9,7 +9,12 @@ impl PluginManager {
         strict: bool,
         load_origin: PluginLoadOrigin,
     ) {
-        let selection = build_load_selection(&graph, filter, &self.loaded_ids);
+        let selection = build_load_selection(
+            &graph,
+            filter,
+            &self.loaded_ids,
+            self.frozen_composition_plan.as_ref(),
+        );
         let pending = selection
             .bootstrap_candidates
             .iter()
@@ -62,7 +67,12 @@ impl PluginManager {
         load_origin: PluginLoadOrigin,
     ) -> Result<(), PluginLoadError> {
         let (graph, graph_is_new) = self.ensure_discovery_graph(dir)?;
-        let selection = build_load_selection(&graph, filter, &self.loaded_ids);
+        let selection = build_load_selection(
+            &graph,
+            filter,
+            &self.loaded_ids,
+            self.frozen_composition_plan.as_ref(),
+        );
 
         let loaded_ids_before = self.loaded_ids.clone();
 

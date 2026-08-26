@@ -1,5 +1,6 @@
 use super::super::state::{
-    bump_services_generation, ctx, EngineCapabilitySlotEntry, EngineCapabilitySlotSnapshot,
+    bump_services_generation, ctx, DeclaredCompositionPolicy, EngineCapabilitySlotEntry,
+    EngineCapabilitySlotSnapshot,
 };
 use super::registry::gateway_registry_snapshot;
 use newengine_service_api::{
@@ -14,10 +15,74 @@ pub fn declare_engine_composition(
     if composition.id.trim().is_empty() {
         return Err("engine composition id must not be empty".to_owned());
     }
+
+    let mut preferred_tags = composition
+        .preferred_tags
+        .iter()
+        .map(|tag| tag.as_str().to_owned())
+        .collect::<Vec<_>>();
+    preferred_tags.sort();
+    preferred_tags.dedup();
+    let mut forbidden_tags = composition
+        .forbidden_tags
+        .iter()
+        .map(|tag| tag.as_str().to_owned())
+        .collect::<Vec<_>>();
+    forbidden_tags.sort();
+    forbidden_tags.dedup();
+    {
+        let c = ctx();
+        let mut policy = match c.composition_policy.lock() {
+            Ok(value) => value,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        *policy = DeclaredCompositionPolicy {
+            preferred_tags,
+            forbidden_tags,
+        };
+    }
+    // A policy-only composition must invalidate the immutable gateway plan too.
+    bump_services_generation();
+
     for requirement in composition.requirements {
         declare_engine_capability_requirement(*requirement, composition.id)?;
     }
     Ok(())
+}
+
+pub(crate) fn declared_engine_composition_matrix() -> CapabilityMatrix {
+    let c = ctx();
+    let requirements = {
+        let slots = match c.capability_slots.lock() {
+            Ok(value) => value,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        slots
+            .values()
+            .map(|entry| entry.requirement.clone())
+            .collect::<Vec<_>>()
+    };
+    let policy = {
+        let policy = match c.composition_policy.lock() {
+            Ok(value) => value,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        policy.clone()
+    };
+    CapabilityMatrix::new(requirements)
+        .with_preferred_tags(policy.preferred_tags)
+        .with_forbidden_tags(policy.forbidden_tags)
+}
+
+pub fn engine_composition_allows_system_tags(tags: &[String]) -> bool {
+    declared_engine_composition_matrix().allows_system_tags(tags)
+}
+
+#[inline]
+pub fn engine_composition_has_forbidden_system_tags() -> bool {
+    !declared_engine_composition_matrix()
+        .conflict_tags()
+        .is_empty()
 }
 
 pub fn declare_engine_capability_requirement(

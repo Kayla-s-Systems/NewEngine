@@ -122,13 +122,17 @@ impl GameReadyFpsApp {
     #[inline]
     pub fn new() -> Self {
         Self {
-            profile: GameReadyRuntimeProfile::standalone_game(),
+            profile: GameReadyRuntimeProfile::standalone_game()
+                .with_game_module_factory(newengine_game_module_fps::factory_registration()),
         }
     }
 
     #[inline]
     pub fn with_profile(profile: GameReadyRuntimeProfile) -> Self {
-        Self { profile }
+        Self {
+            profile: profile
+                .with_game_module_factory(newengine_game_module_fps::factory_registration()),
+        }
     }
 
     #[inline]
@@ -158,6 +162,21 @@ impl RuntimeHostAppProfile for GameReadyFpsApp {
     #[inline]
     fn composition_spec(&self) -> Option<newengine_service_api::EngineCompositionSpec> {
         Some(crate::provider_routes::GAME_READY_COMPOSITION_SPEC)
+    }
+
+    #[inline]
+    fn runtime_unit_registrations(
+        &self,
+    ) -> &'static [newengine_runtime_host::app_launcher::RuntimeHostRuntimeUnitRegistration] {
+        crate::runtime_units::GAME_READY_RUNTIME_UNIT_REGISTRATIONS
+    }
+
+    #[inline]
+    fn runtime_unit_requirements_for_runtime(
+        &self,
+        runtime: Option<&newengine_project_runtime::RuntimeCompositionContext>,
+    ) -> Result<Vec<newengine_service_api::RuntimeUnitRequirementDescriptor>, String> {
+        self.profile.runtime_unit_requirements_for_runtime(runtime)
     }
 
     #[inline]
@@ -216,6 +235,59 @@ pub fn run_game_ready_fps_process() -> ! {
 mod tests {
     use super::*;
     use std::collections::HashSet;
+
+    #[test]
+    fn canonical_fps_game_module_requirements_are_satisfied_by_game_ready_inventory() {
+        let app = GameReadyFpsApp::new();
+        assert_eq!(app.profile.game_module_factory_count(), 1);
+
+        let runtime = newengine_project_runtime::RuntimeCompositionContext {
+            manifest_path: std::path::PathBuf::from("game.toml"),
+            runtime_root: std::path::PathBuf::from("."),
+            runtime_profile: crate::GAME_READY_RUNTIME_PROFILE_ID.to_owned(),
+            game_module: Some(newengine_game_module_fps::FPS_GAME_MODULE_ID.to_owned()),
+            launch_profile: newengine_project_api::RuntimeLaunchProfile::Game,
+            startup_scene: Some("game:/maps/test.ymap".to_owned()),
+            startup_presentation_state: None,
+            definitions: Vec::new(),
+            mounts: newengine_project_api::ContentMountRegistry::default(),
+            scripts: newengine_project_api::ProjectScriptRegistry::default(),
+        };
+        let requirements = app
+            .runtime_unit_requirements_for_runtime(Some(&runtime))
+            .expect("construction-free FPS descriptor requirements");
+        let provided = app
+            .runtime_unit_registrations()
+            .iter()
+            .flat_map(|registration| registration.spec.provides.iter().copied())
+            .collect::<std::collections::BTreeSet<_>>();
+
+        for capability in [
+            newengine_service_api::runtime_unit_capability::GAME_SCENE_BOOTSTRAP,
+            newengine_service_api::runtime_unit_capability::GAME_WORLD_RUNTIME,
+            newengine_service_api::runtime_unit_capability::GAME_INPUT_PROFILE,
+            newengine_service_api::runtime_unit_capability::RENDER_FEATURE,
+        ] {
+            assert!(
+                requirements
+                    .iter()
+                    .any(|requirement| requirement.capability == capability),
+                "FPS descriptor missing requirement {capability}"
+            );
+            assert!(
+                provided.contains(capability),
+                "GameReady inventory missing producer for {capability}"
+            );
+        }
+        let render = requirements
+            .iter()
+            .find(|requirement| {
+                requirement.capability
+                    == newengine_service_api::runtime_unit_capability::RENDER_FEATURE
+            })
+            .expect("render feature requirement");
+        assert_eq!(render.cardinality, newengine_service_api::Cardinality::Many);
+    }
 
     #[test]
     fn shipping_fps_requires_every_visual_runtime_backend() {

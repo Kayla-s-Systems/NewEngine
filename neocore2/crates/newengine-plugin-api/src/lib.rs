@@ -4,6 +4,7 @@
 pub mod capability;
 pub mod config;
 pub mod contract;
+pub mod discovery_manifest;
 pub mod editor;
 pub mod host;
 pub mod module;
@@ -18,6 +19,7 @@ pub mod prelude;
 pub use capability::*;
 pub use config::*;
 pub use contract::*;
+pub use discovery_manifest::*;
 pub use editor::*;
 pub use host::*;
 pub use module::*;

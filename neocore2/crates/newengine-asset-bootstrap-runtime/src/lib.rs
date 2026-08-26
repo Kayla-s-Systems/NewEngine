@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 #[cfg(feature = "window-icon")]
 use abi_stable::std_types::RVec;
 #[cfg(feature = "window-icon")]
-use newengine_assets::{wait_ready, AssetAccess};
+use newengine_assets::{AssetAccess, wait_ready};
 use newengine_assets::{AssetService, AssetServiceClient};
 use newengine_platform_api::PlatformAppIconV1;
 #[cfg(feature = "window-icon")]
@@ -92,7 +92,7 @@ pub fn mount_profile_content_best_effort(assets: &AssetServiceClient, spec: Prof
 fn collect_content_set_roots(content: ContentSetSpec) -> Vec<PathBuf> {
     let mut roots = Vec::new();
     for env_var in content.env_roots {
-        if let Ok(path) = std::env::var(env_var) {
+        if let Some(path) = newengine_plugin_host::current_host_context().environment_var(env_var) {
             let path = path.trim();
             if !path.is_empty() {
                 roots.push(PathBuf::from(path));
@@ -175,7 +175,7 @@ fn push_content_roots_from_base(roots: &mut Vec<PathBuf>, base: &Path, content: 
 pub fn collect_app_asset_roots(app_dir_name: &str, env_var: &str) -> Vec<PathBuf> {
     let mut roots: Vec<PathBuf> = Vec::new();
 
-    if let Ok(p) = std::env::var(env_var) {
+    if let Some(p) = newengine_plugin_host::current_host_context().environment_var(env_var) {
         roots.push(PathBuf::from(p));
     }
 

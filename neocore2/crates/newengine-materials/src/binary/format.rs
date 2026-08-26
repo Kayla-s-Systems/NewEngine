@@ -59,6 +59,7 @@ pub(crate) fn decode_descriptor_from(
     let shading_model = match shading_u8 {
         0 => ShadingModel::Unlit,
         1 => ShadingModel::PbrMetallicRoughness,
+        2 => ShadingModel::Eye,
         v => {
             return Err(MaterialBinaryError::InvalidEnumValue {
                 field: "shading_model",

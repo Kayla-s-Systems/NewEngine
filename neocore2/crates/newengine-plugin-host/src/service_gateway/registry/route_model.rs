@@ -1,6 +1,6 @@
 use super::facts::{GatewayOverrideMode, GatewayPolicyFact, GatewayProviderOrigin};
 use super::*;
-use newengine_service_api::CompositionSolver;
+use newengine_service_api::{parse_versioned_contract_id, CompositionCandidate, CompositionSolver};
 
 #[inline]
 pub(super) fn route_allowed_by_policy(
@@ -80,6 +80,9 @@ pub(crate) struct ActiveGatewayRoute {
     pub(crate) provider_abi: Option<String>,
     pub(crate) provider_owner_id: String,
     pub(crate) backend_capability_id: String,
+    pub(crate) capability_version: Option<u32>,
+    pub(crate) contract_id: Option<String>,
+    pub(crate) contract_version: Option<u32>,
     pub(crate) backend_priority: i32,
     pub(crate) origin: GatewayProviderOrigin,
     pub(crate) override_mode: GatewayOverrideMode,
@@ -100,6 +103,9 @@ impl ActiveGatewayRoute {
         provider_abi: Option<String>,
         provider_owner_id: String,
         backend_capability_id: String,
+        capability_version: Option<u32>,
+        contract_id: Option<String>,
+        contract_version: Option<u32>,
         backend_priority: i32,
         origin: GatewayProviderOrigin,
         route_tags: Vec<String>,
@@ -148,6 +154,9 @@ impl ActiveGatewayRoute {
             provider_abi,
             provider_owner_id,
             backend_capability_id,
+            capability_version,
+            contract_id,
+            contract_version,
             backend_priority,
             origin,
             override_mode,
@@ -156,5 +165,41 @@ impl ActiveGatewayRoute {
             system_tags,
             selection_key,
         })
+    }
+
+    pub(super) fn composition_candidate(&self) -> CompositionCandidate {
+        let mut candidate = CompositionCandidate::new(
+            self.gateway_id.clone(),
+            self.selection_key.clone(),
+            self.provider_owner_id.clone(),
+            self.backend_priority,
+            self.origin.origin_bias(),
+            self.selection_bonus,
+        )
+        .with_capability(self.backend_capability_id.clone())
+        .with_tags(self.system_tags.clone());
+
+        if let Some(version) = self.capability_version {
+            candidate = candidate.with_capability_version(version);
+        }
+
+        match (self.contract_id.as_deref(), self.contract_version) {
+            (Some(contract_id), Some(version)) => {
+                candidate = candidate.with_contract(contract_id.to_owned(), version);
+            }
+            (Some(contract_id), None) => {
+                candidate = candidate.with_contract_id(contract_id.to_owned());
+            }
+            _ => {
+                if let Some((contract_id, version)) = self
+                    .provider_abi
+                    .as_deref()
+                    .and_then(parse_versioned_contract_id)
+                {
+                    candidate = candidate.with_contract(contract_id, version);
+                }
+            }
+        }
+        candidate
     }
 }

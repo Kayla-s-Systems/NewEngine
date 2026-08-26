@@ -8,7 +8,7 @@ use std::{
 
 use newengine_assets::{AssetService, AssetServiceClient};
 use newengine_assets_api::{
-    plan_asset_invalidation_v1, AssetInvalidationPlanV1, AssetInvalidationRequestV1,
+    AssetInvalidationPlanV1, AssetInvalidationRequestV1, plan_asset_invalidation_v1,
 };
 use newengine_core::{Resources, TaskLane, TaskPriority, TaskRequest, ThreadPoolHandle};
 use newengine_project_api::{ContentMountNamespace, ContentMountRegistry};
@@ -438,8 +438,8 @@ fn scan_dir(root: &Path, max_files: usize, out: &mut BTreeMap<PathBuf, FileStamp
 }
 
 fn asset_hot_reload_disabled() -> bool {
-    std::env::var(ASSET_HOT_RELOAD_DISABLE_ENV)
-        .ok()
+    newengine_plugin_host::current_host_context()
+        .environment_var(ASSET_HOT_RELOAD_DISABLE_ENV)
         .map(|value| {
             matches!(
                 value.trim().to_ascii_lowercase().as_str(),

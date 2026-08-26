@@ -9,6 +9,8 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 
+static NEXT_HOST_CONTEXT_INSTANCE_ID: AtomicU64 = AtomicU64::new(1);
+
 pub(crate) struct ServiceLifecycle {
     accepting_calls: AtomicBool,
     active_calls: AtomicUsize,
@@ -140,6 +142,12 @@ pub(crate) struct EngineCapabilitySlotEntry {
     pub(crate) requirement: newengine_service_api::CompositionRequirement,
 }
 
+#[derive(Clone, Debug, Default)]
+pub(crate) struct DeclaredCompositionPolicy {
+    pub(crate) preferred_tags: Vec<String>,
+    pub(crate) forbidden_tags: Vec<String>,
+}
+
 #[derive(Clone, Debug)]
 pub struct EngineGatewayRouteSnapshot {
     pub gateway_id: String,
@@ -168,6 +176,7 @@ pub(crate) struct GatewayProviderRouteEntry {
     pub(crate) provider_owner_id: String,
     pub(crate) backend_capability_id: String,
     pub(crate) backend_priority: i32,
+    pub(crate) system_tags: Vec<String>,
     pub(crate) origin: crate::service_gateway::GatewayProviderOrigin,
 }
 
@@ -255,6 +264,7 @@ pub(crate) fn reject_topology_mutation_from_host_callback(operation: &str) -> Re
 }
 
 pub(crate) struct HostContext {
+    pub(crate) instance_id: u64,
     pub(crate) services: Mutex<NeHashMap<String, ServiceEntry>>,
     pub(crate) services_generation: AtomicU64,
     pub(crate) event_sinks: Mutex<Arc<[EventSinkEntry]>>,
@@ -267,9 +277,11 @@ pub(crate) struct HostContext {
     pub(crate) external_runtime_plugins: Mutex<NeHashMap<String, ExternalRuntimePluginEntry>>,
     pub(crate) gateway_provider_routes: Mutex<NeHashMap<String, GatewayProviderRouteEntry>>,
     pub(crate) capability_slots: Mutex<NeHashMap<String, EngineCapabilitySlotEntry>>,
+    pub(crate) composition_policy: Mutex<DeclaredCompositionPolicy>,
     pub(crate) gateway_selection_policies:
         Mutex<NeHashMap<String, crate::host_context::gateway::EngineGatewaySelectionPolicy>>,
     pub(crate) gateway_registry_cache: Mutex<Option<GatewayRegistryCache>>,
+    pub(crate) frozen_composition_plan: RwLock<Option<Arc<newengine_service_api::CompositionPlan>>>,
     pub(crate) provider_transaction: Mutex<Option<ProviderTransactionState>>,
     pub(crate) plugin_config_store:
         Mutex<Option<Arc<crate::plugin_config_service::PluginConfigStore>>>,
@@ -279,7 +291,6 @@ pub(crate) struct HostContext {
     pub(crate) invalid_gateway_route_warnings: Mutex<NeHashSet<String>>,
     pub(crate) gateway_resolution_diagnostics: Mutex<NeHashMap<String, String>>,
     pub(crate) warned_retired_capabilities: AtomicBool,
-    pub(crate) headless_provider_skip_message_printed: AtomicBool,
     /// Per-Engine snapshot of process/bootstrap environment. Runtime policy must
     /// read this snapshot instead of observing later process-global mutations.
     pub(crate) environment: RwLock<Arc<NeHashMap<OsString, OsString>>>,
@@ -306,6 +317,13 @@ impl HostContextHandle {
         Arc::as_ptr(&self.inner) as usize
     }
 
+    /// Opaque, process-local Engine instance identity for observability/correlation.
+    /// Unlike `identity()`, this never exposes a memory address.
+    #[inline]
+    pub fn instance_id(&self) -> u64 {
+        self.inner.instance_id
+    }
+
     /// Replaces this Engine's environment snapshot explicitly. This is the
     /// preferred path for Editor/PIE/preview instances because it never mutates
     /// or depends on process-global environment after construction.
@@ -326,6 +344,36 @@ impl HostContextHandle {
         self.replace_environment_snapshot(std::env::vars_os());
     }
 
+    /// Applies one launch-time environment override to this Engine instance.
+    /// This mutates only the instance snapshot; it never touches process env.
+    pub fn set_environment_var(&self, name: impl Into<OsString>, value: impl Into<OsString>) {
+        let name = name.into();
+        let value = value.into();
+        match self.inner.environment.write() {
+            Ok(mut slot) => {
+                Arc::make_mut(&mut *slot).insert(name, value);
+            }
+            Err(poisoned) => {
+                let mut slot = poisoned.into_inner();
+                Arc::make_mut(&mut *slot).insert(name, value);
+            }
+        }
+    }
+
+    /// Removes one launch-time environment override from this Engine instance.
+    /// This mutates only the instance snapshot; it never touches process env.
+    pub fn remove_environment_var(&self, name: &str) {
+        match self.inner.environment.write() {
+            Ok(mut slot) => {
+                Arc::make_mut(&mut *slot).remove(OsStr::new(name));
+            }
+            Err(poisoned) => {
+                let mut slot = poisoned.into_inner();
+                Arc::make_mut(&mut *slot).remove(OsStr::new(name));
+            }
+        }
+    }
+
     #[inline]
     pub fn environment_var_os(&self, name: &str) -> Option<OsString> {
         let environment = match self.inner.environment.read() {
@@ -339,6 +387,34 @@ impl HostContextHandle {
     pub fn environment_var(&self, name: &str) -> Option<String> {
         self.environment_var_os(name)
             .and_then(|value| value.into_string().ok())
+    }
+
+    /// Installs the one authoritative provider-selection plan for this Engine.
+    /// Re-installing the exact same plan is idempotent; replacing it with a
+    /// different plan is rejected so bootstrap cannot silently re-compose after
+    /// provider loading has started.
+    pub(crate) fn freeze_composition_plan(
+        &self,
+        plan: newengine_service_api::CompositionPlan,
+    ) -> Result<(), String> {
+        let mut slot = match self.inner.frozen_composition_plan.write() {
+            Ok(value) => value,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        if let Some(existing) = slot.as_ref() {
+            if existing.as_ref() == &plan {
+                return Ok(());
+            }
+            return Err(
+                "authoritative composition plan is already frozen for this host context".to_owned(),
+            );
+        }
+        *slot = Some(Arc::new(plan));
+        drop(slot);
+        self.inner
+            .services_generation
+            .fetch_add(2, Ordering::AcqRel);
+        Ok(())
     }
 
     /// Returns the complete contract universe owned by this Engine instance.
@@ -373,10 +449,27 @@ impl HostContextHandle {
         };
         catalog.contract_by_advertised_id(id).cloned()
     }
+
+    /// Captures the stable composition observability surface for this exact Engine instance.
+    pub fn composition_snapshot_v1(&self) -> newengine_service_api::CompositionSnapshotV1 {
+        with_host_context(
+            self,
+            crate::host_context::gateway::engine_composition_snapshot_v1,
+        )
+    }
+
+    /// JSON form of [`Self::composition_snapshot_v1`], suitable for profiler,
+    /// console, editor inspector and crash-report attachment surfaces.
+    pub fn composition_snapshot_v1_json(&self) -> Result<String, String> {
+        self.composition_snapshot_v1()
+            .to_json()
+            .map_err(|error| format!("composition.snapshot_v1 serialization failed: {error}"))
+    }
 }
 
-fn make_default_ctx() -> Arc<HostContext> {
+fn make_ctx(environment: NeHashMap<OsString, OsString>) -> Arc<HostContext> {
     Arc::new(HostContext {
+        instance_id: NEXT_HOST_CONTEXT_INSTANCE_ID.fetch_add(1, Ordering::Relaxed),
         services: Mutex::new(NeHashMap::default()),
         services_generation: AtomicU64::new(2),
         event_sinks: Mutex::new(Arc::from(Vec::<EventSinkEntry>::new())),
@@ -387,8 +480,10 @@ fn make_default_ctx() -> Arc<HostContext> {
         external_runtime_plugins: Mutex::new(NeHashMap::default()),
         gateway_provider_routes: Mutex::new(NeHashMap::default()),
         capability_slots: Mutex::new(NeHashMap::default()),
+        composition_policy: Mutex::new(DeclaredCompositionPolicy::default()),
         gateway_selection_policies: Mutex::new(NeHashMap::default()),
         gateway_registry_cache: Mutex::new(None),
+        frozen_composition_plan: RwLock::new(None),
         provider_transaction: Mutex::new(None),
         plugin_config_store: Mutex::new(None),
         host_job_seq: AtomicU64::new(1),
@@ -399,19 +494,31 @@ fn make_default_ctx() -> Arc<HostContext> {
         invalid_gateway_route_warnings: Mutex::new(NeHashSet::default()),
         gateway_resolution_diagnostics: Mutex::new(NeHashMap::default()),
         warned_retired_capabilities: AtomicBool::new(false),
-        headless_provider_skip_message_printed: AtomicBool::new(false),
-        environment: RwLock::new(Arc::new(std::env::vars_os().collect())),
+        environment: RwLock::new(Arc::new(environment)),
         run_id: std::sync::OnceLock::new(),
     })
 }
 
-/// Creates and activates a fresh host context for one Engine instance.
-pub fn create_host_context() -> HostContextHandle {
+fn make_default_ctx() -> Arc<HostContext> {
+    make_ctx(std::env::vars_os().collect())
+}
+
+/// Creates and activates a fresh host context from an explicit environment snapshot.
+/// This is the preferred launcher path for multi-instance runtimes.
+pub fn create_host_context_with_environment_snapshot(
+    variables: impl IntoIterator<Item = (OsString, OsString)>,
+) -> HostContextHandle {
     let handle = HostContextHandle {
-        inner: make_default_ctx(),
+        inner: make_ctx(variables.into_iter().collect()),
     };
     activate_host_context(&handle);
     handle
+}
+
+/// Compatibility constructor for callers that intentionally use the current process environment
+/// as their one-time bootstrap snapshot.
+pub fn create_host_context() -> HostContextHandle {
+    create_host_context_with_environment_snapshot(std::env::vars_os())
 }
 
 /// Activates an Engine-owned context on the current execution thread.
@@ -487,7 +594,10 @@ pub(crate) fn environment_snapshot_utf8() -> NeHashMap<String, String> {
 pub(crate) fn ctx() -> Arc<HostContext> {
     CURRENT_HOST_CONTEXT.with(|slot| {
         if slot.borrow().is_none() {
-            *slot.borrow_mut() = Some(make_default_ctx());
+            // Never re-snapshot process environment from an arbitrary runtime thread.
+            // Callers that intentionally bootstrap from process state must do so explicitly
+            // through `init_host_context` / `create_host_context`.
+            *slot.borrow_mut() = Some(make_ctx(NeHashMap::default()));
         }
         slot.borrow()
             .as_ref()
@@ -515,6 +625,7 @@ mod tests {
         let a = create_host_context();
         let b = create_host_context();
         assert_ne!(a.identity(), b.identity());
+        assert_ne!(a.instance_id(), b.instance_id());
     }
 
     #[test]
@@ -539,6 +650,77 @@ mod tests {
         assert!(b.runtime_contract("test.instance.contract").is_none());
         assert!(a.runtime_contract("render.provider.abi").is_some());
         assert!(b.runtime_contract("render.provider.abi").is_some());
+    }
+
+    #[test]
+    fn environment_snapshots_are_instance_scoped() {
+        let a = create_host_context();
+        a.replace_environment_snapshot([(
+            OsString::from("NEWENGINE_TEST_INSTANCE_ENV"),
+            OsString::from("alpha"),
+        )]);
+        let b = create_host_context();
+        b.replace_environment_snapshot([(
+            OsString::from("NEWENGINE_TEST_INSTANCE_ENV"),
+            OsString::from("beta"),
+        )]);
+
+        assert_eq!(
+            a.environment_var("NEWENGINE_TEST_INSTANCE_ENV").as_deref(),
+            Some("alpha")
+        );
+        assert_eq!(
+            b.environment_var("NEWENGINE_TEST_INSTANCE_ENV").as_deref(),
+            Some("beta")
+        );
+
+        activate_host_context(&a);
+        assert_eq!(
+            environment_var("NEWENGINE_TEST_INSTANCE_ENV").as_deref(),
+            Some("alpha")
+        );
+        activate_host_context(&b);
+        assert_eq!(
+            environment_var("NEWENGINE_TEST_INSTANCE_ENV").as_deref(),
+            Some("beta")
+        );
+    }
+
+    #[test]
+    fn explicit_environment_snapshots_and_overrides_are_instance_scoped() {
+        let a = create_host_context_with_environment_snapshot([(
+            OsString::from("NEWENGINE_TEST_EXPLICIT_ENV"),
+            OsString::from("alpha"),
+        )]);
+        let b = create_host_context_with_environment_snapshot([(
+            OsString::from("NEWENGINE_TEST_EXPLICIT_ENV"),
+            OsString::from("beta"),
+        )]);
+
+        a.set_environment_var("NEWENGINE_TEST_EXPLICIT_ENV", "gamma");
+        assert_eq!(
+            a.environment_var("NEWENGINE_TEST_EXPLICIT_ENV").as_deref(),
+            Some("gamma")
+        );
+        assert_eq!(
+            b.environment_var("NEWENGINE_TEST_EXPLICIT_ENV").as_deref(),
+            Some("beta")
+        );
+
+        a.remove_environment_var("NEWENGINE_TEST_EXPLICIT_ENV");
+        assert!(a.environment_var("NEWENGINE_TEST_EXPLICIT_ENV").is_none());
+        assert_eq!(
+            b.environment_var("NEWENGINE_TEST_EXPLICIT_ENV").as_deref(),
+            Some("beta")
+        );
+    }
+
+    #[test]
+    fn implicit_unbound_thread_context_has_no_process_environment_snapshot() {
+        let snapshot = std::thread::spawn(environment_snapshot_utf8)
+            .join()
+            .expect("unbound HostContext probe thread panicked");
+        assert!(snapshot.is_empty());
     }
 
     #[test]

@@ -16,7 +16,8 @@ pub mod prelude {
     pub use crate::definition::*;
     pub use crate::plugin_api::*;
     pub use crate::{
-        export_newengine_plugin, export_newengine_plugin_root, export_newengine_plugin_signature,
+        export_newengine_plugin, export_newengine_plugin_descriptor_v2,
+        export_newengine_plugin_root, export_newengine_plugin_signature,
     };
 }
 
@@ -31,6 +32,16 @@ macro_rules! export_newengine_plugin_root {
     };
     ($create:path, $ui_assets_v1:path, $editor_extensions_v1:path) => {
         $crate::plugin_api::export_plugin_root!($create, $ui_assets_v1, $editor_extensions_v1);
+    };
+}
+
+/// Exports a first-party native V2 discovery descriptor. The descriptor function
+/// must construct `PluginDescriptorV2` directly; V1 compatibility normalization
+/// belongs to the host's legacy-plugin path, not production provider authoring.
+#[macro_export]
+macro_rules! export_newengine_plugin_descriptor_v2 {
+    ($descriptor:path) => {
+        $crate::plugin_api::export_plugin_descriptor_v2!($descriptor);
     };
 }
 

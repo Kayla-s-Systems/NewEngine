@@ -14,6 +14,22 @@ use newengine_render_feature_api::{
     SceneExtractionCtx,
 };
 
+pub const GAME_READY_RENDER_FEATURE_RUNTIME_UNIT_SPEC:
+    newengine_service_api::EngineRuntimeUnitSpec =
+    newengine_service_api::EngineRuntimeUnitSpec::new(
+        "newengine.render-feature.gameready",
+        1,
+        newengine_service_api::EngineRuntimeUnitKind::Provider,
+        &[newengine_service_api::runtime_unit_capability::RENDER_FEATURE],
+        &["render.backend"],
+        &[
+            "engine.runtime-unit",
+            "render-feature",
+            "game-ready",
+            "first-party",
+        ],
+    );
+
 pub const GAME_READY_TERRAIN_PROVIDER_ID: &str = "gameready.terrain";
 pub const GAME_READY_PRIMITIVE_MESH_PROVIDER_ID: &str = "gameready.primitive_mesh";
 pub const GAME_READY_DIRECTIONAL_SHADOW_PROVIDER_ID: &str = "gameready.directional_shadow";
@@ -41,6 +57,19 @@ impl GameReadyRenderFeaturePack {
     #[inline]
     pub fn new() -> Self {
         Self::default()
+    }
+
+    #[inline]
+    pub fn runtime_contribution(&self) -> newengine_render_feature_api::RenderFeatureContribution {
+        newengine_render_feature_api::RenderFeatureContribution::new(
+            "newengine.render-feature.gameready",
+        )
+        .with_draw_list_providers(self.draw_list_providers())
+        .with_light_extraction_providers(self.light_extraction_providers())
+        .with_material_pipeline(
+            self.material_pipeline_provider(),
+            self.primary_lit_material_domain(),
+        )
     }
 
     #[inline]
@@ -150,3 +179,15 @@ impl LightExtractionProvider for CompatLightProvider {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod runtime_unit_tests {
+    use super::*;
+
+    #[test]
+    fn runtime_unit_advertises_render_feature_capability() {
+        assert!(GAME_READY_RENDER_FEATURE_RUNTIME_UNIT_SPEC
+            .provides
+            .contains(&newengine_service_api::runtime_unit_capability::RENDER_FEATURE));
+    }
+}

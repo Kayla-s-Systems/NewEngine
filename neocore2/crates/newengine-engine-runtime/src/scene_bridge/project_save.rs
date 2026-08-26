@@ -114,7 +114,7 @@ impl SceneBridge {
             return Ok(0);
         }
 
-        let project_root = std::env::var_os("NEWENGINE_PROJECT_ROOT")
+        let project_root = crate::env_config::var_os("NEWENGINE_PROJECT_ROOT")
             .map(PathBuf::from)
             .ok_or_else(|| "in-game editor save requires NEWENGINE_PROJECT_ROOT".to_owned())?;
 

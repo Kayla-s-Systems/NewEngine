@@ -475,7 +475,7 @@ fn parse_camera_start_view(raw: Option<&str>) -> CameraViewMode {
 impl Default for CameraGatewayState {
     #[inline]
     fn default() -> Self {
-        let start_view = std::env::var("NEWENGINE_CAMERA_START_VIEW").ok();
+        let start_view = crate::env_config::var("NEWENGINE_CAMERA_START_VIEW");
         Self {
             nav: newengine_camera_runtime::CameraNavState::default(),
             last_play_mode: GameRunMode::Staging,

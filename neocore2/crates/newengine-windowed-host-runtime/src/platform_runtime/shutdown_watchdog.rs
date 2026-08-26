@@ -1,8 +1,8 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use std::sync::{
-    atomic::{AtomicBool, Ordering},
     Arc,
+    atomic::{AtomicBool, Ordering},
 };
 
 use newengine_core::{TaskLane, TaskPriority, TaskRequest, TaskTicket, ThreadPoolHandle};
@@ -178,7 +178,8 @@ fn configured_timeout_ms() -> Option<u64> {
     if env_flag_enabled("NEWENGINE_DISABLE_SHUTDOWN_WATCHDOG") {
         return None;
     }
-    let raw = std::env::var("NEWENGINE_SHUTDOWN_WATCHDOG_MS").ok();
+    let raw = newengine_plugin_host::current_host_context()
+        .environment_var("NEWENGINE_SHUTDOWN_WATCHDOG_MS");
     let value = raw
         .as_deref()
         .and_then(|it| it.trim().parse::<u64>().ok())
@@ -188,11 +189,11 @@ fn configured_timeout_ms() -> Option<u64> {
 }
 
 fn env_flag_enabled(name: &str) -> bool {
-    match std::env::var(name) {
-        Ok(value) => matches!(
+    match newengine_plugin_host::current_host_context().environment_var(name) {
+        Some(value) => matches!(
             value.trim().to_ascii_lowercase().as_str(),
             "1" | "true" | "yes" | "on"
         ),
-        Err(_) => false,
+        None => false,
     }
 }

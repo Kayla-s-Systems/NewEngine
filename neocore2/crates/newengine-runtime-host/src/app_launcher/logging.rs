@@ -119,7 +119,12 @@ impl<P> RuntimeHostLauncher<P>
 where
     P: RuntimeHostAppProfile,
 {
-    pub(super) fn configure_sharded_log_files(&self, startup: &mut StartupConfig, run_id: &str) {
+    pub(super) fn configure_sharded_log_files(
+        &self,
+        startup: &mut StartupConfig,
+        run_id: &str,
+        host: &newengine_plugin_host::HostContextHandle,
+    ) {
         let Some(logging) = startup
             .plugins
             .get_mut(CHRONICLE_PLUGIN_ID)
@@ -128,11 +133,11 @@ where
             return;
         };
 
-        if std::env::var_os("NEWENGINE_LOG_FILE").is_none() {
+        if host.environment_var_os("NEWENGINE_LOG_FILE").is_none() {
             if let Some(path) = configured_logging_path(logging, "file") {
                 if let Some(sharded) = shard_log_path_by_run_id(&path, run_id) {
                     set_logging_source_path(logging, "file", &sharded);
-                    std::env::set_var("NEWENGINE_LOG_FILE", &sharded);
+                    host.set_environment_var("NEWENGINE_LOG_FILE", &sharded);
                     self.early_log(format_args!(
                         "logging.file.sharded path={} run_id={}",
                         sharded, run_id
@@ -141,15 +146,15 @@ where
             }
         }
 
-        if std::env::var_os("NORTHSTAR_ULOG").is_none()
-            && std::env::var_os("NEWENGINE_ULOG").is_none()
+        if host.environment_var_os("NORTHSTAR_ULOG").is_none()
+            && host.environment_var_os("NEWENGINE_ULOG").is_none()
             && logging_source_enabled(logging, "ulog")
         {
             let path = configured_logging_path(logging, "ulog")
                 .unwrap_or_else(|| "logs/current.ulog.ndjson".to_owned());
             if let Some(sharded) = shard_log_path_by_run_id(&path, run_id) {
                 set_logging_source_path(logging, "ulog", &sharded);
-                std::env::set_var("NEWENGINE_ULOG", &sharded);
+                host.set_environment_var("NEWENGINE_ULOG", &sharded);
                 self.early_log(format_args!(
                     "logging.ulog.sharded path={} run_id={}",
                     sharded, run_id

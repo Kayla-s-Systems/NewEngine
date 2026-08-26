@@ -45,24 +45,36 @@ pub use control::{PluginControlCommand, PluginControlQueue, PluginControlResult}
 pub use host_api::{call_service_v1, default_host_api, host_register_service_impl};
 pub use host_context::{
     activate_host_context, active_engine_gateway_route, clear_engine_gateway_selection_policies,
-    create_host_context, current_host_context, declare_engine_capability_requirement,
-    declare_engine_capability_slot, declare_engine_composition, describe_service,
-    engine_gateway_has_capability, has_service, init_host_context,
-    install_engine_gateway_selection_policy, list_engine_capability_slots,
+    create_host_context, create_host_context_with_environment_snapshot, current_host_context,
+    declare_engine_capability_requirement, declare_engine_capability_slot,
+    declare_engine_composition, describe_service, engine_composition_allows_system_tags,
+    engine_composition_explanation, engine_composition_has_forbidden_system_tags,
+    engine_composition_snapshot_v1, engine_composition_snapshot_v1_json,
+    engine_gateway_has_capability, explain_engine_gateway_composition, has_service,
+    init_host_context, install_engine_gateway_selection_policy, list_engine_capability_slots,
     list_engine_gateway_routes, list_external_runtime_descriptors, list_external_runtime_plugins,
     list_runtime_contracts, list_services, register_engine_gateway_provider_route,
     register_external_runtime_plugin, register_null_engine_gateway_provider_route,
-    register_null_engine_gateway_provider_route_with_abi, resolve_service_for_backend_capability,
+    register_null_engine_gateway_provider_route_with_abi,
+    register_null_engine_gateway_provider_route_with_abi_and_tags,
+    register_null_engine_gateway_provider_route_with_tags, resolve_service_for_backend_capability,
     resolve_service_for_engine_gateway, runtime_contract, runtime_contract_by_advertised_id,
     services_generation, validate_required_engine_capability_slots, with_host_context,
     with_host_module_callback, EngineCapabilitySlotSnapshot, EngineGatewayRouteSnapshot,
     EngineGatewaySelectionPolicy, HostContextHandle, ProviderRegistrationTransaction,
     RuntimeContractAuthority, RuntimeContractEntry, RuntimeContractSpec,
 };
+/// Reads and cryptographically verifies a generated plugin discovery sidecar without mapping the DLL.
+pub fn read_verified_plugin_discovery_manifest(
+    path: &std::path::Path,
+) -> Result<newengine_plugin_api::PluginDiscoveryManifestV1, String> {
+    manager::read_verified_manifest(path)
+}
+
 pub use manager::{
     resolve_plugin_discovery_dir, scan_plugin_discovery_graph, IncrementalLoadOutcome,
     PluginDiscoveryGraph, PluginIconSnapshot, PluginLoadError, PluginLoadOrigin, PluginManager,
-    PluginSnapshotEntry,
+    PluginRuntimeUnitInventoryEntry, PluginSnapshotEntry,
 };
 pub use plugin_config_service::{
     get_plugin_overrides_with_env, init_plugin_config_service, CONFIG_SERVICE_ID,

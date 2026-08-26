@@ -397,10 +397,11 @@ pub fn register_threading_gateway_service_best_effort(
     thread_pool: ThreadPoolHandle,
     events: newengine_core::EventHub,
 ) -> bool {
-    if newengine_core::has_engine_gateway_route(ENGINE_THREADING_SERVICE_ID)
-        || newengine_core::has_engine_gateway_route(THREADING_SERVICE_ID)
-    {
-        return register_jobs_gateway_alias_best_effort();
+    if newengine_core::has_engine_gateway_route(ENGINE_THREADING_SERVICE_ID) {
+        // A pre-existing provider owns engine.threading and therefore owns any legacy
+        // engine.jobs compatibility surface it chooses to advertise. RuntimeHost must
+        // not fabricate an alias to an arbitrary provider service.
+        return true;
     }
 
     let registered = register_engine_gateway_provider_service_dynamic_best_effort(
@@ -423,23 +424,17 @@ pub fn register_threading_gateway_service_best_effort(
         },
     );
 
-    registered && register_jobs_gateway_alias_best_effort()
+    registered && register_native_jobs_gateway_alias_best_effort()
 }
 
-fn register_jobs_gateway_alias_best_effort() -> bool {
+fn register_native_jobs_gateway_alias_best_effort() -> bool {
     if newengine_core::has_engine_gateway_route(ENGINE_JOBS_GATEWAY_ID) {
         return true;
     }
 
-    if !newengine_plugin_host::has_service(THREADING_SERVICE_ID) {
-        newengine_ulog_api::ulog::warn!(
-            "engine-runtime jobs route skipped gateway='{}' provider_service='{}' reason='threading service missing'",
-            ENGINE_JOBS_GATEWAY_ID,
-            THREADING_SERVICE_ID
-        );
-        return false;
-    }
-
+    // This alias is part of the native provider's compatibility surface. The concrete
+    // service id is legitimate here because the provider was registered immediately above;
+    // it is never used as a presence check or provider-selection fallback.
     match newengine_plugin_host::register_engine_gateway_provider_route(
         ENGINE_JOBS_GATEWAY_ID,
         JOBS_COMPAT_SERVICE_KIND,

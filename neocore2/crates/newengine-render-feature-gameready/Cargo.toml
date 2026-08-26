@@ -11,3 +11,4 @@ newengine-material-domain-api = { path = "../newengine-material-domain-api" }
 newengine-material-domain-gameready = { path = "../newengine-material-domain-gameready" }
 newengine-render-feature-api = { path = "../newengine-render-feature-api" }
 newengine-render-feature-standard = { path = "../newengine-render-feature-standard" }
+newengine-service-api = { path = "../newengine-service-api" }

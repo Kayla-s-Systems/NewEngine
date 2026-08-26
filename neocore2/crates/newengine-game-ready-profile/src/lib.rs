@@ -8,6 +8,7 @@ mod env_config;
 mod game_ready_fps;
 mod profile;
 mod provider_routes;
+mod runtime_units;
 mod scene_bootstrap;
 mod validation;
 mod world_runtime;

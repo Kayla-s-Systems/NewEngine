@@ -9,7 +9,12 @@ pub use newengine_contract_api::{
 /// Normative compile-time Engine contract set. Runtime/plugin-owned contracts belong
 /// in `newengine-runtime-contract-catalog` and must never mutate this trust root.
 pub const ENGINE_CONTRACTS: &[ContractSpec] = &[
+    newengine_service_api::COMPOSITION_SNAPSHOT_CONTRACT_SPEC,
+    newengine_service_api::COMPOSITION_DIFF_CONTRACT_SPEC,
     newengine_assets_api::NEF8_WIRE_CONTRACT_SPEC,
+    newengine_assets_api::ASSET_DECODE_PROTOCOL_CONTRACT_SPEC,
+    newengine_assets_api::CONTAINER_WRITE_BYTES_PROTOCOL_CONTRACT_SPEC,
+    newengine_assets_api::ASSET_PREVIEW_PROTOCOL_CONTRACT_SPEC,
     newengine_asset_format_nef8::YDD_BINARY_CONTRACT_SPEC,
     newengine_asset_format_nef8::ytd::CONTENT_SCHEMA_CONTRACT_SPEC,
     newengine_asset_format_nef8::nemat::CONTENT_SCHEMA_CONTRACT_SPEC,
@@ -92,7 +97,12 @@ mod tests {
     #[test]
     fn roadmap_contracts_are_registered() {
         for key in [
+            "composition.snapshot.protocol",
+            "composition.diff.protocol",
             "asset.nef8.wire",
+            "asset.decode.protocol",
+            "asset.container.write_bytes.protocol",
+            "asset.preview.protocol",
             "asset.ydd.body",
             "asset.ytd.schema",
             "asset.nemat.schema",
@@ -131,6 +141,11 @@ mod tests {
         assert_eq!(
             contract("audio.provider.abi").unwrap().version.major,
             newengine_audio_api::AUDIO_PROVIDER_ABI_VERSION
+        );
+        assert_eq!(contract("game.module.contract").unwrap().version.major, 2);
+        assert_eq!(
+            contract("game.module.contract").unwrap().advertised_id,
+            Some(newengine_game_module_api::GAME_MODULE_CONTRACT_V2)
         );
     }
     #[test]

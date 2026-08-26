@@ -27,7 +27,7 @@ struct ShadowTortureRuntime {
 #[inline]
 fn env_enabled(name: &str) -> bool {
     matches!(
-        std::env::var(name).ok().as_deref(),
+        crate::env_config::var(name).as_deref(),
         Some("1")
             | Some("true")
             | Some("TRUE")
@@ -40,8 +40,7 @@ fn env_enabled(name: &str) -> bool {
 
 #[inline]
 pub(crate) fn requested() -> bool {
-    std::env::var(newengine_project_api::PROJECT_LAUNCH_PRESET_ENV)
-        .ok()
+    crate::env_config::var(newengine_project_api::PROJECT_LAUNCH_PRESET_ENV)
         .is_some_and(|value| value.trim().eq_ignore_ascii_case(TORTURE_LAUNCH_ID))
         || env_enabled("NEWENGINE_SHADOW_TORTURE_TEST")
 }

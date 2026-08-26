@@ -14,8 +14,8 @@ static PLUGIN_SNAPSHOT_REVISION: AtomicU64 = AtomicU64::new(0);
 
 #[inline]
 fn bootstrap_preload_deferred() -> bool {
-    std::env::var("NEWENGINE_BOOTSTRAP_PLUGIN_PRELOAD")
-        .ok()
+    newengine_plugin_host::current_host_context()
+        .environment_var("NEWENGINE_BOOTSTRAP_PLUGIN_PRELOAD")
         .map(|v| {
             matches!(
                 v.trim().to_ascii_lowercase().as_str(),
@@ -114,6 +114,50 @@ impl<E: Send + 'static> Engine<E> {
             let mut resolved = root.clone();
             resolved.dir = dir;
             out.push(resolved);
+        }
+        Ok(out)
+    }
+}
+
+impl<E: Send + 'static> Engine<E> {
+    /// Descriptor-only plugin runtime-unit inventory scan. No plugin is initialized here.
+    /// This is consumed before runtime-unit solving so plugin units participate in the same
+    /// catalog as distribution/profile/game units.
+    pub fn scan_plugin_runtime_unit_inventory(
+        &self,
+    ) -> EngineResult<Vec<newengine_plugin_host::PluginRuntimeUnitInventoryEntry>> {
+        let roots = self.resolved_plugin_discovery_roots()?;
+        let mut out = Vec::new();
+        for root in roots {
+            match newengine_plugin_host::scan_plugin_discovery_graph(&root.dir) {
+                Ok(graph) => {
+                    let mut units = graph.runtime_unit_inventory().map_err(|error| {
+                        EngineError::Other(format!(
+                            "plugins: runtime-unit inventory parse failed owner='{}' root='{}': {}",
+                            root.owner,
+                            root.dir.display(),
+                            error
+                        ))
+                    })?;
+                    out.append(&mut units);
+                }
+                Err(error) if root.required => {
+                    return Err(EngineError::Other(format!(
+                        "plugins: required runtime-unit inventory root scan failed owner='{}' root='{}': {}",
+                        root.owner,
+                        root.dir.display(),
+                        error
+                    )));
+                }
+                Err(error) => {
+                    newengine_ulog_api::ulog::warn!(
+                        "plugins: optional runtime-unit inventory root skipped owner='{}' root='{}' err={}",
+                        root.owner,
+                        root.dir.display(),
+                        error
+                    );
+                }
+            }
         }
         Ok(out)
     }

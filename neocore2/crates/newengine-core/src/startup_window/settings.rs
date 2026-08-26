@@ -748,7 +748,7 @@ impl StartupLaunchSettings {
         self.graphics.normalize();
     }
 
-    pub fn publish_process_variables(&self) {
+    pub fn publish_environment_snapshot(&self) {
         let mut value = self.clone();
         value.normalize();
         set_env(ENV_GRAPHICS_PRESET, value.graphics.preset.as_str());
@@ -912,7 +912,7 @@ pub fn startup_launch_settings() -> StartupLaunchSettings {
 
 pub(crate) fn set_startup_launch_settings(mut settings: StartupLaunchSettings) {
     settings.normalize();
-    settings.publish_process_variables();
+    settings.publish_environment_snapshot();
     let lock = ACTIVE_SETTINGS.get_or_init(|| RwLock::new(StartupLaunchSettings::default()));
     *lock
         .write()
@@ -937,16 +937,12 @@ fn normalize_shadow_map_resolution(value: u32) -> u32 {
 
 #[inline]
 fn bool_text(value: bool) -> &'static str {
-    if value {
-        "1"
-    } else {
-        "0"
-    }
+    if value { "1" } else { "0" }
 }
 
 #[inline]
 fn set_env(key: &str, value: impl AsRef<str>) {
-    std::env::set_var(key, value.as_ref());
+    newengine_plugin_host::current_host_context().set_environment_var(key, value.as_ref());
 }
 
 #[cfg(test)]

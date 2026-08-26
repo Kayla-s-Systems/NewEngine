@@ -97,6 +97,92 @@ impl RuntimeContractCatalog {
         self.by_key.get(key)
     }
 
+    /// Resolves either the stable registry key or an advertised boundary id to the
+    /// same catalog entry. Consumers should canonicalize references through this
+    /// method before comparing contracts across independently-authored metadata.
+    pub fn resolve_contract_reference(&self, reference: &str) -> Option<&RuntimeContractEntry> {
+        let reference = reference.trim();
+        if reference.is_empty() {
+            return None;
+        }
+        self.contract(reference)
+            .or_else(|| self.contract_by_advertised_id(reference))
+    }
+
+    /// Canonical version-neutral registry key for a key or advertised-id reference.
+    pub fn canonical_contract_key(&self, reference: &str) -> Option<&str> {
+        self.resolve_contract_reference(reference)
+            .map(|entry| entry.spec.key.as_str())
+    }
+
+    /// Validates a concrete major version advertised by provider metadata against
+    /// the catalog's normative compatibility policy.
+    pub fn validate_offered_major(
+        &self,
+        reference: &str,
+        offered_major: u32,
+    ) -> Result<&RuntimeContractEntry, String> {
+        let entry = self
+            .resolve_contract_reference(reference)
+            .ok_or_else(|| format!("unknown runtime contract reference '{reference}'"))?;
+        let major = u16::try_from(offered_major).map_err(|_| {
+            format!(
+                "runtime contract '{}' offered major {} exceeds u16",
+                entry.spec.key, offered_major
+            )
+        })?;
+        let offered = ContractVersion::major(major);
+        if !entry.spec.accepts_version(offered) {
+            return Err(format!(
+                "runtime contract '{}' rejects offered version {} under compatibility {:?}; registered version is {}",
+                entry.spec.key, offered, entry.spec.compatibility, entry.spec.version
+            ));
+        }
+        Ok(entry)
+    }
+
+    /// Validates that a requirement's major-version interval intersects the set of
+    /// versions accepted by the registered contract. Editor requirement metadata
+    /// uses major ranges, so this deliberately validates at major granularity.
+    pub fn validate_required_major_range(
+        &self,
+        reference: &str,
+        min_major: u32,
+        max_major: Option<u32>,
+    ) -> Result<&RuntimeContractEntry, String> {
+        if max_major.is_some_and(|max| max < min_major) {
+            return Err(format!(
+                "runtime contract requirement '{reference}' has invalid major range {min_major}..{:?}",
+                max_major
+            ));
+        }
+        let entry = self
+            .resolve_contract_reference(reference)
+            .ok_or_else(|| format!("unknown runtime contract reference '{reference}'"))?;
+        let registered_major = u32::from(entry.spec.version.major);
+        let intersects = match entry.spec.compatibility {
+            ContractCompatibility::Exact | ContractCompatibility::SameMajor => {
+                registered_major >= min_major && max_major.is_none_or(|max| registered_major <= max)
+            }
+            ContractCompatibility::AtLeast => {
+                max_major.is_none_or(|max| max >= registered_major.max(min_major))
+            }
+        };
+        if !intersects {
+            return Err(format!(
+                "runtime contract '{}' registered version {} compatibility {:?} does not intersect required major range {}..{}",
+                entry.spec.key,
+                entry.spec.version,
+                entry.spec.compatibility,
+                min_major,
+                max_major
+                    .map(|value| value.to_string())
+                    .unwrap_or_else(|| "*".to_owned())
+            ));
+        }
+        Ok(entry)
+    }
+
     pub fn list(&self) -> Vec<RuntimeContractEntry> {
         self.by_key.values().cloned().collect()
     }
@@ -336,6 +422,35 @@ mod tests {
                 "other",
                 vec![plugin_spec("other", "other.foo", "shared.v1")],
             )
+            .is_err());
+    }
+
+    #[test]
+    fn references_resolve_by_key_or_advertised_id_and_validate_versions() {
+        let catalog = RuntimeContractCatalog::default();
+        let by_key = catalog
+            .resolve_contract_reference("asset.decode.protocol")
+            .expect("asset decode contract by key");
+        let by_id = catalog
+            .resolve_contract_reference("asset.decode_v1")
+            .expect("asset decode contract by advertised id");
+        assert_eq!(by_key.spec.key, by_id.spec.key);
+        assert_eq!(
+            catalog.canonical_contract_key("asset.decode_v1"),
+            Some("asset.decode.protocol")
+        );
+        assert!(catalog.validate_offered_major("asset.decode_v1", 1).is_ok());
+        assert!(catalog
+            .validate_offered_major("asset.decode_v1", 2)
+            .is_err());
+        assert!(catalog
+            .validate_required_major_range("asset.decode.protocol", 1, Some(1))
+            .is_ok());
+        assert!(catalog
+            .validate_required_major_range("asset.decode.protocol", 2, Some(3))
+            .is_err());
+        assert!(catalog
+            .validate_required_major_range("unknown.contract", 1, None)
             .is_err());
     }
 

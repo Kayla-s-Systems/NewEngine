@@ -32,6 +32,11 @@ use newengine_ui_api::{
     UI_SERVICE_METHOD_UNMOUNT_SURFACE_V1,
 };
 
+const NULL_PROVIDER_SYSTEM_TAGS: &[&str] = &[
+    newengine_service_api::system_tag::HEADLESS,
+    newengine_service_api::system_tag::DETERMINISTIC,
+];
+
 const NULL_RENDER_SERVICE: &str = "null.render.api";
 const NULL_RENDER_ROUTE: &str = "engine.render.null";
 const NULL_PHYSICS_SERVICE: &str = "null.physics.api";
@@ -241,6 +246,7 @@ fn register_null_render_provider() {
             provider_abi: Some(newengine_render_api::RENDER_PROVIDER_ABI_ID),
             capability: spec.backend_capability_id,
             owner: NULL_RENDER_ROUTE,
+            system_tags: NULL_PROVIDER_SYSTEM_TAGS,
             service,
         },
     );
@@ -331,6 +337,7 @@ fn register_null_physics_provider() {
             provider_abi: Some(newengine_physics_api::PHYSICS_PROVIDER_ABI_ID),
             capability: spec.backend_capability_id,
             owner: NULL_PHYSICS_ROUTE,
+            system_tags: NULL_PROVIDER_SYSTEM_TAGS,
             service,
         },
     );
@@ -409,6 +416,7 @@ fn register_null_ui_provider() {
             provider_abi: Some(newengine_ui_api::UI_PROVIDER_ABI_ID),
             capability: spec.backend_capability_id,
             owner: NULL_UI_ROUTE,
+            system_tags: NULL_PROVIDER_SYSTEM_TAGS,
             service,
         },
     );
@@ -463,6 +471,7 @@ fn register_null_ai_provider() {
             provider_abi: None,
             capability: "ai.backend",
             owner: "engine.ai.null",
+            system_tags: NULL_PROVIDER_SYSTEM_TAGS,
             service,
         },
     );

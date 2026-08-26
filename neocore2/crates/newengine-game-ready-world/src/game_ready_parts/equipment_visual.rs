@@ -929,7 +929,7 @@ fn update_weapon_attachment(
     if authored_weapon_presentation
         && !legacy_viewmodel_active
         && !visual.grip_debug_emitted
-        && std::env::var_os("NORTHSTAR_DEBUG_WEAPON_GRIP").is_some()
+        && crate::env_config::var_os("NORTHSTAR_DEBUG_WEAPON_GRIP").is_some()
     {
         let Some(right_frame) = right_frame_for_debug else {
             return;

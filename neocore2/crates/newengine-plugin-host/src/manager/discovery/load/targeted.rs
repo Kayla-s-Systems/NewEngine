@@ -50,7 +50,12 @@ impl PluginManager {
         }
 
         let (graph, _) = self.ensure_discovery_graph(dir)?;
-        let selection = build_load_selection(&graph, LoadPhaseFilter::All, &self.loaded_ids);
+        let selection = build_load_selection(
+            &graph,
+            LoadPhaseFilter::All,
+            &self.loaded_ids,
+            self.frozen_composition_plan.as_ref(),
+        );
         let selected_paths = selection
             .bootstrap_candidates
             .iter()

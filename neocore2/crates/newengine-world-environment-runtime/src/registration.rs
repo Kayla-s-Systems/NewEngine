@@ -35,6 +35,10 @@ pub fn register_world_environment_gateway_best_effort() {
                 provider_abi: None,
                 capability: WORLD_ENVIRONMENT_BACKEND_CAPABILITY_ID,
                 owner: WORLD_ENVIRONMENT_GATEWAY_OWNER,
+                system_tags: &[
+                    newengine_service_api::system_tag::HEADLESS,
+                    newengine_service_api::system_tag::DETERMINISTIC,
+                ],
                 service: null_service,
             },
         );

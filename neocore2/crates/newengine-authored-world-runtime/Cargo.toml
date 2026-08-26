@@ -16,6 +16,7 @@ newengine-ecs = { path = "../newengine-ecs" }
 newengine-engine-runtime = { path = "../newengine-engine-runtime" }
 newengine-math = { path = "../newengine-math" }
 newengine-physics-contracts = { path = "../newengine-physics-contracts" }
+newengine-plugin-host = { path = "../newengine-plugin-host" }
 newengine-primitives = { path = "../newengine-primitives" }
 newengine-project-api = { path = "../newengine-project-api" }
 newengine-scene = { path = "../newengine-scene", features = ["runtime"] }

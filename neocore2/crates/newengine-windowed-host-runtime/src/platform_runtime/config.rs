@@ -6,7 +6,8 @@ use newengine_core::{EngineError, EngineResult, StartupConfig};
 use newengine_platform_api::PlatformAppConfigV1;
 use newengine_plugin_api::{ConfigPatchV1, PluginRootV1Ref};
 
-use crate::platform_runtime::constants::{PLATFORM_PLUGIN_ID, PLUGIN_ROOT_SYMBOL};
+use crate::platform_runtime::constants::PLUGIN_ROOT_SYMBOL;
+use crate::platform_runtime::discovery::try_read_runtime_descriptor;
 use crate::platform_runtime::types::ResolvedPlatformRuntimeConfig;
 
 mod descriptor;
@@ -29,28 +30,45 @@ use patches::{
     log_platform_config_diags, platform_metadata_probe_enabled, strip_host_only_platform_keys,
 };
 
+const GENERIC_PLATFORM_RUNTIME_ID: &str = "engine.platform.runtime";
+const GENERIC_PLATFORM_RUNTIME_NAME: &str = "NewEngine Platform Runtime";
+
+fn runtime_identity(runtime_path: &Path) -> (String, String, String) {
+    if let Some(descriptor) = try_read_runtime_descriptor(runtime_path) {
+        let id = descriptor.id.to_string();
+        let name = descriptor.name.to_string();
+        let version = descriptor.version.to_string();
+        return (
+            if id.trim().is_empty() { GENERIC_PLATFORM_RUNTIME_ID.to_owned() } else { id },
+            if name.trim().is_empty() { GENERIC_PLATFORM_RUNTIME_NAME.to_owned() } else { name },
+            if version.trim().is_empty() { platform_runtime_version_from_path(runtime_path) } else { version },
+        );
+    }
+    (
+        GENERIC_PLATFORM_RUNTIME_ID.to_owned(),
+        GENERIC_PLATFORM_RUNTIME_NAME.to_owned(),
+        platform_runtime_version_from_path(runtime_path),
+    )
+}
+
 fn resolve_platform_runtime_config_without_metadata_probe(
     startup: &StartupConfig,
     startup_defaults: PlatformAppConfigV1,
     runtime_path: &Path,
 ) -> ResolvedPlatformRuntimeConfig {
-    let overrides = newengine_plugin_host::get_plugin_overrides_with_env(PLATFORM_PLUGIN_ID);
+    let (plugin_id, plugin_name, plugin_version) = runtime_identity(runtime_path);
+    let overrides = newengine_plugin_host::get_plugin_overrides_with_env(&plugin_id);
     let icon_path =
         extract_string_field(&overrides, "icon").or_else(|| startup.window_icon_path.clone());
     let config = apply_confirmed_core_launch_settings(
         apply_startup_platform_overrides(startup_defaults, &overrides),
         startup,
     );
-    let plugin_version = platform_runtime_version_from_path(runtime_path);
-    let descriptor = synthesize_platform_descriptor(
-        PLATFORM_PLUGIN_ID,
-        "NewEngine Platform Runtime",
-        &plugin_version,
-    );
+    let descriptor = synthesize_platform_descriptor(&plugin_id, &plugin_name, &plugin_version);
 
     newengine_ulog_api::ulog::info!(
-        "platform runtime: metadata probe disabled; using host-side config id='{}' title='{}' size={}x{} placement={:?} icon={}",
-        PLATFORM_PLUGIN_ID,
+        "platform runtime: metadata probe disabled; using descriptor identity id='{}' title='{}' size={}x{} placement={:?} icon={}",
+        plugin_id,
         config.title,
         config.width,
         config.height,
@@ -59,8 +77,8 @@ fn resolve_platform_runtime_config_without_metadata_probe(
     );
 
     ResolvedPlatformRuntimeConfig {
-        plugin_id: PLATFORM_PLUGIN_ID.to_owned(),
-        plugin_name: "NewEngine Platform Runtime".to_owned(),
+        plugin_id,
+        plugin_name,
         plugin_version,
         descriptor,
         config,
@@ -102,15 +120,12 @@ pub fn resolve_platform_runtime_config(
             newengine_ulog_api::ulog::info!(
                 "platform runtime: plugin metadata not exported; using startup window config defaults"
             );
-            let plugin_version = platform_runtime_version_from_path(runtime_path);
-            let descriptor = synthesize_platform_descriptor(
-                PLATFORM_PLUGIN_ID,
-                "NewEngine Platform Runtime",
-                &plugin_version,
-            );
+            let (plugin_id, plugin_name, plugin_version) = runtime_identity(runtime_path);
+            let descriptor =
+                synthesize_platform_descriptor(&plugin_id, &plugin_name, &plugin_version);
             return Ok(ResolvedPlatformRuntimeConfig {
-                plugin_id: PLATFORM_PLUGIN_ID.to_owned(),
-                plugin_name: "NewEngine Platform Runtime".to_owned(),
+                plugin_id,
+                plugin_name,
                 plugin_version,
                 descriptor,
                 config: startup_defaults,
@@ -121,7 +136,24 @@ pub fn resolve_platform_runtime_config(
 
     let root = unsafe { root_sym() };
     let module = root.create()();
-    let descriptor = ensure_platform_runtime_capabilities(module.descriptor());
+    let raw_descriptor = module.descriptor();
+    let manifest = newengine_plugin_host::read_verified_plugin_discovery_manifest(runtime_path)
+        .map_err(|e| EngineError::other(format!("platform runtime discovery metadata verification failed: {e}")))?;
+    let planned_descriptor = manifest.descriptor.ok_or_else(|| {
+        EngineError::other(format!(
+            "platform runtime sidecar has no plugin descriptor for '{}'",
+            runtime_path.display()
+        ))
+    })?;
+    let live_descriptor_v2 = newengine_plugin_api::PluginDescriptorV2::from_legacy(&raw_descriptor);
+    let live_projection = newengine_plugin_api::PluginDiscoveryDescriptorV1::from_descriptor_v2(&live_descriptor_v2);
+    if planned_descriptor != live_projection {
+        return Err(EngineError::other(format!(
+            "platform runtime plugin descriptor does not match frozen discovery metadata path='{}'",
+            runtime_path.display()
+        )));
+    }
+    let descriptor = ensure_platform_runtime_capabilities(raw_descriptor);
     let plugin_id = descriptor.id.to_string();
     let plugin_name = descriptor.name.to_string();
     let plugin_version = descriptor.version.to_string();

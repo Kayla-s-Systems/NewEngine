@@ -16,6 +16,19 @@ impl StandardRenderFeaturePack {
     }
 
     #[inline]
+    pub fn runtime_contribution(&self) -> newengine_render_feature_api::RenderFeatureContribution {
+        newengine_render_feature_api::RenderFeatureContribution::new(
+            "newengine.render-feature.standard",
+        )
+        .with_draw_list_providers(self.draw_list_providers())
+        .with_light_extraction_providers(self.light_extraction_providers())
+        .with_material_pipeline(
+            self.material_pipeline_provider(),
+            self.primary_lit_material_domain(),
+        )
+    }
+
+    #[inline]
     pub fn material_pipeline_provider(&self) -> Box<dyn MaterialGpuPipelineProvider> {
         Box::new(StandardLitMaterialDomainProvider::new())
     }

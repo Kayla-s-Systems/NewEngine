@@ -415,8 +415,7 @@ fn vec3_array(value: Vec3) -> [f32; 3] {
 }
 
 fn occlusion_emitter_budget_from_env() -> usize {
-    std::env::var("NEWENGINE_AUDIO_OCCLUSION_MAX_EMITTERS_PER_TICK")
-        .ok()
+    crate::env_config::var("NEWENGINE_AUDIO_OCCLUSION_MAX_EMITTERS_PER_TICK")
         .and_then(|value| value.trim().parse::<usize>().ok())
         .map(|value| value.clamp(1, MAX_OCCLUSION_EMITTERS_PER_TICK))
         .unwrap_or(DEFAULT_MAX_OCCLUSION_EMITTERS_PER_TICK)

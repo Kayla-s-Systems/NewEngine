@@ -916,6 +916,7 @@ mod contract_catalog_tests {
             provider_owner_id: owner.to_owned(),
             backend_capability_id: "test.backend".to_owned(),
             backend_priority: 1,
+            system_tags: Vec::new(),
             origin: crate::service_gateway::GatewayProviderOrigin::GamePlugin,
         }
     }

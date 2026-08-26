@@ -2,13 +2,9 @@
 
 use std::path::{Path, PathBuf};
 
-use libloading::Library;
-
 use super::graph::{DiscoveryGraph, ScannedDynlib, ScannedDynlibKind};
-use super::metadata::{
-    build_scanned_plugin_kind, platform_runtime_identity_from_probe, probe_plugin_metadata,
-    PLATFORM_RUNTIME_SYMBOL,
-};
+use super::metadata::{build_scanned_plugin_kind, ScanPluginProbe};
+use super::sidecar::read_verified_manifest;
 use crate::manager::types::PluginLoadError;
 use crate::paths::is_dynamic_lib;
 use newengine_ulog_api::path_format::display_clean;
@@ -100,48 +96,58 @@ pub(super) fn scan_plugins_dir(dir: &Path) -> Result<DiscoveryGraph, PluginLoadE
 
 fn scan_dynamic_lib(path: &Path) -> Result<ScannedDynlib, String> {
     let file_name = file_name_only(path);
+    let manifest = read_verified_manifest(path)?;
 
-    if let Some(stem) = deprecated_runtime_artifact_stem(&file_name) {
-        newengine_ulog_api::ulog::warn!(
-            "plugins: skipping deprecated runtime DLL name '{}' stem='{}'; rebuild plugins so discovery uses implementation-purpose artifacts instead of stale ABI binaries",
-            file_name,
-            stem
-        );
+    if let Some(platform) = manifest.platform_runtime.as_ref() {
         return Ok(ScannedDynlib {
             path: path.to_path_buf(),
             file_name,
-            kind: ScannedDynlibKind::Unknown,
+            discovery_manifest: Some(manifest.clone()),
+            kind: ScannedDynlibKind::PlatformRuntime {
+                id: platform.id.clone(),
+                version: platform.version.clone(),
+                system_tags: platform.system_tags.clone(),
+                backend_priority: platform.backend_priority,
+            },
         });
     }
 
-    if !metadata_probe_enabled() {
-        newengine_ulog_api::ulog::warn!(
-            "plugins: ABI metadata probe disabled; '{}' cannot be classified without opening its descriptor",
-            display_clean(path)
-        );
+    let signature = manifest
+        .signature
+        .as_ref()
+        .map(|signature| {
+            Ok::<newengine_plugin_api::PluginSignatureV1, String>(
+                newengine_plugin_api::PluginSignatureV1 {
+                    id: signature.id.clone().into(),
+                    name: signature.name.clone().into(),
+                    version: signature.version.clone().into(),
+                    kind: newengine_plugin_api::plugin_kind_from_u8(signature.kind)?,
+                    bootstrap_phase: newengine_plugin_api::bootstrap_phase_from_u8(
+                        signature.bootstrap_phase,
+                    )?,
+                },
+            )
+        })
+        .transpose()?;
+    let descriptor_v2 = manifest
+        .descriptor
+        .as_ref()
+        .map(newengine_plugin_api::PluginDiscoveryDescriptorV1::to_descriptor_v2)
+        .transpose()?;
+    let probe = ScanPluginProbe {
+        signature,
+        info: None,
+        descriptor: None,
+        descriptor_v2,
+        has_canonical_root: manifest.has_canonical_root,
+        has_legacy_root: manifest.has_legacy_root,
+    };
+
+    if let Some(kind) = build_scanned_plugin_kind(&probe) {
         return Ok(ScannedDynlib {
             path: path.to_path_buf(),
             file_name,
-            kind: ScannedDynlibKind::Unknown,
-        });
-    }
-
-    let lib = unsafe { Library::new(path) }.map_err(|e| format!("Library::new failed: {e}"))?;
-    let plugin_probe = probe_plugin_metadata(&lib)?;
-
-    if unsafe { lib.get::<unsafe extern "C" fn()>(PLATFORM_RUNTIME_SYMBOL) }.is_ok() {
-        let (id, version) = platform_runtime_identity_from_probe(path, &plugin_probe);
-        return Ok(ScannedDynlib {
-            path: path.to_path_buf(),
-            file_name,
-            kind: ScannedDynlibKind::PlatformRuntime { id, version },
-        });
-    }
-
-    if let Some(kind) = build_scanned_plugin_kind(&plugin_probe) {
-        return Ok(ScannedDynlib {
-            path: path.to_path_buf(),
-            file_name,
+            discovery_manifest: Some(manifest.clone()),
             kind,
         });
     }
@@ -149,69 +155,9 @@ fn scan_dynamic_lib(path: &Path) -> Result<ScannedDynlib, String> {
     Ok(ScannedDynlib {
         path: path.to_path_buf(),
         file_name,
+        discovery_manifest: Some(manifest),
         kind: ScannedDynlibKind::Unknown,
     })
-}
-
-#[inline]
-fn metadata_probe_enabled() -> bool {
-    std::env::var("NEWENGINE_PLUGIN_DISCOVERY_ABI_PROBE")
-        .ok()
-        .map(|v| {
-            !matches!(
-                v.trim().to_ascii_lowercase().as_str(),
-                "0" | "false" | "no" | "off"
-            )
-        })
-        .unwrap_or(true)
-}
-
-fn deprecated_runtime_artifact_stem(file_name: &str) -> Option<&'static str> {
-    let lower = file_name.to_ascii_lowercase();
-    let deprecated_stems: &[&str] = &[
-        "aurelia",
-        "engine.ui.aurelia",
-        "engine-ui-aurelia",
-        "vulkan",
-        "engine.render.vulkan",
-        "engine-render-vulkan",
-        "starvault",
-        "engine.assets.starvault",
-        "engine-assets-starvault",
-        "assetmanager",
-        "compass",
-        "engine.input.compass",
-        "engine-input-compass",
-        "constellation",
-        "engine.ecs.constellation",
-        "engine-ecs-constellation",
-        "gravitas",
-        "engine.physics.gravitas",
-        "engine-physics-gravitas",
-        "chronicle",
-        "engine.logging.chronicle",
-        "engine-logging-chronicle",
-        "starprofiler",
-        "engine.profiler.starprofiler",
-        "engine-profiler-starprofiler",
-        "winit",
-        "platform-winit",
-        "winit-platform-plugin",
-        "engine.platform.winit",
-        "engine-platform-winit",
-    ];
-
-    for &stem in deprecated_stems {
-        let prefix = format!("{stem}-");
-        let Some(rest) = lower.strip_prefix(&prefix) else {
-            continue;
-        };
-        if rest.chars().next().is_some_and(|ch| ch.is_ascii_digit()) {
-            return Some(stem);
-        }
-    }
-
-    None
 }
 
 #[inline]
@@ -230,4 +176,75 @@ fn sort_key(path: &Path) -> (String, String) {
         .map(str::to_owned)
         .unwrap_or_else(|| "<unnamed>".to_owned());
     (file_name, display_clean(path))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use newengine_plugin_api::{
+        bootstrap_phase_to_u8, plugin_kind_to_u8, PluginBootstrapPhase, PluginDescriptorV2,
+        PluginDiscoveryDescriptorV1, PluginDiscoveryManifestV1, PluginDiscoverySignatureV1,
+        PluginKind, PLUGIN_DISCOVERY_MANIFEST_SCHEMA_VERSION,
+    };
+    use sha2::{Digest, Sha256};
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn discovery_uses_sidecar_without_mapping_binary() {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("northstar-zero-map-{nonce}"));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let dll = dir.join("fake-provider.dll");
+        // Deliberately not a PE/ELF/Mach-O image. Any Library::new() in discovery
+        // would make this regression fail.
+        let bytes = b"northstar-sidecar-only-not-a-dynamic-library";
+        std::fs::write(&dll, bytes).expect("fake dll");
+
+        let descriptor = PluginDescriptorV2 {
+            id: "test.fake.provider".into(),
+            name: "Fake Provider".into(),
+            version: "1.2.3".into(),
+            kind: PluginKind::Runtime,
+            capabilities: Vec::new().into(),
+            extension_json: "".into(),
+        };
+        let manifest = PluginDiscoveryManifestV1 {
+            schema_version: PLUGIN_DISCOVERY_MANIFEST_SCHEMA_VERSION,
+            artifact_file: "fake-provider.dll".to_owned(),
+            artifact_size: bytes.len() as u64,
+            artifact_sha256: format!("{:x}", Sha256::digest(bytes)),
+            signature: Some(PluginDiscoverySignatureV1 {
+                id: "test.fake.provider".to_owned(),
+                name: "Fake Provider".to_owned(),
+                version: "1.2.3".to_owned(),
+                kind: plugin_kind_to_u8(PluginKind::Runtime),
+                bootstrap_phase: bootstrap_phase_to_u8(PluginBootstrapPhase::Engine),
+            }),
+            descriptor: Some(PluginDiscoveryDescriptorV1::from_descriptor_v2(&descriptor)),
+            platform_runtime: None,
+            has_canonical_root: true,
+            has_legacy_root: false,
+        };
+        let sidecar = dll.with_extension(newengine_plugin_api::PLUGIN_DISCOVERY_MANIFEST_SUFFIX);
+        std::fs::write(
+            &sidecar,
+            serde_json::to_vec_pretty(&manifest).expect("json"),
+        )
+        .expect("sidecar");
+
+        let scanned = scan_dynamic_lib(&dll).expect("sidecar-only discovery must succeed");
+        assert_eq!(scanned.discovery_manifest.as_ref(), Some(&manifest));
+        match scanned.kind {
+            ScannedDynlibKind::Plugin { id, version, .. } => {
+                assert_eq!(id, "test.fake.provider");
+                assert_eq!(version, "1.2.3");
+            }
+            other => panic!("expected plugin, got {other:?}"),
+        }
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
 }

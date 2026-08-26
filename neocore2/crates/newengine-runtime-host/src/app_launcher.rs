@@ -17,13 +17,14 @@ mod types;
 pub use boot_options::RuntimeHostBootOption;
 pub use types::{
     RuntimeHostAppProfile, RuntimeHostFrontend, RuntimeHostFrontendContext, RuntimeHostLaunchSpec,
-    RuntimeHostLauncher,
+    RuntimeHostLauncher, RuntimeHostRuntimeUnitRegistration, RuntimeUnitCompositionReport,
+    RuntimeUnitFactory,
 };
 
 #[inline]
 fn env_bool(name: &str, default: bool) -> bool {
-    std::env::var(name)
-        .ok()
+    newengine_plugin_host::current_host_context()
+        .environment_var(name)
         .map(|value| {
             matches!(
                 value.trim().to_ascii_lowercase().as_str(),

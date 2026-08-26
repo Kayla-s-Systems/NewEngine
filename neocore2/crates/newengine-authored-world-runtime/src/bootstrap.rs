@@ -22,8 +22,9 @@ impl SceneBootstrapProvider for AuthoredMapSceneBootstrapProvider {
         &self,
         ctx: &mut SceneBootstrapContext<'_>,
     ) -> Result<SceneBootstrapResult, String> {
-        let logical_path = std::env::var(newengine_project_api::PROJECT_STARTUP_SCENE_ENV)
-            .map_err(|_| "authored-world bootstrap requires project startup_scene".to_owned())?;
+        let logical_path = newengine_plugin_host::current_host_context()
+            .environment_var(newengine_project_api::PROJECT_STARTUP_SCENE_ENV)
+            .ok_or_else(|| "authored-world bootstrap requires project startup_scene".to_owned())?;
         let logical_path = logical_path.trim();
         if logical_path.is_empty() {
             return Err("authored-world bootstrap received an empty startup_scene".to_owned());

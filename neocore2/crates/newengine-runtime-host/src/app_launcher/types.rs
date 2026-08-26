@@ -1,10 +1,48 @@
-use std::path::PathBuf;
+use std::{collections::BTreeSet, path::PathBuf};
 
 use newengine_assets::AssetServiceClient;
 use newengine_core::{Engine, EngineResult, StartupConfig};
 use newengine_project_runtime::RuntimeCompositionContext;
 
 use super::boot_options::RuntimeHostBootOption;
+
+pub type RuntimeUnitFactory = fn(
+    &mut Engine<()>,
+    &StartupConfig,
+) -> EngineResult<Option<Box<dyn newengine_core::Module<()>>>>;
+
+/// Profile/game-owned static runtime-unit inventory entry with its factory binding.
+/// If the same descriptor is also present in `EngineCompositionSpec.runtime_units`, the
+/// merged catalog deduplicates it by `id@version`; otherwise this registration itself
+/// contributes the candidate and its materializer.
+#[derive(Clone, Copy)]
+pub struct RuntimeHostRuntimeUnitRegistration {
+    pub spec: newengine_service_api::EngineRuntimeUnitSpec,
+    pub factory: RuntimeUnitFactory,
+}
+
+impl RuntimeHostRuntimeUnitRegistration {
+    #[inline]
+    pub const fn new(
+        spec: newengine_service_api::EngineRuntimeUnitSpec,
+        factory: RuntimeUnitFactory,
+    ) -> Self {
+        Self { spec, factory }
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct RuntimeUnitCompositionReport {
+    pub selected_units: Vec<String>,
+    pub provided_capabilities: BTreeSet<String>,
+}
+
+impl RuntimeUnitCompositionReport {
+    #[inline]
+    pub fn provides(&self, capability: &str) -> bool {
+        self.provided_capabilities.contains(capability)
+    }
+}
 
 /// Generic process/control-plane launch declaration.
 ///
@@ -26,15 +64,15 @@ pub struct RuntimeHostLaunchSpec {
 
 impl RuntimeHostLaunchSpec {
     #[inline]
-    pub fn apply_env_defaults(&self) {
+    pub fn apply_env_defaults(&self, host: &newengine_plugin_host::HostContextHandle) {
         for &(key, value) in self.env_defaults {
-            if std::env::var_os(key).is_none() {
-                std::env::set_var(key, value);
+            if host.environment_var_os(key).is_none() {
+                host.set_environment_var(key, value);
             }
         }
         if let Some((key, value)) = self.default_profile_env {
-            if std::env::var_os(key).is_none() {
-                std::env::set_var(key, value);
+            if host.environment_var_os(key).is_none() {
+                host.set_environment_var(key, value);
             }
         }
     }
@@ -48,6 +86,24 @@ pub trait RuntimeHostAppProfile {
     #[inline]
     fn composition_spec(&self) -> Option<newengine_service_api::EngineCompositionSpec> {
         None
+    }
+
+    /// Additional profile/game static runtime-unit inventory and factory bindings.
+    /// Distribution, declarative composition, and plugin units are merged with these entries.
+    #[inline]
+    fn runtime_unit_registrations(&self) -> &'static [RuntimeHostRuntimeUnitRegistration] {
+        &[]
+    }
+
+    /// Runtime-specific capability roots contributed before runtime-unit materialization.
+    /// This is the generic extension point used by game modules and future product overlays;
+    /// it contributes requirements only and never constructs providers.
+    #[inline]
+    fn runtime_unit_requirements_for_runtime(
+        &self,
+        _runtime: Option<&RuntimeCompositionContext>,
+    ) -> Result<Vec<newengine_service_api::RuntimeUnitRequirementDescriptor>, String> {
+        Ok(Vec::new())
     }
 
     fn register_modules(

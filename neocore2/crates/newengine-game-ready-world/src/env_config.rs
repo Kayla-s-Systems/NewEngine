@@ -1,15 +1,18 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-//! Centralized process-environment access for reusable engine runtime.
+//! Engine-instance environment compatibility access.
 //!
-//! Runtime modules must not read `std::env` directly. App/profile/bootstrap
-//! layers may still provide values through process env during transition, but
-//! this module is the only engine-runtime chokepoint until all knobs move to
-//! declarative profile JSON/capability policy.
+//! Runtime values come from the active HostContext snapshot; process environment is a
+//! launcher/bootstrap concern only.
 
 #[inline]
 pub(crate) fn var(name: &str) -> Option<String> {
-    std::env::var(name).ok()
+    newengine_plugin_host::current_host_context().environment_var(name)
+}
+
+#[inline]
+pub(crate) fn var_os(name: &str) -> Option<std::ffi::OsString> {
+    newengine_plugin_host::current_host_context().environment_var_os(name)
 }
 
 #[inline]

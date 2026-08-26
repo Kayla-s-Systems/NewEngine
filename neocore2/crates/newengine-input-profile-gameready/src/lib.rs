@@ -30,5 +30,20 @@ pub use key_registry::gameplay_default_key_registry;
 pub use listeners::gameplay_default_listeners;
 pub use profile::{game_ready_game_input_profile, game_ready_input_profile};
 
+pub const GAME_READY_INPUT_PROFILE_RUNTIME_UNIT_SPEC: newengine_service_api::EngineRuntimeUnitSpec =
+    newengine_service_api::EngineRuntimeUnitSpec::new(
+        "newengine.input-profile.gameready",
+        1,
+        newengine_service_api::EngineRuntimeUnitKind::Provider,
+        &[newengine_service_api::runtime_unit_capability::GAME_INPUT_PROFILE],
+        &["input.backend"],
+        &[
+            "engine.runtime-unit",
+            "input-profile",
+            "game-ready",
+            "first-party",
+        ],
+    );
+
 #[cfg(test)]
 mod tests;

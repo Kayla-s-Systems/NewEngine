@@ -73,9 +73,10 @@ pub fn normalize_path(path: PathBuf, default_base: Option<&Path>) -> PathBuf {
 
 pub fn publish_env(spec: EngineStorageRootSpec, path: &Path) {
     let normalized = lexical_normalize(path);
-    std::env::set_var(spec.primary_env, &normalized);
-    std::env::set_var(spec.alias_env, &normalized);
-    std::env::set_var(spec.ready_env, "1");
+    let host = newengine_plugin_host::current_host_context();
+    host.set_environment_var(spec.primary_env, &normalized);
+    host.set_environment_var(spec.alias_env, &normalized);
+    host.set_environment_var(spec.ready_env, "1");
 }
 
 pub fn child(spec: EngineStorageRootSpec, child: impl AsRef<Path>) -> PathBuf {
@@ -162,7 +163,9 @@ fn strip_leading_segment(segment: &str, path: &Path) -> PathBuf {
 }
 
 fn non_empty_env(name: &str) -> Option<OsString> {
-    std::env::var_os(name).filter(|value| !value.as_os_str().is_empty())
+    newengine_plugin_host::current_host_context()
+        .environment_var_os(name)
+        .filter(|value| !value.as_os_str().is_empty())
 }
 
 #[cfg(test)]
@@ -177,9 +180,11 @@ mod tests {
             .join("AssetInspector");
         let normalized = normalize_path(PathBuf::from("../../cache/asset-inspector"), Some(&base));
         assert!(normalized.is_absolute());
-        assert!(!normalized
-            .components()
-            .any(|component| matches!(component, Component::ParentDir | Component::CurDir)));
+        assert!(
+            !normalized
+                .components()
+                .any(|component| matches!(component, Component::ParentDir | Component::CurDir))
+        );
         assert!(normalized.ends_with(Path::new("cache/asset-inspector")));
     }
 
@@ -196,8 +201,10 @@ mod tests {
         );
         let child = resolve_under_root(spec, &root, Path::new("shaders/../shaders/vulkan"));
         assert!(child.ends_with(Path::new("cache/asset-inspector/shaders/vulkan")));
-        assert!(!child
-            .components()
-            .any(|component| matches!(component, Component::ParentDir | Component::CurDir)));
+        assert!(
+            !child
+                .components()
+                .any(|component| matches!(component, Component::ParentDir | Component::CurDir))
+        );
     }
 }

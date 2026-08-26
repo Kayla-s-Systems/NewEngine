@@ -27,7 +27,7 @@ pub(crate) fn disabled_by_process_args_or_env() -> Option<String> {
     }
 
     for key in DISABLE_ENV {
-        let Ok(value) = std::env::var(key) else {
+        let Some(value) = newengine_plugin_host::current_host_context().environment_var(key) else {
             continue;
         };
         if is_truthy(&value) {

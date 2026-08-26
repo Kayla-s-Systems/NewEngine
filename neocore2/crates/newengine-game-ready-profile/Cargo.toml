@@ -8,7 +8,6 @@ description = "Game Ready FPS runtime profile composition for NewEngine"
 [dependencies]
 newengine-assets-api = { path = "../newengine-assets-api" }
 newengine-audio-api = { path = "../newengine-audio-api" }
-newengine-audio-runtime = { path = "../newengine-audio-runtime" }
 newengine-physics-api = { path = "../newengine-physics-api" }
 newengine-render-api = { path = "../newengine-render-api" }
 newengine-schema-api = { path = "../newengine-schema-api" }
@@ -16,26 +15,19 @@ newengine-scene-io = { path = "../newengine-scene-io" }
 newengine-scripting-api = { path = "../newengine-scripting-api" }
 newengine-time-api = { path = "../newengine-time-api" }
 newengine-ulog-api = { path = "../newengine-ulog-api" }
-newengine-asset-format-nef8 = { path = "../newengine-asset-format-nef8" }
 log = "0.4"
 serde_json = "1"
 abi_stable = "0.11"
 
 newengine-assets = { path = "../newengine-assets" }
 newengine-asset-bootstrap-runtime = { path = "../newengine-asset-bootstrap-runtime" }
-newengine-assets-ui-runtime = { path = "../newengine-assets-ui-runtime" }
 newengine-assets-catalog-ui-runtime = { path = "../newengine-assets-catalog-ui-runtime" }
 newengine-core = { path = "../newengine-core", features = ["runtime-domain-contracts"] }
-newengine-definitions-runtime = { path = "../newengine-definitions-runtime" }
-newengine-ecs-runtime = { path = "../newengine-ecs-runtime" }
 newengine-engine-runtime = { path = "../newengine-engine-runtime" }
 newengine-input-api = { path = "../newengine-input-api" }
 newengine-input-bindings-runtime = { path = "../newengine-input-bindings-runtime" }
 newengine-input-profile-gameready = { path = "../newengine-input-profile-gameready" }
-newengine-material-runtime = { path = "../newengine-material-runtime" }
-newengine-model-runtime = { path = "../newengine-model-runtime" }
 newengine-entity-runtime = { path = "../newengine-entity-runtime" }
-newengine-gameplay-runtime = { path = "../newengine-gameplay-runtime" }
 newengine-game-events-runtime = { path = "../newengine-game-events-runtime" }
 newengine-replication-runtime = { path = "../newengine-replication-runtime" }
 newengine-network-runtime = { path = "../newengine-network-runtime" }
@@ -46,16 +38,12 @@ newengine-plugin-host = { path = "../newengine-plugin-host" }
 newengine-render-feature-api = { path = "../newengine-render-feature-api" }
 newengine-render-feature-gameready = { path = "../newengine-render-feature-gameready" }
 newengine-runtime-host = { path = "../newengine-runtime-host", default-features = false, features = ["full-runtime"] }
+newengine-runtime-units = { path = "../newengine-runtime-units" }
 newengine-windowed-host-runtime = { path = "../newengine-windowed-host-runtime", default-features = false, features = ["prestart-window-egui", "window-icon"] }
-newengine-time-runtime = { path = "../newengine-time-runtime" }
-newengine-schema-runtime = { path = "../newengine-schema-runtime" }
 newengine-service-api = { path = "../newengine-service-api" }
 newengine-scene = { path = "../newengine-scene", features = ["runtime"] }
 newengine-scene-runtime = { path = "../newengine-scene-runtime" }
 newengine-world-api = { path = "../newengine-world-api" }
-newengine-world-runtime = { path = "../newengine-world-runtime" }
-newengine-world-environment-runtime = { path = "../newengine-world-environment-runtime" }
-newengine-scripting-runtime = { path = "../newengine-scripting-runtime" }
 newengine-ui = { path = "../newengine-ui", default-features = false }
 newengine-ui-api = { path = "../newengine-ui-api" }
 newengine-entity-api = { path = "../newengine-entity-api" }
@@ -67,4 +55,5 @@ newengine-game-ready-world = { path = "../newengine-game-ready-world" }
 newengine-game-data = { path = "../newengine-game-data" }
 newengine-game-data-lua = { path = "../newengine-game-data-lua" }
 newengine-game-module-composition = { path = "../newengine-game-module-composition" }
+newengine-game-module-fps = { path = "../newengine-game-module-fps" }
 newengine-game-module-runtime = { path = "../newengine-game-module-runtime" }

@@ -1,14 +1,8 @@
 use newengine_math::collections_prelude::NeHashSet as HashSet;
 use std::path::{Path, PathBuf};
 
-use libloading::Library;
 use newengine_core::{EngineError, EngineResult};
-use newengine_platform_api::PlatformRuntimeRunFnV1;
-use newengine_plugin_api::{PluginRootV1Ref, PluginSignatureV1};
-
-use crate::platform_runtime::constants::{
-    PLATFORM_PLUGIN_ID, PLATFORM_RUNTIME_SYMBOL, PLUGIN_ROOT_SYMBOL, PLUGIN_SIGNATURE_SYMBOL,
-};
+use newengine_platform_api::PlatformRuntimeDescriptorV1;
 
 #[inline]
 fn desired_runtime_profile() -> &'static str {
@@ -21,8 +15,8 @@ fn desired_runtime_profile() -> &'static str {
 
 #[inline]
 fn mixed_plugin_profile_allowed() -> bool {
-    std::env::var("NEWENGINE_ALLOW_MIXED_PLUGIN_PROFILE")
-        .ok()
+    newengine_plugin_host::current_host_context()
+        .environment_var("NEWENGINE_ALLOW_MIXED_PLUGIN_PROFILE")
         .map(|v| {
             matches!(
                 v.trim().to_ascii_lowercase().as_str(),
@@ -69,114 +63,45 @@ fn runtime_profile_matches(path: &Path, desired: &'static str, allow_mixed: bool
 }
 
 #[inline]
-fn runtime_metadata_probe_enabled() -> bool {
-    std::env::var("NEWENGINE_PLATFORM_RUNTIME_METADATA_PROBE")
-        .ok()
-        .map(|v| {
-            matches!(
-                v.trim().to_ascii_lowercase().as_str(),
-                "1" | "true" | "yes" | "on"
-            )
-        })
-        .unwrap_or(false)
-}
-
-#[inline]
-fn runtime_symbol_validation_enabled() -> bool {
-    std::env::var("NEWENGINE_PLATFORM_RUNTIME_VALIDATE_SYMBOL")
-        .ok()
-        .map(|v| {
-            matches!(
-                v.trim().to_ascii_lowercase().as_str(),
-                "1" | "true" | "yes" | "on"
-            )
-        })
-        .unwrap_or(true)
-}
-
-#[inline]
-fn legacy_platform_runtime_name_allowed() -> bool {
-    std::env::var("NEWENGINE_ALLOW_LEGACY_PLATFORM_RUNTIME_NAME")
-        .ok()
-        .map(|v| {
-            matches!(
-                v.trim().to_ascii_lowercase().as_str(),
-                "1" | "true" | "yes" | "on"
-            )
-        })
-        .unwrap_or(false)
-}
-
-#[inline]
-fn is_legacy_platform_runtime_filename(path: &Path) -> bool {
-    let lower = path
-        .file_name()
-        .and_then(|s| s.to_str())
-        .unwrap_or("")
-        .to_ascii_lowercase();
-    [
-        "platform-winit-",
-        "winit-platform-plugin-",
-        "engine.platform.winit-",
-        "engine-platform-winit-",
-        "winit-",
-    ]
-    .iter()
-    .any(|prefix| {
-        lower
-            .strip_prefix(prefix)
-            .is_some_and(|rest| rest.chars().next().is_some_and(|ch| ch.is_ascii_digit()))
-    })
-}
-
-#[inline]
 fn is_platform_runtime_filename_candidate(path: &Path) -> bool {
     if !path.is_file() {
         return false;
     }
-
-    let Some(name) = path.file_name().and_then(|s| s.to_str()) else {
-        return false;
-    };
-
-    let lower = name.to_ascii_lowercase();
-    (lower.ends_with(".dll") || lower.ends_with(".so") || lower.ends_with(".dylib"))
-        && (lower.contains("platform-winit") || lower.contains("winit-platform"))
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .map(|ext| matches!(ext.to_ascii_lowercase().as_str(), "dll" | "so" | "dylib"))
+        .unwrap_or(false)
 }
 
-fn runtime_symbol_present(path: &Path) -> bool {
-    let Ok(lib) = (unsafe { libloading::Library::new(path) }) else {
-        return false;
-    };
-
-    unsafe { lib.get::<PlatformRuntimeRunFnV1>(PLATFORM_RUNTIME_SYMBOL) }.is_ok()
+pub(crate) fn try_read_runtime_descriptor(
+    path: &Path,
+) -> Option<PlatformRuntimeDescriptorV1> {
+    let manifest = newengine_plugin_host::read_verified_plugin_discovery_manifest(path).ok()?;
+    let platform = manifest.platform_runtime?;
+    Some(
+        PlatformRuntimeDescriptorV1::new(platform.id, platform.name, platform.version)
+            .with_backend_priority(platform.backend_priority)
+            .with_system_tags(platform.system_tags),
+    )
 }
 
-fn try_read_runtime_identity(path: &Path) -> Option<(String, String)> {
-    let lib = unsafe { Library::new(path) }.ok()?;
-    let has_runtime = unsafe { lib.get::<PlatformRuntimeRunFnV1>(PLATFORM_RUNTIME_SYMBOL) }.is_ok();
-    if !has_runtime {
-        return None;
-    }
+fn normalized_runtime_tags(descriptor: &PlatformRuntimeDescriptorV1) -> Vec<String> {
+    let mut tags = descriptor
+        .system_tags
+        .iter()
+        .filter_map(|tag| newengine_service_api::normalize_system_tag(tag.as_str()))
+        .collect::<Vec<_>>();
+    tags.sort();
+    tags.dedup();
+    tags
+}
 
-    if let Ok(sym) =
-        unsafe { lib.get::<unsafe extern "C" fn() -> PluginSignatureV1>(PLUGIN_SIGNATURE_SYMBOL) }
-    {
-        let signature = unsafe { sym() };
-        let id = signature.id.to_string();
-        let version = signature.version.to_string();
-        if !id.trim().is_empty() {
-            return Some((id, version));
-        }
-    }
-
-    let root_sym =
-        unsafe { lib.get::<unsafe extern "C" fn() -> PluginRootV1Ref>(PLUGIN_ROOT_SYMBOL) }.ok()?;
-    let root = unsafe { root_sym() };
-
-    let module = root.create()();
-    let descriptor = module.descriptor();
-    Some((descriptor.id.to_string(), descriptor.version.to_string()))
+fn runtime_descriptor_allowed(descriptor: Option<&PlatformRuntimeDescriptorV1>) -> bool {
+    let Some(descriptor) = descriptor else {
+        return !newengine_plugin_host::engine_composition_has_forbidden_system_tags();
+    };
+    let tags = normalized_runtime_tags(descriptor);
+    newengine_plugin_host::engine_composition_allows_system_tags(&tags)
 }
 
 pub fn detect_platform_runtime_path(modules_dir: &Path) -> EngineResult<PathBuf> {
@@ -191,36 +116,29 @@ pub fn detect_platform_runtime_path(modules_dir: &Path) -> EngineResult<PathBuf>
         let Ok(rd) = std::fs::read_dir(dir) else {
             return;
         };
-
-        let validate_symbol = runtime_symbol_validation_enabled();
         for ent in rd.flatten() {
             let path = ent.path();
             if !is_platform_runtime_filename_candidate(&path) {
                 continue;
             }
-
-            if is_legacy_platform_runtime_filename(&path) && !legacy_platform_runtime_name_allowed()
-            {
+            let descriptor = try_read_runtime_descriptor(&path);
+            if descriptor.is_none() {
+                continue;
+            }
+            if !runtime_descriptor_allowed(descriptor.as_ref()) {
                 crate::platform_early_log!(
-                    "host.discovery.skip_legacy_platform_name path='{}'",
+                    "host.discovery.skip_composition_tags path='{}'",
                     path.display()
                 );
                 continue;
             }
-
-            if validate_symbol && !runtime_symbol_present(&path) {
-                crate::platform_early_log!(
-                    "host.discovery.skip_symbol_absent path='{}'",
-                    path.display()
-                );
-                continue;
-            }
-
             out.push(path);
         }
     }
 
-    if let Some(explicit) = std::env::var_os("NEWENGINE_PLATFORM_RUNTIME") {
+    if let Some(explicit) = newengine_plugin_host::current_host_context()
+        .environment_var_os("NEWENGINE_PLATFORM_RUNTIME")
+    {
         let explicit = PathBuf::from(explicit);
         crate::platform_early_log!(
             "host.discovery.explicit path='{}' exists={}",
@@ -228,6 +146,19 @@ pub fn detect_platform_runtime_path(modules_dir: &Path) -> EngineResult<PathBuf>
             explicit.is_file()
         );
         if explicit.is_file() {
+            let descriptor = try_read_runtime_descriptor(&explicit);
+            if descriptor.is_none() {
+                return Err(EngineError::other(format!(
+                    "NEWENGINE_PLATFORM_RUNTIME '{}' has no valid verified platform-runtime discovery sidecar",
+                    explicit.display()
+                )));
+            }
+            if !runtime_descriptor_allowed(descriptor.as_ref()) {
+                return Err(EngineError::other(format!(
+                    "NEWENGINE_PLATFORM_RUNTIME '{}' is incompatible with the active composition tags",
+                    explicit.display()
+                )));
+            }
             return Ok(explicit);
         }
 
@@ -323,7 +254,7 @@ pub fn detect_platform_runtime_path(modules_dir: &Path) -> EngineResult<PathBuf>
             candidates.len()
         );
         newengine_ulog_api::ulog::warn!(
-            "platform runtime discovery: no '{}' platform DLL found; falling back to available platform runtime profile. Rebuild winit-platform-plugin with matching profile to remove this warning.",
+            "platform runtime discovery: no '{}' platform runtime build found; falling back to another available runtime profile.",
             desired_profile
         );
     } else {
@@ -334,35 +265,6 @@ pub fn detect_platform_runtime_path(modules_dir: &Path) -> EngineResult<PathBuf>
         "host.discovery.candidates.after_profile_filter={}",
         candidates.len()
     );
-
-    if runtime_metadata_probe_enabled() {
-        if let Some(path) = candidates
-            .iter()
-            .find(|path| {
-                matches!(try_read_runtime_identity(path), Some((ref id, _)) if id == PLATFORM_PLUGIN_ID)
-            })
-            .cloned()
-        {
-            crate::platform_early_log!("host.discovery.selected.identity path='{}'", path.display());
-            return Ok(path);
-        }
-    } else {
-        crate::platform_early_log!("host.discovery.metadata_probe.disabled");
-    }
-
-    if let Some(path) = candidates
-        .iter()
-        .find(|path| {
-            path.file_name()
-                .and_then(|s| s.to_str())
-                .map(|name| name.to_ascii_lowercase().contains("winit-platform"))
-                .unwrap_or(false)
-        })
-        .cloned()
-    {
-        crate::platform_early_log!("host.discovery.selected.filename path='{}'", path.display());
-        return Ok(path);
-    }
 
     if let Some(path) = candidates.into_iter().next() {
         crate::platform_early_log!("host.discovery.selected.fallback path='{}'", path.display());
@@ -390,7 +292,7 @@ fn is_current_dir_path(path: &Path) -> bool {
 }
 
 fn env_dir(name: &str) -> Option<PathBuf> {
-    let raw = std::env::var_os(name)?;
+    let raw = newengine_plugin_host::current_host_context().environment_var_os(name)?;
     let path = PathBuf::from(raw);
     if path.as_os_str().is_empty() {
         None
@@ -424,12 +326,7 @@ fn sort_runtime_candidates(candidates: &mut [PathBuf], desired_profile: &'static
     });
 }
 
-fn runtime_candidate_rank(path: &Path, desired_profile: &'static str) -> (u8, u8, String) {
-    let name = path
-        .file_name()
-        .and_then(|s| s.to_str())
-        .unwrap_or("")
-        .to_ascii_lowercase();
+fn runtime_candidate_rank(path: &Path, desired_profile: &'static str) -> (u8, i32, String) {
     let profile_rank = match runtime_file_profile(path) {
         p if p == desired_profile => 0,
         "unknown" => 1,
@@ -439,12 +336,10 @@ fn runtime_candidate_rank(path: &Path, desired_profile: &'static str) -> (u8, u8
         "bench" => 5,
         _ => 9,
     };
-    let name_rank = if name.contains("winit-platform") {
-        0
-    } else {
-        1
-    };
-    (profile_rank, name_rank, name)
+    let priority_rank = try_read_runtime_descriptor(path)
+        .map(|descriptor| descriptor.backend_priority.saturating_neg())
+        .unwrap_or(0);
+    (profile_rank, priority_rank, path.to_string_lossy().to_string())
 }
 
 fn push_ancestor_plugin_dirs(out: &mut Vec<PathBuf>, start: &Path) {

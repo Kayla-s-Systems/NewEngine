@@ -19,7 +19,10 @@ mod facts;
 #[path = "registry/route_model.rs"]
 mod route_model;
 
-pub(crate) use active::ActiveGatewayRegistry;
+pub(crate) use active::{
+    descriptor_composition_candidates, descriptor_v2_composition_candidates,
+    host_route_composition_candidates, ActiveGatewayRegistry,
+};
 pub(crate) use descriptor::{
     descriptor_engine_gateways, descriptor_engine_gateways_v2, descriptor_max_gateway_priority,
     descriptor_max_gateway_priority_v2,

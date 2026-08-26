@@ -143,6 +143,7 @@ fn register_engine_gateway_provider_route_with_origin<S>(
     backend_capability_id: &str,
     backend_priority: i32,
     provider_owner_id: &str,
+    system_tags: &[&str],
     origin: crate::service_gateway::GatewayProviderOrigin,
 ) -> Result<(), String>
 where
@@ -192,6 +193,18 @@ where
     } else {
         provider_owner_id.to_owned()
     };
+    let mut route_system_tags = vec![
+        newengine_service_api::system_tag::ENGINE_DOMAIN.to_owned(),
+        newengine_service_api::system_tag::PROVIDER_BACKEND.to_owned(),
+    ];
+    route_system_tags.extend(
+        system_tags
+            .iter()
+            .filter_map(|tag| newengine_service_api::normalize_system_tag(tag)),
+    );
+    route_system_tags.sort();
+    route_system_tags.dedup();
+
     let key = format!("{}::{}", gateway_id, provider_service_id);
     let entry = GatewayProviderRouteEntry {
         gateway_id: gateway_id.to_owned(),
@@ -205,6 +218,7 @@ where
         provider_owner_id: normalized_owner.clone(),
         backend_capability_id: backend_capability_id.to_owned(),
         backend_priority,
+        system_tags: route_system_tags,
         origin,
     };
 
@@ -329,6 +343,7 @@ where
         backend_capability_id,
         backend_priority,
         provider_owner_id,
+        &[],
         crate::service_gateway::GatewayProviderOrigin::EngineRuntime,
     )
 }
@@ -353,6 +368,7 @@ where
         backend_capability_id,
         -10_000,
         provider_owner_id,
+        &[],
         crate::service_gateway::GatewayProviderOrigin::NullProvider,
     )
 }
@@ -378,6 +394,60 @@ where
         backend_capability_id,
         -10_000,
         provider_owner_id,
+        &[],
+        crate::service_gateway::GatewayProviderOrigin::NullProvider,
+    )
+}
+
+pub fn register_null_engine_gateway_provider_route_with_tags<S>(
+    gateway_id: &str,
+    service_kind: S,
+    provider_service_id: &str,
+    provider_route_id: &str,
+    backend_capability_id: &str,
+    provider_owner_id: &str,
+    system_tags: &[&str],
+) -> Result<(), String>
+where
+    S: AsRef<str>,
+{
+    register_engine_gateway_provider_route_with_origin(
+        gateway_id,
+        service_kind,
+        provider_service_id,
+        provider_route_id,
+        None,
+        backend_capability_id,
+        -10_000,
+        provider_owner_id,
+        system_tags,
+        crate::service_gateway::GatewayProviderOrigin::NullProvider,
+    )
+}
+
+pub fn register_null_engine_gateway_provider_route_with_abi_and_tags<S>(
+    gateway_id: &str,
+    service_kind: S,
+    provider_service_id: &str,
+    provider_route_id: &str,
+    provider_abi: &str,
+    backend_capability_id: &str,
+    provider_owner_id: &str,
+    system_tags: &[&str],
+) -> Result<(), String>
+where
+    S: AsRef<str>,
+{
+    register_engine_gateway_provider_route_with_origin(
+        gateway_id,
+        service_kind,
+        provider_service_id,
+        provider_route_id,
+        Some(provider_abi),
+        backend_capability_id,
+        -10_000,
+        provider_owner_id,
+        system_tags,
         crate::service_gateway::GatewayProviderOrigin::NullProvider,
     )
 }

@@ -15,7 +15,9 @@ fn module_stage_profile_enabled() -> bool {
     static ENABLED: OnceLock<bool> = OnceLock::new();
     *ENABLED.get_or_init(|| {
         matches!(
-            std::env::var("NEWENGINE_MODULE_STAGE_LOG").ok().as_deref(),
+            newengine_plugin_host::current_host_context()
+                .environment_var("NEWENGINE_MODULE_STAGE_LOG")
+                .as_deref(),
             Some("1") | Some("true") | Some("TRUE") | Some("on") | Some("ON")
         )
     })

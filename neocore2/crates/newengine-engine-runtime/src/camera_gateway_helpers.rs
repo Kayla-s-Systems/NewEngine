@@ -202,7 +202,7 @@ static CAMERA_TRACE_SINK: OnceLock<Option<StdMutex<CameraTraceSink>>> = OnceLock
 fn camera_trace_sink() -> Option<&'static StdMutex<CameraTraceSink>> {
     CAMERA_TRACE_SINK
         .get_or_init(|| {
-            let path = std::env::var_os("NEWENGINE_CAMERA_TRACE_FILE")?;
+            let path = crate::env_config::var_os("NEWENGINE_CAMERA_TRACE_FILE")?;
             let file = OpenOptions::new()
                 .create(true)
                 .truncate(true)

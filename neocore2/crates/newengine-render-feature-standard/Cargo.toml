@@ -12,3 +12,4 @@ newengine-render-feature-api = { path = "../newengine-render-feature-api" }
 newengine-lighting = { path = "../newengine-lighting" }
 newengine-material-domain-api = { path = "../newengine-material-domain-api" }
 newengine-material-domain-standard = { path = "../newengine-material-domain-standard" }
+newengine-service-api = { path = "../newengine-service-api" }

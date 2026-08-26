@@ -6,6 +6,7 @@ description = "Normative compile-time Engine Contract Registry for NewEngine ABI
 license = "MIT OR Apache-2.0"
 
 [dependencies]
+newengine-service-api = { path = "../newengine-service-api" }
 newengine-audio-api = { path = "../newengine-audio-api" }
 newengine-physics-api = { path = "../newengine-physics-api" }
 newengine-render-api = { path = "../newengine-render-api" }

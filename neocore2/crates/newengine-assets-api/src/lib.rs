@@ -428,6 +428,42 @@ pub mod method {
     pub const SHUTDOWN_V1: &str = newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1;
 }
 
+/// Normative contract behind the generic `asset.decode_v1` codec boundary.
+/// The advertised id intentionally remains the method token already carried by
+/// AssetManager/codec descriptors; the stable registry key is version-neutral.
+pub const ASSET_DECODE_PROTOCOL_CONTRACT_SPEC: newengine_contract_api::ContractSpec =
+    newengine_contract_api::ContractSpec::new(
+        "asset.decode.protocol",
+        newengine_contract_api::ContractKind::Protocol,
+        newengine_contract_api::ContractVersion::major(1),
+        newengine_contract_api::ContractCompatibility::Exact,
+        "newengine-assets-api",
+        Some(method::DECODE_V1),
+    );
+
+/// Normative contract for editor/package write-back through container codecs.
+pub const CONTAINER_WRITE_BYTES_PROTOCOL_CONTRACT_SPEC: newengine_contract_api::ContractSpec =
+    newengine_contract_api::ContractSpec::new(
+        "asset.container.write_bytes.protocol",
+        newengine_contract_api::ContractKind::Protocol,
+        newengine_contract_api::ContractVersion::major(1),
+        newengine_contract_api::ContractCompatibility::Exact,
+        "newengine-assets-api",
+        Some("container.write_bytes_v1"),
+    );
+
+/// Descriptor-driven preview contract shared by AssetManager and Editor surfaces.
+pub const ASSET_PREVIEW_PROTOCOL_ID: &str = "newengine.assets.preview.contract.v1";
+pub const ASSET_PREVIEW_PROTOCOL_CONTRACT_SPEC: newengine_contract_api::ContractSpec =
+    newengine_contract_api::ContractSpec::new(
+        "asset.preview.protocol",
+        newengine_contract_api::ContractKind::Protocol,
+        newengine_contract_api::ContractVersion::major(1),
+        newengine_contract_api::ContractCompatibility::Exact,
+        "newengine-assets-api",
+        Some(ASSET_PREVIEW_PROTOCOL_ID),
+    );
+
 pub mod textures_method {
     pub const INFO_JSON: &str = newengine_service_api::SERVICE_METHOD_INFO_JSON;
     pub const INVOKE_JSON: &str = newengine_service_api::SERVICE_METHOD_INVOKE_JSON;

@@ -1,7 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use newengine_core::render::TextureId;
-use newengine_materials::api::{MaterialFlags, MaterialResolved};
+use newengine_materials::api::{MaterialFlags, MaterialResolved, ShadingModel};
 
 #[derive(Clone, Debug)]
 pub(super) enum MaterialTextureGpuResidency {
@@ -77,11 +77,20 @@ impl<'a> LitMaterialPlan<'a> {
                 material.textures.uv_offset[0],
                 material.textures.uv_offset[1],
             ],
+            // Ordinary materials encode occlusion in w=[0,1]. Eye materials use w=[2,3]
+            // so the stable four-float GPU material ABI can carry a shading-family marker
+            // without sacrificing any PBR scalar precision. Lit shaders remove the marker
+            // before evaluating occlusion.
             material_params: [
                 material.desc.normal_scale,
                 material.desc.roughness,
                 material.desc.metallic,
-                material.desc.occlusion_strength,
+                material.desc.occlusion_strength
+                    + if material.desc.shading_model == ShadingModel::Eye {
+                        2.0
+                    } else {
+                        0.0
+                    },
             ],
             base_color_texture: material.textures.base_color_texture.as_deref(),
             normal_texture: material.textures.normal_texture.as_deref(),

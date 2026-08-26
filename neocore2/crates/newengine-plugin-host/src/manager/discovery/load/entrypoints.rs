@@ -130,6 +130,55 @@ impl PluginManager {
         )
     }
 
+    /// Scans the complete plugin inventory and freezes the single authoritative
+    /// provider-selection plan before any provider DLL is initialized.
+    pub fn freeze_composition_plan_for_roots(
+        &mut self,
+        roots: &[(PathBuf, PluginLoadOrigin, bool)],
+        strict: bool,
+    ) -> Result<(), PluginLoadError> {
+        if self.frozen_composition_plan.is_some() {
+            return Ok(());
+        }
+
+        let mut inventories = Vec::with_capacity(roots.len());
+        for (dir, origin, required) in roots {
+            match scan_plugin_discovery_graph(dir) {
+                Ok(graph) => inventories.push((graph, *origin)),
+                Err(error) if strict || *required => return Err(error),
+                Err(error) => {
+                    newengine_ulog_api::ulog::warn!(
+                        "plugins: optional discovery root omitted from composition inventory path={} err={}",
+                        display_clean(dir),
+                        error,
+                    );
+                }
+            }
+        }
+
+        let planning = crate::host_context::with_host_context(&self.host, || {
+            crate::host_context::composition_planning_snapshot()
+        });
+        let frozen = build_frozen_composition_plan(&inventories, &planning);
+        crate::host_context::with_host_context(&self.host, || {
+            self.host.freeze_composition_plan(frozen.plan.clone())
+        })
+        .map_err(|message| PluginLoadError {
+            path: roots
+                .first()
+                .map(|(path, _, _)| path.clone())
+                .unwrap_or_default(),
+            message,
+        })?;
+
+        newengine_ulog_api::ulog::info!(
+            "plugins: authoritative composition plan frozen roots={} gateways={}",
+            inventories.len(),
+            frozen.plan.gateway_ids().len(),
+        );
+        self.frozen_composition_plan = Some(frozen);
+        Ok(())
+    }
     #[inline]
     pub fn invalidate_discovery_cache(&mut self) {
         self.discovery_cache = None;

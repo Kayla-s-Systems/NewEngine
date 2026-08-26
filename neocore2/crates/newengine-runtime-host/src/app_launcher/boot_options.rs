@@ -39,6 +39,7 @@ fn backend_required(declared: bool, headless_requested: bool) -> bool {
 pub(crate) fn apply_declared_boot_options_env(
     app_name: &str,
     options: Option<&'static [RuntimeHostBootOption]>,
+    host: &newengine_plugin_host::HostContextHandle,
 ) {
     let Some(options) = options else {
         newengine_ulog_api::ulog::debug!(
@@ -52,16 +53,16 @@ pub(crate) fn apply_declared_boot_options_env(
     let headless_requested = super::env_bool("NEWENGINE_HEADLESS", false);
 
     if has(RuntimeHostBootOption::PreStartConfigWindow) && !headless_requested {
-        std::env::remove_var("NEWENGINE_STARTUP_WINDOW_DISABLED");
-        std::env::remove_var("NEWENGINE_STARTUP_WINDOW_SKIP");
+        host.remove_environment_var("NEWENGINE_STARTUP_WINDOW_DISABLED");
+        host.remove_environment_var("NEWENGINE_STARTUP_WINDOW_SKIP");
     } else {
-        std::env::set_var("NEWENGINE_STARTUP_WINDOW_DISABLED", "1");
+        host.set_environment_var("NEWENGINE_STARTUP_WINDOW_DISABLED", "1");
     }
 
     if has(RuntimeHostBootOption::RuntimeBootstrapOverlay) && !headless_requested {
-        std::env::remove_var("NEWENGINE_RUNTIME_BOOTSTRAP_OVERLAY_DISABLED");
+        host.remove_environment_var("NEWENGINE_RUNTIME_BOOTSTRAP_OVERLAY_DISABLED");
     } else {
-        std::env::set_var("NEWENGINE_RUNTIME_BOOTSTRAP_OVERLAY_DISABLED", "1");
+        host.set_environment_var("NEWENGINE_RUNTIME_BOOTSTRAP_OVERLAY_DISABLED", "1");
     }
 
     let require_platform = backend_required(
@@ -74,15 +75,15 @@ pub(crate) fn apply_declared_boot_options_env(
     );
     let require_ui = backend_required(has(RuntimeHostBootOption::UiBackend), headless_requested);
 
-    std::env::set_var(
+    host.set_environment_var(
         "NEWENGINE_REQUIRE_PLATFORM_BACKEND",
         if require_platform { "1" } else { "0" },
     );
-    std::env::set_var(
+    host.set_environment_var(
         "NEWENGINE_REQUIRE_RENDER_BACKEND",
         if require_render { "1" } else { "0" },
     );
-    std::env::set_var(
+    host.set_environment_var(
         "NEWENGINE_REQUIRE_UI_BACKEND",
         if require_ui { "1" } else { "0" },
     );

@@ -1,5 +1,5 @@
 use super::*;
-use newengine_materials::MaterialFlags;
+use newengine_materials::{MaterialFlags, ShadingModel};
 
 #[test]
 fn runtime_texture_ref_rejects_raw_source_images() {
@@ -127,4 +127,22 @@ fn legacy_material_library_xml_schema_remains_runtime_readable() {
     let library = crate::decode_nemat_material_library_from_body(body)
         .expect("legacy NEMAT authored XML schema");
     assert_eq!(library.materials[0].name, "legacy");
+}
+
+#[test]
+fn pbr_eye_shader_selects_eye_shading_model() {
+    let payload =
+        br#"<NematMaterialLibrary schema="newengine.nemat.material_library.v1" version="1">
+  <Material name="eye" shader="pbr.eye" domain="surface">
+    <Surface blend="opaque" two_sided="false" />
+    <Textures>
+      <Texture slot="base_color" ref="textures/characters/test.ytd@eye_base" />
+      <Texture slot="roughness" ref="textures/characters/test.ytd@eye_roughness" />
+    </Textures>
+  </Material>
+</NematMaterialLibrary>"#;
+    let material = decode_material_entry_payload(payload, "eye").expect("eye authored material");
+    let response = material_response_from_authored("materials/test.nemat", "eye", material)
+        .expect("eye runtime material response");
+    assert_eq!(response.descriptor.shading_model, ShadingModel::Eye);
 }

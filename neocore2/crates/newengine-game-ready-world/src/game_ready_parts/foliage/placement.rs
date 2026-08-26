@@ -141,8 +141,7 @@ pub(super) fn choose_foliage_prefab<'a>(
 
 pub(super) fn effective_foliage_spec(spec: &GameReadyFoliageSpec) -> GameReadyFoliageSpec {
     let mut effective = spec.clone();
-    let stress = std::env::var("NEWENGINE_FOLIAGE_STRESS")
-        .ok()
+    let stress = crate::env_config::var("NEWENGINE_FOLIAGE_STRESS")
         .map(|value| {
             matches!(
                 value.trim().to_ascii_lowercase().as_str(),

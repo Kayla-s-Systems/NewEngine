@@ -4,12 +4,13 @@ use std::path::PathBuf;
 
 #[inline]
 pub(crate) fn var(name: &str) -> Option<String> {
-    std::env::var(name).ok()
+    newengine_plugin_host::current_host_context().environment_var(name)
 }
 
 #[inline]
 pub(crate) fn path(name: &str) -> Option<PathBuf> {
-    std::env::var_os(name)
+    newengine_plugin_host::current_host_context()
+        .environment_var_os(name)
         .map(PathBuf::from)
         .filter(|path| !path.as_os_str().is_empty())
 }

@@ -276,8 +276,7 @@ impl RenderUiNodeSurfaceState {
 
         self.document_last_attempt_frame = Some(frame_index);
         let Some(document_ref) =
-            std::env::var(newengine_ui_navigation_api::ENGINE_PRIMARY_UI_DOCUMENT_REF_ENV)
-                .ok()
+            crate::env_config::var(newengine_ui_navigation_api::ENGINE_PRIMARY_UI_DOCUMENT_REF_ENV)
                 .map(|value| value.trim().to_owned())
                 .filter(|value| !value.is_empty())
         else {

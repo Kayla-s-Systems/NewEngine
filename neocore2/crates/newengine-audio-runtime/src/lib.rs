@@ -6,40 +6,40 @@ mod streaming_pcm;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::io::Cursor;
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::{mpsc, Arc, OnceLock};
+use std::sync::{Arc, OnceLock, mpsc};
 use std::thread;
 use std::time::{Duration, Instant};
 
 use abi_stable::std_types::{RResult, RString};
 use newengine_assets_api::AssetServiceClient;
 use newengine_audio_api::{
-    sanitize_gain, sanitize_speed, AudioAcousticState, AudioAttenuationSettings, AudioBus,
-    AudioBusGainAck, AudioBusGainRequest, AudioCuePlayRequest, AudioCuePreloadRequest,
+    AUDIO_BACKEND_CAPABILITY_ID, AUDIO_PROVIDER_ABI_ID, AUDIO_SERVICE_ID,
+    AUDIO_SERVICE_METHOD_DIAGNOSTICS_JSON_V1, AUDIO_SERVICE_METHOD_INVOKE,
+    AUDIO_SERVICE_METHOD_PLAY_CLIP_JSON_V1, AUDIO_SERVICE_METHOD_PLAY_CUE_JSON_V1,
+    AUDIO_SERVICE_METHOD_PLAY_EVENT_JSON_V1, AUDIO_SERVICE_METHOD_PLAY_STREAM_JSON_V1,
+    AUDIO_SERVICE_METHOD_PRELOAD_CLIP_JSON_V1, AUDIO_SERVICE_METHOD_PRELOAD_CUE_JSON_V1,
+    AUDIO_SERVICE_METHOD_SET_BUS_GAIN_JSON_V1, AUDIO_SERVICE_METHOD_SET_LISTENER_JSON_V1,
+    AUDIO_SERVICE_METHOD_SET_VOICE_JSON_V1, AUDIO_SERVICE_METHOD_SHUTDOWN_V1,
+    AUDIO_SERVICE_METHOD_STOP_VOICE_JSON_V1, AudioAcousticState, AudioAttenuationSettings,
+    AudioBus, AudioBusGainAck, AudioBusGainRequest, AudioCuePlayRequest, AudioCuePreloadRequest,
     AudioDiagnostics, AudioEnvironmentState, AudioFeedbackAck, AudioFeedbackEvent,
     AudioListenerState, AudioPlayAck, AudioPlayRequest, AudioPreloadAck, AudioPreloadRequest,
     AudioReverbSend, AudioServiceInfo, AudioSpatialParams, AudioStopVoiceRequest,
     AudioStreamBufferConfig, AudioStreamPlayRequest, AudioVoiceAck, AudioVoiceUpdateRequest,
-    SoundCue, SoundCueClip, SoundCueSpatialPolicy, AUDIO_BACKEND_CAPABILITY_ID,
-    AUDIO_PROVIDER_ABI_ID, AUDIO_SERVICE_ID, AUDIO_SERVICE_METHOD_DIAGNOSTICS_JSON_V1,
-    AUDIO_SERVICE_METHOD_INVOKE, AUDIO_SERVICE_METHOD_PLAY_CLIP_JSON_V1,
-    AUDIO_SERVICE_METHOD_PLAY_CUE_JSON_V1, AUDIO_SERVICE_METHOD_PLAY_EVENT_JSON_V1,
-    AUDIO_SERVICE_METHOD_PLAY_STREAM_JSON_V1, AUDIO_SERVICE_METHOD_PRELOAD_CLIP_JSON_V1,
-    AUDIO_SERVICE_METHOD_PRELOAD_CUE_JSON_V1, AUDIO_SERVICE_METHOD_SET_BUS_GAIN_JSON_V1,
-    AUDIO_SERVICE_METHOD_SET_LISTENER_JSON_V1, AUDIO_SERVICE_METHOD_SET_VOICE_JSON_V1,
-    AUDIO_SERVICE_METHOD_SHUTDOWN_V1, AUDIO_SERVICE_METHOD_STOP_VOICE_JSON_V1,
-    ENGINE_AUDIO_SERVICE_ID,
+    ENGINE_AUDIO_SERVICE_ID, SoundCue, SoundCueClip, SoundCueSpatialPolicy, sanitize_gain,
+    sanitize_speed,
 };
 use newengine_plugin_api::Blob;
 use newengine_service_kit::{
-    engine_gateway_provider_service_description, ok_empty_blob, ok_json,
-    register_engine_gateway_provider_service, EngineGatewayProviderDecl, JsonServiceRouter,
+    EngineGatewayProviderDecl, JsonServiceRouter, engine_gateway_provider_service_description,
+    ok_empty_blob, ok_json, register_engine_gateway_provider_service,
 };
 use rodio::source::{SeekError, SineWave, Source};
 use rodio::stream::{DeviceSinkBuilder, MixerDeviceSink};
 use rodio::{ChannelCount, Decoder, Player, SampleRate, SpatialPlayer};
 
 use streaming_asset::RangedAssetReader;
-use streaming_pcm::{build_streaming_source, StreamingStats};
+use streaming_pcm::{StreamingStats, build_streaming_source};
 
 pub const NATIVE_AUDIO_SERVICE_ID: &str = AUDIO_SERVICE_ID;
 pub const NATIVE_AUDIO_PROVIDER_ROUTE: &str = "engine.audio.native";
@@ -2642,7 +2642,7 @@ fn audio_attenuation_from_yscd(
         other => {
             return Err(format!(
                 "YSCD cue has unsupported attenuation curve '{other}'"
-            ))
+            ));
         }
     };
     Ok(AudioAttenuationSettings {
@@ -2708,8 +2708,8 @@ fn should_seek_materialized_voice(position: Duration) -> bool {
 }
 
 fn max_physical_voices_from_env() -> usize {
-    std::env::var("NEWENGINE_AUDIO_MAX_PHYSICAL_VOICES")
-        .ok()
+    newengine_plugin_host::current_host_context()
+        .environment_var("NEWENGINE_AUDIO_MAX_PHYSICAL_VOICES")
         .and_then(|value| value.trim().parse::<usize>().ok())
         .map(|voices| voices.clamp(1, MAX_CONFIGURED_PHYSICAL_VOICES))
         .unwrap_or(DEFAULT_MAX_PHYSICAL_VOICES)
@@ -2729,8 +2729,8 @@ fn feedback_tone(event_id: &str) -> (f32, u64) {
 }
 
 fn cache_limit_bytes_from_env() -> usize {
-    std::env::var("NEWENGINE_AUDIO_CACHE_MB")
-        .ok()
+    newengine_plugin_host::current_host_context()
+        .environment_var("NEWENGINE_AUDIO_CACHE_MB")
         .and_then(|value| value.trim().parse::<usize>().ok())
         .map(|mb| mb.clamp(8, 2048).saturating_mul(1024 * 1024))
         .unwrap_or(DEFAULT_CLIP_CACHE_LIMIT_BYTES)
@@ -2747,12 +2747,14 @@ fn audio_disabled_by_env() -> bool {
 }
 
 fn env_flag(name: &str) -> bool {
-    std::env::var(name).ok().is_some_and(|value| {
-        matches!(
-            value.trim().to_ascii_lowercase().as_str(),
-            "1" | "true" | "yes" | "on"
-        )
-    })
+    newengine_plugin_host::current_host_context()
+        .environment_var(name)
+        .is_some_and(|value| {
+            matches!(
+                value.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
 }
 
 #[cfg(test)]

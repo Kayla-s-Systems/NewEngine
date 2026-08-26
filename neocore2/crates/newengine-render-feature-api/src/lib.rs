@@ -15,6 +15,10 @@ pub use shadows::*;
 use newengine_core::render::{Extent2D, RenderDrawListKind};
 use newengine_core::EngineResult;
 use newengine_math::{Mat4, Vec3};
+use std::sync::Arc;
+
+pub const RENDER_FEATURE_RUNTIME_CAPABILITY_ID: &str =
+    newengine_service_api::runtime_unit_capability::RENDER_FEATURE;
 
 pub const PROVIDER_TAG_FEATURE: &str = "feature";
 pub const PROVIDER_CAP_DRAW_LISTS: &str =
@@ -214,6 +218,60 @@ pub trait RenderDrawListProvider: Send + Sync {
         ctx: &SceneExtractionCtx<'_>,
         out: &mut dyn DrawListBuildCtx,
     ) -> EngineResult<()>;
+}
+
+/// A complete render-feature pack contribution produced by one selected runtime unit.
+/// The shared runtime owns this transport type; product profiles do not need to know the
+/// concrete provider implementations contained in the pack.
+pub struct RenderFeatureContribution {
+    pub id: &'static str,
+    pub draw_list_providers: Vec<Arc<dyn RenderDrawListProvider>>,
+    pub light_extraction_providers: Vec<Arc<dyn LightExtractionProvider>>,
+    pub material_pipeline_provider:
+        Option<Box<dyn newengine_material_domain_api::MaterialGpuPipelineProvider>>,
+    pub primary_lit_material_domain: Option<newengine_material_domain_api::MaterialGpuPipelineKey>,
+}
+
+impl RenderFeatureContribution {
+    #[inline]
+    pub fn new(id: &'static str) -> Self {
+        Self {
+            id,
+            draw_list_providers: Vec::new(),
+            light_extraction_providers: Vec::new(),
+            material_pipeline_provider: None,
+            primary_lit_material_domain: None,
+        }
+    }
+
+    #[inline]
+    pub fn with_draw_list_providers(
+        mut self,
+        providers: Vec<Arc<dyn RenderDrawListProvider>>,
+    ) -> Self {
+        self.draw_list_providers = providers;
+        self
+    }
+
+    #[inline]
+    pub fn with_light_extraction_providers(
+        mut self,
+        providers: Vec<Arc<dyn LightExtractionProvider>>,
+    ) -> Self {
+        self.light_extraction_providers = providers;
+        self
+    }
+
+    #[inline]
+    pub fn with_material_pipeline(
+        mut self,
+        provider: Box<dyn newengine_material_domain_api::MaterialGpuPipelineProvider>,
+        primary_lit_material_domain: newengine_material_domain_api::MaterialGpuPipelineKey,
+    ) -> Self {
+        self.material_pipeline_provider = Some(provider);
+        self.primary_lit_material_domain = Some(primary_lit_material_domain);
+        self
+    }
 }
 
 #[inline]
