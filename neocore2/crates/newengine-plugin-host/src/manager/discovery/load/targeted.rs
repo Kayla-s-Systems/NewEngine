@@ -49,7 +49,15 @@ impl PluginManager {
             return Ok(true);
         }
 
-        let (graph, _) = self.ensure_discovery_graph(dir)?;
+        let dir = resolve_plugins_dir(dir)?;
+        if let Err(e) = std::fs::create_dir_all(&dir) {
+            return Err(PluginLoadError {
+                path: dir.clone(),
+                message: format!("create_dir_all failed: {e}"),
+            });
+        }
+        let dir = canonicalize_if_exists(&dir);
+        let graph = scan_plugin_id(&dir, plugin_id)?;
         let selection = build_load_selection(
             &graph,
             LoadPhaseFilter::All,

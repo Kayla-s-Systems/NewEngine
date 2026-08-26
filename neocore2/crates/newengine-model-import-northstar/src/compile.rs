@@ -27,8 +27,12 @@ pub struct CharacterCompileRequest {
     /// Optional canonical NEMAT reference. When set, imported LOD0 meshes are
     /// bound deterministically as @m00, @m01, ... in package/mesh order.
     pub material_library_ref: Option<String>,
-    /// Resolve default material slots from sorted native source-material identity.
+    /// Resolve default material slots from native source-material identity.
     pub material_by_source_identity: bool,
+    /// Optional canonical source-material identity -> NEMAT slot assignments. When non-empty,
+    /// every imported source material must be present here and the assigned slot is preserved
+    /// across character outfit variants instead of being re-numbered from the variant subset.
+    pub material_identity_slots: Vec<(String, usize)>,
     /// Optional per-package mesh prefixes. If a package has one or more entries here,
     /// only meshes whose decoded name starts with one of those prefixes are imported.
     pub package_mesh_prefixes: Vec<(PathBuf, String)>,
@@ -445,12 +449,44 @@ pub fn compile_character(
                     })
             })
             .collect::<Result<BTreeSet<_>, _>>()?;
-        identities
-            .into_iter()
-            .enumerate()
-            .map(|(index, identity)| (identity.to_owned(), index))
-            .collect::<BTreeMap<_, _>>()
+        if request.material_identity_slots.is_empty() {
+            identities
+                .into_iter()
+                .enumerate()
+                .map(|(index, identity)| (identity.to_owned(), index))
+                .collect::<BTreeMap<_, _>>()
+        } else {
+            let mut canonical = BTreeMap::<String, usize>::new();
+            for (identity, slot) in &request.material_identity_slots {
+                let identity = identity.trim();
+                if identity.is_empty() {
+                    return Err(
+                        "material identity slot contract contains an empty identity".to_owned()
+                    );
+                }
+                if canonical.insert(identity.to_owned(), *slot).is_some() {
+                    return Err(format!(
+                        "material identity slot contract contains duplicate identity='{identity}'"
+                    ));
+                }
+            }
+            let mut resolved = BTreeMap::new();
+            for identity in identities {
+                let slot = canonical.get(identity).copied().ok_or_else(|| {
+                    format!(
+                        "material identity slot contract has no binding for source material='{identity}'"
+                    )
+                })?;
+                resolved.insert(identity.to_owned(), slot);
+            }
+            resolved
+        }
     } else {
+        if !request.material_identity_slots.is_empty() {
+            return Err(
+                "material identity slot contract requires --material-by-source-identity".to_owned(),
+            );
+        }
         BTreeMap::new()
     };
     let native_meshes = meshes

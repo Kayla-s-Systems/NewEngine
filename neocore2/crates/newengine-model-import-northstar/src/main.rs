@@ -19,6 +19,7 @@ fn run() -> Result<(), String> {
     let mut skeleton_profile = SkeletonProfile::Humanoid;
     let mut material_library_ref = None;
     let mut material_by_source_identity = false;
+    let mut material_identity_slots = Vec::new();
     let mut packages = Vec::new();
     let mut package_mesh_prefixes = Vec::new();
     let mut material_overrides = Vec::new();
@@ -85,6 +86,25 @@ fn run() -> Result<(), String> {
                 }
                 material_overrides.push((prefix.to_owned(), reference.to_owned()));
             }
+            "--material-identity-slot" => {
+                let spec = args
+                    .next()
+                    .ok_or("--material-identity-slot requires IDENTITY=mNN")?;
+                let (identity, raw_slot) = spec
+                    .rsplit_once('=')
+                    .ok_or("--material-identity-slot requires IDENTITY=mNN")?;
+                let identity = identity.trim();
+                let raw_slot = raw_slot.trim();
+                if identity.is_empty() || raw_slot.len() < 2 || !raw_slot.starts_with('m') {
+                    return Err(
+                        "--material-identity-slot requires non-empty IDENTITY=mNN".to_owned()
+                    );
+                }
+                let slot = raw_slot[1..]
+                    .parse::<usize>()
+                    .map_err(|error| format!("invalid material slot '{raw_slot}': {error}"))?;
+                material_identity_slots.push((identity.to_owned(), slot));
+            }
             "--require-mesh-prefix" => {
                 let prefix = args.next().ok_or("--require-mesh-prefix requires PREFIX")?;
                 if prefix.trim().is_empty() {
@@ -130,6 +150,7 @@ fn run() -> Result<(), String> {
         output_dir: output_dir.ok_or("--output-dir is required")?,
         material_library_ref,
         material_by_source_identity,
+        material_identity_slots,
         package_mesh_prefixes,
         material_overrides,
         required_mesh_prefixes,
@@ -174,6 +195,6 @@ fn run() -> Result<(), String> {
 
 fn print_help() {
     println!(
-        "Usage: newengine-model-import-northstar --name NAME --skeleton FILE [--skeleton-profile humanoid|weapon] --package FILE [--package FILE...] [--package-mesh-prefix PATH::PREFIX] [--material-override PREFIX=REF] [--require-mesh-prefix PREFIX] [--package-skin-fallback PATH::JOINT[,JOINT...]] [--material-by-source-identity] [--source-to-model M00,...,M33] --output-dir DIR [--material-library REF]"
+        "Usage: newengine-model-import-northstar --name NAME --skeleton FILE [--skeleton-profile humanoid|weapon] --package FILE [--package FILE...] [--package-mesh-prefix PATH::PREFIX] [--material-override PREFIX=REF] [--material-identity-slot IDENTITY=mNN] [--require-mesh-prefix PREFIX] [--package-skin-fallback PATH::JOINT[,JOINT...]] [--material-by-source-identity] [--source-to-model M00,...,M33] --output-dir DIR [--material-library REF]"
     );
 }

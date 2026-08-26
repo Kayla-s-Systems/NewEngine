@@ -15,7 +15,12 @@ pub(super) fn sidecar_path(path: &Path) -> PathBuf {
     path.with_extension(PLUGIN_DISCOVERY_MANIFEST_SUFFIX)
 }
 
-pub(crate) fn read_verified_manifest(path: &Path) -> Result<PluginDiscoveryManifestV1, String> {
+/// Reads discovery identity/descriptor metadata without hashing the artifact.
+///
+/// Targeted bootstrap discovery uses this to reject unrelated sibling DLLs without
+/// paying O(total plugin bytes). Any artifact selected for loading still passes the
+/// full SHA-256 verification path before it can be admitted.
+pub(super) fn read_manifest_metadata(path: &Path) -> Result<PluginDiscoveryManifestV1, String> {
     let sidecar = sidecar_path(path);
     let bytes = std::fs::read(&sidecar).map_err(|e| {
         format!(
@@ -25,7 +30,13 @@ pub(crate) fn read_verified_manifest(path: &Path) -> Result<PluginDiscoveryManif
     })?;
     let manifest: PluginDiscoveryManifestV1 = serde_json::from_slice(&bytes)
         .map_err(|e| format!("invalid discovery sidecar '{}': {e}", sidecar.display()))?;
-    verify_artifact_against_manifest(path, &manifest)?;
+    verify_manifest_identity_and_size(path, &manifest)?;
+    Ok(manifest)
+}
+
+pub(crate) fn read_verified_manifest(path: &Path) -> Result<PluginDiscoveryManifestV1, String> {
+    let manifest = read_manifest_metadata(path)?;
+    verify_artifact_hash(path, &manifest)?;
     Ok(manifest)
 }
 
@@ -33,6 +44,14 @@ pub(crate) fn read_verified_manifest(path: &Path) -> Result<PluginDiscoveryManif
 /// earlier. This deliberately does not re-read the sidecar; callers that own a
 /// frozen composition inventory must pass that immutable snapshot here.
 pub(crate) fn verify_artifact_against_manifest(
+    path: &Path,
+    manifest: &PluginDiscoveryManifestV1,
+) -> Result<(), String> {
+    verify_manifest_identity_and_size(path, manifest)?;
+    verify_artifact_hash(path, manifest)
+}
+
+fn verify_manifest_identity_and_size(
     path: &Path,
     manifest: &PluginDiscoveryManifestV1,
 ) -> Result<(), String> {
@@ -64,6 +83,13 @@ pub(crate) fn verify_artifact_against_manifest(
             path.display()
         ));
     }
+    Ok(())
+}
+
+fn verify_artifact_hash(
+    path: &Path,
+    manifest: &PluginDiscoveryManifestV1,
+) -> Result<(), String> {
     let actual_hash = sha256_file(path)?;
     if !actual_hash.eq_ignore_ascii_case(manifest.artifact_sha256.trim()) {
         return Err(format!(
@@ -82,6 +108,14 @@ pub(crate) fn verify_live_descriptor_against_manifest(
     manifest: &PluginDiscoveryManifestV1,
 ) -> Result<(), String> {
     verify_artifact_against_manifest(path, manifest)?;
+    verify_live_descriptor_metadata_against_manifest(path, descriptor, manifest)
+}
+
+fn verify_live_descriptor_metadata_against_manifest(
+    path: &Path,
+    descriptor: &PluginDescriptorV2,
+    manifest: &PluginDiscoveryManifestV1,
+) -> Result<(), String> {
     let planned = manifest.descriptor.as_ref().ok_or_else(|| {
         format!(
             "frozen discovery manifest has no plugin descriptor for '{}'",
@@ -106,8 +140,10 @@ pub(crate) fn verify_live_descriptor(
     path: &Path,
     descriptor: &PluginDescriptorV2,
 ) -> Result<(), String> {
+    // `read_verified_manifest` already performed the artifact SHA-256 check. Do
+    // not hash the same DLL a second time merely to compare its live descriptor.
     let manifest = read_verified_manifest(path)?;
-    verify_live_descriptor_against_manifest(path, descriptor, &manifest)
+    verify_live_descriptor_metadata_against_manifest(path, descriptor, &manifest)
 }
 
 fn sha256_file(path: &Path) -> Result<String, String> {
@@ -165,6 +201,28 @@ mod tests {
             sidecar_path(Path::new("a/b/plugin-1.0-release.dll")),
             PathBuf::from("a/b/plugin-1.0-release.nspmeta.json")
         );
+    }
+
+    #[test]
+    fn metadata_lookup_does_not_hash_artifact() {
+        let bytes = b"not-a-real-dll-target";
+        let path = temp_artifact("provider.dll", bytes);
+        let mut manifest = manifest_for(&path, bytes);
+        manifest.artifact_sha256 = "00".repeat(32);
+        let sidecar = sidecar_path(&path);
+        std::fs::write(
+            &sidecar,
+            serde_json::to_vec_pretty(&manifest).expect("json"),
+        )
+        .expect("sidecar");
+
+        let metadata =
+            read_manifest_metadata(&path).expect("metadata lookup must not hash artifact");
+        assert_eq!(metadata.artifact_file, "provider.dll");
+        let error = read_verified_manifest(&path).expect_err("verified lookup must hash artifact");
+        assert!(error.contains("SHA-256 mismatch"));
+
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
     }
 
     #[test]
