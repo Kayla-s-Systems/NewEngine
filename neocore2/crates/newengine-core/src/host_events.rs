@@ -1,0 +1,210 @@
+use raw_window_handle::{RawDisplayHandle, RawWindowHandle};
+
+#[derive(Debug, Clone)]
+pub enum HostEvent {
+    Window(WindowHostEvent),
+    Input(InputHostEvent),
+    Text(TextHostEvent),
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum WindowHostEvent {
+    /// Window became available (handles are provided via Resources, not events).
+    Ready {
+        width: u32,
+        height: u32,
+    },
+    Resized {
+        width: u32,
+        height: u32,
+    },
+    /// Window minimize/restore state change.
+    ///
+    /// On many platforms a minimized window reports a 0x0 inner size. This event allows
+    /// runtime systems (especially renderer backends) to suppress swapchain work deterministically.
+    MinimizedChanged(bool),
+    Focused(bool),
+    CloseRequested,
+
+    /// Requests a platform cursor mode change.
+    ///
+    /// This event is consumed by the platform host (e.g. winit) and should be published by
+    /// runtime/editor modules based on their current interaction mode.
+    Cursor(CursorState),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CursorGrabMode {
+    None,
+    Confined,
+    Locked,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CursorState {
+    pub visible: bool,
+    pub grab: CursorGrabMode,
+}
+
+impl CursorState {
+    #[inline]
+    pub const fn released() -> Self {
+        Self {
+            visible: true,
+            grab: CursorGrabMode::None,
+        }
+    }
+
+    #[inline]
+    pub const fn captured_locked() -> Self {
+        Self {
+            visible: false,
+            grab: CursorGrabMode::Locked,
+        }
+    }
+
+    #[inline]
+    pub const fn captured_confined() -> Self {
+        Self {
+            visible: false,
+            grab: CursorGrabMode::Confined,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum InputHostEvent {
+    Key {
+        code: KeyCode,
+        state: KeyState,
+        repeat: bool,
+    },
+    MouseMove {
+        x: f32,
+        y: f32,
+    },
+    MouseDelta {
+        dx: f32,
+        dy: f32,
+    },
+    MouseButton {
+        button: MouseButton,
+        state: KeyState,
+    },
+    MouseWheel {
+        dx: f32,
+        dy: f32,
+    },
+}
+
+#[derive(Debug, Clone)]
+pub enum TextHostEvent {
+    Char(char),
+    ImePreedit(String),
+    ImeCommit(String),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KeyState {
+    Pressed,
+    Released,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MouseButton {
+    Left,
+    Right,
+    Middle,
+    Other(u16),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KeyCode {
+    Escape,
+    Enter,
+    Space,
+    Tab,
+    Backspace,
+
+    ArrowUp,
+    ArrowDown,
+    ArrowLeft,
+    ArrowRight,
+
+    A,
+    B,
+    C,
+    D,
+    E,
+    F,
+    G,
+    H,
+    I,
+    J,
+    K,
+    L,
+    M,
+    N,
+    O,
+    P,
+    Q,
+    R,
+    S,
+    T,
+    U,
+    V,
+    W,
+    X,
+    Y,
+    Z,
+
+    Digit0,
+    Digit1,
+    Digit2,
+    Digit3,
+    Digit4,
+    Digit5,
+    Digit6,
+    Digit7,
+    Digit8,
+    Digit9,
+
+    F1,
+    F2,
+    F3,
+    F4,
+    F5,
+    F6,
+    F7,
+    F8,
+    F9,
+    F10,
+    F11,
+    F12,
+
+    Unknown,
+}
+
+impl KeyCode {
+    #[inline(always)]
+    pub const fn to_index(self) -> usize {
+        self as usize
+    }
+}
+
+/// Platform window handles are not Send/Sync on some targets (iOS UIKit).
+/// Store them in Resources and access only on the owning thread.
+#[derive(Debug, Clone, Copy)]
+pub struct WindowHandles {
+    pub window: RawWindowHandle,
+    pub display: RawDisplayHandle,
+}
+
+/// Initial window size provided by the platform host.
+///
+/// This is intentionally platform-agnostic and can be produced by any platform plugin.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WindowInitSize {
+    pub width: u32,
+    pub height: u32,
+}

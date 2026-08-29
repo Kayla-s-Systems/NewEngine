@@ -1,0 +1,294 @@
+#![forbid(unsafe_op_in_unsafe_fn)]
+
+use abi_stable::std_types::RResult;
+use newengine_plugin_api::ServiceV1Dyn;
+use newengine_service_api::EngineServiceKind;
+
+pub struct EngineGatewayProviderDecl {
+    /// Public engine API gateway, for example `engine.camera` or `engine.assets.textures`.
+    pub gateway: &'static str,
+    pub service_kind: EngineServiceKind,
+    pub provider_service: &'static str,
+    /// Provider implementation route identity. This is metadata, not the public API.
+    /// Built-in providers must declare it the same way external/plugin providers do.
+    pub provider_route: &'static str,
+    pub capability: &'static str,
+    pub priority: i32,
+    pub owner: &'static str,
+    pub service: ServiceV1Dyn<'static>,
+}
+
+/// Dynamic variant for gateway providers whose domain is declared by data, not
+/// by the historical `EngineServiceKind` convenience enum. Prefer this for new
+/// third-level domains and profile/plugin-owned feature surfaces.
+pub struct EngineGatewayProviderDeclDynamic {
+    /// Public engine API gateway, for example `engine.threading` or a data-declared child gateway.
+    pub gateway: &'static str,
+    pub service_kind: &'static str,
+    pub provider_service: &'static str,
+    /// Provider implementation route identity. This is metadata, not the public API.
+    pub provider_route: &'static str,
+    pub capability: &'static str,
+    pub priority: i32,
+    pub owner: &'static str,
+    pub service: ServiceV1Dyn<'static>,
+}
+
+pub struct NullEngineGatewayProviderDeclDynamic {
+    pub gateway: &'static str,
+    pub service_kind: &'static str,
+    pub provider_service: &'static str,
+    pub provider_route: &'static str,
+    pub provider_abi: Option<&'static str>,
+    pub capability: &'static str,
+    pub owner: &'static str,
+    pub system_tags: &'static [&'static str],
+    pub service: ServiceV1Dyn<'static>,
+}
+
+pub fn register_engine_gateway_provider_service(
+    decl: EngineGatewayProviderDecl,
+) -> Result<(), String> {
+    let service_id = decl.service.id().to_string();
+    if service_id != decl.provider_service {
+        return Err(format!(
+            "engine-runtime route service id mismatch: declared='{}' actual='{}'",
+            decl.provider_service, service_id
+        ));
+    }
+
+    match newengine_plugin_host::host_register_service_impl(decl.service) {
+        RResult::ROk(()) => {}
+        RResult::RErr(e) => return Err(e.to_string()),
+    }
+
+    newengine_plugin_host::register_engine_gateway_provider_route(
+        decl.gateway,
+        decl.service_kind,
+        decl.provider_service,
+        decl.provider_route,
+        decl.capability,
+        decl.priority,
+        decl.owner,
+    )
+}
+
+pub fn register_engine_gateway_provider_service_dynamic(
+    decl: EngineGatewayProviderDeclDynamic,
+) -> Result<(), String> {
+    let service_id = decl.service.id().to_string();
+    if service_id != decl.provider_service {
+        return Err(format!(
+            "engine-runtime route service id mismatch: declared='{}' actual='{}'",
+            decl.provider_service, service_id
+        ));
+    }
+
+    match newengine_plugin_host::host_register_service_impl(decl.service) {
+        RResult::ROk(()) => {}
+        RResult::RErr(e) => return Err(e.to_string()),
+    }
+
+    newengine_plugin_host::register_engine_gateway_provider_route(
+        decl.gateway,
+        decl.service_kind,
+        decl.provider_service,
+        decl.provider_route,
+        decl.capability,
+        decl.priority,
+        decl.owner,
+    )
+}
+
+/// Publishes one host-owned dynamic service and its gateway route in a single topology
+/// generation. If service registration, route staging, validation, or commit fails,
+/// the transaction is rolled back and neither half becomes visible.
+pub fn register_engine_gateway_provider_service_dynamic_atomic(
+    decl: EngineGatewayProviderDeclDynamic,
+) -> Result<(), String> {
+    let transaction_owner = format!(
+        "gateway-provider:{}:{}",
+        decl.gateway, decl.provider_service
+    );
+    let transaction =
+        newengine_plugin_host::ProviderRegistrationTransaction::begin_host(transaction_owner)?;
+
+    if let Err(error) = register_engine_gateway_provider_service_dynamic(decl) {
+        transaction.rollback();
+        return Err(error);
+    }
+    if let Err(error) = transaction.validate() {
+        transaction.rollback();
+        return Err(error);
+    }
+    transaction.commit().map(|_| ())
+}
+
+pub fn register_engine_gateway_provider_service_dynamic_atomic_best_effort(
+    decl: EngineGatewayProviderDeclDynamic,
+) -> bool {
+    let gateway = decl.gateway;
+    let capability = decl.capability;
+    let provider_route = decl.provider_route;
+    let owner = decl.owner;
+    match register_engine_gateway_provider_service_dynamic_atomic(decl) {
+        Ok(()) => {
+            newengine_ulog_api::ulog::info!(
+                "engine-runtime route atomically registered gateway='{}' provider_route='{}' capability='{}' owner='{}'",
+                gateway,
+                provider_route,
+                capability,
+                owner
+            );
+            true
+        }
+        Err(e) => {
+            newengine_ulog_api::ulog::warn!(
+                "engine-runtime atomic route registration skipped gateway='{}' provider_route='{}' capability='{}' owner='{}' err='{}'",
+                gateway,
+                provider_route,
+                capability,
+                owner,
+                e
+            );
+            false
+        }
+    }
+}
+
+pub fn register_null_engine_gateway_provider_service_dynamic(
+    decl: NullEngineGatewayProviderDeclDynamic,
+) -> Result<(), String> {
+    let service_id = decl.service.id().to_string();
+    if service_id != decl.provider_service {
+        return Err(format!(
+            "null-provider route service id mismatch: declared='{}' actual='{}'",
+            decl.provider_service, service_id
+        ));
+    }
+
+    match newengine_plugin_host::host_register_service_impl(decl.service) {
+        RResult::ROk(()) => {}
+        RResult::RErr(e) => return Err(e.to_string()),
+    }
+
+    match decl.provider_abi {
+        Some(provider_abi) => {
+            newengine_plugin_host::register_null_engine_gateway_provider_route_with_abi_and_tags(
+                decl.gateway,
+                decl.service_kind,
+                decl.provider_service,
+                decl.provider_route,
+                provider_abi,
+                decl.capability,
+                decl.owner,
+                decl.system_tags,
+            )
+        }
+        None => newengine_plugin_host::register_null_engine_gateway_provider_route_with_tags(
+            decl.gateway,
+            decl.service_kind,
+            decl.provider_service,
+            decl.provider_route,
+            decl.capability,
+            decl.owner,
+            decl.system_tags,
+        ),
+    }
+}
+
+pub fn register_engine_gateway_provider_service_best_effort(
+    decl: EngineGatewayProviderDecl,
+) -> bool {
+    let gateway = decl.gateway;
+    let capability = decl.capability;
+    let provider_route = decl.provider_route;
+    let owner = decl.owner;
+    match register_engine_gateway_provider_service(decl) {
+        Ok(()) => {
+            newengine_ulog_api::ulog::info!(
+                "engine-runtime route registered gateway='{}' provider_route='{}' capability='{}' owner='{}'",
+                gateway,
+                provider_route,
+                capability,
+                owner
+            );
+            true
+        }
+        Err(e) => {
+            newengine_ulog_api::ulog::warn!(
+                "engine-runtime route registration skipped gateway='{}' provider_route='{}' capability='{}' owner='{}' err='{}'",
+                gateway,
+                provider_route,
+                capability,
+                owner,
+                e
+            );
+            false
+        }
+    }
+}
+
+pub fn register_engine_gateway_provider_service_dynamic_best_effort(
+    decl: EngineGatewayProviderDeclDynamic,
+) -> bool {
+    let gateway = decl.gateway;
+    let capability = decl.capability;
+    let provider_route = decl.provider_route;
+    let owner = decl.owner;
+    match register_engine_gateway_provider_service_dynamic(decl) {
+        Ok(()) => {
+            newengine_ulog_api::ulog::info!(
+                "engine-runtime route registered gateway='{}' provider_route='{}' capability='{}' owner='{}'",
+                gateway,
+                provider_route,
+                capability,
+                owner
+            );
+            true
+        }
+        Err(e) => {
+            newengine_ulog_api::ulog::warn!(
+                "engine-runtime route registration skipped gateway='{}' provider_route='{}' capability='{}' owner='{}' err='{}'",
+                gateway,
+                provider_route,
+                capability,
+                owner,
+                e
+            );
+            false
+        }
+    }
+}
+
+pub fn register_null_engine_gateway_provider_service_dynamic_best_effort(
+    decl: NullEngineGatewayProviderDeclDynamic,
+) -> bool {
+    let gateway = decl.gateway;
+    let capability = decl.capability;
+    let provider_route = decl.provider_route;
+    let owner = decl.owner;
+    match register_null_engine_gateway_provider_service_dynamic(decl) {
+        Ok(()) => {
+            newengine_ulog_api::ulog::info!(
+                "null-provider route registered gateway='{}' provider_route='{}' capability='{}' owner='{}'",
+                gateway,
+                provider_route,
+                capability,
+                owner
+            );
+            true
+        }
+        Err(e) => {
+            newengine_ulog_api::ulog::warn!(
+                "null-provider route registration skipped gateway='{}' provider_route='{}' capability='{}' owner='{}' err='{}'",
+                gateway,
+                provider_route,
+                capability,
+                owner,
+                e
+            );
+            false
+        }
+    }
+}

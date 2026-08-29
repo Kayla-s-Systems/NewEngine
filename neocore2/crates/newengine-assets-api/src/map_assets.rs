@@ -330,7 +330,12 @@ impl MapIndexV1 {
 
     #[inline]
     pub fn cell(&self, coord: MapCellCoordV1) -> Option<&MapCellRefV1> {
-        self.cells.iter().find(|cell| cell.coord == coord)
+        // `normalize()` keeps cells sorted by coordinate. Large maps may contain tens of
+        // thousands of cells, so lookup must not linearly scan the entire topology.
+        self.cells
+            .binary_search_by_key(&(coord.x, coord.z), |cell| (cell.coord.x, cell.coord.z))
+            .ok()
+            .and_then(|index| self.cells.get(index))
     }
 
     pub fn world_to_cell(&self, position: [f32; 3]) -> Option<MapCellCoordV1> {
@@ -428,6 +433,19 @@ pub struct MapResolvedCellV1 {
     pub map_ref: String,
     pub cell_ref: String,
     pub index: MapIndexV1,
+    pub cell: MapCellV1,
+}
+
+/// Compact independently streamed cell response.
+///
+/// V1 embedded the complete `MapIndexV1` in every cell response. For large worlds this
+/// duplicated the full cell topology over IPC for every independently requested cell.
+/// Consumers obtain the index once via `INDEX_V1` and use V2 for subsequent cell payloads.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct MapResolvedCellV2 {
+    pub map_ref: String,
+    pub cell_ref: String,
     pub cell: MapCellV1,
 }
 
@@ -609,6 +627,57 @@ mod tests {
             ..Default::default()
         };
         assert!(cell.validate().is_ok());
+    }
+
+    #[test]
+    fn normalized_index_cell_lookup_is_binary_search_compatible() {
+        let mut index = MapIndexV1 {
+            map_id: "world".to_owned(),
+            cells: vec![
+                MapCellRefV1::canonical(MapCellCoordV1::new(50, 2)),
+                MapCellRefV1::canonical(MapCellCoordV1::new(-10, 3)),
+                MapCellRefV1::canonical(MapCellCoordV1::new(0, 0)),
+            ],
+            ..Default::default()
+        };
+        index.normalize();
+        assert_eq!(
+            index
+                .cell(MapCellCoordV1::new(-10, 3))
+                .map(|cell| cell.coord),
+            Some(MapCellCoordV1::new(-10, 3))
+        );
+        assert!(index.cell(MapCellCoordV1::new(99, 99)).is_none());
+    }
+
+    #[test]
+    fn compact_cell_v2_omits_redundant_map_index() {
+        let index = MapIndexV1 {
+            map_id: "large".to_owned(),
+            cells: (0..128)
+                .map(|x| MapCellRefV1::canonical(MapCellCoordV1::new(x, 0)))
+                .collect(),
+            ..Default::default()
+        };
+        let cell = MapCellV1 {
+            coord: MapCellCoordV1::new(0, 0),
+            ..Default::default()
+        };
+        let v1 = serde_json::to_vec(&MapResolvedCellV1 {
+            map_ref: "maps/large.ymap@map".to_owned(),
+            cell_ref: "maps/large.ymap@cell/0/0".to_owned(),
+            index,
+            cell: cell.clone(),
+        })
+        .unwrap();
+        let v2 = serde_json::to_vec(&MapResolvedCellV2 {
+            map_ref: "maps/large.ymap@map".to_owned(),
+            cell_ref: "maps/large.ymap@cell/0/0".to_owned(),
+            cell,
+        })
+        .unwrap();
+        assert!(v2.len() < v1.len());
+        assert!(!std::str::from_utf8(&v2).unwrap().contains("\"index\""));
     }
 
     #[test]

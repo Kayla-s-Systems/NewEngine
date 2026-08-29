@@ -274,7 +274,7 @@ fn load_discrete_map_profile(logical_path: &str) -> Result<GameReadyMapProfile, 
         })?;
         let cell_bytes = newengine_core::call_service_v1_optional(
             newengine_assets_api::ENGINE_ASSETS_MAPS_SERVICE_ID,
-            newengine_assets_api::maps_method::CELL_V1,
+            newengine_assets_api::maps_method::CELL_V2,
             &cell_request,
         )
         .map_err(|e| {
@@ -289,10 +289,10 @@ fn load_discrete_map_profile(logical_path: &str) -> Result<GameReadyMapProfile, 
                 cell_ref.coord.x, cell_ref.coord.z
             )
         })?;
-        let resolved: newengine_assets_api::MapResolvedCellV1 =
+        let resolved: newengine_assets_api::MapResolvedCellV2 =
             serde_json::from_slice(&cell_bytes).map_err(|e| {
                 format!(
-                    "engine.assets.maps returned invalid MapResolvedCellV1 map='{map_ref}' cell={},{} err='{e}'",
+                    "engine.assets.maps returned invalid MapResolvedCellV2 map='{map_ref}' cell={},{} err='{e}'",
                     cell_ref.coord.x, cell_ref.coord.z
                 )
             })?;

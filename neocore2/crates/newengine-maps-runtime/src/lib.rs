@@ -9,15 +9,16 @@
 mod parsing;
 
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use abi_stable::std_types::{RResult, RString};
 use newengine_assets::AssetServiceClient;
 use newengine_assets_api::{
     maps_method, require_asset_reference_extension, AssetDecodeRequest, MapCellRequestV1,
-    MapDependenciesV1, MapIndexV1, MapRefRequestV1, MapResolvedCellV1, MapValidationV1,
-    ASSET_LIST_FILE_BODY_OUTPUT, ENGINE_ASSETS_MAPS_SERVICE_ID, ENGINE_ASSET_SERVICE_ID,
-    LIST_FILE_MAGIC_NEF8, MAPS_BACKEND_CAPABILITY_ID, MAPS_RUNTIME_CONTRACT, MAPS_SERVICE_ID,
-    MAPS_SERVICE_METHODS, MAP_INDEX_ENTRY,
+    MapDependenciesV1, MapIndexV1, MapRefRequestV1, MapResolvedCellV1, MapResolvedCellV2,
+    MapValidationV1, ASSET_LIST_FILE_BODY_OUTPUT, ENGINE_ASSETS_MAPS_SERVICE_ID,
+    ENGINE_ASSET_SERVICE_ID, LIST_FILE_MAGIC_NEF8, MAPS_BACKEND_CAPABILITY_ID,
+    MAPS_RUNTIME_CONTRACT, MAPS_SERVICE_ID, MAPS_SERVICE_METHODS, MAP_INDEX_ENTRY,
 };
 use newengine_plugin_api::Blob;
 use newengine_service_kit::{
@@ -33,7 +34,7 @@ pub const MAPS_GATEWAY_OWNER: &str = "newengine-maps-runtime.semantic-service";
 #[derive(Clone)]
 pub struct MapsRuntimeState {
     client: AssetServiceClient,
-    parsed_cache: BTreeMap<String, ParsedMapV1>,
+    parsed_cache: BTreeMap<String, Arc<ParsedMapV1>>,
 }
 
 impl MapsRuntimeState {
@@ -136,10 +137,10 @@ fn decode_map_body(state: &MapsRuntimeState, source: &str) -> Result<Vec<u8>, St
 fn load_parsed_map(
     state: &mut MapsRuntimeState,
     request: &MapRefRequestV1,
-) -> Result<(String, ParsedMapV1), String> {
+) -> Result<(String, Arc<ParsedMapV1>), String> {
     let (source, canonical) = canonical_map_source(request)?;
     if let Some(parsed) = state.parsed_cache.get(&source) {
-        return Ok((canonical, parsed.clone()));
+        return Ok((canonical, Arc::clone(parsed)));
     }
     let (body, mut transport_warnings) = load_map_body(state, &source)?;
     if !newengine_authored_xml::body_is_xml(&body) {
@@ -151,18 +152,27 @@ fn load_parsed_map(
     let mut parsed = parse_discrete_map_xml(&source, &body)?;
     transport_warnings.append(&mut parsed.warnings);
     parsed.warnings = transport_warnings;
-    state.parsed_cache.insert(source, parsed.clone());
+    let parsed = Arc::new(parsed);
+    state.parsed_cache.insert(source, Arc::clone(&parsed));
     Ok((canonical, parsed))
 }
 
 fn map_index(state: &mut MapsRuntimeState, request: MapRefRequestV1) -> Result<MapIndexV1, String> {
-    load_parsed_map(state, &request).map(|(_, parsed)| parsed.index)
+    load_parsed_map(state, &request).map(|(_, parsed)| parsed.index.clone())
 }
 
-fn map_cell(
+fn resolve_map_cell(
     state: &mut MapsRuntimeState,
     request: MapCellRequestV1,
-) -> Result<MapResolvedCellV1, String> {
+) -> Result<
+    (
+        String,
+        String,
+        Arc<ParsedMapV1>,
+        newengine_assets_api::MapCellV1,
+    ),
+    String,
+> {
     let map_request = MapRefRequestV1 {
         map_ref: request.map_ref,
     };
@@ -178,10 +188,30 @@ fn map_cell(
         canonical_map_ref.split('@').next().unwrap_or_default(),
         request.coord.canonical_entry()
     );
+    Ok((canonical_map_ref, cell_ref, parsed, cell))
+}
+
+fn map_cell_v1(
+    state: &mut MapsRuntimeState,
+    request: MapCellRequestV1,
+) -> Result<MapResolvedCellV1, String> {
+    let (map_ref, cell_ref, parsed, cell) = resolve_map_cell(state, request)?;
     Ok(MapResolvedCellV1 {
-        map_ref: canonical_map_ref,
+        map_ref,
         cell_ref,
-        index: parsed.index,
+        index: parsed.index.clone(),
+        cell,
+    })
+}
+
+fn map_cell_v2(
+    state: &mut MapsRuntimeState,
+    request: MapCellRequestV1,
+) -> Result<MapResolvedCellV2, String> {
+    let (map_ref, cell_ref, _parsed, cell) = resolve_map_cell(state, request)?;
+    Ok(MapResolvedCellV2 {
+        map_ref,
+        cell_ref,
         cell,
     })
 }
@@ -193,7 +223,7 @@ fn map_dependencies(
     let (canonical_map_ref, parsed) = load_parsed_map(state, &request)?;
     Ok(MapDependenciesV1 {
         map_ref: canonical_map_ref,
-        dependencies: parsed.dependencies,
+        dependencies: parsed.dependencies.clone(),
     })
 }
 
@@ -210,7 +240,7 @@ fn map_validation(state: &mut MapsRuntimeState, request: MapRefRequestV1) -> Map
                 .map(|cell| u32::try_from(cell.placements.len()).unwrap_or(u32::MAX))
                 .fold(0_u32, u32::saturating_add),
             errors: Vec::new(),
-            warnings: parsed.warnings,
+            warnings: parsed.warnings.clone(),
         },
         Err(error) => MapValidationV1 {
             ok: false,
@@ -243,7 +273,15 @@ fn invoke_json(state: &mut MapsRuntimeState, payload: Blob) -> RResult<Blob, RSt
         maps_method::CELL_V1 => {
             let request =
                 serde_json::from_value::<MapCellRequestV1>(request_value).unwrap_or_default();
-            match map_cell(state, request) {
+            match map_cell_v1(state, request) {
+                Ok(cell) => ok_json(cell),
+                Err(error) => RResult::RErr(RString::from(error)),
+            }
+        }
+        maps_method::CELL_V2 => {
+            let request =
+                serde_json::from_value::<MapCellRequestV1>(request_value).unwrap_or_default();
+            match map_cell_v2(state, request) {
                 Ok(cell) => ok_json(cell),
                 Err(error) => RResult::RErr(RString::from(error)),
             }
@@ -282,6 +320,8 @@ pub fn maps_gateway_service(
         "discrete-map-index-v1",
         "legacy-ymap-v1-placement-projection",
         "independent-cell-addressing",
+        "compact-cell-v2",
+        "shared-parsed-map-cache",
         "ytyp-only-placements",
         "map-layer-composition",
         "deterministic-validation",
@@ -292,7 +332,14 @@ pub fn maps_gateway_service(
         .describe_json(&description)
         .info(maps_service_info)
         .post_json_result::<MapRefRequestV1, MapIndexV1, _>(maps_method::INDEX_V1, map_index)
-        .post_json_result::<MapCellRequestV1, MapResolvedCellV1, _>(maps_method::CELL_V1, map_cell)
+        .post_json_result::<MapCellRequestV1, MapResolvedCellV1, _>(
+            maps_method::CELL_V1,
+            map_cell_v1,
+        )
+        .post_json_result::<MapCellRequestV1, MapResolvedCellV2, _>(
+            maps_method::CELL_V2,
+            map_cell_v2,
+        )
         .post_json_result::<MapRefRequestV1, MapValidationV1, _>(
             maps_method::VALIDATE_V1,
             |state, request| Ok(map_validation(state, request)),
@@ -316,6 +363,7 @@ mod tests {
         assert_eq!(info.gateway, "engine.assets.maps");
         assert_eq!(info.capability, "assets.maps.backend");
         assert!(info.methods.contains(&"assets.maps.cell_v1"));
+        assert!(info.methods.contains(&"assets.maps.cell_v2"));
         assert!(info.ownership_policy.contains("apply-stage mutation"));
     }
 }

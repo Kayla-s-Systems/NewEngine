@@ -28,6 +28,9 @@ struct GameReadyStaticWorldStreamingState {
     pending: VecDeque<GameReadyPrefabSpec>,
     materials: ForestRoadMaterials,
     decoded_cache: BTreeMap<String, Arc<Vec<DecodedPrefabMeshPart>>>,
+    /// Number of queued placements still referencing each normalized source packet.
+    /// This avoids scanning the entire pending queue after every admitted prefab.
+    source_ref_counts: BTreeMap<String, usize>,
     decode_jobs: BTreeMap<String, StaticWorldDecodeJob>,
     decode_errors: BTreeMap<String, String>,
     summary: StaticWorldSpawnSummary,
@@ -53,19 +56,29 @@ pub(in super::super) fn begin_static_world_prefabs(
         })
         .cloned()
         .collect::<Vec<_>>();
+    // Canonicalize the source path once. The old path normalized it repeatedly inside
+    // queue scans, ready checks and release checks, creating transient Strings proportional
+    // to the number of pending placements.
+    for prefab in &mut candidates {
+        prefab.source = prefab.source.trim().replace('\\', "/");
+    }
+
     // Collision is launch-critical and is admitted before render-only static geometry.
     // Decoded source packets remain cached for the later visual declaration.
     candidates.sort_by(|a, b| {
         let a_collision = is_collision_proxy(a.proxy.trim());
         let b_collision = is_collision_proxy(b.proxy.trim());
-        let a_source = a.source.trim().replace('\\', "/");
-        let b_source = b.source.trim().replace('\\', "/");
         // Collision is launch-critical: admit it before render-only static geometry.
         // Within the same role retain deterministic source order for cache locality.
         b_collision
             .cmp(&a_collision)
-            .then_with(|| a_source.cmp(&b_source))
+            .then_with(|| a.source.cmp(&b.source))
     });
+
+    let mut source_ref_counts = BTreeMap::<String, usize>::new();
+    for prefab in &candidates {
+        *source_ref_counts.entry(prefab.source.clone()).or_default() += 1;
+    }
 
     let total = candidates.len() as u32;
     world.insert_resource(WorldAssemblyProgress {
@@ -82,6 +95,7 @@ pub(in super::super) fn begin_static_world_prefabs(
         pending: candidates.into(),
         materials: register_forest_road_materials(mats),
         decoded_cache: BTreeMap::new(),
+        source_ref_counts,
         decode_jobs: BTreeMap::new(),
         decode_errors: BTreeMap::new(),
         summary: StaticWorldSpawnSummary::default(),
@@ -103,8 +117,27 @@ fn is_collision_proxy(proxy: &str) -> bool {
         || proxy.eq_ignore_ascii_case(BOX_COLLISION_WORLD_PROXY)
 }
 
-fn static_world_source(prefab: &GameReadyPrefabSpec) -> String {
-    prefab.source.trim().replace('\\', "/")
+fn static_world_source(prefab: &GameReadyPrefabSpec) -> &str {
+    prefab.source.as_str()
+}
+
+fn consume_static_world_source_reference(
+    state: &mut GameReadyStaticWorldStreamingState,
+    source: &str,
+) {
+    let release_packet = match state.source_ref_counts.get_mut(source) {
+        Some(count) if *count > 1 => {
+            *count -= 1;
+            false
+        }
+        Some(_) => true,
+        None => true,
+    };
+    if release_packet {
+        state.source_ref_counts.remove(source);
+        state.decoded_cache.remove(source);
+        state.decode_errors.remove(source);
+    }
 }
 
 fn static_world_decode_concurrency(thread_pool: &ThreadPoolHandle) -> usize {
@@ -134,14 +167,14 @@ fn submit_static_world_decode_jobs(
     let mut sources = Vec::<String>::new();
     for prefab in &state.pending {
         let source = static_world_source(prefab);
-        if state.decoded_cache.contains_key(&source)
-            || state.decode_jobs.contains_key(&source)
-            || state.decode_errors.contains_key(&source)
-            || sources.contains(&source)
+        if state.decoded_cache.contains_key(source)
+            || state.decode_jobs.contains_key(source)
+            || state.decode_errors.contains_key(source)
+            || sources.iter().any(|candidate| candidate == source)
         {
             continue;
         }
-        sources.push(source);
+        sources.push(source.to_owned());
         if sources.len() >= free_slots {
             break;
         }
@@ -206,8 +239,8 @@ fn poll_static_world_decode_jobs(state: &mut GameReadyStaticWorldStreamingState)
 fn decode_one_static_world_source_synchronously(state: &mut GameReadyStaticWorldStreamingState) {
     let Some(source) = state.pending.iter().find_map(|prefab| {
         let source = static_world_source(prefab);
-        (!state.decoded_cache.contains_key(&source) && !state.decode_errors.contains_key(&source))
-            .then_some(source)
+        (!state.decoded_cache.contains_key(source) && !state.decode_errors.contains_key(source))
+            .then(|| source.to_owned())
     }) else {
         return;
     };
@@ -257,15 +290,15 @@ pub(crate) fn tick_game_ready_static_world_prefabs(
         if let Some(failed_position) = state.pending.iter().position(|prefab| {
             state
                 .decode_errors
-                .contains_key(&static_world_source(prefab))
+                .contains_key(static_world_source(prefab))
         }) {
             let Some(prefab) = state.pending.remove(failed_position) else {
                 continue;
             };
-            let source = static_world_source(&prefab);
+            let source = static_world_source(&prefab).to_owned();
             let error = state
                 .decode_errors
-                .get(&source)
+                .get(source.as_str())
                 .cloned()
                 .unwrap_or_else(|| "unknown static world decode failure".to_owned());
             failed_this_frame = failed_this_frame.saturating_add(1);
@@ -275,21 +308,22 @@ pub(crate) fn tick_game_ready_static_world_prefabs(
                 prefab.source,
                 error,
             );
+            consume_static_world_source_reference(&mut state, source.as_str());
             continue;
         }
 
         let Some(ready_position) = state.pending.iter().position(|prefab| {
             state
                 .decoded_cache
-                .contains_key(&static_world_source(prefab))
+                .contains_key(static_world_source(prefab))
         }) else {
             break;
         };
         let Some(prefab) = state.pending.remove(ready_position) else {
             continue;
         };
-        let source = static_world_source(&prefab);
-        let Some(decoded) = state.decoded_cache.get(&source).cloned() else {
+        let source = static_world_source(&prefab).to_owned();
+        let Some(decoded) = state.decoded_cache.get(source.as_str()).cloned() else {
             continue;
         };
 
@@ -370,18 +404,10 @@ pub(crate) fn tick_game_ready_static_world_prefabs(
             }
         }
 
-        // Decoded YDD packets can be much larger than the retained ECS declaration. Keep a
-        // source packet only while another queued placement still references it. The old path
-        // retained every decoded source until the entire world bootstrap completed, allowing
-        // a large map to accumulate a second full copy of already-admitted static geometry.
-        if !state
-            .pending
-            .iter()
-            .any(|pending_prefab| static_world_source(pending_prefab) == source)
-        {
-            state.decoded_cache.remove(&source);
-            state.decode_errors.remove(&source);
-        }
+        // Decoded YDD packets can be much larger than the retained ECS declaration. Release
+        // the packet in O(log unique_sources) using the source reference count instead of an
+        // O(pending_prefabs) full queue scan after every admitted placement.
+        consume_static_world_source_reference(&mut state, source.as_str());
     }
 
     let pending = state.pending.len() as u32;

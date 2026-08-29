@@ -543,6 +543,7 @@ pub mod maps_method {
     pub const SHUTDOWN_V1: &str = newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1;
     pub const INDEX_V1: &str = "assets.maps.index_v1";
     pub const CELL_V1: &str = "assets.maps.cell_v1";
+    pub const CELL_V2: &str = "assets.maps.cell_v2";
     pub const VALIDATE_V1: &str = "assets.maps.validate_v1";
     pub const DEPENDENCIES_V1: &str = "assets.maps.dependencies_v1";
 }
@@ -553,6 +554,7 @@ pub const MAPS_SERVICE_METHODS: &[&str] = &[
     maps_method::SHUTDOWN_V1,
     maps_method::INDEX_V1,
     maps_method::CELL_V1,
+    maps_method::CELL_V2,
     maps_method::VALIDATE_V1,
     maps_method::DEPENDENCIES_V1,
 ];

@@ -1,0 +1,133 @@
+#![forbid(unsafe_op_in_unsafe_fn)]
+#![allow(dead_code)]
+
+use smallvec::SmallVec;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum UiIconSide {
+    Left,
+    Right,
+}
+
+impl UiIconSide {
+    #[inline]
+    pub(crate) fn from_str(s: &str) -> Self {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "right" | "end" | "after" => Self::Right,
+            _ => Self::Left,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) enum UiNode {
+    Ui {
+        children: Vec<UiNode>,
+    },
+    TopBar {
+        children: Vec<UiNode>,
+    },
+    Window {
+        title: String,
+        open: bool,
+        children: Vec<UiNode>,
+    },
+    Row {
+        children: Vec<UiNode>,
+    },
+    Column {
+        children: Vec<UiNode>,
+    },
+
+    /// Flexible spacer that consumes remaining space on the main axis.
+    ///
+    /// In horizontal layouts it expands width; in vertical layouts it expands height.
+    Flex,
+
+    Label {
+        id: Option<String>,
+        text: String,
+        icon: Option<String>,
+        icon_side: UiIconSide,
+        icon_size: Option<f32>,
+    },
+    Button {
+        id: String,
+        text: String,
+        icon: Option<String>,
+        icon_side: UiIconSide,
+        icon_size: Option<f32>,
+        on_click: SmallVec<[String; 2]>,
+    },
+    TextBox {
+        id: String,
+        hint: String,
+        bind: String,
+        multiline: bool,
+        on_change: SmallVec<[String; 2]>,
+        on_submit: SmallVec<[String; 2]>,
+    },
+
+    Checkbox {
+        id: String,
+        text: String,
+        bind: String,
+        on_change: SmallVec<[String; 2]>,
+    },
+
+    Select {
+        id: String,
+        bind: String,
+        /// Raw options spec as declared in markup.
+        ///
+        /// Supported forms:
+        /// - Comma/semicolon separated list: "v|Label, v2|Label2" or "v, v2"
+        /// - A JSON array after substitution via `$vars`, e.g. `$editor.prims_options`.
+        ///   Each element can be:
+        ///   - {"value":"...","label":"..."}
+        ///   - {"v":"...","l":"..."}
+        ///   - ["value","label"]
+        options_raw: String,
+        /// Parsed options for the static form (fast path).
+        ///
+        /// If `options_raw` contains `$` or parses as JSON, render path will re-parse per frame.
+        options: Vec<(String, String)>,
+        on_change: SmallVec<[String; 2]>,
+    },
+
+    Separator,
+
+    Scroll {
+        id: Option<String>,
+        children: Vec<UiNode>,
+    },
+
+    /// Repeat children for each JSON object in `items`.
+    ///
+    /// - `items` is a key in UiState.vars that must contain a JSON array.
+    /// - `as_name` is a variable prefix, e.g. "p" => "$p.id", "$p.name".
+    Repeat {
+        items: String,
+        as_name: String,
+        children: Vec<UiNode>,
+    },
+
+    Spacer,
+
+    /// Draw a texture as an UI element.
+    ///
+    /// `tex` must resolve to an `a provider-neutral external texture id`.
+    Image {
+        id: Option<String>,
+        tex: String,
+        /// Desired size in points (logical units). If omitted, 16x16 is used.
+        size: Option<[f32; 2]>,
+        /// Optional tint as RGBA hex: "#RRGGBBAA" or "#RRGGBB".
+        tint: Option<String>,
+    },
+
+    Unknown {
+        tag: String,
+        children: Vec<UiNode>,
+    },
+}
