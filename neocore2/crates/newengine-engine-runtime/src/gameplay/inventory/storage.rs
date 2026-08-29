@@ -204,12 +204,35 @@ pub struct InventoryMutation {
     pub touched_instances: Vec<ItemInstanceId>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct EquippedWeaponBinding {
     pub instance_id: ItemInstanceId,
     pub item: ItemId,
-    pub slot: EquipmentSlot,
-    pub ammo_item: ItemId,
+    /// Inventory slot for authored weapons. Virtual Unarmed has no inventory slot.
+    pub slot: Option<EquipmentSlot>,
+    pub weapon: WeaponItemDefinition,
+}
+
+impl EquippedWeaponBinding {
+    #[inline]
+    pub const fn class(self) -> WeaponType {
+        self.weapon.weapon_type
+    }
+
+    #[inline]
+    pub const fn rank(self) -> u16 {
+        self.weapon.rank
+    }
+
+    #[inline]
+    pub const fn capabilities(self) -> WeaponCapabilities {
+        self.weapon.capabilities()
+    }
+
+    #[inline]
+    pub const fn is_unarmed(self) -> bool {
+        self.instance_id.is_unarmed()
+    }
 }
 
 /// Latest world-space muzzle pose published by the equipped-weapon presentation.

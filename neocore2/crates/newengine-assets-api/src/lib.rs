@@ -26,6 +26,9 @@ pub use map_assets::*;
 mod asset_lifecycle;
 pub use asset_lifecycle::*;
 
+mod asset_streaming;
+pub use asset_streaming::*;
+
 /// Engine-facing asset service gateway id.
 ///
 /// Runtime and provider plugins must request assets through this stable host-owned
@@ -192,7 +195,24 @@ pub const ASSETS_STREAMING_REQUEST_QUEUE_CAPABILITY_ID: &str = "assets.streaming
 pub const ASSETS_STREAMING_RESIDENCY_CAPABILITY_ID: &str = "assets.streaming.residency";
 pub const ASSETS_STREAMING_DEFRAG_CAPABILITY_ID: &str = "assets.streaming.defrag";
 pub const ASSETS_STREAMING_CACHE_LOADER_CAPABILITY_ID: &str = "assets.streaming.cache_loader";
-pub const ASSETS_STREAMING_RUNTIME_CONTRACT: &str = "newengine.assets.streaming.runtime.v1";
+// `engine.assets.streaming` is currently a child gateway routed to the same
+// `asset_manager.api` provider service as the root `engine.assets` gateway. Runtime
+// contract validation therefore checks the provider service family here; the
+// streaming-specific surface is enforced by `ASSETS_STREAMING_SERVICE_METHODS` and
+// `assets.streaming.backend`. A dedicated future streaming provider may publish its
+// own exact runtime contract family once it owns a distinct provider service.
+pub const ASSETS_STREAMING_RUNTIME_CONTRACT: &str = "newengine.assets-api >= 0.8.x";
+
+/// Concrete provider routing for the global asset residency controller.
+/// The provider service remains `asset_manager.api`; this sub-gateway is the
+/// ownership boundary for request/pin/residency/cleanup policy.
+pub const ASSETS_STREAMING_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec =
+    newengine_service_api::BackendServiceSpec::new(
+        "assets.streaming",
+        ENGINE_ASSETS_STREAMING_SERVICE_ID,
+        ASSET_PROVIDER_SERVICE_ID,
+        ASSETS_STREAMING_BACKEND_CAPABILITY_ID,
+    );
 
 /// World streaming gateway and capability ids.
 ///
@@ -424,6 +444,15 @@ pub mod method {
     /// Explicit UTF-8 text replacement through the winning writable VFS source.
     pub const PACKAGE_WRITE_TEXT_JSON_V1: &str = "asset.package_write_text_json_v1";
 
+    // Global runtime residency / memory controller.
+    pub const STREAMING_REQUEST_V1: &str = "asset.streaming.request_v1";
+    pub const STREAMING_PIN_V1: &str = "asset.streaming.pin_v1";
+    pub const STREAMING_UNPIN_V1: &str = "asset.streaming.unpin_v1";
+    pub const STREAMING_TOUCH_V1: &str = "asset.streaming.touch_v1";
+    pub const STREAMING_CLEANUP_V1: &str = "asset.streaming.cleanup_v1";
+    pub const STREAMING_COMPACT_V1: &str = "asset.streaming.compact_v1";
+    pub const STREAMING_STATS_V1: &str = "asset.streaming.stats_v1";
+
     // Generic lifecycle hook understood by the plugin host.
     pub const SHUTDOWN_V1: &str = newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1;
 }
@@ -640,6 +669,35 @@ pub const ASSETS_UI_RUNTIME_REQUIREMENT_SPEC: newengine_service_api::RuntimeServ
         Some("NEWENGINE_REQUIRE_ASSETS_UI_BACKEND"),
     );
 
+pub const ASSETS_STREAMING_SERVICE_METHODS: &[&str] = &[
+    newengine_service_api::SERVICE_METHOD_INFO_JSON,
+    newengine_service_api::SERVICE_METHOD_INVOKE_JSON,
+    newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1,
+    method::STREAMING_REQUEST_V1,
+    method::STREAMING_PIN_V1,
+    method::STREAMING_UNPIN_V1,
+    method::STREAMING_TOUCH_V1,
+    method::STREAMING_CLEANUP_V1,
+    method::STREAMING_COMPACT_V1,
+    method::STREAMING_STATS_V1,
+];
+
+pub const ASSETS_STREAMING_RUNTIME_CONTRACT_SPEC:
+    newengine_service_api::RuntimeServiceContractSpec =
+    newengine_service_api::RuntimeServiceContractSpec::new(
+        ENGINE_ASSETS_STREAMING_SERVICE_ID,
+        ASSETS_STREAMING_RUNTIME_CONTRACT,
+        ASSETS_STREAMING_SERVICE_METHODS,
+    );
+
+pub const ASSETS_STREAMING_RUNTIME_REQUIREMENT_SPEC:
+    newengine_service_api::RuntimeServiceRequirementSpec =
+    newengine_service_api::RuntimeServiceRequirementSpec::new(
+        ASSETS_STREAMING_RUNTIME_CONTRACT_SPEC,
+        Some(ASSETS_STREAMING_BACKEND_CAPABILITY_ID),
+        Some("NEWENGINE_REQUIRE_ASSET_STREAMING_BACKEND"),
+    );
+
 /// Required runtime methods for AssetManager 0.6+ deployments.
 ///
 /// The engine validates these before scene bootstrap so an old DLL cannot fail
@@ -678,6 +736,13 @@ pub const REQUIRED_RUNTIME_METHODS_V1: &[&str] = &[
     method::PACKAGE_WRITER_INFO_JSON_V1,
     method::PACKAGE_WRITE_NEPAK_JSON_V1,
     method::PACKAGE_WRITE_TEXT_JSON_V1,
+    method::STREAMING_REQUEST_V1,
+    method::STREAMING_PIN_V1,
+    method::STREAMING_UNPIN_V1,
+    method::STREAMING_TOUCH_V1,
+    method::STREAMING_CLEANUP_V1,
+    method::STREAMING_COMPACT_V1,
+    method::STREAMING_STATS_V1,
 ];
 
 /// Startup validation contract for the engine-facing asset gateway.

@@ -86,6 +86,15 @@ fn render_protocol_v2_rejects_v1_binary_command_batches() {
 }
 
 #[test]
+fn abort_frame_service_request_roundtrips() {
+    let encoded = serde_json::to_vec(&RenderServiceRequest::AbortFrame)
+        .expect("serialize abort-frame request");
+    let decoded: RenderServiceRequest =
+        serde_json::from_slice(&encoded).expect("deserialize abort-frame request");
+    assert!(matches!(decoded, RenderServiceRequest::AbortFrame));
+}
+
+#[test]
 fn binary_unit_batch_roundtrips_recording_scope_commands() {
     let encoded = encode_unit_command_batch_bin(&[
         RenderCommand::SetDrawListKind {

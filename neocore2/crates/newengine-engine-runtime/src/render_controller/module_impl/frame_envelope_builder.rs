@@ -4,7 +4,7 @@ use newengine_core::render::{
     Extent2D, PostFxFrameParams, RenderEffectStack, RenderFrameDomainIntent, RenderFrameEnvelope,
     UiLayerDrawPacketSet,
 };
-use newengine_render_frame_graph::{ui_layer_only_frame, DrawListDesc, RenderFramePlan};
+use newengine_render_frame_graph::{ui_layer_only_frame, RenderFramePlan};
 
 /// Builds the backend-facing envelope from an engine-side frame plan.
 ///
@@ -17,7 +17,6 @@ pub(super) fn build_runtime_frame_envelope(
     viewport_extent: Extent2D,
     direct_surface_viewport: bool,
     frame_plan: &RenderFramePlan,
-    draw_list_descs: &[DrawListDesc],
     postfx: PostFxFrameParams,
     ui_layers: UiLayerDrawPacketSet,
     trace_frame: bool,
@@ -52,7 +51,7 @@ pub(super) fn build_runtime_frame_envelope(
     .with_postfx(postfx)
     .with_domain_intent(domains)
     .with_effect_stack(RenderEffectStack::aaa_default())
-    .with_draw_lists(draw_list_descs.iter().map(|desc| desc.kind))
+    .with_draw_lists(frame_plan.draw_lists.iter().map(|desc| desc.kind))
     .with_ui_layers(ui_layers)
 }
 

@@ -36,6 +36,10 @@ impl From<SimFrame> for GameplayFrame {
 /// by the active application/profile and register providers explicitly.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum GameplayExecutionPhase {
+    /// Render/input-cadence phase. Runs once per presented world frame after native/input
+    /// actions have been written to PlayerCommandFrame, even when fixed_step_count == 0.
+    /// UI/menu command consumption belongs here; simulation mechanics do not.
+    FrameInput,
     BeforePhysics,
     AfterPhysics,
     AfterDerived,

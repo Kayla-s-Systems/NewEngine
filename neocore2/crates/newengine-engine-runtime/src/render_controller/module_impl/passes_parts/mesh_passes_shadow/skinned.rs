@@ -27,7 +27,7 @@ pub(super) fn draw_skinned_player_primitives_shadow(
         let Some(skin) = world.get::<crate::gameplay::PlayerSkinBinding>(entity) else {
             continue;
         };
-        if !display_visible_in_mode(world, entity, runtime) {
+        if !display_shadow_caster_visible_in_mode(world, entity, runtime) {
             continue;
         }
         let render_model = crate::gameplay::player_render_model_matrix(world, entity, global.0);
@@ -38,22 +38,39 @@ pub(super) fn draw_skinned_player_primitives_shadow(
             continue;
         }
         if runtime {
-            if let Some(bounds) = world.get::<Bounds>(entity) {
-                let (center_ws, radius_ws) = transform_sphere(
-                    render_model,
-                    bounds.local_sphere.center,
-                    bounds.local_sphere.radius,
-                );
-                if center_ws.distance_squared(camera_position) > shadow_max_distance_sq
-                    || !shadow_caster_visible(this.shadows_current_cull(), center_ws, radius_ws)
-                    || !shadow_caster_projected_radius_visible(
-                        cascade_index,
-                        cascade_texel_world_size,
-                        radius_ws,
-                    )
-                {
-                    continue;
-                }
+            // A skinned mesh can leave its authored bind-pose part bounds substantially
+            // (limbs, root motion, retargeting/orientation changes). Culling the shadow
+            // caster with those per-part static bounds can therefore remove the entire
+            // character from CSM while the forward skin is still visible. Use a single
+            // conservative owner-space character proxy for shadow admission instead.
+            let owner_height = world
+                .get::<crate::gameplay::PlayerModelBinding>(skin.owner)
+                .map(|binding| binding.target_height.max(1.0))
+                .unwrap_or(2.0);
+            let (center_ws, radius_ws) = world
+                .get::<GlobalTransform>(skin.owner)
+                .map(|owner_global| {
+                    let center =
+                        owner_global
+                            .0
+                            .transform_point3(Vec3::new(0.0, owner_height * 0.5, 0.0));
+                    // Covers full body deformation plus weapon/limb excursions without
+                    // turning the directional atlas into an unbounded dynamic-caster set.
+                    (center, owner_height * 0.80 + 0.45)
+                })
+                .unwrap_or_else(|| {
+                    let center = render_model.transform_point3(Vec3::ZERO);
+                    (center, owner_height * 0.80 + 0.45)
+                });
+            if center_ws.distance_squared(camera_position) > shadow_max_distance_sq
+                || !shadow_caster_visible(this.shadows_current_cull(), center_ws, radius_ws)
+                || !shadow_caster_projected_radius_visible(
+                    cascade_index,
+                    cascade_texel_world_size,
+                    radius_ws,
+                )
+            {
+                continue;
             }
         }
 
@@ -99,7 +116,17 @@ pub(super) fn draw_skinned_player_primitives_shadow(
             r,
         )?;
         let base_texture = if material_plan.alpha_cutoff > 0.0 {
-            this.material_texture_or_default(r, material_plan.base_color_texture, lit.white_texture)
+            let Some(path) = material_plan.base_color_texture else {
+                // A masked skinned caster without its authored opacity source cannot
+                // produce a valid silhouette. Never replace it with an opaque white card.
+                continue;
+            };
+            let Some(texture) =
+                this.material_texture_if_ready(r, path, "render.shadow_skinned_character")
+            else {
+                continue;
+            };
+            texture
         } else {
             lit.white_texture
         };

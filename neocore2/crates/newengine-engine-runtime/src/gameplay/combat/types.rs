@@ -1,6 +1,8 @@
 use newengine_ecs::EntityId;
 use newengine_math::Vec3;
 
+use crate::gameplay::inventory::ItemInstanceId;
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct HitscanWeaponTuning {
     pub magazine_capacity: u32,
@@ -73,6 +75,18 @@ impl PlayerWeaponState {
         Self {
             ammo_in_magazine: tuning.magazine_capacity,
             reserve_ammo: tuning.reserve_capacity,
+            cooldown_remaining: 0.0,
+            reload_remaining: 0.0,
+            shot_sequence: 0,
+            aiming: false,
+            empty_latched: false,
+        }
+    }
+
+    pub const fn melee() -> Self {
+        Self {
+            ammo_in_magazine: 0,
+            reserve_ammo: 0,
             cooldown_remaining: 0.0,
             reload_remaining: 0.0,
             shot_sequence: 0,
@@ -194,6 +208,7 @@ impl Default for PlayerInteractionTuning {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum WeaponEventKind {
     Fired,
+    MeleeAttacked,
     Empty,
     ReloadStarted,
     ReloadCompleted,
@@ -204,6 +219,8 @@ pub enum WeaponEventKind {
 pub struct WeaponEvent {
     pub kind: WeaponEventKind,
     pub shooter: EntityId,
+    /// Concrete inventory weapon instance that authored this event.
+    pub weapon_instance_id: ItemInstanceId,
     pub target: Option<EntityId>,
     pub shot_sequence: u64,
     pub damage: f32,
@@ -260,9 +277,19 @@ impl InteractionEventBus {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WeaponAttackKind {
+    Melee,
+    Firearm,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PendingHitscan {
     pub query_seq: u64,
+    /// Weapon identity is captured at trigger time and survives equipment switches while the
+    /// asynchronous physics query is in flight.
+    pub weapon_instance_id: ItemInstanceId,
+    pub attack_kind: WeaponAttackKind,
     pub shot_sequence: u64,
     pub origin: Vec3,
     pub direction: Vec3,

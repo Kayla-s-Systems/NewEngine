@@ -64,11 +64,11 @@ pub use host_context::{
     EngineGatewaySelectionPolicy, HostContextHandle, ProviderRegistrationTransaction,
     RuntimeContractAuthority, RuntimeContractEntry, RuntimeContractSpec,
 };
-/// Reads and cryptographically verifies a generated plugin discovery sidecar without mapping the DLL.
+/// Reads declarative plugin discovery metadata and fingerprints the DLL without mapping it.
 pub fn read_verified_plugin_discovery_manifest(
     path: &std::path::Path,
-) -> Result<newengine_plugin_api::PluginDiscoveryManifestV1, String> {
-    manager::read_verified_manifest(path)
+) -> Result<newengine_plugin_api::PluginDiscoveryManifestV2, String> {
+    manager::read_verified_manifest(path).map(|snapshot| snapshot.manifest)
 }
 
 pub use manager::{

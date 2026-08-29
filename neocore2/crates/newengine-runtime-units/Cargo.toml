@@ -2,44 +2,30 @@
 name = "newengine-runtime-units"
 version = "0.1.0"
 edition = "2021"
-description = "Static first-party runtime unit catalog and factories for North Star"
+description = "Declarative standard-game runtime unit distribution catalog for North Star"
 
 [dependencies]
-newengine-core = { path = "../newengine-core", default-features = false }
-newengine-service-api = { path = "../newengine-service-api" }
-newengine-plugin-host = { path = "../newengine-plugin-host" }
-newengine-ulog-api = { path = "../newengine-ulog-api" }
-newengine-assets = { path = "../newengine-assets" }
-newengine-assets-api = { path = "../newengine-assets-api" }
-newengine-asset-format-nef8 = { path = "../newengine-asset-format-nef8" }
-newengine-assets-ui-runtime = { path = "../newengine-assets-ui-runtime" }
-newengine-audio-api = { path = "../newengine-audio-api" }
-newengine-audio-runtime = { path = "../newengine-audio-runtime" }
-newengine-engine-runtime = { path = "../newengine-engine-runtime" }
-newengine-scene-io = { path = "../newengine-scene-io" }
+newengine-runtime-unit-api = { path = "../newengine-runtime-unit-api" }
+newengine-render-runtime-adapter = { path = "../newengine-render-runtime-adapter" }
+newengine-physics-runtime-adapter = { path = "../newengine-physics-runtime-adapter" }
 newengine-scene-runtime = { path = "../newengine-scene-runtime" }
-newengine-world-api = { path = "../newengine-world-api" }
 newengine-world-runtime = { path = "../newengine-world-runtime" }
-newengine-world-environment-api = { path = "../newengine-world-environment-api" }
 newengine-world-environment-runtime = { path = "../newengine-world-environment-runtime" }
-newengine-ecs-api = { path = "../newengine-ecs-api" }
 newengine-ecs-runtime = { path = "../newengine-ecs-runtime" }
-newengine-entity-api = { path = "../newengine-entity-api" }
 newengine-entity-runtime = { path = "../newengine-entity-runtime" }
-newengine-time-api = { path = "../newengine-time-api" }
 newengine-time-runtime = { path = "../newengine-time-runtime" }
-newengine-schema-api = { path = "../newengine-schema-api" }
 newengine-schema-runtime = { path = "../newengine-schema-runtime" }
-newengine-scripting-api = { path = "../newengine-scripting-api" }
 newengine-scripting-runtime = { path = "../newengine-scripting-runtime" }
-newengine-gameplay-runtime = { path = "../newengine-gameplay-runtime" }
-newengine-tags-api = { path = "../newengine-tags-api" }
-newengine-tasks-api = { path = "../newengine-tasks-api" }
-newengine-animation-api = { path = "../newengine-animation-api" }
-newengine-navigation-api = { path = "../newengine-navigation-api" }
-newengine-ai-api = { path = "../newengine-ai-api" }
+newengine-tags-runtime = { path = "../newengine-tags-runtime" }
+newengine-tasks-runtime = { path = "../newengine-tasks-runtime" }
+newengine-animation-foundation-runtime = { path = "../newengine-animation-foundation-runtime" }
+newengine-navigation-runtime = { path = "../newengine-navigation-runtime" }
+newengine-ai-runtime = { path = "../newengine-ai-runtime" }
+newengine-asset-types-runtime = { path = "../newengine-asset-types-runtime" }
+newengine-assets = { path = "../newengine-assets" }
 newengine-definitions-runtime = { path = "../newengine-definitions-runtime" }
-newengine-materials = { path = "../newengine-materials", features = ["serde"] }
+newengine-assets-ui-runtime = { path = "../newengine-assets-ui-runtime" }
 newengine-material-runtime = { path = "../newengine-material-runtime" }
-newengine-model-domain-api = { path = "../newengine-model-domain-api" }
 newengine-model-runtime = { path = "../newengine-model-runtime" }
+newengine-audio-runtime = { path = "../newengine-audio-runtime" }
+newengine-audio-world-runtime = { path = "../newengine-audio-world-runtime" }

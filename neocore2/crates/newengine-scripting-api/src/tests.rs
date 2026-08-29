@@ -36,3 +36,41 @@ fn response_preserves_request_id_only() {
     assert_eq!(response.status, ScriptingResponseStatus::Empty);
     assert!(response.payload_bytes.is_empty());
 }
+
+#[test]
+fn completion_tooling_method_is_part_of_the_generic_scripting_surface() {
+    assert!(scripting_service_methods()
+        .iter()
+        .any(|method| *method == SCRIPTING_SERVICE_METHOD_COMPLETE_JSON_V1));
+
+    let request = ScriptingCompletionRequest::default();
+    assert_eq!(request.schema, SCRIPTING_COMPLETION_REQUEST_SCHEMA_V1);
+    let response = ScriptingCompletionResponse::default();
+    assert_eq!(response.schema, SCRIPTING_COMPLETION_RESPONSE_SCHEMA_V1);
+}
+
+#[test]
+fn signature_and_tooling_catalog_methods_are_generic_scripting_surface() {
+    let methods = scripting_service_methods();
+    assert!(methods
+        .iter()
+        .any(|method| *method == SCRIPTING_SERVICE_METHOD_SIGNATURE_HELP_JSON_V1));
+    assert!(methods
+        .iter()
+        .any(|method| *method == SCRIPTING_SERVICE_METHOD_SET_TOOLING_CATALOG_JSON_V1));
+
+    let signature_request = ScriptingSignatureHelpRequest::default();
+    assert_eq!(
+        signature_request.schema,
+        SCRIPTING_SIGNATURE_HELP_REQUEST_SCHEMA_V1
+    );
+    let signature_response = ScriptingSignatureHelpResponse::default();
+    assert_eq!(
+        signature_response.schema,
+        SCRIPTING_SIGNATURE_HELP_RESPONSE_SCHEMA_V1
+    );
+
+    let catalog = ScriptingToolingCatalog::default();
+    assert_eq!(catalog.schema, SCRIPTING_TOOLING_CATALOG_SCHEMA_V1);
+    assert_eq!(catalog.root_namespace, "NorthStar");
+}

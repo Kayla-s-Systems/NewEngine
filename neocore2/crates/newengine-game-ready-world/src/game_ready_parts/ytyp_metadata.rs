@@ -1,4 +1,5 @@
 use super::*;
+use newengine_game_data::{GameData, PlayerMotionResponseData};
 
 /// GameReady metadata hydration from `.ytyp` Definition Entries.
 ///
@@ -38,6 +39,66 @@ pub(super) fn value_f32(value: &serde_json::Value) -> Option<f32> {
         .map(|v| v as f32)
         .or_else(|| value.as_str().and_then(|v| v.trim().parse::<f32>().ok()))
         .filter(|v| v.is_finite())
+}
+
+#[inline]
+pub(super) fn value_bool(value: &serde_json::Value) -> Option<bool> {
+    value.as_bool().or_else(|| {
+        let raw = value.as_str()?.trim().to_ascii_lowercase();
+        match raw.as_str() {
+            "1" | "true" | "yes" | "on" => Some(true),
+            "0" | "false" | "no" | "off" => Some(false),
+            _ => None,
+        }
+    })
+}
+
+fn player_joint_rotation_weights(
+    value: &serde_json::Value,
+) -> Option<Vec<newengine_engine_runtime::gameplay::PlayerJointRotationWeight>> {
+    fn item(
+        joint: &str,
+        weight: f32,
+    ) -> Option<newengine_engine_runtime::gameplay::PlayerJointRotationWeight> {
+        let joint = joint.trim();
+        if joint.is_empty() || !weight.is_finite() {
+            return None;
+        }
+        Some(
+            newengine_engine_runtime::gameplay::PlayerJointRotationWeight {
+                joint: joint.to_owned(),
+                weight: weight.clamp(0.0, 1.0),
+            },
+        )
+    }
+
+    let mut result = Vec::new();
+    if let Some(array) = value.as_array() {
+        for entry in array {
+            let Some(joint) = entry.get("joint").and_then(|value| value.as_str()) else {
+                continue;
+            };
+            let Some(weight) = entry.get("weight").and_then(value_f32) else {
+                continue;
+            };
+            if let Some(weight) = item(joint, weight) {
+                result.push(weight);
+            }
+        }
+    } else if let Some(raw) = value.as_str() {
+        for entry in raw.split(';') {
+            let Some((joint, weight)) = entry.split_once(':') else {
+                continue;
+            };
+            let Ok(weight) = weight.trim().parse::<f32>() else {
+                continue;
+            };
+            if let Some(weight) = item(joint, weight) {
+                result.push(weight);
+            }
+        }
+    }
+    (!result.is_empty()).then_some(result)
 }
 
 #[inline]
@@ -266,6 +327,59 @@ pub(super) fn apply_player_model_from_ytyp(
         profile.player.model.fall_animation = Some(reference);
         applied += 1;
     }
+    if let Some(reference) =
+        value_path(model, &["equipment_ready_animation"]).and_then(value_string)
+    {
+        profile.player.model.equipment_ready_animation = Some(reference);
+        applied += 1;
+    }
+    if let Some(reference) = value_path(model, &["equipment_aim_animation"]).and_then(value_string)
+    {
+        profile.player.model.equipment_aim_animation = Some(reference);
+        applied += 1;
+    }
+    if let Some(reference) =
+        value_path(model, &["equipment_reload_animation"]).and_then(value_string)
+    {
+        profile.player.model.equipment_reload_animation = Some(reference);
+        applied += 1;
+    }
+    if let Some(phase) = value_path(model, &["equipment_ready_sample_phase"]).and_then(value_f32) {
+        profile.player.model.equipment_ready_sample_phase = phase.clamp(0.0, 1.0);
+        applied += 1;
+    }
+    if let Some(weights) = value_path(model, &["equipment_ready_rotation_weights"])
+        .and_then(player_joint_rotation_weights)
+    {
+        profile.player.model.equipment_ready_rotation_weights = weights;
+        applied += 1;
+    }
+    if let Some(weights) = value_path(model, &["equipment_aim_rotation_weights"])
+        .and_then(player_joint_rotation_weights)
+    {
+        profile.player.model.equipment_aim_rotation_weights = weights;
+        applied += 1;
+    }
+    if let Some(weights) = value_path(model, &["equipment_reload_rotation_weights"])
+        .and_then(player_joint_rotation_weights)
+    {
+        profile.player.model.equipment_reload_rotation_weights = weights;
+        applied += 1;
+    }
+    if let Some(enabled) = value_path(model, &["equipment_arm_ik"]).and_then(value_bool) {
+        profile.player.model.equipment_arm_ik = enabled;
+        applied += 1;
+    }
+    if let Some(reference) = value_path(model, &["unarmed_ready_animation"]).and_then(value_string)
+    {
+        profile.player.model.unarmed_ready_animation = Some(reference);
+        applied += 1;
+    }
+    if let Some(reference) = value_path(model, &["unarmed_attack_animation"]).and_then(value_string)
+    {
+        profile.player.model.unarmed_attack_animation = Some(reference);
+        applied += 1;
+    }
     let player_values = player_node.unwrap_or(model);
     if let Some(value) = value_path(player_values, &["walk_speed"]).and_then(value_f32) {
         profile.player.walk_speed = value.clamp(0.05, 50.0);
@@ -314,6 +428,147 @@ pub(super) fn apply_player_model_from_ytyp(
             profile.player.model.properties_ref
         );
     }
+    applied
+}
+
+fn player_motion_response_from_ytyp(
+    player: &serde_json::Value,
+) -> Option<PlayerMotionResponseData> {
+    let response = value_path(player, &["motion_response"])?;
+    if !response.is_object() {
+        return None;
+    }
+    Some(PlayerMotionResponseData {
+        velocity_spring_const: value_path(response, &["velocity_spring_const"])
+            .and_then(value_f32)?,
+        velocity_spring_const_decel: value_path(response, &["velocity_spring_const_decel"])
+            .and_then(value_f32)?,
+        velocity_spring_dampen_ratio: value_path(response, &["velocity_spring_dampen_ratio"])
+            .and_then(value_f32)?,
+        speed_spring_const: value_path(response, &["speed_spring_const"]).and_then(value_f32)?,
+        max_accel: value_path(response, &["max_accel"]).and_then(value_f32)?,
+        trans_clamp_dist: value_path(response, &["trans_clamp_dist"]).and_then(value_f32)?,
+    })
+}
+
+fn apply_player_runtime_data_from_ytyp(
+    profile: &mut GameReadyMapProfile,
+    data: &mut GameData,
+    metadata: &serde_json::Value,
+) -> usize {
+    let Some(player) = value_path(metadata, &["player"]) else {
+        return 0;
+    };
+    if !player.is_object() {
+        return 0;
+    }
+
+    // The Shared character definition is authoritative for character-owned model and locomotion
+    // data. Project GameData remains authoritative for spawn/look and world physics.
+    data.player.model.enabled = profile.player.model.enabled;
+    data.player.model.source = profile.player.model.source.clone();
+    data.player.model.target_height = profile.player.model.target_height;
+    data.player.model.eye_height_ratio = profile.player.model.eye_height_ratio;
+    data.player.model.local_offset = [
+        profile.player.model.local_offset.x,
+        profile.player.model.local_offset.y,
+        profile.player.model.local_offset.z,
+    ];
+    data.player.model.yaw_offset = profile.player.model.yaw_offset;
+    data.player.model.hide_in_first_person = profile.player.model.hide_in_first_person;
+    data.player.move_speed = profile.player.run_speed;
+
+    let tuning = &mut data.player.tuning;
+    let mut applied = 1usize;
+    if value_path(player, &["motion_response"]).is_some() {
+        if let Some(response) = player_motion_response_from_ytyp(player) {
+            tuning.motion_response = Some(response);
+            applied += 6;
+            newengine_ulog_api::ulog::info!(
+                "game-ready ytyp player motion_response: velocity_k={:.3} decel_k={:.3} dampen={:.3} speed_k={:.3} max_accel={:.3} trans_clamp_dist={:.4} policy='authored spring/K payload; max_accel sentinel semantics unresolved'",
+                response.velocity_spring_const,
+                response.velocity_spring_const_decel,
+                response.velocity_spring_dampen_ratio,
+                response.speed_spring_const,
+                response.max_accel,
+                response.trans_clamp_dist,
+            );
+        } else {
+            newengine_ulog_api::ulog::warn!(
+                "game-ready ytyp player motion_response ignored: block must provide all six finite authored fields"
+            );
+        }
+    }
+    macro_rules! apply_tuning {
+        ($key:literal, $field:ident, $min:expr, $max:expr) => {
+            if let Some(value) = value_path(player, &[$key]).and_then(value_f32) {
+                tuning.$field = value.clamp($min, $max);
+                applied += 1;
+            }
+        };
+    }
+
+    apply_tuning!("body_radius", body_radius, 0.15, 1.0);
+    apply_tuning!("body_half_height", body_half_height, 0.15, 1.5);
+    apply_tuning!(
+        "crouched_body_half_height",
+        crouched_body_half_height,
+        0.05,
+        1.5
+    );
+    apply_tuning!("visual_radius", visual_radius, 0.15, 1.0);
+    apply_tuning!("visual_half_height", visual_half_height, 0.15, 1.5);
+    apply_tuning!("camera_eye_height", camera_eye_height, 0.05, 2.5);
+    apply_tuning!(
+        "crouched_camera_eye_height",
+        crouched_camera_eye_height,
+        0.05,
+        2.5
+    );
+    apply_tuning!("crouch_camera_speed", crouch_camera_speed, 0.1, 100.0);
+    apply_tuning!("jump_speed", jump_speed, 0.0, 30.0);
+    apply_tuning!("ground_probe_distance", ground_probe_distance, 0.01, 2.0);
+    apply_tuning!("max_slope_degrees", max_slope_degrees, 0.0, 89.0);
+    apply_tuning!("footstep_stride", footstep_stride, 0.25, 10.0);
+    apply_tuning!(
+        "landing_speed_threshold",
+        landing_speed_threshold,
+        0.0,
+        100.0
+    );
+    apply_tuning!(
+        "locomotion_min_horizontal_speed",
+        locomotion_min_horizontal_speed,
+        0.0,
+        20.0
+    );
+    apply_tuning!(
+        "ground_probe_max_upward_velocity",
+        ground_probe_max_upward_velocity,
+        -20.0,
+        20.0
+    );
+    apply_tuning!(
+        "landing_min_airborne_seconds",
+        landing_min_airborne_seconds,
+        0.0,
+        5.0
+    );
+
+    if let Some(value) = value_path(player, &["sprint_multiplier"]).and_then(value_f32) {
+        tuning.sprint_multiplier = value.clamp(1.0, 8.0);
+        applied += 1;
+    } else if profile.player.run_speed > 0.0 {
+        tuning.sprint_multiplier =
+            (profile.player.sprint_speed / profile.player.run_speed).clamp(1.0, 8.0);
+    }
+
+    profile.gameplay.player_collision.radius = tuning.body_radius;
+    profile.gameplay.player_collision.half_height = tuning.body_half_height;
+    profile.gameplay.player_visual.radius = tuning.visual_radius;
+    profile.gameplay.player_visual.half_height = tuning.visual_half_height;
+    profile.gameplay.player_visual.camera_eye_height = tuning.camera_eye_height;
+    profile.gameplay.player_visual.sprint_multiplier = tuning.sprint_multiplier;
     applied
 }
 
@@ -480,38 +735,121 @@ pub(super) fn load_game_ready_definition_entry(definition_ref: &str) -> Option<s
     }
 }
 
-pub(super) fn game_ready_metadata_namespace(
-    entry: &serde_json::Value,
-) -> Option<&serde_json::Value> {
-    // engine.assets.definitions returns arbitrary metadata as a source-of-knowledge
-    // envelope: { arbitrary_metadata: { metadata: { ns: ... }, namespaces: { ns: ... } } }.
-    // Older probes may still expose metadata directly. Accept both shapes, but
-    // keep the namespace name fully data-authored; GameReady does not own .ytyp.
+fn metadata_namespace<'a>(
+    entry: &'a serde_json::Value,
+    namespace: &str,
+) -> Option<&'a serde_json::Value> {
     entry
         .get("arbitrary_metadata")
         .and_then(|v| v.get("metadata"))
-        .and_then(|v| v.get("newengine.game_ready"))
+        .and_then(|v| v.get(namespace))
         .or_else(|| {
             entry
                 .get("arbitrary_metadata")
                 .and_then(|v| v.get("namespaces"))
-                .and_then(|v| v.get("newengine.game_ready"))
+                .and_then(|v| v.get(namespace))
         })
         .or_else(|| {
             entry
                 .get("arbitrary_metadata")
-                .and_then(|v| v.get("newengine.game_ready"))
+                .and_then(|v| v.get(namespace))
         })
-        .or_else(|| {
-            entry
-                .get("metadata")
-                .and_then(|v| v.get("newengine.game_ready"))
-        })
-        .or_else(|| {
-            entry
-                .get("namespaces")
-                .and_then(|v| v.get("newengine.game_ready"))
-        })
+        .or_else(|| entry.get("metadata").and_then(|v| v.get(namespace)))
+        .or_else(|| entry.get("namespaces").and_then(|v| v.get(namespace)))
+}
+
+fn audio_metadata_namespace(entry: &serde_json::Value) -> Option<&serde_json::Value> {
+    metadata_namespace(entry, "newengine.audio")
+}
+
+fn string_or_array(value: &serde_json::Value) -> Vec<String> {
+    if let Some(value) = value.as_str() {
+        let value = value.trim().to_ascii_lowercase();
+        return (!value.is_empty()).then_some(value).into_iter().collect();
+    }
+    value
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|value| value.as_str())
+        .map(|value| value.trim().to_ascii_lowercase())
+        .filter(|value| !value.is_empty())
+        .collect()
+}
+
+fn acoustic_material_library_from_ytyp(
+    metadata: &serde_json::Value,
+) -> Option<newengine_audio_api::AcousticMaterialLibrary> {
+    let library = metadata.get("acoustic_material_library")?;
+    let raw_materials = library.get("material")?;
+    let materials = raw_materials
+        .as_array()
+        .map(|values| values.iter().collect::<Vec<_>>())
+        .unwrap_or_else(|| vec![raw_materials]);
+    let mut rules = Vec::new();
+    for material in materials {
+        let Some(material_id) = material.get("material_id").and_then(value_string) else {
+            continue;
+        };
+        let Some(transmission_gain) = material.get("transmission_gain").and_then(value_f32) else {
+            continue;
+        };
+        let reflection_gain = material
+            .get("reflection_gain")
+            .and_then(value_f32)
+            .unwrap_or_else(|| {
+                newengine_audio_api::AcousticMaterialProfile::default().reflection_gain
+            });
+        let Some(high_frequency_absorption) = material
+            .get("high_frequency_absorption")
+            .and_then(value_f32)
+        else {
+            continue;
+        };
+        let Some(low_pass_hz) = material.get("low_pass_hz").and_then(value_f32) else {
+            continue;
+        };
+        let surface_matches = material
+            .get("match")
+            .map(string_or_array)
+            .unwrap_or_default();
+        if surface_matches.is_empty() {
+            continue;
+        }
+        rules.push(newengine_audio_api::AcousticMaterialRule {
+            material_id,
+            surface_matches,
+            profile: newengine_audio_api::AcousticMaterialProfile {
+                transmission_gain,
+                reflection_gain,
+                high_frequency_absorption,
+                low_pass_hz,
+            },
+        });
+    }
+    (!rules.is_empty()).then(|| newengine_audio_api::AcousticMaterialLibrary::new(rules))
+}
+
+fn merge_acoustic_material_library(
+    target: &mut newengine_audio_api::AcousticMaterialLibrary,
+    incoming: newengine_audio_api::AcousticMaterialLibrary,
+) {
+    for incoming_rule in incoming.rules {
+        let incoming_matches = incoming_rule.surface_matches.clone();
+        for rule in &mut target.rules {
+            rule.surface_matches
+                .retain(|pattern| !incoming_matches.iter().any(|value| value == pattern));
+        }
+        target.rules.retain(|rule| !rule.surface_matches.is_empty());
+        target.rules.push(incoming_rule);
+    }
+    *target = target.clone().sanitized();
+}
+
+pub(super) fn game_ready_metadata_namespace(
+    entry: &serde_json::Value,
+) -> Option<&serde_json::Value> {
+    metadata_namespace(entry, "newengine.game_ready")
 }
 
 fn definition_render_options(
@@ -522,6 +860,39 @@ fn definition_render_options(
         .and_then(|value| value.get("render_options"))
         .cloned()
         .and_then(|value| serde_json::from_value(value).ok())
+}
+
+fn apply_sky_drawable_from_ytyp(
+    profile: &mut GameReadyMapProfile,
+    entry: &serde_json::Value,
+    definition_ref: &str,
+) -> usize {
+    let Some(options) = definition_render_options(entry) else {
+        return 0;
+    };
+    if !matches!(
+        options.role,
+        newengine_model_domain_api::MeshRenderRole::SkyBackground
+            | newengine_model_domain_api::MeshRenderRole::CelestialBillboard
+    ) {
+        return 0;
+    }
+    let drawable = entry
+        .get("model_explanation")
+        .and_then(|value| value.get("drawable_ref"))
+        .and_then(|value| value.as_str())
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    let Some(drawable) = drawable else {
+        return 0;
+    };
+    profile.sky.mesh = drawable.replace('\\', "/");
+    newengine_ulog_api::ulog::info!(
+        "game-ready ytyp sky drawable: definition_ref='{}' mesh='{}' source='model_explanation.drawable_ref' policy='YTYP dependency graph owns skydome asset identity'",
+        definition_ref,
+        profile.sky.mesh
+    );
+    1
 }
 
 fn apply_render_options_from_ytyp(
@@ -558,7 +929,10 @@ fn apply_render_options_from_ytyp(
     1
 }
 
-pub(crate) fn apply_game_ready_ytyp_metadata(profile: &mut GameReadyMapProfile) {
+pub(crate) fn apply_game_ready_ytyp_metadata(
+    profile: &mut GameReadyMapProfile,
+    game_data: &mut GameData,
+) {
     let definitions = profile.definitions.clone();
     if definitions.is_empty() {
         newengine_ulog_api::ulog::warn!(
@@ -575,16 +949,33 @@ pub(crate) fn apply_game_ready_ytyp_metadata(profile: &mut GameReadyMapProfile) 
         };
         let null_metadata = serde_json::Value::Null;
         let metadata = game_ready_metadata_namespace(&entry).unwrap_or(&null_metadata);
+        let mut audio_applied = 0usize;
+        if let Some(audio_metadata) = audio_metadata_namespace(&entry) {
+            if let Some(library) = acoustic_material_library_from_ytyp(audio_metadata) {
+                let count = library.rules.len();
+                merge_acoustic_material_library(&mut profile.acoustic_materials, library);
+                audio_applied = count;
+                newengine_ulog_api::ulog::info!(
+                    "game-ready ytyp audio metadata: definition_ref='{}' acoustic_material_rules={} total_rules={} policy='Shared baseline first; later definitions replace matching surface rules'",
+                    definition_ref,
+                    count,
+                    profile.acoustic_materials.rules.len(),
+                );
+            }
+        }
         if metadata.is_null() {
             newengine_ulog_api::ulog::debug!(
                 "game-ready ytyp metadata: definition_ref='{}' has no newengine.game_ready namespace; graph-only definition",
                 definition_ref
             );
         }
-        let applied = apply_render_options_from_ytyp(profile, &entry, definition_ref)
+        let applied = audio_applied
+            + apply_render_options_from_ytyp(profile, &entry, definition_ref)
+            + apply_sky_drawable_from_ytyp(profile, &entry, definition_ref)
             + apply_material_refs_from_ytyp(profile, metadata, definition_ref)
             + apply_texture_refs_from_ytyp(profile, metadata, definition_ref)
             + apply_player_model_from_ytyp(profile, metadata, definition_ref)
+            + apply_player_runtime_data_from_ytyp(profile, game_data, metadata)
             + apply_gameplay_constants_from_ytyp(profile, metadata)
             + apply_sky_constants_from_ytyp(profile, metadata)
             + apply_time_constants_from_ytyp(profile, metadata);
@@ -641,5 +1032,143 @@ pub(crate) fn resolve_game_ready_asset_graph(
             );
             None
         }
+    }
+}
+
+#[cfg(test)]
+mod player_presentation_metadata_tests {
+    use super::*;
+
+    #[test]
+    fn complete_motion_response_block_is_typed_without_invented_fields() {
+        let player = serde_json::json!({
+            "motion_response": {
+                "velocity_spring_const": 7.0,
+                "velocity_spring_const_decel": 10.0,
+                "velocity_spring_dampen_ratio": 1.0,
+                "speed_spring_const": 4.6,
+                "max_accel": -1.0,
+                "trans_clamp_dist": 0.01
+            }
+        });
+        let response = player_motion_response_from_ytyp(&player).expect("typed response");
+        assert_eq!(response.velocity_spring_const, 7.0);
+        assert_eq!(response.velocity_spring_const_decel, 10.0);
+        assert_eq!(response.velocity_spring_dampen_ratio, 1.0);
+        assert_eq!(response.speed_spring_const, 4.6);
+        assert_eq!(response.max_accel, -1.0);
+        assert_eq!(response.trans_clamp_dist, 0.01);
+    }
+
+    #[test]
+    fn partial_motion_response_block_is_rejected_instead_of_filling_guesses() {
+        let player = serde_json::json!({
+            "motion_response": {
+                "velocity_spring_const": 7.0,
+                "velocity_spring_const_decel": 10.0
+            }
+        });
+        assert!(player_motion_response_from_ytyp(&player).is_none());
+    }
+
+    #[test]
+    fn compact_equipment_rotation_weights_parse_from_ytyp_attribute() {
+        let value = serde_json::Value::String("spineb:0.22;r_shoulder:0.92;r_palm:1.0".to_owned());
+        let weights = player_joint_rotation_weights(&value).expect("weights");
+        assert_eq!(weights.len(), 3);
+        assert_eq!(weights[0].joint, "spineb");
+        assert!((weights[0].weight - 0.22).abs() < 1.0e-6);
+        assert_eq!(weights[1].joint, "r_shoulder");
+        assert!((weights[1].weight - 0.92).abs() < 1.0e-6);
+        assert_eq!(weights[2].joint, "r_palm");
+        assert!((weights[2].weight - 1.0).abs() < 1.0e-6);
+    }
+    #[test]
+    fn acoustic_material_library_hydrates_from_definition_metadata_projection() {
+        let metadata = serde_json::json!({
+            "acoustic_material_library": {
+                "schema": "newengine.audio.acoustic-material-library.v2",
+                "version": 2,
+                "material": [
+                    {
+                        "material_id": "material.test.a",
+                        "transmission_gain": 0.25,
+                        "reflection_gain": 0.72,
+                        "high_frequency_absorption": 0.75,
+                        "low_pass_hz": 2400.0,
+                        "match": "solid_a"
+                    },
+                    {
+                        "material_id": "material.test.b",
+                        "transmission_gain": 0.55,
+                        "high_frequency_absorption": 0.40,
+                        "low_pass_hz": 6400.0,
+                        "match": ["panel_b", "sheet_b"]
+                    }
+                ]
+            }
+        });
+        let library = acoustic_material_library_from_ytyp(&metadata).expect("acoustic library");
+        assert_eq!(library.rules.len(), 2);
+        assert_eq!(
+            library.resolve("surface.wall.solid_a").unwrap().material_id,
+            "material.test.a"
+        );
+        assert_eq!(
+            library.resolve("surface.sheet_b").unwrap().material_id,
+            "material.test.b"
+        );
+        assert!(
+            (library
+                .resolve("surface.wall.solid_a")
+                .unwrap()
+                .profile
+                .reflection_gain
+                - 0.72)
+                .abs()
+                < 1.0e-6
+        );
+        assert!(
+            (library
+                .resolve("surface.sheet_b")
+                .unwrap()
+                .profile
+                .reflection_gain
+                - newengine_audio_api::AcousticMaterialProfile::default().reflection_gain)
+                .abs()
+                < 1.0e-6
+        );
+    }
+
+    #[test]
+    fn later_acoustic_library_replaces_matching_shared_rule_only() {
+        let mut shared = newengine_audio_api::AcousticMaterialLibrary::new(vec![
+            newengine_audio_api::AcousticMaterialRule {
+                material_id: "material.shared.wall".to_owned(),
+                surface_matches: vec!["wall".to_owned(), "masonry".to_owned()],
+                profile: newengine_audio_api::AcousticMaterialProfile::default(),
+            },
+        ]);
+        let project = newengine_audio_api::AcousticMaterialLibrary::new(vec![
+            newengine_audio_api::AcousticMaterialRule {
+                material_id: "material.project.wall".to_owned(),
+                surface_matches: vec!["wall".to_owned()],
+                profile: newengine_audio_api::AcousticMaterialProfile {
+                    transmission_gain: 0.9,
+                    reflection_gain: 0.2,
+                    high_frequency_absorption: 0.1,
+                    low_pass_hz: 12_000.0,
+                },
+            },
+        ]);
+        merge_acoustic_material_library(&mut shared, project);
+        assert_eq!(
+            shared.resolve("surface.wall").unwrap().material_id,
+            "material.project.wall"
+        );
+        assert_eq!(
+            shared.resolve("surface.masonry").unwrap().material_id,
+            "material.shared.wall"
+        );
     }
 }

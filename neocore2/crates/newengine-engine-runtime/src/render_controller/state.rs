@@ -12,11 +12,11 @@ use std::sync::Arc;
 
 use crate::plugin_manager::PluginManagerBridge;
 use crate::scene_bridge::SceneBridge;
-use crate::viewport_bridge::ViewportBridge;
+use newengine_viewport_bridge::ViewportBridge;
 
 use super::gpu::{
     DebugLineGpu, LitPipeline, MaterialGpuPipeline, MaterialGpuPipelineKey, MaterialGpuRegistry,
-    MaterialPipelineBuildProfile, PlayerSkinGpu, PrimitiveGpu, SkinPaletteGpu,
+    MaterialPipelineBuildProfile, PlayerSkinGpu, PrimitiveGpu, SkinPaletteGpu, VfxGpuRenderer,
 };
 use super::material_bindings::MaterialTextureGpuResidency;
 use super::metrics::RuntimeOverlayMetrics;
@@ -393,6 +393,7 @@ pub(super) struct RenderGpuSceneState {
     pub(super) material: RenderMaterialGpuState,
     pub(super) meshes: RenderMeshGpuState,
     pub(super) lifetimes: RenderGpuLifetimeState,
+    pub(super) vfx_particles: VfxGpuRenderer,
 }
 
 impl RenderGpuSceneState {
@@ -402,6 +403,7 @@ impl RenderGpuSceneState {
             material: RenderMaterialGpuState::new(),
             meshes: RenderMeshGpuState::new(),
             lifetimes: RenderGpuLifetimeState::new(),
+            vfx_particles: VfxGpuRenderer::new(),
         }
     }
 
@@ -479,7 +481,7 @@ pub(super) struct RenderFrameRuntimeState {
     pub(super) gameplay_ui: crate::gameplay::GameplayUiProviderRegistry,
     pub(super) gameplay_physics_queries: crate::gameplay::GameplayPhysicsQueryProviderRegistry,
     pub(super) world_runtime: crate::WorldRuntimeProviderRegistry,
-    pub(super) input_systems: crate::input_systems::InputRuntimeSystems,
+    pub(super) input_systems: newengine_input_systems_runtime::InputRuntimeSystems,
     pub(super) last_play_mode: crate::GameRunMode,
 }
 
@@ -498,7 +500,7 @@ impl RenderFrameRuntimeState {
             gameplay_ui: crate::gameplay::GameplayUiProviderRegistry::new(),
             gameplay_physics_queries: crate::gameplay::GameplayPhysicsQueryProviderRegistry::new(),
             world_runtime: crate::WorldRuntimeProviderRegistry::new(),
-            input_systems: crate::input_systems::InputRuntimeSystems::new(),
+            input_systems: newengine_input_systems_runtime::InputRuntimeSystems::new(),
             last_play_mode: crate::GameRunMode::Staging,
         }
     }

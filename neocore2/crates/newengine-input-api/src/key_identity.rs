@@ -43,6 +43,7 @@ pub const ARROW_RIGHT: &str = "keyboard.arrow_right";
 pub const ARROW_DOWN: &str = "keyboard.arrow_down";
 
 pub const ESCAPE: &str = "keyboard.escape";
+pub const BACKQUOTE: &str = "keyboard.backquote";
 pub const F1: &str = "keyboard.f1";
 pub const F2: &str = "keyboard.f2";
 
@@ -88,6 +89,7 @@ pub fn key_code_from_id(id: &str) -> Option<u32> {
         ARROW_RIGHT => Some(key_code::ARROW_RIGHT),
         ARROW_DOWN => Some(key_code::ARROW_DOWN),
         ESCAPE => Some(key_code::ESCAPE),
+        BACKQUOTE => Some(key_code::BACKQUOTE),
         F1 => Some(key_code::F1),
         F2 => Some(key_code::F2),
         _ => None,
@@ -140,6 +142,7 @@ pub fn canonical_id_from_native_physical_name(name: &str) -> Option<&'static str
         "ArrowRight" => Some(ARROW_RIGHT),
         "ArrowDown" => Some(ARROW_DOWN),
         "Escape" => Some(ESCAPE),
+        "Backquote" => Some(BACKQUOTE),
         "F1" => Some(F1),
         "F2" => Some(F2),
         _ => None,

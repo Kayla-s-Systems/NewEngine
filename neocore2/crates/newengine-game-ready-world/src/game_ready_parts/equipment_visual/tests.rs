@@ -47,6 +47,54 @@ mod alignment_tests {
     }
 
     #[test]
+    fn long_gun_secondary_spring_is_bounded_and_decays_after_fast_turn() {
+        let dt = 1.0 / 60.0;
+        let mut state = step_long_gun_secondary_dynamics(
+            WeaponSecondaryDynamicsState::default(),
+            Quat::IDENTITY,
+            Vec3::ZERO,
+            Quat::IDENTITY,
+            dt,
+            0.0,
+            0.0,
+            0.0,
+        );
+        state = step_long_gun_secondary_dynamics(
+            state,
+            Quat::from_rotation_y(24.0_f32.to_radians()),
+            Vec3::ZERO,
+            Quat::IDENTITY,
+            dt,
+            0.0,
+            0.0,
+            0.0,
+        );
+        let injected = state.rotation_offset_local.length();
+        assert!(injected > 0.001, "fast target rotation must inject inertial lag");
+        assert!(
+            injected <= LONG_GUN_SECONDARY_HIP_MAX_ANGLE + 1.0e-6,
+            "secondary motion must stay inside the authored grip envelope"
+        );
+        let target = Quat::from_rotation_y(24.0_f32.to_radians());
+        for _ in 0..90 {
+            state = step_long_gun_secondary_dynamics(
+                state,
+                target,
+                Vec3::ZERO,
+                Quat::IDENTITY,
+                dt,
+                0.0,
+                0.0,
+                0.0,
+            );
+        }
+        assert!(
+            state.rotation_offset_local.length() < injected * 0.02,
+            "critically damped secondary motion must settle back to the authored pose"
+        );
+    }
+
+    #[test]
     fn first_person_aim_alpha_converges_without_overshoot() {
         let mut value = 0.0;
         for _ in 0..30 {
@@ -59,7 +107,7 @@ mod alignment_tests {
     }
 
     #[test]
-    fn first_person_aim_reads_current_render_frame_command_before_fixed_step() {
+    fn raw_aim_command_without_equipped_weapon_cannot_activate_ads() {
         let mut world = newengine_ecs::World::new();
         let owner = world.spawn();
         let mut commands = PlayerCommandFrame::default();
@@ -68,7 +116,11 @@ mod alignment_tests {
             .held
             .push(newengine_gameplay_fps_api::action::PLAYER_AIM.to_owned());
         let _ = world.insert(owner, commands);
-        assert!(first_person_aim_held(&world, owner));
+        assert!(!equipped_weapon_aim_held(
+            &world,
+            owner,
+            newengine_engine_runtime::gameplay::ItemInstanceId(1),
+        ));
     }
 
     #[test]

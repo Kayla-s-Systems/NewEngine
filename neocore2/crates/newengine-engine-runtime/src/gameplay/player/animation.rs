@@ -171,9 +171,11 @@ pub fn update_player_animation_states(world: &mut World, dt: f32) {
             let rate = cycle_rate_hz(state.locomotion, state.normalized_speed);
             state.cycle_phase = (state.cycle_phase + dt * rate).fract();
         } else {
-            let mut state = PlayerAnimationState::default();
-            state.locomotion = desired;
-            state.normalized_speed = normalized_speed;
+            let state = PlayerAnimationState {
+                locomotion: desired,
+                normalized_speed,
+                ..PlayerAnimationState::default()
+            };
             let _ = world.insert(player, state);
             changed = true;
         }

@@ -57,6 +57,14 @@ impl AudioRuntimeState {
                 spatial: request.spatial,
                 attenuation: request.attenuation,
                 acoustic: request.acoustic.sanitized(),
+                propagation: propagation_state(
+                    self.listener,
+                    self.listener_velocity,
+                    request.spatial,
+                    [0.0; 3],
+                ),
+                emitter_velocity: [0.0; 3],
+                last_spatial_update: request.spatial.map(|_| now),
                 environment: request.environment.sanitized(),
                 stream_stats: None,
                 concurrency_group,
@@ -150,6 +158,14 @@ impl AudioRuntimeState {
                 spatial: request.spatial,
                 attenuation: request.attenuation,
                 acoustic: request.acoustic,
+                propagation: propagation_state(
+                    self.listener,
+                    self.listener_velocity,
+                    request.spatial,
+                    [0.0; 3],
+                ),
+                emitter_velocity: [0.0; 3],
+                last_spatial_update: request.spatial.map(|_| Instant::now()),
                 environment: request.environment,
                 stream_stats: None,
                 concurrency_group: request.concurrency_group,
@@ -196,17 +212,32 @@ impl AudioRuntimeState {
             return Ok(cue.clone());
         }
 
-        let source = self
-            .assets
-            .raw_bytes_v1(&reference.logical_path)
-            .map_err(|error| {
-                format!(
-                    "YSCD VFS read failed logical_path='{}': {error}",
-                    reference.logical_path
-                )
-            })?;
-        let dictionary =
-            newengine_asset_format_nef8::decode_yscd_nef8(&source, &reference.logical_path)?;
+        let dictionary = if let Some(dictionary) = self.yscd_dictionaries.get(&reference.logical_path) {
+            Arc::clone(dictionary)
+        } else {
+            let source = self
+                .assets
+                .raw_bytes_v1(&reference.logical_path)
+                .map_err(|error| {
+                    format!(
+                        "YSCD VFS read failed logical_path='{}': {error}",
+                        reference.logical_path
+                    )
+                })?;
+            let decoded = Arc::new(newengine_asset_format_nef8::decode_yscd_nef8(
+                &source,
+                &reference.logical_path,
+            )?);
+            newengine_ulog_api::ulog::info!(
+                "YSCD dictionary cache miss path='{}' cues={} bytes={} policy='decode-once'",
+                reference.logical_path,
+                decoded.cues.len(),
+                source.len(),
+            );
+            self.yscd_dictionaries
+                .insert(reference.logical_path.clone(), Arc::clone(&decoded));
+            decoded
+        };
         let cue_name = reference.entry.as_deref().expect("entry required above");
         let authored = dictionary.cue(cue_name).ok_or_else(|| {
             format!(
@@ -296,6 +327,7 @@ impl AudioRuntimeState {
             looping: authored.descriptor.looping,
             concurrency_group: authored.descriptor.concurrency_group.clone(),
             priority: authored.descriptor.priority,
+            repeat_avoidance: authored.descriptor.repeat_avoidance,
             spatial_policy: sound_cue_spatial_policy_from_yscd(
                 &authored.descriptor.spatial_policy,
             )?,
@@ -428,14 +460,24 @@ impl AudioRuntimeState {
             let random_a = splitmix64(seed);
             let random_b = splitmix64(random_a);
             let random_c = splitmix64(random_b);
-            let selected = select_weighted_clip(&cue, unit_f32(random_a))
+            let recent = self
+                .cue_history
+                .get(&canonical)
                 .cloned()
-                .ok_or_else(|| "SoundCue weighted selection produced no clip".to_owned())?;
+                .unwrap_or_default();
+            let selected = select_weighted_clips_avoiding(
+                &cue.clips,
+                unit_f32(random_a),
+                &recent,
+            )
+            .cloned()
+            .ok_or_else(|| "SoundCue weighted selection produced no clip".to_owned())?;
             let gain = sanitize_gain(
                 request.gain * selected.gain * sample_range(cue.gain_range, unit_f32(random_b)),
             );
-            let speed =
-                sanitize_speed(selected.pitch * sample_range(cue.pitch_range, unit_f32(random_c)));
+            let speed = sanitize_speed(
+                request.pitch * selected.pitch * sample_range(cue.pitch_range, unit_f32(random_c)),
+            );
             let ack = self.play_clip_with_policy(
                 AudioPlayRequest {
                     version: 1,
@@ -453,6 +495,13 @@ impl AudioRuntimeState {
                 cue.priority,
             )?;
             let mut ack = ack;
+            if ack.accepted {
+                self.remember_cue_selection(
+                    &canonical,
+                    &selected.clip.uri,
+                    cue.repeat_avoidance,
+                );
+            }
             if let Some(diagnostic) = self.yscd_play_diagnostic(&canonical, "body", &selected, &ack)
             {
                 ack.diagnostics.push(diagnostic);
@@ -468,8 +517,18 @@ impl AudioRuntimeState {
             let random_a = splitmix64(layer_seed);
             let random_b = splitmix64(random_a);
             let random_c = splitmix64(random_b);
-            let selected = select_weighted_clips(&layer.clips, unit_f32(random_a))
+            let history_key = format!("{canonical}#{}", layer.name);
+            let recent = self
+                .cue_history
+                .get(&history_key)
                 .cloned()
+                .unwrap_or_default();
+            let selected = select_weighted_clips_avoiding(
+                &layer.clips,
+                unit_f32(random_a),
+                &recent,
+            )
+            .cloned()
                 .ok_or_else(|| {
                     format!(
                         "YSCD layer '{}' weighted selection produced no clip",
@@ -483,7 +542,10 @@ impl AudioRuntimeState {
                     * sample_range(cue.gain_range, unit_f32(random_b)),
             );
             let speed = sanitize_speed(
-                layer.pitch * selected.pitch * sample_range(cue.pitch_range, unit_f32(random_c)),
+                request.pitch
+                    * layer.pitch
+                    * selected.pitch
+                    * sample_range(cue.pitch_range, unit_f32(random_c)),
             );
             let concurrency_group = if cue.concurrency_group.trim().is_empty() {
                 String::new()
@@ -515,6 +577,11 @@ impl AudioRuntimeState {
                 diagnostics.push(diagnostic);
             }
             if ack.accepted {
+                self.remember_cue_selection(
+                    &history_key,
+                    &selected.clip.uri,
+                    cue.repeat_avoidance,
+                );
                 accepted_layers = accepted_layers.saturating_add(1);
                 let preferred_primary = matches!(layer.role.as_str(), "body" | "near");
                 if primary.is_none() || preferred_primary {
@@ -536,6 +603,18 @@ impl AudioRuntimeState {
             virtualized: false,
             diagnostics,
         })
+    }
+
+    fn remember_cue_selection(&mut self, key: &str, clip_uri: &str, limit: usize) {
+        if limit == 0 {
+            return;
+        }
+        let history = self.cue_history.entry(key.to_owned()).or_default();
+        history.retain(|entry| entry != clip_uri);
+        history.push_back(clip_uri.to_owned());
+        while history.len() > limit {
+            history.pop_front();
+        }
     }
 
     fn yscd_play_diagnostic(
@@ -567,8 +646,15 @@ impl AudioRuntimeState {
             .unwrap_or(0.0);
         let bus_gain = voice.map(|voice| self.bus_gain(voice.bus)).unwrap_or(0.0);
         let transmission_gain = voice
-            .map(|voice| voice.acoustic.sanitized().transmission_gain)
+            .map(|voice| voice.propagated_acoustic().transmission_gain)
             .unwrap_or(0.0);
+        let doppler_ratio = voice.map(|voice| voice.propagation.doppler_ratio).unwrap_or(1.0);
+        let air_hf_gain = voice
+            .map(|voice| voice.propagation.air_high_frequency_gain)
+            .unwrap_or(1.0);
+        let air_low_pass_hz = voice
+            .map(|voice| voice.propagation.air_low_pass_hz)
+            .unwrap_or(20_000.0);
         let output_state = if self.output.is_some() {
             "ready"
         } else if self.output_error.is_some() {
@@ -584,7 +670,7 @@ impl AudioRuntimeState {
             .map(String::as_str)
             .unwrap_or("");
         Some(format!(
-            "YSCD play dictionary='{}' cue='{}' layer='{}' embedded_clip_bytes={} dictionary_embedded_bytes={} physical_voice={} virtualized={} voice_id={:?} output_state='{}' arbiter_selected={} audibility={:.6} distance={:.3} attenuation_gain={:.6} bus_gain={:.3} transmission_gain={:.3} max_physical_voices={} output_error='{}' materialize_error='{}'",
+            "YSCD play dictionary='{}' cue='{}' layer='{}' embedded_clip_bytes={} dictionary_embedded_bytes={} physical_voice={} virtualized={} voice_id={:?} output_state='{}' arbiter_selected={} audibility={:.6} distance={:.3} attenuation_gain={:.6} bus_gain={:.3} transmission_gain={:.3} doppler={:.4} air_hf_gain={:.3} air_low_pass_hz={:.0} max_physical_voices={} output_error='{}' materialize_error='{}'",
             meta.dictionary_path,
             meta.cue_name,
             layer,
@@ -600,6 +686,9 @@ impl AudioRuntimeState {
             attenuation_gain,
             bus_gain,
             transmission_gain,
+            doppler_ratio,
+            air_hf_gain,
+            air_low_pass_hz,
             self.max_physical_voices,
             self.output_error.as_deref().unwrap_or(""),
             materialize_error,
@@ -626,6 +715,9 @@ impl AudioRuntimeState {
                 spatial: None,
                 attenuation: None,
                 acoustic: AudioAcousticState::clear(),
+                propagation: AudioPropagationState::default(),
+                emitter_velocity: [0.0; 3],
+                last_spatial_update: None,
                 environment: AudioEnvironmentState::clear(),
                 stream_stats: None,
                 concurrency_group: String::new(),

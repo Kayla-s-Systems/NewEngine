@@ -106,6 +106,17 @@ impl InputBinding {
     }
 
     #[inline]
+    pub fn keyboard_released(action: impl Into<String>, code: u32) -> Self {
+        Self {
+            action: action.into(),
+            device: InputBindingDevice::Keyboard,
+            code,
+            name: None,
+            phase: InputBindingPhase::Released,
+        }
+    }
+
+    #[inline]
     pub fn mouse_button_down(action: impl Into<String>, code: u32) -> Self {
         Self {
             action: action.into(),

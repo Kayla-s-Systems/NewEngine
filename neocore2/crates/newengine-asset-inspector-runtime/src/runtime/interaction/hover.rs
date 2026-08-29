@@ -9,11 +9,9 @@ impl AssetInspectorRuntimeModule {
                 self.hovered_node = Some(node_id.to_owned());
                 self.hover_hint = self.hover_hint_for_node(node_id);
             }
-            UiNodeEventTrigger::HoverExit => {
-                if self.hovered_node.as_deref() == Some(node_id) {
-                    self.hovered_node = None;
-                    self.hover_hint.clear();
-                }
+            UiNodeEventTrigger::HoverExit if self.hovered_node.as_deref() == Some(node_id) => {
+                self.hovered_node = None;
+                self.hover_hint.clear();
             }
             _ => {}
         }

@@ -15,7 +15,7 @@ pub struct FrozenPluginCompositionPlan {
     artifact_winners: HashMap<String, PathBuf>,
     /// Verified metadata snapshot keyed by the exact winning artifact path.
     /// Loader/materializer must use this snapshot rather than re-reading a mutable sidecar.
-    artifact_manifests: HashMap<PathBuf, newengine_plugin_api::PluginDiscoveryManifestV1>,
+    artifact_manifests: HashMap<PathBuf, super::sidecar::VerifiedPluginDiscoveryManifest>,
     provider_paths: NeHashSet<PathBuf>,
     selected_provider_paths: NeHashSet<PathBuf>,
     forbidden_system_tags: Vec<String>,
@@ -31,7 +31,7 @@ impl FrozenPluginCompositionPlan {
     pub(crate) fn artifact_manifest(
         &self,
         path: &Path,
-    ) -> Option<&newengine_plugin_api::PluginDiscoveryManifestV1> {
+    ) -> Option<&super::sidecar::VerifiedPluginDiscoveryManifest> {
         self.artifact_manifests.get(path)
     }
 
@@ -86,7 +86,7 @@ pub fn build_frozen_composition_plan(
     let mut provider_paths = NeHashSet::default();
     let mut candidate_paths: HashMap<String, PathBuf> = HashMap::default();
     let mut winner_paths: HashMap<String, PathBuf> = HashMap::default();
-    let mut artifact_manifests: HashMap<PathBuf, newengine_plugin_api::PluginDiscoveryManifestV1> =
+    let mut artifact_manifests: HashMap<PathBuf, super::sidecar::VerifiedPluginDiscoveryManifest> =
         HashMap::default();
 
     for (plugin_id, (item, load_origin)) in &artifact_winners {

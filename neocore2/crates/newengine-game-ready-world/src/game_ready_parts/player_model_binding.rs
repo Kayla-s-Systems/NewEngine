@@ -21,7 +21,19 @@ fn assignment_from_spec(
         crouch_walk_animation: spec.crouch_walk_animation.clone(),
         jump_animation: spec.jump_animation.clone(),
         fall_animation: spec.fall_animation.clone(),
-        presentation: newengine_engine_runtime::gameplay::PlayerCharacterPresentation::default(),
+        presentation: newengine_engine_runtime::gameplay::PlayerCharacterPresentation {
+            equipment_ready_animation: spec.equipment_ready_animation.clone(),
+            equipment_aim_animation: spec.equipment_aim_animation.clone(),
+            equipment_reload_animation: spec.equipment_reload_animation.clone(),
+            unarmed_ready_animation: spec.unarmed_ready_animation.clone(),
+            unarmed_attack_animation: spec.unarmed_attack_animation.clone(),
+            equipment_ready_sample_phase: spec.equipment_ready_sample_phase,
+            equipment_ready_rotation_weights: spec.equipment_ready_rotation_weights.clone(),
+            equipment_aim_rotation_weights: spec.equipment_aim_rotation_weights.clone(),
+            equipment_reload_rotation_weights: spec.equipment_reload_rotation_weights.clone(),
+            equipment_arm_ik: spec.equipment_arm_ik,
+            ..newengine_engine_runtime::gameplay::PlayerCharacterPresentation::default()
+        },
         target_height: spec.target_height,
         eye_height_ratio: spec.eye_height_ratio,
         local_offset: spec.local_offset,
@@ -133,6 +145,7 @@ fn clear_player_model_binding(
     clear_player_runtime_model_visuals(world, player);
     let _ = world.remove::<PlayerAnimationRuntimeBinding>(player);
     let _ = world.remove::<newengine_engine_runtime::gameplay::PlayerSkinPose>(player);
+    let _ = world.remove::<newengine_model_contact_api::ModelFootPoseState>(player);
     if let Some(binding) =
         world.get_mut::<newengine_engine_runtime::gameplay::PlayerModelBinding>(player)
     {
@@ -175,6 +188,7 @@ fn bind_player_model_assignment(
     clear_player_runtime_model_visuals(world, player);
     let _ = world.remove::<PlayerAnimationRuntimeBinding>(player);
     let _ = world.remove::<newengine_engine_runtime::gameplay::PlayerSkinPose>(player);
+    let _ = world.remove::<newengine_model_contact_api::ModelFootPoseState>(player);
 
     let label = model_label(&model_source);
     let visual_root_name = format!("Player/Avatar/{label}");

@@ -296,11 +296,14 @@ impl RenderRuntimeProfile {
             }
             RenderHardwareTier::Gtx => {
                 self.id = tier.profile_id().to_owned();
-                // GTX 10-series class hardware is still a capable renderer tier.
-                // Do not turn off authored features here: the launch policy and
-                // upload queue own startup pressure, while feature availability
-                // remains controlled by the declarative runtime profile.
+                // Production safety policy for the GTX auto tier: keep the proven
+                // forward + shadow path while async PostFX recovery is exercised by
+                // explicit test profiles. Authored non-auto profiles are not rewritten.
                 self.gpu_safe = false;
+                self.graphics.shadows = FeatureSwitch::Enabled;
+                self.graphics.hdr_scene = FeatureSwitch::Disabled;
+                self.graphics.postfx = FeatureSwitch::Disabled;
+                self.graphics.deferred = FeatureSwitch::Disabled;
             }
             RenderHardwareTier::Rtx => {
                 self.id = tier.profile_id().to_owned();
@@ -333,4 +336,29 @@ const fn default_sky_mode() -> SkyPassMode {
 
 fn compact_json(value: &Value) -> String {
     serde_json::to_string(value).unwrap_or_else(|_| "<unprintable>".to_owned())
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn auto_gtx_tier_uses_stable_forward_shadow_profile() {
+        let mut profile = RenderRuntimeProfile::default();
+        profile.apply_hardware_tier(RenderHardwareTier::Gtx);
+        assert_eq!(profile.id, RenderHardwareTier::Gtx.profile_id());
+        assert!(profile.graphics.shadows.enabled());
+        assert!(!profile.graphics.hdr_scene.enabled());
+        assert!(!profile.graphics.postfx.enabled());
+        assert!(!profile.graphics.deferred.enabled());
+    }
+
+    #[test]
+    fn explicit_profiles_are_identifiable_before_hardware_tier_application() {
+        let mut profile = RenderRuntimeProfile::default();
+        assert!(profile.accepts_hardware_tier_resolution());
+        profile.id = "newengine.render.runtime.custom".to_owned();
+        assert!(!profile.accepts_hardware_tier_resolution());
+    }
 }

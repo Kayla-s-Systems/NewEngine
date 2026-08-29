@@ -83,6 +83,8 @@ impl ScreenProfileRuntimeState {
             last_right_edit_selection_key: String::new(),
             cached_right_edit_document: None,
             cached_right_edit_error: None,
+            script_editor: ScriptEditorPanelState::default(),
+            active_bottom_panel: "bottom.asset_browser".to_owned(),
             hidden_panels: BTreeSet::new(),
             last_runtime_command_frame: u64::MAX,
             last_dock_click_frame: u64::MAX,
@@ -174,6 +176,7 @@ impl ScreenProfileRuntimeState {
         self.update_editor_runtime_state(resources, frame_index);
         self.update_editor_viewport_interaction(resources, frame_index);
         self.update_dock_interaction(resources, frame_index);
+        self.update_script_editor_interaction(resources, frame_index);
         self.publish_editor_layout_state(resources, frame_index);
         self.publish_focus_policy(resources);
         let profile_changed = self.last_published_profile != Some(self.descriptor.profile);

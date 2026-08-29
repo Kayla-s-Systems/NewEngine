@@ -234,6 +234,12 @@ struct RawSkySpec {
     pub(super) mesh: String,
     #[serde(default = "default_sky_follow_camera")]
     pub(super) follow_camera: bool,
+    #[serde(default)]
+    pub(super) environment_profile: String,
+    #[serde(default)]
+    pub(super) environment_region: String,
+    #[serde(default)]
+    pub(super) environment_biome: String,
     #[serde(default = "default_cloud_dictionary")]
     pub(super) cloud_dictionary: String,
     #[serde(default = "default_cloud_profile")]

@@ -11,12 +11,17 @@ use newengine_transform::GlobalTransform;
 pub(super) fn collect_lights(world: &newengine_ecs::World) -> PackedLights {
     let snapshot = collect_light_scene_snapshot(world);
     let packed = PackedLights::from_snapshot(&snapshot);
-    world
+    let packed = world
         .resource::<crate::gameplay::CloudShadowRenderState>()
         .copied()
         .map(|cloud| {
             packed.with_cloud_shadow(cloud.map0, cloud.map1, cloud.map2, cloud.map3, cloud.map4)
         })
+        .unwrap_or(packed);
+    world
+        .resource::<crate::gameplay::SkyCloudProfileRenderState>()
+        .copied()
+        .map(|profile| packed.with_sky_cloud_profile(profile.profile0, profile.profile1))
         .unwrap_or(packed)
 }
 
@@ -36,7 +41,7 @@ pub(super) fn collect_light_scene_snapshot(world: &newengine_ecs::World) -> Ligh
             position: Vec3::new(m.w_axis.x, m.w_axis.y, m.w_axis.z),
         });
     }
-    point_lights.sort_by(|a, b| a.stable_id.cmp(&b.stable_id));
+    point_lights.sort_by_key(|light| light.stable_id);
 
     let mut spot_lights = Vec::new();
     for (e, light, gt) in world.query2::<SpotLight, GlobalTransform>() {
@@ -47,7 +52,7 @@ pub(super) fn collect_light_scene_snapshot(world: &newengine_ecs::World) -> Ligh
             position: Vec3::new(m.w_axis.x, m.w_axis.y, m.w_axis.z),
         });
     }
-    spot_lights.sort_by(|a, b| a.stable_id.cmp(&b.stable_id));
+    spot_lights.sort_by_key(|light| light.stable_id);
 
     LightSceneSnapshot {
         ambient,

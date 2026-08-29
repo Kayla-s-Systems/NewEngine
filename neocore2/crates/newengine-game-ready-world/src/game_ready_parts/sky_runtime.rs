@@ -111,6 +111,10 @@ pub fn tick_game_ready_sky_cycle(world: &mut newengine_ecs::World, dt: f32) {
     };
 
     let dynamics = update_sky_dynamics(world, &frame, dt);
+    let physical_clouds = world
+        .resource::<SkyDynamicsRuntime>()
+        .copied()
+        .unwrap_or_default();
     let sky_visual_ready = world.query::<EnvironmentDomeRenderState>().next().is_some();
     let spatial_shadow = if EXPERIMENTAL_SPATIAL_CLOUD_SHADOWS_ENABLED && sky_visual_ready {
         spatial_cloud_shadow_from_dynamics(&frame, &dynamics)
@@ -134,6 +138,22 @@ pub fn tick_game_ready_sky_cycle(world: &mut newengine_ecs::World, dt: f32) {
     world.insert_resource(postfx);
     world.insert_resource(dynamics.sun_occlusion);
     world.insert_resource(spatial_shadow);
+    world.insert_resource(
+        newengine_engine_runtime::gameplay::SkyCloudProfileRenderState {
+            profile0: [
+                physical_clouds.smoothed_cloud_base_altitude_m,
+                physical_clouds.smoothed_cloud_thickness_m,
+                physical_clouds.smoothed_cloud_layer_density,
+                physical_clouds.smoothed_high_cloud_coverage,
+            ],
+            profile1: [
+                physical_clouds.smoothed_humidity,
+                physical_clouds.smoothed_aerosol_density,
+                physical_clouds.smoothed_precipitation_intensity,
+                physical_clouds.smoothed_high_cloud_density,
+            ],
+        },
+    );
 
     if let Some(environment) = environment_frame.as_ref() {
         if environment.frame_id <= 2 || environment.frame_id.is_multiple_of(600) {
@@ -149,7 +169,26 @@ pub fn tick_game_ready_sky_cycle(world: &mut newengine_ecs::World, dt: f32) {
             let (shadow_samples, shadow_min, shadow_max) =
                 spatial_cloud_shadow_probe(&spatial_shadow, frame.to_sun);
             newengine_ulog_api::ulog::info!(
-                "game-ready live sky: frame={} profile='{}' weather='{}' tod={:.3} sun_y={:.3} sun_lux={:.1} day={:.3} overcast={:.3} target_clouds={:.3} live_clouds={:.3} absorption={:.3} sky_light={:.3} haze={:.3} -> clear_sun={:.3} world_sun={:.3} ambient={:.3} world_ambient={:.3} sun_cloud_raw={:.3} sun_cloud={:.3} optical_depth={:.3} transmittance={:.3} world_shadow={:.3} map=[{:.3},{:.3},{:.3},{:.3},{:.3}] spread={:.3} history={:.3} erosion=[freq:{:.4},strength:{:.3},fade:{:.1}] wind_offset=[{:.4},{:.4}] evolution={:.4} lifecycle={:.4} gust={:.3}",
+                "game-ready atmosphere: profile='{}' p={:.1}hPa T={:.2}C Td={:.2}C RH={:.3} q={:.2}g/kg rho={:.3}kg/m3 LCL={:.0}m PW={:.2}mm CWP={:.3}kg/m2 condensation={:.3} CAPE={:.0}J/kg CIN={:.0}J/kg cloud_top={:.0}m aerosol={:.3} visibility={:.0}m",
+                environment.global.atmosphere_profile_ref,
+                environment.atmosphere.surface_pressure_hpa,
+                environment.atmosphere.temperature_celsius,
+                environment.atmosphere.dew_point_celsius,
+                environment.atmosphere.humidity,
+                environment.atmosphere.specific_humidity_g_per_kg,
+                environment.atmosphere.air_density_kg_m3,
+                environment.atmosphere.lifting_condensation_level_meters,
+                environment.atmosphere.precipitable_water_mm,
+                environment.atmosphere.cloud_water_path_kg_m2,
+                environment.atmosphere.condensation_potential,
+                environment.atmosphere.cape_j_per_kg,
+                environment.atmosphere.cin_j_per_kg,
+                environment.atmosphere.convective_cloud_top_meters,
+                environment.atmosphere.aerosol_density,
+                environment.atmosphere.visibility_distance_meters,
+            );
+            newengine_ulog_api::ulog::info!(
+                "game-ready live sky: frame={} profile='{}' weather='{}' tod={:.3} sun_y={:.3} sun_lux={:.1} day={:.3} overcast={:.3} target_clouds={:.3} live_clouds={:.3} absorption={:.3} sky_light={:.3} haze={:.3} -> clear_sun={:.3} world_sun={:.3} ambient={:.3} world_ambient={:.3} sun_cloud_raw={:.3} sun_cloud={:.3} optical_depth={:.3} transmittance={:.3} world_shadow={:.3} map=[{:.3},{:.3},{:.3},{:.3},{:.3}] spread={:.3} history={:.3} erosion=[freq:{:.4},strength:{:.3},fade:{:.1}] deck=[base:{:.0},thickness:{:.0},density:{:.3},high:{:.3}/{:.3}] air=[humidity:{:.3},aerosol:{:.3},precip:{:.3}] wind_offset=[{:.4},{:.4}] evolution={:.4} lifecycle={:.4} gust={:.3}",
                 environment.frame_id,
                 environment.global.active_environment_profile,
                 environment.global.active_weather_profile,
@@ -184,6 +223,14 @@ pub fn tick_game_ready_sky_cycle(world: &mut newengine_ecs::World, dt: f32) {
                 spatial_shadow.map4[1],
                 spatial_shadow.map4[2],
                 spatial_shadow.map4[3],
+                physical_clouds.smoothed_cloud_base_altitude_m,
+                physical_clouds.smoothed_cloud_thickness_m,
+                physical_clouds.smoothed_cloud_layer_density,
+                physical_clouds.smoothed_high_cloud_coverage,
+                physical_clouds.smoothed_high_cloud_density,
+                physical_clouds.smoothed_humidity,
+                physical_clouds.smoothed_aerosol_density,
+                physical_clouds.smoothed_precipitation_intensity,
                 dynamics.cloud_offset.x,
                 dynamics.cloud_offset.y,
                 dynamics.evolution_phase,
@@ -226,7 +273,12 @@ pub fn tick_game_ready_sky_cycle(world: &mut newengine_ecs::World, dt: f32) {
             let cloud_neutral = [0.78, 0.84, 0.94];
             let cloud_mix = dynamics.sun_occlusion.smoothed_density * 0.10;
             light.color = sky_lerp3(frame.sun_color, cloud_neutral, cloud_mix);
-            light.intensity = frame.sun_intensity * spatial_shadow.map2[2];
+            // Keep scene illumination synchronized with the same cloud optical
+            // column that attenuates the solar disc/glare. Previously the log
+            // reported this factor but the actual DirectionalLight ignored it.
+            light.intensity = frame.sun_intensity
+                * spatial_shadow.map2[2]
+                * dynamics.sun_occlusion.direct_light_scale;
         }
     } else {
         newengine_ulog_api::ulog::warn!(

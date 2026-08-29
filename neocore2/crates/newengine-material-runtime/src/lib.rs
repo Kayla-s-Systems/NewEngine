@@ -25,5 +25,32 @@ pub(crate) use nemat::{
     preview_material_name_from_body, split_nemat_selector,
 };
 
+pub const RUNTIME_UNIT_SPEC: newengine_runtime_unit_api::EngineRuntimeUnitSpec =
+    newengine_runtime_unit_api::EngineRuntimeUnitSpec::new(
+        "engine.runtime.materials",
+        1,
+        newengine_runtime_unit_api::EngineRuntimeUnitKind::Provider,
+        &[newengine_materials::MATERIALS_BACKEND_CAPABILITY_ID],
+        &[newengine_assets_api::ASSET_BACKEND_CAPABILITY_ID],
+        newengine_runtime_unit_api::STATIC_PROVIDER_TAGS,
+    );
+
+fn runtime_unit_factory(
+    _: &mut newengine_runtime_unit_api::Engine<()>,
+    _: &newengine_runtime_unit_api::StartupConfig,
+) -> newengine_runtime_unit_api::EngineResult<Option<Box<dyn newengine_runtime_unit_api::Module<()>>>>
+{
+    let host = newengine_plugin_host::default_host_api();
+    let client = newengine_assets::AssetServiceClient::new(host.clone());
+    let _ = register_materials_gateway_best_effort_with_host(Some(host), client);
+    Ok(None)
+}
+
+pub const RUNTIME_UNIT_REGISTRATION: newengine_runtime_unit_api::RuntimeUnitRegistration =
+    newengine_runtime_unit_api::RuntimeUnitRegistration::new(
+        RUNTIME_UNIT_SPEC,
+        runtime_unit_factory,
+    );
+
 #[cfg(test)]
 mod tests;

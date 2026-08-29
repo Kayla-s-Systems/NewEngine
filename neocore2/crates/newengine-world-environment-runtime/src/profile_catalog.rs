@@ -1,11 +1,14 @@
 use crate::visual_asset_catalog::EnvironmentVisualAssetGroupDescriptor;
-use newengine_world_environment_api::{EnvironmentObjectKind, PrecipitationKind, WeatherKind};
+use newengine_world_environment_api::WeatherKind;
 
+mod atmosphere;
+mod clouds;
 mod patterns;
-mod phenomena;
 mod profiles;
 mod tables;
 
+use atmosphere::ATMOSPHERE_PROFILES;
+use clouds::CLOUD_PROFILES;
 use patterns::PATTERNS;
 use profiles::PROFILES;
 use tables::TABLES;
@@ -22,6 +25,7 @@ pub(crate) struct EnvironmentProfileDescriptor {
     pub weather_table_ref: &'static str,
     pub sky_profile_ref: &'static str,
     pub cloud_profile_ref: &'static str,
+    pub atmosphere_profile_ref: &'static str,
     pub wind_profile_ref: &'static str,
     pub visual_assets: &'static EnvironmentVisualAssetGroupDescriptor,
     pub latitude_degrees: f32,
@@ -29,67 +33,51 @@ pub(crate) struct EnvironmentProfileDescriptor {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct WeatherBandDescriptor {
+pub(crate) struct AtmosphereProfileDescriptor {
+    pub id: &'static str,
+    pub mean_temperature_c: f32,
+    pub terrain_elevation_m: f32,
+    pub sea_level_pressure_hpa: f32,
+    pub base_specific_humidity_g_per_kg: f32,
+    pub background_aerosol: f32,
+    pub lapse_rate_k_per_km: f32,
+    pub surface_moisture_availability: f32,
+    pub surface_albedo: f32,
+    pub boundary_layer_heat_capacity_j_m2_k: f32,
+    pub boundary_layer_depth_m: f32,
+    pub geostrophic_wind_mps: f32,
+    pub geostrophic_wind_x: f32,
+    pub geostrophic_wind_z: f32,
+    pub surface_roughness_m: f32,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct CloudProfileDescriptor {
+    pub id: &'static str,
+    /// Sub-grid morphology only. These coefficients cannot create condensate or set altitude.
+    pub low_coverage_scale: f32,
+    pub low_overcast_coverage_gain: f32,
+    pub low_density_scale: f32,
+    pub high_cloud_coverage_scale: f32,
+    pub high_density_scale: f32,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct WeatherPresentationEntryDescriptor {
+    /// Presentation mapping candidate for an already-observed physical WeatherKind.
     pub pattern_id: &'static str,
-    pub pressure_min: f32,
-    pub pressure_max: f32,
-    pub time_center: Option<f32>,
-    pub time_half_width: f32,
-    pub score_bias: f32,
 }
 
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct WeatherTableDescriptor {
-    pub bands: &'static [WeatherBandDescriptor],
+pub(crate) struct WeatherPresentationTableDescriptor {
+    pub bands: &'static [WeatherPresentationEntryDescriptor],
 }
 
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct WeatherPatternDescriptor {
+pub(crate) struct WeatherPresentationDescriptor {
     pub id: &'static str,
     pub kind: WeatherKind,
     pub weather_visual_ref: &'static str,
-    pub intensity_min: f32,
-    pub intensity_max: f32,
-    /// Minimum fractional sky coverage for this meteorological regime.
-    pub cloud_floor: f32,
-    /// Maximum fractional sky coverage for this regime. Coverage is resolved
-    /// continuously inside `[cloud_floor, cloud_ceiling]`; the floor is not a
-    /// global clamp on an unrelated baseline signal.
-    pub cloud_ceiling: f32,
-    pub overcast_bias: f32,
-    pub precipitation_kind: PrecipitationKind,
-    pub precipitation_factor: f32,
-    pub thunder_factor: f32,
-    pub wetness_factor: f32,
-    pub snow_factor: f32,
-    pub fog_factor: f32,
-    pub haze_factor: f32,
-    pub wind_base_mps: f32,
-    pub wind_gain_mps: f32,
-    pub gust_base: f32,
-    pub gust_gain: f32,
-    pub visibility_factor: f32,
-    pub tags: &'static [&'static str],
-    pub required_assets: &'static [&'static str],
-    pub phenomena: &'static [PhenomenonTemplateDescriptor],
-}
-
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct PhenomenonTemplateDescriptor {
-    pub kind: EnvironmentObjectKind,
-    pub template_id: &'static str,
-    pub activation_threshold: f32,
-    pub offset_x: f32,
-    pub offset_y: f32,
-    pub offset_z: f32,
-    pub radius: f32,
-    pub y_min: f32,
-    pub y_max: f32,
-    pub altitude_min: f32,
-    pub altitude_max: f32,
-    pub priority: &'static str,
-    pub reason: &'static str,
-    pub tags: &'static [&'static str],
     pub required_assets: &'static [&'static str],
 }
 
@@ -111,7 +99,23 @@ pub(crate) fn profile_by_id(id: &str) -> (&'static EnvironmentProfileDescriptor,
 }
 
 #[inline]
-pub(crate) fn table_by_id(id: &str) -> &'static WeatherTableDescriptor {
+pub(crate) fn cloud_profile_by_id(id: &str) -> &'static CloudProfileDescriptor {
+    CLOUD_PROFILES
+        .iter()
+        .find(|profile| profile.id == id)
+        .unwrap_or(&CLOUD_PROFILES[2])
+}
+
+#[inline]
+pub(crate) fn atmosphere_profile_by_id(id: &str) -> &'static AtmosphereProfileDescriptor {
+    ATMOSPHERE_PROFILES
+        .iter()
+        .find(|profile| profile.id == id)
+        .unwrap_or(&ATMOSPHERE_PROFILES[2])
+}
+
+#[inline]
+pub(crate) fn presentation_table_by_id(id: &str) -> &'static WeatherPresentationTableDescriptor {
     match id {
         "weather/game_ready_forest_road.yweather@table" => &TABLES[0],
         "weather/game_ready_highlands.yweather@table" => &TABLES[1],
@@ -123,7 +127,7 @@ pub(crate) fn table_by_id(id: &str) -> &'static WeatherTableDescriptor {
 }
 
 #[inline]
-pub(crate) fn pattern_by_id(id: &str) -> &'static WeatherPatternDescriptor {
+pub(crate) fn presentation_by_id(id: &str) -> &'static WeatherPresentationDescriptor {
     match id {
         "weather.clear.dry_high_pressure" => &PATTERNS[0],
         "weather.cloudy.fair_cumulus" => &PATTERNS[1],

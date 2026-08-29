@@ -3,6 +3,27 @@ mod in_game_editor_tests {
     use super::*;
 
     #[test]
+    fn runtime_render_child_selection_promotes_to_transform_edit_root() {
+        let bridge = SceneBridge::new(newengine_scene::Scene::new());
+        let (root, child) = {
+            let scene_lock = bridge.scene();
+            let mut scene = scene_lock.write();
+            let world = scene.world_mut();
+            let root = world.spawn();
+            let child = world.spawn();
+            let _ = world.insert(root, Transform::default());
+            let _ = world.insert(root, newengine_transform_api::TransformEditRoot);
+            let _ = world.insert(child, Transform::default());
+            assert!(newengine_transform::set_parent(world, child, Some(root)));
+            (root, child)
+        };
+
+        bridge.set_selection(Some(child));
+        assert_eq!(bridge.selection(), Some(root));
+        assert_eq!(bridge.selections(), vec![root]);
+    }
+
+    #[test]
     fn parses_transform_action_fields() {
         assert_eq!(
             TransformEditField::parse("game.editor.transform.position.x"),

@@ -4,8 +4,9 @@ use super::runtime::ConsoleRuntime;
 use super::types::SuggestResponse;
 
 use newengine_console_api::{
-    method, COMMAND_BACKEND_CAPABILITY_ID, COMMAND_DESCRIPTOR_CONTRACT_ID, COMMAND_PROVIDER_ROUTE,
-    COMMAND_PROVIDER_SERVICE_ID, COMMAND_SERVICE_KIND, ENGINE_COMMAND_GATEWAY_ID,
+    method, CommandCompleteResponse, CommandExecResponse, COMMAND_BACKEND_CAPABILITY_ID,
+    COMMAND_DESCRIPTOR_CONTRACT_ID, COMMAND_PROVIDER_ROUTE, COMMAND_PROVIDER_SERVICE_ID,
+    COMMAND_SERVICE_KIND, ENGINE_COMMAND_GATEWAY_ID,
 };
 use newengine_service_kit::{
     register_engine_gateway_provider_service_dynamic_atomic_best_effort,
@@ -55,17 +56,25 @@ impl ServiceV1 for CommandService {
                 let out = self.rt.exec(&line);
 
                 let resp = match out {
-                    Ok(v) => json!({ "ok": true, "output": v }),
-                    Err(e) => json!({ "ok": false, "error": e }),
+                    Ok(output) => CommandExecResponse {
+                        ok: true,
+                        output: Some(output),
+                        error: None,
+                    },
+                    Err(error) => CommandExecResponse {
+                        ok: false,
+                        output: None,
+                        error: Some(error),
+                    },
                 };
-
-                RResult::ROk(Blob::from(resp.to_string().into_bytes()))
+                RResult::ROk(Blob::from(serde_json::to_vec(&resp).unwrap_or_default()))
             }
 
             method::COMPLETE => {
                 let p = String::from_utf8_lossy(payload.as_slice());
-                let v = self.rt.complete(&p);
-                RResult::ROk(Blob::from(json!({ "items": v }).to_string().into_bytes()))
+                let items = self.rt.complete(&p);
+                let resp = CommandCompleteResponse { items };
+                RResult::ROk(Blob::from(serde_json::to_vec(&resp).unwrap_or_default()))
             }
 
             method::SUGGEST => {

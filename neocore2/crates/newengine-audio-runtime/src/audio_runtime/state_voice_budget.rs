@@ -31,7 +31,7 @@ impl AudioRuntimeState {
             return;
         };
         voice.virtual_source_position =
-            voice.normalized_source_position(control.get_pos().mul_f32(voice.speed));
+            voice.normalized_source_position(control.get_pos().mul_f32(voice.effective_speed()));
         control.stop();
         voice.virtual_since = (!voice.paused).then_some(now);
     }
@@ -46,11 +46,11 @@ impl AudioRuntimeState {
         let source = voice.source.clone();
         let bus = voice.bus;
         let gain = voice.gain;
-        let speed = voice.speed;
+        let speed = voice.effective_speed();
         let looping = voice.looping;
         let spatial = voice.spatial;
         let attenuation = voice.attenuation.clone();
-        let acoustic = voice.acoustic.sanitized();
+        let acoustic = voice.propagated_acoustic();
         let environment_state = voice.environment.sanitized();
         let paused = voice.paused;
         let source_position = voice.current_source_position(now);
@@ -76,6 +76,7 @@ impl AudioRuntimeState {
                 .clone()
                 .unwrap_or_else(|| "audio output device is still initializing".to_owned()));
         }
+        let late_binding = self.room_bus_binding_for_environment(environment_state, volume);
 
         let mut materialized_stream_stats = None;
         let control = match source {
@@ -87,29 +88,41 @@ impl AudioRuntimeState {
                 let environment = EnvironmentFilterControl::new(environment_state);
                 if let Some(spatial) = spatial {
                     let (left, right) = self.listener.ear_positions();
-                    let player = SpatialPlayer::connect_new(
-                        self.output.as_ref().expect("output checked").mixer(),
-                        spatial.sanitized().position,
-                        left,
-                        right,
-                    );
+                    let spatial_control =
+                        SpatialMixControl::new(spatial.sanitized().position, left, right);
+                    let player =
+                        Player::connect_new(self.output.as_ref().expect("output checked").mixer());
                     player.set_volume(volume);
                     player.set_speed(speed);
                     if looping {
-                        player.append(DynamicEnvironmentSource::new(
+                        let mono = ChannelVolume::new(
                             DynamicSpectralSource::new(decoder.repeat_infinite(), spectral.clone()),
+                            vec![1.0],
+                        );
+                        player.append(DynamicSpatialEnvironmentSource::new_with_late_binding(
+                            mono,
                             environment.clone(),
+                            spatial_control.clone(),
+                            late_binding.clone(),
                         ));
                     } else {
-                        player.append(DynamicEnvironmentSource::new(
+                        let mono = ChannelVolume::new(
                             DynamicSpectralSource::new(decoder, spectral.clone()),
+                            vec![1.0],
+                        );
+                        player.append(DynamicSpatialEnvironmentSource::new_with_late_binding(
+                            mono,
                             environment.clone(),
+                            spatial_control.clone(),
+                            late_binding.clone(),
                         ));
                     }
                     let control = VoiceControl::Spatial {
                         player,
+                        spatial: spatial_control,
                         spectral: Some(spectral),
                         environment: Some(environment),
+                        late_binding: late_binding.clone(),
                     };
                     if should_seek_materialized_voice(seek_position) {
                         control.try_seek(seek_position)?;
@@ -122,20 +135,23 @@ impl AudioRuntimeState {
                     player.set_volume(volume);
                     player.set_speed(speed);
                     if looping {
-                        player.append(DynamicEnvironmentSource::new(
+                        player.append(DynamicEnvironmentSource::new_with_late_binding(
                             DynamicSpectralSource::new(decoder.repeat_infinite(), spectral.clone()),
                             environment.clone(),
+                            late_binding.clone(),
                         ));
                     } else {
-                        player.append(DynamicEnvironmentSource::new(
+                        player.append(DynamicEnvironmentSource::new_with_late_binding(
                             DynamicSpectralSource::new(decoder, spectral.clone()),
                             environment.clone(),
+                            late_binding.clone(),
                         ));
                     }
                     let control = VoiceControl::Flat {
                         player,
                         spectral: Some(spectral),
                         environment: Some(environment),
+                        late_binding: late_binding.clone(),
                     };
                     if should_seek_materialized_voice(seek_position) {
                         control.try_seek(seek_position)?;
@@ -165,22 +181,28 @@ impl AudioRuntimeState {
                 let environment = EnvironmentFilterControl::new(environment_state);
                 if let Some(spatial) = spatial {
                     let (left, right) = self.listener.ear_positions();
-                    let player = SpatialPlayer::connect_new(
-                        self.output.as_ref().expect("output checked").mixer(),
-                        spatial.sanitized().position,
-                        left,
-                        right,
-                    );
+                    let spatial_control =
+                        SpatialMixControl::new(spatial.sanitized().position, left, right);
+                    let player =
+                        Player::connect_new(self.output.as_ref().expect("output checked").mixer());
                     player.set_volume(volume);
                     player.set_speed(1.0);
-                    player.append(DynamicEnvironmentSource::new(
+                    let mono = ChannelVolume::new(
                         DynamicSpectralSource::new(stream, spectral.clone()),
+                        vec![1.0],
+                    );
+                    player.append(DynamicSpatialEnvironmentSource::new_with_late_binding(
+                        mono,
                         environment.clone(),
+                        spatial_control.clone(),
+                        late_binding.clone(),
                     ));
                     let control = VoiceControl::Spatial {
                         player,
+                        spatial: spatial_control,
                         spectral: Some(spectral),
                         environment: Some(environment),
+                        late_binding: late_binding.clone(),
                     };
                     control.set_paused(paused);
                     control
@@ -189,14 +211,16 @@ impl AudioRuntimeState {
                         Player::connect_new(self.output.as_ref().expect("output checked").mixer());
                     player.set_volume(volume);
                     player.set_speed(1.0);
-                    player.append(DynamicEnvironmentSource::new(
+                    player.append(DynamicEnvironmentSource::new_with_late_binding(
                         DynamicSpectralSource::new(stream, spectral.clone()),
                         environment.clone(),
+                        late_binding.clone(),
                     ));
                     let control = VoiceControl::Flat {
                         player,
                         spectral: Some(spectral),
                         environment: Some(environment),
+                        late_binding: late_binding.clone(),
                     };
                     control.set_paused(paused);
                     control
@@ -216,6 +240,7 @@ impl AudioRuntimeState {
                     player,
                     spectral: None,
                     environment: None,
+                    late_binding: None,
                 }
             }
         };

@@ -1,6 +1,8 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use newengine_lighting::{AmbientLight, DirectionalLight, PointLight, SpotLight};
+use newengine_lighting::{
+    AmbientLight, DirectionalLight, PointLight, SpotLight, SOLAR_ANGULAR_RADIUS_RADIANS,
+};
 use newengine_math::{Mat4, Vec3};
 
 use crate::{
@@ -121,6 +123,11 @@ pub struct PackedLights {
     pub cloud_shadow_map2: [f32; 4],
     pub cloud_shadow_map3: [f32; 4],
     pub cloud_shadow_map4: [f32; 4],
+    /// Sky cloud physical profile, append-only std140 lanes.
+    /// profile0 = [low_base_m, low_thickness_m, low_density, high_coverage]
+    pub sky_cloud_profile0: [f32; 4],
+    /// profile1 = [humidity, aerosol_density, precipitation, high_density]
+    pub sky_cloud_profile1: [f32; 4],
     /// xyz = normalized active camera forward direction; w = receiver diagnostic mode.
     /// Appended to the std140 block so CSM receiver selection can use the exact
     /// same camera-forward depth convention as CPU cascade fitting.
@@ -159,13 +166,15 @@ impl Default for PackedLights {
             cloud_shadow_map2: [0.0; 4],
             cloud_shadow_map3: [0.0; 4],
             cloud_shadow_map4: [0.0; 4],
+            sky_cloud_profile0: [1250.0, 1100.0, 0.16, 0.08],
+            sky_cloud_profile1: [0.45, 0.12, 0.0, 0.04],
             shadow_view_forward: [0.0, 0.0, 1.0, 0.0],
         }
     }
 }
 
 impl PackedLights {
-    pub const UBO_SIZE: usize = 3168;
+    pub const UBO_SIZE: usize = 3200;
 
     #[inline]
     pub fn from_snapshot(snapshot: &LightSceneSnapshot) -> Self {
@@ -179,7 +188,14 @@ impl PackedLights {
             dir.direction_ws[2],
             dir.intensity,
         ];
-        let dir_color = [dir.color[0], dir.color[1], dir.color[2], 0.0];
+        // Alpha is an append-safe physical source lane: shaders use it as the solar
+        // angular half-radius. RGB remains the linear directional-light chromaticity.
+        let dir_color = [
+            dir.color[0],
+            dir.color[1],
+            dir.color[2],
+            SOLAR_ANGULAR_RADIUS_RADIANS,
+        ];
 
         let pts = snapshot.sorted_point_lights();
         if pts.len() > MAX_POINT_LIGHTS {
@@ -309,6 +325,13 @@ impl PackedLights {
     }
 
     #[inline]
+    pub fn with_sky_cloud_profile(mut self, profile0: [f32; 4], profile1: [f32; 4]) -> Self {
+        self.sky_cloud_profile0 = profile0;
+        self.sky_cloud_profile1 = profile1;
+        self
+    }
+
+    #[inline]
     pub fn with_shadow_frame(mut self, frame: ShadowFrame) -> Self {
         self.shadow_light_mvp = frame.light_mvp;
         self.shadow_cascade_light_mvp = frame.cascade_light_mvp;
@@ -421,6 +444,8 @@ impl PackedLights {
             write_vec4(bytes, &mut local_off, value);
         }
         write_vec4(bytes, &mut local_off, self.local_shadow_atlas);
+        write_vec4(bytes, &mut local_off, self.sky_cloud_profile0);
+        write_vec4(bytes, &mut local_off, self.sky_cloud_profile1);
         debug_assert_eq!(local_off, Self::UBO_SIZE);
     }
 }
@@ -432,7 +457,7 @@ mod cloud_shadow_ubo_tests {
     #[test]
     fn packed_camera_forward_is_normalized_for_csm_receiver_depth() {
         let packed = PackedLights::default().with_camera_forward([0.0, 3.0, 4.0]);
-        assert_eq!(PackedLights::UBO_SIZE, 3168);
+        assert_eq!(PackedLights::UBO_SIZE, 3200);
         assert!((packed.shadow_view_forward[0] - 0.0).abs() < 1.0e-6);
         assert!((packed.shadow_view_forward[1] - 0.6).abs() < 1.0e-6);
         assert!((packed.shadow_view_forward[2] - 0.8).abs() < 1.0e-6);
@@ -454,9 +479,30 @@ mod cloud_shadow_ubo_tests {
         let frame = ShadowFrame::disabled(newengine_core::render::TextureId::new(1))
             .with_pcss(pcss0, pcss1);
         let packed = PackedLights::default().with_shadow_frame(frame);
-        assert_eq!(PackedLights::UBO_SIZE, 3168);
+        assert_eq!(PackedLights::UBO_SIZE, 3200);
         assert_eq!(packed.shadow_pcss0, pcss0);
         assert_eq!(packed.shadow_pcss1, pcss1);
+    }
+
+    #[test]
+    fn packed_sky_cloud_profile_occupies_tail_slots() {
+        let profile0 = [920.0, 1840.0, 0.62, 0.31];
+        let profile1 = [0.78, 0.24, 0.18, 0.12];
+        let packed = PackedLights::default().with_sky_cloud_profile(profile0, profile1);
+        let mut bytes = [0u8; PackedLights::UBO_SIZE];
+        packed.write_into(&mut bytes);
+        let read_f32 = |offset: usize| {
+            f32::from_ne_bytes(
+                bytes[offset..offset + 4]
+                    .try_into()
+                    .expect("four byte float"),
+            )
+        };
+        assert_eq!(PackedLights::UBO_SIZE, 3200);
+        assert_eq!(packed.sky_cloud_profile0, profile0);
+        assert_eq!(packed.sky_cloud_profile1, profile1);
+        assert_eq!(read_f32(3168), profile0[0]);
+        assert_eq!(read_f32(3184), profile1[0]);
     }
 
     #[test]
@@ -467,7 +513,7 @@ mod cloud_shadow_ubo_tests {
         let map3 = [0.10, 0.20, 0.31, 0.43];
         let map4 = [0.78, 0.035, 0.17, 96.0];
         let packed = PackedLights::default().with_cloud_shadow(map0, map1, map2, map3, map4);
-        assert_eq!(PackedLights::UBO_SIZE, 3168);
+        assert_eq!(PackedLights::UBO_SIZE, 3200);
         assert_eq!(packed.cloud_shadow_map0, map0);
         assert_eq!(packed.cloud_shadow_map1, map1);
         assert_eq!(packed.cloud_shadow_map2, map2);

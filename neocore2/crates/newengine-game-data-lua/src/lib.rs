@@ -9,4 +9,4 @@
 mod client;
 mod provider;
 
-pub use provider::{LuaGameDataProvider, LUA_GAME_DATA_PROVIDER_ID};
+pub use provider::{LuaGameDataProvider, LUA_GAME_DATA_PROVIDER_ID, SCRIPT_GAME_DATA_PROVIDER_ID};

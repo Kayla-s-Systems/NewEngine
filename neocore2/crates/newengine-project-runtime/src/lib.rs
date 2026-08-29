@@ -438,11 +438,15 @@ fn convention_logical_path(source_relative: &str) -> Option<String> {
             return Some(normalized[..normalized.len() - ".xml".len()].to_owned());
         }
     }
-    if lower.starts_with("scripts/") && lower.ends_with(".lua") {
-        return Some(format!(
-            "{}.ysc",
-            &normalized[..normalized.len() - ".lua".len()]
-        ));
+    if lower.starts_with("scripts/") {
+        for extension in [".ts", ".tsx", ".js", ".mjs", ".lua"] {
+            if lower.ends_with(extension) {
+                return Some(format!(
+                    "{}.ysc",
+                    &normalized[..normalized.len() - extension.len()]
+                ));
+            }
+        }
     }
     if lower.starts_with("animations/") && lower.ends_with(".clip.json") {
         return Some(format!(
@@ -695,6 +699,14 @@ mod tests {
         assert_eq!(
             convention_logical_path("scripts/game.lua").as_deref(),
             Some("scripts/game.ysc")
+        );
+        assert_eq!(
+            convention_logical_path("scripts/game.ts").as_deref(),
+            Some("scripts/game.ysc")
+        );
+        assert_eq!(
+            convention_logical_path("scripts/editor.mjs").as_deref(),
+            Some("scripts/editor.ysc")
         );
         assert_eq!(
             convention_logical_path("animations/idle.clip.json").as_deref(),

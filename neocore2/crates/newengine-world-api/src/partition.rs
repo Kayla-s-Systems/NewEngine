@@ -25,6 +25,16 @@ impl WorldCellCoord {
     pub const fn new(x: i32, z: i32) -> Self {
         Self { x, z }
     }
+
+    /// Canonical world-space XZ center for the zero-origin partition grid.
+    /// This matches scene/world streaming cell addressing and avoids each consumer
+    /// inventing its own cell-to-world transform.
+    #[inline]
+    pub fn center_xz(self, cell_size_x: f32, cell_size_z: f32) -> (f32, f32) {
+        let sx = cell_size_x.max(1.0);
+        let sz = cell_size_z.max(1.0);
+        ((self.x as f32 + 0.5) * sx, (self.z as f32 + 0.5) * sz)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -101,5 +111,13 @@ mod tests {
     #[test]
     fn coordinate_constructor_is_const_shape() {
         assert_eq!(WorldCellCoord::new(4, -3), WorldCellCoord { x: 4, z: -3 });
+    }
+
+    #[test]
+    fn cell_center_uses_canonical_zero_origin_partition_mapping() {
+        assert_eq!(
+            WorldCellCoord::new(1, -1).center_xz(64.0, 64.0),
+            (96.0, -32.0)
+        );
     }
 }

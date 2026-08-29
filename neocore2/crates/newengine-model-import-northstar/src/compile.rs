@@ -18,6 +18,13 @@ use crate::pak::PakFile;
 use crate::skeleton::{decode_skeleton_with_profile, DecodedSkeleton, SkeletonProfile};
 
 #[derive(Clone, Debug)]
+pub struct PackageSkinSubsetRule {
+    pub package_path: PathBuf,
+    pub source_domain_size: usize,
+    pub local_to_master: Vec<Option<u16>>,
+}
+
+#[derive(Clone, Debug)]
 pub struct CharacterCompileRequest {
     pub name: String,
     pub package_paths: Vec<PathBuf>,
@@ -44,6 +51,11 @@ pub struct CharacterCompileRequest {
     /// master joints are used to produce a stable proximity-weighted skeletal approximation until
     /// the source cloth simulation-node domain has a dedicated runtime.
     pub package_skin_fallback_joints: Vec<(PathBuf, Vec<String>)>,
+    /// Exact native master-rig mode. Source skin domains equal to the decoded skeleton are
+    /// preserved verbatim; other domains require an explicit package subset mapping.
+    pub master_rig: bool,
+    /// Exact source-local -> master joint mappings, scoped by package and source domain.
+    pub package_skin_subsets: Vec<PackageSkinSubsetRule>,
     /// Optional rigid affine transform from decoded PAK source space into canonical model space.
     /// The same matrix is persisted as YDD `skin_source_to_model`, preserving native skinning.
     pub source_to_model: Option<[f32; 16]>,
@@ -295,6 +307,55 @@ pub fn compile_character(
     let skeleton = decode_skeleton_with_profile(&skeleton_pak, request.skeleton_profile)?;
     let skeleton_globals = imported_joint_globals(&skeleton)?;
 
+    if request.master_rig && !request.package_skin_fallback_joints.is_empty() {
+        return Err(
+            "master-rig import forbids package_skin_fallback_joints; use exact package skin subsets"
+                .to_owned(),
+        );
+    }
+    for subset in &request.package_skin_subsets {
+        if !request.package_paths.contains(&subset.package_path) {
+            return Err(format!(
+                "master-rig subset references a package outside this build package='{}'",
+                subset.package_path.display()
+            ));
+        }
+        if subset.source_domain_size == 0 || subset.local_to_master.len() != subset.source_domain_size {
+            return Err(format!(
+                "master-rig subset mapping size mismatch package='{}' source_domain={} mapping_entries={}",
+                subset.package_path.display(),
+                subset.source_domain_size,
+                subset.local_to_master.len()
+            ));
+        }
+        for (local, target) in subset.local_to_master.iter().enumerate() {
+            if let Some(target) = target {
+                if usize::from(*target) >= skeleton.joints.len() {
+                    return Err(format!(
+                        "master-rig subset target outside master domain package='{}' local={} target={} master_joints={}",
+                        subset.package_path.display(),
+                        local,
+                        target,
+                        skeleton.joints.len()
+                    ));
+                }
+            }
+        }
+    }
+    for (index, left) in request.package_skin_subsets.iter().enumerate() {
+        for right in request.package_skin_subsets.iter().skip(index + 1) {
+            if left.package_path == right.package_path
+                && left.source_domain_size == right.source_domain_size
+            {
+                return Err(format!(
+                    "duplicate master-rig subset rule package='{}' source_domain={}",
+                    left.package_path.display(),
+                    left.source_domain_size
+                ));
+            }
+        }
+    }
+
     for (package, joints) in &request.package_skin_fallback_joints {
         if !request.package_paths.contains(package) {
             return Err(format!(
@@ -339,6 +400,11 @@ pub fn compile_character(
         let resolved_fallback = fallback
             .map(|joints| resolve_master_fallback_joints(&skeleton, joints, path))
             .transpose()?;
+        let subset_rules = request
+            .package_skin_subsets
+            .iter()
+            .filter(|rule| &rule.package_path == path)
+            .collect::<Vec<_>>();
 
         for mut mesh in decoded.meshes {
             if !package_filters.is_empty()
@@ -348,7 +414,44 @@ pub fn compile_character(
             {
                 continue;
             }
-            if let Some(source_domain) = mesh.source_skin_joint_domain_size {
+            if mesh.skin.is_some() && request.master_rig {
+                let source_domain = mesh.source_skin_joint_domain_size.ok_or_else(|| {
+                    format!(
+                        "master-rig skinned mesh has no source skin domain package='{}' mesh='{}'",
+                        path.display(),
+                        mesh.name
+                    )
+                })?;
+                if source_domain != skeleton.joints.len() {
+                    let matching = subset_rules
+                        .iter()
+                        .filter(|rule| rule.source_domain_size == source_domain)
+                        .copied()
+                        .collect::<Vec<_>>();
+                    if matching.len() != 1 {
+                        return Err(format!(
+                            "master-rig skin domain requires exactly one explicit subset package='{}' mesh='{}' source_domain={} master_joints={} matching_rules={}",
+                            path.display(),
+                            mesh.name,
+                            source_domain,
+                            skeleton.joints.len(),
+                            matching.len()
+                        ));
+                    }
+                    let rule = matching[0];
+                    let skin = mesh.skin.as_mut().ok_or_else(|| {
+                        format!("master-rig skin disappeared mesh='{}'", mesh.name)
+                    })?;
+                    for vertex in skin.iter_mut() {
+                        *vertex = remap_skin_vertex_to_master(
+                            *vertex,
+                            source_domain,
+                            skeleton.joints.len(),
+                            Some(&rule.local_to_master),
+                        )?;
+                    }
+                }
+            } else if let Some(source_domain) = mesh.source_skin_joint_domain_size {
                 if mesh.skin.is_some() && source_domain != skeleton.joints.len() {
                     let target_joints = fallback.ok_or_else(|| {
                         format!(
@@ -394,6 +497,10 @@ pub fn compile_character(
         }
     }
     validate_geometry_sanity(&meshes)?;
+    // Native diagnostics compare decoded source geometry to the authored native skeleton.
+    // Run them before optional model-space canonicalization; otherwise a valid rigid
+    // source_to_model transform makes geometry and bind centers live in different spaces.
+    validate_native_eye_contract(&meshes, &skeleton)?;
     let source_to_model = request
         .source_to_model
         .map(validate_rigid_source_to_model)
@@ -403,7 +510,6 @@ pub fn compile_character(
             transform_mesh_to_model_space(mesh, transform)?;
         }
     }
-    validate_native_eye_contract(&meshes, &skeleton)?;
 
     let bounds_min = [
         meshes
@@ -1254,6 +1360,149 @@ fn encode_skeleton_xml(skeleton: &DecodedSkeleton) -> Vec<u8> {
     ));
     out.push_str("  </Skeleton>\n</Metadata>\n");
     out.into_bytes()
+}
+
+
+
+fn remap_skin_vertex_to_master(
+    mut vertex: YddBinarySkinVertex,
+    source_domain_size: usize,
+    master_domain_size: usize,
+    local_to_master: Option<&[Option<u16>]>,
+) -> Result<YddBinarySkinVertex, String> {
+    if source_domain_size == master_domain_size {
+        return Ok(vertex);
+    }
+    let mapping = local_to_master.ok_or_else(|| {
+        format!(
+            "unknown skin domain source_domain={} master_domain={}; explicit subset mapping required",
+            source_domain_size, master_domain_size
+        )
+    })?;
+    if mapping.len() != source_domain_size {
+        return Err(format!(
+            "subset mapping size mismatch source_domain={} mapping_entries={}",
+            source_domain_size,
+            mapping.len()
+        ));
+    }
+
+    fn remap_quartet(
+        joints: &mut [u16; 4],
+        weights: &[f32; 4],
+        mapping: &[Option<u16>],
+        source_domain_size: usize,
+        master_domain_size: usize,
+    ) -> Result<(), String> {
+        for slot in 0..4 {
+            let weight = weights[slot];
+            if weight <= 0.0 {
+                continue;
+            }
+            let local = usize::from(joints[slot]);
+            if local >= source_domain_size {
+                return Err(format!(
+                    "weighted local joint outside source skin domain local joint {} source_domain={}",
+                    local, source_domain_size
+                ));
+            }
+            let master = mapping[local].ok_or_else(|| {
+                format!(
+                    "subset mapping missing weighted local joint {} source_domain={} master_domain={}",
+                    local, source_domain_size, master_domain_size
+                )
+            })?;
+            if usize::from(master) >= master_domain_size {
+                return Err(format!(
+                    "subset mapping target outside master domain local joint {} target={} master_domain={}",
+                    local, master, master_domain_size
+                ));
+            }
+            joints[slot] = master;
+        }
+        Ok(())
+    }
+
+    remap_quartet(
+        &mut vertex.joints,
+        &vertex.weights,
+        mapping,
+        source_domain_size,
+        master_domain_size,
+    )?;
+    remap_quartet(
+        &mut vertex.joints_extra,
+        &vertex.weights_extra,
+        mapping,
+        source_domain_size,
+        master_domain_size,
+    )?;
+    Ok(vertex)
+}
+
+#[cfg(test)]
+mod master_rig_tests {
+    use super::*;
+
+    fn skin(joints: [u16; 4], weights: [f32; 4]) -> YddBinarySkinVertex {
+        YddBinarySkinVertex {
+            joints,
+            weights,
+            joints_extra: [0; 4],
+            weights_extra: [0.0; 4],
+        }
+    }
+
+    #[test]
+    fn master_rig_skin_passthrough_is_exact() {
+        let input = skin([53, 29, 0, 0], [0.7, 0.3, 0.0, 0.0]);
+        let output = remap_skin_vertex_to_master(input, 62, 62, None)
+            .expect("master-domain passthrough");
+        assert_eq!(output, input);
+    }
+
+    #[test]
+    fn subset_remap_changes_only_weighted_joint_indices() {
+        let input = skin([22, 5, 0, 0], [0.75, 0.25, 0.0, 0.0]);
+        let mut mapping = vec![None; 35];
+        mapping[22] = Some(53);
+        mapping[5] = Some(29);
+        let output = remap_skin_vertex_to_master(input, 35, 62, Some(&mapping))
+            .expect("subset remap");
+        assert_eq!(output.joints, [53, 29, 0, 0]);
+        assert_eq!(output.weights, input.weights);
+        assert_eq!(output.joints_extra, input.joints_extra);
+        assert_eq!(output.weights_extra, input.weights_extra);
+    }
+
+    #[test]
+    fn subset_remap_requires_every_weighted_local_joint() {
+        let input = skin([22, 8, 0, 0], [0.5, 0.5, 0.0, 0.0]);
+        let mut mapping = vec![None; 35];
+        mapping[22] = Some(53);
+        let error = remap_skin_vertex_to_master(input, 35, 62, Some(&mapping))
+            .expect_err("missing local mapping must reject");
+        assert!(error.contains("local joint 8"), "{error}");
+    }
+
+    #[test]
+    fn unknown_source_skin_domain_is_rejected() {
+        let input = skin([0, 0, 0, 0], [1.0, 0.0, 0.0, 0.0]);
+        let error = remap_skin_vertex_to_master(input, 41, 62, None)
+            .expect_err("unknown domain must reject");
+        assert!(error.contains("unknown skin domain"), "{error}");
+    }
+
+    #[test]
+    fn zero_weight_joint_does_not_require_subset_mapping() {
+        let input = skin([22, 34, 0, 0], [1.0, 0.0, 0.0, 0.0]);
+        let mut mapping = vec![None; 35];
+        mapping[22] = Some(53);
+        let output = remap_skin_vertex_to_master(input, 35, 62, Some(&mapping))
+            .expect("zero-weight slot is irrelevant");
+        assert_eq!(output.joints[0], 53);
+        assert_eq!(output.weights, input.weights);
+    }
 }
 
 fn xml_escape(value: &str) -> String {

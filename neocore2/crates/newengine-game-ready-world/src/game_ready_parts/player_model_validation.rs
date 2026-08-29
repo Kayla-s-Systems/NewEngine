@@ -47,6 +47,14 @@ pub(super) fn validate_player_asset_family(
         ),
         ("jump_animation", assignment.jump_animation.as_deref()),
         ("fall_animation", assignment.fall_animation.as_deref()),
+        (
+            "unarmed_ready_animation",
+            assignment.presentation.unarmed_ready_animation.as_deref(),
+        ),
+        (
+            "unarmed_attack_animation",
+            assignment.presentation.unarmed_attack_animation.as_deref(),
+        ),
     ] {
         let Some(reference) = reference else { continue };
         let Some(reference_owner) = character_asset_owner(reference) else {

@@ -232,7 +232,7 @@ fn decode_rgba8_height_samples(bytes: &[u8]) -> Result<(u32, u32, Vec<f32>), Str
         .get(start..end)
         .ok_or_else(|| "RGBA payload outside wire buffer".to_owned())?;
     let mut samples = Vec::with_capacity((width as usize).saturating_mul(height as usize));
-    for px in rgba.chunks_exact(4) {
+    for px in rgba.as_chunks::<4>().0 {
         let luma =
             (0.2126 * f32::from(px[0]) + 0.7152 * f32::from(px[1]) + 0.0722 * f32::from(px[2]))
                 / 255.0;

@@ -2,6 +2,7 @@
 
 mod accessors;
 mod apply_commands;
+mod authoring_adapter;
 mod bootstrap_provider;
 mod commands;
 mod commands_api;
@@ -9,7 +10,6 @@ mod definitions_runtime;
 mod helpers;
 mod imported_assets;
 mod material_application;
-mod project_save;
 mod queue;
 mod scene_object_validation;
 mod view_gateway;
@@ -48,7 +48,6 @@ use newengine_primitives::{builtins, Primitive, PrimitiveId, PrimitiveRegistry};
 use newengine_scene::{spawn_named, Scene, SceneAsset};
 use newengine_transform::Transform;
 
-use crate::audio_gateway::register_audio_gateway_best_effort;
 use crate::authority::RuntimeWorldAuthorityBridge;
 use crate::camera_gateway::CameraGatewayBridge;
 use crate::gameplay::{
@@ -84,27 +83,25 @@ pub struct SceneBridge {
     camera_gateway: Arc<CameraGatewayBridge>,
     authority: Arc<RuntimeWorldAuthorityBridge>,
     play_mode: Arc<Mutex<GameRunMode>>,
-    in_game_editor_enabled: Arc<Mutex<bool>>,
-    authored_map_edits: Arc<Mutex<project_save::AuthoredMapEditJournal>>,
+    authoring: Arc<RwLock<Option<Arc<dyn newengine_scene_authoring_api::SceneAuthoringService>>>>,
     scene_bootstrap_provider: Arc<RwLock<Option<Arc<dyn SceneBootstrapProvider>>>>,
 }
 impl SceneBridge {
     #[inline]
     pub fn new(mut initial: Scene) -> Self {
         bootstrap_runtime_scene(&mut initial);
-        register_audio_gateway_best_effort();
         let primitives = Arc::new(RwLock::new(PrimitiveRegistry::with_builtins()));
         let materials = Arc::new(RwLock::new(MaterialRegistry::with_builtins()));
 
         // Product/profile scene assembly happens through profile-owned modules.
         // The reusable scene bridge starts in staging and exposes explicit hooks
         // for profiles that need late bootstrap after providers are routed.
-        let (initial_selection, initial_mode) = (None, GameRunMode::Staging);
+        let initial_mode = GameRunMode::Staging;
 
         Self {
             scene: Arc::new(RwLock::new(initial)),
             queue: Arc::new(Mutex::new(SceneQueue::default())),
-            selection: Arc::new(Mutex::new(initial_selection)),
+            selection: Arc::new(Mutex::new(None)),
             selection_set: Arc::new(Mutex::new(Vec::new())),
             selection_authority: Arc::new(Mutex::new(None)),
             primitives,
@@ -113,17 +110,45 @@ impl SceneBridge {
             camera_gateway: Arc::new(CameraGatewayBridge::new()),
             authority: Arc::new(RuntimeWorldAuthorityBridge::new()),
             play_mode: Arc::new(Mutex::new(initial_mode)),
-            in_game_editor_enabled: Arc::new(Mutex::new(false)),
-            authored_map_edits: Arc::new(Mutex::new(
-                project_save::AuthoredMapEditJournal::default(),
-            )),
+            authoring: Arc::new(RwLock::new(None)),
             scene_bootstrap_provider: Arc::new(RwLock::new(None)),
         }
     }
 
     #[inline]
+    pub fn set_scene_authoring_provider(
+        &self,
+        provider: Arc<dyn newengine_scene_authoring_api::SceneAuthoringService>,
+    ) {
+        *self.authoring.write() = Some(provider);
+    }
+
+    #[inline]
+    pub fn clear_scene_authoring_provider(&self) {
+        *self.authoring.write() = None;
+    }
+
+    #[inline]
+    pub fn scene_authoring_available(&self) -> bool {
+        self.authoring.read().is_some()
+    }
+
+    #[inline]
+    fn scene_authoring_provider(
+        &self,
+    ) -> Option<Arc<dyn newengine_scene_authoring_api::SceneAuthoringService>> {
+        self.authoring.read().clone()
+    }
+
+    #[inline]
     pub fn scene(&self) -> Arc<RwLock<Scene>> {
         Arc::clone(&self.scene)
+    }
+
+    /// Publishes the scene-owned authoritative camera bridge into the active HostContext.
+    #[inline]
+    pub fn publish_camera_gateway_best_effort(&self) -> bool {
+        self.camera_gateway.publish_gateway_best_effort()
     }
 
     #[inline]

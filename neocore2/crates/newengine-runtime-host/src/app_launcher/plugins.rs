@@ -26,6 +26,7 @@ where
                 engine,
                 startup,
                 composition,
+                self.profile.distribution_runtime_unit_registrations(),
                 self.profile.runtime_unit_registrations(),
                 &extra_runtime_unit_requirements,
                 boot_option_enabled(boot_options, RuntimeHostBootOption::RuntimePlugins),

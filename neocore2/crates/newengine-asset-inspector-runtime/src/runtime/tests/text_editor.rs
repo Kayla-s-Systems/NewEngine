@@ -30,7 +30,7 @@ fn text_document_builds_preview_and_editor_syntax_pages() {
         ..Default::default()
     };
     let preview_api = Arc::new(AssetPreviewApi::new(Arc::new(
-        newengine_engine_runtime::ViewportBridge::new(),
+        newengine_viewport_bridge::ViewportBridge::new(),
     )));
     let mut runtime = AssetInspectorRuntimeModule::new(preview_api);
     runtime.sync_text_editor_from_document(&document);
@@ -56,7 +56,7 @@ fn text_line_edit_marks_document_dirty() {
         ..Default::default()
     };
     let preview_api = Arc::new(AssetPreviewApi::new(Arc::new(
-        newengine_engine_runtime::ViewportBridge::new(),
+        newengine_viewport_bridge::ViewportBridge::new(),
     )));
     let mut runtime = AssetInspectorRuntimeModule::new(preview_api);
     runtime.text_editor = TextEditorState::from_document(&document);

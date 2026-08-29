@@ -13,6 +13,7 @@ prestart-window-egui = ["dep:newengine-startup-window-egui"]
 [dependencies]
 newengine-runtime-host = { path = "../newengine-runtime-host", default-features = false, features = ["full-runtime"] }
 newengine-core = { path = "../newengine-core", features = ["render-api", "physics-api"] }
+newengine-console-api = { path = "../newengine-console-api" }
 newengine-ulog-api = { path = "../newengine-ulog-api" }
 newengine-asset-bootstrap-runtime = { path = "../newengine-asset-bootstrap-runtime" }
 newengine-asset-hot-reload-runtime = { path = "../newengine-asset-hot-reload-runtime" }
@@ -30,6 +31,8 @@ newengine-runtime-session-api = { path = "../newengine-runtime-session-api" }
 newengine-runtime-session-runtime = { path = "../newengine-runtime-session-runtime" }
 newengine-schema-api = { path = "../newengine-schema-api" }
 newengine-schema-runtime = { path = "../newengine-schema-runtime" }
+newengine-scripting-client = { path = "../newengine-scripting-client" }
+newengine-scripting-api = { path = "../newengine-scripting-api" }
 newengine-service-api = { path = "../newengine-service-api" }
 newengine-service-kit = { path = "../newengine-service-kit" }
 newengine-system-contracts = { path = "../newengine-system-contracts" }

@@ -97,6 +97,31 @@ mod tests {
             .find(|pass| pass.kind == RenderGraphPassKind::ForwardOpaque)
             .expect("forward pass missing")
             .id;
+        let particle_simulation = plan
+            .graph
+            .passes
+            .iter()
+            .find(|pass| pass.kind == RenderGraphPassKind::ParticleSimulation)
+            .expect("particle simulation pass missing");
+        assert_eq!(
+            particle_simulation.queue,
+            newengine_render_api::RenderGraphQueueKind::Compute
+        );
+        let particle_simulation_id = particle_simulation.id;
+        let particle_state = plan
+            .graph
+            .resources
+            .iter()
+            .find(|resource| resource.label.as_deref() == Some("vfx_particle_state"))
+            .expect("VFX particle-state resource missing")
+            .id;
+        let transparent = plan
+            .graph
+            .passes
+            .iter()
+            .find(|pass| pass.kind == RenderGraphPassKind::Transparent)
+            .expect("transparent pass missing")
+            .id;
         let postfx = plan
             .graph
             .passes
@@ -109,7 +134,19 @@ mod tests {
             .expect("standard frame graph must compile");
 
         assert!(compiled.dag.edges.iter().any(|edge| {
+            edge.producer == particle_simulation_id
+                && edge.consumer == transparent
+                && edge.resource == particle_state
+                && edge.kind == RenderGraphDependencyKind::ReadAfterWrite
+        }));
+        assert!(compiled.dag.edges.iter().any(|edge| {
             edge.producer == forward
+                && edge.consumer == transparent
+                && edge.resource == RG_SCENE_HDR_COLOR
+                && edge.kind == RenderGraphDependencyKind::WriteAfterWrite
+        }));
+        assert!(compiled.dag.edges.iter().any(|edge| {
+            edge.producer == transparent
                 && edge.consumer == postfx
                 && edge.resource == RG_SCENE_HDR_COLOR
                 && edge.kind == RenderGraphDependencyKind::ReadAfterWrite

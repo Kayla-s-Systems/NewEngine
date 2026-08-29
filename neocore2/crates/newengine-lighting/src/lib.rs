@@ -11,7 +11,9 @@
 mod lights;
 mod shadow;
 
-pub use lights::{AmbientLight, DirectionalLight, PointLight, SpotLight};
+pub use lights::{
+    AmbientLight, DirectionalLight, PointLight, SpotLight, SOLAR_ANGULAR_RADIUS_RADIANS,
+};
 pub use shadow::{
     LocalShadowSettings, ShadowFilter, ShadowMethod, ShadowPcssSettings, ShadowSettings,
 };

@@ -20,7 +20,17 @@ pub struct EnvironmentFrameRequest {
     pub active_region: Option<String>,
     pub active_biome: Option<String>,
     pub resident_cells: Vec<WorldCellCoord>,
+    /// Physical width/depth of one atmospheric cell. Zero disables mesoscale transport.
+    #[serde(default)]
+    pub spatial_cell_size_meters: f32,
+    /// World-owned surface boundary conditions. The atmosphere never fabricates missing cells.
+    #[serde(default)]
+    pub surface_boundaries: Vec<crate::EnvironmentSurfaceBoundaryDto>,
     pub environment_profile: EnvironmentProfileRefDto,
+    /// Optional world-level weather constraint. This is evaluated by the environment
+    /// provider before any consumer packet is assembled; render code never authors it.
+    #[serde(default)]
+    pub weather_constraint: crate::EnvironmentWeatherConstraint,
     pub seed: u64,
 }
 
@@ -36,9 +46,12 @@ impl Default for EnvironmentFrameRequest {
             active_region: None,
             active_biome: None,
             resident_cells: Vec::new(),
+            spatial_cell_size_meters: 0.0,
+            surface_boundaries: Vec::new(),
             environment_profile: EnvironmentProfileRefDto {
                 profile_id: "environment.default".to_owned(),
             },
+            weather_constraint: crate::EnvironmentWeatherConstraint::Dynamic,
             seed: 0,
         }
     }
@@ -104,6 +117,12 @@ pub struct EnvironmentFrameDto {
     pub exposure_intent: ExposureIntentDto,
     #[serde(default)]
     pub environment_objects: Vec<EnvironmentObjectDto>,
+    /// Physical square-cell size used by `spatial_atmosphere`; zero means column-only mode.
+    #[serde(default)]
+    pub spatial_cell_size_meters: f32,
+    /// Mesoscale cells are serialized with the frame so snapshot/restore preserves atmospheric memory.
+    #[serde(default)]
+    pub spatial_atmosphere: Vec<crate::EnvironmentAtmosphereCellDto>,
     #[serde(default)]
     pub consumer_packets: EnvironmentConsumerPacketsDto,
     pub diagnostics: EnvironmentDiagnosticsDto,
@@ -123,6 +142,8 @@ pub struct EnvironmentGlobalStateDto {
     #[serde(default)]
     pub cloud_profile_ref: String,
     #[serde(default)]
+    pub atmosphere_profile_ref: String,
+    #[serde(default)]
     pub wind_profile_ref: String,
     pub environment_seed: u64,
 }
@@ -138,6 +159,7 @@ impl Default for EnvironmentGlobalStateDto {
             weather_table_ref: String::new(),
             sky_profile_ref: String::new(),
             cloud_profile_ref: String::new(),
+            atmosphere_profile_ref: String::new(),
             wind_profile_ref: String::new(),
             environment_seed: 0,
         }

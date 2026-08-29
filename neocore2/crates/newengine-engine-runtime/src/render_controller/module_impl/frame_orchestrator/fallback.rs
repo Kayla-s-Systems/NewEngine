@@ -52,6 +52,25 @@ impl RenderFrameOrchestrator {
         )
     }
 
+    pub(in super::super) fn abort_viewport_after_transient_pipeline_wait(
+        controller: &mut RuntimeRenderController,
+        r: &mut dyn RenderApi,
+        scope: RenderFrameScope,
+        error: impl std::fmt::Display,
+    ) -> EngineResult<()> {
+        log_transient_pipeline_wait_once(controller.frame.frame_index, &error.to_string());
+        if scope.trace_frame {
+            newengine_core::crash::record_breadcrumb(format!(
+                "render controller: abort_frame frame={} after transient shader/pipeline wait during graph submit",
+                controller.frame.frame_index,
+            ));
+        }
+        r.abort_frame()?;
+        controller.gc_per_draw_ubos(r);
+        controller.gc_deferred_rts(r);
+        Ok(())
+    }
+
     pub(in super::super) fn end_viewport_after_pipeline_failure(
         controller: &mut RuntimeRenderController,
         r: &mut dyn RenderApi,

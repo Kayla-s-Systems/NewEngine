@@ -382,7 +382,7 @@ pub(super) struct RoutedPlayerInput {
 #[inline]
 pub(super) fn route_player_input_channels(
     input: &CameraGatewayInput,
-    gameplay_capture: crate::gameplay::GameplayInputCapture,
+    gameplay_capture: newengine_input_capture_api::GameplayInputCapture,
 ) -> RoutedPlayerInput {
     let movement_blocked = input.gameplay_movement_gated || gameplay_capture.block_player_movement;
     let look_blocked = input.camera_navigation_gated || gameplay_capture.block_camera_navigation;
@@ -676,8 +676,10 @@ mod tests {
             move_mask: 0x0f,
             ..CameraGatewayInput::default()
         };
-        let routed =
-            route_player_input_channels(&input, crate::gameplay::GameplayInputCapture::none());
+        let routed = route_player_input_channels(
+            &input,
+            newengine_input_capture_api::GameplayInputCapture::none(),
+        );
         assert_eq!(routed.move_mask, 0);
         assert_eq!(routed.look_delta, Vec2::new(-12.0, 7.5));
         assert!(routed.look_active);
@@ -692,8 +694,10 @@ mod tests {
             move_mask: 0,
             ..CameraGatewayInput::default()
         };
-        let routed =
-            route_player_input_channels(&input, crate::gameplay::GameplayInputCapture::none());
+        let routed = route_player_input_channels(
+            &input,
+            newengine_input_capture_api::GameplayInputCapture::none(),
+        );
         assert_eq!(routed.look_delta, Vec2::new(0.0, -9.0));
         assert!(routed.look_active);
     }
@@ -706,8 +710,10 @@ mod tests {
             active: true,
             ..CameraGatewayInput::default()
         };
-        let routed =
-            route_player_input_channels(&input, crate::gameplay::GameplayInputCapture::none());
+        let routed = route_player_input_channels(
+            &input,
+            newengine_input_capture_api::GameplayInputCapture::none(),
+        );
         assert_eq!(routed.look_delta, Vec2::new(-120.0, 120.0));
         assert!(routed.look_active);
     }
@@ -722,8 +728,10 @@ mod tests {
             move_mask: 0x03,
             ..CameraGatewayInput::default()
         };
-        let routed =
-            route_player_input_channels(&input, crate::gameplay::GameplayInputCapture::none());
+        let routed = route_player_input_channels(
+            &input,
+            newengine_input_capture_api::GameplayInputCapture::none(),
+        );
         assert_eq!(routed.move_mask, 0x03);
         assert_eq!(routed.look_delta, Vec2::ZERO);
         assert!(!routed.look_active);

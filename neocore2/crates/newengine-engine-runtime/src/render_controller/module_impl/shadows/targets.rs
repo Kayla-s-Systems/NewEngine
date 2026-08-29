@@ -43,12 +43,9 @@ fn effective_shadow_tile_resolution(
 
 #[inline]
 fn next_shadow_resolution_fallback(current: u32) -> Option<u32> {
-    for candidate in [8192_u32, 4096, 2048, 1024, 512, 256] {
-        if candidate < current {
-            return Some(candidate);
-        }
-    }
-    None
+    [8192_u32, 4096, 2048, 1024, 512, 256]
+        .into_iter()
+        .find(|&candidate| candidate < current)
 }
 
 #[inline]

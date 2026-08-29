@@ -57,6 +57,34 @@ impl BufferSlice {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DispatchArgs {
+    pub groups_x: u32,
+    pub groups_y: u32,
+    pub groups_z: u32,
+}
+
+impl DispatchArgs {
+    #[inline]
+    pub const fn new(groups_x: u32, groups_y: u32, groups_z: u32) -> Self {
+        Self {
+            groups_x,
+            groups_y,
+            groups_z,
+        }
+    }
+
+    #[inline]
+    pub const fn one_dimensional(groups_x: u32) -> Self {
+        Self::new(groups_x, 1, 1)
+    }
+
+    #[inline]
+    pub const fn is_empty(self) -> bool {
+        self.groups_x == 0 || self.groups_y == 0 || self.groups_z == 0
+    }
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct DrawArgs {
     pub vertex_count: u32,

@@ -27,6 +27,8 @@ pub struct AnimationClip {
     pub sample_rate_hz: f32,
     pub looped: bool,
     pub joint_tags: Vec<u32>,
+    /// Authored semantic timeline markers, sorted by `time_seconds`.
+    pub events: Vec<AnimationEvent>,
     /// Frame-major local poses: `frame * joint_count + joint_index`.
     pub poses: Vec<JointLocalPose>,
 }
@@ -39,12 +41,10 @@ impl AnimationClip {
 
     #[inline]
     pub fn frame_count(&self) -> usize {
-        let joints = self.joint_count();
-        if joints == 0 {
-            0
-        } else {
-            self.poses.len() / joints
-        }
+        self.poses
+            .len()
+            .checked_div(self.joint_count())
+            .unwrap_or(0)
     }
 
     pub fn sample_local_pose(

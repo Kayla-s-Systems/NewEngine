@@ -1,0 +1,20 @@
+[package]
+name = "newengine-fps-character-runtime"
+version = "0.1.0"
+edition = "2021"
+description = "Reusable FPS character control, locomotion and foot-contact mechanics"
+license = "Proprietary"
+
+[dependencies]
+newengine-audio-api = { path = "../newengine-audio-api" }
+newengine-audio-client = { path = "../newengine-audio-client" }
+newengine-ecs = { path = "../newengine-ecs" }
+newengine-engine-runtime = { path = "../newengine-engine-runtime" }
+newengine-gameplay-fps-api = { path = "../newengine-gameplay-fps-api" }
+newengine-input-actions-api = { path = "../newengine-input-actions-api" }
+newengine-math = { path = "../newengine-math" }
+newengine-model-contact-api = { path = "../newengine-model-contact-api" }
+newengine-physics-api = { path = "../newengine-physics-api" }
+newengine-sim = { path = "../newengine-sim" }
+newengine-transform = { path = "../newengine-transform" }
+newengine-ulog-api = { path = "../newengine-ulog-api" }

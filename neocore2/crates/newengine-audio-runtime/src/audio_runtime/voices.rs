@@ -1,13 +1,164 @@
+const SPEED_OF_SOUND_MPS: f32 = 343.0;
+const MAX_DOPPLER_RADIAL_SPEED_MPS: f32 = SPEED_OF_SOUND_MPS * 0.25;
+const MAX_TRACKED_AUDIO_VELOCITY_MPS: f32 = 120.0;
+const MIN_VELOCITY_SAMPLE_SECONDS: f32 = 1.0 / 500.0;
+const MAX_VELOCITY_SAMPLE_SECONDS: f32 = 0.25;
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct AudioPropagationState {
+    distance: f32,
+    air_gain: f32,
+    air_high_frequency_gain: f32,
+    air_low_pass_hz: f32,
+    doppler_ratio: f32,
+}
+
+impl Default for AudioPropagationState {
+    fn default() -> Self {
+        Self {
+            distance: 0.0,
+            air_gain: 1.0,
+            air_high_frequency_gain: 1.0,
+            air_low_pass_hz: 20_000.0,
+            doppler_ratio: 1.0,
+        }
+    }
+}
+
+#[inline]
+fn vec3_sub(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
+    [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
+}
+
+#[inline]
+fn vec3_dot(a: [f32; 3], b: [f32; 3]) -> f32 {
+    a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+}
+
+#[inline]
+fn vec3_length(value: [f32; 3]) -> f32 {
+    vec3_dot(value, value).max(0.0).sqrt()
+}
+
+#[inline]
+fn vec3_normalize_or_zero(value: [f32; 3]) -> [f32; 3] {
+    let length = vec3_length(value);
+    if !length.is_finite() || length <= 1.0e-5 {
+        [0.0; 3]
+    } else {
+        [value[0] / length, value[1] / length, value[2] / length]
+    }
+}
+
+#[inline]
+fn clamp_velocity(value: [f32; 3]) -> [f32; 3] {
+    let speed = vec3_length(value);
+    if !speed.is_finite() || speed <= 0.0 {
+        return [0.0; 3];
+    }
+    if speed <= MAX_TRACKED_AUDIO_VELOCITY_MPS {
+        value
+    } else {
+        let scale = MAX_TRACKED_AUDIO_VELOCITY_MPS / speed;
+        [value[0] * scale, value[1] * scale, value[2] * scale]
+    }
+}
+
+#[inline]
+fn estimate_velocity(previous: [f32; 3], current: [f32; 3], dt_seconds: f32) -> [f32; 3] {
+    if !dt_seconds.is_finite()
+        || !(MIN_VELOCITY_SAMPLE_SECONDS..=MAX_VELOCITY_SAMPLE_SECONDS).contains(&dt_seconds)
+    {
+        return [0.0; 3];
+    }
+    let delta = vec3_sub(current, previous);
+    let raw = [
+        delta[0] / dt_seconds,
+        delta[1] / dt_seconds,
+        delta[2] / dt_seconds,
+    ];
+    // Camera/entity teleports are discontinuities, not acoustic velocities.
+    if vec3_length(raw) > MAX_TRACKED_AUDIO_VELOCITY_MPS {
+        [0.0; 3]
+    } else {
+        clamp_velocity(raw)
+    }
+}
+
+#[inline]
+fn smooth_velocity(previous: [f32; 3], target: [f32; 3]) -> [f32; 3] {
+    const ALPHA: f32 = 0.42;
+    [
+        previous[0] + (target[0] - previous[0]) * ALPHA,
+        previous[1] + (target[1] - previous[1]) * ALPHA,
+        previous[2] + (target[2] - previous[2]) * ALPHA,
+    ]
+}
+
+#[inline]
+fn doppler_ratio(
+    listener_position: [f32; 3],
+    listener_velocity: [f32; 3],
+    emitter_position: [f32; 3],
+    emitter_velocity: [f32; 3],
+) -> f32 {
+    let listener_to_source = vec3_sub(emitter_position, listener_position);
+    let direction = vec3_normalize_or_zero(listener_to_source);
+    if vec3_length(direction) <= 0.0 {
+        return 1.0;
+    }
+    let listener_toward_source = vec3_dot(listener_velocity, direction)
+        .clamp(-MAX_DOPPLER_RADIAL_SPEED_MPS, MAX_DOPPLER_RADIAL_SPEED_MPS);
+    let source_along_listener_to_source = vec3_dot(emitter_velocity, direction)
+        .clamp(-MAX_DOPPLER_RADIAL_SPEED_MPS, MAX_DOPPLER_RADIAL_SPEED_MPS);
+    let numerator = SPEED_OF_SOUND_MPS + listener_toward_source;
+    let denominator = (SPEED_OF_SOUND_MPS + source_along_listener_to_source).max(1.0);
+    (numerator / denominator).clamp(0.75, 1.35)
+}
+
+#[inline]
+fn propagation_state(
+    listener: AudioListenerState,
+    listener_velocity: [f32; 3],
+    spatial: Option<AudioSpatialParams>,
+    emitter_velocity: [f32; 3],
+) -> AudioPropagationState {
+    let Some(spatial) = spatial else {
+        return AudioPropagationState::default();
+    };
+    let distance = distance3(spatial.position, listener.position).max(0.0);
+    // Standard-atmosphere approximation. Authored distance attenuation remains the dominant
+    // energy law; this layer models the additional frequency-dependent air loss.
+    let air_gain = (-distance * 0.0008).exp().clamp(0.55, 1.0);
+    let air_high_frequency_gain = (-distance * 0.0060).exp().clamp(0.10, 1.0);
+    let air_low_pass_hz = (20_000.0 / (1.0 + distance * 0.012)).clamp(2_500.0, 20_000.0);
+    AudioPropagationState {
+        distance,
+        air_gain,
+        air_high_frequency_gain,
+        air_low_pass_hz,
+        doppler_ratio: doppler_ratio(
+            listener.position,
+            listener_velocity,
+            spatial.position,
+            emitter_velocity,
+        ),
+    }
+}
+
 enum VoiceControl {
     Flat {
         player: Player,
         spectral: Option<SpectralFilterControl>,
         environment: Option<EnvironmentFilterControl>,
+        late_binding: Option<RoomBusVoiceBinding>,
     },
     Spatial {
-        player: SpatialPlayer,
+        player: Player,
+        spatial: SpatialMixControl,
         spectral: Option<SpectralFilterControl>,
         environment: Option<EnvironmentFilterControl>,
+        late_binding: Option<RoomBusVoiceBinding>,
     },
 }
 
@@ -15,8 +166,21 @@ impl VoiceControl {
     #[inline]
     fn set_volume(&self, value: f32) {
         match self {
-            Self::Flat { player, .. } => player.set_volume(value),
-            Self::Spatial { player, .. } => player.set_volume(value),
+            Self::Flat {
+                player,
+                late_binding,
+                ..
+            }
+            | Self::Spatial {
+                player,
+                late_binding,
+                ..
+            } => {
+                player.set_volume(value);
+                if let Some(binding) = late_binding {
+                    binding.set_voice_gain(value);
+                }
+            }
         }
     }
 
@@ -41,8 +205,8 @@ impl VoiceControl {
     #[inline]
     fn set_emitter_position(&self, position: [f32; 3]) -> bool {
         match self {
-            Self::Spatial { player, .. } => {
-                player.set_emitter_position(position);
+            Self::Spatial { spatial, .. } => {
+                spatial.set_emitter_position(position);
                 true
             }
             Self::Flat { .. } => false,
@@ -51,10 +215,9 @@ impl VoiceControl {
 
     #[inline]
     fn update_listener(&self, listener: AudioListenerState) {
-        if let Self::Spatial { player, .. } = self {
+        if let Self::Spatial { spatial, .. } = self {
             let (left, right) = listener.ear_positions();
-            player.set_left_ear_position(left);
-            player.set_right_ear_position(right);
+            spatial.set_ears(left, right);
         }
     }
 
@@ -77,6 +240,15 @@ impl VoiceControl {
         };
         if let Some(environment) = environment {
             environment.set_environment(environment_state);
+        }
+    }
+
+    #[inline]
+    fn late_binding(&self) -> Option<&RoomBusVoiceBinding> {
+        match self {
+            Self::Flat { late_binding, .. } | Self::Spatial { late_binding, .. } => {
+                late_binding.as_ref()
+            }
         }
     }
 
@@ -163,6 +335,9 @@ struct VoiceEntry {
     spatial: Option<AudioSpatialParams>,
     attenuation: Option<AudioAttenuationSettings>,
     acoustic: AudioAcousticState,
+    propagation: AudioPropagationState,
+    emitter_velocity: [f32; 3],
+    last_spatial_update: Option<Instant>,
     environment: AudioEnvironmentState,
     stream_stats: Option<Arc<StreamingStats>>,
     concurrency_group: String,
@@ -206,7 +381,8 @@ impl VoiceEntry {
 
     fn current_source_position(&self, now: Instant) -> Duration {
         if let Some(control) = self.control.as_ref() {
-            return self.normalized_source_position(control.get_pos().mul_f32(self.speed));
+            return self
+                .normalized_source_position(control.get_pos().mul_f32(self.effective_speed()));
         }
         let mut position = self.virtual_source_position;
         if !self.paused {
@@ -241,6 +417,76 @@ impl VoiceEntry {
         self.source
             .source_duration()
             .is_some_and(|duration| self.current_source_position(now) >= duration)
+    }
+
+    #[inline]
+    fn environment_audibility_gain(&self) -> f32 {
+        let environment = self.environment.sanitized();
+        let indirect = (environment.source_send.gain + environment.listener_send.gain) * 0.22;
+        environment
+            .portal_gain
+            .max(indirect.clamp(0.0, 1.0))
+            .clamp(0.0, 1.0)
+    }
+
+    #[inline]
+    fn effective_speed(&self) -> f32 {
+        match self.source {
+            VoiceSource::Stream { .. } => 1.0,
+            _ => sanitize_speed(self.speed * self.propagation.doppler_ratio),
+        }
+    }
+
+    #[inline]
+    fn propagated_acoustic(&self) -> AudioAcousticState {
+        let acoustic = self.acoustic.sanitized();
+        AudioAcousticState {
+            obstruction: acoustic.obstruction,
+            occlusion: acoustic.occlusion,
+            transmission_gain: (acoustic.transmission_gain * self.propagation.air_gain)
+                .clamp(0.0, 1.0),
+            high_frequency_gain: (acoustic.high_frequency_gain
+                * self.propagation.air_high_frequency_gain)
+                .clamp(0.0, 1.0),
+            low_pass_hz: acoustic.low_pass_hz.min(self.propagation.air_low_pass_hz),
+        }
+        .sanitized()
+    }
+
+    fn refresh_propagation(&mut self, listener: AudioListenerState, listener_velocity: [f32; 3]) {
+        let target = propagation_state(
+            listener,
+            listener_velocity,
+            self.spatial,
+            self.emitter_velocity,
+        );
+        let previous_doppler = self.propagation.doppler_ratio;
+        self.propagation = target;
+        // Smooth only the pitch-rate term. Distance and air absorption follow geometry directly.
+        self.propagation.doppler_ratio = if self.spatial.is_some() {
+            previous_doppler + (target.doppler_ratio - previous_doppler) * 0.35
+        } else {
+            1.0
+        };
+        if let Some(control) = self.control.as_ref() {
+            control.set_speed(self.effective_speed());
+            control.set_acoustic(self.propagated_acoustic());
+        }
+    }
+
+    fn update_emitter_motion(&mut self, position: [f32; 3], now: Instant) {
+        if let Some(previous) = self.spatial.map(|spatial| spatial.position) {
+            let dt = self
+                .last_spatial_update
+                .map(|last| now.saturating_duration_since(last).as_secs_f32())
+                .unwrap_or(0.0);
+            let target = estimate_velocity(previous, position, dt);
+            self.emitter_velocity = smooth_velocity(self.emitter_velocity, target);
+        } else {
+            self.emitter_velocity = [0.0; 3];
+        }
+        self.last_spatial_update = Some(now);
+        self.spatial = self.spatial.map(|_| AudioSpatialParams { position });
     }
 
     #[inline]

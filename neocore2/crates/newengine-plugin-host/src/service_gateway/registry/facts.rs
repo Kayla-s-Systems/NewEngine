@@ -25,6 +25,7 @@ pub(crate) struct PluginDescriptorFact {
 }
 
 impl PluginDescriptorFact {
+    #[cfg(test)]
     #[inline]
     pub(crate) fn new(
         plugin_id: String,

@@ -1,0 +1,19 @@
+[package]
+name = "newengine-fps-inventory-ui-runtime"
+version = "0.1.0"
+edition = "2021"
+description = "Optional FPS inventory and character-selection UI provider"
+license = "Proprietary"
+
+[dependencies]
+serde_json = "1"
+newengine-ecs = { path = "../newengine-ecs" }
+newengine-engine-runtime = { path = "../newengine-engine-runtime" }
+newengine-fps-character-runtime = { path = "../newengine-fps-character-runtime" }
+newengine-fps-combat-runtime = { path = "../newengine-fps-combat-runtime" }
+newengine-game-data = { path = "../newengine-game-data" }
+newengine-gameplay-fps-api = { path = "../newengine-gameplay-fps-api" }
+newengine-math = { path = "../newengine-math" }
+newengine-ui-api = { path = "../newengine-ui-api" }
+newengine-ulog-api = { path = "../newengine-ulog-api" }
+newengine-scripting-client = { path = "../newengine-scripting-client" }

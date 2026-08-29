@@ -100,7 +100,7 @@ impl RenderFrameRecipe {
         features: RuntimeFrameFeatureSet,
         cascaded_shadows: bool,
     ) -> Self {
-        let mut steps = Vec::with_capacity(12);
+        let mut steps = Vec::with_capacity(14);
         steps.push(RenderPhaseRecipeStep::enabled(
             StandardRenderPhase::BeginFrame,
         ));
@@ -119,6 +119,14 @@ impl RenderFrameRecipe {
             StandardRenderPhase::LocalShadowMap,
             features.local_shadows,
         ));
+        // Particle simulation is compute work consumed by the transparent draw list.
+        // Schedule it before the scene raster chain: Vulkan compute execution ends an
+        // active legacy render pass, so placing it between ForwardOpaque and Transparent
+        // would force a direct-surface continuation to reopen the swapchain CLEAR pass
+        // and erase the opaque scene that was just rendered.
+        steps.push(RenderPhaseRecipeStep::enabled(
+            StandardRenderPhase::ParticleSimulation,
+        ));
         if features.deferred {
             steps.push(RenderPhaseRecipeStep::enabled(
                 StandardRenderPhase::DepthPrepass,
@@ -134,6 +142,9 @@ impl RenderFrameRecipe {
                 StandardRenderPhase::ViewportForward,
             ));
         }
+        steps.push(RenderPhaseRecipeStep::enabled(
+            StandardRenderPhase::Transparent,
+        ));
         steps.push(RenderPhaseRecipeStep::optional(
             StandardRenderPhase::PostFx,
             features.postfx,
@@ -189,5 +200,44 @@ impl RuntimeRecipeBuildParams {
     pub const fn with_shadow_cascade_count(mut self, cascade_count: u32) -> Self {
         self.shadow_cascade_count = cascade_count;
         self
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn particle_compute_precedes_forward_surface_raster_chain() {
+        let recipe = RenderFrameRecipe::standard_runtime(RuntimeFrameFeatureSet::forward(
+            true, false, false, false,
+        ));
+        let phases = recipe.enabled_phases().collect::<Vec<_>>();
+        let particle = phases
+            .iter()
+            .position(|phase| *phase == StandardRenderPhase::ParticleSimulation)
+            .expect("particle simulation phase");
+        let forward = phases
+            .iter()
+            .position(|phase| *phase == StandardRenderPhase::ViewportForward)
+            .expect("forward phase");
+        let transparent = phases
+            .iter()
+            .position(|phase| *phase == StandardRenderPhase::Transparent)
+            .expect("transparent phase");
+
+        assert!(
+            particle < forward,
+            "compute must finish before surface raster begins"
+        );
+        assert!(
+            forward < transparent,
+            "transparent must continue the opaque surface scope"
+        );
+        assert_eq!(
+            transparent,
+            forward + 1,
+            "no phase may split the direct-surface raster chain"
+        );
     }
 }

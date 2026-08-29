@@ -21,6 +21,40 @@ pub mod method {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CommandExecResponse {
+    pub ok: bool,
+    #[serde(default)]
+    pub output: Option<String>,
+    #[serde(default)]
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CommandCompleteResponse {
+    #[serde(default)]
+    pub items: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CommandSuggestItem {
+    pub kind: String,
+    pub display: String,
+    pub insert: String,
+    #[serde(default)]
+    pub help: String,
+    #[serde(default)]
+    pub usage: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CommandSuggestResponse {
+    #[serde(default)]
+    pub signature: String,
+    #[serde(default)]
+    pub items: Vec<CommandSuggestItem>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CommandArgSpec {
     pub name: String,
     #[serde(default)]

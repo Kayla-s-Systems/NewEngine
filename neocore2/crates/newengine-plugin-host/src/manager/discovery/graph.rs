@@ -36,7 +36,7 @@ pub(super) struct ScannedDynlib {
     pub(super) file_name: String,
     /// Verified sidecar snapshot captured during discovery. It is immutable input
     /// to the authoritative composition/load plan and must not be re-read later.
-    pub(super) discovery_manifest: Option<newengine_plugin_api::PluginDiscoveryManifestV1>,
+    pub(super) discovery_manifest: Option<super::sidecar::VerifiedPluginDiscoveryManifest>,
     pub(super) kind: ScannedDynlibKind,
 }
 

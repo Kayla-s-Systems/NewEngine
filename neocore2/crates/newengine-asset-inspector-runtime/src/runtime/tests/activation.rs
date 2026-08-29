@@ -3,7 +3,7 @@ use super::super::*;
 #[test]
 fn click_on_already_selected_open_asset_schedules_refresh() {
     let preview_api = Arc::new(AssetPreviewApi::new(Arc::new(
-        newengine_engine_runtime::ViewportBridge::new(),
+        newengine_viewport_bridge::ViewportBridge::new(),
     )));
     let mut runtime = AssetInspectorRuntimeModule::new(preview_api);
     runtime.entries = vec![InspectorEntry {
@@ -29,7 +29,7 @@ fn click_on_already_selected_open_asset_schedules_refresh() {
 #[test]
 fn second_click_on_selected_file_always_schedules_open() {
     let preview_api = Arc::new(AssetPreviewApi::new(Arc::new(
-        newengine_engine_runtime::ViewportBridge::new(),
+        newengine_viewport_bridge::ViewportBridge::new(),
     )));
     let mut runtime = AssetInspectorRuntimeModule::new(preview_api);
     runtime.entries = vec![InspectorEntry {
@@ -50,7 +50,7 @@ fn second_click_on_selected_file_always_schedules_open() {
 #[test]
 fn second_click_on_different_file_only_changes_selection() {
     let preview_api = Arc::new(AssetPreviewApi::new(Arc::new(
-        newengine_engine_runtime::ViewportBridge::new(),
+        newengine_viewport_bridge::ViewportBridge::new(),
     )));
     let mut runtime = AssetInspectorRuntimeModule::new(preview_api);
     runtime.entries = vec![
@@ -76,7 +76,7 @@ fn second_click_on_different_file_only_changes_selection() {
 #[test]
 fn explicit_double_click_opens_unselected_file_immediately() {
     let preview_api = Arc::new(AssetPreviewApi::new(Arc::new(
-        newengine_engine_runtime::ViewportBridge::new(),
+        newengine_viewport_bridge::ViewportBridge::new(),
     )));
     let mut runtime = AssetInspectorRuntimeModule::new(preview_api);
     runtime.entries = vec![InspectorEntry {
@@ -93,7 +93,7 @@ fn explicit_double_click_opens_unselected_file_immediately() {
 #[test]
 fn single_click_selects_file_without_starting_provider_decode() {
     let preview_api = Arc::new(AssetPreviewApi::new(Arc::new(
-        newengine_engine_runtime::ViewportBridge::new(),
+        newengine_viewport_bridge::ViewportBridge::new(),
     )));
     let mut runtime = AssetInspectorRuntimeModule::new(preview_api);
     runtime.entries = vec![InspectorEntry {
@@ -113,7 +113,7 @@ fn single_click_selects_file_without_starting_provider_decode() {
 #[test]
 fn file_activation_is_deferred_one_frame_so_progress_can_be_presented() {
     let preview_api = Arc::new(AssetPreviewApi::new(Arc::new(
-        newengine_engine_runtime::ViewportBridge::new(),
+        newengine_viewport_bridge::ViewportBridge::new(),
     )));
     let mut runtime = AssetInspectorRuntimeModule::new(preview_api);
     runtime.entries = vec![InspectorEntry {

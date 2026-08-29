@@ -75,6 +75,8 @@ pub const UI_SURFACE_ENGINE_LOADING: &str = "engine.ui.loading";
 pub const UI_SURFACE_ENGINE_ERROR_MODAL: &str = "engine.error_modal";
 pub const UI_SURFACE_RUNTIME_OVERLAY: &str = "runtime.overlay";
 pub const UI_SURFACE_RUNTIME_DEBUG_OVERLAY: &str = "runtime.debug_overlay";
+/// Global interactive developer console rendered by engine.ui and driven by engine.command.
+pub const UI_SURFACE_ENGINE_CONSOLE: &str = "engine.console.overlay";
 pub const UI_SURFACE_ENGINE_PRIMARY: &str = "engine.ui.primary";
 /// Canonical declarative UI theme id used by first-party runtime/editor surfaces.
 /// The engine treats this as a token; the active UI provider resolves fonts,
@@ -109,6 +111,7 @@ pub const UI_COMPONENT_COLUMN: &str = "column";
 pub const UI_COMPONENT_GRID: &str = "grid";
 pub const UI_COMPONENT_BUTTON: &str = "button";
 pub const UI_COMPONENT_INPUT: &str = "input";
+pub const UI_COMPONENT_CODE_EDITOR: &str = "code_editor";
 pub const UI_COMPONENT_CHECKBOX: &str = "checkbox";
 pub const UI_COMPONENT_TOGGLE: &str = "toggle";
 pub const UI_COMPONENT_SLIDER: &str = "slider";
@@ -277,6 +280,7 @@ impl Default for UiServiceInfo {
                 UI_SURFACE_ENGINE_ERROR_MODAL.to_owned(),
                 UI_SURFACE_RUNTIME_OVERLAY.to_owned(),
                 UI_SURFACE_RUNTIME_DEBUG_OVERLAY.to_owned(),
+                UI_SURFACE_ENGINE_CONSOLE.to_owned(),
                 UI_SURFACE_ENGINE_PRIMARY.to_owned(),
             ],
         }

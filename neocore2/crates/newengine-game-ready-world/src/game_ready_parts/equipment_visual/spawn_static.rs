@@ -84,7 +84,13 @@ fn spawn_equipped_weapon_visual(
         .collect::<Result<Vec<_>, _>>()?;
 
     let root = spawn_named(world, format!("Player/EquippedWeapon/{}", definition.name));
-    let _ = world.insert(root, Transform::default());
+    let initial_transform = Transform::default();
+    let _ = world.insert(root, initial_transform);
+    let _ = world.insert(root, newengine_transform::TransformEditRoot);
+    let _ = world.insert(
+        root,
+        newengine_transform::RuntimeTransformEditOverride::new(initial_transform),
+    );
     let last_shot_sequence = world
         .get::<PlayerWeaponState>(owner)
         .map(|state| state.shot_sequence)
@@ -102,6 +108,7 @@ fn spawn_equipped_weapon_visual(
             recoil_yaw_radians: 0.0,
         },
     );
+    let _ = world.insert(root, WeaponSecondaryDynamicsState::default());
     let _ = world.insert(
         root,
         DisplayVisibility {

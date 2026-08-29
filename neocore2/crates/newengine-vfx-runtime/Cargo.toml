@@ -1,0 +1,16 @@
+[package]
+name = "newengine-vfx-runtime"
+version = "0.1.0"
+edition = "2021"
+description = "Semantic VFX orchestration, budgets and lifetime runtime for North Star Engine"
+license = "Proprietary"
+
+[dependencies]
+newengine-vfx-api = { path = "../newengine-vfx-api" }
+newengine-ecs = { path = "../newengine-ecs" }
+newengine-lighting = { path = "../newengine-lighting" }
+newengine-math = { path = "../newengine-math" }
+newengine-model-domain-api = { path = "../newengine-model-domain-api" }
+newengine-primitives = { path = "../newengine-primitives" }
+newengine-scene = { path = "../newengine-scene", features = ["runtime"] }
+newengine-transform = { path = "../newengine-transform" }

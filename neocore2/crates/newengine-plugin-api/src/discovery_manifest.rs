@@ -9,15 +9,20 @@ use crate::{
     SystemTagV2,
 };
 
-pub const PLUGIN_DISCOVERY_MANIFEST_SCHEMA_VERSION: u32 = 1;
+pub const PLUGIN_DISCOVERY_MANIFEST_SCHEMA_VERSION: u32 = 2;
 pub const PLUGIN_DISCOVERY_MANIFEST_SUFFIX: &str = "nspmeta.json";
+/// Fixed trailer marker for metadata embedded directly into a plugin artifact.
+pub const PLUGIN_DISCOVERY_EMBEDDED_MAGIC: &[u8; 16] = b"NSPMETA2-EMBED\0\0";
+pub const PLUGIN_DISCOVERY_EMBEDDED_FOOTER_SIZE: u64 = 24;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct PluginDiscoveryManifestV1 {
+/// Declarative plugin metadata shipped with the plugin source/artifact.
+///
+/// Artifact size and SHA-256 are intentionally not serialized here. They are
+/// observed by the runtime scanner and frozen in-memory for TOCTOU protection.
+pub struct PluginDiscoveryManifestV2 {
     pub schema_version: u32,
     pub artifact_file: String,
-    pub artifact_size: u64,
-    pub artifact_sha256: String,
     pub signature: Option<PluginDiscoverySignatureV1>,
     pub descriptor: Option<PluginDiscoveryDescriptorV1>,
     pub platform_runtime: Option<PluginDiscoveryPlatformRuntimeV1>,
@@ -125,7 +130,7 @@ impl PluginDiscoveryDescriptorV1 {
 impl PluginDiscoveryCapabilityV1 {
     fn from_typed(c: &CapabilityDescV2) -> Self {
         let (contract_id, contract_version) = match &c.contract {
-            ROption::RSome(v) => (Some(v.id.to_string()), v.version.clone().into_option()),
+            ROption::RSome(v) => (Some(v.id.to_string()), v.version.into_option()),
             ROption::RNone => (None, None),
         };
         let route = match &c.route {
@@ -149,7 +154,7 @@ impl PluginDiscoveryCapabilityV1 {
         let requirement = match &c.requirement {
             ROption::RSome(r) => Some(PluginDiscoveryRequirementV1 {
                 min_version: r.min_version,
-                max_version: r.max_version.clone().into_option(),
+                max_version: r.max_version.into_option(),
                 required_tags: r
                     .required_tags
                     .iter()

@@ -15,6 +15,7 @@ mod objects;
 mod primitives;
 mod requests;
 mod service;
+mod spatial;
 mod taxonomy;
 mod weather;
 
@@ -27,6 +28,7 @@ pub use objects::*;
 pub use primitives::*;
 pub use requests::*;
 pub use service::*;
+pub use spatial::*;
 pub use taxonomy::*;
 pub use weather::*;
 

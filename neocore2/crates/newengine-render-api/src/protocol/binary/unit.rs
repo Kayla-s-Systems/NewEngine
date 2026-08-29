@@ -1,7 +1,8 @@
 use super::super::RenderCommand;
 use super::codec::*;
 use crate::{
-    BindGroupId, BufferId, BufferSlice, DrawArgs, DrawIndexedArgs, PipelineId, RectI32, Viewport,
+    BindGroupId, BufferId, BufferSlice, DispatchArgs, DrawArgs, DrawIndexedArgs, PipelineId,
+    RectI32, Viewport,
 };
 
 const COMMAND_BATCH_BIN_MAGIC: &[u8; 8] = b"NECB\x02\0\0\0";
@@ -115,6 +116,12 @@ fn encode_unit_command(out: &mut Vec<u8>, command: &RenderCommand) -> Result<(),
         RenderCommand::DiscardRecordedCommands => {
             put_u8(out, 12);
         }
+        RenderCommand::Dispatch(args) => {
+            put_u8(out, 13);
+            put_u32(out, args.groups_x);
+            put_u32(out, args.groups_y);
+            put_u32(out, args.groups_z);
+        }
         _ => {
             return Err(format!(
                 "render command is not supported by binary unit batch: {command:?}"
@@ -182,6 +189,11 @@ fn decode_unit_command(r: &mut BinReader<'_>) -> Result<RenderCommand, String> {
             kind: r.optional_render_draw_list_kind()?,
         }),
         12 => Ok(RenderCommand::DiscardRecordedCommands),
+        13 => Ok(RenderCommand::Dispatch(DispatchArgs {
+            groups_x: r.u32()?,
+            groups_y: r.u32()?,
+            groups_z: r.u32()?,
+        })),
         tag => Err(format!("unknown render command batch binary tag {tag}")),
     }
 }

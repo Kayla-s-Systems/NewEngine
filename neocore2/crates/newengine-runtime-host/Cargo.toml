@@ -10,13 +10,8 @@ edition = "2021"
 # full-runtime control-plane orchestration explicitly at their dependency site.
 default = []
 command-console = ["dep:newengine-console-runtime"]
-standard-backend-adapters = [
-    "dep:newengine-render-runtime-adapter",
-    "dep:newengine-physics-runtime-adapter",
-]
 host-capabilities-native = ["dep:newengine-host-capabilities-runtime"]
 full-runtime = [
-    "standard-backend-adapters",
     "command-console",
     "dep:newengine-ulog-api",
     "dep:newengine-host-capabilities-api",
@@ -41,7 +36,7 @@ full-runtime = [
     "dep:newengine-plugin-host",
     "dep:newengine-service-kit",
     "dep:newengine-service-api",
-    "dep:newengine-runtime-units",
+    "dep:newengine-runtime-unit-api",
     "dep:newengine-transform",
 ]
 
@@ -76,9 +71,7 @@ newengine-plugin-api = { path = "../newengine-plugin-api", optional = true }
 newengine-schema-runtime = { path = "../newengine-schema-runtime", optional = true }
 newengine-service-kit = { path = "../newengine-service-kit", optional = true }
 newengine-service-api = { path = "../newengine-service-api", optional = true }
-newengine-runtime-units = { path = "../newengine-runtime-units", optional = true }
-newengine-render-runtime-adapter = { path = "../newengine-render-runtime-adapter", optional = true }
-newengine-physics-runtime-adapter = { path = "../newengine-physics-runtime-adapter", optional = true }
+newengine-runtime-unit-api = { path = "../newengine-runtime-unit-api", optional = true }
 newengine-plugin-host = { path = "../newengine-plugin-host", optional = true }
 newengine-transform = { path = "../newengine-transform", features = ["ecs", "service"], default-features = false, optional = true }
 

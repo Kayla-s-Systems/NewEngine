@@ -165,6 +165,13 @@ impl RuntimeHostAppProfile for GameReadyFpsApp {
     }
 
     #[inline]
+    fn distribution_runtime_unit_registrations(
+        &self,
+    ) -> &'static [newengine_runtime_host::app_launcher::RuntimeHostRuntimeUnitRegistration] {
+        newengine_runtime_units::STATIC_RUNTIME_UNIT_REGISTRATIONS
+    }
+
+    #[inline]
     fn runtime_unit_registrations(
         &self,
     ) -> &'static [newengine_runtime_host::app_launcher::RuntimeHostRuntimeUnitRegistration] {

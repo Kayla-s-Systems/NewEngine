@@ -369,3 +369,52 @@ impl PipelineDesc {
         self
     }
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ComputePipelineDesc {
+    pub label: Option<String>,
+    pub cs: ShaderId,
+    pub bind_group_layouts: Vec<BindGroupLayoutId>,
+    #[serde(default)]
+    pub cache_key: Option<String>,
+    #[serde(default)]
+    pub warmup: bool,
+}
+
+impl ComputePipelineDesc {
+    #[inline]
+    pub fn new(cs: ShaderId) -> Self {
+        Self {
+            label: None,
+            cs,
+            bind_group_layouts: Vec::new(),
+            cache_key: None,
+            warmup: false,
+        }
+    }
+
+    #[inline]
+    pub fn with_label(mut self, label: impl Into<String>) -> Self {
+        self.label = Some(label.into());
+        self
+    }
+
+    #[inline]
+    pub fn with_bind_group_layouts(mut self, layouts: Vec<BindGroupLayoutId>) -> Self {
+        self.bind_group_layouts = layouts;
+        self
+    }
+
+    #[inline]
+    pub fn with_cache_key(mut self, key: impl Into<String>) -> Self {
+        let key = key.into();
+        self.cache_key = (!key.trim().is_empty()).then_some(key);
+        self
+    }
+
+    #[inline]
+    pub fn as_warmup(mut self) -> Self {
+        self.warmup = true;
+        self
+    }
+}

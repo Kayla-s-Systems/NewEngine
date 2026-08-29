@@ -25,7 +25,7 @@ fn parses_authored_entry_and_field_row_ids() {
 #[test]
 fn hover_exit_only_clears_the_matching_hover_owner() {
     let preview_api = Arc::new(AssetPreviewApi::new(Arc::new(
-        newengine_engine_runtime::ViewportBridge::new(),
+        newengine_viewport_bridge::ViewportBridge::new(),
     )));
     let mut runtime = AssetInspectorRuntimeModule::new(preview_api);
 
@@ -51,7 +51,7 @@ fn hover_exit_only_clears_the_matching_hover_owner() {
 #[test]
 fn field_hover_uses_provider_help_text() {
     let preview_api = Arc::new(AssetPreviewApi::new(Arc::new(
-        newengine_engine_runtime::ViewportBridge::new(),
+        newengine_viewport_bridge::ViewportBridge::new(),
     )));
     let mut runtime = AssetInspectorRuntimeModule::new(preview_api);
     runtime.document = Some(AssetDocument {

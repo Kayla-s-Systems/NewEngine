@@ -346,7 +346,7 @@ fn hovered_item_index(
 
 #[inline]
 fn audio(kind: AudioFeedbackKind, frame_index: u64) {
-    crate::audio_gateway::emit_audio_feedback(kind, frame_index);
+    newengine_audio_client::emit_audio_feedback(kind, frame_index);
 }
 
 #[inline]

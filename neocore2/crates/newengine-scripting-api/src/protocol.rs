@@ -42,6 +42,11 @@ pub const SCRIPTING_SERVICE_METHOD_VALIDATE_MODULE_REF_JSON_V1: &str =
 pub const SCRIPTING_SERVICE_METHOD_UNLOAD_MODULE_JSON_V1: &str = "scripting.unload_module_json_v1";
 pub const SCRIPTING_SERVICE_METHOD_BINDING_MANIFEST_JSON_V1: &str =
     "scripting.binding_manifest_json_v1";
+pub const SCRIPTING_SERVICE_METHOD_COMPLETE_JSON_V1: &str = "scripting.complete_json_v1";
+pub const SCRIPTING_SERVICE_METHOD_SIGNATURE_HELP_JSON_V1: &str =
+    "scripting.signature_help_json_v1";
+pub const SCRIPTING_SERVICE_METHOD_SET_TOOLING_CATALOG_JSON_V1: &str =
+    "scripting.set_tooling_catalog_json_v1";
 
 pub const SCRIPTING_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec =
     newengine_service_api::BackendServiceSpec::new(
@@ -76,6 +81,9 @@ pub const SCRIPTING_SERVICE_METHODS: &[&str] = &[
     SCRIPTING_SERVICE_METHOD_VALIDATE_MODULE_REF_JSON_V1,
     SCRIPTING_SERVICE_METHOD_UNLOAD_MODULE_JSON_V1,
     SCRIPTING_SERVICE_METHOD_BINDING_MANIFEST_JSON_V1,
+    SCRIPTING_SERVICE_METHOD_COMPLETE_JSON_V1,
+    SCRIPTING_SERVICE_METHOD_SIGNATURE_HELP_JSON_V1,
+    SCRIPTING_SERVICE_METHOD_SET_TOOLING_CATALOG_JSON_V1,
 ];
 
 #[inline]

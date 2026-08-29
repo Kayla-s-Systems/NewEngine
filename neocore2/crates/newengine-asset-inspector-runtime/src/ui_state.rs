@@ -1,5 +1,5 @@
+use newengine_asset_preview_runtime::{AssetPreviewKind, AssetPreviewSnapshot};
 use newengine_assets_api::{AssetDocument, AssetDocumentField, AssetPatchResult};
-use newengine_engine_runtime::{AssetPreviewKind, AssetPreviewSnapshot};
 use newengine_ui_api::{
     UiStatePatch, ENGINE_UI_SERVICE_ID, UI_SERVICE_METHOD_APPLY_STATE_PATCH_V1,
 };

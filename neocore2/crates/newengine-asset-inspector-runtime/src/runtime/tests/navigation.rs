@@ -42,7 +42,7 @@ fn provider_manifest_parent_returns_to_the_asset_directory() {
 #[test]
 fn activating_parent_row_navigates_up_without_closing_the_open_document() {
     let preview_api = Arc::new(AssetPreviewApi::new(Arc::new(
-        newengine_engine_runtime::ViewportBridge::new(),
+        newengine_viewport_bridge::ViewportBridge::new(),
     )));
     let mut runtime = AssetInspectorRuntimeModule::new(preview_api);
     runtime.current_path = "textures/characters".to_owned();
@@ -62,14 +62,14 @@ fn activating_parent_row_navigates_up_without_closing_the_open_document() {
 #[test]
 fn browser_navigation_keeps_open_document_and_preview() {
     let preview_api = Arc::new(AssetPreviewApi::new(Arc::new(
-        newengine_engine_runtime::ViewportBridge::new(),
+        newengine_viewport_bridge::ViewportBridge::new(),
     )));
     let mut runtime = AssetInspectorRuntimeModule::new(preview_api);
     runtime.selected_index = Some(4);
     runtime.document = Some(AssetDocument::default());
     runtime.preview_snapshot = Some(AssetPreviewSnapshot {
         asset_ref: "textures/test.ytd".to_owned(),
-        kind: newengine_engine_runtime::AssetPreviewKind::Texture2d,
+        kind: newengine_asset_preview_runtime::AssetPreviewKind::Texture2d,
         ready: true,
         texture_ref: Some("textures/test.ytd@entry".to_owned()),
         ui_texture_id: None,
@@ -83,7 +83,8 @@ fn browser_navigation_keeps_open_document_and_preview() {
     assert_eq!(runtime.selected_index, None);
     assert!(runtime.document.is_some());
     assert!(runtime.preview_snapshot.as_ref().is_some_and(|preview| {
-        preview.ready && preview.kind == newengine_engine_runtime::AssetPreviewKind::Texture2d
+        preview.ready
+            && preview.kind == newengine_asset_preview_runtime::AssetPreviewKind::Texture2d
     }));
 }
 

@@ -44,6 +44,60 @@ pub struct AnimationGraphRef(pub String);
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct AnimationClipRef(pub String);
 
+/// Runtime occurrence of an authored animation timeline marker.
+///
+/// The DTO intentionally carries semantic tag/payload data only. Pose buffers, clip ownership,
+/// skeleton bindings and backend-specific event cursors remain private to animation runtimes.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AnimationTimelineEventV1 {
+    pub entity: EntityHandle,
+    pub clip: AnimationClipRef,
+    #[serde(default)]
+    pub channel: String,
+    pub tag: TagId,
+    pub clip_time_seconds: f32,
+    pub playback_time_seconds: f32,
+    #[serde(default)]
+    pub loop_index: u64,
+    #[serde(default)]
+    pub parameters: serde_json::Value,
+}
+
+/// Frame/runtime-owned timeline event queue. Consumers drain semantic occurrences without owning
+/// animation runtime state. A bounded queue prevents an authored malformed loop from growing memory
+/// without limit even if the consumer temporarily stops draining it.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+pub struct AnimationTimelineEventQueueV1 {
+    #[serde(default)]
+    pub events: Vec<AnimationTimelineEventV1>,
+}
+
+impl AnimationTimelineEventQueueV1 {
+    pub const MAX_RETAINED_EVENTS: usize = 1024;
+
+    #[inline]
+    pub fn emit(&mut self, event: AnimationTimelineEventV1) {
+        if self.events.len() >= Self::MAX_RETAINED_EVENTS {
+            let overflow = self.events.len() + 1 - Self::MAX_RETAINED_EVENTS;
+            self.events.drain(0..overflow);
+        }
+        self.events.push(event);
+    }
+
+    #[inline]
+    pub fn drain(&mut self) -> Vec<AnimationTimelineEventV1> {
+        std::mem::take(&mut self.events)
+    }
+}
+
+impl Extend<AnimationTimelineEventV1> for AnimationTimelineEventQueueV1 {
+    fn extend<T: IntoIterator<Item = AnimationTimelineEventV1>>(&mut self, iter: T) {
+        for event in iter {
+            self.emit(event);
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub enum AnimationIntentKind {
     #[default]
@@ -147,5 +201,40 @@ impl Default for AnimationServiceInfoV1 {
                 .collect(),
             features: vec!["animation-intents".to_owned(), "task-bindings".to_owned()],
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn event(index: usize) -> AnimationTimelineEventV1 {
+        AnimationTimelineEventV1 {
+            entity: EntityHandle::new(7),
+            clip: AnimationClipRef("test.ycd@idle".to_owned()),
+            channel: "character.locomotion".to_owned(),
+            tag: TagId::new(format!("event.{index}")),
+            clip_time_seconds: 0.0,
+            playback_time_seconds: index as f32,
+            loop_index: 0,
+            parameters: serde_json::Value::Null,
+        }
+    }
+
+    #[test]
+    fn timeline_queue_is_bounded_and_drains() {
+        let mut queue = AnimationTimelineEventQueueV1::default();
+        queue.extend((0..=AnimationTimelineEventQueueV1::MAX_RETAINED_EVENTS).map(event));
+        assert_eq!(
+            queue.events.len(),
+            AnimationTimelineEventQueueV1::MAX_RETAINED_EVENTS
+        );
+        assert_eq!(queue.events[0].tag.as_str(), "event.1");
+        let drained = queue.drain();
+        assert_eq!(
+            drained.len(),
+            AnimationTimelineEventQueueV1::MAX_RETAINED_EVENTS
+        );
+        assert!(queue.events.is_empty());
     }
 }

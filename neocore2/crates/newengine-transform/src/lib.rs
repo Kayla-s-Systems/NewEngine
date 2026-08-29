@@ -8,7 +8,9 @@ mod propagate;
 #[cfg(feature = "ecs")]
 mod world_space;
 
-pub use newengine_transform_api::{GlobalTransform, Transform, WorldPose};
+pub use newengine_transform_api::{
+    GlobalTransform, RuntimeTransformEditOverride, Transform, TransformEditRoot, WorldPose,
+};
 
 pub use newengine_transform_api::{Children, Parent, TransformDirty};
 
@@ -20,7 +22,8 @@ pub use propagate::{ensure_transform_outputs, propagate_transforms};
 
 #[cfg(feature = "ecs")]
 pub use world_space::{
-    read_entity_world_pose, read_entity_world_pose_local_chain, write_entity_local_from_world_pose,
+    read_entity_world_matrix_local_chain, read_entity_world_pose,
+    read_entity_world_pose_local_chain, write_entity_local_from_world_pose,
     write_entity_local_from_world_pose_local_chain,
 };
 

@@ -1,0 +1,25 @@
+[package]
+name = "newengine-asset-preview-runtime"
+version = "0.1.0"
+edition = "2021"
+readme = "README.md"
+description = "Focused provider-backed visual asset preview runtime for North Star"
+
+[dependencies]
+abi_stable = "0.11"
+parking_lot = "0.12"
+serde_json = "1"
+newengine-assets = { path = "../newengine-assets" }
+newengine-assets-api = { path = "../newengine-assets-api" }
+newengine-core = { path = "../newengine-core" }
+newengine-material-client = { path = "../newengine-material-client" }
+newengine-materials = { path = "../newengine-materials", features = ["serde"] }
+newengine-math = { path = "../newengine-math" }
+newengine-model-client = { path = "../newengine-model-client" }
+newengine-model-domain-api = { path = "../newengine-model-domain-api" }
+newengine-plugin-api = { path = "../newengine-plugin-api" }
+newengine-plugin-host = { path = "../newengine-plugin-host" }
+newengine-primitives = { path = "../newengine-primitives" }
+newengine-render-feature-api = { path = "../newengine-render-feature-api" }
+newengine-ulog-api = { path = "../newengine-ulog-api" }
+newengine-viewport-bridge = { path = "../newengine-viewport-bridge" }

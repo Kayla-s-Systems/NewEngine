@@ -10,6 +10,29 @@ struct EquippedWeaponVisualRoot {
     recoil_yaw_radians: f32,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct WeaponSecondaryDynamicsState {
+    initialized: bool,
+    rotation_offset_local: Vec3,
+    angular_velocity_local: Vec3,
+    previous_target_rotation: Quat,
+    previous_owner_position_world: Vec3,
+    previous_owner_velocity_world: Vec3,
+}
+
+impl Default for WeaponSecondaryDynamicsState {
+    fn default() -> Self {
+        Self {
+            initialized: false,
+            rotation_offset_local: Vec3::ZERO,
+            angular_velocity_local: Vec3::ZERO,
+            previous_target_rotation: Quat::IDENTITY,
+            previous_owner_position_world: Vec3::ZERO,
+            previous_owner_velocity_world: Vec3::ZERO,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct EquippedWeaponVisualPart {
     owner: EntityId,

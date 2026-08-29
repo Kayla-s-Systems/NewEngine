@@ -72,6 +72,18 @@ impl RawGameReadyPayload {
                     ),
                     jump_animation: sanitize_asset_path(self.player.model.jump_animation),
                     fall_animation: sanitize_asset_path(self.player.model.fall_animation),
+                    // Equipment and bare-hand presentation are character-owned Shared metadata,
+                    // never project map payload. YTYP hydration fills these after map projection.
+                    equipment_ready_animation: None,
+                    equipment_aim_animation: None,
+                    equipment_reload_animation: None,
+                    unarmed_ready_animation: None,
+                    unarmed_attack_animation: None,
+                    equipment_ready_sample_phase: 0.0,
+                    equipment_ready_rotation_weights: Vec::new(),
+                    equipment_aim_rotation_weights: Vec::new(),
+                    equipment_reload_rotation_weights: Vec::new(),
+                    equipment_arm_ik: false,
                     target_height: self.player.model.target_height.clamp(0.25, 3.0),
                     eye_height_ratio: self.player.model.eye_height_ratio.clamp(0.55, 0.98),
                     local_offset: arr3(self.player.model.local_offset),
@@ -121,6 +133,9 @@ impl RawGameReadyPayload {
                 radius: self.sky.radius.max(16.0),
                 mesh: non_empty_or(self.sky.mesh, default_skydome_mesh()),
                 follow_camera: self.sky.follow_camera,
+                environment_profile: self.sky.environment_profile.trim().to_owned(),
+                environment_region: self.sky.environment_region.trim().to_owned(),
+                environment_biome: self.sky.environment_biome.trim().to_owned(),
                 cloud_dictionary: non_empty_or(
                     self.sky.cloud_dictionary,
                     default_cloud_dictionary(),
@@ -173,6 +188,7 @@ impl RawGameReadyPayload {
                 .into_iter()
                 .filter_map(sanitize_definition_instance_spec)
                 .collect(),
+            acoustic_materials: newengine_audio_api::AcousticMaterialLibrary::default(),
             gameplay: GameReadyGameplaySpec {
                 default_status: non_empty_or(self.gameplay.default_status, default_status_text()),
                 pickup_status: non_empty_or(self.gameplay.pickup_status, default_pickup_status()),

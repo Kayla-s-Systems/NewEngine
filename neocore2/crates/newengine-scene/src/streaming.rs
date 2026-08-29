@@ -224,6 +224,28 @@ impl SceneStreamingPlan {
         Self::build_from_desired(center, budget, desired, loaded, pending)
     }
 
+    /// Build residency from a primary focus plus one or more bounded secondary focuses.
+    ///
+    /// Mature open-world streamers issue spatial searches from more than one point: the
+    /// current player/camera position remains authoritative while velocity/cutscene/vehicle
+    /// look-ahead positions can prewarm a smaller region. Keeping the primary center for
+    /// unload scoring prevents read-ahead from evicting the ground directly under the player.
+    pub fn build_multi_focus(
+        center: SceneCellCoord,
+        budget: SceneStreamingBudget,
+        secondary_focuses: impl IntoIterator<Item = (SceneCellCoord, i32)>,
+        loaded: impl IntoIterator<Item = SceneCellCoord>,
+        pending: impl IntoIterator<Item = SceneCellCoord>,
+    ) -> Self {
+        let budget = budget.sanitized();
+        let desired = SceneResidencySet::desired_cells_for_focuses(
+            center,
+            budget.resident_radius,
+            secondary_focuses,
+        );
+        Self::build_from_desired(center, budget, desired, loaded, pending)
+    }
+
     pub fn build_from_desired(
         center: SceneCellCoord,
         budget: SceneStreamingBudget,
@@ -303,6 +325,43 @@ impl SceneLayeredStreamingPlan {
         let simulation = SceneStreamingPlan::build(
             center,
             profile.simulation,
+            simulation_loaded,
+            simulation_pending,
+        );
+        Self {
+            center,
+            render,
+            simulation,
+        }
+    }
+
+    /// Build the render/simulation layers from caller-authored desired sets.
+    ///
+    /// This is the bridge used by spatial read-ahead: the planner still owns deterministic
+    /// request/unload ordering and hysteresis, while the world streamer can union primary
+    /// and predictive search volumes before admission.
+    pub fn build_from_desired(
+        center: SceneCellCoord,
+        profile: SceneStreamingProfile,
+        render_desired: Vec<SceneCellCoord>,
+        simulation_desired: Vec<SceneCellCoord>,
+        render_loaded: impl IntoIterator<Item = SceneCellCoord>,
+        render_pending: impl IntoIterator<Item = SceneCellCoord>,
+        simulation_loaded: impl IntoIterator<Item = SceneCellCoord>,
+        simulation_pending: impl IntoIterator<Item = SceneCellCoord>,
+    ) -> Self {
+        let profile = profile.sanitized();
+        let render = SceneStreamingPlan::build_from_desired(
+            center,
+            profile.render,
+            render_desired,
+            render_loaded,
+            render_pending,
+        );
+        let simulation = SceneStreamingPlan::build_from_desired(
+            center,
+            profile.simulation,
+            simulation_desired,
             simulation_loaded,
             simulation_pending,
         );
@@ -392,8 +451,28 @@ impl SceneBucketedCellPlan {
         render_desired: impl IntoIterator<Item = SceneCellCoord>,
         simulation_desired: impl IntoIterator<Item = SceneCellCoord>,
     ) -> Self {
+        Self::from_desired_sets_with_prediction(
+            center,
+            render_desired,
+            simulation_desired,
+            std::iter::empty(),
+        )
+    }
+
+    /// Classify desired cells while preserving a distinct predictive bucket.
+    ///
+    /// Predictive cells are intentionally admitted after the immediate near ring but before
+    /// ordinary far render residency. This mirrors request-list streamers that prefetch along
+    /// motion/camera paths without allowing speculative work to starve the current scene.
+    pub fn from_desired_sets_with_prediction(
+        center: SceneCellCoord,
+        render_desired: impl IntoIterator<Item = SceneCellCoord>,
+        simulation_desired: impl IntoIterator<Item = SceneCellCoord>,
+        predicted_desired: impl IntoIterator<Item = SceneCellCoord>,
+    ) -> Self {
         let render_set = render_desired.into_iter().collect::<BTreeSet<_>>();
         let simulation_set = simulation_desired.into_iter().collect::<BTreeSet<_>>();
+        let predicted_set = predicted_desired.into_iter().collect::<BTreeSet<_>>();
         let mut all = render_set
             .union(&simulation_set)
             .copied()
@@ -408,6 +487,8 @@ impl SceneBucketedCellPlan {
                 let bucket = if render_set.contains(&coord) {
                     if dist <= 1 {
                         SceneStreamingBucket::VisibleNear
+                    } else if predicted_set.contains(&coord) {
+                        SceneStreamingBucket::PredictedNear
                     } else {
                         SceneStreamingBucket::VisibleFar
                     }
@@ -478,5 +559,114 @@ impl SceneResidencySet {
         }
         desired.sort_by_key(|coord| coord.distance_key(center));
         desired
+    }
+
+    pub fn desired_cells_for_focuses(
+        center: SceneCellCoord,
+        radius: i32,
+        secondary_focuses: impl IntoIterator<Item = (SceneCellCoord, i32)>,
+    ) -> Vec<SceneCellCoord> {
+        let mut desired = Self::desired_cells(center, radius)
+            .into_iter()
+            .collect::<BTreeSet<_>>();
+        for (focus, focus_radius) in secondary_focuses {
+            desired.extend(Self::desired_cells(focus, focus_radius));
+        }
+        let mut desired = desired.into_iter().collect::<Vec<_>>();
+        desired.sort_by_key(|coord| coord.distance_key(center));
+        desired
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn multi_focus_plan_keeps_primary_scene_and_prefetches_secondary_focus() {
+        let center = SceneCellCoord { x: 0, z: 0 };
+        let predicted = SceneCellCoord { x: 3, z: 0 };
+        let budget = SceneStreamingBudget {
+            resident_radius: 1,
+            unload_radius: 4,
+            max_commits_per_tick: 4,
+        };
+        let plan = SceneStreamingPlan::build_multi_focus(
+            center,
+            budget,
+            [(predicted, 1)],
+            std::iter::empty(),
+            std::iter::empty(),
+        );
+
+        assert!(plan.desired.contains(&center));
+        assert!(plan.desired.contains(&predicted));
+        assert_eq!(
+            plan.desired.iter().copied().collect::<BTreeSet<_>>().len(),
+            plan.desired.len()
+        );
+    }
+
+    #[test]
+    fn predicted_bucket_is_prioritized_ahead_of_regular_far_cells() {
+        let center = SceneCellCoord { x: 0, z: 0 };
+        let predicted = SceneCellCoord { x: 3, z: 0 };
+        let ordinary_far = SceneCellCoord { x: 0, z: 2 };
+        let render = [center, ordinary_far, predicted];
+        let plan = SceneBucketedCellPlan::from_desired_sets_with_prediction(
+            center,
+            render,
+            render,
+            [predicted],
+        );
+
+        let predicted_cell = plan
+            .cells
+            .iter()
+            .find(|cell| cell.coord == predicted)
+            .unwrap();
+        let far_cell = plan
+            .cells
+            .iter()
+            .find(|cell| cell.coord == ordinary_far)
+            .unwrap();
+        assert_eq!(predicted_cell.bucket, SceneStreamingBucket::PredictedNear);
+        assert_eq!(far_cell.bucket, SceneStreamingBucket::VisibleFar);
+        assert!(predicted_cell.score > far_cell.score);
+    }
+
+    #[test]
+    fn custom_layered_plan_preserves_unload_hysteresis_around_primary_center() {
+        let center = SceneCellCoord { x: 0, z: 0 };
+        let far_loaded = SceneCellCoord { x: -6, z: 0 };
+        let profile = SceneStreamingProfile {
+            render: SceneStreamingBudget {
+                resident_radius: 1,
+                unload_radius: 4,
+                max_commits_per_tick: 2,
+            },
+            simulation: SceneStreamingBudget {
+                resident_radius: 2,
+                unload_radius: 5,
+                max_commits_per_tick: 1,
+            },
+        };
+        let render_desired = SceneResidencySet::desired_cells(center, 1);
+        let simulation_desired = SceneResidencySet::desired_cells(center, 2);
+        let plan = SceneLayeredStreamingPlan::build_from_desired(
+            center,
+            profile,
+            render_desired,
+            simulation_desired,
+            [far_loaded],
+            std::iter::empty(),
+            std::iter::empty(),
+            std::iter::empty(),
+        );
+        assert!(plan
+            .render
+            .unloads
+            .iter()
+            .any(|request| request.coord == far_loaded));
     }
 }

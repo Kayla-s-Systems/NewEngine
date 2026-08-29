@@ -26,6 +26,19 @@ pub enum WeatherKind {
     HeatHaze,
 }
 
+/// World-authored constraint on the meteorological state exposed to consumers.
+///
+/// `Dynamic` leaves the physically simulated atmosphere/weather authoritative.
+/// `ClearSky` is a real environment condition, not a renderer-only cloud toggle: it
+/// removes cloud optical depth, precipitation and storm exposure before render/audio/AI
+/// packets are built, while keeping the underlying dry-air/aerosol atmosphere intact.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum EnvironmentWeatherConstraint {
+    #[default]
+    Dynamic,
+    ClearSky,
+}
+
 impl Default for WeatherKind {
     #[inline]
     fn default() -> Self {

@@ -1,11 +1,12 @@
 use super::RenderApiVersion;
 use crate::{
     BeginFrameDesc, BeginRenderTargetDesc, BindGroupDesc, BindGroupId, BindGroupLayoutDesc,
-    BindGroupLayoutId, BufferDesc, BufferId, BufferSlice, Color4, DrawArgs, DrawIndexedArgs,
-    IndexFormat, PipelineDesc, PipelineId, PipelineWarmupDesc, PipelineWarmupReport, RectI32,
-    RenderBackendCapabilities, RenderDiagnosticsSnapshot, RenderDrawListKind, RenderGraphPassKind,
-    RenderTargetDesc, RenderTargetId, RenderWorkBudget, SamplerDesc, SamplerId, ShaderDesc,
-    ShaderId, ShaderRuntimeCacheStats, TextureDesc, TextureId, TextureResidencySnapshot, UiTexId,
+    BindGroupLayoutId, BufferDesc, BufferId, BufferSlice, Color4, ComputePipelineDesc,
+    DispatchArgs, DrawArgs, DrawIndexedArgs, IndexFormat, PipelineDesc, PipelineId,
+    PipelineWarmupDesc, PipelineWarmupReport, RectI32, RenderBackendCapabilities,
+    RenderDiagnosticsSnapshot, RenderDrawListKind, RenderGraphPassKind, RenderTargetDesc,
+    RenderTargetId, RenderWorkBudget, SamplerDesc, SamplerId, ShaderDesc, ShaderId,
+    ShaderRuntimeCacheStats, TextureDesc, TextureId, TextureResidencySnapshot, UiTexId,
     UploadPumpDesc, UploadPumpReport, Viewport,
 };
 use serde::{Deserialize, Serialize};
@@ -92,6 +93,7 @@ pub enum RenderCommand {
         id: ShaderId,
     },
     CreatePipeline(PipelineDesc),
+    CreateComputePipeline(ComputePipelineDesc),
     DestroyPipeline {
         id: PipelineId,
     },
@@ -122,6 +124,7 @@ pub enum RenderCommand {
     },
     Draw(DrawArgs),
     DrawIndexed(DrawIndexedArgs),
+    Dispatch(DispatchArgs),
     SetWorkBudget(RenderWorkBudget),
     PumpUploads(UploadPumpDesc),
     TextureResidency {

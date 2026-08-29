@@ -87,5 +87,32 @@ pub(crate) use node_compile::*;
 pub(crate) use theme::*;
 pub(crate) use xml::*;
 
+pub const RUNTIME_UNIT_SPEC: newengine_runtime_unit_api::EngineRuntimeUnitSpec =
+    newengine_runtime_unit_api::EngineRuntimeUnitSpec::new(
+        "engine.runtime.assets-ui",
+        1,
+        newengine_runtime_unit_api::EngineRuntimeUnitKind::Provider,
+        &[newengine_assets_api::ASSETS_UI_BACKEND_CAPABILITY_ID],
+        &[newengine_assets_api::ASSET_BACKEND_CAPABILITY_ID],
+        newengine_runtime_unit_api::STATIC_PROVIDER_TAGS,
+    );
+
+fn runtime_unit_factory(
+    _: &mut newengine_runtime_unit_api::Engine<()>,
+    _: &newengine_runtime_unit_api::StartupConfig,
+) -> newengine_runtime_unit_api::EngineResult<Option<Box<dyn newengine_runtime_unit_api::Module<()>>>>
+{
+    let client =
+        newengine_assets_api::AssetServiceClient::new(newengine_plugin_host::default_host_api());
+    let _ = register_assets_ui_gateway_best_effort(client);
+    Ok(None)
+}
+
+pub const RUNTIME_UNIT_REGISTRATION: newengine_runtime_unit_api::RuntimeUnitRegistration =
+    newengine_runtime_unit_api::RuntimeUnitRegistration::new(
+        RUNTIME_UNIT_SPEC,
+        runtime_unit_factory,
+    );
+
 #[cfg(test)]
 mod tests;

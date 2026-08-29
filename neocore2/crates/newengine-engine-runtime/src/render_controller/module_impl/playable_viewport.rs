@@ -1,9 +1,9 @@
-use crate::input_systems::InputCaptureState;
 use crate::ui_gateway;
 use newengine_core::host_events::CursorState;
 use newengine_core::physics::PhysicsApiRef;
 use newengine_core::render::{Extent2D, RenderApi};
 use newengine_core::{EngineResult, ModuleCtx};
+use newengine_input_systems_runtime::InputCaptureState;
 use newengine_runtime_session_api::RuntimeSessionMode;
 use newengine_runtime_session_runtime::{
     begin_runtime_session_frame, record_runtime_session_ticks,
@@ -24,6 +24,20 @@ mod input;
 mod ui;
 
 use ui::*;
+
+#[inline]
+fn should_pause_playable_world(
+    in_game_editor: bool,
+    published_capture: &UiInputCaptureState,
+    gameplay_pause_simulation: bool,
+    session_paused: bool,
+    session_step_this_frame: bool,
+) -> bool {
+    in_game_editor
+        || published_capture.modal
+        || gameplay_pause_simulation
+        || (session_paused && !session_step_this_frame)
+}
 
 impl RuntimeRenderController {
     pub(super) fn render_playable_viewport_frame<E: Send + 'static>(
@@ -129,10 +143,13 @@ impl RuntimeRenderController {
         };
         // Selective input capture is not a simulation pause. Pausing on any capture made
         // transient hover/focus states freeze the world and made the camera appear locked.
-        let pause_world = in_game_editor
-            || published_capture.modal
-            || gameplay_capture.pause_simulation
-            || (session_frame.paused && !session_frame.step_this_frame);
+        let pause_world = should_pause_playable_world(
+            in_game_editor,
+            &published_capture,
+            gameplay_capture.pause_simulation,
+            session_frame.paused,
+            session_frame.step_this_frame,
+        );
         let session_fixed_step_count = if session_frame.step_this_frame {
             1
         } else {
@@ -249,17 +266,20 @@ impl RuntimeRenderController {
             let selection_radius = super::scene::selection_bounds_world(scene.world(), selected)
                 .map(|bounds| bounds.radius)
                 .unwrap_or(0.5);
-            self.editor_viewport.sync_gizmo_geometry(
+            self.editor_viewport_scene.sync_gizmo_geometry(
+                &self.editor_viewport,
                 &self.bridges.scene,
                 &mut scene,
                 selected,
                 selection_radius,
             );
             let last_camera = self.frame.last_camera_snapshot.as_ref();
+            let mut editor_effects = crate::editor_viewport_adapter::EngineEditorTransformEffects;
             self.editor_viewport.process_history_actions(
                 scene.world_mut(),
                 ctx.resources()
                     .get::<newengine_ui_api::UiEventDispatchFrame>(),
+                &mut editor_effects,
             );
             self.editor_viewport.process_transform_input(
                 scene.world_mut(),
@@ -267,9 +287,10 @@ impl RuntimeRenderController {
                 frame_input.surface_input.as_ref(),
                 last_camera,
                 [scope.vp_w, scope.vp_h],
+                &mut editor_effects,
             );
         } else {
-            self.editor_viewport
+            self.editor_viewport_scene
                 .clear_runtime_geometry(scene.world_mut());
         }
         let physics_api = ctx
@@ -309,6 +330,15 @@ impl RuntimeRenderController {
                 .unwrap_or_default()
                 .invalidate(UiLayerDomain::GameViewport, self.frame.frame_index);
             ctx.resources_mut().insert(next);
+
+            // Gameplay UI publishes retained state after the host-side UI packet has already
+            // been prepared. Replace the current GameViewport packet before render submission
+            // so toggles such as Character Menu become visible in this same present.
+            let _ = self.refresh_gameplay_ui_draw_list_after_publish(
+                ctx,
+                &mut frame_input.ui_layers,
+                scope,
+            )?;
         }
         let gameplay_capture_after_tick = self
             .frame
@@ -373,5 +403,29 @@ impl RuntimeRenderController {
             ctx.resources_mut().insert(inspector_snapshot);
         }
         Ok(outcome)
+    }
+}
+
+#[cfg(test)]
+mod pause_policy_tests {
+    use super::*;
+
+    #[test]
+    fn exclusive_console_capture_does_not_pause_playable_world() {
+        let capture = UiInputCaptureState::exclusive("engine.console.overlay", "console");
+        assert!(capture.camera_navigation_gated);
+        assert!(capture.gameplay_movement_gated);
+        assert!(!capture.modal);
+        assert!(!should_pause_playable_world(
+            false, &capture, false, false, false
+        ));
+    }
+
+    #[test]
+    fn true_modal_capture_still_pauses_playable_world() {
+        let capture = UiInputCaptureState::modal("game.pause", "pause menu");
+        assert!(should_pause_playable_world(
+            false, &capture, false, false, false
+        ));
     }
 }

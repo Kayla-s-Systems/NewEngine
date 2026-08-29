@@ -3,7 +3,7 @@ use super::super::*;
 #[test]
 fn preview_capture_uses_provider_dispatch_owner() {
     let preview_api = Arc::new(AssetPreviewApi::new(Arc::new(
-        newengine_engine_runtime::ViewportBridge::new(),
+        newengine_viewport_bridge::ViewportBridge::new(),
     )));
     let mut runtime = AssetInspectorRuntimeModule::new(preview_api);
     runtime.preview_snapshot = Some(AssetPreviewSnapshot {
@@ -36,7 +36,7 @@ fn preview_capture_uses_provider_dispatch_owner() {
 #[test]
 fn middle_mouse_drag_activates_preview_camera_pan() {
     let preview_api = Arc::new(AssetPreviewApi::new(Arc::new(
-        newengine_engine_runtime::ViewportBridge::new(),
+        newengine_viewport_bridge::ViewportBridge::new(),
     )));
     let mut runtime = AssetInspectorRuntimeModule::new(preview_api);
     runtime.preview_snapshot = Some(AssetPreviewSnapshot {
@@ -71,7 +71,7 @@ fn middle_mouse_drag_activates_preview_camera_pan() {
 #[test]
 fn pending_preview_open_is_not_executed_in_request_frame() {
     let preview_api = Arc::new(AssetPreviewApi::new(Arc::new(
-        newengine_engine_runtime::ViewportBridge::new(),
+        newengine_viewport_bridge::ViewportBridge::new(),
     )));
     let mut runtime = AssetInspectorRuntimeModule::new(preview_api);
     runtime.entries = vec![InspectorEntry {
@@ -88,7 +88,7 @@ fn pending_preview_open_is_not_executed_in_request_frame() {
 #[test]
 fn newest_preview_request_replaces_stale_pending_open() {
     let preview_api = Arc::new(AssetPreviewApi::new(Arc::new(
-        newengine_engine_runtime::ViewportBridge::new(),
+        newengine_viewport_bridge::ViewportBridge::new(),
     )));
     let mut runtime = AssetInspectorRuntimeModule::new(preview_api);
     runtime.entries = vec![
@@ -119,7 +119,7 @@ fn newest_preview_request_replaces_stale_pending_open() {
 #[test]
 fn preview_entries_scrolling_selects_absolute_entry() {
     let preview_api = Arc::new(AssetPreviewApi::new(Arc::new(
-        newengine_engine_runtime::ViewportBridge::new(),
+        newengine_viewport_bridge::ViewportBridge::new(),
     )));
     let mut runtime = AssetInspectorRuntimeModule::new(preview_api);
     runtime.preview_entries = (0..12)
@@ -168,7 +168,7 @@ fn preview_entry_cache_is_bounded_and_promotes_hits() {
 #[test]
 fn info_modal_actions_toggle_visibility_without_provider_work() {
     let preview_api = Arc::new(AssetPreviewApi::new(Arc::new(
-        newengine_engine_runtime::ViewportBridge::new(),
+        newengine_viewport_bridge::ViewportBridge::new(),
     )));
     let mut runtime = AssetInspectorRuntimeModule::new(preview_api);
     runtime.document = Some(AssetDocument {

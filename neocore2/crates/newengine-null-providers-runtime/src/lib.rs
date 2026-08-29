@@ -182,6 +182,7 @@ fn null_render_invoke(state: &mut NullRenderState, payload: Blob) -> RResult<Blo
         RenderServiceRequest::SetRenderPhase { .. }
         | RenderServiceRequest::SetDrawListKind { .. }
         | RenderServiceRequest::DiscardRecordedCommands
+        | RenderServiceRequest::AbortFrame
         | RenderServiceRequest::SetWorkBudget(_) => RenderServiceResponse::Unit,
     };
     match encode_render_json(&response) {

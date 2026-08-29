@@ -28,11 +28,21 @@ pub fn platform_config_from_startup_defaults(startup: &StartupConfig) -> Platfor
     } else {
         PlatformDisplayConfigV1::default()
     };
+    let (width, height) = if startup.launch_settings_explicit {
+        match startup.launch_settings.display.resolution {
+            [width, height] if width > 0 && height > 0 => {
+                (width.clamp(64, 16_384), height.clamp(64, 16_384))
+            }
+            _ => startup.window_size,
+        }
+    } else {
+        startup.window_size
+    };
 
     PlatformAppConfigV1 {
         title: startup.window_title.clone().into(),
-        width: startup.window_size.0,
-        height: startup.window_size.1,
+        width,
+        height,
         placement,
         icon: ROption::RNone,
         display,

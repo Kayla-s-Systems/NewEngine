@@ -83,6 +83,12 @@ pub fn remove_item(
                 message: format!("removed {} x{}", definition_name, mutation.accepted),
             },
         );
+        let needs_weapon_selection = world
+            .get::<PlayerInventory>(owner)
+            .is_some_and(|inventory| inventory.active_slot.is_none());
+        if needs_weapon_selection {
+            select_highest_ranked_equipped_weapon(world, owner);
+        }
         sync_equipped_weapon_runtime(world, owner);
     }
     Ok(mutation)
@@ -126,6 +132,9 @@ pub fn apply_loadout(world: &mut World, owner: EntityId, loadout: ItemId) -> Res
             equip_first_item(world, owner, entry.item)?;
         }
     }
+    // Loadout application is an automatic selection boundary: entry order must not determine
+    // the active weapon. Project-authored rank does; explicit player slot selection remains manual.
+    select_highest_ranked_equipped_weapon(world, owner);
     if let Some(inventory) = world.get_mut::<PlayerInventory>(owner) {
         inventory.mark_loadout_initialized();
     }

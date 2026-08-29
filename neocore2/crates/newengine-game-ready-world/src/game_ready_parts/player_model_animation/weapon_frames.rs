@@ -125,6 +125,15 @@ pub(crate) fn player_rifle_ready_body_frames(
     Some((chest, right_shoulder, left_shoulder))
 }
 
+pub(crate) fn player_resolved_weapon_ready_root(
+    world: &newengine_ecs::World,
+    player: EntityId,
+) -> Option<crate::weapon_grip::WeaponRootTransform> {
+    world
+        .get::<PlayerAnimationRuntimeBinding>(player)
+        .and_then(|binding| binding.equipment_resolved_weapon_root)
+}
+
 /// Stable right-hand weapon grip in player-model local space.
 pub(crate) fn player_right_hand_prop_frame(
     world: &newengine_ecs::World,

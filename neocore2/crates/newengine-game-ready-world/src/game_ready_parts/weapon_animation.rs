@@ -1,25 +1,29 @@
 use super::*;
 
 use newengine_animation_runtime::{
-    build_skin_palette_from_local_pose, decode_ycd_body, AnimationClip, JointLocalPose,
+    global_animation_clip_store, AnimationClip, AnimationClipBinding, AnimationClipReference,
+    AnimationEventCursor, AnimationEventOccurrence, AnimationSkeletonRuntime, JointLocalPose,
 };
 use newengine_assets::{AssetDecodeRequest, AssetServiceClient, ASSET_LIST_FILE_BODY_OUTPUT};
 use newengine_engine_runtime::gameplay::{
-    HitscanWeaponTuning, PlayerSkinPose, PlayerWeaponState, WeaponAnimationDefinition,
+    active_equipped_weapon_binding, HitscanWeaponTuning, ItemInstanceId, PlayerSkinPose,
+    PlayerWeaponState, WeaponAnimationDefinition,
 };
 use newengine_model_skeleton_api::ModelSkeletonMetadata;
 
 #[derive(Clone, Debug)]
 struct WeaponRuntimeClip {
     reference: String,
-    clip: AnimationClip,
+    clip: std::sync::Arc<AnimationClip>,
+    binding: AnimationClipBinding,
+    event_cursor: AnimationEventCursor,
 }
 
 #[derive(Clone, Debug)]
 struct EquippedWeaponAnimationRuntime {
     owner: EntityId,
-    skeleton: ModelSkeletonMetadata,
-    source_to_model: [f32; 16],
+    instance_id: ItemInstanceId,
+    animation_runtime: AnimationSkeletonRuntime,
     idle: Option<WeaponRuntimeClip>,
     fire: Option<WeaponRuntimeClip>,
     reload: Option<WeaponRuntimeClip>,
@@ -28,26 +32,7 @@ struct EquippedWeaponAnimationRuntime {
     idle_time: f32,
     fire_time: f32,
     last_shot_sequence: u64,
-}
-
-fn split_animation_ref(reference: &str) -> Result<(String, Option<String>), String> {
-    let reference = reference.trim().replace('\\', "/");
-    if reference.is_empty() {
-        return Err("weapon animation reference is empty".to_owned());
-    }
-    let (path, selector) = reference
-        .split_once('@')
-        .map(|(path, selector)| (path.trim(), Some(selector.trim())))
-        .unwrap_or((reference.as_str(), None));
-    if path.is_empty() {
-        return Err(format!(
-            "weapon animation reference has no path ref='{reference}'"
-        ));
-    }
-    let selector = selector
-        .filter(|selector| !selector.is_empty())
-        .map(ToOwned::to_owned);
-    Ok((path.to_owned(), selector))
+    reload_active: bool,
 }
 
 fn normalize_mount_alias(reference: &str) -> String {
@@ -69,25 +54,35 @@ fn skeleton_refs_compatible(clip_ref: &str, expected: &str) -> bool {
 fn load_weapon_clip(
     reference: Option<&str>,
     expected_skeleton: &str,
-    skeleton: &ModelSkeletonMetadata,
+    animation_runtime: &AnimationSkeletonRuntime,
 ) -> Result<Option<WeaponRuntimeClip>, String> {
     let Some(reference) = reference.map(str::trim).filter(|value| !value.is_empty()) else {
         return Ok(None);
     };
-    let (path, selector) = split_animation_ref(reference)?;
+    let parsed = AnimationClipReference::parse(reference)?;
+    if !parsed.logical_path.to_ascii_lowercase().ends_with(".ycd") {
+        return Err(format!(
+            "weapon animation must reference .ycd asset ref='{reference}'"
+        ));
+    }
     let assets = AssetServiceClient::new(newengine_plugin_host::default_host_api());
-    let body = assets
-        .decode_v1(&AssetDecodeRequest {
-            logical_path: path,
-            output_kind: ASSET_LIST_FILE_BODY_OUTPUT.to_owned(),
-            selector: serde_json::Value::Null,
+    let clip = global_animation_clip_store()
+        .load_ycd_clip(reference, |logical_path| {
+            assets
+                .decode_v1(&AssetDecodeRequest {
+                    logical_path: logical_path.to_owned(),
+                    output_kind: ASSET_LIST_FILE_BODY_OUTPUT.to_owned(),
+                    selector: serde_json::Value::Null,
+                })
+                .map_err(|error| {
+                    format!(
+                        "weapon animation asset decode failed ref='{reference}' path='{logical_path}': {error}"
+                    )
+                })
         })
         .map_err(|error| {
-            format!("weapon animation asset decode failed ref='{reference}': {error}")
+            format!("weapon animation shared clip load failed ref='{reference}': {error}")
         })?;
-    let clip = decode_ycd_body(&body, selector.as_deref()).map_err(|error| {
-        format!("weapon animation YCD decode failed ref='{reference}': {error}")
-    })?;
     if !clip.skeleton_ref.trim().is_empty()
         && !skeleton_refs_compatible(&clip.skeleton_ref, expected_skeleton)
     {
@@ -96,49 +91,25 @@ fn load_weapon_clip(
             clip.skeleton_ref, expected_skeleton
         ));
     }
-    for (clip_index, &tag) in clip.joint_tags.iter().enumerate() {
-        if clip.joint_tags[..clip_index].contains(&tag) {
-            return Err(format!(
-                "weapon animation duplicate joint tag ref='{reference}' tag={tag}"
-            ));
-        }
-        let dense = tag as usize;
-        let present = dense < skeleton.joints.len() && skeleton.joints[dense].tag == tag
-            || skeleton.joints.iter().any(|joint| joint.tag == tag);
-        if !present {
-            return Err(format!(
-                "weapon animation joint tag absent ref='{reference}' tag={tag} joints={}",
-                skeleton.joints.len()
-            ));
-        }
-    }
+    let binding = clip.bind_to_skeleton(animation_runtime).map_err(|error| {
+        format!("weapon animation runtime binding failed ref='{reference}': {error}")
+    })?;
     Ok(Some(WeaponRuntimeClip {
         reference: reference.to_owned(),
         clip,
+        binding,
+        event_cursor: AnimationEventCursor::default(),
     }))
-}
-
-fn bind_pose(skeleton: &ModelSkeletonMetadata) -> Vec<JointLocalPose> {
-    skeleton
-        .joints
-        .iter()
-        .map(|joint| JointLocalPose {
-            translation: joint.position_ls,
-            rotation: joint.rotation_ls,
-            scale: Some(joint.scale_ls),
-        })
-        .collect()
 }
 
 fn publish_weapon_palette(
     world: &mut newengine_ecs::World,
     root: EntityId,
-    skeleton: &ModelSkeletonMetadata,
-    source_to_model: [f32; 16],
+    animation_runtime: &AnimationSkeletonRuntime,
     locals: &[JointLocalPose],
 ) -> Result<(), String> {
-    let mut palette = Vec::with_capacity(skeleton.joints.len());
-    build_skin_palette_from_local_pose(skeleton, source_to_model, locals, &mut palette)?;
+    let mut palette = Vec::with_capacity(animation_runtime.joint_count());
+    animation_runtime.build_skin_palette_from_local_pose(locals, &mut palette)?;
     let revision = world
         .get::<PlayerSkinPose>(root)
         .map(|pose| pose.revision.wrapping_add(1).max(1))
@@ -151,6 +122,7 @@ pub(crate) fn bind_equipped_weapon_animation(
     world: &mut newengine_ecs::World,
     root: EntityId,
     owner: EntityId,
+    instance_id: ItemInstanceId,
     skeleton: ModelSkeletonMetadata,
     source_to_model: [f32; 16],
     definition: &WeaponAnimationDefinition,
@@ -160,26 +132,47 @@ pub(crate) fn bind_equipped_weapon_animation(
         .skeleton
         .as_deref()
         .ok_or("skinned weapon animation requires authored skeleton ref")?;
-    let idle = load_weapon_clip(definition.idle.as_deref(), expected_skeleton, &skeleton)?;
-    let fire = load_weapon_clip(definition.fire.as_deref(), expected_skeleton, &skeleton)?;
-    let reload = load_weapon_clip(definition.reload.as_deref(), expected_skeleton, &skeleton)?;
-    let spawn_pose = load_weapon_clip(
+    let animation_runtime = AnimationSkeletonRuntime::compile(&skeleton, source_to_model)
+        .map_err(|error| format!("weapon animation skeleton compile failed: {error}"))?;
+    let mut idle = load_weapon_clip(
+        definition.idle.as_deref(),
+        expected_skeleton,
+        &animation_runtime,
+    )?;
+    let fire = load_weapon_clip(
+        definition.fire.as_deref(),
+        expected_skeleton,
+        &animation_runtime,
+    )?;
+    let reload = load_weapon_clip(
+        definition.reload.as_deref(),
+        expected_skeleton,
+        &animation_runtime,
+    )?;
+    let mut spawn_pose = load_weapon_clip(
         definition.spawn_pose.as_deref(),
         expected_skeleton,
-        &skeleton,
+        &animation_runtime,
     )?;
     if idle.is_none() && fire.is_none() && reload.is_none() && spawn_pose.is_none() {
         return Err("skinned weapon has no authored animation clips".to_owned());
     }
 
-    let mut sampled_locals = bind_pose(&skeleton);
-    if let Some(initial) = spawn_pose.as_ref().or(idle.as_ref()) {
-        initial
-            .clip
-            .sample_local_pose_for_skeleton(0.0, &skeleton, &mut sampled_locals)?;
+    if let Some(initial) = idle.as_mut().or(spawn_pose.as_mut()) {
+        initial.event_cursor.restart();
     }
-    publish_weapon_palette(world, root, &skeleton, source_to_model, &sampled_locals)?;
-    let joint_count = skeleton.joints.len();
+
+    let mut sampled_locals = animation_runtime.bind_locals().to_vec();
+    if let Some(initial) = spawn_pose.as_ref().or(idle.as_ref()) {
+        initial.clip.sample_local_pose_bound(
+            0.0,
+            &animation_runtime,
+            &initial.binding,
+            &mut sampled_locals,
+        )?;
+    }
+    publish_weapon_palette(world, root, &animation_runtime, &sampled_locals)?;
+    let joint_count = animation_runtime.joint_count();
     let idle_ref = idle
         .as_ref()
         .map(|clip| clip.reference.clone())
@@ -200,8 +193,8 @@ pub(crate) fn bind_equipped_weapon_animation(
         root,
         EquippedWeaponAnimationRuntime {
             owner,
-            skeleton,
-            source_to_model,
+            instance_id,
+            animation_runtime,
             idle,
             fire,
             reload,
@@ -210,6 +203,7 @@ pub(crate) fn bind_equipped_weapon_animation(
             idle_time: 0.0,
             fire_time: f32::INFINITY,
             last_shot_sequence: initial_shot_sequence,
+            reload_active: false,
         },
     );
     newengine_ulog_api::ulog::info!(
@@ -222,6 +216,35 @@ pub(crate) fn bind_equipped_weapon_animation(
         reload_ref,
         spawn_ref,
     );
+    Ok(())
+}
+
+fn sample_weapon_runtime_clip(
+    entity: EntityId,
+    animation_runtime: &AnimationSkeletonRuntime,
+    runtime_clip: &mut WeaponRuntimeClip,
+    sampled_locals: &mut Vec<JointLocalPose>,
+    playback_time_seconds: f32,
+    channel: &str,
+    occurrence_scratch: &mut Vec<AnimationEventOccurrence>,
+    timeline_events: &mut Vec<newengine_animation_api::AnimationTimelineEventV1>,
+) -> Result<(), String> {
+    runtime_clip.clip.sample_local_pose_bound(
+        playback_time_seconds,
+        animation_runtime,
+        &runtime_clip.binding,
+        sampled_locals,
+    )?;
+    crate::animation_events::collect_timeline_events(
+        entity,
+        &runtime_clip.reference,
+        channel,
+        &runtime_clip.clip,
+        &mut runtime_clip.event_cursor,
+        playback_time_seconds,
+        occurrence_scratch,
+        timeline_events,
+    )?;
     Ok(())
 }
 
@@ -240,14 +263,27 @@ pub(crate) fn tick_equipped_weapon_animations(world: &mut newengine_ecs::World, 
         let Some(mut runtime) = world.get::<EquippedWeaponAnimationRuntime>(root).cloned() else {
             continue;
         };
-        let state = world
-            .get::<PlayerWeaponState>(runtime.owner)
-            .copied()
-            .unwrap_or_default();
+        let active = active_equipped_weapon_binding(world, runtime.owner)
+            .is_some_and(|binding| binding.instance_id == runtime.instance_id);
+        let state = if active {
+            world
+                .get::<PlayerWeaponState>(runtime.owner)
+                .copied()
+                .unwrap_or_default()
+        } else {
+            // A stale weapon root may survive the same frame as an equipment switch. Freeze its
+            // fire/reload state instead of letting it consume the new weapon instance's sequence.
+            PlayerWeaponState {
+                shot_sequence: runtime.last_shot_sequence,
+                ..PlayerWeaponState::default()
+            }
+        };
+
         if state.shot_sequence != runtime.last_shot_sequence {
             runtime.last_shot_sequence = state.shot_sequence;
             runtime.fire_time = 0.0;
-            if let Some(fire) = runtime.fire.as_ref() {
+            if let Some(fire) = runtime.fire.as_mut() {
+                fire.event_cursor.restart();
                 newengine_ulog_api::ulog::info!(
                     "game-ready: native weapon fire animation triggered root={} owner={} shot={} clip='{}' duration={:.6}s source='TLOU2 assault-fire'",
                     root.stable_u64(),
@@ -259,7 +295,14 @@ pub(crate) fn tick_equipped_weapon_animations(world: &mut newengine_ecs::World, 
             }
         }
 
-        let reload_progress = (state.reload_remaining > 0.0).then(|| {
+        let reload_active = state.reload_remaining > 0.0;
+        if reload_active && !runtime.reload_active {
+            if let Some(reload) = runtime.reload.as_mut() {
+                reload.event_cursor.restart();
+            }
+        }
+        runtime.reload_active = reload_active;
+        let reload_progress = reload_active.then(|| {
             let duration = world
                 .get::<HitscanWeaponTuning>(runtime.owner)
                 .map(|tuning| tuning.sanitized().reload_duration)
@@ -268,58 +311,103 @@ pub(crate) fn tick_equipped_weapon_animations(world: &mut newengine_ecs::World, 
             (1.0 - state.reload_remaining / duration).clamp(0.0, 1.0)
         });
 
-        let sampled =
-            if let (Some(progress), Some(reload)) = (reload_progress, runtime.reload.as_ref()) {
-                runtime.fire_time = f32::INFINITY;
-                reload.clip.sample_local_pose_for_skeleton(
-                    reload.clip.duration_seconds * progress,
-                    &runtime.skeleton,
-                    &mut runtime.sampled_locals,
-                )
-            } else if let Some(fire) = runtime
-                .fire
-                .as_ref()
-                .filter(|fire| runtime.fire_time <= fire.clip.duration_seconds)
-            {
-                let result = fire.clip.sample_local_pose_for_skeleton(
-                    runtime.fire_time.max(0.0),
-                    &runtime.skeleton,
-                    &mut runtime.sampled_locals,
-                );
-                runtime.fire_time += dt;
-                result
-            } else if let Some(idle) = runtime.idle.as_ref() {
-                runtime.idle_time += dt;
-                idle.clip.sample_local_pose_for_skeleton(
-                    runtime.idle_time,
-                    &runtime.skeleton,
-                    &mut runtime.sampled_locals,
-                )
-            } else if let Some(spawn) = runtime.spawn_pose.as_ref() {
-                spawn.clip.sample_local_pose_for_skeleton(
-                    spawn.clip.duration_seconds,
-                    &runtime.skeleton,
-                    &mut runtime.sampled_locals,
+        let mut occurrence_scratch = Vec::new();
+        let mut timeline_events = Vec::new();
+        let sampled = if let Some(progress) = reload_progress {
+            runtime.fire_time = f32::INFINITY;
+            let animation_runtime = &runtime.animation_runtime;
+            let sampled_locals = &mut runtime.sampled_locals;
+            if let Some(reload) = runtime.reload.as_mut() {
+                let sample_time = reload.clip.duration_seconds * progress;
+                sample_weapon_runtime_clip(
+                    root,
+                    animation_runtime,
+                    reload,
+                    sampled_locals,
+                    sample_time,
+                    "weapon.reload",
+                    &mut occurrence_scratch,
+                    &mut timeline_events,
                 )
             } else {
                 Ok(())
-            };
+            }
+        } else {
+            let fire_active = runtime
+                .fire
+                .as_ref()
+                .is_some_and(|fire| runtime.fire_time <= fire.clip.duration_seconds);
+            if fire_active {
+                let sample_time = runtime.fire_time.max(0.0);
+                let animation_runtime = &runtime.animation_runtime;
+                let sampled_locals = &mut runtime.sampled_locals;
+                let result = sample_weapon_runtime_clip(
+                    root,
+                    animation_runtime,
+                    runtime.fire.as_mut().expect("fire clip checked above"),
+                    sampled_locals,
+                    sample_time,
+                    "weapon.fire",
+                    &mut occurrence_scratch,
+                    &mut timeline_events,
+                );
+                runtime.fire_time += dt;
+                result
+            } else if runtime.idle.is_some() {
+                runtime.idle_time += dt;
+                let sample_time = runtime.idle_time;
+                let animation_runtime = &runtime.animation_runtime;
+                let sampled_locals = &mut runtime.sampled_locals;
+                sample_weapon_runtime_clip(
+                    root,
+                    animation_runtime,
+                    runtime.idle.as_mut().expect("idle clip checked above"),
+                    sampled_locals,
+                    sample_time,
+                    "weapon.idle",
+                    &mut occurrence_scratch,
+                    &mut timeline_events,
+                )
+            } else if runtime.spawn_pose.is_some() {
+                let animation_runtime = &runtime.animation_runtime;
+                let sampled_locals = &mut runtime.sampled_locals;
+                let spawn = runtime
+                    .spawn_pose
+                    .as_mut()
+                    .expect("spawn pose checked above");
+                let sample_time = spawn.clip.duration_seconds;
+                sample_weapon_runtime_clip(
+                    root,
+                    animation_runtime,
+                    spawn,
+                    sampled_locals,
+                    sample_time,
+                    "weapon.spawn",
+                    &mut occurrence_scratch,
+                    &mut timeline_events,
+                )
+            } else {
+                Ok(())
+            }
+        };
 
-        if let Err(error) = sampled.and_then(|_| {
+        let frame_result = sampled.and_then(|_| {
             publish_weapon_palette(
                 world,
                 root,
-                &runtime.skeleton,
-                runtime.source_to_model,
+                &runtime.animation_runtime,
                 &runtime.sampled_locals,
             )
-        }) {
+        });
+        if let Err(error) = frame_result {
             newengine_ulog_api::ulog::warn!(
                 "game-ready: equipped weapon skeletal animation failed root={} owner={}: {}",
                 root.stable_u64(),
                 runtime.owner.stable_u64(),
                 error,
             );
+        } else {
+            crate::animation_events::publish_timeline_events(world, timeline_events);
         }
         let _ = world.insert(root, runtime);
     }

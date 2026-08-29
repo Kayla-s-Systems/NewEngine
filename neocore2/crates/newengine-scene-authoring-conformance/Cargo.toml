@@ -1,0 +1,14 @@
+[package]
+name = "newengine-scene-authoring-conformance"
+version = "0.1.0"
+edition = "2021"
+description = "Composition conformance tests for SceneBridge and replaceable scene-authoring providers"
+license = "Proprietary"
+publish = false
+
+[dependencies]
+newengine-engine-runtime = { path = "../newengine-engine-runtime" }
+newengine-scene = { path = "../newengine-scene", features = ["runtime"] }
+newengine-scene-authoring-runtime = { path = "../newengine-scene-authoring-runtime" }
+newengine-transform = { path = "../newengine-transform", features = ["ecs"], default-features = false }
+newengine-world-authoring-api = { path = "../newengine-world-authoring-api" }

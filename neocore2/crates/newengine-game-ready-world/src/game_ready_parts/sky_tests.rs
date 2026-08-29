@@ -9,6 +9,10 @@ fn test_cycle() -> SkyCycleRuntime {
         day_length_seconds: 1200.0,
         latitude_degrees: 45.0,
         axial_tilt_degrees: 23.44,
+        environment_profile: "environment.default".to_owned(),
+        environment_region: "world.default".to_owned(),
+        environment_biome: "temperate".to_owned(),
+        cloud_profile: "temperate_cumulus_dynamic".to_owned(),
         base_sun_color: [1.0, 0.95, 0.84],
         base_sun_intensity: 3.6,
         base_ambient_color: [0.32, 0.39, 0.52],
@@ -148,9 +152,71 @@ fn live_cloud_coverage_smoothly_tracks_weather_target() {
         .unwrap()
         .smoothed_coverage;
     assert!(
-        high > low + 0.60,
-        "coverage did not converge low={low} high={high}"
+        high > low + 0.36,
+        "coverage did not advance on a meteorological timescale low={low} high={high}"
     );
+}
+
+#[test]
+fn cloud_front_cannot_fill_the_sky_in_ten_seconds() {
+    let mut world = newengine_ecs::World::new();
+    let mut frame = sample_sky_frame(&test_cycle(), None, Vec3::new(0.0, 0.65, 0.760));
+    frame.cloud_coverage = 0.08;
+    frame.cloud_overcast = 0.05;
+    frame.cloud_advection = Vec2::new(4.0, 1.0);
+    let _ = update_sky_dynamics(&mut world, &frame, 1.0 / 60.0);
+    let start = world
+        .resource::<SkyDynamicsRuntime>()
+        .unwrap()
+        .smoothed_coverage;
+
+    frame.cloud_coverage = 0.95;
+    frame.cloud_overcast = 0.90;
+    for _ in 0..600 {
+        let _ = update_sky_dynamics(&mut world, &frame, 1.0 / 60.0);
+    }
+    let after_ten_seconds = world
+        .resource::<SkyDynamicsRuntime>()
+        .unwrap()
+        .smoothed_coverage;
+    assert!(
+        after_ten_seconds - start < 0.16,
+        "cloud deck materialized too quickly start={start} after10s={after_ten_seconds}"
+    );
+}
+
+#[test]
+fn vertical_cloud_deck_cannot_teleport_between_weather_states() {
+    let mut world = newengine_ecs::World::new();
+    let mut frame = sample_sky_frame(&test_cycle(), None, Vec3::new(0.0, 0.72, 0.694));
+    frame.cloud_base_altitude_m = 1700.0;
+    frame.cloud_thickness_m = 750.0;
+    frame.cloud_layer_density = 0.18;
+    let _ = update_sky_dynamics(&mut world, &frame, 1.0 / 60.0);
+    let start = *world.resource::<SkyDynamicsRuntime>().unwrap();
+
+    frame.cloud_base_altitude_m = 650.0;
+    frame.cloud_thickness_m = 2500.0;
+    frame.cloud_layer_density = 0.92;
+    frame.precipitation_intensity = 0.85;
+    for _ in 0..600 {
+        let _ = update_sky_dynamics(&mut world, &frame, 1.0 / 60.0);
+    }
+    let after = *world.resource::<SkyDynamicsRuntime>().unwrap();
+    assert!(
+        start.smoothed_cloud_base_altitude_m - after.smoothed_cloud_base_altitude_m < 155.0,
+        "cloud base teleported start={} after={}",
+        start.smoothed_cloud_base_altitude_m,
+        after.smoothed_cloud_base_altitude_m
+    );
+    assert!(
+        after.smoothed_cloud_thickness_m - start.smoothed_cloud_thickness_m < 250.0,
+        "cloud thickness jumped start={} after={}",
+        start.smoothed_cloud_thickness_m,
+        after.smoothed_cloud_thickness_m
+    );
+    assert!(after.smoothed_precipitation_intensity > 0.0);
+    assert!(after.smoothed_precipitation_intensity < 0.60);
 }
 
 #[test]

@@ -17,7 +17,7 @@ fn spawn_skinned_equipped_weapon_visual(
     let request = newengine_model_domain_api::ModelAssetRequest::new(model_ref.to_owned())
         .with_skeleton(skeleton_ref.to_owned());
     let constructor =
-        newengine_model_runtime::ModelGatewayClient::new(newengine_plugin_host::default_host_api());
+        newengine_model_client::ModelGatewayClient::new(newengine_plugin_host::default_host_api());
     let bundle = constructor.assemble_bundle(&request).map_err(|error| {
         format!("equipped skinned rifle bundle failed model='{model_ref}': {error}")
     })?;
@@ -65,7 +65,13 @@ fn spawn_skinned_equipped_weapon_visual(
     let source_to_model = source_to_model.ok_or("equipped rifle has no skin source_to_model")?;
 
     let root = spawn_named(world, format!("Player/EquippedWeapon/{}", definition.name));
-    let _ = world.insert(root, Transform::default());
+    let initial_transform = Transform::default();
+    let _ = world.insert(root, initial_transform);
+    let _ = world.insert(root, newengine_transform::TransformEditRoot);
+    let _ = world.insert(
+        root,
+        newengine_transform::RuntimeTransformEditOverride::new(initial_transform),
+    );
     let last_shot_sequence = world
         .get::<PlayerWeaponState>(owner)
         .map(|state| state.shot_sequence)
@@ -83,6 +89,7 @@ fn spawn_skinned_equipped_weapon_visual(
             recoil_yaw_radians: 0.0,
         },
     );
+    let _ = world.insert(root, WeaponSecondaryDynamicsState::default());
     let _ = world.insert(
         root,
         DisplayVisibility {
@@ -184,6 +191,7 @@ fn spawn_skinned_equipped_weapon_visual(
         world,
         root,
         owner,
+        binding.instance_id,
         skeleton,
         source_to_model,
         &definition.weapon_animation,

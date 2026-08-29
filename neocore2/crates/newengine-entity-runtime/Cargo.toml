@@ -6,6 +6,7 @@ readme = "README.md"
 description = "Runtime-hosted entity gateway runtime service for NewEngine"
 
 [dependencies]
+newengine-runtime-unit-api = { path = "../newengine-runtime-unit-api" }
 newengine-ulog-api = { path = "../newengine-ulog-api" }
 abi_stable = "0.11"
 log = "0.4"

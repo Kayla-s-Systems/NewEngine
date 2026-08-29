@@ -104,7 +104,22 @@ impl MapPlacementV1 {
         if self.id.trim().is_empty() {
             return Err("map placement id is empty".to_owned());
         }
-        require_definition_ref(&self.definition_ref)?;
+        let definitionless_marker = matches!(
+            self.apply_mode.trim().to_ascii_lowercase().as_str(),
+            "player_spawn" | "info_player_start"
+        ) || self.tags.iter().any(|tag| {
+            matches!(
+                tag.trim().to_ascii_lowercase().as_str(),
+                "player_spawn" | "info_player_start" | "spawn.player"
+            )
+        });
+        if self.definition_ref.trim().is_empty() {
+            if !definitionless_marker {
+                require_definition_ref(&self.definition_ref)?;
+            }
+        } else {
+            require_definition_ref(&self.definition_ref)?;
+        }
         if self.apply_mode.trim().is_empty() {
             return Err(format!("map placement '{}' apply_mode is empty", self.id));
         }
@@ -558,6 +573,33 @@ mod tests {
         assert!(errors
             .iter()
             .any(|error| error.contains("expected .ytyp path")));
+    }
+
+    #[test]
+    fn cell_accepts_definitionless_player_spawn_marker() {
+        let cell = MapCellV1 {
+            placements: vec![MapPlacementV1 {
+                id: "player_start".to_owned(),
+                definition_ref: String::new(),
+                apply_mode: "player_spawn".to_owned(),
+                tags: vec!["player_spawn".to_owned()],
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        assert!(cell.validate().is_ok());
+    }
+
+    #[test]
+    fn cell_rejects_definitionless_instantiated_placement() {
+        let cell = MapCellV1 {
+            placements: vec![placement("orphan", "")],
+            ..Default::default()
+        };
+        let errors = cell.validate().unwrap_err();
+        assert!(errors
+            .iter()
+            .any(|error| error.contains("reference is empty")));
     }
 
     #[test]

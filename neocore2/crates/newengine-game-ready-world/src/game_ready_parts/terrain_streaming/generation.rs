@@ -210,6 +210,8 @@ pub(super) fn enqueue_streamed_terrain_chunk(
     state: &mut GameReadyTerrainStreamingState,
     thread_pool: Option<&ThreadPoolHandle>,
     coord: TerrainChunkCoord,
+    priority: TaskPriority,
+    request_score: i32,
 ) -> bool {
     if state.pending.contains_key(&coord) || state.loaded.contains_key(&coord) {
         return false;
@@ -230,12 +232,12 @@ pub(super) fn enqueue_streamed_terrain_chunk(
     let ticket = thread_pool.submit_request(
         TaskRequest::new("game-ready.terrain.chunk.render-packet")
             .with_source("scene.streaming.terrain")
-            .with_owner("engine.render")
+            .with_owner("engine.world.streaming")
             .with_category("terrain.render-packet")
-            .with_lane(TaskLane::RenderPrep)
-            .with_priority(TaskPriority::Interactive)
+            .with_lane(TaskLane::Streaming)
+            .with_priority(priority)
             .with_dependency_group(format!("terrain.chunk.{}.{}.renderprep", coord.x, coord.z))
-            .with_task_domain(task_domain::ENGINE_RENDER_PREP)
+            .with_task_domain(task_domain::ENGINE_WORLD_STREAMING)
             .with_task_pass(task_pass::TERRAIN_RENDER_PACKET),
         move || {
             let generated = generate_terrain_for_chunk(&spec, coord, color, heightmap.as_deref());
@@ -244,8 +246,13 @@ pub(super) fn enqueue_streamed_terrain_chunk(
             }
         },
     );
-    state
-        .pending
-        .insert(coord, PendingTerrainChunk { result, ticket });
+    state.pending.insert(
+        coord,
+        PendingTerrainChunk {
+            result,
+            ticket,
+            request_score,
+        },
+    );
     true
 }

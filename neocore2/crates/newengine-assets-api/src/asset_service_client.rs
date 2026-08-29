@@ -9,6 +9,7 @@ mod access;
 mod core;
 mod editor;
 mod service;
+mod streaming;
 mod textures;
 mod transport;
 

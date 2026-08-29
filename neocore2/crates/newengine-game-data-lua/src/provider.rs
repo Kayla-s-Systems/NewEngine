@@ -2,6 +2,7 @@ use newengine_game_data::{GameData, GameDataProvider, GameDataSnapshot};
 
 use crate::client::load_game_data_from_script;
 
+pub const SCRIPT_GAME_DATA_PROVIDER_ID: &str = "newengine.game_data.script";
 pub const LUA_GAME_DATA_PROVIDER_ID: &str = "newengine.game_data.lua";
 
 #[derive(Clone, Debug)]
@@ -38,7 +39,7 @@ impl LuaGameDataProvider {
     fn source_id(&self) -> String {
         format!(
             "{}:{}#{}",
-            LUA_GAME_DATA_PROVIDER_ID, self.script_ref, self.operation
+            SCRIPT_GAME_DATA_PROVIDER_ID, self.script_ref, self.operation
         )
     }
 }
@@ -46,13 +47,13 @@ impl LuaGameDataProvider {
 impl GameDataProvider for LuaGameDataProvider {
     #[inline]
     fn id(&self) -> &'static str {
-        LUA_GAME_DATA_PROVIDER_ID
+        SCRIPT_GAME_DATA_PROVIDER_ID
     }
 
     fn load(&self) -> Result<GameData, String> {
         if self.operation.trim().is_empty() {
             return Err(format!(
-                "Lua game-data provider '{}' has no configured operation; bind one in the project scripting registry",
+                "Script game-data provider '{}' has no configured operation; bind one in the project scripting registry",
                 self.script_ref
             ));
         }
@@ -73,7 +74,7 @@ mod tests {
     fn explicit_provider_targets_selectorless_game_data_module() {
         let provider = LuaGameDataProvider::new("scripts/custom_data.ysc")
             .with_operation("custom_data_export");
-        assert_eq!(provider.id(), LUA_GAME_DATA_PROVIDER_ID);
+        assert_eq!(provider.id(), SCRIPT_GAME_DATA_PROVIDER_ID);
         assert_eq!(provider.script_ref(), "scripts/custom_data.ysc");
         assert!(!provider.script_ref().contains('@'));
         assert_eq!(provider.operation(), "custom_data_export");

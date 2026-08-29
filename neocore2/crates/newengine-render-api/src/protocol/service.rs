@@ -30,6 +30,12 @@ pub enum RenderServiceRequest {
         kind: Option<RenderDrawListKind>,
     },
     DiscardRecordedCommands,
+    /// Aborts the currently opened backend frame without queue submission.
+    ///
+    /// This is distinct from `DiscardRecordedCommands`: graph execution may have
+    /// already written native commands even after all deferred CPU draw buckets
+    /// are cleared. Backends must retire the acquired frame/sync objects safely.
+    AbortFrame,
     SubmitRenderGraph(RenderGraphDesc),
     SubmitFrame(Box<RenderFrameEnvelope>),
     SetWorkBudget(RenderWorkBudget),

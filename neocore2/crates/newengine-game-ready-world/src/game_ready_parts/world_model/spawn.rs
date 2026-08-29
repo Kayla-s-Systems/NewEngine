@@ -46,13 +46,13 @@ fn attach_authored_map_placement(
         return;
     }
     let source = if prefab.authored_discrete_placement {
-        newengine_engine_runtime::gameplay::AuthoredMapPlacementSource::DiscretePlacement
+        newengine_world_authoring_api::AuthoredMapPlacementSource::DiscretePlacement
     } else {
-        newengine_engine_runtime::gameplay::AuthoredMapPlacementSource::ProfilePrefab
+        newengine_world_authoring_api::AuthoredMapPlacementSource::ProfilePrefab
     };
     let _ = world.insert(
         entity,
-        newengine_engine_runtime::gameplay::AuthoredMapPlacement::new(
+        newengine_world_authoring_api::AuthoredMapPlacement::new(
             prefab.authored_map_ref.clone(),
             prefab.authored_placement_id.clone(),
             source,
@@ -85,7 +85,7 @@ pub(super) fn spawn_collision_ydd_prefab_from_decoded(
                 vertex.pos[2] * prefab.scale.z,
             ]);
         }
-        for triangle in part.mesh.indices.chunks_exact(3) {
+        for triangle in part.mesh.indices.as_chunks::<3>().0 {
             triangles.push([
                 base.checked_add(triangle[0])
                     .ok_or("collision index overflow")?,
@@ -123,7 +123,7 @@ pub(super) fn spawn_collision_ydd_prefab_from_decoded(
     if prefab.authored_discrete_placement && !prefab.authored_primary {
         let _ = world.insert(
             entity,
-            newengine_engine_runtime::gameplay::AuthoredMapPlacementReplicaScaleState {
+            newengine_world_authoring_api::AuthoredMapPlacementReplicaScaleState {
                 last_authored_scale: prefab.scale,
             },
         );
@@ -154,6 +154,71 @@ pub(super) fn spawn_collision_ydd_prefab_from_decoded(
         prefab.scale,
         local_bounds.min,
         local_bounds.max,
+    );
+    Ok((part_count, triangle_count))
+}
+
+pub(super) fn spawn_box_collision_ydd_prefab_from_decoded(
+    world: &mut newengine_ecs::World,
+    parent: EntityId,
+    prefab: &GameReadyPrefabSpec,
+    decoded: &[DecodedPrefabMeshPart],
+) -> Result<(u32, u64), String> {
+    ensure_ydd_prefab_source(prefab, "box collision")?;
+    let half_extents = dynamic_prefab_half_extents(decoded, prefab.scale);
+    let entity = spawn_named(world, format!("World/Collision/{}", prefab.id));
+    let _ = set_parent(world, entity, Some(parent));
+    let rotation = Quat::from_euler(
+        EulerRot::YXZ,
+        prefab.rotation_ypr.x,
+        prefab.rotation_ypr.y,
+        prefab.rotation_ypr.z,
+    );
+    let _ = world.insert(
+        entity,
+        Transform {
+            position: prefab.position,
+            rotation,
+            scale: Vec3::ONE,
+        },
+    );
+    attach_authored_map_placement(world, entity, prefab);
+    if prefab.authored_discrete_placement && !prefab.authored_primary {
+        let _ = world.insert(
+            entity,
+            newengine_world_authoring_api::AuthoredMapPlacementReplicaScaleState {
+                last_authored_scale: prefab.scale,
+            },
+        );
+    }
+    let local_bounds = newengine_bounds::Aabb::from_center_half_extents(Vec3::ZERO, half_extents);
+    let _ = world.insert(entity, Bounds::from_local_aabb(local_bounds));
+    let mut body = PhysicsBodyDesc::static_solid(CollisionShapeDesc::Box {
+        half_extents: [half_extents.x, half_extents.y, half_extents.z],
+    });
+    body.material.friction = 0.94;
+    body.material.restitution = 0.0;
+    let _ = world.insert(entity, body);
+    let _ = world.insert(
+        entity,
+        newengine_engine_runtime::gameplay::PhysicsSurface {
+            id: "surface.platform".to_owned(),
+            footstep_event: "audio.footstep.concrete".to_owned(),
+            landing_event: "audio.landing.concrete".to_owned(),
+        },
+    );
+    let part_count = decoded.len() as u32;
+    let triangle_count = decoded
+        .iter()
+        .map(|part| (part.mesh.indices.len() / 3) as u64)
+        .sum();
+    newengine_ulog_api::ulog::info!(
+        "static box collision spawned id='{}' source='{}' entity={:?} half_extents={:?} position={:?}",
+        prefab.id,
+        prefab.source,
+        entity,
+        half_extents,
+        prefab.position,
     );
     Ok((part_count, triangle_count))
 }

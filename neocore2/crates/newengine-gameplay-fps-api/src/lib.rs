@@ -7,14 +7,16 @@ mod policy;
 mod runtime;
 
 pub use policy::{
-    FpsCallbackExports, FpsCombatPolicy, FpsGameplayPolicyProvider, FpsGameplayPolicySnapshot,
-    FpsMissionPolicy, FpsMissionStateMachinePolicy, FpsPlayableCharacterAnimations,
-    FpsPlayableCharacterPolicy, FpsPlayerPolicy, FpsPolicyDecision, FpsPolicyEvent,
-    FpsRequiredContentPolicy, FPS_GAMEPLAY_POLICY_SCHEMA, FPS_GAMEPLAY_POLICY_VERSION,
+    FpsCallbackExports, FpsCharacterMenuPolicyProvider, FpsCharacterMenuPolicySnapshot,
+    FpsCombatPolicy, FpsGameplayPolicyProvider, FpsGameplayPolicySnapshot, FpsMissionPolicy,
+    FpsMissionStateMachinePolicy, FpsPlayableCharacterAnimations, FpsPlayableCharacterPolicy,
+    FpsPlayerPolicy, FpsPolicyDecision, FpsPolicyEvent, FpsRequiredContentPolicy,
+    FPS_CHARACTER_MENU_POLICY_SCHEMA, FPS_CHARACTER_MENU_POLICY_VERSION,
+    FPS_GAMEPLAY_POLICY_SCHEMA, FPS_GAMEPLAY_POLICY_VERSION,
 };
 pub use runtime::{
     FpsDemoGoal, FpsDemoHazard, FpsDemoPickup, FpsDemoRules, FpsDemoState, FpsDemoTarget,
-    FpsPlayerTuning, WeaponShellCasing,
+    FpsMotionResponseTuning, FpsPlayerTuning, WeaponShellCasing,
 };
 
 use newengine_input_actions_api::ActionCommandFrame;
@@ -22,7 +24,10 @@ use newengine_input_actions_api::ActionCommandFrame;
 pub mod action {
     pub const PLAYER_JUMP: &str = "player.jump";
     pub const PLAYER_CROUCH: &str = "player.crouch";
-    pub const PLAYER_FIRE_PRIMARY: &str = "player.fire.primary";
+    /// Canonical primary weapon attack intent. The wire id stays legacy-compatible so existing
+    /// project input maps do not need migration when melee/unarmed share the same control.
+    pub const PLAYER_ATTACK_PRIMARY: &str = "player.fire.primary";
+    pub const PLAYER_FIRE_PRIMARY: &str = PLAYER_ATTACK_PRIMARY;
     pub const PLAYER_LAUNCH_PROJECTILE: &str = "player.projectile.launch";
     pub const PLAYER_AIM: &str = "player.aim";
     pub const PLAYER_RELOAD: &str = "player.reload";

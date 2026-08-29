@@ -66,7 +66,7 @@ fn append_wire_mesh_edges(
 ) -> bool {
     use newengine_math::Vec4;
 
-    for triangle in mesh.indices.chunks_exact(3) {
+    for triangle in mesh.indices.as_chunks::<3>().0 {
         for (a, b) in [
             (triangle[0], triangle[1]),
             (triangle[1], triangle[2]),

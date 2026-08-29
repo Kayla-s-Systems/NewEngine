@@ -1,0 +1,11 @@
+[package]
+name = "newengine-runtime-unit-api"
+version = "0.1.0"
+edition = "2021"
+readme = "README.md"
+description = "Provider-neutral static runtime-unit factory registration contract"
+license = "Proprietary"
+
+[dependencies]
+newengine-core = { path = "../newengine-core", default-features = false }
+newengine-service-api = { path = "../newengine-service-api" }

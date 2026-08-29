@@ -217,13 +217,17 @@ fn shadow_cascade_atlas_scales_with_cascade_count() {
 
 #[test]
 fn draw_list_route_validation_warns_when_pass_route_has_no_declared_list() {
-    let plan = standard_runtime_frame(
+    let mut plan = standard_runtime_frame(
         StandardRuntimePipelineDesc::new(14, Extent2D::new(800, 600), Extent2D::new(800, 600))
             .hdr_scene(false)
             .postfx(false)
             .ui(true)
             .debug_overlay(false),
     );
+    // Standard runtime construction normalizes graph-owned routes. Remove one
+    // declaration deliberately so this test remains a validator-level negative case.
+    plan.draw_lists
+        .retain(|desc| desc.kind != newengine_render_api::RenderDrawListKind::Transparent);
 
     let report = plan.validate_draw_list_routes();
     assert!(

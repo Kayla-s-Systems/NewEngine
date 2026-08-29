@@ -44,7 +44,7 @@ impl PluginManager {
         Err(PluginLoadError {
             path: dir,
             message: format!(
-                "targeted discovery did not find selected plugin id '{}'; verify the DLL and its .nspmeta.json sidecar are both present and finalized",
+                "targeted discovery did not find selected plugin id '{}'; verify the DLL contains finalized embedded discovery metadata (or a valid .nspmeta.json fallback for dev/debug)",
                 plugin_id.trim()
             ),
         })

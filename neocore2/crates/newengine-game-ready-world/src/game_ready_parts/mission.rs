@@ -3,6 +3,46 @@ use super::*;
 use crate::content::GameReadyMissionPickupSpec;
 
 const MISSION_MATERIAL_LIBRARY: &str = newengine_game_data::MISSION_MATERIAL_LIBRARY;
+const MISSION_STREAMING_PIN_OWNER: &str = "game-ready.mission";
+
+#[derive(Debug, Default)]
+struct MissionAssetPinSet {
+    leases: std::collections::BTreeMap<String, newengine_assets::AssetStreamingPinLease>,
+}
+
+fn pin_mission_asset(world: &mut newengine_ecs::World, logical_path: &str) -> Result<(), String> {
+    let logical_path = logical_path.trim().replace('\\', "/");
+    if logical_path.is_empty() {
+        return Ok(());
+    }
+
+    let mut pins = world
+        .remove_resource::<MissionAssetPinSet>()
+        .unwrap_or_default();
+    if pins.leases.contains_key(&logical_path) {
+        world.insert_resource(pins);
+        return Ok(());
+    }
+
+    let client =
+        newengine_assets::AssetServiceClient::new(newengine_plugin_host::default_host_api());
+    match newengine_assets::AssetStreamingPinLease::acquire(
+        client,
+        logical_path.clone(),
+        MISSION_STREAMING_PIN_OWNER,
+        newengine_assets::AssetStreamingPinClassV1::Mission,
+    ) {
+        Ok(lease) => {
+            pins.leases.insert(logical_path, lease);
+            world.insert_resource(pins);
+            Ok(())
+        }
+        Err(error) => {
+            world.insert_resource(pins);
+            Err(error)
+        }
+    }
+}
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(super) struct GameReadyMissionSpawnSummary {
@@ -380,9 +420,19 @@ fn try_spawn_deferred_world_item(
     let world_definition = definition.world.clone().sanitized();
 
     let decoded = match world_definition.model_ref.as_deref() {
-        Some(model_ref) => Some(decode_runtime_ydd_prefab(model_ref).map_err(|error| {
-            format!("world-item model decode failed path='{model_ref}': {error}")
-        })?),
+        Some(model_ref) => {
+            pin_mission_asset(world, model_ref).map_err(|error| {
+                format!("mission model residency pin failed path='{model_ref}': {error}")
+            })?;
+            if let Some(material_ref) = world_definition.material_library_ref.as_deref() {
+                pin_mission_asset(world, material_ref).map_err(|error| {
+                    format!("mission material residency pin failed path='{material_ref}': {error}")
+                })?;
+            }
+            Some(decode_runtime_ydd_prefab(model_ref).map_err(|error| {
+                format!("world-item model decode failed path='{model_ref}': {error}")
+            })?)
+        }
         None => None,
     };
 
@@ -704,6 +754,22 @@ pub(super) fn spawn_game_ready_mission(
     mission: &GameReadyMissionSpec,
 ) -> GameReadyMissionSpawnSummary {
     let mut summary = GameReadyMissionSpawnSummary::default();
+    for entry in [
+        "mission_core",
+        "mission_target",
+        "mission_hazard",
+        "mission_goal",
+    ] {
+        let material_ref = format!("{MISSION_MATERIAL_LIBRARY}@{entry}");
+        if let Err(error) = pin_mission_asset(world, &material_ref) {
+            newengine_ulog_api::ulog::warn!(
+                "game-ready mission asset pin failed asset='{}' class='mission' owner='{}' err='{}'",
+                material_ref,
+                MISSION_STREAMING_PIN_OWNER,
+                error,
+            );
+        }
+    }
     let materials = register_mission_materials(mats);
 
     let mut deferred_items = Vec::new();

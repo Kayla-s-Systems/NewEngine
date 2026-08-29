@@ -1,0 +1,9 @@
+[package]
+name = "newengine-host-probe-storage"
+version = "0.1.0"
+edition = "2021"
+description = "Single-purpose storage inventory probe for NewEngine"
+
+[dependencies]
+newengine-host-capabilities-api = { path = "../newengine-host-capabilities-api" }
+sysinfo = { version = "0.38.3", default-features = true }

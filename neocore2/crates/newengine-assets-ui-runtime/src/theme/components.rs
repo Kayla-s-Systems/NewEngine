@@ -145,7 +145,7 @@ pub(crate) fn merge_component_templates(
     local: Vec<UiComponentTemplate>,
 ) -> Vec<UiComponentTemplate> {
     let mut by_id = BTreeMap::<String, UiComponentTemplate>::new();
-    for template in imported.into_iter().chain(local.into_iter()) {
+    for template in imported.into_iter().chain(local) {
         if template.id.trim().is_empty() {
             continue;
         }

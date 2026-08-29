@@ -16,6 +16,7 @@ pub(crate) struct GameReadyMapProfile {
     pub(crate) foliage: GameReadyFoliageSpec,
     pub(crate) prefabs: Vec<GameReadyPrefabSpec>,
     pub(crate) definitions: Vec<GameReadyDefinitionInstanceSpec>,
+    pub(crate) acoustic_materials: newengine_audio_api::AcousticMaterialLibrary,
     pub(crate) gameplay: GameReadyGameplaySpec,
     pub(crate) palette: GameReadyPaletteSpec,
 }
@@ -50,6 +51,19 @@ pub(crate) struct GameReadyPlayerModelSpec {
     pub(crate) crouch_walk_animation: Option<String>,
     pub(crate) jump_animation: Option<String>,
     pub(crate) fall_animation: Option<String>,
+    pub(crate) equipment_ready_animation: Option<String>,
+    pub(crate) equipment_aim_animation: Option<String>,
+    pub(crate) equipment_reload_animation: Option<String>,
+    pub(crate) unarmed_ready_animation: Option<String>,
+    pub(crate) unarmed_attack_animation: Option<String>,
+    pub(crate) equipment_ready_sample_phase: f32,
+    pub(crate) equipment_ready_rotation_weights:
+        Vec<newengine_engine_runtime::gameplay::PlayerJointRotationWeight>,
+    pub(crate) equipment_aim_rotation_weights:
+        Vec<newengine_engine_runtime::gameplay::PlayerJointRotationWeight>,
+    pub(crate) equipment_reload_rotation_weights:
+        Vec<newengine_engine_runtime::gameplay::PlayerJointRotationWeight>,
+    pub(crate) equipment_arm_ik: bool,
     pub(crate) target_height: f32,
     pub(crate) eye_height_ratio: f32,
     pub(crate) local_offset: Vec3,
@@ -142,6 +156,9 @@ pub(crate) struct GameReadySkySpec {
     pub(crate) radius: f32,
     pub(crate) mesh: String,
     pub(crate) follow_camera: bool,
+    pub(crate) environment_profile: String,
+    pub(crate) environment_region: String,
+    pub(crate) environment_biome: String,
     pub(crate) cloud_dictionary: String,
     pub(crate) cloud_profile: String,
     pub(crate) sun_radius: f32,

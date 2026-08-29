@@ -1,8 +1,11 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 use newengine_console_api::{CommandArgSpec, CommandFlags};
+pub use newengine_console_api::{
+    CommandSuggestItem as SuggestItem, CommandSuggestResponse as SuggestResponse,
+};
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct ConsoleCmdEntry {
@@ -45,19 +48,4 @@ pub struct DynCommand {
 pub enum DynPayload {
     Empty,
     Raw,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct SuggestItem {
-    pub kind: String,
-    pub display: String,
-    pub insert: String,
-    pub help: String,
-    pub usage: String,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct SuggestResponse {
-    pub signature: String,
-    pub items: Vec<SuggestItem>,
 }

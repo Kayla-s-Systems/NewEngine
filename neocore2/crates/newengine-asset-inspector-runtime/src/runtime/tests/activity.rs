@@ -38,7 +38,7 @@ fn completed_activity_animates_to_one() {
 #[test]
 fn activity_publication_is_throttled_to_reduce_full_ui_state_patches() {
     let preview_api = Arc::new(AssetPreviewApi::new(Arc::new(
-        newengine_engine_runtime::ViewportBridge::new(),
+        newengine_viewport_bridge::ViewportBridge::new(),
     )));
     let mut runtime = AssetInspectorRuntimeModule::new(preview_api);
     runtime.begin_activity("OPENING", 10);

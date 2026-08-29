@@ -1,0 +1,9 @@
+[package]
+name = "newengine-host-probe-memory"
+version = "0.1.0"
+edition = "2021"
+description = "Single-purpose memory capacity probe for NewEngine"
+
+[dependencies]
+newengine-host-capabilities-api = { path = "../newengine-host-capabilities-api" }
+sysinfo = { version = "0.38.3", default-features = true }

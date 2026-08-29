@@ -137,44 +137,26 @@ pub(crate) fn update_platform_window_snapshot(ready: PlatformWindowReadyV1) {
 
 #[cfg(test)]
 mod loaded_provider_contract_tests {
-    use std::path::{Path, PathBuf};
-
-    fn repo_root() -> PathBuf {
-        let crate_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
-        crate_dir
-            .parent()
-            .and_then(Path::parent)
-            .and_then(Path::parent)
-            .and_then(Path::parent)
-            .expect("NorthStar repository root")
-            .to_path_buf()
-    }
-
-    fn load_first_party(manager: &mut newengine_plugin_host::PluginManager, path: &Path) {
-        assert!(path.is_file(), "missing runtime plugin {}", path.display());
+    fn load_first_party(manager: &mut newengine_plugin_host::PluginManager, plugin_id: &str) {
         manager
-            .load_path_with_origin(
-                path,
+            .load_plugin_id_default_with_origin(
+                plugin_id,
                 newengine_plugin_host::default_host_api(),
                 newengine_plugin_host::PluginLoadOrigin::FirstPartyPlugin,
             )
-            .unwrap_or_else(|error| panic!("load {} failed: {error}", path.display()));
+            .unwrap_or_else(|error| panic!("load plugin id '{plugin_id}' failed: {error}"));
     }
 
     #[test]
     fn loaded_headless_safe_first_party_provider_routes_conform_to_registry() {
         newengine_plugin_host::init_host_context();
-        let runtime = repo_root().join("pluginsRuntime");
         let mut manager = newengine_plugin_host::PluginManager::new();
 
         // Vulkan is intentionally excluded here: its real init contract requires
         // a valid native Win32 window/surface. It is covered by descriptor
         // conformance plus the window-backed runtime smoke, not by fake handles.
-        load_first_party(
-            &mut manager,
-            &runtime.join("gravitas-physics-0.3.0-release.dll"),
-        );
-        load_first_party(&mut manager, &runtime.join("egui-ui-0.1.0-release.dll"));
+        load_first_party(&mut manager, "engine.physics.gravitas");
+        load_first_party(&mut manager, "engine.ui.egui");
 
         for (backend, abi, owner) in [
             (
@@ -205,5 +187,10 @@ mod loaded_provider_contract_tests {
             assert_eq!(report.provider_owner_id, owner);
             assert_eq!(route.origin, "first-party-plugin");
         }
+
+        // Loaded ABI services contain plugin-owned trait objects. Use the host's
+        // explicit shutdown path so services are unregistered before DLL-backed
+        // objects are retired; raw PluginManager drop is not a safe lifecycle gate.
+        manager.shutdown();
     }
 }

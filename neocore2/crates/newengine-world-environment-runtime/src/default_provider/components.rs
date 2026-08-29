@@ -1,8 +1,8 @@
-use crate::math::{clamp01_f32, mix_color, normalize};
+use crate::math::{clamp01_f32, mix_color};
 use newengine_world_environment_api::{
-    AtmosphereStateDto, CelestialBodyDto, CloudStateDto, Color3Dto,
-    EnvironmentGameplayModifiersDto, EnvironmentLightingIntentDto, ExposureIntentDto, SkyStateDto,
-    TimeOfDayStateDto, Vec3Dto, WeatherStateDto, WindStateDto,
+    CelestialBodyDto, CloudStateDto, Color3Dto, EnvironmentGameplayModifiersDto,
+    EnvironmentLightingIntentDto, ExposureIntentDto, SkyStateDto, TimeOfDayStateDto,
+    WeatherStateDto, WindStateDto,
 };
 
 pub(super) fn build_sky_state(time_of_day: &TimeOfDayStateDto, overcast: f32) -> SkyStateDto {
@@ -31,70 +31,6 @@ pub(super) fn build_sky_state(time_of_day: &TimeOfDayStateDto, overcast: f32) ->
         night_blend: time_of_day.night_blend,
         overcast_blend: overcast,
         light_pollution: 0.04 * time_of_day.night_blend,
-    }
-}
-
-pub(super) struct AtmosphereInputs<'a> {
-    pub time_of_day: &'a TimeOfDayStateDto,
-    pub overcast: f32,
-    pub precipitation: f32,
-    pub fog_bias: f32,
-    pub weather_intensity: f32,
-    pub cloud_coverage: f32,
-    pub haze: f32,
-    pub visibility: f32,
-}
-
-pub(super) fn build_atmosphere_state(input: AtmosphereInputs<'_>) -> AtmosphereStateDto {
-    let AtmosphereInputs {
-        time_of_day,
-        overcast,
-        precipitation,
-        fog_bias,
-        weather_intensity,
-        cloud_coverage,
-        haze,
-        visibility,
-    } = input;
-    AtmosphereStateDto {
-        fog_density: 0.006
-            + overcast * 0.024
-            + precipitation * 0.020
-            + fog_bias * weather_intensity,
-        fog_height_falloff: 0.12,
-        fog_color_linear: mix_color(
-            Color3Dto::new(0.06, 0.07, 0.11),
-            Color3Dto::new(0.56, 0.62, 0.70),
-            time_of_day.day_blend,
-        ),
-        haze_amount: haze,
-        humidity: clamp01_f32(
-            0.26 + cloud_coverage * 0.30 + precipitation * 0.34 + fog_bias * 0.28,
-        ),
-        aerosol_density: 0.08 + haze,
-        visibility_distance_meters: visibility,
-    }
-}
-
-pub(super) fn build_wind_state(
-    wind_base_mps: f32,
-    wind_gain_mps: f32,
-    gust_base: f32,
-    gust_gain: f32,
-    cloud_coverage: f32,
-    weather_intensity: f32,
-    overcast: f32,
-) -> WindStateDto {
-    WindStateDto {
-        global_direction: normalize(Vec3Dto::new(0.92, 0.0, 0.38)),
-        global_speed_mps: wind_base_mps + cloud_coverage * 1.6 + wind_gain_mps * weather_intensity,
-        gust_strength: (gust_base + gust_gain * weather_intensity + overcast * 0.12)
-            .clamp(0.0, 1.0),
-        cloud_advection: Vec3Dto::new(
-            wind_base_mps + cloud_coverage * 1.8 + wind_gain_mps * weather_intensity,
-            0.0,
-            0.8 + weather_intensity * 1.4,
-        ),
     }
 }
 

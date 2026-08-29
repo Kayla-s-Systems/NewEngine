@@ -294,7 +294,6 @@ pub(crate) struct HostContext {
     /// Per-Engine snapshot of process/bootstrap environment. Runtime policy must
     /// read this snapshot instead of observing later process-global mutations.
     pub(crate) environment: RwLock<Arc<NeHashMap<OsString, OsString>>>,
-    pub(crate) run_id: std::sync::OnceLock<String>,
 }
 
 /// Instance-owned host state handle. It is cheap to clone and is intended to live
@@ -495,7 +494,6 @@ fn make_ctx(environment: NeHashMap<OsString, OsString>) -> Arc<HostContext> {
         gateway_resolution_diagnostics: Mutex::new(NeHashMap::default()),
         warned_retired_capabilities: AtomicBool::new(false),
         environment: RwLock::new(Arc::new(environment)),
-        run_id: std::sync::OnceLock::new(),
     })
 }
 

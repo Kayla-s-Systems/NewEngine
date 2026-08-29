@@ -1,0 +1,10 @@
+[package]
+name = "newengine-viewport-bridge"
+version = "0.1.0"
+edition = "2021"
+readme = "README.md"
+description = "Focused thread-safe UI/render viewport bridge for North Star"
+
+[dependencies]
+newengine-math = { path = "../newengine-math" }
+parking_lot = "0.12"

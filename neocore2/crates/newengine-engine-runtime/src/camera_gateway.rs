@@ -1,7 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use parking_lot::Mutex;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use abi_stable::std_types::{RResult, RString};
@@ -39,14 +38,15 @@ use newengine_transform::Transform;
 
 use crate::engine_bounds::EngineBoundsSnap;
 use crate::gameplay::{
-    apply_player_command_frame, emit_player_event, first_player, is_player_controller_enabled,
-    sync_player_view_listeners, CharacterBody, CharacterMotionTuning, GameRunMode,
-    PlayerCommandFrame, PlayerEventKind, PlayerStanceState, PlayerWeaponState,
+    active_equipped_weapon_aiming, active_equipped_weapon_can_aim, apply_player_command_frame,
+    emit_player_event, first_player, is_player_controller_enabled, sync_player_view_listeners,
+    CharacterBody, CharacterMotionTuning, GameRunMode, PlayerCommandFrame, PlayerEventKind,
+    PlayerStanceState,
 };
-use crate::viewport_bridge::ViewportBridge;
+use newengine_viewport_bridge::ViewportBridge;
 
 const CAMERA_GATEWAY_OWNER: &str = "newengine-engine-runtime.camera-gateway";
-static CAMERA_GATEWAY_REGISTERED: AtomicBool = AtomicBool::new(false);
+const CAMERA_GATEWAY_ROUTE: &str = "engine.camera.stargazer";
 
 #[path = "camera_gateway_helpers.rs"]
 mod camera_gateway_helpers;
@@ -77,9 +77,9 @@ fn camera_gateway_service(
     JsonServiceRouter::with_shared_state(ENGINE_CAMERA_SERVICE_ID, state)
         .describe_json(&description)
         .info(CameraServiceInfo::default)
-        .get_json(
+        .blob(
             newengine_camera_api::CAMERA_SERVICE_METHOD_SNAPSHOT_JSON_V1,
-            |state| state.last_snapshot.unwrap_or_default(),
+            camera_snapshot_gateway,
         )
         .blob(
             newengine_camera_api::CAMERA_SERVICE_METHOD_INVOKE,
@@ -103,10 +103,27 @@ fn camera_gateway_service(
         .into_service_v1()
 }
 
+fn authoritative_camera_snapshot(
+    state: &CameraGatewayState,
+) -> Result<CameraFrameSnapshot, RString> {
+    state
+        .last_snapshot
+        .ok_or_else(|| RString::from("engine.camera: authoritative camera snapshot unavailable"))
+}
+
+fn camera_snapshot_gateway(
+    state: &mut CameraGatewayState,
+    _payload: Blob,
+) -> RResult<Blob, RString> {
+    match authoritative_camera_snapshot(state) {
+        Ok(snapshot) => ok_json(snapshot),
+        Err(error) => RResult::RErr(error),
+    }
+}
+
 fn invoke_camera_gateway(state: &mut CameraGatewayState, payload: Blob) -> RResult<Blob, RString> {
     if payload.as_slice().is_empty() {
-        let snapshot = state.last_snapshot.unwrap_or_default();
-        return ok_json(snapshot);
+        return camera_snapshot_gateway(state, payload);
     }
     apply_camera_view_command(state, payload)
 }
@@ -132,16 +149,23 @@ fn apply_camera_view_command(
     ok_json(CameraViewCommandResponse { active_view })
 }
 
-fn register_camera_gateway_service_best_effort(state: Arc<Mutex<CameraGatewayState>>) {
-    // Early runtime bootstrap must not resolve `engine.camera` through the
-    // gateway registry and must not emit legacy routed logs. The in-process
-    // stargazer provider is idempotently installed once; later providers can
-    // still override by normal gateway priority rules.
-    if CAMERA_GATEWAY_REGISTERED
-        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
-        .is_err()
-    {
-        return;
+pub(crate) fn camera_gateway_route_is_authoritative_in_current_host_context() -> bool {
+    newengine_plugin_host::active_engine_gateway_route(ENGINE_CAMERA_SERVICE_ID).is_some_and(
+        |route| {
+            route.provider_service_id == ENGINE_CAMERA_SERVICE_ID
+                && route.provider_route_id.as_deref() == Some(CAMERA_GATEWAY_ROUTE)
+                && route.provider_owner_id == CAMERA_GATEWAY_OWNER
+                && route.backend_capability_id == CAMERA_BACKEND_CAPABILITY_ID
+        },
+    )
+}
+
+fn register_camera_gateway_service_best_effort(state: Arc<Mutex<CameraGatewayState>>) -> bool {
+    // Gateway registries are HostContext-scoped. The registry itself is therefore
+    // the idempotency authority; a process-global once flag would incorrectly
+    // suppress publication when a runtime switches to a fresh HostContext.
+    if camera_gateway_route_is_authoritative_in_current_host_context() {
+        return true;
     }
 
     let service = camera_gateway_service(state);
@@ -149,16 +173,19 @@ fn register_camera_gateway_service_best_effort(state: Arc<Mutex<CameraGatewaySta
         gateway: ENGINE_CAMERA_SERVICE_ID,
         service_kind: newengine_service_api::EngineServiceKind::Camera,
         provider_service: ENGINE_CAMERA_SERVICE_ID,
-        provider_route: "engine.camera.stargazer",
+        provider_route: CAMERA_GATEWAY_ROUTE,
         capability: CAMERA_BACKEND_CAPABILITY_ID,
         priority: 0,
         owner: CAMERA_GATEWAY_OWNER,
         service,
     })
-    .is_err()
+    .is_ok()
     {
-        CAMERA_GATEWAY_REGISTERED.store(false, Ordering::Release);
+        return true;
     }
+
+    // Another publication racing this call may have won after our initial probe.
+    camera_gateway_route_is_authoritative_in_current_host_context()
 }
 
 /// Runtime-hosted camera gateway bridge.
@@ -175,8 +202,18 @@ impl CameraGatewayBridge {
     #[inline]
     pub fn new() -> Self {
         let state = Arc::new(Mutex::new(CameraGatewayState::default()));
-        register_camera_gateway_service_best_effort(Arc::clone(&state));
-        Self { state }
+        let bridge = Self { state };
+        let _ = bridge.publish_gateway_best_effort();
+        bridge
+    }
+
+    /// Publishes this bridge into the gateway registry of the currently active HostContext.
+    ///
+    /// This is intentionally repeatable because runtime launchers create instance-owned
+    /// HostContexts after profile construction. Re-publication is a no-op when the
+    /// authoritative camera route is already present in the active context.
+    pub fn publish_gateway_best_effort(&self) -> bool {
+        register_camera_gateway_service_best_effort(Arc::clone(&self.state))
     }
 
     /// Samples direct-player input before the fixed simulation schedule.
@@ -363,17 +400,8 @@ impl CameraGatewayBridge {
         );
         controller_z_phases[4] = follow_controller_offset_z(world, cam_id);
 
-        let first_person_aiming = player.is_some_and(|player| {
-            // Camera resolution happens after the command transport is sampled, but fixed-step
-            // combat may not have run on every render frame. Prefer the current semantic RMB
-            // command and retain PlayerWeaponState as a compatibility fallback.
-            world
-                .get::<PlayerCommandFrame>(player)
-                .is_some_and(|commands| commands.actions.is_held("player.aim"))
-                || world
-                    .get::<PlayerWeaponState>(player)
-                    .is_some_and(|state| state.aiming)
-        });
+        let first_person_aiming =
+            player.is_some_and(|player| active_weapon_aim_intent(world, player));
         let (snapshot, report, resolved_frame) = if let Some(manager) =
             world.resource_mut::<CameraManagerResource>()
         {
@@ -411,14 +439,39 @@ impl CameraGatewayBridge {
             controller_z_phases,
         );
 
-        if let Some(listener) = crate::audio_gateway::audio_listener_from_camera_snapshot(&snapshot)
+        if let Some(listener) =
+            newengine_audio_client::audio_listener_from_camera_snapshot(&snapshot)
         {
-            world.insert_resource(crate::audio_occlusion::AudioListenerRuntimeState {
+            world.insert_resource(newengine_audio_world_api::AudioListenerRuntimeState {
                 listener,
                 frame_index,
             });
         }
-        crate::audio_gateway::sync_audio_listener_from_camera_snapshot(&snapshot);
+        newengine_audio_client::sync_audio_listener_from_camera_snapshot(&snapshot);
+        debug_assert!(
+            snapshot.finite,
+            "authoritative camera snapshot must be finite"
+        );
+        debug_assert!(
+            snapshot
+                .view_cols
+                .iter()
+                .flatten()
+                .all(|value| value.is_finite()),
+            "authoritative camera view matrix must be finite"
+        );
+        debug_assert!(
+            snapshot
+                .projection_cols
+                .iter()
+                .flatten()
+                .all(|value| value.is_finite()),
+            "authoritative camera projection matrix must be finite"
+        );
+        debug_assert!(
+            snapshot.position_ws.iter().all(|value| value.is_finite()),
+            "authoritative camera position must be finite"
+        );
         state.last_snapshot = Some(snapshot);
         let view = EngineViewFrame::from_camera_snapshot(snapshot);
         let cursor = if effective_play_mode.wants_direct_player_control()
@@ -442,6 +495,18 @@ impl CameraGatewayBridge {
             world_playable,
         }
     }
+}
+
+#[inline]
+fn active_weapon_aim_intent(world: &World, player: EntityId) -> bool {
+    // Input actions are intent only. ADS/FOV may exist only when the authoritative active weapon
+    // explicitly exposes the Aim capability. This keeps raw mouse input from becoming a camera
+    // zoom for Unarmed, melee, an empty/incomplete equipment state, or a stale weapon command.
+    active_equipped_weapon_can_aim(world, player)
+        && (world
+            .get::<PlayerCommandFrame>(player)
+            .is_some_and(|commands| commands.actions.is_held("player.aim"))
+            || active_equipped_weapon_aiming(world, player))
 }
 
 impl Default for CameraGatewayBridge {
@@ -621,5 +686,28 @@ mod camera_gateway_start_view_tests {
             parse_camera_start_view(Some("third_person_orbit")),
             CameraViewMode::ThirdPersonOrbit
         );
+    }
+
+    #[test]
+    fn weaponless_fire_and_aim_intent_cannot_activate_camera_ads() {
+        let mut world = World::new();
+        let player = world.spawn();
+        let mut commands = PlayerCommandFrame::default();
+        commands.actions.held.push("player.fire.primary".to_owned());
+        commands.actions.held.push("player.aim".to_owned());
+        let _ = world.insert(player, commands);
+
+        assert!(!active_weapon_aim_intent(&world, player));
+    }
+
+    #[test]
+    fn camera_snapshot_request_rejects_missing_authoritative_frame() {
+        let mut state = CameraGatewayState::default();
+        match invoke_camera_gateway(&mut state, Blob::from(Vec::<u8>::new())) {
+            RResult::RErr(error) => assert!(error
+                .to_string()
+                .contains("authoritative camera snapshot unavailable")),
+            RResult::ROk(_) => panic!("missing authoritative camera must not fall back to default"),
+        }
     }
 }

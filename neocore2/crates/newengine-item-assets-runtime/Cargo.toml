@@ -1,0 +1,21 @@
+[package]
+name = "newengine-item-assets-runtime"
+version = "0.1.0"
+edition = "2021"
+description = "Provider-neutral authored item package compiler/runtime installer"
+license = "Proprietary"
+
+[features]
+default = []
+test-support = []
+
+[dependencies]
+blake3 = "1"
+flate2 = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+newengine-assets-api = { path = "../newengine-assets-api" }
+newengine-ecs = { path = "../newengine-ecs" }
+newengine-engine-runtime = { path = "../newengine-engine-runtime" }
+newengine-core = { path = "../newengine-core" }
+newengine-primitives = { path = "../newengine-primitives" }

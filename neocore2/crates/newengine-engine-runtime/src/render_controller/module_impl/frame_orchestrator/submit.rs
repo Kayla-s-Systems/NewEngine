@@ -26,7 +26,9 @@ impl RenderFrameOrchestrator {
     ) -> EngineResult<PlayableFrameOutcome> {
         let mut cpu_profile = FrameCpuProfile::new();
 
-        let view_frame = &world_frame.view_frame;
+        let view_frame = world_frame
+            .require_authoritative_camera()
+            .map_err(|error| newengine_core::EngineError::other(error.to_string()))?;
         let view = view_frame.view;
         let viewproj = view.view_projection;
         passes::publish_camera_spawn(
@@ -322,6 +324,42 @@ impl RenderFrameOrchestrator {
             let mut build_ctx = DrawListBuildCtx::new(controller, r, features.draw_lists());
             features.extract_external_providers(&extraction, &frame_plan, &mut build_ctx)?;
         }
+        match controller.gpu.vfx_particles.record_frame(
+            r,
+            scene.world(),
+            controller.frame.frame_index,
+            scope.dt,
+            viewproj,
+            view.view,
+            view.position_ws,
+            scene_color_format,
+            scope.vp_w,
+            scope.vp_h,
+        ) {
+            Ok(report) => {
+                if scope.trace_frame && report.high_water > 0 {
+                    newengine_ulog_api::ulog::debug!(
+                        "vfx gpu particles: high_water={} uploaded={} killed={} capacity_drops={}",
+                        report.high_water,
+                        report.uploaded_spawns,
+                        report.killed_particles,
+                        report.capacity_drops,
+                    );
+                }
+            }
+            Err(error) if is_transient_shader_pipeline_error(&error) => {
+                newengine_ulog_api::ulog::debug!(
+                    "vfx gpu particles: shader/pipeline not ready; semantic GPU spawns remain queued: {}",
+                    error
+                );
+            }
+            Err(error) => {
+                newengine_ulog_api::ulog::warn!(
+                    "vfx gpu particles: frame realization skipped without disabling scene rendering: {}",
+                    error
+                );
+            }
+        }
         // UI domain draw streams travel inside RenderFrameEnvelope.ui_layers.
         // No renderer state is mutated out-of-band before graph submission.
         cpu_profile.mark("frame_plan_external");
@@ -346,7 +384,6 @@ impl RenderFrameOrchestrator {
             extent,
             scope.direct_surface_viewport,
             &frame_plan,
-            &draw_list_descs,
             postfx,
             ui_layers,
             scope.trace_frame,
@@ -372,10 +409,10 @@ impl RenderFrameOrchestrator {
         let submit_report = match submit_frame_envelope(r, frame_envelope, scope.trace_frame) {
             Ok(report) => report,
             Err(e) if is_transient_shader_pipeline_error(&e) => {
-                // The envelope has already transferred packet ownership into the backend.
-                // A backend may still present staged layer packets during end_frame(); avoid
-                // cloning every healthy frame solely to retain a generic error-path copy.
-                Self::end_viewport_after_transient_pipeline_wait(controller, r, None, scope, e)?;
+                // Graph execution may already have recorded native Vulkan commands.
+                // Never present this partial frame: abort the opened backend frame and
+                // retry from a fresh command buffer once the async shader becomes ready.
+                Self::abort_viewport_after_transient_pipeline_wait(controller, r, scope, e)?;
                 return Ok(PlayableFrameOutcome::EndedEarly { ui_telemetry: None });
             }
             Err(e) => {
@@ -385,11 +422,20 @@ impl RenderFrameOrchestrator {
                     "render controller: frame graph submit failed; viewport pass disabled and renderer continues in degraded UI/safe-present mode: {}",
                     message
                 );
+                // Any error returned after submit_frame started consuming the graph
+                // may leave native commands in the backend command buffer. Abort rather
+                // than attempting to present a partially recorded frame.
+                let abort_result = r.abort_frame();
                 if is_backend_device_lost_error(&e) {
+                    if let Err(abort_error) = abort_result {
+                        newengine_ulog_api::ulog::warn!(
+                            "render controller: abort after device loss also failed: {}",
+                            abort_error
+                        );
+                    }
                     controller.record_render_backend_error("render_graph.submit_frame", e)?;
                 } else {
-                    let _ = r.discard_recorded_commands();
-                    let _ = r.end_frame();
+                    abort_result?;
                 }
                 return Ok(PlayableFrameOutcome::EndedEarly { ui_telemetry: None });
             }

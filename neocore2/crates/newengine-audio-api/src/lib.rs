@@ -465,6 +465,9 @@ fn sample_custom_attenuation(points: &[[f32; 2]], t: f32) -> f32 {
 pub struct AcousticMaterialProfile {
     /// Broadband energy transmitted through the material when a ray is blocked.
     pub transmission_gain: f32,
+    /// Broadband energy returned by a visible first-order reflection. Transmission, reflection
+    /// and absorption are independent authored channels; runtime never derives this as `1-T`.
+    pub reflection_gain: f32,
     /// Fraction of high-frequency energy absorbed by the material in `[0,1]`.
     pub high_frequency_absorption: f32,
     /// Nominal low-pass cutoff for a fully blocked path.
@@ -476,6 +479,7 @@ impl Default for AcousticMaterialProfile {
     fn default() -> Self {
         Self {
             transmission_gain: 0.35,
+            reflection_gain: 0.50,
             high_frequency_absorption: 0.65,
             low_pass_hz: 3_500.0,
         }
@@ -487,6 +491,7 @@ impl AcousticMaterialProfile {
     pub fn sanitized(self) -> Self {
         Self {
             transmission_gain: finite_clamped(self.transmission_gain, 0.35, 0.0, 1.0),
+            reflection_gain: finite_clamped(self.reflection_gain, 0.50, 0.0, 1.0),
             high_frequency_absorption: finite_clamped(
                 self.high_frequency_absorption,
                 0.65,
@@ -500,6 +505,117 @@ impl AcousticMaterialProfile {
     #[inline]
     pub fn high_frequency_gain(self) -> f32 {
         1.0 - self.sanitized().high_frequency_absorption
+    }
+
+    /// Acoustically transparent propagation fallback. This is deliberately distinct from
+    /// `Default`: an unmapped physics surface must not invent a concrete wall response.
+    #[inline]
+    pub const fn transparent() -> Self {
+        Self {
+            transmission_gain: 1.0,
+            reflection_gain: 0.0,
+            high_frequency_absorption: 0.0,
+            low_pass_hz: 20_000.0,
+        }
+    }
+}
+
+pub const ACOUSTIC_MATERIAL_LIBRARY_SCHEMA: &str = "newengine.audio.acoustic-material-library.v2";
+pub const ACOUSTIC_MATERIAL_LIBRARY_VERSION: u32 = 2;
+
+/// One authored mapping rule between provider-neutral `PhysicsSurface.id` semantics and
+/// an audio-domain material response. Concrete names/presets belong to Shared or projects;
+/// the engine only performs deterministic rule matching.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AcousticMaterialRule {
+    pub material_id: String,
+    pub surface_matches: Vec<String>,
+    pub profile: AcousticMaterialProfile,
+}
+
+impl AcousticMaterialRule {
+    pub fn sanitized(mut self) -> Self {
+        self.material_id = self.material_id.trim().to_owned();
+        self.surface_matches = self
+            .surface_matches
+            .into_iter()
+            .map(|value| value.trim().to_ascii_lowercase())
+            .filter(|value| !value.is_empty())
+            .collect();
+        self.surface_matches.sort();
+        self.surface_matches.dedup();
+        self.profile = self.profile.sanitized();
+        self
+    }
+}
+
+/// Data-authored acoustic material library installed as an ECS world resource by the
+/// active product/profile composition. Project libraries can replace/extend Shared without
+/// teaching engine-runtime concrete material names.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AcousticMaterialLibrary {
+    pub schema: String,
+    pub version: u32,
+    pub rules: Vec<AcousticMaterialRule>,
+}
+
+impl Default for AcousticMaterialLibrary {
+    fn default() -> Self {
+        Self {
+            schema: ACOUSTIC_MATERIAL_LIBRARY_SCHEMA.to_owned(),
+            version: ACOUSTIC_MATERIAL_LIBRARY_VERSION,
+            rules: Vec::new(),
+        }
+    }
+}
+
+impl AcousticMaterialLibrary {
+    pub fn new(rules: Vec<AcousticMaterialRule>) -> Self {
+        Self {
+            rules,
+            ..Self::default()
+        }
+        .sanitized()
+    }
+
+    pub fn sanitized(mut self) -> Self {
+        self.schema = ACOUSTIC_MATERIAL_LIBRARY_SCHEMA.to_owned();
+        self.version = ACOUSTIC_MATERIAL_LIBRARY_VERSION;
+        self.rules = self
+            .rules
+            .into_iter()
+            .map(AcousticMaterialRule::sanitized)
+            .filter(|rule| !rule.material_id.is_empty() && !rule.surface_matches.is_empty())
+            .collect();
+        self.rules.sort_by(|a, b| a.material_id.cmp(&b.material_id));
+        self
+    }
+
+    /// Resolve the strongest authored match. Longer match expressions win; material id is
+    /// the deterministic tie breaker. Unknown surfaces intentionally return `None`.
+    pub fn resolve(&self, surface_id: &str) -> Option<AcousticSurface> {
+        let surface = surface_id.trim().to_ascii_lowercase();
+        if surface.is_empty() {
+            return None;
+        }
+        let mut best: Option<(usize, &AcousticMaterialRule)> = None;
+        for rule in &self.rules {
+            for pattern in &rule.surface_matches {
+                if !surface.contains(pattern) {
+                    continue;
+                }
+                let replace = best.is_none_or(|(best_len, best_rule)| {
+                    pattern.len() > best_len
+                        || (pattern.len() == best_len && rule.material_id < best_rule.material_id)
+                });
+                if replace {
+                    best = Some((pattern.len(), rule));
+                }
+            }
+        }
+        best.map(|(_, rule)| AcousticSurface::new(rule.material_id.clone(), rule.profile))
     }
 }
 
@@ -601,11 +717,7 @@ impl AudioOcclusionSettings {
         self.acoustic_state_with_material(
             obstruction,
             occlusion,
-            AcousticMaterialProfile {
-                transmission_gain: 1.0,
-                high_frequency_absorption: 0.0,
-                low_pass_hz: 20_000.0,
-            },
+            AcousticMaterialProfile::transparent(),
         )
     }
 
@@ -1040,6 +1152,9 @@ pub struct SoundCue {
     pub looping: bool,
     pub concurrency_group: String,
     pub priority: i32,
+    /// Number of recently selected clips excluded from the next weighted draw.
+    /// Zero preserves unconstrained weighted random selection.
+    pub repeat_avoidance: usize,
     pub spatial_policy: SoundCueSpatialPolicy,
     pub attenuation: Option<AudioAttenuationSettings>,
 }
@@ -1055,6 +1170,7 @@ impl Default for SoundCue {
             looping: false,
             concurrency_group: String::new(),
             priority: 0,
+            repeat_avoidance: 0,
             spatial_policy: SoundCueSpatialPolicy::Inherit,
             attenuation: None,
         }
@@ -1078,6 +1194,7 @@ impl SoundCue {
         self.gain_range = sanitize_range(self.gain_range, 0.0, 4.0, [1.0, 1.0]);
         self.pitch_range = sanitize_range(self.pitch_range, 0.05, 4.0, [1.0, 1.0]);
         self.concurrency_group = self.concurrency_group.trim().to_owned();
+        self.repeat_avoidance = self.repeat_avoidance.min(64);
         self.attenuation = self.attenuation.map(AudioAttenuationSettings::sanitized);
         Ok(self)
     }
@@ -1090,6 +1207,9 @@ pub struct AudioCuePlayRequest {
     pub cue: SoundCueRef,
     pub position: Option<[f32; 3]>,
     pub gain: f32,
+    /// Per-playback pitch/speed multiplier applied after authored cue/clip pitch randomization.
+    /// Gameplay may use this for physically derived contact energy without selecting clips.
+    pub pitch: f32,
     pub seed: Option<u64>,
     #[serde(default)]
     pub acoustic: AudioAcousticState,
@@ -1104,6 +1224,7 @@ impl Default for AudioCuePlayRequest {
             cue: SoundCueRef::new(String::new()),
             position: None,
             gain: 1.0,
+            pitch: 1.0,
             seed: None,
             acoustic: AudioAcousticState::clear(),
             environment: AudioEnvironmentState::clear(),
@@ -1123,6 +1244,7 @@ impl AudioCuePlayRequest {
     #[inline]
     pub fn sanitized(mut self) -> Self {
         self.gain = sanitize_gain(self.gain);
+        self.pitch = sanitize_speed(self.pitch);
         self.position = self.position.map(sanitize_vec3);
         self.acoustic = self.acoustic.sanitized();
         self.environment = self.environment.sanitized();
@@ -1157,7 +1279,19 @@ pub struct AudioDiagnostics {
     #[serde(default)]
     pub spectrally_filtered_voices: usize,
     #[serde(default)]
+    pub air_filtered_voices: usize,
+    #[serde(default)]
+    pub doppler_shifted_voices: usize,
+    #[serde(default)]
+    pub portal_attenuated_voices: usize,
+    #[serde(default)]
     pub reverberant_voices: usize,
+    /// Number of native shared late-field processors currently allocated by room identity.
+    #[serde(default)]
+    pub active_room_buses: usize,
+    /// Hard bound for simultaneously resident native room late-field processors.
+    #[serde(default)]
+    pub max_room_buses: usize,
     #[serde(default)]
     pub active_streams: usize,
     #[serde(default)]
@@ -1175,6 +1309,8 @@ pub struct AudioDiagnostics {
     pub cached_clips: usize,
     pub cached_bytes: usize,
     pub listener: AudioListenerState,
+    #[serde(default)]
+    pub listener_velocity: [f32; 3],
     #[serde(default)]
     pub bus_gains: std::collections::BTreeMap<String, f32>,
 }
@@ -1333,6 +1469,13 @@ mod playback_contract_tests {
         let request = request.sanitized();
         assert_eq!(request.gain, 1.0);
         assert_eq!(request.speed, 0.05);
+
+        let mut cue = AudioCuePlayRequest::new("shared/audio/test.yscd@test");
+        cue.pitch = -10.0;
+        cue.gain = f32::NAN;
+        let cue = cue.sanitized();
+        assert_eq!(cue.pitch, 0.05);
+        assert_eq!(cue.gain, 1.0);
     }
     #[test]
     fn sound_cue_sanitizes_ranges_and_rejects_empty_clip_sets() {
@@ -1447,6 +1590,7 @@ mod playback_contract_tests {
             "material.concrete.wall",
             AcousticMaterialProfile {
                 transmission_gain: 0.2,
+                reflection_gain: 0.78,
                 high_frequency_absorption: 0.9,
                 low_pass_hz: 1_200.0,
             },
@@ -1466,11 +1610,13 @@ mod playback_contract_tests {
         let settings = AudioOcclusionSettings::default();
         let concrete = AcousticMaterialProfile {
             transmission_gain: 0.16,
+            reflection_gain: 0.78,
             high_frequency_absorption: 0.92,
             low_pass_hz: 1_100.0,
         };
         let glass = AcousticMaterialProfile {
             transmission_gain: 0.58,
+            reflection_gain: 0.74,
             high_frequency_absorption: 0.42,
             low_pass_hz: 6_500.0,
         };
@@ -1479,6 +1625,49 @@ mod playback_contract_tests {
         assert!(concrete_state.transmission_gain < glass_state.transmission_gain);
         assert!(concrete_state.high_frequency_gain < glass_state.high_frequency_gain);
         assert!(concrete_state.low_pass_hz < glass_state.low_pass_hz);
+        assert_ne!(concrete.reflection_gain, 1.0 - concrete.transmission_gain);
+        assert_eq!(AcousticMaterialProfile::transparent().reflection_gain, 0.0);
+    }
+
+    #[test]
+    fn acoustic_material_library_prefers_longest_authored_surface_match() {
+        let library = AcousticMaterialLibrary::new(vec![
+            AcousticMaterialRule {
+                material_id: "material.generic".to_owned(),
+                surface_matches: vec!["wall".to_owned()],
+                profile: AcousticMaterialProfile {
+                    transmission_gain: 0.7,
+                    reflection_gain: 0.25,
+                    high_frequency_absorption: 0.2,
+                    low_pass_hz: 9_000.0,
+                },
+            },
+            AcousticMaterialRule {
+                material_id: "material.specific".to_owned(),
+                surface_matches: vec!["wall.solid".to_owned()],
+                profile: AcousticMaterialProfile {
+                    transmission_gain: 0.2,
+                    reflection_gain: 0.85,
+                    high_frequency_absorption: 0.8,
+                    low_pass_hz: 2_000.0,
+                },
+            },
+        ]);
+        let resolved = library
+            .resolve("surface.wall.solid")
+            .expect("authored acoustic material");
+        assert_eq!(resolved.material_id, "material.specific");
+        assert_eq!(resolved.profile.transmission_gain, 0.2);
+        assert_eq!(resolved.profile.reflection_gain, 0.85);
+        assert!(library.resolve("surface.unmapped").is_none());
+    }
+
+    #[test]
+    fn transparent_acoustic_material_does_not_invent_spectral_loss() {
+        let profile = AcousticMaterialProfile::transparent();
+        assert_eq!(profile.transmission_gain, 1.0);
+        assert_eq!(profile.high_frequency_absorption, 0.0);
+        assert_eq!(profile.low_pass_hz, 20_000.0);
     }
 
     #[test]

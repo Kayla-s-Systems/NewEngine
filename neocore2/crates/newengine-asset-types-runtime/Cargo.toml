@@ -1,0 +1,13 @@
+[package]
+name = "newengine-asset-types-runtime"
+version = "0.1.0"
+edition = "2021"
+description = "First-party asset type registry provider and runtime-unit factory"
+
+[dependencies]
+newengine-runtime-unit-api = { path = "../newengine-runtime-unit-api" }
+newengine-assets = { path = "../newengine-assets" }
+newengine-assets-api = { path = "../newengine-assets-api" }
+newengine-asset-format-nef8 = { path = "../newengine-asset-format-nef8" }
+newengine-plugin-host = { path = "../newengine-plugin-host" }
+newengine-ulog-api = { path = "../newengine-ulog-api" }

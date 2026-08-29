@@ -59,6 +59,26 @@ impl Default for EnvironmentPostFxState {
     }
 }
 
+/// Physical cloud/atmosphere profile resolved by engine.world.environment and
+/// consumed globally by sky-capable renderers. Kept separate from material and
+/// cloud-shadow payloads so tuning does not overload unrelated ABI lanes.
+/// profile0 = [low_base_m, low_thickness_m, low_density, high_coverage]
+/// profile1 = [humidity, aerosol_density, precipitation, high_density]
+#[derive(Clone, Copy, Debug)]
+pub struct SkyCloudProfileRenderState {
+    pub profile0: [f32; 4],
+    pub profile1: [f32; 4],
+}
+
+impl Default for SkyCloudProfileRenderState {
+    fn default() -> Self {
+        Self {
+            profile0: [1250.0, 1100.0, 0.16, 0.08],
+            profile1: [0.45, 0.12, 0.0, 0.04],
+        }
+    }
+}
+
 /// Generic packed cloud-shadow projection consumed by light/render providers.
 #[derive(Clone, Copy, Debug)]
 pub struct CloudShadowRenderState {

@@ -201,6 +201,12 @@ pub fn drop_item(
             message: "item dropped into world".to_owned(),
         },
     );
+    let needs_weapon_selection = world
+        .get::<PlayerInventory>(owner)
+        .is_some_and(|inventory| inventory.active_slot.is_none());
+    if needs_weapon_selection {
+        select_highest_ranked_equipped_weapon(world, owner);
+    }
     sync_equipped_weapon_runtime(world, owner);
     Ok(entity)
 }

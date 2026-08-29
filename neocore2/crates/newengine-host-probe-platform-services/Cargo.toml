@@ -1,0 +1,8 @@
+[package]
+name = "newengine-host-probe-platform-services"
+version = "0.1.0"
+edition = "2021"
+description = "Single-purpose host platform-services availability probe for NewEngine"
+
+[dependencies]
+newengine-host-capabilities-api = { path = "../newengine-host-capabilities-api" }

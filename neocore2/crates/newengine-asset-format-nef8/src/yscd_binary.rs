@@ -64,6 +64,7 @@ pub struct YscdCueDescriptor {
     pub looping: bool,
     pub concurrency_group: String,
     pub priority: i32,
+    pub repeat_avoidance: usize,
     pub spatial_policy: String,
     pub gain_range: [f32; 2],
     pub pitch_range: [f32; 2],
@@ -78,6 +79,7 @@ impl Default for YscdCueDescriptor {
             looping: false,
             concurrency_group: String::new(),
             priority: 0,
+            repeat_avoidance: 0,
             spatial_policy: "inherit".to_owned(),
             gain_range: [1.0, 1.0],
             pitch_range: [1.0, 1.0],
@@ -136,6 +138,222 @@ pub fn decode_yscd_nef8(source: &[u8], logical_path: &str) -> Result<YscdDiction
     }
     decode_yscd_binary_body(&envelope.body)
         .map_err(|error| format!("YSCD decode failed path='{logical_path}': {error}"))
+}
+
+/// Encode the canonical inflated YSCD-v1 domain body.
+///
+/// The NEF8 envelope is intentionally not owned here: callers may choose build/profile
+/// metadata and compression policy through `newengine-assets-api::encode_list_file`.
+/// Clip payload hashes are always recomputed from the embedded bytes so authored stale
+/// hashes can never leak into a production dictionary.
+pub fn encode_yscd_binary_body(dictionary: &YscdDictionary) -> Result<Vec<u8>, String> {
+    use std::collections::BTreeSet;
+
+    let cue_count = u32::try_from(dictionary.cues.len())
+        .map_err(|_| "YSCD cue count exceeds u32".to_owned())?;
+    let clip_total = dictionary
+        .cues
+        .iter()
+        .try_fold(0usize, |total, cue| total.checked_add(cue.clips.len()))
+        .ok_or("YSCD clip count overflow")?;
+    let clip_count =
+        u32::try_from(clip_total).map_err(|_| "YSCD clip count exceeds u32".to_owned())?;
+
+    #[derive(Clone)]
+    struct CueRow {
+        stable_hash: u64,
+        name_offset: u32,
+        descriptor_offset: u32,
+        descriptor_len: u32,
+        first_clip: u32,
+        clip_count: u32,
+    }
+    #[derive(Clone)]
+    struct ClipRow<'a> {
+        stable_hash: u64,
+        name_offset: u32,
+        source_offset: u32,
+        codec_offset: u32,
+        weight: f32,
+        gain: f32,
+        pitch: f32,
+        clip: &'a YscdClip,
+    }
+
+    let mut strings = Vec::<u8>::new();
+    let mut cue_rows = Vec::<CueRow>::with_capacity(dictionary.cues.len());
+    let mut clip_rows = Vec::<ClipRow<'_>>::with_capacity(clip_total);
+    let mut cue_names = BTreeSet::<String>::new();
+    let mut first_clip = 0u32;
+
+    for cue in &dictionary.cues {
+        let cue_name = cue.name.trim();
+        if cue_name.is_empty() {
+            return Err("YSCD cue name must not be empty".to_owned());
+        }
+        if !cue_names.insert(cue_name.to_ascii_lowercase()) {
+            return Err(format!("duplicate YSCD cue name '{cue_name}'"));
+        }
+        let descriptor = serde_json::to_string(&cue.descriptor)
+            .map_err(|error| format!("YSCD cue '{cue_name}' descriptor encode failed: {error}"))?;
+        let descriptor_len = u32::try_from(descriptor.len())
+            .map_err(|_| format!("YSCD cue '{cue_name}' descriptor exceeds u32"))?;
+        let name_offset = push_cstr(&mut strings, cue_name)?;
+        let descriptor_offset = push_cstr(&mut strings, &descriptor)?;
+        let this_clip_count = u32::try_from(cue.clips.len())
+            .map_err(|_| format!("YSCD cue '{cue_name}' clip count exceeds u32"))?;
+        if this_clip_count == 0 {
+            return Err(format!("YSCD cue '{cue_name}' has no clips"));
+        }
+        let stable_hash = if cue.stable_hash == 0 {
+            newengine_assets_api::stable_hash_from_text(cue_name)
+        } else {
+            cue.stable_hash
+        };
+        cue_rows.push(CueRow {
+            stable_hash,
+            name_offset,
+            descriptor_offset,
+            descriptor_len,
+            first_clip,
+            clip_count: this_clip_count,
+        });
+
+        let mut clip_names = BTreeSet::<String>::new();
+        for clip in &cue.clips {
+            let clip_name = clip.name.trim();
+            if clip_name.is_empty() {
+                return Err(format!("YSCD cue '{cue_name}' contains an empty clip name"));
+            }
+            if !clip_names.insert(clip_name.to_ascii_lowercase()) {
+                return Err(format!(
+                    "YSCD cue '{cue_name}' has duplicate clip '{clip_name}'"
+                ));
+            }
+            if clip.bytes.is_empty() {
+                return Err(format!(
+                    "YSCD cue '{cue_name}' clip '{clip_name}' has empty payload"
+                ));
+            }
+            if !clip.weight.is_finite() || clip.weight <= 0.0 {
+                return Err(format!(
+                    "YSCD cue '{cue_name}' clip '{clip_name}' has invalid weight"
+                ));
+            }
+            if !clip.gain.is_finite() || !clip.pitch.is_finite() {
+                return Err(format!(
+                    "YSCD cue '{cue_name}' clip '{clip_name}' has non-finite gain/pitch"
+                ));
+            }
+            let source = clip.source.trim();
+            let codec = clip.codec.trim();
+            if source.is_empty() || codec.is_empty() {
+                return Err(format!(
+                    "YSCD cue '{cue_name}' clip '{clip_name}' requires source and codec"
+                ));
+            }
+            clip_rows.push(ClipRow {
+                stable_hash: newengine_assets_api::stable_hash_from_text(clip_name),
+                name_offset: push_cstr(&mut strings, clip_name)?,
+                source_offset: push_cstr(&mut strings, source)?,
+                codec_offset: push_cstr(&mut strings, codec)?,
+                weight: clip.weight,
+                gain: clip.gain,
+                pitch: clip.pitch,
+                clip,
+            });
+        }
+        first_clip = first_clip
+            .checked_add(this_clip_count)
+            .ok_or("YSCD first clip index overflow")?;
+    }
+
+    let cue_table_offset = HEADER_LEN;
+    let clip_table_offset = cue_table_offset
+        .checked_add(
+            cue_rows
+                .len()
+                .checked_mul(CUE_RECORD_LEN)
+                .ok_or("YSCD cue table overflow")?,
+        )
+        .ok_or("YSCD clip table offset overflow")?;
+    let string_table_offset = clip_table_offset
+        .checked_add(
+            clip_rows
+                .len()
+                .checked_mul(CLIP_RECORD_LEN)
+                .ok_or("YSCD clip table overflow")?,
+        )
+        .ok_or("YSCD string table offset overflow")?;
+    let payload_offset = string_table_offset
+        .checked_add(strings.len())
+        .ok_or("YSCD payload offset overflow")?;
+    let payload_len = clip_rows.iter().try_fold(0usize, |total, row| {
+        total
+            .checked_add(row.clip.bytes.len())
+            .ok_or("YSCD payload length overflow")
+    })?;
+    let total_len = payload_offset
+        .checked_add(payload_len)
+        .ok_or("YSCD body length overflow")?;
+    let mut out = vec![0u8; total_len];
+
+    out[0..4].copy_from_slice(&YSCD_BINARY_MAGIC);
+    write_u16(&mut out, 4, YSCD_BINARY_SCHEMA_VERSION)?;
+    write_u32(&mut out, 8, cue_count)?;
+    write_u32(&mut out, 12, clip_count)?;
+    write_u64(&mut out, 16, cue_table_offset as u64)?;
+    write_u64(&mut out, 24, clip_table_offset as u64)?;
+    write_u64(&mut out, 32, string_table_offset as u64)?;
+    write_u64(&mut out, 40, strings.len() as u64)?;
+    write_u64(&mut out, 48, payload_offset as u64)?;
+    write_u64(&mut out, 56, payload_len as u64)?;
+
+    for (index, row) in cue_rows.iter().enumerate() {
+        let at = cue_table_offset + index * CUE_RECORD_LEN;
+        write_u64(&mut out, at, row.stable_hash)?;
+        write_u32(&mut out, at + 8, row.name_offset)?;
+        write_u32(&mut out, at + 12, row.descriptor_offset)?;
+        write_u32(&mut out, at + 16, row.descriptor_len)?;
+        write_u32(&mut out, at + 20, row.first_clip)?;
+        write_u32(&mut out, at + 24, row.clip_count)?;
+    }
+    out[string_table_offset..payload_offset].copy_from_slice(&strings);
+
+    let mut payload_cursor = payload_offset;
+    for (index, row) in clip_rows.iter().enumerate() {
+        let at = clip_table_offset + index * CLIP_RECORD_LEN;
+        let payload = &row.clip.bytes;
+        let payload_hash = *blake3::hash(payload).as_bytes();
+        write_u64(&mut out, at, row.stable_hash)?;
+        write_u32(&mut out, at + 8, row.name_offset)?;
+        write_u32(&mut out, at + 12, row.source_offset)?;
+        write_u32(&mut out, at + 16, row.codec_offset)?;
+        write_f32(&mut out, at + 24, row.weight)?;
+        write_f32(&mut out, at + 28, row.gain)?;
+        write_f32(&mut out, at + 32, row.pitch)?;
+        write_u64(&mut out, at + 40, payload_cursor as u64)?;
+        write_u64(&mut out, at + 48, payload.len() as u64)?;
+        out[at + 56..at + 88].copy_from_slice(&payload_hash);
+        let end = payload_cursor
+            .checked_add(payload.len())
+            .ok_or("YSCD payload cursor overflow")?;
+        out[payload_cursor..end].copy_from_slice(payload);
+        payload_cursor = end;
+    }
+    debug_assert_eq!(payload_cursor, out.len());
+    Ok(out)
+}
+
+fn push_cstr(strings: &mut Vec<u8>, value: &str) -> Result<u32, String> {
+    if value.as_bytes().contains(&0) {
+        return Err("YSCD strings may not contain NUL".to_owned());
+    }
+    let offset =
+        u32::try_from(strings.len()).map_err(|_| "YSCD string table exceeds u32".to_owned())?;
+    strings.extend_from_slice(value.as_bytes());
+    strings.push(0);
+    Ok(offset)
 }
 
 pub fn decode_yscd_binary_body(body: &[u8]) -> Result<YscdDictionary, String> {
@@ -254,6 +472,41 @@ pub fn decode_yscd_binary_body(body: &[u8]) -> Result<YscdDictionary, String> {
     Ok(YscdDictionary { cues })
 }
 
+fn write_u16(bytes: &mut [u8], at: usize, value: u16) -> Result<(), String> {
+    checked_slice_mut(bytes, at, 2, "u16")?.copy_from_slice(&value.to_le_bytes());
+    Ok(())
+}
+
+fn write_u32(bytes: &mut [u8], at: usize, value: u32) -> Result<(), String> {
+    checked_slice_mut(bytes, at, 4, "u32")?.copy_from_slice(&value.to_le_bytes());
+    Ok(())
+}
+
+fn write_u64(bytes: &mut [u8], at: usize, value: u64) -> Result<(), String> {
+    checked_slice_mut(bytes, at, 8, "u64")?.copy_from_slice(&value.to_le_bytes());
+    Ok(())
+}
+
+fn write_f32(bytes: &mut [u8], at: usize, value: f32) -> Result<(), String> {
+    checked_slice_mut(bytes, at, 4, "f32")?.copy_from_slice(&value.to_le_bytes());
+    Ok(())
+}
+
+fn checked_slice_mut<'a>(
+    bytes: &'a mut [u8],
+    offset: usize,
+    len: usize,
+    label: &str,
+) -> Result<&'a mut [u8], String> {
+    let end = offset
+        .checked_add(len)
+        .ok_or_else(|| format!("{label} range overflow"))?;
+    let bytes_len = bytes.len();
+    bytes
+        .get_mut(offset..end)
+        .ok_or_else(|| format!("{label} truncated offset={offset} len={len} bytes={bytes_len}"))
+}
+
 fn checked_slice<'a>(
     bytes: &'a [u8],
     offset: usize,
@@ -326,5 +579,44 @@ mod tests {
     #[test]
     fn rejects_non_yscd_body() {
         assert!(decode_yscd_binary_body(b"NOPE").is_err());
+    }
+
+    #[test]
+    fn yscd_binary_roundtrips_embedded_clip() {
+        let dictionary = YscdDictionary {
+            cues: vec![YscdCue {
+                name: "dirt_run".to_owned(),
+                stable_hash: newengine_assets_api::stable_hash_from_text("dirt_run"),
+                descriptor: YscdCueDescriptor {
+                    bus: "sfx".to_owned(),
+                    spatial_policy: "spatial".to_owned(),
+                    gain_range: [0.95, 1.05],
+                    pitch_range: [0.97, 1.03],
+                    ..Default::default()
+                },
+                clips: vec![YscdClip {
+                    name: "dirt_run_01".to_owned(),
+                    source: "dirt/run_01.wav".to_owned(),
+                    codec: "wav".to_owned(),
+                    weight: 1.0,
+                    gain: 1.0,
+                    pitch: 1.0,
+                    bytes: b"RIFF-test-payload".to_vec(),
+                    payload_hash: [0; 32],
+                }],
+            }],
+        };
+        let encoded = encode_yscd_binary_body(&dictionary).expect("encode YSCD");
+        let decoded = decode_yscd_binary_body(&encoded).expect("decode encoded YSCD");
+        let cue = decoded.cue("dirt_run").expect("cue");
+        assert_eq!(cue.descriptor.bus, "sfx");
+        assert_eq!(cue.descriptor.spatial_policy, "spatial");
+        assert_eq!(cue.clips.len(), 1);
+        assert_eq!(cue.clips[0].source, "dirt/run_01.wav");
+        assert_eq!(cue.clips[0].bytes, b"RIFF-test-payload");
+        assert_eq!(
+            cue.clips[0].payload_hash,
+            *blake3::hash(b"RIFF-test-payload").as_bytes()
+        );
     }
 }

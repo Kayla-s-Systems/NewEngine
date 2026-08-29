@@ -1,0 +1,24 @@
+[package]
+name = "newengine-fps-combat-runtime"
+version = "0.1.0"
+edition = "2021"
+description = "Reusable FPS combat, interaction and hitscan mechanics"
+license = "Proprietary"
+
+[dependencies]
+newengine-ecs = { path = "../newengine-ecs" }
+newengine-engine-runtime = { path = "../newengine-engine-runtime" }
+newengine-fps-projectile-runtime = { path = "../newengine-fps-projectile-runtime" }
+newengine-game-data = { path = "../newengine-game-data" }
+newengine-gameplay-fps-api = { path = "../newengine-gameplay-fps-api" }
+newengine-gameplay-script-api = { path = "../newengine-gameplay-script-api" }
+newengine-gameplay-script-runtime = { path = "../newengine-gameplay-script-runtime" }
+newengine-math = { path = "../newengine-math" }
+newengine-physics-api = { path = "../newengine-physics-api" }
+newengine-scene = { path = "../newengine-scene" }
+newengine-sim = { path = "../newengine-sim" }
+newengine-transform = { path = "../newengine-transform" }
+newengine-ulog-api = { path = "../newengine-ulog-api" }
+
+[dev-dependencies]
+newengine-fps-content-runtime = { path = "../newengine-fps-content-runtime", features = ["test-support"] }

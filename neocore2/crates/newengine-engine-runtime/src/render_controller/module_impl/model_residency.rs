@@ -297,5 +297,5 @@ fn load_model_bundle(logical_path: &str) -> Result<ModelAssetBundle, String> {
 
     let mut request = ModelAssetRequest::new(logical_path.to_owned());
     request.dependency_graph = Some(dependency_graph);
-    newengine_model_runtime::ModelGatewayClient::new(host).assemble_bundle(&request)
+    newengine_model_client::ModelGatewayClient::new(host).assemble_bundle(&request)
 }

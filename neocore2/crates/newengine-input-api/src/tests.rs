@@ -26,3 +26,15 @@ fn snapshots_default_to_empty_provider_state() {
     let snapshot = InputStateSnapshot::default();
     assert!(snapshot.gamepads.is_empty());
 }
+
+#[test]
+fn backquote_maps_to_console_physical_key() {
+    assert_eq!(
+        crate::key_identity::canonical_id_from_native_physical_name("Backquote"),
+        Some(crate::key_identity::BACKQUOTE)
+    );
+    assert_eq!(
+        crate::key_identity::key_code_from_id(crate::key_identity::BACKQUOTE),
+        Some(crate::key_code::BACKQUOTE)
+    );
+}

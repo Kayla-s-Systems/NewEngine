@@ -6,7 +6,7 @@ use serde::Deserialize;
 
 use crate::plugin_manager::PluginManagerBridge;
 use crate::scene_bridge::SceneBridge;
-use crate::viewport_bridge::ViewportBridge;
+use newengine_viewport_bridge::ViewportBridge;
 
 use super::error_policy::RenderBackendFailureState;
 use super::gpu::{MaterialGpuPipelineKey, MaterialGpuPipelineProvider};
@@ -115,7 +115,8 @@ pub struct RuntimeRenderController {
     pub(super) backend_failure: RenderBackendFailureState,
     pub(super) backend_execution: RenderExecutionCapabilities,
     pub(super) app_policy: RenderRuntimeAppPolicy,
-    pub(super) editor_viewport: crate::editor_viewport::EditorViewportController,
+    pub(super) editor_viewport: newengine_editor_viewport_runtime::EditorViewportController,
+    pub(super) editor_viewport_scene: crate::editor_viewport_adapter::EditorViewportSceneAdapter,
 }
 
 impl RuntimeRenderController {
@@ -164,19 +165,19 @@ impl RuntimeRenderController {
         }
         if restore_input {
             self.frame.input_systems.set_enabled(
-                crate::input_systems::InputRuntimeSystem::Actions,
+                newengine_input_systems_runtime::InputRuntimeSystem::Actions,
                 true,
                 "UI restore contract",
                 self.frame.frame_index,
             );
             self.frame.input_systems.set_enabled(
-                crate::input_systems::InputRuntimeSystem::GameplayMovement,
+                newengine_input_systems_runtime::InputRuntimeSystem::GameplayMovement,
                 true,
                 "UI restore contract",
                 self.frame.frame_index,
             );
             self.frame.input_systems.set_enabled(
-                crate::input_systems::InputRuntimeSystem::CameraLook,
+                newengine_input_systems_runtime::InputRuntimeSystem::CameraLook,
                 true,
                 "UI restore contract",
                 self.frame.frame_index,
@@ -300,7 +301,7 @@ impl RuntimeRenderController {
     #[inline]
     pub fn set_input_system_enabled(
         &mut self,
-        system: crate::input_systems::InputRuntimeSystem,
+        system: newengine_input_systems_runtime::InputRuntimeSystem,
         enabled: bool,
         reason: impl Into<String>,
     ) {
@@ -310,7 +311,9 @@ impl RuntimeRenderController {
     }
 
     #[inline]
-    pub fn input_systems_snapshot(&self) -> crate::input_systems::InputRuntimeSystemsSnapshot {
+    pub fn input_systems_snapshot(
+        &self,
+    ) -> newengine_input_systems_runtime::InputRuntimeSystemsSnapshot {
         self.frame.input_systems.snapshot(self.frame.frame_index)
     }
 
@@ -360,7 +363,9 @@ impl RuntimeRenderController {
             backend_failure: RenderBackendFailureState::new(),
             backend_execution: RenderExecutionCapabilities::default(),
             app_policy: RenderRuntimeAppPolicy::from_startup_config(),
-            editor_viewport: crate::editor_viewport::EditorViewportController::default(),
+            editor_viewport: newengine_editor_viewport_runtime::EditorViewportController::default(),
+            editor_viewport_scene:
+                crate::editor_viewport_adapter::EditorViewportSceneAdapter::default(),
         }
     }
 }

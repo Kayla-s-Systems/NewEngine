@@ -56,7 +56,12 @@ pub fn launch_game_ready_profile_with(
 }
 
 pub fn launch_registered_game_ready_profile(manifest_path: &std::path::Path) -> Result<(), String> {
-    launch_game_ready_profile_with(manifest_path, GameReadyRuntimeProfile::standalone_game())
+    // Distribution-owned implementations live with the runtime profile, never inside a
+    // game-module descriptor plugin. The selected module is still resolved from game.toml;
+    // registering a factory does not activate it unless the runtime requests that module id.
+    let profile = GameReadyRuntimeProfile::standalone_game()
+        .with_game_module_factory(newengine_game_module_fps::factory_registration());
+    launch_game_ready_profile_with(manifest_path, profile)
 }
 
 /// Registration consumed by the generic NewEngine runtime-profile registry.

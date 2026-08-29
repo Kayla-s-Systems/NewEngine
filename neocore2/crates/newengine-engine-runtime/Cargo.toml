@@ -1,6 +1,6 @@
 [package]
 name = "newengine-engine-runtime"
-version = "0.1.0"
+version = "0.3.0"
 edition = "2021"
 readme = "README.md"
 description = "Reusable GameFirst runtime scene and render controller layer for NewEngine"
@@ -10,7 +10,6 @@ default = []
 
 [dependencies]
 newengine-ulog-api = { path = "../newengine-ulog-api" }
-newengine-asset-format-nef8 = { path = "../newengine-asset-format-nef8" }
 abi_stable = { version = "0.11" }
 blake3 = "1"
 crossbeam-channel = "0.5"
@@ -23,8 +22,9 @@ serde_json = "1"
 
 newengine-assets = { path = "../newengine-assets" }
 newengine-assets-api = { path = "../newengine-assets-api" }
-newengine-authored-xml = { path = "../newengine-authored-xml" }
 newengine-audio-api = { path = "../newengine-audio-api" }
+newengine-audio-client = { path = "../newengine-audio-client" }
+newengine-audio-world-api = { path = "../newengine-audio-world-api" }
 newengine-bounds = { path = "../newengine-bounds" }
 newengine-camera = { path = "../newengine-camera" }
 newengine-camera-api = { path = "../newengine-camera-api" }
@@ -32,6 +32,8 @@ newengine-camera-contracts = { path = "../newengine-camera-contracts" }
 newengine-camera-runtime = { path = "../newengine-camera-runtime" }
 newengine-core = { path = "../newengine-core", features = ["render-api", "physics-api"] }
 newengine-input-actions-api = { path = "../newengine-input-actions-api" }
+newengine-input-systems-runtime = { path = "../newengine-input-systems-runtime" }
+newengine-input-capture-api = { path = "../newengine-input-capture-api" }
 newengine-input-api = { path = "../newengine-input-api" }
 newengine-input-bindings-api = { path = "../newengine-input-bindings-api" }
 newengine-input-bindings-runtime = { path = "../newengine-input-bindings-runtime" }
@@ -39,12 +41,12 @@ newengine-task-api = { path = "../newengine-task-api" }
 newengine-ecs = { path = "../newengine-ecs" }
 newengine-ecs-api = { path = "../newengine-ecs-api" }
 newengine-entity-api = { path = "../newengine-entity-api" }
+newengine-editor-viewport-runtime = { path = "../newengine-editor-viewport-runtime" }
 newengine-lighting = { path = "../newengine-lighting" }
 newengine-materials = { path = "../newengine-materials", features = ["serde"] }
 newengine-material-domain-api = { path = "../newengine-material-domain-api" }
-newengine-material-runtime = { path = "../newengine-material-runtime" }
 newengine-model-domain-api = { path = "../newengine-model-domain-api" }
-newengine-model-runtime = { path = "../newengine-model-runtime" }
+newengine-model-client = { path = "../newengine-model-client" }
 newengine-model-skeleton-api = { path = "../newengine-model-skeleton-api" }
 newengine-physics-contracts = { path = "../newengine-physics-contracts" }
 newengine-physics-api = { path = "../newengine-physics-api" }
@@ -63,6 +65,7 @@ newengine-runtime-session-api = { path = "../newengine-runtime-session-api" }
 newengine-runtime-session-runtime = { path = "../newengine-runtime-session-runtime" }
 newengine-render-feature-api = { path = "../newengine-render-feature-api" }
 newengine-render-frame-graph = { path = "../newengine-render-frame-graph" }
+newengine-scene-authoring-api = { path = "../newengine-scene-authoring-api" }
 newengine-scene = { path = "../newengine-scene", features = ["runtime"] }
 newengine-scene-io = { path = "../newengine-scene-io" }
 newengine-service-api = { path = "../newengine-service-api" }
@@ -75,4 +78,8 @@ newengine-ui = { path = "../newengine-ui", default-features = false }
 newengine-ui-api = { path = "../newengine-ui-api" }
 newengine-ui-navigation-api = { path = "../newengine-ui-navigation-api" }
 newengine-viewport = { path = "../newengine-viewport" }
+newengine-viewport-bridge = { path = "../newengine-viewport-bridge" }
+newengine-vfx-api = { path = "../newengine-vfx-api" }
+newengine-world-authoring-api = { path = "../newengine-world-authoring-api" }
 newengine-world-environment-api = { path = "../newengine-world-environment-api" }
+

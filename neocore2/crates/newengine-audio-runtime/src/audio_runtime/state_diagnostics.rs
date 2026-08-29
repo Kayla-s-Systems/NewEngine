@@ -38,15 +38,32 @@ impl AudioRuntimeState {
                 .voices
                 .values()
                 .filter(|voice| {
-                    voice.acoustic.high_frequency_gain < 0.999
-                        || voice.acoustic.low_pass_hz < 19_999.0
+                    let acoustic = voice.propagated_acoustic();
+                    acoustic.high_frequency_gain < 0.999 || acoustic.low_pass_hz < 19_999.0
                 })
+                .count(),
+            air_filtered_voices: self
+                .voices
+                .values()
+                .filter(|voice| voice.propagation.air_high_frequency_gain < 0.999)
+                .count(),
+            doppler_shifted_voices: self
+                .voices
+                .values()
+                .filter(|voice| (voice.propagation.doppler_ratio - 1.0).abs() > 0.002)
+                .count(),
+            portal_attenuated_voices: self
+                .voices
+                .values()
+                .filter(|voice| voice.environment.portal_gain < 0.999)
                 .count(),
             reverberant_voices: self
                 .voices
                 .values()
                 .filter(|voice| voice.environment.is_wet())
                 .count(),
+            active_room_buses: self.room_buses.active_bus_count(),
+            max_room_buses: MAX_SHARED_ROOM_BUSES,
             active_streams: self
                 .voices
                 .values()
@@ -91,6 +108,7 @@ impl AudioRuntimeState {
             cached_clips: self.clips.len(),
             cached_bytes: self.cached_bytes,
             listener: self.listener,
+            listener_velocity: self.listener_velocity,
             bus_gains: self
                 .bus_gains
                 .iter()

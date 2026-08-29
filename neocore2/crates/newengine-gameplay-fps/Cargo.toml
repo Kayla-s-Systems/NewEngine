@@ -3,32 +3,19 @@ name = "newengine-gameplay-fps"
 version = "0.1.0"
 edition = "2021"
 readme = "README.md"
-description = "FPS gameplay package for NewEngine profiles"
+description = "Thin FPS gameplay provider coordinator for NewEngine profiles"
 license = "Proprietary"
 
 [dependencies]
-blake3 = "1"
-flate2 = "1"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-newengine-assets-api = { path = "../newengine-assets-api" }
-newengine-core = { path = "../newengine-core" }
-newengine-camera = { path = "../newengine-camera" }
 newengine-ecs = { path = "../newengine-ecs" }
 newengine-engine-runtime = { path = "../newengine-engine-runtime" }
-newengine-input-actions-api = { path = "../newengine-input-actions-api" }
-newengine-lighting = { path = "../newengine-lighting" }
-newengine-math = { path = "../newengine-math" }
-newengine-model-domain-api = { path = "../newengine-model-domain-api" }
-newengine-physics-api = { path = "../newengine-physics-api" }
-newengine-primitives = { path = "../newengine-primitives" }
-newengine-scene = { path = "../newengine-scene", features = ["runtime"] }
-newengine-sim = { path = "../newengine-sim" }
-newengine-transform = { path = "../newengine-transform" }
-newengine-ui-api = { path = "../newengine-ui-api" }
-newengine-ulog-api = { path = "../newengine-ulog-api" }
+newengine-fps-character-runtime = { path = "../newengine-fps-character-runtime" }
+newengine-fps-combat-runtime = { path = "../newengine-fps-combat-runtime" }
+newengine-fps-content-runtime = { path = "../newengine-fps-content-runtime" }
+newengine-fps-inventory-ui-runtime = { path = "../newengine-fps-inventory-ui-runtime" }
+newengine-fps-objective-runtime = { path = "../newengine-fps-objective-runtime" }
+newengine-fps-projectile-runtime = { path = "../newengine-fps-projectile-runtime" }
 newengine-gameplay-fps-api = { path = "../newengine-gameplay-fps-api" }
-newengine-game-data = { path = "../newengine-game-data" }
-
 newengine-gameplay-script-api = { path = "../newengine-gameplay-script-api" }
 newengine-gameplay-script-runtime = { path = "../newengine-gameplay-script-runtime" }
+newengine-physics-api = { path = "../newengine-physics-api" }

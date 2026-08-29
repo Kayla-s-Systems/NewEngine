@@ -5,7 +5,11 @@ use crate::{EnvironmentObjectDto, PrecipitationKind, Vec3Dto, WeatherKind};
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct PrecipitationStateDto {
     pub kind: PrecipitationKind,
+    /// Normalized consumer-facing severity. Mass conservation must use rate_mm_per_hour.
     pub intensity: f32,
+    /// Surface-equivalent hydrometeor mass flux in millimeters of liquid water per hour.
+    #[serde(default)]
+    pub rate_mm_per_hour: f32,
 }
 
 impl Default for PrecipitationStateDto {
@@ -14,6 +18,7 @@ impl Default for PrecipitationStateDto {
         Self {
             kind: PrecipitationKind::None,
             intensity: 0.0,
+            rate_mm_per_hour: 0.0,
         }
     }
 }
@@ -37,6 +42,9 @@ impl Default for ThunderStateDto {
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct WetnessStateDto {
     pub surface_wetness: f32,
+    /// Explicit liquid-water storage on exposed surfaces [mm].
+    #[serde(default)]
+    pub surface_water_mm: f32,
     pub accumulation_rate: f32,
     pub drying_rate: f32,
 }
@@ -46,6 +54,7 @@ impl Default for WetnessStateDto {
     fn default() -> Self {
         Self {
             surface_wetness: 0.0,
+            surface_water_mm: 0.0,
             accumulation_rate: 0.0,
             drying_rate: 0.02,
         }
@@ -55,6 +64,9 @@ impl Default for WetnessStateDto {
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct SnowStateDto {
     pub surface_snow: f32,
+    /// Snow-water equivalent stored on the surface [mm].
+    #[serde(default)]
+    pub snow_water_equivalent_mm: f32,
     pub accumulation_rate: f32,
     pub melt_rate: f32,
 }
@@ -64,6 +76,7 @@ impl Default for SnowStateDto {
     fn default() -> Self {
         Self {
             surface_snow: 0.0,
+            snow_water_equivalent_mm: 0.0,
             accumulation_rate: 0.0,
             melt_rate: 0.0,
         }

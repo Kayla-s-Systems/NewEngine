@@ -327,6 +327,33 @@ fn load_discrete_map_profile(logical_path: &str) -> Result<GameReadyMapProfile, 
                 );
                 continue;
             }
+            // YMAP v2 metadata-only placements are composition inputs, not world instances.
+            // They must reach the same YTYP hydration path as legacy YMAP v1 definitions
+            // (player avatar, sky/environment, gameplay constants, etc.) and must never
+            // be materialized as static/dynamic prefabs merely because their definition
+            // also carries drawable dependencies.
+            if placement
+                .apply_mode
+                .trim()
+                .eq_ignore_ascii_case("metadata_only")
+            {
+                profile.definitions.push(GameReadyDefinitionInstanceSpec {
+                    definition_ref: placement.definition_ref,
+                    position: Vec3::new(
+                        placement.transform.position[0],
+                        placement.transform.position[1],
+                        placement.transform.position[2],
+                    ),
+                    rotation_ypr: placement.transform.rotation_ypr,
+                    scale: Vec3::new(
+                        placement.transform.scale[0],
+                        placement.transform.scale[1],
+                        placement.transform.scale[2],
+                    ),
+                    apply_mode: GameReadyDefinitionApplyMode::MetadataOnly,
+                });
+                continue;
+            }
             let definition = if let Some(existing) = definition_cache.get(&placement.definition_ref)
             {
                 existing.clone()
@@ -410,7 +437,7 @@ fn load_discrete_map_profile(logical_path: &str) -> Result<GameReadyMapProfile, 
                     .any(|tag| tag.eq_ignore_ascii_case("collision"))
                 || matches!(
                     collision_policy.to_ascii_lowercase().as_str(),
-                    "static_mesh" | "triangle_mesh" | "mesh"
+                    "static_mesh" | "triangle_mesh" | "mesh" | "box"
                 );
             if has_collision && !dynamic_physics {
                 let collision_source = definition
@@ -430,7 +457,11 @@ fn load_discrete_map_profile(logical_path: &str) -> Result<GameReadyMapProfile, 
                     authored_discrete_placement: true,
                     authored_primary: false,
                     source: collision_source,
-                    proxy: "world_collision_ydd".to_owned(),
+                    proxy: if collision_policy.eq_ignore_ascii_case("box") {
+                        "world_collision_box".to_owned()
+                    } else {
+                        "world_collision_ydd".to_owned()
+                    },
                     material: String::new(),
                     enabled: true,
                     position,

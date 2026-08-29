@@ -251,7 +251,7 @@ pub(crate) fn draw_model_components_wireframe(
                 (fallback[2] * tint[2]).clamp(0.12, 1.0),
                 1.0,
             ];
-            for triangle in part.mesh.indices.chunks_exact(3) {
+            for triangle in part.mesh.indices.as_chunks::<3>().0 {
                 for (a, b) in [
                     (triangle[0], triangle[1]),
                     (triangle[1], triangle[2]),

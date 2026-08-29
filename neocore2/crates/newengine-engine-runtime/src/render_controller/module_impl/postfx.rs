@@ -103,6 +103,10 @@ pub(super) fn game_sun_postfx_params(
     let on_screen = (-0.06..=1.06).contains(&screen_x) && (-0.06..=1.06).contains(&screen_y);
     let daylight = ((to_sun.y + 0.035) / 0.16).clamp(0.0, 1.0);
     let horizon_grazing = (1.0 - to_sun.y.abs()).clamp(0.0, 1.0);
+    // Optical source energy is intentionally bounded. The sky HDR disc remains
+    // physically bright, while raster lens/shaft effects react smoothly to a dim
+    // sunrise, cloud attenuation, and a full daylight source without exploding.
+    let optical_source_energy = (sun.intensity / (sun.intensity + 1.0)).clamp(0.0, 1.0);
     let visibility = if on_screen {
         daylight * edge_visibility
     } else {
@@ -122,11 +126,14 @@ pub(super) fn game_sun_postfx_params(
         intensity: sun.intensity,
         visibility,
         disk_radius,
-        // Lens flare is an optical response to a visible HDR solar source and is
-        // intentionally independent from the optional god-ray/streak toggle.
-        flare_strength: (0.26 + 0.22 * horizon_grazing) * sky_postfx.sun_glare_scale,
+        // Flare stays compact; the stronger low-angle response is carried by the
+        // depth-aware raster shaft field. This mirrors the reference renderer's
+        // separation between a tiny solar disc and a much broader scatter radius.
+        flare_strength: (0.18 + 0.18 * horizon_grazing)
+            * sky_postfx.sun_glare_scale
+            * (0.60 + 0.40 * optical_source_energy),
         ray_strength: if launch_graphics.sun_rays_enabled {
-            (0.10 + 0.18 * horizon_grazing) * sky_postfx.sun_ray_scale
+            (0.18 + 0.34 * horizon_grazing) * sky_postfx.sun_ray_scale * optical_source_energy
         } else {
             0.0
         },

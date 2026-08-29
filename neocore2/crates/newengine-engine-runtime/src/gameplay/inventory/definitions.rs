@@ -3,6 +3,8 @@ use super::*;
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ItemId(pub u64);
 
+pub const SHARED_UNARMED_WEAPON_ITEM_NAME: &str = "weapon.unarmed";
+
 impl ItemId {
     pub fn from_name(name: &str) -> Option<Self> {
         let normalized = normalize_item_name(name)?;
@@ -17,6 +19,17 @@ impl ItemId {
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ItemInstanceId(pub u64);
+
+impl ItemInstanceId {
+    /// Virtual, non-inventory weapon instance representing the character's own body/hands.
+    /// Inventory allocation already rejects zero, so this identity cannot alias a real item.
+    pub const UNARMED: Self = Self(0);
+
+    #[inline]
+    pub const fn is_unarmed(self) -> bool {
+        self.0 == 0
+    }
+}
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ItemKind {
@@ -214,11 +227,143 @@ pub enum WeaponFireMode {
     Automatic,
 }
 
+/// Coarse weapon taxonomy. Ammo is deliberately not part of weapon identity: both Unarmed and
+/// Melee are weapons, but neither requires ammunition or exposes firearm ADS/fire/reload actions.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum WeaponType {
+    #[default]
+    Unarmed,
+    Melee,
+    Firearm,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct WeaponCapabilities {
+    pub melee: bool,
+    pub fire: bool,
+    pub aim: bool,
+    pub reload: bool,
+    pub uses_ammo: bool,
+}
+
+impl WeaponType {
+    #[inline]
+    pub const fn capabilities(self) -> WeaponCapabilities {
+        match self {
+            Self::Unarmed | Self::Melee => WeaponCapabilities {
+                melee: true,
+                fire: false,
+                aim: false,
+                reload: false,
+                uses_ammo: false,
+            },
+            Self::Firearm => WeaponCapabilities {
+                melee: false,
+                fire: true,
+                aim: true,
+                reload: true,
+                uses_ammo: true,
+            },
+        }
+    }
+
+    /// Default selection/order rank. Rank is classification priority only; it never changes damage.
+    #[inline]
+    pub const fn default_rank(self) -> u16 {
+        match self {
+            Self::Unarmed => 0,
+            Self::Melee => 100,
+            Self::Firearm => 200,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct WeaponItemDefinition {
+pub struct MeleeWeaponTuning {
+    pub damage: f32,
+    pub range: f32,
+    pub attack_interval: f32,
+}
+
+impl MeleeWeaponTuning {
+    pub fn sanitized(self) -> Self {
+        Self {
+            damage: sanitize_non_negative(self.damage).clamp(0.0, 10_000.0),
+            range: sanitize_non_negative(self.range).clamp(0.1, 8.0),
+            attack_interval: sanitize_non_negative(self.attack_interval).clamp(0.05, 10.0),
+        }
+    }
+}
+
+impl Default for MeleeWeaponTuning {
+    fn default() -> Self {
+        Self {
+            damage: 18.0,
+            range: 1.35,
+            attack_interval: 0.45,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct FirearmWeaponDefinition {
     pub tuning: HitscanWeaponTuning,
     pub ammo_item: ItemId,
     pub fire_mode: WeaponFireMode,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct WeaponItemDefinition {
+    pub weapon_type: WeaponType,
+    pub rank: u16,
+    pub melee: Option<MeleeWeaponTuning>,
+    pub firearm: Option<FirearmWeaponDefinition>,
+}
+
+impl WeaponItemDefinition {
+    #[inline]
+    pub fn unarmed(rank: u16, tuning: MeleeWeaponTuning) -> Self {
+        Self {
+            weapon_type: WeaponType::Unarmed,
+            rank,
+            melee: Some(tuning.sanitized()),
+            firearm: None,
+        }
+    }
+
+    #[inline]
+    pub fn melee(rank: u16, tuning: MeleeWeaponTuning) -> Self {
+        Self {
+            weapon_type: WeaponType::Melee,
+            rank,
+            melee: Some(tuning.sanitized()),
+            firearm: None,
+        }
+    }
+
+    #[inline]
+    pub fn firearm(
+        rank: u16,
+        tuning: HitscanWeaponTuning,
+        ammo_item: ItemId,
+        fire_mode: WeaponFireMode,
+    ) -> Self {
+        Self {
+            weapon_type: WeaponType::Firearm,
+            rank,
+            melee: None,
+            firearm: Some(FirearmWeaponDefinition {
+                tuning: tuning.sanitized(),
+                ammo_item,
+                fire_mode,
+            }),
+        }
+    }
+
+    #[inline]
+    pub const fn capabilities(self) -> WeaponCapabilities {
+        self.weapon_type.capabilities()
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -313,6 +458,8 @@ pub struct WeaponPresentationDefinition {
     pub ads_shoulder_pocket_offset: [f32; 3],
     pub fire_kick_duration_seconds: f32,
     pub fire_kick_pitch_radians: f32,
+    /// Third-person ReadyHold body -> weapon native-rig rotation. The runtime must compose
+    /// `native_rig_to_runtime_basis` after this quaternion exactly once.
     pub ready_body_to_root_rotation: [f32; 4],
     pub ready_right_elbow_pole_offset: [f32; 3],
     pub ready_left_elbow_pole_offset: [f32; 3],
@@ -321,8 +468,10 @@ pub struct WeaponPresentationDefinition {
     pub ready_left_palm_to_weapon: [f32; 4],
     pub right_palm_to_handle: [f32; 3],
     pub right_palm_to_native_rig: [f32; 4],
+    /// The single weapon native-rig -> North Star canonical runtime basis correction.
+    /// Third-person, first-person, grip, muzzle and ADS presentation must all consume this same
+    /// basis; view-specific orientation compensation is forbidden.
     pub native_rig_to_runtime_basis: [f32; 4],
-    pub first_person_view_basis: [f32; 4],
     pub first_person_hip_handle_offset: [f32; 3],
     pub ads_rear_sight_from_handle: [f32; 3],
     pub ads_front_sight_from_handle: [f32; 3],
@@ -351,7 +500,6 @@ impl Default for WeaponPresentationDefinition {
             right_palm_to_handle: [0.0; 3],
             right_palm_to_native_rig: [0.0, 0.0, 0.0, 1.0],
             native_rig_to_runtime_basis: [0.0, 0.0, 0.0, 1.0],
-            first_person_view_basis: [0.0, 0.0, 0.0, 1.0],
             first_person_hip_handle_offset: [0.2, -0.2, -0.5],
             ads_rear_sight_from_handle: [0.0; 3],
             ads_front_sight_from_handle: [0.0, 0.0, 0.4],
@@ -454,14 +602,14 @@ impl WeaponPresentationDefinition {
         self.ready_left_palm_to_weapon = quat(self.ready_left_palm_to_weapon);
         self.right_palm_to_native_rig = quat(self.right_palm_to_native_rig);
         self.native_rig_to_runtime_basis = quat(self.native_rig_to_runtime_basis);
-        self.first_person_view_basis = quat(self.first_person_view_basis);
         self.fire_kick_duration_seconds = if self.fire_kick_duration_seconds.is_finite() {
             self.fire_kick_duration_seconds.clamp(0.001, 10.0)
         } else {
             fallback.fire_kick_duration_seconds
         };
         self.fire_kick_pitch_radians = if self.fire_kick_pitch_radians.is_finite() {
-            self.fire_kick_pitch_radians.clamp(-3.14, 3.14)
+            self.fire_kick_pitch_radians
+                .clamp(-std::f32::consts::PI, std::f32::consts::PI)
         } else {
             0.0
         };
@@ -655,6 +803,21 @@ impl ItemDefinition {
         })
     }
 
+    pub fn typed_weapon(
+        name: impl AsRef<str>,
+        display_name: impl Into<String>,
+        slot: Option<EquipmentSlot>,
+        weapon: WeaponItemDefinition,
+        unit_weight: f32,
+    ) -> Result<Self, String> {
+        let mut item = Self::stackable(name, display_name, ItemKind::Weapon, 1, unit_weight)?;
+        item.equipment_slot = slot;
+        item.weapon = Some(weapon);
+        Ok(item)
+    }
+
+    /// Backward-compatible firearm constructor. Concrete weapons remain project-authored; this
+    /// helper only constructs the engine's Firearm weapon type.
     pub fn weapon(
         name: impl AsRef<str>,
         display_name: impl Into<String>,
@@ -664,18 +827,38 @@ impl ItemDefinition {
         fire_mode: WeaponFireMode,
         unit_weight: f32,
     ) -> Result<Self, String> {
-        let mut item = Self::stackable(name, display_name, ItemKind::Weapon, 1, unit_weight)?;
-        item.equipment_slot = Some(slot);
-        item.weapon = Some(WeaponItemDefinition {
-            tuning: tuning.sanitized(),
-            ammo_item,
-            fire_mode,
-        });
-        Ok(item)
+        Self::typed_weapon(
+            name,
+            display_name,
+            Some(slot),
+            WeaponItemDefinition::firearm(
+                WeaponType::Firearm.default_rank(),
+                tuning,
+                ammo_item,
+                fire_mode,
+            ),
+            unit_weight,
+        )
+    }
+
+    pub fn melee_weapon(
+        name: impl AsRef<str>,
+        display_name: impl Into<String>,
+        slot: EquipmentSlot,
+        rank: u16,
+        tuning: MeleeWeaponTuning,
+        unit_weight: f32,
+    ) -> Result<Self, String> {
+        Self::typed_weapon(
+            name,
+            display_name,
+            Some(slot),
+            WeaponItemDefinition::melee(rank, tuning),
+            unit_weight,
+        )
     }
 
     #[inline]
-    
     pub fn with_weapon_presentation(mut self, presentation: WeaponPresentationDefinition) -> Self {
         self.weapon_presentation = presentation.sanitized();
         self

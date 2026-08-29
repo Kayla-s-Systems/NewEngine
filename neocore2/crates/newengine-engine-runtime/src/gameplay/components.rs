@@ -30,7 +30,7 @@ pub use player::{
 };
 pub use render_environment::{
     CloudShadowRenderState, EnvironmentDomeRenderState, EnvironmentPostFxState,
-    TerrainMaterialLayers, WorldClearColor,
+    SkyCloudProfileRenderState, TerrainMaterialLayers, WorldClearColor,
 };
 pub use run_mode::GameRunMode;
 pub use scene::{

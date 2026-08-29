@@ -1,5 +1,14 @@
 use super::*;
 
+type ShadowPrimitiveEntry = (
+    f32,
+    u64,
+    Primitive,
+    Mat4,
+    Option<newengine_materials::MaterialRef>,
+    Option<newengine_model_domain_api::FoliageInstanceRuntime>,
+);
+
 pub(super) fn draw_primitives_shadow_body(
     this: &mut RuntimeRenderController,
     r: &mut dyn newengine_core::render::RenderApi,
@@ -20,22 +29,8 @@ pub(super) fn draw_primitives_shadow_body(
     let shadow_max_distance = primitive_shadow_max_distance(runtime);
     let shadow_max_distance_sq = shadow_max_distance * shadow_max_distance;
 
-    let mut entries: Vec<(
-        f32,
-        u64,
-        Primitive,
-        Mat4,
-        Option<newengine_materials::MaterialRef>,
-        Option<newengine_model_domain_api::FoliageInstanceRuntime>,
-    )> = Vec::new();
-    let mut foliage_entries: Vec<(
-        f32,
-        u64,
-        Primitive,
-        Mat4,
-        Option<newengine_materials::MaterialRef>,
-        Option<newengine_model_domain_api::FoliageInstanceRuntime>,
-    )> = Vec::new();
+    let mut entries: Vec<ShadowPrimitiveEntry> = Vec::new();
+    let mut foliage_entries: Vec<ShadowPrimitiveEntry> = Vec::new();
     let mut shadow_seen = 0usize;
     let mut shadow_policy_culled = 0usize;
     let mut shadow_distance_culled = 0usize;
@@ -135,7 +130,7 @@ pub(super) fn draw_primitives_shadow_body(
     let mut batches = InstanceBatchSet::default();
     let mut shadow_submitted = 0usize;
     for (_distance_sq, _entity_key, prim, model, material_ref, foliage_runtime) in
-        foliage_entries.into_iter().chain(entries.into_iter())
+        foliage_entries.into_iter().chain(entries)
     {
         let plan_key = PrimitivePlanKey::new(prim, material_ref, false, false, true);
         let plan = if let Some(plan) = plan_cache.get(&plan_key).copied() {

@@ -4,10 +4,10 @@
 //! Engine runtime composition layer.
 //!
 //! This crate owns reusable runtime systems that are neither game code nor editor
-//! UI code: scene bridge, gameplay components/schedules, viewport bridge and the
+//! UI code: scene bridge, gameplay components/schedules and the
 //! render controller that talks to `newengine-render-api`. Applications consume
 //! this layer; they must not create backend resources or backend objects directly.
-mod editor_viewport;
+mod editor_viewport_adapter;
 mod env_config;
 mod provider_contract;
 mod runtime_composition;
@@ -15,17 +15,16 @@ mod runtime_policy;
 pub mod world_authoring;
 mod world_runtime_provider;
 
-pub mod asset_preview;
-pub mod audio_ambience;
-pub mod audio_environment;
-pub mod audio_gateway;
+pub mod audio_diffraction;
 pub mod audio_occlusion;
-pub mod audio_scene;
+pub mod audio_reflections;
 pub mod authority;
 pub mod camera_gateway;
 pub mod engine_bounds;
 pub mod gameplay;
-pub mod input_systems;
+pub mod input_systems {
+    pub use newengine_input_systems_runtime::*;
+}
 pub mod plugin_manager;
 pub mod render_controller;
 pub mod runtime;
@@ -41,29 +40,24 @@ pub mod replay {
 mod scene_bootstrap;
 pub mod scene_bridge;
 mod ui_gateway;
-pub mod viewport_bridge;
-
-pub use asset_preview::{AssetPreviewApi, AssetPreviewKind, AssetPreviewSnapshot};
-pub use audio_ambience::{AudioAmbienceBedRuntime, AudioAmbienceRuntimeModule};
-pub use audio_environment::{
-    AudioEnvironmentFrame, AudioEnvironmentResolution, AudioEnvironmentRuntimeState,
-};
-pub use audio_gateway::register_audio_gateway_best_effort;
-pub use audio_occlusion::{
-    acoustic_material_profile_for_surface, AudioListenerRuntimeState, AudioOcclusionObservation,
-    AudioOcclusionPhysicsQueryProvider,
-};
-pub use audio_scene::{
-    AcousticSurface, AudioEmitter, AudioEmitterRuntime, AudioEnvironmentZone, AudioPortal,
-    AudioSceneRuntimeModule,
-};
+pub use audio_diffraction::AudioDiffractionPhysicsQueryProvider;
+pub use audio_occlusion::AudioOcclusionPhysicsQueryProvider;
+pub use audio_reflections::AudioReflectionPhysicsQueryProvider;
 pub use authority::{
     RuntimeWorldAuthorityBridge, RuntimeWorldAuthorityFrame, RuntimeWorldAuthorityMode,
     RuntimeWorldAuthorityResource,
 };
-pub use newengine_audio_api::AudioAmbienceBed;
+pub use newengine_audio_api::{
+    AcousticSurface, AudioAmbienceBed, AudioEmitter, AudioEnvironmentZone, AudioPortal,
+};
+pub use newengine_audio_world_api::{
+    AudioAmbienceBedRuntime, AudioEarlyReflectionObservation, AudioEarlyReflectionPathObservation,
+    AudioEdgeDiffractionObservation, AudioEdgeDiffractionPathObservation, AudioEmitterRuntime,
+    AudioListenerRuntimeState, AudioOcclusionObservation,
+};
 
 pub use gameplay::{CollisionShapeDesc, GameRunMode, GameplayActor, PhysicsBodyDesc, PlayerActor};
+pub use newengine_viewport_bridge::ViewportBridge;
 pub use plugin_manager::PluginManagerBridge;
 pub use provider_contract::{
     validate_provider_contract, RuntimeProviderDescriptor, I_GAMEPLAY_CONTENT_PROVIDER_V1,
@@ -75,7 +69,6 @@ pub use runtime_composition::RuntimeRenderContributionRegistry;
 pub use scene_bridge::{
     SceneBootstrapContext, SceneBootstrapProvider, SceneBootstrapResult, SceneBridge,
 };
-pub use viewport_bridge::ViewportBridge;
 pub use world_runtime_provider::{
     WorldRuntimeFrame, WorldRuntimeProvider, WorldRuntimeProviderRegistry,
 };

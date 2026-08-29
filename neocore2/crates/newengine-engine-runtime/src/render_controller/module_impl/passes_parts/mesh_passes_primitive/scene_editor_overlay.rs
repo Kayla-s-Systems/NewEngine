@@ -84,7 +84,7 @@ pub(super) fn draw_editor_viewport_overlays(
             world.query2::<crate::gameplay::PhysicsBodyDesc, GlobalTransform>()
         {
             if world
-                .get::<crate::editor_viewport::EditorGizmoAxisComponent>(entity)
+                .get::<newengine_editor_viewport_runtime::EditorGizmoAxisComponent>(entity)
                 .is_some()
             {
                 continue;

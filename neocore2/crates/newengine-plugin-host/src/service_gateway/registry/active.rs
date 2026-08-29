@@ -1,10 +1,11 @@
 use super::facts::GatewayPolicyFact;
 use super::route_model::route_matches_query;
 use super::*;
+#[cfg(test)]
+use newengine_service_api::CompositionCandidateDisposition;
 use newengine_service_api::{
-    CapabilityMatrix, CompositionCandidateDisposition, CompositionContractResolution,
-    CompositionContractResolutionSubject, CompositionExplanationGraph, CompositionPlan,
-    CompositionSolver, CompositionSolverInput,
+    CapabilityMatrix, CompositionContractResolution, CompositionContractResolutionSubject,
+    CompositionExplanationGraph, CompositionPlan, CompositionSolver, CompositionSolverInput,
 };
 
 #[derive(Debug, Clone, Default)]
@@ -15,6 +16,7 @@ pub(crate) struct ActiveGatewayRegistry {
     plan: CompositionPlan,
 }
 
+#[cfg(test)]
 #[derive(Debug, Clone, Default)]
 pub(crate) struct GatewayRouteDiagnostics {
     pub(crate) gateway_id: String,
@@ -166,6 +168,7 @@ impl ActiveGatewayRegistry {
         Self::from_facts_with_policy(descriptors, services, gateway_provider_routes, &[])
     }
 
+    #[cfg(test)]
     pub(crate) fn from_facts_with_policy(
         descriptors: &[PluginDescriptorFact],
         services: &[RegisteredServiceFact],
@@ -181,6 +184,7 @@ impl ActiveGatewayRegistry {
         )
     }
 
+    #[cfg(test)]
     pub(crate) fn from_facts_with_policy_and_matrix(
         descriptors: &[PluginDescriptorFact],
         services: &[RegisteredServiceFact],
@@ -401,6 +405,7 @@ impl ActiveGatewayRegistry {
         &self.routes
     }
 
+    #[cfg(test)]
     pub(crate) fn route_diagnostics(&self, gateway_id: &str) -> GatewayRouteDiagnostics {
         let explanation = self.plan.explanation().gateway(gateway_id);
         let active_key = explanation.and_then(|gateway| {

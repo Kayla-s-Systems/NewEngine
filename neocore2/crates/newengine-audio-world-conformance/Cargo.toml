@@ -1,0 +1,18 @@
+[package]
+name = "newengine-audio-world-conformance"
+version = "0.5.0"
+edition = "2021"
+readme = "README.md"
+description = "Cross-boundary conformance tests for North Star world-audio and physics integration"
+
+[dependencies]
+newengine-audio-api = { path = "../newengine-audio-api" }
+newengine-audio-client = { path = "../newengine-audio-client" }
+newengine-audio-world-api = { path = "../newengine-audio-world-api" }
+newengine-audio-world-runtime = { path = "../newengine-audio-world-runtime" }
+newengine-camera-contracts = { path = "../newengine-camera-contracts" }
+newengine-ecs = { path = "../newengine-ecs" }
+newengine-engine-runtime = { path = "../newengine-engine-runtime" }
+newengine-math = { path = "../newengine-math" }
+newengine-physics-api = { path = "../newengine-physics-api" }
+newengine-transform = { path = "../newengine-transform", features = ["ecs", "service"], default-features = false }

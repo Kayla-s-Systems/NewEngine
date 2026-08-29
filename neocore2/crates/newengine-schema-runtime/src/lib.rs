@@ -11,6 +11,31 @@ pub use state::{SchemaRegistryState, SchemaRuntimeServiceInfoV1};
 pub(crate) const OWNER: &str = "newengine-schema-runtime.engine-core-baseline-provider";
 pub(crate) const PROVIDER_ROUTE: &str = "engine.schema.registry";
 
+pub const RUNTIME_UNIT_SPEC: newengine_runtime_unit_api::EngineRuntimeUnitSpec =
+    newengine_runtime_unit_api::EngineRuntimeUnitSpec::new(
+        "engine.runtime.schema",
+        1,
+        newengine_runtime_unit_api::EngineRuntimeUnitKind::Provider,
+        &[newengine_schema_api::SCHEMA_BACKEND_CAPABILITY_ID],
+        &[],
+        newengine_runtime_unit_api::STATIC_PROVIDER_TAGS,
+    );
+
+fn runtime_unit_factory(
+    _: &mut newengine_runtime_unit_api::Engine<()>,
+    _: &newengine_runtime_unit_api::StartupConfig,
+) -> newengine_runtime_unit_api::EngineResult<Option<Box<dyn newengine_runtime_unit_api::Module<()>>>>
+{
+    let _ = register_schema_gateway_best_effort();
+    Ok(None)
+}
+
+pub const RUNTIME_UNIT_REGISTRATION: newengine_runtime_unit_api::RuntimeUnitRegistration =
+    newengine_runtime_unit_api::RuntimeUnitRegistration::new(
+        RUNTIME_UNIT_SPEC,
+        runtime_unit_factory,
+    );
+
 #[cfg(test)]
 mod tests {
     use super::*;

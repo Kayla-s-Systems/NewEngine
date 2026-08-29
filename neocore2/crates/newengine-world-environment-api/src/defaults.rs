@@ -47,6 +47,8 @@ impl EnvironmentFrameDto {
             gameplay_modifiers: EnvironmentGameplayModifiersDto::default(),
             exposure_intent: ExposureIntentDto::default(),
             environment_objects: Vec::new(),
+            spatial_cell_size_meters: 0.0,
+            spatial_atmosphere: Vec::new(),
             consumer_packets: EnvironmentConsumerPacketsDto::default(),
             diagnostics: EnvironmentDiagnosticsDto {
                 provider: "environment.null".to_owned(),

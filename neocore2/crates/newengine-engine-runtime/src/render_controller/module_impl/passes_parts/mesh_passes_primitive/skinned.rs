@@ -33,9 +33,10 @@ pub(crate) fn draw_skinned_player_primitives(
             continue;
         }
         let render_model = crate::gameplay::player_render_model_matrix(world, entity, global.0);
-        let skip_equipped_weapon_skin = world
-            .get::<crate::gameplay::PlayerModelBinding>(skin.owner)
-            .is_none();
+        // Skin ownership is palette ownership, not character-model ownership. Equipped long guns
+        // own an independent PlayerSkinPose on their weapon root and intentionally do not carry a
+        // PlayerModelBinding. Requiring PlayerModelBinding here made their shadow path render while
+        // the forward path silently discarded every skinned weapon primitive.
         let Some(pose) = world.get::<crate::gameplay::PlayerSkinPose>(skin.owner) else {
             continue;
         };
@@ -65,10 +66,6 @@ pub(crate) fn draw_skinned_player_primitives(
         }
 
         let gpu = ensure_primitive_gpu(&reg, prim.id, &mut this.gpu.meshes.prim_cache, r)?;
-        if skip_equipped_weapon_skin {
-            // Keep the crash-isolation policy without synchronous per-frame tracing.
-            continue;
-        }
         let skin_gpu = ensure_player_skin_gpu(
             &mut this.gpu.meshes.skin_vertex_cache,
             prim.id,

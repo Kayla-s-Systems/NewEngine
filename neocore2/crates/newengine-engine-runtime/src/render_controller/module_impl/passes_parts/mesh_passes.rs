@@ -23,7 +23,7 @@ use super::mesh_visibility::{
     terrain_forward_max_distance, terrain_near_accept_distance, terrain_receive_shadows_enabled,
     transform_sphere,
 };
-use crate::gameplay::display_visible_in_mode;
+use crate::gameplay::{display_shadow_caster_visible_in_mode, display_visible_in_mode};
 use crate::gameplay::{EnvironmentDomeRenderState, TerrainMaterialLayers};
 use crate::render_controller::RuntimeRenderController;
 use newengine_math::collections::FxHashMap;
@@ -44,7 +44,7 @@ pub use self::mesh_passes_shadow::{draw_primitives_shadow, draw_procedural_terra
 use self::scene_mesh_pass::{route_diagnostics_due, SceneMeshPass};
 
 pub(crate) fn publish_camera_spawn(
-    bridge: &crate::viewport_bridge::ViewportBridge,
+    bridge: &newengine_viewport_bridge::ViewportBridge,
     camera_position: Vec3,
     camera_forward: Vec3,
 ) {

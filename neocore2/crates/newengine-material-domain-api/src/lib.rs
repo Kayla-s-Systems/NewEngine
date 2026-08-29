@@ -178,7 +178,7 @@ pub struct LitPipeline {
 /// transforms and point/spot shadow metadata. Keep this value synchronized with
 /// `newengine_render_feature_api::PackedLights::UBO_SIZE`; per-draw buffers are
 /// allocated from this contract before the runtime writes the complete packed block.
-pub const LIT_UBO_SIZE: u64 = 3168;
+pub const LIT_UBO_SIZE: u64 = 3200;
 
 /// Vertex stride consumed by the current instanced lit shader family.
 ///

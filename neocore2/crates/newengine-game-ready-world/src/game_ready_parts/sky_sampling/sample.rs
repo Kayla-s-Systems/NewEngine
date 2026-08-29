@@ -122,6 +122,14 @@ pub(crate) fn sample_sky_frame(
         cloud_gust_strength: 0.18,
         cloud_overcast: cloud_coverage * 0.28,
         cloud_light_absorption: cloud_coverage * 0.18,
+        cloud_base_altitude_m: 1350.0,
+        cloud_thickness_m: 980.0 + cloud_coverage * 520.0,
+        cloud_layer_density: cloud_coverage * 0.34,
+        high_cloud_coverage: cloud_coverage * 0.22,
+        high_cloud_density: cloud_coverage * 0.08,
+        humidity: (0.38 + cloud_coverage * 0.28).clamp(0.0, 1.0),
+        aerosol_density: (0.10 + horizon_glow * 0.12).clamp(0.0, 1.0),
+        precipitation_intensity: 0.0,
     }
 }
 

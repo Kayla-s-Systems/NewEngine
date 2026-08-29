@@ -21,6 +21,20 @@ mod tests {
     }
 
     #[test]
+    fn display_resolution_uses_auto_sentinel_and_clamps_authored_size() {
+        let mut settings = StartupLaunchSettings::default();
+        assert_eq!(settings.display.resolution, [0, 0]);
+
+        settings.display.resolution = [32, 50_000];
+        settings.normalize();
+        assert_eq!(settings.display.resolution, [64, 16_384]);
+
+        settings.display.resolution = [0, 1080];
+        settings.normalize();
+        assert_eq!(settings.display.resolution, [0, 0]);
+    }
+
+    #[test]
     fn disabled_shadows_force_off_quality() {
         let mut settings = StartupLaunchSettings::default();
         settings.graphics.shadows_enabled = false;

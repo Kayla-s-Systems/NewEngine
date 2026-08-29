@@ -1,0 +1,10 @@
+[package]
+name = "newengine-scene-authoring-api"
+version = "0.1.0"
+edition = "2021"
+description = "Provider-neutral scene authoring service contract for NewEngine"
+license = "Proprietary"
+
+[dependencies]
+newengine-ecs = { path = "../newengine-ecs" }
+newengine-world-authoring-api = { path = "../newengine-world-authoring-api" }

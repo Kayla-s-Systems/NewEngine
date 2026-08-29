@@ -120,6 +120,7 @@ impl FrameGraphBuilder {
                 StandardRenderPhase::ViewportGBuffer => self.gbuffer(),
                 StandardRenderPhase::DeferredLighting => self.deferred_lighting(),
                 StandardRenderPhase::ViewportForward => self.forward_opaque(),
+                StandardRenderPhase::ParticleSimulation => self.particle_simulation(),
                 StandardRenderPhase::Transparent => self.transparent(),
                 StandardRenderPhase::Water => self.water(),
                 StandardRenderPhase::PostFx => self.postfx(true),

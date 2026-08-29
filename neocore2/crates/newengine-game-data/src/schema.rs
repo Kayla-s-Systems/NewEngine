@@ -38,10 +38,23 @@ pub struct WorldData {
 pub struct PlayerData {
     pub spawn: [f32; 3],
     pub yaw: f32,
+    #[serde(default = "default_player_move_speed")]
     pub move_speed: f32,
     pub look_sensitivity: f32,
+    #[serde(default = "default_player_character_ref")]
+    pub character_ref: String,
+    #[serde(default)]
     pub model: PlayerModelData,
+    #[serde(default)]
     pub tuning: PlayerTuningData,
+}
+
+fn default_player_character_ref() -> String {
+    crate::DEFAULT_PLAYER_CHARACTER_REF.to_owned()
+}
+
+fn default_player_move_speed() -> f32 {
+    3.0
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -55,8 +68,24 @@ pub struct PlayerModelData {
     pub hide_in_first_person: bool,
 }
 
+/// Optional authored spring/K locomotion response parameters.
+///
+/// Absence means the character definition does not provide an original response model. The
+/// runtime must not synthesize TLOU2-derived constants for another character/profile.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct PlayerMotionResponseData {
+    pub velocity_spring_const: f32,
+    pub velocity_spring_const_decel: f32,
+    pub velocity_spring_dampen_ratio: f32,
+    pub speed_spring_const: f32,
+    pub max_accel: f32,
+    pub trans_clamp_dist: f32,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PlayerTuningData {
+    #[serde(default)]
+    pub motion_response: Option<PlayerMotionResponseData>,
     pub body_radius: f32,
     pub body_half_height: f32,
     pub crouched_body_half_height: f32,
@@ -188,6 +217,14 @@ pub struct SkyData {
     pub radius: f32,
     pub mesh: String,
     pub follow_camera: bool,
+    /// Environment provider profile. Empty keeps the provider default.
+    #[serde(default)]
+    pub environment_profile: String,
+    /// Optional world-environment routing metadata.
+    #[serde(default)]
+    pub environment_region: String,
+    #[serde(default)]
+    pub environment_biome: String,
     pub cloud_dictionary: String,
     pub cloud_profile: String,
     pub sun_radius: f32,

@@ -15,7 +15,7 @@ impl SceneBridge {
 
         for (entity, name) in world.query::<newengine_scene::components::Name>() {
             if world
-                .get::<crate::editor_viewport::EditorGizmoAxisComponent>(entity)
+                .get::<newengine_editor_viewport_runtime::EditorGizmoAxisComponent>(entity)
                 .is_some()
             {
                 continue;

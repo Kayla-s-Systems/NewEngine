@@ -26,6 +26,7 @@ pub mod method {
     pub const FORMATS_JSON_V1: &str = "assets.materials.formats_json_v1";
     pub const MANIFEST_JSON_V1: &str = "assets.materials.manifest_v1";
     pub const LOAD_DESCRIPTOR_V1: &str = "assets.materials.load_descriptor_v1";
+    pub const PREVIEW_REF_V1: &str = "assets.materials.preview_ref_v1";
     pub const RESOLVE_GRAPH_V1: &str = "assets.materials.resolve_graph_v1";
     pub const VALIDATE_V1: &str = "assets.materials.validate_v1";
     pub const TO_RENDER_PACKET_V1: &str = "assets.materials.to_render_packet_v1";
@@ -40,6 +41,7 @@ pub const MATERIALS_SERVICE_METHODS: &[&str] = &[
     method::FORMATS_JSON_V1,
     method::MANIFEST_JSON_V1,
     method::LOAD_DESCRIPTOR_V1,
+    method::PREVIEW_REF_V1,
     method::RESOLVE_GRAPH_V1,
     method::VALIDATE_V1,
     method::TO_RENDER_PACKET_V1,
@@ -178,6 +180,20 @@ pub struct MaterialDescriptorLoadResponse {
     pub textures: MaterialTextureBindings,
     pub params: BTreeMap<String, MaterialParamValue>,
 }
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(default))]
+pub struct MaterialPreviewRefRequest {
+    pub logical_path: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(default))]
+pub struct MaterialPreviewRefResponse {
+    pub material_ref: String,
+}
+
 #[derive(Clone, Debug, PartialEq, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(default))]

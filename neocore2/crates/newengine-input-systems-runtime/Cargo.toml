@@ -1,0 +1,12 @@
+[package]
+name = "newengine-input-systems-runtime"
+version = "0.1.0"
+edition = "2021"
+readme = "README.md"
+description = "Focused semantic input runtime policy and diagnostics for North Star"
+
+[dependencies]
+newengine-input-actions-api = { path = "../newengine-input-actions-api" }
+newengine-input-capture-api = { path = "../newengine-input-capture-api" }
+newengine-ui-api = { path = "../newengine-ui-api" }
+newengine-ulog-api = { path = "../newengine-ulog-api" }

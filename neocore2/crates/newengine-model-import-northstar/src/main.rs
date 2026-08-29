@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use newengine_model_import_northstar::{
-    compile_character, CharacterCompileRequest, SkeletonProfile,
+    compile_character, CharacterCompileRequest, PackageSkinSubsetRule, SkeletonProfile,
 };
 
 fn main() {
@@ -25,6 +25,8 @@ fn run() -> Result<(), String> {
     let mut material_overrides = Vec::new();
     let mut required_mesh_prefixes = Vec::new();
     let mut package_skin_fallback_joints = Vec::new();
+    let mut master_rig = false;
+    let mut package_skin_subsets = Vec::new();
     let mut source_to_model = None;
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -112,6 +114,60 @@ fn run() -> Result<(), String> {
                 }
                 required_mesh_prefixes.push(prefix);
             }
+            "--master-rig" => master_rig = true,
+            "--package-skin-subset" => {
+                let spec = args
+                    .next()
+                    .ok_or("--package-skin-subset requires PATH::SOURCE_DOMAIN::LOCAL=MASTER[,LOCAL=MASTER...]")?;
+                let mut parts = spec.splitn(3, "::");
+                let path = parts.next().unwrap_or_default().trim();
+                let source_domain = parts
+                    .next()
+                    .ok_or("--package-skin-subset requires PATH::SOURCE_DOMAIN::LOCAL=MASTER[,LOCAL=MASTER...]")?
+                    .trim()
+                    .parse::<usize>()
+                    .map_err(|error| format!("invalid --package-skin-subset source domain: {error}"))?;
+                let mappings = parts
+                    .next()
+                    .ok_or("--package-skin-subset requires PATH::SOURCE_DOMAIN::LOCAL=MASTER[,LOCAL=MASTER...]")?;
+                if path.is_empty() || source_domain == 0 {
+                    return Err("--package-skin-subset path and source domain must be non-empty".to_owned());
+                }
+                let mut local_to_master = vec![None; source_domain];
+                for pair in mappings.split(',').map(str::trim).filter(|value| !value.is_empty()) {
+                    let (local, master) = pair
+                        .split_once('=')
+                        .ok_or("--package-skin-subset mapping must use LOCAL=MASTER")?;
+                    let local = local
+                        .trim()
+                        .parse::<usize>()
+                        .map_err(|error| format!("invalid local subset joint '{local}': {error}"))?;
+                    let master = master
+                        .trim()
+                        .parse::<u16>()
+                        .map_err(|error| format!("invalid master subset joint '{master}': {error}"))?;
+                    if local >= source_domain {
+                        return Err(format!(
+                            "--package-skin-subset local joint outside source domain local={} source_domain={}",
+                            local, source_domain
+                        ));
+                    }
+                    if local_to_master[local].replace(master).is_some() {
+                        return Err(format!(
+                            "--package-skin-subset duplicate local joint {}",
+                            local
+                        ));
+                    }
+                }
+                if !local_to_master.iter().any(Option::is_some) {
+                    return Err("--package-skin-subset requires at least one mapping".to_owned());
+                }
+                package_skin_subsets.push(PackageSkinSubsetRule {
+                    package_path: PathBuf::from(path),
+                    source_domain_size: source_domain,
+                    local_to_master,
+                });
+            }
             "--package-skin-fallback" => {
                 let spec = args
                     .next()
@@ -155,6 +211,8 @@ fn run() -> Result<(), String> {
         material_overrides,
         required_mesh_prefixes,
         package_skin_fallback_joints,
+        master_rig,
+        package_skin_subsets,
         source_to_model,
     };
     let report = compile_character(&request)?;
@@ -195,6 +253,6 @@ fn run() -> Result<(), String> {
 
 fn print_help() {
     println!(
-        "Usage: newengine-model-import-northstar --name NAME --skeleton FILE [--skeleton-profile humanoid|weapon] --package FILE [--package FILE...] [--package-mesh-prefix PATH::PREFIX] [--material-override PREFIX=REF] [--material-identity-slot IDENTITY=mNN] [--require-mesh-prefix PREFIX] [--package-skin-fallback PATH::JOINT[,JOINT...]] [--material-by-source-identity] [--source-to-model M00,...,M33] --output-dir DIR [--material-library REF]"
+        "Usage: newengine-model-import-northstar --name NAME --skeleton FILE [--skeleton-profile humanoid|weapon] --package FILE [--package FILE...] [--package-mesh-prefix PATH::PREFIX] [--material-override PREFIX=REF] [--material-identity-slot IDENTITY=mNN] [--require-mesh-prefix PREFIX] [--package-skin-fallback PATH::JOINT[,JOINT...]] [--master-rig] [--package-skin-subset PATH::SOURCE_DOMAIN::LOCAL=MASTER[,LOCAL=MASTER...]] [--material-by-source-identity] [--source-to-model M00,...,M33] --output-dir DIR [--material-library REF]"
     );
 }

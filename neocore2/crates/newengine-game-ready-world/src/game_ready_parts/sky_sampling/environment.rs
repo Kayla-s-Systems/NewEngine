@@ -15,6 +15,11 @@ pub(crate) fn sample_sky_frame_from_environment(
     let weather_intensity = environment.weather.intensity.clamp(0.0, 1.0);
     let preset = sky_cloud_visual_preset(environment.weather.state);
     let preset_blend = (0.24 + weather_intensity * 0.66 + overcast * 0.10).clamp(0.0, 1.0);
+    let cloud_profile = cycle.cloud_profile.trim().to_ascii_lowercase();
+    let force_cloudless = matches!(
+        cloud_profile.as_str(),
+        "clear" | "cloudless" | "clear_sky" | "clear-sky" | "none"
+    );
     let haze =
         (environment.atmosphere.haze_amount + preset.haze_bias * preset_blend).clamp(0.0, 1.0);
     let overcast_loss = 1.0 - overcast * 0.32;
@@ -86,15 +91,67 @@ pub(crate) fn sample_sky_frame_from_environment(
     let ambient_intensity = cycle.base_ambient_intensity
         * (0.11 + day_strength.powf(0.58) * 0.82 + sky_light * 0.55 + overcast * 0.12)
         * (1.0 - storm_darkening * 0.55);
-    let cloud_coverage = environment.clouds.coverage.clamp(0.0, 1.0);
+    let cloud_coverage = if force_cloudless {
+        0.0
+    } else {
+        environment.clouds.coverage.clamp(0.0, 1.0)
+    };
     // Do not pre-blur the entire cloud field. The shader now owns edge
     // erosion/penumbra while this value describes meteorological morphology.
     let baseline_softness = (0.78 - overcast * 0.22).clamp(0.38, 0.86);
     let cloud_softness = (baseline_softness + (preset.softness - baseline_softness) * preset_blend)
         .clamp(0.34, 0.94);
-    let cloud_shadow_strength = (environment.clouds.shadow_strength
-        * (1.0 + (preset.shadow_scale - 1.0) * preset_blend))
-        .clamp(0.0, 1.0);
+    let cloud_shadow_strength = if force_cloudless {
+        0.0
+    } else {
+        (environment.clouds.shadow_strength * (1.0 + (preset.shadow_scale - 1.0) * preset_blend))
+            .clamp(0.0, 1.0)
+    };
+    let low_layer = environment.clouds.layers.first();
+    let high_layer = environment.clouds.layers.get(1);
+    let cloud_base_altitude_m = low_layer
+        .map(|layer| layer.altitude_min_meters)
+        .unwrap_or(1250.0)
+        .clamp(400.0, 4500.0);
+    let cloud_thickness_m = low_layer
+        .map(|layer| layer.altitude_max_meters - layer.altitude_min_meters)
+        .unwrap_or(1100.0)
+        .clamp(300.0, 7600.0);
+    let cloud_layer_density = if force_cloudless {
+        0.0
+    } else {
+        low_layer
+            .map(|layer| layer.density)
+            .unwrap_or(cloud_coverage * 0.36)
+            .clamp(0.0, 1.0)
+    };
+    let high_cloud_coverage = if force_cloudless {
+        0.0
+    } else {
+        high_layer
+            .map(|layer| layer.coverage)
+            .unwrap_or(0.0)
+            .clamp(0.0, 1.0)
+    };
+    let high_cloud_density = if force_cloudless {
+        0.0
+    } else {
+        high_layer
+            .map(|layer| layer.density)
+            .unwrap_or(0.0)
+            .clamp(0.0, 1.0)
+    };
+    let air_density = environment.atmosphere.air_density_kg_m3.clamp(0.55, 1.55);
+    let air_density_scale = (air_density / 1.225).clamp(0.55, 1.35).powf(0.55);
+    let precipitable_water = environment
+        .atmosphere
+        .precipitable_water_mm
+        .clamp(0.2, 75.0);
+    let water_column_scale = (precipitable_water / 25.0).clamp(0.02, 3.0);
+    let cloud_water_path = environment
+        .atmosphere
+        .cloud_water_path_kg_m2
+        .clamp(0.0, 2.8);
     let adv = environment.wind.cloud_advection;
     SkyFrameSample {
         to_sun,
@@ -112,17 +169,35 @@ pub(crate) fn sample_sky_frame_from_environment(
         cloud_field_seed: environment.global.environment_seed,
         cloud_world_time_seconds: environment.world_time_seconds,
         rayleigh_strength: ((1.08 - haze * 0.22)
+            * air_density_scale
             * (1.0 + (preset.rayleigh_scale - 1.0) * preset_blend))
-            .clamp(0.50, 1.20),
+            .clamp(0.42, 1.35),
         mie_strength: ((0.50 + haze * 1.65 + overcast * 0.25)
+            * (0.94 + water_column_scale.sqrt() * 0.10)
             * (1.0 + (preset.mie_scale - 1.0) * preset_blend))
-            .clamp(0.35, 2.75),
+            .clamp(0.30, 3.10),
         star_intensity: (environment.sky.night_blend
             * (1.0 - environment.sky.light_pollution.clamp(0.0, 1.0))
             * (1.0 - overcast * 0.82))
             .clamp(0.0, 1.0),
         cloud_gust_strength: environment.wind.gust_strength.clamp(0.0, 1.0),
         cloud_overcast: overcast,
-        cloud_light_absorption: environment.clouds.light_absorption.clamp(0.0, 1.0),
+        cloud_light_absorption: if force_cloudless {
+            0.0
+        } else {
+            environment
+                .clouds
+                .light_absorption
+                .max(cloud_water_path * 0.22)
+                .clamp(0.0, 1.0)
+        },
+        cloud_base_altitude_m,
+        cloud_thickness_m,
+        cloud_layer_density,
+        high_cloud_coverage,
+        high_cloud_density,
+        humidity: environment.atmosphere.humidity.clamp(0.0, 1.0),
+        aerosol_density: environment.atmosphere.aerosol_density.clamp(0.0, 2.0),
+        precipitation_intensity: environment.weather.precipitation.intensity.clamp(0.0, 1.0),
     }
 }

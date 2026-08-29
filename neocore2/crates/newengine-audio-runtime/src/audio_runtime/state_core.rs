@@ -8,16 +8,21 @@ pub struct AudioRuntimeState {
     next_voice_id: u64,
     cue_counter: u64,
     listener: AudioListenerState,
+    listener_velocity: [f32; 3],
+    listener_updated_at: Option<Instant>,
     bus_gains: BTreeMap<AudioBus, f32>,
     clips: HashMap<String, CachedClip>,
     cues: HashMap<String, SoundCue>,
+    yscd_dictionaries: HashMap<String, Arc<newengine_asset_format_nef8::YscdDictionary>>,
     cue_layers: HashMap<String, Vec<YscdRuntimeLayer>>,
     cue_meta: HashMap<String, YscdRuntimeMeta>,
+    cue_history: HashMap<String, VecDeque<String>>,
     embedded_yscd_clips: HashMap<String, EmbeddedYscdClipLocator>,
     materialization_errors: HashMap<u64, String>,
     cached_bytes: usize,
     cache_limit_bytes: usize,
     max_physical_voices: usize,
+    room_buses: SharedRoomLateBusManager,
 }
 
 impl AudioRuntimeState {
@@ -39,16 +44,21 @@ impl AudioRuntimeState {
             next_voice_id: 1,
             cue_counter: 1,
             listener: AudioListenerState::default(),
+            listener_velocity: [0.0; 3],
+            listener_updated_at: None,
             bus_gains,
             clips: HashMap::new(),
             cues: HashMap::new(),
+            yscd_dictionaries: HashMap::new(),
             cue_layers: HashMap::new(),
             cue_meta: HashMap::new(),
+            cue_history: HashMap::new(),
             embedded_yscd_clips: HashMap::new(),
             materialization_errors: HashMap::new(),
             cached_bytes: 0,
             cache_limit_bytes: cache_limit_bytes_from_env(),
             max_physical_voices: max_physical_voices_from_env(),
+            room_buses: SharedRoomLateBusManager::new(),
         })
     }
 
@@ -169,17 +179,22 @@ impl AudioRuntimeState {
     }
 
     #[inline]
-    fn voice_audibility(&self, voice: &VoiceEntry) -> f32 {
+    fn voice_output_gain(&self, voice: &VoiceEntry) -> f32 {
         sanitize_gain(voice.gain)
             * self.bus_gain(voice.bus)
             * voice.attenuation_gain(self.listener)
-            * voice.acoustic.sanitized().transmission_gain
+            * voice.propagated_acoustic().transmission_gain
+    }
+
+    #[inline]
+    fn voice_audibility(&self, voice: &VoiceEntry) -> f32 {
+        self.voice_output_gain(voice) * voice.environment_audibility_gain()
     }
 
     fn refresh_voice_gains(&self) {
         for voice in self.voices.values() {
             if let Some(control) = voice.control.as_ref() {
-                control.set_volume(self.voice_audibility(voice));
+                control.set_volume(self.voice_output_gain(voice));
             }
         }
     }

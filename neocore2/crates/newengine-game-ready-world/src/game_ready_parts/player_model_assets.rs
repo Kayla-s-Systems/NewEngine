@@ -1,7 +1,7 @@
 use super::*;
 
+use newengine_model_client::ModelGatewayClient;
 use newengine_model_domain_api::ModelAssetRequest;
-use newengine_model_runtime::ModelGatewayClient;
 use newengine_model_skeleton_api::ModelSkeletonMetadata;
 
 pub(super) fn ensure_player_runtime_model_parts(

@@ -9,8 +9,9 @@ description = "Thin authored-UI facade over engine.assets inspection, preview, s
 newengine-assets = { path = "../newengine-assets" }
 newengine-assets-api = { path = "../newengine-assets-api" }
 newengine-assets-ui-runtime = { path = "../newengine-assets-ui-runtime" }
+newengine-asset-preview-runtime = { path = "../newengine-asset-preview-runtime" }
+newengine-viewport-bridge = { path = "../newengine-viewport-bridge" }
 newengine-core = { path = "../newengine-core" }
-newengine-engine-runtime = { path = "../newengine-engine-runtime" }
 newengine-math = { path = "../newengine-math" }
 newengine-plugin-host = { path = "../newengine-plugin-host" }
 newengine-schema-api = { path = "../newengine-schema-api" }

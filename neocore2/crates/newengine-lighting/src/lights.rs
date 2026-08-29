@@ -2,6 +2,10 @@
 
 use newengine_math::Vec3;
 
+/// Mean apparent angular half-radius of the Sun as seen from Earth, in radians.
+/// Shared by raster solar-disc rendering, PCSS area-light semantics and the path tracer.
+pub const SOLAR_ANGULAR_RADIUS_RADIANS: f32 = 0.004_650_47;
+
 /// Global ambient lighting parameters.
 ///
 /// Scene resource only. Render backends translate this into their own native

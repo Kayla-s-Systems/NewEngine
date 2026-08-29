@@ -1,0 +1,28 @@
+[package]
+name = "newengine-fps-projectile-runtime"
+version = "0.1.0"
+edition = "2021"
+description = "Reusable FPS projectile and weapon-shot FX mechanics"
+license = "Proprietary"
+
+[dependencies]
+newengine-camera = { path = "../newengine-camera" }
+newengine-ecs = { path = "../newengine-ecs" }
+newengine-engine-runtime = { path = "../newengine-engine-runtime" }
+newengine-game-data = { path = "../newengine-game-data" }
+newengine-gameplay-fps-api = { path = "../newengine-gameplay-fps-api" }
+newengine-input-actions-api = { path = "../newengine-input-actions-api" }
+newengine-item-assets-runtime = { path = "../newengine-item-assets-runtime" }
+newengine-lighting = { path = "../newengine-lighting" }
+newengine-math = { path = "../newengine-math" }
+newengine-primitives = { path = "../newengine-primitives" }
+newengine-scene = { path = "../newengine-scene", features = ["runtime"] }
+newengine-sim = { path = "../newengine-sim" }
+newengine-transform = { path = "../newengine-transform" }
+newengine-model-domain-api = { path = "../newengine-model-domain-api" }
+newengine-ulog-api = { path = "../newengine-ulog-api" }
+newengine-vfx-runtime = { path = "../newengine-vfx-runtime" }
+newengine-vfx-api = { path = "../newengine-vfx-api" }
+
+[dev-dependencies]
+newengine-item-assets-runtime = { path = "../newengine-item-assets-runtime", features = ["test-support"] }

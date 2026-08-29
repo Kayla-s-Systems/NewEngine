@@ -16,7 +16,8 @@ use super::{
     PlayerAnimationState, PlayerCommandFrame, PlayerController, PlayerEventKind,
     PlayerFixedPoseHistory, PlayerGroundState, PlayerLocomotionAnimation, PlayerLocomotionState,
     PlayerModelAssignment, PlayerModelBinding, PlayerMovementSpeeds, PlayerRenderPose,
-    PlayerStanceKind, PlayerStanceState, PlayerViewVisibility, PlayerVisualKind, PlayerVisualPart,
+    PlayerStanceKind, PlayerStanceState, PlayerViewState, PlayerViewVisibility,
+    PlayerViewVisibilityPolicy, PlayerVisualKind, PlayerVisualPart,
 };
 
 #[path = "player/animation.rs"]
@@ -36,7 +37,8 @@ mod stance;
 
 pub use animation::update_player_animation_states;
 pub use camera::{
-    attach_active_camera_to_player, detach_active_camera_from_player, display_visible_in_mode,
+    attach_active_camera_to_player, detach_active_camera_from_player,
+    display_shadow_caster_visible_in_mode, display_visible_in_mode,
 };
 pub use input::{
     apply_player_command_frame, apply_player_input, clear_player_input,

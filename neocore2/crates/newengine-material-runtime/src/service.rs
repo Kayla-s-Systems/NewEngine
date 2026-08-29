@@ -2,8 +2,9 @@ use abi_stable::std_types::{RResult, RString};
 use newengine_assets::AssetServiceClient;
 use newengine_materials::{
     method as material_method, MaterialDescriptorLoadResponse, MaterialLoadRequest,
-    MaterialTextureRefInfo, MaterialTextureRefRequest, MaterialValidationRequest,
-    MaterialValidationResult, MaterialsManifest, RenderMaterialPacket, ResolvedMaterialGraph,
+    MaterialPreviewRefRequest, MaterialPreviewRefResponse, MaterialTextureRefInfo,
+    MaterialTextureRefRequest, MaterialValidationRequest, MaterialValidationResult,
+    MaterialsManifest, RenderMaterialPacket, ResolvedMaterialGraph,
     ENGINE_ASSETS_MATERIALS_SERVICE_ID, MATERIALS_BACKEND_CAPABILITY_ID, MATERIALS_SERVICE_ID,
     MATERIALS_SERVICE_METHODS,
 };
@@ -90,6 +91,21 @@ impl MaterialGatewayState {
                 };
                 match self.adapter.load_descriptor(&request) {
                     Ok(value) => ok_json(value),
+                    Err(e) => RResult::RErr(RString::from(e)),
+                }
+            }
+            material_method::PREVIEW_REF_V1 => {
+                let request =
+                    match serde_json::from_value::<MaterialPreviewRefRequest>(envelope.request) {
+                        Ok(request) => request,
+                        Err(e) => {
+                            return RResult::RErr(RString::from(format!(
+                                "materials.api: invalid preview ref request: {e}"
+                            )))
+                        }
+                    };
+                match self.adapter.preview_material_ref(&request.logical_path) {
+                    Ok(material_ref) => ok_json(MaterialPreviewRefResponse { material_ref }),
                     Err(e) => RResult::RErr(RString::from(e)),
                 }
             }
@@ -216,6 +232,15 @@ pub fn materials_gateway_service_with_host(
     .post_json_result::<MaterialLoadRequest, ResolvedMaterialGraph, _>(
         material_method::RESOLVE_GRAPH_V1,
         |state, request| state.adapter.resolve_graph(&request),
+    )
+    .post_json_result::<MaterialPreviewRefRequest, MaterialPreviewRefResponse, _>(
+        material_method::PREVIEW_REF_V1,
+        |state, request| {
+            state
+                .adapter
+                .preview_material_ref(&request.logical_path)
+                .map(|material_ref| MaterialPreviewRefResponse { material_ref })
+        },
     )
     .post_json::<MaterialValidationRequest, MaterialValidationResult, _>(
         material_method::VALIDATE_V1,

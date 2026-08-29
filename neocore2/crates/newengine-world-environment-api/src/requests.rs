@@ -32,6 +32,26 @@ pub struct EnvironmentSampleAtPositionResponse {
     pub cell: Option<WorldCellCoord>,
     pub visibility_multiplier: f32,
     pub wind_velocity: Vec3Dto,
+    #[serde(default)]
+    pub surface_pressure_hpa: f32,
+    #[serde(default)]
+    pub temperature_celsius: f32,
+    #[serde(default)]
+    pub dew_point_celsius: f32,
+    #[serde(default)]
+    pub relative_humidity: f32,
+    #[serde(default)]
+    pub specific_humidity_g_per_kg: f32,
+    #[serde(default)]
+    pub air_density_kg_m3: f32,
+    #[serde(default)]
+    pub cloud_water_path_kg_m2: f32,
+    #[serde(default)]
+    pub precipitation_rate_mm_per_hour: f32,
+    #[serde(default)]
+    pub cape_j_per_kg: f32,
+    #[serde(default)]
+    pub cin_j_per_kg: f32,
     pub weather_tags: Vec<String>,
     pub diagnostics: EnvironmentDiagnosticsDto,
 }

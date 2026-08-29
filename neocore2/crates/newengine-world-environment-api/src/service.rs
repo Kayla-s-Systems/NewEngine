@@ -23,6 +23,11 @@ pub const WORLD_ENVIRONMENT_SERVICE_METHOD_INVOKE: &str =
 pub const WORLD_ENVIRONMENT_SERVICE_METHOD_SHUTDOWN_V1: &str =
     newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1;
 pub const WORLD_ENVIRONMENT_SERVICE_METHOD_FRAME_JSON_V1: &str = "environment.frame_json_v1";
+/// Read-only compact diagnostics for the current physical atmosphere. No request payload.
+pub const WORLD_ENVIRONMENT_SERVICE_METHOD_INSPECT_TEXT_V1: &str = "environment.inspect_text_v1";
+pub const WORLD_ENVIRONMENT_SERVICE_METHOD_INSPECT_CELL_TEXT_V1: &str =
+    "environment.inspect_cell_text_v1";
+pub const WORLD_ENVIRONMENT_SERVICE_METHOD_OBJECTS_TEXT_V1: &str = "environment.objects_text_v1";
 pub const WORLD_ENVIRONMENT_SERVICE_METHOD_SAMPLE_AT_POSITION_JSON_V1: &str =
     "environment.sample_at_position_json_v1";
 pub const WORLD_ENVIRONMENT_SERVICE_METHOD_SNAPSHOT_JSON_V1: &str = "environment.snapshot_json_v1";
@@ -106,7 +111,13 @@ impl EnvironmentServiceInfo {
             ],
             methods: WORLD_ENVIRONMENT_REQUIRED_METHODS_V1
                 .iter()
-                .map(|it| (*it).to_owned())
+                .copied()
+                .chain([
+                    WORLD_ENVIRONMENT_SERVICE_METHOD_INSPECT_TEXT_V1,
+                    WORLD_ENVIRONMENT_SERVICE_METHOD_INSPECT_CELL_TEXT_V1,
+                    WORLD_ENVIRONMENT_SERVICE_METHOD_OBJECTS_TEXT_V1,
+                ])
+                .map(str::to_owned)
                 .collect(),
         }
     }

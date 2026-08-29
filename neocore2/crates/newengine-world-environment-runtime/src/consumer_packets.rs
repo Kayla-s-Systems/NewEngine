@@ -1,6 +1,5 @@
 #![allow(clippy::too_many_arguments)]
-use crate::phenomena::required_assets_for_object;
-use crate::profile_catalog::{EnvironmentProfileDescriptor, WeatherPatternDescriptor};
+use crate::profile_catalog::{EnvironmentProfileDescriptor, WeatherPresentationDescriptor};
 use newengine_world_api::WorldCellCoord;
 use newengine_world_environment_api::{
     AiEnvironmentObservationDto, AtmosphereStateDto, AudioEnvironmentPacketDto, CelestialBodyDto,
@@ -12,7 +11,7 @@ use newengine_world_environment_api::{
 
 pub(crate) fn build_consumer_packets(
     profile: &EnvironmentProfileDescriptor,
-    pattern: &WeatherPatternDescriptor,
+    pattern: &WeatherPresentationDescriptor,
     time: &TimeOfDayStateDto,
     sun: &CelestialBodyDto,
     moon: &CelestialBodyDto,
@@ -96,7 +95,7 @@ pub(crate) fn build_consumer_packets(
                 .map(|object| EnvironmentResidencyIntentDto {
                     object_id: object.id,
                     owning_cells: object.owning_cells.clone(),
-                    required_assets: required_assets_for_object(object, pattern, profile),
+                    required_assets: required_assets_for_spatial_object(pattern, profile),
                     priority: object
                         .state_json
                         .get("priority")
@@ -122,4 +121,24 @@ fn rain_audio_intensity(weather: &WeatherStateDto) -> f32 {
         PrecipitationKind::Rain => weather.precipitation.intensity,
         _ => 0.0,
     }
+}
+
+fn required_assets_for_spatial_object(
+    pattern: &WeatherPresentationDescriptor,
+    profile: &EnvironmentProfileDescriptor,
+) -> Vec<String> {
+    let mut assets = vec![
+        profile.visual_assets.cloud_density_texture_ref.to_owned(),
+        profile.visual_assets.cloud_detail_texture_ref.to_owned(),
+        profile.visual_assets.cloud_dither_texture_ref.to_owned(),
+    ];
+    assets.extend(
+        pattern
+            .required_assets
+            .iter()
+            .map(|asset| (*asset).to_owned()),
+    );
+    assets.sort();
+    assets.dedup();
+    assets
 }

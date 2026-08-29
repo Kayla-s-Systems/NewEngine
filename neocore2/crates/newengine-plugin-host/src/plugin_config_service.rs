@@ -6,6 +6,7 @@ use abi_stable::std_types::{RResult, RString};
 use newengine_math::collections_prelude::{NeBTreeSet as BTreeSet, NeHashMap as HashMap};
 use newengine_plugin_api::{Blob, CapabilityId, MethodName, ServiceV1, ServiceV1Dyn};
 use serde_json::{json, Map, Value};
+#[cfg(test)]
 use std::env;
 use std::sync::Arc;
 
@@ -101,6 +102,7 @@ pub(crate) struct PluginConfigStore {
 }
 
 impl PluginConfigStore {
+    #[cfg(test)]
     #[inline]
     fn new(overrides: HashMap<String, Value>) -> Self {
         Self::new_with_environment(overrides, env::vars().collect())

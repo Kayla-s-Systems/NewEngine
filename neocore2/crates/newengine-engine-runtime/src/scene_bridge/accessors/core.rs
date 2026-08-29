@@ -44,7 +44,7 @@ impl SceneBridge {
     }
 
     pub fn set_selection(&self, id: Option<EntityId>) {
-        let id = id.map(|entity| self.authored_actor_selection_root(entity));
+        let id = id.map(|entity| self.editor_selection_root(entity));
         let changed = {
             let mut selection = self.selection.lock();
             let mut set = self.selection_set.lock();
@@ -60,7 +60,7 @@ impl SceneBridge {
     }
 
     pub fn toggle_selection(&self, id: EntityId) {
-        let id = self.authored_actor_selection_root(id);
+        let id = self.editor_selection_root(id);
         let primary = {
             let mut set = self.selection_set.lock();
             if let Some(index) = set.iter().position(|candidate| *candidate == id) {
@@ -78,7 +78,7 @@ impl SceneBridge {
     pub fn replace_selections(&self, ids: impl IntoIterator<Item = EntityId>) {
         let mut unique = Vec::new();
         for id in ids {
-            let id = self.authored_actor_selection_root(id);
+            let id = self.editor_selection_root(id);
             if !unique.contains(&id) {
                 unique.push(id);
             }
@@ -89,13 +89,22 @@ impl SceneBridge {
         self.refresh_selection_authority_and_inspector(primary);
     }
 
-    fn authored_actor_selection_root(&self, entity: EntityId) -> EntityId {
+    fn editor_selection_root(&self, entity: EntityId) -> EntityId {
         let scene = self.scene.read();
         let world = scene.world();
         let mut current = entity;
         for _ in 0..64 {
+            // Runtime-generated logical objects can explicitly own editor selection even though
+            // their renderable mesh is split across child entities. This is intentionally checked
+            // before authored map promotion so a marked runtime sub-object remains directly editable.
             if world
-                .get::<crate::gameplay::AuthoredMapPlacement>(current)
+                .get::<newengine_transform_api::TransformEditRoot>(current)
+                .is_some()
+            {
+                return current;
+            }
+            if world
+                .get::<newengine_world_authoring_api::AuthoredMapPlacement>(current)
                 .is_some_and(|authored| authored.primary)
             {
                 return current;
@@ -132,26 +141,21 @@ impl SceneBridge {
 
     #[inline]
     pub fn in_game_editor_enabled(&self) -> bool {
-        *self.in_game_editor_enabled.lock()
+        self.scene_authoring_provider()
+            .is_some_and(|authoring| authoring.in_game_editor_enabled())
     }
 
     pub fn set_in_game_editor_enabled(&self, enabled: bool) -> bool {
-        let changed = {
-            let mut current = self.in_game_editor_enabled.lock();
-            if *current == enabled {
-                false
-            } else {
-                *current = enabled;
-                true
-            }
+        let Some(authoring) = self.scene_authoring_provider() else {
+            return false;
         };
+        let changed = authoring.set_in_game_editor_enabled(enabled);
         if !changed {
             return enabled;
         }
 
         // Editor Mode owns the screen as one product mode. Hiding the gameplay HUD
         // prevents crosshair/ammo overlays from leaking into the authoring viewport.
-        // Visibility is restored when F2 exits back to gameplay.
         let _ = crate::ui_gateway::set_surface_visible(GAME_HUD_SURFACE_ID, !enabled);
 
         if !enabled {
@@ -168,12 +172,9 @@ impl SceneBridge {
             self.publish_inspector_state(self.selection());
         }
         newengine_ulog_api::ulog::info!(
-            "in-game editor: mode={} source='engine.scene' center_pick={} gameplay_input_gated={} free_fly={} noclip={}",
+            "in-game editor: mode={} source='engine.scene.authoring' center_pick={} gameplay_input_gated={} free_fly={} noclip={}",
             if enabled { "edit" } else { "play" },
-            enabled,
-            enabled,
-            enabled,
-            enabled,
+            enabled, enabled, enabled, enabled,
         );
         enabled
     }

@@ -5,8 +5,8 @@ use newengine_math::{Mat4, Vec3};
 use newengine_primitives::Primitive;
 use newengine_transform::GlobalTransform;
 
-use crate::editor_viewport::{EditorGizmoAxisComponent, EditorGizmoHandle};
 use crate::gameplay::display_visible_in_mode;
+use newengine_editor_viewport_runtime::{EditorGizmoAxisComponent, EditorGizmoHandle};
 
 use super::RuntimeRenderController;
 
@@ -36,6 +36,13 @@ pub(super) fn handle_picking(
             this.frame.pending_pick_selection = None;
         }
     }
+}
+
+#[inline]
+fn editor_pick_visible(world: &newengine_ecs::World, entity: newengine_ecs::EntityId) -> bool {
+    // F2 edits the live game world, so both authoring-only helpers and runtime-visible actors must
+    // remain selectable. `RuntimeHidden` is rejected by both display visibility paths.
+    display_visible_in_mode(world, entity, false) || display_visible_in_mode(world, entity, true)
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -77,7 +84,7 @@ fn pick_target(
     let mut best_target = PickTarget::Scene(None);
 
     for (entity, _primitive, global) in world.query2::<Primitive, GlobalTransform>() {
-        if !display_visible_in_mode(world, entity, false) {
+        if !editor_pick_visible(world, entity) {
             continue;
         }
 
@@ -102,7 +109,7 @@ fn pick_target(
     for (entity, _model, global) in
         world.query2::<crate::gameplay::ModelRenderComponent, GlobalTransform>()
     {
-        if !display_visible_in_mode(world, entity, false) {
+        if !editor_pick_visible(world, entity) {
             continue;
         }
         let hit_t = world

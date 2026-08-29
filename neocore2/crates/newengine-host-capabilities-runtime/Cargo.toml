@@ -3,22 +3,19 @@ name = "newengine-host-capabilities-runtime"
 version = "0.1.0"
 edition = "2021"
 readme = "README.md"
-description = "Host-owned OS and hardware discovery for NewEngine PreInit"
+description = "Composition factory for single-purpose NewEngine host capability probes"
 
 [dependencies]
 abi_stable = "0.11"
 serde_json = "1"
 newengine-host-capabilities-api = { path = "../newengine-host-capabilities-api" }
+newengine-host-probe-environment = { path = "../newengine-host-probe-environment" }
+newengine-host-probe-platform-services = { path = "../newengine-host-probe-platform-services" }
+newengine-host-probe-cpu = { path = "../newengine-host-probe-cpu" }
+newengine-host-probe-memory = { path = "../newengine-host-probe-memory" }
+newengine-host-probe-storage = { path = "../newengine-host-probe-storage" }
+newengine-host-probe-gpu = { path = "../newengine-host-probe-gpu" }
+newengine-host-probe-display = { path = "../newengine-host-probe-display" }
+newengine-host-probe-input = { path = "../newengine-host-probe-input" }
+newengine-host-capability-policy = { path = "../newengine-host-capability-policy" }
 newengine-plugin-api = { path = "../newengine-plugin-api" }
-newengine-ulog-api = { path = "../newengine-ulog-api" }
-sysinfo = { version = "0.38.3", default-features = true }
-
-[target.'cfg(windows)'.dependencies]
-windows = { version = "0.62.2", features = [
-    "Win32_Foundation",
-    "Win32_Graphics_Dxgi",
-    "Win32_Graphics_Dxgi_Common",
-    "Win32_Graphics_Direct3D",
-    "Win32_Graphics_Direct3D12",
-    "Win32_UI_WindowsAndMessaging",
-] }

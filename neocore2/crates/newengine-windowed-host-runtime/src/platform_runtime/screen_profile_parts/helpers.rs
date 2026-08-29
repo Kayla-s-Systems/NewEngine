@@ -151,6 +151,7 @@ pub(super) fn dock_slot_label(slot: &str) -> &'static str {
         "left.scene_tree" => "Scene",
         "right.inspector" => "Inspector",
         "bottom.asset_browser" => "Assets",
+        "bottom.script_editor" => "Script",
         "bottom.import_queue" => "Import",
         "bottom.output_log" => "Log",
         "bottom.profiler_diagnostics" => "Diagnostics",

@@ -405,6 +405,12 @@ impl ScreenProfileRuntimeState {
                     layout.hovered_dock_slot == Some("bottom.asset_browser"),
                 ),
                 dock_state(
+                    "bottom.script_editor",
+                    layout.bottom_visible && !self.hidden_panels.contains("bottom.script_editor"),
+                    false,
+                    layout.hovered_dock_slot == Some("bottom.script_editor"),
+                ),
+                dock_state(
                     "bottom.import_queue",
                     layout.bottom_visible,
                     false,
@@ -484,6 +490,7 @@ impl ScreenProfileRuntimeState {
         if asset_document_selected {
             self.append_right_edit_window(resources, &mut node, &layout);
         }
+        self.append_script_editor_panel(&mut node, &layout);
         sort_components_by_layout_y(&mut node.components);
         publish_screen_node_tree_request(&UiNodeTreeRequest::from_surface_node(
             &node,

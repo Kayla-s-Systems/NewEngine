@@ -6,6 +6,8 @@ readme = "README.md"
 description = "Gateway-backed model construction runtime for NewEngine"
 
 [dependencies]
+newengine-plugin-host = { path = "../newengine-plugin-host" }
+newengine-runtime-unit-api = { path = "../newengine-runtime-unit-api" }
 newengine-asset-format-nef8 = { path = "../newengine-asset-format-nef8" }
 abi_stable = "0.11"
 log = "0.4"
@@ -18,6 +20,7 @@ newengine-material-runtime = { path = "../newengine-material-runtime" }
 newengine-materials = { path = "../newengine-materials", features = ["serde"] }
 newengine-model-collision-runtime = { path = "../newengine-model-collision-runtime" }
 newengine-model-domain-api = { path = "../newengine-model-domain-api" }
+newengine-model-client = { path = "../newengine-model-client" }
 newengine-model-import-obj = { path = "../newengine-model-import-obj" }
 newengine-model-skeleton-api = { path = "../newengine-model-skeleton-api" }
 newengine-plugin-api = { path = "../newengine-plugin-api" }

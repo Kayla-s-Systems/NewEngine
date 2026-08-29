@@ -201,8 +201,9 @@ pub(super) fn scan_plugin_id(
 fn scan_dynamic_lib(path: &Path) -> Result<ScannedDynlib, String> {
     let file_name = file_name_only(path);
     let manifest = read_verified_manifest(path)?;
+    let metadata = &manifest.manifest;
 
-    if let Some(platform) = manifest.platform_runtime.as_ref() {
+    if let Some(platform) = metadata.platform_runtime.as_ref() {
         return Ok(ScannedDynlib {
             path: path.to_path_buf(),
             file_name,
@@ -216,7 +217,7 @@ fn scan_dynamic_lib(path: &Path) -> Result<ScannedDynlib, String> {
         });
     }
 
-    let signature = manifest
+    let signature = metadata
         .signature
         .as_ref()
         .map(|signature| {
@@ -233,7 +234,7 @@ fn scan_dynamic_lib(path: &Path) -> Result<ScannedDynlib, String> {
             )
         })
         .transpose()?;
-    let descriptor_v2 = manifest
+    let descriptor_v2 = metadata
         .descriptor
         .as_ref()
         .map(newengine_plugin_api::PluginDiscoveryDescriptorV1::to_descriptor_v2)
@@ -243,8 +244,8 @@ fn scan_dynamic_lib(path: &Path) -> Result<ScannedDynlib, String> {
         info: None,
         descriptor: None,
         descriptor_v2,
-        has_canonical_root: manifest.has_canonical_root,
-        has_legacy_root: manifest.has_legacy_root,
+        has_canonical_root: metadata.has_canonical_root,
+        has_legacy_root: metadata.has_legacy_root,
     };
 
     if let Some(kind) = build_scanned_plugin_kind(&probe) {
@@ -287,7 +288,7 @@ mod tests {
     use super::*;
     use newengine_plugin_api::{
         bootstrap_phase_to_u8, plugin_kind_to_u8, PluginBootstrapPhase, PluginDescriptorV2,
-        PluginDiscoveryDescriptorV1, PluginDiscoveryManifestV1, PluginDiscoverySignatureV1,
+        PluginDiscoveryDescriptorV1, PluginDiscoveryManifestV2, PluginDiscoverySignatureV1,
         PluginKind, PLUGIN_DISCOVERY_MANIFEST_SCHEMA_VERSION,
     };
     use sha2::{Digest, Sha256};
@@ -302,7 +303,7 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("northstar-targeted-discovery-{nonce}"));
         std::fs::create_dir_all(&dir).expect("temp dir");
 
-        let write_fixture = |file_name: &str, id: &str, bytes: &[u8], valid_hash: bool| {
+        let write_fixture = |file_name: &str, id: &str, bytes: &[u8]| {
             let dll = dir.join(file_name);
             std::fs::write(&dll, bytes).expect("fake dll");
             let descriptor = PluginDescriptorV2 {
@@ -313,15 +314,9 @@ mod tests {
                 capabilities: Vec::new().into(),
                 extension_json: "".into(),
             };
-            let manifest = PluginDiscoveryManifestV1 {
+            let manifest = PluginDiscoveryManifestV2 {
                 schema_version: PLUGIN_DISCOVERY_MANIFEST_SCHEMA_VERSION,
                 artifact_file: file_name.to_owned(),
-                artifact_size: bytes.len() as u64,
-                artifact_sha256: if valid_hash {
-                    format!("{:x}", Sha256::digest(bytes))
-                } else {
-                    "00".repeat(32)
-                },
                 signature: Some(PluginDiscoverySignatureV1 {
                     id: id.to_owned(),
                     name: id.to_owned(),
@@ -340,32 +335,18 @@ mod tests {
                 .expect("sidecar");
         };
 
-        write_fixture(
-            "target.dll",
-            "test.target.provider",
-            b"target-artifact",
-            true,
-        );
-        // A wrong SHA on a different provider proves targeted lookup does not read
-        // the unrelated artifact payload. Full inventory discovery would reject it.
+        write_fixture("target.dll", "test.target.provider", b"target-artifact");
+        // Targeted lookup reads only the unrelated provider sidecar; its payload is not
+        // fingerprinted because the provider id does not match the request.
         write_fixture(
             "unrelated.dll",
             "test.unrelated.provider",
             b"unrelated-artifact",
-            false,
         );
 
         let graph =
             scan_plugin_id(&dir, "test.target.provider").expect("targeted discovery succeeds");
         assert_eq!(graph.items.len(), 1);
-        assert!(
-            graph
-                .scan_errors
-                .iter()
-                .all(|error| !error.contains("SHA-256 mismatch")),
-            "unrelated artifact must not be SHA-verified: {:?}",
-            graph.scan_errors
-        );
         match &graph.items[0].kind {
             ScannedDynlibKind::Plugin { id, .. } => assert_eq!(id, "test.target.provider"),
             other => panic!("expected plugin, got {other:?}"),
@@ -375,12 +356,12 @@ mod tests {
     }
 
     #[test]
-    fn targeted_discovery_rejects_invalid_matching_artifact() {
+    fn scan_captures_artifact_fingerprint_in_memory() {
         let nonce = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("clock")
             .as_nanos();
-        let dir = std::env::temp_dir().join(format!("northstar-targeted-invalid-{nonce}"));
+        let dir = std::env::temp_dir().join(format!("northstar-scan-fingerprint-{nonce}"));
         std::fs::create_dir_all(&dir).expect("temp dir");
         let dll = dir.join("target.dll");
         let bytes = b"target-artifact";
@@ -393,11 +374,9 @@ mod tests {
             capabilities: Vec::new().into(),
             extension_json: "".into(),
         };
-        let manifest = PluginDiscoveryManifestV1 {
+        let manifest = PluginDiscoveryManifestV2 {
             schema_version: PLUGIN_DISCOVERY_MANIFEST_SCHEMA_VERSION,
             artifact_file: "target.dll".to_owned(),
-            artifact_size: bytes.len() as u64,
-            artifact_sha256: "00".repeat(32),
             signature: Some(PluginDiscoverySignatureV1 {
                 id: "test.target.provider".to_owned(),
                 name: "Target".to_owned(),
@@ -410,13 +389,20 @@ mod tests {
             has_canonical_root: true,
             has_legacy_root: false,
         };
-        let sidecar = dll.with_extension(newengine_plugin_api::PLUGIN_DISCOVERY_MANIFEST_SUFFIX);
-        std::fs::write(sidecar, serde_json::to_vec_pretty(&manifest).expect("json"))
-            .expect("sidecar");
+        std::fs::write(
+            dll.with_extension(newengine_plugin_api::PLUGIN_DISCOVERY_MANIFEST_SUFFIX),
+            serde_json::to_vec_pretty(&manifest).expect("json"),
+        )
+        .expect("sidecar");
 
-        let error = scan_plugin_id(&dir, "test.target.provider")
-            .expect_err("matching artifact with invalid SHA must fail");
-        assert!(error.message.contains("SHA-256 mismatch"));
+        let scanned = scan_dynamic_lib(&dll).expect("scan");
+        let snapshot = scanned.discovery_manifest.expect("verified snapshot");
+        assert_eq!(snapshot.manifest, manifest);
+        assert_eq!(snapshot.artifact_size, bytes.len() as u64);
+        assert_eq!(
+            snapshot.artifact_sha256,
+            format!("{:x}", Sha256::digest(bytes))
+        );
 
         let _ = std::fs::remove_dir_all(dir);
     }
@@ -443,11 +429,9 @@ mod tests {
             capabilities: Vec::new().into(),
             extension_json: "".into(),
         };
-        let manifest = PluginDiscoveryManifestV1 {
+        let manifest = PluginDiscoveryManifestV2 {
             schema_version: PLUGIN_DISCOVERY_MANIFEST_SCHEMA_VERSION,
             artifact_file: "fake-provider.dll".to_owned(),
-            artifact_size: bytes.len() as u64,
-            artifact_sha256: format!("{:x}", Sha256::digest(bytes)),
             signature: Some(PluginDiscoverySignatureV1 {
                 id: "test.fake.provider".to_owned(),
                 name: "Fake Provider".to_owned(),
@@ -468,7 +452,13 @@ mod tests {
         .expect("sidecar");
 
         let scanned = scan_dynamic_lib(&dll).expect("sidecar-only discovery must succeed");
-        assert_eq!(scanned.discovery_manifest.as_ref(), Some(&manifest));
+        assert_eq!(
+            scanned
+                .discovery_manifest
+                .as_ref()
+                .map(|snapshot| &snapshot.manifest),
+            Some(&manifest)
+        );
         match scanned.kind {
             ScannedDynlibKind::Plugin { id, version, .. } => {
                 assert_eq!(id, "test.fake.provider");

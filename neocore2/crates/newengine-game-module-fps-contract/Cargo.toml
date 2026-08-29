@@ -1,0 +1,9 @@
+[package]
+name = "newengine-game-module-fps-contract"
+version = "0.1.0"
+edition = "2021"
+description = "Contract-only FPS game-module descriptor for North Star"
+
+[dependencies]
+newengine-game-module-api = { path = "../newengine-game-module-api" }
+newengine-service-api = { path = "../newengine-service-api" }

@@ -1,0 +1,32 @@
+[package]
+name = "newengine-fps-content-runtime"
+version = "0.1.0"
+edition = "2021"
+description = "Project-authored FPS content and policy bridge"
+license = "Proprietary"
+
+[features]
+default = []
+test-support = ["newengine-item-assets-runtime/test-support"]
+
+[dependencies]
+serde_json = "1"
+newengine-engine-runtime = { path = "../newengine-engine-runtime" }
+newengine-fps-character-runtime = { path = "../newengine-fps-character-runtime" }
+newengine-game-data = { path = "../newengine-game-data" }
+newengine-gameplay-fps-api = { path = "../newengine-gameplay-fps-api" }
+newengine-gameplay-script-api = { path = "../newengine-gameplay-script-api" }
+newengine-gameplay-script-runtime = { path = "../newengine-gameplay-script-runtime" }
+newengine-item-assets-runtime = { path = "../newengine-item-assets-runtime" }
+newengine-ulog-api = { path = "../newengine-ulog-api" }
+
+[[test]]
+name = "inventory_integration"
+path = "tests/inventory_integration.rs"
+required-features = ["test-support"]
+
+[dev-dependencies]
+newengine-ecs = { path = "../newengine-ecs" }
+newengine-math = { path = "../newengine-math" }
+newengine-primitives = { path = "../newengine-primitives" }
+newengine-sim = { path = "../newengine-sim" }

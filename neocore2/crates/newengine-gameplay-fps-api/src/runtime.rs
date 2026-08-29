@@ -1,10 +1,45 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
+/// Authored spring/K response model carried into the FPS runtime.
+///
+/// This is a data contract only. In particular, `max_accel = -1` is preserved verbatim; the
+/// original native sentinel semantics are intentionally not guessed here.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct FpsMotionResponseTuning {
+    pub velocity_spring_const: f32,
+    pub velocity_spring_const_decel: f32,
+    pub velocity_spring_dampen_ratio: f32,
+    pub speed_spring_const: f32,
+    pub max_accel: f32,
+    pub trans_clamp_dist: f32,
+}
+
+impl FpsMotionResponseTuning {
+    #[inline]
+    pub fn sanitized(self) -> Option<Self> {
+        let values = [
+            self.velocity_spring_const,
+            self.velocity_spring_const_decel,
+            self.velocity_spring_dampen_ratio,
+            self.speed_spring_const,
+            self.max_accel,
+            self.trans_clamp_dist,
+        ];
+        if values.iter().any(|value| !value.is_finite()) {
+            return None;
+        }
+        // Preserve authored values exactly. The original domain/sentinel semantics are not fully
+        // recovered yet, so this layer deliberately does not invent numeric bounds.
+        Some(self)
+    }
+}
+
 /// Declarative FPS runtime tuning.
 ///
 /// The scene/profile owns these values; runtime systems only consume the resource.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct FpsPlayerTuning {
+    pub motion_response: Option<FpsMotionResponseTuning>,
     pub body_radius: f32,
     pub body_half_height: f32,
     pub crouched_body_half_height: f32,
@@ -21,6 +56,9 @@ pub struct FpsPlayerTuning {
     pub max_slope_radians: f32,
     pub footstep_stride: f32,
     pub landing_speed_threshold: f32,
+    pub locomotion_min_horizontal_speed: f32,
+    pub ground_probe_max_upward_velocity: f32,
+    pub landing_min_airborne_seconds: f32,
 }
 
 impl Default for FpsPlayerTuning {
@@ -29,6 +67,7 @@ impl Default for FpsPlayerTuning {
         // Mechanics-safe schema defaults only. Product/player tuning is authored by the
         // active project and installed as `FpsDemoRules` during scene bootstrap.
         Self {
+            motion_response: None,
             body_radius: 0.35,
             body_half_height: 0.55,
             crouched_body_half_height: 0.30,
@@ -45,6 +84,9 @@ impl Default for FpsPlayerTuning {
             max_slope_radians: core::f32::consts::FRAC_PI_4,
             footstep_stride: 1.4,
             landing_speed_threshold: 4.0,
+            locomotion_min_horizontal_speed: 0.15,
+            ground_probe_max_upward_velocity: 0.1,
+            landing_min_airborne_seconds: 0.05,
         }
     }
 }
@@ -53,6 +95,9 @@ impl FpsPlayerTuning {
     #[inline]
     pub fn sanitized(self) -> Self {
         Self {
+            motion_response: self
+                .motion_response
+                .and_then(FpsMotionResponseTuning::sanitized),
             body_radius: self.body_radius.clamp(0.05, 5.0),
             body_half_height: self.body_half_height.clamp(0.05, 8.0),
             crouched_body_half_height: self
@@ -73,6 +118,11 @@ impl FpsPlayerTuning {
                 .clamp(0.0, core::f32::consts::FRAC_PI_2),
             footstep_stride: self.footstep_stride.clamp(0.25, 10.0),
             landing_speed_threshold: self.landing_speed_threshold.clamp(0.0, 100.0),
+            locomotion_min_horizontal_speed: self.locomotion_min_horizontal_speed.clamp(0.0, 20.0),
+            ground_probe_max_upward_velocity: self
+                .ground_probe_max_upward_velocity
+                .clamp(-20.0, 20.0),
+            landing_min_airborne_seconds: self.landing_min_airborne_seconds.clamp(0.0, 5.0),
         }
     }
 }
@@ -244,5 +294,48 @@ impl Default for FpsDemoState {
     #[inline]
     fn default() -> Self {
         Self::new(0)
+    }
+}
+
+#[cfg(test)]
+mod motion_response_tests {
+    use super::*;
+
+    #[test]
+    fn authored_motion_response_survives_runtime_sanitization_verbatim() {
+        let authored = FpsMotionResponseTuning {
+            velocity_spring_const: 7.0,
+            velocity_spring_const_decel: 10.0,
+            velocity_spring_dampen_ratio: 1.0,
+            speed_spring_const: 4.6,
+            max_accel: -1.0,
+            trans_clamp_dist: 0.01,
+        };
+        assert_eq!(authored.sanitized(), Some(authored));
+
+        let tuning = FpsPlayerTuning {
+            motion_response: Some(authored),
+            ..FpsPlayerTuning::default()
+        }
+        .sanitized();
+        assert_eq!(tuning.motion_response, Some(authored));
+    }
+
+    #[test]
+    fn non_finite_motion_response_is_rejected_without_rewriting_other_values() {
+        let invalid = FpsMotionResponseTuning {
+            velocity_spring_const: 7.0,
+            velocity_spring_const_decel: 10.0,
+            velocity_spring_dampen_ratio: 1.0,
+            speed_spring_const: 4.6,
+            max_accel: f32::NAN,
+            trans_clamp_dist: 0.01,
+        };
+        assert_eq!(invalid.sanitized(), None);
+    }
+
+    #[test]
+    fn generic_runtime_does_not_invent_a_motion_response() {
+        assert_eq!(FpsPlayerTuning::default().motion_response, None);
     }
 }

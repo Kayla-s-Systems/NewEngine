@@ -6,6 +6,7 @@ readme = "README.md"
 description = "Service-backed physics capability runtime adapter for NewEngine"
 
 [dependencies]
+newengine-runtime-unit-api = { path = "../newengine-runtime-unit-api" }
 newengine-service-api = { path = "../newengine-service-api" }
 newengine-core = { path = "../newengine-core", default-features = false, features = ["physics-api"] }
 newengine-plugin-api = { path = "../newengine-plugin-api" }

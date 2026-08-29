@@ -111,6 +111,17 @@ pub trait RenderApi: Send {
     fn set_debug_text(&mut self, _text: String) {}
 
     fn end_frame(&mut self) -> EngineResult<()>;
+
+    /// Aborts the currently opened backend frame without queue submission.
+    ///
+    /// The default implementation preserves compatibility for in-process/null
+    /// backends that only record CPU commands. Native backends must override this
+    /// when begin_frame acquires presentation or synchronization resources.
+    #[inline]
+    fn abort_frame(&mut self) -> EngineResult<()> {
+        self.discard_recorded_commands()
+    }
+
     fn resize(&mut self, width: u32, height: u32) -> EngineResult<()>;
 
     fn create_render_target(&mut self, desc: RenderTargetDesc) -> EngineResult<RenderTargetId>;
@@ -135,6 +146,7 @@ pub trait RenderApi: Send {
     fn destroy_shader(&mut self, id: ShaderId);
 
     fn create_pipeline(&mut self, desc: PipelineDesc) -> EngineResult<PipelineId>;
+    fn create_compute_pipeline(&mut self, desc: ComputePipelineDesc) -> EngineResult<PipelineId>;
     fn destroy_pipeline(&mut self, id: PipelineId);
 
     fn create_bind_group_layout(
@@ -157,6 +169,7 @@ pub trait RenderApi: Send {
 
     fn draw(&mut self, args: DrawArgs) -> EngineResult<()>;
     fn draw_indexed(&mut self, args: DrawIndexedArgs) -> EngineResult<()>;
+    fn dispatch(&mut self, args: DispatchArgs) -> EngineResult<()>;
 
     /// Selects the render graph phase that subsequent recorded commands belong to.
     /// Backends may use this to route command recording into phase buckets.

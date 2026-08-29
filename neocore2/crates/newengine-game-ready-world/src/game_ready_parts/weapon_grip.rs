@@ -55,6 +55,56 @@ pub(crate) fn weapon_root_from_right_palm(
     })
 }
 
+/// Resolve the physical firing-grip anchor from an authored character palm frame without changing
+/// weapon orientation. This is valid only after an authored long-gun hand pose has been applied.
+pub(crate) fn weapon_handle_anchor_from_right_palm(
+    presentation: &WeaponPresentationDefinition,
+    right_palm: Mat4,
+) -> Option<Vec3> {
+    let presentation = presentation.clone().sanitized();
+    if !presentation.enabled {
+        return None;
+    }
+    let (scale, rotation, position) = right_palm.to_scale_rotation_translation();
+    if !scale.is_finite()
+        || scale.x <= 0.0
+        || scale.y <= 0.0
+        || scale.z <= 0.0
+        || !rotation.is_finite()
+        || !position.is_finite()
+    {
+        return None;
+    }
+    let anchor =
+        position + rotation.normalize_or_identity() * v3(presentation.right_palm_to_handle);
+    anchor.is_finite().then_some(anchor)
+}
+
+/// Resolve the physical support-grip anchor from an authored character palm frame. The support
+/// hand may influence weapon orientation, but never owns weapon translation.
+pub(crate) fn weapon_left_grip_anchor_from_left_palm(
+    presentation: &WeaponPresentationDefinition,
+    left_palm: Mat4,
+) -> Option<Vec3> {
+    let presentation = presentation.clone().sanitized();
+    if !presentation.enabled {
+        return None;
+    }
+    let (scale, rotation, position) = left_palm.to_scale_rotation_translation();
+    if !scale.is_finite()
+        || scale.x <= 0.0
+        || scale.y <= 0.0
+        || scale.z <= 0.0
+        || !rotation.is_finite()
+        || !position.is_finite()
+    {
+        return None;
+    }
+    let anchor =
+        position + rotation.normalize_or_identity() * v3(presentation.ready_left_palm_to_left_grip);
+    anchor.is_finite().then_some(anchor)
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct WeaponReadySolveContract {
     pub root: WeaponRootTransform,
@@ -149,8 +199,14 @@ pub(crate) fn weapon_ready_solve_contract_presented(
     let up_axis = forward_axis.cross(left_axis).normalize_or_zero();
     let body_rotation =
         Quat::from_mat3(&Mat3::from_cols(left_axis, up_axis, forward_axis)).normalize_or_identity();
-    let base_rotation =
-        (body_rotation * q4(presentation.ready_body_to_root_rotation)).normalize_or_identity();
+    // `ready_body_to_root_rotation` is authored in the weapon's native rig basis. Complete the
+    // same native->runtime conversion used by palm-owned attachment before any contacts, ADS or
+    // muzzle projection are evaluated. Omitting this term made native rifles with -Y-up appear
+    // 180 degrees rolled around the barrel in torso-owned ReadyHold.
+    let base_rotation = (body_rotation
+        * q4(presentation.ready_body_to_root_rotation)
+        * q4(presentation.native_rig_to_runtime_basis))
+    .normalize_or_identity();
     let local_sight_axis = (v3(presentation.ads_front_sight_from_handle)
         - v3(presentation.ads_rear_sight_from_handle))
     .normalize_or_zero();
@@ -240,10 +296,6 @@ pub(crate) fn weapon_ready_contract_with_contacts(
         0.0
     };
 
-    let Some(handle_anchor) = handle_anchor.filter(|anchor| anchor.is_finite()) else {
-        return Some(contract);
-    };
-
     fn rotate_about_handle(
         presentation: &WeaponPresentationDefinition,
         contract: &mut WeaponReadySolveContract,
@@ -272,7 +324,27 @@ pub(crate) fn weapon_ready_contract_with_contacts(
         Some(Quat::IDENTITY.slerp(full, t).normalize_or_identity())
     }
 
-    // First put the weapon handle exactly on the authored firing-hand contact.
+    let Some(handle_anchor) = handle_anchor.filter(|anchor| anchor.is_finite()) else {
+        // Anatomical ReadyHold owns translation when no explicit firing-hand contact is supplied.
+        // Obstruction may still pivot the barrel around that authored handle, but relaxed hands
+        // are observations only and must never drag the weapon root away from the torso solve.
+        if obstruction_alpha > 0.0 {
+            let handle = weapon_handle_position(&presentation, contract.root);
+            let local_right = (contract.root.rotation * Vec3::X).normalize_or_zero();
+            if local_right.length_squared() > 1.0e-8 {
+                let delta =
+                    Quat::from_axis_angle(local_right, -50.0_f32.to_radians() * obstruction_alpha);
+                rotate_about_handle(&presentation, &mut contract, delta, handle);
+            }
+        }
+        return (contract.root.position.is_finite()
+            && contract.root.rotation.is_finite()
+            && contract.stock_contact.is_finite())
+        .then_some(contract);
+    };
+
+    // Explicit contact mode is reserved for presentation paths where an authored hand socket is
+    // intentionally the kinematic owner (for example a dedicated manipulation/reload contract).
     contract.root.position =
         handle_anchor - contract.root.rotation * v3(presentation.handle_from_root);
     contract.stock_contact =
@@ -324,6 +396,53 @@ pub(crate) fn weapon_ready_contract_with_contacts(
     .then_some(contract)
 }
 
+#[inline]
+fn quat_from_rotation_vector(rotation_vector: Vec3) -> Quat {
+    if !rotation_vector.is_finite() {
+        return Quat::IDENTITY;
+    }
+    let angle = rotation_vector.length();
+    if !angle.is_finite() || angle <= 1.0e-7 {
+        return Quat::IDENTITY;
+    }
+    Quat::from_axis_angle(rotation_vector / angle, angle).normalize_or_identity()
+}
+
+/// Applies a small local-space secondary rotation around the firing-hand handle. The handle is an
+/// exact kinematic pivot; only the long-gun orientation is allowed to lag.
+pub(crate) fn weapon_root_with_secondary_rotation(
+    presentation: &WeaponPresentationDefinition,
+    root: WeaponRootTransform,
+    rotation_offset_local: Vec3,
+) -> Option<WeaponRootTransform> {
+    if !rotation_offset_local.is_finite() {
+        return None;
+    }
+    let presentation = presentation.clone().sanitized();
+    let handle = weapon_handle_position(&presentation, root);
+    let rotation =
+        (root.rotation * quat_from_rotation_vector(rotation_offset_local)).normalize_or_identity();
+    let position = handle - rotation * v3(presentation.handle_from_root);
+    (position.is_finite() && rotation.is_finite())
+        .then_some(WeaponRootTransform { position, rotation })
+}
+
+/// Applies the same secondary rotation to the ReadyHold contract so support-hand IK consumes the
+/// same spring state as the rendered weapon (one presentation frame behind by design).
+pub(crate) fn weapon_ready_contract_with_secondary_rotation(
+    presentation: &WeaponPresentationDefinition,
+    mut contract: WeaponReadySolveContract,
+    rotation_offset_local: Vec3,
+) -> Option<WeaponReadySolveContract> {
+    contract.root =
+        weapon_root_with_secondary_rotation(presentation, contract.root, rotation_offset_local)?;
+    let presentation = presentation.clone().sanitized();
+    let handle = weapon_handle_position(&presentation, contract.root);
+    contract.stock_contact =
+        handle + contract.root.rotation * v3(presentation.stock_contact_from_handle);
+    contract.stock_contact.is_finite().then_some(contract)
+}
+
 pub(crate) fn weapon_root_from_first_person_view(
     presentation: &WeaponPresentationDefinition,
     camera_position: Vec3,
@@ -344,8 +463,30 @@ pub(crate) fn weapon_root_from_first_person_view(
     if camera_forward.length_squared() <= 1.0e-8 {
         return None;
     }
-    let base_rotation =
-        (view_rotation * q4(presentation.first_person_view_basis)).normalize_or_identity();
+    // First-person has no independent authored weapon-orientation correction. Build a stable
+    // camera mount for the canonical weapon frame (+Y up, +Z forward), then compose the same
+    // native-rig -> runtime basis used by third-person, grip, muzzle and ADS.
+    let camera_up = (view_rotation * Vec3::Y).normalize_or_zero();
+    if camera_up.length_squared() <= 1.0e-8 {
+        return None;
+    }
+    let canonical_right = camera_up.cross(camera_forward).normalize_or_zero();
+    if canonical_right.length_squared() <= 1.0e-8 {
+        return None;
+    }
+    let canonical_up = camera_forward.cross(canonical_right).normalize_or_zero();
+    if canonical_up.length_squared() <= 1.0e-8 {
+        return None;
+    }
+    let camera_mount = Quat::from_mat3(&Mat3::from_cols(
+        canonical_right,
+        canonical_up,
+        camera_forward,
+    ))
+    .normalize_or_identity();
+    let native_to_runtime = q4(presentation.native_rig_to_runtime_basis);
+    let runtime_to_native = native_to_runtime.inverse();
+    let base_rotation = (camera_mount * native_to_runtime).normalize_or_identity();
     let hip_handle_position =
         camera_position + view_rotation * v3(presentation.first_person_hip_handle_offset);
     let hip_target = camera_position + camera_forward * presentation.first_person_hip_convergence_m;
@@ -353,7 +494,8 @@ pub(crate) fn weapon_root_from_first_person_view(
     if hip_forward.length_squared() <= 1.0e-8 {
         return None;
     }
-    let hip_base_forward = (base_rotation * Vec3::Z).normalize_or_zero();
+    let native_forward = (runtime_to_native * Vec3::Z).normalize_or_zero();
+    let hip_base_forward = (base_rotation * native_forward).normalize_or_zero();
     let hip_rotation = (Quat::from_rotation_arc(hip_base_forward, hip_forward) * base_rotation)
         .normalize_or_identity();
     let local_ads_axis = (v3(presentation.ads_front_sight_from_handle)
@@ -463,7 +605,6 @@ mod tests {
             ready_right_palm_to_weapon: [-0.656, 0.722, 0.174, 0.133],
             ready_left_palm_to_weapon: [-0.023, -0.459, -0.303, 0.835],
             right_palm_to_handle: [0.019, 0.033, -0.083],
-            first_person_view_basis: [1.0, 0.0, 0.0, 0.0],
             first_person_hip_handle_offset: [0.205, -0.205, -0.58],
             ads_rear_sight_from_handle: [0.0, -0.058, 0.235],
             ads_front_sight_from_handle: [0.0, -0.070, 0.640],
@@ -491,17 +632,32 @@ mod tests {
         let left = Mat4::from_translation(Vec3::new(0.20, 1.48, 0.02));
         let contract = weapon_ready_solve_contract(&p, chest, right, left).expect("contract");
         let anchor = Vec3::new(-0.31, 1.36, 0.41);
-        let anchored = weapon_ready_contract_with_contacts(
-            &p,
-            contract,
-            Some(anchor),
-            None,
-            0.0,
-            0.0,
-        )
-        .expect("anchored contract");
+        let anchored =
+            weapon_ready_contract_with_contacts(&p, contract, Some(anchor), None, 0.0, 0.0)
+                .expect("anchored contract");
         let handle = weapon_handle_position(&p, anchored.root);
         assert!((handle - anchor).length() < 1.0e-5);
+    }
+
+    #[test]
+    fn readyhold_applies_native_rig_to_runtime_basis_exactly_once() {
+        let mut p = fixture();
+        p.ready_body_to_root_rotation = [0.0, 0.0, 0.0, 1.0];
+        p.native_rig_to_runtime_basis = [0.0, 0.0, 1.0, 0.0];
+        p.ready_shoulder_pocket_offset = [0.0, 0.0, 0.0];
+        p.ads_shoulder_pocket_offset = [0.0, 0.0, 0.0];
+
+        let chest = Mat4::from_translation(Vec3::new(0.0, 1.20, 0.0));
+        let right = Mat4::from_translation(Vec3::new(-0.20, 1.45, 0.0));
+        let left = Mat4::from_translation(Vec3::new(0.20, 1.45, 0.0));
+        let contract = weapon_ready_solve_contract(&p, chest, right, left).expect("ReadyHold");
+
+        let forward = (contract.root.rotation * Vec3::Z).normalize_or_zero();
+        let up = (contract.root.rotation * Vec3::Y).normalize_or_zero();
+        let right_axis = (contract.root.rotation * Vec3::X).normalize_or_zero();
+        assert!(forward.dot(Vec3::Z) > 0.9999);
+        assert!(up.dot(-Vec3::Y) > 0.9999);
+        assert!(right_axis.dot(-Vec3::X) > 0.9999);
     }
 
     #[test]
@@ -530,6 +686,32 @@ mod tests {
     }
 
     #[test]
+    fn secondary_long_gun_rotation_preserves_exact_firing_handle_contact() {
+        let p = fixture();
+        let root = WeaponRootTransform {
+            position: Vec3::new(-0.2, 1.3, 0.1),
+            rotation: Quat::from_rotation_y(0.35),
+        };
+        let handle_before = weapon_handle_position(&p, root);
+        let dynamic = weapon_root_with_secondary_rotation(
+            &p,
+            root,
+            Vec3::new(
+                2.5_f32.to_radians(),
+                -3.0_f32.to_radians(),
+                1.0_f32.to_radians(),
+            ),
+        )
+        .expect("secondary root");
+        let handle_after = weapon_handle_position(&p, dynamic);
+        assert!(
+            (handle_after - handle_before).length() < 1.0e-6,
+            "secondary dynamics may rotate around the firing hand but may never detach from it"
+        );
+        assert!(root.rotation.dot(dynamic.rotation).abs() < 0.999_999);
+    }
+
+    #[test]
     fn aim_blocked_pivots_barrel_without_translating_firing_handle() {
         let p = fixture();
         let chest = Mat4::from_translation(Vec3::new(0.0, 1.25, 0.0));
@@ -553,6 +735,35 @@ mod tests {
             clear_forward.dot(blocked_forward) < 0.98,
             "aim-blocked must visibly pivot the barrel"
         );
+    }
+
+    #[test]
+    fn first_person_mount_preserves_canonical_weapon_up() {
+        let mut p = fixture();
+        p.native_rig_to_runtime_basis = [0.0, 0.0, 0.0, 1.0];
+        let camera = Vec3::new(0.0, 1.7, 0.0);
+        let view = Quat::IDENTITY;
+        let root = weapon_root_from_first_person_view(&p, camera, view, 0.0).unwrap();
+        let forward = (root.rotation * Vec3::Z).normalize_or_zero();
+        let up = (root.rotation * Vec3::Y).normalize_or_zero();
+        assert!(forward.dot(-Vec3::Z) > 0.999);
+        assert!(up.dot(Vec3::Y) > 0.999);
+    }
+
+    #[test]
+    fn first_person_mount_tracks_camera_up_without_roll_inversion() {
+        let mut p = fixture();
+        p.native_rig_to_runtime_basis = [0.0, 0.0, 0.0, 1.0];
+        let camera = Vec3::new(0.0, 1.7, 0.0);
+        let view =
+            (Quat::from_rotation_y(0.43) * Quat::from_rotation_x(-0.18)).normalize_or_identity();
+        let root = weapon_root_from_first_person_view(&p, camera, view, 0.0).unwrap();
+        let expected_forward = (view * -Vec3::Z).normalize_or_zero();
+        let expected_up = (view * Vec3::Y).normalize_or_zero();
+        let forward = (root.rotation * Vec3::Z).normalize_or_zero();
+        let up = (root.rotation * Vec3::Y).normalize_or_zero();
+        assert!(forward.dot(expected_forward) > 0.999);
+        assert!(up.dot(expected_up) > 0.999);
     }
 
     #[test]

@@ -6,6 +6,8 @@ readme = "README.md"
 description = "Runtime-hosted runtime definitions gateway for NewEngine .ytyp Definition Entry dictionaries"
 
 [dependencies]
+newengine-plugin-host = { path = "../newengine-plugin-host" }
+newengine-runtime-unit-api = { path = "../newengine-runtime-unit-api" }
 abi_stable = "0.11"
 log = "0.4"
 serde = { version = "1.0.228", features = ["derive"] }

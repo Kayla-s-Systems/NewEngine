@@ -1,0 +1,18 @@
+[package]
+name = "newengine-scene-authoring-runtime"
+version = "0.1.0"
+edition = "2021"
+description = "Focused authored scene edit journal and project-save runtime for NewEngine"
+license = "Proprietary"
+
+[dependencies]
+parking_lot = "0.12"
+serde_json = "1"
+newengine-assets-api = { path = "../newengine-assets-api" }
+newengine-core = { path = "../newengine-core" }
+newengine-ecs = { path = "../newengine-ecs" }
+newengine-math = { path = "../newengine-math" }
+newengine-scene-authoring-api = { path = "../newengine-scene-authoring-api" }
+newengine-transform = { path = "../newengine-transform", features = ["ecs"], default-features = false }
+newengine-ulog-api = { path = "../newengine-ulog-api" }
+newengine-world-authoring-api = { path = "../newengine-world-authoring-api" }

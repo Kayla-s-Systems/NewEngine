@@ -45,7 +45,7 @@ pub(in super::super) fn sanitize_mission_pickup_spec(
     Some(GameReadyMissionPickupSpec {
         id,
         item: (!item.is_empty()).then_some(item),
-        quantity: raw.quantity.max(1).min(10_000),
+        quantity: raw.quantity.clamp(1, 10_000),
         auto_equip: raw.auto_equip,
         position: arr3(sanitize_array3_finite(raw.position, [0.0, 0.0, 0.0])),
         rotation_ypr: arr3(sanitize_array3_finite(raw.rotation_ypr, [0.0, 0.0, 0.0])),

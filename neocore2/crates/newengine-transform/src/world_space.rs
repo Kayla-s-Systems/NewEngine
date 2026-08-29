@@ -80,6 +80,15 @@ pub fn read_entity_world_pose(world: &World, id: EntityId) -> Option<(Vec3, Quat
     read_entity_world_pose_local_chain(world, id)
 }
 
+/// Reads the exact world matrix by composing local transforms along the `Parent` chain.
+///
+/// Unlike `GlobalTransform`, this does not depend on derived propagation having run for the current
+/// frame, so editor manipulations of parented entities can consume same-frame parent changes.
+#[inline]
+pub fn read_entity_world_matrix_local_chain(world: &World, id: EntityId) -> Option<Mat4> {
+    world_matrix_from_local_chain(world, id)
+}
+
 /// Reads an entity world pose by composing local transforms along the `Parent` chain.
 ///
 /// This function does **not** depend on derived propagation state (`GlobalTransform`) and is

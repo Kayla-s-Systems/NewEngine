@@ -1,0 +1,11 @@
+[package]
+name = "newengine-vfx-api"
+version = "0.1.0"
+edition = "2021"
+description = "Provider-neutral VFX contracts for North Star Engine"
+license = "Proprietary"
+
+[dependencies]
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.149"
+newengine-entity-api = { path = "../newengine-entity-api" }

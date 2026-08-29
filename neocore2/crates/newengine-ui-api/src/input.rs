@@ -186,6 +186,26 @@ impl UiInputCaptureState {
         }
     }
 
+    /// Exclusive non-pausing UI input ownership.
+    ///
+    /// This gates player camera/navigation and gameplay movement while leaving
+    /// `modal=false`, so consumers must not interpret this capture as a request
+    /// to pause simulation. Developer consoles and command palettes use this
+    /// contract: input is exclusive, world time keeps advancing.
+    #[inline]
+    pub fn exclusive(surface_id: impl Into<String>, reason: impl Into<String>) -> Self {
+        Self {
+            sampling_alive: true,
+            camera_navigation_gated: true,
+            gameplay_movement_gated: true,
+            modal: false,
+            draw_refresh_requested: true,
+            reason: reason.into(),
+            surfaces: vec![surface_id.into()],
+            contributors: Vec::new(),
+        }
+    }
+
     #[inline]
     pub fn requests_capture(&self) -> bool {
         self.modal || self.camera_navigation_gated || self.gameplay_movement_gated
@@ -267,4 +287,21 @@ impl UiInputFrame {
 /// Canonical keyboard ids consumed by editor/UI code.
 pub mod keys {
     pub use newengine_input_api::key_code::*;
+}
+
+#[cfg(test)]
+mod capture_contract_tests {
+    use super::*;
+
+    #[test]
+    fn exclusive_capture_gates_input_without_becoming_modal() {
+        let capture = UiInputCaptureState::exclusive("engine.console.overlay", "console");
+        assert!(capture.sampling_alive);
+        assert!(capture.camera_navigation_gated);
+        assert!(capture.gameplay_movement_gated);
+        assert!(!capture.modal);
+        assert!(capture.requests_capture());
+        assert!(capture.draw_refresh_requested);
+        assert_eq!(capture.surfaces, ["engine.console.overlay"]);
+    }
 }

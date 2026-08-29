@@ -145,7 +145,7 @@ pub(super) fn spawn_runtime_ydd_prefab_instance(
         if let Some(t) = world.get_mut_tracked::<Transform>(entity) {
             t.rotation = yaw;
         }
-        let _ = world.insert(entity, foliage_runtime.clone());
+        let _ = world.insert(entity, *foliage_runtime);
     }
 }
 
@@ -363,7 +363,7 @@ pub(crate) fn spawn_foliage_prefabs(
     };
 
     if !foliage.settings.canonical_path.is_empty() {
-        let gateway = newengine_model_runtime::ModelGatewayClient::new(
+        let gateway = newengine_model_client::ModelGatewayClient::new(
             newengine_plugin_host::default_host_api(),
         );
         let request = newengine_model_domain_api::FoliageImportRequestV1 {
@@ -398,7 +398,7 @@ pub(crate) fn spawn_foliage_prefabs(
     }
 
     if alternate_prefab.is_some() && !foliage.alternate_canonical_path.is_empty() {
-        let gateway = newengine_model_runtime::ModelGatewayClient::new(
+        let gateway = newengine_model_client::ModelGatewayClient::new(
             newengine_plugin_host::default_host_api(),
         );
         let mut alternate_settings = foliage.settings.clone();

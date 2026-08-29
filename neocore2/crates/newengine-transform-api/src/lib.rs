@@ -2,7 +2,10 @@
 
 mod components;
 
-pub use components::{Children, GlobalTransform, Parent, Transform, TransformDirty, WorldPose};
+pub use components::{
+    Children, GlobalTransform, Parent, RuntimeTransformEditOverride, Transform, TransformDirty,
+    TransformEditRoot, WorldPose,
+};
 pub use newengine_entity_api::EntityHandle;
 
 use newengine_service_api::{hash_u128, InterfaceId, ServiceKey};

@@ -1,5 +1,5 @@
 use super::*;
-pub(crate) fn publish_surface_node(node: &UiSurfaceNode) {
+pub(crate) fn publish_surface_node(node: &UiSurfaceNode) -> bool {
     let payload = match serde_json::to_vec(node) {
         Ok(payload) => payload,
         Err(e) => {
@@ -7,16 +7,25 @@ pub(crate) fn publish_surface_node(node: &UiSurfaceNode) {
                 "ui gateway: failed to encode surface node surface='{}': {e}",
                 node.surface_id
             );
-            return;
+            return false;
         }
     };
     match ui_surface_node_call().call_optional(&payload) {
-        Ok(Some(_)) => {}
-        Ok(None) => newengine_ulog_api::ulog::warn!(
-            "ui gateway: engine.ui route unavailable; surface='{}' skipped without native/special renderer",
-            node.surface_id,
-        ),
-        Err(e) => newengine_ulog_api::ulog::warn!("ui gateway: surface node publish failed surface='{}' err='{e}'", node.surface_id),
+        Ok(Some(_)) => true,
+        Ok(None) => {
+            newengine_ulog_api::ulog::warn!(
+                "ui gateway: engine.ui route unavailable; surface='{}' skipped without native/special renderer",
+                node.surface_id,
+            );
+            false
+        }
+        Err(e) => {
+            newengine_ulog_api::ulog::warn!(
+                "ui gateway: surface node publish failed surface='{}' err='{e}'",
+                node.surface_id
+            );
+            false
+        }
     }
 }
 

@@ -8,6 +8,97 @@ use serde::{Deserialize, Serialize};
 pub const FPS_GAMEPLAY_POLICY_SCHEMA: &str = "newengine.gameplay.fps.policy.v1";
 pub const FPS_GAMEPLAY_POLICY_VERSION: u32 = 1;
 
+pub const FPS_CHARACTER_MENU_POLICY_SCHEMA: &str = "newengine.gameplay.fps.character_menu.v1";
+pub const FPS_CHARACTER_MENU_POLICY_VERSION: u32 = 1;
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct FpsCharacterMenuPolicySnapshot {
+    pub schema: String,
+    pub version: u32,
+    /// Semantic action consumed by the menu. Physical key mapping remains input-profile owned.
+    pub toggle_action: String,
+    pub title: String,
+    /// Shared fallback catalog. A non-empty project `characters` catalog remains authoritative.
+    pub characters: Vec<FpsPlayableCharacterPolicy>,
+}
+
+impl Default for FpsCharacterMenuPolicySnapshot {
+    fn default() -> Self {
+        Self {
+            schema: FPS_CHARACTER_MENU_POLICY_SCHEMA.to_owned(),
+            version: FPS_CHARACTER_MENU_POLICY_VERSION,
+            toggle_action: crate::action::CHARACTER_SELECT_TOGGLE.to_owned(),
+            title: "Character".to_owned(),
+            characters: Vec::new(),
+        }
+    }
+}
+
+impl FpsCharacterMenuPolicySnapshot {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.schema != FPS_CHARACTER_MENU_POLICY_SCHEMA {
+            return Err(format!(
+                "FPS character-menu policy schema mismatch: expected '{}' got '{}'",
+                FPS_CHARACTER_MENU_POLICY_SCHEMA, self.schema
+            ));
+        }
+        if self.version != FPS_CHARACTER_MENU_POLICY_VERSION {
+            return Err(format!(
+                "FPS character-menu policy version mismatch: expected {} got {}",
+                FPS_CHARACTER_MENU_POLICY_VERSION, self.version
+            ));
+        }
+        validate_action_id("character_menu.toggle_action", &self.toggle_action)?;
+        if self.title.trim().is_empty() || self.title.len() > 96 {
+            return Err("FPS character-menu title must contain 1..=96 bytes".to_owned());
+        }
+        let mut ids = BTreeSet::new();
+        let mut aliases = BTreeSet::new();
+        for character in &self.characters {
+            character.validate()?;
+            let id = character.id.trim().to_ascii_lowercase();
+            if !ids.insert(id.clone()) {
+                return Err(format!(
+                    "duplicate Shared FPS character-menu character id '{}'",
+                    character.id
+                ));
+            }
+            for alias in &character.aliases {
+                let alias = alias.trim().to_ascii_lowercase();
+                if alias == id || !aliases.insert(alias.clone()) {
+                    return Err(format!(
+                        "duplicate/ambiguous Shared FPS character-menu alias '{}'",
+                        alias
+                    ));
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+pub trait FpsCharacterMenuPolicyProvider: Send + Sync {
+    fn id(&self) -> &'static str;
+    fn load_snapshot(&self) -> Result<Arc<FpsCharacterMenuPolicySnapshot>, String>;
+}
+
+fn validate_action_id(label: &str, value: &str) -> Result<(), String> {
+    let value = value.trim();
+    if value.is_empty() || value.len() > 128 {
+        return Err(format!("{label} must contain 1..=128 bytes"));
+    }
+    if !value
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '.' | '_' | '-' | ':'))
+    {
+        return Err(format!(
+            "{label} contains unsupported characters: '{value}'"
+        ));
+    }
+    Ok(())
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct FpsGameplayPolicySnapshot {
@@ -171,6 +262,9 @@ pub struct FpsCharacterPresentationPolicy {
     pub equipment_ready_animation: Option<String>,
     pub equipment_aim_animation: Option<String>,
     pub equipment_reload_animation: Option<String>,
+    /// Character-owned bare-hand presentation. Weapon definitions never carry character clips.
+    pub unarmed_ready_animation: Option<String>,
+    pub unarmed_attack_animation: Option<String>,
     pub equipment_ready_sample_phase: f32,
     pub equipment_ready_rotation_weights: Vec<FpsJointRotationWeightPolicy>,
     pub equipment_aim_rotation_weights: Vec<FpsJointRotationWeightPolicy>,
@@ -337,6 +431,14 @@ impl FpsPlayableCharacterPolicy {
                         "equipment_reload_animation",
                         self.presentation.equipment_reload_animation.as_deref(),
                     ),
+                    (
+                        "unarmed_ready_animation",
+                        self.presentation.unarmed_ready_animation.as_deref(),
+                    ),
+                    (
+                        "unarmed_attack_animation",
+                        self.presentation.unarmed_attack_animation.as_deref(),
+                    ),
                 ] {
                     let Some(reference) = reference else { continue };
                     let animation_owner = character_asset_owner(reference).ok_or_else(|| {
@@ -442,6 +544,7 @@ impl FpsPlayerPolicy {
 #[serde(default)]
 pub struct FpsCombatPolicy {
     pub allow_fire: bool,
+    pub allow_melee: bool,
     pub allow_reload: bool,
     pub damage_multiplier: f32,
     pub interaction_range_multiplier: f32,
@@ -451,6 +554,7 @@ impl Default for FpsCombatPolicy {
     fn default() -> Self {
         Self {
             allow_fire: true,
+            allow_melee: true,
             allow_reload: true,
             damage_multiplier: 1.0,
             interaction_range_multiplier: 1.0,
@@ -633,6 +737,8 @@ pub enum FpsPolicyEvent {
     },
     Hit {
         shooter: u64,
+        /// Concrete inventory weapon instance captured when the shot was authored.
+        weapon_instance_id: u64,
         target: Option<u64>,
         shot_sequence: u64,
         base_damage: f32,
@@ -814,5 +920,20 @@ mod tests {
             ..FpsPolicyDecision::default()
         };
         assert!(decision.validate().is_err());
+    }
+
+    #[test]
+    fn character_menu_policy_validates_semantic_toggle_contract() {
+        let mut policy = FpsCharacterMenuPolicySnapshot::default();
+        policy.title = "MODEL".to_owned();
+        policy.validate().expect("default semantic menu policy");
+
+        policy.toggle_action = "KeyM".to_owned();
+        policy
+            .validate()
+            .expect("policy accepts provider-authored semantic action ids");
+
+        policy.toggle_action = "bad action with spaces".to_owned();
+        assert!(policy.validate().is_err());
     }
 }

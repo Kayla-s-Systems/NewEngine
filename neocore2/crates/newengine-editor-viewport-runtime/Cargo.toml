@@ -1,0 +1,19 @@
+[package]
+name = "newengine-editor-viewport-runtime"
+version = "0.1.0"
+edition = "2021"
+description = "Focused editor viewport controller, transform policy and gizmo planning for NewEngine"
+license = "Proprietary"
+
+[dependencies]
+newengine-camera = { path = "../newengine-camera" }
+newengine-camera-api = { path = "../newengine-camera-api" }
+newengine-ecs = { path = "../newengine-ecs" }
+newengine-input-api = { path = "../newengine-input-api" }
+newengine-math = { path = "../newengine-math" }
+newengine-model-domain-api = { path = "../newengine-model-domain-api" }
+newengine-primitives = { path = "../newengine-primitives" }
+newengine-transform = { path = "../newengine-transform", features = ["ecs"], default-features = false }
+newengine-ui-api = { path = "../newengine-ui-api" }
+newengine-ulog-api = { path = "../newengine-ulog-api" }
+newengine-world-authoring-api = { path = "../newengine-world-authoring-api" }

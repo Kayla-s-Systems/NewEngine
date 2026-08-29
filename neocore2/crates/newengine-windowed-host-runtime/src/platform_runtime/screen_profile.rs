@@ -1,8 +1,8 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use newengine_assets_api::{
-    assets_ui_method, AssetDocument, AssetDocumentRequest, AssetServiceClient,
-    ENGINE_ASSETS_UI_SERVICE_ID,
+    assets_ui_method, AssetDocument, AssetDocumentRequest, AssetService, AssetServiceClient,
+    TextAssetWriteRequestV1, ASSETS_PACKAGE_WRITER_CAPABILITY_ID, ENGINE_ASSETS_UI_SERVICE_ID,
 };
 use newengine_core::host_events::WindowInitSize;
 use newengine_core::Resources;
@@ -19,6 +19,8 @@ use newengine_runtime_session_runtime::{
     install_runtime_session_resources, submit_runtime_session_command,
 };
 use newengine_schema_api::ENGINE_SCHEMA_SERVICE_ID;
+use newengine_scripting_api::{ScriptingSignatureHelpRequest, ScriptingSignatureHelpResponse};
+use newengine_scripting_client::{ScriptCodeEditorSession, ScriptingToolingClient};
 use newengine_ui_api::{
     EditorSelectionContext, EditorSelectionKind, UiComponentNode, UiDockLayoutState,
     UiDockPanelRuntimeState, UiEditorInspectorSnapshot, UiEditorRuntimeMode, UiEditorRuntimeState,
@@ -30,10 +32,11 @@ use newengine_ui_api::{
     UiNodeTone, UiNodeTreeRequest, UiPresentationFlowState, UiScreenInputFocusPolicy,
     UiScreenPanelDescriptor, UiScreenProfile, UiScreenProfileDescriptor, UiScreenProfileState,
     UiSurfaceAnchor, UiSurfaceNode, UiSurfaceStyle, UiToastSeverity, UiToastStack, UiViewportSlot,
-    ENGINE_UI_NOTIFY_SERVICE_ID, UI_COMPONENT_INPUT, UI_COMPONENT_PANEL, UI_COMPONENT_ROW,
-    UI_FONT_ASSET_EDITOR_DISPLAY, UI_FONT_ASSET_EDITOR_SANS, UI_SURFACE_EDITOR_SHELL,
-    UI_SURFACE_GAME_PRESENTATION, UI_SURFACE_SCREEN_ROOT, UI_SURFACE_SYSTEM_NOTIFICATIONS,
-    UI_THEME_ASSET_NORTHSTAR_EDITOR, UI_THEME_NORTHSTAR_DEFAULT, UI_THEME_NORTHSTAR_EDITOR,
+    ENGINE_UI_NOTIFY_SERVICE_ID, UI_COMPONENT_CODE_EDITOR, UI_COMPONENT_INPUT, UI_COMPONENT_PANEL,
+    UI_COMPONENT_ROW, UI_FONT_ASSET_EDITOR_DISPLAY, UI_FONT_ASSET_EDITOR_SANS,
+    UI_SURFACE_EDITOR_SHELL, UI_SURFACE_GAME_PRESENTATION, UI_SURFACE_SCREEN_ROOT,
+    UI_SURFACE_SYSTEM_NOTIFICATIONS, UI_THEME_ASSET_NORTHSTAR_EDITOR, UI_THEME_NORTHSTAR_DEFAULT,
+    UI_THEME_NORTHSTAR_EDITOR,
 };
 use serde::Deserialize;
 use serde_json::Value;
@@ -102,6 +105,8 @@ mod helpers;
 mod panels_and_tests;
 #[path = "screen_profile_parts/profiles.rs"]
 mod profiles;
+#[path = "screen_profile_parts/script_editor.rs"]
+mod script_editor;
 #[path = "screen_profile_parts/state.rs"]
 mod state;
 #[path = "screen_profile_parts/types.rs"]

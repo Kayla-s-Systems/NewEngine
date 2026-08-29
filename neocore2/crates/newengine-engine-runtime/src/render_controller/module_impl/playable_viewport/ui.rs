@@ -155,6 +155,56 @@ impl RuntimeRenderController {
 
         Ok(provider_capture)
     }
+
+    /// Refreshes the GameViewport retained draw packet immediately after gameplay providers
+    /// publish state during the world tick. The host prepared its UI packet before engine.step(),
+    /// so relying only on invalidation would present one stale frame and, under event-driven
+    /// pacing, could leave the new state invisible until another native input event.
+    pub(super) fn refresh_gameplay_ui_draw_list_after_publish<E: Send + 'static>(
+        &self,
+        ctx: &ModuleCtx<'_, E>,
+        ui_layers: &mut UiLayerDrawPacketSet,
+        scope: RenderFrameScope,
+    ) -> EngineResult<Option<UiInputCaptureState>> {
+        let domain = UiLayerDomain::GameViewport;
+        let surface_ids = ui_layers
+            .packets
+            .iter()
+            .find(|packet| packet.domain == domain)
+            .map(|packet| packet.surface_ids.clone())
+            .unwrap_or_default();
+        if surface_ids.is_empty() {
+            return Ok(None);
+        }
+
+        match ui_gateway::request_frame_output_for_surfaces(
+            self.frame.frame_index,
+            scope.dt,
+            [scope.w, scope.h],
+            1.0,
+            &surface_ids,
+        ) {
+            Ok(Some(output)) => {
+                set_primary_domain_draw_list(
+                    ctx,
+                    ui_layers,
+                    domain,
+                    self.frame.frame_index,
+                    &surface_ids,
+                    output.draw_list,
+                );
+                Ok(Some(output.input_capture))
+            }
+            Ok(None) => Ok(None),
+            Err(error) => {
+                newengine_ulog_api::ulog::warn!(
+                    "gameplay ui: same-frame retained refresh failed: {}",
+                    error
+                );
+                Ok(None)
+            }
+        }
+    }
 }
 
 fn primary_domain_refresh_surface_ids<E: Send + 'static>(

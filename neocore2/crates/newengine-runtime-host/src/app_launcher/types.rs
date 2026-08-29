@@ -6,30 +6,9 @@ use newengine_project_runtime::RuntimeCompositionContext;
 
 use super::boot_options::RuntimeHostBootOption;
 
-pub type RuntimeUnitFactory = fn(
-    &mut Engine<()>,
-    &StartupConfig,
-) -> EngineResult<Option<Box<dyn newengine_core::Module<()>>>>;
-
-/// Profile/game-owned static runtime-unit inventory entry with its factory binding.
-/// If the same descriptor is also present in `EngineCompositionSpec.runtime_units`, the
-/// merged catalog deduplicates it by `id@version`; otherwise this registration itself
-/// contributes the candidate and its materializer.
-#[derive(Clone, Copy)]
-pub struct RuntimeHostRuntimeUnitRegistration {
-    pub spec: newengine_service_api::EngineRuntimeUnitSpec,
-    pub factory: RuntimeUnitFactory,
-}
-
-impl RuntimeHostRuntimeUnitRegistration {
-    #[inline]
-    pub const fn new(
-        spec: newengine_service_api::EngineRuntimeUnitSpec,
-        factory: RuntimeUnitFactory,
-    ) -> Self {
-        Self { spec, factory }
-    }
-}
+pub use newengine_runtime_unit_api::{
+    RuntimeUnitFactory, RuntimeUnitRegistration as RuntimeHostRuntimeUnitRegistration,
+};
 
 #[derive(Clone, Debug, Default)]
 pub struct RuntimeUnitCompositionReport {
@@ -86,6 +65,17 @@ pub trait RuntimeHostAppProfile {
     #[inline]
     fn composition_spec(&self) -> Option<newengine_service_api::EngineCompositionSpec> {
         None
+    }
+
+    /// Distribution-level static runtime-unit inventory selected by this product.
+    ///
+    /// The generic Host owns no first-party implementation catalog. Products explicitly
+    /// supply the catalog(s) they ship, keeping concrete providers above the Host boundary.
+    #[inline]
+    fn distribution_runtime_unit_registrations(
+        &self,
+    ) -> &'static [RuntimeHostRuntimeUnitRegistration] {
+        &[]
     }
 
     /// Additional profile/game static runtime-unit inventory and factory bindings.

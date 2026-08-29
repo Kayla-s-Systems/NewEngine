@@ -146,6 +146,22 @@ pub(super) fn editing_overlay_descriptor() -> UiScreenProfileDescriptor {
                 ],
             ),
             screen_panel(
+                "bottom.script_editor",
+                "Script Editor",
+                "engine.ui.editor.script_editor",
+                "engine.scripting",
+                "newengine.scripting.code_editor.session.v1",
+                false,
+                false,
+                [
+                    "bottom",
+                    "script-editor",
+                    "code-editor",
+                    "typescript",
+                    "engine.scripting",
+                ],
+            ),
+            screen_panel(
                 "bottom.import_queue",
                 "Import Queue",
                 "engine.ui.editor.import_queue",

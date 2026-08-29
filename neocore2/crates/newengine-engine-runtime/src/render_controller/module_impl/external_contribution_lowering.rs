@@ -212,7 +212,7 @@ fn lower_debug_line_list_contribution(
         }
 
         let mut bytes = Vec::with_capacity(vertex_count as usize * 32);
-        for pair in vertices.chunks_exact(2) {
+        for pair in vertices.as_chunks::<2>().0 {
             push_debug_line_vertex(&mut bytes, ctx.viewproj, pair[0], color);
             push_debug_line_vertex(&mut bytes, ctx.viewproj, pair[1], color);
         }

@@ -5,7 +5,8 @@ use newengine_scene::Scene;
 use crate::engine_bounds::EngineBoundsSnap;
 use crate::gameplay::{
     capture_player_fixed_poses, consume_player_transient_input, publish_player_render_poses,
-    run_schedule_with_physics_mode_and_telemetry_for_frame, GameRunMode, PhysicsIntegrationMode,
+    run_schedule_with_physics_mode_and_telemetry_for_frame, GameRunMode, GameplayExecutionPhase,
+    GameplayFrame, PhysicsIntegrationMode,
 };
 use crate::scene_bridge::EngineViewInput;
 
@@ -89,6 +90,17 @@ impl RuntimeRenderController {
                 camera_play_mode,
                 self.frame.frame_index,
             );
+
+            // UI/menu actions are render-input concerns, not fixed-simulation concerns.
+            // Run this phase unconditionally so a key edge such as M is consumed even when
+            // the accumulator produces zero fixed steps for this presented frame.
+            self.frame.gameplay_systems.run_phase(
+                GameplayExecutionPhase::FrameInput,
+                world,
+                GameplayFrame { dt, fixed_tick },
+            );
+            self.frame.gameplay_ui.sync_modal_state(world);
+
             // The view request was consumed in the pre-simulation input phase. Keeping
             // it in the render-phase packet would cycle camera modes twice in one frame.
             engine_view_input.camera_view = newengine_input_actions_api::CameraViewRequest::None;
@@ -240,7 +252,8 @@ impl RuntimeRenderController {
             let world_bounds =
                 scene::scene_bounds_world(scene.world()).unwrap_or_else(scene::default_bounds);
             let selection_bounds = scene::selection_bounds_world(scene.world(), selection);
-            self.editor_viewport.apply_camera_projection(
+            crate::editor_viewport_adapter::apply_camera_projection(
+                &mut self.editor_viewport,
                 &mut view_frame,
                 world_bounds.center,
                 world_bounds.radius,

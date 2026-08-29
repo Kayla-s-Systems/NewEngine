@@ -23,10 +23,11 @@ mod storage;
 
 pub use catalog::ItemCatalog;
 pub use definitions::{
-    EquipmentSlot, ItemDefinition, ItemId, ItemInstanceId, ItemKind, ItemUseEffect,
-    WeaponAnimationDefinition, WeaponAudioAction, WeaponAudioDefinition, WeaponCasingDefinition,
-    WeaponFireMode, WeaponItemDefinition, WeaponPresentationDefinition, WorldItemDefinition,
-    WorldItemPresentation, WorldItemRuntime, WorldItemVisualPart,
+    EquipmentSlot, FirearmWeaponDefinition, ItemDefinition, ItemId, ItemInstanceId, ItemKind,
+    ItemUseEffect, MeleeWeaponTuning, WeaponAnimationDefinition, WeaponAudioAction,
+    WeaponAudioDefinition, WeaponCapabilities, WeaponCasingDefinition, WeaponFireMode,
+    WeaponItemDefinition, WeaponPresentationDefinition, WeaponType, WorldItemDefinition,
+    WorldItemPresentation, WorldItemRuntime, WorldItemVisualPart, SHARED_UNARMED_WEAPON_ITEM_NAME,
 };
 pub use loadouts::{InventoryLoadout, InventoryLoadoutCatalog, InventoryLoadoutEntry};
 pub use operations::{
@@ -39,9 +40,11 @@ pub use storage::{
 };
 
 pub use inventory_equipment::{
-    consume_equipped_ammo, equip_first_item, equip_item_instance, equipped_reserve_ammo,
-    persist_equipped_weapon_state, play_equipped_weapon_audio, play_weapon_item_audio,
-    preload_weapon_audio_definition, select_equipment_slot, sync_equipped_weapon_runtime,
+    active_equipped_weapon_aiming, active_equipped_weapon_binding, active_equipped_weapon_can_aim,
+    active_equipped_weapon_can_fire, active_equipped_weapon_can_melee, consume_equipped_ammo,
+    equip_first_item, equip_item_instance, equipped_reserve_ammo, persist_equipped_weapon_state,
+    play_equipped_weapon_audio, play_weapon_item_audio, preload_weapon_audio_definition,
+    select_equipment_slot, select_highest_ranked_equipped_weapon, sync_equipped_weapon_runtime,
     unequip_slot, use_item,
 };
 pub use inventory_world::try_collect_item_pickup;

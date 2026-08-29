@@ -1,0 +1,8 @@
+[package]
+name = "newengine-host-capability-policy"
+version = "0.1.0"
+edition = "2021"
+description = "Pure HostCapabilities-to-provider-selection policy derivation"
+
+[dependencies]
+newengine-host-capabilities-api = { path = "../newengine-host-capabilities-api" }

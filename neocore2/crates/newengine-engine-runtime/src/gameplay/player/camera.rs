@@ -90,3 +90,82 @@ pub fn display_visible_in_mode(world: &World, entity: EntityId, runtime: bool) -
         vis.visible_in_authoring()
     }
 }
+
+/// Shadow-caster visibility is intentionally not identical to camera presentation visibility.
+/// A full-body first-person avatar is hidden from the main color pass to avoid camera clipping,
+/// but it must remain in world-space shadow passes so the player still has a physical CSM/local
+/// shadow. `RuntimeHidden` remains a hard reject for every other reason.
+#[inline]
+pub fn display_shadow_caster_visible_in_mode(
+    world: &World,
+    entity: EntityId,
+    runtime: bool,
+) -> bool {
+    if !runtime {
+        return display_visible_in_mode(world, entity, false);
+    }
+
+    let vis = world
+        .get::<DisplayVisibility>(entity)
+        .copied()
+        .unwrap_or_default();
+    if !matches!(vis.mode, DisplayMode::RuntimeHidden) {
+        return vis.visible_in_game();
+    }
+
+    let Some(binding) = world.get::<PlayerViewVisibility>(entity).copied() else {
+        return false;
+    };
+    let first_person_active = world
+        .resource::<PlayerViewState>()
+        .copied()
+        .unwrap_or_default()
+        .first_person_active;
+
+    first_person_active
+        && binding.policy == PlayerViewVisibilityPolicy::HideInFirstPerson
+        && !matches!(binding.base_mode, DisplayMode::RuntimeHidden)
+}
+
+#[cfg(test)]
+mod shadow_visibility_tests {
+    use super::*;
+
+    #[test]
+    fn first_person_hidden_avatar_remains_a_shadow_caster() {
+        let mut world = World::new();
+        let entity = world.spawn();
+        let _ = world.insert(
+            entity,
+            DisplayVisibility {
+                mode: DisplayMode::RuntimeHidden,
+            },
+        );
+        let _ = world.insert(
+            entity,
+            PlayerViewVisibility {
+                base_mode: DisplayMode::GameOnly,
+                policy: PlayerViewVisibilityPolicy::HideInFirstPerson,
+            },
+        );
+        world.insert_resource(PlayerViewState {
+            first_person_active: true,
+        });
+
+        assert!(!display_visible_in_mode(&world, entity, true));
+        assert!(display_shadow_caster_visible_in_mode(&world, entity, true));
+    }
+
+    #[test]
+    fn unrelated_runtime_hidden_entity_does_not_cast() {
+        let mut world = World::new();
+        let entity = world.spawn();
+        let _ = world.insert(
+            entity,
+            DisplayVisibility {
+                mode: DisplayMode::RuntimeHidden,
+            },
+        );
+        assert!(!display_shadow_caster_visible_in_mode(&world, entity, true));
+    }
+}

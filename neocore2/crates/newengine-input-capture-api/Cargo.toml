@@ -1,0 +1,6 @@
+[package]
+name = "newengine-input-capture-api"
+version = "0.1.0"
+edition = "2021"
+readme = "README.md"
+description = "Neutral runtime input-capture policy contract for North Star"

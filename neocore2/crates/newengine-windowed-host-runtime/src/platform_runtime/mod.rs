@@ -5,6 +5,7 @@ mod bootstrap_overlay;
 mod bootstrap_subsystems;
 mod callbacks;
 mod config;
+mod console_overlay;
 mod constants;
 mod discovery;
 pub(crate) mod early_log;

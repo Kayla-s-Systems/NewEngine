@@ -216,6 +216,16 @@ pub enum RenderFeature {
     FoliageRendering,
     LodSystem,
     RenderDebugOverlays,
+    /// Backend can expose device addresses required by hardware acceleration structures.
+    BufferDeviceAddress,
+    /// Backend can build and bind Vulkan/DXR-class bottom/top-level acceleration structures.
+    AccelerationStructures,
+    /// Backend can execute dedicated hardware ray-tracing pipelines.
+    RayTracingPipeline,
+    /// Backend exposes inline ray queries from compute/fragment-class shaders.
+    RayQuery,
+    /// Backend has the complete hardware feature set required by North Star path tracing.
+    PathTracing,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

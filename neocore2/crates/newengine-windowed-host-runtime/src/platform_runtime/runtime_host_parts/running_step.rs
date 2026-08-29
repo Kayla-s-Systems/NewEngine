@@ -8,7 +8,8 @@ use newengine_ui_api::{
     UiDrawInvalidationState, UiEventDispatchFrame, UiGameLayerStackState, UiInGameEditorState,
     UiInputFrame, UiLayerCompositionPlan, UiLayerDomain, UiLayerDrawPacketSet,
     UiPresentationFlowState, UiScreenInputFocusPolicy, UiScreenProfileState,
-    UI_PRESENTATION_TARGET_PRIMARY, UI_SURFACE_EDITOR_SHELL, UI_SURFACE_RUNTIME_DEBUG_OVERLAY,
+    UI_PRESENTATION_TARGET_PRIMARY, UI_SURFACE_EDITOR_SHELL, UI_SURFACE_ENGINE_CONSOLE,
+    UI_SURFACE_RUNTIME_DEBUG_OVERLAY,
 };
 
 use crate::platform_input::poll_input_frame;
@@ -91,8 +92,34 @@ impl HostPlatformRuntime {
         self.ui_frame_index = self.ui_frame_index.wrapping_add(1);
         let ui_frame_index = self.ui_frame_index;
         let input_poll_started = Instant::now();
-        let input_frame = poll_input_frame();
+        let raw_input_frame = poll_input_frame();
         let input_poll_ms = input_poll_started.elapsed().as_secs_f64() * 1000.0;
+        // The runtime console owns raw keyboard/text/gameplay input before any
+        // product/editor consumer. It still needs pointer position/buttons/wheel in
+        // `engine.ui` for output scrolling, so keep two deliberately different views:
+        // - gameplay/resource input: fully consumed while the console owns the edge;
+        // - UI-provider input: mouse-only while the console remains open.
+        let console_frame = crate::platform_runtime::console_overlay::prepare_frame(
+            self.engine.resources_mut(),
+            raw_input_frame.as_ref(),
+            [self.surface.width, self.surface.height],
+        );
+        let ui_provider_input_frame = if console_frame.open {
+            Some(
+                crate::platform_runtime::console_overlay::provider_mouse_input(
+                    raw_input_frame.as_ref(),
+                ),
+            )
+        } else if console_frame.consumed_input {
+            Some(UiInputFrame::default())
+        } else {
+            raw_input_frame.clone()
+        };
+        let input_frame = if console_frame.consumed_input {
+            Some(UiInputFrame::default())
+        } else {
+            raw_input_frame
+        };
         let mut ui_provider_dispatch_ms = 0.0_f64;
         let mut ui_provider_dispatch_used = false;
         // Preserve the prior provider interaction before this frame replaces the
@@ -126,10 +153,10 @@ impl HostPlatformRuntime {
             }
         }
 
-        let ui_dispatch_frame = if let Some(input) = input_frame.clone() {
-            self.engine
-                .resources_mut()
-                .insert::<UiInputFrame>(input.clone());
+        if let Some(input) = input_frame.clone() {
+            self.engine.resources_mut().insert::<UiInputFrame>(input);
+        }
+        let ui_dispatch_frame = if let Some(input) = ui_provider_input_frame.clone() {
             let frontend_presentation_active = self
                 .engine
                 .resources
@@ -147,13 +174,16 @@ impl HostPlatformRuntime {
             if dispatch_to_provider {
                 ui_provider_dispatch_used = true;
                 let dispatch_started = Instant::now();
-                let dispatch_surface_id = self
-                    .engine
-                    .resources
-                    .get::<UiPresentationFlowState>()
-                    .and_then(|state| state.active_surface_id.as_deref())
-                    .map(str::trim)
-                    .filter(|id| !id.is_empty());
+                let dispatch_surface_id = if console_frame.open {
+                    Some(UI_SURFACE_ENGINE_CONSOLE)
+                } else {
+                    self.engine
+                        .resources
+                        .get::<UiPresentationFlowState>()
+                        .and_then(|state| state.active_surface_id.as_deref())
+                        .map(str::trim)
+                        .filter(|id| !id.is_empty())
+                };
                 let dispatch_result =
                     crate::platform_runtime::ui_gateway_frame::dispatch_input_frame(
                         ui_frame_index,
@@ -293,6 +323,9 @@ impl HostPlatformRuntime {
                 .resources
                 .get::<newengine_ui_api::UiRuntimeDebugOverlayTelemetry>()
                 .is_some();
+        let console_overlay_active = console_frame.open
+            || crate::platform_runtime::console_overlay::is_open(&self.engine.resources);
+        let debug_layer_active = debug_overlay_active || console_overlay_active;
         let invalidation = self
             .engine
             .resources
@@ -379,7 +412,10 @@ impl HostPlatformRuntime {
         );
         debug_ui_plan.invalidation_revision = invalidation.revision_for(UiLayerDomain::Debug);
         if debug_overlay_active {
-            debug_ui_plan.surface_ids = vec![UI_SURFACE_RUNTIME_DEBUG_OVERLAY.to_owned()];
+            append_surface_once(&mut debug_ui_plan, UI_SURFACE_RUNTIME_DEBUG_OVERLAY);
+        }
+        if console_overlay_active {
+            append_surface_once(&mut debug_ui_plan, UI_SURFACE_ENGINE_CONSOLE);
         }
 
         let provider_ui_needed =
@@ -418,7 +454,7 @@ impl HostPlatformRuntime {
             || ui_dispatch_refresh
             || self.ui_build.is_some()
             || gameplay_hud_refresh_due;
-        let debug_force_refresh = debug_overlay_active;
+        let debug_force_refresh = debug_overlay_active || console_frame.draw_refresh;
 
         let game_ui_refresh = self.game_ui_cache.needs_refresh(
             &game_ui_plan,
@@ -538,7 +574,7 @@ impl HostPlatformRuntime {
             );
         }
 
-        let mut debug_ui_draw = if provider_ui_active && debug_overlay_active {
+        let mut debug_ui_draw = if provider_ui_active && debug_layer_active {
             if debug_ui_refresh {
                 match crate::platform_runtime::ui_gateway_frame::request_ui_draw_list(
                     ui_frame_index,

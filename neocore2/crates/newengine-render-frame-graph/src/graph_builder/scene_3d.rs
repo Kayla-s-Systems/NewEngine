@@ -1,6 +1,7 @@
 use newengine_render_api::{
-    RenderGraphPassDomain, RenderGraphResourceDesc, RenderGraphResourceSemantic,
-    RenderGraphResourceUsage, TextureFormat,
+    RenderGraphPassDomain, RenderGraphResourceDesc, RenderGraphResourceId,
+    RenderGraphResourceLifetime, RenderGraphResourceSemantic, RenderGraphResourceUsage,
+    TextureFormat,
 };
 
 use crate::{DrawListKind, StandardRenderPhase};
@@ -9,6 +10,9 @@ use super::{
     FrameGraphBuilder, RG_GBUFFER_ALBEDO, RG_GBUFFER_DEPTH, RG_GBUFFER_MATERIAL, RG_GBUFFER_NORMAL,
     RG_SHADOW_MAP, RG_VIEWPORT_DEPTH,
 };
+
+const RG_VFX_PARTICLE_STATE: RenderGraphResourceId = RenderGraphResourceId(17_500);
+const VFX_PARTICLE_STATE_BYTES: u64 = 262_144 * 96;
 
 impl FrameGraphBuilder {
     #[inline]
@@ -29,11 +33,45 @@ impl FrameGraphBuilder {
     }
 
     #[inline]
+    pub fn particle_simulation(mut self) -> Self {
+        if !self.has_resource(RG_VFX_PARTICLE_STATE) {
+            self.graph.resources.push(RenderGraphResourceDesc {
+                id: RG_VFX_PARTICLE_STATE,
+                label: Some("vfx_particle_state".to_owned()),
+                semantic: RenderGraphResourceSemantic::Custom,
+                usage: RenderGraphResourceUsage::StorageBuffer,
+                lifetime: RenderGraphResourceLifetime::Persistent,
+                extent: None,
+                format: None,
+                sample_count: 1,
+                byte_size: Some(VFX_PARTICLE_STATE_BYTES),
+                external: None,
+            });
+        }
+        self.add_phase_pass(StandardRenderPhase::ParticleSimulation, |pass| {
+            let mut pass = pass
+                .with_domain(RenderGraphPassDomain::Render3d)
+                .with_culling(false)
+                .writes(
+                    RG_VFX_PARTICLE_STATE,
+                    RenderGraphResourceUsage::StorageBuffer,
+                );
+            pass.queue = newengine_render_api::RenderGraphQueueKind::Compute;
+            pass
+        });
+        self
+    }
+
+    #[inline]
     pub fn transparent(mut self) -> Self {
         let viewport_color = self.viewport_color_resource();
         self.add_phase_pass(StandardRenderPhase::Transparent, |pass| {
             pass.with_domain(RenderGraphPassDomain::Render3d)
                 .reads(RG_VIEWPORT_DEPTH, RenderGraphResourceUsage::DepthAttachment)
+                .reads(
+                    RG_VFX_PARTICLE_STATE,
+                    RenderGraphResourceUsage::StorageBuffer,
+                )
                 .writes(viewport_color, RenderGraphResourceUsage::ColorAttachment)
                 .draw_list(DrawListKind::Transparent)
         });

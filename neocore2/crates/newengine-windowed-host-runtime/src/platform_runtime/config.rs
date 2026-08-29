@@ -252,6 +252,7 @@ mod tests {
             ..StartupConfig::default()
         };
         startup.launch_settings.display.monitor_index = 2;
+        startup.launch_settings.display.resolution = [3840, 2160];
         startup.launch_settings.display.window_mode =
             newengine_core::StartupWindowMode::ExclusiveFullscreen;
         startup.launch_settings.display.vsync = false;
@@ -262,7 +263,7 @@ mod tests {
 
         let config = platform_config_from_startup_defaults(&startup);
 
-        assert_eq!((config.width, config.height), (2560, 1440));
+        assert_eq!((config.width, config.height), (3840, 2160));
         assert_eq!(config.display.monitor_index, 2);
         assert_eq!(
             config.display.window_mode,

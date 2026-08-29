@@ -83,6 +83,25 @@ pub(super) fn sky_macro_cloud_field(
     (0.50 + wave0 * 0.24 + wave1 * 0.16 + wave2 * 0.10 + (lifecycle - 0.5) * 0.08).clamp(0.0, 1.0)
 }
 
+/// Low-frequency meteorological occupancy field. Cloud coverage changes are
+/// admitted through this coherent front rather than by shifting the threshold
+/// of every high-frequency cloud texel at once. That prevents a weather profile
+/// change from materializing a complete cloud deck over the whole sky.
+#[inline]
+pub(super) fn sky_cloud_front_field(
+    cloud_plane: Vec2,
+    cloud_offset: Vec2,
+    evolution_phase: f32,
+    lifecycle: f32,
+) -> f32 {
+    let angle = evolution_phase.rem_euclid(1.0) * TAU;
+    let rotated = sky_rotate2(cloud_plane, angle.cos() * 0.075);
+    let coord = rotated * 0.018 + cloud_offset * 0.23 + Vec2::new(0.317, -0.193);
+    let wave0 = ((coord.x * 0.83 + coord.y * 0.57) * TAU + angle * 0.19).sin();
+    let wave1 = ((coord.x * -0.41 + coord.y * 1.11) * TAU - angle * 0.13 + 1.71).sin();
+    (0.52 + wave0 * 0.29 + wave1 * 0.19 + (lifecycle - 0.5) * 0.04).clamp(0.0, 1.0)
+}
+
 #[inline]
 pub(super) fn sky_cloud_sun_density(
     frame: &SkyFrameSample,
@@ -95,32 +114,37 @@ pub(super) fn sky_cloud_sun_density(
     if frame.to_sun.y <= -0.04 {
         return 0.0;
     }
-    let macro_field = sky_macro_cloud_field(
-        sky_cloud_plane(frame.to_sun),
-        cloud_offset,
-        evolution_phase,
-        lifecycle,
-    );
+    let cloud_plane = sky_cloud_plane(frame.to_sun);
+    let macro_field = sky_macro_cloud_field(cloud_plane, cloud_offset, evolution_phase, lifecycle);
+    let front_field = sky_cloud_front_field(cloud_plane, cloud_offset, evolution_phase, lifecycle);
     let evolution_sin = (evolution_phase * TAU).sin();
     let live_coverage =
         (coverage + (lifecycle - 0.5) * 0.10 + evolution_sin * 0.018).clamp(0.0, 1.0);
     let overcast = frame.cloud_overcast.clamp(0.0, 1.0);
+    let softness = softness.clamp(0.04, 0.98);
 
-    // Match the dome shader's meteorological coverage curve, but remain
-    // deliberately conservative: CPU has the macro field only, while the dome
-    // owns the actual texture FBM/cirrus samples. Global cloud coverage must not
-    // become fake line-of-sight occlusion of the solar disc.
-    let threshold = (0.79 + (0.46 - 0.79) * live_coverage - overcast * 0.022).clamp(0.43, 0.82);
-    let edge_width = (0.030 + (0.116 - 0.030) * softness.clamp(0.04, 0.98))
-        * (0.92 + (1.10 - 0.92) * lifecycle.clamp(0.0, 1.0));
+    // Coverage controls the connected synoptic/mesoscale cloud mass. Fine cloud
+    // morphology only changes modestly with coverage, so a provider transition
+    // cannot suddenly turn every suitable FBM texel into a cloud.
+    let front_threshold =
+        (0.84 + (0.24 - 0.84) * live_coverage - overcast * 0.035).clamp(0.20, 0.88);
+    let front_width = 0.075 + (0.160 - 0.075) * softness;
+    let weather_mass = sky_smoothstep(
+        front_threshold - front_width,
+        front_threshold + front_width,
+        front_field,
+    );
+    let threshold = (0.73 + (0.54 - 0.73) * live_coverage - overcast * 0.018).clamp(0.50, 0.76);
+    let edge_width =
+        (0.034 + (0.112 - 0.034) * softness) * (0.92 + (1.10 - 0.92) * lifecycle.clamp(0.0, 1.0));
     let dense_core = sky_smoothstep(
-        threshold - edge_width * 0.62,
-        threshold + edge_width * 0.98,
+        threshold - edge_width * 0.72,
+        threshold + edge_width * 0.92,
         macro_field,
     );
-    let cloud_presence = sky_smoothstep(0.10, 0.24, live_coverage);
+    let cloud_presence = sky_smoothstep(0.08, 0.22, live_coverage);
     let altitude_mask = sky_smoothstep(-0.025, 0.12, frame.to_sun.y);
-    (dense_core * cloud_presence * altitude_mask).clamp(0.0, 1.0)
+    (dense_core * weather_mass * cloud_presence * altitude_mask).clamp(0.0, 1.0)
 }
 
 #[inline]
@@ -383,6 +407,26 @@ fn sky_exp_alpha(dt: f32, response_seconds: f32) -> f32 {
     (1.0 - (-dt / response_seconds.max(0.001)).exp()).clamp(0.0, 1.0)
 }
 
+/// Exponential relaxation with a physical slew-rate ceiling. The exponential
+/// term removes frame-rate dependence; the slew limit prevents a large target
+/// discontinuity from becoming an implausibly fast weather front.
+#[inline]
+fn sky_rate_limited_exp_step(
+    current: f32,
+    target: f32,
+    dt: f32,
+    response_seconds: f32,
+    max_rate_per_second: f32,
+) -> f32 {
+    if !dt.is_finite() || dt <= 0.0 {
+        return current;
+    }
+    let alpha = sky_exp_alpha(dt, response_seconds);
+    let requested_delta = (target - current) * alpha;
+    let max_delta = max_rate_per_second.max(0.0) * dt;
+    current + requested_delta.clamp(-max_delta, max_delta)
+}
+
 #[inline]
 fn sky_lifecycle_value(phase: f32) -> f32 {
     let angle = phase.rem_euclid(1.0) * TAU;
@@ -450,6 +494,14 @@ pub(super) fn update_sky_dynamics(
         dynamics.smoothed_softness = frame.cloud_softness.clamp(0.04, 0.98);
         dynamics.smoothed_shadow = frame.cloud_shadow_strength.clamp(0.0, 1.0);
         dynamics.smoothed_haze = frame.haze_amount.clamp(0.0, 1.0);
+        dynamics.smoothed_cloud_base_altitude_m = frame.cloud_base_altitude_m.clamp(400.0, 4500.0);
+        dynamics.smoothed_cloud_thickness_m = frame.cloud_thickness_m.clamp(300.0, 7600.0);
+        dynamics.smoothed_cloud_layer_density = frame.cloud_layer_density.clamp(0.0, 1.0);
+        dynamics.smoothed_high_cloud_coverage = frame.high_cloud_coverage.clamp(0.0, 1.0);
+        dynamics.smoothed_high_cloud_density = frame.high_cloud_density.clamp(0.0, 1.0);
+        dynamics.smoothed_humidity = frame.humidity.clamp(0.0, 1.0);
+        dynamics.smoothed_aerosol_density = frame.aerosol_density.clamp(0.0, 2.0);
+        dynamics.smoothed_precipitation_intensity = frame.precipitation_intensity.clamp(0.0, 1.0);
         dynamics.cloud_offset = sky_cloud_seeded_offset(frame, target_wind);
 
         let initial_wind_speed = target_wind.length().clamp(0.0, 24.0);
@@ -473,17 +525,111 @@ pub(super) fn update_sky_dynamics(
     }
 
     let wind_alpha = sky_exp_alpha(dt, 7.5);
-    let weather_alpha = sky_exp_alpha(dt, 24.0);
+    let weather_alpha = sky_exp_alpha(dt, 34.0);
     let optical_alpha = sky_exp_alpha(dt, 12.0);
     dynamics.smoothed_wind += (target_wind - dynamics.smoothed_wind) * wind_alpha;
-    dynamics.smoothed_coverage +=
-        (frame.cloud_coverage.clamp(0.0, 1.0) - dynamics.smoothed_coverage) * weather_alpha;
+
+    // Cloud fraction is a transported meteorological quantity, not a UI slider.
+    // Let a new deck arrive as a front over ~1-3 minutes instead of allowing a
+    // discontinuous provider target to fill the sky in a few seconds. Stronger
+    // wind/overcast may move the front faster, but it is still rate limited.
+    let target_coverage = frame.cloud_coverage.clamp(0.0, 1.0);
+    let pre_update_wind_speed = dynamics.smoothed_wind.length().clamp(0.0, 24.0);
+    let coverage_is_growing = target_coverage >= dynamics.smoothed_coverage;
+    let coverage_response = if coverage_is_growing {
+        (70.0 - pre_update_wind_speed * 1.10 - frame.cloud_overcast.clamp(0.0, 1.0) * 18.0)
+            .clamp(38.0, 70.0)
+    } else {
+        (48.0 - pre_update_wind_speed * 0.70).clamp(28.0, 48.0)
+    };
+    let coverage_max_rate = if coverage_is_growing {
+        (0.006 + pre_update_wind_speed * 0.00025 + frame.cloud_overcast.clamp(0.0, 1.0) * 0.003)
+            .clamp(0.006, 0.015)
+    } else {
+        (0.009 + pre_update_wind_speed * 0.00030).clamp(0.009, 0.018)
+    };
+    dynamics.smoothed_coverage = sky_rate_limited_exp_step(
+        dynamics.smoothed_coverage,
+        target_coverage,
+        dt,
+        coverage_response,
+        coverage_max_rate,
+    )
+    .clamp(0.0, 1.0);
     dynamics.smoothed_softness +=
         (frame.cloud_softness.clamp(0.04, 0.98) - dynamics.smoothed_softness) * weather_alpha;
     dynamics.smoothed_shadow +=
         (frame.cloud_shadow_strength.clamp(0.0, 1.0) - dynamics.smoothed_shadow) * optical_alpha;
     dynamics.smoothed_haze +=
         (frame.haze_amount.clamp(0.0, 1.0) - dynamics.smoothed_haze) * optical_alpha;
+
+    // Vertical cloud geometry and atmospheric moisture have their own inertia.
+    // A weather state may change immediately at the control plane, but the real
+    // deck must lift, deepen and saturate over tens of seconds rather than jump.
+    dynamics.smoothed_cloud_base_altitude_m = sky_rate_limited_exp_step(
+        dynamics.smoothed_cloud_base_altitude_m,
+        frame.cloud_base_altitude_m.clamp(400.0, 4500.0),
+        dt,
+        62.0,
+        15.0,
+    )
+    .clamp(400.0, 4500.0);
+    dynamics.smoothed_cloud_thickness_m = sky_rate_limited_exp_step(
+        dynamics.smoothed_cloud_thickness_m,
+        frame.cloud_thickness_m.clamp(300.0, 7600.0),
+        dt,
+        48.0,
+        24.0,
+    )
+    .clamp(300.0, 7600.0);
+    dynamics.smoothed_cloud_layer_density = sky_rate_limited_exp_step(
+        dynamics.smoothed_cloud_layer_density,
+        frame.cloud_layer_density.clamp(0.0, 1.0),
+        dt,
+        34.0,
+        0.020,
+    )
+    .clamp(0.0, 1.0);
+    dynamics.smoothed_high_cloud_coverage = sky_rate_limited_exp_step(
+        dynamics.smoothed_high_cloud_coverage,
+        frame.high_cloud_coverage.clamp(0.0, 1.0),
+        dt,
+        58.0,
+        0.014,
+    )
+    .clamp(0.0, 1.0);
+    dynamics.smoothed_high_cloud_density = sky_rate_limited_exp_step(
+        dynamics.smoothed_high_cloud_density,
+        frame.high_cloud_density.clamp(0.0, 1.0),
+        dt,
+        52.0,
+        0.016,
+    )
+    .clamp(0.0, 1.0);
+    dynamics.smoothed_humidity = sky_rate_limited_exp_step(
+        dynamics.smoothed_humidity,
+        frame.humidity.clamp(0.0, 1.0),
+        dt,
+        90.0,
+        0.010,
+    )
+    .clamp(0.0, 1.0);
+    dynamics.smoothed_aerosol_density = sky_rate_limited_exp_step(
+        dynamics.smoothed_aerosol_density,
+        frame.aerosol_density.clamp(0.0, 2.0),
+        dt,
+        76.0,
+        0.018,
+    )
+    .clamp(0.0, 2.0);
+    dynamics.smoothed_precipitation_intensity = sky_rate_limited_exp_step(
+        dynamics.smoothed_precipitation_intensity,
+        frame.precipitation_intensity.clamp(0.0, 1.0),
+        dt,
+        14.0,
+        0.070,
+    )
+    .clamp(0.0, 1.0);
 
     let wind_speed = dynamics.smoothed_wind.length().clamp(0.0, 24.0);
     let gust_strength = frame.cloud_gust_strength.clamp(0.0, 1.0);
@@ -532,14 +678,24 @@ pub(super) fn update_sky_dynamics(
         // incorrect launch flash and temporarily desynchronizes sky and world light.
         dynamics.smoothed_sun_occlusion = raw_sun_occlusion;
     } else {
-        let occlusion_response = if raw_sun_occlusion > dynamics.smoothed_sun_occlusion {
-            0.48
+        // A real cloud edge can cross the 0.53 degree solar disc in seconds, but
+        // not in a single frame because a global coverage target changed. Keep
+        // local crossings responsive while preserving finite optical inertia.
+        let incoming = raw_sun_occlusion > dynamics.smoothed_sun_occlusion;
+        let occlusion_response = if incoming {
+            (4.2 - wind_speed * 0.075).clamp(2.4, 4.2)
         } else {
-            1.15
+            (5.4 - wind_speed * 0.090).clamp(3.0, 5.4)
         };
-        let occlusion_alpha = sky_exp_alpha(dt, occlusion_response);
-        dynamics.smoothed_sun_occlusion +=
-            (raw_sun_occlusion - dynamics.smoothed_sun_occlusion) * occlusion_alpha;
+        let max_occlusion_rate = if incoming { 0.30 } else { 0.24 };
+        dynamics.smoothed_sun_occlusion = sky_rate_limited_exp_step(
+            dynamics.smoothed_sun_occlusion,
+            raw_sun_occlusion,
+            dt,
+            occlusion_response,
+            max_occlusion_rate,
+        )
+        .clamp(0.0, 1.0);
     }
     let sun_occlusion =
         sky_cloud_occlusion_from_density(frame, raw_sun_occlusion, dynamics.smoothed_sun_occlusion);

@@ -179,7 +179,7 @@ mod tests {
     #[test]
     fn wheel_scrolls_browser_window_without_changing_selection() {
         let preview_api = Arc::new(AssetPreviewApi::new(Arc::new(
-            newengine_engine_runtime::ViewportBridge::new(),
+            newengine_viewport_bridge::ViewportBridge::new(),
         )));
         let mut runtime = AssetInspectorRuntimeModule::new(preview_api);
         runtime.entries = (0..30)
@@ -202,7 +202,7 @@ mod tests {
     #[test]
     fn scrollbar_drag_maps_to_virtualized_preview_entry_window() {
         let preview_api = Arc::new(AssetPreviewApi::new(Arc::new(
-            newengine_engine_runtime::ViewportBridge::new(),
+            newengine_viewport_bridge::ViewportBridge::new(),
         )));
         let mut runtime = AssetInspectorRuntimeModule::new(preview_api);
         runtime.preview_entries = (0..25)

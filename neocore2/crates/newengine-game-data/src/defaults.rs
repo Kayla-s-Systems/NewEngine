@@ -19,6 +19,22 @@ impl GameData {
         if self.runtime.fixed_dt_ms == 0 {
             return Err("runtime.fixed_dt_ms must be greater than zero".to_owned());
         }
+        if self.player.character_ref.trim().is_empty() {
+            return Err(
+                "player.character_ref must select a Shared/player character definition".to_owned(),
+            );
+        }
+        if !self
+            .player
+            .character_ref
+            .to_ascii_lowercase()
+            .contains(".ytyp@")
+        {
+            return Err(format!(
+                "player.character_ref '{}' must be a selector-qualified .ytyp reference",
+                self.player.character_ref
+            ));
+        }
         if self.runtime.app_name.trim().is_empty()
             || self.runtime.default_profile_asset.trim().is_empty()
         {
@@ -52,6 +68,19 @@ impl GameData {
         {
             return Err("game-data contains non-finite runtime values".to_owned());
         }
+        if let Some(response) = tuning.motion_response {
+            let response_scalars = [
+                response.velocity_spring_const,
+                response.velocity_spring_const_decel,
+                response.velocity_spring_dampen_ratio,
+                response.speed_spring_const,
+                response.max_accel,
+                response.trans_clamp_dist,
+            ];
+            if response_scalars.iter().any(|value| !value.is_finite()) {
+                return Err("player.tuning.motion_response contains non-finite values".to_owned());
+            }
+        }
         if tuning.body_radius <= 0.0
             || tuning.body_half_height <= 0.0
             || tuning.crouched_body_half_height <= 0.0
@@ -62,6 +91,47 @@ impl GameData {
             return Err("game-data contains non-positive physical dimensions".to_owned());
         }
         Ok(())
+    }
+}
+
+impl Default for PlayerModelData {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            source: String::new(),
+            target_height: 1.80,
+            eye_height_ratio: 0.90,
+            local_offset: [0.0, 0.0, 0.0],
+            yaw_offset: 0.0,
+            hide_in_first_person: false,
+        }
+    }
+}
+
+impl Default for PlayerTuningData {
+    fn default() -> Self {
+        Self {
+            motion_response: None,
+            body_radius: 0.35,
+            body_half_height: 0.55,
+            crouched_body_half_height: 0.30,
+            visual_radius: 0.35,
+            visual_half_height: 0.90,
+            camera_eye_height: 0.62,
+            crouched_camera_eye_height: 0.35,
+            crouch_camera_speed: 8.0,
+            sprint_multiplier: 1.5,
+            jump_speed: 5.0,
+            gravity: 9.81,
+            contact_skin: 0.03,
+            ground_probe_distance: 0.12,
+            max_slope_degrees: 45.0,
+            footstep_stride: 1.4,
+            landing_speed_threshold: 4.0,
+            locomotion_min_horizontal_speed: 0.10,
+            ground_probe_max_upward_velocity: 0.10,
+            landing_min_airborne_seconds: 0.05,
+        }
     }
 }
 
@@ -129,15 +199,18 @@ impl Default for GameData {
                     },
                 },
                 sky: SkyData {
-                    definition_ref: "definitions/fps/sky_clear_morning.ytyp@sky_clear_morning".to_owned(),
+                    definition_ref: "shared/definitions/environment/default_sky.ytyp@default_sky".to_owned(),
                     radius: 220.0,
-                    mesh: String::new(),
+                    mesh: "models/environment/skydome.ydd@skydome_high".to_owned(),
                     follow_camera: true,
-                    cloud_dictionary: String::new(),
-                    cloud_profile: "clear".to_owned(),
+                    environment_profile: "environment.game_ready_forest_road".to_owned(),
+                    environment_region: "game_ready.forest_road".to_owned(),
+                    environment_biome: "temperate_forest".to_owned(),
+                    cloud_dictionary: "textures/environment/sky_clouds_v2.ytd".to_owned(),
+                    cloud_profile: "temperate_cumulus_dynamic".to_owned(),
                     sun_radius: 18.0,
                     moon_radius: 13.5,
-                    moon_texture: String::new(),
+                    moon_texture: "textures/environment/skydome.ytd@moon_new".to_owned(),
                     atmosphere: SkyAtmosphereData {
                         day_zenith: [0.23, 0.42, 0.82],
                         day_horizon: [0.64, 0.78, 0.96],
@@ -171,7 +244,7 @@ impl Default for GameData {
                 },
                 lighting: LightingData {
                     ambient_color: [0.42, 0.47, 0.56],
-                    ambient_intensity: 0.52,
+                    ambient_intensity: 0.30,
                     sun_direction: [-0.55, -0.82, -0.28],
                     sun_color: [1.0, 0.955, 0.86],
                     sun_intensity: 4.60,
@@ -184,7 +257,7 @@ impl Default for GameData {
                     softness: 1.0,
                     bias: 0.0025,
                     normal_bias: 0.015,
-                    contact_strength: 0.58,
+                    contact_strength: 0.72,
                     filter: "pcss".to_owned(),
                     pcss_light_angular_radius_degrees: 0.266,
                     pcss_blocker_search_radius_texels: 3.0,
@@ -234,36 +307,9 @@ impl Default for GameData {
                 yaw: -0.72,
                 move_speed: 7.3,
                 look_sensitivity: 0.0022,
-                model: PlayerModelData {
-                    enabled: false,
-                    source: String::new(),
-                    target_height: 1.78,
-                    eye_height_ratio: 0.91,
-                    local_offset: [0.0, 0.0, 0.0],
-                    yaw_offset: 0.0,
-                    hide_in_first_person: false,
-                },
-                tuning: PlayerTuningData {
-                    body_radius: 0.45,
-                    body_half_height: 0.45,
-                    crouched_body_half_height: 0.15,
-                    visual_radius: 0.45,
-                    visual_half_height: 0.90,
-                    camera_eye_height: 0.72,
-                    crouched_camera_eye_height: 0.45,
-                    crouch_camera_speed: 12.0,
-                    sprint_multiplier: 1.75,
-                    jump_speed: 5.5,
-                    gravity: 9.81,
-                    contact_skin: 0.035,
-                    ground_probe_distance: 0.25,
-                    max_slope_degrees: 50.0,
-                    footstep_stride: 2.1,
-                    landing_speed_threshold: 3.0,
-                    locomotion_min_horizontal_speed: 0.15,
-                    ground_probe_max_upward_velocity: 0.1,
-                    landing_min_airborne_seconds: 0.05,
-                },
+                character_ref: DEFAULT_PLAYER_CHARACTER_REF.to_owned(),
+                model: PlayerModelData::default(),
+                tuning: PlayerTuningData::default(),
             },
             gameplay: GameplayData {
                 status: GameplayStatusData {

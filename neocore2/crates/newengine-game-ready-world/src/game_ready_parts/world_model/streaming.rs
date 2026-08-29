@@ -2,11 +2,12 @@ use super::super::foliage::{decode_runtime_ydd_prefab, DecodedPrefabMeshPart};
 use super::super::*;
 use super::materials::{register_forest_road_materials, ForestRoadMaterials};
 use super::spawn::{
-    spawn_collision_ydd_prefab_from_decoded, spawn_dynamic_ydd_prefab_from_decoded,
-    spawn_static_ydd_prefab_from_decoded,
+    spawn_box_collision_ydd_prefab_from_decoded, spawn_collision_ydd_prefab_from_decoded,
+    spawn_dynamic_ydd_prefab_from_decoded, spawn_static_ydd_prefab_from_decoded,
 };
 use super::{
-    StaticWorldSpawnSummary, COLLISION_WORLD_PROXY, DYNAMIC_WORLD_PROXY, STATIC_WORLD_PROXY,
+    StaticWorldSpawnSummary, BOX_COLLISION_WORLD_PROXY, COLLISION_WORLD_PROXY, DYNAMIC_WORLD_PROXY,
+    STATIC_WORLD_PROXY,
 };
 use newengine_core::{TaskLane, TaskPriority, TaskRequest, TaskTicket, ThreadPoolHandle};
 use newengine_engine_runtime::gameplay::WorldAssemblyProgress;
@@ -48,18 +49,15 @@ pub(in super::super) fn begin_static_world_prefabs(
                         .proxy
                         .trim()
                         .eq_ignore_ascii_case(DYNAMIC_WORLD_PROXY)
-                    || prefab
-                        .proxy
-                        .trim()
-                        .eq_ignore_ascii_case(COLLISION_WORLD_PROXY))
+                    || is_collision_proxy(prefab.proxy.trim()))
         })
         .cloned()
         .collect::<Vec<_>>();
     // Collision is launch-critical and is admitted before render-only static geometry.
     // Decoded source packets remain cached for the later visual declaration.
     candidates.sort_by(|a, b| {
-        let a_collision = a.proxy.trim().eq_ignore_ascii_case(COLLISION_WORLD_PROXY);
-        let b_collision = b.proxy.trim().eq_ignore_ascii_case(COLLISION_WORLD_PROXY);
+        let a_collision = is_collision_proxy(a.proxy.trim());
+        let b_collision = is_collision_proxy(b.proxy.trim());
         let a_source = a.source.trim().replace('\\', "/");
         let b_source = b.source.trim().replace('\\', "/");
         // Collision is launch-critical: admit it before render-only static geometry.
@@ -97,6 +95,12 @@ pub(in super::super) fn begin_static_world_prefabs(
         models: total,
         ..StaticWorldSpawnSummary::default()
     }
+}
+
+#[inline]
+fn is_collision_proxy(proxy: &str) -> bool {
+    proxy.eq_ignore_ascii_case(COLLISION_WORLD_PROXY)
+        || proxy.eq_ignore_ascii_case(BOX_COLLISION_WORLD_PROXY)
 }
 
 fn static_world_source(prefab: &GameReadyPrefabSpec) -> String {
@@ -292,6 +296,17 @@ pub(crate) fn tick_game_ready_static_world_prefabs(
         let result = if prefab
             .proxy
             .trim()
+            .eq_ignore_ascii_case(BOX_COLLISION_WORLD_PROXY)
+        {
+            spawn_box_collision_ydd_prefab_from_decoded(
+                world,
+                state.parent,
+                &prefab,
+                decoded.as_slice(),
+            )
+        } else if prefab
+            .proxy
+            .trim()
             .eq_ignore_ascii_case(COLLISION_WORLD_PROXY)
         {
             spawn_collision_ydd_prefab_from_decoded(
@@ -353,6 +368,19 @@ pub(crate) fn tick_game_ready_static_world_prefabs(
                     error,
                 );
             }
+        }
+
+        // Decoded YDD packets can be much larger than the retained ECS declaration. Keep a
+        // source packet only while another queued placement still references it. The old path
+        // retained every decoded source until the entire world bootstrap completed, allowing
+        // a large map to accumulate a second full copy of already-admitted static geometry.
+        if !state
+            .pending
+            .iter()
+            .any(|pending_prefab| static_world_source(pending_prefab) == source)
+        {
+            state.decoded_cache.remove(&source);
+            state.decode_errors.remove(&source);
         }
     }
 

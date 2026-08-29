@@ -5,15 +5,14 @@ edition = "2021"
 description = "FPS game module composition for NewEngine"
 
 [dependencies]
-abi_stable = "0.11"
 newengine-game-module-api = { path = "../newengine-game-module-api" }
+newengine-game-module-fps-contract = { path = "../newengine-game-module-fps-contract" }
 newengine-game-module-composition = { path = "../newengine-game-module-composition" }
 newengine-gameplay-fps = { path = "../newengine-gameplay-fps" }
+newengine-fps-inventory-ui-runtime = { path = "../newengine-fps-inventory-ui-runtime" }
+newengine-fps-content-runtime = { path = "../newengine-fps-content-runtime" }
 newengine-gameplay-fps-api = { path = "../newengine-gameplay-fps-api" }
 newengine-gameplay-fps-lua = { path = "../newengine-gameplay-fps-lua" }
 newengine-gameplay-script-api = { path = "../newengine-gameplay-script-api" }
-newengine-plugin-api = { path = "../newengine-plugin-api" }
-newengine-plugin-host = { path = "../newengine-plugin-host" }
 newengine-project-runtime = { path = "../newengine-project-runtime" }
 newengine-service-api = { path = "../newengine-service-api" }
-serde_json = "1"

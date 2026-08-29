@@ -79,6 +79,12 @@ impl GameReadyRuntimeProfile {
             .insert::<Arc<newengine_scene_runtime::SceneBridge>>(Arc::clone(&self.scene));
         engine
             .resources_mut()
+            .insert(newengine_audio_world_runtime::AudioWorldScene::new(
+                self.scene.scene(),
+            ));
+        newengine_audio_world_runtime::register_audio_gateway_best_effort();
+        engine
+            .resources_mut()
             .insert(SceneGatewayAssetMounts::from_profile(GAME_READY_MOUNT_SPEC));
         if let Some(provider) = self.game_data_provider.clone() {
             engine
@@ -141,6 +147,11 @@ impl GameReadyRuntimeProfile {
 
     #[inline]
     pub fn register_engine_provider_routes_best_effort(&self) {
+        // CameraGatewayBridge is created with the profile, before the launcher creates the
+        // instance-owned runtime HostContext. Re-publish it here so the authoritative
+        // engine.camera route lives in the same registry as the rest of GameReady composition.
+        let _ = self.scene.publish_camera_gateway_best_effort();
+
         // Product-owned registrations only. Generic engine domains are materialized by
         // EngineCompositionSpec.runtime_units through the host runtime-unit catalog.
         register_game_ready_entity_archetypes_best_effort();
@@ -241,5 +252,32 @@ mod composition_architecture_tests {
         assert!(!manifest.contains(&render_dependency));
         assert!(!manifest.contains(&physics_dependency));
         assert!(manifest.contains("features = [\"full-runtime\"]"));
+    }
+
+    #[test]
+    fn gameready_runtime_publishes_authoritative_camera_gateway_in_active_host_context() {
+        let _bootstrap_host = newengine_plugin_host::create_host_context();
+        let profile = GameReadyRuntimeProfile::new();
+
+        let _runtime_host = newengine_plugin_host::create_host_context();
+        assert!(
+            newengine_plugin_host::active_engine_gateway_route("engine.camera").is_none(),
+            "fresh runtime host context must begin without inherited camera routes"
+        );
+
+        profile.register_engine_provider_routes_best_effort();
+
+        let camera = newengine_plugin_host::active_engine_gateway_route("engine.camera")
+            .expect("GameReady runtime must publish engine.camera");
+        assert_eq!(camera.provider_service_id, "engine.camera");
+        assert_eq!(
+            camera.provider_route_id.as_deref(),
+            Some("engine.camera.stargazer")
+        );
+        assert_eq!(
+            camera.provider_owner_id,
+            "newengine-engine-runtime.camera-gateway"
+        );
+        assert_eq!(camera.backend_capability_id, "camera.backend");
     }
 }

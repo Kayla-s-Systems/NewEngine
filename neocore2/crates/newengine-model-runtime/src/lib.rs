@@ -42,94 +42,7 @@ mod skeleton_metadata;
 pub use adapter::ModelAssetAdapter;
 pub use asset_graph_gateway::register_asset_graph_gateway_best_effort;
 
-#[derive(Clone)]
-pub struct ModelGatewayClient {
-    host: HostApiV1,
-    service_id: RString,
-}
-
-impl ModelGatewayClient {
-    #[inline]
-    pub fn new(host: HostApiV1) -> Self {
-        Self {
-            host,
-            service_id: RString::from(ENGINE_ASSETS_MODELS_SERVICE_ID),
-        }
-    }
-
-    #[inline]
-    pub fn with_service_id(host: HostApiV1, service_id: &str) -> Self {
-        Self {
-            host,
-            service_id: RString::from(service_id),
-        }
-    }
-
-    pub fn assemble_bundle(&self, request: &ModelAssetRequest) -> Result<ModelAssetBundle, String> {
-        let payload = serde_json::to_vec(request).map_err(|e| e.to_string())?;
-        let bytes = self.call_raw(MODEL_SERVICE_METHOD_ASSEMBLE_JSON_V1, payload)?;
-        serde_json::from_slice::<ModelAssetBundle>(&bytes).map_err(|e| {
-            format!("engine.assets.models returned invalid ModelAssetBundle JSON: {e}")
-        })
-    }
-
-    pub fn validate_request(
-        &self,
-        request: &ModelAssetRequest,
-    ) -> Result<ModelConstructionValidation, String> {
-        let payload = serde_json::to_vec(request).map_err(|e| e.to_string())?;
-        let bytes = self.call_raw(MODEL_SERVICE_METHOD_VALIDATE_JSON_V1, payload)?;
-        serde_json::from_slice::<ModelConstructionValidation>(&bytes)
-            .map_err(|e| format!("engine.assets.models returned invalid validation JSON: {e}"))
-    }
-
-    pub fn drawable_dictionary_manifest(
-        &self,
-        request: &DrawableDictionaryRequest,
-    ) -> Result<DrawableDictionaryManifest, String> {
-        let payload = serde_json::to_vec(request).map_err(|e| e.to_string())?;
-        let bytes = self.call_raw(
-            MODEL_SERVICE_METHOD_DRAWABLE_DICTIONARY_MANIFEST_JSON_V1,
-            payload,
-        )?;
-        serde_json::from_slice::<DrawableDictionaryManifest>(&bytes).map_err(|e| {
-            format!("engine.assets.models returned invalid drawable dictionary manifest JSON: {e}")
-        })
-    }
-
-    pub fn resolve_drawable(
-        &self,
-        request: &DrawableDictionaryRequest,
-    ) -> Result<DrawableDictionaryManifest, String> {
-        let payload = serde_json::to_vec(request).map_err(|e| e.to_string())?;
-        let bytes = self.call_raw(MODEL_SERVICE_METHOD_RESOLVE_DRAWABLE_V1, payload)?;
-        serde_json::from_slice::<DrawableDictionaryManifest>(&bytes).map_err(|e| {
-            format!("engine.assets.models returned invalid resolved drawable JSON: {e}")
-        })
-    }
-
-    pub fn import_foliage(
-        &self,
-        request: &FoliageImportRequestV1,
-    ) -> Result<FoliageImportResponseV1, String> {
-        let payload = serde_json::to_vec(request).map_err(|e| e.to_string())?;
-        let bytes = self.call_raw(MODEL_SERVICE_METHOD_IMPORT_FOLIAGE_V1, payload)?;
-        serde_json::from_slice::<FoliageImportResponseV1>(&bytes).map_err(|e| {
-            format!("engine.assets.models returned invalid foliage import response JSON: {e}")
-        })
-    }
-
-    fn call_raw(&self, method_name: &str, payload: Vec<u8>) -> Result<Vec<u8>, String> {
-        (self.host.call_service_v1)(
-            self.service_id.clone(),
-            MethodName::from(method_name),
-            Blob::from(payload),
-        )
-        .into_result()
-        .map(|value| value.into_vec())
-        .map_err(|err| err.to_string())
-    }
-}
+pub use newengine_model_client::ModelGatewayClient;
 
 #[derive(Clone)]
 struct ModelRuntimeState {
@@ -313,3 +226,64 @@ fn register_model_gateway_service(client: AssetServiceClient, host: Option<HostA
         service: model_gateway_service(adapter),
     })
 }
+
+pub const MODELS_RUNTIME_UNIT_SPEC: newengine_runtime_unit_api::EngineRuntimeUnitSpec =
+    newengine_runtime_unit_api::EngineRuntimeUnitSpec::new(
+        "engine.runtime.models",
+        1,
+        newengine_runtime_unit_api::EngineRuntimeUnitKind::Provider,
+        &[newengine_model_domain_api::MODEL_BACKEND_CAPABILITY_ID],
+        &[
+            newengine_assets_api::ASSET_BACKEND_CAPABILITY_ID,
+            newengine_materials::MATERIALS_BACKEND_CAPABILITY_ID,
+        ],
+        newengine_runtime_unit_api::STATIC_PROVIDER_TAGS,
+    );
+
+pub const ASSET_GRAPH_RUNTIME_UNIT_SPEC: newengine_runtime_unit_api::EngineRuntimeUnitSpec =
+    newengine_runtime_unit_api::EngineRuntimeUnitSpec::new(
+        "engine.runtime.asset-graph",
+        1,
+        newengine_runtime_unit_api::EngineRuntimeUnitKind::Provider,
+        &[newengine_model_domain_api::ASSET_GRAPH_BACKEND_CAPABILITY_ID],
+        &[
+            newengine_assets_api::ASSET_BACKEND_CAPABILITY_ID,
+            newengine_model_domain_api::MODEL_BACKEND_CAPABILITY_ID,
+            newengine_assets_api::DEFINITIONS_BACKEND_CAPABILITY_ID,
+        ],
+        newengine_runtime_unit_api::STATIC_PROVIDER_TAGS,
+    );
+
+fn models_runtime_unit_factory(
+    _: &mut newengine_runtime_unit_api::Engine<()>,
+    _: &newengine_runtime_unit_api::StartupConfig,
+) -> newengine_runtime_unit_api::EngineResult<Option<Box<dyn newengine_runtime_unit_api::Module<()>>>>
+{
+    let host = newengine_plugin_host::default_host_api();
+    let client = newengine_assets_api::AssetServiceClient::new(host.clone());
+    let _ = register_model_gateway_best_effort_with_host(host, client);
+    Ok(None)
+}
+
+fn asset_graph_runtime_unit_factory(
+    _: &mut newengine_runtime_unit_api::Engine<()>,
+    _: &newengine_runtime_unit_api::StartupConfig,
+) -> newengine_runtime_unit_api::EngineResult<Option<Box<dyn newengine_runtime_unit_api::Module<()>>>>
+{
+    let host = newengine_plugin_host::default_host_api();
+    let client = newengine_assets_api::AssetServiceClient::new(host.clone());
+    let _ = register_asset_graph_gateway_best_effort(host, client);
+    Ok(None)
+}
+
+pub const MODELS_RUNTIME_UNIT_REGISTRATION: newengine_runtime_unit_api::RuntimeUnitRegistration =
+    newengine_runtime_unit_api::RuntimeUnitRegistration::new(
+        MODELS_RUNTIME_UNIT_SPEC,
+        models_runtime_unit_factory,
+    );
+pub const ASSET_GRAPH_RUNTIME_UNIT_REGISTRATION:
+    newengine_runtime_unit_api::RuntimeUnitRegistration =
+    newengine_runtime_unit_api::RuntimeUnitRegistration::new(
+        ASSET_GRAPH_RUNTIME_UNIT_SPEC,
+        asset_graph_runtime_unit_factory,
+    );

@@ -1,0 +1,16 @@
+[package]
+name = "newengine-host-probe-gpu"
+version = "0.1.0"
+edition = "2021"
+description = "Single-purpose GPU inventory and preference probe for NewEngine"
+
+[dependencies]
+newengine-host-capabilities-api = { path = "../newengine-host-capabilities-api" }
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.62.2", features = [
+    "Win32_Graphics_Dxgi",
+    "Win32_Graphics_Dxgi_Common",
+    "Win32_Graphics_Direct3D",
+    "Win32_Graphics_Direct3D12",
+] }

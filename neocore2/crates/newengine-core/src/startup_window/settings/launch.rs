@@ -20,6 +20,11 @@ impl StartupLaunchSettings {
     pub fn normalize(&mut self) {
         self.schema_version = STARTUP_SETTINGS_SCHEMA_VERSION;
         self.display.monitor_index = self.display.monitor_index.max(-1);
+        self.display.resolution = match self.display.resolution {
+            [0, 0] => [0, 0],
+            [width, height] if width == 0 || height == 0 => [0, 0],
+            [width, height] => [width.clamp(64, 16_384), height.clamp(64, 16_384)],
+        };
         self.display.render_scale = self.display.render_scale.clamp(0.25, 2.0);
         self.display.refresh_rate_millihz = self.display.refresh_rate_millihz.min(1_000_000);
         self.display.frame_limit = match self.display.frame_limit {

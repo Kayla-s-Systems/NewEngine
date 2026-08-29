@@ -137,7 +137,7 @@ fn viewport_toolbar_action(
         .tagged(if active { "active" } else { "inactive" })
 }
 
-fn lively_editor_action(mut component: UiComponentNode) -> UiComponentNode {
+pub(super) fn lively_editor_action(mut component: UiComponentNode) -> UiComponentNode {
     component
         .props
         .insert("interactive".to_owned(), serde_json::json!(true));

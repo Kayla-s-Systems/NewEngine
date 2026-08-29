@@ -75,6 +75,18 @@ pub struct VfxSystemDescriptorDto {
     #[serde(default)]
     pub max_particles: u32,
     #[serde(default)]
+    pub max_transient_lights: u32,
+    #[serde(default)]
+    pub max_decals: u32,
+    #[serde(default)]
+    pub max_trails: u32,
+    #[serde(default)]
+    pub semantic_effect_library: bool,
+    #[serde(default)]
+    pub surface_impact_response: bool,
+    #[serde(default)]
+    pub staged_runtime: bool,
+    #[serde(default)]
     pub simulation_stage: String,
 }
 

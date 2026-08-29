@@ -50,6 +50,11 @@ pub(crate) const RUNTIME_SERVICE_CATALOG: &[RuntimeServiceCatalogEntry] = &[
     ),
     #[cfg(feature = "runtime-domain-contracts")]
     RuntimeServiceCatalogEntry::new(
+        newengine_assets_api::ASSETS_STREAMING_RUNTIME_REQUIREMENT_SPEC,
+        "engine.assets.streaming request priority / semantic pins / CPU residency GC / metadata compaction",
+    ),
+    #[cfg(feature = "runtime-domain-contracts")]
+    RuntimeServiceCatalogEntry::new(
         newengine_assets_api::ASSET_TYPES_RUNTIME_REQUIREMENT_SPEC,
         "engine.assets.types descriptor registry / VFS navigation",
     ),

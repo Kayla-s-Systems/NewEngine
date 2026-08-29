@@ -11,7 +11,7 @@ fn canonical_editor_actor_roots(
         .filter(|entity| {
             protected_root != Some(*entity)
                 && world
-                    .get::<crate::editor_viewport::EditorGizmoAxisComponent>(*entity)
+                    .get::<newengine_editor_viewport_runtime::EditorGizmoAxisComponent>(*entity)
                     .is_none()
                 && world.get::<crate::gameplay::PlayerActor>(*entity).is_none()
         })
@@ -58,12 +58,12 @@ fn authored_editor_actor_root(world: &newengine_ecs::World, entity: EntityId) ->
         if world.get::<crate::gameplay::PlayerActor>(current).is_some() {
             return Some(current);
         }
-        if let Some(authored) = world.get::<crate::gameplay::AuthoredMapPlacement>(current) {
+        if let Some(authored) = world.get::<newengine_world_authoring_api::AuthoredMapPlacement>(current) {
             if authored.primary {
                 return Some(current);
             }
             if let Some(primary) = world
-                .query::<crate::gameplay::AuthoredMapPlacement>()
+                .query::<newengine_world_authoring_api::AuthoredMapPlacement>()
                 .find_map(|(candidate, identity)| {
                     (identity.primary
                         && identity.map_ref == authored.map_ref

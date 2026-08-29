@@ -62,7 +62,11 @@ pub(crate) fn standalone_fps_bindings() -> Vec<InputBinding> {
         InputBinding::keyboard_pressed(action::PLAYER_RELOAD, keys::KEY_R),
         InputBinding::keyboard_pressed(action::PLAYER_INTERACT, keys::KEY_E),
         InputBinding::keyboard_pressed(action::INVENTORY_TOGGLE, keys::KEY_I),
+        // Character selector is a real keyboard modal. Keep explicit press/release
+        // phases so M can open, release can re-arm, and the next M press can close
+        // without an arbitrary multi-frame timeout.
         InputBinding::keyboard_pressed(action::CHARACTER_SELECT_TOGGLE, keys::KEY_M),
+        InputBinding::keyboard_released(action::CHARACTER_SELECT_TOGGLE, keys::KEY_M),
         InputBinding::keyboard_pressed(action::EQUIP_PRIMARY, keys::DIGIT1),
         InputBinding::keyboard_pressed(action::EQUIP_SECONDARY, keys::DIGIT2),
         InputBinding::keyboard_pressed(action::EQUIP_SIDEARM, keys::DIGIT3),

@@ -1,0 +1,9 @@
+[package]
+name = "newengine-world-authoring-api"
+version = "0.1.0"
+edition = "2021"
+description = "Provider-neutral authored world placement contracts for NewEngine"
+license = "Proprietary"
+
+[dependencies]
+newengine-math = { path = "../newengine-math" }

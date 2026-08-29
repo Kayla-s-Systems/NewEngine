@@ -39,19 +39,44 @@ pub(crate) fn environment_frame_for_sky_cycle(
     cycle: &SkyCycleRuntime,
     snapshot: newengine_core::time::TimeSnapshotV1,
 ) -> Option<newengine_world_environment_api::EnvironmentFrameDto> {
+    let environment_profile = if cycle.environment_profile.trim().is_empty() {
+        "environment.default"
+    } else {
+        cycle.environment_profile.trim()
+    };
+    let active_region = (!cycle.environment_region.trim().is_empty())
+        .then(|| cycle.environment_region.trim().to_owned());
+    let active_biome = (!cycle.environment_biome.trim().is_empty())
+        .then(|| cycle.environment_biome.trim().to_owned());
+    let cloud_profile = cycle.cloud_profile.trim().to_ascii_lowercase();
+    let weather_constraint = if matches!(
+        cloud_profile.as_str(),
+        "clear" | "cloudless" | "clear_sky" | "clear-sky" | "none"
+    ) {
+        newengine_world_environment_api::EnvironmentWeatherConstraint::ClearSky
+    } else {
+        newengine_world_environment_api::EnvironmentWeatherConstraint::Dynamic
+    };
     let request = newengine_world_environment_api::EnvironmentFrameRequest {
         frame_id: snapshot.frame_index,
         world_instance_id: "game-ready-fps.world".to_owned(),
         time: snapshot,
         observer_position: newengine_world_environment_api::Vec3Dto::zero(),
         observer_cell: None,
-        active_region: Some("game_ready.forest_road".to_owned()),
-        active_biome: Some("temperate_forest".to_owned()),
+        active_region,
+        active_biome,
         resident_cells: Vec::new(),
+        // This bridge samples the current single-column environment only. Mesoscale transport
+        // is disabled until world streaming supplies explicit atmospheric cells/boundaries.
+        spatial_cell_size_meters: 0.0,
+        surface_boundaries: Vec::new(),
         environment_profile: newengine_world_environment_api::EnvironmentProfileRefDto {
-            profile_id: "environment.game_ready_forest_road".to_owned(),
+            profile_id: environment_profile.to_owned(),
         },
-        seed: 0x4752_4541_4459u64 ^ u64::from(cycle.day_length_seconds.to_bits()),
+        weather_constraint,
+        seed: 0x4752_4541_4459u64
+            ^ u64::from(cycle.day_length_seconds.to_bits())
+            ^ u64::from(cycle.latitude_degrees.to_bits()).rotate_left(17),
     };
     let payload = match serde_json::to_vec(&request) {
         Ok(payload) => payload,

@@ -22,6 +22,13 @@ pub const GAME_READY_FPS_WINDOW_TITLE: &str = "North Star Game Ready FPS";
 pub const GAME_READY_FPS_EARLY_LOG_FILE: &str = "game-ready-fps-early.log";
 pub const GAME_READY_PROFILE_ENV: &str = "NEWENGINE_SCENE_PROFILE";
 pub const GAME_READY_DEFAULT_PROFILE_ASSET: &str = "maps/white_platform.ymap";
+pub const DEFAULT_PLAYER_CHARACTER_REF: &str =
+    "shared/definitions/fps/player_abby.ytyp@player_abby";
+
+pub const SHARED_UNARMED_ITEM_NAME: &str = "weapon.unarmed";
+pub const SHARED_UNARMED_DEFINITION_REF: &str = "definitions/weapon/unarmed.ytyp@unarmed";
+pub const SHARED_ACOUSTIC_MATERIAL_LIBRARY_REF: &str =
+    "shared/definitions/audio/acoustic_materials.ytyp@acoustic_materials";
 
 pub const DEFAULT_RIFLE_ITEM_NAME: &str = "weapon.rifle.standard";
 pub const DEFAULT_RIFLE_AMMO_NAME: &str = "ammo.rifle.standard";
@@ -50,6 +57,51 @@ mod tests {
     fn contract_validation_rejects_non_finite_provider_data() {
         let mut data = GameData::default();
         data.player.move_speed = f32::NAN;
+        assert!(data.validate().is_err());
+    }
+
+    #[test]
+    fn project_payload_can_omit_shared_character_implementation() {
+        let mut value = serde_json::to_value(GameData::default()).unwrap();
+        let player = value
+            .get_mut("player")
+            .and_then(serde_json::Value::as_object_mut)
+            .expect("player object");
+        player.remove("character_ref");
+        player.remove("move_speed");
+        player.remove("model");
+        player.remove("tuning");
+
+        let decoded: GameData = serde_json::from_value(value).unwrap();
+        assert_eq!(decoded.player.character_ref, DEFAULT_PLAYER_CHARACTER_REF);
+        assert_eq!(decoded.player.move_speed, 3.0);
+        assert!(!decoded.player.model.enabled);
+        assert_eq!(decoded.player.tuning.gravity, 9.81);
+        assert_eq!(decoded.player.tuning.motion_response, None);
+        decoded.validate().unwrap();
+    }
+
+    #[test]
+    fn v1_player_tuning_can_omit_additive_motion_response() {
+        let mut value = serde_json::to_value(GameData::default()).unwrap();
+        let tuning = value
+            .get_mut("player")
+            .and_then(|player| player.get_mut("tuning"))
+            .and_then(serde_json::Value::as_object_mut)
+            .expect("player tuning object");
+        tuning.remove("motion_response");
+
+        let decoded: GameData = serde_json::from_value(value).unwrap();
+        assert_eq!(decoded.schema, GAME_DATA_SCHEMA);
+        assert_eq!(decoded.version, GAME_DATA_VERSION);
+        assert_eq!(decoded.player.tuning.motion_response, None);
+        decoded.validate().unwrap();
+    }
+
+    #[test]
+    fn player_character_ref_is_mandatory_after_deserialization() {
+        let mut data = GameData::default();
+        data.player.character_ref.clear();
         assert!(data.validate().is_err());
     }
 

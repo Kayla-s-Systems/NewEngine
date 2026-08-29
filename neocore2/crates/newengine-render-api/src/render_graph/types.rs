@@ -121,6 +121,7 @@ pub enum RenderGraphPassKind {
     GBuffer,
     DeferredLighting,
     ForwardOpaque,
+    ParticleSimulation,
     Transparent,
     Water,
     PostFx,

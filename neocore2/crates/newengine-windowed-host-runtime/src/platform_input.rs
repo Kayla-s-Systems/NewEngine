@@ -1,8 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use std::collections::BTreeSet;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Mutex, OnceLock};
+use std::sync::OnceLock;
 
 use newengine_core::StableServiceCall;
 use newengine_math::collections_prelude::NeBTreeMap;
@@ -15,7 +14,6 @@ pub const INPUT_SERVICE_ID: &str = newengine_input_api::ENGINE_INPUT_SERVICE_ID;
 static INPUT_POLL_ONLINE_LOGGED: AtomicBool = AtomicBool::new(false);
 static INPUT_POLL_OFFLINE_LOGGED: AtomicBool = AtomicBool::new(false);
 static INPUT_STATE_CALL: OnceLock<StableServiceCall> = OnceLock::new();
-static PREVIOUS_KEYS_DOWN: OnceLock<Mutex<BTreeSet<u32>>> = OnceLock::new();
 
 #[inline]
 fn input_state_call() -> &'static StableServiceCall {
@@ -64,7 +62,6 @@ pub fn poll_input_frame() -> Option<UiInputFrame> {
     out.keys_down.extend(st.keys.down);
     out.keys_pressed.extend(st.keys.pressed);
     out.keys_released.extend(st.keys.released);
-    suppress_keyboard_autorepeat(&mut out);
 
     out.mouse_pos = Some((st.mouse.pos.x, st.mouse.pos.y));
     out.mouse_delta = (st.mouse.delta.x, st.mouse.delta.y);
@@ -125,21 +122,10 @@ pub fn poll_input_frame() -> Option<UiInputFrame> {
     Some(out)
 }
 
-fn suppress_keyboard_autorepeat(frame: &mut UiInputFrame) {
-    let previous_lock = PREVIOUS_KEYS_DOWN.get_or_init(|| Mutex::new(BTreeSet::new()));
-    let mut previous = previous_lock
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    retain_new_key_edges(&previous, &mut frame.keys_pressed);
-    *previous = frame.keys_down.clone();
-}
-
-fn retain_new_key_edges(previous_down: &BTreeSet<u32>, pressed: &mut BTreeSet<u32>) {
-    // Win32 key-repeat may report another `pressed` pulse while the physical key
-    // is still down. Semantic `keyboard_pressed` means an up->down edge, so only
-    // retain keys that were not down in the previous atomic input snapshot.
-    pressed.retain(|key| !previous_down.contains(key));
-}
+// `engine.input.state_json` is the sole owner of keyboard one-shot edges.
+// The active provider derives `pressed/released` from the physical transition and
+// clears them after the atomic snapshot, so re-deriving edges here from a previous
+// `keys_down` frame can discard a valid first press when provider/host polling phases differ.
 
 fn gate_gameplay_text_leak(frame: &mut UiInputFrame) -> bool {
     if frame.text.is_empty() && frame.ime_commit.is_empty() {
@@ -275,26 +261,5 @@ fn parse_text_edit_op_kind(op: &str) -> Option<UiTextEditOpKind> {
         "cut" => Some(UiTextEditOpKind::Cut),
         "paste" => Some(UiTextEditOpKind::Paste),
         _ => None,
-    }
-}
-
-#[cfg(test)]
-mod autorepeat_tests {
-    use super::*;
-
-    #[test]
-    fn keyboard_autorepeat_is_not_a_second_pressed_edge() {
-        let previous = BTreeSet::from([newengine_input_api::key_code::KEY_M]);
-        let mut pressed = BTreeSet::from([newengine_input_api::key_code::KEY_M]);
-        retain_new_key_edges(&previous, &mut pressed);
-        assert!(pressed.is_empty());
-    }
-
-    #[test]
-    fn fresh_keyboard_down_remains_a_pressed_edge() {
-        let previous = BTreeSet::new();
-        let mut pressed = BTreeSet::from([newengine_input_api::key_code::KEY_M]);
-        retain_new_key_edges(&previous, &mut pressed);
-        assert!(pressed.contains(&newengine_input_api::key_code::KEY_M));
     }
 }

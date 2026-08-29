@@ -41,6 +41,8 @@ pub const ARROW_RIGHT: u32 = 88;
 pub const ARROW_DOWN: u32 = 89;
 
 pub const ESCAPE: u32 = 114;
+/// Physical grave/backquote key (` / ~). Used by global developer console toggle.
+pub const BACKQUOTE: u32 = 115;
 
 pub const F1: u32 = 159;
 pub const F2: u32 = 160;

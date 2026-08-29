@@ -4,9 +4,11 @@
 use newengine_game_data::GameDataSnapshot;
 use newengine_gameplay_fps_api::{
     FpsDemoGoal, FpsDemoHazard, FpsDemoPickup, FpsDemoRules, FpsDemoState, FpsDemoTarget,
-    FpsPlayerTuning,
+    FpsMotionResponseTuning, FpsPlayerTuning,
 };
 
+#[path = "game_ready_parts/animation_events.rs"]
+mod animation_events;
 #[path = "game_ready_parts/assets_bootstrap.rs"]
 mod assets_bootstrap;
 mod content;
@@ -63,7 +65,7 @@ use newengine_procedural_noise::{
 };
 use newengine_scene::{
     spawn_named, Scene, SceneBucketedCellPlan, SceneCellCoord, SceneLayeredStreamingPlan,
-    SceneResidencySet, SceneStreamingBudget, SceneStreamingProfile,
+    SceneResidencySet, SceneStreamingBudget, SceneStreamingObserver, SceneStreamingProfile,
 };
 use newengine_task_api::{task_domain, task_pass};
 use newengine_transform::{set_parent, Transform};

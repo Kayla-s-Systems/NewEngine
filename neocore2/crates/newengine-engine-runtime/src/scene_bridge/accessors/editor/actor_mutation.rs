@@ -23,7 +23,7 @@ impl SceneBridge {
 
         for source_root in roots {
             let source_authored = world
-                .get::<crate::gameplay::AuthoredMapPlacement>(source_root)
+                .get::<newengine_world_authoring_api::AuthoredMapPlacement>(source_root)
                 .cloned()
                 .filter(|authored| authored.primary);
             let duplicate_authored = source_authored
@@ -34,7 +34,7 @@ impl SceneBridge {
             if let Some(authored) = source_authored.as_ref() {
                 clone_roots.extend(
                     world
-                        .query::<crate::gameplay::AuthoredMapPlacement>()
+                        .query::<newengine_world_authoring_api::AuthoredMapPlacement>()
                         .filter_map(|(entity, candidate)| {
                             (!candidate.primary
                                 && candidate.map_ref == authored.map_ref
@@ -103,7 +103,7 @@ impl SceneBridge {
                 clone_component!(
                     *source,
                     target,
-                    crate::gameplay::AuthoredMapPlacementReplicaScaleState
+                    newengine_world_authoring_api::AuthoredMapPlacementReplicaScaleState
                 );
 
                 if let (
@@ -114,7 +114,7 @@ impl SceneBridge {
                     source_authored.as_ref(),
                     duplicate_authored.as_ref(),
                     world
-                        .get::<crate::gameplay::AuthoredMapPlacement>(*source)
+                        .get::<newengine_world_authoring_api::AuthoredMapPlacement>(*source)
                         .cloned(),
                 ) {
                     if source_identity.map_ref == original_identity.map_ref
@@ -123,7 +123,7 @@ impl SceneBridge {
                     {
                         let _ = world.insert(
                             target,
-                            crate::gameplay::AuthoredMapPlacement::new(
+                            newengine_world_authoring_api::AuthoredMapPlacement::new(
                                 new_primary_identity.map_ref.clone(),
                                 new_primary_identity.placement_id.clone(),
                                 new_primary_identity.source,
@@ -133,7 +133,7 @@ impl SceneBridge {
                         if source_identity.primary {
                             let _ = world.insert(target, clone_origin.clone());
                             let _ =
-                                world.insert(target, crate::gameplay::AuthoredMapPlacementDirty);
+                                world.insert(target, newengine_world_authoring_api::AuthoredMapPlacementDirty);
                         }
                     }
                 }
@@ -194,7 +194,7 @@ impl SceneBridge {
         let mut authored_deletions = Vec::new();
         for root in &actor_roots {
             let Some(authored) = world
-                .get::<crate::gameplay::AuthoredMapPlacement>(*root)
+                .get::<newengine_world_authoring_api::AuthoredMapPlacement>(*root)
                 .cloned()
                 .filter(|authored| authored.primary)
             else {
@@ -202,14 +202,14 @@ impl SceneBridge {
             };
 
             if world
-                .get::<crate::gameplay::AuthoredMapPlacementCloneSource>(*root)
+                .get::<newengine_world_authoring_api::AuthoredMapPlacementCloneSource>(*root)
                 .is_none()
             {
                 authored_deletions.push(authored.clone());
             }
             delete_roots.extend(
                 world
-                    .query::<crate::gameplay::AuthoredMapPlacement>()
+                    .query::<newengine_world_authoring_api::AuthoredMapPlacement>()
                     .filter_map(|(entity, candidate)| {
                         (!candidate.primary
                             && candidate.map_ref == authored.map_ref
@@ -288,8 +288,8 @@ impl SceneBridge {
             {
                 let mut scene = self.scene.write();
                 let world = scene.world_mut();
-                let _ = world.insert(entity, crate::gameplay::AuthoredMapPlacementDirty);
-                crate::editor_viewport::sync_authored_map_placement_replicas(world, entity);
+                let _ = world.insert(entity, newengine_world_authoring_api::AuthoredMapPlacementDirty);
+                crate::editor_viewport_adapter::sync_editor_transform_side_effects(world, entity);
             }
             self.publish_inspector_state(Some(entity));
             newengine_ulog_api::ulog::info!(

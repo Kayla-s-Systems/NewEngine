@@ -10,8 +10,40 @@ fn normalize_vfs_path(uri: &str) -> Result<String, String> {
     Ok(reference.logical_path)
 }
 
+#[cfg(test)]
 fn select_weighted_clip(cue: &SoundCue, unit: f32) -> Option<&SoundCueClip> {
     select_weighted_clips(&cue.clips, unit)
+}
+
+fn select_weighted_clips_avoiding<'a>(
+    clips: &'a [SoundCueClip],
+    unit: f32,
+    recent: &VecDeque<String>,
+) -> Option<&'a SoundCueClip> {
+    if recent.is_empty() {
+        return select_weighted_clips(clips, unit);
+    }
+    let total = clips
+        .iter()
+        .filter(|clip| !recent.iter().any(|uri| uri == &clip.clip.uri))
+        .map(|clip| clip.weight.max(0.0))
+        .sum::<f32>();
+    if !(total.is_finite() && total > 0.0) {
+        return select_weighted_clips(clips, unit);
+    }
+    let mut cursor = unit.clamp(0.0, 0.999_999_94) * total;
+    let mut fallback = None;
+    for clip in clips {
+        if recent.iter().any(|uri| uri == &clip.clip.uri) {
+            continue;
+        }
+        fallback = Some(clip);
+        cursor -= clip.weight.max(0.0);
+        if cursor <= 0.0 {
+            return Some(clip);
+        }
+    }
+    fallback
 }
 
 fn select_weighted_clips(clips: &[SoundCueClip], unit: f32) -> Option<&SoundCueClip> {

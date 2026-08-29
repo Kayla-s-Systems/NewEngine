@@ -211,7 +211,24 @@ pub fn standard_runtime_frame(desc: StandardRuntimePipelineDesc) -> RenderFrameP
         )
         .submit();
     expand_ui_composite_layers(&mut plan, &desc.ui_layers);
+    declare_graph_draw_lists(&mut plan);
     plan
+}
+
+fn declare_graph_draw_lists(plan: &mut RenderFramePlan) {
+    let mut required = Vec::new();
+    for pass in &plan.graph.passes {
+        for &kind in &pass.draw_lists {
+            if !required.contains(&kind) {
+                required.push(kind);
+            }
+        }
+    }
+    for kind in required {
+        if !plan.draw_lists.iter().any(|desc| desc.kind == kind) {
+            plan.draw_lists.push(DrawListDesc::standard(kind));
+        }
+    }
 }
 
 /// Minimal presentation graph used by bootstrap, UI-only tools and degraded recovery.
@@ -359,6 +376,38 @@ mod tests {
             .writes
             .iter()
             .any(|write| write.resource == crate::RG_SCENE_HDR_COLOR));
+    }
+
+    #[test]
+    fn standard_pipeline_declares_every_graph_draw_list_route() {
+        let plan = standard_runtime_frame(
+            StandardRuntimePipelineDesc::new(
+                3,
+                Extent2D::new(1600, 900),
+                Extent2D::new(1600, 900),
+            )
+            .viewport_is_surface(true)
+            .shadow(false, 1)
+            .postfx(false)
+            .ui(false)
+            .debug_overlay(false)
+            .draw_lists([DrawListDesc::standard(
+                newengine_render_api::RenderDrawListKind::OpaqueForward,
+            )]),
+        );
+        let report = plan.validate_draw_list_routes();
+        assert!(report.errors.is_empty(), "route errors: {:?}", report.errors);
+        assert!(
+            report
+                .warnings
+                .iter()
+                .all(|issue| issue.code != "draw_list.route_without_declared_list"),
+            "route warnings: {:?}",
+            report.warnings
+        );
+        assert!(plan.draw_lists.iter().any(|desc| {
+            desc.kind == newengine_render_api::RenderDrawListKind::Transparent
+        }));
     }
 
     #[test]

@@ -23,3 +23,19 @@ pub const PHYSICS_RUNTIME_UNIT_SPEC: newengine_service_api::EngineRuntimeUnitSpe
         &[newengine_physics_api::PHYSICS_BACKEND_CAPABILITY_ID],
         &["engine.runtime-unit", "backend-neutral", "service-adapter"],
     );
+fn runtime_unit_factory(
+    _: &mut newengine_runtime_unit_api::Engine<()>,
+    startup: &newengine_runtime_unit_api::StartupConfig,
+) -> newengine_runtime_unit_api::EngineResult<Option<Box<dyn newengine_runtime_unit_api::Module<()>>>>
+{
+    Ok(Some(Box::new(PhysicsBackendRuntimeModule::new(
+        startup.modules_dir.clone(),
+    ))))
+}
+
+/// Statically linked materializer owned by this adapter crate.
+pub const RUNTIME_UNIT_REGISTRATION: newengine_runtime_unit_api::RuntimeUnitRegistration =
+    newengine_runtime_unit_api::RuntimeUnitRegistration::new(
+        PHYSICS_RUNTIME_UNIT_SPEC,
+        runtime_unit_factory,
+    );

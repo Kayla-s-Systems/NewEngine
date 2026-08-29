@@ -1,5 +1,9 @@
-use crate::audio_scene::{AcousticSurface, AudioEmitter, AudioEnvironmentZone, AudioPortal};
-use newengine_audio_api::AudioAmbienceBed;
+use newengine_audio_api::{
+    AcousticSurface, AudioAmbienceBed, AudioEmitter, AudioEnvironmentZone, AudioPortal,
+};
+use newengine_audio_world_api::{
+    AudioAmbienceBedRuntime, AudioEmitterRuntime, AudioOcclusionObservation,
+};
 use newengine_bounds::Bounds;
 use newengine_ecs::{Component, EntityId, World};
 use newengine_math::collections::FxHashSet;
@@ -193,9 +197,9 @@ pub fn restore_runtime_world_snapshot(world: &mut World, snapshot: RuntimeWorldS
         restore_component_clone(world, entry.entity, entry.audio_environment_zone);
         restore_component_clone(world, entry.entity, entry.audio_portal);
         restore_component_clone(world, entry.entity, entry.audio_ambience_bed);
-        let _ = world.remove::<crate::audio_ambience::AudioAmbienceBedRuntime>(entry.entity);
-        let _ = world.remove::<crate::audio_scene::AudioEmitterRuntime>(entry.entity);
-        let _ = world.remove::<crate::audio_occlusion::AudioOcclusionObservation>(entry.entity);
+        let _ = world.remove::<AudioAmbienceBedRuntime>(entry.entity);
+        let _ = world.remove::<AudioEmitterRuntime>(entry.entity);
+        let _ = world.remove::<AudioOcclusionObservation>(entry.entity);
         restore_component_opt(world, entry.entity, entry.velocity);
         restore_component_opt(world, entry.entity, entry.angular_velocity);
         restore_component_opt(world, entry.entity, entry.motor_input);
@@ -349,7 +353,7 @@ mod tests {
         }
         world.insert_resource(GameplayModalState {
             active: true,
-            capture: crate::gameplay::GameplayInputCapture::modal(),
+            capture: newengine_input_capture_api::GameplayInputCapture::modal(),
             provider_count: 1,
             revision: 1,
         });

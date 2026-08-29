@@ -4,7 +4,9 @@ use std::sync::Arc;
 
 use newengine_core::{Engine, EngineError, EngineResult, Module, StartupConfig};
 use newengine_game_data::GameDataProvider;
-use newengine_game_data_lua::{LuaGameDataProvider, LUA_GAME_DATA_PROVIDER_ID};
+use newengine_game_data_lua::{
+    LuaGameDataProvider, LUA_GAME_DATA_PROVIDER_ID, SCRIPT_GAME_DATA_PROVIDER_ID,
+};
 use newengine_runtime_host::app_launcher::RuntimeHostRuntimeUnitRegistration;
 use newengine_service_api::{EngineRuntimeUnitKind, EngineRuntimeUnitSpec};
 
@@ -59,11 +61,21 @@ fn runtime_context(
 
 fn resolve_game_data_provider(engine: &mut Engine<()>) -> EngineResult<Arc<dyn GameDataProvider>> {
     let runtime = runtime_context(engine)?;
-    if let Some(binding) = runtime.scripts.binding(LUA_GAME_DATA_PROVIDER_ID) {
+    if let Some((binding_id, binding)) = runtime
+        .scripts
+        .binding(SCRIPT_GAME_DATA_PROVIDER_ID)
+        .map(|binding| (SCRIPT_GAME_DATA_PROVIDER_ID, binding))
+        .or_else(|| {
+            runtime
+                .scripts
+                .binding(LUA_GAME_DATA_PROVIDER_ID)
+                .map(|binding| (LUA_GAME_DATA_PROVIDER_ID, binding))
+        })
+    {
         let operation = binding.operation.ok_or_else(|| {
             EngineError::Other(format!(
                 "runtime scripting binding '{}' must declare an operation",
-                LUA_GAME_DATA_PROVIDER_ID
+                binding_id
             ))
         })?;
         return Ok(Arc::new(
@@ -78,7 +90,8 @@ fn resolve_game_data_provider(engine: &mut Engine<()>) -> EngineResult<Arc<dyn G
         return Ok(provider);
     }
     Err(EngineError::Other(format!(
-        "GameReady scene-bootstrap unit requires project-authored game data binding '{}' (or an explicitly injected test/tool provider); built-in game-data fallback is forbidden",
+        "GameReady scene-bootstrap unit requires project-authored game data binding '{}' (legacy '{}', or an explicitly injected test/tool provider); built-in game-data fallback is forbidden",
+        SCRIPT_GAME_DATA_PROVIDER_ID,
         LUA_GAME_DATA_PROVIDER_ID
     )))
 }

@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use newengine_core::{Engine, EngineError, EngineResult, Module, StartupConfig};
+use newengine_core::{Engine, EngineError, EngineResult, StartupConfig};
 use newengine_service_api::{
     CapabilityMatrix, CompositionCandidate, CompositionRequirement, CompositionSolver,
     CompositionSolverInput, EngineCompositionSpec, EngineRuntimeUnitSpec, RuntimeUnitDescriptor,
@@ -116,52 +116,15 @@ impl RuntimeUnitCatalog {
     }
 }
 
-#[cfg(feature = "standard-backend-adapters")]
-fn render_runtime_unit(
-    _engine: &mut Engine<()>,
-    startup: &StartupConfig,
-) -> EngineResult<Option<Box<dyn Module<()>>>> {
-    Ok(Some(Box::new(
-        newengine_render_runtime_adapter::RenderBackendRuntimeModule::new(
-            startup.modules_dir.clone(),
-        ),
-    )))
-}
-
-#[cfg(feature = "standard-backend-adapters")]
-fn physics_runtime_unit(
-    _engine: &mut Engine<()>,
-    startup: &StartupConfig,
-) -> EngineResult<Option<Box<dyn Module<()>>>> {
-    Ok(Some(Box::new(
-        newengine_physics_runtime_adapter::PhysicsBackendRuntimeModule::new(
-            startup.modules_dir.clone(),
-        ),
-    )))
-}
-
-fn distribution_runtime_unit_catalog() -> Result<RuntimeUnitCatalog, String> {
+fn distribution_runtime_unit_catalog(
+    distribution_registrations: &'static [RuntimeHostRuntimeUnitRegistration],
+) -> Result<RuntimeUnitCatalog, String> {
     let mut catalog = RuntimeUnitCatalog::default();
 
-    #[cfg(feature = "standard-backend-adapters")]
-    {
-        catalog.register_static(
-            newengine_render_runtime_adapter::RENDER_RUNTIME_UNIT_SPEC,
-            "distribution:render-adapter",
-            render_runtime_unit,
-        )?;
-        catalog.register_static(
-            newengine_physics_runtime_adapter::PHYSICS_RUNTIME_UNIT_SPEC,
-            "distribution:physics-adapter",
-            physics_runtime_unit,
-        )?;
-    }
-
-    #[cfg(feature = "full-runtime")]
-    for registration in newengine_runtime_units::STATIC_RUNTIME_UNIT_REGISTRATIONS {
+    for registration in distribution_registrations {
         catalog.register_static(
             registration.spec,
-            "distribution:first-party-static",
+            "distribution:profile-selected-static",
             registration.factory,
         )?;
     }
@@ -171,10 +134,11 @@ fn distribution_runtime_unit_catalog() -> Result<RuntimeUnitCatalog, String> {
 
 fn build_runtime_unit_catalog(
     composition: EngineCompositionSpec,
+    distribution_registrations: &'static [RuntimeHostRuntimeUnitRegistration],
     profile_registrations: &'static [RuntimeHostRuntimeUnitRegistration],
     plugin_units: Vec<newengine_plugin_host::PluginRuntimeUnitInventoryEntry>,
 ) -> Result<RuntimeUnitCatalog, String> {
-    let mut catalog = distribution_runtime_unit_catalog()?;
+    let mut catalog = distribution_runtime_unit_catalog(distribution_registrations)?;
 
     // EngineCompositionSpec.runtime_units is inventory, not an imperative activation list.
     for spec in composition.runtime_units {
@@ -518,6 +482,7 @@ pub(super) fn materialize_runtime_units(
     engine: &mut Engine<()>,
     startup: &StartupConfig,
     composition: EngineCompositionSpec,
+    distribution_registrations: &'static [RuntimeHostRuntimeUnitRegistration],
     profile_registrations: &'static [RuntimeHostRuntimeUnitRegistration],
     extra_runtime_unit_requirements: &[RuntimeUnitRequirementDescriptor],
     include_plugin_inventory: bool,
@@ -527,8 +492,13 @@ pub(super) fn materialize_runtime_units(
     } else {
         Vec::new()
     };
-    let catalog = build_runtime_unit_catalog(composition, profile_registrations, plugin_units)
-        .map_err(EngineError::Other)?;
+    let catalog = build_runtime_unit_catalog(
+        composition,
+        distribution_registrations,
+        profile_registrations,
+        plugin_units,
+    )
+    .map_err(EngineError::Other)?;
     let descriptors = catalog.descriptors();
     let selected =
         select_runtime_unit_keys(composition, &descriptors, extra_runtime_unit_requirements)
@@ -596,9 +566,6 @@ mod tests {
     const WORLD: CapabilityId = CapabilityId::new("world.backend", "engine.world", "world");
     const CUSTOM: CapabilityId =
         CapabilityId::new("custom.runtime", "engine.custom", "runtime-unit");
-    const ASSET_MANAGER: CapabilityId =
-        CapabilityId::new("asset_manager.backend", "engine.assets", "assets");
-    const AUDIO: CapabilityId = CapabilityId::new("audio.backend", "engine.audio", "audio");
 
     const REQUIREMENTS: &[CapabilityRequirement] = &[
         CapabilityRequirement::required(RENDER),
@@ -607,10 +574,6 @@ mod tests {
     const WORLD_REQUIREMENTS: &[CapabilityRequirement] = &[CapabilityRequirement::required(WORLD)];
     const CUSTOM_REQUIREMENTS: &[CapabilityRequirement] =
         &[CapabilityRequirement::required(CUSTOM)];
-    const STANDARD_EXTERNAL_REQUIREMENTS: &[CapabilityRequirement] = &[
-        CapabilityRequirement::required(ASSET_MANAGER),
-        CapabilityRequirement::optional(AUDIO),
-    ];
     const RENDER_V1: EngineRuntimeUnitSpec = EngineRuntimeUnitSpec::new(
         "render.bridge.v1",
         1,
@@ -697,7 +660,7 @@ mod tests {
     fn noop_runtime_unit(
         _engine: &mut Engine<()>,
         _startup: &StartupConfig,
-    ) -> EngineResult<Option<Box<dyn Module<()>>>> {
+    ) -> EngineResult<Option<Box<dyn newengine_core::Module<()>>>> {
         Ok(None)
     }
 
@@ -861,57 +824,49 @@ mod tests {
         assert_eq!(catalog.registrations.len(), 2);
     }
 
-    #[cfg(feature = "full-runtime")]
     #[test]
-    fn standard_game_roots_select_distribution_inventory_without_profile_mirror() {
-        let composition =
-            EngineCompositionSpec::new("test.standard-game", STANDARD_EXTERNAL_REQUIREMENTS)
-                .with_runtime_unit_requirements(
-                    newengine_runtime_units::STANDARD_GAME_RUNTIME_UNIT_REQUIREMENTS,
-                );
-        let catalog = distribution_runtime_unit_catalog().expect("distribution catalog");
-        let descriptors = catalog.descriptors();
-        let selected = select_runtime_unit_keys(composition, &descriptors, &[])
-            .expect("standard game runtime-unit selection");
-        for requirement in newengine_runtime_units::STANDARD_GAME_RUNTIME_UNIT_REQUIREMENTS {
-            assert!(
-                selected.iter().any(|key| {
-                    catalog.registration(key).is_some_and(|entry| {
-                        entry
-                            .descriptor
-                            .provides
-                            .iter()
-                            .any(|provided| provided == requirement.capability)
-                    })
-                }),
-                "standard game root was not selected from distribution inventory: {}",
-                requirement.capability
-            );
-        }
-    }
-
-    #[cfg(feature = "full-runtime")]
-    #[test]
-    fn distribution_catalog_contains_static_domain_units() {
-        let catalog = distribution_runtime_unit_catalog().expect("distribution catalog");
+    fn product_supplied_distribution_catalog_is_the_only_static_distribution_inventory() {
+        const DISTRIBUTION: &[RuntimeHostRuntimeUnitRegistration] = &[
+            RuntimeHostRuntimeUnitRegistration::new(SCENE_UNIT, noop_runtime_unit),
+            RuntimeHostRuntimeUnitRegistration::new(WORLD_UNIT, noop_runtime_unit),
+        ];
+        let catalog = distribution_runtime_unit_catalog(DISTRIBUTION)
+            .expect("product-supplied distribution catalog");
         let ids = catalog
             .descriptors()
             .into_iter()
             .map(|descriptor| descriptor.id)
             .collect::<BTreeSet<_>>();
-        for required in [
-            "engine.runtime.scene",
-            "engine.runtime.world",
-            "engine.runtime.entity",
-            "engine.runtime.time",
-            "engine.runtime.schema",
-            "engine.runtime.materials",
-        ] {
-            assert!(
-                ids.contains(required),
-                "missing distribution runtime unit {required}"
-            );
-        }
+        assert_eq!(
+            ids,
+            BTreeSet::from([
+                "engine.runtime.scene.test".to_owned(),
+                "engine.runtime.world.test".to_owned(),
+            ])
+        );
+    }
+
+    #[test]
+    fn product_supplied_distribution_units_participate_in_generic_solver() {
+        const DISTRIBUTION: &[RuntimeHostRuntimeUnitRegistration] = &[
+            RuntimeHostRuntimeUnitRegistration::new(SCENE_UNIT, noop_runtime_unit),
+            RuntimeHostRuntimeUnitRegistration::new(WORLD_UNIT, noop_runtime_unit),
+        ];
+        const ROOTS: &[RuntimeUnitRequirementSpec] =
+            &[RuntimeUnitRequirementSpec::required("world.backend")];
+        let composition = EngineCompositionSpec::new("test.product-distribution", &[])
+            .with_runtime_unit_requirements(ROOTS);
+        let catalog = distribution_runtime_unit_catalog(DISTRIBUTION)
+            .expect("product-supplied distribution catalog");
+        let selected = select_runtime_unit_keys(composition, &catalog.descriptors(), &[])
+            .expect("generic runtime-unit selection");
+        assert_eq!(
+            selected,
+            vec![
+                "engine.runtime.scene.test@1".to_owned(),
+                "engine.runtime.world.test@1".to_owned(),
+            ]
+        );
     }
     #[test]
     fn runtime_overlay_many_selects_all_compatible_units() {

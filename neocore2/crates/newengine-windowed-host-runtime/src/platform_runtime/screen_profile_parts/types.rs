@@ -338,6 +338,46 @@ impl Default for ScreenProfileConfig {
 }
 
 #[derive(Clone, Debug)]
+pub(super) struct ScriptEditorPanelState {
+    pub(super) asset_ref: String,
+    pub(super) title: String,
+    pub(super) editable: bool,
+    pub(super) original_text: String,
+    pub(super) session: Option<ScriptCodeEditorSession>,
+    pub(super) signature_help: Option<ScriptingSignatureHelpResponse>,
+    pub(super) status: String,
+    pub(super) tooling_catalog_revision: u64,
+    pub(super) last_completion_revision: u64,
+    pub(super) last_signature_revision: u64,
+}
+
+impl Default for ScriptEditorPanelState {
+    fn default() -> Self {
+        Self {
+            asset_ref: String::new(),
+            title: String::new(),
+            editable: false,
+            original_text: String::new(),
+            session: None,
+            signature_help: None,
+            status: "Select an authored TypeScript .ts asset in Content Browser".to_owned(),
+            tooling_catalog_revision: 0,
+            last_completion_revision: 0,
+            last_signature_revision: 0,
+        }
+    }
+}
+
+impl ScriptEditorPanelState {
+    #[inline]
+    pub(super) fn dirty(&self) -> bool {
+        self.session
+            .as_ref()
+            .is_some_and(|session| session.source_text() != self.original_text)
+    }
+}
+
+#[derive(Clone, Debug)]
 pub(crate) struct ScreenProfileRuntimeState {
     pub(super) config: ScreenProfileConfig,
     pub(super) descriptor: UiScreenProfileDescriptor,
@@ -361,6 +401,8 @@ pub(crate) struct ScreenProfileRuntimeState {
     pub(super) last_right_edit_selection_key: String,
     pub(super) cached_right_edit_document: Option<AssetDocument>,
     pub(super) cached_right_edit_error: Option<String>,
+    pub(super) script_editor: ScriptEditorPanelState,
+    pub(super) active_bottom_panel: String,
     pub(super) hidden_panels: BTreeSet<String>,
     pub(super) last_runtime_command_frame: u64,
     pub(super) last_dock_click_frame: u64,

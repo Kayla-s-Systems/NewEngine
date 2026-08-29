@@ -1,4 +1,4 @@
-pub fn decode_ycd_body(body: &[u8], selector: Option<&str>) -> Result<AnimationClip, String> {
+pub fn decode_ycd_dictionary(body: &[u8]) -> Result<AnimationDictionary, String> {
     if body.len() < YCD_BODY_HEADER_LEN {
         return Err(format!(
             "YCD body too small bytes={} expected>={YCD_BODY_HEADER_LEN}",
@@ -37,26 +37,46 @@ pub fn decode_ycd_body(body: &[u8], selector: Option<&str>) -> Result<AnimationC
         return Err("YCD payload floor outside body".to_owned());
     }
 
-    let requested = selector.map(str::trim).filter(|value| !value.is_empty());
-    let mut selected_record = None;
+    let mut clips = Vec::with_capacity(clip_count);
     for index in 0..clip_count {
         let record = table_offset + index * YCD_CLIP_RECORD_LEN;
-        let name = read_string(strings, read_u32(body, record + 8)?)?;
-        let matches = requested
-            .map(|value| name.eq_ignore_ascii_case(value))
-            .unwrap_or(index == 0);
-        if matches {
-            selected_record = Some((record, name));
-            break;
-        }
+        clips.push(std::sync::Arc::new(decode_ycd_clip_record(
+            body,
+            strings,
+            record,
+            payload_floor,
+            schema,
+            local_pose_stride,
+        )?));
     }
-    let (record, name) = selected_record.ok_or_else(|| {
-        format!(
-            "YCD selector '{}' was not found",
-            requested.unwrap_or("<first>")
-        )
-    })?;
+    Ok(AnimationDictionary { clips })
+}
 
+pub fn decode_ycd_body(body: &[u8], selector: Option<&str>) -> Result<AnimationClip, String> {
+    let dictionary = decode_ycd_dictionary(body)?;
+    dictionary
+        .clip(selector)
+        .map(|clip| (*clip).clone())
+        .ok_or_else(|| {
+            format!(
+                "YCD selector '{}' was not found",
+                selector
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                    .unwrap_or("<first>")
+            )
+        })
+}
+
+fn decode_ycd_clip_record(
+    body: &[u8],
+    strings: &[u8],
+    record: usize,
+    payload_floor: usize,
+    schema: u32,
+    local_pose_stride: usize,
+) -> Result<AnimationClip, String> {
+    let name = read_string(strings, read_u32(body, record + 8)?)?;
     let skeleton_ref = read_string(strings, read_u32(body, record + 12)?)?;
     let joint_count = read_u32(body, record + 16)? as usize;
     let frame_count = read_u32(body, record + 20)? as usize;
@@ -73,7 +93,11 @@ pub fn decode_ycd_body(body: &[u8], selector: Option<&str>) -> Result<AnimationC
             "YCD clip '{name}' invalid dimensions joints={joint_count} frames={frame_count}"
         ));
     }
-    if duration_seconds <= 0.0 || sample_rate_hz <= 0.0 {
+    if !duration_seconds.is_finite()
+        || !sample_rate_hz.is_finite()
+        || duration_seconds <= 0.0
+        || sample_rate_hz <= 0.0
+    {
         return Err(format!(
             "YCD clip '{name}' invalid timing duration={duration_seconds} sample_rate={sample_rate_hz}"
         ));
@@ -120,6 +144,9 @@ pub fn decode_ycd_body(body: &[u8], selector: Option<&str>) -> Result<AnimationC
             read_f32(payload, cursor + 4)?,
             read_f32(payload, cursor + 8)?,
         ];
+        if translation.iter().any(|value| !value.is_finite()) {
+            return Err(format!("YCD clip '{name}' contains invalid translation"));
+        }
         let rotation = [
             read_f32(payload, cursor + 12)?,
             read_f32(payload, cursor + 16)?,
@@ -151,7 +178,7 @@ pub fn decode_ycd_body(body: &[u8], selector: Option<&str>) -> Result<AnimationC
         });
         cursor += local_pose_stride;
     }
-    Ok(AnimationClip {
+    let clip = AnimationClip {
         name,
         skeleton_ref,
         source,
@@ -159,6 +186,9 @@ pub fn decode_ycd_body(body: &[u8], selector: Option<&str>) -> Result<AnimationC
         sample_rate_hz,
         looped: flags & YCD_CLIP_FLAG_LOOP != 0,
         joint_tags,
+        events: Vec::new(),
         poses,
-    })
+    };
+    clip.validate_structure()?;
+    Ok(clip)
 }

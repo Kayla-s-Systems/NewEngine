@@ -1,0 +1,9 @@
+[package]
+name = "newengine-model-contact-api"
+version = "0.1.0"
+edition = "2021"
+description = "Model-space foot pose and ground-contact tracking API"
+license = "Proprietary"
+
+[dependencies]
+newengine-math = { path = "../newengine-math" }

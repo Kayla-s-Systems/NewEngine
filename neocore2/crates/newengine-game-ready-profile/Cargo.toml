@@ -8,6 +8,7 @@ description = "Game Ready FPS runtime profile composition for NewEngine"
 [dependencies]
 newengine-assets-api = { path = "../newengine-assets-api" }
 newengine-audio-api = { path = "../newengine-audio-api" }
+newengine-audio-world-runtime = { path = "../newengine-audio-world-runtime" }
 newengine-physics-api = { path = "../newengine-physics-api" }
 newengine-render-api = { path = "../newengine-render-api" }
 newengine-schema-api = { path = "../newengine-schema-api" }
@@ -43,6 +44,7 @@ newengine-windowed-host-runtime = { path = "../newengine-windowed-host-runtime",
 newengine-service-api = { path = "../newengine-service-api" }
 newengine-scene = { path = "../newengine-scene", features = ["runtime"] }
 newengine-scene-runtime = { path = "../newengine-scene-runtime" }
+newengine-scene-authoring-runtime = { path = "../newengine-scene-authoring-runtime" }
 newengine-world-api = { path = "../newengine-world-api" }
 newengine-ui = { path = "../newengine-ui", default-features = false }
 newengine-ui-api = { path = "../newengine-ui-api" }

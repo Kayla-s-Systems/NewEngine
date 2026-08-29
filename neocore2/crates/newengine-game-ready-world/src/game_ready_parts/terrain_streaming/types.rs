@@ -62,6 +62,7 @@ pub(super) struct GeneratedTerrainChunk {
 pub(super) struct PendingTerrainChunk {
     pub(super) result: Arc<Mutex<Option<GeneratedTerrainChunk>>>,
     pub(super) ticket: TaskTicket,
+    pub(super) request_score: i32,
 }
 
 pub(super) struct GameReadyTerrainStreamingState {

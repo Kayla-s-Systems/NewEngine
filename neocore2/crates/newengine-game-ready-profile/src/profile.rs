@@ -33,6 +33,12 @@ impl GameReadyRuntimeProfile {
         let scene = Arc::new(newengine_scene_runtime::SceneBridge::new(
             newengine_scene::Scene::new(),
         ));
+        // GameReady exposes live F2 world authoring when the EditingTools capability is present.
+        // SceneBridge intentionally owns no authoring implementation, so the product profile
+        // injects the focused provider explicitly.
+        scene.set_scene_authoring_provider(Arc::new(
+            newengine_scene_authoring_runtime::SceneAuthoringRuntime::default(),
+        ));
         Self {
             viewport: Arc::new(newengine_engine_runtime::ViewportBridge::new()),
             plugins: Arc::new(newengine_engine_runtime::PluginManagerBridge::new()),
@@ -136,6 +142,12 @@ impl GameReadyRuntimeProfile {
             )
             .with_gameplay_physics_query_provider(
                 newengine_engine_runtime::AudioOcclusionPhysicsQueryProvider::shared(),
+            )
+            .with_gameplay_physics_query_provider(
+                newengine_engine_runtime::AudioDiffractionPhysicsQueryProvider::shared(),
+            )
+            .with_gameplay_physics_query_provider(
+                newengine_engine_runtime::AudioReflectionPhysicsQueryProvider::shared(),
             ),
         );
 
@@ -202,6 +214,16 @@ mod tests {
             data.player.move_speed = 13.0;
             Ok(data)
         }
+    }
+
+    #[test]
+    fn gameready_profile_installs_scene_authoring_provider_for_f2_world_editor() {
+        let profile = GameReadyRuntimeProfile::new();
+        assert!(profile.scene.scene_authoring_available());
+        assert!(profile.scene.set_in_game_editor_enabled(true));
+        assert!(profile.scene.in_game_editor_enabled());
+        assert!(!profile.scene.set_in_game_editor_enabled(false));
+        assert!(!profile.scene.in_game_editor_enabled());
     }
 
     #[test]

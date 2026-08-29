@@ -10,6 +10,7 @@ mod streaming;
 const STATIC_WORLD_PROXY: &str = "world_static_ydd";
 const DYNAMIC_WORLD_PROXY: &str = "world_dynamic_ydd";
 const COLLISION_WORLD_PROXY: &str = "world_collision_ydd";
+const BOX_COLLISION_WORLD_PROXY: &str = "world_collision_box";
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(super) struct GroundPlacementSurface;

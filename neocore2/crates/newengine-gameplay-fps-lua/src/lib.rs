@@ -17,6 +17,7 @@ use newengine_gameplay_script_api::{
 };
 use newengine_scripting_client::AssetBackedScriptClient;
 
+pub const SCRIPT_FPS_GAMEPLAY_PROVIDER_ID: &str = "newengine.gameplay.fps.script-policy";
 pub const LUA_FPS_GAMEPLAY_PROVIDER_ID: &str = "newengine.gameplay.fps.lua-policy";
 
 pub struct LuaFpsGameplayPolicyProvider {
@@ -50,7 +51,7 @@ impl LuaFpsGameplayPolicyProvider {
     fn load_uncached(&self) -> Result<Arc<FpsGameplayPolicySnapshot>, String> {
         if self.policy_operation.trim().is_empty() {
             return Err(format!(
-                "Lua FPS policy provider '{}' has no configured bootstrap operation; bind one in the project scripting registry",
+                "Script FPS policy provider '{}' has no configured bootstrap operation; bind one in the project scripting registry",
                 self.client.script_ref()
             ));
         }
@@ -71,7 +72,7 @@ impl LuaFpsGameplayPolicyProvider {
         )?;
         snapshot
             .validate()
-            .map_err(|error| format!("Lua FPS gameplay policy validation failed: {error}"))?;
+            .map_err(|error| format!("Script FPS gameplay policy validation failed: {error}"))?;
         Ok(Arc::new(snapshot))
     }
 }
@@ -79,7 +80,7 @@ impl LuaFpsGameplayPolicyProvider {
 impl FpsGameplayPolicyProvider for LuaFpsGameplayPolicyProvider {
     #[inline]
     fn id(&self) -> &'static str {
-        LUA_FPS_GAMEPLAY_PROVIDER_ID
+        SCRIPT_FPS_GAMEPLAY_PROVIDER_ID
     }
 
     fn load_snapshot(&self) -> Result<Arc<FpsGameplayPolicySnapshot>, String> {
@@ -112,7 +113,7 @@ impl FpsGameplayPolicyProvider for LuaFpsGameplayPolicyProvider {
             )]),
         )?;
         decision.validate().map_err(|error| {
-            format!("Lua FPS policy callback '{export}' returned invalid decision: {error}")
+            format!("Script FPS policy callback '{export}' returned invalid decision: {error}")
         })?;
         Ok(decision)
     }
@@ -120,7 +121,7 @@ impl FpsGameplayPolicyProvider for LuaFpsGameplayPolicyProvider {
 
 impl ScriptedGameplayProvider for LuaFpsGameplayPolicyProvider {
     fn id(&self) -> &'static str {
-        LUA_FPS_GAMEPLAY_PROVIDER_ID
+        SCRIPT_FPS_GAMEPLAY_PROVIDER_ID
     }
 
     fn invoke_action(

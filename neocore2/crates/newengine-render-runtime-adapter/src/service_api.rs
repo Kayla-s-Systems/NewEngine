@@ -2,13 +2,14 @@ use std::sync::Mutex;
 
 use newengine_core::render::{
     BeginFrameDesc, BeginRenderTargetDesc, BindGroupDesc, BindGroupId, BindGroupLayoutDesc,
-    BindGroupLayoutId, BufferDesc, BufferId, BufferSlice, DrawArgs, DrawIndexedArgs, IndexFormat,
-    PipelineDesc, PipelineId, PipelineWarmupDesc, PipelineWarmupReport, RectI32, RenderApi,
-    RenderBackendEvent, RenderDiagnosticsSnapshot, RenderDrawListKind, RenderFrameEnvelope,
-    RenderGraphCompileReport, RenderGraphDesc, RenderGraphPassKind, RenderGraphSubmitReport,
-    RenderGraphValidationReport, RenderTargetDesc, RenderTargetId, RenderWorkBudget, SamplerDesc,
-    SamplerId, ShaderDesc, ShaderId, ShaderRuntimeCacheStats, TextureDesc, TextureId,
-    TextureResidencySnapshot, UiTexId, UploadPumpDesc, UploadPumpReport, Viewport,
+    BindGroupLayoutId, BufferDesc, BufferId, BufferSlice, ComputePipelineDesc, DispatchArgs,
+    DrawArgs, DrawIndexedArgs, IndexFormat, PipelineDesc, PipelineId, PipelineWarmupDesc,
+    PipelineWarmupReport, RectI32, RenderApi, RenderBackendEvent, RenderDiagnosticsSnapshot,
+    RenderDrawListKind, RenderFrameEnvelope, RenderGraphCompileReport, RenderGraphDesc,
+    RenderGraphPassKind, RenderGraphSubmitReport, RenderGraphValidationReport, RenderTargetDesc,
+    RenderTargetId, RenderWorkBudget, SamplerDesc, SamplerId, ShaderDesc, ShaderId,
+    ShaderRuntimeCacheStats, TextureDesc, TextureId, TextureResidencySnapshot, UiTexId,
+    UploadPumpDesc, UploadPumpReport, Viewport,
 };
 use newengine_core::{EngineError, EngineResult};
 use newengine_render_api::{
@@ -115,6 +116,20 @@ impl RenderApi for ServiceBackedRenderApi {
 
     fn end_frame(&mut self) -> EngineResult<()> {
         self.unit(RenderCommand::EndFrame)
+    }
+
+    fn abort_frame(&mut self) -> EngineResult<()> {
+        {
+            let mut pending = self.pending();
+            pending.clear();
+        }
+        match self.invoke_service(RenderServiceRequest::AbortFrame)? {
+            RenderServiceResponse::Unit => Ok(()),
+            other => Err(EngineError::other(format!(
+                "render service protocol error: expected Unit, got {:?}",
+                other
+            ))),
+        }
     }
 
     fn resize(&mut self, width: u32, height: u32) -> EngineResult<()> {
@@ -232,6 +247,16 @@ impl RenderApi for ServiceBackedRenderApi {
         }
     }
 
+    fn create_compute_pipeline(&mut self, desc: ComputePipelineDesc) -> EngineResult<PipelineId> {
+        match self.command(RenderCommand::CreateComputePipeline(desc))? {
+            RenderCommandResponse::PipelineId(id) => Ok(id),
+            other => Err(EngineError::other(format!(
+                "render service protocol error: expected PipelineId, got {:?}",
+                other
+            ))),
+        }
+    }
+
     fn destroy_pipeline(&mut self, id: PipelineId) {
         let _ = self.unit(RenderCommand::DestroyPipeline { id });
     }
@@ -297,6 +322,10 @@ impl RenderApi for ServiceBackedRenderApi {
 
     fn draw_indexed(&mut self, args: DrawIndexedArgs) -> EngineResult<()> {
         self.queue_unit(RenderCommand::DrawIndexed(args))
+    }
+
+    fn dispatch(&mut self, args: DispatchArgs) -> EngineResult<()> {
+        self.queue_unit(RenderCommand::Dispatch(args))
     }
 
     fn set_render_phase(&mut self, phase: Option<RenderGraphPassKind>) -> EngineResult<()> {

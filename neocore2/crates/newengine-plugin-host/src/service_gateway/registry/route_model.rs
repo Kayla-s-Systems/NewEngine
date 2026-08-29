@@ -124,9 +124,32 @@ impl ActiveGatewayRoute {
         }
 
         if route_blocked_by_selection_policy(&route_tags, policy) {
+            if let Some(policy) = policy {
+                newengine_ulog_api::ulog::debug!(
+                    "gateways: route blocked by selection policy gateway='{}' service='{}' provider_owner='{}' policy_owner='{}' forbidden_tags={:?}",
+                    gateway_id,
+                    provider_service_id,
+                    provider_owner_id,
+                    policy.owner_id,
+                    policy.forbidden_system_tags,
+                );
+            }
             return None;
         }
         let selection_bonus = selection_policy_score_bonus(&route_tags, policy);
+        if selection_bonus > 0 {
+            if let Some(policy) = policy {
+                newengine_ulog_api::ulog::debug!(
+                    "gateways: selection policy bonus gateway='{}' service='{}' provider_owner='{}' policy_owner='{}' bonus={} preferred_tags={:?}",
+                    gateway_id,
+                    provider_service_id,
+                    provider_owner_id,
+                    policy.owner_id,
+                    selection_bonus,
+                    policy.preferred_system_tags,
+                );
+            }
+        }
         let system_tags = merge_system_tags(route_tags, policy);
         let override_mode = policy
             .and_then(|policy| policy.override_mode)

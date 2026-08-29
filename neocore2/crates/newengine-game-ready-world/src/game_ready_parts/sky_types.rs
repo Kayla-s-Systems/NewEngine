@@ -147,6 +147,17 @@ pub(crate) struct SkyFrameSample {
     pub(crate) cloud_gust_strength: f32,
     pub(crate) cloud_overcast: f32,
     pub(crate) cloud_light_absorption: f32,
+    /// Resolved low cloud deck base and geometric thickness in meters.
+    pub(crate) cloud_base_altitude_m: f32,
+    pub(crate) cloud_thickness_m: f32,
+    /// Low/deep cloud optical morphology plus the independent high deck.
+    pub(crate) cloud_layer_density: f32,
+    pub(crate) high_cloud_coverage: f32,
+    pub(crate) high_cloud_density: f32,
+    /// Atmospheric state used by droplet scattering and aerosol extinction.
+    pub(crate) humidity: f32,
+    pub(crate) aerosol_density: f32,
+    pub(crate) precipitation_intensity: f32,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -158,6 +169,14 @@ pub(crate) struct SkyDynamicsRuntime {
     pub smoothed_softness: f32,
     pub smoothed_shadow: f32,
     pub smoothed_haze: f32,
+    pub smoothed_cloud_base_altitude_m: f32,
+    pub smoothed_cloud_thickness_m: f32,
+    pub smoothed_cloud_layer_density: f32,
+    pub smoothed_high_cloud_coverage: f32,
+    pub smoothed_high_cloud_density: f32,
+    pub smoothed_humidity: f32,
+    pub smoothed_aerosol_density: f32,
+    pub smoothed_precipitation_intensity: f32,
     pub evolution_phase: f32,
     pub lifecycle_phase: f32,
     pub gust_phase: f32,
@@ -174,6 +193,14 @@ impl Default for SkyDynamicsRuntime {
             smoothed_softness: 0.70,
             smoothed_shadow: 0.12,
             smoothed_haze: 0.10,
+            smoothed_cloud_base_altitude_m: 1250.0,
+            smoothed_cloud_thickness_m: 1100.0,
+            smoothed_cloud_layer_density: 0.16,
+            smoothed_high_cloud_coverage: 0.08,
+            smoothed_high_cloud_density: 0.04,
+            smoothed_humidity: 0.45,
+            smoothed_aerosol_density: 0.12,
+            smoothed_precipitation_intensity: 0.0,
             evolution_phase: 0.0,
             lifecycle_phase: 0.31,
             gust_phase: 0.0,
@@ -208,6 +235,13 @@ pub(crate) struct SkyCycleRuntime {
     pub day_length_seconds: f32,
     pub latitude_degrees: f32,
     pub axial_tilt_degrees: f32,
+    /// Authoritative environment-provider routing for this world.
+    pub environment_profile: String,
+    pub environment_region: String,
+    pub environment_biome: String,
+    /// Presentation policy such as `cloudless`; it may intentionally suppress
+    /// cloud visuals while retaining the physical atmosphere/wind provider.
+    pub cloud_profile: String,
     pub base_sun_color: [f32; 3],
     pub base_sun_intensity: f32,
     pub base_ambient_color: [f32; 3],

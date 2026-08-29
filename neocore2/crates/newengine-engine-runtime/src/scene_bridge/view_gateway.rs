@@ -13,7 +13,7 @@ use newengine_math::{Mat4, Vec3};
 use crate::camera_gateway::{CameraGatewayFrame, CameraGatewayInput, CameraTransitionPhase};
 use crate::engine_bounds::EngineBoundsSnap;
 use crate::gameplay::GameRunMode;
-use crate::viewport_bridge::ViewportBridge;
+use newengine_viewport_bridge::ViewportBridge;
 
 use super::SceneBridge;
 

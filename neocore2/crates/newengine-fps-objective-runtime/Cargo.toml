@@ -1,0 +1,16 @@
+[package]
+name = "newengine-fps-objective-runtime"
+version = "0.1.0"
+edition = "2021"
+description = "FPS objective fact collection and project-policy event dispatch"
+license = "Proprietary"
+
+[dependencies]
+newengine-ecs = { path = "../newengine-ecs" }
+newengine-engine-runtime = { path = "../newengine-engine-runtime" }
+newengine-gameplay-fps-api = { path = "../newengine-gameplay-fps-api" }
+newengine-gameplay-script-api = { path = "../newengine-gameplay-script-api" }
+newengine-gameplay-script-runtime = { path = "../newengine-gameplay-script-runtime" }
+newengine-math = { path = "../newengine-math" }
+newengine-transform = { path = "../newengine-transform" }
+newengine-ulog-api = { path = "../newengine-ulog-api" }

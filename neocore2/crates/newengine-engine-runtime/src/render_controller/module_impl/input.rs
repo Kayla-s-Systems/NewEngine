@@ -1,7 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use crate::input_systems::InputActionFrameCarrier;
 use newengine_input_actions_api::{CameraViewRequest, InputActionFrame, InputFrameSource};
+use newengine_input_systems_runtime::InputActionFrameCarrier;
 use newengine_ui_api::UiInputFrame;
 
 #[derive(Clone, Debug, Default)]
@@ -32,33 +32,22 @@ pub(super) struct ViewportInputSnap {
 
 impl ViewportInputSnap {
     #[inline]
-    pub(super) fn read(bridge: &crate::viewport_bridge::ViewportBridge) -> Self {
-        let (
-            dx_px,
-            dy_px,
-            wheel_y,
-            active,
-            look_drag,
-            pan_drag,
-            ui_busy,
-            fly_rmb,
-            move_mask,
-            speed_scalar,
-        ) = bridge.read_camera_input();
+    pub(super) fn read(bridge: &newengine_viewport_bridge::ViewportBridge) -> Self {
+        let input = bridge.read_camera_input();
         Self {
-            dx_px,
-            dy_px,
-            wheel_y,
-            active,
-            look_drag,
-            pan_drag,
-            ui_busy,
-            fly_rmb,
+            dx_px: input.dx_px,
+            dy_px: input.dy_px,
+            wheel_y: input.wheel_y,
+            active: input.active,
+            look_drag: input.look_drag,
+            pan_drag: input.pan_drag,
+            ui_busy: input.ui_busy,
+            fly_rmb: input.fly_rmb,
             sampling_alive: true,
             camera_navigation_gated: false,
             gameplay_movement_gated: false,
-            move_mask,
-            speed_scalar,
+            move_mask: input.move_mask,
+            speed_scalar: input.speed_scalar,
             camera_view: CameraViewRequest::None,
             actions: InputActionFrame::default(),
         }

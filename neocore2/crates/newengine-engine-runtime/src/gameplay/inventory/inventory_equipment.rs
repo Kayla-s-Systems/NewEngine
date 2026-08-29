@@ -15,11 +15,13 @@ pub fn preload_weapon_audio_definition(audio: &WeaponAudioDefinition) {
             continue;
         };
         let result = if is_yscd_cue_reference(reference) {
-            crate::audio_gateway::preload_audio_cue(&newengine_audio_api::AudioCuePreloadRequest {
-                cue: newengine_audio_api::SoundCueRef::new(reference.to_owned()),
-            })
+            newengine_audio_client::preload_audio_cue(
+                &newengine_audio_api::AudioCuePreloadRequest {
+                    cue: newengine_audio_api::SoundCueRef::new(reference.to_owned()),
+                },
+            )
         } else {
-            crate::audio_gateway::preload_audio_clip(&newengine_audio_api::AudioPreloadRequest {
+            newengine_audio_client::preload_audio_clip(&newengine_audio_api::AudioPreloadRequest {
                 clip: newengine_audio_api::AudioClipRef::new(reference.to_owned()),
             })
         };
@@ -104,14 +106,14 @@ pub fn play_weapon_item_audio(
     let result = if is_cue {
         let mut request = newengine_audio_api::AudioCuePlayRequest::new(reference.clone());
         request.position = spatial_position.map(|position| [position.x, position.y, position.z]);
-        crate::audio_gateway::play_audio_cue(&request)
+        newengine_audio_client::play_audio_cue(&request)
     } else {
         let mut request = newengine_audio_api::AudioPlayRequest::new(reference.clone());
         request.spatial =
             spatial_position.map(|position| newengine_audio_api::AudioSpatialParams {
                 position: [position.x, position.y, position.z],
             });
-        crate::audio_gateway::play_audio_clip(&request)
+        newengine_audio_client::play_audio_clip(&request)
     };
 
     match result {
@@ -332,6 +334,12 @@ pub fn unequip_slot(world: &mut World, owner: EntityId, slot: EquipmentSlot) -> 
             message: "equipment slot cleared".to_owned(),
         },
     );
+    let needs_weapon_selection = world
+        .get::<PlayerInventory>(owner)
+        .is_some_and(|inventory| inventory.active_slot.is_none());
+    if needs_weapon_selection {
+        select_highest_ranked_equipped_weapon(world, owner);
+    }
     sync_equipped_weapon_runtime(world, owner);
     play_weapon_item_audio(world, owner, item, WeaponAudioAction::Unequip);
     Ok(())
@@ -342,15 +350,17 @@ pub fn sync_equipped_weapon_runtime(world: &mut World, owner: EntityId) {
     let current_binding = world.get::<EquippedWeaponBinding>(owner).copied();
     let current_state = world.get::<PlayerWeaponState>(owner).copied();
 
-    if current_binding.map(|binding| binding.instance_id)
-        != selected
-            .as_ref()
-            .map(|selected| selected.binding.instance_id)
-    {
-        if let (Some(binding), Some(state)) = (current_binding, current_state) {
-            if let Some(inventory) = world.get_mut::<PlayerInventory>(owner) {
-                if inventory.entry(binding.instance_id).is_some() {
-                    inventory.weapon_states.insert(binding.instance_id, state);
+    let selected_instance = selected
+        .as_ref()
+        .map(|selected| selected.binding.instance_id);
+    if current_binding.map(|binding| binding.instance_id) != selected_instance {
+        if let (Some(binding), Some(mut state)) = (current_binding, current_state) {
+            state.aiming = false;
+            if !binding.is_unarmed() {
+                if let Some(inventory) = world.get_mut::<PlayerInventory>(owner) {
+                    if inventory.entry(binding.instance_id).is_some() {
+                        inventory.weapon_states.insert(binding.instance_id, state);
+                    }
                 }
             }
         }
@@ -363,13 +373,24 @@ pub fn sync_equipped_weapon_runtime(world: &mut World, owner: EntityId) {
         return;
     };
 
-    let reserve = inventory_quantity(world, owner, selected.binding.ammo_item);
+    let reserve = selected
+        .binding
+        .weapon
+        .firearm
+        .map(|firearm| inventory_quantity(world, owner, firearm.ammo_item))
+        .unwrap_or(0);
+
     if current_binding == Some(selected.binding) {
-        if world.get::<HitscanWeaponTuning>(owner).is_none() {
-            let _ = world.insert(owner, selected.tuning);
+        if let Some(firearm) = selected.binding.weapon.firearm {
+            if world.get::<HitscanWeaponTuning>(owner).is_none() {
+                let _ = world.insert(owner, firearm.tuning);
+            }
+        } else {
+            let _ = world.remove::<HitscanWeaponTuning>(owner);
         }
         if let Some(state) = world.get_mut::<PlayerWeaponState>(owner) {
             state.reserve_ammo = reserve;
+            state.aiming &= selected.binding.capabilities().aim;
         } else {
             let mut state = selected.stored_state;
             state.reserve_ammo = reserve;
@@ -380,8 +401,13 @@ pub fn sync_equipped_weapon_runtime(world: &mut World, owner: EntityId) {
 
     let mut state = selected.stored_state;
     state.reserve_ammo = reserve;
+    state.aiming = false;
     let _ = world.insert(owner, selected.binding);
-    let _ = world.insert(owner, selected.tuning);
+    if let Some(firearm) = selected.binding.weapon.firearm {
+        let _ = world.insert(owner, firearm.tuning);
+    } else {
+        let _ = world.remove::<HitscanWeaponTuning>(owner);
+    }
     let _ = world.insert(owner, state);
 }
 
@@ -389,9 +415,13 @@ pub fn persist_equipped_weapon_state(world: &mut World, owner: EntityId) {
     let Some(binding) = world.get::<EquippedWeaponBinding>(owner).copied() else {
         return;
     };
-    let Some(state) = world.get::<PlayerWeaponState>(owner).copied() else {
+    if binding.is_unarmed() {
+        return;
+    }
+    let Some(mut state) = world.get::<PlayerWeaponState>(owner).copied() else {
         return;
     };
+    state.aiming = false;
     if let Some(inventory) = world.get_mut::<PlayerInventory>(owner) {
         if inventory.entry(binding.instance_id).is_some() {
             inventory.weapon_states.insert(binding.instance_id, state);
@@ -399,18 +429,61 @@ pub fn persist_equipped_weapon_state(world: &mut World, owner: EntityId) {
     }
 }
 
+/// Returns the authoritative weapon context. When no inventory weapon is selected, this is the
+/// virtual Unarmed weapon rather than absence of a weapon.
+pub fn active_equipped_weapon_binding(
+    world: &World,
+    owner: EntityId,
+) -> Option<EquippedWeaponBinding> {
+    let selected = selected_weapon(world, owner)?;
+    match world.get::<EquippedWeaponBinding>(owner).copied() {
+        Some(binding) if binding == selected.binding => Some(binding),
+        None if selected.binding.is_unarmed() => Some(selected.binding),
+        _ => None,
+    }
+}
+
+#[inline]
+pub fn active_equipped_weapon_aiming(world: &World, owner: EntityId) -> bool {
+    active_equipped_weapon_binding(world, owner).is_some_and(|binding| {
+        binding.capabilities().aim
+            && world
+                .get::<PlayerWeaponState>(owner)
+                .is_some_and(|state| state.aiming)
+    })
+}
+
+#[inline]
+pub fn active_equipped_weapon_can_aim(world: &World, owner: EntityId) -> bool {
+    active_equipped_weapon_binding(world, owner).is_some_and(|binding| binding.capabilities().aim)
+}
+
+#[inline]
+pub fn active_equipped_weapon_can_fire(world: &World, owner: EntityId) -> bool {
+    active_equipped_weapon_binding(world, owner).is_some_and(|binding| binding.capabilities().fire)
+}
+
+#[inline]
+pub fn active_equipped_weapon_can_melee(world: &World, owner: EntityId) -> bool {
+    active_equipped_weapon_binding(world, owner).is_some_and(|binding| binding.capabilities().melee)
+}
+
 pub fn equipped_reserve_ammo(world: &World, owner: EntityId) -> Option<u32> {
-    let binding = world.get::<EquippedWeaponBinding>(owner)?;
-    Some(inventory_quantity(world, owner, binding.ammo_item))
+    let binding = active_equipped_weapon_binding(world, owner)?;
+    let firearm = binding.weapon.firearm?;
+    Some(inventory_quantity(world, owner, firearm.ammo_item))
 }
 
 pub fn consume_equipped_ammo(world: &mut World, owner: EntityId, requested: u32) -> u32 {
-    let Some(binding) = world.get::<EquippedWeaponBinding>(owner).copied() else {
+    let Some(binding) = active_equipped_weapon_binding(world, owner) else {
+        return 0;
+    };
+    let Some(firearm) = binding.weapon.firearm else {
         return 0;
     };
     let mutation = world
         .get_mut::<PlayerInventory>(owner)
-        .map(|inventory| inventory.remove_quantity(binding.ammo_item, requested))
+        .map(|inventory| inventory.remove_quantity(firearm.ammo_item, requested))
         .unwrap_or_default();
     if mutation.accepted > 0 {
         emit_inventory_event(
@@ -418,10 +491,10 @@ pub fn consume_equipped_ammo(world: &mut World, owner: EntityId, requested: u32)
             InventoryEvent {
                 kind: InventoryEventKind::AmmoConsumed,
                 owner,
-                item: binding.ammo_item,
+                item: firearm.ammo_item,
                 instance_id: mutation.touched_instances.last().copied(),
                 quantity: mutation.accepted,
-                slot: Some(binding.slot),
+                slot: binding.slot,
                 world_entity: None,
                 message: "ammunition transferred into magazine".to_owned(),
             },
@@ -479,31 +552,91 @@ pub fn use_item(world: &mut World, owner: EntityId, item: ItemId) -> Result<(), 
 #[derive(Clone, Copy)]
 struct SelectedWeapon {
     binding: EquippedWeaponBinding,
-    tuning: HitscanWeaponTuning,
     stored_state: PlayerWeaponState,
 }
 
+impl SelectedWeapon {
+    fn shared_unarmed(world: &World) -> Option<Self> {
+        let definition = world
+            .resource::<ItemCatalog>()?
+            .find(SHARED_UNARMED_WEAPON_ITEM_NAME)?;
+        let weapon = definition.weapon?;
+        if weapon.weapon_type != WeaponType::Unarmed || weapon.melee.is_none() {
+            return None;
+        }
+        Some(Self {
+            binding: EquippedWeaponBinding {
+                instance_id: ItemInstanceId::UNARMED,
+                item: definition.id,
+                slot: None,
+                weapon,
+            },
+            stored_state: PlayerWeaponState::melee(),
+        })
+    }
+}
+
 fn selected_weapon(world: &World, owner: EntityId) -> Option<SelectedWeapon> {
+    let selected_inventory_weapon = world.get::<PlayerInventory>(owner).and_then(|inventory| {
+        inventory.active_slot.and_then(|slot| {
+            let instance_id = inventory.equipped_instance(slot)?;
+            let entry = inventory.entry(instance_id)?;
+            let definition = world.resource::<ItemCatalog>()?.get(entry.item)?;
+            let weapon = definition.weapon?;
+            let mut state = inventory
+                .weapon_states
+                .get(&instance_id)
+                .copied()
+                .unwrap_or_else(|| {
+                    weapon
+                        .firearm
+                        .map(|firearm| PlayerWeaponState::loaded(firearm.tuning))
+                        .unwrap_or_else(PlayerWeaponState::melee)
+                });
+            state.reserve_ammo = weapon
+                .firearm
+                .map(|firearm| inventory.quantity(firearm.ammo_item))
+                .unwrap_or(0);
+            state.aiming = false;
+            Some(SelectedWeapon {
+                binding: EquippedWeaponBinding {
+                    instance_id,
+                    item: entry.item,
+                    slot: Some(slot),
+                    weapon,
+                },
+                stored_state: state,
+            })
+        })
+    });
+
+    selected_inventory_weapon.or_else(|| SelectedWeapon::shared_unarmed(world))
+}
+
+fn highest_ranked_equipped_weapon_slot(world: &World, owner: EntityId) -> Option<EquipmentSlot> {
     let inventory = world.get::<PlayerInventory>(owner)?;
-    let slot = inventory.active_slot?;
-    let instance_id = inventory.equipped_instance(slot)?;
-    let entry = inventory.entry(instance_id)?;
-    let definition = world.resource::<ItemCatalog>()?.get(entry.item)?;
-    let weapon = definition.weapon?;
-    let mut state = inventory
-        .weapon_states
-        .get(&instance_id)
-        .copied()
-        .unwrap_or_else(|| PlayerWeaponState::loaded(weapon.tuning));
-    state.reserve_ammo = inventory.quantity(weapon.ammo_item);
-    Some(SelectedWeapon {
-        binding: EquippedWeaponBinding {
-            instance_id,
-            item: entry.item,
-            slot,
-            ammo_item: weapon.ammo_item,
-        },
-        tuning: weapon.tuning,
-        stored_state: state,
-    })
+    let catalog = world.resource::<ItemCatalog>()?;
+    inventory
+        .equipped
+        .iter()
+        .filter_map(|(slot, instance_id)| {
+            let entry = inventory.entry(*instance_id)?;
+            let weapon = catalog.get(entry.item)?.weapon?;
+            Some((*slot, weapon.rank))
+        })
+        .max_by(|(slot_a, rank_a), (slot_b, rank_b)| {
+            rank_a.cmp(rank_b).then_with(|| slot_b.cmp(slot_a))
+        })
+        .map(|(slot, _)| slot)
+}
+
+pub fn select_highest_ranked_equipped_weapon(
+    world: &mut World,
+    owner: EntityId,
+) -> Option<EquipmentSlot> {
+    let selected = highest_ranked_equipped_weapon_slot(world, owner);
+    if let Some(inventory) = world.get_mut::<PlayerInventory>(owner) {
+        inventory.active_slot = selected;
+    }
+    selected
 }

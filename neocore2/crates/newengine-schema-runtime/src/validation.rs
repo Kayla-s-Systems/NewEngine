@@ -1,7 +1,6 @@
 use newengine_schema_api::{
-    schema_method, SchemaBindingFunctionV1, SchemaDiagnosticV1, SchemaPatchDtoV1,
-    SchemaPatchOperationV1, SchemaPropertyDescriptorV1, SchemaTypeDescriptorV1, SchemaValueKindV1,
-    ENGINE_SCHEMA_SERVICE_ID,
+    SchemaDiagnosticV1, SchemaPatchDtoV1, SchemaPatchOperationV1, SchemaPropertyDescriptorV1,
+    SchemaTypeDescriptorV1, SchemaValueKindV1,
 };
 use serde_json::{json, Value};
 
@@ -79,52 +78,6 @@ pub(crate) fn deterministic_transaction_id(patch: &SchemaPatchDtoV1) -> String {
         sanitize_id(&patch.target_ref),
         patch.operations.len()
     )
-}
-
-pub(crate) fn binding_functions() -> Vec<SchemaBindingFunctionV1> {
-    [
-        (
-            "describe_type",
-            schema_method::DESCRIBE_TYPE_V1,
-            "SchemaDescribeTypeRequestV1",
-            "SchemaDescribeTypeResponseV1",
-        ),
-        (
-            "describe_properties",
-            schema_method::DESCRIBE_PROPERTIES_V1,
-            "SchemaDescribePropertiesRequestV1",
-            "SchemaDescribePropertiesResponseV1",
-        ),
-        (
-            "validate_patch",
-            schema_method::VALIDATE_PATCH_V1,
-            "SchemaPatchValidationRequestV1",
-            "SchemaPatchValidationResponseV1",
-        ),
-        (
-            "default_value",
-            schema_method::DEFAULT_VALUE_V1,
-            "SchemaDefaultValueRequestV1",
-            "SchemaDefaultValueResponseV1",
-        ),
-        (
-            "transaction_plan",
-            schema_method::TRANSACTION_PLAN_V1,
-            "SchemaTransactionDtoV1",
-            "SchemaTransactionResultV1",
-        ),
-    ]
-    .into_iter()
-    .map(
-        |(name, method, request_type, response_type)| SchemaBindingFunctionV1 {
-            name: name.to_owned(),
-            method: method.to_owned(),
-            request_type: request_type.to_owned(),
-            response_type: response_type.to_owned(),
-            gateway: ENGINE_SCHEMA_SERVICE_ID.to_owned(),
-        },
-    )
-    .collect()
 }
 
 pub(crate) fn default_value_for_kind(kind: SchemaValueKindV1) -> Value {

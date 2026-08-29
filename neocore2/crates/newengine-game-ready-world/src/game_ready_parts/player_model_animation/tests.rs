@@ -3,7 +3,7 @@ mod transition_tests {
     use super::*;
 
     #[test]
-    fn authored_rifle_grip_preserves_firing_hand_and_bounds_support_ik() {
+    fn bilateral_rifle_ik_drives_both_hands_toward_readyhold_contacts() {
         use newengine_model_skeleton_api::{ModelSkeletonAnchors, ModelSkeletonJointMetadata};
 
         let names = [
@@ -88,17 +88,19 @@ mod transition_tests {
             ..Default::default()
         }
         .sanitized();
+        let animation_runtime = AnimationSkeletonRuntime::compile(&skeleton, source_to_model)
+            .expect("compile animation skeleton");
         let mut frames = Vec::new();
-        rebuild_model_joint_frames(&skeleton, source_to_model, &pose, &mut frames)
+        rebuild_model_joint_frames(&animation_runtime, &pose, &mut frames)
             .expect("initial frames");
         let right_before = frames[rig.right_palm].transform_point3(Vec3::ZERO);
         let left_before = frames[rig.left_palm].transform_point3(Vec3::ZERO);
 
-        let final_error = apply_equipped_weapon_support_ik(
+        let final_result = apply_equipped_weapon_support_ik(
             &presentation,
             Some(&rig),
             &skeleton,
-            source_to_model,
+            &animation_runtime,
             &mut pose,
             &mut frames,
             None,
@@ -106,6 +108,8 @@ mod transition_tests {
             0.0,
             0.0,
             0.0,
+            Vec3::ZERO,
+            true,
             true,
             true,
         )
@@ -114,15 +118,103 @@ mod transition_tests {
 
         let right_after = frames[rig.right_palm].transform_point3(Vec3::ZERO);
         let left_after = frames[rig.left_palm].transform_point3(Vec3::ZERO);
-        assert!(
-            (right_after - right_before).length() < 1.0e-5,
-            "firing hand must remain authored: before={right_before:?} after={right_after:?}"
+        let right_target = crate::weapon_grip::weapon_ready_right_palm_position(
+            &presentation,
+            final_result.base_root,
         );
-        assert!(
-            (left_after - left_before).length() <= 0.115,
-            "support IK must remain bounded: before={left_before:?} after={left_after:?}"
+        let left_target = crate::weapon_grip::weapon_ready_left_palm_position(
+            &presentation,
+            final_result.base_root,
         );
-        assert!(final_error.is_finite() && final_error <= 0.115);
+        let right_before_error = (right_before - right_target).length();
+        let left_before_error = (left_before - left_target).length();
+        let right_after_error = (right_after - right_target).length();
+        let left_after_error = (left_after - left_target).length();
+        assert!(right_after_error < right_before_error);
+        assert!(left_after_error < left_before_error);
+        assert!(final_result.error_m.is_finite());
+    }
+
+    #[test]
+    fn partial_equipment_overlay_never_replaces_missing_joint_with_bind_pose() {
+        use newengine_model_skeleton_api::{ModelSkeletonAnchors, ModelSkeletonJointMetadata};
+
+        let joint = |index: u32, name: &str, parent_index: Option<u32>| ModelSkeletonJointMetadata {
+            index, tag: index, name: name.to_owned(),
+            parent: parent_index.map(|_| "root".to_owned()), parent_index,
+            position_ls: if index == 0 { [0.0, 0.0, 0.0] } else { [0.2, 0.0, 0.0] },
+            rotation_ls: [0.0, 0.0, 0.0, 1.0], scale_ls: [1.0, 1.0, 1.0], flags: Vec::new(),
+        };
+        let skeleton = ModelSkeletonMetadata {
+            source: "test".to_owned(), source_format: "test".to_owned(),
+            container_magic: "TEST".to_owned(), byte_len: 0, content_hash: String::new(),
+            decode_status: "ok".to_owned(),
+            joints: vec![joint(0, "root", None), joint(1, "arm", Some(0))],
+            anchors: ModelSkeletonAnchors {
+                root: "root".to_owned(), hips: "root".to_owned(), head: "arm".to_owned(),
+                left_hand: "arm".to_owned(), right_hand: "arm".to_owned(),
+                left_foot: "root".to_owned(), right_foot: "root".to_owned(),
+                eye: "arm".to_owned(), eye_height: 0.0,
+            },
+        };
+        let live_rotation = Quat::from_rotation_y(0.75);
+        let mut target = vec![
+            JointLocalPose { translation: [0.0, 0.0, 0.0], rotation: [0.0, 0.0, 0.0, 1.0], scale: Some([1.0, 1.0, 1.0]) },
+            JointLocalPose { translation: [0.2, 0.0, 0.0], rotation: [live_rotation.x, live_rotation.y, live_rotation.z, live_rotation.w], scale: Some([1.0, 1.0, 1.0]) },
+        ];
+        let raw_clip = AnimationClip {
+            name: "partial".to_owned(), skeleton_ref: "test".to_owned(), source: "test".to_owned(),
+            duration_seconds: 1.0 / 30.0, sample_rate_hz: 30.0, looped: false, joint_tags: vec![0],
+            events: Vec::new(),
+            poses: vec![JointLocalPose { translation: [0.0, 0.0, 0.0], rotation: [0.0, 0.0, 0.0, 1.0], scale: Some([1.0, 1.0, 1.0]) }],
+        };
+        let animation_runtime = AnimationSkeletonRuntime::compile(&skeleton, Mat4::IDENTITY.to_cols_array())
+            .expect("compile animation skeleton");
+        let binding = raw_clip.bind_to_skeleton(&animation_runtime).expect("bind partial clip");
+        let clip = PlayerAnimationRuntimeClip {
+            clip_ref: "test@partial".to_owned(),
+            clip: raw_clip.into(),
+            binding,
+            event_cursor: AnimationEventCursor::default(),
+        };
+        let before = target[1];
+        let mut scratch = Vec::new();
+        apply_equipment_rotation_overlay(
+            Some(&clip),
+            &skeleton,
+            &animation_runtime,
+            &mut scratch,
+            &mut target,
+            0.0,
+            &[("arm".to_owned(), 1.0)],
+            1.0,
+        )
+        .unwrap();
+        assert_eq!(target[1], before);
+    }
+
+    #[test]
+    fn weapon_reach_fit_corrects_small_mismatch_but_never_masks_large_pose_error() {
+        let pose = vec![
+            JointLocalPose { translation: [0.0, 0.0, 0.0], rotation: [0.0, 0.0, 0.0, 1.0], scale: Some([1.0, 1.0, 1.0]) };
+            4
+        ];
+        let frames = vec![
+            Mat4::from_translation(Vec3::new(0.0, 0.0, 0.0)),
+            Mat4::from_translation(Vec3::new(0.0, 0.0, 0.25)),
+            Mat4::from_translation(Vec3::new(0.0, 0.0, 0.50)),
+            Mat4::from_translation(Vec3::new(0.0, 0.0, 0.51)),
+        ];
+        let small = arm_reach_fit_correction(
+            &pose, &frames, 0, 1, 2, 3, Vec3::new(0.0, 0.0, 0.52), Quat::IDENTITY,
+        );
+        assert!(small.length() > 0.015 && small.length() < 0.017);
+        assert!(small.z < 0.0);
+
+        let large = arm_reach_fit_correction(
+            &pose, &frames, 0, 1, 2, 3, Vec3::new(0.0, 0.0, 0.62), Quat::IDENTITY,
+        );
+        assert!(large.length() < 1.0e-6);
     }
 
     #[test]
@@ -177,28 +269,4 @@ mod transition_tests {
         assert!(error.contains("eye palette drift"));
     }
 
-    #[test]
-    fn local_pose_crossfade_preserves_endpoints_and_shortest_quaternion_path() {
-        let from = [JointLocalPose {
-            translation: [0.0, 0.0, 0.0],
-            rotation: [0.0, 0.0, 0.0, 1.0],
-            scale: Some([1.0, 1.0, 1.0]),
-        }];
-        let to = [JointLocalPose {
-            translation: [2.0, 4.0, 6.0],
-            // Same identity rotation with opposite quaternion sign.
-            rotation: [0.0, 0.0, 0.0, -1.0],
-            scale: Some([1.0, 1.0, 1.0]),
-        }];
-        let mut out = Vec::new();
-        blend_local_poses(&from, &to, 0.5, &mut out).expect("blend");
-        assert_eq!(out.len(), 1);
-        assert!((out[0].translation[0] - 1.0).abs() <= 1.0e-6);
-        assert!((out[0].translation[1] - 2.0).abs() <= 1.0e-6);
-        assert!((out[0].translation[2] - 3.0).abs() <= 1.0e-6);
-        assert!(out[0].rotation[0].abs() <= 1.0e-6);
-        assert!(out[0].rotation[1].abs() <= 1.0e-6);
-        assert!(out[0].rotation[2].abs() <= 1.0e-6);
-        assert!((out[0].rotation[3].abs() - 1.0).abs() <= 1.0e-6);
-    }
 }

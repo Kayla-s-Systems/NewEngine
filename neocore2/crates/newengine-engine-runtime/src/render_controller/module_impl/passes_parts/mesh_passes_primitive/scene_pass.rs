@@ -216,8 +216,8 @@ pub(super) fn draw_primitives_for_pass(
         sky_runtime,
     ) in sky_entries
         .into_iter()
-        .chain(foliage_entries.into_iter())
-        .chain(entries.into_iter())
+        .chain(foliage_entries)
+        .chain(entries)
     {
         let follows_view = has_primitive_flag(draw_flags, PRIMITIVE_DRAW_FOLLOW_VIEW);
         let foliage_role = has_primitive_flag(draw_flags, PRIMITIVE_DRAW_FOLIAGE_ROLE);

@@ -92,7 +92,9 @@ fn primitive_vertices_from_bytes(bytes: &[u8]) -> Result<Vec<PrimitiveVertex>, S
         ])
     }
     Ok(bytes
-        .chunks_exact(32)
+        .as_chunks::<32>()
+        .0
+        .iter()
         .map(|record| PrimitiveVertex {
             pos: [
                 read_f32(record, 0),

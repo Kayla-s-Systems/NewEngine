@@ -7,6 +7,7 @@ pub const PLAYER_MOVE_DOWN: &str = "player.move.down";
 pub const PLAYER_SPRINT: &str = "player.sprint";
 pub const PLAYER_JUMP: &str = newengine_gameplay_fps_api::action::PLAYER_JUMP;
 pub const PLAYER_CROUCH: &str = newengine_gameplay_fps_api::action::PLAYER_CROUCH;
+pub const PLAYER_ATTACK_PRIMARY: &str = newengine_gameplay_fps_api::action::PLAYER_ATTACK_PRIMARY;
 pub const PLAYER_FIRE_PRIMARY: &str = newengine_gameplay_fps_api::action::PLAYER_FIRE_PRIMARY;
 pub const PLAYER_LAUNCH_PROJECTILE: &str =
     newengine_gameplay_fps_api::action::PLAYER_LAUNCH_PROJECTILE;

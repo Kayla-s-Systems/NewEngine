@@ -2,136 +2,29 @@
 
 use std::sync::Arc;
 
-use abi_stable::std_types::{RResult, RString};
-use newengine_game_module_api::{
-    GameModuleDescriptorV1, GameModuleDescriptorV2, GameModuleGameplayProviderRole,
-    GameModuleProviderRef, GameModuleProviderRefV2, GameModuleProviderRole,
-    GAME_MODULE_CONTRACT_V1, GAME_MODULE_CONTRACT_V2, GAME_MODULE_DESCRIBE_METHOD_V1,
-    GAME_MODULE_DESCRIBE_METHOD_V2, GAME_MODULE_SERVICE_ID,
+use newengine_fps_content_runtime::FpsContentProvider;
+use newengine_fps_inventory_ui_runtime::{
+    FpsInventoryHudProvider, ScriptFpsCharacterMenuPolicyProvider,
+    SCRIPT_FPS_CHARACTER_MENU_PROVIDER_ID,
 };
+use newengine_game_module_api::GameModuleDescriptorV2;
 use newengine_game_module_composition::{
     GameModuleBootstrapRegistration, GameModuleComposition, GameModuleFactoryRegistration,
     GameModuleProviderSet, GameModuleTarget,
 };
-use newengine_gameplay_fps::{FpsContentProvider, FpsGameplayProvider, FpsInventoryHudProvider};
-use newengine_gameplay_fps_api::FpsGameplayPolicyProvider;
-use newengine_gameplay_fps_lua::{LuaFpsGameplayPolicyProvider, LUA_FPS_GAMEPLAY_PROVIDER_ID};
+use newengine_game_module_fps_contract::descriptor_v2;
+pub use newengine_game_module_fps_contract::{FPS_GAME_MODULE_ID, FPS_GAME_MODULE_VERSION};
+use newengine_gameplay_fps::FpsGameplayProvider;
+use newengine_gameplay_fps_api::{FpsCharacterMenuPolicyProvider, FpsGameplayPolicyProvider};
+use newengine_gameplay_fps_lua::{
+    LuaFpsGameplayPolicyProvider, LUA_FPS_GAMEPLAY_PROVIDER_ID, SCRIPT_FPS_GAMEPLAY_PROVIDER_ID,
+};
 use newengine_gameplay_script_api::ScriptedGameplayProvider;
-use newengine_plugin_api::{Blob, CapabilityId, MethodName, ServiceV1, ServiceV1Dyn};
 use newengine_project_runtime::RuntimeCompositionContext;
-use newengine_service_api::{Cardinality, RuntimeUnitRequirementDescriptor};
-
-pub const FPS_GAME_MODULE_ID: &str = "newengine.game-module.fps";
-pub const FPS_GAME_MODULE_VERSION: &str = "1.0.0";
-
-fn gameplay_provider_refs() -> Vec<GameModuleProviderRefV2> {
-    vec![
-        GameModuleProviderRefV2 {
-            role: GameModuleGameplayProviderRole::GameplayContent,
-            provider_id: "newengine.gameplay.fps.content.lua-policy".to_owned(),
-            interface: "newengine.gameplay.IGameplayContentProvider.v1".to_owned(),
-            required: true,
-        },
-        GameModuleProviderRefV2 {
-            role: GameModuleGameplayProviderRole::GameplaySystem,
-            provider_id: "newengine.gameplay.fps".to_owned(),
-            interface: "newengine.gameplay.IGameplaySystemProvider.v1".to_owned(),
-            required: true,
-        },
-        GameModuleProviderRefV2 {
-            role: GameModuleGameplayProviderRole::GameplayUi,
-            provider_id: "newengine.gameplay.fps.inventory-hud".to_owned(),
-            interface: "newengine.gameplay.IGameplayUiProvider.v1".to_owned(),
-            required: false,
-        },
-        GameModuleProviderRefV2 {
-            role: GameModuleGameplayProviderRole::GameplayPhysicsQueries,
-            provider_id: "newengine.gameplay.fps.physics-queries".to_owned(),
-            interface: "newengine.gameplay.IGameplayPhysicsQueryProvider.v1".to_owned(),
-            required: true,
-        },
-    ]
-}
-
-fn descriptor_v2() -> GameModuleDescriptorV2 {
-    GameModuleDescriptorV2 {
-        contract: GAME_MODULE_CONTRACT_V2.to_owned(),
-        module_id: FPS_GAME_MODULE_ID.to_owned(),
-        version: FPS_GAME_MODULE_VERSION.to_owned(),
-        capabilities: vec![
-            "gameplay.fps".to_owned(),
-            "gameplay.ui".to_owned(),
-            "gameplay.script-policy".to_owned(),
-            "target.editor".to_owned(),
-            "target.client".to_owned(),
-            "target.server.shared-gameplay".to_owned(),
-        ],
-        required_services: Vec::new(),
-        requirements: vec![
-            RuntimeUnitRequirementDescriptor::required(
-                newengine_game_module_api::GAME_SCENE_BOOTSTRAP_CAPABILITY,
-            ),
-            RuntimeUnitRequirementDescriptor::required(
-                newengine_game_module_api::GAME_WORLD_RUNTIME_CAPABILITY,
-            ),
-            RuntimeUnitRequirementDescriptor::required(
-                newengine_game_module_api::GAME_INPUT_PROFILE_CAPABILITY,
-            ),
-            RuntimeUnitRequirementDescriptor::required(
-                newengine_game_module_api::RENDER_FEATURE_CAPABILITY,
-            )
-            .with_cardinality(Cardinality::Many),
-        ],
-        providers: gameplay_provider_refs(),
-    }
-}
-
-/// Legacy wire response for V1 consumers. Native runtime composition never consumes this path.
-fn descriptor_v1_compat() -> GameModuleDescriptorV1 {
-    let mut providers = vec![
-        GameModuleProviderRef {
-            role: Some(GameModuleProviderRole::SceneBootstrap),
-            provider_id: "newengine.gameready.scene-bootstrap".to_owned(),
-            interface: "newengine.scene.ISceneBootstrapProvider.v1".to_owned(),
-            required: true,
-        },
-        GameModuleProviderRef {
-            role: Some(GameModuleProviderRole::WorldRuntime),
-            provider_id: "newengine.gameready.world-runtime".to_owned(),
-            interface: "newengine.world.IWorldRuntimeProvider.v1".to_owned(),
-            required: true,
-        },
-        GameModuleProviderRef {
-            role: Some(GameModuleProviderRole::InputProfile),
-            provider_id: "newengine.input-profile.gameready".to_owned(),
-            interface: "newengine.input.IInputProfile.v1".to_owned(),
-            required: true,
-        },
-        GameModuleProviderRef {
-            role: Some(GameModuleProviderRole::RenderFeature),
-            provider_id: "newengine.render-feature.gameready".to_owned(),
-            interface: "newengine.render.IRenderFeaturePack.v1".to_owned(),
-            required: true,
-        },
-    ];
-    providers.extend(
-        gameplay_provider_refs()
-            .into_iter()
-            .map(GameModuleProviderRefV2::into_v1_compat),
-    );
-    let v2 = descriptor_v2();
-    GameModuleDescriptorV1 {
-        contract: GAME_MODULE_CONTRACT_V1.to_owned(),
-        module_id: v2.module_id,
-        version: v2.version,
-        capabilities: v2.capabilities,
-        required_services: v2.required_services,
-        providers,
-    }
-}
 
 struct FpsGameModule {
     policy: Arc<LuaFpsGameplayPolicyProvider>,
+    character_menu_policy: Option<Arc<ScriptFpsCharacterMenuPolicyProvider>>,
 }
 
 impl GameModuleComposition for FpsGameModule {
@@ -150,10 +43,21 @@ impl GameModuleComposition for FpsGameModule {
         providers
             .gameplay_content
             .push(FpsContentProvider::shared(policy_for_content));
-        providers.gameplay_systems.push(FpsGameplayProvider::shared(
-            policy_for_system,
-            scripts_for_system,
-        ));
+        if let Some(character_menu) = self.character_menu_policy.as_ref() {
+            let character_menu: Arc<dyn FpsCharacterMenuPolicyProvider> = character_menu.clone();
+            providers
+                .gameplay_systems
+                .push(FpsGameplayProvider::shared_with_character_menu(
+                    policy_for_system,
+                    scripts_for_system,
+                    character_menu,
+                ));
+        } else {
+            providers.gameplay_systems.push(FpsGameplayProvider::shared(
+                policy_for_system,
+                scripts_for_system,
+            ));
+        }
         providers
             .gameplay_physics_queries
             .push(FpsGameplayProvider::shared(
@@ -174,80 +78,57 @@ fn create_fps_module(
     runtime: &RuntimeCompositionContext,
     _target: GameModuleTarget,
 ) -> Result<Arc<dyn GameModuleComposition>, String> {
-    let binding = runtime
+    let (binding_id, binding) = runtime
         .scripts
-        .binding(LUA_FPS_GAMEPLAY_PROVIDER_ID)
+        .binding(SCRIPT_FPS_GAMEPLAY_PROVIDER_ID)
+        .map(|binding| (SCRIPT_FPS_GAMEPLAY_PROVIDER_ID, binding))
+        .or_else(|| {
+            runtime
+                .scripts
+                .binding(LUA_FPS_GAMEPLAY_PROVIDER_ID)
+                .map(|binding| (LUA_FPS_GAMEPLAY_PROVIDER_ID, binding))
+        })
         .ok_or_else(|| {
             format!(
                 "FPS game module requires runtime scripting binding for consumer '{}'",
-                LUA_FPS_GAMEPLAY_PROVIDER_ID
+                SCRIPT_FPS_GAMEPLAY_PROVIDER_ID
             )
         })?;
     let operation = binding.operation.ok_or_else(|| {
         format!(
             "runtime scripting binding '{}' must declare an operation",
-            LUA_FPS_GAMEPLAY_PROVIDER_ID
+            binding_id
         )
     })?;
+    let character_menu_policy = if matches!(_target, GameModuleTarget::Server) {
+        None
+    } else {
+        let binding = runtime
+            .scripts
+            .binding(SCRIPT_FPS_CHARACTER_MENU_PROVIDER_ID)
+            .ok_or_else(|| {
+                format!(
+                    "FPS client module requires runtime scripting binding for consumer '{}'",
+                    SCRIPT_FPS_CHARACTER_MENU_PROVIDER_ID
+                )
+            })?;
+        let operation = binding.operation.ok_or_else(|| {
+            format!(
+                "runtime scripting binding '{}' must declare an operation",
+                SCRIPT_FPS_CHARACTER_MENU_PROVIDER_ID
+            )
+        })?;
+        Some(Arc::new(ScriptFpsCharacterMenuPolicyProvider::new(
+            binding.script_ref,
+            operation,
+        )))
+    };
     Ok(Arc::new(FpsGameModule {
         policy: Arc::new(
             LuaFpsGameplayPolicyProvider::new(binding.script_ref).with_policy_operation(operation),
         ),
+        character_menu_policy,
     }))
-}
-
-struct FpsGameModuleDescriptorService;
-
-impl ServiceV1 for FpsGameModuleDescriptorService {
-    fn id(&self) -> CapabilityId {
-        RString::from(GAME_MODULE_SERVICE_ID)
-    }
-
-    fn describe(&self) -> RString {
-        RString::from(
-            serde_json::json!({
-                "id": GAME_MODULE_SERVICE_ID,
-                "contract": GAME_MODULE_CONTRACT_V2,
-                "active_module": FPS_GAME_MODULE_ID,
-                "methods": [GAME_MODULE_DESCRIBE_METHOD_V2, GAME_MODULE_DESCRIBE_METHOD_V1]
-            })
-            .to_string(),
-        )
-    }
-
-    fn call(&self, method: MethodName, payload: Blob) -> RResult<Blob, RString> {
-        if method.as_str() != GAME_MODULE_DESCRIBE_METHOD_V2
-            && method.as_str() != GAME_MODULE_DESCRIBE_METHOD_V1
-        {
-            return RResult::RErr(RString::from("unknown game-module method"));
-        }
-        if !payload.is_empty() {
-            if let Ok(request) = serde_json::from_slice::<serde_json::Value>(payload.as_slice()) {
-                if let Some(requested) = request
-                    .get("requested_module_id")
-                    .and_then(serde_json::Value::as_str)
-                {
-                    if requested != FPS_GAME_MODULE_ID {
-                        return RResult::RErr(RString::from(format!(
-                            "active game module '{}' does not satisfy requested '{}'",
-                            FPS_GAME_MODULE_ID, requested
-                        )));
-                    }
-                }
-            }
-        }
-        let encoded = if method.as_str() == GAME_MODULE_DESCRIBE_METHOD_V2 {
-            serde_json::to_vec(&descriptor_v2())
-        } else {
-            serde_json::to_vec(&descriptor_v1_compat())
-        };
-        match encoded {
-            Ok(bytes) => RResult::ROk(Blob::from(bytes)),
-            Err(error) => RResult::RErr(RString::from(format!(
-                "encode FPS game-module descriptor: {error}"
-            ))),
-        }
-    }
 }
 
 pub const fn factory_registration() -> GameModuleFactoryRegistration {
@@ -257,13 +138,8 @@ pub const fn factory_registration() -> GameModuleFactoryRegistration {
 }
 
 pub fn activate() -> Result<(), String> {
-    let service = ServiceV1Dyn::from_value(
-        FpsGameModuleDescriptorService,
-        abi_stable::sabi_trait::TD_Opaque,
-    );
-    newengine_plugin_host::host_register_service_impl(service)
-        .into_result()
-        .map_err(|error| format!("register FPS game-module descriptor service: {error}"))?;
+    // Descriptor publication is owned by the dynamically loaded fps-game plugin.
+    // This distribution-side implementation activation deliberately has no host/service side effects.
     Ok(())
 }
 
@@ -274,6 +150,9 @@ pub const fn bootstrap_registration() -> GameModuleBootstrapRegistration {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use newengine_game_module_api::{GameModuleDescriptorV2, GameModuleGameplayProviderRole};
+    use newengine_game_module_fps_contract::descriptor_v1_compat;
+    use newengine_service_api::{Cardinality, RuntimeUnitRequirementDescriptor};
 
     #[test]
     fn fps_descriptor_declares_gameplay_ui_provider() {
@@ -357,10 +236,15 @@ runtime = "lua"
 
 [scripting.modules]
 fps_runtime = "scripts:/fps_gameplay.ysc"
+character_menu = "scripts:/character_menu.ysc"
 
 [scripting.bindings."newengine.gameplay.fps.lua-policy"]
 module = "fps_runtime"
 operation = "gameplay_policy"
+
+[scripting.bindings."newengine.gameplay.fps.character-menu.script-policy"]
+module = "character_menu"
+operation = "character_menu_policy"
 "#,
         )
         .expect("write temporary game manifest");

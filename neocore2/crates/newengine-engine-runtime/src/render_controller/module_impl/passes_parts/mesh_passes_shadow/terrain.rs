@@ -38,7 +38,7 @@ pub fn draw_procedural_terrain_shadow(
             material: world.get::<newengine_materials::MaterialRef>(id).copied(),
         });
     }
-    entries.sort_by(|a, b| a.entity_key.cmp(&b.entity_key));
+    entries.sort_by_key(|entry| entry.entity_key);
     let terrain_shadow_candidates = entries.len();
     let terrain_shadow_budget = terrain_budget(runtime, true);
     entries.truncate(terrain_shadow_budget);
