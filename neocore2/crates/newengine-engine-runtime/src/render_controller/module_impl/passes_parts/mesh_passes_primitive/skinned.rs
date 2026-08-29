@@ -14,7 +14,7 @@ pub(crate) fn draw_skinned_player_primitives(
     local_shadow_texture: TextureId,
     runtime: bool,
     camera_position: Vec3,
-    camera_forward: Vec3,
+    _camera_forward: Vec3,
 ) -> newengine_core::EngineResult<()> {
     use crate::render_controller::gpu::{ensure_player_skin_gpu, ensure_skin_palette_gpu};
 
@@ -23,7 +23,7 @@ pub(crate) fn draw_skinned_player_primitives(
     let reg = reg_lock.read();
     let mats_lock = this.bridges.scene.materials();
     let mats = mats_lock.read();
-    let visibility_settings = primitive_visibility_settings(runtime);
+    let visibility_settings = primitive_visibility_settings(runtime, viewproj);
 
     for (entity, prim, global) in world.query2::<Primitive, GlobalTransform>() {
         let Some(skin) = world.get::<crate::gameplay::PlayerSkinBinding>(entity) else {
@@ -51,13 +51,12 @@ pub(crate) fn draw_skinned_player_primitives(
                     bounds.local_sphere.center,
                     bounds.local_sphere.radius,
                 );
-                if !forward_sphere_visible(
+                if !frustum_sphere_visible(
+                    &visibility_settings.frustum,
                     camera_position,
-                    camera_forward,
                     center_ws,
                     radius_ws,
                     visibility_settings.max_distance,
-                    visibility_settings.cone_dot,
                     visibility_settings.near_accept_distance,
                 ) {
                     continue;

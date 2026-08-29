@@ -108,7 +108,7 @@ impl<E: Send + 'static> Module<E> for DeferredAssetRootMountModule {
 }
 
 struct AssetInspectorApp {
-    viewport: Arc<newengine_engine_runtime::ViewportBridge>,
+    viewport: Arc<newengine_viewport_bridge::ViewportBridge>,
     plugins: Arc<newengine_engine_runtime::PluginManagerBridge>,
     scene: Arc<newengine_scene_runtime::SceneBridge>,
 }
@@ -116,7 +116,7 @@ struct AssetInspectorApp {
 impl Default for AssetInspectorApp {
     fn default() -> Self {
         Self {
-            viewport: Arc::new(newengine_engine_runtime::ViewportBridge::new()),
+            viewport: Arc::new(newengine_viewport_bridge::ViewportBridge::new()),
             plugins: Arc::new(newengine_engine_runtime::PluginManagerBridge::new()),
             scene: Arc::new(newengine_scene_runtime::SceneBridge::new(
                 newengine_scene::Scene::new(),
@@ -152,9 +152,9 @@ impl RuntimeHostAppProfile for AssetInspectorApp {
             startup.modules_dir.clone(),
         )))?;
         engine.register_module(Box::new(DeferredAssetRootMountModule::new()))?;
-        let preview_api = Arc::new(newengine_engine_runtime::AssetPreviewApi::new(Arc::clone(
-            &self.viewport,
-        )));
+        let preview_api = Arc::new(newengine_asset_preview_runtime::AssetPreviewApi::new(
+            Arc::clone(&self.viewport),
+        ));
         let preview_draw_lists = preview_api.draw_list_provider();
         engine.register_module(Box::new(
             newengine_asset_inspector_runtime::AssetInspectorRuntimeModule::new(preview_api),

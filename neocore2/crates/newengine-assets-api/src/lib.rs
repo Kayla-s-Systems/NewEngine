@@ -29,6 +29,9 @@ pub use asset_lifecycle::*;
 mod asset_streaming;
 pub use asset_streaming::*;
 
+mod source_dictionary;
+pub use source_dictionary::*;
+
 /// Engine-facing asset service gateway id.
 ///
 /// Runtime and provider plugins must request assets through this stable host-owned
@@ -446,6 +449,12 @@ pub mod method {
 
     // Global runtime residency / memory controller.
     pub const STREAMING_REQUEST_V1: &str = "asset.streaming.request_v1";
+    /// Scheduler-selected provider admission. Demand selection remains engine-owned.
+    pub const STREAMING_ADMIT_V2: &str = "asset.streaming.admit_v2";
+    /// Exact scheduler-selected CPU residency eviction.
+    pub const STREAMING_EVICT_V2: &str = "asset.streaming.evict_v2";
+    /// Provider lifecycle acknowledgement used to reconcile engine residency state.
+    pub const STREAMING_LIFECYCLE_V2: &str = "asset.streaming.lifecycle_v2";
     pub const STREAMING_PIN_V1: &str = "asset.streaming.pin_v1";
     pub const STREAMING_UNPIN_V1: &str = "asset.streaming.unpin_v1";
     pub const STREAMING_TOUCH_V1: &str = "asset.streaming.touch_v1";
@@ -676,6 +685,9 @@ pub const ASSETS_STREAMING_SERVICE_METHODS: &[&str] = &[
     newengine_service_api::SERVICE_METHOD_INVOKE_JSON,
     newengine_service_api::SERVICE_METHOD_SHUTDOWN_V1,
     method::STREAMING_REQUEST_V1,
+    method::STREAMING_ADMIT_V2,
+    method::STREAMING_EVICT_V2,
+    method::STREAMING_LIFECYCLE_V2,
     method::STREAMING_PIN_V1,
     method::STREAMING_UNPIN_V1,
     method::STREAMING_TOUCH_V1,
@@ -739,6 +751,9 @@ pub const REQUIRED_RUNTIME_METHODS_V1: &[&str] = &[
     method::PACKAGE_WRITE_NEPAK_JSON_V1,
     method::PACKAGE_WRITE_TEXT_JSON_V1,
     method::STREAMING_REQUEST_V1,
+    method::STREAMING_ADMIT_V2,
+    method::STREAMING_EVICT_V2,
+    method::STREAMING_LIFECYCLE_V2,
     method::STREAMING_PIN_V1,
     method::STREAMING_UNPIN_V1,
     method::STREAMING_TOUCH_V1,

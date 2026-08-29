@@ -1,9 +1,13 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
+mod project_browser_settings;
+mod standalone_package;
+
 use std::{
     env,
     path::{Path, PathBuf},
     process::{Command, ExitCode},
+    sync::atomic::{AtomicBool, Ordering},
 };
 
 use newengine_plugin_api::Blob;
@@ -12,7 +16,7 @@ use newengine_plugin_host::{
     PluginManager,
 };
 use newengine_project_api::{
-    runtime_profile_service_id_for_game, GAME_MANIFEST_ENV, PROJECT_BROWSER_PRESENT_METHOD_V1,
+    runtime_profile_service_id, GAME_MANIFEST_ENV, PROJECT_BROWSER_PRESENT_METHOD_V1,
     PROJECT_BROWSER_SERVICE_ID, PROJECT_MANIFEST_FILE, RUNTIME_PROFILE_LAUNCH_METHOD_V1,
 };
 use newengine_project_runtime::{
@@ -21,9 +25,45 @@ use newengine_project_runtime::{
     ProjectBrowserSelection,
 };
 use newengine_runtime_host::runtime_config::{load_engine_runtime_config, ENGINE_RUNTIME_MODE_ENV};
+use project_browser_settings::{
+    apply_project_browser_settings_patch, prepare_project_browser_config_document,
+};
 
 const DEFAULT_PROJECT_BROWSER_PLUGIN_ID: &str = "newengine.project-browser.egui";
 const PROJECT_BROWSER_PLUGIN_ID_ENV: &str = "NEWENGINE_PROJECT_BROWSER_PLUGIN_ID";
+static PROJECT_BROWSER_INVOCATION_ACTIVE: AtomicBool = AtomicBool::new(false);
+
+struct ProjectBrowserInvocationLease;
+
+impl ProjectBrowserInvocationLease {
+    fn acquire() -> Result<Self, String> {
+        PROJECT_BROWSER_INVOCATION_ACTIVE
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .map(|_| Self)
+            .map_err(|_| {
+                "Project Browser invocation rejected because a selection window is already active"
+                    .to_owned()
+            })
+    }
+}
+
+impl Drop for ProjectBrowserInvocationLease {
+    fn drop(&mut self) {
+        PROJECT_BROWSER_INVOCATION_ACTIVE.store(false, Ordering::Release);
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ProjectBrowserAction {
+    Launch,
+    BuildStandalone,
+}
+
+struct ProjectBrowserResult {
+    selection: ProjectBrowserSelection,
+    action: ProjectBrowserAction,
+    build_options: standalone_package::StandaloneBuildOptions,
+}
 
 fn main() -> ExitCode {
     match run() {
@@ -38,6 +78,29 @@ fn main() -> ExitCode {
 fn run() -> Result<(), String> {
     let (runtime_config_path, runtime_config) = load_engine_runtime_config()?;
     runtime_config.apply_process_env(&runtime_config_path)?;
+
+    if env::args().any(|arg| arg == "--build-standalone") {
+        let manifest_path = project_request_from_cli()
+            .map(normalize_manifest_request)
+            .ok_or_else(|| {
+                "--build-standalone requires --project <game.toml|project-directory>".to_owned()
+            })?;
+        let launch_request =
+            project_launch_request_from_process().or_else(|| Some("game".to_owned()));
+        let project =
+            load_project_from_request_with_launch(&manifest_path, launch_request.as_deref())?;
+        let build_options = standalone_build_options_from_cli()?;
+        let output = standalone_package::build_game_ready_standalone_with_options(
+            &runtime_config_path,
+            &project,
+            &build_options,
+        )?;
+        println!(
+            "North Star: standalone Game Ready package built at '{}'",
+            output.display()
+        );
+        return Ok(());
+    }
 
     let project_browser_requested =
         env::args().any(|arg| arg == "--list-projects" || arg == "--project-browser");
@@ -233,6 +296,40 @@ fn project_request_from_cli() -> Option<PathBuf> {
     None
 }
 
+fn cli_option_value(name: &str) -> Option<String> {
+    let mut args = env::args().skip(1);
+    while let Some(arg) = args.next() {
+        if arg == name {
+            return args.next().filter(|value| !value.trim().is_empty());
+        }
+        if let Some(value) = arg.strip_prefix(&format!("{name}=")) {
+            if !value.trim().is_empty() {
+                return Some(value.to_owned());
+            }
+        }
+    }
+    None
+}
+
+fn standalone_build_options_from_cli() -> Result<standalone_package::StandaloneBuildOptions, String>
+{
+    let target_os = cli_option_value("--standalone-target")
+        .as_deref()
+        .map(|value| {
+            standalone_package::StandaloneTargetOs::from_id(value)
+                .ok_or_else(|| format!("unknown standalone target OS '{value}'"))
+        })
+        .transpose()?
+        .unwrap_or(standalone_package::StandaloneTargetOs::Windows);
+    Ok(standalone_package::StandaloneBuildOptions {
+        output_dir: cli_option_value("--standalone-output").map(PathBuf::from),
+        package_name: cli_option_value("--standalone-name"),
+        target_os,
+        rebuild_plugins: !env::args().any(|arg| arg == "--standalone-no-rebuild-plugins"),
+        include_source: !env::args().any(|arg| arg == "--standalone-no-source"),
+    })
+}
+
 fn run_project_selection(runtime_config_path: &Path) -> Result<(), String> {
     env::set_var("NEWENGINE_HEADLESS", "0");
 
@@ -259,23 +356,39 @@ fn run_project_selection(runtime_config_path: &Path) -> Result<(), String> {
             }
             return Ok(());
         }
-        let selection = present_project_browser_via_plugin(&root)?;
-        if selection.cancelled {
+        let result = present_project_browser_via_plugin(&root)?;
+        if result.selection.cancelled {
             return Ok(());
         }
-        (
-            selection
-                .manifest_path
-                .ok_or_else(|| "project selection returned no game.toml".to_owned())?,
-            selection.launch_id,
-        )
+        let manifest_path = result
+            .selection
+            .manifest_path
+            .ok_or_else(|| "project selection returned no game.toml".to_owned())?;
+        if result.action == ProjectBrowserAction::BuildStandalone {
+            let project = load_project_from_request_with_launch(
+                &manifest_path,
+                result.selection.launch_id.as_deref(),
+            )?;
+            let output = standalone_package::build_game_ready_standalone_with_options(
+                runtime_config_path,
+                &project,
+                &result.build_options,
+            )?;
+            println!(
+                "North Star: standalone Game Ready package built at '{}'",
+                output.display()
+            );
+            return Ok(());
+        }
+        (manifest_path, result.selection.launch_id)
     };
 
     let project = load_project_from_request_with_launch(&manifest_path, launch_request.as_deref())?;
     dispatch_project_launch(runtime_config_path, project)
 }
 
-fn present_project_browser_via_plugin(root: &Path) -> Result<ProjectBrowserSelection, String> {
+fn present_project_browser_via_plugin(root: &Path) -> Result<ProjectBrowserResult, String> {
+    let _invocation_lease = ProjectBrowserInvocationLease::acquire()?;
     init_host_context();
     let host = default_host_api();
     let mut plugins = PluginManager::new();
@@ -308,34 +421,13 @@ fn present_project_browser_via_plugin(root: &Path) -> Result<ProjectBrowserSelec
             .filter(|value| !value.trim().is_empty())
             .unwrap_or_else(|| "config.json".to_owned());
     let startup_paths = newengine_core::ConfigPaths::from_startup_str(&startup_config_path);
-    let startup_settings =
-        newengine_core::StartupLoader::load_launch_settings_preview(&startup_paths)
-            .unwrap_or_default();
+    let mut startup_document =
+        newengine_core::StartupLoader::load_startup_document_preview(&startup_paths)
+            .map_err(|error| format!("load Project Browser startup config document: {error}"))?;
+    let browser_document = prepare_project_browser_config_document(startup_document.clone())?;
     let payload = serde_json::to_vec(&serde_json::json!({
         "root": root.to_string_lossy(),
-        "settings": {
-            "preset": startup_settings.graphics.preset.as_str(),
-            "lod_quality": startup_settings.graphics.lod_quality.as_str(),
-            "lod_distance_scale": startup_settings.graphics.lod_distance_scale,
-            "shadows_enabled": startup_settings.graphics.shadows_enabled,
-            "shadow_quality": startup_settings.graphics.shadow_quality.as_str(),
-            "shadow_cascade_count": startup_settings.graphics.shadow_cascade_count,
-            "shadow_map_resolution": startup_settings.graphics.shadow_map_resolution,
-            "shadow_advanced_override": startup_settings.graphics.shadow_advanced_override,
-            "shadow_filter": startup_settings.graphics.shadow_filter.as_str(),
-            "shadow_max_distance": startup_settings.graphics.shadow_max_distance,
-            "shadow_softness": startup_settings.graphics.shadow_softness,
-            "shadow_bias": startup_settings.graphics.shadow_bias,
-            "shadow_normal_bias": startup_settings.graphics.shadow_normal_bias,
-            "shadow_contact_strength": startup_settings.graphics.shadow_contact_strength,
-            "shadow_pcss_light_radius_degrees": startup_settings.graphics.shadow_pcss_light_radius_degrees,
-            "shadow_pcss_blocker_radius_texels": startup_settings.graphics.shadow_pcss_blocker_radius_texels,
-            "shadow_pcss_max_filter_radius_texels": startup_settings.graphics.shadow_pcss_max_filter_radius_texels,
-            "shadow_pcss_blocker_samples": startup_settings.graphics.shadow_pcss_blocker_samples,
-            "shadow_pcss_filter_samples": startup_settings.graphics.shadow_pcss_filter_samples,
-            "shadow_pcss_min_filter_radius_texels": startup_settings.graphics.shadow_pcss_min_filter_radius_texels,
-            "shadow_pcss_stable_kernel_texels": startup_settings.graphics.shadow_pcss_stable_kernel_texels,
-        }
+        "config_document": browser_document,
     }))
     .map_err(|error| format!("encode project-browser request: {error}"))?;
     let response = call_service_v1(
@@ -352,10 +444,26 @@ fn present_project_browser_via_plugin(root: &Path) -> Result<ProjectBrowserSelec
         .and_then(serde_json::Value::as_bool)
         .unwrap_or(false)
     {
-        let mut selected_settings = startup_settings.clone();
-        apply_project_browser_graphics_settings(&value, &mut selected_settings);
-        newengine_core::StartupLoader::persist_launch_settings(&startup_paths, &selected_settings)
-            .map_err(|error| format!("persist Project Browser launch settings: {error}"))?;
+        let changed_settings = apply_project_browser_settings_patch(&value, &mut startup_document)?;
+        if changed_settings > 0 {
+            newengine_core::StartupLoader::persist_startup_document(
+                &startup_paths,
+                &startup_document,
+            )
+            .map_err(|error| format!("persist Project Browser startup document: {error}"))?;
+            let mut selected_settings: newengine_core::StartupLaunchSettings =
+                serde_json::from_value(
+                    startup_document
+                        .get("startup_settings")
+                        .cloned()
+                        .unwrap_or_else(|| serde_json::json!({})),
+                )
+                .map_err(|error| {
+                    format!("decode confirmed Project Browser startup settings: {error}")
+                })?;
+            selected_settings.normalize();
+            selected_settings.publish_environment_snapshot();
+        }
         // Settings were already confirmed in the project-selection window. Do not
         // present a second PreStart settings window for this browser-selected launch.
         env::set_var("NEWENGINE_STARTUP_WINDOW_SKIP", "1");
@@ -374,140 +482,58 @@ fn present_project_browser_via_plugin(root: &Path) -> Result<ProjectBrowserSelec
             .and_then(serde_json::Value::as_bool)
             .unwrap_or(false),
     };
+    let action = match value
+        .get("action")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("launch")
+    {
+        "launch" => ProjectBrowserAction::Launch,
+        "build_standalone" => ProjectBrowserAction::BuildStandalone,
+        other => {
+            plugins.shutdown();
+            return Err(format!("Project Browser returned unknown action '{other}'"));
+        }
+    };
+    let build_options = parse_project_browser_build_options(&value);
     plugins.shutdown();
-    Ok(selection)
+    Ok(ProjectBrowserResult {
+        selection,
+        action,
+        build_options,
+    })
 }
 
-fn apply_project_browser_graphics_settings(
+fn parse_project_browser_build_options(
     value: &serde_json::Value,
-    launch_settings: &mut newengine_core::StartupLaunchSettings,
-) {
-    let Some(settings) = value.get("settings") else {
-        return;
-    };
-    let graphics = &mut launch_settings.graphics;
-    let mut explicit_preset = false;
-    if let Some(v) = settings.get("preset").and_then(serde_json::Value::as_str) {
-        graphics.preset = match v.trim().to_ascii_lowercase().as_str() {
-            "low" => newengine_core::GraphicsPreset::Low,
-            "balanced" | "medium" => newengine_core::GraphicsPreset::Balanced,
-            "high" => newengine_core::GraphicsPreset::High,
-            "ultra" => newengine_core::GraphicsPreset::Ultra,
-            _ => newengine_core::GraphicsPreset::Custom,
-        };
-        explicit_preset = true;
+) -> standalone_package::StandaloneBuildOptions {
+    let build = value.get("build");
+    standalone_package::StandaloneBuildOptions {
+        output_dir: build
+            .and_then(|build| build.get("output_dir"))
+            .and_then(serde_json::Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(PathBuf::from),
+        package_name: build
+            .and_then(|build| build.get("package_name"))
+            .and_then(serde_json::Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_owned),
+        target_os: build
+            .and_then(|build| build.get("target_os"))
+            .and_then(serde_json::Value::as_str)
+            .and_then(standalone_package::StandaloneTargetOs::from_id)
+            .unwrap_or(standalone_package::StandaloneTargetOs::Windows),
+        rebuild_plugins: build
+            .and_then(|build| build.get("rebuild_plugins"))
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(true),
+        include_source: build
+            .and_then(|build| build.get("include_source"))
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(true),
     }
-    if let Some(v) = settings
-        .get("lod_quality")
-        .and_then(serde_json::Value::as_str)
-    {
-        graphics.lod_quality = match v.trim().to_ascii_lowercase().as_str() {
-            "low" => newengine_core::LodQuality::Low,
-            "medium" => newengine_core::LodQuality::Medium,
-            "high" => newengine_core::LodQuality::High,
-            "ultra" => newengine_core::LodQuality::Ultra,
-            "cinematic" => newengine_core::LodQuality::Cinematic,
-            _ => newengine_core::LodQuality::Custom,
-        };
-    }
-    if let Some(v) = settings
-        .get("lod_distance_scale")
-        .and_then(serde_json::Value::as_f64)
-    {
-        graphics.lod_distance_scale = v as f32;
-    }
-    if let Some(v) = settings
-        .get("shadows_enabled")
-        .and_then(serde_json::Value::as_bool)
-    {
-        graphics.shadows_enabled = v;
-    }
-    if let Some(v) = settings
-        .get("shadow_quality")
-        .and_then(serde_json::Value::as_str)
-    {
-        graphics.shadow_quality = match v.trim().to_ascii_lowercase().as_str() {
-            "performance" => newengine_core::ShadowQuality::Performance,
-            "quality" => newengine_core::ShadowQuality::Quality,
-            "cinematic" => newengine_core::ShadowQuality::Cinematic,
-            "off" => newengine_core::ShadowQuality::Off,
-            _ => newengine_core::ShadowQuality::Balanced,
-        };
-    }
-    if let Some(v) = settings
-        .get("shadow_cascade_count")
-        .and_then(serde_json::Value::as_u64)
-    {
-        graphics.shadow_cascade_count = v as u32;
-    }
-    if let Some(v) = settings
-        .get("shadow_map_resolution")
-        .and_then(serde_json::Value::as_u64)
-    {
-        graphics.shadow_map_resolution = v as u32;
-    }
-    if let Some(v) = settings
-        .get("shadow_advanced_override")
-        .and_then(serde_json::Value::as_bool)
-    {
-        graphics.shadow_advanced_override = v;
-    }
-    if let Some(v) = settings
-        .get("shadow_filter")
-        .and_then(serde_json::Value::as_str)
-    {
-        graphics.shadow_filter = match v.trim().to_ascii_lowercase().as_str() {
-            "hard" => newengine_core::ShadowFilterMode::Hard,
-            "pcf" => newengine_core::ShadowFilterMode::Pcf,
-            _ => newengine_core::ShadowFilterMode::Pcss,
-        };
-    }
-    macro_rules! f32_setting {
-        ($name:literal, $field:ident) => {
-            if let Some(v) = settings.get($name).and_then(serde_json::Value::as_f64) {
-                graphics.$field = v as f32;
-            }
-        };
-    }
-    macro_rules! u32_setting {
-        ($name:literal, $field:ident) => {
-            if let Some(v) = settings.get($name).and_then(serde_json::Value::as_u64) {
-                graphics.$field = v as u32;
-            }
-        };
-    }
-    f32_setting!("shadow_max_distance", shadow_max_distance);
-    f32_setting!("shadow_softness", shadow_softness);
-    f32_setting!("shadow_bias", shadow_bias);
-    f32_setting!("shadow_normal_bias", shadow_normal_bias);
-    f32_setting!("shadow_contact_strength", shadow_contact_strength);
-    f32_setting!(
-        "shadow_pcss_light_radius_degrees",
-        shadow_pcss_light_radius_degrees
-    );
-    f32_setting!(
-        "shadow_pcss_blocker_radius_texels",
-        shadow_pcss_blocker_radius_texels
-    );
-    f32_setting!(
-        "shadow_pcss_max_filter_radius_texels",
-        shadow_pcss_max_filter_radius_texels
-    );
-    u32_setting!("shadow_pcss_blocker_samples", shadow_pcss_blocker_samples);
-    u32_setting!("shadow_pcss_filter_samples", shadow_pcss_filter_samples);
-    f32_setting!(
-        "shadow_pcss_min_filter_radius_texels",
-        shadow_pcss_min_filter_radius_texels
-    );
-    f32_setting!(
-        "shadow_pcss_stable_kernel_texels",
-        shadow_pcss_stable_kernel_texels
-    );
-    if !explicit_preset {
-        graphics.mark_custom();
-    }
-    launch_settings.normalize();
-    launch_settings.publish_environment_snapshot();
 }
 
 fn launch_runtime_profile_via_plugins(
@@ -518,42 +544,60 @@ fn launch_runtime_profile_via_plugins(
     let host = default_host_api();
     let mut plugins = PluginManager::new();
 
-    // Game-owned compositions win over engine defaults. This is what allows
-    // fpsGame.dll, topDownGame.dll and thirdPersonGame.dll to select the same
-    // reusable runtime profile without recompiling NewEngine.exe.
+    // Project-local plugins are loaded first so a project may provide/override its own
+    // game-module descriptor. Runtime-profile ownership remains independent.
     load_game_runtime_plugins(&mut plugins, project, host.clone())?;
 
-    let service_id = runtime_profile_service_id_for_game(
-        runtime_profile,
-        project.manifest.game_module.as_deref(),
-    );
+    // game_module is a descriptor/capability root, not a runtime-profile launcher.
+    // The launcher verifies/loads it in the launcher host, but must not exclude it from the
+    // runtime host: GameModuleContractModule validates the descriptor through the runtime-local
+    // engine.game.module service after EnginePluginsReady.
+    if let Some(game_module) = project
+        .manifest
+        .game_module
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        if !has_service(newengine_game_module_api::GAME_MODULE_SERVICE_ID) {
+            plugins
+                .load_plugin_id_default_with_origin(
+                    game_module,
+                    host.clone(),
+                    PluginLoadOrigin::FirstPartyPlugin,
+                )
+                .map_err(|error| {
+                    format!(
+                        "load game-module descriptor plugin '{}' from pluginsRuntime: {error}",
+                        game_module
+                    )
+                })?;
+        }
+        if !has_service(newengine_game_module_api::GAME_MODULE_SERVICE_ID) {
+            return Err(format!(
+                "game_module '{}' loaded without required descriptor service '{}'",
+                game_module,
+                newengine_game_module_api::GAME_MODULE_SERVICE_ID,
+            ));
+        }
+    }
 
+    // Runtime profile is resolved independently from the module descriptor.
+    let service_id = runtime_profile_service_id(runtime_profile);
     if !has_service(&service_id) {
-        // Runtime composition identity is intentionally aligned with the selected
-        // game_module (or runtime_profile for a generic composition). Load only
-        // that plugin from pluginsRuntime; renderer/physics/UI remain owned by the
-        // runtime's own PluginManager and are not initialized by the launcher.
-        let composition_plugin_id = project
-            .manifest
-            .game_module
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .unwrap_or(runtime_profile);
         plugins
             .load_plugin_id_default_with_origin(
-                composition_plugin_id,
+                runtime_profile,
                 host.clone(),
                 PluginLoadOrigin::FirstPartyPlugin,
             )
             .map_err(|error| {
                 format!(
-                    "load runtime composition plugin '{}' from pluginsRuntime: {error}",
-                    composition_plugin_id
+                    "load runtime-profile plugin '{}' from pluginsRuntime: {error}",
+                    runtime_profile
                 )
             })?;
     }
-
     if !has_service(&service_id) {
         let available = plugins
             .snapshot()
@@ -567,30 +611,13 @@ fn launch_runtime_profile_via_plugins(
             .collect::<Vec<_>>()
             .join(", ");
         return Err(format!(
-            "runtime composition service '{}' is unavailable for profile='{}' game_module='{}'; loaded capabilities=[{}]",
-            service_id,
-            runtime_profile,
-            project.manifest.game_module.as_deref().unwrap_or("<none>"),
-            available,
+            "runtime profile service '{}' is unavailable for profile='{}'; loaded capabilities=[{}]",
+            service_id, runtime_profile, available,
         ));
     }
-
-    let composition_plugin_id = project
-        .manifest
-        .game_module
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .unwrap_or(runtime_profile);
-    append_env_list_unique("NEWENGINE_PLUGIN_EXCLUDE_IDS", composition_plugin_id);
+    append_env_list_unique("NEWENGINE_PLUGIN_EXCLUDE_IDS", runtime_profile);
 
     let payload = serde_json::to_vec(&serde_json::json!({
-        // Project launches selected by the startup browser are dev launches.
-        // Keep `manifest_path` as the canonical project-manifest field expected
-        // by runtime-profile services, while `game_manifest_path` remains an
-        // explicit compatibility alias for game-module services. Neither field
-        // is `runtime_manifest_path`: that name is reserved for packaged runtime
-        // configuration and must never point at game.toml.
         "manifest_path": project.manifest_path.to_string_lossy(),
         "game_manifest_path": project.manifest_path.to_string_lossy(),
         "launch_id": project.launch.preset_id,

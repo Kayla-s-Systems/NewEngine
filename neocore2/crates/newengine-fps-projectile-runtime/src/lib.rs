@@ -17,7 +17,7 @@ use newengine_transform::Transform;
 use crate::game_data::active_game_data;
 
 use newengine_engine_runtime::gameplay::{
-    play_equipped_weapon_audio, play_weapon_item_audio_at, CollisionShapeDesc, DisplayVisibility,
+    play_equipped_weapon_audio, CollisionShapeDesc, DisplayVisibility,
     EquippedWeaponBinding, EquippedWeaponMuzzle, GameplayActor, ItemCatalog, ItemId,
     PhysicsBodyDesc, PhysicsSurface, PlayerCommandFrame, PlayerController, PlayerStanceState,
     WeaponAudioAction,

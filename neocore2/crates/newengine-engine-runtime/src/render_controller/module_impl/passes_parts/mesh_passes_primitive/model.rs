@@ -13,13 +13,13 @@ pub(crate) fn draw_model_components(
     local_shadow_texture: TextureId,
     runtime: bool,
     camera_position: Vec3,
-    camera_forward: Vec3,
+    _camera_forward: Vec3,
     deferred: bool,
 ) -> newengine_core::EngineResult<()> {
     use newengine_core::render::{BufferSlice, DrawIndexedArgs, IndexFormat};
 
     let world = scene.world();
-    let visibility_settings = primitive_visibility_settings(runtime);
+    let visibility_settings = primitive_visibility_settings(runtime, viewproj);
 
     for (entity, model_component, global) in
         world.query2::<crate::gameplay::ModelRenderComponent, GlobalTransform>()
@@ -55,13 +55,12 @@ pub(crate) fn draw_model_components(
                 });
             if let Some((center, radius)) = model_bounds {
                 let (center_ws, radius_ws) = transform_sphere(render_model, center, radius);
-                if !forward_sphere_visible(
+                if !frustum_sphere_visible(
+                    &visibility_settings.frustum,
                     camera_position,
-                    camera_forward,
                     center_ws,
                     radius_ws,
                     visibility_settings.max_distance,
-                    visibility_settings.cone_dot,
                     visibility_settings.near_accept_distance,
                 ) {
                     continue;

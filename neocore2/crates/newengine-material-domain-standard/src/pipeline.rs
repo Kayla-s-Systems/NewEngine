@@ -73,6 +73,8 @@ pub(super) struct PendingLitPipelineBuild {
     shadow_instanced_double_sided_pipeline: Option<PipelineId>,
     skinned_pipeline: Option<PipelineId>,
     skinned_double_sided_pipeline: Option<PipelineId>,
+    skinned_alpha_pipeline: Option<PipelineId>,
+    skinned_alpha_double_sided_pipeline: Option<PipelineId>,
     gbuffer_skinned_pipeline: Option<PipelineId>,
     gbuffer_skinned_double_sided_pipeline: Option<PipelineId>,
     shadow_skinned_pipeline: Option<PipelineId>,
@@ -125,6 +127,8 @@ impl PendingLitPipelineBuild {
             shadow_instanced_double_sided_pipeline: None,
             skinned_pipeline: None,
             skinned_double_sided_pipeline: None,
+            skinned_alpha_pipeline: None,
+            skinned_alpha_double_sided_pipeline: None,
             gbuffer_skinned_pipeline: None,
             gbuffer_skinned_double_sided_pipeline: None,
             shadow_skinned_pipeline: None,
@@ -141,7 +145,7 @@ impl PendingLitPipelineBuild {
         let mut operations = 0_u32;
 
         loop {
-            if self.stage >= 35 {
+            if self.stage >= 37 {
                 let pipeline = self.finish()?;
                 newengine_ulog_api::ulog::info!(
                     "standard material domain: staged pipeline ready stages={} operations_this_frame={} elapsed_ms={:.2} deferred_pipelines={}",
@@ -366,6 +370,14 @@ impl PendingLitPipelineBuild {
             34 => {
                 self.decal_instanced_double_sided_pipeline =
                     Some(r.create_pipeline(self.decal_pipeline_desc(true, true)?)?)
+            }
+            35 => {
+                self.skinned_alpha_pipeline =
+                    Some(r.create_pipeline(self.skinned_alpha_pipeline_desc(false)?)?)
+            }
+            36 => {
+                self.skinned_alpha_double_sided_pipeline =
+                    Some(r.create_pipeline(self.skinned_alpha_pipeline_desc(true)?)?)
             }
             _ => {}
         }

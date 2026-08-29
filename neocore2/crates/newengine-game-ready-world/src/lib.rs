@@ -125,7 +125,7 @@ use self::foliage::tick_deferred_foliage_prefabs;
 use self::mission::{tick_deferred_item_pickups, tick_runtime_world_item_visuals};
 use self::sky::{tick_game_ready_sky_cycle, SkyVisualKind};
 use self::terrain_streaming::{tick_game_ready_streaming_terrain, TerrainSurfaceSampler};
-use self::world_model::tick_game_ready_static_world_prefabs;
+use self::world_model::{tick_authored_map_streaming, tick_game_ready_static_world_prefabs};
 
 use self::material_source::*;
 use self::materials_terrain::*;
@@ -149,6 +149,7 @@ pub fn tick_prelaunch(
     materials: &MaterialRegistry,
     thread_pool: Option<&ThreadPoolHandle>,
 ) {
+    tick_authored_map_streaming(world, primitives, materials, thread_pool);
     tick_game_ready_static_world_prefabs(world, primitives, materials, thread_pool);
     tick_deferred_foliage_prefabs(world, primitives, materials);
     tick_deferred_item_pickups(world, primitives, materials);
@@ -171,6 +172,9 @@ pub fn tick_frame(
     equipment_visual::tick_equipped_weapon_visuals(world, primitives, materials, frame.dt);
     weapon_casing::tick_weapon_shell_casing_visuals(world, primitives, materials);
     weapon_animation::tick_equipped_weapon_animations(world, frame.dt);
+    if frame.runtime_active && frame.streaming_enabled {
+        tick_authored_map_streaming(world, primitives, materials, thread_pool);
+    }
     tick_game_ready_static_world_prefabs(world, primitives, materials, thread_pool);
     tick_deferred_foliage_prefabs(world, primitives, materials);
     tick_deferred_item_pickups(world, primitives, materials);

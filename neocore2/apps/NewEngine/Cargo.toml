@@ -19,11 +19,13 @@ path = "src/main.rs"
 [dependencies]
 newengine-project-api = { path = "../../crates/newengine-project-api" }
 newengine-project-runtime = { path = "../../crates/newengine-project-runtime" }
+newengine-game-module-api = { path = "../../crates/newengine-game-module-api" }
 newengine-plugin-api = { path = "../../crates/newengine-plugin-api" }
 newengine-plugin-host = { path = "../../crates/newengine-plugin-host" }
 newengine-runtime-host = { path = "../../crates/newengine-runtime-host", default-features = false, features = ["full-runtime"] }
 newengine-core = { path = "../../crates/newengine-core" }
 serde_json = "1"
+toml = "1.1.4"
 
 [build-dependencies]
-embed-resource = "2"
+embed-resource = "3.0.11"

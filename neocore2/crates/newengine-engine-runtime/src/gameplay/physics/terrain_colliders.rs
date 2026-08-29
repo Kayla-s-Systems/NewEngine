@@ -165,6 +165,7 @@ fn terrain_body_footprint(body: &PhysicsFrameBodySnapshot) -> f32 {
         CollisionShapeDto::Box { half_extents } => half_extents[0].abs().max(half_extents[2].abs()),
         CollisionShapeDto::Sphere { radius } => radius.abs(),
         CollisionShapeDto::Capsule { radius, .. } => radius.abs(),
+        CollisionShapeDto::Cylinder { radius, .. } => radius.abs(),
     };
     let bounds_radius = ((body.bounds_max[0] - body.bounds_min[0])
         .abs()

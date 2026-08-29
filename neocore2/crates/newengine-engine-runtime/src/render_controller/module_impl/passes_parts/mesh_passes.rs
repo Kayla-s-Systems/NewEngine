@@ -16,12 +16,11 @@ use super::super::instancing::{
     InstancedReplayState, RenderInstanceRaw,
 };
 use super::mesh_visibility::{
-    distance_sq_to_camera, foliage_instance_budget, forward_sphere_visible, primitive_budget,
+    distance_sq_to_camera, foliage_instance_budget, frustum_sphere_visible, primitive_budget,
     primitive_cast_shadows_enabled, primitive_shadow_max_distance, primitive_visibility_settings,
-    render_scene_culling_enabled, scene_forward_cone_dot, shadow_caster_visible,
-    sort_by_distance_then_key, terrain_budget, terrain_cast_shadows_enabled,
-    terrain_forward_max_distance, terrain_near_accept_distance, terrain_receive_shadows_enabled,
-    transform_sphere,
+    render_scene_culling_enabled, shadow_caster_visible, sort_by_distance_then_key, terrain_budget,
+    terrain_cast_shadows_enabled, terrain_forward_max_distance, terrain_near_accept_distance,
+    terrain_receive_shadows_enabled, transform_sphere,
 };
 use crate::gameplay::{display_shadow_caster_visible_in_mode, display_visible_in_mode};
 use crate::gameplay::{EnvironmentDomeRenderState, TerrainMaterialLayers};
@@ -154,14 +153,15 @@ fn draw_procedural_terrain_for_pass(
     local_shadow_texture: TextureId,
     runtime: bool,
     camera_position: Vec3,
-    camera_forward: Vec3,
+    _camera_forward: Vec3,
 ) -> newengine_core::EngineResult<()> {
     let world = scene.world();
     let mats_lock = this.bridges.scene.materials();
     let mats = mats_lock.read();
     let terrain_culling_enabled = render_scene_culling_enabled();
     let terrain_max_distance = terrain_forward_max_distance();
-    let terrain_cone_dot = scene_forward_cone_dot();
+    let terrain_frustum = (runtime && terrain_culling_enabled)
+        .then(|| newengine_camera::Frustum::from_view_proj(viewproj));
 
     let mut entries: Vec<TerrainDrawEntry> = Vec::new();
     for (id, terrain, gt) in world.query2::<ProceduralTerrain, GlobalTransform>() {
@@ -176,13 +176,12 @@ fn draw_procedural_terrain_for_pass(
                 local_bounds.center(),
                 local_bounds.half_extents().length(),
             );
-            if !forward_sphere_visible(
+            if !frustum_sphere_visible(
+                terrain_frustum.as_ref().expect("terrain culling frustum"),
                 camera_position,
-                camera_forward,
                 center_ws,
                 radius_ws,
                 terrain_max_distance,
-                terrain_cone_dot,
                 terrain_near_accept_distance(radius_ws),
             ) {
                 continue;

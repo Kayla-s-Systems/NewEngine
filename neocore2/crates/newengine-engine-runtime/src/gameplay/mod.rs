@@ -33,9 +33,10 @@ pub use components::{
     PlayerModelAssignment, PlayerModelBinding, PlayerMovementSpeeds, PlayerRenderPose,
     PlayerSkinBinding, PlayerSkinPose, PlayerSkinVertex, PlayerStanceKind, PlayerStanceState,
     PlayerViewState, PlayerViewVisibility, PlayerViewVisibilityPolicy, PlayerVisualKind,
-    PlayerVisualPart, PreparedRenderMesh, ResidencyProgress, SceneAnchorFollow, SceneEntityAnchor,
-    SceneEntityRole, SkyCloudProfileRenderState, StaticMeshCollider, TerrainMaterialLayers,
-    WorldActivationPhase, WorldActivationState, WorldAssemblyProgress, WorldClearColor,
+    PlayerVisualPart, PreparedRenderMesh, PrimitiveGpuEvictionQueue, ResidencyProgress,
+    SceneAnchorFollow, SceneEntityAnchor, SceneEntityRole, SkyCloudProfileRenderState,
+    StaticMeshCollider, TerrainMaterialLayers, WorldActivationPhase, WorldActivationState,
+    WorldAssemblyProgress, WorldClearColor,
 };
 pub use content::{GameplayContentProvider, GameplayContentProviderRegistry};
 pub use execution::{

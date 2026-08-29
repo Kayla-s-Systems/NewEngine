@@ -1,6 +1,9 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use std::collections::BTreeSet;
+use std::{
+    collections::{BTreeSet, HashSet},
+    sync::OnceLock,
+};
 
 use newengine_math::Vec3;
 
@@ -256,9 +259,11 @@ impl SceneStreamingPlan {
         let budget = budget.sanitized();
         desired.sort_by_key(|coord| coord.distance_key(center));
         desired.dedup();
-        let loaded_set = loaded.into_iter().collect::<BTreeSet<_>>();
-        let pending_set = pending.into_iter().collect::<BTreeSet<_>>();
-        let desired_set = desired.iter().copied().collect::<BTreeSet<_>>();
+        // These sets are frame-local membership accelerators. Request ordering is sorted below,
+        // so tree ordering buys us nothing here while imposing O(log N) lookup/build costs.
+        let loaded_set = loaded.into_iter().collect::<HashSet<_>>();
+        let pending_set = pending.into_iter().collect::<HashSet<_>>();
+        let desired_set = desired.iter().copied().collect::<HashSet<_>>();
 
         let mut loads = desired
             .iter()
@@ -470,9 +475,9 @@ impl SceneBucketedCellPlan {
         simulation_desired: impl IntoIterator<Item = SceneCellCoord>,
         predicted_desired: impl IntoIterator<Item = SceneCellCoord>,
     ) -> Self {
-        let render_set = render_desired.into_iter().collect::<BTreeSet<_>>();
-        let simulation_set = simulation_desired.into_iter().collect::<BTreeSet<_>>();
-        let predicted_set = predicted_desired.into_iter().collect::<BTreeSet<_>>();
+        let render_set = render_desired.into_iter().collect::<HashSet<_>>();
+        let simulation_set = simulation_desired.into_iter().collect::<HashSet<_>>();
+        let predicted_set = predicted_desired.into_iter().collect::<HashSet<_>>();
         let mut all = render_set
             .union(&simulation_set)
             .copied()
@@ -549,16 +554,14 @@ impl SceneResidencySet {
 
     #[inline]
     pub fn desired_cells(center: SceneCellCoord, radius: i32) -> Vec<SceneCellCoord> {
-        let radius = radius.clamp(0, SceneStreamingBudget::MAX_RESIDENT_RADIUS);
-        let side = (radius as usize).saturating_mul(2).saturating_add(1);
-        let mut desired = Vec::with_capacity(side.saturating_mul(side));
-        for z in (center.z - radius)..=(center.z + radius) {
-            for x in (center.x - radius)..=(center.x + radius) {
-                desired.push(SceneCellCoord { x, z });
-            }
-        }
-        desired.sort_by_key(|coord| coord.distance_key(center));
-        desired
+        let radius = radius.clamp(0, SceneStreamingBudget::MAX_RESIDENT_RADIUS) as usize;
+        ordered_residency_offsets()[radius]
+            .iter()
+            .map(|offset| SceneCellCoord {
+                x: center.x.saturating_add(offset.x),
+                z: center.z.saturating_add(offset.z),
+            })
+            .collect()
     }
 
     pub fn desired_cells_for_focuses(
@@ -568,7 +571,7 @@ impl SceneResidencySet {
     ) -> Vec<SceneCellCoord> {
         let mut desired = Self::desired_cells(center, radius)
             .into_iter()
-            .collect::<BTreeSet<_>>();
+            .collect::<HashSet<_>>();
         for (focus, focus_radius) in secondary_focuses {
             desired.extend(Self::desired_cells(focus, focus_radius));
         }
@@ -578,9 +581,45 @@ impl SceneResidencySet {
     }
 }
 
+fn ordered_residency_offsets() -> &'static Vec<Vec<SceneCellCoord>> {
+    static OFFSETS: OnceLock<Vec<Vec<SceneCellCoord>>> = OnceLock::new();
+    OFFSETS.get_or_init(|| {
+        (0..=SceneStreamingBudget::MAX_RESIDENT_RADIUS)
+            .map(|radius| {
+                let side = (radius as usize).saturating_mul(2).saturating_add(1);
+                let mut offsets = Vec::with_capacity(side.saturating_mul(side));
+                for z in -radius..=radius {
+                    for x in -radius..=radius {
+                        offsets.push(SceneCellCoord { x, z });
+                    }
+                }
+                offsets.sort_by_key(|coord| coord.distance_key(SceneCellCoord { x: 0, z: 0 }));
+                offsets
+            })
+            .collect()
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn desired_cell_stencil_is_ordered_and_translation_stable() {
+        let origin = SceneCellCoord { x: 0, z: 0 };
+        let shifted = SceneCellCoord { x: 100, z: -75 };
+        let origin_cells = SceneResidencySet::desired_cells(origin, 3);
+        let shifted_cells = SceneResidencySet::desired_cells(shifted, 3);
+        assert_eq!(origin_cells.len(), 49);
+        assert_eq!(shifted_cells.len(), origin_cells.len());
+        assert!(origin_cells
+            .windows(2)
+            .all(|pair| pair[0].distance_key(origin) <= pair[1].distance_key(origin)));
+        for (base, moved) in origin_cells.iter().zip(&shifted_cells) {
+            assert_eq!(moved.x - shifted.x, base.x);
+            assert_eq!(moved.z - shifted.z, base.z);
+        }
+    }
 
     #[test]
     fn multi_focus_plan_keeps_primary_scene_and_prefetches_secondary_focus() {

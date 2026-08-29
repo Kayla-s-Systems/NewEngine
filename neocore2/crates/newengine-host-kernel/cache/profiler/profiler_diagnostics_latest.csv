@@ -1,0 +1,5 @@
+at_unix_ms,level,code,job_id,message
+1787314756953.000,warn,job_end_without_begin,host.plugin_load.4,job 'host.plugin_load.4' ended without a matching begin event
+1787314756953.000,warn,job_end_without_begin,host.plugin_load.4,job 'host.plugin_load.4' ended without a matching begin event
+1787314756997.000,error,failed_job,renderer.vulkan.bootstrap,job 'Vulkan renderer bootstrap' failed: <no error payload>
+1787314756997.000,error,failed_job,host.plugin_load.14,job 'plugin_load:C:/Users/Aiden/Documents/Repos/NorthStar/pluginsRuntime/vulkan-renderer-0.31.2-release.dll' failed: <no error payload>

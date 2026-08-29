@@ -1,6 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use crate::gameplay::PreparedRenderMesh;
+use crate::gameplay::{PreparedRenderMesh, PrimitiveGpuEvictionQueue};
 use newengine_core::render::{RenderApi, TextureFormat};
 use newengine_core::{EngineResult, ThreadPoolHandle};
 use newengine_primitives::{Primitive, PrimitiveId};
@@ -12,6 +12,72 @@ use super::super::gpu::{ensure_primitive_gpu, upload_primitive_mesh};
 use super::RuntimeRenderController;
 
 impl RuntimeRenderController {
+    /// Removes GPU primitive cache entries requested by world residency producers and retires
+    /// native buffers through the renderer's frame-completion lifetime queue. Active ECS/model
+    /// references win over stale eviction requests, so a cell that re-enters before this drain
+    /// cannot lose a mesh still needed by the current frame.
+    fn drain_primitive_gpu_evictions(&mut self, scene: &Scene) -> usize {
+        let world = scene.world();
+        let Some(queue) = world.resource::<PrimitiveGpuEvictionQueue>() else {
+            return 0;
+        };
+        let requested = queue.drain();
+        if requested.is_empty() {
+            return 0;
+        }
+
+        let mut active = BTreeSet::<PrimitiveId>::new();
+        active.extend(
+            world
+                .query::<Primitive>()
+                .map(|(_, primitive)| primitive.id),
+        );
+        for (_, model) in world.query::<crate::gameplay::ModelRenderComponent>() {
+            let source = model.logical_path.trim();
+            let Some(bundle) = self.gpu.meshes.model_bundle_cache.get(source) else {
+                continue;
+            };
+            active.extend(
+                bundle
+                    .parts
+                    .iter()
+                    .enumerate()
+                    .map(|(part_index, _)| Self::model_part_primitive_id(bundle, part_index)),
+            );
+        }
+
+        let mut evicted = 0usize;
+        for id in requested {
+            if active.contains(&id) {
+                continue;
+            }
+            let Some(gpu) = self.gpu.meshes.prim_cache.remove(&id) else {
+                continue;
+            };
+            self.gpu
+                .lifetimes
+                .resources
+                .retire_buffer_after_frame(gpu.vb, self.frame.frame_index);
+            self.gpu
+                .lifetimes
+                .resources
+                .retire_buffer_after_frame(gpu.ib, self.frame.frame_index);
+            evicted = evicted.saturating_add(1);
+        }
+        if evicted > 0 {
+            self.invalidate_shadow_cache();
+            self.invalidate_local_shadow_cache();
+            newengine_ulog_api::ulog::debug!(
+                "render residency: primitive gpu evictions frame={} evicted={} active={} cache_remaining={} policy='frame-completion deferred buffer retirement'",
+                self.frame.frame_index,
+                evicted,
+                active.len(),
+                self.gpu.meshes.prim_cache.len(),
+            );
+        }
+        evicted
+    }
+
     /// Warms the immutable scene pipeline while the loading projection is active.
     ///
     /// Mesh residency is intentionally excluded from this method. Terrain,
@@ -49,6 +115,7 @@ impl RuntimeRenderController {
         scene: &Scene,
         thread_pool: Option<&ThreadPoolHandle>,
     ) -> EngineResult<u32> {
+        let _primitive_evicted = self.drain_primitive_gpu_evictions(scene);
         let model_uploaded = self.pump_model_residency(r, scene, thread_pool)?;
 
         let interval = terrain_gpu_upload_interval_frames();

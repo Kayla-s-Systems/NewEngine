@@ -89,7 +89,7 @@ END
     let out_dir = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR"));
     let rc_path = out_dir.join("newengine_windows_resources.rc");
     fs::write(&rc_path, rc).expect("failed to write NewEngine Windows resource script");
-    embed_resource::compile(rc_path, embed_resource::NONE);
+    let _ = embed_resource::compile(rc_path, embed_resource::NONE);
 }
 
 fn parse_version(version: &str) -> (u16, u16, u16, u16) {

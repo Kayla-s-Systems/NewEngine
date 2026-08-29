@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use newengine_assets_api::{
-    maps_method, MapCellRequestV1, MapIndexV1, MapRefRequestV1, MapResolvedCellV1,
+    maps_method, MapCellRequestV1, MapIndexV1, MapRefRequestV1, MapResolvedCellV2,
 };
 use newengine_definitions_runtime::{DefinitionEntryV1, DefinitionRefRequest};
 
@@ -22,7 +22,7 @@ pub(crate) fn placement_requires_definition(
 pub(crate) struct LoadedAuthoredMap {
     pub map_ref: String,
     pub index: MapIndexV1,
-    pub cells: Vec<MapResolvedCellV1>,
+    pub cells: Vec<MapResolvedCellV2>,
     pub definitions: BTreeMap<String, DefinitionEntryV1>,
 }
 
@@ -60,9 +60,9 @@ pub(crate) fn load_authored_map(logical_path: &str) -> Result<LoadedAuthoredMap,
     let mut cells = Vec::with_capacity(index.cells.len());
     let mut definitions = BTreeMap::new();
     for cell_ref in &index.cells {
-        let resolved: MapResolvedCellV1 = call_json(
+        let resolved: MapResolvedCellV2 = call_json(
             newengine_assets_api::ENGINE_ASSETS_MAPS_SERVICE_ID,
-            maps_method::CELL_V1,
+            maps_method::CELL_V2,
             &MapCellRequestV1 {
                 map_ref: map_ref.clone(),
                 coord: cell_ref.coord,

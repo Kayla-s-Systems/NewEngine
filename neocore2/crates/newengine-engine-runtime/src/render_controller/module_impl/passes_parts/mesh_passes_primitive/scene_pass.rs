@@ -13,7 +13,7 @@ pub(super) fn draw_primitives_for_pass(
     local_shadow_texture: TextureId,
     runtime: bool,
     camera_position: Vec3,
-    camera_forward: Vec3,
+    _camera_forward: Vec3,
     deferred: bool,
 ) -> newengine_core::EngineResult<()> {
     let world = scene.world();
@@ -26,7 +26,7 @@ pub(super) fn draw_primitives_for_pass(
         && crate::runtime_policy::render_runtime_policy().primitive_stage_log;
     let stage_total_started = stage_profile.then(std::time::Instant::now);
     let scan_started = stage_profile.then(std::time::Instant::now);
-    let visibility_settings = primitive_visibility_settings(runtime);
+    let visibility_settings = primitive_visibility_settings(runtime, viewproj);
 
     type PrimitiveDrawEntry = (
         f32,
@@ -127,13 +127,12 @@ pub(super) fn draw_primitives_for_pass(
                     bounds.local_sphere.center,
                     bounds.local_sphere.radius,
                 );
-                if !forward_sphere_visible(
+                if !frustum_sphere_visible(
+                    &visibility_settings.frustum,
                     camera_position,
-                    camera_forward,
                     center_ws,
                     radius_ws,
                     visibility_settings.max_distance,
-                    visibility_settings.cone_dot,
                     visibility_settings.near_accept_distance,
                 ) {
                     continue;

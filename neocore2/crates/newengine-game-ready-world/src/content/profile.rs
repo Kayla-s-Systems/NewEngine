@@ -8,6 +8,7 @@ pub(crate) type ColorRgb = [f32; 3];
 pub(crate) struct GameReadyMapProfile {
     pub(crate) title: String,
     pub(crate) objective: String,
+    pub(crate) authored_map_streaming: Option<GameReadyAuthoredMapStreamingSpec>,
     pub(crate) player: GameReadyPlayerSpec,
     pub(crate) terrain: GameReadyTerrainSpec,
     pub(crate) sky: GameReadySkySpec,
@@ -19,6 +20,18 @@ pub(crate) struct GameReadyMapProfile {
     pub(crate) acoustic_materials: newengine_audio_api::AcousticMaterialLibrary,
     pub(crate) gameplay: GameReadyGameplaySpec,
     pub(crate) palette: GameReadyPaletteSpec,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct GameReadyAuthoredMapStreamingSpec {
+    pub(crate) map_ref: String,
+    pub(crate) index: newengine_assets_api::MapIndexV1,
+    pub(crate) initial_cells: Vec<newengine_assets_api::MapCellCoordV1>,
+    pub(crate) initial_placement_ids:
+        std::collections::BTreeMap<newengine_assets_api::MapCellCoordV1, Vec<String>>,
+    pub(crate) resident_radius: i32,
+    pub(crate) unload_radius: i32,
+    pub(crate) max_cells_per_tick: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -288,6 +301,8 @@ pub(crate) struct GameReadyPrefabSpec {
     pub(crate) id: String,
     pub(crate) authored_map_ref: String,
     pub(crate) authored_placement_id: String,
+    /// Discrete YMAP cell ownership. None for legacy/profile-authored prefabs.
+    pub(crate) authored_cell: Option<newengine_assets_api::MapCellCoordV1>,
     pub(crate) authored_discrete_placement: bool,
     pub(crate) authored_primary: bool,
     pub(crate) source: String,

@@ -40,6 +40,7 @@ impl RawGameReadyPayload {
         GameReadyMapProfile {
             title: self.title,
             objective: self.objective,
+            authored_map_streaming: None,
             player: GameReadyPlayerSpec {
                 start: arr3(self.player.start),
                 yaw: self.player.yaw,

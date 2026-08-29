@@ -27,7 +27,7 @@ fn critical_primitive_gpu_ready(
     this: &RuntimeRenderController,
     world: &newengine_ecs::World,
 ) -> LaunchReadiness {
-    let mut unique = std::collections::BTreeSet::new();
+    let mut unique = std::collections::HashSet::new();
     for (_entity, primitive) in world.query::<newengine_primitives::Primitive>() {
         unique.insert(primitive.id);
     }
@@ -62,13 +62,15 @@ fn critical_model_gpu_ready(
     this: &RuntimeRenderController,
     world: &newengine_ecs::World,
 ) -> LaunchReadiness {
+    // Readiness only needs unique membership, not ordering. Borrow source strings directly
+    // from ECS components so large streamed scenes do not clone every model path each frame.
     let sources = world
         .query::<ModelRenderComponent>()
         .filter_map(|(_, model)| {
             let source = model.logical_path.trim();
-            (!source.is_empty()).then(|| source.to_owned())
+            (!source.is_empty()).then_some(source)
         })
-        .collect::<std::collections::BTreeSet<_>>();
+        .collect::<std::collections::HashSet<_>>();
     let total = sources.len() as u32;
     if total == 0 {
         return LaunchReadiness::ready("no imported model actors declared", 0, 0);
@@ -77,11 +79,11 @@ fn critical_model_gpu_ready(
     let mut resident = 0u32;
     let mut failed = 0u32;
     for source in &sources {
-        if this.gpu.meshes.model_bundle_failures.contains_key(source) {
+        if this.gpu.meshes.model_bundle_failures.contains_key(*source) {
             failed = failed.saturating_add(1);
             continue;
         }
-        let Some(bundle) = this.gpu.meshes.model_bundle_cache.get(source) else {
+        let Some(bundle) = this.gpu.meshes.model_bundle_cache.get(*source) else {
             continue;
         };
         let all_parts_resident = bundle.parts.iter().enumerate().all(|(part_index, _)| {

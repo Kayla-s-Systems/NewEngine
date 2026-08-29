@@ -1,0 +1,4 @@
+rank,category,count,failed,slow,total_elapsed_ms,total_share_percent,average_elapsed_ms,max_elapsed_ms
+1,plugin_lifecycle,10,1,0,39.322400,94.346286,3.932240,8.220000
+2,renderer,1,1,0,2.356400,5.653714,2.356400,2.356400
+3,event,3,0,0,0.000000,0.000000,0.000000,0.000000

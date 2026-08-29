@@ -7,6 +7,8 @@ readme = "README.md"
 [dependencies]
 newengine-asset-format-nef8 = { path = "../../crates/newengine-asset-format-nef8" }
 newengine-asset-inspector-runtime = { path = "../../crates/newengine-asset-inspector-runtime" }
+newengine-asset-preview-runtime = { path = "../../crates/newengine-asset-preview-runtime" }
+newengine-viewport-bridge = { path = "../../crates/newengine-viewport-bridge" }
 newengine-assets = { path = "../../crates/newengine-assets" }
 newengine-asset-bootstrap-runtime = { path = "../../crates/newengine-asset-bootstrap-runtime" }
 newengine-assets-ui-runtime = { path = "../../crates/newengine-assets-ui-runtime" }

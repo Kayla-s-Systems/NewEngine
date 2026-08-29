@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 pub const ASSET_STREAMING_SCHEMA_V1: &str = "newengine.assets.streaming.v1";
+pub const ASSET_STREAMING_SCHEMA_V2: &str = "newengine.assets.streaming.v2";
 
 /// Semantic reason for keeping an asset non-evictable.
 ///
@@ -101,4 +102,110 @@ pub struct AssetStreamingStatsV1 {
     pub total_freed_bytes: u64,
     pub compaction_calls: u64,
     pub budget_bytes: u64,
+}
+
+/// Provider execution state acknowledged back to the engine-owned residency scheduler.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum AssetStreamingLifecycleStateV2 {
+    Queued,
+    Loading,
+    Resident,
+    Failed,
+    #[default]
+    Unloaded,
+}
+
+/// Execute one scheduler-selected admission. Demand selection belongs to the engine control plane.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct AssetStreamingAdmitRequestV2 {
+    pub logical_path: String,
+    pub priority: i32,
+    pub frame: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct AssetStreamingAdmitResponseV2 {
+    pub schema: String,
+    pub ok: bool,
+    pub logical_path: String,
+    pub id_u128: Option<String>,
+    pub state: AssetStreamingLifecycleStateV2,
+    pub resident_bytes: u64,
+    pub pin_references: u64,
+    pub error: Option<String>,
+}
+
+/// Execute one exact scheduler-selected eviction. Semantic pins remain authoritative.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct AssetStreamingEvictRequestV2 {
+    pub logical_path: String,
+    pub frame: u64,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct AssetStreamingEvictResponseV2 {
+    pub schema: String,
+    pub ok: bool,
+    pub logical_path: String,
+    pub evicted: bool,
+    pub blocked_by_pin: bool,
+    pub freed_bytes: u64,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct AssetStreamingLifecycleRequestV2 {
+    pub logical_paths: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct AssetStreamingLifecycleRowV2 {
+    pub logical_path: String,
+    pub id_u128: String,
+    pub state: AssetStreamingLifecycleStateV2,
+    pub resident_bytes: u64,
+    pub pin_references: u64,
+    pub priority: i32,
+    pub last_touch_epoch: u64,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct AssetStreamingLifecycleResponseV2 {
+    pub schema: String,
+    pub rows: Vec<AssetStreamingLifecycleRowV2>,
+}
+
+#[cfg(test)]
+mod v2_tests {
+    use super::*;
+
+    #[test]
+    fn lifecycle_state_wire_is_stable() {
+        assert_eq!(
+            serde_json::to_string(&AssetStreamingLifecycleStateV2::Resident).unwrap(),
+            "\"resident\""
+        );
+        assert_eq!(
+            serde_json::from_str::<AssetStreamingLifecycleStateV2>("\"unloaded\"").unwrap(),
+            AssetStreamingLifecycleStateV2::Unloaded
+        );
+    }
+
+    #[test]
+    fn admit_v2_defaults_are_non_demanding() {
+        let request = AssetStreamingAdmitRequestV2::default();
+        assert!(request.logical_path.is_empty());
+        assert_eq!(request.priority, 0);
+        assert_eq!(request.frame, 0);
+    }
 }

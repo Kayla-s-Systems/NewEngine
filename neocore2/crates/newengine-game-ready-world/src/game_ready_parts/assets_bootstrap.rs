@@ -6,7 +6,7 @@ use super::mission::spawn_game_ready_mission;
 use super::player_model::spawn_game_ready_player_model;
 use super::sky::configure_game_ready_lighting;
 use super::terrain_streaming::spawn_procedural_terrain;
-use super::world_model::begin_static_world_prefabs;
+use super::world_model::{begin_authored_map_streaming, begin_static_world_prefabs};
 use super::ytyp_metadata::{apply_game_ready_ytyp_metadata, resolve_game_ready_asset_graph};
 use super::*;
 use newengine_game_data::{GameData, GameDataSnapshot};
@@ -391,6 +391,7 @@ pub(crate) fn bootstrap_game_ready_world_scene_impl(
         );
         (entity, Some(sampler))
     };
+    begin_authored_map_streaming(world, layout.terrain, map.authored_map_streaming.as_ref());
     let static_world = begin_static_world_prefabs(world, mats, layout.terrain, &map.prefabs);
     if map.terrain.enabled {
         spawn_foliage_prefabs(

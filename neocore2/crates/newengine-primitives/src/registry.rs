@@ -140,6 +140,19 @@ impl PrimitiveRegistry {
         self.entries.contains_key(&id)
     }
 
+    /// Removes only an imported/runtime mesh registration. Built-in deterministic
+    /// builders are never removable through the residency path.
+    #[inline]
+    pub fn unregister_runtime_mesh(&mut self, id: PrimitiveId) -> bool {
+        if !matches!(
+            self.entries.get(&id).map(|entry| &entry.source),
+            Some(PrimitiveSource::Mesh(_))
+        ) {
+            return false;
+        }
+        self.entries.remove(&id).is_some()
+    }
+
     #[inline]
     pub fn name(&self, id: PrimitiveId) -> Option<&str> {
         self.entries.get(&id).map(|e| e.name.as_str())
@@ -182,5 +195,50 @@ impl PrimitiveRegistry {
     #[inline]
     pub fn ids(&self) -> impl Iterator<Item = PrimitiveId> + '_ {
         self.entries.keys().copied()
+    }
+}
+
+#[cfg(test)]
+mod residency_tests {
+    use super::*;
+    use crate::PrimitiveVertex;
+
+    #[test]
+    fn runtime_mesh_can_be_evicted_without_removing_builtin_builder() {
+        let mut registry = PrimitiveRegistry::with_builtins();
+        let builtin = crate::builtins::ID_CUBE;
+        assert!(!registry.unregister_runtime_mesh(builtin));
+        assert!(registry.is_registered(builtin));
+
+        let runtime = PrimitiveId::new(0xfeed_beef);
+        registry.register_mesh(
+            runtime,
+            "streamed",
+            PrimitiveMesh {
+                vertices: vec![
+                    PrimitiveVertex {
+                        pos: [0.0, 0.0, 0.0],
+                        nrm: [0.0, 1.0, 0.0],
+                        uv: [0.0, 0.0],
+                    },
+                    PrimitiveVertex {
+                        pos: [1.0, 0.0, 0.0],
+                        nrm: [0.0, 1.0, 0.0],
+                        uv: [1.0, 0.0],
+                    },
+                    PrimitiveVertex {
+                        pos: [0.0, 0.0, 1.0],
+                        nrm: [0.0, 1.0, 0.0],
+                        uv: [0.0, 1.0],
+                    },
+                ],
+                indices: vec![0, 1, 2],
+                bounds_center: newengine_math::Vec3::new(0.5, 0.0, 0.5),
+                bounds_radius: 1.0,
+            },
+        );
+        assert!(registry.unregister_runtime_mesh(runtime));
+        assert!(!registry.is_registered(runtime));
+        assert!(!registry.unregister_runtime_mesh(runtime));
     }
 }

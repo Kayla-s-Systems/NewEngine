@@ -24,6 +24,7 @@ pub(in super::super) fn sanitize_prefab_spec(raw: RawPrefabSpec) -> Option<GameR
         authored_placement_id: id.clone(),
         id,
         authored_map_ref: String::new(),
+        authored_cell: None,
         authored_discrete_placement: false,
         authored_primary: true,
         source: raw.source.trim().to_owned(),

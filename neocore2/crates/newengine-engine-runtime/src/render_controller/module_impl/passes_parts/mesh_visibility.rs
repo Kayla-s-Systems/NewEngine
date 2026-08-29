@@ -1,3 +1,4 @@
+use newengine_camera::Frustum;
 use newengine_math::{Mat4, Vec3};
 use std::sync::OnceLock;
 
@@ -24,7 +25,6 @@ struct MeshRuntimePolicy {
     terrain_render_distance: f32,
     primitive_render_distance: [f32; 2],
     primitive_shadow_distance: [f32; 2],
-    forward_cone_dot: f32,
     terrain_near_accept_override: Option<f32>,
     primitive_near_accept_distance: f32,
 }
@@ -148,9 +148,11 @@ impl MeshRuntimePolicy {
                 ],
             ],
             terrain_receive_shadows_override: optional_bool("NEWENGINE_TERRAIN_RECEIVE_SHADOWS"),
+            // Exact view-frustum culling is safe as the default; the previous default-off
+            // policy existed because the old forward-cone heuristic could pop visible objects.
             scene_culling_enabled: crate::env_config::var_bool(
                 "NEWENGINE_RENDER_SCENE_CULLING",
-                false,
+                true,
             ),
             terrain_render_distance: lod_scaled(
                 crate::env_config::var_f32("NEWENGINE_TERRAIN_RENDER_DISTANCE", 96.0, 32.0, 2048.0),
@@ -201,12 +203,6 @@ impl MeshRuntimePolicy {
                     4096.0,
                 ),
             ],
-            forward_cone_dot: crate::env_config::var_f32(
-                "NEWENGINE_RENDER_FORWARD_CONE_DOT",
-                -0.12,
-                -0.95,
-                0.95,
-            ),
             terrain_near_accept_override: optional_f32(
                 "NEWENGINE_TERRAIN_NEAR_ACCEPT_DISTANCE",
                 8.0,
@@ -418,17 +414,20 @@ pub(super) fn shadow_caster_visible(
 #[derive(Clone, Copy, Debug)]
 pub(super) struct PrimitiveVisibilitySettings {
     pub(super) culling_enabled: bool,
+    pub(super) frustum: Frustum,
     pub(super) max_distance: f32,
-    pub(super) cone_dot: f32,
     pub(super) near_accept_distance: f32,
 }
 
 #[inline]
-pub(super) fn primitive_visibility_settings(runtime: bool) -> PrimitiveVisibilitySettings {
+pub(super) fn primitive_visibility_settings(
+    runtime: bool,
+    viewproj: Mat4,
+) -> PrimitiveVisibilitySettings {
     PrimitiveVisibilitySettings {
         culling_enabled: render_scene_culling_enabled(),
+        frustum: Frustum::from_view_proj(viewproj),
         max_distance: primitive_forward_max_distance(runtime),
-        cone_dot: scene_forward_cone_dot(),
         near_accept_distance: primitive_near_accept_distance(),
     }
 }
@@ -443,24 +442,20 @@ pub(super) fn render_scene_culling_enabled() -> bool {
     mesh_runtime_policy().scene_culling_enabled
 }
 
-/// Conservative forward-visibility test used by the runtime draw lists.
+/// Conservative CPU visibility test used before draw-list materialization.
 ///
-/// This is intentionally a cheap scene-streamer bucket test, not a replacement
-/// for backend frustum clipping. It keeps the CPU extraction path from treating
-/// every resident cell as visible. Nearby objects are always accepted to avoid
-/// near-plane popping; farther objects must be inside a wide forward cone.
+/// The view frustum is extracted once per render pass and reused for every entity. Nearby
+/// objects retain a tiny unconditional ring to avoid near-plane churn while everything else
+/// must intersect the exact Vulkan/D3D 0..1 clip-space frustum.
 #[inline]
-pub(super) fn forward_sphere_visible(
+pub(super) fn frustum_sphere_visible(
+    frustum: &Frustum,
     camera_position: Vec3,
-    camera_forward: Vec3,
     center_ws: Vec3,
     radius_ws: f32,
     max_distance: f32,
-    cone_dot: f32,
     near_accept_distance: f32,
 ) -> bool {
-    // The caller owns the culling policy snapshot. Keep this predicate pure so
-    // entity extraction never re-enters process configuration in the inner loop.
     let radius = radius_ws.abs().max(0.001);
     let delta = center_ws - camera_position;
     let dist2 = delta.length_squared();
@@ -473,14 +468,7 @@ pub(super) fn forward_sphere_visible(
     if dist2 <= near * near {
         return true;
     }
-
-    let forward = camera_forward.normalize_or_zero();
-    if forward.length_squared() <= 1.0e-6 {
-        return true;
-    }
-
-    let dir = delta.normalize_or_zero();
-    dir.dot(forward) >= cone_dot.clamp(-0.95, 0.95)
+    frustum.contains_sphere(center_ws, radius)
 }
 
 #[inline]
@@ -499,14 +487,6 @@ pub(super) fn primitive_shadow_max_distance(runtime: bool) -> f32 {
 }
 
 #[inline]
-pub(super) fn scene_forward_cone_dot() -> f32 {
-    // -0.25 is intentionally wider than a strict camera frustum. It keeps
-    // objects around the edges alive while cutting resident cells fully behind
-    // the player/camera, matching the reference scene streamer's active buckets.
-    mesh_runtime_policy().forward_cone_dot
-}
-
-#[inline]
 pub(super) fn terrain_near_accept_distance(radius_ws: f32) -> f32 {
     mesh_runtime_policy()
         .terrain_near_accept_override
@@ -521,6 +501,27 @@ pub(super) fn primitive_near_accept_distance() -> f32 {
 #[cfg(test)]
 mod startup_lod_scale_tests {
     use super::scale_lod_distance;
+
+    #[test]
+    fn frustum_culler_rejects_far_offscreen_spheres() {
+        let frustum = newengine_camera::Frustum::from_view_proj(newengine_math::Mat4::IDENTITY);
+        assert!(super::frustum_sphere_visible(
+            &frustum,
+            newengine_math::Vec3::ZERO,
+            newengine_math::Vec3::new(0.0, 0.0, 0.5),
+            0.1,
+            100.0,
+            0.01,
+        ));
+        assert!(!super::frustum_sphere_visible(
+            &frustum,
+            newengine_math::Vec3::ZERO,
+            newengine_math::Vec3::new(10.0, 0.0, 0.5),
+            0.1,
+            100.0,
+            0.01,
+        ));
+    }
 
     #[test]
     fn lod_distance_scale_preserves_and_scales_runtime_ranges() {

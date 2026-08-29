@@ -210,6 +210,247 @@ fn load_resolved_map_definition(
     })
 }
 
+fn cell_distance(
+    a: newengine_assets_api::MapCellCoordV1,
+    b: newengine_assets_api::MapCellCoordV1,
+) -> i32 {
+    (a.x - b.x).abs().max((a.z - b.z).abs())
+}
+
+fn metadata_i32(index: &newengine_assets_api::MapIndexV1, key: &str, default: i32) -> i32 {
+    index
+        .metadata
+        .get(key)
+        .and_then(|value| value.trim().parse::<i32>().ok())
+        .unwrap_or(default)
+}
+
+fn metadata_usize(index: &newengine_assets_api::MapIndexV1, key: &str, default: usize) -> usize {
+    index
+        .metadata
+        .get(key)
+        .and_then(|value| value.trim().parse::<usize>().ok())
+        .unwrap_or(default)
+}
+
+fn load_discrete_cell(
+    map_ref: &str,
+    coord: newengine_assets_api::MapCellCoordV1,
+) -> Result<newengine_assets_api::MapResolvedCellV2, String> {
+    let cell_request = serde_json::to_vec(&newengine_assets_api::MapCellRequestV1 {
+        map_ref: map_ref.to_owned(),
+        coord,
+    })
+    .map_err(|e| format!("discrete YMAP cell request encode failed map='{map_ref}' err='{e}'"))?;
+    let cell_bytes = newengine_core::call_service_v1_optional(
+        newengine_assets_api::ENGINE_ASSETS_MAPS_SERVICE_ID,
+        newengine_assets_api::maps_method::CELL_V2,
+        &cell_request,
+    )
+    .map_err(|e| {
+        format!(
+            "engine.assets.maps cell request failed map='{map_ref}' cell={},{} err='{e}'",
+            coord.x, coord.z
+        )
+    })?
+    .ok_or_else(|| {
+        format!(
+            "engine.assets.maps route unavailable while loading map='{map_ref}' cell={},{}",
+            coord.x, coord.z
+        )
+    })?;
+    serde_json::from_slice(&cell_bytes).map_err(|e| {
+        format!(
+            "engine.assets.maps returned invalid MapResolvedCellV2 map='{map_ref}' cell={},{} err='{e}'",
+            coord.x, coord.z
+        )
+    })
+}
+
+fn apply_discrete_placement(
+    profile: &mut GameReadyMapProfile,
+    definition_cache: &mut std::collections::BTreeMap<String, ResolvedMapDefinitionEntry>,
+    logical_path: &str,
+    coord: newengine_assets_api::MapCellCoordV1,
+    placement: newengine_assets_api::MapPlacementV1,
+) -> Result<(), String> {
+    let authored_player_spawn = placement.tags.iter().any(|tag| {
+        matches!(
+            tag.trim().to_ascii_lowercase().as_str(),
+            "player_spawn" | "info_player_start" | "spawn.player"
+        )
+    }) || matches!(
+        placement.apply_mode.trim().to_ascii_lowercase().as_str(),
+        "player_spawn" | "info_player_start"
+    );
+    if authored_player_spawn {
+        profile.player.start = Vec3::new(
+            placement.transform.position[0],
+            placement.transform.position[1],
+            placement.transform.position[2],
+        );
+        profile.player.yaw = placement.transform.rotation_ypr[0];
+        newengine_ulog_api::ulog::info!(
+            "game-ready: authored player spawn selected id='{}' position={:?} yaw={:.3} policy='YMAP spawn marker owns map start position'",
+            placement.id,
+            profile.player.start,
+            profile.player.yaw,
+        );
+        return Ok(());
+    }
+
+    if placement
+        .apply_mode
+        .trim()
+        .eq_ignore_ascii_case("metadata_only")
+    {
+        profile.definitions.push(GameReadyDefinitionInstanceSpec {
+            definition_ref: placement.definition_ref,
+            position: Vec3::new(
+                placement.transform.position[0],
+                placement.transform.position[1],
+                placement.transform.position[2],
+            ),
+            rotation_ypr: placement.transform.rotation_ypr,
+            scale: Vec3::new(
+                placement.transform.scale[0],
+                placement.transform.scale[1],
+                placement.transform.scale[2],
+            ),
+            apply_mode: GameReadyDefinitionApplyMode::MetadataOnly,
+        });
+        return Ok(());
+    }
+
+    let definition = if let Some(existing) = definition_cache.get(&placement.definition_ref) {
+        existing.clone()
+    } else {
+        let parsed = load_resolved_map_definition(&placement.definition_ref).map_err(|e| {
+            format!(
+                "discrete YMAP placement '{}' definition_ref='{}' resolution failed: {e}",
+                placement.id, placement.definition_ref
+            )
+        })?;
+        definition_cache.insert(placement.definition_ref.clone(), parsed.clone());
+        parsed
+    };
+
+    let drawable_ref = definition
+        .refs
+        .drawable_refs
+        .first()
+        .cloned()
+        .ok_or_else(|| {
+            format!(
+                "discrete YMAP placement '{}' definition_ref='{}' has no drawable_refs",
+                placement.id, placement.definition_ref
+            )
+        })?;
+    let material_ref = definition
+        .refs
+        .material_refs
+        .first()
+        .cloned()
+        .unwrap_or_default();
+    let position = Vec3::new(
+        placement.transform.position[0],
+        placement.transform.position[1],
+        placement.transform.position[2],
+    );
+    let scale = Vec3::new(
+        placement.transform.scale[0],
+        placement.transform.scale[1],
+        placement.transform.scale[2],
+    );
+    let rotation_ypr = Vec3::new(
+        placement.transform.rotation_ypr[0],
+        placement.transform.rotation_ypr[1],
+        placement.transform.rotation_ypr[2],
+    );
+    let apply_mode = placement.apply_mode.trim();
+    let dynamic_physics = apply_mode.eq_ignore_ascii_case("dynamic_physics");
+    let collision_only = apply_mode.eq_ignore_ascii_case("collision_only")
+        || placement
+            .tags
+            .iter()
+            .any(|tag| tag.eq_ignore_ascii_case("collision_only"));
+
+    if !collision_only {
+        profile.prefabs.push(GameReadyPrefabSpec {
+            id: placement.id.clone(),
+            authored_map_ref: logical_path.to_owned(),
+            authored_placement_id: placement.id.clone(),
+            authored_cell: Some(coord),
+            authored_discrete_placement: true,
+            authored_primary: true,
+            source: drawable_ref.clone(),
+            proxy: if dynamic_physics {
+                "world_dynamic_ydd".to_owned()
+            } else {
+                "world_static_ydd".to_owned()
+            },
+            material: material_ref,
+            enabled: true,
+            position,
+            rotation_ypr,
+            scale,
+        });
+    }
+
+    let collision_policy = definition.model_explanation.collision_policy.trim();
+    let has_collision = !definition.refs.collision_refs.is_empty()
+        || definition
+            .semantic_tags
+            .iter()
+            .any(|tag| tag.eq_ignore_ascii_case("collision"))
+        || matches!(
+            collision_policy.to_ascii_lowercase().as_str(),
+            "static_mesh" | "triangle_mesh" | "mesh" | "box"
+        );
+    if has_collision && !dynamic_physics {
+        let collision_source = definition
+            .refs
+            .collision_refs
+            .first()
+            .cloned()
+            .unwrap_or(drawable_ref);
+        profile.prefabs.push(GameReadyPrefabSpec {
+            id: if collision_only {
+                placement.id.clone()
+            } else {
+                format!("{}#collision", placement.id)
+            },
+            authored_map_ref: logical_path.to_owned(),
+            authored_placement_id: placement.id.clone(),
+            authored_cell: Some(coord),
+            authored_discrete_placement: true,
+            authored_primary: false,
+            source: collision_source,
+            proxy: if collision_policy.eq_ignore_ascii_case("box") {
+                "world_collision_box".to_owned()
+            } else {
+                "world_collision_ydd".to_owned()
+            },
+            material: String::new(),
+            enabled: true,
+            position,
+            rotation_ypr,
+            scale,
+        });
+    } else if collision_only {
+        return Err(format!(
+            "discrete YMAP placement '{}' is collision_only but definition_ref='{}' declares no collision",
+            placement.id, placement.definition_ref
+        ));
+    }
+
+    // Ordinary render/collision placements are already fully resolved above. Do not append
+    // 10k+ duplicate MetadataOnly definition instances: that turns a discrete map into an
+    // eager startup graph and defeats cell streaming. Only authored metadata_only placements
+    // belong in profile.definitions.
+    Ok(())
+}
+
 fn load_discrete_map_profile(logical_path: &str) -> Result<GameReadyMapProfile, String> {
     let map_ref =
         newengine_assets_api::map_entry_ref(logical_path, newengine_assets_api::MAP_INDEX_ENTRY);
@@ -231,9 +472,6 @@ fn load_discrete_map_profile(logical_path: &str) -> Result<GameReadyMapProfile, 
             format!("engine.assets.maps returned invalid MapIndexV1 map='{map_ref}' err='{e}'")
         })?;
 
-    // Game-mode constants are owned by GameReady, not by YMAP. The valid v2 map
-    // contributes only world composition, while this empty payload intentionally
-    // resolves through the same canonical defaults/sanitizers as game-mode data.
     let mut profile = parse_payload(
         serde_json::json!({}),
         "game-ready.mode-defaults",
@@ -248,9 +486,6 @@ fn load_discrete_map_profile(logical_path: &str) -> Result<GameReadyMapProfile, 
     profile.prefabs.clear();
     profile.definitions.clear();
 
-    // Discrete YMAP owns topology/placements only. GameReady still owns the
-    // mode-level environment definition, so seed the canonical SkyDome metadata
-    // definition before map-local placement definitions are appended.
     let mode_sky_definition = profile.sky.definition_ref.trim().to_owned();
     if !mode_sky_definition.is_empty() {
         profile.definitions.push(GameReadyDefinitionInstanceSpec {
@@ -262,235 +497,84 @@ fn load_discrete_map_profile(logical_path: &str) -> Result<GameReadyMapProfile, 
         });
     }
 
+    let fallback_spawn_cell = index
+        .world_to_cell([
+            profile.player.start.x,
+            profile.player.start.y,
+            profile.player.start.z,
+        ])
+        .or_else(|| index.cells.first().map(|cell| cell.coord))
+        .unwrap_or_default();
+    let spawn_cell = newengine_assets_api::MapCellCoordV1::new(
+        metadata_i32(&index, "streaming.spawn_cell_x", fallback_spawn_cell.x),
+        metadata_i32(&index, "streaming.spawn_cell_z", fallback_spawn_cell.z),
+    );
+    let resident_radius = metadata_i32(&index, "streaming.resident_radius", 1).clamp(0, 4);
+    let unload_radius = metadata_i32(&index, "streaming.unload_radius", resident_radius + 1)
+        .clamp(resident_radius + 1, 8);
+    let max_cells_per_tick = metadata_usize(&index, "streaming.max_cells_per_tick", 1).clamp(1, 4);
+
+    let mut initial_cells = index
+        .cells
+        .iter()
+        .map(|cell| cell.coord)
+        .filter(|coord| cell_distance(*coord, spawn_cell) <= resident_radius)
+        .collect::<Vec<_>>();
+    initial_cells.sort_by_key(|coord| (cell_distance(*coord, spawn_cell), coord.x, coord.z));
+    if initial_cells.is_empty() && index.cell(spawn_cell).is_some() {
+        initial_cells.push(spawn_cell);
+    }
+
     let mut definition_cache =
         std::collections::BTreeMap::<String, ResolvedMapDefinitionEntry>::new();
-    for cell_ref in &index.cells {
-        let cell_request = serde_json::to_vec(&newengine_assets_api::MapCellRequestV1 {
-            map_ref: map_ref.clone(),
-            coord: cell_ref.coord,
-        })
-        .map_err(|e| {
-            format!("discrete YMAP cell request encode failed map='{map_ref}' err='{e}'")
-        })?;
-        let cell_bytes = newengine_core::call_service_v1_optional(
-            newengine_assets_api::ENGINE_ASSETS_MAPS_SERVICE_ID,
-            newengine_assets_api::maps_method::CELL_V2,
-            &cell_request,
-        )
-        .map_err(|e| {
-            format!(
-                "engine.assets.maps cell request failed map='{map_ref}' cell={},{} err='{e}'",
-                cell_ref.coord.x, cell_ref.coord.z
-            )
-        })?
-        .ok_or_else(|| {
-            format!(
-                "engine.assets.maps route unavailable while loading map='{map_ref}' cell={},{}",
-                cell_ref.coord.x, cell_ref.coord.z
-            )
-        })?;
-        let resolved: newengine_assets_api::MapResolvedCellV2 =
-            serde_json::from_slice(&cell_bytes).map_err(|e| {
-                format!(
-                    "engine.assets.maps returned invalid MapResolvedCellV2 map='{map_ref}' cell={},{} err='{e}'",
-                    cell_ref.coord.x, cell_ref.coord.z
-                )
-            })?;
-
+    let mut initial_placement_ids = std::collections::BTreeMap::new();
+    for coord in initial_cells.iter().copied() {
+        let resolved = load_discrete_cell(&map_ref, coord)?;
+        let ids = resolved
+            .cell
+            .placements
+            .iter()
+            .filter(|placement| placement.enabled)
+            .map(|placement| placement.id.clone())
+            .collect::<Vec<_>>();
+        initial_placement_ids.insert(coord, ids);
         for placement in resolved
             .cell
             .placements
             .into_iter()
             .filter(|placement| placement.enabled)
         {
-            let authored_player_spawn = placement.tags.iter().any(|tag| {
-                matches!(
-                    tag.trim().to_ascii_lowercase().as_str(),
-                    "player_spawn" | "info_player_start" | "spawn.player"
-                )
-            }) || matches!(
-                placement.apply_mode.trim().to_ascii_lowercase().as_str(),
-                "player_spawn" | "info_player_start"
-            );
-            if authored_player_spawn {
-                profile.player.start = Vec3::new(
-                    placement.transform.position[0],
-                    placement.transform.position[1],
-                    placement.transform.position[2],
-                );
-                profile.player.yaw = placement.transform.rotation_ypr[0];
-                newengine_ulog_api::ulog::info!(
-                    "game-ready: authored player spawn selected id='{}' position={:?} yaw={:.3} policy='YMAP spawn marker owns map start position'",
-                    placement.id,
-                    profile.player.start,
-                    profile.player.yaw,
-                );
-                continue;
-            }
-            // YMAP v2 metadata-only placements are composition inputs, not world instances.
-            // They must reach the same YTYP hydration path as legacy YMAP v1 definitions
-            // (player avatar, sky/environment, gameplay constants, etc.) and must never
-            // be materialized as static/dynamic prefabs merely because their definition
-            // also carries drawable dependencies.
-            if placement
-                .apply_mode
-                .trim()
-                .eq_ignore_ascii_case("metadata_only")
-            {
-                profile.definitions.push(GameReadyDefinitionInstanceSpec {
-                    definition_ref: placement.definition_ref,
-                    position: Vec3::new(
-                        placement.transform.position[0],
-                        placement.transform.position[1],
-                        placement.transform.position[2],
-                    ),
-                    rotation_ypr: placement.transform.rotation_ypr,
-                    scale: Vec3::new(
-                        placement.transform.scale[0],
-                        placement.transform.scale[1],
-                        placement.transform.scale[2],
-                    ),
-                    apply_mode: GameReadyDefinitionApplyMode::MetadataOnly,
-                });
-                continue;
-            }
-            let definition = if let Some(existing) = definition_cache.get(&placement.definition_ref)
-            {
-                existing.clone()
-            } else {
-                let parsed =
-                    load_resolved_map_definition(&placement.definition_ref).map_err(|e| {
-                        format!(
-                        "discrete YMAP placement '{}' definition_ref='{}' resolution failed: {e}",
-                        placement.id, placement.definition_ref
-                    )
-                    })?;
-                definition_cache.insert(placement.definition_ref.clone(), parsed.clone());
-                parsed
-            };
-
-            let drawable_ref = definition
-                .refs
-                .drawable_refs
-                .first()
-                .cloned()
-                .ok_or_else(|| {
-                    format!(
-                        "discrete YMAP placement '{}' definition_ref='{}' has no drawable_refs",
-                        placement.id, placement.definition_ref
-                    )
-                })?;
-            let material_ref = definition
-                .refs
-                .material_refs
-                .first()
-                .cloned()
-                .unwrap_or_default();
-            let position = Vec3::new(
-                placement.transform.position[0],
-                placement.transform.position[1],
-                placement.transform.position[2],
-            );
-            let scale = Vec3::new(
-                placement.transform.scale[0],
-                placement.transform.scale[1],
-                placement.transform.scale[2],
-            );
-            let rotation_ypr = Vec3::new(
-                placement.transform.rotation_ypr[0],
-                placement.transform.rotation_ypr[1],
-                placement.transform.rotation_ypr[2],
-            );
-            let apply_mode = placement.apply_mode.trim();
-            let dynamic_physics = apply_mode.eq_ignore_ascii_case("dynamic_physics");
-            let collision_only = apply_mode.eq_ignore_ascii_case("collision_only")
-                || placement
-                    .tags
-                    .iter()
-                    .any(|tag| tag.eq_ignore_ascii_case("collision_only"));
-            if !collision_only {
-                profile.prefabs.push(GameReadyPrefabSpec {
-                    id: placement.id.clone(),
-                    authored_map_ref: logical_path.to_owned(),
-                    authored_placement_id: placement.id.clone(),
-                    authored_discrete_placement: true,
-                    authored_primary: true,
-                    source: drawable_ref.clone(),
-                    proxy: if dynamic_physics {
-                        "world_dynamic_ydd".to_owned()
-                    } else {
-                        "world_static_ydd".to_owned()
-                    },
-                    material: material_ref,
-                    enabled: true,
-                    position,
-                    rotation_ypr,
-                    scale,
-                });
-            }
-
-            let collision_policy = definition.model_explanation.collision_policy.trim();
-            let has_collision = !definition.refs.collision_refs.is_empty()
-                || definition
-                    .semantic_tags
-                    .iter()
-                    .any(|tag| tag.eq_ignore_ascii_case("collision"))
-                || matches!(
-                    collision_policy.to_ascii_lowercase().as_str(),
-                    "static_mesh" | "triangle_mesh" | "mesh" | "box"
-                );
-            if has_collision && !dynamic_physics {
-                let collision_source = definition
-                    .refs
-                    .collision_refs
-                    .first()
-                    .cloned()
-                    .unwrap_or(drawable_ref);
-                profile.prefabs.push(GameReadyPrefabSpec {
-                    id: if collision_only {
-                        placement.id.clone()
-                    } else {
-                        format!("{}#collision", placement.id)
-                    },
-                    authored_map_ref: logical_path.to_owned(),
-                    authored_placement_id: placement.id.clone(),
-                    authored_discrete_placement: true,
-                    authored_primary: false,
-                    source: collision_source,
-                    proxy: if collision_policy.eq_ignore_ascii_case("box") {
-                        "world_collision_box".to_owned()
-                    } else {
-                        "world_collision_ydd".to_owned()
-                    },
-                    material: String::new(),
-                    enabled: true,
-                    position,
-                    rotation_ypr,
-                    scale,
-                });
-            } else if collision_only {
-                return Err(format!(
-                    "discrete YMAF placement '{}' is collision_only but definition_ref='{}' declares no collision",
-                  placement.id, placement.definition_ref
-                ));
-            }
-
-            profile.definitions.push(GameReadyDefinitionInstanceSpec {
-                definition_ref: placement.definition_ref,
-                position,
-                rotation_ypr: placement.transform.rotation_ypr,
-                scale,
-                apply_mode: GameReadyDefinitionApplyMode::MetadataOnly,
-            });
+            apply_discrete_placement(
+                &mut profile,
+                &mut definition_cache,
+                logical_path,
+                coord,
+                placement,
+            )?;
         }
     }
 
+    profile.authored_map_streaming = Some(GameReadyAuthoredMapStreamingSpec {
+        map_ref: map_ref.clone(),
+        index: index.clone(),
+        initial_cells: initial_cells.clone(),
+        initial_placement_ids,
+        resident_radius,
+        unload_radius,
+        max_cells_per_tick,
+    });
+
     newengine_ulog_api::ulog::info!(
-        "game-ready: loaded discrete YMAP v2 map='{}' cells={} placements={} resolved_definitions={} policy='YMAP -> engine.assets.maps DTO -> engine.assets.definitions DTO -> scene-owned static-world admission'",
+        "game-ready: loaded discrete YMAP v2 map='{}' cells_total={} cells_initial={} prefabs_initial={} resolved_definitions={} spawn_cell={},{} resident_radius={} unload_radius={} policy='index-resident; cell payloads stream by player position'",
         map_ref,
         index.cells.len(),
-        profile.definitions.len(),
+        initial_cells.len(),
+        profile.prefabs.len(),
         definition_cache.len(),
+        spawn_cell.x,
+        spawn_cell.z,
+        resident_radius,
+        unload_radius,
     );
     Ok(profile)
 }

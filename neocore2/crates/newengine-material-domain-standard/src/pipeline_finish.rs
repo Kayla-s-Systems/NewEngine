@@ -22,6 +22,12 @@ impl PendingLitPipelineBuild {
             self.skinned_double_sided_pipeline,
             "skinned_double_sided_pipeline",
         )?;
+        let skinned_alpha_pipeline =
+            required(self.skinned_alpha_pipeline, "skinned_alpha_pipeline")?;
+        let skinned_alpha_double_sided_pipeline = required(
+            self.skinned_alpha_double_sided_pipeline,
+            "skinned_alpha_double_sided_pipeline",
+        )?;
         Ok(LitPipeline {
             bgl: required(self.bgl, "bgl")?,
             skin_bgl: required(self.skin_bgl, "skin_bgl")?,
@@ -99,6 +105,8 @@ impl PendingLitPipelineBuild {
             )?,
             skinned_pipeline,
             skinned_double_sided_pipeline,
+            skinned_alpha_pipeline,
+            skinned_alpha_double_sided_pipeline,
             gbuffer_skinned_pipeline: if self.profile.deferred_pipelines {
                 required(self.gbuffer_skinned_pipeline, "gbuffer_skinned_pipeline")?
             } else {

@@ -1,5 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
+#[path = "world_model/authored_map_streaming.rs"]
+mod authored_map_streaming;
 #[path = "world_model/materials.rs"]
 mod materials;
 #[path = "world_model/spawn.rs"]
@@ -22,5 +24,7 @@ pub(super) struct StaticWorldSpawnSummary {
     pub triangles: u64,
 }
 
+pub(super) use authored_map_streaming::begin_authored_map_streaming;
+pub(crate) use authored_map_streaming::tick_authored_map_streaming;
 pub(super) use streaming::begin_static_world_prefabs;
 pub(crate) use streaming::tick_game_ready_static_world_prefabs;

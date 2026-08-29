@@ -1,0 +1,4 @@
+rank,key,category,source,sample_name,count,failed,slow,total_elapsed_ms,total_share_percent,average_elapsed_ms,max_elapsed_ms,max_load,total_payload_bytes,total_output_bytes
+1,newengine-plugin-host:plugin_lifecycle::<no-method>,plugin_lifecycle,newengine-plugin-host,plugin_load:C:/Users/Aiden/Documents/Repos/NorthStar/pluginsRuntime/aurelia-ui-0.5.12-release.dll,10,1,0,39.322400,94.346286,3.932240,8.220000,0.493101,0,0
+2,engine.render.vulkan:renderer::<no-method>,renderer,engine.render.vulkan,Vulkan renderer bootstrap,1,1,0,2.356400,5.653714,2.356400,2.356400,0.141356,0,0
+3,engine.render.vulkan:event::<no-method>,event,engine.render.vulkan,engine.ui.loading.status.v1,3,0,0,0.000000,0.000000,0.000000,0.000000,0.000000,0,0

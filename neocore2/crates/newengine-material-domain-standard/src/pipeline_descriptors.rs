@@ -244,6 +244,29 @@ impl PendingLitPipelineBuild {
         Ok(desc)
     }
 
+    pub(super) fn skinned_alpha_pipeline_desc(
+        &self,
+        double_sided: bool,
+    ) -> MaterialDomainResult<PipelineDesc> {
+        let label = if double_sided {
+            "standard_lit_alpha_pipeline_skinned_double_sided"
+        } else {
+            "standard_lit_alpha_pipeline_skinned"
+        };
+        Ok(self
+            .skinned_pipeline_desc(double_sided, false)?
+            .with_label(label)
+            .with_cache_key(format!(
+                "standard:{label}:{:?}",
+                self.profile.scene_hdr_color_format
+            ))
+            .with_depth_state(
+                TextureFormat::Depth32Float,
+                PipelineDepthMode::new(true, false, PipelineDepthCompare::LessOrEqual),
+            )
+            .with_blend_mode(PipelineBlendMode::Alpha))
+    }
+
     pub(super) fn skinned_shadow_pipeline_desc(
         &self,
         double_sided: bool,

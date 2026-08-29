@@ -277,27 +277,13 @@ pub(crate) fn tick_game_ready_streaming_terrain(
         }
     }
 
-    let loaded_coords = state
-        .loaded
-        .keys()
-        .copied()
-        .collect::<std::collections::BTreeSet<_>>();
-    let pending_coords = state
-        .pending
-        .keys()
-        .copied()
-        .collect::<std::collections::BTreeSet<_>>();
+    // `loaded` and `pending` are already ordered maps. Query them directly rather than
+    // cloning both key sets every frame; large streaming radii otherwise create avoidable
+    // allocator traffic and duplicate tree construction on the hot path.
     let completed_ready = state
         .pending
-        .keys()
-        .copied()
-        .filter(|coord| {
-            state
-                .pending
-                .get(coord)
-                .map(|pending| pending.ticket.is_complete())
-                .unwrap_or(false)
-        })
+        .iter()
+        .filter_map(|(coord, pending)| pending.ticket.is_complete().then_some(*coord))
         .collect::<Vec<_>>();
     let stream_requests_ready = bucket_plan
         .cells
@@ -305,7 +291,7 @@ pub(crate) fn tick_game_ready_streaming_terrain(
         .copied()
         .filter(|cell| cell.bucket.wants_render_residency())
         .filter(|cell| {
-            !loaded_coords.contains(&cell.coord) && !pending_coords.contains(&cell.coord)
+            !state.loaded.contains_key(&cell.coord) && !state.pending.contains_key(&cell.coord)
         })
         .collect::<Vec<_>>();
 
