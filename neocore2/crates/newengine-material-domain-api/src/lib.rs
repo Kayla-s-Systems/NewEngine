@@ -165,6 +165,9 @@ pub struct LitPipeline {
     pub shadow_instanced_double_sided_pipeline: PipelineId,
     pub skinned_pipeline: PipelineId,
     pub skinned_double_sided_pipeline: PipelineId,
+    /// Forward alpha-blended skinned surface: depth-tested, depth read-only.
+    pub skinned_alpha_pipeline: PipelineId,
+    pub skinned_alpha_double_sided_pipeline: PipelineId,
     pub gbuffer_skinned_pipeline: PipelineId,
     pub gbuffer_skinned_double_sided_pipeline: PipelineId,
     pub shadow_skinned_pipeline: PipelineId,

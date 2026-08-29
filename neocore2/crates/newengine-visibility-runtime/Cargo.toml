@@ -1,0 +1,11 @@
+[package]
+name = "newengine-visibility-runtime"
+version = "0.1.0"
+edition = "2021"
+description = "Persistent engine visibility control plane with coarse culling, delayed-result hysteresis and bounded query planning"
+license = "Proprietary"
+
+[dependencies]
+newengine-math = { path = "../newengine-math" }
+newengine-scene = { path = "../newengine-scene" }
+newengine-visibility-api = { path = "../newengine-visibility-api" }

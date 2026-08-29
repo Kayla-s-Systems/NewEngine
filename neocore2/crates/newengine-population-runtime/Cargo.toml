@@ -1,0 +1,15 @@
+[package]
+name = "newengine-population-runtime"
+version = "0.1.0"
+edition = "2021"
+description = "Engine-owned bounded population control plane for NorthStar/NewEngine"
+license = "Proprietary"
+
+[features]
+default = []
+profiler-events = ["dep:newengine-plugin-host", "dep:serde_json"]
+
+[dependencies]
+newengine-math = { path = "../newengine-math" }
+newengine-plugin-host = { path = "../newengine-plugin-host", optional = true }
+serde_json = { version = "1", optional = true }

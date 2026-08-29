@@ -131,21 +131,25 @@ fn run() -> Result<(), String> {
                     .next()
                     .ok_or("--package-skin-subset requires PATH::SOURCE_DOMAIN::LOCAL=MASTER[,LOCAL=MASTER...]")?;
                 if path.is_empty() || source_domain == 0 {
-                    return Err("--package-skin-subset path and source domain must be non-empty".to_owned());
+                    return Err(
+                        "--package-skin-subset path and source domain must be non-empty".to_owned(),
+                    );
                 }
                 let mut local_to_master = vec![None; source_domain];
-                for pair in mappings.split(',').map(str::trim).filter(|value| !value.is_empty()) {
+                for pair in mappings
+                    .split(',')
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                {
                     let (local, master) = pair
                         .split_once('=')
                         .ok_or("--package-skin-subset mapping must use LOCAL=MASTER")?;
-                    let local = local
-                        .trim()
-                        .parse::<usize>()
-                        .map_err(|error| format!("invalid local subset joint '{local}': {error}"))?;
-                    let master = master
-                        .trim()
-                        .parse::<u16>()
-                        .map_err(|error| format!("invalid master subset joint '{master}': {error}"))?;
+                    let local = local.trim().parse::<usize>().map_err(|error| {
+                        format!("invalid local subset joint '{local}': {error}")
+                    })?;
+                    let master = master.trim().parse::<u16>().map_err(|error| {
+                        format!("invalid master subset joint '{master}': {error}")
+                    })?;
                     if local >= source_domain {
                         return Err(format!(
                             "--package-skin-subset local joint outside source domain local={} source_domain={}",

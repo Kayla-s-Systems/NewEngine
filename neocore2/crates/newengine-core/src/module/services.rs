@@ -1,8 +1,0 @@
-/// Engine-wide immutable services.
-///
-/// This is intentionally small and stable.
-/// Extend via Resources if you need typed APIs.
-pub trait Services: Send + Sync {
-    /// In-process service registry (IoC / composition root).
-    fn service_registry(&self) -> &crate::ServiceRegistry;
-}

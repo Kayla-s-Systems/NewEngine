@@ -44,7 +44,7 @@ pub(crate) fn setting_block(
     let outer_width = ui.available_width();
     egui::Frame::none()
         .fill(color32(style.palette.bg_deep))
-        .stroke(egui::Stroke::new(1.0, color32(style.palette.edge_soft)))
+        .stroke(egui::Stroke::new(1.0_f32, color32(style.palette.edge_soft)))
         .rounding(egui::Rounding::same(8.0))
         .inner_margin(egui::Margin::same(12.0))
         .show(ui, |ui| {

@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<NeUiDictionary schema="newengine.neui.xmlcentral.v1" document_kind="surface">
-  <Entries><Entry name="surface" kind="ui_surface" /></Entries>
-  <Surface name="p3.surface" kind="test" root="p3.root" />
-  <Layout name="p3.root" title="P3"><Text id="p3.text" value="P3" /></Layout>
-</NeUiDictionary>

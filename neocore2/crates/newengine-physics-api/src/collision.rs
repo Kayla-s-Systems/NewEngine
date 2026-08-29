@@ -18,9 +18,21 @@ impl Default for PhysicsBodyKindDto {
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum CollisionShapeDto {
-    Box { half_extents: PhysicsVec3 },
-    Sphere { radius: f32 },
-    Capsule { radius: f32, half_height: f32 },
+    Box {
+        half_extents: PhysicsVec3,
+    },
+    Sphere {
+        radius: f32,
+    },
+    Capsule {
+        radius: f32,
+        half_height: f32,
+    },
+    /// Solid cylinder aligned to local +Y/-Y, with flat caps.
+    Cylinder {
+        radius: f32,
+        half_height: f32,
+    },
 }
 
 impl Default for CollisionShapeDto {

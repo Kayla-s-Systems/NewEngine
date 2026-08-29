@@ -17,4 +17,5 @@ newengine-model-contact-api = { path = "../newengine-model-contact-api" }
 newengine-physics-api = { path = "../newengine-physics-api" }
 newengine-sim = { path = "../newengine-sim" }
 newengine-transform = { path = "../newengine-transform" }
+newengine-ui-api = { path = "../newengine-ui-api" }
 newengine-ulog-api = { path = "../newengine-ulog-api" }

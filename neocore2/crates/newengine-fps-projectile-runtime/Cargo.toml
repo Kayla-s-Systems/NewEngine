@@ -16,6 +16,7 @@ newengine-item-assets-runtime = { path = "../newengine-item-assets-runtime" }
 newengine-lighting = { path = "../newengine-lighting" }
 newengine-math = { path = "../newengine-math" }
 newengine-primitives = { path = "../newengine-primitives" }
+newengine-physics-contracts = { path = "../newengine-physics-contracts" }
 newengine-scene = { path = "../newengine-scene", features = ["runtime"] }
 newengine-sim = { path = "../newengine-sim" }
 newengine-transform = { path = "../newengine-transform" }

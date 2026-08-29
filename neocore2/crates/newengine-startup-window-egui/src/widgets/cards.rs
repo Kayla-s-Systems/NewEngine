@@ -87,7 +87,7 @@ pub(crate) fn warning_banner(ui: &mut egui::Ui, text: &str) {
             palette.warn.b,
             18,
         ))
-        .stroke(egui::Stroke::new(1.0, color32(palette.warn)))
+        .stroke(egui::Stroke::new(1.0_f32, color32(palette.warn)))
         .rounding(egui::Rounding::same(8.0))
         .inner_margin(egui::Margin::symmetric(14.0, 10.0))
         .show(ui, |ui| {

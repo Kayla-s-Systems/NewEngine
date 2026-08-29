@@ -12,8 +12,7 @@ use newengine_engine_runtime::gameplay::{
     select_equipment_slot, sync_equipped_weapon_runtime, use_item, EquipmentSlot,
     EquippedWeaponBinding, GameplayInputCapture, GameplayUiFrameOutput, GameplayUiProvider,
     GameplayWorld, Interactable, ItemCatalog, ItemId, ItemInstanceId, ItemKind, ItemPickup,
-    PlayerCommandFrame, PlayerController, PlayerInventory, PlayerWeaponState,
-    SHARED_UNARMED_WEAPON_ITEM_NAME,
+    PlayerCommandFrame, PlayerController, PlayerInventory, PlayerWeaponState, WeaponType,
 };
 #[cfg(test)]
 use newengine_gameplay_fps_api::action as fps_action;
@@ -66,9 +65,10 @@ use publish::publish_inventory_hud_state;
 #[cfg(test)]
 use state::inventory_hud_is_visible;
 use state::{
-    ensure_inventory_hud_state, inventory_hud_is_open, inventory_slot_count, InventoryDragState,
-    InventoryHudState, CHARACTER_UI_ACTION_NOCLIP_TOGGLE, CHARACTER_UI_ACTION_TOGGLE,
-    INVENTORY_HUD_CONTRACT, INVENTORY_HUD_SURFACE_ID, INVENTORY_UI_ACTION_DROP,
-    INVENTORY_UI_ACTION_EQUIPMENT, INVENTORY_UI_ACTION_HOTBAR, INVENTORY_UI_ACTION_SLOT,
-    INVENTORY_UI_ACTION_TOGGLE,
+    ensure_inventory_hud_state, inventory_hud_is_open, inventory_slot_count, CharacterMenuCategory,
+    InventoryDragState, InventoryHudState, CHARACTER_MENU_CATEGORY_CHARACTERS_ACTION,
+    CHARACTER_MENU_CATEGORY_WEAPONS_ACTION, CHARACTER_UI_ACTION_NOCLIP_TOGGLE,
+    CHARACTER_UI_ACTION_TOGGLE, INVENTORY_HUD_CONTRACT, INVENTORY_HUD_SURFACE_ID,
+    INVENTORY_UI_ACTION_DROP, INVENTORY_UI_ACTION_EQUIPMENT, INVENTORY_UI_ACTION_HOTBAR,
+    INVENTORY_UI_ACTION_SLOT, INVENTORY_UI_ACTION_TOGGLE,
 };

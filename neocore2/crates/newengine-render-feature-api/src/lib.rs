@@ -42,6 +42,26 @@ const ALL_SHADOWS_AND_OPAQUE: &[RenderDrawListKind] = &[
     RenderDrawListKind::LocalShadowCasters,
     RenderDrawListKind::OpaqueForward,
 ];
+const OPAQUE_AND_TRANSPARENT: &[RenderDrawListKind] = &[
+    RenderDrawListKind::OpaqueForward,
+    RenderDrawListKind::Transparent,
+];
+const SHADOW_OPAQUE_AND_TRANSPARENT: &[RenderDrawListKind] = &[
+    RenderDrawListKind::ShadowCasters,
+    RenderDrawListKind::OpaqueForward,
+    RenderDrawListKind::Transparent,
+];
+const LOCAL_SHADOW_OPAQUE_AND_TRANSPARENT: &[RenderDrawListKind] = &[
+    RenderDrawListKind::LocalShadowCasters,
+    RenderDrawListKind::OpaqueForward,
+    RenderDrawListKind::Transparent,
+];
+const ALL_SHADOWS_OPAQUE_AND_TRANSPARENT: &[RenderDrawListKind] = &[
+    RenderDrawListKind::ShadowCasters,
+    RenderDrawListKind::LocalShadowCasters,
+    RenderDrawListKind::OpaqueForward,
+    RenderDrawListKind::Transparent,
+];
 
 #[derive(Clone, Copy, Debug)]
 pub struct RuntimeVisibilityPlan {
@@ -59,7 +79,7 @@ impl RuntimeVisibilityPlan {
             shadow_casters,
             local_shadow_casters,
             opaque_forward: true,
-            transparent: false,
+            transparent: true,
             debug,
         }
     }
@@ -289,6 +309,19 @@ pub const fn shadow_lists_and_opaque(
         (true, false) => SHADOW_AND_OPAQUE,
         (false, true) => LOCAL_SHADOW_AND_OPAQUE,
         (false, false) => OPAQUE_FORWARD,
+    }
+}
+
+#[inline]
+pub const fn shadow_lists_opaque_and_transparent(
+    directional_active: bool,
+    local_active: bool,
+) -> &'static [RenderDrawListKind] {
+    match (directional_active, local_active) {
+        (true, true) => ALL_SHADOWS_OPAQUE_AND_TRANSPARENT,
+        (true, false) => SHADOW_OPAQUE_AND_TRANSPARENT,
+        (false, true) => LOCAL_SHADOW_OPAQUE_AND_TRANSPARENT,
+        (false, false) => OPAQUE_AND_TRANSPARENT,
     }
 }
 

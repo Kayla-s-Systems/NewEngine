@@ -1,2 +1,0 @@
-scheduled_jobs,blocked_jobs,blocked_share_percent,polling_jobs,gpu_wait_jobs,gpu_wait_share_percent,frame_budget_exceeded_jobs,async_jobs,async_share_percent
-11,0,0.000000,0,0,0.000000,0,0,0.000000
