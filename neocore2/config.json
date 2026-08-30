@@ -5,6 +5,11 @@
     "modules_dir": "pluginsRuntime"
   },
   "plugins": {
+    "engine.animation.foundation": {
+      "runtime_data": {
+        "catalog": "gameplay/gameplay_foundation.v1.json"
+      }
+    },
     "engine.assets.starvault": {
       "codecs_dir": "codecs",
       "container_scan": {
@@ -80,6 +85,11 @@
       ],
       "pump_steps": 16
     },
+    "engine.game-ready.world": {
+      "runtime_data": {
+        "locomotion_graph": "animation/humanoid_locomotion.graph.v1.json"
+      }
+    },
     "engine.input.compass": {
       "device_mode": "hybrid",
       "enabled": true,
@@ -106,6 +116,15 @@
         "background": "textures/ui/loading/loaderWindow.ytd@north_star_preload_background",
         "logo": "textures/ui/loading/loaderWindow.ytd@north_star_engine_logo",
         "spinner": "textures/ui/loading/loaderWindow.ytd@north_star_loading_spinner"
+      },
+      "spinner_animation": {
+        "frame_height": 64,
+        "frame_width": 64,
+        "rotation_rps": 0.9,
+        "sprite_columns": 1,
+        "sprite_fps": 24.0,
+        "sprite_frames": 1,
+        "sprite_rows": 1
       }
     },
     "engine.logging.chronicle": {
@@ -224,10 +243,10 @@
               0.02,
               0.025,
               0.035,
-              1.0
+              0.5
             ],
-            "deferred": "disabled",
-            "hdr_scene": "disabled",
+            "deferred": "enabled",
+            "hdr_scene": "enabled",
             "postfx": "enabled",
             "shadows": "enabled",
             "sky": {
@@ -258,6 +277,21 @@
           "profile": "game",
           "publish_editor_shell": true
         }
+      }
+    },
+    "engine.schema.registry": {
+      "runtime_data": {
+        "registry": "schema/schema_registry.v1.json"
+      }
+    },
+    "engine.tags.foundation": {
+      "runtime_data": {
+        "catalog": "gameplay/gameplay_foundation.v1.json"
+      }
+    },
+    "engine.tasks.foundation": {
+      "runtime_data": {
+        "catalog": "gameplay/gameplay_foundation.v1.json"
       }
     },
     "newengine": {
@@ -1384,8 +1418,7 @@
           }
         ],
         "project": {
-          "name": "MyGameProject",
-          "path": "C:\\Users\\AidenFox\\Documents\\Kaylas-Systems\\NewEngineRockstar\\NewEngine\\neocore2"
+          "name": "MyGameProject"
         },
         "remember_last_options": true,
         "schema": "newengine.startup_window.v1",
@@ -1405,30 +1438,30 @@
       "window_mode": "windowed"
     },
     "graphics": {
-      "anisotropy": 8,
-      "bloom_enabled": true,
-      "bloom_intensity": 0.08500000089406967,
-      "bloom_knee": 0.3499999940395355,
+      "anisotropy": 2,
+      "bloom_enabled": false,
+      "bloom_intensity": 0.09,
+      "bloom_knee": 0.35000000000000003,
       "bloom_radius": 1.0,
-      "bloom_threshold": 0.8500000238418579,
+      "bloom_threshold": 0.8500000000000001,
       "depth_of_field_enabled": false,
       "fxaa_edge_threshold": 0.125,
       "fxaa_edge_threshold_min": 0.031199999153614044,
       "fxaa_enabled": true,
       "fxaa_subpixel_quality": 0.75,
       "lod_distance_scale": 1.75,
-      "lod_quality": "cinematic",
+      "lod_quality": "medium",
       "motion_blur_enabled": false,
-      "msaa_samples": 0,
-      "preset": "custom",
+      "msaa_samples": 2,
+      "preset": "balanced",
       "shadow_advanced_override": false,
       "shadow_bias": 0.0024999999441206455,
-      "shadow_cascade_count": 4,
+      "shadow_cascade_count": 2,
       "shadow_contact_strength": 0.44999998807907104,
       "shadow_filter": "pcss",
-      "shadow_map_resolution": 4096,
+      "shadow_map_resolution": 1024,
       "shadow_max_distance": 240.0,
-      "shadow_normal_bias": 0.014999999664723873,
+      "shadow_normal_bias": 0.014999999664723871,
       "shadow_pcss_blocker_radius_texels": 4.5,
       "shadow_pcss_blocker_samples": 16,
       "shadow_pcss_filter_samples": 16,
@@ -1436,20 +1469,20 @@
       "shadow_pcss_max_filter_radius_texels": 8.0,
       "shadow_pcss_min_filter_radius_texels": 0.18000000715255737,
       "shadow_pcss_stable_kernel_texels": 8.0,
-      "shadow_quality": "cinematic",
-      "shadow_softness": 1.149999976158142,
+      "shadow_quality": "balanced",
+      "shadow_softness": 1.15,
       "shadows_enabled": true,
-      "ssao_enabled": false,
+      "ssao_enabled": true,
       "ssao_half_resolution": true,
-      "ssao_intensity": 0.8199999928474426,
+      "ssao_intensity": 0.8,
       "ssao_quality_steps": 16,
-      "ssao_radius_ws": 0.75,
+      "ssao_radius_ws": 0.7500000000000001,
       "sun_rays_enabled": true,
-      "taa_enabled": false,
-      "taa_feedback": 0.9200000166893005,
+      "taa_enabled": true,
+      "taa_feedback": 0.9200000166893004,
       "taa_jitter_scale": 1.0,
       "taa_neighborhood_clamping": 1.0,
-      "texture_quality": "high"
+      "texture_quality": "medium"
     },
     "schema_version": 3
   },
