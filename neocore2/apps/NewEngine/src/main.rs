@@ -543,104 +543,109 @@ fn launch_runtime_profile_via_plugins(
     init_host_context();
     let host = default_host_api();
     let mut plugins = PluginManager::new();
+    let result = (|| -> Result<(), String> {
+        // Project-local plugins are loaded first so a project may provide/override its own
+        // game-module descriptor. Runtime-profile ownership remains independent.
+        load_game_runtime_plugins(&mut plugins, project, host.clone())?;
 
-    // Project-local plugins are loaded first so a project may provide/override its own
-    // game-module descriptor. Runtime-profile ownership remains independent.
-    load_game_runtime_plugins(&mut plugins, project, host.clone())?;
+        // game_module is a descriptor/capability root, not a runtime-profile launcher.
+        // The launcher verifies/loads it in the launcher host, but must not exclude it from the
+        // runtime host: GameModuleContractModule validates the descriptor through the runtime-local
+        // engine.game.module service after EnginePluginsReady.
+        if let Some(game_module) = project
+            .manifest
+            .game_module
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            if !has_service(newengine_game_module_api::GAME_MODULE_SERVICE_ID) {
+                plugins
+                    .load_plugin_id_default_with_origin(
+                        game_module,
+                        host.clone(),
+                        PluginLoadOrigin::FirstPartyPlugin,
+                    )
+                    .map_err(|error| {
+                        format!(
+                            "load game-module descriptor plugin '{}' from pluginsRuntime: {error}",
+                            game_module
+                        )
+                    })?;
+            }
+            if !has_service(newengine_game_module_api::GAME_MODULE_SERVICE_ID) {
+                return Err(format!(
+                    "game_module '{}' loaded without required descriptor service '{}'",
+                    game_module,
+                    newengine_game_module_api::GAME_MODULE_SERVICE_ID,
+                ));
+            }
+        }
 
-    // game_module is a descriptor/capability root, not a runtime-profile launcher.
-    // The launcher verifies/loads it in the launcher host, but must not exclude it from the
-    // runtime host: GameModuleContractModule validates the descriptor through the runtime-local
-    // engine.game.module service after EnginePluginsReady.
-    if let Some(game_module) = project
-        .manifest
-        .game_module
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    {
-        if !has_service(newengine_game_module_api::GAME_MODULE_SERVICE_ID) {
+        // Runtime profile is resolved independently from the module descriptor.
+        let service_id = runtime_profile_service_id(runtime_profile);
+        if !has_service(&service_id) {
             plugins
                 .load_plugin_id_default_with_origin(
-                    game_module,
+                    runtime_profile,
                     host.clone(),
                     PluginLoadOrigin::FirstPartyPlugin,
                 )
                 .map_err(|error| {
                     format!(
-                        "load game-module descriptor plugin '{}' from pluginsRuntime: {error}",
-                        game_module
+                        "load runtime-profile plugin '{}' from pluginsRuntime: {error}",
+                        runtime_profile
                     )
                 })?;
         }
-        if !has_service(newengine_game_module_api::GAME_MODULE_SERVICE_ID) {
+        if !has_service(&service_id) {
+            let available = plugins
+                .snapshot()
+                .into_iter()
+                .flat_map(|plugin| {
+                    plugin
+                        .capabilities
+                        .into_iter()
+                        .map(move |capability| format!("{}:{}", plugin.id, capability.id))
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
             return Err(format!(
-                "game_module '{}' loaded without required descriptor service '{}'",
-                game_module,
-                newengine_game_module_api::GAME_MODULE_SERVICE_ID,
-            ));
-        }
-    }
-
-    // Runtime profile is resolved independently from the module descriptor.
-    let service_id = runtime_profile_service_id(runtime_profile);
-    if !has_service(&service_id) {
-        plugins
-            .load_plugin_id_default_with_origin(
-                runtime_profile,
-                host.clone(),
-                PluginLoadOrigin::FirstPartyPlugin,
-            )
-            .map_err(|error| {
-                format!(
-                    "load runtime-profile plugin '{}' from pluginsRuntime: {error}",
-                    runtime_profile
-                )
-            })?;
-    }
-    if !has_service(&service_id) {
-        let available = plugins
-            .snapshot()
-            .into_iter()
-            .flat_map(|plugin| {
-                plugin
-                    .capabilities
-                    .into_iter()
-                    .map(move |capability| format!("{}:{}", plugin.id, capability.id))
-            })
-            .collect::<Vec<_>>()
-            .join(", ");
-        return Err(format!(
             "runtime profile service '{}' is unavailable for profile='{}'; loaded capabilities=[{}]",
             service_id, runtime_profile, available,
         ));
-    }
-    append_env_list_unique("NEWENGINE_PLUGIN_EXCLUDE_IDS", runtime_profile);
+        }
+        append_env_list_unique("NEWENGINE_PLUGIN_EXCLUDE_IDS", runtime_profile);
 
-    let payload = serde_json::to_vec(&serde_json::json!({
-        "manifest_path": project.manifest_path.to_string_lossy(),
-        "game_manifest_path": project.manifest_path.to_string_lossy(),
-        "launch_id": project.launch.preset_id,
-        "runtime_profile": runtime_profile,
-        "game_module": project.manifest.game_module,
-    }))
-    .map_err(|error| format!("encode runtime-profile launch request: {error}"))?;
+        let payload = serde_json::to_vec(&serde_json::json!({
+            "manifest_path": project.manifest_path.to_string_lossy(),
+            "game_manifest_path": project.manifest_path.to_string_lossy(),
+            "launch_id": project.launch.preset_id,
+            "runtime_profile": runtime_profile,
+            "game_module": project.manifest.game_module,
+        }))
+        .map_err(|error| format!("encode runtime-profile launch request: {error}"))?;
 
-    let result = call_service_v1(
-        service_id.clone().into(),
-        RUNTIME_PROFILE_LAUNCH_METHOD_V1.into(),
-        Blob::from(payload),
-    )
-    .into_result()
-    .map_err(|error| {
-        format!(
-            "runtime profile '{}' launch failed: {error}",
-            runtime_profile
+        let launch_result = call_service_v1(
+            service_id.clone().into(),
+            RUNTIME_PROFILE_LAUNCH_METHOD_V1.into(),
+            Blob::from(payload),
         )
-    });
+        .into_result()
+        .map_err(|error| {
+            format!(
+                "runtime profile '{}' launch failed: {error}",
+                runtime_profile
+            )
+        });
 
+        launch_result.map(|_| ())
+    })();
+    // Always release launcher-owned plugin DLLs/services, including every early-error path.
+    // Returning through `?` after loading the game-module descriptor used to skip this and
+    // could leave host callbacks pointing into an unloading DLL, producing STATUS_ACCESS_VIOLATION.
     plugins.shutdown();
-    result.map(|_| ())
+    result
 }
 
 fn load_game_runtime_plugins(

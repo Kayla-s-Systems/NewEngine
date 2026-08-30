@@ -6,11 +6,50 @@ struct PlayerAnimationRuntimeClip {
     event_cursor: AnimationEventCursor,
 }
 
-
 #[derive(Clone, Copy, Debug)]
 struct PlayerFootJointBinding {
     left: usize,
     right: usize,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct ResolvedJointBlendRule {
+    joint_index: usize,
+    joint_tag: u32,
+    weight: f32,
+    channels: newengine_engine_runtime::gameplay::PlayerJointChannels,
+}
+
+fn resolve_joint_blend_rules(
+    skeleton: &ModelSkeletonMetadata,
+    rules: &[newengine_engine_runtime::gameplay::PlayerJointRotationWeight],
+) -> Result<Vec<ResolvedJointBlendRule>, String> {
+    let mut resolved = Vec::with_capacity(rules.len());
+    for rule in rules {
+        let joint_name = rule.joint.trim();
+        let index = skeleton
+            .joints
+            .iter()
+            .position(|joint| joint.name == joint_name)
+            .ok_or_else(|| {
+                format!(
+                    "authored animation layer joint is absent from skeleton joint='{joint_name}'"
+                )
+            })?;
+        if !rule.weight.is_finite() || !(0.0..=1.0).contains(&rule.weight) || !rule.channels.any() {
+            return Err(format!(
+                "authored animation layer rule is invalid joint='{joint_name}' weight={} channels={:?}",
+                rule.weight, rule.channels
+            ));
+        }
+        resolved.push(ResolvedJointBlendRule {
+            joint_index: index,
+            joint_tag: skeleton.joints[index].tag,
+            weight: rule.weight,
+            channels: rule.channels,
+        });
+    }
+    Ok(resolved)
 }
 
 fn resolve_foot_joint_binding(skeleton: &ModelSkeletonMetadata) -> Option<PlayerFootJointBinding> {
@@ -18,17 +57,42 @@ fn resolve_foot_joint_binding(skeleton: &ModelSkeletonMetadata) -> Option<Player
         let root = skeleton.anchors.root.as_str();
         let hips = skeleton.anchors.hips.as_str();
         if !authored.trim().is_empty() && authored != root && authored != hips {
-            if let Some(index) = skeleton.joints.iter().position(|joint| joint.name == authored) {
+            if let Some(index) = skeleton
+                .joints
+                .iter()
+                .position(|joint| joint.name == authored)
+            {
                 return Some(index);
             }
         }
         let patterns: &[&str] = if left {
-            &["left_foot", "foot_l", "l_foot", "leftfoot", "left_ankle", "ankle_l", "l_ankle"]
+            &[
+                "left_foot",
+                "foot_l",
+                "l_foot",
+                "leftfoot",
+                "left_ankle",
+                "ankle_l",
+                "l_ankle",
+            ]
         } else {
-            &["right_foot", "foot_r", "r_foot", "rightfoot", "right_ankle", "ankle_r", "r_ankle"]
+            &[
+                "right_foot",
+                "foot_r",
+                "r_foot",
+                "rightfoot",
+                "right_ankle",
+                "ankle_r",
+                "r_ankle",
+            ]
         };
         skeleton.joints.iter().position(|joint| {
-            let name = joint.name.to_ascii_lowercase().replace('.', "_").replace(':', "_").replace('-', "_");
+            let name = joint
+                .name
+                .to_ascii_lowercase()
+                .replace('.', "_")
+                .replace(':', "_")
+                .replace('-', "_");
             patterns.iter().any(|pattern| {
                 name == *pattern || name.starts_with(pattern) || name.ends_with(pattern)
             })
@@ -61,12 +125,15 @@ pub(super) struct PlayerAnimationRuntimeBinding {
     joint_frames_scratch: Vec<Mat4>,
     foot_joints: Option<PlayerFootJointBinding>,
     braid_secondary_motion: Option<AbbyBraidRuntime>,
-    /// Mirrored North Star deform/helper branches must follow their primary joints.
-    helper_mirror_pairs: Vec<(usize, usize)>,
+    /// Definition-authored local-pose copy rules resolved to this skeleton.
+    helper_pose_copies: Vec<ResolvedJointCopyRule>,
     /// Imported Rigify control/face branches need the authored constraint order restored:
     /// deform body -> animated neck/head controls -> face/eyes deform branches.
     eye_contract: Option<EyeRuntimeContract>,
     head_follow: Option<DetachedHeadFollowRig>,
+    noclip_pose: Option<PlayerAnimationRuntimeClip>,
+    noclip_time_seconds: f32,
+    noclip_active: bool,
     equipment_ready_pose: Option<PlayerAnimationRuntimeClip>,
     equipment_aim_pose: Option<PlayerAnimationRuntimeClip>,
     equipment_reload_pose: Option<PlayerAnimationRuntimeClip>,
@@ -77,9 +144,9 @@ pub(super) struct PlayerAnimationRuntimeBinding {
     equipment_ready_sample_phase: f32,
     equipment_time_seconds: f32,
     equipment_reload_active: bool,
-    equipment_ready_rotation_weights: Vec<(String, f32)>,
-    equipment_aim_rotation_weights: Vec<(String, f32)>,
-    equipment_reload_rotation_weights: Vec<(String, f32)>,
+    equipment_ready_rotation_weights: Vec<ResolvedJointBlendRule>,
+    equipment_aim_rotation_weights: Vec<ResolvedJointBlendRule>,
+    equipment_reload_rotation_weights: Vec<ResolvedJointBlendRule>,
     equipment_overlay_locals: Vec<JointLocalPose>,
     equipment_ik: Option<WeaponArmIkRig>,
     /// Torso-owned, reach-fitted weapon root before secondary dynamics. Render consumes this exact root.
@@ -137,17 +204,6 @@ impl PlayerAnimationRuntimeBinding {
 }
 
 #[inline]
-fn equipment_overlay_uses_authored_translation(name: &str) -> bool {
-    matches!(
-        name,
-        "l_hand_prop"
-            | "r_hand_prop"
-            | "l_hand_prop_attachment"
-            | "r_hand_prop_attachment"
-    )
-}
-
-#[inline]
 fn blend_joint_translation_only(dst: &mut JointLocalPose, src: &JointLocalPose, weight: f32) {
     let weight = if weight.is_finite() {
         weight.clamp(0.0, 1.0)
@@ -188,8 +244,25 @@ fn blend_joint_rotation_only(dst: &mut JointLocalPose, src: &JointLocalPose, wei
     dst.rotation = [rotation.x, rotation.y, rotation.z, rotation.w];
 }
 
+#[inline]
+fn blend_joint_scale_only(dst: &mut JointLocalPose, src: &JointLocalPose, weight: f32) {
+    let weight = if weight.is_finite() {
+        weight.clamp(0.0, 1.0)
+    } else {
+        1.0
+    };
+    let from = dst.scale.unwrap_or([1.0, 1.0, 1.0]);
+    let to = src.scale.unwrap_or([1.0, 1.0, 1.0]);
+    dst.scale = Some([
+        from[0] + (to[0] - from[0]) * weight,
+        from[1] + (to[1] - from[1]) * weight,
+        from[2] + (to[2] - from[2]) * weight,
+    ]);
+}
+
 fn apply_character_rotation_overlay(
     clip: Option<&PlayerAnimationRuntimeClip>,
+    skeleton: &ModelSkeletonMetadata,
     animation_runtime: &AnimationSkeletonRuntime,
     scratch: &mut Vec<JointLocalPose>,
     target: &mut [JointLocalPose],
@@ -205,26 +278,28 @@ fn apply_character_rotation_overlay(
     };
     let sample_time =
         (clip.clip.duration_seconds * phase).clamp(0.0, clip.clip.duration_seconds.max(0.0));
-    clip.clip.sample_local_pose_bound(
-        sample_time,
-        animation_runtime,
-        &clip.binding,
-        scratch,
-    )?;
-    for (dst, src) in target.iter_mut().zip(scratch.iter()) {
-        blend_joint_rotation_only(dst, src, 1.0);
+    clip.clip
+        .sample_local_pose_bound(sample_time, animation_runtime, &clip.binding, scratch)?;
+    for (index, (dst, src)) in target.iter_mut().zip(scratch.iter()).enumerate() {
+        let Some(joint) = skeleton.joints.get(index) else {
+            continue;
+        };
+        // Untracked clip channels are bind-pose completion, not authored overlay data. Preserve
+        // the current base locomotion pose unless this clip explicitly owns the joint tag.
+        if clip.clip.joint_tags.contains(&joint.tag) {
+            blend_joint_rotation_only(dst, src, 1.0);
+        }
     }
     Ok(())
 }
 
 fn apply_equipment_rotation_overlay(
     clip: Option<&PlayerAnimationRuntimeClip>,
-    skeleton: &ModelSkeletonMetadata,
     animation_runtime: &AnimationSkeletonRuntime,
     scratch: &mut Vec<JointLocalPose>,
     target: &mut [JointLocalPose],
     normalized_phase: f32,
-    weights: &[(String, f32)],
+    weights: &[ResolvedJointBlendRule],
     weight_scale: f32,
 ) -> Result<(), String> {
     let Some(clip) = clip else {
@@ -237,37 +312,28 @@ fn apply_equipment_rotation_overlay(
     };
     let sample_time =
         (clip.clip.duration_seconds * phase).clamp(0.0, clip.clip.duration_seconds.max(0.0));
-    clip.clip.sample_local_pose_bound(
-        sample_time,
-        animation_runtime,
-        &clip.binding,
-        scratch,
-    )?;
-    for (name, weight) in weights {
-        let Some(index) = skeleton
-            .joints
-            .iter()
-            .position(|joint| joint.name == name.as_str())
-        else {
-            continue;
-        };
-        // `sample_local_pose_for_skeleton` fills missing clip channels from bind pose so it can
-        // return a complete skeleton pose. For an overlay that fallback is NOT authored data:
-        // applying it would erase the live locomotion/stance channel back to bind. Only joints
-        // explicitly present in the partial YCD clip are allowed to participate in this layer.
-        let joint_tag = skeleton.joints[index].tag;
-        if !clip.clip.joint_tags.contains(&joint_tag) {
+    clip.clip
+        .sample_local_pose_bound(sample_time, animation_runtime, &clip.binding, scratch)?;
+    for rule in weights {
+        // Sampling returns a complete pose by filling absent clip channels from bind pose. That
+        // fallback is not layer-authored data. A project layer may only modify a joint when the
+        // selected clip explicitly owns that joint tag; otherwise the live base pose is preserved.
+        if !clip.clip.joint_tags.contains(&rule.joint_tag) {
             continue;
         }
-        if let (Some(dst), Some(src)) = (target.get_mut(index), scratch.get(index)) {
-            let effective_weight = (*weight * weight_scale).clamp(0.0, 1.0);
-            blend_joint_rotation_only(dst, src, effective_weight);
-            // Naughty Dog hand-prop joints are animated constraint/contact frames. Keeping only
-            // their rotation leaves the weapon contact at bind-pose translation and visibly
-            // detaches the rifle from the authored hand pose. Only these dedicated prop channels
-            // inherit translation; torso/locomotion translation remains owned by the base clip.
-            if equipment_overlay_uses_authored_translation(name) {
+        if let (Some(dst), Some(src)) = (
+            target.get_mut(rule.joint_index),
+            scratch.get(rule.joint_index),
+        ) {
+            let effective_weight = (rule.weight * weight_scale).clamp(0.0, 1.0);
+            if rule.channels.translation {
                 blend_joint_translation_only(dst, src, effective_weight);
+            }
+            if rule.channels.rotation {
+                blend_joint_rotation_only(dst, src, effective_weight);
+            }
+            if rule.channels.scale {
+                blend_joint_scale_only(dst, src, effective_weight);
             }
         }
     }

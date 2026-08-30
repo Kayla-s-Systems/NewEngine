@@ -73,8 +73,14 @@ impl RawGameReadyPayload {
                     ),
                     jump_animation: sanitize_asset_path(self.player.model.jump_animation),
                     fall_animation: sanitize_asset_path(self.player.model.fall_animation),
-                    // Equipment and bare-hand presentation are character-owned Shared metadata,
-                    // never project map payload. YTYP hydration fills these after map projection.
+                    // Character presentation is definition-owned metadata. Map projection starts empty;
+                    // the selected .ytyp character definition hydrates all rig/layer/IK contracts.
+                    detached_head_follow: false,
+                    detached_head_follow_rule: None,
+                    eye_parent_follow: false,
+                    eye_parent_follow_rule: None,
+                    helper_pose_copies: Vec::new(),
+                    braid_secondary_motion: None,
                     equipment_ready_animation: None,
                     equipment_aim_animation: None,
                     equipment_reload_animation: None,
@@ -85,6 +91,7 @@ impl RawGameReadyPayload {
                     equipment_aim_rotation_weights: Vec::new(),
                     equipment_reload_rotation_weights: Vec::new(),
                     equipment_arm_ik: false,
+                    equipment_arm_ik_rig: None,
                     target_height: self.player.model.target_height.clamp(0.25, 3.0),
                     eye_height_ratio: self.player.model.eye_height_ratio.clamp(0.55, 0.98),
                     local_offset: arr3(self.player.model.local_offset),

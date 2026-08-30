@@ -12,6 +12,13 @@ pub mod render_feature_capability {
     pub const POSTFX_STACK: &str = "render.postfx_stack";
     pub const REFLECTION_PROBES: &str = "render.probes.reflection";
     pub const PARTICLES_VFX: &str = "render.vfx.particles";
+    pub const HAIR_STRANDS: &str = "render.hair.strands";
+    pub const HAIR_GPU_SIMULATION: &str = "render.hair.gpu_simulation";
+    pub const HAIR_SKINNING: &str = "render.hair.skinning";
+    pub const HAIR_COLLISION_CAPSULES: &str = "render.hair.collision.capsules";
+    pub const HAIR_COLLISION_SDF: &str = "render.hair.collision.sdf";
+    pub const HAIR_SHADOWS: &str = "render.hair.shadows";
+    pub const HAIR_LOD: &str = "render.hair.lod";
     pub const TERRAIN_RENDERING: &str = "render.terrain";
     pub const FOLIAGE_RENDERING: &str = "render.foliage";
     pub const LOD_SYSTEM: &str = "render.lod";
@@ -31,6 +38,7 @@ pub mod render_feature_gateway {
     pub const POSTFX: &str = "engine.render.postfx";
     pub const PROBES: &str = "engine.render.probes";
     pub const VFX: &str = "engine.render.vfx";
+    pub const HAIR: &str = "engine.render.hair";
     pub const TERRAIN: &str = "engine.render.terrain";
     pub const FOLIAGE: &str = "engine.render.foliage";
     pub const LOD: &str = "engine.render.lod";
@@ -48,6 +56,7 @@ pub enum RenderFeatureSystemKind {
     PostFx,
     Probes,
     ParticlesVfx,
+    Hair,
     Terrain,
     Foliage,
     Lod,

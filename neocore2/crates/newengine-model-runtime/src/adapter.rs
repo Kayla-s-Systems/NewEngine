@@ -159,6 +159,7 @@ impl ModelAssetAdapter {
                 ),
             };
             parts.push(ModelMeshPart {
+                source_mesh_name: String::new(),
                 material_slot: part.material_slot,
                 mesh: part.mesh,
                 skin: None,

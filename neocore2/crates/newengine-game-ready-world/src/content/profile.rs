@@ -26,11 +26,14 @@ pub(crate) struct GameReadyMapProfile {
 pub(crate) struct GameReadyAuthoredMapStreamingSpec {
     pub(crate) map_ref: String,
     pub(crate) index: newengine_assets_api::MapIndexV1,
-    pub(crate) initial_cells: Vec<newengine_assets_api::MapCellCoordV1>,
+    pub(crate) initial_render_cells: Vec<newengine_assets_api::MapCellCoordV1>,
+    pub(crate) initial_simulation_cells: Vec<newengine_assets_api::MapCellCoordV1>,
     pub(crate) initial_placement_ids:
         std::collections::BTreeMap<newengine_assets_api::MapCellCoordV1, Vec<String>>,
-    pub(crate) resident_radius: i32,
-    pub(crate) unload_radius: i32,
+    pub(crate) render_radius: i32,
+    pub(crate) simulation_radius: i32,
+    pub(crate) render_unload_radius: i32,
+    pub(crate) simulation_unload_radius: i32,
     pub(crate) max_cells_per_tick: usize,
 }
 
@@ -64,6 +67,15 @@ pub(crate) struct GameReadyPlayerModelSpec {
     pub(crate) crouch_walk_animation: Option<String>,
     pub(crate) jump_animation: Option<String>,
     pub(crate) fall_animation: Option<String>,
+    pub(crate) detached_head_follow: bool,
+    pub(crate) detached_head_follow_rule:
+        Option<newengine_engine_runtime::gameplay::PlayerPaletteFollowRule>,
+    pub(crate) eye_parent_follow: bool,
+    pub(crate) eye_parent_follow_rule:
+        Option<newengine_engine_runtime::gameplay::PlayerEyeParentFollowRule>,
+    pub(crate) helper_pose_copies: Vec<newengine_engine_runtime::gameplay::PlayerJointCopyRule>,
+    pub(crate) braid_secondary_motion:
+        Option<newengine_engine_runtime::gameplay::PlayerBraidSecondaryMotionRig>,
     pub(crate) equipment_ready_animation: Option<String>,
     pub(crate) equipment_aim_animation: Option<String>,
     pub(crate) equipment_reload_animation: Option<String>,
@@ -77,6 +89,8 @@ pub(crate) struct GameReadyPlayerModelSpec {
     pub(crate) equipment_reload_rotation_weights:
         Vec<newengine_engine_runtime::gameplay::PlayerJointRotationWeight>,
     pub(crate) equipment_arm_ik: bool,
+    pub(crate) equipment_arm_ik_rig:
+        Option<newengine_engine_runtime::gameplay::PlayerWeaponArmIkRigDefinition>,
     pub(crate) target_height: f32,
     pub(crate) eye_height_ratio: f32,
     pub(crate) local_offset: Vec3,

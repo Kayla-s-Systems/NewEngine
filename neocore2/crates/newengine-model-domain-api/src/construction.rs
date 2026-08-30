@@ -188,6 +188,11 @@ impl ModelSkinBinding {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ModelMeshPart {
+    /// Stable source mesh/geometry name when provided by the model container.
+    /// Presentation layers may use it for authored cutovers without inferring semantics
+    /// from material slots (which can legitimately be shared by unrelated meshes).
+    #[serde(default)]
+    pub source_mesh_name: String,
     pub material_slot: String,
     pub mesh: newengine_primitives::PrimitiveMesh,
     #[serde(default, skip_serializing_if = "Option::is_none")]

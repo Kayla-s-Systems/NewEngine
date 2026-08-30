@@ -1,3 +1,42 @@
+fn equipped_weapon_vfx_definition(
+    world: &World,
+    owner: EntityId,
+) -> Option<WeaponVfxDefinition> {
+    let binding = world.get::<EquippedWeaponBinding>(owner).copied()?;
+    world
+        .resource::<ItemCatalog>()?
+        .get(binding.item)
+        .map(|definition| definition.weapon_vfx.clone())
+}
+
+#[inline]
+fn equipped_weapon_entity(world: &World, owner: EntityId) -> Option<EntityId> {
+    let binding = world.get::<EquippedWeaponBinding>(owner).copied()?;
+    let link = world.get::<EquippedWeaponEntity>(owner).copied()?;
+    (link.instance_id == binding.instance_id
+        && link.item == binding.item
+        && world.exists(link.entity))
+    .then_some(link.entity)
+}
+
+#[inline]
+fn signed_casing_noise(owner: EntityId, weapon_item_id: u64, shot_sequence: u64, channel: u64) -> f32 {
+    let seed = owner.stable_u64()
+        ^ weapon_item_id.rotate_left(17)
+        ^ shot_sequence.rotate_left(31)
+        ^ channel.wrapping_mul(0x9E37_79B9_7F4A_7C15);
+    let bits = (newengine_math::avalanche_u64(seed) >> 40) as u32 & 0x00ff_ffff;
+    (bits as f32 / 0x00ff_ffffu32 as f32) * 2.0 - 1.0
+}
+
+fn fallback_weapon_socket(position: Vec3, forward: Vec3) -> Option<WeaponSocketPose> {
+    let forward = forward.normalize_or_zero();
+    if !position.is_finite() || forward.length_squared() <= 1.0e-8 {
+        return None;
+    }
+    let rotation = Quat::from_rotation_arc(Vec3::Z, forward).normalize_or_identity();
+    WeaponSocketPose::stationary(position, rotation)
+}
 /// Publishes a semantic weapon-shot effect from the already-resolved physical muzzle.
 /// Damage/collision remain authoritative in the hitscan path; transient visual composition,
 /// budgets and lifetime are owned by `newengine-vfx-runtime`. Physical shell casings remain here
@@ -14,33 +53,33 @@ pub fn spawn_weapon_shot_fx(
     if !origin.is_finite() || direction.length_squared() <= 1.0e-8 {
         return;
     }
-    let max_distance = if range.is_finite() {
+    let max_distance = if range.is_finite() && range > 0.0 {
         range.clamp(0.1, 100_000.0)
     } else {
-        120.0
+        0.0
     };
-    let request = newengine_vfx_api::VfxSpawnRequestV1 {
-        effect: newengine_vfx_api::VfxEffectRef::new(
-            newengine_vfx_runtime::VFX_WEAPON_SHOT_DEFAULT,
-        ),
-        owner: Some(newengine_vfx_api::EntityHandle::new(owner.stable_u64())),
-        correlation_id: shot_sequence,
-        position: vec3_array(origin),
-        direction: vec3_array(direction),
-        max_distance,
-        seed: owner.stable_u64() ^ shot_sequence.rotate_left(23),
-        tags: vec!["weapon".to_owned(), "shot".to_owned()],
-        ..Default::default()
-    };
-    if let Err(error) = newengine_vfx_runtime::spawn_vfx(world, request) {
-        newengine_ulog_api::ulog::warn!(
-            "weapon VFX spawn rejected owner={} shot={} err='{}'",
-            owner.stable_u64(),
-            shot_sequence,
-            error
-        );
+    if let Some(effect) = equipped_weapon_vfx_definition(world, owner).and_then(|vfx| vfx.shot) {
+        let effect_owner = equipped_weapon_entity(world, owner).unwrap_or(owner);
+        let request = newengine_vfx_api::VfxSpawnRequestV1 {
+            effect: newengine_vfx_api::VfxEffectRef::new(effect),
+            owner: Some(newengine_vfx_api::EntityHandle::new(effect_owner.stable_u64())),
+            correlation_id: shot_sequence,
+            position: vec3_array(origin),
+            direction: vec3_array(direction),
+            max_distance,
+            seed: effect_owner.stable_u64() ^ shot_sequence.rotate_left(23),
+            tags: vec!["weapon".to_owned(), "shot".to_owned()],
+            ..Default::default()
+        };
+        if let Err(error) = newengine_vfx_runtime::spawn_vfx(world, request) {
+            newengine_ulog_api::ulog::warn!(
+                "project weapon shot VFX rejected owner={} shot={} err='{}'",
+                owner.stable_u64(),
+                shot_sequence,
+                error
+            );
+        }
     }
-
     // Physical casing behavior belongs to the equipped weapon definition. Weapons without an
     // authored casing contract simply do not schedule a casing entity.
     let casing_contract = world
@@ -71,6 +110,7 @@ pub fn spawn_weapon_shot_fx(
             pending,
             PendingWeaponShellEjection {
                 owner,
+                weapon_entity: equipped_weapon_entity(world, owner),
                 shot_sequence,
                 weapon_item_id,
                 shot_origin: origin,
@@ -83,6 +123,7 @@ pub fn spawn_weapon_shot_fx(
 fn spawn_persistent_shell_casing(
     world: &mut World,
     owner: EntityId,
+    weapon_entity: Option<EntityId>,
     shot_sequence: u64,
     weapon_item_id: u64,
     fallback_origin: Vec3,
@@ -97,36 +138,51 @@ fn spawn_persistent_shell_casing(
     if !casing_definition.enabled() {
         return None;
     }
-    let (origin, direction) = world
-        .get::<EquippedWeaponMuzzle>(owner)
-        .copied()
-        .map(|muzzle| (muzzle.position, muzzle.forward.normalize_or_zero()))
-        .filter(|(position, forward)| position.is_finite() && forward.length_squared() > 1.0e-8)
-        .unwrap_or((fallback_origin, fallback_direction.normalize_or_zero()));
-    if !origin.is_finite() || direction.length_squared() <= 1.0e-8 {
+    let authored_socket = weapon_entity
+        .filter(|entity| world.exists(*entity))
+        .and_then(|entity| world.get::<WeaponEntitySockets>(entity))
+        .and_then(|sockets| sockets.casing_ejection);
+    let muzzle_socket = weapon_entity
+        .filter(|entity| world.exists(*entity))
+        .and_then(|entity| world.get::<WeaponEntitySockets>(entity))
+        .and_then(|sockets| sockets.muzzle)
+        .or_else(|| {
+            world
+                .get::<EquippedWeaponMuzzle>(owner)
+                .copied()
+                .and_then(|muzzle| fallback_weapon_socket(muzzle.position, muzzle.forward))
+        });
+    let socket = if casing_definition.ejection_joint.is_some() {
+        authored_socket.or(muzzle_socket)
+    } else {
+        muzzle_socket
+    }
+    .or_else(|| fallback_weapon_socket(fallback_origin, fallback_direction))?;
+
+    let right = (socket.rotation * Vec3::X).normalize_or_zero();
+    let up = (socket.rotation * Vec3::Y).normalize_or_zero();
+    let forward = (socket.rotation * Vec3::Z).normalize_or_zero();
+    if right.length_squared() <= 1.0e-8
+        || up.length_squared() <= 1.0e-8
+        || forward.length_squared() <= 1.0e-8
+    {
         return None;
     }
-
-    let mut right = direction.cross(Vec3::Y).normalize_or_zero();
-    if right.length_squared() <= 1.0e-8 {
-        right = Vec3::X;
-    }
-    let up = right.cross(direction).normalize_or_zero();
-    let jitter = (((shot_sequence
-        .wrapping_mul(1_103_515_245)
-        .wrapping_add(12_345)
-        >> 8)
-        & 0xffff) as f32
-        / 65_535.0)
-        - 0.5;
-    let local_vector = |value: [f32; 3]| right * value[0] + up * value[1] + direction * value[2];
-    let casing_origin = origin + local_vector(casing_definition.origin_local);
+    let local_vector = |value: [f32; 3]| right * value[0] + up * value[1] + forward * value[2];
+    let casing_origin = socket.position + local_vector(casing_definition.origin_local);
     let velocity_local = [
-        casing_definition.velocity_local[0] + jitter * casing_definition.velocity_jitter[0],
-        casing_definition.velocity_local[1] + jitter * casing_definition.velocity_jitter[1],
-        casing_definition.velocity_local[2] + jitter * casing_definition.velocity_jitter[2],
+        casing_definition.velocity_local[0]
+            + signed_casing_noise(owner, weapon_item_id, shot_sequence, 0)
+                * casing_definition.velocity_jitter[0],
+        casing_definition.velocity_local[1]
+            + signed_casing_noise(owner, weapon_item_id, shot_sequence, 1)
+                * casing_definition.velocity_jitter[1],
+        casing_definition.velocity_local[2]
+            + signed_casing_noise(owner, weapon_item_id, shot_sequence, 2)
+                * casing_definition.velocity_jitter[2],
     ];
-    let casing_velocity = local_vector(velocity_local);
+    let casing_velocity = socket.linear_velocity * casing_definition.inherit_socket_linear_velocity
+        + local_vector(velocity_local);
     let casing_axis = local_vector(casing_definition.axis_local).normalize_or_zero();
     let casing_axis = if casing_axis.length_squared() > 1.0e-8 {
         casing_axis
@@ -173,27 +229,36 @@ fn spawn_persistent_shell_casing(
     let _ = world.insert(casing, Velocity(casing_velocity));
     let angular_local = [
         casing_definition.angular_velocity[0]
-            + jitter * casing_definition.angular_velocity_jitter[0],
+            + signed_casing_noise(owner, weapon_item_id, shot_sequence, 3)
+                * casing_definition.angular_velocity_jitter[0],
         casing_definition.angular_velocity[1]
-            + jitter * casing_definition.angular_velocity_jitter[1],
+            + signed_casing_noise(owner, weapon_item_id, shot_sequence, 4)
+                * casing_definition.angular_velocity_jitter[1],
         casing_definition.angular_velocity[2]
-            + jitter * casing_definition.angular_velocity_jitter[2],
+            + signed_casing_noise(owner, weapon_item_id, shot_sequence, 5)
+                * casing_definition.angular_velocity_jitter[2],
     ];
-    let _ = world.insert(casing, AngularVelocity(local_vector(angular_local)));
+    let casing_angular_velocity = socket.angular_velocity
+        * casing_definition.inherit_socket_angular_velocity
+        + local_vector(angular_local);
+    let _ = world.insert(casing, AngularVelocity(casing_angular_velocity));
     let _ = world.insert(
         casing,
         WeaponShellCasing::new(owner.stable_u64(), shot_sequence, weapon_item_id, variant),
     );
     play_equipped_weapon_audio(world, owner, WeaponAudioAction::ShellEject);
     newengine_ulog_api::ulog::info!(
-        "weapon casing ejected entity={} owner={} shot={} weapon_item={:016x} variant={} delay_ms={:.3} collider_half_extents={:?} physics='dynamic' persistence='world' visual='authored-definition'",
+        "weapon casing ejected entity={} owner={} weapon_entity={:?} shot={} weapon_item={:016x} variant={} delay_ms={:.3} collider_half_extents={:?} inherited_linear={:.3} inherited_angular={:.3} physics='dynamic' persistence='world' visual='authored-definition'",
         casing.stable_u64(),
         owner.stable_u64(),
+        weapon_entity.map(EntityId::stable_u64),
         shot_sequence,
         weapon_item_id,
         variant,
         casing_definition.ejection_delay_seconds * 1000.0,
         casing_definition.half_extents,
+        casing_definition.inherit_socket_linear_velocity,
+        casing_definition.inherit_socket_angular_velocity,
     );
     Some(casing)
 }
@@ -206,9 +271,10 @@ pub fn clamp_weapon_shot_fx_to_hit(
     shot_sequence: u64,
     point: Vec3,
 ) {
+    let effect_owner = equipped_weapon_entity(world, owner).unwrap_or(owner);
     newengine_vfx_runtime::clamp_vfx_tracers_to_hit(
         world,
-        owner.stable_u64(),
+        effect_owner.stable_u64(),
         shot_sequence,
         point,
     );
@@ -235,18 +301,21 @@ pub fn resolve_weapon_shot_hit_fx(
     };
     let surface = target
         .and_then(|entity| world.get::<PhysicsSurface>(entity))
-        .map(|surface| surface.id.clone())
-        .or_else(|| Some("surface.default".to_owned()));
+        .map(|surface| surface.id.clone());
+    let effect = equipped_weapon_vfx_definition(world, owner)
+        .and_then(|vfx| vfx.impact_effect(surface.as_deref()).map(str::to_owned));
+    let Some(effect) = effect else {
+        return;
+    };
+    let effect_owner = equipped_weapon_entity(world, owner).unwrap_or(owner);
     let request = newengine_vfx_api::VfxSpawnRequestV1 {
-        effect: newengine_vfx_api::VfxEffectRef::new(
-            newengine_vfx_runtime::VFX_WEAPON_IMPACT_DEFAULT,
-        ),
-        owner: Some(newengine_vfx_api::EntityHandle::new(owner.stable_u64())),
+        effect: newengine_vfx_api::VfxEffectRef::new(effect),
+        owner: Some(newengine_vfx_api::EntityHandle::new(effect_owner.stable_u64())),
         correlation_id: shot_sequence,
         position: vec3_array(point),
         direction: vec3_array(-normal),
         normal: vec3_array(normal),
-        seed: owner.stable_u64()
+        seed: effect_owner.stable_u64()
             ^ shot_sequence.rotate_left(23)
             ^ point.x.to_bits() as u64
             ^ (point.y.to_bits() as u64).rotate_left(11)
@@ -257,7 +326,7 @@ pub fn resolve_weapon_shot_hit_fx(
     };
     if let Err(error) = newengine_vfx_runtime::spawn_vfx(world, request) {
         newengine_ulog_api::ulog::warn!(
-            "weapon impact VFX rejected owner={} shot={} err='{}'",
+            "project weapon impact VFX rejected owner={} shot={} err='{}'",
             owner.stable_u64(),
             shot_sequence,
             error
@@ -283,6 +352,7 @@ pub fn step_weapon_shot_fx(world: &mut World, dt: f32) {
             let _ = spawn_persistent_shell_casing(
                 world,
                 pending.owner,
+                pending.weapon_entity,
                 pending.shot_sequence,
                 pending.weapon_item_id,
                 pending.shot_origin,

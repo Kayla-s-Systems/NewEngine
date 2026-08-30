@@ -2,6 +2,8 @@
 
 //! FPS content/policy bridge. Concrete items, loadouts, characters and mission text come from the active project policy.
 
+mod project_vfx;
+
 use std::sync::Arc;
 
 use newengine_engine_runtime::gameplay::{
@@ -127,6 +129,7 @@ impl GameplayContentProvider for FpsContentProvider {
 
     fn install(&self, world: &mut GameplayWorld) -> Result<(), String> {
         let (policy, package) = self.load_compiled_content()?;
+        project_vfx::install_project_vfx_dictionaries(world, &package.catalog)?;
         install_compiled_item_package(world, package);
         install_policy_resources(world, policy.as_ref());
         ensure_scripted_mission_state_machine(world, policy.as_ref())?;

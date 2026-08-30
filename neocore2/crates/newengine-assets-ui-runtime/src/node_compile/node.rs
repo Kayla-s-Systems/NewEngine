@@ -86,6 +86,23 @@ pub(crate) fn parse_ui_node_element(
                         node.value = Some(value.to_owned());
                     }
                 }
+                // Retained nodes must start from authored binding fallbacks before
+                // the first state-source patch arrives. Otherwise a node authored
+                // as `visible <- state.open, fallback=false` flashes visible on the
+                // first frame and only becomes correct after an unrelated redraw.
+                match binding.property.as_str() {
+                    "visible" => {
+                        if let Some(value) = binding.fallback.as_bool() {
+                            node.visible = value;
+                        }
+                    }
+                    "enabled" => {
+                        if let Some(value) = binding.fallback.as_bool() {
+                            node.enabled = value;
+                        }
+                    }
+                    _ => {}
+                }
                 node.bindings.push(binding);
             }
             "Event" => {

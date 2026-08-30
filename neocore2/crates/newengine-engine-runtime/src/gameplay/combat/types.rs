@@ -14,7 +14,11 @@ pub struct HitscanWeaponTuning {
     pub hip_spread_radians: f32,
     pub aim_spread_radians: f32,
     pub recoil_pitch_radians: f32,
+    pub recoil_pitch_random_radians: f32,
     pub recoil_yaw_radians: f32,
+    pub recoil_yaw_bias_radians: f32,
+    pub ads_recoil_multiplier: f32,
+    pub recoil_recovery_hz: f32,
     pub muzzle_forward_offset: f32,
 }
 
@@ -30,7 +34,11 @@ impl Default for HitscanWeaponTuning {
             hip_spread_radians: 1.5_f32.to_radians(),
             aim_spread_radians: 0.25_f32.to_radians(),
             recoil_pitch_radians: 0.8_f32.to_radians(),
+            recoil_pitch_random_radians: 0.15_f32.to_radians(),
             recoil_yaw_radians: 0.35_f32.to_radians(),
+            recoil_yaw_bias_radians: 0.0,
+            ads_recoil_multiplier: 0.78,
+            recoil_recovery_hz: 7.5,
             muzzle_forward_offset: 0.52,
         }
     }
@@ -52,7 +60,11 @@ impl HitscanWeaponTuning {
                 .aim_spread_radians
                 .clamp(0.0, core::f32::consts::FRAC_PI_2),
             recoil_pitch_radians: self.recoil_pitch_radians.clamp(0.0, 1.0),
+            recoil_pitch_random_radians: self.recoil_pitch_random_radians.clamp(0.0, 1.0),
             recoil_yaw_radians: self.recoil_yaw_radians.clamp(0.0, 1.0),
+            recoil_yaw_bias_radians: self.recoil_yaw_bias_radians.clamp(-1.0, 1.0),
+            ads_recoil_multiplier: self.ads_recoil_multiplier.clamp(0.0, 4.0),
+            recoil_recovery_hz: self.recoil_recovery_hz.clamp(0.05, 120.0),
             muzzle_forward_offset: self.muzzle_forward_offset.clamp(0.0, 10.0),
         }
     }

@@ -11,6 +11,7 @@ pub(super) fn draw_skinned_player_primitives_shadow(
     camera_position: Vec3,
     cascade_index: usize,
     cascade_texel_world_size: f32,
+    shadow_ubo_view: ShadowUboViewKey,
 ) -> newengine_core::EngineResult<()> {
     use crate::render_controller::gpu::{ensure_player_skin_gpu, ensure_skin_palette_gpu};
 
@@ -21,7 +22,6 @@ pub(super) fn draw_skinned_player_primitives_shadow(
     let mats = mats_lock.read();
     let shadow_max_distance = primitive_shadow_max_distance(runtime);
     let shadow_max_distance_sq = shadow_max_distance * shadow_max_distance;
-    let light_key = shadow_light_view_key(light_viewproj);
 
     for (entity, prim, global) in world.query2::<Primitive, GlobalTransform>() {
         let Some(skin) = world.get::<crate::gameplay::PlayerSkinBinding>(entity) else {
@@ -138,10 +138,9 @@ pub(super) fn draw_skinned_player_primitives_shadow(
         let mut ubo_key = 0x736b_696e_5f73_6864u64;
         ubo_key = hash_combine_u64(ubo_key, entity.stable_u64());
         ubo_key = hash_combine_u64(ubo_key, prim.id.0);
-        ubo_key = hash_combine_u64(ubo_key, light_key);
+        ubo_key = hash_combine_u64(ubo_key, shadow_ubo_view.cache_discriminator());
         ubo_key = hash_combine_u64(ubo_key, base_texture.get() as u64);
         ubo_key = hash_combine_u64(ubo_key, pipeline.get() as u64);
-        ubo_key = hash_combine_u64(ubo_key, this.frame.frame_index & 3);
         let per = this.ensure_per_draw_ubo_with_binding(
             r,
             lit,

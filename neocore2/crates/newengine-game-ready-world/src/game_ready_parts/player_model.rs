@@ -22,6 +22,7 @@ pub(crate) use binding::{
 
 #[derive(Clone, Debug)]
 pub(super) struct PlayerRuntimeModelPart {
+    source_mesh_name: String,
     primitive_id: PrimitiveId,
     material_id: MaterialId,
     material_slot: String,

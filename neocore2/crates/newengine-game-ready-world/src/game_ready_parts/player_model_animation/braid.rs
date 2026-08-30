@@ -3,9 +3,6 @@
 // every position/axis is canonicalized through the YDD skin_source_to_model matrix.
 include!("abby_braid_cloth_authored.rs");
 
-const ABBY_BRAID_NATIVE_JOINT_NAMES: [&str; 8] = [
-    "braid_offset", "braid_a", "braid_b", "braid_c", "braid_d", "braid_e", "braid_f", "braid_g",
-];
 const ABBY_BRAID_NATIVE_JOINT_COUNT: usize = 8;
 const ABBY_BRAID_DYNAMIC_START: usize = 1;
 const ABBY_BRAID_TELEPORT_RESET_DISTANCE: f32 = 0.85;
@@ -266,7 +263,6 @@ impl AbbyBraidColliderBindings {
     }
 }
 
-
 #[derive(Clone, Debug)]
 struct AbbyBraidRuntime {
     rig: AbbyBraidCollisionRig,
@@ -292,15 +288,23 @@ impl AbbyBraidRuntime {
         bind_joint_frames: &[Mat4],
     ) -> Result<Self, String> {
         let source_to_model = Mat4::from_cols_array(&source_to_model);
-        let attachment_bind = *bind_joint_frames.get(rig.attachment_joint).ok_or_else(||
-            format!("braid attachment bind joint outside frame table joint={} frames={}", rig.attachment_joint, bind_joint_frames.len()))?;
+        let attachment_bind = *bind_joint_frames.get(rig.attachment_joint).ok_or_else(|| {
+            format!(
+                "braid attachment bind joint outside frame table joint={} frames={}",
+                rig.attachment_joint,
+                bind_joint_frames.len()
+            )
+        })?;
         let attachment_bind_inverse = attachment_bind.inverse();
-        if attachment_bind_inverse.to_cols_array().iter().any(|v| !v.is_finite()) {
+        if attachment_bind_inverse
+            .to_cols_array()
+            .iter()
+            .any(|v| !v.is_finite())
+        {
             return Err("braid attachment bind frame is singular/non-finite".to_owned());
         }
-        let collider_bindings = AbbyBraidColliderBindings::from_bind_frames(
-            rig, bind_joint_frames, source_to_model,
-        )?;
+        let collider_bindings =
+            AbbyBraidColliderBindings::from_bind_frames(rig, bind_joint_frames, source_to_model)?;
         let cloth_bind = ABBY_BRAID_CLOTH_BIND_PARTICLES
             .map(|p| source_to_model.transform_point3(Vec3::new(p[0], p[1], p[2])));
         let cloth_attachment_local_points =
@@ -308,17 +312,26 @@ impl AbbyBraidRuntime {
         let mut bind_braid_points = [Vec3::ZERO; ABBY_BRAID_NATIVE_JOINT_COUNT];
         let mut bind_braid_frames = [Mat4::IDENTITY; ABBY_BRAID_NATIVE_JOINT_COUNT];
         for (lane, joint) in braid_joints.iter().copied().enumerate() {
-            let frame = *bind_joint_frames.get(joint).ok_or_else(||
-                format!("native braid joint outside bind frame table lane={lane} joint={joint}"))?;
+            let frame = *bind_joint_frames.get(joint).ok_or_else(|| {
+                format!("native braid joint outside bind frame table lane={lane} joint={joint}")
+            })?;
             bind_braid_frames[lane] = frame;
             bind_braid_points[lane] = frame.transform_point3(Vec3::ZERO);
         }
         Ok(Self {
-            rig, braid_joints, collider_bindings,
-            cloth_attachment_local_points, bind_braid_points, bind_braid_frames,
-            points: cloth_bind, previous_points: cloth_bind,
-            previous_root_velocity_local: Vec3::ZERO, last_root_position: None,
-            last_root_rotation: None, reset_pending: true, initialized: false,
+            rig,
+            braid_joints,
+            collider_bindings,
+            cloth_attachment_local_points,
+            bind_braid_points,
+            bind_braid_frames,
+            points: cloth_bind,
+            previous_points: cloth_bind,
+            previous_root_velocity_local: Vec3::ZERO,
+            last_root_position: None,
+            last_root_rotation: None,
+            reset_pending: true,
+            initialized: false,
         })
     }
 
@@ -331,25 +344,41 @@ impl AbbyBraidRuntime {
     }
 
     fn tick(
-        &mut self, dt: f32, root_velocity_local: Vec3, root_position: Vec3, root_rotation: Quat,
-        joint_frames: &[Mat4], palette: &mut [Mat4],
+        &mut self,
+        dt: f32,
+        root_velocity_local: Vec3,
+        root_position: Vec3,
+        root_rotation: Quat,
+        joint_frames: &[Mat4],
+        palette: &mut [Mat4],
     ) -> Result<(), String> {
-        let attachment = *joint_frames.get(self.rig.attachment_joint).ok_or_else(||
-            "native braid attachment frame missing".to_owned())?;
-        let cloth_guide = self.cloth_attachment_local_points
+        let attachment = *joint_frames
+            .get(self.rig.attachment_joint)
+            .ok_or_else(|| "native braid attachment frame missing".to_owned())?;
+        let cloth_guide = self
+            .cloth_attachment_local_points
             .map(|point| attachment.transform_point3(point));
         let mut native_guide = [Vec3::ZERO; ABBY_BRAID_NATIVE_JOINT_COUNT];
         for (lane, joint) in self.braid_joints.iter().copied().enumerate() {
-            native_guide[lane] = joint_frames.get(joint).copied()
-                .ok_or_else(|| format!("native braid animated frame missing lane={lane} joint={joint}"))?
+            native_guide[lane] = joint_frames
+                .get(joint)
+                .copied()
+                .ok_or_else(|| {
+                    format!("native braid animated frame missing lane={lane} joint={joint}")
+                })?
                 .transform_point3(Vec3::ZERO);
         }
         let colliders = self.collider_bindings.from_joint_frames(joint_frames)?;
         let root_rotation = root_rotation.normalize_or_identity();
-        if self.last_root_position.is_some_and(|p| (root_position - p).length() > ABBY_BRAID_TELEPORT_RESET_DISTANCE) {
+        if self
+            .last_root_position
+            .is_some_and(|p| (root_position - p).length() > ABBY_BRAID_TELEPORT_RESET_DISTANCE)
+        {
             self.reset_pending = true;
         }
-        if self.last_root_rotation.is_some_and(|q| q.normalize_or_identity().dot(root_rotation).abs() < ABBY_BRAID_TELEPORT_RESET_QUAT_DOT) {
+        if self.last_root_rotation.is_some_and(|q| {
+            q.normalize_or_identity().dot(root_rotation).abs() < ABBY_BRAID_TELEPORT_RESET_QUAT_DOT
+        }) {
             self.reset_pending = true;
         }
         self.last_root_position = Some(root_position);
@@ -365,12 +394,20 @@ impl AbbyBraidRuntime {
             let mut root_acceleration_local =
                 (root_velocity_local - self.previous_root_velocity_local) / frame_dt.max(1.0e-5);
             let acceleration_len = root_acceleration_local.length();
-            if acceleration_len > 22.0 { root_acceleration_local *= 22.0 / acceleration_len; }
+            if acceleration_len > 22.0 {
+                root_acceleration_local *= 22.0 / acceleration_len;
+            }
             self.previous_root_velocity_local = root_velocity_local;
-            let gravity = Vec3::new(0.0, 9.81 * ABBY_BRAID_CLOTH_RAW_PARAMS[7] * step_dt * step_dt, 0.0);
-            let inertial_base = -root_acceleration_local * (ABBY_BRAID_CLOTH_RAW_PARAMS[4] * step_dt * step_dt);
+            let gravity = Vec3::new(
+                0.0,
+                9.81 * ABBY_BRAID_CLOTH_RAW_PARAMS[7] * step_dt * step_dt,
+                0.0,
+            );
+            let inertial_base =
+                -root_acceleration_local * (ABBY_BRAID_CLOTH_RAW_PARAMS[4] * step_dt * step_dt);
             let velocity_retention = (1.0 - ABBY_BRAID_CLOTH_RAW_PARAMS[14]).clamp(0.0, 1.0);
-            let collision_margin = ABBY_BRAID_CLOTH_RAW_PARAMS[6].max(0.0) + ABBY_BRAID_BACK_CLEARANCE;
+            let collision_margin =
+                ABBY_BRAID_CLOTH_RAW_PARAMS[6].max(0.0) + ABBY_BRAID_BACK_CLEARANCE;
             for _ in 0..SUBSTEPS {
                 for index in 0..ABBY_BRAID_CLOTH_PARTICLE_COUNT {
                     let mobility = ABBY_BRAID_CLOTH_SCALAR0[index].max(0.0);
@@ -382,42 +419,75 @@ impl AbbyBraidRuntime {
                     let current = self.points[index];
                     let velocity = (current - self.previous_points[index]) * velocity_retention;
                     self.previous_points[index] = current;
-                    let inertia_weight = (ABBY_BRAID_CLOTH_SCALAR2[index] / ABBY_BRAID_CLOTH_RAW_PARAMS[4].max(1.0e-6)).clamp(0.0, 1.0);
-                    self.points[index] = current + velocity + gravity + inertial_base * inertia_weight;
+                    let inertia_weight = (ABBY_BRAID_CLOTH_SCALAR2[index]
+                        / ABBY_BRAID_CLOTH_RAW_PARAMS[4].max(1.0e-6))
+                    .clamp(0.0, 1.0);
+                    self.points[index] =
+                        current + velocity + gravity + inertial_base * inertia_weight;
                 }
                 for _ in 0..ITERATIONS {
                     pin_authored_cloth_particles(&mut self.points, &cloth_guide);
-                    for &(a,b,rest,stiffness,_damping) in &ABBY_BRAID_CLOTH_EDGES {
-                        solve_authored_cloth_edge(&mut self.points,a,b,rest,stiffness);
+                    for &(a, b, rest, stiffness, _damping) in &ABBY_BRAID_CLOTH_EDGES {
+                        solve_authored_cloth_edge(&mut self.points, a, b, rest, stiffness);
                     }
-                    for &(indices,weights,geometry_scale,rest_scalar) in &ABBY_BRAID_CLOTH_BENDS {
-                        solve_authored_cloth_bend(&mut self.points,&cloth_guide,indices,weights,geometry_scale,rest_scalar);
+                    for &(indices, weights, geometry_scale, rest_scalar) in &ABBY_BRAID_CLOTH_BENDS
+                    {
+                        solve_authored_cloth_bend(
+                            &mut self.points,
+                            &cloth_guide,
+                            indices,
+                            weights,
+                            geometry_scale,
+                            rest_scalar,
+                        );
                     }
                     for index in 0..ABBY_BRAID_CLOTH_PARTICLE_COUNT {
-                        if ABBY_BRAID_CLOTH_SCALAR0[index] <= 1.0e-8 { continue; }
-                        let follow = (ABBY_BRAID_CLOTH_SCALAR1[index] * ABBY_BRAID_CLOTH_RAW_PARAMS[2]).clamp(0.0,1.0);
+                        if ABBY_BRAID_CLOTH_SCALAR0[index] <= 1.0e-8 {
+                            continue;
+                        }
+                        let follow = (ABBY_BRAID_CLOTH_SCALAR1[index]
+                            * ABBY_BRAID_CLOTH_RAW_PARAMS[2])
+                            .clamp(0.0, 1.0);
                         self.points[index] = self.points[index].lerp(cloth_guide[index], follow);
                         // Lower/middle/upper torso capsules are one-sided for the braid: the
                         // strand may leave the back, but never tunnel through to the chest side.
                         let back_normal = colliders.boxes[0].axes[2];
-                        for (capsule_index, capsule) in colliders.capsules.iter().copied().enumerate() {
+                        for (capsule_index, capsule) in
+                            colliders.capsules.iter().copied().enumerate()
+                        {
                             if capsule_index <= 2 {
-                                project_behind_capsule(&mut self.points[index], capsule, back_normal, collision_margin);
+                                project_behind_capsule(
+                                    &mut self.points[index],
+                                    capsule,
+                                    back_normal,
+                                    collision_margin,
+                                );
                             } else {
-                                project_out_of_capsule(&mut self.points[index], capsule.a, capsule.b, capsule.radius + collision_margin);
+                                project_out_of_capsule(
+                                    &mut self.points[index],
+                                    capsule.a,
+                                    capsule.b,
+                                    capsule.radius + collision_margin,
+                                );
                             }
                         }
                         let mut torso = colliders.boxes[0];
                         torso.half_extents += Vec3::splat(collision_margin);
                         project_behind_oriented_box(&mut self.points[index], torso);
                     }
-                    for &(a,b,rest,stiffness,_damping) in &ABBY_BRAID_CLOTH_EDGES {
-                        solve_authored_cloth_edge(&mut self.points,a,b,rest,stiffness);
+                    for &(a, b, rest, stiffness, _damping) in &ABBY_BRAID_CLOTH_EDGES {
+                        solve_authored_cloth_edge(&mut self.points, a, b, rest, stiffness);
                     }
                     pin_authored_cloth_particles(&mut self.points, &cloth_guide);
                 }
-                for &(a,b,_rest,_stiffness,damping) in &ABBY_BRAID_CLOTH_EDGES {
-                    damp_authored_cloth_edge_velocity(&self.points,&mut self.previous_points,a,b,damping);
+                for &(a, b, _rest, _stiffness, damping) in &ABBY_BRAID_CLOTH_EDGES {
+                    damp_authored_cloth_edge_velocity(
+                        &self.points,
+                        &mut self.previous_points,
+                        a,
+                        b,
+                        damping,
+                    );
                 }
                 pin_authored_cloth_particles(&mut self.points, &cloth_guide);
             }
@@ -435,13 +505,23 @@ impl AbbyBraidRuntime {
             let joint = self.braid_joints[lane];
             let guide_direction = if lane + 1 < ABBY_BRAID_NATIVE_JOINT_COUNT {
                 native_guide[lane + 1] - native_guide[lane]
-            } else { native_guide[lane] - native_guide[lane - 1] }.normalize_or_zero();
+            } else {
+                native_guide[lane] - native_guide[lane - 1]
+            }
+            .normalize_or_zero();
             let current_direction = if lane + 1 < ABBY_BRAID_NATIVE_JOINT_COUNT {
                 desired[lane + 1] - desired[lane]
-            } else { desired[lane] - desired[lane - 1] }.normalize_or_zero();
-            let bend = if guide_direction.length_squared() > 1.0e-8 && current_direction.length_squared() > 1.0e-8 {
+            } else {
+                desired[lane] - desired[lane - 1]
+            }
+            .normalize_or_zero();
+            let bend = if guide_direction.length_squared() > 1.0e-8
+                && current_direction.length_squared() > 1.0e-8
+            {
                 Quat::from_rotation_arc(guide_direction, current_direction)
-            } else { Quat::IDENTITY };
+            } else {
+                Quat::IDENTITY
+            };
             let base_frame = joint_frames[joint];
             let desired_frame = Mat4::from_translation(desired[lane])
                 * Mat4::from_quat(bend)
@@ -450,7 +530,9 @@ impl AbbyBraidRuntime {
             let bind_inverse = self.bind_braid_frames[lane].inverse();
             let deformation = desired_frame * bind_inverse;
             if deformation.to_cols_array().iter().any(|v| !v.is_finite()) {
-                return Err(format!("native braid deformation became non-finite lane={lane} joint={joint}"));
+                return Err(format!(
+                    "native braid deformation became non-finite lane={lane} joint={joint}"
+                ));
             }
             palette[joint] = deformation;
         }
@@ -463,70 +545,133 @@ fn resolve_native_braid_joint(skeleton: &ModelSkeletonMetadata, name: &str) -> O
 }
 
 fn prepare_native_braid_secondary_motion(
-    parts: &[PlayerRuntimeModelPart], skeleton: &ModelSkeletonMetadata, source_to_model: [f32;16],
+    parts: &[PlayerRuntimeModelPart],
+    skeleton: &ModelSkeletonMetadata,
+    authored: Option<&newengine_engine_runtime::gameplay::PlayerBraidSecondaryMotionRig>,
+    source_to_model: [f32; 16],
     bind_joint_frames: &[Mat4],
 ) -> Result<Option<AbbyBraidRuntime>, String> {
-    let Some(offset) = resolve_native_braid_joint(skeleton, "braid_offset") else { return Ok(None); };
-    let mut braid_joints = [0usize; ABBY_BRAID_NATIVE_JOINT_COUNT];
-    braid_joints[0] = offset;
-    for (lane,name) in ABBY_BRAID_NATIVE_JOINT_NAMES.iter().copied().enumerate().skip(1) {
-        braid_joints[lane] = resolve_native_braid_joint(skeleton,name)
-            .ok_or_else(|| format!("native braid chain is partial: missing '{name}'"))?;
+    let Some(authored) = authored else {
+        return Ok(None);
+    };
+    if authored.chain_joints.len() != ABBY_BRAID_NATIVE_JOINT_COUNT {
+        return Err(format!(
+            "native braid authored chain requires {} joints, got {}",
+            ABBY_BRAID_NATIVE_JOINT_COUNT,
+            authored.chain_joints.len()
+        ));
     }
-    let has_braid_skin = parts.iter().filter_map(|part| part.skin.as_ref()).any(|skin|
-        skin.vertices.iter().any(|vertex|
-            vertex.joints.iter().chain(vertex.joints_extra.iter())
-                .zip(vertex.weights.iter().chain(vertex.weights_extra.iter()))
-                .any(|(&joint,&weight)| weight > 1.0e-5 && braid_joints.contains(&(joint as usize)))
-        )
-    );
-    if !has_braid_skin { return Ok(None); }
-    let required = |name: &str| resolve_native_braid_joint(skeleton,name)
-        .ok_or_else(|| format!("native braid body collision driver '{name}' is missing"));
+
+    let mut braid_joints = [0usize; ABBY_BRAID_NATIVE_JOINT_COUNT];
+    for (lane, name) in authored.chain_joints.iter().enumerate() {
+        braid_joints[lane] = resolve_native_braid_joint(skeleton, name).ok_or_else(|| {
+            format!("native braid authored chain is partial: missing joint '{name}'")
+        })?;
+    }
+
+    let has_braid_skin = parts
+        .iter()
+        .filter_map(|part| part.skin.as_ref())
+        .any(|skin| {
+            skin.vertices.iter().any(|vertex| {
+                vertex
+                    .joints
+                    .iter()
+                    .chain(vertex.joints_extra.iter())
+                    .zip(vertex.weights.iter().chain(vertex.weights_extra.iter()))
+                    .any(|(&joint, &weight)| {
+                        weight > 1.0e-5 && braid_joints.contains(&(joint as usize))
+                    })
+            })
+        });
+    if !has_braid_skin {
+        return Ok(None);
+    }
+
+    let required = |name: &str| {
+        resolve_native_braid_joint(skeleton, name)
+            .ok_or_else(|| format!("native braid authored collision driver '{name}' is missing"))
+    };
     let rig = AbbyBraidCollisionRig {
         attachment_joint: braid_joints[0],
-        head_joint: required("headb")?,
-        head_base_joint: required("heada")?,
-        upper_back_joint: required("spined")?,
-        middle_back_joint: required("spinec")?,
-        lower_back_joint: required("spineb")?,
-        left_shoulder_joint: required("l_shoulder")?,
-        right_shoulder_joint: required("r_shoulder")?,
+        head_joint: required(&authored.head_joint)?,
+        head_base_joint: required(&authored.head_base_joint)?,
+        upper_back_joint: required(&authored.upper_back_joint)?,
+        middle_back_joint: required(&authored.middle_back_joint)?,
+        lower_back_joint: required(&authored.lower_back_joint)?,
+        left_shoulder_joint: required(&authored.left_shoulder_joint)?,
+        right_shoulder_joint: required(&authored.right_shoulder_joint)?,
     };
     let runtime = AbbyBraidRuntime::new(rig, braid_joints, source_to_model, bind_joint_frames)?;
     newengine_ulog_api::ulog::info!(
-        "game-ready: native braid secondary motion ready joints=8 particles=32 collision='8 authored capsules + authored torso OBB + one-sided back guard' space='source -> skin_source_to_model -> animated model'"
+        "game-ready: native braid secondary motion ready joints={} particles=32 collision='authored rig drivers + authored source-space colliders' space='source -> skin_source_to_model -> animated model'",
+        ABBY_BRAID_NATIVE_JOINT_COUNT
     );
     Ok(Some(runtime))
 }
 
 fn project_out_of_capsule(point: &mut Vec3, a: Vec3, b: Vec3, radius: f32) {
-    let axis = b-a; let len2=axis.length_squared(); if len2<=1.0e-8 { return; }
-    let t=((*point-a).dot(axis)/len2).clamp(0.0,1.0); let closest=a+axis*t;
-    let delta=*point-closest; let distance=delta.length();
-    if distance<radius {
-        let normal=if distance>1.0e-6 {delta/distance} else {Vec3::Z};
-        *point=closest+normal*radius;
+    let axis = b - a;
+    let len2 = axis.length_squared();
+    if len2 <= 1.0e-8 {
+        return;
+    }
+    let t = ((*point - a).dot(axis) / len2).clamp(0.0, 1.0);
+    let closest = a + axis * t;
+    let delta = *point - closest;
+    let distance = delta.length();
+    if distance < radius {
+        let normal = if distance > 1.0e-6 {
+            delta / distance
+        } else {
+            Vec3::Z
+        };
+        *point = closest + normal * radius;
     }
 }
 
-fn project_behind_capsule(point: &mut Vec3, capsule: AbbyBraidCapsule, back_normal: Vec3, margin: f32) {
-    let axis=capsule.b-capsule.a; let len2=axis.length_squared(); if len2<=1.0e-8 {return;}
-    let t=((*point-capsule.a).dot(axis)/len2).clamp(0.0,1.0); let closest=capsule.a+axis*t;
-    let back=back_normal.normalize_or_zero(); if back.length_squared()<=1.0e-8 {return;}
-    let delta=*point-closest; let signed=delta.dot(back);
-    let tangent=(delta-back*signed).length(); let radius=capsule.radius+margin;
-    if tangent < radius*1.10 && signed < radius { *point += back*(radius-signed); }
+fn project_behind_capsule(
+    point: &mut Vec3,
+    capsule: AbbyBraidCapsule,
+    back_normal: Vec3,
+    margin: f32,
+) {
+    let axis = capsule.b - capsule.a;
+    let len2 = axis.length_squared();
+    if len2 <= 1.0e-8 {
+        return;
+    }
+    let t = ((*point - capsule.a).dot(axis) / len2).clamp(0.0, 1.0);
+    let closest = capsule.a + axis * t;
+    let back = back_normal.normalize_or_zero();
+    if back.length_squared() <= 1.0e-8 {
+        return;
+    }
+    let delta = *point - closest;
+    let signed = delta.dot(back);
+    let tangent = (delta - back * signed).length();
+    let radius = capsule.radius + margin;
+    if tangent < radius * 1.10 && signed < radius {
+        *point += back * (radius - signed);
+    }
 }
 
 fn project_behind_oriented_box(point: &mut Vec3, oriented_box: AbbyBraidOrientedBox) {
-    let delta=*point-oriented_box.center;
-    let local=Vec3::new(delta.dot(oriented_box.axes[0]),delta.dot(oriented_box.axes[1]),delta.dot(oriented_box.axes[2]));
-    let e=oriented_box.half_extents;
-    if local.x.abs()>e.x || local.y.abs()>e.y {return;}
+    let delta = *point - oriented_box.center;
+    let local = Vec3::new(
+        delta.dot(oriented_box.axes[0]),
+        delta.dot(oriented_box.axes[1]),
+        delta.dot(oriented_box.axes[2]),
+    );
+    let e = oriented_box.half_extents;
+    if local.x.abs() > e.x || local.y.abs() > e.y {
+        return;
+    }
     // axes[2] is the authored back direction. Keep braid on/back of this face and catch
     // a complete one-frame tunnel through the torso up to 20 cm beyond the front face.
-    if local.z < e.z && local.z > -(e.z+0.20) { *point += oriented_box.axes[2]*(e.z-local.z); }
+    if local.z < e.z && local.z > -(e.z + 0.20) {
+        *point += oriented_box.axes[2] * (e.z - local.z);
+    }
 }
 
 fn pin_authored_cloth_particles(
@@ -697,8 +842,6 @@ fn sample_polyline_normalized(points: &[Vec3], t: f32) -> Vec3 {
     *points.last().unwrap_or(&points[0])
 }
 
-
-
 #[cfg(test)]
 mod braid_tests {
     use super::*;
@@ -714,22 +857,32 @@ mod braid_tests {
 
     #[test]
     fn source_to_model_rotation_places_authored_braid_on_canonical_back() {
-        let m=Mat4::from_cols_array(&[-1.0,0.0,0.0,0.0, 0.0,1.0,0.0,0.0, 0.0,0.0,-1.0,0.0, 0.0,0.0,0.0,1.0]);
-        let p=m.transform_point3(Vec3::new(0.02,1.4,-0.11));
-        assert!(p.z>0.10);
+        let m = Mat4::from_cols_array(&[
+            -1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
+        ]);
+        let p = m.transform_point3(Vec3::new(0.02, 1.4, -0.11));
+        assert!(p.z > 0.10);
     }
     #[test]
     fn one_sided_capsule_guard_cannot_exit_through_chest_side() {
-        let capsule=AbbyBraidCapsule{a:Vec3::new(-0.1,0.0,0.0),b:Vec3::new(0.1,0.0,0.0),radius:0.12};
-        let mut point=Vec3::new(0.0,0.0,-0.15);
-        project_behind_capsule(&mut point,capsule,Vec3::Z,0.01);
-        assert!(point.z>=0.129);
+        let capsule = AbbyBraidCapsule {
+            a: Vec3::new(-0.1, 0.0, 0.0),
+            b: Vec3::new(0.1, 0.0, 0.0),
+            radius: 0.12,
+        };
+        let mut point = Vec3::new(0.0, 0.0, -0.15);
+        project_behind_capsule(&mut point, capsule, Vec3::Z, 0.01);
+        assert!(point.z >= 0.129);
     }
     #[test]
     fn torso_back_guard_catches_complete_tunnel() {
-        let box_shape=AbbyBraidOrientedBox{center:Vec3::ZERO,axes:[Vec3::X,Vec3::Y,Vec3::Z],half_extents:Vec3::new(0.2,0.3,0.1)};
-        let mut point=Vec3::new(0.0,0.0,-0.18);
-        project_behind_oriented_box(&mut point,box_shape);
-        assert!((point.z-0.1).abs()<1.0e-6);
+        let box_shape = AbbyBraidOrientedBox {
+            center: Vec3::ZERO,
+            axes: [Vec3::X, Vec3::Y, Vec3::Z],
+            half_extents: Vec3::new(0.2, 0.3, 0.1),
+        };
+        let mut point = Vec3::new(0.0, 0.0, -0.18);
+        project_behind_oriented_box(&mut point, box_shape);
+        assert!((point.z - 0.1).abs() < 1.0e-6);
     }
 }

@@ -31,6 +31,34 @@ pub enum GameplayCameraRunnerKind {
 }
 
 #[derive(Clone, Copy, Debug)]
+struct GameplayFirstPersonCameraState {
+    target: EntityId,
+    parallax_offset_ws: Vec3,
+    locomotion_phase: f32,
+    aim_alpha: f32,
+    recoil_pitch_radians: f32,
+    recoil_yaw_radians: f32,
+    last_shot_sequence: u64,
+    initialized: bool,
+}
+
+impl Default for GameplayFirstPersonCameraState {
+    #[inline]
+    fn default() -> Self {
+        Self {
+            target: EntityId::default(),
+            parallax_offset_ws: Vec3::ZERO,
+            locomotion_phase: 0.0,
+            aim_alpha: 0.0,
+            recoil_pitch_radians: 0.0,
+            recoil_yaw_radians: 0.0,
+            last_shot_sequence: 0,
+            initialized: false,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
 struct GameplayThirdPersonCameraState {
     runner: GameplayCameraRunnerKind,
     target: EntityId,
@@ -198,14 +226,54 @@ impl Default for GameplayCameraRunnerKind {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct FirstPersonPresentationInput {
+    /// Fixed-step grounded state. Bobbing is suppressed while airborne.
+    pub grounded: bool,
+    /// Horizontal player speed in metres per second.
+    pub horizontal_speed: f32,
+    /// Semantic aim intent. Camera runtime smooths this independently from weapon placement.
+    pub aiming: bool,
+    /// Monotonic weapon shot sequence; a changed value injects exactly one visual recoil impulse.
+    pub shot_sequence: u64,
+    pub recoil_pitch_radians: f32,
+    pub recoil_pitch_random_radians: f32,
+    pub recoil_yaw_radians: f32,
+    pub recoil_yaw_bias_radians: f32,
+    pub ads_recoil_multiplier: f32,
+    pub recoil_recovery_hz: f32,
+}
+
+impl Default for FirstPersonPresentationInput {
+    fn default() -> Self {
+        Self {
+            grounded: false,
+            horizontal_speed: 0.0,
+            aiming: false,
+            shot_sequence: 0,
+            recoil_pitch_radians: 0.0,
+            recoil_pitch_random_radians: 0.0,
+            recoil_yaw_radians: 0.0,
+            recoil_yaw_bias_radians: 0.0,
+            ads_recoil_multiplier: 0.78,
+            recoil_recovery_hz: 7.5,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct CameraRuntimeServiceConfig {
     pub runner: GameplayCameraRunnerKind,
     pub first_person_eye_height: f32,
-    /// Optional animated eye-center anchor supplied by the active avatar provider.
+    /// Optional stable render-cadence eye anchor supplied by the active avatar provider.
     pub first_person_anchor_ws: Option<Vec3>,
-    /// Forward clearance from the eye center. This keeps the near plane in front of face geometry.
+    /// Optional render-cadence body rotation. FPP position follows this body frame while look yaw/pitch
+    /// remain input-owned; this prevents mouse look from orbiting the camera around the skull.
+    pub first_person_body_rotation_ws: Option<Quat>,
+    /// Small body-forward clearance from the eye center. This is positional parallax, not a viewmodel offset.
     pub first_person_forward_clearance: f32,
+    /// Semantic render-cadence FPP presentation input. It never changes physical eye/ballistic aim.
+    pub first_person_presentation: FirstPersonPresentationInput,
     /// Visual character center relative to the PlayerActor root.
     /// ThirdPersonOrbit uses this exact point as both orbit pivot and look-at target.
     pub third_person_orbit_pivot_offset_ls: Vec3,
@@ -222,7 +290,9 @@ impl Default for CameraRuntimeServiceConfig {
             runner: GameplayCameraRunnerKind::FirstPerson,
             first_person_eye_height: 1.6,
             first_person_anchor_ws: None,
-            first_person_forward_clearance: 0.055,
+            first_person_body_rotation_ws: None,
+            first_person_forward_clearance: 0.045,
+            first_person_presentation: FirstPersonPresentationInput::default(),
             third_person_orbit_pivot_offset_ls: Vec3::ZERO,
             third_person_render_position_ws: None,
             third_person_render_rotation_ws: None,

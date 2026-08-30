@@ -122,6 +122,7 @@ pub enum RenderGraphPassKind {
     DeferredLighting,
     ForwardOpaque,
     ParticleSimulation,
+    HairSimulation,
     Transparent,
     Water,
     PostFx,

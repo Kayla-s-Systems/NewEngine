@@ -13,6 +13,8 @@ use super::{
 
 const RG_VFX_PARTICLE_STATE: RenderGraphResourceId = RenderGraphResourceId(17_500);
 const VFX_PARTICLE_STATE_BYTES: u64 = 262_144 * 96;
+pub(super) const RG_HAIR_STRAND_STATE: RenderGraphResourceId = RenderGraphResourceId(17_600);
+const HAIR_STRAND_STATE_BYTES: u64 = 40_632_320;
 
 impl FrameGraphBuilder {
     #[inline]
@@ -63,17 +65,63 @@ impl FrameGraphBuilder {
     }
 
     #[inline]
+    pub fn hair_simulation(mut self) -> Self {
+        if !self.has_resource(RG_HAIR_STRAND_STATE) {
+            self.graph.resources.push(RenderGraphResourceDesc {
+                id: RG_HAIR_STRAND_STATE,
+                label: Some("hair_strand_state".to_owned()),
+                semantic: RenderGraphResourceSemantic::Custom,
+                usage: RenderGraphResourceUsage::StorageBuffer,
+                lifetime: RenderGraphResourceLifetime::Persistent,
+                extent: None,
+                format: None,
+                sample_count: 1,
+                byte_size: Some(HAIR_STRAND_STATE_BYTES),
+                external: None,
+            });
+        }
+        self.add_phase_pass(StandardRenderPhase::HairSimulation, |pass| {
+            let mut pass = pass
+                .with_domain(RenderGraphPassDomain::Render3d)
+                .with_culling(false)
+                .writes(
+                    RG_HAIR_STRAND_STATE,
+                    RenderGraphResourceUsage::StorageBuffer,
+                );
+            pass.queue = newengine_render_api::RenderGraphQueueKind::Compute;
+            pass
+        });
+        self
+    }
+
+    #[inline]
     pub fn transparent(mut self) -> Self {
         let viewport_color = self.viewport_color_resource();
+        let has_hair = self.has_resource(RG_HAIR_STRAND_STATE);
+        let has_shadow = self.has_resource(RG_SHADOW_MAP);
         self.add_phase_pass(StandardRenderPhase::Transparent, |pass| {
-            pass.with_domain(RenderGraphPassDomain::Render3d)
+            let pass = pass
+                .with_domain(RenderGraphPassDomain::Render3d)
                 .reads(RG_VIEWPORT_DEPTH, RenderGraphResourceUsage::DepthAttachment)
                 .reads(
                     RG_VFX_PARTICLE_STATE,
                     RenderGraphResourceUsage::StorageBuffer,
                 )
                 .writes(viewport_color, RenderGraphResourceUsage::ColorAttachment)
-                .draw_list(DrawListKind::Transparent)
+                .draw_list(DrawListKind::Transparent);
+            let pass = if has_hair {
+                pass.reads(
+                    RG_HAIR_STRAND_STATE,
+                    RenderGraphResourceUsage::StorageBuffer,
+                )
+            } else {
+                pass
+            };
+            if has_shadow {
+                pass.reads(RG_SHADOW_MAP, RenderGraphResourceUsage::SampledTexture)
+            } else {
+                pass
+            }
         });
         self
     }

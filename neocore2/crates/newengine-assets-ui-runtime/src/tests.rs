@@ -337,6 +337,44 @@ fn compiles_aurelia_asset_preview_stand_with_font_texture_and_binding_refs() {
 }
 
 #[test]
+fn visible_binding_fallback_initializes_retained_node_before_first_patch() {
+    let xml = r#"
+<NeUiDictionary document_kind="surface">
+  <Surface name="game.hud" kind="game_hud" root="layout.main" />
+  <Layout name="layout.main" surface="game.hud" title="">
+    <Panel id="character.window">
+      <Bind property="visible" source="character.open" fallback="false" />
+      <Text id="character.title" text="Player Setup" />
+    </Panel>
+  </Layout>
+</NeUiDictionary>
+"#;
+    let surface = parse_surface(xml).expect("surface declaration");
+    let root = compile_surface_root(
+        xml,
+        &surface,
+        "ui/shared/runtime/hud.neui@surface",
+        None,
+        &NeUiDialect::builtin(),
+    )
+    .expect("compile HUD");
+    assert!(
+        root.text.is_empty(),
+        "surface root must not leak its id as visible text"
+    );
+    let window = find_node(&root, "character.window").expect("character window");
+    assert!(
+        !window.visible,
+        "visible fallback=false must apply before the first state patch"
+    );
+    assert_eq!(
+        window.children.len(),
+        1,
+        "hidden initial state must retain the full subtree"
+    );
+}
+
+#[test]
 fn compiled_absolute_image_preserves_authored_position_and_extent() {
     let xml = r#"
 <NeUiDictionary document_kind="surface">

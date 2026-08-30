@@ -5,6 +5,15 @@ pub struct ItemId(pub u64);
 
 pub const SHARED_UNARMED_WEAPON_ITEM_NAME: &str = "weapon.unarmed";
 
+#[inline]
+fn finite_or(value: f32, fallback: f32) -> f32 {
+    if value.is_finite() {
+        value
+    } else {
+        fallback
+    }
+}
+
 impl ItemId {
     pub fn from_name(name: &str) -> Option<Self> {
         let normalized = normalize_item_name(name)?;
@@ -376,6 +385,10 @@ pub enum WeaponAudioAction {
     Unequip,
     Empty,
     ShellEject,
+    ShellContactSmall,
+    ShellContactMedium,
+    ShellContactHard,
+    ShellContactSoft,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -414,6 +427,10 @@ pub struct WeaponAudioDefinition {
     pub unequip: Option<String>,
     pub empty: Option<String>,
     pub shell_eject: Option<String>,
+    pub shell_contact_small: Option<String>,
+    pub shell_contact_medium: Option<String>,
+    pub shell_contact_hard: Option<String>,
+    pub shell_contact_soft: Option<String>,
 }
 
 impl WeaponAudioDefinition {
@@ -430,6 +447,10 @@ impl WeaponAudioDefinition {
         self.unequip = clean(self.unequip);
         self.empty = clean(self.empty);
         self.shell_eject = clean(self.shell_eject);
+        self.shell_contact_small = clean(self.shell_contact_small);
+        self.shell_contact_medium = clean(self.shell_contact_medium);
+        self.shell_contact_hard = clean(self.shell_contact_hard);
+        self.shell_contact_soft = clean(self.shell_contact_soft);
         self
     }
 
@@ -443,6 +464,10 @@ impl WeaponAudioDefinition {
             WeaponAudioAction::Unequip => self.unequip.as_deref(),
             WeaponAudioAction::Empty => self.empty.as_deref(),
             WeaponAudioAction::ShellEject => self.shell_eject.as_deref(),
+            WeaponAudioAction::ShellContactSmall => self.shell_contact_small.as_deref(),
+            WeaponAudioAction::ShellContactMedium => self.shell_contact_medium.as_deref(),
+            WeaponAudioAction::ShellContactHard => self.shell_contact_hard.as_deref(),
+            WeaponAudioAction::ShellContactSoft => self.shell_contact_soft.as_deref(),
         }
     }
 }
@@ -477,6 +502,19 @@ pub struct WeaponPresentationDefinition {
     pub ads_front_sight_from_handle: [f32; 3],
     pub ads_camera_to_rear_sight: [f32; 3],
     pub first_person_hip_convergence_m: f32,
+    /// Response speed for authored ADS/ready interpolation.
+    pub aim_response_hz: f32,
+    /// Maximum bounded secondary angular lag in hip/ready presentation.
+    pub secondary_hip_max_angle_radians: f32,
+    /// Maximum bounded secondary angular lag while aiming.
+    pub secondary_ads_max_angle_radians: f32,
+    /// Angular target-motion inertia gain.
+    pub secondary_angular_inertia_gain: f32,
+    /// Player acceleration -> weapon inertia gain.
+    pub secondary_movement_inertia_gain: f32,
+    pub secondary_natural_hz_hip: f32,
+    pub secondary_natural_hz_ads: f32,
+    pub secondary_obstruction_hz_boost: f32,
 }
 
 impl Default for WeaponPresentationDefinition {
@@ -505,6 +543,14 @@ impl Default for WeaponPresentationDefinition {
             ads_front_sight_from_handle: [0.0, 0.0, 0.4],
             ads_camera_to_rear_sight: [0.0, 0.0, -0.075],
             first_person_hip_convergence_m: 12.0,
+            aim_response_hz: 18.0,
+            secondary_hip_max_angle_radians: 5.0_f32.to_radians(),
+            secondary_ads_max_angle_radians: 2.25_f32.to_radians(),
+            secondary_angular_inertia_gain: 0.38,
+            secondary_movement_inertia_gain: 1.0,
+            secondary_natural_hz_hip: 5.4,
+            secondary_natural_hz_ads: 9.0,
+            secondary_obstruction_hz_boost: 6.0,
         }
     }
 }
@@ -618,7 +664,92 @@ impl WeaponPresentationDefinition {
         } else {
             fallback.first_person_hip_convergence_m
         };
+        self.aim_response_hz =
+            finite_or(self.aim_response_hz, fallback.aim_response_hz).clamp(0.1, 120.0);
+        self.secondary_hip_max_angle_radians = finite_or(
+            self.secondary_hip_max_angle_radians,
+            fallback.secondary_hip_max_angle_radians,
+        )
+        .clamp(0.0, std::f32::consts::FRAC_PI_2);
+        self.secondary_ads_max_angle_radians = finite_or(
+            self.secondary_ads_max_angle_radians,
+            fallback.secondary_ads_max_angle_radians,
+        )
+        .clamp(0.0, std::f32::consts::FRAC_PI_2);
+        self.secondary_angular_inertia_gain = finite_or(
+            self.secondary_angular_inertia_gain,
+            fallback.secondary_angular_inertia_gain,
+        )
+        .clamp(0.0, 4.0);
+        self.secondary_movement_inertia_gain = finite_or(
+            self.secondary_movement_inertia_gain,
+            fallback.secondary_movement_inertia_gain,
+        )
+        .clamp(0.0, 4.0);
+        self.secondary_natural_hz_hip = finite_or(
+            self.secondary_natural_hz_hip,
+            fallback.secondary_natural_hz_hip,
+        )
+        .clamp(0.1, 120.0);
+        self.secondary_natural_hz_ads = finite_or(
+            self.secondary_natural_hz_ads,
+            fallback.secondary_natural_hz_ads,
+        )
+        .clamp(0.1, 120.0);
+        self.secondary_obstruction_hz_boost = finite_or(
+            self.secondary_obstruction_hz_boost,
+            fallback.secondary_obstruction_hz_boost,
+        )
+        .clamp(0.0, 120.0);
         self
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct WeaponVfxDefinition {
+    pub shot: Option<String>,
+    pub impact_default: Option<String>,
+    pub impact_by_surface: BTreeMap<String, String>,
+}
+
+impl WeaponVfxDefinition {
+    pub fn sanitized(mut self) -> Self {
+        fn clean(value: Option<String>) -> Option<String> {
+            value
+                .map(|value| value.trim().replace('\\', "/"))
+                .filter(|value| !value.is_empty())
+        }
+        self.shot = clean(self.shot);
+        self.impact_default = clean(self.impact_default);
+        self.impact_by_surface = self
+            .impact_by_surface
+            .into_iter()
+            .filter_map(|(surface, effect)| {
+                let surface = surface.trim().to_ascii_lowercase();
+                let effect = effect.trim().replace('\\', "/");
+                (!surface.is_empty() && !effect.is_empty()).then_some((surface, effect))
+            })
+            .collect();
+        self
+    }
+
+    #[inline]
+    pub fn impact_effect(&self, surface: Option<&str>) -> Option<&str> {
+        surface
+            .and_then(|surface| {
+                self.impact_by_surface
+                    .get(&surface.trim().to_ascii_lowercase())
+            })
+            .map(String::as_str)
+            .or(self.impact_default.as_deref())
+    }
+
+    pub fn effect_refs(&self) -> impl Iterator<Item = &str> {
+        self.shot
+            .iter()
+            .map(String::as_str)
+            .chain(self.impact_default.iter().map(String::as_str))
+            .chain(self.impact_by_surface.values().map(String::as_str))
     }
 }
 
@@ -632,7 +763,13 @@ pub struct WeaponCasingDefinition {
     pub half_extents: [f32; 3],
     /// Delay from the shot event to physical casing spawn.
     pub ejection_delay_seconds: f32,
-    /// Local basis coefficients `[right, up, forward]` relative to the muzzle pose.
+    /// Optional joint/socket on the weapon skeleton. If authored, casing emission follows the
+    /// animated weapon entity rather than reconstructing a pose from the player or camera.
+    pub ejection_joint: Option<String>,
+    /// Fraction of measured socket linear/angular velocity inherited by the ejected casing.
+    pub inherit_socket_linear_velocity: f32,
+    pub inherit_socket_angular_velocity: f32,
+    /// Local basis coefficients `[right, up, forward]` relative to the ejection socket pose.
     pub origin_local: [f32; 3],
     pub velocity_local: [f32; 3],
     /// Signed scalar jitter is multiplied component-wise by this vector.
@@ -644,6 +781,11 @@ pub struct WeaponCasingDefinition {
     pub friction: f32,
     pub restitution: f32,
     pub density: f32,
+    pub contact_min_impulse: f32,
+    pub contact_medium_impulse: f32,
+    pub contact_hard_impulse: f32,
+    /// Case-insensitive surface-id substrings that select the soft-contact cue.
+    pub soft_surface_contains: Vec<String>,
 }
 
 impl Default for WeaponCasingDefinition {
@@ -655,6 +797,9 @@ impl Default for WeaponCasingDefinition {
             material_ref: None,
             half_extents: [0.01, 0.01, 0.01],
             ejection_delay_seconds: 0.0,
+            ejection_joint: None,
+            inherit_socket_linear_velocity: 1.0,
+            inherit_socket_angular_velocity: 0.35,
             origin_local: [0.0; 3],
             velocity_local: [0.0; 3],
             velocity_jitter: [0.0; 3],
@@ -664,6 +809,10 @@ impl Default for WeaponCasingDefinition {
             friction: 0.4,
             restitution: 0.1,
             density: 1.0,
+            contact_min_impulse: 0.0,
+            contact_medium_impulse: 0.0,
+            contact_hard_impulse: 0.0,
+            soft_surface_contains: Vec::new(),
         }
     }
 }
@@ -687,6 +836,7 @@ impl WeaponCasingDefinition {
         }
         self.model_dictionary = clean(self.model_dictionary);
         self.material_ref = clean(self.material_ref);
+        self.ejection_joint = clean(self.ejection_joint);
         self.variants = self
             .variants
             .into_iter()
@@ -701,6 +851,10 @@ impl WeaponCasingDefinition {
         } else {
             0.0
         };
+        self.inherit_socket_linear_velocity =
+            finite_or(self.inherit_socket_linear_velocity, 1.0).clamp(0.0, 4.0);
+        self.inherit_socket_angular_velocity =
+            finite_or(self.inherit_socket_angular_velocity, 0.35).clamp(0.0, 4.0);
         self.origin_local = finite_vec3(self.origin_local, [0.0; 3], 10.0);
         self.velocity_local = finite_vec3(self.velocity_local, [0.0; 3], 100.0);
         self.velocity_jitter = finite_vec3(self.velocity_jitter, [0.0; 3], 100.0);
@@ -727,10 +881,27 @@ impl WeaponCasingDefinition {
             0.1
         };
         self.density = if self.density.is_finite() {
-            self.density.clamp(0.01, 1000.0)
+            // Permit physically meaningful authored material densities (e.g. brass/steel) while
+            // keeping pathological values bounded for backend stability.
+            self.density.clamp(0.01, 25_000.0)
         } else {
             1.0
         };
+        self.contact_min_impulse = finite_or(self.contact_min_impulse, 0.0).max(0.0);
+        self.contact_medium_impulse =
+            finite_or(self.contact_medium_impulse, self.contact_min_impulse)
+                .max(self.contact_min_impulse);
+        self.contact_hard_impulse =
+            finite_or(self.contact_hard_impulse, self.contact_medium_impulse)
+                .max(self.contact_medium_impulse);
+        self.soft_surface_contains = self
+            .soft_surface_contains
+            .into_iter()
+            .map(|value| value.trim().to_ascii_lowercase())
+            .filter(|value| !value.is_empty())
+            .collect();
+        self.soft_surface_contains.sort();
+        self.soft_surface_contains.dedup();
         self
     }
 
@@ -765,6 +936,7 @@ pub struct ItemDefinition {
     pub weapon_presentation: WeaponPresentationDefinition,
     pub weapon_animation: WeaponAnimationDefinition,
     pub weapon_audio: WeaponAudioDefinition,
+    pub weapon_vfx: WeaponVfxDefinition,
     pub weapon_casing: WeaponCasingDefinition,
     pub use_effect: ItemUseEffect,
     pub world: WorldItemDefinition,
@@ -797,6 +969,7 @@ impl ItemDefinition {
             weapon_presentation: WeaponPresentationDefinition::default(),
             weapon_animation: WeaponAnimationDefinition::default(),
             weapon_audio: WeaponAudioDefinition::default(),
+            weapon_vfx: WeaponVfxDefinition::default(),
             weapon_casing: WeaponCasingDefinition::default(),
             use_effect: ItemUseEffect::None,
             world: WorldItemDefinition::for_kind(kind),
@@ -872,6 +1045,12 @@ impl ItemDefinition {
     #[inline]
     pub fn with_weapon_audio(mut self, audio: WeaponAudioDefinition) -> Self {
         self.weapon_audio = audio.sanitized();
+        self
+    }
+
+    #[inline]
+    pub fn with_weapon_vfx(mut self, vfx: WeaponVfxDefinition) -> Self {
+        self.weapon_vfx = vfx.sanitized();
         self
     }
 

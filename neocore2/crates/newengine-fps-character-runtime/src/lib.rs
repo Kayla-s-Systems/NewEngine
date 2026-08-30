@@ -13,7 +13,10 @@ pub use character_physics::{
     collect_character_queries, ensure_footstep_audio_preloaded, resolve_character_query_hits,
     step_character_locomotion, sync_physics_world_settings,
 };
-pub use noclip::{fps_noclip_enabled, set_fps_noclip, step_fps_noclip_motion, toggle_fps_noclip};
+pub use noclip::{
+    fps_noclip_enabled, set_fps_noclip, step_fps_noclip_motion, toggle_fps_noclip,
+    toggle_fps_noclip_once_for_source_frame,
+};
 
 pub use presentation_policy::{
     reconcile_existing_player_assignments_with_policy, PlayableCharacterSelection,

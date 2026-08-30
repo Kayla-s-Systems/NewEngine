@@ -1,10 +1,10 @@
-/// Current gameplay view direction converted into avatar/model-local space. Full-body first
-/// person and explicit third-person aim use this for both rendered rifle and arm IK, so the weapon
-/// and visible hands cannot diverge from the gameplay view axis.
-pub(crate) fn player_rifle_view_forward_model(
+/// Current gameplay view rotation converted into avatar/model-local space. Full-body FPP uses
+/// this complete frame rather than only a forward vector so authored camera-space weapon offsets
+/// preserve lateral/up placement while yaw/pitch remain gameplay-owned.
+pub(crate) fn player_rifle_view_rotation_model(
     world: &newengine_ecs::World,
     player: EntityId,
-) -> Option<Vec3> {
+) -> Option<Quat> {
     let visual_root = world
         .get::<newengine_engine_runtime::gameplay::PlayerModelBinding>(player)?
         .visual_root
@@ -21,7 +21,7 @@ pub(crate) fn player_rifle_view_forward_model(
         .map(|controller| controller.rot_offset)
         .unwrap_or(Quat::IDENTITY)
         .normalize_or_identity();
-    let view_rotation = world
+    let view_rotation_ws = world
         .get::<newengine_sim::CharacterMotor>(player)
         .map(|motor| {
             (Quat::from_euler(EulerRot::YXZ, motor.yaw, motor.pitch, 0.0) * camera_rot_offset)
@@ -32,10 +32,22 @@ pub(crate) fn player_rifle_view_forward_model(
                 .and_then(|camera| world.get::<newengine_sim::CameraRigComp>(camera))
                 .map(|rig| rig.0.rotation.normalize_or_identity())
         })?;
-    let forward_ws = (view_rotation * -Vec3::Z).normalize_or_zero();
-    let forward_model = visual_rotation.normalize_or_identity().inverse() * forward_ws;
-    (forward_model.is_finite() && forward_model.length_squared() > 1.0e-8)
-        .then_some(forward_model.normalize())
+    let view_rotation_model = (visual_rotation.normalize_or_identity().inverse()
+        * view_rotation_ws)
+        .normalize_or_identity();
+    view_rotation_model
+        .is_finite()
+        .then_some(view_rotation_model)
+}
+
+/// Current gameplay view direction converted into avatar/model-local space.
+pub(crate) fn player_rifle_view_forward_model(
+    world: &newengine_ecs::World,
+    player: EntityId,
+) -> Option<Vec3> {
+    let view_rotation = player_rifle_view_rotation_model(world, player)?;
+    let forward_model = (view_rotation * -Vec3::Z).normalize_or_zero();
+    (forward_model.is_finite() && forward_model.length_squared() > 1.0e-8).then_some(forward_model)
 }
 
 fn player_prop_frame(
@@ -164,72 +176,79 @@ pub(crate) fn player_right_hand_prop_frame(
     }
 }
 
+#[inline]
+fn calibrated_first_person_eye_height(
+    body: newengine_engine_runtime::gameplay::CharacterBody,
+    stance_eye_height: f32,
+    model_feet_to_eye_height: Option<f32>,
+) -> f32 {
+    let body = body.sanitized();
+    let stance_eye_height = if stance_eye_height.is_finite() {
+        stance_eye_height.clamp(0.05, 12.0)
+    } else {
+        body.standing_eye_height
+    };
+    let Some(feet_to_eye) =
+        model_feet_to_eye_height.filter(|height| height.is_finite() && *height > 0.05)
+    else {
+        return stance_eye_height;
+    };
+
+    // PlayerActor is the capsule center. Convert the model's feet->eye measurement into the same
+    // root-relative space, then blend that calibration out as the authored crouch eye height takes
+    // over. This keeps one generic camera contract across differently-proportioned skeletons.
+    let capsule_foot_offset = body.standing_half_height + body.radius;
+    let model_standing_eye = (feet_to_eye - capsule_foot_offset).clamp(0.05, 12.0);
+    let stance_span = body.standing_eye_height - body.crouched_eye_height;
+    let standing_weight = if stance_span.abs() > 1.0e-5 {
+        ((stance_eye_height - body.crouched_eye_height) / stance_span).clamp(0.0, 1.0)
+    } else {
+        1.0
+    };
+    let correction = (model_standing_eye - body.standing_eye_height).clamp(-0.12, 0.12);
+    stance_eye_height + correction * standing_weight
+}
+
 pub(crate) fn publish_player_first_person_camera_anchors(world: &mut newengine_ecs::World) {
-    const EYE_FORWARD_CLEARANCE_M: f32 = 0.055;
+    // FPP camera position is gameplay-owned, not a child of animated eye/head joints. Locomotion
+    // may move the visible skull substantially; sampling that motion directly makes the camera
+    // cross the face/torso shell during walk cycles. Use the render-interpolated actor position and
+    // stance eye height. Camera runtime adds only a small body-owned forward/parallax offset.
+    const FACE_FORWARD_CLEARANCE_M: f32 = 0.045;
     let players = world
         .query::<PlayerAnimationRuntimeBinding>()
         .map(|(player, _)| player)
         .collect::<Vec<_>>();
 
     for player in players {
-        let eye_center_model = {
-            let Some(binding) = world.get::<PlayerAnimationRuntimeBinding>(player) else {
-                continue;
-            };
-            if let Some(eyes) = binding.eye_contract.as_ref() {
-                let frame_at = |index: usize| {
-                    binding
-                        .joint_frames_scratch
-                        .get(index)
-                        .copied()
-                        .or_else(|| binding.bind_joint_frames.get(index).copied())
-                };
-                match (frame_at(eyes.left), frame_at(eyes.right)) {
-                    (Some(left), Some(right)) => {
-                        let left = left.transform_point3(Vec3::ZERO);
-                        let right = right.transform_point3(Vec3::ZERO);
-                        ((left + right) * 0.5)
-                            .is_finite()
-                            .then_some((left + right) * 0.5)
-                    }
-                    _ => None,
-                }
-            } else {
-                let anchor = binding.skeleton.anchors.eye.as_str();
-                let frame = binding
-                    .skeleton
-                    .joints
-                    .iter()
-                    .position(|joint| joint.name == anchor)
-                    .and_then(|index| {
-                        binding
-                            .joint_frames_scratch
-                            .get(index)
-                            .copied()
-                            .or_else(|| binding.bind_joint_frames.get(index).copied())
-                    });
-                frame
-                    .map(|frame| frame.transform_point3(Vec3::ZERO))
-                    .filter(|position| position.is_finite())
-            }
-        };
-        let Some(eye_center_model) = eye_center_model else {
+        let actor_position = world
+            .get::<newengine_engine_runtime::gameplay::PlayerRenderPose>(player)
+            .copied()
+            .filter(|pose| pose.position.is_finite())
+            .map(|pose| pose.position)
+            .or_else(|| {
+                newengine_transform::read_entity_world_pose_local_chain(world, player)
+                    .map(|pose| pose.0)
+            });
+        let Some(actor_position) = actor_position else {
             continue;
         };
-        let Some(visual_root) = world
+        let body = world
+            .get::<newengine_engine_runtime::gameplay::CharacterBody>(player)
+            .copied()
+            .unwrap_or_default()
+            .sanitized();
+        let stance_eye_height = world
+            .get::<newengine_engine_runtime::gameplay::PlayerStanceState>(player)
+            .map(|state| state.current_eye_height)
+            .filter(|height| height.is_finite() && *height > 0.01)
+            .unwrap_or(body.standing_eye_height);
+        let model_feet_to_eye_height = world
             .get::<newengine_engine_runtime::gameplay::PlayerModelBinding>(player)
-            .and_then(|binding| binding.visual_root)
-            .filter(|entity| world.exists(*entity))
-        else {
-            continue;
-        };
-        let Some((visual_position, visual_rotation)) =
-            newengine_transform::read_entity_world_pose_local_chain(world, visual_root)
-        else {
-            continue;
-        };
-        let eye_center_ws =
-            visual_position + visual_rotation.normalize_or_identity() * eye_center_model;
+            .map(|binding| binding.feet_to_eye_height);
+        let eye_height =
+            calibrated_first_person_eye_height(body, stance_eye_height, model_feet_to_eye_height);
+        let eye_center_ws = actor_position + Vec3::Y * eye_height;
         if !eye_center_ws.is_finite() {
             continue;
         }
@@ -237,7 +256,7 @@ pub(crate) fn publish_player_first_person_camera_anchors(world: &mut newengine_e
             player,
             newengine_engine_runtime::gameplay::PlayerFirstPersonCameraAnchor {
                 eye_center_ws,
-                forward_clearance: EYE_FORWARD_CLEARANCE_M,
+                forward_clearance: FACE_FORWARD_CLEARANCE_M,
             },
         );
     }

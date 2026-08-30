@@ -3,6 +3,24 @@
 //! Each namespace is intentionally data-only so downstream code can retain the
 //! historical `newengine_asset_format_nef8::<format>::...` API through re-export.
 
+pub mod fxd {
+    pub const EXTENSION: &str = "fxd";
+    pub const ASSET_KIND: &str = "effect_dictionary";
+    pub const CONTENT_KIND: u32 = newengine_assets_api::LIST_FILE_CONTENT_KIND_FXD;
+    pub const CONTENT_SCHEMA_VERSION: u16 = 1;
+    pub const PURPOSE: &str = "Project-authored visual effect dictionary";
+    pub const SEMANTIC_GATEWAY: &str = "engine.render.vfx";
+    pub const HANDLER_SERVICE: &str = "asset.codec.listfile.fxd";
+    pub const SELECTOR_SYNTAX: &str = "file.fxd@effect";
+    pub const CONSUMER_DOMAINS: &[&str] = &[
+        "engine.render.vfx",
+        "engine.gameplay",
+        "engine.render",
+        "engine.assets.graph",
+        "engine.editor",
+    ];
+}
+
 pub mod nemat {
     pub const EXTENSION: &str = "nemat";
     pub const ASSET_KIND: &str = "material_library";

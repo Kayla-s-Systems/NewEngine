@@ -143,6 +143,7 @@ impl RuntimeRenderController {
             .max(super::render_quality::SHADOW_RESOLUTION_MIN);
         self.runtime_profile
             .apply_hardware_tier_once(capabilities.hardware_tier);
+        self.gpu.hair.apply_backend_capabilities(capabilities);
         self.backend_execution = capabilities.execution;
     }
 

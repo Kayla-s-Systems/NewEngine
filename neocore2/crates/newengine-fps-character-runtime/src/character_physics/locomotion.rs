@@ -2,11 +2,12 @@ use std::collections::BTreeMap;
 
 use newengine_ecs::{EntityId, World};
 use newengine_engine_runtime::gameplay::{
-    emit_player_event, PhysicsSurface, PlayerController, PlayerEventKind, PlayerGroundState,
-    PlayerLocomotionState, PlayerMovementSpeeds, StaticMeshCollider,
+    emit_player_event, PhysicsSurface, PlayerController, PlayerEventKind, PlayerFallState,
+    PlayerGroundState, PlayerLocomotionState, PlayerMovementSpeeds, StaticMeshCollider,
 };
 use newengine_math::Vec2;
 use newengine_sim::{CharacterMotor, Velocity};
+use newengine_transform::Transform;
 
 use super::footsteps::{
     classify_player_footstep_mode, classify_surface, contact_modulation, contact_plan,
@@ -55,6 +56,11 @@ fn update_player_locomotion(world: &mut World, key_to_entity: &BTreeMap<u64, Ent
             .copied()
             .unwrap_or_default();
         let velocity = world.get::<Velocity>(player).copied().unwrap_or_default().0;
+        let current_height = world
+            .get::<Transform>(player)
+            .map(|transform| transform.position.y)
+            .filter(|height| height.is_finite())
+            .unwrap_or(0.0);
         let horizontal_velocity = Vec2::new(velocity.x, velocity.z);
         let horizontal_speed = horizontal_velocity.length();
         let travel_direction = horizontal_velocity.normalize_or_zero();
@@ -78,6 +84,15 @@ fn update_player_locomotion(world: &mut World, key_to_entity: &BTreeMap<u64, Ent
             .get::<PlayerLocomotionState>(player)
             .copied()
             .unwrap_or_default();
+        let mut fall = world
+            .get::<PlayerFallState>(player)
+            .copied()
+            .unwrap_or(PlayerFallState {
+                start_height: current_height,
+                peak_height: current_height,
+                current_height,
+                ..PlayerFallState::default()
+            });
         let mut footsteps = world
             .get::<FootstepRuntimeState>(player)
             .cloned()
@@ -477,12 +492,80 @@ fn update_player_locomotion(world: &mut World, key_to_entity: &BTreeMap<u64, Ent
                 footsteps.was_moving = false;
             }
 
+            if fall.airborne {
+                if fall.falling {
+                    emitted.push((
+                        PlayerEventKind::FallEnded,
+                        format!(
+                            "fall ended distance_m={:.3} peak_height={:.3} landing_height={:.3} max_downward_speed={:.3}",
+                            fall.max_distance,
+                            fall.peak_height,
+                            current_height,
+                            locomotion.max_downward_speed.max(fall.downward_speed),
+                        ),
+                    ));
+                }
+                fall = PlayerFallState {
+                    start_height: current_height,
+                    peak_height: current_height,
+                    current_height,
+                    revision: fall.revision.saturating_add(1).max(1),
+                    ..PlayerFallState::default()
+                };
+            } else {
+                fall.start_height = current_height;
+                fall.peak_height = current_height;
+                fall.current_height = current_height;
+                fall.distance = 0.0;
+                fall.max_distance = 0.0;
+                fall.downward_speed = 0.0;
+            }
             locomotion.airborne_time = 0.0;
             locomotion.max_downward_speed = 0.0;
             locomotion.jump_started = false;
         } else {
             if locomotion.was_grounded {
                 emitted.push((PlayerEventKind::GroundStateChanged, "airborne".to_owned()));
+            }
+            if !fall.airborne {
+                fall.airborne = true;
+                fall.falling = false;
+                fall.start_height = current_height;
+                fall.peak_height = current_height;
+                fall.current_height = current_height;
+                fall.distance = 0.0;
+                fall.max_distance = 0.0;
+                fall.downward_speed = 0.0;
+                fall.revision = fall.revision.saturating_add(1).max(1);
+            } else {
+                fall.current_height = current_height;
+                fall.peak_height = fall.peak_height.max(current_height);
+                fall.distance = (fall.peak_height - current_height).max(0.0);
+                fall.max_distance = fall.max_distance.max(fall.distance);
+                fall.downward_speed = if velocity.y.is_finite() {
+                    (-velocity.y).max(0.0)
+                } else {
+                    0.0
+                };
+                fall.revision = fall.revision.saturating_add(1).max(1);
+                if !fall.falling
+                    && velocity.y.is_finite()
+                    && velocity.y < 0.0
+                    && fall.distance > 1.0e-4
+                {
+                    fall.falling = true;
+                    emitted.push((
+                        PlayerEventKind::FallStarted,
+                        format!(
+                            "fall started start_height={:.3} peak_height={:.3} current_height={:.3} distance_m={:.3} downward_speed={:.3} state_component='PlayerFallState'",
+                            fall.start_height,
+                            fall.peak_height,
+                            fall.current_height,
+                            fall.distance,
+                            fall.downward_speed,
+                        ),
+                    ));
+                }
             }
             locomotion.step_distance = 0.0;
             locomotion.airborne_time += dt;
@@ -506,6 +589,7 @@ fn update_player_locomotion(world: &mut World, key_to_entity: &BTreeMap<u64, Ent
 
         locomotion.was_grounded = ground.grounded;
         let _ = world.insert(player, locomotion);
+        let _ = world.insert(player, fall);
         let _ = world.insert(player, footsteps);
 
         for action in &audio_actions {
@@ -521,8 +605,8 @@ fn update_player_locomotion(world: &mut World, key_to_entity: &BTreeMap<u64, Ent
 mod tests {
     use super::*;
     use newengine_engine_runtime::gameplay::{
-        spawn_default_player, PlayerEventBus, PlayerMovementSpeeds, PlayerStanceKind,
-        PlayerStanceState,
+        spawn_default_player, PlayerEventBus, PlayerFallState, PlayerMovementSpeeds,
+        PlayerStanceKind, PlayerStanceState,
     };
     use newengine_math::Vec3;
 
@@ -544,6 +628,72 @@ mod tests {
             },
         );
         player
+    }
+
+    #[test]
+    fn falling_publishes_height_aware_lifecycle_for_animation_subscribers() {
+        let mut world = World::new();
+        let player = grounded_player(&mut world, Vec3::ZERO);
+        if let Some(transform) = world.get_mut::<Transform>(player) {
+            transform.position.y = 10.0;
+        }
+        update_player_locomotion(&mut world, &BTreeMap::new(), 1.0 / 60.0);
+
+        if let Some(ground) = world.get_mut::<PlayerGroundState>(player) {
+            ground.grounded = false;
+            ground.walkable = false;
+        }
+        if let Some(velocity) = world.get_mut::<Velocity>(player) {
+            velocity.0.y = 3.0;
+        }
+        update_player_locomotion(&mut world, &BTreeMap::new(), 1.0 / 60.0);
+        if let Some(transform) = world.get_mut::<Transform>(player) {
+            transform.position.y = 12.0;
+        }
+        update_player_locomotion(&mut world, &BTreeMap::new(), 1.0 / 60.0);
+
+        if let Some(transform) = world.get_mut::<Transform>(player) {
+            transform.position.y = 8.5;
+        }
+        if let Some(velocity) = world.get_mut::<Velocity>(player) {
+            velocity.0.y = -6.0;
+        }
+        update_player_locomotion(&mut world, &BTreeMap::new(), 1.0 / 60.0);
+
+        let fall = world
+            .get::<PlayerFallState>(player)
+            .copied()
+            .expect("fall state");
+        assert!(fall.airborne && fall.falling);
+        assert!((fall.peak_height - 12.0).abs() < 1.0e-4);
+        assert!((fall.distance - 3.5).abs() < 1.0e-4);
+        assert!(fall.downward_speed >= 6.0);
+        let bus = world
+            .resource::<PlayerEventBus>()
+            .expect("player event bus");
+        assert!(bus.events.iter().any(|event| {
+            event.entity == player
+                && event.kind == PlayerEventKind::FallStarted
+                && event.message.contains("distance_m=3.500")
+                && event.message.contains("state_component='PlayerFallState'")
+        }));
+
+        if let Some(ground) = world.get_mut::<PlayerGroundState>(player) {
+            ground.grounded = true;
+            ground.walkable = true;
+        }
+        if let Some(transform) = world.get_mut::<Transform>(player) {
+            transform.position.y = 8.0;
+        }
+        update_player_locomotion(&mut world, &BTreeMap::new(), 1.0 / 60.0);
+        let bus = world
+            .resource::<PlayerEventBus>()
+            .expect("player event bus");
+        assert!(bus.events.iter().any(|event| {
+            event.entity == player
+                && event.kind == PlayerEventKind::FallEnded
+                && event.message.contains("distance_m=3.500")
+        }));
     }
 
     #[test]

@@ -78,6 +78,52 @@ impl RuntimeRenderController {
         evicted
     }
 
+    /// Reclaims procedural-terrain GPU meshes whose ECS owners have left the active
+    /// streaming window. CPU terrain mesh memory is entity-owned; this closes the matching
+    /// GPU high-water path while keeping buffer destruction frame-completion safe.
+    fn drain_stale_terrain_gpu(&mut self, scene: &Scene) -> usize {
+        let active = scene
+            .world()
+            .query::<ProceduralTerrain>()
+            .map(|(_, terrain)| terrain.mesh_key())
+            .collect::<BTreeSet<_>>();
+        let stale = self
+            .gpu
+            .meshes
+            .terrain_cache
+            .keys()
+            .copied()
+            .filter(|mesh_key| !active.contains(mesh_key))
+            .collect::<Vec<_>>();
+        let mut evicted = 0usize;
+        for mesh_key in stale {
+            let Some(gpu) = self.gpu.meshes.terrain_cache.remove(&mesh_key) else {
+                continue;
+            };
+            self.gpu
+                .lifetimes
+                .resources
+                .retire_buffer_after_frame(gpu.vb, self.frame.frame_index);
+            self.gpu
+                .lifetimes
+                .resources
+                .retire_buffer_after_frame(gpu.ib, self.frame.frame_index);
+            evicted = evicted.saturating_add(1);
+        }
+        if evicted > 0 {
+            self.invalidate_shadow_cache();
+            self.invalidate_local_shadow_cache();
+            newengine_ulog_api::ulog::debug!(
+                "render residency: terrain gpu evictions frame={} evicted={} active={} cache_remaining={} policy='owner-mark-sweep; frame-completion deferred retirement'",
+                self.frame.frame_index,
+                evicted,
+                active.len(),
+                self.gpu.meshes.terrain_cache.len(),
+            );
+        }
+        evicted
+    }
+
     /// Warms the immutable scene pipeline while the loading projection is active.
     ///
     /// Mesh residency is intentionally excluded from this method. Terrain,
@@ -116,6 +162,7 @@ impl RuntimeRenderController {
         thread_pool: Option<&ThreadPoolHandle>,
     ) -> EngineResult<u32> {
         let _primitive_evicted = self.drain_primitive_gpu_evictions(scene);
+        let _terrain_evicted = self.drain_stale_terrain_gpu(scene);
         let model_uploaded = self.pump_model_residency(r, scene, thread_pool)?;
 
         let interval = terrain_gpu_upload_interval_frames();

@@ -24,6 +24,7 @@ pub struct StandardRuntimePipelineDesc {
     pub shadow_cascade_count: u32,
     pub deferred: bool,
     pub hdr_scene_enabled: bool,
+    pub hair_enabled: bool,
     pub postfx_enabled: bool,
     pub ui_enabled: bool,
     /// Ordered renderer-owned UI domains. Empty keeps the legacy single UI pass.
@@ -52,6 +53,7 @@ impl StandardRuntimePipelineDesc {
             shadow_cascade_count: 1,
             deferred: false,
             hdr_scene_enabled: true,
+            hair_enabled: false,
             postfx_enabled: true,
             ui_enabled: true,
             ui_layers: Vec::new(),
@@ -115,6 +117,12 @@ impl StandardRuntimePipelineDesc {
     #[inline]
     pub fn hdr_scene(mut self, enabled: bool) -> Self {
         self.hdr_scene_enabled = enabled;
+        self
+    }
+
+    #[inline]
+    pub fn hair(mut self, enabled: bool) -> Self {
+        self.hair_enabled = enabled;
         self
     }
 
@@ -185,6 +193,7 @@ pub fn standard_runtime_frame(desc: StandardRuntimePipelineDesc) -> RenderFrameP
         )
         .with_ui_backdrop_blur(desc.ui_backdrop_blur_enabled)
         .with_local_shadows(desc.local_shadow_enabled)
+        .with_hair(desc.hair_enabled)
     } else {
         RuntimeFrameFeatureSet::forward(
             desc.shadow_enabled,
@@ -194,6 +203,7 @@ pub fn standard_runtime_frame(desc: StandardRuntimePipelineDesc) -> RenderFrameP
         )
         .with_ui_backdrop_blur(desc.ui_backdrop_blur_enabled)
         .with_local_shadows(desc.local_shadow_enabled)
+        .with_hair(desc.hair_enabled)
     };
     let recipe = RenderFrameRecipe::standard_runtime_with_shadow_mode(
         features,

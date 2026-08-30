@@ -2,11 +2,11 @@ use super::foliage::{decode_runtime_ydd_prefab, DecodedPrefabMeshPart};
 use super::*;
 
 use newengine_engine_runtime::gameplay::{
-    CharacterBody, DisplayMode, DisplayVisibility, EquippedWeaponBinding, EquippedWeaponMuzzle,
-    HitscanWeaponTuning, ItemCatalog, PlayerCommandFrame, PlayerModelAssignment,
-    PlayerModelBinding, PlayerSkinBinding, PlayerSkinVertex, PlayerStanceState, PlayerViewState,
-    PlayerViewVisibility, PlayerViewVisibilityPolicy, PlayerVisualKind, PlayerVisualPart,
-    PlayerWeaponState, WeaponObstructionState,
+    DisplayMode, DisplayVisibility, EquippedWeaponBinding, EquippedWeaponEntity,
+    EquippedWeaponMuzzle, HitscanWeaponTuning, ItemCatalog, PlayerCommandFrame, PlayerModelBinding,
+    PlayerSkinBinding, PlayerSkinVertex, PlayerViewState, PlayerViewVisibility,
+    PlayerViewVisibilityPolicy, PlayerVisualKind, PlayerVisualPart, PlayerWeaponState,
+    WeaponEntityRuntime, WeaponEntitySockets, WeaponObstructionState, WeaponSocketPose,
 };
 
 // Equipment rendering is decomposed by policy, spawn path, and presentation update.

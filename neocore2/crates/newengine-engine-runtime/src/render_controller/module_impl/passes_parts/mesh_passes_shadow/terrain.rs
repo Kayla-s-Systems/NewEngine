@@ -8,8 +8,8 @@ pub fn draw_procedural_terrain_shadow(
     light_viewproj: Mat4,
     lights: &PackedLights,
     runtime: bool,
+    shadow_ubo_view: ShadowUboViewKey,
 ) -> newengine_core::EngineResult<()> {
-    let shadow_view_key = shadow_light_view_key(light_viewproj);
     let world = scene.world();
     let mats_lock = this.bridges.scene.materials();
     let mats = mats_lock.read();
@@ -75,7 +75,10 @@ pub fn draw_procedural_terrain_shadow(
             continue;
         };
 
-        let key = hash_combine_u64(entity_key ^ 0x5a44_1000_0000_0000u64, shadow_view_key);
+        let key = hash_combine_u64(
+            entity_key ^ 0x5a44_1000_0000_0000u64,
+            shadow_ubo_view.cache_discriminator(),
+        );
         let per = this.ensure_per_draw_ubo_with_binding(
             r,
             lit,

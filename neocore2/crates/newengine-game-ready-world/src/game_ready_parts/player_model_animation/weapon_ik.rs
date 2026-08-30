@@ -13,20 +13,59 @@ struct WeaponArmIkRig {
     left_prop_attachment: Option<usize>,
 }
 
-fn build_weapon_arm_ik_rig(skeleton: &ModelSkeletonMetadata) -> Option<WeaponArmIkRig> {
-    let find = |name: &str| skeleton.joints.iter().position(|joint| joint.name == name);
-    Some(WeaponArmIkRig {
-        chest: find("spined")?,
-        right_shoulder: find("r_shoulder")?,
-        right_elbow: find("r_elbow")?,
-        right_wrist: find("r_wrist")?,
-        right_palm: find("r_palm")?,
-        right_prop_attachment: find("r_hand_prop_attachment"),
-        left_shoulder: find("l_shoulder")?,
-        left_elbow: find("l_elbow")?,
-        left_wrist: find("l_wrist")?,
-        left_palm: find("l_palm")?,
-        left_prop_attachment: find("l_hand_prop_attachment"),
+fn build_weapon_arm_ik_rig(
+    skeleton: &ModelSkeletonMetadata,
+    authored: &newengine_engine_runtime::gameplay::PlayerWeaponArmIkRigDefinition,
+) -> Result<WeaponArmIkRig, String> {
+    let resolve_required = |label: &str, name: &str| -> Result<usize, String> {
+        let name = name.trim();
+        if name.is_empty() {
+            return Err(format!("authored weapon IK joint '{label}' is empty"));
+        }
+        skeleton
+            .joints
+            .iter()
+            .position(|joint| joint.name == name)
+            .ok_or_else(|| {
+                format!("authored weapon IK joint '{label}' is absent from skeleton name='{name}'")
+            })
+    };
+    let resolve_optional = |label: &str, name: Option<&String>| -> Result<Option<usize>, String> {
+        let Some(name) = name
+            .map(String::as_str)
+            .map(str::trim)
+            .filter(|name| !name.is_empty())
+        else {
+            return Ok(None);
+        };
+        skeleton
+            .joints
+            .iter()
+            .position(|joint| joint.name == name)
+            .map(Some)
+            .ok_or_else(|| {
+                format!("authored weapon IK joint '{label}' is absent from skeleton name='{name}'")
+            })
+    };
+
+    Ok(WeaponArmIkRig {
+        chest: resolve_required("chest", &authored.chest)?,
+        right_shoulder: resolve_required("right_shoulder", &authored.right_shoulder)?,
+        right_elbow: resolve_required("right_elbow", &authored.right_elbow)?,
+        right_wrist: resolve_required("right_wrist", &authored.right_wrist)?,
+        right_palm: resolve_required("right_palm", &authored.right_palm)?,
+        right_prop_attachment: resolve_optional(
+            "right_prop_attachment",
+            authored.right_prop_attachment.as_ref(),
+        )?,
+        left_shoulder: resolve_required("left_shoulder", &authored.left_shoulder)?,
+        left_elbow: resolve_required("left_elbow", &authored.left_elbow)?,
+        left_wrist: resolve_required("left_wrist", &authored.left_wrist)?,
+        left_palm: resolve_required("left_palm", &authored.left_palm)?,
+        left_prop_attachment: resolve_optional(
+            "left_prop_attachment",
+            authored.left_prop_attachment.as_ref(),
+        )?,
     })
 }
 
@@ -184,12 +223,8 @@ fn solve_arm_to_palm_contact(
     label: &str,
 ) -> Result<(), String> {
     rebuild_model_joint_frames(animation_runtime, pose, frames)?;
-    let wrist_frame = *frames
-        .get(wrist)
-        .ok_or("rifle wrist frame missing")?;
-    let palm_frame = *frames
-        .get(palm)
-        .ok_or("rifle palm frame missing")?;
+    let wrist_frame = *frames.get(wrist).ok_or("rifle wrist frame missing")?;
+    let palm_frame = *frames.get(palm).ok_or("rifle palm frame missing")?;
     let wrist_position = wrist_frame.transform_point3(Vec3::ZERO);
     let palm_position = palm_frame.transform_point3(Vec3::ZERO);
     let wrist_rotation = wrist_frame
@@ -200,17 +235,12 @@ fn solve_arm_to_palm_contact(
         .get(palm)
         .ok_or("rifle palm local pose missing")?
         .rotation;
-    let palm_local_rotation = Quat::from_xyzw(
-        palm_local[0],
-        palm_local[1],
-        palm_local[2],
-        palm_local[3],
-    )
-    .normalize_or_identity();
+    let palm_local_rotation =
+        Quat::from_xyzw(palm_local[0], palm_local[1], palm_local[2], palm_local[3])
+            .normalize_or_identity();
     let desired_wrist_rotation =
         (desired_palm_global * palm_local_rotation.inverse()).normalize_or_identity();
-    let wrist_to_palm_local =
-        wrist_rotation.inverse() * (palm_position - wrist_position);
+    let wrist_to_palm_local = wrist_rotation.inverse() * (palm_position - wrist_position);
     let wrist_target = palm_target - desired_wrist_rotation * wrist_to_palm_local;
     if crate::env_config::var_os("NORTHSTAR_DEBUG_WEAPON_IK").is_some() {
         static DEBUG_SAMPLES: std::sync::atomic::AtomicUsize =
@@ -249,13 +279,7 @@ fn solve_arm_to_palm_contact(
         pole,
     )?;
     rebuild_model_joint_frames(animation_runtime, pose, frames)?;
-    set_pose_joint_global_rotation(
-        skeleton,
-        pose,
-        frames,
-        wrist,
-        desired_wrist_rotation,
-    )?;
+    set_pose_joint_global_rotation(skeleton, pose, frames, wrist, desired_wrist_rotation)?;
     rebuild_model_joint_frames(animation_runtime, pose, frames)?;
     Ok(())
 }
@@ -338,8 +362,7 @@ fn arm_reach_fit_correction(
     .normalize_or_identity();
     let desired_wrist_rotation =
         (desired_palm_global * palm_local_rotation.inverse()).normalize_or_identity();
-    let wrist_to_palm_local =
-        wrist_rotation.inverse() * (palm_position - wrist_position);
+    let wrist_to_palm_local = wrist_rotation.inverse() * (palm_position - wrist_position);
     let wrist_target = palm_target - desired_wrist_rotation * wrist_to_palm_local;
 
     let upper_len = (elbow_position - shoulder_position).length();
@@ -438,6 +461,9 @@ fn apply_equipped_weapon_support_ik(
     pose: &mut [JointLocalPose],
     frames: &mut Vec<Mat4>,
     view_forward_model: Option<Vec3>,
+    first_person_view_rotation_model: Option<Quat>,
+    first_person_eye_model: Option<Vec3>,
+    first_person_active: bool,
     aim_alpha: f32,
     recoil_alpha: f32,
     recoil_yaw_radians: f32,
@@ -460,37 +486,71 @@ fn apply_equipped_weapon_support_ik(
     let left_shoulder = *frames
         .get(rig.left_shoulder)
         .ok_or("weapon ReadyHold left shoulder frame is unavailable")?;
-    // A complete authored long-gun pose owns the firing-grip translation: preserve the resolved
-    // orientation from the torso/aim contract, but place the actual weapon handle at the authored
-    // right-hand contact. This is deliberately gated so a missing/partial pose can never let a
-    // relaxed hand drag the rifle across the body. The left hand is a bounded rotational support.
-    let handle_anchor = (authored_hand_contacts && support_right_hand)
+    // Third person can use an authored palm as a manipulation/contact owner. Full-body FPP is
+    // deliberately the inverse relationship: camera-space weapon presentation owns the root and
+    // the real animated arms solve to its grip contacts. Letting the pre-IK palm own translation in
+    // FPP turns a locomotion/ready pose into a feedback loop and pulls the rifle back toward the face.
+    let handle_anchor = (authored_hand_contacts && support_right_hand && !first_person_active)
         .then(|| frames[rig.right_palm])
-        .and_then(|frame| crate::weapon_grip::weapon_handle_anchor_from_right_palm(presentation, frame));
-    let support_anchor = (authored_hand_contacts && support_left_hand)
+        .and_then(|frame| {
+            crate::weapon_grip::weapon_handle_anchor_from_right_palm(presentation, frame)
+        });
+    let support_anchor = (authored_hand_contacts && support_left_hand && !first_person_active)
         .then(|| frames[rig.left_palm])
-        .and_then(|frame| crate::weapon_grip::weapon_left_grip_anchor_from_left_palm(presentation, frame));
-    let base_contract = crate::weapon_grip::weapon_ready_solve_contract_presented(
-        presentation,
-        chest,
-        right_shoulder,
-        left_shoulder,
-        view_forward_model,
-        aim_alpha,
-        recoil_alpha,
-        recoil_yaw_radians,
-    )
-    .and_then(|contract| {
-        crate::weapon_grip::weapon_ready_contract_with_contacts(
+        .and_then(|frame| {
+            crate::weapon_grip::weapon_left_grip_anchor_from_left_palm(presentation, frame)
+        });
+    let root_contract = if first_person_active {
+        first_person_eye_model
+            .zip(first_person_view_rotation_model)
+            .and_then(|(eye, view_rotation)| {
+                crate::weapon_grip::weapon_first_person_solve_contract_presented(
+                    presentation,
+                    eye,
+                    view_rotation,
+                    right_shoulder,
+                    left_shoulder,
+                    aim_alpha,
+                    recoil_alpha,
+                    recoil_yaw_radians,
+                )
+            })
+            .or_else(|| {
+                crate::weapon_grip::weapon_ready_solve_contract_presented(
+                    presentation,
+                    chest,
+                    right_shoulder,
+                    left_shoulder,
+                    view_forward_model,
+                    aim_alpha,
+                    recoil_alpha,
+                    recoil_yaw_radians,
+                )
+            })
+    } else {
+        crate::weapon_grip::weapon_ready_solve_contract_presented(
             presentation,
-            contract,
-            handle_anchor,
-            support_anchor,
+            chest,
+            right_shoulder,
+            left_shoulder,
+            view_forward_model,
             aim_alpha,
-            obstruction_alpha,
+            recoil_alpha,
+            recoil_yaw_radians,
         )
-    })
-    .ok_or("weapon ReadyHold could not resolve torso/contact constraint")?;
+    };
+    let base_contract = root_contract
+        .and_then(|contract| {
+            crate::weapon_grip::weapon_ready_contract_with_contacts(
+                presentation,
+                contract,
+                handle_anchor,
+                support_anchor,
+                aim_alpha,
+                obstruction_alpha,
+            )
+        })
+        .ok_or("weapon presentation could not resolve camera/torso contact constraint")?;
     // Reach fitting is a fallback for torso-owned placement only. Once an authored firing hand
     // supplies the handle anchor, translating the root again would break the exact hand/weapon
     // contact we just established.
@@ -556,11 +616,13 @@ fn apply_equipped_weapon_support_ik(
 
     rebuild_model_joint_frames(animation_runtime, pose, frames)?;
     if crate::env_config::var_os("NORTHSTAR_DEBUG_WEAPON_CONTACT_FRAMES").is_some() {
-        static CONTACT_FRAME_SAMPLES: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        static CONTACT_FRAME_SAMPLES: std::sync::atomic::AtomicUsize =
+            std::sync::atomic::AtomicUsize::new(0);
         let sample = CONTACT_FRAME_SAMPLES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         if sample < 2 {
             let handle = crate::weapon_grip::weapon_handle_position(presentation, contract.root);
-            let left_grip = crate::weapon_grip::weapon_ready_left_grip_position(presentation, contract.root);
+            let left_grip =
+                crate::weapon_grip::weapon_ready_left_grip_position(presentation, contract.root);
             let right_palm_frame = frames[rig.right_palm];
             let left_palm_frame = frames[rig.left_palm];
             let right_palm = right_palm_frame.transform_point3(Vec3::ZERO);
@@ -573,8 +635,14 @@ fn apply_equipped_weapon_support_ik(
                 presentation,
                 left_palm_frame,
             );
-            let right_prop = rig.right_prop_attachment.and_then(|index| frames.get(index).copied()).map(|frame| frame.transform_point3(Vec3::ZERO));
-            let left_prop = rig.left_prop_attachment.and_then(|index| frames.get(index).copied()).map(|frame| frame.transform_point3(Vec3::ZERO));
+            let right_prop = rig
+                .right_prop_attachment
+                .and_then(|index| frames.get(index).copied())
+                .map(|frame| frame.transform_point3(Vec3::ZERO));
+            let left_prop = rig
+                .left_prop_attachment
+                .and_then(|index| frames.get(index).copied())
+                .map(|frame| frame.transform_point3(Vec3::ZERO));
             newengine_ulog_api::ulog::info!(
                 "WEAPON_CONTACT_FRAMES right_palm={:?} right_palm_to_handle_m={:.5} right_contact={:?} right_contact_error_m={:?} right_prop={:?} right_prop_reference_to_handle_m={:?} handle={:?} left_palm={:?} left_palm_to_grip_m={:.5} left_contact={:?} left_contact_error_m={:?} left_prop={:?} left_prop_reference_to_handle_m={:?} l_grip={:?}",
                 right_palm, (right_palm-handle).length(), right_contact, right_contact.map(|value| (value-handle).length()), right_prop, right_prop.map(|value| (value-handle).length()), handle, left_palm, (left_palm-left_grip).length(), left_contact, left_contact.map(|value| (value-left_grip).length()), left_prop, left_prop.map(|value| (value-handle).length()), left_grip,
@@ -598,35 +666,72 @@ fn apply_equipped_weapon_support_ik(
     if !error.is_finite() {
         return Err("weapon ReadyHold IK produced non-finite contact error".to_owned());
     }
-    Ok(Some(WeaponIkSolveResult { error_m: error, base_root }))
+    Ok(Some(WeaponIkSolveResult {
+        error_m: error,
+        base_root,
+    }))
 }
 
-fn build_helper_mirror_pairs(skeleton: &ModelSkeletonMetadata) -> Vec<(usize, usize)> {
-    use std::collections::HashMap;
+#[derive(Clone, Copy, Debug)]
+struct ResolvedJointCopyRule {
+    source_index: usize,
+    target_index: usize,
+    channels: newengine_engine_runtime::gameplay::PlayerJointChannels,
+}
 
-    let by_name = skeleton
-        .joints
-        .iter()
-        .enumerate()
-        .map(|(index, joint)| (joint.name.as_str(), index))
-        .collect::<HashMap<_, _>>();
-    skeleton
-        .joints
-        .iter()
-        .enumerate()
-        .filter_map(|(helper_index, joint)| {
-            let primary_name = joint.name.strip_suffix("_helper")?;
-            let primary_index = *by_name.get(primary_name)?;
-            (primary_index != helper_index).then_some((helper_index, primary_index))
-        })
-        .collect()
+fn resolve_helper_pose_copy_rules(
+    skeleton: &ModelSkeletonMetadata,
+    authored: &[newengine_engine_runtime::gameplay::PlayerJointCopyRule],
+) -> Result<Vec<ResolvedJointCopyRule>, String> {
+    let mut resolved = Vec::with_capacity(authored.len());
+    for rule in authored {
+        let source_name = rule.source_joint.trim();
+        let target_name = rule.target_joint.trim();
+        if source_name.is_empty()
+            || target_name.is_empty()
+            || source_name.eq_ignore_ascii_case(target_name)
+            || !rule.channels.any()
+        {
+            return Err(format!(
+                "invalid authored joint-copy rule source='{}' target='{}' channels={:?}",
+                rule.source_joint, rule.target_joint, rule.channels
+            ));
+        }
+        let source_index = skeleton
+            .joints
+            .iter()
+            .position(|joint| joint.name == source_name)
+            .ok_or_else(|| format!("authored joint-copy source is absent name='{source_name}'"))?;
+        let target_index = skeleton
+            .joints
+            .iter()
+            .position(|joint| joint.name == target_name)
+            .ok_or_else(|| format!("authored joint-copy target is absent name='{target_name}'"))?;
+        resolved.push(ResolvedJointCopyRule {
+            source_index,
+            target_index,
+            channels: rule.channels,
+        });
+    }
+    Ok(resolved)
 }
 
 #[inline]
-fn synchronize_helper_pose(pairs: &[(usize, usize)], pose: &mut [JointLocalPose]) {
-    for &(helper_index, primary_index) in pairs {
-        if helper_index < pose.len() && primary_index < pose.len() {
-            pose[helper_index] = pose[primary_index];
+fn synchronize_helper_pose(rules: &[ResolvedJointCopyRule], pose: &mut [JointLocalPose]) {
+    for rule in rules {
+        if rule.source_index >= pose.len() || rule.target_index >= pose.len() {
+            continue;
+        }
+        let source = pose[rule.source_index];
+        let target = &mut pose[rule.target_index];
+        if rule.channels.translation {
+            target.translation = source.translation;
+        }
+        if rule.channels.rotation {
+            target.rotation = source.rotation;
+        }
+        if rule.channels.scale {
+            target.scale = source.scale;
         }
     }
 }

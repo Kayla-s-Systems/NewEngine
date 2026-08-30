@@ -75,6 +75,7 @@ fn preview_camera_reset_restores_default_view() {
 #[test]
 fn preview_geometry_normalization_uses_vertex_aabb_not_coarse_sphere_bounds() {
     let mut parts = vec![ModelMeshPart {
+        source_mesh_name: String::new(),
         material_slot: "default".to_owned(),
         mesh: newengine_primitives::PrimitiveMesh {
             vertices: vec![

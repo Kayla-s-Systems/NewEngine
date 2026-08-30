@@ -36,6 +36,7 @@ pub struct AuthoredItemDefinition {
     pub weapon: Option<AuthoredWeaponDefinition>,
     pub weapon_animation: Option<AuthoredWeaponAnimationDefinition>,
     pub weapon_audio: Option<AuthoredWeaponAudioDefinition>,
+    pub weapon_vfx: Option<AuthoredWeaponVfxDefinition>,
     pub weapon_presentation: Option<AuthoredWeaponPresentationDefinition>,
     pub weapon_casing: Option<AuthoredWeaponCasingDefinition>,
     pub use_effect: Option<AuthoredUseEffect>,
@@ -58,6 +59,7 @@ impl Default for AuthoredItemDefinition {
             weapon: None,
             weapon_animation: None,
             weapon_audio: None,
+            weapon_vfx: None,
             weapon_presentation: None,
             weapon_casing: None,
             use_effect: None,
@@ -83,7 +85,11 @@ pub struct AuthoredWeaponDefinition {
     pub hip_spread_degrees: f32,
     pub aim_spread_degrees: f32,
     pub recoil_pitch_degrees: f32,
+    pub recoil_pitch_random_degrees: f32,
     pub recoil_yaw_degrees: f32,
+    pub recoil_yaw_bias_degrees: f32,
+    pub ads_recoil_multiplier: f32,
+    pub recoil_recovery_hz: f32,
     pub muzzle_forward_offset: f32,
     pub melee_damage: f32,
     pub melee_range: f32,
@@ -108,7 +114,11 @@ impl Default for AuthoredWeaponDefinition {
             hip_spread_degrees: tuning.hip_spread_radians.to_degrees(),
             aim_spread_degrees: tuning.aim_spread_radians.to_degrees(),
             recoil_pitch_degrees: tuning.recoil_pitch_radians.to_degrees(),
+            recoil_pitch_random_degrees: tuning.recoil_pitch_random_radians.to_degrees(),
             recoil_yaw_degrees: tuning.recoil_yaw_radians.to_degrees(),
+            recoil_yaw_bias_degrees: tuning.recoil_yaw_bias_radians.to_degrees(),
+            ads_recoil_multiplier: tuning.ads_recoil_multiplier,
+            recoil_recovery_hz: tuning.recoil_recovery_hz,
             muzzle_forward_offset: tuning.muzzle_forward_offset,
             melee_damage: melee.damage,
             melee_range: melee.range,
@@ -171,7 +181,11 @@ impl AuthoredWeaponDefinition {
             hip_spread_radians: self.hip_spread_degrees.to_radians(),
             aim_spread_radians: self.aim_spread_degrees.to_radians(),
             recoil_pitch_radians: self.recoil_pitch_degrees.to_radians(),
+            recoil_pitch_random_radians: self.recoil_pitch_random_degrees.to_radians(),
             recoil_yaw_radians: self.recoil_yaw_degrees.to_radians(),
+            recoil_yaw_bias_radians: self.recoil_yaw_bias_degrees.to_radians(),
+            ads_recoil_multiplier: self.ads_recoil_multiplier,
+            recoil_recovery_hz: self.recoil_recovery_hz,
             muzzle_forward_offset: self.muzzle_forward_offset,
         }
         .sanitized()
@@ -236,6 +250,14 @@ pub struct AuthoredWeaponPresentationDefinition {
     pub ads_front_sight_from_handle: [f32; 3],
     pub ads_camera_to_rear_sight: [f32; 3],
     pub first_person_hip_convergence_m: f32,
+    pub aim_response_hz: f32,
+    pub secondary_hip_max_angle_radians: f32,
+    pub secondary_ads_max_angle_radians: f32,
+    pub secondary_angular_inertia_gain: f32,
+    pub secondary_movement_inertia_gain: f32,
+    pub secondary_natural_hz_hip: f32,
+    pub secondary_natural_hz_ads: f32,
+    pub secondary_obstruction_hz_boost: f32,
 }
 
 impl Default for AuthoredWeaponPresentationDefinition {
@@ -265,6 +287,14 @@ impl Default for AuthoredWeaponPresentationDefinition {
             ads_front_sight_from_handle: runtime.ads_front_sight_from_handle,
             ads_camera_to_rear_sight: runtime.ads_camera_to_rear_sight,
             first_person_hip_convergence_m: runtime.first_person_hip_convergence_m,
+            aim_response_hz: runtime.aim_response_hz,
+            secondary_hip_max_angle_radians: runtime.secondary_hip_max_angle_radians,
+            secondary_ads_max_angle_radians: runtime.secondary_ads_max_angle_radians,
+            secondary_angular_inertia_gain: runtime.secondary_angular_inertia_gain,
+            secondary_movement_inertia_gain: runtime.secondary_movement_inertia_gain,
+            secondary_natural_hz_hip: runtime.secondary_natural_hz_hip,
+            secondary_natural_hz_ads: runtime.secondary_natural_hz_ads,
+            secondary_obstruction_hz_boost: runtime.secondary_obstruction_hz_boost,
         }
     }
 }
@@ -295,6 +325,14 @@ impl AuthoredWeaponPresentationDefinition {
             ads_front_sight_from_handle: self.ads_front_sight_from_handle,
             ads_camera_to_rear_sight: self.ads_camera_to_rear_sight,
             first_person_hip_convergence_m: self.first_person_hip_convergence_m,
+            aim_response_hz: self.aim_response_hz,
+            secondary_hip_max_angle_radians: self.secondary_hip_max_angle_radians,
+            secondary_ads_max_angle_radians: self.secondary_ads_max_angle_radians,
+            secondary_angular_inertia_gain: self.secondary_angular_inertia_gain,
+            secondary_movement_inertia_gain: self.secondary_movement_inertia_gain,
+            secondary_natural_hz_hip: self.secondary_natural_hz_hip,
+            secondary_natural_hz_ads: self.secondary_natural_hz_ads,
+            secondary_obstruction_hz_boost: self.secondary_obstruction_hz_boost,
         }
         .sanitized()
     }
@@ -308,7 +346,10 @@ pub struct AuthoredWeaponCasingDefinition {
     pub material_ref: String,
     pub half_extents: [f32; 3],
     pub ejection_delay_seconds: f32,
-    /// Local `[right, up, forward]` coefficients relative to the muzzle pose.
+    pub ejection_joint: String,
+    pub inherit_socket_linear_velocity: f32,
+    pub inherit_socket_angular_velocity: f32,
+    /// Local `[right, up, forward]` coefficients relative to the authored ejection socket.
     pub origin_local: [f32; 3],
     pub velocity_local: [f32; 3],
     pub velocity_jitter: [f32; 3],
@@ -318,6 +359,10 @@ pub struct AuthoredWeaponCasingDefinition {
     pub friction: f32,
     pub restitution: f32,
     pub density: f32,
+    pub contact_min_impulse: f32,
+    pub contact_medium_impulse: f32,
+    pub contact_hard_impulse: f32,
+    pub soft_surface_contains: Vec<String>,
 }
 
 impl Default for AuthoredWeaponCasingDefinition {
@@ -329,6 +374,9 @@ impl Default for AuthoredWeaponCasingDefinition {
             material_ref: String::new(),
             half_extents: runtime.half_extents,
             ejection_delay_seconds: runtime.ejection_delay_seconds,
+            ejection_joint: runtime.ejection_joint.unwrap_or_default(),
+            inherit_socket_linear_velocity: runtime.inherit_socket_linear_velocity,
+            inherit_socket_angular_velocity: runtime.inherit_socket_angular_velocity,
             origin_local: runtime.origin_local,
             velocity_local: runtime.velocity_local,
             velocity_jitter: runtime.velocity_jitter,
@@ -338,6 +386,10 @@ impl Default for AuthoredWeaponCasingDefinition {
             friction: runtime.friction,
             restitution: runtime.restitution,
             density: runtime.density,
+            contact_min_impulse: runtime.contact_min_impulse,
+            contact_medium_impulse: runtime.contact_medium_impulse,
+            contact_hard_impulse: runtime.contact_hard_impulse,
+            soft_surface_contains: runtime.soft_surface_contains,
         }
     }
 }
@@ -352,6 +404,10 @@ impl AuthoredWeaponCasingDefinition {
                 .then(|| self.material_ref.trim().replace('\\', "/")),
             half_extents: self.half_extents,
             ejection_delay_seconds: self.ejection_delay_seconds,
+            ejection_joint: (!self.ejection_joint.trim().is_empty())
+                .then(|| self.ejection_joint.trim().to_owned()),
+            inherit_socket_linear_velocity: self.inherit_socket_linear_velocity,
+            inherit_socket_angular_velocity: self.inherit_socket_angular_velocity,
             origin_local: self.origin_local,
             velocity_local: self.velocity_local,
             velocity_jitter: self.velocity_jitter,
@@ -361,6 +417,30 @@ impl AuthoredWeaponCasingDefinition {
             friction: self.friction,
             restitution: self.restitution,
             density: self.density,
+            contact_min_impulse: self.contact_min_impulse,
+            contact_medium_impulse: self.contact_medium_impulse,
+            contact_hard_impulse: self.contact_hard_impulse,
+            soft_surface_contains: self.soft_surface_contains.clone(),
+        }
+        .sanitized()
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Default)]
+#[serde(default)]
+pub struct AuthoredWeaponVfxDefinition {
+    pub shot: String,
+    pub impact_default: String,
+    pub impact_by_surface: std::collections::BTreeMap<String, String>,
+}
+
+impl AuthoredWeaponVfxDefinition {
+    pub(super) fn compile(&self) -> WeaponVfxDefinition {
+        WeaponVfxDefinition {
+            shot: (!self.shot.trim().is_empty()).then(|| self.shot.trim().to_owned()),
+            impact_default: (!self.impact_default.trim().is_empty())
+                .then(|| self.impact_default.trim().to_owned()),
+            impact_by_surface: self.impact_by_surface.clone(),
         }
         .sanitized()
     }
@@ -376,6 +456,10 @@ pub struct AuthoredWeaponAudioDefinition {
     pub unequip: String,
     pub empty: String,
     pub shell_eject: String,
+    pub shell_contact_small: String,
+    pub shell_contact_medium: String,
+    pub shell_contact_hard: String,
+    pub shell_contact_soft: String,
 }
 
 impl AuthoredWeaponAudioDefinition {
@@ -392,6 +476,10 @@ impl AuthoredWeaponAudioDefinition {
             unequip: clip(&self.unequip),
             empty: clip(&self.empty),
             shell_eject: clip(&self.shell_eject),
+            shell_contact_small: clip(&self.shell_contact_small),
+            shell_contact_medium: clip(&self.shell_contact_medium),
+            shell_contact_hard: clip(&self.shell_contact_hard),
+            shell_contact_soft: clip(&self.shell_contact_soft),
         }
         .sanitized()
     }

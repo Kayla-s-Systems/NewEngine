@@ -3,6 +3,77 @@ mod transition_tests {
     use super::*;
 
     #[test]
+    fn equipment_arm_ik_requires_authored_rig_even_for_humanoid_topology() {
+        use newengine_model_skeleton_api::{ModelSkeletonAnchors, ModelSkeletonJointMetadata};
+
+        let names = [
+            "root",
+            "spined",
+            "r_shoulder",
+            "r_elbow",
+            "r_wrist",
+            "r_palm",
+            "l_shoulder",
+            "l_elbow",
+            "l_wrist",
+            "l_palm",
+        ];
+        let parents = [
+            None,
+            Some(0),
+            Some(1),
+            Some(2),
+            Some(3),
+            Some(4),
+            Some(1),
+            Some(6),
+            Some(7),
+            Some(8),
+        ];
+        let joints = names
+            .iter()
+            .enumerate()
+            .map(|(index, name)| ModelSkeletonJointMetadata {
+                index: index as u32,
+                tag: index as u32,
+                name: (*name).to_owned(),
+                parent: parents[index].map(|parent| names[parent].to_owned()),
+                parent_index: parents[index].map(|parent| parent as u32),
+                position_ls: [0.0, 0.1, 0.0],
+                rotation_ls: [0.0, 0.0, 0.0, 1.0],
+                scale_ls: [1.0, 1.0, 1.0],
+                flags: Vec::new(),
+            })
+            .collect();
+        let skeleton = ModelSkeletonMetadata {
+            source: "authored-only-ik-test".to_owned(),
+            source_format: "test".to_owned(),
+            container_magic: "TEST".to_owned(),
+            byte_len: 0,
+            content_hash: String::new(),
+            decode_status: "ok".to_owned(),
+            joints,
+            anchors: ModelSkeletonAnchors {
+                root: "root".to_owned(),
+                hips: "root".to_owned(),
+                head: "spined".to_owned(),
+                left_hand: "l_palm".to_owned(),
+                right_hand: "r_palm".to_owned(),
+                left_foot: "root".to_owned(),
+                right_foot: "root".to_owned(),
+                eye: "spined".to_owned(),
+                eye_height: 1.6,
+            },
+        };
+        let mut presentation =
+            newengine_engine_runtime::gameplay::PlayerCharacterPresentation::default();
+        presentation.equipment_arm_ik = true;
+        presentation.equipment_arm_ik_rig = None;
+
+        assert!(resolve_authored_equipment_arm_ik(&skeleton, &presentation).is_none());
+    }
+
+    #[test]
     fn bilateral_rifle_ik_drives_both_hands_toward_readyhold_contacts() {
         use newengine_model_skeleton_api::{ModelSkeletonAnchors, ModelSkeletonJointMetadata};
 
@@ -71,7 +142,20 @@ mod transition_tests {
                 scale: Some(joint.scale_ls),
             })
             .collect::<Vec<_>>();
-        let rig = build_weapon_arm_ik_rig(&skeleton).expect("rifle IK rig");
+        let authored_rig = newengine_engine_runtime::gameplay::PlayerWeaponArmIkRigDefinition {
+            chest: "spined".to_owned(),
+            right_shoulder: "r_shoulder".to_owned(),
+            right_elbow: "r_elbow".to_owned(),
+            right_wrist: "r_wrist".to_owned(),
+            right_palm: "r_palm".to_owned(),
+            right_prop_attachment: None,
+            left_shoulder: "l_shoulder".to_owned(),
+            left_elbow: "l_elbow".to_owned(),
+            left_wrist: "l_wrist".to_owned(),
+            left_palm: "l_palm".to_owned(),
+            left_prop_attachment: None,
+        };
+        let rig = build_weapon_arm_ik_rig(&skeleton, &authored_rig).expect("rifle IK rig");
         let source_to_model = [
             1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
         ];
@@ -91,8 +175,7 @@ mod transition_tests {
         let animation_runtime = AnimationSkeletonRuntime::compile(&skeleton, source_to_model)
             .expect("compile animation skeleton");
         let mut frames = Vec::new();
-        rebuild_model_joint_frames(&animation_runtime, &pose, &mut frames)
-            .expect("initial frames");
+        rebuild_model_joint_frames(&animation_runtime, &pose, &mut frames).expect("initial frames");
         let right_before = frames[rig.right_palm].transform_point3(Vec3::ZERO);
         let left_before = frames[rig.left_palm].transform_point3(Vec3::ZERO);
 
@@ -104,6 +187,9 @@ mod transition_tests {
             &mut pose,
             &mut frames,
             None,
+            None,
+            None,
+            false,
             0.0,
             0.0,
             0.0,
@@ -139,38 +225,81 @@ mod transition_tests {
     fn partial_equipment_overlay_never_replaces_missing_joint_with_bind_pose() {
         use newengine_model_skeleton_api::{ModelSkeletonAnchors, ModelSkeletonJointMetadata};
 
-        let joint = |index: u32, name: &str, parent_index: Option<u32>| ModelSkeletonJointMetadata {
-            index, tag: index, name: name.to_owned(),
-            parent: parent_index.map(|_| "root".to_owned()), parent_index,
-            position_ls: if index == 0 { [0.0, 0.0, 0.0] } else { [0.2, 0.0, 0.0] },
-            rotation_ls: [0.0, 0.0, 0.0, 1.0], scale_ls: [1.0, 1.0, 1.0], flags: Vec::new(),
-        };
+        let joint =
+            |index: u32, name: &str, parent_index: Option<u32>| ModelSkeletonJointMetadata {
+                index,
+                tag: index,
+                name: name.to_owned(),
+                parent: parent_index.map(|_| "root".to_owned()),
+                parent_index,
+                position_ls: if index == 0 {
+                    [0.0, 0.0, 0.0]
+                } else {
+                    [0.2, 0.0, 0.0]
+                },
+                rotation_ls: [0.0, 0.0, 0.0, 1.0],
+                scale_ls: [1.0, 1.0, 1.0],
+                flags: Vec::new(),
+            };
         let skeleton = ModelSkeletonMetadata {
-            source: "test".to_owned(), source_format: "test".to_owned(),
-            container_magic: "TEST".to_owned(), byte_len: 0, content_hash: String::new(),
+            source: "test".to_owned(),
+            source_format: "test".to_owned(),
+            container_magic: "TEST".to_owned(),
+            byte_len: 0,
+            content_hash: String::new(),
             decode_status: "ok".to_owned(),
             joints: vec![joint(0, "root", None), joint(1, "arm", Some(0))],
             anchors: ModelSkeletonAnchors {
-                root: "root".to_owned(), hips: "root".to_owned(), head: "arm".to_owned(),
-                left_hand: "arm".to_owned(), right_hand: "arm".to_owned(),
-                left_foot: "root".to_owned(), right_foot: "root".to_owned(),
-                eye: "arm".to_owned(), eye_height: 0.0,
+                root: "root".to_owned(),
+                hips: "root".to_owned(),
+                head: "arm".to_owned(),
+                left_hand: "arm".to_owned(),
+                right_hand: "arm".to_owned(),
+                left_foot: "root".to_owned(),
+                right_foot: "root".to_owned(),
+                eye: "arm".to_owned(),
+                eye_height: 0.0,
             },
         };
         let live_rotation = Quat::from_rotation_y(0.75);
         let mut target = vec![
-            JointLocalPose { translation: [0.0, 0.0, 0.0], rotation: [0.0, 0.0, 0.0, 1.0], scale: Some([1.0, 1.0, 1.0]) },
-            JointLocalPose { translation: [0.2, 0.0, 0.0], rotation: [live_rotation.x, live_rotation.y, live_rotation.z, live_rotation.w], scale: Some([1.0, 1.0, 1.0]) },
+            JointLocalPose {
+                translation: [0.0, 0.0, 0.0],
+                rotation: [0.0, 0.0, 0.0, 1.0],
+                scale: Some([1.0, 1.0, 1.0]),
+            },
+            JointLocalPose {
+                translation: [0.2, 0.0, 0.0],
+                rotation: [
+                    live_rotation.x,
+                    live_rotation.y,
+                    live_rotation.z,
+                    live_rotation.w,
+                ],
+                scale: Some([1.0, 1.0, 1.0]),
+            },
         ];
         let raw_clip = AnimationClip {
-            name: "partial".to_owned(), skeleton_ref: "test".to_owned(), source: "test".to_owned(),
-            duration_seconds: 1.0 / 30.0, sample_rate_hz: 30.0, looped: false, joint_tags: vec![0],
+            name: "partial".to_owned(),
+            skeleton_ref: "test".to_owned(),
+            source: "test".to_owned(),
+            duration_seconds: 1.0 / 30.0,
+            sample_rate_hz: 30.0,
+            looped: false,
+            joint_tags: vec![0],
             events: Vec::new(),
-            poses: vec![JointLocalPose { translation: [0.0, 0.0, 0.0], rotation: [0.0, 0.0, 0.0, 1.0], scale: Some([1.0, 1.0, 1.0]) }],
+            poses: vec![JointLocalPose {
+                translation: [0.0, 0.0, 0.0],
+                rotation: [0.0, 0.0, 0.0, 1.0],
+                scale: Some([1.0, 1.0, 1.0]),
+            }],
         };
-        let animation_runtime = AnimationSkeletonRuntime::compile(&skeleton, Mat4::IDENTITY.to_cols_array())
-            .expect("compile animation skeleton");
-        let binding = raw_clip.bind_to_skeleton(&animation_runtime).expect("bind partial clip");
+        let animation_runtime =
+            AnimationSkeletonRuntime::compile(&skeleton, Mat4::IDENTITY.to_cols_array())
+                .expect("compile animation skeleton");
+        let binding = raw_clip
+            .bind_to_skeleton(&animation_runtime)
+            .expect("bind partial clip");
         let clip = PlayerAnimationRuntimeClip {
             clip_ref: "test@partial".to_owned(),
             clip: raw_clip.into(),
@@ -179,14 +308,25 @@ mod transition_tests {
         };
         let before = target[1];
         let mut scratch = Vec::new();
+        let rules = resolve_joint_blend_rules(
+            &skeleton,
+            &[
+                newengine_engine_runtime::gameplay::PlayerJointRotationWeight {
+                    joint: "arm".to_owned(),
+                    weight: 1.0,
+                    channels:
+                        newengine_engine_runtime::gameplay::PlayerJointChannels::rotation_only(),
+                },
+            ],
+        )
+        .expect("resolve overlay rule");
         apply_equipment_rotation_overlay(
             Some(&clip),
-            &skeleton,
             &animation_runtime,
             &mut scratch,
             &mut target,
             0.0,
-            &[("arm".to_owned(), 1.0)],
+            &rules,
             1.0,
         )
         .unwrap();
@@ -196,7 +336,11 @@ mod transition_tests {
     #[test]
     fn weapon_reach_fit_corrects_small_mismatch_but_never_masks_large_pose_error() {
         let pose = vec![
-            JointLocalPose { translation: [0.0, 0.0, 0.0], rotation: [0.0, 0.0, 0.0, 1.0], scale: Some([1.0, 1.0, 1.0]) };
+            JointLocalPose {
+                translation: [0.0, 0.0, 0.0],
+                rotation: [0.0, 0.0, 0.0, 1.0],
+                scale: Some([1.0, 1.0, 1.0])
+            };
             4
         ];
         let frames = vec![
@@ -206,13 +350,27 @@ mod transition_tests {
             Mat4::from_translation(Vec3::new(0.0, 0.0, 0.51)),
         ];
         let small = arm_reach_fit_correction(
-            &pose, &frames, 0, 1, 2, 3, Vec3::new(0.0, 0.0, 0.52), Quat::IDENTITY,
+            &pose,
+            &frames,
+            0,
+            1,
+            2,
+            3,
+            Vec3::new(0.0, 0.0, 0.52),
+            Quat::IDENTITY,
         );
         assert!(small.length() > 0.015 && small.length() < 0.017);
         assert!(small.z < 0.0);
 
         let large = arm_reach_fit_correction(
-            &pose, &frames, 0, 1, 2, 3, Vec3::new(0.0, 0.0, 0.62), Quat::IDENTITY,
+            &pose,
+            &frames,
+            0,
+            1,
+            2,
+            3,
+            Vec3::new(0.0, 0.0, 0.62),
+            Quat::IDENTITY,
         );
         assert!(large.length() < 1.0e-6);
     }
@@ -220,9 +378,8 @@ mod transition_tests {
     #[test]
     fn detached_control_and_face_share_the_same_canonical_headb_delta() {
         let rig = DetachedHeadFollowRig {
-            headb_driver: 0,
-            control_followers: vec![1],
-            face_followers: vec![2],
+            driver_joint: 0,
+            followers: vec![1, 2],
         };
         let mut palette = vec![Mat4::IDENTITY; 3];
         palette[0] = Mat4::from_translation(Vec3::new(0.2, 0.1, -0.3));
@@ -250,6 +407,7 @@ mod transition_tests {
             parent: 0,
             left: 1,
             right: 2,
+            preserve_bind_local: true,
         };
         let head_delta = Mat4::from_scale_rotation_translation(
             Vec3::new(1.0, 1.0, 1.0),
@@ -268,5 +426,4 @@ mod transition_tests {
             .expect_err("extra eye deformation must be rejected");
         assert!(error.contains("eye palette drift"));
     }
-
 }

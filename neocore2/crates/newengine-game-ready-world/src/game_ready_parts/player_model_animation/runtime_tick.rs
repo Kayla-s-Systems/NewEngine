@@ -45,10 +45,17 @@ pub(crate) fn tick_player_skin_animation(world: &mut newengine_ecs::World, dt: f
             .get::<newengine_engine_runtime::gameplay::PlayerAnimationState>(player)
             .copied()
             .unwrap_or_default();
-        let active_weapon = newengine_engine_runtime::gameplay::active_equipped_weapon_binding(world, player);
-        let unarmed_active = active_weapon.is_some_and(|binding| {
-            binding.weapon.weapon_type == newengine_engine_runtime::gameplay::WeaponType::Unarmed
-        });
+        let noclip_enabled = world
+            .resource::<newengine_gameplay_fps_api::FpsCharacterTraversalState>()
+            .copied()
+            .is_some_and(|state| state.noclip_enabled());
+        let active_weapon =
+            newengine_engine_runtime::gameplay::active_equipped_weapon_binding(world, player);
+        let unarmed_active = !noclip_enabled
+            && active_weapon.is_some_and(|binding| {
+                binding.weapon.weapon_type
+                    == newengine_engine_runtime::gameplay::WeaponType::Unarmed
+            });
         let unarmed_attack_sequence = if unarmed_active {
             world
                 .get::<newengine_engine_runtime::gameplay::PlayerWeaponState>(player)
@@ -66,18 +73,27 @@ pub(crate) fn tick_player_skin_animation(world: &mut newengine_ecs::World, dt: f
             .get::<newengine_engine_runtime::gameplay::WeaponObstructionState>(player)
             .map(|state| state.alpha.clamp(0.0, 1.0))
             .unwrap_or(0.0);
-        let rifle_secondary_rotation_offset_local =
-            super::equipment_visual::equipped_weapon_secondary_rotation_offset_local(world, player);
         let first_person_active = world
             .resource::<newengine_engine_runtime::gameplay::PlayerViewState>()
             .copied()
             .unwrap_or_default()
             .first_person_active;
-        let rifle_view_forward_model = if first_person_active || rifle_aim_alpha > 0.001 {
-            player_rifle_view_forward_model(world, player)
+        // Secondary long-gun inertia is a third-person presentation effect. Feeding its previous
+        // frame offset back into first-person arm IK creates a hand <-> weapon feedback loop and
+        // manifests as visible weapon tremor. First-person hands solve against the canonical root.
+        let rifle_secondary_rotation_offset_local = if first_person_active {
+            Vec3::ZERO
+        } else {
+            super::equipment_visual::equipped_weapon_secondary_rotation_offset_local(world, player)
+        };
+        let rifle_view_rotation_model = if first_person_active || rifle_aim_alpha > 0.001 {
+            player_rifle_view_rotation_model(world, player)
         } else {
             None
         };
+        let rifle_view_forward_model = rifle_view_rotation_model
+            .map(|rotation| (rotation * -Vec3::Z).normalize_or_zero())
+            .filter(|forward| forward.is_finite() && forward.length_squared() > 1.0e-8);
         let weapon_state = world
             .get::<newengine_engine_runtime::gameplay::PlayerWeaponState>(player)
             .copied();
@@ -94,7 +110,8 @@ pub(crate) fn tick_player_skin_animation(world: &mut newengine_ecs::World, dt: f
             weapon_state,
             weapon_presentation.is_some(),
         );
-        let equipment_presentation_active = equipment_stance != EquipmentPresentationStance::None
+        let equipment_presentation_active = !noclip_enabled
+            && equipment_stance != EquipmentPresentationStance::None
             && world
                 .get::<PlayerAnimationRuntimeBinding>(player)
                 .is_some_and(|binding| {
@@ -129,6 +146,20 @@ pub(crate) fn tick_player_skin_animation(world: &mut newengine_ecs::World, dt: f
             .and_then(|visual_root| world.get::<Transform>(visual_root).copied())
             .unwrap_or_default();
         let model_to_world = root_transform.to_mat4() * model_root_local.to_mat4();
+        let first_person_eye_model = if first_person_active {
+            world
+                .get::<newengine_engine_runtime::gameplay::PlayerFirstPersonCameraAnchor>(player)
+                .copied()
+                .filter(|anchor| anchor.eye_center_ws.is_finite())
+                .map(|anchor| {
+                    model_to_world
+                        .inverse()
+                        .transform_point3(anchor.eye_center_ws)
+                })
+                .filter(|position| position.is_finite())
+        } else {
+            None
+        };
         let previous_foot_pose = world
             .get::<newengine_model_contact_api::ModelFootPoseState>(player)
             .copied();
@@ -256,7 +287,7 @@ pub(crate) fn tick_player_skin_animation(world: &mut newengine_ecs::World, dt: f
 
             let active_slot = binding.active_slot;
             let active_state = binding.active_state;
-            let clip_ref = binding.clips[active_slot]
+            let mut clip_ref = binding.clips[active_slot]
                 .as_ref()
                 .expect("resolved player animation slot must contain a clip")
                 .clip_ref
@@ -307,6 +338,7 @@ pub(crate) fn tick_player_skin_animation(world: &mut newengine_ecs::World, dt: f
                 };
                 if let Err(error) = apply_character_rotation_overlay(
                     overlay,
+                    &binding.skeleton,
                     &binding.animation_runtime,
                     &mut binding.equipment_overlay_locals,
                     &mut binding.sampled_target_locals,
@@ -377,7 +409,6 @@ pub(crate) fn tick_player_skin_animation(world: &mut newengine_ecs::World, dt: f
                         .unwrap_or_else(|| "<none>".to_owned());
                     if let Err(error) = apply_equipment_rotation_overlay(
                         binding.equipment_reload_pose.as_ref(),
-                        &binding.skeleton,
                         &binding.animation_runtime,
                         &mut binding.equipment_overlay_locals,
                         &mut binding.sampled_target_locals,
@@ -416,7 +447,6 @@ pub(crate) fn tick_player_skin_animation(world: &mut newengine_ecs::World, dt: f
                 } else {
                     if let Err(error) = apply_equipment_rotation_overlay(
                         binding.equipment_ready_pose.as_ref(),
-                        &binding.skeleton,
                         &binding.animation_runtime,
                         &mut binding.equipment_overlay_locals,
                         &mut binding.sampled_target_locals,
@@ -442,7 +472,6 @@ pub(crate) fn tick_player_skin_animation(world: &mut newengine_ecs::World, dt: f
                             .unwrap_or(0.0);
                         if let Err(error) = apply_equipment_rotation_overlay(
                             binding.equipment_aim_pose.as_ref(),
-                            &binding.skeleton,
                             &binding.animation_runtime,
                             &mut binding.equipment_overlay_locals,
                             &mut binding.sampled_target_locals,
@@ -485,8 +514,58 @@ pub(crate) fn tick_player_skin_animation(world: &mut newengine_ecs::World, dt: f
                     let _ = aim.event_cursor.seek(binding.equipment_time_seconds);
                 }
             }
+
+            if noclip_enabled {
+                if !binding.noclip_active {
+                    binding.noclip_time_seconds = 0.0;
+                    binding.noclip_active = true;
+                    if let Some(noclip) = binding.noclip_pose.as_mut() {
+                        noclip.event_cursor.restart();
+                    }
+                    newengine_ulog_api::ulog::info!(
+                        "game-ready: NoClip presentation entered player={} clip='{}' overlays=off foot_contact=off",
+                        player.stable_u64(),
+                        binding
+                            .noclip_pose
+                            .as_ref()
+                            .map(|clip| clip.clip_ref.as_str())
+                            .unwrap_or("none")
+                    );
+                } else {
+                    binding.noclip_time_seconds += dt;
+                }
+                if let Some(noclip) = binding.noclip_pose.as_mut() {
+                    let duration = noclip.clip.duration_seconds.max(1.0 / 30.0);
+                    let sample_time = binding.noclip_time_seconds.rem_euclid(duration);
+                    if let Err(error) = noclip.clip.sample_local_pose_bound(
+                        sample_time,
+                        &binding.animation_runtime,
+                        &noclip.binding,
+                        &mut binding.sampled_target_locals,
+                    ) {
+                        newengine_ulog_api::ulog::warn!(
+                            "game-ready: NoClip full-body pose sampling failed player={} clip='{}': {}",
+                            player.stable_u64(),
+                            noclip.clip_ref,
+                            error
+                        );
+                    } else {
+                        clip_ref = noclip.clip_ref.clone();
+                    }
+                }
+                timeline_events.clear();
+                event_occurrences.clear();
+            } else if binding.noclip_active {
+                binding.noclip_active = false;
+                binding.noclip_time_seconds = 0.0;
+                newengine_ulog_api::ulog::info!(
+                    "game-ready: NoClip presentation exited player={} locomotion_restored=true",
+                    player.stable_u64()
+                );
+            }
+
             synchronize_helper_pose(
-                &binding.helper_mirror_pairs,
+                &binding.helper_pose_copies,
                 &mut binding.sampled_target_locals,
             );
 
@@ -505,6 +584,9 @@ pub(crate) fn tick_player_skin_animation(world: &mut newengine_ecs::World, dt: f
                     &mut binding.current_locals,
                     &mut binding.joint_frames_scratch,
                     rifle_view_forward_model,
+                    rifle_view_rotation_model,
+                    first_person_eye_model,
+                    first_person_active,
                     rifle_aim_alpha,
                     rifle_recoil_alpha,
                     rifle_recoil_yaw_radians,
@@ -539,7 +621,7 @@ pub(crate) fn tick_player_skin_animation(world: &mut newengine_ecs::World, dt: f
                     }
                 }
             }
-            synchronize_helper_pose(&binding.helper_mirror_pairs, &mut binding.current_locals);
+            synchronize_helper_pose(&binding.helper_pose_copies, &mut binding.current_locals);
             if let Err(error) = stabilize_eye_locals(
                 binding.eye_contract.as_ref(),
                 &binding.skeleton,
@@ -613,29 +695,35 @@ pub(crate) fn tick_player_skin_animation(world: &mut newengine_ecs::World, dt: f
                 let frame = binding.palette_scratch[index] * binding.bind_joint_frames[index];
                 binding.joint_frames_scratch.push(frame);
             }
-            let foot_pose = binding.foot_joints.and_then(|feet| {
-                let left = binding.joint_frames_scratch.get(feet.left)?;
-                let right = binding.joint_frames_scratch.get(feet.right)?;
-                let left_bind = binding.bind_joint_frames.get(feet.left)?;
-                let right_bind = binding.bind_joint_frames.get(feet.right)?;
+            let foot_pose = if noclip_enabled {
+                None
+            } else {
+                binding.foot_joints.and_then(|feet| {
+                    let left = binding.joint_frames_scratch.get(feet.left)?;
+                    let right = binding.joint_frames_scratch.get(feet.right)?;
+                    let left_bind = binding.bind_joint_frames.get(feet.left)?;
+                    let right_bind = binding.bind_joint_frames.get(feet.right)?;
 
-                // Skeleton foot anchors normally sit at the ankle/foot-bone origin rather than
-                // on the shoe sole. Calibrate that static bind-height out before contact testing.
-                // X/Z remain animated joint truth; only the authored rest height becomes y=0.
-                let left_bind_y = left_bind.transform_point3(Vec3::ZERO).y.clamp(-0.30, 0.40);
-                let right_bind_y = right_bind.transform_point3(Vec3::ZERO).y.clamp(-0.30, 0.40);
-                let left_model = left.transform_point3(Vec3::ZERO) - Vec3::Y * left_bind_y;
-                let right_model = right.transform_point3(Vec3::ZERO) - Vec3::Y * right_bind_y;
-                let left_world = model_to_world.transform_point3(left_model);
-                let right_world = model_to_world.transform_point3(right_model);
-                Some(newengine_model_contact_api::ModelFootPoseState::from_world_positions(
-                    next_foot_pose_revision,
-                    left_world,
-                    right_world,
-                    previous_foot_pose,
-                    dt,
-                ))
-            });
+                    // Skeleton foot anchors normally sit at the ankle/foot-bone origin rather than
+                    // on the shoe sole. Calibrate that static bind-height out before contact testing.
+                    // X/Z remain animated joint truth; only the authored rest height becomes y=0.
+                    let left_bind_y = left_bind.transform_point3(Vec3::ZERO).y.clamp(-0.30, 0.40);
+                    let right_bind_y = right_bind.transform_point3(Vec3::ZERO).y.clamp(-0.30, 0.40);
+                    let left_model = left.transform_point3(Vec3::ZERO) - Vec3::Y * left_bind_y;
+                    let right_model = right.transform_point3(Vec3::ZERO) - Vec3::Y * right_bind_y;
+                    let left_world = model_to_world.transform_point3(left_model);
+                    let right_world = model_to_world.transform_point3(right_model);
+                    Some(
+                        newengine_model_contact_api::ModelFootPoseState::from_world_positions(
+                            next_foot_pose_revision,
+                            left_world,
+                            right_world,
+                            previous_foot_pose,
+                            dt,
+                        ),
+                    )
+                })
+            };
             let (braid_secondary_motion, joint_frames_scratch, palette_scratch) = (
                 &mut binding.braid_secondary_motion,
                 &binding.joint_frames_scratch,
@@ -707,6 +795,7 @@ pub(crate) fn tick_player_skin_animation(world: &mut newengine_ecs::World, dt: f
                 binding.palette_scratch = recycled_palette;
             }
         }
+        crate::player_hair::publish_player_hair_pose(world, player, model_to_world);
         crate::animation_events::publish_timeline_events(world, timeline_events);
 
         if dt > 0.0

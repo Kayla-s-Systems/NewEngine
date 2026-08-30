@@ -36,6 +36,7 @@ pub mod ui {
 #[cfg(feature = "physics-api")]
 pub mod physics;
 pub mod run_id;
+pub mod runtime_data;
 pub mod sched;
 pub mod services_registry;
 pub mod startup;
@@ -98,6 +99,11 @@ pub use task_core::{
 };
 
 pub use run_id::{init_run_id, run_id};
+
+pub use runtime_data::{
+    plugin_runtime_data_path, plugin_runtime_data_value, read_plugin_runtime_data_bytes,
+    read_plugin_runtime_data_string, RUNTIME_DATA_OBJECT_KEY,
+};
 
 #[cfg(feature = "render-api")]
 pub use render::{

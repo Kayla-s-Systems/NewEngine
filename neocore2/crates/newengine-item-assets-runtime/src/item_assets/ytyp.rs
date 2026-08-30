@@ -46,6 +46,46 @@ fn string_list(value: &serde_json::Value, object: &str, key: &str) -> Option<Vec
     (!values.is_empty()).then_some(values)
 }
 
+fn string_map(
+    value: &serde_json::Value,
+    object: &str,
+    key: &str,
+) -> Option<std::collections::BTreeMap<String, String>> {
+    let value = get(value, object, key)?;
+    let mut out = std::collections::BTreeMap::new();
+    if let Some(object) = value.as_object() {
+        for (key, value) in object {
+            let Some(value) = value
+                .as_str()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+            else {
+                continue;
+            };
+            let key = key.trim().to_ascii_lowercase();
+            if !key.is_empty() {
+                out.insert(key, value.to_owned());
+            }
+        }
+    } else if let Some(raw) = value.as_str() {
+        for entry in raw
+            .split(';')
+            .map(str::trim)
+            .filter(|entry| !entry.is_empty())
+        {
+            let Some((key, mapped)) = entry.split_once('=') else {
+                continue;
+            };
+            let key = key.trim().to_ascii_lowercase();
+            let mapped = mapped.trim();
+            if !key.is_empty() && !mapped.is_empty() {
+                out.insert(key, mapped.to_owned());
+            }
+        }
+    }
+    (!out.is_empty()).then_some(out)
+}
+
 fn f32_value(value: &serde_json::Value, object: &str, key: &str) -> Option<f32> {
     let value = get(value, object, key)?;
     value
@@ -201,6 +241,14 @@ pub(super) fn apply_weapon_ytyp_namespace(
             unequip: string(namespace, "audio", "unequip").unwrap_or_default(),
             empty: string(namespace, "audio", "empty").unwrap_or_default(),
             shell_eject: string(namespace, "audio", "shell_eject").unwrap_or_default(),
+            shell_contact_small: string(namespace, "audio", "shell_contact_small")
+                .unwrap_or_default(),
+            shell_contact_medium: string(namespace, "audio", "shell_contact_medium")
+                .unwrap_or_default(),
+            shell_contact_hard: string(namespace, "audio", "shell_contact_hard")
+                .unwrap_or_default(),
+            shell_contact_soft: string(namespace, "audio", "shell_contact_soft")
+                .unwrap_or_default(),
         };
         let has_audio = !audio.fire.trim().is_empty()
             || !audio.reload_start.trim().is_empty()
@@ -208,9 +256,28 @@ pub(super) fn apply_weapon_ytyp_namespace(
             || !audio.equip.trim().is_empty()
             || !audio.unequip.trim().is_empty()
             || !audio.empty.trim().is_empty()
-            || !audio.shell_eject.trim().is_empty();
+            || !audio.shell_eject.trim().is_empty()
+            || !audio.shell_contact_small.trim().is_empty()
+            || !audio.shell_contact_medium.trim().is_empty()
+            || !audio.shell_contact_hard.trim().is_empty()
+            || !audio.shell_contact_soft.trim().is_empty();
         if has_audio {
             authored.weapon_audio = Some(audio);
+        }
+
+        if namespace.get("vfx").is_some() {
+            let vfx = AuthoredWeaponVfxDefinition {
+                shot: string(namespace, "vfx", "shot").unwrap_or_default(),
+                impact_default: string(namespace, "vfx", "impact_default").unwrap_or_default(),
+                impact_by_surface: string_map(namespace, "vfx", "impact_by_surface")
+                    .unwrap_or_default(),
+            };
+            if !vfx.shot.trim().is_empty()
+                || !vfx.impact_default.trim().is_empty()
+                || !vfx.impact_by_surface.is_empty()
+            {
+                authored.weapon_vfx = Some(vfx);
+            }
         }
 
         if namespace.get("presentation").is_some() {
@@ -261,6 +328,21 @@ pub(super) fn apply_weapon_ytyp_namespace(
             {
                 presentation.first_person_hip_convergence_m = value;
             }
+            macro_rules! presentation_scalar {
+                ($field:ident) => {
+                    if let Some(value) = f32_value(namespace, "presentation", stringify!($field)) {
+                        presentation.$field = value;
+                    }
+                };
+            }
+            presentation_scalar!(aim_response_hz);
+            presentation_scalar!(secondary_hip_max_angle_radians);
+            presentation_scalar!(secondary_ads_max_angle_radians);
+            presentation_scalar!(secondary_angular_inertia_gain);
+            presentation_scalar!(secondary_movement_inertia_gain);
+            presentation_scalar!(secondary_natural_hz_hip);
+            presentation_scalar!(secondary_natural_hz_ads);
+            presentation_scalar!(secondary_obstruction_hz_boost);
             authored.weapon_presentation = Some(presentation);
         }
 
@@ -275,6 +357,14 @@ pub(super) fn apply_weapon_ytyp_namespace(
             }
             if let Some(value) = f32_value(namespace, "casing", "ejection_delay_seconds") {
                 casing.ejection_delay_seconds = value;
+            }
+            casing.ejection_joint =
+                string(namespace, "casing", "ejection_joint").unwrap_or_default();
+            if let Some(value) = f32_value(namespace, "casing", "inherit_socket_linear_velocity") {
+                casing.inherit_socket_linear_velocity = value;
+            }
+            if let Some(value) = f32_value(namespace, "casing", "inherit_socket_angular_velocity") {
+                casing.inherit_socket_angular_velocity = value;
             }
             if let Some(value) = vec3(namespace, "casing", "origin_local") {
                 casing.origin_local = value;
@@ -438,7 +528,10 @@ mod tests {
                 "angular_velocity_jitter": "1,2,3",
                 "friction": 0.3,
                 "restitution": 0.2,
-                "density": 7.5
+                "density": 7.5,
+                "ejection_joint": "shell_eject",
+                "inherit_socket_linear_velocity": 0.9,
+                "inherit_socket_angular_velocity": 0.25
             },
             "world": {
                 "model": "models/weapon/test.ydd@test",
@@ -453,7 +546,20 @@ mod tests {
                 "left_grip_from_handle": [-0.021, 0.043, 0.306],
                 "stock_contact_from_handle": [-0.020, 0.053, -0.341],
                 "ready_body_to_root_rotation": [0.036, 0.608, -0.041, 0.792],
-                "right_palm_to_handle": [0.019, 0.033, -0.083]
+                "right_palm_to_handle": [0.019, 0.033, -0.083],
+                "aim_response_hz": 14.0,
+                "secondary_hip_max_angle_radians": 0.08,
+                "secondary_ads_max_angle_radians": 0.03,
+                "secondary_angular_inertia_gain": 0.31,
+                "secondary_movement_inertia_gain": 0.77,
+                "secondary_natural_hz_hip": 4.8,
+                "secondary_natural_hz_ads": 8.2,
+                "secondary_obstruction_hz_boost": 5.7
+            },
+            "vfx": {
+                "shot": "effects/weapons/test.fxd@shot",
+                "impact_default": "effects/weapons/test.fxd@impact.default",
+                "impact_by_surface": "surface.metal=effects/weapons/test.fxd@impact.metal;surface.wood=effects/weapons/test.fxd@impact.wood"
             }
         });
         apply_weapon_ytyp_namespace(&mut item, &metadata).expect("hydrate");
@@ -472,6 +578,17 @@ mod tests {
         assert_eq!(casing.half_extents, [0.01, 0.02, 0.03]);
         assert!((casing.ejection_delay_seconds - 0.04).abs() < 1.0e-6);
         assert_eq!(casing.axis_local, [0.9, 0.1, 0.0]);
+        assert_eq!(casing.ejection_joint, "shell_eject");
+        assert!((casing.inherit_socket_linear_velocity - 0.9).abs() < 1.0e-6);
+        assert!((casing.inherit_socket_angular_velocity - 0.25).abs() < 1.0e-6);
+        let vfx = item.weapon_vfx.expect("weapon vfx");
+        assert_eq!(vfx.shot, "effects/weapons/test.fxd@shot");
+        assert_eq!(
+            vfx.impact_by_surface
+                .get("surface.metal")
+                .map(String::as_str),
+            Some("effects/weapons/test.fxd@impact.metal")
+        );
         let world = item.world.expect("world");
         assert_eq!(world.model, "models/weapon/test.ydd@test");
         assert_eq!(world.material_library, "materials/test.nemat");
@@ -485,5 +602,9 @@ mod tests {
             [0.036, 0.608, -0.041, 0.792]
         );
         assert_eq!(presentation.right_palm_to_handle, [0.019, 0.033, -0.083]);
+        assert!((presentation.aim_response_hz - 14.0).abs() < 1.0e-6);
+        assert!((presentation.secondary_angular_inertia_gain - 0.31).abs() < 1.0e-6);
+        assert!((presentation.secondary_movement_inertia_gain - 0.77).abs() < 1.0e-6);
+        assert!((presentation.secondary_natural_hz_ads - 8.2).abs() < 1.0e-6);
     }
 }

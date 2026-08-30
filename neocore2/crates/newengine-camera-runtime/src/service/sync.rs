@@ -1,5 +1,171 @@
 use super::*;
 
+#[inline]
+fn first_person_horizontal_forward(rotation: Quat) -> Vec3 {
+    let forward = (rotation.normalize_or_identity() * -Vec3::Z).normalize_or_zero();
+    Vec3::new(forward.x, 0.0, forward.z).normalize_or_zero()
+}
+
+#[inline]
+fn first_person_position_contract(
+    body_rotation: Quat,
+    camera_rotation: Quat,
+    forward_clearance: f32,
+) -> (Vec3, Vec3) {
+    let mut body_forward = first_person_horizontal_forward(body_rotation);
+    if body_forward.length_squared() <= 1.0e-8 {
+        body_forward = Vec3::new(0.0, 0.0, -1.0);
+    }
+    let view_forward = {
+        let value = first_person_horizontal_forward(camera_rotation);
+        if value.length_squared() > 1.0e-8 {
+            value
+        } else {
+            body_forward
+        }
+    };
+    let body_right = Vec3::new(-body_forward.z, 0.0, body_forward.x).normalize_or_zero();
+    let yaw_cos = body_forward.dot(view_forward).clamp(-1.0, 1.0);
+    let yaw_sin = body_forward.cross(view_forward).y.clamp(-1.0, 1.0);
+
+    // REDengine exposes FPP parallax as separate forward/side channels instead of rotating the
+    // positional eye offset by raw view yaw. Keep the same contract here: body owns the base eye
+    // position; view yaw contributes only a centimetre-scale, bounded additive parallax.
+    const MAX_SIDE_PARALLAX_M: f32 = 0.012;
+    const MAX_FORWARD_RELIEF_M: f32 = 0.012;
+    let side = (-yaw_sin * MAX_SIDE_PARALLAX_M).clamp(-MAX_SIDE_PARALLAX_M, MAX_SIDE_PARALLAX_M);
+    let forward_relief =
+        ((1.0 - yaw_cos) * (MAX_FORWARD_RELIEF_M * 0.5)).clamp(0.0, MAX_FORWARD_RELIEF_M);
+    let base_offset = body_forward * forward_clearance;
+    let parallax = body_right * side - body_forward * forward_relief;
+    (base_offset, parallax)
+}
+
+#[inline]
+fn smooth_first_person_parallax(current: Vec3, target: Vec3, dt: f32) -> Vec3 {
+    if !target.is_finite() {
+        return Vec3::ZERO;
+    }
+    if !current.is_finite() || !(dt.is_finite() && dt > 0.0) {
+        return target;
+    }
+    // Position follows view quickly enough to feel attached to the head but remains independent
+    // from instantaneous mouse rotation. This is deliberately much faster than body turn.
+    let alpha = (1.0 - (-dt / 0.035).exp()).clamp(0.0, 1.0);
+    current + (target - current) * alpha
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+struct FirstPersonAdditivePose {
+    position_ls: Vec3,
+    rotation_ls: Quat,
+}
+
+#[inline]
+fn signed_sequence_noise(sequence: u64, salt: u64) -> f32 {
+    let bits = (newengine_math::avalanche_u64(sequence ^ salt) >> 40) as u32 & 0x00ff_ffff;
+    (bits as f32 / 0x00ff_ffffu32 as f32) * 2.0 - 1.0
+}
+
+fn step_first_person_additive_motion(
+    state: &mut GameplayFirstPersonCameraState,
+    input: FirstPersonPresentationInput,
+    dt: f32,
+) -> FirstPersonAdditivePose {
+    let dt = if dt.is_finite() && dt > 0.0 {
+        dt.min(0.05)
+    } else {
+        0.0
+    };
+    let horizontal_speed = if input.horizontal_speed.is_finite() {
+        input.horizontal_speed.max(0.0).min(25.0)
+    } else {
+        0.0
+    };
+    let aim_target = if input.aiming { 1.0 } else { 0.0 };
+    if dt > 0.0 {
+        let aim_response_hz = 18.0_f32;
+        let alpha = 1.0 - (-aim_response_hz * dt).exp();
+        state.aim_alpha =
+            (state.aim_alpha + (aim_target - state.aim_alpha) * alpha).clamp(0.0, 1.0);
+    } else {
+        state.aim_alpha = aim_target;
+    }
+
+    if input.shot_sequence != state.last_shot_sequence {
+        const PITCH_SALT: u64 = 0x243f_6a88_85a3_08d3;
+        const YAW_SALT: u64 = 0x1319_8a2e_0370_7344;
+        let pitch_base = input.recoil_pitch_radians.max(0.0);
+        let pitch_random = input.recoil_pitch_random_radians.max(0.0);
+        let yaw_random = input.recoil_yaw_radians.max(0.0);
+        let yaw_bias = if input.recoil_yaw_bias_radians.is_finite() {
+            input.recoil_yaw_bias_radians
+        } else {
+            0.0
+        };
+        let ads_multiplier = if input.ads_recoil_multiplier.is_finite() {
+            input.ads_recoil_multiplier.clamp(0.0, 4.0)
+        } else {
+            1.0
+        };
+        let recoil_scale = 1.0 + (ads_multiplier - 1.0) * state.aim_alpha;
+        // Camera recoil is intentionally smaller than weapon-side recoil. The weapon animation is
+        // the primary visual kick; the camera receives a separate additive impulse like REDengine.
+        const CAMERA_RECOIL_SHARE: f32 = 0.42;
+        state.recoil_pitch_radians += (pitch_base
+            + signed_sequence_noise(input.shot_sequence, PITCH_SALT) * pitch_random)
+            .max(0.0)
+            * recoil_scale
+            * CAMERA_RECOIL_SHARE;
+        state.recoil_yaw_radians += (yaw_bias
+            + signed_sequence_noise(input.shot_sequence, YAW_SALT) * yaw_random)
+            * recoil_scale
+            * CAMERA_RECOIL_SHARE;
+        state.last_shot_sequence = input.shot_sequence;
+    }
+
+    if dt > 0.0 {
+        let recovery_hz = if input.recoil_recovery_hz.is_finite() {
+            input.recoil_recovery_hz.clamp(0.05, 120.0)
+        } else {
+            7.5
+        };
+        let decay = (-recovery_hz * dt).exp();
+        state.recoil_pitch_radians *= decay;
+        state.recoil_yaw_radians *= decay;
+    }
+    state.recoil_pitch_radians = state.recoil_pitch_radians.clamp(0.0, 0.20);
+    state.recoil_yaw_radians = state.recoil_yaw_radians.clamp(-0.12, 0.12);
+
+    let moving = input.grounded && horizontal_speed > 0.20;
+    let speed_alpha = ((horizontal_speed - 0.20) / 4.30).clamp(0.0, 1.25);
+    if moving && dt > 0.0 {
+        let stride_hz = (1.35 + horizontal_speed * 0.24).clamp(1.35, 3.6);
+        state.locomotion_phase = (state.locomotion_phase + dt * stride_hz * core::f32::consts::TAU)
+            .rem_euclid(core::f32::consts::TAU);
+    }
+    let ads_motion_scale = 1.0 - state.aim_alpha * 0.76;
+    let locomotion_scale = if moving {
+        speed_alpha * ads_motion_scale
+    } else {
+        0.0
+    };
+    let phase = state.locomotion_phase;
+    let lateral = phase.sin() * 0.0035 * locomotion_scale;
+    let vertical = (phase * 2.0).sin() * 0.0045 * locomotion_scale;
+    let bob_pitch = (phase * 2.0).sin() * 0.0018 * locomotion_scale;
+    let bob_roll = -phase.sin() * 0.0024 * locomotion_scale;
+
+    FirstPersonAdditivePose {
+        // No forward/back positional bob: it would change face clearance and can cross body shells.
+        position_ls: Vec3::new(lateral, vertical, 0.0),
+        rotation_ls: (Quat::from_rotation_z(bob_roll)
+            * Quat::from_rotation_y(state.recoil_yaw_radians)
+            * Quat::from_rotation_x(bob_pitch + state.recoil_pitch_radians))
+        .normalize_or_identity(),
+    }
+}
+
 impl CameraRuntimeService {
     /// Synchronizes a possessed gameplay camera at render cadence. Character translation
     /// remains fixed-step authoritative, but view rotation and camera spring integration no
@@ -37,7 +203,10 @@ impl CameraRuntimeService {
                 .filter(|rotation| rotation.is_finite())
                 .unwrap_or(simulation_target_body_rotation)
         } else {
-            simulation_target_body_rotation
+            config
+                .first_person_body_rotation_ws
+                .filter(|rotation| rotation.is_finite())
+                .unwrap_or(simulation_target_body_rotation)
         }
         .normalize_or_identity();
         let player_motor = world.get::<CharacterMotor>(player).copied();
@@ -60,17 +229,59 @@ impl CameraRuntimeService {
             let camera_rotation =
                 (player_view_rotation * controller.rot_offset).normalize_or_identity();
             let forward_clearance = if config.first_person_forward_clearance.is_finite() {
-                config.first_person_forward_clearance.clamp(0.0, 0.20)
+                config.first_person_forward_clearance.clamp(0.0, 0.08)
             } else {
-                0.055
+                0.045
             };
-            let camera_position =
-                eye_center + (camera_rotation * -Vec3::Z).normalize_or_zero() * forward_clearance;
+            let (base_offset, target_parallax) = first_person_position_contract(
+                target_body_rotation,
+                camera_rotation,
+                forward_clearance,
+            );
+            let mut first_person = world
+                .get::<GameplayFirstPersonCameraState>(camera)
+                .copied()
+                .unwrap_or_default();
+            if !first_person.initialized
+                || first_person.target != player
+                || !first_person.parallax_offset_ws.is_finite()
+            {
+                first_person.target = player;
+                first_person.parallax_offset_ws = target_parallax;
+                first_person.locomotion_phase = 0.0;
+                first_person.aim_alpha = if config.first_person_presentation.aiming {
+                    1.0
+                } else {
+                    0.0
+                };
+                first_person.recoil_pitch_radians = 0.0;
+                first_person.recoil_yaw_radians = 0.0;
+                first_person.last_shot_sequence = config.first_person_presentation.shot_sequence;
+                first_person.initialized = true;
+            } else {
+                first_person.parallax_offset_ws = smooth_first_person_parallax(
+                    first_person.parallax_offset_ws,
+                    target_parallax,
+                    dt,
+                );
+            }
+            let additive = step_first_person_additive_motion(
+                &mut first_person,
+                config.first_person_presentation,
+                dt,
+            );
+            let camera_position = eye_center
+                + base_offset
+                + first_person.parallax_offset_ws
+                + camera_rotation * additive.position_ls;
+            let rendered_camera_rotation =
+                (camera_rotation * additive.rotation_ls).normalize_or_identity();
+            let _ = world.insert(camera, first_person);
             let _ = world.insert(
                 camera,
                 CameraRigComp(CameraRig {
                     position: camera_position,
-                    rotation: camera_rotation,
+                    rotation: rendered_camera_rotation,
                 }),
             );
             let _ = world.insert(camera, FollowTargetCameraMotor::default());
@@ -79,10 +290,12 @@ impl CameraRuntimeService {
                 world,
                 camera,
                 camera_position,
-                camera_rotation,
+                rendered_camera_rotation,
             );
             return true;
         }
+
+        let _ = world.remove::<GameplayFirstPersonCameraState>(camera);
 
         // Third-person motion is decomposed into independent translation/orientation state.
         // Free Orbit is stricter than Follow: its pivot must use the exact same current player
@@ -265,5 +478,125 @@ impl CameraRuntimeService {
         world
             .resource::<CameraManagerResource>()
             .map(|manager| manager.last_cursor)
+    }
+}
+
+#[cfg(test)]
+mod first_person_position_tests {
+    use super::*;
+
+    #[test]
+    fn pitch_rotates_view_without_translating_fpp_position() {
+        let body = Quat::from_rotation_y(0.37);
+        let neutral = body;
+        let pitched = (body * Quat::from_rotation_x(1.25)).normalize_or_identity();
+        let neutral_contract = first_person_position_contract(body, neutral, 0.045);
+        let pitched_contract = first_person_position_contract(body, pitched, 0.045);
+        assert!((neutral_contract.0 - pitched_contract.0).length() <= 1.0e-6);
+        assert!((neutral_contract.1 - pitched_contract.1).length() <= 1.0e-6);
+    }
+
+    #[test]
+    fn mouse_yaw_cannot_orbit_camera_around_eye_center() {
+        let body = Quat::IDENTITY;
+        let forward = first_person_position_contract(body, body, 0.045);
+        let right_view = Quat::from_rotation_y(core::f32::consts::FRAC_PI_2);
+        let right = first_person_position_contract(body, right_view, 0.045);
+        let forward_position = forward.0 + forward.1;
+        let right_position = right.0 + right.1;
+        // View yaw is allowed only centimetre-scale parallax; the old implementation moved the
+        // camera around a 11.5 cm circle and violated this bound by a wide margin.
+        assert!((right_position - forward_position).length() <= 0.025);
+        assert!(right.1.length() <= 0.018);
+    }
+
+    #[test]
+    fn additive_locomotion_never_moves_camera_forward_or_backward() {
+        let mut state = GameplayFirstPersonCameraState::default();
+        state.initialized = true;
+        for _ in 0..120 {
+            let pose = step_first_person_additive_motion(
+                &mut state,
+                FirstPersonPresentationInput {
+                    grounded: true,
+                    horizontal_speed: 4.5,
+                    ..Default::default()
+                },
+                1.0 / 60.0,
+            );
+            assert!(pose.position_ls.is_finite());
+            assert!(pose.position_ls.z.abs() <= 1.0e-8);
+            assert!(pose.position_ls.length() <= 0.008);
+        }
+    }
+
+    #[test]
+    fn ads_suppresses_locomotion_camera_motion() {
+        let mut hip = GameplayFirstPersonCameraState {
+            initialized: true,
+            locomotion_phase: 0.7,
+            ..Default::default()
+        };
+        let mut ads = hip;
+        ads.aim_alpha = 1.0;
+        let hip_pose = step_first_person_additive_motion(
+            &mut hip,
+            FirstPersonPresentationInput {
+                grounded: true,
+                horizontal_speed: 4.5,
+                ..Default::default()
+            },
+            0.0,
+        );
+        let ads_pose = step_first_person_additive_motion(
+            &mut ads,
+            FirstPersonPresentationInput {
+                grounded: true,
+                horizontal_speed: 4.5,
+                aiming: true,
+                ..Default::default()
+            },
+            0.0,
+        );
+        assert!(ads_pose.position_ls.length() < hip_pose.position_ls.length() * 0.35);
+    }
+
+    #[test]
+    fn shot_sequence_injects_camera_recoil_once_then_recovers() {
+        let mut state = GameplayFirstPersonCameraState {
+            initialized: true,
+            last_shot_sequence: 10,
+            ..Default::default()
+        };
+        let shot = FirstPersonPresentationInput {
+            shot_sequence: 11,
+            recoil_pitch_radians: 0.04,
+            recoil_pitch_random_radians: 0.0,
+            recoil_yaw_radians: 0.0,
+            recoil_recovery_hz: 5.0,
+            ..Default::default()
+        };
+        let _ = step_first_person_additive_motion(&mut state, shot, 1.0 / 120.0);
+        let first = state.recoil_pitch_radians;
+        let _ = step_first_person_additive_motion(&mut state, shot, 1.0 / 120.0);
+        let second = state.recoil_pitch_radians;
+        assert!(first > 0.0);
+        assert!(
+            second < first,
+            "same shot sequence must decay, not inject twice"
+        );
+        for _ in 0..240 {
+            let _ = step_first_person_additive_motion(&mut state, shot, 1.0 / 120.0);
+        }
+        assert!(state.recoil_pitch_radians < second * 0.01);
+    }
+
+    #[test]
+    fn body_turn_owns_the_base_eye_clearance() {
+        let body = Quat::from_rotation_y(0.83);
+        let view = Quat::from_rotation_y(-0.41);
+        let (base, _) = first_person_position_contract(body, view, 0.045);
+        let expected = first_person_horizontal_forward(body) * 0.045;
+        assert!((base - expected).length() <= 1.0e-6);
     }
 }

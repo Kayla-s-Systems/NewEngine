@@ -76,8 +76,8 @@ pub(in super::super) fn begin_static_world_prefabs(
     // Collision is launch-critical and is admitted before render-only static geometry.
     // Decoded source packets remain cached for the later visual declaration.
     candidates.sort_by(|a, b| {
-        let a_collision = is_collision_proxy(a.proxy.trim());
-        let b_collision = is_collision_proxy(b.proxy.trim());
+        let a_collision = is_simulation_proxy(a.proxy.trim());
+        let b_collision = is_simulation_proxy(b.proxy.trim());
         // Collision is launch-critical: admit it before render-only static geometry.
         // Within the same role retain deterministic source order for cache locality.
         b_collision
@@ -96,7 +96,7 @@ pub(in super::super) fn begin_static_world_prefabs(
             decode_backlog.push_back(source.clone());
         }
         let queue = pending_by_source.entry(source).or_default();
-        if is_collision_proxy(prefab.proxy.trim()) {
+        if is_simulation_proxy(prefab.proxy.trim()) {
             queue.collision.push_back(prefab);
         } else {
             queue.visual.push_back(prefab);
@@ -164,8 +164,8 @@ pub(super) fn enqueue_static_world_prefabs(
         .cloned()
         .collect::<Vec<_>>();
     candidates.sort_by(|a, b| {
-        is_collision_proxy(b.proxy.trim())
-            .cmp(&is_collision_proxy(a.proxy.trim()))
+        is_simulation_proxy(b.proxy.trim())
+            .cmp(&is_simulation_proxy(a.proxy.trim()))
             .then_with(|| a.source.cmp(&b.source))
             .then_with(|| a.id.cmp(&b.id))
     });
@@ -207,10 +207,11 @@ pub(super) fn enqueue_static_world_prefabs(
     world.insert_resource(state);
 }
 
-pub(super) fn cancel_static_world_cell(
+pub(super) fn cancel_static_world_cell_domain(
     world: &mut newengine_ecs::World,
     map_ref: &str,
     coord: newengine_assets_api::MapCellCoordV1,
+    domain: super::authored_map_streaming::AuthoredCellDomain,
 ) -> usize {
     let Some(mut state) = world.remove_resource::<GameReadyStaticWorldStreamingState>() else {
         return 0;
@@ -222,12 +223,13 @@ pub(super) fn cancel_static_world_cell(
             continue;
         };
         let before = queue.collision.len().saturating_add(queue.visual.len());
-        queue.collision.retain(|prefab| {
-            !(prefab.authored_map_ref == map_ref && prefab.authored_cell == Some(coord))
-        });
-        queue.visual.retain(|prefab| {
-            !(prefab.authored_map_ref == map_ref && prefab.authored_cell == Some(coord))
-        });
+        let keep = |prefab: &GameReadyPrefabSpec| {
+            !(prefab.authored_map_ref == map_ref
+                && prefab.authored_cell == Some(coord)
+                && super::authored_map_streaming::static_world_prefab_domain(prefab) == domain)
+        };
+        queue.collision.retain(&keep);
+        queue.visual.retain(keep);
         let after = queue.collision.len().saturating_add(queue.visual.len());
         removed = removed.saturating_add(before.saturating_sub(after));
         if queue.collision.is_empty() && queue.visual.is_empty() {
@@ -255,6 +257,11 @@ pub(super) fn cancel_static_world_cell(
 fn is_collision_proxy(proxy: &str) -> bool {
     proxy.eq_ignore_ascii_case(COLLISION_WORLD_PROXY)
         || proxy.eq_ignore_ascii_case(BOX_COLLISION_WORLD_PROXY)
+}
+
+#[inline]
+fn is_simulation_proxy(proxy: &str) -> bool {
+    is_collision_proxy(proxy) || proxy.eq_ignore_ascii_case(DYNAMIC_WORLD_PROXY)
 }
 
 fn mark_static_world_source_terminal(state: &mut GameReadyStaticWorldStreamingState, source: &str) {

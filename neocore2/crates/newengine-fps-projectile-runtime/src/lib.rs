@@ -17,10 +17,10 @@ use newengine_transform::Transform;
 use crate::game_data::active_game_data;
 
 use newengine_engine_runtime::gameplay::{
-    play_equipped_weapon_audio, CollisionShapeDesc, DisplayVisibility,
-    EquippedWeaponBinding, EquippedWeaponMuzzle, GameplayActor, ItemCatalog, ItemId,
-    PhysicsBodyDesc, PhysicsSurface, PlayerCommandFrame, PlayerController, PlayerStanceState,
-    WeaponAudioAction,
+    play_equipped_weapon_audio, CollisionShapeDesc, DisplayVisibility, EquippedWeaponBinding,
+    EquippedWeaponEntity, EquippedWeaponMuzzle, GameplayActor, ItemCatalog, ItemId, PhysicsBodyDesc,
+    PhysicsSurface, PlayerCommandFrame, PlayerController, PlayerStanceState, WeaponAudioAction,
+    WeaponEntitySockets, WeaponSocketPose, WeaponVfxDefinition,
 };
 
 // Projectile facade: weapon-shot presentation and physical sphere launcher are kept separate.

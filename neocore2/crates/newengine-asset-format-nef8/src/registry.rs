@@ -4,7 +4,7 @@ use newengine_assets_api::{AssetFileTypeDescriptor, AssetGatewayRoute};
 
 use super::descriptor::Nef8FormatSpec;
 use super::formats::{
-    neftd, neitems, nemat, nepak, neui, ybd, ybn, ycd, ydd, ydr, yed, yfd, yft, yld, ymap, ymf,
+    fxd, neftd, neitems, nemat, nepak, neui, ybd, ybn, ycd, ydd, ydr, yed, yfd, yft, yld, ymap, ymf,
     ymt, ypdb, ysc, yscd, ytd, ytf, ytyd, ytyp, yvr, ywr,
 };
 
@@ -54,6 +54,7 @@ macro_rules! package_spec {
 }
 
 const FORMAT_SPECS: &[Nef8FormatSpec] = &[
+    listfile_spec!(fxd),
     listfile_spec!(nemat),
     package_spec!(nepak),
     listfile_spec!(neitems),
@@ -158,6 +159,11 @@ pub fn default_entry_route_for_content_kind(content_kind: u32) -> Option<AssetGa
             "engine.audio",
             "audio.sound_cue_dictionary_v1",
             "sound_cue_dictionary",
+        ),
+        "fxd" => (
+            "engine.render.vfx",
+            "vfx.effect_dictionary_v1",
+            "effect_dictionary",
         ),
         _ => (spec.semantic_gateway, "asset.decode_v1", spec.asset_kind),
     };

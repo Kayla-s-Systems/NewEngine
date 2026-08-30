@@ -6,13 +6,37 @@ use super::scene_mesh_pass::route_diagnostics_due;
 
 use super::*;
 
-#[inline]
-fn shadow_light_view_key(light_viewproj: Mat4) -> u64 {
-    let mut h = 0xa5ad_50c5_1a57_0001u64;
-    for f in light_viewproj.to_cols_array() {
-        h = hash_combine_u64(h, f.to_bits() as u64);
+/// Stable semantic identity for a shadow render view.
+///
+/// A light matrix is frame-varying payload and must never enter a persistent
+/// per-draw cache key. Cascades and local atlas views still need distinct UBOs
+/// inside one CPU frame because their matrices differ.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ShadowUboViewKey {
+    DirectionalCascade(usize),
+    LocalView(usize),
+}
+
+impl ShadowUboViewKey {
+    #[inline]
+    pub(crate) const fn directional(cascade_index: usize) -> Self {
+        Self::DirectionalCascade(cascade_index)
     }
-    h
+
+    #[inline]
+    pub(crate) const fn local(view_index: usize) -> Self {
+        Self::LocalView(view_index)
+    }
+
+    #[inline]
+    fn cache_discriminator(self) -> u64 {
+        match self {
+            Self::DirectionalCascade(index) => {
+                hash_combine_u64(0xd1ec_710a_0000_0000, index as u64)
+            }
+            Self::LocalView(index) => hash_combine_u64(0x10ca_15ad_0000_0000, index as u64),
+        }
+    }
 }
 
 #[inline]
@@ -50,6 +74,7 @@ pub fn draw_primitives_shadow(
     camera_position: Vec3,
     cascade_index: usize,
     cascade_texel_world_size: f32,
+    shadow_ubo_view: ShadowUboViewKey,
 ) -> newengine_core::EngineResult<()> {
     skinned::draw_skinned_player_primitives_shadow(
         this,
@@ -62,6 +87,7 @@ pub fn draw_primitives_shadow(
         camera_position,
         cascade_index,
         cascade_texel_world_size,
+        shadow_ubo_view,
     )?;
     models::draw_model_components_shadow(
         this,
@@ -74,6 +100,7 @@ pub fn draw_primitives_shadow(
         camera_position,
         cascade_index,
         cascade_texel_world_size,
+        shadow_ubo_view,
     )?;
     primitives::draw_primitives_shadow_body(
         this,
@@ -91,7 +118,8 @@ pub fn draw_primitives_shadow(
 
 #[cfg(test)]
 mod shadow_caster_lod_tests {
-    use super::shadow_caster_projected_radius_visible;
+    use super::{shadow_caster_projected_radius_visible, ShadowUboViewKey};
+    use std::collections::BTreeSet;
 
     #[test]
     fn shadow_caster_lod_keeps_near_and_rejects_subtexel_distant_casters() {
@@ -107,5 +135,22 @@ mod shadow_caster_lod_tests {
     fn shadow_caster_lod_disables_itself_without_valid_texel_scale() {
         assert!(shadow_caster_projected_radius_visible(3, 0.0, 0.01));
         assert!(shadow_caster_projected_radius_visible(3, f32::NAN, 0.01));
+    }
+    #[test]
+    fn shadow_ubo_view_keys_are_bounded_and_domain_separated() {
+        let directional = (0..4)
+            .map(|index| ShadowUboViewKey::directional(index).cache_discriminator())
+            .collect::<BTreeSet<_>>();
+        let local = (0..16)
+            .map(|index| ShadowUboViewKey::local(index).cache_discriminator())
+            .collect::<BTreeSet<_>>();
+
+        assert_eq!(directional.len(), 4);
+        assert_eq!(local.len(), 16);
+        assert!(directional.is_disjoint(&local));
+        assert_eq!(
+            ShadowUboViewKey::directional(2).cache_discriminator(),
+            ShadowUboViewKey::directional(2).cache_discriminator()
+        );
     }
 }

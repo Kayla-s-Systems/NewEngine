@@ -11,13 +11,13 @@ pub(super) fn draw_model_components_shadow(
     camera_position: Vec3,
     cascade_index: usize,
     cascade_texel_world_size: f32,
+    shadow_ubo_view: ShadowUboViewKey,
 ) -> newengine_core::EngineResult<()> {
     use newengine_core::render::{BufferSlice, DrawIndexedArgs, IndexFormat};
 
     let world = scene.world();
     let shadow_max_distance = primitive_shadow_max_distance(runtime);
     let shadow_max_distance_sq = shadow_max_distance * shadow_max_distance;
-    let light_key = shadow_light_view_key(light_viewproj);
 
     for (entity, model_component, global) in
         world.query2::<crate::gameplay::ModelRenderComponent, GlobalTransform>()
@@ -104,7 +104,7 @@ pub(super) fn draw_model_components_shadow(
             let mut ubo_key = 0x6d6f_6465_6c5f_7368u64;
             ubo_key = hash_combine_u64(ubo_key, entity.stable_u64());
             ubo_key = hash_combine_u64(ubo_key, primitive_id.0);
-            ubo_key = hash_combine_u64(ubo_key, light_key);
+            ubo_key = hash_combine_u64(ubo_key, shadow_ubo_view.cache_discriminator());
             ubo_key = hash_combine_u64(ubo_key, base_texture.get() as u64);
             ubo_key = hash_combine_u64(ubo_key, pipeline.get() as u64);
 

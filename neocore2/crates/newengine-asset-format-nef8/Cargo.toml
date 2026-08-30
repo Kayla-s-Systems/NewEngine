@@ -11,6 +11,7 @@ blake3 = "1"
 flate2 = "1"
 newengine-contract-api = { path = "../newengine-contract-api" }
 newengine-assets-api = { path = "../newengine-assets-api" }
+newengine-vfx-api = { path = "../newengine-vfx-api" }
 
 [features]
 default = []

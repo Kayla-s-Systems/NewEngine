@@ -95,9 +95,9 @@ pub(super) fn publish_inventory_hud_state(
                 "character",
                 "noclip_label",
                 serde_json::json!(if noclip_enabled {
-                    "No Clip  [x]"
+                    "NoClip - ENABLED"
                 } else {
-                    "No Clip  [ ]"
+                    "NoClip - Disabled"
                 }),
             )
             .with_change(
@@ -142,6 +142,34 @@ pub(super) fn publish_inventory_hud_state(
                     .map(availability_label)
                     .unwrap_or("External assignment")),
             );
+        let character_category = state.character_category;
+        patch = patch
+            .with_change(
+                "character",
+                "category_characters_selected",
+                serde_json::json!(matches!(
+                    character_category,
+                    CharacterMenuCategory::Characters
+                )),
+            )
+            .with_change(
+                "character",
+                "category_weapons_selected",
+                serde_json::json!(matches!(character_category, CharacterMenuCategory::Weapons)),
+            )
+            .with_change(
+                "character",
+                "characters_visible",
+                serde_json::json!(matches!(
+                    character_category,
+                    CharacterMenuCategory::Characters
+                )),
+            )
+            .with_change(
+                "character",
+                "weapons_visible",
+                serde_json::json!(matches!(character_category, CharacterMenuCategory::Weapons)),
+            );
         for (index, variant) in playable_character_variants(world).iter().enumerate() {
             patch = patch.with_change(
                 "character",
@@ -151,20 +179,85 @@ pub(super) fn publish_inventory_hud_state(
                 ),
             );
         }
+        let registered_characters = registered_character_items(world, player);
+        patch = patch
+            .with_change(
+                "character",
+                "registered_character_count",
+                serde_json::json!(registered_characters.len()),
+            )
+            .with_change(
+                "character",
+                "registered_character_count_label",
+                serde_json::json!(format!("{} AVAILABLE", registered_characters.len())),
+            )
+            .with_change(
+                "character",
+                "registered_characters",
+                serde_json::Value::Array(registered_characters),
+            );
         let registered_weapons = registered_weapon_items(catalog, binding);
         patch = patch.with_change(
             "character",
             "registered_weapons",
             serde_json::Value::Array(registered_weapons),
         );
-        patch = patch.with_change(
-            "character",
-            "registered_weapon_count",
-            serde_json::json!(catalog
-                .definitions()
-                .filter(|definition| definition.kind == ItemKind::Weapon)
-                .count()),
-        );
+        let registered_weapon_count = catalog
+            .definitions()
+            .filter(|definition| definition.kind == ItemKind::Weapon)
+            .count();
+        patch = patch
+            .with_change(
+                "character",
+                "registered_weapon_count",
+                serde_json::json!(registered_weapon_count),
+            )
+            .with_change(
+                "character",
+                "registered_weapon_count_label",
+                serde_json::json!(format!("{} AVAILABLE", registered_weapon_count)),
+            );
+        let selected_weapon = binding.and_then(|binding| catalog.get(binding.item));
+        patch = patch
+            .with_change(
+                "character",
+                "selected_weapon_name",
+                serde_json::json!(selected_weapon
+                    .map(|definition| definition.display_name.as_str())
+                    .unwrap_or("Unarmed")),
+            )
+            .with_change(
+                "character",
+                "selected_weapon_description",
+                serde_json::json!(selected_weapon
+                    .map(|definition| definition.description.as_str())
+                    .filter(|description| !description.trim().is_empty())
+                    .unwrap_or("No weapon is currently equipped.")),
+            )
+            .with_change(
+                "character",
+                "selected_weapon_status",
+                serde_json::json!(if selected_weapon.is_some() {
+                    "Equipped · runtime active"
+                } else {
+                    "Unarmed · no active weapon"
+                }),
+            )
+            .with_change(
+                "character",
+                "selected_weapon_slot",
+                serde_json::json!(selected_weapon
+                    .and_then(|definition| definition.equipment_slot)
+                    .map(equipment_slot_name)
+                    .unwrap_or("none")),
+            )
+            .with_change(
+                "character",
+                "selected_weapon_id",
+                serde_json::json!(selected_weapon
+                    .map(|definition| definition.name.as_str())
+                    .unwrap_or("unarmed")),
+            );
 
         patch = patch.with_change(
             "character",
@@ -300,6 +393,31 @@ fn base_patch(
         )
 }
 
+fn registered_character_items(world: &World, player: EntityId) -> Vec<serde_json::Value> {
+    let selected_id = selected_variant(world, player).map(|variant| variant.id.as_str());
+    playable_character_variants(world)
+        .iter()
+        .map(|variant| {
+            serde_json::json!({
+                "entity_key": variant.id,
+                "entity": variant.id,
+                "display_name": variant.display_name,
+                "action_id": format!("game.character.select.{}", variant.id),
+                "subtitle": variant.subtitle,
+                "family": variant.family,
+                "rig_label": variant.rig_label,
+                "status": availability_label(variant),
+                "detail": format!("{} | {} | {}", variant.subtitle, variant.rig_label, availability_label(variant)),
+                "reasons": [variant.subtitle, variant.rig_label],
+                "runtime_ready": variant.runtime_ready,
+                "disabled": !variant.runtime_ready,
+                "selected": selected_id.is_some_and(|selected| selected == variant.id),
+                "registration_name": variant.id,
+            })
+        })
+        .collect()
+}
+
 fn registered_weapon_items(
     catalog: &ItemCatalog,
     active: Option<EquippedWeaponBinding>,
@@ -312,11 +430,28 @@ fn registered_weapon_items(
     weapons
         .into_iter()
         .map(|definition| {
+            let slot = definition
+                .equipment_slot
+                .map(equipment_slot_name)
+                .unwrap_or("unassigned");
+            let detail = if definition.description.trim().is_empty() {
+                format!("slot: {slot}")
+            } else {
+                format!("{} · slot: {slot}", definition.description.trim())
+            };
+            let selected = active.is_some_and(|binding| binding.item == definition.id)
+                || (active.is_none()
+                    && (definition.name == SHARED_UNARMED_WEAPON_ITEM_NAME
+                        || definition.equipment_slot.is_none()));
             serde_json::json!({
                 "entity_key": definition.id.0,
                 "entity": definition.name,
                 "display_name": definition.display_name,
-                "selected": active.is_some_and(|binding| binding.item == definition.id),
+                "action_id": format!("game.weapon.select.{}", definition.id.0),
+                "detail": detail,
+                "reasons": [detail],
+                "selected": selected,
+                "disabled": false,
                 "registration_name": definition.name,
             })
         })
@@ -489,6 +624,7 @@ pub(super) fn inventory_hud_fingerprint(world: &World, player: EntityId) -> u64 
         push(state.visible as u64);
         push(state.open as u64);
         push(state.character_select_open as u64);
+        push(state.character_category.fingerprint_code());
         push(state.character_nav_index as u64);
         push(state.revision);
         push(state.selected_instance.map_or(0, |instance| instance.0));
@@ -521,6 +657,23 @@ pub(super) fn inventory_hud_fingerprint(world: &World, player: EntityId) -> u64 
     if let Some(selection) = world.get::<PlayableCharacterSelection>(player) {
         for byte in selection.variant_id.as_bytes() {
             push(u64::from(*byte));
+        }
+    }
+    for variant in playable_character_variants(world) {
+        for byte in variant
+            .id
+            .as_bytes()
+            .iter()
+            .chain(variant.display_name.as_bytes())
+            .chain(variant.family.as_bytes())
+        {
+            push(u64::from(*byte));
+        }
+        push(variant.runtime_ready as u64);
+        if let Some(reference) = variant.runtime_model_ref.as_deref() {
+            for byte in reference.as_bytes() {
+                push(u64::from(*byte));
+            }
         }
     }
     if let Some(menu) = world.resource::<FpsCharacterMenuPolicySnapshot>() {

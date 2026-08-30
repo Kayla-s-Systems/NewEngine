@@ -3,6 +3,8 @@
 use newengine_core::render::TextureId;
 use newengine_materials::api::{MaterialFlags, MaterialResolved, ShadingModel};
 
+const SHADING_FAMILY_EYE_MARKER: f32 = 2.0;
+
 #[derive(Clone, Debug)]
 pub(super) enum MaterialTextureGpuResidency {
     /// Path has been declared by scene/material extraction but no AssetManager
@@ -52,6 +54,8 @@ pub(super) struct LitMaterialPlan<'a> {
     pub normal_texture: Option<&'a str>,
     pub roughness_texture: Option<&'a str>,
     pub double_sided: bool,
+    /// Explicit authored transparency. This is distinct from alpha-test/cutout.
+    pub alpha_blend: bool,
     pub cast_shadows: bool,
     pub receive_shadows: bool,
 }
@@ -87,7 +91,7 @@ impl<'a> LitMaterialPlan<'a> {
                 material.desc.metallic,
                 material.desc.occlusion_strength
                     + if material.desc.shading_model == ShadingModel::Eye {
-                        2.0
+                        SHADING_FAMILY_EYE_MARKER
                     } else {
                         0.0
                     },
@@ -96,13 +100,13 @@ impl<'a> LitMaterialPlan<'a> {
             normal_texture: material.textures.normal_texture.as_deref(),
             roughness_texture: material.textures.roughness_texture.as_deref(),
             double_sided: material.desc.flags.contains(MaterialFlags::DOUBLE_SIDED),
+            alpha_blend: material.desc.flags.contains(MaterialFlags::ALPHA_BLEND),
             cast_shadows: material.desc.flags.contains(MaterialFlags::CAST_SHADOWS),
             receive_shadows: material.desc.flags.contains(MaterialFlags::RECEIVE_SHADOWS)
                 || material.desc.flags.contains(MaterialFlags::CAST_SHADOWS),
         }
     }
 
-    #[inline]
     pub fn has_textures(self) -> bool {
         self.base_color_texture.is_some()
             || self.normal_texture.is_some()
@@ -121,6 +125,7 @@ impl<'a> LitMaterialPlan<'a> {
             normal_texture: None,
             roughness_texture: None,
             double_sided: false,
+            alpha_blend: false,
             cast_shadows: true,
             receive_shadows: true,
         }

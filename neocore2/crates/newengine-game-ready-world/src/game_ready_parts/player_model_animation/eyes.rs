@@ -3,32 +3,44 @@ struct EyeRuntimeContract {
     left: usize,
     right: usize,
     parent: usize,
+    preserve_bind_local: bool,
 }
 
-fn build_eye_runtime_contract(skeleton: &ModelSkeletonMetadata) -> Option<EyeRuntimeContract> {
-    let left = skeleton
-        .joints
-        .iter()
-        .position(|joint| joint.name == "l_eyeball")?;
-    let right = skeleton
-        .joints
-        .iter()
-        .position(|joint| joint.name == "r_eyeball")?;
-    let parent = skeleton.joints.get(left)?.parent_index? as usize;
-    if skeleton
-        .joints
-        .get(right)?
-        .parent_index
-        .map(|value| value as usize)
-        != Some(parent)
-        || skeleton.joints.get(parent)?.name != "headb"
-    {
-        return None;
+fn build_eye_runtime_contract(
+    skeleton: &ModelSkeletonMetadata,
+    authored: &newengine_engine_runtime::gameplay::PlayerEyeParentFollowRule,
+) -> Result<EyeRuntimeContract, String> {
+    let resolve = |label: &str, name: &str| -> Result<usize, String> {
+        let name = name.trim();
+        skeleton
+            .joints
+            .iter()
+            .position(|joint| joint.name == name)
+            .ok_or_else(|| format!("authored eye contract joint '{label}' is absent name='{name}'"))
+    };
+    let left = resolve("left_joint", &authored.left_joint)?;
+    let right = resolve("right_joint", &authored.right_joint)?;
+    let parent = resolve("parent_joint", &authored.parent_joint)?;
+    if left == right {
+        return Err("authored eye contract left/right joints must be distinct".to_owned());
     }
-    Some(EyeRuntimeContract {
+    for (label, index) in [("left", left), ("right", right)] {
+        let actual_parent = skeleton
+            .joints
+            .get(index)
+            .and_then(|joint| joint.parent_index)
+            .map(|value| value as usize);
+        if actual_parent != Some(parent) {
+            return Err(format!(
+                "authored eye contract {label} joint parent mismatch joint={index} expected_parent={parent} actual_parent={actual_parent:?}"
+            ));
+        }
+    }
+    Ok(EyeRuntimeContract {
         left,
         right,
         parent,
+        preserve_bind_local: authored.preserve_bind_local,
     })
 }
 
@@ -40,6 +52,9 @@ fn stabilize_eye_locals(
     let Some(contract) = contract else {
         return Ok(());
     };
+    if !contract.preserve_bind_local {
+        return Ok(());
+    }
     for index in [contract.left, contract.right] {
         let joint = skeleton
             .joints
@@ -103,7 +118,7 @@ fn debug_dump_eye_matrices(
     let Some(contract) = contract else {
         return;
     };
-    if crate::env_config::var_os("NORTHSTAR_DEBUG_ABBY_EYES").is_none() {
+    if crate::env_config::var_os("NORTHSTAR_DEBUG_CHARACTER_EYES").is_none() {
         return;
     }
     let Some(parent_bind_global) = bind_joint_frames.get(contract.parent).copied() else {
@@ -139,7 +154,7 @@ fn debug_dump_eye_matrices(
         );
         let animated_global = palette_matrix * bind_global;
         newengine_ulog_api::ulog::info!(
-            "ABBY_EYE_MATRIX context='{}' side={} joint={} parent={} bind_global={:?} parent_global={:?} animated_local={:?} animated_global={:?} palette_matrix={:?} parent_palette={:?} palette_parent_drift={:.8}",
+            "CHARACTER_EYE_MATRIX context='{}' side={} joint={} parent={} bind_global={:?} parent_global={:?} animated_local={:?} animated_global={:?} palette_matrix={:?} parent_palette={:?} palette_parent_drift={:.8}",
             context,
             side,
             index,

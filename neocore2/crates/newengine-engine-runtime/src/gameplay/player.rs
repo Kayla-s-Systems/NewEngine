@@ -13,7 +13,7 @@ use super::listeners::emit_player_event;
 use super::{
     ensure_player_inventory, CharacterBody, CharacterMotionTuning, CollisionShapeDesc, DisplayMode,
     DisplayVisibility, GameplayActor, Health, PhysicsBodyDesc, PhysicsSurface, PlayerActor,
-    PlayerAnimationState, PlayerCommandFrame, PlayerController, PlayerEventKind,
+    PlayerAnimationState, PlayerCommandFrame, PlayerController, PlayerEventKind, PlayerFallState,
     PlayerFixedPoseHistory, PlayerGroundState, PlayerLocomotionAnimation, PlayerLocomotionState,
     PlayerModelAssignment, PlayerModelBinding, PlayerMovementSpeeds, PlayerRenderPose,
     PlayerStanceKind, PlayerStanceState, PlayerViewState, PlayerViewVisibility,

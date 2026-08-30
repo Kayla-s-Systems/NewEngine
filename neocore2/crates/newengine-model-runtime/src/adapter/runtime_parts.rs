@@ -122,6 +122,7 @@ impl ModelAssetAdapter {
                 })
                 .transpose()?;
             out.push(ModelMeshPart {
+                source_mesh_name: source_mesh.name.clone(),
                 material_slot,
                 mesh: PrimitiveMesh {
                     vertices,

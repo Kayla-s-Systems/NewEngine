@@ -31,8 +31,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Err("usage: dump_native_skin_source OUTPUT PACKAGE...".into());
     }
 
-    let mut json =
-        String::from("{\n  \"schema\": \"northstar.native-source-skin.v1\",\n  \"packages\": [\n");
+    let mut json = String::from(
+        "{\n  \"schema\": \"northstar.native-runtime-skin.v1\",\n  \"projection\": \"top8_runtime_projection\",\n  \"packages\": [\n",
+    );
     let mut first_package = true;
     let mut total_meshes = 0usize;
     let mut source_max = 0u32;
@@ -61,14 +62,30 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             json.push_str(&format!(
                 ",\n          \"vertex_count\": {},\n          \"source_skin_joint_domain_size\": {},\n          \"skin\": [",
                 mesh.vertices.len(),
-                mesh.source_skin_joint_domain_size.map(|v| v as i64).unwrap_or(-1)
+                mesh.source_skin_joint_domain_size
+                    .map(|value| value as i64)
+                    .unwrap_or(-1)
             ));
-            if let Some(skin) = &mesh.source_skin_full {
-                for (vertex_index, influences) in skin.iter().enumerate() {
+            if let Some(skin) = &mesh.skin {
+                for (vertex_index, vertex) in skin.iter().enumerate() {
                     if vertex_index != 0 {
                         json.push(',');
                     }
                     json.push('[');
+                    let influences = vertex
+                        .joints
+                        .iter()
+                        .copied()
+                        .zip(vertex.weights.iter().copied())
+                        .chain(
+                            vertex
+                                .joints_extra
+                                .iter()
+                                .copied()
+                                .zip(vertex.weights_extra.iter().copied()),
+                        )
+                        .filter(|(_, weight)| weight.is_finite() && *weight > 0.0)
+                        .collect::<Vec<_>>();
                     for (influence_index, (joint, weight)) in influences.iter().enumerate() {
                         if influence_index != 0 {
                             json.push(',');
@@ -83,7 +100,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         json.push_str("\n      ]\n    }");
     }
     json.push_str(&format!(
-        "\n  ],\n  \"summary\": {{\"packages\": {}, \"meshes\": {}, \"max_source_influences\": {}}}\n}}\n",
+        "\n  ],\n  \"summary\": {{\"packages\": {}, \"meshes\": {}, \"max_source_influences_before_top8_projection\": {}}}\n}}\n",
         packages.len(), total_meshes, source_max
     ));
     if let Some(parent) = output.parent() {
@@ -91,7 +108,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     fs::write(&output, json)?;
     println!(
-        "native-source-skin: PASS packages={} meshes={} max_influences={} output={}",
+        "native-runtime-skin: PASS packages={} meshes={} max_source_influences={} output={}",
         packages.len(),
         total_meshes,
         source_max,

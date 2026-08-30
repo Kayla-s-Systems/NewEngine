@@ -43,5 +43,6 @@ pub fn gameplay_default_key_registry() -> Vec<InputKeyRegistration> {
         InputKeyRegistration::new(keys::ESCAPE, key_identity::ESCAPE, "ESC"),
         InputKeyRegistration::new(keys::F1, key_identity::F1, "F1"),
         InputKeyRegistration::new(keys::F2, key_identity::F2, "F2"),
+        InputKeyRegistration::new(keys::F7, key_identity::F7, "F7"),
     ]
 }

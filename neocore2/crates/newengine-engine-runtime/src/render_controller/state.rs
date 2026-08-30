@@ -15,8 +15,9 @@ use crate::scene_bridge::SceneBridge;
 use newengine_viewport_bridge::ViewportBridge;
 
 use super::gpu::{
-    DebugLineGpu, LitPipeline, MaterialGpuPipeline, MaterialGpuPipelineKey, MaterialGpuRegistry,
-    MaterialPipelineBuildProfile, PlayerSkinGpu, PrimitiveGpu, SkinPaletteGpu, VfxGpuRenderer,
+    DebugLineGpu, HairGpuRenderer, LitPipeline, MaterialGpuPipeline, MaterialGpuPipelineKey,
+    MaterialGpuRegistry, MaterialPipelineBuildProfile, PlayerSkinGpu, PrimitiveGpu, SkinPaletteGpu,
+    VfxGpuRenderer,
 };
 use super::material_bindings::MaterialTextureGpuResidency;
 use super::metrics::RuntimeOverlayMetrics;
@@ -393,6 +394,7 @@ pub(super) struct RenderGpuSceneState {
     pub(super) material: RenderMaterialGpuState,
     pub(super) meshes: RenderMeshGpuState,
     pub(super) lifetimes: RenderGpuLifetimeState,
+    pub(super) hair: HairGpuRenderer,
     pub(super) vfx_particles: VfxGpuRenderer,
 }
 
@@ -403,6 +405,7 @@ impl RenderGpuSceneState {
             material: RenderMaterialGpuState::new(),
             meshes: RenderMeshGpuState::new(),
             lifetimes: RenderGpuLifetimeState::new(),
+            hair: HairGpuRenderer::new(),
             vfx_particles: VfxGpuRenderer::new(),
         }
     }

@@ -346,6 +346,95 @@ fn published_weapon_section_only_exposes_equipped_available_weapons() {
 }
 
 #[test]
+fn character_menu_publishes_registry_and_starts_on_characters_category() {
+    let mut world = World::new();
+    let _player = spawn_test_player(&mut world, "character-menu-registry-player");
+    ensure_inventory_hud_state(&mut world);
+    world
+        .resource_mut::<InventoryHudState>()
+        .expect("inventory HUD")
+        .character_select_open = true;
+
+    let output = publish_inventory_hud_state(&mut world, 1);
+    let changes = &output.patches.first().expect("HUD patch").patch.changes;
+    let value = |source: &str, path: &str| {
+        changes
+            .iter()
+            .find(|change| change.source_id == source && change.path == path)
+            .map(|change| change.value.clone())
+            .expect("published character menu field")
+    };
+
+    assert_eq!(
+        value("character", "category_characters_selected"),
+        serde_json::json!(true)
+    );
+    assert_eq!(
+        value("character", "category_weapons_selected"),
+        serde_json::json!(false)
+    );
+    assert_eq!(
+        value("character", "characters_visible"),
+        serde_json::json!(true)
+    );
+    assert_eq!(
+        value("character", "weapons_visible"),
+        serde_json::json!(false)
+    );
+    assert_eq!(
+        value("character", "registered_character_count"),
+        serde_json::json!(2)
+    );
+    let characters = value("character", "registered_characters");
+    let characters = characters.as_array().expect("registered character list");
+    assert_eq!(characters.len(), 2);
+    assert_eq!(
+        characters[0]["entity_key"],
+        serde_json::json!(TEST_CHARACTER_A)
+    );
+    assert_eq!(
+        characters[1]["entity_key"],
+        serde_json::json!(TEST_CHARACTER_B)
+    );
+}
+
+#[test]
+fn character_menu_category_actions_switch_retained_collection_without_closing_menu() {
+    let mut world = World::new();
+    let _player = spawn_test_player(&mut world, "character-menu-category-player");
+    ensure_inventory_hud_state(&mut world);
+    world
+        .resource_mut::<InventoryHudState>()
+        .expect("inventory HUD")
+        .character_select_open = true;
+
+    let frame = UiEventDispatchFrame {
+        actions: vec![newengine_ui_api::UiActionDispatch {
+            surface_id: INVENTORY_HUD_SURFACE_ID.to_owned(),
+            node_id: "character.category.weapons".to_owned(),
+            action_id: CHARACTER_UI_ACTION_CATEGORY_WEAPONS.to_owned(),
+            trigger: UiNodeEventTrigger::Click,
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    assert!(FpsInventoryHudProvider.dispatch_actions(&mut world, &frame));
+    let state = world
+        .resource::<InventoryHudState>()
+        .expect("inventory HUD");
+    assert!(state.character_select_open);
+    assert_eq!(state.character_category, CharacterMenuCategory::Weapons);
+
+    let output = publish_inventory_hud_state(&mut world, 2);
+    let changes = &output.patches.first().expect("HUD patch").patch.changes;
+    assert!(changes.iter().any(|change| {
+        change.source_id == "character"
+            && change.path == "weapons_visible"
+            && change.value == serde_json::json!(true)
+    }));
+}
+
+#[test]
 fn m_command_toggles_playable_character_selector_open_and_closed() {
     let mut world = World::new();
     let player = spawn_test_player(&mut world, "character-selector-player");

@@ -48,6 +48,11 @@ pub fn apply_fps_character_commands(world: &mut World, dt: f32, fixed_tick: u64)
             .copied()
             .unwrap_or_else(|| PlayerStanceState::standing(body.standing_eye_height));
 
+        if actions.noclip_toggle_pressed {
+            let _ =
+                crate::noclip::toggle_fps_noclip_once_for_source_frame(world, player, source_frame);
+        }
+
         if crate::noclip::fps_noclip_enabled(world, player) {
             // Noclip owns collision/gravity and 3-axis travel. Do not run stance or jump
             // semantics while the body is intentionally detached from the physics world.
@@ -221,6 +226,37 @@ mod tests {
         assert!(world
             .get::<Velocity>(player)
             .is_some_and(|velocity| velocity.0.y > 0.0));
+    }
+
+    #[test]
+    fn f7_noclip_edge_toggles_once_per_input_source_frame() {
+        let mut world = World::new();
+        let player = spawn_default_player(&mut world, None, "fps-noclip-f7", Vec3::ZERO);
+        if let Some(commands) = world.get_mut::<PlayerCommandFrame>(player) {
+            commands.source_frame = 700;
+            commands.actions = ActionCommandFrame {
+                pressed: vec![action::NOCLIP_TOGGLE.into()],
+                ..ActionCommandFrame::default()
+            };
+        }
+        apply_fps_character_commands(&mut world, 1.0 / 60.0, 1);
+        assert!(crate::noclip::fps_noclip_enabled(&world, player));
+        assert!(world
+            .get::<newengine_engine_runtime::gameplay::PhysicsBodyDesc>(player)
+            .is_none());
+
+        // Same sampled input edge on catch-up fixed tick must not toggle back off.
+        apply_fps_character_commands(&mut world, 1.0 / 60.0, 2);
+        assert!(crate::noclip::fps_noclip_enabled(&world, player));
+
+        if let Some(commands) = world.get_mut::<PlayerCommandFrame>(player) {
+            commands.source_frame = 701;
+        }
+        apply_fps_character_commands(&mut world, 1.0 / 60.0, 3);
+        assert!(!crate::noclip::fps_noclip_enabled(&world, player));
+        assert!(world
+            .get::<newengine_engine_runtime::gameplay::PhysicsBodyDesc>(player)
+            .is_some());
     }
 
     #[test]

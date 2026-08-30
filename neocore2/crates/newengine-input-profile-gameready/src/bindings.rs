@@ -67,6 +67,7 @@ pub(crate) fn standalone_fps_bindings() -> Vec<InputBinding> {
         // without an arbitrary multi-frame timeout.
         InputBinding::keyboard_pressed(action::CHARACTER_SELECT_TOGGLE, keys::KEY_M),
         InputBinding::keyboard_released(action::CHARACTER_SELECT_TOGGLE, keys::KEY_M),
+        InputBinding::keyboard_pressed(action::NOCLIP_TOGGLE, keys::F7),
         InputBinding::keyboard_pressed(action::EQUIP_PRIMARY, keys::DIGIT1),
         InputBinding::keyboard_pressed(action::EQUIP_SECONDARY, keys::DIGIT2),
         InputBinding::keyboard_pressed(action::EQUIP_SIDEARM, keys::DIGIT3),

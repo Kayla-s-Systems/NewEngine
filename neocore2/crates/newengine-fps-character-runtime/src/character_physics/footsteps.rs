@@ -13,20 +13,85 @@ use newengine_transform::Transform;
 
 pub(crate) const FOOTSTEP_DICTIONARY: &str = "shared/audio/footsteps/footsteps.yscd";
 
-#[derive(Default)]
-struct FootstepAudioPreloadAttempted;
+const FOOTSTEP_PRELOAD_RETRY_FRAMES: u16 = 30;
+
+#[derive(Clone, Copy, Debug, Default)]
+struct FootstepAudioPreloadState {
+    ready: bool,
+    retry_frames: u16,
+    attempts: u16,
+}
 
 /// Decode/materialize the dictionary before the first stride event. AudioRuntime keeps the
 /// decoded YSCD dictionary cached, so later gait/phase entries do not re-read/re-decode it.
+///
+/// A failed preload is deliberately *not* latched as success. Asset mounts and the external
+/// audio provider can become available a few fixed frames later during startup, so silently
+/// remembering one failed attempt would permanently mute footsteps for the whole session.
 pub fn ensure_footstep_audio_preloaded(world: &mut World) {
-    if world.resource::<FootstepAudioPreloadAttempted>().is_some() {
+    let mut state = world
+        .resource::<FootstepAudioPreloadState>()
+        .copied()
+        .unwrap_or_default();
+    if state.ready {
         return;
     }
-    let _ =
-        newengine_audio_client::preload_audio_cue(&newengine_audio_api::AudioCuePreloadRequest {
-            cue: newengine_audio_api::SoundCueRef::new(format!("{FOOTSTEP_DICTIONARY}@stone_run")),
-        });
-    world.insert_resource(FootstepAudioPreloadAttempted);
+    if state.retry_frames > 0 {
+        state.retry_frames -= 1;
+        world.insert_resource(state);
+        return;
+    }
+
+    state.attempts = state.attempts.saturating_add(1);
+    let request = newengine_audio_api::AudioCuePreloadRequest {
+        cue: newengine_audio_api::SoundCueRef::new(format!("{FOOTSTEP_DICTIONARY}@stone_run")),
+    };
+    match newengine_audio_client::preload_audio_cue(&request) {
+        Ok(Some(ack)) if ack.accepted => {
+            state.ready = true;
+            state.retry_frames = 0;
+            newengine_ulog_api::ulog::info!(
+                "footstep audio preload ready dictionary='{}' attempts={} cached={} bytes={} provider='{}' diagnostics='{}'",
+                FOOTSTEP_DICTIONARY,
+                state.attempts,
+                ack.cached,
+                ack.bytes,
+                ack.provider,
+                ack.diagnostics.join(" | "),
+            );
+        }
+        Ok(Some(ack)) => {
+            state.retry_frames = FOOTSTEP_PRELOAD_RETRY_FRAMES;
+            newengine_ulog_api::ulog::warn!(
+                "footstep audio preload rejected dictionary='{}' attempt={} provider='{}'; retry_frames={} diagnostics='{}'",
+                FOOTSTEP_DICTIONARY,
+                state.attempts,
+                ack.provider,
+                state.retry_frames,
+                ack.diagnostics.join(" | "),
+            );
+        }
+        Ok(None) => {
+            state.retry_frames = FOOTSTEP_PRELOAD_RETRY_FRAMES;
+            newengine_ulog_api::ulog::warn!(
+                "footstep audio preload unavailable dictionary='{}' attempt={}; audio service returned no response; retry_frames={}",
+                FOOTSTEP_DICTIONARY,
+                state.attempts,
+                state.retry_frames,
+            );
+        }
+        Err(error) => {
+            state.retry_frames = FOOTSTEP_PRELOAD_RETRY_FRAMES;
+            newengine_ulog_api::ulog::warn!(
+                "footstep audio preload failed dictionary='{}' attempt={} err='{}'; retry_frames={}",
+                FOOTSTEP_DICTIONARY,
+                state.attempts,
+                error,
+                state.retry_frames,
+            );
+        }
+    }
+    world.insert_resource(state);
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

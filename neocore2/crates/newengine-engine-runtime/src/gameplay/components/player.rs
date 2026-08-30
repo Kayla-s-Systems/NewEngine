@@ -270,6 +270,26 @@ pub struct PlayerLocomotionState {
     pub last_jump_command_source_frame: Option<u64>,
 }
 
+/// Continuous fall metrics owned by gameplay physics and exposed to presentation systems.
+///
+/// `FallStarted`/`FallEnded` player events delimit the lifetime of a fall. Animation, camera,
+/// VFX or audio subscribers can then read this component every frame and select authored
+/// presentation from the actual world-space fall distance instead of hard-coding clip thresholds
+/// in the character controller. `peak_height` tracks the airborne apex, so jumps measure the
+/// downward part of the trajectory rather than the initial take-off height.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct PlayerFallState {
+    pub airborne: bool,
+    pub falling: bool,
+    pub start_height: f32,
+    pub peak_height: f32,
+    pub current_height: f32,
+    pub distance: f32,
+    pub max_distance: f32,
+    pub downward_speed: f32,
+    pub revision: u64,
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum PlayerLocomotionAnimation {
     #[default]
@@ -365,39 +385,148 @@ impl Default for PlayerStanceState {
 pub struct PlayerJointRotationWeight {
     pub joint: String,
     pub weight: f32,
+    pub channels: PlayerJointChannels,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PlayerJointChannels {
+    pub translation: bool,
+    pub rotation: bool,
+    pub scale: bool,
+}
+
+impl PlayerJointChannels {
+    #[inline]
+    pub const fn rotation_only() -> Self {
+        Self {
+            translation: false,
+            rotation: true,
+            scale: false,
+        }
+    }
+
+    #[inline]
+    pub const fn translation_rotation() -> Self {
+        Self {
+            translation: true,
+            rotation: true,
+            scale: false,
+        }
+    }
+
+    #[inline]
+    pub const fn all() -> Self {
+        Self {
+            translation: true,
+            rotation: true,
+            scale: true,
+        }
+    }
+
+    #[inline]
+    pub const fn any(self) -> bool {
+        self.translation || self.rotation || self.scale
+    }
+}
+
+impl Default for PlayerJointChannels {
+    fn default() -> Self {
+        Self::rotation_only()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct PlayerJointCopyRule {
+    pub source_joint: String,
+    pub target_joint: String,
+    pub channels: PlayerJointChannels,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct PlayerPaletteFollowRule {
+    pub driver_joint: String,
+    pub follower_roots: Vec<String>,
+    pub include_descendants: bool,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct PlayerEyeParentFollowRule {
+    pub left_joint: String,
+    pub right_joint: String,
+    pub parent_joint: String,
+    pub preserve_bind_local: bool,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct PlayerWeaponArmIkRigDefinition {
+    pub chest: String,
+    pub right_shoulder: String,
+    pub right_elbow: String,
+    pub right_wrist: String,
+    pub right_palm: String,
+    pub right_prop_attachment: Option<String>,
+    pub left_shoulder: String,
+    pub left_elbow: String,
+    pub left_wrist: String,
+    pub left_palm: String,
+    pub left_prop_attachment: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct PlayerBraidSecondaryMotionRig {
+    pub chain_joints: Vec<String>,
+    pub head_joint: String,
+    pub head_base_joint: String,
+    pub upper_back_joint: String,
+    pub middle_back_joint: String,
+    pub lower_back_joint: String,
+    pub left_shoulder_joint: String,
+    pub right_shoulder_joint: String,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct PlayerCharacterPresentation {
     pub detached_head_follow: bool,
+    pub detached_head_follow_rule: Option<PlayerPaletteFollowRule>,
     pub eye_parent_follow: bool,
+    pub eye_parent_follow_rule: Option<PlayerEyeParentFollowRule>,
+    pub helper_pose_copies: Vec<PlayerJointCopyRule>,
+    pub braid_secondary_motion: Option<PlayerBraidSecondaryMotionRig>,
     pub equipment_ready_animation: Option<String>,
     pub equipment_aim_animation: Option<String>,
     pub equipment_reload_animation: Option<String>,
     pub unarmed_ready_animation: Option<String>,
     pub unarmed_attack_animation: Option<String>,
+    pub noclip_animation: Option<String>,
     pub equipment_ready_sample_phase: f32,
     pub equipment_ready_rotation_weights: Vec<PlayerJointRotationWeight>,
     pub equipment_aim_rotation_weights: Vec<PlayerJointRotationWeight>,
     pub equipment_reload_rotation_weights: Vec<PlayerJointRotationWeight>,
     pub equipment_arm_ik: bool,
+    pub equipment_arm_ik_rig: Option<PlayerWeaponArmIkRigDefinition>,
 }
 
 impl Default for PlayerCharacterPresentation {
     fn default() -> Self {
         Self {
             detached_head_follow: false,
+            detached_head_follow_rule: None,
             eye_parent_follow: false,
+            eye_parent_follow_rule: None,
+            helper_pose_copies: Vec::new(),
+            braid_secondary_motion: None,
             equipment_ready_animation: None,
             equipment_aim_animation: None,
             equipment_reload_animation: None,
             unarmed_ready_animation: None,
             unarmed_attack_animation: None,
+            noclip_animation: None,
             equipment_ready_sample_phase: 0.0,
             equipment_ready_rotation_weights: Vec::new(),
             equipment_aim_rotation_weights: Vec::new(),
             equipment_reload_rotation_weights: Vec::new(),
             equipment_arm_ik: false,
+            equipment_arm_ik_rig: None,
         }
     }
 }
@@ -472,7 +601,7 @@ impl Default for PlayerModelAssignment {
             eye_height_ratio: 0.91,
             local_offset: Vec3::ZERO,
             yaw_offset: 0.0,
-            hide_in_first_person: true,
+            hide_in_first_person: false,
         }
     }
 }
@@ -554,13 +683,14 @@ impl Default for PlayerModelBinding {
 }
 
 /// Provider-neutral first-person camera anchor published by the active avatar/runtime model.
-/// The position is the current animated eye center in world space. Camera orientation remains
-/// input-owned (CharacterMotor yaw/pitch); the anchor only supplies where the player's eyes are.
+/// The position is a stable render-cadence eye center in world space. Camera orientation remains
+/// input-owned (CharacterMotor yaw/pitch); animation may affect presentation but never owns the
+/// gameplay camera position.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PlayerFirstPersonCameraAnchor {
     pub eye_center_ws: Vec3,
-    /// Small clearance along the current camera-forward axis so the near plane sits just in front
-    /// of the face instead of inside eye/head geometry.
+    /// Small body-forward clearance from the stable eye center. View yaw/pitch must not rotate this
+    /// offset around the head; camera runtime may add only bounded FPP parallax.
     pub forward_clearance: f32,
 }
 
@@ -569,7 +699,7 @@ impl Default for PlayerFirstPersonCameraAnchor {
     fn default() -> Self {
         Self {
             eye_center_ws: Vec3::ZERO,
-            forward_clearance: 0.055,
+            forward_clearance: 0.045,
         }
     }
 }
@@ -686,6 +816,8 @@ pub enum PlayerEventKind {
     Released,
     InputApplied,
     GroundStateChanged,
+    FallStarted,
+    FallEnded,
     Footstep,
     Landed,
     StanceChanged,

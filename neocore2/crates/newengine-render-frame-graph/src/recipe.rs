@@ -7,6 +7,8 @@ pub struct RuntimeFrameFeatureSet {
     pub shadows: bool,
     pub local_shadows: bool,
     pub deferred: bool,
+    #[serde(default)]
+    pub hair: bool,
     pub postfx: bool,
     pub ui_composite: bool,
     pub ui_backdrop_blur: bool,
@@ -25,6 +27,7 @@ impl RuntimeFrameFeatureSet {
             shadows,
             local_shadows: false,
             deferred: false,
+            hair: false,
             postfx,
             ui_composite,
             ui_backdrop_blur: false,
@@ -43,6 +46,7 @@ impl RuntimeFrameFeatureSet {
             shadows,
             local_shadows: false,
             deferred: true,
+            hair: false,
             postfx,
             ui_composite,
             ui_backdrop_blur: false,
@@ -58,6 +62,12 @@ impl RuntimeFrameFeatureSet {
     #[inline]
     pub const fn with_local_shadows(mut self, enabled: bool) -> Self {
         self.local_shadows = enabled;
+        self
+    }
+
+    #[inline]
+    pub const fn with_hair(mut self, enabled: bool) -> Self {
+        self.hair = enabled;
         self
     }
 }
@@ -100,9 +110,15 @@ impl RenderFrameRecipe {
         features: RuntimeFrameFeatureSet,
         cascaded_shadows: bool,
     ) -> Self {
-        let mut steps = Vec::with_capacity(14);
+        let mut steps = Vec::with_capacity(15);
         steps.push(RenderPhaseRecipeStep::enabled(
             StandardRenderPhase::BeginFrame,
+        ));
+        // Hair state participates in the directional shadow atlas, so current-frame
+        // simulation must complete before any shadow caster phase consumes it.
+        steps.push(RenderPhaseRecipeStep::optional(
+            StandardRenderPhase::HairSimulation,
+            features.hair,
         ));
         if cascaded_shadows {
             steps.push(RenderPhaseRecipeStep::optional(
@@ -238,6 +254,57 @@ mod tests {
             transparent,
             forward + 1,
             "no phase may split the direct-surface raster chain"
+        );
+    }
+
+    #[test]
+    fn hair_compute_precedes_cascaded_shadow_when_enabled() {
+        let recipe = RenderFrameRecipe::standard_runtime_with_shadow_mode(
+            RuntimeFrameFeatureSet::forward(true, false, false, false).with_hair(true),
+            true,
+        );
+        let phases = recipe.enabled_phases().collect::<Vec<_>>();
+        let hair = phases
+            .iter()
+            .position(|phase| *phase == StandardRenderPhase::HairSimulation)
+            .expect("hair simulation phase");
+        let shadow = phases
+            .iter()
+            .position(|phase| *phase == StandardRenderPhase::ShadowCascadeMap)
+            .expect("cascaded shadow phase");
+        assert!(
+            hair < shadow,
+            "current-frame hair state must exist before CSM raster"
+        );
+    }
+
+    #[test]
+    fn hair_compute_precedes_surface_raster_when_enabled() {
+        let recipe = RenderFrameRecipe::standard_runtime(
+            RuntimeFrameFeatureSet::forward(true, false, false, false).with_hair(true),
+        );
+        let phases = recipe.enabled_phases().collect::<Vec<_>>();
+        let hair = phases
+            .iter()
+            .position(|phase| *phase == StandardRenderPhase::HairSimulation)
+            .expect("hair simulation phase");
+        let forward = phases
+            .iter()
+            .position(|phase| *phase == StandardRenderPhase::ViewportForward)
+            .expect("forward phase");
+        let transparent = phases
+            .iter()
+            .position(|phase| *phase == StandardRenderPhase::Transparent)
+            .expect("transparent phase");
+
+        assert!(
+            hair < forward,
+            "hair compute must finish before surface raster begins"
+        );
+        assert_eq!(
+            transparent,
+            forward + 1,
+            "hair compute must not split the direct-surface raster chain"
         );
     }
 }

@@ -163,6 +163,43 @@ fn game_profile_resolves_m_to_playable_character_selector() {
 }
 
 #[test]
+fn game_profile_resolves_f7_to_noclip_toggle_and_keeps_vertical_flight_axes() {
+    let profile = game_ready_game_input_profile();
+    let frame = profile.resolve(&PressedKeyboardKey(newengine_input_api::key_code::F7));
+
+    assert!(frame.contains_action(action::NOCLIP_TOGGLE));
+    assert!(
+        newengine_gameplay_fps_api::FpsActionFrame::from_commands(&frame.command_actions())
+            .noclip_toggle_pressed
+    );
+    assert!(profile.keys.iter().any(|key| {
+        key.code == newengine_input_api::key_code::F7
+            && key.id == newengine_input_api::key_identity::F7
+    }));
+    assert!(profile.listeners.iter().any(|listener| {
+        listener.id == "player-controller"
+            && listener
+                .action_filter
+                .iter()
+                .any(|id| id == action::NOCLIP_TOGGLE)
+    }));
+    for (action_id, key) in [
+        (action::PLAYER_MOVE_UP, newengine_input_api::key_code::KEY_Q),
+        (
+            action::PLAYER_MOVE_DOWN,
+            newengine_input_api::key_code::KEY_E,
+        ),
+    ] {
+        assert!(profile.bindings.iter().any(|binding| {
+            binding.action == action_id
+                && binding.device == InputBindingDevice::Keyboard
+                && binding.code == key
+                && binding.phase == InputBindingPhase::Down
+        }));
+    }
+}
+
+#[test]
 fn game_profile_excludes_editor_asset_browser() {
     let profile = game_ready_game_input_profile();
     assert!(profile.listeners.iter().any(|l| l.id == "ui-navigation"));
@@ -201,11 +238,12 @@ fn game_profile_excludes_editor_asset_browser() {
             .iter()
             .any(|binding| binding.action == action_id));
     }
-    assert!(!profile
-        .bindings
-        .iter()
-        .any(|binding| binding.action == action::PLAYER_MOVE_UP
-            || binding.action == action::PLAYER_MOVE_DOWN));
+    for action_id in [action::PLAYER_MOVE_UP, action::PLAYER_MOVE_DOWN] {
+        assert!(profile
+            .bindings
+            .iter()
+            .any(|binding| binding.action == action_id));
+    }
     assert!(profile.bindings.iter().any(|binding| {
         binding.action == action::PLAYER_FIRE_PRIMARY
             && binding.device == InputBindingDevice::MouseButton

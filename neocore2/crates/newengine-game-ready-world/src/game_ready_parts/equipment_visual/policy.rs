@@ -102,24 +102,11 @@ fn equipped_weapon_render_options() -> newengine_model_domain_api::MeshRenderOpt
     options
 }
 
-#[inline]
-fn first_person_weapon_render_options() -> newengine_model_domain_api::MeshRenderOptions {
-    // First-person weapons are an overlay/view-model domain, not ordinary world opaque geometry.
-    // The pose is still authored as a world transform so gameplay and muzzle math share one frame,
-    // while the render role keeps it in the forward view-model pass with no self-shadow casting.
-    newengine_model_domain_api::MeshRenderOptions::first_person_view_model()
-}
-
-fn sync_equipped_weapon_render_policy(
-    world: &mut newengine_ecs::World,
-    root: EntityId,
-    first_person_active: bool,
-) {
-    let desired = if first_person_active {
-        first_person_weapon_render_options()
-    } else {
-        equipped_weapon_render_options()
-    };
+fn sync_equipped_weapon_render_policy(world: &mut newengine_ecs::World, root: EntityId) {
+    // Full-body first person uses the same world-space render domain for hands and equipment.
+    // A separate view-model pass gives the weapon a different camera/depth cadence and can make
+    // it visibly drift or tremble against the skeleton that actually owns the grip contacts.
+    let desired = equipped_weapon_render_options();
     let parts = world
         .query::<EquippedWeaponVisualPart>()
         .filter_map(|(entity, part)| (part.root == root).then_some(entity))
@@ -128,7 +115,7 @@ fn sync_equipped_weapon_render_policy(
         let mut desired_for_part = desired.clone();
         // Skinned equipped geometry uses receive-only world shadows to avoid invalidating the
         // shadow atlas with rapidly animated first-person/equipment skinning.
-        if world.get::<PlayerSkinBinding>(entity).is_some() && !first_person_active {
+        if world.get::<PlayerSkinBinding>(entity).is_some() {
             desired_for_part.shadow_policy =
                 newengine_model_domain_api::MeshShadowPolicy::ReceiveOnly;
         }
@@ -239,6 +226,7 @@ fn clear_equipped_weapon_visual(world: &mut newengine_ecs::World, owner: EntityI
         let _ = world.despawn(entity);
     }
     let _ = world.remove::<EquippedWeaponMuzzle>(owner);
+    let _ = world.remove::<EquippedWeaponEntity>(owner);
 }
 
 fn existing_visual(

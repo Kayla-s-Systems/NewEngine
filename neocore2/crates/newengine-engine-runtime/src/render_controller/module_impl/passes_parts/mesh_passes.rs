@@ -39,6 +39,7 @@ mod scene_mesh_pass;
 pub use self::mesh_passes_primitive::{
     draw_asset_preview_bundle, draw_primitives, draw_primitives_gbuffer,
 };
+pub(crate) use self::mesh_passes_shadow::ShadowUboViewKey;
 pub use self::mesh_passes_shadow::{draw_primitives_shadow, draw_procedural_terrain_shadow};
 use self::scene_mesh_pass::{route_diagnostics_due, SceneMeshPass};
 

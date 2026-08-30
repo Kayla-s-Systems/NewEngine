@@ -84,6 +84,53 @@ fn load_runtime_animation_clip(
     })
 }
 
+fn load_optional_presentation_clip(
+    role: &str,
+    reference: Option<&str>,
+    assignment: &newengine_engine_runtime::gameplay::PlayerModelAssignment,
+    skeleton: &ModelSkeletonMetadata,
+    animation_runtime: &AnimationSkeletonRuntime,
+) -> Option<PlayerAnimationRuntimeClip> {
+    let reference = reference?;
+    match load_runtime_animation_clip(reference, assignment, skeleton, animation_runtime) {
+        Ok(clip) => Some(clip),
+        Err(error) => {
+            newengine_ulog_api::ulog::warn!(
+                "game-ready: optional player presentation animation unavailable role='{}' ref='{}' err='{}' action='keep visual model and locomotion binding'",
+                role,
+                reference,
+                error
+            );
+            None
+        }
+    }
+}
+
+fn resolve_authored_equipment_arm_ik(
+    skeleton: &ModelSkeletonMetadata,
+    presentation: &newengine_engine_runtime::gameplay::PlayerCharacterPresentation,
+) -> Option<WeaponArmIkRig> {
+    if !presentation.equipment_arm_ik {
+        return None;
+    }
+    let Some(authored) = presentation.equipment_arm_ik_rig.as_ref() else {
+        newengine_ulog_api::ulog::warn!(
+            "game-ready: player presentation degraded capability='equipment_arm_ik' reason='authored rig unavailable' action='disable arm IK and keep authored animation'"
+        );
+        return None;
+    };
+    match build_weapon_arm_ik_rig(skeleton, authored) {
+        Ok(binding) => Some(binding),
+        Err(error) => {
+            newengine_ulog_api::ulog::warn!(
+                "game-ready: player presentation degraded capability='equipment_arm_ik' err='{}' action='disable arm IK and keep authored animation'",
+                error
+            );
+            None
+        }
+    }
+}
+
 pub(super) fn prepare_player_animation_binding(
     assignment: &newengine_engine_runtime::gameplay::PlayerModelAssignment,
     parts: &[PlayerRuntimeModelPart],
@@ -116,13 +163,12 @@ pub(super) fn prepare_player_animation_binding(
     };
     let mut clips: [Option<PlayerAnimationRuntimeClip>; 8] =
         [None, None, None, None, None, None, None, None];
-    clips[locomotion_slot(L::Idle)] =
-        Some(load_runtime_animation_clip(
-            idle_ref,
-            assignment,
-            skeleton,
-            &animation_runtime,
-        )?);
+    clips[locomotion_slot(L::Idle)] = Some(load_runtime_animation_clip(
+        idle_ref,
+        assignment,
+        skeleton,
+        &animation_runtime,
+    )?);
 
     for (state, reference) in [
         (L::Walk, assignment.walk_animation.as_deref()),
@@ -154,34 +200,85 @@ pub(super) fn prepare_player_animation_binding(
             0.0,
             &mut locomotion_graph_evaluation,
         )
-        .map_err(|error| format!("GameReady locomotion graph initial evaluation failed: {error}"))?;
-    let helper_mirror_pairs = build_helper_mirror_pairs(skeleton);
-    // Compatibility reconstruction is explicit project-authored presentation metadata. Runtime
-    // behavior is never inferred from a character name, model path, or source franchise.
-    let head_follow = assignment
-        .presentation
-        .detached_head_follow
-        .then(|| build_detached_head_follow(skeleton))
-        .flatten();
-    let eye_contract = assignment
-        .presentation
-        .eye_parent_follow
-        .then(|| build_eye_runtime_contract(skeleton))
-        .flatten();
+        .map_err(|error| {
+            format!("GameReady locomotion graph initial evaluation failed: {error}")
+        })?;
+    let helper_pose_copies = match resolve_helper_pose_copy_rules(
+        skeleton,
+        &assignment.presentation.helper_pose_copies,
+    ) {
+        Ok(rules) => rules,
+        Err(error) => {
+            newengine_ulog_api::ulog::warn!(
+                "game-ready: player presentation degraded capability='helper_pose_copies' err='{}' action='keep locomotion animation'",
+                error
+            );
+            Vec::new()
+        }
+    };
+    // Rig reconstruction is definition-authored. Runtime only resolves exact authored joints and
+    // executes generic copy/follow operators; no character, franchise, or naming convention is inferred.
+    let head_follow = if !assignment.presentation.detached_head_follow {
+        None
+    } else if let Some(rule) = assignment.presentation.detached_head_follow_rule.as_ref() {
+        match build_detached_head_follow(skeleton, rule) {
+            Ok(binding) => Some(binding),
+            Err(error) => {
+                newengine_ulog_api::ulog::warn!(
+                    "game-ready: player presentation degraded capability='detached_head_follow' err='{}' action='keep locomotion animation'",
+                    error
+                );
+                None
+            }
+        }
+    } else {
+        newengine_ulog_api::ulog::warn!(
+            "game-ready: player presentation degraded capability='detached_head_follow' reason='authored follow rule unavailable' action='keep locomotion animation'"
+        );
+        None
+    };
+    let eye_contract = if !assignment.presentation.eye_parent_follow {
+        None
+    } else if let Some(rule) = assignment.presentation.eye_parent_follow_rule.as_ref() {
+        match build_eye_runtime_contract(skeleton, rule) {
+            Ok(binding) => Some(binding),
+            Err(error) => {
+                newengine_ulog_api::ulog::warn!(
+                    "game-ready: player presentation degraded capability='eye_parent_follow' err='{}' action='keep locomotion animation'",
+                    error
+                );
+                None
+            }
+        }
+    } else {
+        newengine_ulog_api::ulog::warn!(
+            "game-ready: player presentation degraded capability='eye_parent_follow' reason='authored eye contract unavailable' action='keep locomotion animation'"
+        );
+        None
+    };
     let bind_locals = animation_runtime.bind_locals().to_vec();
     let bind_joint_frames = animation_runtime.bind_joint_frames().to_vec();
-    let braid_secondary_motion = prepare_native_braid_secondary_motion(
+    let braid_secondary_motion = match prepare_native_braid_secondary_motion(
         parts,
         skeleton,
+        assignment.presentation.braid_secondary_motion.as_ref(),
         source_to_model,
         &bind_joint_frames,
-    )?;
+    ) {
+        Ok(binding) => binding,
+        Err(error) => {
+            newengine_ulog_api::ulog::warn!(
+                "game-ready: player presentation degraded capability='braid_secondary_motion' err='{}' action='keep locomotion animation'",
+                error
+            );
+            None
+        }
+    };
     let mut current_locals = locomotion_graph_evaluation.local_pose.clone();
-    synchronize_helper_pose(&helper_mirror_pairs, &mut current_locals);
+    synchronize_helper_pose(&helper_pose_copies, &mut current_locals);
     stabilize_eye_locals(eye_contract.as_ref(), skeleton, &mut current_locals)?;
     let mut palette_scratch = Vec::with_capacity(skeleton.joints.len());
-    animation_runtime
-        .build_skin_palette_from_local_pose(&current_locals, &mut palette_scratch)?;
+    animation_runtime.build_skin_palette_from_local_pose(&current_locals, &mut palette_scratch)?;
     apply_detached_head_follow_palette(head_follow.as_ref(), &mut palette_scratch)?;
     validate_eye_palette(eye_contract.as_ref(), &palette_scratch)?;
     debug_dump_eye_matrices(
@@ -191,78 +288,133 @@ pub(super) fn prepare_player_animation_binding(
         &palette_scratch,
         "initial",
     );
-    let equipment_ready_pose = assignment
-        .presentation
-        .equipment_ready_animation
-        .as_deref()
-        .map(|reference| load_runtime_animation_clip(reference, assignment, skeleton, &animation_runtime))
-        .transpose()?;
-    let equipment_aim_pose = assignment
-        .presentation
-        .equipment_aim_animation
-        .as_deref()
-        .map(|reference| load_runtime_animation_clip(reference, assignment, skeleton, &animation_runtime))
-        .transpose()?;
-    let equipment_reload_pose = assignment
-        .presentation
-        .equipment_reload_animation
-        .as_deref()
-        .map(|reference| load_runtime_animation_clip(reference, assignment, skeleton, &animation_runtime))
-        .transpose()?;
-    let unarmed_ready_pose = assignment
-        .presentation
-        .unarmed_ready_animation
-        .as_deref()
-        .map(|reference| load_runtime_animation_clip(reference, assignment, skeleton, &animation_runtime))
-        .transpose()?;
-    let unarmed_attack_pose = assignment
-        .presentation
-        .unarmed_attack_animation
-        .as_deref()
-        .map(|reference| load_runtime_animation_clip(reference, assignment, skeleton, &animation_runtime))
-        .transpose()?;
-    let equipment_ready_sample_phase = assignment
+    // Presentation overlays are feature-level assets, not avatar-existence invariants.
+    // A missing rifle/unarmed clip may degrade the corresponding stance, but must never
+    // tear down a successfully decoded/skinned playable character.
+    let equipment_ready_pose = load_optional_presentation_clip(
+        "equipment_ready",
+        assignment.presentation.equipment_ready_animation.as_deref(),
+        assignment,
+        skeleton,
+        &animation_runtime,
+    );
+    let equipment_aim_pose = load_optional_presentation_clip(
+        "equipment_aim",
+        assignment.presentation.equipment_aim_animation.as_deref(),
+        assignment,
+        skeleton,
+        &animation_runtime,
+    );
+    let equipment_reload_pose = load_optional_presentation_clip(
+        "equipment_reload",
+        assignment
+            .presentation
+            .equipment_reload_animation
+            .as_deref(),
+        assignment,
+        skeleton,
+        &animation_runtime,
+    );
+    let unarmed_ready_pose = load_optional_presentation_clip(
+        "unarmed_ready",
+        assignment.presentation.unarmed_ready_animation.as_deref(),
+        assignment,
+        skeleton,
+        &animation_runtime,
+    );
+    let unarmed_attack_pose = load_optional_presentation_clip(
+        "unarmed_attack",
+        assignment.presentation.unarmed_attack_animation.as_deref(),
+        assignment,
+        skeleton,
+        &animation_runtime,
+    );
+    // NoClip is a full-body traversal mode, not a degradable upper-body presentation overlay.
+    // If a character authors a seated-flight clip, accepting a load/binding failure and falling
+    // back to locomotion would make the character visibly walk/run while collisionless. Treat the
+    // authored clip as required so the character either binds the intended seated pose or reports
+    // an explicit model-binding error instead of silently presenting the wrong state.
+    let noclip_pose = match assignment.presentation.noclip_animation.as_deref() {
+        Some(reference) => Some(
+            load_runtime_animation_clip(reference, assignment, skeleton, &animation_runtime)
+                .map_err(|error| {
+                    format!(
+                        "required NoClip full-body animation unavailable ref='{reference}' err='{error}'"
+                    )
+                })?,
+        ),
+        None => None,
+    };
+    let equipment_ready_sample_phase = if assignment
         .presentation
         .equipment_ready_sample_phase
-        .clamp(0.0, 1.0);
-    let equipment_ready_rotation_weights = assignment
-        .presentation
-        .equipment_ready_rotation_weights
-        .iter()
-        .map(|item| (item.joint.clone(), item.weight.clamp(0.0, 1.0)))
-        .collect::<Vec<_>>();
-    let equipment_aim_rotation_weights = assignment
-        .presentation
-        .equipment_aim_rotation_weights
-        .iter()
-        .map(|item| (item.joint.clone(), item.weight.clamp(0.0, 1.0)))
-        .collect::<Vec<_>>();
-    let equipment_reload_rotation_weights = assignment
-        .presentation
-        .equipment_reload_rotation_weights
-        .iter()
-        .map(|item| (item.joint.clone(), item.weight.clamp(0.0, 1.0)))
-        .collect::<Vec<_>>();
-    let equipment_ik = assignment
-        .presentation
-        .equipment_arm_ik
-        .then(|| build_weapon_arm_ik_rig(skeleton))
-        .flatten();
+        .is_finite()
+    {
+        assignment
+            .presentation
+            .equipment_ready_sample_phase
+            .clamp(0.0, 1.0)
+    } else {
+        newengine_ulog_api::ulog::warn!(
+            "game-ready: player presentation degraded capability='equipment_ready_sample_phase' reason='non-finite authored value' action='use phase 0'"
+        );
+        0.0
+    };
+    let equipment_ready_rotation_weights = match resolve_joint_blend_rules(
+        skeleton,
+        &assignment.presentation.equipment_ready_rotation_weights,
+    ) {
+        Ok(rules) => rules,
+        Err(error) => {
+            newengine_ulog_api::ulog::warn!(
+                "game-ready: player presentation degraded capability='equipment_ready_rotation_weights' err='{}' action='disable overlay weights'",
+                error
+            );
+            Vec::new()
+        }
+    };
+    let equipment_aim_rotation_weights = match resolve_joint_blend_rules(
+        skeleton,
+        &assignment.presentation.equipment_aim_rotation_weights,
+    ) {
+        Ok(rules) => rules,
+        Err(error) => {
+            newengine_ulog_api::ulog::warn!(
+                "game-ready: player presentation degraded capability='equipment_aim_rotation_weights' err='{}' action='disable overlay weights'",
+                error
+            );
+            Vec::new()
+        }
+    };
+    let equipment_reload_rotation_weights = match resolve_joint_blend_rules(
+        skeleton,
+        &assignment.presentation.equipment_reload_rotation_weights,
+    ) {
+        Ok(rules) => rules,
+        Err(error) => {
+            newengine_ulog_api::ulog::warn!(
+                "game-ready: player presentation degraded capability='equipment_reload_rotation_weights' err='{}' action='disable overlay weights'",
+                error
+            );
+            Vec::new()
+        }
+    };
+    let equipment_ik = resolve_authored_equipment_arm_ik(skeleton, &assignment.presentation);
     let joint_frames_scratch = Vec::with_capacity(skeleton.joints.len());
     let foot_joints = resolve_foot_joint_binding(skeleton);
     let sampled_target_locals = current_locals.clone();
-    if !helper_mirror_pairs.is_empty() {
+    if !helper_pose_copies.is_empty() {
         newengine_ulog_api::ulog::info!(
-            "game-ready: mirrored North Star helper rig channels={} policy='primary local pose -> *_helper deform branch before skin palette'",
-            helper_mirror_pairs.len()
+            "game-ready: authored joint-copy rig channels={} policy='definition rules -> generic local-pose copy before skin palette'",
+            helper_pose_copies.len()
         );
     }
     if let Some(rig) = head_follow.as_ref() {
         newengine_ulog_api::ulog::info!(
-            "game-ready: restored authored detached head-space headb_driver={} control_followers={} face_followers={} policy='primary deform hierarchy -> detached controls + face/eyes'",
-            rig.headb_driver,
-            rig.control_followers.len(),
-            rig.face_followers.len(),
+            "game-ready: authored palette-follow contract driver={} followers={} reserved={} policy='definition-selected driver deformation -> authored follower branches'",
+            rig.driver_joint,
+            rig.followers.len(),
+            0usize,
         );
     }
     if let Some(eyes) = eye_contract.as_ref() {
@@ -318,9 +470,12 @@ pub(super) fn prepare_player_animation_binding(
         joint_frames_scratch,
         foot_joints,
         braid_secondary_motion,
-        helper_mirror_pairs,
+        helper_pose_copies,
         eye_contract,
         head_follow,
+        noclip_pose,
+        noclip_time_seconds: 0.0,
+        noclip_active: false,
         equipment_ready_pose,
         equipment_aim_pose,
         equipment_reload_pose,

@@ -20,6 +20,8 @@ pub(crate) struct RenderRuntimePolicy {
     pub render_phase_log: bool,
     pub primary_ui_enabled: bool,
     pub primitive_stage_log: bool,
+    pub render_route_diagnostics: bool,
+    pub render_route_diagnostic_interval_frames: u64,
 }
 
 #[derive(Clone, Debug)]
@@ -37,6 +39,7 @@ pub(crate) struct DiagnosticsPolicy {
     pub render_slow_profile_interval_frames: u64,
     pub render_profiler_sample_interval_frames: u64,
     pub render_profiler_samples: bool,
+    pub render_steady_trace_interval_frames: u64,
     pub render_job_event_mode: RenderJobEventMode,
     pub render_job_event_interval_frames: u64,
 }
@@ -67,6 +70,16 @@ pub(crate) fn render_runtime_policy() -> &'static RenderRuntimePolicy {
         render_phase_log: crate::env_config::var_bool("NEWENGINE_RENDER_PHASE_LOG", false),
         primary_ui_enabled: crate::env_config::var_bool("NEWENGINE_PRIMARY_UI_ENABLED", false),
         primitive_stage_log: crate::env_config::var_bool("NEWENGINE_PRIMITIVE_STAGE_LOG", false),
+        render_route_diagnostics: crate::env_config::var_bool(
+            "NEWENGINE_RENDER_ROUTE_DIAGNOSTICS",
+            false,
+        ),
+        render_route_diagnostic_interval_frames: crate::env_config::var_u64(
+            "NEWENGINE_RENDER_ROUTE_DIAGNOSTIC_INTERVAL_FRAMES",
+            240,
+            1,
+            60_000,
+        ),
     })
 }
 
@@ -128,6 +141,14 @@ pub(crate) fn diagnostics_policy() -> &'static DiagnosticsPolicy {
             render_profiler_samples: crate::env_config::var_bool(
                 "NEWENGINE_RENDER_PROFILER_SAMPLES",
                 true,
+            ),
+            // Human-readable steady-state trace output is opt-in. A synchronous
+            // console/file sink must not introduce deterministic frame hitches.
+            render_steady_trace_interval_frames: crate::env_config::var_u64(
+                "NEWENGINE_RENDER_STEADY_TRACE_INTERVAL_FRAMES",
+                0,
+                0,
+                60_000,
             ),
             render_job_event_mode,
             render_job_event_interval_frames: crate::env_config::var_u64(

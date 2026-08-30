@@ -49,8 +49,11 @@ mod alignment_tests {
     #[test]
     fn long_gun_secondary_spring_is_bounded_and_decays_after_fast_turn() {
         let dt = 1.0 / 60.0;
+        let presentation =
+            newengine_engine_runtime::gameplay::WeaponPresentationDefinition::default().sanitized();
         let mut state = step_long_gun_secondary_dynamics(
             WeaponSecondaryDynamicsState::default(),
+            &presentation,
             Quat::IDENTITY,
             Vec3::ZERO,
             Quat::IDENTITY,
@@ -61,6 +64,7 @@ mod alignment_tests {
         );
         state = step_long_gun_secondary_dynamics(
             state,
+            &presentation,
             Quat::from_rotation_y(24.0_f32.to_radians()),
             Vec3::ZERO,
             Quat::IDENTITY,
@@ -72,13 +76,14 @@ mod alignment_tests {
         let injected = state.rotation_offset_local.length();
         assert!(injected > 0.001, "fast target rotation must inject inertial lag");
         assert!(
-            injected <= LONG_GUN_SECONDARY_HIP_MAX_ANGLE + 1.0e-6,
+            injected <= presentation.secondary_hip_max_angle_radians + 1.0e-6,
             "secondary motion must stay inside the authored grip envelope"
         );
         let target = Quat::from_rotation_y(24.0_f32.to_radians());
         for _ in 0..90 {
             state = step_long_gun_secondary_dynamics(
                 state,
+                &presentation,
                 target,
                 Vec3::ZERO,
                 Quat::IDENTITY,
@@ -95,14 +100,53 @@ mod alignment_tests {
     }
 
     #[test]
+    fn authored_secondary_motion_tuning_changes_runtime_response() {
+        let dt = 1.0 / 60.0;
+        let mut loose = newengine_engine_runtime::gameplay::WeaponPresentationDefinition::default();
+        loose.secondary_angular_inertia_gain = 0.8;
+        loose.secondary_hip_max_angle_radians = 0.12;
+        let loose = loose.sanitized();
+        let mut tight = loose.clone();
+        tight.secondary_angular_inertia_gain = 0.08;
+        tight.secondary_hip_max_angle_radians = 0.02;
+        let seed = |presentation: &newengine_engine_runtime::gameplay::WeaponPresentationDefinition| {
+            let state = step_long_gun_secondary_dynamics(
+                WeaponSecondaryDynamicsState::default(),
+                presentation,
+                Quat::IDENTITY,
+                Vec3::ZERO,
+                Quat::IDENTITY,
+                dt,
+                0.0,
+                0.0,
+                0.0,
+            );
+            step_long_gun_secondary_dynamics(
+                state,
+                presentation,
+                Quat::from_rotation_y(30.0_f32.to_radians()),
+                Vec3::ZERO,
+                Quat::IDENTITY,
+                dt,
+                0.0,
+                0.0,
+                0.0,
+            )
+            .rotation_offset_local
+            .length()
+        };
+        assert!(seed(&loose) > seed(&tight));
+    }
+
+    #[test]
     fn first_person_aim_alpha_converges_without_overshoot() {
         let mut value = 0.0;
         for _ in 0..30 {
-            value = smooth_first_person_aim_alpha(value, 1.0, 1.0 / 60.0);
+            value = smooth_first_person_aim_alpha(value, 1.0, 1.0 / 60.0, 18.0);
             assert!((0.0..=1.0).contains(&value));
         }
         assert!(value > 0.99);
-        let released = smooth_first_person_aim_alpha(value, 0.0, 1.0 / 60.0);
+        let released = smooth_first_person_aim_alpha(value, 0.0, 1.0 / 60.0, 18.0);
         assert!(released < value);
     }
 

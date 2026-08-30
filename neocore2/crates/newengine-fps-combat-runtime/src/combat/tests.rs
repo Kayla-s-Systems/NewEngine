@@ -43,7 +43,14 @@ mod tests {
             motor.pitch = 0.0;
         }
 
-        apply_recoil(&mut world, player, tuning, 1);
+        apply_recoil(
+            &mut world,
+            player,
+            newengine_engine_runtime::gameplay::ItemInstanceId(1),
+            tuning,
+            false,
+            1,
+        );
 
         let motor = world.get::<CharacterMotor>(player).copied().expect("motor");
         assert!(

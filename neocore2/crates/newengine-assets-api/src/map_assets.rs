@@ -64,8 +64,10 @@ impl MapTransformV1 {
         if !finite {
             return Err("map transform contains a non-finite value".to_owned());
         }
-        if self.scale.iter().any(|value| *value <= 0.0) {
-            return Err("map transform scale must be positive on every axis".to_owned());
+        // Negative scale is a valid authored mirror transform. Imported worlds use it
+        // extensively for mirrored static placements; only a zero component is singular.
+        if self.scale.contains(&0.0) {
+            return Err("map transform scale must be non-zero on every axis".to_owned());
         }
         Ok(())
     }
@@ -562,6 +564,22 @@ mod tests {
     #[test]
     fn canonical_cell_entry_is_stable() {
         assert_eq!(MapCellCoordV1::new(-2, 7).canonical_entry(), "cell/-2/7");
+    }
+
+    #[test]
+    fn map_transform_accepts_mirrored_scale_but_rejects_singular_scale() {
+        let mirrored = MapTransformV1 {
+            scale: [-0.999_999_9, 0.999_999_8, 0.999_999_6],
+            ..Default::default()
+        };
+        assert!(mirrored.validate().is_ok());
+
+        let singular = MapTransformV1 {
+            scale: [0.0, 1.0, 1.0],
+            ..Default::default()
+        };
+        let error = singular.validate().unwrap_err();
+        assert!(error.contains("non-zero"));
     }
 
     #[test]

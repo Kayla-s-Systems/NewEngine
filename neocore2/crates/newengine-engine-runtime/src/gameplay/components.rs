@@ -19,14 +19,15 @@ mod world_runtime;
 pub use display::{DisplayMode, DisplayVisibility};
 pub use physics::{PhysicsSurface, PhysicsWorldSettings, StaticMeshCollider};
 pub use player::{
-    CharacterBody, CharacterMotionTuning, PlayerAnimationState, PlayerCharacterPresentation,
-    PlayerCommandFrame, PlayerController, PlayerControllerKind, PlayerEvent, PlayerEventBus,
-    PlayerEventKind, PlayerFirstPersonCameraAnchor, PlayerFixedPoseHistory, PlayerGroundState,
-    PlayerJointRotationWeight, PlayerLocomotionAnimation, PlayerLocomotionState,
-    PlayerModelAssignment, PlayerModelBinding, PlayerMovementSpeeds, PlayerRenderPose,
-    PlayerSkinBinding, PlayerSkinPose, PlayerSkinVertex, PlayerStanceKind, PlayerStanceState,
-    PlayerViewState, PlayerViewVisibility, PlayerViewVisibilityPolicy, PlayerVisualKind,
-    PlayerVisualPart,
+    CharacterBody, CharacterMotionTuning, PlayerAnimationState, PlayerBraidSecondaryMotionRig,
+    PlayerCharacterPresentation, PlayerCommandFrame, PlayerController, PlayerControllerKind,
+    PlayerEvent, PlayerEventBus, PlayerEventKind, PlayerEyeParentFollowRule, PlayerFallState,
+    PlayerFirstPersonCameraAnchor, PlayerFixedPoseHistory, PlayerGroundState, PlayerJointChannels,
+    PlayerJointCopyRule, PlayerJointRotationWeight, PlayerLocomotionAnimation,
+    PlayerLocomotionState, PlayerModelAssignment, PlayerModelBinding, PlayerMovementSpeeds,
+    PlayerPaletteFollowRule, PlayerRenderPose, PlayerSkinBinding, PlayerSkinPose, PlayerSkinVertex,
+    PlayerStanceKind, PlayerStanceState, PlayerViewState, PlayerViewVisibility,
+    PlayerViewVisibilityPolicy, PlayerVisualKind, PlayerVisualPart, PlayerWeaponArmIkRigDefinition,
 };
 pub use render_environment::{
     CloudShadowRenderState, EnvironmentDomeRenderState, EnvironmentPostFxState,

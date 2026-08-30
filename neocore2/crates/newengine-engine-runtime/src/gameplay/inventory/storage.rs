@@ -235,11 +235,90 @@ impl EquippedWeaponBinding {
     }
 }
 
+/// Direct owner -> equipped weapon ECS entity link. Inventory owns selection; the weapon itself
+/// owns skeleton pose, sockets, effects and presentation state.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct EquippedWeaponEntity {
+    pub entity: EntityId,
+    pub instance_id: ItemInstanceId,
+    pub item: ItemId,
+}
+
+/// Identity carried by the weapon root entity itself. This keeps downstream systems data-oriented:
+/// they consume a normal ECS entity rather than reconstructing a special weapon object from player
+/// state.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct WeaponEntityRuntime {
+    pub owner: EntityId,
+    pub instance_id: ItemInstanceId,
+    pub item: ItemId,
+}
+
+/// World-space pose and measured motion of an authored socket on a weapon entity.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct WeaponSocketPose {
+    pub position: Vec3,
+    pub rotation: newengine_math::Quat,
+    pub linear_velocity: Vec3,
+    pub angular_velocity: Vec3,
+}
+
+impl WeaponSocketPose {
+    #[inline]
+    pub fn stationary(position: Vec3, rotation: newengine_math::Quat) -> Option<Self> {
+        let rotation = rotation.normalize_or_identity();
+        (position.is_finite() && rotation.is_finite()).then_some(Self {
+            position,
+            rotation,
+            linear_velocity: Vec3::ZERO,
+            angular_velocity: Vec3::ZERO,
+        })
+    }
+
+    /// Reconstructs socket linear/angular velocity from consecutive authored skeleton frames.
+    /// The algorithm is generic and has no knowledge of muzzle/ejection semantics.
+    pub fn with_measured_motion(self, previous: Option<Self>, dt: f32) -> Self {
+        let Some(previous) = previous.filter(|_| dt.is_finite() && dt > 1.0e-6 && dt <= 0.25)
+        else {
+            return self;
+        };
+        let linear_velocity = (self.position - previous.position) / dt;
+        let mut delta = (previous.rotation.inverse() * self.rotation).normalize_or_identity();
+        if delta.w < 0.0 {
+            delta = newengine_math::Quat::from_xyzw(-delta.x, -delta.y, -delta.z, -delta.w);
+        }
+        let w = delta.w.clamp(-1.0, 1.0);
+        let sin_half = (1.0 - w * w).max(0.0).sqrt();
+        let angular_velocity = if sin_half <= 1.0e-6 {
+            Vec3::new(delta.x, delta.y, delta.z) * (2.0 / dt)
+        } else {
+            let angle = 2.0 * sin_half.atan2(w);
+            Vec3::new(delta.x, delta.y, delta.z) * (angle / (sin_half * dt))
+        };
+        Self {
+            linear_velocity: linear_velocity
+                .is_finite()
+                .then_some(linear_velocity)
+                .unwrap_or(Vec3::ZERO),
+            angular_velocity: angular_velocity
+                .is_finite()
+                .then_some(angular_velocity)
+                .unwrap_or(Vec3::ZERO),
+            ..self
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct WeaponEntitySockets {
+    pub muzzle: Option<WeaponSocketPose>,
+    pub casing_ejection: Option<WeaponSocketPose>,
+}
+
 /// Latest world-space muzzle pose published by the equipped-weapon presentation.
 ///
-/// Gameplay remains authoritative for ammo/damage, while the rendered weapon owns the physical
-/// barrel pose. Publishing this small component lets hitscan, shot audio and transient VFX start
-/// from the same point without coupling the generic combat runtime to a specific rifle rig.
+/// Compatibility projection for gameplay systems that still read the owner entity. New weapon
+/// systems should consume `EquippedWeaponEntity -> WeaponEntitySockets` instead.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct EquippedWeaponMuzzle {
     pub position: Vec3,

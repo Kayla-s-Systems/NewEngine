@@ -217,6 +217,28 @@ fn cell_distance(
     (a.x - b.x).abs().max((a.z - b.z).abs())
 }
 
+fn existing_cells_within_radius(
+    index: &newengine_assets_api::MapIndexV1,
+    center: newengine_assets_api::MapCellCoordV1,
+    radius: i32,
+) -> Vec<newengine_assets_api::MapCellCoordV1> {
+    let radius = radius.max(0);
+    let mut cells = Vec::new();
+    for dz in -radius..=radius {
+        for dx in -radius..=radius {
+            let coord = newengine_assets_api::MapCellCoordV1::new(
+                center.x.saturating_add(dx),
+                center.z.saturating_add(dz),
+            );
+            if index.cell(coord).is_some() {
+                cells.push(coord);
+            }
+        }
+    }
+    cells.sort_by_key(|coord| (cell_distance(*coord, center), coord.x, coord.z));
+    cells
+}
+
 fn metadata_i32(index: &newengine_assets_api::MapIndexV1, key: &str, default: i32) -> i32 {
     index
         .metadata
@@ -272,6 +294,8 @@ fn apply_discrete_placement(
     definition_cache: &mut std::collections::BTreeMap<String, ResolvedMapDefinitionEntry>,
     logical_path: &str,
     coord: newengine_assets_api::MapCellCoordV1,
+    include_render: bool,
+    include_simulation: bool,
     placement: newengine_assets_api::MapPlacementV1,
 ) -> Result<(), String> {
     let authored_player_spawn = placement.tags.iter().any(|tag| {
@@ -375,7 +399,9 @@ fn apply_discrete_placement(
             .iter()
             .any(|tag| tag.eq_ignore_ascii_case("collision_only"));
 
-    if !collision_only {
+    if !collision_only
+        && ((!dynamic_physics && include_render) || (dynamic_physics && include_simulation))
+    {
         profile.prefabs.push(GameReadyPrefabSpec {
             id: placement.id.clone(),
             authored_map_ref: logical_path.to_owned(),
@@ -407,7 +433,7 @@ fn apply_discrete_placement(
             collision_policy.to_ascii_lowercase().as_str(),
             "static_mesh" | "triangle_mesh" | "mesh" | "box"
         );
-    if has_collision && !dynamic_physics {
+    if has_collision && !dynamic_physics && include_simulation {
         let collision_source = definition
             .refs
             .collision_refs
@@ -437,7 +463,7 @@ fn apply_discrete_placement(
             rotation_ypr,
             scale,
         });
-    } else if collision_only {
+    } else if collision_only && include_simulation {
         return Err(format!(
             "discrete YMAP placement '{}' is collision_only but definition_ref='{}' declares no collision",
             placement.id, placement.definition_ref
@@ -509,21 +535,52 @@ fn load_discrete_map_profile(logical_path: &str) -> Result<GameReadyMapProfile, 
         metadata_i32(&index, "streaming.spawn_cell_x", fallback_spawn_cell.x),
         metadata_i32(&index, "streaming.spawn_cell_z", fallback_spawn_cell.z),
     );
-    let resident_radius = metadata_i32(&index, "streaming.resident_radius", 1).clamp(0, 4);
-    let unload_radius = metadata_i32(&index, "streaming.unload_radius", resident_radius + 1)
-        .clamp(resident_radius + 1, 8);
-    let max_cells_per_tick = metadata_usize(&index, "streaming.max_cells_per_tick", 1).clamp(1, 4);
+    let legacy_resident_radius = metadata_i32(&index, "streaming.resident_radius", 1).clamp(0, 4);
+    let render_radius =
+        metadata_i32(&index, "streaming.render_radius", legacy_resident_radius).clamp(0, 6);
+    // Preserve old maps by default while allowing larger render windows to keep physics tight.
+    let simulation_default = legacy_resident_radius.min(1).min(render_radius);
+    let simulation_radius = metadata_i32(&index, "streaming.simulation_radius", simulation_default)
+        .clamp(0, render_radius.max(0));
+    let render_unload_radius = metadata_i32(
+        &index,
+        "streaming.render_unload_radius",
+        metadata_i32(&index, "streaming.unload_radius", render_radius + 1),
+    )
+    .clamp(render_radius + 1, 10);
+    let simulation_unload_radius = metadata_i32(
+        &index,
+        "streaming.simulation_unload_radius",
+        simulation_radius + 1,
+    )
+    .clamp(
+        simulation_radius + 1,
+        render_unload_radius.max(simulation_radius + 1),
+    );
+    let max_cells_per_tick = metadata_usize(&index, "streaming.max_cells_per_tick", 1).clamp(1, 8);
 
-    let mut initial_cells = index
-        .cells
+    let mut initial_render_cells = existing_cells_within_radius(&index, spawn_cell, render_radius);
+    let mut initial_simulation_cells =
+        existing_cells_within_radius(&index, spawn_cell, simulation_radius);
+    if initial_render_cells.is_empty() && index.cell(spawn_cell).is_some() {
+        initial_render_cells.push(spawn_cell);
+    }
+    if initial_simulation_cells.is_empty() && index.cell(spawn_cell).is_some() {
+        initial_simulation_cells.push(spawn_cell);
+    }
+    let initial_render_set = initial_render_cells
         .iter()
-        .map(|cell| cell.coord)
-        .filter(|coord| cell_distance(*coord, spawn_cell) <= resident_radius)
+        .copied()
+        .collect::<std::collections::BTreeSet<_>>();
+    let initial_simulation_set = initial_simulation_cells
+        .iter()
+        .copied()
+        .collect::<std::collections::BTreeSet<_>>();
+    let mut initial_cells = initial_render_set
+        .union(&initial_simulation_set)
+        .copied()
         .collect::<Vec<_>>();
     initial_cells.sort_by_key(|coord| (cell_distance(*coord, spawn_cell), coord.x, coord.z));
-    if initial_cells.is_empty() && index.cell(spawn_cell).is_some() {
-        initial_cells.push(spawn_cell);
-    }
 
     let mut definition_cache =
         std::collections::BTreeMap::<String, ResolvedMapDefinitionEntry>::new();
@@ -549,6 +606,8 @@ fn load_discrete_map_profile(logical_path: &str) -> Result<GameReadyMapProfile, 
                 &mut definition_cache,
                 logical_path,
                 coord,
+                initial_render_set.contains(&coord),
+                initial_simulation_set.contains(&coord),
                 placement,
             )?;
         }
@@ -557,15 +616,18 @@ fn load_discrete_map_profile(logical_path: &str) -> Result<GameReadyMapProfile, 
     profile.authored_map_streaming = Some(GameReadyAuthoredMapStreamingSpec {
         map_ref: map_ref.clone(),
         index: index.clone(),
-        initial_cells: initial_cells.clone(),
+        initial_render_cells: initial_render_cells.clone(),
+        initial_simulation_cells: initial_simulation_cells.clone(),
         initial_placement_ids,
-        resident_radius,
-        unload_radius,
+        render_radius,
+        simulation_radius,
+        render_unload_radius,
+        simulation_unload_radius,
         max_cells_per_tick,
     });
 
     newengine_ulog_api::ulog::info!(
-        "game-ready: loaded discrete YMAP v2 map='{}' cells_total={} cells_initial={} prefabs_initial={} resolved_definitions={} spawn_cell={},{} resident_radius={} unload_radius={} policy='index-resident; cell payloads stream by player position'",
+        "game-ready: loaded discrete YMAP v2 map='{}' cells_total={} cells_initial={} prefabs_initial={} resolved_definitions={} spawn_cell={},{} render_radius={} simulation_radius={} render_unload_radius={} simulation_unload_radius={} policy='index-resident; dual-domain cell payloads stream by player position'",
         map_ref,
         index.cells.len(),
         initial_cells.len(),
@@ -573,8 +635,10 @@ fn load_discrete_map_profile(logical_path: &str) -> Result<GameReadyMapProfile, 
         definition_cache.len(),
         spawn_cell.x,
         spawn_cell.z,
-        resident_radius,
-        unload_radius,
+        render_radius,
+        simulation_radius,
+        render_unload_radius,
+        simulation_unload_radius,
     );
     Ok(profile)
 }

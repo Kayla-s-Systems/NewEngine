@@ -1,11 +1,10 @@
 use std::collections::{BTreeMap, VecDeque};
 
 use newengine_math::Vec3;
-use newengine_primitives::{builtins, PrimitiveId};
-use newengine_vfx_api::{VfxBudgetV1, VfxEffectRef, VfxPriority, VfxSpawnRequestV1};
-
-pub const VFX_WEAPON_SHOT_DEFAULT: &str = "vfx.weapon.shot.default";
-pub const VFX_WEAPON_IMPACT_DEFAULT: &str = "vfx.weapon.impact.default";
+use newengine_primitives::PrimitiveId;
+use newengine_vfx_api::{
+    VfxBudgetV1, VfxEffectRef, VfxGpuBillboardMode, VfxPriority, VfxSpawnRequestV1,
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct VfxInstanceId(pub u64);
@@ -19,6 +18,7 @@ pub enum VfxLayerKind {
     Spark,
     ImpactDecal,
     Trail,
+    Debris,
     Generic,
 }
 
@@ -50,6 +50,8 @@ pub enum VfxLayerDefinition {
         primitive: PrimitiveId,
         role: VfxRenderRole,
         alignment: VfxAlignment,
+        texture_slot: u8,
+        billboard: VfxGpuBillboardMode,
         offset_along_direction: f32,
         offset_along_normal: f32,
         scale: Vec3,
@@ -57,6 +59,11 @@ pub enum VfxLayerDefinition {
         color: [f32; 4],
         lifetime_seconds: f32,
         fade_start_fraction: f32,
+        fade_in_fraction: f32,
+        drag_per_second: f32,
+        rotation_radians: f32,
+        rotation_random_radians: f32,
+        spin_radians_per_second: f32,
         light: Option<VfxLightDefinition>,
     },
     Tracer {
@@ -71,14 +78,24 @@ pub enum VfxLayerDefinition {
         kind: VfxLayerKind,
         primitive: PrimitiveId,
         role: VfxRenderRole,
+        texture_slot: u8,
+        billboard: VfxGpuBillboardMode,
         count: u16,
         scale: Vec3,
         color: [f32; 4],
         speed_min: f32,
         speed_max: f32,
+        cone_angle_degrees: f32,
+        size_variance: f32,
+        lifetime_variance: f32,
         acceleration: Vec3,
+        drag_per_second: f32,
+        rotation_random_radians: f32,
+        spin_radians_per_second: f32,
+        spin_variance: f32,
         lifetime_seconds: f32,
         fade_start_fraction: f32,
+        fade_in_fraction: f32,
     },
     Decal {
         primitive: PrimitiveId,
@@ -239,44 +256,12 @@ pub struct VfxSurfaceResponseLibrary {
 
 impl Default for VfxSurfaceResponseLibrary {
     fn default() -> Self {
-        let mut library = Self {
-            responses: BTreeMap::new(),
-        };
-        library.responses.insert(
+        let mut responses = BTreeMap::new();
+        responses.insert(
             "surface.default".to_owned(),
             VfxSurfaceResponse::authored(None, 1.0, None, None),
         );
-        library.responses.insert(
-            "surface.metal".to_owned(),
-            VfxSurfaceResponse::authored(
-                Some([1.0, 0.78, 0.34]),
-                1.0,
-                None,
-                Some([0.055, 0.050, 0.045]),
-            ),
-        );
-        library.responses.insert(
-            "surface.wood".to_owned(),
-            VfxSurfaceResponse::authored(
-                Some([0.84, 0.48, 0.16]),
-                0.72,
-                Some([0.30, 0.23, 0.17]),
-                Some([0.11, 0.070, 0.035]),
-            ),
-        );
-        let concrete = VfxSurfaceResponse::authored(
-            Some([0.92, 0.70, 0.42]),
-            0.62,
-            Some([0.38, 0.37, 0.35]),
-            None,
-        );
-        library
-            .responses
-            .insert("surface.concrete".to_owned(), concrete);
-        library
-            .responses
-            .insert("surface.stone".to_owned(), concrete);
-        library
+        Self { responses }
     }
 }
 
@@ -316,16 +301,9 @@ pub struct VfxEffectLibrary {
 
 impl Default for VfxEffectLibrary {
     fn default() -> Self {
-        let mut library = Self {
+        Self {
             effects: BTreeMap::new(),
-        };
-        library
-            .register(default_weapon_shot_definition())
-            .expect("built-in weapon shot VFX must validate");
-        library
-            .register(default_weapon_impact_definition())
-            .expect("built-in weapon impact VFX must validate");
-        library
+        }
     }
 }
 
@@ -582,112 +560,5 @@ impl VfxRuntimeState {
     pub(crate) fn allocate_instance_id(&mut self) -> VfxInstanceId {
         self.next_instance_id = self.next_instance_id.wrapping_add(1).max(1);
         VfxInstanceId(self.next_instance_id)
-    }
-}
-
-fn default_weapon_shot_definition() -> VfxEffectDefinition {
-    VfxEffectDefinition {
-        effect: VfxEffectRef::new(VFX_WEAPON_SHOT_DEFAULT),
-        priority: VfxPriority::High,
-        layers: vec![
-            VfxLayerDefinition::Pulse {
-                kind: VfxLayerKind::MuzzleFlash,
-                primitive: builtins::ID_CONE,
-                role: VfxRenderRole::Transparent,
-                alignment: VfxAlignment::DirectionY,
-                offset_along_direction: 0.085,
-                offset_along_normal: 0.0,
-                scale: Vec3::new(0.075, 0.17, 0.075),
-                growth_per_second: Vec3::new(0.12, 0.30, 0.12),
-                color: [1.0, 0.50, 0.08, 0.92],
-                lifetime_seconds: 0.045,
-                fade_start_fraction: 0.15,
-                light: None,
-            },
-            VfxLayerDefinition::Pulse {
-                kind: VfxLayerKind::MuzzleCore,
-                primitive: builtins::ID_SPHERE_UV,
-                role: VfxRenderRole::Transparent,
-                alignment: VfxAlignment::None,
-                offset_along_direction: 0.018,
-                offset_along_normal: 0.0,
-                scale: Vec3::new(0.038, 0.038, 0.060),
-                growth_per_second: Vec3::new(0.05, 0.05, 0.08),
-                color: [1.0, 0.88, 0.48, 1.0],
-                lifetime_seconds: 0.032,
-                fade_start_fraction: 0.08,
-                light: Some(VfxLightDefinition {
-                    color: [1.0, 0.55, 0.16],
-                    intensity: 34.0,
-                    range: 3.8,
-                }),
-            },
-            VfxLayerDefinition::Pulse {
-                kind: VfxLayerKind::Smoke,
-                primitive: builtins::ID_SPHERE_UV,
-                role: VfxRenderRole::Transparent,
-                alignment: VfxAlignment::None,
-                offset_along_direction: 0.10,
-                offset_along_normal: 0.025,
-                scale: Vec3::new(0.035, 0.028, 0.070),
-                growth_per_second: Vec3::new(0.28, 0.34, 0.46),
-                color: [0.24, 0.22, 0.20, 0.32],
-                lifetime_seconds: 0.55,
-                fade_start_fraction: 0.18,
-                light: None,
-            },
-            VfxLayerDefinition::Tracer {
-                primitive: builtins::ID_CUBE,
-                color: [1.0, 0.72, 0.24, 0.90],
-                half_length: 0.12,
-                radius: 0.004,
-                speed: 320.0,
-                max_lifetime_seconds: 0.8,
-            },
-        ],
-    }
-}
-
-fn default_weapon_impact_definition() -> VfxEffectDefinition {
-    VfxEffectDefinition {
-        effect: VfxEffectRef::new(VFX_WEAPON_IMPACT_DEFAULT),
-        priority: VfxPriority::High,
-        layers: vec![
-            VfxLayerDefinition::Burst {
-                kind: VfxLayerKind::Spark,
-                primitive: builtins::ID_CUBE,
-                role: VfxRenderRole::Transparent,
-                count: 8,
-                scale: Vec3::new(0.006, 0.006, 0.045),
-                color: [1.0, 0.64, 0.18, 0.95],
-                speed_min: 3.5,
-                speed_max: 9.0,
-                acceleration: Vec3::new(0.0, -6.5, 0.0),
-                lifetime_seconds: 0.22,
-                fade_start_fraction: 0.30,
-            },
-            VfxLayerDefinition::Pulse {
-                kind: VfxLayerKind::Smoke,
-                primitive: builtins::ID_SPHERE_UV,
-                role: VfxRenderRole::Transparent,
-                alignment: VfxAlignment::NormalY,
-                offset_along_direction: 0.0,
-                offset_along_normal: 0.025,
-                scale: Vec3::new(0.045, 0.025, 0.045),
-                growth_per_second: Vec3::new(0.42, 0.28, 0.42),
-                color: [0.26, 0.25, 0.24, 0.34],
-                lifetime_seconds: 0.72,
-                fade_start_fraction: 0.12,
-                light: None,
-            },
-            VfxLayerDefinition::Decal {
-                primitive: builtins::ID_DISC,
-                scale: Vec3::new(0.16, 0.002, 0.16),
-                color: [0.08, 0.065, 0.055, 0.88],
-                normal_offset: 0.003,
-                lifetime_seconds: 18.0,
-                fade_start_fraction: 0.82,
-            },
-        ],
     }
 }

@@ -23,6 +23,8 @@ mod material_source;
 mod materials_terrain;
 #[path = "game_ready_parts/mission.rs"]
 mod mission;
+#[path = "game_ready_parts/player_hair.rs"]
+mod player_hair;
 #[path = "game_ready_parts/player_model.rs"]
 mod player_model;
 #[path = "game_ready_parts/shadow_torture.rs"]
@@ -90,6 +92,10 @@ use newengine_engine_runtime::world_authoring::{
 };
 
 use self::assets_bootstrap::bootstrap_game_ready_world_scene_impl;
+pub use player_hair::{
+    bind_compiled_player_groom_v1, bind_player_nehair_v1, install_nehair_groom_v1,
+    load_nehair_groom_v1,
+};
 
 #[inline]
 pub(crate) fn character_body_from_fps_tuning(
@@ -167,8 +173,10 @@ pub fn tick_frame(
     player_model::tick_player_model_assignments(world, primitives, materials);
     player_model::tick_player_model_grounding(world);
     equipment_visual::tick_equipped_weapon_presentation_input(world, frame.dt);
-    player_model::tick_player_skin_animation(world, frame.dt);
+    // The stable FPP eye anchor is actor/stance-owned and independent from animated head joints.
+    // Publish it before arm/weapon animation so camera and FPP grip solve consume one frame authority.
     player_model::publish_player_first_person_camera_anchors(world);
+    player_model::tick_player_skin_animation(world, frame.dt);
     equipment_visual::tick_equipped_weapon_visuals(world, primitives, materials, frame.dt);
     weapon_casing::tick_weapon_shell_casing_visuals(world, primitives, materials);
     weapon_animation::tick_equipped_weapon_animations(world, frame.dt);

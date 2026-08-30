@@ -15,8 +15,9 @@ pub use policy::{
     FPS_GAMEPLAY_POLICY_SCHEMA, FPS_GAMEPLAY_POLICY_VERSION,
 };
 pub use runtime::{
-    FpsDemoGoal, FpsDemoHazard, FpsDemoPickup, FpsDemoRules, FpsDemoState, FpsDemoTarget,
-    FpsMotionResponseTuning, FpsPlayerTuning, WeaponShellCasing,
+    FpsCharacterTraversalMode, FpsCharacterTraversalState, FpsDemoGoal, FpsDemoHazard,
+    FpsDemoPickup, FpsDemoRules, FpsDemoState, FpsDemoTarget, FpsMotionResponseTuning,
+    FpsPlayerTuning, WeaponShellCasing,
 };
 
 use newengine_input_actions_api::ActionCommandFrame;
@@ -34,6 +35,7 @@ pub mod action {
     pub const PLAYER_INTERACT: &str = "player.interact";
     pub const INVENTORY_TOGGLE: &str = "player.inventory.toggle";
     pub const CHARACTER_SELECT_TOGGLE: &str = "player.character.select.toggle";
+    pub const NOCLIP_TOGGLE: &str = "player.noclip.toggle";
     pub const UI_ACCEPT: &str = "ui.accept";
     pub const UI_BACK: &str = "ui.back";
     pub const UI_NAV_UP: &str = "ui.nav.up";
@@ -60,6 +62,7 @@ pub struct FpsActionFrame {
     pub interact_pressed: bool,
     pub inventory_toggle_pressed: bool,
     pub character_select_toggle_pressed: bool,
+    pub noclip_toggle_pressed: bool,
     pub ui_accept_pressed: bool,
     pub ui_back_pressed: bool,
     pub ui_nav_up_pressed: bool,
@@ -84,6 +87,7 @@ impl FpsActionFrame {
             interact_pressed: commands.is_pressed(action::PLAYER_INTERACT),
             inventory_toggle_pressed: commands.is_pressed(action::INVENTORY_TOGGLE),
             character_select_toggle_pressed: commands.is_pressed(action::CHARACTER_SELECT_TOGGLE),
+            noclip_toggle_pressed: commands.is_pressed(action::NOCLIP_TOGGLE),
             ui_accept_pressed: commands.is_pressed(action::UI_ACCEPT),
             ui_back_pressed: commands.is_pressed(action::UI_BACK),
             ui_nav_up_pressed: commands.is_pressed(action::UI_NAV_UP),
@@ -116,13 +120,18 @@ mod tests {
                 action::PLAYER_CROUCH.into(),
                 action::PLAYER_FIRE_PRIMARY.into(),
             ],
-            pressed: vec![action::PLAYER_JUMP.into(), action::EQUIP_SIDEARM.into()],
+            pressed: vec![
+                action::PLAYER_JUMP.into(),
+                action::EQUIP_SIDEARM.into(),
+                action::NOCLIP_TOGGLE.into(),
+            ],
             released: Vec::new(),
         };
         let fps = FpsActionFrame::from_commands(&commands);
         assert!(fps.crouch_held);
         assert!(fps.fire_primary_held);
         assert!(fps.jump_pressed);
+        assert!(fps.noclip_toggle_pressed);
         assert_eq!(fps.equipment_slot_pressed, Some(3));
     }
 }

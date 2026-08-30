@@ -1,10 +1,5 @@
-const HUMANOID_LOCOMOTION_GRAPH_ASSET_REF: &str =
-    "config/animation/humanoid_locomotion.graph.v1.json";
-const HUMANOID_LOCOMOTION_GRAPH_NAME: &str = "humanoid.locomotion";
-const HUMANOID_LOCOMOTION_GRAPH_BYTES: &[u8] = include_bytes!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/../../config/animation/humanoid_locomotion.graph.v1.json"
-));
+const GAME_READY_WORLD_RUNTIME_DATA_OWNER: &str = "engine.game-ready.world";
+const LOCOMOTION_GRAPH_RUNTIME_DATA_KEY: &str = "locomotion_graph";
 
 #[inline]
 fn locomotion_fallback_slots(
@@ -53,10 +48,7 @@ fn locomotion_state_for_alias(
     reference: &str,
 ) -> Result<newengine_engine_runtime::gameplay::PlayerLocomotionAnimation, String> {
     use newengine_engine_runtime::gameplay::PlayerLocomotionAnimation as L;
-    let alias = reference
-        .trim()
-        .replace('\\', "/")
-        .to_ascii_lowercase();
+    let alias = reference.trim().replace('\\', "/").to_ascii_lowercase();
     match alias.as_str() {
         "slot://idle" => Ok(L::Idle),
         "slot://walk" => Ok(L::Walk),
@@ -72,9 +64,7 @@ fn locomotion_state_for_alias(
     }
 }
 
-fn locomotion_graph_binding_variant_key(
-    clips: &[Option<PlayerAnimationRuntimeClip>; 8],
-) -> u64 {
+fn locomotion_graph_binding_variant_key(clips: &[Option<PlayerAnimationRuntimeClip>; 8]) -> u64 {
     let mut hasher = blake3::Hasher::new();
     for state in [
         newengine_engine_runtime::gameplay::PlayerLocomotionAnimation::Idle,
@@ -95,25 +85,45 @@ fn locomotion_graph_binding_variant_key(
         hasher.update(&[0xff]);
     }
     let digest = hasher.finalize();
-    u64::from_le_bytes(digest.as_bytes()[..8].try_into().expect("blake3 digest width"))
+    u64::from_le_bytes(
+        digest.as_bytes()[..8]
+            .try_into()
+            .expect("blake3 digest width"),
+    )
 }
 
 fn compile_game_ready_locomotion_graph(
     clips: &[Option<PlayerAnimationRuntimeClip>; 8],
     animation_runtime: &AnimationSkeletonRuntime,
 ) -> Result<std::sync::Arc<CompiledAnimationGraph>, String> {
+    let startup = newengine_core::startup::last_startup_config()
+        .ok_or_else(|| "GameReady locomotion graph requires startup configuration".to_owned())?;
+    let graph_ref = newengine_core::plugin_runtime_data_value(
+        startup,
+        GAME_READY_WORLD_RUNTIME_DATA_OWNER,
+        LOCOMOTION_GRAPH_RUNTIME_DATA_KEY,
+    )?
+    .to_owned();
+    let (_, graph_bytes) = newengine_core::read_plugin_runtime_data_bytes(
+        startup,
+        GAME_READY_WORLD_RUNTIME_DATA_OWNER,
+        LOCOMOTION_GRAPH_RUNTIME_DATA_KEY,
+    )?;
     let variant_key = locomotion_graph_binding_variant_key(clips);
     global_compiled_animation_graph_store().load_or_compile_with_variant(
-        HUMANOID_LOCOMOTION_GRAPH_ASSET_REF,
+        &graph_ref,
         animation_runtime,
         variant_key,
-        |logical_path| {
-            if logical_path.eq_ignore_ascii_case(HUMANOID_LOCOMOTION_GRAPH_ASSET_REF) {
-                Ok(HUMANOID_LOCOMOTION_GRAPH_BYTES.to_vec())
-            } else {
-                Err(format!(
-                    "unexpected GameReady locomotion graph asset path '{logical_path}'"
-                ))
+        {
+            let graph_ref = graph_ref.clone();
+            move |logical_path| {
+                if logical_path.eq_ignore_ascii_case(&graph_ref) {
+                    Ok(graph_bytes.clone())
+                } else {
+                    Err(format!(
+                        "unexpected GameReady locomotion graph asset path '{logical_path}'"
+                    ))
+                }
             }
         },
         |reference| {
@@ -155,6 +165,7 @@ fn locomotion_playback_rate(
 
 fn graph_intent(
     entity: newengine_ecs::EntityId,
+    graph: &CompiledAnimationGraph,
     kind: newengine_animation_api::AnimationIntentKind,
     parameters: serde_json::Value,
 ) -> newengine_animation_api::AnimationIntentDtoV1 {
@@ -162,7 +173,7 @@ fn graph_intent(
         entity: entity.into(),
         intent: kind,
         graph: Some(newengine_animation_api::AnimationGraphRef(
-            HUMANOID_LOCOMOTION_GRAPH_NAME.to_owned(),
+            graph.name().to_owned(),
         )),
         clip: None,
         task: None,
@@ -179,6 +190,7 @@ fn apply_locomotion_graph_parameters(
 ) -> Result<(), String> {
     let intent = graph_intent(
         entity,
+        graph,
         newengine_animation_api::AnimationIntentKind::SetParameter,
         serde_json::json!({ "normalized_speed": normalized_speed }),
     );
@@ -193,6 +205,7 @@ fn blend_locomotion_graph_to_state(
 ) -> Result<(), String> {
     let intent = graph_intent(
         entity,
+        graph,
         newengine_animation_api::AnimationIntentKind::BlendToState,
         serde_json::json!({
             "state": state,

@@ -1,14 +1,7 @@
 #[derive(Clone, Debug)]
 struct DetachedHeadFollowRig {
-    /// Canonical imported equivalent of North Star `headb`.
-    ///
-    /// Abby's scalp/hair skin is predominantly weighted to `DEF-spine.006`, and
-    /// the original `abby-skel` parents `braid_offset` directly to `headb`.
-    /// Detached Blender control/face branches must therefore inherit this same
-    /// deformation delta instead of becoming a second animated head space.
-    headb_driver: usize,
-    control_followers: Vec<usize>,
-    face_followers: Vec<usize>,
+    driver_joint: usize,
+    followers: Vec<usize>,
 }
 
 fn collect_joint_descendants(skeleton: &ModelSkeletonMetadata, roots: &[usize]) -> Vec<usize> {
@@ -35,44 +28,46 @@ fn collect_joint_descendants(skeleton: &ModelSkeletonMetadata, roots: &[usize]) 
     followers
 }
 
-fn build_detached_head_follow(skeleton: &ModelSkeletonMetadata) -> Option<DetachedHeadFollowRig> {
-    // Binary authority: original `abby-skel.pak` hierarchy is
-    // `... -> neck -> heada -> headb -> braid_offset`. Bind-space comparison maps
-    // those joints to `DEF-spine.004/.005/.006` in the imported 709-joint rig.
-    let headb_driver = skeleton
+fn build_detached_head_follow(
+    skeleton: &ModelSkeletonMetadata,
+    authored: &newengine_engine_runtime::gameplay::PlayerPaletteFollowRule,
+) -> Result<DetachedHeadFollowRig, String> {
+    let driver_name = authored.driver_joint.trim();
+    let driver_joint = skeleton
         .joints
         .iter()
-        .position(|joint| joint.name == "DEF-spine.006")?;
+        .position(|joint| joint.name == driver_name)
+        .ok_or_else(|| format!("authored palette-follow driver is absent joint='{driver_name}'"))?;
 
-    // The Blender control rig is detached from the deform chain. Keep it useful
-    // for authored controls, but project the *same* headb rigid deformation onto
-    // it. It is never the skinning authority for Abby's head/hair.
-    let control_roots = skeleton
-        .joints
-        .iter()
-        .enumerate()
-        .filter_map(|(index, joint)| (joint.name == "MCH-ROT-neck").then_some(index))
-        .collect::<Vec<_>>();
-    let face_roots = skeleton
-        .joints
-        .iter()
-        .enumerate()
-        .filter_map(|(index, joint)| {
-            matches!(joint.name.as_str(), "ORG-face" | "MCH-eyes_parent").then_some(index)
-        })
-        .collect::<Vec<_>>();
-    if face_roots.is_empty() {
-        return None;
+    let mut roots = Vec::with_capacity(authored.follower_roots.len());
+    for name in &authored.follower_roots {
+        let name = name.trim();
+        let index = skeleton
+            .joints
+            .iter()
+            .position(|joint| joint.name == name)
+            .ok_or_else(|| format!("authored palette-follow root is absent joint='{name}'"))?;
+        roots.push(index);
+    }
+    roots.sort_unstable();
+    roots.dedup();
+    if roots.is_empty() {
+        return Err("authored palette-follow rule requires at least one follower root".to_owned());
     }
 
-    let control_followers = collect_joint_descendants(skeleton, &control_roots);
-    let mut face_followers = collect_joint_descendants(skeleton, &face_roots);
-    face_followers.retain(|joint| *joint != headb_driver && !control_followers.contains(joint));
+    let mut followers = if authored.include_descendants {
+        collect_joint_descendants(skeleton, &roots)
+    } else {
+        roots
+    };
+    followers.retain(|joint| *joint != driver_joint);
+    if followers.is_empty() {
+        return Err("authored palette-follow rule resolved no followers".to_owned());
+    }
 
-    Some(DetachedHeadFollowRig {
-        headb_driver,
-        control_followers,
-        face_followers,
+    Ok(DetachedHeadFollowRig {
+        driver_joint,
+        followers,
     })
 }
 
@@ -83,28 +78,21 @@ fn apply_detached_head_follow_palette(
     let Some(rig) = rig else {
         return Ok(());
     };
-    let headb_deformation = *palette.get(rig.headb_driver).ok_or_else(|| {
+    let driver_deformation = *palette.get(rig.driver_joint).ok_or_else(|| {
         format!(
-            "head-follow canonical headb driver outside palette joint={}",
-            rig.headb_driver
+            "palette-follow driver outside palette joint={}",
+            rig.driver_joint
         )
     })?;
 
-    // Skin-palette entries are model-space deformation transforms, not local
-    // joint transforms. Never rebuild a fake MCH hierarchy by multiplying them
-    // parent-by-child. Apply one shared rigid headb delta to every detached
-    // control/face branch. Scalp, facial skin, eyes and braid then live in the
-    // exact same animated head space as `DEF-spine.006`.
-    for &joint in rig
-        .control_followers
-        .iter()
-        .chain(rig.face_followers.iter())
-    {
-        let detached_deformation = *palette
+    // Skin-palette entries are model-space deformation transforms. The authored rule explicitly
+    // selects which detached branches consume the driver's deformation; runtime does not infer
+    // rig names, character families, or follower semantics.
+    for &joint in &rig.followers {
+        let follower_deformation = *palette
             .get(joint)
-            .ok_or_else(|| format!("detached head follower outside palette joint={joint}"))?;
-        palette[joint] = headb_deformation * detached_deformation;
+            .ok_or_else(|| format!("palette-follow follower outside palette joint={joint}"))?;
+        palette[joint] = driver_deformation * follower_deformation;
     }
     Ok(())
 }
-

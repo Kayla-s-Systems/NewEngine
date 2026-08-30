@@ -188,6 +188,7 @@ impl<'a> newengine_render_feature_api::DrawListBuildCtx for DrawListBuildCtx<'a>
                             cascade.light_mvp,
                             &ctx.lights,
                             ctx.runtime,
+                            super::super::passes::ShadowUboViewKey::directional(cascade_index),
                         )
                     })?;
             }
@@ -203,6 +204,7 @@ impl<'a> newengine_render_feature_api::DrawListBuildCtx for DrawListBuildCtx<'a>
                 ctx.shadow_frame.light_mvp,
                 &ctx.lights,
                 ctx.runtime,
+                super::super::passes::ShadowUboViewKey::directional(0),
             )
         })?;
         Ok(())
@@ -237,6 +239,7 @@ impl<'a> newengine_render_feature_api::DrawListBuildCtx for DrawListBuildCtx<'a>
                     view.light_mvp,
                     &local_lights,
                     ctx.runtime,
+                    super::super::passes::ShadowUboViewKey::local(view_index),
                 )
             })?;
         }
@@ -312,6 +315,7 @@ impl<'a> newengine_render_feature_api::DrawListBuildCtx for DrawListBuildCtx<'a>
                             ctx.camera_position,
                             cascade_index,
                             cascade.texel_world_size,
+                            super::super::passes::ShadowUboViewKey::directional(cascade_index),
                         )
                     })?;
             }
@@ -330,6 +334,7 @@ impl<'a> newengine_render_feature_api::DrawListBuildCtx for DrawListBuildCtx<'a>
                 ctx.camera_position,
                 0,
                 0.0,
+                super::super::passes::ShadowUboViewKey::directional(0),
             )
         })?;
         Ok(())
@@ -364,6 +369,7 @@ impl<'a> newengine_render_feature_api::DrawListBuildCtx for DrawListBuildCtx<'a>
                     ctx.camera_position,
                     0,
                     0.0,
+                    super::super::passes::ShadowUboViewKey::local(view_index),
                 )
             })?;
         }

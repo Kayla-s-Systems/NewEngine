@@ -23,9 +23,16 @@ pub const RUNTIME_UNIT_SPEC: newengine_runtime_unit_api::EngineRuntimeUnitSpec =
 
 fn runtime_unit_factory(
     _: &mut newengine_runtime_unit_api::Engine<()>,
-    _: &newengine_runtime_unit_api::StartupConfig,
+    startup: &newengine_runtime_unit_api::StartupConfig,
 ) -> newengine_runtime_unit_api::EngineResult<Option<Box<dyn newengine_runtime_unit_api::Module<()>>>>
 {
+    let probe = SchemaRegistryState::from_startup(startup);
+    if !probe.registry_diagnostics.is_empty() {
+        return Err(newengine_core::EngineError::other(format!(
+            "configured schema registry is invalid: {:?}",
+            probe.registry_diagnostics
+        )));
+    }
     let _ = register_schema_gateway_best_effort();
     Ok(None)
 }
@@ -45,9 +52,25 @@ mod tests {
     };
     use serde_json::json;
 
+    fn test_state() -> SchemaRegistryState {
+        let loaded = crate::config::load_registry_json(
+            r#"{
+            "$schema": "northstar.engine.schema_registry.v1",
+            "records": [
+                {"type_id":"newengine.assets.document.asset_document","domain":"assets","kind":"resource","properties":[]},
+                {"type_id":"newengine.component.transform.v1","domain":"components","kind":"component","properties":[]},
+                {"type_id":"newengine.settings.world_environment.v1","domain":"settings","kind":"settings","properties":[
+                    {"property_id":"time_of_day","value_kind":"float","editable":true,"required":true,"json_pointer":"/time_of_day","min":0.0,"max":1.0}
+                ]}
+            ]
+        }"#,
+        );
+        SchemaRegistryState::from_loaded(loaded)
+    }
+
     #[test]
-    fn embedded_registry_loads_foundation_domains() {
-        let state = SchemaRegistryState::default();
+    fn configured_registry_loads_foundation_domains() {
+        let state = test_state();
         assert!(
             state
                 .describe_type(SchemaDescribeTypeRequestV1 {
@@ -76,7 +99,7 @@ mod tests {
 
     #[test]
     fn describe_type_returns_properties_from_config() {
-        let state = SchemaRegistryState::default();
+        let state = test_state();
         let response = state.describe_type(SchemaDescribeTypeRequestV1 {
             type_id: "newengine.settings.world_environment.v1".to_owned(),
             include_properties: true,
@@ -93,7 +116,7 @@ mod tests {
 
     #[test]
     fn validate_patch_returns_normalized_patch_and_undo() {
-        let state = SchemaRegistryState::default();
+        let state = test_state();
         let response = state.validate_patch(SchemaPatchValidationRequestV1 {
             patch: SchemaPatchDtoV1 {
                 target_type: "newengine.settings.world_environment.v1".to_owned(),
@@ -115,7 +138,7 @@ mod tests {
 
     #[test]
     fn default_value_is_served_from_schema_property() {
-        let state = SchemaRegistryState::default();
+        let state = test_state();
         let response = state.default_value(SchemaDefaultValueRequestV1 {
             type_id: "newengine.settings.world_environment.v1".to_owned(),
             property_id: "time_of_day".to_owned(),

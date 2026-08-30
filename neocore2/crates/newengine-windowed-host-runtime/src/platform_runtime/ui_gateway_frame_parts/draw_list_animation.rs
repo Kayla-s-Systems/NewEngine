@@ -1,5 +1,3 @@
-const DEFAULT_LOADING_SPINNER_RPS: f32 = 0.90;
-
 #[derive(Debug, Clone)]
 pub(super) struct LoadingSpinnerAnimationSpec {
     pub(super) rotation_rps: f32,
@@ -24,16 +22,16 @@ pub(super) struct LoadingSpinnerRuntimeAnimation {
 }
 
 impl LoadingSpinnerAnimationSpec {
-    fn fallback() -> Self {
+    fn unconfigured() -> Self {
         Self {
-            rotation_rps: DEFAULT_LOADING_SPINNER_RPS,
-            sprite_fps: 24.0,
-            sprite_frames: Some(1),
-            sprite_columns: Some(1),
-            sprite_rows: Some(1),
-            frame_width: Some(64),
-            frame_height: Some(64),
-            source: "engine-default",
+            rotation_rps: 0.0,
+            sprite_fps: 0.0,
+            sprite_frames: None,
+            sprite_columns: None,
+            sprite_rows: None,
+            frame_width: None,
+            frame_height: None,
+            source: "unconfigured",
         }
     }
 
@@ -67,151 +65,45 @@ static LOADING_SPINNER_ANIMATION_SPEC: std::sync::OnceLock<LoadingSpinnerAnimati
     std::sync::OnceLock::new();
 
 pub(super) fn loading_spinner_animation_spec() -> &'static LoadingSpinnerAnimationSpec {
-    LOADING_SPINNER_ANIMATION_SPEC.get_or_init(load_spinner_animation_spec_from_neui)
+    LOADING_SPINNER_ANIMATION_SPEC.get_or_init(load_spinner_animation_spec_from_config)
 }
 
-fn load_spinner_animation_spec_from_neui() -> LoadingSpinnerAnimationSpec {
-    let Some(source) = read_loading_neui_source() else {
-        return LoadingSpinnerAnimationSpec::fallback();
+fn load_spinner_animation_spec_from_config() -> LoadingSpinnerAnimationSpec {
+    let Some(startup) = newengine_core::startup::last_startup_config() else {
+        return LoadingSpinnerAnimationSpec::unconfigured();
     };
-    let Some(tag) = extract_image_tag_by_id(&source, "loading.spinner") else {
-        return LoadingSpinnerAnimationSpec::fallback();
+    let Some(config) = startup
+        .plugins
+        .get("engine.loading")
+        .and_then(|plugin| plugin.get("spinner_animation"))
+        .and_then(serde_json::Value::as_object)
+    else {
+        return LoadingSpinnerAnimationSpec::unconfigured();
     };
 
-    let mut spec = LoadingSpinnerAnimationSpec::fallback();
-    spec.source = "loading.neui";
-    if let Some(value) = neui_param_f32(&tag, "rotation_rps") {
-        spec.rotation_rps = value.clamp(0.0, 20.0);
-    } else if let Some(value) = neui_param_f32(&tag, "rotation_rad_per_sec")
-        .or_else(|| neui_param_f32(&tag, "rotation_rad_s"))
-    {
-        spec.rotation_rps = (value / std::f32::consts::TAU).clamp(0.0, 20.0);
+    let finite_f32 = |key: &str| {
+        config
+            .get(key)
+            .and_then(serde_json::Value::as_f64)
+            .filter(|value| value.is_finite())
+            .map(|value| value as f32)
+    };
+    let positive_usize = |key: &str| {
+        config
+            .get(key)
+            .and_then(serde_json::Value::as_u64)
+            .and_then(|value| usize::try_from(value).ok())
+            .filter(|value| *value > 0)
+    };
+
+    LoadingSpinnerAnimationSpec {
+        rotation_rps: finite_f32("rotation_rps").unwrap_or(0.0).clamp(0.0, 20.0),
+        sprite_fps: finite_f32("sprite_fps").unwrap_or(0.0).clamp(0.0, 240.0),
+        sprite_frames: positive_usize("sprite_frames"),
+        sprite_columns: positive_usize("sprite_columns"),
+        sprite_rows: positive_usize("sprite_rows"),
+        frame_width: positive_usize("frame_width"),
+        frame_height: positive_usize("frame_height"),
+        source: "config:engine.loading.spinner_animation",
     }
-    if let Some(value) = neui_param_f32(&tag, "sprite_fps") {
-        spec.sprite_fps = value.clamp(0.0, 240.0);
-    } else if let Some(ms) = neui_param_usize(&tag, "sprite_frame_ms").filter(|ms| *ms > 0) {
-        spec.sprite_fps = (1000.0 / ms as f32).clamp(0.0, 240.0);
-    }
-    spec.sprite_frames = neui_param_usize(&tag, "sprite_frames")
-        .or_else(|| neui_param_usize(&tag, "frame_count"))
-        .or(spec.sprite_frames);
-    spec.sprite_columns = neui_param_usize(&tag, "sprite_columns")
-        .or_else(|| neui_param_usize(&tag, "columns"))
-        .or(spec.sprite_columns);
-    spec.sprite_rows = neui_param_usize(&tag, "sprite_rows")
-        .or_else(|| neui_param_usize(&tag, "rows"))
-        .or(spec.sprite_rows);
-    spec.frame_width = neui_param_usize(&tag, "frame_width")
-        .or_else(|| neui_param_usize(&tag, "sprite_frame_width"))
-        .or(spec.frame_width);
-    spec.frame_height = neui_param_usize(&tag, "frame_height")
-        .or_else(|| neui_param_usize(&tag, "sprite_frame_height"))
-        .or(spec.frame_height);
-    spec
-}
-
-fn read_loading_neui_source() -> Option<String> {
-    let mut candidates = Vec::new();
-    if let Ok(cwd) = std::env::current_dir() {
-        for rel in [
-            "gameAssets/ui/src/engine/loading.neui.xml",
-            "../gameAssets/ui/src/engine/loading.neui.xml",
-            "../../gameAssets/ui/src/engine/loading.neui.xml",
-            "../../../gameAssets/ui/src/engine/loading.neui.xml",
-            "NorthStar/gameAssets/ui/src/engine/loading.neui.xml",
-        ] {
-            candidates.push(cwd.join(rel));
-        }
-    }
-    candidates.push(std::path::PathBuf::from(
-        "NorthStar/gameAssets/ui/src/engine/loading.neui.xml",
-    ));
-
-    for path in candidates {
-        if let Ok(source) = std::fs::read_to_string(&path) {
-            return Some(source);
-        }
-    }
-    None
-}
-
-fn extract_image_tag_by_id(source: &str, id: &str) -> Option<String> {
-    let mut search_from = 0usize;
-    while let Some(offset) = source[search_from..].find("<Image") {
-        let start = search_from + offset;
-        let end = source[start..].find('>').map(|offset| start + offset + 1)?;
-        let tag = &source[start..end];
-        if extract_xml_attr(tag, "id").as_deref() == Some(id) {
-            return Some(tag.to_owned());
-        }
-        search_from = end;
-    }
-    None
-}
-
-fn neui_param_f32(tag: &str, key: &str) -> Option<f32> {
-    neui_param_raw(tag, key).and_then(|value| value.parse::<f32>().ok())
-}
-
-fn neui_param_usize(tag: &str, key: &str) -> Option<usize> {
-    neui_param_raw(tag, key).and_then(|value| value.parse::<usize>().ok())
-}
-
-fn neui_param_raw(tag: &str, key: &str) -> Option<String> {
-    extract_xml_attr(tag, key).or_else(|| {
-        for attr in ["tags", "args", "class"] {
-            if let Some(value) = extract_xml_attr(tag, attr) {
-                if let Some(found) = token_param(&value, key) {
-                    return Some(found);
-                }
-            }
-        }
-        None
-    })
-}
-
-fn token_param(value: &str, key: &str) -> Option<String> {
-    for token in value.split(|ch: char| ch.is_whitespace() || ch == ';' || ch == ',') {
-        if let Some(rest) = token.strip_prefix(key) {
-            let rest = rest.strip_prefix('=').or_else(|| rest.strip_prefix(':'))?;
-            if !rest.trim().is_empty() {
-                return Some(rest.trim().to_owned());
-            }
-        }
-    }
-    None
-}
-
-fn extract_xml_attr(tag: &str, key: &str) -> Option<String> {
-    let bytes = tag.as_bytes();
-    let key_bytes = key.as_bytes();
-    let mut i = 0usize;
-    while i + key_bytes.len() < bytes.len() {
-        if &bytes[i..i + key_bytes.len()] == key_bytes {
-            let before_ok = i == 0 || !bytes[i - 1].is_ascii_alphanumeric() && bytes[i - 1] != b'_';
-            let mut j = i + key_bytes.len();
-            while j < bytes.len() && bytes[j].is_ascii_whitespace() {
-                j += 1;
-            }
-            if before_ok && j < bytes.len() && bytes[j] == b'=' {
-                j += 1;
-                while j < bytes.len() && bytes[j].is_ascii_whitespace() {
-                    j += 1;
-                }
-                if j < bytes.len() && (bytes[j] == b'"' || bytes[j] == b'\'') {
-                    let quote = bytes[j];
-                    j += 1;
-                    let start = j;
-                    while j < bytes.len() && bytes[j] != quote {
-                        j += 1;
-                    }
-                    if j <= bytes.len() {
-                        return Some(String::from_utf8_lossy(&bytes[start..j]).trim().to_owned());
-                    }
-                }
-            }
-        }
-        i += 1;
-    }
-    None
 }

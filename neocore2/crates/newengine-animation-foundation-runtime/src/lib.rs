@@ -20,7 +20,6 @@ use std::collections::HashSet;
 
 pub const PROVIDER_ROUTE: &str = "engine.animation.foundation";
 const OWNER: &str = "newengine-animation-foundation-runtime.foundation-provider";
-const CONFIG_JSON: &str = include_str!("../../../config/gameplay/gameplay_foundation.v1.json");
 
 #[derive(Debug, Deserialize)]
 struct Config {
@@ -96,8 +95,8 @@ fn canonical_states(
 }
 
 impl AnimationState {
-    fn load() -> Self {
-        let config: Config = match serde_json::from_str(CONFIG_JSON) {
+    fn load_from_json(config_json: &str) -> Self {
+        let config: Config = match serde_json::from_str(config_json) {
             Ok(config) => config,
             Err(error) => {
                 return Self {
@@ -149,6 +148,20 @@ impl AnimationState {
             graphs,
             config_diagnostics: diagnostics,
         }
+    }
+
+    fn load_from_startup(startup: &newengine_core::StartupConfig) -> Result<Self, String> {
+        let (_, text) =
+            newengine_core::read_plugin_runtime_data_string(startup, PROVIDER_ROUTE, "catalog")?;
+        let state = Self::load_from_json(&text);
+        if state
+            .config_diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.contains("decode failed"))
+        {
+            return Err(state.config_diagnostics.join("; "));
+        }
+        Ok(state)
     }
 
     fn info(&self) -> AnimationServiceInfoV1 {
@@ -414,7 +427,7 @@ fn invoke(state: &mut AnimationState, payload: Blob) -> RResult<Blob, RString> {
     }
 }
 
-pub fn register_animation_gateway_best_effort() -> bool {
+fn register_animation_gateway_with_state(state: AnimationState) -> bool {
     let description = engine_gateway_provider_service_description(
         ANIMATION_SERVICE_ID,
         PROVIDER_ROUTE,
@@ -432,7 +445,7 @@ pub fn register_animation_gateway_best_effort() -> bool {
         "atomic-plan-validation",
     ])
     .notes("Owns baseline animation graph/intent semantics and validation only; skeletal clip decoding/evaluation remains in newengine-animation-runtime and apply stages own world mutation.");
-    let service = JsonServiceRouter::with_state(ANIMATION_SERVICE_ID, AnimationState::load())
+    let service = JsonServiceRouter::with_state(ANIMATION_SERVICE_ID, state)
         .describe_json(&description)
         .get_json(animation_method::INFO_JSON, |state| state.info())
         .post_json(animation_method::DESCRIBE_GRAPHS_JSON_V1, |state, req| {
@@ -458,6 +471,15 @@ pub fn register_animation_gateway_best_effort() -> bool {
     .is_ok()
 }
 
+pub fn register_animation_gateway_best_effort() -> bool {
+    let Some(startup) = newengine_core::startup::last_startup_config() else {
+        return false;
+    };
+    AnimationState::load_from_startup(startup)
+        .map(register_animation_gateway_with_state)
+        .unwrap_or(false)
+}
+
 pub const RUNTIME_UNIT_SPEC: newengine_runtime_unit_api::EngineRuntimeUnitSpec =
     newengine_runtime_unit_api::EngineRuntimeUnitSpec::new(
         "engine.runtime.animation",
@@ -470,10 +492,16 @@ pub const RUNTIME_UNIT_SPEC: newengine_runtime_unit_api::EngineRuntimeUnitSpec =
 
 fn runtime_unit_factory(
     _: &mut newengine_runtime_unit_api::Engine<()>,
-    _: &newengine_runtime_unit_api::StartupConfig,
+    startup: &newengine_runtime_unit_api::StartupConfig,
 ) -> newengine_runtime_unit_api::EngineResult<Option<Box<dyn newengine_runtime_unit_api::Module<()>>>>
 {
-    let _ = register_animation_gateway_best_effort();
+    let state =
+        AnimationState::load_from_startup(startup).map_err(newengine_core::EngineError::other)?;
+    if !register_animation_gateway_with_state(state) {
+        return Err(newengine_core::EngineError::other(
+            "failed to register configured animation provider",
+        ));
+    }
     Ok(None)
 }
 
@@ -487,6 +515,27 @@ pub const RUNTIME_UNIT_REGISTRATION: newengine_runtime_unit_api::RuntimeUnitRegi
 mod tests {
     use super::*;
     use newengine_animation_api::AnimationClipRef;
+
+    fn test_state() -> AnimationState {
+        AnimationState::load_from_json(
+            r#"{
+            "animation_graphs": [
+                {
+                    "graph": "humanoid.locomotion",
+                    "display_name": "Locomotion",
+                    "tags": ["character.locomotion"],
+                    "states": ["idle", "walk", "run"]
+                },
+                {
+                    "graph": "humanoid.upper_body",
+                    "display_name": "Upper Body",
+                    "tags": ["weapon.firearm"],
+                    "states": ["idle", "aim", "fire"]
+                }
+            ]
+        }"#,
+        )
+    }
 
     fn intent(kind: AnimationIntentKind) -> AnimationIntentDtoV1 {
         AnimationIntentDtoV1 {
@@ -502,7 +551,7 @@ mod tests {
 
     #[test]
     fn state_loads_valid_animation_domain() {
-        let state = AnimationState::load();
+        let state = test_state();
         assert!(
             state.config_diagnostics.is_empty(),
             "{:?}",
@@ -513,7 +562,7 @@ mod tests {
 
     #[test]
     fn describe_graphs_honors_tag_filter() {
-        let state = AnimationState::load();
+        let state = test_state();
         let response = state.describe(AnimationDescribeGraphsRequestV1 {
             tag_filter: vec![TagId::new("weapon.firearm")],
         });
@@ -524,7 +573,7 @@ mod tests {
 
     #[test]
     fn play_clip_is_normalized_and_unknown_graph_is_rejected() {
-        let state = AnimationState::load();
+        let state = test_state();
         let mut play = intent(AnimationIntentKind::PlayClip);
         play.graph = Some(AnimationGraphRef("  HUMANOID.LOCOMOTION  ".to_owned()));
         play.clip = Some(AnimationClipRef("  idle  ".to_owned()));
@@ -544,7 +593,7 @@ mod tests {
 
     #[test]
     fn plan_is_atomic_when_any_intent_is_invalid() {
-        let state = AnimationState::load();
+        let state = test_state();
         let mut valid = intent(AnimationIntentKind::PlayClip);
         valid.graph = Some(AnimationGraphRef("humanoid.locomotion".to_owned()));
         valid.clip = Some(AnimationClipRef("idle".to_owned()));
@@ -560,7 +609,7 @@ mod tests {
 
     #[test]
     fn blend_state_and_task_contracts_are_validated() {
-        let state = AnimationState::load();
+        let state = test_state();
         let mut blend = intent(AnimationIntentKind::BlendToState);
         blend.graph = Some(AnimationGraphRef("humanoid.upper_body".to_owned()));
         blend.parameters = serde_json::json!({"state":"AIM"});

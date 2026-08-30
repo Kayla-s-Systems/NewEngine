@@ -1,5 +1,33 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum FpsCharacterTraversalMode {
+    #[default]
+    Standard,
+    NoClip,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct FpsCharacterTraversalState {
+    pub mode: FpsCharacterTraversalMode,
+    pub revision: u64,
+}
+
+impl FpsCharacterTraversalState {
+    #[inline]
+    pub const fn noclip_enabled(self) -> bool {
+        matches!(self.mode, FpsCharacterTraversalMode::NoClip)
+    }
+
+    #[inline]
+    pub const fn with_mode(self, mode: FpsCharacterTraversalMode) -> Self {
+        Self {
+            mode,
+            revision: self.revision.saturating_add(1),
+        }
+    }
+}
+
 /// Authored spring/K response model carried into the FPS runtime.
 ///
 /// This is a data contract only. In particular, `max_accel = -1` is preserved verbatim; the

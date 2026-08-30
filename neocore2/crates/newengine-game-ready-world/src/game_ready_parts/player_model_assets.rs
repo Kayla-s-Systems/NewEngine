@@ -91,6 +91,7 @@ pub(super) fn ensure_player_runtime_model_parts(
         }
 
         out.push(PlayerRuntimeModelPart {
+            source_mesh_name: part.source_mesh_name,
             primitive_id,
             material_id,
             material_slot: part.material_slot,

@@ -1,6 +1,8 @@
 use newengine_core::host_events::{HostEvent, WindowHostEvent};
+use newengine_core::render::SceneLaunchStatus;
 use newengine_core::EngineResult;
 use newengine_platform_api::PlatformStepResultV1;
+use newengine_ui_api::UiPresentationFlowState;
 
 use crate::platform_runtime::bootstrap_overlay::{
     map_engine_startup_progress_to_bootstrap, RuntimeBootstrapStage, OVERLAY_LOG_PROGRESS_EPSILON,
@@ -8,6 +10,7 @@ use crate::platform_runtime::bootstrap_overlay::{
 };
 
 use super::super::HostPlatformRuntime;
+use super::running_ui::effective_scene_launch_active;
 
 impl HostPlatformRuntime {
     pub(crate) fn step_bootstrap(&mut self) -> EngineResult<PlatformStepResultV1> {
@@ -150,13 +153,34 @@ impl HostPlatformRuntime {
                 Ok(self.loading_step_result())
             }
             RuntimeBootstrapStage::ReadyOverlay => {
-                let result = self.loading_step_result();
-                if self.ready_overlay_frames_left == 0 {
-                    self.bootstrap_stage = RuntimeBootstrapStage::Running;
-                } else {
+                if self.ready_overlay_frames_left != 0 {
                     self.ready_overlay_frames_left =
                         self.ready_overlay_frames_left.saturating_sub(1);
+                    return Ok(self.loading_step_result());
                 }
+
+                // Core Running means engine services can tick; it does not mean the authored
+                // world is playable. Pump runtime frames behind the native loader until the
+                // render controller releases SceneLaunchStatus after world decode, residency,
+                // pipelines and physics have crossed the prelaunch gate.
+                let result = self.step_running(0.0)?;
+                let presentation_blocks_world_bootstrap = self
+                    .engine
+                    .resources
+                    .get::<UiPresentationFlowState>()
+                    .is_some_and(|state| state.blocks_world_bootstrap);
+                let scene_launch_status = self.engine.resources.get::<SceneLaunchStatus>().cloned();
+                if effective_scene_launch_active(
+                    scene_launch_status.as_ref(),
+                    presentation_blocks_world_bootstrap,
+                ) {
+                    return Ok(result);
+                }
+
+                self.bootstrap_stage = RuntimeBootstrapStage::Running;
+                newengine_ulog_api::ulog::info!(
+                    "platform runtime bootstrap: playable-world handoff released; scene launch gate is inactive"
+                );
                 Ok(result)
             }
             RuntimeBootstrapStage::Running => self.step_running(0.0),

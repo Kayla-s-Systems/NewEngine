@@ -21,8 +21,8 @@ use super::inventory::{
 use super::{
     DisplayVisibility, GameplayModalState, Health, HitscanWeaponTuning, Interactable,
     InteractionEventBus, PhysicsBodyDesc, PhysicsSurface, PlayerCommandFrame, PlayerEventBus,
-    PlayerGroundState, PlayerInteractionTuning, PlayerLocomotionState, PlayerStanceState,
-    PlayerWeaponState, WeaponEventBus,
+    PlayerFallState, PlayerGroundState, PlayerInteractionTuning, PlayerLocomotionState,
+    PlayerStanceState, PlayerWeaponState, WeaponEventBus,
 };
 
 #[derive(Clone, Debug)]
@@ -47,6 +47,7 @@ pub struct RuntimeEntitySnapshot {
     pub player_commands: Option<PlayerCommandFrame>,
     pub player_ground: Option<PlayerGroundState>,
     pub player_locomotion: Option<PlayerLocomotionState>,
+    pub player_fall: Option<PlayerFallState>,
     pub player_stance: Option<PlayerStanceState>,
     pub weapon_tuning: Option<HitscanWeaponTuning>,
     pub weapon_state: Option<PlayerWeaponState>,
@@ -100,6 +101,7 @@ pub fn capture_runtime_world_snapshot(world: &World) -> RuntimeWorldSnapshot {
             player_commands: world.get::<PlayerCommandFrame>(entity).cloned(),
             player_ground: world.get::<PlayerGroundState>(entity).copied(),
             player_locomotion: world.get::<PlayerLocomotionState>(entity).copied(),
+            player_fall: world.get::<PlayerFallState>(entity).copied(),
             player_stance: world.get::<PlayerStanceState>(entity).copied(),
             weapon_tuning: world.get::<HitscanWeaponTuning>(entity).copied(),
             weapon_state: world.get::<PlayerWeaponState>(entity).copied(),
@@ -213,6 +215,7 @@ pub fn restore_runtime_world_snapshot(world: &mut World, snapshot: RuntimeWorldS
         restore_component_clone(world, entry.entity, entry.player_commands);
         restore_component_opt(world, entry.entity, entry.player_ground);
         restore_component_opt(world, entry.entity, entry.player_locomotion);
+        restore_component_opt(world, entry.entity, entry.player_fall);
         restore_component_opt(world, entry.entity, entry.player_stance);
         restore_component_opt(world, entry.entity, entry.weapon_tuning);
         restore_component_opt(world, entry.entity, entry.weapon_state);

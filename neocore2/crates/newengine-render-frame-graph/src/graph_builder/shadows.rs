@@ -6,7 +6,8 @@ use newengine_render_api::{
 use crate::{DrawListKind, StandardRenderPhase};
 
 use super::{
-    FrameGraphBuilder, RG_LOCAL_SHADOW_DEPTH, RG_LOCAL_SHADOW_MAP, RG_SHADOW_DEPTH, RG_SHADOW_MAP,
+    scene_3d::RG_HAIR_STRAND_STATE, FrameGraphBuilder, RG_LOCAL_SHADOW_DEPTH, RG_LOCAL_SHADOW_MAP,
+    RG_SHADOW_DEPTH, RG_SHADOW_MAP,
 };
 
 impl FrameGraphBuilder {
@@ -50,6 +51,7 @@ impl FrameGraphBuilder {
                 .with_semantic(RenderGraphResourceSemantic::ViewportDepth),
             );
         }
+        let has_hair = self.has_resource(RG_HAIR_STRAND_STATE);
         self.add_phase_pass(StandardRenderPhase::ShadowMap, |pass| {
             let pass = pass
                 .with_domain(RenderGraphPassDomain::Render3d)
@@ -58,6 +60,14 @@ impl FrameGraphBuilder {
                 pass
             } else {
                 pass.writes(RG_SHADOW_DEPTH, RenderGraphResourceUsage::DepthAttachment)
+            };
+            let pass = if has_hair {
+                pass.reads(
+                    RG_HAIR_STRAND_STATE,
+                    RenderGraphResourceUsage::StorageBuffer,
+                )
+            } else {
+                pass
             };
             pass.draw_list(DrawListKind::ShadowCasters)
         });
@@ -124,6 +134,7 @@ impl FrameGraphBuilder {
                 .with_semantic(RenderGraphResourceSemantic::ViewportDepth),
             );
         }
+        let has_hair = self.has_resource(RG_HAIR_STRAND_STATE);
         self.add_phase_pass(StandardRenderPhase::ShadowCascadeMap, |pass| {
             let pass = pass
                 .with_domain(RenderGraphPassDomain::Render3d)
@@ -132,6 +143,14 @@ impl FrameGraphBuilder {
                 pass
             } else {
                 pass.writes(RG_SHADOW_DEPTH, RenderGraphResourceUsage::DepthAttachment)
+            };
+            let pass = if has_hair {
+                pass.reads(
+                    RG_HAIR_STRAND_STATE,
+                    RenderGraphResourceUsage::StorageBuffer,
+                )
+            } else {
+                pass
             };
             pass.draw_list(DrawListKind::ShadowCasters)
         });

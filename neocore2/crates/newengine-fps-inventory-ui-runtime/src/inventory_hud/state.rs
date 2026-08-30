@@ -9,6 +9,25 @@ pub const INVENTORY_UI_ACTION_EQUIPMENT: &str = "game.inventory.equipment";
 pub const INVENTORY_UI_ACTION_DROP: &str = "game.inventory.drop";
 pub const CHARACTER_UI_ACTION_TOGGLE: &str = "game.character.toggle";
 pub const CHARACTER_UI_ACTION_NOCLIP_TOGGLE: &str = "game.character.noclip.toggle";
+pub const CHARACTER_UI_ACTION_CATEGORY_CHARACTERS: &str = "game.character_menu.category.characters";
+pub const CHARACTER_UI_ACTION_CATEGORY_WEAPONS: &str = "game.character_menu.category.weapons";
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum CharacterMenuCategory {
+    #[default]
+    Characters,
+    Weapons,
+}
+
+impl CharacterMenuCategory {
+    #[inline]
+    pub const fn fingerprint_code(self) -> u64 {
+        match self {
+            Self::Characters => 1,
+            Self::Weapons => 2,
+        }
+    }
+}
 
 #[inline]
 pub(super) fn inventory_slot_count(world: &World) -> usize {
@@ -28,6 +47,7 @@ pub struct InventoryHudState {
     pub visible: bool,
     pub open: bool,
     pub character_select_open: bool,
+    pub character_category: CharacterMenuCategory,
     /// Stable keyboard/gamepad focus for the vertical playable-character list.
     pub character_nav_index: usize,
     /// Debounces a logical M press across input snapshots. Some providers keep the
@@ -79,10 +99,20 @@ impl InventoryHudState {
     pub(super) fn toggle_character_select(&mut self) {
         self.visible = true;
         self.character_select_open = !self.character_select_open;
+        if self.character_select_open {
+            self.character_category = CharacterMenuCategory::Characters;
+        }
         self.open = false;
         self.drag = None;
         self.selected_instance = None;
         self.touch();
+    }
+
+    pub(super) fn set_character_category(&mut self, category: CharacterMenuCategory) {
+        if self.character_category != category {
+            self.character_category = category;
+            self.touch();
+        }
     }
 
     pub(super) fn set_character_nav_index(&mut self, index: usize, count: usize) {
@@ -119,6 +149,7 @@ impl Default for InventoryHudState {
             visible: true,
             open: false,
             character_select_open: false,
+            character_category: CharacterMenuCategory::Characters,
             character_nav_index: 0,
             character_toggle_latched: false,
             selected_instance: None,

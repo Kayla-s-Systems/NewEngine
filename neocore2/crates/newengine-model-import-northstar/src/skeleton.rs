@@ -153,8 +153,8 @@ pub fn decode_skeleton_with_profile(
                 let root = required_anchor(&node_names, &["root"])?;
                 let hips = required_anchor(&node_names, &["pelvis"])?;
                 let head = required_anchor(&node_names, &["headb", "heada"])?;
-                let left_hand = required_anchor(&node_names, &["l_wrist", "l_palm"])?;
-                let right_hand = required_anchor(&node_names, &["r_wrist", "r_palm"])?;
+                let left_hand = required_anchor(&node_names, &["l_palm", "l_wrist"])?;
+                let right_hand = required_anchor(&node_names, &["r_palm", "r_wrist"])?;
                 let left_foot = required_anchor(&node_names, &["l_ankle", "l_ball"])?;
                 let right_foot = required_anchor(&node_names, &["r_ankle", "r_ball"])?;
                 let eye = required_anchor(&node_names, &["l_eyeball", "r_eyeball", "headb"])?;

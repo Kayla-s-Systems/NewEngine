@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use newengine_schema_api::{SchemaDiagnosticV1, SchemaTypeDescriptorV1};
 use serde::Serialize;
 
-use crate::config::load_embedded_registry;
+use crate::config::{load_configured_registry, LoadedRegistry};
 
 mod bindings;
 mod info;
@@ -35,9 +35,8 @@ pub struct SchemaRegistryState {
     pub(crate) shutdown_count: u64,
 }
 
-impl Default for SchemaRegistryState {
-    fn default() -> Self {
-        let loaded = load_embedded_registry();
+impl SchemaRegistryState {
+    pub(crate) fn from_loaded(loaded: LoadedRegistry) -> Self {
         Self {
             source_schema: loaded.source_schema,
             policy: loaded.policy,
@@ -45,5 +44,15 @@ impl Default for SchemaRegistryState {
             registry_diagnostics: loaded.diagnostics,
             shutdown_count: 0,
         }
+    }
+
+    pub(crate) fn from_startup(startup: &newengine_core::StartupConfig) -> Self {
+        Self::from_loaded(crate::config::load_registry_from_startup(startup))
+    }
+}
+
+impl Default for SchemaRegistryState {
+    fn default() -> Self {
+        Self::from_loaded(load_configured_registry())
     }
 }

@@ -1,5 +1,37 @@
 use super::*;
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct WeaponRecoilRuntime {
+    weapon_instance_id: ItemInstanceId,
+    applied_pitch_radians: f32,
+    applied_yaw_radians: f32,
+    recovery_hz: f32,
+}
+
+fn recover_weapon_recoil(world: &mut World, player: EntityId, dt: f32) {
+    let Some(mut recoil) = world.get::<WeaponRecoilRuntime>(player).copied() else {
+        return;
+    };
+    if dt <= 0.0 {
+        return;
+    }
+    let decay = (-recoil.recovery_hz.max(0.05) * dt).exp();
+    let next_pitch = recoil.applied_pitch_radians * decay;
+    let next_yaw = recoil.applied_yaw_radians * decay;
+    if let Some(motor) = world.get_mut::<CharacterMotor>(player) {
+        motor.pitch = (motor.pitch + next_pitch - recoil.applied_pitch_radians)
+            .clamp(-motor.pitch_limit, motor.pitch_limit);
+        motor.yaw += next_yaw - recoil.applied_yaw_radians;
+    }
+    recoil.applied_pitch_radians = next_pitch;
+    recoil.applied_yaw_radians = next_yaw;
+    if next_pitch.abs() < 1.0e-5 && next_yaw.abs() < 1.0e-5 {
+        let _ = world.remove::<WeaponRecoilRuntime>(player);
+    } else {
+        let _ = world.insert(player, recoil);
+    }
+}
+
 pub fn step_player_combat(world: &mut World, dt: f32, fixed_tick: u64) {
     let gameplay_policy = world
         .resource::<FpsGameplayPolicySnapshot>()
@@ -21,6 +53,7 @@ pub fn step_player_combat(world: &mut World, dt: f32, fixed_tick: u64) {
         // Inventory/equipment is the only authority for firearm availability. Never synthesize
         // the old demo rifle state when the player has no equipped weapon.
         sync_equipped_weapon_runtime(world, player);
+        recover_weapon_recoil(world, player, dt);
         let actions = world
             .get::<PlayerCommandFrame>(player)
             .map(|commands| FpsActionFrame::from_commands(&commands.actions))
@@ -160,7 +193,7 @@ pub fn step_player_combat(world: &mut World, dt: f32, fixed_tick: u64) {
                             origin,
                             direction,
                         );
-                        apply_recoil(world, player, tuning, shot_sequence);
+                        apply_recoil(world, player, binding.instance_id, tuning, aiming, shot_sequence);
                     }
                 }
             } else if let Some(melee) = binding.weapon.melee {
@@ -269,23 +302,54 @@ pub fn step_player_combat(world: &mut World, dt: f32, fixed_tick: u64) {
 pub(super) fn apply_recoil(
     world: &mut World,
     player: EntityId,
+    weapon_instance_id: ItemInstanceId,
     tuning: HitscanWeaponTuning,
+    aiming: bool,
     shot_sequence: u64,
 ) {
+    let tuning = tuning.sanitized();
+    let ads_scale = if aiming { tuning.ads_recoil_multiplier } else { 1.0 };
+    let pitch_noise = signed_unit(shot_sequence ^ 0x243f_6a88_85a3_08d3);
+    let yaw_noise = signed_unit(shot_sequence ^ 0x1319_8a2e_0370_7344);
+    let pitch_kick = (tuning.recoil_pitch_radians
+        + pitch_noise * tuning.recoil_pitch_random_radians)
+        .max(0.0)
+        * ads_scale;
+    let yaw_kick = (tuning.recoil_yaw_bias_radians
+        + yaw_noise * tuning.recoil_yaw_radians)
+        * ads_scale;
+
+    let previous = world.get::<WeaponRecoilRuntime>(player).copied();
+    if let Some(previous) = previous.filter(|state| state.weapon_instance_id != weapon_instance_id) {
+        if let Some(motor) = world.get_mut::<CharacterMotor>(player) {
+            motor.pitch = (motor.pitch - previous.applied_pitch_radians)
+                .clamp(-motor.pitch_limit, motor.pitch_limit);
+            motor.yaw -= previous.applied_yaw_radians;
+        }
+        let _ = world.remove::<WeaponRecoilRuntime>(player);
+    }
+
     let Some(motor) = world.get_mut::<CharacterMotor>(player) else {
         return;
     };
-    let yaw_sign = if shot_sequence.is_multiple_of(2) {
-        1.0
-    } else {
-        -1.0
-    };
-    let yaw_scale = 0.55 + signed_unit(shot_sequence ^ 0xa409_3822).abs() * 0.45;
-    // Positive pitch rotates the engine forward vector (-Z) upward. Recoil therefore
-    // increases pitch; subtracting it drives the crosshair down.
-    motor.pitch =
-        (motor.pitch + tuning.recoil_pitch_radians).clamp(-motor.pitch_limit, motor.pitch_limit);
-    motor.yaw += tuning.recoil_yaw_radians * yaw_sign * yaw_scale;
+    // Positive pitch rotates the canonical -Z forward vector upward.
+    motor.pitch = (motor.pitch + pitch_kick).clamp(-motor.pitch_limit, motor.pitch_limit);
+    motor.yaw += yaw_kick;
+
+    let mut recoil = world
+        .get::<WeaponRecoilRuntime>(player)
+        .copied()
+        .unwrap_or(WeaponRecoilRuntime {
+            weapon_instance_id,
+            applied_pitch_radians: 0.0,
+            applied_yaw_radians: 0.0,
+            recovery_hz: tuning.recoil_recovery_hz,
+        });
+    recoil.weapon_instance_id = weapon_instance_id;
+    recoil.applied_pitch_radians += pitch_kick;
+    recoil.applied_yaw_radians += yaw_kick;
+    recoil.recovery_hz = tuning.recoil_recovery_hz;
+    let _ = world.insert(player, recoil);
 }
 
 fn weapon_event(

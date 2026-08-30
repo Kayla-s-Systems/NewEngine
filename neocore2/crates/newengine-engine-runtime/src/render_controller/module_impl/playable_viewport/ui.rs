@@ -170,8 +170,14 @@ impl RuntimeRenderController {
         let surface_ids = ui_layers
             .packets
             .iter()
-            .find(|packet| packet.domain == domain)
+            .find(|packet| packet.domain == domain && !packet.surface_ids.is_empty())
             .map(|packet| packet.surface_ids.clone())
+            .or_else(|| {
+                ctx.resources()
+                    .get::<newengine_ui_api::UiLayerCompositionPlan>()
+                    .filter(|plan| plan.domain == domain && !plan.surface_ids.is_empty())
+                    .map(|plan| plan.surface_ids.clone())
+            })
             .unwrap_or_default();
         if surface_ids.is_empty() {
             return Ok(None);

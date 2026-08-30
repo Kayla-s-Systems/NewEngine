@@ -70,6 +70,7 @@ pub struct ProjectileSphereRuntime {
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct PendingWeaponShellEjection {
     owner: EntityId,
+    weapon_entity: Option<EntityId>,
     shot_sequence: u64,
     weapon_item_id: u64,
     shot_origin: Vec3,

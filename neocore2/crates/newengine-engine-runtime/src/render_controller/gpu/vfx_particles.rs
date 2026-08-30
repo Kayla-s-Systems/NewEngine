@@ -2,16 +2,19 @@ use newengine_core::render::{
     BindGroupDesc, BindGroupId, BindGroupLayoutDesc, BindGroupLayoutId, BindingKind, BufferBinding,
     BufferDesc, BufferId, BufferUsage, ComputePipelineDesc, DispatchArgs, DrawArgs, MemoryHint,
     PipelineBlendMode, PipelineDepthCompare, PipelineDepthMode, PipelineDesc, PipelineId,
-    RasterCullMode, RectI32, RenderApi, RenderDrawListKind, RenderGraphPassKind, ShaderDesc,
-    ShaderId, ShaderSourceKind, ShaderStage, TextureFormat, Viewport,
+    RasterCullMode, RectI32, RenderApi, RenderDrawListKind, RenderGraphPassKind, SamplerDesc,
+    SamplerId, ShaderDesc, ShaderId, ShaderSourceKind, ShaderStage, TextureDesc, TextureFormat,
+    TextureId, TextureUsage, Viewport,
 };
 use newengine_core::{EngineError, EngineResult};
 use newengine_ecs::World;
 use newengine_math::{Mat4, Vec3};
-use newengine_vfx_api::{VfxGpuParticleBridge, VfxGpuParticleKind, VfxGpuParticleSpawnV1};
+use newengine_vfx_api::{
+    VfxGpuParticleBridge, VfxGpuParticleKind, VfxGpuParticleSpawnV1, VFX_GPU_TEXTURE_SLOT_CAPACITY,
+};
 
 pub(super) const VFX_GPU_PARTICLE_CAPACITY: usize = 262_144;
-const PARTICLE_SLOT_BYTES: usize = 96;
+const PARTICLE_SLOT_BYTES: usize = 112;
 const PARTICLE_SSBO_BYTES: u64 = (VFX_GPU_PARTICLE_CAPACITY * PARTICLE_SLOT_BYTES) as u64;
 const PARTICLE_FRAME_UBO_BYTES: u64 = 128;
 const PARTICLE_FRAME_SLOTS: usize = 4;
@@ -35,6 +38,9 @@ pub(crate) struct VfxGpuRenderer {
     particle_buffer: Option<BufferId>,
     frame_ubos: [Option<BufferId>; PARTICLE_FRAME_SLOTS],
     bind_groups: [Option<BindGroupId>; PARTICLE_FRAME_SLOTS],
+    bound_textures: [Option<[TextureId; VFX_GPU_TEXTURE_SLOT_CAPACITY]>; PARTICLE_FRAME_SLOTS],
+    fallback_texture: Option<TextureId>,
+    sampler: Option<SamplerId>,
     compute_shader: Option<ShaderId>,
     vertex_shader: Option<ShaderId>,
     fragment_shader: Option<ShaderId>,
@@ -62,6 +68,9 @@ impl VfxGpuRenderer {
             particle_buffer: None,
             frame_ubos: [None; PARTICLE_FRAME_SLOTS],
             bind_groups: [None; PARTICLE_FRAME_SLOTS],
+            bound_textures: [None; PARTICLE_FRAME_SLOTS],
+            fallback_texture: None,
+            sampler: None,
             compute_shader: None,
             vertex_shader: None,
             fragment_shader: None,
@@ -88,6 +97,7 @@ impl VfxGpuRenderer {
         color_format: TextureFormat,
         viewport_width: u32,
         viewport_height: u32,
+        texture_slots: [Option<TextureId>; VFX_GPU_TEXTURE_SLOT_CAPACITY],
     ) -> EngineResult<VfxGpuFrameReport> {
         let dt = if dt.is_finite() {
             dt.clamp(0.0, 0.25)
@@ -106,7 +116,7 @@ impl VfxGpuRenderer {
         }
 
         newengine_ulog_api::ulog::error!("VFXDIAG ensure_resources begin");
-        self.ensure_resources(r, color_format)?;
+        self.ensure_resources(r, color_format, texture_slots)?;
         newengine_ulog_api::ulog::error!("VFXDIAG ensure_resources done");
         let particle_buffer = self.particle_buffer.ok_or_else(|| {
             EngineError::other("VFX GPU particle buffer missing after resource creation")
@@ -115,7 +125,10 @@ impl VfxGpuRenderer {
         newengine_ulog_api::ulog::error!("VFXDIAG process_kills begin");
         let killed_particles = self.process_kills(r, bridge, particle_buffer)?;
         newengine_ulog_api::ulog::error!("VFXDIAG process_kills done");
-        newengine_ulog_api::ulog::error!("VFXDIAG process_spawns begin pending={}", pending.pending_spawns);
+        newengine_ulog_api::ulog::error!(
+            "VFXDIAG process_spawns begin pending={}",
+            pending.pending_spawns
+        );
         let (uploaded_spawns, capacity_drops) = self.process_spawns(r, bridge, particle_buffer)?;
         newengine_ulog_api::ulog::error!("VFXDIAG process_spawns done uploaded={uploaded_spawns}");
         self.trim_expired_tail();
@@ -144,6 +157,7 @@ impl VfxGpuRenderer {
             camera_position,
             dt,
             self.high_water,
+            resident_texture_mask(texture_slots),
         );
         newengine_ulog_api::ulog::error!("VFXDIAG frame_ubo write begin");
         r.write_buffer(frame_ubo, 0, &frame_bytes)?;
@@ -202,6 +216,7 @@ impl VfxGpuRenderer {
         &mut self,
         r: &mut dyn RenderApi,
         color_format: TextureFormat,
+        texture_slots: [Option<TextureId>; VFX_GPU_TEXTURE_SLOT_CAPACITY],
     ) -> EngineResult<()> {
         newengine_ulog_api::ulog::error!("VFXDIAG resource layout");
         let layout = match self.layout {
@@ -211,6 +226,10 @@ impl VfxGpuRenderer {
                     BindGroupLayoutDesc::new(vec![
                         BindingKind::UniformBuffer,
                         BindingKind::StorageBuffer,
+                        BindingKind::Texture2D,
+                        BindingKind::Texture2D,
+                        BindingKind::Texture2D,
+                        BindingKind::Sampler,
                     ])
                     .with_label("vfx.gpu_particles.layout"),
                 )?;
@@ -236,6 +255,34 @@ impl VfxGpuRenderer {
             }
         };
 
+        let fallback_texture = match self.fallback_texture {
+            Some(texture) => texture,
+            None => {
+                let texture = r.create_texture(
+                    TextureDesc::new(
+                        newengine_core::render::Extent2D::new(1, 1),
+                        TextureFormat::Rgba8Unorm,
+                        TextureUsage::Sampled,
+                    )
+                    .with_label("vfx.gpu_particles.transparent_fallback")
+                    .with_data(vec![0, 0, 0, 0]),
+                )?;
+                self.fallback_texture = Some(texture);
+                texture
+            }
+        };
+        let sampler = match self.sampler {
+            Some(sampler) => sampler,
+            None => {
+                let sampler = r.create_sampler(
+                    SamplerDesc::default().with_label("vfx.gpu_particles.sampler"),
+                )?;
+                self.sampler = Some(sampler);
+                sampler
+            }
+        };
+        let bound_textures = texture_slots.map(|texture| texture.unwrap_or(fallback_texture));
+
         newengine_ulog_api::ulog::error!("VFXDIAG resource ubos_bindgroups");
         for slot in 0..PARTICLE_FRAME_SLOTS {
             if self.frame_ubos[slot].is_none() {
@@ -250,7 +297,8 @@ impl VfxGpuRenderer {
                     )?,
                 );
             }
-            if self.bind_groups[slot].is_none() {
+            if self.bind_groups[slot].is_none() || self.bound_textures[slot] != Some(bound_textures)
+            {
                 let ubo = self.frame_ubos[slot].expect("VFX UBO created above");
                 self.bind_groups[slot] = Some(
                     r.create_bind_group(
@@ -261,9 +309,14 @@ impl VfxGpuRenderer {
                                 particle_buffer,
                                 0,
                                 PARTICLE_SSBO_BYTES,
-                            )),
+                            ))
+                            .with_texture0(bound_textures[0])
+                            .with_texture1(bound_textures[1])
+                            .with_texture2(bound_textures[2])
+                            .with_sampler0(sampler),
                     )?,
                 );
+                self.bound_textures[slot] = Some(bound_textures);
             }
         }
 
@@ -323,7 +376,9 @@ impl VfxGpuRenderer {
             );
         }
 
-        newengine_ulog_api::ulog::error!("VFXDIAG resource graphics_pipeline format={color_format:?}");
+        newengine_ulog_api::ulog::error!(
+            "VFXDIAG resource graphics_pipeline format={color_format:?}"
+        );
         if self.graphics_pipeline(color_format).is_none() {
             let vs = self.vertex_shader.expect("vertex shader created above");
             let fs = self.fragment_shader.expect("fragment shader created above");
@@ -451,6 +506,15 @@ impl VfxGpuRenderer {
     }
 }
 
+fn resident_texture_mask(texture_slots: [Option<TextureId>; VFX_GPU_TEXTURE_SLOT_CAPACITY]) -> u32 {
+    texture_slots
+        .iter()
+        .enumerate()
+        .fold(0u32, |mask, (index, texture)| {
+            mask | (u32::from(texture.is_some()) << index)
+        })
+}
+
 fn encode_frame_ubo(
     view_projection: Mat4,
     camera_right: Vec3,
@@ -458,6 +522,7 @@ fn encode_frame_ubo(
     camera_position: Vec3,
     dt: f32,
     high_water: usize,
+    resident_texture_mask: u32,
 ) -> [u8; PARTICLE_FRAME_UBO_BYTES as usize] {
     let mut values = [0.0f32; 32];
     values[..16].copy_from_slice(&view_projection.to_cols_array());
@@ -467,14 +532,14 @@ fn encode_frame_ubo(
     values[28..32].copy_from_slice(&[
         high_water as f32,
         VFX_GPU_PARTICLE_CAPACITY as f32,
-        0.0,
+        resident_texture_mask as f32,
         0.0,
     ]);
     f32_array_bytes(values)
 }
 
 fn encode_particle_slot(spawn: VfxGpuParticleSpawnV1) -> [u8; PARTICLE_SLOT_BYTES] {
-    let mut values = [0.0f32; 24];
+    let mut values = [0.0f32; 28];
     values[0..4].copy_from_slice(&[spawn.position[0], spawn.position[1], spawn.position[2], 0.0]);
     values[4..8].copy_from_slice(&[
         spawn.velocity[0],
@@ -498,7 +563,16 @@ fn encode_particle_slot(spawn: VfxGpuParticleSpawnV1) -> [u8; PARTICLE_SLOT_BYTE
     values[20] = match spawn.kind {
         VfxGpuParticleKind::Smoke => 1.0,
         VfxGpuParticleKind::Spark => 2.0,
+        VfxGpuParticleKind::Debris => 3.0,
     };
+    values[21] = f32::from(spawn.texture_slot);
+    values[22] = spawn.billboard as u32 as f32;
+    values[24..28].copy_from_slice(&[
+        spawn.drag_per_second,
+        spawn.rotation_radians,
+        spawn.angular_velocity_radians_per_second,
+        spawn.fade_in_fraction,
+    ]);
     f32_array_bytes(values)
 }
 
@@ -528,6 +602,12 @@ mod tests {
             color: [1.0, 0.8, 0.4, 1.0],
             lifetime_seconds,
             fade_start_fraction: 0.6,
+            fade_in_fraction: 0.1,
+            drag_per_second: 1.25,
+            rotation_radians: 0.3,
+            angular_velocity_radians_per_second: 4.0,
+            texture_slot: 2,
+            billboard: newengine_vfx_api::VfxGpuBillboardMode::VelocityAligned,
         }
     }
 
@@ -539,10 +619,14 @@ mod tests {
         let width = f32::from_ne_bytes(bytes[44..48].try_into().unwrap());
         let height = f32::from_ne_bytes(bytes[56..60].try_into().unwrap());
         let kind = f32::from_ne_bytes(bytes[80..84].try_into().unwrap());
+        let drag = f32::from_ne_bytes(bytes[96..100].try_into().unwrap());
+        let rotation = f32::from_ne_bytes(bytes[100..104].try_into().unwrap());
         assert_eq!(lifetime, 2.0);
         assert_eq!(width, 0.02);
         assert_eq!(height, 0.10);
         assert_eq!(kind, 2.0);
+        assert_eq!(drag, 1.25);
+        assert_eq!(rotation, 0.3);
     }
 
     #[test]

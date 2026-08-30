@@ -92,6 +92,23 @@ fn spawn_skinned_equipped_weapon_visual(
     let _ = world.insert(root, WeaponSecondaryDynamicsState::default());
     let _ = world.insert(
         root,
+        WeaponEntityRuntime {
+            owner,
+            instance_id: binding.instance_id,
+            item: binding.item,
+        },
+    );
+    let _ = world.insert(root, WeaponEntitySockets::default());
+    let _ = world.insert(
+        owner,
+        EquippedWeaponEntity {
+            entity: root,
+            instance_id: binding.instance_id,
+            item: binding.item,
+        },
+    );
+    let _ = world.insert(
+        root,
         DisplayVisibility {
             mode: DisplayMode::GameOnly,
         },
@@ -195,6 +212,7 @@ fn spawn_skinned_equipped_weapon_visual(
         skeleton,
         source_to_model,
         &definition.weapon_animation,
+        definition.weapon_casing.ejection_joint.as_deref(),
         last_shot_sequence,
     ) {
         clear_equipped_weapon_visual(world, owner);

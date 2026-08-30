@@ -112,6 +112,7 @@ impl CameraRuntimeService {
             .remove::<newengine_sim::FollowTargetCameraController>(camera)
             .is_some();
         let removed_motor = world.remove::<FollowTargetCameraMotor>(camera).is_some();
+        let _ = world.remove::<GameplayFirstPersonCameraState>(camera);
         let _ = world.remove::<GameplayThirdPersonCameraState>(camera);
         removed_follow || removed_motor
     }

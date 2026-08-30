@@ -14,6 +14,8 @@ include!("runtime/compiled.rs");
 include!("runtime/decode.rs");
 include!("runtime/store.rs");
 include!("runtime/graph.rs");
+include!("runtime/graph_compile.rs");
+include!("runtime/graph_state.rs");
 include!("runtime/graph_asset.rs");
 include!("runtime/graph_store.rs");
 include!("runtime/intent.rs");

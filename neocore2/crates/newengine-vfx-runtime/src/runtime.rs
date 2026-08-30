@@ -9,8 +9,8 @@ use newengine_primitives::Primitive;
 use newengine_scene::components::Name;
 use newengine_transform::Transform;
 use newengine_vfx_api::{
-    VfxGpuParticleBridge, VfxGpuParticleKind, VfxGpuParticleSpawnV1, VfxRuntimeStatsV1,
-    VfxSpawnRequestV1,
+    VfxGpuParticleBridge, VfxGpuParticleKind, VfxGpuParticleSpawnV1,
+    VfxGpuTextureRegistry, VfxRuntimeStatsV1, VfxSpawnRequestV1,
 };
 
 use crate::{
@@ -57,6 +57,9 @@ pub fn install_vfx_runtime(world: &mut World) {
     }
     if world.resource::<VfxGpuParticleLedger>().is_none() {
         world.insert_resource(VfxGpuParticleLedger::default());
+    }
+    if world.resource::<VfxGpuTextureRegistry>().is_none() {
+        world.insert_resource(VfxGpuTextureRegistry::default());
     }
 }
 
@@ -421,6 +424,8 @@ fn spawn_layer(
             primitive,
             role,
             alignment,
+            texture_slot,
+            billboard,
             offset_along_direction,
             offset_along_normal,
             scale,
@@ -428,18 +433,33 @@ fn spawn_layer(
             color,
             lifetime_seconds,
             fade_start_fraction,
+            fade_in_fraction,
+            drag_per_second,
+            rotation_radians,
+            rotation_random_radians,
+            spin_radians_per_second,
             light,
         } => {
-            if *kind == VfxLayerKind::Smoke && *role == VfxRenderRole::Transparent {
+            if *role == VfxRenderRole::Transparent
+                && (gpu_particle_kind(*kind).is_some() || *texture_slot > 0)
+            {
                 let lifetime = requested_lifetime.unwrap_or(*lifetime_seconds).max(0.001);
                 let color = surface_color(*kind, *color, surface_response);
                 let layer_position =
                     position + direction * *offset_along_direction + normal * *offset_along_normal;
                 let base_scale = *scale * request.scale;
                 let growth = *growth_per_second * request.scale;
+                let layer_seed = mix64(
+                    request.seed
+                        ^ request.correlation_id.rotate_left(17)
+                        ^ layer_index.rotate_left(31),
+                );
+                let rotation = *rotation_radians
+                    + signed_unit_float(mix64(layer_seed ^ 0x6a09_e667_f3bc_c909))
+                        * *rotation_random_radians;
                 let spawn = VfxGpuParticleSpawnV1 {
                     instance_id: instance_id.0,
-                    kind: VfxGpuParticleKind::Smoke,
+                    kind: gpu_particle_kind(*kind).unwrap_or(VfxGpuParticleKind::Debris),
                     position: [layer_position.x, layer_position.y, layer_position.z],
                     velocity: request.velocity,
                     acceleration: [0.0; 3],
@@ -451,6 +471,12 @@ fn spawn_layer(
                     color,
                     lifetime_seconds: lifetime,
                     fade_start_fraction: fade_start_fraction.clamp(0.0, 0.999),
+                    fade_in_fraction: fade_in_fraction.clamp(0.0, 0.999),
+                    drag_per_second: (*drag_per_second).max(0.0),
+                    rotation_radians: rotation,
+                    angular_velocity_radians_per_second: *spin_radians_per_second,
+                    texture_slot: *texture_slot,
+                    billboard: *billboard,
                 };
                 let admitted = world
                     .resource::<VfxGpuParticleBridge>()
@@ -597,20 +623,40 @@ fn spawn_layer(
             kind,
             primitive,
             role,
+            texture_slot,
+            billboard,
             count,
             scale,
             color,
             speed_min,
             speed_max,
+            cone_angle_degrees,
+            size_variance,
+            lifetime_variance,
             acceleration,
+            drag_per_second,
+            rotation_random_radians,
+            spin_radians_per_second,
+            spin_variance,
             lifetime_seconds,
             fade_start_fraction,
+            fade_in_fraction,
         } => {
-            if *kind == VfxLayerKind::Spark && *role == VfxRenderRole::Transparent {
+            if *role == VfxRenderRole::Transparent
+                && (gpu_particle_kind(*kind).is_some() || *texture_slot > 0)
+            {
                 let base_scale = *scale * request.scale;
-                let lifetime = requested_lifetime.unwrap_or(*lifetime_seconds).max(0.001);
+                let base_lifetime = requested_lifetime.unwrap_or(*lifetime_seconds).max(0.001);
+                let emission_axis = if normal.length_squared() > 1.0e-8 {
+                    normal
+                } else if direction.length_squared() > 1.0e-8 {
+                    direction
+                } else {
+                    Vec3::Y
+                };
                 let resolved_color = surface_color(*kind, *color, surface_response);
                 let mut admitted = 0u32;
+                let mut max_admitted_lifetime = 0.0_f32;
                 for particle_index in 0..u64::from(*count) {
                     let seed = mix64(
                         request.seed
@@ -618,40 +664,59 @@ fn spawn_layer(
                             ^ layer_index.rotate_left(31)
                             ^ particle_index,
                     );
-                    let random = random_unit_vector(seed);
-                    let hemisphere = if random.dot(normal) < 0.0 {
-                        -random
-                    } else {
-                        random
-                    };
-                    let travel_direction = (hemisphere + normal * 0.40).normalize_or_zero();
+                    let travel_direction = random_direction_in_cone(
+                        emission_axis,
+                        cone_angle_degrees.to_radians(),
+                        seed,
+                    );
                     let speed_t = unit_float(mix64(seed ^ 0x9e37_79b9_7f4a_7c15));
                     let speed = speed_min + (speed_max - speed_min).max(0.0) * speed_t;
                     let velocity = travel_direction * speed + vec3_from_array(request.velocity);
+                    let size_factor = (1.0
+                        + signed_unit_float(mix64(seed ^ 0xbb67_ae85_84ca_a73b))
+                            * *size_variance)
+                        .max(0.05);
+                    let lifetime_factor = (1.0
+                        + signed_unit_float(mix64(seed ^ 0x3c6e_f372_fe94_f82b))
+                            * *lifetime_variance)
+                        .max(0.05);
+                    let lifetime = (base_lifetime * lifetime_factor).max(0.001);
+                    let rotation = signed_unit_float(mix64(seed ^ 0xa54f_f53a_5f1d_36f1))
+                        * *rotation_random_radians;
+                    let spin = *spin_radians_per_second
+                        + signed_unit_float(mix64(seed ^ 0x510e_527f_ade6_82d1))
+                            * *spin_variance;
                     let spawn = VfxGpuParticleSpawnV1 {
                         instance_id: instance_id.0,
-                        kind: VfxGpuParticleKind::Spark,
+                        kind: gpu_particle_kind(*kind).unwrap_or(VfxGpuParticleKind::Debris),
                         position: [
-                            position.x + normal.x * 0.012,
-                            position.y + normal.y * 0.012,
-                            position.z + normal.z * 0.012,
+                            position.x + emission_axis.x * 0.012,
+                            position.y + emission_axis.y * 0.012,
+                            position.z + emission_axis.z * 0.012,
                         ],
                         velocity: [velocity.x, velocity.y, velocity.z],
                         acceleration: [acceleration.x, acceleration.y, acceleration.z],
                         size: [
-                            (base_scale.x * 2.0).max(0.0001),
-                            (base_scale.z * 2.0).max(0.0001),
+                            (base_scale.x * 2.0 * size_factor).max(0.0001),
+                            (base_scale.z * 2.0 * size_factor).max(0.0001),
                         ],
                         growth_per_second: [0.0; 2],
                         color: resolved_color,
                         lifetime_seconds: lifetime,
                         fade_start_fraction: fade_start_fraction.clamp(0.0, 0.999),
+                        fade_in_fraction: fade_in_fraction.clamp(0.0, 0.999),
+                        drag_per_second: (*drag_per_second).max(0.0),
+                        rotation_radians: rotation,
+                        angular_velocity_radians_per_second: spin,
+                        texture_slot: *texture_slot,
+                        billboard: *billboard,
                     };
                     if world
                         .resource::<VfxGpuParticleBridge>()
                         .is_some_and(|bridge| bridge.enqueue_spawn(spawn))
                     {
                         admitted = admitted.saturating_add(1);
+                        max_admitted_lifetime = max_admitted_lifetime.max(lifetime);
                     }
                 }
                 if admitted > 0 {
@@ -662,7 +727,7 @@ fn spawn_layer(
                             instance_id,
                             kind: *kind,
                             particle_count: admitted,
-                            remaining_seconds: lifetime,
+                            remaining_seconds: max_admitted_lifetime.max(base_lifetime),
                         });
                 }
                 return admitted;
@@ -676,13 +741,18 @@ fn spawn_layer(
                         ^ layer_index.rotate_left(31)
                         ^ particle_index,
                 );
-                let random = random_unit_vector(seed);
-                let hemisphere = if random.dot(normal) < 0.0 {
-                    -random
+                let emission_axis = if normal.length_squared() > 1.0e-8 {
+                    normal
+                } else if direction.length_squared() > 1.0e-8 {
+                    direction
                 } else {
-                    random
+                    Vec3::Y
                 };
-                let travel_direction = (hemisphere + normal * 0.40).normalize_or_zero();
+                let travel_direction = random_direction_in_cone(
+                    emission_axis,
+                    cone_angle_degrees.to_radians(),
+                    seed,
+                );
                 let speed_t = unit_float(mix64(seed ^ 0x9e37_79b9_7f4a_7c15));
                 let speed = speed_min + (speed_max - speed_min).max(0.0) * speed_t;
                 let velocity = travel_direction * speed + vec3_from_array(request.velocity);
@@ -690,8 +760,16 @@ fn spawn_layer(
                 let rotation =
                     Quat::from_rotation_arc(Vec3::Z, travel_direction).normalize_or_identity();
                 let color = surface_color(*kind, *color, surface_response);
-                let base_scale = *scale * request.scale;
-                let lifetime = requested_lifetime.unwrap_or(*lifetime_seconds).max(0.001);
+                let size_factor = (1.0
+                    + signed_unit_float(mix64(seed ^ 0xbb67_ae85_84ca_a73b)) * *size_variance)
+                    .max(0.05);
+                let base_scale = *scale * request.scale * size_factor;
+                let lifetime_factor = (1.0
+                    + signed_unit_float(mix64(seed ^ 0x3c6e_f372_fe94_f82b))
+                        * *lifetime_variance)
+                    .max(0.05);
+                let lifetime = (requested_lifetime.unwrap_or(*lifetime_seconds) * lifetime_factor)
+                    .max(0.001);
                 let _ = world.insert(
                     entity,
                     Name(format!(
@@ -798,6 +876,15 @@ fn spawn_layer(
             );
             1
         }
+    }
+}
+
+fn gpu_particle_kind(kind: VfxLayerKind) -> Option<VfxGpuParticleKind> {
+    match kind {
+        VfxLayerKind::Smoke => Some(VfxGpuParticleKind::Smoke),
+        VfxLayerKind::Spark => Some(VfxGpuParticleKind::Spark),
+        VfxLayerKind::Debris => Some(VfxGpuParticleKind::Debris),
+        _ => None,
     }
 }
 
@@ -955,6 +1042,34 @@ fn mix64(mut value: u64) -> u64 {
 #[inline]
 fn unit_float(value: u64) -> f32 {
     ((value >> 40) as u32 as f32) / ((1u32 << 24) as f32)
+}
+
+#[inline]
+fn signed_unit_float(value: u64) -> f32 {
+    unit_float(value) * 2.0 - 1.0
+}
+
+fn random_direction_in_cone(axis: Vec3, cone_radians: f32, seed: u64) -> Vec3 {
+    let axis = axis.normalize_or_zero();
+    if axis.length_squared() <= 1.0e-8 {
+        return random_unit_vector(seed);
+    }
+    let cone = if cone_radians.is_finite() {
+        cone_radians.clamp(0.0, core::f32::consts::PI)
+    } else {
+        core::f32::consts::FRAC_PI_2
+    };
+    let cos_min = cone.cos();
+    let cos_theta = 1.0 - unit_float(mix64(seed ^ 0x1f83_d9ab_fb41_bd6b)) * (1.0 - cos_min);
+    let sin_theta = (1.0 - cos_theta * cos_theta).max(0.0).sqrt();
+    let phi = core::f32::consts::TAU * unit_float(mix64(seed ^ 0x5be0_cd19_137e_2179));
+    let helper = if axis.y.abs() < 0.95 { Vec3::Y } else { Vec3::X };
+    let tangent = axis.cross(helper).normalize_or_zero();
+    let bitangent = tangent.cross(axis).normalize_or_zero();
+    (axis * cos_theta
+        + tangent * (phi.cos() * sin_theta)
+        + bitangent * (phi.sin() * sin_theta))
+        .normalize_or_zero()
 }
 
 fn random_unit_vector(seed: u64) -> Vec3 {

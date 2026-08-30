@@ -259,12 +259,39 @@ impl UiNodeRequest {
             state_tags: tags,
             action_id: self.action_id.clone(),
             props,
+            // Retained UI must preserve authored hidden subtrees. Visibility is a
+            // paint/hit-test state, not a structural admission rule: a node that
+            // starts hidden may become visible later through a state binding.
             children: self
                 .children
                 .iter()
-                .filter(|child| child.visible)
                 .map(UiNodeRequest::to_component_node)
                 .collect(),
         }
+    }
+}
+
+
+#[cfg(test)]
+mod retained_visibility_tests {
+    use super::*;
+
+    #[test]
+    fn hidden_child_survives_component_materialization() {
+        let mut hidden = UiNodeRequest::new("character.window", UiRuntimeNodeKind::Panel);
+        hidden.visible = false;
+        hidden = hidden.with_child(UiNodeRequest::new(
+            "character.title",
+            UiRuntimeNodeKind::Text,
+        ).with_text("Character Menu"));
+        let root = UiNodeRequest::new("game.hud", UiRuntimeNodeKind::Panel).with_child(hidden);
+
+        let component = root.to_component_node();
+        assert_eq!(component.children.len(), 1);
+        let window = &component.children[0];
+        assert_eq!(window.id, "character.window");
+        assert_eq!(window.props.get("visible").and_then(serde_json::Value::as_bool), Some(false));
+        assert_eq!(window.children.len(), 1);
+        assert_eq!(window.children[0].id, "character.title");
     }
 }

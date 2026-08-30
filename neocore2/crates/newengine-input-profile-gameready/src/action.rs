@@ -17,6 +17,7 @@ pub const PLAYER_INTERACT: &str = newengine_gameplay_fps_api::action::PLAYER_INT
 pub const INVENTORY_TOGGLE: &str = newengine_gameplay_fps_api::action::INVENTORY_TOGGLE;
 pub const CHARACTER_SELECT_TOGGLE: &str =
     newengine_gameplay_fps_api::action::CHARACTER_SELECT_TOGGLE;
+pub const NOCLIP_TOGGLE: &str = newengine_gameplay_fps_api::action::NOCLIP_TOGGLE;
 pub const HUD_VISIBILITY_TOGGLE: &str = newengine_gameplay_fps_api::action::HUD_VISIBILITY_TOGGLE;
 pub const EQUIP_PRIMARY: &str = newengine_gameplay_fps_api::action::EQUIP_PRIMARY;
 pub const EQUIP_SECONDARY: &str = newengine_gameplay_fps_api::action::EQUIP_SECONDARY;

@@ -30,8 +30,6 @@ pub fn game_ready_game_input_profile() -> InputBindingsProfile {
     });
     profile.bindings.retain(|binding| {
         binding.action != action::ASSET_CATALOG_UI_TOGGLE
-            && binding.action != action::PLAYER_MOVE_UP
-            && binding.action != action::PLAYER_MOVE_DOWN
             && !(binding.device == InputBindingDevice::Keyboard
                 && (newengine_input_api::key_code::DIGIT1..=newengine_input_api::key_code::DIGIT3)
                     .contains(&binding.code)
@@ -41,9 +39,6 @@ pub fn game_ready_game_input_profile() -> InputBindingsProfile {
                         | action::CAMERA_VIEW_THIRD_PERSON_FOLLOW
                         | action::CAMERA_VIEW_THIRD_PERSON_AIM
                 ))
-    });
-    profile.actions.retain(|definition| {
-        definition.id != action::PLAYER_MOVE_UP && definition.id != action::PLAYER_MOVE_DOWN
     });
     if !profile
         .actions
@@ -56,9 +51,6 @@ pub fn game_ready_game_input_profile() -> InputBindingsProfile {
         );
     }
     for listener in &mut profile.listeners {
-        listener.action_filter.retain(|action_id| {
-            action_id != action::PLAYER_MOVE_UP && action_id != action::PLAYER_MOVE_DOWN
-        });
         if listener.id == "inventory-controller"
             && !listener
                 .action_filter

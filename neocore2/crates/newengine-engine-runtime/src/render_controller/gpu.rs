@@ -1,6 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 mod debug_lines;
+mod hair;
 mod material_registry;
 mod primitives;
 mod shader_manifest;
@@ -9,6 +10,7 @@ mod types;
 mod vfx_particles;
 
 pub(super) use debug_lines::ensure_debug_line_pipeline;
+pub(super) use hair::HairGpuRenderer;
 pub use material_registry::MaterialGpuRegistry;
 pub use newengine_material_domain_api::{
     LitPipeline, MaterialGpuPipeline, MaterialGpuPipelineKey, MaterialGpuPipelineProvider,

@@ -111,6 +111,23 @@ fn spawn_equipped_weapon_visual(
     let _ = world.insert(root, WeaponSecondaryDynamicsState::default());
     let _ = world.insert(
         root,
+        WeaponEntityRuntime {
+            owner,
+            instance_id: binding.instance_id,
+            item: binding.item,
+        },
+    );
+    let _ = world.insert(root, WeaponEntitySockets::default());
+    let _ = world.insert(
+        owner,
+        EquippedWeaponEntity {
+            entity: root,
+            instance_id: binding.instance_id,
+            item: binding.item,
+        },
+    );
+    let _ = world.insert(
+        root,
         DisplayVisibility {
             mode: DisplayMode::GameOnly,
         },

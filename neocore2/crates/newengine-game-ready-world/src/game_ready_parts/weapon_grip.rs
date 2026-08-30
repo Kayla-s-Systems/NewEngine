@@ -176,7 +176,7 @@ pub(crate) fn weapon_ready_solve_contract_presented(
         0.0
     };
     let fire_recoil_alpha = if fire_recoil_alpha.is_finite() {
-        fire_recoil_alpha.clamp(0.0, 1.0)
+        fire_recoil_alpha.clamp(0.0, 4.0)
     } else {
         0.0
     };
@@ -256,6 +256,147 @@ pub(crate) fn weapon_ready_solve_contract_presented(
         right_position + body_rotation * v3(presentation.ready_right_elbow_pole_offset);
     let left_elbow_pole =
         left_position + body_rotation * v3(presentation.ready_left_elbow_pole_offset);
+    (position.is_finite()
+        && rotation.is_finite()
+        && shoulder_pocket.is_finite()
+        && stock_contact.is_finite()
+        && right_elbow_pole.is_finite()
+        && left_elbow_pole.is_finite())
+    .then_some(WeaponReadySolveContract {
+        root,
+        shoulder_pocket,
+        stock_contact,
+        right_elbow_pole,
+        left_elbow_pole,
+    })
+}
+
+/// Resolve the full-body first-person weapon root in camera/model space. This consumes the FPP
+/// fields that are already authored in YTYP: hip handle offset, sight points, camera-to-rear-sight
+/// offset and hip convergence distance. The result is still the ordinary world weapon entity;
+/// both real arms are solved to this root afterwards, so there is no duplicate viewmodel.
+pub(crate) fn weapon_first_person_solve_contract_presented(
+    presentation: &WeaponPresentationDefinition,
+    eye_position_model: Vec3,
+    view_rotation_model: Quat,
+    right_shoulder: Mat4,
+    left_shoulder: Mat4,
+    aim_alpha: f32,
+    fire_recoil_alpha: f32,
+    fire_recoil_yaw_radians: f32,
+) -> Option<WeaponReadySolveContract> {
+    let presentation = presentation.clone().sanitized();
+    if !presentation.enabled || !eye_position_model.is_finite() || !view_rotation_model.is_finite()
+    {
+        return None;
+    }
+    let view_rotation = view_rotation_model.normalize_or_identity();
+    let view_right = (view_rotation * Vec3::X).normalize_or_zero();
+    let view_up = (view_rotation * Vec3::Y).normalize_or_zero();
+    let view_forward = (view_rotation * -Vec3::Z).normalize_or_zero();
+    if view_right.length_squared() <= 1.0e-8
+        || view_up.length_squared() <= 1.0e-8
+        || view_forward.length_squared() <= 1.0e-8
+    {
+        return None;
+    }
+
+    let right_position = right_shoulder.transform_point3(Vec3::ZERO);
+    let left_position = left_shoulder.transform_point3(Vec3::ZERO);
+    if !right_position.is_finite() || !left_position.is_finite() {
+        return None;
+    }
+
+    let aim_alpha = if aim_alpha.is_finite() {
+        aim_alpha.clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    let fire_recoil_alpha = if fire_recoil_alpha.is_finite() {
+        fire_recoil_alpha.clamp(0.0, 4.0)
+    } else {
+        0.0
+    };
+    let fire_recoil_yaw_radians = if fire_recoil_yaw_radians.is_finite() {
+        fire_recoil_yaw_radians.clamp(-0.5, 0.5)
+    } else {
+        0.0
+    };
+
+    // ReadyHold's canonical body frame is X=left, Y=up, Z=forward. Build the same frame from
+    // the gameplay camera so native-rig basis correction stays identical between FPP and TPP.
+    let presentation_frame = Quat::from_mat3(&Mat3::from_cols(-view_right, view_up, view_forward))
+        .normalize_or_identity();
+    let base_rotation = (presentation_frame
+        * q4(presentation.ready_body_to_root_rotation)
+        * q4(presentation.native_rig_to_runtime_basis))
+    .normalize_or_identity();
+
+    let rear_from_handle = v3(presentation.ads_rear_sight_from_handle);
+    let front_from_handle = v3(presentation.ads_front_sight_from_handle);
+    let local_sight_axis = (front_from_handle - rear_from_handle).normalize_or_zero();
+    let hip_handle =
+        eye_position_model + view_rotation * v3(presentation.first_person_hip_handle_offset);
+    if !hip_handle.is_finite() {
+        return None;
+    }
+    let convergence_distance = presentation.first_person_hip_convergence_m.max(0.1);
+    let convergence_point = eye_position_model + view_forward * convergence_distance;
+    let hip_rear_estimate = hip_handle + base_rotation * rear_from_handle;
+    let hip_forward = (convergence_point - hip_rear_estimate).normalize_or_zero();
+    let hip_forward = if hip_forward.length_squared() > 1.0e-8 {
+        hip_forward
+    } else {
+        view_forward
+    };
+    let desired_sight_forward = hip_forward
+        .lerp(view_forward, aim_alpha)
+        .normalize_or_zero();
+    let rotation = if local_sight_axis.length_squared() > 1.0e-8 {
+        let current_sight_axis = (base_rotation * local_sight_axis).normalize_or_zero();
+        if current_sight_axis.length_squared() > 1.0e-8
+            && desired_sight_forward.length_squared() > 1.0e-8
+        {
+            (Quat::from_rotation_arc(current_sight_axis, desired_sight_forward) * base_rotation)
+                .normalize_or_identity()
+        } else {
+            base_rotation
+        }
+    } else {
+        base_rotation
+    };
+
+    // Camera recoil and weapon recoil are separate layers in REDengine. This root carries the
+    // weapon-side impulse only; the camera runtime may apply its own smaller additive response.
+    let rotation = if fire_recoil_alpha > 0.0 || fire_recoil_yaw_radians.abs() > 1.0e-6 {
+        let pitch = Quat::from_axis_angle(
+            view_right,
+            -presentation.fire_kick_pitch_radians * fire_recoil_alpha,
+        );
+        let yaw = Quat::from_axis_angle(view_up, fire_recoil_yaw_radians);
+        (yaw * pitch * rotation).normalize_or_identity()
+    } else {
+        rotation
+    };
+
+    let handle_from_root = v3(presentation.handle_from_root);
+    let hip_root_position = hip_handle - rotation * handle_from_root;
+    let ads_rear_target =
+        eye_position_model + view_rotation * v3(presentation.ads_camera_to_rear_sight);
+    let ads_root_position = ads_rear_target - rotation * (handle_from_root + rear_from_handle);
+    let position = hip_root_position.lerp(ads_root_position, aim_alpha);
+    let root = WeaponRootTransform { position, rotation };
+
+    let shoulder_offset = v3(presentation.ready_shoulder_pocket_offset)
+        .lerp(v3(presentation.ads_shoulder_pocket_offset), aim_alpha);
+    let shoulder_pocket = right_position + presentation_frame * shoulder_offset;
+    let stock_contact = weapon_handle_position(&presentation, root)
+        + rotation * v3(presentation.stock_contact_from_handle);
+    let right_elbow_pole =
+        right_position + presentation_frame * v3(presentation.ready_right_elbow_pole_offset);
+    let left_elbow_pole =
+        left_position + presentation_frame * v3(presentation.ready_left_elbow_pole_offset);
+
     (position.is_finite()
         && rotation.is_finite()
         && shoulder_pocket.is_finite()
@@ -441,87 +582,6 @@ pub(crate) fn weapon_ready_contract_with_secondary_rotation(
     contract.stock_contact =
         handle + contract.root.rotation * v3(presentation.stock_contact_from_handle);
     contract.stock_contact.is_finite().then_some(contract)
-}
-
-pub(crate) fn weapon_root_from_first_person_view(
-    presentation: &WeaponPresentationDefinition,
-    camera_position: Vec3,
-    view_rotation: Quat,
-    aim_alpha: f32,
-) -> Option<WeaponRootTransform> {
-    let presentation = presentation.clone().sanitized();
-    if !presentation.enabled || !camera_position.is_finite() || !view_rotation.is_finite() {
-        return None;
-    }
-    let view_rotation = view_rotation.normalize_or_identity();
-    let aim_alpha = if aim_alpha.is_finite() {
-        aim_alpha.clamp(0.0, 1.0)
-    } else {
-        0.0
-    };
-    let camera_forward = (view_rotation * -Vec3::Z).normalize_or_zero();
-    if camera_forward.length_squared() <= 1.0e-8 {
-        return None;
-    }
-    // First-person has no independent authored weapon-orientation correction. Build a stable
-    // camera mount for the canonical weapon frame (+Y up, +Z forward), then compose the same
-    // native-rig -> runtime basis used by third-person, grip, muzzle and ADS.
-    let camera_up = (view_rotation * Vec3::Y).normalize_or_zero();
-    if camera_up.length_squared() <= 1.0e-8 {
-        return None;
-    }
-    let canonical_right = camera_up.cross(camera_forward).normalize_or_zero();
-    if canonical_right.length_squared() <= 1.0e-8 {
-        return None;
-    }
-    let canonical_up = camera_forward.cross(canonical_right).normalize_or_zero();
-    if canonical_up.length_squared() <= 1.0e-8 {
-        return None;
-    }
-    let camera_mount = Quat::from_mat3(&Mat3::from_cols(
-        canonical_right,
-        canonical_up,
-        camera_forward,
-    ))
-    .normalize_or_identity();
-    let native_to_runtime = q4(presentation.native_rig_to_runtime_basis);
-    let runtime_to_native = native_to_runtime.inverse();
-    let base_rotation = (camera_mount * native_to_runtime).normalize_or_identity();
-    let hip_handle_position =
-        camera_position + view_rotation * v3(presentation.first_person_hip_handle_offset);
-    let hip_target = camera_position + camera_forward * presentation.first_person_hip_convergence_m;
-    let hip_forward = (hip_target - hip_handle_position).normalize_or_zero();
-    if hip_forward.length_squared() <= 1.0e-8 {
-        return None;
-    }
-    let native_forward = (runtime_to_native * Vec3::Z).normalize_or_zero();
-    let hip_base_forward = (base_rotation * native_forward).normalize_or_zero();
-    let hip_rotation = (Quat::from_rotation_arc(hip_base_forward, hip_forward) * base_rotation)
-        .normalize_or_identity();
-    let local_ads_axis = (v3(presentation.ads_front_sight_from_handle)
-        - v3(presentation.ads_rear_sight_from_handle))
-    .normalize_or_zero();
-    if local_ads_axis.length_squared() <= 1.0e-8 {
-        return None;
-    }
-    let world_ads_axis = (base_rotation * local_ads_axis).normalize_or_zero();
-    if world_ads_axis.length_squared() <= 1.0e-8 {
-        return None;
-    }
-    let ads_rotation = (Quat::from_rotation_arc(world_ads_axis, camera_forward) * base_rotation)
-        .normalize_or_identity();
-    let ads_rear_sight_world =
-        camera_position + view_rotation * v3(presentation.ads_camera_to_rear_sight);
-    let ads_handle_position =
-        ads_rear_sight_world - ads_rotation * v3(presentation.ads_rear_sight_from_handle);
-    let rotation = hip_rotation
-        .slerp(ads_rotation, aim_alpha)
-        .normalize_or_identity();
-    let handle_position = hip_handle_position.lerp(ads_handle_position, aim_alpha);
-    Some(WeaponRootTransform {
-        position: handle_position - rotation * v3(presentation.handle_from_root),
-        rotation,
-    })
 }
 
 #[inline]
@@ -712,6 +772,42 @@ mod tests {
     }
 
     #[test]
+    fn first_person_hip_consumes_authored_camera_space_handle_offset() {
+        let p = fixture();
+        let eye = Vec3::new(0.0, 1.62, 0.0);
+        let view = Quat::IDENTITY;
+        let right = Mat4::from_translation(Vec3::new(-0.20, 1.46, 0.0));
+        let left = Mat4::from_translation(Vec3::new(0.20, 1.46, 0.0));
+        let contract =
+            weapon_first_person_solve_contract_presented(&p, eye, view, right, left, 0.0, 0.0, 0.0)
+                .expect("FPP hip contract");
+        let handle = weapon_handle_position(&p, contract.root);
+        let expected = eye + view * v3(p.first_person_hip_handle_offset);
+        assert!((handle - expected).length() <= 1.0e-5);
+    }
+
+    #[test]
+    fn first_person_ads_places_rear_sight_at_authored_camera_offset() {
+        let p = fixture();
+        let eye = Vec3::new(0.0, 1.62, 0.0);
+        let view = Quat::from_euler(newengine_math::EulerRot::YXZ, 0.37, -0.18, 0.0);
+        let right = Mat4::from_translation(Vec3::new(-0.20, 1.46, 0.0));
+        let left = Mat4::from_translation(Vec3::new(0.20, 1.46, 0.0));
+        let contract =
+            weapon_first_person_solve_contract_presented(&p, eye, view, right, left, 1.0, 0.0, 0.0)
+                .expect("FPP ADS contract");
+        let handle = weapon_handle_position(&p, contract.root);
+        let rear = handle + contract.root.rotation * v3(p.ads_rear_sight_from_handle);
+        let expected = eye + view * v3(p.ads_camera_to_rear_sight);
+        assert!((rear - expected).length() <= 1.0e-5);
+        let sight = (contract.root.rotation
+            * (v3(p.ads_front_sight_from_handle) - v3(p.ads_rear_sight_from_handle)))
+        .normalize_or_zero();
+        let forward = (view * -Vec3::Z).normalize_or_zero();
+        assert!(sight.dot(forward) > 0.9999);
+    }
+
+    #[test]
     fn aim_blocked_pivots_barrel_without_translating_firing_handle() {
         let p = fixture();
         let chest = Mat4::from_translation(Vec3::new(0.0, 1.25, 0.0));
@@ -735,47 +831,5 @@ mod tests {
             clear_forward.dot(blocked_forward) < 0.98,
             "aim-blocked must visibly pivot the barrel"
         );
-    }
-
-    #[test]
-    fn first_person_mount_preserves_canonical_weapon_up() {
-        let mut p = fixture();
-        p.native_rig_to_runtime_basis = [0.0, 0.0, 0.0, 1.0];
-        let camera = Vec3::new(0.0, 1.7, 0.0);
-        let view = Quat::IDENTITY;
-        let root = weapon_root_from_first_person_view(&p, camera, view, 0.0).unwrap();
-        let forward = (root.rotation * Vec3::Z).normalize_or_zero();
-        let up = (root.rotation * Vec3::Y).normalize_or_zero();
-        assert!(forward.dot(-Vec3::Z) > 0.999);
-        assert!(up.dot(Vec3::Y) > 0.999);
-    }
-
-    #[test]
-    fn first_person_mount_tracks_camera_up_without_roll_inversion() {
-        let mut p = fixture();
-        p.native_rig_to_runtime_basis = [0.0, 0.0, 0.0, 1.0];
-        let camera = Vec3::new(0.0, 1.7, 0.0);
-        let view =
-            (Quat::from_rotation_y(0.43) * Quat::from_rotation_x(-0.18)).normalize_or_identity();
-        let root = weapon_root_from_first_person_view(&p, camera, view, 0.0).unwrap();
-        let expected_forward = (view * -Vec3::Z).normalize_or_zero();
-        let expected_up = (view * Vec3::Y).normalize_or_zero();
-        let forward = (root.rotation * Vec3::Z).normalize_or_zero();
-        let up = (root.rotation * Vec3::Y).normalize_or_zero();
-        assert!(forward.dot(expected_forward) > 0.999);
-        assert!(up.dot(expected_up) > 0.999);
-    }
-
-    #[test]
-    fn authored_weapon_ads_aligns_sight_axis_to_camera() {
-        let p = fixture();
-        let camera = Vec3::new(0.0, 1.7, 0.0);
-        let view = Quat::IDENTITY;
-        let root = weapon_root_from_first_person_view(&p, camera, view, 1.0).expect("ADS");
-        let handle = weapon_handle_position(&p, root);
-        let rear = handle + root.rotation * v3(p.ads_rear_sight_from_handle);
-        let front = handle + root.rotation * v3(p.ads_front_sight_from_handle);
-        let sight = (front - rear).normalize_or_zero();
-        assert!(sight.dot(-Vec3::Z) > 0.999);
     }
 }

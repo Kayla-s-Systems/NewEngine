@@ -107,6 +107,39 @@ pub(super) fn camera_runtime_service_config(
         }
 
         if matches!(active_view, CameraViewMode::FirstPerson) {
+            let velocity = world
+                .get::<newengine_sim::Velocity>(player)
+                .copied()
+                .unwrap_or_default()
+                .0;
+            let horizontal_speed = Vec3::new(velocity.x, 0.0, velocity.z).length();
+            let grounded = world
+                .get::<crate::gameplay::PlayerGroundState>(player)
+                .is_some_and(|ground| ground.grounded && ground.walkable);
+            let weapon_state = world
+                .get::<crate::gameplay::PlayerWeaponState>(player)
+                .copied();
+            let weapon_tuning = world
+                .get::<crate::gameplay::HitscanWeaponTuning>(player)
+                .copied()
+                .map(|tuning| tuning.sanitized());
+            let mut presentation = newengine_camera_runtime::FirstPersonPresentationInput {
+                grounded,
+                horizontal_speed,
+                aiming: active_weapon_aim_intent(world, player),
+                shot_sequence: weapon_state.map(|state| state.shot_sequence).unwrap_or(0),
+                ..Default::default()
+            };
+            if let Some(tuning) = weapon_tuning {
+                presentation.recoil_pitch_radians = tuning.recoil_pitch_radians;
+                presentation.recoil_pitch_random_radians = tuning.recoil_pitch_random_radians;
+                presentation.recoil_yaw_radians = tuning.recoil_yaw_radians;
+                presentation.recoil_yaw_bias_radians = tuning.recoil_yaw_bias_radians;
+                presentation.ads_recoil_multiplier = tuning.ads_recoil_multiplier;
+                presentation.recoil_recovery_hz = tuning.recoil_recovery_hz;
+            }
+            config.first_person_presentation = presentation;
+
             if let Some(anchor) = world
                 .get::<crate::gameplay::PlayerFirstPersonCameraAnchor>(player)
                 .copied()
@@ -114,10 +147,18 @@ pub(super) fn camera_runtime_service_config(
             {
                 config.first_person_anchor_ws = Some(anchor.eye_center_ws);
                 config.first_person_forward_clearance = if anchor.forward_clearance.is_finite() {
-                    anchor.forward_clearance.clamp(0.0, 0.20)
+                    anchor.forward_clearance.clamp(0.0, 0.08)
                 } else {
-                    0.055
+                    0.045
                 };
+            }
+            if let Some(render_pose) = world
+                .get::<crate::gameplay::PlayerRenderPose>(player)
+                .copied()
+                .filter(|pose| pose.rotation.is_finite())
+            {
+                config.first_person_body_rotation_ws =
+                    Some(render_pose.rotation.normalize_or_identity());
             }
         }
 
@@ -585,10 +626,21 @@ pub(super) fn apply_gameplay_view_lens(
     let Projection::Perspective(mut perspective) = frame.projection else {
         return frame;
     };
-    if (perspective.fovy - target_fov_y).abs() <= 1.0e-6 {
+    let target_near = if matches!(active_view, CameraViewMode::FirstPerson) {
+        // Full-body FPP shares world geometry with the character. A 1 cm near plane exposes
+        // backfaces inside face/clothing shells; 4.5 cm still preserves close interaction while
+        // behaving like a dedicated FPP render contract.
+        0.045
+    } else {
+        perspective.near
+    };
+    if (perspective.fovy - target_fov_y).abs() <= 1.0e-6
+        && (perspective.near - target_near).abs() <= 1.0e-6
+    {
         return frame;
     }
     perspective.fovy = target_fov_y;
+    perspective.near = target_near;
     CameraFrame::build(
         frame.channel,
         frame.rig,

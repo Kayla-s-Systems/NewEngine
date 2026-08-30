@@ -19,7 +19,6 @@ use serde_json::Value;
 
 pub const PROVIDER_ROUTE: &str = "engine.tags.foundation";
 const OWNER: &str = "newengine-tags-runtime.foundation-provider";
-const CONFIG_JSON: &str = include_str!("../../../config/gameplay/gameplay_foundation.v1.json");
 
 #[derive(Debug, Deserialize)]
 struct Config {
@@ -41,12 +40,13 @@ struct RawTag {
 #[derive(Default)]
 struct TagsState {
     tags: BTreeMap<String, TagDescriptorV1>,
+    source: String,
 }
 
 impl TagsState {
-    fn load() -> Self {
-        let config: Config =
-            serde_json::from_str(CONFIG_JSON).unwrap_or(Config { tags: Vec::new() });
+    fn load_from_json(text: &str, source: impl Into<String>) -> Result<Self, String> {
+        let config: Config = serde_json::from_str(text)
+            .map_err(|error| format!("tags catalog decode failed: {error}"))?;
         let tags = config
             .tags
             .into_iter()
@@ -62,7 +62,16 @@ impl TagsState {
                 (descriptor.tag.0.clone(), descriptor)
             })
             .collect();
-        Self { tags }
+        Ok(Self {
+            tags,
+            source: source.into(),
+        })
+    }
+
+    fn load_from_startup(startup: &newengine_core::StartupConfig) -> Result<Self, String> {
+        let (path, text) =
+            newengine_core::read_plugin_runtime_data_string(startup, PROVIDER_ROUTE, "catalog")?;
+        Self::load_from_json(&text, path.to_string_lossy())
     }
 
     fn info(&self) -> TagsServiceInfoV1 {
@@ -111,7 +120,7 @@ impl TagsState {
                 },
                 entity: None,
                 tags: self.tags.keys().cloned().map(TagId::new).collect(),
-                source: "config/gameplay/gameplay_foundation.v1.json".to_owned(),
+                source: self.source.clone(),
             }],
             diagnostics: Vec::new(),
         }
@@ -187,14 +196,14 @@ fn invoke(state: &mut TagsState, payload: Blob) -> RResult<Blob, RString> {
     }
 }
 
-pub fn register_tags_gateway_best_effort() -> bool {
+fn register_tags_gateway_with_state(state: TagsState) -> bool {
     let description = engine_gateway_provider_service_description(
         TAGS_SERVICE_ID, PROVIDER_ROUTE, TAGS_REGISTRY_CAPABILITY_ID, TAGS_SERVICE_METHODS.iter().copied(),
     ).gateway("engine.tags")
      .protocol("newengine.tags.foundation/v1")
      .features(["single-purpose-provider", "replaceable-gateway-route", "dto-only-boundary"])
      .notes("Owns only baseline tag registry semantics; no tasks, animation, navigation, AI, world mutation, or Host composition.");
-    let service = JsonServiceRouter::with_state(TAGS_SERVICE_ID, TagsState::load())
+    let service = JsonServiceRouter::with_state(TAGS_SERVICE_ID, state)
         .describe_json(&description)
         .get_json(tags_method::INFO_JSON, |state| state.info())
         .post_json(tags_method::DESCRIBE_TAGS_JSON_V1, |state, req| {
@@ -225,6 +234,15 @@ pub fn register_tags_gateway_best_effort() -> bool {
     .is_ok()
 }
 
+pub fn register_tags_gateway_best_effort() -> bool {
+    let Some(startup) = newengine_core::startup::last_startup_config() else {
+        return false;
+    };
+    TagsState::load_from_startup(startup)
+        .map(register_tags_gateway_with_state)
+        .unwrap_or(false)
+}
+
 pub const RUNTIME_UNIT_SPEC: newengine_runtime_unit_api::EngineRuntimeUnitSpec =
     newengine_runtime_unit_api::EngineRuntimeUnitSpec::new(
         "engine.runtime.tags",
@@ -237,10 +255,16 @@ pub const RUNTIME_UNIT_SPEC: newengine_runtime_unit_api::EngineRuntimeUnitSpec =
 
 fn runtime_unit_factory(
     _: &mut newengine_runtime_unit_api::Engine<()>,
-    _: &newengine_runtime_unit_api::StartupConfig,
+    startup: &newengine_runtime_unit_api::StartupConfig,
 ) -> newengine_runtime_unit_api::EngineResult<Option<Box<dyn newengine_runtime_unit_api::Module<()>>>>
 {
-    let _ = register_tags_gateway_best_effort();
+    let state =
+        TagsState::load_from_startup(startup).map_err(newengine_core::EngineError::other)?;
+    if !register_tags_gateway_with_state(state) {
+        return Err(newengine_core::EngineError::other(
+            "failed to register configured tags provider",
+        ));
+    }
     Ok(None)
 }
 
@@ -255,7 +279,11 @@ mod tests {
     use super::*;
     #[test]
     fn state_loads_tag_domain_only() {
-        let state = TagsState::load();
+        let state = TagsState::load_from_json(
+            r#"{"tags":[{"tag":"state.idle","domain":"State"}]}"#,
+            "test",
+        )
+        .unwrap();
         assert!(!state.tags.is_empty());
     }
 }

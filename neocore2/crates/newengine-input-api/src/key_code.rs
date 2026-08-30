@@ -46,3 +46,4 @@ pub const BACKQUOTE: u32 = 115;
 
 pub const F1: u32 = 159;
 pub const F2: u32 = 160;
+pub const F7: u32 = 165;

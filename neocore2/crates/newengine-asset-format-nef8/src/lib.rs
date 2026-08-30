@@ -8,8 +8,12 @@ mod descriptor;
 mod formats;
 mod registry;
 
+pub mod fxd_binary;
+
 pub mod ydd_binary;
 pub mod yscd_binary;
+
+pub use fxd_binary::{decode_fxd_nef8, encode_fxd_nef8};
 
 pub use ydd_binary::{
     encode_ydd_binary_body, YDD_BINARY_CONTRACT_SPEC, YDD_BINARY_ENCODING,
@@ -27,6 +31,7 @@ pub use registry::{
     spec_for_content_kind, specs,
 };
 
+pub use formats::fxd;
 pub use formats::neftd;
 pub use formats::neitems;
 pub use formats::nemat;

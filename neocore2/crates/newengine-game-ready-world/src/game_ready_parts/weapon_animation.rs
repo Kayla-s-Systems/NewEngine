@@ -7,8 +7,9 @@ use newengine_animation_runtime::{
 use newengine_assets::{AssetDecodeRequest, AssetServiceClient, ASSET_LIST_FILE_BODY_OUTPUT};
 use newengine_engine_runtime::gameplay::{
     active_equipped_weapon_binding, HitscanWeaponTuning, ItemInstanceId, PlayerSkinPose,
-    PlayerWeaponState, WeaponAnimationDefinition,
+    PlayerWeaponState, WeaponAnimationDefinition, WeaponEntitySockets, WeaponSocketPose,
 };
+use newengine_math::Mat4;
 use newengine_model_skeleton_api::ModelSkeletonMetadata;
 
 #[derive(Clone, Debug)]
@@ -33,6 +34,7 @@ struct EquippedWeaponAnimationRuntime {
     fire_time: f32,
     last_shot_sequence: u64,
     reload_active: bool,
+    casing_ejection_joint_index: Option<usize>,
 }
 
 fn normalize_mount_alias(reference: &str) -> String {
@@ -118,6 +120,32 @@ fn publish_weapon_palette(
     Ok(())
 }
 
+fn resolve_authored_weapon_joint(
+    skeleton: &ModelSkeletonMetadata,
+    authored_name: Option<&str>,
+    semantic: &str,
+) -> Result<Option<usize>, String> {
+    let Some(name) = authored_name.map(str::trim).filter(|name| !name.is_empty()) else {
+        return Ok(None);
+    };
+    let matches = skeleton
+        .joints
+        .iter()
+        .enumerate()
+        .filter_map(|(index, joint)| (joint.name == name).then_some(index))
+        .collect::<Vec<_>>();
+    match matches.as_slice() {
+        [] => Err(format!(
+            "authored weapon socket joint is absent semantic='{semantic}' joint='{name}'"
+        )),
+        [index] => Ok(Some(*index)),
+        _ => Err(format!(
+            "authored weapon socket joint is ambiguous semantic='{semantic}' joint='{name}' matches={}",
+            matches.len()
+        )),
+    }
+}
+
 pub(crate) fn bind_equipped_weapon_animation(
     world: &mut newengine_ecs::World,
     root: EntityId,
@@ -126,12 +154,15 @@ pub(crate) fn bind_equipped_weapon_animation(
     skeleton: ModelSkeletonMetadata,
     source_to_model: [f32; 16],
     definition: &WeaponAnimationDefinition,
+    casing_ejection_joint: Option<&str>,
     initial_shot_sequence: u64,
 ) -> Result<(), String> {
     let expected_skeleton = definition
         .skeleton
         .as_deref()
         .ok_or("skinned weapon animation requires authored skeleton ref")?;
+    let casing_ejection_joint_index =
+        resolve_authored_weapon_joint(&skeleton, casing_ejection_joint, "casing_ejection")?;
     let animation_runtime = AnimationSkeletonRuntime::compile(&skeleton, source_to_model)
         .map_err(|error| format!("weapon animation skeleton compile failed: {error}"))?;
     let mut idle = load_weapon_clip(
@@ -204,6 +235,7 @@ pub(crate) fn bind_equipped_weapon_animation(
             fire_time: f32::INFINITY,
             last_shot_sequence: initial_shot_sequence,
             reload_active: false,
+            casing_ejection_joint_index,
         },
     );
     newengine_ulog_api::ulog::info!(
@@ -245,6 +277,48 @@ fn sample_weapon_runtime_clip(
         occurrence_scratch,
         timeline_events,
     )?;
+    Ok(())
+}
+
+fn publish_weapon_skeleton_sockets(
+    world: &mut newengine_ecs::World,
+    root: EntityId,
+    animation_runtime: &AnimationSkeletonRuntime,
+    locals: &[JointLocalPose],
+    casing_ejection_joint_index: Option<usize>,
+    dt: f32,
+) -> Result<(), String> {
+    let Some(joint_index) = casing_ejection_joint_index else {
+        return Ok(());
+    };
+    let mut frames = Vec::new();
+    animation_runtime.build_model_joint_frames_from_local_pose(locals, &mut frames)?;
+    let joint_frame = frames
+        .get(joint_index)
+        .copied()
+        .ok_or_else(|| format!("weapon socket joint frame missing index={joint_index}"))?;
+    let (root_position, root_rotation) =
+        newengine_transform::read_entity_world_pose_local_chain(world, root)
+            .ok_or_else(|| format!("weapon root has no world pose entity={}", root.stable_u64()))?;
+    let root_frame = Mat4::from_scale_rotation_translation(
+        Vec3::ONE,
+        root_rotation.normalize_or_identity(),
+        root_position,
+    );
+    let world_frame = root_frame * joint_frame;
+    let (_scale, rotation, position) = world_frame.to_scale_rotation_translation();
+    let current = WeaponSocketPose::stationary(position, rotation)
+        .ok_or_else(|| format!("weapon socket pose non-finite index={joint_index}"))?;
+    let previous = world
+        .get::<WeaponEntitySockets>(root)
+        .and_then(|sockets| sockets.casing_ejection);
+    let current = current.with_measured_motion(previous, dt);
+    let mut sockets = world
+        .get::<WeaponEntitySockets>(root)
+        .copied()
+        .unwrap_or_default();
+    sockets.casing_ejection = Some(current);
+    let _ = world.insert(root, sockets);
     Ok(())
 }
 
@@ -407,6 +481,21 @@ pub(crate) fn tick_equipped_weapon_animations(world: &mut newengine_ecs::World, 
                 error,
             );
         } else {
+            if let Err(error) = publish_weapon_skeleton_sockets(
+                world,
+                root,
+                &runtime.animation_runtime,
+                &runtime.sampled_locals,
+                runtime.casing_ejection_joint_index,
+                dt,
+            ) {
+                newengine_ulog_api::ulog::warn!(
+                    "game-ready: weapon socket publication failed root={} owner={}: {}",
+                    root.stable_u64(),
+                    runtime.owner.stable_u64(),
+                    error,
+                );
+            }
             crate::animation_events::publish_timeline_events(world, timeline_events);
         }
         let _ = world.insert(root, runtime);

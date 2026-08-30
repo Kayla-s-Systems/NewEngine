@@ -11,7 +11,7 @@ use newengine_engine_runtime::gameplay::{
     InventoryLoadout, InventoryLoadoutCatalog, InventoryLoadoutEntry, ItemCatalog, ItemDefinition,
     ItemId, ItemKind, ItemUseEffect, MeleeWeaponTuning, WeaponAnimationDefinition,
     WeaponAudioDefinition, WeaponCasingDefinition, WeaponFireMode, WeaponItemDefinition,
-    WeaponPresentationDefinition, WeaponType, WorldItemDefinition,
+    WeaponPresentationDefinition, WeaponType, WeaponVfxDefinition, WorldItemDefinition,
 };
 use newengine_primitives::builtins as primitive_builtins;
 use serde::{Deserialize, Serialize};
@@ -41,7 +41,7 @@ pub use types::{
     AuthoredItemDefinition, AuthoredItemPackage, AuthoredLoadoutDefinition, AuthoredLoadoutEntry,
     AuthoredUseEffect, AuthoredWeaponAnimationDefinition, AuthoredWeaponAudioDefinition,
     AuthoredWeaponCasingDefinition, AuthoredWeaponDefinition, AuthoredWeaponPresentationDefinition,
-    AuthoredWorldItemDefinition, CompiledItemPackage,
+    AuthoredWeaponVfxDefinition, AuthoredWorldItemDefinition, CompiledItemPackage,
 };
 
 use compile::validate_package_header;
@@ -102,6 +102,9 @@ pub fn test_fps_item_package() -> AuthoredItemPackage {
                     material_ref: "test/materials/rifle_shell.nemat@brass".to_owned(),
                     half_extents: [0.00635, 0.00625, 0.02940],
                     ejection_delay_seconds: 1.0 / 30.0,
+                    ejection_joint: "shell_eject".to_owned(),
+                    inherit_socket_linear_velocity: 1.0,
+                    inherit_socket_angular_velocity: 0.35,
                     origin_local: [0.050, 0.025, -0.430],
                     velocity_local: [1.85, 1.25, -0.22],
                     velocity_jitter: [0.35, 0.25, 0.0],
@@ -111,6 +114,10 @@ pub fn test_fps_item_package() -> AuthoredItemPackage {
                     friction: 0.38,
                     restitution: 0.22,
                     density: 8.5,
+                    contact_min_impulse: 0.002,
+                    contact_medium_impulse: 0.012,
+                    contact_hard_impulse: 0.035,
+                    soft_surface_contains: vec!["dirt".to_owned(), "sand".to_owned()],
                 }),
                 world: Some(AuthoredWorldItemDefinition {
                     model: "shared/models/weapon/rifle/rifle.ydd@rifle".to_owned(),

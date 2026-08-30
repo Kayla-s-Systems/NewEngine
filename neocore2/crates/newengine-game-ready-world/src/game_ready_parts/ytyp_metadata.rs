@@ -53,12 +53,141 @@ pub(super) fn value_bool(value: &serde_json::Value) -> Option<bool> {
     })
 }
 
+fn player_joint_channels_text(
+    raw: &str,
+) -> Option<newengine_engine_runtime::gameplay::PlayerJointChannels> {
+    let mut channels = newengine_engine_runtime::gameplay::PlayerJointChannels {
+        translation: false,
+        rotation: false,
+        scale: false,
+    };
+    for token in raw
+        .trim()
+        .to_ascii_lowercase()
+        .replace('+', ",")
+        .replace('|', ",")
+        .split(',')
+        .map(str::trim)
+        .filter(|token| !token.is_empty())
+    {
+        match token {
+            "t" | "translation" => channels.translation = true,
+            "r" | "rotation" => channels.rotation = true,
+            "s" | "scale" => channels.scale = true,
+            "tr" | "rt" => {
+                channels.translation = true;
+                channels.rotation = true;
+            }
+            "trs" | "all" => {
+                channels = newengine_engine_runtime::gameplay::PlayerJointChannels::all()
+            }
+            _ => return None,
+        }
+    }
+    channels.any().then_some(channels)
+}
+
+fn player_joint_channels(
+    value: Option<&serde_json::Value>,
+) -> newengine_engine_runtime::gameplay::PlayerJointChannels {
+    let Some(value) = value else {
+        return newengine_engine_runtime::gameplay::PlayerJointChannels::rotation_only();
+    };
+    if let Some(raw) = value.as_str() {
+        return player_joint_channels_text(raw).unwrap_or_else(
+            newengine_engine_runtime::gameplay::PlayerJointChannels::rotation_only,
+        );
+    }
+    if let Some(object) = value.as_object() {
+        let channels = newengine_engine_runtime::gameplay::PlayerJointChannels {
+            translation: object
+                .get("translation")
+                .and_then(value_bool)
+                .unwrap_or(false),
+            rotation: object.get("rotation").and_then(value_bool).unwrap_or(false),
+            scale: object.get("scale").and_then(value_bool).unwrap_or(false),
+        };
+        if channels.any() {
+            return channels;
+        }
+    }
+    newengine_engine_runtime::gameplay::PlayerJointChannels::rotation_only()
+}
+
+fn player_joint_copy_rules(
+    value: &serde_json::Value,
+) -> Option<Vec<newengine_engine_runtime::gameplay::PlayerJointCopyRule>> {
+    let mut result = Vec::new();
+    if let Some(array) = value.as_array() {
+        for entry in array {
+            let Some(source_joint) = entry.get("source_joint").and_then(value_string) else {
+                continue;
+            };
+            let Some(target_joint) = entry.get("target_joint").and_then(value_string) else {
+                continue;
+            };
+            let channels = player_joint_channels(entry.get("channels"));
+            if !source_joint.eq_ignore_ascii_case(&target_joint) && channels.any() {
+                result.push(newengine_engine_runtime::gameplay::PlayerJointCopyRule {
+                    source_joint,
+                    target_joint,
+                    channels,
+                });
+            }
+        }
+    } else if let Some(raw) = value.as_str() {
+        for entry in raw
+            .split(';')
+            .map(str::trim)
+            .filter(|entry| !entry.is_empty())
+        {
+            let (mapping, channels) = entry.rsplit_once(':').unwrap_or((entry, "trs"));
+            let Some((source_joint, target_joint)) = mapping.split_once('>') else {
+                continue;
+            };
+            let Some(channels) = player_joint_channels_text(channels) else {
+                continue;
+            };
+            let source_joint = source_joint.trim();
+            let target_joint = target_joint.trim();
+            if !source_joint.is_empty()
+                && !target_joint.is_empty()
+                && !source_joint.eq_ignore_ascii_case(target_joint)
+            {
+                result.push(newengine_engine_runtime::gameplay::PlayerJointCopyRule {
+                    source_joint: source_joint.to_owned(),
+                    target_joint: target_joint.to_owned(),
+                    channels,
+                });
+            }
+        }
+    }
+    (!result.is_empty()).then_some(result)
+}
+
+fn authored_joint_list(value: &serde_json::Value) -> Vec<String> {
+    if let Some(array) = value.as_array() {
+        return array.iter().filter_map(value_string).collect();
+    }
+    value
+        .as_str()
+        .map(|raw| {
+            raw.split(';')
+                .map(str::trim)
+                .filter(|item| !item.is_empty())
+                .map(str::to_owned)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 fn player_joint_rotation_weights(
     value: &serde_json::Value,
 ) -> Option<Vec<newengine_engine_runtime::gameplay::PlayerJointRotationWeight>> {
     fn item(
         joint: &str,
         weight: f32,
+        channels: newengine_engine_runtime::gameplay::PlayerJointChannels,
     ) -> Option<newengine_engine_runtime::gameplay::PlayerJointRotationWeight> {
         let joint = joint.trim();
         if joint.is_empty() || !weight.is_finite() {
@@ -68,6 +197,7 @@ fn player_joint_rotation_weights(
             newengine_engine_runtime::gameplay::PlayerJointRotationWeight {
                 joint: joint.to_owned(),
                 weight: weight.clamp(0.0, 1.0),
+                channels,
             },
         )
     }
@@ -81,19 +211,26 @@ fn player_joint_rotation_weights(
             let Some(weight) = entry.get("weight").and_then(value_f32) else {
                 continue;
             };
-            if let Some(weight) = item(joint, weight) {
+            let channels = player_joint_channels(entry.get("channels"));
+            if let Some(weight) = item(joint, weight, channels) {
                 result.push(weight);
             }
         }
     } else if let Some(raw) = value.as_str() {
         for entry in raw.split(';') {
-            let Some((joint, weight)) = entry.split_once(':') else {
-                continue;
-            };
+            let mut parts = entry.split(':');
+            let Some(joint) = parts.next() else { continue };
+            let Some(weight) = parts.next() else { continue };
             let Ok(weight) = weight.trim().parse::<f32>() else {
                 continue;
             };
-            if let Some(weight) = item(joint, weight) {
+            let channels = parts
+                .next()
+                .and_then(player_joint_channels_text)
+                .unwrap_or_else(
+                    newengine_engine_runtime::gameplay::PlayerJointChannels::rotation_only,
+                );
+            if let Some(weight) = item(joint, weight, channels) {
                 result.push(weight);
             }
         }
@@ -295,6 +432,97 @@ pub(super) fn apply_player_model_from_ytyp(
         profile.player.model.skeleton = Some(skeleton);
         applied += 1;
     }
+    if let Some(enabled) = value_path(model, &["detached_head_follow"]).and_then(value_bool) {
+        profile.player.model.detached_head_follow = enabled;
+        applied += 1;
+    }
+    let detached_driver =
+        value_path(model, &["detached_head_follow_driver"]).and_then(value_string);
+    let detached_roots = value_path(model, &["detached_head_follow_roots"])
+        .map(authored_joint_list)
+        .unwrap_or_default();
+    if let Some(driver_joint) = detached_driver.filter(|_| !detached_roots.is_empty()) {
+        profile.player.model.detached_head_follow_rule = Some(
+            newengine_engine_runtime::gameplay::PlayerPaletteFollowRule {
+                driver_joint,
+                follower_roots: detached_roots,
+                include_descendants: value_path(model, &["detached_head_follow_descendants"])
+                    .and_then(value_bool)
+                    .unwrap_or(true),
+            },
+        );
+        applied += 1;
+    }
+
+    if let Some(enabled) = value_path(model, &["eye_parent_follow"]).and_then(value_bool) {
+        profile.player.model.eye_parent_follow = enabled;
+        applied += 1;
+    }
+    let eye_left = value_path(model, &["eye_left_joint"]).and_then(value_string);
+    let eye_right = value_path(model, &["eye_right_joint"]).and_then(value_string);
+    let eye_parent = value_path(model, &["eye_parent_joint"]).and_then(value_string);
+    if let (Some(left_joint), Some(right_joint), Some(parent_joint)) =
+        (eye_left, eye_right, eye_parent)
+    {
+        profile.player.model.eye_parent_follow_rule = Some(
+            newengine_engine_runtime::gameplay::PlayerEyeParentFollowRule {
+                left_joint,
+                right_joint,
+                parent_joint,
+                preserve_bind_local: value_path(model, &["eye_preserve_bind_local"])
+                    .and_then(value_bool)
+                    .unwrap_or(true),
+            },
+        );
+        applied += 1;
+    }
+
+    if let Some(rules) =
+        value_path(model, &["helper_pose_copies"]).and_then(player_joint_copy_rules)
+    {
+        profile.player.model.helper_pose_copies = rules;
+        applied += 1;
+    }
+
+    let braid_chain_joints = value_path(model, &["braid_secondary_motion_chain_joints"])
+        .and_then(value_string)
+        .map(|raw| {
+            raw.split(';')
+                .map(str::trim)
+                .filter(|joint| !joint.is_empty())
+                .map(str::to_owned)
+                .collect::<Vec<_>>()
+        });
+    let braid_collision_joints = [
+        "braid_secondary_motion_head_joint",
+        "braid_secondary_motion_head_base_joint",
+        "braid_secondary_motion_upper_back_joint",
+        "braid_secondary_motion_middle_back_joint",
+        "braid_secondary_motion_lower_back_joint",
+        "braid_secondary_motion_left_shoulder_joint",
+        "braid_secondary_motion_right_shoulder_joint",
+    ]
+    .map(|key| value_path(model, &[key]).and_then(value_string));
+    if let (
+        Some(chain_joints),
+        [Some(head_joint), Some(head_base_joint), Some(upper_back_joint), Some(middle_back_joint), Some(lower_back_joint), Some(left_shoulder_joint), Some(right_shoulder_joint)],
+    ) = (braid_chain_joints, braid_collision_joints)
+    {
+        profile.player.model.braid_secondary_motion = Some(
+            newengine_engine_runtime::gameplay::PlayerBraidSecondaryMotionRig {
+                chain_joints,
+                head_joint,
+                head_base_joint,
+                upper_back_joint,
+                middle_back_joint,
+                lower_back_joint,
+                left_shoulder_joint,
+                right_shoulder_joint,
+            },
+        );
+        applied += 1;
+    }
+
     if let Some(reference) = value_path(model, &["idle_animation"]).and_then(value_string) {
         profile.player.model.idle_animation = Some(reference);
         applied += 1;
@@ -368,6 +596,43 @@ pub(super) fn apply_player_model_from_ytyp(
     }
     if let Some(enabled) = value_path(model, &["equipment_arm_ik"]).and_then(value_bool) {
         profile.player.model.equipment_arm_ik = enabled;
+        applied += 1;
+    }
+    let ik_required = [
+        "equipment_arm_ik_chest",
+        "equipment_arm_ik_right_shoulder",
+        "equipment_arm_ik_right_elbow",
+        "equipment_arm_ik_right_wrist",
+        "equipment_arm_ik_right_palm",
+        "equipment_arm_ik_left_shoulder",
+        "equipment_arm_ik_left_elbow",
+        "equipment_arm_ik_left_wrist",
+        "equipment_arm_ik_left_palm",
+    ]
+    .map(|key| value_path(model, &[key]).and_then(value_string));
+    if let [Some(chest), Some(right_shoulder), Some(right_elbow), Some(right_wrist), Some(right_palm), Some(left_shoulder), Some(left_elbow), Some(left_wrist), Some(left_palm)] =
+        ik_required
+    {
+        profile.player.model.equipment_arm_ik_rig = Some(
+            newengine_engine_runtime::gameplay::PlayerWeaponArmIkRigDefinition {
+                chest,
+                right_shoulder,
+                right_elbow,
+                right_wrist,
+                right_palm,
+                right_prop_attachment: value_path(
+                    model,
+                    &["equipment_arm_ik_right_prop_attachment"],
+                )
+                .and_then(value_string),
+                left_shoulder,
+                left_elbow,
+                left_wrist,
+                left_palm,
+                left_prop_attachment: value_path(model, &["equipment_arm_ik_left_prop_attachment"])
+                    .and_then(value_string),
+            },
+        );
         applied += 1;
     }
     if let Some(reference) = value_path(model, &["unarmed_ready_animation"]).and_then(value_string)

@@ -1,7 +1,7 @@
 use super::*;
 use crate::{standard_runtime_frame, StandardRuntimePipelineDesc};
 use newengine_render_api::{
-    Extent2D, RenderGraphPassKind, RenderGraphResourceUsage, RenderTargetId,
+    Extent2D, RenderGraphPassKind, RenderGraphQueueKind, RenderGraphResourceUsage, RenderTargetId,
 };
 
 #[test]
@@ -293,4 +293,110 @@ fn viewport_surface_with_hdr_scene_uses_offscreen_scene_color_and_depth() {
         .iter()
         .any(|pass| pass.kind == RenderGraphPassKind::Copy
             && pass.label == "hdr_scene_resolve_to_surface"));
+}
+
+#[test]
+fn hair_simulation_storage_dependency_reaches_transparent_pass() {
+    let plan = standard_runtime_frame(
+        StandardRuntimePipelineDesc::new(17, Extent2D::new(1280, 720), Extent2D::new(1280, 720))
+            .hair(true)
+            .postfx(false)
+            .ui(false)
+            .debug_overlay(false),
+    );
+
+    let hair = plan
+        .graph
+        .passes
+        .iter()
+        .find(|pass| pass.kind == RenderGraphPassKind::HairSimulation)
+        .expect("Hair-enabled graph must contain HairSimulation");
+    assert_eq!(hair.queue, RenderGraphQueueKind::Compute);
+    let state = hair
+        .writes
+        .iter()
+        .find(|write| write.usage == RenderGraphResourceUsage::StorageBuffer)
+        .expect("HairSimulation must publish strand state")
+        .resource;
+
+    let transparent = plan
+        .graph
+        .passes
+        .iter()
+        .find(|pass| pass.kind == RenderGraphPassKind::Transparent)
+        .expect("Hair-enabled graph must retain Transparent raster");
+    assert!(transparent.reads.iter().any(|read| {
+        read.resource == state && read.usage == RenderGraphResourceUsage::StorageBuffer
+    }));
+
+    newengine_render_api::compile_render_graph(&plan.graph)
+        .expect("Hair compute-to-transparent graph must compile as a valid dependency DAG");
+}
+
+#[test]
+fn hair_state_flows_through_csm_before_transparent() {
+    let plan = standard_runtime_frame(
+        StandardRuntimePipelineDesc::new(23, Extent2D::new(1280, 720), Extent2D::new(1280, 720))
+            .hair(true)
+            .shadow(true, 1024)
+            .shadow_cascades(4)
+            .postfx(false)
+            .ui(false)
+            .debug_overlay(false),
+    );
+    let hair = plan
+        .graph
+        .passes
+        .iter()
+        .find(|pass| pass.kind == RenderGraphPassKind::HairSimulation)
+        .expect("HairSimulation");
+    let hair_state = hair
+        .writes
+        .iter()
+        .find(|write| write.usage == RenderGraphResourceUsage::StorageBuffer)
+        .expect("hair state")
+        .resource;
+    let csm = plan
+        .graph
+        .passes
+        .iter()
+        .find(|pass| pass.kind == RenderGraphPassKind::ShadowCascadeMap)
+        .expect("ShadowCascadeMap");
+    assert!(csm.reads.iter().any(|read| {
+        read.resource == hair_state && read.usage == RenderGraphResourceUsage::StorageBuffer
+    }));
+    let shadow_map = csm
+        .writes
+        .iter()
+        .find(|write| write.usage == RenderGraphResourceUsage::ColorAttachment)
+        .expect("CSM color-packed depth")
+        .resource;
+    let transparent = plan
+        .graph
+        .passes
+        .iter()
+        .find(|pass| pass.kind == RenderGraphPassKind::Transparent)
+        .expect("Transparent");
+    assert!(transparent.reads.iter().any(|read| {
+        read.resource == shadow_map && read.usage == RenderGraphResourceUsage::SampledTexture
+    }));
+
+    let compiled = newengine_render_api::compile_render_graph(&plan.graph)
+        .expect("HairSimulation -> CSM -> Transparent dependency DAG must compile");
+    let hair_pos = compiled
+        .execution_order
+        .iter()
+        .position(|id| *id == hair.id)
+        .unwrap();
+    let csm_pos = compiled
+        .execution_order
+        .iter()
+        .position(|id| *id == csm.id)
+        .unwrap();
+    let transparent_pos = compiled
+        .execution_order
+        .iter()
+        .position(|id| *id == transparent.id)
+        .unwrap();
+    assert!(hair_pos < csm_pos && csm_pos < transparent_pos);
 }

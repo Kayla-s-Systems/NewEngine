@@ -56,7 +56,7 @@ impl FpsCharacterMenuPolicySnapshot {
         let mut ids = BTreeSet::new();
         let mut aliases = BTreeSet::new();
         for character in &self.characters {
-            character.validate()?;
+            character.validate_menu_entry()?;
             let id = character.id.trim().to_ascii_lowercase();
             if !ids.insert(id.clone()) {
                 return Err(format!(
@@ -235,11 +235,37 @@ pub struct FpsPlayableCharacterAnimations {
     pub fall: Option<String>,
 }
 
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct FpsJointChannelsPolicy {
+    pub translation: bool,
+    pub rotation: bool,
+    pub scale: bool,
+}
+
+impl FpsJointChannelsPolicy {
+    #[inline]
+    pub const fn any(self) -> bool {
+        self.translation || self.rotation || self.scale
+    }
+}
+
+impl Default for FpsJointChannelsPolicy {
+    fn default() -> Self {
+        Self {
+            translation: false,
+            rotation: true,
+            scale: false,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct FpsJointRotationWeightPolicy {
     pub joint: String,
     pub weight: f32,
+    pub channels: FpsJointChannelsPolicy,
 }
 
 impl Default for FpsJointRotationWeightPolicy {
@@ -247,8 +273,63 @@ impl Default for FpsJointRotationWeightPolicy {
         Self {
             joint: String::new(),
             weight: 0.0,
+            channels: FpsJointChannelsPolicy::default(),
         }
     }
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct FpsJointCopyPolicy {
+    pub source_joint: String,
+    pub target_joint: String,
+    pub channels: FpsJointChannelsPolicy,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct FpsPaletteFollowPolicy {
+    pub driver_joint: String,
+    pub follower_roots: Vec<String>,
+    pub include_descendants: bool,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct FpsEyeParentFollowPolicy {
+    pub left_joint: String,
+    pub right_joint: String,
+    pub parent_joint: String,
+    pub preserve_bind_local: bool,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct FpsWeaponArmIkRigPolicy {
+    pub chest: String,
+    pub right_shoulder: String,
+    pub right_elbow: String,
+    pub right_wrist: String,
+    pub right_palm: String,
+    pub right_prop_attachment: Option<String>,
+    pub left_shoulder: String,
+    pub left_elbow: String,
+    pub left_wrist: String,
+    pub left_palm: String,
+    pub left_prop_attachment: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct FpsBraidSecondaryMotionRigPolicy {
+    pub chain_joints: Vec<String>,
+    pub head_joint: String,
+    pub head_base_joint: String,
+    pub upper_back_joint: String,
+    pub middle_back_joint: String,
+    pub lower_back_joint: String,
+    pub left_shoulder_joint: String,
+    pub right_shoulder_joint: String,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
@@ -257,7 +338,11 @@ pub struct FpsCharacterPresentationPolicy {
     /// Compatibility reconstruction for rigs whose authored control/face branches are detached
     /// from the primary deform hierarchy. Enabled only by project-authored character data.
     pub detached_head_follow: bool,
+    pub detached_head_follow_rule: Option<FpsPaletteFollowPolicy>,
     pub eye_parent_follow: bool,
+    pub eye_parent_follow_rule: Option<FpsEyeParentFollowPolicy>,
+    pub helper_pose_copies: Vec<FpsJointCopyPolicy>,
+    pub braid_secondary_motion: Option<FpsBraidSecondaryMotionRigPolicy>,
     /// Optional upper-body equipment pose clips authored for this character rig.
     pub equipment_ready_animation: Option<String>,
     pub equipment_aim_animation: Option<String>,
@@ -265,12 +350,15 @@ pub struct FpsCharacterPresentationPolicy {
     /// Character-owned bare-hand presentation. Weapon definitions never carry character clips.
     pub unarmed_ready_animation: Option<String>,
     pub unarmed_attack_animation: Option<String>,
+    /// Full-body pose used while the character owns NoClip traversal.
+    pub noclip_animation: Option<String>,
     pub equipment_ready_sample_phase: f32,
     pub equipment_ready_rotation_weights: Vec<FpsJointRotationWeightPolicy>,
     pub equipment_aim_rotation_weights: Vec<FpsJointRotationWeightPolicy>,
     pub equipment_reload_rotation_weights: Vec<FpsJointRotationWeightPolicy>,
-    /// Allows the generic two-arm equipment IK stage for compatible humanoid joint names.
+    /// Allows the generic two-arm equipment IK stage only when the project authors an explicit rig contract.
     pub equipment_arm_ik: bool,
+    pub equipment_arm_ik_rig: Option<FpsWeaponArmIkRigPolicy>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -322,7 +410,7 @@ impl Default for FpsPlayableCharacterPolicy {
 }
 
 impl FpsPlayableCharacterPolicy {
-    fn validate(&self) -> Result<(), String> {
+    fn validate_menu_entry(&self) -> Result<(), String> {
         for (label, value) in [
             ("id", self.id.as_str()),
             ("family", self.family.as_str()),
@@ -347,6 +435,11 @@ impl FpsPlayableCharacterPolicy {
                 ));
             }
         }
+        Ok(())
+    }
+
+    fn validate(&self) -> Result<(), String> {
+        self.validate_menu_entry()?;
         if !self.yaw_offset.is_finite() {
             return Err(format!(
                 "FPS playable character '{}' yaw_offset must be finite",
@@ -418,82 +511,12 @@ impl FpsPlayableCharacterPolicy {
                         }
                     }
                 }
-                for (label, reference) in [
-                    (
-                        "equipment_ready_animation",
-                        self.presentation.equipment_ready_animation.as_deref(),
-                    ),
-                    (
-                        "equipment_aim_animation",
-                        self.presentation.equipment_aim_animation.as_deref(),
-                    ),
-                    (
-                        "equipment_reload_animation",
-                        self.presentation.equipment_reload_animation.as_deref(),
-                    ),
-                    (
-                        "unarmed_ready_animation",
-                        self.presentation.unarmed_ready_animation.as_deref(),
-                    ),
-                    (
-                        "unarmed_attack_animation",
-                        self.presentation.unarmed_attack_animation.as_deref(),
-                    ),
-                ] {
-                    let Some(reference) = reference else { continue };
-                    let animation_owner = character_asset_owner(reference).ok_or_else(|| {
-                        format!(
-                            "FPS playable character '{}' presentation '{label}' must live under animations/characters/{owner}/..., got '{reference}'",
-                            self.id
-                        )
-                    })?;
-                    if animation_owner != owner {
-                        return Err(format!(
-                            "FPS playable character '{}' presentation '{label}' crosses character ownership model_owner='{owner}' animation_owner='{animation_owner}' ref='{reference}'",
-                            self.id
-                        ));
-                    }
-                }
             }
         }
-        if !self.presentation.equipment_ready_sample_phase.is_finite()
-            || !(0.0..=1.0).contains(&self.presentation.equipment_ready_sample_phase)
-        {
-            return Err(format!(
-                "FPS playable character '{}' equipment_ready_sample_phase must be finite in [0,1]",
-                self.id
-            ));
-        }
-        for (label, weights) in [
-            (
-                "equipment_ready_rotation_weights",
-                self.presentation
-                    .equipment_ready_rotation_weights
-                    .as_slice(),
-            ),
-            (
-                "equipment_aim_rotation_weights",
-                self.presentation.equipment_aim_rotation_weights.as_slice(),
-            ),
-            (
-                "equipment_reload_rotation_weights",
-                self.presentation
-                    .equipment_reload_rotation_weights
-                    .as_slice(),
-            ),
-        ] {
-            for item in weights {
-                if item.joint.trim().is_empty()
-                    || !item.weight.is_finite()
-                    || !(0.0..=1.0).contains(&item.weight)
-                {
-                    return Err(format!(
-                        "FPS playable character '{}' {label} contains invalid joint/weight joint='{}' weight={}",
-                        self.id, item.joint, item.weight
-                    ));
-                }
-            }
-        }
+        // Presentation is a set of optional capabilities attached after the entity/model/skeleton
+        // boundary. Missing or malformed presentation data must never invalidate the character
+        // catalog or prevent the visual entity from existing. Runtime feature binders diagnose
+        // and disable individual capabilities instead.
         Ok(())
     }
 }
@@ -901,6 +924,49 @@ mod tests {
         character
             .validate()
             .expect("Ellie-owned animation refs must validate");
+    }
+
+    #[test]
+    fn character_menu_does_not_require_equipment_ik_rig() {
+        let character = FpsPlayableCharacterPolicy {
+            id: "generic_entity".to_owned(),
+            family: "Test".to_owned(),
+            display_name: "Generic Entity".to_owned(),
+            presentation: FpsCharacterPresentationPolicy {
+                equipment_arm_ik: true,
+                equipment_arm_ik_rig: None,
+                ..FpsCharacterPresentationPolicy::default()
+            },
+            ..FpsPlayableCharacterPolicy::default()
+        };
+        let policy = FpsCharacterMenuPolicySnapshot {
+            characters: vec![character],
+            ..FpsCharacterMenuPolicySnapshot::default()
+        };
+        policy
+            .validate()
+            .expect("optional equipment IK must not invalidate Character Menu");
+    }
+
+    #[test]
+    fn runtime_character_admission_does_not_require_equipment_ik_rig() {
+        let character = FpsPlayableCharacterPolicy {
+            id: "generic_entity".to_owned(),
+            family: "Test".to_owned(),
+            display_name: "Generic Entity".to_owned(),
+            runtime_ready: true,
+            runtime_model_ref: Some("models/test/generic.ydd@generic".to_owned()),
+            target_height: 1.8,
+            presentation: FpsCharacterPresentationPolicy {
+                equipment_arm_ik: true,
+                equipment_arm_ik_rig: None,
+                ..FpsCharacterPresentationPolicy::default()
+            },
+            ..FpsPlayableCharacterPolicy::default()
+        };
+        character
+            .validate()
+            .expect("optional equipment IK must not reject a valid visual entity");
     }
 
     #[test]

@@ -64,6 +64,22 @@ pub fn apply_inventory_ui_actions(world: &mut World, frame: &UiEventDispatchFram
                     consumed = true;
                 }
             }
+            CHARACTER_UI_ACTION_CATEGORY_CHARACTERS => {
+                if action.trigger == UiNodeEventTrigger::Click {
+                    if let Some(state) = world.resource_mut::<InventoryHudState>() {
+                        state.set_character_category(CharacterMenuCategory::Characters);
+                    }
+                    consumed = true;
+                }
+            }
+            CHARACTER_UI_ACTION_CATEGORY_WEAPONS => {
+                if action.trigger == UiNodeEventTrigger::Click {
+                    if let Some(state) = world.resource_mut::<InventoryHudState>() {
+                        state.set_character_category(CharacterMenuCategory::Weapons);
+                    }
+                    consumed = true;
+                }
+            }
             CHARACTER_UI_ACTION_NOCLIP_TOGGLE => {
                 if action.trigger == UiNodeEventTrigger::Click {
                     if toggle_fps_noclip(world, player) {

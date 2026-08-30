@@ -1,13 +1,83 @@
 use newengine_ecs::World;
 use newengine_math::Vec3;
 use newengine_model_domain_api::{MeshRenderOptions, MeshRenderRole};
-use newengine_vfx_api::{EntityHandle, VfxBudgetV1, VfxEffectRef, VfxSpawnRequestV1};
+use newengine_vfx_api::{
+    EntityHandle, VfxBudgetV1, VfxEffectRef, VfxGpuBillboardMode, VfxPriority, VfxSpawnRequestV1,
+};
 
 use crate::*;
 
+const TEST_SHOT_EFFECT: &str = "effects/tests/weapon.fxd@shot";
+const TEST_IMPACT_EFFECT: &str = "effects/tests/weapon.fxd@impact";
+
+fn test_effect_library() -> VfxEffectLibrary {
+    let mut library = VfxEffectLibrary::default();
+    library.register(VfxEffectDefinition {
+        effect: VfxEffectRef::new(TEST_SHOT_EFFECT),
+        priority: VfxPriority::High,
+        layers: vec![
+            VfxLayerDefinition::Pulse {
+                kind: VfxLayerKind::MuzzleFlash, primitive: newengine_primitives::builtins::ID_PLANE,
+                role: VfxRenderRole::Transparent, alignment: VfxAlignment::DirectionZ, texture_slot: 0,
+                billboard: VfxGpuBillboardMode::CameraFacing, offset_along_direction: 0.0, offset_along_normal: 0.0,
+                scale: Vec3::splat(0.1), growth_per_second: Vec3::ZERO, color: [1.0;4], lifetime_seconds: 0.05,
+                fade_start_fraction: 0.5, fade_in_fraction: 0.0, drag_per_second: 0.0, rotation_radians: 0.0, rotation_random_radians: 0.0, spin_radians_per_second: 0.0, light: Some(VfxLightDefinition { color: [1.0,0.7,0.3], intensity: 8.0, range: 2.0 }),
+            },
+            VfxLayerDefinition::Pulse {
+                kind: VfxLayerKind::MuzzleCore, primitive: newengine_primitives::builtins::ID_SPHERE_UV,
+                role: VfxRenderRole::Transparent, alignment: VfxAlignment::None, texture_slot: 0,
+                billboard: VfxGpuBillboardMode::CameraFacing, offset_along_direction: 0.0, offset_along_normal: 0.0,
+                scale: Vec3::splat(0.04), growth_per_second: Vec3::ZERO, color: [1.0;4], lifetime_seconds: 0.04,
+                fade_start_fraction: 0.5, fade_in_fraction: 0.0, drag_per_second: 0.0, rotation_radians: 0.0, rotation_random_radians: 0.0, spin_radians_per_second: 0.0, light: None,
+            },
+            VfxLayerDefinition::Pulse {
+                kind: VfxLayerKind::Smoke, primitive: newengine_primitives::builtins::ID_SPHERE_UV,
+                role: VfxRenderRole::Transparent, alignment: VfxAlignment::DirectionZ, texture_slot: 0,
+                billboard: VfxGpuBillboardMode::CameraFacing, offset_along_direction: 0.0, offset_along_normal: 0.0,
+                scale: Vec3::splat(0.05), growth_per_second: Vec3::splat(0.1), color: [0.2,0.2,0.2,0.3],
+                lifetime_seconds: 0.5, fade_start_fraction: 0.5, fade_in_fraction: 0.0, drag_per_second: 0.0, rotation_radians: 0.0, rotation_random_radians: 0.0, spin_radians_per_second: 0.0, light: None,
+            },
+            VfxLayerDefinition::Tracer {
+                primitive: newengine_primitives::builtins::ID_CUBE, color: [1.0,0.7,0.2,1.0],
+                half_length: 0.18, radius: 0.003, speed: 12.0, max_lifetime_seconds: 1.0,
+            },
+        ],
+    }).unwrap();
+    library.register(VfxEffectDefinition {
+        effect: VfxEffectRef::new(TEST_IMPACT_EFFECT),
+        priority: VfxPriority::High,
+        layers: vec![
+            VfxLayerDefinition::Burst {
+                kind: VfxLayerKind::Spark, primitive: newengine_primitives::builtins::ID_CUBE,
+                role: VfxRenderRole::Transparent, texture_slot: 0, billboard: VfxGpuBillboardMode::VelocityAligned,
+                count: 8, scale: Vec3::splat(0.01), color: [1.0,0.82,0.25,1.0], speed_min: 2.0, speed_max: 7.0, cone_angle_degrees: 70.0, size_variance: 0.2, lifetime_variance: 0.15, drag_per_second: 0.1, rotation_random_radians: 3.14159, spin_radians_per_second: 3.0, spin_variance: 1.5,
+                acceleration: Vec3::new(0.0,-9.8,0.0), lifetime_seconds: 0.3, fade_start_fraction: 0.5, fade_in_fraction: 0.0,
+            },
+            VfxLayerDefinition::Pulse {
+                kind: VfxLayerKind::Smoke, primitive: newengine_primitives::builtins::ID_SPHERE_UV,
+                role: VfxRenderRole::Transparent, alignment: VfxAlignment::NormalY, texture_slot: 0,
+                billboard: VfxGpuBillboardMode::CameraFacing, offset_along_direction: 0.0, offset_along_normal: 0.01,
+                scale: Vec3::splat(0.04), growth_per_second: Vec3::splat(0.1), color: [0.2,0.2,0.2,0.3],
+                lifetime_seconds: 0.5, fade_start_fraction: 0.5, fade_in_fraction: 0.0, drag_per_second: 0.0, rotation_radians: 0.0, rotation_random_radians: 0.0, spin_radians_per_second: 0.0, light: None,
+            },
+            VfxLayerDefinition::Decal {
+                primitive: newengine_primitives::builtins::ID_DISC, scale: Vec3::new(0.1,0.002,0.1),
+                color: [0.05,0.05,0.05,1.0], normal_offset: 0.003, lifetime_seconds: 5.0, fade_start_fraction: 0.9,
+            },
+        ],
+    }).unwrap();
+    library
+}
+
+fn test_world() -> World {
+    let mut world = World::new();
+    world.insert_resource(test_effect_library());
+    world
+}
+
 fn shot_request(owner: u64, sequence: u64) -> VfxSpawnRequestV1 {
     VfxSpawnRequestV1 {
-        effect: VfxEffectRef::new(VFX_WEAPON_SHOT_DEFAULT),
+        effect: VfxEffectRef::new(TEST_SHOT_EFFECT),
         owner: Some(EntityHandle::new(owner)),
         correlation_id: sequence,
         position: [1.0, 2.0, 3.0],
@@ -19,21 +89,16 @@ fn shot_request(owner: u64, sequence: u64) -> VfxSpawnRequestV1 {
 }
 
 #[test]
-fn built_in_library_contains_weapon_compositions() {
-    let library = VfxEffectLibrary::default();
-    assert_eq!(library.len(), 2);
-    let shot = library.get(VFX_WEAPON_SHOT_DEFAULT).expect("weapon shot");
-    assert_eq!(shot.layers.len(), 4);
-    let impact = library
-        .get(VFX_WEAPON_IMPACT_DEFAULT)
-        .expect("weapon impact");
-    assert!(impact.estimated_layers() >= 10);
-    assert_eq!(impact.estimated_decals(), 1);
+fn default_library_contains_no_weapon_presets() {
+    assert!(VfxEffectLibrary::default().is_empty());
+    let library = test_effect_library();
+    assert_eq!(library.get(TEST_SHOT_EFFECT).unwrap().layers.len(), 4);
+    assert_eq!(library.get(TEST_IMPACT_EFFECT).unwrap().estimated_layers(), 10);
 }
 
 #[test]
 fn weapon_shot_routes_smoke_to_gpu_and_keeps_structural_layers_in_ecs() {
-    let mut world = World::new();
+    let mut world = test_world();
     let id = spawn_vfx(&mut world, shot_request(9, 17))
         .unwrap()
         .expect("spawned VFX");
@@ -87,7 +152,7 @@ fn weapon_shot_routes_smoke_to_gpu_and_keeps_structural_layers_in_ecs() {
 
 #[test]
 fn tracer_clamp_stops_at_authoritative_hit() {
-    let mut world = World::new();
+    let mut world = test_world();
     spawn_vfx(&mut world, shot_request(11, 3)).unwrap();
     let point = Vec3::new(1.0, 2.0, 2.0);
     clamp_vfx_tracers_to_hit(&mut world, 11, 3, point);
@@ -110,9 +175,9 @@ fn tracer_clamp_stops_at_authoritative_hit() {
 
 #[test]
 fn impact_routes_surface_aware_sparks_and_smoke_to_gpu_and_keeps_decal_in_ecs() {
-    let mut world = World::new();
+    let mut world = test_world();
     let request = VfxSpawnRequestV1 {
-        effect: VfxEffectRef::new(VFX_WEAPON_IMPACT_DEFAULT),
+        effect: VfxEffectRef::new(TEST_IMPACT_EFFECT),
         position: [0.0, 1.0, 0.0],
         direction: [0.0, 0.0, -1.0],
         normal: [0.0, 1.0, 0.0],
@@ -163,8 +228,7 @@ fn impact_routes_surface_aware_sparks_and_smoke_to_gpu_and_keeps_decal_in_ecs() 
 
 #[test]
 fn budget_is_bounded_and_reports_drops() {
-    let mut world = World::new();
-    world.insert_resource(VfxEffectLibrary::default());
+    let mut world = test_world();
     world.insert_resource(VfxRuntimeState::with_budget(VfxBudgetV1 {
         max_active_instances: 1,
         max_active_layers: 4,
@@ -183,7 +247,7 @@ fn budget_is_bounded_and_reports_drops() {
 
 #[test]
 fn queued_requests_are_bounded_and_report_overflow() {
-    let mut world = World::new();
+    let mut world = test_world();
     world.insert_resource(VfxSpawnQueue::with_capacity(2));
     assert!(queue_vfx(&mut world, shot_request(7, 1)).unwrap());
     assert!(queue_vfx(&mut world, shot_request(7, 2)).unwrap());
@@ -208,7 +272,7 @@ fn queued_requests_are_bounded_and_report_overflow() {
 
 #[test]
 fn pending_tracer_is_clamped_before_pre_update_materialization() {
-    let mut world = World::new();
+    let mut world = test_world();
     assert!(queue_vfx(&mut world, shot_request(11, 9)).unwrap());
     assert_eq!(vfx_runtime_stats(&world).pending_requests, 1);
 
@@ -225,11 +289,11 @@ fn pending_tracer_is_clamped_before_pre_update_materialization() {
 #[test]
 fn deterministic_impact_seed_reproduces_gpu_spark_velocities() {
     fn velocities() -> Vec<[f32; 3]> {
-        let mut world = World::new();
+        let mut world = test_world();
         spawn_vfx(
             &mut world,
             VfxSpawnRequestV1 {
-                effect: VfxEffectRef::new(VFX_WEAPON_IMPACT_DEFAULT),
+                effect: VfxEffectRef::new(TEST_IMPACT_EFFECT),
                 normal: [0.0, 1.0, 0.0],
                 seed: 0x1234,
                 ..Default::default()
@@ -257,7 +321,7 @@ fn deterministic_impact_seed_reproduces_gpu_spark_velocities() {
 
 #[test]
 fn staged_frame_driver_exposes_reference_like_lifecycle() {
-    let mut world = World::new();
+    let mut world = test_world();
     pre_update_vfx(&mut world);
     assert_eq!(
         world.resource::<VfxRuntimeState>().unwrap().stage,

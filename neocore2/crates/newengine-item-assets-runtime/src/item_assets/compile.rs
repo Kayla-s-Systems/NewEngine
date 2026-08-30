@@ -164,6 +164,9 @@ fn compile_item_definition(authored: &AuthoredItemDefinition) -> Result<ItemDefi
     if let Some(audio) = authored.weapon_audio.as_ref() {
         definition = definition.with_weapon_audio(audio.compile());
     }
+    if let Some(vfx) = authored.weapon_vfx.as_ref() {
+        definition = definition.with_weapon_vfx(vfx.compile());
+    }
     if let Some(presentation) = authored.weapon_presentation.as_ref() {
         definition = definition.with_weapon_presentation(presentation.compile());
     }

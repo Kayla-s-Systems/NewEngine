@@ -7,6 +7,7 @@ description = "Single-purpose baseline provider for engine.animation"
 license = "Proprietary"
 
 [dependencies]
+newengine-core = { path = "../newengine-core" }
 newengine-runtime-unit-api = { path = "../newengine-runtime-unit-api" }
 abi_stable = "0.11"
 serde = { version = "1.0.228", features = ["derive"] }

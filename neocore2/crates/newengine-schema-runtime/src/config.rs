@@ -8,9 +8,6 @@ use serde_json::Value;
 
 use crate::validation::default_value_for_kind;
 
-pub(crate) const EMBEDDED_SCHEMA_REGISTRY: &str =
-    include_str!("../../../config/schema/schema_registry.v1.json");
-
 #[derive(Clone, Debug, Default)]
 pub(crate) struct LoadedRegistry {
     pub(crate) source_schema: String,
@@ -46,8 +43,40 @@ struct SchemaRegistryRecordV1 {
     metadata: BTreeMap<String, Value>,
 }
 
-pub(crate) fn load_embedded_registry() -> LoadedRegistry {
-    load_registry_json(EMBEDDED_SCHEMA_REGISTRY)
+pub(crate) fn load_registry_from_startup(
+    startup: &newengine_core::StartupConfig,
+) -> LoadedRegistry {
+    match newengine_core::read_plugin_runtime_data_string(
+        startup,
+        crate::PROVIDER_ROUTE,
+        "registry",
+    ) {
+        Ok((_path, text)) => load_registry_json(&text),
+        Err(error) => LoadedRegistry {
+            source_schema: "northstar.engine.schema_registry.v1".to_owned(),
+            policy: "configured schema registry unavailable".to_owned(),
+            records: BTreeMap::new(),
+            diagnostics: vec![SchemaDiagnosticV1::error(
+                "SCHEMA_REGISTRY_READ_FAILED",
+                error,
+            )],
+        },
+    }
+}
+
+pub(crate) fn load_configured_registry() -> LoadedRegistry {
+    match newengine_core::startup::last_startup_config() {
+        Some(startup) => load_registry_from_startup(startup),
+        None => LoadedRegistry {
+            source_schema: "northstar.engine.schema_registry.v1".to_owned(),
+            policy: "startup configuration unavailable".to_owned(),
+            records: BTreeMap::new(),
+            diagnostics: vec![SchemaDiagnosticV1::error(
+                "SCHEMA_REGISTRY_STARTUP_CONFIG_MISSING",
+                "schema registry requires startup configuration",
+            )],
+        },
+    }
 }
 
 pub(crate) fn load_registry_json(text: &str) -> LoadedRegistry {
@@ -56,11 +85,11 @@ pub(crate) fn load_registry_json(text: &str) -> LoadedRegistry {
         Ok(file) => from_registry_file(file),
         Err(err) => LoadedRegistry {
             source_schema: "northstar.engine.schema_registry.v1".to_owned(),
-            policy: "embedded registry failed to parse".to_owned(),
+            policy: "schema registry failed to parse".to_owned(),
             records: BTreeMap::new(),
             diagnostics: vec![SchemaDiagnosticV1::error(
                 "SCHEMA_REGISTRY_PARSE_FAILED",
-                format!("embedded schema registry is invalid: {err}"),
+                format!("schema registry is invalid: {err}"),
             )],
         },
     }

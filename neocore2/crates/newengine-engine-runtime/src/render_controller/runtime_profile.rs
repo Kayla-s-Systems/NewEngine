@@ -338,7 +338,6 @@ fn compact_json(value: &Value) -> String {
     serde_json::to_string(value).unwrap_or_else(|_| "<unprintable>".to_owned())
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

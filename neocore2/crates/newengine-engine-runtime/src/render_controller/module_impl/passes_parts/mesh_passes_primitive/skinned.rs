@@ -102,6 +102,11 @@ pub(crate) fn draw_skinned_player_primitives(
             .copied();
         let resolved = material_ref.and_then(|reference| mats.resolve(reference.id));
         let material_plan = LitMaterialPlan::from_resolved(resolved.as_ref(), prim.color);
+        // Transparent skinned overlays are forward-only. Writing tearline/wet layers into
+        // the deferred GBuffer makes their mostly-transparent cards become opaque depth/color.
+        if pass.is_gbuffer() && material_plan.alpha_blend {
+            continue;
+        }
         let base_texture = if let Some(path) = material_plan.base_color_texture {
             let Some(texture) = this.material_texture_if_ready(r, path, "render.skinned_character")
             else {
@@ -131,6 +136,10 @@ pub(crate) fn draw_skinned_player_primitives(
             lit.clamp_sampler
         };
         let pipeline = match pass {
+            SceneMeshPass::Forward if material_plan.alpha_blend && material_plan.double_sided => {
+                lit.skinned_alpha_double_sided_pipeline
+            }
+            SceneMeshPass::Forward if material_plan.alpha_blend => lit.skinned_alpha_pipeline,
             SceneMeshPass::Forward if material_plan.double_sided => {
                 lit.skinned_double_sided_pipeline
             }
@@ -153,11 +162,10 @@ pub(crate) fn draw_skinned_player_primitives(
                 lit.white_texture
             };
         // Per-draw UBOs are host-visible and may still be read by an in-flight frame.
-        // Ring the cache key exactly like the skin palette so one character part cannot
-        // overwrite the matrix/material UBO that the previous GPU frame is consuming.
-        let frame_slot_key = (this.frame.frame_index & 3).wrapping_mul(0x9e37_79b9_7f4a_7c15);
+        // The central per-draw cache adds the physical frame slot. Keep the logical
+        // identity stable so callers cannot accidentally multiply that ring.
         let ubo_key = instance_batch_ubo_key(
-            0x736b_696e_0000_0000 ^ entity.stable_u64() ^ prim.id.0 ^ frame_slot_key,
+            0x736b_696e_0000_0000 ^ entity.stable_u64() ^ prim.id.0,
             pipeline,
             base_texture,
             normal_texture,

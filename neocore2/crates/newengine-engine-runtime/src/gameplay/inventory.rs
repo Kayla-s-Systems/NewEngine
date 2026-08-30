@@ -26,8 +26,9 @@ pub use definitions::{
     EquipmentSlot, FirearmWeaponDefinition, ItemDefinition, ItemId, ItemInstanceId, ItemKind,
     ItemUseEffect, MeleeWeaponTuning, WeaponAnimationDefinition, WeaponAudioAction,
     WeaponAudioDefinition, WeaponCapabilities, WeaponCasingDefinition, WeaponFireMode,
-    WeaponItemDefinition, WeaponPresentationDefinition, WeaponType, WorldItemDefinition,
-    WorldItemPresentation, WorldItemRuntime, WorldItemVisualPart, SHARED_UNARMED_WEAPON_ITEM_NAME,
+    WeaponItemDefinition, WeaponPresentationDefinition, WeaponType, WeaponVfxDefinition,
+    WorldItemDefinition, WorldItemPresentation, WorldItemRuntime, WorldItemVisualPart,
+    SHARED_UNARMED_WEAPON_ITEM_NAME,
 };
 pub use loadouts::{InventoryLoadout, InventoryLoadoutCatalog, InventoryLoadoutEntry};
 pub use operations::{
@@ -35,8 +36,9 @@ pub use operations::{
     give_item, inventory_quantity, remove_item,
 };
 pub use storage::{
-    EquippedWeaponBinding, EquippedWeaponMuzzle, InventoryEntry, InventoryEvent, InventoryEventBus,
-    InventoryEventKind, InventoryMutation, ItemPickup, PlayerInventory,
+    EquippedWeaponBinding, EquippedWeaponEntity, EquippedWeaponMuzzle, InventoryEntry,
+    InventoryEvent, InventoryEventBus, InventoryEventKind, InventoryMutation, ItemPickup,
+    PlayerInventory, WeaponEntityRuntime, WeaponEntitySockets, WeaponSocketPose,
 };
 
 pub use inventory_equipment::{

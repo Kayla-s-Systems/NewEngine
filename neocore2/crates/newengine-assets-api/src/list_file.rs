@@ -390,6 +390,8 @@ pub const LIST_FILE_CONTENT_KIND_NEUI: u32 = 32;
 pub const LIST_FILE_CONTENT_KIND_NEITEMS: u32 = 33;
 /// Y Sound Cue Dictionary: embedded encoded audio payloads + cue playback metadata.
 pub const LIST_FILE_CONTENT_KIND_YSCD: u32 = 34;
+/// Project-authored FX Dictionary: semantic VFX graphs and project texture references.
+pub const LIST_FILE_CONTENT_KIND_FXD: u32 = 35;
 
 /// Frozen, publicly assigned NEF8/ListFile content-kind identifiers.
 ///
@@ -421,6 +423,7 @@ pub const LIST_FILE_PUBLISHED_CONTENT_KINDS: &[u32] = &[
     LIST_FILE_CONTENT_KIND_NEUI,
     LIST_FILE_CONTENT_KIND_NEITEMS,
     LIST_FILE_CONTENT_KIND_YSCD,
+    LIST_FILE_CONTENT_KIND_FXD,
 ];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -552,6 +555,7 @@ pub const fn list_file_content_kind_label(kind: u32) -> &'static str {
         LIST_FILE_CONTENT_KIND_NEUI => "neui_ui_dictionary",
         LIST_FILE_CONTENT_KIND_NEITEMS => "neitems_inventory_dictionary",
         LIST_FILE_CONTENT_KIND_YSCD => "yscd_sound_cue_dictionary",
+        LIST_FILE_CONTENT_KIND_FXD => "fxd_effect_dictionary",
         _ => "provider_declared",
     }
 }

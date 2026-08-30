@@ -54,6 +54,7 @@ pub fn gameplay_default_listeners() -> Vec<InputActionListenerRegistration> {
                 action::PLAYER_AIM,
                 action::PLAYER_RELOAD,
                 action::PLAYER_INTERACT,
+                action::NOCLIP_TOGGLE,
             ])
             .with_priority(10),
         InputActionListenerRegistration::new("newengine-inventory", "inventory-controller")

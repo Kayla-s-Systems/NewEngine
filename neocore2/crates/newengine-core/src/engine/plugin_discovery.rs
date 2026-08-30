@@ -27,7 +27,7 @@ impl PluginDiscoveryScanTask {
         let dir_worker = dir.clone();
         let request = TaskRequest::new("plugin.discovery.scan")
             .with_lane(TaskLane::Plugin)
-            .with_priority(TaskPriority::Interactive)
+            .with_priority(TaskPriority::Critical)
             .with_source("newengine-core.engine.plugins")
             .with_owner("newengine-core")
             .with_category("plugin-discovery")

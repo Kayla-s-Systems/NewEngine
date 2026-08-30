@@ -59,14 +59,134 @@ mod tests {
         ));
     }
 
+    fn install_test_weapon_vfx(world: &mut World) {
+        use newengine_vfx_api::{VfxEffectRef, VfxGpuBillboardMode, VfxPriority};
+        use newengine_vfx_runtime::{
+            VfxAlignment, VfxEffectDefinition, VfxEffectLibrary, VfxLayerDefinition, VfxLayerKind,
+            VfxRenderRole,
+        };
+        let mut library = VfxEffectLibrary::default();
+        library
+            .register(VfxEffectDefinition {
+                effect: VfxEffectRef::new("effects/test_weapon.fxd@shot"),
+                priority: VfxPriority::High,
+                layers: vec![
+                    VfxLayerDefinition::Pulse {
+                        kind: VfxLayerKind::MuzzleFlash,
+                        primitive: prim_builtins::ID_PLANE,
+                        role: VfxRenderRole::Transparent,
+                        alignment: VfxAlignment::DirectionZ,
+                        texture_slot: 0,
+                        billboard: VfxGpuBillboardMode::CameraFacing,
+                        offset_along_direction: 0.0,
+                        offset_along_normal: 0.0,
+                        scale: Vec3::splat(0.1),
+                        growth_per_second: Vec3::ZERO,
+                        color: [1.0; 4],
+                        lifetime_seconds: 0.05,
+                        fade_start_fraction: 0.5, fade_in_fraction: 0.0, drag_per_second: 0.0, rotation_radians: 0.0, rotation_random_radians: 0.0, spin_radians_per_second: 0.0,
+                        light: None,
+                    },
+                    VfxLayerDefinition::Pulse {
+                        kind: VfxLayerKind::MuzzleCore,
+                        primitive: prim_builtins::ID_SPHERE_UV,
+                        role: VfxRenderRole::Transparent,
+                        alignment: VfxAlignment::None,
+                        texture_slot: 0,
+                        billboard: VfxGpuBillboardMode::CameraFacing,
+                        offset_along_direction: 0.0,
+                        offset_along_normal: 0.0,
+                        scale: Vec3::splat(0.05),
+                        growth_per_second: Vec3::ZERO,
+                        color: [1.0; 4],
+                        lifetime_seconds: 0.04,
+                        fade_start_fraction: 0.5, fade_in_fraction: 0.0, drag_per_second: 0.0, rotation_radians: 0.0, rotation_random_radians: 0.0, spin_radians_per_second: 0.0,
+                        light: None,
+                    },
+                    VfxLayerDefinition::Pulse {
+                        kind: VfxLayerKind::Smoke,
+                        primitive: prim_builtins::ID_SPHERE_UV,
+                        role: VfxRenderRole::Transparent,
+                        alignment: VfxAlignment::DirectionZ,
+                        texture_slot: 0,
+                        billboard: VfxGpuBillboardMode::CameraFacing,
+                        offset_along_direction: 0.0,
+                        offset_along_normal: 0.0,
+                        scale: Vec3::splat(0.05),
+                        growth_per_second: Vec3::splat(0.1),
+                        color: [0.2, 0.2, 0.2, 0.3],
+                        lifetime_seconds: 0.5,
+                        fade_start_fraction: 0.5, fade_in_fraction: 0.0, drag_per_second: 0.0, rotation_radians: 0.0, rotation_random_radians: 0.0, spin_radians_per_second: 0.0,
+                        light: None,
+                    },
+                    VfxLayerDefinition::Tracer {
+                        primitive: prim_builtins::ID_CUBE,
+                        color: [1.0, 0.7, 0.2, 1.0],
+                        half_length: 0.18,
+                        radius: 0.003,
+                        speed: 180.0,
+                        max_lifetime_seconds: 0.65,
+                    },
+                ],
+            })
+            .expect("register shot test effect");
+        library
+            .register(VfxEffectDefinition {
+                effect: VfxEffectRef::new("effects/test_weapon.fxd@impact.metal"),
+                priority: VfxPriority::High,
+                layers: vec![
+                    VfxLayerDefinition::Burst {
+                        kind: VfxLayerKind::Spark,
+                        primitive: prim_builtins::ID_CUBE,
+                        role: VfxRenderRole::Transparent,
+                        texture_slot: 0,
+                        billboard: VfxGpuBillboardMode::VelocityAligned,
+                        count: 8,
+                        scale: Vec3::splat(0.01),
+                        color: [1.0, 0.7, 0.2, 1.0],
+                        speed_min: 2.0,
+                        speed_max: 7.0, cone_angle_degrees: 70.0, size_variance: 0.2, lifetime_variance: 0.15, drag_per_second: 0.1, rotation_random_radians: 3.14159, spin_radians_per_second: 3.0, spin_variance: 1.5,
+                        acceleration: Vec3::new(0.0, -9.8, 0.0),
+                        lifetime_seconds: 0.3,
+                        fade_start_fraction: 0.5, fade_in_fraction: 0.0,
+                    },
+                    VfxLayerDefinition::Decal {
+                        primitive: prim_builtins::ID_DISC,
+                        scale: Vec3::new(0.1, 0.002, 0.1),
+                        color: [0.05, 0.05, 0.05, 1.0],
+                        normal_offset: 0.003,
+                        lifetime_seconds: 5.0,
+                        fade_start_fraction: 0.9,
+                    },
+                ],
+            })
+            .expect("register impact test effect");
+        world.insert_resource(library);
+    }
+
     #[test]
     fn weapon_shot_fx_starts_at_muzzle_and_stops_at_hitscan_impact() {
         let mut world = World::new();
-        let package = newengine_item_assets_runtime::compile_authored_item_package(
-            &newengine_item_assets_runtime::test_fps_item_package(),
-        )
-        .expect("compile test item package");
+        let mut authored = newengine_item_assets_runtime::test_fps_item_package();
+        let rifle = authored
+            .items
+            .iter_mut()
+            .find(|item| item.id == "weapon.rifle.standard")
+            .expect("authored test rifle");
+        rifle.weapon_vfx = Some(newengine_item_assets_runtime::AuthoredWeaponVfxDefinition {
+            shot: "effects/test_weapon.fxd@shot".to_owned(),
+            impact_default: "effects/test_weapon.fxd@impact.metal".to_owned(),
+            impact_by_surface: [(
+                "surface.metal".to_owned(),
+                "effects/test_weapon.fxd@impact.metal".to_owned(),
+            )]
+            .into_iter()
+            .collect(),
+        });
+        let package = newengine_item_assets_runtime::compile_authored_item_package(&authored)
+            .expect("compile test item package");
         newengine_item_assets_runtime::install_compiled_item_package(&mut world, package);
+        install_test_weapon_vfx(&mut world);
         let (rifle_id, weapon) = {
             let catalog = world.resource::<ItemCatalog>().expect("item catalog");
             let rifle = catalog

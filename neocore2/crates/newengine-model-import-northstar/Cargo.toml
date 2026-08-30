@@ -10,3 +10,8 @@ newengine-assets-api = { path = "../newengine-assets-api" }
 newengine-math = { path = "../newengine-math" }
 newengine-texture-container = { path = "../newengine-texture-container" }
 flate2 = "1"
+newengine-asset-format-nehair = { path = "../newengine-asset-format-nehair" }
+newengine-model-skeleton-api = { path = "../newengine-model-skeleton-api" }
+serde_json = "1"
+roxmltree = "0.20"
+blake3 = "1"

@@ -22,6 +22,12 @@ fn assignment_from_spec(
         jump_animation: spec.jump_animation.clone(),
         fall_animation: spec.fall_animation.clone(),
         presentation: newengine_engine_runtime::gameplay::PlayerCharacterPresentation {
+            detached_head_follow: spec.detached_head_follow,
+            detached_head_follow_rule: spec.detached_head_follow_rule.clone(),
+            eye_parent_follow: spec.eye_parent_follow,
+            eye_parent_follow_rule: spec.eye_parent_follow_rule.clone(),
+            helper_pose_copies: spec.helper_pose_copies.clone(),
+            braid_secondary_motion: spec.braid_secondary_motion.clone(),
             equipment_ready_animation: spec.equipment_ready_animation.clone(),
             equipment_aim_animation: spec.equipment_aim_animation.clone(),
             equipment_reload_animation: spec.equipment_reload_animation.clone(),
@@ -32,6 +38,7 @@ fn assignment_from_spec(
             equipment_aim_rotation_weights: spec.equipment_aim_rotation_weights.clone(),
             equipment_reload_rotation_weights: spec.equipment_reload_rotation_weights.clone(),
             equipment_arm_ik: spec.equipment_arm_ik,
+            equipment_arm_ik_rig: spec.equipment_arm_ik_rig.clone(),
             ..newengine_engine_runtime::gameplay::PlayerCharacterPresentation::default()
         },
         target_height: spec.target_height,
@@ -143,6 +150,7 @@ fn clear_player_model_binding(
     assignment_revision: u64,
 ) {
     clear_player_runtime_model_visuals(world, player);
+    let _ = crate::player_hair::unbind_player_hair_v1(world, player);
     let _ = world.remove::<PlayerAnimationRuntimeBinding>(player);
     let _ = world.remove::<newengine_engine_runtime::gameplay::PlayerSkinPose>(player);
     let _ = world.remove::<newengine_model_contact_api::ModelFootPoseState>(player);
@@ -159,6 +167,93 @@ fn clear_player_model_binding(
         player,
         newengine_engine_runtime::gameplay::DisplayMode::GameOnly,
     );
+}
+
+fn joint_is_descendant_of(
+    skeleton: &newengine_model_skeleton_api::ModelSkeletonMetadata,
+    mut joint_index: usize,
+    ancestor_index: usize,
+) -> bool {
+    let mut guard = 0usize;
+    loop {
+        if joint_index == ancestor_index {
+            return true;
+        }
+        if guard >= skeleton.joints.len() {
+            return false;
+        }
+        let Some(parent) = skeleton
+            .joints
+            .get(joint_index)
+            .and_then(|joint| joint.parent_index)
+            .map(|index| index as usize)
+            .filter(|index| *index < skeleton.joints.len())
+        else {
+            return false;
+        };
+        if parent == joint_index {
+            return false;
+        }
+        joint_index = parent;
+        guard += 1;
+    }
+}
+
+/// Full-body first person keeps the body/arms but suppresses pieces whose deformation is almost
+/// entirely owned by the head hierarchy. This is the world-body equivalent of an FPP visibility
+/// mask: it prevents face/eyes/hair shells from surrounding the camera while preserving the same
+/// character entity, skeleton and arm skin used by third person.
+fn runtime_part_visibility_policy(
+    part: &PlayerRuntimeModelPart,
+    skeleton: Option<&newengine_model_skeleton_api::ModelSkeletonMetadata>,
+) -> newengine_engine_runtime::gameplay::PlayerViewVisibilityPolicy {
+    const HEAD_OWNERSHIP_HIDE_RATIO: f32 = 0.65;
+    let (Some(skeleton), Some(skin)) = (skeleton, part.skin.as_ref()) else {
+        return newengine_engine_runtime::gameplay::PlayerViewVisibilityPolicy::AlwaysVisible;
+    };
+    let Some(head_index) = skeleton
+        .joints
+        .iter()
+        .position(|joint| joint.name == skeleton.anchors.head)
+    else {
+        return newengine_engine_runtime::gameplay::PlayerViewVisibilityPolicy::AlwaysVisible;
+    };
+    let root_index = skeleton
+        .joints
+        .iter()
+        .position(|joint| joint.name == skeleton.anchors.root);
+    // Generic/non-humanoid metadata may legally collapse semantic anchors to root. Never let that
+    // turn the whole skinned entity into an FPP-hidden "head".
+    if root_index == Some(head_index) {
+        return newengine_engine_runtime::gameplay::PlayerViewVisibilityPolicy::AlwaysVisible;
+    }
+
+    let mut total_weight = 0.0_f32;
+    let mut head_weight = 0.0_f32;
+    for vertex in &skin.vertices {
+        for (&joint, &weight) in vertex
+            .joints
+            .iter()
+            .zip(vertex.weights.iter())
+            .chain(vertex.joints_extra.iter().zip(vertex.weights_extra.iter()))
+        {
+            if !weight.is_finite() || weight <= 0.0 {
+                continue;
+            }
+            total_weight += weight;
+            let joint_index = usize::from(joint);
+            if joint_index < skeleton.joints.len()
+                && joint_is_descendant_of(skeleton, joint_index, head_index)
+            {
+                head_weight += weight;
+            }
+        }
+    }
+    if total_weight > 1.0e-5 && head_weight / total_weight >= HEAD_OWNERSHIP_HIDE_RATIO {
+        newengine_engine_runtime::gameplay::PlayerViewVisibilityPolicy::HideInFirstPerson
+    } else {
+        newengine_engine_runtime::gameplay::PlayerViewVisibilityPolicy::AlwaysVisible
+    }
 }
 
 fn bind_player_model_assignment(
@@ -182,10 +277,42 @@ fn bind_player_model_assignment(
         ensure_player_runtime_model_parts(prims, mats, assignment)?;
     let validated_skin_source_to_model =
         super::validation::validate_player_skin_contract(assignment, &parts, skeleton.as_ref())?;
-    let animation_binding =
-        prepare_player_animation_binding(assignment, &parts, skeleton.as_ref())?;
+    let animation_binding = match prepare_player_animation_binding(
+        assignment,
+        &parts,
+        skeleton.as_ref(),
+    ) {
+        Ok(binding) => binding,
+        Err(error) => {
+            newengine_ulog_api::ulog::warn!(
+                "game-ready: optional skeletal animation binding unavailable player={} source='{}' err='{}' action='keep visual entity and use bind pose'",
+                player.stable_u64(),
+                assignment.source,
+                error
+            );
+            None
+        }
+    };
+
+    let prepared_hair = match crate::player_hair::prepare_player_hair_from_assignment_v1(
+        player,
+        assignment,
+        skeleton.as_ref(),
+    ) {
+        Ok(binding) => binding,
+        Err(error) => {
+            newengine_ulog_api::ulog::warn!(
+                "game-ready: optional player hair preparation unavailable player={} definition={:?} err='{}' action='keep authored source hair meshes'",
+                player.stable_u64(),
+                assignment.properties_ref,
+                error
+            );
+            None
+        }
+    };
 
     clear_player_runtime_model_visuals(world, player);
+    let _ = crate::player_hair::unbind_player_hair_v1(world, player);
     let _ = world.remove::<PlayerAnimationRuntimeBinding>(player);
     let _ = world.remove::<newengine_engine_runtime::gameplay::PlayerSkinPose>(player);
     let _ = world.remove::<newengine_model_contact_api::ModelFootPoseState>(player);
@@ -214,17 +341,21 @@ fn bind_player_model_assignment(
     );
     let _ = set_parent(world, visual_root, Some(player));
 
-    let visibility_policy = if assignment.hide_in_first_person {
-        newengine_engine_runtime::gameplay::PlayerViewVisibilityPolicy::HideInFirstPerson
-    } else {
-        newengine_engine_runtime::gameplay::PlayerViewVisibilityPolicy::AlwaysVisible
-    };
-
+    // Character remains one world-space skinned entity. First-person visibility is evaluated per
+    // mesh part so arms/body stay present while head-dominant shells cannot surround the camera.
+    // Hair source meshes stay live until the replacement groom has successfully bound.
+    let mut hair_source_entities = Vec::new();
     for (part_index, part) in parts.iter().enumerate() {
+        let visibility_policy = runtime_part_visibility_policy(part, skeleton.as_ref());
         let entity = spawn_named(
             world,
             format!("{visual_root_name}/Part{part_index}:{}", part.material_slot),
         );
+        if prepared_hair.as_ref().is_some_and(|hair| {
+            crate::player_hair::source_mesh_replaced_by_hair_v1(hair, &part.source_mesh_name)
+        }) {
+            hair_source_entities.push(entity);
+        }
         let _ = world.insert(entity, Transform::default());
         let _ = world.insert(
             entity,
@@ -280,7 +411,9 @@ fn bind_player_model_assignment(
                 policy: visibility_policy,
             },
         );
-        let initial_mode = if assignment.hide_in_first_person {
+        let initial_mode = if visibility_policy
+            == newengine_engine_runtime::gameplay::PlayerViewVisibilityPolicy::HideInFirstPerson
+        {
             newengine_engine_runtime::gameplay::DisplayMode::RuntimeHidden
         } else {
             newengine_engine_runtime::gameplay::DisplayMode::GameOnly
@@ -358,6 +491,31 @@ fn bind_player_model_assignment(
             player.stable_u64(),
             joint_count,
         );
+    }
+
+    if let Some(prepared_hair) = prepared_hair {
+        match crate::player_hair::bind_prepared_player_hair_v1(world, player, prepared_hair) {
+            Ok(()) => {
+                let replaced = hair_source_entities.len();
+                for entity in hair_source_entities {
+                    if world.exists(entity) {
+                        let _ = world.despawn(entity);
+                    }
+                }
+                newengine_ulog_api::ulog::info!(
+                    "game-ready: player NEHAIR cutover committed player={} source_meshes_replaced={} policy='compiled groom active before source hair-card removal; native braid meshes remain independently owned'",
+                    player.stable_u64(),
+                    replaced,
+                );
+            }
+            Err(error) => {
+                newengine_ulog_api::ulog::warn!(
+                    "game-ready: optional player NEHAIR bind failed player={} err='{}' action='retain authored source hair meshes'",
+                    player.stable_u64(),
+                    error
+                );
+            }
+        }
     }
 
     if let Some(binding) =

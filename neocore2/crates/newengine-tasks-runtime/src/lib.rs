@@ -19,7 +19,6 @@ use std::collections::BTreeMap;
 
 pub const PROVIDER_ROUTE: &str = "engine.tasks.foundation";
 const OWNER: &str = "newengine-tasks-runtime.foundation-provider";
-const CONFIG_JSON: &str = include_str!("../../../config/gameplay/gameplay_foundation.v1.json");
 
 #[derive(Debug, Deserialize)]
 struct Config {
@@ -46,9 +45,9 @@ struct TasksState {
     tasks: BTreeMap<String, TaskDescriptorV1>,
 }
 impl TasksState {
-    fn load() -> Self {
-        let config: Config =
-            serde_json::from_str(CONFIG_JSON).unwrap_or(Config { tasks: Vec::new() });
+    fn load_from_json(text: &str) -> Result<Self, String> {
+        let config: Config = serde_json::from_str(text)
+            .map_err(|error| format!("tasks catalog decode failed: {error}"))?;
         let tasks = config
             .tasks
             .into_iter()
@@ -64,7 +63,12 @@ impl TasksState {
                 (descriptor.task.0.clone(), descriptor)
             })
             .collect();
-        Self { tasks }
+        Ok(Self { tasks })
+    }
+    fn load_from_startup(startup: &newengine_core::StartupConfig) -> Result<Self, String> {
+        let (_, text) =
+            newengine_core::read_plugin_runtime_data_string(startup, PROVIDER_ROUTE, "catalog")?;
+        Self::load_from_json(&text)
     }
     fn info(&self) -> TasksServiceInfoV1 {
         TasksServiceInfoV1::default()
@@ -152,14 +156,14 @@ fn invoke(state: &mut TasksState, payload: Blob) -> RResult<Blob, RString> {
         ))),
     }
 }
-pub fn register_tasks_gateway_best_effort() -> bool {
+fn register_tasks_gateway_with_state(state: TasksState) -> bool {
     let description = engine_gateway_provider_service_description(
         TASKS_SERVICE_ID, PROVIDER_ROUTE, TASKS_BACKEND_CAPABILITY_ID, TASKS_SERVICE_METHODS.iter().copied(),
     ).gateway("engine.tasks")
      .protocol("newengine.tasks.foundation/v1")
      .features(["single-purpose-provider", "replaceable-gateway-route", "dto-only-boundary"])
      .notes("Owns only baseline task catalog/queue planning; no tags registry, animation, navigation, AI, or world mutation.");
-    let service = JsonServiceRouter::with_state(TASKS_SERVICE_ID, TasksState::load())
+    let service = JsonServiceRouter::with_state(TASKS_SERVICE_ID, state)
         .describe_json(&description)
         .get_json(tasks_method::INFO_JSON, |state| state.info())
         .post_json(tasks_method::DESCRIBE_TASKS_JSON_V1, |state, req| {
@@ -187,6 +191,15 @@ pub fn register_tasks_gateway_best_effort() -> bool {
     .is_ok()
 }
 
+pub fn register_tasks_gateway_best_effort() -> bool {
+    let Some(startup) = newengine_core::startup::last_startup_config() else {
+        return false;
+    };
+    TasksState::load_from_startup(startup)
+        .map(register_tasks_gateway_with_state)
+        .unwrap_or(false)
+}
+
 pub const RUNTIME_UNIT_SPEC: newengine_runtime_unit_api::EngineRuntimeUnitSpec =
     newengine_runtime_unit_api::EngineRuntimeUnitSpec::new(
         "engine.runtime.tasks",
@@ -199,10 +212,16 @@ pub const RUNTIME_UNIT_SPEC: newengine_runtime_unit_api::EngineRuntimeUnitSpec =
 
 fn runtime_unit_factory(
     _: &mut newengine_runtime_unit_api::Engine<()>,
-    _: &newengine_runtime_unit_api::StartupConfig,
+    startup: &newengine_runtime_unit_api::StartupConfig,
 ) -> newengine_runtime_unit_api::EngineResult<Option<Box<dyn newengine_runtime_unit_api::Module<()>>>>
 {
-    let _ = register_tasks_gateway_best_effort();
+    let state =
+        TasksState::load_from_startup(startup).map_err(newengine_core::EngineError::other)?;
+    if !register_tasks_gateway_with_state(state) {
+        return Err(newengine_core::EngineError::other(
+            "failed to register configured tasks provider",
+        ));
+    }
     Ok(None)
 }
 
@@ -217,6 +236,8 @@ mod tests {
     use super::*;
     #[test]
     fn state_loads_task_domain_only() {
-        assert!(!TasksState::load().tasks.is_empty());
+        let state =
+            TasksState::load_from_json(r#"{"tasks":[{"task":"wait","kind":"Wait"}]}"#).unwrap();
+        assert!(!state.tasks.is_empty());
     }
 }

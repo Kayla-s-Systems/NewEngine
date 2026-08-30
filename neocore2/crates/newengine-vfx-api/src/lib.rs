@@ -5,7 +5,9 @@
 //! Gameplay publishes effect intent. The VFX runtime owns composition, budgets,
 //! lifetime, LOD/culling policy and renderer-facing realization.
 
+mod fxd;
 mod gpu_particles;
+pub use fxd::*;
 pub use gpu_particles::*;
 
 pub use newengine_entity_api::EntityHandle;

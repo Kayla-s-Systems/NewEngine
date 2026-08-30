@@ -6,6 +6,7 @@
 //! cones, impact sparks or decals directly; it submits effect intent here.
 
 mod definitions;
+mod fxd_compile;
 mod runtime;
 
 pub use definitions::*;
