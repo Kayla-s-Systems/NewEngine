@@ -147,6 +147,15 @@ where
         let runtime_context = game_context
             .as_ref()
             .map(RuntimeCompositionContext::from_project);
+        if let Some(project) = game_context.as_ref() {
+            crate::project_service::register_selected_project_service(&host_context, project)
+                .map_err(|error| {
+                    EngineError::Other(format!(
+                        "selected project service registration failed project='{}': {error}",
+                        project.manifest.id
+                    ))
+                })?;
+        }
         install_project_scripting_provider_policy(&host_context, game_context.as_ref())?;
         frontend.prepare_startup(&self.profile, &self.spec)?;
         let mut startup = self.load_startup_config(&host_context)?;
@@ -566,7 +575,7 @@ fn configure_game_plugin_roots(
     project: &ProjectRuntimeContext,
 ) -> EngineResult<()> {
     let project_id = project.manifest.id.trim();
-    let conventional_plugins = project.project_root.join("plugins");
+    let conventional_plugins = project.paths().conventional_plugins_dir();
     engine.add_plugin_discovery_root(
         PluginDiscoveryRoot::new(
             conventional_plugins,
@@ -583,11 +592,7 @@ fn configure_game_plugin_roots(
         let Some(path) = plugin.path.as_ref() else {
             continue;
         };
-        let path = if path.is_absolute() {
-            path.clone()
-        } else {
-            project.project_root.join(path)
-        };
+        let path = project.resolve_authored_path(path);
         let root_dir = if path.is_dir() {
             path
         } else if path.extension().is_some() {

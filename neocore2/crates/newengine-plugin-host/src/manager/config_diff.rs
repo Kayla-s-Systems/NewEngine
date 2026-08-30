@@ -5,7 +5,7 @@ pub(crate) fn json_diff_keys_shallow_or_paths(
     defaults_bytes: &[u8],
     effective_bytes: &[u8],
 ) -> Vec<String> {
-    if content_type != "application/json" {
+    if defaults_bytes == effective_bytes || content_type != "application/json" {
         return Vec::new();
     }
 
@@ -100,5 +100,26 @@ fn join_path(prefix: &str, key: &str) -> String {
         key.to_owned()
     } else {
         format!("{prefix}.{key}")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn identical_json_uses_empty_fast_path() {
+        let bytes = br#"{"nested":{"value":1}}"#;
+        assert!(json_diff_keys_shallow_or_paths("application/json", bytes, bytes).is_empty());
+    }
+
+    #[test]
+    fn nested_changes_are_reported_once_and_sorted() {
+        let changed = json_diff_keys_shallow_or_paths(
+            "application/json",
+            br#"{"z":1,"nested":{"a":1,"b":2}}"#,
+            br#"{"z":2,"nested":{"a":3,"c":4}}"#,
+        );
+        assert_eq!(changed, vec!["nested.a", "nested.b", "nested.c", "z"]);
     }
 }

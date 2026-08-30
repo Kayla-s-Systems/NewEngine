@@ -554,6 +554,90 @@ mod tests {
     use newengine_math::{Mat4, Vec3};
     use newengine_render_api::{HairGroomRef, HairInstanceDescV1, HairShaderSetV1};
 
+    fn prepared_with_prefixes(prefixes: &[&str]) -> PreparedPlayerHairV1 {
+        PreparedPlayerHairV1 {
+            groom: HairGroomAssetV1 {
+                groom: HairGroomRef::new("characters/test/hair.nehair"),
+                guide_points: Vec::new(),
+                guide_strands: Vec::new(),
+                collision_capsules: Vec::new(),
+                follow_strands_per_guide: 0,
+            },
+            instance: HairInstanceDescV1::default(),
+            shaders: HairShaderSetV1::new(
+                "shaders/hair/guide_sim.comp",
+                "shaders/hair/strand_ribbon.vert",
+                "shaders/hair/strand_ribbon.frag",
+            ),
+            source_mesh_prefixes: prefixes.iter().map(|value| (*value).to_owned()).collect(),
+            hide_in_first_person: true,
+        }
+    }
+
+    #[test]
+    fn ellie_cutover_keeps_cap_back_and_scrunchy() {
+        let prepared = prepared_with_prefixes(&[
+            "default_hair_wet_extra_",
+            "default_hair_thick_",
+            "default_hair_tail_thin_",
+            "default_hair_flying_",
+            "default_strand_hair_loose_",
+        ]);
+        assert!(source_mesh_replaced_by_hair_v1(
+            &prepared,
+            "default_hair_thick_lod0_LODShape0_shader2_merged_partition0"
+        ));
+        assert!(source_mesh_replaced_by_hair_v1(
+            &prepared,
+            "default_strand_hair_loose_lod0_LODShape0_shader1_merged_partition0"
+        ));
+        assert!(!source_mesh_replaced_by_hair_v1(
+            &prepared,
+            "default_hair_base_lod0_LODShape0_shader1_merged_partition0"
+        ));
+        assert!(!source_mesh_replaced_by_hair_v1(
+            &prepared,
+            "default_hair_back_lod0_LODShape0_shader7_merged_partition0"
+        ));
+        assert!(!source_mesh_replaced_by_hair_v1(
+            &prepared,
+            "default_scrunchy_lod0_LODShape0_shader5_merged_partition0"
+        ));
+    }
+
+    #[test]
+    fn isaac_cutover_excludes_beard_brows_fuzz_and_scalp_cap() {
+        let prepared = prepared_with_prefixes(&[
+            "hair_LODShape0_shader8_",
+            "hair_LODShape0_shader10_",
+            "hair_LODShape0_shader11_",
+        ]);
+        assert!(source_mesh_replaced_by_hair_v1(
+            &prepared,
+            "hair_LODShape0_shader8_merged_partition0"
+        ));
+        assert!(source_mesh_replaced_by_hair_v1(
+            &prepared,
+            "hair_LODShape0_shader10_merged_partition0"
+        ));
+        assert!(!source_mesh_replaced_by_hair_v1(
+            &prepared,
+            "hair_LODShape0_shader7_merged_partition0"
+        ));
+        assert!(!source_mesh_replaced_by_hair_v1(
+            &prepared,
+            "hair_LODShape0_shader9_merged_partition0"
+        ));
+        assert!(!source_mesh_replaced_by_hair_v1(
+            &prepared,
+            "beard_LODShape0_shader12_merged_partition0"
+        ));
+        assert!(!source_mesh_replaced_by_hair_v1(
+            &prepared,
+            "eyebrows_LODShape0_shader4_merged_partition0"
+        ));
+    }
+
     #[test]
     fn compiled_groom_binding_targets_player_pose_id() {
         let mut world = World::new();

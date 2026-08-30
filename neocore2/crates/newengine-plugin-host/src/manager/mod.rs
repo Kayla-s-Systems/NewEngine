@@ -2,10 +2,13 @@
 
 mod adapter;
 mod cap_validate;
+mod config_diff;
 mod config_patch;
 mod discovery;
 mod lifecycle;
+mod load_profile;
 mod loader;
+mod plugin_init;
 mod types;
 mod ui_assets;
 

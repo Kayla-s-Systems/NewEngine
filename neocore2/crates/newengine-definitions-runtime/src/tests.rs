@@ -114,6 +114,51 @@ fn json_ytyp_dictionary_preserves_uv_layout_refs_and_arbitrary_strings() {
 }
 
 #[test]
+fn xml_ytyp_preserves_character_turn_in_place_attributes_in_game_ready_metadata() {
+    let body = br#"<YtypProperties schema="newengine.ytyp.properties.v1" name="player_test" kind="game_ready_metadata">
+        <Metadata>
+            <Namespace name="newengine.game_ready">
+                <player
+                    model="models/characters/test/test.ydd@test"
+                    idle_animation="animations/characters/test/mm.ycd@idle"
+                    equipment_ready_animation="animations/characters/test/gun.ycd@ready"
+                    turn_45_left_animation="animations/characters/test/mm.ycd@turn45l"
+                    turn_90_right_animation="animations/characters/test/mm.ycd@turn90r"
+                    turn_180_left_animation="animations/characters/test/mm.ycd@turn180l" />
+            </Namespace>
+        </Metadata>
+    </YtypProperties>"#;
+    let (entries, warnings) =
+        parse_ytyp_xml_document("definitions/fps/player_test.ytyp", body).unwrap();
+    let entry =
+        build_entry("definitions/fps/player_test.ytyp", entries[0].clone(), &warnings).unwrap();
+    let player = entry
+        .arbitrary_metadata
+        .get("metadata")
+        .and_then(|value| value.get("newengine.game_ready"))
+        .and_then(|value| value.get("player"))
+        .expect("player metadata");
+    assert_eq!(
+        player
+            .get("turn_45_left_animation")
+            .and_then(|value| value.as_str()),
+        Some("animations/characters/test/mm.ycd@turn45l")
+    );
+    assert_eq!(
+        player
+            .get("turn_90_right_animation")
+            .and_then(|value| value.as_str()),
+        Some("animations/characters/test/mm.ycd@turn90r")
+    );
+    assert_eq!(
+        player
+            .get("turn_180_left_animation")
+            .and_then(|value| value.as_str()),
+        Some("animations/characters/test/mm.ycd@turn180l")
+    );
+}
+
+#[test]
 fn logical_ref_normalization_is_linear_and_stable() {
     assert_eq!(
         normalize_logical_ref(r"  .\definitions\\fps//player.ytyp  "),

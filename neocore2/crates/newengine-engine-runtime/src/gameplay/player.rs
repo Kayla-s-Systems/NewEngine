@@ -14,10 +14,10 @@ use super::{
     ensure_player_inventory, CharacterBody, CharacterMotionTuning, CollisionShapeDesc, DisplayMode,
     DisplayVisibility, GameplayActor, Health, PhysicsBodyDesc, PhysicsSurface, PlayerActor,
     PlayerAnimationState, PlayerCommandFrame, PlayerController, PlayerEventKind, PlayerFallState,
-    PlayerFixedPoseHistory, PlayerGroundState, PlayerLocomotionAnimation, PlayerLocomotionState,
-    PlayerModelAssignment, PlayerModelBinding, PlayerMovementSpeeds, PlayerRenderPose,
-    PlayerStanceKind, PlayerStanceState, PlayerViewState, PlayerViewVisibility,
-    PlayerViewVisibilityPolicy, PlayerVisualKind, PlayerVisualPart,
+    PlayerFirstPersonBodyBarrierProfile, PlayerFixedPoseHistory, PlayerGroundState,
+    PlayerLocomotionAnimation, PlayerLocomotionState, PlayerModelAssignment, PlayerModelBinding,
+    PlayerMovementSpeeds, PlayerRenderPose, PlayerStanceKind, PlayerStanceState, PlayerViewState,
+    PlayerViewVisibility, PlayerViewVisibilityPolicy, PlayerVisualKind, PlayerVisualPart,
 };
 
 #[path = "player/animation.rs"]

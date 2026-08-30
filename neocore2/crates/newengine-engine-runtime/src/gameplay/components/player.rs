@@ -290,6 +290,16 @@ pub struct PlayerFallState {
     pub revision: u64,
 }
 
+/// Last resolved landing impact. Unlike `PlayerFallState`, this survives the grounded transition so
+/// presentation systems can consume the impact on the following render/animation frame.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct PlayerLandingState {
+    pub distance: f32,
+    pub downward_speed: f32,
+    pub horizontal_speed: f32,
+    pub revision: u64,
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum PlayerLocomotionAnimation {
     #[default]
@@ -498,6 +508,28 @@ pub struct PlayerCharacterPresentation {
     pub unarmed_ready_animation: Option<String>,
     pub unarmed_attack_animation: Option<String>,
     pub noclip_animation: Option<String>,
+    /// Optional authored turn-in-place clips. These are full-body steps; stationary mouse yaw never
+    /// rotates the world root directly. Runtime selects the nearest signed angle.
+    pub turn_45_left_animation: Option<String>,
+    pub turn_45_right_animation: Option<String>,
+    pub turn_90_left_animation: Option<String>,
+    pub turn_90_right_animation: Option<String>,
+    pub turn_135_left_animation: Option<String>,
+    pub turn_135_right_animation: Option<String>,
+    pub turn_180_left_animation: Option<String>,
+    pub turn_180_right_animation: Option<String>,
+    /// Optional full-body fall clips selected from the runtime fall-distance signal.
+    pub fall_low_animation: Option<String>,
+    pub fall_medium_animation: Option<String>,
+    pub fall_high_animation: Option<String>,
+    /// Optional character-native landing response clips. These run after `FallEnded`, not while airborne.
+    pub landing_soft_animation: Option<String>,
+    pub landing_medium_animation: Option<String>,
+    pub landing_hard_animation: Option<String>,
+    pub landing_hard_run_animation: Option<String>,
+    /// Project-authored distance thresholds measured from the airborne trajectory apex.
+    pub fall_medium_min_distance: f32,
+    pub fall_high_min_distance: f32,
     pub equipment_ready_sample_phase: f32,
     pub equipment_ready_rotation_weights: Vec<PlayerJointRotationWeight>,
     pub equipment_aim_rotation_weights: Vec<PlayerJointRotationWeight>,
@@ -521,6 +553,23 @@ impl Default for PlayerCharacterPresentation {
             unarmed_ready_animation: None,
             unarmed_attack_animation: None,
             noclip_animation: None,
+            turn_45_left_animation: None,
+            turn_45_right_animation: None,
+            turn_90_left_animation: None,
+            turn_90_right_animation: None,
+            turn_135_left_animation: None,
+            turn_135_right_animation: None,
+            turn_180_left_animation: None,
+            turn_180_right_animation: None,
+            fall_low_animation: None,
+            fall_medium_animation: None,
+            fall_high_animation: None,
+            landing_soft_animation: None,
+            landing_medium_animation: None,
+            landing_hard_animation: None,
+            landing_hard_run_animation: None,
+            fall_medium_min_distance: 0.0,
+            fall_high_min_distance: 0.0,
             equipment_ready_sample_phase: 0.0,
             equipment_ready_rotation_weights: Vec::new(),
             equipment_aim_rotation_weights: Vec::new(),
@@ -701,6 +750,108 @@ impl Default for PlayerFirstPersonCameraAnchor {
             eye_center_ws: Vec3::ZERO,
             forward_clearance: 0.045,
         }
+    }
+}
+
+/// Authorable self-collision envelope for a local first-person camera. Offsets are expressed
+/// in the player body frame relative to the stable eye anchor (engine forward = -Z). The camera
+/// runtime consumes only these analytic primitives; it never performs triangle collision against
+/// a deforming character mesh.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PlayerFirstPersonBodyBarrierProfile {
+    pub enabled: bool,
+    pub head_center_offset_ls: Vec3,
+    pub head_radius: f32,
+    pub neck_top_offset_ls: Vec3,
+    pub neck_bottom_offset_ls: Vec3,
+    pub neck_radius: f32,
+    pub chest_top_offset_ls: Vec3,
+    pub chest_bottom_offset_ls: Vec3,
+    pub chest_radius: f32,
+    pub surface_padding: f32,
+    /// Maximum downward view pitch from the horizon. Upward pitch keeps the motor-authored limit.
+    pub downward_pitch_limit_radians: f32,
+}
+
+impl PlayerFirstPersonBodyBarrierProfile {
+    #[inline]
+    pub fn from_body(body: CharacterBody) -> Self {
+        let body = body.sanitized();
+        let height_scale = (body.visual_half_height / 0.90).clamp(0.65, 1.60);
+        let radius = body.visual_radius;
+        Self {
+            enabled: true,
+            // +Z is behind the eyes. Keeping the primitive centre slightly behind the anchor
+            // makes the safe projection resolve toward the face/front, not through the skull.
+            head_center_offset_ls: Vec3::new(0.0, -0.035 * height_scale, 0.035 * height_scale),
+            head_radius: (radius * 0.28).clamp(0.095, 0.145),
+            neck_top_offset_ls: Vec3::new(0.0, -0.115 * height_scale, 0.030 * height_scale),
+            neck_bottom_offset_ls: Vec3::new(0.0, -0.245 * height_scale, 0.045 * height_scale),
+            neck_radius: (radius * 0.20).clamp(0.065, 0.100),
+            chest_top_offset_ls: Vec3::new(0.0, -0.275 * height_scale, 0.055 * height_scale),
+            chest_bottom_offset_ls: Vec3::new(0.0, -0.525 * height_scale, 0.070 * height_scale),
+            chest_radius: (radius * 0.38).clamp(0.140, 0.205),
+            surface_padding: 0.012,
+            downward_pitch_limit_radians: 75.0_f32.to_radians(),
+        }
+    }
+
+    #[inline]
+    pub fn sanitized(self, fallback_body: CharacterBody) -> Self {
+        let fallback = Self::from_body(fallback_body);
+        let finite_vec = |value: Vec3, default: Vec3| {
+            if value.is_finite() {
+                value
+            } else {
+                default
+            }
+        };
+        let finite_radius = |value: f32, default: f32, lo: f32, hi: f32| {
+            if value.is_finite() {
+                value.clamp(lo, hi)
+            } else {
+                default
+            }
+        };
+        Self {
+            enabled: self.enabled,
+            head_center_offset_ls: finite_vec(
+                self.head_center_offset_ls,
+                fallback.head_center_offset_ls,
+            ),
+            head_radius: finite_radius(self.head_radius, fallback.head_radius, 0.04, 0.40),
+            neck_top_offset_ls: finite_vec(self.neck_top_offset_ls, fallback.neck_top_offset_ls),
+            neck_bottom_offset_ls: finite_vec(
+                self.neck_bottom_offset_ls,
+                fallback.neck_bottom_offset_ls,
+            ),
+            neck_radius: finite_radius(self.neck_radius, fallback.neck_radius, 0.03, 0.30),
+            chest_top_offset_ls: finite_vec(self.chest_top_offset_ls, fallback.chest_top_offset_ls),
+            chest_bottom_offset_ls: finite_vec(
+                self.chest_bottom_offset_ls,
+                fallback.chest_bottom_offset_ls,
+            ),
+            chest_radius: finite_radius(self.chest_radius, fallback.chest_radius, 0.05, 0.45),
+            surface_padding: finite_radius(
+                self.surface_padding,
+                fallback.surface_padding,
+                0.0,
+                0.05,
+            ),
+            downward_pitch_limit_radians: finite_radius(
+                self.downward_pitch_limit_radians,
+                fallback.downward_pitch_limit_radians,
+                35.0_f32.to_radians(),
+                85.0_f32.to_radians(),
+            ),
+        }
+    }
+}
+
+impl Default for PlayerFirstPersonBodyBarrierProfile {
+    #[inline]
+    fn default() -> Self {
+        Self::from_body(CharacterBody::default())
     }
 }
 

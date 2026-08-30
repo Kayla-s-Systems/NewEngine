@@ -355,6 +355,31 @@ mod tests {
     }
 
     #[test]
+    fn direct_surface_resources_use_srgb_presentation_contract() {
+        let plan = standard_runtime_frame(
+            StandardRuntimePipelineDesc::new(2, Extent2D::new(1600, 900), Extent2D::new(1600, 900))
+                .viewport_is_surface(true)
+                .hdr_scene(false)
+                .postfx(false)
+                .shadow(false, 1),
+        );
+        let surface = plan
+            .graph
+            .resources
+            .iter()
+            .find(|resource| resource.semantic == RenderGraphResourceSemantic::SurfaceColor)
+            .expect("surface color resource");
+        let viewport = plan
+            .graph
+            .resources
+            .iter()
+            .find(|resource| resource.semantic == RenderGraphResourceSemantic::ViewportColor)
+            .expect("surface viewport color resource");
+        assert_eq!(surface.format, Some(TextureFormat::Bgra8Srgb));
+        assert_eq!(viewport.format, Some(TextureFormat::Bgra8Srgb));
+    }
+
+    #[test]
     fn ldr_postfx_uses_sampleable_bgra_scene_color_and_depth() {
         let plan = standard_runtime_frame(
             StandardRuntimePipelineDesc::new(2, Extent2D::new(1600, 900), Extent2D::new(1600, 900))
@@ -391,22 +416,22 @@ mod tests {
     #[test]
     fn standard_pipeline_declares_every_graph_draw_list_route() {
         let plan = standard_runtime_frame(
-            StandardRuntimePipelineDesc::new(
-                3,
-                Extent2D::new(1600, 900),
-                Extent2D::new(1600, 900),
-            )
-            .viewport_is_surface(true)
-            .shadow(false, 1)
-            .postfx(false)
-            .ui(false)
-            .debug_overlay(false)
-            .draw_lists([DrawListDesc::standard(
-                newengine_render_api::RenderDrawListKind::OpaqueForward,
-            )]),
+            StandardRuntimePipelineDesc::new(3, Extent2D::new(1600, 900), Extent2D::new(1600, 900))
+                .viewport_is_surface(true)
+                .shadow(false, 1)
+                .postfx(false)
+                .ui(false)
+                .debug_overlay(false)
+                .draw_lists([DrawListDesc::standard(
+                    newengine_render_api::RenderDrawListKind::OpaqueForward,
+                )]),
         );
         let report = plan.validate_draw_list_routes();
-        assert!(report.errors.is_empty(), "route errors: {:?}", report.errors);
+        assert!(
+            report.errors.is_empty(),
+            "route errors: {:?}",
+            report.errors
+        );
         assert!(
             report
                 .warnings
@@ -415,9 +440,10 @@ mod tests {
             "route warnings: {:?}",
             report.warnings
         );
-        assert!(plan.draw_lists.iter().any(|desc| {
-            desc.kind == newengine_render_api::RenderDrawListKind::Transparent
-        }));
+        assert!(plan
+            .draw_lists
+            .iter()
+            .any(|desc| { desc.kind == newengine_render_api::RenderDrawListKind::Transparent }));
     }
 
     #[test]

@@ -82,6 +82,7 @@ pub fn spawn_player_controller(
     );
     let _ = world.insert(e, PlayerAnimationState::default());
     let _ = world.insert(e, PlayerStanceState::standing(body.standing_eye_height));
+    let _ = world.insert(e, PlayerFirstPersonBodyBarrierProfile::from_body(body));
     let _ = world.insert(e, PlayerModelAssignment::default());
     let _ = world.insert(e, PlayerModelBinding::default());
     let _ = world.insert(e, CharacterMotor::default());

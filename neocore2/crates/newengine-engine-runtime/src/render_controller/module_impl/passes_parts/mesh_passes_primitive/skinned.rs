@@ -24,6 +24,15 @@ pub(crate) fn draw_skinned_player_primitives(
     let mats_lock = this.bridges.scene.materials();
     let mats = mats_lock.read();
     let visibility_settings = primitive_visibility_settings(runtime, viewproj);
+    // Diagnostic gate for character alpha overlays. TLOU-derived character packages can
+    // contain both alpha-blend and dither/cutout presentations of the same authored hair
+    // or facial layer. This switch lets the runtime prove whether translucent overlays are
+    // the source of face/body corruption without changing authored assets.
+    let disable_skinned_alpha_blend = runtime
+        && std::env::var_os("NEWENGINE_DEBUG_DISABLE_SKIN_ALPHA_BLEND").is_some();
+
+    let force_skinned_double_sided = runtime
+        && std::env::var_os("NEWENGINE_DEBUG_FORCE_SKIN_DOUBLE_SIDED").is_some();
 
     for (entity, prim, global) in world.query2::<Primitive, GlobalTransform>() {
         let Some(skin) = world.get::<crate::gameplay::PlayerSkinBinding>(entity) else {
@@ -102,6 +111,12 @@ pub(crate) fn draw_skinned_player_primitives(
             .copied();
         let resolved = material_ref.and_then(|reference| mats.resolve(reference.id));
         let material_plan = LitMaterialPlan::from_resolved(resolved.as_ref(), prim.color);
+        if disable_skinned_alpha_blend
+            && matches!(pass, SceneMeshPass::Forward)
+            && material_plan.alpha_blend
+        {
+            continue;
+        }
         // Transparent skinned overlays are forward-only. Writing tearline/wet layers into
         // the deferred GBuffer makes their mostly-transparent cards become opaque depth/color.
         if pass.is_gbuffer() && material_plan.alpha_blend {
@@ -136,15 +151,18 @@ pub(crate) fn draw_skinned_player_primitives(
             lit.clamp_sampler
         };
         let pipeline = match pass {
-            SceneMeshPass::Forward if material_plan.alpha_blend && material_plan.double_sided => {
+            SceneMeshPass::Forward
+                if material_plan.alpha_blend
+                    && (material_plan.double_sided || force_skinned_double_sided) =>
+            {
                 lit.skinned_alpha_double_sided_pipeline
             }
             SceneMeshPass::Forward if material_plan.alpha_blend => lit.skinned_alpha_pipeline,
-            SceneMeshPass::Forward if material_plan.double_sided => {
+            SceneMeshPass::Forward if material_plan.double_sided || force_skinned_double_sided => {
                 lit.skinned_double_sided_pipeline
             }
             SceneMeshPass::Forward => lit.skinned_pipeline,
-            SceneMeshPass::GBuffer if material_plan.double_sided => {
+            SceneMeshPass::GBuffer if material_plan.double_sided || force_skinned_double_sided => {
                 lit.gbuffer_skinned_double_sided_pipeline
             }
             SceneMeshPass::GBuffer => lit.gbuffer_skinned_pipeline,

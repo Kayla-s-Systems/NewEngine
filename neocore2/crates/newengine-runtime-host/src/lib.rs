@@ -14,6 +14,8 @@ pub mod path_resolver;
 #[cfg(feature = "full-runtime")]
 pub mod preinit;
 #[cfg(feature = "full-runtime")]
+mod project_service;
+#[cfg(feature = "full-runtime")]
 pub mod runtime_config;
 #[cfg(feature = "full-runtime")]
 mod threading_gateway;

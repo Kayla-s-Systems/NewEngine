@@ -5,7 +5,7 @@ pub const DEFAULT_VFX_GPU_PARTICLE_BRIDGE_CAPACITY: usize = 262_144;
 pub const DEFAULT_VFX_GPU_PARTICLE_KILL_CAPACITY: usize = 4_096;
 /// Current renderer descriptor capacity. Project data chooses the actual textures;
 /// this number is a backend capability, not an authored effect value.
-pub const VFX_GPU_TEXTURE_SLOT_CAPACITY: usize = 3;
+pub const VFX_GPU_TEXTURE_SLOT_CAPACITY: usize = 4;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[repr(u32)]
@@ -303,6 +303,7 @@ mod tests {
         assert_eq!(registry.register("textures/vfx/a.ytd@a").unwrap(), 1);
         assert_eq!(registry.register("textures/vfx/b.ytd@b").unwrap(), 2);
         assert_eq!(registry.register("textures/vfx/c.ytd@c").unwrap(), 3);
-        assert!(registry.register("textures/vfx/d.ytd@d").is_err());
+        assert_eq!(registry.register("textures/vfx/d.ytd@d").unwrap(), 4);
+        assert!(registry.register("textures/vfx/e.ytd@e").is_err());
     }
 }

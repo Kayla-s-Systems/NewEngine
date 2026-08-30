@@ -8,10 +8,10 @@ use newengine_transform::{read_entity_world_pose_local_chain, Transform};
 
 use crate::{
     run_character_motor_controller, run_follow_camera_controller, run_orbit_camera_controller,
-    AngularVelocity, CameraControlInputComp, CameraRigComp, CharacterMotor, CommandBuffer,
-    ControllerCtx, ControllerIntentQueue, FollowTargetCameraController, FollowTargetCameraMotor,
-    IntentBuffer, IntentCommandBufferExt, MotorInput, OrbitCameraMotor, SimFrame,
-    TransformCommandBufferExt, Velocity,
+    AngularVelocity, CameraControlInputComp, CameraRigComp, CharacterFacingTurnStepRequest,
+    CharacterMotor, CommandBuffer, ControllerCtx, ControllerIntentQueue,
+    FollowTargetCameraController, FollowTargetCameraMotor, IntentBuffer, IntentCommandBufferExt,
+    MotorInput, OrbitCameraMotor, SimFrame, TransformCommandBufferExt, Velocity,
 };
 
 #[inline]
@@ -41,6 +41,11 @@ pub fn sys_character_motor(world: &World, frame: SimFrame, cmd: &mut CommandBuff
         };
 
         run_character_motor_controller(id, &ctx, motor, input, &mut intents);
+        if world.get::<CharacterFacingTurnStepRequest>(id).is_some() {
+            // The controller has consumed this bounded yaw increment into its rotation intent.
+            // Normal fixed-pose interpolation must see both endpoints; no snap/bypass marker exists.
+            cmd.remove::<CharacterFacingTurnStepRequest>(id);
+        }
     }
 
     if !intents.is_empty() {

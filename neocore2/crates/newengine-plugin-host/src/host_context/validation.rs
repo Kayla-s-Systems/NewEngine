@@ -174,6 +174,24 @@ fn route_alias_candidate_from_typed_capability(
     )
 }
 
+fn candidate_from_active_gateway_route(
+    route: &super::state::EngineGatewayRouteSnapshot,
+) -> newengine_service_api::CompositionCandidate {
+    newengine_service_api::CompositionCandidate::new(
+        capability_composition_key(&route.gateway_id, CapabilityKind::ServiceV1),
+        format!(
+            "active-gateway::{}::{}::{}",
+            route.gateway_id, route.provider_owner_id, route.provider_service_id
+        ),
+        route.provider_owner_id.clone(),
+        route.backend_priority,
+        0,
+        0,
+    )
+    .with_capability(route.gateway_id.clone())
+    .with_capability_version(1)
+}
+
 fn requirement_from_typed_capability(
     owner_id: &str,
     capability: &newengine_plugin_api::CapabilityDescV2,
@@ -273,6 +291,18 @@ pub(crate) fn capability_provider_candidates() -> Vec<newengine_service_api::Com
             .with_capability_version(1),
         );
     }
+
+    // Service requirements authored against stable `engine.*` gateways must be
+    // satisfiable by host-owned gateway routes as well as plugin-declared routes.
+    // Previously only concrete service ids (for example `threading.api`) were added
+    // here, so a valid host route `engine.threading -> threading.api` was invisible
+    // to plugin requirement validation and StarProfiler was incorrectly disabled.
+    for gateway_id in super::gateway::active_engine_gateways() {
+        if let Some(route) = super::gateway::active_engine_gateway_route(&gateway_id) {
+            out.push(candidate_from_active_gateway_route(&route));
+        }
+    }
+
     out.push(
         newengine_service_api::CompositionCandidate::new(
             capability_composition_key("host.events.v1", CapabilityKind::EventsV1),
@@ -407,11 +437,13 @@ pub(crate) fn plugin_declares_provided_service(plugin_id: &str, service_id: &str
 #[cfg(test)]
 mod typed_requirement_tests {
     use super::*;
+    use abi_stable::sabi_trait::TD_Opaque;
+    use abi_stable::std_types::RResult;
     use abi_stable::std_types::{ROption, RString, RVec};
     use newengine_plugin_api::{
-        BackendRouteDescriptorV2, CapabilityDesc, CapabilityDescV2, CapabilityKind,
-        CapabilityRequirementDescV2, CapabilityRole, PluginDescriptor, PluginDescriptorV2,
-        PluginKind,
+        BackendRouteDescriptorV2, Blob, CapabilityDesc, CapabilityDescV2, CapabilityId,
+        CapabilityKind, CapabilityRequirementDescV2, CapabilityRole, MethodName, PluginDescriptor,
+        PluginDescriptorV2, PluginKind, ServiceV1, ServiceV1Dyn,
     };
 
     fn descriptor_v2(id: &str, capabilities: Vec<CapabilityDescV2>) -> PluginDescriptorV2 {
@@ -566,5 +598,68 @@ mod typed_requirement_tests {
             effective_provider_origin(&legacy, Some(&typed), default_origin),
             crate::service_gateway::GatewayProviderOrigin::NullProvider
         );
+    }
+
+    struct HostGatewayTestService;
+
+    impl ServiceV1 for HostGatewayTestService {
+        fn id(&self) -> CapabilityId {
+            CapabilityId::from("test.host-gateway.service")
+        }
+
+        fn describe(&self) -> RString {
+            RString::from("{\"test\":true}")
+        }
+
+        fn call(&self, _method: MethodName, payload: Blob) -> RResult<Blob, RString> {
+            RResult::ROk(payload)
+        }
+    }
+
+    #[test]
+    fn active_host_gateway_route_satisfies_service_requirement() {
+        let context = crate::host_context::create_host_context();
+        crate::host_context::with_host_context(&context, || {
+            let service = ServiceV1Dyn::from_value(HostGatewayTestService, TD_Opaque);
+            crate::host_api::host_register_service_impl(service)
+                .into_result()
+                .expect("register host gateway test service");
+            crate::host_context::register_engine_gateway_provider_route(
+                "engine.test-host-gateway",
+                "test-host-gateway",
+                "test.host-gateway.service",
+                "engine.test-host-gateway.core",
+                "test.host-gateway.backend",
+                0,
+                "test.host-gateway",
+            )
+            .expect("register host gateway test route");
+
+            let consumer = descriptor_v2(
+                "consumer.host-gateway",
+                vec![CapabilityDescV2::new(
+                    "engine.test-host-gateway",
+                    CapabilityRole::Requires,
+                    CapabilityKind::ServiceV1,
+                    1,
+                )],
+            );
+            let candidates = capability_provider_candidates();
+            assert!(
+                missing_typed_descriptor_requirements(&consumer, &candidates).is_empty(),
+                "active host-owned engine gateway must satisfy ServiceV1 requirement by gateway id"
+            );
+            assert!(candidates.iter().any(|candidate| {
+                candidate.gateway_id
+                    == capability_composition_key(
+                        "engine.test-host-gateway",
+                        CapabilityKind::ServiceV1,
+                    )
+                    && candidate
+                        .capability_ids
+                        .iter()
+                        .any(|capability| capability == "engine.test-host-gateway")
+            }));
+        });
     }
 }

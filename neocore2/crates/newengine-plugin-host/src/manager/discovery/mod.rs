@@ -15,4 +15,6 @@ pub use self::load::{
 pub(super) use self::selection::FrozenPluginCompositionPlan;
 
 pub(crate) use self::sidecar::read_verified_manifest;
-pub(super) use self::sidecar::{verify_live_descriptor, verify_live_descriptor_against_manifest};
+pub(super) use self::sidecar::{
+    verify_artifact_against_manifest, verify_live_descriptor_against_manifest,
+};

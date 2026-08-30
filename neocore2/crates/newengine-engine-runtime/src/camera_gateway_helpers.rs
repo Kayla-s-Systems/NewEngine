@@ -140,6 +140,33 @@ pub(super) fn camera_runtime_service_config(
             }
             config.first_person_presentation = presentation;
 
+            let body = world
+                .get::<CharacterBody>(player)
+                .copied()
+                .unwrap_or_default()
+                .sanitized();
+            let barrier = world
+                .get::<crate::gameplay::PlayerFirstPersonBodyBarrierProfile>(player)
+                .copied()
+                .unwrap_or_else(|| {
+                    crate::gameplay::PlayerFirstPersonBodyBarrierProfile::from_body(body)
+                })
+                .sanitized(body);
+            config.first_person_body_barrier =
+                newengine_camera_runtime::FirstPersonBodyBarrierInput {
+                    enabled: barrier.enabled,
+                    head_center_offset_ls: barrier.head_center_offset_ls,
+                    head_radius: barrier.head_radius,
+                    neck_top_offset_ls: barrier.neck_top_offset_ls,
+                    neck_bottom_offset_ls: barrier.neck_bottom_offset_ls,
+                    neck_radius: barrier.neck_radius,
+                    chest_top_offset_ls: barrier.chest_top_offset_ls,
+                    chest_bottom_offset_ls: barrier.chest_bottom_offset_ls,
+                    chest_radius: barrier.chest_radius,
+                    surface_padding: barrier.surface_padding,
+                    downward_pitch_limit_radians: barrier.downward_pitch_limit_radians,
+                };
+
             if let Some(anchor) = world
                 .get::<crate::gameplay::PlayerFirstPersonCameraAnchor>(player)
                 .copied()
@@ -563,6 +590,9 @@ pub(super) fn apply_runtime_input(
             routed.look_active,
             service_config.sprint_multiplier,
             service_config.runner,
+            service_config
+                .first_person_body_barrier
+                .downward_pitch_limit_radians,
             matches!(
                 service_config.runner,
                 newengine_camera_runtime::GameplayCameraRunnerKind::FirstPerson

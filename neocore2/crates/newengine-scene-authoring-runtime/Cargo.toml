@@ -12,6 +12,7 @@ newengine-assets-api = { path = "../newengine-assets-api" }
 newengine-core = { path = "../newengine-core" }
 newengine-ecs = { path = "../newengine-ecs" }
 newengine-math = { path = "../newengine-math" }
+newengine-project-api = { path = "../newengine-project-api" }
 newengine-scene-authoring-api = { path = "../newengine-scene-authoring-api" }
 newengine-transform = { path = "../newengine-transform", features = ["ecs"], default-features = false }
 newengine-ulog-api = { path = "../newengine-ulog-api" }

@@ -229,6 +229,7 @@ impl VfxGpuRenderer {
                         BindingKind::Texture2D,
                         BindingKind::Texture2D,
                         BindingKind::Texture2D,
+                        BindingKind::Texture2D,
                         BindingKind::Sampler,
                     ])
                     .with_label("vfx.gpu_particles.layout"),
@@ -313,6 +314,7 @@ impl VfxGpuRenderer {
                             .with_texture0(bound_textures[0])
                             .with_texture1(bound_textures[1])
                             .with_texture2(bound_textures[2])
+                            .with_texture3(bound_textures[3])
                             .with_sampler0(sampler),
                     )?,
                 );

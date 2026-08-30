@@ -261,6 +261,43 @@ impl Default for FirstPersonPresentationInput {
     }
 }
 
+/// Provider-neutral analytic body envelope resolved by the gameplay/avatar layer. All offsets are
+/// relative to the stable eye anchor in body-local space; the camera runtime transforms them with
+/// the render-cadence body rotation and never inspects character render meshes or skeleton data.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct FirstPersonBodyBarrierInput {
+    pub enabled: bool,
+    pub head_center_offset_ls: Vec3,
+    pub head_radius: f32,
+    pub neck_top_offset_ls: Vec3,
+    pub neck_bottom_offset_ls: Vec3,
+    pub neck_radius: f32,
+    pub chest_top_offset_ls: Vec3,
+    pub chest_bottom_offset_ls: Vec3,
+    pub chest_radius: f32,
+    pub surface_padding: f32,
+    pub downward_pitch_limit_radians: f32,
+}
+
+impl Default for FirstPersonBodyBarrierInput {
+    #[inline]
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            head_center_offset_ls: Vec3::ZERO,
+            head_radius: 0.0,
+            neck_top_offset_ls: Vec3::ZERO,
+            neck_bottom_offset_ls: Vec3::ZERO,
+            neck_radius: 0.0,
+            chest_top_offset_ls: Vec3::ZERO,
+            chest_bottom_offset_ls: Vec3::ZERO,
+            chest_radius: 0.0,
+            surface_padding: 0.0,
+            downward_pitch_limit_radians: 75.0_f32.to_radians(),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct CameraRuntimeServiceConfig {
     pub runner: GameplayCameraRunnerKind,
@@ -274,6 +311,9 @@ pub struct CameraRuntimeServiceConfig {
     pub first_person_forward_clearance: f32,
     /// Semantic render-cadence FPP presentation input. It never changes physical eye/ballistic aim.
     pub first_person_presentation: FirstPersonPresentationInput,
+    /// Self-collision envelope for the local owner camera. World collision remains a separate
+    /// spring-arm query; this envelope exists only to prevent entering the animated body shell.
+    pub first_person_body_barrier: FirstPersonBodyBarrierInput,
     /// Visual character center relative to the PlayerActor root.
     /// ThirdPersonOrbit uses this exact point as both orbit pivot and look-at target.
     pub third_person_orbit_pivot_offset_ls: Vec3,
@@ -293,6 +333,7 @@ impl Default for CameraRuntimeServiceConfig {
             first_person_body_rotation_ws: None,
             first_person_forward_clearance: 0.045,
             first_person_presentation: FirstPersonPresentationInput::default(),
+            first_person_body_barrier: FirstPersonBodyBarrierInput::default(),
             third_person_orbit_pivot_offset_ls: Vec3::ZERO,
             third_person_render_position_ws: None,
             third_person_render_rotation_ws: None,

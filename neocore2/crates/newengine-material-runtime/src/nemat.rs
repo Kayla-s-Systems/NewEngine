@@ -384,8 +384,15 @@ fn descriptor_from_authored(material: &AuthoredMaterialDescriptor) -> MaterialDe
         descriptor.flags = descriptor.flags.union(MaterialFlags::ALPHA_BLEND);
     }
     if let Some(alpha_cutoff) = material.surface.alpha_cutoff {
-        descriptor.flags = descriptor.flags.union(MaterialFlags::ALPHA_TEST);
-        descriptor.alpha_cutoff = alpha_cutoff;
+        // alphaCutoff=0 is the authored sentinel for "cutout disabled". Character
+        // libraries intentionally emit the attribute on every surface, including opaque
+        // skin textures whose alpha channel carries masks rather than opacity. Treating
+        // Some(0.0) as ALPHA_TEST turned that packed mask into geometry holes on every
+        // character. Only a strictly positive cutoff enables cutout semantics.
+        descriptor.alpha_cutoff = alpha_cutoff.max(0.0);
+        if descriptor.alpha_cutoff > 0.0 {
+            descriptor.flags = descriptor.flags.union(MaterialFlags::ALPHA_TEST);
+        }
     }
     if let Some(value) = param_f32(&material.params, "metallic") {
         descriptor.metallic = value;
@@ -534,6 +541,30 @@ pub(crate) fn normalize_material_logical_path(path: &str) -> Result<String, Stri
 #[cfg(test)]
 mod canonical_identity_tests {
     use super::*;
+
+    #[test]
+    fn zero_alpha_cutoff_does_not_enable_alpha_test() {
+        let mut material = AuthoredMaterialDescriptor::default();
+        material.surface.blend = "opaque".to_owned();
+        material.surface.alpha_cutoff = Some(0.0);
+
+        let descriptor = descriptor_from_authored(&material);
+
+        assert!(!descriptor.flags.contains(MaterialFlags::ALPHA_TEST));
+        assert_eq!(descriptor.alpha_cutoff, 0.0);
+    }
+
+    #[test]
+    fn positive_alpha_cutoff_enables_alpha_test() {
+        let mut material = AuthoredMaterialDescriptor::default();
+        material.surface.blend = "masked".to_owned();
+        material.surface.alpha_cutoff = Some(0.5);
+
+        let descriptor = descriptor_from_authored(&material);
+
+        assert!(descriptor.flags.contains(MaterialFlags::ALPHA_TEST));
+        assert_eq!(descriptor.alpha_cutoff, 0.5);
+    }
 
     #[test]
     fn nemat_material_id_is_scoped_by_canonical_source() {

@@ -8,13 +8,14 @@ use newengine_plugin_api::{Blob, CapabilityId, MethodName, ServiceV1, ServiceV1D
 use serde_json::{json, Map, Value};
 #[cfg(test)]
 use std::env;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 pub const CONFIG_SERVICE_ID: &str = "newengine.config.v1";
 
 const METHOD_GET_PLUGIN_JSON: &str = "get_plugin_json";
 const ENV_PLUGIN_PREFIX: &str = "NEWENGINE_PLUGIN_";
 const ENV_PATH_SEPARATOR: &str = "__";
+const RESOLVED_CACHE_MAX_ENTRIES: usize = 256;
 
 #[inline]
 fn empty_object() -> Value {
@@ -93,12 +94,14 @@ fn collect_override_ids_inner(
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct PluginConfigStore {
     /// Raw `config.json.plugins` content keyed by top-level root or exact plugin id.
     overrides: HashMap<String, Value>,
     /// Environment snapshot captured for this Engine instance.
     environment: HashMap<String, String>,
+    /// Immutable store results are reused across discovery, selection and load.
+    resolved_cache: Mutex<HashMap<String, Value>>,
 }
 
 impl PluginConfigStore {
@@ -115,10 +118,21 @@ impl PluginConfigStore {
         Self {
             overrides,
             environment,
+            resolved_cache: Mutex::new(HashMap::default()),
         }
     }
 
     fn resolve_plugin_overrides(&self, plugin_id: &str) -> Value {
+        {
+            let cache = match self.resolved_cache.lock() {
+                Ok(cache) => cache,
+                Err(poisoned) => poisoned.into_inner(),
+            };
+            if let Some(resolved) = cache.get(plugin_id) {
+                return resolved.clone();
+            }
+        }
+
         let mut resolved = self
             .overrides
             .get(plugin_id)
@@ -130,6 +144,16 @@ impl PluginConfigStore {
         }
 
         apply_env_overrides_from(&self.environment, plugin_id, &mut resolved);
+
+        let mut cache = match self.resolved_cache.lock() {
+            Ok(cache) => cache,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        if cache.len() < RESOLVED_CACHE_MAX_ENTRIES {
+            cache
+                .entry(plugin_id.to_owned())
+                .or_insert_with(|| resolved.clone());
+        }
         resolved
     }
 
@@ -674,6 +698,28 @@ mod tests {
                 json!("B")
             );
         });
+    }
+
+    #[test]
+    fn resolved_overrides_are_cached_by_plugin_id() {
+        let mut overrides = HashMap::default();
+        overrides.insert(
+            "engine.render.vulkan".to_owned(),
+            json!({"debug_text": "Cached"}),
+        );
+        let store = make_store(overrides);
+
+        assert!(store.resolved_cache.lock().expect("cache").is_empty());
+        assert_eq!(
+            store.resolve_plugin_overrides("engine.render.vulkan")["debug_text"],
+            json!("Cached")
+        );
+        assert_eq!(store.resolved_cache.lock().expect("cache").len(), 1);
+        assert_eq!(
+            store.resolve_plugin_overrides("engine.render.vulkan")["debug_text"],
+            json!("Cached")
+        );
+        assert_eq!(store.resolved_cache.lock().expect("cache").len(), 1);
     }
 
     #[test]

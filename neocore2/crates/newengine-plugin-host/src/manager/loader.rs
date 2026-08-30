@@ -3,25 +3,27 @@
 use std::path::Path;
 use std::time::Instant;
 
-use abi_stable::std_types::RVec;
 use libloading::Library;
 
 use newengine_plugin_api::{
-    ConfigDiagLevelV1, ConfigPatchV1, HostApiV1, PluginDescriptor, PluginDescriptorV2, PluginInfo,
-    PluginRootV1Ref, LEGACY_PLUGIN_ROOT_SYMBOL_BYTES_NUL, LEGACY_PLUGIN_ROOT_SYMBOL_NAME,
+    HostApiV1, PluginDescriptor, PluginDescriptorV2, PluginInfo, PluginRootV1Ref,
+    LEGACY_PLUGIN_ROOT_SYMBOL_BYTES_NUL, LEGACY_PLUGIN_ROOT_SYMBOL_NAME,
     PLUGIN_DESCRIPTOR_V2_SYMBOL_BYTES_NUL, PLUGIN_ROOT_SYMBOL_BYTES_NUL, PLUGIN_ROOT_SYMBOL_NAME,
 };
 
 use crate::host_context::{
     begin_provider_transaction, commit_provider_transaction, register_plugin_descriptor,
-    rollback_provider_transaction, validate_provider_transaction, with_current_plugin_id,
+    rollback_provider_transaction, validate_provider_transaction,
 };
 use crate::plugin_config_service::get_plugin_overrides_with_env;
 use crate::root_observers::{record_loaded_plugin_root, LoadedPluginRootSnapshot};
 use newengine_ulog_api::path_format::{canonicalize_if_exists, display_clean};
 
 use super::adapter::ModuleAdapterAny;
-use super::config_patch::config_patch_from_json_merge_patch;
+use super::load_profile::{LoadProfilerJob, LoadTimings};
+use super::plugin_init::{
+    init_with_overrides, require_non_empty, shutdown_adapter_any, shutdown_after_failed_init,
+};
 use super::types::{LoadedPlugin, PluginLoadError, PluginLoadOrigin, PluginState};
 use super::ui_assets::{extract_plugin_icon, PluginIconData};
 use super::PluginManager;
@@ -29,90 +31,6 @@ use super::PluginManager;
 fn pretty_abs_path(path: &Path) -> String {
     let p = canonicalize_if_exists(path);
     display_clean(&p)
-}
-
-struct LoadProfilerJob {
-    id: String,
-    path: String,
-    started: Instant,
-    completed: bool,
-}
-
-impl LoadProfilerJob {
-    fn begin(path: &str) -> Self {
-        let id = crate::diagnostics::next_job_id("host.plugin_load");
-        crate::diagnostics::begin(serde_json::json!({
-            "id": id.clone(),
-            "name": format!("plugin_load:{}", path),
-            "category": "plugin_lifecycle",
-            "source": "newengine-plugin-host",
-            "detail": "dynamic library load + canonical ABI root + init",
-            "metadata": { "path": path, "operation": "load_one" }
-        }));
-        Self {
-            id,
-            path: path.to_owned(),
-            started: Instant::now(),
-            completed: false,
-        }
-    }
-
-    fn complete_ok(&mut self, plugin_id: &str, timings: &LoadTimings) {
-        self.completed = true;
-        crate::diagnostics::end(serde_json::json!({
-            "id": self.id.clone(),
-            "status": "completed",
-            "detail": format!("plugin loaded in {} ms", timings.total_ms),
-            "metadata": {
-                "plugin_id": plugin_id,
-                "path": self.path.clone(),
-                "total_ms": timings.total_ms,
-                "dlopen_ms": timings.dlopen_ms,
-                "sym_ms": timings.sym_ms,
-                "root_ms": timings.root_ms,
-                "module_create_ms": timings.module_create_ms,
-                "override_lookup_ms": timings.override_lookup_ms,
-                "init_total_ms": timings.init_total_ms
-            }
-        }));
-    }
-}
-
-impl Drop for LoadProfilerJob {
-    fn drop(&mut self) {
-        if self.completed {
-            return;
-        }
-        crate::diagnostics::end(serde_json::json!({
-            "id": self.id.clone(),
-            "status": "failed",
-            "error": "plugin load exited before completion",
-            "detail": format!(
-                "plugin load failed or was skipped after {:.3} ms",
-                crate::diagnostics::elapsed_ms(self.started)
-            ),
-            "metadata": { "path": self.path.clone(), "operation": "load_one" }
-        }));
-    }
-}
-
-#[derive(Debug, Clone, Default)]
-struct InitTimings {
-    config_defaults_ms: u128,
-    config_apply_ms: u128,
-    init_ms: u128,
-}
-
-#[derive(Debug, Clone, Default)]
-struct LoadTimings {
-    dlopen_ms: u128,
-    sym_ms: u128,
-    root_ms: u128,
-    module_create_ms: u128,
-    override_lookup_ms: u128,
-    init_total_ms: u128,
-    init_breakdown: Option<InitTimings>,
-    total_ms: u128,
 }
 
 impl PluginManager {
@@ -139,6 +57,37 @@ impl PluginManager {
         let mut load_job = LoadProfilerJob::begin(pretty_path.as_str());
         let t_total = Instant::now();
         let mut tm = LoadTimings::default();
+
+        // Freeze-time discovery owns the expensive artifact fingerprint. Before mapping
+        // executable code, validate that the observed file identity is still unchanged;
+        // only metadata drift falls back to SHA-256. Manual loads capture their verified
+        // snapshot here, so they still hash exactly once before `Library::new`.
+        let t_discovery = Instant::now();
+        let verification_snapshot = match frozen_manifest {
+            Some(snapshot) => snapshot,
+            None if frozen_plan_present => {
+                return Err(PluginLoadError {
+                    path: path.to_path_buf(),
+                    message: format!(
+                        "artifact '{}' is absent from the frozen discovery manifest inventory",
+                        path.display()
+                    ),
+                });
+            }
+            None => {
+                super::discovery::read_verified_manifest(path).map_err(|error| PluginLoadError {
+                    path: path.to_path_buf(),
+                    message: format!("discovery metadata verification failed: {error}"),
+                })?
+            }
+        };
+        super::discovery::verify_artifact_against_manifest(path, &verification_snapshot).map_err(
+            |error| PluginLoadError {
+                path: path.to_path_buf(),
+                message: format!("frozen discovery artifact verification failed: {error}"),
+            },
+        )?;
+        tm.discovery_verify_ms = t_discovery.elapsed().as_millis();
 
         let t = Instant::now();
         newengine_ulog_api::ulog::info!(
@@ -185,6 +134,7 @@ impl PluginManager {
             "plugins: load stage='root-symbol-done' path='{}'",
             pretty_path.as_str()
         );
+        let t = Instant::now();
         let descriptor_v2 = unsafe {
             lib.get::<unsafe extern "C" fn() -> PluginDescriptorV2>(
                 PLUGIN_DESCRIPTOR_V2_SYMBOL_BYTES_NUL,
@@ -192,6 +142,7 @@ impl PluginManager {
         }
         .ok()
         .map(|symbol| unsafe { symbol() });
+        tm.descriptor_v2_ms = t.elapsed().as_millis();
 
         let t = Instant::now();
         newengine_ulog_api::ulog::info!(
@@ -223,6 +174,7 @@ impl PluginManager {
         );
         tm.module_create_ms = t.elapsed().as_millis();
 
+        let t_identity = Instant::now();
         let id_str = info.id.to_string();
         if let Err(e) = require_non_empty("plugin id", &id_str, path) {
             shutdown_adapter_any(module_any);
@@ -256,18 +208,16 @@ impl PluginManager {
         let normalized_descriptor_v2 = descriptor_v2
             .clone()
             .unwrap_or_else(|| PluginDescriptorV2::from_legacy(&descriptor));
-        let discovery_verification = match frozen_manifest.as_ref() {
-            Some(manifest) => super::discovery::verify_live_descriptor_against_manifest(
-                path,
-                &normalized_descriptor_v2,
-                manifest,
-            ),
-            None if frozen_plan_present => Err(format!(
-                "artifact '{}' is absent from the frozen discovery manifest inventory",
-                path.display()
-            )),
-            None => super::discovery::verify_live_descriptor(path, &normalized_descriptor_v2),
-        };
+        tm.identity_validation_ms = t_identity.elapsed().as_millis();
+        let t_discovery = Instant::now();
+        let discovery_verification = super::discovery::verify_live_descriptor_against_manifest(
+            path,
+            &normalized_descriptor_v2,
+            &verification_snapshot,
+        );
+        tm.discovery_verify_ms = tm
+            .discovery_verify_ms
+            .saturating_add(t_discovery.elapsed().as_millis());
         if let Err(error) = discovery_verification {
             shutdown_adapter_any(module_any);
             return Err(PluginLoadError {
@@ -292,6 +242,7 @@ impl PluginManager {
         let overrides_non_empty =
             !matches!(overrides, serde_json::Value::Object(ref mm) if mm.is_empty());
 
+        let t_provider_prepare = Instant::now();
         let mut provider_origin = load_origin.gateway_origin(path);
         begin_provider_transaction(&id_str).map_err(|e| PluginLoadError {
             path: path.to_path_buf(),
@@ -303,6 +254,7 @@ impl PluginManager {
             descriptor_v2.clone(),
             provider_origin,
         );
+        tm.provider_prepare_ms = t_provider_prepare.elapsed().as_millis();
 
         let t = Instant::now();
         let init_breakdown = match init_with_overrides(
@@ -431,256 +383,4 @@ fn select_module(
     let icon_small = extract_plugin_icon(root);
     newengine_ulog_api::ulog::debug!("plugins: canonical ABI selected id='{}'", info.id);
     (ModuleAdapterAny::new(module), info, descriptor, icon_small)
-}
-
-fn init_with_overrides(
-    module_any: &mut ModuleAdapterAny,
-    id_str: &str,
-    host: HostApiV1,
-    overrides_non_empty: bool,
-    overrides: &serde_json::Value,
-) -> Result<InitTimings, String> {
-    let init_res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        with_current_plugin_id(id_str, || {
-            let mut t = InitTimings::default();
-
-            let t0 = Instant::now();
-            let defaults = module_any
-                .module
-                .config_defaults()
-                .into_result()
-                .map_err(|e| e.to_string())?;
-            t.config_defaults_ms = t0.elapsed().as_millis();
-
-            newengine_ulog_api::ulog::debug!(
-                "plugins: config defaults id='{}' content_type='{}' len={} fmt_v={} ",
-                id_str,
-                defaults.content_type,
-                defaults.bytes.len(),
-                defaults.format_version
-            );
-
-            let mut patches = RVec::<ConfigPatchV1>::new();
-            if overrides_non_empty {
-                patches.push(config_patch_from_json_merge_patch(
-                    id_str,
-                    "config+env",
-                    0,
-                    overrides,
-                ));
-            }
-
-            let t0 = Instant::now();
-            let applied = module_any
-                .module
-                .config_apply_patches(&defaults, patches)
-                .into_result()
-                .map_err(|e| e.to_string())?;
-            t.config_apply_ms = t0.elapsed().as_millis();
-
-            const PREVIEW_MAX: usize = 200;
-            let s = String::from_utf8_lossy(applied.effective.bytes.as_slice());
-            let mut preview = s.to_string();
-            if preview.len() > PREVIEW_MAX {
-                preview.truncate(PREVIEW_MAX);
-                preview.push_str("...");
-            }
-
-            let changed_keys = json_diff_keys_shallow_or_paths(
-                defaults.content_type.as_str(),
-                defaults.bytes.as_slice(),
-                applied.effective.bytes.as_slice(),
-            );
-
-            if changed_keys.is_empty() {
-                newengine_ulog_api::ulog::debug!(
-                    "plugins: config effective id='{}' content_type='{}' len={} changed={} preview='{}'",
-                    id_str,
-                    applied.effective.content_type,
-                    applied.effective.bytes.len(),
-                    applied.changed,
-                    preview
-                );
-            } else {
-                newengine_ulog_api::ulog::debug!(
-                    "plugins: config effective id='{}' content_type='{}' len={} changed={} changed_keys=[{}] preview='{}'",
-                    id_str,
-                    applied.effective.content_type,
-                    applied.effective.bytes.len(),
-                    applied.changed,
-                    changed_keys.join(", "),
-                    preview
-                );
-            }
-
-            for d in applied.diags.iter() {
-                match d.level {
-                    ConfigDiagLevelV1::Info => newengine_ulog_api::ulog::info!(
-                        "plugins: config info id='{}' {} {}",
-                        id_str,
-                        d.code,
-                        d.message
-                    ),
-                    ConfigDiagLevelV1::Warn => newengine_ulog_api::ulog::warn!(
-                        "plugins: config warn id='{}' {} {}",
-                        id_str,
-                        d.code,
-                        d.message
-                    ),
-                    ConfigDiagLevelV1::Error => newengine_ulog_api::ulog::error!(
-                        "plugins: config error id='{}' {} {}",
-                        id_str,
-                        d.code,
-                        d.message
-                    ),
-                }
-            }
-
-            let t0 = Instant::now();
-            module_any
-                .module
-                .init(host.clone(), applied.effective)
-                .into_result()
-                .map_err(|e| e.to_string())?;
-            t.init_ms = t0.elapsed().as_millis();
-            Ok(t)
-        })
-    }));
-
-    match init_res {
-        Ok(Ok(t)) => Ok(t),
-        Ok(Err(e)) => {
-            shutdown_after_failed_init(id_str, module_any);
-            Err(e)
-        }
-        Err(_) => {
-            shutdown_after_failed_init(id_str, module_any);
-            Err("init panicked".to_string())
-        }
-    }
-}
-
-fn json_diff_keys_shallow_or_paths(
-    content_type: &str,
-    defaults_bytes: &[u8],
-    effective_bytes: &[u8],
-) -> Vec<String> {
-    if content_type != "application/json" {
-        return Vec::new();
-    }
-
-    let defaults: serde_json::Value = match serde_json::from_slice(defaults_bytes) {
-        Ok(v) => v,
-        Err(_) => return Vec::new(),
-    };
-
-    let effective: serde_json::Value = match serde_json::from_slice(effective_bytes) {
-        Ok(v) => v,
-        Err(_) => return Vec::new(),
-    };
-
-    let mut out: Vec<String> = Vec::new();
-    diff_json_paths(&defaults, &effective, "", 0, 4, 64, &mut out);
-    out.sort();
-    out.dedup();
-    out
-}
-
-fn diff_json_paths(
-    a: &serde_json::Value,
-    b: &serde_json::Value,
-    prefix: &str,
-    depth: usize,
-    max_depth: usize,
-    max_items: usize,
-    out: &mut Vec<String>,
-) {
-    if out.len() >= max_items {
-        return;
-    }
-
-    if depth >= max_depth {
-        if a != b {
-            out.push(prefix.to_owned());
-        }
-        return;
-    }
-
-    match (a, b) {
-        (serde_json::Value::Object(ao), serde_json::Value::Object(bo)) => {
-            for k in ao.keys() {
-                if out.len() >= max_items {
-                    return;
-                }
-                if !bo.contains_key(k) {
-                    out.push(join_path(prefix, k));
-                }
-            }
-            for (k, bv) in bo.iter() {
-                if out.len() >= max_items {
-                    return;
-                }
-                match ao.get(k) {
-                    None => out.push(join_path(prefix, k)),
-                    Some(av) => {
-                        let p = join_path(prefix, k);
-                        diff_json_paths(av, bv, &p, depth + 1, max_depth, max_items, out);
-                    }
-                }
-            }
-        }
-        (serde_json::Value::Array(aa), serde_json::Value::Array(ba)) => {
-            if aa.len() != ba.len() {
-                out.push(prefix.to_owned());
-                return;
-            }
-            for (i, (av, bv)) in aa.iter().zip(ba.iter()).enumerate() {
-                if out.len() >= max_items {
-                    return;
-                }
-                let p = if prefix.is_empty() {
-                    format!("[{}]", i)
-                } else {
-                    format!("{}[{}]", prefix, i)
-                };
-                diff_json_paths(av, bv, &p, depth + 1, max_depth, max_items, out);
-            }
-        }
-        _ => {
-            if a != b {
-                out.push(prefix.to_owned());
-            }
-        }
-    }
-}
-
-#[inline]
-fn join_path(prefix: &str, key: &str) -> String {
-    if prefix.is_empty() {
-        key.to_owned()
-    } else {
-        format!("{}.{}", prefix, key)
-    }
-}
-
-fn shutdown_after_failed_init(id_str: &str, module_any: &mut ModuleAdapterAny) {
-    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        with_current_plugin_id(id_str, || module_any.module.shutdown())
-    }));
-}
-
-fn shutdown_adapter_any(mut module_any: ModuleAdapterAny) {
-    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        module_any.shutdown();
-    }));
-}
-
-fn require_non_empty(field: &str, value: &str, path: &Path) -> Result<(), PluginLoadError> {
-    if value.trim().is_empty() {
-        return Err(PluginLoadError {
-            path: path.to_path_buf(),
-            message: format!("{field} is empty"),
-        });
-    }
-    Ok(())
 }

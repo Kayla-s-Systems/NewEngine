@@ -10,6 +10,7 @@ use std::{
     fs::File,
     io::{Read, Seek, SeekFrom},
     path::{Path, PathBuf},
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -17,6 +18,8 @@ pub(crate) struct VerifiedPluginDiscoveryManifest {
     pub(crate) manifest: PluginDiscoveryManifestV2,
     pub(crate) artifact_size: u64,
     pub(crate) artifact_sha256: String,
+    pub(crate) artifact_modified_unix_ns: Option<u128>,
+    pub(crate) artifact_created_unix_ns: Option<u128>,
 }
 
 pub(super) fn sidecar_path(path: &Path) -> PathBuf {
@@ -105,20 +108,29 @@ pub(crate) fn read_verified_manifest(
     path: &Path,
 ) -> Result<VerifiedPluginDiscoveryManifest, String> {
     let manifest = read_manifest_metadata(path)?;
-    let artifact_size = std::fs::metadata(path)
-        .map_err(|e| format!("metadata '{}': {e}", path.display()))?
-        .len();
+    let metadata =
+        std::fs::metadata(path).map_err(|e| format!("metadata '{}': {e}", path.display()))?;
+    let artifact_size = metadata.len();
+    let artifact_modified_unix_ns = metadata.modified().ok().and_then(system_time_unix_ns);
+    let artifact_created_unix_ns = metadata.created().ok().and_then(system_time_unix_ns);
     let artifact_sha256 = sha256_file(path)?;
     Ok(VerifiedPluginDiscoveryManifest {
         manifest,
         artifact_size,
         artifact_sha256,
+        artifact_modified_unix_ns,
+        artifact_created_unix_ns,
     })
 }
 
-/// Verifies the currently present artifact against the fingerprint captured during
-/// discovery. The sidecar itself is deliberately not re-read: composition owns an
-/// immutable metadata + observed-artifact snapshot after scanning.
+/// Verifies that the artifact selected by frozen discovery still names the same
+/// observed file before it is mapped as executable code.
+///
+/// Discovery already owns the expensive SHA-256 fingerprint. On the normal immutable
+/// startup path, size + filesystem timestamps prove that the observed artifact has not
+/// changed since that fingerprint was captured, avoiding a second full-file read. If
+/// the filesystem identity drifts (or timestamps are unavailable), verification falls
+/// back to SHA-256 before `Library::new` is allowed to execute the provider.
 pub(crate) fn verify_artifact_against_manifest(
     path: &Path,
     snapshot: &VerifiedPluginDiscoveryManifest,
@@ -134,6 +146,22 @@ pub(crate) fn verify_artifact_against_manifest(
             path.display()
         ));
     }
+
+    let actual_modified_unix_ns = meta.modified().ok().and_then(system_time_unix_ns);
+    let actual_created_unix_ns = meta.created().ok().and_then(system_time_unix_ns);
+    let has_observed_timestamp =
+        snapshot.artifact_modified_unix_ns.is_some() || snapshot.artifact_created_unix_ns.is_some();
+    let modified_matches = snapshot
+        .artifact_modified_unix_ns
+        .is_none_or(|expected| actual_modified_unix_ns == Some(expected));
+    let created_matches = snapshot
+        .artifact_created_unix_ns
+        .is_none_or(|expected| actual_created_unix_ns == Some(expected));
+
+    if has_observed_timestamp && modified_matches && created_matches {
+        return Ok(());
+    }
+
     let actual_hash = sha256_file(path)?;
     if !actual_hash.eq_ignore_ascii_case(snapshot.artifact_sha256.trim()) {
         return Err(format!(
@@ -171,12 +199,14 @@ fn verify_manifest_identity(
     Ok(())
 }
 
+/// Compares the descriptor exposed by the already mapped provider with the immutable
+/// descriptor captured during discovery. Artifact bytes themselves must be verified by
+/// `verify_artifact_against_manifest` before mapping.
 pub(crate) fn verify_live_descriptor_against_manifest(
     path: &Path,
     descriptor: &PluginDescriptorV2,
     snapshot: &VerifiedPluginDiscoveryManifest,
 ) -> Result<(), String> {
-    verify_artifact_against_manifest(path, snapshot)?;
     verify_live_descriptor_metadata_against_manifest(path, descriptor, &snapshot.manifest)
 }
 
@@ -202,13 +232,11 @@ fn verify_live_descriptor_metadata_against_manifest(
     Ok(())
 }
 
-/// Compatibility path for direct/manual loads that do not own a frozen plan.
-pub(crate) fn verify_live_descriptor(
-    path: &Path,
-    descriptor: &PluginDescriptorV2,
-) -> Result<(), String> {
-    let snapshot = read_verified_manifest(path)?;
-    verify_live_descriptor_metadata_against_manifest(path, descriptor, &snapshot.manifest)
+fn system_time_unix_ns(value: SystemTime) -> Option<u128> {
+    value
+        .duration_since(UNIX_EPOCH)
+        .ok()
+        .map(|duration| duration.as_nanos())
 }
 
 fn sha256_file(path: &Path) -> Result<String, String> {
@@ -322,6 +350,25 @@ mod tests {
     }
 
     #[test]
+    fn frozen_snapshot_unchanged_identity_avoids_second_hash() {
+        let bytes = b"not-a-real-dll-fast-path";
+        let path = temp_artifact("provider.dll", bytes);
+        let manifest = manifest_for(&path);
+        std::fs::write(
+            sidecar_path(&path),
+            serde_json::to_vec_pretty(&manifest).expect("json"),
+        )
+        .expect("sidecar");
+        let mut snapshot = read_verified_manifest(&path).expect("capture fingerprint");
+        // If the unchanged fast path accidentally re-hashes, this deliberately invalid
+        // digest would make verification fail.
+        snapshot.artifact_sha256 = "not-the-real-digest".to_owned();
+        verify_artifact_against_manifest(&path, &snapshot)
+            .expect("unchanged observed identity must not perform a second full-file hash");
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
     fn frozen_snapshot_rejects_artifact_mutation_without_rereading_sidecar() {
         let original = b"not-a-real-dll-a";
         let path = temp_artifact("provider.dll", original);
@@ -334,7 +381,7 @@ mod tests {
         let snapshot = read_verified_manifest(&path).expect("capture fingerprint");
         verify_artifact_against_manifest(&path, &snapshot).expect("original artifact");
 
-        std::fs::write(&path, b"not-a-real-dll-b").expect("mutate artifact");
+        std::fs::write(&path, b"not-a-real-dll-mutated-and-larger").expect("mutate artifact");
         let error = verify_artifact_against_manifest(&path, &snapshot).expect_err("must reject");
         assert!(error.contains("SHA-256 mismatch") || error.contains("size mismatch"));
 

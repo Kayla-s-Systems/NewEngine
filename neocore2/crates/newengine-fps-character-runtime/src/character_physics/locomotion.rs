@@ -3,7 +3,8 @@ use std::collections::BTreeMap;
 use newengine_ecs::{EntityId, World};
 use newengine_engine_runtime::gameplay::{
     emit_player_event, PhysicsSurface, PlayerController, PlayerEventKind, PlayerFallState,
-    PlayerGroundState, PlayerLocomotionState, PlayerMovementSpeeds, StaticMeshCollider,
+    PlayerGroundState, PlayerLandingState, PlayerLocomotionState, PlayerMovementSpeeds,
+    StaticMeshCollider,
 };
 use newengine_math::Vec2;
 use newengine_sim::{CharacterMotor, Velocity};
@@ -93,6 +94,10 @@ fn update_player_locomotion(world: &mut World, key_to_entity: &BTreeMap<u64, Ent
                 current_height,
                 ..PlayerFallState::default()
             });
+        let mut landing = world
+            .get::<PlayerLandingState>(player)
+            .copied()
+            .unwrap_or_default();
         let mut footsteps = world
             .get::<FootstepRuntimeState>(player)
             .cloned()
@@ -494,14 +499,23 @@ fn update_player_locomotion(world: &mut World, key_to_entity: &BTreeMap<u64, Ent
 
             if fall.airborne {
                 if fall.falling {
+                    let impact_speed = locomotion.max_downward_speed.max(fall.downward_speed);
+                    landing = PlayerLandingState {
+                        distance: fall.max_distance,
+                        downward_speed: impact_speed,
+                        horizontal_speed,
+                        revision: landing.revision.saturating_add(1).max(1),
+                    };
                     emitted.push((
                         PlayerEventKind::FallEnded,
                         format!(
-                            "fall ended distance_m={:.3} peak_height={:.3} landing_height={:.3} max_downward_speed={:.3}",
+                            "fall ended distance_m={:.3} peak_height={:.3} landing_height={:.3} max_downward_speed={:.3} horizontal_speed={:.3} landing_revision={}",
                             fall.max_distance,
                             fall.peak_height,
                             current_height,
-                            locomotion.max_downward_speed.max(fall.downward_speed),
+                            impact_speed,
+                            horizontal_speed,
+                            landing.revision,
                         ),
                     ));
                 }
@@ -590,6 +604,7 @@ fn update_player_locomotion(world: &mut World, key_to_entity: &BTreeMap<u64, Ent
         locomotion.was_grounded = ground.grounded;
         let _ = world.insert(player, locomotion);
         let _ = world.insert(player, fall);
+        let _ = world.insert(player, landing);
         let _ = world.insert(player, footsteps);
 
         for action in &audio_actions {
@@ -605,8 +620,8 @@ fn update_player_locomotion(world: &mut World, key_to_entity: &BTreeMap<u64, Ent
 mod tests {
     use super::*;
     use newengine_engine_runtime::gameplay::{
-        spawn_default_player, PlayerEventBus, PlayerFallState, PlayerMovementSpeeds,
-        PlayerStanceKind, PlayerStanceState,
+        spawn_default_player, PlayerEventBus, PlayerFallState, PlayerLandingState,
+        PlayerMovementSpeeds, PlayerStanceKind, PlayerStanceState,
     };
     use newengine_math::Vec3;
 
@@ -694,6 +709,13 @@ mod tests {
                 && event.kind == PlayerEventKind::FallEnded
                 && event.message.contains("distance_m=3.500")
         }));
+        let landing = world
+            .get::<PlayerLandingState>(player)
+            .copied()
+            .expect("landing state");
+        assert!((landing.distance - 3.5).abs() < 1.0e-4);
+        assert!(landing.downward_speed >= 6.0);
+        assert!(landing.revision > 0);
     }
 
     #[test]

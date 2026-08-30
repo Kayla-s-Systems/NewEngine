@@ -14,6 +14,10 @@ fn main() -> Result<(), String> {
         VfxTextureSelection::new("muzzleflash-main-alpha.tga/", "muzzle_main_alpha"),
         VfxTextureSelection::new("muzzleflash-main-emis3.tga/", "muzzle_main_rgba")
             .with_alpha_source("muzzleflash-main-alpha.tga/"),
+        VfxTextureSelection::new("pistol-muzzleflash-side-color.tga/", "pistol_muzzle_color"),
+        VfxTextureSelection::new("pistol-muzzleflash-side-alpha.tga/", "pistol_muzzle_alpha"),
+        VfxTextureSelection::new("pistol-muzzleflash-side-color.tga/", "pistol_muzzle_rgba")
+            .with_alpha_source("pistol-muzzleflash-side-alpha.tga/"),
         VfxTextureSelection::new("/misc/sparks.tga/", "impact_sparks"),
         VfxTextureSelection::new("concrete-bullet-hole-col.tga/", "impact_concrete_color"),
         VfxTextureSelection::new("concrete-bullet-hole-alpha.tga/", "impact_concrete_alpha"),

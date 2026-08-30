@@ -555,6 +555,46 @@ pub(super) fn apply_player_model_from_ytyp(
         profile.player.model.fall_animation = Some(reference);
         applied += 1;
     }
+    if let Some(reference) = value_path(model, &["fall_low_animation"]).and_then(value_string) {
+        profile.player.model.fall_low_animation = Some(reference);
+        applied += 1;
+    }
+    if let Some(reference) = value_path(model, &["fall_medium_animation"]).and_then(value_string) {
+        profile.player.model.fall_medium_animation = Some(reference);
+        applied += 1;
+    }
+    if let Some(reference) = value_path(model, &["fall_high_animation"]).and_then(value_string) {
+        profile.player.model.fall_high_animation = Some(reference);
+        applied += 1;
+    }
+    if let Some(reference) = value_path(model, &["landing_soft_animation"]).and_then(value_string) {
+        profile.player.model.landing_soft_animation = Some(reference);
+        applied += 1;
+    }
+    if let Some(reference) = value_path(model, &["landing_medium_animation"]).and_then(value_string)
+    {
+        profile.player.model.landing_medium_animation = Some(reference);
+        applied += 1;
+    }
+    if let Some(reference) = value_path(model, &["landing_hard_animation"]).and_then(value_string) {
+        profile.player.model.landing_hard_animation = Some(reference);
+        applied += 1;
+    }
+    if let Some(reference) =
+        value_path(model, &["landing_hard_run_animation"]).and_then(value_string)
+    {
+        profile.player.model.landing_hard_run_animation = Some(reference);
+        applied += 1;
+    }
+    if let Some(value) = value_path(model, &["fall_medium_min_distance"]).and_then(value_f32) {
+        profile.player.model.fall_medium_min_distance = value.max(0.0);
+        applied += 1;
+    }
+    if let Some(value) = value_path(model, &["fall_high_min_distance"]).and_then(value_f32) {
+        profile.player.model.fall_high_min_distance =
+            value.max(profile.player.model.fall_medium_min_distance);
+        applied += 1;
+    }
     if let Some(reference) =
         value_path(model, &["equipment_ready_animation"]).and_then(value_string)
     {
@@ -643,6 +683,46 @@ pub(super) fn apply_player_model_from_ytyp(
     if let Some(reference) = value_path(model, &["unarmed_attack_animation"]).and_then(value_string)
     {
         profile.player.model.unarmed_attack_animation = Some(reference);
+        applied += 1;
+    }
+    if let Some(reference) = value_path(model, &["turn_45_left_animation"]).and_then(value_string)
+    {
+        profile.player.model.turn_45_left_animation = Some(reference);
+        applied += 1;
+    }
+    if let Some(reference) = value_path(model, &["turn_45_right_animation"]).and_then(value_string)
+    {
+        profile.player.model.turn_45_right_animation = Some(reference);
+        applied += 1;
+    }
+    if let Some(reference) = value_path(model, &["turn_90_left_animation"]).and_then(value_string)
+    {
+        profile.player.model.turn_90_left_animation = Some(reference);
+        applied += 1;
+    }
+    if let Some(reference) = value_path(model, &["turn_90_right_animation"]).and_then(value_string)
+    {
+        profile.player.model.turn_90_right_animation = Some(reference);
+        applied += 1;
+    }
+    if let Some(reference) = value_path(model, &["turn_135_left_animation"]).and_then(value_string)
+    {
+        profile.player.model.turn_135_left_animation = Some(reference);
+        applied += 1;
+    }
+    if let Some(reference) = value_path(model, &["turn_135_right_animation"]).and_then(value_string)
+    {
+        profile.player.model.turn_135_right_animation = Some(reference);
+        applied += 1;
+    }
+    if let Some(reference) = value_path(model, &["turn_180_left_animation"]).and_then(value_string)
+    {
+        profile.player.model.turn_180_left_animation = Some(reference);
+        applied += 1;
+    }
+    if let Some(reference) = value_path(model, &["turn_180_right_animation"]).and_then(value_string)
+    {
+        profile.player.model.turn_180_right_animation = Some(reference);
         applied += 1;
     }
     let player_values = player_node.unwrap_or(model);

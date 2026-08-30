@@ -9,6 +9,7 @@ use newengine_asset_format_nehair::{
     compile_authored_groom_json, decode_nehair, encode_nehair_v1, AuthoredHairCollisionCapsuleV1,
     AuthoredHairGroomV1, AuthoredHairGuidePointV1, AuthoredHairGuideStrandV1,
 };
+use newengine_math::{Mat4, Vec3};
 use newengine_model_skeleton_api::{
     ModelSkeletonAnchors, ModelSkeletonJointMetadata, ModelSkeletonMetadata,
 };
@@ -93,11 +94,18 @@ fn main() -> Result<(), String> {
                     mesh.vertices.len()
                 ));
             }
+            let source_to_model = entry.skin_source_to_model.ok_or_else(|| {
+                format!(
+                    "selected skinned hair mesh '{}' belongs to YDD entry '{}' without skin_source_to_model",
+                    mesh.name, entry.name
+                )
+            })?;
             let (accepted, rejected) = append_mesh_guides(
                 &mut authored,
                 mesh,
                 skin,
                 &skeleton,
+                source_to_model,
                 mesh_index.min(u16::MAX as usize) as u16,
             )?;
             accepted_components += accepted;
@@ -154,6 +162,7 @@ fn append_mesh_guides(
     mesh: &YddBinaryMesh,
     skin: &[YddBinarySkinVertex],
     skeleton: &ModelSkeletonMetadata,
+    source_to_model: [f32; 16],
     group: u16,
 ) -> Result<(usize, usize), String> {
     let triangles = valid_triangles(mesh)?;
@@ -182,9 +191,15 @@ fn append_mesh_guides(
             continue;
         }
 
+        let source_to_model = Mat4::from_cols_array(&source_to_model);
         let mut centers = diameter
             .iter()
-            .map(|&tri| triangle_centroid(mesh, &triangles[tri]))
+            .map(|&tri| {
+                let source = triangle_centroid(mesh, &triangles[tri]);
+                let model =
+                    source_to_model.transform_point3(Vec3::new(source[0], source[1], source[2]));
+                [model.x, model.y, model.z]
+            })
             .collect::<Vec<_>>();
         let total_length = polyline_length(&centers);
         if !total_length.is_finite() || !(0.012..=2.5).contains(&total_length) {

@@ -67,6 +67,15 @@ pub(crate) struct GameReadyPlayerModelSpec {
     pub(crate) crouch_walk_animation: Option<String>,
     pub(crate) jump_animation: Option<String>,
     pub(crate) fall_animation: Option<String>,
+    pub(crate) fall_low_animation: Option<String>,
+    pub(crate) fall_medium_animation: Option<String>,
+    pub(crate) fall_high_animation: Option<String>,
+    pub(crate) landing_soft_animation: Option<String>,
+    pub(crate) landing_medium_animation: Option<String>,
+    pub(crate) landing_hard_animation: Option<String>,
+    pub(crate) landing_hard_run_animation: Option<String>,
+    pub(crate) fall_medium_min_distance: f32,
+    pub(crate) fall_high_min_distance: f32,
     pub(crate) detached_head_follow: bool,
     pub(crate) detached_head_follow_rule:
         Option<newengine_engine_runtime::gameplay::PlayerPaletteFollowRule>,
@@ -81,6 +90,16 @@ pub(crate) struct GameReadyPlayerModelSpec {
     pub(crate) equipment_reload_animation: Option<String>,
     pub(crate) unarmed_ready_animation: Option<String>,
     pub(crate) unarmed_attack_animation: Option<String>,
+    /// Optional authored turn-in-place clips. These are full-body steps; stationary mouse yaw never
+    /// rotates the world root directly. Runtime selects the nearest signed angle.
+    pub(crate) turn_45_left_animation: Option<String>,
+    pub(crate) turn_45_right_animation: Option<String>,
+    pub(crate) turn_90_left_animation: Option<String>,
+    pub(crate) turn_90_right_animation: Option<String>,
+    pub(crate) turn_135_left_animation: Option<String>,
+    pub(crate) turn_135_right_animation: Option<String>,
+    pub(crate) turn_180_left_animation: Option<String>,
+    pub(crate) turn_180_right_animation: Option<String>,
     pub(crate) equipment_ready_sample_phase: f32,
     pub(crate) equipment_ready_rotation_weights:
         Vec<newengine_engine_runtime::gameplay::PlayerJointRotationWeight>,

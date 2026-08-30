@@ -1,15 +1,19 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
+mod filesystem;
 mod launch;
 mod manifest;
 mod mounts;
 mod scripting;
+mod service;
 mod validation;
 
+pub use filesystem::*;
 pub use launch::*;
 pub use manifest::*;
 pub use mounts::*;
 pub use scripting::*;
+pub use service::*;
 
 pub const PROJECT_MANIFEST_FILE: &str = "game.toml";
 pub const GAME_MANIFEST_ENV: &str = "NEWENGINE_GAME_MANIFEST";

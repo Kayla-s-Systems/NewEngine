@@ -17,12 +17,12 @@ use newengine_plugin_host::{
 };
 use newengine_project_api::{
     runtime_profile_service_id, GAME_MANIFEST_ENV, PROJECT_BROWSER_PRESENT_METHOD_V1,
-    PROJECT_BROWSER_SERVICE_ID, PROJECT_MANIFEST_FILE, RUNTIME_PROFILE_LAUNCH_METHOD_V1,
+    PROJECT_BROWSER_SERVICE_ID, RUNTIME_PROFILE_LAUNCH_METHOD_V1,
 };
 use newengine_project_runtime::{
     adjacent_game_manifest_from_exe, default_projects_root, game_manifest_request_from_process,
-    load_project_from_request_with_launch, project_launch_request_from_process,
-    ProjectBrowserSelection,
+    load_project_from_request_with_launch, normalize_project_manifest_request,
+    project_launch_request_from_process, ProjectBrowserSelection,
 };
 use newengine_runtime_host::runtime_config::{load_engine_runtime_config, ENGINE_RUNTIME_MODE_ENV};
 use project_browser_settings::{
@@ -81,7 +81,7 @@ fn run() -> Result<(), String> {
 
     if env::args().any(|arg| arg == "--build-standalone") {
         let manifest_path = project_request_from_cli()
-            .map(normalize_manifest_request)
+            .map(normalize_project_manifest_request)
             .ok_or_else(|| {
                 "--build-standalone requires --project <game.toml|project-directory>".to_owned()
             })?;
@@ -109,7 +109,7 @@ fn run() -> Result<(), String> {
     }
 
     let manifest_path = project_request_from_cli()
-        .map(normalize_manifest_request)
+        .map(normalize_project_manifest_request)
         .or_else(game_manifest_request_from_process)
         .or_else(adjacent_game_manifest_from_exe);
     let Some(manifest_path) = manifest_path else {
@@ -118,7 +118,7 @@ fn run() -> Result<(), String> {
         }
         return Err("runtime package is incomplete: game.toml was not found; pass --project <game.toml> or enable the startup project browser".to_owned());
     };
-    let manifest_path = normalize_manifest_request(manifest_path);
+    let manifest_path = normalize_project_manifest_request(manifest_path);
     let launch_request = project_launch_request_from_process()
         .or_else(|| Some(runtime_config.runtime.mode.launch_id().to_owned()));
     let project = load_project_from_request_with_launch(&manifest_path, launch_request.as_deref())?;
@@ -337,7 +337,7 @@ fn run_project_selection(runtime_config_path: &Path) -> Result<(), String> {
         // Explicit CLI project selection is the only chooser bypass. Inherited
         // NEWENGINE_PROJECT is deliberately ignored in project-selection mode
         (
-            normalize_manifest_request(request),
+            normalize_project_manifest_request(request),
             project_launch_request_from_process(),
         )
     } else {
@@ -653,7 +653,7 @@ fn load_game_runtime_plugins(
     project: &newengine_project_runtime::ProjectRuntimeContext,
     host: newengine_plugin_api::HostApiV1,
 ) -> Result<(), String> {
-    let conventional = project.project_root.join("plugins");
+    let conventional = project.paths().conventional_plugins_dir();
     if conventional.is_dir() {
         plugins
             .load_from_dir_with_policy_and_origin(
@@ -674,11 +674,7 @@ fn load_game_runtime_plugins(
         let Some(path) = plugin.path.as_ref() else {
             continue;
         };
-        let path = if path.is_absolute() {
-            path.clone()
-        } else {
-            project.project_root.join(path)
-        };
+        let path = project.resolve_authored_path(path);
 
         let result = if path.is_dir() {
             plugins.load_from_dir_with_policy_and_origin(
@@ -707,13 +703,6 @@ fn load_game_runtime_plugins(
         }
     }
     Ok(())
-}
-
-fn normalize_manifest_request(mut path: PathBuf) -> PathBuf {
-    if path.is_dir() {
-        path.push(PROJECT_MANIFEST_FILE);
-    }
-    path
 }
 
 #[derive(Debug)]

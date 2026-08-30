@@ -350,8 +350,28 @@ pub struct FpsCharacterPresentationPolicy {
     /// Character-owned bare-hand presentation. Weapon definitions never carry character clips.
     pub unarmed_ready_animation: Option<String>,
     pub unarmed_attack_animation: Option<String>,
+    /// Optional authored turn-in-place clips. These are full-body steps; stationary mouse yaw never
+    /// rotates the world root directly. Runtime selects the nearest signed angle.
+    pub turn_45_left_animation: Option<String>,
+    pub turn_45_right_animation: Option<String>,
+    pub turn_90_left_animation: Option<String>,
+    pub turn_90_right_animation: Option<String>,
+    pub turn_135_left_animation: Option<String>,
+    pub turn_135_right_animation: Option<String>,
+    pub turn_180_left_animation: Option<String>,
+    pub turn_180_right_animation: Option<String>,
     /// Full-body pose used while the character owns NoClip traversal.
     pub noclip_animation: Option<String>,
+    /// Optional height-aware full-body fall presentation. Clip refs and thresholds are authored data.
+    pub fall_low_animation: Option<String>,
+    pub fall_medium_animation: Option<String>,
+    pub fall_high_animation: Option<String>,
+    pub landing_soft_animation: Option<String>,
+    pub landing_medium_animation: Option<String>,
+    pub landing_hard_animation: Option<String>,
+    pub landing_hard_run_animation: Option<String>,
+    pub fall_medium_min_distance: f32,
+    pub fall_high_min_distance: f32,
     pub equipment_ready_sample_phase: f32,
     pub equipment_ready_rotation_weights: Vec<FpsJointRotationWeightPolicy>,
     pub equipment_aim_rotation_weights: Vec<FpsJointRotationWeightPolicy>,

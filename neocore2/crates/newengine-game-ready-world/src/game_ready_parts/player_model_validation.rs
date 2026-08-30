@@ -55,6 +55,38 @@ pub(super) fn validate_player_asset_family(
             "unarmed_attack_animation",
             assignment.presentation.unarmed_attack_animation.as_deref(),
         ),
+        (
+            "turn_45_left_animation",
+            assignment.presentation.turn_45_left_animation.as_deref(),
+        ),
+        (
+            "turn_45_right_animation",
+            assignment.presentation.turn_45_right_animation.as_deref(),
+        ),
+        (
+            "turn_90_left_animation",
+            assignment.presentation.turn_90_left_animation.as_deref(),
+        ),
+        (
+            "turn_90_right_animation",
+            assignment.presentation.turn_90_right_animation.as_deref(),
+        ),
+        (
+            "turn_135_left_animation",
+            assignment.presentation.turn_135_left_animation.as_deref(),
+        ),
+        (
+            "turn_135_right_animation",
+            assignment.presentation.turn_135_right_animation.as_deref(),
+        ),
+        (
+            "turn_180_left_animation",
+            assignment.presentation.turn_180_left_animation.as_deref(),
+        ),
+        (
+            "turn_180_right_animation",
+            assignment.presentation.turn_180_right_animation.as_deref(),
+        ),
     ] {
         let Some(reference) = reference else { continue };
         let Some(reference_owner) = character_asset_owner(reference) else {

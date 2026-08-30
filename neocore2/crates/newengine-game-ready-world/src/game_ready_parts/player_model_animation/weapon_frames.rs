@@ -214,7 +214,6 @@ pub(crate) fn publish_player_first_person_camera_anchors(world: &mut newengine_e
     // may move the visible skull substantially; sampling that motion directly makes the camera
     // cross the face/torso shell during walk cycles. Use the render-interpolated actor position and
     // stance eye height. Camera runtime adds only a small body-owned forward/parallax offset.
-    const FACE_FORWARD_CLEARANCE_M: f32 = 0.045;
     let players = world
         .query::<PlayerAnimationRuntimeBinding>()
         .map(|(player, _)| player)
@@ -248,6 +247,11 @@ pub(crate) fn publish_player_first_person_camera_anchors(world: &mut newengine_e
             .map(|binding| binding.feet_to_eye_height);
         let eye_height =
             calibrated_first_person_eye_height(body, stance_eye_height, model_feet_to_eye_height);
+        // Keep the gameplay camera at the front of the authored head envelope instead of
+        // leaving it near the skull centre. Weapon placement is camera-space-owned now, so
+        // this clearance no longer drags the rifle or hands with it. Scale from the generic
+        // visual envelope and keep a conservative human-sized bound for malformed content.
+        let face_forward_clearance = (body.visual_radius * 0.24).clamp(0.085, 0.120);
         let eye_center_ws = actor_position + Vec3::Y * eye_height;
         if !eye_center_ws.is_finite() {
             continue;
@@ -256,7 +260,7 @@ pub(crate) fn publish_player_first_person_camera_anchors(world: &mut newengine_e
             player,
             newengine_engine_runtime::gameplay::PlayerFirstPersonCameraAnchor {
                 eye_center_ws,
-                forward_clearance: FACE_FORWARD_CLEARANCE_M,
+                forward_clearance: face_forward_clearance,
             },
         );
     }

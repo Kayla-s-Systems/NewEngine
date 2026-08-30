@@ -329,6 +329,62 @@ pub(super) fn prepare_player_animation_binding(
         skeleton,
         &animation_runtime,
     );
+    let turn_45_left_pose = load_optional_presentation_clip(
+        "turn_45_left",
+        assignment.presentation.turn_45_left_animation.as_deref(),
+        assignment,
+        skeleton,
+        &animation_runtime,
+    );
+    let turn_45_right_pose = load_optional_presentation_clip(
+        "turn_45_right",
+        assignment.presentation.turn_45_right_animation.as_deref(),
+        assignment,
+        skeleton,
+        &animation_runtime,
+    );
+    let turn_90_left_pose = load_optional_presentation_clip(
+        "turn_90_left",
+        assignment.presentation.turn_90_left_animation.as_deref(),
+        assignment,
+        skeleton,
+        &animation_runtime,
+    );
+    let turn_90_right_pose = load_optional_presentation_clip(
+        "turn_90_right",
+        assignment.presentation.turn_90_right_animation.as_deref(),
+        assignment,
+        skeleton,
+        &animation_runtime,
+    );
+    let turn_135_left_pose = load_optional_presentation_clip(
+        "turn_135_left",
+        assignment.presentation.turn_135_left_animation.as_deref(),
+        assignment,
+        skeleton,
+        &animation_runtime,
+    );
+    let turn_135_right_pose = load_optional_presentation_clip(
+        "turn_135_right",
+        assignment.presentation.turn_135_right_animation.as_deref(),
+        assignment,
+        skeleton,
+        &animation_runtime,
+    );
+    let turn_180_left_pose = load_optional_presentation_clip(
+        "turn_180_left",
+        assignment.presentation.turn_180_left_animation.as_deref(),
+        assignment,
+        skeleton,
+        &animation_runtime,
+    );
+    let turn_180_right_pose = load_optional_presentation_clip(
+        "turn_180_right",
+        assignment.presentation.turn_180_right_animation.as_deref(),
+        assignment,
+        skeleton,
+        &animation_runtime,
+    );
     // NoClip is a full-body traversal mode, not a degradable upper-body presentation overlay.
     // If a character authors a seated-flight clip, accepting a load/binding failure and falling
     // back to locomotion would make the character visibly walk/run while collisionless. Treat the
@@ -345,6 +401,72 @@ pub(super) fn prepare_player_animation_binding(
         ),
         None => None,
     };
+    let fall_low_pose = load_optional_presentation_clip(
+        "fall_low",
+        assignment.presentation.fall_low_animation.as_deref(),
+        assignment,
+        skeleton,
+        &animation_runtime,
+    );
+    let fall_medium_pose = load_optional_presentation_clip(
+        "fall_medium",
+        assignment.presentation.fall_medium_animation.as_deref(),
+        assignment,
+        skeleton,
+        &animation_runtime,
+    );
+    let fall_high_pose = load_optional_presentation_clip(
+        "fall_high",
+        assignment.presentation.fall_high_animation.as_deref(),
+        assignment,
+        skeleton,
+        &animation_runtime,
+    );
+    let landing_soft_pose = load_optional_presentation_clip(
+        "landing_soft",
+        assignment.presentation.landing_soft_animation.as_deref(),
+        assignment,
+        skeleton,
+        &animation_runtime,
+    );
+    let landing_medium_pose = load_optional_presentation_clip(
+        "landing_medium",
+        assignment.presentation.landing_medium_animation.as_deref(),
+        assignment,
+        skeleton,
+        &animation_runtime,
+    );
+    let landing_hard_pose = load_optional_presentation_clip(
+        "landing_hard",
+        assignment.presentation.landing_hard_animation.as_deref(),
+        assignment,
+        skeleton,
+        &animation_runtime,
+    );
+    let landing_hard_run_pose = load_optional_presentation_clip(
+        "landing_hard_run",
+        assignment
+            .presentation
+            .landing_hard_run_animation
+            .as_deref(),
+        assignment,
+        skeleton,
+        &animation_runtime,
+    );
+    let fall_medium_min_distance = if assignment.presentation.fall_medium_min_distance.is_finite() {
+        assignment.presentation.fall_medium_min_distance.max(0.0)
+    } else {
+        0.0
+    };
+    let fall_high_min_distance = if assignment.presentation.fall_high_min_distance.is_finite() {
+        assignment
+            .presentation
+            .fall_high_min_distance
+            .max(fall_medium_min_distance)
+    } else {
+        fall_medium_min_distance
+    };
+
     let equipment_ready_sample_phase = if assignment
         .presentation
         .equipment_ready_sample_phase
@@ -402,7 +524,13 @@ pub(super) fn prepare_player_animation_binding(
     let equipment_ik = resolve_authored_equipment_arm_ik(skeleton, &assignment.presentation);
     let joint_frames_scratch = Vec::with_capacity(skeleton.joints.len());
     let foot_joints = resolve_foot_joint_binding(skeleton);
+    let turn_root_joint = skeleton
+        .joints
+        .iter()
+        .position(|joint| joint.name == skeleton.anchors.root);
+    let body_turn_layers = resolve_body_turn_layers(skeleton);
     let sampled_target_locals = current_locals.clone();
+    let pose_continuity = PoseContinuityBridge::new(&current_locals);
     if !helper_pose_copies.is_empty() {
         newengine_ulog_api::ulog::info!(
             "game-ready: authored joint-copy rig channels={} policy='definition rules -> generic local-pose copy before skin palette'",
@@ -423,6 +551,31 @@ pub(super) fn prepare_player_animation_binding(
             eyes.left,
             eyes.right,
             eyes.parent,
+        );
+    }
+    if !body_turn_layers.is_empty() {
+        newengine_ulog_api::ulog::info!(
+            "game-ready: turn-in-place torso chain resolved layers={} policy='view residual yaw -> spine hierarchy; hips/legs stay root-owned'",
+            body_turn_layers.len(),
+        );
+    }
+    let native_turn_clip_count = [
+        turn_45_left_pose.is_some(),
+        turn_45_right_pose.is_some(),
+        turn_90_left_pose.is_some(),
+        turn_90_right_pose.is_some(),
+        turn_135_left_pose.is_some(),
+        turn_135_right_pose.is_some(),
+        turn_180_left_pose.is_some(),
+        turn_180_right_pose.is_some(),
+    ]
+    .into_iter()
+    .filter(|ready| *ready)
+    .count();
+    if native_turn_clip_count > 0 {
+        newengine_ulog_api::ulog::info!(
+            "game-ready: native turn-in-place prepared clips={} policy=authored-step-bounded-fixed-step-yaw-no-snap-rebase",
+            native_turn_clip_count,
         );
     }
     if equipment_ready_pose.is_some()
@@ -469,6 +622,20 @@ pub(super) fn prepare_player_animation_binding(
         bind_joint_frames,
         joint_frames_scratch,
         foot_joints,
+        turn_root_joint,
+        turn_45_left_pose,
+        turn_45_right_pose,
+        turn_90_left_pose,
+        turn_90_right_pose,
+        turn_135_left_pose,
+        turn_135_right_pose,
+        turn_180_left_pose,
+        turn_180_right_pose,
+        turn_in_place: None,
+        turn_sequence: 0,
+        pose_continuity,
+        body_turn_layers,
+        body_turn_yaw_radians: 0.0,
         braid_secondary_motion,
         helper_pose_copies,
         eye_contract,
@@ -476,6 +643,21 @@ pub(super) fn prepare_player_animation_binding(
         noclip_pose,
         noclip_time_seconds: 0.0,
         noclip_active: false,
+        fall_low_pose,
+        fall_medium_pose,
+        fall_high_pose,
+        landing_soft_pose,
+        landing_medium_pose,
+        landing_hard_pose,
+        landing_hard_run_pose,
+        landing_active_band: None,
+        landing_active_run: false,
+        landing_time_seconds: 0.0,
+        landing_last_revision: 0,
+        fall_medium_min_distance,
+        fall_high_min_distance,
+        fall_active_band: None,
+        fall_time_seconds: 0.0,
         equipment_ready_pose,
         equipment_aim_pose,
         equipment_reload_pose,

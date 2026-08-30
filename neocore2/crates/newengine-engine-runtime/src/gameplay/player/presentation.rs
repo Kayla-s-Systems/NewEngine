@@ -102,6 +102,8 @@ pub fn capture_player_fixed_poses(world: &mut World, fixed_tick: u64) {
             history.current_position = position;
             history.current_rotation = rotation;
         }
+        // Keep both fixed endpoints intact. Authored turn-in-place now advances physical facing in
+        // small bounded increments, so ordinary render slerp is exactly the desired presentation.
         let _ = world.insert(player, history);
     }
 }
@@ -218,6 +220,27 @@ pub fn player_render_model_matrix(world: &World, entity: EntityId, simulation_mo
 mod tests {
     use super::*;
     use newengine_transform::Transform;
+
+    #[test]
+    fn incremental_turn_facing_is_interpolated_instead_of_snapped() {
+        let mut world = World::new();
+        let player = world.spawn();
+        let _ = world.insert(player, PlayerActor);
+        let _ = world.insert(player, Transform::default());
+        capture_player_fixed_poses(&mut world, 1);
+
+        let six_degrees = 6.0_f32.to_radians();
+        world.get_mut::<Transform>(player).unwrap().rotation = Quat::from_rotation_y(six_degrees);
+        capture_player_fixed_poses(&mut world, 2);
+        publish_player_render_poses(&mut world, 0.25, 1.0 / 144.0);
+
+        let rendered = world.get::<PlayerRenderPose>(player).copied().unwrap();
+        let (yaw, pitch, roll) = rendered.rotation.to_euler(newengine_math::EulerRot::YXZ);
+        assert!(yaw > 0.0 && yaw < six_degrees);
+        assert!((yaw - six_degrees * 0.25).abs() < 1.0e-4);
+        assert!(pitch.abs() < 1.0e-6);
+        assert!(roll.abs() < 1.0e-6);
+    }
 
     #[test]
     fn fixed_pose_interpolation_is_monotonic_and_does_not_mutate_simulation_transform() {

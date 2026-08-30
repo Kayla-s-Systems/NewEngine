@@ -239,7 +239,15 @@ impl PendingLitPipelineBuild {
             desc = desc.with_color_formats(gbuffer_color_formats());
         }
         if double_sided {
-            desc = desc.with_cull_mode(RasterCullMode::None);
+            // Diagnostic only: when selected through the skinned debug gate, front-cull
+            // distinguishes globally reversed character winding from a genuine need for
+            // two-sided rasterization. Production keeps authored double-sided semantics.
+            let cull = if std::env::var_os("NEWENGINE_DEBUG_SKIN_CULL_FRONT").is_some() {
+                RasterCullMode::Front
+            } else {
+                RasterCullMode::None
+            };
+            desc = desc.with_cull_mode(cull);
         }
         Ok(desc)
     }

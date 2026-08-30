@@ -49,9 +49,19 @@ pub(crate) fn tick_player_skin_animation(world: &mut newengine_ecs::World, dt: f
             .resource::<newengine_gameplay_fps_api::FpsCharacterTraversalState>()
             .copied()
             .is_some_and(|state| state.noclip_enabled());
+        let fall_state = world
+            .get::<newengine_engine_runtime::gameplay::PlayerFallState>(player)
+            .copied()
+            .unwrap_or_default();
+        let landing_state = world
+            .get::<newengine_engine_runtime::gameplay::PlayerLandingState>(player)
+            .copied()
+            .unwrap_or_default();
+        let fall_presentation_requested = !noclip_enabled && fall_state.falling;
         let active_weapon =
             newengine_engine_runtime::gameplay::active_equipped_weapon_binding(world, player);
         let unarmed_active = !noclip_enabled
+            && !fall_presentation_requested
             && active_weapon.is_some_and(|binding| {
                 binding.weapon.weapon_type
                     == newengine_engine_runtime::gameplay::WeaponType::Unarmed
@@ -111,6 +121,7 @@ pub(crate) fn tick_player_skin_animation(world: &mut newengine_ecs::World, dt: f
             weapon_presentation.is_some(),
         );
         let equipment_presentation_active = !noclip_enabled
+            && !fall_presentation_requested
             && equipment_stance != EquipmentPresentationStance::None
             && world
                 .get::<PlayerAnimationRuntimeBinding>(player)
@@ -139,12 +150,42 @@ pub(crate) fn tick_player_skin_animation(world: &mut newengine_ecs::World, dt: f
             .copied()
             .unwrap_or_default()
             .0;
+
         let root_transform = world.get::<Transform>(player).copied().unwrap_or_default();
         let model_root_local = world
             .get::<newengine_engine_runtime::gameplay::PlayerModelBinding>(player)
             .and_then(|binding| binding.visual_root)
             .and_then(|visual_root| world.get::<Transform>(visual_root).copied())
             .unwrap_or_default();
+        // Gameplay facing is the PlayerActor root. `visual_root.rotation` is an imported-model basis
+        // correction (Ellie is a good example with yaw_offset=PI) and must never be interpreted as
+        // additional gameplay yaw, otherwise an aligned character appears to require a 180° turn.
+        let rendered_body_rotation = root_transform.rotation.normalize_or_identity();
+        let body_forward = (rendered_body_rotation * -Vec3::Z).normalize_or_zero();
+        let body_yaw = if body_forward.length_squared() > 1.0e-8 {
+            (-body_forward.x).atan2(-body_forward.z)
+        } else {
+            0.0
+        };
+        let view_yaw = world
+            .get::<newengine_sim::CharacterMotor>(player)
+            .map(|motor| motor.yaw)
+            .filter(|yaw| yaw.is_finite())
+            .unwrap_or(body_yaw);
+        let view_body_yaw_delta = newengine_math::wrap_pi(view_yaw - body_yaw);
+        let horizontal_speed = Vec3::new(world_velocity.x, 0.0, world_velocity.z).length();
+        let native_turn_allowed = !noclip_enabled
+            && !fall_presentation_requested
+            && horizontal_speed < 0.08
+            && animation_state.locomotion
+                == newengine_engine_runtime::gameplay::PlayerLocomotionAnimation::Idle;
+        // Before a native step starts, a small upper-body anticipation may follow view yaw. Once
+        // the turn clip owns the body this procedural layer is disabled completely.
+        let body_turn_target_yaw = if native_turn_allowed {
+            view_body_yaw_delta.clamp(-32.0_f32.to_radians(), 32.0_f32.to_radians())
+        } else {
+            0.0
+        };
         let model_to_world = root_transform.to_mat4() * model_root_local.to_mat4();
         let first_person_eye_model = if first_person_active {
             world
@@ -170,6 +211,7 @@ pub(crate) fn tick_player_skin_animation(world: &mut newengine_ecs::World, dt: f
         let root_position = root_transform.position;
         let root_rotation = root_transform.rotation;
         let mut timeline_events = Vec::new();
+        let mut turn_step_request = None;
         let (palette, clip_ref, active_state, foot_pose) = {
             let Some(binding) = world.get_mut::<PlayerAnimationRuntimeBinding>(player) else {
                 continue;
@@ -307,6 +349,137 @@ pub(crate) fn tick_player_skin_animation(world: &mut newengine_ecs::World, dt: f
                     animation_state.normalized_speed
                 );
             }
+            // Native turn-in-place keeps the authored full-body step, but extracts facing into
+            // the simulation root continuously. The actor follows the visible weight transfer
+            // instead of staying frozen and jumping 45/90/135/180 degrees at clip completion.
+            if !native_turn_allowed && binding.turn_in_place.is_some() {
+                binding.turn_in_place = None;
+            }
+            if native_turn_allowed && binding.turn_in_place.is_none() {
+                if let Some(slot) = nearest_turn_in_place_slot(view_body_yaw_delta, |candidate| {
+                    binding.turn_clip(candidate).is_some()
+                }) {
+                    if let Some(clip) = binding.turn_clip_mut(slot) {
+                        clip.event_cursor.restart();
+                    }
+                    binding.turn_in_place = Some(TurnInPlaceRuntimeState {
+                        slot,
+                        elapsed_seconds: 0.0,
+                        start_body_yaw: body_yaw,
+                        last_body_yaw: body_yaw,
+                        applied_yaw_radians: 0.0,
+                    });
+                    binding.turn_sequence = binding.turn_sequence.wrapping_add(1).max(1);
+                    binding.body_turn_yaw_radians = 0.0;
+                    let selected_turn_ref = binding
+                        .turn_clip(slot)
+                        .map(|clip| clip.clip_ref.as_str())
+                        .unwrap_or("<missing>");
+                    newengine_ulog_api::ulog::info!(
+                        "game-ready: native turn-in-place started player={} side={} angle_deg={:.0} view_delta_deg={:.1} clip={} policy=authored-stepping-continuous-yaw",
+                        player.stable_u64(),
+                        if slot.signed_yaw_radians() > 0.0 { "left" } else { "right" },
+                        slot.angle_degrees(),
+                        view_body_yaw_delta.to_degrees(),
+                        selected_turn_ref,
+                    );
+                }
+            }
+            let active_turn = binding.turn_in_place;
+            if let Some(mut turn) = active_turn {
+                // Accumulate accepted simulation yaw without wrapping the whole 180-degree turn.
+                turn.applied_yaw_radians = accumulate_turn_in_place_yaw(
+                    turn.applied_yaw_radians,
+                    turn.last_body_yaw,
+                    body_yaw,
+                );
+                turn.last_body_yaw = body_yaw;
+
+                let clip_data = binding.turn_clip(turn.slot).map(|clip| {
+                    (
+                        clip.clip_ref.clone(),
+                        clip.clip.clone(),
+                        clip.binding.clone(),
+                        clip.clip.duration_seconds.max(1.0 / 30.0),
+                    )
+                });
+                if let Some((turn_ref, turn_clip, turn_binding, duration)) = clip_data {
+                    turn.elapsed_seconds = (turn.elapsed_seconds + dt).min(duration);
+                    if let Err(error) = turn_clip.sample_local_pose_bound(
+                        turn.elapsed_seconds,
+                        &binding.animation_runtime,
+                        &turn_binding,
+                        &mut binding.sampled_target_locals,
+                    ) {
+                        newengine_ulog_api::ulog::warn!(
+                            "game-ready: native turn-in-place sampling failed player={} clip={}: {}",
+                            player.stable_u64(),
+                            turn_ref,
+                            error,
+                        );
+                        binding.turn_in_place = None;
+                    } else {
+                        clip_ref = turn_ref.clone();
+
+                        // Remove accepted physical yaw from the sampled root. Authored feet/pelvis
+                        // stepping remains visually intact and cannot double-spin.
+                        compensate_turn_root_yaw(
+                            &mut binding.sampled_target_locals,
+                            binding.turn_root_joint,
+                            turn.applied_yaw_radians,
+                        );
+
+                        if let Some(clip) = binding.turn_clip_mut(turn.slot) {
+                            let _ = crate::animation_events::collect_timeline_events(
+                                player,
+                                &clip.clip_ref,
+                                "character.turn_in_place",
+                                &clip.clip,
+                                &mut clip.event_cursor,
+                                turn.elapsed_seconds,
+                                &mut event_occurrences,
+                                &mut timeline_events,
+                            );
+                        }
+
+                        let desired_applied_yaw =
+                            turn_in_place_target_yaw(turn.slot, turn.elapsed_seconds, duration);
+                        let yaw_error = desired_applied_yaw - turn.applied_yaw_radians;
+                        let step_yaw = bounded_turn_in_place_step(yaw_error);
+                        if step_yaw.abs() > 1.0e-6 {
+                            turn_step_request = Some(step_yaw);
+                        }
+
+                        let final_error = turn.slot.signed_yaw_radians() - turn.applied_yaw_radians;
+                        let clip_finished = turn.elapsed_seconds + 1.0e-5 >= duration;
+                        if clip_finished
+                            && final_error.abs() <= TURN_IN_PLACE_FINISH_EPSILON_RADIANS
+                        {
+                            newengine_ulog_api::ulog::info!(
+                                "game-ready: native turn-in-place completed player={} side={} angle_deg={:.0} start_yaw_deg={:.2} applied_yaw_deg={:.3} residual_deg={:.3} max_step_deg={:.1} policy=no-snap-no-teleport",
+                                player.stable_u64(),
+                                if turn.slot.signed_yaw_radians() > 0.0 { "left" } else { "right" },
+                                turn.slot.angle_degrees(),
+                                turn.start_body_yaw.to_degrees(),
+                                turn.applied_yaw_radians.to_degrees(),
+                                final_error.to_degrees(),
+                                TURN_IN_PLACE_MAX_STEP_RADIANS.to_degrees(),
+                            );
+                            binding.turn_in_place = None;
+                            binding.body_turn_yaw_radians = 0.0;
+                        } else {
+                            // Hold final authored stance while the remainder drains through the
+                            // same bounded path. There is never a special final facing commit.
+                            binding.turn_in_place = Some(turn);
+                        }
+                    }
+                } else {
+                    binding.turn_in_place = None;
+                }
+            }
+
+            let native_turn_active = binding.turn_in_place.is_some();
+
             if unarmed_active {
                 let attack_phase = binding.unarmed_attack_pose.as_ref().and_then(|clip| {
                     if unarmed_attack_sequence == 0 {
@@ -515,6 +688,176 @@ pub(crate) fn tick_player_skin_animation(world: &mut newengine_ecs::World, dt: f
                 }
             }
 
+            let requested_fall_band = if fall_presentation_requested {
+                select_fall_presentation_band(
+                    fall_state.distance,
+                    binding.fall_low_pose.is_some(),
+                    binding.fall_medium_pose.is_some(),
+                    binding.fall_high_pose.is_some(),
+                    binding.fall_medium_min_distance,
+                    binding.fall_high_min_distance,
+                )
+            } else {
+                None
+            };
+            if requested_fall_band != binding.fall_active_band {
+                binding.fall_active_band = requested_fall_band;
+                binding.fall_time_seconds = 0.0;
+                let selected = match requested_fall_band {
+                    Some(FallPresentationBand::Low) => binding.fall_low_pose.as_mut(),
+                    Some(FallPresentationBand::Medium) => binding.fall_medium_pose.as_mut(),
+                    Some(FallPresentationBand::High) => binding.fall_high_pose.as_mut(),
+                    None => None,
+                };
+                if let Some(clip) = selected {
+                    clip.event_cursor.restart();
+                    newengine_ulog_api::ulog::info!(
+                        "game-ready: fall presentation selected player={} band={:?} distance_m={:.3} clip='{}'",
+                        player.stable_u64(),
+                        requested_fall_band.expect("selected fall band"),
+                        fall_state.distance,
+                        clip.clip_ref,
+                    );
+                }
+            } else if requested_fall_band.is_some() {
+                binding.fall_time_seconds += dt;
+            }
+
+            if let Some(band) = requested_fall_band {
+                let animation_runtime = &binding.animation_runtime;
+                let target = &mut binding.sampled_target_locals;
+                let clip = match band {
+                    FallPresentationBand::Low => binding.fall_low_pose.as_mut(),
+                    FallPresentationBand::Medium => binding.fall_medium_pose.as_mut(),
+                    FallPresentationBand::High => binding.fall_high_pose.as_mut(),
+                };
+                if let Some(clip) = clip {
+                    if let Err(error) = clip.clip.sample_local_pose_bound(
+                        binding.fall_time_seconds,
+                        animation_runtime,
+                        &clip.binding,
+                        target,
+                    ) {
+                        newengine_ulog_api::ulog::warn!(
+                            "game-ready: height-aware fall pose sampling failed player={} band={:?} distance_m={:.3} clip='{}': {}",
+                            player.stable_u64(),
+                            band,
+                            fall_state.distance,
+                            clip.clip_ref,
+                            error,
+                        );
+                    } else {
+                        clip_ref = clip.clip_ref.clone();
+                    }
+                }
+                // Height-aware fall presentation is a full-body override. Locomotion/equipment
+                // timeline events from the underlying graph must not leak through this frame.
+                timeline_events.clear();
+                event_occurrences.clear();
+            } else if binding.fall_active_band.is_some() {
+                binding.fall_active_band = None;
+                binding.fall_time_seconds = 0.0;
+            }
+
+            // Landing response is driven by a persistent impact revision because PlayerFallState
+            // is reset on the grounded physics tick. This lets authored character-native landing
+            // performances play on the following animation frames without replaying every frame.
+            if landing_state.revision > binding.landing_last_revision {
+                binding.landing_last_revision = landing_state.revision;
+                let band = select_fall_presentation_band(
+                    landing_state.distance,
+                    binding.landing_soft_pose.is_some(),
+                    binding.landing_medium_pose.is_some(),
+                    binding.landing_hard_pose.is_some() || binding.landing_hard_run_pose.is_some(),
+                    binding.fall_medium_min_distance,
+                    binding.fall_high_min_distance,
+                );
+                binding.landing_active_band = band;
+                binding.landing_active_run = matches!(band, Some(FallPresentationBand::High))
+                    && binding.landing_hard_run_pose.is_some()
+                    && landing_state.horizontal_speed > 1.5;
+                binding.landing_time_seconds = 0.0;
+                let selected = match (band, binding.landing_active_run) {
+                    (Some(FallPresentationBand::Low), _) => binding.landing_soft_pose.as_mut(),
+                    (Some(FallPresentationBand::Medium), _) => binding.landing_medium_pose.as_mut(),
+                    (Some(FallPresentationBand::High), true) => {
+                        binding.landing_hard_run_pose.as_mut()
+                    }
+                    (Some(FallPresentationBand::High), false) => binding
+                        .landing_hard_pose
+                        .as_mut()
+                        .or(binding.landing_hard_run_pose.as_mut()),
+                    (None, _) => None,
+                };
+                if let Some(clip) = selected {
+                    clip.event_cursor.restart();
+                    newengine_ulog_api::ulog::info!(
+                        "game-ready: landing presentation selected player={} band={:?} distance_m={:.3} downward_speed={:.3} horizontal_speed={:.3} clip='{}'",
+                        player.stable_u64(),
+                        band.expect("selected landing band"),
+                        landing_state.distance,
+                        landing_state.downward_speed,
+                        landing_state.horizontal_speed,
+                        clip.clip_ref,
+                    );
+                }
+            }
+            if fall_presentation_requested || noclip_enabled {
+                binding.landing_active_band = None;
+                binding.landing_time_seconds = 0.0;
+                binding.landing_active_run = false;
+            } else if let Some(band) = binding.landing_active_band {
+                let time = binding.landing_time_seconds;
+                let run_variant = binding.landing_active_run;
+                let finished;
+                {
+                    let clip = match (band, run_variant) {
+                        (FallPresentationBand::Low, _) => binding.landing_soft_pose.as_mut(),
+                        (FallPresentationBand::Medium, _) => binding.landing_medium_pose.as_mut(),
+                        (FallPresentationBand::High, true) => {
+                            binding.landing_hard_run_pose.as_mut()
+                        }
+                        (FallPresentationBand::High, false) => binding
+                            .landing_hard_pose
+                            .as_mut()
+                            .or(binding.landing_hard_run_pose.as_mut()),
+                    };
+                    if let Some(clip) = clip {
+                        let duration = clip.clip.duration_seconds.max(1.0 / 30.0);
+                        let sample_time = time.min(duration);
+                        if let Err(error) = clip.clip.sample_local_pose_bound(
+                            sample_time,
+                            &binding.animation_runtime,
+                            &clip.binding,
+                            &mut binding.sampled_target_locals,
+                        ) {
+                            newengine_ulog_api::ulog::warn!(
+                                "game-ready: landing pose sampling failed player={} band={:?} distance_m={:.3} clip='{}': {}",
+                                player.stable_u64(),
+                                band,
+                                landing_state.distance,
+                                clip.clip_ref,
+                                error,
+                            );
+                            finished = true;
+                        } else {
+                            clip_ref = clip.clip_ref.clone();
+                            finished = time + dt >= duration;
+                        }
+                    } else {
+                        finished = true;
+                    }
+                }
+                timeline_events.clear();
+                event_occurrences.clear();
+                binding.landing_time_seconds += dt;
+                if finished {
+                    binding.landing_active_band = None;
+                    binding.landing_time_seconds = 0.0;
+                    binding.landing_active_run = false;
+                }
+            }
+
             if noclip_enabled {
                 if !binding.noclip_active {
                     binding.noclip_time_seconds = 0.0;
@@ -573,6 +916,30 @@ pub(crate) fn tick_player_skin_animation(world: &mut newengine_ecs::World, dt: f
                 .current_locals
                 .clone_from(&binding.sampled_target_locals);
 
+            let torso_target =
+                if noclip_enabled || fall_presentation_requested || native_turn_active {
+                    0.0
+                } else {
+                    body_turn_target_yaw
+                };
+            binding.body_turn_yaw_radians =
+                smooth_body_turn_yaw(binding.body_turn_yaw_radians, torso_target, dt);
+            if let Err(error) = apply_body_turn_pose(
+                &binding.skeleton,
+                &binding.animation_runtime,
+                &binding.body_turn_layers,
+                &mut binding.current_locals,
+                &mut binding.joint_frames_scratch,
+                binding.body_turn_yaw_radians,
+            ) {
+                newengine_ulog_api::ulog::warn!(
+                    "game-ready: procedural turn-in-place torso solve failed player={} yaw_deg={:.2}: {}",
+                    player.stable_u64(),
+                    binding.body_turn_yaw_radians.to_degrees(),
+                    error,
+                );
+            }
+
             if equipment_presentation_active {
                 match apply_equipped_weapon_support_ik(
                     weapon_presentation
@@ -621,6 +988,15 @@ pub(crate) fn tick_player_skin_animation(world: &mut newengine_ecs::World, dt: f
                     }
                 }
             }
+            let continuity_key = PoseContinuityKey {
+                clip_hash: animation_source_hash(&clip_ref),
+                turn_sequence: binding.turn_sequence,
+                unarmed_attack_sequence,
+                equipment_stance: equipment_stance as u8,
+            };
+            binding
+                .pose_continuity
+                .apply(continuity_key, &mut binding.current_locals, dt);
             synchronize_helper_pose(&binding.helper_pose_copies, &mut binding.current_locals);
             if let Err(error) = stabilize_eye_locals(
                 binding.eye_contract.as_ref(),
@@ -635,6 +1011,9 @@ pub(crate) fn tick_player_skin_animation(world: &mut newengine_ecs::World, dt: f
                 );
                 continue;
             }
+            binding
+                .pose_continuity
+                .commit_visible_pose(&binding.current_locals);
 
             if let Err(error) = binding
                 .animation_runtime
@@ -794,6 +1173,12 @@ pub(crate) fn tick_player_skin_animation(world: &mut newengine_ecs::World, dt: f
             if let Some(binding) = world.get_mut::<PlayerAnimationRuntimeBinding>(player) {
                 binding.palette_scratch = recycled_palette;
             }
+        }
+        if let Some(yaw_delta) = turn_step_request {
+            let _ = world.insert(
+                player,
+                newengine_sim::CharacterFacingTurnStepRequest { yaw_delta },
+            );
         }
         crate::player_hair::publish_player_hair_pose(world, player, model_to_world);
         crate::animation_events::publish_timeline_events(world, timeline_events);

@@ -33,6 +33,23 @@ fn assignment_from_spec(
             equipment_reload_animation: spec.equipment_reload_animation.clone(),
             unarmed_ready_animation: spec.unarmed_ready_animation.clone(),
             unarmed_attack_animation: spec.unarmed_attack_animation.clone(),
+            turn_45_left_animation: spec.turn_45_left_animation.clone(),
+            turn_45_right_animation: spec.turn_45_right_animation.clone(),
+            turn_90_left_animation: spec.turn_90_left_animation.clone(),
+            turn_90_right_animation: spec.turn_90_right_animation.clone(),
+            turn_135_left_animation: spec.turn_135_left_animation.clone(),
+            turn_135_right_animation: spec.turn_135_right_animation.clone(),
+            turn_180_left_animation: spec.turn_180_left_animation.clone(),
+            turn_180_right_animation: spec.turn_180_right_animation.clone(),
+            fall_low_animation: spec.fall_low_animation.clone(),
+            fall_medium_animation: spec.fall_medium_animation.clone(),
+            fall_high_animation: spec.fall_high_animation.clone(),
+            landing_soft_animation: spec.landing_soft_animation.clone(),
+            landing_medium_animation: spec.landing_medium_animation.clone(),
+            landing_hard_animation: spec.landing_hard_animation.clone(),
+            landing_hard_run_animation: spec.landing_hard_run_animation.clone(),
+            fall_medium_min_distance: spec.fall_medium_min_distance,
+            fall_high_min_distance: spec.fall_high_min_distance,
             equipment_ready_sample_phase: spec.equipment_ready_sample_phase,
             equipment_ready_rotation_weights: spec.equipment_ready_rotation_weights.clone(),
             equipment_aim_rotation_weights: spec.equipment_aim_rotation_weights.clone(),
@@ -199,15 +216,35 @@ fn joint_is_descendant_of(
     }
 }
 
-/// Full-body first person keeps the body/arms but suppresses pieces whose deformation is almost
-/// entirely owned by the head hierarchy. This is the world-body equivalent of an FPP visibility
-/// mask: it prevents face/eyes/hair shells from surrounding the camera while preserving the same
-/// character entity, skeleton and arm skin used by third person.
+#[inline]
+fn part_is_first_person_near_body_semantic(part: &PlayerRuntimeModelPart) -> bool {
+    let mesh = part.source_mesh_name.to_ascii_lowercase();
+    let slot = part.material_slot.to_ascii_lowercase();
+    // Semantic names are authoritative when available and also cover rigid face accessories that
+    // have no skin stream. Keep the list deliberately anatomical/near-camera; ordinary torso/arm
+    // meshes are not suppressed merely because they belong to a player.
+    const TOKENS: &[&str] = &[
+        "head", "face", "scalp", "hair", "eye", "eyeball", "lash", "brow", "teeth", "tooth",
+        "tongue", "mouth", "oral", "gum", "neck", "collar", "hood",
+    ];
+    TOKENS
+        .iter()
+        .any(|token| mesh.contains(token) || slot.contains(token))
+}
+
+/// Full-body first person keeps the body/arms but suppresses camera-near shells. Semantic mesh or
+/// material names win when authored; otherwise skin ownership provides a generic fallback for
+/// head/neck pieces. This keeps the same world character and shadow caster while preventing
+/// face/eyes/hair/neck geometry from surrounding the local camera.
 fn runtime_part_visibility_policy(
     part: &PlayerRuntimeModelPart,
     skeleton: Option<&newengine_model_skeleton_api::ModelSkeletonMetadata>,
 ) -> newengine_engine_runtime::gameplay::PlayerViewVisibilityPolicy {
-    const HEAD_OWNERSHIP_HIDE_RATIO: f32 = 0.65;
+    const HEAD_OWNERSHIP_HIDE_RATIO: f32 = 0.45;
+    const HEAD_PARENT_OWNERSHIP_HIDE_RATIO: f32 = 0.72;
+    if part_is_first_person_near_body_semantic(part) {
+        return newengine_engine_runtime::gameplay::PlayerViewVisibilityPolicy::HideInFirstPerson;
+    }
     let (Some(skeleton), Some(skin)) = (skeleton, part.skin.as_ref()) else {
         return newengine_engine_runtime::gameplay::PlayerViewVisibilityPolicy::AlwaysVisible;
     };
@@ -228,8 +265,17 @@ fn runtime_part_visibility_policy(
         return newengine_engine_runtime::gameplay::PlayerViewVisibilityPolicy::AlwaysVisible;
     }
 
+    let head_parent_index = skeleton
+        .joints
+        .get(head_index)
+        .and_then(|joint| joint.parent_index)
+        .map(|index| index as usize)
+        .filter(|index| *index < skeleton.joints.len())
+        .filter(|index| Some(*index) != root_index && *index != head_index);
+
     let mut total_weight = 0.0_f32;
     let mut head_weight = 0.0_f32;
+    let mut head_parent_weight = 0.0_f32;
     for vertex in &skin.vertices {
         for (&joint, &weight) in vertex
             .joints
@@ -242,14 +288,23 @@ fn runtime_part_visibility_policy(
             }
             total_weight += weight;
             let joint_index = usize::from(joint);
-            if joint_index < skeleton.joints.len()
-                && joint_is_descendant_of(skeleton, joint_index, head_index)
-            {
-                head_weight += weight;
+            if joint_index < skeleton.joints.len() {
+                if joint_is_descendant_of(skeleton, joint_index, head_index) {
+                    head_weight += weight;
+                }
+                if head_parent_index.is_some_and(|parent_index| {
+                    joint_is_descendant_of(skeleton, joint_index, parent_index)
+                }) {
+                    head_parent_weight += weight;
+                }
             }
         }
     }
-    if total_weight > 1.0e-5 && head_weight / total_weight >= HEAD_OWNERSHIP_HIDE_RATIO {
+    if total_weight > 1.0e-5
+        && (head_weight / total_weight >= HEAD_OWNERSHIP_HIDE_RATIO
+            || (head_parent_index.is_some()
+                && head_parent_weight / total_weight >= HEAD_PARENT_OWNERSHIP_HIDE_RATIO))
+    {
         newengine_engine_runtime::gameplay::PlayerViewVisibilityPolicy::HideInFirstPerson
     } else {
         newengine_engine_runtime::gameplay::PlayerViewVisibilityPolicy::AlwaysVisible
@@ -695,6 +750,34 @@ mod grounding_tests {
         apply_player_stance_geometry, spawn_default_player, PlayerModelAssignment,
         PlayerModelBinding, PlayerStanceKind,
     };
+
+    #[test]
+    fn first_person_semantic_mask_hides_face_shell_without_skin_stream() {
+        let face = PlayerRuntimeModelPart {
+            source_mesh_name: "character_face_shell".to_owned(),
+            primitive_id: PrimitiveId(1),
+            material_id: MaterialId(1),
+            material_slot: "m_face".to_owned(),
+            color: [1.0; 4],
+            skin: None,
+        };
+        let body = PlayerRuntimeModelPart {
+            source_mesh_name: "character_torso".to_owned(),
+            primitive_id: PrimitiveId(2),
+            material_id: MaterialId(2),
+            material_slot: "m_body".to_owned(),
+            color: [1.0; 4],
+            skin: None,
+        };
+        assert_eq!(
+            runtime_part_visibility_policy(&face, None),
+            newengine_engine_runtime::gameplay::PlayerViewVisibilityPolicy::HideInFirstPerson
+        );
+        assert_eq!(
+            runtime_part_visibility_policy(&body, None),
+            newengine_engine_runtime::gameplay::PlayerViewVisibilityPolicy::AlwaysVisible
+        );
+    }
 
     #[test]
     fn visual_root_preserves_world_foot_plane_when_crouching() {

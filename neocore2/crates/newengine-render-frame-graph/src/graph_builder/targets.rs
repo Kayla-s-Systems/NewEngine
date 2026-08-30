@@ -20,6 +20,9 @@ pub const RG_GBUFFER_NORMAL: RenderGraphResourceId = RenderGraphResourceId(21);
 pub const RG_GBUFFER_MATERIAL: RenderGraphResourceId = RenderGraphResourceId(22);
 pub const RG_GBUFFER_DEPTH: RenderGraphResourceId = RenderGraphResourceId(23);
 pub const RG_LIT_COLOR: RenderGraphResourceId = RenderGraphResourceId(30);
+/// Canonical SDR presentation format selected by the Vulkan WSI backend.
+/// Offscreen LDR scene/editor targets intentionally remain BGRA8 UNORM.
+pub const SDR_PRESENTATION_COLOR_FORMAT: TextureFormat = TextureFormat::Bgra8Srgb;
 
 #[derive(Debug, Clone, Copy)]
 pub struct FrameGraphTargetDesc {
@@ -30,7 +33,9 @@ pub struct FrameGraphTargetDesc {
     pub shadow_render_target: Option<RenderTargetId>,
     pub local_shadow_render_target: Option<RenderTargetId>,
     pub local_shadow_extent: Extent2D,
-    /// Final display/swapchain format. Keep LDR unless the platform exposes HDR swapchains.
+    /// Offscreen/non-surface viewport color format. Native SDR swapchain resources use
+    /// `SDR_PRESENTATION_COLOR_FORMAT` so presentation encoding cannot be conflated with
+    /// linear/sampleable LDR render targets.
     pub color_format: TextureFormat,
     /// Linear scene color format used by HDR-capable world/material shaders.
     pub scene_color_format: TextureFormat,
@@ -115,7 +120,7 @@ impl FrameGraphBuilder {
                 "swapchain_surface_color",
                 RenderGraphResourceUsage::ColorAttachment,
                 self.target.surface_extent,
-                self.target.color_format,
+                SDR_PRESENTATION_COLOR_FORMAT,
             )
             .with_semantic(RenderGraphResourceSemantic::SurfaceColor),
         );
@@ -155,7 +160,7 @@ impl FrameGraphBuilder {
                     "viewport_surface_color",
                     RenderGraphResourceUsage::ColorAttachment,
                     self.target.surface_extent,
-                    self.target.color_format,
+                    SDR_PRESENTATION_COLOR_FORMAT,
                 )
                 .with_semantic(RenderGraphResourceSemantic::ViewportColor),
             );

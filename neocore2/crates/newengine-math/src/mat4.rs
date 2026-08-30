@@ -90,21 +90,34 @@ impl Mat4 {
 
         let inv_sx = if sx > 0.0 { 1.0 / sx } else { 0.0 };
         let inv_sy = if sy > 0.0 { 1.0 / sy } else { 0.0 };
-        // `inv_sz` intentionally removed: `rz` is reconstructed via cross() after orthonormalization.
+        let inv_sz = if sz > 0.0 { 1.0 / sz } else { 0.0 };
 
-        // Normalize basis (remove scale first, then Gram-Schmidt to remove shear drift).
-        let mut rx = (x * inv_sx).normalize_or_zero();
+        // Preserve the handedness of the authored basis *before* rebuilding the
+        // orthonormal Z axis. The previous implementation computed determinant
+        // after `rz = rx.cross(ry)`, which is right-handed by construction and
+        // therefore silently lost reflected/negative-scale transforms such as
+        // TLOU2 helper joints with diag(+1,+1,-1).
+        let authored_rx = (x * inv_sx).normalize_or_zero();
+        let authored_ry = (y * inv_sy).normalize_or_zero();
+        let authored_rz = (z * inv_sz).normalize_or_zero();
+        let authored_handedness = authored_rx.dot(authored_ry.cross(authored_rz));
+
+        // Normalize basis (remove scale first, then Gram-Schmidt to remove mild shear drift).
+        let rx = authored_rx;
         let mut ry = y * inv_sy;
         ry = (ry - rx * ry.dot(rx)).normalize_or_zero();
-        let mut rz = rx.cross(ry);
+        let rz = rx.cross(ry);
 
-        // Ensure a right-handed orthonormal frame and preserve negative scale via determinant sign.
-        // det = dot(rx, cross(ry, rz)) for a 3x3 basis with columns (rx, ry, rz).
-        let det = rx.dot(ry.cross(rz));
-        if det < 0.0 {
-            sx = -sx;
-            rx = -rx;
-            rz = rx.cross(ry);
+        // A quaternion always represents a proper rotation (det=+1), so encode a
+        // reflected affine basis as a signed scale. Using Z keeps X/Y orientation
+        // stable and reconstructs the original matrix exactly for pure S/R/T input.
+        if authored_handedness < 0.0 {
+            // Keep the quaternion basis proper (det=+1) and encode the
+            // reflection exclusively in signed Z scale. For a reflected
+            // authored basis `authored_rz ≈ -cross(rx, ry)`, so the positive
+            // cross-product rotation multiplied by negative `sz` reconstructs
+            // the original Z column exactly.
+            sz = -sz;
         }
 
         let rot_m = Mat3::from_cols(rx, ry, rz);
@@ -389,5 +402,42 @@ impl Mul<Vec4> for Mat4 {
     fn mul(self, rhs: Vec4) -> Self::Output {
         // Column-major: v' = x*vx + y*vy + z*vz + w*vw
         self.x_axis * rhs.x + self.y_axis * rhs.y + self.z_axis * rhs.z + self.w_axis * rhs.w
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn assert_srt_round_trip(source: Mat4) {
+        let (scale, rotation, translation) = source.to_scale_rotation_translation();
+        let rebuilt = Mat4::from_scale_rotation_translation(scale, rotation, translation);
+        let error = source
+            .to_cols_array()
+            .iter()
+            .zip(rebuilt.to_cols_array().iter())
+            .map(|(a, b)| (a - b).abs())
+            .fold(0.0_f32, f32::max);
+        assert!(error <= 1.0e-6, "reflected SRT round-trip error={error}");
+        assert!(scale.z < 0.0, "reflection must remain encoded in signed scale: {scale:?}");
+    }
+
+    #[test]
+    fn reflected_srt_round_trips_without_losing_scale_sign() {
+        assert_srt_round_trip(Mat4::from_scale_rotation_translation(
+            Vec3::new(1.0, 1.0, -1.0),
+            Quat::IDENTITY,
+            Vec3::new(0.25, -0.5, 1.25),
+        ));
+    }
+
+    #[test]
+    fn rotated_reflected_srt_round_trips_without_improper_quaternion_basis() {
+        assert_srt_round_trip(Mat4::from_scale_rotation_translation(
+            Vec3::new(1.0, 1.0, -1.0),
+            Quat::from_rotation_y(0.37) * Quat::from_rotation_x(-0.21),
+            Vec3::new(-0.1, 0.75, 0.33),
+        ));
     }
 }

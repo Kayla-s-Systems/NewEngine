@@ -3,6 +3,308 @@ mod transition_tests {
     use super::*;
 
     #[test]
+    fn fall_presentation_selects_authored_height_bands_deterministically() {
+        let select = |distance| select_fall_presentation_band(distance, true, true, true, 2.0, 5.0);
+        assert_eq!(select(0.0), Some(FallPresentationBand::Low));
+        assert_eq!(select(1.999), Some(FallPresentationBand::Low));
+        assert_eq!(select(2.0), Some(FallPresentationBand::Medium));
+        assert_eq!(select(4.999), Some(FallPresentationBand::Medium));
+        assert_eq!(select(5.0), Some(FallPresentationBand::High));
+        assert_eq!(select(25.0), Some(FallPresentationBand::High));
+    }
+
+    #[test]
+    fn fall_presentation_degrades_only_within_available_authored_bands() {
+        assert_eq!(
+            select_fall_presentation_band(0.5, false, true, true, 2.0, 5.0),
+            Some(FallPresentationBand::Medium)
+        );
+        assert_eq!(
+            select_fall_presentation_band(3.0, true, false, true, 2.0, 5.0),
+            Some(FallPresentationBand::Low)
+        );
+        assert_eq!(
+            select_fall_presentation_band(7.0, true, false, true, 2.0, 5.0),
+            Some(FallPresentationBand::High)
+        );
+        assert_eq!(
+            select_fall_presentation_band(7.0, false, false, false, 2.0, 5.0),
+            None
+        );
+    }
+
+    #[test]
+    fn pose_continuity_bridge_preserves_previous_visible_pose_on_any_source_change() {
+        let previous = vec![JointLocalPose {
+            translation: [0.35, 1.1, -0.22],
+            rotation: {
+                let q = Quat::from_rotation_y(32.0_f32.to_radians());
+                [q.x, q.y, q.z, q.w]
+            },
+            scale: Some([1.0, 1.0, 1.0]),
+        }];
+        let mut target = vec![JointLocalPose {
+            translation: [0.0, 0.9, 0.0],
+            rotation: [0.0, 0.0, 0.0, 1.0],
+            scale: Some([1.0, 1.0, 1.0]),
+        }];
+        let mut bridge = PoseContinuityBridge::new(&previous);
+        let idle = PoseContinuityKey {
+            clip_hash: animation_source_hash("idle"),
+            ..PoseContinuityKey::default()
+        };
+        bridge.apply(idle, &mut target, 1.0 / 60.0);
+        bridge.commit_visible_pose(&previous);
+
+        // Establish initial source without altering it.
+        target[0] = previous[0];
+        let mut next = vec![JointLocalPose {
+            translation: [0.0, 0.9, 0.0],
+            rotation: [0.0, 0.0, 0.0, 1.0],
+            scale: Some([1.0, 1.0, 1.0]),
+        }];
+        let walk = PoseContinuityKey {
+            clip_hash: animation_source_hash("walk"),
+            ..PoseContinuityKey::default()
+        };
+        bridge.apply(walk, &mut next, 1.0 / 60.0);
+
+        assert_eq!(next[0].translation, previous[0].translation);
+        assert_eq!(next[0].rotation, previous[0].rotation);
+    }
+
+    #[test]
+    fn pose_continuity_bridge_converges_without_root_translation_reset() {
+        let previous = vec![JointLocalPose {
+            translation: [0.4, 1.0, -0.3],
+            rotation: {
+                let q = Quat::from_rotation_y(45.0_f32.to_radians());
+                [q.x, q.y, q.z, q.w]
+            },
+            scale: Some([1.0, 1.0, 1.0]),
+        }];
+        let authored_target = JointLocalPose {
+            translation: [0.0, 0.8, 0.0],
+            rotation: [0.0, 0.0, 0.0, 1.0],
+            scale: Some([1.0, 1.0, 1.0]),
+        };
+        let mut bridge = PoseContinuityBridge::new(&previous);
+        let key_a = PoseContinuityKey {
+            clip_hash: animation_source_hash("a"),
+            ..PoseContinuityKey::default()
+        };
+        let mut establish = previous.clone();
+        bridge.apply(key_a, &mut establish, 1.0 / 60.0);
+        bridge.commit_visible_pose(&previous);
+
+        let key_b = PoseContinuityKey {
+            clip_hash: animation_source_hash("b"),
+            ..PoseContinuityKey::default()
+        };
+        let mut visible = previous.clone();
+        for _ in 0..10 {
+            let mut target = vec![authored_target];
+            bridge.apply(key_b, &mut target, 1.0 / 60.0);
+            // Root position moves continuously; it is never reset to the target in one frame.
+            let dx = (target[0].translation[0] - visible[0].translation[0]).abs();
+            assert!(dx <= 0.2);
+            visible = target;
+            bridge.commit_visible_pose(&visible);
+        }
+        assert!((visible[0].translation[0] - authored_target.translation[0]).abs() < 1.0e-5);
+        assert!((visible[0].translation[1] - authored_target.translation[1]).abs() < 1.0e-5);
+        assert!((visible[0].translation[2] - authored_target.translation[2]).abs() < 1.0e-5);
+    }
+
+    #[test]
+    fn repeated_same_turn_clip_uses_sequence_to_force_pose_continuity() {
+        let clip_hash = animation_source_hash("turn-45-left");
+        let first = PoseContinuityKey {
+            clip_hash,
+            turn_sequence: 1,
+            ..PoseContinuityKey::default()
+        };
+        let second = PoseContinuityKey {
+            clip_hash,
+            turn_sequence: 2,
+            ..PoseContinuityKey::default()
+        };
+        assert_ne!(first, second);
+    }
+
+    #[test]
+    fn native_turn_in_place_selects_nearest_available_signed_step() {
+        let all = |_slot: TurnInPlaceSlot| true;
+        assert_eq!(
+            nearest_turn_in_place_slot(40.0_f32.to_radians(), all),
+            Some(TurnInPlaceSlot::Left45)
+        );
+        assert_eq!(
+            nearest_turn_in_place_slot(-52.0_f32.to_radians(), all),
+            Some(TurnInPlaceSlot::Right45)
+        );
+        assert_eq!(
+            nearest_turn_in_place_slot(96.0_f32.to_radians(), all),
+            Some(TurnInPlaceSlot::Left90)
+        );
+        assert_eq!(
+            nearest_turn_in_place_slot(-168.0_f32.to_radians(), all),
+            Some(TurnInPlaceSlot::Right180)
+        );
+        assert_eq!(nearest_turn_in_place_slot(20.0_f32.to_radians(), all), None);
+
+        // Missing 45° content must degrade to the nearest authored step on the same side,
+        // never to a rigid world-root turn.
+        let only_left_90 = |slot: TurnInPlaceSlot| slot == TurnInPlaceSlot::Left90;
+        assert_eq!(
+            nearest_turn_in_place_slot(42.0_f32.to_radians(), only_left_90),
+            Some(TurnInPlaceSlot::Left90)
+        );
+        assert_eq!(
+            nearest_turn_in_place_slot(-90.0_f32.to_radians(), only_left_90),
+            None
+        );
+    }
+
+    #[test]
+    fn native_turn_in_place_yaw_is_eased_and_hard_bounded_against_snap_turns() {
+        let midpoint = turn_in_place_target_yaw(TurnInPlaceSlot::Left90, 0.5, 1.0);
+        assert!((midpoint - 45.0_f32.to_radians()).abs() <= 1.0e-6);
+
+        let positive = bounded_turn_in_place_step(90.0_f32.to_radians());
+        let negative = bounded_turn_in_place_step(-180.0_f32.to_radians());
+        assert!((positive - 6.0_f32.to_radians()).abs() <= 1.0e-6);
+        assert!((negative + 6.0_f32.to_radians()).abs() <= 1.0e-6);
+        assert_eq!(
+            bounded_turn_in_place_step(0.25_f32.to_radians()),
+            0.25_f32.to_radians()
+        );
+    }
+
+    #[test]
+    fn native_turn_in_place_accumulation_remains_continuous_across_pi_for_180_steps() {
+        let applied = 179.0_f32.to_radians();
+        let next =
+            accumulate_turn_in_place_yaw(applied, 179.0_f32.to_radians(), -179.0_f32.to_radians());
+        assert!((next - 181.0_f32.to_radians()).abs() <= 1.0e-5);
+    }
+
+    #[test]
+    fn extracted_world_turn_is_removed_from_skeleton_root_without_double_spin() {
+        let mut pose = [JointLocalPose {
+            translation: [0.0, 0.0, 0.0],
+            rotation: [0.0, 0.0, 0.0, 1.0],
+            scale: Some([1.0, 1.0, 1.0]),
+        }];
+        let extracted = 30.0_f32.to_radians();
+        compensate_turn_root_yaw(&mut pose, Some(0), extracted);
+        let local = Quat::from_xyzw(
+            pose[0].rotation[0],
+            pose[0].rotation[1],
+            pose[0].rotation[2],
+            pose[0].rotation[3],
+        )
+        .normalize_or_identity();
+        let world = (Quat::from_rotation_y(extracted) * local).normalize_or_identity();
+        assert!(world.dot(Quat::IDENTITY).abs() > 0.99999);
+    }
+    #[test]
+    fn turn_in_place_twists_spine_without_rotating_hips_or_legs() {
+        use newengine_model_skeleton_api::{ModelSkeletonAnchors, ModelSkeletonJointMetadata};
+
+        let names = [
+            "root",
+            "hips",
+            "spine_a",
+            "spine_b",
+            "neck",
+            "head",
+            "left_foot",
+        ];
+        // Mirror rigs where pelvis and spine are sibling branches under root (Abby/TLOU2 style).
+        let parents = [None, Some(0), Some(0), Some(2), Some(3), Some(4), Some(1)];
+        let joints = names
+            .iter()
+            .enumerate()
+            .map(|(index, name)| ModelSkeletonJointMetadata {
+                index: index as u32,
+                tag: index as u32,
+                name: (*name).to_owned(),
+                parent: parents[index].map(|parent| names[parent].to_owned()),
+                parent_index: parents[index].map(|parent| parent as u32),
+                position_ls: [0.0, if index == 0 { 0.0 } else { 0.2 }, 0.0],
+                rotation_ls: [0.0, 0.0, 0.0, 1.0],
+                scale_ls: [1.0, 1.0, 1.0],
+                flags: Vec::new(),
+            })
+            .collect::<Vec<_>>();
+        let skeleton = ModelSkeletonMetadata {
+            source: "turn-in-place-test".to_owned(),
+            source_format: "test".to_owned(),
+            container_magic: "TEST".to_owned(),
+            byte_len: 0,
+            content_hash: String::new(),
+            decode_status: "ok".to_owned(),
+            joints,
+            anchors: ModelSkeletonAnchors {
+                root: "root".to_owned(),
+                hips: "hips".to_owned(),
+                head: "head".to_owned(),
+                left_hand: "spine_b".to_owned(),
+                right_hand: "spine_b".to_owned(),
+                left_foot: "left_foot".to_owned(),
+                right_foot: "left_foot".to_owned(),
+                eye: "head".to_owned(),
+                eye_height: 1.6,
+            },
+        };
+        let layers = resolve_body_turn_layers(&skeleton);
+        assert_eq!(
+            layers
+                .iter()
+                .map(|layer| layer.joint_index)
+                .collect::<Vec<_>>(),
+            vec![2, 3, 4]
+        );
+        let weight_sum = layers.iter().map(|layer| layer.weight).sum::<f32>();
+        assert!((weight_sum - 1.0).abs() <= 1.0e-6);
+
+        let mut pose = skeleton
+            .joints
+            .iter()
+            .map(|joint| JointLocalPose {
+                translation: joint.position_ls,
+                rotation: joint.rotation_ls,
+                scale: Some(joint.scale_ls),
+            })
+            .collect::<Vec<_>>();
+        let source_to_model = [
+            1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
+        ];
+        let runtime = AnimationSkeletonRuntime::compile(&skeleton, source_to_model)
+            .expect("compile turn-in-place skeleton");
+        let mut frames = Vec::new();
+        apply_body_turn_pose(
+            &skeleton,
+            &runtime,
+            &layers,
+            &mut pose,
+            &mut frames,
+            60.0_f32.to_radians(),
+        )
+        .expect("apply torso turn");
+        rebuild_model_joint_frames(&runtime, &pose, &mut frames).expect("rebuild turned frames");
+
+        let hips_forward = frames[1].transform_vector3(-Vec3::Z).normalize_or_zero();
+        let foot_forward = frames[6].transform_vector3(-Vec3::Z).normalize_or_zero();
+        let head_forward = frames[5].transform_vector3(-Vec3::Z).normalize_or_zero();
+        assert!(hips_forward.dot(-Vec3::Z) > 0.99999);
+        assert!(foot_forward.dot(-Vec3::Z) > 0.99999);
+        let expected_head = Quat::from_rotation_y(60.0_f32.to_radians()) * -Vec3::Z;
+        assert!(head_forward.dot(expected_head.normalize_or_zero()) > 0.999);
+    }
+
+    #[test]
     fn equipment_arm_ik_requires_authored_rig_even_for_humanoid_topology() {
         use newengine_model_skeleton_api::{ModelSkeletonAnchors, ModelSkeletonJointMetadata};
 

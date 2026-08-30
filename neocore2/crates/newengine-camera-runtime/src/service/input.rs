@@ -185,6 +185,8 @@ impl CameraRuntimeService {
         player: EntityId,
         look_delta_px: Vec2,
         look_active: bool,
+        runner: GameplayCameraRunnerKind,
+        first_person_down_pitch_limit_radians: f32,
     ) -> bool {
         if !look_active {
             return false;
@@ -219,7 +221,20 @@ impl CameraRuntimeService {
         } else {
             CharacterMotor::default().pitch_limit
         };
-        motor.pitch = motor.pitch.clamp(-pitch_limit, pitch_limit);
+        let min_pitch = if matches!(runner, GameplayCameraRunnerKind::FirstPerson) {
+            let authored_down_limit = if first_person_down_pitch_limit_radians.is_finite()
+                && first_person_down_pitch_limit_radians > 0.0
+            {
+                first_person_down_pitch_limit_radians
+                    .clamp(35.0_f32.to_radians(), 85.0_f32.to_radians())
+            } else {
+                75.0_f32.to_radians()
+            };
+            -authored_down_limit.min(pitch_limit)
+        } else {
+            -pitch_limit
+        };
+        motor.pitch = motor.pitch.clamp(min_pitch, pitch_limit);
         // Mouse-look owns the view orientation only. Do not write yaw/pitch back to
         // the PlayerActor transform: that transform represents body facing and is
         // driven by locomotion/aim at fixed-step cadence.
@@ -238,6 +253,7 @@ impl CameraRuntimeService {
         look_active: bool,
         sprint_multiplier: f32,
         runner: GameplayCameraRunnerKind,
+        first_person_down_pitch_limit_radians: f32,
         face_view: bool,
     ) {
         let mut axis = Vec3::ZERO;
@@ -270,8 +286,14 @@ impl CameraRuntimeService {
         } else {
             Vec2::ZERO
         };
-        let look_applied_immediately =
-            Self::apply_player_look_immediate(world, player, player_look_delta, player_look_active);
+        let look_applied_immediately = Self::apply_player_look_immediate(
+            world,
+            player,
+            player_look_delta,
+            player_look_active,
+            runner,
+            first_person_down_pitch_limit_radians,
+        );
 
         if let Some(input) = world.get_mut::<MotorInput>(player) {
             input.move_axis = axis;

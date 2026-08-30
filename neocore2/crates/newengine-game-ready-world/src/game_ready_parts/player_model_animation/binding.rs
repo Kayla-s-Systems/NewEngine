@@ -20,6 +20,390 @@ struct ResolvedJointBlendRule {
     channels: newengine_engine_runtime::gameplay::PlayerJointChannels,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum TurnInPlaceSlot {
+    Left45,
+    Right45,
+    Left90,
+    Right90,
+    Left135,
+    Right135,
+    Left180,
+    Right180,
+}
+
+impl TurnInPlaceSlot {
+    #[inline]
+    fn signed_yaw_radians(self) -> f32 {
+        match self {
+            Self::Left45 => 45.0_f32.to_radians(),
+            Self::Right45 => -45.0_f32.to_radians(),
+            Self::Left90 => 90.0_f32.to_radians(),
+            Self::Right90 => -90.0_f32.to_radians(),
+            Self::Left135 => 135.0_f32.to_radians(),
+            Self::Right135 => -135.0_f32.to_radians(),
+            Self::Left180 => core::f32::consts::PI,
+            Self::Right180 => -core::f32::consts::PI,
+        }
+    }
+
+    #[inline]
+    fn angle_degrees(self) -> f32 {
+        self.signed_yaw_radians().abs().to_degrees()
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+struct TurnInPlaceRuntimeState {
+    slot: TurnInPlaceSlot,
+    elapsed_seconds: f32,
+    /// Wrapped world yaw observed when the authored step started.
+    start_body_yaw: f32,
+    /// Last wrapped simulation yaw used to accumulate a continuous turn angle across +/-PI.
+    last_body_yaw: f32,
+    /// Authoritative physical yaw already accepted by simulation since this step started.
+    applied_yaw_radians: f32,
+}
+
+const TURN_IN_PLACE_MAX_STEP_RADIANS: f32 = core::f32::consts::PI / 30.0; // 6 degrees
+const TURN_IN_PLACE_FINISH_EPSILON_RADIANS: f32 = core::f32::consts::PI / 240.0; // 0.75 degree
+
+#[inline]
+fn turn_in_place_target_yaw(slot: TurnInPlaceSlot, elapsed_seconds: f32, duration: f32) -> f32 {
+    let duration = if duration.is_finite() && duration > 1.0e-6 {
+        duration
+    } else {
+        1.0
+    };
+    let phase = if elapsed_seconds.is_finite() {
+        (elapsed_seconds / duration).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    // Ease-in/out follows authored weight transfer instead of imposing a linear rigid-body spin.
+    let eased = phase * phase * (3.0 - 2.0 * phase);
+    slot.signed_yaw_radians() * eased
+}
+
+#[inline]
+fn accumulate_turn_in_place_yaw(applied: f32, previous_wrapped: f32, current_wrapped: f32) -> f32 {
+    if !applied.is_finite() || !previous_wrapped.is_finite() || !current_wrapped.is_finite() {
+        return applied;
+    }
+    applied + newengine_math::wrap_pi(current_wrapped - previous_wrapped)
+}
+
+#[inline]
+fn bounded_turn_in_place_step(yaw_error: f32) -> f32 {
+    if !yaw_error.is_finite() {
+        return 0.0;
+    }
+    yaw_error.clamp(
+        -TURN_IN_PLACE_MAX_STEP_RADIANS,
+        TURN_IN_PLACE_MAX_STEP_RADIANS,
+    )
+}
+
+#[inline]
+fn compensate_turn_root_yaw(
+    pose: &mut [JointLocalPose],
+    root_joint: Option<usize>,
+    applied_world_yaw: f32,
+) {
+    if !applied_world_yaw.is_finite() || applied_world_yaw.abs() <= 1.0e-6 {
+        return;
+    }
+    let Some(root) = root_joint.and_then(|index| pose.get_mut(index)) else {
+        return;
+    };
+    let authored = Quat::from_xyzw(
+        root.rotation[0],
+        root.rotation[1],
+        root.rotation[2],
+        root.rotation[3],
+    )
+    .normalize_or_identity();
+    // Physical yaw is extracted into PlayerActor. Counter-rotate the sampled root by the exact
+    // accepted amount so feet/pelvis keep the authored performance and never double-spin.
+    let compensated =
+        (Quat::from_rotation_y(-applied_world_yaw) * authored).normalize_or_identity();
+    root.rotation = [compensated.x, compensated.y, compensated.z, compensated.w];
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct PoseContinuityKey {
+    clip_hash: u64,
+    turn_sequence: u64,
+    unarmed_attack_sequence: u64,
+    equipment_stance: u8,
+}
+
+#[derive(Clone, Debug)]
+struct PoseContinuityBridge {
+    initialized: bool,
+    key: PoseContinuityKey,
+    from_pose: Vec<JointLocalPose>,
+    last_visible_pose: Vec<JointLocalPose>,
+    elapsed_seconds: f32,
+    duration_seconds: f32,
+}
+
+impl PoseContinuityBridge {
+    fn new(initial_pose: &[JointLocalPose]) -> Self {
+        Self {
+            initialized: false,
+            key: PoseContinuityKey::default(),
+            from_pose: initial_pose.to_vec(),
+            last_visible_pose: initial_pose.to_vec(),
+            elapsed_seconds: 0.0,
+            duration_seconds: 0.12,
+        }
+    }
+
+    fn apply(&mut self, key: PoseContinuityKey, target_pose: &mut [JointLocalPose], dt: f32) {
+        if self.last_visible_pose.len() != target_pose.len() || target_pose.is_empty() {
+            self.initialized = true;
+            self.key = key;
+            self.elapsed_seconds = self.duration_seconds;
+            self.last_visible_pose.clear();
+            self.last_visible_pose.extend_from_slice(target_pose);
+            self.from_pose.clone_from(&self.last_visible_pose);
+            return;
+        }
+        if !self.initialized {
+            self.initialized = true;
+            self.key = key;
+            self.elapsed_seconds = self.duration_seconds;
+            return;
+        }
+        if self.key != key {
+            self.key = key;
+            self.from_pose.clone_from(&self.last_visible_pose);
+            self.elapsed_seconds = 0.0;
+        }
+        if self.elapsed_seconds >= self.duration_seconds {
+            return;
+        }
+
+        // First frame of any presentation-source change is exactly the last pose that reached the
+        // skin palette. The new source keeps advancing underneath and is eased in over 120 ms.
+        let phase = if self.duration_seconds > 1.0e-6 {
+            (self.elapsed_seconds / self.duration_seconds).clamp(0.0, 1.0)
+        } else {
+            1.0
+        };
+        let weight = phase * phase * (3.0 - 2.0 * phase);
+        for (target, from) in target_pose.iter_mut().zip(self.from_pose.iter()) {
+            let mut blended = *from;
+            blend_joint_translation_only(&mut blended, target, weight);
+            blend_joint_rotation_only(&mut blended, target, weight);
+            blend_joint_scale_only(&mut blended, target, weight);
+            *target = blended;
+        }
+        self.elapsed_seconds = (self.elapsed_seconds + dt.max(0.0)).min(self.duration_seconds);
+    }
+
+    fn commit_visible_pose(&mut self, visible_pose: &[JointLocalPose]) {
+        if self.last_visible_pose.len() == visible_pose.len() {
+            self.last_visible_pose.clone_from_slice(visible_pose);
+        } else {
+            self.last_visible_pose.clear();
+            self.last_visible_pose.extend_from_slice(visible_pose);
+        }
+    }
+}
+
+#[inline]
+fn animation_source_hash(value: &str) -> u64 {
+    // Stable allocation-free FNV-1a. This is an animation source discriminator only, not a
+    // security hash; it keeps the continuity hot path independent of randomized std hashers.
+    let mut hash = 0xcbf29ce484222325_u64;
+    for byte in value.as_bytes() {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    hash
+}
+
+#[inline]
+fn nearest_turn_in_place_slot(
+    yaw_delta: f32,
+    mut available: impl FnMut(TurnInPlaceSlot) -> bool,
+) -> Option<TurnInPlaceSlot> {
+    if !yaw_delta.is_finite() || yaw_delta.abs() < 35.0_f32.to_radians() {
+        return None;
+    }
+    let left = yaw_delta > 0.0;
+    let candidates = if left {
+        [
+            TurnInPlaceSlot::Left45,
+            TurnInPlaceSlot::Left90,
+            TurnInPlaceSlot::Left135,
+            TurnInPlaceSlot::Left180,
+        ]
+    } else {
+        [
+            TurnInPlaceSlot::Right45,
+            TurnInPlaceSlot::Right90,
+            TurnInPlaceSlot::Right135,
+            TurnInPlaceSlot::Right180,
+        ]
+    };
+    candidates
+        .into_iter()
+        .filter(|slot| available(*slot))
+        .min_by(|a, b| {
+            let da = (yaw_delta.abs().to_degrees() - a.angle_degrees()).abs();
+            let db = (yaw_delta.abs().to_degrees() - b.angle_degrees()).abs();
+            da.total_cmp(&db)
+        })
+}
+
+#[derive(Clone, Copy, Debug)]
+struct ResolvedBodyTurnLayer {
+    joint_index: usize,
+    weight: f32,
+}
+
+fn resolve_body_turn_layers(skeleton: &ModelSkeletonMetadata) -> Vec<ResolvedBodyTurnLayer> {
+    let Some(hips_index) = skeleton
+        .joints
+        .iter()
+        .position(|joint| joint.name == skeleton.anchors.hips)
+    else {
+        return Vec::new();
+    };
+    let Some(head_index) = skeleton
+        .joints
+        .iter()
+        .position(|joint| joint.name == skeleton.anchors.head)
+    else {
+        return Vec::new();
+    };
+    if hips_index == head_index {
+        return Vec::new();
+    }
+
+    // The hips anchor is not guaranteed to be an ancestor of the spine. Naughty Dog rigs, for
+    // example, commonly make `pelvis` and `spinea` siblings under `root`. Build the hips ancestry
+    // first, then walk head upward until the first common ancestor. Everything between that common
+    // ancestor and the head belongs to the torso/neck branch; the common ancestor and hips branch
+    // stay root-owned so pelvis/legs never inherit procedural yaw.
+    let mut hips_ancestors = std::collections::HashSet::new();
+    let mut current = Some(hips_index);
+    for _ in 0..skeleton.joints.len() {
+        let Some(index) = current.filter(|index| *index < skeleton.joints.len()) else {
+            break;
+        };
+        if !hips_ancestors.insert(index) {
+            break;
+        }
+        current = skeleton.joints[index]
+            .parent_index
+            .map(|value| value as usize);
+    }
+
+    let mut chain_reversed = Vec::new();
+    let mut current = skeleton
+        .joints
+        .get(head_index)
+        .and_then(|joint| joint.parent_index)
+        .map(|index| index as usize);
+    let mut reached_common_ancestor = false;
+    for _ in 0..skeleton.joints.len() {
+        let Some(index) = current.filter(|index| *index < skeleton.joints.len()) else {
+            break;
+        };
+        if hips_ancestors.contains(&index) {
+            reached_common_ancestor = true;
+            break;
+        }
+        chain_reversed.push(index);
+        current = skeleton.joints[index]
+            .parent_index
+            .map(|value| value as usize);
+    }
+    if !reached_common_ancestor || chain_reversed.is_empty() {
+        return Vec::new();
+    }
+    chain_reversed.reverse();
+
+    // More yaw belongs to the upper torso than to the lower spine. Normalizing these monotonic
+    // weights means the full requested residual yaw is distributed exactly once across the chain.
+    let raw = chain_reversed
+        .iter()
+        .enumerate()
+        .map(|(index, _)| 0.75 + index as f32 * 0.35)
+        .collect::<Vec<_>>();
+    let sum = raw.iter().copied().sum::<f32>().max(1.0e-6);
+    chain_reversed
+        .into_iter()
+        .zip(raw)
+        .map(|(joint_index, value)| ResolvedBodyTurnLayer {
+            joint_index,
+            weight: value / sum,
+        })
+        .collect()
+}
+
+fn apply_body_turn_pose(
+    skeleton: &ModelSkeletonMetadata,
+    animation_runtime: &AnimationSkeletonRuntime,
+    layers: &[ResolvedBodyTurnLayer],
+    pose: &mut [JointLocalPose],
+    frames: &mut Vec<Mat4>,
+    yaw_radians: f32,
+) -> Result<(), String> {
+    if layers.is_empty() || !yaw_radians.is_finite() || yaw_radians.abs() <= 1.0e-5 {
+        return Ok(());
+    }
+    rebuild_model_joint_frames(animation_runtime, pose, frames)?;
+    for layer in layers {
+        let Some(joint) = skeleton.joints.get(layer.joint_index) else {
+            continue;
+        };
+        let Some(parent_index) = joint.parent_index.map(|index| index as usize) else {
+            continue;
+        };
+        let Some(joint_frame) = frames.get(layer.joint_index).copied() else {
+            continue;
+        };
+        let Some(parent_frame) = frames.get(parent_index).copied() else {
+            continue;
+        };
+        let (_, joint_global_rotation, _) = joint_frame.to_scale_rotation_translation();
+        let (_, parent_global_rotation, _) = parent_frame.to_scale_rotation_translation();
+        let delta = Quat::from_rotation_y(yaw_radians * layer.weight).normalize_or_identity();
+        let desired_global = (delta * joint_global_rotation).normalize_or_identity();
+        let local_rotation =
+            (parent_global_rotation.inverse() * desired_global).normalize_or_identity();
+        let Some(local) = pose.get_mut(layer.joint_index) else {
+            continue;
+        };
+        local.rotation = [
+            local_rotation.x,
+            local_rotation.y,
+            local_rotation.z,
+            local_rotation.w,
+        ];
+    }
+    Ok(())
+}
+
+#[inline]
+fn smooth_body_turn_yaw(current: f32, target: f32, dt: f32) -> f32 {
+    let target = if target.is_finite() {
+        target.clamp(-65.0_f32.to_radians(), 65.0_f32.to_radians())
+    } else {
+        0.0
+    };
+    if !current.is_finite() || !(dt.is_finite() && dt > 0.0) {
+        return target;
+    }
+    let alpha = (1.0 - (-dt / 0.075).exp()).clamp(0.0, 1.0);
+    current + newengine_math::wrap_pi(target - current) * alpha
+}
+
 fn resolve_joint_blend_rules(
     skeleton: &ModelSkeletonMetadata,
     rules: &[newengine_engine_runtime::gameplay::PlayerJointRotationWeight],
@@ -104,6 +488,53 @@ fn resolve_foot_joint_binding(skeleton: &ModelSkeletonMetadata) -> Option<Player
     (left != right).then_some(PlayerFootJointBinding { left, right })
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum FallPresentationBand {
+    Low,
+    Medium,
+    High,
+}
+
+#[inline]
+pub(super) fn select_fall_presentation_band(
+    distance: f32,
+    low_available: bool,
+    medium_available: bool,
+    high_available: bool,
+    medium_min_distance: f32,
+    high_min_distance: f32,
+) -> Option<FallPresentationBand> {
+    let distance = if distance.is_finite() {
+        distance.max(0.0)
+    } else {
+        0.0
+    };
+    let medium_min = if medium_min_distance.is_finite() {
+        medium_min_distance.max(0.0)
+    } else {
+        0.0
+    };
+    let high_min = if high_min_distance.is_finite() {
+        high_min_distance.max(medium_min)
+    } else {
+        medium_min
+    };
+
+    if high_available && high_min > 0.0 && distance >= high_min {
+        return Some(FallPresentationBand::High);
+    }
+    if medium_available && medium_min > 0.0 && distance >= medium_min {
+        return Some(FallPresentationBand::Medium);
+    }
+    if low_available {
+        return Some(FallPresentationBand::Low);
+    }
+    if medium_available {
+        return Some(FallPresentationBand::Medium);
+    }
+    high_available.then_some(FallPresentationBand::High)
+}
+
 #[derive(Clone, Debug)]
 pub(super) struct PlayerAnimationRuntimeBinding {
     clips: [Option<PlayerAnimationRuntimeClip>; 8],
@@ -124,6 +555,22 @@ pub(super) struct PlayerAnimationRuntimeBinding {
     bind_joint_frames: Vec<Mat4>,
     joint_frames_scratch: Vec<Mat4>,
     foot_joints: Option<PlayerFootJointBinding>,
+    turn_root_joint: Option<usize>,
+    turn_45_left_pose: Option<PlayerAnimationRuntimeClip>,
+    turn_45_right_pose: Option<PlayerAnimationRuntimeClip>,
+    turn_90_left_pose: Option<PlayerAnimationRuntimeClip>,
+    turn_90_right_pose: Option<PlayerAnimationRuntimeClip>,
+    turn_135_left_pose: Option<PlayerAnimationRuntimeClip>,
+    turn_135_right_pose: Option<PlayerAnimationRuntimeClip>,
+    turn_180_left_pose: Option<PlayerAnimationRuntimeClip>,
+    turn_180_right_pose: Option<PlayerAnimationRuntimeClip>,
+    turn_in_place: Option<TurnInPlaceRuntimeState>,
+    turn_sequence: u64,
+    pose_continuity: PoseContinuityBridge,
+    /// Procedural anticipation twist used only before a native turn step starts. It never rotates
+    /// the torso hierarchy; hips/legs remain root-owned so feet do not spin with mouse yaw.
+    body_turn_layers: Vec<ResolvedBodyTurnLayer>,
+    body_turn_yaw_radians: f32,
     braid_secondary_motion: Option<AbbyBraidRuntime>,
     /// Definition-authored local-pose copy rules resolved to this skeleton.
     helper_pose_copies: Vec<ResolvedJointCopyRule>,
@@ -134,6 +581,21 @@ pub(super) struct PlayerAnimationRuntimeBinding {
     noclip_pose: Option<PlayerAnimationRuntimeClip>,
     noclip_time_seconds: f32,
     noclip_active: bool,
+    fall_low_pose: Option<PlayerAnimationRuntimeClip>,
+    fall_medium_pose: Option<PlayerAnimationRuntimeClip>,
+    fall_high_pose: Option<PlayerAnimationRuntimeClip>,
+    landing_soft_pose: Option<PlayerAnimationRuntimeClip>,
+    landing_medium_pose: Option<PlayerAnimationRuntimeClip>,
+    landing_hard_pose: Option<PlayerAnimationRuntimeClip>,
+    landing_hard_run_pose: Option<PlayerAnimationRuntimeClip>,
+    landing_active_band: Option<FallPresentationBand>,
+    landing_active_run: bool,
+    landing_time_seconds: f32,
+    landing_last_revision: u64,
+    fall_medium_min_distance: f32,
+    fall_high_min_distance: f32,
+    fall_active_band: Option<FallPresentationBand>,
+    fall_time_seconds: f32,
     equipment_ready_pose: Option<PlayerAnimationRuntimeClip>,
     equipment_aim_pose: Option<PlayerAnimationRuntimeClip>,
     equipment_reload_pose: Option<PlayerAnimationRuntimeClip>,
@@ -200,6 +662,32 @@ impl PlayerAnimationRuntimeBinding {
         state: newengine_engine_runtime::gameplay::PlayerLocomotionAnimation,
     ) -> usize {
         resolve_locomotion_slot(&self.clips, state)
+    }
+
+    fn turn_clip(&self, slot: TurnInPlaceSlot) -> Option<&PlayerAnimationRuntimeClip> {
+        match slot {
+            TurnInPlaceSlot::Left45 => self.turn_45_left_pose.as_ref(),
+            TurnInPlaceSlot::Right45 => self.turn_45_right_pose.as_ref(),
+            TurnInPlaceSlot::Left90 => self.turn_90_left_pose.as_ref(),
+            TurnInPlaceSlot::Right90 => self.turn_90_right_pose.as_ref(),
+            TurnInPlaceSlot::Left135 => self.turn_135_left_pose.as_ref(),
+            TurnInPlaceSlot::Right135 => self.turn_135_right_pose.as_ref(),
+            TurnInPlaceSlot::Left180 => self.turn_180_left_pose.as_ref(),
+            TurnInPlaceSlot::Right180 => self.turn_180_right_pose.as_ref(),
+        }
+    }
+
+    fn turn_clip_mut(&mut self, slot: TurnInPlaceSlot) -> Option<&mut PlayerAnimationRuntimeClip> {
+        match slot {
+            TurnInPlaceSlot::Left45 => self.turn_45_left_pose.as_mut(),
+            TurnInPlaceSlot::Right45 => self.turn_45_right_pose.as_mut(),
+            TurnInPlaceSlot::Left90 => self.turn_90_left_pose.as_mut(),
+            TurnInPlaceSlot::Right90 => self.turn_90_right_pose.as_mut(),
+            TurnInPlaceSlot::Left135 => self.turn_135_left_pose.as_mut(),
+            TurnInPlaceSlot::Right135 => self.turn_135_right_pose.as_mut(),
+            TurnInPlaceSlot::Left180 => self.turn_180_left_pose.as_mut(),
+            TurnInPlaceSlot::Right180 => self.turn_180_right_pose.as_mut(),
+        }
     }
 }
 

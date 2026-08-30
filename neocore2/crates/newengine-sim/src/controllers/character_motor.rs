@@ -3,7 +3,10 @@
 use newengine_ecs::EntityId;
 use newengine_math::{EulerRot, Quat, Vec2, Vec3};
 
-use crate::{CharacterMotor, ControllerCtx, Intent, IntentSink, MotorInput, Velocity};
+use crate::{
+    CharacterFacingTurnStepRequest, CharacterMotor, ControllerCtx, Intent, IntentSink, MotorInput,
+    Velocity,
+};
 
 #[derive(Clone, Copy, Debug)]
 pub struct CharacterMotorStep {
@@ -136,14 +139,23 @@ pub fn step_character_motor(
         Vec3::ZERO
     };
 
-    // Body facing is independent from view. While moving, face travel direction.
-    // In explicit aim/lock-on mode, face the view yaw even while stationary.
+    // Body facing is independent from view. While translating, face travel/view intent.
+    // Stationary yaw is deliberately presentation-owned: the world root stays fixed until an
+    // authored turn-in-place animation advances the world facing through bounded fixed-step increments.
     let (current_body_yaw, _, _) = current_rot.normalize_or_identity().to_euler(EulerRot::YXZ);
     let horizontal_velocity = Vec3::new(velocity_ws.x, 0.0, velocity_ws.z);
-    let target_body_yaw = if input.face_view {
-        motor.yaw
-    } else if horizontal_velocity.length_squared() > 1.0e-8 {
-        yaw_from_forward(horizontal_velocity)
+    // A stationary possessed character never rotates its physical/world root directly from mouse
+    // yaw. Turn-in-place presentation owns that case so feet/pelvis can execute an authored step.
+    // The motor only turns the root while there is meaningful translation.
+    const TRANSLATING_SPEED_MPS: f32 = 0.08;
+    let translating =
+        horizontal_velocity.length_squared() > TRANSLATING_SPEED_MPS * TRANSLATING_SPEED_MPS;
+    let target_body_yaw = if translating {
+        if input.face_view {
+            motor.yaw
+        } else {
+            yaw_from_forward(horizontal_velocity)
+        }
     } else {
         current_body_yaw
     };
@@ -172,12 +184,17 @@ pub fn run_character_motor_controller(
     input: MotorInput,
     out: &mut impl IntentSink,
 ) {
-    let Some(step) = step_character_motor(
-        motor,
-        input,
-        ctx.local_rotation_or_identity(entity),
-        ctx.dt(),
-    ) else {
+    let current_rotation = ctx.local_rotation_or_identity(entity);
+    let current_rotation = ctx
+        .world()
+        .get::<CharacterFacingTurnStepRequest>(entity)
+        .copied()
+        .filter(|request| request.yaw_delta.is_finite())
+        .map(|request| {
+            (Quat::from_rotation_y(request.yaw_delta) * current_rotation).normalize_or_identity()
+        })
+        .unwrap_or(current_rotation);
+    let Some(step) = step_character_motor(motor, input, current_rotation, ctx.dt()) else {
         return;
     };
 
@@ -287,10 +304,9 @@ mod tests {
     }
 
     #[test]
-    fn aim_mode_turns_body_toward_view_with_bounded_rate() {
+    fn stationary_face_view_never_rotates_world_root_from_mouse_yaw() {
         let motor = CharacterMotor {
-            yaw: 1.0,
-            body_turn_speed: 2.0,
+            yaw: 90.0_f32.to_radians(),
             ..CharacterMotor::default()
         };
         let input = MotorInput {
@@ -299,7 +315,7 @@ mod tests {
         };
         let step = step_character_motor(motor, input, Quat::IDENTITY, 0.1).expect("motor step");
         let (body_yaw, body_pitch, _) = step.body_rotation.to_euler(EulerRot::YXZ);
-        assert!((body_yaw - 0.2).abs() <= 1.0e-4);
+        assert!(body_yaw.abs() <= 1.0e-6);
         assert!(body_pitch.abs() <= 1.0e-6);
     }
 }

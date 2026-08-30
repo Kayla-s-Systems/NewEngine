@@ -8,6 +8,9 @@ use newengine_task_api::{
     ENGINE_TASK_ENVELOPE_TOPIC_V1, ENGINE_TASK_EVENT_TOPIC_V1,
 };
 
+const DIAGNOSTICS_JOB_BEGIN_TOPIC_V1: &str = "newengine.diagnostics.job.begin.v1";
+const DIAGNOSTICS_JOB_END_TOPIC_V1: &str = "newengine.diagnostics.job.end.v1";
+
 #[derive(Clone, Debug)]
 pub(crate) struct PluginHostJobRecord {
     task_id: String,
@@ -163,13 +166,24 @@ pub(crate) fn elapsed_ms(started: Instant) -> f64 {
     started.elapsed().as_secs_f64() * 1000.0
 }
 
+fn publish_raw_job_event(topic: &str, value: &serde_json::Value) {
+    if let Ok(payload) = serde_json::to_vec(value) {
+        let _ = crate::host_context::publish_event(topic, &payload);
+    }
+}
+
 #[inline]
 pub(crate) fn begin(value: serde_json::Value) {
+    // Publish the rich diagnostics payload before the generic task projection.
+    // Late profiler subscribers can synthesize a completed startup job from the
+    // terminal payload, while live subscribers retain loader-specific metadata.
+    publish_raw_job_event(DIAGNOSTICS_JOB_BEGIN_TOPIC_V1, &value);
     PluginHostJobBridge::begin(value);
 }
 
 #[inline]
 pub(crate) fn end(value: serde_json::Value) {
+    publish_raw_job_event(DIAGNOSTICS_JOB_END_TOPIC_V1, &value);
     PluginHostJobBridge::end(value);
 }
 

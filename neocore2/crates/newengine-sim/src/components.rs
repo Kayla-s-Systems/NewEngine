@@ -40,6 +40,16 @@ pub struct MotorInput {
 ///
 /// This is meant to be a small, deterministic building block.
 /// Character collision/physics should live in a separate plugin/system.
+/// One fixed-step increment of an authored turn-in-place facing change.
+///
+/// Presentation chooses the authored turn trajectory, but simulation remains the sole owner of the
+/// physical/world facing. Producers must keep `yaw_delta` small and bounded; a complete 45/90/180
+/// degree turn is intentionally delivered as a sequence of these requests, never as a snap rebase.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct CharacterFacingTurnStepRequest {
+    pub yaw_delta: f32,
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct CharacterMotor {
     pub yaw: f32,
@@ -47,8 +57,8 @@ pub struct CharacterMotor {
 
     pub look_sens: f32,
     pub move_speed: f32,
-    /// Maximum body yaw turn rate in radians/sec. View yaw remains unrestricted
-    /// by this value; this only controls the visible/physical character facing.
+    /// Maximum body yaw turn rate in radians/sec while translating. View yaw remains unrestricted
+    /// by this value; this controls only the visible/physical character facing.
     pub body_turn_speed: f32,
 
     pub pitch_limit: f32,

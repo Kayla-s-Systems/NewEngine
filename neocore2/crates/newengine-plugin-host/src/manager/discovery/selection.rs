@@ -55,15 +55,14 @@ pub fn build_frozen_composition_plan(
 ) -> FrozenPluginCompositionPlan {
     let mut artifact_winners: HashMap<String, (super::graph::ScannedDynlib, PluginLoadOrigin)> =
         HashMap::default();
+    let mut host_policy = HostPluginPolicySnapshot::capture();
 
     for (graph, load_origin) in inventories {
         for item in &graph.items {
             let ScannedDynlibKind::Plugin { id, .. } = &item.kind else {
                 continue;
             };
-            if plugin_excluded_by_host_policy(id)
-                || !crate::plugin_config_service::plugin_enabled_by_config(id)
-            {
+            if host_policy.is_excluded(id) || !host_policy.is_enabled(id) {
                 continue;
             }
             match artifact_winners.get(id) {
@@ -217,17 +216,42 @@ impl SelectionDecision {
     }
 }
 
-#[inline]
-fn plugin_excluded_by_host_policy(id: &str) -> bool {
-    crate::host_context::environment_var("NEWENGINE_PLUGIN_EXCLUDE_IDS")
-        .map(|value| {
-            value
-                .split(|ch: char| ch == ',' || ch == ';' || ch.is_ascii_whitespace())
-                .map(str::trim)
-                .filter(|entry| !entry.is_empty())
-                .any(|entry| entry == id)
-        })
-        .unwrap_or(false)
+struct HostPluginPolicySnapshot {
+    excluded_ids: NeHashSet<String>,
+    enabled_by_id: HashMap<String, bool>,
+}
+
+impl HostPluginPolicySnapshot {
+    fn capture() -> Self {
+        let mut excluded_ids = NeHashSet::default();
+        if let Some(value) = crate::host_context::environment_var("NEWENGINE_PLUGIN_EXCLUDE_IDS") {
+            excluded_ids.extend(
+                value
+                    .split(|ch: char| ch == ',' || ch == ';' || ch.is_ascii_whitespace())
+                    .map(str::trim)
+                    .filter(|entry| !entry.is_empty())
+                    .map(str::to_owned),
+            );
+        }
+        Self {
+            excluded_ids,
+            enabled_by_id: HashMap::default(),
+        }
+    }
+
+    #[inline]
+    fn is_excluded(&self, id: &str) -> bool {
+        self.excluded_ids.contains(id)
+    }
+
+    fn is_enabled(&mut self, id: &str) -> bool {
+        if let Some(enabled) = self.enabled_by_id.get(id) {
+            return *enabled;
+        }
+        let enabled = crate::plugin_config_service::plugin_enabled_by_config(id);
+        self.enabled_by_id.insert(id.to_owned(), enabled);
+        enabled
+    }
 }
 
 /// Converts discovery inventory into a load set.
@@ -244,15 +268,16 @@ pub(super) fn build_load_selection(
 ) -> LoadSelection {
     let mut out = LoadSelection::default();
     let mut winners_by_id: HashMap<&str, &super::graph::ScannedDynlib> = HashMap::default();
+    let mut host_policy = HostPluginPolicySnapshot::capture();
 
     for item in &graph.items {
         let ScannedDynlibKind::Plugin { id, phase, .. } = &item.kind else {
             continue;
         };
         if loaded_ids.contains(id)
-            || plugin_excluded_by_host_policy(id)
-            || !crate::plugin_config_service::plugin_enabled_by_config(id)
             || !filter.allows(*phase)
+            || host_policy.is_excluded(id)
+            || !host_policy.is_enabled(id)
         {
             continue;
         }
@@ -287,11 +312,11 @@ pub(super) fn build_load_selection(
             } => {
                 if loaded_ids.contains(id) {
                     SelectionDecision::AlreadyLoaded
-                } else if plugin_excluded_by_host_policy(id) {
+                } else if host_policy.is_excluded(id) {
                     SelectionDecision::Unsupported {
                         reason: "plugin id excluded by host composition policy",
                     }
-                } else if !crate::plugin_config_service::plugin_enabled_by_config(id) {
+                } else if !host_policy.is_enabled(id) {
                     SelectionDecision::DisabledByConfig
                 } else if !filter.allows(*phase) {
                     SelectionDecision::Filtered {
@@ -358,12 +383,18 @@ fn is_better_plugin_candidate(
 ) -> bool {
     let candidate_rank = plugin_candidate_rank(candidate);
     let current_rank = plugin_candidate_rank(current);
-    candidate_rank > current_rank
+    candidate_rank
+        .cmp(&current_rank)
+        .then_with(|| {
+            candidate
+                .path
+                .to_string_lossy()
+                .cmp(&current.path.to_string_lossy())
+        })
+        .is_gt()
 }
 
-fn plugin_candidate_rank(
-    item: &super::graph::ScannedDynlib,
-) -> ((u64, u64, u64, u64), usize, String) {
+fn plugin_candidate_rank(item: &super::graph::ScannedDynlib) -> ((u64, u64, u64, u64), usize) {
     let (version, declared_capabilities) = match &item.kind {
         ScannedDynlibKind::Plugin {
             version,
@@ -375,11 +406,7 @@ fn plugin_candidate_rank(
 
     // The final path string is only a deterministic tie-breaker for two artifacts
     // with equal id/version/capability metadata. It is not provider selection.
-    (
-        version,
-        declared_capabilities,
-        item.path.to_string_lossy().to_string(),
-    )
+    (version, declared_capabilities)
 }
 
 fn semver_rank(version: &str) -> (u64, u64, u64, u64) {

@@ -485,7 +485,11 @@ fn authored_source_path(project_root: &Path, map_ref: &str) -> Result<PathBuf, S
             "project save currently requires a .ymap authored source, got '{map_ref}'"
         ));
     }
-    Ok(project_root.join("Source").join(format!("{logical}.xml")))
+    Ok(
+        newengine_project_api::ProjectFilesystem::new(project_root.to_path_buf())
+            .source_dir()
+            .join(format!("{logical}.xml")),
+    )
 }
 
 fn patch_authored_transform(xml: &mut String, edit: &AuthoredPlacementEdit) -> Result<(), String> {

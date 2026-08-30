@@ -109,6 +109,7 @@ fn third_person_orbit_look_does_not_mutate_character_view_or_body_intent() {
         true,
         2.0,
         GameplayCameraRunnerKind::ThirdPersonOrbit,
+        75.0_f32.to_radians(),
         false,
     );
 
@@ -135,6 +136,38 @@ fn third_person_orbit_look_does_not_mutate_character_view_or_body_intent() {
         .unwrap();
     assert!(camera_state.orbit_yaw.is_finite());
     assert!(camera_state.orbit_pitch.is_finite());
+}
+
+#[test]
+fn first_person_look_clamps_downward_pitch_before_inner_torso_can_enter_view() {
+    let mut world = World::new();
+    let player = world.spawn();
+    let _ = world.insert(
+        player,
+        CharacterMotor {
+            pitch: 0.0,
+            look_sens: 1.0,
+            pitch_limit: 1.54,
+            ..CharacterMotor::default()
+        },
+    );
+    let _ = world.insert(player, MotorInput::default());
+
+    CameraRuntimeService::apply_player_input(
+        &mut world,
+        player,
+        0,
+        Vec2::new(0.0, -10.0),
+        true,
+        1.0,
+        GameplayCameraRunnerKind::FirstPerson,
+        75.0_f32.to_radians(),
+        true,
+    );
+
+    let motor = world.get::<CharacterMotor>(player).copied().unwrap();
+    assert!(motor.pitch >= -75.0_f32.to_radians() - 1.0e-6);
+    assert!(motor.pitch <= 0.0);
 }
 
 #[test]

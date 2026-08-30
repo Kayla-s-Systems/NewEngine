@@ -42,6 +42,166 @@ fn first_person_position_contract(
 }
 
 #[inline]
+fn closest_point_on_segment(point: Vec3, a: Vec3, b: Vec3) -> Vec3 {
+    let ab = b - a;
+    let denom = ab.length_squared();
+    if !denom.is_finite() || denom <= 1.0e-10 {
+        return a;
+    }
+    let t = ((point - a).dot(ab) / denom).clamp(0.0, 1.0);
+    a + ab * t
+}
+
+#[inline]
+fn project_point_outside_sphere(
+    point: Vec3,
+    center: Vec3,
+    radius: f32,
+    fallback_direction: Vec3,
+) -> Vec3 {
+    if !point.is_finite() || !center.is_finite() || !radius.is_finite() || radius <= 0.0 {
+        return point;
+    }
+    let delta = point - center;
+    let distance_sq = delta.length_squared();
+    if !distance_sq.is_finite() || distance_sq >= radius * radius {
+        return point;
+    }
+    let direction = if distance_sq > 1.0e-10 {
+        delta / distance_sq.sqrt()
+    } else {
+        let fallback = fallback_direction.normalize_or_zero();
+        if fallback.length_squared() > 1.0e-10 {
+            fallback
+        } else {
+            Vec3::new(0.0, 0.0, -1.0)
+        }
+    };
+    center + direction * radius
+}
+
+#[inline]
+fn project_point_outside_capsule(
+    point: Vec3,
+    a: Vec3,
+    b: Vec3,
+    radius: f32,
+    fallback_direction: Vec3,
+) -> Vec3 {
+    if !a.is_finite() || !b.is_finite() {
+        return point;
+    }
+    let closest = closest_point_on_segment(point, a, b);
+    project_point_outside_sphere(point, closest, radius, fallback_direction)
+}
+
+#[inline]
+fn constrain_first_person_body_barrier_position(
+    eye_center: Vec3,
+    body_rotation: Quat,
+    desired_camera_position: Vec3,
+    barrier: FirstPersonBodyBarrierInput,
+) -> Vec3 {
+    if !barrier.enabled || !eye_center.is_finite() || !desired_camera_position.is_finite() {
+        return desired_camera_position;
+    }
+    let body_rotation = body_rotation.normalize_or_identity();
+    let body_forward = {
+        let forward = first_person_horizontal_forward(body_rotation);
+        if forward.length_squared() > 1.0e-10 {
+            forward
+        } else {
+            Vec3::new(0.0, 0.0, -1.0)
+        }
+    };
+    let to_world = |offset_ls: Vec3| eye_center + body_rotation * offset_ls;
+    let padding = if barrier.surface_padding.is_finite() {
+        barrier.surface_padding.clamp(0.0, 0.05)
+    } else {
+        0.0
+    };
+    let radius = |value: f32| {
+        if value.is_finite() && value > 0.0 {
+            value.clamp(0.001, 0.50) + padding
+        } else {
+            0.0
+        }
+    };
+    let head_center = to_world(barrier.head_center_offset_ls);
+    let neck_top = to_world(barrier.neck_top_offset_ls);
+    let neck_bottom = to_world(barrier.neck_bottom_offset_ls);
+    let chest_top = to_world(barrier.chest_top_offset_ls);
+    let chest_bottom = to_world(barrier.chest_bottom_offset_ls);
+
+    let mut position = desired_camera_position;
+    // Overlapping head/neck/chest primitives can move the point into a neighbour. Two compact
+    // Gauss-Seidel passes converge for this tiny convex envelope without allocating or touching
+    // character triangles.
+    for _ in 0..2 {
+        position = project_point_outside_sphere(
+            position,
+            head_center,
+            radius(barrier.head_radius),
+            body_forward,
+        );
+        position = project_point_outside_capsule(
+            position,
+            neck_top,
+            neck_bottom,
+            radius(barrier.neck_radius),
+            body_forward,
+        );
+        position = project_point_outside_capsule(
+            position,
+            chest_top,
+            chest_bottom,
+            radius(barrier.chest_radius),
+            body_forward,
+        );
+    }
+    if position.is_finite() {
+        position
+    } else {
+        desired_camera_position
+    }
+}
+
+#[inline]
+fn constrain_first_person_camera_position(
+    player: EntityId,
+    eye_center: Vec3,
+    desired_camera_position: Vec3,
+    collision_world: Option<&CameraSpringArmCollisionWorld>,
+) -> Vec3 {
+    let desired_offset_ws = desired_camera_position - eye_center;
+    if !desired_offset_ws.is_finite() || desired_offset_ws.length_squared() <= 1.0e-10 {
+        return eye_center;
+    }
+    // FPP uses the same collision scene as the third-person spring arm but with a head-sized
+    // probe and no minimum arm length. The PlayerActor collider itself is ignored by the shared
+    // constraint, so this prevents wall/ceiling penetration without treating the player's own
+    // capsule as an obstacle.
+    let constrained_offset_ws = constrain_spring_arm_offset_ls(
+        player,
+        eye_center,
+        Quat::IDENTITY,
+        desired_offset_ws,
+        CameraSpringArmConfig {
+            enabled: true,
+            probe_radius: 0.055,
+            collision_padding: 0.012,
+            min_distance: 0.0,
+        },
+        collision_world,
+    );
+    let constrained = eye_center + constrained_offset_ws;
+    if constrained.is_finite() {
+        constrained
+    } else {
+        eye_center
+    }
+}
+
 fn smooth_first_person_parallax(current: Vec3, target: Vec3, dt: f32) -> Vec3 {
     if !target.is_finite() {
         return Vec3::ZERO;
@@ -229,7 +389,7 @@ impl CameraRuntimeService {
             let camera_rotation =
                 (player_view_rotation * controller.rot_offset).normalize_or_identity();
             let forward_clearance = if config.first_person_forward_clearance.is_finite() {
-                config.first_person_forward_clearance.clamp(0.0, 0.08)
+                config.first_person_forward_clearance.clamp(0.0, 0.14)
             } else {
                 0.045
             };
@@ -270,10 +430,34 @@ impl CameraRuntimeService {
                 config.first_person_presentation,
                 dt,
             );
-            let camera_position = eye_center
+            let desired_camera_position = eye_center
                 + base_offset
                 + first_person.parallax_offset_ws
                 + camera_rotation * additive.position_ls;
+            // Resolve the local-owner body envelope before entering the shared world collision
+            // scene. Re-apply it after world retraction as well: a wall immediately in front of
+            // the face must not retract the camera back through the skull/neck shell.
+            let body_safe_desired = constrain_first_person_body_barrier_position(
+                eye_center,
+                target_body_rotation,
+                desired_camera_position,
+                config.first_person_body_barrier,
+            );
+            let world_safe_position = {
+                let collision_world = world.resource::<CameraSpringArmCollisionWorld>();
+                constrain_first_person_camera_position(
+                    player,
+                    eye_center,
+                    body_safe_desired,
+                    collision_world,
+                )
+            };
+            let camera_position = constrain_first_person_body_barrier_position(
+                eye_center,
+                target_body_rotation,
+                world_safe_position,
+                config.first_person_body_barrier,
+            );
             let rendered_camera_rotation =
                 (camera_rotation * additive.rotation_ls).normalize_or_identity();
             let _ = world.insert(camera, first_person);
@@ -484,6 +668,77 @@ impl CameraRuntimeService {
 #[cfg(test)]
 mod first_person_position_tests {
     use super::*;
+
+    #[test]
+    fn first_person_body_barrier_projects_camera_out_of_head_volume() {
+        let barrier = FirstPersonBodyBarrierInput {
+            enabled: true,
+            head_center_offset_ls: Vec3::ZERO,
+            head_radius: 0.12,
+            surface_padding: 0.01,
+            ..FirstPersonBodyBarrierInput::default()
+        };
+        let constrained = constrain_first_person_body_barrier_position(
+            Vec3::ZERO,
+            Quat::IDENTITY,
+            Vec3::ZERO,
+            barrier,
+        );
+        assert!(constrained.is_finite());
+        assert!(constrained.z < -0.129);
+        assert!(constrained.length() >= 0.129);
+    }
+
+    #[test]
+    fn first_person_body_barrier_is_noop_when_disabled() {
+        let desired = Vec3::new(0.01, 0.02, -0.03);
+        let constrained = constrain_first_person_body_barrier_position(
+            Vec3::ZERO,
+            Quat::IDENTITY,
+            desired,
+            FirstPersonBodyBarrierInput::default(),
+        );
+        assert!((constrained - desired).length() <= 1.0e-8);
+    }
+
+    #[test]
+    fn first_person_camera_volume_retracts_before_world_geometry() {
+        let mut ecs = World::new();
+        let player = ecs.spawn();
+        let wall = ecs.spawn();
+        let mut collision = CameraSpringArmCollisionWorld::default();
+        collision.push_aabb(crate::constraints::CameraSpringArmAabbCollider {
+            entity: wall,
+            min_ws: Vec3::new(-1.0, -1.0, -0.22),
+            max_ws: Vec3::new(1.0, 1.0, -0.20),
+        });
+        let eye = Vec3::ZERO;
+        let desired = Vec3::new(0.0, 0.0, -0.30);
+        let constrained =
+            constrain_first_person_camera_position(player, eye, desired, Some(&collision));
+        assert!(
+            constrained.z > desired.z,
+            "camera must retract before the wall"
+        );
+        assert!(constrained.z <= 0.0);
+    }
+
+    #[test]
+    fn first_person_camera_collision_ignores_player_body_proxy() {
+        let mut ecs = World::new();
+        let player = ecs.spawn();
+        let mut collision = CameraSpringArmCollisionWorld::default();
+        collision.push(crate::constraints::CameraSpringArmCollider {
+            entity: player,
+            center_ws: Vec3::new(0.0, 0.0, -0.05),
+            radius: 0.45,
+        });
+        let eye = Vec3::ZERO;
+        let desired = Vec3::new(0.0, 0.0, -0.10);
+        let constrained =
+            constrain_first_person_camera_position(player, eye, desired, Some(&collision));
+        assert!((constrained - desired).length() <= 1.0e-6);
+    }
 
     #[test]
     fn pitch_rotates_view_without_translating_fpp_position() {

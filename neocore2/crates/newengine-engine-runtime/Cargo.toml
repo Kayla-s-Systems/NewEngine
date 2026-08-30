@@ -52,6 +52,7 @@ newengine-physics-contracts = { path = "../newengine-physics-contracts" }
 newengine-physics-api = { path = "../newengine-physics-api" }
 newengine-math = { path = "../newengine-math" }
 newengine-platform-api = { path = "../newengine-platform-api" }
+newengine-project-api = { path = "../newengine-project-api" }
 newengine-plugin-api = { path = "../newengine-plugin-api" }
 newengine-plugin-host = { path = "../newengine-plugin-host" }
 newengine-replay = { path = "../newengine-replay" }

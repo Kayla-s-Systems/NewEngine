@@ -190,8 +190,14 @@ pub fn decode_geometry_lod0(pak: &PakFile) -> Result<DecodedGeometry, String> {
         // those vertices intentionally have no skin weight record. They are not renderable data:
         // compact strictly to vertices referenced by the triangle index buffer before skin decode.
         // A zero-weight vertex that is actually referenced still fails in `decode_skin` below.
-        let (positions, uv0, indices, source_vertex_indices) =
+        let (positions, uv0, mut indices, source_vertex_indices) =
             compact_indexed_vertex_streams(&positions, &uv0, &source_indices, &name)?;
+        // TLOU2 PC packages encode triangle winding opposite to NewEngine's canonical
+        // clockwise framebuffer-front-face convention. Preserve the source vertex/skin
+        // streams, but canonicalize every triangle before deriving normals or publishing YDD.
+        // Without this conversion skinned exterior shells are classified as back faces and
+        // disappear under normal back-face culling, which looks like transparent skin.
+        reverse_tlou2_triangle_winding(&mut indices);
         let normals = recalculate_normals(&positions, &indices);
         let (skin, skin_loss) = match skin_header {
             Some(header) => {
@@ -692,6 +698,12 @@ fn decode_skin(
     Ok((out, stats))
 }
 
+fn reverse_tlou2_triangle_winding(indices: &mut [u32]) {
+    for triangle in indices.chunks_exact_mut(3) {
+        triangle.swap(1, 2);
+    }
+}
+
 fn recalculate_normals(positions: &[[f32; 4]], indices: &[u32]) -> Vec<[f32; 3]> {
     let mut normals = vec![Vec3::ZERO; positions.len()];
     for triangle in indices.chunks_exact(3) {
@@ -758,6 +770,28 @@ impl<'a> LsbBitReader<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tlou2_triangle_winding_is_canonicalized_once() {
+        let mut indices = vec![0, 1, 2, 3, 4, 5];
+        reverse_tlou2_triangle_winding(&mut indices);
+        assert_eq!(indices, vec![0, 2, 1, 3, 5, 4]);
+    }
+
+    #[test]
+    fn winding_canonicalization_flips_derived_face_normal() {
+        let positions = vec![
+            [0.0, 0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0, 0.0],
+        ];
+        let original = recalculate_normals(&positions, &[0, 1, 2]);
+        let mut indices = vec![0, 1, 2];
+        reverse_tlou2_triangle_winding(&mut indices);
+        let canonical = recalculate_normals(&positions, &indices);
+        assert!(original[0][2] > 0.99);
+        assert!(canonical[0][2] < -0.99);
+    }
 
     #[test]
     fn lsb_reader_matches_tlou2_packing_order() {

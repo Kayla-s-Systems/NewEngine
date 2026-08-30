@@ -26,8 +26,9 @@ pub use commands::{Command, CommandBuffer};
 // Re-export simulation components/controllers at crate root for ergonomic use by editor/runtime.
 // Keep explicit re-exports to avoid accidental API disappearance when modules evolve.
 pub use components::{
-    AngularVelocity, CameraControlInputComp, CameraRigComp, CharacterMotor,
-    FollowTargetCameraController, FollowTargetCameraMotor, MotorInput, OrbitCameraMotor, Velocity,
+    AngularVelocity, CameraControlInputComp, CameraRigComp, CharacterFacingTurnStepRequest,
+    CharacterMotor, FollowTargetCameraController, FollowTargetCameraMotor, MotorInput,
+    OrbitCameraMotor, Velocity,
 };
 pub use controller_ctx::{ControllerCtx, EntityControllerV1};
 pub use controllers::{

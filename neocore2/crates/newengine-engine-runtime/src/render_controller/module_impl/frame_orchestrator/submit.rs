@@ -103,8 +103,14 @@ impl RenderFrameOrchestrator {
             runtime_profile.postfx_enabled() && !external_preview_target && !editor_debug_shading;
         let shadows_enabled =
             runtime_profile.shadows_enabled() && !external_preview_target && !editor_debug_shading;
+        let scene_offscreen = hdr_scene_enabled || postfx_enabled;
         let scene_color_format = if hdr_scene_enabled {
             crate::render_controller::render_quality::SCENE_HDR_COLOR_FORMAT
+        } else if scope.direct_surface_viewport && !scene_offscreen {
+            // The Vulkan WSI contract is BGRA8_SRGB. A direct-to-surface LDR material
+            // pipeline must be baked against that exact render-pass format; offscreen
+            // LDR targets stay UNORM so they remain sampleable linear intermediates.
+            TextureFormat::Bgra8Srgb
         } else {
             TextureFormat::Bgra8Unorm
         };
