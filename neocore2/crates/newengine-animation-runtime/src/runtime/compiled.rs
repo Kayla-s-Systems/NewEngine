@@ -515,6 +515,32 @@ impl AnimationClip {
         binding: &AnimationClipBinding,
         out: &mut Vec<JointLocalPose>,
     ) -> Result<(), String> {
+        self.sample_local_pose_bound_impl(time_seconds, skeleton, binding, out, true)
+    }
+
+    /// Samples a clip without replacing joints absent from a partial binding with bind pose.
+    ///
+    /// Full-body presentation layers use this path so sparse authored clips can own only the
+    /// joints they actually contain while the previously visible pose remains authoritative for
+    /// every untracked joint. This prevents bind/default-pose flashes during an active animation.
+    pub fn sample_local_pose_bound_preserve_untracked(
+        &self,
+        time_seconds: f32,
+        skeleton: &AnimationSkeletonRuntime,
+        binding: &AnimationClipBinding,
+        out: &mut Vec<JointLocalPose>,
+    ) -> Result<(), String> {
+        self.sample_local_pose_bound_impl(time_seconds, skeleton, binding, out, false)
+    }
+
+    fn sample_local_pose_bound_impl(
+        &self,
+        time_seconds: f32,
+        skeleton: &AnimationSkeletonRuntime,
+        binding: &AnimationClipBinding,
+        out: &mut Vec<JointLocalPose>,
+        reset_untracked_to_bind: bool,
+    ) -> Result<(), String> {
         if binding.skeleton_joint_count != skeleton.joint_count()
             || binding.clip_joint_count != self.joint_count()
             || binding.clip_joint_to_skeleton.len() != self.joint_count()
@@ -564,7 +590,9 @@ impl AnimationClip {
             (frame0 + 1).min(frame_count - 1)
         };
 
-        if !binding.full_pose || out.len() != skeleton.joint_count() {
+        if out.len() != skeleton.joint_count()
+            || (reset_untracked_to_bind && !binding.full_pose)
+        {
             out.clear();
             out.extend_from_slice(skeleton.bind_locals());
         }

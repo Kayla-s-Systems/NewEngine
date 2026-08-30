@@ -16,16 +16,17 @@ pub(super) fn draw_primitives_for_pass(
     _camera_forward: Vec3,
     deferred: bool,
 ) -> newengine_core::EngineResult<()> {
-    let world = scene.world();
-    let reg_lock = this.bridges.scene.primitives();
-    let reg = reg_lock.read();
-    let mats_lock = this.bridges.scene.materials();
-    let mats = mats_lock.read();
     let stage_profile = runtime
         && (this.frame.frame_index <= 3 || this.frame.frame_index.is_multiple_of(30))
         && crate::runtime_policy::render_runtime_policy().primitive_stage_log;
     let stage_total_started = stage_profile.then(std::time::Instant::now);
     let scan_started = stage_profile.then(std::time::Instant::now);
+    let (primitive_snapshot, snapshot_reused) =
+        this.primitive_scene_snapshot(scene, runtime);
+    let reg_lock = this.bridges.scene.primitives();
+    let reg = reg_lock.read();
+    let mats_lock = this.bridges.scene.materials();
+    let mats = mats_lock.read();
     let visibility_settings = primitive_visibility_settings(runtime, viewproj);
 
     type PrimitiveDrawEntry = (
@@ -44,35 +45,19 @@ pub(super) fn draw_primitives_for_pass(
     let mut entries: Vec<PrimitiveDrawEntry> = Vec::new();
     let mut sky_seen = 0usize;
     let mut sky_profile_culled = 0usize;
-    for (id, prim, gt) in world.query2::<Primitive, GlobalTransform>() {
-        if world
-            .get::<crate::gameplay::PlayerSkinBinding>(id)
-            .is_some()
-        {
-            continue;
-        }
-        if !display_visible_in_mode(world, id, runtime) {
-            continue;
-        }
-        let render_model = crate::gameplay::player_render_model_matrix(world, id, gt.0);
-        let sky_dome_runtime = world.get::<EnvironmentDomeRenderState>(id);
+    for source in primitive_snapshot.entries.iter() {
+        let prim = source.primitive;
+        let render_model = source.render_model;
+        let sky_dome_runtime = source.environment_dome.as_ref();
         let asset_label = sky_dome_runtime
             .and_then(|sky| sky.asset_ref.as_deref())
             .unwrap_or("primitive://runtime");
         let definition_label = sky_dome_runtime
             .and_then(|sky| sky.definition_ref.as_deref())
             .unwrap_or("<none>");
-        let mesh_render_options = primitive_mesh_render_options(world.get::<MeshRenderOptions>(id));
-        let mut draw_flags = primitive_draw_flags(&mesh_render_options);
-        let equipped_weapon = world
-            .get::<crate::gameplay::PlayerVisualPart>(id)
-            .is_some_and(|part| part.kind == crate::gameplay::PlayerVisualKind::EquippedWeapon);
-        let authored_world_item = world
-            .get::<crate::gameplay::WorldItemVisualPart>(id)
-            .and_then(|part| world.get::<crate::gameplay::WorldItemPresentation>(part.owner))
-            .and_then(|presentation| presentation.model_ref.as_deref())
-            .is_some_and(|model_ref| !model_ref.trim().is_empty());
-        if equipped_weapon || authored_world_item {
+        let mesh_render_options = &source.render_options;
+        let mut draw_flags = primitive_draw_flags(mesh_render_options);
+        if source.authored_pbr_required {
             draw_flags |= PRIMITIVE_DRAW_AUTHORED_BASE_REQUIRED;
         }
         let follows_view = has_primitive_flag(draw_flags, PRIMITIVE_DRAW_FOLLOW_VIEW);
@@ -82,7 +67,7 @@ pub(super) fn draw_primitives_for_pass(
             sky_seen += 1;
         }
         if let Some(culled_reason) = primitive_role_cull_reason(
-            &mesh_render_options,
+            mesh_render_options,
             pass,
             this.runtime_profile().draw_sky_visuals(),
             deferred,
@@ -111,9 +96,7 @@ pub(super) fn draw_primitives_for_pass(
             continue;
         }
         if has_primitive_flag(draw_flags, PRIMITIVE_DRAW_FOLIAGE_ROLE) {
-            if let Some(foliage) =
-                world.get::<newengine_model_domain_api::FoliageInstanceRuntime>(id)
-            {
+            if let Some(foliage) = source.foliage_runtime {
                 let distance = distance_sq_to_camera(render_model, camera_position).sqrt();
                 if !foliage.is_visible(distance, false) {
                     continue;
@@ -121,12 +104,9 @@ pub(super) fn draw_primitives_for_pass(
             }
         }
         if runtime && !follows_view && visibility_settings.culling_enabled {
-            if let Some(bounds) = world.get::<Bounds>(id) {
-                let (center_ws, radius_ws) = transform_sphere(
-                    render_model,
-                    bounds.local_sphere.center,
-                    bounds.local_sphere.radius,
-                );
+            if let Some((local_center, local_radius)) = source.local_bounds {
+                let (center_ws, radius_ws) =
+                    transform_sphere(render_model, local_center, local_radius);
                 if !frustum_sphere_visible(
                     &visibility_settings.frustum,
                     camera_position,
@@ -143,22 +123,19 @@ pub(super) fn draw_primitives_for_pass(
                 continue;
             }
         }
-        let key = id.stable_u64();
         let entry = (
             if follows_view || sky_role {
                 0.0
             } else {
                 distance_sq_to_camera(render_model, camera_position)
             },
-            key,
-            *prim,
+            source.entity_key,
+            prim,
             render_model,
-            world.get::<newengine_materials::MaterialRef>(id).copied(),
+            source.material_ref,
             draw_flags,
-            world
-                .get::<newengine_model_domain_api::FoliageInstanceRuntime>(id)
-                .copied(),
-            sky_dome_runtime.cloned(),
+            source.foliage_runtime,
+            source.environment_dome.clone(),
         );
         if sky_role {
             sky_entries.push(entry);
@@ -240,8 +217,12 @@ pub(super) fn draw_primitives_for_pass(
             plan
         } else {
             let gpu = ensure_primitive_gpu(&reg, prim.id, &mut this.gpu.meshes.prim_cache, r)?;
-            let resolved = material_ref.and_then(|mr| mats.resolve(mr.id));
-            let mut material_plan = LitMaterialPlan::from_resolved(resolved.as_ref(), prim.color);
+            let owned_material_plan = this
+                .gpu
+                .material
+                .resolved_lit_plans
+                .resolve(&*mats, material_ref, prim.color);
+            let mut material_plan = owned_material_plan.as_borrowed();
             if let Some(runtime) = sky_runtime.as_ref() {
                 material_plan.uv_transform = runtime.uv_transform;
                 material_plan.material_params = runtime.material_params;
@@ -597,12 +578,21 @@ pub(super) fn draw_primitives_for_pass(
         let total_ms = stage_total_started
             .map(|started| started.elapsed().as_secs_f64() * 1000.0)
             .unwrap_or(0.0);
+        let material_plan_cache = this.gpu.material.resolved_lit_plans.stats();
         newengine_ulog_api::ulog::info!(
-            "primitive.stage.profile: frame={} pass='{}' total_ms={:.3} scan_ms={:.3} plan_batch_ms={:.3} upload_ms={:.3} replay_ms={:.3} batches={} instances={} bytes={}",
+            "primitive.stage.profile: frame={} pass='{}' total_ms={:.3} scan_ms={:.3} snapshot_reused={} snapshot_entries={} queried={} material_plan_entries={} material_plan_hits={} material_plan_misses={} material_plan_negative_hits={} material_plan_invalidations={} plan_batch_ms={:.3} upload_ms={:.3} replay_ms={:.3} batches={} instances={} bytes={}",
             this.frame.frame_index,
             pass.label(),
             total_ms,
             scan_ms,
+            snapshot_reused,
+            primitive_snapshot.entries.len(),
+            primitive_snapshot.queried_count,
+            material_plan_cache.entries,
+            material_plan_cache.hits,
+            material_plan_cache.misses,
+            material_plan_cache.negative_hits,
+            material_plan_cache.invalidations,
             plan_ms,
             upload_ms,
             replay_ms,

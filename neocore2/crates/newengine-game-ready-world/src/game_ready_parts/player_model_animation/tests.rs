@@ -14,18 +14,21 @@ mod transition_tests {
     }
 
     #[test]
-    fn fall_presentation_degrades_only_within_available_authored_bands() {
+    fn fall_presentation_never_substitutes_a_different_authored_severity() {
         assert_eq!(
             select_fall_presentation_band(0.5, false, true, true, 2.0, 5.0),
-            Some(FallPresentationBand::Medium)
+            None,
+            "missing low must hold the current pose, not play medium/high"
         );
         assert_eq!(
             select_fall_presentation_band(3.0, true, false, true, 2.0, 5.0),
-            Some(FallPresentationBand::Low)
+            None,
+            "missing medium must not substitute low"
         );
         assert_eq!(
-            select_fall_presentation_band(7.0, true, false, true, 2.0, 5.0),
-            Some(FallPresentationBand::High)
+            select_fall_presentation_band(7.0, true, true, false, 2.0, 5.0),
+            None,
+            "missing high must not substitute medium/low"
         );
         assert_eq!(
             select_fall_presentation_band(7.0, false, false, false, 2.0, 5.0),
@@ -34,7 +37,26 @@ mod transition_tests {
     }
 
     #[test]
-    fn pose_continuity_bridge_preserves_previous_visible_pose_on_any_source_change() {
+    fn runtime_locomotion_selection_never_falls_back_to_another_state() {
+        let clips: [Option<PlayerAnimationRuntimeClip>; 8] = std::array::from_fn(|_| None);
+        assert_eq!(
+            resolve_runtime_locomotion_slot(
+                &clips,
+                newengine_engine_runtime::gameplay::PlayerLocomotionAnimation::Fall,
+            ),
+            None
+        );
+        assert_eq!(
+            resolve_runtime_locomotion_slot(
+                &clips,
+                newengine_engine_runtime::gameplay::PlayerLocomotionAnimation::Sprint,
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn pose_continuity_bridge_starts_blending_on_the_source_change_frame() {
         let previous = vec![JointLocalPose {
             translation: [0.35, 1.1, -0.22],
             rotation: {
@@ -69,8 +91,14 @@ mod transition_tests {
         };
         bridge.apply(walk, &mut next, 1.0 / 60.0);
 
-        assert_eq!(next[0].translation, previous[0].translation);
-        assert_eq!(next[0].rotation, previous[0].rotation);
+        assert_ne!(
+            next[0].translation, previous[0].translation,
+            "transition must make visible progress on the same frame"
+        );
+        assert_ne!(
+            next[0].translation, [0.0, 0.9, 0.0],
+            "transition must blend, not snap to the destination"
+        );
     }
 
     #[test]

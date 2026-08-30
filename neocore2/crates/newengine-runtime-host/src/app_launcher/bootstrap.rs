@@ -7,7 +7,8 @@ use newengine_core::{
     StartupLoader,
 };
 use newengine_project_api::{
-    ContentMountRegistry, ProjectContentMountState, RuntimeLaunchProfile, PROJECT_STARTUP_SCENE_ENV,
+    ContentMountRegistry, ProjectContentMountState, RuntimeLaunchProfile, GAME_ROOT_ENV,
+    PROJECT_MANIFEST_ENV, PROJECT_ROOT_ENV, PROJECT_STARTUP_SCENE_ENV,
 };
 use newengine_project_runtime::{
     game_manifest_request_from_environment, load_project_from_request_with_launch,
@@ -443,16 +444,16 @@ fn apply_project_environment(
 ) {
     if editor_owned {
         host.set_environment_var(
-            "NEWENGINE_PROJECT_ROOT",
+            PROJECT_ROOT_ENV,
             context.project_root.as_os_str().to_os_string(),
         );
         host.set_environment_var(
-            "NEWENGINE_PROJECT_MANIFEST",
+            PROJECT_MANIFEST_ENV,
             context.manifest_path.as_os_str().to_os_string(),
         );
     } else {
         host.set_environment_var(
-            "NEWENGINE_GAME_ROOT",
+            GAME_ROOT_ENV,
             context.project_root.as_os_str().to_os_string(),
         );
         host.set_environment_var(

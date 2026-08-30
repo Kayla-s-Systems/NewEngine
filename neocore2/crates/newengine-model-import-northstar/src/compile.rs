@@ -47,6 +47,11 @@ pub struct CharacterCompileRequest {
     pub material_overrides: Vec<(String, String)>,
     /// Build-time completeness contract: every prefix must match at least one imported LOD0 mesh.
     pub required_mesh_prefixes: Vec<String>,
+    /// Mesh prefixes whose native corrective/helper skin influences must be collapsed onto the
+    /// canonical deform skeleton. TLOU2 helper/twist branches are constraint-driven in the source
+    /// runtime; leaving those joints at bind local while sparse locomotion animates the deform
+    /// chain causes neighbouring vertices to diverge into visible rubber spikes.
+    pub corrective_skin_collapse_prefixes: Vec<String>,
     /// Explicit fallback for packages whose skin domain is not the master skeleton. The listed
     /// master joints are used to produce a stable proximity-weighted skeletal approximation until
     /// the source cloth simulation-node domain has a dedicated runtime.
@@ -294,6 +299,216 @@ fn rebind_mesh_skin_to_master_joints(
     Ok(())
 }
 
+fn side_deform_joint_name(name: &str, suffix: &str) -> Option<String> {
+    if name.starts_with("l_") {
+        Some(format!("l_{suffix}"))
+    } else if name.starts_with("r_") {
+        Some(format!("r_{suffix}"))
+    } else {
+        None
+    }
+}
+
+fn finger_deform_joint_name(name: &str) -> Option<String> {
+    let lower = name.to_ascii_lowercase();
+    let suffix = [
+        ("index_meta", "index_meta"),
+        ("indexmeta", "index_meta"),
+        ("middle_meta", "middle_meta"),
+        ("middlemeta", "middle_meta"),
+        ("ring_meta", "ring_meta"),
+        ("ringmeta", "ring_meta"),
+        ("pinky_meta", "pinky_meta"),
+        ("pinkymeta", "pinky_meta"),
+        ("indexc", "indexc"),
+        ("indexb", "indexb"),
+        ("indexa", "indexa"),
+        ("middlec", "middlec"),
+        ("middleb", "middleb"),
+        ("middlea", "middlea"),
+        ("ringc", "ringc"),
+        ("ringb", "ringb"),
+        ("ringa", "ringa"),
+        ("pinkyc", "pinkyc"),
+        ("pinkyb", "pinkyb"),
+        ("pinkya", "pinkya"),
+        ("thumbc", "thumbc"),
+        ("thumbb", "thumbb"),
+        ("thumba", "thumba"),
+    ]
+    .into_iter()
+    .find_map(|(needle, canonical)| lower.contains(needle).then_some(canonical))?;
+    side_deform_joint_name(&lower, suffix)
+}
+
+fn corrective_skin_target_map(skeleton: &DecodedSkeleton) -> Result<Vec<u16>, String> {
+    let by_name = skeleton
+        .joints
+        .iter()
+        .enumerate()
+        .map(|(index, joint)| (joint.name.to_ascii_lowercase(), index))
+        .collect::<BTreeMap<_, _>>();
+    let mut memo = vec![None::<u16>; skeleton.joints.len()];
+    let mut active = BTreeSet::<usize>::new();
+
+    fn resolve(
+        index: usize,
+        skeleton: &DecodedSkeleton,
+        by_name: &BTreeMap<String, usize>,
+        memo: &mut [Option<u16>],
+        active: &mut BTreeSet<usize>,
+    ) -> Result<u16, String> {
+        if let Some(target) = memo[index] {
+            return Ok(target);
+        }
+        if !active.insert(index) {
+            return Err(format!("corrective skin mapping cycle at joint={index}"));
+        }
+        let joint = &skeleton.joints[index];
+        let name = joint.name.to_ascii_lowercase();
+        let lookup = |candidate: &str| by_name.get(candidate).copied();
+        let mut explicit = None::<usize>;
+
+        if let Some(candidate) = name.strip_suffix("_helper") {
+            explicit = lookup(candidate);
+        }
+        if explicit.is_none() {
+            if let Some(candidate) = name.strip_suffix("_offset") {
+                explicit = lookup(candidate);
+            }
+        }
+        if explicit.is_none() {
+            if let Some(candidate) = finger_deform_joint_name(&name) {
+                explicit = lookup(&candidate);
+            }
+        }
+        if explicit.is_none() && name.contains("wrist") {
+            explicit = side_deform_joint_name(&name, "wrist").and_then(|value| lookup(&value));
+        }
+        if explicit.is_none() && name.contains("elbow") {
+            explicit = side_deform_joint_name(&name, "elbow").and_then(|value| lookup(&value));
+        }
+        if explicit.is_none() && name.contains("shoulder") {
+            explicit = side_deform_joint_name(&name, "shoulder").and_then(|value| lookup(&value));
+        }
+        if explicit.is_none() && name.contains("clavicle") {
+            explicit = side_deform_joint_name(&name, "clavicle").and_then(|value| lookup(&value));
+        }
+        if explicit.is_none() && name.contains("twist_") {
+            let number = name
+                .split("twist_")
+                .nth(1)
+                .and_then(|tail| tail.get(0..2))
+                .and_then(|raw| raw.parse::<u8>().ok());
+            let canonical = match number {
+                Some(0..=3) => "shoulder",
+                Some(4..=6) => "elbow",
+                Some(_) => "wrist",
+                None => "elbow",
+            };
+            explicit = side_deform_joint_name(&name, canonical).and_then(|value| lookup(&value));
+        }
+
+        let target_index = if let Some(candidate) = explicit {
+            if candidate == index {
+                index
+            } else {
+                resolve(candidate, skeleton, by_name, memo, active)? as usize
+            }
+        } else if name.contains("_helper")
+            || name.contains("finger_roll")
+            || name.contains("_roll_")
+            || name.contains("bicep")
+            || name.contains("tricep")
+        {
+            if let Some(parent) = joint.parent_index {
+                resolve(parent as usize, skeleton, by_name, memo, active)? as usize
+            } else {
+                index
+            }
+        } else {
+            index
+        };
+        let target = u16::try_from(target_index)
+            .map_err(|_| format!("corrective skin target exceeds u16 index={target_index}"))?;
+        active.remove(&index);
+        memo[index] = Some(target);
+        Ok(target)
+    }
+
+    for index in 0..skeleton.joints.len() {
+        let _ = resolve(index, skeleton, &by_name, &mut memo, &mut active)?;
+    }
+    Ok(memo
+        .into_iter()
+        .map(|value| value.expect("resolved"))
+        .collect())
+}
+
+fn collapse_mesh_corrective_skin(
+    mesh: &mut crate::geometry::ImportMesh,
+    target_map: &[u16],
+) -> Result<usize, String> {
+    let Some(skin) = mesh.skin.as_mut() else {
+        return Ok(0);
+    };
+    let mut changed_vertices = 0usize;
+    for vertex in skin.iter_mut() {
+        let mut combined = BTreeMap::<u16, f32>::new();
+        let mut changed = false;
+        for (&joint, &weight) in vertex
+            .joints
+            .iter()
+            .chain(vertex.joints_extra.iter())
+            .zip(vertex.weights.iter().chain(vertex.weights_extra.iter()))
+        {
+            if weight <= 0.0 {
+                continue;
+            }
+            let target = *target_map.get(joint as usize).ok_or_else(|| {
+                format!("corrective skin source joint outside mapping joint={joint}")
+            })?;
+            changed |= target != joint;
+            *combined.entry(target).or_insert(0.0) += weight;
+        }
+        if !changed {
+            continue;
+        }
+        let mut influences = combined.into_iter().collect::<Vec<_>>();
+        influences.sort_by(|left, right| {
+            right
+                .1
+                .partial_cmp(&left.1)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| left.0.cmp(&right.0))
+        });
+        if influences.len() > 8 {
+            influences.truncate(8);
+        }
+        let total = influences.iter().map(|(_, weight)| *weight).sum::<f32>();
+        if !total.is_finite() || total <= 1.0e-8 {
+            return Err(format!(
+                "corrective skin collapse produced invalid total mesh='{}'",
+                mesh.name
+            ));
+        }
+        let mut joints = [0u16; 8];
+        let mut weights = [0.0f32; 8];
+        for (slot, (joint, weight)) in influences.into_iter().enumerate() {
+            joints[slot] = joint;
+            weights[slot] = weight / total;
+        }
+        *vertex = YddBinarySkinVertex {
+            joints: [joints[0], joints[1], joints[2], joints[3]],
+            weights: [weights[0], weights[1], weights[2], weights[3]],
+            joints_extra: [joints[4], joints[5], joints[6], joints[7]],
+            weights_extra: [weights[4], weights[5], weights[6], weights[7]],
+        };
+        changed_vertices += 1;
+    }
+    Ok(changed_vertices)
+}
+
 pub fn compile_character(
     request: &CharacterCompileRequest,
 ) -> Result<CharacterCompileReport, String> {
@@ -306,6 +521,9 @@ pub fn compile_character(
     let skeleton_pak = PakFile::parse(read_file(&request.skeleton_path)?)?;
     let skeleton = decode_skeleton_with_profile(&skeleton_pak, request.skeleton_profile)?;
     let skeleton_globals = imported_joint_globals(&skeleton)?;
+    let corrective_skin_targets = (!request.corrective_skin_collapse_prefixes.is_empty())
+        .then(|| corrective_skin_target_map(&skeleton))
+        .transpose()?;
 
     if request.master_rig && !request.package_skin_fallback_joints.is_empty() {
         return Err(
@@ -320,7 +538,9 @@ pub fn compile_character(
                 subset.package_path.display()
             ));
         }
-        if subset.source_domain_size == 0 || subset.local_to_master.len() != subset.source_domain_size {
+        if subset.source_domain_size == 0
+            || subset.local_to_master.len() != subset.source_domain_size
+        {
             return Err(format!(
                 "master-rig subset mapping size mismatch package='{}' source_domain={} mapping_entries={}",
                 subset.package_path.display(),
@@ -477,6 +697,22 @@ pub fn compile_character(
                         target_joints: target_joints.to_vec(),
                     });
                 }
+            }
+            if request
+                .corrective_skin_collapse_prefixes
+                .iter()
+                .any(|prefix| mesh.name.starts_with(prefix))
+            {
+                let targets = corrective_skin_targets
+                    .as_deref()
+                    .ok_or("corrective skin target map unavailable")?;
+                let changed = collapse_mesh_corrective_skin(&mut mesh, targets)?;
+                println!(
+                    "corrective-skin-collapse package='{}' mesh='{}' changed_vertices={}",
+                    path.display(),
+                    mesh.name,
+                    changed
+                );
             }
             validate_skin_joint_range(&mesh, skeleton.joints.len(), path)?;
             meshes.push(mesh);
@@ -1362,8 +1598,6 @@ fn encode_skeleton_xml(skeleton: &DecodedSkeleton) -> Vec<u8> {
     out.into_bytes()
 }
 
-
-
 fn remap_skin_vertex_to_master(
     mut vertex: YddBinarySkinVertex,
     source_domain_size: usize,
@@ -1456,8 +1690,8 @@ mod master_rig_tests {
     #[test]
     fn master_rig_skin_passthrough_is_exact() {
         let input = skin([53, 29, 0, 0], [0.7, 0.3, 0.0, 0.0]);
-        let output = remap_skin_vertex_to_master(input, 62, 62, None)
-            .expect("master-domain passthrough");
+        let output =
+            remap_skin_vertex_to_master(input, 62, 62, None).expect("master-domain passthrough");
         assert_eq!(output, input);
     }
 
@@ -1467,8 +1701,8 @@ mod master_rig_tests {
         let mut mapping = vec![None; 35];
         mapping[22] = Some(53);
         mapping[5] = Some(29);
-        let output = remap_skin_vertex_to_master(input, 35, 62, Some(&mapping))
-            .expect("subset remap");
+        let output =
+            remap_skin_vertex_to_master(input, 35, 62, Some(&mapping)).expect("subset remap");
         assert_eq!(output.joints, [53, 29, 0, 0]);
         assert_eq!(output.weights, input.weights);
         assert_eq!(output.joints_extra, input.joints_extra);

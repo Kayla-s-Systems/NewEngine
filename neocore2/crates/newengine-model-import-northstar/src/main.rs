@@ -24,6 +24,7 @@ fn run() -> Result<(), String> {
     let mut package_mesh_prefixes = Vec::new();
     let mut material_overrides = Vec::new();
     let mut required_mesh_prefixes = Vec::new();
+    let mut corrective_skin_collapse_prefixes = Vec::new();
     let mut package_skin_fallback_joints = Vec::new();
     let mut master_rig = false;
     let mut package_skin_subsets = Vec::new();
@@ -113,6 +114,15 @@ fn run() -> Result<(), String> {
                     return Err("--require-mesh-prefix must not be empty".to_owned());
                 }
                 required_mesh_prefixes.push(prefix);
+            }
+            "--collapse-corrective-skin-prefix" => {
+                let prefix = args
+                    .next()
+                    .ok_or("--collapse-corrective-skin-prefix requires PREFIX")?;
+                if prefix.trim().is_empty() {
+                    return Err("--collapse-corrective-skin-prefix must not be empty".to_owned());
+                }
+                corrective_skin_collapse_prefixes.push(prefix);
             }
             "--master-rig" => master_rig = true,
             "--package-skin-subset" => {
@@ -214,6 +224,7 @@ fn run() -> Result<(), String> {
         package_mesh_prefixes,
         material_overrides,
         required_mesh_prefixes,
+        corrective_skin_collapse_prefixes,
         package_skin_fallback_joints,
         master_rig,
         package_skin_subsets,

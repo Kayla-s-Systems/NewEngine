@@ -21,7 +21,8 @@ pub(super) fn draw_primitives_shadow_body(
     cascade_index: usize,
     cascade_texel_world_size: f32,
 ) -> newengine_core::EngineResult<()> {
-    let world = scene.world();
+    let (primitive_snapshot, _snapshot_reused) =
+        this.primitive_scene_snapshot(scene, runtime);
     let reg_lock = this.bridges.scene.primitives();
     let reg = reg_lock.read();
     let mats_lock = this.bridges.scene.materials();
@@ -31,30 +32,18 @@ pub(super) fn draw_primitives_shadow_body(
 
     let mut entries: Vec<ShadowPrimitiveEntry> = Vec::new();
     let mut foliage_entries: Vec<ShadowPrimitiveEntry> = Vec::new();
-    let mut shadow_seen = 0usize;
+    let shadow_seen = primitive_snapshot.queried_count;
     let mut shadow_policy_culled = 0usize;
     let mut shadow_distance_culled = 0usize;
     let mut shadow_light_culled = 0usize;
     let mut shadow_lod_culled = 0usize;
-    for (id, prim, gt) in world.query2::<Primitive, GlobalTransform>() {
-        shadow_seen = shadow_seen.saturating_add(1);
-        if world
-            .get::<crate::gameplay::PlayerSkinBinding>(id)
-            .is_some()
-        {
+    for source in primitive_snapshot.entries.iter() {
+        if source.environment_dome.is_some() {
             continue;
         }
-        if !display_visible_in_mode(world, id, runtime)
-            || world.get::<EnvironmentDomeRenderState>(id).is_some()
-        {
-            continue;
-        }
-        let render_model = crate::gameplay::player_render_model_matrix(world, id, gt.0);
-        let render_options = world
-            .get::<MeshRenderOptions>(id)
-            .cloned()
-            .unwrap_or_else(MeshRenderOptions::world_opaque);
-        if !primitive_cast_shadows_enabled(&render_options) {
+        let render_model = source.render_model;
+        let render_options = &source.render_options;
+        if !primitive_cast_shadows_enabled(render_options) {
             shadow_policy_culled = shadow_policy_culled.saturating_add(1);
             continue;
         }
@@ -63,9 +52,7 @@ pub(super) fn draw_primitives_shadow_body(
             newengine_model_domain_api::MeshRenderRole::FoliageInstanced
         );
         if foliage_role {
-            if let Some(foliage) =
-                world.get::<newengine_model_domain_api::FoliageInstanceRuntime>(id)
-            {
+            if let Some(foliage) = source.foliage_runtime {
                 let distance = distance_sq_to_camera(render_model, camera_position).sqrt();
                 if !foliage.is_visible(distance, true) {
                     shadow_distance_culled = shadow_distance_culled.saturating_add(1);
@@ -74,12 +61,9 @@ pub(super) fn draw_primitives_shadow_body(
             }
         }
         if runtime {
-            if let Some(bounds) = world.get::<Bounds>(id) {
-                let (center_ws, radius_ws) = transform_sphere(
-                    render_model,
-                    bounds.local_sphere.center,
-                    bounds.local_sphere.radius,
-                );
+            if let Some((local_center, local_radius)) = source.local_bounds {
+                let (center_ws, radius_ws) =
+                    transform_sphere(render_model, local_center, local_radius);
                 if center_ws.distance_squared(camera_position) > shadow_max_distance_sq {
                     shadow_distance_culled = shadow_distance_culled.saturating_add(1);
                     continue;
@@ -98,16 +82,13 @@ pub(super) fn draw_primitives_shadow_body(
                 }
             }
         }
-        let key = id.stable_u64();
         let entry = (
             distance_sq_to_camera(render_model, camera_position),
-            key,
-            *prim,
+            source.entity_key,
+            source.primitive,
             render_model,
-            world.get::<newengine_materials::MaterialRef>(id).copied(),
-            world
-                .get::<newengine_model_domain_api::FoliageInstanceRuntime>(id)
-                .copied(),
+            source.material_ref,
+            source.foliage_runtime,
         );
         if foliage_role {
             foliage_entries.push(entry);
@@ -136,8 +117,12 @@ pub(super) fn draw_primitives_shadow_body(
         let plan = if let Some(plan) = plan_cache.get(&plan_key).copied() {
             plan
         } else {
-            let resolved = material_ref.and_then(|mr| mats.resolve(mr.id));
-            let material_plan = LitMaterialPlan::from_resolved(resolved.as_ref(), prim.color);
+            let owned_material_plan = this
+                .gpu
+                .material
+                .resolved_lit_plans
+                .resolve(&*mats, material_ref, prim.color);
+            let material_plan = owned_material_plan.as_borrowed();
             if !material_plan.cast_shadows {
                 continue;
             }

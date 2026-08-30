@@ -169,6 +169,8 @@ fn clear_player_model_binding(
     clear_player_runtime_model_visuals(world, player);
     let _ = crate::player_hair::unbind_player_hair_v1(world, player);
     let _ = world.remove::<PlayerAnimationRuntimeBinding>(player);
+    let _ = world
+        .remove::<newengine_engine_runtime::gameplay::PlayerAuthoredAnimationCapabilities>(player);
     let _ = world.remove::<newengine_engine_runtime::gameplay::PlayerSkinPose>(player);
     let _ = world.remove::<newengine_model_contact_api::ModelFootPoseState>(player);
     if let Some(binding) =
@@ -330,24 +332,27 @@ fn bind_player_model_assignment(
     // visible avatar; the presentation swap happens only after the replacement is ready.
     let (model_source, parts, skeleton) =
         ensure_player_runtime_model_parts(prims, mats, assignment)?;
-    let validated_skin_source_to_model =
-        super::validation::validate_player_skin_contract(assignment, &parts, skeleton.as_ref())?;
-    let animation_binding = match prepare_player_animation_binding(
+    super::validation::validate_player_skin_contract(assignment, &parts, skeleton.as_ref())?;
+    let animation_binding = prepare_player_animation_binding(
         assignment,
         &parts,
         skeleton.as_ref(),
-    ) {
-        Ok(binding) => binding,
-        Err(error) => {
-            newengine_ulog_api::ulog::warn!(
-                "game-ready: optional skeletal animation binding unavailable player={} source='{}' err='{}' action='keep visual entity and use bind pose'",
-                player.stable_u64(),
-                assignment.source,
-                error
-            );
-            None
-        }
-    };
+    )
+    .map_err(|error| {
+        format!(
+            "required playable-character skeletal animation binding failed player={} source={} err={} policy=no_bind_or_default_pose_fallback",
+            player.stable_u64(),
+            assignment.source,
+            error
+        )
+    })?;
+    if animation_binding.is_none() && parts.iter().any(|part| part.skin.is_some()) {
+        return Err(format!(
+            "skinned playable character has no authored animation binding player={} source={} policy=authored_animation_required",
+            player.stable_u64(),
+            assignment.source,
+        ));
+    }
 
     let prepared_hair = match crate::player_hair::prepare_player_hair_from_assignment_v1(
         player,
@@ -369,6 +374,8 @@ fn bind_player_model_assignment(
     clear_player_runtime_model_visuals(world, player);
     let _ = crate::player_hair::unbind_player_hair_v1(world, player);
     let _ = world.remove::<PlayerAnimationRuntimeBinding>(player);
+    let _ = world
+        .remove::<newengine_engine_runtime::gameplay::PlayerAuthoredAnimationCapabilities>(player);
     let _ = world.remove::<newengine_engine_runtime::gameplay::PlayerSkinPose>(player);
     let _ = world.remove::<newengine_model_contact_api::ModelFootPoseState>(player);
 
@@ -506,6 +513,8 @@ fn bind_player_model_assignment(
                 revision: 1,
             },
         );
+        let capabilities = animation_binding.authored_capabilities();
+        let _ = world.insert(player, capabilities);
         let _ = world.insert(player, animation_binding);
         newengine_ulog_api::ulog::info!(
             "game-ready: player skeletal animation set bound player={} clips='{}' skeleton_joints={} palette_joints={} supplemental_joints={} policy='semantic locomotion -> YCD -> local pose -> global -> inverse-bind -> model-space palette'",
@@ -514,37 +523,6 @@ fn bind_player_model_assignment(
             skeleton_joint_count,
             joint_count,
             supplemental_joint_count,
-        );
-    } else if parts.iter().any(|part| part.skin.is_some()) {
-        let skeleton = skeleton
-            .as_ref()
-            .ok_or_else(|| "skinned player model requires authored skeleton metadata".to_owned())?;
-        let joint_count = skeleton.joints.len();
-        let source_to_model = validated_skin_source_to_model.ok_or_else(|| {
-            "skinned player model has no validated source-to-model transform".to_owned()
-        })?;
-        let mut bind_palette = Vec::with_capacity(joint_count);
-        newengine_animation_runtime::build_bind_pose_palette(
-            skeleton,
-            source_to_model,
-            &mut bind_palette,
-        )?;
-        super::validation::validate_player_palette(
-            &bind_palette,
-            joint_count,
-            "validated bind-pose palette",
-        )?;
-        let _ = world.insert(
-            player,
-            newengine_engine_runtime::gameplay::PlayerSkinPose {
-                palette: bind_palette,
-                revision: 1,
-            },
-        );
-        newengine_ulog_api::ulog::info!(
-            "game-ready: player bind-pose skin palette validated player={} joints={} policy='YDD skin + YMT hierarchy -> validated model-space identity palette'",
-            player.stable_u64(),
-            joint_count,
         );
     }
 

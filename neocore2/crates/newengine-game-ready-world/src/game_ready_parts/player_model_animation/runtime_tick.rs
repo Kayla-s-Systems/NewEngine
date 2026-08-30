@@ -242,8 +242,13 @@ pub(crate) fn tick_player_skin_animation(world: &mut newengine_ecs::World, dt: f
             }
             binding.equipment_reload_active = reload_active;
 
-            let desired_slot = binding.resolve_slot(animation_state.locomotion);
-            let state_changed = binding.active_state != animation_state.locomotion;
+            let requested_state = animation_state.locomotion;
+            let requested_slot = binding.resolve_slot(requested_state);
+            let (effective_state, desired_slot) = match requested_slot {
+                Some(slot) => (requested_state, slot),
+                None => (binding.active_state, binding.active_slot),
+            };
+            let state_changed = binding.active_state != effective_state;
             let slot_changed = binding.active_slot != desired_slot;
             let transitioned = state_changed || slot_changed;
             let target_graph_state = locomotion_state_for_slot(desired_slot);
@@ -267,7 +272,7 @@ pub(crate) fn tick_player_skin_animation(world: &mut newengine_ecs::World, dt: f
                 binding.active_slot = desired_slot;
             }
             if state_changed {
-                binding.active_state = animation_state.locomotion;
+                binding.active_state = effective_state;
             }
 
             if let Err(error) = apply_locomotion_graph_parameters(
@@ -285,14 +290,9 @@ pub(crate) fn tick_player_skin_animation(world: &mut newengine_ecs::World, dt: f
                 continue;
             }
 
-            // Preserve the old GameReady phase contract: a newly selected clip is sampled at t=0
-            // on the transition frame. From the next frame onward the generic graph owns clocks,
-            // synchronization and cross-fade progression.
-            let graph_dt = if slot_changed {
-                0.0
-            } else {
-                dt * locomotion_playback_rate(animation_state)
-            };
+            // Zero-gap transition contract: both source and destination advance on the transition
+            // frame and blending starts immediately. There is no synthetic frozen t=0 frame.
+            let graph_dt = dt * locomotion_playback_rate(animation_state);
             if let Err(error) = binding.locomotion_graph_instance.evaluate(
                 &binding.locomotion_graph,
                 &binding.animation_runtime,
@@ -404,8 +404,11 @@ pub(crate) fn tick_player_skin_animation(world: &mut newengine_ecs::World, dt: f
                     )
                 });
                 if let Some((turn_ref, turn_clip, turn_binding, duration)) = clip_data {
+                    let _ = binding
+                        .pose_continuity
+                        .restore_last_visible_pose(&mut binding.sampled_target_locals);
                     turn.elapsed_seconds = (turn.elapsed_seconds + dt).min(duration);
-                    if let Err(error) = turn_clip.sample_local_pose_bound(
+                    if let Err(error) = turn_clip.sample_local_pose_bound_preserve_untracked(
                         turn.elapsed_seconds,
                         &binding.animation_runtime,
                         &turn_binding,
@@ -725,18 +728,20 @@ pub(crate) fn tick_player_skin_animation(world: &mut newengine_ecs::World, dt: f
 
             if let Some(band) = requested_fall_band {
                 let animation_runtime = &binding.animation_runtime;
-                let target = &mut binding.sampled_target_locals;
                 let clip = match band {
                     FallPresentationBand::Low => binding.fall_low_pose.as_mut(),
                     FallPresentationBand::Medium => binding.fall_medium_pose.as_mut(),
                     FallPresentationBand::High => binding.fall_high_pose.as_mut(),
                 };
                 if let Some(clip) = clip {
-                    if let Err(error) = clip.clip.sample_local_pose_bound(
+                    let _ = binding
+                        .pose_continuity
+                        .restore_last_visible_pose(&mut binding.sampled_target_locals);
+                    if let Err(error) = clip.clip.sample_local_pose_bound_preserve_untracked(
                         binding.fall_time_seconds,
                         animation_runtime,
                         &clip.binding,
-                        target,
+                        &mut binding.sampled_target_locals,
                     ) {
                         newengine_ulog_api::ulog::warn!(
                             "game-ready: height-aware fall pose sampling failed player={} band={:?} distance_m={:.3} clip='{}': {}",
@@ -783,10 +788,9 @@ pub(crate) fn tick_player_skin_animation(world: &mut newengine_ecs::World, dt: f
                     (Some(FallPresentationBand::High), true) => {
                         binding.landing_hard_run_pose.as_mut()
                     }
-                    (Some(FallPresentationBand::High), false) => binding
-                        .landing_hard_pose
-                        .as_mut()
-                        .or(binding.landing_hard_run_pose.as_mut()),
+                    (Some(FallPresentationBand::High), false) => {
+                        binding.landing_hard_pose.as_mut()
+                    },
                     (None, _) => None,
                 };
                 if let Some(clip) = selected {
@@ -817,15 +821,17 @@ pub(crate) fn tick_player_skin_animation(world: &mut newengine_ecs::World, dt: f
                         (FallPresentationBand::High, true) => {
                             binding.landing_hard_run_pose.as_mut()
                         }
-                        (FallPresentationBand::High, false) => binding
-                            .landing_hard_pose
-                            .as_mut()
-                            .or(binding.landing_hard_run_pose.as_mut()),
+                        (FallPresentationBand::High, false) => {
+                            binding.landing_hard_pose.as_mut()
+                        },
                     };
                     if let Some(clip) = clip {
+                        let _ = binding
+                            .pose_continuity
+                            .restore_last_visible_pose(&mut binding.sampled_target_locals);
                         let duration = clip.clip.duration_seconds.max(1.0 / 30.0);
                         let sample_time = time.min(duration);
-                        if let Err(error) = clip.clip.sample_local_pose_bound(
+                        if let Err(error) = clip.clip.sample_local_pose_bound_preserve_untracked(
                             sample_time,
                             &binding.animation_runtime,
                             &clip.binding,
@@ -878,9 +884,12 @@ pub(crate) fn tick_player_skin_animation(world: &mut newengine_ecs::World, dt: f
                     binding.noclip_time_seconds += dt;
                 }
                 if let Some(noclip) = binding.noclip_pose.as_mut() {
+                    let _ = binding
+                        .pose_continuity
+                        .restore_last_visible_pose(&mut binding.sampled_target_locals);
                     let duration = noclip.clip.duration_seconds.max(1.0 / 30.0);
                     let sample_time = binding.noclip_time_seconds.rem_euclid(duration);
-                    if let Err(error) = noclip.clip.sample_local_pose_bound(
+                    if let Err(error) = noclip.clip.sample_local_pose_bound_preserve_untracked(
                         sample_time,
                         &binding.animation_runtime,
                         &noclip.binding,

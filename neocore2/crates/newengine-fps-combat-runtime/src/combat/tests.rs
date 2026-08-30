@@ -258,6 +258,63 @@ mod tests {
     }
 
     #[test]
+    fn unarmed_attack_is_rejected_when_bound_character_has_no_authored_attack_pose() {
+        let mut world = World::new();
+        let player =
+            spawn_default_player(&mut world, None, "unarmed-animation-unsupported", Vec3::ZERO);
+        let unarmed = ItemDefinition::typed_weapon(
+            "weapon.unarmed",
+            "Unarmed",
+            None,
+            newengine_engine_runtime::gameplay::WeaponItemDefinition::unarmed(
+                WeaponType::Unarmed.default_rank(),
+                MeleeWeaponTuning::default(),
+            ),
+            0.0,
+        )
+        .expect("unarmed definition");
+        let mut catalog = ItemCatalog::default();
+        catalog.register(unarmed).expect("register unarmed");
+        world.insert_resource(catalog);
+        let _ = world.insert(player, PlayerInventory::default());
+        sync_equipped_weapon_runtime(&mut world, player);
+        let binding = active_equipped_weapon_binding(&world, player).expect("unarmed binding");
+        assert_eq!(binding.weapon.weapon_type, WeaponType::Unarmed);
+        let _ = world.insert(
+            player,
+            PlayerAuthoredAnimationCapabilities {
+                unarmed_attack: false,
+                ..Default::default()
+            },
+        );
+
+        if let Some(commands) = world.get_mut::<PlayerCommandFrame>(player) {
+            commands
+                .actions
+                .pressed
+                .push(fps_action::PLAYER_FIRE_PRIMARY.into());
+        }
+        step_player_combat(&mut world, 1.0 / 60.0, 21);
+
+        assert!(
+            world.get::<PendingHitscan>(player).is_none(),
+            "unsupported authored unarmed attack must not create a damage query"
+        );
+        let state = world
+            .get::<PlayerWeaponState>(player)
+            .copied()
+            .expect("unarmed state");
+        assert_eq!(state.shot_sequence, 0);
+        let events = drain_weapon_events(&mut world);
+        assert!(
+            !events
+                .iter()
+                .any(|event| event.kind == WeaponEventKind::MeleeAttacked),
+            "unsupported authored unarmed attack must not emit MeleeAttacked"
+        );
+    }
+
+     #[test]
     fn semi_auto_weapon_fires_once_per_press_not_continuously_while_held() {
         let mut world = World::new();
         let player = spawn_fps_player(&mut world, "semi-auto-player", Vec3::ZERO);

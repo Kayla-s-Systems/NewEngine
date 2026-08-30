@@ -35,6 +35,17 @@ impl ProjectFilesystem {
         Self { root: root.into() }
     }
 
+    /// Derive the project filesystem authority from a resolved manifest path.
+    #[inline]
+    pub fn from_manifest_path(manifest_path: impl AsRef<Path>) -> Self {
+        let root = manifest_path
+            .as_ref()
+            .parent()
+            .filter(|path| !path.as_os_str().is_empty())
+            .unwrap_or_else(|| Path::new("."));
+        Self::new(root.to_path_buf())
+    }
+
     #[inline]
     pub fn root(&self) -> &Path {
         &self.root
@@ -105,6 +116,24 @@ pub fn normalize_project_manifest_request(path: impl Into<PathBuf>) -> PathBuf {
     }
 }
 
+/// Resolve a project request against one explicit process base.
+///
+/// With an absolute base this always returns an absolute manifest path, so child
+/// launchers, content mounts and authoring systems cannot reinterpret it against
+/// different working directories.
+#[inline]
+pub fn resolve_project_manifest_request(
+    path: impl AsRef<Path>,
+    base_dir: &Path,
+) -> PathBuf {
+    let path = normalize_project_manifest_request(path.as_ref().to_path_buf());
+    if path.is_absolute() {
+        path
+    } else {
+        base_dir.join(path)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -140,6 +169,34 @@ mod tests {
         assert_eq!(
             fs.resolve_authored(Path::new("plugins/game.dll")),
             PathBuf::from("project-root").join("plugins/game.dll")
+        );
+    }
+
+    #[test]
+    fn filesystem_authority_derives_root_from_manifest() {
+        let manifest = PathBuf::from("workspace")
+            .join("project")
+            .join(PROJECT_MANIFEST_FILE);
+        let fs = ProjectFilesystem::from_manifest_path(&manifest);
+        assert_eq!(fs.root(), Path::new("workspace").join("project"));
+        assert_eq!(fs.manifest_path(), manifest);
+    }
+
+    #[test]
+    fn relative_manifest_request_is_anchored_once() {
+        let base = PathBuf::from("workspace");
+        let request = PathBuf::from("project").join(PROJECT_MANIFEST_FILE);
+        assert_eq!(
+            resolve_project_manifest_request(request.as_path(), &base),
+            base.join(request)
+        );
+
+        let absolute = std::env::temp_dir()
+            .join("northstar-project-resolver")
+            .join(PROJECT_MANIFEST_FILE);
+        assert_eq!(
+            resolve_project_manifest_request(absolute.as_path(), Path::new("ignored")),
+            absolute
         );
     }
 }

@@ -20,9 +20,9 @@ use newengine_project_api::{
     PROJECT_BROWSER_SERVICE_ID, RUNTIME_PROFILE_LAUNCH_METHOD_V1,
 };
 use newengine_project_runtime::{
-    adjacent_game_manifest_from_exe, default_projects_root, game_manifest_request_from_process,
-    load_project_from_request_with_launch, normalize_project_manifest_request,
-    project_launch_request_from_process, ProjectBrowserSelection,
+    default_projects_root, game_manifest_request_from_process,
+    load_project_from_request_with_launch, project_launch_request_from_process,
+    project_request_from_cli, ProjectBrowserSelection,
 };
 use newengine_runtime_host::runtime_config::{load_engine_runtime_config, ENGINE_RUNTIME_MODE_ENV};
 use project_browser_settings::{
@@ -80,11 +80,9 @@ fn run() -> Result<(), String> {
     runtime_config.apply_process_env(&runtime_config_path)?;
 
     if env::args().any(|arg| arg == "--build-standalone") {
-        let manifest_path = project_request_from_cli()
-            .map(normalize_project_manifest_request)
-            .ok_or_else(|| {
-                "--build-standalone requires --project <game.toml|project-directory>".to_owned()
-            })?;
+        let manifest_path = project_request_from_cli().ok_or_else(|| {
+            "--build-standalone requires --project <game.toml|project-directory>".to_owned()
+        })?;
         let launch_request =
             project_launch_request_from_process().or_else(|| Some("game".to_owned()));
         let project =
@@ -108,17 +106,14 @@ fn run() -> Result<(), String> {
         return run_project_selection(&runtime_config_path);
     }
 
-    let manifest_path = project_request_from_cli()
-        .map(normalize_project_manifest_request)
-        .or_else(game_manifest_request_from_process)
-        .or_else(adjacent_game_manifest_from_exe);
+    let manifest_path =
+        project_request_from_cli().or_else(game_manifest_request_from_process);
     let Some(manifest_path) = manifest_path else {
         if runtime_config.runtime.startup_window {
             return run_project_selection(&runtime_config_path);
         }
         return Err("runtime package is incomplete: game.toml was not found; pass --project <game.toml> or enable the startup project browser".to_owned());
     };
-    let manifest_path = normalize_project_manifest_request(manifest_path);
     let launch_request = project_launch_request_from_process()
         .or_else(|| Some(runtime_config.runtime.mode.launch_id().to_owned()));
     let project = load_project_from_request_with_launch(&manifest_path, launch_request.as_deref())?;
@@ -279,23 +274,6 @@ fn dispatch_project_launch(
     Ok(())
 }
 
-fn project_request_from_cli() -> Option<PathBuf> {
-    let mut args = env::args_os().skip(1);
-    while let Some(arg) = args.next() {
-        if arg == "--project" {
-            return args.next().map(PathBuf::from);
-        }
-        if let Some(text) = arg.to_str() {
-            if let Some(value) = text.strip_prefix("--project=") {
-                if !value.trim().is_empty() {
-                    return Some(PathBuf::from(value));
-                }
-            }
-        }
-    }
-    None
-}
-
 fn cli_option_value(name: &str) -> Option<String> {
     let mut args = env::args().skip(1);
     while let Some(arg) = args.next() {
@@ -336,10 +314,7 @@ fn run_project_selection(runtime_config_path: &Path) -> Result<(), String> {
     let (manifest_path, launch_request) = if let Some(request) = project_request_from_cli() {
         // Explicit CLI project selection is the only chooser bypass. Inherited
         // NEWENGINE_PROJECT is deliberately ignored in project-selection mode
-        (
-            normalize_project_manifest_request(request),
-            project_launch_request_from_process(),
-        )
+        (request, project_launch_request_from_process())
     } else {
         let root = default_projects_root().ok_or_else(|| {
             "project browser cannot discover Projects root; set NEWENGINE_PROJECTS_ROOT or pass --project <game.toml>"

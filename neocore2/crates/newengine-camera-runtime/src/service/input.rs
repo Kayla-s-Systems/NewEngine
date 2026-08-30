@@ -1,5 +1,67 @@
 use super::*;
 
+const FIRST_PERSON_BODY_RELATIVE_YAW_LIMIT_RADIANS: f32 = 65.0 * core::f32::consts::PI / 180.0;
+const FIRST_PERSON_VISIBILITY_SAFE_DOWN_PITCH_RADIANS: f32 = 65.0 * core::f32::consts::PI / 180.0;
+
+#[inline]
+fn horizontal_body_yaw(rotation: Quat) -> Option<f32> {
+    let forward = (rotation.normalize_or_identity() * -Vec3::Z).normalize_or_zero();
+    let horizontal = Vec3::new(forward.x, 0.0, forward.z);
+    if !horizontal.is_finite() || horizontal.length_squared() <= 1.0e-10 {
+        return None;
+    }
+    let horizontal = horizontal.normalize_or_zero();
+    Some(wrap_pi((-horizontal.x).atan2(-horizontal.z)))
+}
+
+#[inline]
+fn first_person_body_yaw(world: &World, player: EntityId) -> Option<f32> {
+    read_entity_world_pose_local_chain(world, player)
+        .and_then(|(_, rotation)| horizontal_body_yaw(rotation))
+}
+
+#[inline]
+fn constrain_first_person_view_yaw(current_yaw: f32, desired_yaw: f32, body_yaw: f32) -> f32 {
+    let current_yaw = if current_yaw.is_finite() {
+        wrap_pi(current_yaw)
+    } else {
+        body_yaw
+    };
+    let desired_yaw = if desired_yaw.is_finite() {
+        wrap_pi(desired_yaw)
+    } else {
+        current_yaw
+    };
+    let body_yaw = if body_yaw.is_finite() {
+        wrap_pi(body_yaw)
+    } else {
+        return desired_yaw;
+    };
+
+    let current_delta = wrap_pi(current_yaw - body_yaw);
+    let desired_delta = wrap_pi(desired_yaw - body_yaw);
+    let current_abs = current_delta.abs();
+    let desired_abs = desired_delta.abs();
+
+    // A save/runtime handoff may begin with an already-invalid legacy free-look angle. Never snap
+    // that view back to the limit in one frame. Freeze movement farther away from the body and
+    // allow only input that reduces the error while the authored body turn catches up.
+    if current_abs > FIRST_PERSON_BODY_RELATIVE_YAW_LIMIT_RADIANS {
+        if desired_abs + 1.0e-6 >= current_abs {
+            return current_yaw;
+        }
+        return desired_yaw;
+    }
+
+    wrap_pi(
+        body_yaw
+            + desired_delta.clamp(
+                -FIRST_PERSON_BODY_RELATIVE_YAW_LIMIT_RADIANS,
+                FIRST_PERSON_BODY_RELATIVE_YAW_LIMIT_RADIANS,
+            ),
+    )
+}
+
 #[inline]
 fn apply_zoom_factor(
     controller: &mut FollowTargetCameraController,
@@ -214,7 +276,14 @@ impl CameraRuntimeService {
         } else {
             CharacterMotor::default().look_sens
         };
-        motor.yaw += delta.x * sensitivity;
+        let desired_yaw = wrap_pi(motor.yaw + delta.x * sensitivity);
+        motor.yaw = if matches!(runner, GameplayCameraRunnerKind::FirstPerson) {
+            first_person_body_yaw(world, player)
+                .map(|body_yaw| constrain_first_person_view_yaw(motor.yaw, desired_yaw, body_yaw))
+                .unwrap_or(desired_yaw)
+        } else {
+            desired_yaw
+        };
         motor.pitch += delta.y * sensitivity;
         let pitch_limit = if motor.pitch_limit.is_finite() && motor.pitch_limit > 0.0 {
             motor.pitch_limit
@@ -225,10 +294,12 @@ impl CameraRuntimeService {
             let authored_down_limit = if first_person_down_pitch_limit_radians.is_finite()
                 && first_person_down_pitch_limit_radians > 0.0
             {
-                first_person_down_pitch_limit_radians
-                    .clamp(35.0_f32.to_radians(), 85.0_f32.to_radians())
+                first_person_down_pitch_limit_radians.clamp(
+                    35.0_f32.to_radians(),
+                    FIRST_PERSON_VISIBILITY_SAFE_DOWN_PITCH_RADIANS,
+                )
             } else {
-                75.0_f32.to_radians()
+                FIRST_PERSON_VISIBILITY_SAFE_DOWN_PITCH_RADIANS
             };
             -authored_down_limit.min(pitch_limit)
         } else {

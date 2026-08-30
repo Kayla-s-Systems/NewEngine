@@ -31,6 +31,48 @@ mod tests {
     };
 
     #[test]
+    fn worker_inherits_submission_host_context() {
+        use newengine_plugin_host::{
+            activate_host_context, create_host_context, current_host_context,
+        };
+        use std::sync::mpsc;
+        use std::time::Duration;
+
+        let submission_context = create_host_context();
+        let expected_identity = submission_context.identity();
+        let mut jobs = ThreadPoolCore::new(ThreadPoolCoreConfig {
+            worker_threads: 1,
+            frame_cpu_budget_ms: DEFAULT_FRAME_CPU_BUDGET_MS,
+        });
+        let handle = jobs.handle();
+        let (identity_tx, identity_rx) = mpsc::channel();
+
+        let ticket = handle.submit_request(
+            TaskRequest::new("host-context-propagation")
+                .with_task_id("test.host-context-propagation")
+                .with_priority(TaskPriority::Critical),
+            move || {
+                identity_tx
+                    .send(current_host_context().identity())
+                    .expect("identity receiver dropped");
+            },
+        );
+
+        let unrelated_context = create_host_context();
+        activate_host_context(&unrelated_context);
+
+        assert_eq!(
+            identity_rx
+                .recv_timeout(Duration::from_secs(1))
+                .expect("worker did not report host context"),
+            expected_identity,
+            "engine worker escaped the HostContext captured at task submission"
+        );
+        ticket.wait();
+        jobs.shutdown_and_join();
+    }
+
+    #[test]
     fn pending_counter_returns_to_zero_after_task_completion() {
         let mut jobs = ThreadPoolCore::new(ThreadPoolCoreConfig {
             worker_threads: 1,

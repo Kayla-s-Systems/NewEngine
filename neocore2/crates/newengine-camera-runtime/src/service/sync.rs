@@ -311,14 +311,14 @@ fn step_first_person_additive_motion(
         0.0
     };
     let phase = state.locomotion_phase;
-    let lateral = phase.sin() * 0.0035 * locomotion_scale;
-    let vertical = (phase * 2.0).sin() * 0.0045 * locomotion_scale;
     let bob_pitch = (phase * 2.0).sin() * 0.0018 * locomotion_scale;
     let bob_roll = -phase.sin() * 0.0024 * locomotion_scale;
 
     FirstPersonAdditivePose {
-        // No forward/back positional bob: it would change face clearance and can cross body shells.
-        position_ls: Vec3::new(lateral, vertical, 0.0),
+        // Full-body FPP keeps the eye position locked to the stable render-cadence anchor.
+        // Locomotion belongs to the body/weapon presentation; translating the camera itself makes
+        // the body barrier amplify millimetre-scale bob into visible lateral/vertical jumps.
+        position_ls: Vec3::ZERO,
         rotation_ls: (Quat::from_rotation_z(bob_roll)
             * Quat::from_rotation_y(state.recoil_yaw_radians)
             * Quat::from_rotation_x(bob_pitch + state.recoil_pitch_radians))
@@ -766,7 +766,7 @@ mod first_person_position_tests {
     }
 
     #[test]
-    fn additive_locomotion_never_moves_camera_forward_or_backward() {
+    fn additive_locomotion_keeps_first_person_eye_position_locked() {
         let mut state = GameplayFirstPersonCameraState::default();
         state.initialized = true;
         for _ in 0..120 {
@@ -780,8 +780,7 @@ mod first_person_position_tests {
                 1.0 / 60.0,
             );
             assert!(pose.position_ls.is_finite());
-            assert!(pose.position_ls.z.abs() <= 1.0e-8);
-            assert!(pose.position_ls.length() <= 0.008);
+            assert!(pose.position_ls.length() <= 1.0e-8);
         }
     }
 
@@ -813,7 +812,12 @@ mod first_person_position_tests {
             },
             0.0,
         );
-        assert!(ads_pose.position_ls.length() < hip_pose.position_ls.length() * 0.35);
+        assert!(hip_pose.position_ls.length() <= 1.0e-8);
+        assert!(ads_pose.position_ls.length() <= 1.0e-8);
+        assert!(
+            ads_pose.rotation_ls.dot(Quat::IDENTITY).abs()
+                > hip_pose.rotation_ls.dot(Quat::IDENTITY).abs()
+        );
     }
 
     #[test]

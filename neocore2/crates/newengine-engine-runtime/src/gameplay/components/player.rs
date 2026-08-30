@@ -354,6 +354,21 @@ impl Default for PlayerAnimationState {
     }
 }
 
+/// Verified authored animation capabilities for the currently bound playable character.
+///
+/// The component is published by a character presentation provider only after its clips have
+/// decoded and bound to the active skeleton. Absence of this component means the generic gameplay
+/// runtime has no presentation-specific restrictions; a present component is authoritative.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct PlayerAuthoredAnimationCapabilities {
+    pub unarmed_ready: bool,
+    pub unarmed_attack: bool,
+    pub equipment_ready: bool,
+    pub equipment_aim: bool,
+    pub equipment_reload: bool,
+    pub noclip: bool,
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum PlayerStanceKind {
     #[default]

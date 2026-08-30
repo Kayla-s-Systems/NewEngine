@@ -16,6 +16,15 @@ pub use scripting::*;
 pub use service::*;
 
 pub const PROJECT_MANIFEST_FILE: &str = "game.toml";
+/// Compatibility request accepting either a project directory or manifest path.
+pub const PROJECT_REQUEST_ENV: &str = "NEWENGINE_PROJECT";
+/// Canonical selected editor-project root.
+pub const PROJECT_ROOT_ENV: &str = "NEWENGINE_PROJECT_ROOT";
+/// Canonical selected editor-project manifest.
+pub const PROJECT_MANIFEST_ENV: &str = "NEWENGINE_PROJECT_MANIFEST";
+/// Canonical selected game root.
+pub const GAME_ROOT_ENV: &str = "NEWENGINE_GAME_ROOT";
+/// Canonical selected game manifest.
 pub const GAME_MANIFEST_ENV: &str = "NEWENGINE_GAME_MANIFEST";
 pub const PROJECT_MANIFEST_CONTRACT: &str = "newengine.project.v1";
 pub const PROJECT_STARTUP_SCENE_ENV: &str = "NEWENGINE_PROJECT_STARTUP_SCENE";

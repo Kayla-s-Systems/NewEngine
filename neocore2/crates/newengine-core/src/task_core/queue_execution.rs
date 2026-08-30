@@ -1,6 +1,7 @@
 use super::hierarchy::TaskBodyOutcome;
 use super::*;
 use newengine_loading_api::EngineTaskPhase;
+use newengine_plugin_host::with_host_context;
 use std::cell::RefCell;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::time::Instant;
@@ -52,7 +53,12 @@ pub(super) fn duration_to_ns(duration: Duration) -> u64 {
 }
 
 impl QueuedTask {
-    pub(super) fn run(mut self, shared: &TaskCoreShared) {
+    pub(super) fn run(self, shared: &TaskCoreShared) {
+        let host_context = self.control.host_context();
+        with_host_context(&host_context, || self.run_in_host_context(shared));
+    }
+
+    fn run_in_host_context(mut self, shared: &TaskCoreShared) {
         let lane = self.request.lane;
         let task_id = self.control.task_id().to_owned();
 

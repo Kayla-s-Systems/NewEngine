@@ -60,6 +60,16 @@ pub fn set_fps_noclip(world: &mut World, player: EntityId, enabled: bool) -> boo
     }
 
     if enabled {
+        if world
+            .get::<newengine_engine_runtime::gameplay::PlayerAuthoredAnimationCapabilities>(player)
+            .is_some_and(|capabilities| !capabilities.noclip)
+        {
+            newengine_ulog_api::ulog::warn!(
+                "fps noclip rejected player={} reason=missing_authored_noclip_animation policy=no_locomotion_or_bind_pose_fallback",
+                player.stable_u64()
+            );
+            return false;
+        }
         let saved_body = world
             .get::<PhysicsBodyDesc>(player)
             .copied()
@@ -248,6 +258,24 @@ mod tests {
     };
 
     #[test]
+    fn noclip_is_rejected_when_bound_character_has_no_authored_noclip_pose() {
+        let mut world = World::new();
+        let player = spawn_default_player(&mut world, None, "noclip-unsupported", Vec3::ZERO);
+        let original = world.get::<PhysicsBodyDesc>(player).copied().expect("body");
+        let _ = world.insert(
+            player,
+            newengine_engine_runtime::gameplay::PlayerAuthoredAnimationCapabilities {
+                noclip: false,
+                ..Default::default()
+            },
+        );
+
+        assert!(!set_fps_noclip(&mut world, player, true));
+        assert!(!fps_noclip_enabled(&world, player));
+        assert_eq!(world.get::<PhysicsBodyDesc>(player).copied(), Some(original));
+    }
+
+     #[test]
     fn noclip_removes_and_restores_player_physics_body() {
         let mut world = World::new();
         let player = spawn_default_player(&mut world, None, "noclip-player", Vec3::ZERO);

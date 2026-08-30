@@ -65,6 +65,18 @@ pub fn step_player_combat(world: &mut World, dt: f32, fixed_tick: u64) {
 
         if let Some(binding) = active_equipped_weapon_binding(world, player) {
             let capabilities = binding.capabilities();
+            let authored_animation = world
+                .get::<PlayerAuthoredAnimationCapabilities>(player)
+                .copied();
+            let equipment_ready_supported =
+                authored_animation.is_none_or(|value| value.equipment_ready);
+            let equipment_aim_supported =
+                authored_animation.is_none_or(|value| value.equipment_aim);
+            let equipment_reload_supported =
+                authored_animation.is_none_or(|value| value.equipment_reload);
+            let melee_attack_supported = authored_animation.is_none_or(|value| {
+                binding.weapon.weapon_type != WeaponType::Unarmed || value.unarmed_attack
+            });
             let mut state = world
                 .get::<PlayerWeaponState>(player)
                 .copied()
@@ -76,7 +88,7 @@ pub fn step_player_combat(world: &mut World, dt: f32, fixed_tick: u64) {
                         .unwrap_or_else(PlayerWeaponState::melee)
                 });
             state.cooldown_remaining = (state.cooldown_remaining - dt).max(0.0);
-            state.aiming = capabilities.aim && actions.aim_held;
+            state.aiming = capabilities.aim && equipment_aim_supported && actions.aim_held;
 
             let mut events = Vec::<WeaponEvent>::new();
 
@@ -104,6 +116,7 @@ pub fn step_player_combat(world: &mut World, dt: f32, fixed_tick: u64) {
                 }
 
                 if capabilities.reload
+                    && equipment_reload_supported
                     && combat_policy.allow_reload
                     && actions.reload_pressed
                     && state.reload_remaining <= 0.0
@@ -126,6 +139,7 @@ pub fn step_player_combat(world: &mut World, dt: f32, fixed_tick: u64) {
 
                 let mut fire_request = None;
                 if capabilities.fire
+                    && equipment_ready_supported
                     && combat_policy.allow_fire
                     && trigger_active
                     && state.reload_remaining <= 0.0
@@ -206,6 +220,7 @@ pub fn step_player_combat(world: &mut World, dt: f32, fixed_tick: u64) {
                 state.empty_latched = false;
 
                 if capabilities.melee
+                    && melee_attack_supported
                     && combat_policy.allow_melee
                     && actions.fire_primary_pressed
                     && state.cooldown_remaining <= 0.0

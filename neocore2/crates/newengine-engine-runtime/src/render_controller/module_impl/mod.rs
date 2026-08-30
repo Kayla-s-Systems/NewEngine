@@ -6,7 +6,7 @@ mod external_contribution_lowering;
 mod feature_extraction;
 mod frame_envelope_builder;
 mod frame_orchestrator;
-mod frame_snapshots;
+pub(super) mod frame_snapshots;
 mod frame_submit;
 mod frame_types;
 mod gpu_prewarm;

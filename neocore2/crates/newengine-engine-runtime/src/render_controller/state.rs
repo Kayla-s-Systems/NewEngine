@@ -20,6 +20,7 @@ use super::gpu::{
     VfxGpuRenderer,
 };
 use super::material_bindings::MaterialTextureGpuResidency;
+use super::material_plan_cache::ResolvedLitMaterialPlanCache;
 use super::metrics::RuntimeOverlayMetrics;
 use super::module_impl::draw_lists::RenderDrawListProviderRegistry;
 use super::module_impl::instancing::InstanceBufferUploader;
@@ -301,6 +302,7 @@ pub(super) struct RenderMaterialGpuState {
     pub(super) texture_queued: FxHashSet<String>,
     pub(super) texture_decode_jobs: FxHashMap<String, MaterialTextureDecodeJob>,
     pub(super) per_draw_ubo: FxHashMap<(u64, u8), PerDrawUbo>,
+    pub(super) resolved_lit_plans: ResolvedLitMaterialPlanCache,
 }
 
 impl RenderMaterialGpuState {
@@ -314,6 +316,7 @@ impl RenderMaterialGpuState {
             texture_queued: FxHashSet::default(),
             texture_decode_jobs: FxHashMap::default(),
             per_draw_ubo: FxHashMap::default(),
+            resolved_lit_plans: ResolvedLitMaterialPlanCache::default(),
         }
     }
 }
@@ -478,6 +481,9 @@ pub(super) struct RenderFrameRuntimeState {
     /// This is a pure DTO snapshot from the camera contract boundary. Render
     /// runtime must not own `newengine-camera` projection/controller/nav state.
     pub(super) last_camera_snapshot: Option<CameraFrameSnapshot>,
+    /// Frame-coherent primitive extraction reused by shadow, GBuffer and forward passes.
+    pub(super) primitive_scene_snapshot:
+        Option<Arc<super::module_impl::frame_snapshots::PrimitiveSceneSnapshot>>,
     pub(super) sim_schedule: newengine_sim::SimSchedule,
     pub(super) gameplay_systems: crate::gameplay::GameplaySystemProviderRegistry,
     pub(super) gameplay_content: crate::gameplay::GameplayContentProviderRegistry,
@@ -497,6 +503,7 @@ impl RenderFrameRuntimeState {
             pending_pick_selection: None,
             pending_pick_additive: false,
             last_camera_snapshot: None,
+            primitive_scene_snapshot: None,
             sim_schedule: crate::gameplay::default_sim_schedule(),
             gameplay_systems: crate::gameplay::GameplaySystemProviderRegistry::new(),
             gameplay_content: crate::gameplay::GameplayContentProviderRegistry::new(),

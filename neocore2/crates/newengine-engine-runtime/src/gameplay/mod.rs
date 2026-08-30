@@ -26,7 +26,7 @@ pub use components::{
     CharacterMotionTuning, CloudShadowRenderState, CollisionShapeDesc, DisplayMode,
     DisplayVisibility, EnvironmentDomeRenderState, EnvironmentPostFxState, GameRunMode,
     GameplayActor, ModelRenderComponent, PhysicsBodyDesc, PhysicsSurface, PhysicsWorldSettings,
-    PlayerActor, PlayerAnimationState, PlayerBraidSecondaryMotionRig, PlayerCharacterPresentation,
+    PlayerActor, PlayerAnimationState, PlayerAuthoredAnimationCapabilities, PlayerBraidSecondaryMotionRig, PlayerCharacterPresentation,
     PlayerCommandFrame, PlayerController, PlayerControllerKind, PlayerEvent, PlayerEventBus,
     PlayerEventKind, PlayerEyeParentFollowRule, PlayerFallState,
     PlayerFirstPersonBodyBarrierProfile, PlayerFirstPersonCameraAnchor, PlayerFixedPoseHistory,

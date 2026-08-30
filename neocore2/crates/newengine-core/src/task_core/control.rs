@@ -1,5 +1,6 @@
 use crate::events::EventHub;
 use newengine_loading_api::{EngineTaskEvent, EngineTaskPhase};
+use newengine_plugin_host::{current_host_context, with_host_context, HostContextHandle};
 use parking_lot::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex as StdMutex};
@@ -39,6 +40,7 @@ struct CoreTaskControlInner {
     pause_requested: AtomicBool,
     phase: Mutex<EngineTaskPhase>,
     events: Option<EventHub>,
+    host_context: HostContextHandle,
     pause_lock: StdMutex<()>,
     pause_wake: Condvar,
 }
@@ -65,6 +67,7 @@ impl CoreTaskControl {
                 pause_requested: AtomicBool::new(false),
                 phase: Mutex::new(EngineTaskPhase::Scheduled),
                 events,
+                host_context: current_host_context(),
                 pause_lock: StdMutex::new(()),
                 pause_wake: Condvar::new(),
             }),
@@ -74,6 +77,11 @@ impl CoreTaskControl {
     #[inline]
     pub fn task_id(&self) -> &str {
         self.inner.task_id.as_str()
+    }
+
+    #[inline]
+    pub(super) fn host_context(&self) -> HostContextHandle {
+        self.inner.host_context.clone()
     }
 
     #[inline]
@@ -239,7 +247,9 @@ impl CoreTaskControl {
             event = event.with_progress(progress);
         }
 
-        publish_task_event(self.inner.events.as_ref(), event);
+        with_host_context(&self.inner.host_context, || {
+            publish_task_event(self.inner.events.as_ref(), event);
+        });
     }
 }
 

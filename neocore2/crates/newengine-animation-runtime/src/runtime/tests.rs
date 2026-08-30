@@ -555,4 +555,45 @@ mod tests {
         );
     }
 
+    #[test]
+    fn sparse_bound_sampling_can_preserve_untracked_live_pose() {
+        let clip = AnimationClip {
+            name: "sparse-preserve-live".to_owned(),
+            skeleton_ref: "skeleton.ymt@body".to_owned(),
+            source: "test".to_owned(),
+            duration_seconds: 1.0,
+            sample_rate_hz: 2.0,
+            looped: true,
+            joint_tags: vec![20],
+            events: Vec::new(),
+            poses: vec![
+                JointLocalPose {
+                    translation: [0.0, 1.0, 0.0],
+                    rotation: [0.0, 0.0, 0.0, 1.0],
+                    scale: Some([1.0, 1.0, 1.0]),
+                },
+                JointLocalPose {
+                    translation: [2.0, 1.0, 0.0],
+                    rotation: [0.0, 0.0, 0.0, 1.0],
+                    scale: Some([1.0, 1.0, 1.0]),
+                },
+            ],
+        };
+        let skeleton = two_joint_skeleton();
+        let runtime = AnimationSkeletonRuntime::compile(&skeleton, Mat4::IDENTITY.to_cols_array())
+            .expect("compile skeleton");
+        let binding = clip.bind_to_skeleton(&runtime).expect("bind sparse clip");
+        let mut live_pose = runtime.bind_locals().to_vec();
+        live_pose[0].translation = [9.0, 8.0, 7.0];
+        clip.sample_local_pose_bound_preserve_untracked(0.25, &runtime, &binding, &mut live_pose)
+            .expect("sample sparse over live pose");
+
+        assert_eq!(
+            live_pose[0].translation,
+            [9.0, 8.0, 7.0],
+            "untracked root must remain the last live pose, never bind/default pose"
+        );
+        assert!((live_pose[1].translation[0] - 1.0).abs() < 1.0e-6);
+    }
+
 }

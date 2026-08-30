@@ -685,8 +685,7 @@ pub(super) fn apply_player_model_from_ytyp(
         profile.player.model.unarmed_attack_animation = Some(reference);
         applied += 1;
     }
-    if let Some(reference) = value_path(model, &["turn_45_left_animation"]).and_then(value_string)
-    {
+    if let Some(reference) = value_path(model, &["turn_45_left_animation"]).and_then(value_string) {
         profile.player.model.turn_45_left_animation = Some(reference);
         applied += 1;
     }
@@ -695,8 +694,7 @@ pub(super) fn apply_player_model_from_ytyp(
         profile.player.model.turn_45_right_animation = Some(reference);
         applied += 1;
     }
-    if let Some(reference) = value_path(model, &["turn_90_left_animation"]).and_then(value_string)
-    {
+    if let Some(reference) = value_path(model, &["turn_90_left_animation"]).and_then(value_string) {
         profile.player.model.turn_90_left_animation = Some(reference);
         applied += 1;
     }

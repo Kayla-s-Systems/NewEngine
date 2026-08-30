@@ -16,7 +16,9 @@ fn hash_bytes(mut h: u64, bytes: &[u8]) -> u64 {
 
 #[inline]
 fn quantize(value: f32, scale: f32) -> i32 {
-    (value * scale).round().clamp(i32::MIN as f32, i32::MAX as f32) as i32
+    (value * scale)
+        .round()
+        .clamp(i32::MIN as f32, i32::MAX as f32) as i32
 }
 
 fn mesh_signature(mesh: &newengine_model_import_northstar::ImportMesh) -> u64 {
@@ -30,7 +32,10 @@ fn mesh_signature(mesh: &newengine_model_import_northstar::ImportMesh) -> u64 {
     h = hash_bytes(h, &(mesh.indices.len() as u64).to_le_bytes());
     for vertex in &mesh.vertices {
         for axis in 0..3 {
-            h = hash_bytes(h, &quantize(vertex.position[axis] - center[axis], 4096.0).to_le_bytes());
+            h = hash_bytes(
+                h,
+                &quantize(vertex.position[axis] - center[axis], 4096.0).to_le_bytes(),
+            );
             h = hash_bytes(h, &quantize(vertex.normal[axis], 32767.0).to_le_bytes());
         }
         for axis in 0..2 {
@@ -45,13 +50,20 @@ fn mesh_signature(mesh: &newengine_model_import_northstar::ImportMesh) -> u64 {
 
 fn main() -> Result<(), String> {
     let mut args = env::args().skip(1);
-    let root = PathBuf::from(args.next().ok_or("usage: inventory_level_mesh_signatures <pak-dir> <output.tsv>")?);
+    let root = PathBuf::from(
+        args.next()
+            .ok_or("usage: inventory_level_mesh_signatures <pak-dir> <output.tsv>")?,
+    );
     let output = PathBuf::from(args.next().ok_or("output path required")?);
     let mut packages = fs::read_dir(&root)
         .map_err(|e| format!("read_dir '{}': {e}", root.display()))?
         .filter_map(Result::ok)
         .map(|e| e.path())
-        .filter(|p| p.extension().and_then(|s| s.to_str()).is_some_and(|s| s.eq_ignore_ascii_case("pak")))
+        .filter(|p| {
+            p.extension()
+                .and_then(|s| s.to_str())
+                .is_some_and(|s| s.eq_ignore_ascii_case("pak"))
+        })
         .collect::<Vec<_>>();
     packages.sort();
 
@@ -75,7 +87,10 @@ fn main() -> Result<(), String> {
             Err(_) => continue,
         };
         package_count += 1;
-        let package = path.file_name().and_then(|s| s.to_str()).unwrap_or("source.pak");
+        let package = path
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or("source.pak");
         for mesh in decoded.meshes {
             let center = [
                 (mesh.bounds_min[0] + mesh.bounds_max[0]) * 0.5,
@@ -87,7 +102,11 @@ fn main() -> Result<(), String> {
                 mesh.bounds_max[1] - mesh.bounds_min[1],
                 mesh.bounds_max[2] - mesh.bounds_min[2],
             ];
-            let material = mesh.source_material.as_deref().unwrap_or("").replace(['\t', '\n', '\r'], " ");
+            let material = mesh
+                .source_material
+                .as_deref()
+                .unwrap_or("")
+                .replace(['\t', '\n', '\r'], " ");
             let name = mesh.name.replace(['\t', '\n', '\r'], " ");
             let sig = mesh_signature(&mesh);
             out.push_str(&format!(
@@ -102,6 +121,9 @@ fn main() -> Result<(), String> {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
     fs::write(&output, out).map_err(|e| format!("write '{}': {e}", output.display()))?;
-    println!("MESH_SIGNATURE_INVENTORY_OK packages={package_count} meshes={mesh_count} output='{}'", output.display());
+    println!(
+        "MESH_SIGNATURE_INVENTORY_OK packages={package_count} meshes={mesh_count} output='{}'",
+        output.display()
+    );
     Ok(())
 }

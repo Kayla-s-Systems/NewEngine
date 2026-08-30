@@ -4,7 +4,10 @@ use std::{env, fs, path::PathBuf};
 fn read_tga_rgba(path: &PathBuf) -> Result<(u32, u32, Vec<u8>), String> {
     let bytes = fs::read(path).map_err(|e| format!("read {}: {e}", path.display()))?;
     if bytes.len() < 18 || bytes[2] != 2 || bytes[16] != 32 {
-        return Err(format!("{} is not an uncompressed 32-bit TGA", path.display()));
+        return Err(format!(
+            "{} is not an uncompressed 32-bit TGA",
+            path.display()
+        ));
     }
     let width = u16::from_le_bytes([bytes[12], bytes[13]]) as u32;
     let height = u16::from_le_bytes([bytes[14], bytes[15]]) as u32;
@@ -21,7 +24,10 @@ fn read_tga_rgba(path: &PathBuf) -> Result<(u32, u32, Vec<u8>), String> {
 
 fn main() -> Result<(), String> {
     let mut args = env::args_os().skip(1);
-    let pak_path = PathBuf::from(args.next().ok_or("usage: match_vram_source_tga PAK SOURCE.tga...")?);
+    let pak_path = PathBuf::from(
+        args.next()
+            .ok_or("usage: match_vram_source_tga PAK SOURCE.tga...")?,
+    );
     let sources = args.map(PathBuf::from).collect::<Vec<_>>();
     if sources.is_empty() {
         return Err("at least one SOURCE.tga is required".to_owned());

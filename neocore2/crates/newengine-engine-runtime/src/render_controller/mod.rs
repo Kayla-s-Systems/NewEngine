@@ -4,6 +4,7 @@ mod controller;
 mod error_policy;
 mod gpu;
 mod material_bindings;
+mod material_plan_cache;
 mod metrics;
 mod module_impl;
 mod render_quality;

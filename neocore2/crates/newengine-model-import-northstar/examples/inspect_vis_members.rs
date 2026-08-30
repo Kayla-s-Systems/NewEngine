@@ -1,15 +1,24 @@
-use std::{env, fs};
 use newengine_model_import_northstar::PakFile;
+use std::{env, fs};
 
 fn main() -> Result<(), String> {
     let mut args = env::args().skip(1);
-    let source = args.next().ok_or("usage: inspect_vis_members <pak> [records]")?;
-    let limit: usize = args.next().as_deref().unwrap_or("4").parse().map_err(|_| "invalid count")?;
+    let source = args
+        .next()
+        .ok_or("usage: inspect_vis_members <pak> [records]")?;
+    let limit: usize = args
+        .next()
+        .as_deref()
+        .unwrap_or("4")
+        .parse()
+        .map_err(|_| "invalid count")?;
     let pak = PakFile::parse(fs::read(&source).map_err(|e| e.to_string())?)?;
     let res = pak.resource("VIS_INFO_1").ok_or("VIS_INFO_1 missing")?;
     let base = pak.resource_payload(res)?;
     let count = pak.read_u32(base + 4)? as usize;
-    let table = pak.resolve_pointer(base + 0x10)?.ok_or("record table missing")?;
+    let table = pak
+        .resolve_pointer(base + 0x10)?
+        .ok_or("record table missing")?;
     println!("VIS_MEMBERS package='{source}' count={count}");
     for index in 0..count.min(limit) {
         let rec = table + index * 0x48;
@@ -25,10 +34,14 @@ fn main() -> Result<(), String> {
                 print!(" ptr=0x{ptr:x} values=");
                 let nread = n.min(24);
                 for j in 0..nread {
-                    if j != 0 { print!(","); }
+                    if j != 0 {
+                        print!(",");
+                    }
                     print!("{}", pak.read_u32(ptr + j * 4).unwrap_or(u32::MAX));
                 }
-                if n > nread { print!(",..."); }
+                if n > nread {
+                    print!(",...");
+                }
             }
             println!();
         }

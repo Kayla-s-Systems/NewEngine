@@ -85,15 +85,6 @@ pub(super) const PRIMITIVE_DRAW_FOLIAGE_ROLE: u8 = 0x10;
 pub(super) const PRIMITIVE_DRAW_DECAL_ROLE: u8 = 0x20;
 pub(super) const PRIMITIVE_DRAW_AUTHORED_BASE_REQUIRED: u8 = 0x40;
 #[inline]
-pub(super) fn primitive_mesh_render_options(
-    explicit: Option<&MeshRenderOptions>,
-) -> MeshRenderOptions {
-    explicit
-        .cloned()
-        .unwrap_or_else(MeshRenderOptions::world_opaque)
-}
-
-#[inline]
 pub(super) fn primitive_draw_flags(options: &MeshRenderOptions) -> u8 {
     let mut flags = 0u8;
     if matches!(options.transform_policy, MeshTransformPolicy::FollowCamera) {

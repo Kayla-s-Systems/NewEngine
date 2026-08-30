@@ -15,9 +15,9 @@ use newengine_engine_runtime::gameplay::{
     try_collect_item_pickup, EquippedWeaponBinding, EquippedWeaponMuzzle, Health,
     HitscanWeaponTuning, Interactable, InteractionEvent, InteractionEventBus, ItemInstanceId,
     ItemPickup, MeleeWeaponTuning, PendingHitscan, PendingInteraction, PlayerCommandFrame,
-    PlayerController, PlayerInteractionTuning, PlayerStanceState, PlayerWeaponState,
-    WeaponAttackKind, WeaponAudioAction, WeaponEvent, WeaponEventBus, WeaponEventKind,
-    WeaponFireMode, WeaponObstructionState,
+    PlayerAuthoredAnimationCapabilities, PlayerController, PlayerInteractionTuning,
+    PlayerStanceState, PlayerWeaponState, WeaponAttackKind, WeaponAudioAction, WeaponEvent,
+    WeaponEventBus, WeaponEventKind, WeaponFireMode, WeaponObstructionState, WeaponType,
 };
 #[cfg(test)]
 use newengine_gameplay_fps_api::action as fps_action;

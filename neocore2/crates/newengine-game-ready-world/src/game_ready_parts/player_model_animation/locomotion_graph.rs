@@ -2,7 +2,7 @@ const GAME_READY_WORLD_RUNTIME_DATA_OWNER: &str = "engine.game-ready.world";
 const LOCOMOTION_GRAPH_RUNTIME_DATA_KEY: &str = "locomotion_graph";
 
 #[inline]
-fn locomotion_fallback_slots(
+fn graph_alias_fallback_slots(
     state: newengine_engine_runtime::gameplay::PlayerLocomotionAnimation,
 ) -> &'static [usize] {
     use newengine_engine_runtime::gameplay::PlayerLocomotionAnimation as L;
@@ -22,11 +22,22 @@ fn resolve_locomotion_slot(
     clips: &[Option<PlayerAnimationRuntimeClip>; 8],
     state: newengine_engine_runtime::gameplay::PlayerLocomotionAnimation,
 ) -> usize {
-    locomotion_fallback_slots(state)
+    graph_alias_fallback_slots(state)
         .iter()
         .copied()
         .find(|slot| clips[*slot].is_some())
         .unwrap_or(0)
+}
+
+/// Runtime state selection is strict: an unavailable authored state is unsupported, not an
+/// invitation to play another locomotion clip. Graph aliases retain deterministic compile-time
+/// completion only because the static graph declares all eight slots.
+fn resolve_runtime_locomotion_slot(
+    clips: &[Option<PlayerAnimationRuntimeClip>; 8],
+    state: newengine_engine_runtime::gameplay::PlayerLocomotionAnimation,
+) -> Option<usize> {
+    let slot = locomotion_slot(state);
+    clips[slot].as_ref().map(|_| slot)
 }
 
 #[inline]

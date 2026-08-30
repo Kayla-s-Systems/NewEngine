@@ -19,7 +19,7 @@ mod world_runtime;
 pub use display::{DisplayMode, DisplayVisibility};
 pub use physics::{PhysicsSurface, PhysicsWorldSettings, StaticMeshCollider};
 pub use player::{
-    CharacterBody, CharacterMotionTuning, PlayerAnimationState, PlayerBraidSecondaryMotionRig,
+    CharacterBody, CharacterMotionTuning, PlayerAnimationState, PlayerAuthoredAnimationCapabilities, PlayerBraidSecondaryMotionRig,
     PlayerCharacterPresentation, PlayerCommandFrame, PlayerController, PlayerControllerKind,
     PlayerEvent, PlayerEventBus, PlayerEventKind, PlayerEyeParentFollowRule, PlayerFallState,
     PlayerFirstPersonBodyBarrierProfile, PlayerFirstPersonCameraAnchor, PlayerFixedPoseHistory,
