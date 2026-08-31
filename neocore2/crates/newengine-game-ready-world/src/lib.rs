@@ -9,6 +9,8 @@ use newengine_gameplay_fps_api::{
 
 #[path = "game_ready_parts/animation_events.rs"]
 mod animation_events;
+#[path = "game_ready_parts/animation_semantic.rs"]
+mod animation_semantic;
 #[path = "game_ready_parts/assets_bootstrap.rs"]
 mod assets_bootstrap;
 mod content;
@@ -75,7 +77,7 @@ use newengine_transform::{set_parent, Transform};
 use std::sync::{Arc, Mutex};
 
 use newengine_engine_runtime::gameplay::{spawn_player_controller, WorldActivationState};
-use newengine_engine_runtime::world_authoring::bootstrap_runtime_scene;
+use newengine_engine_runtime::world_authoring::bootstrap_runtime_scene_foundation;
 
 use self::content::{
     load_game_ready_map_profile, GameReadyDayNightSpec, GameReadyDefinitionApplyMode,
@@ -173,6 +175,7 @@ pub fn tick_frame(
     player_model::tick_player_model_assignments(world, primitives, materials);
     player_model::tick_player_model_grounding(world);
     equipment_visual::tick_equipped_weapon_presentation_input(world, frame.dt);
+    animation_semantic::capture_animation_semantic_frame(world);
     // The stable FPP eye anchor is actor/stance-owned and independent from animated head joints.
     // Publish it before arm/weapon animation so camera and FPP grip solve consume one frame authority.
     player_model::publish_player_first_person_camera_anchors(world);

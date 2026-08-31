@@ -7,6 +7,232 @@ enum EquipmentPresentationStance {
     Reload,
 }
 
+const EQUIPMENT_SUPPORT_IK_RESIDUAL_WARN_THRESHOLD_M: f32 = 0.025;
+const EQUIPMENT_SUPPORT_IK_RESIDUAL_DIAG_INTERVAL_SECONDS: f32 = 2.0;
+
+#[inline]
+fn semantic_f32(state: &ResolvedAnimationSemanticState, key: &str, fallback: f32) -> f32 {
+    state
+        .parameters
+        .get(key)
+        .and_then(|value| value.as_f64())
+        .map(|value| value as f32)
+        .filter(|value| value.is_finite())
+        .unwrap_or(fallback)
+}
+
+#[inline]
+fn semantic_u64(state: &ResolvedAnimationSemanticState, key: &str, fallback: u64) -> u64 {
+    state
+        .parameters
+        .get(key)
+        .and_then(|value| value.as_u64())
+        .unwrap_or(fallback)
+}
+
+fn locomotion_from_semantic_target(
+    target: &str,
+) -> Option<newengine_engine_runtime::gameplay::PlayerLocomotionAnimation> {
+    use newengine_engine_runtime::gameplay::PlayerLocomotionAnimation as L;
+    match target.trim().to_ascii_lowercase().as_str() {
+        "locomotion.idle" => Some(L::Idle),
+        "locomotion.walk" => Some(L::Walk),
+        "locomotion.run" => Some(L::Run),
+        "locomotion.sprint" => Some(L::Sprint),
+        "locomotion.crouch_idle" => Some(L::CrouchIdle),
+        "locomotion.crouch_walk" => Some(L::CrouchWalk),
+        "locomotion.jump" => Some(L::Jump),
+        "locomotion.fall" => Some(L::Fall),
+        "none" => None,
+        _ => None,
+    }
+}
+
+fn look_context_from_semantic_target(
+    target: &str,
+) -> Option<newengine_engine_runtime::gameplay::PlayerLookContext> {
+    use newengine_engine_runtime::gameplay::PlayerLookContext as C;
+    match target.trim().to_ascii_lowercase().as_str() {
+        "look.auto" => Some(C::Standard),
+        "look.context.cover_low_left" => Some(C::CoverLowLeft),
+        "look.context.cover_low_right" => Some(C::CoverLowRight),
+        "look.context.prone" => Some(C::Prone),
+        "look.context.supine" => Some(C::Supine),
+        "look.context.rope" => Some(C::Rope),
+        "look.context.ladder" => Some(C::Ladder),
+        "look.context.swim_idle" => Some(C::SwimIdle),
+        "look.context.injured" => Some(C::Injured),
+        "look.context.relaxed_injured" => Some(C::RelaxedInjured),
+        "none" => None,
+        _ => None,
+    }
+}
+
+fn equipment_stance_from_semantic_target(target: &str) -> EquipmentPresentationStance {
+    match target.trim().to_ascii_lowercase().as_str() {
+        "equipment.ready" => EquipmentPresentationStance::Ready,
+        "equipment.aim" => EquipmentPresentationStance::Aim,
+        "equipment.reload" => EquipmentPresentationStance::Reload,
+        _ => EquipmentPresentationStance::None,
+    }
+}
+
+fn turn_event_id(slot: TurnInPlaceSlot) -> &'static str {
+    match slot {
+        TurnInPlaceSlot::Left45 => "character.turn.left.45",
+        TurnInPlaceSlot::Right45 => "character.turn.right.45",
+        TurnInPlaceSlot::Left90 => "character.turn.left.90",
+        TurnInPlaceSlot::Right90 => "character.turn.right.90",
+        TurnInPlaceSlot::Left135 => "character.turn.left.135",
+        TurnInPlaceSlot::Right135 => "character.turn.right.135",
+        TurnInPlaceSlot::Left180 => "character.turn.left.180",
+        TurnInPlaceSlot::Right180 => "character.turn.right.180",
+    }
+}
+
+fn turn_slot_from_semantic_target(target: &str) -> Option<TurnInPlaceSlot> {
+    match target.trim().to_ascii_lowercase().as_str() {
+        "turn.left.45" => Some(TurnInPlaceSlot::Left45),
+        "turn.right.45" => Some(TurnInPlaceSlot::Right45),
+        "turn.left.90" => Some(TurnInPlaceSlot::Left90),
+        "turn.right.90" => Some(TurnInPlaceSlot::Right90),
+        "turn.left.135" => Some(TurnInPlaceSlot::Left135),
+        "turn.right.135" => Some(TurnInPlaceSlot::Right135),
+        "turn.left.180" => Some(TurnInPlaceSlot::Left180),
+        "turn.right.180" => Some(TurnInPlaceSlot::Right180),
+        _ => None,
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+struct SemanticLandingImpact {
+    sequence: u64,
+    distance: f32,
+    downward_speed: f32,
+    horizontal_speed: f32,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct PlayerAnimationSemanticFrameState {
+    animation_state: newengine_engine_runtime::gameplay::PlayerAnimationState,
+    look_context: newengine_engine_runtime::gameplay::PlayerLookContext,
+    view_yaw: Option<f32>,
+    view_pitch: Option<f32>,
+    noclip_enabled: bool,
+    fall_active: bool,
+    fall_distance: f32,
+    equipment_stance: EquipmentPresentationStance,
+    aim_alpha: f32,
+    reload_progress: Option<f32>,
+    recoil_alpha: f32,
+    recoil_yaw_radians: f32,
+    obstruction_alpha: f32,
+    unarmed_ready: bool,
+    unarmed_attack_sequence: u64,
+    landing: Option<SemanticLandingImpact>,
+    turn_request: Option<(u64, TurnInPlaceSlot)>,
+    max_pulse_sequence: u64,
+}
+
+fn semantic_frame_state(binding: &PlayerAnimationRuntimeBinding) -> PlayerAnimationSemanticFrameState {
+    let locomotion_state = binding.semantic_input.state("character.locomotion");
+    let locomotion = locomotion_state
+        .and_then(|state| locomotion_from_semantic_target(&state.target))
+        .unwrap_or(binding.active_state);
+    let mut animation_state = newengine_engine_runtime::gameplay::PlayerAnimationState {
+        locomotion,
+        ..newengine_engine_runtime::gameplay::PlayerAnimationState::default()
+    };
+    if let Some(state) = locomotion_state {
+        animation_state.normalized_speed = semantic_f32(state, "normalized_speed", 0.0).clamp(0.0, 2.0);
+        animation_state.cycle_phase = semantic_f32(state, "cycle_phase", 0.0).rem_euclid(1.0);
+        animation_state.transition_alpha = semantic_f32(state, "transition_alpha", 1.0).clamp(0.0, 1.0);
+        animation_state.revision = semantic_u64(state, "revision", state.sequence).max(1);
+    }
+
+    let look_context = binding
+        .semantic_input
+        .state("character.look.context")
+        .and_then(|state| look_context_from_semantic_target(&state.target))
+        .unwrap_or_default();
+    let look_view = binding.semantic_input.state("character.look.view");
+    let view_yaw = look_view.map(|state| semantic_f32(state, "yaw", 0.0));
+    let view_pitch = look_view.map(|state| semantic_f32(state, "pitch", 0.0));
+
+    let traversal = binding.semantic_input.state("character.traversal");
+    let noclip_enabled = traversal
+        .is_some_and(|state| state.target.eq_ignore_ascii_case("traversal.noclip"));
+    let fall = binding.semantic_input.state("character.fall");
+    let fall_active = fall.is_some_and(|state| state.target.eq_ignore_ascii_case("fall.auto"));
+    let fall_distance = fall.map(|state| semantic_f32(state, "distance", 0.0).max(0.0)).unwrap_or(0.0);
+
+    let equipment = binding.semantic_input.state("character.equipment");
+    let equipment_stance = equipment
+        .map(|state| equipment_stance_from_semantic_target(&state.target))
+        .unwrap_or_default();
+    let aim_alpha = equipment.map(|state| semantic_f32(state, "aim_alpha", 0.0).clamp(0.0, 1.0)).unwrap_or(0.0);
+    let reload_progress = (equipment_stance == EquipmentPresentationStance::Reload)
+        .then(|| equipment.map(|state| semantic_f32(state, "reload_progress", 0.0).clamp(0.0, 1.0)).unwrap_or(0.0));
+    let recoil_alpha = equipment.map(|state| semantic_f32(state, "recoil_alpha", 0.0).max(0.0)).unwrap_or(0.0);
+    let recoil_yaw_radians = equipment.map(|state| semantic_f32(state, "recoil_yaw_radians", 0.0)).unwrap_or(0.0);
+    let obstruction_alpha = equipment.map(|state| semantic_f32(state, "obstruction_alpha", 0.0).clamp(0.0, 1.0)).unwrap_or(0.0);
+
+    let unarmed_ready = binding
+        .semantic_input
+        .state("character.weapon.mode")
+        .is_some_and(|state| state.target.eq_ignore_ascii_case("unarmed.ready"));
+    let attack = binding
+        .semantic_input
+        .latest_pulse_target("unarmed.attack")
+        .filter(|pulse| pulse.sequence > binding.consumed_pulse_sequence);
+    let landing_pulse = binding
+        .semantic_input
+        .latest_pulse_target("landing.auto")
+        .filter(|pulse| pulse.sequence > binding.consumed_pulse_sequence);
+    let landing = landing_pulse.map(|pulse| SemanticLandingImpact {
+        sequence: pulse.sequence,
+        distance: semantic_f32(pulse, "distance", 0.0).max(0.0),
+        downward_speed: semantic_f32(pulse, "downward_speed", 0.0).max(0.0),
+        horizontal_speed: semantic_f32(pulse, "horizontal_speed", 0.0).max(0.0),
+    });
+    let unarmed_attack_sequence = attack.map(|pulse| pulse.sequence).unwrap_or(0);
+    let turn_request = binding
+        .semantic_input
+        .pulses
+        .iter()
+        .rev()
+        .filter(|pulse| pulse.sequence > binding.consumed_pulse_sequence)
+        .find_map(|pulse| turn_slot_from_semantic_target(&pulse.target).map(|slot| (pulse.sequence, slot)));
+    let max_pulse_sequence = landing
+        .map(|impact| impact.sequence)
+        .into_iter()
+        .chain(attack.map(|pulse| pulse.sequence))
+        .chain(turn_request.map(|(sequence, _)| sequence))
+        .max()
+        .unwrap_or(binding.consumed_pulse_sequence);
+
+    PlayerAnimationSemanticFrameState {
+        animation_state,
+        look_context,
+        view_yaw,
+        view_pitch,
+        noclip_enabled,
+        fall_active,
+        fall_distance,
+        equipment_stance,
+        aim_alpha,
+        reload_progress,
+        recoil_alpha,
+        recoil_yaw_radians,
+        obstruction_alpha,
+        unarmed_ready,
+        unarmed_attack_sequence,
+        landing,
+        turn_request,
+        max_pulse_sequence,
+    }
+}
+
 fn resolve_equipment_presentation_stance(
     weapon_type: Option<newengine_engine_runtime::gameplay::WeaponType>,
     weapon_state: Option<newengine_engine_runtime::gameplay::PlayerWeaponState>,
@@ -65,14 +291,11 @@ fn resolve_authored_look_state(
 #[inline]
 fn authoritative_fall_presentation_requested(
     noclip_enabled: bool,
-    ground: newengine_engine_runtime::gameplay::PlayerGroundState,
-    fall: newengine_engine_runtime::gameplay::PlayerFallState,
+    fall_event_active: bool,
     locomotion: newengine_engine_runtime::gameplay::PlayerLocomotionAnimation,
 ) -> bool {
     !noclip_enabled
-        && !ground.grounded
-        && fall.airborne
-        && fall.falling
+        && fall_event_active
         && locomotion == newengine_engine_runtime::gameplay::PlayerLocomotionAnimation::Fall
 }
 
@@ -88,69 +311,86 @@ pub(crate) fn tick_player_skin_animation(world: &mut newengine_ecs::World, dt: f
         .collect::<Vec<_>>();
 
     for player in players {
-        let animation_state = world
-            .get::<newengine_engine_runtime::gameplay::PlayerAnimationState>(player)
-            .copied()
-            .unwrap_or_default();
-        let look_context = world
-            .get::<newengine_engine_runtime::gameplay::PlayerLookContext>(player)
-            .copied()
-            .unwrap_or_default();
-        let noclip_enabled = world
-            .resource::<newengine_gameplay_fps_api::FpsCharacterTraversalState>()
-            .copied()
-            .is_some_and(|state| state.noclip_enabled());
-        let ground_state = world
-            .get::<newengine_engine_runtime::gameplay::PlayerGroundState>(player)
-            .copied()
-            .unwrap_or_default();
-        let fall_state = world
-            .get::<newengine_engine_runtime::gameplay::PlayerFallState>(player)
-            .copied()
-            .unwrap_or_default();
-        let landing_state = world
-            .get::<newengine_engine_runtime::gameplay::PlayerLandingState>(player)
-            .copied()
-            .unwrap_or_default();
+        let semantic_events =
+            crate::animation_semantic::semantic_events_for_entity(world, player.stable_u64());
+        if let Some(binding) = world.get_mut::<PlayerAnimationRuntimeBinding>(player) {
+            if let Err(error) = binding.consume_semantic_events(semantic_events.iter()) {
+                newengine_ulog_api::ulog::warn!(
+                    "game-ready: animation semantic event consume failed player={} err='{}'",
+                    player.stable_u64(),
+                    error
+                );
+            }
+        }
+        let semantic = world
+            .get::<PlayerAnimationRuntimeBinding>(player)
+            .map(semantic_frame_state)
+            .unwrap_or_else(|| PlayerAnimationSemanticFrameState {
+                animation_state: newengine_engine_runtime::gameplay::PlayerAnimationState::default(),
+                look_context: newengine_engine_runtime::gameplay::PlayerLookContext::default(),
+                view_yaw: None,
+                view_pitch: None,
+                noclip_enabled: false,
+                fall_active: false,
+                fall_distance: 0.0,
+                equipment_stance: EquipmentPresentationStance::None,
+                aim_alpha: 0.0,
+                reload_progress: None,
+                recoil_alpha: 0.0,
+                recoil_yaw_radians: 0.0,
+                obstruction_alpha: 0.0,
+                unarmed_ready: false,
+                unarmed_attack_sequence: 0,
+                landing: None,
+                turn_request: None,
+                max_pulse_sequence: 0,
+            });
+        let animation_state = semantic.animation_state;
+        let look_context = semantic.look_context;
+        let noclip_enabled = semantic.noclip_enabled;
         let fall_presentation_requested = authoritative_fall_presentation_requested(
             noclip_enabled,
-            ground_state,
-            fall_state,
+            semantic.fall_active,
             animation_state.locomotion,
         );
         let active_weapon =
             newengine_engine_runtime::gameplay::active_equipped_weapon_binding(world, player);
+        let (prior_unarmed_attack_sequence, prior_unarmed_attack_active) = world
+            .get::<PlayerAnimationRuntimeBinding>(player)
+            .map(|binding| {
+                let active = binding.unarmed_attack_sequence > 0
+                    && binding.unarmed_attack_pose.as_ref().is_some_and(|clip| {
+                        binding.unarmed_attack_time_seconds
+                            <= clip.clip.duration_seconds.max(1.0 / 30.0)
+                    });
+                (binding.unarmed_attack_sequence, active)
+            })
+            .unwrap_or((0, false));
         let unarmed_active = !noclip_enabled
             && !fall_presentation_requested
-            && active_weapon.is_some_and(|binding| {
-                binding.weapon.weapon_type
-                    == newengine_engine_runtime::gameplay::WeaponType::Unarmed
-            });
-        let unarmed_attack_sequence = if unarmed_active {
-            world
-                .get::<newengine_engine_runtime::gameplay::PlayerWeaponState>(player)
-                .map(|state| state.shot_sequence)
-                .unwrap_or(0)
+            && (semantic.unarmed_ready
+                || semantic.unarmed_attack_sequence > 0
+                || prior_unarmed_attack_active);
+        let unarmed_attack_sequence = if !unarmed_active {
+            0
+        } else if semantic.unarmed_attack_sequence > 0 {
+            semantic.unarmed_attack_sequence
+        } else if prior_unarmed_attack_active {
+            prior_unarmed_attack_sequence
         } else {
             0
         };
-        let rifle_aim_alpha = super::equipment_visual::equipped_weapon_aim_alpha(world, player);
-        let rifle_recoil_alpha =
-            super::equipment_visual::equipped_weapon_recoil_alpha(world, player);
-        let rifle_recoil_yaw_radians =
-            super::equipment_visual::equipped_weapon_recoil_yaw_radians(world, player);
-        let rifle_obstruction_alpha = world
-            .get::<newengine_engine_runtime::gameplay::WeaponObstructionState>(player)
-            .map(|state| state.alpha.clamp(0.0, 1.0))
-            .unwrap_or(0.0);
+        let rifle_aim_alpha = semantic.aim_alpha;
+        let rifle_recoil_alpha = semantic.recoil_alpha;
+        let rifle_recoil_yaw_radians = semantic.recoil_yaw_radians;
+        let rifle_obstruction_alpha = semantic.obstruction_alpha;
         let first_person_active = world
             .resource::<newengine_engine_runtime::gameplay::PlayerViewState>()
             .copied()
             .unwrap_or_default()
             .first_person_active;
-        // Secondary long-gun inertia is a third-person presentation effect. Feeding its previous
-        // frame offset back into first-person arm IK creates a hand <-> weapon feedback loop and
-        // manifests as visible weapon tremor. First-person hands solve against the canonical root.
+        // Secondary weapon inertia remains physical presentation state. It never selects an
+        // animation; the semantic equipment event above owns Ready/Aim/Reload selection.
         let rifle_secondary_rotation_offset_local = if first_person_active {
             Vec3::ZERO
         } else {
@@ -164,9 +404,6 @@ pub(crate) fn tick_player_skin_animation(world: &mut newengine_ecs::World, dt: f
         let rifle_view_forward_model = rifle_view_rotation_model
             .map(|rotation| (rotation * -Vec3::Z).normalize_or_zero())
             .filter(|forward| forward.is_finite() && forward.length_squared() > 1.0e-8);
-        let weapon_state = world
-            .get::<newengine_engine_runtime::gameplay::PlayerWeaponState>(player)
-            .copied();
         let weapon_presentation = active_weapon
             .and_then(|equipped| {
                 world
@@ -175,11 +412,7 @@ pub(crate) fn tick_player_skin_animation(world: &mut newengine_ecs::World, dt: f
                     .map(|definition| definition.weapon_presentation.clone().sanitized())
             })
             .filter(|presentation| presentation.enabled);
-        let equipment_stance = resolve_equipment_presentation_stance(
-            active_weapon.map(|binding| binding.weapon.weapon_type),
-            weapon_state,
-            weapon_presentation.is_some(),
-        );
+        let equipment_stance = semantic.equipment_stance;
         let equipment_presentation_active = !noclip_enabled
             && !fall_presentation_requested
             && equipment_stance != EquipmentPresentationStance::None
@@ -191,20 +424,7 @@ pub(crate) fn tick_player_skin_animation(world: &mut newengine_ecs::World, dt: f
                         || binding.equipment_reload_pose.is_some()
                         || binding.equipment_ik.is_some()
                 });
-        let rifle_reload_progress = if equipment_stance == EquipmentPresentationStance::Reload {
-            weapon_state.and_then(|state| {
-                (state.reload_remaining > 0.0).then(|| {
-                    let duration = world
-                        .get::<newengine_engine_runtime::gameplay::HitscanWeaponTuning>(player)
-                        .map(|tuning| tuning.sanitized().reload_duration)
-                        .filter(|duration| *duration > 1.0e-4)
-                        .unwrap_or(2.0);
-                    (1.0 - state.reload_remaining / duration).clamp(0.0, 1.0)
-                })
-            })
-        } else {
-            None
-        };
+        let rifle_reload_progress = semantic.reload_progress;
         let world_velocity = world
             .get::<newengine_sim::Velocity>(player)
             .copied()
@@ -227,16 +447,14 @@ pub(crate) fn tick_player_skin_animation(world: &mut newengine_ecs::World, dt: f
         } else {
             0.0
         };
-        let (view_yaw, view_pitch) = world
-            .get::<newengine_sim::CharacterMotor>(player)
-            .map(|motor| (motor.yaw, motor.pitch))
-            .map(|(yaw, pitch)| {
-                (
-                    if yaw.is_finite() { yaw } else { body_yaw },
-                    if pitch.is_finite() { pitch } else { 0.0 },
-                )
-            })
-            .unwrap_or((body_yaw, 0.0));
+        let view_yaw = semantic
+            .view_yaw
+            .filter(|yaw| yaw.is_finite())
+            .unwrap_or(body_yaw);
+        let view_pitch = semantic
+            .view_pitch
+            .filter(|pitch| pitch.is_finite())
+            .unwrap_or(0.0);
         let view_body_yaw_delta = newengine_math::wrap_pi(view_yaw - body_yaw);
         let horizontal_speed = Vec3::new(world_velocity.x, 0.0, world_velocity.z).length();
         let native_turn_allowed = !noclip_enabled
@@ -274,8 +492,16 @@ pub(crate) fn tick_player_skin_animation(world: &mut newengine_ecs::World, dt: f
             let Some(binding) = world.get_mut::<PlayerAnimationRuntimeBinding>(player) else {
                 continue;
             };
+            if semantic.max_pulse_sequence > binding.consumed_pulse_sequence {
+                binding.consumed_pulse_sequence = semantic.max_pulse_sequence;
+                binding
+                    .semantic_input
+                    .discard_pulses_through(binding.consumed_pulse_sequence);
+            }
             let mut event_occurrences = Vec::new();
             binding.equipment_time_seconds += dt;
+            binding.equipment_ik_residual_diag_cooldown =
+                (binding.equipment_ik_residual_diag_cooldown - dt).max(0.0);
             binding.equipment_resolved_weapon_root = None;
             if unarmed_active {
                 if binding.unarmed_attack_sequence != unarmed_attack_sequence {
@@ -822,7 +1048,7 @@ pub(crate) fn tick_player_skin_animation(world: &mut newengine_ecs::World, dt: f
 
             let requested_fall_band = if fall_presentation_requested {
                 select_fall_presentation_band(
-                    fall_state.distance,
+                    semantic.fall_distance,
                     binding.fall_low_pose.is_some(),
                     binding.fall_medium_pose.is_some(),
                     binding.fall_high_pose.is_some(),
@@ -847,7 +1073,7 @@ pub(crate) fn tick_player_skin_animation(world: &mut newengine_ecs::World, dt: f
                         "game-ready: fall presentation selected player={} band={:?} distance_m={:.3} clip='{}'",
                         player.stable_u64(),
                         requested_fall_band.expect("selected fall band"),
-                        fall_state.distance,
+                        semantic.fall_distance,
                         clip.clip_ref,
                     );
                 }
@@ -876,7 +1102,7 @@ pub(crate) fn tick_player_skin_animation(world: &mut newengine_ecs::World, dt: f
                             "game-ready: height-aware fall pose sampling failed player={} band={:?} distance_m={:.3} clip='{}': {}",
                             player.stable_u64(),
                             band,
-                            fall_state.distance,
+                            semantic.fall_distance,
                             clip.clip_ref,
                             error,
                         );
@@ -893,13 +1119,11 @@ pub(crate) fn tick_player_skin_animation(world: &mut newengine_ecs::World, dt: f
                 binding.fall_time_seconds = 0.0;
             }
 
-            // Landing response is driven by a persistent impact revision because PlayerFallState
-            // is reset on the grounded physics tick. This lets authored character-native landing
-            // performances play on the following animation frames without replaying every frame.
-            if landing_state.revision > binding.landing_last_revision {
-                binding.landing_last_revision = landing_state.revision;
+            // Landing is a non-retained semantic pulse. A hot-reloaded animation subscriber never
+            // replays historical impacts, and presentation never polls PlayerLandingState directly.
+            if let Some(landing) = semantic.landing {
                 let band = select_fall_presentation_band(
-                    landing_state.distance,
+                    landing.distance,
                     binding.landing_soft_pose.is_some(),
                     binding.landing_medium_pose.is_some(),
                     binding.landing_hard_pose.is_some() || binding.landing_hard_run_pose.is_some(),
@@ -909,8 +1133,11 @@ pub(crate) fn tick_player_skin_animation(world: &mut newengine_ecs::World, dt: f
                 binding.landing_active_band = band;
                 binding.landing_active_run = matches!(band, Some(FallPresentationBand::High))
                     && binding.landing_hard_run_pose.is_some()
-                    && landing_state.horizontal_speed > 1.5;
+                    && landing.horizontal_speed > 1.5;
                 binding.landing_time_seconds = 0.0;
+                binding.landing_active_distance = landing.distance;
+                binding.landing_active_downward_speed = landing.downward_speed;
+                binding.landing_active_horizontal_speed = landing.horizontal_speed;
                 let selected = match (band, binding.landing_active_run) {
                     (Some(FallPresentationBand::Low), _) => binding.landing_soft_pose.as_mut(),
                     (Some(FallPresentationBand::Medium), _) => binding.landing_medium_pose.as_mut(),
@@ -923,12 +1150,12 @@ pub(crate) fn tick_player_skin_animation(world: &mut newengine_ecs::World, dt: f
                 if let Some(clip) = selected {
                     clip.event_cursor.restart();
                     newengine_ulog_api::ulog::info!(
-                        "game-ready: landing presentation selected player={} band={:?} distance_m={:.3} downward_speed={:.3} horizontal_speed={:.3} clip='{}'",
+                        "game-ready: landing presentation selected player={} band={:?} distance_m={:.3} downward_speed={:.3} horizontal_speed={:.3} clip='{}' source=animation-semantic-pulse",
                         player.stable_u64(),
                         band.expect("selected landing band"),
-                        landing_state.distance,
-                        landing_state.downward_speed,
-                        landing_state.horizontal_speed,
+                        landing.distance,
+                        landing.downward_speed,
+                        landing.horizontal_speed,
                         clip.clip_ref,
                     );
                 }
@@ -966,7 +1193,7 @@ pub(crate) fn tick_player_skin_animation(world: &mut newengine_ecs::World, dt: f
                                 "game-ready: landing pose sampling failed player={} band={:?} distance_m={:.3} clip='{}': {}",
                                 player.stable_u64(),
                                 band,
-                                landing_state.distance,
+                                binding.landing_active_distance,
                                 clip.clip_ref,
                                 error,
                             );
@@ -1069,50 +1296,67 @@ pub(crate) fn tick_player_skin_animation(world: &mut newengine_ecs::World, dt: f
             }
 
             if equipment_presentation_active {
-                match apply_equipped_weapon_support_ik(
-                    weapon_presentation
-                        .as_ref()
-                        .expect("active equipment presentation requires weapon descriptor"),
-                    binding.equipment_ik.as_ref(),
-                    &binding.skeleton,
-                    &binding.animation_runtime,
-                    &mut binding.current_locals,
-                    &mut binding.joint_frames_scratch,
-                    rifle_view_forward_model,
-                    rifle_view_rotation_model,
-                    first_person_eye_model,
-                    first_person_active,
-                    rifle_aim_alpha,
-                    rifle_recoil_alpha,
-                    rifle_recoil_yaw_radians,
-                    rifle_obstruction_alpha,
-                    rifle_secondary_rotation_offset_local,
-                    equipment_stance != EquipmentPresentationStance::Reload
-                        && binding.equipment_ready_pose.is_some(),
-                    rifle_reload_progress
-                        .map(|progress| progress <= 0.08 || progress >= 0.92)
-                        .unwrap_or(true),
-                    rifle_reload_progress
-                        .map(|progress| progress <= 0.08 || progress >= 0.92)
-                        .unwrap_or(true),
-                ) {
-                    Ok(Some(result)) => {
-                        binding.equipment_resolved_weapon_root = Some(result.base_root);
-                        if result.error_m > 0.025 {
-                            newengine_ulog_api::ulog::warn!(
-                                "game-ready: authored equipment support IK residual player={} error_m={:.5}",
-                                player.stable_u64(),
-                                result.error_m,
-                            );
+                // Support IK is valid only when both sides of the authored binding resolved:
+                // a sanitized weapon presentation and a skeleton-resolved arm IK rig. Poses may
+                // still be authored without IK, but that must not manufacture a procedural target.
+                if let (Some(presentation), Some(rig)) =
+                    (weapon_presentation.as_ref(), binding.equipment_ik.as_ref())
+                {
+                    match apply_equipped_weapon_support_ik(
+                        presentation,
+                        Some(rig),
+                        &binding.skeleton,
+                        &binding.animation_runtime,
+                        &mut binding.current_locals,
+                        &mut binding.joint_frames_scratch,
+                        rifle_view_forward_model,
+                        rifle_view_rotation_model,
+                        first_person_eye_model,
+                        first_person_active,
+                        rifle_aim_alpha,
+                        rifle_recoil_alpha,
+                        rifle_recoil_yaw_radians,
+                        rifle_obstruction_alpha,
+                        rifle_secondary_rotation_offset_local,
+                        equipment_stance != EquipmentPresentationStance::Reload
+                            && binding.equipment_ready_pose.is_some(),
+                        rifle_reload_progress
+                            .map(|progress| progress <= 0.08 || progress >= 0.92)
+                            .unwrap_or(true),
+                        rifle_reload_progress
+                            .map(|progress| progress <= 0.08 || progress >= 0.92)
+                            .unwrap_or(true),
+                    ) {
+                        Ok(Some(result)) => {
+                            binding.equipment_resolved_weapon_root = Some(result.base_root);
+                            if result.error_m > EQUIPMENT_SUPPORT_IK_RESIDUAL_WARN_THRESHOLD_M
+                                && binding.equipment_ik_residual_diag_cooldown <= 0.0
+                            {
+                                newengine_ulog_api::ulog::warn!(
+                                    "game-ready: authored equipment support IK residual player={} error_m={:.5} right_error_m={:.5} left_error_m={:.5} threshold_m={:.5} diagnostic_interval_s={:.1}",
+                                    player.stable_u64(),
+                                    result.error_m,
+                                    result.right_error_m,
+                                    result.left_error_m,
+                                    EQUIPMENT_SUPPORT_IK_RESIDUAL_WARN_THRESHOLD_M,
+                                    EQUIPMENT_SUPPORT_IK_RESIDUAL_DIAG_INTERVAL_SECONDS,
+                                );
+                                binding.equipment_ik_residual_diag_cooldown =
+                                    EQUIPMENT_SUPPORT_IK_RESIDUAL_DIAG_INTERVAL_SECONDS;
+                            }
                         }
-                    }
-                    Ok(None) => {}
-                    Err(error) => {
-                        newengine_ulog_api::ulog::warn!(
-                            "game-ready: authored equipment support IK failed player={}: {}",
-                            player.stable_u64(),
-                            error,
-                        );
+                        Ok(None) => {}
+                        Err(error) => {
+                            if binding.equipment_ik_residual_diag_cooldown <= 0.0 {
+                                newengine_ulog_api::ulog::warn!(
+                                    "game-ready: authored equipment support IK failed player={}: {}",
+                                    player.stable_u64(),
+                                    error,
+                                );
+                                binding.equipment_ik_residual_diag_cooldown =
+                                    EQUIPMENT_SUPPORT_IK_RESIDUAL_DIAG_INTERVAL_SECONDS;
+                            }
+                        }
                     }
                 }
             }

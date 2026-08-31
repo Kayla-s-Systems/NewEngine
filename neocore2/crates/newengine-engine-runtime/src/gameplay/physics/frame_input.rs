@@ -136,6 +136,7 @@ fn collect_static_mesh_colliders(
                 is_trigger: false,
                 participates_in_queries: true,
                 casts_contacts: true,
+                continuous_collision: false,
             },
             material: PhysicsMaterialDto {
                 friction: collider.friction,
@@ -216,6 +217,7 @@ fn collect_body_snapshots(world: &World) -> Vec<PhysicsFrameBodySnapshot> {
                 is_trigger: body.flags.is_trigger,
                 participates_in_queries: body.flags.participates_in_queries,
                 casts_contacts: body.flags.casts_contacts,
+                continuous_collision: body.flags.continuous_collision,
             },
             material: PhysicsMaterialDto {
                 friction: body.material.friction,

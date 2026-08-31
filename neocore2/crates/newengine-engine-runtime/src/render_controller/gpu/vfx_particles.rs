@@ -25,6 +25,20 @@ const PARTICLE_SIM_SHADER: &str = "shaders/vfx/particle_sim.comp";
 const PARTICLE_VERTEX_SHADER: &str = "shaders/vfx/particle_billboard.vert";
 const PARTICLE_FRAGMENT_SHADER: &str = "shaders/vfx/particle_billboard.frag";
 
+#[inline]
+fn vfx_diagnostics_enabled() -> bool {
+    static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ENABLED.get_or_init(|| crate::env_config::var_os("NORTHSTAR_VFX_DIAGNOSTICS").is_some())
+}
+
+macro_rules! vfx_diag {
+    ($($arg:tt)*) => {
+        if vfx_diagnostics_enabled() {
+            newengine_ulog_api::ulog::trace!($($arg)*);
+        }
+    };
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) struct VfxGpuFrameReport {
     pub(crate) high_water: u32,
@@ -115,22 +129,22 @@ impl VfxGpuRenderer {
             return Ok(VfxGpuFrameReport::default());
         }
 
-        newengine_ulog_api::ulog::trace!("VFXDIAG ensure_resources begin");
+        vfx_diag!("VFXDIAG ensure_resources begin");
         self.ensure_resources(r, color_format, texture_slots)?;
-        newengine_ulog_api::ulog::trace!("VFXDIAG ensure_resources done");
+        vfx_diag!("VFXDIAG ensure_resources done");
         let particle_buffer = self.particle_buffer.ok_or_else(|| {
             EngineError::other("VFX GPU particle buffer missing after resource creation")
         })?;
 
-        newengine_ulog_api::ulog::trace!("VFXDIAG process_kills begin");
+        vfx_diag!("VFXDIAG process_kills begin");
         let killed_particles = self.process_kills(r, bridge, particle_buffer)?;
-        newengine_ulog_api::ulog::trace!("VFXDIAG process_kills done");
-        newengine_ulog_api::ulog::trace!(
+        vfx_diag!("VFXDIAG process_kills done");
+        vfx_diag!(
             "VFXDIAG process_spawns begin pending={}",
             pending.pending_spawns
         );
         let (uploaded_spawns, capacity_drops) = self.process_spawns(r, bridge, particle_buffer)?;
-        newengine_ulog_api::ulog::trace!("VFXDIAG process_spawns done uploaded={uploaded_spawns}");
+        vfx_diag!("VFXDIAG process_spawns done uploaded={uploaded_spawns}");
         self.trim_expired_tail();
 
         if self.high_water == 0 {
@@ -159,28 +173,28 @@ impl VfxGpuRenderer {
             self.high_water,
             resident_texture_mask(texture_slots),
         );
-        newengine_ulog_api::ulog::trace!("VFXDIAG frame_ubo write begin");
+        vfx_diag!("VFXDIAG frame_ubo write begin");
         r.write_buffer(frame_ubo, 0, &frame_bytes)?;
-        newengine_ulog_api::ulog::trace!("VFXDIAG frame_ubo write done");
+        vfx_diag!("VFXDIAG frame_ubo write done");
 
         let compute = self
             .compute_pipeline
             .ok_or_else(|| EngineError::other("VFX GPU compute pipeline missing"))?;
-        newengine_ulog_api::ulog::trace!("VFXDIAG compute begin_render_phase");
+        vfx_diag!("VFXDIAG compute begin_render_phase");
         r.begin_render_phase(RenderGraphPassKind::ParticleSimulation)?;
-        newengine_ulog_api::ulog::trace!("VFXDIAG compute set_pipeline");
+        vfx_diag!("VFXDIAG compute set_pipeline");
         r.set_pipeline(compute)?;
         r.set_bind_group(0, bind_group)?;
         let groups = (self.high_water as u32).div_ceil(PARTICLE_WORKGROUP_SIZE);
-        newengine_ulog_api::ulog::trace!("VFXDIAG compute dispatch groups={groups}");
+        vfx_diag!("VFXDIAG compute dispatch groups={groups}");
         r.dispatch(DispatchArgs::one_dimensional(groups))?;
         r.end_render_phase()?;
-        newengine_ulog_api::ulog::trace!("VFXDIAG compute end");
+        vfx_diag!("VFXDIAG compute end");
 
         let graphics = self
             .graphics_pipeline(color_format)
             .ok_or_else(|| EngineError::other("VFX GPU billboard pipeline missing"))?;
-        newengine_ulog_api::ulog::trace!("VFXDIAG graphics begin_draw_list");
+        vfx_diag!("VFXDIAG graphics begin_draw_list");
         r.begin_draw_list(RenderDrawListKind::Transparent)?;
         let extent =
             newengine_core::render::Extent2D::new(viewport_width.max(1), viewport_height.max(1));
@@ -191,10 +205,10 @@ impl VfxGpuRenderer {
             viewport_width.max(1).min(i32::MAX as u32) as i32,
             viewport_height.max(1).min(i32::MAX as u32) as i32,
         ))?;
-        newengine_ulog_api::ulog::trace!("VFXDIAG graphics set_pipeline");
+        vfx_diag!("VFXDIAG graphics set_pipeline");
         r.set_pipeline(graphics)?;
         r.set_bind_group(0, bind_group)?;
-        newengine_ulog_api::ulog::trace!("VFXDIAG graphics draw instances={}", self.high_water);
+        vfx_diag!("VFXDIAG graphics draw instances={}", self.high_water);
         r.draw(DrawArgs {
             vertex_count: 6,
             instance_count: self.high_water.min(u32::MAX as usize) as u32,
@@ -202,7 +216,7 @@ impl VfxGpuRenderer {
             first_instance: 0,
         })?;
         r.end_draw_list()?;
-        newengine_ulog_api::ulog::trace!("VFXDIAG graphics end");
+        vfx_diag!("VFXDIAG graphics end");
 
         Ok(VfxGpuFrameReport {
             high_water: self.high_water as u32,
@@ -218,7 +232,7 @@ impl VfxGpuRenderer {
         color_format: TextureFormat,
         texture_slots: [Option<TextureId>; VFX_GPU_TEXTURE_SLOT_CAPACITY],
     ) -> EngineResult<()> {
-        newengine_ulog_api::ulog::trace!("VFXDIAG resource layout");
+        vfx_diag!("VFXDIAG resource layout");
         let layout = match self.layout {
             Some(layout) => layout,
             None => {
@@ -239,7 +253,7 @@ impl VfxGpuRenderer {
             }
         };
 
-        newengine_ulog_api::ulog::trace!("VFXDIAG resource particle_buffer");
+        vfx_diag!("VFXDIAG resource particle_buffer");
         let particle_buffer = match self.particle_buffer {
             Some(buffer) => buffer,
             None => {
@@ -284,7 +298,7 @@ impl VfxGpuRenderer {
         };
         let bound_textures = texture_slots.map(|texture| texture.unwrap_or(fallback_texture));
 
-        newengine_ulog_api::ulog::trace!("VFXDIAG resource ubos_bindgroups");
+        vfx_diag!("VFXDIAG resource ubos_bindgroups");
         for slot in 0..PARTICLE_FRAME_SLOTS {
             if self.frame_ubos[slot].is_none() {
                 self.frame_ubos[slot] = Some(
@@ -322,7 +336,7 @@ impl VfxGpuRenderer {
             }
         }
 
-        newengine_ulog_api::ulog::trace!("VFXDIAG resource compute_shader");
+        vfx_diag!("VFXDIAG resource compute_shader");
         if self.compute_shader.is_none() {
             self.compute_shader = Some(
                 r.create_shader(
@@ -336,7 +350,7 @@ impl VfxGpuRenderer {
                 )?,
             );
         }
-        newengine_ulog_api::ulog::trace!("VFXDIAG resource vertex_shader");
+        vfx_diag!("VFXDIAG resource vertex_shader");
         if self.vertex_shader.is_none() {
             self.vertex_shader = Some(
                 r.create_shader(
@@ -350,7 +364,7 @@ impl VfxGpuRenderer {
                 )?,
             );
         }
-        newengine_ulog_api::ulog::trace!("VFXDIAG resource fragment_shader");
+        vfx_diag!("VFXDIAG resource fragment_shader");
         if self.fragment_shader.is_none() {
             self.fragment_shader = Some(
                 r.create_shader(
@@ -365,7 +379,7 @@ impl VfxGpuRenderer {
             );
         }
 
-        newengine_ulog_api::ulog::trace!("VFXDIAG resource compute_pipeline");
+        vfx_diag!("VFXDIAG resource compute_pipeline");
         if self.compute_pipeline.is_none() {
             let shader = self.compute_shader.expect("compute shader created above");
             self.compute_pipeline = Some(
@@ -378,9 +392,7 @@ impl VfxGpuRenderer {
             );
         }
 
-        newengine_ulog_api::ulog::trace!(
-            "VFXDIAG resource graphics_pipeline format={color_format:?}"
-        );
+        vfx_diag!("VFXDIAG resource graphics_pipeline format={color_format:?}");
         if self.graphics_pipeline(color_format).is_none() {
             let vs = self.vertex_shader.expect("vertex shader created above");
             let fs = self.fragment_shader.expect("fragment shader created above");

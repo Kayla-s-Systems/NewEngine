@@ -3,8 +3,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde::{Deserialize, Serialize};
 
 use super::{
-    sanitize_gain, sanitize_speed, AudioAcousticState, AudioEnvironmentState,
-    AudioVoiceBudgetReservation, SoundCueRef,
+    sanitize_gain, sanitize_speed, AudioAcousticState, AudioEnvironmentState, AudioMusicSessionId,
+    AudioStreamPlayRequest, AudioTransportAction, AudioTransportActionId, AudioTransportConfig,
+    AudioTransportSchedulePoint, AudioVoiceBudgetReservation, InteractiveMusicGraph, SoundCueRef,
 };
 
 pub const AUDIO_ORCHESTRATION_SCHEMA: &str = "newengine.audio.orchestration.v1";
@@ -186,6 +187,55 @@ impl AudioPlayInstanceRequest {
         self.tags = sanitize_symbols("audio instance tag", self.tags)?;
         self.gain = sanitize_gain(self.gain);
         self.pitch = sanitize_speed(self.pitch);
+        self.parameters = self.parameters.sanitized();
+        Ok(self)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AudioPlayStreamInstanceRequest {
+    pub stream: AudioStreamPlayRequest,
+    pub route: AudioRouteId,
+    pub tags: Vec<String>,
+    /// Additional logical instance gain above the authored stream request gain.
+    pub gain: f32,
+    /// When true, the AudioObject position overrides the stream request spatial position.
+    pub spatial: bool,
+    pub parameters: AudioParameterSet,
+}
+
+impl Default for AudioPlayStreamInstanceRequest {
+    fn default() -> Self {
+        Self {
+            stream: AudioStreamPlayRequest::default(),
+            route: AudioRouteId::default(),
+            tags: Vec::new(),
+            gain: 1.0,
+            spatial: false,
+            parameters: AudioParameterSet::default(),
+        }
+    }
+}
+
+impl AudioPlayStreamInstanceRequest {
+    pub fn new(uri: impl Into<String>) -> Self {
+        let mut request = Self::default();
+        request.stream.clip = super::AudioClipRef::new(uri);
+        request
+    }
+
+    pub fn sanitized(mut self) -> Result<Self, String> {
+        self.stream = self.stream.sanitized();
+        if self.stream.clip.uri.trim().is_empty() {
+            return Err("audio stream instance requires a non-empty stream uri".to_owned());
+        }
+        self.route.0 = self.route.0.trim().to_owned();
+        if !self.route.0.is_empty() {
+            self.route.validate()?;
+        }
+        self.tags = sanitize_symbols("audio stream instance tag", self.tags)?;
+        self.gain = sanitize_gain(self.gain);
         self.parameters = self.parameters.sanitized();
         Ok(self)
     }
@@ -436,7 +486,7 @@ impl AudioMixGraph {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AudioParameterTarget {
     Global,
@@ -466,6 +516,11 @@ pub enum AudioOrchestrationCommand {
         object_id: AudioObjectId,
         request: AudioPlayInstanceRequest,
     },
+    PlayStream {
+        instance_id: AudioInstanceId,
+        object_id: AudioObjectId,
+        request: AudioPlayStreamInstanceRequest,
+    },
     StopInstance {
         instance_id: AudioInstanceId,
     },
@@ -491,6 +546,42 @@ pub enum AudioOrchestrationCommand {
     DeactivateSnapshot {
         snapshot: String,
         transition_seconds: Option<f32>,
+    },
+    ConfigureTransport {
+        config: AudioTransportConfig,
+    },
+    ScheduleTransport {
+        action_id: AudioTransportActionId,
+        when: AudioTransportSchedulePoint,
+        action: AudioTransportAction,
+    },
+    CancelTransportAction {
+        action_id: AudioTransportActionId,
+    },
+    InstallMusicGraph {
+        graph: InteractiveMusicGraph,
+    },
+    CreateMusicSession {
+        session_id: AudioMusicSessionId,
+        graph: String,
+        object_id: AudioObjectId,
+    },
+    DestroyMusicSession {
+        session_id: AudioMusicSessionId,
+    },
+    RequestMusicState {
+        session_id: AudioMusicSessionId,
+        state: String,
+    },
+    SetMusicScalar {
+        session_id: AudioMusicSessionId,
+        name: String,
+        value: f32,
+    },
+    SetMusicSwitch {
+        session_id: AudioMusicSessionId,
+        name: String,
+        value: String,
     },
 }
 

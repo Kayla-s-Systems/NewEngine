@@ -28,7 +28,7 @@ impl CameraRuntimeService {
         config: CameraRuntimeServiceConfig,
         wheel_y: f32,
     ) -> bool {
-        let Some((min_distance, max_distance)) = gameplay_zoom_limits(config.runner) else {
+        let Some((min_distance, max_distance)) = gameplay_zoom_limits(config) else {
             return false;
         };
         let steps = normalized_gameplay_zoom_steps(wheel_y);
@@ -45,7 +45,7 @@ impl CameraRuntimeService {
             min_distance,
             max_distance,
             max_distance.min(4.0),
-            (-steps * 0.16).exp(),
+            (-steps * config.zoom_wheel_exponent_per_step).exp(),
         );
         true
     }
@@ -65,7 +65,7 @@ impl CameraRuntimeService {
         {
             return false;
         }
-        let Some((min_distance, max_distance)) = gameplay_zoom_limits(config.runner) else {
+        let Some((min_distance, max_distance)) = gameplay_zoom_limits(config) else {
             return false;
         };
         let Some(controller) = world.get_mut::<FollowTargetCameraController>(camera) else {
@@ -77,8 +77,8 @@ impl CameraRuntimeService {
             controller,
             min_distance,
             max_distance,
-            GameplayThirdPersonOrbitRunner::default().orbit_offset.z,
-            (drag_dy_px.clamp(-240.0, 240.0) * 0.008).exp(),
+            config.third_person_orbit_offset_ls.z,
+            (drag_dy_px.clamp(-240.0, 240.0) * config.orbit_drag_zoom_exponent_per_pixel).exp(),
         );
         true
     }

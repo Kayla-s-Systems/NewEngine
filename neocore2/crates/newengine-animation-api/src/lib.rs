@@ -98,6 +98,90 @@ impl Extend<AnimationTimelineEventV1> for AnimationTimelineEventQueueV1 {
     }
 }
 
+/// High-level semantic event published by gameplay/runtime systems and consumed by animation
+/// presentation providers. Unlike `AnimationIntentDtoV1`, this contract never names a clip,
+/// graph or backend state. Project data maps `event` to an authored animation capability.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum AnimationSemanticEventKind {
+    /// Retained channel state. A late animation subscriber receives the latest value for the
+    /// `(entity, channel)` key instead of reconstructing gameplay state by reading components.
+    #[default]
+    State,
+    /// Non-retained one-shot occurrence such as attack/fire/land/turn-step.
+    Pulse,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AnimationSemanticEventV1 {
+    pub entity: EntityHandle,
+    /// Stable project-facing semantic channel, e.g. `character.locomotion`.
+    pub channel: String,
+    /// Stable semantic event id, e.g. `character.locomotion.walk`.
+    pub event: String,
+    #[serde(default)]
+    pub kind: AnimationSemanticEventKind,
+    /// Monotonic bus-assigned sequence. Producers leave this at zero; the runtime bus assigns it.
+    #[serde(default)]
+    pub sequence: u64,
+    #[serde(default)]
+    pub parameters: serde_json::Value,
+}
+
+impl AnimationSemanticEventV1 {
+    pub fn state(
+        entity: EntityHandle,
+        channel: impl Into<String>,
+        event: impl Into<String>,
+        parameters: serde_json::Value,
+    ) -> Self {
+        Self {
+            entity,
+            channel: channel.into(),
+            event: event.into(),
+            kind: AnimationSemanticEventKind::State,
+            sequence: 0,
+            parameters,
+        }
+    }
+
+    pub fn pulse(
+        entity: EntityHandle,
+        channel: impl Into<String>,
+        event: impl Into<String>,
+        parameters: serde_json::Value,
+    ) -> Self {
+        Self {
+            entity,
+            channel: channel.into(),
+            event: event.into(),
+            kind: AnimationSemanticEventKind::Pulse,
+            sequence: 0,
+            parameters,
+        }
+    }
+
+    pub fn validate(&self) -> Result<(), String> {
+        for (label, value) in [("channel", self.channel.trim()), ("event", self.event.trim())] {
+            if value.is_empty() || value.len() > 256 {
+                return Err(format!("animation semantic {label} must contain 1..=256 bytes"));
+            }
+            if value.chars().any(char::is_control) {
+                return Err(format!("animation semantic {label} contains control characters: '{value}'"));
+            }
+        }
+        let payload_bytes = serde_json::to_vec(&self.parameters)
+            .map_err(|error| format!("serialize animation semantic event payload: {error}"))?;
+        if payload_bytes.len() > 64 * 1024 {
+            return Err(format!(
+                "animation semantic event '{}' payload exceeds 65536 bytes: {}",
+                self.event,
+                payload_bytes.len()
+            ));
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub enum AnimationIntentKind {
     #[default]
@@ -237,4 +321,23 @@ mod tests {
         );
         assert!(queue.events.is_empty());
     }
+
+    #[test]
+    fn semantic_event_rejects_empty_identity() {
+        let event = AnimationSemanticEventV1::state(
+            EntityHandle::new(7),
+            "character.locomotion",
+            "character.locomotion.walk",
+            serde_json::json!({"normalized_speed": 0.7}),
+        );
+        event.validate().unwrap();
+        let invalid = AnimationSemanticEventV1::pulse(
+            EntityHandle::new(7),
+            "",
+            "character.attack",
+            serde_json::Value::Null,
+        );
+        assert!(invalid.validate().is_err());
+    }
+
 }

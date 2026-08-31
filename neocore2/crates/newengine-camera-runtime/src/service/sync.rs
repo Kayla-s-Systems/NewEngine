@@ -29,6 +29,7 @@ fn constrain_first_person_camera_position(
     player: EntityId,
     eye_center: Vec3,
     desired_camera_position: Vec3,
+    spring_arm: CameraSpringArmConfig,
     collision_world: Option<&CameraSpringArmCollisionWorld>,
 ) -> Vec3 {
     let desired_offset_ws = desired_camera_position - eye_center;
@@ -44,12 +45,7 @@ fn constrain_first_person_camera_position(
         eye_center,
         Quat::IDENTITY,
         desired_offset_ws,
-        CameraSpringArmConfig {
-            enabled: true,
-            probe_radius: 0.055,
-            collision_padding: 0.012,
-            min_distance: 0.0,
-        },
+        spring_arm,
         collision_world,
     );
     let constrained = eye_center + constrained_offset_ws;
@@ -305,6 +301,12 @@ impl CameraRuntimeService {
                     player,
                     eye_center,
                     desired_camera_position,
+                    CameraSpringArmConfig {
+                        enabled: config.first_person_collision_enabled,
+                        probe_radius: config.first_person_collision_probe_radius,
+                        collision_padding: config.first_person_collision_padding,
+                        min_distance: 0.0,
+                    },
                     collision_world,
                 )
             };
@@ -437,7 +439,12 @@ impl CameraRuntimeService {
                     focus_position,
                     target_rotation,
                     desired_arm_ls,
-                    CameraSpringArmConfig::default(),
+                    CameraSpringArmConfig {
+                        enabled: config.third_person_collision_enabled,
+                        probe_radius: config.third_person_collision_probe_radius,
+                        collision_padding: config.third_person_collision_padding,
+                        min_distance: config.third_person_collision_min_distance,
+                    },
                     collision_world,
                 )
             };
@@ -532,8 +539,18 @@ mod first_person_position_tests {
         });
         let eye = Vec3::ZERO;
         let desired = Vec3::new(0.0, 0.0, -0.30);
-        let constrained =
-            constrain_first_person_camera_position(player, eye, desired, Some(&collision));
+        let constrained = constrain_first_person_camera_position(
+            player,
+            eye,
+            desired,
+            CameraSpringArmConfig {
+                enabled: true,
+                probe_radius: 0.055,
+                collision_padding: 0.012,
+                min_distance: 0.0,
+            },
+            Some(&collision),
+        );
         assert!(
             constrained.z > desired.z,
             "camera must retract before the wall"
@@ -553,8 +570,18 @@ mod first_person_position_tests {
         });
         let eye = Vec3::ZERO;
         let desired = Vec3::new(0.0, 0.0, -0.10);
-        let constrained =
-            constrain_first_person_camera_position(player, eye, desired, Some(&collision));
+        let constrained = constrain_first_person_camera_position(
+            player,
+            eye,
+            desired,
+            CameraSpringArmConfig {
+                enabled: true,
+                probe_radius: 0.055,
+                collision_padding: 0.012,
+                min_distance: 0.0,
+            },
+            Some(&collision),
+        );
         assert!((constrained - desired).length() <= 1.0e-6);
     }
 

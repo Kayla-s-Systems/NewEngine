@@ -313,6 +313,8 @@ fn set_pose_joint_global_rotation(
 #[derive(Clone, Copy, Debug)]
 struct WeaponIkSolveResult {
     error_m: f32,
+    right_error_m: f32,
+    left_error_m: f32,
     base_root: crate::weapon_grip::WeaponRootTransform,
 }
 
@@ -580,6 +582,12 @@ fn apply_equipped_weapon_support_ik(
         crate::weapon_grip::weapon_ready_right_palm_position(presentation, contract.root);
     let left_target =
         crate::weapon_grip::weapon_ready_left_palm_position(presentation, contract.root);
+    if solve_right_hand && !right_target.is_finite() {
+        return Err("weapon ReadyHold authored right-hand target is non-finite".to_owned());
+    }
+    if support_left_hand && !left_target.is_finite() {
+        return Err("weapon ReadyHold authored support-hand target is non-finite".to_owned());
+    }
 
     if solve_right_hand {
         solve_arm_to_palm_contact(
@@ -668,6 +676,8 @@ fn apply_equipped_weapon_support_ik(
     }
     Ok(Some(WeaponIkSolveResult {
         error_m: error,
+        right_error_m: right_error,
+        left_error_m: left_error,
         base_root,
     }))
 }

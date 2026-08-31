@@ -832,4 +832,30 @@ mod tests {
             "aim-blocked must visibly pivot the barrel"
         );
     }
+    #[test]
+    fn first_person_recoil_consumes_full_authored_weapon_kick_independent_of_camera_angle() {
+        let mut p = fixture();
+        p.fire_kick_pitch_radians = 5.0_f32.to_radians();
+        let eye = Vec3::new(0.0, 1.62, 0.0);
+        let view = Quat::IDENTITY;
+        let right = Mat4::from_translation(Vec3::new(-0.20, 1.46, 0.0));
+        let left = Mat4::from_translation(Vec3::new(0.20, 1.46, 0.0));
+        let clear =
+            weapon_first_person_solve_contract_presented(&p, eye, view, right, left, 0.0, 0.0, 0.0)
+                .expect("clear FPP contract");
+        let kicked =
+            weapon_first_person_solve_contract_presented(&p, eye, view, right, left, 0.0, 1.0, 0.0)
+                .expect("recoil FPP contract");
+        let dot = clear
+            .root
+            .rotation
+            .dot(kicked.root.rotation)
+            .abs()
+            .clamp(0.0, 1.0);
+        let delta_degrees = (2.0 * dot.acos()).to_degrees();
+        assert!(
+            (delta_degrees - 5.0).abs() < 0.05,
+            "weapon-space recoil must consume the full authored 5 degree kick, got {delta_degrees}"
+        );
+    }
 }

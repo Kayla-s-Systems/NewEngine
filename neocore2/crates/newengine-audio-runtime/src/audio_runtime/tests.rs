@@ -1246,4 +1246,74 @@ mod tests {
         assert!(delta < Duration::from_millis(20), "actual={actual:?} expected={expected:?}");
     }
 
+    fn test_pcm_wav_bytes(sample_rate: u32, frames: u32) -> Vec<u8> {
+        let channels = 1u16;
+        let bits_per_sample = 16u16;
+        let block_align = channels * (bits_per_sample / 8);
+        let byte_rate = sample_rate * u32::from(block_align);
+        let data_len = frames * u32::from(block_align);
+        let riff_len = 36u32 + data_len;
+        let mut bytes = Vec::with_capacity((44 + data_len) as usize);
+        bytes.extend_from_slice(b"RIFF");
+        bytes.extend_from_slice(&riff_len.to_le_bytes());
+        bytes.extend_from_slice(b"WAVEfmt ");
+        bytes.extend_from_slice(&16u32.to_le_bytes());
+        bytes.extend_from_slice(&1u16.to_le_bytes());
+        bytes.extend_from_slice(&channels.to_le_bytes());
+        bytes.extend_from_slice(&sample_rate.to_le_bytes());
+        bytes.extend_from_slice(&byte_rate.to_le_bytes());
+        bytes.extend_from_slice(&block_align.to_le_bytes());
+        bytes.extend_from_slice(&bits_per_sample.to_le_bytes());
+        bytes.extend_from_slice(b"data");
+        bytes.extend_from_slice(&data_len.to_le_bytes());
+        bytes.resize(44 + data_len as usize, 0);
+        bytes
+    }
+
+    #[test]
+    fn transport_late_dispatch_starts_logical_clip_at_source_offset() {
+        let mut state = voice_policy_test_state();
+        state.max_physical_voices = 0;
+        let uri = "shared/audio/test/transport_offset.wav";
+        state
+            .cache_clip_bytes(uri.to_owned(), test_pcm_wav_bytes(48_000, 48_000))
+            .expect("cache wav");
+        let ack = state
+            .play_clip_with_policy(
+                AudioPlayRequest::new(uri),
+                AudioVoicePolicy::default(),
+                None,
+                77,
+                Duration::from_millis(250),
+            )
+            .expect("transport-offset play");
+        assert!(ack.accepted);
+        let voice_id = ack.voice_id.expect("voice id");
+        let voice = state.voices.get(&voice_id).expect("logical voice");
+        assert!(voice.is_virtual());
+        assert!((voice.virtual_source_position.as_secs_f64() - 0.25).abs() < 0.002);
+    }
+
+    #[test]
+    fn transport_offset_past_non_looping_eof_is_rejected() {
+        let mut state = voice_policy_test_state();
+        state.max_physical_voices = 0;
+        let uri = "shared/audio/test/transport_eof.wav";
+        state
+            .cache_clip_bytes(uri.to_owned(), test_pcm_wav_bytes(48_000, 24_000))
+            .expect("cache wav");
+        let ack = state
+            .play_clip_with_policy(
+                AudioPlayRequest::new(uri),
+                AudioVoicePolicy::default(),
+                None,
+                88,
+                Duration::from_secs(1),
+            )
+            .expect("transport-offset reject");
+        assert!(!ack.accepted);
+        assert!(ack.message.contains("at or beyond source duration"));
+        assert!(state.voices.is_empty());
+    }
+
 }

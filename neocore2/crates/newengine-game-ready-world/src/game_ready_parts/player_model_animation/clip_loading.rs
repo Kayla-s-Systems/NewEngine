@@ -156,7 +156,7 @@ pub(super) fn prepare_player_animation_binding(
     let animation_runtime = AnimationSkeletonRuntime::compile(skeleton, source_to_model)
         .map_err(|error| format!("player animation skeleton compile failed: {error}"))?;
 
-    let Some(idle_ref) = assignment.idle_animation.as_deref() else {
+    let Some(idle_ref) = assignment.animation_for_slot("locomotion.idle") else {
         return Ok(None);
     };
     let mut clips: [Option<PlayerAnimationRuntimeClip>; 8] =
@@ -169,13 +169,13 @@ pub(super) fn prepare_player_animation_binding(
     )?);
 
     for (state, reference) in [
-        (L::Walk, assignment.walk_animation.as_deref()),
-        (L::Run, assignment.run_animation.as_deref()),
-        (L::Sprint, assignment.sprint_animation.as_deref()),
-        (L::CrouchIdle, assignment.crouch_idle_animation.as_deref()),
-        (L::CrouchWalk, assignment.crouch_walk_animation.as_deref()),
-        (L::Jump, assignment.jump_animation.as_deref()),
-        (L::Fall, assignment.fall_animation.as_deref()),
+        (L::Walk, assignment.animation_for_slot("locomotion.walk")),
+        (L::Run, assignment.animation_for_slot("locomotion.run")),
+        (L::Sprint, assignment.animation_for_slot("locomotion.sprint")),
+        (L::CrouchIdle, assignment.animation_for_slot("locomotion.crouch_idle")),
+        (L::CrouchWalk, assignment.animation_for_slot("locomotion.crouch_walk")),
+        (L::Jump, assignment.animation_for_slot("locomotion.jump")),
+        (L::Fall, assignment.animation_for_slot("locomotion.fall")),
     ] {
         if let Some(reference) = reference {
             clips[locomotion_slot(state)] = Some(load_runtime_animation_clip(
@@ -291,94 +291,91 @@ pub(super) fn prepare_player_animation_binding(
     // Silent locomotion/bind substitution would create an animation gap and visible reset.
     let equipment_ready_pose = load_authored_presentation_clip(
         "equipment_ready",
-        assignment.presentation.equipment_ready_animation.as_deref(),
+        assignment.animation_for_slot("equipment.ready"),
         assignment,
         skeleton,
         &animation_runtime,
     )?;
     let equipment_aim_pose = load_authored_presentation_clip(
         "equipment_aim",
-        assignment.presentation.equipment_aim_animation.as_deref(),
+        assignment.animation_for_slot("equipment.aim"),
         assignment,
         skeleton,
         &animation_runtime,
     )?;
     let equipment_reload_pose = load_authored_presentation_clip(
         "equipment_reload",
-        assignment
-            .presentation
-            .equipment_reload_animation
-            .as_deref(),
+        assignment.animation_for_slot("equipment.reload"),
         assignment,
         skeleton,
         &animation_runtime,
     )?;
     let unarmed_ready_pose = load_authored_presentation_clip(
         "unarmed_ready",
-        assignment.presentation.unarmed_ready_animation.as_deref(),
+        assignment.animation_for_slot("unarmed.ready"),
         assignment,
         skeleton,
         &animation_runtime,
     )?;
     let unarmed_attack_pose = load_authored_presentation_clip(
         "unarmed_attack",
-        assignment.presentation.unarmed_attack_animation.as_deref(),
+        assignment.animation_for_slot("unarmed.attack"),
         assignment,
         skeleton,
         &animation_runtime,
     )?;
     let turn_45_left_pose = load_authored_presentation_clip(
         "turn_45_left",
-        assignment.presentation.turn_45_left_animation.as_deref(),
+        assignment.animation_for_slot("turn.left.45"),
         assignment,
         skeleton,
         &animation_runtime,
     )?;
     let turn_45_right_pose = load_authored_presentation_clip(
         "turn_45_right",
-        assignment.presentation.turn_45_right_animation.as_deref(),
+        assignment.animation_for_slot("turn.right.45"),
         assignment,
         skeleton,
         &animation_runtime,
     )?;
     let turn_90_left_pose = load_authored_presentation_clip(
         "turn_90_left",
-        assignment.presentation.turn_90_left_animation.as_deref(),
+        assignment.animation_for_slot("turn.left.90"),
         assignment,
         skeleton,
         &animation_runtime,
     )?;
     let turn_90_right_pose = load_authored_presentation_clip(
         "turn_90_right",
-        assignment.presentation.turn_90_right_animation.as_deref(),
+        assignment.animation_for_slot("turn.right.90"),
         assignment,
         skeleton,
         &animation_runtime,
     )?;
     let turn_135_left_pose = load_authored_presentation_clip(
         "turn_135_left",
-        assignment.presentation.turn_135_left_animation.as_deref(),
+        assignment.animation_for_slot("turn.left.135"),
         assignment,
         skeleton,
         &animation_runtime,
     )?;
     let turn_135_right_pose = load_authored_presentation_clip(
         "turn_135_right",
-        assignment.presentation.turn_135_right_animation.as_deref(),
+        assignment.animation_for_slot("turn.right.135"),
         assignment,
         skeleton,
         &animation_runtime,
     )?;
     let turn_180_left_pose = load_authored_presentation_clip(
         "turn_180_left",
-        assignment.presentation.turn_180_left_animation.as_deref(),
+        assignment.animation_for_slot("turn.left.180"),
         assignment,
         skeleton,
         &animation_runtime,
     )?;
     let turn_180_right_pose = load_authored_presentation_clip(
         "turn_180_right",
-        assignment.presentation.turn_180_right_animation.as_deref(),
+        assignment.animation_for_slot("turn.right.180"),
         assignment,
         skeleton,
         &animation_runtime,
@@ -388,7 +385,7 @@ pub(super) fn prepare_player_animation_binding(
     // back to locomotion would make the character visibly walk/run while collisionless. Treat the
     // authored clip as required so the character either binds the intended seated pose or reports
     // an explicit model-binding error instead of silently presenting the wrong state.
-    let noclip_pose = match assignment.presentation.noclip_animation.as_deref() {
+    let noclip_pose = match assignment.animation_for_slot("traversal.noclip") {
         Some(reference) => Some(
             load_runtime_animation_clip(reference, assignment, skeleton, &animation_runtime)
                 .map_err(|error| {
@@ -401,52 +398,49 @@ pub(super) fn prepare_player_animation_binding(
     };
     let fall_low_pose = load_authored_presentation_clip(
         "fall_low",
-        assignment.presentation.fall_low_animation.as_deref(),
+        assignment.animation_for_slot("fall.low"),
         assignment,
         skeleton,
         &animation_runtime,
     )?;
     let fall_medium_pose = load_authored_presentation_clip(
         "fall_medium",
-        assignment.presentation.fall_medium_animation.as_deref(),
+        assignment.animation_for_slot("fall.medium"),
         assignment,
         skeleton,
         &animation_runtime,
     )?;
     let fall_high_pose = load_authored_presentation_clip(
         "fall_high",
-        assignment.presentation.fall_high_animation.as_deref(),
+        assignment.animation_for_slot("fall.high"),
         assignment,
         skeleton,
         &animation_runtime,
     )?;
     let landing_soft_pose = load_authored_presentation_clip(
         "landing_soft",
-        assignment.presentation.landing_soft_animation.as_deref(),
+        assignment.animation_for_slot("landing.soft"),
         assignment,
         skeleton,
         &animation_runtime,
     )?;
     let landing_medium_pose = load_authored_presentation_clip(
         "landing_medium",
-        assignment.presentation.landing_medium_animation.as_deref(),
+        assignment.animation_for_slot("landing.medium"),
         assignment,
         skeleton,
         &animation_runtime,
     )?;
     let landing_hard_pose = load_authored_presentation_clip(
         "landing_hard",
-        assignment.presentation.landing_hard_animation.as_deref(),
+        assignment.animation_for_slot("landing.hard"),
         assignment,
         skeleton,
         &animation_runtime,
     )?;
     let landing_hard_run_pose = load_authored_presentation_clip(
         "landing_hard_run",
-        assignment
-            .presentation
-            .landing_hard_run_animation
-            .as_deref(),
+        assignment.animation_for_slot("landing.hard_run"),
         assignment,
         skeleton,
         &animation_runtime,
@@ -705,6 +699,9 @@ pub(super) fn prepare_player_animation_binding(
 
     Ok(Some(PlayerAnimationRuntimeBinding {
         clips,
+        animation_event_bindings: assignment.presentation.animation_event_bindings.clone(),
+        semantic_input: PlayerAnimationSemanticInput::default(),
+        consumed_pulse_sequence: 0,
         active_state: L::Idle,
         active_slot: locomotion_slot(L::Idle),
         locomotion_graph,
@@ -748,6 +745,9 @@ pub(super) fn prepare_player_animation_binding(
         landing_active_band: None,
         landing_active_run: false,
         landing_time_seconds: 0.0,
+        landing_active_distance: 0.0,
+        landing_active_downward_speed: 0.0,
+        landing_active_horizontal_speed: 0.0,
         landing_last_revision: 0,
         fall_medium_min_distance,
         fall_high_min_distance,
@@ -768,6 +768,7 @@ pub(super) fn prepare_player_animation_binding(
         equipment_reload_rotation_weights,
         equipment_overlay_locals: bind_locals,
         equipment_ik,
+        equipment_ik_residual_diag_cooldown: 0.0,
         equipment_resolved_weapon_root: None,
     }))
 }

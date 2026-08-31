@@ -2,7 +2,8 @@ use std::collections::BTreeMap;
 
 use newengine_ecs::{EntityId, World};
 use newengine_engine_runtime::gameplay::{
-    emit_gameplay_event, emit_player_event, player_fall_is_confirmed, PhysicsSurface,
+    emit_animation_pulse, emit_animation_state, emit_gameplay_event, emit_player_event,
+    player_fall_is_confirmed, PhysicsSurface,
     PlayerController, PlayerEventKind, PlayerFallState, PlayerGroundState, PlayerLandingState,
     PlayerLocomotionState, PlayerMovementSpeeds, StaticMeshCollider,
 };
@@ -132,6 +133,7 @@ fn update_player_locomotion(world: &mut World, key_to_entity: &BTreeMap<u64, Ent
             .get::<PlayerLandingState>(player)
             .copied()
             .unwrap_or_default();
+        let landing_revision_before = landing.revision;
         let mut footsteps = world
             .get::<FootstepRuntimeState>(player)
             .cloned()
@@ -517,6 +519,54 @@ fn update_player_locomotion(world: &mut World, key_to_entity: &BTreeMap<u64, Ent
         let _ = world.insert(player, landing);
         let _ = world.insert(player, footsteps);
 
+        let fall_event = if ground.grounded {
+            "character.fall.inactive"
+        } else if fall.falling {
+            "character.fall.active"
+        } else {
+            "character.fall.pending"
+        };
+        if let Err(error) = emit_animation_state(
+            world,
+            player,
+            "character.fall",
+            fall_event,
+            serde_json::json!({
+                "airborne": fall.airborne,
+                "falling": fall.falling,
+                "distance": fall.distance,
+                "max_distance": fall.max_distance,
+                "downward_speed": fall.downward_speed,
+                "revision": fall.revision,
+            }),
+        ) {
+            newengine_ulog_api::ulog::warn!(
+                "locomotion animation fall-state publish failed player={} err='{}'",
+                player.stable_u64(),
+                error
+            );
+        }
+        if landing.revision > landing_revision_before {
+            if let Err(error) = emit_animation_pulse(
+                world,
+                player,
+                "character.landing",
+                "character.landing.impact",
+                serde_json::json!({
+                    "distance": landing.distance,
+                    "downward_speed": landing.downward_speed,
+                    "horizontal_speed": landing.horizontal_speed,
+                    "revision": landing.revision,
+                }),
+            ) {
+                newengine_ulog_api::ulog::warn!(
+                    "locomotion animation landing publish failed player={} err='{}'",
+                    player.stable_u64(),
+                    error
+                );
+            }
+        }
+
         for (kind, message) in emitted {
             emit_player_event(world, player, kind, message);
         }
@@ -694,6 +744,10 @@ mod tests {
             }
             update_player_locomotion(&mut world, &BTreeMap::new(), 0.1);
         }
+        // The confirmation predicate observes airborne time accumulated by prior fixed steps.
+        // Hold the same measured height for one more tick so this test crosses 0.35 s without
+        // manufacturing extra fall distance.
+        update_player_locomotion(&mut world, &BTreeMap::new(), 0.1);
 
         let fall = world
             .get::<PlayerFallState>(player)

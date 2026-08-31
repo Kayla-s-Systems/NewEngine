@@ -29,7 +29,8 @@ fn assignment_from_spec(
         jump_animation: animation("jump", &spec.jump_animation),
         fall_animation: animation("fall", &spec.fall_animation),
         presentation: newengine_engine_runtime::gameplay::PlayerCharacterPresentation {
-            animation_slots: std::collections::BTreeMap::new(),
+            animation_slots: spec.animation_slots.clone(),
+            animation_event_bindings: spec.animation_event_bindings.clone(),
             detached_head_follow: spec.detached_head_follow,
             detached_head_follow_rule: spec.detached_head_follow_rule.clone(),
             eye_parent_follow: spec.eye_parent_follow,
@@ -572,6 +573,11 @@ fn bind_player_model_assignment(
     };
 
     if let Some(mut animation_binding) = animation_binding {
+        let retained_animation_states =
+            newengine_engine_runtime::gameplay::retained_animation_states(world, player);
+        animation_binding
+            .seed_semantic_state(&retained_animation_states)
+            .map_err(|error| format!("seed player animation semantic state: {error}"))?;
         // One-shot landing presentation begins from the current gameplay revision. A model
         // rebind/hot-reload must not replay a historical landing as if it happened this frame.
         animation_binding.consume_landing_revision_baseline(

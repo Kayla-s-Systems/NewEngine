@@ -25,6 +25,8 @@ pub struct PhysicsBodyRuntimeFlags {
     pub is_trigger: bool,
     pub participates_in_queries: bool,
     pub casts_contacts: bool,
+    /// Request continuous collision detection for small/fast dynamic bodies when supported.
+    pub continuous_collision: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -45,6 +47,7 @@ impl Default for PhysicsBodyDesc {
                 is_trigger: false,
                 participates_in_queries: true,
                 casts_contacts: true,
+                continuous_collision: false,
             },
             material: PhysicsMaterialDesc::default(),
         }
@@ -61,6 +64,7 @@ impl PhysicsBodyDesc {
                 is_trigger: false,
                 participates_in_queries: true,
                 casts_contacts: true,
+                continuous_collision: false,
             },
             material: PhysicsMaterialDesc {
                 friction: 0.75,
@@ -79,6 +83,7 @@ impl PhysicsBodyDesc {
                 is_trigger: false,
                 participates_in_queries: true,
                 casts_contacts: true,
+                continuous_collision: false,
             },
             material: PhysicsMaterialDesc {
                 friction: 0.75,
@@ -97,6 +102,7 @@ impl PhysicsBodyDesc {
                 is_trigger: true,
                 participates_in_queries: true,
                 casts_contacts: false,
+                continuous_collision: false,
             },
             material: PhysicsMaterialDesc {
                 friction: 0.75,

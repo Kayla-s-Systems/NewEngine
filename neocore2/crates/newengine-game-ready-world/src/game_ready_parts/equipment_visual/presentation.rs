@@ -65,9 +65,8 @@ fn step_long_gun_secondary_dynamics(
     let recoil_alpha = recoil_alpha.clamp(0.0, 1.0);
     let obstruction_alpha = obstruction_alpha.clamp(0.0, 1.0);
     let constraint_scale = (1.0 - obstruction_alpha * 0.95) * (1.0 - recoil_alpha * 0.70);
-    let angular_inertia_gain = presentation.secondary_angular_inertia_gain
-        * (1.0 - aim_alpha * 0.48)
-        * constraint_scale;
+    let angular_inertia_gain =
+        presentation.secondary_angular_inertia_gain * (1.0 - aim_alpha * 0.48) * constraint_scale;
 
     let target_delta_local =
         shortest_rotation_vector(state.previous_target_rotation.inverse() * target_rotation);
@@ -78,9 +77,8 @@ fn step_long_gun_secondary_dynamics(
         (owner_velocity_world - state.previous_owner_velocity_world) / dt;
     owner_acceleration_world = clamp_vec3_length(owner_acceleration_world, 35.0);
     let owner_acceleration_local = owner_rotation_world.inverse() * owner_acceleration_world;
-    let movement_gain = presentation.secondary_movement_inertia_gain
-        * (1.0 - aim_alpha * 0.55)
-        * constraint_scale;
+    let movement_gain =
+        presentation.secondary_movement_inertia_gain * (1.0 - aim_alpha * 0.55) * constraint_scale;
     let movement_impulse = Vec3::new(
         owner_acceleration_local.z * -0.00125 + owner_acceleration_local.y * 0.00045,
         owner_acceleration_local.x * -0.00095,
@@ -90,7 +88,8 @@ fn step_long_gun_secondary_dynamics(
 
     // Exact critical-damping solution for a constant zero target over this frame.
     let natural_hz = presentation.secondary_natural_hz_hip
-        + (presentation.secondary_natural_hz_ads - presentation.secondary_natural_hz_hip) * aim_alpha
+        + (presentation.secondary_natural_hz_ads - presentation.secondary_natural_hz_hip)
+            * aim_alpha
         + obstruction_alpha * presentation.secondary_obstruction_hz_boost;
     let omega = 2.0 * core::f32::consts::PI * natural_hz;
     let exp = (-omega * dt).exp();
@@ -184,7 +183,11 @@ fn smooth_first_person_aim_alpha(current: f32, target: f32, dt: f32, response_hz
     if dt <= 0.0 {
         return target;
     }
-    let response_hz = if response_hz.is_finite() { response_hz.max(0.1) } else { 18.0 };
+    let response_hz = if response_hz.is_finite() {
+        response_hz.max(0.1)
+    } else {
+        18.0
+    };
     let alpha = 1.0 - (-response_hz * dt).exp();
     (current + (target - current) * alpha).clamp(0.0, 1.0)
 }
@@ -300,30 +303,38 @@ pub(crate) fn tick_equipped_weapon_presentation_input(world: &mut newengine_ecs:
             .unwrap_or_default()
             .sanitized();
         let recoil_recovery_hz = tuning.recoil_recovery_hz;
+        // TLOU2-style recoil is layered: gameplay/camera recoil and weapon/arms presentation are
+        // independent. The previous ratio `camera_kick / authored_visual_kick` collapsed the
+        // authored weapon kick back to the tiny camera angle, making the rifle look almost static.
+        let visual_recoil_recovery_hz = presentation
+            .as_ref()
+            .map(|presentation| 2.6 / presentation.fire_kick_duration_seconds.max(0.001))
+            .unwrap_or(recoil_recovery_hz)
+            .clamp(0.1, 120.0);
         let recoil_scale = 1.0 + (tuning.ads_recoil_multiplier - 1.0) * aim_alpha;
         let signed_noise = |salt: u64| {
-            let bits = (newengine_math::avalanche_u64(shot_sequence ^ salt) >> 40) as u32
-                & 0x00ff_ffff;
+            let bits =
+                (newengine_math::avalanche_u64(shot_sequence ^ salt) >> 40) as u32 & 0x00ff_ffff;
             (bits as f32 / 0x00ff_ffffu32 as f32) * 2.0 - 1.0
         };
         let recoil_alpha = if new_shot {
-            let pitch_kick = (tuning.recoil_pitch_radians
-                + signed_noise(0x243f_6a88_85a3_08d3) * tuning.recoil_pitch_random_radians)
-                .max(0.0)
-                * recoil_scale;
             presentation
                 .as_ref()
-                .map(|presentation| {
-                    let authored_visual_kick = presentation.fire_kick_pitch_radians.abs();
-                    if authored_visual_kick > 1.0e-6 {
-                        (pitch_kick / authored_visual_kick).clamp(0.0, 4.0)
-                    } else {
-                        0.0
-                    }
+                .filter(|presentation| presentation.fire_kick_pitch_radians.abs() > 1.0e-6)
+                .map(|_| {
+                    // Keep small deterministic shot-to-shot variation, but never derive the
+                    // weapon-space amplitude from the camera-space kick. The authored visual kick
+                    // owns the rifle/arms layer exactly as TLOU2's fire-start/fire-loop layers do.
+                    let variation = 1.0
+                        + signed_noise(0x243f_6a88_85a3_08d3)
+                            * (tuning.recoil_pitch_random_radians
+                                / tuning.recoil_pitch_radians.max(1.0e-4))
+                            .clamp(0.0, 0.22);
+                    (variation * recoil_scale).clamp(0.0, 2.0)
                 })
                 .unwrap_or(0.0)
         } else if dt > 0.0 {
-            (visual.recoil_alpha * (-recoil_recovery_hz * dt).exp()).clamp(0.0, 4.0)
+            (visual.recoil_alpha * (-visual_recoil_recovery_hz * dt).exp()).clamp(0.0, 4.0)
         } else {
             visual.recoil_alpha
         };
@@ -332,7 +343,7 @@ pub(crate) fn tick_equipped_weapon_presentation_input(world: &mut newengine_ecs:
                 + signed_noise(0x1319_8a2e_0370_7344) * tuning.recoil_yaw_radians)
                 * recoil_scale
         } else if dt > 0.0 {
-            visual.recoil_yaw_radians * (-recoil_recovery_hz * dt).exp()
+            visual.recoil_yaw_radians * (-visual_recoil_recovery_hz * dt).exp()
         } else {
             visual.recoil_yaw_radians
         };
@@ -341,6 +352,50 @@ pub(crate) fn tick_equipped_weapon_presentation_input(world: &mut newengine_ecs:
             state.last_shot_sequence = shot_sequence;
             state.recoil_alpha = recoil_alpha;
             state.recoil_yaw_radians = recoil_yaw_radians;
+        }
+        if active_visual {
+            let weapon_state = world
+                .get::<PlayerWeaponState>(visual.owner)
+                .copied()
+                .unwrap_or_default();
+            let reload_active = weapon_state.reload_remaining > 0.0;
+            let reload_duration = world
+                .get::<HitscanWeaponTuning>(visual.owner)
+                .map(|tuning| tuning.sanitized().reload_duration)
+                .filter(|duration| *duration > 1.0e-4)
+                .unwrap_or(2.0);
+            let reload_progress = if reload_active {
+                (1.0 - weapon_state.reload_remaining / reload_duration).clamp(0.0, 1.0)
+            } else {
+                0.0
+            };
+            let event = if reload_active {
+                "character.equipment.reload"
+            } else if aim_alpha > 0.001 {
+                "character.equipment.aim"
+            } else {
+                "character.equipment.ready"
+            };
+            if let Err(error) = newengine_engine_runtime::gameplay::emit_animation_state(
+                world,
+                visual.owner,
+                "character.equipment",
+                event,
+                serde_json::json!({
+                    "aim_alpha": aim_alpha,
+                    "reload_progress": reload_progress,
+                    "shot_sequence": shot_sequence,
+                    "recoil_alpha": recoil_alpha,
+                    "recoil_yaw_radians": recoil_yaw_radians,
+                    "obstruction_alpha": obstruction_alpha,
+                }),
+            ) {
+                newengine_ulog_api::ulog::warn!(
+                    "game-ready: equipment animation semantic publish failed player={} err='{}'",
+                    visual.owner.stable_u64(),
+                    error
+                );
+            }
         }
     }
 }
@@ -583,9 +638,14 @@ fn update_weapon_attachment(
             let previous = world
                 .get::<WeaponEntitySockets>(root)
                 .and_then(|sockets| sockets.muzzle);
-            if let Some(socket_pose) = WeaponSocketPose::stationary(muzzle.position, weapon_rotation) {
+            if let Some(socket_pose) =
+                WeaponSocketPose::stationary(muzzle.position, weapon_rotation)
+            {
                 let socket_pose = socket_pose.with_measured_motion(previous, dt);
-                let mut sockets = world.get::<WeaponEntitySockets>(root).copied().unwrap_or_default();
+                let mut sockets = world
+                    .get::<WeaponEntitySockets>(root)
+                    .copied()
+                    .unwrap_or_default();
                 sockets.muzzle = Some(socket_pose);
                 let _ = world.insert(root, sockets);
             }

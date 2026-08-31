@@ -108,6 +108,8 @@ pub struct PhysicsBodyFlagsDto {
     pub is_trigger: bool,
     pub participates_in_queries: bool,
     pub casts_contacts: bool,
+    #[serde(default)]
+    pub continuous_collision: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

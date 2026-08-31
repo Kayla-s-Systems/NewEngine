@@ -52,7 +52,7 @@ impl AudioStreamBufferConfig {
 
 /// Provider-neutral request for long-form audio. `stop_voice_json_v1` and
 /// `set_voice_json_v1` operate on the returned voice id exactly like clip voices.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AudioStreamPlayRequest {
     pub version: u32,

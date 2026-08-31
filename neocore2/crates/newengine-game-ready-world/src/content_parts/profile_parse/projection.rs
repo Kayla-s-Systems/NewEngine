@@ -72,6 +72,7 @@ impl RawGameReadyPayload {
                             (!slot.is_empty()).then_some((slot, reference))
                         })
                         .collect(),
+                    animation_event_bindings: std::collections::BTreeMap::new(),
                     idle_animation: sanitize_asset_path(self.player.model.idle_animation),
                     walk_animation: sanitize_asset_path(self.player.model.walk_animation),
                     run_animation: sanitize_asset_path(self.player.model.run_animation),
@@ -310,6 +311,7 @@ impl RawGameReadyPayload {
                         .gameplay
                         .camera
                         .hide_local_model_in_first_person,
+                    ..GameReadyCameraSpec::default()
                 },
                 physics: GameReadyPhysicsSpec {
                     gravity: self.gameplay.physics.gravity.clamp(0.0, 80.0),

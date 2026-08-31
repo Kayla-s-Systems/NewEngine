@@ -130,6 +130,25 @@ pub fn set_fps_noclip(world: &mut World, player: EntityId, enabled: bool) -> boo
             player.stable_u64()
         );
     }
+    let traversal_event = if enabled {
+        "character.traversal.noclip.enabled"
+    } else {
+        "character.traversal.noclip.disabled"
+    };
+    if let Err(error) = newengine_engine_runtime::gameplay::emit_animation_state(
+        world,
+        player,
+        "character.traversal",
+        traversal_event,
+        serde_json::json!({"enabled": enabled}),
+    ) {
+        newengine_ulog_api::ulog::warn!(
+            "fps traversal animation semantic publish failed player={} enabled={} err='{}'",
+            player.stable_u64(),
+            enabled,
+            error
+        );
+    }
     true
 }
 

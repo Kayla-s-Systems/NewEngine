@@ -130,8 +130,12 @@ fn xml_ytyp_preserves_character_turn_in_place_attributes_in_game_ready_metadata(
     </YtypProperties>"#;
     let (entries, warnings) =
         parse_ytyp_xml_document("definitions/fps/player_test.ytyp", body).unwrap();
-    let entry =
-        build_entry("definitions/fps/player_test.ytyp", entries[0].clone(), &warnings).unwrap();
+    let entry = build_entry(
+        "definitions/fps/player_test.ytyp",
+        entries[0].clone(),
+        &warnings,
+    )
+    .unwrap();
     let player = entry
         .arbitrary_metadata
         .get("metadata")
@@ -156,6 +160,61 @@ fn xml_ytyp_preserves_character_turn_in_place_attributes_in_game_ready_metadata(
             .and_then(|value| value.as_str()),
         Some("animations/characters/test/mm.ycd@turn180l")
     );
+}
+
+#[test]
+fn xml_ytyp_preserves_project_camera_definition_namespace() {
+    let body = br#"<YtypProperties schema="newengine.ytyp.properties.v1" name="player_camera" kind="camera_definition">
+        <Metadata>
+            <Namespace name="newengine.camera">
+                <camera schema="newengine.camera.definition.v1">
+                    <first_person fov_y_degrees="71" hide_local_model="true" collision_probe_radius="0.061" />
+                    <third_person collision_enabled="true">
+                        <follow offset="0.4,1.7,5.2" zoom_min="1.5" zoom_max="11.0" />
+                    </third_person>
+                </camera>
+            </Namespace>
+        </Metadata>
+    </YtypProperties>"#;
+    let (entries, warnings) =
+        parse_ytyp_xml_document("definitions/camera/player_camera.ytyp", body).unwrap();
+    let entry = build_entry(
+        "definitions/camera/player_camera.ytyp",
+        entries[0].clone(),
+        &warnings,
+    )
+    .unwrap();
+    let camera = entry
+        .arbitrary_metadata
+        .get("metadata")
+        .and_then(|value| value.get("newengine.camera"))
+        .and_then(|value| value.get("camera"))
+        .expect("camera metadata");
+    assert_eq!(
+        camera.get("schema").and_then(|value| value.as_str()),
+        Some("newengine.camera.definition.v1")
+    );
+    let first_person = camera.get("first_person").expect("first_person");
+    assert_eq!(
+        first_person
+            .get("fov_y_degrees")
+            .and_then(|value| value.as_f64()),
+        Some(71.0)
+    );
+    assert_eq!(
+        first_person
+            .get("hide_local_model")
+            .and_then(|value| value.as_bool()),
+        Some(true)
+    );
+    let offset = camera
+        .get("third_person")
+        .and_then(|value| value.get("follow"))
+        .and_then(|value| value.get("offset"))
+        .and_then(|value| value.as_array())
+        .expect("follow offset");
+    assert_eq!(offset.len(), 3);
+    assert_eq!(offset[2].as_f64(), Some(5.2));
 }
 
 #[test]

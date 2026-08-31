@@ -1,5 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
+mod animation_events;
 mod capabilities;
 mod combat;
 mod components;
@@ -15,6 +16,10 @@ mod schedule;
 mod snapshot;
 mod ui;
 
+pub use animation_events::{
+    drain_animation_semantic_events, emit_animation_pulse, emit_animation_state,
+    publish_animation_semantic_event, retained_animation_states, AnimationSemanticEventBus,
+};
 pub use capabilities::{
     dispatch_gameplay_capabilities, drain_gameplay_capability_requests,
     ensure_builtin_gameplay_capabilities, request_gameplay_capability, GameplayCapabilityBus,

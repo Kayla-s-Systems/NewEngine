@@ -735,13 +735,25 @@ impl WeaponVfxDefinition {
 
     #[inline]
     pub fn impact_effect(&self, surface: Option<&str>) -> Option<&str> {
-        surface
-            .and_then(|surface| {
-                self.impact_by_surface
-                    .get(&surface.trim().to_ascii_lowercase())
-            })
-            .map(String::as_str)
-            .or(self.impact_default.as_deref())
+        let surface = surface.map(|value| value.trim().to_ascii_lowercase());
+        if let Some(surface) = surface.as_deref() {
+            if let Some(exact) = self.impact_by_surface.get(surface) {
+                return Some(exact.as_str());
+            }
+            // Physics surfaces are commonly hierarchical (`surface.metal.floor`,
+            // `environment.concrete.wall`, ...). Project-authored impact rules are semantic
+            // match tokens; prefer the longest matching token so a specific rule wins over a
+            // broad material family without requiring runtime hard-coding.
+            if let Some((_, effect)) = self
+                .impact_by_surface
+                .iter()
+                .filter(|(needle, _)| !needle.is_empty() && surface.contains(needle.as_str()))
+                .max_by_key(|(needle, _)| needle.len())
+            {
+                return Some(effect.as_str());
+            }
+        }
+        self.impact_default.as_deref()
     }
 
     pub fn effect_refs(&self) -> impl Iterator<Item = &str> {

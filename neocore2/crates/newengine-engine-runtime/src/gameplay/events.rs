@@ -108,9 +108,22 @@ impl GameplayEventBus {
 }
 
 pub fn publish_gameplay_event(world: &mut World, event: GameplayEvent) -> Result<(), String> {
+    event.validate()?;
+    let animation_mirror = event.source.map(|source| {
+        newengine_animation_api::AnimationSemanticEventV1::pulse(
+            newengine_entity_api::EntityHandle::new(source),
+            "gameplay",
+            event.id.clone(),
+            event.payload.clone(),
+        )
+    });
     world
         .resource_mut_or_insert_default::<GameplayEventBus>()
-        .publish(event)
+        .publish(event)?;
+    if let Some(animation_event) = animation_mirror {
+        super::publish_animation_semantic_event(world, animation_event).map(|_| ())?;
+    }
+    Ok(())
 }
 
 pub fn emit_gameplay_event(

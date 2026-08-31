@@ -399,10 +399,14 @@ fn present_project_browser_via_plugin(root: &Path) -> Result<ProjectBrowserResul
     let mut startup_document =
         newengine_core::StartupLoader::load_startup_document_preview(&startup_paths)
             .map_err(|error| format!("load Project Browser startup config document: {error}"))?;
-    let browser_document = prepare_project_browser_config_document(startup_document.clone())?;
+    // Project Browser edits the hydrated player-settings document, so that exact
+    // document must remain authoritative through patch application and persistence.
+    // Applying its patch to the pre-hydration raw JSON makes default-backed fields
+    // such as startup_settings.display.resolution appear in the UI but fail on save.
+    startup_document = prepare_project_browser_config_document(startup_document)?;
     let payload = serde_json::to_vec(&serde_json::json!({
         "root": root.to_string_lossy(),
-        "config_document": browser_document,
+        "config_document": startup_document.clone(),
     }))
     .map_err(|error| format!("encode project-browser request: {error}"))?;
     let response = call_service_v1(

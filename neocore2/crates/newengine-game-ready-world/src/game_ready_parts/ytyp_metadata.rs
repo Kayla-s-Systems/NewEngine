@@ -181,6 +181,40 @@ fn authored_joint_list(value: &serde_json::Value) -> Vec<String> {
         .unwrap_or_default()
 }
 
+fn animation_event_bindings(
+    value: &serde_json::Value,
+) -> Option<std::collections::BTreeMap<String, String>> {
+    let mut result = std::collections::BTreeMap::new();
+    if let Some(object) = value.as_object() {
+        for (event, target) in object {
+            let Some(target) = value_string(target) else {
+                continue;
+            };
+            let event = event.trim();
+            let target = target.trim();
+            if !event.is_empty() && !target.is_empty() {
+                result.insert(event.to_owned(), target.to_owned());
+            }
+        }
+    } else if let Some(raw) = value.as_str() {
+        for entry in raw
+            .split(';')
+            .map(str::trim)
+            .filter(|entry| !entry.is_empty())
+        {
+            let Some((event, target)) = entry.split_once('>') else {
+                continue;
+            };
+            let event = event.trim();
+            let target = target.trim();
+            if !event.is_empty() && !target.is_empty() {
+                result.insert(event.to_owned(), target.to_owned());
+            }
+        }
+    }
+    (!result.is_empty()).then_some(result)
+}
+
 fn player_joint_rotation_weights(
     value: &serde_json::Value,
 ) -> Option<Vec<newengine_engine_runtime::gameplay::PlayerJointRotationWeight>> {
@@ -557,6 +591,13 @@ pub(super) fn apply_player_model_from_ytyp(
         applied += 1;
     }
 
+    if let Some(bindings) =
+        value_path(model, &["animation_event_bindings"]).and_then(animation_event_bindings)
+    {
+        profile.player.model.animation_event_bindings = bindings;
+        applied += 1;
+    }
+
     if let Some(reference) = value_path(model, &["idle_animation"]).and_then(value_string) {
         profile.player.model.idle_animation = Some(reference);
         applied += 1;
@@ -845,6 +886,132 @@ pub(super) fn apply_player_model_from_ytyp(
         profile.player.model.turn_180_right_animation = Some(reference);
         applied += 1;
     }
+    // Normalize legacy per-animation attributes into the project-owned slot table. Runtime
+    // consumers resolve only these semantic slots; filenames/clip names never escape authoring.
+    for (slot, reference) in [
+        (
+            "locomotion.idle",
+            profile.player.model.idle_animation.clone(),
+        ),
+        (
+            "locomotion.walk",
+            profile.player.model.walk_animation.clone(),
+        ),
+        ("locomotion.run", profile.player.model.run_animation.clone()),
+        (
+            "locomotion.sprint",
+            profile.player.model.sprint_animation.clone(),
+        ),
+        (
+            "locomotion.crouch_idle",
+            profile.player.model.crouch_idle_animation.clone(),
+        ),
+        (
+            "locomotion.crouch_walk",
+            profile.player.model.crouch_walk_animation.clone(),
+        ),
+        (
+            "locomotion.jump",
+            profile.player.model.jump_animation.clone(),
+        ),
+        (
+            "locomotion.fall",
+            profile.player.model.fall_animation.clone(),
+        ),
+        ("fall.low", profile.player.model.fall_low_animation.clone()),
+        (
+            "fall.medium",
+            profile.player.model.fall_medium_animation.clone(),
+        ),
+        (
+            "fall.high",
+            profile.player.model.fall_high_animation.clone(),
+        ),
+        (
+            "landing.soft",
+            profile.player.model.landing_soft_animation.clone(),
+        ),
+        (
+            "landing.medium",
+            profile.player.model.landing_medium_animation.clone(),
+        ),
+        (
+            "landing.hard",
+            profile.player.model.landing_hard_animation.clone(),
+        ),
+        (
+            "landing.hard_run",
+            profile.player.model.landing_hard_run_animation.clone(),
+        ),
+        (
+            "equipment.ready",
+            profile.player.model.equipment_ready_animation.clone(),
+        ),
+        (
+            "equipment.aim",
+            profile.player.model.equipment_aim_animation.clone(),
+        ),
+        (
+            "equipment.reload",
+            profile.player.model.equipment_reload_animation.clone(),
+        ),
+        (
+            "unarmed.ready",
+            profile.player.model.unarmed_ready_animation.clone(),
+        ),
+        (
+            "unarmed.attack",
+            profile.player.model.unarmed_attack_animation.clone(),
+        ),
+        (
+            "turn.left.45",
+            profile.player.model.turn_45_left_animation.clone(),
+        ),
+        (
+            "turn.right.45",
+            profile.player.model.turn_45_right_animation.clone(),
+        ),
+        (
+            "turn.left.90",
+            profile.player.model.turn_90_left_animation.clone(),
+        ),
+        (
+            "turn.right.90",
+            profile.player.model.turn_90_right_animation.clone(),
+        ),
+        (
+            "turn.left.135",
+            profile.player.model.turn_135_left_animation.clone(),
+        ),
+        (
+            "turn.right.135",
+            profile.player.model.turn_135_right_animation.clone(),
+        ),
+        (
+            "turn.left.180",
+            profile.player.model.turn_180_left_animation.clone(),
+        ),
+        (
+            "turn.right.180",
+            profile.player.model.turn_180_right_animation.clone(),
+        ),
+    ] {
+        if let Some(reference) = reference {
+            profile
+                .player
+                .model
+                .animation_slots
+                .insert(slot.to_owned(), reference);
+        }
+    }
+    if let Some(reference) = value_path(model, &["noclip_animation"]).and_then(value_string) {
+        profile
+            .player
+            .model
+            .animation_slots
+            .insert("traversal.noclip".to_owned(), reference);
+    }
+
     let player_values = player_node.unwrap_or(model);
     if let Some(value) = value_path(player_values, &["walk_speed"]).and_then(value_f32) {
         profile.player.walk_speed = value.clamp(0.05, 50.0);
@@ -1311,6 +1478,365 @@ fn merge_acoustic_material_library(
     *target = target.clone().sanitized();
 }
 
+fn camera_definition_namespace(entry: &serde_json::Value) -> Option<&serde_json::Value> {
+    metadata_namespace(entry, "newengine.camera")
+}
+
+fn camera_required_value<'a>(
+    root: &'a serde_json::Value,
+    path: &[&str],
+    definition_ref: &str,
+) -> Result<&'a serde_json::Value, String> {
+    value_path(root, path).ok_or_else(|| {
+        format!(
+            "camera definition missing field ref={} path={}",
+            definition_ref,
+            path.join(".")
+        )
+    })
+}
+
+fn camera_required_f32(
+    root: &serde_json::Value,
+    path: &[&str],
+    definition_ref: &str,
+) -> Result<f32, String> {
+    let value = camera_required_value(root, path, definition_ref)?;
+    value_f32(value).ok_or_else(|| {
+        format!(
+            "camera definition field must be finite number ref={} path={} value={}",
+            definition_ref,
+            path.join("."),
+            value
+        )
+    })
+}
+
+fn camera_required_string(
+    root: &serde_json::Value,
+    path: &[&str],
+    definition_ref: &str,
+) -> Result<String, String> {
+    let value = camera_required_value(root, path, definition_ref)?;
+    value_string(value).ok_or_else(|| {
+        format!(
+            "camera definition field must be non-empty string ref={} path={} value={}",
+            definition_ref,
+            path.join("."),
+            value
+        )
+    })
+}
+
+fn camera_required_bool(
+    root: &serde_json::Value,
+    path: &[&str],
+    definition_ref: &str,
+) -> Result<bool, String> {
+    let value = camera_required_value(root, path, definition_ref)?;
+    value_bool(value).ok_or_else(|| {
+        format!(
+            "camera definition field must be bool ref={} path={} value={}",
+            definition_ref,
+            path.join("."),
+            value
+        )
+    })
+}
+
+fn camera_required_vec3(
+    root: &serde_json::Value,
+    path: &[&str],
+    definition_ref: &str,
+) -> Result<Vec3, String> {
+    let value = camera_required_value(root, path, definition_ref)?;
+    let values = if let Some(values) = value.as_array() {
+        values.iter().map(value_f32).collect::<Option<Vec<_>>>()
+    } else if let Some(text) = value.as_str() {
+        text.split(',')
+            .map(|atom| atom.trim().parse::<f32>().ok())
+            .collect::<Option<Vec<_>>>()
+    } else {
+        None
+    }
+    .ok_or_else(|| {
+        format!(
+            "camera definition field must be vec3 ref={} path={} value={}",
+            definition_ref,
+            path.join("."),
+            value
+        )
+    })?;
+    if values.len() != 3 || values.iter().any(|value| !value.is_finite()) {
+        return Err(format!(
+            "camera definition field must contain 3 finite values ref={} path={} value={}",
+            definition_ref,
+            path.join("."),
+            value
+        ));
+    }
+    Ok(Vec3::new(values[0], values[1], values[2]))
+}
+
+fn hydrate_camera_definition(
+    profile: &mut GameReadyMapProfile,
+    entry: &serde_json::Value,
+    definition_ref: &str,
+) -> Result<usize, String> {
+    let namespace = camera_definition_namespace(entry).ok_or_else(|| {
+        format!(
+            "camera definition has no newengine.camera namespace ref={}",
+            definition_ref
+        )
+    })?;
+    let camera = value_path(namespace, &["camera"]).unwrap_or(namespace);
+    let schema = value_path(camera, &["schema"])
+        .and_then(value_string)
+        .unwrap_or_default();
+    if schema != "newengine.camera.definition.v1" {
+        return Err(format!(
+            "camera definition schema mismatch ref={} actual={} expected=newengine.camera.definition.v1",
+            definition_ref, schema
+        ));
+    }
+    let role = camera_required_string(camera, &["role"], definition_ref)?;
+    if !role.eq_ignore_ascii_case("player") {
+        return Err(format!(
+            "camera definition role mismatch ref={} actual={} expected=player",
+            definition_ref, role
+        ));
+    }
+    if !camera_required_bool(camera, &["active"], definition_ref)? {
+        return Err(format!(
+            "player camera definition must declare active=true ref={}",
+            definition_ref
+        ));
+    }
+    let target = camera_required_string(camera, &["target"], definition_ref)?;
+    if !target.eq_ignore_ascii_case("player") {
+        return Err(format!(
+            "player camera definition target mismatch ref={} actual={} expected=player",
+            definition_ref, target
+        ));
+    }
+
+    let c = &mut profile.gameplay.camera;
+    c.definition_ref = definition_ref.to_owned();
+
+    c.first_person_fov_y_radians =
+        camera_required_f32(camera, &["first_person", "fov_y_degrees"], definition_ref)?
+            .to_radians();
+    c.first_person_ads_fov_y_radians = camera_required_f32(
+        camera,
+        &["first_person", "ads_fov_y_degrees"],
+        definition_ref,
+    )?
+    .to_radians();
+    c.first_person_near = camera_required_f32(camera, &["first_person", "near"], definition_ref)?;
+    c.first_person_forward_clearance = camera_required_f32(
+        camera,
+        &["first_person", "forward_clearance"],
+        definition_ref,
+    )?;
+    c.first_person_body_yaw_limit_radians = camera_required_f32(
+        camera,
+        &["first_person", "body_yaw_limit_degrees"],
+        definition_ref,
+    )?
+    .to_radians();
+    c.first_person_down_pitch_limit_radians = camera_required_f32(
+        camera,
+        &["first_person", "down_pitch_limit_degrees"],
+        definition_ref,
+    )?
+    .to_radians();
+    c.first_person_collision_enabled = camera_required_bool(
+        camera,
+        &["first_person", "collision_enabled"],
+        definition_ref,
+    )?;
+    c.first_person_collision_probe_radius = camera_required_f32(
+        camera,
+        &["first_person", "collision_probe_radius"],
+        definition_ref,
+    )?;
+    c.first_person_collision_padding = camera_required_f32(
+        camera,
+        &["first_person", "collision_padding"],
+        definition_ref,
+    )?;
+    c.hide_local_model_in_first_person = camera_required_bool(
+        camera,
+        &["first_person", "hide_local_model"],
+        definition_ref,
+    )?;
+
+    c.third_person_collision_enabled = camera_required_bool(
+        camera,
+        &["third_person", "collision_enabled"],
+        definition_ref,
+    )?;
+    c.third_person_collision_probe_radius = camera_required_f32(
+        camera,
+        &["third_person", "collision_probe_radius"],
+        definition_ref,
+    )?;
+    c.third_person_collision_padding = camera_required_f32(
+        camera,
+        &["third_person", "collision_padding"],
+        definition_ref,
+    )?;
+    c.third_person_collision_min_distance = camera_required_f32(
+        camera,
+        &["third_person", "collision_min_distance"],
+        definition_ref,
+    )?;
+
+    c.third_person_follow_fov_y_radians = camera_required_f32(
+        camera,
+        &["third_person", "follow", "fov_y_degrees"],
+        definition_ref,
+    )?
+    .to_radians();
+    c.third_person_follow_offset_ls = camera_required_vec3(
+        camera,
+        &["third_person", "follow", "offset"],
+        definition_ref,
+    )?;
+    c.third_person_follow_focus_offset_ls = camera_required_vec3(
+        camera,
+        &["third_person", "follow", "focus_offset"],
+        definition_ref,
+    )?;
+    c.third_person_follow_smooth_time = camera_required_f32(
+        camera,
+        &["third_person", "follow", "smooth_time"],
+        definition_ref,
+    )?;
+    c.third_person_follow_max_speed = camera_required_f32(
+        camera,
+        &["third_person", "follow", "max_speed"],
+        definition_ref,
+    )?;
+    c.third_person_follow_zoom_min = camera_required_f32(
+        camera,
+        &["third_person", "follow", "zoom_min"],
+        definition_ref,
+    )?;
+    c.third_person_follow_zoom_max = camera_required_f32(
+        camera,
+        &["third_person", "follow", "zoom_max"],
+        definition_ref,
+    )?;
+
+    c.third_person_aim_fov_y_radians = camera_required_f32(
+        camera,
+        &["third_person", "aim", "fov_y_degrees"],
+        definition_ref,
+    )?
+    .to_radians();
+    c.third_person_aim_offset_ls =
+        camera_required_vec3(camera, &["third_person", "aim", "offset"], definition_ref)?;
+    c.third_person_aim_focus_offset_ls = camera_required_vec3(
+        camera,
+        &["third_person", "aim", "focus_offset"],
+        definition_ref,
+    )?;
+    c.third_person_aim_smooth_time = camera_required_f32(
+        camera,
+        &["third_person", "aim", "smooth_time"],
+        definition_ref,
+    )?;
+    c.third_person_aim_max_speed = camera_required_f32(
+        camera,
+        &["third_person", "aim", "max_speed"],
+        definition_ref,
+    )?;
+    c.third_person_aim_zoom_min =
+        camera_required_f32(camera, &["third_person", "aim", "zoom_min"], definition_ref)?;
+    c.third_person_aim_zoom_max =
+        camera_required_f32(camera, &["third_person", "aim", "zoom_max"], definition_ref)?;
+
+    c.third_person_orbit_fov_y_radians = camera_required_f32(
+        camera,
+        &["third_person", "orbit", "fov_y_degrees"],
+        definition_ref,
+    )?
+    .to_radians();
+    c.third_person_orbit_offset_ls =
+        camera_required_vec3(camera, &["third_person", "orbit", "offset"], definition_ref)?;
+    c.third_person_orbit_focus_offset_ls = camera_required_vec3(
+        camera,
+        &["third_person", "orbit", "focus_offset"],
+        definition_ref,
+    )?;
+    c.third_person_orbit_smooth_time = camera_required_f32(
+        camera,
+        &["third_person", "orbit", "smooth_time"],
+        definition_ref,
+    )?;
+    c.third_person_orbit_max_speed = camera_required_f32(
+        camera,
+        &["third_person", "orbit", "max_speed"],
+        definition_ref,
+    )?;
+    c.third_person_orbit_zoom_min = camera_required_f32(
+        camera,
+        &["third_person", "orbit", "zoom_min"],
+        definition_ref,
+    )?;
+    c.third_person_orbit_zoom_max = camera_required_f32(
+        camera,
+        &["third_person", "orbit", "zoom_max"],
+        definition_ref,
+    )?;
+    c.orbit_drag_zoom_exponent_per_pixel = camera_required_f32(
+        camera,
+        &["third_person", "orbit", "drag_zoom_exponent_per_pixel"],
+        definition_ref,
+    )?;
+
+    c.zoom_wheel_exponent_per_step =
+        camera_required_f32(camera, &["zoom", "wheel_exponent_per_step"], definition_ref)?;
+    c.gameplay_blend_in_seconds =
+        camera_required_f32(camera, &["blend", "in_seconds"], definition_ref)?;
+    c.gameplay_blend_out_seconds =
+        camera_required_f32(camera, &["blend", "out_seconds"], definition_ref)?;
+    c.gameplay_blend_lock_input =
+        camera_required_bool(camera, &["blend", "lock_input"], definition_ref)?;
+
+    Ok(39)
+}
+
+pub(crate) fn apply_required_camera_definition(
+    profile: &mut GameReadyMapProfile,
+) -> Result<(), String> {
+    if !profile.gameplay.camera.declared {
+        return Err("player camera is not declared by the authored map".to_owned());
+    }
+    let definition_ref = profile.gameplay.camera.definition_ref.trim().to_owned();
+    if definition_ref.is_empty() {
+        return Err(format!(
+            "authored player camera '{}' has empty definition_ref",
+            profile.gameplay.camera.instance_id
+        ));
+    }
+    let entry = load_game_ready_definition_entry(&definition_ref).ok_or_else(|| {
+        format!(
+            "camera definition unavailable through engine.assets.definitions ref={}",
+            definition_ref
+        )
+    })?;
+    let applied = hydrate_camera_definition(profile, &entry, &definition_ref)?;
+    newengine_ulog_api::ulog::info!(
+        "game-ready camera definition hydrated camera='{}' ref='{}' fields={} source='engine.assets.definitions/newengine.camera' policy='no engine camera fallback'",
+        profile.gameplay.camera.instance_id,
+        definition_ref,
+        applied
+    );
+    Ok(())
+}
+
 pub(super) fn game_ready_metadata_namespace(
     entry: &serde_json::Value,
 ) -> Option<&serde_json::Value> {
@@ -1503,6 +2029,40 @@ pub(crate) fn resolve_game_ready_asset_graph(
 #[cfg(test)]
 mod player_presentation_metadata_tests {
     use super::*;
+
+    #[test]
+    fn engine_base_camera_uses_canonical_player_camera_defaults() {
+        let spec = engine_base_camera_spec();
+        let defaults =
+            newengine_engine_runtime::gameplay::PlayerCameraProfile::default().sanitized();
+        let actual = spec.player_profile();
+        assert_eq!(spec.definition_ref, ENGINE_BASE_CAMERA_DEFINITION_REF);
+        assert!(
+            (actual.first_person_fov_y_radians - defaults.first_person_fov_y_radians).abs()
+                < 1.0e-6
+        );
+        assert!(
+            (actual.first_person_ads_fov_y_radians - defaults.first_person_ads_fov_y_radians).abs()
+                < 1.0e-6
+        );
+        assert_eq!(
+            actual.first_person_collision_enabled,
+            defaults.first_person_collision_enabled
+        );
+        assert_eq!(
+            actual.third_person_collision_enabled,
+            defaults.third_person_collision_enabled
+        );
+        assert!(
+            (actual.third_person_follow_fov_y_radians - defaults.third_person_follow_fov_y_radians)
+                .abs()
+                < 1.0e-6
+        );
+        assert!(
+            (actual.third_person_orbit_zoom_max - defaults.third_person_orbit_zoom_max).abs()
+                < 1.0e-6
+        );
+    }
 
     #[test]
     fn complete_motion_response_block_is_typed_without_invented_fields() {

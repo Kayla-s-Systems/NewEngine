@@ -256,27 +256,6 @@ fn metadata_usize(index: &newengine_assets_api::MapIndexV1, key: &str, default: 
         .unwrap_or(default)
 }
 
-fn metadata_f32(index: &newengine_assets_api::MapIndexV1, key: &str, default: f32) -> f32 {
-    index
-        .metadata
-        .get(key)
-        .and_then(|value| value.trim().parse::<f32>().ok())
-        .filter(|value| value.is_finite())
-        .unwrap_or(default)
-}
-
-fn metadata_bool(index: &newengine_assets_api::MapIndexV1, key: &str, default: bool) -> bool {
-    index
-        .metadata
-        .get(key)
-        .and_then(|value| match value.trim().to_ascii_lowercase().as_str() {
-            "true" | "1" | "yes" | "on" => Some(true),
-            "false" | "0" | "no" | "off" => Some(false),
-            _ => None,
-        })
-        .unwrap_or(default)
-}
-
 fn load_discrete_cell(
     map_ref: &str,
     coord: newengine_assets_api::MapCellCoordV1,
@@ -375,6 +354,52 @@ fn apply_discrete_placement(
     include_simulation: bool,
     placement: newengine_assets_api::MapPlacementV1,
 ) -> Result<(), String> {
+    let authored_player_camera = placement.tags.iter().any(|tag| {
+        matches!(
+            tag.trim().to_ascii_lowercase().as_str(),
+            "player_camera" | "camera.player" | "active_camera"
+        )
+    }) || matches!(
+        placement.apply_mode.trim().to_ascii_lowercase().as_str(),
+        "player_camera" | "camera_player" | "active_camera"
+    );
+    if authored_player_camera {
+        if profile.gameplay.camera.declared {
+            return Err(format!(
+                "discrete YMAP declares more than one player camera previous='{}' duplicate='{}'",
+                profile.gameplay.camera.instance_id, placement.id
+            ));
+        }
+        profile.gameplay.camera.declared = true;
+        profile.gameplay.camera.instance_id = placement.id.clone();
+        profile.gameplay.camera.definition_ref = placement.definition_ref.clone();
+        profile.gameplay.camera.position = Vec3::new(
+            placement.transform.position[0],
+            placement.transform.position[1],
+            placement.transform.position[2],
+        );
+        profile.gameplay.camera.rotation_ypr = Vec3::new(
+            placement.transform.rotation_ypr[0],
+            placement.transform.rotation_ypr[1],
+            placement.transform.rotation_ypr[2],
+        );
+        profile.definitions.push(GameReadyDefinitionInstanceSpec {
+            definition_ref: placement.definition_ref.clone(),
+            position: profile.gameplay.camera.position,
+            rotation_ypr: placement.transform.rotation_ypr,
+            scale: Vec3::ONE,
+            apply_mode: GameReadyDefinitionApplyMode::MetadataOnly,
+        });
+        newengine_ulog_api::ulog::info!(
+            "game-ready: authored player camera selected id='{}' definition_ref='{}' position={:?} rotation_ypr={:?} policy='YMAP declares camera instance; YTYP defines behavior'",
+            profile.gameplay.camera.instance_id,
+            profile.gameplay.camera.definition_ref,
+            profile.gameplay.camera.position,
+            profile.gameplay.camera.rotation_ypr,
+        );
+        return Ok(());
+    }
+
     let authored_player_spawn = placement.tags.iter().any(|tag| {
         matches!(
             tag.trim().to_ascii_lowercase().as_str(),
@@ -596,77 +621,8 @@ fn load_discrete_map_profile(logical_path: &str) -> Result<GameReadyMapProfile, 
     profile.prefabs.clear();
     profile.definitions.clear();
 
-    // Discrete YMAP v2 owns project camera authoring through map metadata. The generic camera
-    // runtime receives this typed profile and executes it; it does not choose game-specific lens,
-    // owner visibility, or first-person look envelopes. Missing keys preserve compatibility defaults.
-    let camera_defaults = profile.gameplay.camera;
-    profile.gameplay.camera = GameReadyCameraSpec {
-        first_person_fov_y_radians: metadata_f32(
-            &index,
-            "camera.first_person_fov_y_degrees",
-            camera_defaults.first_person_fov_y_radians.to_degrees(),
-        )
-        .to_radians(),
-        first_person_ads_fov_y_radians: metadata_f32(
-            &index,
-            "camera.first_person_ads_fov_y_degrees",
-            camera_defaults.first_person_ads_fov_y_radians.to_degrees(),
-        )
-        .to_radians(),
-        first_person_near: metadata_f32(
-            &index,
-            "camera.first_person_near",
-            camera_defaults.first_person_near,
-        ),
-        first_person_forward_clearance: metadata_f32(
-            &index,
-            "camera.first_person_forward_clearance",
-            camera_defaults.first_person_forward_clearance,
-        ),
-        first_person_body_yaw_limit_radians: metadata_f32(
-            &index,
-            "camera.first_person_body_yaw_limit_degrees",
-            camera_defaults
-                .first_person_body_yaw_limit_radians
-                .to_degrees(),
-        )
-        .to_radians(),
-        first_person_down_pitch_limit_radians: metadata_f32(
-            &index,
-            "camera.first_person_down_pitch_limit_degrees",
-            camera_defaults
-                .first_person_down_pitch_limit_radians
-                .to_degrees(),
-        )
-        .to_radians(),
-        third_person_follow_fov_y_radians: metadata_f32(
-            &index,
-            "camera.third_person_follow_fov_y_degrees",
-            camera_defaults
-                .third_person_follow_fov_y_radians
-                .to_degrees(),
-        )
-        .to_radians(),
-        third_person_aim_fov_y_radians: metadata_f32(
-            &index,
-            "camera.third_person_aim_fov_y_degrees",
-            camera_defaults.third_person_aim_fov_y_radians.to_degrees(),
-        )
-        .to_radians(),
-        third_person_orbit_fov_y_radians: metadata_f32(
-            &index,
-            "camera.third_person_orbit_fov_y_degrees",
-            camera_defaults
-                .third_person_orbit_fov_y_radians
-                .to_degrees(),
-        )
-        .to_radians(),
-        hide_local_model_in_first_person: metadata_bool(
-            &index,
-            "camera.hide_local_model_in_first_person",
-            camera_defaults.hide_local_model_in_first_person,
-        ),
-    };
+    // Camera identity is declared by an explicit YMAP player_camera placement.
+    // No map-level camera scalar or hidden engine camera selection is accepted here.
 
     let mode_sky_definition = profile.sky.definition_ref.trim().to_owned();
     if !mode_sky_definition.is_empty() {
@@ -767,6 +723,25 @@ fn load_discrete_map_profile(logical_path: &str) -> Result<GameReadyMapProfile, 
                 placement,
             )?;
         }
+    }
+
+    if !profile.gameplay.camera.declared {
+        return Err(format!(
+            "discrete YMAP v2 declares no player camera path='{}' expected Placement apply_mode='player_camera' definition_ref='.ytyp@entry'",
+            logical_path
+        ));
+    }
+    if !profile
+        .gameplay
+        .camera
+        .definition_ref
+        .to_ascii_lowercase()
+        .contains(".ytyp@")
+    {
+        return Err(format!(
+            "player camera '{}' has invalid definition_ref='{}' expected='.ytyp@entry'",
+            profile.gameplay.camera.instance_id, profile.gameplay.camera.definition_ref
+        ));
     }
 
     profile.authored_map_streaming = Some(GameReadyAuthoredMapStreamingSpec {

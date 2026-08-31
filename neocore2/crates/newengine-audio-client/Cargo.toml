@@ -1,6 +1,6 @@
 [package]
 name = "newengine-audio-client"
-version = "0.5.0"
+version = "0.6.0"
 edition = "2021"
 readme = "README.md"
 description = "Provider-neutral typed client for the stable engine.audio gateway"

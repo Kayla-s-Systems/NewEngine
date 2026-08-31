@@ -89,6 +89,41 @@ pub fn spawn_player_controller(
     let _ = world.insert(e, MotorInput::default());
     let _ = world.insert(e, Velocity(Vec3::ZERO));
 
+    let _ = crate::gameplay::emit_animation_state(
+        world,
+        e,
+        "character.locomotion",
+        "character.locomotion.idle",
+        serde_json::json!({
+            "state": "idle",
+            "normalized_speed": 0.0,
+            "cycle_phase": 0.0,
+            "transition_alpha": 1.0,
+            "revision": 1,
+        }),
+    );
+    let _ = crate::gameplay::emit_animation_state(
+        world,
+        e,
+        "character.look.view",
+        "character.look.view",
+        serde_json::json!({"yaw": 0.0, "pitch": 0.0}),
+    );
+    let _ = crate::gameplay::emit_animation_state(
+        world,
+        e,
+        "character.look.context",
+        "character.look.context.standard",
+        serde_json::Value::Null,
+    );
+    let _ = crate::gameplay::emit_animation_state(
+        world,
+        e,
+        "character.fall",
+        "character.fall.inactive",
+        serde_json::json!({"airborne": false, "falling": false, "distance": 0.0}),
+    );
+
     ensure_physics_body(
         world,
         e,

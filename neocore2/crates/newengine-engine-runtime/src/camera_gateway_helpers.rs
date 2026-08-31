@@ -109,9 +109,40 @@ pub(super) fn camera_runtime_service_config(
             config.first_person_fov_y_radians = profile.first_person_fov_y_radians;
             config.first_person_ads_fov_y_radians = profile.first_person_ads_fov_y_radians;
             config.first_person_near = profile.first_person_near;
+            config.first_person_collision_enabled = profile.first_person_collision_enabled;
+            config.first_person_collision_probe_radius =
+                profile.first_person_collision_probe_radius;
+            config.first_person_collision_padding = profile.first_person_collision_padding;
             config.third_person_follow_fov_y_radians = profile.third_person_follow_fov_y_radians;
+            config.third_person_follow_offset_ls = profile.third_person_follow_offset_ls;
+            config.third_person_follow_focus_offset_ls =
+                profile.third_person_follow_focus_offset_ls;
+            config.third_person_follow_smooth_time = profile.third_person_follow_smooth_time;
+            config.third_person_follow_max_speed = profile.third_person_follow_max_speed;
+            config.third_person_follow_zoom_min = profile.third_person_follow_zoom_min;
+            config.third_person_follow_zoom_max = profile.third_person_follow_zoom_max;
             config.third_person_aim_fov_y_radians = profile.third_person_aim_fov_y_radians;
+            config.third_person_aim_offset_ls = profile.third_person_aim_offset_ls;
+            config.third_person_aim_focus_offset_ls = profile.third_person_aim_focus_offset_ls;
+            config.third_person_aim_smooth_time = profile.third_person_aim_smooth_time;
+            config.third_person_aim_max_speed = profile.third_person_aim_max_speed;
+            config.third_person_aim_zoom_min = profile.third_person_aim_zoom_min;
+            config.third_person_aim_zoom_max = profile.third_person_aim_zoom_max;
             config.third_person_orbit_fov_y_radians = profile.third_person_orbit_fov_y_radians;
+            config.third_person_orbit_offset_ls = profile.third_person_orbit_offset_ls;
+            config.third_person_orbit_focus_offset_ls = profile.third_person_orbit_focus_offset_ls;
+            config.third_person_orbit_smooth_time = profile.third_person_orbit_smooth_time;
+            config.third_person_orbit_max_speed = profile.third_person_orbit_max_speed;
+            config.third_person_orbit_zoom_min = profile.third_person_orbit_zoom_min;
+            config.third_person_orbit_zoom_max = profile.third_person_orbit_zoom_max;
+            config.third_person_collision_enabled = profile.third_person_collision_enabled;
+            config.third_person_collision_probe_radius =
+                profile.third_person_collision_probe_radius;
+            config.third_person_collision_padding = profile.third_person_collision_padding;
+            config.third_person_collision_min_distance =
+                profile.third_person_collision_min_distance;
+            config.zoom_wheel_exponent_per_step = profile.zoom_wheel_exponent_per_step;
+            config.orbit_drag_zoom_exponent_per_pixel = profile.orbit_drag_zoom_exponent_per_pixel;
         }
         if let Some(body) = world.get::<CharacterBody>(player) {
             let body = body.sanitized();

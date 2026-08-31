@@ -22,6 +22,11 @@ pub fn bootstrap_runtime_scene(scene: &mut Scene) {
 }
 
 #[inline]
+pub fn bootstrap_runtime_scene_foundation(scene: &mut Scene) {
+    crate::scene_bootstrap::bootstrap_runtime_scene_foundation(scene);
+}
+
+#[inline]
 pub fn ensure_scene_root(scene: &mut Scene) -> EntityId {
     crate::scene_bridge::ensure_root(scene)
 }

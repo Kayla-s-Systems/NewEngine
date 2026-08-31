@@ -5,19 +5,47 @@ struct WeaponRecoilRuntime {
     weapon_instance_id: ItemInstanceId,
     applied_pitch_radians: f32,
     applied_yaw_radians: f32,
+    pitch_speed_radians_per_second: f32,
+    yaw_speed_radians_per_second: f32,
     recovery_hz: f32,
 }
 
-fn recover_weapon_recoil(world: &mut World, player: EntityId, dt: f32) {
+#[inline]
+fn critically_damped_recoil_step(angle: f32, speed: f32, recovery_hz: f32, dt: f32) -> (f32, f32) {
+    // TLOU2 exposes both a recoil angle and a recoil-tracker speed. Model that contract as a
+    // stable critically damped second-order tracker rather than subtracting a fixed exponential
+    // fraction of the angle every frame. The analytic form is stable even on a long frame.
+    let omega = recovery_hz.max(0.05) * 2.2;
+    let c = speed + omega * angle;
+    let decay = (-omega * dt).exp();
+    let next_angle = (angle + c * dt) * decay;
+    let next_speed = (speed - omega * c * dt) * decay;
+    if next_angle.is_finite() && next_speed.is_finite() {
+        (next_angle, next_speed)
+    } else {
+        (0.0, 0.0)
+    }
+}
+
+pub(super) fn recover_weapon_recoil(world: &mut World, player: EntityId, dt: f32) {
     let Some(mut recoil) = world.get::<WeaponRecoilRuntime>(player).copied() else {
         return;
     };
     if dt <= 0.0 {
         return;
     }
-    let decay = (-recoil.recovery_hz.max(0.05) * dt).exp();
-    let next_pitch = recoil.applied_pitch_radians * decay;
-    let next_yaw = recoil.applied_yaw_radians * decay;
+    let (next_pitch, next_pitch_speed) = critically_damped_recoil_step(
+        recoil.applied_pitch_radians,
+        recoil.pitch_speed_radians_per_second,
+        recoil.recovery_hz,
+        dt,
+    );
+    let (next_yaw, next_yaw_speed) = critically_damped_recoil_step(
+        recoil.applied_yaw_radians,
+        recoil.yaw_speed_radians_per_second,
+        recoil.recovery_hz,
+        dt,
+    );
     if let Some(motor) = world.get_mut::<CharacterMotor>(player) {
         motor.pitch = (motor.pitch + next_pitch - recoil.applied_pitch_radians)
             .clamp(-motor.pitch_limit, motor.pitch_limit);
@@ -25,7 +53,13 @@ fn recover_weapon_recoil(world: &mut World, player: EntityId, dt: f32) {
     }
     recoil.applied_pitch_radians = next_pitch;
     recoil.applied_yaw_radians = next_yaw;
-    if next_pitch.abs() < 1.0e-5 && next_yaw.abs() < 1.0e-5 {
+    recoil.pitch_speed_radians_per_second = next_pitch_speed;
+    recoil.yaw_speed_radians_per_second = next_yaw_speed;
+    if next_pitch.abs() < 1.0e-5
+        && next_yaw.abs() < 1.0e-5
+        && next_pitch_speed.abs() < 1.0e-4
+        && next_yaw_speed.abs() < 1.0e-4
+    {
         let _ = world.remove::<WeaponRecoilRuntime>(player);
     } else {
         let _ = world.insert(player, recoil);
@@ -214,7 +248,14 @@ pub fn step_player_combat(world: &mut World, dt: f32, fixed_tick: u64) {
                         origin,
                         direction,
                     );
-                    apply_recoil(world, player, binding.instance_id, tuning, aiming, shot_sequence);
+                    apply_recoil(
+                        world,
+                        player,
+                        binding.instance_id,
+                        tuning,
+                        aiming,
+                        shot_sequence,
+                    );
                 }
             } else if let Some(melee) = binding.weapon.melee {
                 let melee = melee.sanitized();
@@ -319,19 +360,22 @@ pub(super) fn apply_recoil(
     shot_sequence: u64,
 ) {
     let tuning = tuning.sanitized();
-    let ads_scale = if aiming { tuning.ads_recoil_multiplier } else { 1.0 };
+    let ads_scale = if aiming {
+        tuning.ads_recoil_multiplier
+    } else {
+        1.0
+    };
     let pitch_noise = signed_unit(shot_sequence ^ 0x243f_6a88_85a3_08d3);
     let yaw_noise = signed_unit(shot_sequence ^ 0x1319_8a2e_0370_7344);
-    let pitch_kick = (tuning.recoil_pitch_radians
-        + pitch_noise * tuning.recoil_pitch_random_radians)
-        .max(0.0)
-        * ads_scale;
-    let yaw_kick = (tuning.recoil_yaw_bias_radians
-        + yaw_noise * tuning.recoil_yaw_radians)
-        * ads_scale;
+    let pitch_kick =
+        (tuning.recoil_pitch_radians + pitch_noise * tuning.recoil_pitch_random_radians).max(0.0)
+            * ads_scale;
+    let yaw_kick =
+        (tuning.recoil_yaw_bias_radians + yaw_noise * tuning.recoil_yaw_radians) * ads_scale;
 
     let previous = world.get::<WeaponRecoilRuntime>(player).copied();
-    if let Some(previous) = previous.filter(|state| state.weapon_instance_id != weapon_instance_id) {
+    if let Some(previous) = previous.filter(|state| state.weapon_instance_id != weapon_instance_id)
+    {
         if let Some(motor) = world.get_mut::<CharacterMotor>(player) {
             motor.pitch = (motor.pitch - previous.applied_pitch_radians)
                 .clamp(-motor.pitch_limit, motor.pitch_limit);
@@ -343,22 +387,32 @@ pub(super) fn apply_recoil(
     let Some(motor) = world.get_mut::<CharacterMotor>(player) else {
         return;
     };
-    // Positive pitch rotates the canonical -Z forward vector upward.
+    // Positive pitch rotates the canonical -Z forward vector upward. Keep the immediate impulse
+    // responsive, then let the recoil tracker carry a short follow-through before settling.
+    let prior_pitch = motor.pitch;
     motor.pitch = (motor.pitch + pitch_kick).clamp(-motor.pitch_limit, motor.pitch_limit);
+    let applied_pitch_kick = motor.pitch - prior_pitch;
     motor.yaw += yaw_kick;
 
-    let mut recoil = world
-        .get::<WeaponRecoilRuntime>(player)
-        .copied()
-        .unwrap_or(WeaponRecoilRuntime {
-            weapon_instance_id,
-            applied_pitch_radians: 0.0,
-            applied_yaw_radians: 0.0,
-            recovery_hz: tuning.recoil_recovery_hz,
-        });
+    let mut recoil =
+        world
+            .get::<WeaponRecoilRuntime>(player)
+            .copied()
+            .unwrap_or(WeaponRecoilRuntime {
+                weapon_instance_id,
+                applied_pitch_radians: 0.0,
+                applied_yaw_radians: 0.0,
+                pitch_speed_radians_per_second: 0.0,
+                yaw_speed_radians_per_second: 0.0,
+                recovery_hz: tuning.recoil_recovery_hz,
+            });
     recoil.weapon_instance_id = weapon_instance_id;
-    recoil.applied_pitch_radians += pitch_kick;
+    recoil.applied_pitch_radians += applied_pitch_kick;
     recoil.applied_yaw_radians += yaw_kick;
+    // Initial tracker speed produces the authored 1-2 frame follow-through seen in TLOU2 VEPR
+    // fire layers instead of snapping immediately into recovery.
+    recoil.pitch_speed_radians_per_second += applied_pitch_kick * tuning.recoil_recovery_hz * 1.4;
+    recoil.yaw_speed_radians_per_second += yaw_kick * tuning.recoil_recovery_hz * 1.15;
     recoil.recovery_hz = tuning.recoil_recovery_hz;
     let _ = world.insert(player, recoil);
 }
@@ -451,6 +505,40 @@ fn publish_weapon_project_event(world: &mut World, event: &WeaponEvent) {
         "ammo_in_magazine": state.map(|state| state.ammo_in_magazine),
         "reserve_ammo": state.map(|state| state.reserve_ammo),
     });
+
+    let animation_event =
+        binding.and_then(|binding| match (event.kind, binding.weapon.weapon_type) {
+            (WeaponEventKind::Fired, WeaponType::Firearm) => Some("character.weapon.firearm.fire"),
+            (WeaponEventKind::MeleeAttacked, WeaponType::Unarmed) => {
+                Some("character.weapon.unarmed.attack")
+            }
+            (WeaponEventKind::MeleeAttacked, WeaponType::Melee) => {
+                Some("character.weapon.melee.attack")
+            }
+            (WeaponEventKind::ReloadStarted, WeaponType::Firearm) => {
+                Some("character.weapon.firearm.reload_started")
+            }
+            (WeaponEventKind::ReloadCompleted, WeaponType::Firearm) => {
+                Some("character.weapon.firearm.reload_completed")
+            }
+            _ => None,
+        });
+    if let Some(animation_event) = animation_event {
+        if let Err(error) = emit_animation_pulse(
+            world,
+            event.shooter,
+            "character.weapon.action",
+            animation_event,
+            payload.clone(),
+        ) {
+            newengine_ulog_api::ulog::warn!(
+                "weapon animation semantic pulse rejected event='{}' shooter={} err='{}'",
+                animation_event,
+                event.shooter.stable_u64(),
+                error,
+            );
+        }
+    }
 
     if let Err(error) = emit_gameplay_event(
         world,

@@ -7,7 +7,10 @@ use super::player_model::spawn_game_ready_player_model;
 use super::sky::configure_game_ready_lighting;
 use super::terrain_streaming::spawn_procedural_terrain;
 use super::world_model::{begin_authored_map_streaming, begin_static_world_prefabs};
-use super::ytyp_metadata::{apply_game_ready_ytyp_metadata, resolve_game_ready_asset_graph};
+use super::ytyp_metadata::{
+    apply_game_ready_ytyp_metadata, apply_required_camera_definition,
+    resolve_game_ready_asset_graph,
+};
 use super::*;
 use newengine_game_data::{GameData, GameDataSnapshot};
 
@@ -299,10 +302,9 @@ pub(crate) fn bootstrap_game_ready_world_scene_impl(
     game_data: GameDataSnapshot,
 ) -> Option<EntityId> {
     *scene = Scene::new();
-    bootstrap_runtime_scene(scene);
+    bootstrap_runtime_scene_foundation(scene);
 
     let root = ensure_root(scene);
-    let active_camera = scene.active_camera();
     let mut map = match load_game_ready_map_profile() {
         Ok(map) => map,
         Err(errors) => {
@@ -326,6 +328,16 @@ pub(crate) fn bootstrap_game_ready_world_scene_impl(
     install_game_data_player_definition(&mut map, game_data.data());
 
     let mut effective_data = game_data.data().clone();
+    if let Err(error) = apply_required_camera_definition(&mut map) {
+        newengine_ulog_api::ulog::error!(
+            "game-ready: project player camera bootstrap failed err='{}' policy='YMAP must declare player_camera and YTYP must provide a valid newengine.camera definition; no engine fallback'",
+            error
+        );
+        newengine_core::crash::record_breadcrumb(format!(
+            "game-ready camera defSystem failed: {error}"
+        ));
+        return None;
+    }
     apply_game_ready_ytyp_metadata(&mut map, &mut effective_data);
     // GameData is authoritative for runtime weather/atmosphere policy, while the
     // selected YTYP owns the skydome/material/texture graph. The merge below keeps
@@ -363,6 +375,52 @@ pub(crate) fn bootstrap_game_ready_world_scene_impl(
     ));
 
     let layout = spawn_game_ready_scene_entity_layout(world, root);
+
+    // The project declares the player camera instance in YMAP and its behavior in YTYP.
+    // GameReady must not rely on the generic engine bootstrap manufacturing a camera.
+    let active_camera = {
+        let camera = spawn_named(world, "PlayerCamera");
+        let _ = world.insert(camera, newengine_scene::components::ActiveCamera);
+        let _ = world.insert(
+            camera,
+            newengine_camera::CameraDefinitionBinding::player(
+                map.gameplay.camera.instance_id.clone(),
+                map.gameplay.camera.definition_ref.clone(),
+            ),
+        );
+        let _ = world.insert(camera, newengine_sim::CameraRigComp::default());
+        let _ = world.insert(camera, newengine_camera::RuntimeNavController::default());
+        let _ = set_parent(world, camera, Some(layout.cameras));
+        newengine_engine_runtime::gameplay::attach_scene_element_core(
+            world,
+            camera,
+            newengine_engine_runtime::gameplay::SceneEntityRole::ActiveCamera,
+            "Scene/Cameras/PlayerCamera",
+            map.gameplay.camera.position,
+            Vec3::splat(0.35),
+        );
+        if let Some(transform) = world.get_mut_tracked::<Transform>(camera) {
+            transform.position = map.gameplay.camera.position;
+            transform.rotation = Quat::from_euler(
+                EulerRot::YXZ,
+                map.gameplay.camera.rotation_ypr.x,
+                map.gameplay.camera.rotation_ypr.y,
+                map.gameplay.camera.rotation_ypr.z,
+            );
+        }
+        if let Some(state) = world.resource_mut::<newengine_scene::SceneState>() {
+            state.active_camera = Some(camera);
+        } else {
+            world.insert_resource(newengine_scene::SceneState::new(Some(root), Some(camera)));
+        }
+        newengine_ulog_api::ulog::info!(
+            "game-ready: instantiated authored player camera entity={:?} id='{}' definition_ref='{}' target='player'",
+            camera,
+            map.gameplay.camera.instance_id,
+            map.gameplay.camera.definition_ref,
+        );
+        camera
+    };
 
     configure_game_ready_lighting(world, layout.environment, &map.lighting, &map.sky);
 
@@ -522,20 +580,11 @@ pub(crate) fn bootstrap_game_ready_world_scene_impl(
         t.rotation = Quat::from_euler(EulerRot::YXZ, map.player.yaw, 0.0, 0.0);
     }
 
-    if let Some(cam) = active_camera {
-        let _ = set_parent(world, cam, Some(layout.cameras));
-        newengine_engine_runtime::gameplay::attach_scene_element_core(
-            world,
-            cam,
-            newengine_engine_runtime::gameplay::SceneEntityRole::ActiveCamera,
-            "Scene/Cameras/ActiveCamera",
-            Vec3::new(start_x, start_y + player_tuning.camera_eye_height, start_z),
-            Vec3::splat(0.35),
-        );
-        if let Some(t) = world.get_mut_tracked::<Transform>(cam) {
-            t.position = Vec3::new(start_x, start_y + player_tuning.camera_eye_height, start_z);
-            t.rotation = Quat::from_euler(EulerRot::YXZ, map.player.yaw, 0.0, 0.0);
-        }
+    // Possession will take over camera motion, but seed the declared camera from the resolved
+    // player start so the first pre-possession frame is finite and deterministic.
+    if let Some(t) = world.get_mut_tracked::<Transform>(active_camera) {
+        t.position = Vec3::new(start_x, start_y + player_tuning.camera_eye_height, start_z);
+        t.rotation = Quat::from_euler(EulerRot::YXZ, map.player.yaw, 0.0, 0.0);
     }
 
     let mission = spawn_game_ready_mission(

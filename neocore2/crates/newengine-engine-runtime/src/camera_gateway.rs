@@ -278,6 +278,10 @@ impl CameraGatewayBridge {
             .map(|ctrl| ctrl.mode)
             .unwrap_or(RuntimeNavMode::Orbit);
         let player = first_player(world);
+        let camera_profile = player
+            .and_then(|player| world.get::<crate::gameplay::PlayerCameraProfile>(player))
+            .copied()
+            .map(crate::gameplay::PlayerCameraProfile::sanitized);
         let gate_blocked = play_mode.is_runtime() && !world_playable;
         let mut controller_z_phases = [f32::NAN; 5];
         controller_z_phases[0] = follow_controller_offset_z(world, cam_id);
@@ -286,6 +290,11 @@ impl CameraGatewayBridge {
             let manager = world
                 .resource_mut::<CameraManagerResource>()
                 .expect("camera manager resource inserted");
+            if let Some(profile) = camera_profile {
+                manager.settings.gameplay.blend_in_sec = profile.gameplay_blend_in_seconds;
+                manager.settings.gameplay.blend_out_sec = profile.gameplay_blend_out_seconds;
+                manager.settings.gameplay.lock_input = profile.gameplay_blend_lock_input;
+            }
             manager.advance(camera_dt);
             manager.sync_world_state(CameraRuntimeWorldState {
                 game_nav_mode: existing_nav_mode,

@@ -15,6 +15,8 @@ mod audio_environment;
 mod audio_gateway_fallback;
 mod audio_orchestration;
 mod audio_scene;
+mod audio_transport;
+mod interactive_music;
 
 pub use audio_ambience::AudioAmbienceRuntimeModule;
 pub use audio_environment::{
@@ -27,6 +29,8 @@ pub use audio_orchestration::{
 pub use audio_scene::{
     AcousticSurface, AudioEmitter, AudioEnvironmentZone, AudioPortal, AudioSceneRuntimeModule,
 };
+pub use audio_transport::AudioTransportHandle;
+pub use interactive_music::InteractiveMusicHandle;
 pub use newengine_audio_api::AudioAmbienceBed;
 
 /// Narrow instance-local scene resource consumed by world-audio runtime units.
@@ -84,7 +88,11 @@ pub const AUDIO_ORCHESTRATION_RUNTIME_UNIT_SPEC: newengine_runtime_unit_api::Eng
         "engine.runtime.audio-orchestration",
         1,
         newengine_runtime_unit_api::EngineRuntimeUnitKind::Module,
-        &["engine.runtime.audio-orchestration"],
+        &[
+            "engine.runtime.audio-orchestration",
+            newengine_audio_api::AUDIO_TRANSPORT_CAPABILITY_ID,
+            newengine_audio_api::AUDIO_INTERACTIVE_MUSIC_CAPABILITY_ID,
+        ],
         &[newengine_audio_api::AUDIO_BACKEND_CAPABILITY_ID],
         newengine_runtime_unit_api::STATIC_MODULE_TAGS,
     );

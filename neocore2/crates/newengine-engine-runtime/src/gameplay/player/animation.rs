@@ -1,4 +1,5 @@
 use super::*;
+use crate::gameplay::{emit_animation_state, PlayerLookContext};
 
 #[inline]
 fn sanitized_dt(dt: f32) -> f32 {
@@ -199,11 +200,81 @@ pub fn update_player_animation_states(world: &mut World, dt: f32) {
             changed = true;
         }
 
+        let state = world
+            .get::<PlayerAnimationState>(player)
+            .copied()
+            .unwrap_or_default();
+        let locomotion_event = format!("character.locomotion.{}", state.locomotion.clip_hint());
+        if let Err(error) = emit_animation_state(
+            world,
+            player,
+            "character.locomotion",
+            locomotion_event,
+            serde_json::json!({
+                "normalized_speed": state.normalized_speed,
+                "cycle_phase": state.cycle_phase,
+                "transition_alpha": state.transition_alpha,
+                "revision": state.revision,
+            }),
+        ) {
+            newengine_ulog_api::ulog::warn!(
+                "player animation semantic locomotion publish failed player={} err='{}'",
+                player.stable_u64(),
+                error
+            );
+        }
+
+        let motor = world
+            .get::<CharacterMotor>(player)
+            .copied()
+            .unwrap_or_default();
+        let look_context = world
+            .get::<PlayerLookContext>(player)
+            .copied()
+            .unwrap_or_default();
+        if let Err(error) = emit_animation_state(
+            world,
+            player,
+            "character.look.view",
+            "character.look.view",
+            serde_json::json!({
+                "yaw": motor.yaw,
+                "pitch": motor.pitch,
+            }),
+        ) {
+            newengine_ulog_api::ulog::warn!(
+                "player animation semantic look-view publish failed player={} err='{}'",
+                player.stable_u64(),
+                error
+            );
+        }
+        let context_event = match look_context {
+            PlayerLookContext::Standard => "character.look.context.standard",
+            PlayerLookContext::CoverLowLeft => "character.look.context.cover_low_left",
+            PlayerLookContext::CoverLowRight => "character.look.context.cover_low_right",
+            PlayerLookContext::Prone => "character.look.context.prone",
+            PlayerLookContext::Supine => "character.look.context.supine",
+            PlayerLookContext::Rope => "character.look.context.rope",
+            PlayerLookContext::Ladder => "character.look.context.ladder",
+            PlayerLookContext::SwimIdle => "character.look.context.swim_idle",
+            PlayerLookContext::Injured => "character.look.context.injured",
+            PlayerLookContext::RelaxedInjured => "character.look.context.relaxed_injured",
+        };
+        if let Err(error) = emit_animation_state(
+            world,
+            player,
+            "character.look.context",
+            context_event,
+            serde_json::Value::Null,
+        ) {
+            newengine_ulog_api::ulog::warn!(
+                "player animation semantic look-context publish failed player={} err='{}'",
+                player.stable_u64(),
+                error
+            );
+        }
+
         if changed {
-            let state = world
-                .get::<PlayerAnimationState>(player)
-                .copied()
-                .unwrap_or_default();
             emit_player_event(
                 world,
                 player,

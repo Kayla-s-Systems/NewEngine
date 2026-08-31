@@ -143,6 +143,7 @@ pub fn assignment(variant: &FpsPlayableCharacterPolicy) -> Option<PlayerModelAss
         fall_animation: animation("fall", &variant.animations.fall),
         presentation: PlayerCharacterPresentation {
             animation_slots: variant.presentation.animation_slots.clone(),
+            animation_event_bindings: std::collections::BTreeMap::new(),
             detached_head_follow: variant.presentation.detached_head_follow,
             detached_head_follow_rule: variant.presentation.detached_head_follow_rule.as_ref().map(
                 |rule| PlayerPaletteFollowRule {

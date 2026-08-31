@@ -1,11 +1,15 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 mod environment;
+mod music;
 mod orchestration;
 mod streaming;
+mod transport;
 pub use environment::*;
+pub use music::*;
 pub use orchestration::*;
 pub use streaming::*;
+pub use transport::*;
 
 use serde::{Deserialize, Serialize};
 
@@ -1389,6 +1393,13 @@ pub struct AudioCuePlayRequest {
     /// Opaque owner/object identity used only when an authored concurrency policy has object scope.
     #[serde(default)]
     pub scope_id: Option<u64>,
+    /// Logical source offset when a transport-scheduled cue is dispatched after its intended
+    /// sample boundary. Zero means start from source origin.
+    #[serde(default)]
+    pub start_sample_offset: u64,
+    /// Sample rate for `start_sample_offset`. Zero is valid only when the offset is zero.
+    #[serde(default)]
+    pub transport_sample_rate: u32,
     #[serde(default)]
     pub acoustic: AudioAcousticState,
     #[serde(default)]
@@ -1408,6 +1419,8 @@ impl Default for AudioCuePlayRequest {
             pitch: 1.0,
             seed: None,
             scope_id: None,
+            start_sample_offset: 0,
+            transport_sample_rate: 0,
             acoustic: AudioAcousticState::clear(),
             environment: AudioEnvironmentState::clear(),
             parameters: AudioParameterSet::default(),
@@ -1430,6 +1443,9 @@ impl AudioCuePlayRequest {
         self.pitch = sanitize_speed(self.pitch);
         self.position = self.position.map(sanitize_vec3);
         self.scope_id = self.scope_id.filter(|id| *id != 0);
+        if self.start_sample_offset == 0 {
+            self.transport_sample_rate = 0;
+        }
         self.acoustic = self.acoustic.sanitized();
         self.environment = self.environment.sanitized();
         self.parameters = self.parameters.sanitized();

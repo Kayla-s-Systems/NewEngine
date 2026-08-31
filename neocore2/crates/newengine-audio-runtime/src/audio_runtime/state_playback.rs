@@ -6,6 +6,7 @@ impl AudioRuntimeState {
             AudioVoicePolicy::default(),
             None,
             policy_instance_id,
+            Duration::ZERO,
         )
     }
 
@@ -15,11 +16,32 @@ impl AudioRuntimeState {
         policy: AudioVoicePolicy,
         scope_id: Option<u64>,
         policy_instance_id: u64,
+        authored_initial_position: Duration,
     ) -> Result<AudioPlayAck, String> {
         self.prune_finished();
         let request = request.sanitized();
         let uri = normalize_vfs_path(&request.clip.uri)?;
         let source_duration = self.clip_source_duration(&uri)?;
+        if !request.looping
+            && source_duration.is_some_and(|duration| {
+                !duration.is_zero() && authored_initial_position >= duration
+            })
+        {
+            return Ok(AudioPlayAck {
+                accepted: false,
+                provider: NATIVE_AUDIO_PROVIDER_ROUTE.to_owned(),
+                voice_id: None,
+                voice_ids: Vec::new(),
+                message: "transport start offset is at or beyond source duration".to_owned(),
+                virtualized: false,
+                diagnostics: Vec::new(),
+            });
+        }
+        let initial_position = normalize_timeline_position(
+            authored_initial_position,
+            source_duration,
+            request.looping,
+        );
         let policy = policy.sanitized()?;
         let scope_key = Self::concurrency_scope_key(&policy, scope_id)?;
         match self.admit_voice_policy(&policy, scope_id, policy_instance_id)? {
@@ -83,7 +105,7 @@ impl AudioRuntimeState {
                 voice_budget: policy.budget,
                 priority: policy.priority,
                 paused: false,
-                virtual_source_position: Duration::ZERO,
+                virtual_source_position: initial_position,
                 virtual_since: Some(now),
             },
         );
@@ -528,6 +550,19 @@ impl AudioRuntimeState {
                 request.version
             ));
         }
+        let transport_initial_position = if request.start_sample_offset == 0 {
+            Duration::ZERO
+        } else {
+            if !(8_000..=384_000).contains(&request.transport_sample_rate) {
+                return Err(format!(
+                    "SoundCue transport_sample_rate={} invalid for non-zero start_sample_offset",
+                    request.transport_sample_rate
+                ));
+            }
+            Duration::from_secs_f64(
+                request.start_sample_offset as f64 / f64::from(request.transport_sample_rate),
+            )
+        };
         let parsed = newengine_assets_api::parse_asset_reference(&request.cue.logical_path)
             .map_err(|error| {
                 format!(
@@ -616,6 +651,7 @@ impl AudioRuntimeState {
                     voice_policy.clone(),
                     request.scope_id,
                     policy_instance_id,
+                    transport_initial_position,
                 )?;
                 if let Some(diagnostic) =
                     self.yscd_play_diagnostic(&canonical, &format!("graph:{}", plan.label), &selected, &ack)
@@ -689,6 +725,7 @@ impl AudioRuntimeState {
                 voice_policy.clone(),
                 request.scope_id,
                 policy_instance_id,
+                transport_initial_position,
             )?;
             let mut ack = ack;
             if ack.accepted {
@@ -757,6 +794,7 @@ impl AudioRuntimeState {
                 voice_policy.clone(),
                 request.scope_id,
                 policy_instance_id,
+                transport_initial_position,
             )?;
             if let Some(diagnostic) =
                 self.yscd_play_diagnostic(&canonical, &layer.name, &selected, &ack)

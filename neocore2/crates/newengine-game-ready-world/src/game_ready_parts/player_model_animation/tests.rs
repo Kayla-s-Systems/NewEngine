@@ -558,51 +558,27 @@ mod transition_tests {
     }
 
     #[test]
-    fn fall_full_body_override_requires_ground_physics_and_semantic_state_to_agree() {
-        use newengine_engine_runtime::gameplay::{
-            PlayerFallState, PlayerGroundState, PlayerLocomotionAnimation,
-        };
+    fn fall_full_body_override_requires_authored_fall_event_and_fall_locomotion() {
+        use newengine_engine_runtime::gameplay::PlayerLocomotionAnimation;
 
-        let airborne_fall = PlayerFallState {
-            airborne: true,
-            falling: true,
-            ..PlayerFallState::default()
-        };
-        let airborne = PlayerGroundState {
-            grounded: false,
-            walkable: false,
-            last_fixed_tick: 10,
-            ..PlayerGroundState::default()
-        };
         assert!(!authoritative_fall_presentation_requested(
             false,
-            airborne,
-            airborne_fall,
+            true,
             PlayerLocomotionAnimation::Walk,
         ));
         assert!(authoritative_fall_presentation_requested(
             false,
-            airborne,
-            airborne_fall,
+            true,
             PlayerLocomotionAnimation::Fall,
         ));
-
-        let grounded = PlayerGroundState {
-            grounded: true,
-            walkable: true,
-            last_fixed_tick: 11,
-            ..PlayerGroundState::default()
-        };
         assert!(!authoritative_fall_presentation_requested(
             false,
-            grounded,
-            airborne_fall,
+            false,
             PlayerLocomotionAnimation::Fall,
         ));
         assert!(!authoritative_fall_presentation_requested(
             true,
-            airborne,
-            airborne_fall,
+            true,
             PlayerLocomotionAnimation::Fall,
         ));
     }

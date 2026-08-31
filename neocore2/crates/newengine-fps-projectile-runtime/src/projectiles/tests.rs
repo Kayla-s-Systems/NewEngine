@@ -84,7 +84,12 @@ mod tests {
                         growth_per_second: Vec3::ZERO,
                         color: [1.0; 4],
                         lifetime_seconds: 0.05,
-                        fade_start_fraction: 0.5, fade_in_fraction: 0.0, drag_per_second: 0.0, rotation_radians: 0.0, rotation_random_radians: 0.0, spin_radians_per_second: 0.0,
+                        fade_start_fraction: 0.5,
+                        fade_in_fraction: 0.0,
+                        drag_per_second: 0.0,
+                        rotation_radians: 0.0,
+                        rotation_random_radians: 0.0,
+                        spin_radians_per_second: 0.0,
                         light: None,
                     },
                     VfxLayerDefinition::Pulse {
@@ -100,7 +105,12 @@ mod tests {
                         growth_per_second: Vec3::ZERO,
                         color: [1.0; 4],
                         lifetime_seconds: 0.04,
-                        fade_start_fraction: 0.5, fade_in_fraction: 0.0, drag_per_second: 0.0, rotation_radians: 0.0, rotation_random_radians: 0.0, spin_radians_per_second: 0.0,
+                        fade_start_fraction: 0.5,
+                        fade_in_fraction: 0.0,
+                        drag_per_second: 0.0,
+                        rotation_radians: 0.0,
+                        rotation_random_radians: 0.0,
+                        spin_radians_per_second: 0.0,
                         light: None,
                     },
                     VfxLayerDefinition::Pulse {
@@ -116,7 +126,12 @@ mod tests {
                         growth_per_second: Vec3::splat(0.1),
                         color: [0.2, 0.2, 0.2, 0.3],
                         lifetime_seconds: 0.5,
-                        fade_start_fraction: 0.5, fade_in_fraction: 0.0, drag_per_second: 0.0, rotation_radians: 0.0, rotation_random_radians: 0.0, spin_radians_per_second: 0.0,
+                        fade_start_fraction: 0.5,
+                        fade_in_fraction: 0.0,
+                        drag_per_second: 0.0,
+                        rotation_radians: 0.0,
+                        rotation_random_radians: 0.0,
+                        spin_radians_per_second: 0.0,
                         light: None,
                     },
                     VfxLayerDefinition::Tracer {
@@ -145,10 +160,18 @@ mod tests {
                         scale: Vec3::splat(0.01),
                         color: [1.0, 0.7, 0.2, 1.0],
                         speed_min: 2.0,
-                        speed_max: 7.0, cone_angle_degrees: 70.0, size_variance: 0.2, lifetime_variance: 0.15, drag_per_second: 0.1, rotation_random_radians: 3.14159, spin_radians_per_second: 3.0, spin_variance: 1.5,
+                        speed_max: 7.0,
+                        cone_angle_degrees: 70.0,
+                        size_variance: 0.2,
+                        lifetime_variance: 0.15,
+                        drag_per_second: 0.1,
+                        rotation_random_radians: 3.14159,
+                        spin_radians_per_second: 3.0,
+                        spin_variance: 1.5,
                         acceleration: Vec3::new(0.0, -9.8, 0.0),
                         lifetime_seconds: 0.3,
-                        fade_start_fraction: 0.5, fade_in_fraction: 0.0,
+                        fade_start_fraction: 0.5,
+                        fade_in_fraction: 0.0,
                     },
                     VfxLayerDefinition::Decal {
                         primitive: prim_builtins::ID_DISC,
@@ -189,9 +212,7 @@ mod tests {
         install_test_weapon_vfx(&mut world);
         let (rifle_id, weapon) = {
             let catalog = world.resource::<ItemCatalog>().expect("item catalog");
-            let rifle = catalog
-                .find("weapon.rifle.standard")
-                .expect("test rifle");
+            let rifle = catalog.find("weapon.rifle.standard").expect("test rifle");
             (rifle.id, rifle.weapon.expect("rifle weapon definition"))
         };
         let owner = world.spawn();
@@ -217,7 +238,10 @@ mod tests {
             3,
             "shot structural layers stay in ECS while smoke is GPU-resident"
         );
-        assert_eq!(newengine_vfx_runtime::vfx_runtime_stats(&world).active_layers, 4);
+        assert_eq!(
+            newengine_vfx_runtime::vfx_runtime_stats(&world).active_layers,
+            4
+        );
         assert_eq!(
             world
                 .resource::<newengine_vfx_api::VfxGpuParticleBridge>()
@@ -268,7 +292,9 @@ mod tests {
         assert_eq!(
             world
                 .query::<newengine_vfx_runtime::VfxLayerRuntime>()
-                .filter(|(_, runtime)| runtime.kind == newengine_vfx_runtime::VfxLayerKind::ImpactDecal)
+                .filter(
+                    |(_, runtime)| runtime.kind == newengine_vfx_runtime::VfxLayerKind::ImpactDecal
+                )
                 .count(),
             1,
             "authoritative hit must publish one VFX-owned impact decal"
@@ -331,7 +357,7 @@ mod tests {
         assert!(world.get::<AngularVelocity>(casing).is_some());
         assert!(matches!(
             world.get::<PhysicsBodyDesc>(casing).map(|body| body.shape),
-            Some(CollisionShapeDesc::Box { .. })
+            Some(CollisionShapeDesc::Cylinder { .. })
         ));
         // Presentation FX may expire, but physical brass is deliberately persistent.
         for _ in 0..30 {
@@ -367,5 +393,304 @@ mod tests {
             expire_projectile_spheres(&mut world, 0.1);
         }
         assert!(!world.exists(entity));
+    }
+    #[test]
+    fn shell_casing_uses_cylinder_and_ejection_impulse() {
+        let mut world = World::new();
+        let package = newengine_item_assets_runtime::compile_authored_item_package(
+            &newengine_item_assets_runtime::test_fps_item_package(),
+        )
+        .expect("compile test item package");
+        newengine_item_assets_runtime::install_compiled_item_package(&mut world, package);
+        let rifle_id = world
+            .resource::<ItemCatalog>()
+            .and_then(|catalog| catalog.find("weapon.rifle.standard"))
+            .map(|definition| definition.id)
+            .expect("test rifle");
+        let owner = world.spawn();
+        let casing = spawn_persistent_shell_casing(
+            &mut world,
+            owner,
+            None,
+            9,
+            rifle_id.raw(),
+            Vec3::new(0.0, 1.25, 0.0),
+            Vec3::Z,
+        )
+        .expect("physical casing");
+        let body = world.get::<PhysicsBodyDesc>(casing).copied().expect("body");
+        assert!(matches!(
+            body.shape,
+            CollisionShapeDesc::Cylinder { radius, half_height }
+                if radius > 0.005 && half_height > 0.02
+        ));
+        assert!(world
+            .get::<Velocity>(casing)
+            .is_some_and(|velocity| velocity.0.length() > 1.0));
+        assert!(world
+            .get::<AngularVelocity>(casing)
+            .is_some_and(|velocity| velocity.0.length() > 10.0));
+        assert!(body.material.restitution >= 0.0);
+        assert!(body.material.friction >= 0.0);
+    }
+
+    #[test]
+    fn shell_contact_begin_and_rolling_persist_are_acoustically_distinct() {
+        let mut world = World::new();
+        let package = newengine_item_assets_runtime::compile_authored_item_package(
+            &newengine_item_assets_runtime::test_fps_item_package(),
+        )
+        .expect("compile test item package");
+        newengine_item_assets_runtime::install_compiled_item_package(&mut world, package);
+        let rifle_id = world
+            .resource::<ItemCatalog>()
+            .and_then(|catalog| catalog.find("weapon.rifle.standard"))
+            .map(|definition| definition.id)
+            .expect("test rifle");
+        let owner = world.spawn();
+        let casing = world.spawn();
+        let ground = world.spawn();
+        let _ = world.insert(
+            casing,
+            WeaponShellCasing::new(owner.stable_u64(), 11, rifle_id.raw(), 0),
+        );
+        let _ = world.insert(casing, WeaponShellContactRuntime::default());
+        let _ = world.insert(casing, Transform::default());
+        let _ = world.insert(casing, Velocity(Vec3::new(0.75, 0.02, 0.20)));
+        let _ = world.insert(casing, AngularVelocity(Vec3::new(0.0, 12.0, 3.0)));
+        let _ = world.insert(
+            ground,
+            PhysicsSurface {
+                id: "surface.metal.floor".to_owned(),
+                ..PhysicsSurface::default()
+            },
+        );
+        let contact = newengine_physics_contracts::PhysicsContactEvent {
+            a: casing.into(),
+            b: ground.into(),
+            point: Vec3::ZERO,
+            normal: Vec3::Y,
+            impulse: 0.02,
+        };
+
+        world.insert_resource(PhysicsStepReport {
+            fixed_tick: 77,
+            dt: 1.0 / 60.0,
+            events: vec![PhysicsEvent::ContactBegin(contact)],
+            ..PhysicsStepReport::default()
+        });
+        process_shell_physics_events(&mut world, 1.0 / 60.0);
+        let begin_events = newengine_engine_runtime::gameplay::drain_gameplay_events(&mut world);
+        assert!(begin_events.iter().any(|event| {
+            event.id == GAMEPLAY_EVENT_WEAPON_SHELL_CONTACT
+                && event.payload["contact_class"] == "medium"
+        }));
+        assert!(begin_events
+            .iter()
+            .all(|event| event.id != GAMEPLAY_EVENT_WEAPON_SHELL_ROLLING));
+
+        world.insert_resource(PhysicsStepReport {
+            fixed_tick: 78,
+            dt: 1.0 / 60.0,
+            events: vec![PhysicsEvent::ContactPersist(contact)],
+            ..PhysicsStepReport::default()
+        });
+        process_shell_physics_events(&mut world, 1.0 / 60.0);
+        let persist_events = newengine_engine_runtime::gameplay::drain_gameplay_events(&mut world);
+        assert!(persist_events
+            .iter()
+            .any(|event| event.id == GAMEPLAY_EVENT_WEAPON_SHELL_ROLLING));
+        assert!(
+            persist_events
+                .iter()
+                .all(|event| event.id != GAMEPLAY_EVENT_WEAPON_SHELL_CONTACT),
+            "rolling ContactPersist must never replay an impact cue: {persist_events:?}"
+        );
+    }
+    #[test]
+    fn shell_rolling_does_not_require_impact_threshold() {
+        let mut world = World::new();
+        let package = newengine_item_assets_runtime::compile_authored_item_package(
+            &newengine_item_assets_runtime::test_fps_item_package(),
+        )
+        .expect("compile test item package");
+        newengine_item_assets_runtime::install_compiled_item_package(&mut world, package);
+        let rifle_id = world
+            .resource::<ItemCatalog>()
+            .and_then(|catalog| catalog.find("weapon.rifle.standard"))
+            .map(|definition| definition.id)
+            .expect("test rifle");
+        let owner = world.spawn();
+        let casing = world.spawn();
+        let ground = world.spawn();
+        let _ = world.insert(
+            casing,
+            WeaponShellCasing::new(owner.stable_u64(), 12, rifle_id.raw(), 0),
+        );
+        let _ = world.insert(casing, WeaponShellContactRuntime::default());
+        let _ = world.insert(casing, Transform::default());
+        let _ = world.insert(casing, Velocity(Vec3::new(0.45, 0.0, 0.18)));
+        let _ = world.insert(casing, AngularVelocity(Vec3::new(0.0, 8.0, 2.0)));
+        let _ = world.insert(
+            ground,
+            PhysicsSurface {
+                id: "surface.metal.floor".to_owned(),
+                ..PhysicsSurface::default()
+            },
+        );
+        world.insert_resource(PhysicsStepReport {
+            fixed_tick: 78,
+            dt: 1.0 / 60.0,
+            events: vec![PhysicsEvent::ContactPersist(
+                newengine_physics_contracts::PhysicsContactEvent {
+                    a: casing.into(),
+                    b: ground.into(),
+                    point: Vec3::ZERO,
+                    normal: Vec3::Y,
+                    impulse: 0.0001,
+                },
+            )],
+            ..PhysicsStepReport::default()
+        });
+        process_shell_physics_events(&mut world, 1.0 / 60.0);
+        let events = newengine_engine_runtime::gameplay::drain_gameplay_events(&mut world);
+        assert!(!events
+            .iter()
+            .any(|event| event.id == GAMEPLAY_EVENT_WEAPON_SHELL_CONTACT));
+        assert!(events
+            .iter()
+            .any(|event| event.id == GAMEPLAY_EVENT_WEAPON_SHELL_ROLLING));
+    }
+    #[test]
+    fn settled_shell_stops_emitting_persistent_contact_audio_until_real_wake() {
+        let mut world = World::new();
+        let package = newengine_item_assets_runtime::compile_authored_item_package(
+            &newengine_item_assets_runtime::test_fps_item_package(),
+        )
+        .expect("compile test item package");
+        newengine_item_assets_runtime::install_compiled_item_package(&mut world, package);
+        let rifle_id = world
+            .resource::<ItemCatalog>()
+            .and_then(|catalog| catalog.find("weapon.rifle.standard"))
+            .map(|definition| definition.id)
+            .expect("test rifle");
+        let owner = world.spawn();
+        let casing = world.spawn();
+        let ground = world.spawn();
+        let _ = world.insert(
+            casing,
+            WeaponShellCasing::new(owner.stable_u64(), 13, rifle_id.raw(), 0),
+        );
+        let _ = world.insert(casing, WeaponShellContactRuntime::default());
+        let _ = world.insert(casing, Transform::default());
+        let _ = world.insert(casing, Velocity(Vec3::new(0.012, 0.0, 0.008)));
+        let _ = world.insert(casing, AngularVelocity(Vec3::new(0.0, 0.35, 0.12)));
+        let _ = world.insert(
+            ground,
+            PhysicsSurface {
+                id: "surface.metal.floor".to_owned(),
+                ..PhysicsSurface::default()
+            },
+        );
+
+        let contact = newengine_physics_contracts::PhysicsContactEvent {
+            a: casing.into(),
+            b: ground.into(),
+            point: Vec3::ZERO,
+            normal: Vec3::Y,
+            // Deliberately non-zero solver support impulse: this must not keep a resting shell audible.
+            impulse: 0.02,
+        };
+        for tick in 1..=20 {
+            world.insert_resource(PhysicsStepReport {
+                fixed_tick: tick,
+                dt: 1.0 / 60.0,
+                events: vec![PhysicsEvent::ContactPersist(contact)],
+                ..PhysicsStepReport::default()
+            });
+            process_shell_physics_events(&mut world, 1.0 / 60.0);
+            let _ = newengine_engine_runtime::gameplay::drain_gameplay_events(&mut world);
+        }
+        assert!(world
+            .get::<WeaponShellContactRuntime>(casing)
+            .is_some_and(|state| state.settled));
+
+        for tick in 21..=80 {
+            world.insert_resource(PhysicsStepReport {
+                fixed_tick: tick,
+                dt: 1.0 / 60.0,
+                events: vec![PhysicsEvent::ContactPersist(contact)],
+                ..PhysicsStepReport::default()
+            });
+            process_shell_physics_events(&mut world, 1.0 / 60.0);
+            let events = newengine_engine_runtime::gameplay::drain_gameplay_events(&mut world);
+            assert!(
+                events.iter().all(|event| {
+                    event.id != GAMEPLAY_EVENT_WEAPON_SHELL_CONTACT
+                        && event.id != GAMEPLAY_EVENT_WEAPON_SHELL_ROLLING
+                }),
+                "settled casing emitted audio semantics again at fixed tick {tick}: {events:?}"
+            );
+        }
+
+        // A genuine new motion impulse re-arms the acoustic state.
+        let _ = world.insert(casing, Velocity(Vec3::new(0.55, 0.0, 0.15)));
+        let _ = world.insert(casing, AngularVelocity(Vec3::new(0.0, 7.0, 1.0)));
+        world.insert_resource(PhysicsStepReport {
+            fixed_tick: 81,
+            dt: 1.0 / 60.0,
+            events: vec![PhysicsEvent::ContactPersist(
+                newengine_physics_contracts::PhysicsContactEvent {
+                    impulse: 0.0002,
+                    ..contact
+                },
+            )],
+            ..PhysicsStepReport::default()
+        });
+        process_shell_physics_events(&mut world, 1.0 / 60.0);
+        let events = newengine_engine_runtime::gameplay::drain_gameplay_events(&mut world);
+        assert!(events
+            .iter()
+            .any(|event| event.id == GAMEPLAY_EVENT_WEAPON_SHELL_ROLLING));
+        assert!(world
+            .get::<WeaponShellContactRuntime>(casing)
+            .is_some_and(|state| !state.settled));
+    }
+    #[test]
+    fn impact_surface_routing_accepts_hierarchical_physics_surface_ids() {
+        let vfx = newengine_engine_runtime::gameplay::WeaponVfxDefinition {
+            impact_default: Some("effects/weapon.fxd@impact.default".to_owned()),
+            impact_by_surface: [
+                (
+                    "metal".to_owned(),
+                    "effects/weapon.fxd@impact.metal".to_owned(),
+                ),
+                (
+                    "metal.floor".to_owned(),
+                    "effects/weapon.fxd@impact.metal_floor".to_owned(),
+                ),
+                (
+                    "wood".to_owned(),
+                    "effects/weapon.fxd@impact.wood".to_owned(),
+                ),
+            ]
+            .into_iter()
+            .collect(),
+            ..Default::default()
+        }
+        .sanitized();
+
+        assert_eq!(
+            vfx.impact_effect(Some("surface.metal.floor.brushed")),
+            Some("effects/weapon.fxd@impact.metal_floor")
+        );
+        assert_eq!(
+            vfx.impact_effect(Some("environment.wood.plywood")),
+            Some("effects/weapon.fxd@impact.wood")
+        );
+        assert_eq!(
+            vfx.impact_effect(Some("surface.fabric")),
+            Some("effects/weapon.fxd@impact.default")
+        );
     }
 }

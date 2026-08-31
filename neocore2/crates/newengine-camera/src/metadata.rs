@@ -131,6 +131,27 @@ impl CameraBlendSpec {
     }
 }
 
+/// Runtime binding proving that a camera entity came from an authored project definition.
+/// The camera runtime executes this identity; it does not invent project camera ownership.
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct CameraDefinitionBinding {
+    pub instance_id: String,
+    pub definition_ref: String,
+    pub target_role: String,
+}
+
+impl CameraDefinitionBinding {
+    #[inline]
+    pub fn player(instance_id: impl Into<String>, definition_ref: impl Into<String>) -> Self {
+        Self {
+            instance_id: instance_id.into(),
+            definition_ref: definition_ref.into(),
+            target_role: "player".to_owned(),
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct CameraLensMetadata {

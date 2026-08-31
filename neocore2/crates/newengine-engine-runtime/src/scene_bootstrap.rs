@@ -120,3 +120,61 @@ pub fn bootstrap_runtime_scene(scene: &mut Scene) {
     // Let scene reconcile duplicates deterministically (if user data created any).
     let _ = scene.validate_invariants();
 }
+
+/// Runtime scene foundation without manufacturing an active camera.
+///
+/// Product-owned worlds use this when camera identity is authored by project data. The engine
+/// installs only generic scene resources/root/light infrastructure; the product must explicitly
+/// create and select its camera before rendering begins.
+pub fn bootstrap_runtime_scene_foundation(scene: &mut Scene) {
+    let root_hint = scene.root();
+    {
+        let world = scene.world_mut();
+        if world.resource::<AmbientLight>().is_none() {
+            world.insert_resource(AmbientLight::default());
+        }
+        if world.resource::<ShadowSettings>().is_none() {
+            world.insert_resource(ShadowSettings::default());
+        }
+        if world.resource::<LocalShadowSettings>().is_none() {
+            world.insert_resource(LocalShadowSettings::default());
+        }
+
+        let root = root_hint.or_else(|| world.query::<SceneRoot>().next().map(|(id, _)| id));
+        let root = match root {
+            Some(id) if world.exists(id) => id,
+            _ => {
+                let root = spawn_named(world, "Root");
+                let _ = world.insert(root, SceneRoot);
+                root
+            }
+        };
+        if world.get::<SceneRoot>(root).is_none() {
+            let _ = world.insert(root, SceneRoot);
+        }
+
+        if crate::gameplay::scene_entity_by_role(world, SceneEntityRole::Sun).is_none() {
+            let sun = spawn_named(world, "Sun");
+            let _ = world.insert(sun, DirectionalLight::default());
+            let _ = set_parent(world, sun, Some(root));
+            attach_scene_element_core(
+                world,
+                sun,
+                SceneEntityRole::Sun,
+                "Scene/Environment/Sun",
+                Vec3::ZERO,
+                Vec3::splat(0.5),
+            );
+        }
+        if world.resource::<CameraManagerResource>().is_none() {
+            world.insert_resource(CameraManagerResource::default());
+        }
+        if let Some(state) = world.resource_mut::<SceneState>() {
+            state.root = Some(root);
+            state.active_camera = None;
+        } else {
+            world.insert_resource(SceneState::new(Some(root), None));
+        }
+    }
+    let _ = scene.validate_invariants();
+}

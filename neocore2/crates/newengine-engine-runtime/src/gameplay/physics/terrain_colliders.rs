@@ -147,6 +147,7 @@ fn build_body_local_heightfield_collider(
             is_trigger: false,
             participates_in_queries: false,
             casts_contacts: true,
+            continuous_collision: false,
         },
         material: PhysicsMaterialDto {
             friction: 0.85,

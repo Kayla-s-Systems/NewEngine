@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     PhysicsCommandDto, PhysicsEntityKey, PhysicsFrameBodySnapshot, PhysicsFrameColliderSnapshot,
-    PhysicsQuat, PhysicsQueryDto, PhysicsVec3,
+    PhysicsMaterialDto, PhysicsQuat, PhysicsQueryDto, PhysicsVec3,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -54,6 +54,14 @@ pub struct PhysicsBodyVelocityUpdate {
     pub angular_velocity: PhysicsVec3,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+pub struct PhysicsContactMaterialPairDto {
+    #[serde(default)]
+    pub a: Option<PhysicsMaterialDto>,
+    #[serde(default)]
+    pub b: Option<PhysicsMaterialDto>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct PhysicsContactEventDto {
     pub a: PhysicsEntityKey,
@@ -61,6 +69,10 @@ pub struct PhysicsContactEventDto {
     pub point: PhysicsVec3,
     pub normal: PhysicsVec3,
     pub impulse: f32,
+    #[serde(default)]
+    pub relative_velocity: Option<PhysicsVec3>,
+    #[serde(default)]
+    pub materials: PhysicsContactMaterialPairDto,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]

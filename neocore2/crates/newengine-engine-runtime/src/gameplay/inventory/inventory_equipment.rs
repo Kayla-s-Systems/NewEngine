@@ -456,6 +456,27 @@ pub fn unequip_slot(world: &mut World, owner: EntityId, slot: EquipmentSlot) -> 
 
 pub fn sync_equipped_weapon_runtime(world: &mut World, owner: EntityId) {
     let selected = selected_weapon(world, owner);
+    let (weapon_mode_event, weapon_type) = selected
+        .as_ref()
+        .map(|selected| match selected.binding.weapon.weapon_type {
+            WeaponType::Unarmed => ("character.weapon.mode.unarmed", "unarmed"),
+            WeaponType::Melee => ("character.weapon.mode.melee", "melee"),
+            WeaponType::Firearm => ("character.weapon.mode.firearm", "firearm"),
+        })
+        .unwrap_or(("character.weapon.mode.none", "none"));
+    if let Err(error) = super::super::emit_animation_state(
+        world,
+        owner,
+        "character.weapon.mode",
+        weapon_mode_event,
+        serde_json::json!({"weapon_type": weapon_type}),
+    ) {
+        newengine_ulog_api::ulog::warn!(
+            "weapon animation semantic mode publish failed owner={} err='{}'",
+            owner.stable_u64(),
+            error
+        );
+    }
     let current_binding = world.get::<EquippedWeaponBinding>(owner).copied();
     let current_state = world.get::<PlayerWeaponState>(owner).copied();
 

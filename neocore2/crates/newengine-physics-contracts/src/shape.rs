@@ -3,11 +3,21 @@ use newengine_math::Vec3;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum CollisionShapeDesc {
-    Box { half_extents: [f32; 3] },
-    Sphere { radius: f32 },
-    Capsule { radius: f32, half_height: f32 },
+    Box {
+        half_extents: [f32; 3],
+    },
+    Sphere {
+        radius: f32,
+    },
+    Capsule {
+        radius: f32,
+        half_height: f32,
+    },
     /// Solid cylinder aligned to local +Y/-Y.
-    Cylinder { radius: f32, half_height: f32 },
+    Cylinder {
+        radius: f32,
+        half_height: f32,
+    },
 }
 
 impl Default for CollisionShapeDesc {
@@ -70,10 +80,7 @@ impl CollisionShapeDesc {
             Self::Cylinder {
                 radius,
                 half_height,
-            } => Aabb::from_center_half_extents(
-                Vec3::ZERO,
-                Vec3::new(radius, half_height, radius),
-            ),
+            } => Aabb::from_center_half_extents(Vec3::ZERO, Vec3::new(radius, half_height, radius)),
         }
     }
 
@@ -92,7 +99,12 @@ impl CollisionShapeDesc {
             Self::Cylinder {
                 radius,
                 half_height,
-            } => Sphere::new(Vec3::ZERO, (half_height * half_height + radius * radius).sqrt().max(0.001)),
+            } => Sphere::new(
+                Vec3::ZERO,
+                (half_height * half_height + radius * radius)
+                    .sqrt()
+                    .max(0.001),
+            ),
         }
     }
 

@@ -11,17 +11,16 @@ use std::collections::{BTreeMap, BTreeSet};
 use newengine_ecs::{EntityId, World};
 use newengine_engine_runtime::gameplay::{
     active_equipped_weapon_binding, active_equipped_weapon_muzzle, consume_equipped_ammo,
-    emit_gameplay_event, equipped_reserve_ammo, persist_equipped_weapon_state,
-    sync_equipped_weapon_runtime,
-    try_collect_item_pickup, EquippedWeaponBinding, Health,
-    HitscanWeaponTuning, Interactable, InteractionEvent, InteractionEventBus, ItemInstanceId,
-    ItemPickup, MeleeWeaponTuning, PendingHitscan, PendingInteraction, PlayerCommandFrame,
-    PlayerAuthoredAnimationCapabilities, PlayerController, PlayerInteractionTuning,
-    ItemCatalog, PlayerStanceState, PlayerWeaponState, WeaponAttackKind, WeaponEvent, WeaponEventBus,
-    WeaponEventKind, WeaponFireMode, WeaponObstructionState, WeaponType,
-    GAMEPLAY_EVENT_WEAPON_EMPTY, GAMEPLAY_EVENT_WEAPON_FIRED, GAMEPLAY_EVENT_WEAPON_HIT,
-    GAMEPLAY_EVENT_WEAPON_MELEE_ATTACKED, GAMEPLAY_EVENT_WEAPON_RELOAD_COMPLETED,
-    GAMEPLAY_EVENT_WEAPON_RELOAD_STARTED,
+    emit_animation_pulse, emit_gameplay_event, equipped_reserve_ammo,
+    persist_equipped_weapon_state, sync_equipped_weapon_runtime, try_collect_item_pickup,
+    EquippedWeaponBinding, Health, HitscanWeaponTuning, Interactable, InteractionEvent,
+    InteractionEventBus, ItemCatalog, ItemInstanceId, ItemPickup, MeleeWeaponTuning,
+    PendingHitscan, PendingInteraction, PlayerAuthoredAnimationCapabilities, PlayerCommandFrame,
+    PlayerController, PlayerInteractionTuning, PlayerStanceState, PlayerWeaponState,
+    WeaponAttackKind, WeaponEvent, WeaponEventBus, WeaponEventKind, WeaponFireMode,
+    WeaponObstructionState, WeaponType, GAMEPLAY_EVENT_WEAPON_EMPTY, GAMEPLAY_EVENT_WEAPON_FIRED,
+    GAMEPLAY_EVENT_WEAPON_HIT, GAMEPLAY_EVENT_WEAPON_MELEE_ATTACKED,
+    GAMEPLAY_EVENT_WEAPON_RELOAD_COMPLETED, GAMEPLAY_EVENT_WEAPON_RELOAD_STARTED,
 };
 #[cfg(test)]
 use newengine_gameplay_fps_api::action as fps_action;
@@ -100,7 +99,7 @@ pub use queries::{collect_combat_queries, resolve_combat_queries};
 pub use runtime::step_player_combat;
 
 #[cfg(test)]
-use runtime::apply_recoil;
+use runtime::{apply_recoil, recover_weapon_recoil};
 use runtime::{emit_interaction_event, emit_weapon_event};
 use targeting::{
     hitscan_query_seq, interaction_query_seq, interaction_ray, melee_origin_and_direction,

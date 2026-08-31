@@ -1,6 +1,6 @@
 [package]
 name = "newengine-audio-world-runtime"
-version = "0.5.0"
+version = "0.6.0"
 edition = "2021"
 readme = "README.md"
 description = "World-facing spatial audio scene, ambience and engine.audio gateway runtime for North Star"

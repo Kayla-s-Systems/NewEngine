@@ -73,6 +73,24 @@ mod tests {
             forward.y > 0.0,
             "post-recoil camera forward must point upward"
         );
+
+        let initial_pitch = motor.pitch;
+        recover_weapon_recoil(&mut world, player, 1.0 / 60.0);
+        let followed = world.get::<CharacterMotor>(player).copied().expect("motor");
+        assert!(
+            followed.pitch >= initial_pitch,
+            "TLOU2-style recoil tracker must carry a short post-shot follow-through before recovery"
+        );
+        for _ in 0..45 {
+            recover_weapon_recoil(&mut world, player, 1.0 / 60.0);
+        }
+        let settled = world.get::<CharacterMotor>(player).copied().expect("motor");
+        assert!(
+            settled.pitch.abs() < initial_pitch * 0.10,
+            "camera recoil tracker must settle without leaving a permanent authored offset: initial={} settled={}",
+            initial_pitch,
+            settled.pitch
+        );
     }
 
     #[test]
@@ -110,15 +128,25 @@ mod tests {
             .expect("semantic weapon fired event");
         assert_eq!(fired.source, Some(shooter.stable_u64()));
         assert_eq!(
-            fired.payload.get("shot_sequence").and_then(serde_json::Value::as_u64),
+            fired
+                .payload
+                .get("shot_sequence")
+                .and_then(serde_json::Value::as_u64),
             Some(pending.shot_sequence)
         );
         assert_eq!(
-            fired.payload.get("weapon").and_then(serde_json::Value::as_str),
+            fired
+                .payload
+                .get("weapon")
+                .and_then(serde_json::Value::as_str),
             Some("weapon.rifle.standard")
         );
         assert!(
-            fired.payload.get("shot_origin").and_then(serde_json::Value::as_array).is_some(),
+            fired
+                .payload
+                .get("shot_origin")
+                .and_then(serde_json::Value::as_array)
+                .is_some(),
             "fired event must expose the authoritative muzzle-originated shot"
         );
         let map = BTreeMap::from([
@@ -148,7 +176,9 @@ mod tests {
             .expect("semantic weapon hit event");
         assert_eq!(hit.source, Some(shooter.stable_u64()));
         assert_eq!(
-            hit.payload.get("target").and_then(serde_json::Value::as_u64),
+            hit.payload
+                .get("target")
+                .and_then(serde_json::Value::as_u64),
             Some(target.stable_u64())
         );
         let events = drain_weapon_events(&mut world);
@@ -298,8 +328,12 @@ mod tests {
     #[test]
     fn unarmed_attack_is_rejected_when_bound_character_has_no_authored_attack_pose() {
         let mut world = World::new();
-        let player =
-            spawn_default_player(&mut world, None, "unarmed-animation-unsupported", Vec3::ZERO);
+        let player = spawn_default_player(
+            &mut world,
+            None,
+            "unarmed-animation-unsupported",
+            Vec3::ZERO,
+        );
         let unarmed = ItemDefinition::typed_weapon(
             "weapon.unarmed",
             "Unarmed",
@@ -352,7 +386,7 @@ mod tests {
         );
     }
 
-     #[test]
+    #[test]
     fn semi_auto_weapon_fires_once_per_press_not_continuously_while_held() {
         let mut world = World::new();
         let player = spawn_fps_player(&mut world, "semi-auto-player", Vec3::ZERO);
@@ -753,9 +787,8 @@ fn hitscan_direction_tracks_mouse_look_pitch() {
             ..PlayerStanceState::default()
         },
     );
-    let muzzle =
-        EquippedWeaponMuzzle::new(Vec3::new(0.2, 1.3, -0.55), Vec3::new(0.0, 0.0, -1.0))
-            .expect("physical muzzle");
+    let muzzle = EquippedWeaponMuzzle::new(Vec3::new(0.2, 1.3, -0.55), Vec3::new(0.0, 0.0, -1.0))
+        .expect("physical muzzle");
     let _ = world.insert(player, muzzle);
     let mut tuning = HitscanWeaponTuning::default();
     tuning.hip_spread_radians = 0.0;

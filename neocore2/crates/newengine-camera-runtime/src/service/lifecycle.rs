@@ -85,15 +85,27 @@ impl CameraRuntimeService {
                 eye_height: config.first_person_eye_height,
             }
             .controller(player),
-            GameplayCameraRunnerKind::ThirdPersonFollow => {
-                GameplayThirdPersonFollowRunner::default().controller(player)
+            GameplayCameraRunnerKind::ThirdPersonFollow => GameplayThirdPersonFollowRunner {
+                shoulder_offset: config.third_person_follow_offset_ls,
+                focus_offset: config.third_person_follow_focus_offset_ls,
+                smooth_time: config.third_person_follow_smooth_time,
+                max_speed: config.third_person_follow_max_speed,
             }
-            GameplayCameraRunnerKind::ThirdPersonAim => {
-                GameplayThirdPersonAimRunner::default().controller(player)
+            .controller(player),
+            GameplayCameraRunnerKind::ThirdPersonAim => GameplayThirdPersonAimRunner {
+                shoulder_offset: config.third_person_aim_offset_ls,
+                focus_offset: config.third_person_aim_focus_offset_ls,
+                smooth_time: config.third_person_aim_smooth_time,
+                max_speed: config.third_person_aim_max_speed,
             }
-            GameplayCameraRunnerKind::ThirdPersonOrbit => {
-                GameplayThirdPersonOrbitRunner::default().controller(player)
+            .controller(player),
+            GameplayCameraRunnerKind::ThirdPersonOrbit => GameplayThirdPersonOrbitRunner {
+                orbit_offset: config.third_person_orbit_offset_ls,
+                focus_offset: config.third_person_orbit_focus_offset_ls,
+                smooth_time: config.third_person_orbit_smooth_time,
+                max_speed: config.third_person_orbit_max_speed,
             }
+            .controller(player),
         };
 
         let _ = world.insert(camera, follow);

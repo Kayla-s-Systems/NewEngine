@@ -68,24 +68,14 @@ pub fn consume_weapon_gameplay_events(world: &mut World, events: &[GameplayEvent
                     .get("target")
                     .and_then(serde_json::Value::as_u64)
                     .and_then(|target| entity_from_stable_id(world, target));
-                resolve_weapon_shot_hit_fx(
-                    world,
-                    owner,
-                    shot_sequence,
-                    point,
-                    normal,
-                    target,
-                );
+                resolve_weapon_shot_hit_fx(world, owner, shot_sequence, point, normal, target);
             }
             _ => {}
         }
     }
 }
 
-fn equipped_weapon_vfx_definition(
-    world: &World,
-    owner: EntityId,
-) -> Option<WeaponVfxDefinition> {
+fn equipped_weapon_vfx_definition(world: &World, owner: EntityId) -> Option<WeaponVfxDefinition> {
     let binding = world.get::<EquippedWeaponBinding>(owner).copied()?;
     world
         .resource::<ItemCatalog>()?
@@ -104,7 +94,12 @@ fn equipped_weapon_entity(world: &World, owner: EntityId) -> Option<EntityId> {
 }
 
 #[inline]
-fn signed_casing_noise(owner: EntityId, weapon_item_id: u64, shot_sequence: u64, channel: u64) -> f32 {
+fn signed_casing_noise(
+    owner: EntityId,
+    weapon_item_id: u64,
+    shot_sequence: u64,
+    channel: u64,
+) -> f32 {
     let seed = owner.stable_u64()
         ^ weapon_item_id.rotate_left(17)
         ^ shot_sequence.rotate_left(31)
@@ -113,10 +108,18 @@ fn signed_casing_noise(owner: EntityId, weapon_item_id: u64, shot_sequence: u64,
     (bits as f32 / 0x00ff_ffffu32 as f32) * 2.0 - 1.0
 }
 
+const SHELL_SETTLE_LINEAR_SPEED_MPS: f32 = 0.055;
+const SHELL_SETTLE_ANGULAR_SPEED_RADPS: f32 = 1.0;
+const SHELL_WAKE_LINEAR_SPEED_MPS: f32 = 0.22;
+const SHELL_WAKE_ANGULAR_SPEED_RADPS: f32 = 4.0;
+const SHELL_SETTLE_HOLD_SECONDS: f32 = 0.20;
+
 #[derive(Clone, Copy, Debug, Default)]
 struct WeaponShellContactRuntime {
     impact_cooldown_seconds: f32,
     rolling_cooldown_seconds: f32,
+    quiet_seconds: f32,
+    settled: bool,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -124,7 +127,10 @@ struct WeaponShellPhysicsEventCursor {
     fixed_tick: u64,
 }
 
-fn weapon_shell_definition(world: &World, casing: WeaponShellCasing) -> Option<newengine_engine_runtime::gameplay::WeaponCasingDefinition> {
+fn weapon_shell_definition(
+    world: &World,
+    casing: WeaponShellCasing,
+) -> Option<newengine_engine_runtime::gameplay::WeaponCasingDefinition> {
     world
         .resource::<ItemCatalog>()?
         .get(ItemId(casing.weapon_item_id))
@@ -140,11 +146,9 @@ fn casing_contact_class(
         return None;
     }
     let surface_lower = surface.trim().to_ascii_lowercase();
-    if definition
-        .soft_surface_contains
-        .iter()
-        .any(|needle| !needle.trim().is_empty() && surface_lower.contains(&needle.trim().to_ascii_lowercase()))
-    {
+    if definition.soft_surface_contains.iter().any(|needle| {
+        !needle.trim().is_empty() && surface_lower.contains(&needle.trim().to_ascii_lowercase())
+    }) {
         return Some("dirt");
     }
     if impulse >= definition.contact_hard_impulse {
@@ -167,7 +171,11 @@ fn publish_shell_physics_event(
     impulse: f32,
     fixed_tick: u64,
 ) {
-    let velocity = world.get::<Velocity>(casing_entity).copied().unwrap_or_default().0;
+    let velocity = world
+        .get::<Velocity>(casing_entity)
+        .copied()
+        .unwrap_or_default()
+        .0;
     let angular_velocity = world
         .get::<AngularVelocity>(casing_entity)
         .copied()
@@ -211,9 +219,48 @@ fn process_shell_physics_events(world: &mut World, dt: f32) {
         .map(|(entity, casing)| (entity, *casing))
         .collect::<Vec<_>>();
     for (entity, _) in &shells {
-        let mut state = world.get::<WeaponShellContactRuntime>(*entity).copied().unwrap_or_default();
+        let mut state = world
+            .get::<WeaponShellContactRuntime>(*entity)
+            .copied()
+            .unwrap_or_default();
         state.impact_cooldown_seconds = (state.impact_cooldown_seconds - dt).max(0.0);
         state.rolling_cooldown_seconds = (state.rolling_cooldown_seconds - dt).max(0.0);
+
+        let linear_speed = world
+            .get::<Velocity>(*entity)
+            .copied()
+            .unwrap_or_default()
+            .0
+            .length();
+        let angular_speed = world
+            .get::<AngularVelocity>(*entity)
+            .copied()
+            .unwrap_or_default()
+            .0
+            .length();
+
+        if state.settled {
+            // Sleeping/settled brass must remain acoustically silent through solver jitter.
+            // Only a real wake impulse is allowed to re-arm rolling/contact audio.
+            if linear_speed >= SHELL_WAKE_LINEAR_SPEED_MPS
+                || angular_speed >= SHELL_WAKE_ANGULAR_SPEED_RADPS
+            {
+                state.settled = false;
+                state.quiet_seconds = 0.0;
+            }
+        } else if linear_speed <= SHELL_SETTLE_LINEAR_SPEED_MPS
+            && angular_speed <= SHELL_SETTLE_ANGULAR_SPEED_RADPS
+        {
+            state.quiet_seconds = (state.quiet_seconds + dt).min(SHELL_SETTLE_HOLD_SECONDS);
+            if state.quiet_seconds >= SHELL_SETTLE_HOLD_SECONDS {
+                state.settled = true;
+                state.impact_cooldown_seconds = 0.0;
+                state.rolling_cooldown_seconds = 0.0;
+            }
+        } else {
+            state.quiet_seconds = 0.0;
+        }
+
         let _ = world.insert(*entity, state);
     }
 
@@ -241,9 +288,23 @@ fn process_shell_physics_events(world: &mut World, dt: f32) {
         let a = entity_from_stable_id(world, contact.a.stable_id);
         let b = entity_from_stable_id(world, contact.b.stable_id);
         let Some((casing_entity, other_entity, casing)) = a
-            .and_then(|entity| world.get::<WeaponShellCasing>(entity).copied().map(|casing| (entity, b, casing)))
-            .or_else(|| b.and_then(|entity| world.get::<WeaponShellCasing>(entity).copied().map(|casing| (entity, a, casing))))
-            .and_then(|(casing_entity, other, casing)| other.map(|other| (casing_entity, other, casing)))
+            .and_then(|entity| {
+                world
+                    .get::<WeaponShellCasing>(entity)
+                    .copied()
+                    .map(|casing| (entity, b, casing))
+            })
+            .or_else(|| {
+                b.and_then(|entity| {
+                    world
+                        .get::<WeaponShellCasing>(entity)
+                        .copied()
+                        .map(|casing| (entity, a, casing))
+                })
+            })
+            .and_then(|(casing_entity, other, casing)| {
+                other.map(|other| (casing_entity, other, casing))
+            })
         else {
             continue;
         };
@@ -254,31 +315,49 @@ fn process_shell_physics_events(world: &mut World, dt: f32) {
             .get::<PhysicsSurface>(other_entity)
             .map(|surface| surface.id.as_str())
             .unwrap_or("");
-        let Some(contact_class) = casing_contact_class(&definition, surface, contact.impulse) else {
-            continue;
-        };
+        let surface_lower = surface.trim().to_ascii_lowercase();
+        let soft_surface = definition.soft_surface_contains.iter().any(|needle| {
+            let needle = needle.trim().to_ascii_lowercase();
+            !needle.is_empty() && surface_lower.contains(&needle)
+        });
+        let contact_class = casing_contact_class(&definition, surface, contact.impulse);
         let mut state = world
             .get::<WeaponShellContactRuntime>(casing_entity)
             .copied()
             .unwrap_or_default();
+        if state.settled {
+            // ContactPersist continues while a rigid body rests on a surface. Once the casing has
+            // physically settled, those maintenance contacts are not audible impacts/rolling.
+            continue;
+        }
 
-        if state.impact_cooldown_seconds <= 0.0 && (is_begin || contact.impulse >= definition.contact_medium_impulse) {
-            publish_shell_physics_event(
-                world,
-                casing_entity,
-                other_entity,
-                casing,
-                GAMEPLAY_EVENT_WEAPON_SHELL_CONTACT,
-                contact_class,
-                contact.point,
-                contact.impulse,
-                report.fixed_tick,
-            );
-            state.impact_cooldown_seconds = 0.035;
+        if let Some(contact_class) = contact_class {
+            // Impact audio belongs to collision transitions only. A resting/rolling rigid body
+            // receives ContactPersist support impulses every solver tick; treating those as new
+            // impacts is exactly what produced the repeating ground-hit sound while brass rolled.
+            // A genuine bounce separates first, so its next collision arrives as ContactBegin.
+            if is_begin && state.impact_cooldown_seconds <= 0.0 {
+                publish_shell_physics_event(
+                    world,
+                    casing_entity,
+                    other_entity,
+                    casing,
+                    GAMEPLAY_EVENT_WEAPON_SHELL_CONTACT,
+                    contact_class,
+                    contact.point,
+                    contact.impulse,
+                    report.fixed_tick,
+                );
+                state.impact_cooldown_seconds = 0.035;
+            }
         }
 
         if !is_begin && state.rolling_cooldown_seconds <= 0.0 {
-            let velocity = world.get::<Velocity>(casing_entity).copied().unwrap_or_default().0;
+            let velocity = world
+                .get::<Velocity>(casing_entity)
+                .copied()
+                .unwrap_or_default()
+                .0;
             let angular = world
                 .get::<AngularVelocity>(casing_entity)
                 .copied()
@@ -295,7 +374,7 @@ fn process_shell_physics_events(world: &mut World, dt: f32) {
                     other_entity,
                     casing,
                     GAMEPLAY_EVENT_WEAPON_SHELL_ROLLING,
-                    if contact_class == "dirt" { "dirt" } else { "small" },
+                    if soft_surface { "dirt" } else { "small" },
                     contact.point,
                     contact.impulse,
                     report.fixed_tick,
@@ -305,7 +384,9 @@ fn process_shell_physics_events(world: &mut World, dt: f32) {
         }
         let _ = world.insert(casing_entity, state);
     }
-    world.insert_resource(WeaponShellPhysicsEventCursor { fixed_tick: report.fixed_tick });
+    world.insert_resource(WeaponShellPhysicsEventCursor {
+        fixed_tick: report.fixed_tick,
+    });
 }
 
 fn fallback_weapon_socket(position: Vec3, forward: Vec3) -> Option<WeaponSocketPose> {
@@ -341,7 +422,9 @@ pub fn spawn_weapon_shot_fx(
         let effect_owner = equipped_weapon_entity(world, owner).unwrap_or(owner);
         let request = newengine_vfx_api::VfxSpawnRequestV1 {
             effect: newengine_vfx_api::VfxEffectRef::new(effect),
-            owner: Some(newengine_vfx_api::EntityHandle::new(effect_owner.stable_u64())),
+            owner: Some(newengine_vfx_api::EntityHandle::new(
+                effect_owner.stable_u64(),
+            )),
             correlation_id: shot_sequence,
             position: vec3_array(origin),
             direction: vec3_array(direction),
@@ -512,6 +595,7 @@ fn spawn_persistent_shell_casing(
     body.material.friction = casing_definition.friction;
     body.material.restitution = casing_definition.restitution;
     body.material.density = casing_definition.density;
+    body.flags.continuous_collision = true;
     let _ = world.insert(casing, body);
     let _ = world.insert(casing, body.to_bounds());
     let _ = world.insert(casing, Velocity(casing_velocity));
@@ -626,7 +710,9 @@ pub fn resolve_weapon_shot_hit_fx(
     let effect_owner = equipped_weapon_entity(world, owner).unwrap_or(owner);
     let request = newengine_vfx_api::VfxSpawnRequestV1 {
         effect: newengine_vfx_api::VfxEffectRef::new(effect),
-        owner: Some(newengine_vfx_api::EntityHandle::new(effect_owner.stable_u64())),
+        owner: Some(newengine_vfx_api::EntityHandle::new(
+            effect_owner.stable_u64(),
+        )),
         correlation_id: shot_sequence,
         position: vec3_array(point),
         direction: vec3_array(-normal),

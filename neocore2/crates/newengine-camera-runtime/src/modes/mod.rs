@@ -35,6 +35,7 @@ impl GameplayFirstPersonRunner {
 #[derive(Clone, Copy, Debug)]
 pub struct GameplayThirdPersonFollowRunner {
     pub shoulder_offset: Vec3,
+    pub focus_offset: Vec3,
     pub smooth_time: f32,
     pub max_speed: f32,
 }
@@ -44,6 +45,7 @@ impl Default for GameplayThirdPersonFollowRunner {
     fn default() -> Self {
         Self {
             shoulder_offset: Vec3::new(0.35, 1.65, 4.5),
+            focus_offset: Vec3::new(0.0, 0.95, 0.0),
             smooth_time: 0.08,
             max_speed: 0.0,
         }
@@ -57,7 +59,7 @@ impl GameplayThirdPersonFollowRunner {
             target: player,
             offset_ls: self.shoulder_offset,
             rot_offset: Quat::IDENTITY,
-            focus_offset_ls: Vec3::new(0.0, 0.95, 0.0),
+            focus_offset_ls: self.focus_offset,
             follow_rotation: false,
             render_cadence_only: true,
             smooth_time: self.smooth_time.max(0.0),
@@ -69,6 +71,7 @@ impl GameplayThirdPersonFollowRunner {
 #[derive(Clone, Copy, Debug)]
 pub struct GameplayThirdPersonAimRunner {
     pub shoulder_offset: Vec3,
+    pub focus_offset: Vec3,
     pub smooth_time: f32,
     pub max_speed: f32,
 }
@@ -78,6 +81,7 @@ impl Default for GameplayThirdPersonAimRunner {
     fn default() -> Self {
         Self {
             shoulder_offset: Vec3::new(0.55, 1.55, 2.2),
+            focus_offset: Vec3::new(0.0, 1.25, 0.0),
             smooth_time: 0.035,
             max_speed: 0.0,
         }
@@ -91,7 +95,7 @@ impl GameplayThirdPersonAimRunner {
             target: player,
             offset_ls: self.shoulder_offset,
             rot_offset: Quat::IDENTITY,
-            focus_offset_ls: Vec3::new(0.0, 1.25, 0.0),
+            focus_offset_ls: self.focus_offset,
             follow_rotation: true,
             render_cadence_only: true,
             smooth_time: self.smooth_time.max(0.0),
@@ -103,6 +107,7 @@ impl GameplayThirdPersonAimRunner {
 #[derive(Clone, Copy, Debug)]
 pub struct GameplayThirdPersonOrbitRunner {
     pub orbit_offset: Vec3,
+    pub focus_offset: Vec3,
     pub smooth_time: f32,
     pub max_speed: f32,
 }
@@ -114,6 +119,7 @@ impl Default for GameplayThirdPersonOrbitRunner {
             // Orbit is a pure radius around a separate character-center pivot.
             // Do not bake shoulder/height bias into the arm or the subject drifts off-center.
             orbit_offset: Vec3::new(0.0, 0.0, 4.8),
+            focus_offset: Vec3::new(0.0, 0.95, 0.0),
             smooth_time: 0.06,
             max_speed: 0.0,
         }
@@ -128,7 +134,7 @@ impl GameplayThirdPersonOrbitRunner {
             offset_ls: self.orbit_offset,
             rot_offset: Quat::IDENTITY,
             // Aim at the torso center, not the animated head/hips and not the feet.
-            focus_offset_ls: Vec3::new(0.0, 0.95, 0.0),
+            focus_offset_ls: self.focus_offset,
             follow_rotation: false,
             render_cadence_only: true,
             smooth_time: self.smooth_time.max(0.0),

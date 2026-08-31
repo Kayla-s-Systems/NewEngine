@@ -232,6 +232,38 @@ mod tests {
             json!(17)
         );
         assert!(prepared["startup_settings"]["display"].is_object());
+        assert_eq!(
+            prepared["startup_settings"]["display"]["resolution"],
+            json!([0, 0])
+        );
+    }
+
+    #[test]
+    fn patch_updates_default_injected_display_resolution() {
+        let mut document = prepare_project_browser_config_document(json!({
+            "startup_settings": {
+                "display": {"vsync": true},
+                "graphics": {}
+            }
+        }))
+        .unwrap();
+
+        let changed = apply_project_browser_settings_patch(
+            &json!({
+                "settings_patch": [{
+                    "path": ["startup_settings", "display", "resolution"],
+                    "value": [2560, 1440]
+                }]
+            }),
+            &mut document,
+        )
+        .unwrap();
+
+        assert_eq!(changed, 1);
+        assert_eq!(
+            document["startup_settings"]["display"]["resolution"],
+            json!([2560, 1440])
+        );
     }
 
     #[test]

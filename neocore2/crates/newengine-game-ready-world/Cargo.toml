@@ -20,6 +20,7 @@ newengine-assets-api = { path = "../newengine-assets-api" }
 newengine-animation-api = { path = "../newengine-animation-api" }
 newengine-animation-runtime = { path = "../newengine-animation-runtime" }
 newengine-bounds = { path = "../newengine-bounds" }
+newengine-camera = { path = "../newengine-camera" }
 newengine-core = { path = "../newengine-core" }
 newengine-ecs = { path = "../newengine-ecs" }
 newengine-lighting = { path = "../newengine-lighting" }

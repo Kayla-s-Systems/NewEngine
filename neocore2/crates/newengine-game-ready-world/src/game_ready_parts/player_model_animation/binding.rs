@@ -411,8 +411,86 @@ pub(super) fn select_fall_presentation_band(
 }
 
 #[derive(Clone, Debug)]
+struct ResolvedAnimationSemanticState {
+    event: String,
+    target: String,
+    sequence: u64,
+    parameters: serde_json::Value,
+}
+
+#[derive(Clone, Debug, Default)]
+struct PlayerAnimationSemanticInput {
+    states: std::collections::BTreeMap<String, ResolvedAnimationSemanticState>,
+    pulses: Vec<ResolvedAnimationSemanticState>,
+}
+
+impl PlayerAnimationSemanticInput {
+    const MAX_PULSES: usize = 64;
+
+    fn consume(
+        &mut self,
+        bindings: &std::collections::BTreeMap<String, String>,
+        event: &newengine_animation_api::AnimationSemanticEventV1,
+    ) -> Result<bool, String> {
+        let Some(target) = bindings.get(event.event.as_str()) else {
+            return Ok(false);
+        };
+        let target = target.trim();
+        if target.is_empty() {
+            return Err(format!(
+                "animation event binding target is empty event='{}'",
+                event.event
+            ));
+        }
+        let resolved = ResolvedAnimationSemanticState {
+            event: event.event.clone(),
+            target: target.to_owned(),
+            sequence: event.sequence,
+            parameters: event.parameters.clone(),
+        };
+        match event.kind {
+            newengine_animation_api::AnimationSemanticEventKind::State => {
+                let replace = self
+                    .states
+                    .get(event.channel.as_str())
+                    .map(|previous| event.sequence > previous.sequence)
+                    .unwrap_or(true);
+                if replace {
+                    self.states.insert(event.channel.clone(), resolved);
+                }
+            }
+            newengine_animation_api::AnimationSemanticEventKind::Pulse => {
+                if self.pulses.len() >= Self::MAX_PULSES {
+                    let overflow = self.pulses.len() + 1 - Self::MAX_PULSES;
+                    self.pulses.drain(0..overflow);
+                }
+                self.pulses.push(resolved);
+            }
+        }
+        Ok(true)
+    }
+
+    fn state(&self, channel: &str) -> Option<&ResolvedAnimationSemanticState> {
+        self.states.get(channel)
+    }
+
+    fn latest_pulse_target(&self, target: &str) -> Option<&ResolvedAnimationSemanticState> {
+        self.pulses
+            .iter()
+            .rev()
+            .find(|event| event.target.eq_ignore_ascii_case(target))
+    }
+
+    fn discard_pulses_through(&mut self, sequence: u64) {
+        self.pulses.retain(|pulse| pulse.sequence > sequence);
+    }
+}
+
 pub(super) struct PlayerAnimationRuntimeBinding {
     clips: [Option<PlayerAnimationRuntimeClip>; 8],
+    animation_event_bindings: std::collections::BTreeMap<String, String>,
+    semantic_input: PlayerAnimationSemanticInput,
+    consumed_pulse_sequence: u64,
     active_state: newengine_engine_runtime::gameplay::PlayerLocomotionAnimation,
     active_slot: usize,
     locomotion_graph: std::sync::Arc<CompiledAnimationGraph>,
@@ -465,6 +543,9 @@ pub(super) struct PlayerAnimationRuntimeBinding {
     landing_active_band: Option<FallPresentationBand>,
     landing_active_run: bool,
     landing_time_seconds: f32,
+    landing_active_distance: f32,
+    landing_active_downward_speed: f32,
+    landing_active_horizontal_speed: f32,
     landing_last_revision: u64,
     fall_medium_min_distance: f32,
     fall_high_min_distance: f32,
@@ -485,6 +566,9 @@ pub(super) struct PlayerAnimationRuntimeBinding {
     equipment_reload_rotation_weights: Vec<ResolvedJointBlendRule>,
     equipment_overlay_locals: Vec<JointLocalPose>,
     equipment_ik: Option<WeaponArmIkRig>,
+    /// Cooldown for significant support-IK residual diagnostics. The solve still runs every frame,
+    /// but a persistent authored-contact problem must not flood the runtime log.
+    equipment_ik_residual_diag_cooldown: f32,
     /// Torso-owned, reach-fitted weapon root before secondary dynamics. Render consumes this exact root.
     equipment_resolved_weapon_root: Option<crate::weapon_grip::WeaponRootTransform>,
 }
@@ -507,6 +591,32 @@ const fn locomotion_slot(
 }
 
 impl PlayerAnimationRuntimeBinding {
+    pub(super) fn consume_semantic_event(
+        &mut self,
+        event: &newengine_animation_api::AnimationSemanticEventV1,
+    ) -> Result<bool, String> {
+        self.semantic_input
+            .consume(&self.animation_event_bindings, event)
+    }
+
+    pub(super) fn consume_semantic_events<'a>(
+        &mut self,
+        events: impl IntoIterator<Item = &'a newengine_animation_api::AnimationSemanticEventV1>,
+    ) -> Result<usize, String> {
+        let mut accepted = 0usize;
+        for event in events {
+            accepted += usize::from(self.consume_semantic_event(event)?);
+        }
+        Ok(accepted)
+    }
+
+    pub(super) fn seed_semantic_state(
+        &mut self,
+        events: &[newengine_animation_api::AnimationSemanticEventV1],
+    ) -> Result<usize, String> {
+        self.consume_semantic_events(events.iter())
+    }
+
     pub(super) fn authored_capabilities(
         &self,
     ) -> newengine_engine_runtime::gameplay::PlayerAuthoredAnimationCapabilities {

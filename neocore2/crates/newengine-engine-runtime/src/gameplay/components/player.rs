@@ -90,9 +90,39 @@ pub struct PlayerCameraProfile {
     pub first_person_forward_clearance: f32,
     pub first_person_body_yaw_limit_radians: f32,
     pub first_person_down_pitch_limit_radians: f32,
+    pub first_person_collision_enabled: bool,
+    pub first_person_collision_probe_radius: f32,
+    pub first_person_collision_padding: f32,
     pub third_person_follow_fov_y_radians: f32,
+    pub third_person_follow_offset_ls: Vec3,
+    pub third_person_follow_focus_offset_ls: Vec3,
+    pub third_person_follow_smooth_time: f32,
+    pub third_person_follow_max_speed: f32,
+    pub third_person_follow_zoom_min: f32,
+    pub third_person_follow_zoom_max: f32,
     pub third_person_aim_fov_y_radians: f32,
+    pub third_person_aim_offset_ls: Vec3,
+    pub third_person_aim_focus_offset_ls: Vec3,
+    pub third_person_aim_smooth_time: f32,
+    pub third_person_aim_max_speed: f32,
+    pub third_person_aim_zoom_min: f32,
+    pub third_person_aim_zoom_max: f32,
     pub third_person_orbit_fov_y_radians: f32,
+    pub third_person_orbit_offset_ls: Vec3,
+    pub third_person_orbit_focus_offset_ls: Vec3,
+    pub third_person_orbit_smooth_time: f32,
+    pub third_person_orbit_max_speed: f32,
+    pub third_person_orbit_zoom_min: f32,
+    pub third_person_orbit_zoom_max: f32,
+    pub third_person_collision_enabled: bool,
+    pub third_person_collision_probe_radius: f32,
+    pub third_person_collision_padding: f32,
+    pub third_person_collision_min_distance: f32,
+    pub zoom_wheel_exponent_per_step: f32,
+    pub orbit_drag_zoom_exponent_per_pixel: f32,
+    pub gameplay_blend_in_seconds: f32,
+    pub gameplay_blend_out_seconds: f32,
+    pub gameplay_blend_lock_input: bool,
     /// When true, the local player's world model is presentation-hidden in first person.
     /// Shadow passes may still consume it through the existing view-visibility contract.
     pub hide_local_model_in_first_person: bool,
@@ -101,40 +131,182 @@ pub struct PlayerCameraProfile {
 impl PlayerCameraProfile {
     #[inline]
     pub fn sanitized(self) -> Self {
+        let defaults = Self::default();
         let fov = |value: f32, fallback: f32| {
             finite_or(value, fallback).clamp(20.0_f32.to_radians(), 130.0_f32.to_radians())
         };
+        let positive =
+            |value: f32, fallback: f32, max: f32| finite_or(value, fallback).clamp(0.0, max);
+        let vec3 = |value: Vec3, fallback: Vec3| if value.is_finite() { value } else { fallback };
+        let zoom_pair = |min_value: f32, max_value: f32, fallback_min: f32, fallback_max: f32| {
+            let min_value = finite_or(min_value, fallback_min).clamp(0.01, 1000.0);
+            let max_value = finite_or(max_value, fallback_max).clamp(min_value, 1000.0);
+            (min_value, max_value)
+        };
+        let (follow_zoom_min, follow_zoom_max) = zoom_pair(
+            self.third_person_follow_zoom_min,
+            self.third_person_follow_zoom_max,
+            defaults.third_person_follow_zoom_min,
+            defaults.third_person_follow_zoom_max,
+        );
+        let (aim_zoom_min, aim_zoom_max) = zoom_pair(
+            self.third_person_aim_zoom_min,
+            self.third_person_aim_zoom_max,
+            defaults.third_person_aim_zoom_min,
+            defaults.third_person_aim_zoom_max,
+        );
+        let (orbit_zoom_min, orbit_zoom_max) = zoom_pair(
+            self.third_person_orbit_zoom_min,
+            self.third_person_orbit_zoom_max,
+            defaults.third_person_orbit_zoom_min,
+            defaults.third_person_orbit_zoom_max,
+        );
         Self {
-            first_person_fov_y_radians: fov(self.first_person_fov_y_radians, 68.0_f32.to_radians()),
+            first_person_fov_y_radians: fov(
+                self.first_person_fov_y_radians,
+                defaults.first_person_fov_y_radians,
+            ),
             first_person_ads_fov_y_radians: fov(
                 self.first_person_ads_fov_y_radians,
-                45.0_f32.to_radians(),
+                defaults.first_person_ads_fov_y_radians,
             ),
-            first_person_near: finite_or(self.first_person_near, 0.045).clamp(0.005, 0.50),
-            first_person_forward_clearance: finite_or(self.first_person_forward_clearance, 0.07)
-                .clamp(0.0, 0.25),
+            first_person_near: finite_or(self.first_person_near, defaults.first_person_near)
+                .clamp(0.005, 0.50),
+            first_person_forward_clearance: finite_or(
+                self.first_person_forward_clearance,
+                defaults.first_person_forward_clearance,
+            )
+            .clamp(0.0, 0.25),
             first_person_body_yaw_limit_radians: finite_or(
                 self.first_person_body_yaw_limit_radians,
-                65.0_f32.to_radians(),
+                defaults.first_person_body_yaw_limit_radians,
             )
             .clamp(1.0_f32.to_radians(), 179.0_f32.to_radians()),
             first_person_down_pitch_limit_radians: finite_or(
                 self.first_person_down_pitch_limit_radians,
-                85.0_f32.to_radians(),
+                defaults.first_person_down_pitch_limit_radians,
             )
             .clamp(1.0_f32.to_radians(), 89.0_f32.to_radians()),
+            first_person_collision_enabled: self.first_person_collision_enabled,
+            first_person_collision_probe_radius: positive(
+                self.first_person_collision_probe_radius,
+                defaults.first_person_collision_probe_radius,
+                1.0,
+            ),
+            first_person_collision_padding: positive(
+                self.first_person_collision_padding,
+                defaults.first_person_collision_padding,
+                0.5,
+            ),
             third_person_follow_fov_y_radians: fov(
                 self.third_person_follow_fov_y_radians,
-                64.0_f32.to_radians(),
+                defaults.third_person_follow_fov_y_radians,
             ),
+            third_person_follow_offset_ls: vec3(
+                self.third_person_follow_offset_ls,
+                defaults.third_person_follow_offset_ls,
+            ),
+            third_person_follow_focus_offset_ls: vec3(
+                self.third_person_follow_focus_offset_ls,
+                defaults.third_person_follow_focus_offset_ls,
+            ),
+            third_person_follow_smooth_time: positive(
+                self.third_person_follow_smooth_time,
+                defaults.third_person_follow_smooth_time,
+                10.0,
+            ),
+            third_person_follow_max_speed: positive(
+                self.third_person_follow_max_speed,
+                defaults.third_person_follow_max_speed,
+                1000.0,
+            ),
+            third_person_follow_zoom_min: follow_zoom_min,
+            third_person_follow_zoom_max: follow_zoom_max,
             third_person_aim_fov_y_radians: fov(
                 self.third_person_aim_fov_y_radians,
-                54.0_f32.to_radians(),
+                defaults.third_person_aim_fov_y_radians,
             ),
+            third_person_aim_offset_ls: vec3(
+                self.third_person_aim_offset_ls,
+                defaults.third_person_aim_offset_ls,
+            ),
+            third_person_aim_focus_offset_ls: vec3(
+                self.third_person_aim_focus_offset_ls,
+                defaults.third_person_aim_focus_offset_ls,
+            ),
+            third_person_aim_smooth_time: positive(
+                self.third_person_aim_smooth_time,
+                defaults.third_person_aim_smooth_time,
+                10.0,
+            ),
+            third_person_aim_max_speed: positive(
+                self.third_person_aim_max_speed,
+                defaults.third_person_aim_max_speed,
+                1000.0,
+            ),
+            third_person_aim_zoom_min: aim_zoom_min,
+            third_person_aim_zoom_max: aim_zoom_max,
             third_person_orbit_fov_y_radians: fov(
                 self.third_person_orbit_fov_y_radians,
-                60.0_f32.to_radians(),
+                defaults.third_person_orbit_fov_y_radians,
             ),
+            third_person_orbit_offset_ls: vec3(
+                self.third_person_orbit_offset_ls,
+                defaults.third_person_orbit_offset_ls,
+            ),
+            third_person_orbit_focus_offset_ls: vec3(
+                self.third_person_orbit_focus_offset_ls,
+                defaults.third_person_orbit_focus_offset_ls,
+            ),
+            third_person_orbit_smooth_time: positive(
+                self.third_person_orbit_smooth_time,
+                defaults.third_person_orbit_smooth_time,
+                10.0,
+            ),
+            third_person_orbit_max_speed: positive(
+                self.third_person_orbit_max_speed,
+                defaults.third_person_orbit_max_speed,
+                1000.0,
+            ),
+            third_person_orbit_zoom_min: orbit_zoom_min,
+            third_person_orbit_zoom_max: orbit_zoom_max,
+            third_person_collision_enabled: self.third_person_collision_enabled,
+            third_person_collision_probe_radius: positive(
+                self.third_person_collision_probe_radius,
+                defaults.third_person_collision_probe_radius,
+                4.0,
+            ),
+            third_person_collision_padding: positive(
+                self.third_person_collision_padding,
+                defaults.third_person_collision_padding,
+                2.0,
+            ),
+            third_person_collision_min_distance: positive(
+                self.third_person_collision_min_distance,
+                defaults.third_person_collision_min_distance,
+                32.0,
+            ),
+            zoom_wheel_exponent_per_step: positive(
+                self.zoom_wheel_exponent_per_step,
+                defaults.zoom_wheel_exponent_per_step,
+                4.0,
+            ),
+            orbit_drag_zoom_exponent_per_pixel: positive(
+                self.orbit_drag_zoom_exponent_per_pixel,
+                defaults.orbit_drag_zoom_exponent_per_pixel,
+                1.0,
+            ),
+            gameplay_blend_in_seconds: positive(
+                self.gameplay_blend_in_seconds,
+                defaults.gameplay_blend_in_seconds,
+                30.0,
+            ),
+            gameplay_blend_out_seconds: positive(
+                self.gameplay_blend_out_seconds,
+                defaults.gameplay_blend_out_seconds,
+                30.0,
+            ),
+            gameplay_blend_lock_input: self.gameplay_blend_lock_input,
             hide_local_model_in_first_person: self.hide_local_model_in_first_person,
         }
     }
@@ -150,9 +322,39 @@ impl Default for PlayerCameraProfile {
             first_person_forward_clearance: 0.07,
             first_person_body_yaw_limit_radians: 65.0_f32.to_radians(),
             first_person_down_pitch_limit_radians: 85.0_f32.to_radians(),
+            first_person_collision_enabled: true,
+            first_person_collision_probe_radius: 0.055,
+            first_person_collision_padding: 0.012,
             third_person_follow_fov_y_radians: 64.0_f32.to_radians(),
+            third_person_follow_offset_ls: Vec3::new(0.35, 1.65, 4.5),
+            third_person_follow_focus_offset_ls: Vec3::new(0.0, 0.95, 0.0),
+            third_person_follow_smooth_time: 0.08,
+            third_person_follow_max_speed: 0.0,
+            third_person_follow_zoom_min: 1.35,
+            third_person_follow_zoom_max: 9.0,
             third_person_aim_fov_y_radians: 54.0_f32.to_radians(),
+            third_person_aim_offset_ls: Vec3::new(0.55, 1.55, 2.2),
+            third_person_aim_focus_offset_ls: Vec3::new(0.0, 1.25, 0.0),
+            third_person_aim_smooth_time: 0.035,
+            third_person_aim_max_speed: 0.0,
+            third_person_aim_zoom_min: 1.10,
+            third_person_aim_zoom_max: 4.50,
             third_person_orbit_fov_y_radians: 60.0_f32.to_radians(),
+            third_person_orbit_offset_ls: Vec3::new(0.0, 0.0, 4.8),
+            third_person_orbit_focus_offset_ls: Vec3::new(0.0, 0.95, 0.0),
+            third_person_orbit_smooth_time: 0.06,
+            third_person_orbit_max_speed: 0.0,
+            third_person_orbit_zoom_min: 1.35,
+            third_person_orbit_zoom_max: 10.0,
+            third_person_collision_enabled: true,
+            third_person_collision_probe_radius: 0.18,
+            third_person_collision_padding: 0.08,
+            third_person_collision_min_distance: 0.75,
+            zoom_wheel_exponent_per_step: 0.16,
+            orbit_drag_zoom_exponent_per_pixel: 0.008,
+            gameplay_blend_in_seconds: 0.16,
+            gameplay_blend_out_seconds: 0.14,
+            gameplay_blend_lock_input: false,
             hide_local_model_in_first_person: false,
         }
     }
@@ -627,6 +829,8 @@ pub struct PlayerCharacterPresentation {
     /// Project-authored animation capability bindings. The engine treats both key and value as
     /// opaque semantic data and never constructs an asset path from either.
     pub animation_slots: std::collections::BTreeMap<String, String>,
+    /// Project-authored semantic event -> animation slot/controller subscription table.
+    pub animation_event_bindings: std::collections::BTreeMap<String, String>,
     pub detached_head_follow: bool,
     pub detached_head_follow_rule: Option<PlayerPaletteFollowRule>,
     pub eye_parent_follow: bool,
@@ -674,6 +878,7 @@ impl Default for PlayerCharacterPresentation {
     fn default() -> Self {
         Self {
             animation_slots: std::collections::BTreeMap::new(),
+            animation_event_bindings: std::collections::BTreeMap::new(),
             detached_head_follow: false,
             detached_head_follow_rule: None,
             eye_parent_follow: false,
