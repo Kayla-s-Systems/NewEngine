@@ -7,22 +7,34 @@ use super::materials::{
 use newengine_physics_contracts::{CollisionShapeDesc, PhysicsBodyDesc};
 use newengine_sim::{AngularVelocity, Velocity};
 
-#[inline]
-fn supports_foliage_ground_placement(prefab: &GameReadyPrefabSpec) -> bool {
-    let id = prefab.id.trim().to_ascii_lowercase();
-    [
-        "dirt_road",
-        "ground_dirt",
-        "mud_pile",
-        "sloped_rock",
-        "terrain_far",
-        "tall_cliff",
-        "cobblestone",
-        "grass_close",
-        "broken_rocks",
-    ]
-    .iter()
-    .any(|token| id.contains(token))
+fn authored_physics_surface(
+    prefab: &GameReadyPrefabSpec,
+) -> Option<newengine_engine_runtime::gameplay::PhysicsSurface> {
+    let id = prefab.surface_id.trim().to_owned();
+    let event_bindings = prefab
+        .surface_events
+        .iter()
+        .filter_map(|(signal, event_id)| {
+            let signal = signal.trim().to_owned();
+            let event_id = event_id.trim().to_owned();
+            (!signal.is_empty() && !event_id.is_empty()).then_some((signal, event_id))
+        })
+        .collect::<std::collections::BTreeMap<_, _>>();
+    if id.is_empty() && event_bindings.is_empty() {
+        None
+    } else {
+        Some(newengine_engine_runtime::gameplay::PhysicsSurface { id, event_bindings })
+    }
+}
+
+fn attach_authored_physics_surface(
+    world: &mut newengine_ecs::World,
+    entity: EntityId,
+    prefab: &GameReadyPrefabSpec,
+) {
+    if let Some(surface) = authored_physics_surface(prefab) {
+        let _ = world.insert(entity, surface);
+    }
 }
 
 #[inline]
@@ -130,17 +142,10 @@ pub(super) fn spawn_collision_ydd_prefab_from_decoded(
     }
     let _ = world.insert(entity, Bounds::from_local_aabb(local_bounds));
     let _ = world.insert(entity, collider);
-    if supports_foliage_ground_placement(prefab) {
+    attach_authored_physics_surface(world, entity, prefab);
+    if prefab.ground_placement_surface {
         let _ = world.insert(entity, super::GroundPlacementSurface);
     }
-    let _ = world.insert(
-        entity,
-        newengine_engine_runtime::gameplay::PhysicsSurface {
-            id: "surface.dirt_road".to_owned(),
-            footstep_event: "audio.footstep.dirt".to_owned(),
-            landing_event: "audio.landing.dirt".to_owned(),
-        },
-    );
     newengine_ulog_api::ulog::debug!(
         "static world collision spawned id='{}' source='{}' entity={:?} parts={} vertices={} triangles={} position={:?} rotation_ypr={:?} scale_baked={:?} bounds_min={:?} bounds_max={:?}",
         prefab.id,
@@ -199,14 +204,7 @@ pub(super) fn spawn_box_collision_ydd_prefab_from_decoded(
     body.material.friction = 0.94;
     body.material.restitution = 0.0;
     let _ = world.insert(entity, body);
-    let _ = world.insert(
-        entity,
-        newengine_engine_runtime::gameplay::PhysicsSurface {
-            id: "surface.platform".to_owned(),
-            footstep_event: "audio.footstep.concrete".to_owned(),
-            landing_event: "audio.landing.concrete".to_owned(),
-        },
-    );
+    attach_authored_physics_surface(world, entity, prefab);
     let part_count = decoded.len() as u32;
     let triangle_count = decoded
         .iter()
@@ -294,6 +292,7 @@ pub(super) fn spawn_dynamic_ydd_prefab_from_decoded(
     body.material.restitution = 0.08;
     body.material.density = 0.85;
     let _ = world.insert(root, body);
+    attach_authored_physics_surface(world, root, prefab);
     let _ = world.insert(root, Velocity(Vec3::ZERO));
     let _ = world.insert(root, AngularVelocity(Vec3::ZERO));
 
@@ -409,7 +408,7 @@ pub(super) fn spawn_static_ydd_prefab_from_decoded(
             render_options.shadow_policy =
                 newengine_model_domain_api::MeshShadowPolicy::ReceiveOnly;
         }
-        let entity = spawn_game_primitive(
+        let _ = spawn_game_primitive(
             world,
             &*prims,
             mats,
@@ -430,19 +429,6 @@ pub(super) fn spawn_static_ydd_prefab_from_decoded(
         // Static imported geometry is currently visual-only. The procedural terrain
         // remains the authoritative walkable collision surface; this prevents a
         // single coarse collider from enclosing the entire winding road mesh.
-        let _ = world.insert(
-            entity,
-            newengine_engine_runtime::gameplay::PhysicsSurface {
-                id: if part.material_slot.to_ascii_lowercase().ends_with("_road") {
-                    "surface.dirt_road"
-                } else {
-                    "surface.forest_ground"
-                }
-                .to_owned(),
-                footstep_event: "audio.footstep.dirt".to_owned(),
-                landing_event: "audio.landing.dirt".to_owned(),
-            },
-        );
         part_count = part_count.saturating_add(1);
         newengine_ulog_api::ulog::debug!(
             "static world part spawned prefab='{}' part='{}' vertices={} triangles={} material_id={:?}",

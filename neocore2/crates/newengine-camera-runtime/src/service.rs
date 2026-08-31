@@ -33,8 +33,7 @@ pub enum GameplayCameraRunnerKind {
 #[derive(Clone, Copy, Debug)]
 struct GameplayFirstPersonCameraState {
     target: EntityId,
-    parallax_offset_ws: Vec3,
-    locomotion_phase: f32,
+    stable_eye_anchor_ws: Vec3,
     aim_alpha: f32,
     recoil_pitch_radians: f32,
     recoil_yaw_radians: f32,
@@ -47,8 +46,7 @@ impl Default for GameplayFirstPersonCameraState {
     fn default() -> Self {
         Self {
             target: EntityId::default(),
-            parallax_offset_ws: Vec3::ZERO,
-            locomotion_phase: 0.0,
+            stable_eye_anchor_ws: Vec3::ZERO,
             aim_alpha: 0.0,
             recoil_pitch_radians: 0.0,
             recoil_yaw_radians: 0.0,
@@ -261,9 +259,9 @@ impl Default for FirstPersonPresentationInput {
     }
 }
 
-/// Provider-neutral analytic body envelope resolved by the gameplay/avatar layer. All offsets are
-/// relative to the stable eye anchor in body-local space; the camera runtime transforms them with
-/// the render-cadence body rotation and never inspects character render meshes or skeleton data.
+/// Provider-neutral first-person presentation safety metadata resolved by the gameplay/avatar
+/// layer. Geometry fields remain available to presentation providers, but camera position is never
+/// projected against the local owner's body: FPP owner visibility/topology owns that problem.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct FirstPersonBodyBarrierInput {
     pub enabled: bool,
@@ -293,7 +291,7 @@ impl Default for FirstPersonBodyBarrierInput {
             chest_bottom_offset_ls: Vec3::ZERO,
             chest_radius: 0.0,
             surface_padding: 0.0,
-            downward_pitch_limit_radians: 75.0_f32.to_radians(),
+            downward_pitch_limit_radians: 55.0_f32.to_radians(),
         }
     }
 }
@@ -307,12 +305,21 @@ pub struct CameraRuntimeServiceConfig {
     /// Optional render-cadence body rotation. FPP position follows this body frame while look yaw/pitch
     /// remain input-owned; this prevents mouse look from orbiting the camera around the skull.
     pub first_person_body_rotation_ws: Option<Quat>,
-    /// Small body-forward clearance from the eye center. This is positional parallax, not a viewmodel offset.
+    /// Small body-forward clearance from the eye center. It is body-owned and view-independent.
     pub first_person_forward_clearance: f32,
+    /// Project-authored body-relative free-look envelope.
+    pub first_person_body_yaw_limit_radians: f32,
+    /// Project-authored gameplay lens values. Camera runtime executes them but does not choose them.
+    pub first_person_fov_y_radians: f32,
+    pub first_person_ads_fov_y_radians: f32,
+    pub first_person_near: f32,
+    pub third_person_follow_fov_y_radians: f32,
+    pub third_person_aim_fov_y_radians: f32,
+    pub third_person_orbit_fov_y_radians: f32,
     /// Semantic render-cadence FPP presentation input. It never changes physical eye/ballistic aim.
     pub first_person_presentation: FirstPersonPresentationInput,
-    /// Self-collision envelope for the local owner camera. World collision remains a separate
-    /// spring-arm query; this envelope exists only to prevent entering the animated body shell.
+    /// Local-owner presentation safety metadata. The camera consumes the authored downward pitch
+    /// bound but does not move itself against the owner envelope; world collision remains separate.
     pub first_person_body_barrier: FirstPersonBodyBarrierInput,
     /// Visual character center relative to the PlayerActor root.
     /// ThirdPersonOrbit uses this exact point as both orbit pivot and look-at target.
@@ -331,7 +338,14 @@ impl Default for CameraRuntimeServiceConfig {
             first_person_eye_height: 1.6,
             first_person_anchor_ws: None,
             first_person_body_rotation_ws: None,
-            first_person_forward_clearance: 0.045,
+            first_person_forward_clearance: 0.07,
+            first_person_body_yaw_limit_radians: 65.0_f32.to_radians(),
+            first_person_fov_y_radians: 68.0_f32.to_radians(),
+            first_person_ads_fov_y_radians: 45.0_f32.to_radians(),
+            first_person_near: 0.045,
+            third_person_follow_fov_y_radians: 64.0_f32.to_radians(),
+            third_person_aim_fov_y_radians: 54.0_f32.to_radians(),
+            third_person_orbit_fov_y_radians: 60.0_f32.to_radians(),
             first_person_presentation: FirstPersonPresentationInput::default(),
             first_person_body_barrier: FirstPersonBodyBarrierInput::default(),
             third_person_orbit_pivot_offset_ls: Vec3::ZERO,

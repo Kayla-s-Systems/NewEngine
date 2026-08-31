@@ -1,6 +1,9 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use std::{collections::BTreeSet, sync::Arc};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::Arc,
+};
 
 use newengine_gameplay_script_api::GameplayCommandBuffer;
 use serde::{Deserialize, Serialize};
@@ -113,6 +116,8 @@ pub struct FpsGameplayPolicySnapshot {
     pub player: FpsPlayerPolicy,
     pub combat: FpsCombatPolicy,
     pub mission: FpsMissionPolicy,
+    /// Generic project-owned event routing.
+    pub event_subscriptions: Vec<FpsProjectEventSubscription>,
     pub callbacks: FpsCallbackExports,
 }
 
@@ -132,6 +137,7 @@ impl Default for FpsGameplayPolicySnapshot {
             player: FpsPlayerPolicy::default(),
             combat: FpsCombatPolicy::default(),
             mission: FpsMissionPolicy::default(),
+            event_subscriptions: Vec::new(),
             callbacks: FpsCallbackExports::default(),
         }
     }
@@ -179,6 +185,20 @@ impl FpsGameplayPolicySnapshot {
         self.player.validate()?;
         self.combat.validate()?;
         self.mission.validate()?;
+        let mut subscriptions = BTreeSet::new();
+        for subscription in &self.event_subscriptions {
+            subscription.validate()?;
+            let key = (
+                subscription.event.trim().to_ascii_lowercase(),
+                subscription.operation.trim().to_ascii_lowercase(),
+            );
+            if !subscriptions.insert(key) {
+                return Err(format!(
+                    "duplicate FPS project event subscription event='{}' operation='{}'",
+                    subscription.event, subscription.operation
+                ));
+            }
+        }
         self.callbacks.validate()?;
         Ok(())
     }
@@ -225,6 +245,10 @@ impl FpsRequiredContentPolicy {
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct FpsPlayableCharacterAnimations {
+    /// Authoritative project-owned animation bindings. Keys are semantic capability ids chosen
+    /// by the project/runtime profile; values are arbitrary asset or graph references.
+    pub slots: BTreeMap<String, String>,
+    /// Legacy compatibility fields. New projects should author `slots`.
     pub idle: Option<String>,
     pub walk: Option<String>,
     pub run: Option<String>,
@@ -335,6 +359,9 @@ pub struct FpsBraidSecondaryMotionRigPolicy {
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct FpsCharacterPresentationPolicy {
+    /// Authoritative project-owned animation bindings for presentation capabilities.
+    /// Runtime never derives paths or filenames from these keys or values.
+    pub animation_slots: BTreeMap<String, String>,
     /// Compatibility reconstruction for rigs whose authored control/face branches are detached
     /// from the primary deform hierarchy. Enabled only by project-authored character data.
     pub detached_head_follow: bool,
@@ -481,7 +508,26 @@ impl FpsPlayableCharacterPolicy {
                 ));
             }
         }
-        let animation_refs = [
+        for (slot, reference) in &self.animations.slots {
+            let slot = slot.trim();
+            let reference = reference.trim();
+            if slot.is_empty() || slot.len() > 256 || slot.chars().any(char::is_control) {
+                return Err(format!(
+                    "FPS playable character '{}' has invalid animation slot id '{}'",
+                    self.id, slot
+                ));
+            }
+            if reference.is_empty() {
+                return Err(format!(
+                    "FPS playable character '{}' animation slot '{}' must not be blank",
+                    self.id, slot
+                ));
+            }
+        }
+
+        // Compatibility-only fixed fields are opaque authored refs. There is deliberately no
+        // directory, extension, filename or character-owner convention here.
+        for (label, value) in [
             ("idle", self.animations.idle.as_deref()),
             ("walk", self.animations.walk.as_deref()),
             ("run", self.animations.run.as_deref()),
@@ -490,69 +536,21 @@ impl FpsPlayableCharacterPolicy {
             ("crouch_walk", self.animations.crouch_walk.as_deref()),
             ("jump", self.animations.jump.as_deref()),
             ("fall", self.animations.fall.as_deref()),
-        ];
-        for (label, value) in animation_refs {
+        ] {
             if value.is_some_and(|value| value.trim().is_empty()) {
                 return Err(format!(
-                    "FPS playable character '{}' animation '{label}' must not be blank",
+                    "FPS playable character '{}' legacy animation '{label}' must not be blank",
                     self.id
                 ));
             }
         }
 
-        // A character whose runtime model lives in `models/characters/<owner>/...` owns
-        // its animation namespace as well. This makes cross-character retarget/fallback
-        // impossible to author accidentally (e.g. Ellie -> Abby YCD) while still allowing
-        // non-character legacy/test models that do not use the character namespace.
-        if let Some(model_ref) = self.runtime_model_ref.as_deref() {
-            if let Some(owner) = character_asset_owner(model_ref) {
-                for (label, reference) in animation_refs {
-                    let Some(reference) = reference else { continue };
-                    let animation_owner = character_asset_owner(reference).ok_or_else(|| {
-                        format!(
-                            "FPS playable character '{}' animation '{label}' must live under animations/characters/{owner}/..., got '{reference}'",
-                            self.id
-                        )
-                    })?;
-                    if animation_owner != owner {
-                        return Err(format!(
-                            "FPS playable character '{}' animation '{label}' crosses character ownership model_owner='{owner}' animation_owner='{animation_owner}' ref='{reference}'",
-                            self.id
-                        ));
-                    }
-                }
-                if let Some(skeleton_ref) = self.skeleton_ref.as_deref() {
-                    if let Some(skeleton_owner) = character_asset_owner(skeleton_ref) {
-                        if skeleton_owner != owner {
-                            return Err(format!(
-                                "FPS playable character '{}' skeleton crosses character ownership model_owner='{owner}' skeleton_owner='{skeleton_owner}' ref='{skeleton_ref}'",
-                                self.id
-                            ));
-                        }
-                    }
-                }
-            }
-        }
         // Presentation is a set of optional capabilities attached after the entity/model/skeleton
         // boundary. Missing or malformed presentation data must never invalidate the character
         // catalog or prevent the visual entity from existing. Runtime feature binders diagnose
         // and disable individual capabilities instead.
         Ok(())
     }
-}
-
-fn character_asset_owner(reference: &str) -> Option<String> {
-    let path = reference
-        .split('@')
-        .next()
-        .unwrap_or(reference)
-        .trim()
-        .replace('\\', "/")
-        .to_ascii_lowercase();
-    let parts = path.split('/').collect::<Vec<_>>();
-    parts.windows(2).find_map(|pair| {
-        (pair[0] == "characters" && !pair[1].is_empty()).then(|| pair[1].to_owned())
-    })
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq)]
@@ -730,6 +728,56 @@ impl FpsMissionPolicy {
     }
 }
 
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default)]
+pub struct FpsProjectEventSubscription {
+    pub event: String,
+    pub operation: String,
+}
+
+impl FpsProjectEventSubscription {
+    pub fn validate(&self) -> Result<(), String> {
+        let event = self.event.trim();
+        if event.is_empty() || event.len() > 256 || event.chars().any(char::is_control) {
+            return Err(format!(
+                "invalid FPS project event subscription id '{}'",
+                self.event
+            ));
+        }
+        let wildcard_count = event.matches('*').count();
+        let allowed_wildcards = usize::from(event.ends_with('*'));
+        if wildcard_count > allowed_wildcards {
+            return Err(format!(
+                "subscription wildcard is only allowed as trailing '*': '{}'",
+                self.event
+            ));
+        }
+        let operation = self.operation.trim();
+        if operation.is_empty() || operation.len() > 256 {
+            return Err(
+                "FPS project event subscription operation must contain 1..=256 bytes".to_owned(),
+            );
+        }
+        if operation.contains('@') || operation.contains('/') || operation.contains('\\') {
+            return Err(format!(
+                "subscription operation must be a name, not selector/path: '{}'",
+                self.operation
+            ));
+        }
+        Ok(())
+    }
+    pub fn matches(&self, event_id: &str) -> bool {
+        let pattern = self.event.trim();
+        if let Some(prefix) = pattern.strip_suffix('*') {
+            event_id
+                .to_ascii_lowercase()
+                .starts_with(&prefix.to_ascii_lowercase())
+        } else {
+            pattern.eq_ignore_ascii_case(event_id)
+        }
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct FpsCallbackExports {
@@ -756,7 +804,7 @@ impl FpsCallbackExports {
             ("mission_event", &self.mission_event),
         ] {
             if value.trim().is_empty() {
-                return Err(format!("FPS callback export '{label}' must not be empty"));
+                continue;
             }
             if value.contains('@') || value.contains('/') || value.contains('\\') {
                 return Err(format!(
@@ -771,6 +819,11 @@ impl FpsCallbackExports {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum FpsPolicyEvent {
+    Project {
+        id: String,
+        source: Option<u64>,
+        payload: serde_json::Value,
+    },
     Interaction {
         player: u64,
         target: u64,
@@ -877,73 +930,59 @@ mod tests {
     }
 
     #[test]
-    fn character_animation_namespace_rejects_cross_character_refs() {
+    fn character_animation_bindings_are_project_defined_not_directory_owned() {
         let character = FpsPlayableCharacterPolicy {
-            id: "ellie_default_native".to_owned(),
-            family: "Ellie".to_owned(),
-            display_name: "Ellie".to_owned(),
+            id: "project_character".to_owned(),
+            family: "Project".to_owned(),
+            display_name: "Project Character".to_owned(),
             runtime_ready: true,
-            runtime_model_ref: Some("models/characters/ellie/ellie.ydd@ellie".to_owned()),
-            skeleton_ref: Some("models/characters/ellie/ellie.ymt@ellie".to_owned()),
+            runtime_model_ref: Some("arbitrary/storage/avatar.asset@body".to_owned()),
+            skeleton_ref: Some("rigs/shared/runtime.asset@skeleton".to_owned()),
             animations: FpsPlayableCharacterAnimations {
-                idle: Some(
-                    "animations/characters/abby/mm-explore.ycd@abby-mm-explore-idle".to_owned(),
-                ),
+                slots: BTreeMap::from([
+                    (
+                        "locomotion.rest".to_owned(),
+                        "motion/banks/a.asset@rest".to_owned(),
+                    ),
+                    (
+                        "project.inspect.head".to_owned(),
+                        "anywhere/custom.bin@head_turn".to_owned(),
+                    ),
+                ]),
+                idle: Some("legacy/location/also_allowed.asset@idle".to_owned()),
                 ..FpsPlayableCharacterAnimations::default()
             },
             target_height: 1.70,
             ..FpsPlayableCharacterPolicy::default()
         };
-        let error = character
-            .validate()
-            .expect_err("Ellie must reject Abby animation refs");
-        assert!(error.contains("crosses character ownership"), "{error}");
+        character.validate().expect(
+            "animation references are opaque project-authored bindings, not directory ownership",
+        );
     }
 
     #[test]
-    fn character_animation_namespace_accepts_fully_owned_ellie_locomotion() {
-        let character = FpsPlayableCharacterPolicy {
-            id: "ellie_default_native".to_owned(),
-            family: "Ellie".to_owned(),
-            display_name: "Ellie".to_owned(),
-            runtime_ready: true,
-            runtime_model_ref: Some("models/characters/ellie/ellie.ydd@ellie".to_owned()),
-            skeleton_ref: Some("models/characters/ellie/ellie.ymt@ellie".to_owned()),
+    fn arbitrary_animation_slot_rejects_blank_binding_but_not_custom_names() {
+        let mut character = FpsPlayableCharacterPolicy {
+            id: "custom".to_owned(),
+            family: "Project".to_owned(),
+            display_name: "Custom".to_owned(),
             animations: FpsPlayableCharacterAnimations {
-                idle: Some(
-                    "animations/characters/ellie/mm-explore.ycd@ellie-mm-explore-idle".to_owned(),
-                ),
-                walk: Some(
-                    "animations/characters/ellie/mm-explore.ycd@ellie-mm-explore-walk-loop-fw"
-                        .to_owned(),
-                ),
-                run: Some(
-                    "animations/characters/ellie/mm-explore.ycd@ellie-mm-explore-run-loop-fw"
-                        .to_owned(),
-                ),
-                sprint: Some(
-                    "animations/characters/ellie/mm-explore.ycd@ellie-mm-explore-sprint-loop-fw"
-                        .to_owned(),
-                ),
-                crouch_idle: Some(
-                    "animations/characters/ellie/mm-crouch.ycd@ellie-mm-crouch-idle".to_owned(),
-                ),
-                crouch_walk: Some(
-                    "animations/characters/ellie/mm-crouch.ycd@ellie-mm-strafe-crouch-loop-fw"
-                        .to_owned(),
-                ),
-                jump: Some(
-                    "animations/characters/ellie/traversal.ycd@ellie-jump-ground-run-leap"
-                        .to_owned(),
-                ),
-                fall: Some("animations/characters/ellie/traversal.ycd@ellie-fall-med".to_owned()),
+                slots: BTreeMap::from([(
+                    "my.gameplay.mode.experimental".to_owned(),
+                    "custom/protocol/ref#42".to_owned(),
+                )]),
+                ..FpsPlayableCharacterAnimations::default()
             },
-            target_height: 1.70,
             ..FpsPlayableCharacterPolicy::default()
         };
         character
             .validate()
-            .expect("Ellie-owned animation refs must validate");
+            .expect("custom slot names and refs are project data");
+        character
+            .animations
+            .slots
+            .insert("broken".to_owned(), "   ".to_owned());
+        assert!(character.validate().is_err());
     }
 
     #[test]

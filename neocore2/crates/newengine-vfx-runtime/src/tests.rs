@@ -97,7 +97,7 @@ fn default_library_contains_no_weapon_presets() {
 }
 
 #[test]
-fn weapon_shot_routes_smoke_to_gpu_and_keeps_structural_layers_in_ecs() {
+fn weapon_shot_routes_muzzle_and_smoke_to_gpu_without_near_camera_primitives() {
     let mut world = test_world();
     let id = spawn_vfx(&mut world, shot_request(9, 17))
         .unwrap()
@@ -109,8 +109,8 @@ fn weapon_shot_routes_smoke_to_gpu_and_keeps_structural_layers_in_ecs() {
         .collect::<Vec<_>>();
     assert_eq!(
         layers.len(),
-        3,
-        "smoke must no longer materialize as an ECS primitive"
+        1,
+        "muzzle flash/core and smoke must stay out of ECS primitive rendering"
     );
     assert!(layers.iter().all(|(_, layer)| layer.instance_id == id));
     assert_eq!(
@@ -121,13 +121,9 @@ fn weapon_shot_routes_smoke_to_gpu_and_keeps_structural_layers_in_ecs() {
         1
     );
     assert_eq!(
-        layers
-            .iter()
-            .filter(|(entity, _)| world
-                .get::<newengine_lighting::PointLight>(*entity)
-                .is_some())
-            .count(),
-        1
+        world.query::<newengine_lighting::PointLight>().count(),
+        1,
+        "GPU muzzle core must retain its authored transient point light"
     );
     assert!(layers.iter().all(|(entity, _)| {
         world
@@ -137,16 +133,34 @@ fn weapon_shot_routes_smoke_to_gpu_and_keeps_structural_layers_in_ecs() {
     let ledger = world
         .resource::<VfxGpuParticleLedger>()
         .expect("GPU particle ledger");
-    assert_eq!(ledger.layers().len(), 1);
-    assert_eq!(ledger.layers()[0].kind, VfxLayerKind::Smoke);
-    assert_eq!(ledger.layers()[0].particle_count, 1);
+    assert_eq!(ledger.layers().len(), 3);
+    assert!(ledger
+        .layers()
+        .iter()
+        .any(|layer| layer.kind == VfxLayerKind::MuzzleFlash && layer.particle_count == 1));
+    assert!(ledger
+        .layers()
+        .iter()
+        .any(|layer| layer.kind == VfxLayerKind::MuzzleCore && layer.particle_count == 1));
+    assert!(ledger
+        .layers()
+        .iter()
+        .any(|layer| layer.kind == VfxLayerKind::Smoke && layer.particle_count == 1));
     let bridge = world
         .resource::<newengine_vfx_api::VfxGpuParticleBridge>()
         .unwrap();
     let spawns = bridge.drain_spawns(8);
-    assert_eq!(spawns.len(), 1);
-    assert_eq!(spawns[0].kind, newengine_vfx_api::VfxGpuParticleKind::Smoke);
-    assert_eq!(spawns[0].instance_id, id.0);
+    assert_eq!(spawns.len(), 3);
+    assert!(spawns.iter().all(|spawn| spawn.instance_id == id.0));
+    assert!(spawns
+        .iter()
+        .any(|spawn| spawn.kind == newengine_vfx_api::VfxGpuParticleKind::MuzzleFlash));
+    assert!(spawns
+        .iter()
+        .any(|spawn| spawn.kind == newengine_vfx_api::VfxGpuParticleKind::MuzzleCore));
+    assert!(spawns
+        .iter()
+        .any(|spawn| spawn.kind == newengine_vfx_api::VfxGpuParticleKind::Smoke));
     assert_eq!(vfx_runtime_stats(&world).active_layers, 4);
 }
 

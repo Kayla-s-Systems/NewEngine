@@ -12,6 +12,7 @@ pub mod fxd_binary;
 
 pub mod ydd_binary;
 pub mod yscd_binary;
+pub mod yscd_sound_graph;
 
 pub use fxd_binary::{decode_fxd_nef8, encode_fxd_nef8};
 
@@ -23,6 +24,10 @@ pub use ydd_binary::{
 pub use yscd_binary::{
     decode_yscd_binary_body, decode_yscd_nef8, encode_yscd_binary_body, YscdAttenuation, YscdClip,
     YscdCue, YscdCueDescriptor, YscdDictionary, YSCD_BINARY_MAGIC, YSCD_BINARY_SCHEMA_VERSION,
+};
+pub use yscd_sound_graph::{
+    YscdBlendPoint, YscdLayerNodeRef, YscdSoundGraph, YscdSoundGraphNode, YscdSoundGraphValueKind,
+    YscdWeightedNodeRef,
 };
 
 pub use descriptor::{Nef8FormatSpec, ASSET_BLOB_OUTPUT, DOMAIN_MANIFEST_OUTPUT, NEF8_MAGIC_HEX};

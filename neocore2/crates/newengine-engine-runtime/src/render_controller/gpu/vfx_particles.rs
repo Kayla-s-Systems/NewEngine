@@ -115,22 +115,22 @@ impl VfxGpuRenderer {
             return Ok(VfxGpuFrameReport::default());
         }
 
-        newengine_ulog_api::ulog::error!("VFXDIAG ensure_resources begin");
+        newengine_ulog_api::ulog::trace!("VFXDIAG ensure_resources begin");
         self.ensure_resources(r, color_format, texture_slots)?;
-        newengine_ulog_api::ulog::error!("VFXDIAG ensure_resources done");
+        newengine_ulog_api::ulog::trace!("VFXDIAG ensure_resources done");
         let particle_buffer = self.particle_buffer.ok_or_else(|| {
             EngineError::other("VFX GPU particle buffer missing after resource creation")
         })?;
 
-        newengine_ulog_api::ulog::error!("VFXDIAG process_kills begin");
+        newengine_ulog_api::ulog::trace!("VFXDIAG process_kills begin");
         let killed_particles = self.process_kills(r, bridge, particle_buffer)?;
-        newengine_ulog_api::ulog::error!("VFXDIAG process_kills done");
-        newengine_ulog_api::ulog::error!(
+        newengine_ulog_api::ulog::trace!("VFXDIAG process_kills done");
+        newengine_ulog_api::ulog::trace!(
             "VFXDIAG process_spawns begin pending={}",
             pending.pending_spawns
         );
         let (uploaded_spawns, capacity_drops) = self.process_spawns(r, bridge, particle_buffer)?;
-        newengine_ulog_api::ulog::error!("VFXDIAG process_spawns done uploaded={uploaded_spawns}");
+        newengine_ulog_api::ulog::trace!("VFXDIAG process_spawns done uploaded={uploaded_spawns}");
         self.trim_expired_tail();
 
         if self.high_water == 0 {
@@ -159,28 +159,28 @@ impl VfxGpuRenderer {
             self.high_water,
             resident_texture_mask(texture_slots),
         );
-        newengine_ulog_api::ulog::error!("VFXDIAG frame_ubo write begin");
+        newengine_ulog_api::ulog::trace!("VFXDIAG frame_ubo write begin");
         r.write_buffer(frame_ubo, 0, &frame_bytes)?;
-        newengine_ulog_api::ulog::error!("VFXDIAG frame_ubo write done");
+        newengine_ulog_api::ulog::trace!("VFXDIAG frame_ubo write done");
 
         let compute = self
             .compute_pipeline
             .ok_or_else(|| EngineError::other("VFX GPU compute pipeline missing"))?;
-        newengine_ulog_api::ulog::error!("VFXDIAG compute begin_render_phase");
+        newengine_ulog_api::ulog::trace!("VFXDIAG compute begin_render_phase");
         r.begin_render_phase(RenderGraphPassKind::ParticleSimulation)?;
-        newengine_ulog_api::ulog::error!("VFXDIAG compute set_pipeline");
+        newengine_ulog_api::ulog::trace!("VFXDIAG compute set_pipeline");
         r.set_pipeline(compute)?;
         r.set_bind_group(0, bind_group)?;
         let groups = (self.high_water as u32).div_ceil(PARTICLE_WORKGROUP_SIZE);
-        newengine_ulog_api::ulog::error!("VFXDIAG compute dispatch groups={groups}");
+        newengine_ulog_api::ulog::trace!("VFXDIAG compute dispatch groups={groups}");
         r.dispatch(DispatchArgs::one_dimensional(groups))?;
         r.end_render_phase()?;
-        newengine_ulog_api::ulog::error!("VFXDIAG compute end");
+        newengine_ulog_api::ulog::trace!("VFXDIAG compute end");
 
         let graphics = self
             .graphics_pipeline(color_format)
             .ok_or_else(|| EngineError::other("VFX GPU billboard pipeline missing"))?;
-        newengine_ulog_api::ulog::error!("VFXDIAG graphics begin_draw_list");
+        newengine_ulog_api::ulog::trace!("VFXDIAG graphics begin_draw_list");
         r.begin_draw_list(RenderDrawListKind::Transparent)?;
         let extent =
             newengine_core::render::Extent2D::new(viewport_width.max(1), viewport_height.max(1));
@@ -191,10 +191,10 @@ impl VfxGpuRenderer {
             viewport_width.max(1).min(i32::MAX as u32) as i32,
             viewport_height.max(1).min(i32::MAX as u32) as i32,
         ))?;
-        newengine_ulog_api::ulog::error!("VFXDIAG graphics set_pipeline");
+        newengine_ulog_api::ulog::trace!("VFXDIAG graphics set_pipeline");
         r.set_pipeline(graphics)?;
         r.set_bind_group(0, bind_group)?;
-        newengine_ulog_api::ulog::error!("VFXDIAG graphics draw instances={}", self.high_water);
+        newengine_ulog_api::ulog::trace!("VFXDIAG graphics draw instances={}", self.high_water);
         r.draw(DrawArgs {
             vertex_count: 6,
             instance_count: self.high_water.min(u32::MAX as usize) as u32,
@@ -202,7 +202,7 @@ impl VfxGpuRenderer {
             first_instance: 0,
         })?;
         r.end_draw_list()?;
-        newengine_ulog_api::ulog::error!("VFXDIAG graphics end");
+        newengine_ulog_api::ulog::trace!("VFXDIAG graphics end");
 
         Ok(VfxGpuFrameReport {
             high_water: self.high_water as u32,
@@ -218,7 +218,7 @@ impl VfxGpuRenderer {
         color_format: TextureFormat,
         texture_slots: [Option<TextureId>; VFX_GPU_TEXTURE_SLOT_CAPACITY],
     ) -> EngineResult<()> {
-        newengine_ulog_api::ulog::error!("VFXDIAG resource layout");
+        newengine_ulog_api::ulog::trace!("VFXDIAG resource layout");
         let layout = match self.layout {
             Some(layout) => layout,
             None => {
@@ -239,7 +239,7 @@ impl VfxGpuRenderer {
             }
         };
 
-        newengine_ulog_api::ulog::error!("VFXDIAG resource particle_buffer");
+        newengine_ulog_api::ulog::trace!("VFXDIAG resource particle_buffer");
         let particle_buffer = match self.particle_buffer {
             Some(buffer) => buffer,
             None => {
@@ -284,7 +284,7 @@ impl VfxGpuRenderer {
         };
         let bound_textures = texture_slots.map(|texture| texture.unwrap_or(fallback_texture));
 
-        newengine_ulog_api::ulog::error!("VFXDIAG resource ubos_bindgroups");
+        newengine_ulog_api::ulog::trace!("VFXDIAG resource ubos_bindgroups");
         for slot in 0..PARTICLE_FRAME_SLOTS {
             if self.frame_ubos[slot].is_none() {
                 self.frame_ubos[slot] = Some(
@@ -322,7 +322,7 @@ impl VfxGpuRenderer {
             }
         }
 
-        newengine_ulog_api::ulog::error!("VFXDIAG resource compute_shader");
+        newengine_ulog_api::ulog::trace!("VFXDIAG resource compute_shader");
         if self.compute_shader.is_none() {
             self.compute_shader = Some(
                 r.create_shader(
@@ -336,7 +336,7 @@ impl VfxGpuRenderer {
                 )?,
             );
         }
-        newengine_ulog_api::ulog::error!("VFXDIAG resource vertex_shader");
+        newengine_ulog_api::ulog::trace!("VFXDIAG resource vertex_shader");
         if self.vertex_shader.is_none() {
             self.vertex_shader = Some(
                 r.create_shader(
@@ -350,7 +350,7 @@ impl VfxGpuRenderer {
                 )?,
             );
         }
-        newengine_ulog_api::ulog::error!("VFXDIAG resource fragment_shader");
+        newengine_ulog_api::ulog::trace!("VFXDIAG resource fragment_shader");
         if self.fragment_shader.is_none() {
             self.fragment_shader = Some(
                 r.create_shader(
@@ -365,7 +365,7 @@ impl VfxGpuRenderer {
             );
         }
 
-        newengine_ulog_api::ulog::error!("VFXDIAG resource compute_pipeline");
+        newengine_ulog_api::ulog::trace!("VFXDIAG resource compute_pipeline");
         if self.compute_pipeline.is_none() {
             let shader = self.compute_shader.expect("compute shader created above");
             self.compute_pipeline = Some(
@@ -378,7 +378,7 @@ impl VfxGpuRenderer {
             );
         }
 
-        newengine_ulog_api::ulog::error!(
+        newengine_ulog_api::ulog::trace!(
             "VFXDIAG resource graphics_pipeline format={color_format:?}"
         );
         if self.graphics_pipeline(color_format).is_none() {
@@ -566,6 +566,8 @@ fn encode_particle_slot(spawn: VfxGpuParticleSpawnV1) -> [u8; PARTICLE_SLOT_BYTE
         VfxGpuParticleKind::Smoke => 1.0,
         VfxGpuParticleKind::Spark => 2.0,
         VfxGpuParticleKind::Debris => 3.0,
+        VfxGpuParticleKind::MuzzleFlash => 4.0,
+        VfxGpuParticleKind::MuzzleCore => 5.0,
     };
     values[21] = f32::from(spawn.texture_slot);
     values[22] = spawn.billboard as u32 as f32;
@@ -629,6 +631,25 @@ mod tests {
         assert_eq!(kind, 2.0);
         assert_eq!(drag, 1.25);
         assert_eq!(rotation, 0.3);
+    }
+
+    #[test]
+    fn muzzle_particle_kinds_keep_stable_shader_ids() {
+        let mut flash = spawn(10, 0.05);
+        flash.kind = VfxGpuParticleKind::MuzzleFlash;
+        let flash_bytes = encode_particle_slot(flash);
+        assert_eq!(
+            f32::from_ne_bytes(flash_bytes[80..84].try_into().unwrap()),
+            4.0
+        );
+
+        let mut core = spawn(11, 0.04);
+        core.kind = VfxGpuParticleKind::MuzzleCore;
+        let core_bytes = encode_particle_slot(core);
+        assert_eq!(
+            f32::from_ne_bytes(core_bytes[80..84].try_into().unwrap()),
+            5.0
+        );
     }
 
     #[test]

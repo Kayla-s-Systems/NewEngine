@@ -16,7 +16,6 @@ fn fps_motion_response_from_game_data(
 
 pub(super) fn to_fps_demo_rules(
     spec: &GameReadyGameplaySpec,
-    model: &self::content::GameReadyPlayerModelSpec,
     game_data: &GameData,
 ) -> FpsDemoRules {
     let tuning = game_data.player.tuning;
@@ -66,14 +65,7 @@ pub(super) fn to_fps_demo_rules(
         landing_min_airborne_seconds: default_player.landing_min_airborne_seconds,
     }
     .sanitized();
-    let feet_to_eye = model.target_height * model.eye_height_ratio;
-    let model_eye_offset_from_player_origin =
-        feet_to_eye - (base.body_half_height + base.body_radius);
-    let player = FpsPlayerTuning {
-        camera_eye_height: model_eye_offset_from_player_origin.clamp(0.05, model.target_height),
-        ..base
-    }
-    .sanitized();
+    let player = base;
 
     FpsDemoRules {
         default_status: spec.default_status.clone(),

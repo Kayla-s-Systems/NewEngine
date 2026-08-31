@@ -6,12 +6,13 @@ use newengine_audio_api::{
     AudioBusGainAck, AudioBusGainRequest, AudioCuePlayRequest, AudioCuePreloadRequest,
     AudioDiagnostics, AudioFeedbackEvent, AudioFeedbackKind, AudioListenerState, AudioPlayAck,
     AudioPlayRequest, AudioPreloadAck, AudioPreloadRequest, AudioServiceInfo,
-    AudioStopVoiceRequest, AudioStreamPlayRequest, AudioVoiceAck, AudioVoiceUpdateRequest,
-    AUDIO_SERVICE_METHOD_DIAGNOSTICS_JSON_V1, AUDIO_SERVICE_METHOD_INFO,
-    AUDIO_SERVICE_METHOD_PLAY_CLIP_JSON_V1, AUDIO_SERVICE_METHOD_PLAY_CUE_JSON_V1,
-    AUDIO_SERVICE_METHOD_PLAY_EVENT_JSON_V1, AUDIO_SERVICE_METHOD_PLAY_STREAM_JSON_V1,
-    AUDIO_SERVICE_METHOD_PRELOAD_CLIP_JSON_V1, AUDIO_SERVICE_METHOD_PRELOAD_CUE_JSON_V1,
-    AUDIO_SERVICE_METHOD_SET_BUS_GAIN_JSON_V1, AUDIO_SERVICE_METHOD_SET_LISTENER_JSON_V1,
+    AudioStopVoiceRequest, AudioStreamPlayRequest, AudioVoiceAck, AudioVoiceBudgetAck,
+    AudioVoiceBudgetConfig, AudioVoiceUpdateRequest, AUDIO_SERVICE_METHOD_DIAGNOSTICS_JSON_V1,
+    AUDIO_SERVICE_METHOD_INFO, AUDIO_SERVICE_METHOD_PLAY_CLIP_JSON_V1,
+    AUDIO_SERVICE_METHOD_PLAY_CUE_JSON_V1, AUDIO_SERVICE_METHOD_PLAY_EVENT_JSON_V1,
+    AUDIO_SERVICE_METHOD_PLAY_STREAM_JSON_V1, AUDIO_SERVICE_METHOD_PRELOAD_CLIP_JSON_V1,
+    AUDIO_SERVICE_METHOD_PRELOAD_CUE_JSON_V1, AUDIO_SERVICE_METHOD_SET_BUS_GAIN_JSON_V1,
+    AUDIO_SERVICE_METHOD_SET_LISTENER_JSON_V1, AUDIO_SERVICE_METHOD_SET_VOICE_BUDGETS_JSON_V1,
     AUDIO_SERVICE_METHOD_SET_VOICE_JSON_V1, AUDIO_SERVICE_METHOD_STOP_VOICE_JSON_V1,
     ENGINE_AUDIO_SERVICE_ID,
 };
@@ -114,6 +115,12 @@ pub fn set_audio_bus_gain(
     request: &AudioBusGainRequest,
 ) -> Result<Option<AudioBusGainAck>, String> {
     call_audio_json(AUDIO_SERVICE_METHOD_SET_BUS_GAIN_JSON_V1, request)
+}
+
+pub fn set_audio_voice_budgets(
+    request: &AudioVoiceBudgetConfig,
+) -> Result<Option<AudioVoiceBudgetAck>, String> {
+    call_audio_json(AUDIO_SERVICE_METHOD_SET_VOICE_BUDGETS_JSON_V1, request)
 }
 
 /// Converts the canonical resolved camera frame into the provider-neutral audio listener pose.

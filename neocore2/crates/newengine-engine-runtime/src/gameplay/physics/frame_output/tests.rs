@@ -193,8 +193,7 @@ mod tests {
             ground,
             PhysicsSurface {
                 id: "surface.metal".to_owned(),
-                footstep_event: "audio.footstep.metal".to_owned(),
-                landing_event: "audio.landing.metal".to_owned(),
+                ..PhysicsSurface::default()
             },
         );
         let _ = world.insert(player, Velocity(Vec3::new(6.0, -4.0, 0.0)));
@@ -233,11 +232,12 @@ mod tests {
 
         let events = crate::gameplay::drain_player_events(&mut world);
         assert!(events.iter().any(|event| {
-            event.kind == PlayerEventKind::Landed && event.message.contains("audio.landing.metal")
+            event.kind == PlayerEventKind::Landed
+                && event.message.contains("surface='surface.metal'")
         }));
         assert!(events.iter().any(|event| {
             event.kind == PlayerEventKind::Footstep
-                && event.message.contains("audio.footstep.metal")
+                && event.message.contains("surface='surface.metal'")
         }));
     }
 

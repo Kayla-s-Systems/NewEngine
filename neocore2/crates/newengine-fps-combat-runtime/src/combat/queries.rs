@@ -109,19 +109,7 @@ pub fn resolve_combat_queries(
     for (shooter, pending) in pending_shots {
         consumed.insert(pending.query_seq);
         if let Some(hit) = hits.iter().find(|hit| hit.seq == pending.query_seq) {
-            let hit_point = vec3_from_array(hit.position);
-            let hit_normal = vec3_from_array(hit.normal);
             let target = key_to_entity.get(&hit.entity).copied();
-            if pending.attack_kind == WeaponAttackKind::Firearm {
-                newengine_fps_projectile_runtime::resolve_weapon_shot_hit_fx(
-                    world,
-                    shooter,
-                    pending.shot_sequence,
-                    hit_point,
-                    hit_normal,
-                    target,
-                );
-            }
             let event = FpsPolicyEvent::Hit {
                 shooter: shooter.stable_u64(),
                 weapon_instance_id: pending.weapon_instance_id.0,

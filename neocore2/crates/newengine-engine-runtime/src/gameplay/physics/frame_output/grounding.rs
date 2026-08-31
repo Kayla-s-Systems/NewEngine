@@ -160,8 +160,8 @@ pub(super) fn update_player_locomotion(
                         emitted.push((
                             PlayerEventKind::Landed,
                             format!(
-                                "{} surface='{}' speed={:.2}",
-                                surface.landing_event, surface.id, state.max_downward_speed
+                                "surface='{}' speed={:.2}",
+                                surface.id, state.max_downward_speed
                             ),
                         ));
                     }
@@ -174,10 +174,7 @@ pub(super) fn update_player_locomotion(
                             (state.step_distance - tuning.footstep_stride).max(0.0);
                         emitted.push((
                             PlayerEventKind::Footstep,
-                            format!(
-                                "{} surface='{}' speed={:.2}",
-                                surface.footstep_event, surface.id, horizontal_speed
-                            ),
+                            format!("surface='{}' speed={:.2}", surface.id, horizontal_speed),
                         ));
                     }
                 }

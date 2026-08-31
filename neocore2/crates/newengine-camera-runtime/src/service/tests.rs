@@ -109,6 +109,7 @@ fn third_person_orbit_look_does_not_mutate_character_view_or_body_intent() {
         true,
         2.0,
         GameplayCameraRunnerKind::ThirdPersonOrbit,
+        65.0_f32.to_radians(),
         75.0_f32.to_radians(),
         false,
     );
@@ -161,17 +162,18 @@ fn first_person_look_clamps_downward_pitch_before_inner_torso_can_enter_view() {
         true,
         1.0,
         GameplayCameraRunnerKind::FirstPerson,
+        65.0_f32.to_radians(),
         75.0_f32.to_radians(),
         true,
     );
 
     let motor = world.get::<CharacterMotor>(player).copied().unwrap();
-    assert!(motor.pitch >= -65.0_f32.to_radians() - 1.0e-6);
+    assert!(motor.pitch >= -75.0_f32.to_radians() - 1.0e-6);
     assert!(motor.pitch <= 0.0);
 }
 
 #[test]
-fn first_person_yaw_is_body_relative_and_requires_body_turn_for_full_rotation() {
+fn first_person_yaw_remains_free_while_body_is_stationary() {
     let mut world = World::new();
     let player = world.spawn();
     let _ = world.insert(player, Transform::default());
@@ -185,45 +187,39 @@ fn first_person_yaw_is_body_relative_and_requires_body_turn_for_full_rotation() 
     );
     let _ = world.insert(player, MotorInput::default());
 
-    let apply_look = |world: &mut World| {
+    let apply_look = |world: &mut World, dx: f32| {
         CameraRuntimeService::apply_player_input(
             world,
             player,
             0,
-            Vec2::new(2.0, 0.0),
+            Vec2::new(dx, 0.0),
             true,
             1.0,
             GameplayCameraRunnerKind::FirstPerson,
             65.0_f32.to_radians(),
+            85.0_f32.to_radians(),
             true,
         );
     };
 
-    apply_look(&mut world);
+    apply_look(&mut world, 2.0);
     let first_yaw = world.get::<CharacterMotor>(player).copied().unwrap().yaw;
-    assert!((first_yaw - 65.0_f32.to_radians()).abs() <= 1.0e-5);
+    assert!((wrap_pi(first_yaw - 2.0)).abs() <= 1.0e-5);
 
-    // More mouse input cannot rotate the head/view farther while the body is stationary.
-    apply_look(&mut world);
-    let blocked_yaw = world.get::<CharacterMotor>(player).copied().unwrap().yaw;
-    assert!((wrap_pi(blocked_yaw - first_yaw)).abs() <= 1.0e-5);
+    // The old FPP path stopped here at the body-relative yaw limit. The camera must continue
+    // rotating even though the physical body has not advanced yet.
+    apply_look(&mut world, 0.5);
+    let continued_yaw = world.get::<CharacterMotor>(player).copied().unwrap().yaw;
+    assert!((wrap_pi(continued_yaw - 2.5)).abs() <= 1.0e-5);
 
-    // Once authored/simulation body turning advances, the same input can continue rotating the
-    // view. A 360-degree inspection therefore necessarily carries the body with it.
-    let _ = world.insert(
-        player,
-        Transform {
-            rotation: Quat::from_rotation_y(45.0_f32.to_radians()),
-            ..Transform::default()
-        },
-    );
-    apply_look(&mut world);
-    let advanced_yaw = world.get::<CharacterMotor>(player).copied().unwrap().yaw;
-    assert!((wrap_pi(advanced_yaw - 110.0_f32.to_radians())).abs() <= 1.0e-5);
+    let body = world.get::<Transform>(player).copied().unwrap();
+    let (body_yaw, body_pitch, _) = body.rotation.to_euler(EulerRot::YXZ);
+    assert!(body_yaw.abs() <= 1.0e-6);
+    assert!(body_pitch.abs() <= 1.0e-6);
 }
 
 #[test]
-fn first_person_legacy_out_of_range_yaw_never_snaps_inward_in_one_frame() {
+fn first_person_yaw_crosses_previous_body_limit_without_snap_or_capture() {
     let mut world = World::new();
     let player = world.spawn();
     let _ = world.insert(player, Transform::default());
@@ -247,24 +243,26 @@ fn first_person_legacy_out_of_range_yaw_never_snaps_inward_in_one_frame() {
         1.0,
         GameplayCameraRunnerKind::FirstPerson,
         65.0_f32.to_radians(),
+        85.0_f32.to_radians(),
         true,
     );
-    let held = world.get::<CharacterMotor>(player).copied().unwrap().yaw;
-    assert!((wrap_pi(held - initial_yaw)).abs() <= 1.0e-5);
+    let advanced = world.get::<CharacterMotor>(player).copied().unwrap().yaw;
+    assert!((wrap_pi(advanced - wrap_pi(initial_yaw + 0.1))).abs() <= 1.0e-5);
 
     CameraRuntimeService::apply_player_input(
         &mut world,
         player,
         0,
-        Vec2::new(-0.1, 0.0),
+        Vec2::new(-0.2, 0.0),
         true,
         1.0,
         GameplayCameraRunnerKind::FirstPerson,
         65.0_f32.to_radians(),
+        85.0_f32.to_radians(),
         true,
     );
-    let recovering = world.get::<CharacterMotor>(player).copied().unwrap().yaw;
-    assert!(wrap_pi(recovering).abs() < wrap_pi(initial_yaw).abs());
+    let reversed = world.get::<CharacterMotor>(player).copied().unwrap().yaw;
+    assert!((wrap_pi(reversed - wrap_pi(initial_yaw - 0.1))).abs() <= 1.0e-5);
 }
 
 #[test]

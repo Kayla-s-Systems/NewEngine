@@ -23,7 +23,7 @@ fn weapon_obstruction_query_seq(player: EntityId, fixed_tick: u64) -> u64 {
 /// gameplay-side equivalent of Naughty Dog's aim-blocked layer: it detects when the authored
 /// barrel would cross solid geometry before the shot query is created.
 pub(super) fn queue_weapon_obstruction_probe(world: &mut World, player: EntityId, fixed_tick: u64) {
-    let Some(muzzle) = world.get::<EquippedWeaponMuzzle>(player).copied() else {
+    let Some(muzzle) = active_equipped_weapon_muzzle(world, player) else {
         let _ = world.remove::<PendingWeaponObstructionProbe>(player);
         let _ = world.remove::<WeaponObstructionState>(player);
         return;
@@ -142,7 +142,9 @@ pub(super) fn shot_origin_and_direction(
         .filter(|position| position.is_finite());
     let view_origin = active_camera_position.unwrap_or(player_position + Vec3::Y * eye_height);
 
-    let muzzle = world.get::<EquippedWeaponMuzzle>(player).copied();
+    // A firearm shot is invalid until presentation has published a physical muzzle socket.
+    // The camera only selects a convergence target; it can never synthesize the shot origin.
+    let muzzle = active_equipped_weapon_muzzle(world, player)?;
     let obstruction = world
         .get::<WeaponObstructionState>(player)
         .copied()
@@ -150,12 +152,7 @@ pub(super) fn shot_origin_and_direction(
     let muzzle_origin = obstruction
         .map(|state| state.safe_muzzle_position)
         .filter(|position| position.is_finite())
-        .or_else(|| {
-            muzzle.map(|muzzle| muzzle.position + muzzle.forward.normalize_or_zero() * 0.008)
-        })
-        .unwrap_or(
-            player_position + Vec3::Y * eye_height + camera_forward * tuning.muzzle_forward_offset,
-        );
+        .unwrap_or_else(|| muzzle.position + muzzle.forward.normalize_or_zero() * 0.008);
 
     let hip_convergence = world
         .get::<EquippedWeaponBinding>(player)
@@ -178,10 +175,12 @@ pub(super) fn shot_origin_and_direction(
     let forward = if ballistic_forward.length_squared() > 1.0e-8 {
         ballistic_forward
     } else {
-        muzzle
-            .map(|muzzle| muzzle.forward.normalize_or_zero())
-            .filter(|forward| forward.length_squared() > 1.0e-8)
-            .unwrap_or(camera_forward)
+        let muzzle_forward = muzzle.forward.normalize_or_zero();
+        if muzzle_forward.length_squared() > 1.0e-8 {
+            muzzle_forward
+        } else {
+            camera_forward
+        }
     };
 
     let spread = if aiming {

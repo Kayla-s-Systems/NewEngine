@@ -34,6 +34,33 @@ fn select_ground_locomotion_animation(
     }
 }
 
+/// Authoritative evidence gate for entering the semantic Fall state.
+///
+/// A transient ground-probe miss or solver correction must never manufacture a fall.
+/// Explicit jumps may transition to Fall shortly after the apex; walking off a ledge
+/// requires sustained separation and meaningful downward velocity. Presentation and
+/// physics producers share this predicate so `FallStarted`, locomotion=`Fall`, and
+/// the full-body fall override cannot disagree.
+#[inline]
+pub fn player_fall_is_confirmed(
+    jump_started: bool,
+    airborne_time: f32,
+    vertical_speed: f32,
+) -> bool {
+    if !vertical_speed.is_finite() {
+        return false;
+    }
+    let airborne_time = if airborne_time.is_finite() {
+        airborne_time.max(0.0)
+    } else {
+        0.0
+    };
+    if jump_started {
+        return airborne_time >= 0.08 && vertical_speed <= -0.45;
+    }
+    airborne_time >= 0.35 && vertical_speed < -2.5
+}
+
 #[inline]
 fn select_locomotion_animation(
     grounded: bool,
@@ -59,23 +86,15 @@ fn select_locomotion_animation(
     // vertical correction velocity oscillates around zero. Treating every miss as an
     // airborne state caused idle/walk/run to thrash into jump/fall many times per second.
     // Airborne animation therefore requires sustained separation plus meaningful Y speed.
-    let airborne_time = if airborne_time.is_finite() {
-        airborne_time.max(0.0)
-    } else {
-        0.0
-    };
-    if jump_started {
-        if !vertical_speed.is_finite() || vertical_speed > -0.45 || airborne_time < 0.08 {
-            return PlayerLocomotionAnimation::Jump;
-        }
+    if player_fall_is_confirmed(jump_started, airborne_time, vertical_speed) {
         return PlayerLocomotionAnimation::Fall;
+    }
+    if jump_started {
+        return PlayerLocomotionAnimation::Jump;
     }
     // A rigid character capsule can receive short positive/negative Y impulses from
     // uneven terrain. They are physics correction, not jump/fall intent. Walking off
     // a ledge therefore requires sustained, meaningful downward motion before Fall.
-    if vertical_speed.is_finite() && vertical_speed < -2.5 && airborne_time >= 0.35 {
-        return PlayerLocomotionAnimation::Fall;
-    }
 
     // Ground-contact uncertainty is presentation-only. Physics remains authoritative;
     // locomotion animation holds the appropriate grounded pose until a true jump/fall

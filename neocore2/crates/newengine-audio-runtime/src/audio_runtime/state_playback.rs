@@ -1,45 +1,53 @@
 impl AudioRuntimeState {
     fn play_clip(&mut self, request: AudioPlayRequest) -> Result<AudioPlayAck, String> {
-        self.play_clip_with_policy(request, String::new(), 0)
+        let policy_instance_id = self.alloc_policy_instance_id();
+        self.play_clip_with_policy(
+            request,
+            AudioVoicePolicy::default(),
+            None,
+            policy_instance_id,
+        )
     }
 
     fn play_clip_with_policy(
         &mut self,
         request: AudioPlayRequest,
-        concurrency_group: String,
-        priority: i32,
+        policy: AudioVoicePolicy,
+        scope_id: Option<u64>,
+        policy_instance_id: u64,
     ) -> Result<AudioPlayAck, String> {
         self.prune_finished();
-        if !concurrency_group.is_empty() {
-            let conflicts = self
-                .voices
-                .iter()
-                .filter(|(_, voice)| voice.concurrency_group == concurrency_group)
-                .map(|(id, voice)| (*id, voice.priority))
-                .collect::<Vec<_>>();
-            if conflicts
-                .iter()
-                .any(|(_, current_priority)| *current_priority > priority)
-            {
+        let request = request.sanitized();
+        let uri = normalize_vfs_path(&request.clip.uri)?;
+        let source_duration = self.clip_source_duration(&uri)?;
+        let policy = policy.sanitized()?;
+        let scope_key = Self::concurrency_scope_key(&policy, scope_id)?;
+        match self.admit_voice_policy(&policy, scope_id, policy_instance_id)? {
+            VoicePolicyAdmission::Rejected { reason } => {
                 return Ok(AudioPlayAck {
                     accepted: false,
                     provider: NATIVE_AUDIO_PROVIDER_ROUTE.to_owned(),
                     voice_id: None,
-                    message: format!(
-                        "concurrency group '{concurrency_group}' is occupied by a higher-priority voice"
-                    ),
+                    voice_ids: Vec::new(),
+                    message: reason,
                     virtualized: false,
                     diagnostics: Vec::new(),
                 });
             }
-            for (voice_id, _) in conflicts {
-                let _ = self.remove_voice(voice_id);
+            VoicePolicyAdmission::Accepted { stolen_instances } => {
+                if !stolen_instances.is_empty() {
+                    newengine_ulog_api::ulog::trace!(
+                        "audio voice policy: admitted group='{}' scope={:?} limit={} steal_rule={:?} stolen_instances={:?}",
+                        policy.group,
+                        policy.scope,
+                        policy.limit,
+                        policy.steal_rule,
+                        stolen_instances
+                    );
+                }
             }
         }
 
-        let request = request.sanitized();
-        let uri = normalize_vfs_path(&request.clip.uri)?;
-        let source_duration = self.clip_source_duration(&uri)?;
         let voice_id = self.alloc_voice_id();
         let now = Instant::now();
         self.voices.insert(
@@ -67,8 +75,13 @@ impl AudioRuntimeState {
                 last_spatial_update: request.spatial.map(|_| now),
                 environment: request.environment.sanitized(),
                 stream_stats: None,
-                concurrency_group,
-                priority,
+                physical_source_origin: Duration::ZERO,
+                concurrency_group: policy.group,
+                concurrency_scope: policy.scope,
+                concurrency_scope_id: scope_key,
+                policy_instance_id,
+                voice_budget: policy.budget,
+                priority: policy.priority,
                 paused: false,
                 virtual_source_position: Duration::ZERO,
                 virtual_since: Some(now),
@@ -81,6 +94,7 @@ impl AudioRuntimeState {
                 accepted: false,
                 provider: NATIVE_AUDIO_PROVIDER_ROUTE.to_owned(),
                 voice_id: None,
+                voice_ids: Vec::new(),
                 message: "physical voice budget exhausted for a non-virtualizable source"
                     .to_owned(),
                 virtualized: false,
@@ -91,6 +105,7 @@ impl AudioRuntimeState {
             accepted: true,
             provider: NATIVE_AUDIO_PROVIDER_ROUTE.to_owned(),
             voice_id: Some(voice_id),
+            voice_ids: vec![voice_id],
             message: if voice.is_virtual() {
                 "voice accepted as virtual; awaiting a physical mixer slot".to_owned()
             } else {
@@ -99,6 +114,25 @@ impl AudioRuntimeState {
             virtualized: voice.is_virtual(),
             diagnostics: Vec::new(),
         })
+    }
+
+    fn stream_source_metadata(
+        &mut self,
+        uri: &str,
+        buffer: AudioStreamBufferConfig,
+    ) -> Result<StreamSourceMetadata, String> {
+        if let Some(metadata) = self.stream_metadata.get(uri).copied() {
+            return Ok(metadata);
+        }
+        let reader = RangedAssetReader::new(
+            self.assets.clone(),
+            uri.to_owned(),
+            buffer.compressed_chunk_bytes,
+            buffer.compressed_cache_bytes,
+        );
+        let metadata = probe_stream_source_metadata(reader)?;
+        self.stream_metadata.insert(uri.to_owned(), metadata);
+        Ok(metadata)
     }
 
     fn play_stream(&mut self, request: AudioStreamPlayRequest) -> Result<AudioPlayAck, String> {
@@ -113,35 +147,66 @@ impl AudioRuntimeState {
         if request.clip.uri.trim().is_empty() {
             return Err("streaming audio requires a non-empty VFS clip uri".to_owned());
         }
-        if !request.concurrency_group.is_empty() {
-            let conflicts = self
-                .voices
-                .iter()
-                .filter(|(_, voice)| voice.concurrency_group == request.concurrency_group)
-                .map(|(id, voice)| (*id, voice.priority))
-                .collect::<Vec<_>>();
-            if conflicts
-                .iter()
-                .any(|(_, current_priority)| *current_priority > request.priority)
-            {
+        let uri = normalize_vfs_path(&request.clip.uri)?;
+        let metadata = self.stream_source_metadata(&uri, request.buffer)?;
+        let authored_start = Duration::from_secs_f64(request.start_seconds);
+        if !request.looping
+            && metadata
+                .source_duration
+                .is_some_and(|duration| !duration.is_zero() && authored_start >= duration)
+        {
+            return Ok(AudioPlayAck {
+                accepted: false,
+                provider: NATIVE_AUDIO_PROVIDER_ROUTE.to_owned(),
+                voice_id: None,
+                voice_ids: Vec::new(),
+                message: "stream start position is at or beyond source duration".to_owned(),
+                virtualized: false,
+                diagnostics: Vec::new(),
+            });
+        }
+        let initial_position = normalize_timeline_position(
+            authored_start,
+            metadata.source_duration,
+            request.looping,
+        );
+        let policy = AudioVoicePolicy {
+            group: request.concurrency_group.clone(),
+            limit: request.concurrency_limit,
+            scope: request.concurrency_scope,
+            steal_rule: request.steal_rule,
+            budget: request.voice_budget.clone(),
+            priority: request.priority,
+        }
+        .sanitized()?;
+        let policy_instance_id = self.alloc_policy_instance_id();
+        let scope_key = Self::concurrency_scope_key(&policy, request.scope_id)?;
+        match self.admit_voice_policy(&policy, request.scope_id, policy_instance_id)? {
+            VoicePolicyAdmission::Rejected { reason } => {
                 return Ok(AudioPlayAck {
                     accepted: false,
                     provider: NATIVE_AUDIO_PROVIDER_ROUTE.to_owned(),
                     voice_id: None,
-                    message: format!(
-                        "concurrency group '{}' is occupied by a higher-priority voice",
-                        request.concurrency_group
-                    ),
+                    voice_ids: Vec::new(),
+                    message: reason,
                     virtualized: false,
                     diagnostics: Vec::new(),
                 });
             }
-            for (voice_id, _) in conflicts {
-                let _ = self.remove_voice(voice_id);
+            VoicePolicyAdmission::Accepted { stolen_instances } => {
+                if !stolen_instances.is_empty() {
+                    newengine_ulog_api::ulog::trace!(
+                        "audio voice policy: admitted stream group='{}' scope={:?} limit={} steal_rule={:?} stolen_instances={:?}",
+                        policy.group,
+                        policy.scope,
+                        policy.limit,
+                        policy.steal_rule,
+                        stolen_instances
+                    );
+                }
             }
         }
 
-        let uri = normalize_vfs_path(&request.clip.uri)?;
         let voice_id = self.alloc_voice_id();
         self.voices.insert(
             voice_id,
@@ -150,6 +215,7 @@ impl AudioRuntimeState {
                 source: VoiceSource::Stream {
                     uri,
                     buffer: request.buffer,
+                    source_duration: metadata.source_duration,
                 },
                 bus: request.bus,
                 gain: request.gain,
@@ -168,10 +234,15 @@ impl AudioRuntimeState {
                 last_spatial_update: request.spatial.map(|_| Instant::now()),
                 environment: request.environment,
                 stream_stats: None,
-                concurrency_group: request.concurrency_group,
-                priority: request.priority,
+                physical_source_origin: Duration::ZERO,
+                concurrency_group: policy.group,
+                concurrency_scope: policy.scope,
+                concurrency_scope_id: scope_key,
+                policy_instance_id,
+                voice_budget: policy.budget,
+                priority: policy.priority,
                 paused: false,
-                virtual_source_position: Duration::from_secs_f64(request.start_seconds),
+                virtual_source_position: initial_position,
                 virtual_since: Some(Instant::now()),
             },
         );
@@ -182,7 +253,8 @@ impl AudioRuntimeState {
                 accepted: false,
                 provider: NATIVE_AUDIO_PROVIDER_ROUTE.to_owned(),
                 voice_id: None,
-                message: "physical voice budget exhausted for streaming source".to_owned(),
+                voice_ids: Vec::new(),
+                message: "logical stream disappeared during provider rebalance".to_owned(),
                 virtualized: false,
                 diagnostics: Vec::new(),
             });
@@ -191,7 +263,12 @@ impl AudioRuntimeState {
             accepted: true,
             provider: NATIVE_AUDIO_PROVIDER_ROUTE.to_owned(),
             voice_id: Some(voice_id),
-            message: String::new(),
+            voice_ids: vec![voice_id],
+            message: if voice.is_virtual() {
+                "stream accepted as logical virtual voice; awaiting a physical mixer slot".to_owned()
+            } else {
+                String::new()
+            },
             virtualized: voice.is_virtual(),
             diagnostics: Vec::new(),
         })
@@ -212,32 +289,33 @@ impl AudioRuntimeState {
             return Ok(cue.clone());
         }
 
-        let dictionary = if let Some(dictionary) = self.yscd_dictionaries.get(&reference.logical_path) {
-            Arc::clone(dictionary)
-        } else {
-            let source = self
-                .assets
-                .raw_bytes_v1(&reference.logical_path)
-                .map_err(|error| {
-                    format!(
-                        "YSCD VFS read failed logical_path='{}': {error}",
-                        reference.logical_path
-                    )
-                })?;
-            let decoded = Arc::new(newengine_asset_format_nef8::decode_yscd_nef8(
-                &source,
-                &reference.logical_path,
-            )?);
-            newengine_ulog_api::ulog::info!(
-                "YSCD dictionary cache miss path='{}' cues={} bytes={} policy='decode-once'",
-                reference.logical_path,
-                decoded.cues.len(),
-                source.len(),
-            );
-            self.yscd_dictionaries
-                .insert(reference.logical_path.clone(), Arc::clone(&decoded));
-            decoded
-        };
+        let dictionary =
+            if let Some(dictionary) = self.yscd_dictionaries.get(&reference.logical_path) {
+                Arc::clone(dictionary)
+            } else {
+                let source =
+                    self.assets
+                        .raw_bytes_v1(&reference.logical_path)
+                        .map_err(|error| {
+                            format!(
+                                "YSCD VFS read failed logical_path='{}': {error}",
+                                reference.logical_path
+                            )
+                        })?;
+                let decoded = Arc::new(newengine_asset_format_nef8::decode_yscd_nef8(
+                    &source,
+                    &reference.logical_path,
+                )?);
+                newengine_ulog_api::ulog::info!(
+                    "YSCD dictionary cache miss path='{}' cues={} bytes={} policy='decode-once'",
+                    reference.logical_path,
+                    decoded.cues.len(),
+                    source.len(),
+                );
+                self.yscd_dictionaries
+                    .insert(reference.logical_path.clone(), Arc::clone(&decoded));
+                decoded
+            };
         let cue_name = reference.entry.as_deref().expect("entry required above");
         let authored = dictionary.cue(cue_name).ok_or_else(|| {
             format!(
@@ -310,12 +388,17 @@ impl AudioRuntimeState {
             .map(|clip| clip.bytes.len())
             .sum::<usize>();
         newengine_ulog_api::ulog::info!(
-            "YSCD resolve dictionary='{}' cue='{}' embedded_clip_bytes={} clips={} layers={} source='engine.assets.raw_bytes_v1' body='NEF8/YSCD-v1'",
+            "YSCD resolve dictionary='{}' cue='{}' embedded_clip_bytes={} clips={} layers={} sound_graph_nodes={} source='engine.assets.raw_bytes_v1' body='NEF8/YSCD-v1'",
             reference.logical_path,
             authored.name,
             embedded_bytes,
             authored.clips.len(),
             runtime_layers.len(),
+            authored
+                .descriptor
+                .sound_graph
+                .as_ref()
+                .map_or(0, |graph| graph.nodes.len()),
         );
 
         let cue = SoundCue {
@@ -326,6 +409,12 @@ impl AudioRuntimeState {
             bus: audio_bus_from_yscd(&authored.descriptor.bus)?,
             looping: authored.descriptor.looping,
             concurrency_group: authored.descriptor.concurrency_group.clone(),
+            concurrency_limit: authored.descriptor.concurrency_limit,
+            concurrency_scope: concurrency_scope_from_yscd(
+                &authored.descriptor.concurrency_scope,
+            )?,
+            steal_rule: voice_steal_rule_from_yscd(&authored.descriptor.steal_rule)?,
+            voice_budget: authored.descriptor.voice_budget.clone(),
             priority: authored.descriptor.priority,
             repeat_avoidance: authored.descriptor.repeat_avoidance,
             spatial_policy: sound_cue_spatial_policy_from_yscd(
@@ -340,6 +429,14 @@ impl AudioRuntimeState {
         }
         .sanitized()?;
         self.cue_layers.insert(canonical.clone(), runtime_layers);
+        self.cue_clips_by_name
+            .insert(canonical.clone(), clips_by_name);
+        if let Some(graph) = authored.descriptor.sound_graph.as_ref() {
+            self.cue_sound_graphs
+                .insert(canonical.clone(), Arc::new(graph.clone()));
+        } else {
+            self.cue_sound_graphs.remove(&canonical);
+        }
         self.cue_meta.insert(
             canonical.clone(),
             YscdRuntimeMeta {
@@ -364,6 +461,10 @@ impl AudioRuntimeState {
         let cue = self.load_cue(&request.cue.logical_path)?;
         let clip_count = cue.clips.len();
         let layer_count = self.cue_layers.get(&canonical).map_or(0, Vec::len);
+        let graph_node_count = self
+            .cue_sound_graphs
+            .get(&canonical)
+            .map_or(0, |graph| graph.nodes.len());
         let mut bytes = 0usize;
         let mut all_cached = true;
         for entry in cue.clips {
@@ -383,12 +484,13 @@ impl AudioRuntimeState {
             .get(&canonical)
             .map(|meta| {
                 vec![format!(
-                    "YSCD resolve dictionary='{}' cue='{}' embedded_clip_bytes={} clips={} layers={}",
+                    "YSCD resolve dictionary='{}' cue='{}' embedded_clip_bytes={} clips={} layers={} sound_graph_nodes={}",
                     meta.dictionary_path,
                     meta.cue_name,
                     meta.embedded_bytes,
                     clip_count,
                     layer_count,
+                    graph_node_count,
                 )]
             })
             .unwrap_or_default();
@@ -436,6 +538,8 @@ impl AudioRuntimeState {
         let canonical = parsed.canonical.clone();
         let cue = self.load_cue(&request.cue.logical_path)?;
         let layers = self.cue_layers.get(&canonical).cloned().unwrap_or_default();
+        let voice_policy = cue.voice_policy().sanitized()?;
+        let policy_instance_id = self.alloc_policy_instance_id();
         let seed = request.seed.unwrap_or_else(|| {
             let seed = self.cue_counter;
             self.cue_counter = self.cue_counter.wrapping_add(1).max(1);
@@ -456,6 +560,101 @@ impl AudioRuntimeState {
                 .map(|position| AudioSpatialParams { position }),
         };
 
+        if let Some(graph) = self.cue_sound_graphs.get(&canonical).cloned() {
+            let plans = self.evaluate_sound_graph(
+                &canonical,
+                &graph,
+                &request.parameters,
+                seed,
+                request.scope_id,
+            )?;
+            let clips_by_name = self
+                .cue_clips_by_name
+                .get(&canonical)
+                .cloned()
+                .ok_or_else(|| format!("YSCD SoundGraph '{}' clip map is unavailable", canonical))?;
+            let mut primary: Option<AudioPlayAck> = None;
+            let mut accepted_voice_ids = Vec::<u64>::new();
+            let mut diagnostics = Vec::<String>::new();
+            let mut rejection_reason: Option<String> = None;
+            for (index, plan) in plans.iter().enumerate() {
+                let selected = clips_by_name.get(&plan.clip_name).cloned().ok_or_else(|| {
+                    format!(
+                        "YSCD SoundGraph '{}' resolved unknown runtime clip '{}'",
+                        canonical, plan.clip_name
+                    )
+                })?;
+                let random_a = splitmix64(
+                    seed ^ stable_text_hash(&plan.label) ^ (index as u64).rotate_left(17),
+                );
+                let random_b = splitmix64(random_a);
+                let gain = sanitize_gain(
+                    request.gain
+                        * plan.gain
+                        * selected.gain
+                        * sample_range(cue.gain_range, unit_f32(random_a)),
+                );
+                let speed = sanitize_speed(
+                    request.pitch
+                        * plan.pitch
+                        * selected.pitch
+                        * sample_range(cue.pitch_range, unit_f32(random_b)),
+                );
+                let ack = self.play_clip_with_policy(
+                    AudioPlayRequest {
+                        version: 1,
+                        clip: selected.clip.clone(),
+                        bus: cue.bus,
+                        gain,
+                        speed,
+                        looping: cue.looping,
+                        spatial,
+                        attenuation: cue.attenuation.clone(),
+                        acoustic: request.acoustic,
+                        environment: request.environment,
+                    },
+                    voice_policy.clone(),
+                    request.scope_id,
+                    policy_instance_id,
+                )?;
+                if let Some(diagnostic) =
+                    self.yscd_play_diagnostic(&canonical, &format!("graph:{}", plan.label), &selected, &ack)
+                {
+                    diagnostics.push(diagnostic);
+                }
+                if ack.accepted {
+                    accepted_voice_ids.extend(ack.voice_ids.iter().copied());
+                    if primary.is_none() {
+                        primary = Some(ack.clone());
+                    }
+                } else if rejection_reason.is_none() {
+                    rejection_reason = Some(ack.message.clone());
+                }
+            }
+            if let Some(mut ack) = primary {
+                accepted_voice_ids.sort_unstable();
+                accepted_voice_ids.dedup();
+                ack.voice_ids = accepted_voice_ids;
+                ack.message = format!(
+                    "YSCD SoundGraph accepted logical_voices={}",
+                    ack.voice_ids.len()
+                );
+                ack.diagnostics = diagnostics;
+                return Ok(ack);
+            }
+            return Ok(AudioPlayAck {
+                accepted: false,
+                provider: NATIVE_AUDIO_PROVIDER_ROUTE.to_owned(),
+                voice_id: None,
+                voice_ids: Vec::new(),
+                message: rejection_reason.unwrap_or_else(|| {
+                    "YSCD SoundGraph produced no accepted logical voices".to_owned()
+                }),
+                virtualized: false,
+                diagnostics,
+            });
+        }
+
         if layers.is_empty() {
             let random_a = splitmix64(seed);
             let random_b = splitmix64(random_a);
@@ -465,13 +664,9 @@ impl AudioRuntimeState {
                 .get(&canonical)
                 .cloned()
                 .unwrap_or_default();
-            let selected = select_weighted_clips_avoiding(
-                &cue.clips,
-                unit_f32(random_a),
-                &recent,
-            )
-            .cloned()
-            .ok_or_else(|| "SoundCue weighted selection produced no clip".to_owned())?;
+            let selected = select_weighted_clips_avoiding(&cue.clips, unit_f32(random_a), &recent)
+                .cloned()
+                .ok_or_else(|| "SoundCue weighted selection produced no clip".to_owned())?;
             let gain = sanitize_gain(
                 request.gain * selected.gain * sample_range(cue.gain_range, unit_f32(random_b)),
             );
@@ -491,16 +686,13 @@ impl AudioRuntimeState {
                     acoustic: request.acoustic,
                     environment: request.environment,
                 },
-                cue.concurrency_group.clone(),
-                cue.priority,
+                voice_policy.clone(),
+                request.scope_id,
+                policy_instance_id,
             )?;
             let mut ack = ack;
             if ack.accepted {
-                self.remember_cue_selection(
-                    &canonical,
-                    &selected.clip.uri,
-                    cue.repeat_avoidance,
-                );
+                self.remember_cue_selection(&canonical, &selected.clip.uri, cue.repeat_avoidance);
             }
             if let Some(diagnostic) = self.yscd_play_diagnostic(&canonical, "body", &selected, &ack)
             {
@@ -510,7 +702,9 @@ impl AudioRuntimeState {
         }
 
         let mut primary: Option<AudioPlayAck> = None;
+        let mut rejection_reason: Option<String> = None;
         let mut accepted_layers = 0usize;
+        let mut accepted_voice_ids = Vec::<u64>::new();
         let mut diagnostics = Vec::with_capacity(layers.len());
         for (index, layer) in layers.iter().enumerate() {
             let layer_seed = splitmix64(seed ^ stable_text_hash(&layer.name) ^ index as u64);
@@ -523,18 +717,15 @@ impl AudioRuntimeState {
                 .get(&history_key)
                 .cloned()
                 .unwrap_or_default();
-            let selected = select_weighted_clips_avoiding(
-                &layer.clips,
-                unit_f32(random_a),
-                &recent,
-            )
-            .cloned()
-                .ok_or_else(|| {
-                    format!(
-                        "YSCD layer '{}' weighted selection produced no clip",
-                        layer.name
-                    )
-                })?;
+            let selected =
+                select_weighted_clips_avoiding(&layer.clips, unit_f32(random_a), &recent)
+                    .cloned()
+                    .ok_or_else(|| {
+                        format!(
+                            "YSCD layer '{}' weighted selection produced no clip",
+                            layer.name
+                        )
+                    })?;
             let gain = sanitize_gain(
                 request.gain
                     * layer.gain
@@ -547,11 +738,6 @@ impl AudioRuntimeState {
                     * selected.pitch
                     * sample_range(cue.pitch_range, unit_f32(random_c)),
             );
-            let concurrency_group = if cue.concurrency_group.trim().is_empty() {
-                String::new()
-            } else {
-                format!("{}#{}", cue.concurrency_group, layer.name)
-            };
             let ack = self.play_clip_with_policy(
                 AudioPlayRequest {
                     version: 1,
@@ -568,20 +754,21 @@ impl AudioRuntimeState {
                     acoustic: request.acoustic,
                     environment: request.environment,
                 },
-                concurrency_group,
-                cue.priority,
+                voice_policy.clone(),
+                request.scope_id,
+                policy_instance_id,
             )?;
             if let Some(diagnostic) =
                 self.yscd_play_diagnostic(&canonical, &layer.name, &selected, &ack)
             {
                 diagnostics.push(diagnostic);
             }
+            if !ack.accepted && rejection_reason.is_none() && !ack.message.is_empty() {
+                rejection_reason = Some(ack.message.clone());
+            }
             if ack.accepted {
-                self.remember_cue_selection(
-                    &history_key,
-                    &selected.clip.uri,
-                    cue.repeat_avoidance,
-                );
+                accepted_voice_ids.extend(ack.voice_ids.iter().copied());
+                self.remember_cue_selection(&history_key, &selected.clip.uri, cue.repeat_avoidance);
                 accepted_layers = accepted_layers.saturating_add(1);
                 let preferred_primary = matches!(layer.role.as_str(), "body" | "near");
                 if primary.is_none() || preferred_primary {
@@ -591,6 +778,9 @@ impl AudioRuntimeState {
         }
 
         if let Some(mut ack) = primary {
+            accepted_voice_ids.sort_unstable();
+            accepted_voice_ids.dedup();
+            ack.voice_ids = accepted_voice_ids;
             ack.message = format!("YSCD layered cue accepted layers={accepted_layers}");
             ack.diagnostics = diagnostics;
             return Ok(ack);
@@ -599,7 +789,9 @@ impl AudioRuntimeState {
             accepted: false,
             provider: NATIVE_AUDIO_PROVIDER_ROUTE.to_owned(),
             voice_id: None,
-            message: "YSCD layered cue produced no accepted voices".to_owned(),
+            voice_ids: Vec::new(),
+            message: rejection_reason
+                .unwrap_or_else(|| "YSCD layered cue produced no accepted voices".to_owned()),
             virtualized: false,
             diagnostics,
         })
@@ -648,7 +840,9 @@ impl AudioRuntimeState {
         let transmission_gain = voice
             .map(|voice| voice.propagated_acoustic().transmission_gain)
             .unwrap_or(0.0);
-        let doppler_ratio = voice.map(|voice| voice.propagation.doppler_ratio).unwrap_or(1.0);
+        let doppler_ratio = voice
+            .map(|voice| voice.propagation.doppler_ratio)
+            .unwrap_or(1.0);
         let air_hf_gain = voice
             .map(|voice| voice.propagation.air_high_frequency_gain)
             .unwrap_or(1.0);
@@ -700,6 +894,7 @@ impl AudioRuntimeState {
         let (frequency, duration_ms) = feedback_tone(&event.id);
         let gain = sanitize_gain(DEFAULT_UI_TONE_GAIN * event.intensity.clamp(0.0, 1.0));
         let voice_id = self.alloc_voice_id();
+        let policy_instance_id = self.alloc_policy_instance_id();
         self.voices.insert(
             voice_id,
             VoiceEntry {
@@ -720,7 +915,12 @@ impl AudioRuntimeState {
                 last_spatial_update: None,
                 environment: AudioEnvironmentState::clear(),
                 stream_stats: None,
+                physical_source_origin: Duration::ZERO,
                 concurrency_group: String::new(),
+                concurrency_scope: AudioConcurrencyScope::Global,
+                concurrency_scope_id: None,
+                policy_instance_id,
+                voice_budget: String::new(),
                 priority: UI_FEEDBACK_PRIORITY,
                 paused: false,
                 virtual_source_position: Duration::ZERO,

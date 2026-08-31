@@ -78,6 +78,9 @@ struct RawPlayerModelSpec {
     pub(super) texture_dictionary: Option<String>,
     #[serde(default = "default_player_skeleton")]
     pub(super) skeleton: Option<String>,
+    /// Project-defined semantic animation bindings. No filename/directory convention is implied.
+    #[serde(default)]
+    pub(super) animation_slots: std::collections::BTreeMap<String, String>,
     #[serde(default)]
     pub(super) idle_animation: Option<String>,
     #[serde(default)]
@@ -303,6 +306,8 @@ struct RawGameplaySpec {
     #[serde(default)]
     pub(super) player_visual: RawPlayerVisualSpec,
     #[serde(default)]
+    pub(super) camera: RawCameraSpec,
+    #[serde(default)]
     pub(super) physics: RawPhysicsSpec,
     #[serde(default)]
     pub(super) mission: RawMissionSpec,
@@ -394,6 +399,30 @@ struct RawPlayerVisualSpec {
     pub(super) camera_eye_height: f32,
     #[serde(default = "default_sprint_multiplier")]
     pub(super) sprint_multiplier: f32,
+}
+
+#[derive(Debug, Deserialize)]
+struct RawCameraSpec {
+    #[serde(default = "default_camera_first_person_fov_y_degrees")]
+    pub(super) first_person_fov_y_degrees: f32,
+    #[serde(default = "default_camera_first_person_ads_fov_y_degrees")]
+    pub(super) first_person_ads_fov_y_degrees: f32,
+    #[serde(default = "default_camera_first_person_near")]
+    pub(super) first_person_near: f32,
+    #[serde(default = "default_camera_first_person_forward_clearance")]
+    pub(super) first_person_forward_clearance: f32,
+    #[serde(default = "default_camera_first_person_body_yaw_limit_degrees")]
+    pub(super) first_person_body_yaw_limit_degrees: f32,
+    #[serde(default = "default_camera_first_person_down_pitch_limit_degrees")]
+    pub(super) first_person_down_pitch_limit_degrees: f32,
+    #[serde(default = "default_camera_third_person_follow_fov_y_degrees")]
+    pub(super) third_person_follow_fov_y_degrees: f32,
+    #[serde(default = "default_camera_third_person_aim_fov_y_degrees")]
+    pub(super) third_person_aim_fov_y_degrees: f32,
+    #[serde(default = "default_camera_third_person_orbit_fov_y_degrees")]
+    pub(super) third_person_orbit_fov_y_degrees: f32,
+    #[serde(default)]
+    pub(super) hide_local_model_in_first_person: bool,
 }
 
 #[derive(Debug, Deserialize)]

@@ -19,3 +19,4 @@ newengine-gameplay-fps-api = { path = "../newengine-gameplay-fps-api" }
 newengine-gameplay-script-api = { path = "../newengine-gameplay-script-api" }
 newengine-gameplay-script-runtime = { path = "../newengine-gameplay-script-runtime" }
 newengine-physics-api = { path = "../newengine-physics-api" }
+newengine-ulog-api = { path = "../newengine-ulog-api" }

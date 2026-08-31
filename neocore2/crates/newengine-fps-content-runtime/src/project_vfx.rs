@@ -4,6 +4,14 @@ use newengine_engine_runtime::gameplay::{GameplayWorld, ItemCatalog};
 use newengine_vfx_api::VfxGpuTextureRegistry;
 use newengine_vfx_runtime::VfxEffectLibrary;
 
+pub(crate) fn install_empty_project_vfx_resources(world: &mut GameplayWorld) {
+    // Explicit degraded state: unresolved project effects stay unresolved. This is not a
+    // generated/default gameplay effect fallback; it only prevents stale VFX resources from a
+    // previous content generation from surviving a failed project dictionary load.
+    world.insert_resource(VfxEffectLibrary::default());
+    world.insert_resource(VfxGpuTextureRegistry::default());
+}
+
 pub(crate) fn install_project_vfx_dictionaries(
     world: &mut GameplayWorld,
     catalog: &ItemCatalog,
@@ -24,9 +32,7 @@ pub(crate) fn install_project_vfx_dictionaries(
     let mut dictionaries = BTreeSet::<String>::new();
     for effect_ref in &effect_refs {
         let (path, selector) = effect_ref.rsplit_once('@').ok_or_else(|| {
-            format!(
-                "project weapon VFX reference must use file.fxd@effect syntax: '{effect_ref}'"
-            )
+            format!("project weapon VFX reference must use file.fxd@effect syntax: '{effect_ref}'")
         })?;
         if path.trim().is_empty()
             || selector.trim().is_empty()
@@ -39,7 +45,8 @@ pub(crate) fn install_project_vfx_dictionaries(
         dictionaries.insert(path.trim().replace('\\', "/"));
     }
 
-    let assets = newengine_assets_api::AssetServiceClient::new(newengine_plugin_host::default_host_api());
+    let assets =
+        newengine_assets_api::AssetServiceClient::new(newengine_plugin_host::default_host_api());
     for path in dictionaries {
         let bytes = assets
             .raw_bytes_v1(&path)

@@ -27,7 +27,12 @@ fn audio_service(state: AudioRuntimeState) -> newengine_plugin_api::ServiceV1Dyn
         "audio-buses",
         "clip-cache",
         "voice-budget",
+        "voice-policy-v2",
+        "reserved-voice-budgets",
         "voice-virtualization",
+        "stream-logical-virtualization",
+        "yscd-sound-graph-v1",
+        "sound-graph-trigger-parameters",
         "authored-attenuation",
         "physics-acoustic-state",
         "occlusion-aware-arbitration",
@@ -94,6 +99,10 @@ fn audio_service(state: AudioRuntimeState) -> newengine_plugin_api::ServiceV1Dyn
         .post_json(
             AUDIO_SERVICE_METHOD_SET_BUS_GAIN_JSON_V1,
             |state, request: AudioBusGainRequest| state.set_bus_gain(request),
+        )
+        .post_json(
+            AUDIO_SERVICE_METHOD_SET_VOICE_BUDGETS_JSON_V1,
+            |state, request: AudioVoiceBudgetConfig| state.set_voice_budgets(request),
         )
         .get_json(AUDIO_SERVICE_METHOD_DIAGNOSTICS_JSON_V1, |state| {
             state.diagnostics()

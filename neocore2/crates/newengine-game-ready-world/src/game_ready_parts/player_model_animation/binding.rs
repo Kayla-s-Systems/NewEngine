@@ -105,6 +105,21 @@ fn bounded_turn_in_place_step(yaw_error: f32) -> f32 {
 }
 
 #[inline]
+fn live_view_residual_requires_turn_replan(
+    active: TurnInPlaceSlot,
+    residual_yaw: f32,
+    hysteresis_radians: f32,
+) -> bool {
+    if !residual_yaw.is_finite() || !hysteresis_radians.is_finite() {
+        return false;
+    }
+    if residual_yaw.abs() <= hysteresis_radians.max(0.0) {
+        return false;
+    }
+    residual_yaw.signum() != active.signed_yaw_radians().signum()
+}
+
+#[inline]
 fn compensate_turn_root_yaw(
     pose: &mut [JointLocalPose],
     root_joint: Option<usize>,
@@ -187,8 +202,7 @@ impl PoseContinuityBridge {
 
         // Advance before sampling the blend weight. A source change therefore begins blending on
         // the same rendered frame instead of inserting a zero-weight/frozen transition frame.
-        self.elapsed_seconds =
-            (self.elapsed_seconds + dt.max(0.0)).min(self.duration_seconds);
+        self.elapsed_seconds = (self.elapsed_seconds + dt.max(0.0)).min(self.duration_seconds);
         let phase = if self.duration_seconds > 1.0e-6 {
             (self.elapsed_seconds / self.duration_seconds).clamp(0.0, 1.0)
         } else {
@@ -239,7 +253,7 @@ fn nearest_turn_in_place_slot(
     yaw_delta: f32,
     mut available: impl FnMut(TurnInPlaceSlot) -> bool,
 ) -> Option<TurnInPlaceSlot> {
-    if !yaw_delta.is_finite() || yaw_delta.abs() < 60.0_f32.to_radians() {
+    if !yaw_delta.is_finite() || yaw_delta.abs() <= 1.0e-5 {
         return None;
     }
     let left = yaw_delta > 0.0;
@@ -266,273 +280,6 @@ fn nearest_turn_in_place_slot(
             let db = (yaw_delta.abs().to_degrees() - b.angle_degrees()).abs();
             da.total_cmp(&db)
         })
-}
-
-#[derive(Clone, Copy, Debug)]
-struct ResolvedHeadLookLayer {
-    joint_index: usize,
-    weight: f32,
-}
-
-fn resolve_head_look_layers(skeleton: &ModelSkeletonMetadata) -> Vec<ResolvedHeadLookLayer> {
-    let Some(head_index) = skeleton
-        .joints
-        .iter()
-        .position(|joint| joint.name == skeleton.anchors.head)
-    else {
-        return Vec::new();
-    };
-
-    // Use the authored head anchor plus its two immediate ancestors. On the TLOU2 rigs this is
-    // headb <- heada <- neck. Resolving by hierarchy instead of hard-coded names keeps the policy
-    // valid for Joel/Isaac/Ellie variants that expose the same semantic anchors with different names.
-    let mut upper_to_lower = Vec::with_capacity(3);
-    let mut current = Some(head_index);
-    for _ in 0..3 {
-        let Some(index) = current.filter(|index| *index < skeleton.joints.len()) else {
-            break;
-        };
-        upper_to_lower.push(index);
-        current = skeleton.joints[index]
-            .parent_index
-            .map(|value| value as usize);
-    }
-    upper_to_lower.reverse();
-    if upper_to_lower.is_empty() {
-        return Vec::new();
-    }
-    let canonical = [0.25_f32, 0.35, 0.40];
-    let start = canonical.len().saturating_sub(upper_to_lower.len());
-    let sum = canonical[start..].iter().copied().sum::<f32>().max(1.0e-6);
-    upper_to_lower
-        .into_iter()
-        .zip(canonical[start..].iter().copied())
-        .map(|(joint_index, weight)| ResolvedHeadLookLayer {
-            joint_index,
-            weight: weight / sum,
-        })
-        .collect()
-}
-
-fn apply_head_look_pose(
-    skeleton: &ModelSkeletonMetadata,
-    animation_runtime: &AnimationSkeletonRuntime,
-    layers: &[ResolvedHeadLookLayer],
-    pose: &mut [JointLocalPose],
-    frames: &mut Vec<Mat4>,
-    yaw_radians: f32,
-    pitch_radians: f32,
-) -> Result<(), String> {
-    let yaw = if yaw_radians.is_finite() {
-        yaw_radians.clamp(-55.0_f32.to_radians(), 55.0_f32.to_radians())
-    } else {
-        0.0
-    };
-    let pitch = if pitch_radians.is_finite() {
-        pitch_radians.clamp(-38.0_f32.to_radians(), 38.0_f32.to_radians())
-    } else {
-        0.0
-    };
-    if layers.is_empty() || (yaw.abs() <= 1.0e-5 && pitch.abs() <= 1.0e-5) {
-        return Ok(());
-    }
-
-    // Rebuild after each ancestor adjustment: the next joint must observe the already-turned parent,
-    // otherwise neck + head would over/under-shoot depending on authored local basis.
-    for layer in layers {
-        rebuild_model_joint_frames(animation_runtime, pose, frames)?;
-        let Some(joint) = skeleton.joints.get(layer.joint_index) else {
-            continue;
-        };
-        let Some(parent_index) = joint.parent_index.map(|index| index as usize) else {
-            continue;
-        };
-        let Some(joint_frame) = frames.get(layer.joint_index).copied() else {
-            continue;
-        };
-        let Some(parent_frame) = frames.get(parent_index).copied() else {
-            continue;
-        };
-        let (_, joint_global_rotation, _) = joint_frame.to_scale_rotation_translation();
-        let (_, parent_global_rotation, _) = parent_frame.to_scale_rotation_translation();
-        let delta = (
-            Quat::from_rotation_y(yaw * layer.weight)
-                * Quat::from_rotation_x(pitch * layer.weight)
-        )
-        .normalize_or_identity();
-        let desired_global = (delta * joint_global_rotation).normalize_or_identity();
-        let local_rotation =
-            (parent_global_rotation.inverse() * desired_global).normalize_or_identity();
-        if let Some(local) = pose.get_mut(layer.joint_index) {
-            local.rotation = [
-                local_rotation.x,
-                local_rotation.y,
-                local_rotation.z,
-                local_rotation.w,
-            ];
-        }
-    }
-    Ok(())
-}
-
-#[inline]
-fn smooth_head_look(current: f32, target: f32, limit_degrees: f32, dt: f32) -> f32 {
-    let limit = limit_degrees.max(0.0).to_radians();
-    let target = if target.is_finite() {
-        target.clamp(-limit, limit)
-    } else {
-        0.0
-    };
-    if !current.is_finite() || !(dt.is_finite() && dt > 0.0) {
-        return target;
-    }
-    let alpha = (1.0 - (-dt / 0.085).exp()).clamp(0.0, 1.0);
-    current + (target - current) * alpha
-}
-
-#[derive(Clone, Copy, Debug)]
-struct ResolvedBodyTurnLayer {
-    joint_index: usize,
-    weight: f32,
-}
-
-fn resolve_body_turn_layers(skeleton: &ModelSkeletonMetadata) -> Vec<ResolvedBodyTurnLayer> {
-    let Some(hips_index) = skeleton
-        .joints
-        .iter()
-        .position(|joint| joint.name == skeleton.anchors.hips)
-    else {
-        return Vec::new();
-    };
-    let Some(head_index) = skeleton
-        .joints
-        .iter()
-        .position(|joint| joint.name == skeleton.anchors.head)
-    else {
-        return Vec::new();
-    };
-    if hips_index == head_index {
-        return Vec::new();
-    }
-
-    // The hips anchor is not guaranteed to be an ancestor of the spine. Naughty Dog rigs, for
-    // example, commonly make `pelvis` and `spinea` siblings under `root`. Build the hips ancestry
-    // first, then walk head upward until the first common ancestor. Everything between that common
-    // ancestor and the head belongs to the torso/neck branch; the common ancestor and hips branch
-    // stay root-owned so pelvis/legs never inherit procedural yaw.
-    let mut hips_ancestors = std::collections::HashSet::new();
-    let mut current = Some(hips_index);
-    for _ in 0..skeleton.joints.len() {
-        let Some(index) = current.filter(|index| *index < skeleton.joints.len()) else {
-            break;
-        };
-        if !hips_ancestors.insert(index) {
-            break;
-        }
-        current = skeleton.joints[index]
-            .parent_index
-            .map(|value| value as usize);
-    }
-
-    let mut chain_reversed = Vec::new();
-    let mut current = skeleton
-        .joints
-        .get(head_index)
-        .and_then(|joint| joint.parent_index)
-        .map(|index| index as usize);
-    let mut reached_common_ancestor = false;
-    for _ in 0..skeleton.joints.len() {
-        let Some(index) = current.filter(|index| *index < skeleton.joints.len()) else {
-            break;
-        };
-        if hips_ancestors.contains(&index) {
-            reached_common_ancestor = true;
-            break;
-        }
-        chain_reversed.push(index);
-        current = skeleton.joints[index]
-            .parent_index
-            .map(|value| value as usize);
-    }
-    if !reached_common_ancestor || chain_reversed.is_empty() {
-        return Vec::new();
-    }
-    chain_reversed.reverse();
-
-    // More yaw belongs to the upper torso than to the lower spine. Normalizing these monotonic
-    // weights means the full requested residual yaw is distributed exactly once across the chain.
-    let raw = chain_reversed
-        .iter()
-        .enumerate()
-        .map(|(index, _)| 0.75 + index as f32 * 0.35)
-        .collect::<Vec<_>>();
-    let sum = raw.iter().copied().sum::<f32>().max(1.0e-6);
-    chain_reversed
-        .into_iter()
-        .zip(raw)
-        .map(|(joint_index, value)| ResolvedBodyTurnLayer {
-            joint_index,
-            weight: value / sum,
-        })
-        .collect()
-}
-
-fn apply_body_turn_pose(
-    skeleton: &ModelSkeletonMetadata,
-    animation_runtime: &AnimationSkeletonRuntime,
-    layers: &[ResolvedBodyTurnLayer],
-    pose: &mut [JointLocalPose],
-    frames: &mut Vec<Mat4>,
-    yaw_radians: f32,
-) -> Result<(), String> {
-    if layers.is_empty() || !yaw_radians.is_finite() || yaw_radians.abs() <= 1.0e-5 {
-        return Ok(());
-    }
-    rebuild_model_joint_frames(animation_runtime, pose, frames)?;
-    for layer in layers {
-        let Some(joint) = skeleton.joints.get(layer.joint_index) else {
-            continue;
-        };
-        let Some(parent_index) = joint.parent_index.map(|index| index as usize) else {
-            continue;
-        };
-        let Some(joint_frame) = frames.get(layer.joint_index).copied() else {
-            continue;
-        };
-        let Some(parent_frame) = frames.get(parent_index).copied() else {
-            continue;
-        };
-        let (_, joint_global_rotation, _) = joint_frame.to_scale_rotation_translation();
-        let (_, parent_global_rotation, _) = parent_frame.to_scale_rotation_translation();
-        let delta = Quat::from_rotation_y(yaw_radians * layer.weight).normalize_or_identity();
-        let desired_global = (delta * joint_global_rotation).normalize_or_identity();
-        let local_rotation =
-            (parent_global_rotation.inverse() * desired_global).normalize_or_identity();
-        let Some(local) = pose.get_mut(layer.joint_index) else {
-            continue;
-        };
-        local.rotation = [
-            local_rotation.x,
-            local_rotation.y,
-            local_rotation.z,
-            local_rotation.w,
-        ];
-    }
-    Ok(())
-}
-
-#[inline]
-fn smooth_body_turn_yaw(current: f32, target: f32, dt: f32) -> f32 {
-    let target = if target.is_finite() {
-        target.clamp(-65.0_f32.to_radians(), 65.0_f32.to_radians())
-    } else {
-        0.0
-    };
-    if !current.is_finite() || !(dt.is_finite() && dt > 0.0) {
-        return target;
-    }
-    let alpha = (1.0 - (-dt / 0.075).exp()).clamp(0.0, 1.0);
-    current + newengine_math::wrap_pi(target - current) * alpha
 }
 
 fn resolve_joint_blend_rules(
@@ -695,13 +442,9 @@ pub(super) struct PlayerAnimationRuntimeBinding {
     turn_in_place: Option<TurnInPlaceRuntimeState>,
     turn_sequence: u64,
     pose_continuity: PoseContinuityBridge,
-    /// Procedural anticipation twist used only before a native turn step starts. It never rotates
-    /// the torso hierarchy; hips/legs remain root-owned so feet do not spin with mouse yaw.
-    head_look_layers: Vec<ResolvedHeadLookLayer>,
-    head_look_yaw_radians: f32,
-    head_look_pitch_radians: f32,
-    body_turn_layers: Vec<ResolvedBodyTurnLayer>,
-    body_turn_yaw_radians: f32,
+    /// Original-content authored look-at pose spaces. Range geometry, active joints and turn
+    /// hand-off are derived from the selected native base/range clips, never from character constants.
+    authored_look: AuthoredLookRuntimeBinding,
     braid_secondary_motion: Option<AbbyBraidRuntime>,
     /// Definition-authored local-pose copy rules resolved to this skeleton.
     helper_pose_copies: Vec<ResolvedJointCopyRule>,
@@ -781,6 +524,13 @@ impl PlayerAnimationRuntimeBinding {
         self.palette_scratch.clone()
     }
 
+    pub(super) fn consume_landing_revision_baseline(&mut self, revision: u64) {
+        self.landing_last_revision = revision;
+        self.landing_active_band = None;
+        self.landing_active_run = false;
+        self.landing_time_seconds = 0.0;
+    }
+
     pub(super) fn skeleton_joint_count(&self) -> usize {
         self.skeleton.joints.len()
     }
@@ -832,6 +582,23 @@ impl PlayerAnimationRuntimeBinding {
             TurnInPlaceSlot::Left180 => self.turn_180_left_pose.as_mut(),
             TurnInPlaceSlot::Right180 => self.turn_180_right_pose.as_mut(),
         }
+    }
+
+    fn minimum_turn_step_radians(&self) -> Option<f32> {
+        [
+            TurnInPlaceSlot::Left45,
+            TurnInPlaceSlot::Right45,
+            TurnInPlaceSlot::Left90,
+            TurnInPlaceSlot::Right90,
+            TurnInPlaceSlot::Left135,
+            TurnInPlaceSlot::Right135,
+            TurnInPlaceSlot::Left180,
+            TurnInPlaceSlot::Right180,
+        ]
+        .into_iter()
+        .filter(|slot| self.turn_clip(*slot).is_some())
+        .map(|slot| slot.signed_yaw_radians().abs())
+        .min_by(|a, b| a.total_cmp(b))
     }
 }
 

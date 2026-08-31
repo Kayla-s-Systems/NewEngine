@@ -26,6 +26,7 @@ pub(super) struct ResolvedMapDefinitionEntry {
     refs: ResolvedMapDefinitionRefs,
     semantic_tags: Vec<String>,
     model_explanation: ResolvedMapDefinitionModelExplanation,
+    arbitrary_metadata: std::collections::BTreeMap<String, serde_json::Value>,
 }
 
 fn load_cell(
@@ -90,6 +91,61 @@ fn resolve_definition(
         .entry(definition_ref.to_owned())
         .or_insert_with(|| parsed.clone())
         .clone())
+}
+
+#[derive(Clone, Debug, Default)]
+struct DefinitionSurfaceBinding {
+    id: String,
+    events: std::collections::BTreeMap<String, String>,
+    ground_placement_surface: bool,
+}
+
+fn definition_surface_binding(definition: &ResolvedMapDefinitionEntry) -> DefinitionSurfaceBinding {
+    fn parse(value: &serde_json::Value) -> Option<DefinitionSurfaceBinding> {
+        let object = value.as_object()?;
+        let id = object
+            .get("id")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default()
+            .trim()
+            .to_owned();
+        let events = object
+            .get("events")
+            .and_then(serde_json::Value::as_object)
+            .into_iter()
+            .flat_map(|events| events.iter())
+            .filter_map(|(signal, event_id)| {
+                let signal = signal.trim().to_owned();
+                let event_id = event_id.as_str()?.trim().to_owned();
+                (!signal.is_empty() && !event_id.is_empty()).then_some((signal, event_id))
+            })
+            .collect();
+        let ground_placement_surface = object
+            .get("ground_placement_surface")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false);
+        Some(DefinitionSurfaceBinding {
+            id,
+            events,
+            ground_placement_surface,
+        })
+    }
+
+    for root_name in ["metadata", "namespaces"] {
+        let Some(root) = definition
+            .arbitrary_metadata
+            .get(root_name)
+            .and_then(serde_json::Value::as_object)
+        else {
+            continue;
+        };
+        for namespace in ["newengine.physics.surface", "engine.physics.surface"] {
+            if let Some(binding) = root.get(namespace).and_then(parse) {
+                return binding;
+            }
+        }
+    }
+    DefinitionSurfaceBinding::default()
 }
 
 fn placement_is_spawn(placement: &newengine_assets_api::MapPlacementV1) -> bool {
@@ -159,6 +215,7 @@ fn cell_prefabs(
             .first()
             .cloned()
             .unwrap_or_default();
+        let surface_binding = definition_surface_binding(&definition);
         let position = Vec3::new(
             placement.transform.position[0],
             placement.transform.position[1],
@@ -202,6 +259,9 @@ fn cell_prefabs(
                     STATIC_WORLD_PROXY.to_owned()
                 },
                 material: material_ref,
+                surface_id: surface_binding.id.clone(),
+                surface_events: surface_binding.events.clone(),
+                ground_placement_surface: surface_binding.ground_placement_surface,
                 enabled: true,
                 position,
                 rotation_ypr,
@@ -249,6 +309,9 @@ fn cell_prefabs(
                     COLLISION_WORLD_PROXY.to_owned()
                 },
                 material: String::new(),
+                surface_id: surface_binding.id.clone(),
+                surface_events: surface_binding.events.clone(),
+                ground_placement_surface: surface_binding.ground_placement_surface,
                 enabled: true,
                 position,
                 rotation_ypr,
@@ -286,4 +349,50 @@ pub(super) fn prepare_cell(
         authored_placement_count,
         metadata_only_count,
     })
+}
+
+#[cfg(test)]
+mod project_surface_metadata_tests {
+    use super::*;
+
+    #[test]
+    fn project_surface_metadata_is_explicit_and_generic() {
+        let mut entry = ResolvedMapDefinitionEntry::default();
+        entry.arbitrary_metadata.insert(
+            "metadata".to_owned(),
+            serde_json::json!({
+                "newengine.physics.surface": {
+                    "id": "project.deck.grating",
+                    "events": {
+                        "contact": "project.contact.boot_grating",
+                        "landing": "project.contact.land_grating",
+                        "project.custom_signal": "project.anything.custom"
+                    },
+                    "ground_placement_surface": true
+                }
+            }),
+        );
+        let binding = definition_surface_binding(&entry);
+        assert_eq!(binding.id, "project.deck.grating");
+        assert_eq!(
+            binding.events.get("contact").map(String::as_str),
+            Some("project.contact.boot_grating")
+        );
+        assert_eq!(
+            binding
+                .events
+                .get("project.custom_signal")
+                .map(String::as_str),
+            Some("project.anything.custom")
+        );
+        assert!(binding.ground_placement_surface);
+    }
+
+    #[test]
+    fn absent_surface_metadata_stays_neutral() {
+        let binding = definition_surface_binding(&ResolvedMapDefinitionEntry::default());
+        assert!(binding.id.is_empty());
+        assert!(binding.events.is_empty());
+        assert!(!binding.ground_placement_surface);
+    }
 }

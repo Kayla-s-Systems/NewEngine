@@ -6,7 +6,6 @@ mod queries;
 mod resolution;
 mod tuning;
 
-pub use footsteps::ensure_footstep_audio_preloaded;
 pub use locomotion::step_character_locomotion;
 pub use queries::collect_character_queries;
 pub use resolution::resolve_character_query_hits;

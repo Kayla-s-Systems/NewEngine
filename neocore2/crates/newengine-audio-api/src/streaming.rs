@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 
 use super::{
-    AudioAcousticState, AudioAttenuationSettings, AudioBus, AudioClipRef, AudioEnvironmentState,
-    AudioSpatialParams,
+    AudioAcousticState, AudioAttenuationSettings, AudioBus, AudioClipRef, AudioConcurrencyScope,
+    AudioEnvironmentState, AudioSpatialParams, AudioVoiceStealRule,
 };
 
 pub const AUDIO_AMBIENCE_BED_COMPONENT_TYPE: &str = "audio.ambience_bed";
@@ -68,6 +68,12 @@ pub struct AudioStreamPlayRequest {
     pub environment: AudioEnvironmentState,
     pub buffer: AudioStreamBufferConfig,
     pub concurrency_group: String,
+    pub concurrency_limit: usize,
+    pub concurrency_scope: AudioConcurrencyScope,
+    pub steal_rule: AudioVoiceStealRule,
+    pub voice_budget: String,
+    /// Opaque owner/object identity used by object-scoped concurrency.
+    pub scope_id: Option<u64>,
     pub priority: i32,
 }
 
@@ -86,6 +92,11 @@ impl Default for AudioStreamPlayRequest {
             environment: AudioEnvironmentState::clear(),
             buffer: AudioStreamBufferConfig::default(),
             concurrency_group: String::new(),
+            concurrency_limit: 1,
+            concurrency_scope: AudioConcurrencyScope::Global,
+            steal_rule: AudioVoiceStealRule::LowerPriorityThenOldest,
+            voice_budget: String::new(),
+            scope_id: None,
             priority: 32,
         }
     }
@@ -116,7 +127,10 @@ impl AudioStreamPlayRequest {
         self.environment = self.environment.sanitized();
         self.buffer = self.buffer.sanitized();
         self.concurrency_group = self.concurrency_group.trim().to_owned();
+        self.concurrency_limit = self.concurrency_limit.clamp(1, 4096);
+        self.voice_budget = self.voice_budget.trim().to_ascii_lowercase();
         self.priority = self.priority.clamp(-100_000, 100_000);
+        self.scope_id = self.scope_id.filter(|id| *id != 0);
         self
     }
 }

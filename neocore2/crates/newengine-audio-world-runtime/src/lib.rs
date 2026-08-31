@@ -13,6 +13,7 @@ use parking_lot::RwLock;
 mod audio_ambience;
 mod audio_environment;
 mod audio_gateway_fallback;
+mod audio_orchestration;
 mod audio_scene;
 
 pub use audio_ambience::AudioAmbienceRuntimeModule;
@@ -20,6 +21,9 @@ pub use audio_environment::{
     AudioEnvironmentFrame, AudioEnvironmentResolution, AudioEnvironmentRuntimeState,
 };
 pub use audio_gateway_fallback::register_audio_gateway_best_effort;
+pub use audio_orchestration::{
+    AudioOrchestrationHandle, AudioOrchestrationRuntimeModule, AudioOrchestrationRuntimeState,
+};
 pub use audio_scene::{
     AcousticSurface, AudioEmitter, AudioEnvironmentZone, AudioPortal, AudioSceneRuntimeModule,
 };
@@ -75,6 +79,16 @@ pub const AUDIO_AMBIENCE_RUNTIME_UNIT_SPEC: newengine_runtime_unit_api::EngineRu
         newengine_runtime_unit_api::STATIC_MODULE_TAGS,
     );
 
+pub const AUDIO_ORCHESTRATION_RUNTIME_UNIT_SPEC: newengine_runtime_unit_api::EngineRuntimeUnitSpec =
+    newengine_runtime_unit_api::EngineRuntimeUnitSpec::new(
+        "engine.runtime.audio-orchestration",
+        1,
+        newengine_runtime_unit_api::EngineRuntimeUnitKind::Module,
+        &["engine.runtime.audio-orchestration"],
+        &[newengine_audio_api::AUDIO_BACKEND_CAPABILITY_ID],
+        newengine_runtime_unit_api::STATIC_MODULE_TAGS,
+    );
+
 fn runtime_unit_scene(
     engine: &mut newengine_runtime_unit_api::Engine<()>,
 ) -> newengine_runtime_unit_api::EngineResult<AudioWorldScene> {
@@ -112,6 +126,24 @@ fn audio_ambience_runtime_unit_factory(
     ))))
 }
 
+fn audio_orchestration_runtime_unit_factory(
+    engine: &mut newengine_runtime_unit_api::Engine<()>,
+    _: &newengine_runtime_unit_api::StartupConfig,
+) -> newengine_runtime_unit_api::EngineResult<Option<Box<dyn newengine_runtime_unit_api::Module<()>>>>
+{
+    register_audio_gateway_best_effort();
+    let handle = engine
+        .resources_mut()
+        .get::<AudioOrchestrationHandle>()
+        .cloned()
+        .unwrap_or_else(|| {
+            let handle = AudioOrchestrationHandle::default();
+            engine.resources_mut().insert(handle.clone());
+            handle
+        });
+    Ok(Some(Box::new(AudioOrchestrationRuntimeModule::new(handle))))
+}
+
 pub const AUDIO_SCENE_RUNTIME_UNIT_REGISTRATION:
     newengine_runtime_unit_api::RuntimeUnitRegistration =
     newengine_runtime_unit_api::RuntimeUnitRegistration::new(
@@ -124,4 +156,10 @@ pub const AUDIO_AMBIENCE_RUNTIME_UNIT_REGISTRATION:
     newengine_runtime_unit_api::RuntimeUnitRegistration::new(
         AUDIO_AMBIENCE_RUNTIME_UNIT_SPEC,
         audio_ambience_runtime_unit_factory,
+    );
+pub const AUDIO_ORCHESTRATION_RUNTIME_UNIT_REGISTRATION:
+    newengine_runtime_unit_api::RuntimeUnitRegistration =
+    newengine_runtime_unit_api::RuntimeUnitRegistration::new(
+        AUDIO_ORCHESTRATION_RUNTIME_UNIT_SPEC,
+        audio_orchestration_runtime_unit_factory,
     );

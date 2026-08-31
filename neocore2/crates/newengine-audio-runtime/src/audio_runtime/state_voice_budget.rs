@@ -17,23 +17,40 @@ impl AudioRuntimeState {
                     audibility,
                     distance: voice.distance_to(self.listener),
                     already_physical: voice.is_physical(),
+                    budget: voice.voice_budget.clone(),
                 })
             })
             .collect::<Vec<_>>();
-        select_physical_voice_ids(ranks, self.max_physical_voices)
+        select_physical_voice_ids(
+            ranks,
+            self.max_physical_voices,
+            &self.voice_budget_reservations,
+        )
     }
 
     fn demote_voice(&mut self, voice_id: u64, now: Instant) {
-        let Some(voice) = self.voices.get_mut(&voice_id) else {
-            return;
+        let was_stream = {
+            let Some(voice) = self.voices.get_mut(&voice_id) else {
+                return;
+            };
+            if voice.control.is_none() {
+                return;
+            }
+            let absolute_source_position = voice.current_source_position(now);
+            let control = voice.control.take().expect("control checked above");
+            let was_stream = matches!(voice.source, VoiceSource::Stream { .. });
+            voice.virtual_source_position = absolute_source_position;
+            control.stop();
+            // Stream decoder/ring/cache state is physical residency only. The logical
+            // source timeline stays on VoiceEntry and survives this destruction.
+            voice.stream_stats = None;
+            voice.physical_source_origin = Duration::ZERO;
+            voice.virtual_since = (!voice.paused).then_some(now);
+            was_stream
         };
-        let Some(control) = voice.control.take() else {
-            return;
-        };
-        voice.virtual_source_position =
-            voice.normalized_source_position(control.get_pos().mul_f32(voice.effective_speed()));
-        control.stop();
-        voice.virtual_since = (!voice.paused).then_some(now);
+        if was_stream {
+            self.stream_demotions = self.stream_demotions.saturating_add(1);
+        }
     }
 
     fn materialize_voice(&mut self, voice_id: u64, now: Instant) -> Result<(), String> {
@@ -160,7 +177,11 @@ impl AudioRuntimeState {
                     control
                 }
             }
-            VoiceSource::Stream { uri, buffer } => {
+            VoiceSource::Stream {
+                uri,
+                buffer,
+                source_duration: _,
+            } => {
                 let reader = RangedAssetReader::new(
                     self.assets.clone(),
                     uri.clone(),
@@ -249,10 +270,19 @@ impl AudioRuntimeState {
             control.stop();
             return Err("voice disappeared during materialization".to_owned());
         };
+        let materialized_stream = matches!(voice.source, VoiceSource::Stream { .. });
         voice.control = Some(control);
         voice.stream_stats = materialized_stream_stats;
+        voice.physical_source_origin = if materialized_stream {
+            source_position
+        } else {
+            Duration::ZERO
+        };
         voice.virtual_source_position = source_position;
         voice.virtual_since = None;
+        if materialized_stream {
+            self.stream_promotions = self.stream_promotions.saturating_add(1);
+        }
         Ok(())
     }
 

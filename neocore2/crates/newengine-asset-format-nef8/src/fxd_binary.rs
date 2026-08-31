@@ -1,7 +1,7 @@
 use flate2::{write::DeflateEncoder, Compression};
 use newengine_assets_api::{
-    decode_list_file_envelope, encode_list_file, ListFileEncodeRequest,
-    LIST_FILE_CONTENT_KIND_FXD, LIST_FILE_FULL_HASH_BODY_THRESHOLD,
+    decode_list_file_envelope, encode_list_file, ListFileEncodeRequest, LIST_FILE_CONTENT_KIND_FXD,
+    LIST_FILE_FULL_HASH_BODY_THRESHOLD,
 };
 use newengine_vfx_api::{FxdDictionaryV1, FXD_VERSION_V1};
 use std::io::Write;
@@ -62,9 +62,7 @@ pub fn decode_fxd_nef8(bytes: &[u8]) -> Result<FxdDictionaryV1, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use newengine_vfx_api::{
-        FxdEffectV1, FxdLayerKindV1, FxdLayerV1, FxdRenderRoleV1,
-    };
+    use newengine_vfx_api::{FxdEffectV1, FxdLayerKindV1, FxdLayerV1, FxdRenderRoleV1};
 
     #[test]
     fn fxd_nef8_roundtrip_preserves_project_effect_data() {

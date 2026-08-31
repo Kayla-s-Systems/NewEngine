@@ -43,11 +43,11 @@ pub use storage::{
 
 pub use inventory_equipment::{
     active_equipped_weapon_aiming, active_equipped_weapon_binding, active_equipped_weapon_can_aim,
-    active_equipped_weapon_can_fire, active_equipped_weapon_can_melee, consume_equipped_ammo,
-    equip_first_item, equip_item_instance, equipped_reserve_ammo, persist_equipped_weapon_state,
-    play_equipped_weapon_audio, play_weapon_item_audio, preload_weapon_audio_definition,
-    select_equipment_slot, select_highest_ranked_equipped_weapon, sync_equipped_weapon_runtime,
-    unequip_slot, use_item,
+    active_equipped_weapon_can_fire, active_equipped_weapon_can_melee,
+    active_equipped_weapon_muzzle, consume_equipped_ammo, equip_first_item, equip_item_instance,
+    equipped_reserve_ammo, persist_equipped_weapon_state, play_equipped_weapon_audio,
+    play_weapon_item_audio, preload_weapon_audio_definition, select_equipment_slot,
+    select_highest_ranked_equipped_weapon, sync_equipped_weapon_runtime, unequip_slot, use_item,
 };
 pub use inventory_world::try_collect_item_pickup;
 pub use inventory_world::{

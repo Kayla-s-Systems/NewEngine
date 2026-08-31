@@ -110,6 +110,13 @@ fn try_admit_shell_visual(
                 render_options: shell_render_options(),
             },
         );
+        // Physics cylinder uses local +Y as its longitudinal axis while the recovered authored
+        // casing mesh is Z-long. Keep physics canonical and compensate only the child visual.
+        let shell_mesh_axis_correction =
+            newengine_math::Quat::from_rotation_arc(Vec3::Z, Vec3::Y).normalize_or_identity();
+        if let Some(transform) = world.get_mut_tracked::<newengine_transform::Transform>(child) {
+            transform.rotation = shell_mesh_axis_correction;
+        }
         let _ = world.insert(
             child,
             newengine_engine_runtime::gameplay::DisplayVisibility::default(),

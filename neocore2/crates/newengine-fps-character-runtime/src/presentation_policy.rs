@@ -108,21 +108,41 @@ pub fn assignment(variant: &FpsPlayableCharacterPolicy) -> Option<PlayerModelAss
     if !variant.runtime_ready {
         return None;
     }
+
+    let animation = |slot: &str, legacy: &Option<String>| {
+        variant
+            .animations
+            .slots
+            .get(slot)
+            .cloned()
+            .or_else(|| legacy.clone())
+    };
+    let presentation_animation = |slot: &str, legacy: &Option<String>| {
+        variant
+            .presentation
+            .animation_slots
+            .get(slot)
+            .cloned()
+            .or_else(|| legacy.clone())
+    };
+
     Some(PlayerModelAssignment {
         enabled: true,
         source: variant.runtime_model_ref.as_deref()?.to_owned(),
         properties_ref: variant.properties_ref.clone(),
         texture_dictionary: variant.texture_dictionary.clone(),
         skeleton_source: variant.skeleton_ref.clone(),
-        idle_animation: variant.animations.idle.clone(),
-        walk_animation: variant.animations.walk.clone(),
-        run_animation: variant.animations.run.clone(),
-        sprint_animation: variant.animations.sprint.clone(),
-        crouch_idle_animation: variant.animations.crouch_idle.clone(),
-        crouch_walk_animation: variant.animations.crouch_walk.clone(),
-        jump_animation: variant.animations.jump.clone(),
-        fall_animation: variant.animations.fall.clone(),
+        animation_slots: variant.animations.slots.clone(),
+        idle_animation: animation("idle", &variant.animations.idle),
+        walk_animation: animation("walk", &variant.animations.walk),
+        run_animation: animation("run", &variant.animations.run),
+        sprint_animation: animation("sprint", &variant.animations.sprint),
+        crouch_idle_animation: animation("crouch_idle", &variant.animations.crouch_idle),
+        crouch_walk_animation: animation("crouch_walk", &variant.animations.crouch_walk),
+        jump_animation: animation("jump", &variant.animations.jump),
+        fall_animation: animation("fall", &variant.animations.fall),
         presentation: PlayerCharacterPresentation {
+            animation_slots: variant.presentation.animation_slots.clone(),
             detached_head_follow: variant.presentation.detached_head_follow,
             detached_head_follow_rule: variant.presentation.detached_head_follow_rule.as_ref().map(
                 |rule| PlayerPaletteFollowRule {
@@ -154,6 +174,7 @@ pub fn assignment(variant: &FpsPlayableCharacterPolicy) -> Option<PlayerModelAss
                     },
                 })
                 .collect(),
+            skin_sidecar: None,
             braid_secondary_motion: variant.presentation.braid_secondary_motion.as_ref().map(
                 |rig| PlayerBraidSecondaryMotionRig {
                     chain_joints: rig.chain_joints.clone(),
@@ -166,27 +187,90 @@ pub fn assignment(variant: &FpsPlayableCharacterPolicy) -> Option<PlayerModelAss
                     right_shoulder_joint: rig.right_shoulder_joint.clone(),
                 },
             ),
-            equipment_ready_animation: variant.presentation.equipment_ready_animation.clone(),
-            equipment_aim_animation: variant.presentation.equipment_aim_animation.clone(),
-            equipment_reload_animation: variant.presentation.equipment_reload_animation.clone(),
-            unarmed_ready_animation: variant.presentation.unarmed_ready_animation.clone(),
-            unarmed_attack_animation: variant.presentation.unarmed_attack_animation.clone(),
-            turn_45_left_animation: variant.presentation.turn_45_left_animation.clone(),
-            turn_45_right_animation: variant.presentation.turn_45_right_animation.clone(),
-            turn_90_left_animation: variant.presentation.turn_90_left_animation.clone(),
-            turn_90_right_animation: variant.presentation.turn_90_right_animation.clone(),
-            turn_135_left_animation: variant.presentation.turn_135_left_animation.clone(),
-            turn_135_right_animation: variant.presentation.turn_135_right_animation.clone(),
-            turn_180_left_animation: variant.presentation.turn_180_left_animation.clone(),
-            turn_180_right_animation: variant.presentation.turn_180_right_animation.clone(),
-            noclip_animation: variant.presentation.noclip_animation.clone(),
-            fall_low_animation: variant.presentation.fall_low_animation.clone(),
-            fall_medium_animation: variant.presentation.fall_medium_animation.clone(),
-            fall_high_animation: variant.presentation.fall_high_animation.clone(),
-            landing_soft_animation: variant.presentation.landing_soft_animation.clone(),
-            landing_medium_animation: variant.presentation.landing_medium_animation.clone(),
-            landing_hard_animation: variant.presentation.landing_hard_animation.clone(),
-            landing_hard_run_animation: variant.presentation.landing_hard_run_animation.clone(),
+            equipment_ready_animation: presentation_animation(
+                "equipment.ready",
+                &variant.presentation.equipment_ready_animation,
+            ),
+            equipment_aim_animation: presentation_animation(
+                "equipment.aim",
+                &variant.presentation.equipment_aim_animation,
+            ),
+            equipment_reload_animation: presentation_animation(
+                "equipment.reload",
+                &variant.presentation.equipment_reload_animation,
+            ),
+            unarmed_ready_animation: presentation_animation(
+                "unarmed.ready",
+                &variant.presentation.unarmed_ready_animation,
+            ),
+            unarmed_attack_animation: presentation_animation(
+                "unarmed.attack",
+                &variant.presentation.unarmed_attack_animation,
+            ),
+            turn_45_left_animation: presentation_animation(
+                "turn.left.45",
+                &variant.presentation.turn_45_left_animation,
+            ),
+            turn_45_right_animation: presentation_animation(
+                "turn.right.45",
+                &variant.presentation.turn_45_right_animation,
+            ),
+            turn_90_left_animation: presentation_animation(
+                "turn.left.90",
+                &variant.presentation.turn_90_left_animation,
+            ),
+            turn_90_right_animation: presentation_animation(
+                "turn.right.90",
+                &variant.presentation.turn_90_right_animation,
+            ),
+            turn_135_left_animation: presentation_animation(
+                "turn.left.135",
+                &variant.presentation.turn_135_left_animation,
+            ),
+            turn_135_right_animation: presentation_animation(
+                "turn.right.135",
+                &variant.presentation.turn_135_right_animation,
+            ),
+            turn_180_left_animation: presentation_animation(
+                "turn.left.180",
+                &variant.presentation.turn_180_left_animation,
+            ),
+            turn_180_right_animation: presentation_animation(
+                "turn.right.180",
+                &variant.presentation.turn_180_right_animation,
+            ),
+            noclip_animation: presentation_animation(
+                "movement.noclip",
+                &variant.presentation.noclip_animation,
+            ),
+            fall_low_animation: presentation_animation(
+                "fall.low",
+                &variant.presentation.fall_low_animation,
+            ),
+            fall_medium_animation: presentation_animation(
+                "fall.medium",
+                &variant.presentation.fall_medium_animation,
+            ),
+            fall_high_animation: presentation_animation(
+                "fall.high",
+                &variant.presentation.fall_high_animation,
+            ),
+            landing_soft_animation: presentation_animation(
+                "landing.soft",
+                &variant.presentation.landing_soft_animation,
+            ),
+            landing_medium_animation: presentation_animation(
+                "landing.medium",
+                &variant.presentation.landing_medium_animation,
+            ),
+            landing_hard_animation: presentation_animation(
+                "landing.hard",
+                &variant.presentation.landing_hard_animation,
+            ),
+            landing_hard_run_animation: presentation_animation(
+                "landing.hard_run",
+                &variant.presentation.landing_hard_run_animation,
+            ),
             fall_medium_min_distance: variant.presentation.fall_medium_min_distance,
             fall_high_min_distance: variant.presentation.fall_high_min_distance,
             equipment_ready_sample_phase: variant.presentation.equipment_ready_sample_phase,

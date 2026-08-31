@@ -2,27 +2,45 @@ use std::collections::BTreeMap;
 
 use newengine_ecs::{EntityId, World};
 use newengine_engine_runtime::gameplay::{
-    emit_player_event, PhysicsSurface, PlayerController, PlayerEventKind, PlayerFallState,
-    PlayerGroundState, PlayerLandingState, PlayerLocomotionState, PlayerMovementSpeeds,
-    StaticMeshCollider,
+    emit_gameplay_event, emit_player_event, player_fall_is_confirmed, PhysicsSurface,
+    PlayerController, PlayerEventKind, PlayerFallState, PlayerGroundState, PlayerLandingState,
+    PlayerLocomotionState, PlayerMovementSpeeds, StaticMeshCollider,
 };
 use newengine_math::Vec2;
 use newengine_sim::{CharacterMotor, Velocity};
 use newengine_transform::Transform;
 
 use super::footsteps::{
-    classify_player_footstep_mode, classify_surface, contact_modulation, contact_plan,
-    contact_slip_ratio, contact_stride, is_sharp_direction_change, landing_modulation,
-    landing_normal_impact_speed, landing_position, phase_foot_position, phase_seed,
-    play_locomotion_action, resolve_footstep_cue, scuff_cue, surface_friction,
-    update_model_foot_contacts, FootSide, FootstepAudioAction, FootstepLocomotionMode,
-    FootstepPhase, FootstepRuntimeState, PendingFootstepAudio,
+    classify_player_footstep_mode, contact_slip_ratio, contact_stride, is_sharp_direction_change,
+    landing_normal_impact_speed, landing_position, phase_foot_position, surface_friction,
+    update_model_foot_contacts, FootSide, FootstepLocomotionMode, FootstepPhase,
+    FootstepRuntimeState,
 };
 use super::tuning::tuning;
 
-/// Runs FPS-owned contact-phase footstep and landing semantics after the physics provider has
-/// resolved ground probes. Physics remains material/audio agnostic; this layer consumes only
-/// provider-neutral velocity, grounding and `PhysicsSurface` identity.
+fn publish_authored_surface_event(
+    world: &mut World,
+    player: EntityId,
+    surface: &PhysicsSurface,
+    signal: &str,
+    payload: serde_json::Value,
+) {
+    let Some(event_id) = surface.event_for(signal) else {
+        return;
+    };
+    if let Err(error) = emit_gameplay_event(world, event_id.to_owned(), Some(player), payload) {
+        newengine_ulog_api::ulog::warn!(
+            "locomotion project event publish rejected event='{}' player={} err='{}'",
+            event_id,
+            player.stable_u64(),
+            error,
+        );
+    }
+}
+
+/// Runs FPS-owned contact/landing detection after the physics provider has resolved ground probes.
+/// This layer publishes project-authored semantic events with physical payload only. It never
+/// chooses an audio dictionary, cue, VFX asset, script filename, or project-specific event id.
 pub fn step_character_locomotion(world: &mut World, dt: f32) {
     let mut key_to_entity = world
         .query::<PhysicsSurface>()
@@ -34,6 +52,25 @@ pub fn step_character_locomotion(world: &mut World, dt: f32) {
         key_to_entity.entry(entity.stable_u64()).or_insert(entity);
     }
     update_player_locomotion(world, &key_to_entity, dt);
+}
+
+fn resolve_contact_surface(
+    world: &World,
+    key_to_entity: &BTreeMap<u64, EntityId>,
+    fallback: &PhysicsSurface,
+    surface_key: Option<u64>,
+) -> (Option<EntityId>, PhysicsSurface) {
+    let entity = surface_key.and_then(|key| key_to_entity.get(&key).copied());
+    let semantic = entity
+        .and_then(|entity| world.get::<PhysicsSurface>(entity).cloned())
+        .unwrap_or_else(|| {
+            if surface_key.is_none() {
+                fallback.clone()
+            } else {
+                PhysicsSurface::default()
+            }
+        });
+    (entity, semantic)
 }
 
 fn update_player_locomotion(world: &mut World, key_to_entity: &BTreeMap<u64, EntityId>, dt: f32) {
@@ -71,16 +108,13 @@ fn update_player_locomotion(world: &mut World, key_to_entity: &BTreeMap<u64, Ent
         let surface = ground_entity
             .and_then(|entity| world.get::<PhysicsSurface>(entity).cloned())
             .unwrap_or_default();
-        let surface_kind = classify_surface(&surface);
-        let friction = surface_friction(world, ground_entity, surface_kind);
+        let friction = surface_friction(world, ground_entity);
         let movement = world
             .get::<PlayerMovementSpeeds>(player)
             .copied()
             .unwrap_or_default();
         let mode = classify_player_footstep_mode(world, player, horizontal_speed);
 
-        // Work on local copies so contact planning can read ordinary ECS components without
-        // borrowing the world through PlayerLocomotionState/FootstepRuntimeState simultaneously.
         let mut locomotion = world
             .get::<PlayerLocomotionState>(player)
             .copied()
@@ -109,21 +143,9 @@ fn update_player_locomotion(world: &mut World, key_to_entity: &BTreeMap<u64, Ent
             friction,
             ground.slope_radians,
         );
-        let contact_physics = contact_modulation(
-            surface_kind,
-            mode,
-            horizontal_speed,
-            movement,
-            friction,
-            ground.slope_radians,
-            slip_ratio,
-        );
 
         let mut emitted = Vec::<(PlayerEventKind, String)>::new();
-        let mut audio_actions = Vec::<FootstepAudioAction>::new();
         footsteps.scuff_cooldown = (footsteps.scuff_cooldown - dt).max(0.0);
-        // Advance the model-contact latch even while idle/airborne, so beginning to move does not
-        // turn an already planted foot into a synthetic first step.
         let model_contact_resolution = update_model_foot_contacts(
             world,
             player,
@@ -134,10 +156,6 @@ fn update_player_locomotion(world: &mut World, key_to_entity: &BTreeMap<u64, Ent
         );
 
         if ground.grounded {
-            // Secondary phases (toe/lift) remain phase-related to the originating foot contact
-            // even if the character stopped immediately after planting that foot.
-            audio_actions.extend(footsteps.tick_pending(dt));
-
             if !locomotion.was_grounded {
                 emitted.push((
                     PlayerEventKind::GroundStateChanged,
@@ -155,49 +173,40 @@ fn update_player_locomotion(world: &mut World, key_to_entity: &BTreeMap<u64, Ent
                 if locomotion.airborne_time > landing_min_airborne_seconds
                     && normal_impact_speed >= tuning.landing_speed_threshold
                 {
-                    // Landing supersedes any airborne leftovers and has its own priority/concurrency
-                    // family. Both feet are represented by a centered foot-sole emitter position.
-                    footsteps.cancel_pending();
                     let sequence = footsteps.advance_sequence();
-                    let cue = resolve_footstep_cue(&surface, FootstepLocomotionMode::Land);
-                    let landing = landing_modulation(
-                        surface_kind,
-                        normal_impact_speed,
-                        tuning.landing_speed_threshold,
+                    let position = landing_position(world, player, ground);
+                    publish_authored_surface_event(
+                        world,
+                        player,
+                        &surface,
+                        "landing",
+                        serde_json::json!({
+                            "source_kind": "character_locomotion",
+                            "phase": FootstepPhase::Land.slug(),
+                            "mode": FootstepLocomotionMode::Land.slug(),
+                            "surface": surface.id,
+                            "surface_entity": ground_entity.map(EntityId::stable_u64),
+                            "position": position,
+                            "sequence": sequence,
+                            "vertical_speed": locomotion.max_downward_speed,
+                            "normal_impact_speed": normal_impact_speed,
+                            "horizontal_speed": horizontal_speed,
+                            "friction": friction,
+                            "slope_radians": ground.slope_radians,
+                        }),
                     );
-                    let action = FootstepAudioAction {
-                        cue: cue.clone(),
-                        position: landing_position(world, player, ground),
-                        gain: landing.gain,
-                        pitch: landing.pitch,
-                        seed: phase_seed(
-                            player,
-                            sequence,
-                            surface_kind,
-                            FootstepLocomotionMode::Land,
-                            FootstepPhase::Land,
-                            None,
-                        ),
-                        phase: FootstepPhase::Land,
-                        foot: None,
-                    };
-                    audio_actions.push(action);
                     emitted.push((
                         PlayerEventKind::Landed,
                         format!(
-                            "cue='{}' event='{}' surface='{}' mode='land' vertical_speed={:.2} normal_impact={:.2} gain={:.3} pitch={:.3} friction={:.2} slope_deg={:.1}",
-                            cue,
-                            surface.landing_event,
+                            "event='{}' surface='{}' mode='land' vertical_speed={:.2} normal_impact={:.2} friction={:.2} slope_deg={:.1}",
+                            surface.event_for("landing").unwrap_or(""),
                             surface.id,
                             locomotion.max_downward_speed,
-                            landing.normal_impact_speed,
-                            landing.gain,
-                            landing.pitch,
+                            normal_impact_speed,
                             friction,
                             ground.slope_radians.to_degrees(),
                         ),
                     ));
-                    // Start the next locomotion cycle cleanly after an impact.
                     locomotion.step_distance = 0.0;
                     footsteps.was_moving = false;
                     footsteps.last_direction = Vec2::ZERO;
@@ -206,25 +215,8 @@ fn update_player_locomotion(world: &mut World, key_to_entity: &BTreeMap<u64, Ent
 
             let moving = dt > 0.0 && horizontal_speed > min_horizontal_speed;
             if moving {
-                let stride =
-                    contact_stride(tuning.footstep_stride, mode) * contact_physics.stride_scale;
+                let stride = contact_stride(tuning.footstep_stride, mode);
 
-                let resolve_contact_surface = |surface_key: Option<u64>| {
-                    let entity = surface_key.and_then(|key| key_to_entity.get(&key).copied());
-                    let semantic = entity
-                        .and_then(|entity| world.get::<PhysicsSurface>(entity).cloned())
-                        .unwrap_or_else(|| {
-                            if surface_key.is_none() {
-                                surface.clone()
-                            } else {
-                                PhysicsSurface::default()
-                            }
-                        });
-                    (entity, semantic)
-                };
-
-                // Scuff belongs to the supporting foot too. When per-foot probes exist, use that
-                // foot's material/friction/slope instead of the capsule-center surface.
                 let scuff_side = footsteps.next_foot;
                 let scuff_surface_key = model_contact_resolution
                     .and_then(|resolution| resolution.surface_key(scuff_side))
@@ -233,25 +225,14 @@ fn update_player_locomotion(world: &mut World, key_to_entity: &BTreeMap<u64, Ent
                     .map(|resolution| resolution.slope_radians(scuff_side))
                     .unwrap_or(ground.slope_radians);
                 let (scuff_ground_entity, scuff_surface) =
-                    resolve_contact_surface(scuff_surface_key);
-                let scuff_surface_kind = classify_surface(&scuff_surface);
-                let scuff_friction =
-                    surface_friction(world, scuff_ground_entity, scuff_surface_kind);
+                    resolve_contact_surface(world, key_to_entity, &surface, scuff_surface_key);
+                let scuff_friction = surface_friction(world, scuff_ground_entity);
                 let scuff_slip = contact_slip_ratio(
                     footsteps.last_direction,
                     travel_direction,
                     horizontal_speed,
                     scuff_friction,
                     scuff_slope_radians,
-                );
-                let scuff_physics = contact_modulation(
-                    scuff_surface_kind,
-                    mode,
-                    horizontal_speed,
-                    movement,
-                    scuff_friction,
-                    scuff_slope_radians,
-                    scuff_slip,
                 );
 
                 if footsteps.scuff_cooldown <= 0.0
@@ -261,34 +242,38 @@ fn update_player_locomotion(world: &mut World, key_to_entity: &BTreeMap<u64, Ent
                     && horizontal_speed > min_horizontal_speed.max(0.35)
                 {
                     let sequence = footsteps.advance_sequence();
-                    let cue = scuff_cue(&scuff_surface);
-                    audio_actions.push(FootstepAudioAction {
-                        cue: cue.clone(),
-                        position: phase_foot_position(
-                            world,
-                            player,
-                            scuff_side,
-                            ground,
-                            FootstepPhase::Scuff,
-                        ),
-                        gain: scuff_physics.scuff_gain,
-                        pitch: (scuff_physics.pitch * (1.0 - scuff_slip * 0.035)).clamp(0.88, 1.08),
-                        seed: phase_seed(
-                            player,
-                            sequence,
-                            scuff_surface_kind,
-                            mode,
-                            FootstepPhase::Scuff,
-                            Some(scuff_side),
-                        ),
-                        phase: FootstepPhase::Scuff,
-                        foot: Some(scuff_side),
-                    });
+                    let position = phase_foot_position(
+                        world,
+                        player,
+                        scuff_side,
+                        ground,
+                        FootstepPhase::Scuff,
+                    );
+                    publish_authored_surface_event(
+                        world,
+                        player,
+                        &scuff_surface,
+                        "scuff",
+                        serde_json::json!({
+                            "source_kind": "character_locomotion",
+                            "phase": FootstepPhase::Scuff.slug(),
+                            "mode": mode.slug(),
+                            "foot": scuff_side.slug(),
+                            "surface": scuff_surface.id,
+                            "surface_entity": scuff_ground_entity.map(EntityId::stable_u64),
+                            "position": position,
+                            "sequence": sequence,
+                            "speed": horizontal_speed,
+                            "friction": scuff_friction,
+                            "slip": scuff_slip,
+                            "slope_radians": scuff_slope_radians,
+                        }),
+                    );
                     footsteps.scuff_cooldown = 0.22;
                 }
 
-                // Rigged models use animated foot/ground contact edges as cadence truth. The old
-                // distance accumulator remains only as a compatibility fallback for unrigged models.
+                // Rigged models use animated foot/ground contact edges as cadence truth. The
+                // distance accumulator is only a compatibility fallback for unrigged models.
                 let mut contact_triggers =
                     Vec::<(FootSide, [f32; 3], &'static str, f32, f32, Option<u64>, f32)>::new();
                 if let Some(resolution) = model_contact_resolution {
@@ -312,7 +297,6 @@ fn update_player_locomotion(world: &mut World, key_to_entity: &BTreeMap<u64, Ent
                         }
                     }
                 } else {
-                    // Compatibility path for procedural/non-rigged characters only.
                     if footsteps.last_mode.is_some_and(|previous| previous != mode) {
                         locomotion.step_distance = locomotion.step_distance.min(stride * 0.45);
                     }
@@ -325,7 +309,6 @@ fn update_player_locomotion(world: &mut World, key_to_entity: &BTreeMap<u64, Ent
                     while locomotion.step_distance >= stride && contacts_this_tick < 2 {
                         locomotion.step_distance -= stride;
                         contacts_this_tick += 1;
-
                         let side = footsteps.next_foot;
                         footsteps.next_foot = side.opposite();
                         contact_triggers.push((
@@ -356,11 +339,13 @@ fn update_player_locomotion(world: &mut World, key_to_entity: &BTreeMap<u64, Ent
                     contact_slope_radians,
                 ) in contact_triggers
                 {
-                    let (contact_ground_entity, contact_surface) =
-                        resolve_contact_surface(contact_surface_key);
-                    let contact_surface_kind = classify_surface(&contact_surface);
-                    let contact_friction =
-                        surface_friction(world, contact_ground_entity, contact_surface_kind);
+                    let (contact_ground_entity, contact_surface) = resolve_contact_surface(
+                        world,
+                        key_to_entity,
+                        &surface,
+                        contact_surface_key,
+                    );
+                    let contact_friction = surface_friction(world, contact_ground_entity);
                     let contact_slip = contact_slip_ratio(
                         footsteps.last_direction,
                         travel_direction,
@@ -368,106 +353,36 @@ fn update_player_locomotion(world: &mut World, key_to_entity: &BTreeMap<u64, Ent
                         contact_friction,
                         contact_slope_radians,
                     );
-                    let contact_physics = contact_modulation(
-                        contact_surface_kind,
-                        mode,
-                        horizontal_speed,
-                        movement,
-                        contact_friction,
-                        contact_slope_radians,
-                        contact_slip,
-                    );
-                    // Foot normal velocity is animation-derived physical evidence. Keep its gain
-                    // contribution deliberately bounded so pose jitter can never spike a sample.
-                    let impact_gain_scale = if contact_source == "model-contact" {
-                        (0.94 + (-normal_speed).clamp(0.0, 3.0) * 0.04).clamp(0.94, 1.06)
-                    } else {
-                        1.0
-                    };
-                    let contact_gain = (contact_physics.gain * impact_gain_scale).clamp(0.25, 1.35);
-
                     let sequence = footsteps.advance_sequence();
-                    let plan = contact_plan(&contact_surface, mode);
-                    let has_toe = plan.toe_cue.is_some();
-                    let has_lift = plan.lift_cue.is_some();
-                    audio_actions.push(FootstepAudioAction {
-                        cue: plan.primary_cue.clone(),
-                        position,
-                        gain: contact_gain,
-                        pitch: contact_physics.pitch,
-                        seed: phase_seed(
-                            player,
-                            sequence,
-                            contact_surface_kind,
-                            mode,
-                            FootstepPhase::Contact,
-                            Some(side),
-                        ),
-                        phase: FootstepPhase::Contact,
-                        foot: Some(side),
-                    });
-
-                    if let Some(cue) = plan.toe_cue {
-                        footsteps.pending.push(PendingFootstepAudio {
-                            remaining_seconds: plan.toe_delay_seconds,
-                            action: FootstepAudioAction {
-                                cue,
-                                position: phase_foot_position(
-                                    world,
-                                    player,
-                                    side,
-                                    ground,
-                                    FootstepPhase::Toe,
-                                ),
-                                gain: (plan.toe_gain * contact_gain).clamp(0.30, 1.10),
-                                pitch: (contact_physics.pitch * 1.008).clamp(0.88, 1.12),
-                                seed: phase_seed(
-                                    player,
-                                    sequence,
-                                    contact_surface_kind,
-                                    mode,
-                                    FootstepPhase::Toe,
-                                    Some(side),
-                                ),
-                                phase: FootstepPhase::Toe,
-                                foot: Some(side),
-                            },
-                        });
-                    }
-                    if let Some(cue) = plan.lift_cue {
-                        footsteps.pending.push(PendingFootstepAudio {
-                            remaining_seconds: plan.lift_delay_seconds,
-                            action: FootstepAudioAction {
-                                cue,
-                                position: phase_foot_position(
-                                    world,
-                                    player,
-                                    side,
-                                    ground,
-                                    FootstepPhase::Lift,
-                                ),
-                                gain: (plan.lift_gain * contact_gain).clamp(0.28, 1.05),
-                                pitch: (contact_physics.pitch * 1.012).clamp(0.88, 1.12),
-                                seed: phase_seed(
-                                    player,
-                                    sequence,
-                                    contact_surface_kind,
-                                    mode,
-                                    FootstepPhase::Lift,
-                                    Some(side),
-                                ),
-                                phase: FootstepPhase::Lift,
-                                foot: Some(side),
-                            },
-                        });
-                    }
-
+                    publish_authored_surface_event(
+                        world,
+                        player,
+                        &contact_surface,
+                        "contact",
+                        serde_json::json!({
+                            "source_kind": "character_locomotion",
+                            "phase": FootstepPhase::Contact.slug(),
+                            "mode": mode.slug(),
+                            "foot": side.slug(),
+                            "surface": contact_surface.id,
+                            "surface_entity": contact_ground_entity.map(EntityId::stable_u64),
+                            "position": position,
+                            "sequence": sequence,
+                            "contact_source": contact_source,
+                            "stride": stride,
+                            "speed": horizontal_speed,
+                            "contact_distance": contact_distance,
+                            "normal_speed": normal_speed,
+                            "friction": contact_friction,
+                            "slip": contact_slip,
+                            "slope_radians": contact_slope_radians,
+                        }),
+                    );
                     emitted.push((
                         PlayerEventKind::Footstep,
                         format!(
-                            "cue='{}' event='{}' surface='{}' mode='{}' foot='{}' source='{}' stride={:.3} speed={:.2} contact_distance={:.4} normal_speed={:.3} gain={:.3} pitch={:.3} friction={:.2} slip={:.3} slope_deg={:.1} toe={} lift={}",
-                            plan.primary_cue,
-                            contact_surface.footstep_event,
+                            "event='{}' surface='{}' mode='{}' foot='{}' source='{}' stride={:.3} speed={:.2} contact_distance={:.4} normal_speed={:.3} friction={:.2} slip={:.3} slope_deg={:.1}",
+                            contact_surface.event_for("contact").unwrap_or(""),
                             contact_surface.id,
                             mode.slug(),
                             side.slug(),
@@ -476,13 +391,9 @@ fn update_player_locomotion(world: &mut World, key_to_entity: &BTreeMap<u64, Ent
                             horizontal_speed,
                             contact_distance,
                             normal_speed,
-                            contact_gain,
-                            contact_physics.pitch,
                             contact_friction,
                             contact_slip,
                             contact_slope_radians.to_degrees(),
-                            has_toe,
-                            has_lift,
                         ),
                     ));
                 }
@@ -563,9 +474,11 @@ fn update_player_locomotion(world: &mut World, key_to_entity: &BTreeMap<u64, Ent
                 };
                 fall.revision = fall.revision.saturating_add(1).max(1);
                 if !fall.falling
-                    && velocity.y.is_finite()
-                    && velocity.y < 0.0
-                    && fall.distance > 1.0e-4
+                    && player_fall_is_confirmed(
+                        locomotion.jump_started,
+                        locomotion.airborne_time,
+                        velocity.y,
+                    )
                 {
                     fall.falling = true;
                     emitted.push((
@@ -593,9 +506,6 @@ fn update_player_locomotion(world: &mut World, key_to_entity: &BTreeMap<u64, Ent
                     locomotion.jump_started = false;
                 }
             }
-            // Toe/lift sounds from the previous grounded contact must never leak into airborne
-            // time after a jump/fall transition.
-            footsteps.cancel_pending();
             footsteps.last_direction = Vec2::ZERO;
             footsteps.last_mode = None;
             footsteps.was_moving = false;
@@ -607,12 +517,12 @@ fn update_player_locomotion(world: &mut World, key_to_entity: &BTreeMap<u64, Ent
         let _ = world.insert(player, landing);
         let _ = world.insert(player, footsteps);
 
-        for action in &audio_actions {
-            play_locomotion_action(action);
-        }
         for (kind, message) in emitted {
             emit_player_event(world, player, kind, message);
         }
+
+        let _ = movement;
+        let _ = slip_ratio;
     }
 }
 
@@ -624,6 +534,43 @@ mod tests {
         PlayerMovementSpeeds, PlayerStanceKind, PlayerStanceState,
     };
     use newengine_math::Vec3;
+
+    #[test]
+    fn authored_surface_signal_publishes_exact_project_event_id() {
+        let mut world = World::new();
+        let player = world.spawn();
+        let surface = PhysicsSurface {
+            id: "project.surface.custom".to_owned(),
+            ..PhysicsSurface::default()
+        }
+        .with_event("contact", "project.events.boot_on_deck");
+        publish_authored_surface_event(
+            &mut world,
+            player,
+            &surface,
+            "contact",
+            serde_json::json!({"energy": 0.75}),
+        );
+        let events = newengine_engine_runtime::gameplay::drain_gameplay_events(&mut world);
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].id, "project.events.boot_on_deck");
+        assert_eq!(events[0].source, Some(player.stable_u64()));
+        assert_eq!(events[0].payload["energy"], 0.75);
+    }
+
+    #[test]
+    fn unbound_surface_signal_is_silent_instead_of_inventing_event_id() {
+        let mut world = World::new();
+        let player = world.spawn();
+        publish_authored_surface_event(
+            &mut world,
+            player,
+            &PhysicsSurface::default(),
+            "contact",
+            serde_json::json!({"ignored": true}),
+        );
+        assert!(newengine_engine_runtime::gameplay::drain_gameplay_events(&mut world).is_empty());
+    }
 
     fn grounded_player(world: &mut World, velocity: Vec3) -> EntityId {
         let player = spawn_default_player(world, None, "footstep-test", Vec3::new(0.0, 1.0, 0.0));
@@ -643,6 +590,75 @@ mod tests {
             },
         );
         player
+    }
+
+    #[test]
+    fn walking_probe_glitches_never_manufacture_fall_or_landing_over_1000_frames() {
+        use newengine_engine_runtime::gameplay::{
+            drain_player_events, update_player_animation_states, PlayerAnimationState,
+            PlayerLocomotionAnimation,
+        };
+
+        let mut world = World::new();
+        let player = grounded_player(&mut world, Vec3::new(0.0, 0.0, -2.0));
+        update_player_locomotion(&mut world, &BTreeMap::new(), 1.0 / 60.0);
+        update_player_animation_states(&mut world, 1.0 / 60.0);
+        let _ = drain_player_events(&mut world);
+
+        for frame in 0..1000 {
+            let glitch = frame % 17 == 5 || frame % 17 == 6 || frame % 17 == 7;
+            if let Some(ground) = world.get_mut::<PlayerGroundState>(player) {
+                ground.grounded = !glitch;
+                ground.walkable = !glitch;
+                if !glitch {
+                    ground.last_fixed_tick = ground.last_fixed_tick.saturating_add(1).max(1);
+                }
+            }
+            if let Some(velocity) = world.get_mut::<Velocity>(player) {
+                velocity.0 = Vec3::new(0.0, if glitch { -0.18 } else { 0.0 }, -2.0);
+            }
+            if glitch {
+                if let Some(transform) = world.get_mut::<Transform>(player) {
+                    transform.position.y -= 0.0005;
+                }
+            }
+
+            update_player_locomotion(&mut world, &BTreeMap::new(), 1.0 / 60.0);
+            update_player_animation_states(&mut world, 1.0 / 60.0);
+
+            let fall = world
+                .get::<PlayerFallState>(player)
+                .copied()
+                .unwrap_or_default();
+            assert!(
+                !fall.falling,
+                "probe glitch manufactured Fall at frame {frame}: {fall:?}"
+            );
+            let animation = world
+                .get::<PlayerAnimationState>(player)
+                .copied()
+                .expect("player animation state");
+            assert_ne!(
+                animation.locomotion,
+                PlayerLocomotionAnimation::Fall,
+                "probe glitch selected Fall animation at frame {frame}"
+            );
+        }
+
+        let events = drain_player_events(&mut world);
+        assert!(!events.iter().any(|event| matches!(
+            event.kind,
+            PlayerEventKind::FallStarted | PlayerEventKind::FallEnded
+        )));
+        assert_eq!(
+            world
+                .get::<PlayerLandingState>(player)
+                .copied()
+                .unwrap_or_default()
+                .revision,
+            0,
+            "probe glitches must not synthesize landing revisions"
+        );
     }
 
     #[test]
@@ -667,13 +683,17 @@ mod tests {
         }
         update_player_locomotion(&mut world, &BTreeMap::new(), 1.0 / 60.0);
 
-        if let Some(transform) = world.get_mut::<Transform>(player) {
-            transform.position.y = 8.5;
-        }
         if let Some(velocity) = world.get_mut::<Velocity>(player) {
             velocity.0.y = -6.0;
         }
-        update_player_locomotion(&mut world, &BTreeMap::new(), 1.0 / 60.0);
+        // A walk-off/physics fall needs sustained airborne evidence; a single downward tick is
+        // deliberately insufficient because ground-probe chatter can produce the same signal.
+        for step in 0..4 {
+            if let Some(transform) = world.get_mut::<Transform>(player) {
+                transform.position.y = 12.0 - (step as f32 + 1.0) * 0.875;
+            }
+            update_player_locomotion(&mut world, &BTreeMap::new(), 0.1);
+        }
 
         let fall = world
             .get::<PlayerFallState>(player)
@@ -789,6 +809,7 @@ mod tests {
                 radius,
                 half_height,
             } => radius + half_height,
+            CollisionShapeDesc::Cylinder { half_height, .. } => half_height,
         };
         let contact_skin = tuning(&world).contact_skin;
         let epsilon = (contact_skin.abs() * 0.25).clamp(0.001, 0.01);
@@ -859,17 +880,17 @@ mod tests {
             wood,
             PhysicsSurface {
                 id: "surface.wood".to_owned(),
-                footstep_event: "audio.footstep.wood".to_owned(),
-                landing_event: "audio.landing.wood".to_owned(),
-            },
+                ..PhysicsSurface::default()
+            }
+            .with_event("contact", "project.contact.wood"),
         );
         let _ = world.insert(
             stone,
             PhysicsSurface {
                 id: "surface.stone".to_owned(),
-                footstep_event: "audio.footstep.stone".to_owned(),
-                landing_event: "audio.landing.stone".to_owned(),
-            },
+                ..PhysicsSurface::default()
+            }
+            .with_event("contact", "project.contact.stone"),
         );
 
         let transform = world
@@ -887,6 +908,7 @@ mod tests {
                 radius,
                 half_height,
             } => radius + half_height,
+            CollisionShapeDesc::Cylinder { half_height, .. } => half_height,
         };
         let contact_skin = tuning(&world).contact_skin;
         let epsilon = (contact_skin.abs() * 0.25).clamp(0.001, 0.01);

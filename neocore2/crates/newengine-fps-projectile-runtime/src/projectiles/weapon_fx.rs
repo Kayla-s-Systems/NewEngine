@@ -1,3 +1,87 @@
+fn payload_vec3(payload: &serde_json::Value, key: &str) -> Option<Vec3> {
+    let values = payload.get(key)?.as_array()?;
+    if values.len() != 3 {
+        return None;
+    }
+    let value = Vec3::new(
+        values[0].as_f64()? as f32,
+        values[1].as_f64()? as f32,
+        values[2].as_f64()? as f32,
+    );
+    value.is_finite().then_some(value)
+}
+
+fn entity_from_stable_id(world: &World, stable_id: u64) -> Option<EntityId> {
+    world
+        .iter_entities()
+        .find(|entity| entity.stable_u64() == stable_id)
+}
+
+/// Built-in weapon presentation subscriber. Combat publishes semantic facts; this consumer owns
+/// the default muzzle/tracer/impact composition. Project policy receives the same event batch and
+/// can independently attach audio, scripting or additional presentation without changing combat.
+pub fn consume_weapon_gameplay_events(world: &mut World, events: &[GameplayEvent]) {
+    for event in events {
+        let Some(owner) = event
+            .source
+            .and_then(|source| entity_from_stable_id(world, source))
+        else {
+            continue;
+        };
+        let shot_sequence = event
+            .payload
+            .get("shot_sequence")
+            .and_then(serde_json::Value::as_u64)
+            .unwrap_or(0);
+
+        match event.id.as_str() {
+            GAMEPLAY_EVENT_WEAPON_FIRED => {
+                let Some(origin) = payload_vec3(&event.payload, "shot_origin") else {
+                    continue;
+                };
+                let Some(direction) = payload_vec3(&event.payload, "shot_direction") else {
+                    continue;
+                };
+                let range = event
+                    .payload
+                    .get("range")
+                    .and_then(serde_json::Value::as_f64)
+                    .map(|value| value as f32)
+                    .unwrap_or(0.0);
+                spawn_weapon_shot_fx(world, owner, shot_sequence, origin, direction, range);
+            }
+            GAMEPLAY_EVENT_WEAPON_HIT => {
+                if event
+                    .payload
+                    .get("attack_kind")
+                    .and_then(serde_json::Value::as_str)
+                    != Some("firearm")
+                {
+                    continue;
+                }
+                let Some(point) = payload_vec3(&event.payload, "point") else {
+                    continue;
+                };
+                let normal = payload_vec3(&event.payload, "normal").unwrap_or(Vec3::Y);
+                let target = event
+                    .payload
+                    .get("target")
+                    .and_then(serde_json::Value::as_u64)
+                    .and_then(|target| entity_from_stable_id(world, target));
+                resolve_weapon_shot_hit_fx(
+                    world,
+                    owner,
+                    shot_sequence,
+                    point,
+                    normal,
+                    target,
+                );
+            }
+            _ => {}
+        }
+    }
+}
+
 fn equipped_weapon_vfx_definition(
     world: &World,
     owner: EntityId,
@@ -27,6 +111,201 @@ fn signed_casing_noise(owner: EntityId, weapon_item_id: u64, shot_sequence: u64,
         ^ channel.wrapping_mul(0x9E37_79B9_7F4A_7C15);
     let bits = (newengine_math::avalanche_u64(seed) >> 40) as u32 & 0x00ff_ffff;
     (bits as f32 / 0x00ff_ffffu32 as f32) * 2.0 - 1.0
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+struct WeaponShellContactRuntime {
+    impact_cooldown_seconds: f32,
+    rolling_cooldown_seconds: f32,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+struct WeaponShellPhysicsEventCursor {
+    fixed_tick: u64,
+}
+
+fn weapon_shell_definition(world: &World, casing: WeaponShellCasing) -> Option<newengine_engine_runtime::gameplay::WeaponCasingDefinition> {
+    world
+        .resource::<ItemCatalog>()?
+        .get(ItemId(casing.weapon_item_id))
+        .map(|definition| definition.weapon_casing.clone().sanitized())
+}
+
+fn casing_contact_class(
+    definition: &newengine_engine_runtime::gameplay::WeaponCasingDefinition,
+    surface: &str,
+    impulse: f32,
+) -> Option<&'static str> {
+    if impulse < definition.contact_min_impulse {
+        return None;
+    }
+    let surface_lower = surface.trim().to_ascii_lowercase();
+    if definition
+        .soft_surface_contains
+        .iter()
+        .any(|needle| !needle.trim().is_empty() && surface_lower.contains(&needle.trim().to_ascii_lowercase()))
+    {
+        return Some("dirt");
+    }
+    if impulse >= definition.contact_hard_impulse {
+        Some("hard")
+    } else if impulse >= definition.contact_medium_impulse {
+        Some("medium")
+    } else {
+        Some("small")
+    }
+}
+
+fn publish_shell_physics_event(
+    world: &mut World,
+    casing_entity: EntityId,
+    other_entity: EntityId,
+    casing: WeaponShellCasing,
+    event_id: &'static str,
+    contact_class: &str,
+    point: Vec3,
+    impulse: f32,
+    fixed_tick: u64,
+) {
+    let velocity = world.get::<Velocity>(casing_entity).copied().unwrap_or_default().0;
+    let angular_velocity = world
+        .get::<AngularVelocity>(casing_entity)
+        .copied()
+        .unwrap_or_default()
+        .0;
+    let surface = world
+        .get::<PhysicsSurface>(other_entity)
+        .map(|surface| surface.id.clone())
+        .unwrap_or_default();
+    let weapon = world
+        .resource::<ItemCatalog>()
+        .and_then(|catalog| catalog.get(ItemId(casing.weapon_item_id)))
+        .map(|definition| definition.name.clone());
+    let _ = emit_gameplay_event(
+        world,
+        event_id,
+        Some(casing_entity),
+        serde_json::json!({
+            "schema": "newengine.gameplay.weapon_shell_physics_event.v1",
+            "version": 1,
+            "owner": casing.owner_stable_id,
+            "weapon_item_id": casing.weapon_item_id,
+            "weapon": weapon,
+            "shot_sequence": casing.shot_sequence,
+            "casing": casing_entity.stable_u64(),
+            "other": other_entity.stable_u64(),
+            "position": vec3_array(point),
+            "surface": surface,
+            "contact_class": contact_class,
+            "impulse": impulse,
+            "linear_speed": velocity.length(),
+            "angular_speed": angular_velocity.length(),
+            "fixed_tick": fixed_tick,
+        }),
+    );
+}
+
+fn process_shell_physics_events(world: &mut World, dt: f32) {
+    let shells = world
+        .query::<WeaponShellCasing>()
+        .map(|(entity, casing)| (entity, *casing))
+        .collect::<Vec<_>>();
+    for (entity, _) in &shells {
+        let mut state = world.get::<WeaponShellContactRuntime>(*entity).copied().unwrap_or_default();
+        state.impact_cooldown_seconds = (state.impact_cooldown_seconds - dt).max(0.0);
+        state.rolling_cooldown_seconds = (state.rolling_cooldown_seconds - dt).max(0.0);
+        let _ = world.insert(*entity, state);
+    }
+
+    let Some(report) = world.resource::<PhysicsStepReport>().cloned() else {
+        return;
+    };
+    if report.fixed_tick == 0 {
+        return;
+    }
+    let last_tick = world
+        .resource::<WeaponShellPhysicsEventCursor>()
+        .copied()
+        .unwrap_or_default()
+        .fixed_tick;
+    if report.fixed_tick <= last_tick {
+        return;
+    }
+
+    for event in &report.events {
+        let (contact, is_begin) = match event {
+            PhysicsEvent::ContactBegin(contact) => (*contact, true),
+            PhysicsEvent::ContactPersist(contact) => (*contact, false),
+            _ => continue,
+        };
+        let a = entity_from_stable_id(world, contact.a.stable_id);
+        let b = entity_from_stable_id(world, contact.b.stable_id);
+        let Some((casing_entity, other_entity, casing)) = a
+            .and_then(|entity| world.get::<WeaponShellCasing>(entity).copied().map(|casing| (entity, b, casing)))
+            .or_else(|| b.and_then(|entity| world.get::<WeaponShellCasing>(entity).copied().map(|casing| (entity, a, casing))))
+            .and_then(|(casing_entity, other, casing)| other.map(|other| (casing_entity, other, casing)))
+        else {
+            continue;
+        };
+        let Some(definition) = weapon_shell_definition(world, casing) else {
+            continue;
+        };
+        let surface = world
+            .get::<PhysicsSurface>(other_entity)
+            .map(|surface| surface.id.as_str())
+            .unwrap_or("");
+        let Some(contact_class) = casing_contact_class(&definition, surface, contact.impulse) else {
+            continue;
+        };
+        let mut state = world
+            .get::<WeaponShellContactRuntime>(casing_entity)
+            .copied()
+            .unwrap_or_default();
+
+        if state.impact_cooldown_seconds <= 0.0 && (is_begin || contact.impulse >= definition.contact_medium_impulse) {
+            publish_shell_physics_event(
+                world,
+                casing_entity,
+                other_entity,
+                casing,
+                GAMEPLAY_EVENT_WEAPON_SHELL_CONTACT,
+                contact_class,
+                contact.point,
+                contact.impulse,
+                report.fixed_tick,
+            );
+            state.impact_cooldown_seconds = 0.035;
+        }
+
+        if !is_begin && state.rolling_cooldown_seconds <= 0.0 {
+            let velocity = world.get::<Velocity>(casing_entity).copied().unwrap_or_default().0;
+            let angular = world
+                .get::<AngularVelocity>(casing_entity)
+                .copied()
+                .unwrap_or_default()
+                .0;
+            let normal = contact.normal.normalize_or_zero();
+            let normal_speed = velocity.dot(normal).abs();
+            let tangent_speed = (velocity - normal * velocity.dot(normal)).length();
+            let angular_speed = angular.length();
+            if tangent_speed >= 0.08 && angular_speed >= 1.25 && normal_speed <= 0.9 {
+                publish_shell_physics_event(
+                    world,
+                    casing_entity,
+                    other_entity,
+                    casing,
+                    GAMEPLAY_EVENT_WEAPON_SHELL_ROLLING,
+                    if contact_class == "dirt" { "dirt" } else { "small" },
+                    contact.point,
+                    contact.impulse,
+                    report.fixed_tick,
+                );
+                state.rolling_cooldown_seconds = (0.14 - tangent_speed * 0.025).clamp(0.045, 0.14);
+            }
+        }
+        let _ = world.insert(casing_entity, state);
+    }
+    world.insert_resource(WeaponShellPhysicsEventCursor { fixed_tick: report.fixed_tick });
 }
 
 fn fallback_weapon_socket(position: Vec3, forward: Vec3) -> Option<WeaponSocketPose> {
@@ -189,7 +468,10 @@ fn spawn_persistent_shell_casing(
     } else {
         right
     };
-    let casing_rotation = Quat::from_rotation_arc(Vec3::Z, casing_axis).normalize_or_identity();
+    // Physics cylinders are Y-up in the provider-neutral contract. The authored shell mesh is
+    // Z-long, so presentation applies a local Z->Y correction while the rigid body itself maps
+    // +Y onto the ejection axis.
+    let casing_rotation = Quat::from_rotation_arc(Vec3::Y, casing_axis).normalize_or_identity();
     let variant_count = casing_definition
         .variants
         .len()
@@ -218,8 +500,14 @@ fn spawn_persistent_shell_casing(
     let _ = world.insert(casing, GameplayActor);
     let _ = world.insert(casing, PhysicsSurface::default());
 
-    let mut body = PhysicsBodyDesc::dynamic_solid(CollisionShapeDesc::Box {
-        half_extents: casing_definition.half_extents,
+    let casing_radius = casing_definition.half_extents[0]
+        .abs()
+        .max(casing_definition.half_extents[1].abs())
+        .max(0.001);
+    let casing_half_height = casing_definition.half_extents[2].abs().max(0.001);
+    let mut body = PhysicsBodyDesc::dynamic_solid(CollisionShapeDesc::Cylinder {
+        radius: casing_radius,
+        half_height: casing_half_height,
     });
     body.material.friction = casing_definition.friction;
     body.material.restitution = casing_definition.restitution;
@@ -246,9 +534,36 @@ fn spawn_persistent_shell_casing(
         casing,
         WeaponShellCasing::new(owner.stable_u64(), shot_sequence, weapon_item_id, variant),
     );
-    play_equipped_weapon_audio(world, owner, WeaponAudioAction::ShellEject);
+    let _ = world.insert(casing, WeaponShellContactRuntime::default());
+    let weapon_name = world
+        .resource::<ItemCatalog>()
+        .and_then(|catalog| catalog.get(ItemId(weapon_item_id)))
+        .map(|definition| definition.name.clone());
+    if let Err(error) = emit_gameplay_event(
+        world,
+        GAMEPLAY_EVENT_WEAPON_SHELL_EJECTED,
+        Some(owner),
+        serde_json::json!({
+            "schema": "newengine.gameplay.weapon_shell_event.v1",
+            "version": 1,
+            "weapon_item_id": weapon_item_id,
+            "weapon": weapon_name,
+            "shot_sequence": shot_sequence,
+            "casing": casing.stable_u64(),
+            "position": vec3_array(casing_origin),
+            "velocity": vec3_array(casing_velocity),
+            "variant": variant,
+        }),
+    ) {
+        newengine_ulog_api::ulog::warn!(
+            "weapon shell semantic event rejected owner={} shot={} err='{}'",
+            owner.stable_u64(),
+            shot_sequence,
+            error,
+        );
+    }
     newengine_ulog_api::ulog::info!(
-        "weapon casing ejected entity={} owner={} weapon_entity={:?} shot={} weapon_item={:016x} variant={} delay_ms={:.3} collider_half_extents={:?} inherited_linear={:.3} inherited_angular={:.3} physics='dynamic' persistence='world' visual='authored-definition'",
+        "weapon casing ejected entity={} owner={} weapon_entity={:?} shot={} weapon_item={:016x} variant={} delay_ms={:.3} collider_cylinder=[radius={:.5},half_height={:.5}] inherited_linear={:.3} inherited_angular={:.3} physics='dynamic' persistence='world' visual='authored-definition'",
         casing.stable_u64(),
         owner.stable_u64(),
         weapon_entity.map(EntityId::stable_u64),
@@ -256,7 +571,8 @@ fn spawn_persistent_shell_casing(
         weapon_item_id,
         variant,
         casing_definition.ejection_delay_seconds * 1000.0,
-        casing_definition.half_extents,
+        casing_radius,
+        casing_half_height,
         casing_definition.inherit_socket_linear_velocity,
         casing_definition.inherit_socket_angular_velocity,
     );
@@ -341,6 +657,7 @@ pub fn step_weapon_shot_fx(world: &mut World, dt: f32) {
     }
 
     newengine_vfx_runtime::step_vfx(world, dt);
+    process_shell_physics_events(world, dt);
 
     let pending_ejections = world
         .query::<PendingWeaponShellEjection>()

@@ -6,6 +6,12 @@ use super::assets::ensure_player_runtime_model_parts;
 fn assignment_from_spec(
     spec: &self::content::GameReadyPlayerModelSpec,
 ) -> newengine_engine_runtime::gameplay::PlayerModelAssignment {
+    let animation = |slot: &str, legacy: &Option<String>| {
+        spec.animation_slots
+            .get(slot)
+            .cloned()
+            .or_else(|| legacy.clone())
+    };
     newengine_engine_runtime::gameplay::PlayerModelAssignment {
         revision: 0,
         enabled: spec.enabled,
@@ -13,20 +19,23 @@ fn assignment_from_spec(
         properties_ref: spec.properties_ref.clone(),
         texture_dictionary: spec.texture_dictionary.clone(),
         skeleton_source: spec.skeleton.clone(),
-        idle_animation: spec.idle_animation.clone(),
-        walk_animation: spec.walk_animation.clone(),
-        run_animation: spec.run_animation.clone(),
-        sprint_animation: spec.sprint_animation.clone(),
-        crouch_idle_animation: spec.crouch_idle_animation.clone(),
-        crouch_walk_animation: spec.crouch_walk_animation.clone(),
-        jump_animation: spec.jump_animation.clone(),
-        fall_animation: spec.fall_animation.clone(),
+        animation_slots: spec.animation_slots.clone(),
+        idle_animation: animation("idle", &spec.idle_animation),
+        walk_animation: animation("walk", &spec.walk_animation),
+        run_animation: animation("run", &spec.run_animation),
+        sprint_animation: animation("sprint", &spec.sprint_animation),
+        crouch_idle_animation: animation("crouch_idle", &spec.crouch_idle_animation),
+        crouch_walk_animation: animation("crouch_walk", &spec.crouch_walk_animation),
+        jump_animation: animation("jump", &spec.jump_animation),
+        fall_animation: animation("fall", &spec.fall_animation),
         presentation: newengine_engine_runtime::gameplay::PlayerCharacterPresentation {
+            animation_slots: std::collections::BTreeMap::new(),
             detached_head_follow: spec.detached_head_follow,
             detached_head_follow_rule: spec.detached_head_follow_rule.clone(),
             eye_parent_follow: spec.eye_parent_follow,
             eye_parent_follow_rule: spec.eye_parent_follow_rule.clone(),
             helper_pose_copies: spec.helper_pose_copies.clone(),
+            skin_sidecar: spec.skin_sidecar.clone(),
             braid_secondary_motion: spec.braid_secondary_motion.clone(),
             equipment_ready_animation: spec.equipment_ready_animation.clone(),
             equipment_aim_animation: spec.equipment_aim_animation.clone(),
@@ -167,6 +176,7 @@ fn clear_player_model_binding(
     assignment_revision: u64,
 ) {
     clear_player_runtime_model_visuals(world, player);
+    super::sidecar::clear_player_skin_sidecar(world, player);
     let _ = crate::player_hair::unbind_player_hair_v1(world, player);
     let _ = world.remove::<PlayerAnimationRuntimeBinding>(player);
     let _ = world
@@ -224,10 +234,12 @@ fn part_is_first_person_near_body_semantic(part: &PlayerRuntimeModelPart) -> boo
     let slot = part.material_slot.to_ascii_lowercase();
     // Semantic names are authoritative when available and also cover rigid face accessories that
     // have no skin stream. Keep the list deliberately anatomical/near-camera; ordinary torso/arm
-    // meshes are not suppressed merely because they belong to a player.
+    // meshes are not suppressed merely because they belong to a player. Clothing occluders such as
+    // collars and hoods intentionally remain visible: hiding them exposes the very neck cavity FPP
+    // presentation is required to cover.
     const TOKENS: &[&str] = &[
         "head", "face", "scalp", "hair", "eye", "eyeball", "lash", "brow", "teeth", "tooth",
-        "tongue", "mouth", "oral", "gum", "neck", "collar", "hood",
+        "tongue", "mouth", "oral", "gum", "neck",
     ];
     TOKENS
         .iter()
@@ -241,8 +253,12 @@ fn part_is_first_person_near_body_semantic(part: &PlayerRuntimeModelPart) -> boo
 fn runtime_part_visibility_policy(
     part: &PlayerRuntimeModelPart,
     skeleton: Option<&newengine_model_skeleton_api::ModelSkeletonMetadata>,
+    hide_local_model_in_first_person: bool,
 ) -> newengine_engine_runtime::gameplay::PlayerViewVisibilityPolicy {
     const HEAD_OWNERSHIP_HIDE_RATIO: f32 = 0.45;
+    if hide_local_model_in_first_person {
+        return newengine_engine_runtime::gameplay::PlayerViewVisibilityPolicy::HideInFirstPerson;
+    }
     const HEAD_PARENT_OWNERSHIP_HIDE_RATIO: f32 = 0.72;
     if part_is_first_person_near_body_semantic(part) {
         return newengine_engine_runtime::gameplay::PlayerViewVisibilityPolicy::HideInFirstPerson;
@@ -353,8 +369,23 @@ fn bind_player_model_assignment(
             assignment.source,
         ));
     }
+    let hide_local_model_in_first_person = assignment.hide_in_first_person
+        || world
+            .get::<newengine_engine_runtime::gameplay::PlayerCameraProfile>(player)
+            .copied()
+            .unwrap_or_default()
+            .sanitized()
+            .hide_local_model_in_first_person;
 
-    let prepared_hair = match crate::player_hair::prepare_player_hair_from_assignment_v1(
+    let prepared_sidecar = super::sidecar::prepare_player_skin_sidecar(
+        prims,
+        mats,
+        assignment,
+        &parts,
+        skeleton.as_ref(),
+    )?;
+
+    let mut prepared_hair = match crate::player_hair::prepare_player_hair_from_assignment_v1(
         player,
         assignment,
         skeleton.as_ref(),
@@ -370,8 +401,12 @@ fn bind_player_model_assignment(
             None
         }
     };
+    if let Some(hair) = prepared_hair.as_mut() {
+        hair.hide_in_first_person |= hide_local_model_in_first_person;
+    }
 
     clear_player_runtime_model_visuals(world, player);
+    super::sidecar::clear_player_skin_sidecar(world, player);
     let _ = crate::player_hair::unbind_player_hair_v1(world, player);
     let _ = world.remove::<PlayerAnimationRuntimeBinding>(player);
     let _ = world
@@ -403,12 +438,21 @@ fn bind_player_model_assignment(
     );
     let _ = set_parent(world, visual_root, Some(player));
 
-    // Character remains one world-space skinned entity. First-person visibility is evaluated per
-    // mesh part so arms/body stay present while head-dominant shells cannot surround the camera.
-    // Hair source meshes stay live until the replacement groom has successfully bound.
+    // Character remains one world-space skinned entity. First-person owner visibility is project-authored:
+    // hide-all removes the local world model from the color pass; otherwise the semantic near-camera
+    // mask remains available for full-body projects. Hair source meshes stay live until replacement binds.
+    let first_person_active = world
+        .resource::<newengine_engine_runtime::gameplay::PlayerViewState>()
+        .copied()
+        .unwrap_or_default()
+        .first_person_active;
     let mut hair_source_entities = Vec::new();
     for (part_index, part) in parts.iter().enumerate() {
-        let visibility_policy = runtime_part_visibility_policy(part, skeleton.as_ref());
+        let visibility_policy = runtime_part_visibility_policy(
+            part,
+            skeleton.as_ref(),
+            hide_local_model_in_first_person,
+        );
         let entity = spawn_named(
             world,
             format!("{visual_root_name}/Part{part_index}:{}", part.material_slot),
@@ -419,13 +463,27 @@ fn bind_player_model_assignment(
             hair_source_entities.push(entity);
         }
         let _ = world.insert(entity, Transform::default());
+        let initial_primitive_id = if first_person_active {
+            part.first_person_primitive_id.unwrap_or(part.primitive_id)
+        } else {
+            part.primitive_id
+        };
         let _ = world.insert(
             entity,
             Primitive {
-                id: part.primitive_id,
+                id: initial_primitive_id,
                 color: part.color,
             },
         );
+        if let Some(first_person_primitive) = part.first_person_primitive_id {
+            let _ = world.insert(
+                entity,
+                newengine_engine_runtime::gameplay::PlayerFirstPersonPrimitiveVariant {
+                    world_primitive: part.primitive_id,
+                    first_person_primitive,
+                },
+            );
+        }
         if let Some(bounds) = primitive_bounds(prims, part.primitive_id) {
             let _ = world.insert(entity, bounds);
         }
@@ -473,8 +531,9 @@ fn bind_player_model_assignment(
                 policy: visibility_policy,
             },
         );
-        let initial_mode = if visibility_policy
-            == newengine_engine_runtime::gameplay::PlayerViewVisibilityPolicy::HideInFirstPerson
+        let initial_mode = if first_person_active
+            && visibility_policy
+                == newengine_engine_runtime::gameplay::PlayerViewVisibilityPolicy::HideInFirstPerson
         {
             newengine_engine_runtime::gameplay::DisplayMode::RuntimeHidden
         } else {
@@ -495,7 +554,32 @@ fn bind_player_model_assignment(
         );
     }
 
-    if let Some(animation_binding) = animation_binding {
+    let sidecar_part_count = if let Some(prepared_sidecar) = prepared_sidecar {
+        super::sidecar::bind_prepared_player_skin_sidecar(
+            world,
+            prims,
+            mats,
+            player,
+            visual_root,
+            &visual_root_name,
+            parts.len(),
+            first_person_active,
+            hide_local_model_in_first_person,
+            prepared_sidecar,
+        )?
+    } else {
+        0
+    };
+
+    if let Some(mut animation_binding) = animation_binding {
+        // One-shot landing presentation begins from the current gameplay revision. A model
+        // rebind/hot-reload must not replay a historical landing as if it happened this frame.
+        animation_binding.consume_landing_revision_baseline(
+            world
+                .get::<newengine_engine_runtime::gameplay::PlayerLandingState>(player)
+                .map(|state| state.revision)
+                .unwrap_or(0),
+        );
         let initial_palette = animation_binding.initial_palette();
         let clip_refs = animation_binding.clip_refs_csv();
         let skeleton_joint_count = animation_binding.skeleton_joint_count();
@@ -558,7 +642,7 @@ fn bind_player_model_assignment(
         binding.source = model_source.clone();
         binding.skeleton_source = skeleton.as_ref().map(|metadata| metadata.source.clone());
         binding.visual_root = Some(visual_root);
-        binding.part_count = parts.len() as u32;
+        binding.part_count = parts.len() as u32 + sidecar_part_count;
         binding.target_height = assignment.target_height;
         binding.feet_to_eye_height = skeleton
             .as_ref()
@@ -579,7 +663,7 @@ fn bind_player_model_assignment(
                 .as_ref()
                 .map(|metadata| metadata.source.as_str())
                 .unwrap_or("none"),
-            parts.len()
+            parts.len() as u32 + sidecar_part_count
         ),
     );
     Ok(true)
@@ -734,6 +818,7 @@ mod grounding_tests {
         let face = PlayerRuntimeModelPart {
             source_mesh_name: "character_face_shell".to_owned(),
             primitive_id: PrimitiveId(1),
+            first_person_primitive_id: None,
             material_id: MaterialId(1),
             material_slot: "m_face".to_owned(),
             color: [1.0; 4],
@@ -742,18 +827,23 @@ mod grounding_tests {
         let body = PlayerRuntimeModelPart {
             source_mesh_name: "character_torso".to_owned(),
             primitive_id: PrimitiveId(2),
+            first_person_primitive_id: None,
             material_id: MaterialId(2),
             material_slot: "m_body".to_owned(),
             color: [1.0; 4],
             skin: None,
         };
         assert_eq!(
-            runtime_part_visibility_policy(&face, None),
+            runtime_part_visibility_policy(&face, None, false),
             newengine_engine_runtime::gameplay::PlayerViewVisibilityPolicy::HideInFirstPerson
         );
         assert_eq!(
-            runtime_part_visibility_policy(&body, None),
+            runtime_part_visibility_policy(&body, None, false),
             newengine_engine_runtime::gameplay::PlayerViewVisibilityPolicy::AlwaysVisible
+        );
+        assert_eq!(
+            runtime_part_visibility_policy(&body, None, true),
+            newengine_engine_runtime::gameplay::PlayerViewVisibilityPolicy::HideInFirstPerson
         );
     }
 

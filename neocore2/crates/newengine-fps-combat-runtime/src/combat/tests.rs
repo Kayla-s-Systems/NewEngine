@@ -27,13 +27,23 @@ mod tests {
         GameplayContentProvider::install(&content, world).expect("install FPS content");
         let player = spawn_default_player(world, None, name, position);
         ensure_fps_player_loadouts(world);
+        // Unit tests do not run the game-ready presentation provider, so publish a deterministic
+        // physical compatibility projection explicitly. Production resolves the authored
+        // EquippedWeaponEntity -> WeaponEntitySockets muzzle first.
+        let muzzle = EquippedWeaponMuzzle::new(
+            position + Vec3::new(0.18, 1.20, -0.62),
+            Vec3::new(0.0, 0.0, -1.0),
+        )
+        .expect("test muzzle");
+        let _ = world.insert(player, muzzle);
         player
     }
 
     #[test]
     fn recoil_kicks_camera_up_instead_of_down() {
         let mut world = World::new();
-        let player = spawn_fps_player(&mut world, "recoil-player", Vec3::ZERO);
+        let player = world.spawn();
+        let _ = world.insert(player, CharacterMotor::default());
         let tuning = HitscanWeaponTuning {
             recoil_pitch_radians: 0.05,
             recoil_yaw_radians: 0.0,
@@ -93,6 +103,24 @@ mod tests {
             .copied()
             .expect("pending hitscan");
         assert_eq!(pending.weapon_instance_id, firing_binding.instance_id);
+        let semantic_events = newengine_engine_runtime::gameplay::drain_gameplay_events(&mut world);
+        let fired = semantic_events
+            .iter()
+            .find(|event| event.id == GAMEPLAY_EVENT_WEAPON_FIRED)
+            .expect("semantic weapon fired event");
+        assert_eq!(fired.source, Some(shooter.stable_u64()));
+        assert_eq!(
+            fired.payload.get("shot_sequence").and_then(serde_json::Value::as_u64),
+            Some(pending.shot_sequence)
+        );
+        assert_eq!(
+            fired.payload.get("weapon").and_then(serde_json::Value::as_str),
+            Some("weapon.rifle.standard")
+        );
+        assert!(
+            fired.payload.get("shot_origin").and_then(serde_json::Value::as_array).is_some(),
+            "fired event must expose the authoritative muzzle-originated shot"
+        );
         let map = BTreeMap::from([
             (shooter.stable_u64(), shooter),
             (target.stable_u64(), target),
@@ -113,6 +141,16 @@ mod tests {
         );
 
         assert_eq!(world.get::<Health>(target).expect("health").current, 75.0);
+        let semantic_events = newengine_engine_runtime::gameplay::drain_gameplay_events(&mut world);
+        let hit = semantic_events
+            .iter()
+            .find(|event| event.id == GAMEPLAY_EVENT_WEAPON_HIT)
+            .expect("semantic weapon hit event");
+        assert_eq!(hit.source, Some(shooter.stable_u64()));
+        assert_eq!(
+            hit.payload.get("target").and_then(serde_json::Value::as_u64),
+            Some(target.stable_u64())
+        );
         let events = drain_weapon_events(&mut world);
         assert!(events.iter().any(|event| {
             event.kind == WeaponEventKind::Fired
@@ -715,6 +753,10 @@ fn hitscan_direction_tracks_mouse_look_pitch() {
             ..PlayerStanceState::default()
         },
     );
+    let muzzle =
+        EquippedWeaponMuzzle::new(Vec3::new(0.2, 1.3, -0.55), Vec3::new(0.0, 0.0, -1.0))
+            .expect("physical muzzle");
+    let _ = world.insert(player, muzzle);
     let mut tuning = HitscanWeaponTuning::default();
     tuning.hip_spread_radians = 0.0;
     tuning.aim_spread_radians = 0.0;
@@ -725,6 +767,23 @@ fn hitscan_direction_tracks_mouse_look_pitch() {
         .normalize_or_zero();
     assert!(direction.dot(expected) > 0.999_999);
     assert!(direction.y.abs() > 0.1, "pitch must affect shot direction");
+}
+
+#[test]
+fn hitscan_rejects_camera_only_fire_without_a_physical_muzzle() {
+    let mut world = World::new();
+    let player = world.spawn();
+    let _ = world.insert(player, Transform::default());
+    let _ = world.insert(player, CharacterMotor::default());
+    let _ = world.insert(player, PlayerStanceState::standing(0.72));
+    let mut tuning = HitscanWeaponTuning::default();
+    tuning.hip_spread_radians = 0.0;
+    tuning.aim_spread_radians = 0.0;
+
+    assert!(
+        shot_origin_and_direction(&world, player, tuning, true, 1).is_none(),
+        "camera/view state must never synthesize a firearm origin when no physical muzzle exists"
+    );
 }
 
 #[test]

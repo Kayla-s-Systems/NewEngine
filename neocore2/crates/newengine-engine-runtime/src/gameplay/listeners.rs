@@ -1,8 +1,10 @@
 use newengine_ecs::{EntityId, World};
+use newengine_primitives::{Primitive, PrimitiveId};
 
 use super::{
-    DisplayMode, DisplayVisibility, PlayerEventBus, PlayerEventKind, PlayerViewState,
-    PlayerViewVisibility, PlayerViewVisibilityPolicy, PlayerVisualPart,
+    DisplayMode, DisplayVisibility, PlayerEventBus, PlayerEventKind,
+    PlayerFirstPersonPrimitiveVariant, PlayerViewState, PlayerViewVisibility,
+    PlayerViewVisibilityPolicy, PlayerVisualPart,
 };
 
 #[inline]
@@ -57,6 +59,27 @@ pub fn sync_player_view_listeners(world: &mut World, first_person_active: bool) 
             format!("visual_entity={} mode={:?}", entity.stable_u64(), mode),
         );
     }
+
+    // Full-body FPP uses the same skinned owner entity, but mixed torso meshes may contain a
+    // camera-near neck shell. Swap only topology; material, skin palette and entity identity stay
+    // unchanged. Restoring third person puts the exact authored world primitive back.
+    let primitive_updates = world
+        .query::<PlayerFirstPersonPrimitiveVariant>()
+        .filter_map(|(entity, variant)| {
+            let desired = if first_person_active {
+                variant.first_person_primitive
+            } else {
+                variant.world_primitive
+            };
+            let current = world.get::<Primitive>(entity).map(|primitive| primitive.id);
+            (current != Some(desired)).then_some((entity, desired))
+        })
+        .collect::<Vec<(EntityId, PrimitiveId)>>();
+    for (entity, desired) in primitive_updates {
+        if let Some(primitive) = world.get_mut::<Primitive>(entity) {
+            primitive.id = desired;
+        }
+    }
 }
 
 #[inline]
@@ -65,4 +88,59 @@ pub fn drain_player_events(world: &mut World) -> Vec<super::PlayerEvent> {
         .resource_mut::<PlayerEventBus>()
         .map(PlayerEventBus::drain)
         .unwrap_or_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::gameplay::{PlayerVisualKind, PlayerVisualPart};
+
+    #[test]
+    fn first_person_primitive_variant_swaps_without_hiding_the_torso() {
+        let mut world = World::new();
+        let owner = world.spawn();
+        let visual = world.spawn();
+        let world_id = PrimitiveId(0x1001);
+        let first_person_id = PrimitiveId(0x1002);
+        let _ = world.insert(
+            visual,
+            Primitive {
+                id: world_id,
+                color: [1.0; 4],
+            },
+        );
+        let _ = world.insert(
+            visual,
+            PlayerVisualPart {
+                owner,
+                part_index: 0,
+                kind: PlayerVisualKind::RuntimeModelPart,
+                material_slot: "torso".to_owned(),
+            },
+        );
+        let _ = world.insert(visual, PlayerViewVisibility::runtime_model_default());
+        let _ = world.insert(
+            visual,
+            DisplayVisibility {
+                mode: DisplayMode::GameOnly,
+            },
+        );
+        let _ = world.insert(
+            visual,
+            PlayerFirstPersonPrimitiveVariant {
+                world_primitive: world_id,
+                first_person_primitive: first_person_id,
+            },
+        );
+
+        sync_player_view_listeners(&mut world, true);
+        assert_eq!(world.get::<Primitive>(visual).unwrap().id, first_person_id);
+        assert_eq!(
+            world.get::<DisplayVisibility>(visual).unwrap().mode,
+            DisplayMode::GameOnly
+        );
+
+        sync_player_view_listeners(&mut world, false);
+        assert_eq!(world.get::<Primitive>(visual).unwrap().id, world_id);
+    }
 }

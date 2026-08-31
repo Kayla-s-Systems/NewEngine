@@ -59,6 +59,48 @@ pub(in super::super) fn default_camera_eye_height() -> f32 {
 pub(in super::super) fn default_sprint_multiplier() -> f32 {
     default_game_data().player.tuning.sprint_multiplier
 }
+pub(in super::super) fn default_camera_first_person_fov_y_degrees() -> f32 {
+    newengine_engine_runtime::gameplay::PlayerCameraProfile::default()
+        .first_person_fov_y_radians
+        .to_degrees()
+}
+pub(in super::super) fn default_camera_first_person_ads_fov_y_degrees() -> f32 {
+    newengine_engine_runtime::gameplay::PlayerCameraProfile::default()
+        .first_person_ads_fov_y_radians
+        .to_degrees()
+}
+pub(in super::super) fn default_camera_first_person_near() -> f32 {
+    newengine_engine_runtime::gameplay::PlayerCameraProfile::default().first_person_near
+}
+pub(in super::super) fn default_camera_first_person_forward_clearance() -> f32 {
+    newengine_engine_runtime::gameplay::PlayerCameraProfile::default()
+        .first_person_forward_clearance
+}
+pub(in super::super) fn default_camera_first_person_body_yaw_limit_degrees() -> f32 {
+    newengine_engine_runtime::gameplay::PlayerCameraProfile::default()
+        .first_person_body_yaw_limit_radians
+        .to_degrees()
+}
+pub(in super::super) fn default_camera_first_person_down_pitch_limit_degrees() -> f32 {
+    newengine_engine_runtime::gameplay::PlayerCameraProfile::default()
+        .first_person_down_pitch_limit_radians
+        .to_degrees()
+}
+pub(in super::super) fn default_camera_third_person_follow_fov_y_degrees() -> f32 {
+    newengine_engine_runtime::gameplay::PlayerCameraProfile::default()
+        .third_person_follow_fov_y_radians
+        .to_degrees()
+}
+pub(in super::super) fn default_camera_third_person_aim_fov_y_degrees() -> f32 {
+    newengine_engine_runtime::gameplay::PlayerCameraProfile::default()
+        .third_person_aim_fov_y_radians
+        .to_degrees()
+}
+pub(in super::super) fn default_camera_third_person_orbit_fov_y_degrees() -> f32 {
+    newengine_engine_runtime::gameplay::PlayerCameraProfile::default()
+        .third_person_orbit_fov_y_radians
+        .to_degrees()
+}
 pub(in super::super) fn default_gravity() -> f32 {
     default_game_data().player.tuning.gravity
 }

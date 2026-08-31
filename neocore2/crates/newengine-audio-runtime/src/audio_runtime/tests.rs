@@ -140,6 +140,7 @@ mod tests {
                 audibility: 0.9,
                 distance: 1.0,
                 already_physical: false,
+                budget: String::new(),
             },
             VoiceRank {
                 voice_id: 2,
@@ -147,6 +148,7 @@ mod tests {
                 audibility: 0.1,
                 distance: 100.0,
                 already_physical: false,
+                budget: String::new(),
             },
             VoiceRank {
                 voice_id: 3,
@@ -154,6 +156,7 @@ mod tests {
                 audibility: 0.95,
                 distance: 50.0,
                 already_physical: false,
+                budget: String::new(),
             },
         ];
         sort_voice_ranks(&mut ranks);
@@ -172,9 +175,10 @@ mod tests {
                 audibility: 1.0,
                 distance: voice_id as f32,
                 already_physical: false,
+                budget: String::new(),
             })
             .collect::<Vec<_>>();
-        let selected = select_physical_voice_ids(ranks, 16);
+        let selected = select_physical_voice_ids(ranks, 16, &BTreeMap::new());
         assert_eq!(selected.len(), 16);
     }
 
@@ -339,6 +343,7 @@ mod tests {
                 audibility: occluded,
                 distance: 2.0,
                 already_physical: true,
+                budget: String::new(),
             },
             VoiceRank {
                 voice_id: 2,
@@ -346,6 +351,7 @@ mod tests {
                 audibility: clear,
                 distance: 8.0,
                 already_physical: false,
+                budget: String::new(),
             },
         ];
         sort_voice_ranks(&mut ranks);
@@ -373,7 +379,12 @@ mod tests {
             last_spatial_update: None,
             environment: AudioEnvironmentState::clear(),
             stream_stats: None,
+            physical_source_origin: Duration::ZERO,
             concurrency_group: String::new(),
+            concurrency_scope: AudioConcurrencyScope::Global,
+            concurrency_scope_id: None,
+            policy_instance_id: 1,
+            voice_budget: String::new(),
             priority: 0,
             paused: false,
             virtual_source_position: Duration::from_millis(250),
@@ -835,4 +846,404 @@ mod tests {
             .sum::<f32>();
         assert!(stereo_difference > 1.0e-4);
     }
+
+    fn voice_policy_test_state() -> AudioRuntimeState {
+        AudioRuntimeState::open_default(AssetServiceClient::new(
+            newengine_plugin_host::default_host_api(),
+        ))
+        .expect("semantic audio state")
+    }
+
+    fn insert_policy_test_voice(
+        state: &mut AudioRuntimeState,
+        voice_id: u64,
+        policy_instance_id: u64,
+        group: &str,
+        scope: AudioConcurrencyScope,
+        scope_id: Option<u64>,
+        priority: i32,
+        budget: &str,
+        distance: f32,
+    ) {
+        state.voices.insert(
+            voice_id,
+            VoiceEntry {
+                control: None,
+                source: VoiceSource::Clip {
+                    uri: format!("shared/audio/test/{voice_id}.wav"),
+                    source_duration: Some(Duration::from_secs(10)),
+                },
+                bus: AudioBus::Sfx,
+                gain: 1.0,
+                speed: 1.0,
+                looping: false,
+                spatial: Some(AudioSpatialParams {
+                    position: [0.0, 0.0, distance],
+                }),
+                attenuation: None,
+                acoustic: AudioAcousticState::clear(),
+                propagation: AudioPropagationState::default(),
+                emitter_velocity: [0.0; 3],
+                last_spatial_update: None,
+                environment: AudioEnvironmentState::clear(),
+                stream_stats: None,
+            physical_source_origin: Duration::ZERO,
+                concurrency_group: group.to_owned(),
+                concurrency_scope: scope,
+                concurrency_scope_id: scope_id,
+                policy_instance_id,
+                voice_budget: budget.to_owned(),
+                priority,
+                paused: false,
+                virtual_source_position: Duration::ZERO,
+                virtual_since: Some(Instant::now()),
+            },
+        );
+    }
+
+    #[test]
+    fn voice_policy_limit_counts_logical_instances_not_layers() {
+        let mut state = voice_policy_test_state();
+        insert_policy_test_voice(
+            &mut state,
+            10,
+            100,
+            "weapon.fire",
+            AudioConcurrencyScope::Global,
+            None,
+            10,
+            "",
+            2.0,
+        );
+        insert_policy_test_voice(
+            &mut state,
+            11,
+            100,
+            "weapon.fire",
+            AudioConcurrencyScope::Global,
+            None,
+            10,
+            "",
+            2.0,
+        );
+        let policy = AudioVoicePolicy {
+            group: "weapon.fire".to_owned(),
+            limit: 1,
+            scope: AudioConcurrencyScope::Global,
+            steal_rule: AudioVoiceStealRule::Oldest,
+            priority: 10,
+            ..Default::default()
+        };
+        let admission = state
+            .admit_voice_policy(&policy, None, 200)
+            .expect("admission");
+        match admission {
+            VoicePolicyAdmission::Accepted { stolen_instances } => {
+                assert_eq!(stolen_instances, vec![100]);
+            }
+            VoicePolicyAdmission::Rejected { reason } => panic!("unexpected rejection: {reason}"),
+        }
+        assert!(state.voices.is_empty(), "all layers of stolen instance must stop together");
+    }
+
+    #[test]
+    fn voice_policy_limit_n_steals_only_required_instance_count() {
+        let mut state = voice_policy_test_state();
+        insert_policy_test_voice(
+            &mut state,
+            10,
+            100,
+            "impact",
+            AudioConcurrencyScope::Global,
+            None,
+            1,
+            "",
+            2.0,
+        );
+        insert_policy_test_voice(
+            &mut state,
+            20,
+            200,
+            "impact",
+            AudioConcurrencyScope::Global,
+            None,
+            1,
+            "",
+            3.0,
+        );
+        let policy = AudioVoicePolicy {
+            group: "impact".to_owned(),
+            limit: 2,
+            scope: AudioConcurrencyScope::Global,
+            steal_rule: AudioVoiceStealRule::Oldest,
+            priority: 1,
+            ..Default::default()
+        };
+        let admission = state
+            .admit_voice_policy(&policy, None, 300)
+            .expect("admission");
+        match admission {
+            VoicePolicyAdmission::Accepted { stolen_instances } => {
+                assert_eq!(stolen_instances, vec![100]);
+            }
+            VoicePolicyAdmission::Rejected { reason } => panic!("unexpected rejection: {reason}"),
+        }
+        assert!(state.voices.values().all(|voice| voice.policy_instance_id == 200));
+    }
+
+    #[test]
+    fn object_scoped_concurrency_isolated_by_opaque_owner_id() {
+        let mut state = voice_policy_test_state();
+        insert_policy_test_voice(
+            &mut state,
+            10,
+            100,
+            "foley",
+            AudioConcurrencyScope::Object,
+            Some(7),
+            1,
+            "",
+            2.0,
+        );
+        let policy = AudioVoicePolicy {
+            group: "foley".to_owned(),
+            limit: 1,
+            scope: AudioConcurrencyScope::Object,
+            steal_rule: AudioVoiceStealRule::Oldest,
+            priority: 1,
+            ..Default::default()
+        };
+        let admission = state
+            .admit_voice_policy(&policy, Some(8), 200)
+            .expect("admission");
+        assert!(matches!(
+            admission,
+            VoicePolicyAdmission::Accepted { ref stolen_instances } if stolen_instances.is_empty()
+        ));
+        assert_eq!(state.voices.len(), 1);
+        assert!(state.admit_voice_policy(&policy, None, 300).is_err());
+    }
+
+    #[test]
+    fn lower_priority_rule_never_steals_higher_priority_instance() {
+        let mut state = voice_policy_test_state();
+        insert_policy_test_voice(
+            &mut state,
+            10,
+            100,
+            "critical",
+            AudioConcurrencyScope::Global,
+            None,
+            100,
+            "",
+            1.0,
+        );
+        let policy = AudioVoicePolicy {
+            group: "critical".to_owned(),
+            limit: 1,
+            scope: AudioConcurrencyScope::Global,
+            steal_rule: AudioVoiceStealRule::LowerPriorityThenOldest,
+            priority: 50,
+            ..Default::default()
+        };
+        let admission = state
+            .admit_voice_policy(&policy, None, 200)
+            .expect("admission result");
+        assert!(matches!(admission, VoicePolicyAdmission::Rejected { .. }));
+        assert_eq!(state.voices.len(), 1);
+    }
+
+    #[test]
+    fn reserved_budget_claims_slots_and_unused_reservation_returns_to_shared_pool() {
+        let ranks = vec![
+            VoiceRank {
+                voice_id: 1,
+                priority: 100,
+                audibility: 1.0,
+                distance: 1.0,
+                already_physical: false,
+                budget: String::new(),
+            },
+            VoiceRank {
+                voice_id: 2,
+                priority: 90,
+                audibility: 1.0,
+                distance: 1.0,
+                already_physical: false,
+                budget: String::new(),
+            },
+            VoiceRank {
+                voice_id: 3,
+                priority: 1,
+                audibility: 1.0,
+                distance: 1.0,
+                already_physical: false,
+                budget: "project.dialogue".to_owned(),
+            },
+        ];
+        let reservations = BTreeMap::from([("project.dialogue".to_owned(), 1usize)]);
+        let selected = select_physical_voice_ids(ranks.clone(), 2, &reservations);
+        assert_eq!(selected.len(), 2);
+        assert!(selected.contains(&3));
+        assert!(selected.contains(&1));
+
+        let without_reserved_class = ranks
+            .into_iter()
+            .filter(|rank| rank.budget.is_empty())
+            .collect::<Vec<_>>();
+        let selected = select_physical_voice_ids(without_reserved_class, 2, &reservations);
+        assert_eq!(selected, HashSet::from([1, 2]));
+    }
+
+    #[test]
+    fn provider_rejects_reserved_budget_overcommit_atomically() {
+        let mut state = voice_policy_test_state();
+        let ack = state.set_voice_budgets(AudioVoiceBudgetConfig {
+            reservations: vec![newengine_audio_api::AudioVoiceBudgetReservation {
+                id: "project.critical".to_owned(),
+                reserved_physical_voices: state.max_physical_voices + 1,
+            }],
+        });
+        assert!(!ack.accepted);
+        assert!(state.voice_budget_reservations.is_empty());
+    }
+
+    fn virtual_test_stream(now: Instant, looping: bool) -> VoiceEntry {
+        VoiceEntry {
+            control: None,
+            source: VoiceSource::Stream {
+                uri: "shared/audio/stream/test.ogg".to_owned(),
+                buffer: AudioStreamBufferConfig::default(),
+                source_duration: Some(Duration::from_secs(2)),
+            },
+            bus: AudioBus::Ambience,
+            gain: 1.0,
+            speed: 1.0,
+            looping,
+            spatial: None,
+            attenuation: None,
+            acoustic: AudioAcousticState::clear(),
+            propagation: AudioPropagationState::default(),
+            emitter_velocity: [0.0; 3],
+            last_spatial_update: None,
+            environment: AudioEnvironmentState::clear(),
+            stream_stats: None,
+            physical_source_origin: Duration::ZERO,
+            concurrency_group: String::new(),
+            concurrency_scope: AudioConcurrencyScope::Global,
+            concurrency_scope_id: None,
+            policy_instance_id: 1,
+            voice_budget: String::new(),
+            priority: 0,
+            paused: false,
+            virtual_source_position: Duration::from_millis(1_750),
+            virtual_since: Some(now - Duration::from_millis(500)),
+        }
+    }
+
+    #[test]
+    fn stream_source_is_virtualizable_without_physical_decoder_state() {
+        let source = VoiceSource::Stream {
+            uri: "shared/audio/stream/test.ogg".to_owned(),
+            buffer: AudioStreamBufferConfig::default(),
+            source_duration: Some(Duration::from_secs(5)),
+        };
+        assert!(source.virtualizable());
+    }
+
+    #[test]
+    fn virtual_looping_stream_timeline_advances_and_wraps_while_non_physical() {
+        let now = Instant::now();
+        let voice = virtual_test_stream(now, true);
+        let position = voice.current_source_position(now);
+        assert!((position.as_secs_f32() - 0.25).abs() < 0.02);
+        assert!(!voice.is_finished(now));
+    }
+
+    #[test]
+    fn virtual_non_looping_stream_expires_from_logical_timeline_without_decoder() {
+        let now = Instant::now();
+        let voice = virtual_test_stream(now, false);
+        assert_eq!(voice.current_source_position(now), Duration::from_secs(2));
+        assert!(voice.is_finished(now));
+    }
+
+    #[test]
+    fn virtual_stream_survives_rebalance_when_not_selected_for_physical_residency() {
+        let assets = AssetServiceClient::new(newengine_plugin_host::default_host_api());
+        let mut state = AudioRuntimeState::open_default(assets).expect("audio state");
+        let now = Instant::now();
+        let mut voice = virtual_test_stream(now, true);
+        voice.paused = true;
+        voice.virtual_since = None;
+        state.voices.insert(77, voice);
+        state.rebalance_physical_voices();
+        let voice = state.voices.get(&77).expect("logical stream retained");
+        assert!(voice.is_virtual());
+        assert!(voice.virtualizable());
+    }
+
+
+    #[test]
+    fn rematerialized_stream_physical_clock_keeps_absolute_media_origin() {
+        let absolute = physical_source_position(
+            Duration::from_millis(2_500),
+            1.0,
+            Duration::from_secs(30),
+        );
+        assert_eq!(absolute, Duration::from_millis(32_500));
+    }
+
+    #[test]
+    fn rematerialized_looping_stream_origin_normalizes_after_elapsed_physical_time() {
+        let absolute = physical_source_position(
+            Duration::from_millis(500),
+            1.0,
+            Duration::from_millis(1_750),
+        );
+        let wrapped = normalize_timeline_position(absolute, Some(Duration::from_secs(2)), true);
+        assert_eq!(wrapped, Duration::from_millis(250));
+    }
+
+
+    #[test]
+    fn physical_stream_demotion_preserves_absolute_timeline_and_keeps_logical_voice() {
+        let assets = AssetServiceClient::new(newengine_plugin_host::default_host_api());
+        let mut state = AudioRuntimeState::open_default(assets).expect("audio state");
+        let (player, mut output) = Player::new();
+        player.append(SineWave::new(440.0).take_duration(Duration::from_secs(1)));
+        for _ in 0..8_000 {
+            let _ = output.next();
+        }
+        let elapsed = player.get_pos();
+        assert!(elapsed > Duration::from_millis(5));
+
+        let now = Instant::now();
+        let mut voice = virtual_test_stream(now, true);
+        voice.control = Some(VoiceControl::Flat {
+            player,
+            spectral: None,
+            environment: None,
+            late_binding: None,
+        });
+        voice.physical_source_origin = Duration::from_secs(30);
+        voice.virtual_source_position = Duration::ZERO;
+        voice.virtual_since = None;
+        state.voices.insert(91, voice);
+
+        state.demote_voice(91, now);
+        let voice = state.voices.get(&91).expect("logical voice retained");
+        assert!(voice.is_virtual());
+        assert_eq!(state.stream_demotions, 1);
+        assert_eq!(voice.physical_source_origin, Duration::ZERO);
+        let expected = normalize_timeline_position(
+            Duration::from_secs(30).saturating_add(elapsed),
+            Some(Duration::from_secs(2)),
+            true,
+        );
+        let actual = voice.virtual_source_position;
+        let delta = actual.abs_diff(expected);
+        assert!(delta < Duration::from_millis(20), "actual={actual:?} expected={expected:?}");
+    }
+
 }

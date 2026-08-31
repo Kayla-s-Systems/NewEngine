@@ -356,7 +356,7 @@ pub(crate) fn bootstrap_game_ready_world_scene_impl(
         map.acoustic_materials.rules.len(),
     );
 
-    let rules = to_fps_demo_rules(&map.gameplay, &map.player.model, effective_game_data.data());
+    let rules = to_fps_demo_rules(&map.gameplay, effective_game_data.data());
     world.insert_resource(rules.clone());
     world.insert_resource(WorldActivationState::new(
         "waiting for CPU scene assembly and GPU material residency",
@@ -465,6 +465,18 @@ pub(crate) fn bootstrap_game_ready_world_scene_impl(
             player_tuning.body_radius,
         ),
     );
+    // Camera behavior is project/scene-authored. Install the resolved data contract before
+    // binding the character so first-person owner visibility is known during mesh creation.
+    let player_camera_profile = map.gameplay.camera.player_profile();
+    let _ = world.insert(player, player_camera_profile);
+    if let Some(barrier) = world
+        .get_mut::<newengine_engine_runtime::gameplay::PlayerFirstPersonBodyBarrierProfile>(
+        player,
+    ) {
+        barrier.downward_pitch_limit_radians =
+            player_camera_profile.first_person_down_pitch_limit_radians;
+    }
+
     let model_ground_offset_y = -(player_tuning.body_half_height + player_tuning.body_radius);
     let model_bound = spawn_game_ready_player_model(
         world,

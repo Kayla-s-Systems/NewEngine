@@ -432,6 +432,40 @@ pub(super) fn apply_player_model_from_ytyp(
         profile.player.model.skeleton = Some(skeleton);
         applied += 1;
     }
+    let skin_sidecar_model = value_path(model, &["skin_sidecar_model"]).and_then(value_string);
+    let skin_sidecar_skeleton =
+        value_path(model, &["skin_sidecar_skeleton"]).and_then(value_string);
+    let skin_sidecar_joint_suffix =
+        value_path(model, &["skin_sidecar_joint_suffix"]).and_then(value_string);
+    let skin_sidecar_local_joint_prefix =
+        value_path(model, &["skin_sidecar_local_joint_prefix"]).and_then(value_string);
+    let skin_sidecar_authored = [
+        skin_sidecar_model.is_some(),
+        skin_sidecar_skeleton.is_some(),
+        skin_sidecar_joint_suffix.is_some(),
+        skin_sidecar_local_joint_prefix.is_some(),
+    ];
+    if skin_sidecar_authored.iter().all(|present| *present) {
+        profile.player.model.skin_sidecar = Some(
+            newengine_engine_runtime::gameplay::PlayerSkinSidecarDefinition {
+                model: skin_sidecar_model.expect("checked sidecar model"),
+                skeleton: skin_sidecar_skeleton.expect("checked sidecar skeleton"),
+                joint_name_suffix: skin_sidecar_joint_suffix.expect("checked sidecar suffix"),
+                local_joint_prefix: skin_sidecar_local_joint_prefix
+                    .expect("checked sidecar local prefix"),
+            },
+        );
+        applied += 1;
+    } else if skin_sidecar_authored.iter().any(|present| *present) {
+        newengine_ulog_api::ulog::warn!(
+            "game-ready: incomplete authored player skin sidecar definition definition_ref='{}' model={} skeleton={} suffix={} local_prefix={} action='reject_sidecar_contract'",
+            definition_ref,
+            skin_sidecar_authored[0],
+            skin_sidecar_authored[1],
+            skin_sidecar_authored[2],
+            skin_sidecar_authored[3],
+        );
+    }
     if let Some(enabled) = value_path(model, &["detached_head_follow"]).and_then(value_bool) {
         profile.player.model.detached_head_follow = enabled;
         applied += 1;
@@ -611,6 +645,94 @@ pub(super) fn apply_player_model_from_ytyp(
     {
         profile.player.model.equipment_reload_animation = Some(reference);
         applied += 1;
+    }
+    for (attribute, semantic) in [
+        ("look_relaxed_base_animation", "look.relaxed.base"),
+        ("look_relaxed_range_animation", "look.relaxed.range"),
+        ("look_crouch_base_animation", "look.crouch.base"),
+        ("look_crouch_range_animation", "look.crouch.range"),
+        ("look_tense_base_animation", "look.tense.base"),
+        ("look_tense_range_animation", "look.tense.range"),
+        ("look_eyes_base_animation", "look.eyes.base"),
+        ("look_eyes_range_animation", "look.eyes.range"),
+        (
+            "look_context_cover_low_left_base_animation",
+            "look.context.cover_low_left.base",
+        ),
+        (
+            "look_context_cover_low_left_range_animation",
+            "look.context.cover_low_left.range",
+        ),
+        (
+            "look_context_cover_low_right_base_animation",
+            "look.context.cover_low_right.base",
+        ),
+        (
+            "look_context_cover_low_right_range_animation",
+            "look.context.cover_low_right.range",
+        ),
+        (
+            "look_context_prone_base_animation",
+            "look.context.prone.base",
+        ),
+        (
+            "look_context_prone_range_animation",
+            "look.context.prone.range",
+        ),
+        (
+            "look_context_supine_base_animation",
+            "look.context.supine.base",
+        ),
+        (
+            "look_context_supine_range_animation",
+            "look.context.supine.range",
+        ),
+        ("look_context_rope_base_animation", "look.context.rope.base"),
+        (
+            "look_context_rope_range_animation",
+            "look.context.rope.range",
+        ),
+        (
+            "look_context_ladder_base_animation",
+            "look.context.ladder.base",
+        ),
+        (
+            "look_context_ladder_range_animation",
+            "look.context.ladder.range",
+        ),
+        (
+            "look_context_swim_idle_base_animation",
+            "look.context.swim_idle.base",
+        ),
+        (
+            "look_context_swim_idle_range_animation",
+            "look.context.swim_idle.range",
+        ),
+        (
+            "look_context_injured_base_animation",
+            "look.context.injured.base",
+        ),
+        (
+            "look_context_injured_range_animation",
+            "look.context.injured.range",
+        ),
+        (
+            "look_context_relaxed_injured_base_animation",
+            "look.context.relaxed_injured.base",
+        ),
+        (
+            "look_context_relaxed_injured_range_animation",
+            "look.context.relaxed_injured.range",
+        ),
+    ] {
+        if let Some(reference) = value_path(model, &[attribute]).and_then(value_string) {
+            profile
+                .player
+                .model
+                .animation_slots
+                .insert(semantic.to_owned(), reference);
+            applied += 1;
+        }
     }
     if let Some(phase) = value_path(model, &["equipment_ready_sample_phase"]).and_then(value_f32) {
         profile.player.model.equipment_ready_sample_phase = phase.clamp(0.0, 1.0);

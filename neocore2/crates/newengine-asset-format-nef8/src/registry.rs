@@ -4,8 +4,8 @@ use newengine_assets_api::{AssetFileTypeDescriptor, AssetGatewayRoute};
 
 use super::descriptor::Nef8FormatSpec;
 use super::formats::{
-    fxd, neftd, neitems, nemat, nepak, neui, ybd, ybn, ycd, ydd, ydr, yed, yfd, yft, yld, ymap, ymf,
-    ymt, ypdb, ysc, yscd, ytd, ytf, ytyd, ytyp, yvr, ywr,
+    fxd, neftd, neitems, nemat, nepak, neui, ybd, ybn, ycd, ydd, ydr, yed, yfd, yft, yld, ymap,
+    ymf, ymt, ypdb, ysc, yscd, ytd, ytf, ytyd, ytyp, yvr, ywr,
 };
 
 macro_rules! listfile_spec {

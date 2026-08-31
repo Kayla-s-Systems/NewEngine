@@ -1,6 +1,84 @@
 use super::operations::emit_inventory_event;
 use super::*;
+use crate::gameplay::{
+    emit_gameplay_event, GAMEPLAY_EVENT_WEAPON_EQUIPPED, GAMEPLAY_EVENT_WEAPON_UNEQUIPPED,
+};
 
+/// Resolves the active weapon's physical muzzle pose.
+///
+/// `EquippedWeaponEntity -> WeaponEntitySockets` is authoritative. The owner-side
+/// `EquippedWeaponMuzzle` is only a compatibility projection from the same weapon presentation;
+/// camera/body synthesis is deliberately forbidden here.
+pub fn active_equipped_weapon_muzzle(
+    world: &World,
+    owner: EntityId,
+) -> Option<EquippedWeaponMuzzle> {
+    if let Some(binding) = world.get::<EquippedWeaponBinding>(owner).copied() {
+        if let Some(link) = world
+            .get::<EquippedWeaponEntity>(owner)
+            .copied()
+            .filter(|link| link.instance_id == binding.instance_id && link.item == binding.item)
+        {
+            if let Some(socket) = world
+                .get::<WeaponEntitySockets>(link.entity)
+                .and_then(|sockets| sockets.muzzle)
+            {
+                let forward = (socket.rotation * Vec3::Z).normalize_or_zero();
+                if let Some(muzzle) = EquippedWeaponMuzzle::new(socket.position, forward) {
+                    return Some(muzzle);
+                }
+            }
+        }
+    }
+
+    world.get::<EquippedWeaponMuzzle>(owner).copied()
+}
+
+fn publish_weapon_equipment_event(
+    world: &mut World,
+    id: &str,
+    owner: EntityId,
+    item: ItemId,
+    instance_id: Option<ItemInstanceId>,
+) {
+    let Some(definition) = world
+        .resource::<ItemCatalog>()
+        .and_then(|catalog| catalog.get(item))
+    else {
+        return;
+    };
+    if definition.kind != ItemKind::Weapon {
+        return;
+    }
+    let weapon_name = definition.name.clone();
+    let position = world.get::<Transform>(owner).map(|transform| {
+        [
+            transform.position.x,
+            transform.position.y,
+            transform.position.z,
+        ]
+    });
+    let payload = serde_json::json!({
+        "schema": "newengine.gameplay.weapon_equipment_event.v1",
+        "version": 1,
+        "weapon_item_id": item.raw(),
+        "weapon": weapon_name,
+        "weapon_instance_id": instance_id.map(|instance| instance.0),
+        "position": position,
+    });
+    if let Err(error) = emit_gameplay_event(world, id, Some(owner), payload) {
+        newengine_ulog_api::ulog::warn!(
+            "weapon equipment semantic event rejected: event='{}' owner={} err='{}'",
+            id,
+            owner.stable_u64(),
+            error,
+        );
+    }
+}
+
+/// Legacy audio helpers are kept as a compatibility API for external clients. The engine
+/// equipment/combat path no longer calls them directly; projects subscribe to semantic
+/// gameplay events and choose their own cues/actions.
 pub fn preload_weapon_audio_definition(audio: &WeaponAudioDefinition) {
     for action in [
         WeaponAudioAction::Fire,
@@ -106,6 +184,7 @@ pub fn play_weapon_item_audio(
     let result = if is_cue {
         let mut request = newengine_audio_api::AudioCuePlayRequest::new(reference.clone());
         request.position = spatial_position.map(|position| [position.x, position.y, position.z]);
+        request.scope_id = Some(owner.stable_u64());
         newengine_audio_client::play_audio_cue(&request)
     } else {
         let mut request = newengine_audio_api::AudioPlayRequest::new(reference.clone());
@@ -244,10 +323,22 @@ pub fn equip_item_instance(
     );
     sync_equipped_weapon_runtime(world, owner);
     if let Some(previous_item) = previous_item.filter(|previous_item| *previous_item != item) {
-        play_weapon_item_audio(world, owner, previous_item, WeaponAudioAction::Unequip);
+        publish_weapon_equipment_event(
+            world,
+            GAMEPLAY_EVENT_WEAPON_UNEQUIPPED,
+            owner,
+            previous_item,
+            previous,
+        );
     }
     if definition.kind == ItemKind::Weapon {
-        play_weapon_item_audio(world, owner, item, WeaponAudioAction::Equip);
+        publish_weapon_equipment_event(
+            world,
+            GAMEPLAY_EVENT_WEAPON_EQUIPPED,
+            owner,
+            item,
+            Some(instance),
+        );
     }
     Ok(())
 }
@@ -297,9 +388,21 @@ pub fn select_equipment_slot(
     sync_equipped_weapon_runtime(world, owner);
     if previous_item != Some(item) {
         if let Some(previous_item) = previous_item {
-            play_weapon_item_audio(world, owner, previous_item, WeaponAudioAction::Unequip);
+            publish_weapon_equipment_event(
+                world,
+                GAMEPLAY_EVENT_WEAPON_UNEQUIPPED,
+                owner,
+                previous_item,
+                None,
+            );
         }
-        play_weapon_item_audio(world, owner, item, WeaponAudioAction::Equip);
+        publish_weapon_equipment_event(
+            world,
+            GAMEPLAY_EVENT_WEAPON_EQUIPPED,
+            owner,
+            item,
+            Some(instance),
+        );
     }
     Ok(())
 }
@@ -341,7 +444,13 @@ pub fn unequip_slot(world: &mut World, owner: EntityId, slot: EquipmentSlot) -> 
         select_highest_ranked_equipped_weapon(world, owner);
     }
     sync_equipped_weapon_runtime(world, owner);
-    play_weapon_item_audio(world, owner, item, WeaponAudioAction::Unequip);
+    publish_weapon_equipment_event(
+        world,
+        GAMEPLAY_EVENT_WEAPON_UNEQUIPPED,
+        owner,
+        item,
+        Some(removed),
+    );
     Ok(())
 }
 

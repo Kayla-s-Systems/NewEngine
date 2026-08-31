@@ -19,16 +19,18 @@ mod world_runtime;
 pub use display::{DisplayMode, DisplayVisibility};
 pub use physics::{PhysicsSurface, PhysicsWorldSettings, StaticMeshCollider};
 pub use player::{
-    CharacterBody, CharacterMotionTuning, PlayerAnimationState, PlayerAuthoredAnimationCapabilities, PlayerBraidSecondaryMotionRig,
+    CharacterBody, CharacterMotionTuning, PlayerAnimationState,
+    PlayerAuthoredAnimationCapabilities, PlayerBraidSecondaryMotionRig, PlayerCameraProfile,
     PlayerCharacterPresentation, PlayerCommandFrame, PlayerController, PlayerControllerKind,
     PlayerEvent, PlayerEventBus, PlayerEventKind, PlayerEyeParentFollowRule, PlayerFallState,
-    PlayerFirstPersonBodyBarrierProfile, PlayerFirstPersonCameraAnchor, PlayerFixedPoseHistory,
-    PlayerGroundState, PlayerJointChannels, PlayerJointCopyRule, PlayerJointRotationWeight,
-    PlayerLandingState, PlayerLocomotionAnimation, PlayerLocomotionState, PlayerModelAssignment,
+    PlayerFirstPersonBodyBarrierProfile, PlayerFirstPersonCameraAnchor,
+    PlayerFirstPersonPrimitiveVariant, PlayerFixedPoseHistory, PlayerGroundState,
+    PlayerJointChannels, PlayerJointCopyRule, PlayerJointRotationWeight, PlayerLandingState,
+    PlayerLocomotionAnimation, PlayerLocomotionState, PlayerLookContext, PlayerModelAssignment,
     PlayerModelBinding, PlayerMovementSpeeds, PlayerPaletteFollowRule, PlayerRenderPose,
-    PlayerSkinBinding, PlayerSkinPose, PlayerSkinVertex, PlayerStanceKind, PlayerStanceState,
-    PlayerViewState, PlayerViewVisibility, PlayerViewVisibilityPolicy, PlayerVisualKind,
-    PlayerVisualPart, PlayerWeaponArmIkRigDefinition,
+    PlayerSkinBinding, PlayerSkinPose, PlayerSkinSidecarDefinition, PlayerSkinVertex,
+    PlayerStanceKind, PlayerStanceState, PlayerViewState, PlayerViewVisibility,
+    PlayerViewVisibilityPolicy, PlayerVisualKind, PlayerVisualPart, PlayerWeaponArmIkRigDefinition,
 };
 pub use render_environment::{
     CloudShadowRenderState, EnvironmentDomeRenderState, EnvironmentPostFxState,

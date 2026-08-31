@@ -177,6 +177,7 @@ pub fn tick_frame(
     // Publish it before arm/weapon animation so camera and FPP grip solve consume one frame authority.
     player_model::publish_player_first_person_camera_anchors(world);
     player_model::tick_player_skin_animation(world, frame.dt);
+    player_model::tick_player_skin_sidecars(world);
     equipment_visual::tick_equipped_weapon_visuals(world, primitives, materials, frame.dt);
     weapon_casing::tick_weapon_shell_casing_visuals(world, primitives, materials);
     weapon_animation::tick_equipped_weapon_animations(world, frame.dt);

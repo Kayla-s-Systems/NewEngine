@@ -21,6 +21,12 @@ pub enum VfxGpuParticleKind {
     Smoke = 1,
     Spark = 2,
     Debris = 3,
+    /// Short-lived camera-facing muzzle flame. Kept distinct from generic sparks so the
+    /// renderer can apply a compact non-rectangular procedural coverage fallback.
+    MuzzleFlash = 4,
+    /// Hot central muzzle glow; rendered as a bounded soft billboard rather than near-plane
+    /// intersecting sphere geometry in first person.
+    MuzzleCore = 5,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]

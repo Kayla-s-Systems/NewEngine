@@ -96,7 +96,8 @@ mod transition_tests {
             "transition must make visible progress on the same frame"
         );
         assert_ne!(
-            next[0].translation, [0.0, 0.9, 0.0],
+            next[0].translation,
+            [0.0, 0.9, 0.0],
             "transition must blend, not snap to the destination"
         );
     }
@@ -172,6 +173,10 @@ mod transition_tests {
             Some(TurnInPlaceSlot::Right45)
         );
         assert_eq!(
+            nearest_turn_in_place_slot(65.0_f32.to_radians(), all),
+            Some(TurnInPlaceSlot::Left45)
+        );
+        assert_eq!(
             nearest_turn_in_place_slot(96.0_f32.to_radians(), all),
             Some(TurnInPlaceSlot::Left90)
         );
@@ -179,7 +184,11 @@ mod transition_tests {
             nearest_turn_in_place_slot(-168.0_f32.to_radians(), all),
             Some(TurnInPlaceSlot::Right180)
         );
-        assert_eq!(nearest_turn_in_place_slot(20.0_f32.to_radians(), all), None);
+        assert_eq!(
+            nearest_turn_in_place_slot(20.0_f32.to_radians(), all),
+            Some(TurnInPlaceSlot::Left45)
+        );
+        assert_eq!(nearest_turn_in_place_slot(0.0, all), None);
 
         // Missing 45° content must degrade to the nearest authored step on the same side,
         // never to a rigid world-root turn.
@@ -189,8 +198,57 @@ mod transition_tests {
             Some(TurnInPlaceSlot::Left90)
         );
         assert_eq!(
+            nearest_turn_in_place_slot(70.0_f32.to_radians(), only_left_90),
+            Some(TurnInPlaceSlot::Left90)
+        );
+        assert_eq!(
             nearest_turn_in_place_slot(-90.0_f32.to_radians(), only_left_90),
             None
+        );
+    }
+
+    #[test]
+    fn active_body_turn_never_captures_free_look_and_replans_only_after_opposite_limit_crossing() {
+        let hysteresis = 10.0_f32.to_radians();
+        assert!(
+            !live_view_residual_requires_turn_replan(
+                TurnInPlaceSlot::Left45,
+                4.0_f32.to_radians(),
+                hysteresis,
+            ),
+            "returning inside the authored look envelope must not pop the planted turn step"
+        );
+        assert!(
+            !live_view_residual_requires_turn_replan(
+                TurnInPlaceSlot::Left45,
+                35.0_f32.to_radians(),
+                hysteresis,
+            ),
+            "continuing to look left keeps the current authored left step"
+        );
+        assert!(
+            !live_view_residual_requires_turn_replan(
+                TurnInPlaceSlot::Left45,
+                -8.0_f32.to_radians(),
+                hysteresis,
+            ),
+            "small opposite residual remains inside hysteresis and must not thrash turn direction"
+        );
+        assert!(
+            live_view_residual_requires_turn_replan(
+                TurnInPlaceSlot::Left45,
+                -25.0_f32.to_radians(),
+                hysteresis,
+            ),
+            "free-look crossing the opposite authored limit must re-plan the body turn"
+        );
+        assert!(
+            live_view_residual_requires_turn_replan(
+                TurnInPlaceSlot::Right90,
+                30.0_f32.to_radians(),
+                hysteresis,
+            ),
+            "right turn must likewise yield to live left free-look residual"
         );
     }
 
@@ -236,100 +294,373 @@ mod transition_tests {
         let world = (Quat::from_rotation_y(extracted) * local).normalize_or_identity();
         assert!(world.dot(Quat::IDENTITY).abs() > 0.99999);
     }
+    fn test_look_delta(yaw: f32) -> AuthoredLookJointDelta {
+        let q = Quat::from_rotation_y(yaw);
+        AuthoredLookJointDelta {
+            translation: [0.0; 3],
+            rotation: [q.x, q.y, q.z, q.w],
+            scale_ratio: [1.0; 3],
+        }
+    }
+
+    fn test_look_space() -> AuthoredLookPoseSpace {
+        AuthoredLookPoseSpace {
+            role: "test",
+            joints: vec![2],
+            samples: vec![
+                AuthoredLookSample {
+                    coord: [0.0, 0.0],
+                    deltas: vec![test_look_delta(0.0)],
+                },
+                AuthoredLookSample {
+                    coord: [0.5, 0.0],
+                    deltas: vec![test_look_delta(0.5)],
+                },
+                AuthoredLookSample {
+                    coord: [0.0, 0.5],
+                    deltas: vec![test_look_delta(0.0)],
+                },
+                AuthoredLookSample {
+                    coord: [-0.5, 0.0],
+                    deltas: vec![test_look_delta(-0.5)],
+                },
+                AuthoredLookSample {
+                    coord: [0.0, -0.5],
+                    deltas: vec![test_look_delta(0.0)],
+                },
+            ],
+            triangles: vec![[0, 1, 2], [0, 2, 3], [0, 3, 4], [0, 4, 1]],
+            turn_hysteresis_radians: 0.1,
+        }
+    }
+
     #[test]
-    fn turn_in_place_twists_spine_without_rotating_hips_or_legs() {
+    fn authored_look_range_frame_composes_additive_delta_over_authored_base() {
         use newengine_model_skeleton_api::{ModelSkeletonAnchors, ModelSkeletonJointMetadata};
 
-        let names = [
-            "root",
-            "hips",
-            "spine_a",
-            "spine_b",
-            "neck",
-            "head",
-            "left_foot",
-        ];
-        // Mirror rigs where pelvis and spine are sibling branches under root (Abby/TLOU2 style).
-        let parents = [None, Some(0), Some(0), Some(2), Some(3), Some(4), Some(1)];
-        let joints = names
-            .iter()
-            .enumerate()
-            .map(|(index, name)| ModelSkeletonJointMetadata {
-                index: index as u32,
-                tag: index as u32,
-                name: (*name).to_owned(),
-                parent: parents[index].map(|parent| names[parent].to_owned()),
-                parent_index: parents[index].map(|parent| parent as u32),
-                position_ls: [0.0, if index == 0 { 0.0 } else { 0.2 }, 0.0],
-                rotation_ls: [0.0, 0.0, 0.0, 1.0],
-                scale_ls: [1.0, 1.0, 1.0],
-                flags: Vec::new(),
-            })
-            .collect::<Vec<_>>();
         let skeleton = ModelSkeletonMetadata {
-            source: "turn-in-place-test".to_owned(),
+            source: "authored-look-additive-test".to_owned(),
             source_format: "test".to_owned(),
             container_magic: "TEST".to_owned(),
             byte_len: 0,
             content_hash: String::new(),
             decode_status: "ok".to_owned(),
-            joints,
+            joints: vec![
+                ModelSkeletonJointMetadata {
+                    index: 0,
+                    tag: 0,
+                    name: "root".to_owned(),
+                    parent: None,
+                    parent_index: None,
+                    position_ls: [0.0, 0.0, 0.0],
+                    rotation_ls: [0.0, 0.0, 0.0, 1.0],
+                    scale_ls: [1.0, 1.0, 1.0],
+                    flags: Vec::new(),
+                },
+                ModelSkeletonJointMetadata {
+                    index: 1,
+                    tag: 1,
+                    name: "head".to_owned(),
+                    parent: Some("root".to_owned()),
+                    parent_index: Some(0),
+                    position_ls: [0.0, 0.5, 0.0],
+                    rotation_ls: [0.0, 0.0, 0.0, 1.0],
+                    scale_ls: [1.0, 1.0, 1.0],
+                    flags: Vec::new(),
+                },
+            ],
             anchors: ModelSkeletonAnchors {
                 root: "root".to_owned(),
-                hips: "hips".to_owned(),
+                hips: "root".to_owned(),
                 head: "head".to_owned(),
-                left_hand: "spine_b".to_owned(),
-                right_hand: "spine_b".to_owned(),
-                left_foot: "left_foot".to_owned(),
-                right_foot: "left_foot".to_owned(),
+                left_hand: "head".to_owned(),
+                right_hand: "head".to_owned(),
+                left_foot: "root".to_owned(),
+                right_foot: "root".to_owned(),
                 eye: "head".to_owned(),
-                eye_height: 1.6,
+                eye_height: 1.0,
             },
         };
-        let layers = resolve_body_turn_layers(&skeleton);
-        assert_eq!(
-            layers
-                .iter()
-                .map(|layer| layer.joint_index)
-                .collect::<Vec<_>>(),
-            vec![2, 3, 4]
-        );
-        let weight_sum = layers.iter().map(|layer| layer.weight).sum::<f32>();
-        assert!((weight_sum - 1.0).abs() <= 1.0e-6);
-
-        let mut pose = skeleton
-            .joints
-            .iter()
-            .map(|joint| JointLocalPose {
-                translation: joint.position_ls,
-                rotation: joint.rotation_ls,
-                scale: Some(joint.scale_ls),
-            })
-            .collect::<Vec<_>>();
-        let source_to_model = [
-            1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
+        let animation_runtime =
+            AnimationSkeletonRuntime::compile(&skeleton, Mat4::IDENTITY.to_cols_array())
+                .expect("compile additive look skeleton");
+        let base_rotation = Quat::from_rotation_y(0.25);
+        let base_pose = vec![
+            JointLocalPose {
+                translation: [0.0, 0.0, 0.0],
+                rotation: [0.0, 0.0, 0.0, 1.0],
+                scale: Some([1.0, 1.0, 1.0]),
+            },
+            JointLocalPose {
+                translation: [0.0, 0.75, 0.2],
+                rotation: [
+                    base_rotation.x,
+                    base_rotation.y,
+                    base_rotation.z,
+                    base_rotation.w,
+                ],
+                scale: Some([2.0, 3.0, 4.0]),
+            },
         ];
-        let runtime = AnimationSkeletonRuntime::compile(&skeleton, source_to_model)
-            .expect("compile turn-in-place skeleton");
-        let mut frames = Vec::new();
-        apply_body_turn_pose(
-            &skeleton,
-            &runtime,
-            &layers,
-            &mut pose,
-            &mut frames,
-            60.0_f32.to_radians(),
-        )
-        .expect("apply torso turn");
-        rebuild_model_joint_frames(&runtime, &pose, &mut frames).expect("rebuild turned frames");
+        let delta_rotation = Quat::from_rotation_x(-0.4);
+        let raw_clip = AnimationClip {
+            name: "look-range-add".to_owned(),
+            skeleton_ref: "test".to_owned(),
+            source: "test".to_owned(),
+            duration_seconds: 1.0 / 30.0,
+            sample_rate_hz: 30.0,
+            looped: false,
+            joint_tags: vec![1],
+            events: Vec::new(),
+            poses: vec![JointLocalPose {
+                translation: [0.1, -0.05, 0.025],
+                rotation: [
+                    delta_rotation.x,
+                    delta_rotation.y,
+                    delta_rotation.z,
+                    delta_rotation.w,
+                ],
+                scale: Some([0.5, 2.0, 0.25]),
+            }],
+        };
+        let binding = raw_clip
+            .bind_to_skeleton(&animation_runtime)
+            .expect("bind additive look clip");
+        let clip = PlayerAnimationRuntimeClip {
+            clip_ref: "test@look-range-add".to_owned(),
+            clip: raw_clip.into(),
+            binding,
+            event_cursor: AnimationEventCursor::default(),
+        };
 
-        let hips_forward = frames[1].transform_vector3(-Vec3::Z).normalize_or_zero();
-        let foot_forward = frames[6].transform_vector3(-Vec3::Z).normalize_or_zero();
-        let head_forward = frames[5].transform_vector3(-Vec3::Z).normalize_or_zero();
-        assert!(hips_forward.dot(-Vec3::Z) > 0.99999);
-        assert!(foot_forward.dot(-Vec3::Z) > 0.99999);
-        let expected_head = Quat::from_rotation_y(60.0_f32.to_radians()) * -Vec3::Z;
-        assert!(head_forward.dot(expected_head.normalize_or_zero()) > 0.999);
+        let raw = sample_look_range_raw_frame(&clip, 0, &animation_runtime)
+            .expect("sample additive look frame");
+        let raw_frames = vec![raw.clone()];
+        let channels = vec![(1, look_channel_policy(1, &base_pose, &raw_frames))];
+        let composed = compose_look_range_frame(&base_pose, &raw, &channels);
+        assert_eq!(
+            composed[0], base_pose[0],
+            "untracked root must remain authored base"
+        );
+        assert!((composed[1].translation[0] - 0.1).abs() <= 1.0e-6);
+        assert!((composed[1].translation[1] - 0.70).abs() <= 1.0e-6);
+        assert!((composed[1].translation[2] - 0.225).abs() <= 1.0e-6);
+        let expected_rotation = (base_rotation * delta_rotation).normalize_or_identity();
+        let actual_rotation = look_quat(&composed[1]);
+        assert!(actual_rotation.dot(expected_rotation).abs() > 0.999999);
+        let scale = composed[1].scale.expect("composed scale");
+        assert!((scale[0] - 1.0).abs() <= 1.0e-6);
+        assert!((scale[1] - 6.0).abs() <= 1.0e-6);
+        assert!((scale[2] - 1.0).abs() <= 1.0e-6);
+    }
+
+    #[test]
+    fn authored_look_mixed_absolute_fillers_are_not_reapplied_as_additive_channels() {
+        let base_neck_rotation = Quat::from_rotation_y(0.35);
+        let base_eye_rotation = Quat::from_rotation_x(std::f32::consts::FRAC_PI_2);
+        let base_pose = vec![
+            JointLocalPose {
+                translation: [0.0, -0.003, 0.156],
+                rotation: [
+                    base_neck_rotation.x,
+                    base_neck_rotation.y,
+                    base_neck_rotation.z,
+                    base_neck_rotation.w,
+                ],
+                scale: Some([1.0, 1.0, 1.0]),
+            },
+            JointLocalPose {
+                translation: [0.032, -0.070, 0.055],
+                rotation: [
+                    base_eye_rotation.x,
+                    base_eye_rotation.y,
+                    base_eye_rotation.z,
+                    base_eye_rotation.w,
+                ],
+                scale: Some([1.0, 1.0, 1.0]),
+            },
+        ];
+        let eye_delta_a = Quat::from_rotation_y(-0.25);
+        let eye_delta_b = Quat::from_rotation_y(0.25);
+        let make_raw = |eye_delta: Quat| {
+            vec![
+                // Generic male eyes-look records repeat the absolute bind-local neck channels.
+                // They are fillers and must not be added/multiplied onto the live pose.
+                base_pose[0],
+                JointLocalPose {
+                    // The eye channel is authored around additive neutral instead.
+                    translation: [0.001, 0.0, -0.001],
+                    rotation: [eye_delta.x, eye_delta.y, eye_delta.z, eye_delta.w],
+                    scale: Some([1.0, 1.0, 1.0]),
+                },
+            ]
+        };
+        let raw_frames = vec![make_raw(eye_delta_a), make_raw(eye_delta_b)];
+        let neck_policy = look_channel_policy(0, &base_pose, &raw_frames);
+        let eye_policy = look_channel_policy(1, &base_pose, &raw_frames);
+        assert!(!neck_policy.translation_additive);
+        assert!(!neck_policy.rotation_additive);
+        assert!(!neck_policy.scale_multiplicative);
+        assert!(eye_policy.translation_additive);
+        assert!(eye_policy.rotation_additive);
+
+        let channels = vec![(0, neck_policy), (1, eye_policy)];
+        let composed = compose_look_range_frame(&base_pose, &raw_frames[0], &channels);
+        assert_eq!(
+            composed[0], base_pose[0],
+            "absolute neck filler must stay neutral"
+        );
+        assert!((composed[1].translation[0] - 0.033).abs() <= 1.0e-6);
+        assert!((composed[1].translation[2] - 0.054).abs() <= 1.0e-6);
+        let expected_eye = (base_eye_rotation * eye_delta_a).normalize_or_identity();
+        assert!(look_quat(&composed[1]).dot(expected_eye).abs() > 0.999999);
+    }
+
+    #[test]
+    fn explicit_look_context_overrides_standard_locomotion_and_equipment_selection() {
+        use newengine_engine_runtime::gameplay::{
+            PlayerLocomotionAnimation as L, PlayerLookContext as C,
+        };
+
+        assert_eq!(
+            resolve_authored_look_state(L::CrouchIdle, EquipmentPresentationStance::Aim, C::Prone),
+            AuthoredLookState::Prone
+        );
+        assert_eq!(
+            resolve_authored_look_state(L::Idle, EquipmentPresentationStance::Ready, C::Rope),
+            AuthoredLookState::Rope
+        );
+        assert_eq!(
+            resolve_authored_look_state(
+                L::CrouchWalk,
+                EquipmentPresentationStance::None,
+                C::Standard
+            ),
+            AuthoredLookState::Crouch
+        );
+        assert_eq!(
+            resolve_authored_look_state(L::Idle, EquipmentPresentationStance::Aim, C::Standard),
+            AuthoredLookState::Tense
+        );
+    }
+
+    #[test]
+    fn contextual_look_state_without_authored_range_fails_closed_instead_of_using_relaxed() {
+        let binding = AuthoredLookRuntimeBinding {
+            relaxed: Some(test_look_space()),
+            ..AuthoredLookRuntimeBinding::default()
+        };
+        assert!(binding.body_space(AuthoredLookState::Relaxed).is_some());
+        assert!(binding.body_space(AuthoredLookState::Prone).is_none());
+        assert!(binding.body_space(AuthoredLookState::Rope).is_none());
+        assert!(AuthoredLookState::Prone.contextual());
+        assert!(!AuthoredLookState::Relaxed.contextual());
+    }
+
+    #[test]
+    fn fall_full_body_override_requires_ground_physics_and_semantic_state_to_agree() {
+        use newengine_engine_runtime::gameplay::{
+            PlayerFallState, PlayerGroundState, PlayerLocomotionAnimation,
+        };
+
+        let airborne_fall = PlayerFallState {
+            airborne: true,
+            falling: true,
+            ..PlayerFallState::default()
+        };
+        let airborne = PlayerGroundState {
+            grounded: false,
+            walkable: false,
+            last_fixed_tick: 10,
+            ..PlayerGroundState::default()
+        };
+        assert!(!authoritative_fall_presentation_requested(
+            false,
+            airborne,
+            airborne_fall,
+            PlayerLocomotionAnimation::Walk,
+        ));
+        assert!(authoritative_fall_presentation_requested(
+            false,
+            airborne,
+            airborne_fall,
+            PlayerLocomotionAnimation::Fall,
+        ));
+
+        let grounded = PlayerGroundState {
+            grounded: true,
+            walkable: true,
+            last_fixed_tick: 11,
+            ..PlayerGroundState::default()
+        };
+        assert!(!authoritative_fall_presentation_requested(
+            false,
+            grounded,
+            airborne_fall,
+            PlayerLocomotionAnimation::Fall,
+        ));
+        assert!(!authoritative_fall_presentation_requested(
+            true,
+            airborne,
+            airborne_fall,
+            PlayerLocomotionAnimation::Fall,
+        ));
+    }
+
+    #[test]
+    fn authored_look_pose_space_consumes_view_inside_native_hull() {
+        let space = test_look_space();
+        let binding = AuthoredLookRuntimeBinding {
+            relaxed: Some(space),
+            ..AuthoredLookRuntimeBinding::default()
+        };
+        let projection = binding
+            .projection(AuthoredLookState::Relaxed, 0.2, 0.1)
+            .expect("authored look projection");
+        assert!((projection.body_projected[0] - 0.2).abs() <= 1.0e-5);
+        assert!((projection.body_projected[1] - 0.1).abs() <= 1.0e-5);
+        assert!(projection.residual[0].abs() <= 1.0e-5);
+        assert!(projection.residual[1].abs() <= 1.0e-5);
+    }
+
+    #[test]
+    fn authored_look_pose_space_hands_only_uncovered_residual_to_body_turn() {
+        let space = test_look_space();
+        let binding = AuthoredLookRuntimeBinding {
+            relaxed: Some(space),
+            ..AuthoredLookRuntimeBinding::default()
+        };
+        let projection = binding
+            .projection(AuthoredLookState::Relaxed, 0.9, 0.0)
+            .expect("authored look projection");
+        assert!((projection.body_projected[0] - 0.5).abs() <= 1.0e-5);
+        assert!((projection.residual[0] - 0.4).abs() <= 1.0e-5);
+        assert!(projection.residual[0].abs() > projection.turn_hysteresis_radians);
+    }
+
+    #[test]
+    fn authored_look_pose_space_modifies_only_authored_joints() {
+        let space = test_look_space();
+        let mut pose = vec![
+            JointLocalPose {
+                translation: [0.0; 3],
+                rotation: [0.0, 0.0, 0.0, 1.0],
+                scale: Some([1.0; 3]),
+            };
+            4
+        ];
+        let hips_before = pose[1];
+        let head_before = pose[2];
+        let blend = space.solve([0.25, 0.0]);
+        space.apply_blend(blend, &mut pose);
+        assert_eq!(
+            pose[1], hips_before,
+            "hips are not part of the authored look range"
+        );
+        assert_ne!(
+            pose[2].rotation, head_before.rotation,
+            "authored head joint must receive range delta"
+        );
     }
 
     #[test]

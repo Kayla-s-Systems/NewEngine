@@ -3,9 +3,9 @@
 use newengine_bounds::Bounds;
 use newengine_core::render::Extent2D;
 use newengine_materials::MaterialRef;
+use newengine_math::{Mat4, Vec3};
 use newengine_model_domain_api::{FoliageInstanceRuntime, MeshRenderOptions};
 use newengine_primitives::Primitive;
-use newengine_math::{Mat4, Vec3};
 use newengine_render_feature_api::BoundsSnap;
 use newengine_scene::Scene;
 use newengine_transform::GlobalTransform;

@@ -156,17 +156,35 @@ pub fn step_player_combat(world: &mut World, dt: f32, fixed_tick: u64) {
                             state.empty_latched = true;
                         }
                     } else {
-                        state.ammo_in_magazine -= 1;
-                        state.shot_sequence = state.shot_sequence.wrapping_add(1);
-                        state.cooldown_remaining = tuning.fire_interval;
-                        state.empty_latched = false;
-                        fire_request = Some((state.shot_sequence, state.aiming));
-                        events.push(weapon_event(
-                            WeaponEventKind::Fired,
+                        let shot_sequence = state.shot_sequence.wrapping_add(1);
+                        if let Some((origin, direction)) = shot_origin_and_direction(
+                            world,
                             player,
-                            binding.instance_id,
-                            state.shot_sequence,
-                        ));
+                            tuning,
+                            state.aiming,
+                            shot_sequence,
+                        ) {
+                            // A shot transaction only commits after an authored physical muzzle
+                            // exists. Missing presentation never consumes ammo and never falls back
+                            // to a camera/body origin.
+                            state.ammo_in_magazine -= 1;
+                            state.shot_sequence = shot_sequence;
+                            state.cooldown_remaining = tuning.fire_interval;
+                            state.empty_latched = false;
+                            fire_request = Some((shot_sequence, state.aiming, origin, direction));
+                            events.push(weapon_event(
+                                WeaponEventKind::Fired,
+                                player,
+                                binding.instance_id,
+                                shot_sequence,
+                            ));
+                        } else {
+                            newengine_ulog_api::ulog::warn!(
+                                "weapon fire rejected: shooter={} instance={} reason=physical-muzzle-unavailable",
+                                player.stable_u64(),
+                                binding.instance_id.0,
+                            );
+                        }
                     }
                 } else if !actions.fire_primary_held {
                     state.empty_latched = false;
@@ -175,40 +193,28 @@ pub fn step_player_combat(world: &mut World, dt: f32, fixed_tick: u64) {
                 let _ = world.insert(player, state);
                 persist_equipped_weapon_state(world, player);
 
-                if let Some((shot_sequence, aiming)) = fire_request {
-                    if let Some((origin, direction)) =
-                        shot_origin_and_direction(world, player, tuning, aiming, shot_sequence)
-                    {
-                        let pending = PendingHitscan {
-                            query_seq: hitscan_query_seq(player, shot_sequence),
-                            weapon_instance_id: binding.instance_id,
-                            attack_kind: WeaponAttackKind::Firearm,
-                            shot_sequence,
-                            origin,
-                            direction,
-                            range: tuning.range,
-                            damage: tuning.damage * combat_policy.damage_multiplier,
-                        };
-                        let _ = world.insert(player, pending);
-                        newengine_fps_projectile_runtime::spawn_weapon_shot_fx(
-                            world,
-                            player,
-                            shot_sequence,
-                            origin,
-                            direction,
-                            tuning.range,
-                        );
-                        newengine_ulog_api::ulog::info!(
-                            "weapon firearm attack: shooter={} instance={} attack={} ammo_after={} origin={:?} direction={:?}",
-                            player.stable_u64(),
-                            binding.instance_id.0,
-                            shot_sequence,
-                            state.ammo_in_magazine,
-                            origin,
-                            direction,
-                        );
-                        apply_recoil(world, player, binding.instance_id, tuning, aiming, shot_sequence);
-                    }
+                if let Some((shot_sequence, aiming, origin, direction)) = fire_request {
+                    let pending = PendingHitscan {
+                        query_seq: hitscan_query_seq(player, shot_sequence),
+                        weapon_instance_id: binding.instance_id,
+                        attack_kind: WeaponAttackKind::Firearm,
+                        shot_sequence,
+                        origin,
+                        direction,
+                        range: tuning.range,
+                        damage: tuning.damage * combat_policy.damage_multiplier,
+                    };
+                    let _ = world.insert(player, pending);
+                    newengine_ulog_api::ulog::info!(
+                        "weapon firearm attack: shooter={} instance={} attack={} ammo_after={} origin={:?} direction={:?}",
+                        player.stable_u64(),
+                        binding.instance_id.0,
+                        shot_sequence,
+                        state.ammo_in_magazine,
+                        origin,
+                        direction,
+                    );
+                    apply_recoil(world, player, binding.instance_id, tuning, aiming, shot_sequence);
                 }
             } else if let Some(melee) = binding.weapon.melee {
                 let melee = melee.sanitized();
@@ -265,16 +271,6 @@ pub fn step_player_combat(world: &mut World, dt: f32, fixed_tick: u64) {
             }
 
             for event in events {
-                let action = match event.kind {
-                    WeaponEventKind::Fired => Some(WeaponAudioAction::Fire),
-                    WeaponEventKind::Empty => Some(WeaponAudioAction::Empty),
-                    WeaponEventKind::ReloadStarted => Some(WeaponAudioAction::ReloadStart),
-                    WeaponEventKind::ReloadCompleted => Some(WeaponAudioAction::ReloadComplete),
-                    WeaponEventKind::MeleeAttacked | WeaponEventKind::Hit => None,
-                };
-                if let Some(action) = action {
-                    play_weapon_item_audio(world, event.shooter, binding.item, action);
-                }
                 emit_weapon_event(world, event);
             }
         }
@@ -385,7 +381,94 @@ fn weapon_event(
     }
 }
 
+fn semantic_weapon_event_id(kind: WeaponEventKind) -> &'static str {
+    match kind {
+        WeaponEventKind::Fired => GAMEPLAY_EVENT_WEAPON_FIRED,
+        WeaponEventKind::MeleeAttacked => GAMEPLAY_EVENT_WEAPON_MELEE_ATTACKED,
+        WeaponEventKind::Empty => GAMEPLAY_EVENT_WEAPON_EMPTY,
+        WeaponEventKind::ReloadStarted => GAMEPLAY_EVENT_WEAPON_RELOAD_STARTED,
+        WeaponEventKind::ReloadCompleted => GAMEPLAY_EVENT_WEAPON_RELOAD_COMPLETED,
+        WeaponEventKind::Hit => GAMEPLAY_EVENT_WEAPON_HIT,
+    }
+}
+
+#[inline]
+fn vec3_payload(value: Vec3) -> [f32; 3] {
+    [value.x, value.y, value.z]
+}
+
+fn publish_weapon_project_event(world: &mut World, event: &WeaponEvent) {
+    let binding = world
+        .get::<EquippedWeaponBinding>(event.shooter)
+        .copied()
+        .filter(|binding| binding.instance_id == event.weapon_instance_id);
+    let item = binding.map(|binding| binding.item);
+    let item_name = item.and_then(|item| {
+        world
+            .resource::<ItemCatalog>()
+            .and_then(|catalog| catalog.get(item))
+            .map(|definition| definition.name.clone())
+    });
+    let state = world.get::<PlayerWeaponState>(event.shooter).copied();
+    let muzzle = active_equipped_weapon_muzzle(world, event.shooter);
+    let pending = matches!(
+        event.kind,
+        WeaponEventKind::Fired | WeaponEventKind::MeleeAttacked | WeaponEventKind::Hit
+    )
+    .then(|| world.get::<PendingHitscan>(event.shooter).copied())
+    .flatten()
+    .filter(|pending| {
+        pending.weapon_instance_id == event.weapon_instance_id
+            && pending.shot_sequence == event.shot_sequence
+    });
+    let attack_kind = pending.map(|pending| match pending.attack_kind {
+        WeaponAttackKind::Firearm => "firearm",
+        WeaponAttackKind::Melee => "melee",
+    });
+
+    let payload = serde_json::json!({
+        "schema": "newengine.gameplay.weapon_event.v1",
+        "version": 1,
+        "weapon_instance_id": event.weapon_instance_id.0,
+        "weapon_item_id": item.map(|item| item.raw()),
+        "weapon": item_name,
+        "shot_sequence": event.shot_sequence,
+        "attack_kind": attack_kind,
+        "target": event.target.map(EntityId::stable_u64),
+        "damage": if event.damage > 0.0 {
+            event.damage
+        } else {
+            pending.map(|pending| pending.damage).unwrap_or(0.0)
+        },
+        "point": vec3_payload(event.point),
+        "normal": vec3_payload(event.normal),
+        "muzzle_position": muzzle.map(|muzzle| vec3_payload(muzzle.position)),
+        "muzzle_forward": muzzle.map(|muzzle| vec3_payload(muzzle.forward)),
+        "shot_origin": pending.map(|pending| vec3_payload(pending.origin)),
+        "shot_direction": pending.map(|pending| vec3_payload(pending.direction)),
+        "range": pending.map(|pending| pending.range),
+        "aiming": state.map(|state| state.aiming),
+        "ammo_in_magazine": state.map(|state| state.ammo_in_magazine),
+        "reserve_ammo": state.map(|state| state.reserve_ammo),
+    });
+
+    if let Err(error) = emit_gameplay_event(
+        world,
+        semantic_weapon_event_id(event.kind),
+        Some(event.shooter),
+        payload,
+    ) {
+        newengine_ulog_api::ulog::warn!(
+            "weapon semantic event rejected: event='{}' shooter={} err='{}'",
+            semantic_weapon_event_id(event.kind),
+            event.shooter.stable_u64(),
+            error,
+        );
+    }
+}
+
 pub(super) fn emit_weapon_event(world: &mut World, event: WeaponEvent) {
+    publish_weapon_project_event(world, &event);
     if world.resource::<WeaponEventBus>().is_none() {
         world.insert_resource(WeaponEventBus::default());
     }
@@ -393,7 +476,6 @@ pub(super) fn emit_weapon_event(world: &mut World, event: WeaponEvent) {
         bus.emit(event);
     }
 }
-
 pub(super) fn emit_interaction_event(world: &mut World, event: InteractionEvent) {
     if world.resource::<InteractionEventBus>().is_none() {
         world.insert_resource(InteractionEventBus::default());

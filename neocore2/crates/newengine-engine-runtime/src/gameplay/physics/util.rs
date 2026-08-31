@@ -24,6 +24,13 @@ pub(super) fn shape_to_dto(shape: CollisionShapeDesc) -> CollisionShapeDto {
             radius,
             half_height,
         },
+        CollisionShapeDesc::Cylinder {
+            radius,
+            half_height,
+        } => CollisionShapeDto::Cylinder {
+            radius,
+            half_height,
+        },
     }
 }
 

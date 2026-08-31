@@ -42,23 +42,48 @@ impl Default for PhysicsWorldSettings {
     }
 }
 
-/// Gameplay-facing classification attached to collidable ECS entities.
-/// Physics backends remain material-agnostic; footsteps, impacts and VFX resolve this component
-/// from the stable entity key returned by physics queries/contact events.
+/// Gameplay-facing project-authored surface semantics attached to collidable ECS entities.
+/// Physics backends remain material-agnostic. Engine/product capabilities request semantic
+/// surface signals (for example `contact`, `scuff`, `landing`) and the project maps those signals
+/// to arbitrary gameplay event ids. No audio/VFX/script naming convention exists here.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PhysicsSurface {
+    /// Opaque project-owned surface identity used only as event/debug context.
     pub id: String,
-    pub footstep_event: String,
-    pub landing_event: String,
+    /// signal/capability id -> arbitrary project gameplay event id.
+    pub event_bindings: std::collections::BTreeMap<String, String>,
 }
 
 impl Default for PhysicsSurface {
     fn default() -> Self {
         Self {
-            id: "surface.default".to_owned(),
-            footstep_event: "audio.footstep.default".to_owned(),
-            landing_event: "audio.landing.default".to_owned(),
+            id: String::new(),
+            event_bindings: std::collections::BTreeMap::new(),
         }
+    }
+}
+
+impl PhysicsSurface {
+    #[inline]
+    pub fn event_for(&self, signal: &str) -> Option<&str> {
+        let signal = signal.trim();
+        if signal.is_empty() {
+            return None;
+        }
+        self.event_bindings
+            .iter()
+            .find(|(key, _)| key.eq_ignore_ascii_case(signal))
+            .map(|(_, value)| value.trim())
+            .filter(|value| !value.is_empty())
+    }
+
+    pub fn with_event(mut self, signal: impl Into<String>, event_id: impl Into<String>) -> Self {
+        let signal = signal.into();
+        let event_id = event_id.into();
+        if !signal.trim().is_empty() && !event_id.trim().is_empty() {
+            self.event_bindings.insert(signal, event_id);
+        }
+        self
     }
 }
 

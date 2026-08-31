@@ -51,14 +51,7 @@ fn normalize_project_relative_path(value: &str) -> Option<String> {
     Some(normalized)
 }
 
-fn runtime_logical_path_from_output(
-    output: &str,
-    explicit_logical_path: Option<&str>,
-) -> Option<String> {
-    if let Some(explicit) = explicit_logical_path.and_then(normalize_project_relative_path) {
-        return Some(explicit);
-    }
-
+fn legacy_runtime_logical_path_from_output(output: &str) -> Option<String> {
     let output = normalize_project_relative_path(output)?;
     let (root, rest) = output
         .split_once('/')
@@ -79,16 +72,42 @@ fn runtime_logical_path_from_output(
     Some(output)
 }
 
-fn collect_build_plan_aliases(value: &serde_json::Value, aliases: &mut BTreeMap<String, String>) {
+fn build_plan_has_explicit_logical_paths(value: &serde_json::Value) -> bool {
+    match value {
+        serde_json::Value::Object(object) => {
+            object
+                .get("logical_path")
+                .and_then(|value| value.as_str())
+                .and_then(normalize_project_relative_path)
+                .is_some()
+                || object.values().any(build_plan_has_explicit_logical_paths)
+        }
+        serde_json::Value::Array(values) => {
+            values.iter().any(build_plan_has_explicit_logical_paths)
+        }
+        _ => false,
+    }
+}
+
+fn collect_build_plan_aliases(
+    value: &serde_json::Value,
+    aliases: &mut BTreeMap<String, String>,
+    allow_legacy_output_inference: bool,
+) {
     match value {
         serde_json::Value::Object(object) => {
             let source = object.get("source").and_then(|value| value.as_str());
             let output = object.get("output").and_then(|value| value.as_str());
             if let (Some(source), Some(output)) = (source, output) {
-                let logical_path = runtime_logical_path_from_output(
-                    output,
-                    object.get("logical_path").and_then(|value| value.as_str()),
-                );
+                let explicit_logical_path = object
+                    .get("logical_path")
+                    .and_then(|value| value.as_str())
+                    .and_then(normalize_project_relative_path);
+                let logical_path = explicit_logical_path.or_else(|| {
+                    allow_legacy_output_inference
+                        .then(|| legacy_runtime_logical_path_from_output(output))
+                        .flatten()
+                });
                 let source_path = normalize_project_relative_path(source);
                 if let (Some(logical_path), Some(source_path)) = (logical_path, source_path) {
                     if source_path
@@ -101,12 +120,12 @@ fn collect_build_plan_aliases(value: &serde_json::Value, aliases: &mut BTreeMap<
                 }
             }
             for child in object.values() {
-                collect_build_plan_aliases(child, aliases);
+                collect_build_plan_aliases(child, aliases, allow_legacy_output_inference);
             }
         }
         serde_json::Value::Array(values) => {
             for child in values {
-                collect_build_plan_aliases(child, aliases);
+                collect_build_plan_aliases(child, aliases, allow_legacy_output_inference);
             }
         }
         _ => {}
@@ -204,14 +223,20 @@ fn discover_convention_aliases(
 fn discover_project_source_aliases(project_root: &Path) -> Result<Vec<(String, String)>, String> {
     let mut aliases = BTreeMap::new();
     let plan_path = ProjectPaths::new(project_root.to_path_buf()).asset_build_plan_path();
+    let mut project_defined_aliases = false;
     if plan_path.is_file() {
         let bytes = std::fs::read(&plan_path)
             .map_err(|error| format!("read '{}': {error}", plan_path.display()))?;
         let plan: serde_json::Value = serde_json::from_slice(&bytes)
             .map_err(|error| format!("parse '{}': {error}", plan_path.display()))?;
-        collect_build_plan_aliases(&plan, &mut aliases);
+        project_defined_aliases = build_plan_has_explicit_logical_paths(&plan);
+        collect_build_plan_aliases(&plan, &mut aliases, !project_defined_aliases);
     }
-    discover_convention_aliases(project_root, &mut aliases)?;
+    // Once a project authors even one explicit logical path, its build plan owns the namespace.
+    // We intentionally do not synthesize extra aliases from filenames/extensions/directories.
+    if !project_defined_aliases {
+        discover_convention_aliases(project_root, &mut aliases)?;
+    }
     Ok(aliases.into_iter().collect())
 }
 
@@ -285,9 +310,9 @@ pub fn mount_content_registry_best_effort(
         }
     }
 
-    // Source companions are discovered from the selected project layout, never
-    // from a global gameAssets directory. The build plan is authoritative for
-    // non-trivial output names; bounded convention scanning covers direct pairs.
+    // Source companions are discovered from the selected project only. An authored
+    // build-plan logical_path makes the project namespace authoritative. Filename/
+    // directory inference exists only for legacy plans that author no logical paths.
     for (project_root, priority) in discover_project_source_roots(registry) {
         let aliases = match discover_project_source_aliases(&project_root) {
             Ok(aliases) => aliases,
@@ -348,36 +373,60 @@ mod tests {
     }
 
     #[test]
-    fn build_plan_aliases_follow_current_project_layout() {
+    fn build_plan_aliases_are_project_defined_when_logical_paths_exist() {
         let plan = serde_json::json!({
             "models": [{
                 "source": "Source/models/hero.glb",
-                "output": "Content/models/hero.ydd"
+                "output": "Anything/cache/blob.bin",
+                "logical_path": "avatars/main/body"
             }],
             "definitions": [{
                 "source": "Source/definitions/hero.ytyp.xml",
-                "output": "Definitions/hero.ytyp"
+                "output": "Build/out/definition.bin",
+                "logical_path": "gameplay/characters/hero"
             }],
             "scripts": [{
                 "source": "Source/scripts/game.lua",
-                "output": "Scripts/game.ysc",
-                "logical_path": "scripts/game.ysc"
+                "output": "Generated/module.bin",
+                "logical_path": "logic/bootstrap"
             }]
         });
+        assert!(build_plan_has_explicit_logical_paths(&plan));
         let mut aliases = BTreeMap::new();
-        collect_build_plan_aliases(&plan, &mut aliases);
+        collect_build_plan_aliases(&plan, &mut aliases, false);
         assert_eq!(
-            aliases.get("models/hero.ydd").map(String::as_str),
+            aliases.get("avatars/main/body").map(String::as_str),
             Some("Source/models/hero.glb")
         );
         assert_eq!(
-            aliases.get("definitions/hero.ytyp").map(String::as_str),
+            aliases.get("gameplay/characters/hero").map(String::as_str),
             Some("Source/definitions/hero.ytyp.xml")
         );
         assert_eq!(
-            aliases.get("scripts/game.ysc").map(String::as_str),
+            aliases.get("logic/bootstrap").map(String::as_str),
             Some("Source/scripts/game.lua")
         );
+        assert_eq!(aliases.len(), 3);
+    }
+
+    #[test]
+    fn explicit_logical_paths_disable_legacy_output_inference() {
+        let plan = serde_json::json!({
+            "explicit": {
+                "source": "Source/a.custom",
+                "output": "Content/a.ydd",
+                "logical_path": "project/a"
+            },
+            "implicit": {
+                "source": "Source/b.custom",
+                "output": "Content/b.ydd"
+            }
+        });
+        let mut aliases = BTreeMap::new();
+        collect_build_plan_aliases(&plan, &mut aliases, false);
+        assert_eq!(aliases.get("project/a").map(String::as_str), Some("Source/a.custom"));
+        assert!(!aliases.contains_key("b.ydd"));
+        assert_eq!(aliases.len(), 1);
     }
 
     #[test]

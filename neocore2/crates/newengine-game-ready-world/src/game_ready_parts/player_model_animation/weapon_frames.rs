@@ -176,39 +176,6 @@ pub(crate) fn player_right_hand_prop_frame(
     }
 }
 
-#[inline]
-fn calibrated_first_person_eye_height(
-    body: newengine_engine_runtime::gameplay::CharacterBody,
-    stance_eye_height: f32,
-    model_feet_to_eye_height: Option<f32>,
-) -> f32 {
-    let body = body.sanitized();
-    let stance_eye_height = if stance_eye_height.is_finite() {
-        stance_eye_height.clamp(0.05, 12.0)
-    } else {
-        body.standing_eye_height
-    };
-    let Some(feet_to_eye) =
-        model_feet_to_eye_height.filter(|height| height.is_finite() && *height > 0.05)
-    else {
-        return stance_eye_height;
-    };
-
-    // PlayerActor is the capsule center. Convert the model's feet->eye measurement into the same
-    // root-relative space, then blend that calibration out as the authored crouch eye height takes
-    // over. This keeps one generic camera contract across differently-proportioned skeletons.
-    let capsule_foot_offset = body.standing_half_height + body.radius;
-    let model_standing_eye = (feet_to_eye - capsule_foot_offset).clamp(0.05, 12.0);
-    let stance_span = body.standing_eye_height - body.crouched_eye_height;
-    let standing_weight = if stance_span.abs() > 1.0e-5 {
-        ((stance_eye_height - body.crouched_eye_height) / stance_span).clamp(0.0, 1.0)
-    } else {
-        1.0
-    };
-    let correction = (model_standing_eye - body.standing_eye_height).clamp(-0.12, 0.12);
-    stance_eye_height + correction * standing_weight
-}
-
 pub(crate) fn publish_player_first_person_camera_anchors(world: &mut newengine_ecs::World) {
     // FPP camera position is gameplay-owned, not a child of animated eye/head joints. Locomotion
     // may move the visible skull substantially; sampling that motion directly makes the camera
@@ -242,16 +209,17 @@ pub(crate) fn publish_player_first_person_camera_anchors(world: &mut newengine_e
             .map(|state| state.current_eye_height)
             .filter(|height| height.is_finite() && *height > 0.01)
             .unwrap_or(body.standing_eye_height);
-        let model_feet_to_eye_height = world
-            .get::<newengine_engine_runtime::gameplay::PlayerModelBinding>(player)
-            .map(|binding| binding.feet_to_eye_height);
-        let eye_height =
-            calibrated_first_person_eye_height(body, stance_eye_height, model_feet_to_eye_height);
-        // Keep the gameplay camera at the front of the authored head envelope instead of
-        // leaving it near the skull centre. Weapon placement is camera-space-owned now, so
-        // this clearance no longer drags the rifle or hands with it. Scale from the generic
-        // visual envelope and keep a conservative human-sized bound for malformed content.
-        let face_forward_clearance = (body.visual_radius * 0.24).clamp(0.085, 0.120);
+        // Eye height is authored by project character/camera data. Do not re-fit the camera from
+        // current model proportions: changing a model must not silently move the gameplay camera.
+        let eye_height = stance_eye_height;
+        // Forward eye clearance is project-authored camera data. The avatar provider publishes
+        // only the resolved render-cadence anchor; it does not invent a game-specific camera offset.
+        let face_forward_clearance = world
+            .get::<newengine_engine_runtime::gameplay::PlayerCameraProfile>(player)
+            .copied()
+            .unwrap_or_default()
+            .sanitized()
+            .first_person_forward_clearance;
         let eye_center_ws = actor_position + Vec3::Y * eye_height;
         if !eye_center_ws.is_finite() {
             continue;

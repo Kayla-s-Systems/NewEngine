@@ -1,8 +1,10 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 mod environment;
+mod orchestration;
 mod streaming;
 pub use environment::*;
+pub use orchestration::*;
 pub use streaming::*;
 
 use serde::{Deserialize, Serialize};
@@ -43,6 +45,7 @@ pub const AUDIO_SERVICE_METHOD_STOP_VOICE_JSON_V1: &str = "stop_voice_json_v1";
 pub const AUDIO_SERVICE_METHOD_SET_VOICE_JSON_V1: &str = "set_voice_json_v1";
 pub const AUDIO_SERVICE_METHOD_SET_LISTENER_JSON_V1: &str = "set_listener_json_v1";
 pub const AUDIO_SERVICE_METHOD_SET_BUS_GAIN_JSON_V1: &str = "set_bus_gain_json_v1";
+pub const AUDIO_SERVICE_METHOD_SET_VOICE_BUDGETS_JSON_V1: &str = "set_voice_budgets_json_v1";
 pub const AUDIO_SERVICE_METHOD_DIAGNOSTICS_JSON_V1: &str = "diagnostics_json_v1";
 
 pub const AUDIO_REQUIRED_METHODS_V1: &[&str] = &[
@@ -64,6 +67,9 @@ pub const AUDIO_PLAYBACK_METHODS_V1: &[&str] = &[
     AUDIO_SERVICE_METHOD_SET_BUS_GAIN_JSON_V1,
     AUDIO_SERVICE_METHOD_DIAGNOSTICS_JSON_V1,
 ];
+
+pub const AUDIO_VOICE_POLICY_METHODS_V2: &[&str] =
+    &[AUDIO_SERVICE_METHOD_SET_VOICE_BUDGETS_JSON_V1];
 
 pub const AUDIO_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec =
     newengine_service_api::BackendServiceSpec::new(
@@ -141,6 +147,7 @@ impl AudioServiceInfo {
         let mut methods = AUDIO_REQUIRED_METHODS_V1
             .iter()
             .chain(AUDIO_PLAYBACK_METHODS_V1.iter())
+            .chain(AUDIO_VOICE_POLICY_METHODS_V2.iter())
             .map(|method| (*method).to_owned())
             .collect::<Vec<_>>();
         methods.sort();
@@ -157,7 +164,12 @@ impl AudioServiceInfo {
                 "spatial-audio".to_owned(),
                 "clip-cache".to_owned(),
                 "voice-budget".to_owned(),
+                "voice-policy-v2".to_owned(),
+                "reserved-voice-budgets".to_owned(),
                 "voice-virtualization".to_owned(),
+                "stream-logical-virtualization".to_owned(),
+                "yscd-sound-graph-v1".to_owned(),
+                "sound-graph-trigger-parameters".to_owned(),
                 "authored-attenuation".to_owned(),
                 "environment-state".to_owned(),
                 "reverb-sends".to_owned(),
@@ -847,6 +859,127 @@ impl AudioSpatialParams {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AudioConcurrencyScope {
+    #[default]
+    Global,
+    Object,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AudioVoiceStealRule {
+    RejectNew,
+    #[default]
+    LowerPriorityThenOldest,
+    Oldest,
+    Quietest,
+    Farthest,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AudioVoicePolicy {
+    pub group: String,
+    pub limit: usize,
+    pub scope: AudioConcurrencyScope,
+    pub steal_rule: AudioVoiceStealRule,
+    /// Opaque project-authored physical-budget class. Empty means the shared pool.
+    pub budget: String,
+    pub priority: i32,
+}
+
+impl Default for AudioVoicePolicy {
+    fn default() -> Self {
+        Self {
+            group: String::new(),
+            limit: 1,
+            scope: AudioConcurrencyScope::Global,
+            steal_rule: AudioVoiceStealRule::LowerPriorityThenOldest,
+            budget: String::new(),
+            priority: 0,
+        }
+    }
+}
+
+impl AudioVoicePolicy {
+    pub fn sanitized(mut self) -> Result<Self, String> {
+        self.group = self.group.trim().to_owned();
+        self.budget = self.budget.trim().to_ascii_lowercase();
+        if self.group.len() > 256 {
+            return Err("audio concurrency group exceeds 256 bytes".to_owned());
+        }
+        if self.budget.len() > 256 {
+            return Err("audio voice budget id exceeds 256 bytes".to_owned());
+        }
+        self.limit = self.limit.clamp(1, 4096);
+        self.priority = self.priority.clamp(-100_000, 100_000);
+        Ok(self)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AudioVoiceBudgetReservation {
+    pub id: String,
+    pub reserved_physical_voices: usize,
+}
+
+impl Default for AudioVoiceBudgetReservation {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            reserved_physical_voices: 1,
+        }
+    }
+}
+
+impl AudioVoiceBudgetReservation {
+    pub fn sanitized(mut self) -> Result<Self, String> {
+        self.id = self.id.trim().to_ascii_lowercase();
+        if self.id.is_empty() || self.id.len() > 256 {
+            return Err("audio voice budget id must contain 1..=256 bytes".to_owned());
+        }
+        self.reserved_physical_voices = self.reserved_physical_voices.clamp(1, 4096);
+        Ok(self)
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AudioVoiceBudgetConfig {
+    pub reservations: Vec<AudioVoiceBudgetReservation>,
+}
+
+impl AudioVoiceBudgetConfig {
+    pub fn sanitized(mut self) -> Result<Self, String> {
+        let mut ids = std::collections::BTreeSet::new();
+        let mut reservations = Vec::with_capacity(self.reservations.len());
+        for reservation in self.reservations {
+            let reservation = reservation.sanitized()?;
+            let key = reservation.id.to_ascii_lowercase();
+            if !ids.insert(key) {
+                return Err(format!("duplicate audio voice budget '{}'", reservation.id));
+            }
+            reservations.push(reservation);
+        }
+        reservations.sort_by(|a, b| a.id.cmp(&b.id));
+        self.reservations = reservations;
+        Ok(self)
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AudioVoiceBudgetAck {
+    pub accepted: bool,
+    pub max_physical_voices: usize,
+    #[serde(default)]
+    pub reservations: std::collections::BTreeMap<String, usize>,
+    #[serde(default)]
+    pub message: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AudioPlayRequest {
     #[serde(default = "protocol_version_one")]
@@ -906,6 +1039,12 @@ pub struct AudioPlayAck {
     pub provider: String,
     #[serde(default)]
     pub voice_id: Option<u64>,
+    /// All physical/logical provider voices owned by this accepted play operation.
+    /// `voice_id` remains the compatibility primary handle. Layered cues populate
+    /// this collection so higher-level AudioInstance lifetime can stop/update the
+    /// complete cue rather than leaking secondary layers.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub voice_ids: Vec<u64>,
     #[serde(default)]
     pub message: String,
     /// True when the logical voice was accepted but currently owns no physical
@@ -1151,6 +1290,12 @@ pub struct SoundCue {
     pub bus: AudioBus,
     pub looping: bool,
     pub concurrency_group: String,
+    /// Maximum simultaneous logical cue instances in the selected scope.
+    pub concurrency_limit: usize,
+    pub concurrency_scope: AudioConcurrencyScope,
+    pub steal_rule: AudioVoiceStealRule,
+    /// Opaque project-authored physical voice budget class.
+    pub voice_budget: String,
     pub priority: i32,
     /// Number of recently selected clips excluded from the next weighted draw.
     /// Zero preserves unconstrained weighted random selection.
@@ -1169,6 +1314,10 @@ impl Default for SoundCue {
             bus: AudioBus::Sfx,
             looping: false,
             concurrency_group: String::new(),
+            concurrency_limit: 1,
+            concurrency_scope: AudioConcurrencyScope::Global,
+            steal_rule: AudioVoiceStealRule::LowerPriorityThenOldest,
+            voice_budget: String::new(),
             priority: 0,
             repeat_avoidance: 0,
             spatial_policy: SoundCueSpatialPolicy::Inherit,
@@ -1193,10 +1342,36 @@ impl SoundCue {
         }
         self.gain_range = sanitize_range(self.gain_range, 0.0, 4.0, [1.0, 1.0]);
         self.pitch_range = sanitize_range(self.pitch_range, 0.05, 4.0, [1.0, 1.0]);
-        self.concurrency_group = self.concurrency_group.trim().to_owned();
+        let policy = AudioVoicePolicy {
+            group: self.concurrency_group,
+            limit: self.concurrency_limit,
+            scope: self.concurrency_scope,
+            steal_rule: self.steal_rule,
+            budget: self.voice_budget,
+            priority: self.priority,
+        }
+        .sanitized()?;
+        self.concurrency_group = policy.group;
+        self.concurrency_limit = policy.limit;
+        self.concurrency_scope = policy.scope;
+        self.steal_rule = policy.steal_rule;
+        self.voice_budget = policy.budget;
+        self.priority = policy.priority;
         self.repeat_avoidance = self.repeat_avoidance.min(64);
         self.attenuation = self.attenuation.map(AudioAttenuationSettings::sanitized);
         Ok(self)
+    }
+
+    #[inline]
+    pub fn voice_policy(&self) -> AudioVoicePolicy {
+        AudioVoicePolicy {
+            group: self.concurrency_group.clone(),
+            limit: self.concurrency_limit,
+            scope: self.concurrency_scope,
+            steal_rule: self.steal_rule,
+            budget: self.voice_budget.clone(),
+            priority: self.priority,
+        }
     }
 }
 
@@ -1211,10 +1386,16 @@ pub struct AudioCuePlayRequest {
     /// Gameplay may use this for physically derived contact energy without selecting clips.
     pub pitch: f32,
     pub seed: Option<u64>,
+    /// Opaque owner/object identity used only when an authored concurrency policy has object scope.
+    #[serde(default)]
+    pub scope_id: Option<u64>,
     #[serde(default)]
     pub acoustic: AudioAcousticState,
     #[serde(default)]
     pub environment: AudioEnvironmentState,
+    /// Trigger-time project parameters consumed by YSCD SoundGraph. Names are opaque.
+    #[serde(default)]
+    pub parameters: AudioParameterSet,
 }
 
 impl Default for AudioCuePlayRequest {
@@ -1226,8 +1407,10 @@ impl Default for AudioCuePlayRequest {
             gain: 1.0,
             pitch: 1.0,
             seed: None,
+            scope_id: None,
             acoustic: AudioAcousticState::clear(),
             environment: AudioEnvironmentState::clear(),
+            parameters: AudioParameterSet::default(),
         }
     }
 }
@@ -1246,8 +1429,10 @@ impl AudioCuePlayRequest {
         self.gain = sanitize_gain(self.gain);
         self.pitch = sanitize_speed(self.pitch);
         self.position = self.position.map(sanitize_vec3);
+        self.scope_id = self.scope_id.filter(|id| *id != 0);
         self.acoustic = self.acoustic.sanitized();
         self.environment = self.environment.sanitized();
+        self.parameters = self.parameters.sanitized();
         self
     }
 }
@@ -1271,6 +1456,8 @@ pub struct AudioDiagnostics {
     #[serde(default)]
     pub max_physical_voices: usize,
     #[serde(default)]
+    pub voice_budget_reservations: std::collections::BTreeMap<String, usize>,
+    #[serde(default)]
     pub attenuated_voices: usize,
     #[serde(default)]
     pub obstructed_voices: usize,
@@ -1292,8 +1479,19 @@ pub struct AudioDiagnostics {
     /// Hard bound for simultaneously resident native room late-field processors.
     #[serde(default)]
     pub max_room_buses: usize,
+    /// Logical long-form stream voices (physical + virtual).
     #[serde(default)]
     pub active_streams: usize,
+    #[serde(default)]
+    pub physical_streams: usize,
+    #[serde(default)]
+    pub virtual_streams: usize,
+    /// Logical -> physical stream materializations, including first realization.
+    #[serde(default)]
+    pub stream_promotions: u64,
+    /// Physical -> logical-only transitions caused by arbitration/rematerialization.
+    #[serde(default)]
+    pub stream_demotions: u64,
     #[serde(default)]
     pub stream_buffered_frames: usize,
     #[serde(default)]
@@ -1306,6 +1504,12 @@ pub struct AudioDiagnostics {
     pub stream_compressed_bytes_fetched: u64,
     #[serde(default)]
     pub stream_seek_operations: u64,
+    /// Decoded/validated YSCD SoundGraphs currently resident in the cue cache.
+    #[serde(default)]
+    pub cached_sound_graphs: usize,
+    /// Persistent Sequence cursor states, scoped by cue/node/object.
+    #[serde(default)]
+    pub sound_graph_sequence_states: usize,
     pub cached_clips: usize,
     pub cached_bytes: usize,
     pub listener: AudioListenerState,

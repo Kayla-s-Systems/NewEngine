@@ -20,5 +20,7 @@ newengine-sim = { path = "../newengine-sim" }
 newengine-transform = { path = "../newengine-transform" }
 newengine-ulog-api = { path = "../newengine-ulog-api" }
 
+serde_json = "1"
+
 [dev-dependencies]
 newengine-fps-content-runtime = { path = "../newengine-fps-content-runtime", features = ["test-support"] }

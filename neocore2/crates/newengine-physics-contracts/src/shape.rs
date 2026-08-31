@@ -6,6 +6,8 @@ pub enum CollisionShapeDesc {
     Box { half_extents: [f32; 3] },
     Sphere { radius: f32 },
     Capsule { radius: f32, half_height: f32 },
+    /// Solid cylinder aligned to local +Y/-Y.
+    Cylinder { radius: f32, half_height: f32 },
 }
 
 impl Default for CollisionShapeDesc {
@@ -38,6 +40,13 @@ impl CollisionShapeDesc {
                 radius: radius.abs().clamp(0.001, 10_000.0),
                 half_height: half_height.abs().clamp(0.0, 10_000.0),
             },
+            Self::Cylinder {
+                radius,
+                half_height,
+            } => Self::Cylinder {
+                radius: radius.abs().clamp(0.001, 10_000.0),
+                half_height: half_height.abs().clamp(0.001, 10_000.0),
+            },
         }
     }
 
@@ -58,6 +67,13 @@ impl CollisionShapeDesc {
                 Vec3::ZERO,
                 Vec3::new(radius, half_height + radius, radius),
             ),
+            Self::Cylinder {
+                radius,
+                half_height,
+            } => Aabb::from_center_half_extents(
+                Vec3::ZERO,
+                Vec3::new(radius, half_height, radius),
+            ),
         }
     }
 
@@ -73,6 +89,10 @@ impl CollisionShapeDesc {
                 radius,
                 half_height,
             } => Sphere::new(Vec3::ZERO, (half_height + radius).max(0.001)),
+            Self::Cylinder {
+                radius,
+                half_height,
+            } => Sphere::new(Vec3::ZERO, (half_height * half_height + radius * radius).sqrt().max(0.001)),
         }
     }
 

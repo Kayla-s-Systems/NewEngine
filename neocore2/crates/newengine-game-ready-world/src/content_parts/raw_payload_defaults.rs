@@ -24,6 +24,7 @@ impl Default for RawPlayerModelSpec {
             properties_ref: default_player_model_properties_ref(),
             texture_dictionary: default_player_texture_dictionary(),
             skeleton: default_player_skeleton(),
+            animation_slots: std::collections::BTreeMap::new(),
             idle_animation: None,
             walk_animation: None,
             run_animation: None,
@@ -169,6 +170,7 @@ impl Default for RawGameplaySpec {
             completed_progress_label: default_completed_progress_label(),
             player_collision: RawPlayerCollisionSpec::default(),
             player_visual: RawPlayerVisualSpec::default(),
+            camera: RawCameraSpec::default(),
             physics: RawPhysicsSpec::default(),
             mission: RawMissionSpec::default(),
         }
@@ -191,6 +193,25 @@ impl Default for RawPlayerVisualSpec {
             half_height: default_player_visual_half_height(),
             camera_eye_height: default_camera_eye_height(),
             sprint_multiplier: default_sprint_multiplier(),
+        }
+    }
+}
+
+impl Default for RawCameraSpec {
+    fn default() -> Self {
+        Self {
+            first_person_fov_y_degrees: default_camera_first_person_fov_y_degrees(),
+            first_person_ads_fov_y_degrees: default_camera_first_person_ads_fov_y_degrees(),
+            first_person_near: default_camera_first_person_near(),
+            first_person_forward_clearance: default_camera_first_person_forward_clearance(),
+            first_person_body_yaw_limit_degrees: default_camera_first_person_body_yaw_limit_degrees(
+            ),
+            first_person_down_pitch_limit_degrees:
+                default_camera_first_person_down_pitch_limit_degrees(),
+            third_person_follow_fov_y_degrees: default_camera_third_person_follow_fov_y_degrees(),
+            third_person_aim_fov_y_degrees: default_camera_third_person_aim_fov_y_degrees(),
+            third_person_orbit_fov_y_degrees: default_camera_third_person_orbit_fov_y_degrees(),
+            hide_local_model_in_first_person: false,
         }
     }
 }

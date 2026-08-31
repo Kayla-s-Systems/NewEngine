@@ -83,6 +83,28 @@ fn audio_bus_from_yscd(value: &str) -> Result<AudioBus, String> {
     }
 }
 
+
+fn concurrency_scope_from_yscd(value: &str) -> Result<AudioConcurrencyScope, String> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "global" => Ok(AudioConcurrencyScope::Global),
+        "object" | "owner" | "emitter" => Ok(AudioConcurrencyScope::Object),
+        other => Err(format!("YSCD cue has unsupported concurrency_scope '{other}'")),
+    }
+}
+
+fn voice_steal_rule_from_yscd(value: &str) -> Result<AudioVoiceStealRule, String> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "reject_new" | "reject" => Ok(AudioVoiceStealRule::RejectNew),
+        "lower_priority_then_oldest" | "priority" | "legacy" => {
+            Ok(AudioVoiceStealRule::LowerPriorityThenOldest)
+        }
+        "oldest" => Ok(AudioVoiceStealRule::Oldest),
+        "quietest" => Ok(AudioVoiceStealRule::Quietest),
+        "farthest" => Ok(AudioVoiceStealRule::Farthest),
+        other => Err(format!("YSCD cue has unsupported steal_rule '{other}'")),
+    }
+}
+
 fn sound_cue_spatial_policy_from_yscd(value: &str) -> Result<SoundCueSpatialPolicy, String> {
     match value.trim().to_ascii_lowercase().as_str() {
         "inherit" => Ok(SoundCueSpatialPolicy::Inherit),

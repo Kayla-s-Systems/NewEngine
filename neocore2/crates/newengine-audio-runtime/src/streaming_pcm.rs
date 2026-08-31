@@ -86,6 +86,35 @@ enum StreamCommand {
     },
 }
 
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct StreamSourceMetadata {
+    pub(crate) source_duration: Option<Duration>,
+}
+
+pub(crate) fn probe_stream_source_metadata<R>(reader: R) -> Result<StreamSourceMetadata, String>
+where
+    R: Read + Seek + Send + Sync + 'static,
+{
+    let mut reader = reader;
+    let original_position = reader
+        .stream_position()
+        .map_err(|error| format!("stream reader position query failed: {error}"))?;
+    let byte_len = reader
+        .seek(SeekFrom::End(0))
+        .map_err(|error| format!("stream reader length query failed: {error}"))?;
+    reader
+        .seek(SeekFrom::Start(original_position))
+        .map_err(|error| format!("stream reader restore failed: {error}"))?;
+    let decoder = Decoder::<BufReader<R>>::builder()
+        .with_data(BufReader::new(reader))
+        .with_byte_len(byte_len)
+        .build()
+        .map_err(|error| format!("stream metadata decoder init failed: {error}"))?;
+    Ok(StreamSourceMetadata {
+        source_duration: decoder.total_duration(),
+    })
+}
+
 pub(crate) struct StreamingPcmSource {
     receiver: Receiver<PcmChunk>,
     commands: Sender<StreamCommand>,
@@ -553,5 +582,38 @@ mod tests {
         assert_eq!(stats.capacity_frames(), 4_800);
         assert_eq!(stats.underruns(), 3);
         assert_eq!(stats.seek_operations(), 2);
+    }
+
+    #[test]
+    fn stream_metadata_probe_reports_finite_source_duration_without_starting_worker() {
+        let samples = vec![8_000_i16; 48_000];
+        let bytes = mono_pcm16_wav(48_000, &samples);
+        let metadata = probe_stream_source_metadata(Cursor::new(bytes)).expect("metadata");
+        let duration = metadata.source_duration.expect("finite wav duration");
+        assert!((duration.as_secs_f64() - 1.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn rebuilt_stream_starts_from_requested_logical_position() {
+        let samples = (0..48_000)
+            .map(|index| if index < 24_000 { 2_000 } else { 24_000 })
+            .collect::<Vec<i16>>();
+        let bytes = mono_pcm16_wav(48_000, &samples);
+        let (mut source, _stats) = build_streaming_source(
+            Cursor::new(bytes),
+            None,
+            false,
+            test_config(),
+            Duration::from_millis(750),
+            "logical-resume",
+        )
+        .expect("stream source");
+        let decoded = source.by_ref().take(256).collect::<Vec<_>>();
+        assert_eq!(decoded.len(), 256);
+        let average = decoded.iter().map(|sample| sample.abs()).sum::<f32>() / decoded.len() as f32;
+        assert!(
+            average > 0.5,
+            "resume must start in the high-amplitude second half"
+        );
     }
 }

@@ -95,6 +95,24 @@ pub enum GameplayCommand {
         #[serde(default)]
         owner: Option<String>,
     },
+    PublishEvent {
+        event: String,
+        #[serde(default)]
+        source: Option<u64>,
+        #[serde(default)]
+        payload: serde_json::Value,
+    },
+    /// Request any engine/plugin-provided capability. The command language does not need a new
+    /// enum variant for every subsystem operation; capability providers own their payload schemas.
+    InvokeCapability {
+        capability: String,
+        #[serde(default)]
+        source: Option<u64>,
+        #[serde(default)]
+        target: Option<u64>,
+        #[serde(default)]
+        payload: serde_json::Value,
+    },
     PlayEffect {
         effect: String,
         #[serde(default)]
@@ -147,6 +165,8 @@ pub struct GameplayCommandReceipt {
     pub items_given: u64,
     pub objectives_touched: Vec<String>,
     pub effects_enqueued: usize,
+    pub events_published: usize,
+    pub capability_requests_enqueued: usize,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]

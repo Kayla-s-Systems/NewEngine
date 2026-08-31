@@ -1,8 +1,10 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
+mod capabilities;
 mod combat;
 mod components;
 mod content;
+mod events;
 mod execution;
 mod inventory;
 mod listeners;
@@ -13,6 +15,13 @@ mod schedule;
 mod snapshot;
 mod ui;
 
+pub use capabilities::{
+    dispatch_gameplay_capabilities, drain_gameplay_capability_requests,
+    ensure_builtin_gameplay_capabilities, request_gameplay_capability, GameplayCapabilityBus,
+    GameplayCapabilityDispatchReport, GameplayCapabilityProvider, GameplayCapabilityRegistry,
+    GameplayCapabilityRequest, GAMEPLAY_CAPABILITY_AUDIO_PLAY_V1,
+    GAMEPLAY_CAPABILITY_AUDIO_PRELOAD_V1,
+};
 pub use combat::{
     drain_interaction_events, drain_weapon_events, Health, HitscanWeaponTuning, Interactable,
     InteractionEvent, InteractionEventBus, PendingHitscan, PendingInteraction,
@@ -26,32 +35,44 @@ pub use components::{
     CharacterMotionTuning, CloudShadowRenderState, CollisionShapeDesc, DisplayMode,
     DisplayVisibility, EnvironmentDomeRenderState, EnvironmentPostFxState, GameRunMode,
     GameplayActor, ModelRenderComponent, PhysicsBodyDesc, PhysicsSurface, PhysicsWorldSettings,
-    PlayerActor, PlayerAnimationState, PlayerAuthoredAnimationCapabilities, PlayerBraidSecondaryMotionRig, PlayerCharacterPresentation,
+    PlayerActor, PlayerAnimationState, PlayerAuthoredAnimationCapabilities,
+    PlayerBraidSecondaryMotionRig, PlayerCameraProfile, PlayerCharacterPresentation,
     PlayerCommandFrame, PlayerController, PlayerControllerKind, PlayerEvent, PlayerEventBus,
     PlayerEventKind, PlayerEyeParentFollowRule, PlayerFallState,
-    PlayerFirstPersonBodyBarrierProfile, PlayerFirstPersonCameraAnchor, PlayerFixedPoseHistory,
-    PlayerGroundState, PlayerJointChannels, PlayerJointCopyRule, PlayerJointRotationWeight,
-    PlayerLandingState, PlayerLocomotionAnimation, PlayerLocomotionState, PlayerModelAssignment,
+    PlayerFirstPersonBodyBarrierProfile, PlayerFirstPersonCameraAnchor,
+    PlayerFirstPersonPrimitiveVariant, PlayerFixedPoseHistory, PlayerGroundState,
+    PlayerJointChannels, PlayerJointCopyRule, PlayerJointRotationWeight, PlayerLandingState,
+    PlayerLocomotionAnimation, PlayerLocomotionState, PlayerLookContext, PlayerModelAssignment,
     PlayerModelBinding, PlayerMovementSpeeds, PlayerPaletteFollowRule, PlayerRenderPose,
-    PlayerSkinBinding, PlayerSkinPose, PlayerSkinVertex, PlayerStanceKind, PlayerStanceState,
-    PlayerViewState, PlayerViewVisibility, PlayerViewVisibilityPolicy, PlayerVisualKind,
-    PlayerVisualPart, PlayerWeaponArmIkRigDefinition, PreparedRenderMesh,
-    PrimitiveGpuEvictionQueue, ResidencyProgress, SceneAnchorFollow, SceneEntityAnchor,
-    SceneEntityRole, SkyCloudProfileRenderState, StaticMeshCollider, TerrainMaterialLayers,
-    WorldActivationPhase, WorldActivationState, WorldAssemblyProgress, WorldClearColor,
+    PlayerSkinBinding, PlayerSkinPose, PlayerSkinSidecarDefinition, PlayerSkinVertex,
+    PlayerStanceKind, PlayerStanceState, PlayerViewState, PlayerViewVisibility,
+    PlayerViewVisibilityPolicy, PlayerVisualKind, PlayerVisualPart, PlayerWeaponArmIkRigDefinition,
+    PreparedRenderMesh, PrimitiveGpuEvictionQueue, ResidencyProgress, SceneAnchorFollow,
+    SceneEntityAnchor, SceneEntityRole, SkyCloudProfileRenderState, StaticMeshCollider,
+    TerrainMaterialLayers, WorldActivationPhase, WorldActivationState, WorldAssemblyProgress,
+    WorldClearColor,
 };
 pub use content::{GameplayContentProvider, GameplayContentProviderRegistry};
+pub use events::{
+    drain_gameplay_events, emit_gameplay_event, publish_gameplay_event, GameplayEvent,
+    GameplayEventBus, GAMEPLAY_EVENT_WEAPON_EMPTY, GAMEPLAY_EVENT_WEAPON_EQUIPPED,
+    GAMEPLAY_EVENT_WEAPON_FIRED, GAMEPLAY_EVENT_WEAPON_HIT, GAMEPLAY_EVENT_WEAPON_MELEE_ATTACKED,
+    GAMEPLAY_EVENT_WEAPON_RELOAD_COMPLETED, GAMEPLAY_EVENT_WEAPON_RELOAD_STARTED,
+    GAMEPLAY_EVENT_WEAPON_SHELL_CONTACT, GAMEPLAY_EVENT_WEAPON_SHELL_EJECTED,
+    GAMEPLAY_EVENT_WEAPON_SHELL_ROLLING, GAMEPLAY_EVENT_WEAPON_UNEQUIPPED,
+};
 pub use execution::{
     GameplayExecutionPhase, GameplayFrame, GameplaySystemProvider, GameplaySystemProviderRegistry,
     GameplayWorld,
 };
 pub use inventory::{
     active_equipped_weapon_aiming, active_equipped_weapon_binding, active_equipped_weapon_can_aim,
-    active_equipped_weapon_can_fire, active_equipped_weapon_can_melee, apply_loadout,
-    consume_equipped_ammo, drain_inventory_events, drop_item, ensure_inventory_runtime,
-    ensure_player_inventory, equip_first_item, equip_item_instance, equipped_reserve_ammo,
-    give_item, inventory_quantity, persist_equipped_weapon_state, play_equipped_weapon_audio,
-    play_weapon_item_audio, preload_weapon_audio_definition, remove_item, select_equipment_slot,
+    active_equipped_weapon_can_fire, active_equipped_weapon_can_melee,
+    active_equipped_weapon_muzzle, apply_loadout, consume_equipped_ammo, drain_inventory_events,
+    drop_item, ensure_inventory_runtime, ensure_player_inventory, equip_first_item,
+    equip_item_instance, equipped_reserve_ammo, give_item, inventory_quantity,
+    persist_equipped_weapon_state, play_equipped_weapon_audio, play_weapon_item_audio,
+    preload_weapon_audio_definition, remove_item, select_equipment_slot,
     select_highest_ranked_equipped_weapon, spawn_item_pickup, spawn_persistent_item_pickup,
     step_world_items, sync_equipped_weapon_runtime, try_collect_item_pickup, unequip_slot,
     use_item, EquipmentSlot, EquippedWeaponBinding, EquippedWeaponEntity, EquippedWeaponMuzzle,
@@ -77,9 +98,9 @@ pub use player::{
     clear_player_model_assignment, consume_player_transient_input,
     detach_active_camera_from_player, display_shadow_caster_visible_in_mode,
     display_visible_in_mode, ensure_physics_body, first_player, is_player_controller_enabled,
-    player_render_model_matrix, publish_player_render_poses, remove_physics_body,
-    set_player_model_assignment, spawn_default_player, spawn_player_controller,
-    update_player_animation_states, update_player_stance_camera,
+    player_fall_is_confirmed, player_render_model_matrix, publish_player_render_poses,
+    remove_physics_body, set_player_model_assignment, spawn_default_player,
+    spawn_player_controller, update_player_animation_states, update_player_stance_camera,
 };
 pub use schedule::{
     default_sim_schedule, run_schedule, run_schedule_with_physics_mode,

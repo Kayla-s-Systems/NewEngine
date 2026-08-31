@@ -14,19 +14,21 @@ use abi_stable::std_types::{RResult, RString};
 use newengine_assets_api::AssetServiceClient;
 use newengine_audio_api::{
     sanitize_gain, sanitize_speed, AudioAcousticState, AudioAttenuationSettings, AudioBus,
-    AudioBusGainAck, AudioBusGainRequest, AudioCuePlayRequest, AudioCuePreloadRequest,
-    AudioDiagnostics, AudioDirectPathResponse, AudioEarlyReflectionField, AudioEarlyReflectionTap,
-    AudioEnvironmentState, AudioFeedbackAck, AudioFeedbackEvent, AudioListenerState, AudioPlayAck,
-    AudioPlayRequest, AudioPreloadAck, AudioPreloadRequest, AudioReverbPreset, AudioReverbSend,
-    AudioServiceInfo, AudioSpatialParams, AudioStopVoiceRequest, AudioStreamBufferConfig,
-    AudioStreamPlayRequest, AudioVoiceAck, AudioVoiceUpdateRequest, SoundCue, SoundCueClip,
-    SoundCueSpatialPolicy, AUDIO_BACKEND_CAPABILITY_ID, AUDIO_MAX_EARLY_REFLECTION_TAPS,
-    AUDIO_PROVIDER_ABI_ID, AUDIO_SERVICE_ID, AUDIO_SERVICE_METHOD_DIAGNOSTICS_JSON_V1,
-    AUDIO_SERVICE_METHOD_INVOKE, AUDIO_SERVICE_METHOD_PLAY_CLIP_JSON_V1,
-    AUDIO_SERVICE_METHOD_PLAY_CUE_JSON_V1, AUDIO_SERVICE_METHOD_PLAY_EVENT_JSON_V1,
-    AUDIO_SERVICE_METHOD_PLAY_STREAM_JSON_V1, AUDIO_SERVICE_METHOD_PRELOAD_CLIP_JSON_V1,
-    AUDIO_SERVICE_METHOD_PRELOAD_CUE_JSON_V1, AUDIO_SERVICE_METHOD_SET_BUS_GAIN_JSON_V1,
-    AUDIO_SERVICE_METHOD_SET_LISTENER_JSON_V1, AUDIO_SERVICE_METHOD_SET_VOICE_JSON_V1,
+    AudioBusGainAck, AudioBusGainRequest, AudioConcurrencyScope, AudioCuePlayRequest,
+    AudioCuePreloadRequest, AudioDiagnostics, AudioDirectPathResponse, AudioEarlyReflectionField,
+    AudioEarlyReflectionTap, AudioEnvironmentState, AudioFeedbackAck, AudioFeedbackEvent,
+    AudioListenerState, AudioParameterSet, AudioPlayAck, AudioPlayRequest, AudioPreloadAck,
+    AudioPreloadRequest, AudioReverbPreset, AudioReverbSend, AudioServiceInfo, AudioSpatialParams,
+    AudioStopVoiceRequest, AudioStreamBufferConfig, AudioStreamPlayRequest, AudioVoiceAck,
+    AudioVoiceBudgetAck, AudioVoiceBudgetConfig, AudioVoicePolicy, AudioVoiceStealRule,
+    AudioVoiceUpdateRequest, SoundCue, SoundCueClip, SoundCueSpatialPolicy,
+    AUDIO_BACKEND_CAPABILITY_ID, AUDIO_MAX_EARLY_REFLECTION_TAPS, AUDIO_PROVIDER_ABI_ID,
+    AUDIO_SERVICE_ID, AUDIO_SERVICE_METHOD_DIAGNOSTICS_JSON_V1, AUDIO_SERVICE_METHOD_INVOKE,
+    AUDIO_SERVICE_METHOD_PLAY_CLIP_JSON_V1, AUDIO_SERVICE_METHOD_PLAY_CUE_JSON_V1,
+    AUDIO_SERVICE_METHOD_PLAY_EVENT_JSON_V1, AUDIO_SERVICE_METHOD_PLAY_STREAM_JSON_V1,
+    AUDIO_SERVICE_METHOD_PRELOAD_CLIP_JSON_V1, AUDIO_SERVICE_METHOD_PRELOAD_CUE_JSON_V1,
+    AUDIO_SERVICE_METHOD_SET_BUS_GAIN_JSON_V1, AUDIO_SERVICE_METHOD_SET_LISTENER_JSON_V1,
+    AUDIO_SERVICE_METHOD_SET_VOICE_BUDGETS_JSON_V1, AUDIO_SERVICE_METHOD_SET_VOICE_JSON_V1,
     AUDIO_SERVICE_METHOD_SHUTDOWN_V1, AUDIO_SERVICE_METHOD_STOP_VOICE_JSON_V1,
     ENGINE_AUDIO_SERVICE_ID,
 };
@@ -40,7 +42,9 @@ use rodio::stream::{DeviceSinkBuilder, MixerDeviceSink};
 use rodio::{ChannelCount, Decoder, Player, SampleRate};
 
 use streaming_asset::RangedAssetReader;
-use streaming_pcm::{build_streaming_source, StreamingStats};
+use streaming_pcm::{
+    build_streaming_source, probe_stream_source_metadata, StreamSourceMetadata, StreamingStats,
+};
 
 pub const NATIVE_AUDIO_SERVICE_ID: &str = AUDIO_SERVICE_ID;
 pub const NATIVE_AUDIO_PROVIDER_ROUTE: &str = "engine.audio.native";
@@ -62,6 +66,8 @@ include!("audio_runtime/dsp.rs");
 include!("audio_runtime/room_buses.rs");
 include!("audio_runtime/voices.rs");
 include!("audio_runtime/state_core.rs");
+include!("audio_runtime/voice_policy.rs");
+include!("audio_runtime/sound_graph.rs");
 include!("audio_runtime/state_cache.rs");
 include!("audio_runtime/state_playback.rs");
 include!("audio_runtime/state_control.rs");

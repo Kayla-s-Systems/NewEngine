@@ -63,6 +63,10 @@ pub struct YscdCueDescriptor {
     pub bus: String,
     pub looping: bool,
     pub concurrency_group: String,
+    pub concurrency_limit: usize,
+    pub concurrency_scope: String,
+    pub steal_rule: String,
+    pub voice_budget: String,
     pub priority: i32,
     pub repeat_avoidance: usize,
     pub spatial_policy: String,
@@ -70,6 +74,8 @@ pub struct YscdCueDescriptor {
     pub pitch_range: [f32; 2],
     pub attenuation: Option<YscdAttenuation>,
     pub layers: Vec<YscdLayerDescriptor>,
+    /// Optional typed trigger graph. Mutually exclusive with legacy `layers`.
+    pub sound_graph: Option<crate::yscd_sound_graph::YscdSoundGraph>,
 }
 
 impl Default for YscdCueDescriptor {
@@ -78,6 +84,10 @@ impl Default for YscdCueDescriptor {
             bus: "sfx".to_owned(),
             looping: false,
             concurrency_group: String::new(),
+            concurrency_limit: 1,
+            concurrency_scope: "global".to_owned(),
+            steal_rule: "lower_priority_then_oldest".to_owned(),
+            voice_budget: String::new(),
             priority: 0,
             repeat_avoidance: 0,
             spatial_policy: "inherit".to_owned(),
@@ -85,6 +95,7 @@ impl Default for YscdCueDescriptor {
             pitch_range: [1.0, 1.0],
             attenuation: None,
             layers: Vec::new(),
+            sound_graph: None,
         }
     }
 }
@@ -146,6 +157,25 @@ pub fn decode_yscd_nef8(source: &[u8], logical_path: &str) -> Result<YscdDiction
 /// metadata and compression policy through `newengine-assets-api::encode_list_file`.
 /// Clip payload hashes are always recomputed from the embedded bytes so authored stale
 /// hashes can never leak into a production dictionary.
+fn validate_cue_sound_graph(cue: &YscdCue) -> Result<(), String> {
+    if cue.descriptor.sound_graph.is_some() && !cue.descriptor.layers.is_empty() {
+        return Err(format!(
+            "YSCD cue '{}' cannot author both legacy layers and sound_graph",
+            cue.name
+        ));
+    }
+    if cue.descriptor.sound_graph.is_some() && cue.descriptor.repeat_avoidance != 0 {
+        return Err(format!(
+            "YSCD cue '{}' cannot combine legacy repeat_avoidance with sound_graph; author Random/Sequence explicitly",
+            cue.name
+        ));
+    }
+    if let Some(graph) = cue.descriptor.sound_graph.as_ref() {
+        graph.validate(cue.clips.iter().map(|clip| clip.name.as_str()))?;
+    }
+    Ok(())
+}
+
 pub fn encode_yscd_binary_body(dictionary: &YscdDictionary) -> Result<Vec<u8>, String> {
     use std::collections::BTreeSet;
 
@@ -194,6 +224,7 @@ pub fn encode_yscd_binary_body(dictionary: &YscdDictionary) -> Result<Vec<u8>, S
         if !cue_names.insert(cue_name.to_ascii_lowercase()) {
             return Err(format!("duplicate YSCD cue name '{cue_name}'"));
         }
+        validate_cue_sound_graph(cue)?;
         let descriptor = serde_json::to_string(&cue.descriptor)
             .map_err(|error| format!("YSCD cue '{cue_name}' descriptor encode failed: {error}"))?;
         let descriptor_len = u32::try_from(descriptor.len())
@@ -462,12 +493,14 @@ pub fn decode_yscd_binary_body(body: &[u8]) -> Result<YscdDictionary, String> {
                 payload_hash: row.hash,
             })
             .collect();
-        cues.push(YscdCue {
+        let cue = YscdCue {
             name,
             stable_hash,
             descriptor,
             clips,
-        });
+        };
+        validate_cue_sound_graph(&cue)?;
+        cues.push(cue);
     }
     Ok(YscdDictionary { cues })
 }
@@ -577,6 +610,13 @@ mod tests {
     use super::*;
 
     #[test]
+    fn legacy_descriptor_without_sound_graph_defaults_to_none() {
+        let descriptor: YscdCueDescriptor =
+            serde_json::from_str(r#"{"bus":"sfx"}"#).expect("legacy descriptor");
+        assert!(descriptor.sound_graph.is_none());
+    }
+
+    #[test]
     fn rejects_non_yscd_body() {
         assert!(decode_yscd_binary_body(b"NOPE").is_err());
     }
@@ -589,9 +629,24 @@ mod tests {
                 stable_hash: newengine_assets_api::stable_hash_from_text("dirt_run"),
                 descriptor: YscdCueDescriptor {
                     bus: "sfx".to_owned(),
+                    concurrency_group: "project.footsteps".to_owned(),
+                    concurrency_limit: 4,
+                    concurrency_scope: "object".to_owned(),
+                    steal_rule: "quietest".to_owned(),
+                    voice_budget: "project.foley".to_owned(),
+                    priority: 23,
                     spatial_policy: "spatial".to_owned(),
                     gain_range: [0.95, 1.05],
                     pitch_range: [0.97, 1.03],
+                    sound_graph: Some(crate::yscd_sound_graph::YscdSoundGraph {
+                        root: "root".to_owned(),
+                        nodes: vec![crate::yscd_sound_graph::YscdSoundGraphNode::Clip {
+                            id: "root".to_owned(),
+                            clip: "dirt_run_01".to_owned(),
+                            gain: 0.8,
+                            pitch: 1.1,
+                        }],
+                    }),
                     ..Default::default()
                 },
                 clips: vec![YscdClip {
@@ -610,6 +665,19 @@ mod tests {
         let decoded = decode_yscd_binary_body(&encoded).expect("decode encoded YSCD");
         let cue = decoded.cue("dirt_run").expect("cue");
         assert_eq!(cue.descriptor.bus, "sfx");
+        assert_eq!(cue.descriptor.concurrency_group, "project.footsteps");
+        assert_eq!(cue.descriptor.concurrency_limit, 4);
+        assert_eq!(cue.descriptor.concurrency_scope, "object");
+        assert_eq!(cue.descriptor.steal_rule, "quietest");
+        assert_eq!(cue.descriptor.voice_budget, "project.foley");
+        assert_eq!(cue.descriptor.priority, 23);
+        let graph = cue
+            .descriptor
+            .sound_graph
+            .as_ref()
+            .expect("SoundGraph roundtrip");
+        assert_eq!(graph.root, "root");
+        assert_eq!(graph.nodes.len(), 1);
         assert_eq!(cue.descriptor.spatial_policy, "spatial");
         assert_eq!(cue.clips.len(), 1);
         assert_eq!(cue.clips[0].source, "dirt/run_01.wav");

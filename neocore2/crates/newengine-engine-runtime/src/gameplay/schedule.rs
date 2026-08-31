@@ -321,6 +321,10 @@ pub fn run_schedule_with_physics_mode_and_telemetry_for_frame(
     // Generic engine code never manufactures FPS items/loadouts as a fallback.
     gameplay_content.install_pending(world);
 
+    // Engine exposes capability implementations but never invokes them implicitly. Project/gameplay
+    // code may enqueue requests; dispatch happens only after gameplay phases have committed.
+    crate::gameplay::ensure_builtin_gameplay_capabilities(world);
+
     // Product/gameplay behavior is profile-owned. The engine only owns the stable
     // execution phase boundary and never names FPS, inventory, combat or missions.
     gameplay_systems.run_phase(GameplayExecutionPhase::BeforePhysics, world, gameplay_frame);
@@ -360,6 +364,17 @@ pub fn run_schedule_with_physics_mode_and_telemetry_for_frame(
     );
 
     gameplay_systems.run_phase(GameplayExecutionPhase::AfterDerived, world, gameplay_frame);
+
+    let capability_report = crate::gameplay::dispatch_gameplay_capabilities(world);
+    for capability in capability_report.missing {
+        newengine_ulog_api::ulog::warn!(
+            "gameplay capability provider missing capability='{}'",
+            capability
+        );
+    }
+    for failure in capability_report.failed {
+        newengine_ulog_api::ulog::warn!("gameplay capability invocation failed {}", failure);
+    }
 
     // Player locomotion animation state is derived from authoritative post-physics
     // motion/grounding. The skeletal backend consumes this semantic state separately.

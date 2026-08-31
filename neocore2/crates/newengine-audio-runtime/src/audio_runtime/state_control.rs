@@ -78,7 +78,13 @@ impl AudioRuntimeState {
                     message: "voice seek_seconds must be finite and non-negative".to_owned(),
                 };
             }
-            let target = Duration::from_secs_f64(seek_seconds.min(86_400.0));
+            let requested_target = Duration::from_secs_f64(seek_seconds.min(86_400.0));
+            let stream_source = matches!(voice.source, VoiceSource::Stream { .. });
+            let target = if stream_source {
+                voice.normalized_source_position(requested_target)
+            } else {
+                requested_target
+            };
             if let Some(control) = voice.control.as_ref() {
                 if let Err(error) = control.try_seek(target) {
                     return AudioVoiceAck {
@@ -88,9 +94,19 @@ impl AudioRuntimeState {
                         message: error,
                     };
                 }
+                if stream_source {
+                    // Rodio sets Player::position to the absolute seek target after a successful
+                    // try_seek, so no external origin is required until the next rematerialization.
+                    voice.physical_source_origin = Duration::ZERO;
+                }
             }
-            voice.virtual_source_position =
-                voice.normalized_source_position(target.mul_f32(voice.speed));
+            voice.virtual_source_position = voice.normalized_source_position(
+                if stream_source {
+                    target
+                } else {
+                    target.mul_f32(voice.speed)
+                },
+            );
             voice.virtual_since = (!voice.paused).then_some(now);
         }
         if let Some(paused) = request.paused {

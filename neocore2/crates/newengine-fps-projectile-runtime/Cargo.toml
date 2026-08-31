@@ -25,5 +25,7 @@ newengine-ulog-api = { path = "../newengine-ulog-api" }
 newengine-vfx-runtime = { path = "../newengine-vfx-runtime" }
 newengine-vfx-api = { path = "../newengine-vfx-api" }
 
+serde_json = "1"
+
 [dev-dependencies]
 newengine-item-assets-runtime = { path = "../newengine-item-assets-runtime", features = ["test-support"] }

@@ -21,8 +21,7 @@ pub(super) fn draw_primitives_shadow_body(
     cascade_index: usize,
     cascade_texel_world_size: f32,
 ) -> newengine_core::EngineResult<()> {
-    let (primitive_snapshot, _snapshot_reused) =
-        this.primitive_scene_snapshot(scene, runtime);
+    let (primitive_snapshot, _snapshot_reused) = this.primitive_scene_snapshot(scene, runtime);
     let reg_lock = this.bridges.scene.primitives();
     let reg = reg_lock.read();
     let mats_lock = this.bridges.scene.materials();
@@ -117,11 +116,11 @@ pub(super) fn draw_primitives_shadow_body(
         let plan = if let Some(plan) = plan_cache.get(&plan_key).copied() {
             plan
         } else {
-            let owned_material_plan = this
-                .gpu
-                .material
-                .resolved_lit_plans
-                .resolve(&*mats, material_ref, prim.color);
+            let owned_material_plan =
+                this.gpu
+                    .material
+                    .resolved_lit_plans
+                    .resolve(&*mats, material_ref, prim.color);
             let material_plan = owned_material_plan.as_borrowed();
             if !material_plan.cast_shadows {
                 continue;

@@ -2,6 +2,7 @@ use newengine_animation_api::{
     AnimationClipRef, AnimationTimelineEventQueueV1, AnimationTimelineEventV1,
 };
 use newengine_animation_runtime::{AnimationClip, AnimationEventCursor, AnimationEventOccurrence};
+use newengine_engine_runtime::gameplay::{publish_gameplay_event, GameplayEvent};
 use newengine_tags_api::TagId;
 
 pub(crate) fn timeline_event(
@@ -67,6 +68,30 @@ pub(crate) fn publish_timeline_events(
     if events.is_empty() {
         return;
     }
+    // Animation marker tags are project-authored semantic event ids. Publish them unchanged to
+    // the generic gameplay bus; no native code infers a handler or asset from the marker name.
+    for event in &events {
+        let gameplay_event = GameplayEvent::new(event.tag.as_str().to_owned())
+            .with_stable_source(event.entity.stable_id)
+            .with_payload(serde_json::json!({
+                "source_kind": "animation_timeline",
+                "clip": event.clip.0,
+                "channel": event.channel,
+                "clip_time_seconds": event.clip_time_seconds,
+                "playback_time_seconds": event.playback_time_seconds,
+                "loop_index": event.loop_index,
+                "parameters": event.parameters,
+            }));
+        if let Err(error) = publish_gameplay_event(world, gameplay_event) {
+            newengine_ulog_api::ulog::warn!(
+                "animation timeline event publish rejected tag='{}' entity={} err='{}'",
+                event.tag.as_str(),
+                event.entity.stable_id,
+                error
+            );
+        }
+    }
+
     if world.resource::<AnimationTimelineEventQueueV1>().is_none() {
         world.insert_resource(AnimationTimelineEventQueueV1::default());
     }

@@ -41,6 +41,7 @@ pub const STATIC_RUNTIME_UNIT_REGISTRATIONS: &[StaticRuntimeUnitRegistration] = 
     newengine_audio_runtime::AUDIO_NATIVE_RUNTIME_UNIT_REGISTRATION,
     newengine_audio_world_runtime::AUDIO_SCENE_RUNTIME_UNIT_REGISTRATION,
     newengine_audio_world_runtime::AUDIO_AMBIENCE_RUNTIME_UNIT_REGISTRATION,
+    newengine_audio_world_runtime::AUDIO_ORCHESTRATION_RUNTIME_UNIT_REGISTRATION,
 ];
 
 /// Descriptor-only view retained for composition diagnostics and profile tests.
@@ -70,6 +71,7 @@ pub const STANDARD_GAME_RUNTIME_UNITS: &[newengine_runtime_unit_api::EngineRunti
     newengine_audio_runtime::AUDIO_NATIVE_RUNTIME_UNIT_REGISTRATION.spec,
     newengine_audio_world_runtime::AUDIO_SCENE_RUNTIME_UNIT_REGISTRATION.spec,
     newengine_audio_world_runtime::AUDIO_AMBIENCE_RUNTIME_UNIT_REGISTRATION.spec,
+    newengine_audio_world_runtime::AUDIO_ORCHESTRATION_RUNTIME_UNIT_REGISTRATION.spec,
 ];
 
 /// Product-level capability roots for the standard game shape.
@@ -194,6 +196,11 @@ pub const STANDARD_GAME_RUNTIME_UNIT_REQUIREMENTS: &[RuntimeUnitRequirementSpec]
     ),
     RuntimeUnitRequirementSpec::required(
         newengine_audio_world_runtime::AUDIO_AMBIENCE_RUNTIME_UNIT_REGISTRATION
+            .spec
+            .provides[0],
+    ),
+    RuntimeUnitRequirementSpec::required(
+        newengine_audio_world_runtime::AUDIO_ORCHESTRATION_RUNTIME_UNIT_REGISTRATION
             .spec
             .provides[0],
     ),

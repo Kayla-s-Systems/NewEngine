@@ -5,7 +5,11 @@ pub struct AudioRuntimeState {
     output_error: Option<String>,
     output_init_started: bool,
     voices: HashMap<u64, VoiceEntry>,
+    stream_metadata: HashMap<String, StreamSourceMetadata>,
+    stream_promotions: u64,
+    stream_demotions: u64,
     next_voice_id: u64,
+    next_policy_instance_id: u64,
     cue_counter: u64,
     listener: AudioListenerState,
     listener_velocity: [f32; 3],
@@ -15,6 +19,9 @@ pub struct AudioRuntimeState {
     cues: HashMap<String, SoundCue>,
     yscd_dictionaries: HashMap<String, Arc<newengine_asset_format_nef8::YscdDictionary>>,
     cue_layers: HashMap<String, Vec<YscdRuntimeLayer>>,
+    cue_clips_by_name: HashMap<String, HashMap<String, SoundCueClip>>,
+    cue_sound_graphs: HashMap<String, Arc<newengine_asset_format_nef8::YscdSoundGraph>>,
+    sound_graph_sequences: HashMap<String, u64>,
     cue_meta: HashMap<String, YscdRuntimeMeta>,
     cue_history: HashMap<String, VecDeque<String>>,
     embedded_yscd_clips: HashMap<String, EmbeddedYscdClipLocator>,
@@ -22,6 +29,7 @@ pub struct AudioRuntimeState {
     cached_bytes: usize,
     cache_limit_bytes: usize,
     max_physical_voices: usize,
+    voice_budget_reservations: BTreeMap<String, usize>,
     room_buses: SharedRoomLateBusManager,
 }
 
@@ -41,7 +49,11 @@ impl AudioRuntimeState {
             output_error: None,
             output_init_started: false,
             voices: HashMap::new(),
+            stream_metadata: HashMap::new(),
+            stream_promotions: 0,
+            stream_demotions: 0,
             next_voice_id: 1,
+            next_policy_instance_id: 1,
             cue_counter: 1,
             listener: AudioListenerState::default(),
             listener_velocity: [0.0; 3],
@@ -51,6 +63,9 @@ impl AudioRuntimeState {
             cues: HashMap::new(),
             yscd_dictionaries: HashMap::new(),
             cue_layers: HashMap::new(),
+            cue_clips_by_name: HashMap::new(),
+            cue_sound_graphs: HashMap::new(),
+            sound_graph_sequences: HashMap::new(),
             cue_meta: HashMap::new(),
             cue_history: HashMap::new(),
             embedded_yscd_clips: HashMap::new(),
@@ -58,6 +73,7 @@ impl AudioRuntimeState {
             cached_bytes: 0,
             cache_limit_bytes: cache_limit_bytes_from_env(),
             max_physical_voices: max_physical_voices_from_env(),
+            voice_budget_reservations: BTreeMap::new(),
             room_buses: SharedRoomLateBusManager::new(),
         })
     }
@@ -140,6 +156,13 @@ impl AudioRuntimeState {
     fn alloc_voice_id(&mut self) -> u64 {
         let id = self.next_voice_id.max(1);
         self.next_voice_id = id.wrapping_add(1).max(1);
+        id
+    }
+
+    #[inline]
+    fn alloc_policy_instance_id(&mut self) -> u64 {
+        let id = self.next_policy_instance_id.max(1);
+        self.next_policy_instance_id = id.wrapping_add(1).max(1);
         id
     }
 

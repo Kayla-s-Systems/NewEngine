@@ -13,6 +13,19 @@ use newengine_runtime_adapter_core::GenericJsonServiceClient;
 static TRY_BINARY_RENDER_BATCH: AtomicBool = AtomicBool::new(true);
 static TRY_BINARY_CREATE_TEXTURE: AtomicBool = AtomicBool::new(true);
 
+#[inline]
+fn format_render_problem(problem: newengine_render_api::RenderProblemDetails) -> String {
+    format!(
+        "render service problem code='{}' title='{}' backend='{}' phase='{}' recoverable={} detail='{}'",
+        problem.code,
+        problem.title,
+        problem.backend.as_deref().unwrap_or("<unknown>"),
+        problem.phase.as_deref().unwrap_or("<unknown>"),
+        problem.recoverable,
+        problem.detail,
+    )
+}
+
 #[derive(Clone)]
 pub(crate) struct RenderServiceClient {
     service: GenericJsonServiceClient,
@@ -45,10 +58,7 @@ impl RenderServiceClient {
     ) -> Result<newengine_render_api::RenderCapabilityNegotiationResponse, String> {
         match self.invoke(RenderServiceRequest::Negotiate(request))? {
             RenderServiceResponse::Negotiation(response) => Ok(response),
-            RenderServiceResponse::Problem(problem) => Err(format!(
-                "render protocol negotiation failed {}: {}",
-                problem.code, problem.detail
-            )),
+            RenderServiceResponse::Problem(problem) => Err(format_render_problem(problem)),
             other => Err(format!(
                 "render service protocol error: expected Negotiation, got {:?}",
                 other
@@ -137,10 +147,7 @@ impl RenderServiceClient {
     pub(crate) fn command(&self, req: RenderCommand) -> Result<RenderCommandResponse, String> {
         match self.invoke(RenderServiceRequest::Command(req))? {
             RenderServiceResponse::Command(response) => Ok(response),
-            RenderServiceResponse::Problem(problem) => Err(format!(
-                "render service problem {}: {} ({})",
-                problem.code, problem.title, problem.detail
-            )),
+            RenderServiceResponse::Problem(problem) => Err(format_render_problem(problem)),
             other => Err(format!(
                 "render service protocol error: expected Command response, got {:?}",
                 other
@@ -190,10 +197,7 @@ impl RenderServiceClient {
 
         match self.invoke(RenderServiceRequest::CommandBatch(reqs))? {
             RenderServiceResponse::CommandBatch(responses) => Ok(responses),
-            RenderServiceResponse::Problem(problem) => Err(format!(
-                "render service problem {}: {} ({})",
-                problem.code, problem.title, problem.detail
-            )),
+            RenderServiceResponse::Problem(problem) => Err(format_render_problem(problem)),
             other => Err(format!(
                 "render service protocol error: expected CommandBatch response, got {:?}",
                 other

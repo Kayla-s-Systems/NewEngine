@@ -30,6 +30,17 @@ pub(in super::super) fn sanitize_prefab_spec(raw: RawPrefabSpec) -> Option<GameR
         source: raw.source.trim().to_owned(),
         proxy: non_empty_or(raw.proxy, default_prefab_proxy()),
         material: raw.material.trim().replace('\\', "/"),
+        surface_id: raw.surface_id.trim().to_owned(),
+        surface_events: raw
+            .surface_events
+            .into_iter()
+            .filter_map(|(signal, event_id)| {
+                let signal = signal.trim().to_owned();
+                let event_id = event_id.trim().to_owned();
+                (!signal.is_empty() && !event_id.is_empty()).then_some((signal, event_id))
+            })
+            .collect(),
+        ground_placement_surface: raw.ground_placement_surface,
         enabled: raw.enabled,
         position: arr3(sanitize_array3_finite(raw.position, [0.0, 0.0, 0.0])),
         rotation_ypr: arr3(sanitize_array3_finite(raw.rotation_ypr, [0.0, 0.0, 0.0])),

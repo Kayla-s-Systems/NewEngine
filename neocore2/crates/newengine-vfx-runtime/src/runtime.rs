@@ -29,6 +29,15 @@ struct VfxSpawnContext<'a> {
     surface_response: VfxSurfaceResponse,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct VfxTransientLightRuntime {
+    instance_id: VfxInstanceId,
+    age_seconds: f32,
+    lifetime_seconds: f32,
+    fade_start_fraction: f32,
+    initial_intensity: f32,
+}
+
 #[derive(Clone, Copy, Debug, Default)]
 struct LiveCounts {
     instances: u32,
@@ -279,6 +288,25 @@ fn step_vfx_internal(world: &mut World, dt: f32) {
         let _ = world.insert(entity, runtime);
     }
 
+    let transient_lights = world
+        .query::<VfxTransientLightRuntime>()
+        .map(|(entity, runtime)| (entity, *runtime))
+        .collect::<Vec<_>>();
+    for (entity, mut runtime) in transient_lights {
+        runtime.age_seconds += dt;
+        if runtime.age_seconds + 1.0e-6 >= runtime.lifetime_seconds {
+            let _ = world.despawn(entity);
+            continue;
+        }
+        let life_fraction =
+            (runtime.age_seconds / runtime.lifetime_seconds.max(0.001)).clamp(0.0, 1.0);
+        let fade = fade_multiplier(life_fraction, runtime.fade_start_fraction);
+        if let Some(light) = world.get_mut::<PointLight>(entity) {
+            light.intensity = runtime.initial_intensity * fade;
+        }
+        let _ = world.insert(entity, runtime);
+    }
+
     let roots = world
         .query::<VfxInstanceRoot>()
         .map(|(entity, root)| (entity, *root))
@@ -491,6 +519,39 @@ fn spawn_layer(
                             particle_count: 1,
                             remaining_seconds: lifetime,
                         });
+                    // GPU billboards replace only visible pulse geometry. Preserve authored
+                    // illumination through a light-only transient entity so first-person muzzle
+                    // containment does not regress scene lighting.
+                    if let Some(definition) = *light {
+                        let light_entity = world.spawn();
+                        let _ = world.insert(
+                            light_entity,
+                            Name(format!(
+                                "VfxLight/{:?}/{}/{}",
+                                kind, request.correlation_id, layer_index
+                            )),
+                        );
+                        let _ = world.insert(
+                            light_entity,
+                            Transform {
+                                position: layer_position,
+                                rotation: Quat::IDENTITY,
+                                scale: Vec3::ONE,
+                            },
+                        );
+                        let initial_intensity =
+                            install_light(world, light_entity, definition, request.intensity);
+                        let _ = world.insert(
+                            light_entity,
+                            VfxTransientLightRuntime {
+                                instance_id,
+                                age_seconds: 0.0,
+                                lifetime_seconds: lifetime,
+                                fade_start_fraction: fade_start_fraction.clamp(0.0, 0.999),
+                                initial_intensity,
+                            },
+                        );
+                    }
                     return 1;
                 }
                 return 0;
@@ -884,6 +945,8 @@ fn gpu_particle_kind(kind: VfxLayerKind) -> Option<VfxGpuParticleKind> {
         VfxLayerKind::Smoke => Some(VfxGpuParticleKind::Smoke),
         VfxLayerKind::Spark => Some(VfxGpuParticleKind::Spark),
         VfxLayerKind::Debris => Some(VfxGpuParticleKind::Debris),
+        VfxLayerKind::MuzzleFlash => Some(VfxGpuParticleKind::MuzzleFlash),
+        VfxLayerKind::MuzzleCore => Some(VfxGpuParticleKind::MuzzleCore),
         _ => None,
     }
 }
@@ -980,6 +1043,12 @@ fn live_counts(world: &World) -> LiveCounts {
             _ => counts.particles = counts.particles.saturating_add(1),
         }
     }
+    counts.lights = counts.lights.saturating_add(
+        world
+            .query::<VfxTransientLightRuntime>()
+            .count()
+            .min(u32::MAX as usize) as u32,
+    );
     if let Some(ledger) = world.resource::<VfxGpuParticleLedger>() {
         for layer in ledger.layers() {
             counts.layers = counts.layers.saturating_add(layer.particle_count);
@@ -1007,6 +1076,13 @@ fn despawn_layers_for_instance(world: &mut World, id: VfxInstanceId) {
         .filter_map(|(entity, layer)| (layer.instance_id == id).then_some(entity))
         .collect::<Vec<_>>();
     for entity in layers {
+        let _ = world.despawn(entity);
+    }
+    let transient_lights = world
+        .query::<VfxTransientLightRuntime>()
+        .filter_map(|(entity, runtime)| (runtime.instance_id == id).then_some(entity))
+        .collect::<Vec<_>>();
+    for entity in transient_lights {
         let _ = world.despawn(entity);
     }
     let removed_gpu_particles = world

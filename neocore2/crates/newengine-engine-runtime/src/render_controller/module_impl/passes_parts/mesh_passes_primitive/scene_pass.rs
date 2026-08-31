@@ -21,8 +21,7 @@ pub(super) fn draw_primitives_for_pass(
         && crate::runtime_policy::render_runtime_policy().primitive_stage_log;
     let stage_total_started = stage_profile.then(std::time::Instant::now);
     let scan_started = stage_profile.then(std::time::Instant::now);
-    let (primitive_snapshot, snapshot_reused) =
-        this.primitive_scene_snapshot(scene, runtime);
+    let (primitive_snapshot, snapshot_reused) = this.primitive_scene_snapshot(scene, runtime);
     let reg_lock = this.bridges.scene.primitives();
     let reg = reg_lock.read();
     let mats_lock = this.bridges.scene.materials();
@@ -217,11 +216,11 @@ pub(super) fn draw_primitives_for_pass(
             plan
         } else {
             let gpu = ensure_primitive_gpu(&reg, prim.id, &mut this.gpu.meshes.prim_cache, r)?;
-            let owned_material_plan = this
-                .gpu
-                .material
-                .resolved_lit_plans
-                .resolve(&*mats, material_ref, prim.color);
+            let owned_material_plan =
+                this.gpu
+                    .material
+                    .resolved_lit_plans
+                    .resolve(&*mats, material_ref, prim.color);
             let mut material_plan = owned_material_plan.as_borrowed();
             if let Some(runtime) = sky_runtime.as_ref() {
                 material_plan.uv_transform = runtime.uv_transform;

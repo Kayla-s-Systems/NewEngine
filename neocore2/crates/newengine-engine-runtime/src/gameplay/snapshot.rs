@@ -19,10 +19,11 @@ use super::inventory::{
     PlayerInventory, WorldItemPresentation, WorldItemRuntime,
 };
 use super::{
-    DisplayVisibility, GameplayModalState, Health, HitscanWeaponTuning, Interactable,
-    InteractionEventBus, PhysicsBodyDesc, PhysicsSurface, PlayerCommandFrame, PlayerEventBus,
-    PlayerFallState, PlayerGroundState, PlayerInteractionTuning, PlayerLandingState,
-    PlayerLocomotionState, PlayerStanceState, PlayerWeaponState, WeaponEventBus,
+    DisplayVisibility, GameplayCapabilityBus, GameplayEventBus, GameplayModalState, Health,
+    HitscanWeaponTuning, Interactable, InteractionEventBus, PhysicsBodyDesc, PhysicsSurface,
+    PlayerCommandFrame, PlayerEventBus, PlayerFallState, PlayerGroundState,
+    PlayerInteractionTuning, PlayerLandingState, PlayerLocomotionState, PlayerStanceState,
+    PlayerWeaponState, WeaponEventBus,
 };
 
 #[derive(Clone, Debug)]
@@ -68,6 +69,8 @@ pub struct RuntimeEntitySnapshot {
 #[derive(Clone, Debug, Default)]
 pub struct RuntimeWorldSnapshot {
     pub entities: Vec<RuntimeEntitySnapshot>,
+    pub gameplay_capabilities: Option<GameplayCapabilityBus>,
+    pub gameplay_events: Option<GameplayEventBus>,
     pub player_events: Option<PlayerEventBus>,
     pub weapon_events: Option<WeaponEventBus>,
     pub interaction_events: Option<InteractionEventBus>,
@@ -123,6 +126,8 @@ pub fn capture_runtime_world_snapshot(world: &World) -> RuntimeWorldSnapshot {
     entities.sort_by_key(|it| it.entity.stable_u64());
     RuntimeWorldSnapshot {
         entities,
+        gameplay_capabilities: world.resource::<GameplayCapabilityBus>().cloned(),
+        gameplay_events: world.resource::<GameplayEventBus>().cloned(),
         player_events: world.resource::<PlayerEventBus>().cloned(),
         weapon_events: world.resource::<WeaponEventBus>().cloned(),
         interaction_events: world.resource::<InteractionEventBus>().cloned(),
@@ -173,6 +178,8 @@ fn restore_resource_clone<T: Clone + Send + Sync + 'static>(world: &mut World, v
 pub fn restore_runtime_world_snapshot(world: &mut World, snapshot: RuntimeWorldSnapshot) {
     let RuntimeWorldSnapshot {
         entities,
+        gameplay_capabilities,
+        gameplay_events,
         player_events,
         weapon_events,
         interaction_events,
@@ -235,6 +242,8 @@ pub fn restore_runtime_world_snapshot(world: &mut World, snapshot: RuntimeWorldS
         restore_component_opt(world, entry.entity, entry.pending_interaction);
     }
 
+    restore_resource_clone(world, gameplay_capabilities);
+    restore_resource_clone(world, gameplay_events);
     restore_resource_clone(world, player_events);
     restore_resource_clone(world, weapon_events);
     restore_resource_clone(world, interaction_events);

@@ -179,6 +179,7 @@ struct ResolvedMapDefinitionEntry {
     refs: ResolvedMapDefinitionRefs,
     semantic_tags: Vec<String>,
     model_explanation: ResolvedMapDefinitionModelExplanation,
+    arbitrary_metadata: std::collections::BTreeMap<String, serde_json::Value>,
 }
 
 fn load_resolved_map_definition(
@@ -255,6 +256,27 @@ fn metadata_usize(index: &newengine_assets_api::MapIndexV1, key: &str, default: 
         .unwrap_or(default)
 }
 
+fn metadata_f32(index: &newengine_assets_api::MapIndexV1, key: &str, default: f32) -> f32 {
+    index
+        .metadata
+        .get(key)
+        .and_then(|value| value.trim().parse::<f32>().ok())
+        .filter(|value| value.is_finite())
+        .unwrap_or(default)
+}
+
+fn metadata_bool(index: &newengine_assets_api::MapIndexV1, key: &str, default: bool) -> bool {
+    index
+        .metadata
+        .get(key)
+        .and_then(|value| match value.trim().to_ascii_lowercase().as_str() {
+            "true" | "1" | "yes" | "on" => Some(true),
+            "false" | "0" | "no" | "off" => Some(false),
+            _ => None,
+        })
+        .unwrap_or(default)
+}
+
 fn load_discrete_cell(
     map_ref: &str,
     coord: newengine_assets_api::MapCellCoordV1,
@@ -287,6 +309,61 @@ fn load_discrete_cell(
             coord.x, coord.z
         )
     })
+}
+
+#[derive(Clone, Debug, Default)]
+struct DefinitionSurfaceBinding {
+    id: String,
+    events: std::collections::BTreeMap<String, String>,
+    ground_placement_surface: bool,
+}
+
+fn definition_surface_binding(definition: &ResolvedMapDefinitionEntry) -> DefinitionSurfaceBinding {
+    fn parse(value: &serde_json::Value) -> Option<DefinitionSurfaceBinding> {
+        let object = value.as_object()?;
+        let id = object
+            .get("id")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default()
+            .trim()
+            .to_owned();
+        let events = object
+            .get("events")
+            .and_then(serde_json::Value::as_object)
+            .into_iter()
+            .flat_map(|events| events.iter())
+            .filter_map(|(signal, event_id)| {
+                let signal = signal.trim().to_owned();
+                let event_id = event_id.as_str()?.trim().to_owned();
+                (!signal.is_empty() && !event_id.is_empty()).then_some((signal, event_id))
+            })
+            .collect();
+        let ground_placement_surface = object
+            .get("ground_placement_surface")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false);
+        Some(DefinitionSurfaceBinding {
+            id,
+            events,
+            ground_placement_surface,
+        })
+    }
+
+    for root_name in ["metadata", "namespaces"] {
+        let Some(root) = definition
+            .arbitrary_metadata
+            .get(root_name)
+            .and_then(serde_json::Value::as_object)
+        else {
+            continue;
+        };
+        for namespace in ["newengine.physics.surface", "engine.physics.surface"] {
+            if let Some(binding) = root.get(namespace).and_then(parse) {
+                return binding;
+            }
+        }
+    }
+    DefinitionSurfaceBinding::default()
 }
 
 fn apply_discrete_placement(
@@ -376,6 +453,7 @@ fn apply_discrete_placement(
         .first()
         .cloned()
         .unwrap_or_default();
+    let surface_binding = definition_surface_binding(&definition);
     let position = Vec3::new(
         placement.transform.position[0],
         placement.transform.position[1],
@@ -416,6 +494,9 @@ fn apply_discrete_placement(
                 "world_static_ydd".to_owned()
             },
             material: material_ref,
+            surface_id: surface_binding.id.clone(),
+            surface_events: surface_binding.events.clone(),
+            ground_placement_surface: surface_binding.ground_placement_surface,
             enabled: true,
             position,
             rotation_ypr,
@@ -458,6 +539,9 @@ fn apply_discrete_placement(
                 "world_collision_ydd".to_owned()
             },
             material: String::new(),
+            surface_id: surface_binding.id.clone(),
+            surface_events: surface_binding.events.clone(),
+            ground_placement_surface: surface_binding.ground_placement_surface,
             enabled: true,
             position,
             rotation_ypr,
@@ -511,6 +595,78 @@ fn load_discrete_map_profile(logical_path: &str) -> Result<GameReadyMapProfile, 
     profile.foliage.max_count = 0;
     profile.prefabs.clear();
     profile.definitions.clear();
+
+    // Discrete YMAP v2 owns project camera authoring through map metadata. The generic camera
+    // runtime receives this typed profile and executes it; it does not choose game-specific lens,
+    // owner visibility, or first-person look envelopes. Missing keys preserve compatibility defaults.
+    let camera_defaults = profile.gameplay.camera;
+    profile.gameplay.camera = GameReadyCameraSpec {
+        first_person_fov_y_radians: metadata_f32(
+            &index,
+            "camera.first_person_fov_y_degrees",
+            camera_defaults.first_person_fov_y_radians.to_degrees(),
+        )
+        .to_radians(),
+        first_person_ads_fov_y_radians: metadata_f32(
+            &index,
+            "camera.first_person_ads_fov_y_degrees",
+            camera_defaults.first_person_ads_fov_y_radians.to_degrees(),
+        )
+        .to_radians(),
+        first_person_near: metadata_f32(
+            &index,
+            "camera.first_person_near",
+            camera_defaults.first_person_near,
+        ),
+        first_person_forward_clearance: metadata_f32(
+            &index,
+            "camera.first_person_forward_clearance",
+            camera_defaults.first_person_forward_clearance,
+        ),
+        first_person_body_yaw_limit_radians: metadata_f32(
+            &index,
+            "camera.first_person_body_yaw_limit_degrees",
+            camera_defaults
+                .first_person_body_yaw_limit_radians
+                .to_degrees(),
+        )
+        .to_radians(),
+        first_person_down_pitch_limit_radians: metadata_f32(
+            &index,
+            "camera.first_person_down_pitch_limit_degrees",
+            camera_defaults
+                .first_person_down_pitch_limit_radians
+                .to_degrees(),
+        )
+        .to_radians(),
+        third_person_follow_fov_y_radians: metadata_f32(
+            &index,
+            "camera.third_person_follow_fov_y_degrees",
+            camera_defaults
+                .third_person_follow_fov_y_radians
+                .to_degrees(),
+        )
+        .to_radians(),
+        third_person_aim_fov_y_radians: metadata_f32(
+            &index,
+            "camera.third_person_aim_fov_y_degrees",
+            camera_defaults.third_person_aim_fov_y_radians.to_degrees(),
+        )
+        .to_radians(),
+        third_person_orbit_fov_y_radians: metadata_f32(
+            &index,
+            "camera.third_person_orbit_fov_y_degrees",
+            camera_defaults
+                .third_person_orbit_fov_y_radians
+                .to_degrees(),
+        )
+        .to_radians(),
+        hide_local_model_in_first_person: metadata_bool(
+            &index,
+            "camera.hide_local_model_in_first_person",
+            camera_defaults.hide_local_model_in_first_person,
+        ),
+    };
 
     let mode_sky_definition = profile.sky.definition_ref.trim().to_owned();
     if !mode_sky_definition.is_empty() {

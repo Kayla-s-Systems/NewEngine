@@ -402,27 +402,30 @@ impl CameraGatewayBridge {
 
         let first_person_aiming =
             player.is_some_and(|player| active_weapon_aim_intent(world, player));
-        let (snapshot, report, resolved_frame) = if let Some(manager) =
-            world.resource_mut::<CameraManagerResource>()
-        {
-            manager.sync_runtime_nav_mode_from_controller(out.controller.mode);
-            manager.set_last_cursor(out.cursor);
-            let frame = manager.resolve_camera_frame(out.frame, dt);
-            let frame =
-                apply_gameplay_view_lens(frame, manager.active_view_mode(), first_person_aiming);
-            let effects = manager.last_post_effects().unwrap_or_default();
-            (
-                camera_frame_snapshot_for_view(frame, effects, manager.active_view_mode()),
-                Some(camera_report_snapshot(manager.report())),
-                frame,
-            )
-        } else {
-            (
-                camera_frame_snapshot_for_view(out.frame, Default::default(), active_view),
-                None,
-                out.frame,
-            )
-        };
+        let (snapshot, report, resolved_frame) =
+            if let Some(manager) = world.resource_mut::<CameraManagerResource>() {
+                manager.sync_runtime_nav_mode_from_controller(out.controller.mode);
+                manager.set_last_cursor(out.cursor);
+                let frame = manager.resolve_camera_frame(out.frame, dt);
+                let frame = apply_gameplay_view_lens(
+                    frame,
+                    manager.active_view_mode(),
+                    first_person_aiming,
+                    service_config,
+                );
+                let effects = manager.last_post_effects().unwrap_or_default();
+                (
+                    camera_frame_snapshot_for_view(frame, effects, manager.active_view_mode()),
+                    Some(camera_report_snapshot(manager.report())),
+                    frame,
+                )
+            } else {
+                (
+                    camera_frame_snapshot_for_view(out.frame, Default::default(), active_view),
+                    None,
+                    out.frame,
+                )
+            };
 
         trace_gameplay_camera_frame(
             frame_index,

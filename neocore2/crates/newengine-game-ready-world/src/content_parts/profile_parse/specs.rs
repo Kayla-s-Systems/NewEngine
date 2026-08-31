@@ -227,6 +227,15 @@ pub(in super::super) struct RawPrefabSpec {
     /// Optional exact NEMAT selector used by static world geometry.
     #[serde(default)]
     pub(in super::super) material: String,
+    /// Opaque project-authored surface id. Runtime never infers this from material/file names.
+    #[serde(default)]
+    pub(in super::super) surface_id: String,
+    /// Generic surface signal -> arbitrary project gameplay event id.
+    #[serde(default)]
+    pub(in super::super) surface_events: std::collections::BTreeMap<String, String>,
+    /// Explicit capability consumed by foliage placement; never inferred from prefab id/material.
+    #[serde(default)]
+    pub(in super::super) ground_placement_surface: bool,
     #[serde(default = "default_prefab_enabled")]
     pub(in super::super) enabled: bool,
     #[serde(default)]

@@ -10,8 +10,8 @@ mod presentation_policy;
 
 pub use character_control::apply_fps_character_commands;
 pub use character_physics::{
-    collect_character_queries, ensure_footstep_audio_preloaded, resolve_character_query_hits,
-    step_character_locomotion, sync_physics_world_settings,
+    collect_character_queries, resolve_character_query_hits, step_character_locomotion,
+    sync_physics_world_settings,
 };
 pub use noclip::{
     fps_noclip_enabled, set_fps_noclip, step_fps_noclip_motion, toggle_fps_noclip,

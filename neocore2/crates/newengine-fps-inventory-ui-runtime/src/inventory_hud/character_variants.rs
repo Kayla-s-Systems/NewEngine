@@ -163,21 +163,31 @@ pub fn assignment(variant: &FpsPlayableCharacterPolicy) -> Option<PlayerModelAss
     if !variant.runtime_ready {
         return None;
     }
+    let animation = |slot: &str, legacy: &Option<String>| {
+        variant
+            .animations
+            .slots
+            .get(slot)
+            .cloned()
+            .or_else(|| legacy.clone())
+    };
     Some(PlayerModelAssignment {
         enabled: true,
         source: variant.runtime_model_ref.as_deref()?.to_owned(),
         properties_ref: variant.properties_ref.clone(),
         texture_dictionary: variant.texture_dictionary.clone(),
         skeleton_source: variant.skeleton_ref.clone(),
-        idle_animation: variant.animations.idle.clone(),
-        walk_animation: variant.animations.walk.clone(),
-        run_animation: variant.animations.run.clone(),
-        sprint_animation: variant.animations.sprint.clone(),
-        crouch_idle_animation: variant.animations.crouch_idle.clone(),
-        crouch_walk_animation: variant.animations.crouch_walk.clone(),
-        jump_animation: variant.animations.jump.clone(),
-        fall_animation: variant.animations.fall.clone(),
+        animation_slots: variant.animations.slots.clone(),
+        idle_animation: animation("idle", &variant.animations.idle),
+        walk_animation: animation("walk", &variant.animations.walk),
+        run_animation: animation("run", &variant.animations.run),
+        sprint_animation: animation("sprint", &variant.animations.sprint),
+        crouch_idle_animation: animation("crouch_idle", &variant.animations.crouch_idle),
+        crouch_walk_animation: animation("crouch_walk", &variant.animations.crouch_walk),
+        jump_animation: animation("jump", &variant.animations.jump),
+        fall_animation: animation("fall", &variant.animations.fall),
         presentation: PlayerCharacterPresentation {
+            animation_slots: variant.presentation.animation_slots.clone(),
             detached_head_follow: variant.presentation.detached_head_follow,
             detached_head_follow_rule: variant.presentation.detached_head_follow_rule.as_ref().map(
                 |rule| PlayerPaletteFollowRule {
@@ -209,6 +219,7 @@ pub fn assignment(variant: &FpsPlayableCharacterPolicy) -> Option<PlayerModelAss
                     },
                 })
                 .collect(),
+            skin_sidecar: None,
             braid_secondary_motion: variant.presentation.braid_secondary_motion.as_ref().map(
                 |rig| PlayerBraidSecondaryMotionRig {
                     chain_joints: rig.chain_joints.clone(),

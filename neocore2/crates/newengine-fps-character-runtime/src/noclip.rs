@@ -272,10 +272,13 @@ mod tests {
 
         assert!(!set_fps_noclip(&mut world, player, true));
         assert!(!fps_noclip_enabled(&world, player));
-        assert_eq!(world.get::<PhysicsBodyDesc>(player).copied(), Some(original));
+        assert_eq!(
+            world.get::<PhysicsBodyDesc>(player).copied(),
+            Some(original)
+        );
     }
 
-     #[test]
+    #[test]
     fn noclip_removes_and_restores_player_physics_body() {
         let mut world = World::new();
         let player = spawn_default_player(&mut world, None, "noclip-player", Vec3::ZERO);

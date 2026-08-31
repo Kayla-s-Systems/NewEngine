@@ -6,8 +6,6 @@ description = "Reusable FPS character control, locomotion and foot-contact mecha
 license = "Proprietary"
 
 [dependencies]
-newengine-audio-api = { path = "../newengine-audio-api" }
-newengine-audio-client = { path = "../newengine-audio-client" }
 newengine-ecs = { path = "../newengine-ecs" }
 newengine-engine-runtime = { path = "../newengine-engine-runtime" }
 newengine-gameplay-fps-api = { path = "../newengine-gameplay-fps-api" }
@@ -19,3 +17,4 @@ newengine-sim = { path = "../newengine-sim" }
 newengine-transform = { path = "../newengine-transform" }
 newengine-ui-api = { path = "../newengine-ui-api" }
 newengine-ulog-api = { path = "../newengine-ulog-api" }
+serde_json = "1"

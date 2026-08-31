@@ -98,6 +98,21 @@ pub(super) fn camera_runtime_service_config(
 ) -> CameraRuntimeServiceConfig {
     let mut config = CameraRuntimeServiceConfig::default();
     if let Some(player) = first_player(world) {
+        if let Some(profile) = world
+            .get::<crate::gameplay::PlayerCameraProfile>(player)
+            .copied()
+            .map(crate::gameplay::PlayerCameraProfile::sanitized)
+        {
+            config.first_person_forward_clearance = profile.first_person_forward_clearance;
+            config.first_person_body_yaw_limit_radians =
+                profile.first_person_body_yaw_limit_radians;
+            config.first_person_fov_y_radians = profile.first_person_fov_y_radians;
+            config.first_person_ads_fov_y_radians = profile.first_person_ads_fov_y_radians;
+            config.first_person_near = profile.first_person_near;
+            config.third_person_follow_fov_y_radians = profile.third_person_follow_fov_y_radians;
+            config.third_person_aim_fov_y_radians = profile.third_person_aim_fov_y_radians;
+            config.third_person_orbit_fov_y_radians = profile.third_person_orbit_fov_y_radians;
+        }
         if let Some(body) = world.get::<CharacterBody>(player) {
             let body = body.sanitized();
             config.first_person_eye_height = world
@@ -166,6 +181,15 @@ pub(super) fn camera_runtime_service_config(
                     surface_padding: barrier.surface_padding,
                     downward_pitch_limit_radians: barrier.downward_pitch_limit_radians,
                 };
+            if let Some(profile) = world
+                .get::<crate::gameplay::PlayerCameraProfile>(player)
+                .copied()
+                .map(crate::gameplay::PlayerCameraProfile::sanitized)
+            {
+                config
+                    .first_person_body_barrier
+                    .downward_pitch_limit_radians = profile.first_person_down_pitch_limit_radians;
+            }
 
             if let Some(anchor) = world
                 .get::<crate::gameplay::PlayerFirstPersonCameraAnchor>(player)
@@ -173,11 +197,20 @@ pub(super) fn camera_runtime_service_config(
                 .filter(|anchor| anchor.eye_center_ws.is_finite())
             {
                 config.first_person_anchor_ws = Some(anchor.eye_center_ws);
-                config.first_person_forward_clearance = if anchor.forward_clearance.is_finite() {
-                    anchor.forward_clearance.clamp(0.0, 0.08)
-                } else {
-                    0.045
-                };
+                // Avatar providers publish the resolved anchor; project camera authoring owns
+                // the clearance value. Accept provider clearance only for legacy players that
+                // have no PlayerCameraProfile component.
+                if world
+                    .get::<crate::gameplay::PlayerCameraProfile>(player)
+                    .is_none()
+                {
+                    config.first_person_forward_clearance = if anchor.forward_clearance.is_finite()
+                    {
+                        anchor.forward_clearance.clamp(0.0, 0.25)
+                    } else {
+                        config.first_person_forward_clearance
+                    };
+                }
             }
             if let Some(render_pose) = world
                 .get::<crate::gameplay::PlayerRenderPose>(player)
@@ -590,6 +623,7 @@ pub(super) fn apply_runtime_input(
             routed.look_active,
             service_config.sprint_multiplier,
             service_config.runner,
+            service_config.first_person_body_yaw_limit_radians,
             service_config
                 .first_person_body_barrier
                 .downward_pitch_limit_radians,
@@ -643,24 +677,20 @@ pub(super) fn apply_gameplay_view_lens(
     frame: CameraFrame,
     active_view: CameraViewMode,
     first_person_aiming: bool,
+    config: CameraRuntimeServiceConfig,
 ) -> CameraFrame {
     let target_fov_y = match active_view {
-        // RMB/ADS narrows the lens while the view-model moves onto the sight line. Hip-fire keeps
-        // the wider ~100-degree horizontal presentation used by normal first-person traversal.
-        CameraViewMode::FirstPerson if first_person_aiming => 45.0_f32.to_radians(),
-        CameraViewMode::FirstPerson => 68.0_f32.to_radians(),
-        CameraViewMode::ThirdPersonFollow => 64.0_f32.to_radians(),
-        CameraViewMode::ThirdPersonAim => 54.0_f32.to_radians(),
-        CameraViewMode::ThirdPersonOrbit => 60.0_f32.to_radians(),
+        CameraViewMode::FirstPerson if first_person_aiming => config.first_person_ads_fov_y_radians,
+        CameraViewMode::FirstPerson => config.first_person_fov_y_radians,
+        CameraViewMode::ThirdPersonFollow => config.third_person_follow_fov_y_radians,
+        CameraViewMode::ThirdPersonAim => config.third_person_aim_fov_y_radians,
+        CameraViewMode::ThirdPersonOrbit => config.third_person_orbit_fov_y_radians,
     };
     let Projection::Perspective(mut perspective) = frame.projection else {
         return frame;
     };
     let target_near = if matches!(active_view, CameraViewMode::FirstPerson) {
-        // Full-body FPP shares world geometry with the character. A 1 cm near plane exposes
-        // backfaces inside face/clothing shells; 4.5 cm still preserves close interaction while
-        // behaving like a dedicated FPP render contract.
-        0.045
+        config.first_person_near
     } else {
         perspective.near
     };

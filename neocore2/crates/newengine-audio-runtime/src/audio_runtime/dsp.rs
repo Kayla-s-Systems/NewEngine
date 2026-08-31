@@ -846,32 +846,22 @@ fn load_atomic_vec3(bits: &[Arc<AtomicU32>; 3]) -> [f32; 3] {
     std::array::from_fn(|index| f32::from_bits(bits[index].load(Ordering::Relaxed)))
 }
 
-#[inline]
-fn distance_sq3(a: [f32; 3], b: [f32; 3]) -> f32 {
-    let x = a[0] - b[0];
-    let y = a[1] - b[1];
-    let z = a[2] - b[2];
-    x * x + y * y + z * z
-}
-
-/// Preserves the existing rodio Spatial direct-field law while allowing early/late components to
-/// be spatialized separately after one shared decode.
+/// Direction-only speaker pan for the direct field. Distance energy is deliberately absent here:
+/// authored `AudioAttenuationSettings` is evaluated once in `voice_output_gain`/materialization.
+/// Applying another inverse-distance law in the spatializer caused spatial voices to be attenuated
+/// twice and could make otherwise healthy physical voices effectively inaudible.
 fn direct_stereo_gains(spatial: SpatialMixSnapshot) -> [f32; 2] {
-    let left_dist_sq = distance_sq3(spatial.left_ear, spatial.emitter_position).max(1.0e-8);
-    let right_dist_sq = distance_sq3(spatial.right_ear, spatial.emitter_position).max(1.0e-8);
-    let ear_span = distance_sq3(spatial.left_ear, spatial.right_ear).sqrt();
-    if !ear_span.is_finite() || ear_span <= 1.0e-5 {
-        let gain = (1.0 / left_dist_sq).min(1.0);
-        return [gain, gain];
-    }
-    let left_dist = left_dist_sq.sqrt();
-    let right_dist = right_dist_sq.sqrt();
-    let left_diff = (((left_dist - right_dist) / ear_span + 1.0) / 4.0 + 0.5).min(1.0);
-    let right_diff = (((right_dist - left_dist) / ear_span + 1.0) / 4.0 + 0.5).min(1.0);
-    [
-        left_diff * (1.0 / left_dist_sq).min(1.0),
-        right_diff * (1.0 / right_dist_sq).min(1.0),
-    ]
+    let listener_center = [
+        (spatial.left_ear[0] + spatial.right_ear[0]) * 0.5,
+        (spatial.left_ear[1] + spatial.right_ear[1]) * 0.5,
+        (spatial.left_ear[2] + spatial.right_ear[2]) * 0.5,
+    ];
+    let listener_to_emitter = [
+        spatial.emitter_position[0] - listener_center[0],
+        spatial.emitter_position[1] - listener_center[1],
+        spatial.emitter_position[2] - listener_center[2],
+    ];
+    reflection_stereo_gains(listener_to_emitter, spatial)
 }
 
 /// Equal-power speaker pan from a world-space arrival vector. Ear separation defines listener
@@ -1231,5 +1221,36 @@ where
         self.input.try_seek(pos)?;
         self.reset_environment_state();
         Ok(())
+    }
+}
+#[cfg(test)]
+mod direct_spatial_gain_tests {
+    use super::*;
+
+    fn snapshot(emitter: [f32; 3]) -> SpatialMixSnapshot {
+        SpatialMixSnapshot {
+            emitter_position: emitter,
+            left_ear: [-0.1, 0.0, 0.0],
+            right_ear: [0.1, 0.0, 0.0],
+        }
+    }
+
+    #[test]
+    fn direct_pan_does_not_apply_a_second_distance_law() {
+        let near = direct_stereo_gains(snapshot([0.0, 0.0, 1.0]));
+        let far = direct_stereo_gains(snapshot([0.0, 0.0, 100.0]));
+        assert!((near[0] - far[0]).abs() < 1.0e-6);
+        assert!((near[1] - far[1]).abs() < 1.0e-6);
+        assert!((near[0] - 1.0).abs() < 1.0e-6);
+        assert!((near[1] - 1.0).abs() < 1.0e-6);
+    }
+
+    #[test]
+    fn direct_pan_preserves_directionality_without_distance_attenuation() {
+        let right = direct_stereo_gains(snapshot([10.0, 0.0, 2.0]));
+        let right_far = direct_stereo_gains(snapshot([100.0, 0.0, 20.0]));
+        assert!(right[1] > right[0]);
+        assert!((right[0] - right_far[0]).abs() < 1.0e-6);
+        assert!((right[1] - right_far[1]).abs() < 1.0e-6);
     }
 }

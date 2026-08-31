@@ -5,18 +5,21 @@ use std::sync::Arc;
 
 use newengine_ecs::EntityId;
 use newengine_engine_runtime::gameplay::{
-    step_world_items, GameplayExecutionPhase, GameplayFrame, GameplayPhysicsQueryProvider,
-    GameplaySystemProvider, GameplayWorld,
+    drain_gameplay_events, step_world_items, GameplayExecutionPhase, GameplayFrame,
+    GameplayPhysicsQueryProvider, GameplaySystemProvider, GameplayWorld,
 };
-use newengine_gameplay_fps_api::{FpsCharacterMenuPolicyProvider, FpsGameplayPolicyProvider};
+use newengine_gameplay_fps_api::{
+    FpsCharacterMenuPolicyProvider, FpsGameplayPolicyProvider, FpsGameplayPolicySnapshot,
+    FpsPolicyEvent,
+};
 use newengine_gameplay_script_api::ScriptedGameplayProvider;
 use newengine_gameplay_script_runtime::{step_scripted_gameplay, GameplayCommandExecutor};
 use newengine_physics_api::{PhysicsQueryDto, PhysicsQueryHitDto};
 
 use newengine_fps_character_runtime::apply_fps_character_commands;
 use newengine_fps_character_runtime::{
-    collect_character_queries, ensure_footstep_audio_preloaded, resolve_character_query_hits,
-    step_character_locomotion, step_fps_noclip_motion, sync_physics_world_settings,
+    collect_character_queries, resolve_character_query_hits, step_character_locomotion,
+    step_fps_noclip_motion, sync_physics_world_settings,
 };
 use newengine_fps_combat_runtime::step_player_combat;
 use newengine_fps_content_runtime::ensure_fps_player_loadouts;
@@ -64,6 +67,66 @@ impl FpsGameplayProvider {
     }
 }
 
+fn dispatch_project_events(
+    world: &mut GameplayWorld,
+    policy_provider: &dyn FpsGameplayPolicyProvider,
+    command_executor: &GameplayCommandExecutor,
+) {
+    // Drain exactly one batch. Consumers receive the same immutable semantic facts; events
+    // published by handlers are intentionally deferred to the next dispatch point/frame.
+    let events = drain_gameplay_events(world);
+    if events.is_empty() {
+        return;
+    }
+
+    // Engine presentation is a subscriber, not a combat dependency. Projects receive the same
+    // event batch below and may independently attach audio, scripts or additional presentation.
+    newengine_fps_projectile_runtime::consume_weapon_gameplay_events(world, &events);
+
+    let Some(policy) = world.resource::<FpsGameplayPolicySnapshot>().cloned() else {
+        return;
+    };
+    if policy.event_subscriptions.is_empty() {
+        return;
+    }
+
+    for event in events {
+        let routed = FpsPolicyEvent::Project {
+            id: event.id.clone(),
+            source: event.source,
+            payload: event.payload.clone(),
+        };
+        for subscription in policy
+            .event_subscriptions
+            .iter()
+            .filter(|subscription| subscription.matches(&event.id))
+        {
+            match policy_provider.invoke_event(&subscription.operation, &routed) {
+                Ok(decision) => {
+                    if !decision.commands.commands.is_empty() {
+                        if let Err(error) = command_executor.execute(world, &decision.commands) {
+                            newengine_ulog_api::ulog::error!(
+                                "project event command transaction failed event='{}' operation='{}' err='{}'",
+                                event.id,
+                                subscription.operation,
+                                error
+                            );
+                        }
+                    }
+                }
+                Err(error) => {
+                    newengine_ulog_api::ulog::error!(
+                        "project event callback failed event='{}' operation='{}' err='{}'",
+                        event.id,
+                        subscription.operation,
+                        error
+                    );
+                }
+            }
+        }
+    }
+}
+
 impl GameplaySystemProvider for FpsGameplayProvider {
     #[inline]
     fn id(&self) -> &'static str {
@@ -89,7 +152,6 @@ impl GameplaySystemProvider for FpsGameplayProvider {
             }
             GameplayExecutionPhase::BeforePhysics => {
                 sync_physics_world_settings(world);
-                ensure_footstep_audio_preloaded(world);
                 ensure_fps_player_loadouts(world);
                 step_scripted_gameplay(
                     world,
@@ -115,6 +177,11 @@ impl GameplaySystemProvider for FpsGameplayProvider {
                 step_fps_objective_events(
                     world,
                     frame.dt,
+                    self.policy_provider.as_ref(),
+                    &self.command_executor,
+                );
+                dispatch_project_events(
+                    world,
                     self.policy_provider.as_ref(),
                     &self.command_executor,
                 );

@@ -129,10 +129,24 @@ impl GameplayContentProvider for FpsContentProvider {
 
     fn install(&self, world: &mut GameplayWorld) -> Result<(), String> {
         let (policy, package) = self.load_compiled_content()?;
-        project_vfx::install_project_vfx_dictionaries(world, &package.catalog)?;
+        // Presentation assets are an independent failure domain. A malformed project FXD must
+        // never prevent installation of gameplay policy/event subscriptions, inventory content,
+        // scripted state machines, or audio routing. We still fail the VFX capability explicitly:
+        // no synthetic effect is substituted and the degraded state is logged.
+        let vfx_error =
+            project_vfx::install_project_vfx_dictionaries(world, &package.catalog).err();
+        if vfx_error.is_some() {
+            project_vfx::install_empty_project_vfx_resources(world);
+        }
         install_compiled_item_package(world, package);
         install_policy_resources(world, policy.as_ref());
         ensure_scripted_mission_state_machine(world, policy.as_ref())?;
+        if let Some(error) = vfx_error {
+            newengine_ulog_api::ulog::warn!(
+                "fps project VFX unavailable err='{}' policy='explicit-degraded-no-fallback; gameplay policy remains active'",
+                error
+            );
+        }
         newengine_ulog_api::ulog::info!(
             "fps gameplay policy installed provider='{}' schema='{}' version={} items_source='lua structured content' default_loadout='{}' callbacks=[interaction:'{}',hit:'{}',mission:'{}']",
             self.policy_provider.id(),

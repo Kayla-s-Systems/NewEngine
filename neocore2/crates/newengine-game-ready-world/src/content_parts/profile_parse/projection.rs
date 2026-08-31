@@ -61,6 +61,17 @@ impl RawGameReadyPayload {
                     properties_ref: sanitize_asset_path(self.player.model.properties_ref),
                     texture_dictionary: sanitize_texture_path(self.player.model.texture_dictionary),
                     skeleton: sanitize_asset_path(self.player.model.skeleton),
+                    animation_slots: self
+                        .player
+                        .model
+                        .animation_slots
+                        .into_iter()
+                        .filter_map(|(slot, reference)| {
+                            let slot = slot.trim().to_owned();
+                            let reference = sanitize_asset_path(Some(reference))?;
+                            (!slot.is_empty()).then_some((slot, reference))
+                        })
+                        .collect(),
                     idle_animation: sanitize_asset_path(self.player.model.idle_animation),
                     walk_animation: sanitize_asset_path(self.player.model.walk_animation),
                     run_animation: sanitize_asset_path(self.player.model.run_animation),
@@ -89,6 +100,7 @@ impl RawGameReadyPayload {
                     eye_parent_follow: false,
                     eye_parent_follow_rule: None,
                     helper_pose_copies: Vec::new(),
+                    skin_sidecar: None,
                     braid_secondary_motion: None,
                     equipment_ready_animation: None,
                     equipment_aim_animation: None,
@@ -252,6 +264,52 @@ impl RawGameReadyPayload {
                         .player_visual
                         .sprint_multiplier
                         .clamp(1.0, 8.0),
+                },
+                camera: GameReadyCameraSpec {
+                    first_person_fov_y_radians: self
+                        .gameplay
+                        .camera
+                        .first_person_fov_y_degrees
+                        .to_radians(),
+                    first_person_ads_fov_y_radians: self
+                        .gameplay
+                        .camera
+                        .first_person_ads_fov_y_degrees
+                        .to_radians(),
+                    first_person_near: self.gameplay.camera.first_person_near,
+                    first_person_forward_clearance: self
+                        .gameplay
+                        .camera
+                        .first_person_forward_clearance,
+                    first_person_body_yaw_limit_radians: self
+                        .gameplay
+                        .camera
+                        .first_person_body_yaw_limit_degrees
+                        .to_radians(),
+                    first_person_down_pitch_limit_radians: self
+                        .gameplay
+                        .camera
+                        .first_person_down_pitch_limit_degrees
+                        .to_radians(),
+                    third_person_follow_fov_y_radians: self
+                        .gameplay
+                        .camera
+                        .third_person_follow_fov_y_degrees
+                        .to_radians(),
+                    third_person_aim_fov_y_radians: self
+                        .gameplay
+                        .camera
+                        .third_person_aim_fov_y_degrees
+                        .to_radians(),
+                    third_person_orbit_fov_y_radians: self
+                        .gameplay
+                        .camera
+                        .third_person_orbit_fov_y_degrees
+                        .to_radians(),
+                    hide_local_model_in_first_person: self
+                        .gameplay
+                        .camera
+                        .hide_local_model_in_first_person,
                 },
                 physics: GameReadyPhysicsSpec {
                     gravity: self.gameplay.physics.gravity.clamp(0.0, 80.0),

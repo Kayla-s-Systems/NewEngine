@@ -294,6 +294,7 @@ enum VoiceSource {
     Stream {
         uri: String,
         buffer: AudioStreamBufferConfig,
+        source_duration: Option<Duration>,
     },
     Tone {
         frequency: f32,
@@ -308,7 +309,7 @@ impl VoiceSource {
             Self::Clip {
                 source_duration, ..
             } => *source_duration,
-            Self::Stream { .. } => None,
+            Self::Stream { source_duration, .. } => *source_duration,
             Self::Tone { duration, .. } => Some(*duration),
         }
     }
@@ -320,8 +321,34 @@ impl VoiceSource {
             Self::Clip {
                 source_duration: Some(_),
                 ..
-            }
+            } | Self::Stream { .. }
         )
+    }
+}
+
+fn physical_source_position(
+    output_position: Duration,
+    effective_speed: f32,
+    source_origin: Duration,
+) -> Duration {
+    source_origin.saturating_add(output_position.mul_f32(effective_speed))
+}
+
+fn normalize_timeline_position(
+    position: Duration,
+    source_duration: Option<Duration>,
+    looping: bool,
+) -> Duration {
+    let Some(duration) = source_duration else {
+        return position;
+    };
+    if duration.is_zero() {
+        return Duration::ZERO;
+    }
+    if looping {
+        Duration::from_secs_f64(position.as_secs_f64() % duration.as_secs_f64())
+    } else {
+        position.min(duration)
     }
 }
 
@@ -340,7 +367,14 @@ struct VoiceEntry {
     last_spatial_update: Option<Instant>,
     environment: AudioEnvironmentState,
     stream_stats: Option<Arc<StreamingStats>>,
+    /// Absolute media timeline position corresponding to physical Player::get_pos() == 0.
+    /// Non-stream sources keep this at zero; rebuilt streams set it to their resume point.
+    physical_source_origin: Duration,
     concurrency_group: String,
+    concurrency_scope: AudioConcurrencyScope,
+    concurrency_scope_id: Option<u64>,
+    policy_instance_id: u64,
+    voice_budget: String,
     priority: i32,
     paused: bool,
     /// Timeline position in source time, independent of playback speed.
@@ -365,24 +399,16 @@ impl VoiceEntry {
     }
 
     fn normalized_source_position(&self, position: Duration) -> Duration {
-        let Some(duration) = self.source.source_duration() else {
-            return position;
-        };
-        if duration.is_zero() {
-            return Duration::ZERO;
-        }
-        if self.looping {
-            let duration_secs = duration.as_secs_f64();
-            Duration::from_secs_f64(position.as_secs_f64() % duration_secs)
-        } else {
-            position.min(duration)
-        }
+        normalize_timeline_position(position, self.source.source_duration(), self.looping)
     }
 
     fn current_source_position(&self, now: Instant) -> Duration {
         if let Some(control) = self.control.as_ref() {
-            return self
-                .normalized_source_position(control.get_pos().mul_f32(self.effective_speed()));
+            return self.normalized_source_position(physical_source_position(
+                control.get_pos(),
+                self.effective_speed(),
+                self.physical_source_origin,
+            ));
         }
         let mut position = self.virtual_source_position;
         if !self.paused {
@@ -507,13 +533,14 @@ impl VoiceEntry {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 struct VoiceRank {
     voice_id: u64,
     priority: i32,
     audibility: f32,
     distance: f32,
     already_physical: bool,
+    budget: String,
 }
 
 fn sort_voice_ranks(ranks: &mut [VoiceRank]) {
@@ -530,11 +557,37 @@ fn sort_voice_ranks(ranks: &mut [VoiceRank]) {
 fn select_physical_voice_ids(
     mut ranks: Vec<VoiceRank>,
     max_physical_voices: usize,
+    reservations: &BTreeMap<String, usize>,
 ) -> HashSet<u64> {
     sort_voice_ranks(&mut ranks);
-    ranks
-        .into_iter()
-        .take(max_physical_voices)
-        .map(|rank| rank.voice_id)
-        .collect()
+    let mut selected = HashSet::with_capacity(max_physical_voices);
+
+    // Reservations are project-authored opaque budget ids. Each class may claim up to its
+    // reserved slots when it has eligible voices; unused reserved slots immediately return to
+    // the shared pool. BTreeMap order keeps selection deterministic when several reservations
+    // become active in the same frame.
+    for (budget, reserved) in reservations {
+        let mut remaining = (*reserved).min(max_physical_voices.saturating_sub(selected.len()));
+        if remaining == 0 {
+            break;
+        }
+        for rank in &ranks {
+            if remaining == 0 {
+                break;
+            }
+            if rank.budget == *budget && selected.insert(rank.voice_id) {
+                remaining -= 1;
+            }
+        }
+    }
+
+    if selected.len() < max_physical_voices {
+        for rank in &ranks {
+            if selected.len() >= max_physical_voices {
+                break;
+            }
+            selected.insert(rank.voice_id);
+        }
+    }
+    selected
 }

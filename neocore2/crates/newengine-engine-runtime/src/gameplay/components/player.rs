@@ -78,6 +78,86 @@ impl Default for CharacterMotionTuning {
     }
 }
 
+/// Project-authored gameplay camera contract consumed by the generic camera gateway.
+///
+/// The engine owns camera mechanics, but not game-specific lens, first-person visibility,
+/// or local-owner framing policy. Runtime profiles install this component from project/scene data.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PlayerCameraProfile {
+    pub first_person_fov_y_radians: f32,
+    pub first_person_ads_fov_y_radians: f32,
+    pub first_person_near: f32,
+    pub first_person_forward_clearance: f32,
+    pub first_person_body_yaw_limit_radians: f32,
+    pub first_person_down_pitch_limit_radians: f32,
+    pub third_person_follow_fov_y_radians: f32,
+    pub third_person_aim_fov_y_radians: f32,
+    pub third_person_orbit_fov_y_radians: f32,
+    /// When true, the local player's world model is presentation-hidden in first person.
+    /// Shadow passes may still consume it through the existing view-visibility contract.
+    pub hide_local_model_in_first_person: bool,
+}
+
+impl PlayerCameraProfile {
+    #[inline]
+    pub fn sanitized(self) -> Self {
+        let fov = |value: f32, fallback: f32| {
+            finite_or(value, fallback).clamp(20.0_f32.to_radians(), 130.0_f32.to_radians())
+        };
+        Self {
+            first_person_fov_y_radians: fov(self.first_person_fov_y_radians, 68.0_f32.to_radians()),
+            first_person_ads_fov_y_radians: fov(
+                self.first_person_ads_fov_y_radians,
+                45.0_f32.to_radians(),
+            ),
+            first_person_near: finite_or(self.first_person_near, 0.045).clamp(0.005, 0.50),
+            first_person_forward_clearance: finite_or(self.first_person_forward_clearance, 0.07)
+                .clamp(0.0, 0.25),
+            first_person_body_yaw_limit_radians: finite_or(
+                self.first_person_body_yaw_limit_radians,
+                65.0_f32.to_radians(),
+            )
+            .clamp(1.0_f32.to_radians(), 179.0_f32.to_radians()),
+            first_person_down_pitch_limit_radians: finite_or(
+                self.first_person_down_pitch_limit_radians,
+                85.0_f32.to_radians(),
+            )
+            .clamp(1.0_f32.to_radians(), 89.0_f32.to_radians()),
+            third_person_follow_fov_y_radians: fov(
+                self.third_person_follow_fov_y_radians,
+                64.0_f32.to_radians(),
+            ),
+            third_person_aim_fov_y_radians: fov(
+                self.third_person_aim_fov_y_radians,
+                54.0_f32.to_radians(),
+            ),
+            third_person_orbit_fov_y_radians: fov(
+                self.third_person_orbit_fov_y_radians,
+                60.0_f32.to_radians(),
+            ),
+            hide_local_model_in_first_person: self.hide_local_model_in_first_person,
+        }
+    }
+}
+
+impl Default for PlayerCameraProfile {
+    #[inline]
+    fn default() -> Self {
+        Self {
+            first_person_fov_y_radians: 68.0_f32.to_radians(),
+            first_person_ads_fov_y_radians: 45.0_f32.to_radians(),
+            first_person_near: 0.045,
+            first_person_forward_clearance: 0.07,
+            first_person_body_yaw_limit_radians: 65.0_f32.to_radians(),
+            first_person_down_pitch_limit_radians: 85.0_f32.to_radians(),
+            third_person_follow_fov_y_radians: 64.0_f32.to_radians(),
+            third_person_aim_fov_y_radians: 54.0_f32.to_radians(),
+            third_person_orbit_fov_y_radians: 60.0_f32.to_radians(),
+            hide_local_model_in_first_person: false,
+        }
+    }
+}
+
 /// Authored locomotion targets in metres per second.
 ///
 /// `CharacterMotor.move_speed` remains the low-level motor scalar and is projected from
@@ -147,6 +227,27 @@ fn finite_or(value: f32, fallback: f32) -> f32 {
     } else {
         fallback
     }
+}
+
+/// Explicit authored look-at presentation context.
+///
+/// `Standard` delegates to ordinary locomotion/equipment state selection. Contextual gameplay
+/// systems (cover, traversal, injury, etc.) may set a specific variant when they own that state.
+/// Animation runtime treats this as semantic intent only: it never infers a context from clip names
+/// or asset paths, and a character without an authored range for that context fails closed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum PlayerLookContext {
+    #[default]
+    Standard,
+    CoverLowLeft,
+    CoverLowRight,
+    Prone,
+    Supine,
+    Rope,
+    Ladder,
+    SwimIdle,
+    Injured,
+    RelaxedInjured,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -510,12 +611,28 @@ pub struct PlayerBraidSecondaryMotionRig {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+pub struct PlayerSkinSidecarDefinition {
+    pub model: String,
+    pub skeleton: String,
+    /// Exact authored namespace suffix carried by every joint in the auxiliary skeleton.
+    /// Runtime removes only this literal suffix before attempting an exact master-joint match.
+    pub joint_name_suffix: String,
+    /// Exact prefix for sidecar-local joints that intentionally have no master counterpart
+    /// (for example authored cloth simulation joints). Any other unresolved joint is rejected.
+    pub local_joint_prefix: String,
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub struct PlayerCharacterPresentation {
+    /// Project-authored animation capability bindings. The engine treats both key and value as
+    /// opaque semantic data and never constructs an asset path from either.
+    pub animation_slots: std::collections::BTreeMap<String, String>,
     pub detached_head_follow: bool,
     pub detached_head_follow_rule: Option<PlayerPaletteFollowRule>,
     pub eye_parent_follow: bool,
     pub eye_parent_follow_rule: Option<PlayerEyeParentFollowRule>,
     pub helper_pose_copies: Vec<PlayerJointCopyRule>,
+    pub skin_sidecar: Option<PlayerSkinSidecarDefinition>,
     pub braid_secondary_motion: Option<PlayerBraidSecondaryMotionRig>,
     pub equipment_ready_animation: Option<String>,
     pub equipment_aim_animation: Option<String>,
@@ -556,11 +673,13 @@ pub struct PlayerCharacterPresentation {
 impl Default for PlayerCharacterPresentation {
     fn default() -> Self {
         Self {
+            animation_slots: std::collections::BTreeMap::new(),
             detached_head_follow: false,
             detached_head_follow_rule: None,
             eye_parent_follow: false,
             eye_parent_follow_rule: None,
             helper_pose_copies: Vec::new(),
+            skin_sidecar: None,
             braid_secondary_motion: None,
             equipment_ready_animation: None,
             equipment_aim_animation: None,
@@ -605,6 +724,10 @@ pub struct PlayerModelAssignment {
     pub properties_ref: Option<String>,
     pub texture_dictionary: Option<String>,
     pub skeleton_source: Option<String>,
+    /// Authoritative project-owned animation bindings. Runtime may request a semantic capability
+    /// id, but it never assumes filename, directory, extension, or clip name.
+    pub animation_slots: std::collections::BTreeMap<String, String>,
+    /// Legacy compatibility field. New project data should use `animation_slots`.
     /// Semantic idle clip reference, e.g. `animations/foo.ycd@idle`.
     pub idle_animation: Option<String>,
     pub walk_animation: Option<String>,
@@ -633,6 +756,12 @@ impl PlayerModelAssignment {
         }
     }
 
+    /// Resolve an authored animation capability without any path/name convention.
+    #[inline]
+    pub fn animation_for_slot(&self, slot: &str) -> Option<&str> {
+        self.animation_slots.get(slot).map(String::as_str)
+    }
+
     #[inline]
     pub fn next_revision_after(mut self, previous: Option<&Self>) -> Self {
         self.revision = previous
@@ -652,6 +781,7 @@ impl Default for PlayerModelAssignment {
             properties_ref: None,
             texture_dictionary: None,
             skeleton_source: None,
+            animation_slots: std::collections::BTreeMap::new(),
             idle_animation: None,
             walk_animation: None,
             run_animation: None,
@@ -753,8 +883,8 @@ impl Default for PlayerModelBinding {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PlayerFirstPersonCameraAnchor {
     pub eye_center_ws: Vec3,
-    /// Small body-forward clearance from the stable eye center. View yaw/pitch must not rotate this
-    /// offset around the head; camera runtime may add only bounded FPP parallax.
+    /// Small body-forward clearance from the stable eye center. It is body-owned; view yaw/pitch
+    /// are orientation-only and must never translate this offset around the head.
     pub forward_clearance: f32,
 }
 
@@ -768,10 +898,10 @@ impl Default for PlayerFirstPersonCameraAnchor {
     }
 }
 
-/// Authorable self-collision envelope for a local first-person camera. Offsets are expressed
-/// in the player body frame relative to the stable eye anchor (engine forward = -Z). The camera
-/// runtime consumes only these analytic primitives; it never performs triangle collision against
-/// a deforming character mesh.
+/// Authorable local-owner first-person presentation envelope. Offsets are expressed in the player
+/// body frame relative to the stable eye anchor (engine forward = -Z). Owner geometry visibility
+/// may consume the envelope, while camera position stays rigidly eye-anchored; the downward pitch
+/// bound prevents exposing camera-near body cuts.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PlayerFirstPersonBodyBarrierProfile {
     pub enabled: bool,
@@ -807,7 +937,7 @@ impl PlayerFirstPersonBodyBarrierProfile {
             chest_bottom_offset_ls: Vec3::new(0.0, -0.525 * height_scale, 0.070 * height_scale),
             chest_radius: (radius * 0.38).clamp(0.140, 0.205),
             surface_padding: 0.012,
-            downward_pitch_limit_radians: 75.0_f32.to_radians(),
+            downward_pitch_limit_radians: 55.0_f32.to_radians(),
         }
     }
 
@@ -926,6 +1056,17 @@ pub enum PlayerViewVisibilityPolicy {
 pub struct PlayerViewVisibility {
     pub base_mode: DisplayMode,
     pub policy: PlayerViewVisibilityPolicy,
+}
+
+/// Optional local-owner geometry pair for full-body first-person presentation.
+///
+/// The world primitive is restored for third-person presentation. While first person is active,
+/// first-person primitive is a derived topology variant that may remove camera-near head/neck
+/// triangles and seal the resulting neckline while keeping the same material and skin contract.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PlayerFirstPersonPrimitiveVariant {
+    pub world_primitive: newengine_primitives::PrimitiveId,
+    pub first_person_primitive: newengine_primitives::PrimitiveId,
 }
 
 /// Presentation signal published by the camera gateway for systems that need to distinguish

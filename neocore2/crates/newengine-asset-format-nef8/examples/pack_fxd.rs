@@ -7,7 +7,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let logical_path = args
         .next()
         .map(|value| value.to_string_lossy().into_owned())
-        .unwrap_or_else(|| output.file_name().unwrap_or_default().to_string_lossy().into_owned());
+        .unwrap_or_else(|| {
+            output
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .into_owned()
+        });
     if args.next().is_some() {
         return Err("usage: pack_fxd <source.json> <output.fxd> [logical_path]".into());
     }
@@ -25,7 +31,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     fs::write(&output, &bytes)?;
     println!(
         "packed source='{}' output='{}' logical_path='{}' effects={} textures={} bytes={}",
-        source.display(), output.display(), logical_path, dictionary.effects.len(), dictionary.textures.len(), bytes.len()
+        source.display(),
+        output.display(),
+        logical_path,
+        dictionary.effects.len(),
+        dictionary.textures.len(),
+        bytes.len()
     );
     Ok(())
 }

@@ -19,6 +19,7 @@ impl AudioRuntimeState {
             physical_voices,
             virtual_voices: self.voices.len().saturating_sub(physical_voices),
             max_physical_voices: self.max_physical_voices,
+            voice_budget_reservations: self.voice_budget_reservations.clone(),
             attenuated_voices: self
                 .voices
                 .values()
@@ -69,6 +70,22 @@ impl AudioRuntimeState {
                 .values()
                 .filter(|voice| matches!(voice.source, VoiceSource::Stream { .. }))
                 .count(),
+            physical_streams: self
+                .voices
+                .values()
+                .filter(|voice| {
+                    matches!(voice.source, VoiceSource::Stream { .. }) && voice.is_physical()
+                })
+                .count(),
+            virtual_streams: self
+                .voices
+                .values()
+                .filter(|voice| {
+                    matches!(voice.source, VoiceSource::Stream { .. }) && voice.is_virtual()
+                })
+                .count(),
+            stream_promotions: self.stream_promotions,
+            stream_demotions: self.stream_demotions,
             stream_buffered_frames: self
                 .voices
                 .values()
@@ -105,6 +122,8 @@ impl AudioRuntimeState {
                 .filter_map(|voice| voice.stream_stats.as_ref())
                 .map(|stats| stats.seek_operations())
                 .sum(),
+            cached_sound_graphs: self.cue_sound_graphs.len(),
+            sound_graph_sequence_states: self.sound_graph_sequences.len(),
             cached_clips: self.clips.len(),
             cached_bytes: self.cached_bytes,
             listener: self.listener,
@@ -124,9 +143,13 @@ impl AudioRuntimeState {
             }
         }
         self.voices.clear();
+        self.stream_metadata.clear();
         self.clips.clear();
         self.cues.clear();
         self.cue_layers.clear();
+        self.cue_clips_by_name.clear();
+        self.cue_sound_graphs.clear();
+        self.sound_graph_sequences.clear();
         self.cue_meta.clear();
         self.cached_bytes = 0;
     }

@@ -28,11 +28,11 @@ pub(crate) fn draw_skinned_player_primitives(
     // contain both alpha-blend and dither/cutout presentations of the same authored hair
     // or facial layer. This switch lets the runtime prove whether translucent overlays are
     // the source of face/body corruption without changing authored assets.
-    let disable_skinned_alpha_blend = runtime
-        && std::env::var_os("NEWENGINE_DEBUG_DISABLE_SKIN_ALPHA_BLEND").is_some();
+    let disable_skinned_alpha_blend =
+        runtime && std::env::var_os("NEWENGINE_DEBUG_DISABLE_SKIN_ALPHA_BLEND").is_some();
 
-    let force_skinned_double_sided = runtime
-        && std::env::var_os("NEWENGINE_DEBUG_FORCE_SKIN_DOUBLE_SIDED").is_some();
+    let force_skinned_double_sided =
+        runtime && std::env::var_os("NEWENGINE_DEBUG_FORCE_SKIN_DOUBLE_SIDED").is_some();
 
     for (entity, prim, global) in world.query2::<Primitive, GlobalTransform>() {
         let Some(skin) = world.get::<crate::gameplay::PlayerSkinBinding>(entity) else {

@@ -366,6 +366,7 @@ impl AudioSceneRuntimeModule {
             request.gain = snapshot.emitter.sanitized_gain();
             request.position = snapshot.emitter.spatial.then_some(snapshot.position);
             request.seed = Some(stable_key ^ self.tick.rotate_left(17));
+            request.scope_id = Some(stable_key);
             request.acoustic = frame.acoustic;
             request.environment = frame.environment;
             match play_audio_cue(&request) {

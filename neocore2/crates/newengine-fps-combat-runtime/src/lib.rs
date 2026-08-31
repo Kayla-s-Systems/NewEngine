@@ -10,14 +10,18 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use newengine_ecs::{EntityId, World};
 use newengine_engine_runtime::gameplay::{
-    active_equipped_weapon_binding, consume_equipped_ammo, equipped_reserve_ammo,
-    persist_equipped_weapon_state, play_weapon_item_audio, sync_equipped_weapon_runtime,
-    try_collect_item_pickup, EquippedWeaponBinding, EquippedWeaponMuzzle, Health,
+    active_equipped_weapon_binding, active_equipped_weapon_muzzle, consume_equipped_ammo,
+    emit_gameplay_event, equipped_reserve_ammo, persist_equipped_weapon_state,
+    sync_equipped_weapon_runtime,
+    try_collect_item_pickup, EquippedWeaponBinding, Health,
     HitscanWeaponTuning, Interactable, InteractionEvent, InteractionEventBus, ItemInstanceId,
     ItemPickup, MeleeWeaponTuning, PendingHitscan, PendingInteraction, PlayerCommandFrame,
     PlayerAuthoredAnimationCapabilities, PlayerController, PlayerInteractionTuning,
-    PlayerStanceState, PlayerWeaponState, WeaponAttackKind, WeaponAudioAction, WeaponEvent,
-    WeaponEventBus, WeaponEventKind, WeaponFireMode, WeaponObstructionState, WeaponType,
+    ItemCatalog, PlayerStanceState, PlayerWeaponState, WeaponAttackKind, WeaponEvent, WeaponEventBus,
+    WeaponEventKind, WeaponFireMode, WeaponObstructionState, WeaponType,
+    GAMEPLAY_EVENT_WEAPON_EMPTY, GAMEPLAY_EVENT_WEAPON_FIRED, GAMEPLAY_EVENT_WEAPON_HIT,
+    GAMEPLAY_EVENT_WEAPON_MELEE_ATTACKED, GAMEPLAY_EVENT_WEAPON_RELOAD_COMPLETED,
+    GAMEPLAY_EVENT_WEAPON_RELOAD_STARTED,
 };
 #[cfg(test)]
 use newengine_gameplay_fps_api::action as fps_action;
@@ -30,6 +34,9 @@ use newengine_math::{avalanche_u64, EulerRot, Quat, Vec3};
 use newengine_physics_api::{PhysicsQueryDto, PhysicsQueryHitDto, PhysicsQueryKindDto};
 use newengine_sim::CharacterMotor;
 use newengine_transform::Transform;
+
+#[cfg(test)]
+use newengine_engine_runtime::gameplay::EquippedWeaponMuzzle;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct PendingFocusedItemInteraction {

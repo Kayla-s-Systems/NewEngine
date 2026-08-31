@@ -59,6 +59,7 @@ pub(crate) struct GameReadyPlayerModelSpec {
     pub(crate) properties_ref: Option<String>,
     pub(crate) texture_dictionary: Option<String>,
     pub(crate) skeleton: Option<String>,
+    pub(crate) animation_slots: std::collections::BTreeMap<String, String>,
     pub(crate) idle_animation: Option<String>,
     pub(crate) walk_animation: Option<String>,
     pub(crate) run_animation: Option<String>,
@@ -83,6 +84,8 @@ pub(crate) struct GameReadyPlayerModelSpec {
     pub(crate) eye_parent_follow_rule:
         Option<newengine_engine_runtime::gameplay::PlayerEyeParentFollowRule>,
     pub(crate) helper_pose_copies: Vec<newengine_engine_runtime::gameplay::PlayerJointCopyRule>,
+    pub(crate) skin_sidecar:
+        Option<newengine_engine_runtime::gameplay::PlayerSkinSidecarDefinition>,
     pub(crate) braid_secondary_motion:
         Option<newengine_engine_runtime::gameplay::PlayerBraidSecondaryMotionRig>,
     pub(crate) equipment_ready_animation: Option<String>,
@@ -341,6 +344,11 @@ pub(crate) struct GameReadyPrefabSpec {
     pub(crate) source: String,
     pub(crate) proxy: String,
     pub(crate) material: String,
+    /// Project-authored physics surface identity and generic semantic event bindings.
+    /// Keys are capability/signal ids; values are arbitrary project gameplay event ids.
+    pub(crate) surface_id: String,
+    pub(crate) surface_events: std::collections::BTreeMap<String, String>,
+    pub(crate) ground_placement_surface: bool,
     pub(crate) enabled: bool,
     pub(crate) position: Vec3,
     pub(crate) rotation_ypr: Vec3,
@@ -398,6 +406,7 @@ pub(crate) struct GameReadyGameplaySpec {
     pub(crate) completed_progress_label: String,
     pub(crate) player_collision: GameReadyPlayerCollisionSpec,
     pub(crate) player_visual: GameReadyPlayerVisualSpec,
+    pub(crate) camera: GameReadyCameraSpec,
     pub(crate) physics: GameReadyPhysicsSpec,
     pub(crate) mission: GameReadyMissionSpec,
 }
@@ -458,6 +467,38 @@ pub(crate) struct GameReadyPlayerVisualSpec {
     pub(crate) half_height: f32,
     pub(crate) camera_eye_height: f32,
     pub(crate) sprint_multiplier: f32,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct GameReadyCameraSpec {
+    pub(crate) first_person_fov_y_radians: f32,
+    pub(crate) first_person_ads_fov_y_radians: f32,
+    pub(crate) first_person_near: f32,
+    pub(crate) first_person_forward_clearance: f32,
+    pub(crate) first_person_body_yaw_limit_radians: f32,
+    pub(crate) first_person_down_pitch_limit_radians: f32,
+    pub(crate) third_person_follow_fov_y_radians: f32,
+    pub(crate) third_person_aim_fov_y_radians: f32,
+    pub(crate) third_person_orbit_fov_y_radians: f32,
+    pub(crate) hide_local_model_in_first_person: bool,
+}
+
+impl GameReadyCameraSpec {
+    pub(crate) fn player_profile(self) -> newengine_engine_runtime::gameplay::PlayerCameraProfile {
+        newengine_engine_runtime::gameplay::PlayerCameraProfile {
+            first_person_fov_y_radians: self.first_person_fov_y_radians,
+            first_person_ads_fov_y_radians: self.first_person_ads_fov_y_radians,
+            first_person_near: self.first_person_near,
+            first_person_forward_clearance: self.first_person_forward_clearance,
+            first_person_body_yaw_limit_radians: self.first_person_body_yaw_limit_radians,
+            first_person_down_pitch_limit_radians: self.first_person_down_pitch_limit_radians,
+            third_person_follow_fov_y_radians: self.third_person_follow_fov_y_radians,
+            third_person_aim_fov_y_radians: self.third_person_aim_fov_y_radians,
+            third_person_orbit_fov_y_radians: self.third_person_orbit_fov_y_radians,
+            hide_local_model_in_first_person: self.hide_local_model_in_first_person,
+        }
+        .sanitized()
+    }
 }
 
 #[derive(Clone, Debug)]

@@ -35,7 +35,7 @@ mod spawn;
 #[path = "player/stance.rs"]
 mod stance;
 
-pub use animation::update_player_animation_states;
+pub use animation::{player_fall_is_confirmed, update_player_animation_states};
 pub use camera::{
     attach_active_camera_to_player, detach_active_camera_from_player,
     display_shadow_caster_visible_in_mode, display_visible_in_mode,

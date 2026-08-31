@@ -102,6 +102,8 @@ impl AudioRuntimeState {
         self.clips.clear();
         self.cues.clear();
         self.cue_layers.clear();
+        self.cue_clips_by_name.clear();
+        self.cue_sound_graphs.clear();
         self.cue_meta.clear();
         self.cached_bytes = 0;
     }

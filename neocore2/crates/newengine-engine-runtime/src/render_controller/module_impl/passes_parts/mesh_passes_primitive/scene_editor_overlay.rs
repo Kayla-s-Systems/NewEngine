@@ -118,6 +118,40 @@ pub(super) fn draw_editor_viewport_overlays(
                         color,
                     );
                 }
+                newengine_physics_contracts::CollisionShapeDesc::Cylinder {
+                    radius,
+                    half_height,
+                } => {
+                    const SEGMENTS: usize = 16;
+                    for y in [-half_height, half_height] {
+                        for segment in 0..SEGMENTS {
+                            let a0 = segment as f32 / SEGMENTS as f32 * core::f32::consts::TAU;
+                            let a1 =
+                                (segment + 1) as f32 / SEGMENTS as f32 * core::f32::consts::TAU;
+                            let a = global.0.transform_point3(Vec3::new(
+                                a0.cos() * radius,
+                                y,
+                                a0.sin() * radius,
+                            ));
+                            let b = global.0.transform_point3(Vec3::new(
+                                a1.cos() * radius,
+                                y,
+                                a1.sin() * radius,
+                            ));
+                            push_line(a, b, color);
+                        }
+                    }
+                    for segment in [0usize, 4, 8, 12] {
+                        let angle = segment as f32 / SEGMENTS as f32 * core::f32::consts::TAU;
+                        let x = angle.cos() * radius;
+                        let z = angle.sin() * radius;
+                        push_line(
+                            global.0.transform_point3(Vec3::new(x, -half_height, z)),
+                            global.0.transform_point3(Vec3::new(x, half_height, z)),
+                            color,
+                        );
+                    }
+                }
             }
         }
     }

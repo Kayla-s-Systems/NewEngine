@@ -3,7 +3,8 @@ use std::sync::Arc;
 
 use newengine_ecs::{EntityId, World};
 use newengine_engine_runtime::gameplay::{
-    capture_runtime_world_snapshot, give_item, restore_runtime_world_snapshot, Health, ItemCatalog,
+    capture_runtime_world_snapshot, give_item, publish_gameplay_event, request_gameplay_capability,
+    restore_runtime_world_snapshot, GameplayCapabilityRequest, GameplayEvent, Health, ItemCatalog,
     ItemId,
 };
 use newengine_entity_api::{EntitySpawnRequest, EntitySpawnTransform};
@@ -231,6 +232,43 @@ impl GameplayCommandExecutor {
                     return Err("spawn owner exceeds 256 bytes".to_owned());
                 }
             }
+            GameplayCommand::PublishEvent {
+                event,
+                source,
+                payload,
+            } => {
+                let mut authored = GameplayEvent::new(event.clone()).with_payload(payload.clone());
+                if let Some(source) = source {
+                    if resolve_entity(world, *source).is_none() {
+                        return Err(format!("event source entity {source} does not exist"));
+                    }
+                    authored = authored.with_stable_source(*source);
+                }
+                authored.validate()?;
+            }
+            GameplayCommand::InvokeCapability {
+                capability,
+                source,
+                target,
+                payload,
+            } => {
+                for (label, entity) in [("source", source), ("target", target)] {
+                    if let Some(entity) = entity {
+                        if resolve_entity(world, *entity).is_none() {
+                            return Err(format!(
+                                "capability {label} entity {entity} does not exist"
+                            ));
+                        }
+                    }
+                }
+                GameplayCapabilityRequest {
+                    capability: capability.clone(),
+                    source: *source,
+                    target: *target,
+                    payload: payload.clone(),
+                }
+                .validate()?;
+            }
             GameplayCommand::PlayEffect {
                 effect,
                 position,
@@ -369,6 +407,35 @@ impl GameplayCommandExecutor {
                     receipt.spawned_entities.push(entity.stable_u64());
                 }
             }
+            GameplayCommand::PublishEvent {
+                event,
+                source,
+                payload,
+            } => {
+                let mut authored = GameplayEvent::new(event.clone()).with_payload(payload.clone());
+                if let Some(source) = source {
+                    authored = authored.with_stable_source(*source);
+                }
+                publish_gameplay_event(world, authored)?;
+                receipt.events_published += 1;
+            }
+            GameplayCommand::InvokeCapability {
+                capability,
+                source,
+                target,
+                payload,
+            } => {
+                request_gameplay_capability(
+                    world,
+                    GameplayCapabilityRequest {
+                        capability: capability.clone(),
+                        source: *source,
+                        target: *target,
+                        payload: payload.clone(),
+                    },
+                )?;
+                receipt.capability_requests_enqueued += 1;
+            }
             GameplayCommand::PlayEffect {
                 effect,
                 position,
@@ -466,7 +533,7 @@ mod tests {
 
     use super::*;
     use newengine_engine_runtime::gameplay::{
-        inventory_quantity, ItemDefinition, ItemKind, PlayerInventory,
+        inventory_quantity, GameplayCapabilityBus, ItemDefinition, ItemKind, PlayerInventory,
     };
     use newengine_entity_runtime::EntityArchetypeFactory;
     use newengine_gameplay_script_api::GameplayObjectiveState;
@@ -528,6 +595,12 @@ mod tests {
                     intensity: 1.0,
                     parameters: BTreeMap::new(),
                 },
+                GameplayCommand::InvokeCapability {
+                    capability: "project.test.capability.v1".to_owned(),
+                    source: Some(actor.stable_u64()),
+                    target: Some(target.stable_u64()),
+                    payload: serde_json::json!({"arbitrary": true}),
+                },
             ],
             ..GameplayCommandBuffer::default()
         };
@@ -535,7 +608,7 @@ mod tests {
         let receipt = GameplayCommandExecutor::default()
             .execute(&mut world, &buffer)
             .expect("transaction");
-        assert_eq!(receipt.applied_commands, 5);
+        assert_eq!(receipt.applied_commands, 6);
         assert_eq!(receipt.spawned_entities.len(), 1);
         assert_eq!(world.get::<Health>(target).unwrap().current, 90.0);
         assert_eq!(
@@ -558,6 +631,15 @@ mod tests {
                 .pending()
                 .len(),
             1
+        );
+        assert_eq!(receipt.capability_requests_enqueued, 1);
+        let capability_bus = world
+            .resource::<GameplayCapabilityBus>()
+            .expect("capability bus");
+        assert_eq!(capability_bus.pending().len(), 1);
+        assert_eq!(
+            capability_bus.pending()[0].capability,
+            "project.test.capability.v1"
         );
     }
 
@@ -600,6 +682,12 @@ mod tests {
                     source: None,
                     damage_type: String::new(),
                 },
+                GameplayCommand::InvokeCapability {
+                    capability: "project.rollback.probe.v1".to_owned(),
+                    source: None,
+                    target: None,
+                    payload: serde_json::json!({"must_rollback": true}),
+                },
                 GameplayCommand::SpawnArchetype {
                     archetype: "test.failing".to_owned(),
                     count: 1,
@@ -615,5 +703,12 @@ mod tests {
         let error = executor.execute(&mut world, &buffer).unwrap_err();
         assert!(error.contains("rolled back"));
         assert_eq!(world.get::<Health>(target).unwrap().current, 100.0);
+        assert!(
+            world
+                .resource::<GameplayCapabilityBus>()
+                .map(|bus| bus.pending().is_empty())
+                .unwrap_or(true),
+            "failed transaction must not leak capability side effects"
+        );
     }
 }

@@ -526,8 +526,87 @@ pub(super) fn prepare_player_animation_binding(
         .joints
         .iter()
         .position(|joint| joint.name == skeleton.anchors.root);
-    let head_look_layers = resolve_head_look_layers(skeleton);
-    let body_turn_layers = resolve_body_turn_layers(skeleton);
+    let look_slot = |semantic: &str| assignment.animation_slots.get(semantic).map(String::as_str);
+    let load_look_clip = |role: &str, semantic: &str| {
+        load_authored_presentation_clip(
+            role,
+            look_slot(semantic),
+            assignment,
+            skeleton,
+            &animation_runtime,
+        )
+    };
+    let build_look_space =
+        |role: &'static str, base_semantic: &str, range_semantic: &str, eye_only: bool| {
+            build_authored_look_pose_space(
+                role,
+                load_look_clip(base_semantic, base_semantic)?,
+                load_look_clip(range_semantic, range_semantic)?,
+                skeleton,
+                &animation_runtime,
+                eye_only,
+            )
+        };
+    let authored_look = AuthoredLookRuntimeBinding {
+        relaxed: build_look_space("relaxed", "look.relaxed.base", "look.relaxed.range", false)?,
+        crouch: build_look_space("crouch", "look.crouch.base", "look.crouch.range", false)?,
+        tense: build_look_space("tense", "look.tense.base", "look.tense.range", false)?,
+        cover_low_left: build_look_space(
+            "cover_low_left",
+            "look.context.cover_low_left.base",
+            "look.context.cover_low_left.range",
+            false,
+        )?,
+        cover_low_right: build_look_space(
+            "cover_low_right",
+            "look.context.cover_low_right.base",
+            "look.context.cover_low_right.range",
+            false,
+        )?,
+        prone: build_look_space(
+            "prone",
+            "look.context.prone.base",
+            "look.context.prone.range",
+            false,
+        )?,
+        supine: build_look_space(
+            "supine",
+            "look.context.supine.base",
+            "look.context.supine.range",
+            false,
+        )?,
+        rope: build_look_space(
+            "rope",
+            "look.context.rope.base",
+            "look.context.rope.range",
+            false,
+        )?,
+        ladder: build_look_space(
+            "ladder",
+            "look.context.ladder.base",
+            "look.context.ladder.range",
+            false,
+        )?,
+        swim_idle: build_look_space(
+            "swim_idle",
+            "look.context.swim_idle.base",
+            "look.context.swim_idle.range",
+            false,
+        )?,
+        injured: build_look_space(
+            "injured",
+            "look.context.injured.base",
+            "look.context.injured.range",
+            false,
+        )?,
+        relaxed_injured: build_look_space(
+            "relaxed_injured",
+            "look.context.relaxed_injured.base",
+            "look.context.relaxed_injured.range",
+            false,
+        )?,
+        eyes: build_look_space("eyes", "look.eyes.base", "look.eyes.range", true)?,
+    };
     let sampled_target_locals = current_locals.clone();
     let pose_continuity = PoseContinuityBridge::new(&current_locals);
     if !helper_pose_copies.is_empty() {
@@ -552,10 +631,28 @@ pub(super) fn prepare_player_animation_binding(
             eyes.parent,
         );
     }
-    if !body_turn_layers.is_empty() {
+    let authored_look_roles = [
+        authored_look.relaxed.as_ref(),
+        authored_look.crouch.as_ref(),
+        authored_look.tense.as_ref(),
+        authored_look.eyes.as_ref(),
+    ]
+    .into_iter()
+    .flatten()
+    .map(|space| {
+        format!(
+            "{}:{}samples/{}joints/{:.2}deg-turn-hysteresis",
+            space.role,
+            space.samples.len(),
+            space.joints.len(),
+            space.turn_hysteresis_radians.to_degrees(),
+        )
+    })
+    .collect::<Vec<_>>();
+    if !authored_look_roles.is_empty() {
         newengine_ulog_api::ulog::info!(
-            "game-ready: turn-in-place torso chain resolved layers={} policy='view residual yaw -> spine hierarchy; hips/legs stay root-owned'",
-            body_turn_layers.len(),
+            "game-ready: authored look-at pose spaces [{}] policy='native base+range -> sampled 2D pose-space -> residual eyes -> native body turn'",
+            authored_look_roles.join(", "),
         );
     }
     let native_turn_clip_count = [
@@ -633,11 +730,7 @@ pub(super) fn prepare_player_animation_binding(
         turn_in_place: None,
         turn_sequence: 0,
         pose_continuity,
-        head_look_layers,
-        head_look_yaw_radians: 0.0,
-        head_look_pitch_radians: 0.0,
-        body_turn_layers,
-        body_turn_yaw_radians: 0.0,
+        authored_look,
         braid_secondary_motion,
         helper_pose_copies,
         eye_contract,

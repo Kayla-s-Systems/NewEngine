@@ -249,5 +249,6 @@ fn collision_shape_vertical_extent(shape: CollisionShapeDesc) -> f32 {
             radius,
             half_height,
         } => radius + half_height,
+        CollisionShapeDesc::Cylinder { half_height, .. } => half_height,
     }
 }
