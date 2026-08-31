@@ -233,6 +233,22 @@ pub(in super::super) struct RawPrefabSpec {
     /// Generic surface signal -> arbitrary project gameplay event id.
     #[serde(default)]
     pub(in super::super) surface_events: std::collections::BTreeMap<String, String>,
+    /// Optional authored ballistic response for this physical surface. Omitted means bullets cannot
+    /// infer penetration/ricochet behavior from names or render materials.
+    #[serde(default)]
+    pub(in super::super) ballistic_penetration_resistance_j_per_m: Option<f32>,
+    #[serde(default)]
+    pub(in super::super) ballistic_entry_energy_cost_j: Option<f32>,
+    #[serde(default)]
+    pub(in super::super) ballistic_damage_transfer_multiplier: Option<f32>,
+    #[serde(default)]
+    pub(in super::super) ballistic_impulse_transfer_multiplier: Option<f32>,
+    #[serde(default)]
+    pub(in super::super) ballistic_ricochet_allowed: Option<bool>,
+    #[serde(default)]
+    pub(in super::super) ballistic_ricochet_max_incidence_dot: Option<f32>,
+    #[serde(default)]
+    pub(in super::super) ballistic_ricochet_energy_retention: Option<f32>,
     /// Explicit capability consumed by foliage placement; never inferred from prefab id/material.
     #[serde(default)]
     pub(in super::super) ground_placement_surface: bool,

@@ -282,7 +282,7 @@ impl Source for SharedRoomLateBusSource {
 
 struct ActiveRoomLateBus {
     room_id: u64,
-    _player: Player,
+    _render: BlockVoiceHandle,
     params: RoomLateParamsControl,
 }
 
@@ -313,7 +313,7 @@ impl SharedRoomLateBusManager {
 
     fn ensure_send(
         &mut self,
-        mixer: &rodio::mixer::Mixer,
+        graph: &NativeBlockRenderGraphHandle,
         sample_rate: SampleRate,
         send: AudioReverbSend,
     ) -> Option<u32> {
@@ -337,19 +337,18 @@ impl SharedRoomLateBusManager {
             })
         })?;
         if let Some(retired) = self.slots[index].take() {
-            retired._player.stop();
+            retired._render.stop();
             self.registry.slots[index].reset_for_reuse();
         }
         let ingress = Arc::clone(&self.registry.slots[index]);
         let params = RoomLateParamsControl::new(send.preset);
         let source = SharedRoomLateBusSource::new(ingress, params.clone(), sample_rate);
-        let player = Player::connect_new(mixer);
-        player.set_volume(1.0);
-        player.append(source);
-        player.play();
+        let render = graph
+            .add_source(source, 1.0, 1.0, false, Duration::ZERO)
+            .ok()?;
         self.slots[index] = Some(ActiveRoomLateBus {
             room_id: send.room_bus_id,
-            _player: player,
+            _render: render,
             params,
         });
         Some(index as u32)
@@ -357,7 +356,7 @@ impl SharedRoomLateBusManager {
 
     fn slots_for_environment(
         &mut self,
-        mixer: &rodio::mixer::Mixer,
+        graph: &NativeBlockRenderGraphHandle,
         sample_rate: SampleRate,
         environment: AudioEnvironmentState,
     ) -> Option<(u32, u32)> {
@@ -368,10 +367,10 @@ impl SharedRoomLateBusManager {
             return None;
         }
         let source = source_requested
-            .then(|| self.ensure_send(mixer, sample_rate, environment.source_send))
+            .then(|| self.ensure_send(graph, sample_rate, environment.source_send))
             .flatten();
         let listener = listener_requested
-            .then(|| self.ensure_send(mixer, sample_rate, environment.listener_send))
+            .then(|| self.ensure_send(graph, sample_rate, environment.listener_send))
             .flatten();
         if (source_requested && source.is_none()) || (listener_requested && listener.is_none()) {
             return None;
@@ -482,13 +481,11 @@ impl AudioRuntimeState {
         environment: AudioEnvironmentState,
         voice_gain: f32,
     ) -> Option<RoomBusVoiceBinding> {
-        let (mixer, sample_rate) = {
-            let output = self.output.as_ref()?;
-            (output.mixer().clone(), output.config().sample_rate())
-        };
+        let graph = self.render_graph.clone()?;
+        let sample_rate = graph.sample_rate();
         let slots = self
             .room_buses
-            .slots_for_environment(&mixer, sample_rate, environment)?;
+            .slots_for_environment(&graph, sample_rate, environment)?;
         Some(RoomBusVoiceBinding::new(
             self.room_buses.registry(),
             slots.0,
@@ -502,13 +499,14 @@ impl AudioRuntimeState {
         binding: &RoomBusVoiceBinding,
         environment: AudioEnvironmentState,
     ) -> bool {
-        let (mixer, sample_rate) = match self.output.as_ref() {
-            Some(output) => (output.mixer().clone(), output.config().sample_rate()),
+        let graph = match self.render_graph.clone() {
+            Some(graph) => graph,
             None => return false,
         };
+        let sample_rate = graph.sample_rate();
         let Some((source, listener)) =
             self.room_buses
-                .slots_for_environment(&mixer, sample_rate, environment)
+                .slots_for_environment(&graph, sample_rate, environment)
         else {
             binding.set_slots(NO_ROOM_BUS_SLOT, NO_ROOM_BUS_SLOT);
             // Dry/no-room transitions need no late processor. A wet legacy send with id 0 must

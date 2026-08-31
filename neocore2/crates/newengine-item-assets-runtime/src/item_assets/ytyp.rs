@@ -161,7 +161,105 @@ fn bool_value(value: &serde_json::Value, object: &str, key: &str) -> Option<bool
     })
 }
 
-pub(super) fn apply_weapon_ytyp_namespace(
+fn parse_component_graph(
+    namespace: &serde_json::Value,
+) -> Result<Option<AuthoredWeaponComponentGraphDefinition>, String> {
+    let points_raw = string(namespace, "component_points", "points");
+    let components_raw = string(namespace, "components", "definitions");
+    let installed = string_map(namespace, "components", "installed").unwrap_or_default();
+    if points_raw.is_none() && components_raw.is_none() && installed.is_empty() {
+        return Ok(None);
+    }
+    let mut graph = AuthoredWeaponComponentGraphDefinition::default();
+    if let Some(raw) = points_raw {
+        for record in raw
+            .split(';')
+            .map(str::trim)
+            .filter(|record| !record.is_empty())
+        {
+            let fields = record.split('|').map(str::trim).collect::<Vec<_>>();
+            if fields.len() < 2 {
+                return Err(format!("invalid weapon component point record '{record}'"));
+            }
+            graph.points.push(AuthoredWeaponComponentPointDefinition {
+                id: fields[0].to_owned(),
+                attach_joint: fields[1].to_owned(),
+                allowed_components: fields
+                    .get(2)
+                    .copied()
+                    .unwrap_or("")
+                    .split(',')
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                    .map(ToOwned::to_owned)
+                    .collect(),
+            });
+        }
+    }
+    if let Some(raw) = components_raw {
+        for record in raw
+            .split(';')
+            .map(str::trim)
+            .filter(|record| !record.is_empty())
+        {
+            let fields = record.split('|').map(str::trim).collect::<Vec<_>>();
+            if fields.len() < 2 {
+                return Err(format!("invalid weapon component record '{record}'"));
+            }
+            let scalar = |index: usize| -> Result<f32, String> {
+                let raw = fields.get(index).copied().unwrap_or("");
+                if raw.is_empty() {
+                    return Ok(1.0);
+                }
+                raw.parse::<f32>()
+                    .map_err(|_| format!("invalid component modifier '{}' in '{record}'", raw))
+            };
+            graph.components.push(AuthoredWeaponComponentDefinition {
+                id: fields[0].to_owned(),
+                slot: fields[1].to_owned(),
+                model_ref: fields.get(2).copied().unwrap_or("").to_owned(),
+                audio_override: fields.get(3).copied().unwrap_or("").to_owned(),
+                muzzle_vfx_override: fields.get(4).copied().unwrap_or("").to_owned(),
+                tracer_vfx_override: fields.get(5).copied().unwrap_or("").to_owned(),
+                modifiers: AuthoredWeaponComponentModifiers {
+                    accuracy_multiplier: scalar(6)?,
+                    recoil_multiplier: scalar(7)?,
+                    damage_multiplier: scalar(8)?,
+                    falloff_multiplier: scalar(9)?,
+                    muzzle_velocity_multiplier: scalar(10)?,
+                    penetration_multiplier: scalar(11)?,
+                    audio_gain_multiplier: scalar(12)?,
+                    presentation_offset_local: [
+                        fields
+                            .get(13)
+                            .copied()
+                            .unwrap_or("0")
+                            .parse::<f32>()
+                            .unwrap_or(0.0),
+                        fields
+                            .get(14)
+                            .copied()
+                            .unwrap_or("0")
+                            .parse::<f32>()
+                            .unwrap_or(0.0),
+                        fields
+                            .get(15)
+                            .copied()
+                            .unwrap_or("0")
+                            .parse::<f32>()
+                            .unwrap_or(0.0),
+                    ],
+                },
+            });
+        }
+    }
+    graph.default_installed = installed;
+    // Validate through the runtime graph compiler now so malformed YTYP never reaches gameplay.
+    let _ = graph.compile()?;
+    Ok(Some(graph))
+}
+
+pub(crate) fn apply_weapon_ytyp_namespace(
     authored: &mut AuthoredItemDefinition,
     namespace: &serde_json::Value,
 ) -> Result<(), String> {
@@ -184,6 +282,32 @@ pub(super) fn apply_weapon_ytyp_namespace(
         }
         weapon.fire_mode =
             string(namespace, "weapon", "fire_mode").unwrap_or_else(|| "semi_auto".to_owned());
+        weapon.firing_pattern_kind =
+            string(namespace, "weapon", "firing_pattern_kind").unwrap_or_default();
+        if let Some(value) = u32_value(namespace, "weapon", "bursts_min") {
+            weapon.bursts_min = value.min(u8::MAX as u32) as u8;
+        }
+        if let Some(value) = u32_value(namespace, "weapon", "bursts_max") {
+            weapon.bursts_max = value.min(u8::MAX as u32) as u8;
+        }
+        if let Some(value) = u32_value(namespace, "weapon", "shots_per_burst_min") {
+            weapon.shots_per_burst_min = value.min(u8::MAX as u32) as u8;
+        }
+        if let Some(value) = u32_value(namespace, "weapon", "shots_per_burst_max") {
+            weapon.shots_per_burst_max = value.min(u8::MAX as u32) as u8;
+        }
+        if let Some(value) = f32_value(namespace, "weapon", "time_between_shots") {
+            weapon.time_between_shots = value;
+        }
+        if let Some(value) = f32_value(namespace, "weapon", "time_between_bursts") {
+            weapon.time_between_bursts = value;
+        }
+        if let Some(value) = f32_value(namespace, "weapon", "delay_before_firing") {
+            weapon.delay_before_firing = value;
+        }
+        if let Some(value) = f32_value(namespace, "weapon", "burst_cooldown") {
+            weapon.burst_cooldown = value;
+        }
         if let Some(value) = u32_value(namespace, "weapon", "magazine_capacity") {
             weapon.magazine_capacity = value;
         }
@@ -217,11 +341,53 @@ pub(super) fn apply_weapon_ytyp_namespace(
         if let Some(value) = f32_value(namespace, "weapon", "aim_spread_degrees") {
             weapon.aim_spread_degrees = value;
         }
+        if let Some(value) = f32_value(namespace, "weapon", "movement_spread_multiplier") {
+            weapon.movement_spread_multiplier = value;
+        }
+        if let Some(value) = f32_value(namespace, "weapon", "crouch_spread_multiplier") {
+            weapon.crouch_spread_multiplier = value;
+        }
+        if let Some(value) = f32_value(namespace, "weapon", "recoil_accuracy_per_shot_degrees") {
+            weapon.recoil_accuracy_per_shot_degrees = value;
+        }
+        if let Some(value) = f32_value(namespace, "weapon", "recoil_accuracy_max_degrees") {
+            weapon.recoil_accuracy_max_degrees = value;
+        }
+        if let Some(value) = f32_value(namespace, "weapon", "accuracy_recovery_hz") {
+            weapon.accuracy_recovery_hz = value;
+        }
+        if let Some(value) = f32_value(namespace, "weapon", "accuracy_recovery_delay_seconds") {
+            weapon.accuracy_recovery_delay_seconds = value;
+        }
         if let Some(value) = f32_value(namespace, "weapon", "recoil_pitch_degrees") {
             weapon.recoil_pitch_degrees = value;
         }
         if let Some(value) = f32_value(namespace, "weapon", "recoil_yaw_degrees") {
             weapon.recoil_yaw_degrees = value;
+        }
+        if let Some(value) = f32_value(namespace, "weapon", "recoil_pitch_random_degrees") {
+            weapon.recoil_pitch_random_degrees = value;
+        }
+        if let Some(value) = f32_value(namespace, "weapon", "recoil_yaw_bias_degrees") {
+            weapon.recoil_yaw_bias_degrees = value;
+        }
+        if let Some(value) = f32_value(namespace, "weapon", "ads_recoil_multiplier") {
+            weapon.ads_recoil_multiplier = value;
+        }
+        if let Some(value) = f32_value(namespace, "weapon", "recoil_recovery_hz") {
+            weapon.recoil_recovery_hz = value;
+        }
+        if let Some(value) = bool_value(namespace, "weapon", "ricochet_enabled") {
+            weapon.ricochet_enabled = value;
+        }
+        if let Some(value) = u32_value(namespace, "weapon", "ricochet_max_bounces") {
+            weapon.ricochet_max_bounces = value.min(4) as u8;
+        }
+        if let Some(value) = f32_value(namespace, "weapon", "ricochet_grazing_dot") {
+            weapon.ricochet_grazing_dot = value;
+        }
+        if let Some(value) = f32_value(namespace, "weapon", "ricochet_energy_retention") {
+            weapon.ricochet_energy_retention = value;
         }
         if let Some(value) = f32_value(namespace, "weapon", "muzzle_forward_offset") {
             weapon.muzzle_forward_offset = value;
@@ -232,6 +398,7 @@ pub(super) fn apply_weapon_ytyp_namespace(
                 .map_err(|error| format!("weapon YTYP '{}': {error}", authored.definition_ref))?;
         }
         authored.weapon = Some(weapon);
+        authored.weapon_components = parse_component_graph(namespace)?;
 
         let audio = AuthoredWeaponAudioDefinition {
             fire: string(namespace, "audio", "fire").unwrap_or_default(),
@@ -268,11 +435,15 @@ pub(super) fn apply_weapon_ytyp_namespace(
         if namespace.get("vfx").is_some() {
             let vfx = AuthoredWeaponVfxDefinition {
                 shot: string(namespace, "vfx", "shot").unwrap_or_default(),
+                tracer: string(namespace, "vfx", "tracer").unwrap_or_default(),
+                ricochet: string(namespace, "vfx", "ricochet").unwrap_or_default(),
                 impact_default: string(namespace, "vfx", "impact_default").unwrap_or_default(),
                 impact_by_surface: string_map(namespace, "vfx", "impact_by_surface")
                     .unwrap_or_default(),
             };
             if !vfx.shot.trim().is_empty()
+                || !vfx.tracer.trim().is_empty()
+                || !vfx.ricochet.trim().is_empty()
                 || !vfx.impact_default.trim().is_empty()
                 || !vfx.impact_by_surface.is_empty()
             {
@@ -308,6 +479,13 @@ pub(super) fn apply_weapon_ytyp_namespace(
             v3!(ready_left_palm_to_left_grip);
             v3!(right_palm_to_handle);
             v3!(first_person_hip_handle_offset);
+            if let Some(value) = vec3(
+                namespace,
+                "presentation",
+                "first_person_full_body_hip_handle_offset",
+            ) {
+                presentation.first_person_full_body_hip_handle_offset = Some(value);
+            }
             v3!(ads_rear_sight_from_handle);
             v3!(ads_front_sight_from_handle);
             v3!(ads_camera_to_rear_sight);
@@ -392,6 +570,18 @@ pub(super) fn apply_weapon_ytyp_namespace(
             }
             if let Some(value) = f32_value(namespace, "casing", "density") {
                 casing.density = value;
+            }
+            if let Some(value) = f32_value(namespace, "casing", "contact_min_impulse") {
+                casing.contact_min_impulse = value;
+            }
+            if let Some(value) = f32_value(namespace, "casing", "contact_medium_impulse") {
+                casing.contact_medium_impulse = value;
+            }
+            if let Some(value) = f32_value(namespace, "casing", "contact_hard_impulse") {
+                casing.contact_hard_impulse = value;
+            }
+            if let Some(value) = string_list(namespace, "casing", "soft_surface_contains") {
+                casing.soft_surface_contains = value;
             }
             authored.weapon_casing = Some(casing);
         }
@@ -529,6 +719,10 @@ mod tests {
                 "friction": 0.3,
                 "restitution": 0.2,
                 "density": 7.5,
+                "contact_min_impulse": 0.002,
+                "contact_medium_impulse": 0.011,
+                "contact_hard_impulse": 0.031,
+                "soft_surface_contains": "dirt,sand,grass",
                 "ejection_joint": "shell_eject",
                 "inherit_socket_linear_velocity": 0.9,
                 "inherit_socket_angular_velocity": 0.25
@@ -547,6 +741,8 @@ mod tests {
                 "stock_contact_from_handle": [-0.020, 0.053, -0.341],
                 "ready_body_to_root_rotation": [0.036, 0.608, -0.041, 0.792],
                 "right_palm_to_handle": [0.019, 0.033, -0.083],
+                "first_person_hip_handle_offset": [0.20, -0.20, -0.58],
+                "first_person_full_body_hip_handle_offset": [0.20, -0.20, -0.08],
                 "aim_response_hz": 14.0,
                 "secondary_hip_max_angle_radians": 0.08,
                 "secondary_ads_max_angle_radians": 0.03,
@@ -579,6 +775,10 @@ mod tests {
         assert!((casing.ejection_delay_seconds - 0.04).abs() < 1.0e-6);
         assert_eq!(casing.axis_local, [0.9, 0.1, 0.0]);
         assert_eq!(casing.ejection_joint, "shell_eject");
+        assert!((casing.contact_min_impulse - 0.002).abs() < 1.0e-6);
+        assert!((casing.contact_medium_impulse - 0.011).abs() < 1.0e-6);
+        assert!((casing.contact_hard_impulse - 0.031).abs() < 1.0e-6);
+        assert_eq!(casing.soft_surface_contains, vec!["dirt", "sand", "grass"]);
         assert!((casing.inherit_socket_linear_velocity - 0.9).abs() < 1.0e-6);
         assert!((casing.inherit_socket_angular_velocity - 0.25).abs() < 1.0e-6);
         let vfx = item.weapon_vfx.expect("weapon vfx");
@@ -602,9 +802,101 @@ mod tests {
             [0.036, 0.608, -0.041, 0.792]
         );
         assert_eq!(presentation.right_palm_to_handle, [0.019, 0.033, -0.083]);
+        assert_eq!(
+            presentation.first_person_hip_handle_offset,
+            [0.20, -0.20, -0.58]
+        );
+        assert_eq!(
+            presentation.first_person_full_body_hip_handle_offset,
+            Some([0.20, -0.20, -0.08])
+        );
+        let runtime_presentation = presentation.compile();
+        assert_eq!(
+            runtime_presentation.first_person_full_body_hip_handle_offset,
+            [0.20, -0.20, -0.08]
+        );
         assert!((presentation.aim_response_hz - 14.0).abs() < 1.0e-6);
         assert!((presentation.secondary_angular_inertia_gain - 0.31).abs() < 1.0e-6);
         assert!((presentation.secondary_movement_inertia_gain - 0.77).abs() < 1.0e-6);
         assert!((presentation.secondary_natural_hz_ads - 8.2).abs() < 1.0e-6);
+    }
+
+    #[test]
+    fn legacy_weapon_presentation_inherits_authored_hip_offset_for_full_body_fpp() {
+        let authored = AuthoredWeaponPresentationDefinition {
+            enabled: true,
+            first_person_hip_handle_offset: [0.18, -0.21, -0.31],
+            first_person_full_body_hip_handle_offset: None,
+            ..AuthoredWeaponPresentationDefinition::default()
+        };
+        let runtime = authored.compile();
+        assert_eq!(
+            runtime.first_person_full_body_hip_handle_offset,
+            authored.first_person_hip_handle_offset
+        );
+    }
+    #[test]
+    fn pistol_magazine_ytyp_hydrates_component_graph_and_default_install() {
+        let mut item = AuthoredItemDefinition {
+            id: "weapon.pistol.military".to_owned(),
+            definition_ref: "shared/definitions/weapon/pistol_military.ytyp@pistol_military"
+                .to_owned(),
+            kind: "weapon".to_owned(),
+            ..AuthoredItemDefinition::default()
+        };
+        let metadata = serde_json::json!({
+            "weapon": {
+                "type": "firearm",
+                "ammo": "ammo.sidearm.standard",
+                "fire_mode": "semi_auto",
+                "firing_pattern_kind": "semi",
+                "magazine_capacity": 15,
+                "fire_interval": 0.22
+            },
+            "component_points": {
+                "points": "magazine|magazine|pistol_magazine,pistol_magazine_upgrade;mag_mod|mag_mod|pistol_mag_extend"
+            },
+            "components": {
+                "installed": "magazine=pistol_magazine",
+                "definitions": "pistol_magazine|magazine|shared/models/weapon/pistol/pistol_magazine.ydd@pistol_magazine||||1|1|1|1|1|1|1|0|0|0;pistol_magazine_upgrade|magazine|shared/models/weapon/pistol/pistol_magazine_upgrade.ydd@pistol_magazine_upgrade||||0.96|0.96|1|1|1|1|1|0|0|0;pistol_mag_extend|mag_mod|shared/models/weapon/pistol/pistol_mag_extend.ydd@pistol_mag_extend||||1|1|1|1|1|1|1|0|0|0"
+            }
+        });
+
+        apply_weapon_ytyp_namespace(&mut item, &metadata).expect("hydrate pistol magazine graph");
+        let authored_graph = item.weapon_components.expect("component graph");
+        let runtime_graph = authored_graph.compile().expect("compile component graph");
+
+        assert_eq!(runtime_graph.points.len(), 2);
+        assert_eq!(
+            runtime_graph
+                .default_installed
+                .get("magazine")
+                .map(String::as_str),
+            Some("pistol_magazine")
+        );
+        let magazine = runtime_graph
+            .components
+            .get("pistol_magazine")
+            .expect("standard magazine");
+        assert_eq!(magazine.slot, "magazine");
+        assert_eq!(
+            magazine.model_ref.as_deref(),
+            Some("shared/models/weapon/pistol/pistol_magazine.ydd@pistol_magazine")
+        );
+        let upgrade = runtime_graph
+            .components
+            .get("pistol_magazine_upgrade")
+            .expect("magazine upgrade");
+        assert!((upgrade.modifiers.accuracy_multiplier - 0.96).abs() < 1.0e-6);
+        assert!((upgrade.modifiers.recoil_multiplier - 0.96).abs() < 1.0e-6);
+        assert_eq!(
+            runtime_graph
+                .points
+                .iter()
+                .find(|point| point.id == "mag_mod")
+                .expect("mag mod slot")
+                .allowed_components,
+            vec!["pistol_mag_extend".to_owned()]
+        );
     }
 }

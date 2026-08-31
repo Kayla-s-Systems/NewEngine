@@ -134,17 +134,23 @@ mod tests {
                         spin_radians_per_second: 0.0,
                         light: None,
                     },
-                    VfxLayerDefinition::Tracer {
-                        primitive: prim_builtins::ID_CUBE,
-                        color: [1.0, 0.7, 0.2, 1.0],
-                        half_length: 0.18,
-                        radius: 0.003,
-                        speed: 180.0,
-                        max_lifetime_seconds: 0.65,
-                    },
                 ],
             })
             .expect("register shot test effect");
+        library
+            .register(VfxEffectDefinition {
+                effect: VfxEffectRef::new("effects/test_weapon.fxd@tracer"),
+                priority: VfxPriority::High,
+                layers: vec![VfxLayerDefinition::Tracer {
+                    primitive: prim_builtins::ID_CUBE,
+                    color: [1.0, 0.7, 0.2, 1.0],
+                    half_length: 0.18,
+                    radius: 0.003,
+                    speed: 180.0,
+                    max_lifetime_seconds: 0.65,
+                }],
+            })
+            .expect("register independent tracer test effect");
         library
             .register(VfxEffectDefinition {
                 effect: VfxEffectRef::new("effects/test_weapon.fxd@impact.metal"),
@@ -198,6 +204,7 @@ mod tests {
             .expect("authored test rifle");
         rifle.weapon_vfx = Some(newengine_item_assets_runtime::AuthoredWeaponVfxDefinition {
             shot: "effects/test_weapon.fxd@shot".to_owned(),
+            tracer: "effects/test_weapon.fxd@tracer".to_owned(),
             impact_default: "effects/test_weapon.fxd@impact.metal".to_owned(),
             impact_by_surface: [(
                 "surface.metal".to_owned(),
@@ -205,6 +212,7 @@ mod tests {
             )]
             .into_iter()
             .collect(),
+            ..Default::default()
         });
         let package = newengine_item_assets_runtime::compile_authored_item_package(&authored)
             .expect("compile test item package");
@@ -235,8 +243,8 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(
             effects.len(),
-            3,
-            "shot structural layers stay in ECS while smoke is GPU-resident"
+            1,
+            "muzzle/smoke layers are GPU-resident while the independent tracer keeps its clampable segment runtime"
         );
         assert_eq!(
             newengine_vfx_runtime::vfx_runtime_stats(&world).active_layers,
@@ -248,8 +256,8 @@ mod tests {
                 .expect("GPU particle bridge")
                 .stats()
                 .pending_spawns,
-            1,
-            "shot smoke must be queued for GPU materialization"
+            3,
+            "muzzle flash, hot core and smoke must be queued independently for GPU materialization"
         );
         let (tracer, tracer_runtime) = effects
             .iter()

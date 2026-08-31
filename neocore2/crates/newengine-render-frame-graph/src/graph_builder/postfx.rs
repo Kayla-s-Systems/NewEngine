@@ -7,7 +7,6 @@ use crate::StandardRenderPhase;
 
 use super::{
     FrameGraphBuilder, RG_LIT_COLOR, RG_SCENE_HDR_COLOR, RG_SURFACE_COLOR, RG_VIEWPORT_COLOR,
-    RG_VIEWPORT_DEPTH,
 };
 
 impl FrameGraphBuilder {
@@ -19,13 +18,13 @@ impl FrameGraphBuilder {
         let Some(input) = self.sampleable_scene_input_resource() else {
             return self;
         };
-        let has_scene_depth = self.has_resource(RG_VIEWPORT_DEPTH);
+        let scene_depth = self.scene_depth_resource();
         self.add_phase_pass(StandardRenderPhase::PostFx, |pass| {
             let pass = pass
                 .with_domain(RenderGraphPassDomain::PostProcess)
                 .reads(input, RenderGraphResourceUsage::SampledTexture);
-            let pass = if has_scene_depth {
-                pass.reads(RG_VIEWPORT_DEPTH, RenderGraphResourceUsage::SampledTexture)
+            let pass = if let Some(scene_depth) = scene_depth {
+                pass.reads(scene_depth, RenderGraphResourceUsage::SampledTexture)
             } else {
                 pass
             };

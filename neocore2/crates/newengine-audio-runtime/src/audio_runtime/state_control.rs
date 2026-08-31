@@ -95,8 +95,8 @@ impl AudioRuntimeState {
                     };
                 }
                 if stream_source {
-                    // Rodio sets Player::position to the absolute seek target after a successful
-                    // try_seek, so no external origin is required until the next rematerialization.
+                    // The physical render node clock is reset to the absolute seek target after a successful
+                    // seek, so no external origin is required until the next rematerialization.
                     voice.physical_source_origin = Duration::ZERO;
                 }
             }
@@ -234,14 +234,23 @@ impl AudioRuntimeState {
         self.listener
     }
 
-    fn set_bus_gain(&mut self, request: AudioBusGainRequest) -> AudioBusGainAck {
+    fn set_route_gain(&mut self, mut request: AudioRouteGainRequest) -> AudioRouteGainAck {
+        request.route.0 = request.route.0.trim().to_owned();
         let gain = sanitize_gain(request.gain);
-        self.bus_gains.insert(request.bus, gain);
+        if request.route.0.is_empty() || request.route.validate().is_err() {
+            return AudioRouteGainAck {
+                accepted: false,
+                route: request.route,
+                gain,
+                provider: NATIVE_AUDIO_PROVIDER_ROUTE.to_owned(),
+            };
+        }
+        self.route_gains.insert(request.route.clone(), gain);
         self.refresh_voice_gains();
         self.rebalance_physical_voices();
-        AudioBusGainAck {
+        AudioRouteGainAck {
             accepted: true,
-            bus: request.bus,
+            route: request.route,
             gain,
             provider: NATIVE_AUDIO_PROVIDER_ROUTE.to_owned(),
         }

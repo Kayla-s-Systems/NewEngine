@@ -2,7 +2,6 @@ use super::foliage::{decode_runtime_ydd_prefab, terrain_height, DecodedPrefabMes
 use super::*;
 use crate::content::GameReadyMissionPickupSpec;
 
-const MISSION_MATERIAL_LIBRARY: &str = newengine_game_data::MISSION_MATERIAL_LIBRARY;
 const MISSION_STREAMING_PIN_OWNER: &str = "game-ready.mission";
 
 #[derive(Debug, Default)]
@@ -73,72 +72,71 @@ struct RuntimeWorldItemAdmissionState {
     attempts: u32,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Default)]
 struct MissionMaterials {
-    core: MaterialId,
-    target: MaterialId,
-    hazard: MaterialId,
-    goal: MaterialId,
+    core: Option<MaterialId>,
+    target: Option<MaterialId>,
+    hazard: Option<MaterialId>,
+    goal: Option<MaterialId>,
 }
 
-fn mission_material_spec(entry: &str) -> GameReadyMaterialSpec {
-    GameReadyMaterialSpec {
-        asset: Some(format!("{MISSION_MATERIAL_LIBRARY}@{entry}")),
-        base_color_texture: None,
-        normal_texture: None,
-        roughness_texture: None,
-        uv_scale: [1.0, 1.0],
-        uv_offset: [0.0, 0.0],
-        roughness: 0.3,
-        normal_scale: 0.0,
-        occlusion_strength: 1.0,
+fn mission_material(
+    mats: &MaterialRegistry,
+    role: &str,
+    authored_ref: Option<&str>,
+    required: bool,
+) -> Result<Option<MaterialId>, String> {
+    if !required {
+        return Ok(None);
     }
+    let reference = authored_ref
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
+            format!(
+                "mission role '{}' requires a project-authored material reference",
+                role
+            )
+        })?;
+    let id = register_required_material_ref(
+        mats,
+        &format!("Mission/{role}"),
+        MaterialFlags::CAST_SHADOWS.union(MaterialFlags::RECEIVE_SHADOWS),
+        reference,
+    )?;
+    Ok(Some(id))
 }
 
-fn register_mission_materials(mats: &MaterialRegistry) -> MissionMaterials {
-    let core_spec = mission_material_spec("mission_core");
-    let target_spec = mission_material_spec("mission_target");
-    let hazard_spec = mission_material_spec("mission_hazard");
-    let goal_spec = mission_material_spec("mission_goal");
-
-    MissionMaterials {
-        core: register_material(
+fn register_mission_materials(
+    mats: &MaterialRegistry,
+    mission: &GameReadyMissionSpec,
+) -> Result<MissionMaterials, String> {
+    Ok(MissionMaterials {
+        core: mission_material(
             mats,
-            "FPS/Mission/Core",
-            [0.04, 0.62, 1.0, 1.0],
-            [0.02, 0.55, 1.0],
-            3.2,
-            MaterialFlags::DOUBLE_SIDED,
-            &core_spec,
-        ),
-        target: register_material(
+            "Core",
+            mission.core_material.as_deref(),
+            !mission.pickups.is_empty(),
+        )?,
+        target: mission_material(
             mats,
-            "FPS/Mission/Target",
-            [1.0, 0.18, 0.04, 1.0],
-            [0.72, 0.06, 0.01],
-            1.5,
-            MaterialFlags::CAST_SHADOWS.union(MaterialFlags::RECEIVE_SHADOWS),
-            &target_spec,
-        ),
-        hazard: register_material(
+            "Target",
+            mission.target_material.as_deref(),
+            !mission.targets.is_empty(),
+        )?,
+        hazard: mission_material(
             mats,
-            "FPS/Mission/Hazard",
-            [0.96, 0.02, 0.08, 1.0],
-            [1.0, 0.01, 0.04],
-            3.8,
-            MaterialFlags::DOUBLE_SIDED,
-            &hazard_spec,
-        ),
-        goal: register_material(
+            "Hazard",
+            mission.hazard_material.as_deref(),
+            !mission.hazards.is_empty(),
+        )?,
+        goal: mission_material(
             mats,
-            "FPS/Mission/Goal",
-            [0.08, 1.0, 0.34, 1.0],
-            [0.04, 1.0, 0.22],
-            3.4,
-            MaterialFlags::DOUBLE_SIDED,
-            &goal_spec,
-        ),
-    }
+            "Goal",
+            mission.goal_material.as_deref(),
+            !mission.goals.is_empty(),
+        )?,
+    })
 }
 
 #[inline]
@@ -752,16 +750,18 @@ pub(super) fn spawn_game_ready_mission(
     parent: EntityId,
     terrain: EntityId,
     mission: &GameReadyMissionSpec,
-) -> GameReadyMissionSpawnSummary {
+) -> Result<GameReadyMissionSpawnSummary, String> {
     let mut summary = GameReadyMissionSpawnSummary::default();
-    for entry in [
-        "mission_core",
-        "mission_target",
-        "mission_hazard",
-        "mission_goal",
-    ] {
-        let material_ref = format!("{MISSION_MATERIAL_LIBRARY}@{entry}");
-        if let Err(error) = pin_mission_asset(world, &material_ref) {
+    for material_ref in [
+        mission.core_material.as_deref(),
+        mission.target_material.as_deref(),
+        mission.hazard_material.as_deref(),
+        mission.goal_material.as_deref(),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        if let Err(error) = pin_mission_asset(world, material_ref) {
             newengine_ulog_api::ulog::warn!(
                 "game-ready mission asset pin failed asset='{}' class='mission' owner='{}' err='{}'",
                 material_ref,
@@ -770,7 +770,7 @@ pub(super) fn spawn_game_ready_mission(
             );
         }
     }
-    let materials = register_mission_materials(mats);
+    let materials = register_mission_materials(mats, mission)?;
 
     let mut deferred_items = Vec::new();
     for pickup in &mission.pickups {
@@ -791,7 +791,7 @@ pub(super) fn spawn_game_ready_mission(
             &*prims,
             mats,
             parent,
-            materials.core,
+            materials.core.expect("mission material validated"),
             builtins::ID_SPHERE_UV,
             &format!("Mission/Pickup/{}", pickup.id),
             position,
@@ -824,7 +824,7 @@ pub(super) fn spawn_game_ready_mission(
             &*prims,
             mats,
             parent,
-            materials.target,
+            materials.target.expect("mission material validated"),
             builtins::ID_CAPSULE,
             &format!("Mission/Target/{}", target.id),
             position,
@@ -842,6 +842,10 @@ pub(super) fn spawn_game_ready_mission(
             entity,
             newengine_engine_runtime::gameplay::Health::new(target.health),
         );
+        let _ = world.insert(
+            entity,
+            newengine_engine_runtime::gameplay::DamageReceiver::character(),
+        );
         let _ = world.insert(entity, FpsDemoTarget);
         summary.targets = summary.targets.saturating_add(1);
     }
@@ -853,7 +857,7 @@ pub(super) fn spawn_game_ready_mission(
             &*prims,
             mats,
             parent,
-            materials.hazard,
+            materials.hazard.expect("mission material validated"),
             builtins::ID_CYLINDER,
             &format!("Mission/Hazard/{}", hazard.id),
             position,
@@ -875,7 +879,7 @@ pub(super) fn spawn_game_ready_mission(
             &*prims,
             mats,
             parent,
-            materials.goal,
+            materials.goal.expect("mission material validated"),
             builtins::ID_TORUS,
             &format!("Mission/Goal/{}", goal.id),
             position,
@@ -898,15 +902,14 @@ pub(super) fn spawn_game_ready_mission(
     }
 
     newengine_ulog_api::ulog::info!(
-        "game-ready mission spawned: pickups={} item_pickups={} targets={} hazards={} goals={} materials='{}@mission_*' policy='mission cores stay FpsDemoPickup; item-backed Pickup -> deferred inventory ItemPickup'",
+        "game-ready mission spawned: pickups={} item_pickups={} targets={} hazards={} goals={} policy='all generic mission presentation materials are project-authored'",
         summary.pickups,
         summary.item_pickups,
         summary.targets,
         summary.hazards,
         summary.goals,
-        MISSION_MATERIAL_LIBRARY,
     );
-    summary
+    Ok(summary)
 }
 
 #[cfg(test)]

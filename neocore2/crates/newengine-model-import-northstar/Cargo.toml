@@ -2,7 +2,7 @@
 name = "newengine-model-import-northstar"
 version = "0.1.0"
 edition = "2021"
-description = "Offline North Star TLOU2 PC source importer for NewEngine native model assets"
+description = "Offline NorthStar PC source importer for NewEngine native model assets"
 
 [dependencies]
 newengine-asset-format-nef8 = { path = "../newengine-asset-format-nef8" }

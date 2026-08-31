@@ -1,6 +1,6 @@
 use crate::pak::PakFile;
 
-/// DXGI formats observed in TLOU2 PC `VRAM_DESC` resources.
+/// DXGI formats observed in NorthStar PC `VRAM_DESC` resources.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ImportedTextureFormat {
     Rgba8Unorm,
@@ -79,7 +79,7 @@ impl ImportedTextureFormat {
 
     #[inline]
     pub const fn validated_pitched_linearization(self) -> bool {
-        // TLOU2 PC VRAM_DESC type=1 64-bit block-compressed resources use linear block rows with
+        // NorthStar PC VRAM_DESC type=1 64-bit block-compressed resources use linear block rows with
         // a 256-byte physical row pitch. Earlier tooling incorrectly treated these resources as
         // Morton 8x8 microtiles; corpus validation on character and VFX textures showed that the
         // apparent "tiles" were actually row padding. 128-bit BC5/BC7 remain intentionally
@@ -120,27 +120,27 @@ impl ImportedVramTexture {
     pub fn base_linear_bytes(&self, pak: &PakFile) -> Result<Vec<u8>, String> {
         if !self.format.validated_pitched_linearization() {
             return Err(format!(
-                "TLOU2 pitched base linearization is not validated for DXGI={} path='{}'",
+                "NorthStar pitched base linearization is not validated for DXGI={} path='{}'",
                 self.format.dxgi(),
                 self.source_path
             ));
         }
         if self.texture_type != 1 || self.stream_flags & 0x2 == 0 {
             return Err(format!(
-                "TLOU2 VRAM layout is not validated for type={} stream_flags=0x{:x} path='{}'",
+                "NorthStar VRAM layout is not validated for type={} stream_flags=0x{:x} path='{}'",
                 self.texture_type, self.stream_flags, self.source_path
             ));
         }
         let block_extent = self.format.block_extent().ok_or_else(|| {
             format!(
-                "unsupported TLOU2 texture DXGI={} path='{}'",
+                "unsupported NorthStar texture DXGI={} path='{}'",
                 self.format.dxgi(),
                 self.source_path
             )
         })?;
         let bytes_per_element = self.format.bytes_per_element().ok_or_else(|| {
             format!(
-                "unsupported TLOU2 texture DXGI={} path='{}'",
+                "unsupported NorthStar texture DXGI={} path='{}'",
                 self.format.dxgi(),
                 self.source_path
             )
@@ -149,14 +149,14 @@ impl ImportedVramTexture {
         let element_height = self.height.div_ceil(block_extent) as usize;
         let row_bytes = element_width
             .checked_mul(bytes_per_element)
-            .ok_or("TLOU2 base row size overflow")?;
+            .ok_or("NorthStar base row size overflow")?;
         let row_pitch = align_up(row_bytes, 256)?;
         let physical_base_len = row_pitch
             .checked_mul(element_height)
-            .ok_or("TLOU2 base texture allocation overflow")?;
+            .ok_or("NorthStar base texture allocation overflow")?;
         if physical_base_len > self.vram_size as usize {
             return Err(format!(
-                "TLOU2 base texture allocation exceeds VRAM descriptor path='{}' base_bytes={} vram_size={}",
+                "NorthStar base texture allocation exceeds VRAM descriptor path='{}' base_bytes={} vram_size={}",
                 self.source_path, physical_base_len, self.vram_size
             ));
         }
@@ -208,7 +208,7 @@ impl ImportedVramTexture {
     }
 }
 
-/// Parse all TLOU2 PC `VRAM_DESC` metadata without decoding pixels. This is intentionally separate
+/// Parse all NorthStar PC `VRAM_DESC` metadata without decoding pixels. This is intentionally separate
 /// from canonical texture production so offline tooling can select only the required source assets.
 pub fn decode_vram_textures(pak: &PakFile) -> Result<Vec<ImportedVramTexture>, String> {
     let vram_base = pak.vram_data_base()?;
@@ -399,7 +399,7 @@ mod tests {
     }
 
     #[test]
-    fn pitched_row_alignment_matches_tlou2_bc1_tail_layout() {
+    fn pitched_row_alignment_matches_northstar_bc1_tail_layout() {
         assert_eq!(align_up(16 * 8, 256).unwrap(), 256);
         assert_eq!(align_up(32 * 8, 256).unwrap(), 256);
         assert_eq!(align_up(33 * 8, 256).unwrap(), 512);

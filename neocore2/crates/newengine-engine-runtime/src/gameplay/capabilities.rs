@@ -219,6 +219,15 @@ impl GameplayCapabilityProvider for AudioPlayCapability {
             .ok_or("engine.audio.play.v1 requires non-empty payload.cue")?;
 
         let mut play = newengine_audio_api::AudioCuePlayRequest::new(cue.to_owned());
+        if let Some(route) = payload
+            .get("route")
+            .and_then(serde_json::Value::as_str)
+            .map(str::trim)
+            .filter(|route| !route.is_empty())
+        {
+            play.route = newengine_audio_api::AudioRouteId::new(route.to_owned());
+            play.route.validate()?;
+        }
         if let Some(position) = payload.get("position") {
             play.position = Some(
                 serde_json::from_value::<[f32; 3]>(position.clone())

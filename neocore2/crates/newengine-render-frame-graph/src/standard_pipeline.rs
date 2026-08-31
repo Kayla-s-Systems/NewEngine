@@ -178,7 +178,7 @@ pub fn standard_runtime_frame(desc: StandardRuntimePipelineDesc) -> RenderFrameP
     };
     target.depth_format = TextureFormat::Depth32Float;
     target.hdr_scene_enabled = desc.hdr_scene_enabled;
-    target.offscreen_scene_enabled = desc.hdr_scene_enabled || desc.postfx_enabled;
+    target.offscreen_scene_enabled = desc.deferred || desc.hdr_scene_enabled || desc.postfx_enabled;
     target.viewport_render_target = desc.viewport_render_target;
     target.shadow_render_target = desc.shadow_render_target;
     target.local_shadow_render_target = desc.local_shadow_render_target;

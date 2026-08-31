@@ -2,7 +2,7 @@
 
 Provider-neutral semantic service implementation for the host-owned `engine.assets.maps` gateway.
 
-This crate builds the `maps.api` service but does not register a route with the Host. The standalone `PluginsSrc/MapsRuntime` artifact owns provider identity, capability metadata, priority and service registration, so another plugin can replace it without rebuilding a runtime profile.
+This crate builds the `maps.api` service but does not register a route with the Host. The StarVault AssetManager plugin owns provider identity, capability metadata, priority and service registration. The semantic implementation stays isolated as an internal engine crate, while the public `engine.assets.maps` gateway remains provider-routed and stable for consumers.
 
 The provider resolves canonical `.ymap` map declarations into `MapIndexV1` and
 `MapCellV1` DTOs. It never mutates ECS/world state. `engine.scene` / `engine.world`

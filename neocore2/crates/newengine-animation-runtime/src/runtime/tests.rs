@@ -178,7 +178,7 @@ mod tests {
         let clip = AnimationClip {
             name: "native-sparse".to_owned(),
             skeleton_ref: "skeleton.ymt@body".to_owned(),
-            source: "northstar.tlou2.pc://test".to_owned(),
+            source: "northstar.pc://test".to_owned(),
             duration_seconds: 1.0,
             sample_rate_hz: 2.0,
             looped: true,

@@ -10,6 +10,17 @@ mod tests {
                     id: "ammo.test".to_owned(),
                     display_name: "Test Ammo".to_owned(),
                     kind: "ammo".to_owned(),
+                    ammo_profile: Some(AuthoredAmmoDefinition {
+                        caliber: "5.56x45mm".to_owned(),
+                        projectile_mass_kg: 0.004,
+                        muzzle_velocity_mps: 850.0,
+                        penetration_energy_j: 1450.0,
+                        max_penetration_m: 0.45,
+                        falloff_start_m: 35.0,
+                        falloff_end_m: 120.0,
+                        falloff_min_multiplier: 0.62,
+                        ..AuthoredAmmoDefinition::default()
+                    }),
                     max_stack: 100,
                     ..AuthoredItemDefinition::default()
                 },

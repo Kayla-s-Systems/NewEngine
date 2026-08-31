@@ -58,7 +58,7 @@ pub struct VfxTextureDictionaryCompileReport {
     pub entries: Vec<CompiledVfxTextureEntry>,
 }
 
-/// Compile selected TLOU2 PC particle textures into a canonical resident NorthStar YTD.
+/// Compile selected NorthStar PC particle textures into a canonical resident NorthStar YTD.
 ///
 /// Source `VRAM_DESC` payloads never escape the offline importer. Validated BC1 base blocks are
 /// detiled and preserved byte-for-byte at mip0; lower BC1 mips are regenerated from the decoded

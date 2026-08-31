@@ -61,7 +61,7 @@ fn spawn_skinned_equipped_weapon_visual(
             _ => {}
         }
     }
-    validate_canonical_rifle_visual_space(min, max)?;
+    validate_canonical_skinned_weapon_visual_space(min, max)?;
     let source_to_model = source_to_model.ok_or("equipped rifle has no skin source_to_model")?;
 
     let root = spawn_named(world, format!("Player/EquippedWeapon/{}", definition.name));

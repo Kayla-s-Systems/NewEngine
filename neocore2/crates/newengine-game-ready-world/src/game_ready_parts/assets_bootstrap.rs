@@ -123,29 +123,6 @@ fn game_data_sky_spec(data: &GameData, fallback: &GameReadySkySpec) -> GameReady
     }
 }
 
-fn install_shared_acoustic_material_definition(map: &mut GameReadyMapProfile) {
-    let definition_ref = newengine_game_data::SHARED_ACOUSTIC_MATERIAL_LIBRARY_REF;
-    if map
-        .definitions
-        .iter()
-        .any(|spec| spec.definition_ref == definition_ref)
-    {
-        return;
-    }
-    // Shared baseline is deliberately first: later project/map definitions may replace
-    // matching acoustic rules while retaining the rest of the Shared library.
-    map.definitions.insert(
-        0,
-        GameReadyDefinitionInstanceSpec {
-            definition_ref: definition_ref.to_owned(),
-            position: Vec3::ZERO,
-            rotation_ypr: [0.0, 0.0, 0.0],
-            scale: Vec3::ONE,
-            apply_mode: GameReadyDefinitionApplyMode::MetadataOnly,
-        },
-    );
-}
-
 fn install_game_data_sky_definition(map: &mut GameReadyMapProfile, data: &GameData) {
     let previous_sky_ref = map.sky.definition_ref.trim().replace('\\', "/");
     map.sky = game_data_sky_spec(data, &map.sky);
@@ -203,53 +180,16 @@ fn install_game_data_player_definition(map: &mut GameReadyMapProfile, data: &Gam
     );
 }
 
-fn install_game_data_player_profile(profile: &mut GameReadyMapProfile, data: &GameData) {
-    // Legacy/YMAP v1 maps may already author a complete avatar descriptor. Preserve that
-    // stronger map-owned assignment. Discrete YMAP v2 owns topology/spawn only, so its
-    // empty player model is completed from the selected project's GameData baseline.
-    let map_owns_avatar =
-        profile.player.model.enabled && !profile.player.model.source.trim().is_empty();
-    if map_owns_avatar {
-        return;
-    }
-
-    let player = &data.player;
-    let tuning = &player.tuning;
-    profile.player.move_speed = player.move_speed.clamp(0.05, 50.0);
-    profile.player.run_speed = profile.player.move_speed;
-    profile.player.walk_speed = profile.player.walk_speed.min(profile.player.run_speed);
-    profile.player.sprint_speed = profile.player.sprint_speed.max(profile.player.run_speed);
-    profile.player.crouch_speed = profile.player.crouch_speed.min(profile.player.run_speed);
-    profile.player.look_sens = player.look_sensitivity.clamp(0.0001, 0.1);
-
-    profile.player.model.enabled = player.model.enabled;
-    profile.player.model.source = player.model.source.trim().replace('\\', "/");
-    profile.player.model.target_height = player.model.target_height.clamp(0.25, 3.0);
-    profile.player.model.eye_height_ratio = player.model.eye_height_ratio.clamp(0.55, 0.98);
-    profile.player.model.local_offset = Vec3::new(
-        player.model.local_offset[0],
-        player.model.local_offset[1],
-        player.model.local_offset[2],
-    );
-    profile.player.model.yaw_offset = player.model.yaw_offset;
-    profile.player.model.hide_in_first_person = player.model.hide_in_first_person;
-
-    profile.gameplay.player_collision.radius = tuning.body_radius.clamp(0.15, 1.0);
-    profile.gameplay.player_collision.half_height = tuning.body_half_height.clamp(0.15, 1.5);
-    profile.gameplay.player_visual.radius = tuning.visual_radius.clamp(0.15, 1.0);
-    profile.gameplay.player_visual.half_height = tuning.visual_half_height.clamp(0.15, 1.5);
-    profile.gameplay.player_visual.camera_eye_height = tuning.camera_eye_height.clamp(0.2, 2.5);
-    profile.gameplay.player_visual.sprint_multiplier = tuning.sprint_multiplier.clamp(1.0, 4.0);
-    profile.gameplay.physics.gravity = tuning.gravity.clamp(0.0, 64.0);
-    profile.gameplay.physics.contact_skin = tuning.contact_skin.clamp(0.0, 0.25);
-
+fn install_game_data_player_input_policy(profile: &mut GameReadyMapProfile, data: &GameData) {
+    // GameData V2 owns only project-level player input policy here. Character model, body,
+    // movement speeds and locomotion tuning are definition-owned and are hydrated from the
+    // selected character YTYP below. Never clamp the V2 runtime-resolved sentinel fields into
+    // synthetic character defaults.
+    profile.player.look_sens = data.player.look_sensitivity;
     newengine_ulog_api::ulog::info!(
-        "game-ready game-data player baseline: model_enabled={} source='{}' move_speed={:.2} body=[r={:.2},hh={:.2}] policy='GameData fills non-authored map player; YMAP spawn/yaw preserved; YTYP may enrich model metadata'",
-        profile.player.model.enabled,
-        profile.player.model.source,
-        profile.player.move_speed,
-        profile.gameplay.player_collision.radius,
-        profile.gameplay.player_collision.half_height,
+        "game-ready game-data player input policy: look_sensitivity={:.6} character_ref='{}' policy='GameData selects character/input policy; YMAP owns spawn; YTYP owns model/body/locomotion'",
+        profile.player.look_sens,
+        data.player.character_ref,
     );
 }
 
@@ -319,11 +259,9 @@ pub(crate) fn bootstrap_game_ready_world_scene_impl(
             return None;
         }
     };
-    // GameData owns mode-level player/environment defaults. Discrete YMAP v2 contributes
-    // topology and spawn markers; it must not silently fall back to generic GameReady data.
-    // Legacy/v1 authored avatar descriptors remain stronger than the GameData baseline.
-    install_game_data_player_profile(&mut map, game_data.data());
-    install_shared_acoustic_material_definition(&mut map);
+    // Project GameData selects player/input policy. YMAP owns topology/spawn and the selected
+    // character YTYP owns the complete model/body/locomotion contract.
+    install_game_data_player_input_policy(&mut map, game_data.data());
     install_game_data_sky_definition(&mut map, game_data.data());
     install_game_data_player_definition(&mut map, game_data.data());
 
@@ -587,14 +525,26 @@ pub(crate) fn bootstrap_game_ready_world_scene_impl(
         t.rotation = Quat::from_euler(EulerRot::YXZ, map.player.yaw, 0.0, 0.0);
     }
 
-    let mission = spawn_game_ready_mission(
+    let mission = match spawn_game_ready_mission(
         world,
         prims,
         mats,
         layout.actors,
         terrain,
         &map.gameplay.mission,
-    );
+    ) {
+        Ok(mission) => mission,
+        Err(error) => {
+            newengine_ulog_api::ulog::error!(
+                "game-ready mission bootstrap rejected project content err='{}' policy='authored mission materials/content are required; no engine fallback'",
+                error,
+            );
+            newengine_core::crash::record_breadcrumb(format!(
+                "game-ready mission bootstrap failed: {error}"
+            ));
+            return None;
+        }
+    };
     world.insert_resource(FpsDemoState::from_rules_with_targets(
         mission.pickups,
         mission.targets,

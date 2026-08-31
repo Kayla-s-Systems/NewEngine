@@ -10,16 +10,20 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use newengine_ecs::{EntityId, World};
 use newengine_engine_runtime::gameplay::{
-    active_equipped_weapon_binding, active_equipped_weapon_muzzle, consume_equipped_ammo,
+    active_equipped_weapon_binding, active_equipped_weapon_component_modifiers,
+    active_equipped_weapon_muzzle, consume_equipped_ammo,
     emit_animation_pulse, emit_gameplay_event, equipped_reserve_ammo,
     persist_equipped_weapon_state, sync_equipped_weapon_runtime, try_collect_item_pickup,
-    EquippedWeaponBinding, Health, HitscanWeaponTuning, Interactable, InteractionEvent,
+    BallisticMaterialResponse, BallisticShotProfile, EquippedWeaponBinding,
+    FiringPatternDefinition, FiringPatternKind, HitscanWeaponTuning, Interactable, InteractionEvent,
     InteractionEventBus, ItemCatalog, ItemInstanceId, ItemPickup, MeleeWeaponTuning,
-    PendingHitscan, PendingInteraction, PlayerAuthoredAnimationCapabilities, PlayerCommandFrame,
-    PlayerController, PlayerInteractionTuning, PlayerStanceState, PlayerWeaponState,
-    WeaponAttackKind, WeaponEvent, WeaponEventBus, WeaponEventKind, WeaponFireMode,
-    WeaponObstructionState, WeaponType, GAMEPLAY_EVENT_WEAPON_EMPTY, GAMEPLAY_EVENT_WEAPON_FIRED,
-    GAMEPLAY_EVENT_WEAPON_HIT, GAMEPLAY_EVENT_WEAPON_MELEE_ATTACKED,
+    PendingHitscan, PendingInteraction, PhysicsSurface, PlayerAuthoredAnimationCapabilities,
+    PlayerCommandFrame, PlayerController, PlayerInteractionTuning, PlayerStanceKind,
+    PlayerStanceState, PlayerWeaponState, WeaponAccuracyModifiers, WeaponAccuracyState,
+    WeaponFireControllerState, WeaponAttackKind, WeaponEvent, WeaponEventBus, WeaponEventKind,
+    WeaponImpact, resolve_weapon_impact,
+    WeaponObstructionState, WeaponType, GAMEPLAY_EVENT_WEAPON_EMPTY,
+    GAMEPLAY_EVENT_WEAPON_FIRED, GAMEPLAY_EVENT_WEAPON_HIT, GAMEPLAY_EVENT_WEAPON_MELEE_ATTACKED,
     GAMEPLAY_EVENT_WEAPON_RELOAD_COMPLETED, GAMEPLAY_EVENT_WEAPON_RELOAD_STARTED,
 };
 #[cfg(test)]
@@ -31,11 +35,11 @@ use newengine_gameplay_fps_api::{
 use newengine_gameplay_script_runtime::GameplayCommandExecutor;
 use newengine_math::{avalanche_u64, EulerRot, Quat, Vec3};
 use newengine_physics_api::{PhysicsQueryDto, PhysicsQueryHitDto, PhysicsQueryKindDto};
-use newengine_sim::CharacterMotor;
+use newengine_sim::{CharacterMotor, Velocity};
 use newengine_transform::Transform;
 
 #[cfg(test)]
-use newengine_engine_runtime::gameplay::EquippedWeaponMuzzle;
+use newengine_engine_runtime::gameplay::{EquippedWeaponMuzzle, Health};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct PendingFocusedItemInteraction {
@@ -50,6 +54,31 @@ struct PendingWeaponObstructionProbe {
     direction: Vec3,
     muzzle_distance: f32,
     muzzle_position: Vec3,
+}
+
+#[inline]
+fn ricochet_incidence_dot(direction: Vec3, normal: Vec3) -> f32 {
+    let direction = direction.normalize_or_zero();
+    let normal = normal.normalize_or_zero();
+    if direction.length_squared() <= 1.0e-8 || normal.length_squared() <= 1.0e-8 {
+        return 1.0;
+    }
+    (-direction).dot(normal).abs().clamp(0.0, 1.0)
+}
+
+#[inline]
+fn ballistic_material_allows_ricochet(
+    material: BallisticMaterialResponse,
+    direction: Vec3,
+    normal: Vec3,
+    bounce_count: u8,
+    max_bounces: u8,
+) -> bool {
+    let material = material.sanitized();
+    material.ricochet_allowed
+        && bounce_count < max_bounces
+        && ricochet_incidence_dot(direction, normal) <= material.ricochet_max_incidence_dot
+        && material.ricochet_energy_retention > 0.01
 }
 
 /// Chooses the nearest enabled inventory pickup inside the same interaction radius used by
@@ -102,8 +131,9 @@ pub use runtime::step_player_combat;
 use runtime::{apply_recoil, recover_weapon_recoil};
 use runtime::{emit_interaction_event, emit_weapon_event};
 use targeting::{
-    hitscan_query_seq, interaction_query_seq, interaction_ray, melee_origin_and_direction,
-    queue_weapon_obstruction_probe, shot_origin_and_direction, signed_unit,
+    hitscan_bounce_query_seq, hitscan_query_seq, interaction_query_seq, interaction_ray,
+    melee_origin_and_direction, queue_weapon_obstruction_probe, shot_origin_and_direction,
+    signed_unit,
 };
 
 #[cfg(test)]

@@ -71,18 +71,13 @@ fn embedded_yscd_clip_key(cue_reference: &str, clip_index: usize, codec: &str) -
     }
 }
 
-fn audio_bus_from_yscd(value: &str) -> Result<AudioBus, String> {
-    match value.trim().to_ascii_lowercase().as_str() {
-        "master" => Ok(AudioBus::Master),
-        "music" => Ok(AudioBus::Music),
-        "sfx" => Ok(AudioBus::Sfx),
-        "ui" => Ok(AudioBus::Ui),
-        "dialogue" => Ok(AudioBus::Dialogue),
-        "ambience" => Ok(AudioBus::Ambience),
-        other => Err(format!("YSCD cue has unsupported audio bus '{other}'")),
+fn audio_route_from_yscd(value: &str) -> Result<AudioRouteId, String> {
+    let route = AudioRouteId::new(value.trim().to_owned());
+    if !route.0.is_empty() {
+        route.validate()?;
     }
+    Ok(route)
 }
-
 
 fn concurrency_scope_from_yscd(value: &str) -> Result<AudioConcurrencyScope, String> {
     match value.trim().to_ascii_lowercase().as_str() {

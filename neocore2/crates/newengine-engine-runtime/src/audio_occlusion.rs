@@ -700,6 +700,10 @@ mod tests {
         assert_eq!(queries.len(), 4);
         // sample 0 forward, sample 0 reverse, sample 1 forward, sample 2 forward
         let hit = PhysicsQueryHitDto {
+            subshape_id: 0,
+            hit_index: 0,
+            back_face: false,
+
             seq: queries[2].seq,
             entity: blocker.stable_u64(),
             position: [0.0, 0.0, -4.0],
@@ -743,6 +747,10 @@ mod tests {
         let hits = queries
             .iter()
             .map(|query| PhysicsQueryHitDto {
+                subshape_id: 0,
+                hit_index: 0,
+                back_face: false,
+
                 seq: query.seq,
                 entity: blocker.stable_u64(),
                 position: [0.0, 0.0, -4.0],
@@ -796,6 +804,10 @@ mod tests {
         assert_eq!(queries.len(), 2);
         let hits = [
             PhysicsQueryHitDto {
+                subshape_id: 0,
+                hit_index: 0,
+                back_face: false,
+
                 seq: queries[0].seq,
                 entity: blocker.stable_u64(),
                 position: [0.0, 0.0, -4.0],
@@ -803,6 +815,10 @@ mod tests {
                 distance: 4.0,
             },
             PhysicsQueryHitDto {
+                subshape_id: 0,
+                hit_index: 0,
+                back_face: false,
+
                 seq: queries[1].seq,
                 entity: blocker.stable_u64(),
                 position: [0.0, 0.0, -4.4],
@@ -919,6 +935,10 @@ mod tests {
             .map(|entity| (entity.stable_u64(), entity))
             .collect::<BTreeMap<_, _>>();
         let hit = PhysicsQueryHitDto {
+            subshape_id: 0,
+            hit_index: 0,
+            back_face: false,
+
             seq: 1,
             entity: blocker.stable_u64(),
             position: [0.0; 3],
@@ -946,6 +966,10 @@ mod tests {
             .map(|entity| (entity.stable_u64(), entity))
             .collect::<BTreeMap<_, _>>();
         let hit = PhysicsQueryHitDto {
+            subshape_id: 0,
+            hit_index: 0,
+            back_face: false,
+
             seq: 1,
             entity: blocker.stable_u64(),
             position: [0.0; 3],

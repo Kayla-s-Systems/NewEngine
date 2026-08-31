@@ -68,6 +68,7 @@ fn domain_root_owns_prefab_and_cell_root_despawns_as_one_subtree() {
         material: String::new(),
         surface_id: String::new(),
         surface_events: std::collections::BTreeMap::new(),
+        ballistic_material: None,
         ground_placement_surface: false,
         enabled: true,
         position: Vec3::ZERO,

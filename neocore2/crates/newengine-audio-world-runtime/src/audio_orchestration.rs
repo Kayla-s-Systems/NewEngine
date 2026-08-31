@@ -7,19 +7,22 @@ use parking_lot::Mutex;
 use newengine_audio_api::{
     AudioInstanceId, AudioMixGraph, AudioMusicSessionId, AudioMusicSessionState, AudioObjectId,
     AudioObjectState, AudioOrchestrationCommand, AudioParameterSet, AudioParameterTarget,
-    AudioPlayInstanceRequest, AudioPlayStreamInstanceRequest, AudioRouteId, AudioTransportAction,
-    AudioTransportActionId, AudioTransportConfig, AudioTransportInstanceState,
-    AudioTransportMarkerOccurrence, AudioTransportRuntimeState, AudioTransportSchedulePoint,
-    AudioVoiceBudgetConfig, AudioVoiceUpdateRequest, InteractiveMusicGraph,
+    AudioPlayInstanceRequest, AudioPlayStreamInstanceRequest, AudioRenderClock, AudioRouteId,
+    AudioTransportAction, AudioTransportActionId, AudioTransportConfig,
+    AudioTransportInstanceState, AudioTransportMarkerOccurrence, AudioTransportRuntimeState,
+    AudioTransportSchedulePoint, AudioVoiceBudgetConfig, AudioVoiceRenderAction,
+    AudioVoiceRenderScheduleRequest, AudioVoiceUpdateRequest, InteractiveMusicGraph,
     InteractiveMusicRuntimeState,
 };
 use newengine_audio_client::{
-    play_audio_cue, play_audio_stream, set_audio_voice_budgets, stop_audio_voice,
-    update_audio_voice,
+    audio_render_clock, play_audio_cue, play_audio_stream, schedule_audio_voice_render,
+    set_audio_voice_budgets, stop_audio_voice, update_audio_voice,
 };
 use newengine_core::{EngineResult, Module, ModuleCtx};
 
-use crate::audio_transport::{AudioTransportHandle, AudioTransportRuntime, DueTransportAction};
+use crate::audio_transport::{
+    AudioTransportHandle, AudioTransportRuntime, DueTransportAction, PendingTransportAction,
+};
 use crate::interactive_music::InteractiveMusicHandle;
 
 const DEFAULT_COMMAND_CAPACITY: usize = 2_048;
@@ -421,6 +424,35 @@ struct RuntimeInstance {
     parameters: AudioParameterSet,
     transport_start_sample: u64,
     transport_dispatch_sample: u64,
+    render_armed: bool,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct ProviderClockAnchor {
+    transport_sample: u64,
+    provider_sample: u64,
+    provider_rate: u32,
+}
+
+#[derive(Clone, Debug)]
+enum PrearmedTransportAction {
+    Play {
+        instance_id: AudioInstanceId,
+    },
+    PlayStream {
+        instance_id: AudioInstanceId,
+    },
+    Gain {
+        instance_id: AudioInstanceId,
+        voice_ids: Vec<u64>,
+        schedule_id: u64,
+        end_transport_sample: u64,
+    },
+    Stop {
+        instance_id: AudioInstanceId,
+        voice_ids: Vec<u64>,
+        schedule_id: u64,
+    },
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -572,6 +604,10 @@ pub struct AudioOrchestrationRuntimeModule {
     music_transitions_completed: u64,
     music_transitions_rejected: u64,
     transport: AudioTransportRuntime,
+    provider_clock: Option<AudioRenderClock>,
+    provider_clock_anchor: Option<ProviderClockAnchor>,
+    prearmed_transport_actions: BTreeMap<AudioTransportActionId, PrearmedTransportAction>,
+    provider_gain_ramp_until: BTreeMap<AudioInstanceId, u64>,
 }
 
 impl AudioOrchestrationRuntimeModule {
@@ -591,6 +627,10 @@ impl AudioOrchestrationRuntimeModule {
             music_transitions_completed: 0,
             music_transitions_rejected: 0,
             transport: AudioTransportRuntime::default(),
+            provider_clock: None,
+            provider_clock_anchor: None,
+            prearmed_transport_actions: BTreeMap::new(),
+            provider_gain_ramp_until: BTreeMap::new(),
         }
     }
 
@@ -614,6 +654,309 @@ impl AudioOrchestrationRuntimeModule {
         }
     }
 
+    fn refresh_provider_clock(&mut self) {
+        let should_query = self.transport.has_pending_actions()
+            || !self.instances.is_empty()
+            || !self.music_sessions.is_empty()
+            || self.provider_clock_anchor.is_some();
+        if !should_query {
+            self.provider_clock = None;
+            return;
+        }
+
+        match audio_render_clock() {
+            Ok(Some(clock)) if clock.ready && clock.sample_rate > 0 => {
+                let reset_anchor = self.provider_clock_anchor.is_none_or(|anchor| {
+                    anchor.provider_rate != clock.sample_rate
+                        || clock.sample < anchor.provider_sample
+                });
+                if reset_anchor {
+                    self.provider_clock_anchor = Some(ProviderClockAnchor {
+                        transport_sample: self.transport.sample(),
+                        provider_sample: clock.sample,
+                        provider_rate: clock.sample_rate,
+                    });
+                }
+                self.provider_clock = Some(clock);
+            }
+            Ok(_) => {
+                self.provider_clock = None;
+            }
+            Err(error) => {
+                self.provider_clock = None;
+                newengine_ulog_api::ulog::trace!(
+                    "audio transport: provider render clock unavailable err='{}'",
+                    error
+                );
+            }
+        }
+    }
+
+    fn scale_samples(samples: u64, from_rate: u32, to_rate: u32) -> Option<u64> {
+        if from_rate == 0 || to_rate == 0 {
+            return None;
+        }
+        let numerator = u128::from(samples)
+            .saturating_mul(u128::from(to_rate))
+            .saturating_add(u128::from(from_rate / 2));
+        Some((numerator / u128::from(from_rate)).min(u128::from(u64::MAX)) as u64)
+    }
+
+    fn provider_sample_for_transport(&self, transport_sample: u64) -> Option<u64> {
+        let anchor = self.provider_clock_anchor?;
+        if transport_sample < anchor.transport_sample {
+            return None;
+        }
+        let delta = transport_sample - anchor.transport_sample;
+        let provider_delta =
+            Self::scale_samples(delta, self.transport.sample_rate(), anchor.provider_rate)?;
+        Some(anchor.provider_sample.saturating_add(provider_delta))
+    }
+
+    fn provider_duration_for_transport(&self, transport_samples: u64) -> Option<u64> {
+        let anchor = self.provider_clock_anchor?;
+        let scaled = Self::scale_samples(
+            transport_samples,
+            self.transport.sample_rate(),
+            anchor.provider_rate,
+        )?;
+        Some(if transport_samples > 0 {
+            scaled.max(1)
+        } else {
+            0
+        })
+    }
+
+    fn provider_target_has_prearm_lead(&self, provider_sample: u64) -> bool {
+        let Some(clock) = self.provider_clock else {
+            return false;
+        };
+        let lead = u64::from(clock.block_frames.max(1)).saturating_mul(2);
+        provider_sample >= clock.sample.saturating_add(lead)
+    }
+
+    fn advance_transport_clock(
+        &mut self,
+        dt: f32,
+    ) -> (Vec<AudioTransportMarkerOccurrence>, Vec<DueTransportAction>) {
+        let Some(clock) = self.provider_clock else {
+            return self.transport.advance_seconds(dt);
+        };
+        let Some(anchor) = self.provider_clock_anchor else {
+            return self.transport.advance_seconds(dt);
+        };
+        if clock.sample < anchor.provider_sample || clock.sample_rate != anchor.provider_rate {
+            return self.transport.advance_seconds(dt);
+        }
+        let provider_delta = clock.sample - anchor.provider_sample;
+        let Some(transport_delta) = Self::scale_samples(
+            provider_delta,
+            anchor.provider_rate,
+            self.transport.sample_rate(),
+        ) else {
+            return self.transport.advance_seconds(dt);
+        };
+        let target = anchor.transport_sample.saturating_add(transport_delta);
+        self.transport
+            .advance_samples(target.saturating_sub(self.transport.sample()))
+    }
+
+    fn cancel_provider_voice_schedule(&self, voice_ids: &[u64], schedule_id: u64) {
+        for voice_id in voice_ids.iter().copied() {
+            let request = AudioVoiceRenderScheduleRequest {
+                voice_id,
+                at_sample: self.provider_clock.map_or(0, |clock| clock.sample),
+                schedule_id,
+                action: AudioVoiceRenderAction::Cancel,
+            };
+            let _ = schedule_audio_voice_render(&request);
+        }
+    }
+
+    fn cancel_prearmed_transport_action(&mut self, action_id: AudioTransportActionId) {
+        let Some(prearmed) = self.prearmed_transport_actions.remove(&action_id) else {
+            return;
+        };
+        match prearmed {
+            PrearmedTransportAction::Play { instance_id }
+            | PrearmedTransportAction::PlayStream { instance_id } => {
+                self.stop_instance(instance_id);
+            }
+            PrearmedTransportAction::Gain {
+                instance_id,
+                voice_ids,
+                schedule_id,
+                ..
+            } => {
+                self.cancel_provider_voice_schedule(&voice_ids, schedule_id);
+                self.provider_gain_ramp_until.remove(&instance_id);
+            }
+            PrearmedTransportAction::Stop {
+                voice_ids,
+                schedule_id,
+                ..
+            } => self.cancel_provider_voice_schedule(&voice_ids, schedule_id),
+        }
+    }
+
+    fn try_prearm_transport_action(&mut self, pending: PendingTransportAction) {
+        if self.prearmed_transport_actions.contains_key(&pending.id) {
+            return;
+        }
+        let Some(provider_sample) = self.provider_sample_for_transport(pending.intended_sample)
+        else {
+            return;
+        };
+        if !self.provider_target_has_prearm_lead(provider_sample) {
+            return;
+        }
+
+        match pending.action {
+            AudioTransportAction::Play {
+                instance_id,
+                object_id,
+                request,
+            } => {
+                self.play_instance(
+                    instance_id,
+                    object_id,
+                    request,
+                    pending.intended_sample,
+                    self.transport.sample(),
+                    Some(provider_sample),
+                );
+                if self
+                    .instances
+                    .get(&instance_id)
+                    .is_some_and(|instance| instance.render_armed)
+                {
+                    self.prearmed_transport_actions
+                        .insert(pending.id, PrearmedTransportAction::Play { instance_id });
+                }
+            }
+            AudioTransportAction::PlayStream {
+                instance_id,
+                object_id,
+                request,
+            } => {
+                self.play_stream_instance(
+                    instance_id,
+                    object_id,
+                    request,
+                    pending.intended_sample,
+                    self.transport.sample(),
+                    Some(provider_sample),
+                );
+                if self
+                    .instances
+                    .get(&instance_id)
+                    .is_some_and(|instance| instance.render_armed)
+                {
+                    self.prearmed_transport_actions.insert(
+                        pending.id,
+                        PrearmedTransportAction::PlayStream { instance_id },
+                    );
+                }
+            }
+            AudioTransportAction::TransitionInstanceGain {
+                instance_id,
+                target_gain,
+                duration_samples,
+            } => {
+                let Some(instance) = self.instances.get(&instance_id).cloned() else {
+                    return;
+                };
+                if instance.render_armed {
+                    return;
+                }
+                let Some(object) = self.objects.get(&instance.object_id) else {
+                    return;
+                };
+                let route_gain = self.route_gain(&instance.route);
+                let target_voice_gain = newengine_audio_api::sanitize_gain(
+                    object.state.gain * target_gain * route_gain,
+                );
+                let Some(provider_duration) =
+                    self.provider_duration_for_transport(duration_samples)
+                else {
+                    return;
+                };
+                let schedule_id = pending.id.0;
+                let mut armed = Vec::with_capacity(instance.voice_ids.len());
+                for voice_id in instance.voice_ids.iter().copied() {
+                    let request = AudioVoiceRenderScheduleRequest {
+                        voice_id,
+                        at_sample: provider_sample,
+                        schedule_id,
+                        action: AudioVoiceRenderAction::GainRamp {
+                            target_gain: target_voice_gain,
+                            duration_samples: provider_duration,
+                        },
+                    };
+                    match schedule_audio_voice_render(&request) {
+                        Ok(Some(ack)) if ack.accepted => armed.push(voice_id),
+                        _ => {
+                            self.cancel_provider_voice_schedule(&armed, schedule_id);
+                            return;
+                        }
+                    }
+                }
+                if !armed.is_empty() {
+                    self.prearmed_transport_actions.insert(
+                        pending.id,
+                        PrearmedTransportAction::Gain {
+                            instance_id,
+                            voice_ids: armed,
+                            schedule_id,
+                            end_transport_sample: pending
+                                .intended_sample
+                                .saturating_add(duration_samples),
+                        },
+                    );
+                }
+            }
+            AudioTransportAction::StopInstance { instance_id } => {
+                let Some(instance) = self.instances.get(&instance_id).cloned() else {
+                    return;
+                };
+                let schedule_id = pending.id.0;
+                let mut armed = Vec::with_capacity(instance.voice_ids.len());
+                for voice_id in instance.voice_ids.iter().copied() {
+                    let request = AudioVoiceRenderScheduleRequest {
+                        voice_id,
+                        at_sample: provider_sample,
+                        schedule_id,
+                        action: AudioVoiceRenderAction::Stop,
+                    };
+                    match schedule_audio_voice_render(&request) {
+                        Ok(Some(ack)) if ack.accepted => armed.push(voice_id),
+                        _ => {
+                            self.cancel_provider_voice_schedule(&armed, schedule_id);
+                            return;
+                        }
+                    }
+                }
+                if !armed.is_empty() {
+                    self.prearmed_transport_actions.insert(
+                        pending.id,
+                        PrearmedTransportAction::Stop {
+                            instance_id,
+                            voice_ids: armed,
+                            schedule_id,
+                        },
+                    );
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn prearm_pending_transport_actions(&mut self) {
+        for pending in self.transport.pending_actions() {
+            self.try_prearm_transport_action(pending);
+        }
+    }
+
     fn apply_due_transport_action(&mut self, due: DueTransportAction) {
         if due.lateness_samples > 0 {
             newengine_ulog_api::ulog::trace!(
@@ -624,30 +967,70 @@ impl AudioOrchestrationRuntimeModule {
                 due.lateness_samples
             );
         }
+        let prearmed = self.prearmed_transport_actions.remove(&due.id);
         match due.action {
             AudioTransportAction::Play {
                 instance_id,
                 object_id,
                 request,
-            } => self.play_instance(
-                instance_id,
-                object_id,
-                request,
-                due.intended_sample,
-                due.dispatch_sample,
-            ),
+            } => {
+                if matches!(
+                    prearmed,
+                    Some(PrearmedTransportAction::Play {
+                        instance_id: armed
+                    }) if armed == instance_id
+                ) {
+                    if let Some(instance) = self.instances.get_mut(&instance_id) {
+                        instance.render_armed = false;
+                        instance.transport_dispatch_sample = due.dispatch_sample;
+                    }
+                } else {
+                    self.play_instance(
+                        instance_id,
+                        object_id,
+                        request,
+                        due.intended_sample,
+                        due.dispatch_sample,
+                        None,
+                    );
+                }
+            }
             AudioTransportAction::PlayStream {
                 instance_id,
                 object_id,
                 request,
-            } => self.play_stream_instance(
-                instance_id,
-                object_id,
-                request,
-                due.intended_sample,
-                due.dispatch_sample,
-            ),
-            AudioTransportAction::StopInstance { instance_id } => self.stop_instance(instance_id),
+            } => {
+                if matches!(
+                    prearmed,
+                    Some(PrearmedTransportAction::PlayStream {
+                        instance_id: armed
+                    }) if armed == instance_id
+                ) {
+                    if let Some(instance) = self.instances.get_mut(&instance_id) {
+                        instance.render_armed = false;
+                        instance.transport_dispatch_sample = due.dispatch_sample;
+                    }
+                } else {
+                    self.play_stream_instance(
+                        instance_id,
+                        object_id,
+                        request,
+                        due.intended_sample,
+                        due.dispatch_sample,
+                        None,
+                    );
+                }
+            }
+            AudioTransportAction::StopInstance { instance_id } => {
+                if let Some(PrearmedTransportAction::Stop {
+                    instance_id: armed_instance,
+                    ..
+                }) = prearmed
+                {
+                    debug_assert_eq!(armed_instance, instance_id);
+                }
+                self.stop_instance(instance_id);
+            }
             AudioTransportAction::SetScalar {
                 target,
                 name,
@@ -674,12 +1057,26 @@ impl AudioOrchestrationRuntimeModule {
                 instance_id,
                 target_gain,
                 duration_samples,
-            } => self.transition_instance_gain_samples(
-                instance_id,
-                target_gain,
-                due.intended_sample,
-                duration_samples,
-            ),
+            } => {
+                let exact_provider_end = match prearmed {
+                    Some(PrearmedTransportAction::Gain {
+                        instance_id: armed,
+                        end_transport_sample,
+                        ..
+                    }) if armed == instance_id => Some(end_transport_sample),
+                    _ => None,
+                };
+                self.transition_instance_gain_samples(
+                    instance_id,
+                    target_gain,
+                    due.intended_sample,
+                    duration_samples,
+                );
+                if let Some(end_sample) = exact_provider_end {
+                    self.provider_gain_ramp_until
+                        .insert(instance_id, end_sample);
+                }
+            }
             AudioTransportAction::TransitionSnapshot {
                 snapshot,
                 target_weight,
@@ -775,7 +1172,7 @@ impl AudioOrchestrationRuntimeModule {
                 request,
             } => {
                 let sample = self.transport.sample();
-                self.play_instance(instance_id, object_id, request, sample, sample)
+                self.play_instance(instance_id, object_id, request, sample, sample, None)
             }
             AudioOrchestrationCommand::PlayStream {
                 instance_id,
@@ -783,7 +1180,7 @@ impl AudioOrchestrationRuntimeModule {
                 request,
             } => {
                 let sample = self.transport.sample();
-                self.play_stream_instance(instance_id, object_id, request, sample, sample)
+                self.play_stream_instance(instance_id, object_id, request, sample, sample, None)
             }
             AudioOrchestrationCommand::StopInstance { instance_id } => {
                 self.stop_instance(instance_id);
@@ -827,6 +1224,13 @@ impl AudioOrchestrationRuntimeModule {
                         "audio transport: configuration rejected err='{}'",
                         error
                     );
+                } else {
+                    self.provider_clock_anchor =
+                        self.provider_clock.map(|clock| ProviderClockAnchor {
+                            transport_sample: self.transport.sample(),
+                            provider_sample: clock.sample,
+                            provider_rate: clock.sample_rate,
+                        });
                 }
             }
             AudioOrchestrationCommand::ScheduleTransport {
@@ -843,7 +1247,9 @@ impl AudioOrchestrationRuntimeModule {
                 }
             }
             AudioOrchestrationCommand::CancelTransportAction { action_id } => {
-                if !self.transport.cancel(action_id) {
+                if self.transport.cancel(action_id) {
+                    self.cancel_prearmed_transport_action(action_id);
+                } else {
                     newengine_ulog_api::ulog::trace!(
                         "audio transport: cancel ignored unknown action_id={}",
                         action_id.0
@@ -884,6 +1290,7 @@ impl AudioOrchestrationRuntimeModule {
         request: AudioPlayInstanceRequest,
         transport_start_sample: u64,
         transport_dispatch_sample: u64,
+        render_start_sample: Option<u64>,
     ) {
         let request = match request.sanitized() {
             Ok(request) => request,
@@ -923,6 +1330,7 @@ impl AudioOrchestrationRuntimeModule {
         let mix_gain = self.route_gain(&request.route);
         let mut play =
             newengine_audio_api::AudioCuePlayRequest::new(request.cue.logical_path.clone());
+        play.route = request.route.clone();
         play.position = request.spatial.then_some(object.state.position);
         play.gain = object.state.gain * request.gain * mix_gain;
         play.pitch = request.pitch;
@@ -940,6 +1348,7 @@ impl AudioOrchestrationRuntimeModule {
         parameters.overlay_from(&object.state.parameters);
         parameters.overlay_from(&request.parameters);
         play.parameters = parameters.sanitized();
+        play.render_start_sample = render_start_sample;
 
         match play_audio_cue(&play) {
             Ok(Some(ack)) if ack.accepted => {
@@ -969,6 +1378,7 @@ impl AudioOrchestrationRuntimeModule {
                         parameters: request.parameters,
                         transport_start_sample,
                         transport_dispatch_sample,
+                        render_armed: render_start_sample.is_some(),
                     },
                 );
             }
@@ -999,6 +1409,7 @@ impl AudioOrchestrationRuntimeModule {
         request: AudioPlayStreamInstanceRequest,
         transport_start_sample: u64,
         transport_dispatch_sample: u64,
+        render_start_sample: Option<u64>,
     ) {
         let request = match request.sanitized() {
             Ok(request) => request,
@@ -1037,6 +1448,7 @@ impl AudioOrchestrationRuntimeModule {
 
         let mix_gain = self.route_gain(&request.route);
         let mut stream = request.stream.clone();
+        stream.route = request.route.clone();
         let instance_gain = newengine_audio_api::sanitize_gain(request.gain * stream.gain);
         stream.gain =
             newengine_audio_api::sanitize_gain(object.state.gain * instance_gain * mix_gain);
@@ -1054,6 +1466,7 @@ impl AudioOrchestrationRuntimeModule {
                 + lateness_samples as f64 / f64::from(self.transport.sample_rate()))
             .clamp(0.0, 86_400.0);
         }
+        stream.render_start_sample = render_start_sample;
         stream = stream.sanitized();
 
         match play_audio_stream(&stream) {
@@ -1084,6 +1497,7 @@ impl AudioOrchestrationRuntimeModule {
                         parameters: request.parameters,
                         transport_start_sample,
                         transport_dispatch_sample,
+                        render_armed: render_start_sample.is_some(),
                     },
                 );
             }
@@ -1379,7 +1793,9 @@ impl AudioOrchestrationRuntimeModule {
 
     fn rollback_music_actions(&mut self, action_ids: &[AudioTransportActionId]) {
         for id in action_ids {
-            let _ = self.transport.cancel(*id);
+            if self.transport.cancel(*id) {
+                self.cancel_prearmed_transport_action(*id);
+            }
         }
     }
 
@@ -1987,6 +2403,9 @@ impl AudioOrchestrationRuntimeModule {
     }
 
     fn sync_instances(&mut self) {
+        let transport_sample = self.transport.sample();
+        self.provider_gain_ramp_until
+            .retain(|_, end_sample| *end_sample > transport_sample);
         let weights = self.snapshot_weights();
         let mut route_gains = BTreeMap::<AudioRouteId, f32>::new();
         if let Some(graph) = self.mix_graph.as_ref() {
@@ -2008,6 +2427,9 @@ impl AudioOrchestrationRuntimeModule {
 
         let mut finished = Vec::<AudioInstanceId>::new();
         for (instance_id, instance) in &mut self.instances {
+            if instance.render_armed && transport_sample < instance.transport_start_sample {
+                continue;
+            }
             let Some(object) = self.objects.get(&instance.object_id) else {
                 finished.push(*instance_id);
                 continue;
@@ -2017,9 +2439,14 @@ impl AudioOrchestrationRuntimeModule {
             } else {
                 route_gains.get(&instance.route).copied().unwrap_or(1.0)
             };
+            let provider_ramp_active = self
+                .provider_gain_ramp_until
+                .get(instance_id)
+                .is_some_and(|end_sample| transport_sample < *end_sample);
             let request = AudioVoiceUpdateRequest {
                 voice_id: 0,
-                gain: Some(object.state.gain * instance.gain * route_gain),
+                gain: (!provider_ramp_active)
+                    .then_some(object.state.gain * instance.gain * route_gain),
                 speed: None,
                 seek_seconds: None,
                 paused: Some(false),
@@ -2128,6 +2555,10 @@ impl AudioOrchestrationRuntimeModule {
         self.snapshots.clear();
         self.scalar_transitions.clear();
         self.instance_gain_transitions.clear();
+        self.provider_gain_ramp_until.clear();
+        self.prearmed_transport_actions.clear();
+        self.provider_clock = None;
+        self.provider_clock_anchor = None;
         self.music_sessions.clear();
         self.music_graphs.clear();
     }
@@ -2151,11 +2582,16 @@ impl Module<()> for AudioOrchestrationRuntimeModule {
     }
 
     fn update(&mut self, ctx: &mut ModuleCtx<'_, ()>) -> EngineResult<()> {
+        self.refresh_provider_clock();
         for command in self.drain_commands() {
             self.apply_command(command);
         }
+        if self.provider_clock.is_none() && self.transport.has_pending_actions() {
+            self.refresh_provider_clock();
+        }
+        self.prearm_pending_transport_actions();
         let dt = ctx.frame().map(|frame| frame.dt).unwrap_or(1.0 / 60.0);
-        let (markers, due_actions) = self.transport.advance_seconds(dt);
+        let (markers, due_actions) = self.advance_transport_clock(dt);
         self.publish_transport_markers(markers);
         for due in due_actions {
             self.advance_snapshots_to_sample(due.intended_sample);
@@ -2209,6 +2645,98 @@ mod tests {
         AudioMusicSelectorCondition, AudioMusicSelectorSpec, AudioMusicStateSpec,
         AudioMusicStemSpec, AudioMusicTransitionSpec, AudioVoiceStealRule,
     };
+
+    #[test]
+    fn provider_clock_mapping_is_rational_and_rate_independent() {
+        let handle = AudioOrchestrationHandle::default();
+        let mut runtime = AudioOrchestrationRuntimeModule::new(handle);
+        runtime.provider_clock_anchor = Some(ProviderClockAnchor {
+            transport_sample: 4_800,
+            provider_sample: 9_600,
+            provider_rate: 96_000,
+        });
+        assert_eq!(runtime.transport.sample_rate(), 48_000);
+        assert_eq!(runtime.provider_sample_for_transport(7_200), Some(14_400));
+        assert_eq!(runtime.provider_duration_for_transport(2_400), Some(4_800));
+    }
+
+    #[test]
+    fn provider_clock_drives_transport_by_rendered_frames() {
+        let handle = AudioOrchestrationHandle::default();
+        let mut runtime = AudioOrchestrationRuntimeModule::new(handle);
+        runtime.provider_clock_anchor = Some(ProviderClockAnchor {
+            transport_sample: 0,
+            provider_sample: 0,
+            provider_rate: 96_000,
+        });
+        runtime.provider_clock = Some(AudioRenderClock {
+            ready: true,
+            sample_rate: 96_000,
+            sample: 1_920,
+            block_frames: 256,
+        });
+        let (_, due) = runtime.advance_transport_clock(10.0);
+        assert!(due.is_empty());
+        assert_eq!(runtime.transport.sample(), 960);
+    }
+
+    #[test]
+    fn prearmed_play_due_handoff_does_not_replay_provider_start() {
+        let handle = AudioOrchestrationHandle::default();
+        let mut runtime = AudioOrchestrationRuntimeModule::new(handle);
+        let instance_id = AudioInstanceId(41);
+        let action_id = AudioTransportActionId(73);
+        runtime.instances.insert(
+            instance_id,
+            RuntimeInstance {
+                object_id: AudioObjectId(9),
+                voice_ids: Vec::new(),
+                route: AudioRouteId::default(),
+                tags: Vec::new(),
+                gain: 1.0,
+                spatial: false,
+                parameters: AudioParameterSet::default(),
+                transport_start_sample: 24_000,
+                transport_dispatch_sample: 0,
+                render_armed: true,
+            },
+        );
+        runtime
+            .prearmed_transport_actions
+            .insert(action_id, PrearmedTransportAction::Play { instance_id });
+        runtime.apply_due_transport_action(DueTransportAction {
+            id: action_id,
+            intended_sample: 24_000,
+            dispatch_sample: 24_000,
+            lateness_samples: 0,
+            action: AudioTransportAction::Play {
+                instance_id,
+                object_id: AudioObjectId(9),
+                request: AudioPlayInstanceRequest::new("project/audio/exact.yscd@cue"),
+            },
+        });
+        let instance = runtime
+            .instances
+            .get(&instance_id)
+            .expect("instance retained");
+        assert!(!instance.render_armed);
+        assert_eq!(instance.transport_dispatch_sample, 24_000);
+        assert!(!runtime.prearmed_transport_actions.contains_key(&action_id));
+    }
+
+    #[test]
+    fn prearm_requires_two_provider_blocks_of_lead() {
+        let handle = AudioOrchestrationHandle::default();
+        let mut runtime = AudioOrchestrationRuntimeModule::new(handle);
+        runtime.provider_clock = Some(AudioRenderClock {
+            ready: true,
+            sample_rate: 48_000,
+            sample: 10_000,
+            block_frames: 256,
+        });
+        assert!(!runtime.provider_target_has_prearm_lead(10_511));
+        assert!(runtime.provider_target_has_prearm_lead(10_512));
+    }
 
     #[test]
     fn command_queue_is_bounded_and_reports_drops() {
@@ -2281,6 +2809,7 @@ mod tests {
                 parameters: AudioParameterSet::default(),
                 transport_start_sample: 480,
                 transport_dispatch_sample: 720,
+                render_armed: false,
             },
         );
         let state = runtime.snapshot_state();
@@ -2510,6 +3039,7 @@ mod tests {
                 parameters: AudioParameterSet::default(),
                 transport_start_sample: 0,
                 transport_dispatch_sample: 0,
+                render_armed: false,
             },
         );
         runtime.request_music_state(AudioMusicSessionId(1), "intense".to_owned());
@@ -2587,6 +3117,7 @@ mod tests {
                 parameters: AudioParameterSet::default(),
                 transport_start_sample: 0,
                 transport_dispatch_sample: 0,
+                render_armed: false,
             },
         );
         runtime.transition_instance_gain_samples(AudioInstanceId(3), 1.0, 100, 200);

@@ -34,6 +34,12 @@ pub fn compile_authored_item_package(
                         definition.name, ammo.name
                     ));
                 }
+                if ammo.ammo_profile.is_none() {
+                    return Err(format!(
+                        "firearm '{}' ammo reference '{}' has no authored ammo_profile",
+                        definition.name, ammo.name
+                    ));
+                }
             }
         }
     }
@@ -108,11 +114,14 @@ fn compile_item_definition(authored: &AuthoredItemDefinition) -> Result<ItemDefi
                             authored.id, authored_weapon.ammo
                         )
                     })?;
-                    WeaponItemDefinition::firearm(
+                    let fire_mode = authored_weapon.fire_mode()?;
+                    let pattern = authored_weapon.firing_pattern(fire_mode)?;
+                    WeaponItemDefinition::firearm_with_pattern(
                         rank,
                         authored_weapon.tuning(),
                         ammo_item,
-                        authored_weapon.fire_mode()?,
+                        fire_mode,
+                        pattern,
                     )
                 }
             };
@@ -155,8 +164,23 @@ fn compile_item_definition(authored: &AuthoredItemDefinition) -> Result<ItemDefi
     if !authored.icon.trim().is_empty() {
         definition = definition.with_icon(authored.icon.trim());
     }
+    if kind == ItemKind::Ammo {
+        let ammo = authored
+            .ammo_profile
+            .as_ref()
+            .ok_or_else(|| format!("ammo '{}' has no ammo_profile", authored.id))?;
+        definition = definition.with_ammo_profile(ammo.compile()?);
+    } else if authored.ammo_profile.is_some() {
+        return Err(format!(
+            "item '{}' authors ammo_profile but kind is not ammo",
+            authored.id
+        ));
+    }
     if kind != ItemKind::Weapon && !authored.equipment_slot.trim().is_empty() {
         definition.equipment_slot = Some(parse_equipment_slot(&authored.equipment_slot)?);
+    }
+    if let Some(components) = authored.weapon_components.as_ref() {
+        definition = definition.with_weapon_components(components.compile()?)?;
     }
     if let Some(animation) = authored.weapon_animation.as_ref() {
         definition = definition.with_weapon_animation(animation.compile());

@@ -48,9 +48,12 @@ pub const AUDIO_SERVICE_METHOD_PLAY_STREAM_JSON_V1: &str = "play_stream_json_v1"
 pub const AUDIO_SERVICE_METHOD_STOP_VOICE_JSON_V1: &str = "stop_voice_json_v1";
 pub const AUDIO_SERVICE_METHOD_SET_VOICE_JSON_V1: &str = "set_voice_json_v1";
 pub const AUDIO_SERVICE_METHOD_SET_LISTENER_JSON_V1: &str = "set_listener_json_v1";
-pub const AUDIO_SERVICE_METHOD_SET_BUS_GAIN_JSON_V1: &str = "set_bus_gain_json_v1";
+pub const AUDIO_SERVICE_METHOD_SET_ROUTE_GAIN_JSON_V1: &str = "set_route_gain_json_v1";
 pub const AUDIO_SERVICE_METHOD_SET_VOICE_BUDGETS_JSON_V1: &str = "set_voice_budgets_json_v1";
 pub const AUDIO_SERVICE_METHOD_DIAGNOSTICS_JSON_V1: &str = "diagnostics_json_v1";
+pub const AUDIO_SERVICE_METHOD_RENDER_CLOCK_JSON_V1: &str = "render_clock_json_v1";
+pub const AUDIO_SERVICE_METHOD_SCHEDULE_VOICE_RENDER_JSON_V1: &str =
+    "schedule_voice_render_json_v1";
 
 pub const AUDIO_REQUIRED_METHODS_V1: &[&str] = &[
     AUDIO_SERVICE_METHOD_INFO,
@@ -68,12 +71,17 @@ pub const AUDIO_PLAYBACK_METHODS_V1: &[&str] = &[
     AUDIO_SERVICE_METHOD_STOP_VOICE_JSON_V1,
     AUDIO_SERVICE_METHOD_SET_VOICE_JSON_V1,
     AUDIO_SERVICE_METHOD_SET_LISTENER_JSON_V1,
-    AUDIO_SERVICE_METHOD_SET_BUS_GAIN_JSON_V1,
+    AUDIO_SERVICE_METHOD_SET_ROUTE_GAIN_JSON_V1,
     AUDIO_SERVICE_METHOD_DIAGNOSTICS_JSON_V1,
 ];
 
 pub const AUDIO_VOICE_POLICY_METHODS_V2: &[&str] =
     &[AUDIO_SERVICE_METHOD_SET_VOICE_BUDGETS_JSON_V1];
+
+pub const AUDIO_BLOCK_RENDER_METHODS_V1: &[&str] = &[
+    AUDIO_SERVICE_METHOD_RENDER_CLOCK_JSON_V1,
+    AUDIO_SERVICE_METHOD_SCHEDULE_VOICE_RENDER_JSON_V1,
+];
 
 pub const AUDIO_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec =
     newengine_service_api::BackendServiceSpec::new(
@@ -152,6 +160,7 @@ impl AudioServiceInfo {
             .iter()
             .chain(AUDIO_PLAYBACK_METHODS_V1.iter())
             .chain(AUDIO_VOICE_POLICY_METHODS_V2.iter())
+            .chain(AUDIO_BLOCK_RENDER_METHODS_V1.iter())
             .map(|method| (*method).to_owned())
             .collect::<Vec<_>>();
         methods.sort();
@@ -172,8 +181,13 @@ impl AudioServiceInfo {
                 "reserved-voice-budgets".to_owned(),
                 "voice-virtualization".to_owned(),
                 "stream-logical-virtualization".to_owned(),
+                "block-native-render-graph".to_owned(),
+                "sample-addressed-render-scheduling".to_owned(),
                 "yscd-sound-graph-v1".to_owned(),
                 "sound-graph-trigger-parameters".to_owned(),
+                "block-based-native-render-graph".to_owned(),
+                "single-master-output".to_owned(),
+                "sample-accurate-render-scheduling".to_owned(),
                 "authored-attenuation".to_owned(),
                 "environment-state".to_owned(),
                 "reverb-sends".to_owned(),
@@ -269,50 +283,6 @@ pub struct AudioFeedbackDrain {
 #[inline]
 fn default_intensity() -> f32 {
     1.0
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum AudioBus {
-    Master,
-    Music,
-    Sfx,
-    Ui,
-    Dialogue,
-    Ambience,
-}
-
-impl Default for AudioBus {
-    #[inline]
-    fn default() -> Self {
-        Self::Sfx
-    }
-}
-
-impl AudioBus {
-    #[inline]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Master => "master",
-            Self::Music => "music",
-            Self::Sfx => "sfx",
-            Self::Ui => "ui",
-            Self::Dialogue => "dialogue",
-            Self::Ambience => "ambience",
-        }
-    }
-
-    #[inline]
-    pub const fn all() -> [Self; 6] {
-        [
-            Self::Master,
-            Self::Music,
-            Self::Sfx,
-            Self::Ui,
-            Self::Dialogue,
-            Self::Ambience,
-        ]
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -990,7 +960,7 @@ pub struct AudioPlayRequest {
     pub version: u32,
     pub clip: AudioClipRef,
     #[serde(default)]
-    pub bus: AudioBus,
+    pub route: AudioRouteId,
     #[serde(default = "default_gain")]
     pub gain: f32,
     #[serde(default = "default_speed")]
@@ -1005,6 +975,10 @@ pub struct AudioPlayRequest {
     pub acoustic: AudioAcousticState,
     #[serde(default)]
     pub environment: AudioEnvironmentState,
+    /// Optional absolute provider render-sample at which the physical node becomes audible.
+    /// This is a low-level executor coordinate, never a gameplay/music semantic.
+    #[serde(default)]
+    pub render_start_sample: Option<u64>,
 }
 
 impl AudioPlayRequest {
@@ -1013,7 +987,7 @@ impl AudioPlayRequest {
         Self {
             version: 1,
             clip: AudioClipRef::new(uri),
-            bus: AudioBus::Sfx,
+            route: AudioRouteId::default(),
             gain: 1.0,
             speed: 1.0,
             looping: false,
@@ -1021,11 +995,13 @@ impl AudioPlayRequest {
             attenuation: None,
             acoustic: AudioAcousticState::clear(),
             environment: AudioEnvironmentState::clear(),
+            render_start_sample: None,
         }
     }
 
     #[inline]
     pub fn sanitized(mut self) -> Self {
+        self.route.0 = self.route.0.trim().to_owned();
         self.gain = sanitize_gain(self.gain);
         self.speed = sanitize_speed(self.speed);
         self.spatial = self.spatial.map(AudioSpatialParams::sanitized);
@@ -1167,16 +1143,16 @@ impl AudioListenerState {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-pub struct AudioBusGainRequest {
-    pub bus: AudioBus,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AudioRouteGainRequest {
+    pub route: AudioRouteId,
     pub gain: f32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AudioBusGainAck {
+pub struct AudioRouteGainAck {
     pub accepted: bool,
-    pub bus: AudioBus,
+    pub route: AudioRouteId,
     pub gain: f32,
     #[serde(default)]
     pub provider: String,
@@ -1291,7 +1267,7 @@ pub struct SoundCue {
     pub clips: Vec<SoundCueClip>,
     pub gain_range: [f32; 2],
     pub pitch_range: [f32; 2],
-    pub bus: AudioBus,
+    pub route: AudioRouteId,
     pub looping: bool,
     pub concurrency_group: String,
     /// Maximum simultaneous logical cue instances in the selected scope.
@@ -1315,7 +1291,7 @@ impl Default for SoundCue {
             clips: Vec::new(),
             gain_range: [1.0, 1.0],
             pitch_range: [1.0, 1.0],
-            bus: AudioBus::Sfx,
+            route: AudioRouteId::default(),
             looping: false,
             concurrency_group: String::new(),
             concurrency_limit: 1,
@@ -1346,6 +1322,10 @@ impl SoundCue {
         }
         self.gain_range = sanitize_range(self.gain_range, 0.0, 4.0, [1.0, 1.0]);
         self.pitch_range = sanitize_range(self.pitch_range, 0.05, 4.0, [1.0, 1.0]);
+        self.route.0 = self.route.0.trim().to_owned();
+        if !self.route.0.is_empty() {
+            self.route.validate()?;
+        }
         let policy = AudioVoicePolicy {
             group: self.concurrency_group,
             limit: self.concurrency_limit,
@@ -1384,6 +1364,9 @@ impl SoundCue {
 pub struct AudioCuePlayRequest {
     pub version: u32,
     pub cue: SoundCueRef,
+    /// Optional caller-owned route override. Empty preserves the cue-authored route.
+    #[serde(default)]
+    pub route: AudioRouteId,
     pub position: Option<[f32; 3]>,
     pub gain: f32,
     /// Per-playback pitch/speed multiplier applied after authored cue/clip pitch randomization.
@@ -1407,6 +1390,9 @@ pub struct AudioCuePlayRequest {
     /// Trigger-time project parameters consumed by YSCD SoundGraph. Names are opaque.
     #[serde(default)]
     pub parameters: AudioParameterSet,
+    /// Optional absolute provider render sample for exact physical onset.
+    #[serde(default)]
+    pub render_start_sample: Option<u64>,
 }
 
 impl Default for AudioCuePlayRequest {
@@ -1414,6 +1400,7 @@ impl Default for AudioCuePlayRequest {
         Self {
             version: 1,
             cue: SoundCueRef::new(String::new()),
+            route: AudioRouteId::default(),
             position: None,
             gain: 1.0,
             pitch: 1.0,
@@ -1424,6 +1411,7 @@ impl Default for AudioCuePlayRequest {
             acoustic: AudioAcousticState::clear(),
             environment: AudioEnvironmentState::clear(),
             parameters: AudioParameterSet::default(),
+            render_start_sample: None,
         }
     }
 }
@@ -1439,6 +1427,7 @@ impl AudioCuePlayRequest {
 
     #[inline]
     pub fn sanitized(mut self) -> Self {
+        self.route.0 = self.route.0.trim().to_owned();
         self.gain = sanitize_gain(self.gain);
         self.pitch = sanitize_speed(self.pitch);
         self.position = self.position.map(sanitize_vec3);
@@ -1456,6 +1445,48 @@ impl AudioCuePlayRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AudioCuePreloadRequest {
     pub cue: SoundCueRef,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AudioRenderClock {
+    pub ready: bool,
+    pub sample_rate: u32,
+    pub sample: u64,
+    pub block_frames: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "action", rename_all = "snake_case")]
+pub enum AudioVoiceRenderAction {
+    GainRamp {
+        target_gain: f32,
+        duration_samples: u64,
+    },
+    Stop,
+    Cancel,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct AudioVoiceRenderScheduleRequest {
+    pub voice_id: u64,
+    pub at_sample: u64,
+    /// Opaque caller-owned id used to cancel a previously armed render action.
+    #[serde(default)]
+    pub schedule_id: u64,
+    pub action: AudioVoiceRenderAction,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AudioVoiceRenderScheduleAck {
+    pub accepted: bool,
+    pub voice_id: u64,
+    pub at_sample: u64,
+    #[serde(default)]
+    pub schedule_id: u64,
+    #[serde(default)]
+    pub provider: String,
+    #[serde(default)]
+    pub message: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1495,6 +1526,23 @@ pub struct AudioDiagnostics {
     /// Hard bound for simultaneously resident native room late-field processors.
     #[serde(default)]
     pub max_room_buses: usize,
+    /// Native callback render graph telemetry. These are provider-output PCM frames.
+    #[serde(default)]
+    pub render_sample: u64,
+    #[serde(default)]
+    pub render_block_frames: u32,
+    #[serde(default)]
+    pub rendered_blocks: u64,
+    #[serde(default)]
+    pub rendered_frames: u64,
+    #[serde(default)]
+    pub render_split_segments: u64,
+    #[serde(default)]
+    pub render_applied_commands: u64,
+    #[serde(default)]
+    pub render_dropped_commands: u64,
+    #[serde(default)]
+    pub render_active_nodes: usize,
     /// Logical long-form stream voices (physical + virtual).
     #[serde(default)]
     pub active_streams: usize,
@@ -1532,7 +1580,7 @@ pub struct AudioDiagnostics {
     #[serde(default)]
     pub listener_velocity: [f32; 3],
     #[serde(default)]
-    pub bus_gains: std::collections::BTreeMap<String, f32>,
+    pub route_gains: std::collections::BTreeMap<String, f32>,
 }
 
 #[inline]

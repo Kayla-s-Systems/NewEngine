@@ -10,7 +10,8 @@ use newengine_transform::Transform;
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::gameplay::{
-    GameplayPhysicsQueryProviderRegistry, PhysicsWorldSettings, StaticMeshCollider,
+    GameplayPhysicsQueryProviderRegistry, PendingPhysicsImpulse, PhysicsWorldSettings,
+    StaticMeshCollider,
 };
 
 use super::terrain_colliders::collect_terrain_colliders;
@@ -56,6 +57,20 @@ pub(super) fn build_frame_input(
     colliders.extend(static_colliders);
     colliders.sort_by_key(|collider| collider.entity);
     static_commands.sort_by_key(|command| command.seq);
+    let mut commands = static_commands;
+    commands.extend(
+        world
+            .query::<PendingPhysicsImpulse>()
+            .map(|(entity, request)| PhysicsCommandDto {
+                seq: request.sequence ^ entity.stable_u64().rotate_left(23),
+                kind: PhysicsCommandKindDto::ApplyImpulse {
+                    entity: entity.stable_u64(),
+                    impulse: vec3_to_arr(request.impulse),
+                    point: vec3_to_arr(request.point),
+                },
+            }),
+    );
+    commands.sort_by_key(|command| command.seq);
     let mut queries = gameplay_queries.collect_queries(world);
     queries.sort_by_key(|query| query.seq);
 
@@ -67,7 +82,7 @@ pub(super) fn build_frame_input(
         contact_skin: physics_world.contact_skin,
         bodies,
         colliders,
-        commands: static_commands,
+        commands,
         queries,
     }
 }

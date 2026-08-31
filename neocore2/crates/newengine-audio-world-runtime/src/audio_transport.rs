@@ -75,6 +75,13 @@ pub(crate) struct DueTransportAction {
 }
 
 #[derive(Clone, Debug)]
+pub(crate) struct PendingTransportAction {
+    pub id: AudioTransportActionId,
+    pub intended_sample: u64,
+    pub action: AudioTransportAction,
+}
+
+#[derive(Clone, Debug)]
 struct ScheduledAction {
     id: AudioTransportActionId,
     intended_sample: u64,
@@ -208,6 +215,22 @@ impl AudioTransportRuntime {
             .iter()
             .find_map(|(key, entry)| (entry.id == id).then_some(*key));
         key.and_then(|key| self.scheduled.remove(&key)).is_some()
+    }
+
+    #[inline]
+    pub(crate) fn has_pending_actions(&self) -> bool {
+        !self.scheduled.is_empty()
+    }
+
+    pub(crate) fn pending_actions(&self) -> Vec<PendingTransportAction> {
+        self.scheduled
+            .values()
+            .map(|entry| PendingTransportAction {
+                id: entry.id,
+                intended_sample: entry.intended_sample,
+                action: entry.action.clone(),
+            })
+            .collect()
     }
 
     /// Frame-time adapter used until the native block renderer owns physical advancement.

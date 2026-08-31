@@ -303,7 +303,7 @@ pub(crate) fn tick_equipped_weapon_presentation_input(world: &mut newengine_ecs:
             .unwrap_or_default()
             .sanitized();
         let recoil_recovery_hz = tuning.recoil_recovery_hz;
-        // TLOU2-style recoil is layered: gameplay/camera recoil and weapon/arms presentation are
+        // NorthStar-style recoil is layered: gameplay/camera recoil and weapon/arms presentation are
         // independent. The previous ratio `camera_kick / authored_visual_kick` collapsed the
         // authored weapon kick back to the tiny camera angle, making the rifle look almost static.
         let visual_recoil_recovery_hz = presentation
@@ -324,7 +324,7 @@ pub(crate) fn tick_equipped_weapon_presentation_input(world: &mut newengine_ecs:
                 .map(|_| {
                     // Keep small deterministic shot-to-shot variation, but never derive the
                     // weapon-space amplitude from the camera-space kick. The authored visual kick
-                    // owns the rifle/arms layer exactly as TLOU2's fire-start/fire-loop layers do.
+                    // owns the rifle/arms layer exactly as NorthStar's fire-start/fire-loop layers do.
                     let variation = 1.0
                         + signed_noise(0x243f_6a88_85a3_08d3)
                             * (tuning.recoil_pitch_random_radians
@@ -510,6 +510,19 @@ fn update_weapon_attachment(
     let Some((mut position, mut rotation)) = resolved else {
         return;
     };
+    let component_offset =
+        newengine_engine_runtime::gameplay::active_equipped_weapon_component_modifiers(
+            world, owner,
+        )
+        .presentation_offset_local;
+    let component_offset = Vec3::new(
+        component_offset[0],
+        component_offset[1],
+        component_offset[2],
+    );
+    if component_offset.is_finite() {
+        position += rotation.normalize_or_identity() * component_offset;
+    }
 
     // Held long guns get bounded secondary angular inertia around the already-resolved firing-hand
     // pivot. This is not free rigid-body simulation: the handle remains exact, while fast aim/body
@@ -741,42 +754,146 @@ pub(crate) fn tick_equipped_weapon_visuals(
 
     for owner in owners {
         let binding = world.get::<EquippedWeaponBinding>(owner).copied();
-        match (binding, existing_visual(world, owner)) {
-            (None, Some(_)) => clear_equipped_weapon_visual(world, owner),
-            (None, None) => {}
-            (Some(binding), Some((root, visual)))
-                if visual.instance_id == binding.instance_id && world.exists(root) =>
+        let existing = existing_visual(world, owner);
+
+        let Some(binding) = binding else {
+            if existing.is_some() {
+                clear_equipped_weapon_visual(world, owner);
+            } else {
+                let _ = world.remove::<WeaponVisualAdmissionState>(owner);
+            }
+            continue;
+        };
+
+        if let Some((root, visual)) = existing {
+            if visual.instance_id == binding.instance_id
+                && visual.item == binding.item
+                && world.exists(root)
             {
+                let ready_matches = matches!(
+                    world.get::<WeaponVisualAdmissionState>(owner),
+                    Some(WeaponVisualAdmissionState::Ready {
+                        item,
+                        instance_id,
+                        root: ready_root,
+                    }) if *item == binding.item
+                        && *instance_id == binding.instance_id
+                        && *ready_root == root
+                );
+                if !ready_matches {
+                    let _ = world.insert(
+                        owner,
+                        WeaponVisualAdmissionState::Ready {
+                            item: binding.item,
+                            instance_id: binding.instance_id,
+                            root,
+                        },
+                    );
+                }
+                update_weapon_attachment(world, owner, root, dt);
+                continue;
+            }
+            clear_equipped_weapon_visual(world, owner);
+        }
+
+        let tick = world.tick();
+        let avatar_root = world
+            .get::<PlayerModelBinding>(owner)
+            .and_then(|binding| binding.visual_root)
+            .filter(|root| world.exists(*root));
+        let previous_state = world.get::<WeaponVisualAdmissionState>(owner).cloned();
+        let mut current_key = None;
+
+        if let Some(WeaponVisualAdmissionState::Failed {
+            key,
+            class,
+            next_probe_tick,
+            reason,
+        }) = previous_state
+        {
+            if weapon_visual_failure_static_matches(
+                key,
+                binding.item,
+                binding.instance_id,
+                avatar_root,
+            ) {
+                if tick < next_probe_tick {
+                    continue;
+                }
+
+                let probed_key = weapon_visual_admission_key(world, mats, owner, binding);
+                current_key = Some(probed_key);
+                if weapon_visual_failure_matches(
+                    key,
+                    binding.item,
+                    binding.instance_id,
+                    avatar_root,
+                    probed_key.dependency_generation,
+                ) && class == WeaponVisualAdmissionFailureClass::Deterministic
+                {
+                    let _ = world.insert(
+                        owner,
+                        WeaponVisualAdmissionState::Failed {
+                            key,
+                            class,
+                            next_probe_tick: tick.saturating_add(WEAPON_VISUAL_FAILED_PROBE_TICKS),
+                            reason,
+                        },
+                    );
+                    continue;
+                }
+                // Transient failures are retried only at the bounded cadence above. A changed
+                // dependency generation retries immediately after this probe.
+            }
+        }
+
+        let key =
+            current_key.unwrap_or_else(|| weapon_visual_admission_key(world, mats, owner, binding));
+        let _ = world.insert(owner, WeaponVisualAdmissionState::Pending { key });
+
+        match spawn_equipped_weapon_visual(world, prims, mats, owner, binding) {
+            Ok(root) => {
+                let _ = world.insert(
+                    owner,
+                    WeaponVisualAdmissionState::Ready {
+                        item: binding.item,
+                        instance_id: binding.instance_id,
+                        root,
+                    },
+                );
                 update_weapon_attachment(world, owner, root, dt);
             }
-            (Some(binding), existing) => {
-                if existing.is_some() {
-                    clear_equipped_weapon_visual(world, owner);
-                }
-                match spawn_equipped_weapon_visual(world, prims, mats, owner, binding) {
-                    Ok(root) => update_weapon_attachment(world, owner, root, dt),
-                    Err(error) => {
-                        // Avatar/model admission can lag inventory by a few frames during startup;
-                        // retry quietly until both are resident. Non-transient faults remain visible
-                        // through the normal asset/material diagnostics.
-                        if world
-                            .get::<PlayerModelBinding>(owner)
-                            .and_then(|binding| binding.visual_root)
-                            .is_some()
-                        {
-                            let tick = world.tick();
-                            if tick <= 4 || tick.is_multiple_of(120) {
-                                newengine_ulog_api::ulog::warn!(
-                                    "game-ready: equipped weapon visual deferred player={} item={:016x} tick={}: {}",
-                                    owner.stable_u64(),
-                                    binding.item.raw(),
-                                    tick,
-                                    error,
-                                );
-                            }
-                        }
+            Err(error) => {
+                let class = classify_weapon_visual_admission_failure(&error);
+                let retry_ticks = match class {
+                    WeaponVisualAdmissionFailureClass::Deterministic => {
+                        WEAPON_VISUAL_FAILED_PROBE_TICKS
                     }
-                }
+                    WeaponVisualAdmissionFailureClass::Transient => {
+                        WEAPON_VISUAL_TRANSIENT_RETRY_TICKS
+                    }
+                };
+                let _ = world.insert(
+                    owner,
+                    WeaponVisualAdmissionState::Failed {
+                        key,
+                        class,
+                        next_probe_tick: tick.saturating_add(retry_ticks),
+                        reason: error.clone(),
+                    },
+                );
+                newengine_ulog_api::ulog::warn!(
+                    "game-ready: equipped weapon visual admission failed player={} item={:016x} instance={} tick={} avatar_ready={} dependency_generation={:016x} class={:?} retry_after_ticks={} err='{}'",
+                    owner.stable_u64(),
+                    binding.item.raw(),
+                    binding.instance_id.0,
+                    tick,
+                    avatar_root.is_some(),
+                    key.dependency_generation,
+                    class,
+                    retry_ticks,
+                    error,
+                );
             }
         }
     }

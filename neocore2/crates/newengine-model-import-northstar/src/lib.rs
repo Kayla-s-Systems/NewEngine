@@ -1,6 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-//! Offline source importer for North Star TLOU2 PC `.pak` character assets.
+//! Offline source importer for NorthStar PC `.pak` character assets.
 //!
 //! The parser owns source-format details only. Native YDD serialization is delegated
 //! to `newengine-asset-format-nef8`; runtime crates never parse North Star data.

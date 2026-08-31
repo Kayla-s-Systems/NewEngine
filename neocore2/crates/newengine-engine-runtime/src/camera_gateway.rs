@@ -52,7 +52,7 @@ const CAMERA_GATEWAY_ROUTE: &str = "engine.camera.stargazer";
 mod camera_gateway_helpers;
 use self::camera_gateway_helpers::{
     apply_gameplay_view_lens, apply_runtime_input, camera_nav_input, camera_report_snapshot,
-    camera_runtime_service_config, follow_controller_offset_z,
+    camera_runtime_service_config, follow_controller_offset_z, gameplay_target_fov_y,
     refresh_camera_spring_arm_collision_world, route_player_input_channels, sanitize_camera_dt,
     trace_gameplay_camera_frame, view_postfx_from_camera_snapshot,
 };
@@ -228,10 +228,11 @@ impl CameraGatewayBridge {
         effective_play_mode: GameRunMode,
         frame_index: u64,
     ) {
-        let active_view = self
-            .state
-            .lock()
-            .apply_input_view_request(input.camera_view);
+        let active_view = {
+            let mut state = self.state.lock();
+            state.apply_authored_initial_view(world);
+            state.apply_input_view_request(input.camera_view)
+        };
         // World-runtime presentation (including the first-person weapon) runs before
         // `tick_world_frame`. Publish the active view here as well so the viewmodel never consumes
         // a stale third-person/first-person state for the current render frame.
@@ -263,6 +264,7 @@ impl CameraGatewayBridge {
     ) -> CameraGatewayFrame {
         let camera_dt = sanitize_camera_dt(dt);
         let mut state = self.state.lock();
+        state.apply_authored_initial_view(world);
         let mut nav_input = camera_nav_input(input.clone(), play_mode);
         let active_view = state.apply_input_view_request(input.camera_view);
         sync_player_view_listeners(world, matches!(active_view, CameraViewMode::FirstPerson));
@@ -411,30 +413,63 @@ impl CameraGatewayBridge {
 
         let first_person_aiming =
             player.is_some_and(|player| active_weapon_aim_intent(world, player));
-        let (snapshot, report, resolved_frame) =
+        let (base_resolved_frame, report, effects, resolved_view) =
             if let Some(manager) = world.resource_mut::<CameraManagerResource>() {
                 manager.sync_runtime_nav_mode_from_controller(out.controller.mode);
                 manager.set_last_cursor(out.cursor);
                 let frame = manager.resolve_camera_frame(out.frame, dt);
-                let frame = apply_gameplay_view_lens(
-                    frame,
-                    manager.active_view_mode(),
-                    first_person_aiming,
-                    service_config,
-                );
-                let effects = manager.last_post_effects().unwrap_or_default();
+                let view = manager.active_view_mode();
                 (
-                    camera_frame_snapshot_for_view(frame, effects, manager.active_view_mode()),
-                    Some(camera_report_snapshot(manager.report())),
                     frame,
+                    Some(camera_report_snapshot(manager.report())),
+                    manager.last_post_effects().unwrap_or_default(),
+                    view,
                 )
             } else {
-                (
-                    camera_frame_snapshot_for_view(out.frame, Default::default(), active_view),
-                    None,
-                    out.frame,
-                )
+                (out.frame, None, Default::default(), active_view)
             };
+
+        // NearClipScanner runs after director/frame resolution because it protects the projection
+        // of the actual rendered camera pose. It reuses the same camera collision world that was
+        // refreshed before gameplay camera synchronization; there is no second query authority.
+        let target_fov_y =
+            gameplay_target_fov_y(resolved_view, first_person_aiming, service_config);
+        let fallback_near = match base_resolved_frame.projection {
+            Projection::Perspective(_perspective)
+                if matches!(resolved_view, CameraViewMode::FirstPerson) =>
+            {
+                service_config.first_person_near
+            }
+            Projection::Perspective(perspective) => perspective.near,
+            _ => service_config.first_person_near,
+        };
+        let resolved_near = if effective_play_mode.wants_direct_player_control() {
+            player
+                .map(|player| {
+                    CameraRuntimeService::resolve_gameplay_near_clip(
+                        world,
+                        cam_id,
+                        player,
+                        base_resolved_frame.rig.position,
+                        base_resolved_frame.rig.rotation,
+                        target_fov_y,
+                        base_resolved_frame.viewport.aspect(),
+                        service_config,
+                        camera_dt,
+                    )
+                })
+                .unwrap_or(fallback_near)
+        } else {
+            fallback_near
+        };
+        let resolved_frame = apply_gameplay_view_lens(
+            base_resolved_frame,
+            resolved_view,
+            first_person_aiming,
+            service_config,
+            resolved_near,
+        );
+        let snapshot = camera_frame_snapshot_for_view(resolved_frame, effects, resolved_view);
 
         trace_gameplay_camera_frame(
             frame_index,
@@ -534,6 +569,19 @@ struct CameraGatewayState {
     play_session: Option<CameraPlaySessionSnapshot>,
     last_snapshot: Option<CameraFrameSnapshot>,
     active_view: CameraViewMode,
+    authored_initial_view_applied: bool,
+}
+
+#[inline]
+fn authored_camera_view_mode(view: crate::gameplay::PlayerCameraViewMode) -> CameraViewMode {
+    match view {
+        crate::gameplay::PlayerCameraViewMode::FirstPerson => CameraViewMode::FirstPerson,
+        crate::gameplay::PlayerCameraViewMode::ThirdPersonFollow => {
+            CameraViewMode::ThirdPersonFollow
+        }
+        crate::gameplay::PlayerCameraViewMode::ThirdPersonAim => CameraViewMode::ThirdPersonAim,
+        crate::gameplay::PlayerCameraViewMode::ThirdPersonOrbit => CameraViewMode::ThirdPersonOrbit,
+    }
 }
 
 fn parse_camera_start_view(raw: Option<&str>) -> CameraViewMode {
@@ -559,11 +607,26 @@ impl Default for CameraGatewayState {
             play_session: None,
             last_snapshot: None,
             active_view: parse_camera_start_view(start_view.as_deref()),
+            authored_initial_view_applied: false,
         }
     }
 }
 
 impl CameraGatewayState {
+    fn apply_authored_initial_view(&mut self, world: &World) {
+        if self.authored_initial_view_applied {
+            return;
+        }
+        let Some(profile) = first_player(world)
+            .and_then(|player| world.get::<crate::gameplay::PlayerCameraProfile>(player))
+            .copied()
+        else {
+            return;
+        };
+        self.active_view = authored_camera_view_mode(profile.initial_view);
+        self.authored_initial_view_applied = true;
+    }
+
     fn set_view_command(&mut self, command: CameraViewCommand) -> CameraViewMode {
         self.active_view = match command {
             CameraViewCommand::Next => self.active_view.next(),
@@ -697,6 +760,30 @@ mod camera_gateway_start_view_tests {
         assert_eq!(
             parse_camera_start_view(Some("third_person_orbit")),
             CameraViewMode::ThirdPersonOrbit
+        );
+    }
+
+    #[test]
+    fn authored_project_camera_overrides_transient_engine_start_view_once() {
+        let mut world = World::new();
+        let player = world.spawn();
+        let _ = world.insert(player, crate::gameplay::PlayerActor);
+        let mut profile = crate::gameplay::PlayerCameraProfile::default();
+        profile.initial_view = crate::gameplay::PlayerCameraViewMode::ThirdPersonOrbit;
+        let _ = world.insert(player, profile);
+        let mut state = CameraGatewayState::default();
+        state.active_view = CameraViewMode::FirstPerson;
+        state.apply_authored_initial_view(&world);
+        assert_eq!(state.active_view, CameraViewMode::ThirdPersonOrbit);
+        assert!(state.authored_initial_view_applied);
+
+        profile.initial_view = crate::gameplay::PlayerCameraViewMode::ThirdPersonAim;
+        let _ = world.insert(player, profile);
+        state.apply_authored_initial_view(&world);
+        assert_eq!(
+            state.active_view,
+            CameraViewMode::ThirdPersonOrbit,
+            "runtime view changes must not be reset every frame by authored startup policy"
         );
     }
 

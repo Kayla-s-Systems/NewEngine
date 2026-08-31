@@ -137,7 +137,80 @@ impl RuntimeRenderController {
         let extent = Extent2D::new(texture_width, texture_height);
         let mip_levels = NonZeroU32::new(texture_asset.mips.len().max(1) as u32)
             .expect("runtime texture mip count is non-zero");
-        let (payload, layout) = texture_asset.into_concatenated_payload_and_layout();
+
+        // Uncompressed RGBA dictionaries are normalized to a base-level upload and
+        // backend-generated mip chain. Sending many small RGBA BufferImageCopy regions
+        // through the deferred explicit-mip path has proven driver-fragile and can
+        // escalate from a bad submission to VK_ERROR_DEVICE_LOST. BCn payloads cannot
+        // be blitted safely, so they keep their authored runtime mip chain.
+        let (payload, mip_data, upload_contract) = match texture_format {
+            RuntimeTextureFormat::Rgba8Unorm | RuntimeTextureFormat::Rgba8Srgb => {
+                let Some(base_mip) = texture_asset
+                    .mips
+                    .iter()
+                    .find(|mip| mip.level == 0)
+                    .or_else(|| texture_asset.mips.first())
+                else {
+                    let message = "runtime RGBA texture has no base mip".to_owned();
+                    newengine_ulog_api::ulog::warn!(
+                        "render controller: material texture rejected path='{}' err='{}'",
+                        path,
+                        message
+                    );
+                    self.gpu
+                        .material
+                        .textures
+                        .insert(path, MaterialTextureGpuResidency::Failed { message });
+                    return;
+                };
+                let expected_base_bytes = (texture_width as usize)
+                    .saturating_mul(texture_height as usize)
+                    .saturating_mul(4);
+                if base_mip.level != 0
+                    || base_mip.width != texture_width
+                    || base_mip.height != texture_height
+                    || base_mip.bytes.len() != expected_base_bytes
+                {
+                    let message = format!(
+                        "runtime RGBA base mip contract mismatch level={} extent={}x{} bytes={} expected_level=0 expected_extent={}x{} expected_bytes={}",
+                        base_mip.level,
+                        base_mip.width,
+                        base_mip.height,
+                        base_mip.bytes.len(),
+                        texture_width,
+                        texture_height,
+                        expected_base_bytes,
+                    );
+                    newengine_ulog_api::ulog::warn!(
+                        "render controller: material texture rejected path='{}' err='{}'",
+                        path,
+                        message
+                    );
+                    self.gpu
+                        .material
+                        .textures
+                        .insert(path, MaterialTextureGpuResidency::Failed { message });
+                    return;
+                }
+                (base_mip.bytes.clone(), Vec::new(), "rgba-base+backend-mips")
+            }
+            _ => {
+                let (payload, layout) = texture_asset.into_concatenated_payload_and_layout();
+                let mip_data = layout
+                    .into_iter()
+                    .map(|mip| {
+                        TextureMipDataDesc::new(
+                            mip.level,
+                            mip.width,
+                            mip.height,
+                            mip.offset,
+                            mip.byte_len,
+                        )
+                    })
+                    .collect();
+                (payload, mip_data, "bcn-authored-mips")
+            }
+        };
         let payload_bytes = payload.len();
         if payload_bytes > super::super::render_quality::MATERIAL_TEXTURE_MAX_UPLOAD_PAYLOAD_BYTES {
             let message = format!(
@@ -159,28 +232,25 @@ impl RuntimeRenderController {
                 .insert(path, MaterialTextureGpuResidency::Failed { message });
             return;
         }
-        let mip_data: Vec<TextureMipDataDesc> = layout
-            .into_iter()
-            .map(|mip| {
-                TextureMipDataDesc::new(mip.level, mip.width, mip.height, mip.offset, mip.byte_len)
-            })
-            .collect();
-
         let upload_started = Instant::now();
-        match r.create_texture(
-            TextureDesc::new(
-                extent,
-                render_texture_format_from_runtime(texture_format),
-                TextureUsage::Sampled,
-            )
-            .with_label(format!("material_tex:{path}"))
-            .with_mips(mip_levels)
-            .with_deferred_mip_data(mip_data, payload),
-        ) {
+        let texture_desc = TextureDesc::new(
+            extent,
+            render_texture_format_from_runtime(texture_format),
+            TextureUsage::Sampled,
+        )
+        .with_label(format!("material_tex:{path}"))
+        .with_mips(mip_levels);
+        let texture_desc = if mip_data.is_empty() {
+            texture_desc.with_deferred_data(payload)
+        } else {
+            texture_desc.with_deferred_mip_data(mip_data, payload)
+        };
+        match r.create_texture(texture_desc) {
             Ok(texture) => {
                 newengine_ulog_api::ulog::debug!(
-                    "render controller: material texture packet upload queued path='{}' method='assets.textures.entry_runtime_v1' texture={:?} frame={}",
+                    "render controller: material texture packet upload queued path='{}' method='assets.textures.entry_runtime_v1' contract='{}' texture={:?} frame={}",
                     path,
+                    upload_contract,
                     texture,
                     self.frame.frame_index
                 );

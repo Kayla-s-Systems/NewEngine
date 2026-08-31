@@ -10,6 +10,200 @@ struct EquippedWeaponVisualRoot {
     recoil_yaw_radians: f32,
 }
 
+const WEAPON_VISUAL_FAILED_PROBE_TICKS: u64 = 30;
+const WEAPON_VISUAL_TRANSIENT_RETRY_TICKS: u64 = 30;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct WeaponVisualAdmissionKey {
+    item: newengine_engine_runtime::gameplay::ItemId,
+    instance_id: newengine_engine_runtime::gameplay::ItemInstanceId,
+    avatar_root: Option<EntityId>,
+    dependency_generation: u64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum WeaponVisualAdmissionFailureClass {
+    Deterministic,
+    Transient,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum WeaponVisualAdmissionState {
+    Pending {
+        key: WeaponVisualAdmissionKey,
+    },
+    Ready {
+        item: newengine_engine_runtime::gameplay::ItemId,
+        instance_id: newengine_engine_runtime::gameplay::ItemInstanceId,
+        root: EntityId,
+    },
+    Failed {
+        key: WeaponVisualAdmissionKey,
+        class: WeaponVisualAdmissionFailureClass,
+        next_probe_tick: u64,
+        reason: String,
+    },
+}
+
+#[inline]
+fn weapon_visual_failure_static_matches(
+    key: WeaponVisualAdmissionKey,
+    item: newengine_engine_runtime::gameplay::ItemId,
+    instance_id: newengine_engine_runtime::gameplay::ItemInstanceId,
+    avatar_root: Option<EntityId>,
+) -> bool {
+    key.item == item && key.instance_id == instance_id && key.avatar_root == avatar_root
+}
+
+#[inline]
+fn weapon_visual_failure_matches(
+    key: WeaponVisualAdmissionKey,
+    item: newengine_engine_runtime::gameplay::ItemId,
+    instance_id: newengine_engine_runtime::gameplay::ItemInstanceId,
+    avatar_root: Option<EntityId>,
+    dependency_generation: u64,
+) -> bool {
+    weapon_visual_failure_static_matches(key, item, instance_id, avatar_root)
+        && key.dependency_generation == dependency_generation
+}
+
+fn classify_weapon_visual_admission_failure(error: &str) -> WeaponVisualAdmissionFailureClass {
+    let error = error.to_ascii_lowercase();
+    // Availability/readiness failures are allowed a bounded retry even if the dependency read-model
+    // did not advance. Structural/content faults default to deterministic and remain suppressed
+    // until an authored dependency generation changes.
+    if [
+        "not ready",
+        "pending",
+        "temporar",
+        "service unavailable",
+        "provider unavailable",
+        "gateway unavailable",
+        "would block",
+        "timeout",
+    ]
+    .iter()
+    .any(|token| error.contains(token))
+    {
+        WeaponVisualAdmissionFailureClass::Transient
+    } else {
+        WeaponVisualAdmissionFailureClass::Deterministic
+    }
+}
+
+fn weapon_dependency_logical_path(reference: &str) -> String {
+    let normalized = reference
+        .trim()
+        .replace('\\', "/")
+        .trim_start_matches('/')
+        .to_owned();
+    normalized
+        .rsplit_once('@')
+        .map(|(path, _)| path.to_owned())
+        .unwrap_or(normalized)
+}
+
+fn append_weapon_dependency_status_signature(
+    signature: &mut String,
+    assets: &AssetServiceClient,
+    reference: &str,
+) {
+    let logical_path = weapon_dependency_logical_path(reference);
+    if logical_path.is_empty() {
+        return;
+    }
+    let mut candidates = vec![logical_path.clone()];
+    if let Some(alias) = logical_path.strip_prefix("shared/") {
+        if !alias.is_empty() {
+            candidates.push(alias.to_owned());
+        }
+    }
+    for candidate in candidates {
+        signature.push_str("asset=");
+        signature.push_str(&candidate);
+        signature.push('|');
+        match assets.status_json_v1(&candidate) {
+            Ok(status) => signature.push_str(&status.to_string()),
+            Err(error) => {
+                signature.push_str("status-error:");
+                signature.push_str(&error);
+            }
+        }
+        signature.push(';');
+    }
+}
+
+fn weapon_visual_dependency_generation(
+    world: &newengine_ecs::World,
+    mats: &MaterialRegistry,
+    binding: EquippedWeaponBinding,
+) -> u64 {
+    let mut signature = format!("material-registry-revision={};", mats.revision());
+    let Some(definition) = world
+        .resource::<ItemCatalog>()
+        .and_then(|catalog| catalog.get(binding.item))
+    else {
+        signature.push_str("item-definition=missing;");
+        return fnv1a_64(&signature);
+    };
+
+    signature.push_str("item-definition=");
+    signature.push_str(&definition.name);
+    signature.push_str(&format!(
+        ";scale={:?};presentation={};model={:?};material={:?};skeleton={:?};animation_dictionary={:?};idle={:?};fire={:?};reload={:?};spawn_pose={:?};casing_ejection_joint={:?};",
+        definition.world.scale,
+        definition.weapon_presentation.enabled,
+        definition.world.model_ref,
+        definition.world.material_library_ref,
+        definition.weapon_animation.skeleton,
+        definition.weapon_animation.animation_dictionary,
+        definition.weapon_animation.idle,
+        definition.weapon_animation.fire,
+        definition.weapon_animation.reload,
+        definition.weapon_animation.spawn_pose,
+        definition.weapon_casing.ejection_joint,
+    ));
+
+    let assets = AssetServiceClient::new(default_host_api());
+    let references = [
+        definition.definition_ref.as_deref(),
+        definition.world.model_ref.as_deref(),
+        definition.world.material_library_ref.as_deref(),
+        definition.weapon_animation.skeleton.as_deref(),
+        definition.weapon_animation.animation_dictionary.as_deref(),
+        definition.weapon_animation.idle.as_deref(),
+        definition.weapon_animation.fire.as_deref(),
+        definition.weapon_animation.reload.as_deref(),
+        definition.weapon_animation.spawn_pose.as_deref(),
+    ];
+    let mut unique = std::collections::BTreeSet::new();
+    for reference in references.into_iter().flatten() {
+        let path = weapon_dependency_logical_path(reference);
+        if unique.insert(path) {
+            append_weapon_dependency_status_signature(&mut signature, &assets, reference);
+        }
+    }
+    fnv1a_64(&signature)
+}
+
+fn weapon_visual_admission_key(
+    world: &newengine_ecs::World,
+    mats: &MaterialRegistry,
+    owner: EntityId,
+    binding: EquippedWeaponBinding,
+) -> WeaponVisualAdmissionKey {
+    let avatar_root = world
+        .get::<PlayerModelBinding>(owner)
+        .and_then(|binding| binding.visual_root)
+        .filter(|root| world.exists(*root));
+    WeaponVisualAdmissionKey {
+        item: binding.item,
+        instance_id: binding.instance_id,
+        avatar_root,
+        dependency_generation: weapon_visual_dependency_generation(world, mats, binding),
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct WeaponSecondaryDynamicsState {
     initialized: bool,
@@ -39,21 +233,29 @@ struct EquippedWeaponVisualPart {
     root: EntityId,
 }
 
-fn validate_canonical_rifle_visual_space(min: Vec3, max: Vec3) -> Result<(), String> {
+fn validate_canonical_skinned_weapon_visual_space(min: Vec3, max: Vec3) -> Result<(), String> {
+    if !min.is_finite() || !max.is_finite() {
+        return Err(format!(
+            "canonical skinned-weapon visual-space has non-finite bounds min={min:?} max={max:?}"
+        ));
+    }
     let center = (min + max) * 0.5;
     let extent = max - min;
-    let canonical = center.x.abs() <= 0.20
-        && center.y.abs() <= 0.20
-        && center.z.abs() <= 0.30
-        && extent.x > 0.05
-        && extent.x <= 0.40
-        && extent.y > 0.05
-        && extent.y <= 0.40
-        && extent.z >= 0.75
-        && extent.z <= 1.25;
+    // Engine validation owns only the canonical coordinate-space invariant. Weapon class/size is
+    // authored data: a pistol must not be rejected by a rifle-length heuristic. The root still
+    // has to be close to the geometry and +Z remains the canonical weapon-forward axis.
+    let canonical = center.x.abs() <= 0.35
+        && center.y.abs() <= 0.35
+        && center.z.abs() <= 0.35
+        && extent.x > 0.005
+        && extent.x <= 0.75
+        && extent.y > 0.005
+        && extent.y <= 0.75
+        && extent.z > 0.05
+        && extent.z <= 1.50;
     if !canonical {
         return Err(format!(
-            "canonical rifle visual-space rejected min={min:?} max={max:?} center={center:?} extent={extent:?}; expected handle-centered +X/+Y/+Z weapon space"
+            "canonical skinned-weapon visual-space rejected min={min:?} max={max:?} center={center:?} extent={extent:?}; expected root-centered +X/+Y/+Z weapon space independent of weapon class"
         ));
     }
     Ok(())
@@ -227,6 +429,7 @@ fn clear_equipped_weapon_visual(world: &mut newengine_ecs::World, owner: EntityI
     }
     let _ = world.remove::<EquippedWeaponMuzzle>(owner);
     let _ = world.remove::<EquippedWeaponEntity>(owner);
+    let _ = world.remove::<WeaponVisualAdmissionState>(owner);
 }
 
 fn existing_visual(

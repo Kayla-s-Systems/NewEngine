@@ -1,6 +1,7 @@
 use super::foliage::{decode_runtime_ydd_prefab, DecodedPrefabMeshPart};
 use super::*;
 
+use newengine_assets::AssetAccess;
 use newengine_engine_runtime::gameplay::{
     DisplayMode, DisplayVisibility, EquippedWeaponBinding, EquippedWeaponEntity,
     EquippedWeaponMuzzle, HitscanWeaponTuning, ItemCatalog, PlayerCommandFrame, PlayerModelBinding,

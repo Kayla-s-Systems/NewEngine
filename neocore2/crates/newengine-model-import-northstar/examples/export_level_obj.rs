@@ -43,7 +43,7 @@ fn main() -> Result<(), String> {
 
     let mut obj = BufWriter::new(fs::File::create(&obj_path).map_err(|e| e.to_string())?);
     let mut tsv = BufWriter::new(fs::File::create(&tsv_path).map_err(|e| e.to_string())?);
-    writeln!(obj, "# NorthStar TLOU2 stadium native geometry export").map_err(|e| e.to_string())?;
+    writeln!(obj, "# NorthStar stadium native geometry export").map_err(|e| e.to_string())?;
     writeln!(obj, "# source: {}", pak_path.display()).map_err(|e| e.to_string())?;
     writeln!(tsv, "mesh_index\tmesh_name\tmaterial_id\tsource_material")
         .map_err(|e| e.to_string())?;

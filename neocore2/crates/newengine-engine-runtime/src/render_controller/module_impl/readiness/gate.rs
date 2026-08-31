@@ -5,7 +5,8 @@ use newengine_materials::api::MaterialRegistryApi;
 
 use crate::gameplay::{
     clear_player_input, first_player, GameRunMode, PhysicsStaticColliderSyncProgress,
-    StaticMeshCollider, WorldActivationState, WorldAssemblyProgress,
+    PlayerModelAssignment, PlayerModelBinding, StaticMeshCollider, WorldActivationState,
+    WorldAssemblyProgress,
 };
 
 use super::super::RuntimeRenderController;
@@ -13,6 +14,70 @@ use super::materials::{cached_scene_material_launch_plan, SceneMaterialLaunchPla
 use super::residency::critical_scene_residency_ready;
 
 static SCENE_LAUNCH_EPOCH: OnceLock<Instant> = OnceLock::new();
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct PlayerVisualReadiness {
+    pending: bool,
+    reason: String,
+}
+
+fn required_player_visual_readiness(world: &newengine_ecs::World) -> PlayerVisualReadiness {
+    let Some(player) = first_player(world) else {
+        return PlayerVisualReadiness {
+            pending: false,
+            reason: String::new(),
+        };
+    };
+    let Some(assignment) = world.get::<PlayerModelAssignment>(player) else {
+        return PlayerVisualReadiness {
+            pending: false,
+            reason: String::new(),
+        };
+    };
+    if !assignment.enabled || assignment.source.trim().is_empty() {
+        return PlayerVisualReadiness {
+            pending: false,
+            reason: String::new(),
+        };
+    }
+
+    let binding = world.get::<PlayerModelBinding>(player);
+    let ready = binding.is_some_and(|binding| {
+        binding.assignment_revision == assignment.revision
+            && binding.source == assignment.source
+            && binding.visual_root.is_some()
+            && binding.part_count > 0
+    });
+    if ready {
+        return PlayerVisualReadiness {
+            pending: false,
+            reason: String::new(),
+        };
+    }
+
+    let detail = binding.map_or_else(
+        || "binding=missing".to_owned(),
+        |binding| {
+            format!(
+                "binding_revision={} assignment_revision={} source_match={} visual_root={} parts={}",
+                binding.assignment_revision,
+                assignment.revision,
+                binding.source == assignment.source,
+                binding.visual_root.is_some(),
+                binding.part_count
+            )
+        },
+    );
+    PlayerVisualReadiness {
+        pending: true,
+        reason: format!(
+            "waiting for required playable-character visual binding player={} source='{}' {}",
+            player.stable_u64(),
+            assignment.source,
+            detail
+        ),
+    }
+}
 
 pub(in crate::render_controller::module_impl) fn prepare_scene_launch_resources(
     this: &mut RuntimeRenderController,
@@ -88,7 +153,18 @@ fn update_world_activation_gate_impl(
             .resource::<PhysicsStaticColliderSyncProgress>()
             .map(|progress| !progress.is_ready() || progress.registered < static_collision_total)
             .unwrap_or(true);
-    let launch_critical_pending = authored_world_pending || physics_collision_pending;
+    let player_visual = required_player_visual_readiness(world);
+    let launch_critical_pending =
+        authored_world_pending || physics_collision_pending || player_visual.pending;
+    let critical_reason = if player_visual.pending {
+        Some(player_visual.reason.as_str())
+    } else if authored_world_pending {
+        Some("waiting for authored world assembly")
+    } else if physics_collision_pending {
+        Some("waiting for authored static collision residency")
+    } else {
+        None
+    };
     let mut release: Option<(bool, u64, u64, String)> = None;
 
     if let Some(gate) = world.resource_mut::<WorldActivationState>() {
@@ -108,7 +184,7 @@ fn update_world_activation_gate_impl(
         let soft_timeout = waited_frames >= scene_texture_gate_soft_timeout_frames()
             || waited_ms >= scene_texture_gate_soft_timeout_ms();
 
-        if readiness.ready {
+        if readiness.ready && !launch_critical_pending {
             gate.mark_ready(frame_index, readiness.reason);
             release = Some((false, waited_frames, waited_ms, gate.reason.clone()));
         } else if soft_timeout && !launch_critical_pending {
@@ -119,7 +195,9 @@ fn update_world_activation_gate_impl(
             gate.mark_ready(frame_index, fallback_reason);
             release = Some((true, waited_frames, waited_ms, gate.reason.clone()));
         } else {
-            gate.reason = readiness.reason;
+            gate.reason = critical_reason
+                .map(str::to_owned)
+                .unwrap_or(readiness.reason);
             let early_wait_frame = waited_frames <= 8;
             if first_wait || frame_index.is_multiple_of(60) {
                 newengine_ulog_api::ulog::info!(

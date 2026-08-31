@@ -93,7 +93,7 @@ fn stable_hand_grip_frame(
     if delta.is_finite() && delta.length_squared() <= MAX_PROP_SOCKET_TO_HAND_DISTANCE.powi(2) {
         Some(prop)
     } else {
-        // Naughty Dog prop-attachment joints can be animation/constraint targets rather than
+        // source prop-attachment joints can be animation/constraint targets rather than
         // literal palm centers. A stale target may move far away from the hand; never drag an
         // equipped weapon there. Fall back to the animated palm/wrist frame.
         Some(physical)
@@ -113,7 +113,7 @@ pub(crate) fn player_left_hand_weapon_frame(
 }
 
 /// Anatomical frames used by third-person rifle ReadyHold. The solve contract deliberately needs
-/// both shoulders: Naughty Dog `spined` axes are not body-forward/body-up, so a stable body frame
+/// both shoulders: authored `spined` axes are not body-forward/body-up, so a stable body frame
 /// is reconstructed from the shoulder line instead of trusting the spine joint basis.
 pub(crate) fn player_rifle_ready_body_frames(
     world: &newengine_ecs::World,

@@ -8,7 +8,7 @@ mod tests {
         ItemPickup, PlayerInventory, PlayerStanceState, WeaponFireMode, WeaponType,
     };
     use newengine_fps_content_runtime::{
-        embedded_test_content_provider, embedded_test_policy_provider, ensure_fps_player_loadouts,
+        embedded_test_content_provider, ensure_fps_player_loadouts,
     };
     use newengine_gameplay_script_runtime::GameplayCommandExecutor;
     use newengine_math::Quat;
@@ -22,7 +22,7 @@ mod tests {
         ItemId::from_name("ammo.rifle.standard").expect("valid test rifle ammo id")
     }
 
-    fn spawn_fps_player(world: &mut World, name: &str, position: Vec3) -> EntityId {
+    pub(super) fn spawn_fps_player(world: &mut World, name: &str, position: Vec3) -> EntityId {
         let content = embedded_test_content_provider();
         GameplayContentProvider::install(&content, world).expect("install FPS content");
         let player = spawn_default_player(world, None, name, position);
@@ -79,7 +79,7 @@ mod tests {
         let followed = world.get::<CharacterMotor>(player).copied().expect("motor");
         assert!(
             followed.pitch >= initial_pitch,
-            "TLOU2-style recoil tracker must carry a short post-shot follow-through before recovery"
+            "NorthStar-style recoil tracker must carry a short post-shot follow-through before recovery"
         );
         for _ in 0..45 {
             recover_weapon_recoil(&mut world, player, 1.0 / 60.0);
@@ -99,6 +99,7 @@ mod tests {
         let shooter = spawn_fps_player(&mut world, "shooter", Vec3::ZERO);
         let target = world.spawn();
         let _ = world.insert(target, Health::new(100.0));
+        let _ = world.insert(target, newengine_engine_runtime::gameplay::DamageReceiver::character());
         let _ = world.insert(target, Transform::default());
         let _ = world.insert(shooter, HitscanWeaponTuning::default());
         let _ = world.insert(shooter, PlayerWeaponState::default());
@@ -157,6 +158,10 @@ mod tests {
             &mut world,
             1,
             &[PhysicsQueryHitDto {
+                subshape_id: 0,
+                hit_index: 0,
+                back_face: false,
+
                 seq: pending.query_seq,
                 entity: target.stable_u64(),
                 position: [0.0, 0.0, -2.0],
@@ -164,7 +169,7 @@ mod tests {
                 distance: 2.0,
             }],
             &map,
-            embedded_test_policy_provider().as_ref(),
+            newengine_fps_content_runtime::embedded_test_policy_provider().as_ref(),
             &GameplayCommandExecutor::default(),
         );
 
@@ -440,6 +445,12 @@ mod tests {
         let content = embedded_test_content_provider();
         GameplayContentProvider::install(&content, &mut world).expect("install FPS content");
         let player = spawn_default_player(&mut world, None, "auto-player", Vec3::ZERO);
+        let muzzle = EquippedWeaponMuzzle::new(
+            Vec3::new(0.18, 1.20, -0.62),
+            Vec3::new(0.0, 0.0, -1.0),
+        )
+        .expect("auto muzzle");
+        let _ = world.insert(player, muzzle);
 
         let ammo = ItemId::from_name("ammo.rifle.standard").expect("ammo id");
         let weapon_id = ItemId::from_name("weapon.auto.test").expect("weapon id");
@@ -625,7 +636,7 @@ mod tests {
             10,
             &[],
             &map,
-            embedded_test_policy_provider().as_ref(),
+            newengine_fps_content_runtime::embedded_test_policy_provider().as_ref(),
             &GameplayCommandExecutor::default(),
         );
 
@@ -667,6 +678,10 @@ mod tests {
             &mut world,
             2,
             &[PhysicsQueryHitDto {
+                subshape_id: 0,
+                hit_index: 0,
+                back_face: false,
+
                 seq: pending.query_seq,
                 entity: target.stable_u64(),
                 position: [0.0, 0.7, -1.0],
@@ -674,7 +689,7 @@ mod tests {
                 distance: 1.0,
             }],
             &map,
-            embedded_test_policy_provider().as_ref(),
+            newengine_fps_content_runtime::embedded_test_policy_provider().as_ref(),
             &GameplayCommandExecutor::default(),
         );
 
@@ -715,6 +730,10 @@ mod tests {
             &mut world,
             44,
             &[PhysicsQueryHitDto {
+                subshape_id: 0,
+                hit_index: 0,
+                back_face: false,
+
                 seq: pending.query_seq,
                 entity: wall.stable_u64(),
                 position: [hit_position.x, hit_position.y, hit_position.z],
@@ -722,7 +741,7 @@ mod tests {
                 distance: hit_distance,
             }],
             &map,
-            embedded_test_policy_provider().as_ref(),
+            newengine_fps_content_runtime::embedded_test_policy_provider().as_ref(),
             &GameplayCommandExecutor::default(),
         );
 
@@ -758,7 +777,7 @@ mod tests {
             45,
             &[],
             &BTreeMap::new(),
-            embedded_test_policy_provider().as_ref(),
+            newengine_fps_content_runtime::embedded_test_policy_provider().as_ref(),
             &GameplayCommandExecutor::default(),
         );
         let obstruction = world
@@ -794,12 +813,19 @@ fn hitscan_direction_tracks_mouse_look_pitch() {
     tuning.hip_spread_radians = 0.0;
     tuning.aim_spread_radians = 0.0;
 
-    let (_, direction) =
+    let (origin, direction) =
         shot_origin_and_direction(&world, player, tuning, true, 1).expect("view-aligned hitscan");
-    let expected = (Quat::from_euler(EulerRot::YXZ, motor.yaw, motor.pitch, 0.0) * -Vec3::Z)
-        .normalize_or_zero();
+    let camera_forward =
+        (Quat::from_euler(EulerRot::YXZ, motor.yaw, motor.pitch, 0.0) * -Vec3::Z).normalize_or_zero();
+    let view_origin = Vec3::Y * 1.62;
+    let aim_point = view_origin + camera_forward * tuning.range.clamp(12.0, 80.0);
+    let expected = (aim_point - origin).normalize_or_zero();
     assert!(direction.dot(expected) > 0.999_999);
-    assert!(direction.y.abs() > 0.1, "pitch must affect shot direction");
+    assert!(direction.y.abs() > 0.1, "pitch must affect the converged ballistic direction");
+    assert!(
+        (direction - camera_forward).length() > 1.0e-5,
+        "off-axis muzzle must converge toward the view axis rather than pretending the bullet originated at the camera"
+    );
 }
 
 #[test]
@@ -897,4 +923,315 @@ fn interaction_ray_tracks_mouse_look_pitch() {
     let expected = (Quat::from_euler(EulerRot::YXZ, motor.yaw, motor.pitch, 0.0) * -Vec3::Z)
         .normalize_or_zero();
     assert!(direction.dot(expected) > 0.999_999);
+}
+
+fn test_ballistics() -> BallisticShotProfile {
+    BallisticShotProfile { projectile_mass_kg: 0.004, muzzle_velocity_mps: 800.0, momentum_ns: 3.2, remaining_penetration_energy_j: 1200.0, max_penetration_m: 0.50, damage_multiplier: 1.0, impulse_multiplier: 1.0, falloff_start_m: 0.0, falloff_end_m: 100.0, falloff_min_multiplier: 1.0, component_falloff_multiplier: 1.0 }
+}
+
+#[test]
+fn instant_projectile_ricochets_once_from_grazing_metal_surface() {
+    let mut world = World::new();
+    let shooter = world.spawn();
+    let plate = world.spawn();
+    let _ = world.insert(
+        plate,
+        PhysicsSurface {
+            id: "surface.metal.sheet".to_owned(),
+            ..PhysicsSurface::default()
+        },
+    );
+    let _ = world.insert(plate, BallisticMaterialResponse { penetration_resistance_j_per_m: 20000.0, entry_energy_cost_j: 2000.0, damage_transfer_multiplier: 1.0, impulse_transfer_multiplier: 1.0, ricochet_allowed: true, ricochet_max_incidence_dot: 0.38, ricochet_energy_retention: 0.38 });
+    let pending = PendingHitscan {
+        query_seq: hitscan_query_seq(shooter, 9),
+        weapon_instance_id: ItemInstanceId(17),
+        attack_kind: WeaponAttackKind::Firearm,
+        shot_sequence: 9,
+        origin: Vec3::ZERO,
+        direction: Vec3::new(0.96, 0.0, -0.28).normalize(),
+        range: 100.0,
+        damage: 25.0,
+        ballistics: test_ballistics(),
+        bounce_count: 0,
+        max_bounces: 1,
+        ricochet_grazing_dot: 0.38,
+        ricochet_energy_retention: 0.38,
+    };
+    let _ = world.insert(shooter, pending);
+    let map = BTreeMap::from([(shooter.stable_u64(), shooter), (plate.stable_u64(), plate)]);
+    resolve_combat_queries(
+        &mut world,
+        77,
+        &[PhysicsQueryHitDto {
+            subshape_id: 0,
+            hit_index: 0,
+            back_face: false,
+
+            seq: pending.query_seq,
+            entity: plate.stable_u64(),
+            position: [3.0, 0.0, -0.875],
+            normal: [0.0, 0.0, 1.0],
+            distance: 3.125,
+        }],
+        &map,
+        newengine_fps_content_runtime::embedded_test_policy_provider().as_ref(),
+        &GameplayCommandExecutor::default(),
+    );
+    let bounced = world
+        .get::<PendingHitscan>(shooter)
+        .copied()
+        .expect("grazing metal impact must schedule a bounded ricochet collision trace");
+    assert_eq!(bounced.bounce_count, 1);
+    assert_eq!(bounced.max_bounces, 1);
+    assert!(
+        bounced.direction.z > 0.0,
+        "reflected trace must leave the contact plane"
+    );
+    assert!((bounced.damage - 9.5).abs() < 1.0e-4);
+    assert!(bounced.range < pending.range && bounced.range > 30.0);
+    assert_ne!(bounced.query_seq, pending.query_seq);
+}
+
+#[test]
+fn instant_projectile_does_not_ricochet_from_head_on_or_soft_surface() {
+    let firearm = PendingHitscan {
+        query_seq: 1,
+        weapon_instance_id: ItemInstanceId(1),
+        attack_kind: WeaponAttackKind::Firearm,
+        shot_sequence: 1,
+        origin: Vec3::ZERO,
+        direction: -Vec3::Z,
+        range: 100.0,
+        damage: 25.0,
+        ballistics: test_ballistics(),
+        bounce_count: 0,
+        max_bounces: 1,
+        ricochet_grazing_dot: 0.38,
+        ricochet_energy_retention: 0.38,
+    };
+    let material = BallisticMaterialResponse {
+        penetration_resistance_j_per_m: 20_000.0,
+        entry_energy_cost_j: 2_000.0,
+        damage_transfer_multiplier: 1.0,
+        impulse_transfer_multiplier: 1.0,
+        ricochet_allowed: true,
+        ricochet_max_incidence_dot: 0.38,
+        ricochet_energy_retention: 0.38,
+    };
+    assert!(!ballistic_material_allows_ricochet(
+        material, firearm.direction, Vec3::Z, firearm.bounce_count, firearm.max_bounces,
+    ));
+    let grazing = PendingHitscan { direction: Vec3::new(0.96, 0.0, -0.28).normalize(), ..firearm };
+    let soft = BallisticMaterialResponse { ricochet_allowed: false, ..material };
+    assert!(!ballistic_material_allows_ricochet(
+        soft, grazing.direction, Vec3::Z, grazing.bounce_count, grazing.max_bounces,
+    ));
+}
+
+
+#[test]
+fn ballistic_ray_penetrates_authored_thickness_and_hits_next_receiver() {
+    let mut world = World::new();
+    let shooter = world.spawn();
+    let wall = world.spawn();
+    let target = world.spawn();
+    let pending = PendingHitscan {
+        query_seq: hitscan_query_seq(shooter, 41),
+        weapon_instance_id: ItemInstanceId(41),
+        attack_kind: WeaponAttackKind::Firearm,
+        shot_sequence: 41,
+        origin: Vec3::ZERO,
+        direction: -Vec3::Z,
+        range: 100.0,
+        damage: 30.0,
+        ballistics: test_ballistics(),
+        bounce_count: 0,
+        max_bounces: 0,
+        ricochet_grazing_dot: 0.0,
+        ricochet_energy_retention: 0.0,
+    };
+    let _ = world.insert(shooter, pending);
+    let _ = world.insert(
+        wall,
+        BallisticMaterialResponse {
+            penetration_resistance_j_per_m: 500.0,
+            entry_energy_cost_j: 20.0,
+            damage_transfer_multiplier: 1.0,
+            impulse_transfer_multiplier: 1.0,
+            ricochet_allowed: false,
+            ricochet_max_incidence_dot: 0.0,
+            ricochet_energy_retention: 0.0,
+        },
+    );
+    let _ = world.insert(target, Health::new(100.0));
+    let _ = world.insert(
+        target,
+        newengine_engine_runtime::gameplay::DamageReceiver::character(),
+    );
+    let map = BTreeMap::from([
+        (shooter.stable_u64(), shooter),
+        (wall.stable_u64(), wall),
+        (target.stable_u64(), target),
+    ]);
+    let hits = [
+        PhysicsQueryHitDto {
+            seq: pending.query_seq,
+            entity: wall.stable_u64(),
+            subshape_id: 3,
+            hit_index: 0,
+            back_face: false,
+            position: [0.0, 0.0, -2.0],
+            normal: [0.0, 0.0, 1.0],
+            distance: 2.0,
+        },
+        PhysicsQueryHitDto {
+            seq: pending.query_seq,
+            entity: wall.stable_u64(),
+            subshape_id: 3,
+            hit_index: 1,
+            back_face: true,
+            position: [0.0, 0.0, -2.1],
+            normal: [0.0, 0.0, -1.0],
+            distance: 2.1,
+        },
+        PhysicsQueryHitDto {
+            seq: pending.query_seq,
+            entity: target.stable_u64(),
+            subshape_id: 0,
+            hit_index: 2,
+            back_face: false,
+            position: [0.0, 0.0, -4.0],
+            normal: [0.0, 0.0, 1.0],
+            distance: 4.0,
+        },
+    ];
+    resolve_combat_queries(
+        &mut world,
+        41,
+        &hits,
+        &map,
+        newengine_fps_content_runtime::embedded_test_policy_provider().as_ref(),
+        &GameplayCommandExecutor::default(),
+    );
+    assert!(world.get::<Health>(target).expect("target health").current < 100.0);
+    assert!(
+        world.get::<PendingHitscan>(shooter).is_none(),
+        "non-ricochet traversal must complete"
+    );
+}
+
+#[test]
+fn weapon_accuracy_accumulates_per_shot_and_recovers_after_authored_delay() {
+    let mut world = World::new();
+    let player = tests::spawn_fps_player(&mut world, "accuracy-player", Vec3::ZERO);
+    let binding = active_equipped_weapon_binding(&world, player).expect("weapon binding");
+    let tuning = binding.weapon.firearm.expect("firearm").tuning.sanitized();
+    for _ in 0..4 {
+        runtime::kick_weapon_accuracy(&mut world, player, binding.instance_id, tuning);
+    }
+    let peak = world
+        .get::<WeaponAccuracyState>(player)
+        .copied()
+        .expect("accuracy state");
+    assert_eq!(peak.shot_count, 4);
+    assert!(peak.bloom_radians > 0.0);
+    assert!(peak.bloom_radians <= tuning.recoil_accuracy_max_radians + 1.0e-6);
+    runtime::recover_weapon_accuracy(
+        &mut world,
+        player,
+        tuning.accuracy_recovery_delay_seconds * 0.5,
+    );
+    let delayed = world
+        .get::<WeaponAccuracyState>(player)
+        .copied()
+        .expect("delayed state");
+    assert!(delayed.bloom_radians >= peak.bloom_radians * 0.99);
+    for _ in 0..240 {
+        runtime::recover_weapon_accuracy(&mut world, player, 1.0 / 60.0);
+    }
+    let settled = world
+        .get::<WeaponAccuracyState>(player)
+        .copied()
+        .expect("settled state");
+    assert!(
+        settled.bloom_radians < peak.bloom_radians * 0.1,
+        "bloom must recover independently of camera recoil"
+    );
+}
+
+#[test]
+fn firing_pattern_state_machine_distinguishes_semi_auto_and_burst() {
+    let mut world = World::new();
+    let player = world.spawn();
+    let instance = ItemInstanceId(99);
+    let semi = FiringPatternDefinition::from_fire_mode(newengine_engine_runtime::gameplay::WeaponFireMode::SemiAuto, 0.1);
+    assert!(runtime::fire_controller_wants_shot(
+        &mut world,
+        player,
+        instance,
+        semi,
+        FpsActionFrame {
+            fire_primary_pressed: true,
+            fire_primary_held: true,
+            ..Default::default()
+        },
+        0.016,
+    ));
+    runtime::fire_controller_commit_shot(&mut world, player, instance, semi);
+    assert!(!runtime::fire_controller_wants_shot(
+        &mut world,
+        player,
+        instance,
+        semi,
+        FpsActionFrame {
+            fire_primary_held: true,
+            ..Default::default()
+        },
+        0.016,
+    ));
+    let _ = world.remove::<WeaponFireControllerState>(player);
+    let automatic = FiringPatternDefinition::from_fire_mode(newengine_engine_runtime::gameplay::WeaponFireMode::Automatic, 0.1);
+    assert!(runtime::fire_controller_wants_shot(
+        &mut world,
+        player,
+        instance,
+        automatic,
+        FpsActionFrame {
+            fire_primary_held: true,
+            ..Default::default()
+        },
+        0.016,
+    ));
+    let _ = world.remove::<WeaponFireControllerState>(player);
+    let burst = FiringPatternDefinition {
+        kind: FiringPatternKind::Burst,
+        shots_per_burst_min: 3,
+        shots_per_burst_max: 3,
+        burst_cooldown: 0.25,
+        ..FiringPatternDefinition::default()
+    };
+    let press = FpsActionFrame {
+        fire_primary_pressed: true,
+        fire_primary_held: true,
+        ..Default::default()
+    };
+    let held = FpsActionFrame {
+        fire_primary_held: true,
+        ..Default::default()
+    };
+    assert!(runtime::fire_controller_wants_shot(
+        &mut world, player, instance, burst, press, 0.0,
+    ));
+    runtime::fire_controller_commit_shot(&mut world, player, instance, burst);
+    assert!(runtime::fire_controller_wants_shot(
+        &mut world, player, instance, burst, held, 0.0,
+    ));
+    runtime::fire_controller_commit_shot(&mut world, player, instance, burst);
+    assert!(runtime::fire_controller_wants_shot(
+        &mut world, player, instance, burst, held, 0.0,
+    ));
+    runtime::fire_controller_commit_shot(&mut world, player, instance, burst);
+    assert!(!runtime::fire_controller_wants_shot(
+        &mut world, player, instance, burst, held, 0.0,
+    ));
 }

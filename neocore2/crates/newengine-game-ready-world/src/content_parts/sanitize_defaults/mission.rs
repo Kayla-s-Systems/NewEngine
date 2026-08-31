@@ -1,5 +1,4 @@
 use super::*;
-use newengine_game_data::default_game_data;
 
 #[inline]
 fn sanitized_required_id(value: &str) -> Option<String> {
@@ -8,12 +7,15 @@ fn sanitized_required_id(value: &str) -> Option<String> {
 }
 
 #[inline]
-fn positive_clamped_or(value: f32, min: f32, max: f32, fallback: f32) -> f32 {
-    if value.is_finite() && value > 0.0 {
-        value.clamp(min, max)
-    } else {
-        fallback
-    }
+fn positive_clamped(value: f32, min: f32, max: f32) -> Option<f32> {
+    (value.is_finite() && value > 0.0).then(|| value.clamp(min, max))
+}
+
+fn required_positive_scale(value: [f32; 3]) -> Option<[f32; 3]> {
+    value
+        .iter()
+        .all(|component| component.is_finite() && component.abs() > 1.0e-6)
+        .then_some(value)
 }
 
 #[inline]
@@ -40,6 +42,35 @@ pub(in super::super) fn sanitize_prefab_spec(raw: RawPrefabSpec) -> Option<GameR
                 (!signal.is_empty() && !event_id.is_empty()).then_some((signal, event_id))
             })
             .collect(),
+        ballistic_material: if raw.ballistic_penetration_resistance_j_per_m.is_some()
+            || raw.ballistic_entry_energy_cost_j.is_some()
+            || raw.ballistic_ricochet_allowed.is_some()
+        {
+            Some(
+                newengine_engine_runtime::gameplay::BallisticMaterialResponse {
+                    penetration_resistance_j_per_m: raw
+                        .ballistic_penetration_resistance_j_per_m
+                        .unwrap_or(f32::INFINITY),
+                    entry_energy_cost_j: raw.ballistic_entry_energy_cost_j.unwrap_or(f32::INFINITY),
+                    damage_transfer_multiplier: raw
+                        .ballistic_damage_transfer_multiplier
+                        .unwrap_or(1.0),
+                    impulse_transfer_multiplier: raw
+                        .ballistic_impulse_transfer_multiplier
+                        .unwrap_or(1.0),
+                    ricochet_allowed: raw.ballistic_ricochet_allowed.unwrap_or(false),
+                    ricochet_max_incidence_dot: raw
+                        .ballistic_ricochet_max_incidence_dot
+                        .unwrap_or(0.0),
+                    ricochet_energy_retention: raw
+                        .ballistic_ricochet_energy_retention
+                        .unwrap_or(0.0),
+                }
+                .sanitized(),
+            )
+        } else {
+            None
+        },
         ground_placement_surface: raw.ground_placement_surface,
         enabled: raw.enabled,
         position: arr3(sanitize_array3_finite(raw.position, [0.0, 0.0, 0.0])),
@@ -61,16 +92,8 @@ pub(in super::super) fn sanitize_mission_pickup_spec(
         auto_equip: raw.auto_equip,
         position: arr3(sanitize_array3_finite(raw.position, [0.0, 0.0, 0.0])),
         rotation_ypr: arr3(sanitize_array3_finite(raw.rotation_ypr, [0.0, 0.0, 0.0])),
-        radius: positive_clamped_or(
-            raw.radius,
-            0.15,
-            8.0,
-            default_game_data().world.mission.pickup_radius,
-        ),
-        scale: arr3(sanitize_array3_positive(
-            raw.scale,
-            default_game_data().world.mission.pickup_scale,
-        )),
+        radius: positive_clamped(raw.radius, 0.15, 8.0)?,
+        scale: arr3(required_positive_scale(raw.scale)?),
     })
 }
 
@@ -81,16 +104,8 @@ pub(in super::super) fn sanitize_mission_target_spec(
     Some(GameReadyMissionTargetSpec {
         id,
         position: arr3(sanitize_array3_finite(raw.position, [0.0, 0.0, 0.0])),
-        health: positive_clamped_or(
-            raw.health,
-            1.0,
-            100_000.0,
-            default_game_data().world.mission.target_health,
-        ),
-        scale: arr3(sanitize_array3_positive(
-            raw.scale,
-            default_game_data().world.mission.target_scale,
-        )),
+        health: positive_clamped(raw.health, 1.0, 100_000.0)?,
+        scale: arr3(required_positive_scale(raw.scale)?),
     })
 }
 
@@ -101,16 +116,8 @@ pub(in super::super) fn sanitize_mission_hazard_spec(
     Some(GameReadyMissionHazardSpec {
         id,
         position: arr3(sanitize_array3_finite(raw.position, [0.0, 0.0, 0.0])),
-        radius: positive_clamped_or(
-            raw.radius,
-            0.2,
-            32.0,
-            default_game_data().world.mission.hazard_radius,
-        ),
-        scale: arr3(sanitize_array3_positive(
-            raw.scale,
-            default_game_data().world.mission.hazard_scale,
-        )),
+        radius: positive_clamped(raw.radius, 0.2, 32.0)?,
+        scale: arr3(required_positive_scale(raw.scale)?),
     })
 }
 
@@ -121,16 +128,8 @@ pub(in super::super) fn sanitize_mission_goal_spec(
     Some(GameReadyMissionGoalSpec {
         id,
         position: arr3(sanitize_array3_finite(raw.position, [0.0, 0.0, 0.0])),
-        radius: positive_clamped_or(
-            raw.radius,
-            0.2,
-            32.0,
-            default_game_data().world.mission.goal_radius,
-        ),
-        scale: arr3(sanitize_array3_positive(
-            raw.scale,
-            default_game_data().world.mission.goal_scale,
-        )),
+        radius: positive_clamped(raw.radius, 0.2, 32.0)?,
+        scale: arr3(required_positive_scale(raw.scale)?),
     })
 }
 
@@ -206,10 +205,10 @@ mod tests {
     }
 
     #[test]
-    fn positive_values_use_fallback_before_clamping() {
-        assert_eq!(positive_clamped_or(f32::NAN, 0.2, 32.0, 1.5), 1.5);
-        assert_eq!(positive_clamped_or(-1.0, 0.2, 32.0, 1.5), 1.5);
-        assert_eq!(positive_clamped_or(100.0, 0.2, 32.0, 1.5), 32.0);
+    fn positive_values_are_required_and_only_then_clamped() {
+        assert_eq!(positive_clamped(f32::NAN, 0.2, 32.0), None);
+        assert_eq!(positive_clamped(-1.0, 0.2, 32.0), None);
+        assert_eq!(positive_clamped(100.0, 0.2, 32.0), Some(32.0));
     }
 
     #[test]

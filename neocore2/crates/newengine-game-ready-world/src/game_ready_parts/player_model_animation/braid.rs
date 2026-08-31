@@ -1,5 +1,5 @@
 // Native Abby braid secondary motion.
-// Authored cloth and foreground collision data originate in TLOU2 PC source space;
+// Authored cloth and foreground collision data originate in NorthStar PC source space;
 // every position/axis is canonicalized through the YDD skin_source_to_model matrix.
 include!("abby_braid_cloth_authored.rs");
 

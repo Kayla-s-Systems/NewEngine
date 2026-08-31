@@ -34,6 +34,106 @@ pub fn active_equipped_weapon_muzzle(
     world.get::<EquippedWeaponMuzzle>(owner).copied()
 }
 
+pub fn active_equipped_weapon_component_modifiers(
+    world: &World,
+    owner: EntityId,
+) -> WeaponComponentModifiers {
+    let Some(binding) = world.get::<EquippedWeaponBinding>(owner).copied() else {
+        return WeaponComponentModifiers::default();
+    };
+    let Some(definition) = world.resource::<ItemCatalog>().and_then(|catalog| catalog.get(binding.item)) else {
+        return WeaponComponentModifiers::default();
+    };
+    let Some(installed) = world
+        .get::<PlayerInventory>(owner)
+        .and_then(|inventory| inventory.weapon_components.get(&binding.instance_id))
+    else {
+        return WeaponComponentModifiers::default();
+    };
+    installed.values().filter(|instance| instance.active).fold(
+        WeaponComponentModifiers::default(),
+        |combined, instance| {
+            definition.weapon_components.components.get(&instance.component_id)
+                .map(|component| combined.combine(component.modifiers))
+                .unwrap_or(combined)
+        },
+    )
+}
+
+pub fn active_equipped_weapon_component_overrides(
+    world: &World,
+    owner: EntityId,
+) -> (Option<String>, Option<String>, Option<String>) {
+    let Some(binding) = world.get::<EquippedWeaponBinding>(owner).copied() else {
+        return (None, None, None);
+    };
+    let Some(definition) = world.resource::<ItemCatalog>().and_then(|catalog| catalog.get(binding.item)) else {
+        return (None, None, None);
+    };
+    let Some(installed) = world
+        .get::<PlayerInventory>(owner)
+        .and_then(|inventory| inventory.weapon_components.get(&binding.instance_id))
+    else {
+        return (None, None, None);
+    };
+    let mut audio = None;
+    let mut muzzle = None;
+    let mut tracer = None;
+    for instance in installed.values().filter(|instance| instance.active) {
+        let Some(component) = definition.weapon_components.components.get(&instance.component_id) else {
+            continue;
+        };
+        if component.audio_override.is_some() { audio = component.audio_override.clone(); }
+        if component.muzzle_vfx_override.is_some() { muzzle = component.muzzle_vfx_override.clone(); }
+        if component.tracer_vfx_override.is_some() { tracer = component.tracer_vfx_override.clone(); }
+    }
+    (audio, muzzle, tracer)
+}
+
+pub fn install_weapon_component(
+    world: &mut World,
+    owner: EntityId,
+    weapon_instance: ItemInstanceId,
+    slot: &str,
+    component_id: &str,
+) -> Result<(), String> {
+    let slot = slot.trim().to_ascii_lowercase();
+    let component_id = component_id.trim().to_ascii_lowercase();
+    let item = world.get::<PlayerInventory>(owner)
+        .and_then(|inventory| inventory.entry(weapon_instance))
+        .map(|entry| entry.item)
+        .ok_or_else(|| "weapon instance is not present in inventory".to_owned())?;
+    let graph = world.resource::<ItemCatalog>()
+        .and_then(|catalog| catalog.get(item))
+        .map(|definition| definition.weapon_components.clone().sanitized())
+        .ok_or_else(|| "weapon definition is unavailable".to_owned())?;
+    let point = graph.points.iter().find(|point| point.id == slot)
+        .ok_or_else(|| format!("unknown weapon component slot '{slot}'"))?;
+    let component = graph.components.get(&component_id)
+        .ok_or_else(|| format!("unknown weapon component '{component_id}'"))?;
+    if component.slot != slot || (!point.allowed_components.is_empty() && !point.allowed_components.contains(&component_id)) {
+        return Err(format!("component '{component_id}' is not allowed in slot '{slot}'"));
+    }
+    let inventory = world.get_mut::<PlayerInventory>(owner)
+        .ok_or_else(|| "owner has no inventory".to_owned())?;
+    inventory.weapon_components.entry(weapon_instance).or_default().insert(
+        slot,
+        WeaponComponentInstance { component_id, active: true },
+    );
+    Ok(())
+}
+
+pub fn remove_weapon_component(
+    world: &mut World,
+    owner: EntityId,
+    weapon_instance: ItemInstanceId,
+    slot: &str,
+) -> Option<WeaponComponentInstance> {
+    world.get_mut::<PlayerInventory>(owner)?
+        .weapon_components.get_mut(&weapon_instance)?
+        .remove(&slot.trim().to_ascii_lowercase())
+}
+
 fn publish_weapon_equipment_event(
     world: &mut World,
     id: &str,
@@ -158,14 +258,26 @@ pub fn play_weapon_item_audio(
     item: ItemId,
     action: WeaponAudioAction,
 ) {
-    let Some(reference) = world
-        .resource::<ItemCatalog>()
-        .and_then(|catalog| catalog.get(item))
-        .and_then(|definition| definition.weapon_audio.clip(action))
-        .map(ToOwned::to_owned)
-    else {
+    let component_audio_override = world
+        .get::<EquippedWeaponBinding>(owner)
+        .copied()
+        .filter(|binding| binding.item == item)
+        .and_then(|_| active_equipped_weapon_component_overrides(world, owner).0);
+    let Some(reference) = component_audio_override.or_else(|| {
+        world
+            .resource::<ItemCatalog>()
+            .and_then(|catalog| catalog.get(item))
+            .and_then(|definition| definition.weapon_audio.clip(action))
+            .map(ToOwned::to_owned)
+    }) else {
         return;
     };
+    let component_gain = world
+        .get::<EquippedWeaponBinding>(owner)
+        .copied()
+        .filter(|binding| binding.item == item)
+        .map(|_| active_equipped_weapon_component_modifiers(world, owner).audio_gain_multiplier)
+        .unwrap_or(1.0);
     let spatial_position = match action {
         WeaponAudioAction::Fire | WeaponAudioAction::ShellEject => world
             .get::<EquippedWeaponMuzzle>(owner)
@@ -183,11 +295,13 @@ pub fn play_weapon_item_audio(
     let is_cue = is_yscd_cue_reference(&reference);
     let result = if is_cue {
         let mut request = newengine_audio_api::AudioCuePlayRequest::new(reference.clone());
+        request.gain = component_gain;
         request.position = spatial_position.map(|position| [position.x, position.y, position.z]);
         request.scope_id = Some(owner.stable_u64());
         newengine_audio_client::play_audio_cue(&request)
     } else {
         let mut request = newengine_audio_api::AudioPlayRequest::new(reference.clone());
+        request.gain = component_gain;
         request.spatial =
             spatial_position.map(|position| newengine_audio_api::AudioSpatialParams {
                 position: [position.x, position.y, position.z],
@@ -769,4 +883,123 @@ pub fn select_highest_ranked_equipped_weapon(
         inventory.active_slot = selected;
     }
     selected
+}
+
+#[cfg(test)]
+mod component_graph_tests {
+    use super::*;
+
+    fn component(
+        id: &str,
+        slot: &str,
+        accuracy: f32,
+        recoil: f32,
+        damage: f32,
+    ) -> WeaponComponentDefinition {
+        WeaponComponentDefinition {
+            id: id.to_owned(),
+            slot: slot.to_owned(),
+            model_ref: None,
+            audio_override: None,
+            muzzle_vfx_override: None,
+            tracer_vfx_override: None,
+            modifiers: WeaponComponentModifiers {
+                accuracy_multiplier: accuracy,
+                recoil_multiplier: recoil,
+                damage_multiplier: damage,
+                ..WeaponComponentModifiers::default()
+            },
+        }
+    }
+
+    #[test]
+    fn component_install_validates_slot_and_aggregates_active_instance_modifiers() {
+        let mut world = World::new();
+        let owner = world.spawn();
+        let ammo = ItemId::from_name("ammo.component.test").expect("ammo id");
+        let weapon_id = ItemId::from_name("weapon.component.test").expect("weapon id");
+
+        let graph = WeaponComponentGraphDefinition {
+            points: vec![
+                WeaponComponentPointDefinition {
+                    id: "muzzle".to_owned(),
+                    attach_joint: "muzzle".to_owned(),
+                    allowed_components: vec![
+                        "muzzle.standard".to_owned(),
+                        "muzzle.brake".to_owned(),
+                    ],
+                },
+                WeaponComponentPointDefinition {
+                    id: "optic".to_owned(),
+                    attach_joint: "optic".to_owned(),
+                    allowed_components: vec!["optic.basic".to_owned()],
+                },
+            ],
+            components: [
+                (
+                    "muzzle.standard".to_owned(),
+                    component("muzzle.standard", "muzzle", 1.0, 1.0, 1.0),
+                ),
+                (
+                    "muzzle.brake".to_owned(),
+                    component("muzzle.brake", "muzzle", 0.9, 0.7, 1.05),
+                ),
+                (
+                    "optic.basic".to_owned(),
+                    component("optic.basic", "optic", 0.8, 1.0, 1.0),
+                ),
+            ]
+            .into_iter()
+            .collect(),
+            default_installed: [("muzzle".to_owned(), "muzzle.standard".to_owned())]
+                .into_iter()
+                .collect(),
+        };
+
+        let weapon = ItemDefinition::weapon(
+            "weapon.component.test",
+            "Component Test Weapon",
+            EquipmentSlot::Primary,
+            HitscanWeaponTuning::default(),
+            ammo,
+            WeaponFireMode::SemiAuto,
+            2.5,
+        )
+        .expect("weapon")
+        .with_weapon_components(graph)
+        .expect("component graph");
+        let mut catalog = ItemCatalog::default();
+        catalog.register(weapon).expect("register weapon");
+        world.insert_resource(catalog);
+
+        let mutation = give_item(&mut world, owner, weapon_id, 1).expect("give weapon");
+        let instance = *mutation
+            .touched_instances
+            .first()
+            .expect("weapon instance");
+        equip_item_instance(&mut world, owner, instance).expect("equip weapon");
+
+        let defaults = active_equipped_weapon_component_modifiers(&world, owner);
+        assert!((defaults.recoil_multiplier - 1.0).abs() < 1.0e-6);
+
+        assert!(
+            install_weapon_component(&mut world, owner, instance, "muzzle", "optic.basic").is_err(),
+            "component from another slot must be rejected"
+        );
+        install_weapon_component(&mut world, owner, instance, "muzzle", "muzzle.brake")
+            .expect("install muzzle brake");
+
+        let modified = active_equipped_weapon_component_modifiers(&world, owner);
+        assert!((modified.accuracy_multiplier - 0.9).abs() < 1.0e-6);
+        assert!((modified.recoil_multiplier - 0.7).abs() < 1.0e-6);
+        assert!((modified.damage_multiplier - 1.05).abs() < 1.0e-6);
+
+        let removed =
+            remove_weapon_component(&mut world, owner, instance, "muzzle").expect("remove component");
+        assert_eq!(removed.component_id, "muzzle.brake");
+        assert_eq!(
+            active_equipped_weapon_component_modifiers(&world, owner),
+            WeaponComponentModifiers::default()
+        );
+    }
 }

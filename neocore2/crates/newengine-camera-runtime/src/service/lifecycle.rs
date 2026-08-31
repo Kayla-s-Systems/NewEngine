@@ -20,6 +20,7 @@ impl CameraRuntimeService {
             orbit_pivot_offset_ws: state.orbit_pivot_offset_ws,
             zoom_z: state.zoom_z,
             collision_distance: state.collision_distance,
+            collision_velocity: state.collision_velocity,
             pivot_ws: state.last_pivot_ws,
             focus_ws: state.last_focus_ws,
             desired_camera_ws: state.last_desired_camera_ws,
@@ -126,6 +127,7 @@ impl CameraRuntimeService {
         let removed_motor = world.remove::<FollowTargetCameraMotor>(camera).is_some();
         let _ = world.remove::<GameplayFirstPersonCameraState>(camera);
         let _ = world.remove::<GameplayThirdPersonCameraState>(camera);
+        let _ = world.remove::<GameplayCameraRunnerHistory>(camera);
         removed_follow || removed_motor
     }
 }

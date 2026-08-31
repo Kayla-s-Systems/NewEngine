@@ -141,6 +141,10 @@ fn acoustic_provider_resolves_partial_blockage_into_continuous_occlusion_observa
     let queries = provider.collect_queries(&world);
     assert_eq!(queries.len(), 4);
     let hit = PhysicsQueryHitDto {
+        subshape_id: 0,
+        hit_index: 0,
+        back_face: false,
+
         seq: queries[0].seq,
         entity: blocker.stable_u64(),
         position: [0.0, 0.0, -4.0],
@@ -190,6 +194,10 @@ fn acoustic_provider_marks_all_blocked_rays_as_full_occlusion() {
     let hits = queries
         .iter()
         .map(|query| PhysicsQueryHitDto {
+            subshape_id: 0,
+            hit_index: 0,
+            back_face: false,
+
             seq: query.seq,
             entity: blocker.stable_u64(),
             position: [0.0, 0.0, -4.0],
@@ -232,6 +240,10 @@ fn acoustic_provider_treats_emitter_endpoint_hits_as_clear() {
     let hits = queries
         .iter()
         .map(|query| PhysicsQueryHitDto {
+            subshape_id: 0,
+            hit_index: 0,
+            back_face: false,
+
             seq: query.seq,
             entity: emitter.stable_u64(),
             position: [0.0, 0.0, -9.9],
@@ -294,6 +306,10 @@ fn authored_acoustic_surface_override_wins_over_physics_surface_fallback() {
     let queries = provider.collect_queries(&world);
     assert_eq!(queries.len(), 2);
     let hit = PhysicsQueryHitDto {
+        subshape_id: 0,
+        hit_index: 0,
+        back_face: false,
+
         seq: queries[0].seq,
         entity: blocker.stable_u64(),
         position: [0.0, 0.0, -4.0],

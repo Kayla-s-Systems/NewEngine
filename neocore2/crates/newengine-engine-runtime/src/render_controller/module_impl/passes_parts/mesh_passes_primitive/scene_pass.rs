@@ -22,6 +22,28 @@ pub(super) fn draw_primitives_for_pass(
     let stage_total_started = stage_profile.then(std::time::Instant::now);
     let scan_started = stage_profile.then(std::time::Instant::now);
     let (primitive_snapshot, snapshot_reused) = this.primitive_scene_snapshot(scene, runtime);
+    if runtime
+        && matches!(pass, SceneMeshPass::GBuffer)
+        && std::env::var_os("NEWENGINE_PRIMITIVE_ENTRY_TRACE").is_some()
+        && (this.frame.frame_index <= 3 || this.frame.frame_index.is_multiple_of(30))
+    {
+        eprintln!(
+            "NSDIAG primitive-snapshot frame={} camera=({:.3},{:.3},{:.3}) entries={} queried={}",
+            this.frame.frame_index, camera_position.x, camera_position.y, camera_position.z,
+            primitive_snapshot.entries.len(), primitive_snapshot.queried_count
+        );
+        for source in primitive_snapshot.entries.iter() {
+            let cols = source.render_model.to_cols_array();
+            let bounds = source.local_bounds
+                .map(|(center, radius)| format!("local_center=({:.3},{:.3},{:.3}) radius={:.3}", center.x, center.y, center.z, radius))
+                .unwrap_or_else(|| "local_bounds=<none>".to_owned());
+            eprintln!(
+                "NSDIAG primitive-entry entity={} primitive={} origin=({:.3},{:.3},{:.3}) {} role={:?} material={:?}",
+                source.entity_key, source.primitive.id.0, cols[12], cols[13], cols[14], bounds,
+                source.render_options.role, source.material_ref
+            );
+        }
+    }
     let reg_lock = this.bridges.scene.primitives();
     let reg = reg_lock.read();
     let mats_lock = this.bridges.scene.materials();

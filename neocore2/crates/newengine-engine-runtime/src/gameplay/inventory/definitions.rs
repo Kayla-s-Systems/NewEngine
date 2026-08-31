@@ -236,6 +236,71 @@ pub enum WeaponFireMode {
     Automatic,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum FiringPatternKind {
+    #[default]
+    Semi,
+    Automatic,
+    Burst,
+    Charge,
+    SpinUp,
+    Pump,
+    BoltAction,
+    Binary,
+    ScriptedSequence,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct FiringPatternDefinition {
+    pub kind: FiringPatternKind,
+    pub bursts_min: u8,
+    pub bursts_max: u8,
+    pub shots_per_burst_min: u8,
+    pub shots_per_burst_max: u8,
+    pub time_between_shots: f32,
+    pub time_between_bursts: f32,
+    pub delay_before_firing: f32,
+    pub burst_cooldown: f32,
+}
+
+impl Default for FiringPatternDefinition {
+    fn default() -> Self {
+        Self::from_fire_mode(WeaponFireMode::SemiAuto, 0.1)
+    }
+}
+
+impl FiringPatternDefinition {
+    pub fn from_fire_mode(mode: WeaponFireMode, fire_interval: f32) -> Self {
+        Self {
+            kind: match mode {
+                WeaponFireMode::SemiAuto => FiringPatternKind::Semi,
+                WeaponFireMode::Automatic => FiringPatternKind::Automatic,
+            },
+            bursts_min: 1,
+            bursts_max: 1,
+            shots_per_burst_min: 1,
+            shots_per_burst_max: 1,
+            time_between_shots: fire_interval,
+            time_between_bursts: 0.0,
+            delay_before_firing: 0.0,
+            burst_cooldown: 0.0,
+        }
+        .sanitized()
+    }
+
+    pub fn sanitized(mut self) -> Self {
+        self.bursts_min = self.bursts_min.clamp(1, 32);
+        self.bursts_max = self.bursts_max.clamp(self.bursts_min, 32);
+        self.shots_per_burst_min = self.shots_per_burst_min.clamp(1, 64);
+        self.shots_per_burst_max = self.shots_per_burst_max.clamp(self.shots_per_burst_min, 64);
+        self.time_between_shots = finite_or(self.time_between_shots, 0.1).clamp(0.01, 60.0);
+        self.time_between_bursts = finite_or(self.time_between_bursts, 0.0).clamp(0.0, 60.0);
+        self.delay_before_firing = finite_or(self.delay_before_firing, 0.0).clamp(0.0, 60.0);
+        self.burst_cooldown = finite_or(self.burst_cooldown, 0.0).clamp(0.0, 60.0);
+        self
+    }
+}
+
 /// Coarse weapon taxonomy. Ammo is deliberately not part of weapon identity: both Unarmed and
 /// Melee are weapons, but neither requires ammunition or exposes firearm ADS/fire/reload actions.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -318,7 +383,9 @@ impl Default for MeleeWeaponTuning {
 pub struct FirearmWeaponDefinition {
     pub tuning: HitscanWeaponTuning,
     pub ammo_item: ItemId,
+    /// Compatibility shorthand retained for old consumers; runtime firing uses `firing_pattern`.
     pub fire_mode: WeaponFireMode,
+    pub firing_pattern: FiringPatternDefinition,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -365,8 +432,24 @@ impl WeaponItemDefinition {
                 tuning: tuning.sanitized(),
                 ammo_item,
                 fire_mode,
+                firing_pattern: FiringPatternDefinition::from_fire_mode(fire_mode, tuning.fire_interval),
             }),
         }
+    }
+
+    #[inline]
+    pub fn firearm_with_pattern(
+        rank: u16,
+        tuning: HitscanWeaponTuning,
+        ammo_item: ItemId,
+        fire_mode: WeaponFireMode,
+        firing_pattern: FiringPatternDefinition,
+    ) -> Self {
+        let mut weapon = Self::firearm(rank, tuning, ammo_item, fire_mode);
+        if let Some(firearm) = weapon.firearm.as_mut() {
+            firearm.firing_pattern = firing_pattern.sanitized();
+        }
+        weapon
     }
 
     #[inline]
@@ -497,7 +580,11 @@ pub struct WeaponPresentationDefinition {
     /// Third-person, first-person, grip, muzzle and ADS presentation must all consume this same
     /// basis; view-specific orientation compensation is forbidden.
     pub native_rig_to_runtime_basis: [f32; 4],
+    /// Camera/viewmodel hip handle placement. Kept separate from anatomical full-body reach.
     pub first_person_hip_handle_offset: [f32; 3],
+    /// Camera-owned full-body FPP handle placement. This must keep both authored arm contacts
+    /// physically reachable; weapon definitions own the value rather than a runtime reach clamp.
+    pub first_person_full_body_hip_handle_offset: [f32; 3],
     pub ads_rear_sight_from_handle: [f32; 3],
     pub ads_front_sight_from_handle: [f32; 3],
     pub ads_camera_to_rear_sight: [f32; 3],
@@ -539,6 +626,9 @@ impl Default for WeaponPresentationDefinition {
             right_palm_to_native_rig: [0.0, 0.0, 0.0, 1.0],
             native_rig_to_runtime_basis: [0.0, 0.0, 0.0, 1.0],
             first_person_hip_handle_offset: [0.2, -0.2, -0.5],
+            // Compatibility default only. Authored item compilation inherits the ordinary FPP
+            // offset when no explicit full-body value exists.
+            first_person_full_body_hip_handle_offset: [0.2, -0.2, -0.5],
             ads_rear_sight_from_handle: [0.0; 3],
             ads_front_sight_from_handle: [0.0, 0.0, 0.4],
             ads_camera_to_rear_sight: [0.0, 0.0, -0.075],
@@ -628,6 +718,11 @@ impl WeaponPresentationDefinition {
             fallback.first_person_hip_handle_offset,
             5.0,
         );
+        self.first_person_full_body_hip_handle_offset = vec3(
+            self.first_person_full_body_hip_handle_offset,
+            self.first_person_hip_handle_offset,
+            5.0,
+        );
         self.ads_rear_sight_from_handle = vec3(
             self.ads_rear_sight_from_handle,
             fallback.ads_rear_sight_from_handle,
@@ -708,6 +803,10 @@ impl WeaponPresentationDefinition {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct WeaponVfxDefinition {
     pub shot: Option<String>,
+    /// Independent single-frame/swept tracer presentation for an already-resolved shot segment.
+    pub tracer: Option<String>,
+    /// Shallow-angle collision sweetener spawned only when ballistics schedules a ricochet trace.
+    pub ricochet: Option<String>,
     pub impact_default: Option<String>,
     pub impact_by_surface: BTreeMap<String, String>,
 }
@@ -720,6 +819,8 @@ impl WeaponVfxDefinition {
                 .filter(|value| !value.is_empty())
         }
         self.shot = clean(self.shot);
+        self.tracer = clean(self.tracer);
+        self.ricochet = clean(self.ricochet);
         self.impact_default = clean(self.impact_default);
         self.impact_by_surface = self
             .impact_by_surface
@@ -931,6 +1032,259 @@ impl WeaponCasingDefinition {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum AmmoProjectileType {
+    #[default]
+    Instant,
+    Physical,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct AmmoDefinition {
+    pub caliber: String,
+    pub projectile_type: AmmoProjectileType,
+    pub projectile_mass_kg: f32,
+    pub muzzle_velocity_mps: f32,
+    /// Initial penetration budget in joules. Material traversal consumes this budget.
+    pub penetration_energy_j: f32,
+    pub max_penetration_m: f32,
+    pub drag_coefficient: f32,
+    pub damage_multiplier: f32,
+    pub impulse_multiplier: f32,
+    pub falloff_start_m: f32,
+    pub falloff_end_m: f32,
+    pub falloff_min_multiplier: f32,
+    pub tracer: bool,
+    pub impact_profile: Option<String>,
+}
+
+impl Default for AmmoDefinition {
+    fn default() -> Self {
+        Self {
+            caliber: "generic".to_owned(),
+            projectile_type: AmmoProjectileType::Instant,
+            projectile_mass_kg: 0.008,
+            muzzle_velocity_mps: 350.0,
+            penetration_energy_j: 400.0,
+            max_penetration_m: 0.35,
+            drag_coefficient: 0.0,
+            damage_multiplier: 1.0,
+            impulse_multiplier: 1.0,
+            falloff_start_m: 0.0,
+            falloff_end_m: 100.0,
+            falloff_min_multiplier: 1.0,
+            tracer: false,
+            impact_profile: None,
+        }
+    }
+}
+
+impl AmmoDefinition {
+    pub fn sanitized(mut self) -> Self {
+        self.caliber = self.caliber.trim().to_ascii_lowercase();
+        if self.caliber.is_empty() {
+            self.caliber = "generic".to_owned();
+        }
+        self.projectile_mass_kg = finite_or(self.projectile_mass_kg, 0.008).clamp(0.0001, 1.0);
+        self.muzzle_velocity_mps = finite_or(self.muzzle_velocity_mps, 350.0).clamp(1.0, 2_500.0);
+        self.penetration_energy_j = finite_or(self.penetration_energy_j, 0.0).clamp(0.0, 250_000.0);
+        self.max_penetration_m = finite_or(self.max_penetration_m, 0.0).clamp(0.0, 10.0);
+        self.drag_coefficient = finite_or(self.drag_coefficient, 0.0).clamp(0.0, 10.0);
+        self.damage_multiplier = finite_or(self.damage_multiplier, 1.0).clamp(0.0, 20.0);
+        self.impulse_multiplier = finite_or(self.impulse_multiplier, 1.0).clamp(0.0, 20.0);
+        self.falloff_start_m = finite_or(self.falloff_start_m, 0.0).clamp(0.0, 10_000.0);
+        self.falloff_end_m = finite_or(self.falloff_end_m, self.falloff_start_m.max(1.0))
+            .clamp(self.falloff_start_m.max(0.001), 10_000.0);
+        self.falloff_min_multiplier = finite_or(self.falloff_min_multiplier, 1.0).clamp(0.0, 1.0);
+        self.impact_profile = self
+            .impact_profile
+            .take()
+            .map(|value| value.trim().replace('\\', "/"))
+            .filter(|value| !value.is_empty());
+        self
+    }
+
+    #[inline]
+    pub fn kinetic_energy_j(&self) -> f32 {
+        0.5 * self.projectile_mass_kg * self.muzzle_velocity_mps * self.muzzle_velocity_mps
+    }
+
+    #[inline]
+    pub fn momentum_ns(&self) -> f32 {
+        self.projectile_mass_kg * self.muzzle_velocity_mps
+    }
+
+    pub fn falloff_multiplier_at(&self, distance_m: f32) -> f32 {
+        let value = self.clone().sanitized();
+        if distance_m <= value.falloff_start_m {
+            return 1.0;
+        }
+        if distance_m >= value.falloff_end_m {
+            return value.falloff_min_multiplier;
+        }
+        let alpha = ((distance_m - value.falloff_start_m)
+            / (value.falloff_end_m - value.falloff_start_m).max(0.001))
+            .clamp(0.0, 1.0);
+        1.0 + (value.falloff_min_multiplier - 1.0) * alpha
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct WeaponComponentModifiers {
+    pub accuracy_multiplier: f32,
+    pub recoil_multiplier: f32,
+    pub damage_multiplier: f32,
+    pub falloff_multiplier: f32,
+    pub muzzle_velocity_multiplier: f32,
+    pub penetration_multiplier: f32,
+    pub audio_gain_multiplier: f32,
+    pub presentation_offset_local: [f32; 3],
+}
+
+impl Default for WeaponComponentModifiers {
+    fn default() -> Self {
+        Self {
+            accuracy_multiplier: 1.0,
+            recoil_multiplier: 1.0,
+            damage_multiplier: 1.0,
+            falloff_multiplier: 1.0,
+            muzzle_velocity_multiplier: 1.0,
+            penetration_multiplier: 1.0,
+            audio_gain_multiplier: 1.0,
+            presentation_offset_local: [0.0; 3],
+        }
+    }
+}
+
+impl WeaponComponentModifiers {
+    pub fn sanitized(self) -> Self {
+        Self {
+            accuracy_multiplier: finite_or(self.accuracy_multiplier, 1.0).clamp(0.05, 20.0),
+            recoil_multiplier: finite_or(self.recoil_multiplier, 1.0).clamp(0.0, 20.0),
+            damage_multiplier: finite_or(self.damage_multiplier, 1.0).clamp(0.0, 20.0),
+            falloff_multiplier: finite_or(self.falloff_multiplier, 1.0).clamp(0.0, 20.0),
+            muzzle_velocity_multiplier: finite_or(self.muzzle_velocity_multiplier, 1.0).clamp(0.05, 20.0),
+            penetration_multiplier: finite_or(self.penetration_multiplier, 1.0).clamp(0.0, 20.0),
+            audio_gain_multiplier: finite_or(self.audio_gain_multiplier, 1.0).clamp(0.0, 4.0),
+            presentation_offset_local: self.presentation_offset_local.map(|value| finite_or(value, 0.0).clamp(-2.0, 2.0)),
+        }
+    }
+
+    pub fn combine(self, other: Self) -> Self {
+        let a = self.sanitized();
+        let b = other.sanitized();
+        Self {
+            accuracy_multiplier: a.accuracy_multiplier * b.accuracy_multiplier,
+            recoil_multiplier: a.recoil_multiplier * b.recoil_multiplier,
+            damage_multiplier: a.damage_multiplier * b.damage_multiplier,
+            falloff_multiplier: a.falloff_multiplier * b.falloff_multiplier,
+            muzzle_velocity_multiplier: a.muzzle_velocity_multiplier * b.muzzle_velocity_multiplier,
+            penetration_multiplier: a.penetration_multiplier * b.penetration_multiplier,
+            audio_gain_multiplier: a.audio_gain_multiplier * b.audio_gain_multiplier,
+            presentation_offset_local: [
+                a.presentation_offset_local[0] + b.presentation_offset_local[0],
+                a.presentation_offset_local[1] + b.presentation_offset_local[1],
+                a.presentation_offset_local[2] + b.presentation_offset_local[2],
+            ],
+        }
+        .sanitized()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct WeaponComponentDefinition {
+    pub id: String,
+    pub slot: String,
+    pub model_ref: Option<String>,
+    pub audio_override: Option<String>,
+    pub muzzle_vfx_override: Option<String>,
+    pub tracer_vfx_override: Option<String>,
+    pub modifiers: WeaponComponentModifiers,
+}
+
+impl WeaponComponentDefinition {
+    pub fn sanitized(mut self) -> Self {
+        self.id = self.id.trim().to_ascii_lowercase();
+        self.slot = self.slot.trim().to_ascii_lowercase();
+        let clean = |value: Option<String>| value
+            .map(|value| value.trim().replace('\\', "/"))
+            .filter(|value| !value.is_empty());
+        self.model_ref = clean(self.model_ref);
+        self.audio_override = clean(self.audio_override);
+        self.muzzle_vfx_override = clean(self.muzzle_vfx_override);
+        self.tracer_vfx_override = clean(self.tracer_vfx_override);
+        self.modifiers = self.modifiers.sanitized();
+        self
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct WeaponComponentPointDefinition {
+    pub id: String,
+    pub attach_joint: String,
+    pub allowed_components: Vec<String>,
+}
+
+impl WeaponComponentPointDefinition {
+    pub fn sanitized(mut self) -> Self {
+        self.id = self.id.trim().to_ascii_lowercase();
+        self.attach_joint = self.attach_joint.trim().to_ascii_lowercase();
+        self.allowed_components = self.allowed_components
+            .into_iter()
+            .map(|value| value.trim().to_ascii_lowercase())
+            .filter(|value| !value.is_empty())
+            .collect();
+        self.allowed_components.sort();
+        self.allowed_components.dedup();
+        self
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct WeaponComponentGraphDefinition {
+    pub points: Vec<WeaponComponentPointDefinition>,
+    pub components: BTreeMap<String, WeaponComponentDefinition>,
+    pub default_installed: BTreeMap<String, String>,
+}
+
+impl WeaponComponentGraphDefinition {
+    pub fn sanitized(mut self) -> Self {
+        self.points = self.points.into_iter().map(WeaponComponentPointDefinition::sanitized)
+            .filter(|point| !point.id.is_empty()).collect();
+        self.points.sort_by(|a, b| a.id.cmp(&b.id));
+        self.points.dedup_by(|a, b| a.id == b.id);
+        self.components = self.components.into_values()
+            .map(WeaponComponentDefinition::sanitized)
+            .filter(|component| !component.id.is_empty() && !component.slot.is_empty())
+            .map(|component| (component.id.clone(), component)).collect();
+        self.default_installed = self.default_installed.into_iter()
+            .map(|(slot, component)| (slot.trim().to_ascii_lowercase(), component.trim().to_ascii_lowercase()))
+            .filter(|(slot, component)| !slot.is_empty() && !component.is_empty())
+            .collect();
+        self
+    }
+
+    pub fn validate(&self) -> Result<(), String> {
+        let graph = self.clone().sanitized();
+        for (slot, component_id) in &graph.default_installed {
+            let point = graph.points.iter().find(|point| &point.id == slot)
+                .ok_or_else(|| format!("component default references unknown slot '{slot}'"))?;
+            let component = graph.components.get(component_id)
+                .ok_or_else(|| format!("component default references unknown component '{component_id}'"))?;
+            if component.slot != *slot || (!point.allowed_components.is_empty() && !point.allowed_components.contains(component_id)) {
+                return Err(format!("component '{component_id}' is not allowed in slot '{slot}'"));
+            }
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WeaponComponentInstance {
+    pub component_id: String,
+    pub active: bool,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct ItemDefinition {
     pub id: ItemId,
@@ -945,6 +1299,9 @@ pub struct ItemDefinition {
     pub unit_weight: f32,
     pub equipment_slot: Option<EquipmentSlot>,
     pub weapon: Option<WeaponItemDefinition>,
+    /// Present only for `ItemKind::Ammo`; firearm mechanics reference ammo by item identity.
+    pub ammo_profile: Option<AmmoDefinition>,
+    pub weapon_components: WeaponComponentGraphDefinition,
     pub weapon_presentation: WeaponPresentationDefinition,
     pub weapon_animation: WeaponAnimationDefinition,
     pub weapon_audio: WeaponAudioDefinition,
@@ -978,6 +1335,8 @@ impl ItemDefinition {
             unit_weight: sanitize_non_negative(unit_weight),
             equipment_slot: None,
             weapon: None,
+            ammo_profile: None,
+            weapon_components: WeaponComponentGraphDefinition::default(),
             weapon_presentation: WeaponPresentationDefinition::default(),
             weapon_animation: WeaponAnimationDefinition::default(),
             weapon_audio: WeaponAudioDefinition::default(),
@@ -1041,6 +1400,19 @@ impl ItemDefinition {
             WeaponItemDefinition::melee(rank, tuning),
             unit_weight,
         )
+    }
+
+    #[inline]
+    pub fn with_ammo_profile(mut self, ammo: AmmoDefinition) -> Self {
+        self.ammo_profile = Some(ammo.sanitized());
+        self
+    }
+
+    pub fn with_weapon_components(mut self, graph: WeaponComponentGraphDefinition) -> Result<Self, String> {
+        let graph = graph.sanitized();
+        graph.validate()?;
+        self.weapon_components = graph;
+        Ok(self)
     }
 
     #[inline]

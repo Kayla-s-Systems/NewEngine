@@ -144,14 +144,21 @@ impl RenderFrameRecipe {
             StandardRenderPhase::ParticleSimulation,
         ));
         if features.deferred {
-            steps.push(RenderPhaseRecipeStep::enabled(
-                StandardRenderPhase::DepthPrepass,
-            ));
+            // Native GBuffer writes the authoritative scene depth together with the MRTs.
+            // A separate depth prepass would create a second depth resource/domain and is
+            // therefore forbidden for the standard deferred path.
             steps.push(RenderPhaseRecipeStep::enabled(
                 StandardRenderPhase::ViewportGBuffer,
             ));
             steps.push(RenderPhaseRecipeStep::enabled(
                 StandardRenderPhase::DeferredLighting,
+            ));
+            // Deferred extraction still records OpaqueForward for roles that are not
+            // representable in the GBuffer (sky, view-model and other forward overlays).
+            // Give that bucket a real graph scope before transparent/postfx so it can
+            // never leak into VulkanRenderApi::end_frame()'s generic residual flush.
+            steps.push(RenderPhaseRecipeStep::enabled(
+                StandardRenderPhase::ViewportForward,
             ));
         } else {
             steps.push(RenderPhaseRecipeStep::enabled(

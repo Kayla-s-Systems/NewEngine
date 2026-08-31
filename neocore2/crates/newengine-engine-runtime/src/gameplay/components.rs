@@ -21,9 +21,9 @@ pub use physics::{PhysicsSurface, PhysicsWorldSettings, StaticMeshCollider};
 pub use player::{
     CharacterBody, CharacterMotionTuning, PlayerAnimationState,
     PlayerAuthoredAnimationCapabilities, PlayerBraidSecondaryMotionRig, PlayerCameraProfile,
-    PlayerCharacterPresentation, PlayerCommandFrame, PlayerController, PlayerControllerKind,
-    PlayerEvent, PlayerEventBus, PlayerEventKind, PlayerEyeParentFollowRule, PlayerFallState,
-    PlayerFirstPersonBodyBarrierProfile, PlayerFirstPersonCameraAnchor,
+    PlayerCameraViewMode, PlayerCharacterPresentation, PlayerCommandFrame, PlayerController,
+    PlayerControllerKind, PlayerEvent, PlayerEventBus, PlayerEventKind, PlayerEyeParentFollowRule,
+    PlayerFallState, PlayerFirstPersonBodyBarrierProfile, PlayerFirstPersonCameraAnchor,
     PlayerFirstPersonPrimitiveVariant, PlayerFixedPoseHistory, PlayerGroundState,
     PlayerJointChannels, PlayerJointCopyRule, PlayerJointRotationWeight, PlayerLandingState,
     PlayerLocomotionAnimation, PlayerLocomotionState, PlayerLookContext, PlayerModelAssignment,

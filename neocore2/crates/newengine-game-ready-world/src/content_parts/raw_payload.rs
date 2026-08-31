@@ -315,6 +315,15 @@ struct RawGameplaySpec {
 
 #[derive(Debug, Default, Deserialize)]
 struct RawMissionSpec {
+    /// Project-authored presentation materials for generic mission primitives.
+    #[serde(default)]
+    pub(super) core_material: String,
+    #[serde(default)]
+    pub(super) target_material: String,
+    #[serde(default)]
+    pub(super) hazard_material: String,
+    #[serde(default)]
+    pub(super) goal_material: String,
     #[serde(default)]
     pub(super) pickups: Vec<RawMissionPickupSpec>,
     #[serde(default)]

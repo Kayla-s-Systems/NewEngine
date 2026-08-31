@@ -1,4 +1,4 @@
-// Generated from TLOU2 PC actor97/abby-braid-cloth.pak COLLISION_DATA_CLOTH.
+// Generated from NorthStar PC actor97/abby-braid-cloth.pak COLLISION_DATA_CLOTH.
 // Source offsets and record widths were verified against the resident resource layout.
 // Keep this file data-only: runtime interpretation lives in player_model_animation.rs.
 

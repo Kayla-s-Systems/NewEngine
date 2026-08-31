@@ -1,6 +1,7 @@
 pub struct AudioRuntimeState {
     assets: AssetServiceClient,
     output: Option<MixerDeviceSink>,
+    render_graph: Option<NativeBlockRenderGraphHandle>,
     output_rx: Option<mpsc::Receiver<Result<MixerDeviceSink, String>>>,
     output_error: Option<String>,
     output_init_started: bool,
@@ -14,7 +15,7 @@ pub struct AudioRuntimeState {
     listener: AudioListenerState,
     listener_velocity: [f32; 3],
     listener_updated_at: Option<Instant>,
-    bus_gains: BTreeMap<AudioBus, f32>,
+    route_gains: BTreeMap<AudioRouteId, f32>,
     clips: HashMap<String, CachedClip>,
     cues: HashMap<String, SoundCue>,
     yscd_dictionaries: HashMap<String, Arc<newengine_asset_format_nef8::YscdDictionary>>,
@@ -38,13 +39,10 @@ impl AudioRuntimeState {
     /// never starts from plugin/DLL init; Windows audio APIs may load COM/MMDevAPI modules and
     /// are not safe to initialize under the plugin loader lifecycle.
     pub fn open_default(assets: AssetServiceClient) -> Result<Self, String> {
-        let mut bus_gains = BTreeMap::new();
-        for bus in AudioBus::all() {
-            bus_gains.insert(bus, 1.0);
-        }
         Ok(Self {
             assets,
             output: None,
+            render_graph: None,
             output_rx: None,
             output_error: None,
             output_init_started: false,
@@ -58,7 +56,7 @@ impl AudioRuntimeState {
             listener: AudioListenerState::default(),
             listener_velocity: [0.0; 3],
             listener_updated_at: None,
-            bus_gains,
+            route_gains: BTreeMap::new(),
             clips: HashMap::new(),
             cues: HashMap::new(),
             yscd_dictionaries: HashMap::new(),
@@ -117,12 +115,20 @@ impl AudioRuntimeState {
         };
         match receiver.try_recv() {
             Ok(Ok(output)) => {
+                let channels = output.config().channel_count();
+                let sample_rate = output.config().sample_rate();
+                let (render_graph, master_source) = native_block_render_graph(channels, sample_rate);
+                output.mixer().add(master_source);
+                self.render_graph = Some(render_graph);
                 self.output = Some(output);
                 self.output_rx = None;
                 self.output_error = None;
                 newengine_ulog_api::ulog::info!(
-                    "audio device init: phase='ready' provider='{}'",
-                    NATIVE_AUDIO_PROVIDER_ROUTE
+                    "audio device init: phase='ready' provider='{}' executor='native-block-render' sample_rate={} channels={} block_frames={}",
+                    NATIVE_AUDIO_PROVIDER_ROUTE,
+                    sample_rate.get(),
+                    channels.get(),
+                    block_render::NATIVE_BLOCK_FRAMES,
                 );
             }
             Ok(Err(error)) => {
@@ -150,6 +156,113 @@ impl AudioRuntimeState {
     fn output_ready(&mut self) -> bool {
         self.poll_output_init();
         self.output.is_some()
+    }
+
+    fn render_clock(&mut self) -> AudioRenderClock {
+        self.start_output_init();
+        self.poll_output_init();
+        let Some(g) = self.render_graph.as_ref() else { return AudioRenderClock { ready:false, sample_rate:0, sample:0, block_frames:block_render::NATIVE_BLOCK_FRAMES as u32 }; };
+        AudioRenderClock { ready:true, sample_rate:g.sample_rate().get(), sample:g.output_sample(), block_frames:block_render::NATIVE_BLOCK_FRAMES as u32 }
+    }
+
+    fn validate_render_start_sample(&mut self, at: Option<u64>) -> Result<(), String> {
+        let Some(at)=at else { return Ok(()); };
+        let c=self.render_clock();
+        if !c.ready { return Err("native render clock is not ready for exact scheduled onset".to_owned()); }
+        if at<c.sample { return Err(format!("scheduled render start sample {at} is in the past; provider sample={}",c.sample)); }
+        Ok(())
+    }
+
+    fn schedule_voice_render(
+        &mut self,
+        request: AudioVoiceRenderScheduleRequest,
+    ) -> AudioVoiceRenderScheduleAck {
+        self.poll_output_init();
+        let provider = NATIVE_AUDIO_PROVIDER_ROUTE.to_owned();
+        let reject = |message: String| AudioVoiceRenderScheduleAck {
+            accepted: false,
+            voice_id: request.voice_id,
+            at_sample: request.at_sample,
+            schedule_id: request.schedule_id,
+            provider: provider.clone(),
+            message,
+        };
+
+        let Some(graph) = self.render_graph.as_ref() else {
+            return reject("native render clock is not ready".to_owned());
+        };
+        if request.schedule_id == 0 {
+            return reject("render schedule_id must be non-zero".to_owned());
+        }
+
+        let Some(control) = self
+            .voices
+            .get(&request.voice_id)
+            .and_then(|voice| voice.control.as_ref())
+        else {
+            return reject("voice is not physically materialized".to_owned());
+        };
+        let render = match control {
+            VoiceControl::Flat { render, .. } | VoiceControl::Spatial { render, .. } => render,
+        };
+
+        let result = match request.action {
+            AudioVoiceRenderAction::Cancel => render.cancel_scheduled(request.schedule_id),
+            AudioVoiceRenderAction::GainRamp {
+                target_gain,
+                duration_samples,
+            } => {
+                if request.at_sample < graph.output_sample() {
+                    Err(format!(
+                        "render schedule sample {} is in the past; provider sample={}",
+                        request.at_sample,
+                        graph.output_sample()
+                    ))
+                } else if !target_gain.is_finite() {
+                    Err("scheduled render gain must be finite".to_owned())
+                } else {
+                    let target_output_gain = self
+                        .voices
+                        .get(&request.voice_id)
+                        .map(|voice| {
+                            sanitize_gain(target_gain)
+                                * self.route_gain(&voice.route)
+                                * voice.attenuation_gain(self.listener)
+                                * voice.propagated_acoustic().transmission_gain
+                        })
+                        .unwrap_or_else(|| sanitize_gain(target_gain));
+                    render.schedule_gain_at(
+                        request.at_sample,
+                        target_output_gain,
+                        duration_samples,
+                        request.schedule_id,
+                    )
+                }
+            }
+            AudioVoiceRenderAction::Stop => {
+                if request.at_sample < graph.output_sample() {
+                    Err(format!(
+                        "render schedule sample {} is in the past; provider sample={}",
+                        request.at_sample,
+                        graph.output_sample()
+                    ))
+                } else {
+                    render.schedule_stop_at(request.at_sample, request.schedule_id)
+                }
+            }
+        };
+
+        match result {
+            Ok(()) => AudioVoiceRenderScheduleAck {
+                accepted: true,
+                voice_id: request.voice_id,
+                at_sample: request.at_sample,
+                schedule_id: request.schedule_id,
+                provider,
+                message: String::new(),
+            },
+            Err(message) => reject(message),
+        }
     }
 
     #[inline]
@@ -188,23 +301,18 @@ impl AudioRuntimeState {
     }
 
     #[inline]
-    fn bus_gain(&self, bus: AudioBus) -> f32 {
-        let master = self
-            .bus_gains
-            .get(&AudioBus::Master)
-            .copied()
-            .unwrap_or(1.0);
-        if bus == AudioBus::Master {
-            master
+    fn route_gain(&self, route: &AudioRouteId) -> f32 {
+        if route.0.is_empty() {
+            1.0
         } else {
-            master * self.bus_gains.get(&bus).copied().unwrap_or(1.0)
+            self.route_gains.get(route).copied().unwrap_or(1.0)
         }
     }
 
     #[inline]
     fn voice_output_gain(&self, voice: &VoiceEntry) -> f32 {
         sanitize_gain(voice.gain)
-            * self.bus_gain(voice.bus)
+            * self.route_gain(&voice.route)
             * voice.attenuation_gain(self.listener)
             * voice.propagated_acoustic().transmission_gain
     }

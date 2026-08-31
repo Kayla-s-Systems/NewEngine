@@ -24,15 +24,20 @@ fn audio_service(state: AudioRuntimeState) -> newengine_plugin_api::ServiceV1Dyn
         "flac",
         "2d-voices",
         "spatial-voices",
-        "audio-buses",
+        "opaque-audio-routes",
         "clip-cache",
         "voice-budget",
         "voice-policy-v2",
         "reserved-voice-budgets",
         "voice-virtualization",
         "stream-logical-virtualization",
+        "block-native-render-graph",
+        "sample-addressed-render-scheduling",
         "yscd-sound-graph-v1",
         "sound-graph-trigger-parameters",
+        "block-based-native-render-graph",
+        "single-master-output",
+        "sample-accurate-render-scheduling",
         "authored-attenuation",
         "physics-acoustic-state",
         "occlusion-aware-arbitration",
@@ -97,12 +102,17 @@ fn audio_service(state: AudioRuntimeState) -> newengine_plugin_api::ServiceV1Dyn
             |state, listener: AudioListenerState| state.set_listener(listener),
         )
         .post_json(
-            AUDIO_SERVICE_METHOD_SET_BUS_GAIN_JSON_V1,
-            |state, request: AudioBusGainRequest| state.set_bus_gain(request),
+            AUDIO_SERVICE_METHOD_SET_ROUTE_GAIN_JSON_V1,
+            |state, request: AudioRouteGainRequest| state.set_route_gain(request),
         )
         .post_json(
             AUDIO_SERVICE_METHOD_SET_VOICE_BUDGETS_JSON_V1,
             |state, request: AudioVoiceBudgetConfig| state.set_voice_budgets(request),
+        )
+        .get_json(AUDIO_SERVICE_METHOD_RENDER_CLOCK_JSON_V1, |state| state.render_clock())
+        .post_json(
+            AUDIO_SERVICE_METHOD_SCHEDULE_VOICE_RENDER_JSON_V1,
+            |state, request: AudioVoiceRenderScheduleRequest| state.schedule_voice_render(request),
         )
         .get_json(AUDIO_SERVICE_METHOD_DIAGNOSTICS_JSON_V1, |state| {
             state.diagnostics()

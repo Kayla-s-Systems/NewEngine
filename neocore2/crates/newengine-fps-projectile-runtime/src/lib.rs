@@ -7,7 +7,7 @@ mod game_data;
 
 use newengine_ecs::{EntityId, World};
 use newengine_gameplay_fps_api::{FpsActionFrame, FpsGameplayPolicySnapshot, WeaponShellCasing};
-use newengine_math::{Quat, Vec3};
+use newengine_math::{avalanche_u64, Quat, Vec3};
 use newengine_physics_contracts::{PhysicsEvent, PhysicsStepReport};
 use newengine_primitives::{builtins as prim_builtins, Primitive};
 use newengine_scene::{components::Name, SceneState};

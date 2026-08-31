@@ -96,7 +96,7 @@ impl Mat4 {
         // orthonormal Z axis. The previous implementation computed determinant
         // after `rz = rx.cross(ry)`, which is right-handed by construction and
         // therefore silently lost reflected/negative-scale transforms such as
-        // TLOU2 helper joints with diag(+1,+1,-1).
+        // NorthStar helper joints with diag(+1,+1,-1).
         let authored_rx = (x * inv_sx).normalize_or_zero();
         let authored_ry = (y * inv_sy).normalize_or_zero();
         let authored_rz = (z * inv_sz).normalize_or_zero();

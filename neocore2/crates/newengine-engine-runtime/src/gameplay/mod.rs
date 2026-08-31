@@ -5,6 +5,7 @@ mod capabilities;
 mod combat;
 mod components;
 mod content;
+mod damage;
 mod events;
 mod execution;
 mod inventory;
@@ -28,10 +29,11 @@ pub use capabilities::{
     GAMEPLAY_CAPABILITY_AUDIO_PRELOAD_V1,
 };
 pub use combat::{
-    drain_interaction_events, drain_weapon_events, Health, HitscanWeaponTuning, Interactable,
-    InteractionEvent, InteractionEventBus, PendingHitscan, PendingInteraction,
-    PlayerInteractionTuning, PlayerWeaponState, WeaponAttackKind, WeaponEvent, WeaponEventBus,
-    WeaponEventKind, WeaponObstructionState,
+    drain_interaction_events, drain_weapon_events, BallisticShotProfile, Health,
+    HitscanWeaponTuning, Interactable, InteractionEvent, InteractionEventBus, PendingHitscan,
+    PendingInteraction, PlayerInteractionTuning, PlayerWeaponState, WeaponAccuracyModifiers,
+    WeaponAccuracyState, WeaponFireControllerState, WeaponAttackKind, WeaponEvent, WeaponEventBus, WeaponEventKind,
+    WeaponObstructionState,
 };
 pub use components::{
     attach_scene_element_core, attach_scene_object_core, scene_entity_by_role,
@@ -41,9 +43,9 @@ pub use components::{
     DisplayVisibility, EnvironmentDomeRenderState, EnvironmentPostFxState, GameRunMode,
     GameplayActor, ModelRenderComponent, PhysicsBodyDesc, PhysicsSurface, PhysicsWorldSettings,
     PlayerActor, PlayerAnimationState, PlayerAuthoredAnimationCapabilities,
-    PlayerBraidSecondaryMotionRig, PlayerCameraProfile, PlayerCharacterPresentation,
-    PlayerCommandFrame, PlayerController, PlayerControllerKind, PlayerEvent, PlayerEventBus,
-    PlayerEventKind, PlayerEyeParentFollowRule, PlayerFallState,
+    PlayerBraidSecondaryMotionRig, PlayerCameraProfile, PlayerCameraViewMode,
+    PlayerCharacterPresentation, PlayerCommandFrame, PlayerController, PlayerControllerKind,
+    PlayerEvent, PlayerEventBus, PlayerEventKind, PlayerEyeParentFollowRule, PlayerFallState,
     PlayerFirstPersonBodyBarrierProfile, PlayerFirstPersonCameraAnchor,
     PlayerFirstPersonPrimitiveVariant, PlayerFixedPoseHistory, PlayerGroundState,
     PlayerJointChannels, PlayerJointCopyRule, PlayerJointRotationWeight, PlayerLandingState,
@@ -58,6 +60,10 @@ pub use components::{
     WorldClearColor,
 };
 pub use content::{GameplayContentProvider, GameplayContentProviderRegistry};
+pub use damage::{
+    resolve_weapon_impact, BallisticMaterialResponse, DamageHitZone, DamageHitZoneMap,
+    DamageReceiver, DamageReceiverKind, DamageResolution, PendingPhysicsImpulse, WeaponImpact,
+};
 pub use events::{
     drain_gameplay_events, emit_gameplay_event, publish_gameplay_event, GameplayEvent,
     GameplayEventBus, GAMEPLAY_EVENT_WEAPON_EMPTY, GAMEPLAY_EVENT_WEAPON_EQUIPPED,
@@ -73,22 +79,27 @@ pub use execution::{
 pub use inventory::{
     active_equipped_weapon_aiming, active_equipped_weapon_binding, active_equipped_weapon_can_aim,
     active_equipped_weapon_can_fire, active_equipped_weapon_can_melee,
-    active_equipped_weapon_muzzle, apply_loadout, consume_equipped_ammo, drain_inventory_events,
+    active_equipped_weapon_muzzle, active_equipped_weapon_component_modifiers,
+    active_equipped_weapon_component_overrides, apply_loadout, consume_equipped_ammo, drain_inventory_events,
     drop_item, ensure_inventory_runtime, ensure_player_inventory, equip_first_item,
-    equip_item_instance, equipped_reserve_ammo, give_item, inventory_quantity,
+    equip_item_instance, equipped_reserve_ammo, give_item, install_weapon_component, inventory_quantity,
     persist_equipped_weapon_state, play_equipped_weapon_audio, play_weapon_item_audio,
-    preload_weapon_audio_definition, remove_item, select_equipment_slot,
+    preload_weapon_audio_definition, remove_item, remove_weapon_component, select_equipment_slot,
     select_highest_ranked_equipped_weapon, spawn_item_pickup, spawn_persistent_item_pickup,
     step_world_items, sync_equipped_weapon_runtime, try_collect_item_pickup, unequip_slot,
-    use_item, EquipmentSlot, EquippedWeaponBinding, EquippedWeaponEntity, EquippedWeaponMuzzle,
-    FirearmWeaponDefinition, InventoryEntry, InventoryEvent, InventoryEventBus, InventoryEventKind,
-    InventoryLoadout, InventoryLoadoutCatalog, InventoryLoadoutEntry, InventoryMutation,
-    ItemCatalog, ItemDefinition, ItemId, ItemInstanceId, ItemKind, ItemPickup, ItemUseEffect,
-    MeleeWeaponTuning, PlayerInventory, WeaponAnimationDefinition, WeaponAudioAction,
-    WeaponAudioDefinition, WeaponCapabilities, WeaponCasingDefinition, WeaponEntityRuntime,
-    WeaponEntitySockets, WeaponFireMode, WeaponItemDefinition, WeaponPresentationDefinition,
-    WeaponSocketPose, WeaponType, WeaponVfxDefinition, WorldItemDefinition, WorldItemPresentation,
-    WorldItemRuntime, WorldItemVisualPart, SHARED_UNARMED_WEAPON_ITEM_NAME,
+    use_item, AmmoDefinition, AmmoProjectileType, EquipmentSlot, EquippedWeaponBinding,
+    EquippedWeaponEntity, EquippedWeaponMuzzle, FirearmWeaponDefinition, FiringPatternDefinition,
+    FiringPatternKind, InventoryEntry,
+    InventoryEvent, InventoryEventBus, InventoryEventKind, InventoryLoadout,
+    InventoryLoadoutCatalog, InventoryLoadoutEntry, InventoryMutation, ItemCatalog, ItemDefinition,
+    ItemId, ItemInstanceId, ItemKind, ItemPickup, ItemUseEffect, MeleeWeaponTuning,
+    PlayerInventory, WeaponAnimationDefinition, WeaponAudioAction, WeaponAudioDefinition,
+    WeaponCapabilities, WeaponCasingDefinition, WeaponComponentDefinition, WeaponComponentGraphDefinition,
+    WeaponComponentInstance, WeaponComponentModifiers, WeaponComponentPointDefinition,
+    WeaponEntityRuntime, WeaponEntitySockets,
+    WeaponFireMode, WeaponItemDefinition, WeaponPresentationDefinition, WeaponSocketPose,
+    WeaponType, WeaponVfxDefinition, WorldItemDefinition, WorldItemPresentation, WorldItemRuntime,
+    WorldItemVisualPart, SHARED_UNARMED_WEAPON_ITEM_NAME,
 };
 pub use listeners::{drain_player_events, emit_player_event, sync_player_view_listeners};
 pub(crate) use physics::{prewarm_service_physics_backend, sync_prelaunch_service_physics};

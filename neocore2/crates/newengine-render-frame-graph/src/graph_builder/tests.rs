@@ -2,6 +2,7 @@ use super::*;
 use crate::{standard_runtime_frame, StandardRuntimePipelineDesc};
 use newengine_render_api::{
     Extent2D, RenderGraphPassKind, RenderGraphQueueKind, RenderGraphResourceUsage, RenderTargetId,
+    TextureFormat,
 };
 
 #[test]
@@ -51,10 +52,147 @@ fn deferred_runtime_graph_uses_explicit_lighting_resolve_without_forward_replay(
         lighting
             .writes
             .iter()
-            .any(|write| write.resource == RG_LIT_COLOR
+            .any(|write| write.resource == RG_SCENE_HDR_COLOR
                 && write.usage == RenderGraphResourceUsage::ColorAttachment),
-        "DeferredLighting must write lit color"
+        "DeferredLighting must resolve into canonical scene color"
     );
+    assert!(!lighting
+        .writes
+        .iter()
+        .any(|write| write.resource == RG_LIT_COLOR));
+}
+
+#[test]
+fn deferred_runtime_routes_opaque_geometry_into_gbuffer() {
+    let plan = standard_runtime_frame(
+        StandardRuntimePipelineDesc::new(18, Extent2D::new(1280, 720), Extent2D::new(1280, 720))
+            .deferred(true)
+            .postfx(false)
+            .ui(false)
+            .debug_overlay(false)
+            .draw_lists([crate::DrawListDesc::standard(
+                newengine_render_api::RenderDrawListKind::OpaqueForward,
+            )]),
+    );
+
+    let gbuffer = plan
+        .graph
+        .passes
+        .iter()
+        .find(|pass| pass.kind == RenderGraphPassKind::GBuffer)
+        .expect("deferred graph must contain a GBuffer pass");
+    assert!(
+        gbuffer
+            .draw_lists
+            .contains(&newengine_render_api::RenderDrawListKind::OpaqueForward),
+        "GBuffer must consume OpaqueForward geometry in deferred mode"
+    );
+
+    let report = plan.validate_draw_list_routes();
+    assert!(
+        report.errors.is_empty(),
+        "deferred draw-list routes must validate: {:?}",
+        report.errors
+    );
+}
+
+#[test]
+fn deferred_gbuffer_formats_match_material_domain_mrt_contract() {
+    let plan = standard_runtime_frame(
+        StandardRuntimePipelineDesc::new(20, Extent2D::new(1280, 720), Extent2D::new(1280, 720))
+            .deferred(true)
+            .postfx(false)
+            .ui(false)
+            .debug_overlay(false),
+    );
+
+    let format_for = |id| {
+        plan.graph
+            .resources
+            .iter()
+            .find(|resource| resource.id == id)
+            .and_then(|resource| resource.format)
+            .expect("GBuffer resource must declare a format")
+    };
+
+    assert_eq!(format_for(RG_GBUFFER_ALBEDO), TextureFormat::Rgba8Unorm);
+    assert_eq!(format_for(RG_GBUFFER_NORMAL), TextureFormat::Rgba16Float);
+    assert_eq!(format_for(RG_GBUFFER_MATERIAL), TextureFormat::Rgba8Unorm);
+    assert_eq!(format_for(RG_GBUFFER_DEPTH), TextureFormat::Depth32Float);
+}
+
+#[test]
+fn deferred_runtime_separates_gbuffer_and_scene_depth_ownership() {
+    let plan = standard_runtime_frame(
+        StandardRuntimePipelineDesc::new(19, Extent2D::new(1280, 720), Extent2D::new(1280, 720))
+            .deferred(true)
+            .hdr_scene(true)
+            .postfx(true)
+            .ui(false)
+            .debug_overlay(false)
+            .draw_lists([crate::DrawListDesc::standard(
+                newengine_render_api::RenderDrawListKind::OpaqueForward,
+            )]),
+    );
+
+    assert!(
+        !plan
+            .graph
+            .passes
+            .iter()
+            .any(|pass| pass.kind == RenderGraphPassKind::DepthPrepass),
+        "deferred graph must not duplicate opaque depth outside the GBuffer"
+    );
+
+    let gbuffer = plan
+        .graph
+        .passes
+        .iter()
+        .find(|pass| pass.kind == RenderGraphPassKind::GBuffer)
+        .expect("deferred graph must contain GBuffer");
+    assert!(gbuffer.writes.iter().any(|write| {
+        write.resource == RG_GBUFFER_DEPTH
+            && write.usage == RenderGraphResourceUsage::DepthAttachment
+    }));
+    assert!(!gbuffer
+        .reads
+        .iter()
+        .any(|read| read.resource == RG_VIEWPORT_DEPTH));
+
+    let transparent = plan
+        .graph
+        .passes
+        .iter()
+        .find(|pass| pass.kind == RenderGraphPassKind::Transparent)
+        .expect("deferred graph must contain Transparent");
+    assert!(transparent.reads.iter().any(|read| {
+        read.resource == RG_GBUFFER_DEPTH && read.usage == RenderGraphResourceUsage::DepthAttachment
+    }));
+    assert!(!transparent
+        .reads
+        .iter()
+        .any(|read| read.resource == RG_VIEWPORT_DEPTH));
+
+    let postfx = plan
+        .graph
+        .passes
+        .iter()
+        .find(|pass| pass.kind == RenderGraphPassKind::PostFx)
+        .expect("deferred HDR graph must contain PostFx");
+    assert!(postfx.reads.iter().any(|read| {
+        read.resource == RG_GBUFFER_DEPTH && read.usage == RenderGraphResourceUsage::SampledTexture
+    }));
+    assert!(!postfx
+        .reads
+        .iter()
+        .any(|read| read.resource == RG_VIEWPORT_DEPTH));
+    assert!(postfx
+        .reads
+        .iter()
+        .any(|read| read.resource == RG_SCENE_HDR_COLOR));
+
+    newengine_render_api::compile_render_graph(&plan.graph)
+        .expect("deferred depth domains must have independent producers");
 }
 
 #[test]
@@ -399,4 +537,73 @@ fn hair_state_flows_through_csm_before_transparent() {
         .position(|id| *id == transparent.id)
         .unwrap();
     assert!(hair_pos < csm_pos && csm_pos < transparent_pos);
+}
+
+#[test]
+fn deferred_forward_overlay_consumes_forward_only_bucket_before_postfx() {
+    let plan = standard_runtime_frame(
+        StandardRuntimePipelineDesc::new(
+            91,
+            newengine_render_api::Extent2D::new(1280, 720),
+            newengine_render_api::Extent2D::new(1280, 720),
+        )
+        .viewport_is_surface(true)
+        .deferred(true)
+        .postfx(true)
+        .ui(false)
+        .debug_overlay(false),
+    );
+
+    let gbuffer = plan
+        .graph
+        .passes
+        .iter()
+        .position(|pass| pass.kind == newengine_render_api::RenderGraphPassKind::GBuffer)
+        .expect("deferred frame must contain GBuffer");
+    let lighting = plan
+        .graph
+        .passes
+        .iter()
+        .position(|pass| pass.kind == newengine_render_api::RenderGraphPassKind::DeferredLighting)
+        .expect("deferred frame must contain DeferredLighting");
+    let overlay = plan
+        .graph
+        .passes
+        .iter()
+        .position(|pass| pass.kind == newengine_render_api::RenderGraphPassKind::ForwardOpaque)
+        .expect("deferred frame must contain forward overlay for sky/view-model roles");
+    let transparent = plan
+        .graph
+        .passes
+        .iter()
+        .position(|pass| pass.kind == newengine_render_api::RenderGraphPassKind::Transparent)
+        .expect("transparent pass");
+    let postfx = plan
+        .graph
+        .passes
+        .iter()
+        .position(|pass| pass.kind == newengine_render_api::RenderGraphPassKind::PostFx)
+        .expect("postfx pass");
+
+    assert!(
+        gbuffer < lighting && lighting < overlay && overlay < transparent && transparent < postfx
+    );
+
+    let pass = &plan.graph.passes[overlay];
+    assert!(pass
+        .draw_lists
+        .contains(&newengine_render_api::RenderDrawListKind::OpaqueForward));
+    assert!(pass
+        .writes
+        .iter()
+        .any(|access| access.resource == crate::RG_SCENE_HDR_COLOR));
+    assert!(pass
+        .reads
+        .iter()
+        .any(|access| access.resource == crate::RG_GBUFFER_DEPTH
+            && access.usage == newengine_render_api::RenderGraphResourceUsage::DepthAttachment));
+    assert!(!pass
+        .writes
+        .iter()
+        .any(|access| access.resource == crate::RG_VIEWPORT_DEPTH));
 }

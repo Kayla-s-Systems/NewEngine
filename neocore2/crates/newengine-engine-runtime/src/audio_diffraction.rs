@@ -663,6 +663,10 @@ mod tests {
             _ => panic!("ray expected"),
         };
         let hit = PhysicsQueryHitDto {
+            subshape_id: 0,
+            hit_index: 0,
+            back_face: false,
+
             seq: query.seq,
             entity: obstacle.stable_u64(),
             position: [0.0; 3],

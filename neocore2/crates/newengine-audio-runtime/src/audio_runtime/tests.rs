@@ -42,7 +42,7 @@ mod tests {
 
     #[test]
     fn yscd_metadata_maps_to_audio_runtime_semantics() {
-        assert_eq!(audio_bus_from_yscd("sfx").unwrap(), AudioBus::Sfx);
+        assert_eq!(audio_route_from_yscd("project.test.route").unwrap(), AudioRouteId::new("project.test.route"));
         assert_eq!(
             sound_cue_spatial_policy_from_yscd("spatial").unwrap(),
             SoundCueSpatialPolicy::Spatial
@@ -367,7 +367,7 @@ mod tests {
                 uri: "shared/audio/test.wav".to_owned(),
                 source_duration: Some(Duration::from_secs(2)),
             },
-            bus: AudioBus::Sfx,
+            route: AudioRouteId::new("project.test.sfx"),
             gain: 1.0,
             speed: 2.0,
             looping: true,
@@ -387,6 +387,7 @@ mod tests {
             voice_budget: String::new(),
             priority: 0,
             paused: false,
+            render_start_sample: None,
             virtual_source_position: Duration::from_millis(250),
             virtual_since: Some(now - Duration::from_millis(500)),
         };
@@ -854,6 +855,38 @@ mod tests {
         .expect("semantic audio state")
     }
 
+    #[test]
+    fn provider_route_gain_is_opaque_and_does_not_invent_master_hierarchy() {
+        let mut state = voice_policy_test_state();
+        let parent = AudioRouteId::new("project.mix.output");
+        let child = AudioRouteId::new("project.mix.output.foley");
+        assert_eq!(state.route_gain(&parent), 1.0);
+        assert_eq!(state.route_gain(&child), 1.0);
+
+        let ack = state.set_route_gain(AudioRouteGainRequest {
+            route: parent.clone(),
+            gain: 0.5,
+        });
+        assert!(ack.accepted);
+        assert_eq!(state.route_gain(&parent), 0.5);
+        assert_eq!(
+            state.route_gain(&child),
+            1.0,
+            "native provider must not infer parent/child semantics from route text"
+        );
+    }
+
+    #[test]
+    fn provider_rejects_empty_route_gain_assignment() {
+        let mut state = voice_policy_test_state();
+        let ack = state.set_route_gain(AudioRouteGainRequest {
+            route: AudioRouteId::default(),
+            gain: 0.25,
+        });
+        assert!(!ack.accepted);
+        assert!(state.route_gains.is_empty());
+    }
+
     fn insert_policy_test_voice(
         state: &mut AudioRuntimeState,
         voice_id: u64,
@@ -873,7 +906,7 @@ mod tests {
                     uri: format!("shared/audio/test/{voice_id}.wav"),
                     source_duration: Some(Duration::from_secs(10)),
                 },
-                bus: AudioBus::Sfx,
+                route: AudioRouteId::new("project.test.sfx"),
                 gain: 1.0,
                 speed: 1.0,
                 looping: false,
@@ -895,6 +928,7 @@ mod tests {
                 voice_budget: budget.to_owned(),
                 priority,
                 paused: false,
+                render_start_sample: None,
                 virtual_source_position: Duration::ZERO,
                 virtual_since: Some(Instant::now()),
             },
@@ -1116,7 +1150,7 @@ mod tests {
                 buffer: AudioStreamBufferConfig::default(),
                 source_duration: Some(Duration::from_secs(2)),
             },
-            bus: AudioBus::Ambience,
+            route: AudioRouteId::new("project.test.ambience"),
             gain: 1.0,
             speed: 1.0,
             looping,
@@ -1136,6 +1170,7 @@ mod tests {
             voice_budget: String::new(),
             priority: 0,
             paused: false,
+            render_start_sample: None,
             virtual_source_position: Duration::from_millis(1_750),
             virtual_since: Some(now - Duration::from_millis(500)),
         }
@@ -1210,18 +1245,29 @@ mod tests {
     fn physical_stream_demotion_preserves_absolute_timeline_and_keeps_logical_voice() {
         let assets = AssetServiceClient::new(newengine_plugin_host::default_host_api());
         let mut state = AudioRuntimeState::open_default(assets).expect("audio state");
-        let (player, mut output) = Player::new();
-        player.append(SineWave::new(440.0).take_duration(Duration::from_secs(1)));
+        let (graph, mut output) = native_block_render_graph(
+            ChannelCount::new(1).unwrap(),
+            SampleRate::new(48_000).unwrap(),
+        );
+        let render = graph
+            .add_source(
+                SineWave::new(440.0).take_duration(Duration::from_secs(1)),
+                1.0,
+                1.0,
+                false,
+                Duration::ZERO,
+            )
+            .expect("block voice");
         for _ in 0..8_000 {
             let _ = output.next();
         }
-        let elapsed = player.get_pos();
+        let elapsed = render.get_pos();
         assert!(elapsed > Duration::from_millis(5));
 
         let now = Instant::now();
         let mut voice = virtual_test_stream(now, true);
         voice.control = Some(VoiceControl::Flat {
-            player,
+            render,
             spectral: None,
             environment: None,
             late_binding: None,

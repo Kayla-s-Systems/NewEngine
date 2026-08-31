@@ -4,9 +4,10 @@ use newengine_ecs::World;
 mod types;
 
 pub use types::{
-    Health, HitscanWeaponTuning, Interactable, InteractionEvent, InteractionEventBus,
-    PendingHitscan, PendingInteraction, PlayerInteractionTuning, PlayerWeaponState,
-    WeaponAttackKind, WeaponEvent, WeaponEventBus, WeaponEventKind, WeaponObstructionState,
+    BallisticShotProfile, Health, HitscanWeaponTuning, Interactable, InteractionEvent,
+    InteractionEventBus, PendingHitscan, PendingInteraction, PlayerInteractionTuning,
+    PlayerWeaponState, WeaponAccuracyModifiers, WeaponAccuracyState, WeaponAttackKind, WeaponFireControllerState, WeaponEvent,
+    WeaponEventBus, WeaponEventKind, WeaponObstructionState,
 };
 
 pub fn drain_weapon_events(world: &mut World) -> Vec<WeaponEvent> {

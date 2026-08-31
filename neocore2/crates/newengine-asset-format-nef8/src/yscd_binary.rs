@@ -60,7 +60,9 @@ impl Default for YscdLayerDescriptor {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct YscdCueDescriptor {
-    pub bus: String,
+    /// Opaque logical mix route. Legacy `bus` is accepted only at the asset-loader boundary.
+    #[serde(alias = "bus")]
+    pub route: String,
     pub looping: bool,
     pub concurrency_group: String,
     pub concurrency_limit: usize,
@@ -81,7 +83,7 @@ pub struct YscdCueDescriptor {
 impl Default for YscdCueDescriptor {
     fn default() -> Self {
         Self {
-            bus: "sfx".to_owned(),
+            route: String::new(),
             looping: false,
             concurrency_group: String::new(),
             concurrency_limit: 1,
@@ -628,7 +630,7 @@ mod tests {
                 name: "dirt_run".to_owned(),
                 stable_hash: newengine_assets_api::stable_hash_from_text("dirt_run"),
                 descriptor: YscdCueDescriptor {
-                    bus: "sfx".to_owned(),
+                    route: "project.world.foley".to_owned(),
                     concurrency_group: "project.footsteps".to_owned(),
                     concurrency_limit: 4,
                     concurrency_scope: "object".to_owned(),
@@ -664,7 +666,7 @@ mod tests {
         let encoded = encode_yscd_binary_body(&dictionary).expect("encode YSCD");
         let decoded = decode_yscd_binary_body(&encoded).expect("decode encoded YSCD");
         let cue = decoded.cue("dirt_run").expect("cue");
-        assert_eq!(cue.descriptor.bus, "sfx");
+        assert_eq!(cue.descriptor.route, "project.world.foley");
         assert_eq!(cue.descriptor.concurrency_group, "project.footsteps");
         assert_eq!(cue.descriptor.concurrency_limit, 4);
         assert_eq!(cue.descriptor.concurrency_scope, "object");

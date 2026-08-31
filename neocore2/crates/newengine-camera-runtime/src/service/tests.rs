@@ -387,14 +387,34 @@ fn third_person_sync_applies_spring_arm_collision_without_mutating_player() {
 }
 
 #[test]
-fn spring_arm_collision_retracts_immediately_and_releases_smoothly() {
-    let blocked = smooth_collision_release(4.0, 1.5, 1.0 / 60.0);
+fn spring_arm_collision_retracts_immediately_and_releases_with_stateful_damping() {
+    let (blocked, blocked_velocity) =
+        step_collision_distance_response(4.0, 2.0, 1.5, 1.0 / 60.0, 1.6, 0.8, 0.005);
     assert!((blocked - 1.5).abs() <= f32::EPSILON);
-    let seam_noise = smooth_collision_release(1.5, 1.494, 1.0 / 144.0);
+    assert!(blocked_velocity.abs() <= f32::EPSILON);
+
+    let (seam_noise, seam_velocity) =
+        step_collision_distance_response(1.5, 0.4, 1.496, 1.0 / 144.0, 1.6, 0.8, 0.005);
     assert!((seam_noise - 1.5).abs() <= f32::EPSILON);
-    let released = smooth_collision_release(1.5, 4.0, 1.0 / 60.0);
+    assert!(seam_velocity.abs() <= f32::EPSILON);
+
+    let (released, velocity) =
+        step_collision_distance_response(1.5, 0.0, 4.0, 1.0 / 60.0, 1.6, 0.8, 0.005);
     assert!(released > 1.5);
     assert!(released < 4.0);
+    assert!(velocity > 0.0);
+
+    let mut distance = released;
+    let mut velocity = velocity;
+    for _ in 0..240 {
+        (distance, velocity) =
+            step_collision_distance_response(distance, velocity, 4.0, 1.0 / 60.0, 1.6, 0.8, 0.005);
+        assert!(
+            distance <= 4.0 + 1.0e-6,
+            "collision release must never overshoot"
+        );
+    }
+    assert!((distance - 4.0).abs() < 0.005);
 }
 
 #[test]
@@ -500,6 +520,63 @@ fn orbit_look_before_sync_inherits_view_at_vertical_pole() {
         .unwrap();
     assert!((wrap_pi(after_sync.orbit_yaw - expected_yaw)).abs() < 1.0e-5);
     assert!((after_sync.orbit_pitch - pitch).abs() < 1.0e-5);
+}
+
+#[test]
+fn orbit_look_consumes_authored_sensitivity_and_asymmetric_pitch_limits() {
+    let mut world = World::new();
+    let player = world.spawn();
+    let camera = world.spawn();
+    let _ = world.insert(player, Transform::default());
+    let _ = world.insert(player, CharacterMotor::default());
+    let _ = world.insert(
+        camera,
+        GameplayThirdPersonOrbitRunner::default().controller(player),
+    );
+    let _ = world.insert(
+        camera,
+        CameraRigComp(CameraRig {
+            position: Vec3::new(0.0, 0.0, 4.8),
+            rotation: Quat::IDENTITY,
+        }),
+    );
+    let _ = world.insert(camera, Transform::default());
+    let config = CameraRuntimeServiceConfig {
+        runner: GameplayCameraRunnerKind::ThirdPersonOrbit,
+        third_person_orbit_look_sensitivity_radians_per_pixel: 0.01,
+        third_person_orbit_pitch_min_radians: -0.30,
+        third_person_orbit_pitch_max_radians: 0.20,
+        ..CameraRuntimeServiceConfig::default()
+    };
+
+    assert!(CameraRuntimeService::apply_gameplay_camera_orbit_look(
+        &mut world,
+        camera,
+        player,
+        config,
+        Vec2::new(10.0, 100.0),
+        true,
+    ));
+    let state = world
+        .get::<GameplayThirdPersonCameraState>(camera)
+        .copied()
+        .unwrap();
+    assert!((state.orbit_yaw - 0.10).abs() < 1.0e-5);
+    assert!((state.orbit_pitch - 0.20).abs() < 1.0e-5);
+
+    assert!(CameraRuntimeService::apply_gameplay_camera_orbit_look(
+        &mut world,
+        camera,
+        player,
+        config,
+        Vec2::new(0.0, -100.0),
+        true,
+    ));
+    let state = world
+        .get::<GameplayThirdPersonCameraState>(camera)
+        .copied()
+        .unwrap();
+    assert!((state.orbit_pitch + 0.30).abs() < 1.0e-5);
 }
 
 #[test]

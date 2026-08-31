@@ -48,7 +48,7 @@ pub struct CharacterCompileRequest {
     /// Build-time completeness contract: every prefix must match at least one imported LOD0 mesh.
     pub required_mesh_prefixes: Vec<String>,
     /// Mesh prefixes whose native corrective/helper skin influences must be collapsed onto the
-    /// canonical deform skeleton. TLOU2 helper/twist branches are constraint-driven in the source
+    /// canonical deform skeleton. NorthStar helper/twist branches are constraint-driven in the source
     /// runtime; leaving those joints at bind local while sparse locomotion animates the deform
     /// chain causes neighbouring vertices to diverge into visible rubber spikes.
     pub corrective_skin_collapse_prefixes: Vec<String>,
@@ -87,7 +87,7 @@ pub struct SkinFallbackReport {
     pub target_joints: Vec<String>,
 }
 
-/// Offline extraction of rigid pieces authored as joints inside one skinned TLOU2 PC geometry.
+/// Offline extraction of rigid pieces authored as joints inside one skinned NorthStar PC geometry.
 /// This is used for weapon debris such as the five `rifle-shell-group` casing variants: source
 /// skinning is consumed by the importer and runtime receives ordinary rigid YDD entries.
 #[derive(Clone, Debug)]
@@ -880,7 +880,7 @@ pub fn compile_character(
     let document = YddBinaryDocument {
         entries: vec![YddBinaryEntry {
             name: request.name.clone(),
-            source_path: format!("northstar.tlou2.pc://{source_path}"),
+            source_path: format!("northstar.pc://{source_path}"),
             properties_ref: None,
             bounds_min,
             bounds_max,
@@ -1204,7 +1204,7 @@ pub fn compile_rigid_joint_variants(
         entries.push(YddBinaryEntry {
             name: requested_name.to_owned(),
             source_path: format!(
-                "northstar.tlou2.pc://{}#joint={requested_name}",
+                "northstar.pc://{}#joint={requested_name}",
                 request
                     .package_path
                     .file_name()
@@ -1552,7 +1552,7 @@ pub(crate) fn encode_nef8(
 fn encode_skeleton_xml(skeleton: &DecodedSkeleton) -> Vec<u8> {
     let mut out = String::from("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<Metadata>\n");
     out.push_str(&format!(
-        "  <Skeleton source_format=\"northstar.tlou2.pc.joint_hierarchy.v1\" name=\"{}\">\n",
+        "  <Skeleton source_format=\"northstar.northstar.pc.joint_hierarchy.v1\" name=\"{}\">\n",
         xml_escape(&skeleton.name)
     ));
     for joint in &skeleton.joints {

@@ -98,6 +98,16 @@ pub struct PhysicsQueryHitDto {
     pub position: PhysicsVec3,
     pub normal: PhysicsVec3,
     pub distance: f32,
+    /// Stable sub-shape identifier reported by the physics provider when available.
+    #[serde(default)]
+    pub subshape_id: u32,
+    /// Ordered index within one all-hit query. Ordinary closest-hit rays use zero.
+    #[serde(default)]
+    pub hit_index: u16,
+    /// True when the ray reached the surface from its geometric back face. This is required for
+    /// deterministic entry/exit pairing and is provider-derived, not guessed by gameplay.
+    #[serde(default)]
+    pub back_face: bool,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]

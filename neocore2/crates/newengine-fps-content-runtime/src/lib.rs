@@ -21,14 +21,19 @@ use newengine_gameplay_script_runtime::{
 
 use newengine_item_assets_runtime::{
     compile_authored_item_package, hydrate_item_package_from_ytyp, install_compiled_item_package,
-    AuthoredItemDefinition, AuthoredItemPackage,
+    AuthoredItemPackage,
 };
 
+// Test fixture identities stay local to test-support. Production runtime has no concrete
+// weapon/ammo/loadout identity constants.
 #[cfg(any(test, feature = "test-support"))]
-pub use newengine_game_data::{
-    DEFAULT_FPS_LOADOUT_NAME, DEFAULT_MEDKIT_ITEM_NAME, DEFAULT_RIFLE_AMMO_NAME,
-    DEFAULT_RIFLE_ITEM_NAME,
-};
+pub const DEFAULT_FPS_LOADOUT_NAME: &str = "loadout.fps.default";
+#[cfg(any(test, feature = "test-support"))]
+pub const DEFAULT_MEDKIT_ITEM_NAME: &str = "consumable.medkit.standard";
+#[cfg(any(test, feature = "test-support"))]
+pub const DEFAULT_RIFLE_AMMO_NAME: &str = "ammo.rifle.standard";
+#[cfg(any(test, feature = "test-support"))]
+pub const DEFAULT_RIFLE_ITEM_NAME: &str = "weapon.rifle.standard";
 
 #[cfg(any(test, feature = "test-support"))]
 #[inline]
@@ -82,7 +87,6 @@ impl FpsContentProvider {
         policy.validate()?;
         let mut authored: AuthoredItemPackage = serde_json::from_value(policy.content.clone())
             .map_err(|error| format!("Lua FPS item package decode failed: {error}"))?;
-        ensure_shared_weapon_baseline(&mut authored);
         let hydrated = hydrate_item_package_from_ytyp(&mut authored)
             .map_err(|error| format!("FPS item YTYP hydration failed: {error}"))?;
         let compiled = compile_authored_item_package(&authored).map_err(|error| {
@@ -97,28 +101,6 @@ impl FpsContentProvider {
         validate_required_content(&policy, &compiled)?;
         Ok((policy, compiled))
     }
-}
-
-fn ensure_shared_weapon_baseline(package: &mut AuthoredItemPackage) {
-    use newengine_game_data::{SHARED_UNARMED_DEFINITION_REF, SHARED_UNARMED_ITEM_NAME};
-
-    if package.items.iter().any(|item| {
-        item.id
-            .trim()
-            .eq_ignore_ascii_case(SHARED_UNARMED_ITEM_NAME)
-    }) {
-        return;
-    }
-    package.items.push(AuthoredItemDefinition {
-        id: SHARED_UNARMED_ITEM_NAME.to_owned(),
-        definition_ref: SHARED_UNARMED_DEFINITION_REF.to_owned(),
-        display_name: "Unarmed".to_owned(),
-        description: "Shared baseline unarmed weapon context.".to_owned(),
-        kind: "weapon".to_owned(),
-        max_stack: 1,
-        unit_weight: 0.0,
-        ..AuthoredItemDefinition::default()
-    });
 }
 
 impl GameplayContentProvider for FpsContentProvider {

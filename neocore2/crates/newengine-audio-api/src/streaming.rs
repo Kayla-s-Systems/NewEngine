@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::{
-    AudioAcousticState, AudioAttenuationSettings, AudioBus, AudioClipRef, AudioConcurrencyScope,
+    AudioAcousticState, AudioAttenuationSettings, AudioClipRef, AudioConcurrencyScope, AudioRouteId,
     AudioEnvironmentState, AudioSpatialParams, AudioVoiceStealRule,
 };
 
@@ -57,7 +57,7 @@ impl AudioStreamBufferConfig {
 pub struct AudioStreamPlayRequest {
     pub version: u32,
     pub clip: AudioClipRef,
-    pub bus: AudioBus,
+    pub route: AudioRouteId,
     pub gain: f32,
     pub looping: bool,
     /// Optional initial timeline position for resumable music/ambience streams.
@@ -75,6 +75,9 @@ pub struct AudioStreamPlayRequest {
     /// Opaque owner/object identity used by object-scoped concurrency.
     pub scope_id: Option<u64>,
     pub priority: i32,
+    /// Optional absolute provider render sample for exact physical onset.
+    #[serde(default)]
+    pub render_start_sample: Option<u64>,
 }
 
 impl Default for AudioStreamPlayRequest {
@@ -82,7 +85,7 @@ impl Default for AudioStreamPlayRequest {
         Self {
             version: 1,
             clip: AudioClipRef::new(String::new()),
-            bus: AudioBus::Ambience,
+            route: AudioRouteId::default(),
             gain: 1.0,
             looping: true,
             start_seconds: 0.0,
@@ -98,6 +101,7 @@ impl Default for AudioStreamPlayRequest {
             voice_budget: String::new(),
             scope_id: None,
             priority: 32,
+            render_start_sample: None,
         }
     }
 }
@@ -112,6 +116,7 @@ impl AudioStreamPlayRequest {
 
     pub fn sanitized(mut self) -> Self {
         self.clip.uri = self.clip.uri.trim().replace('\\', "/");
+        self.route.0 = self.route.0.trim().to_owned();
         while self.clip.uri.starts_with('/') {
             self.clip.uri.remove(0);
         }
@@ -154,6 +159,8 @@ pub struct AudioAmbienceBed {
     pub bed_id: String,
     pub enabled: bool,
     pub stream: AudioClipRef,
+    /// Project-authored logical mix route. Empty means ungrouped/unity.
+    pub route: AudioRouteId,
     pub scope: AudioAmbienceScope,
     pub zones: Vec<String>,
     pub gain: f32,
@@ -172,6 +179,7 @@ impl Default for AudioAmbienceBed {
             bed_id: "ambience.default".to_owned(),
             enabled: true,
             stream: AudioClipRef::new(String::new()),
+            route: AudioRouteId::default(),
             scope: AudioAmbienceScope::Global,
             zones: Vec::new(),
             gain: 1.0,
@@ -202,6 +210,7 @@ impl AudioAmbienceBed {
             self.bed_id = "ambience.default".to_owned();
         }
         self.stream.uri = self.stream.uri.trim().replace('\\', "/");
+        self.route.0 = self.route.0.trim().to_owned();
         while self.stream.uri.starts_with('/') {
             self.stream.uri.remove(0);
         }

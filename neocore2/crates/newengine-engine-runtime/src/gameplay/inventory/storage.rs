@@ -16,6 +16,7 @@ pub struct PlayerInventory {
     pub equipped: BTreeMap<EquipmentSlot, ItemInstanceId>,
     pub active_slot: Option<EquipmentSlot>,
     pub weapon_states: BTreeMap<ItemInstanceId, PlayerWeaponState>,
+    pub weapon_components: BTreeMap<ItemInstanceId, BTreeMap<String, WeaponComponentInstance>>,
     loadout_initialized: bool,
     pub(super) next_instance_serial: u64,
 }
@@ -29,6 +30,7 @@ impl Default for PlayerInventory {
             equipped: BTreeMap::new(),
             active_slot: None,
             weapon_states: BTreeMap::new(),
+            weapon_components: BTreeMap::new(),
             loadout_initialized: false,
             next_instance_serial: 1,
         }
@@ -147,6 +149,15 @@ impl PlayerInventory {
                 quantity,
                 condition: 1.0,
             });
+            if definition.kind == ItemKind::Weapon && !definition.weapon_components.default_installed.is_empty() {
+                let installed = definition.weapon_components.default_installed.iter()
+                    .map(|(slot, component_id)| (slot.clone(), WeaponComponentInstance {
+                        component_id: component_id.clone(),
+                        active: true,
+                    }))
+                    .collect();
+                self.weapon_components.insert(instance_id, installed);
+            }
             touched.push(instance_id);
             remaining -= quantity;
         }
@@ -179,6 +190,7 @@ impl PlayerInventory {
             if self.entries[index].quantity == 0 {
                 let removed = self.entries.remove(index);
                 self.weapon_states.remove(&removed.instance_id);
+                self.weapon_components.remove(&removed.instance_id);
                 self.equipped
                     .retain(|_, instance| *instance != removed.instance_id);
                 if self

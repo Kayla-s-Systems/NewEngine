@@ -12,7 +12,7 @@ struct WeaponRecoilRuntime {
 
 #[inline]
 fn critically_damped_recoil_step(angle: f32, speed: f32, recovery_hz: f32, dt: f32) -> (f32, f32) {
-    // TLOU2 exposes both a recoil angle and a recoil-tracker speed. Model that contract as a
+    // NorthStar exposes both a recoil angle and a recoil-tracker speed. Model that contract as a
     // stable critically damped second-order tracker rather than subtracting a fixed exponential
     // fraction of the angle every frame. The analytic form is stable even on a long frame.
     let omega = recovery_hz.max(0.05) * 2.2;
@@ -25,6 +25,60 @@ fn critically_damped_recoil_step(angle: f32, speed: f32, recovery_hz: f32, dt: f
     } else {
         (0.0, 0.0)
     }
+}
+
+pub(super) fn recover_weapon_accuracy(world: &mut World, player: EntityId, dt: f32) {
+    let Some(binding) = active_equipped_weapon_binding(world, player) else {
+        let _ = world.remove::<WeaponAccuracyState>(player);
+        return;
+    };
+    let Some(firearm) = binding.weapon.firearm else {
+        let _ = world.remove::<WeaponAccuracyState>(player);
+        return;
+    };
+    let tuning = firearm.tuning.sanitized();
+    let mut state = world
+        .get::<WeaponAccuracyState>(player)
+        .copied()
+        .filter(|state| state.weapon_instance_id == binding.instance_id)
+        .unwrap_or_else(|| WeaponAccuracyState::new(binding.instance_id));
+    state.time_since_shot = (state.time_since_shot + dt.max(0.0)).min(60.0);
+    if state.time_since_shot >= tuning.accuracy_recovery_delay_seconds && state.bloom_radians > 0.0 {
+        let omega = tuning.accuracy_recovery_hz.max(0.05) * 2.0;
+        let c = state.recovery_velocity + omega * state.bloom_radians;
+        let decay = (-omega * dt.max(0.0)).exp();
+        state.bloom_radians = ((state.bloom_radians + c * dt.max(0.0)) * decay)
+            .clamp(0.0, tuning.recoil_accuracy_max_radians);
+        state.recovery_velocity = (state.recovery_velocity - omega * c * dt.max(0.0)) * decay;
+        if state.bloom_radians < 1.0e-5 && state.recovery_velocity.abs() < 1.0e-4 {
+            state.bloom_radians = 0.0;
+            state.recovery_velocity = 0.0;
+            state.shot_count = 0;
+        }
+    }
+    let _ = world.insert(player, state);
+}
+
+pub(super) fn kick_weapon_accuracy(
+    world: &mut World,
+    player: EntityId,
+    weapon_instance_id: ItemInstanceId,
+    tuning: HitscanWeaponTuning,
+) {
+    let tuning = tuning.sanitized();
+    let mut state = world
+        .get::<WeaponAccuracyState>(player)
+        .copied()
+        .filter(|state| state.weapon_instance_id == weapon_instance_id)
+        .unwrap_or_else(|| WeaponAccuracyState::new(weapon_instance_id));
+    state.bloom_radians = (state.bloom_radians + tuning.recoil_accuracy_per_shot_radians)
+        .clamp(0.0, tuning.recoil_accuracy_max_radians);
+    // Positive velocity delays the initial recovery and gives automatic fire a genuine accuracy
+    // state instead of coupling dispersion to camera recoil.
+    state.recovery_velocity += tuning.recoil_accuracy_per_shot_radians * tuning.accuracy_recovery_hz * 0.35;
+    state.shot_count = state.shot_count.saturating_add(1);
+    state.time_since_shot = 0.0;
+    let _ = world.insert(player, state);
 }
 
 pub(super) fn recover_weapon_recoil(world: &mut World, player: EntityId, dt: f32) {
@@ -66,6 +120,112 @@ pub(super) fn recover_weapon_recoil(world: &mut World, player: EntityId, dt: f32
     }
 }
 
+pub(super) fn fire_controller_wants_shot(
+    world: &mut World,
+    player: EntityId,
+    weapon_instance_id: ItemInstanceId,
+    pattern: FiringPatternDefinition,
+    actions: FpsActionFrame,
+    dt: f32,
+) -> bool {
+    let pattern = pattern.sanitized();
+    let mut state = world
+        .get::<WeaponFireControllerState>(player)
+        .copied()
+        .filter(|state| state.weapon_instance_id == weapon_instance_id)
+        .unwrap_or_else(|| WeaponFireControllerState::new(weapon_instance_id));
+    state.pattern_cooldown_seconds = (state.pattern_cooldown_seconds - dt.max(0.0)).max(0.0);
+    let release_edge = state.trigger_was_held && !actions.fire_primary_held;
+    if actions.fire_primary_held {
+        state.activation_seconds = (state.activation_seconds + dt.max(0.0)).min(60.0);
+    } else if !matches!(pattern.kind, FiringPatternKind::Charge) {
+        state.activation_seconds = 0.0;
+    }
+
+    if matches!(pattern.kind, FiringPatternKind::Burst | FiringPatternKind::ScriptedSequence)
+        && actions.fire_primary_pressed
+        && state.burst_shots_remaining == 0
+        && state.pattern_cooldown_seconds <= 0.0
+    {
+        state.bursts_remaining = pattern.bursts_min;
+        state.burst_shots_remaining = pattern.shots_per_burst_min;
+    }
+
+    let wants = match pattern.kind {
+        FiringPatternKind::Semi | FiringPatternKind::Pump | FiringPatternKind::BoltAction => {
+            actions.fire_primary_pressed && state.pattern_cooldown_seconds <= 0.0
+        }
+        FiringPatternKind::Automatic => {
+            actions.fire_primary_held
+                && state.activation_seconds >= pattern.delay_before_firing
+                && state.pattern_cooldown_seconds <= 0.0
+        }
+        FiringPatternKind::Burst | FiringPatternKind::ScriptedSequence => {
+            state.burst_shots_remaining > 0 && state.pattern_cooldown_seconds <= 0.0
+        }
+        FiringPatternKind::Charge => {
+            release_edge && state.activation_seconds >= pattern.delay_before_firing
+        }
+        FiringPatternKind::SpinUp => {
+            actions.fire_primary_held
+                && state.activation_seconds >= pattern.delay_before_firing
+                && state.pattern_cooldown_seconds <= 0.0
+        }
+        FiringPatternKind::Binary => {
+            (actions.fire_primary_pressed || release_edge) && state.pattern_cooldown_seconds <= 0.0
+        }
+    };
+    if release_edge && matches!(pattern.kind, FiringPatternKind::Charge) {
+        state.activation_seconds = 0.0;
+    }
+    state.trigger_was_held = actions.fire_primary_held;
+    let _ = world.insert(player, state);
+    wants
+}
+
+pub(super) fn fire_controller_commit_shot(
+    world: &mut World,
+    player: EntityId,
+    weapon_instance_id: ItemInstanceId,
+    pattern: FiringPatternDefinition,
+) {
+    let pattern = pattern.sanitized();
+    let mut state = world
+        .get::<WeaponFireControllerState>(player)
+        .copied()
+        .filter(|state| state.weapon_instance_id == weapon_instance_id)
+        .unwrap_or_else(|| WeaponFireControllerState::new(weapon_instance_id));
+    match pattern.kind {
+        FiringPatternKind::Burst | FiringPatternKind::ScriptedSequence => {
+            state.burst_shots_remaining = state.burst_shots_remaining.saturating_sub(1);
+            if state.burst_shots_remaining == 0 {
+                state.bursts_remaining = state.bursts_remaining.saturating_sub(1);
+                if state.bursts_remaining > 0 {
+                    state.burst_shots_remaining = pattern.shots_per_burst_min;
+                    state.pattern_cooldown_seconds = pattern.time_between_bursts;
+                } else {
+                    state.pattern_cooldown_seconds = pattern.burst_cooldown;
+                }
+            }
+        }
+        FiringPatternKind::Pump | FiringPatternKind::BoltAction => {
+            state.pattern_cooldown_seconds = pattern
+                .burst_cooldown
+                .max(pattern.time_between_bursts)
+                .max(pattern.time_between_shots);
+        }
+        FiringPatternKind::Binary => {
+            state.pattern_cooldown_seconds = pattern.time_between_shots;
+        }
+        FiringPatternKind::Charge => {
+            state.activation_seconds = 0.0;
+            state.pattern_cooldown_seconds = pattern.burst_cooldown;
+        }
+        FiringPatternKind::Semi | FiringPatternKind::Automatic | FiringPatternKind::SpinUp => {}
+    }
+    let _ = world.insert(player, state);
+}
+
 pub fn step_player_combat(world: &mut World, dt: f32, fixed_tick: u64) {
     let gameplay_policy = world
         .resource::<FpsGameplayPolicySnapshot>()
@@ -88,6 +248,7 @@ pub fn step_player_combat(world: &mut World, dt: f32, fixed_tick: u64) {
         // the old demo rifle state when the player has no equipped weapon.
         sync_equipped_weapon_runtime(world, player);
         recover_weapon_recoil(world, player, dt);
+        recover_weapon_accuracy(world, player, dt);
         let actions = world
             .get::<PlayerCommandFrame>(player)
             .map(|commands| FpsActionFrame::from_commands(&commands.actions))
@@ -166,10 +327,15 @@ pub fn step_player_combat(world: &mut World, dt: f32, fixed_tick: u64) {
                     ));
                 }
 
-                let trigger_active = match firearm.fire_mode {
-                    WeaponFireMode::SemiAuto => actions.fire_primary_pressed,
-                    WeaponFireMode::Automatic => actions.fire_primary_held,
-                };
+                let firing_pattern = firearm.firing_pattern.sanitized();
+                let trigger_active = fire_controller_wants_shot(
+                    world,
+                    player,
+                    binding.instance_id,
+                    firing_pattern,
+                    actions,
+                    dt,
+                );
 
                 let mut fire_request = None;
                 if capabilities.fire
@@ -191,21 +357,60 @@ pub fn step_player_combat(world: &mut World, dt: f32, fixed_tick: u64) {
                         }
                     } else {
                         let shot_sequence = state.shot_sequence.wrapping_add(1);
-                        if let Some((origin, direction)) = shot_origin_and_direction(
-                            world,
-                            player,
-                            tuning,
-                            state.aiming,
-                            shot_sequence,
+                        let ammo_profile = world
+                            .resource::<ItemCatalog>()
+                            .and_then(|catalog| catalog.get(firearm.ammo_item))
+                            .and_then(|definition| definition.ammo_profile.clone());
+                        if let (Some(ammo_profile), Some((origin, direction))) = (
+                            ammo_profile,
+                            shot_origin_and_direction(
+                                world,
+                                player,
+                                tuning,
+                                state.aiming,
+                                shot_sequence,
+                            ),
                         ) {
-                            // A shot transaction only commits after an authored physical muzzle
-                            // exists. Missing presentation never consumes ammo and never falls back
-                            // to a camera/body origin.
+                            // A shot transaction commits only when both authored physical muzzle
+                            // and authored ammo ballistics are present. Missing data never consumes
+                            // ammo and never falls back to engine defaults.
                             state.ammo_in_magazine -= 1;
                             state.shot_sequence = shot_sequence;
-                            state.cooldown_remaining = tuning.fire_interval;
+                            state.cooldown_remaining = firing_pattern.time_between_shots;
                             state.empty_latched = false;
-                            fire_request = Some((shot_sequence, state.aiming, origin, direction));
+                            let ammo_profile = ammo_profile.sanitized();
+                            let component_modifiers =
+                                active_equipped_weapon_component_modifiers(world, player);
+                            let effective_velocity = ammo_profile.muzzle_velocity_mps
+                                * component_modifiers.muzzle_velocity_multiplier;
+                            fire_request = Some((
+                                shot_sequence,
+                                state.aiming,
+                                origin,
+                                direction,
+                                BallisticShotProfile {
+                                    projectile_mass_kg: ammo_profile.projectile_mass_kg,
+                                    muzzle_velocity_mps: effective_velocity,
+                                    momentum_ns: ammo_profile.projectile_mass_kg * effective_velocity,
+                                    remaining_penetration_energy_j: ammo_profile.penetration_energy_j
+                                        * component_modifiers.penetration_multiplier,
+                                    max_penetration_m: ammo_profile.max_penetration_m,
+                                    damage_multiplier: ammo_profile.damage_multiplier
+                                        * component_modifiers.damage_multiplier,
+                                    impulse_multiplier: ammo_profile.impulse_multiplier,
+                                    falloff_start_m: ammo_profile.falloff_start_m,
+                                    falloff_end_m: ammo_profile.falloff_end_m,
+                                    falloff_min_multiplier: ammo_profile.falloff_min_multiplier,
+                                    component_falloff_multiplier: component_modifiers.falloff_multiplier,
+                                }
+                                .sanitized(),
+                            ));
+                            fire_controller_commit_shot(
+                                world,
+                                player,
+                                binding.instance_id,
+                                firing_pattern,
+                            );
                             events.push(weapon_event(
                                 WeaponEventKind::Fired,
                                 player,
@@ -214,7 +419,7 @@ pub fn step_player_combat(world: &mut World, dt: f32, fixed_tick: u64) {
                             ));
                         } else {
                             newengine_ulog_api::ulog::warn!(
-                                "weapon fire rejected: shooter={} instance={} reason=physical-muzzle-unavailable",
+                                "weapon fire rejected: shooter={} instance={} reason=authored-shot-prerequisite-unavailable (muzzle-or-ammo)",
                                 player.stable_u64(),
                                 binding.instance_id.0,
                             );
@@ -227,7 +432,7 @@ pub fn step_player_combat(world: &mut World, dt: f32, fixed_tick: u64) {
                 let _ = world.insert(player, state);
                 persist_equipped_weapon_state(world, player);
 
-                if let Some((shot_sequence, aiming, origin, direction)) = fire_request {
+                if let Some((shot_sequence, aiming, origin, direction, ballistics)) = fire_request {
                     let pending = PendingHitscan {
                         query_seq: hitscan_query_seq(player, shot_sequence),
                         weapon_instance_id: binding.instance_id,
@@ -237,6 +442,15 @@ pub fn step_player_combat(world: &mut World, dt: f32, fixed_tick: u64) {
                         direction,
                         range: tuning.range,
                         damage: tuning.damage * combat_policy.damage_multiplier,
+                        ballistics,
+                        bounce_count: 0,
+                        max_bounces: if tuning.ricochet_enabled {
+                            tuning.ricochet_max_bounces
+                        } else {
+                            0
+                        },
+                        ricochet_grazing_dot: tuning.ricochet_grazing_dot,
+                        ricochet_energy_retention: tuning.ricochet_energy_retention,
                     };
                     let _ = world.insert(player, pending);
                     newengine_ulog_api::ulog::info!(
@@ -256,6 +470,7 @@ pub fn step_player_combat(world: &mut World, dt: f32, fixed_tick: u64) {
                         aiming,
                         shot_sequence,
                     );
+                    kick_weapon_accuracy(world, player, binding.instance_id, tuning);
                 }
             } else if let Some(melee) = binding.weapon.melee {
                 let melee = melee.sanitized();
@@ -287,6 +502,24 @@ pub fn step_player_combat(world: &mut World, dt: f32, fixed_tick: u64) {
                             direction,
                             range: melee.range,
                             damage: melee.damage * combat_policy.damage_multiplier,
+                            ballistics: BallisticShotProfile {
+                                projectile_mass_kg: 0.0,
+                                muzzle_velocity_mps: 0.0,
+                                momentum_ns: 0.0,
+                                remaining_penetration_energy_j: 0.0,
+                                max_penetration_m: 0.0,
+                                damage_multiplier: 1.0,
+                                impulse_multiplier: 0.0,
+                                falloff_start_m: 0.0,
+                                falloff_end_m: melee.range.max(0.001),
+                                falloff_min_multiplier: 1.0,
+                                component_falloff_multiplier: 1.0,
+                            }
+                            .sanitized(),
+                            bounce_count: 0,
+                            max_bounces: 0,
+                            ricochet_grazing_dot: 0.0,
+                            ricochet_energy_retention: 0.0,
                         };
                         let _ = world.insert(player, pending);
                         events.push(weapon_event(
@@ -360,11 +593,12 @@ pub(super) fn apply_recoil(
     shot_sequence: u64,
 ) {
     let tuning = tuning.sanitized();
-    let ads_scale = if aiming {
+    let component_recoil = active_equipped_weapon_component_modifiers(world, player).recoil_multiplier;
+    let ads_scale = (if aiming {
         tuning.ads_recoil_multiplier
     } else {
         1.0
-    };
+    }) * component_recoil;
     let pitch_noise = signed_unit(shot_sequence ^ 0x243f_6a88_85a3_08d3);
     let yaw_noise = signed_unit(shot_sequence ^ 0x1319_8a2e_0370_7344);
     let pitch_kick =
@@ -409,7 +643,7 @@ pub(super) fn apply_recoil(
     recoil.weapon_instance_id = weapon_instance_id;
     recoil.applied_pitch_radians += applied_pitch_kick;
     recoil.applied_yaw_radians += yaw_kick;
-    // Initial tracker speed produces the authored 1-2 frame follow-through seen in TLOU2 VEPR
+    // Initial tracker speed produces the authored 1-2 frame follow-through seen in NorthStar VEPR
     // fire layers instead of snapping immediately into recovery.
     recoil.pitch_speed_radians_per_second += applied_pitch_kick * tuning.recoil_recovery_hz * 1.4;
     recoil.yaw_speed_radians_per_second += yaw_kick * tuning.recoil_recovery_hz * 1.15;
@@ -479,6 +713,47 @@ fn publish_weapon_project_event(world: &mut World, event: &WeaponEvent) {
         WeaponAttackKind::Firearm => "firearm",
         WeaponAttackKind::Melee => "melee",
     });
+    let hit_surface = event.target.and_then(|target| {
+        world
+            .get::<PhysicsSurface>(target)
+            .map(|surface| surface.id.clone())
+    });
+    let incidence_dot = pending
+        .filter(|pending| {
+            event.kind == WeaponEventKind::Hit && pending.attack_kind == WeaponAttackKind::Firearm
+        })
+        .map(|pending| ricochet_incidence_dot(pending.direction, event.normal));
+    let ricochet_material = event.target.and_then(|target| {
+        world
+            .get::<BallisticMaterialResponse>(target)
+            .copied()
+            .map(BallisticMaterialResponse::sanitized)
+    });
+    let ricochet = pending
+        .filter(|pending| event.kind == WeaponEventKind::Hit && pending.attack_kind == WeaponAttackKind::Firearm)
+        .zip(ricochet_material)
+        .is_some_and(|(pending, material)| {
+            ballistic_material_allows_ricochet(
+                material, pending.direction, event.normal, pending.bounce_count, pending.max_bounces,
+            )
+        });
+    let ricochet_direction = pending
+        .filter(|_| ricochet)
+        .map(|pending| {
+            let incoming = pending.direction.normalize_or_zero();
+            let normal = event.normal.normalize_or_zero();
+            (incoming - normal * (2.0 * incoming.dot(normal))).normalize_or_zero()
+        })
+        .filter(|direction| direction.length_squared() > 1.0e-8);
+    let ricochet_range = pending.filter(|_| ricochet).map(|pending| {
+        let hit_distance = (event.point - pending.origin)
+            .length()
+            .clamp(0.0, pending.range);
+        let retention = ricochet_material
+            .map(|material| material.ricochet_energy_retention)
+            .unwrap_or(0.0);
+        (pending.range - hit_distance).max(0.0) * retention
+    });
 
     let payload = serde_json::json!({
         "schema": "newengine.gameplay.weapon_event.v1",
@@ -501,6 +776,12 @@ fn publish_weapon_project_event(world: &mut World, event: &WeaponEvent) {
         "shot_origin": pending.map(|pending| vec3_payload(pending.origin)),
         "shot_direction": pending.map(|pending| vec3_payload(pending.direction)),
         "range": pending.map(|pending| pending.range),
+        "bounce_count": pending.map(|pending| pending.bounce_count),
+        "surface": hit_surface,
+        "incidence_dot": incidence_dot,
+        "ricochet": ricochet,
+        "ricochet_direction": ricochet_direction.map(vec3_payload),
+        "ricochet_range": ricochet_range,
         "aiming": state.map(|state| state.aiming),
         "ammo_in_magazine": state.map(|state| state.ammo_in_magazine),
         "reserve_ammo": state.map(|state| state.reserve_ammo),

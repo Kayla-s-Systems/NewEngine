@@ -172,30 +172,76 @@ pub fn tick_frame(
     thread_pool: Option<&ThreadPoolHandle>,
     frame: newengine_engine_runtime::WorldRuntimeFrame,
 ) {
+    let trace_profile = frame.frame_index.is_multiple_of(15);
+    let frame_started = std::time::Instant::now();
+    let mut last_mark = frame_started;
+    let mut profile_parts = Vec::<(&'static str, f64)>::with_capacity(18);
+    macro_rules! profile_mark {
+        ($label:literal) => {
+            if trace_profile {
+                let now = std::time::Instant::now();
+                profile_parts.push(($label, now.duration_since(last_mark).as_secs_f64() * 1000.0));
+                last_mark = now;
+            }
+        };
+    }
+
     player_model::tick_player_model_assignments(world, primitives, materials);
+    profile_mark!("model_assign");
     player_model::tick_player_model_grounding(world);
+    profile_mark!("model_ground");
     equipment_visual::tick_equipped_weapon_presentation_input(world, frame.dt);
+    profile_mark!("weapon_input");
     animation_semantic::capture_animation_semantic_frame(world);
+    profile_mark!("anim_semantic");
     // The stable FPP eye anchor is actor/stance-owned and independent from animated head joints.
     // Publish it before arm/weapon animation so camera and FPP grip solve consume one frame authority.
     player_model::publish_player_first_person_camera_anchors(world);
+    profile_mark!("fpp_anchor");
     player_model::tick_player_skin_animation(world, frame.dt);
+    profile_mark!("skin_animation");
     player_model::tick_player_skin_sidecars(world);
+    profile_mark!("skin_sidecars");
     equipment_visual::tick_equipped_weapon_visuals(world, primitives, materials, frame.dt);
+    profile_mark!("weapon_visual");
     weapon_casing::tick_weapon_shell_casing_visuals(world, primitives, materials);
+    profile_mark!("weapon_casing");
     weapon_animation::tick_equipped_weapon_animations(world, frame.dt);
+    profile_mark!("weapon_animation");
     if frame.runtime_active && frame.streaming_enabled {
         tick_authored_map_streaming(world, primitives, materials, thread_pool);
     }
+    profile_mark!("map_streaming");
     tick_game_ready_static_world_prefabs(world, primitives, materials, thread_pool);
+    profile_mark!("static_world");
     tick_deferred_foliage_prefabs(world, primitives, materials);
+    profile_mark!("foliage");
     tick_deferred_item_pickups(world, primitives, materials);
+    profile_mark!("item_pickups");
     tick_runtime_world_item_visuals(world, primitives, materials);
+    profile_mark!("world_items");
     if frame.runtime_active && frame.streaming_enabled {
         tick_game_ready_streaming_terrain(world, materials, thread_pool);
     }
+    profile_mark!("terrain_streaming");
     if frame.environment_cycle_enabled {
         tick_game_ready_sky_cycle(world, frame.dt);
     }
+    profile_mark!("sky");
     shadow_torture::tick(world, frame.dt);
+    profile_mark!("shadow_torture");
+
+    if trace_profile {
+        let breakdown = profile_parts
+            .iter()
+            .map(|(name, ms)| format!("{name}={ms:.2}ms"))
+            .collect::<Vec<_>>()
+            .join(" ");
+        newengine_ulog_api::ulog::info!(
+            "game-ready frame profile: frame={} total_ms={:.2} {}",
+            frame.frame_index,
+            frame_started.elapsed().as_secs_f64() * 1000.0,
+            breakdown,
+        );
+    }
 }

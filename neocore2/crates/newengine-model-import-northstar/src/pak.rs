@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 
-const TLOU2_PC_MAGIC: u32 = 2681;
-const TLOU2_RES_PADDING: usize = 48;
-const TLOU2_LOGIN_SIGNATURE: u32 = 74_565;
+const NORTHSTAR_PC_MAGIC: u32 = 2681;
+const NORTHSTAR_RES_PADDING: usize = 48;
+const NORTHSTAR_LOGIN_SIGNATURE: u32 = 74_565;
 
 #[derive(Clone, Copy, Debug)]
 struct PakPage {
@@ -24,15 +24,15 @@ pub struct PakFile {
     pages: Vec<PakPage>,
     pointer_targets: BTreeMap<usize, usize>,
     resources: Vec<PakResource>,
-    tlou2_pc: bool,
+    northstar_pc: bool,
 }
 
 impl PakFile {
     pub fn parse(bytes: Vec<u8>) -> Result<Self, String> {
-        if read_u32(&bytes, 0)? != TLOU2_PC_MAGIC {
+        if read_u32(&bytes, 0)? != NORTHSTAR_PC_MAGIC {
             return Err(format!(
-                "North Star importer supports TLOU2 PC magic={} only, got {}",
-                TLOU2_PC_MAGIC,
+                "North Star importer supports NorthStar PC magic={} only, got {}",
+                NORTHSTAR_PC_MAGIC,
                 read_u32(&bytes, 0)?
             ));
         }
@@ -78,9 +78,9 @@ impl PakFile {
             .offset
             .checked_add(login_offset)
             .ok_or("login resource offset overflow")?;
-        let tlou2_pc = read_u32(&bytes, login_abs + 32)? == TLOU2_LOGIN_SIGNATURE;
-        if !tlou2_pc {
-            return Err("package is not a TLOU2 PC resource layout".to_owned());
+        let northstar_pc = read_u32(&bytes, login_abs + 32)? == NORTHSTAR_LOGIN_SIGNATURE;
+        if !northstar_pc {
+            return Err("package is not a NorthStar PC resource layout".to_owned());
         }
 
         let fixup_data = read_u32(&bytes, fixup_table + 4)? as usize;
@@ -122,7 +122,7 @@ impl PakFile {
 
         let mut resources = Vec::new();
         for page in &pages {
-            // TLOU2 ResPage header: page size at +12, entry count at +18, entries at +20.
+            // NorthStar ResPage header: page size at +12, entry count at +18, entries at +20.
             if page.size < 20 {
                 continue;
             }
@@ -178,14 +178,14 @@ impl PakFile {
             }
         }
         if resources.is_empty() {
-            return Err("TLOU2 package contains no discoverable resources".to_owned());
+            return Err("NorthStar package contains no discoverable resources".to_owned());
         }
         Ok(Self {
             bytes,
             pages,
             pointer_targets,
             resources,
-            tlou2_pc,
+            northstar_pc,
         })
     }
 
@@ -199,7 +199,7 @@ impl PakFile {
         &self.resources
     }
 
-    /// Absolute file offset where the package VRAM region starts. TLOU2 PC stores
+    /// Absolute file offset where the package VRAM region starts. NorthStar PC stores
     /// texture payloads immediately after the final resource page; individual
     /// `VRAM_DESC` records address this region with a package-relative offset.
     pub fn vram_data_base(&self) -> Result<usize, String> {
@@ -218,10 +218,10 @@ impl PakFile {
 
     #[inline]
     pub fn resource_payload(&self, resource: &PakResource) -> Result<usize, String> {
-        debug_assert!(self.tlou2_pc);
+        debug_assert!(self.northstar_pc);
         let offset = resource
             .absolute_offset
-            .checked_add(TLOU2_RES_PADDING)
+            .checked_add(NORTHSTAR_RES_PADDING)
             .ok_or("resource payload offset overflow")?;
         checked_slice(&self.bytes, offset, 1, "resource payload")?;
         Ok(offset)

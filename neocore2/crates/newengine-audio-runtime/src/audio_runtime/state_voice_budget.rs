@@ -61,7 +61,7 @@ impl AudioRuntimeState {
             return Ok(());
         }
         let source = voice.source.clone();
-        let bus = voice.bus;
+        let route = voice.route.clone();
         let gain = voice.gain;
         let speed = voice.effective_speed();
         let looping = voice.looping;
@@ -70,6 +70,7 @@ impl AudioRuntimeState {
         let acoustic = voice.propagated_acoustic();
         let environment_state = voice.environment.sanitized();
         let paused = voice.paused;
+        let render_start_sample = voice.render_start_sample;
         let source_position = voice.current_source_position(now);
         let seek_position = if speed > 0.0 {
             source_position.div_f32(speed)
@@ -77,7 +78,7 @@ impl AudioRuntimeState {
             Duration::ZERO
         };
         let volume = sanitize_gain(gain)
-            * self.bus_gain(bus)
+            * self.route_gain(&route)
             * match (&attenuation, spatial) {
                 (Some(attenuation), Some(spatial)) => attenuation
                     .gain_at_distance(distance3(spatial.position, self.listener.position)),
@@ -95,6 +96,10 @@ impl AudioRuntimeState {
         }
         let late_binding = self.room_bus_binding_for_environment(environment_state, volume);
 
+        let render_graph = self
+            .render_graph
+            .clone()
+            .ok_or_else(|| "native block render graph is not initialized".to_owned())?;
         let mut materialized_stream_stats = None;
         let control = match source {
             VoiceSource::Clip { uri, .. } => {
@@ -107,74 +112,88 @@ impl AudioRuntimeState {
                     let (left, right) = self.listener.ear_positions();
                     let spatial_control =
                         SpatialMixControl::new(spatial.sanitized().position, left, right);
-                    let player =
-                        Player::connect_new(self.output.as_ref().expect("output checked").mixer());
-                    player.set_volume(volume);
-                    player.set_speed(speed);
-                    if looping {
+                    let mut rendered: Box<dyn Source + Send> = if looping {
                         let mono = ChannelVolume::new(
                             DynamicSpectralSource::new(decoder.repeat_infinite(), spectral.clone()),
                             vec![1.0],
                         );
-                        player.append(DynamicSpatialEnvironmentSource::new_with_late_binding(
+                        Box::new(DynamicSpatialEnvironmentSource::new_with_late_binding(
                             mono,
                             environment.clone(),
                             spatial_control.clone(),
                             late_binding.clone(),
-                        ));
+                        ))
                     } else {
                         let mono = ChannelVolume::new(
                             DynamicSpectralSource::new(decoder, spectral.clone()),
                             vec![1.0],
                         );
-                        player.append(DynamicSpatialEnvironmentSource::new_with_late_binding(
+                        Box::new(DynamicSpatialEnvironmentSource::new_with_late_binding(
                             mono,
                             environment.clone(),
                             spatial_control.clone(),
                             late_binding.clone(),
-                        ));
-                    }
-                    let control = VoiceControl::Spatial {
-                        player,
+                        ))
+                    };
+                    let initial_output_position = if should_seek_materialized_voice(seek_position) {
+                        rendered.try_seek(seek_position).map_err(|error| {
+                            format!("audio voice seek failed during materialization: {error}")
+                        })?;
+                        seek_position
+                    } else {
+                        Duration::ZERO
+                    };
+                    let render = render_graph.add_boxed_source(
+                        rendered,
+                        volume,
+                        speed,
+                        paused,
+                        initial_output_position,
+                        render_start_sample,
+                    )?;
+                    VoiceControl::Spatial {
+                        render,
                         spatial: spatial_control,
                         spectral: Some(spectral),
                         environment: Some(environment),
                         late_binding: late_binding.clone(),
-                    };
-                    if should_seek_materialized_voice(seek_position) {
-                        control.try_seek(seek_position)?;
                     }
-                    control.set_paused(paused);
-                    control
                 } else {
-                    let player =
-                        Player::connect_new(self.output.as_ref().expect("output checked").mixer());
-                    player.set_volume(volume);
-                    player.set_speed(speed);
-                    if looping {
-                        player.append(DynamicEnvironmentSource::new_with_late_binding(
+                    let mut rendered: Box<dyn Source + Send> = if looping {
+                        Box::new(DynamicEnvironmentSource::new_with_late_binding(
                             DynamicSpectralSource::new(decoder.repeat_infinite(), spectral.clone()),
                             environment.clone(),
                             late_binding.clone(),
-                        ));
+                        ))
                     } else {
-                        player.append(DynamicEnvironmentSource::new_with_late_binding(
+                        Box::new(DynamicEnvironmentSource::new_with_late_binding(
                             DynamicSpectralSource::new(decoder, spectral.clone()),
                             environment.clone(),
                             late_binding.clone(),
-                        ));
-                    }
-                    let control = VoiceControl::Flat {
-                        player,
+                        ))
+                    };
+                    let initial_output_position = if should_seek_materialized_voice(seek_position) {
+                        rendered.try_seek(seek_position).map_err(|error| {
+                            format!("audio voice seek failed during materialization: {error}")
+                        })?;
+                        seek_position
+                    } else {
+                        Duration::ZERO
+                    };
+                    let render = render_graph.add_boxed_source(
+                        rendered,
+                        volume,
+                        speed,
+                        paused,
+                        initial_output_position,
+                        render_start_sample,
+                    )?;
+                    VoiceControl::Flat {
+                        render,
                         spectral: Some(spectral),
                         environment: Some(environment),
                         late_binding: late_binding.clone(),
-                    };
-                    if should_seek_materialized_voice(seek_position) {
-                        control.try_seek(seek_position)?;
                     }
-                    control.set_paused(paused);
-                    control
                 }
             }
             VoiceSource::Stream {
@@ -204,61 +223,74 @@ impl AudioRuntimeState {
                     let (left, right) = self.listener.ear_positions();
                     let spatial_control =
                         SpatialMixControl::new(spatial.sanitized().position, left, right);
-                    let player =
-                        Player::connect_new(self.output.as_ref().expect("output checked").mixer());
-                    player.set_volume(volume);
-                    player.set_speed(1.0);
                     let mono = ChannelVolume::new(
                         DynamicSpectralSource::new(stream, spectral.clone()),
                         vec![1.0],
                     );
-                    player.append(DynamicSpatialEnvironmentSource::new_with_late_binding(
-                        mono,
-                        environment.clone(),
-                        spatial_control.clone(),
-                        late_binding.clone(),
-                    ));
-                    let control = VoiceControl::Spatial {
-                        player,
+                    let rendered: Box<dyn Source + Send> = Box::new(
+                        DynamicSpatialEnvironmentSource::new_with_late_binding(
+                            mono,
+                            environment.clone(),
+                            spatial_control.clone(),
+                            late_binding.clone(),
+                        ),
+                    );
+                    let render = render_graph.add_boxed_source(
+                        rendered,
+                        volume,
+                        1.0,
+                        paused,
+                        Duration::ZERO,
+                        render_start_sample,
+                    )?;
+                    VoiceControl::Spatial {
+                        render,
                         spatial: spatial_control,
                         spectral: Some(spectral),
                         environment: Some(environment),
                         late_binding: late_binding.clone(),
-                    };
-                    control.set_paused(paused);
-                    control
+                    }
                 } else {
-                    let player =
-                        Player::connect_new(self.output.as_ref().expect("output checked").mixer());
-                    player.set_volume(volume);
-                    player.set_speed(1.0);
-                    player.append(DynamicEnvironmentSource::new_with_late_binding(
-                        DynamicSpectralSource::new(stream, spectral.clone()),
-                        environment.clone(),
-                        late_binding.clone(),
-                    ));
-                    let control = VoiceControl::Flat {
-                        player,
+                    let rendered: Box<dyn Source + Send> = Box::new(
+                        DynamicEnvironmentSource::new_with_late_binding(
+                            DynamicSpectralSource::new(stream, spectral.clone()),
+                            environment.clone(),
+                            late_binding.clone(),
+                        ),
+                    );
+                    let render = render_graph.add_boxed_source(
+                        rendered,
+                        volume,
+                        1.0,
+                        paused,
+                        Duration::ZERO,
+                        render_start_sample,
+                    )?;
+                    VoiceControl::Flat {
+                        render,
                         spectral: Some(spectral),
                         environment: Some(environment),
                         late_binding: late_binding.clone(),
-                    };
-                    control.set_paused(paused);
-                    control
+                    }
                 }
             }
             VoiceSource::Tone {
                 frequency,
                 duration,
             } => {
-                let player =
-                    Player::connect_new(self.output.as_ref().expect("output checked").mixer());
-                player.set_volume(volume);
-                player.append(SineWave::new(frequency).take_duration(duration).fade_out(
+                let rendered = SineWave::new(frequency).take_duration(duration).fade_out(
                     Duration::from_millis((duration.as_millis() as u64 / 2).max(8)),
-                ));
+                );
+                let render = render_graph.add_boxed_source(
+                    Box::new(rendered),
+                    volume,
+                    1.0,
+                    paused,
+                    Duration::ZERO,
+                    render_start_sample,
+                )?;
                 VoiceControl::Flat {
-                    player,
+                    render,
                     spectral: None,
                     environment: None,
                     late_binding: None,

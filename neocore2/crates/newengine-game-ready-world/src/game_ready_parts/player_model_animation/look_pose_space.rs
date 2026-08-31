@@ -200,7 +200,7 @@ fn look_channel_policy(
         return AuthoredLookChannelPolicy::default();
     };
 
-    // Naughty Dog range records can mix additive channels with static absolute bind/base fillers
+    // authored range records can mix additive channels with static absolute bind/base fillers
     // in the same joint record. Treating those fillers as additive doubles local bone offsets (for
     // example the generic male eyes range repeats neck/heada/headb translations) and produces the
     // characteristic rubber/stretch deformation. Classify only channels that stay static and match

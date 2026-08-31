@@ -20,7 +20,6 @@ impl FrameGraphBuilder {
     #[inline]
     pub fn viewport_gbuffer_or_forward(mut self, deferred: bool) -> Self {
         if deferred {
-            self = self.depth_prepass();
             self = self.gbuffer();
         } else {
             self = self.forward_opaque();
@@ -97,16 +96,20 @@ impl FrameGraphBuilder {
     #[inline]
     pub fn transparent(mut self) -> Self {
         let viewport_color = self.viewport_color_resource();
+        let scene_depth = self.scene_depth_resource();
         let has_hair = self.has_resource(RG_HAIR_STRAND_STATE);
         let has_shadow = self.has_resource(RG_SHADOW_MAP);
         self.add_phase_pass(StandardRenderPhase::Transparent, |pass| {
+            let pass = pass.with_domain(RenderGraphPassDomain::Render3d).reads(
+                RG_VFX_PARTICLE_STATE,
+                RenderGraphResourceUsage::StorageBuffer,
+            );
+            let pass = if let Some(scene_depth) = scene_depth {
+                pass.reads(scene_depth, RenderGraphResourceUsage::DepthAttachment)
+            } else {
+                pass
+            };
             let pass = pass
-                .with_domain(RenderGraphPassDomain::Render3d)
-                .reads(RG_VIEWPORT_DEPTH, RenderGraphResourceUsage::DepthAttachment)
-                .reads(
-                    RG_VFX_PARTICLE_STATE,
-                    RenderGraphResourceUsage::StorageBuffer,
-                )
                 .writes(viewport_color, RenderGraphResourceUsage::ColorAttachment)
                 .draw_list(DrawListKind::Transparent);
             let pass = if has_hair {
@@ -129,15 +132,28 @@ impl FrameGraphBuilder {
     #[inline]
     pub fn water(mut self) -> Self {
         let viewport_color = self.viewport_color_resource();
+        let scene_depth = self.scene_depth_resource();
         self.add_phase_pass(StandardRenderPhase::Water, |pass| {
-            pass.with_domain(RenderGraphPassDomain::Render3d)
-                .reads(RG_VIEWPORT_DEPTH, RenderGraphResourceUsage::DepthAttachment)
-                .writes(viewport_color, RenderGraphResourceUsage::ColorAttachment)
+            let pass = pass.with_domain(RenderGraphPassDomain::Render3d);
+            let pass = if let Some(scene_depth) = scene_depth {
+                pass.reads(scene_depth, RenderGraphResourceUsage::DepthAttachment)
+            } else {
+                pass
+            };
+            pass.writes(viewport_color, RenderGraphResourceUsage::ColorAttachment)
         });
         self
     }
 
     pub fn depth_prepass(mut self) -> Self {
+        self.add_phase_pass(StandardRenderPhase::DepthPrepass, |pass| {
+            pass.with_domain(RenderGraphPassDomain::Render3d)
+                .writes(RG_VIEWPORT_DEPTH, RenderGraphResourceUsage::DepthAttachment)
+        });
+        self
+    }
+
+    pub fn gbuffer(mut self) -> Self {
         self.graph.resources.push(
             RenderGraphResourceDesc::transient_texture(
                 RG_GBUFFER_DEPTH,
@@ -148,21 +164,13 @@ impl FrameGraphBuilder {
             )
             .with_semantic(RenderGraphResourceSemantic::GBufferDepth),
         );
-        self.add_phase_pass(StandardRenderPhase::DepthPrepass, |pass| {
-            pass.with_domain(RenderGraphPassDomain::Render3d)
-                .writes(RG_GBUFFER_DEPTH, RenderGraphResourceUsage::DepthAttachment)
-        });
-        self
-    }
-
-    pub fn gbuffer(mut self) -> Self {
         self.graph.resources.push(
             RenderGraphResourceDesc::transient_texture(
                 RG_GBUFFER_ALBEDO,
                 "gbuffer_albedo",
                 RenderGraphResourceUsage::ColorAttachment,
                 self.target.viewport_extent,
-                self.target.color_format,
+                TextureFormat::Rgba8Unorm,
             )
             .with_semantic(RenderGraphResourceSemantic::GBufferAlbedo),
         );
@@ -172,7 +180,7 @@ impl FrameGraphBuilder {
                 "gbuffer_normal",
                 RenderGraphResourceUsage::ColorAttachment,
                 self.target.viewport_extent,
-                self.target.color_format,
+                TextureFormat::Rgba16Float,
             )
             .with_semantic(RenderGraphResourceSemantic::GBufferNormal),
         );
@@ -188,13 +196,14 @@ impl FrameGraphBuilder {
         );
         self.add_phase_pass(StandardRenderPhase::ViewportGBuffer, |pass| {
             pass.with_domain(RenderGraphPassDomain::Render3d)
-                .reads(RG_GBUFFER_DEPTH, RenderGraphResourceUsage::DepthAttachment)
+                .writes(RG_GBUFFER_DEPTH, RenderGraphResourceUsage::DepthAttachment)
                 .writes(RG_GBUFFER_ALBEDO, RenderGraphResourceUsage::ColorAttachment)
                 .writes(RG_GBUFFER_NORMAL, RenderGraphResourceUsage::ColorAttachment)
                 .writes(
                     RG_GBUFFER_MATERIAL,
                     RenderGraphResourceUsage::ColorAttachment,
                 )
+                .draw_list(DrawListKind::OpaqueForward)
         });
         self
     }
@@ -202,12 +211,21 @@ impl FrameGraphBuilder {
     pub fn forward_opaque(mut self) -> Self {
         let has_shadow = self.has_resource(RG_SHADOW_MAP);
         let viewport_color = self.viewport_color_resource();
+        let deferred_depth = self
+            .has_resource(RG_GBUFFER_DEPTH)
+            .then_some(RG_GBUFFER_DEPTH);
         self.add_phase_pass(StandardRenderPhase::ViewportForward, |pass| {
             let pass = pass
                 .with_domain(RenderGraphPassDomain::Render3d)
                 .writes(viewport_color, RenderGraphResourceUsage::ColorAttachment)
-                .writes(RG_VIEWPORT_DEPTH, RenderGraphResourceUsage::DepthAttachment)
                 .draw_list(DrawListKind::OpaqueForward);
+            let pass = if let Some(depth) = deferred_depth {
+                // Deferred forward-only roles are an overlay on the lighting resolve.
+                // Borrow GBuffer depth; never manufacture a second scene-depth owner.
+                pass.reads(depth, RenderGraphResourceUsage::DepthAttachment)
+            } else {
+                pass.writes(RG_VIEWPORT_DEPTH, RenderGraphResourceUsage::DepthAttachment)
+            };
             if has_shadow {
                 pass.reads(RG_SHADOW_MAP, RenderGraphResourceUsage::SampledTexture)
             } else {

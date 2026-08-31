@@ -113,6 +113,23 @@ pub(super) fn camera_runtime_service_config(
             config.first_person_collision_probe_radius =
                 profile.first_person_collision_probe_radius;
             config.first_person_collision_padding = profile.first_person_collision_padding;
+            config.first_person_grounded_eye_deadband_m =
+                profile.first_person_grounded_eye_deadband_m;
+            config.first_person_grounded_eye_time_constant_seconds =
+                profile.first_person_grounded_eye_time_constant_seconds;
+            config.first_person_camera_recoil_share = profile.first_person_camera_recoil_share;
+            config.first_person_aim_response_hz = profile.first_person_aim_response_hz;
+            config.near_clip_enabled = profile.near_clip_enabled;
+            config.near_clip_first_person_max_distance =
+                profile.near_clip_first_person_max_distance;
+            config.near_clip_third_person_min_distance =
+                profile.near_clip_third_person_min_distance;
+            config.near_clip_third_person_max_distance =
+                profile.near_clip_third_person_max_distance;
+            config.near_clip_pull_in_distance = profile.near_clip_pull_in_distance;
+            config.near_clip_probe_radius = profile.near_clip_probe_radius;
+            config.near_clip_release_time_seconds = profile.near_clip_release_time_seconds;
+            config.near_clip_hysteresis_m = profile.near_clip_hysteresis_m;
             config.third_person_follow_fov_y_radians = profile.third_person_follow_fov_y_radians;
             config.third_person_follow_offset_ls = profile.third_person_follow_offset_ls;
             config.third_person_follow_focus_offset_ls =
@@ -135,14 +152,40 @@ pub(super) fn camera_runtime_service_config(
             config.third_person_orbit_max_speed = profile.third_person_orbit_max_speed;
             config.third_person_orbit_zoom_min = profile.third_person_orbit_zoom_min;
             config.third_person_orbit_zoom_max = profile.third_person_orbit_zoom_max;
+            config.third_person_orbit_look_sensitivity_radians_per_pixel =
+                profile.third_person_orbit_look_sensitivity_radians_per_pixel;
+            config.third_person_orbit_pitch_min_radians =
+                profile.third_person_orbit_pitch_min_radians;
+            config.third_person_orbit_pitch_max_radians =
+                profile.third_person_orbit_pitch_max_radians;
             config.third_person_collision_enabled = profile.third_person_collision_enabled;
             config.third_person_collision_probe_radius =
                 profile.third_person_collision_probe_radius;
             config.third_person_collision_padding = profile.third_person_collision_padding;
             config.third_person_collision_min_distance =
                 profile.third_person_collision_min_distance;
+            config.third_person_collision_release_frequency_hz =
+                profile.third_person_collision_release_frequency_hz;
+            config.third_person_collision_release_damping_ratio =
+                profile.third_person_collision_release_damping_ratio;
+            config.third_person_collision_distance_hysteresis =
+                profile.third_person_collision_distance_hysteresis;
+            config.third_person_look_at_collision_blend =
+                profile.third_person_look_at_collision_blend;
+            config.third_person_look_at_response_hz = profile.third_person_look_at_response_hz;
+            config.third_person_look_at_max_error_fov_fraction =
+                profile.third_person_look_at_max_error_fov_fraction;
+            config.third_person_catch_up_enabled = profile.third_person_catch_up_enabled;
+            config.third_person_catch_up_frequency_hz = profile.third_person_catch_up_frequency_hz;
+            config.third_person_catch_up_damping_ratio =
+                profile.third_person_catch_up_damping_ratio;
+            config.third_person_catch_up_max_distance_m =
+                profile.third_person_catch_up_max_distance_m;
+            config.third_person_catch_up_settle_distance_m =
+                profile.third_person_catch_up_settle_distance_m;
             config.zoom_wheel_exponent_per_step = profile.zoom_wheel_exponent_per_step;
             config.orbit_drag_zoom_exponent_per_pixel = profile.orbit_drag_zoom_exponent_per_pixel;
+            config.zoom_smooth_time_seconds = profile.zoom_smooth_time_seconds;
         }
         if let Some(body) = world.get::<CharacterBody>(player) {
             let body = body.sanitized();
@@ -704,26 +747,48 @@ pub(super) fn camera_nav_input(
 }
 
 #[inline]
-pub(super) fn apply_gameplay_view_lens(
-    frame: CameraFrame,
+pub(super) fn gameplay_target_fov_y(
     active_view: CameraViewMode,
     first_person_aiming: bool,
     config: CameraRuntimeServiceConfig,
-) -> CameraFrame {
-    let target_fov_y = match active_view {
+) -> f32 {
+    match active_view {
         CameraViewMode::FirstPerson if first_person_aiming => config.first_person_ads_fov_y_radians,
         CameraViewMode::FirstPerson => config.first_person_fov_y_radians,
         CameraViewMode::ThirdPersonFollow => config.third_person_follow_fov_y_radians,
         CameraViewMode::ThirdPersonAim => config.third_person_aim_fov_y_radians,
         CameraViewMode::ThirdPersonOrbit => config.third_person_orbit_fov_y_radians,
-    };
+    }
+}
+
+#[inline]
+pub(super) fn gameplay_min_near(
+    active_view: CameraViewMode,
+    config: CameraRuntimeServiceConfig,
+) -> f32 {
+    if matches!(active_view, CameraViewMode::FirstPerson) {
+        config.first_person_near
+    } else {
+        config.near_clip_third_person_min_distance
+    }
+}
+
+#[inline]
+pub(super) fn apply_gameplay_view_lens(
+    frame: CameraFrame,
+    active_view: CameraViewMode,
+    first_person_aiming: bool,
+    config: CameraRuntimeServiceConfig,
+    target_near: f32,
+) -> CameraFrame {
+    let target_fov_y = gameplay_target_fov_y(active_view, first_person_aiming, config);
     let Projection::Perspective(mut perspective) = frame.projection else {
         return frame;
     };
-    let target_near = if matches!(active_view, CameraViewMode::FirstPerson) {
-        config.first_person_near
+    let target_near = if target_near.is_finite() && target_near > 0.0 {
+        target_near
     } else {
-        perspective.near
+        gameplay_min_near(active_view, config)
     };
     if (perspective.fovy - target_fov_y).abs() <= 1.0e-6
         && (perspective.near - target_near).abs() <= 1.0e-6

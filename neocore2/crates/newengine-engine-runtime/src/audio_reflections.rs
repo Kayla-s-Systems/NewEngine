@@ -719,6 +719,10 @@ mod tests {
         let max_t = ray_max_t(query);
         assert!(max_t > 0.5);
         let hit = PhysicsQueryHitDto {
+            subshape_id: 0,
+            hit_index: 0,
+            back_face: false,
+
             seq: query.seq,
             entity: blocker.stable_u64(),
             position: [0.0; 3],
@@ -764,6 +768,10 @@ mod tests {
         let query = &queries[0];
         let max_t = ray_max_t(query);
         let hit = PhysicsQueryHitDto {
+            subshape_id: 0,
+            hit_index: 0,
+            back_face: false,
+
             seq: query.seq,
             entity: boundary.stable_u64(),
             position: [0.0; 3],
@@ -805,6 +813,9 @@ mod tests {
             .expect("middle query");
         let max_t = ray_max_t(query);
         let hit = PhysicsQueryHitDto {
+            subshape_id: 0,
+            hit_index: 0,
+            back_face: false,
             seq,
             entity: blocker.stable_u64(),
             position: [0.0; 3],
@@ -891,6 +902,10 @@ mod tests {
         );
         let hits = [
             PhysicsQueryHitDto {
+                subshape_id: 0,
+                hit_index: 0,
+                back_face: false,
+
                 seq: source.0,
                 entity: first_boundary.stable_u64(),
                 position: source.1.geometry.reflection_points[0],
@@ -898,6 +913,10 @@ mod tests {
                 distance: source_max,
             },
             PhysicsQueryHitDto {
+                subshape_id: 0,
+                hit_index: 0,
+                back_face: false,
+
                 seq: listener.0,
                 entity: second_boundary.stable_u64(),
                 position: listener.1.geometry.reflection_points[1],

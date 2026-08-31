@@ -97,6 +97,7 @@ fn resolve_definition(
 struct DefinitionSurfaceBinding {
     id: String,
     events: std::collections::BTreeMap<String, String>,
+    ballistic_material: Option<newengine_engine_runtime::gameplay::BallisticMaterialResponse>,
     ground_placement_surface: bool,
 }
 
@@ -120,6 +121,49 @@ fn definition_surface_binding(definition: &ResolvedMapDefinitionEntry) -> Defini
                 (!signal.is_empty() && !event_id.is_empty()).then_some((signal, event_id))
             })
             .collect();
+        let ballistic_material = object
+            .get("ballistics")
+            .and_then(serde_json::Value::as_object)
+            .map(|ballistics| {
+                let f32_or = |key: &str, default: f32| {
+                    ballistics
+                        .get(key)
+                        .and_then(|value| {
+                            value
+                                .as_f64()
+                                .map(|v| v as f32)
+                                .or_else(|| value.as_str()?.parse::<f32>().ok())
+                        })
+                        .unwrap_or(default)
+                };
+                let bool_or = |key: &str, default: bool| {
+                    ballistics
+                        .get(key)
+                        .and_then(|value| {
+                            value.as_bool().or_else(|| {
+                                match value.as_str()?.trim().to_ascii_lowercase().as_str() {
+                                    "1" | "true" | "yes" | "on" => Some(true),
+                                    "0" | "false" | "no" | "off" => Some(false),
+                                    _ => None,
+                                }
+                            })
+                        })
+                        .unwrap_or(default)
+                };
+                newengine_engine_runtime::gameplay::BallisticMaterialResponse {
+                    penetration_resistance_j_per_m: f32_or(
+                        "penetration_resistance_j_per_m",
+                        f32::INFINITY,
+                    ),
+                    entry_energy_cost_j: f32_or("entry_energy_cost_j", f32::INFINITY),
+                    damage_transfer_multiplier: f32_or("damage_transfer_multiplier", 1.0),
+                    impulse_transfer_multiplier: f32_or("impulse_transfer_multiplier", 1.0),
+                    ricochet_allowed: bool_or("ricochet_allowed", false),
+                    ricochet_max_incidence_dot: f32_or("ricochet_max_incidence_dot", 0.0),
+                    ricochet_energy_retention: f32_or("ricochet_energy_retention", 0.0),
+                }
+                .sanitized()
+            });
         let ground_placement_surface = object
             .get("ground_placement_surface")
             .and_then(serde_json::Value::as_bool)
@@ -127,6 +171,7 @@ fn definition_surface_binding(definition: &ResolvedMapDefinitionEntry) -> Defini
         Some(DefinitionSurfaceBinding {
             id,
             events,
+            ballistic_material,
             ground_placement_surface,
         })
     }
@@ -261,6 +306,7 @@ fn cell_prefabs(
                 material: material_ref,
                 surface_id: surface_binding.id.clone(),
                 surface_events: surface_binding.events.clone(),
+                ballistic_material: surface_binding.ballistic_material,
                 ground_placement_surface: surface_binding.ground_placement_surface,
                 enabled: true,
                 position,
@@ -311,6 +357,7 @@ fn cell_prefabs(
                 material: String::new(),
                 surface_id: surface_binding.id.clone(),
                 surface_events: surface_binding.events.clone(),
+                ballistic_material: surface_binding.ballistic_material,
                 ground_placement_surface: surface_binding.ground_placement_surface,
                 enabled: true,
                 position,

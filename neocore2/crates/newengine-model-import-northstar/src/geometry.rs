@@ -6,7 +6,7 @@ use newengine_math::Vec3;
 use crate::pak::PakFile;
 
 const PC_SUBMESH_STRIDE: usize = 192;
-const LEGACY_TLOU2_SUBMESH_STRIDE: usize = 176;
+const LEGACY_NORTHSTAR_SUBMESH_STRIDE: usize = 176;
 const STREAM_DESC_STRIDE: usize = 64;
 const PACKED_WEIGHT_MASK: u32 = (1 << 22) - 1;
 const PACKED_WEIGHT_DENOMINATOR: f32 = PACKED_WEIGHT_MASK as f32;
@@ -168,7 +168,7 @@ pub fn decode_geometry_lod0(pak: &PakFile) -> Result<DecodedGeometry, String> {
             .iter()
             .find(|stream| stream.kind == 64 || stream.kind == 0)
             .ok_or_else(|| {
-                format!("submesh '{name}' has no supported TLOU2 position stream type=64/0")
+                format!("submesh '{name}' has no supported NorthStar position stream type=64/0")
             })?;
         let positions = match position_stream.kind {
             64 => decode_quantized_stream(pak, position_stream, vertex_count, 3)?,
@@ -186,18 +186,18 @@ pub fn decode_geometry_lod0(pak: &PakFile) -> Result<DecodedGeometry, String> {
             .transpose()?
             .unwrap_or_else(|| vec![[0.0, 0.0, 0.0, 0.0]; vertex_count]);
         let source_indices = decode_indices(pak, index_buffer, index_count, vertex_count, &name)?;
-        // Naughty Dog packages can retain dead source vertices after mesh partitioning. Some of
+        // source packages can retain dead source vertices after mesh partitioning. Some of
         // those vertices intentionally have no skin weight record. They are not renderable data:
         // compact strictly to vertices referenced by the triangle index buffer before skin decode.
         // A zero-weight vertex that is actually referenced still fails in `decode_skin` below.
         let (positions, uv0, mut indices, source_vertex_indices) =
             compact_indexed_vertex_streams(&positions, &uv0, &source_indices, &name)?;
-        // TLOU2 PC packages encode triangle winding opposite to NewEngine's canonical
+        // NorthStar PC packages encode triangle winding opposite to NewEngine's canonical
         // clockwise framebuffer-front-face convention. Preserve the source vertex/skin
         // streams, but canonicalize every triangle before deriving normals or publishing YDD.
         // Without this conversion skinned exterior shells are classified as back faces and
         // disappear under normal back-face culling, which looks like transparent skin.
-        reverse_tlou2_triangle_winding(&mut indices);
+        reverse_northstar_triangle_winding(&mut indices);
         let normals = recalculate_normals(&positions, &indices);
         let (skin, skin_loss) = match skin_header {
             Some(header) => {
@@ -250,7 +250,7 @@ pub fn decode_geometry_lod0(pak: &PakFile) -> Result<DecodedGeometry, String> {
 
 fn detect_submesh_stride(pak: &PakFile, table: usize, count: usize) -> Result<usize, String> {
     let mut best = (0usize, 0usize);
-    for stride in [PC_SUBMESH_STRIDE, LEGACY_TLOU2_SUBMESH_STRIDE] {
+    for stride in [PC_SUBMESH_STRIDE, LEGACY_NORTHSTAR_SUBMESH_STRIDE] {
         let mut score = 0usize;
         for index in 0..count.min(64) {
             let field = table
@@ -269,7 +269,7 @@ fn detect_submesh_stride(pak: &PakFile, table: usize, count: usize) -> Result<us
         }
     }
     if best.0 == 0 {
-        Err("unable to determine TLOU2 submesh record stride".to_owned())
+        Err("unable to determine NorthStar submesh record stride".to_owned())
     } else {
         Ok(best.1)
     }
@@ -622,7 +622,7 @@ fn decode_skin(
                     )
                 }
                 1 => {
-                    // TLOU2 PC also uses an explicit 8-byte influence representation:
+                    // NorthStar PC also uses an explicit 8-byte influence representation:
                     // f32 weight followed by u32 joint index. The profile bit at skin_header+8
                     // selects this layout. Treating these words as the packed 22/10-bit profile
                     // corrupts both weights and joints (notably Ellie backpack cloth/straps).
@@ -698,7 +698,7 @@ fn decode_skin(
     Ok((out, stats))
 }
 
-fn reverse_tlou2_triangle_winding(indices: &mut [u32]) {
+fn reverse_northstar_triangle_winding(indices: &mut [u32]) {
     for triangle in indices.chunks_exact_mut(3) {
         triangle.swap(1, 2);
     }
@@ -772,9 +772,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn tlou2_triangle_winding_is_canonicalized_once() {
+    fn northstar_triangle_winding_is_canonicalized_once() {
         let mut indices = vec![0, 1, 2, 3, 4, 5];
-        reverse_tlou2_triangle_winding(&mut indices);
+        reverse_northstar_triangle_winding(&mut indices);
         assert_eq!(indices, vec![0, 2, 1, 3, 5, 4]);
     }
 
@@ -787,14 +787,14 @@ mod tests {
         ];
         let original = recalculate_normals(&positions, &[0, 1, 2]);
         let mut indices = vec![0, 1, 2];
-        reverse_tlou2_triangle_winding(&mut indices);
+        reverse_northstar_triangle_winding(&mut indices);
         let canonical = recalculate_normals(&positions, &indices);
         assert!(original[0][2] > 0.99);
         assert!(canonical[0][2] < -0.99);
     }
 
     #[test]
-    fn lsb_reader_matches_tlou2_packing_order() {
+    fn lsb_reader_matches_northstar_packing_order() {
         let bytes = [0b1011_0010u8, 0b0000_0011];
         let mut bits = LsbBitReader::new(&bytes);
         assert_eq!(bits.read(4).unwrap(), 0b0010);

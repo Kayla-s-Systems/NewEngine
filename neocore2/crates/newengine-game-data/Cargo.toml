@@ -1,8 +1,8 @@
 [package]
 name = "newengine-game-data"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
-description = "Central data-only game configuration schema and provider-neutral defaults for script-backed gameplay"
+description = "Project-authored runtime/game configuration schema and provider boundary"
 license = "Proprietary"
 
 [dependencies]

@@ -6,8 +6,8 @@ use newengine_ecs::{EntityId, World};
 use newengine_input_actions_api::move_mask as input_move;
 use newengine_math::{wrap_pi, EulerRot, Mat3, Quat, Vec2, Vec3};
 use newengine_sim::{
-    step_follow_camera, CameraRigComp, CharacterMotor, FollowTargetCameraController,
-    FollowTargetCameraMotor, MotorInput,
+    CameraRigComp, CharacterMotor, FollowTargetCameraController, FollowTargetCameraMotor,
+    MotorInput,
 };
 use newengine_transform::{
     read_entity_world_pose_local_chain, write_entity_local_from_world_pose_local_chain,
@@ -28,6 +28,23 @@ pub enum GameplayCameraRunnerKind {
     ThirdPersonFollow,
     ThirdPersonAim,
     ThirdPersonOrbit,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct GameplayCameraRunnerHistory {
+    target: EntityId,
+    runner: GameplayCameraRunnerKind,
+    initialized: bool,
+}
+
+impl Default for GameplayCameraRunnerHistory {
+    fn default() -> Self {
+        Self {
+            target: EntityId::default(),
+            runner: GameplayCameraRunnerKind::FirstPerson,
+            initialized: false,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -66,6 +83,13 @@ struct GameplayThirdPersonCameraState {
     orbit_pitch: f32,
     orbit_pivot_offset_ws: Vec3,
     collision_distance: f32,
+    collision_velocity: f32,
+    collision_blocked: bool,
+    catch_up_offset_ls: Vec3,
+    catch_up_velocity_ls: Vec3,
+    catch_up_active: bool,
+    look_rotation: Quat,
+    look_initialized: bool,
     last_pivot_ws: Vec3,
     last_focus_ws: Vec3,
     last_desired_camera_ws: Vec3,
@@ -85,6 +109,13 @@ impl Default for GameplayThirdPersonCameraState {
             orbit_pitch: 0.0,
             orbit_pivot_offset_ws: Vec3::ZERO,
             collision_distance: 0.0,
+            collision_velocity: 0.0,
+            collision_blocked: false,
+            catch_up_offset_ls: Vec3::ZERO,
+            catch_up_velocity_ls: Vec3::ZERO,
+            catch_up_active: false,
+            look_rotation: Quat::IDENTITY,
+            look_initialized: false,
             last_pivot_ws: Vec3::ZERO,
             last_focus_ws: Vec3::ZERO,
             last_desired_camera_ws: Vec3::ZERO,
@@ -105,6 +136,7 @@ pub struct GameplayCameraTelemetrySnapshot {
     pub orbit_pivot_offset_ws: Vec3,
     pub zoom_z: f32,
     pub collision_distance: f32,
+    pub collision_velocity: f32,
     pub pivot_ws: Vec3,
     pub focus_ws: Vec3,
     pub desired_camera_ws: Vec3,
@@ -145,7 +177,12 @@ fn gameplay_zoom_limits(config: CameraRuntimeServiceConfig) -> Option<(f32, f32)
 }
 
 #[inline]
-fn orbit_angles_from_camera(pivot_ws: Vec3, camera_ws: Vec3) -> Option<(f32, f32)> {
+fn orbit_angles_from_camera(
+    pivot_ws: Vec3,
+    camera_ws: Vec3,
+    pitch_min_radians: f32,
+    pitch_max_radians: f32,
+) -> Option<(f32, f32)> {
     let dir = (camera_ws - pivot_ws).normalize_or_zero();
     if !dir.is_finite() || dir.length_squared() <= 1.0e-10 {
         return None;
@@ -158,7 +195,10 @@ fn orbit_angles_from_camera(pivot_ws: Vec3, camera_ws: Vec3) -> Option<(f32, f32
         return None;
     }
     let yaw = dir.x.atan2(dir.z);
-    let pitch = (-dir.y).asin().clamp(-1.35, 1.35);
+    let pitch_min = pitch_min_radians.clamp(-89.0_f32.to_radians(), 88.0_f32.to_radians());
+    let pitch_max =
+        pitch_max_radians.clamp(pitch_min + 1.0_f32.to_radians(), 89.0_f32.to_radians());
+    let pitch = (-dir.y).asin().clamp(pitch_min, pitch_max);
     Some((wrap_pi(yaw), pitch))
 }
 
@@ -177,14 +217,19 @@ fn orbit_look_at_rotation(eye: Vec3, center: Vec3) -> Quat {
 }
 
 #[inline]
-fn smooth_gameplay_zoom(current: f32, target: f32, dt: f32) -> f32 {
+fn smooth_gameplay_zoom(current: f32, target: f32, dt: f32, smooth_time_seconds: f32) -> f32 {
     if !target.is_finite() {
         return current;
     }
     if !current.is_finite() || !(dt.is_finite() && dt > 0.0) {
         return target;
     }
-    let alpha = (1.0 - (-dt / 0.09).exp()).clamp(0.0, 1.0);
+    let smooth_time_seconds = if smooth_time_seconds.is_finite() {
+        smooth_time_seconds.clamp(0.001, 5.0)
+    } else {
+        0.09
+    };
+    let alpha = (1.0 - (-dt / smooth_time_seconds).exp()).clamp(0.0, 1.0);
     let next = current + (target - current) * alpha;
     if (target - next).abs() <= 1.0e-4 {
         target
@@ -194,36 +239,76 @@ fn smooth_gameplay_zoom(current: f32, target: f32, dt: f32) -> f32 {
 }
 
 #[inline]
-fn smooth_collision_release(current: f32, target: f32, dt: f32) -> f32 {
+fn step_collision_distance_response(
+    current: f32,
+    velocity: f32,
+    target: f32,
+    dt: f32,
+    release_frequency_hz: f32,
+    damping_ratio: f32,
+    hysteresis_m: f32,
+) -> (f32, f32) {
     if !target.is_finite() || target <= 0.0 {
-        return current;
+        return (current, 0.0);
     }
     if !current.is_finite() || current <= 0.0 {
-        return target;
+        return (target, 0.0);
     }
-    // Triangle seams/contact quantization can move the measured hit distance by a few
-    // millimetres from frame to frame. Reacting asymmetrically (instant retract, soft release)
-    // turns that harmless noise into visible camera sway. The spring arm already keeps 8 cm of
-    // authored collision padding, so a 1 cm distance deadband is safely inside that margin.
-    const COLLISION_DISTANCE_HYSTERESIS: f32 = 0.010;
-    if (target - current).abs() <= COLLISION_DISTANCE_HYSTERESIS {
-        return current;
+    let hysteresis_m = if hysteresis_m.is_finite() {
+        hysteresis_m.clamp(0.0, 0.25)
+    } else {
+        0.005
+    };
+    let error = target - current;
+    if error.abs() <= hysteresis_m {
+        // Contact-triangle seams and query quantization are not camera motion. Latch the previous
+        // safe distance and discard residual spring energy inside the authored deadband.
+        return (current, 0.0);
     }
-    // Meaningful collision retraction is immediate so the camera never clips into geometry.
     if target < current {
-        return target;
+        // Collision push-in is a safety constraint: never spring through geometry. Only pull-back
+        // after free space reappears is damped, matching the reference collision response model.
+        return (target, 0.0);
     }
     if !(dt.is_finite() && dt > 0.0) {
-        return target;
+        return (target, 0.0);
     }
-    // Release is intentionally softer to avoid a hard pop when a wall leaves the arm.
-    let alpha = (1.0 - (-dt / 0.12).exp()).clamp(0.0, 1.0);
-    let next = current + (target - current) * alpha;
-    if (target - next).abs() <= 1.0e-4 {
-        target
+
+    let frequency_hz = if release_frequency_hz.is_finite() {
+        release_frequency_hz.clamp(0.01, 60.0)
     } else {
-        next
+        1.6
+    };
+    let damping_ratio = if damping_ratio.is_finite() {
+        damping_ratio.clamp(0.05, 4.0)
+    } else {
+        0.8
+    };
+    let velocity = if velocity.is_finite() { velocity } else { 0.0 };
+    let dt = dt.min(0.05);
+    let omega = core::f32::consts::TAU * frequency_hz;
+
+    // Stable implicit damped-spring integration. It retains velocity between frames, unlike a
+    // first-order exponential, while remaining well behaved after a render hitch.
+    let f = 1.0 + 2.0 * dt * damping_ratio * omega;
+    let omega_sq = omega * omega;
+    let h_omega_sq = dt * omega_sq;
+    let hh_omega_sq = dt * h_omega_sq;
+    let inv_det = (f + hh_omega_sq).recip();
+    let mut next = (f * current + dt * velocity + hh_omega_sq * target) * inv_det;
+    let mut next_velocity = (velocity + h_omega_sq * (target - current)) * inv_det;
+
+    // Collision recovery may approach the desired orbit distance but must never overshoot it and
+    // create a one-frame cut-back on the following query.
+    if !next.is_finite() || !next_velocity.is_finite() {
+        return (target, 0.0);
     }
+    next = next.clamp(current.min(target), current.max(target));
+    if target - next <= 1.0e-4 {
+        next = target;
+        next_velocity = 0.0;
+    }
+    (next, next_velocity)
 }
 
 impl Default for GameplayCameraRunnerKind {
@@ -325,6 +410,18 @@ pub struct CameraRuntimeServiceConfig {
     pub first_person_collision_enabled: bool,
     pub first_person_collision_probe_radius: f32,
     pub first_person_collision_padding: f32,
+    pub first_person_grounded_eye_deadband_m: f32,
+    pub first_person_grounded_eye_time_constant_seconds: f32,
+    pub first_person_camera_recoil_share: f32,
+    pub first_person_aim_response_hz: f32,
+    pub near_clip_enabled: bool,
+    pub near_clip_first_person_max_distance: f32,
+    pub near_clip_third_person_min_distance: f32,
+    pub near_clip_third_person_max_distance: f32,
+    pub near_clip_pull_in_distance: f32,
+    pub near_clip_probe_radius: f32,
+    pub near_clip_release_time_seconds: f32,
+    pub near_clip_hysteresis_m: f32,
     pub third_person_follow_fov_y_radians: f32,
     pub third_person_follow_offset_ls: Vec3,
     pub third_person_follow_focus_offset_ls: Vec3,
@@ -346,12 +443,27 @@ pub struct CameraRuntimeServiceConfig {
     pub third_person_orbit_max_speed: f32,
     pub third_person_orbit_zoom_min: f32,
     pub third_person_orbit_zoom_max: f32,
+    pub third_person_orbit_look_sensitivity_radians_per_pixel: f32,
+    pub third_person_orbit_pitch_min_radians: f32,
+    pub third_person_orbit_pitch_max_radians: f32,
     pub third_person_collision_enabled: bool,
     pub third_person_collision_probe_radius: f32,
     pub third_person_collision_padding: f32,
     pub third_person_collision_min_distance: f32,
+    pub third_person_collision_release_frequency_hz: f32,
+    pub third_person_collision_release_damping_ratio: f32,
+    pub third_person_collision_distance_hysteresis: f32,
+    pub third_person_look_at_collision_blend: f32,
+    pub third_person_look_at_response_hz: f32,
+    pub third_person_look_at_max_error_fov_fraction: f32,
+    pub third_person_catch_up_enabled: bool,
+    pub third_person_catch_up_frequency_hz: f32,
+    pub third_person_catch_up_damping_ratio: f32,
+    pub third_person_catch_up_max_distance_m: f32,
+    pub third_person_catch_up_settle_distance_m: f32,
     pub zoom_wheel_exponent_per_step: f32,
     pub orbit_drag_zoom_exponent_per_pixel: f32,
+    pub zoom_smooth_time_seconds: f32,
     /// Semantic render-cadence FPP presentation input. It never changes physical eye/ballistic aim.
     pub first_person_presentation: FirstPersonPresentationInput,
     /// Local-owner presentation safety metadata. The camera consumes the authored downward pitch
@@ -382,6 +494,18 @@ impl Default for CameraRuntimeServiceConfig {
             first_person_collision_enabled: true,
             first_person_collision_probe_radius: 0.055,
             first_person_collision_padding: 0.012,
+            first_person_grounded_eye_deadband_m: 0.010,
+            first_person_grounded_eye_time_constant_seconds: 0.060,
+            first_person_camera_recoil_share: 0.42,
+            first_person_aim_response_hz: 18.0,
+            near_clip_enabled: true,
+            near_clip_first_person_max_distance: 0.09,
+            near_clip_third_person_min_distance: 0.05,
+            near_clip_third_person_max_distance: 0.28,
+            near_clip_pull_in_distance: 0.018,
+            near_clip_probe_radius: 0.010,
+            near_clip_release_time_seconds: 0.08,
+            near_clip_hysteresis_m: 0.0025,
             third_person_follow_fov_y_radians: 64.0_f32.to_radians(),
             third_person_follow_offset_ls: Vec3::new(0.35, 1.65, 4.5),
             third_person_follow_focus_offset_ls: Vec3::new(0.0, 0.95, 0.0),
@@ -403,12 +527,27 @@ impl Default for CameraRuntimeServiceConfig {
             third_person_orbit_max_speed: 0.0,
             third_person_orbit_zoom_min: 1.35,
             third_person_orbit_zoom_max: 10.0,
+            third_person_orbit_look_sensitivity_radians_per_pixel: 0.0028,
+            third_person_orbit_pitch_min_radians: -70.0_f32.to_radians(),
+            third_person_orbit_pitch_max_radians: 45.0_f32.to_radians(),
             third_person_collision_enabled: true,
             third_person_collision_probe_radius: 0.18,
             third_person_collision_padding: 0.08,
             third_person_collision_min_distance: 0.75,
+            third_person_collision_release_frequency_hz: 1.6,
+            third_person_collision_release_damping_ratio: 0.8,
+            third_person_collision_distance_hysteresis: 0.005,
+            third_person_look_at_collision_blend: 0.70,
+            third_person_look_at_response_hz: 14.0,
+            third_person_look_at_max_error_fov_fraction: 0.12,
+            third_person_catch_up_enabled: true,
+            third_person_catch_up_frequency_hz: 2.4,
+            third_person_catch_up_damping_ratio: 1.0,
+            third_person_catch_up_max_distance_m: 8.0,
+            third_person_catch_up_settle_distance_m: 0.006,
             zoom_wheel_exponent_per_step: 0.16,
             orbit_drag_zoom_exponent_per_pixel: 0.008,
+            zoom_smooth_time_seconds: 0.09,
             first_person_presentation: FirstPersonPresentationInput::default(),
             first_person_body_barrier: FirstPersonBodyBarrierInput::default(),
             third_person_orbit_pivot_offset_ls: Vec3::ZERO,
@@ -423,6 +562,7 @@ pub struct CameraRuntimeService;
 
 mod input;
 mod lifecycle;
+mod near_clip;
 mod sync;
 
 #[cfg(test)]

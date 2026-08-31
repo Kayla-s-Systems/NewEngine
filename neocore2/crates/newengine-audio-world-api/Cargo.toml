@@ -1,6 +1,6 @@
 [package]
 name = "newengine-audio-world-api"
-version = "0.6.0"
+version = "0.7.0"
 edition = "2021"
 readme = "README.md"
 description = "Provider-neutral transient world-audio contracts for North Star"

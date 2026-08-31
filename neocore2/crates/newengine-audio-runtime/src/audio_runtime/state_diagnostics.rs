@@ -7,6 +7,11 @@ impl AudioRuntimeState {
             .values()
             .filter(|voice| voice.is_physical())
             .count();
+        let render_stats = self
+            .render_graph
+            .as_ref()
+            .map(NativeBlockRenderGraphHandle::stats)
+            .unwrap_or_default();
         AudioDiagnostics {
             provider: NATIVE_AUDIO_PROVIDER_ROUTE.to_owned(),
             output_ready,
@@ -65,6 +70,14 @@ impl AudioRuntimeState {
                 .count(),
             active_room_buses: self.room_buses.active_bus_count(),
             max_room_buses: MAX_SHARED_ROOM_BUSES,
+            render_sample: render_stats.output_sample,
+            render_block_frames: block_render::NATIVE_BLOCK_FRAMES as u32,
+            rendered_blocks: render_stats.rendered_blocks,
+            rendered_frames: render_stats.rendered_frames,
+            render_split_segments: render_stats.split_segments,
+            render_applied_commands: render_stats.applied_commands,
+            render_dropped_commands: render_stats.dropped_commands,
+            render_active_nodes: render_stats.active_nodes,
             active_streams: self
                 .voices
                 .values()
@@ -128,10 +141,10 @@ impl AudioRuntimeState {
             cached_bytes: self.cached_bytes,
             listener: self.listener,
             listener_velocity: self.listener_velocity,
-            bus_gains: self
-                .bus_gains
+            route_gains: self
+                .route_gains
                 .iter()
-                .map(|(bus, gain)| (bus.as_str().to_owned(), *gain))
+                .map(|(route, gain)| (route.0.clone(), *gain))
                 .collect(),
         }
     }

@@ -20,6 +20,12 @@ impl AudioRuntimeState {
     ) -> Result<AudioPlayAck, String> {
         self.prune_finished();
         let request = request.sanitized();
+        if !request.route.0.is_empty() {
+            request.route.validate()?;
+        }
+        if let Err(message) = self.validate_render_start_sample(request.render_start_sample) {
+            return Ok(AudioPlayAck { accepted:false, provider:NATIVE_AUDIO_PROVIDER_ROUTE.to_owned(), voice_id:None, voice_ids:Vec::new(), message, virtualized:false, diagnostics:Vec::new() });
+        }
         let uri = normalize_vfs_path(&request.clip.uri)?;
         let source_duration = self.clip_source_duration(&uri)?;
         if !request.looping
@@ -80,7 +86,7 @@ impl AudioRuntimeState {
                     uri,
                     source_duration,
                 },
-                bus: request.bus,
+                route: request.route.clone(),
                 gain: request.gain,
                 speed: sanitize_speed(request.speed),
                 looping: request.looping,
@@ -105,11 +111,27 @@ impl AudioRuntimeState {
                 voice_budget: policy.budget,
                 priority: policy.priority,
                 paused: false,
+                render_start_sample: request.render_start_sample,
                 virtual_source_position: initial_position,
                 virtual_since: Some(now),
             },
         );
         self.rebalance_physical_voices();
+
+        if request.render_start_sample.is_some()
+            && self.voices.get(&voice_id).is_some_and(VoiceEntry::is_virtual)
+        {
+            let _ = self.remove_voice(voice_id);
+            return Ok(AudioPlayAck {
+                accepted: false,
+                provider: NATIVE_AUDIO_PROVIDER_ROUTE.to_owned(),
+                voice_id: None,
+                voice_ids: Vec::new(),
+                message: "exact render-scheduled voice requires a physical voice slot".to_owned(),
+                virtualized: false,
+                diagnostics: Vec::new(),
+            });
+        }
 
         let Some(voice) = self.voices.get(&voice_id) else {
             return Ok(AudioPlayAck {
@@ -160,6 +182,12 @@ impl AudioRuntimeState {
     fn play_stream(&mut self, request: AudioStreamPlayRequest) -> Result<AudioPlayAck, String> {
         self.prune_finished();
         let request = request.sanitized();
+        if !request.route.0.is_empty() {
+            request.route.validate()?;
+        }
+        if let Err(message) = self.validate_render_start_sample(request.render_start_sample) {
+            return Ok(AudioPlayAck { accepted:false, provider:NATIVE_AUDIO_PROVIDER_ROUTE.to_owned(), voice_id:None, voice_ids:Vec::new(), message, virtualized:false, diagnostics:Vec::new() });
+        }
         if request.version != 1 {
             return Err(format!(
                 "unsupported AudioStreamPlayRequest version {}",
@@ -239,7 +267,7 @@ impl AudioRuntimeState {
                     buffer: request.buffer,
                     source_duration: metadata.source_duration,
                 },
-                bus: request.bus,
+                route: request.route.clone(),
                 gain: request.gain,
                 speed: 1.0,
                 looping: request.looping,
@@ -264,11 +292,27 @@ impl AudioRuntimeState {
                 voice_budget: policy.budget,
                 priority: policy.priority,
                 paused: false,
+                render_start_sample: request.render_start_sample,
                 virtual_source_position: initial_position,
                 virtual_since: Some(Instant::now()),
             },
         );
         self.rebalance_physical_voices();
+
+        if request.render_start_sample.is_some()
+            && self.voices.get(&voice_id).is_some_and(VoiceEntry::is_virtual)
+        {
+            let _ = self.remove_voice(voice_id);
+            return Ok(AudioPlayAck {
+                accepted: false,
+                provider: NATIVE_AUDIO_PROVIDER_ROUTE.to_owned(),
+                voice_id: None,
+                voice_ids: Vec::new(),
+                message: "exact render-scheduled voice requires a physical voice slot".to_owned(),
+                virtualized: false,
+                diagnostics: Vec::new(),
+            });
+        }
 
         let Some(voice) = self.voices.get(&voice_id) else {
             return Ok(AudioPlayAck {
@@ -428,7 +472,7 @@ impl AudioRuntimeState {
             clips,
             gain_range: authored.descriptor.gain_range,
             pitch_range: authored.descriptor.pitch_range,
-            bus: audio_bus_from_yscd(&authored.descriptor.bus)?,
+            route: audio_route_from_yscd(&authored.descriptor.route)?,
             looping: authored.descriptor.looping,
             concurrency_group: authored.descriptor.concurrency_group.clone(),
             concurrency_limit: authored.descriptor.concurrency_limit,
@@ -572,6 +616,14 @@ impl AudioRuntimeState {
             })?;
         let canonical = parsed.canonical.clone();
         let cue = self.load_cue(&request.cue.logical_path)?;
+        let route = if request.route.0.is_empty() {
+            cue.route.clone()
+        } else {
+            request.route.clone()
+        };
+        if !route.0.is_empty() {
+            route.validate()?;
+        }
         let layers = self.cue_layers.get(&canonical).cloned().unwrap_or_default();
         let voice_policy = cue.voice_policy().sanitized()?;
         let policy_instance_id = self.alloc_policy_instance_id();
@@ -639,7 +691,7 @@ impl AudioRuntimeState {
                     AudioPlayRequest {
                         version: 1,
                         clip: selected.clip.clone(),
-                        bus: cue.bus,
+                        route: route.clone(),
                         gain,
                         speed,
                         looping: cue.looping,
@@ -647,6 +699,7 @@ impl AudioRuntimeState {
                         attenuation: cue.attenuation.clone(),
                         acoustic: request.acoustic,
                         environment: request.environment,
+                        render_start_sample: request.render_start_sample,
                     },
                     voice_policy.clone(),
                     request.scope_id,
@@ -713,7 +766,7 @@ impl AudioRuntimeState {
                 AudioPlayRequest {
                     version: 1,
                     clip: selected.clip.clone(),
-                    bus: cue.bus,
+                    route: route.clone(),
                     gain,
                     speed,
                     looping: cue.looping,
@@ -721,6 +774,7 @@ impl AudioRuntimeState {
                     attenuation: cue.attenuation.clone(),
                     acoustic: request.acoustic,
                     environment: request.environment,
+                    render_start_sample: request.render_start_sample,
                 },
                 voice_policy.clone(),
                 request.scope_id,
@@ -779,7 +833,7 @@ impl AudioRuntimeState {
                 AudioPlayRequest {
                     version: 1,
                     clip: selected.clip.clone(),
-                    bus: cue.bus,
+                    route: route.clone(),
                     gain,
                     speed,
                     looping: cue.looping,
@@ -790,6 +844,7 @@ impl AudioRuntimeState {
                         .or_else(|| cue.attenuation.clone()),
                     acoustic: request.acoustic,
                     environment: request.environment,
+                    render_start_sample: request.render_start_sample,
                 },
                 voice_policy.clone(),
                 request.scope_id,
@@ -874,7 +929,8 @@ impl AudioRuntimeState {
         let attenuation_gain = voice
             .map(|voice| voice.attenuation_gain(self.listener))
             .unwrap_or(0.0);
-        let bus_gain = voice.map(|voice| self.bus_gain(voice.bus)).unwrap_or(0.0);
+        let route_id = voice.map(|voice| voice.route.0.as_str()).unwrap_or("");
+        let route_gain = voice.map(|voice| self.route_gain(&voice.route)).unwrap_or(0.0);
         let transmission_gain = voice
             .map(|voice| voice.propagated_acoustic().transmission_gain)
             .unwrap_or(0.0);
@@ -902,7 +958,7 @@ impl AudioRuntimeState {
             .map(String::as_str)
             .unwrap_or("");
         Some(format!(
-            "YSCD play dictionary='{}' cue='{}' layer='{}' embedded_clip_bytes={} dictionary_embedded_bytes={} physical_voice={} virtualized={} voice_id={:?} output_state='{}' arbiter_selected={} audibility={:.6} distance={:.3} attenuation_gain={:.6} bus_gain={:.3} transmission_gain={:.3} doppler={:.4} air_hf_gain={:.3} air_low_pass_hz={:.0} max_physical_voices={} output_error='{}' materialize_error='{}'",
+            "YSCD play dictionary='{}' cue='{}' layer='{}' embedded_clip_bytes={} dictionary_embedded_bytes={} physical_voice={} virtualized={} voice_id={:?} output_state='{}' arbiter_selected={} audibility={:.6} distance={:.3} attenuation_gain={:.6} route='{}' route_gain={:.3} transmission_gain={:.3} doppler={:.4} air_hf_gain={:.3} air_low_pass_hz={:.0} max_physical_voices={} output_error='{}' materialize_error='{}'",
             meta.dictionary_path,
             meta.cue_name,
             layer,
@@ -916,7 +972,8 @@ impl AudioRuntimeState {
             audibility,
             distance,
             attenuation_gain,
-            bus_gain,
+            route_id,
+            route_gain,
             transmission_gain,
             doppler_ratio,
             air_hf_gain,
@@ -941,7 +998,7 @@ impl AudioRuntimeState {
                     frequency,
                     duration: Duration::from_millis(duration_ms),
                 },
-                bus: AudioBus::Ui,
+                route: AudioRouteId::default(),
                 gain,
                 speed: 1.0,
                 looping: false,
@@ -961,6 +1018,7 @@ impl AudioRuntimeState {
                 voice_budget: String::new(),
                 priority: UI_FEEDBACK_PRIORITY,
                 paused: false,
+                render_start_sample: None,
                 virtual_source_position: Duration::ZERO,
                 virtual_since: Some(Instant::now()),
             },

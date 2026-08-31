@@ -11,6 +11,15 @@ fn payload_vec3(payload: &serde_json::Value, key: &str) -> Option<Vec3> {
     value.is_finite().then_some(value)
 }
 
+#[inline]
+fn weapon_segment_correlation_id(shot_sequence: u64, bounce_count: u8) -> u64 {
+    if bounce_count == 0 {
+        shot_sequence
+    } else {
+        avalanche_u64(shot_sequence ^ u64::from(bounce_count).wrapping_mul(0x9E37_79B9_7F4A_7C15))
+    }
+}
+
 fn entity_from_stable_id(world: &World, stable_id: u64) -> Option<EntityId> {
     world
         .iter_entities()
@@ -68,7 +77,52 @@ pub fn consume_weapon_gameplay_events(world: &mut World, events: &[GameplayEvent
                     .get("target")
                     .and_then(serde_json::Value::as_u64)
                     .and_then(|target| entity_from_stable_id(world, target));
-                resolve_weapon_shot_hit_fx(world, owner, shot_sequence, point, normal, target);
+                let bounce_count = event
+                    .payload
+                    .get("bounce_count")
+                    .and_then(serde_json::Value::as_u64)
+                    .unwrap_or(0)
+                    .min(u8::MAX as u64) as u8;
+                resolve_weapon_shot_hit_fx_segment(
+                    world,
+                    owner,
+                    shot_sequence,
+                    bounce_count,
+                    point,
+                    normal,
+                    target,
+                );
+                if event
+                    .payload
+                    .get("ricochet")
+                    .and_then(serde_json::Value::as_bool)
+                    == Some(true)
+                {
+                    let reflected = payload_vec3(&event.payload, "ricochet_direction")
+                        .unwrap_or_else(|| {
+                            let incoming = payload_vec3(&event.payload, "shot_direction")
+                                .unwrap_or(-normal)
+                                .normalize_or_zero();
+                            let n = normal.normalize_or_zero();
+                            (incoming - n * (2.0 * incoming.dot(n))).normalize_or_zero()
+                        });
+                    let remaining = event
+                        .payload
+                        .get("ricochet_range")
+                        .and_then(serde_json::Value::as_f64)
+                        .map(|value| value as f32)
+                        .unwrap_or(0.0);
+                    spawn_weapon_ricochet_fx(
+                        world,
+                        owner,
+                        shot_sequence,
+                        bounce_count.saturating_add(1),
+                        point,
+                        normal,
+                        reflected,
+                        remaining,
+                    );
+                }
             }
             _ => {}
         }
@@ -77,10 +131,15 @@ pub fn consume_weapon_gameplay_events(world: &mut World, events: &[GameplayEvent
 
 fn equipped_weapon_vfx_definition(world: &World, owner: EntityId) -> Option<WeaponVfxDefinition> {
     let binding = world.get::<EquippedWeaponBinding>(owner).copied()?;
-    world
+    let mut vfx = world
         .resource::<ItemCatalog>()?
         .get(binding.item)
-        .map(|definition| definition.weapon_vfx.clone())
+        .map(|definition| definition.weapon_vfx.clone())?;
+    let (_, muzzle_override, tracer_override) =
+        newengine_engine_runtime::gameplay::active_equipped_weapon_component_overrides(world, owner);
+    if muzzle_override.is_some() { vfx.shot = muzzle_override; }
+    if tracer_override.is_some() { vfx.tracer = tracer_override; }
+    Some(vfx)
 }
 
 #[inline]
@@ -397,6 +456,96 @@ fn fallback_weapon_socket(position: Vec3, forward: Vec3) -> Option<WeaponSocketP
     let rotation = Quat::from_rotation_arc(Vec3::Z, forward).normalize_or_identity();
     WeaponSocketPose::stationary(position, rotation)
 }
+fn spawn_weapon_segment_effect(
+    world: &mut World,
+    owner: EntityId,
+    effect: String,
+    shot_sequence: u64,
+    bounce_count: u8,
+    origin: Vec3,
+    direction: Vec3,
+    max_distance: f32,
+    tag: &str,
+) {
+    let direction = direction.normalize_or_zero();
+    if !origin.is_finite() || direction.length_squared() <= 1.0e-8 || max_distance <= 0.0 {
+        return;
+    }
+    let effect_owner = equipped_weapon_entity(world, owner).unwrap_or(owner);
+    let correlation_id = weapon_segment_correlation_id(shot_sequence, bounce_count);
+    let request = newengine_vfx_api::VfxSpawnRequestV1 {
+        effect: newengine_vfx_api::VfxEffectRef::new(effect),
+        owner: Some(newengine_vfx_api::EntityHandle::new(
+            effect_owner.stable_u64(),
+        )),
+        correlation_id,
+        position: vec3_array(origin),
+        direction: vec3_array(direction),
+        max_distance: max_distance.clamp(0.05, 1_000.0),
+        seed: effect_owner.stable_u64()
+            ^ correlation_id.rotate_left(23)
+            ^ u64::from(bounce_count).rotate_left(41),
+        tags: vec!["weapon".to_owned(), tag.to_owned()],
+        ..Default::default()
+    };
+    if let Err(error) = newengine_vfx_runtime::spawn_vfx(world, request) {
+        newengine_ulog_api::ulog::warn!(
+            "project weapon segment VFX rejected owner={} shot={} bounce={} tag='{}' err='{}'",
+            owner.stable_u64(),
+            shot_sequence,
+            bounce_count,
+            tag,
+            error,
+        );
+    }
+}
+
+fn spawn_weapon_ricochet_fx(
+    world: &mut World,
+    owner: EntityId,
+    shot_sequence: u64,
+    bounce_count: u8,
+    point: Vec3,
+    normal: Vec3,
+    reflected: Vec3,
+    remaining: f32,
+) {
+    let Some(vfx) = equipped_weapon_vfx_definition(world, owner) else {
+        return;
+    };
+    let effect_owner = equipped_weapon_entity(world, owner).unwrap_or(owner);
+    let correlation_id = weapon_segment_correlation_id(shot_sequence, bounce_count);
+    if let Some(effect) = vfx.ricochet {
+        let request = newengine_vfx_api::VfxSpawnRequestV1 {
+            effect: newengine_vfx_api::VfxEffectRef::new(effect),
+            owner: Some(newengine_vfx_api::EntityHandle::new(
+                effect_owner.stable_u64(),
+            )),
+            correlation_id,
+            position: vec3_array(point + normal.normalize_or_zero() * 0.004),
+            direction: vec3_array(reflected),
+            normal: vec3_array(normal),
+            seed: effect_owner.stable_u64() ^ correlation_id.rotate_left(29),
+            tags: vec!["weapon".to_owned(), "ricochet".to_owned()],
+            ..Default::default()
+        };
+        let _ = newengine_vfx_runtime::spawn_vfx(world, request);
+    }
+    if let Some(tracer) = vfx.tracer {
+        spawn_weapon_segment_effect(
+            world,
+            owner,
+            tracer,
+            shot_sequence,
+            bounce_count,
+            point + reflected.normalize_or_zero() * 0.012,
+            reflected,
+            remaining,
+            "ricochet_tracer",
+        );
+    }
+}
+
 /// Publishes a semantic weapon-shot effect from the already-resolved physical muzzle.
 /// Damage/collision remain authoritative in the hitscan path; transient visual composition,
 /// budgets and lifetime are owned by `newengine-vfx-runtime`. Physical shell casings remain here
@@ -414,7 +563,7 @@ pub fn spawn_weapon_shot_fx(
         return;
     }
     let max_distance = if range.is_finite() && range > 0.0 {
-        range.clamp(0.1, 100_000.0)
+        range.clamp(0.1, 1_000.0)
     } else {
         0.0
     };
@@ -441,6 +590,19 @@ pub fn spawn_weapon_shot_fx(
                 error
             );
         }
+    }
+    if let Some(tracer) = equipped_weapon_vfx_definition(world, owner).and_then(|vfx| vfx.tracer) {
+        spawn_weapon_segment_effect(
+            world,
+            owner,
+            tracer,
+            shot_sequence,
+            0,
+            origin,
+            direction,
+            max_distance,
+            "tracer",
+        );
     }
     // Physical casing behavior belongs to the equipped weapon definition. Weapons without an
     // authored casing contract simply do not schedule a casing entity.
@@ -690,10 +852,28 @@ pub fn resolve_weapon_shot_hit_fx(
     normal: Vec3,
     target: Option<EntityId>,
 ) {
+    resolve_weapon_shot_hit_fx_segment(world, owner, shot_sequence, 0, point, normal, target);
+}
+
+fn resolve_weapon_shot_hit_fx_segment(
+    world: &mut World,
+    owner: EntityId,
+    shot_sequence: u64,
+    bounce_count: u8,
+    point: Vec3,
+    normal: Vec3,
+    target: Option<EntityId>,
+) {
     if !point.is_finite() {
         return;
     }
-    clamp_weapon_shot_fx_to_hit(world, owner, shot_sequence, point);
+    let effect_owner = equipped_weapon_entity(world, owner).unwrap_or(owner);
+    newengine_vfx_runtime::clamp_vfx_tracers_to_hit(
+        world,
+        effect_owner.stable_u64(),
+        weapon_segment_correlation_id(shot_sequence, bounce_count),
+        point,
+    );
     let normal = if normal.is_finite() && normal.length_squared() > 1.0e-8 {
         normal.normalize_or_zero()
     } else {
@@ -707,13 +887,12 @@ pub fn resolve_weapon_shot_hit_fx(
     let Some(effect) = effect else {
         return;
     };
-    let effect_owner = equipped_weapon_entity(world, owner).unwrap_or(owner);
     let request = newengine_vfx_api::VfxSpawnRequestV1 {
         effect: newengine_vfx_api::VfxEffectRef::new(effect),
         owner: Some(newengine_vfx_api::EntityHandle::new(
             effect_owner.stable_u64(),
         )),
-        correlation_id: shot_sequence,
+        correlation_id: weapon_segment_correlation_id(shot_sequence, bounce_count),
         position: vec3_array(point),
         direction: vec3_array(-normal),
         normal: vec3_array(normal),

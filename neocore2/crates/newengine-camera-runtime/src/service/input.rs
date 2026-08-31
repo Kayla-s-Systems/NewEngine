@@ -150,10 +150,23 @@ impl CameraRuntimeService {
             let inherited_view = world
                 .get::<CharacterMotor>(player)
                 .copied()
-                .map(|motor| (wrap_pi(motor.yaw), motor.pitch.clamp(-1.35, 1.35)))
+                .map(|motor| {
+                    (
+                        wrap_pi(motor.yaw),
+                        motor.pitch.clamp(
+                            config.third_person_orbit_pitch_min_radians,
+                            config.third_person_orbit_pitch_max_radians,
+                        ),
+                    )
+                })
                 .unwrap_or((0.0, 0.0));
-            let (yaw, pitch) =
-                orbit_angles_from_camera(pivot_ws, rig.position).unwrap_or(inherited_view);
+            let (yaw, pitch) = orbit_angles_from_camera(
+                pivot_ws,
+                rig.position,
+                config.third_person_orbit_pitch_min_radians,
+                config.third_person_orbit_pitch_max_radians,
+            )
+            .unwrap_or(inherited_view);
             state.runner = config.runner;
             state.target = player;
             state.anchor_ws = anchor_ws;
@@ -162,6 +175,7 @@ impl CameraRuntimeService {
             state.orbit_pitch = pitch;
             state.orbit_pivot_offset_ws = body_rotation.normalize_or_identity() * pivot_offset_ls;
             state.collision_distance = 0.0;
+            state.collision_velocity = 0.0;
             state.last_pivot_ws = pivot_ws;
             state.last_focus_ws = pivot_ws;
             state.last_desired_camera_ws = rig.position;
@@ -170,12 +184,20 @@ impl CameraRuntimeService {
         }
 
         // Orbit owns an independent camera angle after initialization. CharacterMotor is consulted only
-        // as the stable entry orientation when the previous camera pose is at the orbit pole.
-        const ORBIT_LOOK_SENSITIVITY: f32 = 0.0028;
-        const ORBIT_PITCH_LIMIT: f32 = 1.35;
-        state.orbit_yaw = wrap_pi(state.orbit_yaw + delta.x * ORBIT_LOOK_SENSITIVITY);
-        state.orbit_pitch = (state.orbit_pitch + delta.y * ORBIT_LOOK_SENSITIVITY)
-            .clamp(-ORBIT_PITCH_LIMIT, ORBIT_PITCH_LIMIT);
+        // as the stable entry orientation when the previous camera pose is at the orbit pole. Input
+        // response and vertical envelope are project-authored camera policy.
+        let look_sensitivity = config
+            .third_person_orbit_look_sensitivity_radians_per_pixel
+            .clamp(0.0, 0.25);
+        let pitch_min = config
+            .third_person_orbit_pitch_min_radians
+            .clamp(-89.0_f32.to_radians(), 88.0_f32.to_radians());
+        let pitch_max = config
+            .third_person_orbit_pitch_max_radians
+            .clamp(pitch_min + 1.0_f32.to_radians(), 89.0_f32.to_radians());
+        state.orbit_yaw = wrap_pi(state.orbit_yaw + delta.x * look_sensitivity);
+        state.orbit_pitch =
+            (state.orbit_pitch + delta.y * look_sensitivity).clamp(pitch_min, pitch_max);
         let _ = world.insert(camera, state);
         true
     }

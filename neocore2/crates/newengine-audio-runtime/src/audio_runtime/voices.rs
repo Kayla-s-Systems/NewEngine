@@ -148,13 +148,13 @@ fn propagation_state(
 
 enum VoiceControl {
     Flat {
-        player: Player,
+        render: BlockVoiceHandle,
         spectral: Option<SpectralFilterControl>,
         environment: Option<EnvironmentFilterControl>,
         late_binding: Option<RoomBusVoiceBinding>,
     },
     Spatial {
-        player: Player,
+        render: BlockVoiceHandle,
         spatial: SpatialMixControl,
         spectral: Option<SpectralFilterControl>,
         environment: Option<EnvironmentFilterControl>,
@@ -167,16 +167,16 @@ impl VoiceControl {
     fn set_volume(&self, value: f32) {
         match self {
             Self::Flat {
-                player,
+                render,
                 late_binding,
                 ..
             }
             | Self::Spatial {
-                player,
+                render,
                 late_binding,
                 ..
             } => {
-                player.set_volume(value);
+                render.set_volume(value);
                 if let Some(binding) = late_binding {
                     binding.set_voice_gain(value);
                 }
@@ -187,18 +187,17 @@ impl VoiceControl {
     #[inline]
     fn set_speed(&self, value: f32) {
         match self {
-            Self::Flat { player, .. } => player.set_speed(value),
-            Self::Spatial { player, .. } => player.set_speed(value),
+            Self::Flat { render, .. } => render.set_speed(value),
+            Self::Spatial { render, .. } => render.set_speed(value),
         }
     }
 
     #[inline]
     fn set_paused(&self, paused: bool) {
-        match (self, paused) {
-            (Self::Flat { player, .. }, true) => player.pause(),
-            (Self::Flat { player, .. }, false) => player.play(),
-            (Self::Spatial { player, .. }, true) => player.pause(),
-            (Self::Spatial { player, .. }, false) => player.play(),
+        match self {
+            Self::Flat { render, .. } | Self::Spatial { render, .. } => {
+                render.set_paused(paused);
+            }
         }
     }
 
@@ -255,31 +254,30 @@ impl VoiceControl {
     #[inline]
     fn stop(&self) {
         match self {
-            Self::Flat { player, .. } => player.stop(),
-            Self::Spatial { player, .. } => player.stop(),
+            Self::Flat { render, .. } => render.stop(),
+            Self::Spatial { render, .. } => render.stop(),
         }
     }
 
     #[inline]
     fn empty(&self) -> bool {
         match self {
-            Self::Flat { player, .. } => player.empty(),
-            Self::Spatial { player, .. } => player.empty(),
+            Self::Flat { render, .. } => render.empty(),
+            Self::Spatial { render, .. } => render.empty(),
         }
     }
 
     #[inline]
     fn get_pos(&self) -> Duration {
         match self {
-            Self::Flat { player, .. } => player.get_pos(),
-            Self::Spatial { player, .. } => player.get_pos(),
+            Self::Flat { render, .. } => render.get_pos(),
+            Self::Spatial { render, .. } => render.get_pos(),
         }
     }
 
     fn try_seek(&self, position: Duration) -> Result<(), String> {
         match self {
-            Self::Flat { player, .. } => player.try_seek(position),
-            Self::Spatial { player, .. } => player.try_seek(position),
+            Self::Flat { render, .. } | Self::Spatial { render, .. } => render.try_seek(position),
         }
         .map_err(|error| format!("audio voice seek failed: {error}"))
     }
@@ -355,7 +353,7 @@ fn normalize_timeline_position(
 struct VoiceEntry {
     control: Option<VoiceControl>,
     source: VoiceSource,
-    bus: AudioBus,
+    route: AudioRouteId,
     gain: f32,
     speed: f32,
     looping: bool,
@@ -367,7 +365,7 @@ struct VoiceEntry {
     last_spatial_update: Option<Instant>,
     environment: AudioEnvironmentState,
     stream_stats: Option<Arc<StreamingStats>>,
-    /// Absolute media timeline position corresponding to physical Player::get_pos() == 0.
+    /// Absolute media timeline position corresponding to physical render-node output clock == 0.
     /// Non-stream sources keep this at zero; rebuilt streams set it to their resume point.
     physical_source_origin: Duration,
     concurrency_group: String,
@@ -377,6 +375,8 @@ struct VoiceEntry {
     voice_budget: String,
     priority: i32,
     paused: bool,
+    /// Absolute provider output sample for pre-armed physical onset.
+    render_start_sample: Option<u64>,
     /// Timeline position in source time, independent of playback speed.
     virtual_source_position: Duration,
     virtual_since: Option<Instant>,

@@ -3,7 +3,7 @@
 use std::collections::{HashMap, HashSet};
 
 use newengine_audio_api::{
-    AudioAcousticState, AudioAmbienceBed, AudioAmbienceScope, AudioBus, AudioSpatialParams,
+    AudioAcousticState, AudioAmbienceBed, AudioAmbienceScope, AudioSpatialParams,
     AudioStreamPlayRequest, AudioVoiceUpdateRequest,
 };
 use newengine_core::{EngineResult, Module, ModuleCtx};
@@ -257,7 +257,7 @@ impl AudioAmbienceRuntimeModule {
             }
 
             let mut request = AudioStreamPlayRequest::new(snapshot.bed.stream.uri.clone());
-            request.bus = AudioBus::Ambience;
+            request.route = snapshot.bed.route.clone();
             request.gain = next.max(AMBIENCE_ACTIVE_EPSILON * 2.0);
             request.looping = snapshot.bed.looping;
             request.spatial = snapshot.bed.spatial.then_some(AudioSpatialParams {

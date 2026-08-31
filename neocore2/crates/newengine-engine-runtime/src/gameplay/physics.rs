@@ -311,6 +311,13 @@ pub(super) fn step_service_physics(
         }
     };
     let backend_step_ms = backend_started.elapsed().as_secs_f32() * 1000.0;
+    let completed_impulses = world
+        .query::<crate::gameplay::PendingPhysicsImpulse>()
+        .map(|(entity, _)| entity)
+        .collect::<Vec<_>>();
+    for entity in completed_impulses {
+        let _ = world.remove::<crate::gameplay::PendingPhysicsImpulse>(entity);
+    }
     if let Some(sync) = world.resource_mut::<PhysicsSyncModule>() {
         sync.step_failure_count = 0;
     }

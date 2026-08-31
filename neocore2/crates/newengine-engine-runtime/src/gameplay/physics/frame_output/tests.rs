@@ -104,6 +104,10 @@ mod tests {
                     angular_velocity: [0.0, 0.0, 0.0],
                 }],
                 query_hits: vec![PhysicsQueryHitDto {
+                    subshape_id: 0,
+                    hit_index: 0,
+                    back_face: false,
+
                     seq: player.stable_u64(),
                     entity: ground_key,
                     position: [0.0, -0.03, 0.0],
@@ -214,6 +218,10 @@ mod tests {
                     angular_velocity: [0.0, 0.0, 0.0],
                 }],
                 query_hits: vec![PhysicsQueryHitDto {
+                    subshape_id: 0,
+                    hit_index: 0,
+                    back_face: false,
+
                     seq: player.stable_u64(),
                     entity: ground.stable_u64(),
                     position: [0.0, -0.02, 0.0],
@@ -257,6 +265,10 @@ mod tests {
                     angular_velocity: [0.0, 0.0, 0.0],
                 }],
                 query_hits: vec![PhysicsQueryHitDto {
+                    subshape_id: 0,
+                    hit_index: 0,
+                    back_face: false,
+
                     seq: player.stable_u64(),
                     entity: u64::MAX - 8,
                     position: [0.0, -0.03, 0.0],
@@ -310,6 +322,10 @@ mod tests {
             PhysicsFrameOutput {
                 fixed_tick: 2,
                 query_hits: vec![PhysicsQueryHitDto {
+                    subshape_id: 0,
+                    hit_index: 0,
+                    back_face: false,
+
                     seq: super::super::frame_input::stand_probe_query_seq(player.stable_u64(), 0),
                     entity: ceiling.stable_u64(),
                     position: [0.0, 1.0, 0.0],
@@ -396,6 +412,10 @@ mod tests {
                     angular_velocity: [0.0, 0.0, 0.0],
                 }],
                 query_hits: vec![PhysicsQueryHitDto {
+                    subshape_id: 0,
+                    hit_index: 0,
+                    back_face: false,
+
                     seq: player.stable_u64(),
                     entity: u64::MAX - 9,
                     position: [0.0, -0.02, 0.0],

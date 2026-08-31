@@ -13,6 +13,11 @@ pub enum PhysicsCommandKindDto {
         entity: PhysicsEntityKey,
         velocity: PhysicsVec3,
     },
+    ApplyImpulse {
+        entity: PhysicsEntityKey,
+        impulse: PhysicsVec3,
+        point: PhysicsVec3,
+    },
     DestroyBody {
         entity: PhysicsEntityKey,
     },
@@ -30,6 +35,16 @@ pub enum PhysicsQueryKindDto {
         origin: PhysicsVec3,
         dir: PhysicsVec3,
         max_t: f32,
+    },
+    /// Bounded all-hit mesh ray intended for firearm ballistics. Unlike `Ray`, this query may
+    /// return multiple ordered intersections with the same `seq` and must not be used for ordinary
+    /// ground/audio/interaction probes.
+    BallisticRay {
+        origin: PhysicsVec3,
+        dir: PhysicsVec3,
+        max_t: f32,
+        max_hits: u16,
+        collide_back_faces: bool,
     },
     Sphere {
         center: PhysicsVec3,

@@ -13,6 +13,12 @@ pub struct HitscanWeaponTuning {
     pub range: f32,
     pub hip_spread_radians: f32,
     pub aim_spread_radians: f32,
+    pub movement_spread_multiplier: f32,
+    pub crouch_spread_multiplier: f32,
+    pub recoil_accuracy_per_shot_radians: f32,
+    pub recoil_accuracy_max_radians: f32,
+    pub accuracy_recovery_hz: f32,
+    pub accuracy_recovery_delay_seconds: f32,
     pub recoil_pitch_radians: f32,
     pub recoil_pitch_random_radians: f32,
     pub recoil_yaw_radians: f32,
@@ -20,6 +26,13 @@ pub struct HitscanWeaponTuning {
     pub ads_recoil_multiplier: f32,
     pub recoil_recovery_hz: f32,
     pub muzzle_forward_offset: f32,
+    /// NorthStar-style instant projectile may continue as one shallow-angle ricochet trace.
+    pub ricochet_enabled: bool,
+    pub ricochet_max_bounces: u8,
+    /// Maximum absolute `dot(-shot_dir, hit_normal)` that is considered a grazing impact.
+    pub ricochet_grazing_dot: f32,
+    /// Damage/remaining-range energy retained by each bounce.
+    pub ricochet_energy_retention: f32,
 }
 
 impl Default for HitscanWeaponTuning {
@@ -33,6 +46,12 @@ impl Default for HitscanWeaponTuning {
             range: 120.0,
             hip_spread_radians: 1.5_f32.to_radians(),
             aim_spread_radians: 0.25_f32.to_radians(),
+            movement_spread_multiplier: 1.65,
+            crouch_spread_multiplier: 0.82,
+            recoil_accuracy_per_shot_radians: 0.28_f32.to_radians(),
+            recoil_accuracy_max_radians: 3.5_f32.to_radians(),
+            accuracy_recovery_hz: 5.5,
+            accuracy_recovery_delay_seconds: 0.10,
             recoil_pitch_radians: 0.8_f32.to_radians(),
             recoil_pitch_random_radians: 0.15_f32.to_radians(),
             recoil_yaw_radians: 0.35_f32.to_radians(),
@@ -40,6 +59,10 @@ impl Default for HitscanWeaponTuning {
             ads_recoil_multiplier: 0.78,
             recoil_recovery_hz: 7.5,
             muzzle_forward_offset: 0.52,
+            ricochet_enabled: true,
+            ricochet_max_bounces: 1,
+            ricochet_grazing_dot: 0.38,
+            ricochet_energy_retention: 0.38,
         }
     }
 }
@@ -52,13 +75,25 @@ impl HitscanWeaponTuning {
             fire_interval: self.fire_interval.clamp(0.01, 60.0),
             reload_duration: self.reload_duration.clamp(0.0, 120.0),
             damage: self.damage.clamp(0.0, 1_000_000.0),
-            range: self.range.clamp(0.1, 100_000.0),
+            // NorthStar's bounded mesh-ray path asserts on rays longer than 1000 m. Keep the same
+            // upper contract for instant firearm projectiles.
+            range: self.range.clamp(0.1, 1_000.0),
             hip_spread_radians: self
                 .hip_spread_radians
                 .clamp(0.0, core::f32::consts::FRAC_PI_2),
             aim_spread_radians: self
                 .aim_spread_radians
                 .clamp(0.0, core::f32::consts::FRAC_PI_2),
+            movement_spread_multiplier: self.movement_spread_multiplier.clamp(1.0, 8.0),
+            crouch_spread_multiplier: self.crouch_spread_multiplier.clamp(0.1, 2.0),
+            recoil_accuracy_per_shot_radians: self
+                .recoil_accuracy_per_shot_radians
+                .clamp(0.0, core::f32::consts::FRAC_PI_4),
+            recoil_accuracy_max_radians: self
+                .recoil_accuracy_max_radians
+                .clamp(0.0, core::f32::consts::FRAC_PI_2),
+            accuracy_recovery_hz: self.accuracy_recovery_hz.clamp(0.05, 120.0),
+            accuracy_recovery_delay_seconds: self.accuracy_recovery_delay_seconds.clamp(0.0, 5.0),
             recoil_pitch_radians: self.recoil_pitch_radians.clamp(0.0, 1.0),
             recoil_pitch_random_radians: self.recoil_pitch_random_radians.clamp(0.0, 1.0),
             recoil_yaw_radians: self.recoil_yaw_radians.clamp(0.0, 1.0),
@@ -66,7 +101,89 @@ impl HitscanWeaponTuning {
             ads_recoil_multiplier: self.ads_recoil_multiplier.clamp(0.0, 4.0),
             recoil_recovery_hz: self.recoil_recovery_hz.clamp(0.05, 120.0),
             muzzle_forward_offset: self.muzzle_forward_offset.clamp(0.0, 10.0),
+            ricochet_enabled: self.ricochet_enabled,
+            ricochet_max_bounces: self.ricochet_max_bounces.min(4),
+            ricochet_grazing_dot: self.ricochet_grazing_dot.clamp(0.0, 0.95),
+            ricochet_energy_retention: self.ricochet_energy_retention.clamp(0.0, 0.95),
         }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct WeaponFireControllerState {
+    pub weapon_instance_id: ItemInstanceId,
+    pub trigger_was_held: bool,
+    pub activation_seconds: f32,
+    pub pattern_cooldown_seconds: f32,
+    pub burst_shots_remaining: u8,
+    pub bursts_remaining: u8,
+}
+
+impl WeaponFireControllerState {
+    #[inline]
+    pub fn new(weapon_instance_id: ItemInstanceId) -> Self {
+        Self {
+            weapon_instance_id,
+            trigger_was_held: false,
+            activation_seconds: 0.0,
+            pattern_cooldown_seconds: 0.0,
+            burst_shots_remaining: 0,
+            bursts_remaining: 0,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct WeaponAccuracyState {
+    pub weapon_instance_id: ItemInstanceId,
+    pub bloom_radians: f32,
+    pub recovery_velocity: f32,
+    pub shot_count: u32,
+    pub time_since_shot: f32,
+}
+
+impl WeaponAccuracyState {
+    #[inline]
+    pub fn new(weapon_instance_id: ItemInstanceId) -> Self {
+        Self {
+            weapon_instance_id,
+            bloom_radians: 0.0,
+            recovery_velocity: 0.0,
+            shot_count: 0,
+            time_since_shot: f32::INFINITY,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct WeaponAccuracyModifiers {
+    pub component_multiplier: f32,
+    pub character_multiplier: f32,
+}
+
+impl Default for WeaponAccuracyModifiers {
+    fn default() -> Self {
+        Self {
+            component_multiplier: 1.0,
+            character_multiplier: 1.0,
+        }
+    }
+}
+
+impl WeaponAccuracyModifiers {
+    #[inline]
+    pub fn combined(self) -> f32 {
+        let component = if self.component_multiplier.is_finite() {
+            self.component_multiplier.clamp(0.1, 8.0)
+        } else {
+            1.0
+        };
+        let character = if self.character_multiplier.is_finite() {
+            self.character_multiplier.clamp(0.1, 8.0)
+        } else {
+            1.0
+        };
+        component * character
     }
 }
 
@@ -296,6 +413,99 @@ pub enum WeaponAttackKind {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+pub struct BallisticShotProfile {
+    pub projectile_mass_kg: f32,
+    pub muzzle_velocity_mps: f32,
+    pub momentum_ns: f32,
+    pub remaining_penetration_energy_j: f32,
+    pub max_penetration_m: f32,
+    pub damage_multiplier: f32,
+    pub impulse_multiplier: f32,
+    pub falloff_start_m: f32,
+    pub falloff_end_m: f32,
+    pub falloff_min_multiplier: f32,
+    pub component_falloff_multiplier: f32,
+}
+
+impl BallisticShotProfile {
+    pub fn sanitized(self) -> Self {
+        let mass = if self.projectile_mass_kg.is_finite() {
+            self.projectile_mass_kg.clamp(0.0001, 1.0)
+        } else {
+            0.008
+        };
+        let velocity = if self.muzzle_velocity_mps.is_finite() {
+            self.muzzle_velocity_mps.clamp(1.0, 2_500.0)
+        } else {
+            350.0
+        };
+        Self {
+            projectile_mass_kg: mass,
+            muzzle_velocity_mps: velocity,
+            momentum_ns: if self.momentum_ns.is_finite() {
+                self.momentum_ns.max(0.0)
+            } else {
+                mass * velocity
+            },
+            remaining_penetration_energy_j: if self.remaining_penetration_energy_j.is_finite() {
+                self.remaining_penetration_energy_j.max(0.0)
+            } else {
+                0.0
+            },
+            max_penetration_m: if self.max_penetration_m.is_finite() {
+                self.max_penetration_m.clamp(0.0, 10.0)
+            } else {
+                0.0
+            },
+            damage_multiplier: if self.damage_multiplier.is_finite() {
+                self.damage_multiplier.clamp(0.0, 20.0)
+            } else {
+                1.0
+            },
+            impulse_multiplier: if self.impulse_multiplier.is_finite() {
+                self.impulse_multiplier.clamp(0.0, 20.0)
+            } else {
+                1.0
+            },
+            falloff_start_m: if self.falloff_start_m.is_finite() {
+                self.falloff_start_m.clamp(0.0, 10_000.0)
+            } else {
+                0.0
+            },
+            falloff_end_m: if self.falloff_end_m.is_finite() {
+                self.falloff_end_m.clamp(0.001, 10_000.0)
+            } else {
+                100.0
+            },
+            falloff_min_multiplier: if self.falloff_min_multiplier.is_finite() {
+                self.falloff_min_multiplier.clamp(0.0, 1.0)
+            } else {
+                1.0
+            },
+            component_falloff_multiplier: if self.component_falloff_multiplier.is_finite() {
+                self.component_falloff_multiplier.clamp(0.0, 20.0)
+            } else {
+                1.0
+            },
+        }
+    }
+}
+
+impl BallisticShotProfile {
+    pub fn falloff_multiplier_at(self, distance_m: f32) -> f32 {
+        let value = self.sanitized();
+        let end = value.falloff_end_m.max(value.falloff_start_m + 0.001);
+        let curve = if distance_m <= value.falloff_start_m { 1.0 }
+        else if distance_m >= end { value.falloff_min_multiplier }
+        else {
+            let alpha = ((distance_m - value.falloff_start_m) / (end - value.falloff_start_m)).clamp(0.0, 1.0);
+            1.0 + (value.falloff_min_multiplier - 1.0) * alpha
+        };
+        curve * value.component_falloff_multiplier
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PendingHitscan {
     pub query_seq: u64,
     /// Weapon identity is captured at trigger time and survives equipment switches while the
@@ -307,6 +517,11 @@ pub struct PendingHitscan {
     pub direction: Vec3,
     pub range: f32,
     pub damage: f32,
+    pub ballistics: BallisticShotProfile,
+    pub bounce_count: u8,
+    pub max_bounces: u8,
+    pub ricochet_grazing_dot: f32,
+    pub ricochet_energy_retention: f32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]

@@ -7,11 +7,14 @@ use newengine_assets_api::{
 };
 use newengine_ecs::World;
 use newengine_engine_runtime::gameplay::{
-    preload_weapon_audio_definition, EquipmentSlot, HitscanWeaponTuning, InventoryEventBus,
+    preload_weapon_audio_definition, AmmoDefinition, AmmoProjectileType, EquipmentSlot,
+    FiringPatternDefinition, FiringPatternKind, HitscanWeaponTuning, InventoryEventBus,
     InventoryLoadout, InventoryLoadoutCatalog, InventoryLoadoutEntry, ItemCatalog, ItemDefinition,
     ItemId, ItemKind, ItemUseEffect, MeleeWeaponTuning, WeaponAnimationDefinition,
-    WeaponAudioDefinition, WeaponCasingDefinition, WeaponFireMode, WeaponItemDefinition,
-    WeaponPresentationDefinition, WeaponType, WeaponVfxDefinition, WorldItemDefinition,
+    WeaponAudioDefinition, WeaponCasingDefinition, WeaponComponentDefinition,
+    WeaponComponentGraphDefinition, WeaponComponentModifiers, WeaponComponentPointDefinition,
+    WeaponFireMode, WeaponItemDefinition, WeaponPresentationDefinition, WeaponType,
+    WeaponVfxDefinition, WorldItemDefinition,
 };
 use newengine_primitives::builtins as primitive_builtins;
 use serde::{Deserialize, Serialize};
@@ -27,6 +30,8 @@ mod nef8;
 mod types;
 #[path = "item_assets/ytyp.rs"]
 mod ytyp;
+#[path = "item_assets/ytyp_offline.rs"]
+mod ytyp_offline;
 
 pub use compile::{
     compile_authored_item_package, install_compiled_item_package, parse_authored_item_package_json,
@@ -36,12 +41,16 @@ pub use nef8::{
     encode_authored_item_package_nef8,
 };
 pub use ytyp::hydrate_item_package_from_ytyp;
+pub use ytyp_offline::hydrate_item_package_from_ytyp_source_roots;
 
 pub use types::{
-    AuthoredItemDefinition, AuthoredItemPackage, AuthoredLoadoutDefinition, AuthoredLoadoutEntry,
-    AuthoredUseEffect, AuthoredWeaponAnimationDefinition, AuthoredWeaponAudioDefinition,
-    AuthoredWeaponCasingDefinition, AuthoredWeaponDefinition, AuthoredWeaponPresentationDefinition,
-    AuthoredWeaponVfxDefinition, AuthoredWorldItemDefinition, CompiledItemPackage,
+    AuthoredAmmoDefinition, AuthoredItemDefinition, AuthoredItemPackage, AuthoredLoadoutDefinition,
+    AuthoredLoadoutEntry, AuthoredUseEffect, AuthoredWeaponAnimationDefinition,
+    AuthoredWeaponAudioDefinition, AuthoredWeaponCasingDefinition,
+    AuthoredWeaponComponentDefinition, AuthoredWeaponComponentGraphDefinition,
+    AuthoredWeaponComponentModifiers, AuthoredWeaponComponentPointDefinition,
+    AuthoredWeaponDefinition, AuthoredWeaponPresentationDefinition, AuthoredWeaponVfxDefinition,
+    AuthoredWorldItemDefinition, CompiledItemPackage,
 };
 
 use compile::validate_package_header;
@@ -68,6 +77,16 @@ pub fn test_fps_item_package() -> AuthoredItemPackage {
                 display_name: "Test Rifle Ammo".to_owned(),
                 kind: "ammo".to_owned(),
                 max_stack: 240,
+                ammo_profile: Some(AuthoredAmmoDefinition {
+                    caliber: "7.62x39mm".to_owned(),
+                    projectile_mass_kg: 0.0080,
+                    muzzle_velocity_mps: 715.0,
+                    penetration_energy_j: 1500.0,
+                    max_penetration_m: 0.55,
+                    damage_multiplier: 1.0,
+                    impulse_multiplier: 1.0,
+                    ..AuthoredAmmoDefinition::default()
+                }),
                 unit_weight: 0.012,
                 ..AuthoredItemDefinition::default()
             },
@@ -76,11 +95,20 @@ pub fn test_fps_item_package() -> AuthoredItemPackage {
                 display_name: "Test Sidearm Ammo".to_owned(),
                 kind: "ammo".to_owned(),
                 max_stack: 180,
+                ammo_profile: Some(AuthoredAmmoDefinition {
+                    caliber: "9x19mm".to_owned(),
+                    projectile_mass_kg: 0.0080,
+                    muzzle_velocity_mps: 360.0,
+                    penetration_energy_j: 420.0,
+                    max_penetration_m: 0.28,
+                    damage_multiplier: 1.0,
+                    impulse_multiplier: 0.75,
+                    ..AuthoredAmmoDefinition::default()
+                }),
                 ..AuthoredItemDefinition::default()
             },
             AuthoredItemDefinition {
                 id: "weapon.rifle.standard".to_owned(),
-                definition_ref: "shared/definitions/weapon/rifle.ytyp@rifle".to_owned(),
                 display_name: "Test Rifle".to_owned(),
                 kind: "weapon".to_owned(),
                 equipment_slot: "primary".to_owned(),

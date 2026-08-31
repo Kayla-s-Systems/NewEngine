@@ -240,6 +240,9 @@ mod tests {
 
     fn walkable_hit(player: EntityId, ground: EntityId, distance: f32) -> PhysicsQueryHitDto {
         PhysicsQueryHitDto {
+            subshape_id: 0,
+            hit_index: 0,
+            back_face: false,
             seq: player.stable_u64(),
             entity: ground.stable_u64(),
             position: [0.0, -distance, 0.0],
@@ -399,6 +402,10 @@ mod tests {
 
         let hits = [
             PhysicsQueryHitDto {
+                subshape_id: 0,
+                hit_index: 0,
+                back_face: false,
+
                 seq: foot_probe_query_seq(player.stable_u64(), ModelFootSide::Left),
                 entity: left_surface.stable_u64(),
                 position: [-0.18, 0.0, 0.0],
@@ -406,6 +413,10 @@ mod tests {
                 distance: 0.33,
             },
             PhysicsQueryHitDto {
+                subshape_id: 0,
+                hit_index: 0,
+                back_face: false,
+
                 seq: foot_probe_query_seq(player.stable_u64(), ModelFootSide::Right),
                 entity: right_surface.stable_u64(),
                 position: [0.18, 0.025, 0.0],

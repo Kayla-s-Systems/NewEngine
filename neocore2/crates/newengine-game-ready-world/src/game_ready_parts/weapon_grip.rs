@@ -335,8 +335,8 @@ pub(crate) fn weapon_first_person_solve_contract_presented(
     let rear_from_handle = v3(presentation.ads_rear_sight_from_handle);
     let front_from_handle = v3(presentation.ads_front_sight_from_handle);
     let local_sight_axis = (front_from_handle - rear_from_handle).normalize_or_zero();
-    let hip_handle =
-        eye_position_model + view_rotation * v3(presentation.first_person_hip_handle_offset);
+    let hip_handle = eye_position_model
+        + view_rotation * v3(presentation.first_person_full_body_hip_handle_offset);
     if !hip_handle.is_finite() {
         return None;
     }
@@ -662,10 +662,12 @@ mod tests {
             left_grip_from_handle: [-0.02, 0.04, 0.30],
             stock_contact_from_handle: [-0.02, 0.05, -0.34],
             ready_body_to_root_rotation: [0.036, 0.608, -0.041, 0.792],
+            ready_left_palm_to_left_grip: [0.003, 0.101, 0.006],
             ready_right_palm_to_weapon: [-0.656, 0.722, 0.174, 0.133],
             ready_left_palm_to_weapon: [-0.023, -0.459, -0.303, 0.835],
             right_palm_to_handle: [0.019, 0.033, -0.083],
             first_person_hip_handle_offset: [0.205, -0.205, -0.58],
+            first_person_full_body_hip_handle_offset: [0.205, -0.205, -0.08],
             ads_rear_sight_from_handle: [0.0, -0.058, 0.235],
             ads_front_sight_from_handle: [0.0, -0.070, 0.640],
             ads_camera_to_rear_sight: [0.0, 0.0, -0.075],
@@ -772,7 +774,7 @@ mod tests {
     }
 
     #[test]
-    fn first_person_hip_consumes_authored_camera_space_handle_offset() {
+    fn first_person_full_body_hip_consumes_authored_anatomical_handle_offset() {
         let p = fixture();
         let eye = Vec3::new(0.0, 1.62, 0.0);
         let view = Quat::IDENTITY;
@@ -782,8 +784,36 @@ mod tests {
             weapon_first_person_solve_contract_presented(&p, eye, view, right, left, 0.0, 0.0, 0.0)
                 .expect("FPP hip contract");
         let handle = weapon_handle_position(&p, contract.root);
-        let expected = eye + view * v3(p.first_person_hip_handle_offset);
+        let expected = eye + view * v3(p.first_person_full_body_hip_handle_offset);
         assert!((handle - expected).length() <= 1.0e-5);
+    }
+
+    #[test]
+    fn first_person_full_body_hip_keeps_bilateral_abby_rifle_contacts_reachable() {
+        let p = fixture();
+        let eye = Vec3::new(0.0, 1.62, 0.0);
+        let view = Quat::IDENTITY;
+        let right_shoulder = Vec3::new(-0.087_309, 1.346_941, -0.117_141);
+        let left_shoulder = Vec3::new(0.087_361, 1.345_958, 0.137_559);
+        let right = Mat4::from_translation(right_shoulder);
+        let left = Mat4::from_translation(left_shoulder);
+        let contract =
+            weapon_first_person_solve_contract_presented(&p, eye, view, right, left, 0.0, 0.0, 0.0)
+                .expect("full-body FPP hip contract");
+        let right_target = weapon_ready_right_palm_position(&p, contract.root);
+        let left_target = weapon_ready_left_palm_position(&p, contract.root);
+        // Abby's authored upper+lower arm reaches about 0.520 m to the wrist. Allow the ~1 cm
+        // wrist->palm segment, but retain the solver's 6 mm safety margin. This regression guards
+        // against reusing a distant viewmodel offset for anatomical full-body hands.
+        let max_palm_reach = 0.519_775_4 + 0.010_1 - 0.006;
+        assert!(
+            right_target.distance(right_shoulder) < max_palm_reach,
+            "firing hand must remain anatomically reachable"
+        );
+        assert!(
+            left_target.distance(left_shoulder) < max_palm_reach,
+            "support hand must remain anatomically reachable"
+        );
     }
 
     #[test]

@@ -359,7 +359,7 @@ pub(crate) fn tick_equipped_weapon_animations(world: &mut newengine_ecs::World, 
             if let Some(fire) = runtime.fire.as_mut() {
                 fire.event_cursor.restart();
                 newengine_ulog_api::ulog::info!(
-                    "game-ready: native weapon fire animation triggered root={} owner={} shot={} clip='{}' duration={:.6}s source='TLOU2 assault-fire'",
+                    "game-ready: native weapon fire animation triggered root={} owner={} shot={} clip='{}' duration={:.6}s source='NorthStar assault-fire'",
                     root.stable_u64(),
                     runtime.owner.stable_u64(),
                     state.shot_sequence,

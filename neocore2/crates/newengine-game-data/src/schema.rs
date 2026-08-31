@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct GameData {
     pub schema: String,
     pub version: u32,
@@ -10,7 +11,8 @@ pub struct GameData {
     pub gameplay: GameplayData,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RuntimeData {
     pub fixed_dt_ms: u32,
     pub app_name: String,
@@ -19,7 +21,8 @@ pub struct RuntimeData {
     pub default_profile_asset: String,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct WorldData {
     pub title: String,
     pub objective: String,
@@ -34,30 +37,25 @@ pub struct WorldData {
     pub mission: MissionDefaultsData,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PlayerData {
+    /// Project/YMAP spawn fallback. Discrete YMAP placement remains authoritative when authored.
     pub spawn: [f32; 3],
     pub yaw: f32,
-    #[serde(default = "default_player_move_speed")]
-    pub move_speed: f32,
     pub look_sensitivity: f32,
-    #[serde(default = "default_player_character_ref")]
+    /// Project-selected character definition. Model and locomotion tuning are resolved from YTYP.
     pub character_ref: String,
-    #[serde(default)]
+    /// Runtime-resolved character data. These fields are never accepted from project GameData JSON.
+    #[serde(skip)]
+    pub move_speed: f32,
+    #[serde(skip)]
     pub model: PlayerModelData,
-    #[serde(default)]
+    #[serde(skip)]
     pub tuning: PlayerTuningData,
 }
 
-fn default_player_character_ref() -> String {
-    crate::DEFAULT_PLAYER_CHARACTER_REF.to_owned()
-}
-
-fn default_player_move_speed() -> f32 {
-    3.0
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct PlayerModelData {
     pub enabled: bool,
     pub source: String,
@@ -71,8 +69,8 @@ pub struct PlayerModelData {
 /// Optional authored spring/K locomotion response parameters.
 ///
 /// Absence means the character definition does not provide an original response model. The
-/// runtime must not synthesize TLOU2-derived constants for another character/profile.
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+/// runtime must not synthesize NorthStar-derived constants for another character/profile.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct PlayerMotionResponseData {
     pub velocity_spring_const: f32,
     pub velocity_spring_const_decel: f32,
@@ -82,7 +80,7 @@ pub struct PlayerMotionResponseData {
     pub trans_clamp_dist: f32,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct PlayerTuningData {
     #[serde(default)]
     pub motion_response: Option<PlayerMotionResponseData>,
@@ -107,14 +105,16 @@ pub struct PlayerTuningData {
     pub landing_min_airborne_seconds: f32,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct GameplayData {
     pub status: GameplayStatusData,
     pub projectile: ProjectileData,
     pub inventory: InventoryDefaultsData,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct GameplayStatusData {
     pub default_status: String,
     pub pickup_status: String,
@@ -126,7 +126,8 @@ pub struct GameplayStatusData {
     pub completed_progress_label: String,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ProjectileData {
     pub radius: f32,
     pub speed: f32,
@@ -139,17 +140,14 @@ pub struct ProjectileData {
     pub color: [f32; 4],
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct InventoryDefaultsData {
-    pub rifle_item: String,
-    pub rifle_ammo: String,
-    pub medkit_item: String,
-    pub loadout: String,
-    pub package_asset: String,
+    /// Project-authored HUD capacity. Concrete items/loadouts belong to gameplay policy.
     pub hud_slots: usize,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct TerrainData {
     pub enabled: bool,
     pub seed: u64,
@@ -163,7 +161,7 @@ pub struct TerrainData {
     pub streaming: TerrainStreamingData,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct TerrainGeneratorData {
     pub id: String,
     pub ridged_seed_xor: u64,
@@ -178,7 +176,7 @@ pub struct TerrainGeneratorData {
     pub smoothing_strength: f32,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct TerrainSurfaceData {
     pub forest_texture: String,
     pub sand_texture: String,
@@ -189,7 +187,7 @@ pub struct TerrainSurfaceData {
     pub layer_uv_scale: f32,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct TerrainHeightmapData {
     pub enabled: bool,
     pub source: String,
@@ -202,7 +200,7 @@ pub struct TerrainHeightmapData {
     pub invert: bool,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct TerrainStreamingData {
     pub enabled: bool,
     pub chunk_radius: i32,
@@ -211,7 +209,7 @@ pub struct TerrainStreamingData {
     pub launch_warm_radius: i32,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct SkyData {
     pub definition_ref: String,
     pub radius: f32,
@@ -233,7 +231,7 @@ pub struct SkyData {
     pub atmosphere: SkyAtmosphereData,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct SkyAtmosphereData {
     pub day_zenith: [f32; 3],
     pub day_horizon: [f32; 3],
@@ -248,7 +246,7 @@ pub struct SkyAtmosphereData {
     pub cloud_softness: f32,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct PaletteData {
     pub terrain: [f32; 4],
     pub sky: [f32; 4],
@@ -258,7 +256,7 @@ pub struct PaletteData {
     pub tree_branch: [f32; 4],
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct MaterialDefaultsData {
     pub uv_scale: [f32; 2],
     pub uv_offset: [f32; 2],
@@ -267,7 +265,7 @@ pub struct MaterialDefaultsData {
     pub occlusion_strength: f32,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct LightingData {
     pub ambient_color: [f32; 3],
     pub ambient_intensity: f32,
@@ -276,7 +274,7 @@ pub struct LightingData {
     pub sun_intensity: f32,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct ShadowData {
     pub enabled: bool,
     pub resolution: u32,
@@ -296,7 +294,7 @@ pub struct ShadowData {
     pub pcss_stable_kernel_cell_texels: f32,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct DayNightData {
     pub enabled: bool,
     pub time_of_day_hours: f32,
@@ -306,7 +304,7 @@ pub struct DayNightData {
     pub axial_tilt_degrees: f32,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct FoliageData {
     pub enabled: bool,
     pub prefab: String,
@@ -324,7 +322,7 @@ pub struct FoliageData {
     pub surface_offset: f32,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct MissionDefaultsData {
     pub pickup_radius: f32,
     pub pickup_scale: [f32; 3],

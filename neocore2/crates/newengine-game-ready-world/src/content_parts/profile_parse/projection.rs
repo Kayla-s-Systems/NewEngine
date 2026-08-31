@@ -318,6 +318,14 @@ impl RawGameReadyPayload {
                     contact_skin: self.gameplay.physics.contact_skin.clamp(0.0, 0.50),
                 },
                 mission: GameReadyMissionSpec {
+                    core_material: sanitize_asset_path(Some(self.gameplay.mission.core_material)),
+                    target_material: sanitize_asset_path(Some(
+                        self.gameplay.mission.target_material,
+                    )),
+                    hazard_material: sanitize_asset_path(Some(
+                        self.gameplay.mission.hazard_material,
+                    )),
+                    goal_material: sanitize_asset_path(Some(self.gameplay.mission.goal_material)),
                     pickups: self
                         .gameplay
                         .mission

@@ -243,7 +243,7 @@ fn validate_bind_reconstruction(
             max_joint = index;
         }
     }
-    // The source affine matrices for Abby/TLOU2 PC are representable as S/R/T to
+    // The source affine matrices for Abby/NorthStar PC are representable as S/R/T to
     // floating-point precision. Reject future packages that would silently lose
     // shear/non-SRT bind data in the current YMT contract.
     const MAX_BIND_RECONSTRUCTION_ERROR: f32 = 1.0e-5;

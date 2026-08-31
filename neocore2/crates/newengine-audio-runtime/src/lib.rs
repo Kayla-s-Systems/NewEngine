@@ -1,5 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
+mod block_render;
 mod streaming_asset;
 mod streaming_pcm;
 
@@ -13,21 +14,23 @@ use std::time::{Duration, Instant};
 use abi_stable::std_types::{RResult, RString};
 use newengine_assets_api::AssetServiceClient;
 use newengine_audio_api::{
-    sanitize_gain, sanitize_speed, AudioAcousticState, AudioAttenuationSettings, AudioBus,
-    AudioBusGainAck, AudioBusGainRequest, AudioConcurrencyScope, AudioCuePlayRequest,
+    sanitize_gain, sanitize_speed, AudioAcousticState, AudioAttenuationSettings, AudioRouteGainAck, AudioRouteGainRequest,
+    AudioRouteId, AudioConcurrencyScope, AudioCuePlayRequest,
     AudioCuePreloadRequest, AudioDiagnostics, AudioDirectPathResponse, AudioEarlyReflectionField,
     AudioEarlyReflectionTap, AudioEnvironmentState, AudioFeedbackAck, AudioFeedbackEvent,
     AudioListenerState, AudioParameterSet, AudioPlayAck, AudioPlayRequest, AudioPreloadAck,
-    AudioPreloadRequest, AudioReverbPreset, AudioReverbSend, AudioServiceInfo, AudioSpatialParams,
-    AudioStopVoiceRequest, AudioStreamBufferConfig, AudioStreamPlayRequest, AudioVoiceAck,
-    AudioVoiceBudgetAck, AudioVoiceBudgetConfig, AudioVoicePolicy, AudioVoiceStealRule,
-    AudioVoiceUpdateRequest, SoundCue, SoundCueClip, SoundCueSpatialPolicy,
+    AudioPreloadRequest, AudioRenderClock, AudioReverbPreset, AudioReverbSend, AudioServiceInfo,
+    AudioSpatialParams, AudioStopVoiceRequest, AudioStreamBufferConfig, AudioStreamPlayRequest,
+    AudioVoiceAck, AudioVoiceBudgetAck, AudioVoiceBudgetConfig, AudioVoicePolicy,
+    AudioVoiceRenderAction, AudioVoiceRenderScheduleAck, AudioVoiceRenderScheduleRequest,
+    AudioVoiceStealRule, AudioVoiceUpdateRequest, SoundCue, SoundCueClip, SoundCueSpatialPolicy,
     AUDIO_BACKEND_CAPABILITY_ID, AUDIO_MAX_EARLY_REFLECTION_TAPS, AUDIO_PROVIDER_ABI_ID,
     AUDIO_SERVICE_ID, AUDIO_SERVICE_METHOD_DIAGNOSTICS_JSON_V1, AUDIO_SERVICE_METHOD_INVOKE,
     AUDIO_SERVICE_METHOD_PLAY_CLIP_JSON_V1, AUDIO_SERVICE_METHOD_PLAY_CUE_JSON_V1,
     AUDIO_SERVICE_METHOD_PLAY_EVENT_JSON_V1, AUDIO_SERVICE_METHOD_PLAY_STREAM_JSON_V1,
     AUDIO_SERVICE_METHOD_PRELOAD_CLIP_JSON_V1, AUDIO_SERVICE_METHOD_PRELOAD_CUE_JSON_V1,
-    AUDIO_SERVICE_METHOD_SET_BUS_GAIN_JSON_V1, AUDIO_SERVICE_METHOD_SET_LISTENER_JSON_V1,
+    AUDIO_SERVICE_METHOD_RENDER_CLOCK_JSON_V1, AUDIO_SERVICE_METHOD_SCHEDULE_VOICE_RENDER_JSON_V1,
+    AUDIO_SERVICE_METHOD_SET_ROUTE_GAIN_JSON_V1, AUDIO_SERVICE_METHOD_SET_LISTENER_JSON_V1,
     AUDIO_SERVICE_METHOD_SET_VOICE_BUDGETS_JSON_V1, AUDIO_SERVICE_METHOD_SET_VOICE_JSON_V1,
     AUDIO_SERVICE_METHOD_SHUTDOWN_V1, AUDIO_SERVICE_METHOD_STOP_VOICE_JSON_V1,
     ENGINE_AUDIO_SERVICE_ID,
@@ -39,8 +42,9 @@ use newengine_service_kit::{
 };
 use rodio::source::{ChannelVolume, SeekError, SineWave, Source};
 use rodio::stream::{DeviceSinkBuilder, MixerDeviceSink};
-use rodio::{ChannelCount, Decoder, Player, SampleRate};
+use rodio::{ChannelCount, Decoder, SampleRate};
 
+use block_render::{native_block_render_graph, BlockVoiceHandle, NativeBlockRenderGraphHandle};
 use streaming_asset::RangedAssetReader;
 use streaming_pcm::{
     build_streaming_source, probe_stream_source_metadata, StreamSourceMetadata, StreamingStats,

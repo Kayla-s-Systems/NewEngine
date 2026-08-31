@@ -1,9 +1,6 @@
 use super::super::foliage::DecodedPrefabMeshPart;
 use super::super::*;
-use super::materials::{
-    register_authored_prefab_material, resolve_prefab_part_material, static_world_decal_slot,
-    static_world_receive_only_shadow_slot, ForestRoadMaterials,
-};
+use super::materials::{register_authored_prefab_material, resolve_prefab_part_material};
 use newengine_physics_contracts::{CollisionShapeDesc, PhysicsBodyDesc};
 use newengine_sim::{AngularVelocity, Velocity};
 
@@ -34,6 +31,9 @@ fn attach_authored_physics_surface(
 ) {
     if let Some(surface) = authored_physics_surface(prefab) {
         let _ = world.insert(entity, surface);
+    }
+    if let Some(ballistic) = prefab.ballistic_material {
+        let _ = world.insert(entity, ballistic.sanitized());
     }
 }
 
@@ -255,12 +255,11 @@ pub(super) fn spawn_dynamic_ydd_prefab_from_decoded(
     mats: &MaterialRegistry,
     parent: EntityId,
     prefab: &GameReadyPrefabSpec,
-    materials: ForestRoadMaterials,
     decoded: &[DecodedPrefabMeshPart],
 ) -> Result<(u32, u64), String> {
     ensure_ydd_prefab_source(prefab, "dynamic")?;
 
-    let authored_material = register_authored_prefab_material(mats, prefab);
+    let authored_material = register_authored_prefab_material(mats, prefab)?;
     let root = spawn_named(world, format!("World/Dynamic/{}", prefab.id));
     let _ = set_parent(world, root, Some(parent));
     let rotation = Quat::from_euler(
@@ -307,10 +306,9 @@ pub(super) fn spawn_dynamic_ydd_prefab_from_decoded(
         let (material_id, render_options) = resolve_prefab_part_material(
             mats,
             authored_material,
-            materials,
             &part.material_slot,
             part.material_ref.as_deref(),
-        );
+        )?;
         let _ = spawn_game_primitive(
             world,
             &*prims,
@@ -349,12 +347,11 @@ pub(super) fn spawn_static_ydd_prefab_from_decoded(
     mats: &MaterialRegistry,
     parent: EntityId,
     prefab: &GameReadyPrefabSpec,
-    materials: ForestRoadMaterials,
     decoded: &[DecodedPrefabMeshPart],
 ) -> Result<(u32, u64), String> {
     ensure_ydd_prefab_source(prefab, "static")?;
 
-    let authored_material = register_authored_prefab_material(mats, prefab);
+    let authored_material = register_authored_prefab_material(mats, prefab)?;
     let root = spawn_named(world, format!("World/Static/{}", prefab.id));
     let _ = set_parent(world, root, Some(parent));
     let _ = world.insert(
@@ -392,22 +389,12 @@ pub(super) fn spawn_static_ydd_prefab_from_decoded(
         if !prims.is_registered(primitive_id) {
             prims.register_mesh(primitive_id, part.name.clone(), part.mesh.clone());
         }
-        let (material_id, mut render_options) = resolve_prefab_part_material(
+        let (material_id, render_options) = resolve_prefab_part_material(
             mats,
             authored_material,
-            materials,
             &part.material_slot,
             part.material_ref.as_deref(),
-        );
-        if static_world_decal_slot(&part.material_slot) {
-            render_options.role = newengine_model_domain_api::MeshRenderRole::Decal;
-            render_options.depth_policy = newengine_model_domain_api::MeshDepthPolicy::ReadOnly;
-            render_options.shadow_policy =
-                newengine_model_domain_api::MeshShadowPolicy::ReceiveOnly;
-        } else if static_world_receive_only_shadow_slot(&part.material_slot) {
-            render_options.shadow_policy =
-                newengine_model_domain_api::MeshShadowPolicy::ReceiveOnly;
-        }
+        )?;
         let _ = spawn_game_primitive(
             world,
             &*prims,

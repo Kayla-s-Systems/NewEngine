@@ -1,6 +1,5 @@
 use super::super::foliage::{decode_runtime_ydd_prefab, DecodedPrefabMeshPart};
 use super::super::*;
-use super::materials::{register_forest_road_materials, ForestRoadMaterials};
 use super::spawn::{
     spawn_box_collision_ydd_prefab_from_decoded, spawn_collision_ydd_prefab_from_decoded,
     spawn_dynamic_ydd_prefab_from_decoded, spawn_static_ydd_prefab_from_decoded,
@@ -39,7 +38,6 @@ struct GameReadyStaticWorldStreamingState {
     ready_collision_sources: BTreeSet<String>,
     ready_visual_sources: BTreeSet<String>,
     pending_count: usize,
-    materials: ForestRoadMaterials,
     decoded_cache: BTreeMap<String, Arc<Vec<DecodedPrefabMeshPart>>>,
     decode_jobs: BTreeMap<String, StaticWorldDecodeJob>,
     decode_errors: BTreeMap<String, String>,
@@ -49,7 +47,7 @@ struct GameReadyStaticWorldStreamingState {
 
 pub(in super::super) fn begin_static_world_prefabs(
     world: &mut newengine_ecs::World,
-    mats: &MaterialRegistry,
+    _mats: &MaterialRegistry,
     parent: EntityId,
     prefabs: &[GameReadyPrefabSpec],
 ) -> StaticWorldSpawnSummary {
@@ -119,7 +117,6 @@ pub(in super::super) fn begin_static_world_prefabs(
         ready_collision_sources: BTreeSet::new(),
         ready_visual_sources: BTreeSet::new(),
         pending_count,
-        materials: register_forest_road_materials(mats),
         decoded_cache: BTreeMap::new(),
         decode_jobs: BTreeMap::new(),
         decode_errors: BTreeMap::new(),
@@ -528,7 +525,6 @@ pub(crate) fn tick_game_ready_static_world_prefabs(
                 mats,
                 prefab_parent,
                 &prefab,
-                state.materials,
                 decoded.as_slice(),
             )
         } else {
@@ -538,7 +534,6 @@ pub(crate) fn tick_game_ready_static_world_prefabs(
                 mats,
                 prefab_parent,
                 &prefab,
-                state.materials,
                 decoded.as_slice(),
             )
         };
