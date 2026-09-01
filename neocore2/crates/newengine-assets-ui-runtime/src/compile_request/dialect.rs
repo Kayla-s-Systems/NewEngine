@@ -20,23 +20,25 @@ pub(crate) fn load_neui_dialect(
     let mut last_err = None;
     for candidate in vfs_candidates(&path) {
         match state.client.raw_bytes_v1(&candidate) {
-            Ok(bytes) => match decode_neui_xmlcentral(&candidate, &bytes)
-                .and_then(|xml| NeUiDialect::from_xml(&xml, &cache_key))
-            {
-                Ok(dialect) => {
-                    warnings.push(format!(
+            Ok(bytes) => {
+                match decode_neui_xmlcentral(&candidate, &bytes, LIST_FILE_CONTENT_KIND_NEUI)
+                    .and_then(|xml| NeUiDialect::from_xml(&xml, &cache_key))
+                {
+                    Ok(dialect) => {
+                        warnings.push(format!(
                         ".neui dialect loaded ref='{}' id='{}' source='{}' policy='asset-backed compiler dialect'",
                         cache_key, dialect.id, candidate
                     ));
-                    state
-                        .dialect_cache
-                        .insert(cache_key.clone(), dialect.clone());
-                    return dialect;
+                        state
+                            .dialect_cache
+                            .insert(cache_key.clone(), dialect.clone());
+                        return dialect;
+                    }
+                    Err(error) => {
+                        last_err = Some(format!("{}: {}", candidate, error));
+                    }
                 }
-                Err(error) => {
-                    last_err = Some(format!("{}: {}", candidate, error));
-                }
-            },
+            }
             Err(error) => {
                 last_err = Some(format!("{}: {}", candidate, error));
             }

@@ -1,6 +1,5 @@
 use super::geometry::{
-    asset_extension, material_texture_refs, require_complete_graph, scene_preview_snapshot,
-    texture_dimensions,
+    material_texture_refs, require_complete_graph, scene_preview_snapshot, texture_dimensions,
 };
 use super::*;
 
@@ -194,6 +193,8 @@ impl AssetPreviewApi {
                     source: document.asset_ref.clone(),
                     properties_ref: None,
                     parts: vec![ModelMeshPart {
+                        // Synthetic material-preview sphere has no source container mesh identity.
+                        source_mesh_name: String::new(),
                         material_slot: binding.slot.clone(),
                         mesh,
                         skin: None,
@@ -266,43 +267,42 @@ impl AssetPreviewApi {
             logical_path: logical_path.to_owned(),
             output_kind: ASSET_LIST_FILE_MANIFEST_OUTPUT.to_owned(),
             selector: serde_json::Value::Null,
-                    format_descriptor: None,
-})?;
+            format_descriptor: None,
+        })?;
         let manifest = serde_json::from_slice::<AssetFileManifest>(&bytes)
             .map_err(|error| format!("invalid asset manifest: {error}"))?;
         Ok(manifest.entries.into_iter().next())
     }
 
     pub(super) fn is_texture(&self, document: &AssetDocument) -> bool {
-        asset_extension(&document.asset_ref).eq_ignore_ascii_case("ytd")
-            || document.content_kind == Some(LIST_FILE_CONTENT_KIND_YTD)
+        document
+            .semantic_gateway
+            .eq_ignore_ascii_case("engine.assets.textures")
             || document.asset_kind.contains("texture")
-            || document.semantic_gateway == "engine.assets.textures"
     }
 
     pub(super) fn is_model(&self, document: &AssetDocument) -> bool {
-        matches!(
-            asset_extension(&document.asset_ref)
-                .to_ascii_lowercase()
-                .as_str(),
-            "ydd" | "ydr"
-        ) || document.semantic_gateway == "engine.model"
-            || document.semantic_gateway == "engine.assets.models"
-            || document.semantic_gateway == "engine.assets.definitions"
+        document
+            .semantic_gateway
+            .eq_ignore_ascii_case("engine.model")
+            || document
+                .semantic_gateway
+                .eq_ignore_ascii_case("engine.assets.models")
+            || document
+                .semantic_gateway
+                .eq_ignore_ascii_case("engine.assets.definitions")
             || document.asset_kind.contains("drawable")
             || document.asset_kind.contains("model")
             || document.asset_kind.contains("archetype")
     }
 
     pub(super) fn is_material(&self, document: &AssetDocument) -> bool {
-        document.content_kind == Some(LIST_FILE_CONTENT_KIND_NEMAT)
-            || document.semantic_gateway == "engine.materials"
-            || document.semantic_gateway == "engine.assets.materials"
-            || document.asset_kind.contains("material")
+        document
+            .semantic_gateway
+            .eq_ignore_ascii_case("engine.materials")
             || document
-                .asset_ref
-                .split('@')
-                .next()
-                .is_some_and(|path| path.to_ascii_lowercase().ends_with(".nemat"))
+                .semantic_gateway
+                .eq_ignore_ascii_case("engine.assets.materials")
+            || document.asset_kind.contains("material")
     }
 }

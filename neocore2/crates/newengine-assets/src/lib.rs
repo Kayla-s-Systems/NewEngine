@@ -12,7 +12,7 @@ pub use asset_document_service::{
 };
 pub use asset_service_client::AssetServiceClient;
 pub use asset_type_registry::{
-    asset_types_gateway_service, asset_types_service_info,
+    asset_types_gateway_service, asset_types_gateway_service_seeded, asset_types_service_info,
     register_asset_type_descriptor_best_effort, register_asset_types_gateway_best_effort,
 };
 pub use newengine_assets_api::{

@@ -313,8 +313,22 @@ pub struct RenderGraphSubmitReport {
     pub gpu_submit_ms: f32,
     pub executed_passes: u32,
     pub skipped_passes: u32,
+    /// Backend intentionally deferred native presentation before graph execution.
+    /// This is normal bounded WSI back-pressure, not a render-graph failure.
+    #[serde(default)]
+    pub backend_deferred: bool,
     pub uploads: UploadPumpReport,
     pub compile: RenderGraphCompileReport,
     #[serde(default)]
     pub draw_list_stats: Vec<RecordedDrawListStats>,
+}
+
+#[cfg(test)]
+mod submit_report_compat_tests {
+    use super::*;
+
+    #[test]
+    fn default_submit_report_is_not_backend_deferred() {
+        assert!(!RenderGraphSubmitReport::default().backend_deferred);
+    }
 }

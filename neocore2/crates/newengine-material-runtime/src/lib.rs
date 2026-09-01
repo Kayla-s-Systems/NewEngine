@@ -22,7 +22,7 @@ pub use nemat::decode_nemat_material_library_from_body;
 pub(crate) use nemat::{
     collect_texture_refs, decode_material_entry_payload, material_cache_key,
     material_response_from_authored, normalize_material_logical_path,
-    preview_material_name_from_body, split_nemat_selector,
+    preview_material_name_from_body, split_nemat_selector, validate_material_body_schema,
 };
 
 pub const RUNTIME_UNIT_SPEC: newengine_runtime_unit_api::EngineRuntimeUnitSpec =

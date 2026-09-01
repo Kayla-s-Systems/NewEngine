@@ -233,7 +233,7 @@ pub fn compile_vfx_texture_dictionary(
     let ytd = encode_nef8(
         &netd,
         newengine_assets_api::LIST_FILE_CONTENT_KIND_YTD,
-        newengine_asset_format_nef8::ytd::CONTENT_SCHEMA_VERSION,
+        1,
         report_entries.len() as u32,
     )?;
     let decoded_ytd = newengine_assets_api::decode_list_file_envelope(

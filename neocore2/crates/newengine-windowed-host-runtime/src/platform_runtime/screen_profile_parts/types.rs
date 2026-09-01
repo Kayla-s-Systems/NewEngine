@@ -308,6 +308,8 @@ pub(super) struct ScreenProfileConfig {
     pub(super) presentation_flow: Option<ScreenPresentationFlowConfig>,
     #[serde(default = "default_publish_editor_shell")]
     pub(super) publish_editor_shell: bool,
+    #[serde(default = "default_editor_fly_speed_scale")]
+    pub(super) editor_fly_speed_scale: f32,
 }
 
 pub(super) fn default_screen_profile() -> UiScreenProfile {
@@ -315,7 +317,11 @@ pub(super) fn default_screen_profile() -> UiScreenProfile {
 }
 
 pub(super) fn default_publish_editor_shell() -> bool {
-    true
+    false
+}
+
+pub(super) fn default_editor_fly_speed_scale() -> f32 {
+    DEFAULT_EDITOR_FLY_SPEED_SCALE
 }
 
 pub(super) fn default_ui_surface_focus_policy() -> UiScreenInputFocusPolicy {
@@ -332,7 +338,8 @@ impl Default for ScreenProfileConfig {
             game_ui_document_ref: None,
             game_gui: None,
             presentation_flow: None,
-            publish_editor_shell: true,
+            publish_editor_shell: false,
+            editor_fly_speed_scale: DEFAULT_EDITOR_FLY_SPEED_SCALE,
         }
     }
 }

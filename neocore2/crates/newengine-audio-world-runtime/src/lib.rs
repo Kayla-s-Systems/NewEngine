@@ -11,22 +11,28 @@ use std::sync::Arc;
 use parking_lot::RwLock;
 
 mod audio_ambience;
+pub mod audio_diffraction;
 mod audio_environment;
 mod audio_gateway_fallback;
+pub mod audio_occlusion;
 mod audio_orchestration;
+pub mod audio_reflections;
 mod audio_scene;
 mod audio_transport;
 mod interactive_music;
 
 pub use audio_ambience::AudioAmbienceRuntimeModule;
+pub use audio_diffraction::AudioDiffractionPhysicsQueryProvider;
 pub use audio_environment::{
     AudioEnvironmentFrame, AudioEnvironmentResolution, AudioEnvironmentRuntimeState,
 };
 pub use audio_gateway_fallback::register_audio_gateway_best_effort;
+pub use audio_occlusion::AudioOcclusionPhysicsQueryProvider;
 pub use audio_orchestration::{
     AudioOrchestrationHandle, AudioOrchestrationRuntimeConfig, AudioOrchestrationRuntimeModule,
     AudioOrchestrationRuntimeState,
 };
+pub use audio_reflections::AudioReflectionPhysicsQueryProvider;
 pub use audio_scene::{
     AcousticSurface, AudioEmitter, AudioEnvironmentZone, AudioPortal, AudioSceneRuntimeModule,
 };

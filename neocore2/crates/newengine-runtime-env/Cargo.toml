@@ -1,0 +1,10 @@
+[package]
+name = "newengine-runtime-env"
+version = "0.1.0"
+edition = "2021"
+readme = "README.md"
+description = "Instance-local HostContext environment accessor for runtime compatibility configuration"
+license = "Proprietary"
+
+[dependencies]
+newengine-plugin-host = { path = "../newengine-plugin-host" }

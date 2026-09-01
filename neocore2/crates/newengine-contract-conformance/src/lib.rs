@@ -224,33 +224,15 @@ pub struct ListFileContractConformance {
     pub content_kind: u32,
     pub content_schema_version: u16,
     pub schema_contract_key: String,
+    pub format_module_id: String,
 }
 
-/// Validate a canonical NEF8/ListFile envelope against the typed wire and
-/// domain-schema registry. Parsing is delegated to newengine-assets-api; this
-/// function never reads binary offsets itself.
-pub fn validate_list_file_contract(
+/// Validate a canonical NEF8/ListFile envelope against the authoritative
+/// StarVault `AssetFileTypeDescriptor`. Asset-format schema policy is not part
+/// of the core Contract Registry.
+pub fn validate_list_file_descriptor_contract(
     bytes: &[u8],
-    expected_content_kind: u32,
-    expected_schema: ContractSpec,
-) -> Result<ListFileContractConformance, Vec<String>> {
-    validate_list_file_contract_with_read_compatibility(
-        bytes,
-        expected_content_kind,
-        expected_schema,
-        &[],
-    )
-}
-
-/// Validate a ListFile against the current registered schema while allowing an
-/// explicit, format-owner-defined set of historical schema versions for read
-/// compatibility. This does not weaken the current producer contract: callers
-/// of `validate_list_file_contract` remain exact/registry-driven.
-pub fn validate_list_file_contract_with_read_compatibility(
-    bytes: &[u8],
-    expected_content_kind: u32,
-    expected_schema: ContractSpec,
-    readable_legacy_schema_versions: &[u16],
+    descriptor: &newengine_assets_api::AssetFileTypeDescriptor,
 ) -> Result<ListFileContractConformance, Vec<String>> {
     let mut errors = Vec::new();
     let header = match newengine_assets_api::parse_list_file_header(bytes) {
@@ -266,46 +248,34 @@ pub fn validate_list_file_contract_with_read_compatibility(
             header.version, wire.version
         ));
     }
-    if expected_schema.kind != ContractKind::Schema {
+    let Some(expected_content_kind) = descriptor.content_kind else {
         errors.push(format!(
-            "expected content contract '{}' is kind '{}', not schema",
-            expected_schema.key,
-            expected_schema.kind.as_str()
+            "format module '{}' does not declare NEF8 content_kind",
+            descriptor.module_id
         ));
-    }
-    let registered_schema = newengine_contract_registry::contract(expected_schema.key);
-    match registered_schema {
-        None => errors.push(format!(
-            "content schema contract '{}' is not registered",
-            expected_schema.key
-        )),
-        Some(spec) if *spec != expected_schema => errors.push(format!(
-            "content schema contract '{}' does not match authoritative registry spec",
-            expected_schema.key
-        )),
-        Some(_) => {}
-    }
+        return Err(errors);
+    };
     if header.content_kind != expected_content_kind {
         errors.push(format!(
-            "ListFile content kind mismatch: got={} expected={}",
-            header.content_kind, expected_content_kind
+            "ListFile content kind mismatch module='{}': got={} expected={}",
+            descriptor.module_id, header.content_kind, expected_content_kind
         ));
     }
-    let offered_schema =
-        newengine_contract_api::ContractVersion::major(header.content_schema_version);
-    let accepted_by_current_contract = expected_schema.accepts_version(offered_schema);
-    let accepted_as_read_compatibility = readable_legacy_schema_versions
-        .iter()
-        .copied()
-        .any(|version| version == header.content_schema_version);
-    if !accepted_by_current_contract && !accepted_as_read_compatibility {
-        errors.push(format!(
-            "ListFile content schema version {} is incompatible with '{}' {} and readable legacy versions {:?}",
-            header.content_schema_version,
-            expected_schema.key,
-            expected_schema.version,
-            readable_legacy_schema_versions,
-        ));
+    if let Some(current) = descriptor.content_schema_version {
+        let readable = descriptor
+            .readable_content_schema_versions
+            .iter()
+            .copied()
+            .any(|version| version == header.content_schema_version);
+        if header.content_schema_version != current && !readable {
+            errors.push(format!(
+                "ListFile content schema version {} is incompatible with format module '{}' current={} readable={:?}",
+                header.content_schema_version,
+                descriptor.module_id,
+                current,
+                descriptor.readable_content_schema_versions,
+            ));
+        }
     }
     if !errors.is_empty() {
         return Err(errors);
@@ -314,7 +284,8 @@ pub fn validate_list_file_contract_with_read_compatibility(
         wire_version: header.version,
         content_kind: header.content_kind,
         content_schema_version: header.content_schema_version,
-        schema_contract_key: expected_schema.key.to_owned(),
+        schema_contract_key: descriptor.schema_contract.clone(),
+        format_module_id: descriptor.module_id.clone(),
     })
 }
 
@@ -424,174 +395,50 @@ mod tests {
         .expect("fixture encode")
     }
 
-    #[test]
-    fn canonical_ytyp_listfile_matches_wire_and_schema_registry() {
-        let bytes = encoded_listfile(
-            newengine_assets_api::LIST_FILE_CONTENT_KIND_YTYP,
-            newengine_asset_format_nef8::ytyp::CONTENT_SCHEMA_VERSION,
-        );
-        let report = validate_list_file_contract(
-            &bytes,
-            newengine_assets_api::LIST_FILE_CONTENT_KIND_YTYP,
-            newengine_asset_format_nef8::ytyp::CONTENT_SCHEMA_CONTRACT_SPEC,
-        )
-        .expect("canonical YTYP contract");
-        assert_eq!(report.wire_version, newengine_assets_api::LIST_FILE_VERSION);
-    }
-
-    #[test]
-    fn unsupported_nef8_wire_version_is_rejected_by_canonical_parser() {
-        let mut bytes = encoded_listfile(
-            newengine_assets_api::LIST_FILE_CONTENT_KIND_YTYP,
-            newengine_asset_format_nef8::ytyp::CONTENT_SCHEMA_VERSION,
-        );
-        bytes[4] = (newengine_assets_api::LIST_FILE_VERSION + 1) as u8;
-        let errors = validate_list_file_contract(
-            &bytes,
-            newengine_assets_api::LIST_FILE_CONTENT_KIND_YTYP,
-            newengine_asset_format_nef8::ytyp::CONTENT_SCHEMA_CONTRACT_SPEC,
-        )
-        .unwrap_err();
-        assert!(errors
-            .iter()
-            .any(|e| e.contains("unsupported NEF8 wire version")));
-    }
-
-    #[test]
-    fn wrong_content_schema_version_is_rejected() {
-        let bytes = encoded_listfile(
-            newengine_assets_api::LIST_FILE_CONTENT_KIND_YTYP,
-            newengine_asset_format_nef8::ytyp::CONTENT_SCHEMA_VERSION + 1,
-        );
-        let errors = validate_list_file_contract(
-            &bytes,
-            newengine_assets_api::LIST_FILE_CONTENT_KIND_YTYP,
-            newengine_asset_format_nef8::ytyp::CONTENT_SCHEMA_CONTRACT_SPEC,
-        )
-        .unwrap_err();
-        assert!(errors.iter().any(|e| e.contains("content schema version")));
-    }
-
-    fn collect_files(root: &std::path::Path, extension: &str, out: &mut Vec<std::path::PathBuf>) {
-        let Ok(entries) = std::fs::read_dir(root) else {
-            return;
-        };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                collect_files(&path, extension, out);
-            } else if path
-                .extension()
-                .and_then(|value| value.to_str())
-                .is_some_and(|value| value.eq_ignore_ascii_case(extension))
-            {
-                out.push(path);
-            }
+    fn provider_descriptor(kind: u32, schema: u16) -> newengine_assets_api::AssetFileTypeDescriptor {
+        newengine_assets_api::AssetFileTypeDescriptor {
+            module_id: "test.provider.format".to_owned(),
+            extension: "provider".to_owned(),
+            asset_kind: "provider_asset".to_owned(),
+            content_kind: Some(kind),
+            content_schema_version: Some(schema),
+            readable_content_schema_versions: vec![schema],
+            schema_contract: "provider.schema".to_owned(),
+            handler_service: "asset.codec.listfile".to_owned(),
+            semantic_gateway: "engine.test".to_owned(),
+            gateway: "engine.test".to_owned(),
+            runtime_ready: true,
+            vfs_backed: true,
+            native_container: true,
+            ..Default::default()
         }
     }
 
     #[test]
-    fn production_listfile_corpus_conforms_to_registered_contracts() {
-        let crate_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
-        let neocore = crate_dir
-            .parent()
-            .and_then(std::path::Path::parent)
-            .expect("neocore root");
-        let repo_root = neocore
-            .parent()
-            .and_then(std::path::Path::parent)
-            .expect("NorthStar root");
-        let roots = [repo_root.join("Projects"), repo_root.join("Shared")];
-        let mut ytd = Vec::new();
-        let mut ydd = Vec::new();
-        let mut ytyp = Vec::new();
-        let mut nemat = Vec::new();
-        let mut neui = Vec::new();
-        for root in &roots {
-            collect_files(root, "ytd", &mut ytd);
-            collect_files(root, "ydd", &mut ydd);
-            collect_files(root, "ytyp", &mut ytyp);
-            collect_files(root, "nemat", &mut nemat);
-            collect_files(root, "neui", &mut neui);
-        }
-        for (name, files) in [
-            ("YTD", &ytd),
-            ("YDD", &ydd),
-            ("YTYP", &ytyp),
-            ("NEMAT", &nemat),
-            ("NEUI", &neui),
-        ] {
-            assert!(
-                !files.is_empty(),
-                "production {name} corpus must not be empty"
-            );
-        }
-        let mut errors = Vec::new();
-        let mut validate_group =
-            |files: &[std::path::PathBuf],
-             kind: u32,
-             spec: ContractSpec,
-             readable_legacy_schema_versions: &[u16]| {
-                for path in files {
-                    match std::fs::read(path) {
-                        Ok(bytes) => {
-                            if let Err(items) = validate_list_file_contract_with_read_compatibility(
-                                &bytes,
-                                kind,
-                                spec,
-                                readable_legacy_schema_versions,
-                            ) {
-                                errors.push(format!("{}: {}", path.display(), items.join("; ")));
-                            }
-                        }
-                        Err(error) => {
-                            errors.push(format!("{}: read failed: {error}", path.display()))
-                        }
-                    }
-                }
-            };
-        validate_group(
-            &ytd,
-            newengine_assets_api::LIST_FILE_CONTENT_KIND_YTD,
-            newengine_asset_format_nef8::ytd::CONTENT_SCHEMA_CONTRACT_SPEC,
-            newengine_asset_format_nef8::ytd::READABLE_CONTENT_SCHEMA_VERSIONS,
-        );
-        validate_group(
-            &ydd,
-            newengine_assets_api::LIST_FILE_CONTENT_KIND_YDD,
-            newengine_asset_format_nef8::YDD_BINARY_CONTRACT_SPEC,
-            newengine_asset_format_nef8::ydd::READABLE_CONTENT_SCHEMA_VERSIONS,
-        );
-        validate_group(
-            &ytyp,
-            newengine_assets_api::LIST_FILE_CONTENT_KIND_YTYP,
-            newengine_asset_format_nef8::ytyp::CONTENT_SCHEMA_CONTRACT_SPEC,
-            &[],
-        );
-        validate_group(
-            &nemat,
-            newengine_assets_api::LIST_FILE_CONTENT_KIND_NEMAT,
-            newengine_asset_format_nef8::nemat::CONTENT_SCHEMA_CONTRACT_SPEC,
-            &[],
-        );
-        validate_group(
-            &neui,
-            newengine_assets_api::LIST_FILE_CONTENT_KIND_NEUI,
-            newengine_asset_format_nef8::neui::CONTENT_SCHEMA_CONTRACT_SPEC,
-            &[],
-        );
-        assert!(
-            errors.is_empty(),
-            "asset contract conformance failed:\n{}",
-            errors.join("\n")
-        );
-        eprintln!(
-            "P3 asset corpus conformance: ytd={} ydd={} ytyp={} nemat={} neui={}",
-            ytd.len(),
-            ydd.len(),
-            ytyp.len(),
-            nemat.len(),
-            neui.len()
-        );
+    fn provider_declared_format_contract_is_conformant_without_core_registration() {
+        let descriptor = provider_descriptor(0xE001, 7);
+        let bytes = encoded_listfile(0xE001, 7);
+        let report = validate_list_file_descriptor_contract(&bytes, &descriptor)
+            .expect("provider descriptor conformance");
+        assert_eq!(report.content_kind, 0xE001);
+        assert_eq!(report.content_schema_version, 7);
+        assert_eq!(report.format_module_id, "test.provider.format");
     }
+
+    #[test]
+    fn descriptor_content_kind_mismatch_is_rejected() {
+        let descriptor = provider_descriptor(0xE001, 7);
+        let bytes = encoded_listfile(0xE002, 7);
+        let errors = validate_list_file_descriptor_contract(&bytes, &descriptor).unwrap_err();
+        assert!(errors.iter().any(|error| error.contains("content kind mismatch")));
+    }
+
+    #[test]
+    fn descriptor_schema_policy_is_authoritative() {
+        let descriptor = provider_descriptor(0xE001, 7);
+        let bytes = encoded_listfile(0xE001, 9);
+        let errors = validate_list_file_descriptor_contract(&bytes, &descriptor).unwrap_err();
+        assert!(errors.iter().any(|error| error.contains("content schema version")));
+    }
+
 }

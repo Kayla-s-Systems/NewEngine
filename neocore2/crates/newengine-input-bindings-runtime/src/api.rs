@@ -5,11 +5,57 @@ pub fn input_bindings_profile_snapshot() -> InputBindingsProfile {
     gateway_state().lock().profile.clone()
 }
 
+const ACCEPTANCE_HELD_ACTIONS_ENV: &str = "NEWENGINE_ACCEPTANCE_HELD_ACTIONS";
+
+fn acceptance_held_actions() -> &'static Vec<String> {
+    static ACTIONS: OnceLock<Vec<String>> = OnceLock::new();
+    ACTIONS.get_or_init(|| {
+        std::env::var(ACCEPTANCE_HELD_ACTIONS_ENV)
+            .ok()
+            .into_iter()
+            .flat_map(|value| {
+                value
+                    .split([',', ';'])
+                    .filter_map(newengine_input_actions_api::normalize_action_id)
+                    .collect::<Vec<_>>()
+            })
+            .fold(Vec::<String>::new(), |mut out, action| {
+                if !out.iter().any(|candidate| candidate == &action) {
+                    out.push(action);
+                }
+                out
+            })
+    })
+}
+
+pub(crate) fn apply_acceptance_held_actions(frame: &mut InputActionFrame, held_actions: &[String]) {
+    for action in held_actions {
+        if !frame.actions.iter().any(|candidate| candidate == action) {
+            frame.actions.push(action.clone());
+        }
+        if !frame.signals.iter().any(|signal| {
+            signal.action == *action
+                && signal.phase == newengine_input_actions_api::InputActionPhase::Down
+        }) {
+            frame
+                .signals
+                .push(newengine_input_actions_api::InputActionSignal {
+                    action: action.clone(),
+                    phase: newengine_input_actions_api::InputActionPhase::Down,
+                });
+        }
+    }
+}
+
 #[inline]
 pub fn resolve_input_actions<T: InputFrameSource>(input: &T) -> InputActionFrame {
-    let state_ref = gateway_state();
-    let state = state_ref.lock();
-    state.profile.resolve(input)
+    let mut frame = {
+        let state_ref = gateway_state();
+        let state = state_ref.lock();
+        state.profile.resolve(input)
+    };
+    apply_acceptance_held_actions(&mut frame, acceptance_held_actions());
+    frame
 }
 
 pub fn save_input_bindings_profile(

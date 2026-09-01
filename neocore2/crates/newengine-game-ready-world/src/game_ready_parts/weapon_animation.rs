@@ -62,12 +62,14 @@ fn load_weapon_clip(
         return Ok(None);
     };
     let parsed = AnimationClipReference::parse(reference)?;
-    if !parsed.logical_path.to_ascii_lowercase().ends_with(".ycd") {
+    let assets = AssetServiceClient::new(newengine_plugin_host::default_host_api());
+    let descriptor = assets.resolve_file_type_v1(&parsed.logical_path)?;
+    if !descriptor.semantic_gateway.eq_ignore_ascii_case("engine.animation") {
         return Err(format!(
-            "weapon animation must reference .ycd asset ref='{reference}'"
+            "weapon animation ref='{reference}' resolves to format module='{}' gateway='{}', expected engine.animation",
+            descriptor.module_id, descriptor.semantic_gateway
         ));
     }
-    let assets = AssetServiceClient::new(newengine_plugin_host::default_host_api());
     let clip = global_animation_clip_store()
         .load_ycd_clip(reference, |logical_path| {
             assets

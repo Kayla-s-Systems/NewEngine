@@ -1,0 +1,64 @@
+[package]
+name = "newengine-render-world-runtime"
+version = "0.1.0"
+edition = "2021"
+readme = "README.md"
+description = "Render-world extraction, GPU resource policy and frame submission runtime"
+license = "Proprietary"
+
+[dependencies]
+newengine-ulog-api = { path = "../newengine-ulog-api" }
+abi_stable = { version = "0.11" }
+blake3 = "1"
+parking_lot = "0.12"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+newengine-assets = { path = "../newengine-assets" }
+newengine-assets-api = { path = "../newengine-assets-api" }
+newengine-audio-api = { path = "../newengine-audio-api" }
+newengine-audio-client = { path = "../newengine-audio-client" }
+newengine-bounds = { path = "../newengine-bounds" }
+newengine-camera = { path = "../newengine-camera" }
+newengine-camera-contracts = { path = "../newengine-camera-contracts" }
+newengine-camera-gateway-runtime = { path = "../newengine-camera-gateway-runtime" }
+newengine-core = { path = "../newengine-core", features = ["render-api", "physics-api"] }
+newengine-input-actions-api = { path = "../newengine-input-actions-api" }
+newengine-input-systems-runtime = { path = "../newengine-input-systems-runtime" }
+newengine-input-api = { path = "../newengine-input-api" }
+newengine-input-bindings-api = { path = "../newengine-input-bindings-api" }
+newengine-input-bindings-runtime = { path = "../newengine-input-bindings-runtime" }
+newengine-task-api = { path = "../newengine-task-api" }
+newengine-ecs = { path = "../newengine-ecs" }
+newengine-editor-viewport-runtime = { path = "../newengine-editor-viewport-runtime" }
+newengine-lighting = { path = "../newengine-lighting" }
+newengine-materials = { path = "../newengine-materials", features = ["serde"] }
+newengine-material-domain-api = { path = "../newengine-material-domain-api" }
+newengine-model-domain-api = { path = "../newengine-model-domain-api" }
+newengine-model-client = { path = "../newengine-model-client" }
+newengine-physics-contracts = { path = "../newengine-physics-contracts" }
+newengine-math = { path = "../newengine-math" }
+newengine-plugin-api = { path = "../newengine-plugin-api" }
+newengine-plugin-host = { path = "../newengine-plugin-host" }
+newengine-plugin-manager-bridge = { path = "../newengine-plugin-manager-bridge" }
+newengine-render-api = { path = "../newengine-render-api" }
+newengine-primitives = { path = "../newengine-primitives" }
+newengine-procedural-noise = { path = "../newengine-procedural-noise" }
+newengine-world-runtime-api = { path = "../newengine-world-runtime-api" }
+newengine-render-runtime-adapter = { path = "../newengine-render-runtime-adapter" }
+newengine-runtime-session-api = { path = "../newengine-runtime-session-api" }
+newengine-runtime-session-runtime = { path = "../newengine-runtime-session-runtime" }
+newengine-gameplay-world-runtime = { path = "../newengine-gameplay-world-runtime" }
+newengine-runtime-policy = { path = "../newengine-runtime-policy" }
+newengine-runtime-env = { path = "../newengine-runtime-env" }
+newengine-render-feature-api = { path = "../newengine-render-feature-api" }
+newengine-render-frame-graph = { path = "../newengine-render-frame-graph" }
+newengine-scene-bridge-runtime = { path = "../newengine-scene-bridge-runtime" }
+newengine-scene = { path = "../newengine-scene", features = ["runtime"] }
+newengine-service-api = { path = "../newengine-service-api" }
+newengine-sim = { path = "../newengine-sim" }
+newengine-transform = { path = "../newengine-transform", features = ["ecs", "service"], default-features = false }
+newengine-ui-api = { path = "../newengine-ui-api" }
+newengine-ui-client = { path = "../newengine-ui-client" }
+newengine-ui-navigation-api = { path = "../newengine-ui-navigation-api" }
+newengine-viewport-bridge = { path = "../newengine-viewport-bridge" }
+newengine-vfx-api = { path = "../newengine-vfx-api" }

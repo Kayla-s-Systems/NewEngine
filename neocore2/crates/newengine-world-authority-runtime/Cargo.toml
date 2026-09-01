@@ -6,6 +6,7 @@ readme = "README.md"
 description = "Provider-route world authority adapter outside the NewEngine host"
 
 [dependencies]
+newengine-ecs = { path = "../newengine-ecs" }
 newengine-ecs-api = { path = "../newengine-ecs-api" }
 newengine-entity-api = { path = "../newengine-entity-api" }
 newengine-plugin-api = { path = "../newengine-plugin-api" }
@@ -14,5 +15,7 @@ newengine-runtime-adapter-core = { path = "../newengine-runtime-adapter-core" }
 newengine-scene-io = { path = "../newengine-scene-io" }
 newengine-physics-api = { path = "../newengine-physics-api" }
 newengine-render-api = { path = "../newengine-render-api" }
+newengine-ulog-api = { path = "../newengine-ulog-api" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+parking_lot = "0.12"

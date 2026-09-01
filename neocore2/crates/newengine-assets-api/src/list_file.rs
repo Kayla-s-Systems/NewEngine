@@ -393,38 +393,9 @@ pub const LIST_FILE_CONTENT_KIND_YSCD: u32 = 34;
 /// Project-authored FX Dictionary: semantic VFX graphs and project texture references.
 pub const LIST_FILE_CONTENT_KIND_FXD: u32 = 35;
 
-/// Frozen, publicly assigned NEF8/ListFile content-kind identifiers.
-///
-/// This is the authoritative coverage set for first-party format registries and
-/// conformance tests. `UNKNOWN=0` is intentionally excluded.
-pub const LIST_FILE_PUBLISHED_CONTENT_KINDS: &[u32] = &[
-    LIST_FILE_CONTENT_KIND_YTD,
-    LIST_FILE_CONTENT_KIND_YDD,
-    LIST_FILE_CONTENT_KIND_YTYP,
-    LIST_FILE_CONTENT_KIND_NEMAT,
-    LIST_FILE_CONTENT_KIND_YMAP,
-    LIST_FILE_CONTENT_KIND_YDR,
-    LIST_FILE_CONTENT_KIND_YFT,
-    LIST_FILE_CONTENT_KIND_YBN,
-    LIST_FILE_CONTENT_KIND_YMF,
-    LIST_FILE_CONTENT_KIND_YMT,
-    LIST_FILE_CONTENT_KIND_YCD,
-    LIST_FILE_CONTENT_KIND_YED,
-    LIST_FILE_CONTENT_KIND_YFD,
-    LIST_FILE_CONTENT_KIND_YLD,
-    LIST_FILE_CONTENT_KIND_YPDB,
-    LIST_FILE_CONTENT_KIND_YVR,
-    LIST_FILE_CONTENT_KIND_YWR,
-    LIST_FILE_CONTENT_KIND_YSC,
-    LIST_FILE_CONTENT_KIND_YBD,
-    LIST_FILE_CONTENT_KIND_YTF,
-    LIST_FILE_CONTENT_KIND_YTYD,
-    LIST_FILE_CONTENT_KIND_NEFTD,
-    LIST_FILE_CONTENT_KIND_NEUI,
-    LIST_FILE_CONTENT_KIND_NEITEMS,
-    LIST_FILE_CONTENT_KIND_YSCD,
-    LIST_FILE_CONTENT_KIND_FXD,
-];
+/// The numeric `LIST_FILE_CONTENT_KIND_*` constants above are frozen wire-compatibility
+/// aliases for existing assets only. They are not a registry and new asset formats must
+/// publish their own opaque content kind through `AssetFileTypeDescriptor`.
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ListFileHeader {
@@ -449,11 +420,6 @@ pub struct ListFileHeader {
 }
 
 impl ListFileHeader {
-    #[inline]
-    pub fn content_kind_label(&self) -> &'static str {
-        list_file_content_kind_label(self.content_kind)
-    }
-
     #[inline]
     pub fn is_deflate_body(&self) -> bool {
         (self.flags & LIST_FILE_FLAG_BODY_DEFLATE) != 0
@@ -524,57 +490,6 @@ impl Default for ListFileHeaderMetadata {
             ],
         }
     }
-}
-
-#[inline]
-pub const fn list_file_content_kind_label(kind: u32) -> &'static str {
-    match kind {
-        LIST_FILE_CONTENT_KIND_UNKNOWN => "unknown",
-        LIST_FILE_CONTENT_KIND_YTD => "ytd_texture_dictionary",
-        LIST_FILE_CONTENT_KIND_YDD => "ydd_drawable_dictionary",
-        LIST_FILE_CONTENT_KIND_YTYP => "ytyp_archetype_dictionary",
-        LIST_FILE_CONTENT_KIND_NEMAT => "nemat_material_library",
-        LIST_FILE_CONTENT_KIND_YMAP => "ymap_map_data",
-        LIST_FILE_CONTENT_KIND_YDR => "ydr_drawable",
-        LIST_FILE_CONTENT_KIND_YFT => "yft_fragment",
-        LIST_FILE_CONTENT_KIND_YBN => "ybn_bounds_dictionary",
-        LIST_FILE_CONTENT_KIND_NEFTD => "neftd_font_dictionary",
-        LIST_FILE_CONTENT_KIND_YMF => "ymf_manifest",
-        LIST_FILE_CONTENT_KIND_YMT => "ymt_metadata",
-        LIST_FILE_CONTENT_KIND_YCD => "ycd_clip_dictionary",
-        LIST_FILE_CONTENT_KIND_YED => "yed_expression_dictionary",
-        LIST_FILE_CONTENT_KIND_YFD => "yfd_frame_filter_dictionary",
-        LIST_FILE_CONTENT_KIND_YLD => "yld_cloth_dictionary",
-        LIST_FILE_CONTENT_KIND_YPDB => "ypdb_pose_database",
-        LIST_FILE_CONTENT_KIND_YVR => "yvr_vehicle_record",
-        LIST_FILE_CONTENT_KIND_YWR => "ywr_waypoint_record",
-        LIST_FILE_CONTENT_KIND_YSC => "ysc_script_module",
-        LIST_FILE_CONTENT_KIND_YBD => "ybd_bounds_dictionary",
-        LIST_FILE_CONTENT_KIND_YTF => "ytf_unknown_y_file",
-        LIST_FILE_CONTENT_KIND_YTYD => "ytyd_uv_layout_dictionary",
-        LIST_FILE_CONTENT_KIND_NEUI => "neui_ui_dictionary",
-        LIST_FILE_CONTENT_KIND_NEITEMS => "neitems_inventory_dictionary",
-        LIST_FILE_CONTENT_KIND_YSCD => "yscd_sound_cue_dictionary",
-        LIST_FILE_CONTENT_KIND_FXD => "fxd_effect_dictionary",
-        _ => "provider_declared",
-    }
-}
-
-/// Descriptor-local NEF8/ListFile format metadata.
-///
-/// This struct is retained for format crates/tools that want a compact local
-/// declaration, but the asset API no longer owns a global `LIST_FILE_FORMAT_SPECS`
-/// table. Concrete formats must publish descriptors from their own crates or
-/// providers and register them with `engine.assets.types`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct ListFileFormatSpec {
-    pub extension: &'static str,
-    pub content_kind: u32,
-    pub asset_kind: &'static str,
-    pub purpose: &'static str,
-    pub semantic_gateway: &'static str,
-    pub handler_service: &'static str,
-    pub selector_syntax: &'static str,
 }
 
 /// Parse the canonical self-describing NEF8 envelope.

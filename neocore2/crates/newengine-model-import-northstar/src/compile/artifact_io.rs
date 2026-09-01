@@ -3,7 +3,7 @@ use super::*;
 pub(super) fn encode_skeleton_xml(skeleton: &DecodedSkeleton) -> Vec<u8> {
     let mut out = String::from("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<Metadata>\n");
     out.push_str(&format!(
-        "  <Skeleton source_format=\"northstar.northstar.pc.joint_hierarchy.v1\" name=\"{}\">\n",
+        "  <Skeleton source_format=\"northstar.pc.joint_hierarchy.v1\" name=\"{}\">\n",
         xml_escape(&skeleton.name)
     ));
     for joint in &skeleton.joints {

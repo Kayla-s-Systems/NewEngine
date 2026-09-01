@@ -136,16 +136,21 @@ impl YscdDictionary {
     }
 }
 
-pub fn decode_yscd_nef8(source: &[u8], logical_path: &str) -> Result<YscdDictionary, String> {
+pub fn decode_yscd_nef8(
+    source: &[u8],
+    logical_path: &str,
+    expected_content_kind: u32,
+    expected_schema_version: u16,
+) -> Result<YscdDictionary, String> {
     let envelope = newengine_assets_api::decode_list_file_envelope(
         source,
-        crate::yscd::CONTENT_KIND,
+        expected_content_kind,
         logical_path,
     )?;
-    if envelope.header.content_schema_version != crate::yscd::CONTENT_SCHEMA_VERSION {
+    if envelope.header.content_schema_version != expected_schema_version {
         return Err(format!(
             "YSCD content schema mismatch path='{logical_path}' expected={} actual={}",
-            crate::yscd::CONTENT_SCHEMA_VERSION,
+            expected_schema_version,
             envelope.header.content_schema_version
         ));
     }

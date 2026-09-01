@@ -52,9 +52,9 @@ impl ScriptModuleRef {
     }
 
     #[inline]
-    pub fn is_ysc_module_ref(&self) -> bool {
-        let reference = self.reference.trim().to_ascii_lowercase();
-        !reference.contains('@') && reference.ends_with(".ysc")
+    pub fn is_selector_free_module_ref(&self) -> bool {
+        let reference = self.reference.trim();
+        !reference.is_empty() && !reference.contains('@')
     }
 }
 

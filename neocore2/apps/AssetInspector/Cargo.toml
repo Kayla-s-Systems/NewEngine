@@ -5,7 +5,6 @@ edition = "2021"
 readme = "README.md"
 
 [dependencies]
-newengine-asset-format-nef8 = { path = "../../crates/newengine-asset-format-nef8" }
 newengine-asset-inspector-runtime = { path = "../../crates/newengine-asset-inspector-runtime" }
 newengine-asset-preview-runtime = { path = "../../crates/newengine-asset-preview-runtime" }
 newengine-viewport-bridge = { path = "../../crates/newengine-viewport-bridge" }

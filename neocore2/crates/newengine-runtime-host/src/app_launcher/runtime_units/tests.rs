@@ -1,34 +1,29 @@
-
 use std::collections::BTreeSet;
 
 use newengine_core::{Engine, EngineResult, StartupConfig};
-use newengine_service_api::{
-    EngineCompositionSpec, EngineRuntimeUnitSpec, RuntimeUnitDescriptor,
-};
+use newengine_service_api::{EngineCompositionSpec, EngineRuntimeUnitSpec, RuntimeUnitDescriptor};
 
+use super::super::types::RuntimeHostRuntimeUnitRegistration;
 use super::catalog::{
     distribution_runtime_unit_catalog, RuntimeUnitCatalog, RuntimeUnitMaterializer,
 };
 use super::solver::select_runtime_unit_keys;
-use super::super::types::RuntimeHostRuntimeUnitRegistration;
 use newengine_service_api::{
-    CapabilityId, CapabilityRequirement, EngineRuntimeUnitKind,
-    RuntimeUnitRequirementDescriptor, RuntimeUnitRequirementSpec, SystemTag,
+    CapabilityId, CapabilityRequirement, EngineRuntimeUnitKind, RuntimeUnitRequirementDescriptor,
+    RuntimeUnitRequirementSpec, SystemTag,
 };
 
 const RENDER: CapabilityId = CapabilityId::new("render.backend", "engine.render", "render");
 const PHYSICS: CapabilityId = CapabilityId::new("physics.backend", "engine.physics", "physics");
 const WORLD: CapabilityId = CapabilityId::new("world.backend", "engine.world", "world");
-const CUSTOM: CapabilityId =
-    CapabilityId::new("custom.runtime", "engine.custom", "runtime-unit");
+const CUSTOM: CapabilityId = CapabilityId::new("custom.runtime", "engine.custom", "runtime-unit");
 
 const REQUIREMENTS: &[CapabilityRequirement] = &[
     CapabilityRequirement::required(RENDER),
     CapabilityRequirement::required(PHYSICS),
 ];
 const WORLD_REQUIREMENTS: &[CapabilityRequirement] = &[CapabilityRequirement::required(WORLD)];
-const CUSTOM_REQUIREMENTS: &[CapabilityRequirement] =
-    &[CapabilityRequirement::required(CUSTOM)];
+const CUSTOM_REQUIREMENTS: &[CapabilityRequirement] = &[CapabilityRequirement::required(CUSTOM)];
 const RENDER_V1: EngineRuntimeUnitSpec = EngineRuntimeUnitSpec::new(
     "render.bridge.v1",
     1,
@@ -126,8 +121,8 @@ fn solver_selects_implicit_runtime_bridges() {
         .into_iter()
         .map(RuntimeUnitDescriptor::from_static)
         .collect::<Vec<_>>();
-    let selected = select_runtime_unit_keys(composition, &descriptors, &[])
-        .expect("runtime-unit composition");
+    let selected =
+        select_runtime_unit_keys(composition, &descriptors, &[]).expect("runtime-unit composition");
     assert!(selected.contains(&"render.bridge.v2@2".to_owned()));
     assert!(selected.contains(&"physics.bridge.v1@1".to_owned()));
     assert!(!selected.contains(&"render.bridge.v1@1".to_owned()));
@@ -176,8 +171,8 @@ fn runtime_unit_only_requirement_selects_from_profile_inventory() {
 fn missing_runtime_unit_root_is_a_hard_error() {
     const ROOTS: &[RuntimeUnitRequirementSpec] =
         &[RuntimeUnitRequirementSpec::required("missing.runtime")];
-    let composition = EngineCompositionSpec::new("test.missing-root", &[])
-        .with_runtime_unit_requirements(ROOTS);
+    let composition =
+        EngineCompositionSpec::new("test.missing-root", &[]).with_runtime_unit_requirements(ROOTS);
     let error = select_runtime_unit_keys(composition, &[], &[])
         .expect_err("missing runtime-unit root must fail composition");
     assert!(error.contains("missing.runtime"));
@@ -198,10 +193,9 @@ fn dependency_closure_uses_combined_inventory() {
 
 #[test]
 fn dependency_closure_provider_choice_is_owned_by_composition_solver() {
-    let composition =
-        EngineCompositionSpec::new("test.fixed-point-preference", WORLD_REQUIREMENTS)
-            .with_runtime_units(&[WORLD_UNIT, SCENE_HIGH_VERSION, SCENE_PREFERRED])
-            .with_preferred_tags(&[PREFERRED_RUNTIME]);
+    let composition = EngineCompositionSpec::new("test.fixed-point-preference", WORLD_REQUIREMENTS)
+        .with_runtime_units(&[WORLD_UNIT, SCENE_HIGH_VERSION, SCENE_PREFERRED])
+        .with_preferred_tags(&[PREFERRED_RUNTIME]);
     let descriptors = [WORLD_UNIT, SCENE_HIGH_VERSION, SCENE_PREFERRED]
         .into_iter()
         .map(RuntimeUnitDescriptor::from_static)
@@ -217,9 +211,8 @@ fn dependency_closure_provider_choice_is_owned_by_composition_solver() {
 
 #[test]
 fn dependency_closure_reaches_transitive_fixed_point() {
-    let composition =
-        EngineCompositionSpec::new("test.fixed-point-transitive", WORLD_REQUIREMENTS)
-            .with_runtime_units(&[WORLD_UNIT, SCENE_TRANSITIVE_UNIT, CLOCK_UNIT]);
+    let composition = EngineCompositionSpec::new("test.fixed-point-transitive", WORLD_REQUIREMENTS)
+        .with_runtime_units(&[WORLD_UNIT, SCENE_TRANSITIVE_UNIT, CLOCK_UNIT]);
     let descriptors = [WORLD_UNIT, SCENE_TRANSITIVE_UNIT, CLOCK_UNIT]
         .into_iter()
         .map(RuntimeUnitDescriptor::from_static)

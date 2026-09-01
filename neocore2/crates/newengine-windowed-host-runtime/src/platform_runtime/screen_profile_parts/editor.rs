@@ -356,7 +356,10 @@ impl ScreenProfileRuntimeState {
     }
 
     pub(super) fn publish_editor_layout_state(&self, resources: &mut Resources, frame_index: u64) {
-        if !editing_tools_available(resources) || !in_game_editor_active(resources) {
+        if !editing_tools_available(resources)
+            || !in_game_editor_active(resources)
+            || !self.config.publish_editor_shell
+        {
             resources.insert(UiDockLayoutState {
                 version: 1,
                 frame_index,

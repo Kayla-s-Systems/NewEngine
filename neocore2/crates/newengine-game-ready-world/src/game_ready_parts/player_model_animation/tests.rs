@@ -872,7 +872,16 @@ mod transition_tests {
         let right_after_error = (right_after - right_target).length();
         let left_after_error = (left_after - left_target).length();
         assert!(right_after_error < right_before_error);
-        assert!(left_after_error < left_before_error);
+        assert!(
+            left_after_error <= left_before_error + 1.0e-6,
+            "support-hand correction may improve contact but must never worsen it"
+        );
+        if (left_after_error - left_before_error).abs() <= 1.0e-6 {
+            assert!(
+                left_after.distance(left_before) <= 1.0e-6,
+                "unreachable support grip must preserve authored hand position instead of locking the arm at full extension"
+            );
+        }
         let resolved_handle =
             crate::weapon_grip::weapon_handle_position(&presentation, final_result.base_root);
         assert!(

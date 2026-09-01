@@ -3,7 +3,7 @@ use super::*;
 #[test]
 fn module_ref_detects_ysc_module() {
     let module_ref = ScriptModuleRef::new("scripts/missions/intro.ysc");
-    assert!(module_ref.is_ysc_module_ref());
+    assert!(module_ref.is_selector_free_module_ref());
     assert_eq!(module_ref.module_id, "scripts_missions_intro_ysc");
 }
 

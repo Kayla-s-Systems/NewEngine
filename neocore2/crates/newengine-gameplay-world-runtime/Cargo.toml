@@ -1,0 +1,41 @@
+[package]
+name = "newengine-gameplay-world-runtime"
+version = "0.1.0"
+edition = "2021"
+readme = "README.md"
+description = "Engine-generic ECS gameplay world, scheduling and physics bridge runtime for North Star"
+license = "Proprietary"
+
+[dependencies]
+newengine-ulog-api = { path = "../newengine-ulog-api" }
+parking_lot = "0.12"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+newengine-assets-api = { path = "../newengine-assets-api" }
+newengine-animation-api = { path = "../newengine-animation-api" }
+newengine-audio-api = { path = "../newengine-audio-api" }
+newengine-audio-client = { path = "../newengine-audio-client" }
+newengine-audio-world-api = { path = "../newengine-audio-world-api" }
+newengine-bounds = { path = "../newengine-bounds" }
+newengine-camera = { path = "../newengine-camera" }
+newengine-core = { path = "../newengine-core", features = ["render-api", "physics-api"] }
+newengine-input-actions-api = { path = "../newengine-input-actions-api" }
+newengine-input-capture-api = { path = "../newengine-input-capture-api" }
+newengine-task-api = { path = "../newengine-task-api" }
+newengine-ecs = { path = "../newengine-ecs" }
+newengine-entity-api = { path = "../newengine-entity-api" }
+newengine-physics-contracts = { path = "../newengine-physics-contracts" }
+newengine-physics-world-api = { path = "../newengine-physics-world-api" }
+newengine-physics-api = { path = "../newengine-physics-api" }
+newengine-math = { path = "../newengine-math" }
+newengine-primitives = { path = "../newengine-primitives" }
+newengine-procedural-noise = { path = "../newengine-procedural-noise" }
+newengine-world-authority-runtime = { path = "../newengine-world-authority-runtime" }
+newengine-runtime-provider-api = { path = "../newengine-runtime-provider-api" }
+newengine-runtime-policy = { path = "../newengine-runtime-policy" }
+newengine-scene = { path = "../newengine-scene", features = ["runtime"] }
+newengine-sim = { path = "../newengine-sim" }
+newengine-transform = { path = "../newengine-transform", features = ["ecs", "service"], default-features = false }
+newengine-ui-api = { path = "../newengine-ui-api" }
+newengine-ui-client = { path = "../newengine-ui-client" }
+newengine-world-authoring-api = { path = "../newengine-world-authoring-api" }

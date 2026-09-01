@@ -53,9 +53,9 @@ impl VfxEffectLibrary {
 
 fn canonical_dictionary_path(raw: &str) -> Result<String, String> {
     let path = raw.trim().replace('\\', "/");
-    if path.is_empty() || !path.to_ascii_lowercase().ends_with(".fxd") || path.contains('@') {
+    if path.is_empty() || path.contains('@') {
         return Err(format!(
-            "FXD logical path must be a selector-free .fxd path, got='{raw}'"
+            "effect dictionary logical path must be a normalized selector-free asset path, got='{raw}'"
         ));
     }
     Ok(path)

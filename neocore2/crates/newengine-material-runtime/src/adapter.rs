@@ -14,7 +14,7 @@ use newengine_plugin_api::{Blob, HostApiV1, MethodName};
 use crate::{
     cache::MaterialRuntimeCaches, collect_texture_refs, decode_material_entry_payload,
     material_cache_key, material_response_from_authored, normalize_material_logical_path,
-    preview_material_name_from_body, split_nemat_selector,
+    preview_material_name_from_body, split_nemat_selector, validate_material_body_schema,
 };
 
 #[derive(Clone)]
@@ -47,7 +47,7 @@ impl MaterialAssetGatewayAdapter {
         let source = normalize_material_logical_path(
             logical_path.split('@').next().unwrap_or(logical_path),
         )?;
-        self.client
+        let (_, descriptor) = self.client
             .require_semantic_asset_reference_v1(
                 &source,
                 newengine_assets_api::ENGINE_ASSETS_MATERIALS_SERVICE_ID,
@@ -69,6 +69,7 @@ impl MaterialAssetGatewayAdapter {
             .map_err(|e| format!(
                 "engine.assets decode_v1 failed path='{source}' output='{ASSET_LIST_FILE_BODY_OUTPUT}' err='{e}'"
             ))?;
+        validate_material_body_schema(&bytes, &descriptor)?;
         let selector = preview_material_name_from_body(&bytes)?;
         Ok(format!("{source}@{selector}"))
     }
@@ -79,7 +80,7 @@ impl MaterialAssetGatewayAdapter {
     ) -> Result<MaterialLoadResponse, String> {
         let material_ref = normalize_material_logical_path(&request.logical_path)?;
         let (source, selector) = split_nemat_selector(&material_ref, request.selector.as_deref())?;
-        self.client
+        let (_, descriptor) = self.client
             .require_semantic_asset_reference_v1(
                 &source,
                 newengine_assets_api::ENGINE_ASSETS_MATERIALS_SERVICE_ID,
@@ -105,6 +106,7 @@ impl MaterialAssetGatewayAdapter {
                             format_descriptor: None,
 })
             .map_err(|e| format!("engine.assets decode_v1 failed path='{source}' selector='{selector}' output='{ASSET_LIST_FILE_BODY_OUTPUT}' err='{e}'"))?;
+        validate_material_body_schema(&bytes, &descriptor)?;
         let material = decode_material_entry_payload(&bytes, &selector)
             .map_err(|e| format!("materials: decode .nemat library failed source='{source}' selector='{selector}' err='{e}'"))?;
         newengine_ulog_api::ulog::debug!(

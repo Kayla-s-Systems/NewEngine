@@ -6,7 +6,7 @@ impl AssetTypeRegistryState {
             id: ASSET_TYPES_SERVICE_ID,
             gateway: ENGINE_ASSET_TYPES_SERVICE_ID,
             methods: ASSET_TYPES_SERVICE_METHODS,
-            backend: "engine.assets.starvault.file-type-registry",
+            backend: "engine.assets.host.file-type-registry",
             registered_extensions: self.registry.keys().cloned().collect(),
         }
     }

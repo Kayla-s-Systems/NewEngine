@@ -1,0 +1,10 @@
+{
+  "id": "newengine.input.profile",
+  "version": 4,
+  "device_preference": "hybrid",
+  "keys": [],
+  "actions": [],
+  "listeners": [],
+  "bindings": [],
+  "gamepad_axes": []
+}

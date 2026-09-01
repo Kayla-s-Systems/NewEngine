@@ -1,0 +1,13 @@
+[package]
+name = "newengine-ui-client"
+version = "0.1.0"
+edition = "2021"
+readme = "README.md"
+description = "Provider-neutral engine.ui gateway client for North Star Engine"
+license = "Proprietary"
+
+[dependencies]
+newengine-core = { path = "../newengine-core", default-features = false }
+newengine-ui-api = { path = "../newengine-ui-api" }
+newengine-ulog-api = { path = "../newengine-ulog-api" }
+serde_json = "1"

@@ -23,10 +23,8 @@ pub fn decode_list_file_envelope(
     let header = parse_list_file_header(source)?;
     if !header.content_kind_matches(expected_kind) {
         return Err(format!(
-            "NEF8 content_kind mismatch path='{}' expected='{}' actual='{}'",
-            logical_path,
-            list_file_content_kind_label(expected_kind),
-            header.content_kind_label()
+            "NEF8 content_kind mismatch path='{}' expected={} actual={}",
+            logical_path, expected_kind, header.content_kind
         ));
     }
 
@@ -84,7 +82,7 @@ fn read_header_metadata(
     if header.header_metadata_len == 0 {
         return Ok(ListFileHeaderMetadata {
             logical_path: logical_path.to_owned(),
-            content_kind: header.content_kind_label().to_owned(),
+            content_kind: opaque_content_kind_label(header.content_kind),
             ..ListFileHeaderMetadata::default()
         });
     }
@@ -102,9 +100,14 @@ fn read_header_metadata(
         metadata.logical_path = logical_path.to_owned();
     }
     if metadata.content_kind.trim().is_empty() {
-        metadata.content_kind = header.content_kind_label().to_owned();
+        metadata.content_kind = opaque_content_kind_label(header.content_kind);
     }
     Ok(metadata)
+}
+
+#[inline]
+fn opaque_content_kind_label(content_kind: u32) -> String {
+    format!("opaque:{content_kind}")
 }
 
 fn validate_metadata_entries(
@@ -529,6 +532,51 @@ mod tests {
         assert_eq!(header.size_class, expected_class);
         assert_eq!(header.header_len as usize, 1_usize << expected_class);
         header
+    }
+
+    #[test]
+    fn missing_header_metadata_uses_opaque_wire_content_kind_identity() {
+        let bytes = encode_list_file(ListFileEncodeRequest {
+            content_kind: 9001,
+            content_schema_version: 1,
+            entry_count: 0,
+            additional_flags: 0,
+            min_size_class: 4,
+            header_metadata: &[],
+            body_stored: &[1],
+            body_uncompressed_len: 1,
+            body_raw_hash: None,
+            stable_file_id: None,
+            import_settings_hash: None,
+        })
+        .unwrap();
+        let header = parse_list_file_header(&bytes).unwrap();
+        let metadata = read_header_metadata(&bytes, &header, "test.opaque").unwrap();
+        assert_eq!(metadata.logical_path, "test.opaque");
+        assert_eq!(metadata.content_kind, "opaque:9001");
+    }
+
+    #[test]
+    fn blank_metadata_content_kind_uses_opaque_wire_identity_without_domain_inference() {
+        let header_metadata = br#"{"schema":"metadata","logical_path":"","content_kind":""}"#;
+        let bytes = encode_list_file(ListFileEncodeRequest {
+            content_kind: 9002,
+            content_schema_version: 1,
+            entry_count: 0,
+            additional_flags: 0,
+            min_size_class: 5,
+            header_metadata,
+            body_stored: &[1],
+            body_uncompressed_len: 1,
+            body_raw_hash: None,
+            stable_file_id: None,
+            import_settings_hash: None,
+        })
+        .unwrap();
+        let header = parse_list_file_header(&bytes).unwrap();
+        let metadata = read_header_metadata(&bytes, &header, "test.opaque").unwrap();
+        assert_eq!(metadata.logical_path, "test.opaque");
+        assert_eq!(metadata.content_kind, "opaque:9002");
     }
 
     #[test]

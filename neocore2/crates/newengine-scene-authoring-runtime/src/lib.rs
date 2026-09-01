@@ -161,10 +161,23 @@ impl SceneAuthoringRuntime {
         map_refs.extend(creates.keys().map(|key| key.map_ref.clone()));
         map_refs.extend(deletes.iter().map(|key| key.map_ref.clone()));
 
+        let assets = newengine_assets_api::AssetServiceClient::new(
+            newengine_plugin_host::default_host_api(),
+        );
         let mut total = 0usize;
         let mut saved_entities = Vec::new();
         for map_ref in map_refs {
-            let source_path = authored_source_path(&project_root, &map_ref)?;
+            let (typed_ref, descriptor) = assets.resolve_typed_asset_reference_v1(&map_ref, false)?;
+            if !descriptor
+                .semantic_gateway
+                .eq_ignore_ascii_case("engine.assets.maps")
+            {
+                return Err(format!(
+                    "project save map ref='{}' resolves to format module='{}' gateway='{}', expected engine.assets.maps",
+                    map_ref, descriptor.module_id, descriptor.semantic_gateway
+                ));
+            }
+            let source_path = authored_source_path(&project_root, &typed_ref.logical_path)?;
             let original = std::fs::read_to_string(&source_path).map_err(|error| {
                 format!(
                     "in-game editor save cannot read authored YMAP source '{}': {error}",
@@ -478,11 +491,6 @@ fn authored_source_path(project_root: &Path, map_ref: &str) -> Result<PathBuf, S
     {
         return Err(format!(
             "unsafe authored map ref for project save: '{map_ref}'"
-        ));
-    }
-    if !logical.to_ascii_lowercase().ends_with(".ymap") {
-        return Err(format!(
-            "project save currently requires a .ymap authored source, got '{map_ref}'"
         ));
     }
     Ok(

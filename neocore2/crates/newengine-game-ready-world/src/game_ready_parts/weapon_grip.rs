@@ -133,6 +133,26 @@ pub(crate) fn weapon_sight_forward(
     .normalize_or_zero()
 }
 
+/// Camera origin required by the authored eye-relief vector for a rendered weapon root. This is
+/// intentionally derived from the actual rear sight after all weapon presentation transforms.
+pub(crate) fn weapon_ads_camera_position(
+    presentation: &WeaponPresentationDefinition,
+    root: WeaponRootTransform,
+    view_rotation_ws: Quat,
+) -> Option<Vec3> {
+    if !view_rotation_ws.is_finite() {
+        return None;
+    }
+    let presentation = presentation.clone().sanitized();
+    if !presentation.enabled {
+        return None;
+    }
+    let rear = weapon_rear_sight_position(&presentation, root);
+    let offset = v3(presentation.ads_camera_to_rear_sight);
+    let camera = rear - view_rotation_ws.normalize_or_identity() * offset;
+    camera.is_finite().then_some(camera)
+}
+
 /// Full-body first person keeps the authored firing hand as the physical grip owner. Hip/ready
 /// therefore uses the exact authored palm->weapon transform. While ADS is engaged, only the weapon
 /// orientation rotates around that fixed handle until the real rear->front sight axis matches the
@@ -199,10 +219,8 @@ pub(crate) fn weapon_first_person_hand_anchored_root(
     }
 
     let position = handle_anchor - rotation * v3(presentation.handle_from_root);
-    (position.is_finite() && rotation.is_finite()).then_some(WeaponRootTransform {
-        position,
-        rotation,
-    })
+    (position.is_finite() && rotation.is_finite())
+        .then_some(WeaponRootTransform { position, rotation })
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -878,7 +896,7 @@ mod tests {
         let p = fixture();
         let palm_rotation = Quat::from_euler(newengine_math::EulerRot::YXZ, -0.24, 0.18, 0.11);
         let palm_position = Vec3::new(-0.19, 1.36, -0.08);
-        let palm = Mat4::from_rotation_translation(palm_rotation, palm_position);
+        let palm = Mat4::from_scale_rotation_translation(Vec3::ONE, palm_rotation, palm_position);
         let view = Quat::from_euler(newengine_math::EulerRot::YXZ, 0.37, -0.18, 0.0);
         let root = weapon_first_person_hand_anchored_root(&p, palm, view, 1.0, 0.0, 0.0)
             .expect("hand-anchored ADS root");
@@ -894,6 +912,14 @@ mod tests {
             sight_forward.dot(view_forward) > 0.9999,
             "rear->front sight axis must coincide with gameplay view at full ADS"
         );
+        let camera = weapon_ads_camera_position(&p, root, view).expect("ADS camera origin");
+        let offset = v3(p.ads_camera_to_rear_sight);
+        let rear_from_camera = camera + view * offset;
+        let actual_rear = weapon_rear_sight_position(&p, root);
+        assert!(
+            rear_from_camera.distance(actual_rear) <= 1.0e-5,
+            "camera eye-relief vector must terminate at the rendered rear sight"
+        );
     }
 
     #[test]
@@ -901,7 +927,7 @@ mod tests {
         let p = fixture();
         let palm_rotation = Quat::from_euler(newengine_math::EulerRot::YXZ, -0.24, 0.18, 0.11);
         let palm_position = Vec3::new(-0.19, 1.36, -0.08);
-        let palm = Mat4::from_rotation_translation(palm_rotation, palm_position);
+        let palm = Mat4::from_scale_rotation_translation(Vec3::ONE, palm_rotation, palm_position);
         let authored = weapon_root_from_right_palm(&p, palm).expect("authored palm root");
         let resolved = weapon_first_person_hand_anchored_root(
             &p,

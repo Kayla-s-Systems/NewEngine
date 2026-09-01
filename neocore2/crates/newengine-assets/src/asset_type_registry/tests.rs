@@ -6,6 +6,7 @@ fn explicit_descriptor(
     semantic_gateway: &str,
 ) -> AssetFileTypeDescriptor {
     AssetFileTypeDescriptor {
+        module_id: format!("test.format.{extension}"),
         extension: extension.to_owned(),
         asset_kind: "provider_declared_asset".to_owned(),
         container: format!("newengine.listfile.nef8.{extension}"),

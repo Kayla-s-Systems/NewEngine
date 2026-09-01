@@ -1,11 +1,5 @@
 use super::*;
 
-pub(super) fn extension_of_ref(reference: &str) -> Option<String> {
-    let (path, _) = split_asset_ref(reference);
-    path.rsplit_once('.')
-        .map(|(_, ext)| ext.to_ascii_lowercase())
-}
-
 pub(super) fn refs_to_edges(
     mut refs: Vec<String>,
     default_role: &str,
@@ -13,20 +7,7 @@ pub(super) fn refs_to_edges(
     refs.sort();
     refs.dedup();
     refs.into_iter()
-        .map(|reference| {
-            let role = match extension_of_ref(&reference).as_deref() {
-                Some("ydd") => "drawable_dictionary",
-                Some("nemat") => "material_library",
-                Some("ytd") => "texture_dictionary",
-                Some("ybn") | Some("ycol") => "physics_dictionary",
-                Some("nebrain") => "ai_brain",
-                Some("nepat") => "ai_pattern",
-                Some("nemem") => "ai_memory",
-                Some("ytyp") => "model_properties_descriptor",
-                _ => default_role,
-            };
-            (reference, role.to_owned(), true)
-        })
+        .map(|reference| (reference, default_role.to_owned(), true))
         .collect()
 }
 
@@ -156,41 +137,17 @@ fn collect_ref_strings_into(value: &serde_json::Value, refs: &mut Vec<String>) {
 }
 
 fn looks_like_runtime_asset_ref(value: &str) -> bool {
-    let lower = value.to_ascii_lowercase();
-    [
-        ".ytyp",
-        ".ydd@",
-        ".ytyd@",
-        ".ydr@",
-        ".yft@",
-        ".nemat@",
-        ".ytd@",
-        ".ymap@",
-        ".ymf@",
-        ".ymt@",
-        ".ybn@",
-        ".ybd@",
-        ".ycol@",
-        ".ycd@",
-        ".yed@",
-        ".yfd@",
-        ".yld@",
-        ".ypdb@",
-        ".yvr@",
-        ".ywr@",
-        ".ysc",
-        ".ytf@",
-        ".nebrain@",
-        ".nepat@",
-        ".nemem@",
-        ".negoal@",
-        ".nebt@",
-        ".nebehavior@",
-        ".neutility@",
-        ".nebb@",
-    ]
-    .iter()
-    .any(|needle| lower.contains(needle))
+    let value = value.trim();
+    if value.is_empty() || value.chars().any(char::is_whitespace) {
+        return false;
+    }
+    let Ok(reference) = newengine_assets_api::parse_asset_reference(value) else {
+        return false;
+    };
+    // Candidate detection is intentionally syntax-only. Whether the suffix is a
+    // registered asset type is decided later by engine.assets.types.
+    reference.logical_path.rsplit_once('.').is_some()
+        && (value.contains('/') || value.contains('@'))
 }
 
 pub(super) fn collect_metadata_namespaces(

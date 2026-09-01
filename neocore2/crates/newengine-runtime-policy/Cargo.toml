@@ -1,0 +1,10 @@
+[package]
+name = "newengine-runtime-policy"
+version = "0.1.0"
+edition = "2021"
+readme = "README.md"
+description = "Immutable typed startup policy snapshots for North Star runtime domains"
+license = "Proprietary"
+
+[dependencies]
+newengine-plugin-host = { path = "../newengine-plugin-host" }

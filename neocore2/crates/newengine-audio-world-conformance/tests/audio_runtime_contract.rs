@@ -60,8 +60,11 @@ fn authored_audio_emitter_references_yscd_cue_not_backend_clip() {
 #[test]
 fn acoustic_provider_batches_multi_ray_queries_and_explicitly_ignores_listener_player() {
     let mut world = World::new();
-    world.insert_resource(AudioListenerRuntimeState::default());
     let player = spawn_default_player(&mut world, None, "audio-listener-player", Vec3::ZERO);
+    world.insert_resource(AudioListenerRuntimeState {
+        listener_entity: Some(player.stable_u64()),
+        ..AudioListenerRuntimeState::default()
+    });
     let emitter = world.spawn();
     let _ = world.insert(
         emitter,
@@ -897,6 +900,7 @@ fn proven_occlusion_blocker_drives_only_its_diffraction_edge_graph() {
             position: [0.0, 0.0, 0.0],
             ..Default::default()
         },
+        listener_entity: None,
         frame_index: 1,
     });
 

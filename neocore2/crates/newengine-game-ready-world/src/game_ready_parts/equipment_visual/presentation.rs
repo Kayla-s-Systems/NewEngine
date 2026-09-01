@@ -594,13 +594,13 @@ fn update_weapon_attachment(
                     if sight_forward.length_squared() > 1.0e-8
                         && view_forward.length_squared() > 1.0e-8
                     {
-                        let rear =
-                            crate::weapon_grip::weapon_rear_sight_position(presentation, weapon_root);
-                        let offset = presentation.ads_camera_to_rear_sight;
-                        let camera_to_rear = view_rotation_ws
-                            * Vec3::new(offset[0], offset[1], offset[2]);
-                        let ads_camera_position_ws = rear - camera_to_rear;
-                        if ads_camera_position_ws.is_finite() {
+                        if let Some(ads_camera_position_ws) =
+                            crate::weapon_grip::weapon_ads_camera_position(
+                                presentation,
+                                weapon_root,
+                                view_rotation_ws,
+                            )
+                        {
                             if let Some(anchor) = world.get_mut::<
                                 newengine_engine_runtime::gameplay::PlayerFirstPersonCameraAnchor,
                             >(owner) {
@@ -640,7 +640,15 @@ fn update_weapon_attachment(
                         crate::weapon_grip::weapon_muzzle_position(presentation, weapon_root);
                     newengine_ulog_api::ulog::info!(
                         "WEAPON_BASIS root_pos={:?} root_rot={:?} runtime_forward={:?} runtime_up={:?} runtime_right={:?} runtime_up_dot_world_y={:.5} handle={:?} left_grip={:?} muzzle={:?}",
-                        weapon_root.position, weapon_root.rotation, forward, up, right, up.dot(Vec3::Y), handle, left_grip, muzzle,
+                        weapon_root.position,
+                        weapon_root.rotation,
+                        forward,
+                        up,
+                        right,
+                        up.dot(Vec3::Y),
+                        handle,
+                        left_grip,
+                        muzzle,
                     );
                 }
             }

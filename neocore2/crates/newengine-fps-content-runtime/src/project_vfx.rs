@@ -29,30 +29,43 @@ pub(crate) fn install_project_vfx_dictionaries(
         return Ok(());
     }
 
-    let mut dictionaries = BTreeSet::<String>::new();
-    for effect_ref in &effect_refs {
-        let (path, selector) = effect_ref.rsplit_once('@').ok_or_else(|| {
-            format!("project weapon VFX reference must use file.fxd@effect syntax: '{effect_ref}'")
-        })?;
-        if path.trim().is_empty()
-            || selector.trim().is_empty()
-            || !path.trim().to_ascii_lowercase().ends_with(".fxd")
-        {
-            return Err(format!(
-                "invalid project weapon VFX reference '{effect_ref}'; expected file.fxd@effect"
-            ));
-        }
-        dictionaries.insert(path.trim().replace('\\', "/"));
-    }
-
     let assets =
         newengine_assets_api::AssetServiceClient::new(newengine_plugin_host::default_host_api());
+    let mut dictionaries = BTreeSet::<String>::new();
+    for effect_ref in &effect_refs {
+        let (reference, descriptor) = assets.require_semantic_asset_reference_v1(
+            effect_ref,
+            "engine.render.vfx",
+            true,
+        )?;
+        if descriptor.asset_kind != "effect_dictionary" {
+            return Err(format!(
+                "project weapon VFX reference '{}' resolves to asset kind '{}', expected effect_dictionary",
+                effect_ref, descriptor.asset_kind
+            ));
+        }
+        dictionaries.insert(reference.logical_path);
+    }
+
     for path in dictionaries {
+        let descriptor = assets.resolve_file_type_v1(&path)?;
+        let content_kind = descriptor.content_kind.ok_or_else(|| format!(
+            "VFX format module '{}' does not declare NEF8 content_kind",
+            descriptor.module_id
+        ))?;
+        let schema_version = descriptor.content_schema_version.ok_or_else(|| format!(
+            "VFX format module '{}' does not declare content_schema_version",
+            descriptor.module_id
+        ))?;
         let bytes = assets
             .raw_bytes_v1(&path)
-            .map_err(|error| format!("project FXD load failed path='{path}' err='{error}'"))?;
-        let dictionary = newengine_asset_format_nef8::decode_fxd_nef8(&bytes)
-            .map_err(|error| format!("project FXD decode failed path='{path}' err='{error}'"))?;
+            .map_err(|error| format!("project VFX dictionary load failed path='{path}' err='{error}'"))?;
+        let dictionary = newengine_asset_format_nef8::decode_fxd_nef8(
+            &bytes,
+            content_kind,
+            schema_version,
+        )
+        .map_err(|error| format!("project VFX dictionary decode failed path='{path}' err='{error}'"))?;
         library.register_fxd_dictionary(&dictionary, &path, &mut textures)?;
     }
 

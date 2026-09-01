@@ -8,10 +8,17 @@
 
 mod ecs_runtime;
 mod entity_runtime;
+mod runtime_bridge;
 mod world_authority;
 
 pub use ecs_runtime::EcsServiceClient;
 pub use entity_runtime::EntityServiceClient;
 pub use world_authority::{
     WorldAuthorityClient, WorldAuthorityGatewayRoute, WorldAuthoritySnapshot,
+};
+
+pub use runtime_bridge::{
+    current_entity_authority_map, current_world_authority_frame, RuntimeEntityAuthorityMap,
+    RuntimeWorldAuthorityBridge, RuntimeWorldAuthorityFrame, RuntimeWorldAuthorityMode,
+    RuntimeWorldAuthorityResource,
 };

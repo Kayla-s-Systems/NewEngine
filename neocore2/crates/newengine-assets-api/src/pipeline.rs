@@ -80,72 +80,14 @@ impl Default for AssetPipelineSnapshotV1 {
     fn default() -> Self {
         Self {
             schema: ASSET_PIPELINE_STATUS_SCHEMA.to_owned(),
-            ownership: canonical_asset_format_ownership(),
+            ownership: Vec::new(),
             status: AssetPipelineStatusV1::default(),
         }
     }
 }
 
-pub fn canonical_asset_format_ownership() -> Vec<AssetFormatOwnership> {
-    vec![
-        AssetFormatOwnership {
-            extension: "ytyp".to_owned(),
-            role: "archetype_dictionary".to_owned(),
-            byte_owner_gateway: crate::ENGINE_ASSET_SERVICE_ID.to_owned(),
-            semantic_owner_gateway: crate::ENGINE_ASSETS_DEFINITIONS_SERVICE_ID.to_owned(),
-            runtime_rule: ".ytyp is a NEF8/ListFile definition dictionary; scene/world consume validated DTOs".to_owned(),
-        },
-        AssetFormatOwnership {
-            extension: "ydd".to_owned(),
-            role: "drawable_dictionary".to_owned(),
-            byte_owner_gateway: crate::ENGINE_ASSET_SERVICE_ID.to_owned(),
-            semantic_owner_gateway: crate::ENGINE_ASSETS_MODELS_SERVICE_ID.to_owned(),
-            runtime_rule: ".ydd is a NEF8/ListFile drawable dictionary; renderer never parses it directly".to_owned(),
-        },
-        AssetFormatOwnership {
-            extension: "nemat".to_owned(),
-            role: "material_library".to_owned(),
-            byte_owner_gateway: crate::ENGINE_ASSET_SERVICE_ID.to_owned(),
-            semantic_owner_gateway: crate::ENGINE_ASSETS_MATERIALS_SERVICE_ID.to_owned(),
-            runtime_rule: ".nemat is a NEF8/ListFile material library; render receives render-ready material packets".to_owned(),
-        },
-        AssetFormatOwnership {
-            extension: "ytd".to_owned(),
-            role: "texture_dictionary".to_owned(),
-            byte_owner_gateway: crate::ENGINE_ASSET_SERVICE_ID.to_owned(),
-            semantic_owner_gateway: crate::ENGINE_ASSETS_TEXTURES_SERVICE_ID.to_owned(),
-            runtime_rule: ".ytd is a NEF8/ListFile texture dictionary; render receives runtime texture packets".to_owned(),
-        },
-        AssetFormatOwnership {
-            extension: "srt".to_owned(),
-            role: "speedtree_canonical_source".to_owned(),
-            byte_owner_gateway: crate::ENGINE_ASSET_SERVICE_ID.to_owned(),
-            semantic_owner_gateway: crate::ENGINE_ASSETS_MODELS_SERVICE_ID.to_owned(),
-            runtime_rule: ".srt stays an opaque canonical source; a selected AssetImporterV1 capability produces engine-owned foliage runtime assets".to_owned(),
-        },
-        AssetFormatOwnership {
-            extension: "spm".to_owned(),
-            role: "speedtree_modeler_source".to_owned(),
-            byte_owner_gateway: crate::ENGINE_ASSET_SERVICE_ID.to_owned(),
-            semantic_owner_gateway: crate::ENGINE_ASSETS_MODELS_SERVICE_ID.to_owned(),
-            runtime_rule: ".spm stays an opaque SpeedTree Modeler authoring source; a selected AssetImporterV1 capability produces engine-owned foliage runtime assets".to_owned(),
-        },
-        AssetFormatOwnership {
-            extension: "nefoliage".to_owned(),
-            role: "compiled_foliage_runtime".to_owned(),
-            byte_owner_gateway: crate::ENGINE_ASSET_SERVICE_ID.to_owned(),
-            semantic_owner_gateway: crate::ENGINE_ASSETS_MODELS_SERVICE_ID.to_owned(),
-            runtime_rule: ".nefoliage contains validated LOD/material/impostor metadata; render receives extracted handles and instance commands, never source bytes".to_owned(),
-        },
-        AssetFormatOwnership {
-            extension: "nepak".to_owned(),
-            role: "vfs_package".to_owned(),
-            byte_owner_gateway: crate::ENGINE_ASSET_SERVICE_ID.to_owned(),
-            semantic_owner_gateway: crate::ENGINE_ASSET_SERVICE_ID.to_owned(),
-            runtime_rule: ".nepak is a mounted VFS package, not a ListFile".to_owned(),
-        },
-    ]
-}
+/// `ownership` is populated at runtime from `engine.assets.types`; the API does not
+/// carry a compiled first-party format catalog.
 
 pub const ASSET_IMPORTER_DESCRIPTOR_SCHEMA: &str = "northstar.assets.importer_descriptor.v1";
 pub const ASSET_RUNTIME_GRAPH_SCHEMA: &str = "northstar.assets.runtime_graph.v1";

@@ -1,8 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use newengine_service_api::{
-    EngineCompositionSpec, EngineRuntimeUnitSpec, RuntimeUnitDescriptor,
-};
+use newengine_service_api::{EngineCompositionSpec, EngineRuntimeUnitSpec, RuntimeUnitDescriptor};
 
 use super::super::types::{RuntimeHostRuntimeUnitRegistration, RuntimeUnitFactory};
 

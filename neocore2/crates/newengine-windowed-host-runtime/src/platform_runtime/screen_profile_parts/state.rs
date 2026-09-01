@@ -172,6 +172,10 @@ impl ScreenProfileRuntimeState {
             resources.insert(state);
         }
 
+        resources.insert(UiEditorNavigationSettings {
+            version: 1,
+            fly_speed_scale: self.config.editor_fly_speed_scale,
+        });
         self.update_menu_interaction(resources, frame_index);
         self.update_editor_runtime_state(resources, frame_index);
         self.update_editor_viewport_interaction(resources, frame_index);

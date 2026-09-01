@@ -1,15 +1,11 @@
 use std::collections::BTreeSet;
 
 use newengine_core::{Engine, EngineError, EngineResult, StartupConfig};
-use newengine_service_api::{
-    EngineCompositionSpec, RuntimeUnitRequirementDescriptor,
-};
+use newengine_service_api::{EngineCompositionSpec, RuntimeUnitRequirementDescriptor};
 
+use super::super::types::{RuntimeHostRuntimeUnitRegistration, RuntimeUnitCompositionReport};
 use super::catalog::{build_runtime_unit_catalog, RuntimeUnitMaterializer};
 use super::solver::select_runtime_unit_keys;
-use super::super::types::{
-    RuntimeHostRuntimeUnitRegistration, RuntimeUnitCompositionReport,
-};
 
 pub(in super::super) fn materialize_runtime_units(
     engine: &mut Engine<()>,

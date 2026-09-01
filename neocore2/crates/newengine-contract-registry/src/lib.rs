@@ -6,8 +6,8 @@ pub use newengine_contract_api::{
     ContractCompatibility, ContractKind, ContractSpec, ContractVersion,
 };
 
-/// Normative compile-time Engine contract set. Runtime/plugin-owned contracts belong
-/// in `newengine-runtime-contract-catalog` and must never mutate this trust root.
+/// Normative compile-time Engine contract set. Runtime/plugin/format-owned contracts are
+/// discovered from providers/descriptors and must never mutate this trust root.
 pub const ENGINE_CONTRACTS: &[ContractSpec] = &[
     newengine_service_api::COMPOSITION_SNAPSHOT_CONTRACT_SPEC,
     newengine_service_api::COMPOSITION_DIFF_CONTRACT_SPEC,
@@ -16,11 +16,6 @@ pub const ENGINE_CONTRACTS: &[ContractSpec] = &[
     newengine_assets_api::CONTAINER_WRITE_BYTES_PROTOCOL_CONTRACT_SPEC,
     newengine_assets_api::ASSET_PREVIEW_PROTOCOL_CONTRACT_SPEC,
     newengine_asset_format_nef8::YDD_BINARY_CONTRACT_SPEC,
-    newengine_asset_format_nef8::ytd::CONTENT_SCHEMA_CONTRACT_SPEC,
-    newengine_asset_format_nef8::nemat::CONTENT_SCHEMA_CONTRACT_SPEC,
-    newengine_asset_format_nef8::nemat::AUTHORED_XML_CONTRACT_SPEC,
-    newengine_asset_format_nef8::neui::CONTENT_SCHEMA_CONTRACT_SPEC,
-    newengine_asset_format_nef8::ytyp::CONTENT_SCHEMA_CONTRACT_SPEC,
     newengine_project_api::PROJECT_MANIFEST_CONTRACT_SPEC,
     newengine_project_api::PROJECT_RUNTIME_PROFILE_ABI_CONTRACT_SPEC,
     newengine_game_module_api::GAME_MODULE_CONTRACT_SPEC,
@@ -104,11 +99,6 @@ mod tests {
             "asset.container.write_bytes.protocol",
             "asset.preview.protocol",
             "asset.ydd.body",
-            "asset.ytd.schema",
-            "asset.nemat.schema",
-            "asset.nemat.authored_xml",
-            "asset.neui.schema",
-            "asset.ytyp.schema",
             "project.manifest",
             "runtime.profile.abi",
             "game.module.contract",

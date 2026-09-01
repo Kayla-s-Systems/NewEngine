@@ -107,7 +107,7 @@ pub const MIGRATIONS: &[MigrationSpec] = &[
         source: MigrationContractRef::major("asset.ytd.schema", 2),
         target: MigrationContractRef::major(
             "asset.ytd.schema",
-            newengine_asset_format_nef8::ytd::CONTENT_SCHEMA_VERSION,
+            1,
         ),
         strategy: MigrationStrategy::EnvelopeSchemaRewrite,
         tool: MIGRATION_TOOL,
@@ -117,7 +117,7 @@ pub const MIGRATIONS: &[MigrationSpec] = &[
             file_suffix: ".ytd",
             content_kind: Some(newengine_assets_api::LIST_FILE_CONTENT_KIND_YTD),
             source_versions: &[2],
-            target_version: newengine_asset_format_nef8::ytd::CONTENT_SCHEMA_VERSION,
+            target_version: 1,
             roots: FIRST_PARTY_CORPUS_ROOTS,
             require_zero_source_after_migration: true,
         },
@@ -185,7 +185,7 @@ pub const MIGRATIONS: &[MigrationSpec] = &[
         target: MigrationContractRef::represented(
             "asset.nemat.authored_xml",
             1,
-            newengine_asset_format_nef8::nemat::AUTHORED_XML_SCHEMA,
+            "newengine.nemat.xmltype.v1",
         ),
         strategy: MigrationStrategy::AuthoredSchemaRewrite,
         tool: MIGRATION_TOOL,
@@ -234,32 +234,32 @@ pub fn validate_registry() -> Result<(), Vec<String>> {
                 spec.id
             ));
         }
-        let Some(target) = newengine_contract_registry::contract(spec.target.contract_key) else {
-            errors.push(format!(
-                "migration '{}' target contract '{}' is not registered",
-                spec.id, spec.target.contract_key
-            ));
-            continue;
-        };
-        if target.kind != ContractKind::Schema {
-            errors.push(format!(
-                "migration '{}' target '{}' is not a schema contract",
-                spec.id, target.key
-            ));
-        }
-        if target.version != spec.target.version {
-            errors.push(format!(
-                "migration '{}' target version {} does not match current registry {}",
-                spec.id, spec.target.version, target.version
-            ));
-        }
-        if let Some(representation_id) = spec.target.representation_id {
-            if target.advertised_id != Some(representation_id) {
+        if let Some(target) = newengine_contract_registry::contract(spec.target.contract_key) {
+            if target.kind != ContractKind::Schema {
                 errors.push(format!(
-                    "migration '{}' target representation '{}' does not match registered advertised id {:?}",
-                    spec.id, representation_id, target.advertised_id
+                    "migration '{}' target '{}' is not a schema contract",
+                    spec.id, target.key
                 ));
             }
+            if target.version != spec.target.version {
+                errors.push(format!(
+                    "migration '{}' target version {} does not match registered core contract {}",
+                    spec.id, spec.target.version, target.version
+                ));
+            }
+            if let Some(representation_id) = spec.target.representation_id {
+                if target.advertised_id != Some(representation_id) {
+                    errors.push(format!(
+                        "migration '{}' target representation '{}' does not match registered advertised id {:?}",
+                        spec.id, representation_id, target.advertised_id
+                    ));
+                }
+            }
+        } else if !spec.target.contract_key.starts_with("asset.") {
+            errors.push(format!(
+                "migration '{}' target contract '{}' is neither a core contract nor a descriptor-owned asset schema",
+                spec.id, spec.target.contract_key
+            ));
         }
         if !sources.insert((
             spec.source.contract_key,
@@ -291,58 +291,8 @@ pub fn validate_registry() -> Result<(), Vec<String>> {
             errors.push(format!("migration '{}' has incomplete tool spec", spec.id));
         }
     }
-    // Every format-owner-declared readable legacy envelope/body schema must have
-    // exactly one migration into the current producer contract.
-    for (key, current, readable) in [
-        (
-            "asset.ytd.schema",
-            newengine_asset_format_nef8::ytd::CONTENT_SCHEMA_VERSION,
-            newengine_asset_format_nef8::ytd::READABLE_CONTENT_SCHEMA_VERSIONS,
-        ),
-        (
-            "asset.ydd.body",
-            newengine_asset_format_nef8::YDD_BINARY_SCHEMA_VERSION as u16,
-            newengine_asset_format_nef8::ydd::READABLE_CONTENT_SCHEMA_VERSIONS,
-        ),
-    ] {
-        for legacy in readable
-            .iter()
-            .copied()
-            .filter(|version| *version != current)
-        {
-            let count = MIGRATIONS
-                .iter()
-                .filter(|m| {
-                    m.source.contract_key == key
-                        && m.source.version.major == legacy
-                        && m.target.contract_key == key
-                        && m.target.version.major == current
-                })
-                .count();
-            if count != 1 {
-                errors.push(format!("readable legacy contract '{key}@{legacy}' has {count} migrations to current {current}; expected exactly one"));
-            }
-        }
-    }
-    for legacy in newengine_asset_format_nef8::nemat::LEGACY_AUTHORED_XML_SCHEMAS {
-        let count = MIGRATIONS
-            .iter()
-            .filter(|m| {
-                m.source.contract_key == "asset.nemat.authored_xml"
-                    && m.source.representation_id == Some(*legacy)
-                    && m.target.contract_key == "asset.nemat.authored_xml"
-                    && m.target.representation_id
-                        == Some(newengine_asset_format_nef8::nemat::AUTHORED_XML_SCHEMA)
-            })
-            .count();
-        if count != 1 {
-            errors.push(format!(
-                "legacy NEMAT authored schema '{}' has {} migrations to canonical '{}'; expected exactly one",
-                legacy, count, newengine_asset_format_nef8::nemat::AUTHORED_XML_SCHEMA
-            ));
-        }
-    }
-
+    // Format current/readable schema policy is validated against StarVault descriptors
+    // by descriptor-driven conformance. This registry owns only explicit migration edges.
     if errors.is_empty() {
         Ok(())
     } else {

@@ -21,7 +21,6 @@ newengine-tasks-runtime = { path = "../newengine-tasks-runtime" }
 newengine-animation-foundation-runtime = { path = "../newengine-animation-foundation-runtime" }
 newengine-navigation-runtime = { path = "../newengine-navigation-runtime" }
 newengine-ai-runtime = { path = "../newengine-ai-runtime" }
-newengine-asset-types-runtime = { path = "../newengine-asset-types-runtime" }
 newengine-assets = { path = "../newengine-assets" }
 newengine-definitions-runtime = { path = "../newengine-definitions-runtime" }
 newengine-assets-ui-runtime = { path = "../newengine-assets-ui-runtime" }

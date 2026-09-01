@@ -1,15 +1,19 @@
 use flate2::{write::DeflateEncoder, Compression};
 use newengine_assets_api::{
-    decode_list_file_envelope, encode_list_file, ListFileEncodeRequest, LIST_FILE_CONTENT_KIND_FXD,
+    decode_list_file_envelope, encode_list_file, ListFileEncodeRequest,
     LIST_FILE_FULL_HASH_BODY_THRESHOLD,
 };
-use newengine_vfx_api::{FxdDictionaryV1, FXD_VERSION_V1};
+use newengine_vfx_api::FxdDictionaryV1;
+#[cfg(test)]
+use newengine_vfx_api::FXD_VERSION_V1;
 use std::io::Write;
 
 /// Encodes a project-authored FX dictionary into the canonical NEF8 envelope.
 pub fn encode_fxd_nef8(
     dictionary: &FxdDictionaryV1,
     _logical_path: &str,
+    content_kind: u32,
+    content_schema_version: u16,
 ) -> Result<Vec<u8>, String> {
     dictionary.validate()?;
     let body = serde_json::to_vec(dictionary)
@@ -30,8 +34,8 @@ pub fn encode_fxd_nef8(
         .min(u32::MAX as usize) as u32;
 
     encode_list_file(ListFileEncodeRequest {
-        content_kind: LIST_FILE_CONTENT_KIND_FXD,
-        content_schema_version: FXD_VERSION_V1 as u16,
+        content_kind,
+        content_schema_version,
         entry_count,
         additional_flags: 0,
         min_size_class: 4,
@@ -45,12 +49,12 @@ pub fn encode_fxd_nef8(
 }
 
 /// Decodes the canonical project-owned `.fxd` dictionary.
-pub fn decode_fxd_nef8(bytes: &[u8]) -> Result<FxdDictionaryV1, String> {
-    let envelope = decode_list_file_envelope(bytes, LIST_FILE_CONTENT_KIND_FXD, "<fxd>")?;
-    if envelope.header.content_schema_version != FXD_VERSION_V1 as u16 {
+pub fn decode_fxd_nef8(bytes: &[u8], content_kind: u32, content_schema_version: u16) -> Result<FxdDictionaryV1, String> {
+    let envelope = decode_list_file_envelope(bytes, content_kind, "<fxd>")?;
+    if envelope.header.content_schema_version != content_schema_version {
         return Err(format!(
             "FXD content schema mismatch: got={} expected={}",
-            envelope.header.content_schema_version, FXD_VERSION_V1
+            envelope.header.content_schema_version, content_schema_version
         ));
     }
     let dictionary: FxdDictionaryV1 = serde_json::from_slice(&envelope.body)
@@ -97,8 +101,8 @@ mod tests {
             }],
             ..FxdDictionaryV1::default()
         };
-        let encoded = encode_fxd_nef8(&dictionary, "effects/weapons/rifle.fxd").unwrap();
-        let decoded = decode_fxd_nef8(&encoded).unwrap();
+        let encoded = encode_fxd_nef8(&dictionary, "effects/weapons/rifle.fxd", 35, FXD_VERSION_V1 as u16).unwrap();
+        let decoded = decode_fxd_nef8(&encoded, 35, FXD_VERSION_V1 as u16).unwrap();
         assert_eq!(decoded, dictionary);
     }
 }

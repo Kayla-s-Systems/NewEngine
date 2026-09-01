@@ -31,7 +31,6 @@ pub const STATIC_RUNTIME_UNIT_REGISTRATIONS: &[StaticRuntimeUnitRegistration] = 
     newengine_animation_foundation_runtime::RUNTIME_UNIT_REGISTRATION,
     newengine_navigation_runtime::RUNTIME_UNIT_REGISTRATION,
     newengine_ai_runtime::RUNTIME_UNIT_REGISTRATION,
-    newengine_asset_types_runtime::RUNTIME_UNIT_REGISTRATION,
     newengine_assets::ASSET_DOCUMENTS_RUNTIME_UNIT_REGISTRATION,
     newengine_definitions_runtime::RUNTIME_UNIT_REGISTRATION,
     newengine_assets_ui_runtime::RUNTIME_UNIT_REGISTRATION,
@@ -61,7 +60,6 @@ pub const STANDARD_GAME_RUNTIME_UNITS: &[newengine_runtime_unit_api::EngineRunti
     newengine_animation_foundation_runtime::RUNTIME_UNIT_REGISTRATION.spec,
     newengine_navigation_runtime::RUNTIME_UNIT_REGISTRATION.spec,
     newengine_ai_runtime::RUNTIME_UNIT_REGISTRATION.spec,
-    newengine_asset_types_runtime::RUNTIME_UNIT_REGISTRATION.spec,
     newengine_assets::ASSET_DOCUMENTS_RUNTIME_UNIT_REGISTRATION.spec,
     newengine_definitions_runtime::RUNTIME_UNIT_REGISTRATION.spec,
     newengine_assets_ui_runtime::RUNTIME_UNIT_REGISTRATION.spec,
@@ -145,11 +143,6 @@ pub const STANDARD_GAME_RUNTIME_UNIT_REQUIREMENTS: &[RuntimeUnitRequirementSpec]
             .provides[0],
     ),
     RuntimeUnitRequirementSpec::required(
-        newengine_asset_types_runtime::RUNTIME_UNIT_REGISTRATION
-            .spec
-            .provides[0],
-    ),
-    RuntimeUnitRequirementSpec::required(
         newengine_assets::ASSET_DOCUMENTS_RUNTIME_UNIT_REGISTRATION
             .spec
             .provides[0],
@@ -210,6 +203,16 @@ pub const STANDARD_GAME_RUNTIME_UNIT_REQUIREMENTS: &[RuntimeUnitRequirementSpec]
 mod tests {
     use super::*;
     use std::collections::BTreeSet;
+
+    #[test]
+    fn standard_game_does_not_materialize_asset_types_fallback() {
+        assert!(STANDARD_GAME_RUNTIME_UNITS
+            .iter()
+            .all(|unit| unit.id != "engine.runtime.asset-types"));
+        assert!(STANDARD_GAME_RUNTIME_UNIT_REQUIREMENTS
+            .iter()
+            .all(|requirement| requirement.capability != "assets.types.backend"));
+    }
 
     #[test]
     fn standard_unit_ids_are_unique() {

@@ -1,0 +1,14 @@
+[package]
+name = "newengine-physics-world-api"
+version = "0.1.0"
+edition = "2021"
+readme = "README.md"
+description = "ECS-facing physics world contracts and query contributor API for North Star Engine"
+license = "Proprietary"
+
+[dependencies]
+newengine-bounds = { path = "../newengine-bounds" }
+newengine-ecs = { path = "../newengine-ecs" }
+newengine-math = { path = "../newengine-math" }
+newengine-physics-api = { path = "../newengine-physics-api" }
+newengine-transform = { path = "../newengine-transform", default-features = false }

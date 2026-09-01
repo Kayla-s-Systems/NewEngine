@@ -227,8 +227,8 @@ impl AssetInspectState {
             logical_path: logical_path.to_owned(),
             output_kind: ASSET_LIST_FILE_MANIFEST_OUTPUT.to_owned(),
             selector: json!({}),
-                    format_descriptor: None,
-};
+            format_descriptor: None,
+        };
         let bytes = match client.decode_v1(&request) {
             Ok(bytes) => bytes,
             Err(error) => {

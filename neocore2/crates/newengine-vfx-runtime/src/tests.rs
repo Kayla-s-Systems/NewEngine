@@ -576,6 +576,30 @@ fn queued_requests_are_bounded_and_report_overflow() {
 }
 
 #[test]
+fn queued_batch_reuses_live_counts_without_oversubscribing_instance_budget() {
+    let mut world = test_world();
+    world.insert_resource(VfxRuntimeState::with_budget(VfxBudgetV1 {
+        max_active_instances: 1,
+        max_active_layers: 4,
+        max_transient_lights: 1,
+        max_decals: 1,
+        max_trails: 1,
+        max_particle_estimate: 4,
+    }));
+    assert!(queue_vfx(&mut world, shot_request(17, 1)).unwrap());
+    assert!(queue_vfx(&mut world, shot_request(17, 2)).unwrap());
+
+    let report = process_queued_vfx(&mut world);
+
+    assert_eq!(report.processed, 2);
+    assert_eq!(report.spawned, 1);
+    assert_eq!(report.budget_rejected, 1);
+    let stats = vfx_runtime_stats(&world);
+    assert_eq!(stats.active_instances, 1);
+    assert_eq!(stats.dropped_instances, 1);
+}
+
+#[test]
 fn pending_tracer_is_clamped_before_pre_update_materialization() {
     let mut world = test_world();
     assert!(queue_vfx(&mut world, shot_request(11, 9)).unwrap());

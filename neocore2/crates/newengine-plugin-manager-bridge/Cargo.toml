@@ -1,0 +1,12 @@
+[package]
+name = "newengine-plugin-manager-bridge"
+version = "0.1.0"
+edition = "2021"
+readme = "README.md"
+description = "Retained plugin diagnostics/control bridge for runtime UI"
+license = "Proprietary"
+
+[dependencies]
+newengine-math = { path = "../newengine-math" }
+newengine-plugin-host = { path = "../newengine-plugin-host" }
+parking_lot = "0.12"

@@ -2,7 +2,7 @@ use super::*;
 
 use super::refs::{
     collect_metadata_namespaces, collect_ref_strings, definition_entry_refs_to_edges,
-    extension_of_ref, list_file_manifest_dependency_edges, refs_to_edges,
+    list_file_manifest_dependency_edges, refs_to_edges,
 };
 use super::vfs::vfs_source_from_trace;
 
@@ -50,28 +50,78 @@ impl RuntimeAssetGraphResolver {
             return;
         }
         visiting.push(asset_ref.clone());
-        self.attach_source_and_hash(graph, &asset_ref);
+        let (logical_path, _) = split_asset_ref(&asset_ref);
+        let descriptor = self.client.resolve_file_type_v1(&logical_path).ok();
+        if let Some(descriptor) = descriptor.as_ref() {
+            self.attach_format_descriptor(graph, &asset_ref, descriptor);
+        } else {
+            graph.format_warnings.push(format!(
+                "assets.graph.resolve_v1: no registered asset type for ref='{asset_ref}' path='{logical_path}'"
+            ));
+        }
+        self.attach_source_and_hash(graph, &asset_ref, descriptor.as_ref());
 
-        let deps = match extension_of_ref(&asset_ref).as_deref() {
-            Some("ytyp") => self.resolve_ytyp_entry(graph, &asset_ref),
-            Some("ydd") => self.resolve_ydd_manifest(graph, &asset_ref),
-            Some("ytyd") => {
+        let deps = match descriptor.as_ref() {
+            Some(descriptor)
+                if descriptor.semantic_gateway
+                    == newengine_assets_api::ENGINE_ASSETS_DEFINITIONS_SERVICE_ID
+                    && descriptor
+                        .default_entry_route
+                        .as_ref()
+                        .is_some_and(|route| {
+                            route.semantic_owner.eq_ignore_ascii_case("definition")
+                        }) =>
+            {
+                self.resolve_ytyp_entry(graph, &asset_ref)
+            }
+            Some(descriptor)
+                if descriptor.asset_kind.eq_ignore_ascii_case(
+                    newengine_model_domain_api::DRAWABLE_DICTIONARY_ASSET_KIND,
+                ) =>
+            {
+                self.resolve_ydd_manifest(graph, &asset_ref)
+            }
+            Some(descriptor)
+                if descriptor.asset_kind.eq_ignore_ascii_case(
+                    newengine_model_domain_api::UV_LAYOUT_DICTIONARY_ASSET_KIND,
+                ) =>
+            {
                 self.resolve_generic_manifest(graph, &asset_ref, "uv_layout_dependency")
             }
-            Some("nemat") => self.resolve_nemat_graph(graph, &asset_ref),
-            Some("ytd") => self.validate_ytd_ref(graph, &asset_ref),
-            Some("ymap") | Some("ymf") | Some("ymt") | Some("ywr") | Some("ysc") | Some("ybn")
-            | Some("ybd") | Some("ycol") | Some("ydr") | Some("yft") | Some("ycd")
-            | Some("yed") | Some("yfd") | Some("yld") | Some("ypdb") | Some("yvr")
-            | Some("ytf") => {
-                self.resolve_generic_manifest(graph, &asset_ref, "listfile_dependency")
+            Some(descriptor)
+                if descriptor
+                    .semantic_gateway
+                    .eq_ignore_ascii_case("engine.materials")
+                    || descriptor
+                        .semantic_gateway
+                        .eq_ignore_ascii_case("engine.assets.materials") =>
+            {
+                self.resolve_nemat_graph(graph, &asset_ref)
             }
-            Some("nebrain") | Some("nepat") | Some("nemem") | Some("negoal") | Some("nebt")
-            | Some("nebehavior") | Some("neutility") | Some("nebb") => {
-                self.resolve_generic_manifest(graph, &asset_ref, "ai_dependency")
+            Some(descriptor)
+                if descriptor
+                    .semantic_gateway
+                    .eq_ignore_ascii_case("engine.assets.textures") =>
+            {
+                self.validate_ytd_ref(graph, &asset_ref)
             }
-            Some(other) => {
-                graph.format_warnings.push(format!("assets.graph.resolve_v1: no semantic resolver for ref='{asset_ref}' extension='.{other}'"));
+            Some(descriptor)
+                if descriptor
+                    .handler_service
+                    .eq_ignore_ascii_case("asset.codec.listfile") =>
+            {
+                let role = if descriptor.semantic_gateway.starts_with("engine.ai") {
+                    "ai_dependency"
+                } else {
+                    "listfile_dependency"
+                };
+                self.resolve_generic_manifest(graph, &asset_ref, role)
+            }
+            Some(descriptor) => {
+                graph.debug_log.push(format!(
+                    "assets.graph.resolve_v1: descriptor module='{}' kind='{}' gateway='{}' has no specialized dependency resolver",
+                    descriptor.module_id, descriptor.asset_kind, descriptor.semantic_gateway
+                ));
                 Vec::new()
             }
             None => Vec::new(),
@@ -84,17 +134,65 @@ impl RuntimeAssetGraphResolver {
         visiting.pop();
     }
 
-    fn attach_source_and_hash(&self, graph: &mut ResolvedAssetGraphV2, asset_ref: &str) {
+    fn attach_format_descriptor(
+        &self,
+        graph: &mut ResolvedAssetGraphV2,
+        asset_ref: &str,
+        descriptor: &newengine_assets_api::AssetFileTypeDescriptor,
+    ) {
+        let id = newengine_model_domain_api::stable_graph_id(asset_ref);
+        for node in &mut graph.nodes {
+            if node.id != id {
+                continue;
+            }
+            let semantic_owner = descriptor
+                .default_entry_route
+                .as_ref()
+                .map(|route| route.semantic_owner.trim())
+                .filter(|value| !value.is_empty())
+                .unwrap_or(descriptor.asset_kind.as_str());
+            let method = descriptor
+                .default_entry_route
+                .as_ref()
+                .map(|route| route.method.trim())
+                .filter(|value| !value.is_empty())
+                .unwrap_or(descriptor.read_method.as_str());
+            node.role = semantic_owner.to_owned();
+            node.kind = descriptor.asset_kind.clone();
+            node.asset_kind = descriptor.asset_kind.clone();
+            node.byte_owner = descriptor.byte_owner.clone();
+            node.semantic_gateway = descriptor.semantic_gateway.clone();
+            node.method = method.to_owned();
+            node.semantic_owner = semantic_owner.to_owned();
+            node.schema_version = descriptor
+                .content_schema_version
+                .map(|version| format!("v{version}"))
+                .unwrap_or_else(|| "provider".to_owned());
+        }
+    }
+
+    fn attach_source_and_hash(
+        &self,
+        graph: &mut ResolvedAssetGraphV2,
+        asset_ref: &str,
+        descriptor: Option<&newengine_assets_api::AssetFileTypeDescriptor>,
+    ) {
         let (path, selector) = split_asset_ref(asset_ref);
         if path.is_empty() {
             return;
         }
 
         let defer_missing_to_semantic_resolver = selector.is_some()
-            && extension_of_ref(asset_ref)
-                .as_deref()
-                .map(|extension| extension.eq_ignore_ascii_case("ytyp"))
-                .unwrap_or(false);
+            && descriptor.is_some_and(|descriptor| {
+                descriptor.semantic_gateway
+                    == newengine_assets_api::ENGINE_ASSETS_DEFINITIONS_SERVICE_ID
+                    && descriptor
+                        .default_entry_route
+                        .as_ref()
+                        .is_some_and(|route| {
+                            route.semantic_owner.eq_ignore_ascii_case("definition")
+                        })
+            });
 
         if defer_missing_to_semantic_resolver {
             attach_vfs_source(
@@ -107,7 +205,7 @@ impl RuntimeAssetGraphResolver {
                 },
             );
             graph.debug_log.push(format!(
-                "assets.graph.resolve_v1: deferred canonical .ytyp VFS lookup ref='{asset_ref}' path='{path}' policy='definitions gateway resolves concrete sidecar source'"
+                "assets.graph.resolve_v1: deferred semantic VFS lookup ref='{asset_ref}' path='{path}' policy='descriptor-owned definitions gateway resolves concrete sidecar source'"
             ));
             return;
         }
@@ -300,8 +398,8 @@ impl RuntimeAssetGraphResolver {
                 logical_path: path.clone(),
                 output_kind: newengine_assets_api::method::LIST_FILE_MANIFEST.to_owned(),
                 selector: serde_json::Value::Null,
-                            format_descriptor: None,
-};
+                format_descriptor: None,
+            };
             if let Err(err) = self.client.decode_v1(&request) {
                 graph.missing_refs.push(format!(
                     "{asset_ref}: texture dictionary manifest unavailable: {err}"
@@ -343,8 +441,8 @@ impl RuntimeAssetGraphResolver {
             logical_path: path.clone(),
             output_kind: newengine_assets_api::method::LIST_FILE_MANIFEST.to_owned(),
             selector: serde_json::Value::Null,
-                    format_descriptor: None,
-};
+            format_descriptor: None,
+        };
         match self.client.decode_v1(&request) {
             Ok(bytes) => match serde_json::from_slice::<serde_json::Value>(&bytes) {
                 Ok(value) => list_file_manifest_dependency_edges(&value, role),

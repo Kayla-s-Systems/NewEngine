@@ -28,3 +28,4 @@ newengine-primitives = { path = "../newengine-primitives", features = ["serde"] 
 newengine-math = { path = "../newengine-math", features = ["serde"] }
 newengine-service-api = { path = "../newengine-service-api" }
 newengine-service-kit = { path = "../newengine-service-kit" }
+newengine-ulog-api = { path = "../newengine-ulog-api" }

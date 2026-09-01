@@ -176,9 +176,23 @@ mod tests {
         let parsed = parse_config_value(&json!({})).unwrap();
         assert_eq!(parsed.profile, UiScreenProfile::Game);
         assert!(
-            parsed.publish_editor_shell,
-            "game profile should allow the editor shell capability; UiInGameEditorState still gates actual F2 visibility"
+            !parsed.publish_editor_shell,
+            "live Editing Tools default to gizmo-only; the fullscreen editor shell is explicit opt-in"
         );
+        assert!(
+            (parsed.editor_fly_speed_scale - DEFAULT_EDITOR_FLY_SPEED_SCALE).abs() <= f32::EPSILON,
+            "editor fly must default to the deliberately slower Editing Tools speed"
+        );
+    }
+
+    #[test]
+    fn editor_fly_speed_scale_is_configurable_from_screen_profile() {
+        let parsed = parse_config_value(&json!({
+            "profile": "game",
+            "editor_fly_speed_scale": 0.35
+        }))
+        .unwrap();
+        assert!((parsed.editor_fly_speed_scale - 0.35).abs() <= f32::EPSILON);
     }
 
     #[test]

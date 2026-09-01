@@ -1,0 +1,11 @@
+[package]
+name = "newengine-runtime-provider-api"
+version = "0.1.0"
+edition = "2021"
+readme = "README.md"
+description = "Versioned runtime provider composition contracts for North Star Engine"
+license = "Proprietary"
+
+[dependencies]
+newengine-core = { path = "../newengine-core", default-features = false }
+newengine-service-api = { path = "../newengine-service-api" }

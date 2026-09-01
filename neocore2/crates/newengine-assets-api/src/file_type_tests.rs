@@ -18,6 +18,8 @@ fn descriptor_normalization_does_not_infer_semantic_owner() {
 #[test]
 fn explicit_descriptor_is_valid_without_registry_extension_knowledge() {
     let mut descriptor = AssetFileTypeDescriptor {
+        module_id: "test.formats.opaque".to_owned(),
+        family: "test".to_owned(),
         extension: "opaque".to_owned(),
         asset_kind: "provider_declared_asset".to_owned(),
         container: "newengine.listfile.nef8.opaque".to_owned(),

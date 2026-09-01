@@ -1,6 +1,6 @@
 use super::*;
 
-use super::animation::{prepare_player_animation_binding, PlayerAnimationRuntimeBinding};
+use super::animation::{PlayerAnimationRuntimeBinding, prepare_player_animation_binding};
 use super::assets::ensure_player_runtime_model_parts;
 
 fn assignment_from_spec(
@@ -800,8 +800,8 @@ pub(crate) fn spawn_game_ready_player_model(
 mod grounding_tests {
     use super::*;
     use newengine_engine_runtime::gameplay::{
-        apply_player_stance_geometry, spawn_default_player, PlayerModelAssignment,
-        PlayerModelBinding, PlayerStanceKind,
+        PlayerModelAssignment, PlayerModelBinding, PlayerStanceKind, apply_player_stance_geometry,
+        spawn_default_player,
     };
 
     #[test]

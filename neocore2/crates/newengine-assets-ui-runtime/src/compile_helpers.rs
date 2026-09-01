@@ -43,6 +43,7 @@ pub fn compile_neui_bytes_surface_root(
             &logical_path
         },
         bytes,
+        LIST_FILE_CONTENT_KIND_NEUI,
     )?;
 
     compile_xmlcentral_surface_root(&xml, document_ref, style_ref)

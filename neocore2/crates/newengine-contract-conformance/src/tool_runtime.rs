@@ -1,6 +1,5 @@
 use std::collections::BTreeSet;
 
-use newengine_contract_api::{ContractKind, ContractSpec};
 
 pub const TOOL_RUNTIME_CONFORMANCE_REGISTRY_SCHEMA: &str = "northstar.tool_runtime_conformance.v1";
 pub const TOOL_RUNTIME_CONFORMANCE_REGISTRY_VERSION: u16 = 1;
@@ -151,24 +150,6 @@ impl RuntimeDecodeSpec {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct AuthoredSchemaSpec {
-    pub contract_key: &'static str,
-    pub declaration_attribute: &'static str,
-}
-
-impl AuthoredSchemaSpec {
-    pub const fn xml_attribute(
-        contract_key: &'static str,
-        declaration_attribute: &'static str,
-    ) -> Self {
-        Self {
-            contract_key,
-            declaration_attribute,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CanonicalProjection {
     YtypDefinitionEntriesV1,
     YddDrawableDictionaryV1,
@@ -199,14 +180,10 @@ pub struct ToolRuntimeConformanceSpec {
     pub id: &'static str,
     pub tool_key: &'static str,
     pub fixture: ToolRuntimeFixtureSpec,
+    /// The produced path determines which StarVault format descriptor is resolved
+    /// at conformance execution time. This registry does not duplicate extension,
+    /// content-kind or schema ownership.
     pub output_relative: &'static str,
-    pub content_kind: u32,
-    pub schema_contract_key: &'static str,
-    /// Optional schema contract carried by the authored source fixture rather than
-    /// by the produced runtime artifact. This prevents authored XML schemas from
-    /// being misclassified as standalone runtime formats/producers.
-    pub authored_schema: Option<AuthoredSchemaSpec>,
-    pub readable_legacy_schema_versions: &'static [u16],
     pub commands: &'static [ToolRuntimeCommandSpec],
     pub asset_manager_decode: Option<AssetManagerDecodeSpec>,
     pub runtime_decode: Option<RuntimeDecodeSpec>,
@@ -251,127 +228,43 @@ const NEUI_COMMANDS: &[ToolRuntimeCommandSpec] = &[
 
 pub const TOOL_RUNTIME_CONFORMANCE_SPECS: &[ToolRuntimeConformanceSpec] = &[
     ToolRuntimeConformanceSpec {
-        id: "ytyp",
-        tool_key: "ytyp",
-        fixture: ToolRuntimeFixtureSpec::file(
-            "p3_ytyp_fixture.ytyp.xml",
-            "Source/p3_ytyp_fixture.ytyp.xml",
-        ),
-        output_relative: "Content/p3_ytyp_fixture.ytyp",
-        content_kind: newengine_assets_api::LIST_FILE_CONTENT_KIND_YTYP,
-        schema_contract_key: newengine_asset_format_nef8::ytyp::CONTENT_SCHEMA_CONTRACT_SPEC.key,
-        authored_schema: None,
-        readable_legacy_schema_versions: &[],
-        commands: YTYP_COMMANDS,
-        asset_manager_decode: Some(AssetManagerDecodeSpec::new(
-            "newengine-codec-listfile",
-            "p4_decode_assetmanager_native_dto",
-            newengine_assets_api::ASSET_LIST_FILE_MANIFEST_OUTPUT,
-        )),
-        runtime_decode: Some(RuntimeDecodeSpec::new(
-            ConformanceWorkspace::NeoCore,
-            "newengine-definitions-runtime",
-            "p4_decode_ytyp_native_dto",
-        )),
+        id: "ytyp", tool_key: "ytyp",
+        fixture: ToolRuntimeFixtureSpec::file("p3_ytyp_fixture.ytyp.xml", "Source/p3_ytyp_fixture.ytyp.xml"),
+        output_relative: "Content/p3_ytyp_fixture.ytyp", commands: YTYP_COMMANDS,
+        asset_manager_decode: Some(AssetManagerDecodeSpec::new("newengine-codec-listfile", "p4_decode_assetmanager_native_dto", newengine_assets_api::ASSET_LIST_FILE_MANIFEST_OUTPUT)),
+        runtime_decode: Some(RuntimeDecodeSpec::new(ConformanceWorkspace::NeoCore, "newengine-definitions-runtime", "p4_decode_ytyp_native_dto")),
         canonical_projection: Some(CanonicalProjection::YtypDefinitionEntriesV1),
     },
     ToolRuntimeConformanceSpec {
-        id: "ydd",
-        tool_key: "ydd",
+        id: "ydd", tool_key: "ydd",
         fixture: ToolRuntimeFixtureSpec::file("p3_ydd_fixture.obj", "Source/p3_ydd_fixture.obj"),
-        output_relative: "Content/p3_ydd_fixture.ydd",
-        content_kind: newengine_assets_api::LIST_FILE_CONTENT_KIND_YDD,
-        schema_contract_key: newengine_asset_format_nef8::YDD_BINARY_CONTRACT_SPEC.key,
-        authored_schema: None,
-        readable_legacy_schema_versions:
-            newengine_asset_format_nef8::ydd::READABLE_CONTENT_SCHEMA_VERSIONS,
-        commands: YDD_COMMANDS,
-        asset_manager_decode: Some(AssetManagerDecodeSpec::new(
-            "newengine-codec-listfile",
-            "p4_decode_assetmanager_native_dto",
-            "asset.drawable_manifest_v1",
-        )),
-        runtime_decode: Some(RuntimeDecodeSpec::new(
-            ConformanceWorkspace::NeoCore,
-            "newengine-asset-format-nef8",
-            "p4_decode_ydd_native_dto",
-        )),
+        output_relative: "Content/p3_ydd_fixture.ydd", commands: YDD_COMMANDS,
+        asset_manager_decode: Some(AssetManagerDecodeSpec::new("newengine-codec-listfile", "p4_decode_assetmanager_native_dto", "asset.drawable_manifest_v1")),
+        runtime_decode: Some(RuntimeDecodeSpec::new(ConformanceWorkspace::NeoCore, "newengine-asset-format-nef8", "p4_decode_ydd_native_dto")),
         canonical_projection: Some(CanonicalProjection::YddDrawableDictionaryV1),
     },
     ToolRuntimeConformanceSpec {
-        id: "ytd",
-        tool_key: "ytd",
+        id: "ytd", tool_key: "ytd",
         fixture: ToolRuntimeFixtureSpec::generated_directory("Source/textures"),
-        output_relative: "Content/p3_ytd_fixture.ytd",
-        content_kind: newengine_assets_api::LIST_FILE_CONTENT_KIND_YTD,
-        schema_contract_key: newengine_asset_format_nef8::ytd::CONTENT_SCHEMA_CONTRACT_SPEC.key,
-        authored_schema: None,
-        readable_legacy_schema_versions:
-            newengine_asset_format_nef8::ytd::READABLE_CONTENT_SCHEMA_VERSIONS,
-        commands: YTD_COMMANDS,
-        asset_manager_decode: Some(AssetManagerDecodeSpec::new(
-            "newengine-codec-listfile",
-            "p4_decode_assetmanager_native_dto",
-            "asset.texture_dictionary_manifest_v1",
-        )),
-        runtime_decode: Some(RuntimeDecodeSpec::new(
-            ConformanceWorkspace::NeoCore,
-            "newengine-texture-container",
-            "p4_decode_ytd_native_dto",
-        )),
+        output_relative: "Content/p3_ytd_fixture.ytd", commands: YTD_COMMANDS,
+        asset_manager_decode: Some(AssetManagerDecodeSpec::new("newengine-codec-listfile", "p4_decode_assetmanager_native_dto", "asset.texture_dictionary_manifest_v1")),
+        runtime_decode: Some(RuntimeDecodeSpec::new(ConformanceWorkspace::NeoCore, "newengine-texture-container", "p4_decode_ytd_native_dto")),
         canonical_projection: Some(CanonicalProjection::YtdTextureDictionaryV1),
     },
     ToolRuntimeConformanceSpec {
-        id: "nemat",
-        tool_key: "nemat",
-        fixture: ToolRuntimeFixtureSpec::file(
-            "p3_nemat_fixture.nemat.xml",
-            "Source/p3_nemat_fixture.nemat.xml",
-        ),
-        output_relative: "Content/p3_nemat_fixture.nemat",
-        content_kind: newengine_assets_api::LIST_FILE_CONTENT_KIND_NEMAT,
-        schema_contract_key: newengine_asset_format_nef8::nemat::CONTENT_SCHEMA_CONTRACT_SPEC.key,
-        authored_schema: Some(AuthoredSchemaSpec::xml_attribute(
-            newengine_asset_format_nef8::nemat::AUTHORED_XML_CONTRACT_SPEC.key,
-            "schema",
-        )),
-        readable_legacy_schema_versions: &[],
-        commands: NEMAT_COMMANDS,
-        asset_manager_decode: Some(AssetManagerDecodeSpec::new(
-            "newengine-codec-listfile",
-            "p4_decode_assetmanager_native_dto",
-            newengine_assets_api::ASSET_LIST_FILE_MANIFEST_OUTPUT,
-        )),
-        runtime_decode: Some(RuntimeDecodeSpec::new(
-            ConformanceWorkspace::NeoCore,
-            "newengine-material-runtime",
-            "p4_decode_nemat_native_dto",
-        )),
+        id: "nemat", tool_key: "nemat",
+        fixture: ToolRuntimeFixtureSpec::file("p3_nemat_fixture.nemat.xml", "Source/p3_nemat_fixture.nemat.xml"),
+        output_relative: "Content/p3_nemat_fixture.nemat", commands: NEMAT_COMMANDS,
+        asset_manager_decode: Some(AssetManagerDecodeSpec::new("newengine-codec-listfile", "p4_decode_assetmanager_native_dto", newengine_assets_api::ASSET_LIST_FILE_MANIFEST_OUTPUT)),
+        runtime_decode: Some(RuntimeDecodeSpec::new(ConformanceWorkspace::NeoCore, "newengine-material-runtime", "p4_decode_nemat_native_dto")),
         canonical_projection: Some(CanonicalProjection::NematMaterialLibraryV1),
     },
     ToolRuntimeConformanceSpec {
-        id: "neui",
-        tool_key: "neui",
-        fixture: ToolRuntimeFixtureSpec::file(
-            "p3_neui_fixture.neui.xml",
-            "Source/p3_neui_fixture.neui.xml",
-        ),
-        output_relative: "Content/p3_neui_fixture.neui",
-        content_kind: newengine_assets_api::LIST_FILE_CONTENT_KIND_NEUI,
-        schema_contract_key: newengine_asset_format_nef8::neui::CONTENT_SCHEMA_CONTRACT_SPEC.key,
-        authored_schema: None,
-        readable_legacy_schema_versions: &[],
-        commands: NEUI_COMMANDS,
-        asset_manager_decode: Some(AssetManagerDecodeSpec::new(
-            "newengine-codec-listfile",
-            "p4_decode_assetmanager_native_dto",
-            newengine_assets_api::ASSET_LIST_FILE_MANIFEST_OUTPUT,
-        )),
-        runtime_decode: Some(RuntimeDecodeSpec::new(
-            ConformanceWorkspace::NeoCore,
-            "newengine-assets-ui-runtime",
-            "p4_decode_neui_native_dto",
-        )),
+        id: "neui", tool_key: "neui",
+        fixture: ToolRuntimeFixtureSpec::file("p3_neui_fixture.neui.xml", "Source/p3_neui_fixture.neui.xml"),
+        output_relative: "Content/p3_neui_fixture.neui", commands: NEUI_COMMANDS,
+        asset_manager_decode: Some(AssetManagerDecodeSpec::new("newengine-codec-listfile", "p4_decode_assetmanager_native_dto", newengine_assets_api::ASSET_LIST_FILE_MANIFEST_OUTPUT)),
+        runtime_decode: Some(RuntimeDecodeSpec::new(ConformanceWorkspace::NeoCore, "newengine-assets-ui-runtime", "p4_decode_neui_native_dto")),
         canonical_projection: Some(CanonicalProjection::NeuiSelectorSurfaceV1),
     },
 ];
@@ -390,7 +283,6 @@ pub fn tool_runtime_conformance_spec(id: &str) -> Option<&'static ToolRuntimeCon
 pub fn validate_tool_runtime_registry() -> Result<(), Vec<String>> {
     let mut errors = Vec::new();
     let mut ids = BTreeSet::new();
-    let mut schema_semantic_keys = BTreeSet::new();
     const ALLOWED_PLACEHOLDERS: &[&str] = &[
         "{root}",
         "{source}",
@@ -428,69 +320,6 @@ pub fn validate_tool_runtime_registry() -> Result<(), Vec<String>> {
         }
         if spec.output_relative.trim().is_empty() {
             errors.push(format!("tool/runtime '{}' has empty output path", spec.id));
-        }
-        let Some(contract) = newengine_contract_registry::contract(spec.schema_contract_key) else {
-            errors.push(format!(
-                "tool/runtime '{}' references unregistered schema contract '{}'",
-                spec.id, spec.schema_contract_key
-            ));
-            continue;
-        };
-        if contract.kind != ContractKind::Schema {
-            errors.push(format!(
-                "tool/runtime '{}' contract '{}' is kind '{}', expected schema",
-                spec.id,
-                contract.key,
-                contract.kind.as_str()
-            ));
-        }
-        if !schema_semantic_keys.insert(spec.schema_contract_key) {
-            errors.push(format!(
-                "schema contract '{}' has multiple tool/runtime producers",
-                spec.schema_contract_key
-            ));
-        }
-        if let Some(authored) = spec.authored_schema {
-            let Some(contract) = newengine_contract_registry::contract(authored.contract_key)
-            else {
-                errors.push(format!(
-                    "tool/runtime '{}' references unregistered authored schema contract '{}'",
-                    spec.id, authored.contract_key
-                ));
-                continue;
-            };
-            if contract.kind != ContractKind::Schema {
-                errors.push(format!(
-                    "tool/runtime '{}' authored contract '{}' is kind '{}', expected schema",
-                    spec.id,
-                    contract.key,
-                    contract.kind.as_str()
-                ));
-            }
-            if contract.advertised_id.is_none() {
-                errors.push(format!(
-                    "tool/runtime '{}' authored schema contract '{}' has no advertised schema id",
-                    spec.id, contract.key
-                ));
-            }
-            if authored.declaration_attribute.trim().is_empty() {
-                errors.push(format!(
-                    "tool/runtime '{}' authored schema has empty declaration attribute",
-                    spec.id
-                ));
-            }
-            if spec.fixture.kind != ToolRuntimeFixtureKind::File {
-                errors.push(format!(
-                    "tool/runtime '{}' authored schema requires a file fixture",
-                    spec.id
-                ));
-            }
-            if !schema_semantic_keys.insert(authored.contract_key) {
-                errors.push(format!(
-                    "schema contract '{}' has multiple tool/runtime semantics",
-                    authored.contract_key
-                ));
-            }
         }
         let has_produce = spec
             .commands
@@ -575,23 +404,6 @@ pub fn validate_tool_runtime_registry() -> Result<(), Vec<String>> {
         }
     }
 
-    // P4 rule: every registered first-party asset Schema contract must have one
-    // canonical producer fixture. NEF8 itself is Wire, so it is intentionally not
-    // part of this schema-producer coverage set.
-    for contract in newengine_contract_registry::contracts()
-        .iter()
-        .filter(|contract| {
-            contract.kind == ContractKind::Schema && contract.key.starts_with("asset.")
-        })
-    {
-        if !schema_semantic_keys.contains(contract.key) {
-            errors.push(format!(
-                "registered asset schema '{}' has no ToolRuntimeConformanceSpec semantic owner",
-                contract.key
-            ));
-        }
-    }
-
     if errors.is_empty() {
         Ok(())
     } else {
@@ -601,22 +413,20 @@ pub fn validate_tool_runtime_registry() -> Result<(), Vec<String>> {
 
 pub fn validate_tool_runtime_artifact(
     spec: &ToolRuntimeConformanceSpec,
+    descriptor: &newengine_assets_api::AssetFileTypeDescriptor,
     bytes: &[u8],
 ) -> Result<super::ListFileContractConformance, Vec<String>> {
-    let schema: ContractSpec = newengine_contract_registry::contract(spec.schema_contract_key)
-        .copied()
-        .ok_or_else(|| {
-            vec![format!(
-                "tool/runtime '{}' schema contract '{}' is not registered",
-                spec.id, spec.schema_contract_key
-            )]
-        })?;
-    super::validate_list_file_contract_with_read_compatibility(
-        bytes,
-        spec.content_kind,
-        schema,
-        spec.readable_legacy_schema_versions,
-    )
+    let produced_extension = std::path::Path::new(spec.output_relative)
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default();
+    if !produced_extension.eq_ignore_ascii_case(&descriptor.extension) {
+        return Err(vec![format!(
+            "tool/runtime '{}' produced extension '.{}' but descriptor module='{}' owns '.{}'",
+            spec.id, produced_extension, descriptor.module_id, descriptor.extension
+        )]);
+    }
+    super::validate_list_file_descriptor_contract(bytes, descriptor)
 }
 
 #[cfg(test)]
@@ -631,35 +441,11 @@ mod tests {
     }
 
     #[test]
-    fn current_first_party_asset_schema_contracts_have_exactly_one_producer_spec() {
-        let expected = newengine_contract_registry::contracts()
-            .iter()
-            .filter(|contract| {
-                contract.kind == ContractKind::Schema && contract.key.starts_with("asset.")
-            })
-            .map(|contract| contract.key)
-            .collect::<BTreeSet<_>>();
-        let actual = TOOL_RUNTIME_CONFORMANCE_SPECS
-            .iter()
-            .flat_map(|spec| {
-                std::iter::once(spec.schema_contract_key)
-                    .chain(spec.authored_schema.map(|schema| schema.contract_key))
-            })
-            .collect::<BTreeSet<_>>();
-        assert_eq!(actual, expected);
-    }
-
-    #[test]
-    fn nemat_declares_authored_xml_schema_semantics() {
-        let spec = tool_runtime_conformance_spec("nemat").expect("NEMAT ToolRuntime spec");
-        let authored = spec
-            .authored_schema
-            .expect("NEMAT authored schema semantic");
-        assert_eq!(
-            authored.contract_key,
-            newengine_asset_format_nef8::nemat::AUTHORED_XML_CONTRACT_SPEC.key
-        );
-        assert_eq!(authored.declaration_attribute, "schema");
+    fn producer_specs_do_not_duplicate_asset_format_metadata() {
+        for spec in TOOL_RUNTIME_CONFORMANCE_SPECS {
+            assert!(!spec.output_relative.trim().is_empty());
+            assert!(std::path::Path::new(spec.output_relative).extension().is_some());
+        }
     }
 
     #[test]

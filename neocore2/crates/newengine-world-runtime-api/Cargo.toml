@@ -1,0 +1,15 @@
+[package]
+name = "newengine-world-runtime-api"
+version = "0.1.0"
+edition = "2021"
+readme = "README.md"
+description = "Composable world runtime provider contract and registry"
+license = "Proprietary"
+
+[dependencies]
+newengine-core = { path = "../newengine-core", default-features = false }
+newengine-ecs = { path = "../newengine-ecs" }
+newengine-materials = { path = "../newengine-materials" }
+newengine-primitives = { path = "../newengine-primitives" }
+newengine-runtime-provider-api = { path = "../newengine-runtime-provider-api" }
+newengine-ulog-api = { path = "../newengine-ulog-api" }

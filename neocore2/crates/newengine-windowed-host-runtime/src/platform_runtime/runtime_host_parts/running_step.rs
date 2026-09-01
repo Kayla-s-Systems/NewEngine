@@ -10,10 +10,10 @@ use newengine_platform_api::PlatformStepResultV1;
 use newengine_render_runtime_adapter::ResolvedRenderBackendConfig;
 use newengine_ui::{UiFrameDesc, UiProviderKind};
 use newengine_ui_api::{
-    UiDrawInvalidationState, UiGameLayerStackState, UiInGameEditorState, UiLayerCompositionPlan,
-    UiLayerDomain, UiLayerDrawPacketSet, UiPresentationFlowState, UiScreenProfileState,
-    UI_PRESENTATION_TARGET_PRIMARY, UI_SURFACE_EDITOR_SHELL, UI_SURFACE_ENGINE_CONSOLE,
-    UI_SURFACE_RUNTIME_DEBUG_OVERLAY,
+    UiDockLayoutState, UiDrawInvalidationState, UiGameLayerStackState, UiInGameEditorState,
+    UiLayerCompositionPlan, UiLayerDomain, UiLayerDrawPacketSet, UiPresentationFlowState,
+    UiScreenProfileState, UI_PRESENTATION_TARGET_PRIMARY, UI_SURFACE_EDITOR_SHELL,
+    UI_SURFACE_ENGINE_CONSOLE, UI_SURFACE_RUNTIME_DEBUG_OVERLAY,
 };
 
 use crate::platform_runtime::bootstrap_overlay::RuntimeBootstrapStage;
@@ -85,7 +85,12 @@ impl HostPlatformRuntime {
                 .engine
                 .resources
                 .get::<UiInGameEditorState>()
-                .is_some_and(|state| state.enabled);
+                .is_some_and(|state| state.enabled)
+            && self
+                .engine
+                .resources
+                .get::<UiDockLayoutState>()
+                .is_some_and(|layout| !layout.panels.is_empty());
         if !editor_overlay_active {
             self.editor_ui_cache.clear();
         }

@@ -74,8 +74,27 @@ impl AudioRuntimeState {
                     locator.dictionary_path, locator.cue_name
                 )
             })?;
-        let dictionary =
-            newengine_asset_format_nef8::decode_yscd_nef8(&source, &locator.dictionary_path)?;
+        let descriptor = self.assets.resolve_file_type_v1(&locator.dictionary_path)?;
+        if !descriptor.semantic_gateway.eq_ignore_ascii_case("engine.audio") {
+            return Err(format!(
+                "embedded audio dictionary '{}' resolves to semantic gateway '{}', expected engine.audio",
+                locator.dictionary_path, descriptor.semantic_gateway
+            ));
+        }
+        let content_kind = descriptor.content_kind.ok_or_else(|| format!(
+            "audio format module '{}' does not declare NEF8 content_kind",
+            descriptor.module_id
+        ))?;
+        let schema_version = descriptor.content_schema_version.ok_or_else(|| format!(
+            "audio format module '{}' does not declare content_schema_version",
+            descriptor.module_id
+        ))?;
+        let dictionary = newengine_asset_format_nef8::decode_yscd_nef8(
+            &source,
+            &locator.dictionary_path,
+            content_kind,
+            schema_version,
+        )?;
         let cue = dictionary.cue(&locator.cue_name).ok_or_else(|| {
             format!(
                 "YSCD cue '{}' not found in '{}'",

@@ -771,4 +771,24 @@ mod tests {
             Some("effects/weapon.fxd@impact.default")
         );
     }
+    #[test]
+    fn weapon_event_entity_index_resolves_repeated_references() {
+        let mut world = World::new();
+        let owner = world.spawn();
+        let target = world.spawn();
+        let events = [
+            GameplayEvent::new(GAMEPLAY_EVENT_WEAPON_HIT)
+                .with_source(owner)
+                .with_payload(serde_json::json!({"target": target.stable_u64()})),
+            GameplayEvent::new(GAMEPLAY_EVENT_WEAPON_HIT)
+                .with_source(owner)
+                .with_payload(serde_json::json!({"target": target.stable_u64()})),
+        ];
+
+        let index = weapon_event_entity_index(&world, &events);
+
+        assert_eq!(index.len(), 2);
+        assert_eq!(index.get(&owner.stable_u64()), Some(&owner));
+        assert_eq!(index.get(&target.stable_u64()), Some(&target));
+    }
 }

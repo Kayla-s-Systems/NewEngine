@@ -250,6 +250,7 @@ pub trait RenderApi: Send {
             gpu_submit_ms: 0.0,
             executed_passes: 0,
             skipped_passes: compile.pass_count,
+            backend_deferred: false,
             uploads: UploadPumpReport::default(),
             compile,
             draw_list_stats: Vec::new(),

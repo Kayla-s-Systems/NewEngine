@@ -1,0 +1,33 @@
+[package]
+name = "newengine-camera-gateway-runtime"
+version = "0.1.0"
+edition = "2021"
+readme = "README.md"
+description = "Authoritative engine.camera gateway and gameplay camera bridge outside engine composition"
+license = "Proprietary"
+
+[dependencies]
+abi_stable = { version = "0.11" }
+parking_lot = "0.12"
+newengine-audio-client = { path = "../newengine-audio-client" }
+newengine-audio-world-api = { path = "../newengine-audio-world-api" }
+newengine-bounds = { path = "../newengine-bounds" }
+newengine-camera = { path = "../newengine-camera" }
+newengine-camera-api = { path = "../newengine-camera-api" }
+newengine-camera-contracts = { path = "../newengine-camera-contracts" }
+newengine-camera-runtime = { path = "../newengine-camera-runtime" }
+newengine-core = { path = "../newengine-core", features = ["render-api", "physics-api"] }
+newengine-input-actions-api = { path = "../newengine-input-actions-api" }
+newengine-input-capture-api = { path = "../newengine-input-capture-api" }
+newengine-ecs = { path = "../newengine-ecs" }
+newengine-math = { path = "../newengine-math" }
+newengine-plugin-api = { path = "../newengine-plugin-api" }
+newengine-plugin-host = { path = "../newengine-plugin-host" }
+newengine-gameplay-world-runtime = { path = "../newengine-gameplay-world-runtime" }
+newengine-runtime-env = { path = "../newengine-runtime-env" }
+newengine-scene = { path = "../newengine-scene", features = ["runtime"] }
+newengine-service-api = { path = "../newengine-service-api" }
+newengine-service-kit = { path = "../newengine-service-kit" }
+newengine-sim = { path = "../newengine-sim" }
+newengine-transform = { path = "../newengine-transform", features = ["ecs", "service"], default-features = false }
+newengine-viewport-bridge = { path = "../newengine-viewport-bridge" }

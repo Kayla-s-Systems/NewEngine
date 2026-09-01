@@ -4,7 +4,7 @@ use newengine_camera::CameraRig;
 use newengine_core::host_events::CursorState;
 use newengine_ecs::{EntityId, World};
 use newengine_input_actions_api::move_mask as input_move;
-use newengine_math::{wrap_pi, EulerRot, Mat3, Quat, Vec2, Vec3};
+use newengine_math::{EulerRot, Mat3, Quat, Vec2, Vec3, wrap_pi};
 use newengine_sim::{
     CameraRigComp, CharacterMotor, FollowTargetCameraController, FollowTargetCameraMotor,
     MotorInput,
@@ -14,7 +14,7 @@ use newengine_transform::{
 };
 
 use crate::constraints::{
-    constrain_spring_arm_offset_ls, CameraSpringArmCollisionWorld, CameraSpringArmConfig,
+    CameraSpringArmCollisionWorld, CameraSpringArmConfig, constrain_spring_arm_offset_ls,
 };
 use crate::manager::{CameraDirectorRequest, CameraManagerResource};
 use crate::modes::{

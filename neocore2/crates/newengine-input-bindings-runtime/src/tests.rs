@@ -37,3 +37,16 @@ fn profile_mutation_persists_once_and_returns_snapshot() {
     assert!(load_profile_from_config(&path).is_some());
     let _ = std::fs::remove_file(path);
 }
+
+#[test]
+fn acceptance_held_action_is_semantic_down_without_press_edge() {
+    let mut frame = InputActionFrame::default();
+    let aim = "player.aim".to_owned();
+    crate::api::apply_acceptance_held_actions(&mut frame, std::slice::from_ref(&aim));
+
+    assert!(frame.contains_action(&aim));
+    let commands = frame.command_actions();
+    assert_eq!(commands.held, vec![aim]);
+    assert!(commands.pressed.is_empty());
+    assert!(commands.released.is_empty());
+}

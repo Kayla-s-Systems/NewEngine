@@ -14,6 +14,9 @@ use newengine_audio_api::{AcousticMaterialProfile, AudioListenerState};
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct AudioListenerRuntimeState {
     pub listener: AudioListenerState,
+    /// ECS entity that owns the listener/player body when one exists. Acoustic physics queries
+    /// use this provider-neutral key only to exclude the listener body from visibility probes.
+    pub listener_entity: Option<u64>,
     pub frame_index: u64,
 }
 

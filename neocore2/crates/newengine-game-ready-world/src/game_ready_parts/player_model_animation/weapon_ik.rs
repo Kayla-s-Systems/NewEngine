@@ -702,7 +702,20 @@ fn apply_equipped_weapon_support_ik(
                 .map(|frame| frame.transform_point3(Vec3::ZERO));
             newengine_ulog_api::ulog::info!(
                 "WEAPON_CONTACT_FRAMES right_palm={:?} right_palm_to_handle_m={:.5} right_contact={:?} right_contact_error_m={:?} right_prop={:?} right_prop_reference_to_handle_m={:?} handle={:?} left_palm={:?} left_palm_to_grip_m={:.5} left_contact={:?} left_contact_error_m={:?} left_prop={:?} left_prop_reference_to_handle_m={:?} l_grip={:?}",
-                right_palm, (right_palm-handle).length(), right_contact, right_contact.map(|value| (value-handle).length()), right_prop, right_prop.map(|value| (value-handle).length()), handle, left_palm, (left_palm-left_grip).length(), left_contact, left_contact.map(|value| (value-left_grip).length()), left_prop, left_prop.map(|value| (value-handle).length()), left_grip,
+                right_palm,
+                (right_palm - handle).length(),
+                right_contact,
+                right_contact.map(|value| (value - handle).length()),
+                right_prop,
+                right_prop.map(|value| (value - handle).length()),
+                handle,
+                left_palm,
+                (left_palm - left_grip).length(),
+                left_contact,
+                left_contact.map(|value| (value - left_grip).length()),
+                left_prop,
+                left_prop.map(|value| (value - handle).length()),
+                left_grip,
             );
         }
     }

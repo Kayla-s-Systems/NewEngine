@@ -302,7 +302,14 @@ impl ScreenProfileRuntimeState {
             capture.gameplay_movement_gated = true;
             capture.draw_refresh_requested = true;
             capture.reason = SCREEN_PROFILE_CAPTURE_REASON.to_owned();
-            capture.surfaces = vec![UI_SURFACE_EDITOR_SHELL.to_owned()];
+            capture.surfaces = if resources
+                .get::<UiDockLayoutState>()
+                .is_some_and(|layout| !layout.panels.is_empty())
+            {
+                vec![UI_SURFACE_EDITOR_SHELL.to_owned()]
+            } else {
+                Vec::new()
+            };
             set_input_capture_contribution(resources, SCREEN_PROFILE_CAPTURE_OWNER, capture);
             return;
         }

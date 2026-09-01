@@ -333,6 +333,40 @@ impl Default for UiEditorRuntimeState {
     }
 }
 
+pub const DEFAULT_EDITOR_FLY_SPEED_SCALE: f32 = 0.20;
+
+/// Runtime navigation tuning for lightweight Editing Tools.
+///
+/// `fly_speed_scale` multiplies the camera-runtime scene-aware fly speed. Keeping this
+/// separate from `UiInGameEditorState` lets hosts tune navigation without changing the
+/// editor activation/lifecycle contract.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UiEditorNavigationSettings {
+    pub version: u32,
+    pub fly_speed_scale: f32,
+}
+
+impl UiEditorNavigationSettings {
+    #[inline]
+    pub fn sanitized_fly_speed_scale(self) -> f32 {
+        if self.fly_speed_scale.is_finite() && self.fly_speed_scale > 0.0 {
+            self.fly_speed_scale.clamp(0.05, 5.0)
+        } else {
+            DEFAULT_EDITOR_FLY_SPEED_SCALE
+        }
+    }
+}
+
+impl Default for UiEditorNavigationSettings {
+    fn default() -> Self {
+        Self {
+            version: 1,
+            fly_speed_scale: DEFAULT_EDITOR_FLY_SPEED_SCALE,
+        }
+    }
+}
+
 /// Shared activation contract for the live in-game world editor.
 ///
 /// This is intentionally a UI/runtime intent DTO: the editing-tools plugin and

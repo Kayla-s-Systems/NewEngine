@@ -92,11 +92,7 @@ fn first_person_near_head_weight(
 
 #[inline]
 fn normalized_edge(a: u32, b: u32) -> (u32, u32) {
-    if a <= b {
-        (a, b)
-    } else {
-        (b, a)
-    }
+    if a <= b { (a, b) } else { (b, a) }
 }
 
 #[inline]
@@ -599,7 +595,7 @@ pub(super) fn ensure_player_runtime_sidecar_parts(
 mod first_person_owner_body_tests {
     use super::*;
     use newengine_model_skeleton_api::{
-        skeleton_joint_indexed, ModelSkeletonAnchors, ModelSkeletonMetadata,
+        ModelSkeletonAnchors, ModelSkeletonMetadata, skeleton_joint_indexed,
     };
     use newengine_primitives::PrimitiveVertex;
 
@@ -687,10 +683,12 @@ mod first_person_owner_body_tests {
         assert!(built.removed_triangles >= FPP_MIN_REMOVED_TRIANGLES);
         assert!(built.cap_triangles > 0);
         assert!(built.cap_loops > 0);
-        assert!(built
-            .mesh
-            .indices
-            .iter()
-            .all(|index| (*index as usize) < built.mesh.vertices.len()));
+        assert!(
+            built
+                .mesh
+                .indices
+                .iter()
+                .all(|index| (*index as usize) < built.mesh.vertices.len())
+        );
     }
 }

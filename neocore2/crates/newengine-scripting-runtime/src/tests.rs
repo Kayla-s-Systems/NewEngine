@@ -20,7 +20,7 @@ fn baseline_runtime_returns_empty_opaque_response() {
 
 #[test]
 fn validation_requires_ysc_module_ref() {
-    let bad = validate_script_module_ref(ScriptModuleRef::new("scripts/foo.source"));
+    let bad = validate_script_module_ref(ScriptModuleRef::new("scripts/foo.source@entry"));
     assert!(!bad.ok);
     let good = validate_script_module_ref(ScriptModuleRef::new("scripts/foo.ysc"));
     assert!(good.ok);

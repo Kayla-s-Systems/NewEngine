@@ -182,12 +182,7 @@ impl RuntimeHostAppProfile for AssetInspectorApp {
 
     fn register_engine_provider_routes_best_effort(&self) {
         newengine_schema_runtime::register_schema_gateway_best_effort();
-        newengine_assets::register_asset_types_gateway_best_effort();
         let host = newengine_plugin_host::default_host_api();
-        for descriptor in newengine_asset_format_nef8::descriptors() {
-            let _ = newengine_assets::register_asset_type_descriptor_best_effort(&host, descriptor);
-        }
-
         let assets = newengine_assets::AssetServiceClient::new(host.clone());
         let _ = newengine_material_runtime::register_materials_gateway_best_effort_with_host(
             Some(host.clone()),
