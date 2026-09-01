@@ -64,14 +64,24 @@ impl ModelAssetAdapter {
             .transpose()?;
         let source_ref = normalize_logical_path(&request.model, true)?;
         let (source_path, selector) = split_model_selector(&source_ref);
-        let requested_texture_dictionary = request
-            .texture_dictionary
-            .as_deref()
-            .map(|path| normalize_logical_path(path, false))
-            .transpose()?
-            .filter(|path| {
-                path.ends_with(&format!(".{}", newengine_asset_format_nef8::ytd::EXTENSION))
-            });
+        let requested_texture_dictionary = match request.texture_dictionary.as_deref() {
+            Some(path) => {
+                let path = normalize_logical_path(path, false)?;
+                self.client
+                    .require_semantic_asset_reference_v1(
+                        &path,
+                        newengine_assets_api::ENGINE_ASSETS_TEXTURES_SERVICE_ID,
+                        false,
+                    )
+                    .map_err(|error| {
+                        format!(
+                            "model.api: texture_dictionary must resolve through the registered texture asset format path='{path}': {error}"
+                        )
+                    })?;
+                Some(path)
+            }
+            None => None,
+        };
 
         if has_extension(&source_path, DRAWABLE_DICTIONARY_EXTENSION) {
             let loaded = self.load_ydd_runtime_parts(
@@ -330,7 +340,8 @@ impl ModelAssetAdapter {
             selector: selector
                 .map(|selector| serde_json::json!({ "selector": selector, "entry": selector }))
                 .unwrap_or(serde_json::Value::Null),
-        })
+                    format_descriptor: None,
+})
         .map_err(|e| format!("engine.assets decode_v1 failed path='{source}' output='{output_kind}' err='{e}'"))?;
         serde_json::from_slice::<T>(&bytes).map_err(|e| {
             format!("model.api: {label} decode returned invalid json path='{source}' err='{e}'")

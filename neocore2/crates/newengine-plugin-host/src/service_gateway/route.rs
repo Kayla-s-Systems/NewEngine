@@ -27,7 +27,8 @@ pub(crate) fn provider_route_extends_gateway_parent(
     }
 
     // Provider-namespaced child gateway implementation: engine.assets.uid ->
-    // engine.assets.starvault.uid, engine.ui.text -> engine.ui.aurelia.text.
+    // engine.assets.starvault.uid, engine.assets.textures ->
+    // engine.assets.formats.textures, engine.ui.text -> engine.ui.aurelia.text.
     // Provider identity lives directly below the engine domain; the API tail stays intact.
     let child_tail = &gateway_parts[2..];
     let Some(provider_tail) = provider_parts.get(3..) else {
@@ -48,7 +49,7 @@ mod tests {
         ));
         assert!(provider_route_extends_gateway_parent(
             "engine.assets.textures",
-            "engine.assets.textures.ytd"
+            "engine.assets.formats.textures"
         ));
         assert!(provider_route_extends_gateway_parent(
             "engine.game.module",

@@ -499,6 +499,7 @@ pub(crate) fn tick_game_ready_static_world_prefabs(
         {
             spawn_box_collision_ydd_prefab_from_decoded(
                 world,
+                mats,
                 prefab_parent,
                 &prefab,
                 decoded.as_slice(),
@@ -510,6 +511,7 @@ pub(crate) fn tick_game_ready_static_world_prefabs(
         {
             spawn_collision_ydd_prefab_from_decoded(
                 world,
+                mats,
                 prefab_parent,
                 &prefab,
                 decoded.as_slice(),

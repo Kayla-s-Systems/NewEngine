@@ -346,6 +346,26 @@ fn published_weapon_section_only_exposes_equipped_available_weapons() {
 }
 
 #[test]
+fn closed_character_menu_skips_registry_serialization() {
+    let mut world = World::new();
+    let _player = spawn_test_player(&mut world, "character-menu-closed-registry-player");
+    ensure_inventory_hud_state(&mut world);
+
+    let output = publish_inventory_hud_state(&mut world, 1);
+    let changes = &output.patches.first().expect("HUD patch").patch.changes;
+    assert!(changes.iter().all(|change| {
+        !(change.source_id == "character"
+            && matches!(
+                change.path.as_str(),
+                "registered_characters"
+                    | "registered_weapons"
+                    | "registered_character_count"
+                    | "registered_weapon_count"
+            ))
+    }));
+}
+
+#[test]
 fn character_menu_publishes_registry_and_starts_on_characters_category() {
     let mut world = World::new();
     let _player = spawn_test_player(&mut world, "character-menu-registry-player");
@@ -804,6 +824,11 @@ fn selecting_another_playable_character_closes_selector() {
         selected_variant(&world, player).map(|variant| variant.id.as_str()),
         Some(TEST_CHARACTER_B)
     );
+    let assignment = world
+        .get::<newengine_engine_runtime::gameplay::PlayerModelAssignment>(player)
+        .expect("character selection must publish a model assignment");
+    assert_eq!(assignment.source, "models/test/beta.ydd@beta");
+    assert!(assignment.revision > 0);
 }
 
 #[test]
@@ -850,6 +875,11 @@ fn dropdown_character_selection_dispatch_closes_menu() {
         selected_variant(&world, player).map(|variant| variant.id.as_str()),
         Some(TEST_CHARACTER_B)
     );
+    let assignment = world
+        .get::<newengine_engine_runtime::gameplay::PlayerModelAssignment>(player)
+        .expect("UI dispatch must publish a model assignment");
+    assert_eq!(assignment.source, "models/test/beta.ydd@beta");
+    assert!(assignment.revision > 0);
     let commands = world
         .get::<PlayerCommandFrame>(player)
         .expect("player commands");

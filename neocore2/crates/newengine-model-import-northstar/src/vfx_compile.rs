@@ -232,13 +232,13 @@ pub fn compile_vfx_texture_dictionary(
     }
     let ytd = encode_nef8(
         &netd,
-        newengine_asset_format_nef8::ytd::CONTENT_KIND,
+        newengine_assets_api::LIST_FILE_CONTENT_KIND_YTD,
         newengine_asset_format_nef8::ytd::CONTENT_SCHEMA_VERSION,
         report_entries.len() as u32,
     )?;
     let decoded_ytd = newengine_assets_api::decode_list_file_envelope(
         &ytd,
-        newengine_asset_format_nef8::ytd::CONTENT_KIND,
+        newengine_assets_api::LIST_FILE_CONTENT_KIND_YTD,
         request.output_path.to_string_lossy().as_ref(),
     )?;
     if decoded_ytd.header.entry_count as usize != report_entries.len() {

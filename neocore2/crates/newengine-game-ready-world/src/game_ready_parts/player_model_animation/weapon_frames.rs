@@ -1,17 +1,9 @@
-/// Current gameplay view rotation converted into avatar/model-local space. Full-body FPP uses
-/// this complete frame rather than only a forward vector so authored camera-space weapon offsets
-/// preserve lateral/up placement while yaw/pitch remain gameplay-owned.
-pub(crate) fn player_rifle_view_rotation_model(
+/// Current input-owned gameplay view rotation in world space. Weapon presentation and camera ADS
+/// anchoring must share this exact orientation or the rendered sights and gameplay ray diverge.
+pub(crate) fn player_rifle_view_rotation_world(
     world: &newengine_ecs::World,
     player: EntityId,
 ) -> Option<Quat> {
-    let visual_root = world
-        .get::<newengine_engine_runtime::gameplay::PlayerModelBinding>(player)?
-        .visual_root
-        .filter(|entity| world.exists(*entity))?;
-    let (_, visual_rotation) =
-        newengine_transform::read_entity_world_pose_local_chain(world, visual_root)?;
-
     let active_camera = world
         .resource::<newengine_scene::SceneState>()
         .and_then(|state| state.active_camera.or(state.root));
@@ -32,6 +24,23 @@ pub(crate) fn player_rifle_view_rotation_model(
                 .and_then(|camera| world.get::<newengine_sim::CameraRigComp>(camera))
                 .map(|rig| rig.0.rotation.normalize_or_identity())
         })?;
+    view_rotation_ws.is_finite().then_some(view_rotation_ws)
+}
+
+/// Current gameplay view rotation converted into avatar/model-local space. Full-body FPP uses
+/// this complete frame rather than only a forward vector so authored camera-space weapon offsets
+/// preserve lateral/up placement while yaw/pitch remain gameplay-owned.
+pub(crate) fn player_rifle_view_rotation_model(
+    world: &newengine_ecs::World,
+    player: EntityId,
+) -> Option<Quat> {
+    let visual_root = world
+        .get::<newengine_engine_runtime::gameplay::PlayerModelBinding>(player)?
+        .visual_root
+        .filter(|entity| world.exists(*entity))?;
+    let (_, visual_rotation) =
+        newengine_transform::read_entity_world_pose_local_chain(world, visual_root)?;
+    let view_rotation_ws = player_rifle_view_rotation_world(world, player)?;
     let view_rotation_model = (visual_rotation.normalize_or_identity().inverse()
         * view_rotation_ws)
         .normalize_or_identity();
@@ -151,12 +160,19 @@ pub(crate) fn player_right_hand_prop_frame(
     world: &newengine_ecs::World,
     player: EntityId,
 ) -> Option<Mat4> {
+    let equipment_pose_family = world
+        .get::<newengine_engine_runtime::gameplay::EquippedWeaponBinding>(player)
+        .and_then(|equipped| {
+            world
+                .resource::<newengine_engine_runtime::gameplay::ItemCatalog>()?
+                .get(equipped.item)?
+                .weapon_class
+                .clone()
+        });
     let authored_equipment_contact = world
         .get::<PlayerAnimationRuntimeBinding>(player)
         .is_some_and(|binding| {
-            binding.equipment_ready_pose.is_some()
-                || binding.equipment_aim_pose.is_some()
-                || binding.equipment_reload_pose.is_some()
+            binding.has_equipment_pose_for_family(equipment_pose_family.as_deref())
         });
     if authored_equipment_contact {
         stable_hand_grip_frame(
@@ -228,6 +244,7 @@ pub(crate) fn publish_player_first_person_camera_anchors(world: &mut newengine_e
             player,
             newengine_engine_runtime::gameplay::PlayerFirstPersonCameraAnchor {
                 eye_center_ws,
+                ads_camera_position_ws: None,
                 forward_clearance: face_forward_clearance,
             },
         );

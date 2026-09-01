@@ -267,6 +267,7 @@ pub(crate) fn apply_weapon_ytyp_namespace(
         let mut weapon = authored.weapon.take().unwrap_or_default();
         weapon.weapon_type =
             string(namespace, "weapon", "type").unwrap_or_else(|| weapon.weapon_type.clone());
+        weapon.class = string(namespace, "weapon", "class").unwrap_or_else(|| weapon.class.clone());
         if let Some(value) = u32_value(namespace, "weapon", "rank") {
             weapon.rank = Some(value.min(u16::MAX as u32) as u16);
         }
@@ -377,6 +378,12 @@ pub(crate) fn apply_weapon_ytyp_namespace(
         if let Some(value) = f32_value(namespace, "weapon", "recoil_recovery_hz") {
             weapon.recoil_recovery_hz = value;
         }
+        if let Some(value) = f32_value(namespace, "weapon", "recoil_pitch_tracker_speed_scale") {
+            weapon.recoil_pitch_tracker_speed_scale = value;
+        }
+        if let Some(value) = f32_value(namespace, "weapon", "recoil_yaw_tracker_speed_scale") {
+            weapon.recoil_yaw_tracker_speed_scale = value;
+        }
         if let Some(value) = bool_value(namespace, "weapon", "ricochet_enabled") {
             weapon.ricochet_enabled = value;
         }
@@ -437,6 +444,7 @@ pub(crate) fn apply_weapon_ytyp_namespace(
                 shot: string(namespace, "vfx", "shot").unwrap_or_default(),
                 tracer: string(namespace, "vfx", "tracer").unwrap_or_default(),
                 ricochet: string(namespace, "vfx", "ricochet").unwrap_or_default(),
+                exit: string(namespace, "vfx", "exit").unwrap_or_default(),
                 impact_default: string(namespace, "vfx", "impact_default").unwrap_or_default(),
                 impact_by_surface: string_map(namespace, "vfx", "impact_by_surface")
                     .unwrap_or_default(),
@@ -444,6 +452,7 @@ pub(crate) fn apply_weapon_ytyp_namespace(
             if !vfx.shot.trim().is_empty()
                 || !vfx.tracer.trim().is_empty()
                 || !vfx.ricochet.trim().is_empty()
+                || !vfx.exit.trim().is_empty()
                 || !vfx.impact_default.trim().is_empty()
                 || !vfx.impact_by_surface.is_empty()
             {
@@ -571,6 +580,12 @@ pub(crate) fn apply_weapon_ytyp_namespace(
             if let Some(value) = f32_value(namespace, "casing", "density") {
                 casing.density = value;
             }
+            if let Some(value) = f32_value(namespace, "casing", "linear_damping") {
+                casing.linear_damping = value;
+            }
+            if let Some(value) = f32_value(namespace, "casing", "angular_damping") {
+                casing.angular_damping = value;
+            }
             if let Some(value) = f32_value(namespace, "casing", "contact_min_impulse") {
                 casing.contact_min_impulse = value;
             }
@@ -683,6 +698,7 @@ mod tests {
         };
         let metadata = serde_json::json!({
             "weapon": {
+                "class": "pistol",
                 "ammo": "ammo.test",
                 "fire_mode": "automatic",
                 "magazine_capacity": 32,
@@ -719,6 +735,8 @@ mod tests {
                 "friction": 0.3,
                 "restitution": 0.2,
                 "density": 7.5,
+                "linear_damping": 0.08,
+                "angular_damping": 1.5,
                 "contact_min_impulse": 0.002,
                 "contact_medium_impulse": 0.011,
                 "contact_hard_impulse": 0.031,
@@ -760,6 +778,7 @@ mod tests {
         });
         apply_weapon_ytyp_namespace(&mut item, &metadata).expect("hydrate");
         let weapon = item.weapon.expect("weapon");
+        assert_eq!(weapon.class, "pistol");
         assert_eq!(weapon.fire_mode().expect("mode"), WeaponFireMode::Automatic);
         assert_eq!(weapon.magazine_capacity, 32);
         assert!((weapon.reload_duration - 1.42).abs() < 1.0e-6);
@@ -773,6 +792,8 @@ mod tests {
         assert_eq!(casing.variants, vec!["a", "b", "c"]);
         assert_eq!(casing.half_extents, [0.01, 0.02, 0.03]);
         assert!((casing.ejection_delay_seconds - 0.04).abs() < 1.0e-6);
+        assert!((casing.linear_damping - 0.08).abs() < 1.0e-6);
+        assert!((casing.angular_damping - 1.5).abs() < 1.0e-6);
         assert_eq!(casing.axis_local, [0.9, 0.1, 0.0]);
         assert_eq!(casing.ejection_joint, "shell_eject");
         assert!((casing.contact_min_impulse - 0.002).abs() < 1.0e-6);

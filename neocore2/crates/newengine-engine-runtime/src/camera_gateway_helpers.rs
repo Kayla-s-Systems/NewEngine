@@ -271,6 +271,9 @@ pub(super) fn camera_runtime_service_config(
                 .filter(|anchor| anchor.eye_center_ws.is_finite())
             {
                 config.first_person_anchor_ws = Some(anchor.eye_center_ws);
+                config.first_person_ads_anchor_ws = anchor
+                    .ads_camera_position_ws
+                    .filter(|position| position.is_finite());
                 // Avatar providers publish the resolved anchor; project camera authoring owns
                 // the clearance value. Accept provider clearance only for legacy players that
                 // have no PlayerCameraProfile component.

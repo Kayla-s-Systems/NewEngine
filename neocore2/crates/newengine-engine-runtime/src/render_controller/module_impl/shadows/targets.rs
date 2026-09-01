@@ -73,7 +73,7 @@ pub(super) fn ensure_shadow_rt(
 
     if request_changed {
         if let Some(old) = this.shadows.render_target.take() {
-            this.retire_render_target(old);
+            this.retire_render_target_with_reason(old, "shadow_target_reconfigured");
         }
         this.shadows.render_target_resolution = 0;
         this.shadows.render_target_tile_resolution = 0;
@@ -165,7 +165,7 @@ pub(super) fn ensure_local_shadow_rt(
         || this.shadows.local_render_target_extent_key != extent_key;
     if recreate {
         if let Some(old) = this.shadows.local_render_target.take() {
-            this.retire_render_target(old);
+            this.retire_render_target_with_reason(old, "shadow_target_reconfigured");
         }
         this.shadows.local_render_target_extent_key = 0;
         this.invalidate_local_shadow_cache();
@@ -193,7 +193,7 @@ pub(super) fn ensure_local_shadow_rt(
 #[inline]
 pub(super) fn retire_local_shadow_rt(this: &mut RuntimeRenderController) {
     if let Some(old) = this.shadows.local_render_target.take() {
-        this.retire_render_target(old);
+        this.retire_render_target_with_reason(old, "shadow_target_reconfigured");
     }
     this.shadows.local_render_target_extent_key = 0;
     this.invalidate_local_shadow_cache();
@@ -202,7 +202,7 @@ pub(super) fn retire_local_shadow_rt(this: &mut RuntimeRenderController) {
 #[inline]
 pub(super) fn retire_shadow_rt(this: &mut RuntimeRenderController) {
     if let Some(old) = this.shadows.render_target.take() {
-        this.retire_render_target(old);
+        this.retire_render_target_with_reason(old, "shadow_target_reconfigured");
     }
     this.shadows.render_target_resolution = 0;
     this.shadows.render_target_tile_resolution = 0;

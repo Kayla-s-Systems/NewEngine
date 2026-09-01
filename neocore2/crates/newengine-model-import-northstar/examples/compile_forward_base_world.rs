@@ -95,7 +95,7 @@ fn encode_ydd(entry: YddBinaryEntry, output: &Path) -> Result<(), String> {
     encoder.write_all(&body).map_err(|e| e.to_string())?;
     let stored = encoder.finish().map_err(|e| e.to_string())?;
     let bytes = encode_list_file(ListFileEncodeRequest {
-        content_kind: newengine_asset_format_nef8::ydd::CONTENT_KIND,
+        content_kind: newengine_assets_api::LIST_FILE_CONTENT_KIND_YDD,
         content_schema_version: newengine_asset_format_nef8::YDD_BINARY_SCHEMA_VERSION as u16,
         entry_count: 1,
         additional_flags: 0,

@@ -9,7 +9,7 @@ fn main() -> Result<(), String> {
     let logical = path.to_string_lossy();
     let decoded = newengine_assets_api::decode_list_file_envelope(
         &bytes,
-        newengine_asset_format_nef8::ytd::CONTENT_KIND,
+        newengine_assets_api::LIST_FILE_CONTENT_KIND_YTD,
         &logical,
     )?;
     let dict = newengine_texture_container::parse(&decoded.body).map_err(|e| e.to_string())?;

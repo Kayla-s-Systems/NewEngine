@@ -57,6 +57,24 @@ fn sanitize_material_texture_task_id(path: &str) -> String {
     out
 }
 
+#[inline]
+fn material_texture_decode_request(path: &str, frame_index: u64) -> TaskRequest {
+    let task_path = sanitize_material_texture_task_id(path);
+    TaskRequest::new("material.texture.decode")
+        .with_source("render.controller")
+        .with_owner("engine.render")
+        .with_category("asset-decode")
+        .with_lane(TaskLane::AssetIo)
+        // Texture semantic decode is required for residency, but it is not frame-critical CPU
+        // work. Simulation/RenderPrep interactive jobs must remain ahead of it in the shared pool.
+        .with_priority(TaskPriority::Normal)
+        .with_frame_id(frame_index)
+        .with_dependency_group(format!("frame.{frame_index}.asset-io.texture-decode"))
+        .with_task_domain(task_domain::ENGINE_ASSETS)
+        .with_task_pass(task_pass::TEXTURE_DECODE)
+        .with_task_id(format!("render.material.texture.decode.{task_path}"))
+}
+
 impl RuntimeRenderController {
     fn queue_dictionary_material_texture_decode(
         &mut self,
@@ -89,21 +107,7 @@ impl RuntimeRenderController {
         let worker_path = path.clone();
         let result = Arc::new(Mutex::new(None));
         let result_out = Arc::clone(&result);
-        let task_path = sanitize_material_texture_task_id(&path);
-        let request = TaskRequest::new("material.texture.decode")
-            .with_source("render.controller")
-            .with_owner("engine.render")
-            .with_category("asset-decode")
-            .with_lane(TaskLane::AssetIo)
-            .with_priority(TaskPriority::Interactive)
-            .with_frame_id(self.frame.frame_index)
-            .with_dependency_group(format!(
-                "frame.{}.asset-io.texture-decode",
-                self.frame.frame_index
-            ))
-            .with_task_domain(task_domain::ENGINE_ASSETS)
-            .with_task_pass(task_pass::TEXTURE_DECODE)
-            .with_task_id(format!("render.material.texture.decode.{task_path}"));
+        let request = material_texture_decode_request(&path, self.frame.frame_index);
         let host_context = newengine_plugin_host::current_host_context();
         let ticket = thread_pool.submit_request(request, move || {
             let decoded = newengine_plugin_host::with_host_context(&host_context, || {
@@ -643,5 +647,24 @@ impl RuntimeRenderController {
             }
             MaterialTextureReadyState::Failed => fallback,
         }
+    }
+}
+
+#[cfg(test)]
+mod material_texture_decode_policy_tests {
+    use super::*;
+
+    #[test]
+    fn texture_decode_is_asset_io_normal_priority_not_frame_interactive() {
+        let request = material_texture_decode_request("textures/characters/abby.ytd@m00_base", 42);
+        assert_eq!(request.lane, TaskLane::AssetIo);
+        assert_eq!(request.priority, TaskPriority::Normal);
+        assert_eq!(request.frame_id, Some(42));
+        assert_eq!(request.task_domain, task_domain::ENGINE_ASSETS);
+        assert_eq!(request.task_pass, task_pass::TEXTURE_DECODE);
+        assert!(request
+            .dependency_group
+            .as_deref()
+            .is_some_and(|group| group == "frame.42.asset-io.texture-decode"));
     }
 }

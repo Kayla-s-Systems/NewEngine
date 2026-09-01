@@ -35,6 +35,12 @@ pub struct PhysicsBodyDesc {
     pub kind: PhysicsBodyKind,
     pub flags: PhysicsBodyRuntimeFlags,
     pub material: PhysicsMaterialDesc,
+    /// Optional provider-neutral linear drag coefficient in 1/s. `None` keeps the backend's
+    /// native/default damping policy. Gameplay objects with authored motion decay should set it.
+    pub linear_damping: Option<f32>,
+    /// Optional provider-neutral angular drag coefficient in 1/s. `None` keeps the backend's
+    /// native/default damping policy.
+    pub angular_damping: Option<f32>,
 }
 
 impl Default for PhysicsBodyDesc {
@@ -50,6 +56,8 @@ impl Default for PhysicsBodyDesc {
                 continuous_collision: false,
             },
             material: PhysicsMaterialDesc::default(),
+            linear_damping: None,
+            angular_damping: None,
         }
     }
 }
@@ -71,6 +79,8 @@ impl PhysicsBodyDesc {
                 restitution: 0.05,
                 density: 1.0,
             },
+            linear_damping: None,
+            angular_damping: None,
         }
     }
 
@@ -90,6 +100,8 @@ impl PhysicsBodyDesc {
                 restitution: 0.05,
                 density: 1.0,
             },
+            linear_damping: None,
+            angular_damping: None,
         }
     }
 
@@ -109,6 +121,8 @@ impl PhysicsBodyDesc {
                 restitution: 0.05,
                 density: 1.0,
             },
+            linear_damping: None,
+            angular_damping: None,
         }
     }
 

@@ -22,7 +22,7 @@ impl RuntimeRenderController {
             }
 
             // Do not destroy immediately: GPU may still reference the old framebuffer.
-            self.retire_render_target(rt);
+            self.retire_render_target_with_reason(rt, "viewport_extent_changed");
             self.viewport.render_target = None;
         }
 

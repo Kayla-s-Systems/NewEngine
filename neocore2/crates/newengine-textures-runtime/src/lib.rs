@@ -1,6 +1,10 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-//! Provider-neutral `textures.api` service implementation for canonical `.ytd` dictionaries.
+//! Provider-neutral `engine.assets.textures` semantic service implementation.
+//!
+//! Concrete file formats such as `.ytd` are discovered independently through
+//! StarVault format modules. This crate builds the semantic service but owns no
+//! engine-plugin identity and performs no Host registration by itself.
 
 mod dictionary_cache;
 mod dto;

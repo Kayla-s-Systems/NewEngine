@@ -43,10 +43,3 @@ impl RuntimeRenderController {
         }
     }
 }
-
-pub(super) fn is_game_screen_profile<E: Send + 'static>(ctx: &ModuleCtx<'_, E>) -> bool {
-    ctx.resources()
-        .get::<UiScreenProfileState>()
-        .map(|state| state.descriptor.profile == UiScreenProfile::Game)
-        .unwrap_or(true)
-}

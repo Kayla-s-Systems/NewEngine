@@ -13,6 +13,7 @@ mod material_application;
 mod queue;
 mod scene_object_validation;
 mod view_gateway;
+mod weapon_grip_authoring;
 
 pub use bootstrap_provider::{SceneBootstrapContext, SceneBootstrapProvider, SceneBootstrapResult};
 pub use commands::SceneCommand;

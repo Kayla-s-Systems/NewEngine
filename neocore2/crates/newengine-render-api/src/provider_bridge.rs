@@ -66,6 +66,8 @@ pub struct VisibilityMask {
     pub shadow_casters: bool,
     pub local_shadow_casters: bool,
     pub opaque_forward: bool,
+    #[serde(default)]
+    pub particle_gbuffer: bool,
     pub transparent: bool,
     pub debug: bool,
 }
@@ -77,6 +79,7 @@ impl VisibilityMask {
             RenderDrawListKind::ShadowCasters => self.shadow_casters,
             RenderDrawListKind::LocalShadowCasters => self.local_shadow_casters,
             RenderDrawListKind::OpaqueForward => self.opaque_forward,
+            RenderDrawListKind::ParticleGBuffer => self.particle_gbuffer,
             RenderDrawListKind::Transparent => self.transparent,
             RenderDrawListKind::Debug => self.debug,
         }

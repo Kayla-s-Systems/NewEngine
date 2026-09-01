@@ -155,6 +155,11 @@ fn compile_item_definition(authored: &AuthoredItemDefinition) -> Result<ItemDefi
             authored.unit_weight,
         )?,
     };
+    if kind == ItemKind::Weapon {
+        if let Some(authored_weapon) = authored.weapon.as_ref() {
+            definition = definition.with_weapon_class(&authored_weapon.class);
+        }
+    }
     definition = definition
         .with_description(authored.description.trim())
         .with_tags(authored.tags.clone());

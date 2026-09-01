@@ -1,6 +1,6 @@
 [package]
 name = "newengine-audio-runtime"
-version = "0.7.0"
+version = "0.8.0"
 edition = "2021"
 readme = "README.md"
 description = "First-party native audio provider for the NewEngine engine.audio gateway"

@@ -205,8 +205,7 @@ pub(super) fn shot_origin_and_direction(
         .map(|velocity| Vec3::new(velocity.0.x, 0.0, velocity.0.z).length())
         .unwrap_or(0.0);
     let movement_alpha = (horizontal_speed / 4.5).clamp(0.0, 1.0);
-    let movement_multiplier =
-        1.0 + (tuning.movement_spread_multiplier - 1.0) * movement_alpha;
+    let movement_multiplier = 1.0 + (tuning.movement_spread_multiplier - 1.0) * movement_alpha;
     let stance_multiplier = world
         .get::<PlayerStanceState>(player)
         .map(|stance| match stance.current {
@@ -229,7 +228,8 @@ pub(super) fn shot_origin_and_direction(
         })
         .map(|state| state.bloom_radians)
         .unwrap_or(0.0);
-    let spread = (base_spread * movement_multiplier * stance_multiplier * authored_modifiers + bloom)
+    let spread = (base_spread * movement_multiplier * stance_multiplier * authored_modifiers
+        + bloom)
         .clamp(0.0, core::f32::consts::FRAC_PI_2 - 0.001);
     let spread_scale = spread.tan();
     let offset_x = signed_unit(shot_sequence ^ 0x9e37_79b9) * spread_scale;

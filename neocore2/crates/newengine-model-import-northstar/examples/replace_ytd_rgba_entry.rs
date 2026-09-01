@@ -26,7 +26,7 @@ fn main() -> Result<(), String> {
     let source = fs::read(&input).map_err(|e| format!("read input: {e}"))?;
     let decoded = newengine_assets_api::decode_list_file_envelope(
         &source,
-        newengine_asset_format_nef8::ytd::CONTENT_KIND,
+        newengine_assets_api::LIST_FILE_CONTENT_KIND_YTD,
         &logical_path,
     )?;
     let dictionary = newengine_texture_container::parse(&decoded.body)
@@ -128,7 +128,7 @@ fn main() -> Result<(), String> {
 
     let verify = newengine_assets_api::decode_list_file_envelope(
         &out,
-        newengine_asset_format_nef8::ytd::CONTENT_KIND,
+        newengine_assets_api::LIST_FILE_CONTENT_KIND_YTD,
         &logical_path,
     )?;
     let verify_dict = newengine_texture_container::parse(&verify.body)

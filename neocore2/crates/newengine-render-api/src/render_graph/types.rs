@@ -30,6 +30,9 @@ impl Default for RenderGraphResourceLifetime {
 pub enum RenderGraphResourceUsage {
     ColorAttachment,
     DepthAttachment,
+    /// Same depth image participates in fixed-function depth testing and fragment sampling.
+    /// The backend must use a read-only depth attachment layout for this access.
+    DepthAttachmentSampled,
     SampledTexture,
     StorageTexture,
     VertexBuffer,
@@ -50,6 +53,11 @@ pub enum RenderGraphResourceSemantic {
     GBufferNormal,
     GBufferMaterial,
     GBufferDepth,
+    ParticleAccum,
+    ParticleNormal,
+    ParticleMaterial,
+    ParticleDepth,
+    FroxelFog,
     LitColor,
     PostFxColor,
     UiColor,
@@ -123,6 +131,8 @@ pub enum RenderGraphPassKind {
     ForwardOpaque,
     ParticleSimulation,
     HairSimulation,
+    ParticleGBuffer,
+    ParticleComposite,
     Transparent,
     Water,
     PostFx,

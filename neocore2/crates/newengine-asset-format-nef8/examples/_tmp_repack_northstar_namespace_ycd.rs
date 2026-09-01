@@ -5,7 +5,9 @@ use newengine_assets_api::{
 use std::{env, fs, io::Write, path::PathBuf};
 
 fn replace_all(input: Vec<u8>, from: &[u8], to: &[u8]) -> Vec<u8> {
-    if from.is_empty() { return input; }
+    if from.is_empty() {
+        return input;
+    }
     let mut out = Vec::with_capacity(input.len());
     let mut i = 0usize;
     while i < input.len() {
@@ -30,7 +32,9 @@ fn migrate(mut bytes: Vec<u8>) -> Vec<u8> {
         (b"tlou2", b"northstar"),
         (b"Tlou2", b"NorthStar"),
     ];
-    for (from, to) in RULES { bytes = replace_all(bytes, from, to); }
+    for (from, to) in RULES {
+        bytes = replace_all(bytes, from, to);
+    }
     bytes
 }
 
@@ -40,21 +44,30 @@ fn contains_legacy(bytes: &[u8]) -> bool {
 
 fn repack(path: PathBuf) -> Result<(), String> {
     let old = fs::read(&path).map_err(|e| format!("read {}: {e}", path.display()))?;
-    let decoded = decode_list_file_envelope(&old, LIST_FILE_CONTENT_KIND_YCD, &path.to_string_lossy())?;
+    let decoded =
+        decode_list_file_envelope(&old, LIST_FILE_CONTENT_KIND_YCD, &path.to_string_lossy())?;
     let old_body_len = decoded.body.len();
     let body = migrate(decoded.body.clone());
-    let old_metadata = serde_json::to_vec(&decoded.metadata).map_err(|e| format!("serialize metadata: {e}"))?;
+    let old_metadata =
+        serde_json::to_vec(&decoded.metadata).map_err(|e| format!("serialize metadata: {e}"))?;
     let metadata = migrate(old_metadata.clone());
     if body == decoded.body && metadata == old_metadata {
         println!("SKIP '{}' no legacy namespace", path.display());
         return Ok(());
     }
     if contains_legacy(&body) || contains_legacy(&metadata) {
-        return Err(format!("legacy namespace remains after migration: {}", path.display()));
+        return Err(format!(
+            "legacy namespace remains after migration: {}",
+            path.display()
+        ));
     }
     let mut encoder = DeflateEncoder::new(Vec::new(), Compression::fast());
-    encoder.write_all(&body).map_err(|e| format!("deflate {}: {e}", path.display()))?;
-    let stored = encoder.finish().map_err(|e| format!("deflate finish {}: {e}", path.display()))?;
+    encoder
+        .write_all(&body)
+        .map_err(|e| format!("deflate {}: {e}", path.display()))?;
+    let stored = encoder
+        .finish()
+        .map_err(|e| format!("deflate finish {}: {e}", path.display()))?;
     let header = decoded.header;
     let rebuilt = encode_list_file(ListFileEncodeRequest {
         content_kind: header.content_kind,
@@ -67,24 +80,49 @@ fn repack(path: PathBuf) -> Result<(), String> {
         body_uncompressed_len: body.len() as u64,
         body_raw_hash: Some(*blake3::hash(&body).as_bytes()),
         stable_file_id: header.has_stable_file_id().then_some(header.stable_file_id),
-        import_settings_hash: header.has_import_settings_hash().then_some(header.import_settings_hash),
+        import_settings_hash: header
+            .has_import_settings_hash()
+            .then_some(header.import_settings_hash),
     })?;
-    let verify = decode_list_file_envelope(&rebuilt, LIST_FILE_CONTENT_KIND_YCD, &path.to_string_lossy())?;
-    let verify_metadata = serde_json::to_vec(&verify.metadata).map_err(|e| format!("verify metadata: {e}"))?;
+    let verify = decode_list_file_envelope(
+        &rebuilt,
+        LIST_FILE_CONTENT_KIND_YCD,
+        &path.to_string_lossy(),
+    )?;
+    let verify_metadata =
+        serde_json::to_vec(&verify.metadata).map_err(|e| format!("verify metadata: {e}"))?;
     if contains_legacy(&verify.body) || contains_legacy(&verify_metadata) {
-        return Err(format!("verification found legacy namespace: {}", path.display()));
+        return Err(format!(
+            "verification found legacy namespace: {}",
+            path.display()
+        ));
     }
-    if verify.header.entry_count != header.entry_count || verify.header.stable_file_id != header.stable_file_id {
+    if verify.header.entry_count != header.entry_count
+        || verify.header.stable_file_id != header.stable_file_id
+    {
         return Err(format!("header identity changed: {}", path.display()));
     }
     fs::write(&path, &rebuilt).map_err(|e| format!("write {}: {e}", path.display()))?;
-    println!("REPACK PASS '{}' body:{}->{} bytes:{}->{} entries={} stable_id={}", path.display(), old_body_len, body.len(), old.len(), rebuilt.len(), header.entry_count, header.stable_file_id);
+    println!(
+        "REPACK PASS '{}' body:{}->{} bytes:{}->{} entries={} stable_id={}",
+        path.display(),
+        old_body_len,
+        body.len(),
+        old.len(),
+        rebuilt.len(),
+        header.entry_count,
+        header.stable_file_id
+    );
     Ok(())
 }
 
 fn main() -> Result<(), String> {
     let paths: Vec<PathBuf> = env::args_os().skip(1).map(PathBuf::from).collect();
-    if paths.is_empty() { return Err("one or more YCD paths required".to_owned()); }
-    for path in paths { repack(path)?; }
+    if paths.is_empty() {
+        return Err("one or more YCD paths required".to_owned());
+    }
+    for path in paths {
+        repack(path)?;
+    }
     Ok(())
 }

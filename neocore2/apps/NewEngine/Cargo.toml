@@ -8,7 +8,7 @@ authors = ["Take Some()"]
 license = "Proprietary"
 
 [package.metadata.newengine.winres]
-icon = "../../../../Engine/Content/logo.ico"
+icon = "../../../../Shared/Source/branding/logo.ico"
 product_name = "North Star NewEngine"
 original_filename = "NewEngine.exe"
 

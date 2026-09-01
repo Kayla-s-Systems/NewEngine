@@ -79,6 +79,9 @@ pub struct AnimationClipStoreStats {
 #[derive(Debug, Default)]
 pub struct AnimationClipStore {
     dictionaries: Mutex<std::collections::HashMap<String, Arc<AnimationDictionary>>>,
+    /// Selected-entry fallback cache for dictionaries that fail strict whole-dictionary decode
+    /// because an unrelated clip is malformed. Keys are canonical `path@selector` identities.
+    isolated_clips: Mutex<std::collections::HashMap<String, Arc<AnimationClip>>>,
 }
 
 impl AnimationClipStore {
@@ -95,6 +98,16 @@ impl AnimationClipStore {
             .lock()
             .map(|guard| guard.get(canonical_path_key).cloned())
             .map_err(|_| "animation clip store mutex poisoned".to_owned())
+    }
+
+    fn cached_isolated_clip(
+        &self,
+        canonical_clip_key: &str,
+    ) -> Result<Option<Arc<AnimationClip>>, String> {
+        self.isolated_clips
+            .lock()
+            .map(|guard| guard.get(canonical_clip_key).cloned())
+            .map_err(|_| "animation clip store isolated cache mutex poisoned".to_owned())
     }
 
     pub fn load_ycd_dictionary<F>(
@@ -136,27 +149,62 @@ impl AnimationClipStore {
         F: FnOnce(&str) -> Result<Vec<u8>, String>,
     {
         let parsed = AnimationClipReference::parse(reference)?;
-        let dictionary = if let Some(cached) = self.cached_dictionary(&parsed.canonical_path_key)? {
-            cached
-        } else {
-            let body = load_body(&parsed.logical_path)?;
-            let decoded = Arc::new(decode_ycd_dictionary(&body)?);
-            let mut guard = self
-                .dictionaries
-                .lock()
-                .map_err(|_| "animation clip store mutex poisoned".to_owned())?;
-            guard
-                .entry(parsed.canonical_path_key.clone())
-                .or_insert_with(|| decoded.clone())
-                .clone()
-        };
-        dictionary.clip(parsed.selector.as_deref()).ok_or_else(|| {
-            format!(
-                "animation selector '{}' was not found in dictionary '{}'",
-                parsed.selector.as_deref().unwrap_or("<first>"),
-                parsed.logical_path
-            )
-        })
+        if let Some(cached) = self.cached_dictionary(&parsed.canonical_path_key)? {
+            return cached.clip(parsed.selector.as_deref()).ok_or_else(|| {
+                format!(
+                    "animation selector '{}' was not found in dictionary '{}'",
+                    parsed.selector.as_deref().unwrap_or("<first>"),
+                    parsed.logical_path
+                )
+            });
+        }
+        if parsed.selector.is_some() {
+            if let Some(cached) = self.cached_isolated_clip(&parsed.canonical_clip_key)? {
+                return Ok(cached);
+            }
+        }
+
+        let body = load_body(&parsed.logical_path)?;
+        match decode_ycd_dictionary(&body) {
+            Ok(dictionary) => {
+                let decoded = Arc::new(dictionary);
+                let selected = decoded.clip(parsed.selector.as_deref()).ok_or_else(|| {
+                    format!(
+                        "animation selector '{}' was not found in dictionary '{}'",
+                        parsed.selector.as_deref().unwrap_or("<first>"),
+                        parsed.logical_path
+                    )
+                })?;
+                let mut guard = self
+                    .dictionaries
+                    .lock()
+                    .map_err(|_| "animation clip store mutex poisoned".to_owned())?;
+                guard
+                    .entry(parsed.canonical_path_key)
+                    .or_insert_with(|| decoded);
+                Ok(selected)
+            }
+            Err(dictionary_error) => {
+                let Some(selector) = parsed.selector.as_deref() else {
+                    return Err(dictionary_error);
+                };
+                let selected = Arc::new(decode_ycd_body(&body, Some(selector)).map_err(
+                    |selected_error| {
+                        format!(
+                            "strict YCD dictionary decode failed: {dictionary_error}; selected-entry decode failed: {selected_error}"
+                        )
+                    },
+                )?);
+                let mut guard = self
+                    .isolated_clips
+                    .lock()
+                    .map_err(|_| "animation clip store isolated cache mutex poisoned".to_owned())?;
+                Ok(guard
+                    .entry(parsed.canonical_clip_key)
+                    .or_insert_with(|| selected.clone())
+                    .clone())
+            }
+        }
     }
 
     /// Installs a new immutable event-track revision for a cached clip.
@@ -216,27 +264,51 @@ impl AnimationClipStore {
     /// Invalidates future lookups without invalidating already-bound actors.
     pub fn invalidate_ycd_path(&self, logical_path: &str) -> Result<bool, String> {
         let parsed = AnimationClipReference::parse(logical_path)?;
-        self.dictionaries
+        let dictionary_removed = self
+            .dictionaries
             .lock()
-            .map(|mut guard| guard.remove(&parsed.canonical_path_key).is_some())
-            .map_err(|_| "animation clip store mutex poisoned".to_owned())
+            .map_err(|_| "animation clip store mutex poisoned".to_owned())?
+            .remove(&parsed.canonical_path_key)
+            .is_some();
+        let isolated_prefix = format!("{}@", parsed.canonical_path_key);
+        let mut isolated = self
+            .isolated_clips
+            .lock()
+            .map_err(|_| "animation clip store isolated cache mutex poisoned".to_owned())?;
+        let before = isolated.len();
+        isolated.retain(|key, _| !key.starts_with(&isolated_prefix));
+        Ok(dictionary_removed || isolated.len() != before)
     }
 
     pub fn clear(&self) -> Result<(), String> {
         self.dictionaries
             .lock()
-            .map(|mut guard| guard.clear())
-            .map_err(|_| "animation clip store mutex poisoned".to_owned())
+            .map_err(|_| "animation clip store mutex poisoned".to_owned())?
+            .clear();
+        self.isolated_clips
+            .lock()
+            .map_err(|_| "animation clip store isolated cache mutex poisoned".to_owned())?
+            .clear();
+        Ok(())
     }
 
     pub fn stats(&self) -> Result<AnimationClipStoreStats, String> {
-        self.dictionaries
+        let dictionaries = self
+            .dictionaries
             .lock()
-            .map(|guard| AnimationClipStoreStats {
-                dictionaries: guard.len(),
-                clips: guard.values().map(|dictionary| dictionary.clips.len()).sum(),
-            })
-            .map_err(|_| "animation clip store mutex poisoned".to_owned())
+            .map_err(|_| "animation clip store mutex poisoned".to_owned())?;
+        let isolated = self
+            .isolated_clips
+            .lock()
+            .map_err(|_| "animation clip store isolated cache mutex poisoned".to_owned())?;
+        Ok(AnimationClipStoreStats {
+            dictionaries: dictionaries.len(),
+            clips: dictionaries
+                .values()
+                .map(|dictionary| dictionary.clips.len())
+                .sum::<usize>()
+                + isolated.len(),
+        })
     }
 }
 

@@ -51,7 +51,8 @@ fn ensure_runtime_dictionary_cache(
             logical_path: dictionary_path.to_owned(),
             output_kind: ASSET_LIST_FILE_BODY_OUTPUT.to_owned(),
             selector: serde_json::Value::Null,
-        })
+                    format_descriptor: None,
+})
         .map_err(|error| {
             format!("engine.assets listfile body decode failed path='{dictionary_path}' output='{ASSET_LIST_FILE_BODY_OUTPUT}' err='{error}'")
         })?;

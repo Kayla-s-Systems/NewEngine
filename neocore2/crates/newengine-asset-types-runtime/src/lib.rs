@@ -1,10 +1,11 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-//! First-party `asset-types` runtime provider.
+//! Provider for the generic `engine.assets.types` registry gateway.
 //!
-//! This crate owns the policy that North Star's standard distribution exposes the
-//! asset-type registry together with its first-party NEF8 descriptors. The generic
-//! asset service and the distribution catalog remain format-agnostic.
+//! The registry is intentionally empty at startup. Concrete format descriptors are
+//! owned by StarVault loadable format modules discovered from its relative
+//! `formats/` directory. This runtime unit owns registry availability only; it
+//! does not carry a built-in table of first-party extensions.
 
 pub const RUNTIME_UNIT_SPEC: newengine_runtime_unit_api::EngineRuntimeUnitSpec =
     newengine_runtime_unit_api::EngineRuntimeUnitSpec::new(
@@ -21,16 +22,9 @@ fn runtime_unit_factory(
     _: &newengine_runtime_unit_api::StartupConfig,
 ) -> newengine_runtime_unit_api::EngineResult<Option<Box<dyn newengine_runtime_unit_api::Module<()>>>>
 {
-    let _ = newengine_assets::register_asset_types_gateway_best_effort();
-    let host = newengine_plugin_host::default_host_api();
-    let registered = newengine_asset_format_nef8::descriptors()
-        .into_iter()
-        .filter(|descriptor| {
-            newengine_assets::register_asset_type_descriptor_best_effort(&host, descriptor.clone())
-        })
-        .count();
+    let registered = newengine_assets::register_asset_types_gateway_best_effort();
     newengine_ulog_api::ulog::info!(
-        "asset-types runtime unit: registered {} first-party NEF8 descriptors",
+        "asset-types runtime unit: registry gateway available={} descriptor_source='starvault-relative-formats'",
         registered
     );
     Ok(None)

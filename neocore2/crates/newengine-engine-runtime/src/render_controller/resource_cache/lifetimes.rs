@@ -13,11 +13,15 @@ impl RuntimeRenderController {
             .collect(r, self.frame.frame_index, self.backend_execution);
     }
 
-    pub(in crate::render_controller) fn retire_render_target(&mut self, rt: RenderTargetId) {
+    pub(in crate::render_controller) fn retire_render_target_with_reason(
+        &mut self,
+        rt: RenderTargetId,
+        reason: &'static str,
+    ) {
         self.gpu
             .lifetimes
             .resources
-            .retire_render_target_after_frame(rt, self.frame.frame_index);
+            .retire_render_target_after_frame(rt, self.frame.frame_index, reason);
     }
 
     pub(in crate::render_controller) fn gc_deferred_rts(

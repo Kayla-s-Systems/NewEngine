@@ -155,7 +155,7 @@ fn encode_ydd(document: &YddBinaryDocument) -> Result<Vec<u8>, String> {
     encoder.write_all(&body).map_err(|e| e.to_string())?;
     let stored = encoder.finish().map_err(|e| e.to_string())?;
     encode_list_file(ListFileEncodeRequest {
-        content_kind: newengine_asset_format_nef8::ydd::CONTENT_KIND,
+        content_kind: newengine_assets_api::LIST_FILE_CONTENT_KIND_YDD,
         content_schema_version: YDD_BINARY_SCHEMA_VERSION as u16,
         entry_count: document.entries.len() as u32,
         additional_flags: 0,

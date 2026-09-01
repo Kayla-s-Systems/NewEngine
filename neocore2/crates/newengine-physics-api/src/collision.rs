@@ -136,6 +136,12 @@ pub struct PhysicsFrameBodySnapshot {
     pub linear_velocity: PhysicsVec3,
     #[serde(default)]
     pub angular_velocity: PhysicsVec3,
+    /// Optional linear damping coefficient in 1/s. Missing values preserve provider defaults.
+    #[serde(default)]
+    pub linear_damping: Option<f32>,
+    /// Optional angular damping coefficient in 1/s. Missing values preserve provider defaults.
+    #[serde(default)]
+    pub angular_damping: Option<f32>,
     pub bounds_min: PhysicsVec3,
     pub bounds_max: PhysicsVec3,
 }

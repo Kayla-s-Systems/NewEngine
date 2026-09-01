@@ -77,6 +77,20 @@ fn rebuild_model_joint_frames(
     animation_runtime.build_model_joint_frames_from_local_pose(pose, frames)
 }
 
+#[inline]
+fn refresh_model_joint_frames_subtree(
+    animation_runtime: &AnimationSkeletonRuntime,
+    pose: &[JointLocalPose],
+    frames: &mut Vec<Mat4>,
+    root_joint: usize,
+) -> Result<(), String> {
+    animation_runtime.refresh_model_joint_frames_subtree_from_local_pose(
+        pose,
+        frames.as_mut_slice(),
+        root_joint,
+    )
+}
+
 fn rotate_pose_joint_toward(
     skeleton: &ModelSkeletonMetadata,
     pose: &mut [JointLocalPose],
@@ -145,8 +159,7 @@ fn solve_two_bone_arm_with_pole(
     palm: usize,
     target: Vec3,
     pole: Vec3,
-) -> Result<(), String> {
-    rebuild_model_joint_frames(animation_runtime, pose, frames)?;
+) -> Result<bool, String> {
     let shoulder_position = frames
         .get(shoulder)
         .copied()
@@ -173,13 +186,21 @@ fn solve_two_bone_arm_with_pole(
         || lower_len <= 1.0e-5
         || raw_distance <= 1.0e-5
     {
-        return Ok(());
+        return Ok(false);
     }
 
     let direction = raw_to_target / raw_distance;
     let min_reach = (upper_len - lower_len).abs() + 1.0e-4;
-    let max_reach = (upper_len + lower_len - 1.0e-4).max(min_reach);
-    let distance = raw_distance.clamp(min_reach, max_reach);
+    // Never manufacture contact by locking a real arm at mathematical full extension. Skinning
+    // around a nearly collinear shoulder/elbow/wrist chain is exactly what reads as a rubber arm.
+    // Small presentation mismatch is preferable: the authored pose remains authoritative until the
+    // weapon/contact contract is physically reachable with an anatomical elbow bend.
+    const SAFE_EXTENSION_MARGIN_M: f32 = 0.012;
+    let safe_max_reach = (upper_len + lower_len - SAFE_EXTENSION_MARGIN_M).max(min_reach);
+    if raw_distance > safe_max_reach {
+        return Ok(false);
+    }
+    let distance = raw_distance.clamp(min_reach, safe_max_reach);
     let reachable_target = shoulder_position + direction * distance;
 
     let pole_vector = pole - shoulder_position;
@@ -190,7 +211,7 @@ fn solve_two_bone_arm_with_pole(
     }
     bend_direction = bend_direction.normalize_or_zero();
     if bend_direction.length_squared() <= 1.0e-8 {
-        return Ok(());
+        return Ok(false);
     }
 
     let along = ((upper_len * upper_len - lower_len * lower_len + distance * distance)
@@ -202,10 +223,10 @@ fn solve_two_bone_arm_with_pole(
     // First orient the upper arm into the preferred elbow plane, then close the forearm onto the
     // palm target. No free CCD iterations remain, so the elbow cannot flip to another plane.
     rotate_pose_joint_toward(skeleton, pose, frames, shoulder, elbow, desired_elbow, 1.0)?;
-    rebuild_model_joint_frames(animation_runtime, pose, frames)?;
+    refresh_model_joint_frames_subtree(animation_runtime, pose, frames, shoulder)?;
     rotate_pose_joint_toward(skeleton, pose, frames, elbow, palm, reachable_target, 1.0)?;
-    rebuild_model_joint_frames(animation_runtime, pose, frames)?;
-    Ok(())
+    refresh_model_joint_frames_subtree(animation_runtime, pose, frames, elbow)?;
+    Ok(true)
 }
 
 fn solve_arm_to_palm_contact(
@@ -221,8 +242,7 @@ fn solve_arm_to_palm_contact(
     pole: Vec3,
     desired_palm_global: Quat,
     label: &str,
-) -> Result<(), String> {
-    rebuild_model_joint_frames(animation_runtime, pose, frames)?;
+) -> Result<bool, String> {
     let wrist_frame = *frames.get(wrist).ok_or("rifle wrist frame missing")?;
     let palm_frame = *frames.get(palm).ok_or("rifle palm frame missing")?;
     let wrist_position = wrist_frame.transform_point3(Vec3::ZERO);
@@ -267,7 +287,7 @@ fn solve_arm_to_palm_contact(
             );
         }
     }
-    solve_two_bone_arm_with_pole(
+    let solved = solve_two_bone_arm_with_pole(
         skeleton,
         animation_runtime,
         pose,
@@ -278,10 +298,12 @@ fn solve_arm_to_palm_contact(
         wrist_target,
         pole,
     )?;
-    rebuild_model_joint_frames(animation_runtime, pose, frames)?;
+    if !solved {
+        return Ok(false);
+    }
     set_pose_joint_global_rotation(skeleton, pose, frames, wrist, desired_wrist_rotation)?;
-    rebuild_model_joint_frames(animation_runtime, pose, frames)?;
-    Ok(())
+    refresh_model_joint_frames_subtree(animation_runtime, pose, frames, wrist)?;
+    Ok(true)
 }
 
 fn set_pose_joint_global_rotation(
@@ -488,10 +510,36 @@ fn apply_equipped_weapon_support_ik(
     let left_shoulder = *frames
         .get(rig.left_shoulder)
         .ok_or("weapon ReadyHold left shoulder frame is unavailable")?;
-    // Third person can use an authored palm as a manipulation/contact owner. Full-body FPP is
-    // deliberately the inverse relationship: camera-space weapon presentation owns the root and
-    // the real animated arms solve to its grip contacts. Letting the pre-IK palm own translation in
-    // FPP turns a locomotion/ready pose into a feedback loop and pulls the rifle back toward the face.
+
+    // Full-body FPP must never stretch the avatar's real arms toward a camera-owned gun. Once an
+    // authored equipment pose exists, the firing hand is the physical grip owner. ADS rotates the
+    // weapon around that fixed handle until the actual rear->front sight axis matches gameplay view;
+    // the camera subsequently moves onto the resulting rear sight. No shoulder/elbow IK is applied
+    // in this branch, so authored limb lengths and silhouette remain untouched.
+    if first_person_active && authored_hand_contacts && support_right_hand {
+        if let Some(view_rotation) = first_person_view_rotation_model {
+            if let Some(root) = crate::weapon_grip::weapon_first_person_hand_anchored_root(
+                presentation,
+                frames[rig.right_palm],
+                view_rotation,
+                aim_alpha,
+                recoil_alpha,
+                recoil_yaw_radians,
+            ) {
+                return Ok(Some(WeaponIkSolveResult {
+                    error_m: 0.0,
+                    right_error_m: 0.0,
+                    left_error_m: 0.0,
+                    base_root: root,
+                }));
+            }
+        }
+    }
+
+    // Third-person Ready/Aim is character-authored: the firing hand owns weapon translation and
+    // the support hand may only contribute a bounded angular correction around that handle. If the
+    // FPP hand-owned path above is unavailable, the existing camera/torso solve remains a guarded
+    // compatibility fallback rather than silently dropping the weapon presentation.
     let handle_anchor = (authored_hand_contacts && support_right_hand && !first_person_active)
         .then(|| frames[rig.right_palm])
         .and_then(|frame| {
@@ -553,9 +601,9 @@ fn apply_equipped_weapon_support_ik(
             )
         })
         .ok_or("weapon presentation could not resolve camera/torso contact constraint")?;
-    // Reach fitting is a fallback for torso-owned placement only. Once an authored firing hand
-    // supplies the handle anchor, translating the root again would break the exact hand/weapon
-    // contact we just established.
+    // Reach fitting is valid only while torso/camera space owns translation. Once an authored
+    // firing hand supplies the handle anchor, moving the root again would break the exact contact
+    // and re-introduce the hand/root feedback loop this branch is designed to avoid.
     let base_contract = if handle_anchor.is_some() {
         base_contract
     } else {
@@ -622,7 +670,8 @@ fn apply_equipped_weapon_support_ik(
         )?;
     }
 
-    rebuild_model_joint_frames(animation_runtime, pose, frames)?;
+    // Each arm solve incrementally refreshed its affected branch, so the shared frame table is
+    // already coherent here; a final full-skeleton FK pass would duplicate work every render frame.
     if crate::env_config::var_os("NORTHSTAR_DEBUG_WEAPON_CONTACT_FRAMES").is_some() {
         static CONTACT_FRAME_SAMPLES: std::sync::atomic::AtomicUsize =
             std::sync::atomic::AtomicUsize::new(0);

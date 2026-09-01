@@ -12,6 +12,7 @@ mod service;
 mod streaming;
 mod textures;
 mod transport;
+mod types;
 
 /// Thin client over the engine AssetManager service.
 ///

@@ -263,6 +263,8 @@ impl AuthoredWeaponComponentGraphDefinition {
 pub struct AuthoredWeaponDefinition {
     #[serde(rename = "type", alias = "weapon_type")]
     pub weapon_type: String,
+    /// Open-ended authored presentation family. This is intentionally not a gameplay enum.
+    pub class: String,
     pub rank: Option<u16>,
     pub ammo: String,
     pub fire_mode: String,
@@ -295,6 +297,8 @@ pub struct AuthoredWeaponDefinition {
     pub recoil_yaw_bias_degrees: f32,
     pub ads_recoil_multiplier: f32,
     pub recoil_recovery_hz: f32,
+    pub recoil_pitch_tracker_speed_scale: f32,
+    pub recoil_yaw_tracker_speed_scale: f32,
     pub muzzle_forward_offset: f32,
     pub ricochet_enabled: bool,
     pub ricochet_max_bounces: u8,
@@ -311,6 +315,7 @@ impl Default for AuthoredWeaponDefinition {
         let melee = MeleeWeaponTuning::default();
         Self {
             weapon_type: "firearm".to_owned(),
+            class: String::new(),
             rank: None,
             ammo: String::new(),
             fire_mode: "semi_auto".to_owned(),
@@ -343,6 +348,8 @@ impl Default for AuthoredWeaponDefinition {
             recoil_yaw_bias_degrees: tuning.recoil_yaw_bias_radians.to_degrees(),
             ads_recoil_multiplier: tuning.ads_recoil_multiplier,
             recoil_recovery_hz: tuning.recoil_recovery_hz,
+            recoil_pitch_tracker_speed_scale: tuning.recoil_pitch_tracker_speed_scale,
+            recoil_yaw_tracker_speed_scale: tuning.recoil_yaw_tracker_speed_scale,
             muzzle_forward_offset: tuning.muzzle_forward_offset,
             ricochet_enabled: tuning.ricochet_enabled,
             ricochet_max_bounces: tuning.ricochet_max_bounces,
@@ -462,6 +469,8 @@ impl AuthoredWeaponDefinition {
             recoil_yaw_bias_radians: self.recoil_yaw_bias_degrees.to_radians(),
             ads_recoil_multiplier: self.ads_recoil_multiplier,
             recoil_recovery_hz: self.recoil_recovery_hz,
+            recoil_pitch_tracker_speed_scale: self.recoil_pitch_tracker_speed_scale,
+            recoil_yaw_tracker_speed_scale: self.recoil_yaw_tracker_speed_scale,
             muzzle_forward_offset: self.muzzle_forward_offset,
             ricochet_enabled: self.ricochet_enabled,
             ricochet_max_bounces: self.ricochet_max_bounces,
@@ -644,6 +653,8 @@ pub struct AuthoredWeaponCasingDefinition {
     pub friction: f32,
     pub restitution: f32,
     pub density: f32,
+    pub linear_damping: f32,
+    pub angular_damping: f32,
     pub contact_min_impulse: f32,
     pub contact_medium_impulse: f32,
     pub contact_hard_impulse: f32,
@@ -671,6 +682,8 @@ impl Default for AuthoredWeaponCasingDefinition {
             friction: runtime.friction,
             restitution: runtime.restitution,
             density: runtime.density,
+            linear_damping: runtime.linear_damping,
+            angular_damping: runtime.angular_damping,
             contact_min_impulse: runtime.contact_min_impulse,
             contact_medium_impulse: runtime.contact_medium_impulse,
             contact_hard_impulse: runtime.contact_hard_impulse,
@@ -702,6 +715,8 @@ impl AuthoredWeaponCasingDefinition {
             friction: self.friction,
             restitution: self.restitution,
             density: self.density,
+            linear_damping: self.linear_damping,
+            angular_damping: self.angular_damping,
             contact_min_impulse: self.contact_min_impulse,
             contact_medium_impulse: self.contact_medium_impulse,
             contact_hard_impulse: self.contact_hard_impulse,
@@ -717,6 +732,7 @@ pub struct AuthoredWeaponVfxDefinition {
     pub shot: String,
     pub tracer: String,
     pub ricochet: String,
+    pub exit: String,
     pub impact_default: String,
     pub impact_by_surface: std::collections::BTreeMap<String, String>,
 }
@@ -727,6 +743,7 @@ impl AuthoredWeaponVfxDefinition {
             shot: (!self.shot.trim().is_empty()).then(|| self.shot.trim().to_owned()),
             tracer: (!self.tracer.trim().is_empty()).then(|| self.tracer.trim().to_owned()),
             ricochet: (!self.ricochet.trim().is_empty()).then(|| self.ricochet.trim().to_owned()),
+            exit: (!self.exit.trim().is_empty()).then(|| self.exit.trim().to_owned()),
             impact_default: (!self.impact_default.trim().is_empty())
                 .then(|| self.impact_default.trim().to_owned()),
             impact_by_surface: self.impact_by_surface.clone(),

@@ -81,33 +81,32 @@ fn load_profile_asset(
     assets: &newengine_assets::AssetServiceClient,
     logical_path: &str,
 ) -> Result<GameReadyMapProfile, String> {
-    if !logical_path
-        .to_ascii_lowercase()
-        .split('@')
-        .next()
-        .unwrap_or(logical_path)
-        .ends_with(&format!(
-            ".{}",
-            newengine_asset_format_nef8::ymap::EXTENSION
-        ))
-    {
-        return Err(format!(
-            "non-canonical authored map rejected path='{logical_path}' expected='.{}' policy='authored maps are NEF8/ListFile, not runtime plain JSON'", newengine_asset_format_nef8::ymap::EXTENSION
-        ));
-    }
+    let (map_reference, descriptor) = assets
+        .require_semantic_asset_reference_v1(
+            logical_path,
+            newengine_assets_api::ENGINE_ASSETS_MAPS_SERVICE_ID,
+            false,
+        )
+        .map_err(|error| {
+            format!(
+                "non-canonical authored map rejected path='{logical_path}' policy='authored maps must resolve through the registered engine.assets.maps format': {error}"
+            )
+        })?;
 
     newengine_ulog_api::ulog::info!(
-        "game-ready ymap read: canonical accepted path='{}' extension='{}'",
-        logical_path,
-        newengine_asset_format_nef8::ymap::EXTENSION,
+        "game-ready map read: canonical accepted path='{}' module='{}' kind='{}'",
+        map_reference.logical_path,
+        descriptor.module_id,
+        descriptor.asset_kind,
     );
 
     let output_kind = ASSET_LIST_FILE_BODY_OUTPUT;
     let request = AssetDecodeRequest {
-        logical_path: logical_path.to_owned(),
+        logical_path: map_reference.logical_path.clone(),
         output_kind: output_kind.to_owned(),
         selector: serde_json::Value::Null,
-    };
+            format_descriptor: None,
+};
     newengine_ulog_api::ulog::info!(
         "game-ready ymap read: decode start path='{}' output='{}' selector=null",
         logical_path,

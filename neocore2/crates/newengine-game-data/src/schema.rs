@@ -6,9 +6,16 @@ pub struct GameData {
     pub schema: String,
     pub version: u32,
     pub runtime: RuntimeData,
+    pub audio: AudioProjectData,
     pub world: WorldData,
     pub player: PlayerData,
     pub gameplay: GameplayData,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AudioProjectData {
+    pub mix_graph: newengine_audio_api::AudioMixGraph,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]

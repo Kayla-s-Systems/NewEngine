@@ -168,6 +168,23 @@ pub enum FxdBillboardModeV1 {
     VelocityAligned,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FxdTracerModeV1 {
+    #[default]
+    Swept,
+    SingleFrame,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FxdEmissionAxisV1 {
+    #[default]
+    Normal,
+    Direction,
+    Reflection,
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct FxdLightV1 {
@@ -205,6 +222,9 @@ pub enum FxdLayerV1 {
         fade_in_fraction: f32,
         #[serde(default)]
         drag_per_second: f32,
+        /// World-space fade width against opaque scene depth. Zero disables soft intersection.
+        #[serde(default)]
+        depth_softness_m: f32,
         #[serde(default)]
         rotation_radians: f32,
         #[serde(default)]
@@ -217,6 +237,8 @@ pub enum FxdLayerV1 {
     Tracer {
         primitive: String,
         color: [f32; 4],
+        #[serde(default)]
+        mode: FxdTracerModeV1,
         half_length: f32,
         radius: f32,
         speed: f32,
@@ -231,6 +253,8 @@ pub enum FxdLayerV1 {
         texture: String,
         #[serde(default)]
         billboard: FxdBillboardModeV1,
+        #[serde(default)]
+        emission_axis: FxdEmissionAxisV1,
         count: u16,
         scale: [f32; 3],
         color: [f32; 4],
@@ -246,6 +270,9 @@ pub enum FxdLayerV1 {
         acceleration: [f32; 3],
         #[serde(default)]
         drag_per_second: f32,
+        /// World-space fade width against opaque scene depth. Zero disables soft intersection.
+        #[serde(default)]
+        depth_softness_m: f32,
         #[serde(default)]
         rotation_random_radians: f32,
         #[serde(default)]
@@ -260,10 +287,19 @@ pub enum FxdLayerV1 {
     },
     Decal {
         primitive: String,
+        /// Optional canonical `.nemat@entry` material used by the standard decal pipeline.
+        #[serde(default)]
+        material: String,
         scale: [f32; 3],
         color: [f32; 4],
         #[serde(default)]
         normal_offset: f32,
+        /// Persistent decals are world marks: they have no age-based TTL/fade and are detached
+        /// from the transient VFX instance after spawn. They live until explicit world/map cleanup.
+        #[serde(default)]
+        persistent: bool,
+        /// Required only for transient decals. Ignored when `persistent=true`.
+        #[serde(default)]
         lifetime_seconds: f32,
         #[serde(default)]
         fade_start_fraction: f32,
@@ -303,6 +339,7 @@ impl FxdLayerV1 {
                 fade_start_fraction,
                 fade_in_fraction,
                 drag_per_second,
+                depth_softness_m,
                 rotation_radians,
                 rotation_random_radians,
                 spin_radians_per_second,
@@ -318,6 +355,7 @@ impl FxdLayerV1 {
                     *fade_start_fraction,
                     *fade_in_fraction,
                     *drag_per_second,
+                    *depth_softness_m,
                     *rotation_radians,
                     *rotation_random_radians,
                     *spin_radians_per_second,
@@ -326,6 +364,7 @@ impl FxdLayerV1 {
                     || !finite(color)
                     || *lifetime_seconds <= 0.0
                     || *drag_per_second < 0.0
+                    || *depth_softness_m < 0.0
                     || *rotation_random_radians < 0.0
                     || !(0.0..=1.0).contains(fade_in_fraction)
                 {
@@ -349,6 +388,7 @@ impl FxdLayerV1 {
                 radius,
                 speed,
                 max_lifetime_seconds,
+                ..
             } => {
                 validate_primitive(primitive)?;
                 if !finite(color)
@@ -374,6 +414,7 @@ impl FxdLayerV1 {
                 lifetime_variance,
                 acceleration,
                 drag_per_second,
+                depth_softness_m,
                 rotation_random_radians,
                 spin_radians_per_second,
                 spin_variance,
@@ -395,6 +436,7 @@ impl FxdLayerV1 {
                         *size_variance,
                         *lifetime_variance,
                         *drag_per_second,
+                        *depth_softness_m,
                         *rotation_random_radians,
                         *spin_radians_per_second,
                         *spin_variance,
@@ -408,6 +450,7 @@ impl FxdLayerV1 {
                     || !(0.0..=1.0).contains(size_variance)
                     || !(0.0..=1.0).contains(lifetime_variance)
                     || *drag_per_second < 0.0
+                    || *depth_softness_m < 0.0
                     || *rotation_random_radians < 0.0
                     || *spin_variance < 0.0
                     || !(0.0..=1.0).contains(fade_in_fraction)
@@ -418,17 +461,28 @@ impl FxdLayerV1 {
             }
             Self::Decal {
                 primitive,
+                material,
                 scale,
                 color,
                 normal_offset,
+                persistent,
                 lifetime_seconds,
                 fade_start_fraction,
             } => {
                 validate_primitive(primitive)?;
+                let material = material.trim().replace('\\', "/");
+                if !material.is_empty()
+                    && (!material.to_ascii_lowercase().contains(".nemat@")
+                        || material.ends_with('@'))
+                {
+                    return Err(format!(
+                        "decal material must use canonical .nemat@entry syntax: '{material}'"
+                    ));
+                }
                 if !finite(scale)
                     || !finite(color)
                     || !finite(&[*normal_offset, *lifetime_seconds, *fade_start_fraction])
-                    || *lifetime_seconds <= 0.0
+                    || (!*persistent && *lifetime_seconds <= 0.0)
                 {
                     return Err("decal contains invalid numeric data".to_owned());
                 }
@@ -462,6 +516,7 @@ mod tests {
                     role: FxdRenderRoleV1::Transparent,
                     texture: "missing".to_owned(),
                     billboard: FxdBillboardModeV1::VelocityAligned,
+                    emission_axis: FxdEmissionAxisV1::Reflection,
                     count: 4,
                     scale: [0.01, 0.01, 0.05],
                     color: [1.0; 4],
@@ -472,6 +527,7 @@ mod tests {
                     lifetime_variance: 0.20,
                     acceleration: [0.0, -9.81, 0.0],
                     drag_per_second: 0.1,
+                    depth_softness_m: 0.0,
                     rotation_random_radians: 3.14159,
                     spin_radians_per_second: 2.0,
                     spin_variance: 1.0,

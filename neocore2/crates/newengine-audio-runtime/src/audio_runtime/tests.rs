@@ -856,6 +856,17 @@ mod tests {
     }
 
     #[test]
+    fn provider_rejects_play_on_route_not_installed_by_project_mix_graph() {
+        let mut state = voice_policy_test_state();
+        let mut request = AudioPlayRequest::new("shared/audio/does-not-need-to-exist.wav");
+        request.route = AudioRouteId::new("project.missing.route");
+        let ack = state.play_clip(request).expect("route rejection is semantic");
+        assert!(!ack.accepted);
+        assert!(ack.message.contains("not installed by project AudioMixGraph"));
+        assert!(state.voices.is_empty());
+    }
+
+    #[test]
     fn provider_route_gain_is_opaque_and_does_not_invent_master_hierarchy() {
         let mut state = voice_policy_test_state();
         let parent = AudioRouteId::new("project.mix.output");

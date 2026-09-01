@@ -85,6 +85,9 @@ const fn usage_bit(usage: RenderGraphResourceUsage) -> u16 {
     match usage {
         RenderGraphResourceUsage::ColorAttachment => ResourceUsageClass::COLOR_ATTACHMENT,
         RenderGraphResourceUsage::DepthAttachment => ResourceUsageClass::DEPTH_ATTACHMENT,
+        RenderGraphResourceUsage::DepthAttachmentSampled => {
+            ResourceUsageClass::DEPTH_ATTACHMENT | ResourceUsageClass::SAMPLED_TEXTURE
+        }
         RenderGraphResourceUsage::SampledTexture => ResourceUsageClass::SAMPLED_TEXTURE,
         RenderGraphResourceUsage::StorageTexture => ResourceUsageClass::STORAGE_TEXTURE,
         RenderGraphResourceUsage::VertexBuffer => ResourceUsageClass::VERTEX_BUFFER,

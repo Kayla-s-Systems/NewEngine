@@ -254,12 +254,8 @@ fn part_is_first_person_near_body_semantic(part: &PlayerRuntimeModelPart) -> boo
 fn runtime_part_visibility_policy(
     part: &PlayerRuntimeModelPart,
     skeleton: Option<&newengine_model_skeleton_api::ModelSkeletonMetadata>,
-    hide_local_model_in_first_person: bool,
 ) -> newengine_engine_runtime::gameplay::PlayerViewVisibilityPolicy {
     const HEAD_OWNERSHIP_HIDE_RATIO: f32 = 0.45;
-    if hide_local_model_in_first_person {
-        return newengine_engine_runtime::gameplay::PlayerViewVisibilityPolicy::HideInFirstPerson;
-    }
     const HEAD_PARENT_OWNERSHIP_HIDE_RATIO: f32 = 0.72;
     if part_is_first_person_near_body_semantic(part) {
         return newengine_engine_runtime::gameplay::PlayerViewVisibilityPolicy::HideInFirstPerson;
@@ -370,13 +366,6 @@ fn bind_player_model_assignment(
             assignment.source,
         ));
     }
-    let hide_local_model_in_first_person = assignment.hide_in_first_person
-        || world
-            .get::<newengine_engine_runtime::gameplay::PlayerCameraProfile>(player)
-            .copied()
-            .unwrap_or_default()
-            .sanitized()
-            .hide_local_model_in_first_person;
 
     let prepared_sidecar = super::sidecar::prepare_player_skin_sidecar(
         prims,
@@ -403,7 +392,7 @@ fn bind_player_model_assignment(
         }
     };
     if let Some(hair) = prepared_hair.as_mut() {
-        hair.hide_in_first_person |= hide_local_model_in_first_person;
+        hair.hide_in_first_person = true;
     }
 
     clear_player_runtime_model_visuals(world, player);
@@ -439,9 +428,9 @@ fn bind_player_model_assignment(
     );
     let _ = set_parent(world, visual_root, Some(player));
 
-    // Character remains one world-space skinned entity. First-person owner visibility is project-authored:
-    // hide-all removes the local world model from the color pass; otherwise the semantic near-camera
-    // mask remains available for full-body projects. Hair source meshes stay live until replacement binds.
+    // Character remains one world-space skinned entity in every gameplay camera mode. First person
+    // keeps torso, arms, hands, legs and equipment visible; only camera-near head/face/neck shells
+    // are suppressed or replaced by sealed FPP topology. Hair source meshes stay live until replacement binds.
     let first_person_active = world
         .resource::<newengine_engine_runtime::gameplay::PlayerViewState>()
         .copied()
@@ -449,11 +438,7 @@ fn bind_player_model_assignment(
         .first_person_active;
     let mut hair_source_entities = Vec::new();
     for (part_index, part) in parts.iter().enumerate() {
-        let visibility_policy = runtime_part_visibility_policy(
-            part,
-            skeleton.as_ref(),
-            hide_local_model_in_first_person,
-        );
+        let visibility_policy = runtime_part_visibility_policy(part, skeleton.as_ref());
         let entity = spawn_named(
             world,
             format!("{visual_root_name}/Part{part_index}:{}", part.material_slot),
@@ -565,7 +550,7 @@ fn bind_player_model_assignment(
             &visual_root_name,
             parts.len(),
             first_person_active,
-            hide_local_model_in_first_person,
+            false,
             prepared_sidecar,
         )?
     } else {
@@ -840,16 +825,12 @@ mod grounding_tests {
             skin: None,
         };
         assert_eq!(
-            runtime_part_visibility_policy(&face, None, false),
+            runtime_part_visibility_policy(&face, None),
             newengine_engine_runtime::gameplay::PlayerViewVisibilityPolicy::HideInFirstPerson
         );
         assert_eq!(
-            runtime_part_visibility_policy(&body, None, false),
+            runtime_part_visibility_policy(&body, None),
             newengine_engine_runtime::gameplay::PlayerViewVisibilityPolicy::AlwaysVisible
-        );
-        assert_eq!(
-            runtime_part_visibility_policy(&body, None, true),
-            newengine_engine_runtime::gameplay::PlayerViewVisibilityPolicy::HideInFirstPerson
         );
     }
 

@@ -162,6 +162,78 @@ fn game_profile_resolves_m_to_playable_character_selector() {
     }));
 }
 
+struct GamepadButtonSample {
+    button: &'static str,
+    pressed: bool,
+    released: bool,
+}
+
+impl newengine_input_actions_api::InputFrameSource for GamepadButtonSample {
+    fn is_key_down(&self, _key: u32) -> bool {
+        false
+    }
+    fn is_key_pressed(&self, _key: u32) -> bool {
+        false
+    }
+    fn is_key_released(&self, _key: u32) -> bool {
+        false
+    }
+    fn is_mouse_down(&self, _button: u32) -> bool {
+        false
+    }
+    fn is_mouse_pressed(&self, _button: u32) -> bool {
+        false
+    }
+    fn is_mouse_released(&self, _button: u32) -> bool {
+        false
+    }
+    fn has_gamepad_connected(&self) -> bool {
+        true
+    }
+    fn is_gamepad_button_down(&self, button: &str) -> bool {
+        button == self.button && self.pressed && !self.released
+    }
+    fn is_gamepad_button_pressed(&self, button: &str) -> bool {
+        button == self.button && self.pressed
+    }
+    fn is_gamepad_button_released(&self, button: &str) -> bool {
+        button == self.button && self.released
+    }
+}
+
+#[test]
+fn game_profile_reserves_shoulders_for_inventory_and_character_menu() {
+    let profile = game_ready_game_input_profile();
+    let inventory = profile.resolve(&GamepadButtonSample {
+        button: newengine_input_api::gamepad_button::LEFT_TRIGGER,
+        pressed: true,
+        released: false,
+    });
+    assert!(inventory.contains_action(action::INVENTORY_TOGGLE));
+    assert!(inventory
+        .command_actions()
+        .is_pressed(action::INVENTORY_TOGGLE));
+
+    let character_press = profile.resolve(&GamepadButtonSample {
+        button: newengine_input_api::gamepad_button::RIGHT_TRIGGER,
+        pressed: true,
+        released: false,
+    });
+    assert!(character_press.contains_action(action::CHARACTER_SELECT_TOGGLE));
+    assert!(character_press
+        .command_actions()
+        .is_pressed(action::CHARACTER_SELECT_TOGGLE));
+
+    let character_release = profile.resolve(&GamepadButtonSample {
+        button: newengine_input_api::gamepad_button::RIGHT_TRIGGER,
+        pressed: false,
+        released: true,
+    });
+    assert!(character_release
+        .command_actions()
+        .is_released(action::CHARACTER_SELECT_TOGGLE));
+}
+
 #[test]
 fn game_profile_resolves_f7_to_noclip_toggle_and_keeps_vertical_flight_axes() {
     let profile = game_ready_game_input_profile();

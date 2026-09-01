@@ -19,6 +19,8 @@ mod env_config;
 mod equipment_visual;
 #[path = "game_ready_parts/foliage.rs"]
 mod foliage;
+#[path = "game_ready_parts/impact_debris.rs"]
+mod impact_debris;
 #[path = "game_ready_parts/material_source.rs"]
 mod material_source;
 #[path = "game_ready_parts/materials_terrain.rs"]
@@ -37,6 +39,8 @@ mod sky;
 mod terrain_heightmap;
 #[path = "game_ready_parts/terrain_streaming.rs"]
 mod terrain_streaming;
+#[path = "game_ready_parts/vfx_decal_materials.rs"]
+mod vfx_decal_materials;
 #[path = "game_ready_parts/weapon_animation.rs"]
 mod weapon_animation;
 #[path = "game_ready_parts/weapon_casing.rs"]
@@ -164,6 +168,76 @@ pub fn tick_prelaunch(
     tick_runtime_world_item_visuals(world, primitives, materials);
 }
 
+#[derive(Clone, Copy, Debug, Default)]
+struct GameReadyFrameTiming {
+    model_assign_ms: f32,
+    model_ground_ms: f32,
+    weapon_input_ms: f32,
+    anim_semantic_ms: f32,
+    fpp_anchor_ms: f32,
+    skin_animation_ms: f32,
+    skin_sidecars_ms: f32,
+    weapon_visual_ms: f32,
+    weapon_casing_ms: f32,
+    impact_debris_ms: f32,
+    weapon_animation_ms: f32,
+    map_streaming_ms: f32,
+    static_world_ms: f32,
+    foliage_ms: f32,
+    item_pickups_ms: f32,
+    world_items_ms: f32,
+    terrain_streaming_ms: f32,
+    sky_ms: f32,
+    shadow_torture_ms: f32,
+}
+
+#[inline]
+fn should_emit_game_ready_frame_profile(frame_index: u64, total_ms: f32) -> bool {
+    total_ms >= 4.0 || frame_index.is_multiple_of(120)
+}
+
+#[inline]
+fn emit_game_ready_frame_profile(frame_index: u64, total_ms: f32, timing: GameReadyFrameTiming) {
+    let payload = serde_json::json!({
+        "schema": "newengine.diagnostics.profiler.sample.v1",
+        "category": "world.runtime",
+        "source": "newengine-game-ready-world",
+        "name": "game-ready world runtime frame",
+        "lane": "world-runtime",
+        "priority": "interactive",
+        "dependency_group": format!("world.runtime.frame.{frame_index}"),
+        "frame_index": frame_index,
+        "elapsed_ms": total_ms,
+        "budget_ms": 4.0,
+        "slow": total_ms >= 4.0,
+        "model_assign_ms": timing.model_assign_ms,
+        "model_ground_ms": timing.model_ground_ms,
+        "weapon_input_ms": timing.weapon_input_ms,
+        "anim_semantic_ms": timing.anim_semantic_ms,
+        "fpp_anchor_ms": timing.fpp_anchor_ms,
+        "skin_animation_ms": timing.skin_animation_ms,
+        "skin_sidecars_ms": timing.skin_sidecars_ms,
+        "weapon_visual_ms": timing.weapon_visual_ms,
+        "weapon_casing_ms": timing.weapon_casing_ms,
+        "impact_debris_ms": timing.impact_debris_ms,
+        "weapon_animation_ms": timing.weapon_animation_ms,
+        "map_streaming_ms": timing.map_streaming_ms,
+        "static_world_ms": timing.static_world_ms,
+        "foliage_ms": timing.foliage_ms,
+        "item_pickups_ms": timing.item_pickups_ms,
+        "world_items_ms": timing.world_items_ms,
+        "terrain_streaming_ms": timing.terrain_streaming_ms,
+        "sky_ms": timing.sky_ms,
+        "shadow_torture_ms": timing.shadow_torture_ms,
+    });
+    if let Ok(bytes) = serde_json::to_vec(&payload) {
+        let _ = newengine_plugin_host::emit_plugin_event(
+            "newengine.diagnostics.profiler.sample.v1",
+            &bytes,
+        );
+    }
+}
+
 /// Progress normal GameReady world streaming/environment work.
 pub fn tick_frame(
     world: &mut newengine_ecs::World,
@@ -172,76 +246,85 @@ pub fn tick_frame(
     thread_pool: Option<&ThreadPoolHandle>,
     frame: newengine_engine_runtime::WorldRuntimeFrame,
 ) {
-    let trace_profile = frame.frame_index.is_multiple_of(15);
     let frame_started = std::time::Instant::now();
-    let mut last_mark = frame_started;
-    let mut profile_parts = Vec::<(&'static str, f64)>::with_capacity(18);
-    macro_rules! profile_mark {
-        ($label:literal) => {
-            if trace_profile {
-                let now = std::time::Instant::now();
-                profile_parts.push(($label, now.duration_since(last_mark).as_secs_f64() * 1000.0));
-                last_mark = now;
-            }
-        };
+    let mut phase_started = frame_started;
+    let mut timing = GameReadyFrameTiming::default();
+
+    macro_rules! phase_done {
+        ($field:ident) => {{
+            let now = std::time::Instant::now();
+            timing.$field = now.duration_since(phase_started).as_secs_f32() * 1000.0;
+            phase_started = now;
+        }};
     }
 
     player_model::tick_player_model_assignments(world, primitives, materials);
-    profile_mark!("model_assign");
+    phase_done!(model_assign_ms);
     player_model::tick_player_model_grounding(world);
-    profile_mark!("model_ground");
+    phase_done!(model_ground_ms);
     equipment_visual::tick_equipped_weapon_presentation_input(world, frame.dt);
-    profile_mark!("weapon_input");
+    phase_done!(weapon_input_ms);
     animation_semantic::capture_animation_semantic_frame(world);
-    profile_mark!("anim_semantic");
+    phase_done!(anim_semantic_ms);
     // The stable FPP eye anchor is actor/stance-owned and independent from animated head joints.
     // Publish it before arm/weapon animation so camera and FPP grip solve consume one frame authority.
     player_model::publish_player_first_person_camera_anchors(world);
-    profile_mark!("fpp_anchor");
-    player_model::tick_player_skin_animation(world, frame.dt);
-    profile_mark!("skin_animation");
+    phase_done!(fpp_anchor_ms);
+    player_model::tick_player_skin_animation(world, frame.dt, frame.frame_index);
+    phase_done!(skin_animation_ms);
     player_model::tick_player_skin_sidecars(world);
-    profile_mark!("skin_sidecars");
+    phase_done!(skin_sidecars_ms);
     equipment_visual::tick_equipped_weapon_visuals(world, primitives, materials, frame.dt);
-    profile_mark!("weapon_visual");
+    phase_done!(weapon_visual_ms);
     weapon_casing::tick_weapon_shell_casing_visuals(world, primitives, materials);
-    profile_mark!("weapon_casing");
+    phase_done!(weapon_casing_ms);
+    impact_debris::tick_persistent_impact_debris_visuals(world, primitives, materials);
+    phase_done!(impact_debris_ms);
     weapon_animation::tick_equipped_weapon_animations(world, frame.dt);
-    profile_mark!("weapon_animation");
+    phase_done!(weapon_animation_ms);
+    vfx_decal_materials::tick_vfx_decal_material_bindings(world, materials);
     if frame.runtime_active && frame.streaming_enabled {
         tick_authored_map_streaming(world, primitives, materials, thread_pool);
     }
-    profile_mark!("map_streaming");
+    phase_done!(map_streaming_ms);
     tick_game_ready_static_world_prefabs(world, primitives, materials, thread_pool);
-    profile_mark!("static_world");
+    phase_done!(static_world_ms);
     tick_deferred_foliage_prefabs(world, primitives, materials);
-    profile_mark!("foliage");
+    phase_done!(foliage_ms);
     tick_deferred_item_pickups(world, primitives, materials);
-    profile_mark!("item_pickups");
+    phase_done!(item_pickups_ms);
     tick_runtime_world_item_visuals(world, primitives, materials);
-    profile_mark!("world_items");
+    phase_done!(world_items_ms);
     if frame.runtime_active && frame.streaming_enabled {
         tick_game_ready_streaming_terrain(world, materials, thread_pool);
     }
-    profile_mark!("terrain_streaming");
+    phase_done!(terrain_streaming_ms);
     if frame.environment_cycle_enabled {
         tick_game_ready_sky_cycle(world, frame.dt);
     }
-    profile_mark!("sky");
+    phase_done!(sky_ms);
     shadow_torture::tick(world, frame.dt);
-    profile_mark!("shadow_torture");
+    timing.shadow_torture_ms = phase_started.elapsed().as_secs_f32() * 1000.0;
 
-    if trace_profile {
-        let breakdown = profile_parts
-            .iter()
-            .map(|(name, ms)| format!("{name}={ms:.2}ms"))
-            .collect::<Vec<_>>()
-            .join(" ");
-        newengine_ulog_api::ulog::info!(
-            "game-ready frame profile: frame={} total_ms={:.2} {}",
-            frame.frame_index,
-            frame_started.elapsed().as_secs_f64() * 1000.0,
-            breakdown,
-        );
+    let total_ms = frame_started.elapsed().as_secs_f32() * 1000.0;
+    if should_emit_game_ready_frame_profile(frame.frame_index, total_ms) {
+        emit_game_ready_frame_profile(frame.frame_index, total_ms, timing);
+    }
+}
+
+#[cfg(test)]
+mod game_ready_frame_profile_policy_tests {
+    use super::should_emit_game_ready_frame_profile;
+
+    #[test]
+    fn slow_world_runtime_frame_is_always_profiled() {
+        assert!(should_emit_game_ready_frame_profile(7, 4.0));
+        assert!(should_emit_game_ready_frame_profile(7, 38.7));
+    }
+
+    #[test]
+    fn fast_world_runtime_frame_is_sampled_only_periodically() {
+        assert!(!should_emit_game_ready_frame_profile(119, 3.99));
+        assert!(should_emit_game_ready_frame_profile(120, 0.25));
     }
 }

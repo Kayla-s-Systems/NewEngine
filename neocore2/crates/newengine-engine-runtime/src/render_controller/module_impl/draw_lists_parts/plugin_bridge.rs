@@ -134,6 +134,7 @@ pub(super) fn build_draw_list_provider_request(
             shadow_casters: ctx.visibility().shadow_casters,
             local_shadow_casters: ctx.visibility().local_shadow_casters,
             opaque_forward: ctx.visibility().opaque_forward,
+            particle_gbuffer: ctx.visibility().particle_gbuffer,
             transparent: ctx.visibility().transparent,
             debug: ctx.visibility().debug,
         },

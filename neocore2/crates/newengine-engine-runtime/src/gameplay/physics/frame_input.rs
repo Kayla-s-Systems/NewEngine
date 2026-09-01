@@ -243,6 +243,8 @@ fn collect_body_snapshots(world: &World) -> Vec<PhysicsFrameBodySnapshot> {
             rotation: quat_to_arr(physics_rotation),
             linear_velocity: vec3_to_arr(velocity.0),
             angular_velocity: vec3_to_arr(angular_velocity.0),
+            linear_damping: body.linear_damping,
+            angular_damping: body.angular_damping,
             bounds_min: vec3_to_arr(bounds.min),
             bounds_max: vec3_to_arr(bounds.max),
         });

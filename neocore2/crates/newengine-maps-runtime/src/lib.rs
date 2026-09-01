@@ -126,7 +126,8 @@ fn decode_map_body(state: &MapsRuntimeState, source: &str) -> Result<Vec<u8>, St
             logical_path: source.to_owned(),
             output_kind: ASSET_LIST_FILE_BODY_OUTPUT.to_owned(),
             selector: serde_json::Value::Null,
-        })
+                    format_descriptor: None,
+})
         .map_err(|error| {
             format!(
                 "engine.assets.maps: asset.decode_v1 failed source='{source}' output='{ASSET_LIST_FILE_BODY_OUTPUT}' err='{error}'"

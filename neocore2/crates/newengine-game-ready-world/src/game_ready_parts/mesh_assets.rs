@@ -228,7 +228,8 @@ pub(super) fn load_ydd_mesh_asset(logical_path: &str) -> Result<PrimitiveMesh, S
         selector: selector
             .map(|selector| serde_json::json!({ "selector": selector }))
             .unwrap_or(serde_json::Value::Null),
-    };
+            format_descriptor: None,
+};
     let body = assets.decode_v1(&request).map_err(|e| {
         format!(
             "asset.decode_v1 failed path='{dictionary_path}' output='{ASSET_LIST_FILE_BODY_OUTPUT}' err='{e}'"

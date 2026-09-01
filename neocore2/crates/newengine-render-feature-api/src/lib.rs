@@ -68,6 +68,7 @@ pub struct RuntimeVisibilityPlan {
     pub shadow_casters: bool,
     pub local_shadow_casters: bool,
     pub opaque_forward: bool,
+    pub particle_gbuffer: bool,
     pub transparent: bool,
     pub debug: bool,
 }
@@ -79,6 +80,7 @@ impl RuntimeVisibilityPlan {
             shadow_casters,
             local_shadow_casters,
             opaque_forward: true,
+            particle_gbuffer: true,
             transparent: true,
             debug,
         }
@@ -90,6 +92,7 @@ impl RuntimeVisibilityPlan {
             RenderDrawListKind::ShadowCasters => self.shadow_casters,
             RenderDrawListKind::LocalShadowCasters => self.local_shadow_casters,
             RenderDrawListKind::OpaqueForward => self.opaque_forward,
+            RenderDrawListKind::ParticleGBuffer => self.particle_gbuffer,
             RenderDrawListKind::Transparent => self.transparent,
             RenderDrawListKind::Debug => self.debug,
         }

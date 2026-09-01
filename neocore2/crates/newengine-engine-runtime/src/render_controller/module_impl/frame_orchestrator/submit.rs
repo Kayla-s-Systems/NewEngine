@@ -488,6 +488,84 @@ impl RenderFrameOrchestrator {
             Err(e) => {
                 let message = e.to_string();
                 controller.disable_viewport_pass("render_graph.submit_frame", &message);
+                let pass_detail = frame_plan
+                    .graph
+                    .passes
+                    .iter()
+                    .map(|pass| {
+                        format!(
+                            "id={} label='{}' kind={:?} domain={:?} queue={:?} reads={:?} writes={:?} creates={:?} draw_lists={:?}",
+                            pass.id.0,
+                            pass.label,
+                            pass.kind,
+                            pass.domain,
+                            pass.queue,
+                            pass.reads,
+                            pass.writes,
+                            pass.creates,
+                            pass.draw_lists,
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join(" | ");
+                let resource_detail = frame_plan
+                    .graph
+                    .resources
+                    .iter()
+                    .map(|resource| {
+                        format!(
+                            "id={} label={:?} semantic={:?} usage={:?} lifetime={:?} extent={:?} format={:?} samples={} external={:?}",
+                            resource.id.0,
+                            resource.label,
+                            resource.semantic,
+                            resource.usage,
+                            resource.lifetime,
+                            resource.extent,
+                            resource.format,
+                            resource.sample_count,
+                            resource.external,
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join(" | ");
+                let expected_draw_lists = draw_list_descs
+                    .iter()
+                    .map(|desc| {
+                        format!(
+                            "{}:draw={} indexed={} triangles={} instances={}",
+                            desc.kind.label(),
+                            desc.stats.draw_calls,
+                            desc.stats.indexed_draw_calls,
+                            desc.stats.triangle_count,
+                            desc.stats.instance_count,
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join(",");
+                newengine_ulog_api::ulog::error!(
+                    "CRITICAL render regression: viewport scene pass disabled frame={} viewport={}x{} surface={}x{} direct_surface={} viewport_rt={:?} shadow_rt={:?} local_shadow_rt={:?} graph_passes={} graph_resources={} expected_draw_lists='{}' fallback='degraded-ui-safe-present' reason='{}'",
+                    controller.frame.frame_index,
+                    scope.vp_w,
+                    scope.vp_h,
+                    scope.w,
+                    scope.h,
+                    scope.direct_surface_viewport,
+                    rt,
+                    shadow_rt_for_graph,
+                    local_shadow_plan.render_target(),
+                    frame_plan.graph.passes.len(),
+                    frame_plan.graph.resources.len(),
+                    expected_draw_lists,
+                    message,
+                );
+                newengine_ulog_api::ulog::error!(
+                    "CRITICAL render regression graph passes: {}",
+                    pass_detail
+                );
+                newengine_ulog_api::ulog::error!(
+                    "CRITICAL render regression graph resources: {}",
+                    resource_detail
+                );
                 newengine_ulog_api::ulog::error!(
                     "render controller: frame graph submit failed; viewport pass disabled and renderer continues in degraded UI/safe-present mode: {}",
                     message
@@ -510,6 +588,58 @@ impl RenderFrameOrchestrator {
                 return Ok(PlayableFrameOutcome::EndedEarly { ui_telemetry: None });
             }
         };
+
+        let expected_opaque_draws = draw_list_descs
+            .iter()
+            .find(|desc| desc.kind == newengine_core::render::RenderDrawListKind::OpaqueForward)
+            .map(|desc| {
+                desc.stats
+                    .draw_calls
+                    .saturating_add(desc.stats.indexed_draw_calls)
+            })
+            .unwrap_or(0);
+        if expected_opaque_draws > 0 {
+            let opaque_stats = submit_report.draw_list_stats.iter().find(|stats| {
+                stats.draw_list == newengine_core::render::RenderDrawListKind::OpaqueForward
+            });
+            let recorded_opaque_draws = opaque_stats
+                .map(|stats| stats.draw_calls.saturating_add(stats.indexed_draw_calls))
+                .unwrap_or(0);
+            if recorded_opaque_draws == 0 {
+                let skipped = opaque_stats
+                    .map(|stats| stats.skipped_commands)
+                    .unwrap_or(0);
+                let invalid = opaque_stats
+                    .map(|stats| stats.invalid_draw_calls)
+                    .unwrap_or(0);
+                newengine_ulog_api::ulog::error!(
+                    "CRITICAL render regression: scene-present invariant violated frame={} expected_opaque_draws={} recorded_opaque_draws=0 skipped_commands={} invalid_draw_calls={} executed_passes={} skipped_passes={} viewport={}x{} direct_surface={} viewport_rt={:?}",
+                    controller.frame.frame_index,
+                    expected_opaque_draws,
+                    skipped,
+                    invalid,
+                    submit_report.executed_passes,
+                    submit_report.skipped_passes,
+                    scope.vp_w,
+                    scope.vp_h,
+                    scope.direct_surface_viewport,
+                    rt,
+                );
+            }
+        }
+        if !frame_plan.graph.passes.is_empty() && submit_report.executed_passes == 0 {
+            newengine_ulog_api::ulog::error!(
+                "CRITICAL render regression: non-empty frame graph executed zero passes frame={} declared_passes={} declared_resources={} skipped_passes={} viewport={}x{} direct_surface={}",
+                controller.frame.frame_index,
+                frame_plan.graph.passes.len(),
+                frame_plan.graph.resources.len(),
+                submit_report.skipped_passes,
+                scope.vp_w,
+                scope.vp_h,
+                scope.direct_surface_viewport,
+            );
+        }
+
         cpu_profile.mark("submit");
         Self::publish_render_task_pass_event(
             controller.frame.frame_index,

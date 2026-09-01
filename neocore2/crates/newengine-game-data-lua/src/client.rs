@@ -39,6 +39,13 @@ mod tests {
         data.runtime.app_dir_name = "provider-test".to_owned();
         data.runtime.window_title = "Provider Test".to_owned();
         data.runtime.default_profile_asset = "maps/test.ymap".to_owned();
+        data.audio.mix_graph = serde_json::from_value(serde_json::json!({
+            "schema": "newengine.audio.orchestration.v1",
+            "version": 1,
+            "buses": [{"id": "test.output", "parent": null, "gain_db": 0.0}],
+            "snapshots": [],
+            "voice_budgets": []
+        })).unwrap();
         data.player.spawn = [0.0, 1.0, 0.0];
         data.player.look_sensitivity = 0.002;
         data.player.character_ref = "definitions/test/player.ytyp@player".to_owned();

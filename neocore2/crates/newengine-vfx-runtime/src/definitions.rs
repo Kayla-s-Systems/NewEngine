@@ -36,6 +36,14 @@ pub enum VfxAlignment {
     NormalY,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum VfxEmissionAxis {
+    #[default]
+    Normal,
+    Direction,
+    Reflection,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct VfxLightDefinition {
     pub color: [f32; 3],
@@ -61,6 +69,7 @@ pub enum VfxLayerDefinition {
         fade_start_fraction: f32,
         fade_in_fraction: f32,
         drag_per_second: f32,
+        depth_softness_m: f32,
         rotation_radians: f32,
         rotation_random_radians: f32,
         spin_radians_per_second: f32,
@@ -69,6 +78,7 @@ pub enum VfxLayerDefinition {
     Tracer {
         primitive: PrimitiveId,
         color: [f32; 4],
+        mode: VfxTracerMode,
         half_length: f32,
         radius: f32,
         speed: f32,
@@ -80,6 +90,7 @@ pub enum VfxLayerDefinition {
         role: VfxRenderRole,
         texture_slot: u8,
         billboard: VfxGpuBillboardMode,
+        emission_axis: VfxEmissionAxis,
         count: u16,
         scale: Vec3,
         color: [f32; 4],
@@ -90,6 +101,7 @@ pub enum VfxLayerDefinition {
         lifetime_variance: f32,
         acceleration: Vec3,
         drag_per_second: f32,
+        depth_softness_m: f32,
         rotation_random_radians: f32,
         spin_radians_per_second: f32,
         spin_variance: f32,
@@ -99,9 +111,11 @@ pub enum VfxLayerDefinition {
     },
     Decal {
         primitive: PrimitiveId,
+        material_ref: Option<String>,
         scale: Vec3,
         color: [f32; 4],
         normal_offset: f32,
+        persistent: bool,
         lifetime_seconds: f32,
         fade_start_fraction: f32,
     },
@@ -146,8 +160,13 @@ impl VfxLayerDefinition {
                 lifetime_seconds, ..
             }
             | Self::Decal {
-                lifetime_seconds, ..
+                lifetime_seconds,
+                persistent: false,
+                ..
             } => *lifetime_seconds,
+            Self::Decal {
+                persistent: true, ..
+            } => 0.0,
             Self::Tracer {
                 max_lifetime_seconds,
                 ..
@@ -175,6 +194,15 @@ impl VfxEffectDefinition {
             ));
         }
         if self.layers.iter().any(|layer| {
+            if matches!(
+                layer,
+                VfxLayerDefinition::Decal {
+                    persistent: true,
+                    ..
+                }
+            ) {
+                return false;
+            }
             !layer.max_lifetime_seconds().is_finite() || layer.max_lifetime_seconds() <= 0.0
         }) {
             return Err(format!(
@@ -337,6 +365,13 @@ impl VfxEffectLibrary {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum VfxTracerMode {
+    #[default]
+    Swept,
+    SingleFrame,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct VfxInstanceRoot {
     pub id: VfxInstanceId,
@@ -345,12 +380,30 @@ pub struct VfxInstanceRoot {
     pub remaining_seconds: f32,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct VfxDecalMaterialAssetRef {
+    pub logical_ref: String,
+}
+
+/// Marker for an authored world-persistent decal. Persistent decals are intentionally not owned by
+/// `VfxLayerRuntime`: transient instance teardown and age-based fades must never remove them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct VfxPersistentDecal {
+    pub source_instance_id: VfxInstanceId,
+    pub owner_stable_id: Option<u64>,
+    pub correlation_id: u64,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct VfxLayerRuntime {
     pub instance_id: VfxInstanceId,
     pub owner_stable_id: Option<u64>,
     pub correlation_id: u64,
     pub kind: VfxLayerKind,
+    pub tracer_mode: VfxTracerMode,
+    /// Single-frame tracers are admitted during pre-update, survive that same update for render,
+    /// then retire on the next update without any frame-rate-derived lifetime heuristic.
+    pub tracer_updates_remaining: u8,
     pub origin: Vec3,
     pub velocity: Vec3,
     pub acceleration: Vec3,

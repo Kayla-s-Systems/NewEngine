@@ -18,7 +18,8 @@ fn load_ytyp_semantic_body(
                 logical_path: source.to_owned(),
                 output_kind: ASSET_LIST_FILE_BODY_OUTPUT.to_owned(),
                 selector: serde_json::Value::Null,
-            };
+                            format_descriptor: None,
+};
             state
                 .client
                 .decode_v1(&request)
@@ -37,7 +38,8 @@ fn load_ytyp_semantic_body(
                 logical_path: source.to_owned(),
                 output_kind: ASSET_LIST_FILE_BODY_OUTPUT.to_owned(),
                 selector: serde_json::Value::Null,
-            };
+                            format_descriptor: None,
+};
             state
                 .client
                 .decode_v1(&request)

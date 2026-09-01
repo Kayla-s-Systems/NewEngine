@@ -50,10 +50,14 @@ pub mod nemat {
             None,
         );
     pub const PURPOSE: &str = "Material Library";
-    pub const SEMANTIC_GATEWAY: &str = "engine.materials";
+    pub const SEMANTIC_GATEWAY: &str = "engine.assets.materials";
     pub const HANDLER_SERVICE: &str = "asset.codec.listfile.nemat";
     pub const SELECTOR_SYNTAX: &str = "file.nemat@material_entry";
-    pub const CONSUMER_DOMAINS: &[&str] = &["engine.materials", "engine.model", "engine.render"];
+    pub const CONSUMER_DOMAINS: &[&str] = &[
+        "engine.assets.materials",
+        "engine.assets.models",
+        "engine.render",
+    ];
 }
 
 pub mod nepak {
@@ -148,10 +152,11 @@ pub mod ycd {
     pub const ASSET_KIND: &str = "clip_dictionary";
     pub const CONTENT_KIND: u32 = newengine_assets_api::LIST_FILE_CONTENT_KIND_YCD;
     pub const PURPOSE: &str = "Animation Clips / Clip Dictionary";
-    pub const SEMANTIC_GATEWAY: &str = "engine.assets.models.skeletons";
+    pub const SEMANTIC_GATEWAY: &str = "engine.animation";
     pub const HANDLER_SERVICE: &str = "asset.codec.listfile.ycd";
     pub const SELECTOR_SYNTAX: &str = "file.ycd@entry";
     pub const CONSUMER_DOMAINS: &[&str] = &[
+        "engine.animation",
         "engine.assets.models.skeletons",
         "engine.assets.models",
         "engine.scene",
@@ -168,10 +173,14 @@ pub mod ydd {
     /// is the current producer schema.
     pub const READABLE_CONTENT_SCHEMA_VERSIONS: &[u16] = &[2, 3, 4];
     pub const PURPOSE: &str = "Drawable/Model Dictionary";
-    pub const SEMANTIC_GATEWAY: &str = "engine.model";
+    pub const SEMANTIC_GATEWAY: &str = "engine.assets.models";
     pub const HANDLER_SERVICE: &str = "asset.codec.listfile.ydd";
     pub const SELECTOR_SYNTAX: &str = "file.ydd@drawable_entry";
-    pub const CONSUMER_DOMAINS: &[&str] = &["engine.model", "engine.materials", "engine.render"];
+    pub const CONSUMER_DOMAINS: &[&str] = &[
+        "engine.assets.models",
+        "engine.assets.materials",
+        "engine.render",
+    ];
 }
 
 pub mod ydr {
@@ -420,13 +429,13 @@ pub mod ytd {
             None,
         );
     pub const PURPOSE: &str = "Texture Dictionary";
-    pub const SEMANTIC_GATEWAY: &str = "engine.assets";
+    pub const SEMANTIC_GATEWAY: &str = "engine.assets.textures";
     pub const HANDLER_SERVICE: &str = "asset.codec.listfile.ytd";
     pub const SELECTOR_SYNTAX: &str = "file.ytd@entry";
     pub const CONSUMER_DOMAINS: &[&str] = &[
-        "engine.assets",
-        "engine.materials",
-        "engine.model",
+        "engine.assets.textures",
+        "engine.assets.materials",
+        "engine.assets.models",
         "engine.ui",
         "engine.render",
     ];
@@ -476,8 +485,8 @@ pub mod ytyp {
         "engine.assets.definitions",
         "engine.assets.graph",
         "engine.scene",
-        "engine.model",
-        "engine.materials",
+        "engine.assets.models",
+        "engine.assets.materials",
         "engine.physics",
         "engine.ai",
         "engine.editor",

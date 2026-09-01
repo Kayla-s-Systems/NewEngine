@@ -20,7 +20,8 @@ impl ModelAssetAdapter {
                 logical_path: source.to_owned(),
                 output_kind: newengine_assets_api::ASSET_LIST_FILE_BODY_OUTPUT.to_owned(),
                 selector: serde_json::Value::Null,
-            })
+                            format_descriptor: None,
+})
             .map_err(|e| {
                 format!(
                     "engine.assets decode_v1 failed path='{source}' output='{}' err='{e}'",
@@ -185,20 +186,28 @@ impl ModelAssetAdapter {
         target_height: f32,
         eye_height_ratio: f32,
     ) -> Result<ModelSkeletonMetadata, String> {
-        let path = source.split('@').next().unwrap_or(source);
-        if !path
-            .to_ascii_lowercase()
-            .ends_with(&format!(".{}", newengine_asset_format_nef8::ymt::EXTENSION))
-        {
-            return Err(format!("model skeleton metadata requires provider-declared NEF8 skeleton metadata source, got '{source}'"));
-        }
+        let (reference, descriptor) = self
+            .client
+            .require_asset_kind_reference_v1(source, "metadata", false)
+            .map_err(|error| {
+                format!(
+                    "model skeleton metadata requires a registered metadata asset source='{source}': {error}"
+                )
+            })?;
+        let path = reference.logical_path.as_str();
+        newengine_ulog_api::ulog::debug!(
+            "model.api skeleton metadata: source='{}' format_module='{}'",
+            path,
+            descriptor.module_id
+        );
         let bytes = self
             .client
             .decode_v1(&AssetDecodeRequest {
                 logical_path: path.to_owned(),
                 output_kind: newengine_assets_api::ASSET_LIST_FILE_BODY_OUTPUT.to_owned(),
                 selector: serde_json::Value::Null,
-            })
+                            format_descriptor: None,
+})
             .map_err(|e| {
                 format!(
                     "engine.assets decode_v1 failed path='{path}' output='{}' err='{e}'",

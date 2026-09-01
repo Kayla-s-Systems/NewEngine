@@ -3,7 +3,7 @@ name = "newengine-textures-runtime"
 version = "0.1.0"
 edition = "2021"
 readme = "README.md"
-description = "Runtime-hosted runtime texture gateway for NewEngine .ytd dictionaries"
+description = "Provider-neutral engine.assets.textures semantic service implementation"
 
 [dependencies]
 newengine-ulog-api = { path = "../newengine-ulog-api" }

@@ -110,7 +110,7 @@ impl RenderFrameRecipe {
         features: RuntimeFrameFeatureSet,
         cascaded_shadows: bool,
     ) -> Self {
-        let mut steps = Vec::with_capacity(15);
+        let mut steps = Vec::with_capacity(18);
         steps.push(RenderPhaseRecipeStep::enabled(
             StandardRenderPhase::BeginFrame,
         ));
@@ -165,6 +165,12 @@ impl RenderFrameRecipe {
                 StandardRenderPhase::ViewportForward,
             ));
         }
+        steps.push(RenderPhaseRecipeStep::enabled(
+            StandardRenderPhase::ParticleGBuffer,
+        ));
+        steps.push(RenderPhaseRecipeStep::enabled(
+            StandardRenderPhase::ParticleComposite,
+        ));
         steps.push(RenderPhaseRecipeStep::enabled(
             StandardRenderPhase::Transparent,
         ));

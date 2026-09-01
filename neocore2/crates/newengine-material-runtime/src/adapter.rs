@@ -47,21 +47,25 @@ impl MaterialAssetGatewayAdapter {
         let source = normalize_material_logical_path(
             logical_path.split('@').next().unwrap_or(logical_path),
         )?;
-        if !source.to_ascii_lowercase().ends_with(&format!(
-            ".{}",
-            newengine_asset_format_nef8::nemat::EXTENSION
-        )) {
-            return Err(format!(
-                "materials: expected provider-declared material library path, got '{source}'"
-            ));
-        }
+        self.client
+            .require_semantic_asset_reference_v1(
+                &source,
+                newengine_assets_api::ENGINE_ASSETS_MATERIALS_SERVICE_ID,
+                false,
+            )
+            .map_err(|error| {
+                format!(
+                    "materials: source must resolve through the registered material format: '{source}': {error}"
+                )
+            })?;
         let bytes = self
             .client
             .decode_v1(&AssetDecodeRequest {
                 logical_path: source.clone(),
                 output_kind: ASSET_LIST_FILE_BODY_OUTPUT.to_owned(),
                 selector: serde_json::Value::Null,
-            })
+                            format_descriptor: None,
+})
             .map_err(|e| format!(
                 "engine.assets decode_v1 failed path='{source}' output='{ASSET_LIST_FILE_BODY_OUTPUT}' err='{e}'"
             ))?;
@@ -75,14 +79,17 @@ impl MaterialAssetGatewayAdapter {
     ) -> Result<MaterialLoadResponse, String> {
         let material_ref = normalize_material_logical_path(&request.logical_path)?;
         let (source, selector) = split_nemat_selector(&material_ref, request.selector.as_deref())?;
-        if !source.to_ascii_lowercase().ends_with(&format!(
-            ".{}",
-            newengine_asset_format_nef8::nemat::EXTENSION
-        )) {
-            return Err(format!(
-                "materials: expected provider-declared material library path, got '{source}'"
-            ));
-        }
+        self.client
+            .require_semantic_asset_reference_v1(
+                &source,
+                newengine_assets_api::ENGINE_ASSETS_MATERIALS_SERVICE_ID,
+                false,
+            )
+            .map_err(|error| {
+                format!(
+                    "materials: source must resolve through the registered material format: '{source}': {error}"
+                )
+            })?;
         newengine_ulog_api::ulog::debug!(
             "assets.materials.load_descriptor_v1: source='{}' selector='{}' output_kind='{}' policy='NEF8 body from engine.assets; material semantics stay in engine.assets.materials'",
             source,
@@ -95,7 +102,8 @@ impl MaterialAssetGatewayAdapter {
                 logical_path: source.clone(),
                 output_kind: ASSET_LIST_FILE_BODY_OUTPUT.to_owned(),
                 selector: serde_json::Value::Null,
-            })
+                            format_descriptor: None,
+})
             .map_err(|e| format!("engine.assets decode_v1 failed path='{source}' selector='{selector}' output='{ASSET_LIST_FILE_BODY_OUTPUT}' err='{e}'"))?;
         let material = decode_material_entry_payload(&bytes, &selector)
             .map_err(|e| format!("materials: decode .nemat library failed source='{source}' selector='{selector}' err='{e}'"))?;

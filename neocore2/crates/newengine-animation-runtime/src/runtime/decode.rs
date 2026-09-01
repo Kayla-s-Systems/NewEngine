@@ -53,19 +53,79 @@ pub fn decode_ycd_dictionary(body: &[u8]) -> Result<AnimationDictionary, String>
 }
 
 pub fn decode_ycd_body(body: &[u8], selector: Option<&str>) -> Result<AnimationClip, String> {
+    let requested = selector.map(str::trim).filter(|value| !value.is_empty());
+    if let Some(selector) = requested {
+        return decode_ycd_selected_clip(body, selector);
+    }
     let dictionary = decode_ycd_dictionary(body)?;
     dictionary
-        .clip(selector)
+        .clip(None)
         .map(|clip| (*clip).clone())
-        .ok_or_else(|| {
-            format!(
-                "YCD selector '{}' was not found",
-                selector
-                    .map(str::trim)
-                    .filter(|value| !value.is_empty())
-                    .unwrap_or("<first>")
-            )
-        })
+        .ok_or_else(|| "YCD selector '<first>' was not found".to_owned())
+}
+
+/// Decodes one addressed clip without making unrelated dictionary entries part of the runtime
+/// binding contract. Full dictionary validation remains the responsibility of
+/// [`decode_ycd_dictionary`].
+fn decode_ycd_selected_clip(body: &[u8], selector: &str) -> Result<AnimationClip, String> {
+    if body.len() < YCD_BODY_HEADER_LEN {
+        return Err(format!(
+            "YCD body too small bytes={} expected>={YCD_BODY_HEADER_LEN}",
+            body.len()
+        ));
+    }
+    let schema = read_u32(body, 0)?;
+    if schema != YCD_BODY_SCHEMA_VERSION && schema != YCD_BODY_SCHEMA_VERSION_LEGACY {
+        return Err(format!(
+            "unsupported YCD body schema={schema} supported={YCD_BODY_SCHEMA_VERSION_LEGACY},{YCD_BODY_SCHEMA_VERSION}"
+        ));
+    }
+    let local_pose_stride = if schema == YCD_BODY_SCHEMA_VERSION {
+        LOCAL_POSE_STRIDE_V2
+    } else {
+        LOCAL_POSE_STRIDE_V1
+    };
+    let clip_count = read_u32(body, 4)? as usize;
+    if clip_count == 0 {
+        return Err("YCD body contains no clips".to_owned());
+    }
+    let table_offset = usize_from_u64(read_u64(body, 8)?, "clip table")?;
+    let string_offset = usize_from_u64(read_u64(body, 16)?, "string table")?;
+    let string_len = usize_from_u64(read_u64(body, 24)?, "string length")?;
+    let payload_floor = usize_from_u64(read_u64(body, 32)?, "payload floor")?;
+    checked_slice(
+        body,
+        table_offset,
+        clip_count
+            .checked_mul(YCD_CLIP_RECORD_LEN)
+            .ok_or("YCD clip table overflow")?,
+        "clip table",
+    )?;
+    let strings = checked_slice(body, string_offset, string_len, "string table")?;
+    if payload_floor > body.len() {
+        return Err("YCD payload floor outside body".to_owned());
+    }
+
+    for index in 0..clip_count {
+        let record = table_offset + index * YCD_CLIP_RECORD_LEN;
+        let name_offset = read_u32(body, record + 8)?;
+        // A selected entry is independently addressable. Malformed locator metadata on another
+        // record remains a whole-dictionary validation error, but must not poison this selector.
+        let Ok(name) = read_string(strings, name_offset) else {
+            continue;
+        };
+        if name.eq_ignore_ascii_case(selector) {
+            return decode_ycd_clip_record(
+                body,
+                strings,
+                record,
+                payload_floor,
+                schema,
+                local_pose_stride,
+            );
+        }
+    }
+    Err(format!("YCD selector '{selector}' was not found"))
 }
 
 fn decode_ycd_clip_record(

@@ -37,6 +37,11 @@ pub fn codec_type_requires_magic_by_default(codec_type: &str) -> bool {
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(default)]
 pub struct AssetFileTypeDescriptor {
+    /// Stable format-module identity. Concrete file-type identity is owned by the
+    /// loadable module under StarVault `formats/`, never by core/domain code.
+    pub module_id: String,
+    /// Broad presentation/organization family such as `textures`, `models`, `audio`.
+    pub family: String,
     pub extension: String,
     pub asset_kind: String,
     pub container: String,
@@ -58,6 +63,26 @@ pub struct AssetFileTypeDescriptor {
     pub read_method: String,
     pub selector_syntax: Option<String>,
     pub consumer_domains: Vec<String>,
+    /// Default semantic route for generic ListFile entries. Format-specific
+    /// manifests may override this per entry, but generic writers must not infer
+    /// routes from extensions or content-kind tables.
+    pub default_entry_route: Option<AssetGatewayRoute>,
+    /// Current authored content schema when the format owns one.
+    pub content_schema_version: Option<u16>,
+    /// Runtime-readable schema revisions, oldest to newest. Empty means the format
+    /// does not expose a versioned body contract through this descriptor.
+    pub readable_content_schema_versions: Vec<u16>,
+    /// Contract-registry key for the current body schema, when applicable.
+    pub schema_contract: String,
+    /// Canonical authored/source schema id, when the format has a text authoring form.
+    pub authored_schema: String,
+    /// Read-only compatibility authoring schemas.
+    pub legacy_authored_schemas: Vec<String>,
+    /// Provider-owned preview classification. Consumers must not derive this from extension.
+    pub preview_kind: String,
+    pub preview_strategy: String,
+    pub preview_gateway: String,
+    pub icon_ref: String,
     /// Hex-encoded magic bytes. Required for magic-routed binary codecs, optional
     /// for codecs that deliberately own extension/source-policy routing such as
     /// `definitionType` authored XML beside future binary envelopes.
@@ -98,6 +123,8 @@ pub struct AssetFileTypeDescriptor {
 impl Default for AssetFileTypeDescriptor {
     fn default() -> Self {
         Self {
+            module_id: String::new(),
+            family: String::new(),
             extension: String::new(),
             asset_kind: String::new(),
             container: String::new(),
@@ -110,6 +137,16 @@ impl Default for AssetFileTypeDescriptor {
             read_method: method::DECODE_V1.to_owned(),
             selector_syntax: None,
             consumer_domains: Vec::new(),
+            default_entry_route: None,
+            content_schema_version: None,
+            readable_content_schema_versions: Vec::new(),
+            schema_contract: String::new(),
+            authored_schema: String::new(),
+            legacy_authored_schemas: Vec::new(),
+            preview_kind: String::new(),
+            preview_strategy: String::new(),
+            preview_gateway: String::new(),
+            icon_ref: String::new(),
             magic: None,
             outputs: Vec::new(),
             priority: 0,
@@ -164,6 +201,17 @@ impl AssetFileTypeDescriptor {
         if self.consumer_domains.is_empty() && !self.semantic_gateway.trim().is_empty() {
             self.consumer_domains = vec![self.semantic_gateway.clone()];
         }
+        if self.preview_provider {
+            if self.preview_gateway.trim().is_empty() {
+                self.preview_gateway = self.semantic_gateway.clone();
+            }
+            if self.preview_kind.trim().is_empty() {
+                self.preview_kind = "generic_asset".to_owned();
+            }
+            if self.preview_strategy.trim().is_empty() {
+                self.preview_strategy = "metadata_card".to_owned();
+            }
+        }
         if self.preview_provider && self.inspect_contract.trim().is_empty() {
             self.inspect_contract = format!("asset.inspect.{}.v1", self.extension);
         }
@@ -199,11 +247,19 @@ impl AssetFileTypeDescriptor {
                 ext, self.gateway, self.semantic_gateway
             ));
         }
+        if self.module_id.trim().is_empty() {
+            return Err(format!("asset type '.{}' descriptor module_id is empty", ext));
+        }
         if self.handler_service.trim().is_empty() {
             return Err(format!(
                 "codec '.{}' descriptor handler_service is empty",
                 ext
             ));
+        }
+        if let Some(route) = &self.default_entry_route {
+            if route.gateway.trim().is_empty() || route.method.trim().is_empty() || route.semantic_owner.trim().is_empty() {
+                return Err(format!("asset type '.{}' default_entry_route is incomplete", ext));
+            }
         }
         let is_container = self.is_container_codec();
         if self.allow_nested_assets != is_container {
@@ -270,6 +326,10 @@ pub struct AssetDecodeRequest {
     pub logical_path: String,
     pub output_kind: String,
     pub selector: serde_json::Value,
+    /// Authoritative StarVault file-type descriptor injected by AssetManager at the
+    /// codec boundary. External callers normally leave this `None`; codecs must not
+    /// infer concrete type identity from the path extension.
+    pub format_descriptor: Option<AssetFileTypeDescriptor>,
 }
 
 impl Default for AssetDecodeRequest {
@@ -278,6 +338,7 @@ impl Default for AssetDecodeRequest {
             logical_path: String::new(),
             output_kind: String::new(),
             selector: serde_json::Value::Null,
+            format_descriptor: None,
         }
     }
 }

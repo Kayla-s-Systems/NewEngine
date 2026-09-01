@@ -166,7 +166,8 @@ fn deferred_runtime_separates_gbuffer_and_scene_depth_ownership() {
         .find(|pass| pass.kind == RenderGraphPassKind::Transparent)
         .expect("deferred graph must contain Transparent");
     assert!(transparent.reads.iter().any(|read| {
-        read.resource == RG_GBUFFER_DEPTH && read.usage == RenderGraphResourceUsage::DepthAttachment
+        read.resource == RG_GBUFFER_DEPTH
+            && read.usage == RenderGraphResourceUsage::DepthAttachmentSampled
     }));
     assert!(!transparent
         .reads

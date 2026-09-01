@@ -41,7 +41,10 @@ pub fn active_equipped_weapon_component_modifiers(
     let Some(binding) = world.get::<EquippedWeaponBinding>(owner).copied() else {
         return WeaponComponentModifiers::default();
     };
-    let Some(definition) = world.resource::<ItemCatalog>().and_then(|catalog| catalog.get(binding.item)) else {
+    let Some(definition) = world
+        .resource::<ItemCatalog>()
+        .and_then(|catalog| catalog.get(binding.item))
+    else {
         return WeaponComponentModifiers::default();
     };
     let Some(installed) = world
@@ -53,7 +56,10 @@ pub fn active_equipped_weapon_component_modifiers(
     installed.values().filter(|instance| instance.active).fold(
         WeaponComponentModifiers::default(),
         |combined, instance| {
-            definition.weapon_components.components.get(&instance.component_id)
+            definition
+                .weapon_components
+                .components
+                .get(&instance.component_id)
                 .map(|component| combined.combine(component.modifiers))
                 .unwrap_or(combined)
         },
@@ -67,7 +73,10 @@ pub fn active_equipped_weapon_component_overrides(
     let Some(binding) = world.get::<EquippedWeaponBinding>(owner).copied() else {
         return (None, None, None);
     };
-    let Some(definition) = world.resource::<ItemCatalog>().and_then(|catalog| catalog.get(binding.item)) else {
+    let Some(definition) = world
+        .resource::<ItemCatalog>()
+        .and_then(|catalog| catalog.get(binding.item))
+    else {
         return (None, None, None);
     };
     let Some(installed) = world
@@ -80,12 +89,22 @@ pub fn active_equipped_weapon_component_overrides(
     let mut muzzle = None;
     let mut tracer = None;
     for instance in installed.values().filter(|instance| instance.active) {
-        let Some(component) = definition.weapon_components.components.get(&instance.component_id) else {
+        let Some(component) = definition
+            .weapon_components
+            .components
+            .get(&instance.component_id)
+        else {
             continue;
         };
-        if component.audio_override.is_some() { audio = component.audio_override.clone(); }
-        if component.muzzle_vfx_override.is_some() { muzzle = component.muzzle_vfx_override.clone(); }
-        if component.tracer_vfx_override.is_some() { tracer = component.tracer_vfx_override.clone(); }
+        if component.audio_override.is_some() {
+            audio = component.audio_override.clone();
+        }
+        if component.muzzle_vfx_override.is_some() {
+            muzzle = component.muzzle_vfx_override.clone();
+        }
+        if component.tracer_vfx_override.is_some() {
+            tracer = component.tracer_vfx_override.clone();
+        }
     }
     (audio, muzzle, tracer)
 }
@@ -99,27 +118,47 @@ pub fn install_weapon_component(
 ) -> Result<(), String> {
     let slot = slot.trim().to_ascii_lowercase();
     let component_id = component_id.trim().to_ascii_lowercase();
-    let item = world.get::<PlayerInventory>(owner)
+    let item = world
+        .get::<PlayerInventory>(owner)
         .and_then(|inventory| inventory.entry(weapon_instance))
         .map(|entry| entry.item)
         .ok_or_else(|| "weapon instance is not present in inventory".to_owned())?;
-    let graph = world.resource::<ItemCatalog>()
+    let graph = world
+        .resource::<ItemCatalog>()
         .and_then(|catalog| catalog.get(item))
         .map(|definition| definition.weapon_components.clone().sanitized())
         .ok_or_else(|| "weapon definition is unavailable".to_owned())?;
-    let point = graph.points.iter().find(|point| point.id == slot)
+    let point = graph
+        .points
+        .iter()
+        .find(|point| point.id == slot)
         .ok_or_else(|| format!("unknown weapon component slot '{slot}'"))?;
-    let component = graph.components.get(&component_id)
+    let component = graph
+        .components
+        .get(&component_id)
         .ok_or_else(|| format!("unknown weapon component '{component_id}'"))?;
-    if component.slot != slot || (!point.allowed_components.is_empty() && !point.allowed_components.contains(&component_id)) {
-        return Err(format!("component '{component_id}' is not allowed in slot '{slot}'"));
+    if component.slot != slot
+        || (!point.allowed_components.is_empty()
+            && !point.allowed_components.contains(&component_id))
+    {
+        return Err(format!(
+            "component '{component_id}' is not allowed in slot '{slot}'"
+        ));
     }
-    let inventory = world.get_mut::<PlayerInventory>(owner)
+    let inventory = world
+        .get_mut::<PlayerInventory>(owner)
         .ok_or_else(|| "owner has no inventory".to_owned())?;
-    inventory.weapon_components.entry(weapon_instance).or_default().insert(
-        slot,
-        WeaponComponentInstance { component_id, active: true },
-    );
+    inventory
+        .weapon_components
+        .entry(weapon_instance)
+        .or_default()
+        .insert(
+            slot,
+            WeaponComponentInstance {
+                component_id,
+                active: true,
+            },
+        );
     Ok(())
 }
 
@@ -129,8 +168,10 @@ pub fn remove_weapon_component(
     weapon_instance: ItemInstanceId,
     slot: &str,
 ) -> Option<WeaponComponentInstance> {
-    world.get_mut::<PlayerInventory>(owner)?
-        .weapon_components.get_mut(&weapon_instance)?
+    world
+        .get_mut::<PlayerInventory>(owner)?
+        .weapon_components
+        .get_mut(&weapon_instance)?
         .remove(&slot.trim().to_ascii_lowercase())
 }
 
@@ -973,10 +1014,7 @@ mod component_graph_tests {
         world.insert_resource(catalog);
 
         let mutation = give_item(&mut world, owner, weapon_id, 1).expect("give weapon");
-        let instance = *mutation
-            .touched_instances
-            .first()
-            .expect("weapon instance");
+        let instance = *mutation.touched_instances.first().expect("weapon instance");
         equip_item_instance(&mut world, owner, instance).expect("equip weapon");
 
         let defaults = active_equipped_weapon_component_modifiers(&world, owner);
@@ -994,8 +1032,8 @@ mod component_graph_tests {
         assert!((modified.recoil_multiplier - 0.7).abs() < 1.0e-6);
         assert!((modified.damage_multiplier - 1.05).abs() < 1.0e-6);
 
-        let removed =
-            remove_weapon_component(&mut world, owner, instance, "muzzle").expect("remove component");
+        let removed = remove_weapon_component(&mut world, owner, instance, "muzzle")
+            .expect("remove component");
         assert_eq!(removed.component_id, "muzzle.brake");
         assert_eq!(
             active_equipped_weapon_component_modifiers(&world, owner),

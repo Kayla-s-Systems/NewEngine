@@ -301,6 +301,11 @@ impl AudioRuntimeState {
     }
 
     #[inline]
+    fn route_is_configured(&self, route: &AudioRouteId) -> bool {
+        route.0.is_empty() || self.route_gains.contains_key(route)
+    }
+
+    #[inline]
     fn route_gain(&self, route: &AudioRouteId) -> f32 {
         if route.0.is_empty() {
             1.0

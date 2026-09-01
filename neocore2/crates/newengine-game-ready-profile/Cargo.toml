@@ -26,6 +26,7 @@ newengine-assets-catalog-ui-runtime = { path = "../newengine-assets-catalog-ui-r
 newengine-core = { path = "../newengine-core", features = ["runtime-domain-contracts"] }
 newengine-engine-runtime = { path = "../newengine-engine-runtime" }
 newengine-input-api = { path = "../newengine-input-api" }
+newengine-input-actions-api = { path = "../newengine-input-actions-api" }
 newengine-input-bindings-runtime = { path = "../newengine-input-bindings-runtime" }
 newengine-input-profile-gameready = { path = "../newengine-input-profile-gameready" }
 newengine-entity-runtime = { path = "../newengine-entity-runtime" }

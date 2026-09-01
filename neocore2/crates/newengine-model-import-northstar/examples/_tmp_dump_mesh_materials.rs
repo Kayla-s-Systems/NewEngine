@@ -11,7 +11,9 @@ fn main() -> Result<(), String> {
                 "MESH\t{}\tmaterial={}\tskin_domain={}\tvertices={}\tindices={}",
                 mesh.name,
                 mesh.source_material.as_deref().unwrap_or("<none>"),
-                mesh.source_skin_joint_domain_size.map(|v| v.to_string()).unwrap_or_else(|| "<none>".to_owned()),
+                mesh.source_skin_joint_domain_size
+                    .map(|v| v.to_string())
+                    .unwrap_or_else(|| "<none>".to_owned()),
                 mesh.vertices.len(),
                 mesh.indices.len(),
             );

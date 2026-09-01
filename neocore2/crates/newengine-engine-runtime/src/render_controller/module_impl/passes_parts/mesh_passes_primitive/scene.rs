@@ -10,7 +10,7 @@ mod pass;
 mod wireframe;
 
 use editor_overlay::draw_editor_viewport_overlays;
-use pass::draw_primitives_for_pass;
+use pass::{draw_primitives_for_pass, PrimitivePassSlice};
 use wireframe::draw_primitives_wireframe;
 
 pub fn draw_primitives(
@@ -48,6 +48,7 @@ pub fn draw_primitives(
         camera_position,
         camera_forward,
         deferred,
+        PrimitivePassSlice::NonDecal,
     )?;
     super::draw_skinned_player_primitives(
         this,
@@ -77,6 +78,25 @@ pub fn draw_primitives(
         camera_position,
         camera_forward,
         deferred,
+    )?;
+    // Decals are forward overlays. Replaying them before model/YDD world geometry lets later opaque
+    // batches overwrite their color even though the decal pipeline itself is depth-read-only.
+    // Keep the overlay partition physically after all opaque/skinned/model world draws.
+    draw_primitives_for_pass(
+        this,
+        r,
+        scene,
+        lit,
+        SceneMeshPass::Forward,
+        viewproj,
+        lights,
+        shadow_texture,
+        local_shadow_texture,
+        runtime,
+        camera_position,
+        camera_forward,
+        deferred,
+        PrimitivePassSlice::DecalOnly,
     )?;
     draw_editor_viewport_overlays(this, r, scene, viewproj)
 }
@@ -112,6 +132,7 @@ pub fn draw_primitives_gbuffer(
         camera_position,
         camera_forward,
         deferred,
+        PrimitivePassSlice::All,
     )?;
     super::draw_skinned_player_primitives(
         this,

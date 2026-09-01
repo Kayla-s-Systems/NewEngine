@@ -232,6 +232,80 @@ impl WeaponShellCasing {
     }
 }
 
+/// Surface class carried by persistent bullet-impact debris. This is presentation/gameplay data,
+/// not a renderer material enum: the world package decides how each shard kind is rendered.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum PersistentImpactDebrisKind {
+    #[default]
+    Concrete,
+    Metal,
+    Wood,
+    Glass,
+}
+
+impl PersistentImpactDebrisKind {
+    #[inline]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Concrete => "concrete",
+            Self::Metal => "metal",
+            Self::Wood => "wood",
+            Self::Glass => "glass",
+        }
+    }
+}
+
+/// Persistent shard produced by a firearm impact. There is deliberately no TTL and no automatic
+/// eviction: after settling, runtime physics ownership is removed and the entity remains as static
+/// render clutter until explicit world/map teardown. `half_extents` is authoritative for both the
+/// active collision shape and the persistent presentation scale.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PersistentImpactDebris {
+    pub owner_stable_id: u64,
+    pub shot_sequence: u64,
+    pub kind: PersistentImpactDebrisKind,
+    pub variant: u16,
+    pub half_extents: [f32; 3],
+    /// Stable raw MaterialId inherited from the impacted render surface. `0` means the hit
+    /// could not resolve an authored material and presentation may use a surface-class fallback.
+    pub source_material_id: u64,
+    pub spawn_fixed_tick: u64,
+}
+
+/// One-shot product-world visual admission marker for persistent impact debris. The marker is
+/// removed immediately after the shard visual is attached, so settled clutter never participates
+/// in a per-frame visual-discovery scan.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct PendingImpactDebrisVisual;
+
+impl PersistentImpactDebris {
+    #[inline]
+    pub const fn new(
+        owner_stable_id: u64,
+        shot_sequence: u64,
+        kind: PersistentImpactDebrisKind,
+        variant: u16,
+        half_extents: [f32; 3],
+        spawn_fixed_tick: u64,
+    ) -> Self {
+        Self {
+            owner_stable_id,
+            shot_sequence,
+            kind,
+            variant,
+            half_extents,
+            source_material_id: 0,
+            spawn_fixed_tick,
+        }
+    }
+
+    #[inline]
+    pub const fn with_source_material_id(mut self, source_material_id: u64) -> Self {
+        self.source_material_id = source_material_id;
+        self
+    }
+}
+
 #[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub struct FpsDemoState {

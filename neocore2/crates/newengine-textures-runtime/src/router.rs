@@ -27,12 +27,12 @@ pub fn textures_gateway_service(
     .gateway(ENGINE_ASSETS_TEXTURES_SERVICE_ID)
     .protocol(TEXTURES_RUNTIME_CONTRACT)
     .features([
-        "ytd-manifest",
+        "texture-dictionary-semantics",
         "runtime-texture-packet",
         "rgba8-debug-packet",
         "strict-ref-validation",
     ])
-    .notes("Engine texture runtime service. .ytd semantics live in engine.assets.textures; VFS/raw bytes/codec dispatch remain in engine.assets.");
+    .notes("Engine texture semantic service. Concrete asset-format identity is discovered through StarVault format modules; VFS/raw bytes/codec dispatch remain in engine.assets.");
 
     JsonServiceRouter::with_state(TEXTURES_SERVICE_ID, TextureRuntimeState::new(client))
         .describe_json(&description)

@@ -56,9 +56,9 @@ pub fn step_inventory_commands(world: &mut World, _fixed_tick: u64) {
         if let Some(state) = world.resource_mut::<InventoryHudState>() {
             state.last_consumed_pulse_source_frame = Some(source_frame);
         }
-        // M is the only semantic gameplay action owned by the character modal. Once the menu
-        // is open, retained Aurelia focus owns arrows + Enter/Space, so there is one keyboard
-        // authority instead of two independent focus indices fighting each other.
+        // The configured character-toggle semantic action is the only gameplay action owned by
+        // this modal. Once open, retained engine.ui focus owns keyboard/gamepad navigation and
+        // activation, avoiding competing focus indices in gameplay code and the UI provider.
         if character_toggle_edge {
             let variants = playable_character_variants(world);
             let variant_count = variants.len();
@@ -76,7 +76,7 @@ pub fn step_inventory_commands(world: &mut World, _fixed_tick: u64) {
                     state.set_character_nav_index(selected_index, menu_entry_count);
                 }
                 newengine_ulog_api::ulog::info!(
-                    "character selector toggled open={} source='{}' keyboard_owner='aurelia-retained-focus'",
+                    "character selector toggled open={} source='{}' input_owner='engine.ui.retained-focus'",
                     state.character_select_open,
                     toggle_action.as_deref().unwrap_or("<unconfigured>")
                 );
@@ -104,6 +104,10 @@ pub fn step_inventory_commands(world: &mut World, _fixed_tick: u64) {
         if actions.inventory_toggle_pressed {
             if let Some(state) = world.resource_mut::<InventoryHudState>() {
                 state.toggle_inventory();
+                newengine_ulog_api::ulog::info!(
+                    "inventory HUD toggled open={} source='player.inventory.toggle'",
+                    state.open
+                );
             }
         }
         if let Some(index) = actions.equipment_slot_pressed {

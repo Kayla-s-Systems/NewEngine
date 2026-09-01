@@ -192,53 +192,26 @@ fn smooth_first_person_aim_alpha(current: f32, target: f32, dt: f32, response_hz
     (current + (target - current) * alpha).clamp(0.0, 1.0)
 }
 
-pub(crate) fn equipped_weapon_aim_alpha(world: &newengine_ecs::World, owner: EntityId) -> f32 {
-    let Some(active) =
-        newengine_engine_runtime::gameplay::active_equipped_weapon_binding(world, owner)
-    else {
-        return 0.0;
-    };
-    world
-        .query::<EquippedWeaponVisualRoot>()
-        .find_map(|(_, visual)| {
-            (visual.owner == owner && visual.instance_id == active.instance_id)
-                .then_some(visual.aim_alpha.clamp(0.0, 1.0))
-        })
-        .unwrap_or(0.0)
-}
-
-pub(crate) fn equipped_weapon_recoil_alpha(world: &newengine_ecs::World, owner: EntityId) -> f32 {
-    let Some(active) =
-        newengine_engine_runtime::gameplay::active_equipped_weapon_binding(world, owner)
-    else {
-        return 0.0;
-    };
-    world
-        .query::<EquippedWeaponVisualRoot>()
-        .find_map(|(_, visual)| {
-            (visual.owner == owner && visual.instance_id == active.instance_id)
-                .then_some(visual.recoil_alpha.clamp(0.0, 4.0))
-        })
-        .unwrap_or(0.0)
-}
-
-pub(crate) fn equipped_weapon_recoil_yaw_radians(
-    world: &newengine_ecs::World,
-    owner: EntityId,
-) -> f32 {
-    let Some(active) =
-        newengine_engine_runtime::gameplay::active_equipped_weapon_binding(world, owner)
-    else {
-        return 0.0;
-    };
-    world
-        .query::<EquippedWeaponVisualRoot>()
-        .find_map(|(_, visual)| {
-            (visual.owner == owner && visual.instance_id == active.instance_id)
-                .then_some(visual.recoil_yaw_radians)
-        })
-        .filter(|value| value.is_finite())
-        .unwrap_or(0.0)
+#[inline]
+fn equipment_animation_event(
+    weapon_type: newengine_engine_runtime::gameplay::WeaponType,
+    reload_active: bool,
+    aim_alpha: f32,
+) -> &'static str {
+    use newengine_engine_runtime::gameplay::WeaponType;
+    if weapon_type == WeaponType::Melee {
+        return "character.equipment.ready";
+    }
+    if weapon_type != WeaponType::Firearm {
+        return "character.equipment.inactive";
+    }
+    if reload_active {
+        "character.equipment.reload"
+    } else if aim_alpha > 0.001 {
+        "character.equipment.aim"
+    } else {
+        "character.equipment.ready"
+    }
 }
 
 /// Samples RMB/aim once before animation so body IK and rendered rifle consume the exact same
@@ -260,9 +233,10 @@ pub(crate) fn tick_equipped_weapon_presentation_input(world: &mut newengine_ecs:
             .get::<WeaponObstructionState>(visual.owner)
             .map(|state| state.alpha.clamp(0.0, 1.0))
             .unwrap_or(0.0);
-        let active_visual =
+        let active_binding =
             newengine_engine_runtime::gameplay::active_equipped_weapon_binding(world, visual.owner)
-                .is_some_and(|binding| binding.instance_id == visual.instance_id);
+                .filter(|binding| binding.instance_id == visual.instance_id);
+        let active_visual = active_binding.is_some();
         let presentation = world
             .resource::<ItemCatalog>()
             .and_then(|catalog| catalog.get(visual.item))
@@ -369,13 +343,14 @@ pub(crate) fn tick_equipped_weapon_presentation_input(world: &mut newengine_ecs:
             } else {
                 0.0
             };
-            let event = if reload_active {
-                "character.equipment.reload"
-            } else if aim_alpha > 0.001 {
-                "character.equipment.aim"
-            } else {
-                "character.equipment.ready"
-            };
+            let event = equipment_animation_event(
+                active_binding
+                    .expect("active visual must have an active binding")
+                    .weapon
+                    .weapon_type,
+                reload_active,
+                aim_alpha,
+            );
             if let Err(error) = newengine_engine_runtime::gameplay::emit_animation_state(
                 world,
                 visual.owner,
@@ -602,6 +577,40 @@ fn update_weapon_attachment(
                 position: weapon_position,
                 rotation: weapon_rotation,
             };
+
+            // True full-body ADS is anchored from the weapon that is actually rendered, never from
+            // a second camera/viewmodel approximation. The firing hand owns the weapon; from that
+            // final root derive the real rear sight and move the gameplay camera onto its authored
+            // eye-relief point. At aim_alpha=1 the rear sight, front sight and input-owned view ray
+            // are therefore one geometric line. The base anchor publisher clears this every frame,
+            // so holster/switch/failure cannot leave a stale sight target behind.
+            if first_person_active {
+                if let Some(view_rotation_ws) =
+                    super::player_model::player_rifle_view_rotation_world(world, owner)
+                {
+                    let sight_forward =
+                        crate::weapon_grip::weapon_sight_forward(presentation, weapon_root);
+                    let view_forward = (view_rotation_ws * -Vec3::Z).normalize_or_zero();
+                    if sight_forward.length_squared() > 1.0e-8
+                        && view_forward.length_squared() > 1.0e-8
+                    {
+                        let rear =
+                            crate::weapon_grip::weapon_rear_sight_position(presentation, weapon_root);
+                        let offset = presentation.ads_camera_to_rear_sight;
+                        let camera_to_rear = view_rotation_ws
+                            * Vec3::new(offset[0], offset[1], offset[2]);
+                        let ads_camera_position_ws = rear - camera_to_rear;
+                        if ads_camera_position_ws.is_finite() {
+                            if let Some(anchor) = world.get_mut::<
+                                newengine_engine_runtime::gameplay::PlayerFirstPersonCameraAnchor,
+                            >(owner) {
+                                anchor.ads_camera_position_ws = Some(ads_camera_position_ws);
+                            }
+                        }
+                    }
+                }
+            }
+
             if crate::env_config::var_os("NORTHSTAR_DEBUG_WEAPON_BASIS").is_some() {
                 static BASIS_SAMPLES: std::sync::atomic::AtomicUsize =
                     std::sync::atomic::AtomicUsize::new(0);
@@ -901,12 +910,41 @@ pub(crate) fn tick_equipped_weapon_visuals(
 
 #[cfg(test)]
 mod first_person_stability_tests {
-    use super::secondary_weapon_dynamics_enabled;
+    use super::{equipment_animation_event, secondary_weapon_dynamics_enabled};
+    use newengine_engine_runtime::gameplay::WeaponType;
 
     #[test]
     fn first_person_never_runs_secondary_weapon_inertia() {
         assert!(!secondary_weapon_dynamics_enabled(true, true));
         assert!(secondary_weapon_dynamics_enabled(true, false));
         assert!(!secondary_weapon_dynamics_enabled(false, false));
+    }
+
+    #[test]
+    fn melee_publishes_ready_only_and_never_aim_or_reload() {
+        assert_eq!(
+            equipment_animation_event(WeaponType::Melee, false, 0.0),
+            "character.equipment.ready"
+        );
+        assert_eq!(
+            equipment_animation_event(WeaponType::Melee, true, 1.0),
+            "character.equipment.ready"
+        );
+    }
+
+    #[test]
+    fn firearm_publishes_ready_aim_and_reload_presentation() {
+        assert_eq!(
+            equipment_animation_event(WeaponType::Firearm, false, 0.0),
+            "character.equipment.ready"
+        );
+        assert_eq!(
+            equipment_animation_event(WeaponType::Firearm, false, 1.0),
+            "character.equipment.aim"
+        );
+        assert_eq!(
+            equipment_animation_event(WeaponType::Firearm, true, 1.0),
+            "character.equipment.reload"
+        );
     }
 }

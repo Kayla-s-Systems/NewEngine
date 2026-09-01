@@ -43,7 +43,8 @@ pub(super) fn recover_weapon_accuracy(world: &mut World, player: EntityId, dt: f
         .filter(|state| state.weapon_instance_id == binding.instance_id)
         .unwrap_or_else(|| WeaponAccuracyState::new(binding.instance_id));
     state.time_since_shot = (state.time_since_shot + dt.max(0.0)).min(60.0);
-    if state.time_since_shot >= tuning.accuracy_recovery_delay_seconds && state.bloom_radians > 0.0 {
+    if state.time_since_shot >= tuning.accuracy_recovery_delay_seconds && state.bloom_radians > 0.0
+    {
         let omega = tuning.accuracy_recovery_hz.max(0.05) * 2.0;
         let c = state.recovery_velocity + omega * state.bloom_radians;
         let decay = (-omega * dt.max(0.0)).exp();
@@ -75,7 +76,8 @@ pub(super) fn kick_weapon_accuracy(
         .clamp(0.0, tuning.recoil_accuracy_max_radians);
     // Positive velocity delays the initial recovery and gives automatic fire a genuine accuracy
     // state instead of coupling dispersion to camera recoil.
-    state.recovery_velocity += tuning.recoil_accuracy_per_shot_radians * tuning.accuracy_recovery_hz * 0.35;
+    state.recovery_velocity +=
+        tuning.recoil_accuracy_per_shot_radians * tuning.accuracy_recovery_hz * 0.35;
     state.shot_count = state.shot_count.saturating_add(1);
     state.time_since_shot = 0.0;
     let _ = world.insert(player, state);
@@ -142,8 +144,10 @@ pub(super) fn fire_controller_wants_shot(
         state.activation_seconds = 0.0;
     }
 
-    if matches!(pattern.kind, FiringPatternKind::Burst | FiringPatternKind::ScriptedSequence)
-        && actions.fire_primary_pressed
+    if matches!(
+        pattern.kind,
+        FiringPatternKind::Burst | FiringPatternKind::ScriptedSequence
+    ) && actions.fire_primary_pressed
         && state.burst_shots_remaining == 0
         && state.pattern_cooldown_seconds <= 0.0
     {
@@ -391,8 +395,10 @@ pub fn step_player_combat(world: &mut World, dt: f32, fixed_tick: u64) {
                                 BallisticShotProfile {
                                     projectile_mass_kg: ammo_profile.projectile_mass_kg,
                                     muzzle_velocity_mps: effective_velocity,
-                                    momentum_ns: ammo_profile.projectile_mass_kg * effective_velocity,
-                                    remaining_penetration_energy_j: ammo_profile.penetration_energy_j
+                                    momentum_ns: ammo_profile.projectile_mass_kg
+                                        * effective_velocity,
+                                    remaining_penetration_energy_j: ammo_profile
+                                        .penetration_energy_j
                                         * component_modifiers.penetration_multiplier,
                                     max_penetration_m: ammo_profile.max_penetration_m,
                                     damage_multiplier: ammo_profile.damage_multiplier
@@ -401,7 +407,8 @@ pub fn step_player_combat(world: &mut World, dt: f32, fixed_tick: u64) {
                                     falloff_start_m: ammo_profile.falloff_start_m,
                                     falloff_end_m: ammo_profile.falloff_end_m,
                                     falloff_min_multiplier: ammo_profile.falloff_min_multiplier,
-                                    component_falloff_multiplier: component_modifiers.falloff_multiplier,
+                                    component_falloff_multiplier: component_modifiers
+                                        .falloff_multiplier,
                                 }
                                 .sanitized(),
                             ));
@@ -593,7 +600,8 @@ pub(super) fn apply_recoil(
     shot_sequence: u64,
 ) {
     let tuning = tuning.sanitized();
-    let component_recoil = active_equipped_weapon_component_modifiers(world, player).recoil_multiplier;
+    let component_recoil =
+        active_equipped_weapon_component_modifiers(world, player).recoil_multiplier;
     let ads_scale = (if aiming {
         tuning.ads_recoil_multiplier
     } else {
@@ -643,10 +651,13 @@ pub(super) fn apply_recoil(
     recoil.weapon_instance_id = weapon_instance_id;
     recoil.applied_pitch_radians += applied_pitch_kick;
     recoil.applied_yaw_radians += yaw_kick;
-    // Initial tracker speed produces the authored 1-2 frame follow-through seen in NorthStar VEPR
-    // fire layers instead of snapping immediately into recovery.
-    recoil.pitch_speed_radians_per_second += applied_pitch_kick * tuning.recoil_recovery_hz * 1.4;
-    recoil.yaw_speed_radians_per_second += yaw_kick * tuning.recoil_recovery_hz * 1.15;
+    // Angle impulse and tracker velocity are independent authored quantities. This preserves a
+    // crisp trigger response while allowing each weapon to own how strongly recoil continues for
+    // the first few frames before the critically damped recovery takes over.
+    recoil.pitch_speed_radians_per_second +=
+        applied_pitch_kick * tuning.recoil_recovery_hz * tuning.recoil_pitch_tracker_speed_scale;
+    recoil.yaw_speed_radians_per_second +=
+        yaw_kick * tuning.recoil_recovery_hz * tuning.recoil_yaw_tracker_speed_scale;
     recoil.recovery_hz = tuning.recoil_recovery_hz;
     let _ = world.insert(player, recoil);
 }
@@ -730,11 +741,17 @@ fn publish_weapon_project_event(world: &mut World, event: &WeaponEvent) {
             .map(BallisticMaterialResponse::sanitized)
     });
     let ricochet = pending
-        .filter(|pending| event.kind == WeaponEventKind::Hit && pending.attack_kind == WeaponAttackKind::Firearm)
+        .filter(|pending| {
+            event.kind == WeaponEventKind::Hit && pending.attack_kind == WeaponAttackKind::Firearm
+        })
         .zip(ricochet_material)
         .is_some_and(|(pending, material)| {
             ballistic_material_allows_ricochet(
-                material, pending.direction, event.normal, pending.bounce_count, pending.max_bounces,
+                material,
+                pending.direction,
+                event.normal,
+                pending.bounce_count,
+                pending.max_bounces,
             )
         });
     let ricochet_direction = pending

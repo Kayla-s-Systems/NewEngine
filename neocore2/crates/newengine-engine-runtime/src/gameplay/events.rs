@@ -9,11 +9,14 @@ pub const GAMEPLAY_EVENT_WEAPON_RELOAD_STARTED: &str = "gameplay.weapon.reload.s
 pub const GAMEPLAY_EVENT_WEAPON_RELOAD_COMPLETED: &str = "gameplay.weapon.reload.completed";
 pub const GAMEPLAY_EVENT_WEAPON_MELEE_ATTACKED: &str = "gameplay.weapon.melee.attacked";
 pub const GAMEPLAY_EVENT_WEAPON_HIT: &str = "gameplay.weapon.hit";
+pub const GAMEPLAY_EVENT_WEAPON_PENETRATED: &str = "gameplay.weapon.penetrated";
 pub const GAMEPLAY_EVENT_WEAPON_EQUIPPED: &str = "gameplay.weapon.equipped";
 pub const GAMEPLAY_EVENT_WEAPON_UNEQUIPPED: &str = "gameplay.weapon.unequipped";
 pub const GAMEPLAY_EVENT_WEAPON_SHELL_EJECTED: &str = "gameplay.weapon.shell.ejected";
 pub const GAMEPLAY_EVENT_WEAPON_SHELL_CONTACT: &str = "gameplay.weapon.shell.contact";
 pub const GAMEPLAY_EVENT_WEAPON_SHELL_ROLLING: &str = "gameplay.weapon.shell.rolling";
+pub const GAMEPLAY_EVENT_WEAPON_IMPACT_DEBRIS_CONTACT: &str =
+    "gameplay.weapon.impact.debris.contact";
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(default)]

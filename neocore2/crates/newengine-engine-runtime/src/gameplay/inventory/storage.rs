@@ -149,12 +149,22 @@ impl PlayerInventory {
                 quantity,
                 condition: 1.0,
             });
-            if definition.kind == ItemKind::Weapon && !definition.weapon_components.default_installed.is_empty() {
-                let installed = definition.weapon_components.default_installed.iter()
-                    .map(|(slot, component_id)| (slot.clone(), WeaponComponentInstance {
-                        component_id: component_id.clone(),
-                        active: true,
-                    }))
+            if definition.kind == ItemKind::Weapon
+                && !definition.weapon_components.default_installed.is_empty()
+            {
+                let installed = definition
+                    .weapon_components
+                    .default_installed
+                    .iter()
+                    .map(|(slot, component_id)| {
+                        (
+                            slot.clone(),
+                            WeaponComponentInstance {
+                                component_id: component_id.clone(),
+                                active: true,
+                            },
+                        )
+                    })
                     .collect();
                 self.weapon_components.insert(instance_id, installed);
             }

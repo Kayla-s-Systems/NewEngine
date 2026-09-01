@@ -75,7 +75,8 @@ fn load_weapon_clip(
                     logical_path: logical_path.to_owned(),
                     output_kind: ASSET_LIST_FILE_BODY_OUTPUT.to_owned(),
                     selector: serde_json::Value::Null,
-                })
+                                    format_descriptor: None,
+})
                 .map_err(|error| {
                     format!(
                         "weapon animation asset decode failed ref='{reference}' path='{logical_path}': {error}"

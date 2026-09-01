@@ -21,6 +21,23 @@ use std::sync::{
 };
 use std::time::{Duration, Instant};
 
+#[derive(Clone, Copy, Debug, Default)]
+pub struct SimulationScheduleTiming {
+    pub input_ms: f32,
+    pub controllers_ms: f32,
+    pub apply_intents_ms: f32,
+    pub content_install_ms: f32,
+    pub capability_ensure_ms: f32,
+    pub before_physics_ms: f32,
+    pub physics_ms: f32,
+    pub after_physics_ms: f32,
+    pub derived_ms: f32,
+    pub after_derived_ms: f32,
+    pub capability_dispatch_ms: f32,
+    pub animation_state_ms: f32,
+    pub total_ms: f32,
+}
+
 /// Legacy metadata-only simulation read boundary retained for diagnostics/tests.
 /// Real system execution uses `EngineJobsSimSystemExecutor` below and returns typed
 /// command buffers for deterministic owner-thread commit.
@@ -296,9 +313,13 @@ pub fn run_schedule_with_physics_mode_and_telemetry_for_frame(
     physics_mode: PhysicsIntegrationMode,
     telemetry: Option<&SimulationJobTelemetry<'_>>,
     thread_pool: Option<&ThreadPoolHandle>,
-) {
+) -> SimulationScheduleTiming {
+    let schedule_started = Instant::now();
+    let mut timing = SimulationScheduleTiming::default();
     let frame = SimFrame::new(dt.max(0.0001), frame_index);
     let gameplay_frame = GameplayFrame::from(frame);
+
+    let phase_started = Instant::now();
     run_sim_stage(
         schedule,
         world,
@@ -307,6 +328,9 @@ pub fn run_schedule_with_physics_mode_and_telemetry_for_frame(
         telemetry,
         thread_pool,
     );
+    timing.input_ms = phase_started.elapsed().as_secs_f32() * 1000.0;
+
+    let phase_started = Instant::now();
     run_sim_stage(
         schedule,
         world,
@@ -315,20 +339,31 @@ pub fn run_schedule_with_physics_mode_and_telemetry_for_frame(
         telemetry,
         thread_pool,
     );
+    timing.controllers_ms = phase_started.elapsed().as_secs_f32() * 1000.0;
+
+    let phase_started = Instant::now();
     schedule.run_stage_with_telemetry(world, SimStage::ApplyIntents, frame, telemetry);
+    timing.apply_intents_ms = phase_started.elapsed().as_secs_f32() * 1000.0;
 
     // Profile-owned authored content is installed explicitly before gameplay execution.
     // Generic engine code never manufactures FPS items/loadouts as a fallback.
+    let phase_started = Instant::now();
     gameplay_content.install_pending(world);
+    timing.content_install_ms = phase_started.elapsed().as_secs_f32() * 1000.0;
 
     // Engine exposes capability implementations but never invokes them implicitly. Project/gameplay
     // code may enqueue requests; dispatch happens only after gameplay phases have committed.
+    let phase_started = Instant::now();
     crate::gameplay::ensure_builtin_gameplay_capabilities(world);
+    timing.capability_ensure_ms = phase_started.elapsed().as_secs_f32() * 1000.0;
 
     // Product/gameplay behavior is profile-owned. The engine only owns the stable
     // execution phase boundary and never names FPS, inventory, combat or missions.
+    let phase_started = Instant::now();
     gameplay_systems.run_phase(GameplayExecutionPhase::BeforePhysics, world, gameplay_frame);
+    timing.before_physics_ms = phase_started.elapsed().as_secs_f32() * 1000.0;
 
+    let phase_started = Instant::now();
     match physics_mode {
         PhysicsIntegrationMode::ServiceBackend => {
             // Service-backed physics owns integration for PhysicsBodyDesc entities.
@@ -351,9 +386,13 @@ pub fn run_schedule_with_physics_mode_and_telemetry_for_frame(
             );
         }
     }
+    timing.physics_ms = phase_started.elapsed().as_secs_f32() * 1000.0;
 
+    let phase_started = Instant::now();
     gameplay_systems.run_phase(GameplayExecutionPhase::AfterPhysics, world, gameplay_frame);
+    timing.after_physics_ms = phase_started.elapsed().as_secs_f32() * 1000.0;
 
+    let phase_started = Instant::now();
     run_sim_stage(
         schedule,
         world,
@@ -362,9 +401,13 @@ pub fn run_schedule_with_physics_mode_and_telemetry_for_frame(
         telemetry,
         thread_pool,
     );
+    timing.derived_ms = phase_started.elapsed().as_secs_f32() * 1000.0;
 
+    let phase_started = Instant::now();
     gameplay_systems.run_phase(GameplayExecutionPhase::AfterDerived, world, gameplay_frame);
+    timing.after_derived_ms = phase_started.elapsed().as_secs_f32() * 1000.0;
 
+    let phase_started = Instant::now();
     let capability_report = crate::gameplay::dispatch_gameplay_capabilities(world);
     for capability in capability_report.missing {
         newengine_ulog_api::ulog::warn!(
@@ -375,10 +418,15 @@ pub fn run_schedule_with_physics_mode_and_telemetry_for_frame(
     for failure in capability_report.failed {
         newengine_ulog_api::ulog::warn!("gameplay capability invocation failed {}", failure);
     }
+    timing.capability_dispatch_ms = phase_started.elapsed().as_secs_f32() * 1000.0;
 
     // Player locomotion animation state is derived from authoritative post-physics
     // motion/grounding. The skeletal backend consumes this semantic state separately.
+    let phase_started = Instant::now();
     crate::gameplay::update_player_animation_states(world, frame.dt);
+    timing.animation_state_ms = phase_started.elapsed().as_secs_f32() * 1000.0;
+    timing.total_ms = schedule_started.elapsed().as_secs_f32() * 1000.0;
+    timing
 }
 
 #[inline]

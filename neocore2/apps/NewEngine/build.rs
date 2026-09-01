@@ -15,14 +15,8 @@ fn main() {
 
 fn compile_windows_resources() {
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR"));
-    let icon_path = manifest_dir
-        .join("..")
-        .join("..")
-        .join("..")
-        .join("..")
-        .join("Engine")
-        .join("Content")
-        .join("logo.ico");
+    const ICON_RELATIVE_PATH: &str = "../../../../Shared/Source/branding/logo.ico";
+    let icon_path = manifest_dir.join(ICON_RELATIVE_PATH);
     let icon_path = fs::canonicalize(&icon_path).unwrap_or_else(|_| {
         panic!(
             "NewEngine canonical Windows application icon is missing: {}",

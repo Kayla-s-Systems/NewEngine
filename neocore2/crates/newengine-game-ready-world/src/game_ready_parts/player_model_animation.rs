@@ -22,4 +22,7 @@ include!("player_model_animation/detached_head.rs");
 include!("player_model_animation/clip_loading.rs");
 include!("player_model_animation/weapon_frames.rs");
 include!("player_model_animation/runtime_tick.rs");
+include!("player_model_animation/runtime_tick_prepare.rs");
+include!("player_model_animation/runtime_tick_presentation.rs");
+include!("player_model_animation/runtime_tick_pose.rs");
 include!("player_model_animation/tests.rs");

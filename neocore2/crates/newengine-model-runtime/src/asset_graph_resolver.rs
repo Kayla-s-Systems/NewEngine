@@ -300,7 +300,8 @@ impl RuntimeAssetGraphResolver {
                 logical_path: path.clone(),
                 output_kind: newengine_assets_api::method::LIST_FILE_MANIFEST.to_owned(),
                 selector: serde_json::Value::Null,
-            };
+                            format_descriptor: None,
+};
             if let Err(err) = self.client.decode_v1(&request) {
                 graph.missing_refs.push(format!(
                     "{asset_ref}: texture dictionary manifest unavailable: {err}"
@@ -342,7 +343,8 @@ impl RuntimeAssetGraphResolver {
             logical_path: path.clone(),
             output_kind: newengine_assets_api::method::LIST_FILE_MANIFEST.to_owned(),
             selector: serde_json::Value::Null,
-        };
+                    format_descriptor: None,
+};
         match self.client.decode_v1(&request) {
             Ok(bytes) => match serde_json::from_slice::<serde_json::Value>(&bytes) {
                 Ok(value) => list_file_manifest_dependency_edges(&value, role),

@@ -20,6 +20,8 @@ pub enum RasterCullMode {
 pub enum PipelineBlendMode {
     Opaque,
     Alpha,
+    /// Additive accumulation used by weighted particle GBuffer MRTs.
+    Additive,
 }
 
 impl Default for PipelineBlendMode {

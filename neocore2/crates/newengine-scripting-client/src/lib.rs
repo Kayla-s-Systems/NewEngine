@@ -324,7 +324,8 @@ fn load_script_module_bytes(
         logical_path: script_ref.to_owned(),
         output_kind: ASSET_LIST_FILE_BODY_OUTPUT.to_owned(),
         selector: serde_json::Value::Null,
-    };
+            format_descriptor: None,
+};
     match assets.decode_v1(&request) {
         Ok(bytes) => Ok((bytes, ScriptModuleOrigin::CompiledYsc)),
         Err(decode_error) => {

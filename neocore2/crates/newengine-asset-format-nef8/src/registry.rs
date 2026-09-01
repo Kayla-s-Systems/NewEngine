@@ -126,7 +126,7 @@ pub fn default_entry_route_for_content_kind(content_kind: u32) -> Option<AssetGa
             "texture_dictionary",
         ),
         "ydd" => (
-            "engine.model",
+            "engine.assets.models",
             "model.resolve_drawable_v1",
             "drawable_dictionary",
         ),
@@ -136,7 +136,7 @@ pub fn default_entry_route_for_content_kind(content_kind: u32) -> Option<AssetGa
             "definition",
         ),
         "nemat" => (
-            "engine.materials",
+            "engine.assets.materials",
             "materials.load_descriptor_v1",
             "material_library",
         ),

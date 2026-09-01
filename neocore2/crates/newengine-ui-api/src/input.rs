@@ -289,6 +289,17 @@ pub mod keys {
     pub use newengine_input_api::key_code::*;
 }
 
+/// Canonical gamepad button ids carried by `UiInputFrame`.
+/// Device discovery and normalization remain owned by the active `engine.input` provider.
+pub mod gamepad_buttons {
+    pub use newengine_input_api::gamepad_button::*;
+}
+
+/// Canonical gamepad axis ids carried by `UiInputFrame`.
+pub mod gamepad_axes {
+    pub use newengine_input_api::gamepad_axis::*;
+}
+
 #[cfg(test)]
 mod capture_contract_tests {
     use super::*;

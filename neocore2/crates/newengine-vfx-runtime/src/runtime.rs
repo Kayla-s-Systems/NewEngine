@@ -9,15 +9,16 @@ use newengine_primitives::Primitive;
 use newengine_scene::components::Name;
 use newengine_transform::Transform;
 use newengine_vfx_api::{
-    VfxGpuParticleBridge, VfxGpuParticleKind, VfxGpuParticleSpawnV1,
-    VfxGpuTextureRegistry, VfxRuntimeStatsV1, VfxSpawnRequestV1,
+    VfxGpuParticleBridge, VfxGpuParticleKind, VfxGpuParticleSpawnV1, VfxGpuTextureRegistry,
+    VfxRuntimeStatsV1, VfxSpawnRequestV1,
 };
 
 use crate::{
-    VfxAlignment, VfxEffectLibrary, VfxGpuLayerRuntime, VfxGpuParticleLedger, VfxInstanceId,
-    VfxInstanceRoot, VfxLayerDefinition, VfxLayerKind, VfxLayerRuntime, VfxLightDefinition,
-    VfxQueueProcessReport, VfxRenderRole, VfxRuntimeStage, VfxRuntimeState, VfxSpawnQueue,
-    VfxSurfaceResponse, VfxSurfaceResponseLibrary,
+    VfxAlignment, VfxDecalMaterialAssetRef, VfxEffectLibrary, VfxEmissionAxis, VfxGpuLayerRuntime,
+    VfxGpuParticleLedger, VfxInstanceId, VfxInstanceRoot, VfxLayerDefinition, VfxLayerKind,
+    VfxLayerRuntime, VfxLightDefinition, VfxPersistentDecal, VfxQueueProcessReport, VfxRenderRole,
+    VfxRuntimeStage, VfxRuntimeState, VfxSpawnQueue, VfxSurfaceResponse, VfxSurfaceResponseLibrary,
+    VfxTracerMode,
 };
 
 #[derive(Clone, Copy)]
@@ -243,6 +244,17 @@ fn step_vfx_internal(world: &mut World, dt: f32) {
         .map(|(entity, runtime)| (entity, *runtime))
         .collect::<Vec<_>>();
     for (entity, mut runtime) in layers {
+        if runtime.kind == VfxLayerKind::Tracer && runtime.tracer_mode == VfxTracerMode::SingleFrame
+        {
+            if runtime.tracer_updates_remaining == 0 {
+                let _ = world.despawn(entity);
+                continue;
+            }
+            runtime.tracer_updates_remaining = runtime.tracer_updates_remaining.saturating_sub(1);
+            let _ = world.insert(entity, runtime);
+            continue;
+        }
+
         runtime.age_seconds += dt;
         if runtime.age_seconds + 1.0e-6 >= runtime.lifetime_seconds {
             let _ = world.despawn(entity);
@@ -387,6 +399,15 @@ pub fn clamp_vfx_tracers_to_hit(
         let hit_distance = (point - runtime.origin).length();
         if hit_distance.is_finite() {
             runtime.max_distance = runtime.max_distance.min(hit_distance.max(0.0));
+            if runtime.tracer_mode == VfxTracerMode::SingleFrame {
+                let direction = runtime.velocity.normalize_or_zero();
+                let visible_length = runtime.base_scale.z.min(runtime.max_distance.max(0.0002));
+                runtime.base_scale.z = visible_length;
+                if let Some(transform) = world.get_mut::<Transform>(entity) {
+                    transform.position = runtime.origin + direction * (visible_length * 0.5);
+                    transform.scale.z = visible_length;
+                }
+            }
             let _ = world.insert(entity, runtime);
         }
     }
@@ -463,6 +484,7 @@ fn spawn_layer(
             fade_start_fraction,
             fade_in_fraction,
             drag_per_second,
+            depth_softness_m,
             rotation_radians,
             rotation_random_radians,
             spin_radians_per_second,
@@ -501,6 +523,7 @@ fn spawn_layer(
                     fade_start_fraction: fade_start_fraction.clamp(0.0, 0.999),
                     fade_in_fraction: fade_in_fraction.clamp(0.0, 0.999),
                     drag_per_second: (*drag_per_second).max(0.0),
+                    depth_softness_m: (*depth_softness_m).max(0.0),
                     rotation_radians: rotation,
                     angular_velocity_radians_per_second: *spin_radians_per_second,
                     texture_slot: *texture_slot,
@@ -597,6 +620,8 @@ fn spawn_layer(
                     owner_stable_id,
                     correlation_id: request.correlation_id,
                     kind: *kind,
+                    tracer_mode: VfxTracerMode::Swept,
+                    tracer_updates_remaining: 0,
                     origin: position,
                     velocity: vec3_from_array(request.velocity),
                     acceleration: Vec3::ZERO,
@@ -616,6 +641,7 @@ fn spawn_layer(
         VfxLayerDefinition::Tracer {
             primitive,
             color,
+            mode,
             half_length,
             radius,
             speed,
@@ -627,11 +653,25 @@ fn spawn_layer(
             let entity = world.spawn();
             let half_length = *half_length * request.scale;
             let radius = *radius * request.scale;
-            let lifetime = requested_lifetime
-                .unwrap_or(
-                    (request.max_distance / speed.max(0.001) + 0.06).min(*max_lifetime_seconds),
-                )
-                .max(0.001);
+            let authored_length = (half_length * 2.0).max(0.0002);
+            let visible_length = if *mode == VfxTracerMode::SingleFrame {
+                authored_length.min(request.max_distance.max(0.0002))
+            } else {
+                authored_length
+            };
+            let lifetime = if *mode == VfxTracerMode::SingleFrame {
+                // Lifetime is not used to decide the single-frame retirement. Keep it valid for
+                // instance budgeting/root lifetime while `tracer_updates_remaining` owns visibility.
+                requested_lifetime
+                    .unwrap_or(*max_lifetime_seconds)
+                    .max(0.001)
+            } else {
+                requested_lifetime
+                    .unwrap_or(
+                        (request.max_distance / speed.max(0.001) + 0.06).min(*max_lifetime_seconds),
+                    )
+                    .max(0.001)
+            };
             let rotation = Quat::from_rotation_arc(Vec3::Z, direction).normalize_or_identity();
             let color = surface_color(VfxLayerKind::Tracer, *color, surface_response);
             let _ = world.insert(
@@ -644,9 +684,9 @@ fn spawn_layer(
             let _ = world.insert(
                 entity,
                 Transform {
-                    position: position + direction * half_length,
+                    position: position + direction * (visible_length * 0.5),
                     rotation,
-                    scale: Vec3::new(radius, radius, half_length * 2.0),
+                    scale: Vec3::new(radius, radius, visible_length),
                 },
             );
             let _ = world.insert(
@@ -664,12 +704,14 @@ fn spawn_layer(
                     owner_stable_id,
                     correlation_id: request.correlation_id,
                     kind: VfxLayerKind::Tracer,
+                    tracer_mode: *mode,
+                    tracer_updates_remaining: u8::from(*mode == VfxTracerMode::SingleFrame),
                     origin: position,
                     velocity: direction * *speed,
                     acceleration: Vec3::ZERO,
                     age_seconds: 0.0,
                     lifetime_seconds: lifetime,
-                    base_scale: Vec3::new(radius, radius, half_length * 2.0),
+                    base_scale: Vec3::new(radius, radius, visible_length),
                     growth_per_second: Vec3::ZERO,
                     start_color: color,
                     fade_start_fraction: 0.55,
@@ -686,6 +728,7 @@ fn spawn_layer(
             role,
             texture_slot,
             billboard,
+            emission_axis,
             count,
             scale,
             color,
@@ -696,6 +739,7 @@ fn spawn_layer(
             lifetime_variance,
             acceleration,
             drag_per_second,
+            depth_softness_m,
             rotation_random_radians,
             spin_radians_per_second,
             spin_variance,
@@ -708,13 +752,7 @@ fn spawn_layer(
             {
                 let base_scale = *scale * request.scale;
                 let base_lifetime = requested_lifetime.unwrap_or(*lifetime_seconds).max(0.001);
-                let emission_axis = if normal.length_squared() > 1.0e-8 {
-                    normal
-                } else if direction.length_squared() > 1.0e-8 {
-                    direction
-                } else {
-                    Vec3::Y
-                };
+                let emission_axis = resolve_emission_axis(*emission_axis, direction, normal);
                 let resolved_color = surface_color(*kind, *color, surface_response);
                 let mut admitted = 0u32;
                 let mut max_admitted_lifetime = 0.0_f32;
@@ -734,8 +772,7 @@ fn spawn_layer(
                     let speed = speed_min + (speed_max - speed_min).max(0.0) * speed_t;
                     let velocity = travel_direction * speed + vec3_from_array(request.velocity);
                     let size_factor = (1.0
-                        + signed_unit_float(mix64(seed ^ 0xbb67_ae85_84ca_a73b))
-                            * *size_variance)
+                        + signed_unit_float(mix64(seed ^ 0xbb67_ae85_84ca_a73b)) * *size_variance)
                         .max(0.05);
                     let lifetime_factor = (1.0
                         + signed_unit_float(mix64(seed ^ 0x3c6e_f372_fe94_f82b))
@@ -745,8 +782,7 @@ fn spawn_layer(
                     let rotation = signed_unit_float(mix64(seed ^ 0xa54f_f53a_5f1d_36f1))
                         * *rotation_random_radians;
                     let spin = *spin_radians_per_second
-                        + signed_unit_float(mix64(seed ^ 0x510e_527f_ade6_82d1))
-                            * *spin_variance;
+                        + signed_unit_float(mix64(seed ^ 0x510e_527f_ade6_82d1)) * *spin_variance;
                     let spawn = VfxGpuParticleSpawnV1 {
                         instance_id: instance_id.0,
                         kind: gpu_particle_kind(*kind).unwrap_or(VfxGpuParticleKind::Debris),
@@ -767,6 +803,7 @@ fn spawn_layer(
                         fade_start_fraction: fade_start_fraction.clamp(0.0, 0.999),
                         fade_in_fraction: fade_in_fraction.clamp(0.0, 0.999),
                         drag_per_second: (*drag_per_second).max(0.0),
+                        depth_softness_m: (*depth_softness_m).max(0.0),
                         rotation_radians: rotation,
                         angular_velocity_radians_per_second: spin,
                         texture_slot: *texture_slot,
@@ -802,18 +839,9 @@ fn spawn_layer(
                         ^ layer_index.rotate_left(31)
                         ^ particle_index,
                 );
-                let emission_axis = if normal.length_squared() > 1.0e-8 {
-                    normal
-                } else if direction.length_squared() > 1.0e-8 {
-                    direction
-                } else {
-                    Vec3::Y
-                };
-                let travel_direction = random_direction_in_cone(
-                    emission_axis,
-                    cone_angle_degrees.to_radians(),
-                    seed,
-                );
+                let emission_axis = resolve_emission_axis(*emission_axis, direction, normal);
+                let travel_direction =
+                    random_direction_in_cone(emission_axis, cone_angle_degrees.to_radians(), seed);
                 let speed_t = unit_float(mix64(seed ^ 0x9e37_79b9_7f4a_7c15));
                 let speed = speed_min + (speed_max - speed_min).max(0.0) * speed_t;
                 let velocity = travel_direction * speed + vec3_from_array(request.velocity);
@@ -826,11 +854,10 @@ fn spawn_layer(
                     .max(0.05);
                 let base_scale = *scale * request.scale * size_factor;
                 let lifetime_factor = (1.0
-                    + signed_unit_float(mix64(seed ^ 0x3c6e_f372_fe94_f82b))
-                        * *lifetime_variance)
+                    + signed_unit_float(mix64(seed ^ 0x3c6e_f372_fe94_f82b)) * *lifetime_variance)
                     .max(0.05);
-                let lifetime = (requested_lifetime.unwrap_or(*lifetime_seconds) * lifetime_factor)
-                    .max(0.001);
+                let lifetime =
+                    (requested_lifetime.unwrap_or(*lifetime_seconds) * lifetime_factor).max(0.001);
                 let _ = world.insert(
                     entity,
                     Name(format!(
@@ -861,6 +888,8 @@ fn spawn_layer(
                         owner_stable_id,
                         correlation_id: request.correlation_id,
                         kind: *kind,
+                        tracer_mode: VfxTracerMode::Swept,
+                        tracer_updates_remaining: 0,
                         origin: position,
                         velocity,
                         acceleration: *acceleration,
@@ -881,16 +910,19 @@ fn spawn_layer(
         }
         VfxLayerDefinition::Decal {
             primitive,
+            material_ref,
             scale,
             color,
             normal_offset,
+            persistent,
             lifetime_seconds,
             fade_start_fraction,
         } => {
             let entity = world.spawn();
             let color = surface_color(VfxLayerKind::ImpactDecal, *color, surface_response);
             let base_scale = *scale * request.scale;
-            let lifetime = requested_lifetime.unwrap_or(*lifetime_seconds).max(0.001);
+            let lifetime =
+                (!*persistent).then(|| requested_lifetime.unwrap_or(*lifetime_seconds).max(0.001));
             let _ = world.insert(
                 entity,
                 Name(format!(
@@ -913,28 +945,49 @@ fn spawn_layer(
                     color,
                 },
             );
+            if let Some(material_ref) = material_ref.as_deref() {
+                let _ = world.insert(
+                    entity,
+                    VfxDecalMaterialAssetRef {
+                        logical_ref: material_ref.to_owned(),
+                    },
+                );
+            }
             let _ = world.insert(entity, render_options(VfxRenderRole::Decal));
-            let _ = world.insert(
-                entity,
-                VfxLayerRuntime {
-                    instance_id,
-                    owner_stable_id,
-                    correlation_id: request.correlation_id,
-                    kind: VfxLayerKind::ImpactDecal,
-                    origin: position,
-                    velocity: Vec3::ZERO,
-                    acceleration: Vec3::ZERO,
-                    age_seconds: 0.0,
-                    lifetime_seconds: lifetime,
-                    base_scale,
-                    growth_per_second: Vec3::ZERO,
-                    start_color: color,
-                    fade_start_fraction: fade_start_fraction.clamp(0.0, 0.999),
-                    traveled: 0.0,
-                    max_distance: 0.0,
-                    initial_light_intensity: 0.0,
-                },
-            );
+            if *persistent {
+                let _ = world.insert(
+                    entity,
+                    VfxPersistentDecal {
+                        source_instance_id: instance_id,
+                        owner_stable_id,
+                        correlation_id: request.correlation_id,
+                    },
+                );
+            } else if let Some(lifetime) = lifetime {
+                let _ = world.insert(
+                    entity,
+                    VfxLayerRuntime {
+                        instance_id,
+                        owner_stable_id,
+                        correlation_id: request.correlation_id,
+                        kind: VfxLayerKind::ImpactDecal,
+                        tracer_mode: VfxTracerMode::Swept,
+                        tracer_updates_remaining: 0,
+                        origin: position,
+                        velocity: Vec3::ZERO,
+                        acceleration: Vec3::ZERO,
+                        age_seconds: 0.0,
+                        lifetime_seconds: lifetime,
+                        base_scale,
+                        growth_per_second: Vec3::ZERO,
+                        start_color: color,
+                        fade_start_fraction: fade_start_fraction.clamp(0.0, 0.999),
+                        traveled: 0.0,
+                        max_distance: 0.0,
+                        initial_light_intensity: 0.0,
+                    },
+                );
+            }
             1
         }
     }
@@ -962,6 +1015,38 @@ fn render_options(role: VfxRenderRole) -> MeshRenderOptions {
     options.cull_policy = MeshCullPolicy::None;
     options.sort_policy = MeshSortPolicy::Transparent;
     options
+}
+
+pub(crate) fn resolve_emission_axis(mode: VfxEmissionAxis, direction: Vec3, normal: Vec3) -> Vec3 {
+    let direction = direction.normalize_or_zero();
+    let normal = normal.normalize_or_zero();
+    let fallback_normal = if normal.length_squared() > 1.0e-8 {
+        normal
+    } else {
+        Vec3::Y
+    };
+    match mode {
+        VfxEmissionAxis::Normal => fallback_normal,
+        VfxEmissionAxis::Direction => {
+            if direction.length_squared() > 1.0e-8 {
+                direction
+            } else {
+                fallback_normal
+            }
+        }
+        VfxEmissionAxis::Reflection => {
+            if direction.length_squared() <= 1.0e-8 || normal.length_squared() <= 1.0e-8 {
+                fallback_normal
+            } else {
+                let reflected = direction - normal * (2.0 * direction.dot(normal));
+                if reflected.length_squared() > 1.0e-8 {
+                    reflected.normalize_or_zero()
+                } else {
+                    fallback_normal
+                }
+            }
+        }
+    }
 }
 
 fn alignment_rotation(alignment: VfxAlignment, direction: Vec3, normal: Vec3) -> Quat {
@@ -1043,6 +1128,12 @@ fn live_counts(world: &World) -> LiveCounts {
             _ => counts.particles = counts.particles.saturating_add(1),
         }
     }
+    let persistent_decals = world
+        .query::<VfxPersistentDecal>()
+        .count()
+        .min(u32::MAX as usize) as u32;
+    counts.layers = counts.layers.saturating_add(persistent_decals);
+    counts.decals = counts.decals.saturating_add(persistent_decals);
     counts.lights = counts.lights.saturating_add(
         world
             .query::<VfxTransientLightRuntime>()
@@ -1139,12 +1230,14 @@ fn random_direction_in_cone(axis: Vec3, cone_radians: f32, seed: u64) -> Vec3 {
     let cos_theta = 1.0 - unit_float(mix64(seed ^ 0x1f83_d9ab_fb41_bd6b)) * (1.0 - cos_min);
     let sin_theta = (1.0 - cos_theta * cos_theta).max(0.0).sqrt();
     let phi = core::f32::consts::TAU * unit_float(mix64(seed ^ 0x5be0_cd19_137e_2179));
-    let helper = if axis.y.abs() < 0.95 { Vec3::Y } else { Vec3::X };
+    let helper = if axis.y.abs() < 0.95 {
+        Vec3::Y
+    } else {
+        Vec3::X
+    };
     let tangent = axis.cross(helper).normalize_or_zero();
     let bitangent = tangent.cross(axis).normalize_or_zero();
-    (axis * cos_theta
-        + tangent * (phi.cos() * sin_theta)
-        + bitangent * (phi.sin() * sin_theta))
+    (axis * cos_theta + tangent * (phi.cos() * sin_theta) + bitangent * (phi.sin() * sin_theta))
         .normalize_or_zero()
 }
 

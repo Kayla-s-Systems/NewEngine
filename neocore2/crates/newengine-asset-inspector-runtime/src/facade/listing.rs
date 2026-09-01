@@ -59,7 +59,8 @@ impl EngineAssetFacade {
             logical_path: logical_path.clone(),
             output_kind: ASSET_LIST_FILE_MANIFEST_OUTPUT.to_owned(),
             selector: json!({}),
-        };
+                    format_descriptor: None,
+};
         let bytes = self.client.decode_v1(&request)?;
         let manifest = serde_json::from_slice::<AssetFileManifest>(&bytes)
             .map_err(|error| format!("provider returned invalid AssetFileManifest: {error}"))?;

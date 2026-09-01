@@ -92,9 +92,9 @@ pub fn display_visible_in_mode(world: &World, entity: EntityId, runtime: bool) -
 }
 
 /// Shadow-caster visibility is intentionally not identical to camera presentation visibility.
-/// A full-body first-person avatar is hidden from the main color pass to avoid camera clipping,
-/// but it must remain in world-space shadow passes so the player still has a physical CSM/local
-/// shadow. `RuntimeHidden` remains a hard reject for every other reason.
+/// Camera-near first-person avatar shells may be hidden from the main color pass to avoid clipping,
+/// but they must remain in world-space shadow passes so the player still has a physically complete
+/// CSM/local shadow. `RuntimeHidden` remains a hard reject for every other reason.
 #[inline]
 pub fn display_shadow_caster_visible_in_mode(
     world: &World,

@@ -1,10 +1,10 @@
 use newengine_core::render::{
     BindGroupDesc, BindGroupId, BindGroupLayoutDesc, BindGroupLayoutId, BindingKind, BufferBinding,
-    BufferDesc, BufferId, BufferUsage, ComputePipelineDesc, DispatchArgs, DrawArgs, MemoryHint,
-    PipelineBlendMode, PipelineDepthCompare, PipelineDepthMode, PipelineDesc, PipelineId,
-    RasterCullMode, RectI32, RenderApi, RenderDrawListKind, RenderGraphPassKind, SamplerDesc,
-    SamplerId, ShaderDesc, ShaderId, ShaderSourceKind, ShaderStage, TextureDesc, TextureFormat,
-    TextureId, TextureUsage, Viewport,
+    BufferDesc, BufferId, BufferUsage, ComputePipelineDesc, DispatchArgs, DrawArgs,
+    GraphTextureSemantic, MemoryHint, PipelineBlendMode, PipelineDepthCompare, PipelineDepthMode,
+    PipelineDesc, PipelineId, RasterCullMode, RectI32, RenderApi, RenderDrawListKind,
+    RenderGraphPassKind, SamplerDesc, SamplerId, ShaderDesc, ShaderId, ShaderSourceKind,
+    ShaderStage, TextureDesc, TextureFormat, TextureId, TextureUsage, Viewport,
 };
 use newengine_core::{EngineError, EngineResult};
 use newengine_ecs::World;
@@ -16,14 +16,14 @@ use newengine_vfx_api::{
 pub(super) const VFX_GPU_PARTICLE_CAPACITY: usize = 262_144;
 const PARTICLE_SLOT_BYTES: usize = 112;
 const PARTICLE_SSBO_BYTES: u64 = (VFX_GPU_PARTICLE_CAPACITY * PARTICLE_SLOT_BYTES) as u64;
-const PARTICLE_FRAME_UBO_BYTES: u64 = 128;
+const PARTICLE_FRAME_UBO_BYTES: u64 = 192;
 const PARTICLE_FRAME_SLOTS: usize = 4;
 const PARTICLE_WORKGROUP_SIZE: u32 = 64;
 const MAX_SPAWN_UPLOADS_PER_FRAME: usize = 4_096;
 const MAX_KILLS_PER_FRAME: usize = 4_096;
 const PARTICLE_SIM_SHADER: &str = "shaders/vfx/particle_sim.comp";
 const PARTICLE_VERTEX_SHADER: &str = "shaders/vfx/particle_billboard.vert";
-const PARTICLE_FRAGMENT_SHADER: &str = "shaders/vfx/particle_billboard.frag";
+const PARTICLE_FRAGMENT_SHADER: &str = "shaders/vfx/particle_gbuffer.frag";
 
 #[inline]
 fn vfx_diagnostics_enabled() -> bool {
@@ -172,6 +172,8 @@ impl VfxGpuRenderer {
             dt,
             self.high_water,
             resident_texture_mask(texture_slots),
+            viewport_width,
+            viewport_height,
         );
         vfx_diag!("VFXDIAG frame_ubo write begin");
         r.write_buffer(frame_ubo, 0, &frame_bytes)?;
@@ -195,7 +197,7 @@ impl VfxGpuRenderer {
             .graphics_pipeline(color_format)
             .ok_or_else(|| EngineError::other("VFX GPU billboard pipeline missing"))?;
         vfx_diag!("VFXDIAG graphics begin_draw_list");
-        r.begin_draw_list(RenderDrawListKind::Transparent)?;
+        r.begin_draw_list(RenderDrawListKind::ParticleGBuffer)?;
         let extent =
             newengine_core::render::Extent2D::new(viewport_width.max(1), viewport_height.max(1));
         r.set_viewport(Viewport::full(extent))?;
@@ -244,7 +246,10 @@ impl VfxGpuRenderer {
                         BindingKind::Texture2D,
                         BindingKind::Texture2D,
                         BindingKind::Texture2D,
+                        BindingKind::Texture2D,
+                        BindingKind::Texture2D,
                         BindingKind::Sampler,
+                        BindingKind::GraphTexture2D(GraphTextureSemantic::SceneDepth),
                     ])
                     .with_label("vfx.gpu_particles.layout"),
                 )?;
@@ -329,7 +334,10 @@ impl VfxGpuRenderer {
                             .with_texture1(bound_textures[1])
                             .with_texture2(bound_textures[2])
                             .with_texture3(bound_textures[3])
-                            .with_sampler0(sampler),
+                            .with_texture4(bound_textures[4])
+                            .with_texture5(bound_textures[5])
+                            .with_sampler0(sampler)
+                            .with_graph_texture_fallback(fallback_texture),
                     )?,
                 );
                 self.bound_textures[slot] = Some(bound_textures);
@@ -397,16 +405,22 @@ impl VfxGpuRenderer {
             let vs = self.vertex_shader.expect("vertex shader created above");
             let fs = self.fragment_shader.expect("fragment shader created above");
             let pipeline = r.create_pipeline(
-                PipelineDesc::new(vs, fs, color_format)
-                    .with_label("vfx.gpu_particles.billboard")
+                PipelineDesc::new(vs, fs, TextureFormat::Rgba16Float)
+                    .with_color_formats(vec![
+                        TextureFormat::Rgba16Float,
+                        TextureFormat::Rgba16Float,
+                        TextureFormat::Rgba16Float,
+                        TextureFormat::Rgba16Float,
+                    ])
+                    .with_label("vfx.gpu_particles.gbuffer")
                     .with_bind_group_layouts(vec![layout])
                     .with_depth_state(
                         TextureFormat::Depth32Float,
                         PipelineDepthMode::new(true, false, PipelineDepthCompare::LessOrEqual),
                     )
                     .with_cull_mode(RasterCullMode::None)
-                    .with_blend_mode(PipelineBlendMode::Alpha)
-                    .with_cache_key(format!("vfx.gpu_particles.billboard.v1.{color_format:?}")),
+                    .with_blend_mode(PipelineBlendMode::Additive)
+                    .with_cache_key(format!("vfx.gpu_particles.gbuffer.v1.{color_format:?}")),
             )?;
             self.graphics_pipelines.push((color_format, pipeline));
         }
@@ -537,11 +551,23 @@ fn encode_frame_ubo(
     dt: f32,
     high_water: usize,
     resident_texture_mask: u32,
+    viewport_width: u32,
+    viewport_height: u32,
 ) -> [u8; PARTICLE_FRAME_UBO_BYTES as usize] {
-    let mut values = [0.0f32; 32];
+    let mut values = [0.0f32; 48];
     values[..16].copy_from_slice(&view_projection.to_cols_array());
-    values[16..20].copy_from_slice(&[camera_right.x, camera_right.y, camera_right.z, 0.0]);
-    values[20..24].copy_from_slice(&[camera_up.x, camera_up.y, camera_up.z, 0.0]);
+    values[16..20].copy_from_slice(&[
+        camera_right.x,
+        camera_right.y,
+        camera_right.z,
+        1.0 / viewport_width.max(1) as f32,
+    ]);
+    values[20..24].copy_from_slice(&[
+        camera_up.x,
+        camera_up.y,
+        camera_up.z,
+        1.0 / viewport_height.max(1) as f32,
+    ]);
     values[24..28].copy_from_slice(&[camera_position.x, camera_position.y, camera_position.z, dt]);
     values[28..32].copy_from_slice(&[
         high_water as f32,
@@ -549,6 +575,7 @@ fn encode_frame_ubo(
         resident_texture_mask as f32,
         0.0,
     ]);
+    values[32..48].copy_from_slice(&view_projection.inverse().to_cols_array());
     f32_array_bytes(values)
 }
 
@@ -583,6 +610,7 @@ fn encode_particle_slot(spawn: VfxGpuParticleSpawnV1) -> [u8; PARTICLE_SLOT_BYTE
     };
     values[21] = f32::from(spawn.texture_slot);
     values[22] = spawn.billboard as u32 as f32;
+    values[23] = spawn.depth_softness_m;
     values[24..28].copy_from_slice(&[
         spawn.drag_per_second,
         spawn.rotation_radians,
@@ -620,6 +648,7 @@ mod tests {
             fade_start_fraction: 0.6,
             fade_in_fraction: 0.1,
             drag_per_second: 1.25,
+            depth_softness_m: 0.06,
             rotation_radians: 0.3,
             angular_velocity_radians_per_second: 4.0,
             texture_slot: 2,
@@ -635,12 +664,14 @@ mod tests {
         let width = f32::from_ne_bytes(bytes[44..48].try_into().unwrap());
         let height = f32::from_ne_bytes(bytes[56..60].try_into().unwrap());
         let kind = f32::from_ne_bytes(bytes[80..84].try_into().unwrap());
+        let depth_softness = f32::from_ne_bytes(bytes[92..96].try_into().unwrap());
         let drag = f32::from_ne_bytes(bytes[96..100].try_into().unwrap());
         let rotation = f32::from_ne_bytes(bytes[100..104].try_into().unwrap());
         assert_eq!(lifetime, 2.0);
         assert_eq!(width, 0.02);
         assert_eq!(height, 0.10);
         assert_eq!(kind, 2.0);
+        assert_eq!(depth_softness, 0.06);
         assert_eq!(drag, 1.25);
         assert_eq!(rotation, 0.3);
     }

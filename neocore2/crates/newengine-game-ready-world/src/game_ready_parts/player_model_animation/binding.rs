@@ -6,6 +6,20 @@ struct PlayerAnimationRuntimeClip {
     event_cursor: AnimationEventCursor,
 }
 
+#[derive(Clone, Debug, Default)]
+struct EquipmentPoseSet {
+    ready: Option<PlayerAnimationRuntimeClip>,
+    aim: Option<PlayerAnimationRuntimeClip>,
+    reload: Option<PlayerAnimationRuntimeClip>,
+}
+
+impl EquipmentPoseSet {
+    #[inline]
+    fn any(&self) -> bool {
+        self.ready.is_some() || self.aim.is_some() || self.reload.is_some()
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 struct PlayerFootJointBinding {
     left: usize,
@@ -412,7 +426,6 @@ pub(super) fn select_fall_presentation_band(
 
 #[derive(Clone, Debug)]
 struct ResolvedAnimationSemanticState {
-    event: String,
     target: String,
     sequence: u64,
     parameters: serde_json::Value,
@@ -443,7 +456,6 @@ impl PlayerAnimationSemanticInput {
             ));
         }
         let resolved = ResolvedAnimationSemanticState {
-            event: event.event.clone(),
             target: target.to_owned(),
             sequence: event.sequence,
             parameters: event.parameters.clone(),
@@ -551,9 +563,11 @@ pub(super) struct PlayerAnimationRuntimeBinding {
     fall_high_min_distance: f32,
     fall_active_band: Option<FallPresentationBand>,
     fall_time_seconds: f32,
-    equipment_ready_pose: Option<PlayerAnimationRuntimeClip>,
-    equipment_aim_pose: Option<PlayerAnimationRuntimeClip>,
-    equipment_reload_pose: Option<PlayerAnimationRuntimeClip>,
+    /// Generic `equipment.ready/aim/reload` compatibility fallback.
+    equipment_default_pose_set: EquipmentPoseSet,
+    /// Open-ended project-authored family sets selected by the equipped item's `weapon_class`.
+    /// Keys are normalized class ids such as `pistol` or `rifle`; runtime never enumerates them.
+    equipment_pose_sets: std::collections::BTreeMap<String, EquipmentPoseSet>,
     unarmed_ready_pose: Option<PlayerAnimationRuntimeClip>,
     unarmed_attack_pose: Option<PlayerAnimationRuntimeClip>,
     unarmed_attack_sequence: u64,
@@ -561,6 +575,11 @@ pub(super) struct PlayerAnimationRuntimeBinding {
     equipment_ready_sample_phase: f32,
     equipment_time_seconds: f32,
     equipment_reload_active: bool,
+    /// Last published equipment selection diagnostic. This is transition state only; it never
+    /// participates in pose selection and exists to make live capability routing auditable.
+    equipment_trace_active: bool,
+    equipment_trace_family: Option<String>,
+    equipment_trace_stance: EquipmentPresentationStance,
     equipment_ready_rotation_weights: Vec<ResolvedJointBlendRule>,
     equipment_aim_rotation_weights: Vec<ResolvedJointBlendRule>,
     equipment_reload_rotation_weights: Vec<ResolvedJointBlendRule>,
@@ -590,7 +609,46 @@ const fn locomotion_slot(
     }
 }
 
+#[inline]
+fn select_equipment_pose_set<'a>(
+    default_set: &'a EquipmentPoseSet,
+    pose_sets: &'a std::collections::BTreeMap<String, EquipmentPoseSet>,
+    family: Option<&str>,
+) -> Option<&'a EquipmentPoseSet> {
+    match family {
+        Some(family) => pose_sets.get(family),
+        None => Some(default_set),
+    }
+}
+
+#[inline]
+fn select_equipment_pose_set_mut<'a>(
+    default_set: &'a mut EquipmentPoseSet,
+    pose_sets: &'a mut std::collections::BTreeMap<String, EquipmentPoseSet>,
+    family: Option<&str>,
+) -> Option<&'a mut EquipmentPoseSet> {
+    match family {
+        Some(family) => pose_sets.get_mut(family),
+        None => Some(default_set),
+    }
+}
+
 impl PlayerAnimationRuntimeBinding {
+    #[inline]
+    fn equipment_pose_set(&self, family: Option<&str>) -> Option<&EquipmentPoseSet> {
+        select_equipment_pose_set(
+            &self.equipment_default_pose_set,
+            &self.equipment_pose_sets,
+            family,
+        )
+    }
+
+    #[inline]
+    fn has_equipment_pose_for_family(&self, family: Option<&str>) -> bool {
+        self.equipment_pose_set(family)
+            .is_some_and(EquipmentPoseSet::any)
+    }
+
     pub(super) fn consume_semantic_event(
         &mut self,
         event: &newengine_animation_api::AnimationSemanticEventV1,
@@ -623,9 +681,21 @@ impl PlayerAnimationRuntimeBinding {
         newengine_engine_runtime::gameplay::PlayerAuthoredAnimationCapabilities {
             unarmed_ready: self.unarmed_ready_pose.is_some(),
             unarmed_attack: self.unarmed_attack_pose.is_some(),
-            equipment_ready: self.equipment_ready_pose.is_some(),
-            equipment_aim: self.equipment_aim_pose.is_some(),
-            equipment_reload: self.equipment_reload_pose.is_some(),
+            equipment_ready: self.equipment_default_pose_set.ready.is_some()
+                || self
+                    .equipment_pose_sets
+                    .values()
+                    .any(|set| set.ready.is_some()),
+            equipment_aim: self.equipment_default_pose_set.aim.is_some()
+                || self
+                    .equipment_pose_sets
+                    .values()
+                    .any(|set| set.aim.is_some()),
+            equipment_reload: self.equipment_default_pose_set.reload.is_some()
+                || self
+                    .equipment_pose_sets
+                    .values()
+                    .any(|set| set.reload.is_some()),
             noclip: self.noclip_pose.is_some(),
         }
     }
@@ -847,4 +917,22 @@ fn apply_equipment_rotation_overlay(
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod equipment_pose_family_selection_tests {
+    use super::*;
+
+    #[test]
+    fn classified_equipment_family_never_falls_back_to_generic_pose_set() {
+        let generic = EquipmentPoseSet::default();
+        let mut families = std::collections::BTreeMap::new();
+
+        assert!(select_equipment_pose_set(&generic, &families, None).is_some());
+        assert!(select_equipment_pose_set(&generic, &families, Some("knife")).is_none());
+
+        families.insert("knife".to_owned(), EquipmentPoseSet::default());
+        assert!(select_equipment_pose_set(&generic, &families, Some("knife")).is_some());
+        assert!(select_equipment_pose_set(&generic, &families, Some("bow")).is_none());
+    }
 }

@@ -13,7 +13,7 @@ fn main() {
     });
     let decoded = newengine_assets_api::decode_list_file_envelope(
         &bytes,
-        newengine_asset_format_nef8::ytd::CONTENT_KIND,
+        newengine_assets_api::LIST_FILE_CONTENT_KIND_YTD,
         &logical_path,
     )
     .unwrap_or_else(|error| {

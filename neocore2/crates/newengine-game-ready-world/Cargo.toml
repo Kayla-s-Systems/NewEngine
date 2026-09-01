@@ -39,6 +39,7 @@ newengine-tags-api = { path = "../newengine-tags-api" }
 newengine-task-api = { path = "../newengine-task-api" }
 newengine-transform = { path = "../newengine-transform", features = ["ecs"], default-features = false }
 newengine-ui-api = { path = "../newengine-ui-api" }
+newengine-vfx-runtime = { path = "../newengine-vfx-runtime" }
 newengine-ulog-api = { path = "../newengine-ulog-api" }
 newengine-world-authoring-api = { path = "../newengine-world-authoring-api" }
 newengine-world-environment-api = { path = "../newengine-world-environment-api" }

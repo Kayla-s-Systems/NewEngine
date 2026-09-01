@@ -33,7 +33,7 @@ fn run() -> Result<(), String> {
     let template_bytes =
         fs::read(&template).map_err(|e| format!("read '{}': {e}", template.display()))?;
     let header = parse_list_file_header(&template_bytes)?;
-    if header.content_kind != newengine_asset_format_nef8::neui::CONTENT_KIND {
+    if header.content_kind != newengine_assets_api::LIST_FILE_CONTENT_KIND_NEUI {
         return Err(format!(
             "template '{}' is not NEUI content_kind={}",
             template.display(),

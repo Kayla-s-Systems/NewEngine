@@ -779,6 +779,7 @@ mod transition_tests {
                 scale: Some(joint.scale_ls),
             })
             .collect::<Vec<_>>();
+        let authored_pose = pose.clone();
         let authored_rig = newengine_engine_runtime::gameplay::PlayerWeaponArmIkRigDefinition {
             chest: "spined".to_owned(),
             right_shoulder: "r_shoulder".to_owned(),
@@ -815,6 +816,23 @@ mod transition_tests {
         rebuild_model_joint_frames(&animation_runtime, &pose, &mut frames).expect("initial frames");
         let right_before = frames[rig.right_palm].transform_point3(Vec3::ZERO);
         let left_before = frames[rig.left_palm].transform_point3(Vec3::ZERO);
+        let authored_handle = crate::weapon_grip::weapon_handle_anchor_from_right_palm(
+            &presentation,
+            frames[rig.right_palm],
+        )
+        .expect("authored firing-hand handle anchor");
+        let right_upper_len_before = (frames[rig.right_elbow].transform_point3(Vec3::ZERO)
+            - frames[rig.right_shoulder].transform_point3(Vec3::ZERO))
+        .length();
+        let right_lower_len_before = (frames[rig.right_wrist].transform_point3(Vec3::ZERO)
+            - frames[rig.right_elbow].transform_point3(Vec3::ZERO))
+        .length();
+        let left_upper_len_before = (frames[rig.left_elbow].transform_point3(Vec3::ZERO)
+            - frames[rig.left_shoulder].transform_point3(Vec3::ZERO))
+        .length();
+        let left_lower_len_before = (frames[rig.left_wrist].transform_point3(Vec3::ZERO)
+            - frames[rig.left_elbow].transform_point3(Vec3::ZERO))
+        .length();
 
         let final_result = apply_equipped_weapon_support_ik(
             &presentation,
@@ -855,7 +873,84 @@ mod transition_tests {
         let left_after_error = (left_after - left_target).length();
         assert!(right_after_error < right_before_error);
         assert!(left_after_error < left_before_error);
+        let resolved_handle =
+            crate::weapon_grip::weapon_handle_position(&presentation, final_result.base_root);
+        assert!(
+            (resolved_handle - authored_handle).length() <= 1.0e-5,
+            "third-person Ready/Aim must preserve authored firing-hand translation"
+        );
+        let right_upper_len_after = (frames[rig.right_elbow].transform_point3(Vec3::ZERO)
+            - frames[rig.right_shoulder].transform_point3(Vec3::ZERO))
+        .length();
+        let right_lower_len_after = (frames[rig.right_wrist].transform_point3(Vec3::ZERO)
+            - frames[rig.right_elbow].transform_point3(Vec3::ZERO))
+        .length();
+        let left_upper_len_after = (frames[rig.left_elbow].transform_point3(Vec3::ZERO)
+            - frames[rig.left_shoulder].transform_point3(Vec3::ZERO))
+        .length();
+        let left_lower_len_after = (frames[rig.left_wrist].transform_point3(Vec3::ZERO)
+            - frames[rig.left_elbow].transform_point3(Vec3::ZERO))
+        .length();
+        for (label, before, after) in [
+            ("right upper", right_upper_len_before, right_upper_len_after),
+            ("right lower", right_lower_len_before, right_lower_len_after),
+            ("left upper", left_upper_len_before, left_upper_len_after),
+            ("left lower", left_lower_len_before, left_lower_len_after),
+        ] {
+            assert!(
+                (after - before).abs() <= 1.0e-5,
+                "{label} arm segment stretched before={before:.6} after={after:.6}"
+            );
+        }
         assert!(final_result.error_m.is_finite());
+
+        // Full-body first person is deliberately different: authored arm locals are immutable.
+        // ADS rotates the weapon around the firing handle and camera follows the rendered sights;
+        // no shoulder/elbow solve is allowed to straighten the real avatar arms toward the camera.
+        let mut fpp_pose = authored_pose.clone();
+        let mut fpp_frames = Vec::new();
+        rebuild_model_joint_frames(&animation_runtime, &fpp_pose, &mut fpp_frames)
+            .expect("FPP initial frames");
+        let fpp_handle = crate::weapon_grip::weapon_handle_anchor_from_right_palm(
+            &presentation,
+            fpp_frames[rig.right_palm],
+        )
+        .expect("FPP authored handle");
+        let view = Quat::from_euler(newengine_math::EulerRot::YXZ, 0.31, -0.12, 0.0);
+        let fpp_result = apply_equipped_weapon_support_ik(
+            &presentation,
+            Some(&rig),
+            &skeleton,
+            &animation_runtime,
+            &mut fpp_pose,
+            &mut fpp_frames,
+            Some((view * -Vec3::Z).normalize_or_zero()),
+            Some(view),
+            Some(Vec3::new(0.0, 1.62, 0.0)),
+            true,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            Vec3::ZERO,
+            true,
+            true,
+            true,
+        )
+        .expect("FPP authored hand presentation")
+        .expect("FPP weapon root");
+        for (joint, (before, after)) in authored_pose.iter().zip(&fpp_pose).enumerate() {
+            assert_eq!(
+                before, after,
+                "FPP weapon presentation mutated authored arm/body local joint={joint}"
+            );
+        }
+        let resolved_handle =
+            crate::weapon_grip::weapon_handle_position(&presentation, fpp_result.base_root);
+        assert!(resolved_handle.distance(fpp_handle) <= 1.0e-5);
+        let sight_forward =
+            crate::weapon_grip::weapon_sight_forward(&presentation, fpp_result.base_root);
+        assert!(sight_forward.dot((view * -Vec3::Z).normalize_or_zero()) > 0.9999);
     }
 
     #[test]

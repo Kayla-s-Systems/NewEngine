@@ -194,7 +194,7 @@ fn spawn_equipped_weapon_visual(
     }
 
     newengine_ulog_api::ulog::info!(
-        "game-ready: equipped weapon visual bound player={} item='{}' instance={} model='{}' parts={} attachment='readyhold-spined/bilateral-hand-ik' alignment='calibrated-palm-contacts'",
+        "game-ready: equipped weapon visual bound player={} item='{}' instance={} model='{}' parts={} attachment='right-hand-prop/authored-character-pose' alignment='authored-hand-frame'",
         owner.stable_u64(),
         definition.name,
         binding.instance_id.0,

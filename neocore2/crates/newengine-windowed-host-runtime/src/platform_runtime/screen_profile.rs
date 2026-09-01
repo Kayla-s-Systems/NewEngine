@@ -72,7 +72,7 @@ fn editing_tools_available(resources: &Resources) -> bool {
     resources
         .get::<newengine_plugin_host::PluginsSnapshot>()
         .is_some_and(|snapshot| {
-            snapshot.has_running_capability(newengine_plugin_api::CAPABILITY_ID_EDITING_TOOLS)
+            snapshot.has_loaded_capability(newengine_plugin_api::CAPABILITY_ID_EDITING_TOOLS)
         })
 }
 

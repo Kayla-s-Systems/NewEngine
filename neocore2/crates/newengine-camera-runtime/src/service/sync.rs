@@ -25,6 +25,23 @@ fn first_person_position_contract(
 }
 
 #[inline]
+fn first_person_ads_position_contract(
+    hip_camera_position: Vec3,
+    ads_camera_position: Option<Vec3>,
+    aim_alpha: f32,
+) -> Vec3 {
+    let aim_alpha = if aim_alpha.is_finite() {
+        aim_alpha.clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    ads_camera_position
+        .filter(|position| position.is_finite())
+        .map(|ads| hip_camera_position.lerp(ads, aim_alpha))
+        .unwrap_or(hip_camera_position)
+}
+
+#[inline]
 fn constrain_first_person_camera_position(
     player: EntityId,
     eye_center: Vec3,
@@ -435,8 +452,14 @@ impl CameraRuntimeService {
                 config.first_person_aim_response_hz,
                 config.first_person_camera_recoil_share,
             );
+            let hip_camera_position = eye_center + base_offset;
+            let authored_camera_position = first_person_ads_position_contract(
+                hip_camera_position,
+                config.first_person_ads_anchor_ws,
+                first_person.aim_alpha,
+            );
             let desired_camera_position =
-                eye_center + base_offset + camera_rotation * additive.position_ls;
+                authored_camera_position + camera_rotation * additive.position_ls;
 
             // Do not self-collide the camera against the local owner's head/neck envelope. In a
             // full-body FPP contract those camera-near surfaces are removed from owner rendering.
@@ -903,6 +926,17 @@ mod first_person_position_tests {
             Some(&collision),
         );
         assert!((constrained - desired).length() <= 1.0e-6);
+    }
+
+    #[test]
+    fn ads_camera_position_converges_exactly_to_rendered_rear_sight_anchor() {
+        let hip = Vec3::new(0.0, 1.62, -0.045);
+        let ads = Vec3::new(-0.013, 1.601, -0.092);
+        assert_eq!(first_person_ads_position_contract(hip, Some(ads), 0.0), hip);
+        let half = first_person_ads_position_contract(hip, Some(ads), 0.5);
+        assert!((half - hip.lerp(ads, 0.5)).length() <= 1.0e-7);
+        assert_eq!(first_person_ads_position_contract(hip, Some(ads), 1.0), ads);
+        assert_eq!(first_person_ads_position_contract(hip, None, 1.0), hip);
     }
 
     #[test]

@@ -1,6 +1,8 @@
 use newengine_ecs::World;
 use newengine_math::Vec3;
 use newengine_model_domain_api::{MeshRenderOptions, MeshRenderRole};
+use newengine_primitives::Primitive;
+use newengine_transform::Transform;
 use newengine_vfx_api::{
     EntityHandle, VfxBudgetV1, VfxEffectRef, VfxGpuBillboardMode, VfxPriority, VfxSpawnRequestV1,
 };
@@ -12,60 +14,160 @@ const TEST_IMPACT_EFFECT: &str = "effects/tests/weapon.fxd@impact";
 
 fn test_effect_library() -> VfxEffectLibrary {
     let mut library = VfxEffectLibrary::default();
-    library.register(VfxEffectDefinition {
-        effect: VfxEffectRef::new(TEST_SHOT_EFFECT),
-        priority: VfxPriority::High,
-        layers: vec![
-            VfxLayerDefinition::Pulse {
-                kind: VfxLayerKind::MuzzleFlash, primitive: newengine_primitives::builtins::ID_PLANE,
-                role: VfxRenderRole::Transparent, alignment: VfxAlignment::DirectionZ, texture_slot: 0,
-                billboard: VfxGpuBillboardMode::CameraFacing, offset_along_direction: 0.0, offset_along_normal: 0.0,
-                scale: Vec3::splat(0.1), growth_per_second: Vec3::ZERO, color: [1.0;4], lifetime_seconds: 0.05,
-                fade_start_fraction: 0.5, fade_in_fraction: 0.0, drag_per_second: 0.0, rotation_radians: 0.0, rotation_random_radians: 0.0, spin_radians_per_second: 0.0, light: Some(VfxLightDefinition { color: [1.0,0.7,0.3], intensity: 8.0, range: 2.0 }),
-            },
-            VfxLayerDefinition::Pulse {
-                kind: VfxLayerKind::MuzzleCore, primitive: newengine_primitives::builtins::ID_SPHERE_UV,
-                role: VfxRenderRole::Transparent, alignment: VfxAlignment::None, texture_slot: 0,
-                billboard: VfxGpuBillboardMode::CameraFacing, offset_along_direction: 0.0, offset_along_normal: 0.0,
-                scale: Vec3::splat(0.04), growth_per_second: Vec3::ZERO, color: [1.0;4], lifetime_seconds: 0.04,
-                fade_start_fraction: 0.5, fade_in_fraction: 0.0, drag_per_second: 0.0, rotation_radians: 0.0, rotation_random_radians: 0.0, spin_radians_per_second: 0.0, light: None,
-            },
-            VfxLayerDefinition::Pulse {
-                kind: VfxLayerKind::Smoke, primitive: newengine_primitives::builtins::ID_SPHERE_UV,
-                role: VfxRenderRole::Transparent, alignment: VfxAlignment::DirectionZ, texture_slot: 0,
-                billboard: VfxGpuBillboardMode::CameraFacing, offset_along_direction: 0.0, offset_along_normal: 0.0,
-                scale: Vec3::splat(0.05), growth_per_second: Vec3::splat(0.1), color: [0.2,0.2,0.2,0.3],
-                lifetime_seconds: 0.5, fade_start_fraction: 0.5, fade_in_fraction: 0.0, drag_per_second: 0.0, rotation_radians: 0.0, rotation_random_radians: 0.0, spin_radians_per_second: 0.0, light: None,
-            },
-            VfxLayerDefinition::Tracer {
-                primitive: newengine_primitives::builtins::ID_CUBE, color: [1.0,0.7,0.2,1.0],
-                half_length: 0.18, radius: 0.003, speed: 12.0, max_lifetime_seconds: 1.0,
-            },
-        ],
-    }).unwrap();
-    library.register(VfxEffectDefinition {
-        effect: VfxEffectRef::new(TEST_IMPACT_EFFECT),
-        priority: VfxPriority::High,
-        layers: vec![
-            VfxLayerDefinition::Burst {
-                kind: VfxLayerKind::Spark, primitive: newengine_primitives::builtins::ID_CUBE,
-                role: VfxRenderRole::Transparent, texture_slot: 0, billboard: VfxGpuBillboardMode::VelocityAligned,
-                count: 8, scale: Vec3::splat(0.01), color: [1.0,0.82,0.25,1.0], speed_min: 2.0, speed_max: 7.0, cone_angle_degrees: 70.0, size_variance: 0.2, lifetime_variance: 0.15, drag_per_second: 0.1, rotation_random_radians: 3.14159, spin_radians_per_second: 3.0, spin_variance: 1.5,
-                acceleration: Vec3::new(0.0,-9.8,0.0), lifetime_seconds: 0.3, fade_start_fraction: 0.5, fade_in_fraction: 0.0,
-            },
-            VfxLayerDefinition::Pulse {
-                kind: VfxLayerKind::Smoke, primitive: newengine_primitives::builtins::ID_SPHERE_UV,
-                role: VfxRenderRole::Transparent, alignment: VfxAlignment::NormalY, texture_slot: 0,
-                billboard: VfxGpuBillboardMode::CameraFacing, offset_along_direction: 0.0, offset_along_normal: 0.01,
-                scale: Vec3::splat(0.04), growth_per_second: Vec3::splat(0.1), color: [0.2,0.2,0.2,0.3],
-                lifetime_seconds: 0.5, fade_start_fraction: 0.5, fade_in_fraction: 0.0, drag_per_second: 0.0, rotation_radians: 0.0, rotation_random_radians: 0.0, spin_radians_per_second: 0.0, light: None,
-            },
-            VfxLayerDefinition::Decal {
-                primitive: newengine_primitives::builtins::ID_DISC, scale: Vec3::new(0.1,0.002,0.1),
-                color: [0.05,0.05,0.05,1.0], normal_offset: 0.003, lifetime_seconds: 5.0, fade_start_fraction: 0.9,
-            },
-        ],
-    }).unwrap();
+    library
+        .register(VfxEffectDefinition {
+            effect: VfxEffectRef::new(TEST_SHOT_EFFECT),
+            priority: VfxPriority::High,
+            layers: vec![
+                VfxLayerDefinition::Pulse {
+                    kind: VfxLayerKind::MuzzleFlash,
+                    primitive: newengine_primitives::builtins::ID_PLANE,
+                    role: VfxRenderRole::Transparent,
+                    alignment: VfxAlignment::DirectionZ,
+                    texture_slot: 0,
+                    billboard: VfxGpuBillboardMode::CameraFacing,
+                    offset_along_direction: 0.0,
+                    offset_along_normal: 0.0,
+                    scale: Vec3::splat(0.1),
+                    growth_per_second: Vec3::ZERO,
+                    color: [1.0; 4],
+                    lifetime_seconds: 0.05,
+                    fade_start_fraction: 0.5,
+                    fade_in_fraction: 0.0,
+                    drag_per_second: 0.0,
+                    depth_softness_m: 0.0,
+                    rotation_radians: 0.0,
+                    rotation_random_radians: 0.0,
+                    spin_radians_per_second: 0.0,
+                    light: Some(VfxLightDefinition {
+                        color: [1.0, 0.7, 0.3],
+                        intensity: 8.0,
+                        range: 2.0,
+                    }),
+                },
+                VfxLayerDefinition::Pulse {
+                    kind: VfxLayerKind::MuzzleCore,
+                    primitive: newengine_primitives::builtins::ID_SPHERE_UV,
+                    role: VfxRenderRole::Transparent,
+                    alignment: VfxAlignment::None,
+                    texture_slot: 0,
+                    billboard: VfxGpuBillboardMode::CameraFacing,
+                    offset_along_direction: 0.0,
+                    offset_along_normal: 0.0,
+                    scale: Vec3::splat(0.04),
+                    growth_per_second: Vec3::ZERO,
+                    color: [1.0; 4],
+                    lifetime_seconds: 0.04,
+                    fade_start_fraction: 0.5,
+                    fade_in_fraction: 0.0,
+                    drag_per_second: 0.0,
+                    depth_softness_m: 0.0,
+                    rotation_radians: 0.0,
+                    rotation_random_radians: 0.0,
+                    spin_radians_per_second: 0.0,
+                    light: None,
+                },
+                VfxLayerDefinition::Pulse {
+                    kind: VfxLayerKind::Smoke,
+                    primitive: newengine_primitives::builtins::ID_SPHERE_UV,
+                    role: VfxRenderRole::Transparent,
+                    alignment: VfxAlignment::DirectionZ,
+                    texture_slot: 0,
+                    billboard: VfxGpuBillboardMode::CameraFacing,
+                    offset_along_direction: 0.0,
+                    offset_along_normal: 0.0,
+                    scale: Vec3::splat(0.05),
+                    growth_per_second: Vec3::splat(0.1),
+                    color: [0.2, 0.2, 0.2, 0.3],
+                    lifetime_seconds: 0.5,
+                    fade_start_fraction: 0.5,
+                    fade_in_fraction: 0.0,
+                    drag_per_second: 0.0,
+                    depth_softness_m: 0.0,
+                    rotation_radians: 0.0,
+                    rotation_random_radians: 0.0,
+                    spin_radians_per_second: 0.0,
+                    light: None,
+                },
+                VfxLayerDefinition::Tracer {
+                    primitive: newengine_primitives::builtins::ID_CUBE,
+                    color: [1.0, 0.7, 0.2, 1.0],
+                    mode: VfxTracerMode::Swept,
+                    half_length: 0.18,
+                    radius: 0.003,
+                    speed: 12.0,
+                    max_lifetime_seconds: 1.0,
+                },
+            ],
+        })
+        .unwrap();
+    library
+        .register(VfxEffectDefinition {
+            effect: VfxEffectRef::new(TEST_IMPACT_EFFECT),
+            priority: VfxPriority::High,
+            layers: vec![
+                VfxLayerDefinition::Burst {
+                    kind: VfxLayerKind::Spark,
+                    primitive: newengine_primitives::builtins::ID_CUBE,
+                    role: VfxRenderRole::Transparent,
+                    texture_slot: 0,
+                    billboard: VfxGpuBillboardMode::VelocityAligned,
+                    emission_axis: VfxEmissionAxis::Reflection,
+                    count: 8,
+                    scale: Vec3::splat(0.01),
+                    color: [1.0, 0.82, 0.25, 1.0],
+                    speed_min: 2.0,
+                    speed_max: 7.0,
+                    cone_angle_degrees: 70.0,
+                    size_variance: 0.2,
+                    lifetime_variance: 0.15,
+                    drag_per_second: 0.1,
+                    depth_softness_m: 0.0,
+                    rotation_random_radians: 3.14159,
+                    spin_radians_per_second: 3.0,
+                    spin_variance: 1.5,
+                    acceleration: Vec3::new(0.0, -9.8, 0.0),
+                    lifetime_seconds: 0.3,
+                    fade_start_fraction: 0.5,
+                    fade_in_fraction: 0.0,
+                },
+                VfxLayerDefinition::Pulse {
+                    kind: VfxLayerKind::Smoke,
+                    primitive: newengine_primitives::builtins::ID_SPHERE_UV,
+                    role: VfxRenderRole::Transparent,
+                    alignment: VfxAlignment::NormalY,
+                    texture_slot: 0,
+                    billboard: VfxGpuBillboardMode::CameraFacing,
+                    offset_along_direction: 0.0,
+                    offset_along_normal: 0.01,
+                    scale: Vec3::splat(0.04),
+                    growth_per_second: Vec3::splat(0.1),
+                    color: [0.2, 0.2, 0.2, 0.3],
+                    lifetime_seconds: 0.5,
+                    fade_start_fraction: 0.5,
+                    fade_in_fraction: 0.0,
+                    drag_per_second: 0.0,
+                    depth_softness_m: 0.0,
+                    rotation_radians: 0.0,
+                    rotation_random_radians: 0.0,
+                    spin_radians_per_second: 0.0,
+                    light: None,
+                },
+                VfxLayerDefinition::Decal {
+                    material_ref: Some(
+                        "shared/materials/vfx_bullet_impacts.nemat@metal".to_owned(),
+                    ),
+                    primitive: newengine_primitives::builtins::ID_DISC,
+                    scale: Vec3::new(0.1, 0.002, 0.1),
+                    color: [0.05, 0.05, 0.05, 1.0],
+                    normal_offset: 0.003,
+                    persistent: false,
+                    lifetime_seconds: 5.0,
+                    fade_start_fraction: 0.9,
+                },
+            ],
+        })
+        .unwrap();
     library
 }
 
@@ -89,11 +191,28 @@ fn shot_request(owner: u64, sequence: u64) -> VfxSpawnRequestV1 {
 }
 
 #[test]
+fn reflection_emission_axis_uses_incoming_direction_and_surface_normal() {
+    let incoming = Vec3::new(1.0, -1.0, 0.0).normalize_or_zero();
+    let normal = Vec3::Y;
+    let reflected = runtime::resolve_emission_axis(VfxEmissionAxis::Reflection, incoming, normal);
+    let expected = Vec3::new(1.0, 1.0, 0.0).normalize_or_zero();
+    assert!(
+        (reflected - expected).length() < 1.0e-5,
+        "reflected={reflected:?}"
+    );
+    let normal_axis = runtime::resolve_emission_axis(VfxEmissionAxis::Normal, incoming, normal);
+    assert!((normal_axis - normal).length() < 1.0e-6);
+}
+
+#[test]
 fn default_library_contains_no_weapon_presets() {
     assert!(VfxEffectLibrary::default().is_empty());
     let library = test_effect_library();
     assert_eq!(library.get(TEST_SHOT_EFFECT).unwrap().layers.len(), 4);
-    assert_eq!(library.get(TEST_IMPACT_EFFECT).unwrap().estimated_layers(), 10);
+    assert_eq!(
+        library.get(TEST_IMPACT_EFFECT).unwrap().estimated_layers(),
+        10
+    );
 }
 
 #[test]
@@ -188,6 +307,84 @@ fn tracer_clamp_stops_at_authoritative_hit() {
 }
 
 #[test]
+fn single_frame_tracer_is_static_for_exactly_one_inter_frame_render() {
+    const EFFECT: &str = "effects/tests/weapon.fxd@single_frame_tracer";
+    let mut world = test_world();
+    world
+        .resource_mut::<VfxEffectLibrary>()
+        .expect("effect library")
+        .register(VfxEffectDefinition {
+            effect: VfxEffectRef::new(EFFECT),
+            priority: VfxPriority::High,
+            layers: vec![VfxLayerDefinition::Tracer {
+                primitive: newengine_primitives::builtins::ID_CUBE,
+                color: [1.0, 0.8, 0.3, 1.0],
+                mode: VfxTracerMode::SingleFrame,
+                half_length: 0.18,
+                radius: 0.003,
+                speed: 400.0,
+                max_lifetime_seconds: 0.65,
+            }],
+        })
+        .expect("register single-frame tracer");
+    spawn_vfx(
+        &mut world,
+        VfxSpawnRequestV1 {
+            effect: VfxEffectRef::new(EFFECT),
+            position: [0.0, 0.0, 0.0],
+            direction: [0.0, 0.0, -1.0],
+            max_distance: 0.20,
+            ..Default::default()
+        },
+    )
+    .unwrap()
+    .expect("single-frame tracer spawned");
+
+    let (entity, runtime) = world
+        .query::<VfxLayerRuntime>()
+        .find(|(_, runtime)| runtime.kind == VfxLayerKind::Tracer)
+        .map(|(entity, runtime)| (entity, *runtime))
+        .expect("single-frame tracer layer");
+    assert_eq!(runtime.tracer_mode, VfxTracerMode::SingleFrame);
+    assert_eq!(runtime.tracer_updates_remaining, 1);
+    assert!(
+        (runtime.base_scale.z - 0.20).abs() < 1.0e-6,
+        "streak must clamp to hit distance"
+    );
+    let before = world
+        .get::<Transform>(entity)
+        .copied()
+        .expect("tracer transform");
+
+    update_vfx(&mut world, 0.1);
+    assert!(
+        world.exists(entity),
+        "first update must leave the tracer available for this render"
+    );
+    let after = world
+        .get::<Transform>(entity)
+        .copied()
+        .expect("tracer transform after first update");
+    assert!(
+        (after.position - before.position).length() < 1.0e-8,
+        "single-frame tracer must not sweep through the world"
+    );
+    assert_eq!(
+        world
+            .get::<VfxLayerRuntime>(entity)
+            .unwrap()
+            .tracer_updates_remaining,
+        0
+    );
+
+    update_vfx(&mut world, 0.001);
+    assert!(
+        !world.exists(entity),
+        "single-frame tracer must retire before a second render"
+    );
+}
+
+#[test]
 fn impact_routes_surface_aware_sparks_and_smoke_to_gpu_and_keeps_decal_in_ecs() {
     let mut world = test_world();
     let request = VfxSpawnRequestV1 {
@@ -207,6 +404,13 @@ fn impact_routes_surface_aware_sparks_and_smoke_to_gpu_and_keeps_decal_in_ecs() 
     assert_eq!(
         world.get::<MeshRenderOptions>(decal_entity).unwrap().role,
         MeshRenderRole::Decal
+    );
+    assert_eq!(
+        world
+            .get::<VfxDecalMaterialAssetRef>(decal_entity)
+            .map(|binding| binding.logical_ref.as_str()),
+        Some("shared/materials/vfx_bullet_impacts.nemat@metal"),
+        "authored impact decal material ref must survive compile/spawn into presentation binding"
     );
     assert_eq!(
         world
@@ -238,6 +442,93 @@ fn impact_routes_surface_aware_sparks_and_smoke_to_gpu_and_keeps_decal_in_ecs() 
         1
     );
     assert_eq!(vfx_runtime_stats(&world).active_layers, 10);
+}
+
+#[test]
+fn persistent_decal_survives_transient_instance_teardown_without_age_fade() {
+    const EFFECT: &str = "test.persistent_bullet_hole";
+    let mut world = World::new();
+    let mut library = VfxEffectLibrary::default();
+    library
+        .register(VfxEffectDefinition {
+            effect: VfxEffectRef::new(EFFECT),
+            priority: VfxPriority::High,
+            layers: vec![
+                VfxLayerDefinition::Pulse {
+                    kind: VfxLayerKind::Smoke,
+                    primitive: newengine_primitives::builtins::ID_CUBE,
+                    role: VfxRenderRole::Transparent,
+                    alignment: VfxAlignment::NormalY,
+                    texture_slot: 0,
+                    billboard: VfxGpuBillboardMode::CameraFacing,
+                    offset_along_direction: 0.0,
+                    offset_along_normal: 0.01,
+                    scale: Vec3::splat(0.02),
+                    growth_per_second: Vec3::ZERO,
+                    color: [0.4, 0.4, 0.4, 0.5],
+                    lifetime_seconds: 0.05,
+                    fade_start_fraction: 0.5,
+                    fade_in_fraction: 0.0,
+                    drag_per_second: 0.0,
+                    depth_softness_m: 0.0,
+                    rotation_radians: 0.0,
+                    rotation_random_radians: 0.0,
+                    spin_radians_per_second: 0.0,
+                    light: None,
+                },
+                VfxLayerDefinition::Decal {
+                    primitive: newengine_primitives::builtins::ID_DISC,
+                    material_ref: Some(
+                        "shared/materials/vfx_bullet_impacts.nemat@concrete".to_owned(),
+                    ),
+                    scale: Vec3::new(0.07, 0.0015, 0.07),
+                    color: [0.06, 0.055, 0.05, 0.92],
+                    normal_offset: 0.0025,
+                    persistent: true,
+                    lifetime_seconds: 0.0,
+                    fade_start_fraction: 0.0,
+                },
+            ],
+        })
+        .expect("register persistent impact effect");
+    world.insert_resource(library);
+
+    spawn_vfx(
+        &mut world,
+        VfxSpawnRequestV1 {
+            effect: VfxEffectRef::new(EFFECT),
+            position: [0.0, 1.0, 0.0],
+            normal: [0.0, 0.0, 1.0],
+            correlation_id: 77,
+            ..Default::default()
+        },
+    )
+    .unwrap()
+    .expect("persistent impact spawned");
+
+    let decal = world
+        .query::<VfxPersistentDecal>()
+        .map(|(entity, marker)| (entity, *marker))
+        .next()
+        .expect("persistent decal marker");
+    assert!(world.get::<VfxLayerRuntime>(decal.0).is_none());
+    let initial_color = world.get::<Primitive>(decal.0).unwrap().color;
+
+    for _ in 0..20 {
+        update_vfx(&mut world, 0.1);
+    }
+
+    assert_eq!(world.query::<VfxInstanceRoot>().count(), 0);
+    assert!(
+        world.exists(decal.0),
+        "transient root teardown must not delete bullet hole"
+    );
+    assert_eq!(
+        world.get::<Primitive>(decal.0).unwrap().color,
+        initial_color
+    );
+    assert_eq!(world.query::<VfxPersistentDecal>().count(), 1);
+    assert_eq!(vfx_runtime_stats(&world).decals, 1);
 }
 
 #[test]

@@ -24,7 +24,8 @@ pub use audio_environment::{
 };
 pub use audio_gateway_fallback::register_audio_gateway_best_effort;
 pub use audio_orchestration::{
-    AudioOrchestrationHandle, AudioOrchestrationRuntimeModule, AudioOrchestrationRuntimeState,
+    AudioOrchestrationHandle, AudioOrchestrationRuntimeConfig, AudioOrchestrationRuntimeModule,
+    AudioOrchestrationRuntimeState,
 };
 pub use audio_scene::{
     AcousticSurface, AudioEmitter, AudioEnvironmentZone, AudioPortal, AudioSceneRuntimeModule,
@@ -136,19 +137,24 @@ fn audio_ambience_runtime_unit_factory(
 
 fn audio_orchestration_runtime_unit_factory(
     engine: &mut newengine_runtime_unit_api::Engine<()>,
-    _: &newengine_runtime_unit_api::StartupConfig,
+    startup: &newengine_runtime_unit_api::StartupConfig,
 ) -> newengine_runtime_unit_api::EngineResult<Option<Box<dyn newengine_runtime_unit_api::Module<()>>>>
 {
     register_audio_gateway_best_effort();
-    let handle = engine
+    let handle = if let Some(handle) = engine
         .resources_mut()
         .get::<AudioOrchestrationHandle>()
         .cloned()
-        .unwrap_or_else(|| {
-            let handle = AudioOrchestrationHandle::default();
-            engine.resources_mut().insert(handle.clone());
-            handle
-        });
+    {
+        handle
+    } else {
+        let config = AudioOrchestrationRuntimeConfig::load(startup)
+            .map_err(newengine_runtime_unit_api::EngineError::Other)?;
+        let handle = AudioOrchestrationHandle::with_config(config)
+            .map_err(newengine_runtime_unit_api::EngineError::Other)?;
+        engine.resources_mut().insert(handle.clone());
+        handle
+    };
     Ok(Some(Box::new(AudioOrchestrationRuntimeModule::new(handle))))
 }
 

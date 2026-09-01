@@ -16,6 +16,12 @@ impl GameData {
                 self.version, GAME_DATA_VERSION
             ));
         }
+        self.audio.mix_graph.validate().map_err(|error| {
+            format!("audio.mix_graph invalid: {error}")
+        })?;
+        if self.audio.mix_graph.buses.is_empty() {
+            return Err("audio.mix_graph must declare at least one project-authored route".to_owned());
+        }
         if self.runtime.fixed_dt_ms == 0 {
             return Err("runtime.fixed_dt_ms must be greater than zero".to_owned());
         }
@@ -130,6 +136,7 @@ impl Default for GameData {
             schema: GAME_DATA_SCHEMA.to_owned(),
             version: GAME_DATA_VERSION,
             runtime: RuntimeData::default(),
+            audio: AudioProjectData::default(),
             world: WorldData::default(),
             player: PlayerData::default(),
             gameplay: GameplayData::default(),

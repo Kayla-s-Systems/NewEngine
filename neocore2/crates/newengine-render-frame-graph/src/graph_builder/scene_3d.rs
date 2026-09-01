@@ -11,8 +11,12 @@ use super::{
     RG_SHADOW_MAP, RG_VIEWPORT_DEPTH,
 };
 
-const RG_VFX_PARTICLE_STATE: RenderGraphResourceId = RenderGraphResourceId(17_500);
-const VFX_PARTICLE_STATE_BYTES: u64 = 262_144 * 96;
+pub const RG_VFX_PARTICLE_STATE: RenderGraphResourceId = RenderGraphResourceId(17_500);
+const VFX_PARTICLE_STATE_BYTES: u64 = 262_144 * 112;
+pub const RG_PARTICLE_ACCUM: RenderGraphResourceId = RenderGraphResourceId(17_510);
+pub const RG_PARTICLE_NORMAL: RenderGraphResourceId = RenderGraphResourceId(17_511);
+pub const RG_PARTICLE_MATERIAL: RenderGraphResourceId = RenderGraphResourceId(17_512);
+pub const RG_PARTICLE_DEPTH: RenderGraphResourceId = RenderGraphResourceId(17_513);
 pub(super) const RG_HAIR_STRAND_STATE: RenderGraphResourceId = RenderGraphResourceId(17_600);
 const HAIR_STRAND_STATE_BYTES: u64 = 40_632_320;
 
@@ -93,6 +97,61 @@ impl FrameGraphBuilder {
         self
     }
 
+
+    #[inline]
+    pub fn particle_gbuffer(mut self) -> Self {
+        for (id, label, semantic) in [
+            (RG_PARTICLE_ACCUM, "particle_accum", RenderGraphResourceSemantic::ParticleAccum),
+            (RG_PARTICLE_NORMAL, "particle_normal", RenderGraphResourceSemantic::ParticleNormal),
+            (RG_PARTICLE_MATERIAL, "particle_material", RenderGraphResourceSemantic::ParticleMaterial),
+            (RG_PARTICLE_DEPTH, "particle_depth", RenderGraphResourceSemantic::ParticleDepth),
+        ] {
+            if !self.has_resource(id) {
+                self.graph.resources.push(
+                    RenderGraphResourceDesc::transient_texture(
+                        id,
+                        label,
+                        RenderGraphResourceUsage::ColorAttachment,
+                        self.target.viewport_extent,
+                        TextureFormat::Rgba16Float,
+                    )
+                    .with_semantic(semantic),
+                );
+            }
+        }
+        let scene_depth = self.scene_depth_resource();
+        self.add_phase_pass(StandardRenderPhase::ParticleGBuffer, |pass| {
+            let pass = pass
+                .with_domain(RenderGraphPassDomain::Render3d)
+                .reads(RG_VFX_PARTICLE_STATE, RenderGraphResourceUsage::StorageBuffer)
+                .writes(RG_PARTICLE_ACCUM, RenderGraphResourceUsage::ColorAttachment)
+                .writes(RG_PARTICLE_NORMAL, RenderGraphResourceUsage::ColorAttachment)
+                .writes(RG_PARTICLE_MATERIAL, RenderGraphResourceUsage::ColorAttachment)
+                .writes(RG_PARTICLE_DEPTH, RenderGraphResourceUsage::ColorAttachment)
+                .draw_list(DrawListKind::ParticleGBuffer);
+            if let Some(scene_depth) = scene_depth {
+                pass.reads(scene_depth, RenderGraphResourceUsage::DepthAttachmentSampled)
+            } else {
+                pass
+            }
+        });
+        self
+    }
+
+    #[inline]
+    pub fn particle_composite(mut self) -> Self {
+        let viewport_color = self.viewport_color_resource();
+        self.add_phase_pass(StandardRenderPhase::ParticleComposite, |pass| {
+            pass.with_domain(RenderGraphPassDomain::Render3d)
+                .reads(RG_PARTICLE_ACCUM, RenderGraphResourceUsage::SampledTexture)
+                .reads(RG_PARTICLE_NORMAL, RenderGraphResourceUsage::SampledTexture)
+                .reads(RG_PARTICLE_MATERIAL, RenderGraphResourceUsage::SampledTexture)
+                .reads(RG_PARTICLE_DEPTH, RenderGraphResourceUsage::SampledTexture)
+                .writes(viewport_color, RenderGraphResourceUsage::ColorAttachment)
+        });
+        self
+    }
+
     #[inline]
     pub fn transparent(mut self) -> Self {
         let viewport_color = self.viewport_color_resource();
@@ -100,12 +159,9 @@ impl FrameGraphBuilder {
         let has_hair = self.has_resource(RG_HAIR_STRAND_STATE);
         let has_shadow = self.has_resource(RG_SHADOW_MAP);
         self.add_phase_pass(StandardRenderPhase::Transparent, |pass| {
-            let pass = pass.with_domain(RenderGraphPassDomain::Render3d).reads(
-                RG_VFX_PARTICLE_STATE,
-                RenderGraphResourceUsage::StorageBuffer,
-            );
+            let pass = pass.with_domain(RenderGraphPassDomain::Render3d);
             let pass = if let Some(scene_depth) = scene_depth {
-                pass.reads(scene_depth, RenderGraphResourceUsage::DepthAttachment)
+                pass.reads(scene_depth, RenderGraphResourceUsage::DepthAttachmentSampled)
             } else {
                 pass
             };

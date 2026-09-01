@@ -167,7 +167,7 @@ where
         self.configure_sharded_log_files(Arc::make_mut(&mut startup), &run_id, &host_context);
 
         let asset_roots = collect_app_asset_roots(self.spec.app_dir_name, self.spec.app_assets_env);
-        if let Some(engine_content_root) = asset_roots.iter().find(|root| {
+        if let Some(shared_content_root) = asset_roots.iter().find(|root| {
             root.file_name().and_then(|name| name.to_str()) == Some("Content")
                 && root
                     .parent()
@@ -176,8 +176,8 @@ where
                     == Some("Engine")
         }) {
             host_context.set_environment_var(
-                "NEWENGINE_ENGINE_CONTENT_ROOT",
-                engine_content_root.as_os_str().to_os_string(),
+                "NEWENGINE_SHARED_CONTENT_ROOT",
+                shared_content_root.as_os_str().to_os_string(),
             );
         }
         self.early_log(format_args!(

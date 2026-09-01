@@ -13,9 +13,9 @@ mod textures;
 mod vfx_compile;
 
 pub use compile::{
-    compile_character, compile_rigid_joint_variants, CharacterCompileReport,
+    compile_character, compile_rigid_joint_variants, compile_static_pak, CharacterCompileReport,
     CharacterCompileRequest, PackageSkinSubsetRule, RigidJointVariantsCompileReport,
-    RigidJointVariantsCompileRequest,
+    RigidJointVariantsCompileRequest, StaticPakCompileReport, StaticPakCompileRequest,
 };
 pub use geometry::{decode_geometry_lod0, DecodedGeometry, ImportMesh, SkinLossStats};
 pub use pak::{PakFile, PakResource};

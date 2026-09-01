@@ -59,7 +59,7 @@ fn main() -> Result<(), String> {
     let bytes = fs::read(&ydd_path).map_err(|e| format!("read {}: {e}", ydd_path.display()))?;
     let decoded = newengine_assets_api::decode_list_file_envelope(
         &bytes,
-        newengine_asset_format_nef8::ydd::CONTENT_KIND,
+        newengine_assets_api::LIST_FILE_CONTENT_KIND_YDD,
         ydd_path.to_string_lossy().as_ref(),
     )?;
     let document = newengine_asset_format_nef8::ydd_binary::decode_ydd_binary_body(&decoded.body)?;

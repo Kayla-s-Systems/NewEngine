@@ -427,12 +427,12 @@ mod tests {
     #[test]
     fn canonical_ytyp_listfile_matches_wire_and_schema_registry() {
         let bytes = encoded_listfile(
-            newengine_asset_format_nef8::ytyp::CONTENT_KIND,
+            newengine_assets_api::LIST_FILE_CONTENT_KIND_YTYP,
             newengine_asset_format_nef8::ytyp::CONTENT_SCHEMA_VERSION,
         );
         let report = validate_list_file_contract(
             &bytes,
-            newengine_asset_format_nef8::ytyp::CONTENT_KIND,
+            newengine_assets_api::LIST_FILE_CONTENT_KIND_YTYP,
             newengine_asset_format_nef8::ytyp::CONTENT_SCHEMA_CONTRACT_SPEC,
         )
         .expect("canonical YTYP contract");
@@ -442,13 +442,13 @@ mod tests {
     #[test]
     fn unsupported_nef8_wire_version_is_rejected_by_canonical_parser() {
         let mut bytes = encoded_listfile(
-            newengine_asset_format_nef8::ytyp::CONTENT_KIND,
+            newengine_assets_api::LIST_FILE_CONTENT_KIND_YTYP,
             newengine_asset_format_nef8::ytyp::CONTENT_SCHEMA_VERSION,
         );
         bytes[4] = (newengine_assets_api::LIST_FILE_VERSION + 1) as u8;
         let errors = validate_list_file_contract(
             &bytes,
-            newengine_asset_format_nef8::ytyp::CONTENT_KIND,
+            newengine_assets_api::LIST_FILE_CONTENT_KIND_YTYP,
             newengine_asset_format_nef8::ytyp::CONTENT_SCHEMA_CONTRACT_SPEC,
         )
         .unwrap_err();
@@ -460,12 +460,12 @@ mod tests {
     #[test]
     fn wrong_content_schema_version_is_rejected() {
         let bytes = encoded_listfile(
-            newengine_asset_format_nef8::ytyp::CONTENT_KIND,
+            newengine_assets_api::LIST_FILE_CONTENT_KIND_YTYP,
             newengine_asset_format_nef8::ytyp::CONTENT_SCHEMA_VERSION + 1,
         );
         let errors = validate_list_file_contract(
             &bytes,
-            newengine_asset_format_nef8::ytyp::CONTENT_KIND,
+            newengine_assets_api::LIST_FILE_CONTENT_KIND_YTYP,
             newengine_asset_format_nef8::ytyp::CONTENT_SCHEMA_CONTRACT_SPEC,
         )
         .unwrap_err();
@@ -501,11 +501,7 @@ mod tests {
             .parent()
             .and_then(std::path::Path::parent)
             .expect("NorthStar root");
-        let roots = [
-            repo_root.join("Engine/Content"),
-            repo_root.join("Projects"),
-            repo_root.join("Shared"),
-        ];
+        let roots = [repo_root.join("Projects"), repo_root.join("Shared")];
         let mut ytd = Vec::new();
         let mut ydd = Vec::new();
         let mut ytyp = Vec::new();
@@ -556,31 +552,31 @@ mod tests {
             };
         validate_group(
             &ytd,
-            newengine_asset_format_nef8::ytd::CONTENT_KIND,
+            newengine_assets_api::LIST_FILE_CONTENT_KIND_YTD,
             newengine_asset_format_nef8::ytd::CONTENT_SCHEMA_CONTRACT_SPEC,
             newengine_asset_format_nef8::ytd::READABLE_CONTENT_SCHEMA_VERSIONS,
         );
         validate_group(
             &ydd,
-            newengine_asset_format_nef8::ydd::CONTENT_KIND,
+            newengine_assets_api::LIST_FILE_CONTENT_KIND_YDD,
             newengine_asset_format_nef8::YDD_BINARY_CONTRACT_SPEC,
             newengine_asset_format_nef8::ydd::READABLE_CONTENT_SCHEMA_VERSIONS,
         );
         validate_group(
             &ytyp,
-            newengine_asset_format_nef8::ytyp::CONTENT_KIND,
+            newengine_assets_api::LIST_FILE_CONTENT_KIND_YTYP,
             newengine_asset_format_nef8::ytyp::CONTENT_SCHEMA_CONTRACT_SPEC,
             &[],
         );
         validate_group(
             &nemat,
-            newengine_asset_format_nef8::nemat::CONTENT_KIND,
+            newengine_assets_api::LIST_FILE_CONTENT_KIND_NEMAT,
             newengine_asset_format_nef8::nemat::CONTENT_SCHEMA_CONTRACT_SPEC,
             &[],
         );
         validate_group(
             &neui,
-            newengine_asset_format_nef8::neui::CONTENT_KIND,
+            newengine_assets_api::LIST_FILE_CONTENT_KIND_NEUI,
             newengine_asset_format_nef8::neui::CONTENT_SCHEMA_CONTRACT_SPEC,
             &[],
         );

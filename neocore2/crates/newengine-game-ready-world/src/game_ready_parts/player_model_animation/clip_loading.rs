@@ -13,7 +13,8 @@ fn load_animation_clip(reference: &str) -> Result<std::sync::Arc<AnimationClip>,
                     logical_path: logical_path.to_owned(),
                     output_kind: ASSET_LIST_FILE_BODY_OUTPUT.to_owned(),
                     selector: serde_json::Value::Null,
-                })
+                                    format_descriptor: None,
+})
                 .map_err(|error| {
                     format!(
                         "player animation asset decode failed ref='{reference}' path='{logical_path}' err='{error}'"
@@ -171,9 +172,18 @@ pub(super) fn prepare_player_animation_binding(
     for (state, reference) in [
         (L::Walk, assignment.animation_for_slot("locomotion.walk")),
         (L::Run, assignment.animation_for_slot("locomotion.run")),
-        (L::Sprint, assignment.animation_for_slot("locomotion.sprint")),
-        (L::CrouchIdle, assignment.animation_for_slot("locomotion.crouch_idle")),
-        (L::CrouchWalk, assignment.animation_for_slot("locomotion.crouch_walk")),
+        (
+            L::Sprint,
+            assignment.animation_for_slot("locomotion.sprint"),
+        ),
+        (
+            L::CrouchIdle,
+            assignment.animation_for_slot("locomotion.crouch_idle"),
+        ),
+        (
+            L::CrouchWalk,
+            assignment.animation_for_slot("locomotion.crouch_walk"),
+        ),
         (L::Jump, assignment.animation_for_slot("locomotion.jump")),
         (L::Fall, assignment.animation_for_slot("locomotion.fall")),
     ] {
@@ -289,27 +299,77 @@ pub(super) fn prepare_player_animation_binding(
     // Optional means not authored only. Once a character definition publishes a reference,
     // that clip is part of the presentation contract and must decode/bind successfully.
     // Silent locomotion/bind substitution would create an animation gap and visible reset.
-    let equipment_ready_pose = load_authored_presentation_clip(
-        "equipment_ready",
-        assignment.animation_for_slot("equipment.ready"),
-        assignment,
-        skeleton,
-        &animation_runtime,
-    )?;
-    let equipment_aim_pose = load_authored_presentation_clip(
-        "equipment_aim",
-        assignment.animation_for_slot("equipment.aim"),
-        assignment,
-        skeleton,
-        &animation_runtime,
-    )?;
-    let equipment_reload_pose = load_authored_presentation_clip(
-        "equipment_reload",
-        assignment.animation_for_slot("equipment.reload"),
-        assignment,
-        skeleton,
-        &animation_runtime,
-    )?;
+    let equipment_default_pose_set = EquipmentPoseSet {
+        ready: load_authored_presentation_clip(
+            "equipment_ready",
+            assignment.animation_for_slot("equipment.ready"),
+            assignment,
+            skeleton,
+            &animation_runtime,
+        )?,
+        aim: load_authored_presentation_clip(
+            "equipment_aim",
+            assignment.animation_for_slot("equipment.aim"),
+            assignment,
+            skeleton,
+            &animation_runtime,
+        )?,
+        reload: load_authored_presentation_clip(
+            "equipment_reload",
+            assignment.animation_for_slot("equipment.reload"),
+            assignment,
+            skeleton,
+            &animation_runtime,
+        )?,
+    };
+    // Family ids are authored data, not an engine enum. Discover every
+    // `equipment.<family>.<ready|aim|reload>` capability. Classified families are isolated:
+    // missing stances remain absent rather than inheriting an unrelated generic pose.
+    let mut equipment_pose_families = std::collections::BTreeSet::new();
+    for slot in assignment.animation_slots.keys() {
+        let normalized = slot.trim().to_ascii_lowercase();
+        let mut segments = normalized.split('.');
+        if segments.next() != Some("equipment") {
+            continue;
+        }
+        let (Some(family), Some(stance)) = (segments.next(), segments.next()) else {
+            continue;
+        };
+        if segments.next().is_some()
+            || family.is_empty()
+            || !matches!(stance, "ready" | "aim" | "reload")
+        {
+            continue;
+        }
+        equipment_pose_families.insert(family.to_owned());
+    }
+    let mut equipment_pose_sets = std::collections::BTreeMap::new();
+    for family in equipment_pose_families {
+        // A classified weapon never inherits another class's generic pose. Missing authored
+        // stances remain absent and fail closed; generic slots exist only for unclassified legacy items.
+        let mut set = EquipmentPoseSet::default();
+        for stance in ["ready", "aim", "reload"] {
+            let slot = format!("equipment.{family}.{stance}");
+            let Some(reference) = assignment.animation_for_slot(&slot) else {
+                continue;
+            };
+            let role = format!("equipment_{family}_{stance}");
+            let clip = load_authored_presentation_clip(
+                &role,
+                Some(reference),
+                assignment,
+                skeleton,
+                &animation_runtime,
+            )?;
+            match stance {
+                "ready" => set.ready = clip,
+                "aim" => set.aim = clip,
+                "reload" => set.reload = clip,
+                _ => unreachable!("equipment stance filter is exhaustive"),
+            }
+        }
+        equipment_pose_sets.insert(family, set);
+    }
     let unarmed_ready_pose = load_authored_presentation_clip(
         "unarmed_ready",
         assignment.animation_for_slot("unarmed.ready"),
@@ -668,28 +728,19 @@ pub(super) fn prepare_player_animation_binding(
             native_turn_clip_count,
         );
     }
-    if equipment_ready_pose.is_some()
-        || equipment_aim_pose.is_some()
-        || equipment_reload_pose.is_some()
-        || equipment_ik.is_some()
+    if equipment_default_pose_set.any() || !equipment_pose_sets.is_empty() || equipment_ik.is_some()
     {
+        let families = equipment_pose_sets
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>()
+            .join(",");
         newengine_ulog_api::ulog::info!(
-            "game-ready: character equipment presentation prepared ready='{}' aim='{}' reload='{}' arm_ik={} ready_weights={} aim_weights={} reload_weights={} policy='firearm stance owns upper-body overlay; hand IK runs after locomotion blend'",
-            assignment
-                .presentation
-                .equipment_ready_animation
-                .as_deref()
-                .unwrap_or("none"),
-            assignment
-                .presentation
-                .equipment_aim_animation
-                .as_deref()
-                .unwrap_or("none"),
-            assignment
-                .presentation
-                .equipment_reload_animation
-                .as_deref()
-                .unwrap_or("none"),
+            "game-ready: character equipment presentation prepared generic_ready='{}' generic_aim='{}' generic_reload='{}' families='{}' arm_ik={} ready_weights={} aim_weights={} reload_weights={} policy='equipped weapon class selects isolated authored pose family; generic slots apply only to unclassified legacy items; IK requires weapon presentation contract'",
+            assignment.animation_for_slot("equipment.ready").unwrap_or("none"),
+            assignment.animation_for_slot("equipment.aim").unwrap_or("none"),
+            assignment.animation_for_slot("equipment.reload").unwrap_or("none"),
+            families,
             equipment_ik.is_some(),
             equipment_ready_rotation_weights.len(),
             equipment_aim_rotation_weights.len(),
@@ -753,9 +804,8 @@ pub(super) fn prepare_player_animation_binding(
         fall_high_min_distance,
         fall_active_band: None,
         fall_time_seconds: 0.0,
-        equipment_ready_pose,
-        equipment_aim_pose,
-        equipment_reload_pose,
+        equipment_default_pose_set,
+        equipment_pose_sets,
         unarmed_ready_pose,
         unarmed_attack_pose,
         unarmed_attack_sequence: 0,
@@ -763,6 +813,9 @@ pub(super) fn prepare_player_animation_binding(
         equipment_ready_sample_phase,
         equipment_time_seconds: 0.0,
         equipment_reload_active: false,
+        equipment_trace_active: false,
+        equipment_trace_family: None,
+        equipment_trace_stance: EquipmentPresentationStance::None,
         equipment_ready_rotation_weights,
         equipment_aim_rotation_weights,
         equipment_reload_rotation_weights,

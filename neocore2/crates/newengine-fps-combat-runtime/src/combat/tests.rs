@@ -94,6 +94,46 @@ mod tests {
     }
 
     #[test]
+    fn authored_recoil_tracker_speed_controls_post_shot_follow_through() {
+        fn pitch_after_frame(scale: f32) -> (f32, f32) {
+            let mut world = World::new();
+            let player = world.spawn();
+            let _ = world.insert(player, CharacterMotor::default());
+            let tuning = HitscanWeaponTuning {
+                recoil_pitch_radians: 0.05,
+                recoil_pitch_random_radians: 0.0,
+                recoil_yaw_radians: 0.0,
+                recoil_yaw_bias_radians: 0.0,
+                recoil_recovery_hz: 5.0,
+                recoil_pitch_tracker_speed_scale: scale,
+                recoil_yaw_tracker_speed_scale: 0.0,
+                ..HitscanWeaponTuning::default()
+            };
+            apply_recoil(
+                &mut world,
+                player,
+                newengine_engine_runtime::gameplay::ItemInstanceId(9),
+                tuning,
+                false,
+                1,
+            );
+            let initial = world.get::<CharacterMotor>(player).unwrap().pitch;
+            recover_weapon_recoil(&mut world, player, 1.0 / 60.0);
+            let after = world.get::<CharacterMotor>(player).unwrap().pitch;
+            (initial, after)
+        }
+
+        let (initial_no_follow, no_follow) = pitch_after_frame(0.0);
+        let (initial_strong, strong_follow) = pitch_after_frame(1.8);
+        assert!((initial_no_follow - initial_strong).abs() < 1.0e-6);
+        assert!(no_follow < initial_no_follow, "zero tracker speed should enter recovery immediately");
+        assert!(
+            strong_follow > initial_strong,
+            "authored tracker speed must produce measurable post-shot follow-through: initial={initial_strong} after={strong_follow}"
+        );
+    }
+
+    #[test]
     fn weapon_fires_reloads_and_applies_typed_damage() {
         let mut world = World::new();
         let shooter = spawn_fps_player(&mut world, "shooter", Vec3::ZERO);
@@ -1063,6 +1103,13 @@ fn ballistic_ray_penetrates_authored_thickness_and_hits_next_receiver() {
             ricochet_energy_retention: 0.0,
         },
     );
+    let _ = world.insert(
+        wall,
+        PhysicsSurface {
+            id: "surface.concrete.test".to_owned(),
+            ..PhysicsSurface::default()
+        },
+    );
     let _ = world.insert(target, Health::new(100.0));
     let _ = world.insert(
         target,
@@ -1114,6 +1161,29 @@ fn ballistic_ray_penetrates_authored_thickness_and_hits_next_receiver() {
         &GameplayCommandExecutor::default(),
     );
     assert!(world.get::<Health>(target).expect("target health").current < 100.0);
+    let semantic_events = newengine_engine_runtime::gameplay::drain_gameplay_events(&mut world);
+    let penetration = semantic_events
+        .iter()
+        .find(|event| event.id == GAMEPLAY_EVENT_WEAPON_PENETRATED)
+        .expect("successful entry/exit traversal must publish penetration semantics");
+    assert_eq!(
+        penetration.payload.get("surface").and_then(serde_json::Value::as_str),
+        Some("surface.concrete.test")
+    );
+    assert!((
+        penetration.payload.get("thickness_m").and_then(serde_json::Value::as_f64).unwrap_or_default()
+            - 0.1
+    )
+    .abs() < 1.0e-4);
+    let exit_point = penetration
+        .payload
+        .get("exit_point")
+        .and_then(serde_json::Value::as_array)
+        .expect("penetration event exit_point");
+    assert_eq!(exit_point.len(), 3);
+    assert!((exit_point[0].as_f64().unwrap_or(f64::NAN) - 0.0).abs() < 1.0e-6);
+    assert!((exit_point[1].as_f64().unwrap_or(f64::NAN) - 0.0).abs() < 1.0e-6);
+    assert!((exit_point[2].as_f64().unwrap_or(f64::NAN) + 2.1).abs() < 1.0e-5);
     assert!(
         world.get::<PendingHitscan>(shooter).is_none(),
         "non-ricochet traversal must complete"

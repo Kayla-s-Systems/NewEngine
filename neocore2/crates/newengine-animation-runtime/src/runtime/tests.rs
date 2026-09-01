@@ -105,22 +105,23 @@ mod tests {
         out.extend_from_slice(&strings);
         for translation_x in [0.0f32, 1.0] {
             out.extend_from_slice(&42u32.to_le_bytes());
-            for value in [
-                translation_x,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                1.0,
-                1.0,
-                1.0,
-                1.0,
-            ] {
+            for value in [translation_x, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0] {
                 out.extend_from_slice(&value.to_le_bytes());
             }
         }
         out
+    }
+
+    fn two_clip_body_with_invalid_walk_quaternion() -> Vec<u8> {
+        let mut body = two_clip_test_body();
+        let payload_floor =
+            u64::from_le_bytes(body[32..40].try_into().expect("payload floor")) as usize;
+        let payload_len = 4 + LOCAL_POSE_STRIDE_V2;
+        let walk_payload = payload_floor + payload_len;
+        // payload = joint tag + translation.xyz + rotation.xyzw + scale.xyz
+        let rotation_offset = walk_payload + 4 + 12;
+        body[rotation_offset..rotation_offset + 16].fill(0);
+        body
     }
 
     fn one_joint_skeleton() -> ModelSkeletonMetadata {
@@ -173,6 +174,34 @@ mod tests {
         skeleton
     }
 
+    fn branched_skeleton() -> ModelSkeletonMetadata {
+        let mut skeleton = two_joint_skeleton();
+        skeleton.joints[1].name = "arm".to_owned();
+        skeleton.joints.push(ModelSkeletonJointMetadata {
+            index: 2,
+            tag: 30,
+            name: "hand".to_owned(),
+            parent: Some("arm".to_owned()),
+            parent_index: Some(1),
+            position_ls: [0.0, 1.0, 0.0],
+            rotation_ls: [0.0, 0.0, 0.0, 1.0],
+            scale_ls: [1.0, 1.0, 1.0],
+            flags: Vec::new(),
+        });
+        skeleton.joints.push(ModelSkeletonJointMetadata {
+            index: 3,
+            tag: 40,
+            name: "sibling".to_owned(),
+            parent: Some("root".to_owned()),
+            parent_index: Some(0),
+            position_ls: [1.0, 0.0, 0.0],
+            rotation_ls: [0.0, 0.0, 0.0, 1.0],
+            scale_ls: [1.0, 1.0, 1.0],
+            flags: Vec::new(),
+        });
+        skeleton
+    }
+
     #[test]
     fn sparse_clip_overlays_native_tags_on_bind_pose() {
         let clip = AnimationClip {
@@ -215,6 +244,33 @@ mod tests {
         let mut sampled = Vec::new();
         clip.sample_local_pose(0.25, &mut sampled).expect("sample");
         assert!((sampled[0].translation[0] - 0.5).abs() < 1.0e-6);
+    }
+
+    #[test]
+    fn selected_entry_lookup_skips_malformed_unrelated_name() {
+        let mut body = two_clip_test_body();
+        let string_offset =
+            u64::from_le_bytes(body[16..24].try_into().expect("string offset")) as usize;
+        body[string_offset] = 0xff;
+
+        let strict_error = decode_ycd_dictionary(&body).expect_err("strict dictionary must fail");
+        assert!(strict_error.contains("not UTF-8"));
+        let walk = decode_ycd_body(&body, Some("walk")).expect("unrelated valid selector");
+        assert_eq!(walk.name, "walk");
+    }
+
+    #[test]
+    fn selected_entry_decode_isolated_from_invalid_neighbor_clip() {
+        let body = two_clip_body_with_invalid_walk_quaternion();
+        let strict_error = decode_ycd_dictionary(&body).expect_err("strict dictionary must fail");
+        assert!(strict_error.contains("walk"));
+        assert!(strict_error.contains("invalid quaternion"));
+
+        let idle = decode_ycd_body(&body, Some("idle")).expect("selected valid clip");
+        assert_eq!(idle.name, "idle");
+        let walk_error = decode_ycd_body(&body, Some("walk")).expect_err("selected invalid clip");
+        assert!(walk_error.contains("walk"));
+        assert!(walk_error.contains("invalid quaternion"));
     }
 
     #[test]
@@ -263,6 +319,56 @@ mod tests {
         assert!((origin.x - 1.0).abs() < 1.0e-5, "origin={origin:?}");
         assert!((origin.y - 3.0).abs() < 1.0e-5, "origin={origin:?}");
         assert!(origin.z.abs() < 1.0e-5, "origin={origin:?}");
+    }
+
+    #[test]
+    fn incremental_subtree_joint_frame_refresh_matches_full_fk_and_preserves_siblings() {
+        let skeleton = branched_skeleton();
+        let source_to_model = Mat4::from_quat(Quat::from_rotation_y(0.37)).to_cols_array();
+        let runtime = AnimationSkeletonRuntime::compile(&skeleton, source_to_model)
+            .expect("compile branched skeleton");
+        let mut pose = runtime.bind_locals().to_vec();
+        let mut incremental = Vec::new();
+        runtime
+            .build_model_joint_frames_from_local_pose(&pose, &mut incremental)
+            .expect("initial frames");
+        let sibling_before = incremental[3];
+
+        let arm_rotation = Quat::from_rotation_z(0.42);
+        pose[1].rotation = [
+            arm_rotation.x,
+            arm_rotation.y,
+            arm_rotation.z,
+            arm_rotation.w,
+        ];
+        runtime
+            .refresh_model_joint_frames_subtree_from_local_pose(&pose, &mut incremental, 1)
+            .expect("incremental arm refresh");
+
+        let mut full = Vec::new();
+        runtime
+            .build_model_joint_frames_from_local_pose(&pose, &mut full)
+            .expect("full frames");
+        assert_eq!(incremental.len(), full.len());
+        for (joint, (actual, expected)) in incremental.iter().zip(&full).enumerate() {
+            let max_error = actual
+                .to_cols_array()
+                .into_iter()
+                .zip(expected.to_cols_array())
+                .map(|(a, b)| (a - b).abs())
+                .fold(0.0_f32, f32::max);
+            assert!(max_error <= 1.0e-6, "joint={joint} error={max_error}");
+        }
+        let sibling_error = incremental[3]
+            .to_cols_array()
+            .into_iter()
+            .zip(sibling_before.to_cols_array())
+            .map(|(a, b)| (a - b).abs())
+            .fold(0.0_f32, f32::max);
+        assert!(
+            sibling_error <= 1.0e-7,
+            "sibling changed error={sibling_error}"
+        );
     }
 
     #[test]
@@ -345,6 +451,53 @@ mod tests {
     }
 
     #[test]
+    fn compiled_runtime_preserves_finite_zero_scale_as_authored_visibility() {
+        let runtime = AnimationSkeletonRuntime::compile(
+            &one_joint_skeleton(),
+            Mat4::IDENTITY.to_cols_array(),
+        )
+        .expect("compile animation skeleton");
+        let pose = [JointLocalPose {
+            translation: [0.0, 0.0, 0.0],
+            rotation: [0.0, 0.0, 0.0, 1.0],
+            scale: Some([0.0, 0.0, 0.0]),
+        }];
+
+        let mut palette = Vec::new();
+        runtime
+            .build_skin_palette_from_local_pose(&pose, &mut palette)
+            .expect("finite zero-scale visibility pose must remain valid");
+        assert_eq!(palette.len(), 1);
+        assert!(palette[0]
+            .to_cols_array()
+            .iter()
+            .all(|value| value.is_finite()));
+        let collapsed = palette[0].transform_point3(Vec3::new(1.0, 2.0, 3.0));
+        assert!(
+            collapsed.length_squared() <= 1.0e-10,
+            "collapsed={collapsed:?}"
+        );
+
+        let mut frames = Vec::new();
+        runtime
+            .build_model_joint_frames_from_local_pose(&pose, &mut frames)
+            .expect("zero-scale authored joint frame must remain finite");
+        assert!(frames[0]
+            .to_cols_array()
+            .iter()
+            .all(|value| value.is_finite()));
+    }
+
+    #[test]
+    fn compiled_runtime_still_rejects_singular_bind_scale() {
+        let mut skeleton = one_joint_skeleton();
+        skeleton.joints[0].scale_ls = [0.0, 0.0, 0.0];
+        let error = AnimationSkeletonRuntime::compile(&skeleton, Mat4::IDENTITY.to_cols_array())
+            .expect_err("bind pose must remain invertible");
+        assert!(error.contains("bind scale") && error.contains("singular"));
+    }
+
+    #[test]
     fn compiled_runtime_rejects_cyclic_skeleton_before_frame_evaluation() {
         let mut skeleton = two_joint_skeleton();
         skeleton.joints[0].parent = Some("child".to_owned());
@@ -401,10 +554,16 @@ mod tests {
             2
         );
         assert_eq!(occurrences.len(), 2);
-        assert_eq!(clip.events[occurrences[0].event_index].tag, "foot.right.contact");
+        assert_eq!(
+            clip.events[occurrences[0].event_index].tag,
+            "foot.right.contact"
+        );
         assert_eq!(occurrences[0].loop_index, 0);
         assert!((occurrences[0].playback_time_seconds - 0.75).abs() < 1.0e-6);
-        assert_eq!(clip.events[occurrences[1].event_index].tag, "foot.left.contact");
+        assert_eq!(
+            clip.events[occurrences[1].event_index].tag,
+            "foot.left.contact"
+        );
         assert_eq!(occurrences[1].loop_index, 1);
         assert!((occurrences[1].playback_time_seconds - 1.25).abs() < 1.0e-6);
 
@@ -414,7 +573,11 @@ mod tests {
                 .expect("same-time advance"),
             0
         );
-        assert_eq!(occurrences.len(), 2, "same boundary must never duplicate markers");
+        assert_eq!(
+            occurrences.len(),
+            2,
+            "same boundary must never duplicate markers"
+        );
     }
 
     #[test]
@@ -434,7 +597,9 @@ mod tests {
     fn looped_event_at_duration_is_rejected_as_ambiguous() {
         let mut clip = decode_ycd_body(&test_body(), Some("idle")).expect("decode");
         clip.events = vec![AnimationEvent::new(clip.duration_seconds, "cycle.end")];
-        let error = clip.validate_events().expect_err("loop endpoint must be rejected");
+        let error = clip
+            .validate_events()
+            .expect_err("loop endpoint must be rejected");
         assert!(error.contains("outside clip duration"));
     }
 
@@ -480,6 +645,41 @@ mod tests {
         assert_eq!(loads.get(), 2);
     }
 
+    #[test]
+    fn clip_store_falls_back_to_isolated_selected_entry_without_weakening_dictionary_validation() {
+        use std::cell::Cell;
+
+        let store = AnimationClipStore::new();
+        let body = two_clip_body_with_invalid_walk_quaternion();
+        let loads = Cell::new(0usize);
+        let first = store
+            .load_ycd_clip("shared/character/damaged.ycd@idle", |_| {
+                loads.set(loads.get() + 1);
+                Ok(body.clone())
+            })
+            .expect("valid selected entry");
+        let second = store
+            .load_ycd_clip("SHARED/CHARACTER/DAMAGED.YCD@IDLE", |_| {
+                loads.set(loads.get() + 1);
+                Err("isolated clip cache miss should not happen".to_owned())
+            })
+            .expect("cached isolated entry");
+        assert!(std::sync::Arc::ptr_eq(&first, &second));
+        assert_eq!(loads.get(), 1);
+        assert_eq!(
+            store.stats().unwrap(),
+            AnimationClipStoreStats {
+                dictionaries: 0,
+                clips: 1,
+            }
+        );
+
+        let strict_error = store
+            .load_ycd_dictionary("shared/character/damaged.ycd", |_| Ok(body.clone()))
+            .expect_err("whole dictionary must remain invalid");
+        assert!(strict_error.contains("walk"));
+        assert!(strict_error.contains("invalid quaternion"));
+    }
 
     #[test]
     fn restart_emits_authored_zero_marker() {
@@ -511,7 +711,10 @@ mod tests {
             .expect("install event track");
         assert_eq!(revised.events.len(), 1);
         assert!(!std::sync::Arc::ptr_eq(&original, &revised));
-        assert!(original.events.is_empty(), "bound old revision must remain immutable");
+        assert!(
+            original.events.is_empty(),
+            "bound old revision must remain immutable"
+        );
 
         let future = store
             .load_ycd_clip("shared/character/test.ycd@idle", |_| {
@@ -521,7 +724,6 @@ mod tests {
         assert!(std::sync::Arc::ptr_eq(&revised, &future));
         assert_eq!(future.events[0].tag, "foot.left.contact");
     }
-
 
     #[test]
     fn shared_dictionary_decodes_multiple_selectors_once() {
@@ -595,5 +797,4 @@ mod tests {
         );
         assert!((live_pose[1].translation[0] - 1.0).abs() < 1.0e-6);
     }
-
 }

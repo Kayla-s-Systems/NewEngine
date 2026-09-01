@@ -1,4 +1,3 @@
-use super::input::is_game_screen_profile;
 use super::*;
 
 #[inline]
@@ -6,7 +5,7 @@ fn editing_tools_available<E: Send + 'static>(ctx: &ModuleCtx<'_, E>) -> bool {
     ctx.resources()
         .get::<newengine_plugin_host::PluginsSnapshot>()
         .is_some_and(|snapshot| {
-            snapshot.has_running_capability(newengine_plugin_api::CAPABILITY_ID_EDITING_TOOLS)
+            snapshot.has_loaded_capability(newengine_plugin_api::CAPABILITY_ID_EDITING_TOOLS)
         })
 }
 
@@ -17,19 +16,15 @@ impl RuntimeRenderController {
         frame_input: &ViewportFrameInput,
         scope: RenderFrameScope,
     ) -> (bool, bool) {
-        let game_profile = is_game_screen_profile(ctx);
         let editing_tools_available = editing_tools_available(ctx);
         if editing_tools_available
-            && game_profile
             && frame_input
                 .surface_input
                 .as_ref()
                 .is_some_and(|input| input.is_key_pressed(newengine_input_api::key_code::F2))
         {
             self.bridges.scene.toggle_in_game_editor();
-        } else if (!editing_tools_available || !game_profile)
-            && self.bridges.scene.in_game_editor_enabled()
-        {
+        } else if !editing_tools_available && self.bridges.scene.in_game_editor_enabled() {
             self.bridges.scene.set_in_game_editor_enabled(false);
         }
 
@@ -42,7 +37,7 @@ impl RuntimeRenderController {
             .resources()
             .get::<newengine_ui_api::UiEventDispatchFrame>()
         {
-            if editing_tools_available && game_profile {
+            if editing_tools_available {
                 let _ = self
                     .bridges
                     .scene
@@ -51,9 +46,7 @@ impl RuntimeRenderController {
 
             // Re-read after UI actions because the shell's Exit Editor button may have
             // disabled the mode in this same dispatch frame.
-            let active_now = editing_tools_available
-                && game_profile
-                && self.bridges.scene.in_game_editor_enabled();
+            let active_now = editing_tools_available && self.bridges.scene.in_game_editor_enabled();
             if active_now {
                 let _ = self
                     .bridges
@@ -75,7 +68,7 @@ impl RuntimeRenderController {
         }
 
         let live_editing_active =
-            editing_tools_available && game_profile && self.bridges.scene.in_game_editor_enabled();
+            editing_tools_available && self.bridges.scene.in_game_editor_enabled();
         let in_game_editor = live_editing_active;
         self.editor_viewport.set_active(live_editing_active);
 
@@ -89,7 +82,7 @@ impl RuntimeRenderController {
                 enabled: in_game_editor,
                 free_fly: in_game_editor,
                 noclip: in_game_editor,
-                save_available: editing_tools_available && game_profile,
+                save_available: editing_tools_available,
                 dirty_placements: authoring.dirty_placements,
                 pending_creates: authoring.pending_creates,
                 pending_deletes: authoring.pending_deletes,

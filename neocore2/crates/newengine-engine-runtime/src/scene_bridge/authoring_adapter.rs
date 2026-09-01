@@ -22,12 +22,27 @@ fn selected_project_root() -> Option<std::path::PathBuf> {
 
 impl SceneBridge {
     pub fn save_authored_project_world(&self) -> Result<usize, String> {
+        // Runtime-driven held items are not authored map placements. Commit their transform-gizmo
+        // calibration through the asset edit gateway before saving ordinary project placements.
+        let weapon_grip_written = self.save_selected_weapon_grip_asset()?;
         let project_root = selected_project_root();
-        let authoring = self
-            .scene_authoring_provider()
-            .ok_or_else(|| "scene authoring provider is unavailable".to_owned())?;
+        let Some(authoring) = self.scene_authoring_provider() else {
+            // Asset calibration is independently writable through engine.assets.edit. A gameplay
+            // runtime does not need a map-authoring provider merely to save a held-item grip.
+            if weapon_grip_written {
+                return Ok(0);
+            }
+            return Err("scene authoring provider is unavailable".to_owned());
+        };
         let mut scene = self.scene.write();
-        authoring.save_authored_project_world(scene.world_mut(), project_root.as_deref())
+        let placements =
+            authoring.save_authored_project_world(scene.world_mut(), project_root.as_deref())?;
+        if weapon_grip_written {
+            newengine_ulog_api::ulog::info!(
+                "editor save: weapon grip asset calibration committed alongside project world"
+            );
+        }
+        Ok(placements)
     }
 
     pub fn authored_project_edit_status(

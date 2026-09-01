@@ -14,7 +14,7 @@ fn main() -> Result<(), String> {
     let original_bytes = fs::read(&input).map_err(|e| format!("read input: {e}"))?;
     let decoded = newengine_assets_api::decode_list_file_envelope(
         &original_bytes,
-        newengine_asset_format_nef8::ydd::CONTENT_KIND,
+        newengine_assets_api::LIST_FILE_CONTENT_KIND_YDD,
         &logical,
     )?;
     let mut document =
@@ -160,7 +160,7 @@ fn main() -> Result<(), String> {
     // Round-trip the produced artifact before publishing it.
     let verify = newengine_assets_api::decode_list_file_envelope(
         &output_bytes,
-        newengine_asset_format_nef8::ydd::CONTENT_KIND,
+        newengine_assets_api::LIST_FILE_CONTENT_KIND_YDD,
         &logical,
     )?;
     let verify_doc = newengine_asset_format_nef8::ydd_binary::decode_ydd_binary_body(&verify.body)?;

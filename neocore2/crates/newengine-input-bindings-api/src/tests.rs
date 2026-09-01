@@ -128,3 +128,112 @@ fn profile_preserves_down_and_pressed_phases_for_same_action() {
         1
     );
 }
+
+#[derive(Default)]
+struct GamepadFrame {
+    connected: bool,
+    down: std::collections::BTreeSet<String>,
+    pressed: std::collections::BTreeSet<String>,
+    released: std::collections::BTreeSet<String>,
+    axes: std::collections::BTreeMap<String, f32>,
+}
+
+impl InputFrameSource for GamepadFrame {
+    fn is_key_down(&self, _key: u32) -> bool {
+        false
+    }
+    fn is_key_pressed(&self, _key: u32) -> bool {
+        false
+    }
+    fn is_key_released(&self, _key: u32) -> bool {
+        false
+    }
+    fn is_mouse_down(&self, _button: u32) -> bool {
+        false
+    }
+    fn is_mouse_pressed(&self, _button: u32) -> bool {
+        false
+    }
+    fn is_mouse_released(&self, _button: u32) -> bool {
+        false
+    }
+    fn has_gamepad_connected(&self) -> bool {
+        self.connected
+    }
+    fn is_gamepad_button_down(&self, button: &str) -> bool {
+        self.down.contains(button)
+    }
+    fn is_gamepad_button_pressed(&self, button: &str) -> bool {
+        self.pressed.contains(button)
+    }
+    fn is_gamepad_button_released(&self, button: &str) -> bool {
+        self.released.contains(button)
+    }
+    fn gamepad_axis(&self, axis: &str) -> f32 {
+        self.axes.get(axis).copied().unwrap_or(0.0)
+    }
+}
+
+#[test]
+fn gamepad_buttons_and_axes_resolve_into_semantic_action_frame() {
+    let mut profile = InputBindingsProfile::empty("gamepad-regression");
+    profile
+        .register_action(InputActionDefinition::new("player.jump"))
+        .unwrap();
+    profile
+        .register_binding(InputBindingRegistration::new(
+            InputBinding::gamepad_button_pressed("player.jump", gamepad_button::SOUTH),
+        ))
+        .unwrap();
+    profile
+        .register_gamepad_axis(GamepadAxisBinding::new(
+            gamepad_axis::LEFT_STICK_X,
+            GamepadAxisTarget::MoveX,
+            1.0,
+        ))
+        .unwrap();
+    profile
+        .register_gamepad_axis(GamepadAxisBinding::new(
+            gamepad_axis::LEFT_STICK_Y,
+            GamepadAxisTarget::MoveZ,
+            -1.0,
+        ))
+        .unwrap();
+    profile
+        .register_gamepad_axis(GamepadAxisBinding::new(
+            gamepad_axis::RIGHT_STICK_X,
+            GamepadAxisTarget::LookX,
+            1.0,
+        ))
+        .unwrap();
+
+    let mut input = GamepadFrame {
+        connected: true,
+        ..GamepadFrame::default()
+    };
+    input.pressed.insert(gamepad_button::SOUTH.to_owned());
+    input
+        .axes
+        .insert(gamepad_axis::LEFT_STICK_X.to_owned(), 0.75);
+    input
+        .axes
+        .insert(gamepad_axis::LEFT_STICK_Y.to_owned(), -0.80);
+    input
+        .axes
+        .insert(gamepad_axis::RIGHT_STICK_X.to_owned(), 0.50);
+
+    let frame = profile.resolve(&input);
+    assert!(frame.actions.iter().any(|action| action == "player.jump"));
+    assert!(frame.command_actions().is_pressed("player.jump"));
+    assert!((frame.move_axis[0] - 0.75).abs() < 0.0001);
+    assert!((frame.move_axis[2] - 0.80).abs() < 0.0001);
+    assert!((frame.look_axis[0] - 0.50).abs() < 0.0001);
+    assert_ne!(
+        frame.move_mask & newengine_input_actions_api::move_mask::RIGHT,
+        0
+    );
+    assert_ne!(
+        frame.move_mask & newengine_input_actions_api::move_mask::FORWARD,
+        0
+    );
+}

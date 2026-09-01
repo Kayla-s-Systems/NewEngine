@@ -87,6 +87,7 @@ mod tests {
                         fade_start_fraction: 0.5,
                         fade_in_fraction: 0.0,
                         drag_per_second: 0.0,
+                        depth_softness_m: 0.0,
                         rotation_radians: 0.0,
                         rotation_random_radians: 0.0,
                         spin_radians_per_second: 0.0,
@@ -108,6 +109,7 @@ mod tests {
                         fade_start_fraction: 0.5,
                         fade_in_fraction: 0.0,
                         drag_per_second: 0.0,
+                        depth_softness_m: 0.0,
                         rotation_radians: 0.0,
                         rotation_random_radians: 0.0,
                         spin_radians_per_second: 0.0,
@@ -129,6 +131,7 @@ mod tests {
                         fade_start_fraction: 0.5,
                         fade_in_fraction: 0.0,
                         drag_per_second: 0.0,
+                        depth_softness_m: 0.0,
                         rotation_radians: 0.0,
                         rotation_random_radians: 0.0,
                         spin_radians_per_second: 0.0,
@@ -144,6 +147,7 @@ mod tests {
                 layers: vec![VfxLayerDefinition::Tracer {
                     primitive: prim_builtins::ID_CUBE,
                     color: [1.0, 0.7, 0.2, 1.0],
+                    mode: newengine_vfx_runtime::VfxTracerMode::Swept,
                     half_length: 0.18,
                     radius: 0.003,
                     speed: 180.0,
@@ -162,6 +166,7 @@ mod tests {
                         role: VfxRenderRole::Transparent,
                         texture_slot: 0,
                         billboard: VfxGpuBillboardMode::VelocityAligned,
+                        emission_axis: newengine_vfx_runtime::VfxEmissionAxis::Reflection,
                         count: 8,
                         scale: Vec3::splat(0.01),
                         color: [1.0, 0.7, 0.2, 1.0],
@@ -171,6 +176,7 @@ mod tests {
                         size_variance: 0.2,
                         lifetime_variance: 0.15,
                         drag_per_second: 0.1,
+                        depth_softness_m: 0.0,
                         rotation_random_radians: 3.14159,
                         spin_radians_per_second: 3.0,
                         spin_variance: 1.5,
@@ -180,10 +186,12 @@ mod tests {
                         fade_in_fraction: 0.0,
                     },
                     VfxLayerDefinition::Decal {
+                        material_ref: None,
                         primitive: prim_builtins::ID_DISC,
                         scale: Vec3::new(0.1, 0.002, 0.1),
                         color: [0.05, 0.05, 0.05, 1.0],
                         normal_offset: 0.003,
+                        persistent: false,
                         lifetime_seconds: 5.0,
                         fade_start_fraction: 0.9,
                     },
@@ -440,6 +448,8 @@ mod tests {
             .is_some_and(|velocity| velocity.0.length() > 10.0));
         assert!(body.material.restitution >= 0.0);
         assert!(body.material.friction >= 0.0);
+        assert_eq!(body.linear_damping, Some(0.015));
+        assert_eq!(body.angular_damping, Some(0.025));
     }
 
     #[test]
@@ -664,6 +674,66 @@ mod tests {
             .get::<WeaponShellContactRuntime>(casing)
             .is_some_and(|state| !state.settled));
     }
+    #[test]
+    fn persistent_impact_debris_freezes_out_of_physics_and_survives_without_ttl() {
+        let mut world = World::new();
+        let owner = world.spawn();
+        let spawned = spawn_persistent_impact_debris(
+            &mut world,
+            owner,
+            17,
+            Vec3::new(0.0, 1.0, 0.0),
+            Vec3::Y,
+            -Vec3::Y,
+            None,
+            Some("surface.concrete.wall"),
+        );
+        assert_eq!(spawned, 8);
+
+        let entities = world
+            .query::<PersistentImpactDebris>()
+            .map(|(entity, _)| entity)
+            .collect::<Vec<_>>();
+        assert_eq!(entities.len(), 8);
+        for entity in &entities {
+            assert!(world.get::<ActiveImpactDebris>(*entity).is_some());
+            assert!(world.get::<PhysicsBodyDesc>(*entity).is_some());
+            assert!(world.get::<Velocity>(*entity).is_some());
+            assert!(world.get::<AngularVelocity>(*entity).is_some());
+            let _ = world.insert(*entity, Velocity(Vec3::ZERO));
+            let _ = world.insert(*entity, AngularVelocity(Vec3::ZERO));
+        }
+
+        // 0.40 s at 60 Hz exceeds the authored 0.32 s settle hold.
+        for _ in 0..24 {
+            process_impact_debris_physics_events(&mut world, 1.0 / 60.0);
+        }
+        assert_eq!(world.query::<ActiveImpactDebris>().count(), 0);
+        assert_eq!(world.query::<PersistentImpactDebris>().count(), 8);
+        for entity in &entities {
+            assert!(world.exists(*entity));
+            assert!(world.get::<PhysicsBodyDesc>(*entity).is_none());
+            assert!(world.get::<Velocity>(*entity).is_none());
+            assert!(world.get::<AngularVelocity>(*entity).is_none());
+            assert!(world.get::<GameplayActor>(*entity).is_none());
+            assert!(world.get::<ImpactDebrisContactRuntime>(*entity).is_none());
+            // Visual admission may happen before or after physics settle; this one-shot marker is
+            // intentionally retained until the product world attaches the shard mesh.
+            assert!(world.get::<PendingImpactDebrisVisual>(*entity).is_some());
+        }
+
+        // Five more seconds of gameplay stepping must not age, tick or despawn frozen clutter.
+        for _ in 0..300 {
+            process_impact_debris_physics_events(&mut world, 1.0 / 60.0);
+        }
+        assert_eq!(world.query::<ActiveImpactDebris>().count(), 0);
+        assert_eq!(world.query::<PersistentImpactDebris>().count(), 8);
+        for entity in entities {
+            assert!(world.exists(entity));
+            assert!(world.get::<PhysicsBodyDesc>(entity).is_none());
+        }
+    }
+
     #[test]
     fn impact_surface_routing_accepts_hierarchical_physics_surface_ids() {
         let vfx = newengine_engine_runtime::gameplay::WeaponVfxDefinition {

@@ -3,13 +3,14 @@ use std::collections::BTreeMap;
 use newengine_math::Vec3;
 use newengine_primitives::{builtins, PrimitiveId};
 use newengine_vfx_api::{
-    FxdAlignmentV1, FxdBillboardModeV1, FxdDictionaryV1, FxdLayerKindV1, FxdLayerV1,
-    FxdRenderRoleV1, VfxEffectRef, VfxGpuBillboardMode, VfxGpuTextureRegistry,
+    FxdAlignmentV1, FxdBillboardModeV1, FxdDictionaryV1, FxdEmissionAxisV1, FxdLayerKindV1,
+    FxdLayerV1, FxdRenderRoleV1, FxdTracerModeV1, VfxEffectRef, VfxGpuBillboardMode,
+    VfxGpuTextureRegistry,
 };
 
 use crate::{
-    VfxAlignment, VfxEffectDefinition, VfxEffectLibrary, VfxLayerDefinition, VfxLayerKind,
-    VfxLightDefinition, VfxRenderRole,
+    VfxAlignment, VfxEffectDefinition, VfxEffectLibrary, VfxEmissionAxis, VfxLayerDefinition,
+    VfxLayerKind, VfxLightDefinition, VfxRenderRole, VfxTracerMode,
 };
 
 impl VfxEffectLibrary {
@@ -81,6 +82,7 @@ fn compile_layer(
             fade_start_fraction,
             fade_in_fraction,
             drag_per_second,
+            depth_softness_m,
             rotation_radians,
             rotation_random_radians,
             spin_radians_per_second,
@@ -101,6 +103,7 @@ fn compile_layer(
             fade_start_fraction: *fade_start_fraction,
             fade_in_fraction: *fade_in_fraction,
             drag_per_second: *drag_per_second,
+            depth_softness_m: *depth_softness_m,
             rotation_radians: *rotation_radians,
             rotation_random_radians: *rotation_random_radians,
             spin_radians_per_second: *spin_radians_per_second,
@@ -113,6 +116,7 @@ fn compile_layer(
         FxdLayerV1::Tracer {
             primitive,
             color,
+            mode,
             half_length,
             radius,
             speed,
@@ -120,6 +124,7 @@ fn compile_layer(
         } => VfxLayerDefinition::Tracer {
             primitive: primitive_id(primitive)?,
             color: *color,
+            mode: tracer_mode(*mode),
             half_length: *half_length,
             radius: *radius,
             speed: *speed,
@@ -131,6 +136,7 @@ fn compile_layer(
             role,
             texture,
             billboard,
+            emission_axis,
             count,
             scale,
             color,
@@ -141,6 +147,7 @@ fn compile_layer(
             lifetime_variance,
             acceleration,
             drag_per_second,
+            depth_softness_m,
             rotation_random_radians,
             spin_radians_per_second,
             spin_variance,
@@ -153,6 +160,7 @@ fn compile_layer(
             role: render_role(*role),
             texture_slot: texture_slot(texture, textures)?,
             billboard: billboard_mode(*billboard),
+            emission_axis: emission_axis_mode(*emission_axis),
             count: *count,
             scale: v3(*scale),
             color: *color,
@@ -163,6 +171,7 @@ fn compile_layer(
             lifetime_variance: *lifetime_variance,
             acceleration: v3(*acceleration),
             drag_per_second: *drag_per_second,
+            depth_softness_m: *depth_softness_m,
             rotation_random_radians: *rotation_random_radians,
             spin_radians_per_second: *spin_radians_per_second,
             spin_variance: *spin_variance,
@@ -172,16 +181,20 @@ fn compile_layer(
         },
         FxdLayerV1::Decal {
             primitive,
+            material,
             scale,
             color,
             normal_offset,
+            persistent,
             lifetime_seconds,
             fade_start_fraction,
         } => VfxLayerDefinition::Decal {
             primitive: primitive_id(primitive)?,
+            material_ref: (!material.trim().is_empty()).then(|| material.trim().replace('\\', "/")),
             scale: v3(*scale),
             color: *color,
             normal_offset: *normal_offset,
+            persistent: *persistent,
             lifetime_seconds: *lifetime_seconds,
             fade_start_fraction: *fade_start_fraction,
         },
@@ -246,6 +259,23 @@ fn billboard_mode(value: FxdBillboardModeV1) -> VfxGpuBillboardMode {
 }
 
 #[inline]
+fn tracer_mode(value: FxdTracerModeV1) -> VfxTracerMode {
+    match value {
+        FxdTracerModeV1::Swept => VfxTracerMode::Swept,
+        FxdTracerModeV1::SingleFrame => VfxTracerMode::SingleFrame,
+    }
+}
+
+#[inline]
+fn emission_axis_mode(value: FxdEmissionAxisV1) -> VfxEmissionAxis {
+    match value {
+        FxdEmissionAxisV1::Normal => VfxEmissionAxis::Normal,
+        FxdEmissionAxisV1::Direction => VfxEmissionAxis::Direction,
+        FxdEmissionAxisV1::Reflection => VfxEmissionAxis::Reflection,
+    }
+}
+
+#[inline]
 fn layer_kind(value: FxdLayerKindV1) -> VfxLayerKind {
     match value {
         FxdLayerKindV1::MuzzleFlash => VfxLayerKind::MuzzleFlash,
@@ -280,6 +310,7 @@ mod tests {
                     role: FxdRenderRoleV1::Transparent,
                     texture: "spark".to_owned(),
                     billboard: FxdBillboardModeV1::VelocityAligned,
+                    emission_axis: FxdEmissionAxisV1::Reflection,
                     count: 4,
                     scale: [0.01, 0.01, 0.05],
                     color: [1.0; 4],
@@ -290,6 +321,7 @@ mod tests {
                     lifetime_variance: 0.20,
                     acceleration: [0.0, -9.81, 0.0],
                     drag_per_second: 0.1,
+                    depth_softness_m: 0.0,
                     rotation_random_radians: 3.14159,
                     spin_radians_per_second: 2.0,
                     spin_variance: 1.0,

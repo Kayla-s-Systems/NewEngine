@@ -35,6 +35,23 @@ impl PluginsSnapshot {
                     })
             })
     }
+
+    /// True when an admitted, loaded plugin provides `capability_id`.
+    ///
+    /// `registered` is intentionally included: plugin loading publishes a retained snapshot
+    /// before lifecycle start, while tooling surfaces may already be composed from the loaded
+    /// root exports. Stopped and disabled providers remain unavailable.
+    pub fn has_loaded_capability(&self, capability_id: &str) -> bool {
+        let capability_id = capability_id.trim();
+        !capability_id.is_empty()
+            && self.plugins.iter().any(|plugin| {
+                matches!(plugin.state.as_str(), "registered" | "running")
+                    && plugin.capabilities.iter().any(|capability| {
+                        capability.role == newengine_plugin_api::CapabilityRole::Provides
+                            && capability.id.as_str() == capability_id
+                    })
+            })
+    }
 }
 
 pub use content_manifest::{
@@ -98,4 +115,58 @@ pub fn emit_plugin_event(topic: &str, payload: &[u8]) -> Result<(), String> {
 pub fn emit_plugin_json(topic: &str, value: &serde_json::Value) -> Result<(), String> {
     let bytes = serde_json::to_vec(value).map_err(|e| e.to_string())?;
     emit_plugin_event(topic, &bytes)
+}
+
+#[cfg(test)]
+mod plugin_snapshot_capability_tests {
+    use super::*;
+    use newengine_plugin_api::{CapabilityDesc, CapabilityKind, CapabilityRole};
+    use std::path::PathBuf;
+    use std::sync::Arc;
+
+    fn snapshot_with_state_and_role(state: &str, role: CapabilityRole) -> PluginsSnapshot {
+        PluginsSnapshot {
+            revision: 1,
+            plugins: Arc::from(vec![PluginSnapshotEntry {
+                path: PathBuf::from("editing-tools.dll"),
+                id: "newengine.editing.tools".to_owned(),
+                name: "Editing Tools".to_owned(),
+                version: "0.3.0".to_owned(),
+                kind: None,
+                capabilities: vec![CapabilityDesc::new(
+                    newengine_plugin_api::CAPABILITY_ID_EDITING_TOOLS,
+                    role,
+                    CapabilityKind::Other,
+                    1,
+                )],
+                state: state.to_owned(),
+                disabled_reason: None,
+                icon_small: None,
+            }]),
+        }
+    }
+
+    #[test]
+    fn loaded_tooling_capability_accepts_registered_and_running_only() {
+        for state in ["registered", "running"] {
+            assert!(
+                snapshot_with_state_and_role(state, CapabilityRole::Provides)
+                    .has_loaded_capability(newengine_plugin_api::CAPABILITY_ID_EDITING_TOOLS)
+            );
+        }
+        for state in ["stopped", "disabled"] {
+            assert!(
+                !snapshot_with_state_and_role(state, CapabilityRole::Provides)
+                    .has_loaded_capability(newengine_plugin_api::CAPABILITY_ID_EDITING_TOOLS)
+            );
+        }
+    }
+
+    #[test]
+    fn loaded_tooling_capability_requires_provider_role() {
+        assert!(
+            !snapshot_with_state_and_role("running", CapabilityRole::Requires)
+                .has_loaded_capability(newengine_plugin_api::CAPABILITY_ID_EDITING_TOOLS)
+        );
+    }
 }

@@ -203,7 +203,7 @@ fn main() -> Result<(), String> {
         .finish()
         .map_err(|e| format!("deflate finish failed: {e}"))?;
     let ytd = encode_list_file(ListFileEncodeRequest {
-        content_kind: newengine_asset_format_nef8::ytd::CONTENT_KIND,
+        content_kind: newengine_assets_api::LIST_FILE_CONTENT_KIND_YTD,
         content_schema_version: newengine_asset_format_nef8::ytd::CONTENT_SCHEMA_VERSION,
         entry_count: selections.len() as u32,
         additional_flags: 0,

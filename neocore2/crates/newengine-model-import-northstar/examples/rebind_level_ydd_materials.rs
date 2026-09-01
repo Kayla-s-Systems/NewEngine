@@ -156,7 +156,7 @@ fn main() -> Result<(), String> {
     let bytes = fs::read(&input).map_err(|e| format!("read {}: {e}", input.display()))?;
     let decoded = decode_list_file_envelope(
         &bytes,
-        newengine_asset_format_nef8::ydd::CONTENT_KIND,
+        newengine_assets_api::LIST_FILE_CONTENT_KIND_YDD,
         &logical,
     )?;
     let mut document = decode_ydd_binary_body(&decoded.body)?;
@@ -232,7 +232,7 @@ fn main() -> Result<(), String> {
     })?;
     let verify = decode_list_file_envelope(
         &output_bytes,
-        newengine_asset_format_nef8::ydd::CONTENT_KIND,
+        newengine_assets_api::LIST_FILE_CONTENT_KIND_YDD,
         &logical,
     )?;
     let verify_doc = decode_ydd_binary_body(&verify.body)?;

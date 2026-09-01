@@ -218,16 +218,15 @@ impl GameplayCapabilityProvider for AudioPlayCapability {
             .filter(|cue| !cue.is_empty())
             .ok_or("engine.audio.play.v1 requires non-empty payload.cue")?;
 
-        let mut play = newengine_audio_api::AudioCuePlayRequest::new(cue.to_owned());
-        if let Some(route) = payload
+        let route = payload
             .get("route")
             .and_then(serde_json::Value::as_str)
             .map(str::trim)
             .filter(|route| !route.is_empty())
-        {
-            play.route = newengine_audio_api::AudioRouteId::new(route.to_owned());
-            play.route.validate()?;
-        }
+            .ok_or("engine.audio.play.v1 requires non-empty project-authored payload.route")?;
+        let mut play = newengine_audio_api::AudioCuePlayRequest::new(cue.to_owned());
+        play.route = newengine_audio_api::AudioRouteId::new(route.to_owned());
+        play.route.validate()?;
         if let Some(position) = payload.get("position") {
             play.position = Some(
                 serde_json::from_value::<[f32; 3]>(position.clone())
@@ -265,9 +264,29 @@ impl GameplayCapabilityProvider for AudioPlayCapability {
         }
         play.scope_id = request.source.filter(|source| *source != 0);
         let play = play.sanitized();
-        newengine_audio_client::play_audio_cue(&play)
-            .map_err(|error| format!("audio gateway failed cue='{cue}': {error}"))?;
-        Ok(())
+        match newengine_audio_client::play_audio_cue(&play)
+            .map_err(|error| format!("audio gateway failed cue='{cue}' route='{route}': {error}"))?
+        {
+            Some(ack) if ack.accepted => {
+                newengine_ulog_api::ulog::info!(
+                    "gameplay audio play accepted cue='{}' route='{}' provider='{}' voice_id={:?} voice_ids={:?} virtualized={}",
+                    cue,
+                    route,
+                    ack.provider,
+                    ack.voice_id,
+                    ack.voice_ids,
+                    ack.virtualized,
+                );
+                Ok(())
+            }
+            Some(ack) => Err(format!(
+                "audio play rejected cue='{cue}' route='{route}' provider='{}' message='{}'",
+                ack.provider, ack.message
+            )),
+            None => Err(format!(
+                "audio play capability unavailable cue='{cue}' route='{route}'"
+            )),
+        }
     }
 }
 
@@ -351,6 +370,19 @@ mod tests {
         assert_eq!(report.requested, 1);
         assert_eq!(report.executed, 1);
         assert_eq!(world.resource::<serde_json::Value>().unwrap()["value"], 7);
+    }
+
+    #[test]
+    fn project_audio_capability_requires_authored_route_before_gateway_dispatch() {
+        let mut world = World::new();
+        let request = GameplayCapabilityRequest::new(
+            GAMEPLAY_CAPABILITY_AUDIO_PLAY_V1,
+            serde_json::json!({"cue": "shared/audio/test.yscd@cue"}),
+        );
+        let error = AudioPlayCapability
+            .invoke(&mut world, &request)
+            .expect_err("missing project route must fail before audio gateway");
+        assert!(error.contains("project-authored payload.route"));
     }
 
     #[test]

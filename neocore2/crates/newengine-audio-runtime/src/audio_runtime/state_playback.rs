@@ -22,6 +22,9 @@ impl AudioRuntimeState {
         let request = request.sanitized();
         if !request.route.0.is_empty() {
             request.route.validate()?;
+            if !self.route_is_configured(&request.route) {
+                return Ok(AudioPlayAck { accepted:false, provider:NATIVE_AUDIO_PROVIDER_ROUTE.to_owned(), voice_id:None, voice_ids:Vec::new(), message:format!("audio route '{}' is not installed by project AudioMixGraph", request.route.0), virtualized:false, diagnostics:Vec::new() });
+            }
         }
         if let Err(message) = self.validate_render_start_sample(request.render_start_sample) {
             return Ok(AudioPlayAck { accepted:false, provider:NATIVE_AUDIO_PROVIDER_ROUTE.to_owned(), voice_id:None, voice_ids:Vec::new(), message, virtualized:false, diagnostics:Vec::new() });
@@ -184,6 +187,9 @@ impl AudioRuntimeState {
         let request = request.sanitized();
         if !request.route.0.is_empty() {
             request.route.validate()?;
+            if !self.route_is_configured(&request.route) {
+                return Ok(AudioPlayAck { accepted:false, provider:NATIVE_AUDIO_PROVIDER_ROUTE.to_owned(), voice_id:None, voice_ids:Vec::new(), message:format!("audio route '{}' is not installed by project AudioMixGraph", request.route.0), virtualized:false, diagnostics:Vec::new() });
+            }
         }
         if let Err(message) = self.validate_render_start_sample(request.render_start_sample) {
             return Ok(AudioPlayAck { accepted:false, provider:NATIVE_AUDIO_PROVIDER_ROUTE.to_owned(), voice_id:None, voice_ids:Vec::new(), message, virtualized:false, diagnostics:Vec::new() });
@@ -341,15 +347,14 @@ impl AudioRuntimeState {
     }
 
     fn load_cue(&mut self, cue_reference: &str) -> Result<SoundCue, String> {
-        let reference = newengine_assets_api::parse_asset_reference(cue_reference)
-            .map_err(|error| format!("audio cue reference invalid '{cue_reference}': {error}"))?;
-        if !reference.has_extension(newengine_asset_format_nef8::yscd::EXTENSION) {
-            return Err(format!(
-                "authored SoundCue JSON is retired; cue '{}' must use .yscd@entry",
-                reference.canonical
-            ));
-        }
-        reference.require_entry()?;
+        let (reference, _descriptor) = self
+            .assets
+            .require_semantic_asset_reference_v1(cue_reference, "engine.audio", true)
+            .map_err(|error| {
+                format!(
+                    "audio cue reference must resolve through the registered engine.audio asset format: '{cue_reference}': {error}"
+                )
+            })?;
         let canonical = reference.canonical.clone();
         if let Some(cue) = self.cues.get(&canonical) {
             return Ok(cue.clone());
@@ -368,10 +373,29 @@ impl AudioRuntimeState {
                                 reference.logical_path
                             )
                         })?;
-                let decoded = Arc::new(newengine_asset_format_nef8::decode_yscd_nef8(
-                    &source,
-                    &reference.logical_path,
-                )?);
+                let body = self
+                    .assets
+                    .decode_v1(&newengine_assets_api::AssetDecodeRequest {
+                        logical_path: reference.logical_path.clone(),
+                        output_kind: newengine_assets_api::ASSET_LIST_FILE_BODY_OUTPUT.to_owned(),
+                        selector: serde_json::Value::Null,
+                        format_descriptor: None,
+                    })
+                    .map_err(|error| {
+                        format!(
+                            "audio cue ListFile decode failed logical_path='{}': {error}",
+                            reference.logical_path
+                        )
+                    })?;
+                let decoded = Arc::new(
+                    newengine_asset_format_nef8::yscd_binary::decode_yscd_binary_body(&body)
+                        .map_err(|error| {
+                            format!(
+                                "audio cue body decode failed logical_path='{}': {error}",
+                                reference.logical_path
+                            )
+                        })?,
+                );
                 newengine_ulog_api::ulog::info!(
                     "YSCD dictionary cache miss path='{}' cues={} bytes={} policy='decode-once'",
                     reference.logical_path,
@@ -623,6 +647,17 @@ impl AudioRuntimeState {
         };
         if !route.0.is_empty() {
             route.validate()?;
+            if !self.route_is_configured(&route) {
+                return Ok(AudioPlayAck {
+                    accepted: false,
+                    provider: NATIVE_AUDIO_PROVIDER_ROUTE.to_owned(),
+                    voice_id: None,
+                    voice_ids: Vec::new(),
+                    message: format!("audio route '{}' is not installed by project AudioMixGraph", route.0),
+                    virtualized: false,
+                    diagnostics: Vec::new(),
+                });
+            }
         }
         let layers = self.cue_layers.get(&canonical).cloned().unwrap_or_default();
         let voice_policy = cue.voice_policy().sanitized()?;

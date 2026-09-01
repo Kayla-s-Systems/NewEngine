@@ -2,32 +2,23 @@
 
 Provider-neutral `textures.api` semantic service implementation for `.ytd` texture dictionaries.
 
-This crate builds the service but does not register a Host route. `PluginsSrc/TexturesRuntime` owns first-party plugin identity, backend priority and `engine.assets.textures` route metadata, allowing a compatible plugin to replace the implementation without rebuilding GameReady or AssetInspector.
+This crate builds texture semantics but does not own YTD file-type discovery. StarVault 3.8.0 discovers the dedicated `ytd.dll/.so/.dylib` descriptor module from its relative `formats/` directory. That module owns the `.ytd` `AssetFileTypeDescriptor` and points semantic consumers at `engine.assets.textures`.
 
 Boundary rule:
 
 ```text
-engine.assets.textures owns .ytd semantics and runtime texture packets.
-engine.assets owns VFS bytes and codec dispatch.
-renderer/UI/materials consume texture packets or validation DTOs, never raw .ytd bytes.
+pluginsRuntime/formats/ytd.*
+    -> owns YTD asset-type descriptor / format identity
+
+newengine-textures-runtime
+    -> owns texture semantic service implementation
+
+StarVault / engine.assets
+    -> owns VFS bytes, asset-type registry and format-module discovery
+
+AssetManager codec workers
+    -> own byte/ListFile decode mechanics
+
+renderer/UI/materials
+    -> consume texture packets or validation DTOs, never raw .ytd bytes
 ```
-
-<!-- NORTHSTAR-DIR-README:BEGIN -->
-
-## Directory purpose
-
-**Path:** `NewEngine/neocore2/crates/newengine-textures-runtime`
-
-**Role:** Texture dictionary semantic service factory; no Host registration ownership.
-
-**Local contents:** 1 direct subdirectories, 2 direct files.
-
-**Direct file examples:** `Cargo.toml`
-
-## Working rules
-
-- Do not put transient build output in this directory unless the directory is explicitly a runtime output/cache location.
-- Keep runtime assets and editable source assets separate: source assets are packed into runtime formats through explicit tools/manifests.
-- Do not introduce hidden provider/backend coupling here; use declared descriptors, gateways, DTOs, and explicit maintenance scripts.
-
-<!-- NORTHSTAR-DIR-README:END -->

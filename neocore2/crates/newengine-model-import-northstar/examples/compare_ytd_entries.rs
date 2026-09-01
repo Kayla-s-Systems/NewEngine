@@ -10,12 +10,12 @@ fn main() -> Result<(), String> {
     let bb = read(&b)?;
     let ad = newengine_assets_api::decode_list_file_envelope(
         &ab,
-        newengine_asset_format_nef8::ytd::CONTENT_KIND,
+        newengine_assets_api::LIST_FILE_CONTENT_KIND_YTD,
         &a,
     )?;
     let bd = newengine_assets_api::decode_list_file_envelope(
         &bb,
-        newengine_asset_format_nef8::ytd::CONTENT_KIND,
+        newengine_assets_api::LIST_FILE_CONTENT_KIND_YTD,
         &b,
     )?;
     let aa = newengine_texture_container::parse(&ad.body).map_err(|e| e.to_string())?;

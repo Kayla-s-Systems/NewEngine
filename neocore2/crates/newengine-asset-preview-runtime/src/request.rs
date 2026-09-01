@@ -266,7 +266,8 @@ impl AssetPreviewApi {
             logical_path: logical_path.to_owned(),
             output_kind: ASSET_LIST_FILE_MANIFEST_OUTPUT.to_owned(),
             selector: serde_json::Value::Null,
-        })?;
+                    format_descriptor: None,
+})?;
         let manifest = serde_json::from_slice::<AssetFileManifest>(&bytes)
             .map_err(|error| format!("invalid asset manifest: {error}"))?;
         Ok(manifest.entries.into_iter().next())

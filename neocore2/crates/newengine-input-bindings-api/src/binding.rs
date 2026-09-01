@@ -159,4 +159,15 @@ impl InputBinding {
             phase: InputBindingPhase::Pressed,
         }
     }
+
+    #[inline]
+    pub fn gamepad_button_released(action: impl Into<String>, name: impl Into<String>) -> Self {
+        Self {
+            action: action.into(),
+            device: InputBindingDevice::GamepadButton,
+            code: 0,
+            name: Some(name.into()),
+            phase: InputBindingPhase::Released,
+        }
+    }
 }

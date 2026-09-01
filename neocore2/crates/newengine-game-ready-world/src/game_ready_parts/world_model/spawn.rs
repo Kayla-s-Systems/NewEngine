@@ -49,6 +49,54 @@ fn ensure_ydd_prefab_source(prefab: &GameReadyPrefabSpec, role: &str) -> Result<
         })
 }
 
+fn resolve_unambiguous_prefab_impact_material(
+    mats: &MaterialRegistry,
+    authored_material: Option<MaterialId>,
+    decoded: &[DecodedPrefabMeshPart],
+) -> Result<Option<MaterialId>, String> {
+    let mut resolved = None;
+    for part in decoded {
+        let has_part_material = part
+            .material_ref
+            .as_deref()
+            .map(str::trim)
+            .is_some_and(|value| !value.is_empty());
+        if !has_part_material && authored_material.is_none() {
+            continue;
+        }
+        let (material, _) = resolve_prefab_part_material(
+            mats,
+            authored_material,
+            &part.material_slot,
+            part.material_ref.as_deref(),
+        )?;
+        match resolved {
+            None => resolved = Some(material),
+            Some(existing) if existing == material => {}
+            Some(_) => return Ok(None),
+        }
+    }
+    Ok(resolved.or(authored_material))
+}
+
+fn attach_unambiguous_impact_material(
+    world: &mut newengine_ecs::World,
+    entity: EntityId,
+    mats: &MaterialRegistry,
+    authored_material: Option<MaterialId>,
+    decoded: &[DecodedPrefabMeshPart],
+) -> Result<(), String> {
+    if let Some(material) =
+        resolve_unambiguous_prefab_impact_material(mats, authored_material, decoded)?
+    {
+        let _ = world.insert(
+            entity,
+            newengine_engine_runtime::scene_bridge::PrimitiveMaterialBase { id: material },
+        );
+    }
+    Ok(())
+}
+
 fn attach_authored_map_placement(
     world: &mut newengine_ecs::World,
     entity: EntityId,
@@ -79,11 +127,13 @@ fn attach_authored_map_placement(
 
 pub(super) fn spawn_collision_ydd_prefab_from_decoded(
     world: &mut newengine_ecs::World,
+    mats: &MaterialRegistry,
     parent: EntityId,
     prefab: &GameReadyPrefabSpec,
     decoded: &[DecodedPrefabMeshPart],
 ) -> Result<(u32, u64), String> {
     ensure_ydd_prefab_source(prefab, "collision")?;
+    let authored_material = register_authored_prefab_material(mats, prefab)?;
     let mut vertices = Vec::<[f32; 3]>::new();
     let mut triangles = Vec::<[u32; 3]>::new();
     let mut part_count = 0u32;
@@ -143,6 +193,7 @@ pub(super) fn spawn_collision_ydd_prefab_from_decoded(
     let _ = world.insert(entity, Bounds::from_local_aabb(local_bounds));
     let _ = world.insert(entity, collider);
     attach_authored_physics_surface(world, entity, prefab);
+    attach_unambiguous_impact_material(world, entity, mats, authored_material, decoded)?;
     if prefab.ground_placement_surface {
         let _ = world.insert(entity, super::GroundPlacementSurface);
     }
@@ -165,11 +216,13 @@ pub(super) fn spawn_collision_ydd_prefab_from_decoded(
 
 pub(super) fn spawn_box_collision_ydd_prefab_from_decoded(
     world: &mut newengine_ecs::World,
+    mats: &MaterialRegistry,
     parent: EntityId,
     prefab: &GameReadyPrefabSpec,
     decoded: &[DecodedPrefabMeshPart],
 ) -> Result<(u32, u64), String> {
     ensure_ydd_prefab_source(prefab, "box collision")?;
+    let authored_material = register_authored_prefab_material(mats, prefab)?;
     let half_extents = dynamic_prefab_half_extents(decoded, prefab.scale);
     let entity = spawn_named(world, format!("World/Collision/{}", prefab.id));
     let _ = set_parent(world, entity, Some(parent));
@@ -205,6 +258,7 @@ pub(super) fn spawn_box_collision_ydd_prefab_from_decoded(
     body.material.restitution = 0.0;
     let _ = world.insert(entity, body);
     attach_authored_physics_surface(world, entity, prefab);
+    attach_unambiguous_impact_material(world, entity, mats, authored_material, decoded)?;
     let part_count = decoded.len() as u32;
     let triangle_count = decoded
         .iter()
@@ -292,6 +346,7 @@ pub(super) fn spawn_dynamic_ydd_prefab_from_decoded(
     body.material.density = 0.85;
     let _ = world.insert(root, body);
     attach_authored_physics_surface(world, root, prefab);
+    attach_unambiguous_impact_material(world, root, mats, authored_material, decoded)?;
     let _ = world.insert(root, Velocity(Vec3::ZERO));
     let _ = world.insert(root, AngularVelocity(Vec3::ZERO));
 

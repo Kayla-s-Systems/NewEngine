@@ -441,9 +441,9 @@ mod typed_requirement_tests {
     use abi_stable::std_types::RResult;
     use abi_stable::std_types::{ROption, RString, RVec};
     use newengine_plugin_api::{
-        BackendRouteDescriptorV2, Blob, CapabilityDesc, CapabilityDescV2, CapabilityId,
-        CapabilityKind, CapabilityRequirementDescV2, CapabilityRole, MethodName, PluginDescriptor,
-        PluginDescriptorV2, PluginKind, ServiceV1, ServiceV1Dyn,
+        BackendRouteDescriptor, BackendRouteDescriptorV2, Blob, CapabilityDesc, CapabilityDescV2,
+        CapabilityId, CapabilityKind, CapabilityRequirementDescV2, CapabilityRole, MethodName,
+        PluginDescriptor, PluginDescriptorV2, PluginKind, ServiceV1, ServiceV1Dyn,
     };
 
     fn descriptor_v2(id: &str, capabilities: Vec<CapabilityDescV2>) -> PluginDescriptorV2 {
@@ -546,6 +546,59 @@ mod typed_requirement_tests {
         let missing = missing_typed_descriptor_requirements(&consumer, &forbidden_candidates);
         assert_eq!(missing.len(), 1);
         assert!(missing[0].contains("forbidden_tags=backend.software"));
+    }
+
+    #[test]
+    fn backend_route_alias_satisfies_gateway_service_requirement() {
+        let provider = CapabilityDescV2::backend_route(
+            "assets.textures.backend",
+            1,
+            BackendRouteDescriptor::new(newengine_service_api::BackendServiceSpec::new(
+                "assets.textures",
+                "engine.assets.textures",
+                "textures.api",
+                "assets.textures.backend",
+            ))
+            .provider_route("engine.assets.textures.runtime")
+            .backend("northstar_texture_runtime")
+            .contract("textures.api"),
+        );
+        let provider_descriptor = descriptor_v2("engine.assets.textures.runtime", vec![provider]);
+        let mut candidates = Vec::new();
+        for capability in provider_descriptor.capabilities.iter() {
+            if let Some(candidate) =
+                candidate_from_typed_capability(provider_descriptor.id.as_str(), capability)
+            {
+                candidates.push(candidate);
+            }
+            if let Some(candidate) = route_alias_candidate_from_typed_capability(
+                provider_descriptor.id.as_str(),
+                capability,
+            ) {
+                candidates.push(candidate);
+            }
+        }
+
+        let consumer = descriptor_v2(
+            "newengine.composition.game-ready",
+            vec![CapabilityDescV2::new(
+                "engine.assets.textures",
+                CapabilityRole::Requires,
+                CapabilityKind::ServiceV1,
+                1,
+            )],
+        );
+
+        assert!(
+            missing_typed_descriptor_requirements(&consumer, &candidates).is_empty(),
+            "provider backend route must alias engine.assets.textures for GameReady requirements"
+        );
+        assert!(candidates.iter().any(|candidate| {
+            candidate
+                .capability_ids
+                .iter()
+                .any(|id| id == "engine.assets.textures")
+        }));
     }
 
     #[test]

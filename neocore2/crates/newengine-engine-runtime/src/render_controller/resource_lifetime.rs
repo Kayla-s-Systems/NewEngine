@@ -17,6 +17,7 @@ enum RetiredGpuResource {
 struct RetiredGpuResourceEntry {
     resource: RetiredGpuResource,
     after_frame: u64,
+    reason: &'static str,
 }
 
 #[derive(Default)]
@@ -41,10 +42,22 @@ impl RenderGpuLifetimeQueue {
     }
 
     #[inline]
-    pub(super) fn retire_render_target_after_frame(&mut self, id: RenderTargetId, frame: u64) {
+    pub(super) fn retire_render_target_after_frame(
+        &mut self,
+        id: RenderTargetId,
+        frame: u64,
+        reason: &'static str,
+    ) {
+        newengine_ulog_api::ulog::debug!(
+            "render controller: render target retirement scheduled frame={} id={} reason='{}'",
+            frame,
+            id.0.get(),
+            reason,
+        );
         self.retired.push(RetiredGpuResourceEntry {
             resource: RetiredGpuResource::RenderTarget(id),
             after_frame: frame,
+            reason,
         });
     }
 
@@ -53,6 +66,7 @@ impl RenderGpuLifetimeQueue {
         self.retired.push(RetiredGpuResourceEntry {
             resource: RetiredGpuResource::BindGroup(id),
             after_frame: frame,
+            reason: "bind_group_lifetime",
         });
     }
 
@@ -61,6 +75,7 @@ impl RenderGpuLifetimeQueue {
         self.retired.push(RetiredGpuResourceEntry {
             resource: RetiredGpuResource::Buffer(id),
             after_frame: frame,
+            reason: "buffer_lifetime",
         });
     }
 
@@ -119,7 +134,15 @@ impl RetiredGpuResourceEntry {
     #[inline]
     fn destroy(self, r: &mut dyn RenderApi) {
         match self.resource {
-            RetiredGpuResource::RenderTarget(id) => r.destroy_render_target(id),
+            RetiredGpuResource::RenderTarget(id) => {
+                newengine_ulog_api::ulog::debug!(
+                    "render controller: destroying retired render target id={} after_frame={} reason='{}'",
+                    id.0.get(),
+                    self.after_frame,
+                    self.reason,
+                );
+                r.destroy_render_target(id);
+            }
             RetiredGpuResource::BindGroup(id) => r.destroy_bind_group(id),
             RetiredGpuResource::Buffer(id) => r.destroy_buffer(id),
         }

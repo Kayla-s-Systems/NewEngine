@@ -151,12 +151,9 @@ pub fn resolve_combat_queries(
                     &event,
                     "hit",
                 );
-                if let Err(error) = execute_policy_commands(
-                    world,
-                    command_executor,
-                    &decision.commands,
-                    "hit",
-                ) {
+                if let Err(error) =
+                    execute_policy_commands(world, command_executor, &decision.commands, "hit")
+                {
                     decision.allow_default = false;
                     decision.status = Some(format!("Gameplay command transaction failed: {error}"));
                 }
@@ -260,12 +257,9 @@ pub fn resolve_combat_queries(
                     &event,
                     "hit",
                 );
-                if let Err(error) = execute_policy_commands(
-                    world,
-                    command_executor,
-                    &decision.commands,
-                    "hit",
-                ) {
+                if let Err(error) =
+                    execute_policy_commands(world, command_executor, &decision.commands, "hit")
+                {
                     decision.allow_default = false;
                     decision.status = Some(format!("Gameplay command transaction failed: {error}"));
                 }
@@ -290,7 +284,9 @@ pub fn resolve_combat_queries(
                                         * material
                                             .map(|material| material.impulse_transfer_multiplier)
                                             .unwrap_or(1.0),
-                                    falloff_multiplier: pending.ballistics.falloff_multiplier_at(hit.distance),
+                                    falloff_multiplier: pending
+                                        .ballistics
+                                        .falloff_multiplier_at(hit.distance),
                                 },
                             )
                             .map(|resolution| resolution.applied_damage)
@@ -320,13 +316,43 @@ pub fn resolve_combat_queries(
                     let before = energy_j.max(1.0);
                     energy_j = (energy_j - cost).max(0.0);
                     momentum_ns *= (energy_j / before).sqrt().clamp(0.0, 1.0);
+                    if let Some(exit_index) = exit_index {
+                        let exit_hit = shot_hits[exit_index];
+                        let surface = target
+                            .and_then(|target| world.get::<PhysicsSurface>(target))
+                            .map(|surface| surface.id.clone());
+                        let _ = emit_gameplay_event(
+                            world,
+                            GAMEPLAY_EVENT_WEAPON_PENETRATED,
+                            Some(shooter),
+                            serde_json::json!({
+                                "schema": "newengine.gameplay.weapon_penetration_event.v1",
+                                "version": 1,
+                                "weapon_instance_id": pending.weapon_instance_id.0,
+                                "shot_sequence": pending.shot_sequence,
+                                "entry_point": hit.position,
+                                "entry_normal": hit.normal,
+                                "exit_point": exit_hit.position,
+                                "exit_normal": exit_hit.normal,
+                                "shot_direction": vec3_to_array(pending.direction),
+                                "thickness_m": thickness_m.unwrap_or(0.0),
+                                "remaining_energy_j": energy_j,
+                                "remaining_momentum_ns": momentum_ns,
+                                "surface": surface,
+                            }),
+                        );
+                    }
                     index = exit_index.unwrap_or(index) + 1;
                     continue;
                 }
 
                 let ricochet_material = material.filter(|material| {
                     ballistic_material_allows_ricochet(
-                        *material, pending.direction, normal, pending.bounce_count, pending.max_bounces,
+                        *material,
+                        pending.direction,
+                        normal,
+                        pending.bounce_count,
+                        pending.max_bounces,
                     )
                 });
                 if let Some(ricochet_material) = ricochet_material {

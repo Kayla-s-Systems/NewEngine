@@ -122,6 +122,8 @@ impl FrameGraphBuilder {
                 StandardRenderPhase::ViewportForward => self.forward_opaque(),
                 StandardRenderPhase::ParticleSimulation => self.particle_simulation(),
                 StandardRenderPhase::HairSimulation => self.hair_simulation(),
+                StandardRenderPhase::ParticleGBuffer => self.particle_gbuffer(),
+                StandardRenderPhase::ParticleComposite => self.particle_composite(),
                 StandardRenderPhase::Transparent => self.transparent(),
                 StandardRenderPhase::Water => self.water(),
                 StandardRenderPhase::PostFx => self.postfx(true),

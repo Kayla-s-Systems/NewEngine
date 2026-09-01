@@ -27,6 +27,7 @@ enum ValidationScenario {
     Save,
     Load,
     Controller,
+    HardwareController,
     Hotplug,
     Streaming,
 }
@@ -41,6 +42,7 @@ impl ValidationScenario {
             "save" => Some(Self::Save),
             "load" => Some(Self::Load),
             "controller" => Some(Self::Controller),
+            "hardware_controller" | "hardware-gamepad" => Some(Self::HardwareController),
             "hotplug" => Some(Self::Hotplug),
             "streaming" => Some(Self::Streaming),
             _ => None,
@@ -52,9 +54,46 @@ impl ValidationScenario {
             Self::Save => "save",
             Self::Load => "load",
             Self::Controller => "controller",
+            Self::HardwareController => "hardware_controller",
             Self::Hotplug => "hotplug",
             Self::Streaming => "streaming",
         }
+    }
+}
+
+#[derive(Debug, Default)]
+struct HardwareControllerAcceptance {
+    physical_confirmed: bool,
+    waiting_logged: bool,
+    movement_seen: bool,
+    look_seen: bool,
+    fire_seen: bool,
+    aim_seen: bool,
+    ui_navigation_seen: bool,
+    ui_accept_seen: bool,
+    inventory_toggle_presses: u8,
+    character_toggle_presses: u8,
+    character_toggle_releases: u8,
+    pause_toggle_presses: u8,
+    pause_open_seen: bool,
+    pause_resume_seen: bool,
+}
+
+impl HardwareControllerAcceptance {
+    fn complete(&self) -> bool {
+        self.physical_confirmed
+            && self.movement_seen
+            && self.look_seen
+            && self.fire_seen
+            && self.aim_seen
+            && self.ui_navigation_seen
+            && self.ui_accept_seen
+            && self.inventory_toggle_presses >= 2
+            && self.character_toggle_presses >= 2
+            && self.character_toggle_releases >= 2
+            && self.pause_toggle_presses >= 1
+            && self.pause_open_seen
+            && self.pause_resume_seen
     }
 }
 
@@ -66,6 +105,7 @@ pub(crate) struct GameReadyValidationModule {
     step: u32,
     delay_frames: u32,
     streaming_steps: u32,
+    hardware_controller: HardwareControllerAcceptance,
 }
 
 impl GameReadyValidationModule {
@@ -83,6 +123,7 @@ impl GameReadyValidationModule {
             step: 0,
             delay_frames: 0,
             streaming_steps,
+            hardware_controller: HardwareControllerAcceptance::default(),
         })
     }
 
@@ -141,6 +182,9 @@ impl<E: Send + 'static> Module<E> for GameReadyValidationModule {
             ValidationScenario::Controller => self
                 .controller_update(ctx)
                 .map_err(|error| self.fail(error))?,
+            ValidationScenario::HardwareController => self
+                .hardware_controller_update(ctx)
+                .map_err(|error| self.fail(error))?,
             ValidationScenario::Hotplug => {
                 if !newengine_plugin_host::has_service(newengine_input_api::ENGINE_INPUT_SERVICE_ID)
                 {
@@ -193,6 +237,10 @@ mod tests {
     #[test]
     fn validation_scenarios_are_stable_labels() {
         assert_eq!(ValidationScenario::Controller.label(), "controller");
+        assert_eq!(
+            ValidationScenario::HardwareController.label(),
+            "hardware_controller"
+        );
         assert_eq!(ValidationScenario::Hotplug.label(), "hotplug");
         assert_eq!(ValidationScenario::Streaming.label(), "streaming");
     }

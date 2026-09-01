@@ -25,6 +25,10 @@ pub struct HitscanWeaponTuning {
     pub recoil_yaw_bias_radians: f32,
     pub ads_recoil_multiplier: f32,
     pub recoil_recovery_hz: f32,
+    /// Initial recoil-tracker velocity relative to `kick * recovery_hz`. Kept separate from the
+    /// angle impulse so authored weapons can control post-shot follow-through independently.
+    pub recoil_pitch_tracker_speed_scale: f32,
+    pub recoil_yaw_tracker_speed_scale: f32,
     pub muzzle_forward_offset: f32,
     /// NorthStar-style instant projectile may continue as one shallow-angle ricochet trace.
     pub ricochet_enabled: bool,
@@ -58,6 +62,8 @@ impl Default for HitscanWeaponTuning {
             recoil_yaw_bias_radians: 0.0,
             ads_recoil_multiplier: 0.78,
             recoil_recovery_hz: 7.5,
+            recoil_pitch_tracker_speed_scale: 1.4,
+            recoil_yaw_tracker_speed_scale: 1.15,
             muzzle_forward_offset: 0.52,
             ricochet_enabled: true,
             ricochet_max_bounces: 1,
@@ -100,6 +106,8 @@ impl HitscanWeaponTuning {
             recoil_yaw_bias_radians: self.recoil_yaw_bias_radians.clamp(-1.0, 1.0),
             ads_recoil_multiplier: self.ads_recoil_multiplier.clamp(0.0, 4.0),
             recoil_recovery_hz: self.recoil_recovery_hz.clamp(0.05, 120.0),
+            recoil_pitch_tracker_speed_scale: self.recoil_pitch_tracker_speed_scale.clamp(0.0, 4.0),
+            recoil_yaw_tracker_speed_scale: self.recoil_yaw_tracker_speed_scale.clamp(0.0, 4.0),
             muzzle_forward_offset: self.muzzle_forward_offset.clamp(0.0, 10.0),
             ricochet_enabled: self.ricochet_enabled,
             ricochet_max_bounces: self.ricochet_max_bounces.min(4),
@@ -495,10 +503,13 @@ impl BallisticShotProfile {
     pub fn falloff_multiplier_at(self, distance_m: f32) -> f32 {
         let value = self.sanitized();
         let end = value.falloff_end_m.max(value.falloff_start_m + 0.001);
-        let curve = if distance_m <= value.falloff_start_m { 1.0 }
-        else if distance_m >= end { value.falloff_min_multiplier }
-        else {
-            let alpha = ((distance_m - value.falloff_start_m) / (end - value.falloff_start_m)).clamp(0.0, 1.0);
+        let curve = if distance_m <= value.falloff_start_m {
+            1.0
+        } else if distance_m >= end {
+            value.falloff_min_multiplier
+        } else {
+            let alpha = ((distance_m - value.falloff_start_m) / (end - value.falloff_start_m))
+                .clamp(0.0, 1.0);
             1.0 + (value.falloff_min_multiplier - 1.0) * alpha
         };
         curve * value.component_falloff_multiplier

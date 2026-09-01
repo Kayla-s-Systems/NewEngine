@@ -1,6 +1,24 @@
 use super::*;
 use newengine_math::collections::FxHashSet;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum PrimitivePassSlice {
+    All,
+    NonDecal,
+    DecalOnly,
+}
+
+impl PrimitivePassSlice {
+    #[inline]
+    fn accepts(self, decal: bool) -> bool {
+        match self {
+            Self::All => true,
+            Self::NonDecal => !decal,
+            Self::DecalOnly => decal,
+        }
+    }
+}
+
 pub(super) fn draw_primitives_for_pass(
     this: &mut RuntimeRenderController,
     r: &mut dyn newengine_core::render::RenderApi,
@@ -15,6 +33,7 @@ pub(super) fn draw_primitives_for_pass(
     camera_position: Vec3,
     _camera_forward: Vec3,
     deferred: bool,
+    slice: PrimitivePassSlice,
 ) -> newengine_core::EngineResult<()> {
     let stage_profile = runtime
         && (this.frame.frame_index <= 3 || this.frame.frame_index.is_multiple_of(30))
@@ -29,13 +48,23 @@ pub(super) fn draw_primitives_for_pass(
     {
         eprintln!(
             "NSDIAG primitive-snapshot frame={} camera=({:.3},{:.3},{:.3}) entries={} queried={}",
-            this.frame.frame_index, camera_position.x, camera_position.y, camera_position.z,
-            primitive_snapshot.entries.len(), primitive_snapshot.queried_count
+            this.frame.frame_index,
+            camera_position.x,
+            camera_position.y,
+            camera_position.z,
+            primitive_snapshot.entries.len(),
+            primitive_snapshot.queried_count
         );
         for source in primitive_snapshot.entries.iter() {
             let cols = source.render_model.to_cols_array();
-            let bounds = source.local_bounds
-                .map(|(center, radius)| format!("local_center=({:.3},{:.3},{:.3}) radius={:.3}", center.x, center.y, center.z, radius))
+            let bounds = source
+                .local_bounds
+                .map(|(center, radius)| {
+                    format!(
+                        "local_center=({:.3},{:.3},{:.3}) radius={:.3}",
+                        center.x, center.y, center.z, radius
+                    )
+                })
                 .unwrap_or_else(|| "local_bounds=<none>".to_owned());
             eprintln!(
                 "NSDIAG primitive-entry entity={} primitive={} origin=({:.3},{:.3},{:.3}) {} role={:?} material={:?}",
@@ -80,6 +109,10 @@ pub(super) fn draw_primitives_for_pass(
         let mut draw_flags = primitive_draw_flags(mesh_render_options);
         if source.authored_pbr_required {
             draw_flags |= PRIMITIVE_DRAW_AUTHORED_BASE_REQUIRED;
+        }
+        let decal_role = has_primitive_flag(draw_flags, PRIMITIVE_DRAW_DECAL_ROLE);
+        if !slice.accepts(decal_role) {
+            continue;
         }
         let follows_view = has_primitive_flag(draw_flags, PRIMITIVE_DRAW_FOLLOW_VIEW);
         let sky_role = has_primitive_flag(draw_flags, PRIMITIVE_DRAW_SKY_ROLE);
@@ -634,4 +667,19 @@ pub(super) fn draw_primitives_for_pass(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod primitive_pass_slice_tests {
+    use super::PrimitivePassSlice;
+
+    #[test]
+    fn forward_partition_keeps_decals_out_of_world_slice() {
+        assert!(PrimitivePassSlice::NonDecal.accepts(false));
+        assert!(!PrimitivePassSlice::NonDecal.accepts(true));
+        assert!(PrimitivePassSlice::DecalOnly.accepts(true));
+        assert!(!PrimitivePassSlice::DecalOnly.accepts(false));
+        assert!(PrimitivePassSlice::All.accepts(false));
+        assert!(PrimitivePassSlice::All.accepts(true));
+    }
 }

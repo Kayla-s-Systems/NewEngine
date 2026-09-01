@@ -105,6 +105,106 @@ pub(crate) fn weapon_left_grip_anchor_from_left_palm(
     anchor.is_finite().then_some(anchor)
 }
 
+#[inline]
+pub(crate) fn weapon_rear_sight_position(
+    presentation: &WeaponPresentationDefinition,
+    root: WeaponRootTransform,
+) -> Vec3 {
+    weapon_handle_position(presentation, root)
+        + root.rotation * v3(presentation.ads_rear_sight_from_handle)
+}
+
+#[inline]
+pub(crate) fn weapon_front_sight_position(
+    presentation: &WeaponPresentationDefinition,
+    root: WeaponRootTransform,
+) -> Vec3 {
+    weapon_handle_position(presentation, root)
+        + root.rotation * v3(presentation.ads_front_sight_from_handle)
+}
+
+#[inline]
+pub(crate) fn weapon_sight_forward(
+    presentation: &WeaponPresentationDefinition,
+    root: WeaponRootTransform,
+) -> Vec3 {
+    (weapon_front_sight_position(presentation, root)
+        - weapon_rear_sight_position(presentation, root))
+    .normalize_or_zero()
+}
+
+/// Full-body first person keeps the authored firing hand as the physical grip owner. Hip/ready
+/// therefore uses the exact authored palm->weapon transform. While ADS is engaged, only the weapon
+/// orientation rotates around that fixed handle until the real rear->front sight axis matches the
+/// input-owned camera forward. The arm pose itself is never stretched toward a camera-space root.
+pub(crate) fn weapon_first_person_hand_anchored_root(
+    presentation: &WeaponPresentationDefinition,
+    right_palm: Mat4,
+    view_rotation_model: Quat,
+    aim_alpha: f32,
+    fire_recoil_alpha: f32,
+    fire_recoil_yaw_radians: f32,
+) -> Option<WeaponRootTransform> {
+    let presentation = presentation.clone().sanitized();
+    if !presentation.enabled || !view_rotation_model.is_finite() {
+        return None;
+    }
+    let authored = weapon_root_from_right_palm(&presentation, right_palm)?;
+    let handle_anchor = weapon_handle_anchor_from_right_palm(&presentation, right_palm)?;
+    let view_rotation = view_rotation_model.normalize_or_identity();
+    let view_forward = (view_rotation * -Vec3::Z).normalize_or_zero();
+    let view_right = (view_rotation * Vec3::X).normalize_or_zero();
+    let view_up = (view_rotation * Vec3::Y).normalize_or_zero();
+    if view_forward.length_squared() <= 1.0e-8
+        || view_right.length_squared() <= 1.0e-8
+        || view_up.length_squared() <= 1.0e-8
+    {
+        return None;
+    }
+
+    let aim_alpha = if aim_alpha.is_finite() {
+        aim_alpha.clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    let sight_forward = weapon_sight_forward(&presentation, authored);
+    let ads_rotation = if sight_forward.length_squared() > 1.0e-8 {
+        (Quat::from_rotation_arc(sight_forward, view_forward) * authored.rotation)
+            .normalize_or_identity()
+    } else {
+        authored.rotation
+    };
+    let mut rotation = authored
+        .rotation
+        .slerp(ads_rotation, aim_alpha)
+        .normalize_or_identity();
+
+    let recoil_alpha = if fire_recoil_alpha.is_finite() {
+        fire_recoil_alpha.clamp(0.0, 4.0)
+    } else {
+        0.0
+    };
+    let recoil_yaw = if fire_recoil_yaw_radians.is_finite() {
+        fire_recoil_yaw_radians.clamp(-0.5, 0.5)
+    } else {
+        0.0
+    };
+    if recoil_alpha > 0.0 || recoil_yaw.abs() > 1.0e-6 {
+        let pitch = Quat::from_axis_angle(
+            view_right,
+            -presentation.fire_kick_pitch_radians * recoil_alpha,
+        );
+        let yaw = Quat::from_axis_angle(view_up, recoil_yaw);
+        rotation = (yaw * pitch * rotation).normalize_or_identity();
+    }
+
+    let position = handle_anchor - rotation * v3(presentation.handle_from_root);
+    (position.is_finite() && rotation.is_finite()).then_some(WeaponRootTransform {
+        position,
+        rotation,
+    })
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct WeaponReadySolveContract {
     pub root: WeaponRootTransform,
@@ -771,6 +871,49 @@ mod tests {
             "secondary dynamics may rotate around the firing hand but may never detach from it"
         );
         assert!(root.rotation.dot(dynamic.rotation).abs() < 0.999_999);
+    }
+
+    #[test]
+    fn full_body_fpp_hand_anchored_ads_preserves_grip_and_aligns_real_sights() {
+        let p = fixture();
+        let palm_rotation = Quat::from_euler(newengine_math::EulerRot::YXZ, -0.24, 0.18, 0.11);
+        let palm_position = Vec3::new(-0.19, 1.36, -0.08);
+        let palm = Mat4::from_rotation_translation(palm_rotation, palm_position);
+        let view = Quat::from_euler(newengine_math::EulerRot::YXZ, 0.37, -0.18, 0.0);
+        let root = weapon_first_person_hand_anchored_root(&p, palm, view, 1.0, 0.0, 0.0)
+            .expect("hand-anchored ADS root");
+        let expected_handle = weapon_handle_anchor_from_right_palm(&p, palm).expect("handle");
+        let actual_handle = weapon_handle_position(&p, root);
+        assert!(
+            actual_handle.distance(expected_handle) <= 1.0e-5,
+            "ADS may rotate around the firing grip but never translate it"
+        );
+        let sight_forward = weapon_sight_forward(&p, root);
+        let view_forward = (view * -Vec3::Z).normalize_or_zero();
+        assert!(
+            sight_forward.dot(view_forward) > 0.9999,
+            "rear->front sight axis must coincide with gameplay view at full ADS"
+        );
+    }
+
+    #[test]
+    fn full_body_fpp_hip_keeps_exact_authored_palm_weapon_transform() {
+        let p = fixture();
+        let palm_rotation = Quat::from_euler(newengine_math::EulerRot::YXZ, -0.24, 0.18, 0.11);
+        let palm_position = Vec3::new(-0.19, 1.36, -0.08);
+        let palm = Mat4::from_rotation_translation(palm_rotation, palm_position);
+        let authored = weapon_root_from_right_palm(&p, palm).expect("authored palm root");
+        let resolved = weapon_first_person_hand_anchored_root(
+            &p,
+            palm,
+            Quat::from_rotation_y(0.8),
+            0.0,
+            0.0,
+            0.0,
+        )
+        .expect("hip root");
+        assert!(authored.position.distance(resolved.position) <= 1.0e-6);
+        assert!(authored.rotation.dot(resolved.rotation).abs() > 0.999_999);
     }
 
     #[test]

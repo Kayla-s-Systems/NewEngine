@@ -22,15 +22,8 @@ pub(crate) fn resolve_ui_ref(request: AssetsUiRefRequest) -> Result<ResolvedUiRe
                 .to_owned(),
         );
     }
-    if !path.to_ascii_lowercase().ends_with(&format!(
-        ".{}",
-        newengine_asset_format_nef8::neui::EXTENSION
-    )) {
-        return Err(format!(
-            "engine.assets.ui accepts only .{} dictionaries, got '{path}'",
-            newengine_asset_format_nef8::neui::EXTENSION
-        ));
-    }
+    // Concrete extension/type validation belongs to engine.assets.types. This pure
+    // parser validates reference syntax only; the loader resolves semantic ownership.
     let entry = if entry.is_empty() {
         "surface".to_owned()
     } else {

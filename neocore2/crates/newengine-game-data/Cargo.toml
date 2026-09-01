@@ -6,6 +6,7 @@ description = "Project-authored runtime/game configuration schema and provider b
 license = "Proprietary"
 
 [dependencies]
+newengine-audio-api = { path = "../newengine-audio-api" }
 serde = { version = "1", features = ["derive"] }
 
 [dev-dependencies]

@@ -5,7 +5,7 @@ pub const DEFAULT_VFX_GPU_PARTICLE_BRIDGE_CAPACITY: usize = 262_144;
 pub const DEFAULT_VFX_GPU_PARTICLE_KILL_CAPACITY: usize = 4_096;
 /// Current renderer descriptor capacity. Project data chooses the actual textures;
 /// this number is a backend capability, not an authored effect value.
-pub const VFX_GPU_TEXTURE_SLOT_CAPACITY: usize = 4;
+pub const VFX_GPU_TEXTURE_SLOT_CAPACITY: usize = 6;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[repr(u32)]
@@ -44,6 +44,8 @@ pub struct VfxGpuParticleSpawnV1 {
     pub fade_in_fraction: f32,
     /// Exponential velocity damping coefficient in 1/s. Zero disables drag.
     pub drag_per_second: f32,
+    /// World-space soft intersection width against the opaque scene depth. Zero disables it.
+    pub depth_softness_m: f32,
     /// Camera-facing quad rotation and angular velocity around its billboard normal.
     pub rotation_radians: f32,
     pub angular_velocity_radians_per_second: f32,
@@ -63,6 +65,7 @@ impl VfxGpuParticleSpawnV1 {
             || !self.color.iter().all(|v| v.is_finite())
             || !self.lifetime_seconds.is_finite()
             || !self.drag_per_second.is_finite()
+            || !self.depth_softness_m.is_finite()
             || !self.rotation_radians.is_finite()
             || !self.angular_velocity_radians_per_second.is_finite()
             || self.lifetime_seconds <= 0.0
@@ -70,9 +73,7 @@ impl VfxGpuParticleSpawnV1 {
             return None;
         }
         self.size = self.size.map(|v| v.clamp(0.0001, 10_000.0));
-        self.growth_per_second = self
-            .growth_per_second
-            .map(|v| v.clamp(-10_000.0, 10_000.0));
+        self.growth_per_second = self.growth_per_second.map(|v| v.clamp(-10_000.0, 10_000.0));
         self.lifetime_seconds = self.lifetime_seconds.clamp(0.001, 3_600.0);
         self.fade_start_fraction = if self.fade_start_fraction.is_finite() {
             self.fade_start_fraction.clamp(0.0, 0.999)
@@ -85,8 +86,10 @@ impl VfxGpuParticleSpawnV1 {
             0.0
         };
         self.drag_per_second = self.drag_per_second.clamp(0.0, 1_000.0);
-        self.angular_velocity_radians_per_second =
-            self.angular_velocity_radians_per_second.clamp(-10_000.0, 10_000.0);
+        self.depth_softness_m = self.depth_softness_m.clamp(0.0, 100.0);
+        self.angular_velocity_radians_per_second = self
+            .angular_velocity_radians_per_second
+            .clamp(-10_000.0, 10_000.0);
         self.color[3] = self.color[3].clamp(0.0, 1.0);
         if usize::from(self.texture_slot) > VFX_GPU_TEXTURE_SLOT_CAPACITY {
             self.texture_slot = 0;
@@ -270,6 +273,7 @@ mod tests {
             fade_start_fraction: 0.5,
             fade_in_fraction: 0.0,
             drag_per_second: 0.0,
+            depth_softness_m: 0.0,
             rotation_radians: 0.0,
             angular_velocity_radians_per_second: 0.0,
             texture_slot: 0,
@@ -310,6 +314,8 @@ mod tests {
         assert_eq!(registry.register("textures/vfx/b.ytd@b").unwrap(), 2);
         assert_eq!(registry.register("textures/vfx/c.ytd@c").unwrap(), 3);
         assert_eq!(registry.register("textures/vfx/d.ytd@d").unwrap(), 4);
-        assert!(registry.register("textures/vfx/e.ytd@e").is_err());
+        assert_eq!(registry.register("textures/vfx/e.ytd@e").unwrap(), 5);
+        assert_eq!(registry.register("textures/vfx/f.ytd@f").unwrap(), 6);
+        assert!(registry.register("textures/vfx/g.ytd@g").is_err());
     }
 }

@@ -93,7 +93,7 @@ pub struct MigrationSpec {
     pub corpus_gate: MigrationCorpusGateSpec,
 }
 
-const FIRST_PARTY_CORPUS_ROOTS: &[&str] = &["Engine/Content", "Projects", "Shared"];
+const FIRST_PARTY_CORPUS_ROOTS: &[&str] = &["Projects", "Shared"];
 const MIGRATION_TOOL: MigrationToolSpec = MigrationToolSpec {
     workspace: "neocore",
     package: "newengine-migration-registry",
@@ -115,7 +115,7 @@ pub const MIGRATIONS: &[MigrationSpec] = &[
         backup_policy: MigrationBackupPolicy::RequiredFullCopyWithSha256Manifest,
         corpus_gate: MigrationCorpusGateSpec {
             file_suffix: ".ytd",
-            content_kind: Some(newengine_asset_format_nef8::ytd::CONTENT_KIND),
+            content_kind: Some(newengine_assets_api::LIST_FILE_CONTENT_KIND_YTD),
             source_versions: &[2],
             target_version: newengine_asset_format_nef8::ytd::CONTENT_SCHEMA_VERSION,
             roots: FIRST_PARTY_CORPUS_ROOTS,
@@ -139,7 +139,7 @@ pub const MIGRATIONS: &[MigrationSpec] = &[
         backup_policy: MigrationBackupPolicy::RequiredFullCopyWithSha256Manifest,
         corpus_gate: MigrationCorpusGateSpec {
             file_suffix: ".ydd",
-            content_kind: Some(newengine_asset_format_nef8::ydd::CONTENT_KIND),
+            content_kind: Some(newengine_assets_api::LIST_FILE_CONTENT_KIND_YDD),
             source_versions: &[
                 newengine_asset_format_nef8::ydd_binary::YDD_BINARY_SCHEMA_VERSION_V2 as u16,
             ],
@@ -165,7 +165,7 @@ pub const MIGRATIONS: &[MigrationSpec] = &[
         backup_policy: MigrationBackupPolicy::RequiredFullCopyWithSha256Manifest,
         corpus_gate: MigrationCorpusGateSpec {
             file_suffix: ".ydd",
-            content_kind: Some(newengine_asset_format_nef8::ydd::CONTENT_KIND),
+            content_kind: Some(newengine_assets_api::LIST_FILE_CONTENT_KIND_YDD),
             source_versions: &[
                 newengine_asset_format_nef8::ydd_binary::YDD_BINARY_SCHEMA_VERSION_V3 as u16,
             ],
@@ -437,7 +437,7 @@ fn reencode_ydd_current(
     let header = verify_source(spec, source)?;
     let decoded = newengine_assets_api::decode_list_file_envelope(
         source,
-        newengine_asset_format_nef8::ydd::CONTENT_KIND,
+        newengine_assets_api::LIST_FILE_CONTENT_KIND_YDD,
         logical_path,
     )?;
     let document = newengine_asset_format_nef8::ydd_binary::decode_ydd_binary_body(&decoded.body)?;
@@ -476,7 +476,7 @@ fn reencode_ydd_current(
         })?;
     let check = newengine_assets_api::decode_list_file_envelope(
         &rewritten,
-        newengine_asset_format_nef8::ydd::CONTENT_KIND,
+        newengine_assets_api::LIST_FILE_CONTENT_KIND_YDD,
         logical_path,
     )?;
     if check.header.content_schema_version != spec.target.version.major {
@@ -759,7 +759,7 @@ mod tests {
         let metadata=br#"{"schema":"newengine.asset.list_file.header_metadata.v1","logical_path":"Content/test.ytd","content_kind":"ytd_texture_dictionary","entries":[],"dependencies":[],"namespaces":[],"metadata":{},"warnings":[],"policy":[]}"#;
         let source =
             newengine_assets_api::encode_list_file(newengine_assets_api::ListFileEncodeRequest {
-                content_kind: newengine_asset_format_nef8::ytd::CONTENT_KIND,
+                content_kind: newengine_assets_api::LIST_FILE_CONTENT_KIND_YTD,
                 content_schema_version: 2,
                 entry_count: 0,
                 additional_flags: 0,
@@ -778,7 +778,7 @@ mod tests {
         assert_eq!(h.content_schema_version, 1);
         let decoded = newengine_assets_api::decode_list_file_envelope(
             &out,
-            newengine_asset_format_nef8::ytd::CONTENT_KIND,
+            newengine_assets_api::LIST_FILE_CONTENT_KIND_YTD,
             "Content/test.ytd",
         )
         .unwrap();

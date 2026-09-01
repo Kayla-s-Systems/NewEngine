@@ -5,6 +5,22 @@ pub(crate) fn load_xmlcentral(
     request: AssetsUiRefRequest,
 ) -> Result<(String, Vec<String>, ResolvedUiRef), String> {
     let resolved = resolve_ui_ref(request)?;
+    let descriptor = state.client.resolve_file_type_v1(&resolved.logical_path)?;
+    if !descriptor.semantic_gateway.eq_ignore_ascii_case("engine.assets.ui") {
+        return Err(format!(
+            "engine.assets.ui rejected format module='{}' kind='{}' gateway='{}' path='{}'",
+            descriptor.module_id,
+            descriptor.asset_kind,
+            descriptor.semantic_gateway,
+            resolved.logical_path
+        ));
+    }
+    let content_kind = descriptor.content_kind.ok_or_else(|| {
+        format!(
+            "engine.assets.ui format module='{}' has no ListFile content_kind",
+            descriptor.module_id
+        )
+    })?;
     let cache_key = resolved.logical_path.clone();
     if let Some(cached) = state.xml_cache.get(&cache_key) {
         let actual = ResolvedUiRef {
@@ -19,7 +35,7 @@ pub(crate) fn load_xmlcentral(
     for candidate in vfs_candidates(&resolved.logical_path) {
         match state.client.raw_bytes_v1(&candidate) {
             Ok(bytes) => {
-                let xml = decode_neui_xmlcentral(&candidate, &bytes)?;
+                let xml = decode_neui_xmlcentral(&candidate, &bytes, content_kind)?;
                 state.xml_cache.insert(
                     cache_key,
                     CachedXmlCentral {
@@ -40,16 +56,20 @@ pub(crate) fn load_xmlcentral(
     }
     warnings.push("VFS lookup tried both literal and assets/-stripped paths".to_owned());
     Err(format!(
-        "engine.assets.ui could not read .neui bytes for '{}': {}",
+        "engine.assets.ui could not read registered UI dictionary bytes for '{}': {}",
         resolved.document_ref,
         last_err.unwrap_or_else(|| "no candidate path".to_owned())
     ))
 }
 
-pub(crate) fn decode_neui_xmlcentral(logical_path: &str, bytes: &[u8]) -> Result<String, String> {
+pub(crate) fn decode_neui_xmlcentral(
+    logical_path: &str,
+    bytes: &[u8],
+    expected_content_kind: u32,
+) -> Result<String, String> {
     let decoded = newengine_assets_api::decode_list_file_envelope(
         bytes,
-        LIST_FILE_CONTENT_KIND_NEUI,
+        expected_content_kind,
         logical_path,
     )?;
     let xml = String::from_utf8(decoded.body)

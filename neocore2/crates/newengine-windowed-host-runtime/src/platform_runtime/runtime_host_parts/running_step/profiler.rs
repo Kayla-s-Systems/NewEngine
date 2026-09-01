@@ -23,6 +23,23 @@ pub(super) struct HostFrameProfileInput {
     pub(super) screen_profile_shell_refresh: bool,
 }
 
+#[inline]
+fn pacing_wait_reason(render_timing: Option<&RenderModuleTimingTelemetry>) -> &'static str {
+    let Some(render) = render_timing else {
+        return "";
+    };
+    [
+        (render.backend_frame_slot_wait_ms, "gpu-frame-slot-fence"),
+        (render.backend_surface_acquire_ms, "wsi-surface-acquire"),
+        (render.backend_image_wait_ms, "gpu-swapchain-image-fence"),
+    ]
+    .into_iter()
+    .max_by(|(a, _), (b, _)| a.total_cmp(b))
+    .filter(|(ms, _)| *ms >= 0.05)
+    .map(|(_, reason)| reason)
+    .unwrap_or("")
+}
+
 pub(super) fn publish_running_frame_samples(
     engine_timing: Option<&EngineFrameTimingTelemetry>,
     render_timing: Option<&RenderModuleTimingTelemetry>,
@@ -38,6 +55,7 @@ pub(super) fn publish_running_frame_samples(
                 + f64::from(render.backend_image_wait_ms)
         })
         .unwrap_or(0.0);
+    let pacing_wait_reason = pacing_wait_reason(render_timing);
 
     if let Some(timing) = engine_timing {
         let active_cpu_ms = (timing.total_ms - pacing_wait_ms).max(0.0);
@@ -55,6 +73,8 @@ pub(super) fn publish_running_frame_samples(
                 "elapsed_ms": active_cpu_ms,
                 "wall_elapsed_ms": timing.total_ms,
                 "pacing_wait_ms": pacing_wait_ms,
+            "gpu_wait_ms": pacing_wait_ms,
+            "wait_reason": pacing_wait_reason,
                 "budget_ms": 16.67,
                 "frame_budget_ms": 16.67,
                 "exceeded_frame_budget": active_cpu_ms > 16.67,
@@ -105,6 +125,8 @@ pub(super) fn publish_running_frame_samples(
             "elapsed_ms": host_active_cpu_ms,
             "wall_elapsed_ms": host.host_total_ms,
             "pacing_wait_ms": pacing_wait_ms,
+            "gpu_wait_ms": pacing_wait_ms,
+            "wait_reason": pacing_wait_reason,
             "budget_ms": 16.67,
             "frame_budget_ms": 16.67,
             "exceeded_frame_budget": host_active_cpu_ms > 16.67,
@@ -175,5 +197,32 @@ fn append_render_gpu_fields(
 fn publish_sample(payload: &serde_json::Value) {
     if let Ok(bytes) = serde_json::to_vec(payload) {
         let _ = newengine_plugin_host::host_context::publish_event(PROFILER_SAMPLE_TOPIC, &bytes);
+    }
+}
+
+#[cfg(test)]
+mod pacing_wait_tests {
+    use super::*;
+
+    #[test]
+    fn dominant_backend_wait_is_projected_to_canonical_reason() {
+        let timing = RenderModuleTimingTelemetry {
+            backend_frame_slot_wait_ms: 7.5,
+            backend_surface_acquire_ms: 0.2,
+            backend_image_wait_ms: 0.1,
+            ..RenderModuleTimingTelemetry::default()
+        };
+        assert_eq!(pacing_wait_reason(Some(&timing)), "gpu-frame-slot-fence");
+    }
+
+    #[test]
+    fn negligible_backend_wait_does_not_claim_gpu_stall() {
+        let timing = RenderModuleTimingTelemetry {
+            backend_frame_slot_wait_ms: 0.004,
+            backend_surface_acquire_ms: 0.003,
+            backend_image_wait_ms: 0.001,
+            ..RenderModuleTimingTelemetry::default()
+        };
+        assert_eq!(pacing_wait_reason(Some(&timing)), "");
     }
 }

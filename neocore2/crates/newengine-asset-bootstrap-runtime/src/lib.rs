@@ -21,7 +21,6 @@ pub struct ContentSetSpec {
     pub mount: &'static str,
     pub include_shared_assets: bool,
     pub include_app_assets: bool,
-    pub include_engine_content: bool,
     pub include_legacy_layouts: bool,
 }
 
@@ -40,7 +39,6 @@ impl ContentSetSpec {
             mount: "",
             include_shared_assets: true,
             include_app_assets: true,
-            include_engine_content: true,
             include_legacy_layouts: true,
         }
     }
@@ -154,12 +152,6 @@ fn push_content_roots_from_base(roots: &mut Vec<PathBuf>, base: &Path, content: 
             }
         }
     }
-    if content.include_engine_content {
-        let engine_content = base.join("Engine").join("Content");
-        if engine_content.is_dir() {
-            roots.push(engine_content);
-        }
-    }
     if content.include_legacy_layouts {
         let legacy_engine = base.join("NewEngine").join("assets");
         if legacy_engine.is_dir() {
@@ -239,13 +231,6 @@ fn push_asset_roots_from_base(roots: &mut Vec<PathBuf>, base: &Path, app_dir_nam
         roots.push(app_assets);
     }
 
-    // Canonical engine-owned content root. Project content is deliberately not
-    // discovered here: it is mounted only through the selected `game.toml`.
-    let engine_content = base.join("Engine").join("Content");
-    if engine_content.is_dir() {
-        roots.push(engine_content);
-    }
-
     // Legacy local layouts kept as explicit compatibility candidates for old
     // source snapshots, not as the preferred runtime layout.
     let legacy_newengine_assets = base.join("NewEngine").join("assets");
@@ -298,26 +283,8 @@ fn try_mount_with_policy(
     }
 }
 
-fn is_shared_content_root(path: &Path) -> bool {
-    let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
-        return false;
-    };
-    let Some(parent) = path
-        .parent()
-        .and_then(Path::file_name)
-        .and_then(|name| name.to_str())
-    else {
-        return false;
-    };
-    name.eq_ignore_ascii_case("Content") && parent.eq_ignore_ascii_case("Shared")
-}
-
-fn effective_mount_for_root<'a>(path: &Path, requested_mount: &'a str) -> &'a str {
-    if requested_mount.trim().is_empty() && is_shared_content_root(path) {
-        "shared"
-    } else {
-        requested_mount
-    }
+fn effective_mount_for_root<'a>(_path: &Path, requested_mount: &'a str) -> &'a str {
+    requested_mount
 }
 
 #[cfg(feature = "window-icon")]
@@ -417,17 +384,15 @@ mod shared_content_mount_tests {
     use super::*;
 
     #[test]
-    fn canonical_shared_content_uses_shared_namespace() {
+    fn shared_content_respects_requested_mount_alias() {
         let root = Path::new(r"C:\repo\NorthStar\Shared\Content");
-        assert!(is_shared_content_root(root));
-        assert_eq!(effective_mount_for_root(root, ""), "shared");
-        assert_eq!(effective_mount_for_root(root, "custom"), "custom");
+        assert_eq!(effective_mount_for_root(root, ""), "");
+        assert_eq!(effective_mount_for_root(root, "shared"), "shared");
     }
 
     #[test]
-    fn ordinary_content_root_keeps_requested_mount() {
-        let root = Path::new(r"C:\repo\NorthStar\Engine\Content");
-        assert!(!is_shared_content_root(root));
+    fn ordinary_app_content_root_keeps_requested_mount() {
+        let root = Path::new(r"C:\repo\NorthStar\apps\NewEngine\assets");
         assert_eq!(effective_mount_for_root(root, ""), "");
     }
 }

@@ -172,7 +172,10 @@ fn finite_or(value: f32, fallback: f32) -> f32 {
 
 pub fn resolve_weapon_impact(world: &mut World, impact: WeaponImpact) -> Option<DamageResolution> {
     // Fail closed: only authored damage receivers participate in the damage domain.
-    let receiver = world.get::<DamageReceiver>(impact.target).copied()?.sanitized();
+    let receiver = world
+        .get::<DamageReceiver>(impact.target)
+        .copied()?
+        .sanitized();
     let zone = world
         .get::<DamageHitZoneMap>(impact.target)
         .and_then(|zones| zones.by_subshape.get(&impact.subshape_id))
@@ -299,14 +302,22 @@ mod tests {
         let result = resolve_weapon_impact(
             &mut world,
             WeaponImpact {
-                sequence: 2, source, target, base_damage: 20.0, point: Vec3::ZERO,
-                normal: Vec3::Y, direction: -Vec3::Z, distance: 5.0, range: 100.0,
-                subshape_id: 0, momentum_ns: 2.0, ammo_impulse_multiplier: 1.0,
+                sequence: 2,
+                source,
+                target,
+                base_damage: 20.0,
+                point: Vec3::ZERO,
+                normal: Vec3::Y,
+                direction: -Vec3::Z,
+                distance: 5.0,
+                range: 100.0,
+                subshape_id: 0,
+                momentum_ns: 2.0,
+                ammo_impulse_multiplier: 1.0,
                 falloff_multiplier: 1.0,
             },
         );
         assert!(result.is_none());
         assert!((world.get::<Health>(target).unwrap().current - 100.0).abs() < 1.0e-6);
     }
-
 }

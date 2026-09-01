@@ -179,6 +179,22 @@ impl GameReadySceneBootstrapModule {
 
         match self.scene.bootstrap_profile_scene_now() {
             Some(player) => {
+                if let Err(error) =
+                    install_project_audio_mix_graph(ctx.resources_mut(), &self.scene)
+                {
+                    self.failed_services_generation = Some(services_generation);
+                    newengine_ulog_api::ulog::error!(
+                        "game-ready runtime: authored audio mix bootstrap failed err='{}' policy='no hidden route fallback'",
+                        error
+                    );
+                    ctx.resources_mut().insert(SceneLaunchStatus::loading(
+                        "Audio mix bootstrap failed",
+                        "Project AudioMixGraph was not installed",
+                        error,
+                        0.997,
+                    ));
+                    return Ok(());
+                }
                 self.failed_services_generation = None;
                 self.bootstrapped = true;
                 let selected_player_authority = self.scene.selection_authority_handle();
@@ -207,6 +223,38 @@ impl GameReadySceneBootstrapModule {
 
         Ok(())
     }
+}
+
+fn install_project_audio_mix_graph(
+    resources: &mut Resources,
+    scene: &Arc<newengine_scene_runtime::SceneBridge>,
+) -> Result<(), String> {
+    let graph = {
+        let scene = scene.scene();
+        let scene = scene.read();
+        let snapshot = scene
+            .world()
+            .resource::<newengine_game_data::GameDataSnapshot>()
+            .ok_or("GameReady scene did not publish GameDataSnapshot before audio mix bootstrap")?;
+        snapshot.data().audio.mix_graph.clone()
+    };
+    graph
+        .validate()
+        .map_err(|error| format!("project audio.mix_graph invalid: {error}"))?;
+    let handle = resources
+        .get::<newengine_audio_world_runtime::AudioOrchestrationHandle>()
+        .cloned()
+        .ok_or("GameReady requires AudioOrchestrationHandle for authored audio.mix_graph")?;
+    handle
+        .install_mix_graph(graph.clone())
+        .map_err(|error| format!("project audio.mix_graph installation failed: {error}"))?;
+    newengine_ulog_api::ulog::info!(
+        "game-ready audio mix graph queued routes={} snapshots={} voice_budgets={} authority='project GameData V2 -> AudioOrchestration'",
+        graph.buses.len(),
+        graph.snapshots.len(),
+        graph.voice_budgets.len(),
+    );
+    Ok(())
 }
 
 fn bootstrap_attempt_allowed(

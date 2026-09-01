@@ -10,6 +10,8 @@ pub enum RenderDrawListKind {
     LocalShadowCasters,
     /// Opaque world geometry for the forward viewport path.
     OpaqueForward,
+    /// GPU particles rasterized into the dedicated particle GBuffer.
+    ParticleGBuffer,
     /// Transparent world geometry that must be drawn after opaque geometry.
     Transparent,
     /// Editor/runtime debug primitives and overlays.
@@ -23,6 +25,7 @@ impl RenderDrawListKind {
             Self::ShadowCasters => "shadow_casters",
             Self::LocalShadowCasters => "local_shadow_casters",
             Self::OpaqueForward => "opaque_forward",
+            Self::ParticleGBuffer => "particle_gbuffer",
             Self::Transparent => "transparent",
             Self::Debug => "debug",
         }
@@ -34,6 +37,7 @@ impl RenderDrawListKind {
             Self::ShadowCasters => RenderGraphPassKind::ShadowMap,
             Self::LocalShadowCasters => RenderGraphPassKind::LocalShadowMap,
             Self::OpaqueForward => RenderGraphPassKind::ForwardOpaque,
+            Self::ParticleGBuffer => RenderGraphPassKind::ParticleGBuffer,
             Self::Transparent => RenderGraphPassKind::Transparent,
             Self::Debug => RenderGraphPassKind::DebugOverlay,
         }
@@ -54,7 +58,8 @@ impl RenderDrawListKind {
             ) | (
                 Self::OpaqueForward,
                 RenderGraphPassKind::ForwardOpaque | RenderGraphPassKind::GBuffer,
-            ) | (Self::Transparent, RenderGraphPassKind::Transparent)
+            ) | (Self::ParticleGBuffer, RenderGraphPassKind::ParticleGBuffer)
+                | (Self::Transparent, RenderGraphPassKind::Transparent)
                 | (Self::Debug, RenderGraphPassKind::DebugOverlay)
         )
     }

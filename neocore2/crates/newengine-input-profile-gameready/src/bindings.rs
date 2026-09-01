@@ -89,6 +89,20 @@ pub(crate) fn standalone_fps_bindings() -> Vec<InputBinding> {
         InputBinding::gamepad_button_down(action::PLAYER_AIM, gamepad_button::LEFT_TRIGGER_2),
         InputBinding::gamepad_button_pressed(action::PLAYER_RELOAD, gamepad_button::WEST),
         InputBinding::gamepad_button_pressed(action::PLAYER_INTERACT, gamepad_button::NORTH),
+        // Shoulder buttons are reserved for the two gameplay overlays. They remain
+        // distinct from LT/RT analog aim/fire and from D-pad retained UI navigation.
+        InputBinding::gamepad_button_pressed(
+            action::INVENTORY_TOGGLE,
+            gamepad_button::LEFT_TRIGGER,
+        ),
+        InputBinding::gamepad_button_pressed(
+            action::CHARACTER_SELECT_TOGGLE,
+            gamepad_button::RIGHT_TRIGGER,
+        ),
+        InputBinding::gamepad_button_released(
+            action::CHARACTER_SELECT_TOGGLE,
+            gamepad_button::RIGHT_TRIGGER,
+        ),
     ]
 }
 

@@ -28,10 +28,13 @@ pub(crate) const MATERIAL_TEXTURE_DECODE_PUMP_BUDGET_MS: f32 = 2.0;
 /// thread no longer blocks on the asset provider. This is the first hot-path
 /// rule: heavy service work is ticketed and polled, not awaited by frame submit.
 ///
-/// Defaults intentionally bias toward fast startup/world reveal: several
-/// decode jobs may be in flight at once, but the frame thread still only pumps
-/// completion/residency work within explicit budgets.
-pub(crate) const MATERIAL_TEXTURE_MAX_ASYNC_DECODE_JOBS: usize = 6;
+/// The current `engine.assets.textures` semantic provider owns one mutable
+/// `TextureRuntimeState` behind the service router mutex. Its dictionary decode/cache fill
+/// therefore has effective concurrency 1. Submitting more worker jobs cannot increase decode
+/// throughput: the extra jobs only occupy engine workers while waiting for the same provider lock.
+/// Keep producer concurrency aligned with the provider contract until that service exposes a
+/// genuinely concurrent/per-dictionary cache-fill capability.
+pub(crate) const MATERIAL_TEXTURE_MAX_ASYNC_DECODE_JOBS: usize = 1;
 /// Hard safety boundary for a single service-to-renderer texture allocation.
 /// Assets above this threshold must be block-compressed or reduced during import;
 /// the runtime uses shader fallbacks rather than freezing the native window.

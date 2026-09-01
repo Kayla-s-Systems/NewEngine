@@ -141,7 +141,12 @@ impl PluginManager {
 
         match result {
             Ok(Ok(())) => {
-                if idx < self.loaded.len() && self.loaded[idx].state == PluginState::Registered {
+                if idx < self.loaded.len()
+                    && matches!(
+                        self.loaded[idx].state,
+                        PluginState::Registered | PluginState::Stopped
+                    )
+                {
                     self.loaded[idx].state = PluginState::Running;
                 }
                 newengine_ulog_api::ulog::info!(
@@ -462,7 +467,7 @@ impl PluginManager {
 
         match self.loaded[idx].state {
             PluginState::Registered | PluginState::Stopped => {
-                self.call_plugin(idx, "start", |m| rresult_unit_to_string(m.start()));
+                self.start_plugin_inline(idx);
                 true
             }
             _ => true,

@@ -189,7 +189,8 @@ pub(crate) fn manifest_json(
             logical_path: path.clone(),
             output_kind: output_kind.to_owned(),
             selector: serde_json::Value::Null,
-        }) {
+                    format_descriptor: None,
+}) {
             Ok(bytes) => {
                 let mut value = serde_json::from_slice::<serde_json::Value>(&bytes).map_err(
                     |error| {

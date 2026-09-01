@@ -11,6 +11,9 @@ pub struct AnimationSkeletonRuntime {
     model_to_source: Mat4,
     parent_indices: Vec<Option<usize>>,
     evaluation_order: Vec<usize>,
+    /// Parent-before-child joint lists for incremental FK refreshes. Each entry contains the
+    /// root joint itself followed by every descendant in canonical evaluation order.
+    subtree_evaluation_order: Vec<Vec<usize>>,
     joint_tags: Vec<u32>,
     tag_to_joint: HashMap<u32, usize>,
     ambiguous_tags: HashSet<u32>,
@@ -47,6 +50,7 @@ fn validated_local_matrix(
     pose: JointLocalPose,
     fallback_scale: [f32; 3],
     joint_index: usize,
+    require_invertible_scale: bool,
 ) -> Result<Mat4, String> {
     if pose.translation.iter().any(|value| !value.is_finite()) {
         return Err(format!(
@@ -63,12 +67,19 @@ fn validated_local_matrix(
     }
 
     let scale = pose.scale.unwrap_or(fallback_scale);
-    if scale
-        .iter()
-        .any(|value| !value.is_finite() || value.abs() <= 1.0e-8)
-    {
+    if scale.iter().any(|value| !value.is_finite()) {
         return Err(format!(
-            "animation local scale is singular/non-finite joint={joint_index} scale={scale:?}"
+            "animation local scale is non-finite joint={joint_index} scale={scale:?}"
+        ));
+    }
+    // Bind transforms must remain invertible because inverse-bind matrices are compiled once.
+    // Animated poses are different: native weapon rigs deliberately author zero scale as
+    // visibility state (for example magazine bullets / loader shells). A finite singular
+    // animated matrix is valid for FK and skinning and must be preserved instead of replaced
+    // with bind scale or rejected.
+    if require_invertible_scale && scale.iter().any(|value| value.abs() <= 1.0e-8) {
+        return Err(format!(
+            "animation local scale is singular joint={joint_index} scale={scale:?}"
         ));
     }
 
@@ -170,6 +181,18 @@ impl AnimationSkeletonRuntime {
             }
         }
 
+        // Incremental pose solvers (IK, look-at, procedural appendages) mutate only a small
+        // subtree at a time. Precompute the affected topological order once so hot paths never
+        // rescan the full hierarchy or allocate descendant scratch per correction.
+        let mut subtree_evaluation_order = vec![Vec::new(); joint_count];
+        for &index in &evaluation_order {
+            let mut cursor = Some(index);
+            while let Some(ancestor) = cursor {
+                subtree_evaluation_order[ancestor].push(index);
+                cursor = parent_indices[ancestor];
+            }
+        }
+
         let bind_locals = skeleton
             .joints
             .iter()
@@ -183,7 +206,12 @@ impl AnimationSkeletonRuntime {
         let mut bind_globals = vec![Mat4::IDENTITY; joint_count];
         for &index in &evaluation_order {
             let local =
-                validated_local_matrix(bind_locals[index], skeleton.joints[index].scale_ls, index)?;
+                validated_local_matrix(
+                    bind_locals[index],
+                    skeleton.joints[index].scale_ls,
+                    index,
+                    true,
+                )?;
             bind_globals[index] = parent_indices[index]
                 .map(|parent| bind_globals[parent] * local)
                 .unwrap_or(local);
@@ -267,6 +295,7 @@ impl AnimationSkeletonRuntime {
             model_to_source,
             parent_indices,
             evaluation_order,
+            subtree_evaluation_order,
             joint_tags,
             tag_to_joint,
             ambiguous_tags,
@@ -369,6 +398,7 @@ impl AnimationSkeletonRuntime {
                 locals[index],
                 self.bind_locals[index].scale.unwrap_or([1.0, 1.0, 1.0]),
                 index,
+                false,
             )?;
             out_globals[index] = self.parent_indices[index]
                 .map(|parent| out_globals[parent] * local)
@@ -418,6 +448,62 @@ impl AnimationSkeletonRuntime {
                     "animated joint frame contains non-finite value joint={index}"
                 ));
             }
+        }
+        Ok(())
+    }
+
+    /// Refreshes one already-built model-space joint-frame subtree after local-pose mutation.
+    ///
+    /// This is the incremental counterpart to `build_model_joint_frames_from_local_pose`: callers
+    /// first build a complete frame table, then procedural solvers may update a shoulder/elbow/etc.
+    /// and propagate only that joint and its descendants. The compiled subtree order guarantees
+    /// parent-before-child evaluation and preserves the exact full-FK transform convention.
+    pub fn refresh_model_joint_frames_subtree_from_local_pose(
+        &self,
+        locals: &[JointLocalPose],
+        out_frames: &mut [Mat4],
+        root_joint: usize,
+    ) -> Result<(), String> {
+        if locals.len() != self.joint_count() {
+            return Err(format!(
+                "animation local pose count mismatch poses={} skeleton={}",
+                locals.len(),
+                self.joint_count()
+            ));
+        }
+        if out_frames.len() != self.joint_count() {
+            return Err(format!(
+                "animation joint frame count mismatch frames={} skeleton={}",
+                out_frames.len(),
+                self.joint_count()
+            ));
+        }
+        let order = self
+            .subtree_evaluation_order
+            .get(root_joint)
+            .ok_or_else(|| {
+                format!(
+                    "animation subtree root outside joint table root={root_joint} skeleton={}",
+                    self.joint_count()
+                )
+            })?;
+
+        for &index in order {
+            let local = validated_local_matrix(
+                locals[index],
+                self.bind_locals[index].scale.unwrap_or([1.0, 1.0, 1.0]),
+                index,
+                false,
+            )?;
+            let frame = self.parent_indices[index]
+                .map(|parent| out_frames[parent] * local)
+                .unwrap_or(self.source_to_model * local);
+            if !finite_matrix(frame) {
+                return Err(format!(
+                    "animated joint frame contains non-finite value joint={index}"
+                ));
+            }
+            out_frames[index] = frame;
         }
         Ok(())
     }
@@ -590,9 +676,7 @@ impl AnimationClip {
             (frame0 + 1).min(frame_count - 1)
         };
 
-        if out.len() != skeleton.joint_count()
-            || (reset_untracked_to_bind && !binding.full_pose)
-        {
+        if out.len() != skeleton.joint_count() || (reset_untracked_to_bind && !binding.full_pose) {
             out.clear();
             out.extend_from_slice(skeleton.bind_locals());
         }

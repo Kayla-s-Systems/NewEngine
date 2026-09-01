@@ -75,6 +75,7 @@ mod tests {
                     role: FxdRenderRoleV1::Transparent,
                     texture: String::new(),
                     billboard: Default::default(),
+                    emission_axis: Default::default(),
                     count: 12,
                     scale: [0.004, 0.004, 0.05],
                     color: [1.0, 0.7, 0.2, 1.0],

@@ -396,6 +396,9 @@ pub struct CameraRuntimeServiceConfig {
     pub first_person_eye_height: f32,
     /// Optional stable render-cadence eye anchor supplied by the active avatar provider.
     pub first_person_anchor_ws: Option<Vec3>,
+    /// Optional ADS camera position resolved from the rendered weapon's rear sight. Camera runtime
+    /// blends toward it with the same aim alpha used for FOV/recoil, while orientation stays input-owned.
+    pub first_person_ads_anchor_ws: Option<Vec3>,
     /// Optional render-cadence body rotation. FPP position follows this body frame while look yaw/pitch
     /// remain input-owned; this prevents mouse look from orbiting the camera around the skull.
     pub first_person_body_rotation_ws: Option<Quat>,
@@ -485,6 +488,7 @@ impl Default for CameraRuntimeServiceConfig {
             runner: GameplayCameraRunnerKind::FirstPerson,
             first_person_eye_height: 1.6,
             first_person_anchor_ws: None,
+            first_person_ads_anchor_ws: None,
             first_person_body_rotation_ws: None,
             first_person_forward_clearance: 0.07,
             first_person_body_yaw_limit_radians: 65.0_f32.to_radians(),

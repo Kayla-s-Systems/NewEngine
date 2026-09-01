@@ -41,7 +41,14 @@ impl<E: Send + 'static> Engine<E> {
     pub(crate) fn plugins_start_all(&mut self) -> EngineResult<()> {
         self.plugins
             .start_all()
-            .map_err(|e| EngineError::Other(format!("plugins: start failed: {e}")))
+            .map_err(|e| EngineError::Other(format!("plugins: start failed: {e}")))?;
+
+        // Plugin lifecycle is retained runtime state. Loading publishes a snapshot while
+        // providers are still Registered; start_all() then transitions them to Running.
+        // Republish immediately so capability-driven consumers (editor UI, previews, etc.)
+        // never observe the stale pre-start snapshot for the lifetime of the process.
+        self.expose_plugins_snapshot();
+        Ok(())
     }
 
     #[inline]

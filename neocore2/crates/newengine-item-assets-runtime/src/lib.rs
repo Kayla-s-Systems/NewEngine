@@ -142,6 +142,8 @@ pub fn test_fps_item_package() -> AuthoredItemPackage {
                     friction: 0.38,
                     restitution: 0.22,
                     density: 8.5,
+                    linear_damping: 0.015,
+                    angular_damping: 0.025,
                     contact_min_impulse: 0.002,
                     contact_medium_impulse: 0.012,
                     contact_hard_impulse: 0.035,

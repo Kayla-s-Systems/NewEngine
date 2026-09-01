@@ -179,44 +179,44 @@ pub(super) fn publish_inventory_hud_state(
                 ),
             );
         }
-        let registered_characters = registered_character_items(world, player);
-        patch = patch
-            .with_change(
-                "character",
-                "registered_character_count",
-                serde_json::json!(registered_characters.len()),
-            )
-            .with_change(
-                "character",
-                "registered_character_count_label",
-                serde_json::json!(format!("{} AVAILABLE", registered_characters.len())),
-            )
-            .with_change(
-                "character",
-                "registered_characters",
-                serde_json::Value::Array(registered_characters),
-            );
-        let registered_weapons = registered_weapon_items(catalog, binding);
-        patch = patch.with_change(
-            "character",
-            "registered_weapons",
-            serde_json::Value::Array(registered_weapons),
-        );
-        let registered_weapon_count = catalog
-            .definitions()
-            .filter(|definition| definition.kind == ItemKind::Weapon)
-            .count();
-        patch = patch
-            .with_change(
-                "character",
-                "registered_weapon_count",
-                serde_json::json!(registered_weapon_count),
-            )
-            .with_change(
-                "character",
-                "registered_weapon_count_label",
-                serde_json::json!(format!("{} AVAILABLE", registered_weapon_count)),
-            );
+        if state.character_select_open {
+            let registered_characters = registered_character_items(world, player);
+            patch = patch
+                .with_change(
+                    "character",
+                    "registered_character_count",
+                    serde_json::json!(registered_characters.len()),
+                )
+                .with_change(
+                    "character",
+                    "registered_character_count_label",
+                    serde_json::json!(format!("{} AVAILABLE", registered_characters.len())),
+                )
+                .with_change(
+                    "character",
+                    "registered_characters",
+                    serde_json::Value::Array(registered_characters),
+                );
+
+            let registered_weapons = registered_weapon_items(catalog, binding);
+            let registered_weapon_count = registered_weapons.len();
+            patch = patch
+                .with_change(
+                    "character",
+                    "registered_weapons",
+                    serde_json::Value::Array(registered_weapons),
+                )
+                .with_change(
+                    "character",
+                    "registered_weapon_count",
+                    serde_json::json!(registered_weapon_count),
+                )
+                .with_change(
+                    "character",
+                    "registered_weapon_count_label",
+                    serde_json::json!(format!("{} AVAILABLE", registered_weapon_count)),
+                );
+        }
         let selected_weapon = binding.and_then(|binding| catalog.get(binding.item));
         patch = patch
             .with_change(
@@ -630,6 +630,9 @@ pub(super) fn inventory_hud_fingerprint(world: &World, player: EntityId) -> u64 
         push(state.selected_instance.map_or(0, |instance| instance.0));
         push(state.drag.map_or(0, |drag| drag.instance_id.0));
     }
+    let character_menu_open = world
+        .resource::<InventoryHudState>()
+        .is_some_and(|state| state.character_select_open);
     push(fps_noclip_enabled(world, player) as u64);
     if let Some(inventory) = world.get::<PlayerInventory>(player) {
         push(inventory.entries.len() as u64);
@@ -646,56 +649,57 @@ pub(super) fn inventory_hud_fingerprint(world: &World, player: EntityId) -> u64 
         }
     }
     push(focused_item_pickup(world, player).map_or(0, EntityId::stable_u64));
-    if let Some(binding) =
-        world.get::<newengine_engine_runtime::gameplay::PlayerModelBinding>(player)
-    {
-        push(binding.assignment_revision);
-        for byte in binding.source.as_bytes() {
-            push(u64::from(*byte));
-        }
-    }
-    if let Some(selection) = world.get::<PlayableCharacterSelection>(player) {
-        for byte in selection.variant_id.as_bytes() {
-            push(u64::from(*byte));
-        }
-    }
-    for variant in playable_character_variants(world) {
-        for byte in variant
-            .id
-            .as_bytes()
-            .iter()
-            .chain(variant.display_name.as_bytes())
-            .chain(variant.family.as_bytes())
+    if character_menu_open {
+        if let Some(binding) =
+            world.get::<newengine_engine_runtime::gameplay::PlayerModelBinding>(player)
         {
-            push(u64::from(*byte));
-        }
-        push(variant.runtime_ready as u64);
-        if let Some(reference) = variant.runtime_model_ref.as_deref() {
-            for byte in reference.as_bytes() {
+            push(binding.assignment_revision);
+            for byte in binding.source.as_bytes() {
                 push(u64::from(*byte));
             }
         }
-    }
-    if let Some(menu) = world.resource::<FpsCharacterMenuPolicySnapshot>() {
-        for byte in menu
-            .toggle_action
-            .as_bytes()
-            .iter()
-            .chain(menu.title.as_bytes())
-        {
-            push(u64::from(*byte));
-        }
-        push(menu.characters.len() as u64);
-        for character in &menu.characters {
-            for byte in character.id.as_bytes() {
+        if let Some(selection) = world.get::<PlayableCharacterSelection>(player) {
+            for byte in selection.variant_id.as_bytes() {
                 push(u64::from(*byte));
+            }
+        }
+        for variant in playable_character_variants(world) {
+            for byte in variant
+                .id
+                .as_bytes()
+                .iter()
+                .chain(variant.display_name.as_bytes())
+                .chain(variant.family.as_bytes())
+            {
+                push(u64::from(*byte));
+            }
+            push(variant.runtime_ready as u64);
+            if let Some(reference) = variant.runtime_model_ref.as_deref() {
+                for byte in reference.as_bytes() {
+                    push(u64::from(*byte));
+                }
+            }
+        }
+        if let Some(menu) = world.resource::<FpsCharacterMenuPolicySnapshot>() {
+            for byte in menu
+                .toggle_action
+                .as_bytes()
+                .iter()
+                .chain(menu.title.as_bytes())
+            {
+                push(u64::from(*byte));
+            }
+            push(menu.characters.len() as u64);
+            for character in &menu.characters {
+                for byte in character.id.as_bytes() {
+                    push(u64::from(*byte));
+                }
             }
         }
     }
     if let Some(weapon) = world.get::<PlayerWeaponState>(player) {
         push(u64::from(weapon.ammo_in_magazine));
         push(u64::from(weapon.reserve_ammo));
-        push(weapon.shot_sequence);
     }
     if let Some(mission) = world.resource::<FpsDemoState>() {
         push(u64::from(mission.pickups_collected));

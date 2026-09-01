@@ -17,7 +17,8 @@ pub use policy::{
 pub use runtime::{
     FpsCharacterTraversalMode, FpsCharacterTraversalState, FpsDemoGoal, FpsDemoHazard,
     FpsDemoPickup, FpsDemoRules, FpsDemoState, FpsDemoTarget, FpsMotionResponseTuning,
-    FpsPlayerTuning, WeaponShellCasing,
+    FpsPlayerTuning, PendingImpactDebrisVisual, PersistentImpactDebris, PersistentImpactDebrisKind,
+    WeaponShellCasing,
 };
 
 use newengine_input_actions_api::ActionCommandFrame;
