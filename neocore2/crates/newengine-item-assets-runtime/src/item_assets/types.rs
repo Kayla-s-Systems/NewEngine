@@ -196,6 +196,7 @@ pub struct AuthoredWeaponComponentDefinition {
     pub audio_override: String,
     pub muzzle_vfx_override: String,
     pub tracer_vfx_override: String,
+    pub stat_modifiers: Vec<AuthoredWeaponStatModifier>,
     pub modifiers: AuthoredWeaponComponentModifiers,
 }
 
@@ -230,9 +231,9 @@ impl AuthoredWeaponComponentGraphDefinition {
             components: self
                 .components
                 .iter()
-                .map(|component| {
+                .map(|component| -> Result<_, String> {
                     let id = component.id.trim().to_ascii_lowercase();
-                    (
+                    Ok((
                         id.clone(),
                         WeaponComponentDefinition {
                             id,
@@ -245,11 +246,14 @@ impl AuthoredWeaponComponentGraphDefinition {
                                 .then(|| component.muzzle_vfx_override.clone()),
                             tracer_vfx_override: (!component.tracer_vfx_override.trim().is_empty())
                                 .then(|| component.tracer_vfx_override.clone()),
+                            stat_modifiers: crate::weapon_profiles::compile_weapon_stat_stack(
+                                &component.stat_modifiers,
+                            )?,
                             modifiers: component.modifiers.compile(),
                         },
-                    )
+                    ))
                 })
-                .collect(),
+                .collect::<Result<_, _>>()?,
             default_installed: self.default_installed.clone(),
         }
         .sanitized();
@@ -304,6 +308,9 @@ pub struct AuthoredWeaponDefinition {
     pub ricochet_max_bounces: u8,
     pub ricochet_grazing_dot: f32,
     pub ricochet_energy_retention: f32,
+    /// Optional V2 authored profile decomposition. When absent, the runtime projects the legacy
+    /// flat fields into equivalent handling/spread/recoil/sway/ADS profiles.
+    pub profiles: Option<AuthoredWeaponRuntimeProfiles>,
     pub melee_damage: f32,
     pub melee_range: f32,
     pub melee_attack_interval: f32,
@@ -355,6 +362,7 @@ impl Default for AuthoredWeaponDefinition {
             ricochet_max_bounces: tuning.ricochet_max_bounces,
             ricochet_grazing_dot: tuning.ricochet_grazing_dot,
             ricochet_energy_retention: tuning.ricochet_energy_retention,
+            profiles: None,
             melee_damage: melee.damage,
             melee_range: melee.range,
             melee_attack_interval: melee.attack_interval,
@@ -445,6 +453,14 @@ impl AuthoredWeaponDefinition {
             burst_cooldown: self.burst_cooldown,
         }
         .sanitized())
+    }
+
+    pub(super) fn runtime_profiles(&self) -> Result<WeaponRuntimeProfiles, String> {
+        let tuning = self.tuning();
+        self.profiles
+            .as_ref()
+            .map(|profiles| profiles.compile(tuning))
+            .unwrap_or_else(|| Ok(WeaponRuntimeProfiles::from_legacy_tuning(tuning)))
     }
 
     pub(super) fn tuning(&self) -> HitscanWeaponTuning {
@@ -539,6 +555,7 @@ pub struct AuthoredWeaponPresentationDefinition {
     pub ads_rear_sight_from_handle: [f32; 3],
     pub ads_front_sight_from_handle: [f32; 3],
     pub ads_camera_to_rear_sight: [f32; 3],
+    pub ads_camera_translation_weight: [f32; 3],
     pub first_person_hip_convergence_m: f32,
     pub aim_response_hz: f32,
     pub secondary_hip_max_angle_radians: f32,
@@ -577,6 +594,7 @@ impl Default for AuthoredWeaponPresentationDefinition {
             ads_rear_sight_from_handle: runtime.ads_rear_sight_from_handle,
             ads_front_sight_from_handle: runtime.ads_front_sight_from_handle,
             ads_camera_to_rear_sight: runtime.ads_camera_to_rear_sight,
+            ads_camera_translation_weight: runtime.ads_camera_translation_weight,
             first_person_hip_convergence_m: runtime.first_person_hip_convergence_m,
             aim_response_hz: runtime.aim_response_hz,
             secondary_hip_max_angle_radians: runtime.secondary_hip_max_angle_radians,
@@ -618,6 +636,7 @@ impl AuthoredWeaponPresentationDefinition {
             ads_rear_sight_from_handle: self.ads_rear_sight_from_handle,
             ads_front_sight_from_handle: self.ads_front_sight_from_handle,
             ads_camera_to_rear_sight: self.ads_camera_to_rear_sight,
+            ads_camera_translation_weight: self.ads_camera_translation_weight,
             first_person_hip_convergence_m: self.first_person_hip_convergence_m,
             aim_response_hz: self.aim_response_hz,
             secondary_hip_max_angle_radians: self.secondary_hip_max_angle_radians,

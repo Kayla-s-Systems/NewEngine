@@ -249,8 +249,8 @@ pub(crate) fn decode_runtime_ydd_prefab(
             logical_path: logical_ref.to_owned(),
             output_kind: "asset.list_file_body".to_owned(),
             selector: serde_json::Value::Null,
-                    format_descriptor: None,
-})
+            format_descriptor: None,
+        })
         .map_err(|error| {
             format!("AssetManager decode .ydd body failed path='{logical_ref}' err='{error}'")
         })?;

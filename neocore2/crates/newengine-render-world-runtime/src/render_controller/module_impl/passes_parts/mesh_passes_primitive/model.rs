@@ -1,5 +1,6 @@
 use super::plan::primitive_role_cull_reason;
 use super::*;
+use crate::render_controller::module_impl::passes::mesh_visibility::sphere_screen_coverage_hint;
 
 pub(crate) fn draw_model_components(
     this: &mut RuntimeRenderController,
@@ -46,15 +47,27 @@ pub(crate) fn draw_model_components(
             continue;
         }
 
+        let model_bounds = RuntimeRenderController::model_bundle_bounds(&bundle).or_else(|| {
+            world
+                .get::<Bounds>(entity)
+                .map(|bounds| (bounds.local_sphere.center, bounds.local_sphere.radius))
+        });
+        let transformed_bounds = model_bounds
+            .map(|(center, radius)| transform_sphere(render_model, center, radius));
+        let fallback_distance_m = distance_sq_to_camera(render_model, camera_position).sqrt();
+        let (distance_m, screen_coverage) = transformed_bounds
+            .map(|(center_ws, radius_ws)| {
+                let distance = (center_ws - camera_position).length();
+                (distance, sphere_screen_coverage_hint(radius_ws, distance))
+            })
+            .unwrap_or_else(|| {
+                (
+                    fallback_distance_m,
+                    sphere_screen_coverage_hint(1.0, fallback_distance_m),
+                )
+            });
         if runtime && visibility_settings.culling_enabled {
-            let model_bounds =
-                RuntimeRenderController::model_bundle_bounds(&bundle).or_else(|| {
-                    world
-                        .get::<Bounds>(entity)
-                        .map(|bounds| (bounds.local_sphere.center, bounds.local_sphere.radius))
-                });
-            if let Some((center, radius)) = model_bounds {
-                let (center_ws, radius_ws) = transform_sphere(render_model, center, radius);
+            if let Some((center_ws, radius_ws)) = transformed_bounds {
                 if !frustum_sphere_visible(
                     &visibility_settings.frustum,
                     camera_position,
@@ -65,9 +78,7 @@ pub(crate) fn draw_model_components(
                 ) {
                     continue;
                 }
-            } else if distance_sq_to_camera(render_model, camera_position)
-                > visibility_settings.max_distance * visibility_settings.max_distance
-            {
+            } else if fallback_distance_m > visibility_settings.max_distance {
                 continue;
             }
         }
@@ -100,6 +111,33 @@ pub(crate) fn draw_model_components(
             for (channel, tint_channel) in material_plan.base_color.iter_mut().zip(tint) {
                 *channel *= tint_channel;
             }
+
+            let player_visual = world
+                .get::<newengine_gameplay_world_runtime::gameplay::PlayerVisualPart>(entity);
+            let player_owned = world
+                .get::<newengine_gameplay_world_runtime::gameplay::PlayerSkinBinding>(entity)
+                .is_some()
+                || player_visual.is_some();
+            let equipped_weapon = player_visual.is_some_and(|part| {
+                part.kind
+                    == newengine_gameplay_world_runtime::gameplay::PlayerVisualKind::EquippedWeapon
+            });
+            let player_weapon_relevance = if equipped_weapon {
+                u8::MAX
+            } else if player_owned {
+                208
+            } else {
+                0
+            };
+            this.request_material_set_with_view_hints(
+                material_plan.base_color_texture,
+                material_plan.normal_texture,
+                material_plan.roughness_texture,
+                screen_coverage,
+                distance_m,
+                player_weapon_relevance,
+                equipped_weapon,
+            );
 
             let base_texture = this.material_texture_or_default(
                 r,

@@ -514,7 +514,7 @@ fn apply_equipped_weapon_support_ik(
     // Full-body FPP must never stretch the avatar's real arms toward a camera-owned gun. Once an
     // authored equipment pose exists, the firing hand is the physical grip owner. ADS rotates the
     // weapon around that fixed handle until the actual rear->front sight axis matches gameplay view;
-    // the camera subsequently moves onto the resulting rear sight. No shoulder/elbow IK is applied
+    // weapon presentation subsequently resolves an authored ADS camera anchor from that sight. No shoulder/elbow IK is applied
     // in this branch, so authored limb lengths and silhouette remain untouched.
     if first_person_active && authored_hand_contacts && support_right_hand {
         if let Some(view_rotation) = first_person_view_rotation_model {

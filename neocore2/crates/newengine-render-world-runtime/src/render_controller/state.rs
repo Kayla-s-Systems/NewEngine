@@ -5,9 +5,8 @@ use newengine_camera_contracts::CameraFrameSnapshot;
 use newengine_core::host_events::CursorState;
 use newengine_core::render::{Extent2D, RenderHardwareTier, RenderTargetId, SamplerId, TextureId};
 use newengine_core::TaskTicket;
-use newengine_math::collections::{FxHashMap, FxHashSet};
+use newengine_math::collections::FxHashMap;
 use parking_lot::Mutex;
-use std::collections::VecDeque;
 use std::sync::Arc;
 
 use newengine_plugin_manager_bridge::PluginManagerBridge;
@@ -121,6 +120,12 @@ impl RenderRuntimeProfileState {
             profile: RenderRuntimeProfile::load(),
             applied_hardware_tier: None,
         }
+    }
+
+    #[inline]
+    pub(super) fn hardware_tier(&self) -> RenderHardwareTier {
+        self.applied_hardware_tier
+            .unwrap_or(RenderHardwareTier::Unknown)
     }
 
     pub(super) fn apply_hardware_tier_once(&mut self, tier: RenderHardwareTier) {
@@ -289,6 +294,96 @@ impl MaterialTextureDecodeJob {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub(super) enum MaterialTextureStreamingClass {
+    Secondary = 0,
+    StreamingCritical = 1,
+    LaunchCritical = 2,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(super) struct MaterialTexturePriority {
+    pub(super) class: MaterialTextureStreamingClass,
+    pub(super) visible_now: bool,
+    /// Quantized projected screen coverage. Callers without projection data leave this at zero.
+    pub(super) screen_coverage_q: u16,
+    /// Closeness score; larger is nearer/more urgent.
+    pub(super) proximity_q: u16,
+    pub(super) material_importance: u8,
+    pub(super) player_weapon_relevance: u8,
+    pub(super) mip_urgency: u8,
+}
+
+impl MaterialTexturePriority {
+    #[inline]
+    pub(super) const fn secondary() -> Self {
+        Self {
+            class: MaterialTextureStreamingClass::Secondary,
+            visible_now: false,
+            screen_coverage_q: 0,
+            proximity_q: 0,
+            material_importance: 0,
+            player_weapon_relevance: 0,
+            mip_urgency: 0,
+        }
+    }
+
+    #[inline]
+    pub(super) const fn streaming_visible() -> Self {
+        Self {
+            class: MaterialTextureStreamingClass::StreamingCritical,
+            visible_now: true,
+            screen_coverage_q: 0,
+            proximity_q: 0,
+            material_importance: 128,
+            player_weapon_relevance: 0,
+            mip_urgency: 128,
+        }
+    }
+
+    #[inline]
+    pub(super) const fn launch_world() -> Self {
+        Self {
+            class: MaterialTextureStreamingClass::LaunchCritical,
+            visible_now: true,
+            screen_coverage_q: u16::MAX,
+            proximity_q: u16::MAX,
+            material_importance: u8::MAX,
+            player_weapon_relevance: 0,
+            mip_urgency: u8::MAX,
+        }
+    }
+
+    #[inline]
+    pub(super) const fn launch_player_weapon() -> Self {
+        Self {
+            class: MaterialTextureStreamingClass::LaunchCritical,
+            visible_now: true,
+            screen_coverage_q: u16::MAX / 2,
+            proximity_q: u16::MAX,
+            material_importance: 224,
+            player_weapon_relevance: u8::MAX,
+            mip_urgency: 224,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(super) struct MaterialTextureQueueEntry {
+    pub(super) priority: MaterialTexturePriority,
+    pub(super) enqueued_frame: u64,
+    pub(super) last_touched_frame: u64,
+}
+
+#[derive(Clone, Debug)]
+pub(super) struct MaterialTextureUploadCandidate {
+    pub(super) asset: RuntimeTextureAsset,
+    pub(super) payload_bytes: usize,
+    pub(super) priority: MaterialTexturePriority,
+    pub(super) decoded_frame: u64,
+    pub(super) last_touched_frame: u64,
+}
+
 /// Material-domain GPU state owned by the render controller.
 ///
 /// This state is deliberately separate from mesh caches and transient lifetime
@@ -298,9 +393,15 @@ pub(super) struct RenderMaterialGpuState {
     pub(super) registry: MaterialGpuRegistry,
     pub(super) primary_lit_pipeline_key: Option<MaterialGpuPipelineKey>,
     pub(super) textures: FxHashMap<String, MaterialTextureGpuResidency>,
-    pub(super) texture_queue: VecDeque<String>,
-    pub(super) texture_queued: FxHashSet<String>,
+    /// Last known semantic/visibility priority survives queue pop/retry cycles.
+    pub(super) texture_priorities: FxHashMap<String, MaterialTexturePriority>,
+    /// Mutable priority queue keyed by logical texture reference. Entries are rescored on demand,
+    /// so visibility/camera changes can reprioritize work that has not started decoding yet.
+    pub(super) texture_queue: FxHashMap<String, MaterialTextureQueueEntry>,
     pub(super) texture_decode_jobs: FxHashMap<String, MaterialTextureDecodeJob>,
+    /// Decoded CPU packets waiting for bounded GPU admission. Kept separate from decode jobs so
+    /// CPU concurrency and GPU upload pressure are independently controllable.
+    pub(super) texture_upload_queue: FxHashMap<String, MaterialTextureUploadCandidate>,
     pub(super) per_draw_ubo: FxHashMap<(u64, u8), PerDrawUbo>,
     pub(super) resolved_lit_plans: ResolvedLitMaterialPlanCache,
 }
@@ -312,9 +413,10 @@ impl RenderMaterialGpuState {
             registry: MaterialGpuRegistry::default(),
             primary_lit_pipeline_key: None,
             textures: FxHashMap::default(),
-            texture_queue: VecDeque::new(),
-            texture_queued: FxHashSet::default(),
+            texture_priorities: FxHashMap::default(),
+            texture_queue: FxHashMap::default(),
             texture_decode_jobs: FxHashMap::default(),
+            texture_upload_queue: FxHashMap::default(),
             per_draw_ubo: FxHashMap::default(),
             resolved_lit_plans: ResolvedLitMaterialPlanCache::default(),
         }

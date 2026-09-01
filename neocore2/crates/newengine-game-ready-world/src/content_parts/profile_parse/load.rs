@@ -105,8 +105,8 @@ fn load_profile_asset(
         logical_path: map_reference.logical_path.clone(),
         output_kind: output_kind.to_owned(),
         selector: serde_json::Value::Null,
-            format_descriptor: None,
-};
+        format_descriptor: None,
+    };
     newengine_ulog_api::ulog::info!(
         "game-ready ymap read: decode start path='{}' output='{}' selector=null",
         logical_path,

@@ -549,21 +549,21 @@ mod typed_requirement_tests {
     }
 
     #[test]
-    fn backend_route_alias_satisfies_gateway_service_requirement() {
+    fn backend_route_alias_satisfies_generic_gateway_service_requirement() {
         let provider = CapabilityDescV2::backend_route(
-            "assets.textures.backend",
+            "test.semantic.backend",
             1,
             BackendRouteDescriptor::new(newengine_service_api::BackendServiceSpec::new(
-                "assets.textures",
-                "engine.assets.textures",
-                "textures.api",
-                "assets.textures.backend",
+                "test.semantic",
+                "engine.test.semantic",
+                "test.semantic.api",
+                "test.semantic.backend",
             ))
-            .provider_route("engine.assets.textures.runtime")
-            .backend("northstar_texture_runtime")
-            .contract("textures.api"),
+            .provider_route("engine.test.semantic.runtime")
+            .backend("test_semantic_runtime")
+            .contract("test.semantic.api"),
         );
-        let provider_descriptor = descriptor_v2("engine.assets.textures.runtime", vec![provider]);
+        let provider_descriptor = descriptor_v2("engine.test.semantic.runtime", vec![provider]);
         let mut candidates = Vec::new();
         for capability in provider_descriptor.capabilities.iter() {
             if let Some(candidate) =
@@ -582,7 +582,7 @@ mod typed_requirement_tests {
         let consumer = descriptor_v2(
             "newengine.composition.game-ready",
             vec![CapabilityDescV2::new(
-                "engine.assets.textures",
+                "engine.test.semantic",
                 CapabilityRole::Requires,
                 CapabilityKind::ServiceV1,
                 1,
@@ -591,13 +591,13 @@ mod typed_requirement_tests {
 
         assert!(
             missing_typed_descriptor_requirements(&consumer, &candidates).is_empty(),
-            "provider backend route must alias engine.assets.textures for GameReady requirements"
+            "provider backend route must alias its declared engine gateway"
         );
         assert!(candidates.iter().any(|candidate| {
             candidate
                 .capability_ids
                 .iter()
-                .any(|id| id == "engine.assets.textures")
+                .any(|id| id == "engine.test.semantic")
         }));
     }
 

@@ -1,4 +1,5 @@
 use super::*;
+use crate::render_controller::module_impl::passes::mesh_visibility::sphere_screen_coverage_hint;
 use newengine_math::collections::FxHashSet;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -88,6 +89,7 @@ pub(super) fn draw_primitives_for_pass(
         u8,
         Option<newengine_model_domain_api::FoliageInstanceRuntime>,
         Option<EnvironmentDomeRenderState>,
+        f32,
     );
 
     let mut sky_entries: Vec<PrimitiveDrawEntry> = Vec::new();
@@ -177,12 +179,21 @@ pub(super) fn draw_primitives_for_pass(
                 continue;
             }
         }
+        let distance_sq = if follows_view || sky_role {
+            0.0
+        } else {
+            distance_sq_to_camera(render_model, camera_position)
+        };
+        let screen_coverage = if follows_view || sky_role {
+            1.0
+        } else if let Some((local_center, local_radius)) = source.local_bounds {
+            let (center_ws, radius_ws) = transform_sphere(render_model, local_center, local_radius);
+            sphere_screen_coverage_hint(radius_ws, (center_ws - camera_position).length())
+        } else {
+            sphere_screen_coverage_hint(1.0, distance_sq.sqrt())
+        };
         let entry = (
-            if follows_view || sky_role {
-                0.0
-            } else {
-                distance_sq_to_camera(render_model, camera_position)
-            },
+            distance_sq,
             source.entity_key,
             prim,
             render_model,
@@ -190,6 +201,7 @@ pub(super) fn draw_primitives_for_pass(
             draw_flags,
             source.foliage_runtime,
             source.environment_dome.clone(),
+            screen_coverage,
         );
         if sky_role {
             sky_entries.push(entry);
@@ -236,7 +248,7 @@ pub(super) fn draw_primitives_for_pass(
     // set with sun/moon discs: draw authored dome first, sky foreground discs next,
     // then world opaque batches.
     for (
-        _distance_sq,
+        distance_sq,
         _entity_key,
         prim,
         model,
@@ -244,6 +256,7 @@ pub(super) fn draw_primitives_for_pass(
         draw_flags,
         foliage_runtime,
         sky_runtime,
+        screen_coverage,
     ) in sky_entries
         .into_iter()
         .chain(foliage_entries)
@@ -287,6 +300,17 @@ pub(super) fn draw_primitives_for_pass(
                 // An authored weapon/world-item surface without its base texture is incomplete.
                 // Do not expose the generic white texture as a successful production material.
                 continue;
+            }
+            if !sky_role {
+                this.request_material_set_with_view_hints(
+                    material_plan.base_color_texture,
+                    material_plan.normal_texture,
+                    material_plan.roughness_texture,
+                    screen_coverage,
+                    distance_sq.sqrt(),
+                    if authored_pbr_required { u8::MAX } else { 0 },
+                    authored_pbr_required,
+                );
             }
             let base_tex = if let Some(path) = material_plan.base_color_texture {
                 if foliage_role || material_plan.alpha_cutoff > 0.0 || authored_pbr_required {

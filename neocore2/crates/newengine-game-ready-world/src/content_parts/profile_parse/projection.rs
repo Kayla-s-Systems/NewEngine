@@ -117,6 +117,7 @@ impl RawGameReadyPayload {
                     turn_180_left_animation: None,
                     turn_180_right_animation: None,
                     equipment_ready_sample_phase: 0.0,
+                    equipment_ready_sample_phases: std::collections::BTreeMap::new(),
                     equipment_ready_rotation_weights: Vec::new(),
                     equipment_aim_rotation_weights: Vec::new(),
                     equipment_reload_rotation_weights: Vec::new(),

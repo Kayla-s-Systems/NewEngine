@@ -2,8 +2,7 @@ use std::{env, fs, io::Write, path::PathBuf};
 
 use flate2::{write::DeflateEncoder, Compression};
 use newengine_assets_api::{
-    decode_list_file_envelope, encode_list_file, ListFileEncodeRequest,
-    SourceDictionaryManifestV1,
+    decode_list_file_envelope, encode_list_file, ListFileEncodeRequest, SourceDictionaryManifestV1,
 };
 
 fn main() -> Result<(), String> {
@@ -15,10 +14,9 @@ fn main() -> Result<(), String> {
     }
 
     let manifest_path = source_dir.join("dictionary.source.json");
-    let manifest: SourceDictionaryManifestV1 = serde_json::from_slice(
-        &fs::read(&manifest_path).map_err(|error| error.to_string())?,
-    )
-    .map_err(|error| error.to_string())?;
+    let manifest: SourceDictionaryManifestV1 =
+        serde_json::from_slice(&fs::read(&manifest_path).map_err(|error| error.to_string())?)
+            .map_err(|error| error.to_string())?;
     if manifest.importer.trim() != "nef8.primary_body.v1" {
         return Err(format!("unsupported importer '{}'", manifest.importer));
     }
@@ -43,7 +41,9 @@ fn main() -> Result<(), String> {
         .unwrap_or(0);
 
     let mut encoder = DeflateEncoder::new(Vec::new(), Compression::fast());
-    encoder.write_all(&body).map_err(|error| error.to_string())?;
+    encoder
+        .write_all(&body)
+        .map_err(|error| error.to_string())?;
     let stored = encoder.finish().map_err(|error| error.to_string())?;
     let rebuilt = encode_list_file(ListFileEncodeRequest {
         content_kind,

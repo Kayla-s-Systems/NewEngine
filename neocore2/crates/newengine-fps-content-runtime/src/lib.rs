@@ -4,7 +4,7 @@
 
 mod project_vfx;
 
-use std::sync::Arc;
+use std::{collections::BTreeSet, sync::Arc};
 
 use newengine_engine_runtime::gameplay::{
     apply_loadout, GameplayContentProvider, GameplayWorld, InventoryLoadoutCatalog, ItemCatalog,
@@ -19,10 +19,72 @@ use newengine_gameplay_script_runtime::{
     ScriptedStateMachineStore,
 };
 
+#[cfg(not(any(test, feature = "test-support")))]
+use newengine_item_assets_runtime::decode_authored_item_package_nef8;
 use newengine_item_assets_runtime::{
     compile_authored_item_package, hydrate_item_package_from_ytyp, install_compiled_item_package,
     AuthoredItemPackage,
 };
+
+#[cfg_attr(feature = "test-support", allow(dead_code))]
+const SHARED_WEAPON_CATALOG_PATH: &str = "items/shared_weapons.neitems";
+
+#[cfg_attr(feature = "test-support", allow(dead_code))]
+fn merge_shared_weapon_package(
+    project: &mut AuthoredItemPackage,
+    shared: AuthoredItemPackage,
+) -> Result<(usize, usize), String> {
+    let mut shared_ids = BTreeSet::new();
+    let mut shared_weapons = Vec::new();
+    for item in shared.items {
+        if !item.kind.trim().eq_ignore_ascii_case("weapon") {
+            continue;
+        }
+        if !item.id.starts_with("weapon.") {
+            return Err(format!(
+                "Shared weapon catalog contains non-canonical weapon id '{}'",
+                item.id
+            ));
+        }
+        if !shared_ids.insert(item.id.clone()) {
+            return Err(format!(
+                "Shared weapon catalog contains duplicate weapon id '{}'",
+                item.id
+            ));
+        }
+        shared_weapons.push(item);
+    }
+    if shared_weapons.is_empty() {
+        return Err("Shared weapon catalog contains no weapon definitions".to_owned());
+    }
+
+    let before = project.items.len();
+    project.items.retain(|item| !shared_ids.contains(&item.id));
+    let replaced = before.saturating_sub(project.items.len());
+    let added = shared_weapons.len();
+    project.items.extend(shared_weapons);
+    Ok((replaced, added))
+}
+
+#[cfg(not(any(test, feature = "test-support")))]
+fn load_shared_weapon_package() -> Result<AuthoredItemPackage, String> {
+    let assets =
+        newengine_assets_api::AssetServiceClient::new(newengine_plugin_host::default_host_api());
+    let bytes = assets
+        .raw_bytes_v1(SHARED_WEAPON_CATALOG_PATH)
+        .map_err(|error| {
+            format!(
+                "Shared weapon catalog read failed path='{}': {error}",
+                SHARED_WEAPON_CATALOG_PATH
+            )
+        })?;
+    decode_authored_item_package_nef8(&bytes).map_err(|error| {
+        format!(
+            "Shared weapon catalog decode failed path='{}': {error}",
+            SHARED_WEAPON_CATALOG_PATH
+        )
+    })
+}
 
 // Test fixture identities stay local to test-support. Production runtime has no concrete
 // weapon/ammo/loadout identity constants.
@@ -87,6 +149,17 @@ impl FpsContentProvider {
         policy.validate()?;
         let mut authored: AuthoredItemPackage = serde_json::from_value(policy.content.clone())
             .map_err(|error| format!("Lua FPS item package decode failed: {error}"))?;
+        #[cfg(not(any(test, feature = "test-support")))]
+        {
+            let shared = load_shared_weapon_package()?;
+            let (replaced, added) = merge_shared_weapon_package(&mut authored, shared)?;
+            newengine_ulog_api::ulog::info!(
+                "fps gameplay content merged Shared weapon catalog path='{}' weapons={} replaced_project_aliases={} policy='shared-weapon-authority'",
+                SHARED_WEAPON_CATALOG_PATH,
+                added,
+                replaced,
+            );
+        }
         let hydrated = hydrate_item_package_from_ytyp(&mut authored)
             .map_err(|error| format!("FPS item YTYP hydration failed: {error}"))?;
         let compiled = compile_authored_item_package(&authored).map_err(|error| {
@@ -351,5 +424,75 @@ impl FpsGameplayPolicyProvider for EmbeddedTestPolicyProvider {
         _event: &newengine_gameplay_fps_api::FpsPolicyEvent,
     ) -> Result<newengine_gameplay_fps_api::FpsPolicyDecision, String> {
         Ok(newengine_gameplay_fps_api::FpsPolicyDecision::default())
+    }
+}
+
+#[cfg(test)]
+mod shared_weapon_catalog_tests {
+    use super::*;
+    use newengine_item_assets_runtime::AuthoredItemDefinition;
+
+    fn item(id: &str, kind: &str, definition_ref: &str) -> AuthoredItemDefinition {
+        AuthoredItemDefinition {
+            id: id.to_owned(),
+            kind: kind.to_owned(),
+            definition_ref: definition_ref.to_owned(),
+            ..AuthoredItemDefinition::default()
+        }
+    }
+
+    #[test]
+    fn shared_weapon_catalog_adds_unlisted_weapon_and_replaces_project_alias() {
+        let mut project = AuthoredItemPackage {
+            items: vec![
+                item(
+                    "weapon.rifle.standard",
+                    "weapon",
+                    "project/forbidden.ytyp@rifle",
+                ),
+                item("consumable.medkit.standard", "consumable", ""),
+            ],
+            ..AuthoredItemPackage::default()
+        };
+        let shared = AuthoredItemPackage {
+            items: vec![
+                item(
+                    "weapon.rifle.standard",
+                    "weapon",
+                    "shared/definitions/weapon/rifle.ytyp@rifle",
+                ),
+                item(
+                    "weapon.rifle.mini14",
+                    "weapon",
+                    "shared/definitions/weapon/rifle_mini14.ytyp@rifle_mini14",
+                ),
+                item("ammo.rifle.standard", "ammo", ""),
+            ],
+            ..AuthoredItemPackage::default()
+        };
+
+        let (replaced, added) = merge_shared_weapon_package(&mut project, shared).expect("merge");
+        assert_eq!(replaced, 1);
+        assert_eq!(added, 2);
+        assert!(project
+            .items
+            .iter()
+            .any(|item| item.id == "weapon.rifle.mini14"));
+        assert!(project.items.iter().any(|item| {
+            item.id == "weapon.rifle.standard"
+                && item.definition_ref == "shared/definitions/weapon/rifle.ytyp@rifle"
+        }));
+        assert!(project
+            .items
+            .iter()
+            .any(|item| item.id == "consumable.medkit.standard"));
+        assert_eq!(
+            project
+                .items
+                .iter()
+                .filter(|item| item.id == "weapon.rifle.standard")
+                .count(),
+            1
+        );
     }
 }

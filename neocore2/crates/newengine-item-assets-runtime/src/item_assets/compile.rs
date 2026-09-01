@@ -116,12 +116,10 @@ fn compile_item_definition(authored: &AuthoredItemDefinition) -> Result<ItemDefi
                     })?;
                     let fire_mode = authored_weapon.fire_mode()?;
                     let pattern = authored_weapon.firing_pattern(fire_mode)?;
-                    WeaponItemDefinition::firearm_with_pattern(
-                        rank,
-                        authored_weapon.tuning(),
-                        ammo_item,
-                        fire_mode,
-                        pattern,
+                    let tuning = authored_weapon.tuning();
+                    let profiles = authored_weapon.runtime_profiles()?;
+                    WeaponItemDefinition::firearm_with_profiles(
+                        rank, tuning, profiles, ammo_item, fire_mode, pattern,
                     )
                 }
             };

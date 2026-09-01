@@ -153,6 +153,28 @@ pub(crate) fn weapon_ads_camera_position(
     camera.is_finite().then_some(camera)
 }
 
+/// Resolve the weapon-authored ADS camera translation policy against the stable anatomical eye.
+/// The weapon owns per-axis translation weights; camera runtime receives only the final anchor and
+/// remains agnostic to weapon family/sight geometry. A zero weight preserves the anatomical eye
+/// component, while one consumes the complete rendered-weapon eye-relief component.
+pub(crate) fn weapon_resolved_ads_camera_position(
+    presentation: &WeaponPresentationDefinition,
+    root: WeaponRootTransform,
+    view_rotation_ws: Quat,
+    eye_center_ws: Vec3,
+) -> Option<Vec3> {
+    if !eye_center_ws.is_finite() {
+        return None;
+    }
+    let presentation = presentation.clone().sanitized();
+    let raw = weapon_ads_camera_position(&presentation, root, view_rotation_ws)?;
+    let weight = v3(presentation.ads_camera_translation_weight);
+    let delta = raw - eye_center_ws;
+    let resolved =
+        eye_center_ws + Vec3::new(delta.x * weight.x, delta.y * weight.y, delta.z * weight.z);
+    resolved.is_finite().then_some(resolved)
+}
+
 /// Full-body first person keeps the authored firing hand as the physical grip owner. Hip/ready
 /// therefore uses the exact authored palm->weapon transform. While ADS is engaged, only the weapon
 /// orientation rotates around that fixed handle until the real rear->front sight axis matches the
@@ -889,6 +911,40 @@ mod tests {
             "secondary dynamics may rotate around the firing hand but may never detach from it"
         );
         assert!(root.rotation.dot(dynamic.rotation).abs() < 0.999_999);
+    }
+
+    #[test]
+    fn authored_ads_camera_translation_weight_preserves_selected_eye_axes() {
+        let mut p = fixture();
+        p.ads_camera_translation_weight = [1.0, 0.0, 1.0];
+        let root = WeaponRootTransform {
+            position: Vec3::new(-0.12, 1.39, -0.06),
+            rotation: Quat::from_euler(newengine_math::EulerRot::YXZ, 0.18, -0.09, 0.03),
+        };
+        let view = Quat::from_euler(newengine_math::EulerRot::YXZ, 0.21, -0.11, 0.0);
+        let eye = Vec3::new(0.02, 1.63, -0.01);
+        let raw = weapon_ads_camera_position(&p, root, view).expect("raw ADS anchor");
+        let resolved =
+            weapon_resolved_ads_camera_position(&p, root, view, eye).expect("resolved ADS anchor");
+        assert!((resolved.x - raw.x).abs() <= 1.0e-6);
+        assert!((resolved.y - eye.y).abs() <= 1.0e-6);
+        assert!((resolved.z - raw.z).abs() <= 1.0e-6);
+    }
+
+    #[test]
+    fn full_ads_camera_weight_can_follow_complete_weapon_anchor_when_authored() {
+        let mut p = fixture();
+        p.ads_camera_translation_weight = [1.0, 1.0, 1.0];
+        let root = WeaponRootTransform {
+            position: Vec3::new(-0.12, 1.39, -0.06),
+            rotation: Quat::from_rotation_y(0.14),
+        };
+        let view = Quat::from_rotation_y(0.14);
+        let eye = Vec3::new(0.0, 1.63, 0.0);
+        let raw = weapon_ads_camera_position(&p, root, view).expect("raw ADS anchor");
+        let resolved =
+            weapon_resolved_ads_camera_position(&p, root, view, eye).expect("resolved ADS anchor");
+        assert!(resolved.distance(raw) <= 1.0e-6);
     }
 
     #[test]

@@ -1,6 +1,7 @@
 use super::super::foliage::DecodedPrefabMeshPart;
 use super::super::*;
 use super::materials::{register_authored_prefab_material, resolve_prefab_part_material};
+use newengine_materials::api::MaterialRegistryApi;
 use newengine_physics_contracts::{CollisionShapeDesc, PhysicsBodyDesc};
 use newengine_sim::{AngularVelocity, Velocity};
 
@@ -450,7 +451,7 @@ pub(super) fn spawn_static_ydd_prefab_from_decoded(
             &part.material_slot,
             part.material_ref.as_deref(),
         )?;
-        let _ = spawn_game_primitive(
+        let part_entity = spawn_game_primitive(
             world,
             &*prims,
             mats,
@@ -467,6 +468,31 @@ pub(super) fn spawn_static_ydd_prefab_from_decoded(
                 color: [1.0, 1.0, 1.0, 1.0],
                 render_options,
             },
+        );
+        let applied_ref = world
+            .get::<newengine_materials::MaterialRef>(part_entity)
+            .copied()
+            .ok_or_else(|| {
+                format!(
+                    "static world part prefab='{}' slot='{}' lost MaterialRef after spawn",
+                    prefab.id, part.material_slot
+                )
+            })?;
+        let applied = mats.resolve(applied_ref.id).ok_or_else(|| {
+            format!(
+                "static world part prefab='{}' slot='{}' MaterialRef={:?} is not resolvable in scene material registry",
+                prefab.id, part.material_slot, applied_ref.id
+            )
+        })?;
+        newengine_ulog_api::ulog::debug!(
+            "static world material binding verified prefab='{}' slot='{}' entity={:?} material_ref={:?} base={:?} normal={:?} roughness={:?}",
+            prefab.id,
+            part.material_slot,
+            part_entity,
+            applied_ref.id,
+            applied.textures.base_color_texture,
+            applied.textures.normal_texture,
+            applied.textures.roughness_texture,
         );
         // Static imported geometry is currently visual-only. The procedural terrain
         // remains the authoritative walkable collision surface; this prevents a

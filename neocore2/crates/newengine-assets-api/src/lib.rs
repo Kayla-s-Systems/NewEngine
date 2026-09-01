@@ -68,14 +68,11 @@ pub mod asset_source_role {
     pub const SOURCE: &str = "source";
 }
 
-/// Semantic texture dictionary runtime gateway id. File-type descriptors route `.ytd`
-/// meaning here. `engine.assets.textures` owns validation, manifest semantics and runtime
-/// texture packets; `engine.assets` remains the byte/VFS/codec-dispatch owner.
+/// Stable semantic texture domain id used by `.ytd` format descriptors.
+/// Runtime texture bytes are decoded through `engine.assets` `asset.decode_v1`; there is no
+/// standalone `engine.assets.textures` provider or backend capability.
 pub const ENGINE_ASSETS_TEXTURES_SERVICE_ID: &str =
     newengine_service_api::ENGINE_ASSETS_TEXTURES_GATEWAY_ID;
-pub const TEXTURES_SERVICE_ID: &str = "textures.api";
-pub const TEXTURES_BACKEND_CAPABILITY_ID: &str = "assets.textures.backend";
-pub const TEXTURES_RUNTIME_CONTRACT: &str = "newengine.assets.textures.runtime.v1";
 /// Semantic definition/archetype metadata gateway id. File-type descriptors route
 /// `.ytyp` meaning here; scene/world systems may consume definitions later, but
 /// do not own the file type.
@@ -513,17 +510,6 @@ pub mod textures_method {
     pub const DESCRIBE_REF_JSON_V1: &str = "assets.textures.describe_ref_json_v1";
 }
 
-pub const TEXTURES_SERVICE_METHODS: &[&str] = &[
-    textures_method::INFO_JSON,
-    textures_method::INVOKE_JSON,
-    textures_method::SHUTDOWN_V1,
-    textures_method::MANIFEST_JSON_V1,
-    textures_method::ENTRY_RUNTIME_V1,
-    textures_method::ENTRY_RGBA8_V1,
-    textures_method::VALIDATE_REF_V1,
-    textures_method::DESCRIBE_REF_JSON_V1,
-];
-
 pub mod definitions_method {
     pub const INFO_JSON: &str = newengine_service_api::SERVICE_METHOD_INFO_JSON;
     pub const INVOKE_JSON: &str = newengine_service_api::SERVICE_METHOD_INVOKE_JSON;
@@ -568,14 +554,6 @@ pub const MAPS_SERVICE_METHODS: &[&str] = &[
     maps_method::DEPENDENCIES_V1,
 ];
 
-pub const TEXTURES_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec =
-    newengine_service_api::BackendServiceSpec::new(
-        "assets.textures",
-        ENGINE_ASSETS_TEXTURES_SERVICE_ID,
-        TEXTURES_SERVICE_ID,
-        TEXTURES_BACKEND_CAPABILITY_ID,
-    );
-
 pub const DEFINITIONS_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceSpec =
     newengine_service_api::BackendServiceSpec::new(
         "assets.definitions",
@@ -606,20 +584,6 @@ pub const ASSETS_UI_BACKEND_SERVICE_SPEC: newengine_service_api::BackendServiceS
         ENGINE_ASSETS_UI_SERVICE_ID,
         ASSETS_UI_SERVICE_ID,
         ASSETS_UI_BACKEND_CAPABILITY_ID,
-    );
-
-pub const TEXTURES_RUNTIME_CONTRACT_SPEC: newengine_service_api::RuntimeServiceContractSpec =
-    newengine_service_api::RuntimeServiceContractSpec::new(
-        ENGINE_ASSETS_TEXTURES_SERVICE_ID,
-        TEXTURES_RUNTIME_CONTRACT,
-        TEXTURES_SERVICE_METHODS,
-    );
-
-pub const TEXTURES_RUNTIME_REQUIREMENT_SPEC: newengine_service_api::RuntimeServiceRequirementSpec =
-    newengine_service_api::RuntimeServiceRequirementSpec::new(
-        TEXTURES_RUNTIME_CONTRACT_SPEC,
-        Some(TEXTURES_BACKEND_CAPABILITY_ID),
-        Some("NEWENGINE_REQUIRE_TEXTURES_BACKEND"),
     );
 
 pub const DEFINITIONS_RUNTIME_CONTRACT_SPEC: newengine_service_api::RuntimeServiceContractSpec =

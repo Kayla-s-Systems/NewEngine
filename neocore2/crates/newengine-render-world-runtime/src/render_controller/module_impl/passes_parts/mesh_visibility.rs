@@ -380,6 +380,18 @@ impl<T0, T1, T2, T3, T4, T5> DistanceKeyEntry for (f32, u64, T0, T1, T2, T3, T4,
     }
 }
 
+impl<T0, T1, T2, T3, T4, T5, T6> DistanceKeyEntry for (f32, u64, T0, T1, T2, T3, T4, T5, T6) {
+    #[inline]
+    fn distance_sq(&self) -> f32 {
+        self.0
+    }
+
+    #[inline]
+    fn stable_key(&self) -> u64 {
+        self.1
+    }
+}
+
 #[inline]
 pub(super) fn sort_by_distance_then_key<T: DistanceKeyEntry>(items: &mut [T]) {
     items.sort_by(|a, b| {
@@ -404,6 +416,20 @@ pub(super) fn transform_sphere(model: Mat4, local_center: Vec3, local_radius: f3
         model.transform_point3(local_center),
         local_radius.abs().max(0.001) * max_axis_scale(model),
     )
+}
+
+/// Conservative projected coverage hint used only for streaming priority.
+///
+/// This is intentionally projection-agnostic: `(radius / distance)^2` preserves the ordering that
+/// matters to residency without coupling the asset scheduler to a specific FOV or viewport size.
+#[inline]
+pub(super) fn sphere_screen_coverage_hint(radius_ws: f32, distance_m: f32) -> f32 {
+    let radius = radius_ws.abs().max(0.001);
+    if !distance_m.is_finite() || distance_m <= 0.001 {
+        return 1.0;
+    }
+    let angular_ratio = (radius / distance_m).clamp(0.0, 1.0);
+    (angular_ratio * angular_ratio).clamp(0.0, 1.0)
 }
 
 #[inline]
@@ -534,5 +560,15 @@ mod startup_lod_scale_tests {
         assert_eq!(scale_lod_distance(100.0, 0.75, 8.0, 4096.0), 75.0);
         assert_eq!(scale_lod_distance(100.0, 1.5, 8.0, 4096.0), 150.0);
         assert_eq!(scale_lod_distance(3000.0, 2.0, 8.0, 4096.0), 4096.0);
+    }
+
+    #[test]
+    fn projected_coverage_hint_prefers_large_near_spheres() {
+        let near = super::sphere_screen_coverage_hint(2.0, 4.0);
+        let far = super::sphere_screen_coverage_hint(2.0, 40.0);
+        let small = super::sphere_screen_coverage_hint(0.25, 4.0);
+        assert!(near > far);
+        assert!(near > small);
+        assert_eq!(super::sphere_screen_coverage_hint(10.0, 0.0), 1.0);
     }
 }

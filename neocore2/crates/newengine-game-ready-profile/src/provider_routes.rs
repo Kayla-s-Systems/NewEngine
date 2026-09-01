@@ -15,9 +15,6 @@ const GAME_READY_REQUIREMENTS: &[newengine_service_api::CapabilityRequirement] =
         newengine_assets_api::MAPS_BACKEND_SERVICE_SPEC.capability(),
     ),
     newengine_service_api::CapabilityRequirement::required(
-        newengine_assets_api::TEXTURES_BACKEND_SERVICE_SPEC.capability(),
-    ),
-    newengine_service_api::CapabilityRequirement::required(
         newengine_materials::MATERIALS_BACKEND_SERVICE_SPEC.capability(),
     ),
     newengine_service_api::CapabilityRequirement::required(
@@ -177,7 +174,6 @@ mod composition_architecture_tests {
         let expected = vec![
             ("asset_manager.backend", RequirementStrength::Required),
             ("assets.maps.backend", RequirementStrength::Required),
-            ("assets.textures.backend", RequirementStrength::Required),
             ("assets.materials.backend", RequirementStrength::Required),
             ("render.backend", RequirementStrength::Required),
             ("physics.backend", RequirementStrength::Required),

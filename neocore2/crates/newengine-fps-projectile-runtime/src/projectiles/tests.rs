@@ -335,6 +335,23 @@ mod tests {
             8,
             "metal impact must publish the deterministic GPU spark burst"
         );
+        let impact_debris = world
+            .query::<PersistentImpactDebris>()
+            .map(|(entity, _)| entity)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            impact_debris.len(),
+            6,
+            "the same authoritative hit must eject physical metal debris"
+        );
+        for entity in impact_debris {
+            assert!(world.get::<PhysicsBodyDesc>(entity).is_some());
+            assert!(world.get::<Velocity>(entity).is_some());
+            assert!(
+                world.get::<AngularVelocity>(entity).is_none(),
+                "physical impact debris must not receive authored spin"
+            );
+        }
 
         step_weapon_shot_fx(&mut world, 0.002);
         let after = world
@@ -699,9 +716,11 @@ mod tests {
             assert!(world.get::<ActiveImpactDebris>(*entity).is_some());
             assert!(world.get::<PhysicsBodyDesc>(*entity).is_some());
             assert!(world.get::<Velocity>(*entity).is_some());
-            assert!(world.get::<AngularVelocity>(*entity).is_some());
+            assert!(
+                world.get::<AngularVelocity>(*entity).is_none(),
+                "impact debris must not receive authored spin"
+            );
             let _ = world.insert(*entity, Velocity(Vec3::ZERO));
-            let _ = world.insert(*entity, AngularVelocity(Vec3::ZERO));
         }
 
         // 0.40 s at 60 Hz exceeds the authored 0.32 s settle hold.
@@ -731,6 +750,52 @@ mod tests {
         for entity in entities {
             assert!(world.exists(entity));
             assert!(world.get::<PhysicsBodyDesc>(entity).is_none());
+        }
+    }
+
+    #[test]
+    fn firearm_hit_spawns_dynamic_debris_without_authored_spin_or_vfx_dependency() {
+        let mut world = World::new();
+        let owner = world.spawn();
+        let target = world.spawn();
+        let _ = world.insert(
+            target,
+            PhysicsSurface {
+                id: "surface.metal.wall".to_owned(),
+                ..PhysicsSurface::default()
+            },
+        );
+
+        consume_weapon_gameplay_events(
+            &mut world,
+            &[GameplayEvent::new(GAMEPLAY_EVENT_WEAPON_HIT)
+                .with_source(owner)
+                .with_payload(serde_json::json!({
+                    "attack_kind": "firearm",
+                    "shot_sequence": 41,
+                    "point": [2.0, 1.25, -3.0],
+                    "normal": [0.0, 0.0, 1.0],
+                    "shot_direction": [0.0, 0.0, -1.0],
+                    "target": target.stable_u64()
+                }))],
+        );
+
+        let debris = world
+            .query::<PersistentImpactDebris>()
+            .map(|(entity, _)| entity)
+            .collect::<Vec<_>>();
+        assert_eq!(debris.len(), 6, "metal firearm hit must eject six rigid shards");
+        for entity in debris {
+            assert!(world.get::<ActiveImpactDebris>(entity).is_some());
+            assert!(world.get::<PhysicsBodyDesc>(entity).is_some());
+            assert!(world.get::<GameplayActor>(entity).is_some());
+            assert!(world
+                .get::<Velocity>(entity)
+                .is_some_and(|velocity| velocity.0.length_squared() > 0.0));
+            assert!(
+                world.get::<AngularVelocity>(entity).is_none(),
+                "impact debris must enter physics without scripted angular velocity"
+            );
         }
     }
 

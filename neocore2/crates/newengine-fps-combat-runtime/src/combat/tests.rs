@@ -126,10 +126,67 @@ mod tests {
         let (initial_no_follow, no_follow) = pitch_after_frame(0.0);
         let (initial_strong, strong_follow) = pitch_after_frame(1.8);
         assert!((initial_no_follow - initial_strong).abs() < 1.0e-6);
-        assert!(no_follow < initial_no_follow, "zero tracker speed should enter recovery immediately");
+        assert!(
+            no_follow < initial_no_follow,
+            "zero tracker speed should enter recovery immediately"
+        );
         assert!(
             strong_follow > initial_strong,
             "authored tracker speed must produce measurable post-shot follow-through: initial={initial_strong} after={strong_follow}"
+        );
+    }
+
+    #[cfg(test)]
+    #[test]
+    fn resolved_weapon_stat_stack_modulates_runtime_recoil() {
+        fn pitch_after_kick(recoil_multiplier: f32) -> f32 {
+            let mut world = World::new();
+            let player = world.spawn();
+            let _ = world.insert(player, CharacterMotor::default());
+            let _ = world.insert(
+                player,
+                newengine_engine_runtime::gameplay::WeaponStatModifierStack {
+                    modifiers: vec![
+                        newengine_engine_runtime::gameplay::WeaponStatModifier::multiply(
+                            newengine_engine_runtime::gameplay::WeaponStatId::RecoilMultiplier,
+                            recoil_multiplier,
+                        ),
+                    ],
+                },
+            );
+            let tuning = HitscanWeaponTuning {
+                recoil_pitch_radians: 0.05,
+                recoil_pitch_random_radians: 0.0,
+                recoil_yaw_radians: 0.0,
+                recoil_yaw_bias_radians: 0.0,
+                ..HitscanWeaponTuning::default()
+            };
+            apply_recoil(
+                &mut world,
+                player,
+                newengine_engine_runtime::gameplay::ItemInstanceId(77),
+                tuning,
+                false,
+                1,
+            );
+            world
+                .get::<CharacterMotor>(player)
+                .expect("character motor")
+                .pitch
+        }
+
+        let normal = pitch_after_kick(1.0);
+        let suppressed = pitch_after_kick(0.0);
+        let doubled = pitch_after_kick(2.0);
+
+        assert!(normal > 0.0, "baseline recoil must kick upward");
+        assert!(
+            suppressed.abs() < 1.0e-7,
+            "resolved stat stack must be able to suppress recoil: {suppressed}"
+        );
+        assert!(
+            (doubled - normal * 2.0).abs() < 1.0e-6,
+            "resolved recoil multiplier must reach runtime exactly once: normal={normal} doubled={doubled}"
         );
     }
 
@@ -139,7 +196,10 @@ mod tests {
         let shooter = spawn_fps_player(&mut world, "shooter", Vec3::ZERO);
         let target = world.spawn();
         let _ = world.insert(target, Health::new(100.0));
-        let _ = world.insert(target, newengine_engine_runtime::gameplay::DamageReceiver::character());
+        let _ = world.insert(
+            target,
+            newengine_engine_runtime::gameplay::DamageReceiver::character(),
+        );
         let _ = world.insert(target, Transform::default());
         let _ = world.insert(shooter, HitscanWeaponTuning::default());
         let _ = world.insert(shooter, PlayerWeaponState::default());
@@ -157,6 +217,14 @@ mod tests {
         }
 
         step_player_combat(&mut world, 1.0 / 60.0, 1);
+        assert_eq!(
+            world
+                .get::<WeaponActionRuntime>(shooter)
+                .copied()
+                .unwrap()
+                .action,
+            WeaponActionKind::Firing
+        );
         let pending = world
             .get::<PendingHitscan>(shooter)
             .copied()
@@ -237,6 +305,291 @@ mod tests {
                 && event.target == Some(target)
                 && event.damage == 25.0
         }));
+    }
+
+    #[test]
+    fn reload_ammo_moves_only_at_authored_commit_phase_and_publishes_semantics() {
+        let mut world = World::new();
+        let player = spawn_fps_player(&mut world, "reload-commit-phase", Vec3::ZERO);
+        let binding = active_equipped_weapon_binding(&world, player).expect("primary firearm");
+        let firearm = binding.weapon.firearm.expect("firearm definition");
+        let tuning = firearm.tuning;
+        let timeline = firearm.profiles.sanitized().handling.reload_timeline;
+        let ammo_item = firearm.ammo_item;
+
+        let reserve_before = inventory_quantity(&world, player, ammo_item);
+        remove_item(
+            &mut world,
+            player,
+            ammo_item,
+            reserve_before.saturating_sub(10),
+        )
+        .expect("trim inventory ammunition");
+        let empty_state = PlayerWeaponState {
+            ammo_in_magazine: 0,
+            reserve_ammo: 10,
+            ..PlayerWeaponState::loaded(tuning)
+        };
+        world
+            .get_mut::<PlayerInventory>(player)
+            .expect("player inventory")
+            .weapon_states
+            .insert(binding.instance_id, empty_state);
+        let _ = world.insert(player, empty_state);
+
+        let _ = drain_weapon_events(&mut world);
+        let _ = newengine_engine_runtime::gameplay::drain_gameplay_events(&mut world);
+        let _ = newengine_engine_runtime::gameplay::drain_animation_semantic_events(&mut world);
+
+        if let Some(commands) = world.get_mut::<PlayerCommandFrame>(player) {
+            commands
+                .actions
+                .pressed
+                .push(fps_action::PLAYER_RELOAD.into());
+        }
+        step_player_combat(&mut world, 0.01, 1);
+        if let Some(commands) = world.get_mut::<PlayerCommandFrame>(player) {
+            commands.actions.pressed.clear();
+        }
+
+        let action = world
+            .get::<WeaponActionRuntime>(player)
+            .copied()
+            .expect("reload action");
+        assert_eq!(action.action, WeaponActionKind::Reloading);
+        let commit_time = action.duration_seconds * timeline.ammo_commit_fraction;
+        assert!(commit_time > 0.0 && commit_time < action.duration_seconds);
+
+        let mut tick = 2_u64;
+        loop {
+            let action = world
+                .get::<WeaponActionRuntime>(player)
+                .copied()
+                .expect("reload action");
+            if action.elapsed_seconds + 0.1 >= commit_time {
+                break;
+            }
+            step_player_combat(&mut world, 0.1, tick);
+            tick += 1;
+            let state = world
+                .get::<PlayerWeaponState>(player)
+                .copied()
+                .expect("weapon state");
+            assert_eq!(
+                state.ammo_in_magazine, 0,
+                "magazine must stay empty before AmmoCommitted"
+            );
+            assert_eq!(
+                inventory_quantity(&world, player, ammo_item),
+                10,
+                "reserve inventory must not change before AmmoCommitted"
+            );
+        }
+
+        let _ = drain_weapon_events(&mut world);
+        let _ = newengine_engine_runtime::gameplay::drain_gameplay_events(&mut world);
+        let _ = newengine_engine_runtime::gameplay::drain_animation_semantic_events(&mut world);
+
+        step_player_combat(&mut world, 0.1, tick);
+
+        let state = world
+            .get::<PlayerWeaponState>(player)
+            .copied()
+            .expect("weapon state");
+        assert_eq!(state.ammo_in_magazine, 10);
+        assert_eq!(state.reserve_ammo, 0);
+        assert_eq!(inventory_quantity(&world, player, ammo_item), 0);
+
+        let weapon_events = drain_weapon_events(&mut world);
+        let kinds = weapon_events
+            .iter()
+            .map(|event| event.kind)
+            .collect::<Vec<_>>();
+        assert!(
+            kinds.contains(&WeaponEventKind::ReloadAmmoCommitted),
+            "crossing authored commit threshold must emit ReloadAmmoCommitted: {kinds:?}"
+        );
+        assert!(
+            !kinds.contains(&WeaponEventKind::ReloadCompleted),
+            "ammo commit must occur before reload completion"
+        );
+
+        let semantic_events = newengine_engine_runtime::gameplay::drain_gameplay_events(&mut world);
+        let commit_semantic = semantic_events
+            .iter()
+            .find(|event| {
+                event.id == GAMEPLAY_EVENT_WEAPON_RELOAD_PHASE
+                    && event
+                        .payload
+                        .get("reload_phase")
+                        .and_then(serde_json::Value::as_str)
+                        == Some("ammo_committed")
+            })
+            .expect("reload phase semantic event");
+        assert_eq!(commit_semantic.source, Some(player.stable_u64()));
+
+        let animation_events =
+            newengine_engine_runtime::gameplay::drain_animation_semantic_events(&mut world);
+        assert!(
+            animation_events
+                .iter()
+                .any(|event| event.event == "character.weapon.firearm.ammo_committed"),
+            "AmmoCommitted must drive a dedicated animation pulse"
+        );
+    }
+
+    #[test]
+    fn animation_authority_blocks_fallback_commit_until_clip_markers_arrive() {
+        let mut world = World::new();
+        let player = spawn_fps_player(&mut world, "reload-animation-authority", Vec3::ZERO);
+        let binding = active_equipped_weapon_binding(&world, player).expect("primary firearm");
+        let firearm = binding.weapon.firearm.expect("firearm definition");
+        let tuning = firearm.tuning;
+        let ammo_item = firearm.ammo_item;
+
+        let reserve_before = inventory_quantity(&world, player, ammo_item);
+        remove_item(
+            &mut world,
+            player,
+            ammo_item,
+            reserve_before.saturating_sub(10),
+        )
+        .expect("trim inventory ammunition");
+        let empty_state = PlayerWeaponState {
+            ammo_in_magazine: 0,
+            reserve_ammo: 10,
+            ..PlayerWeaponState::loaded(tuning)
+        };
+        world
+            .get_mut::<PlayerInventory>(player)
+            .expect("player inventory")
+            .weapon_states
+            .insert(binding.instance_id, empty_state);
+        let _ = world.insert(player, empty_state);
+        let _ = world.insert(
+            player,
+            WeaponReloadAnimationAuthority {
+                weapon_instance_id: binding.instance_id,
+                clip_duration_seconds: 0.6,
+                marker_mask: newengine_engine_runtime::gameplay::WEAPON_RELOAD_ANIMATION_REQUIRED_MARKER_MASK,
+            },
+        );
+
+        if let Some(commands) = world.get_mut::<PlayerCommandFrame>(player) {
+            commands
+                .actions
+                .pressed
+                .push(fps_action::PLAYER_RELOAD.into());
+        }
+        step_player_combat(&mut world, 0.01, 1);
+        if let Some(commands) = world.get_mut::<PlayerCommandFrame>(player) {
+            commands.actions.pressed.clear();
+        }
+
+        let action = world
+            .get::<WeaponActionRuntime>(player)
+            .copied()
+            .expect("reload action");
+        assert_eq!(action.action, WeaponActionKind::Reloading);
+        assert_eq!(
+            action.timing_source,
+            WeaponActionTimingSource::AnimationMarkers
+        );
+        assert!((action.duration_seconds - 0.6).abs() < 1.0e-6);
+
+        for tick in 2..=12 {
+            step_player_combat(&mut world, 0.1, tick);
+        }
+        let stalled = world
+            .get::<PlayerWeaponState>(player)
+            .copied()
+            .expect("weapon state");
+        assert_eq!(
+            stalled.ammo_in_magazine, 0,
+            "animation authority must suppress percentage AmmoCommitted even beyond clip duration"
+        );
+        assert_eq!(inventory_quantity(&world, player, ammo_item), 10);
+        assert_eq!(
+            world
+                .get::<WeaponActionRuntime>(player)
+                .copied()
+                .expect("reload action")
+                .action,
+            WeaponActionKind::Reloading,
+            "elapsed time alone must not finish marker-authoritative reload"
+        );
+
+        for phase in [
+            WeaponReloadPhase::MagazineDetached,
+            WeaponReloadPhase::AmmoCommitted,
+        ] {
+            newengine_engine_runtime::gameplay::queue_weapon_reload_animation_marker(
+                &mut world,
+                player,
+                WeaponReloadAnimationMarker {
+                    weapon_instance_id: binding.instance_id,
+                    phase,
+                    clip_time_seconds: 0.3,
+                    playback_time_seconds: 0.3,
+                    loop_index: 0,
+                },
+            );
+        }
+        let _ = drain_weapon_events(&mut world);
+        step_player_combat(&mut world, 0.01, 13);
+
+        let committed = world
+            .get::<PlayerWeaponState>(player)
+            .copied()
+            .expect("weapon state");
+        assert_eq!(committed.ammo_in_magazine, 10);
+        assert_eq!(committed.reserve_ammo, 0);
+        assert_eq!(inventory_quantity(&world, player, ammo_item), 0);
+        let events = drain_weapon_events(&mut world);
+        assert!(events
+            .iter()
+            .any(|event| event.kind == WeaponEventKind::ReloadAmmoCommitted));
+        assert!(!events
+            .iter()
+            .any(|event| event.kind == WeaponEventKind::ReloadCompleted));
+
+        for phase in [
+            WeaponReloadPhase::MagazineInserted,
+            WeaponReloadPhase::Chambered,
+            WeaponReloadPhase::Complete,
+        ] {
+            newengine_engine_runtime::gameplay::queue_weapon_reload_animation_marker(
+                &mut world,
+                player,
+                WeaponReloadAnimationMarker {
+                    weapon_instance_id: binding.instance_id,
+                    phase,
+                    clip_time_seconds: 0.6,
+                    playback_time_seconds: 0.6,
+                    loop_index: 0,
+                },
+            );
+        }
+        step_player_combat(&mut world, 0.01, 14);
+
+        let completed = world
+            .get::<WeaponActionRuntime>(player)
+            .copied()
+            .expect("weapon action");
+        assert_eq!(completed.action, WeaponActionKind::Ready);
+        assert_eq!(completed.reload_phase, WeaponReloadPhase::Complete);
+        assert_eq!(
+            world
+                .get::<PlayerWeaponState>(player)
+                .copied()
+                .expect("weapon state")
+                .reload_remaining,
+            0.0
+        );
+        let events = drain_weapon_events(&mut world);
+        assert!(events
+            .iter()
+            .any(|event| event.kind == WeaponEventKind::ReloadCompleted));
     }
 
     #[test]
@@ -343,6 +696,14 @@ mod tests {
             commands.actions.held.push(fps_action::PLAYER_AIM.into());
         }
         step_player_combat(&mut world, 1.0 / 60.0, 20);
+        assert_eq!(
+            world
+                .get::<WeaponActionRuntime>(player)
+                .copied()
+                .unwrap()
+                .action,
+            WeaponActionKind::Melee
+        );
 
         let pending = world
             .get::<PendingHitscan>(player)
@@ -485,11 +846,9 @@ mod tests {
         let content = embedded_test_content_provider();
         GameplayContentProvider::install(&content, &mut world).expect("install FPS content");
         let player = spawn_default_player(&mut world, None, "auto-player", Vec3::ZERO);
-        let muzzle = EquippedWeaponMuzzle::new(
-            Vec3::new(0.18, 1.20, -0.62),
-            Vec3::new(0.0, 0.0, -1.0),
-        )
-        .expect("auto muzzle");
+        let muzzle =
+            EquippedWeaponMuzzle::new(Vec3::new(0.18, 1.20, -0.62), Vec3::new(0.0, 0.0, -1.0))
+                .expect("auto muzzle");
         let _ = world.insert(player, muzzle);
 
         let ammo = ItemId::from_name("ammo.rifle.standard").expect("ammo id");
@@ -855,13 +1214,16 @@ fn hitscan_direction_tracks_mouse_look_pitch() {
 
     let (origin, direction) =
         shot_origin_and_direction(&world, player, tuning, true, 1).expect("view-aligned hitscan");
-    let camera_forward =
-        (Quat::from_euler(EulerRot::YXZ, motor.yaw, motor.pitch, 0.0) * -Vec3::Z).normalize_or_zero();
+    let camera_forward = (Quat::from_euler(EulerRot::YXZ, motor.yaw, motor.pitch, 0.0) * -Vec3::Z)
+        .normalize_or_zero();
     let view_origin = Vec3::Y * 1.62;
     let aim_point = view_origin + camera_forward * tuning.range.clamp(12.0, 80.0);
     let expected = (aim_point - origin).normalize_or_zero();
     assert!(direction.dot(expected) > 0.999_999);
-    assert!(direction.y.abs() > 0.1, "pitch must affect the converged ballistic direction");
+    assert!(
+        direction.y.abs() > 0.1,
+        "pitch must affect the converged ballistic direction"
+    );
     assert!(
         (direction - camera_forward).length() > 1.0e-5,
         "off-axis muzzle must converge toward the view axis rather than pretending the bullet originated at the camera"
@@ -966,7 +1328,19 @@ fn interaction_ray_tracks_mouse_look_pitch() {
 }
 
 fn test_ballistics() -> BallisticShotProfile {
-    BallisticShotProfile { projectile_mass_kg: 0.004, muzzle_velocity_mps: 800.0, momentum_ns: 3.2, remaining_penetration_energy_j: 1200.0, max_penetration_m: 0.50, damage_multiplier: 1.0, impulse_multiplier: 1.0, falloff_start_m: 0.0, falloff_end_m: 100.0, falloff_min_multiplier: 1.0, component_falloff_multiplier: 1.0 }
+    BallisticShotProfile {
+        projectile_mass_kg: 0.004,
+        muzzle_velocity_mps: 800.0,
+        momentum_ns: 3.2,
+        remaining_penetration_energy_j: 1200.0,
+        max_penetration_m: 0.50,
+        damage_multiplier: 1.0,
+        impulse_multiplier: 1.0,
+        falloff_start_m: 0.0,
+        falloff_end_m: 100.0,
+        falloff_min_multiplier: 1.0,
+        component_falloff_multiplier: 1.0,
+    }
 }
 
 #[test]
@@ -981,7 +1355,18 @@ fn instant_projectile_ricochets_once_from_grazing_metal_surface() {
             ..PhysicsSurface::default()
         },
     );
-    let _ = world.insert(plate, BallisticMaterialResponse { penetration_resistance_j_per_m: 20000.0, entry_energy_cost_j: 2000.0, damage_transfer_multiplier: 1.0, impulse_transfer_multiplier: 1.0, ricochet_allowed: true, ricochet_max_incidence_dot: 0.38, ricochet_energy_retention: 0.38 });
+    let _ = world.insert(
+        plate,
+        BallisticMaterialResponse {
+            penetration_resistance_j_per_m: 20000.0,
+            entry_energy_cost_j: 2000.0,
+            damage_transfer_multiplier: 1.0,
+            impulse_transfer_multiplier: 1.0,
+            ricochet_allowed: true,
+            ricochet_max_incidence_dot: 0.38,
+            ricochet_energy_retention: 0.38,
+        },
+    );
     let pending = PendingHitscan {
         query_seq: hitscan_query_seq(shooter, 9),
         weapon_instance_id: ItemInstanceId(17),
@@ -1059,15 +1444,28 @@ fn instant_projectile_does_not_ricochet_from_head_on_or_soft_surface() {
         ricochet_energy_retention: 0.38,
     };
     assert!(!ballistic_material_allows_ricochet(
-        material, firearm.direction, Vec3::Z, firearm.bounce_count, firearm.max_bounces,
+        material,
+        firearm.direction,
+        Vec3::Z,
+        firearm.bounce_count,
+        firearm.max_bounces,
     ));
-    let grazing = PendingHitscan { direction: Vec3::new(0.96, 0.0, -0.28).normalize(), ..firearm };
-    let soft = BallisticMaterialResponse { ricochet_allowed: false, ..material };
+    let grazing = PendingHitscan {
+        direction: Vec3::new(0.96, 0.0, -0.28).normalize(),
+        ..firearm
+    };
+    let soft = BallisticMaterialResponse {
+        ricochet_allowed: false,
+        ..material
+    };
     assert!(!ballistic_material_allows_ricochet(
-        soft, grazing.direction, Vec3::Z, grazing.bounce_count, grazing.max_bounces,
+        soft,
+        grazing.direction,
+        Vec3::Z,
+        grazing.bounce_count,
+        grazing.max_bounces,
     ));
 }
-
 
 #[test]
 fn ballistic_ray_penetrates_authored_thickness_and_hits_next_receiver() {
@@ -1167,14 +1565,22 @@ fn ballistic_ray_penetrates_authored_thickness_and_hits_next_receiver() {
         .find(|event| event.id == GAMEPLAY_EVENT_WEAPON_PENETRATED)
         .expect("successful entry/exit traversal must publish penetration semantics");
     assert_eq!(
-        penetration.payload.get("surface").and_then(serde_json::Value::as_str),
+        penetration
+            .payload
+            .get("surface")
+            .and_then(serde_json::Value::as_str),
         Some("surface.concrete.test")
     );
-    assert!((
-        penetration.payload.get("thickness_m").and_then(serde_json::Value::as_f64).unwrap_or_default()
-            - 0.1
-    )
-    .abs() < 1.0e-4);
+    assert!(
+        (penetration
+            .payload
+            .get("thickness_m")
+            .and_then(serde_json::Value::as_f64)
+            .unwrap_or_default()
+            - 0.1)
+            .abs()
+            < 1.0e-4
+    );
     let exit_point = penetration
         .payload
         .get("exit_point")
@@ -1234,7 +1640,10 @@ fn firing_pattern_state_machine_distinguishes_semi_auto_and_burst() {
     let mut world = World::new();
     let player = world.spawn();
     let instance = ItemInstanceId(99);
-    let semi = FiringPatternDefinition::from_fire_mode(newengine_engine_runtime::gameplay::WeaponFireMode::SemiAuto, 0.1);
+    let semi = FiringPatternDefinition::from_fire_mode(
+        newengine_engine_runtime::gameplay::WeaponFireMode::SemiAuto,
+        0.1,
+    );
     assert!(runtime::fire_controller_wants_shot(
         &mut world,
         player,
@@ -1260,7 +1669,10 @@ fn firing_pattern_state_machine_distinguishes_semi_auto_and_burst() {
         0.016,
     ));
     let _ = world.remove::<WeaponFireControllerState>(player);
-    let automatic = FiringPatternDefinition::from_fire_mode(newengine_engine_runtime::gameplay::WeaponFireMode::Automatic, 0.1);
+    let automatic = FiringPatternDefinition::from_fire_mode(
+        newengine_engine_runtime::gameplay::WeaponFireMode::Automatic,
+        0.1,
+    );
     assert!(runtime::fire_controller_wants_shot(
         &mut world,
         player,

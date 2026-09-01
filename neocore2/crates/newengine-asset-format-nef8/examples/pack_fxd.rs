@@ -20,8 +20,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let dictionary: newengine_vfx_api::FxdDictionaryV1 =
         serde_json::from_slice(&fs::read(&source)?)?;
     dictionary.validate()?;
-    let bytes = newengine_asset_format_nef8::encode_fxd_nef8(&dictionary, &logical_path)?;
-    let decoded = newengine_asset_format_nef8::decode_fxd_nef8(&bytes)?;
+    const FXD_CONTENT_KIND: u32 = 35;
+    let content_schema_version = newengine_vfx_api::FXD_VERSION_V1 as u16;
+    let bytes = newengine_asset_format_nef8::encode_fxd_nef8(
+        &dictionary,
+        &logical_path,
+        FXD_CONTENT_KIND,
+        content_schema_version,
+    )?;
+    let decoded = newengine_asset_format_nef8::decode_fxd_nef8(
+        &bytes,
+        FXD_CONTENT_KIND,
+        content_schema_version,
+    )?;
     if decoded != dictionary {
         return Err("FXD encode/decode verification mismatch".into());
     }

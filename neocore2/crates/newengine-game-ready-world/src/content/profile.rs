@@ -105,6 +105,7 @@ pub(crate) struct GameReadyPlayerModelSpec {
     pub(crate) turn_180_left_animation: Option<String>,
     pub(crate) turn_180_right_animation: Option<String>,
     pub(crate) equipment_ready_sample_phase: f32,
+    pub(crate) equipment_ready_sample_phases: std::collections::BTreeMap<String, f32>,
     pub(crate) equipment_ready_rotation_weights:
         Vec<newengine_engine_runtime::gameplay::PlayerJointRotationWeight>,
     pub(crate) equipment_aim_rotation_weights:

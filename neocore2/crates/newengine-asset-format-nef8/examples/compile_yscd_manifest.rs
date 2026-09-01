@@ -6,11 +6,12 @@ use std::{
 
 use flate2::{write::DeflateEncoder, Compression};
 use newengine_asset_format_nef8::{
-    encode_yscd_binary_body, yscd, YscdClip, YscdCue, YscdCueDescriptor, YscdDictionary,
+    encode_yscd_binary_body, YscdClip, YscdCue, YscdCueDescriptor, YscdDictionary,
+    YSCD_BINARY_SCHEMA_VERSION,
 };
 use newengine_assets_api::{
     encode_list_file, stable_hash_from_text, AssetEntryManifest, ListFileEncodeRequest,
-    ListFileHeaderMetadata,
+    ListFileHeaderMetadata, LIST_FILE_CONTENT_KIND_YSCD,
 };
 use serde::Deserialize;
 use serde_json::Value;
@@ -174,8 +175,8 @@ fn main() -> Result<(), String> {
     let metadata_bytes = serde_json::to_vec(&metadata)
         .map_err(|error| format!("YSCD header metadata encode failed: {error}"))?;
     let output = encode_list_file(ListFileEncodeRequest {
-        content_kind: yscd::CONTENT_KIND,
-        content_schema_version: yscd::CONTENT_SCHEMA_VERSION,
+        content_kind: LIST_FILE_CONTENT_KIND_YSCD,
+        content_schema_version: YSCD_BINARY_SCHEMA_VERSION,
         entry_count: dictionary.cues.len() as u32,
         additional_flags: 0,
         min_size_class: 7,
@@ -194,7 +195,12 @@ fn main() -> Result<(), String> {
     }
     fs::write(&output_path, &output)
         .map_err(|error| format!("write '{}' failed: {error}", output_path.display()))?;
-    let decoded = newengine_asset_format_nef8::decode_yscd_nef8(&output, &logical_path)?;
+    let decoded = newengine_asset_format_nef8::decode_yscd_nef8(
+        &output,
+        &logical_path,
+        LIST_FILE_CONTENT_KIND_YSCD,
+        YSCD_BINARY_SCHEMA_VERSION,
+    )?;
     if decoded.cues.len() != dictionary.cues.len() {
         return Err("YSCD post-write cue count mismatch".to_owned());
     }

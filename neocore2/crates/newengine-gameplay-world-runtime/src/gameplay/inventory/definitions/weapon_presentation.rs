@@ -128,6 +128,10 @@ pub struct WeaponPresentationDefinition {
     pub ads_rear_sight_from_handle: [f32; 3],
     pub ads_front_sight_from_handle: [f32; 3],
     pub ads_camera_to_rear_sight: [f32; 3],
+    /// Per-axis weight applied when resolving the rendered-weapon ADS camera anchor against the
+    /// stable anatomical eye center. `[1,0,1]` consumes lateral/depth eye-relief while preserving
+    /// eye height; `[1,1,1]` follows the complete weapon-derived anchor.
+    pub ads_camera_translation_weight: [f32; 3],
     pub first_person_hip_convergence_m: f32,
     /// Response speed for authored ADS/ready interpolation.
     pub aim_response_hz: f32,
@@ -172,6 +176,7 @@ impl Default for WeaponPresentationDefinition {
             ads_rear_sight_from_handle: [0.0; 3],
             ads_front_sight_from_handle: [0.0, 0.0, 0.4],
             ads_camera_to_rear_sight: [0.0, 0.0, -0.075],
+            ads_camera_translation_weight: [1.0, 0.0, 1.0],
             first_person_hip_convergence_m: 12.0,
             aim_response_hz: 18.0,
             secondary_hip_max_angle_radians: 5.0_f32.to_radians(),
@@ -193,6 +198,17 @@ impl WeaponPresentationDefinition {
                 if !component.is_finite() || component.abs() > limit {
                     *component = fallback[index];
                 }
+            }
+            out
+        }
+        fn weight3(value: [f32; 3], fallback: [f32; 3]) -> [f32; 3] {
+            let mut out = value;
+            for (index, component) in out.iter_mut().enumerate() {
+                *component = if component.is_finite() {
+                    component.clamp(0.0, 1.0)
+                } else {
+                    fallback[index]
+                };
             }
             out
         }
@@ -277,6 +293,10 @@ impl WeaponPresentationDefinition {
             self.ads_camera_to_rear_sight,
             fallback.ads_camera_to_rear_sight,
             5.0,
+        );
+        self.ads_camera_translation_weight = weight3(
+            self.ads_camera_translation_weight,
+            fallback.ads_camera_translation_weight,
         );
         self.ready_body_to_root_rotation = quat(self.ready_body_to_root_rotation);
         self.ready_right_palm_to_weapon = quat(self.ready_right_palm_to_weapon);

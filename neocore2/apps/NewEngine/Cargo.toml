@@ -1,6 +1,6 @@
 [package]
 name = "newengine"
-version = "0.1.0"
+version = "0.1.2"
 build = "build.rs"
 edition = "2021"
 description = "North Star standalone engine/runtime launcher"

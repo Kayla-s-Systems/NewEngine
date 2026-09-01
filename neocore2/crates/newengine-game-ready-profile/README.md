@@ -4,7 +4,7 @@ Product profile for the Game Ready FPS vertical slice.
 
 This crate owns module composition and product launch policy only. Runtime-hosted scene/ECS/entity gateway services live in dedicated runtime crates and are installed by this profile when selected.
 
-The profile consumes required `engine.assets.maps` and `engine.assets.textures` capabilities through stable gateways. It does not link or register concrete map/texture providers; StarVault currently registers the canonical discrete-map provider, while texture or compatible third-party providers remain replaceable behind the gateway contracts.
+The profile consumes the required `engine.assets.maps` capability through its stable gateway. `.ytd@entry` texture payloads are decoded through the canonical `engine.assets` `asset.decode_v1` path using StarVault-discovered format descriptors; no standalone texture runtime provider is part of the composition.
 
 <!-- NORTHSTAR-DIR-README:BEGIN -->
 

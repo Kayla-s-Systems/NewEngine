@@ -150,7 +150,11 @@ impl Default for MeleeWeaponTuning {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct FirearmWeaponDefinition {
+    /// Compatibility projection retained while authored content migrates away from flat weapon tuning.
     pub tuning: HitscanWeaponTuning,
+    /// V2 runtime-facing handling/spread/recoil/sway/ADS decomposition. New systems consume this
+    /// structure instead of growing `HitscanWeaponTuning` indefinitely.
+    pub profiles: WeaponRuntimeProfiles,
     pub ammo_item: ItemId,
     /// Compatibility shorthand retained for old consumers; runtime firing uses `firing_pattern`.
     pub fire_mode: WeaponFireMode,
@@ -199,6 +203,7 @@ impl WeaponItemDefinition {
             melee: None,
             firearm: Some(FirearmWeaponDefinition {
                 tuning: tuning.sanitized(),
+                profiles: WeaponRuntimeProfiles::from_legacy_tuning(tuning),
                 ammo_item,
                 fire_mode,
                 firing_pattern: FiringPatternDefinition::from_fire_mode(
@@ -220,6 +225,25 @@ impl WeaponItemDefinition {
         let mut weapon = Self::firearm(rank, tuning, ammo_item, fire_mode);
         if let Some(firearm) = weapon.firearm.as_mut() {
             firearm.firing_pattern = firing_pattern.sanitized();
+        }
+        weapon
+    }
+
+    /// Constructs a firearm with explicit V2 runtime profiles while retaining a legacy tuning
+    /// projection for consumers that have not migrated yet.
+    #[inline]
+    pub fn firearm_with_profiles(
+        rank: u16,
+        tuning: HitscanWeaponTuning,
+        profiles: WeaponRuntimeProfiles,
+        ammo_item: ItemId,
+        fire_mode: WeaponFireMode,
+        firing_pattern: FiringPatternDefinition,
+    ) -> Self {
+        let mut weapon =
+            Self::firearm_with_pattern(rank, tuning, ammo_item, fire_mode, firing_pattern);
+        if let Some(firearm) = weapon.firearm.as_mut() {
+            firearm.profiles = profiles.sanitized();
         }
         weapon
     }

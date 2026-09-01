@@ -6,8 +6,11 @@ use newengine_animation_runtime::{
 };
 use newengine_assets::{AssetDecodeRequest, AssetServiceClient, ASSET_LIST_FILE_BODY_OUTPUT};
 use newengine_engine_runtime::gameplay::{
-    active_equipped_weapon_binding, HitscanWeaponTuning, ItemInstanceId, PlayerSkinPose,
-    PlayerWeaponState, WeaponAnimationDefinition, WeaponEntitySockets, WeaponSocketPose,
+    active_equipped_weapon_binding, queue_weapon_reload_animation_marker, ItemInstanceId,
+    PlayerSkinPose, PlayerWeaponState, WeaponActionKind, WeaponActionRuntime,
+    WeaponAnimationDefinition, WeaponEntitySockets, WeaponReloadAnimationAuthority,
+    WeaponReloadAnimationMarker, WeaponReloadAnimationMarkerInbox, WeaponReloadPhase,
+    WeaponSocketPose, WEAPON_RELOAD_ANIMATION_REQUIRED_MARKER_MASK,
 };
 use newengine_math::Mat4;
 use newengine_model_skeleton_api::ModelSkeletonMetadata;
@@ -34,6 +37,7 @@ struct EquippedWeaponAnimationRuntime {
     fire_time: f32,
     last_shot_sequence: u64,
     reload_active: bool,
+    reload_markers_authoritative: bool,
     casing_ejection_joint_index: Option<usize>,
 }
 
@@ -64,7 +68,10 @@ fn load_weapon_clip(
     let parsed = AnimationClipReference::parse(reference)?;
     let assets = AssetServiceClient::new(newengine_plugin_host::default_host_api());
     let descriptor = assets.resolve_file_type_v1(&parsed.logical_path)?;
-    if !descriptor.semantic_gateway.eq_ignore_ascii_case("engine.animation") {
+    if !descriptor
+        .semantic_gateway
+        .eq_ignore_ascii_case("engine.animation")
+    {
         return Err(format!(
             "weapon animation ref='{reference}' resolves to format module='{}' gateway='{}', expected engine.animation",
             descriptor.module_id, descriptor.semantic_gateway
@@ -105,6 +112,81 @@ fn load_weapon_clip(
         binding,
         event_cursor: AnimationEventCursor::default(),
     }))
+}
+
+fn authored_reload_marker_authority(
+    weapon_instance_id: ItemInstanceId,
+    reference: &str,
+    clip: &AnimationClip,
+) -> Result<Option<WeaponReloadAnimationAuthority>, String> {
+    let mut phase_times = [None::<f32>; 5];
+    let mut marker_mask = 0_u8;
+    let mut recognized = 0_usize;
+    for event in &clip.events {
+        let Some(phase) = WeaponReloadPhase::from_animation_marker_tag(&event.tag) else {
+            continue;
+        };
+        let index = match phase {
+            WeaponReloadPhase::MagazineDetached => 0,
+            WeaponReloadPhase::AmmoCommitted => 1,
+            WeaponReloadPhase::MagazineInserted => 2,
+            WeaponReloadPhase::Chambered => 3,
+            WeaponReloadPhase::Complete => 4,
+            WeaponReloadPhase::None | WeaponReloadPhase::Started => continue,
+        };
+        if phase_times[index].replace(event.time_seconds).is_some() {
+            return Err(format!(
+                "reload clip has duplicate authoritative marker clip='{}' tag='{}'",
+                reference, event.tag
+            ));
+        }
+        marker_mask |= phase.marker_bit();
+        recognized += 1;
+    }
+    if recognized == 0 {
+        return Ok(None);
+    }
+    if marker_mask & WEAPON_RELOAD_ANIMATION_REQUIRED_MARKER_MASK
+        != WEAPON_RELOAD_ANIMATION_REQUIRED_MARKER_MASK
+    {
+        return Ok(None);
+    }
+    let times = phase_times.map(|value| value.expect("complete marker mask guarantees phase time"));
+    if times.windows(2).any(|pair| pair[1] < pair[0]) {
+        return Err(format!(
+            "reload clip authoritative markers are out of order clip='{}' times={times:?}",
+            reference
+        ));
+    }
+    Ok(Some(WeaponReloadAnimationAuthority {
+        weapon_instance_id,
+        clip_duration_seconds: clip.duration_seconds,
+        marker_mask,
+    }))
+}
+
+fn bridge_reload_timeline_markers(
+    world: &mut newengine_ecs::World,
+    owner: EntityId,
+    weapon_instance_id: ItemInstanceId,
+    timeline_events: &[newengine_animation_api::AnimationTimelineEventV1],
+) {
+    for event in timeline_events {
+        let Some(phase) = WeaponReloadPhase::from_animation_marker_tag(event.tag.as_str()) else {
+            continue;
+        };
+        queue_weapon_reload_animation_marker(
+            world,
+            owner,
+            WeaponReloadAnimationMarker {
+                weapon_instance_id,
+                phase,
+                clip_time_seconds: event.clip_time_seconds,
+                playback_time_seconds: event.playback_time_seconds,
+                loop_index: event.loop_index,
+            },
+        );
+    }
 }
 
 fn publish_weapon_palette(
@@ -192,6 +274,39 @@ pub(crate) fn bind_equipped_weapon_animation(
         return Err("skinned weapon has no authored animation clips".to_owned());
     }
 
+    let reload_authority = reload
+        .as_ref()
+        .map(|reload| {
+            authored_reload_marker_authority(instance_id, &reload.reference, &reload.clip)
+        })
+        .transpose()?
+        .flatten();
+    let reload_markers_authoritative = reload_authority.is_some();
+    let _ = world.remove::<WeaponReloadAnimationAuthority>(owner);
+    let _ = world.remove::<WeaponReloadAnimationMarkerInbox>(owner);
+    if let Some(authority) = reload_authority {
+        let _ = world.insert(owner, authority);
+        newengine_ulog_api::ulog::info!(
+            "game-ready: reload animation marker authority admitted owner={} instance={} clip_duration={:.6}s marker_mask=0x{:02x}",
+            owner.stable_u64(),
+            instance_id.0,
+            authority.clip_duration_seconds,
+            authority.marker_mask,
+        );
+    } else if reload.as_ref().is_some_and(|reload| {
+        reload
+            .clip
+            .events
+            .iter()
+            .any(|event| WeaponReloadPhase::from_animation_marker_tag(&event.tag).is_some())
+    }) {
+        newengine_ulog_api::ulog::warn!(
+            "game-ready: reload clip has incomplete authoritative marker set; using timeline fallback owner={} instance={}",
+            owner.stable_u64(),
+            instance_id.0,
+        );
+    }
+
     if let Some(initial) = idle.as_mut().or(spawn_pose.as_mut()) {
         initial.event_cursor.restart();
     }
@@ -238,6 +353,7 @@ pub(crate) fn bind_equipped_weapon_animation(
             fire_time: f32::INFINITY,
             last_shot_sequence: initial_shot_sequence,
             reload_active: false,
+            reload_markers_authoritative,
             casing_ejection_joint_index,
         },
     );
@@ -372,21 +488,21 @@ pub(crate) fn tick_equipped_weapon_animations(world: &mut newengine_ecs::World, 
             }
         }
 
-        let reload_active = state.reload_remaining > 0.0;
+        let reload_action = active
+            .then(|| world.get::<WeaponActionRuntime>(runtime.owner).copied())
+            .flatten()
+            .filter(|action| {
+                action.weapon_instance_id == runtime.instance_id
+                    && action.action == WeaponActionKind::Reloading
+            });
+        let reload_active = reload_action.is_some();
         if reload_active && !runtime.reload_active {
             if let Some(reload) = runtime.reload.as_mut() {
                 reload.event_cursor.restart();
             }
         }
         runtime.reload_active = reload_active;
-        let reload_progress = reload_active.then(|| {
-            let duration = world
-                .get::<HitscanWeaponTuning>(runtime.owner)
-                .map(|tuning| tuning.sanitized().reload_duration)
-                .filter(|duration| *duration > 1.0e-4)
-                .unwrap_or(2.0);
-            (1.0 - state.reload_remaining / duration).clamp(0.0, 1.0)
-        });
+        let reload_progress = reload_action.map(WeaponActionRuntime::progress);
 
         let mut occurrence_scratch = Vec::new();
         let mut timeline_events = Vec::new();
@@ -499,6 +615,14 @@ pub(crate) fn tick_equipped_weapon_animations(world: &mut newengine_ecs::World, 
                     error,
                 );
             }
+            if runtime.reload_markers_authoritative && reload_active {
+                bridge_reload_timeline_markers(
+                    world,
+                    runtime.owner,
+                    runtime.instance_id,
+                    &timeline_events,
+                );
+            }
             crate::animation_events::publish_timeline_events(world, timeline_events);
         }
         let _ = world.insert(root, runtime);
@@ -508,6 +632,166 @@ pub(crate) fn tick_equipped_weapon_animations(world: &mut newengine_ecs::World, 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn test_reload_clip(events: Vec<newengine_animation_runtime::AnimationEvent>) -> AnimationClip {
+        AnimationClip {
+            name: "reload".to_owned(),
+            skeleton_ref: String::new(),
+            source: "test".to_owned(),
+            duration_seconds: 1.2,
+            sample_rate_hz: 30.0,
+            looped: false,
+            joint_tags: vec![0],
+            events,
+            poses: vec![JointLocalPose {
+                translation: [0.0, 0.0, 0.0],
+                rotation: [0.0, 0.0, 0.0, 1.0],
+                scale: Some([1.0, 1.0, 1.0]),
+            }],
+        }
+    }
+
+    fn complete_reload_markers() -> Vec<newengine_animation_runtime::AnimationEvent> {
+        [
+            (0.20, WeaponReloadPhase::MagazineDetached),
+            (0.45, WeaponReloadPhase::AmmoCommitted),
+            (0.70, WeaponReloadPhase::MagazineInserted),
+            (0.85, WeaponReloadPhase::Chambered),
+            (1.00, WeaponReloadPhase::Complete),
+        ]
+        .into_iter()
+        .map(|(time, phase)| {
+            newengine_animation_runtime::AnimationEvent::new(
+                time,
+                phase.animation_marker_tag().expect("reload marker tag"),
+            )
+        })
+        .collect()
+    }
+
+    #[test]
+    fn complete_reload_marker_set_admits_animation_authority() {
+        let clip = test_reload_clip(complete_reload_markers());
+        let instance = ItemInstanceId(81);
+        let authority = authored_reload_marker_authority(instance, "reload@test", &clip)
+            .expect("marker validation")
+            .expect("animation authority");
+        assert_eq!(authority.weapon_instance_id, instance);
+        assert_eq!(authority.clip_duration_seconds, 1.2);
+        assert_eq!(
+            authority.marker_mask,
+            WEAPON_RELOAD_ANIMATION_REQUIRED_MARKER_MASK
+        );
+        assert!(authority.is_complete());
+    }
+
+    #[test]
+    fn markerless_and_partial_reload_clips_use_timeline_fallback() {
+        let markerless = test_reload_clip(Vec::new());
+        assert!(
+            authored_reload_marker_authority(ItemInstanceId(82), "markerless", &markerless)
+                .expect("markerless validation")
+                .is_none()
+        );
+
+        let partial = test_reload_clip(vec![newengine_animation_runtime::AnimationEvent::new(
+            0.2,
+            WeaponReloadPhase::MagazineDetached
+                .animation_marker_tag()
+                .unwrap(),
+        )]);
+        assert!(
+            authored_reload_marker_authority(ItemInstanceId(83), "partial", &partial)
+                .expect("partial validation")
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn duplicate_and_out_of_order_authoritative_markers_are_rejected() {
+        let mut duplicate_events = complete_reload_markers();
+        duplicate_events.insert(
+            1,
+            newengine_animation_runtime::AnimationEvent::new(
+                0.21,
+                WeaponReloadPhase::MagazineDetached
+                    .animation_marker_tag()
+                    .unwrap(),
+            ),
+        );
+        let duplicate = test_reload_clip(duplicate_events);
+        assert!(
+            authored_reload_marker_authority(ItemInstanceId(84), "duplicate", &duplicate)
+                .expect_err("duplicate marker must fail")
+                .contains("duplicate authoritative marker")
+        );
+
+        let out_of_order = test_reload_clip(vec![
+            newengine_animation_runtime::AnimationEvent::new(
+                0.20,
+                WeaponReloadPhase::AmmoCommitted
+                    .animation_marker_tag()
+                    .unwrap(),
+            ),
+            newengine_animation_runtime::AnimationEvent::new(
+                0.30,
+                WeaponReloadPhase::MagazineDetached
+                    .animation_marker_tag()
+                    .unwrap(),
+            ),
+            newengine_animation_runtime::AnimationEvent::new(
+                0.70,
+                WeaponReloadPhase::MagazineInserted
+                    .animation_marker_tag()
+                    .unwrap(),
+            ),
+            newengine_animation_runtime::AnimationEvent::new(
+                0.85,
+                WeaponReloadPhase::Chambered.animation_marker_tag().unwrap(),
+            ),
+            newengine_animation_runtime::AnimationEvent::new(
+                1.00,
+                WeaponReloadPhase::Complete.animation_marker_tag().unwrap(),
+            ),
+        ]);
+        assert!(authored_reload_marker_authority(
+            ItemInstanceId(85),
+            "out-of-order",
+            &out_of_order
+        )
+        .expect_err("out-of-order markers must fail")
+        .contains("out of order"));
+    }
+
+    #[test]
+    fn reload_timeline_bridge_targets_weapon_owner_inbox() {
+        let mut world = newengine_ecs::World::new();
+        let owner = world.spawn();
+        let root = world.spawn();
+        let instance = ItemInstanceId(86);
+        let event = newengine_animation_api::AnimationTimelineEventV1 {
+            entity: root.into(),
+            clip: newengine_animation_api::AnimationClipRef("reload@test".to_owned()),
+            channel: "weapon.reload".to_owned(),
+            tag: newengine_tags_api::TagId::new(
+                WeaponReloadPhase::AmmoCommitted
+                    .animation_marker_tag()
+                    .unwrap(),
+            ),
+            clip_time_seconds: 0.45,
+            playback_time_seconds: 0.45,
+            loop_index: 0,
+            parameters: serde_json::Value::Null,
+        };
+
+        bridge_reload_timeline_markers(&mut world, owner, instance, &[event]);
+        let markers = newengine_engine_runtime::gameplay::drain_weapon_reload_animation_markers(
+            &mut world, owner, instance,
+        );
+        assert_eq!(markers.len(), 1);
+        assert_eq!(markers[0].phase, WeaponReloadPhase::AmmoCommitted);
+        assert_eq!(markers[0].weapon_instance_id, instance);
+    }
 
     #[test]
     fn shared_mount_prefix_is_not_part_of_skeleton_identity() {

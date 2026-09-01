@@ -8,6 +8,7 @@ struct WeaponRecoilRuntime {
     pitch_speed_radians_per_second: f32,
     yaw_speed_radians_per_second: f32,
     recovery_hz: f32,
+    hold_remaining_seconds: f32,
 }
 
 #[inline]
@@ -36,20 +37,28 @@ pub(super) fn recover_weapon_accuracy(world: &mut World, player: EntityId, dt: f
         let _ = world.remove::<WeaponAccuracyState>(player);
         return;
     };
-    let tuning = firearm.tuning.sanitized();
+    let profiles = firearm.profiles.sanitized();
+    let spread = profiles.spread;
+    let resolved_stats = resolved_weapon_stats(world, player);
+    let max_bloom = spread
+        .hip
+        .maximum_radians
+        .into_iter()
+        .chain(spread.ads.maximum_radians)
+        .fold(0.0_f32, f32::max)
+        * resolved_stats.spread_multiplier;
     let mut state = world
         .get::<WeaponAccuracyState>(player)
         .copied()
         .filter(|state| state.weapon_instance_id == binding.instance_id)
         .unwrap_or_else(|| WeaponAccuracyState::new(binding.instance_id));
     state.time_since_shot = (state.time_since_shot + dt.max(0.0)).min(60.0);
-    if state.time_since_shot >= tuning.accuracy_recovery_delay_seconds && state.bloom_radians > 0.0
-    {
-        let omega = tuning.accuracy_recovery_hz.max(0.05) * 2.0;
+    if state.time_since_shot >= spread.recovery_delay_seconds && state.bloom_radians > 0.0 {
+        let omega = spread.recovery_hz.max(0.05) * 2.0;
         let c = state.recovery_velocity + omega * state.bloom_radians;
         let decay = (-omega * dt.max(0.0)).exp();
-        state.bloom_radians = ((state.bloom_radians + c * dt.max(0.0)) * decay)
-            .clamp(0.0, tuning.recoil_accuracy_max_radians);
+        state.bloom_radians =
+            ((state.bloom_radians + c * dt.max(0.0)) * decay).clamp(0.0, max_bloom);
         state.recovery_velocity = (state.recovery_velocity - omega * c * dt.max(0.0)) * decay;
         if state.bloom_radians < 1.0e-5 && state.recovery_velocity.abs() < 1.0e-4 {
             state.bloom_radians = 0.0;
@@ -66,18 +75,39 @@ pub(super) fn kick_weapon_accuracy(
     weapon_instance_id: ItemInstanceId,
     tuning: HitscanWeaponTuning,
 ) {
-    let tuning = tuning.sanitized();
+    kick_weapon_accuracy_with_profile(
+        world,
+        player,
+        weapon_instance_id,
+        WeaponRuntimeProfiles::from_legacy_tuning(tuning).spread,
+        false,
+    );
+}
+
+pub(super) fn kick_weapon_accuracy_with_profile(
+    world: &mut World,
+    player: EntityId,
+    weapon_instance_id: ItemInstanceId,
+    spread: WeaponSpreadProfile,
+    aiming: bool,
+) {
+    let spread = spread.sanitized();
+    let state_profile = if aiming { spread.ads } else { spread.hip };
+    let resolved_stats = resolved_weapon_stats(world, player);
+    let per_shot = state_profile.change_per_shot_radians[0]
+        .max(state_profile.change_per_shot_radians[1])
+        * resolved_stats.spread_multiplier;
+    let maximum = state_profile.maximum_radians[0].max(state_profile.maximum_radians[1])
+        * resolved_stats.spread_multiplier;
     let mut state = world
         .get::<WeaponAccuracyState>(player)
         .copied()
         .filter(|state| state.weapon_instance_id == weapon_instance_id)
         .unwrap_or_else(|| WeaponAccuracyState::new(weapon_instance_id));
-    state.bloom_radians = (state.bloom_radians + tuning.recoil_accuracy_per_shot_radians)
-        .clamp(0.0, tuning.recoil_accuracy_max_radians);
+    state.bloom_radians = (state.bloom_radians + per_shot).clamp(0.0, maximum);
     // Positive velocity delays the initial recovery and gives automatic fire a genuine accuracy
     // state instead of coupling dispersion to camera recoil.
-    state.recovery_velocity +=
-        tuning.recoil_accuracy_per_shot_radians * tuning.accuracy_recovery_hz * 0.35;
+    state.recovery_velocity += per_shot * spread.recovery_hz * 0.35;
     state.shot_count = state.shot_count.saturating_add(1);
     state.time_since_shot = 0.0;
     let _ = world.insert(player, state);
@@ -88,6 +118,11 @@ pub(super) fn recover_weapon_recoil(world: &mut World, player: EntityId, dt: f32
         return;
     };
     if dt <= 0.0 {
+        return;
+    }
+    if recoil.hold_remaining_seconds > 0.0 {
+        recoil.hold_remaining_seconds = (recoil.hold_remaining_seconds - dt).max(0.0);
+        let _ = world.insert(player, recoil);
         return;
     }
     let (next_pitch, next_pitch_speed) = critically_damped_recoil_step(
@@ -290,15 +325,40 @@ pub fn step_player_combat(world: &mut World, dt: f32, fixed_tick: u64) {
             state.aiming = capabilities.aim && equipment_aim_supported && actions.aim_held;
 
             let mut events = Vec::<WeaponEvent>::new();
+            ensure_weapon_action_runtime(world, player, binding.instance_id);
+            step_transient_weapon_action(world, player, dt);
 
             if let Some(firearm) = binding.weapon.firearm {
                 queue_weapon_obstruction_probe(world, player, fixed_tick);
                 let tuning = firearm.tuning.sanitized();
+                let profiles = firearm.profiles.sanitized();
+                let resolved_stats = resolved_weapon_stats(world, player);
                 state.reserve_ammo = equipped_reserve_ammo(world, player).unwrap_or(0);
 
-                if state.reload_remaining > 0.0 {
-                    state.reload_remaining = (state.reload_remaining - dt).max(0.0);
-                    if state.reload_remaining == 0.0 {
+                let reload_active = world
+                    .get::<WeaponActionRuntime>(player)
+                    .copied()
+                    .is_some_and(|action| {
+                        action.weapon_instance_id == binding.instance_id
+                            && action.action == WeaponActionKind::Reloading
+                    });
+                if reload_active {
+                    let reload_step = step_reload_action(
+                        world,
+                        player,
+                        binding.instance_id,
+                        profiles.handling.reload_timeline,
+                        dt,
+                    );
+                    if reload_step.magazine_detached {
+                        events.push(weapon_event(
+                            WeaponEventKind::ReloadMagazineDetached,
+                            player,
+                            binding.instance_id,
+                            state.shot_sequence,
+                        ));
+                    }
+                    if reload_step.ammo_committed {
                         let needed = tuning
                             .magazine_capacity
                             .saturating_sub(state.ammo_in_magazine);
@@ -306,23 +366,77 @@ pub fn step_player_combat(world: &mut World, dt: f32, fixed_tick: u64) {
                         state.ammo_in_magazine += moved;
                         state.reserve_ammo = equipped_reserve_ammo(world, player).unwrap_or(0);
                         events.push(weapon_event(
-                            WeaponEventKind::ReloadCompleted,
+                            WeaponEventKind::ReloadAmmoCommitted,
                             player,
                             binding.instance_id,
                             state.shot_sequence,
                         ));
                     }
+                    if reload_step.magazine_inserted {
+                        events.push(weapon_event(
+                            WeaponEventKind::ReloadMagazineInserted,
+                            player,
+                            binding.instance_id,
+                            state.shot_sequence,
+                        ));
+                    }
+                    if reload_step.chambered {
+                        events.push(weapon_event(
+                            WeaponEventKind::ReloadChambered,
+                            player,
+                            binding.instance_id,
+                            state.shot_sequence,
+                        ));
+                    }
+                    if reload_step.completed {
+                        state.reload_remaining = 0.0;
+                        events.push(weapon_event(
+                            WeaponEventKind::ReloadCompleted,
+                            player,
+                            binding.instance_id,
+                            state.shot_sequence,
+                        ));
+                    } else if let Some(action) = world.get::<WeaponActionRuntime>(player).copied() {
+                        state.reload_remaining =
+                            (action.duration_seconds - action.elapsed_seconds).max(0.0);
+                    }
+                } else {
+                    // Compatibility projection only. WeaponActionRuntime is the authoritative
+                    // action state; stale per-instance countdowns are cancelled on weapon switch.
+                    state.reload_remaining = 0.0;
                 }
 
+                let reloading = world
+                    .get::<WeaponActionRuntime>(player)
+                    .copied()
+                    .is_some_and(|action| {
+                        action.weapon_instance_id == binding.instance_id
+                            && action.action == WeaponActionKind::Reloading
+                    });
                 if capabilities.reload
                     && equipment_reload_supported
                     && combat_policy.allow_reload
                     && actions.reload_pressed
-                    && state.reload_remaining <= 0.0
+                    && !reloading
                     && state.ammo_in_magazine < tuning.magazine_capacity
                     && state.reserve_ammo > 0
                 {
-                    state.reload_remaining = tuning.reload_duration;
+                    let (timing_source, authored_duration) = reload_timing_source(
+                        world,
+                        player,
+                        binding.instance_id,
+                        profiles.handling.reload_duration_seconds,
+                    );
+                    let reload_duration =
+                        authored_duration * resolved_stats.reload_duration_multiplier;
+                    begin_reload_action(
+                        world,
+                        player,
+                        binding.instance_id,
+                        reload_duration,
+                        timing_source,
+                    );
+                    state.reload_remaining = reload_duration;
                     events.push(weapon_event(
                         WeaponEventKind::ReloadStarted,
                         player,
@@ -330,6 +444,14 @@ pub fn step_player_combat(world: &mut World, dt: f32, fixed_tick: u64) {
                         state.shot_sequence,
                     ));
                 }
+
+                let reloading = world
+                    .get::<WeaponActionRuntime>(player)
+                    .copied()
+                    .is_some_and(|action| {
+                        action.weapon_instance_id == binding.instance_id
+                            && action.action == WeaponActionKind::Reloading
+                    });
 
                 let firing_pattern = firearm.firing_pattern.sanitized();
                 let trigger_active = fire_controller_wants_shot(
@@ -346,7 +468,7 @@ pub fn step_player_combat(world: &mut World, dt: f32, fixed_tick: u64) {
                     && equipment_ready_supported
                     && combat_policy.allow_fire
                     && trigger_active
-                    && state.reload_remaining <= 0.0
+                    && !reloading
                     && state.cooldown_remaining <= 0.0
                 {
                     if state.ammo_in_magazine == 0 {
@@ -367,10 +489,11 @@ pub fn step_player_combat(world: &mut World, dt: f32, fixed_tick: u64) {
                             .and_then(|definition| definition.ammo_profile.clone());
                         if let (Some(ammo_profile), Some((origin, direction))) = (
                             ammo_profile,
-                            shot_origin_and_direction(
+                            shot_origin_and_direction_with_profiles(
                                 world,
                                 player,
                                 tuning,
+                                profiles,
                                 state.aiming,
                                 shot_sequence,
                             ),
@@ -383,10 +506,8 @@ pub fn step_player_combat(world: &mut World, dt: f32, fixed_tick: u64) {
                             state.cooldown_remaining = firing_pattern.time_between_shots;
                             state.empty_latched = false;
                             let ammo_profile = ammo_profile.sanitized();
-                            let component_modifiers =
-                                active_equipped_weapon_component_modifiers(world, player);
                             let effective_velocity = ammo_profile.muzzle_velocity_mps
-                                * component_modifiers.muzzle_velocity_multiplier;
+                                * resolved_stats.muzzle_velocity_multiplier;
                             fire_request = Some((
                                 shot_sequence,
                                 state.aiming,
@@ -399,16 +520,15 @@ pub fn step_player_combat(world: &mut World, dt: f32, fixed_tick: u64) {
                                         * effective_velocity,
                                     remaining_penetration_energy_j: ammo_profile
                                         .penetration_energy_j
-                                        * component_modifiers.penetration_multiplier,
+                                        * resolved_stats.penetration_multiplier,
                                     max_penetration_m: ammo_profile.max_penetration_m,
                                     damage_multiplier: ammo_profile.damage_multiplier
-                                        * component_modifiers.damage_multiplier,
+                                        * resolved_stats.damage_multiplier,
                                     impulse_multiplier: ammo_profile.impulse_multiplier,
                                     falloff_start_m: ammo_profile.falloff_start_m,
                                     falloff_end_m: ammo_profile.falloff_end_m,
                                     falloff_min_multiplier: ammo_profile.falloff_min_multiplier,
-                                    component_falloff_multiplier: component_modifiers
-                                        .falloff_multiplier,
+                                    component_falloff_multiplier: resolved_stats.falloff_multiplier,
                                 }
                                 .sanitized(),
                             ));
@@ -417,6 +537,14 @@ pub fn step_player_combat(world: &mut World, dt: f32, fixed_tick: u64) {
                                 player,
                                 binding.instance_id,
                                 firing_pattern,
+                            );
+                            let (action_kind, action_duration) = firing_action(firing_pattern);
+                            mark_transient_weapon_action(
+                                world,
+                                player,
+                                binding.instance_id,
+                                action_kind,
+                                action_duration,
                             );
                             events.push(weapon_event(
                                 WeaponEventKind::Fired,
@@ -469,15 +597,21 @@ pub fn step_player_combat(world: &mut World, dt: f32, fixed_tick: u64) {
                         origin,
                         direction,
                     );
-                    apply_recoil(
+                    apply_recoil_with_profile(
                         world,
                         player,
                         binding.instance_id,
-                        tuning,
+                        profiles.recoil,
                         aiming,
                         shot_sequence,
                     );
-                    kick_weapon_accuracy(world, player, binding.instance_id, tuning);
+                    kick_weapon_accuracy_with_profile(
+                        world,
+                        player,
+                        binding.instance_id,
+                        profiles.spread,
+                        aiming,
+                    );
                 }
             } else if let Some(melee) = binding.weapon.melee {
                 let melee = melee.sanitized();
@@ -529,6 +663,13 @@ pub fn step_player_combat(world: &mut World, dt: f32, fixed_tick: u64) {
                             ricochet_energy_retention: 0.0,
                         };
                         let _ = world.insert(player, pending);
+                        mark_transient_weapon_action(
+                            world,
+                            player,
+                            binding.instance_id,
+                            WeaponActionKind::Melee,
+                            melee.attack_interval,
+                        );
                         events.push(weapon_event(
                             WeaponEventKind::MeleeAttacked,
                             player,
@@ -599,21 +740,34 @@ pub(super) fn apply_recoil(
     aiming: bool,
     shot_sequence: u64,
 ) {
-    let tuning = tuning.sanitized();
-    let component_recoil =
-        active_equipped_weapon_component_modifiers(world, player).recoil_multiplier;
-    let ads_scale = (if aiming {
-        tuning.ads_recoil_multiplier
-    } else {
-        1.0
-    }) * component_recoil;
+    apply_recoil_with_profile(
+        world,
+        player,
+        weapon_instance_id,
+        WeaponRuntimeProfiles::from_legacy_tuning(tuning).recoil,
+        aiming,
+        shot_sequence,
+    );
+}
+
+pub(super) fn apply_recoil_with_profile(
+    world: &mut World,
+    player: EntityId,
+    weapon_instance_id: ItemInstanceId,
+    profile: WeaponRecoilProfile,
+    aiming: bool,
+    shot_sequence: u64,
+) {
+    let profile = profile.sanitized();
+    let recoil_state = profile.state(aiming);
+    let component_recoil = resolved_weapon_stats(world, player).recoil_multiplier;
     let pitch_noise = signed_unit(shot_sequence ^ 0x243f_6a88_85a3_08d3);
     let yaw_noise = signed_unit(shot_sequence ^ 0x1319_8a2e_0370_7344);
-    let pitch_kick =
-        (tuning.recoil_pitch_radians + pitch_noise * tuning.recoil_pitch_random_radians).max(0.0)
-            * ads_scale;
+    let pitch_kick = (recoil_state.pitch_radians + pitch_noise * recoil_state.pitch_random_radians)
+        .max(0.0)
+        * component_recoil;
     let yaw_kick =
-        (tuning.recoil_yaw_bias_radians + yaw_noise * tuning.recoil_yaw_radians) * ads_scale;
+        (recoil_state.yaw_bias_radians + yaw_noise * recoil_state.yaw_radians) * component_recoil;
 
     let previous = world.get::<WeaponRecoilRuntime>(player).copied();
     if let Some(previous) = previous.filter(|state| state.weapon_instance_id != weapon_instance_id)
@@ -646,7 +800,8 @@ pub(super) fn apply_recoil(
                 applied_yaw_radians: 0.0,
                 pitch_speed_radians_per_second: 0.0,
                 yaw_speed_radians_per_second: 0.0,
-                recovery_hz: tuning.recoil_recovery_hz,
+                recovery_hz: recoil_state.recovery_hz,
+                hold_remaining_seconds: recoil_state.hold_seconds,
             });
     recoil.weapon_instance_id = weapon_instance_id;
     recoil.applied_pitch_radians += applied_pitch_kick;
@@ -655,10 +810,11 @@ pub(super) fn apply_recoil(
     // crisp trigger response while allowing each weapon to own how strongly recoil continues for
     // the first few frames before the critically damped recovery takes over.
     recoil.pitch_speed_radians_per_second +=
-        applied_pitch_kick * tuning.recoil_recovery_hz * tuning.recoil_pitch_tracker_speed_scale;
+        applied_pitch_kick * recoil_state.recovery_hz * recoil_state.pitch_tracker_speed_scale;
     recoil.yaw_speed_radians_per_second +=
-        yaw_kick * tuning.recoil_recovery_hz * tuning.recoil_yaw_tracker_speed_scale;
-    recoil.recovery_hz = tuning.recoil_recovery_hz;
+        yaw_kick * recoil_state.recovery_hz * recoil_state.yaw_tracker_speed_scale;
+    recoil.recovery_hz = recoil_state.recovery_hz;
+    recoil.hold_remaining_seconds = recoil.hold_remaining_seconds.max(recoil_state.hold_seconds);
     let _ = world.insert(player, recoil);
 }
 
@@ -686,8 +842,25 @@ fn semantic_weapon_event_id(kind: WeaponEventKind) -> &'static str {
         WeaponEventKind::MeleeAttacked => GAMEPLAY_EVENT_WEAPON_MELEE_ATTACKED,
         WeaponEventKind::Empty => GAMEPLAY_EVENT_WEAPON_EMPTY,
         WeaponEventKind::ReloadStarted => GAMEPLAY_EVENT_WEAPON_RELOAD_STARTED,
+        WeaponEventKind::ReloadMagazineDetached
+        | WeaponEventKind::ReloadAmmoCommitted
+        | WeaponEventKind::ReloadMagazineInserted
+        | WeaponEventKind::ReloadChambered => GAMEPLAY_EVENT_WEAPON_RELOAD_PHASE,
         WeaponEventKind::ReloadCompleted => GAMEPLAY_EVENT_WEAPON_RELOAD_COMPLETED,
         WeaponEventKind::Hit => GAMEPLAY_EVENT_WEAPON_HIT,
+    }
+}
+
+#[inline]
+fn reload_phase_label(kind: WeaponEventKind) -> Option<&'static str> {
+    match kind {
+        WeaponEventKind::ReloadStarted => Some("started"),
+        WeaponEventKind::ReloadMagazineDetached => Some("magazine_detached"),
+        WeaponEventKind::ReloadAmmoCommitted => Some("ammo_committed"),
+        WeaponEventKind::ReloadMagazineInserted => Some("magazine_inserted"),
+        WeaponEventKind::ReloadChambered => Some("chambered"),
+        WeaponEventKind::ReloadCompleted => Some("completed"),
+        _ => None,
     }
 }
 
@@ -779,6 +952,7 @@ fn publish_weapon_project_event(world: &mut World, event: &WeaponEvent) {
         "weapon_item_id": item.map(|item| item.raw()),
         "weapon": item_name,
         "shot_sequence": event.shot_sequence,
+        "reload_phase": reload_phase_label(event.kind),
         "attack_kind": attack_kind,
         "target": event.target.map(EntityId::stable_u64),
         "damage": if event.damage > 0.0 {
@@ -815,6 +989,18 @@ fn publish_weapon_project_event(world: &mut World, event: &WeaponEvent) {
             }
             (WeaponEventKind::ReloadStarted, WeaponType::Firearm) => {
                 Some("character.weapon.firearm.reload_started")
+            }
+            (WeaponEventKind::ReloadMagazineDetached, WeaponType::Firearm) => {
+                Some("character.weapon.firearm.magazine_detached")
+            }
+            (WeaponEventKind::ReloadAmmoCommitted, WeaponType::Firearm) => {
+                Some("character.weapon.firearm.ammo_committed")
+            }
+            (WeaponEventKind::ReloadMagazineInserted, WeaponType::Firearm) => {
+                Some("character.weapon.firearm.magazine_inserted")
+            }
+            (WeaponEventKind::ReloadChambered, WeaponType::Firearm) => {
+                Some("character.weapon.firearm.chambered")
             }
             (WeaponEventKind::ReloadCompleted, WeaponType::Firearm) => {
                 Some("character.weapon.firearm.reload_completed")

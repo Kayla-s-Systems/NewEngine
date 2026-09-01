@@ -62,14 +62,30 @@ mod first_person_position_tests {
     }
 
     #[test]
-    fn ads_camera_position_converges_exactly_to_rendered_rear_sight_anchor() {
+    fn ads_camera_position_blends_to_provider_resolved_anchor_without_axis_policy() {
         let hip = Vec3::new(0.0, 1.62, -0.045);
-        let ads = Vec3::new(-0.013, 1.601, -0.092);
-        assert_eq!(first_person_ads_position_contract(hip, Some(ads), 0.0), hip);
-        let half = first_person_ads_position_contract(hip, Some(ads), 0.5);
-        assert!((half - hip.lerp(ads, 0.5)).length() <= 1.0e-7);
-        assert_eq!(first_person_ads_position_contract(hip, Some(ads), 1.0), ads);
+        let resolved_ads = Vec3::new(-0.013, 1.62, -0.092);
+        assert_eq!(
+            first_person_ads_position_contract(hip, Some(resolved_ads), 0.0),
+            hip
+        );
+        let half = first_person_ads_position_contract(hip, Some(resolved_ads), 0.5);
+        assert!((half - hip.lerp(resolved_ads, 0.5)).length() <= 1.0e-7);
+        assert_eq!(
+            first_person_ads_position_contract(hip, Some(resolved_ads), 1.0),
+            resolved_ads
+        );
         assert_eq!(first_person_ads_position_contract(hip, None, 1.0), hip);
+    }
+
+    #[test]
+    fn camera_runtime_accepts_any_finite_resolved_ads_anchor() {
+        let hip = Vec3::new(0.0, 1.62, 0.0);
+        let authored = Vec3::new(0.03, 1.48, -0.08);
+        assert_eq!(
+            first_person_ads_position_contract(hip, Some(authored), 1.0),
+            authored
+        );
     }
 
     #[test]

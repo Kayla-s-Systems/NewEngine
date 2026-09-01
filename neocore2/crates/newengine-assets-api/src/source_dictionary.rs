@@ -47,7 +47,10 @@ impl SourceDictionaryManifestV1 {
             ));
         }
         let actual = normalize_logical_path(&self.logical_path)?;
-        let expected = normalize_logical_path(runtime_path)?;
+        let runtime_base = runtime_path
+            .split_once('@')
+            .map_or(runtime_path, |(base, _)| base);
+        let expected = normalize_logical_path(runtime_base)?;
         if actual != expected {
             return Err(format!(
                 "source dictionary logical_path mismatch manifest='{actual}' runtime='{expected}'"
@@ -424,7 +427,10 @@ mod tests {
             .validate_for_runtime_path("models/hero.ydd")
             .is_ok());
         assert!(manifest
-            .validate_for_runtime_path("models/other.ydd")
+            .validate_for_runtime_path("models/hero.ydd@hero")
+            .is_ok());
+        assert!(manifest
+            .validate_for_runtime_path("models/other.ydd@hero")
             .is_err());
     }
 }

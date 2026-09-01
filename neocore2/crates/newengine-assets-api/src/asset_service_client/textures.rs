@@ -1,11 +1,7 @@
-use abi_stable::std_types::RString;
-use newengine_plugin_api::MethodName;
-
 use super::AssetServiceClient;
 use crate::{
-    require_asset_reference_extension, textures_method, AssetError, AssetResult, Rgba8TextureAsset,
-    RuntimeTextureAsset, RuntimeTextureFormat, RuntimeTextureMip,
-    ENGINE_ASSETS_TEXTURES_SERVICE_ID,
+    require_asset_reference_extension, textures_method, AssetDecodeRequest, AssetError,
+    AssetResult, Rgba8TextureAsset, RuntimeTextureAsset, RuntimeTextureFormat, RuntimeTextureMip,
 };
 
 impl AssetServiceClient {
@@ -217,7 +213,11 @@ impl AssetServiceClient {
         self.textures_entry_runtime_ref_v1_typed(&texture_ref)
     }
 
-    /// Call the semantic `engine.assets.textures` gateway with an authored `.ytd@entry` selector.
+    /// Decode an authored `.ytd@entry` through the canonical StarVault decode path.
+    ///
+    /// This deliberately does not require a separately registered `engine.assets.textures`
+    /// runtime service. Format identity comes from `pluginsRuntime/formats/ytd.*`, while
+    /// AssetManager resolves the authoritative descriptor and dispatches the ListFile codec.
     #[inline]
     pub fn textures_entry_runtime_ref_v1_typed(
         &self,
@@ -225,13 +225,16 @@ impl AssetServiceClient {
     ) -> AssetResult<RuntimeTextureAsset> {
         let reference = require_asset_reference_extension(texture_ref, &["ytd"], true)
             .map_err(AssetError::invalid_request)?;
-        let payload =
-            Self::json_payload_typed(&serde_json::json!({ "texture_ref": reference.canonical }))?;
-        let bytes = self.call_service_typed(
-            RString::from(ENGINE_ASSETS_TEXTURES_SERVICE_ID),
-            MethodName::from(textures_method::ENTRY_RUNTIME_V1),
-            payload,
-        )?;
+        let selector = texture_decode_selector(&reference)?;
+        let request = AssetDecodeRequest {
+            logical_path: reference.logical_path.clone(),
+            output_kind: textures_method::ENTRY_RUNTIME_V1.to_owned(),
+            selector,
+            format_descriptor: None,
+        };
+        let bytes = self.decode_v1(&request).map_err(|message| {
+            AssetError::decode_failed(message).with_logical_path(&reference.canonical)
+        })?;
         Self::decode_texture_runtime_wire_v2_typed(bytes)
             .map_err(|e| e.with_logical_path(&reference.canonical))
     }
@@ -248,7 +251,7 @@ impl AssetServiceClient {
         self.textures_entry_rgba8_ref_v1_typed(&texture_ref)
     }
 
-    /// Call the semantic `engine.assets.textures` gateway with an authored `.ytd@entry` selector.
+    /// Decode an authored `.ytd@entry` to RGBA8 through StarVault + the registered YTD codec.
     #[inline]
     pub fn textures_entry_rgba8_ref_v1_typed(
         &self,
@@ -256,15 +259,38 @@ impl AssetServiceClient {
     ) -> AssetResult<Rgba8TextureAsset> {
         let reference = require_asset_reference_extension(texture_ref, &["ytd"], true)
             .map_err(AssetError::invalid_request)?;
-        let payload =
-            Self::json_payload_typed(&serde_json::json!({ "texture_ref": reference.canonical }))?;
-        let bytes = self.call_service_typed(
-            RString::from(ENGINE_ASSETS_TEXTURES_SERVICE_ID),
-            MethodName::from(textures_method::ENTRY_RGBA8_V1),
-            payload,
-        )?;
+        let selector = texture_decode_selector(&reference)?;
+        let request = AssetDecodeRequest {
+            logical_path: reference.logical_path.clone(),
+            output_kind: textures_method::ENTRY_RGBA8_V1.to_owned(),
+            selector,
+            format_descriptor: None,
+        };
+        let bytes = self.decode_v1(&request).map_err(|message| {
+            AssetError::decode_failed(message).with_logical_path(&reference.canonical)
+        })?;
         Self::decode_texture_rgba8_wire_v1_typed(bytes)
             .map_err(|e| e.with_logical_path(&reference.canonical))
+    }
+}
+
+fn texture_decode_selector(reference: &crate::AssetReference) -> AssetResult<serde_json::Value> {
+    let entry = reference
+        .entry
+        .as_deref()
+        .map(str::trim)
+        .filter(|entry| !entry.is_empty())
+        .ok_or_else(|| AssetError::invalid_request("texture reference requires @entry selector"))?;
+    if let Some(hash) = entry.strip_prefix("hash:") {
+        let hash = hash.trim().parse::<u64>().map_err(|_| {
+            AssetError::invalid_request(format!(
+                "texture reference '{}' has invalid hash selector",
+                reference.canonical
+            ))
+        })?;
+        Ok(serde_json::json!({ "texture_hash": hash }))
+    } else {
+        Ok(serde_json::json!({ "texture_name": entry }))
     }
 }
 

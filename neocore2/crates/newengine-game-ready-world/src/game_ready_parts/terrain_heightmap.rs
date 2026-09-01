@@ -1,7 +1,5 @@
 use super::*;
 
-use newengine_assets_api::{texture_wire, textures_method, ENGINE_ASSETS_TEXTURES_SERVICE_ID};
-
 #[derive(Clone, Debug)]
 pub(super) struct TerrainHeightmapRuntime {
     pub(super) width: u32,
@@ -98,10 +96,8 @@ pub(super) fn load_terrain_heightmap(
     }
 
     newengine_ulog_api::ulog::info!(
-        "game-ready terrain heightmap: resolve begin source='{}' gateway='{}' method='{}' mode='{}' strength={} range=[{},{}] tile_scale=[{},{}] tile_offset=[{},{}] invert={} policy='load .ytd@entry through AssetManager texture runtime'",
+        "game-ready terrain heightmap: resolve begin source='{}' mode='{}' strength={} range=[{},{}] tile_scale=[{},{}] tile_offset=[{},{}] invert={} policy='engine.assets asset.decode_v1 + StarVault ytd format module'",
         heightmap.source,
-        ENGINE_ASSETS_TEXTURES_SERVICE_ID,
-        textures_method::ENTRY_RGBA8_V1,
         heightmap.mode,
         heightmap.strength,
         heightmap.min_height,
@@ -113,51 +109,25 @@ pub(super) fn load_terrain_heightmap(
         heightmap.invert,
     );
 
-    let request = serde_json::json!({ "texture_ref": heightmap.source });
-    let payload = match serde_json::to_vec(&request) {
-        Ok(payload) => payload,
-        Err(e) => {
+    let assets = AssetServiceClient::new(default_host_api());
+    let texture = match assets.textures_entry_rgba8_ref_v1_typed(&heightmap.source) {
+        Ok(texture) => texture,
+        Err(error) => {
             newengine_ulog_api::ulog::warn!(
-                "game-ready terrain heightmap: request encode failed source='{}' err='{}' action='continue_procedural'",
+                "game-ready terrain heightmap: texture decode failed source='{}' err='{}' policy='engine.assets asset.decode_v1' action='continue_procedural'",
                 heightmap.source,
-                e
-            );
-            return None;
-        }
-    };
-    let bytes = match call_service_v1_optional(
-        ENGINE_ASSETS_TEXTURES_SERVICE_ID,
-        textures_method::ENTRY_RGBA8_V1,
-        &payload,
-    ) {
-        Ok(Some(bytes)) => bytes,
-        Ok(None) => {
-            newengine_ulog_api::ulog::warn!(
-                "game-ready terrain heightmap: texture gateway absent gateway='{}' method='{}' source='{}' action='continue_procedural'",
-                ENGINE_ASSETS_TEXTURES_SERVICE_ID,
-                textures_method::ENTRY_RGBA8_V1,
-                heightmap.source
-            );
-            return None;
-        }
-        Err(e) => {
-            newengine_ulog_api::ulog::warn!(
-                "game-ready terrain heightmap: texture gateway failed gateway='{}' method='{}' source='{}' err='{}' action='continue_procedural'",
-                ENGINE_ASSETS_TEXTURES_SERVICE_ID,
-                textures_method::ENTRY_RGBA8_V1,
-                heightmap.source,
-                e
+                error
             );
             return None;
         }
     };
 
-    match decode_rgba8_height_samples(&bytes) {
+    match decode_rgba8_height_samples(texture.width, texture.height, &texture.rgba) {
         Ok((width, height, samples)) => {
             let revision_key = terrain_heightmap_revision_key(heightmap, width, height, &samples);
             let sample_count = samples.len();
             newengine_ulog_api::ulog::info!(
-                "game-ready terrain heightmap: resolved source='{}' size={}x{} samples={} revision_key={} mode='{}' strength={} range=[{},{}] tile_scale=[{},{}] tile_offset=[{},{}] invert={} policy='engine.assets.textures.entry_rgba8_v1'",
+                "game-ready terrain heightmap: resolved source='{}' size={}x{} samples={} revision_key={} mode='{}' strength={} range=[{},{}] tile_scale=[{},{}] tile_offset=[{},{}] invert={} policy='engine.assets.asset.decode_v1/ytd.entry_rgba8_v1'",
                 heightmap.source,
                 width,
                 height,
@@ -192,45 +162,24 @@ pub(super) fn load_terrain_heightmap(
     }
 }
 
-fn decode_rgba8_height_samples(bytes: &[u8]) -> Result<(u32, u32, Vec<f32>), String> {
-    if bytes.len() < texture_wire::HEADER_LEN {
-        return Err(format!(
-            "texture wire too small len={} expected_header={}",
-            bytes.len(),
-            texture_wire::HEADER_LEN
-        ));
-    }
-    if bytes.get(0..4) != Some(&texture_wire::MAGIC[..]) {
-        return Err("texture wire magic mismatch; expected NTRT".to_owned());
-    }
-    let version = read_u16(bytes, 4)?;
-    if version != texture_wire::VERSION_RGBA8_V1 {
-        return Err(format!(
-            "texture wire version={} expected RGBA8 v{}",
-            version,
-            texture_wire::VERSION_RGBA8_V1
-        ));
-    }
-    let width = read_u32(bytes, 8)?;
-    let height = read_u32(bytes, 12)?;
-    let rgba_len = read_u32(bytes, 16)? as usize;
+fn decode_rgba8_height_samples(
+    width: u32,
+    height: u32,
+    rgba: &[u8],
+) -> Result<(u32, u32, Vec<f32>), String> {
     let expected_len = (width as usize)
         .checked_mul(height as usize)
         .and_then(|pixels| pixels.checked_mul(4))
         .ok_or_else(|| "heightmap dimensions overflow".to_owned())?;
-    if rgba_len != expected_len {
+    if rgba.len() != expected_len {
         return Err(format!(
             "RGBA payload length mismatch got={} expected={} size={}x{}",
-            rgba_len, expected_len, width, height
+            rgba.len(),
+            expected_len,
+            width,
+            height
         ));
     }
-    let start = texture_wire::HEADER_LEN;
-    let end = start
-        .checked_add(rgba_len)
-        .ok_or_else(|| "RGBA payload range overflow".to_owned())?;
-    let rgba = bytes
-        .get(start..end)
-        .ok_or_else(|| "RGBA payload outside wire buffer".to_owned())?;
     let mut samples = Vec::with_capacity((width as usize).saturating_mul(height as usize));
     for px in rgba.as_chunks::<4>().0 {
         let luma =
@@ -239,20 +188,6 @@ fn decode_rgba8_height_samples(bytes: &[u8]) -> Result<(u32, u32, Vec<f32>), Str
         samples.push(luma.clamp(0.0, 1.0));
     }
     Ok((width, height, samples))
-}
-
-fn read_u16(bytes: &[u8], offset: usize) -> Result<u16, String> {
-    let slice = bytes
-        .get(offset..offset + 2)
-        .ok_or_else(|| format!("u16 read out of bounds offset={offset}"))?;
-    Ok(u16::from_le_bytes([slice[0], slice[1]]))
-}
-
-fn read_u32(bytes: &[u8], offset: usize) -> Result<u32, String> {
-    let slice = bytes
-        .get(offset..offset + 4)
-        .ok_or_else(|| format!("u32 read out of bounds offset={offset}"))?;
-    Ok(u32::from_le_bytes([slice[0], slice[1], slice[2], slice[3]]))
 }
 
 #[inline]

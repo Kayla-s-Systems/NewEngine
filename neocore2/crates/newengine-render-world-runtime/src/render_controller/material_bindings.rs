@@ -21,7 +21,14 @@ pub(super) enum MaterialTextureGpuResidency {
     CpuDecoding {
         requested_frame: u64,
     },
-    /// CPU payload was decoded and a GPU upload has been enqueued.
+    /// CPU payload is decoded and waiting in the renderer-owned priority upload queue.
+    /// CPU decode may run ahead of GPU residency; upload admission is independently bounded by
+    /// texture count and bytes per frame.
+    GpuQueued {
+        payload_bytes: usize,
+        requested_frame: u64,
+    },
+    /// GPU resource creation/upload was submitted and residency is being polled.
     GpuLoading {
         texture: TextureId,
         requested_frame: u64,

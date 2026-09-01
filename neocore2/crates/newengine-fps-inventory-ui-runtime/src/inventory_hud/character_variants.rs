@@ -257,6 +257,7 @@ pub fn assignment(variant: &FpsPlayableCharacterPolicy) -> Option<PlayerModelAss
             fall_medium_min_distance: variant.presentation.fall_medium_min_distance,
             fall_high_min_distance: variant.presentation.fall_high_min_distance,
             equipment_ready_sample_phase: variant.presentation.equipment_ready_sample_phase,
+            equipment_ready_sample_phases: std::collections::BTreeMap::new(),
             equipment_ready_rotation_weights: variant
                 .presentation
                 .equipment_ready_rotation_weights

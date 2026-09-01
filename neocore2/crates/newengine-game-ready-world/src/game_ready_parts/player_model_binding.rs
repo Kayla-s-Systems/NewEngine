@@ -1,6 +1,6 @@
 use super::*;
 
-use super::animation::{PlayerAnimationRuntimeBinding, prepare_player_animation_binding};
+use super::animation::{prepare_player_animation_binding, PlayerAnimationRuntimeBinding};
 use super::assets::ensure_player_runtime_model_parts;
 
 fn assignment_from_spec(
@@ -61,6 +61,7 @@ fn assignment_from_spec(
             fall_medium_min_distance: spec.fall_medium_min_distance,
             fall_high_min_distance: spec.fall_high_min_distance,
             equipment_ready_sample_phase: spec.equipment_ready_sample_phase,
+            equipment_ready_sample_phases: spec.equipment_ready_sample_phases.clone(),
             equipment_ready_rotation_weights: spec.equipment_ready_rotation_weights.clone(),
             equipment_aim_rotation_weights: spec.equipment_aim_rotation_weights.clone(),
             equipment_reload_rotation_weights: spec.equipment_reload_rotation_weights.clone(),
@@ -800,8 +801,8 @@ pub(crate) fn spawn_game_ready_player_model(
 mod grounding_tests {
     use super::*;
     use newengine_engine_runtime::gameplay::{
-        PlayerModelAssignment, PlayerModelBinding, PlayerStanceKind, apply_player_stance_geometry,
-        spawn_default_player,
+        apply_player_stance_geometry, spawn_default_player, PlayerModelAssignment,
+        PlayerModelBinding, PlayerStanceKind,
     };
 
     #[test]

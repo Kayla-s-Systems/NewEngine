@@ -12,7 +12,7 @@ mod tests {
         let frame_count = 2u32;
         let payload_len = 4 + 2 * LOCAL_POSE_STRIDE_V2;
         let mut out = Vec::new();
-        out.extend_from_slice(&YCD_BODY_SCHEMA_VERSION.to_le_bytes());
+        out.extend_from_slice(&YCD_BODY_SCHEMA_VERSION_V2.to_le_bytes());
         out.extend_from_slice(&1u32.to_le_bytes());
         for value in [
             table_offset as u64,
@@ -73,7 +73,7 @@ mod tests {
         let payload_offsets = [payload_floor, payload_floor + payload_len];
 
         let mut out = Vec::new();
-        out.extend_from_slice(&YCD_BODY_SCHEMA_VERSION.to_le_bytes());
+        out.extend_from_slice(&YCD_BODY_SCHEMA_VERSION_V2.to_le_bytes());
         out.extend_from_slice(&(clip_count as u32).to_le_bytes());
         for value in [
             table_offset as u64,
@@ -122,6 +122,67 @@ mod tests {
         let rotation_offset = walk_payload + 4 + 12;
         body[rotation_offset..rotation_offset + 16].fill(0);
         body
+    }
+
+    fn v3_event_body() -> Vec<u8> {
+        fn push_string(strings: &mut Vec<u8>, value: &str) -> u32 {
+            let offset = strings.len() as u32;
+            strings.extend_from_slice(value.as_bytes());
+            strings.push(0);
+            offset
+        }
+
+        let mut strings = Vec::new();
+        let name_offset = push_string(&mut strings, "reload");
+        let skeleton_offset = push_string(&mut strings, "skeleton.ymt@body");
+        let source_offset = push_string(&mut strings, "source.ycd");
+        let tag_offset = push_string(&mut strings, "weapon.ammo.commit");
+        let key_offset = push_string(&mut strings, "source");
+        let value_offset = push_string(&mut strings, "authored");
+
+        let table_offset = YCD_BODY_HEADER_LEN;
+        let string_offset = table_offset + YCD_CLIP_RECORD_LEN;
+        let payload_floor = string_offset + strings.len();
+        let payload_len = 4 + LOCAL_POSE_STRIDE_V2;
+        let event_table_offset = payload_floor + payload_len;
+        let parameter_table_offset = event_table_offset + YCD_EVENT_RECORD_LEN;
+
+        let mut out = Vec::new();
+        out.extend_from_slice(&YCD_BODY_SCHEMA_VERSION.to_le_bytes());
+        out.extend_from_slice(&1u32.to_le_bytes());
+        for value in [
+            table_offset as u64,
+            string_offset as u64,
+            strings.len() as u64,
+            payload_floor as u64,
+            event_table_offset as u64,
+        ] {
+            out.extend_from_slice(&value.to_le_bytes());
+        }
+        out.extend_from_slice(&1u64.to_le_bytes());
+        out.extend_from_slice(&name_offset.to_le_bytes());
+        out.extend_from_slice(&skeleton_offset.to_le_bytes());
+        out.extend_from_slice(&1u32.to_le_bytes());
+        out.extend_from_slice(&1u32.to_le_bytes());
+        out.extend_from_slice(&1.0f32.to_le_bytes());
+        out.extend_from_slice(&30.0f32.to_le_bytes());
+        out.extend_from_slice(&0u32.to_le_bytes());
+        out.extend_from_slice(&1u32.to_le_bytes());
+        out.extend_from_slice(&(payload_floor as u64).to_le_bytes());
+        out.extend_from_slice(&(payload_len as u64).to_le_bytes());
+        out.extend_from_slice(&(source_offset as u64).to_le_bytes());
+        out.extend_from_slice(&strings);
+        out.extend_from_slice(&42u32.to_le_bytes());
+        for value in [0.0f32, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0] {
+            out.extend_from_slice(&value.to_le_bytes());
+        }
+        out.extend_from_slice(&0.25f32.to_le_bytes());
+        out.extend_from_slice(&tag_offset.to_le_bytes());
+        out.extend_from_slice(&(parameter_table_offset as u32).to_le_bytes());
+        out.extend_from_slice(&1u32.to_le_bytes());
+        out.extend_from_slice(&key_offset.to_le_bytes());
+        out.extend_from_slice(&value_offset.to_le_bytes());
+        out
     }
 
     fn one_joint_skeleton() -> ModelSkeletonMetadata {
@@ -234,6 +295,22 @@ mod tests {
         assert_eq!(sampled[0].translation, [0.0, 0.0, 0.0]);
         assert!((sampled[1].translation[0] - 1.0).abs() < 1.0e-6);
         assert!((sampled[1].translation[1] - 1.0).abs() < 1.0e-6);
+    }
+
+    #[test]
+    fn ycd_v3_persists_authored_event_tracks_and_parameters() {
+        let body = v3_event_body();
+        let clip = decode_ycd_body(&body, Some("reload")).expect("decode v3 selected clip");
+        assert_eq!(clip.events.len(), 1);
+        assert_eq!(clip.events[0].time_seconds, 0.25);
+        assert_eq!(clip.events[0].tag, "weapon.ammo.commit");
+        assert_eq!(clip.events[0].parameters.len(), 1);
+        assert_eq!(clip.events[0].parameters[0].key, "source");
+        assert_eq!(clip.events[0].parameters[0].value, "authored");
+
+        let dictionary = decode_ycd_dictionary(&body).expect("decode v3 dictionary");
+        let dictionary_clip = dictionary.clip(Some("reload")).expect("v3 dictionary clip");
+        assert_eq!(dictionary_clip.events, clip.events);
     }
 
     #[test]

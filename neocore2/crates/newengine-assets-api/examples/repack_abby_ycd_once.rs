@@ -2,8 +2,8 @@ use std::{fs, io::Write, path::PathBuf};
 
 use flate2::{write::DeflateEncoder, Compression};
 use newengine_assets_api::{
-    decode_list_file_envelope, encode_list_file, ListFileEncodeRequest,
-    SourceDictionaryManifestV1, LIST_FILE_CONTENT_KIND_YCD,
+    decode_list_file_envelope, encode_list_file, ListFileEncodeRequest, SourceDictionaryManifestV1,
+    LIST_FILE_CONTENT_KIND_YCD,
 };
 
 fn main() -> Result<(), String> {
@@ -30,25 +30,29 @@ fn main() -> Result<(), String> {
         let source_dir = entry.path();
         let manifest_path = source_dir.join("dictionary.source.json");
         let manifest_bytes = fs::read(&manifest_path).map_err(|error| {
-            format!("read manifest '{}' failed: {error}", manifest_path.display())
+            format!(
+                "read manifest '{}' failed: {error}",
+                manifest_path.display()
+            )
         })?;
         let manifest: SourceDictionaryManifestV1 = serde_json::from_slice(&manifest_bytes)
             .map_err(|error| {
-                format!("parse manifest '{}' failed: {error}", manifest_path.display())
+                format!(
+                    "parse manifest '{}' failed: {error}",
+                    manifest_path.display()
+                )
             })?;
         if manifest.importer.trim() != "nef8.primary_body.v1" {
             return Err(format!(
                 "unexpected importer '{}' for '{}'",
-                manifest.importer,
-                manifest.logical_path
+                manifest.importer, manifest.logical_path
             ));
         }
         manifest.validate_for_runtime_path(&manifest.logical_path)?;
 
         let source_path = source_dir.join(&manifest.primary);
-        let body = fs::read(&source_path).map_err(|error| {
-            format!("read primary '{}' failed: {error}", source_path.display())
-        })?;
+        let body = fs::read(&source_path)
+            .map_err(|error| format!("read primary '{}' failed: {error}", source_path.display()))?;
         let schema_version = manifest
             .options
             .get("content_schema_version")
@@ -72,7 +76,9 @@ fn main() -> Result<(), String> {
         }
 
         let mut encoder = DeflateEncoder::new(Vec::new(), Compression::fast());
-        encoder.write_all(&body).map_err(|error| error.to_string())?;
+        encoder
+            .write_all(&body)
+            .map_err(|error| error.to_string())?;
         let stored = encoder.finish().map_err(|error| error.to_string())?;
         let rebuilt = encode_list_file(ListFileEncodeRequest {
             content_kind: LIST_FILE_CONTENT_KIND_YCD,

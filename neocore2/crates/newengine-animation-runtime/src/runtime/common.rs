@@ -1,7 +1,10 @@
-pub const YCD_BODY_SCHEMA_VERSION: u32 = 2;
+pub const YCD_BODY_SCHEMA_VERSION: u32 = 3;
+pub const YCD_BODY_SCHEMA_VERSION_V2: u32 = 2;
 pub const YCD_BODY_SCHEMA_VERSION_LEGACY: u32 = 1;
 pub const YCD_BODY_HEADER_LEN: usize = 48;
 pub const YCD_CLIP_RECORD_LEN: usize = 64;
+pub const YCD_EVENT_RECORD_LEN: usize = 16;
+pub const YCD_EVENT_PARAMETER_RECORD_LEN: usize = 8;
 pub const YCD_CLIP_FLAG_LOOP: u32 = 0x1;
 const LOCAL_POSE_STRIDE_V1: usize = 28;
 const LOCAL_POSE_STRIDE_V2: usize = 40;

@@ -96,7 +96,11 @@ fn collect_build_plan_aliases(
 ) {
     match value {
         serde_json::Value::Object(object) => {
-            let source = object.get("source").and_then(|value| value.as_str());
+            let source = object
+                .get("source_dictionary")
+                .or_else(|| object.get("source"))
+                .or_else(|| object.get("source_dir"))
+                .and_then(|value| value.as_str());
             let output = object.get("output").and_then(|value| value.as_str());
             if let (Some(source), Some(output)) = (source, output) {
                 let explicit_logical_path = object
@@ -275,7 +279,25 @@ pub fn mount_content_registry_best_effort(
                 mount.id,
                 mount.root.display()
             );
-            if mount.required {
+            let source_fallback_root = [
+                Some(mount.root.clone()),
+                mount.root.parent().map(Path::to_path_buf),
+            ]
+            .into_iter()
+            .flatten()
+            .find(|candidate| {
+                candidate.join(PROJECT_SOURCE_DIR).is_dir()
+                    && ProjectPaths::new(candidate.clone())
+                        .asset_build_plan_path()
+                        .is_file()
+            });
+            if let Some(project_root) = source_fallback_root {
+                diagnostics.push(format!(
+                    "FALLBACK: {message}; source_root='{}' policy={} action='compiled root unavailable; project Source remains eligible'",
+                    project_root.display(),
+                    newengine_assets::ASSET_RESOLUTION_POLICY_COMPILED_FIRST_SOURCE_FALLBACK_V1,
+                ));
+            } else if mount.required {
                 diagnostics.push(format!("ERROR: {message}"));
             } else {
                 diagnostics.push(format!("SKIP: {message}"));
@@ -424,7 +446,10 @@ mod tests {
         });
         let mut aliases = BTreeMap::new();
         collect_build_plan_aliases(&plan, &mut aliases, false);
-        assert_eq!(aliases.get("project/a").map(String::as_str), Some("Source/a.custom"));
+        assert_eq!(
+            aliases.get("project/a").map(String::as_str),
+            Some("Source/a.custom")
+        );
         assert!(!aliases.contains_key("b.ydd"));
         assert_eq!(aliases.len(), 1);
     }

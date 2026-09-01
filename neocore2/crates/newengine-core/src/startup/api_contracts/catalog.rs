@@ -70,11 +70,6 @@ pub(crate) const RUNTIME_SERVICE_CATALOG: &[RuntimeServiceCatalogEntry] = &[
     ),
     #[cfg(feature = "runtime-domain-contracts")]
     RuntimeServiceCatalogEntry::new(
-        newengine_assets_api::TEXTURES_RUNTIME_REQUIREMENT_SPEC,
-        "engine.assets.textures semantic .ytd dictionary API / runtime texture packets",
-    ),
-    #[cfg(feature = "runtime-domain-contracts")]
-    RuntimeServiceCatalogEntry::new(
         newengine_assets_api::DEFINITIONS_RUNTIME_REQUIREMENT_SPEC,
         "engine.assets.definitions semantic .ytyp Definition Entry metadata / dependency declarations",
     ),

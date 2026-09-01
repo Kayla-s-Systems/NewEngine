@@ -13,7 +13,9 @@ use newengine_engine_runtime::gameplay::{
     ItemId, ItemKind, ItemUseEffect, MeleeWeaponTuning, WeaponAnimationDefinition,
     WeaponAudioDefinition, WeaponCasingDefinition, WeaponComponentDefinition,
     WeaponComponentGraphDefinition, WeaponComponentModifiers, WeaponComponentPointDefinition,
-    WeaponFireMode, WeaponItemDefinition, WeaponPresentationDefinition, WeaponType,
+    WeaponFireMode, WeaponItemDefinition, WeaponPresentationDefinition, WeaponRecoilStateProfile,
+    WeaponRuntimeProfiles, WeaponSpreadDistribution, WeaponSpreadStateProfile, WeaponStatId,
+    WeaponStatModifier, WeaponStatModifierOp, WeaponStatModifierStack, WeaponType,
     WeaponVfxDefinition, WorldItemDefinition,
 };
 use newengine_primitives::builtins as primitive_builtins;
@@ -28,6 +30,8 @@ mod compile;
 mod nef8;
 #[path = "item_assets/types.rs"]
 mod types;
+#[path = "item_assets/weapon_profiles.rs"]
+mod weapon_profiles;
 #[path = "item_assets/ytyp.rs"]
 mod ytyp;
 #[path = "item_assets/ytyp_offline.rs"]
@@ -42,6 +46,12 @@ pub use nef8::{
 };
 pub use ytyp::hydrate_item_package_from_ytyp;
 pub use ytyp_offline::hydrate_item_package_from_ytyp_source_roots;
+
+pub use weapon_profiles::{
+    AuthoredWeaponAdsProfile, AuthoredWeaponHandlingProfile, AuthoredWeaponRecoilProfile,
+    AuthoredWeaponRecoilStateProfile, AuthoredWeaponRuntimeProfiles, AuthoredWeaponSpreadProfile,
+    AuthoredWeaponSpreadStateProfile, AuthoredWeaponStatModifier, AuthoredWeaponSwayProfile,
+};
 
 pub use types::{
     AuthoredAmmoDefinition, AuthoredItemDefinition, AuthoredItemPackage, AuthoredLoadoutDefinition,

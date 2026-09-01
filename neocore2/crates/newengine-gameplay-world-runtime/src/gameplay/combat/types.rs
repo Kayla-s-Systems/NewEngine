@@ -195,6 +195,190 @@ impl WeaponAccuracyModifiers {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum WeaponActionKind {
+    #[default]
+    Ready,
+    Firing,
+    Reloading,
+    Cycling,
+    Melee,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum WeaponReloadPhase {
+    #[default]
+    None,
+    Started,
+    MagazineDetached,
+    AmmoCommitted,
+    MagazineInserted,
+    Chambered,
+    Complete,
+}
+
+pub const WEAPON_RELOAD_MARKER_MAGAZINE_DETACHED: &str = "weapon.mag.detach";
+pub const WEAPON_RELOAD_MARKER_AMMO_COMMITTED: &str = "weapon.ammo.commit";
+pub const WEAPON_RELOAD_MARKER_MAGAZINE_INSERTED: &str = "weapon.mag.insert";
+pub const WEAPON_RELOAD_MARKER_CHAMBERED: &str = "weapon.chamber";
+pub const WEAPON_RELOAD_MARKER_COMPLETE: &str = "weapon.reload.complete";
+pub const WEAPON_RELOAD_ANIMATION_REQUIRED_MARKER_MASK: u8 = 0b1_1111;
+
+impl WeaponReloadPhase {
+    #[inline]
+    pub const fn marker_bit(self) -> u8 {
+        match self {
+            Self::MagazineDetached => 1 << 0,
+            Self::AmmoCommitted => 1 << 1,
+            Self::MagazineInserted => 1 << 2,
+            Self::Chambered => 1 << 3,
+            Self::Complete => 1 << 4,
+            Self::None | Self::Started => 0,
+        }
+    }
+
+    #[inline]
+    pub const fn animation_marker_tag(self) -> Option<&'static str> {
+        match self {
+            Self::MagazineDetached => Some(WEAPON_RELOAD_MARKER_MAGAZINE_DETACHED),
+            Self::AmmoCommitted => Some(WEAPON_RELOAD_MARKER_AMMO_COMMITTED),
+            Self::MagazineInserted => Some(WEAPON_RELOAD_MARKER_MAGAZINE_INSERTED),
+            Self::Chambered => Some(WEAPON_RELOAD_MARKER_CHAMBERED),
+            Self::Complete => Some(WEAPON_RELOAD_MARKER_COMPLETE),
+            Self::None | Self::Started => None,
+        }
+    }
+
+    pub fn from_animation_marker_tag(tag: &str) -> Option<Self> {
+        match tag.trim().to_ascii_lowercase().as_str() {
+            WEAPON_RELOAD_MARKER_MAGAZINE_DETACHED => Some(Self::MagazineDetached),
+            WEAPON_RELOAD_MARKER_AMMO_COMMITTED => Some(Self::AmmoCommitted),
+            WEAPON_RELOAD_MARKER_MAGAZINE_INSERTED => Some(Self::MagazineInserted),
+            WEAPON_RELOAD_MARKER_CHAMBERED => Some(Self::Chambered),
+            WEAPON_RELOAD_MARKER_COMPLETE => Some(Self::Complete),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum WeaponActionTimingSource {
+    #[default]
+    TimelineFallback,
+    AnimationMarkers,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct WeaponReloadAnimationAuthority {
+    pub weapon_instance_id: ItemInstanceId,
+    pub clip_duration_seconds: f32,
+    pub marker_mask: u8,
+}
+
+impl WeaponReloadAnimationAuthority {
+    #[inline]
+    pub fn is_complete(self) -> bool {
+        self.clip_duration_seconds.is_finite()
+            && self.clip_duration_seconds > 1.0e-4
+            && self.marker_mask & WEAPON_RELOAD_ANIMATION_REQUIRED_MARKER_MASK
+                == WEAPON_RELOAD_ANIMATION_REQUIRED_MARKER_MASK
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct WeaponReloadAnimationMarker {
+    pub weapon_instance_id: ItemInstanceId,
+    pub phase: WeaponReloadPhase,
+    pub clip_time_seconds: f32,
+    pub playback_time_seconds: f32,
+    pub loop_index: u64,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct WeaponReloadAnimationMarkerInbox {
+    pub markers: Vec<WeaponReloadAnimationMarker>,
+}
+
+impl WeaponReloadAnimationMarkerInbox {
+    pub const MAX_RETAINED_MARKERS: usize = 64;
+
+    pub fn push(&mut self, marker: WeaponReloadAnimationMarker) {
+        if self.markers.len() >= Self::MAX_RETAINED_MARKERS {
+            let overflow = self.markers.len() + 1 - Self::MAX_RETAINED_MARKERS;
+            self.markers.drain(0..overflow);
+        }
+        self.markers.push(marker);
+    }
+
+    pub fn drain_for_instance(
+        &mut self,
+        weapon_instance_id: ItemInstanceId,
+    ) -> Vec<WeaponReloadAnimationMarker> {
+        let mut matched = Vec::new();
+        self.markers.retain(|marker| {
+            if marker.weapon_instance_id == weapon_instance_id {
+                matched.push(*marker);
+                false
+            } else {
+                true
+            }
+        });
+        matched
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct WeaponActionRuntime {
+    pub weapon_instance_id: ItemInstanceId,
+    pub action: WeaponActionKind,
+    pub reload_phase: WeaponReloadPhase,
+    pub timing_source: WeaponActionTimingSource,
+    pub elapsed_seconds: f32,
+    pub duration_seconds: f32,
+    pub phase_mask: u8,
+}
+
+impl WeaponActionRuntime {
+    #[inline]
+    pub fn ready(weapon_instance_id: ItemInstanceId) -> Self {
+        Self {
+            weapon_instance_id,
+            action: WeaponActionKind::Ready,
+            reload_phase: WeaponReloadPhase::None,
+            timing_source: WeaponActionTimingSource::TimelineFallback,
+            elapsed_seconds: 0.0,
+            duration_seconds: 0.0,
+            phase_mask: 0,
+        }
+    }
+
+    #[inline]
+    pub fn begin_reload(
+        weapon_instance_id: ItemInstanceId,
+        duration_seconds: f32,
+        timing_source: WeaponActionTimingSource,
+    ) -> Self {
+        Self {
+            weapon_instance_id,
+            action: WeaponActionKind::Reloading,
+            reload_phase: WeaponReloadPhase::Started,
+            timing_source,
+            elapsed_seconds: 0.0,
+            duration_seconds: duration_seconds.max(0.0),
+            phase_mask: 0,
+        }
+    }
+
+    #[inline]
+    pub fn progress(self) -> f32 {
+        if self.duration_seconds <= 1.0e-6 {
+            1.0
+        } else {
+            (self.elapsed_seconds / self.duration_seconds).clamp(0.0, 1.0)
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PlayerWeaponState {
     pub ammo_in_magazine: u32,
@@ -348,6 +532,10 @@ pub enum WeaponEventKind {
     MeleeAttacked,
     Empty,
     ReloadStarted,
+    ReloadMagazineDetached,
+    ReloadAmmoCommitted,
+    ReloadMagazineInserted,
+    ReloadChambered,
     ReloadCompleted,
     Hit,
 }

@@ -118,6 +118,45 @@ pub(super) fn melee_origin_and_direction(
     (direction.length_squared() > 1.0e-8 && tuning.range > 0.0).then_some((origin, direction))
 }
 
+#[inline]
+fn spread_distribution_offset(
+    distribution: WeaponSpreadDistribution,
+    shot_sequence: u64,
+) -> (f32, f32) {
+    let x = signed_unit(shot_sequence ^ 0x9e37_79b9);
+    let y = signed_unit(shot_sequence ^ 0x7f4a_7c15);
+    match distribution {
+        WeaponSpreadDistribution::Rectangular => (x, y),
+        WeaponSpreadDistribution::Circular => {
+            let u = ((x + 1.0) * 0.5).clamp(0.0, 1.0);
+            let v = ((y + 1.0) * 0.5).clamp(0.0, 1.0);
+            let radius = u.sqrt();
+            let angle = v * core::f32::consts::TAU;
+            (radius * angle.cos(), radius * angle.sin())
+        }
+        WeaponSpreadDistribution::Gaussian => {
+            let u1 = (((x + 1.0) * 0.5).clamp(1.0e-6, 1.0)).max(1.0e-6);
+            let u2 = ((y + 1.0) * 0.5).clamp(0.0, 1.0);
+            let radius = (-2.0 * u1.ln()).sqrt().min(2.5) / 2.5;
+            let angle = core::f32::consts::TAU * u2;
+            (radius * angle.cos(), radius * angle.sin())
+        }
+        WeaponSpreadDistribution::EvenJitter => {
+            // Low-discrepancy 4x4 sequence with a small deterministic jitter. This is useful for
+            // pellet weapons where unconstrained random clustering produces noisy authoring.
+            let cell = (shot_sequence & 15) as u32;
+            let cx = (cell & 3) as f32;
+            let cy = (cell >> 2) as f32;
+            let jitter_x = x * 0.12;
+            let jitter_y = y * 0.12;
+            (
+                ((cx + 0.5) / 4.0) * 2.0 - 1.0 + jitter_x,
+                ((cy + 0.5) / 4.0) * 2.0 - 1.0 + jitter_y,
+            )
+        }
+    }
+}
+
 pub(super) fn shot_origin_and_direction(
     world: &World,
     player: EntityId,
@@ -125,6 +164,25 @@ pub(super) fn shot_origin_and_direction(
     aiming: bool,
     shot_sequence: u64,
 ) -> Option<(Vec3, Vec3)> {
+    shot_origin_and_direction_with_profiles(
+        world,
+        player,
+        tuning,
+        WeaponRuntimeProfiles::from_legacy_tuning(tuning),
+        aiming,
+        shot_sequence,
+    )
+}
+
+pub(super) fn shot_origin_and_direction_with_profiles(
+    world: &World,
+    player: EntityId,
+    tuning: HitscanWeaponTuning,
+    profiles: WeaponRuntimeProfiles,
+    aiming: bool,
+    shot_sequence: u64,
+) -> Option<(Vec3, Vec3)> {
+    let profiles = profiles.sanitized();
     let (player_position, view_rotation) = player_view_pose(world, player)?;
     let eye_height = match world.get::<PlayerStanceState>(player) {
         Some(stance) => stance.current_eye_height,
@@ -195,22 +253,23 @@ pub(super) fn shot_origin_and_direction(
         }
     };
 
-    let base_spread = if aiming {
-        tuning.aim_spread_radians
+    let spread_state = if aiming {
+        profiles.spread.ads
     } else {
-        tuning.hip_spread_radians
-    };
+        profiles.spread.hip
+    }
+    .sanitized();
     let horizontal_speed = world
         .get::<Velocity>(player)
         .map(|velocity| Vec3::new(velocity.0.x, 0.0, velocity.0.z).length())
         .unwrap_or(0.0);
     let movement_alpha = (horizontal_speed / 4.5).clamp(0.0, 1.0);
-    let movement_multiplier = 1.0 + (tuning.movement_spread_multiplier - 1.0) * movement_alpha;
+    let movement_multiplier = 1.0 + (profiles.spread.movement_multiplier - 1.0) * movement_alpha;
     let stance_multiplier = world
         .get::<PlayerStanceState>(player)
         .map(|stance| match stance.current {
             PlayerStanceKind::Standing => 1.0,
-            PlayerStanceKind::Crouched => tuning.crouch_spread_multiplier,
+            PlayerStanceKind::Crouched => profiles.spread.crouch_multiplier,
         })
         .unwrap_or(1.0);
     let authored_modifiers = world
@@ -218,7 +277,7 @@ pub(super) fn shot_origin_and_direction(
         .copied()
         .unwrap_or_default()
         .combined()
-        * active_equipped_weapon_component_modifiers(world, player).accuracy_multiplier;
+        * resolved_weapon_stats(world, player).spread_multiplier;
     let bloom = world
         .get::<WeaponAccuracyState>(player)
         .filter(|state| {
@@ -228,12 +287,27 @@ pub(super) fn shot_origin_and_direction(
         })
         .map(|state| state.bloom_radians)
         .unwrap_or(0.0);
-    let spread = (base_spread * movement_multiplier * stance_multiplier * authored_modifiers
+    let spread_x = (spread_state.default_radians[0]
+        * movement_multiplier
+        * stance_multiplier
+        * authored_modifiers
         + bloom)
-        .clamp(0.0, core::f32::consts::FRAC_PI_2 - 0.001);
-    let spread_scale = spread.tan();
-    let offset_x = signed_unit(shot_sequence ^ 0x9e37_79b9) * spread_scale;
-    let offset_y = signed_unit(shot_sequence ^ 0x7f4a_7c15) * spread_scale;
+        .clamp(
+            spread_state.minimum_radians[0],
+            spread_state.maximum_radians[0],
+        );
+    let spread_y = (spread_state.default_radians[1]
+        * movement_multiplier
+        * stance_multiplier
+        * authored_modifiers
+        + bloom)
+        .clamp(
+            spread_state.minimum_radians[1],
+            spread_state.maximum_radians[1],
+        );
+    let (unit_x, unit_y) = spread_distribution_offset(profiles.spread.distribution, shot_sequence);
+    let offset_x = unit_x * spread_x.tan();
+    let offset_y = unit_y * spread_y.tan();
     let direction = (forward + right * offset_x + up * offset_y).normalize_or_zero();
     Some((muzzle_origin, direction))
 }

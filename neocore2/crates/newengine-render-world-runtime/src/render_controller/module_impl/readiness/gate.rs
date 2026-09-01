@@ -9,6 +9,7 @@ use newengine_gameplay_world_runtime::gameplay::{
     WorldAssemblyProgress,
 };
 
+use super::super::super::material_bindings::MaterialTextureGpuResidency;
 use super::super::RuntimeRenderController;
 use super::materials::{cached_scene_material_launch_plan, SceneMaterialLaunchPlan};
 use super::residency::critical_scene_residency_ready;
@@ -86,6 +87,20 @@ pub(in crate::render_controller::module_impl) fn prepare_scene_launch_resources(
 ) -> SceneMaterialLaunchPlan {
     let plan = cached_scene_material_launch_plan(world, materials);
     for path in &plan.critical_paths {
+        if plan.launch_required_paths.contains(path) && plan.visible_world_paths.contains(path) {
+            this.prioritize_material_texture(path);
+        } else if plan.launch_required_paths.contains(path)
+            || plan.fallback_forbidden_paths.contains(path)
+        {
+            this.prioritize_player_weapon_texture(path);
+        } else {
+            this.request_material_texture_with_priority(
+                path,
+                super::super::super::state::MaterialTexturePriority::streaming_visible(),
+            );
+        }
+    }
+    for path in &plan.optional_paths {
         this.request_material_texture(path);
     }
     plan
@@ -117,6 +132,21 @@ pub(in crate::render_controller::module_impl) fn update_world_activation_gate_wi
         Some(material_plan),
         frame_index,
     )
+}
+
+fn launch_required_texture_pending(
+    this: &RuntimeRenderController,
+    material_plan: Option<&SceneMaterialLaunchPlan>,
+) -> bool {
+    let Some(plan) = material_plan else {
+        return false;
+    };
+    plan.launch_required_paths.iter().any(|path| {
+        !matches!(
+            this.gpu.material.textures.get(path),
+            Some(MaterialTextureGpuResidency::Ready { .. })
+        )
+    })
 }
 
 fn update_world_activation_gate_impl(
@@ -154,14 +184,19 @@ fn update_world_activation_gate_impl(
             .map(|progress| !progress.is_ready() || progress.registered < static_collision_total)
             .unwrap_or(true);
     let player_visual = required_player_visual_readiness(world);
-    let launch_critical_pending =
-        authored_world_pending || physics_collision_pending || player_visual.pending;
+    let launch_required_texture_pending = launch_required_texture_pending(this, material_plan);
+    let launch_critical_pending = authored_world_pending
+        || physics_collision_pending
+        || player_visual.pending
+        || launch_required_texture_pending;
     let critical_reason = if player_visual.pending {
         Some(player_visual.reason.as_str())
     } else if authored_world_pending {
         Some("waiting for authored world assembly")
     } else if physics_collision_pending {
         Some("waiting for authored static collision residency")
+    } else if launch_required_texture_pending {
+        Some("waiting for launch-critical texture working set")
     } else {
         None
     };

@@ -2,7 +2,10 @@ fn load_animation_clip(reference: &str) -> Result<std::sync::Arc<AnimationClip>,
     let parsed = AnimationClipReference::parse(reference)?;
     let assets = AssetServiceClient::new(newengine_plugin_host::default_host_api());
     let descriptor = assets.resolve_file_type_v1(&parsed.logical_path)?;
-    if !descriptor.semantic_gateway.eq_ignore_ascii_case("engine.animation") {
+    if !descriptor
+        .semantic_gateway
+        .eq_ignore_ascii_case("engine.animation")
+    {
         return Err(format!(
             "player animation ref='{reference}' resolves to format module='{}' gateway='{}', expected engine.animation",
             descriptor.module_id, descriptor.semantic_gateway
@@ -323,6 +326,7 @@ pub(super) fn prepare_player_animation_binding(
             skeleton,
             &animation_runtime,
         )?,
+        ready_sample_phase: None,
     };
     // Family ids are authored data, not an engine enum. Discover every
     // `equipment.<family>.<ready|aim|reload>` capability. Classified families are isolated:
@@ -350,6 +354,13 @@ pub(super) fn prepare_player_animation_binding(
         // A classified weapon never inherits another class's generic pose. Missing authored
         // stances remain absent and fail closed; generic slots exist only for unclassified legacy items.
         let mut set = EquipmentPoseSet::default();
+        set.ready_sample_phase = assignment
+            .presentation
+            .equipment_ready_sample_phases
+            .get(&family)
+            .copied()
+            .filter(|phase| phase.is_finite())
+            .map(|phase| phase.clamp(0.0, 1.0));
         for stance in ["ready", "aim", "reload"] {
             let slot = format!("equipment.{family}.{stance}");
             let Some(reference) = assignment.animation_for_slot(&slot) else {

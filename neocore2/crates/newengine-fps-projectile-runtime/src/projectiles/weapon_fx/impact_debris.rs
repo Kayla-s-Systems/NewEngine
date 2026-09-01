@@ -14,7 +14,6 @@ struct BulletImpactDebrisProfile {
     friction: f32,
     restitution: f32,
     density: f32,
-    angular_speed: f32,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -65,7 +64,6 @@ fn impact_debris_profile(kind: PersistentImpactDebrisKind) -> BulletImpactDebris
             friction: 0.78,
             restitution: 0.16,
             density: 1.65,
-            angular_speed: 13.0,
         },
         PersistentImpactDebrisKind::Metal => BulletImpactDebrisProfile {
             kind,
@@ -77,7 +75,6 @@ fn impact_debris_profile(kind: PersistentImpactDebrisKind) -> BulletImpactDebris
             friction: 0.48,
             restitution: 0.34,
             density: 3.2,
-            angular_speed: 20.0,
         },
         PersistentImpactDebrisKind::Wood => BulletImpactDebrisProfile {
             kind,
@@ -89,7 +86,6 @@ fn impact_debris_profile(kind: PersistentImpactDebrisKind) -> BulletImpactDebris
             friction: 0.70,
             restitution: 0.12,
             density: 0.48,
-            angular_speed: 16.0,
         },
         PersistentImpactDebrisKind::Glass => BulletImpactDebrisProfile {
             kind,
@@ -101,7 +97,6 @@ fn impact_debris_profile(kind: PersistentImpactDebrisKind) -> BulletImpactDebris
             friction: 0.36,
             restitution: 0.26,
             density: 0.62,
-            angular_speed: 22.0,
         },
     }
 }
@@ -248,21 +243,10 @@ fn spawn_persistent_impact_debris(
         body.flags.continuous_collision = true;
         let _ = world.insert(entity, body);
         let _ = world.insert(entity, body.to_bounds());
+        // The bullet-contact impulse owns the initial translation. Deliberately do not author
+        // AngularVelocity or advance rotation in presentation code: the shard is a normal dynamic
+        // rigid body, so any later angular motion may only come from the physics solver's contacts.
         let _ = world.insert(entity, Velocity(direction * speed));
-        let angular_axis = Vec3::new(
-            signed_impact_noise(owner, shot_sequence, shard_index, 5),
-            signed_impact_noise(owner, shot_sequence, shard_index, 6),
-            signed_impact_noise(owner, shot_sequence, shard_index, 7),
-        )
-        .normalize_or_zero();
-        let angular_axis = if angular_axis.length_squared() > 1.0e-8 {
-            angular_axis
-        } else {
-            Vec3::Y
-        };
-        let angular_speed = profile.angular_speed
-            * (0.55 + impact_noise01(owner, shot_sequence, shard_index, 8) * 0.9);
-        let _ = world.insert(entity, AngularVelocity(angular_axis * angular_speed));
         let _ = world.insert(
             entity,
             PersistentImpactDebris::new(

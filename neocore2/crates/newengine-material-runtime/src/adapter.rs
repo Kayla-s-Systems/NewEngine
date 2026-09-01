@@ -1,15 +1,13 @@
 use std::sync::{Arc, Mutex};
 
 use newengine_assets::{AssetDecodeRequest, AssetServiceClient};
-use newengine_assets_api::{
-    textures_method, ASSET_LIST_FILE_BODY_OUTPUT, ENGINE_ASSETS_TEXTURES_SERVICE_ID,
-};
+use newengine_assets_api::{ASSET_LIST_FILE_BODY_OUTPUT, ENGINE_ASSETS_TEXTURES_SERVICE_ID};
 use newengine_materials::{
     MaterialDescriptorLoadResponse, MaterialLoadRequest, MaterialLoadResponse,
     MaterialTextureRefInfo, MaterialTextureRefRequest, MaterialValidationRequest,
     MaterialValidationResult, RenderMaterialPacket, ResolvedMaterialGraph,
 };
-use newengine_plugin_api::{Blob, HostApiV1, MethodName};
+use newengine_plugin_api::HostApiV1;
 
 use crate::{
     cache::MaterialRuntimeCaches, collect_texture_refs, decode_material_entry_payload,
@@ -20,7 +18,6 @@ use crate::{
 #[derive(Clone)]
 pub struct MaterialAssetGatewayAdapter {
     client: AssetServiceClient,
-    host: Option<HostApiV1>,
     caches: Arc<Mutex<MaterialRuntimeCaches>>,
 }
 
@@ -29,16 +26,14 @@ impl MaterialAssetGatewayAdapter {
     pub fn with_client(client: AssetServiceClient) -> Self {
         Self {
             client,
-            host: None,
             caches: Arc::new(Mutex::new(MaterialRuntimeCaches::default())),
         }
     }
 
     #[inline]
-    pub fn with_client_and_host(client: AssetServiceClient, host: HostApiV1) -> Self {
+    pub fn with_client_and_host(client: AssetServiceClient, _host: HostApiV1) -> Self {
         Self {
             client,
-            host: Some(host),
             caches: Arc::new(Mutex::new(MaterialRuntimeCaches::default())),
         }
     }
@@ -142,68 +137,30 @@ impl MaterialAssetGatewayAdapter {
             }
         }
 
-        let request = serde_json::json!({ "texture_ref": info.canonical });
-        let payload = match serde_json::to_vec(&request) {
-            Ok(payload) => payload,
-            Err(e) => {
+        match self.client.require_semantic_asset_reference_v1(
+            &info.canonical,
+            ENGINE_ASSETS_TEXTURES_SERVICE_ID,
+            true,
+        ) {
+            Ok((reference, descriptor)) => {
+                info.canonical = reference.canonical;
+                info.warnings.push(format!(
+                    "validated_by=starvault_format_descriptor module={} kind={}",
+                    descriptor.module_id, descriptor.asset_kind
+                ));
+                if let Ok(mut caches) = self.caches.lock() {
+                    caches
+                        .texture_refs
+                        .insert(info.canonical.clone(), info.clone());
+                }
+            }
+            Err(error) => {
                 info.valid = false;
                 info.errors.push(format!(
-                    "engine.assets.textures validation payload encode failed: {e}"
+                    "registered texture format validation failed for '{}': {}",
+                    info.canonical, error
                 ));
-                return info;
             }
-        };
-        let Some(host) = self.host.clone() else {
-            info.valid = false;
-            info.errors.push(format!(
-                "engine.assets.textures validation requires a HostApiV1 supplied by the runtime gateway registry for '{}'",
-                info.canonical
-            ));
-            return info;
-        };
-        let result = (host.call_service_v1)(
-            abi_stable::std_types::RString::from(ENGINE_ASSETS_TEXTURES_SERVICE_ID),
-            MethodName::from(textures_method::VALIDATE_REF_V1),
-            Blob::from(payload),
-        );
-        let bytes = match result.into_result() {
-            Ok(bytes) => bytes.into_vec(),
-            Err(e) => {
-                info.valid = false;
-                info.errors.push(format!(
-                    "engine.assets.textures validation unavailable for '{}': {}",
-                    info.canonical, e
-                ));
-                return info;
-            }
-        };
-        let value = match serde_json::from_slice::<serde_json::Value>(&bytes) {
-            Ok(value) => value,
-            Err(e) => {
-                info.valid = false;
-                info.errors.push(format!(
-                    "engine.assets.textures validation returned non-json for '{}': {}",
-                    info.canonical, e
-                ));
-                return info;
-            }
-        };
-        if value.get("ok").and_then(|v| v.as_bool()).unwrap_or(false) {
-            info.warnings
-                .push("validated_by=engine.assets.textures".to_owned());
-            if let Ok(mut caches) = self.caches.lock() {
-                caches
-                    .texture_refs
-                    .insert(info.canonical.clone(), info.clone());
-            }
-        } else {
-            info.valid = false;
-            let message = value
-                .get("message")
-                .or_else(|| value.get("diagnostic"))
-                .and_then(|v| v.as_str())
-                .unwrap_or("engine.assets.textures rejected texture ref");
-            info.errors.push(message.to_owned());
         }
         info
     }

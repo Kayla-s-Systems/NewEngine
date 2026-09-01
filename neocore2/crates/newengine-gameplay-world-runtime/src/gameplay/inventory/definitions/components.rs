@@ -71,6 +71,9 @@ pub struct WeaponComponentDefinition {
     pub audio_override: Option<String>,
     pub muzzle_vfx_override: Option<String>,
     pub tracer_vfx_override: Option<String>,
+    /// Open-ended stat graph contributions. This supplements the compatibility typed modifiers
+    /// and lets authored attachments affect newly registered weapon stats without schema growth.
+    pub stat_modifiers: WeaponStatModifierStack,
     pub modifiers: WeaponComponentModifiers,
 }
 
@@ -87,6 +90,7 @@ impl WeaponComponentDefinition {
         self.audio_override = clean(self.audio_override);
         self.muzzle_vfx_override = clean(self.muzzle_vfx_override);
         self.tracer_vfx_override = clean(self.tracer_vfx_override);
+        self.stat_modifiers = self.stat_modifiers.sanitized();
         self.modifiers = self.modifiers.sanitized();
         self
     }

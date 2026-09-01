@@ -5,7 +5,10 @@ fn load_ytyp_semantic_body(
     source: &str,
 ) -> Result<(Vec<u8>, Vec<String>), String> {
     match state.client.raw_bytes_v1(source) {
-        Ok(body) if body.get(0..4) != Some(&newengine_assets_api::LIST_FILE_MAGIC_NEF8[..]) => {
+        Ok(body)
+            if authored_xml::body_is_xml(&body)
+                || serde_json::from_slice::<serde_json::Value>(&body).is_ok() =>
+        {
             Ok((
                 body,
                 vec![
@@ -13,24 +16,24 @@ fn load_ytyp_semantic_body(
                 ],
             ))
         }
-        Ok(_nef8_envelope) => {
+        Ok(_encoded_container) => {
             let request = AssetDecodeRequest {
                 logical_path: source.to_owned(),
                 output_kind: ASSET_LIST_FILE_BODY_OUTPUT.to_owned(),
                 selector: serde_json::Value::Null,
-                            format_descriptor: None,
-};
+                format_descriptor: None,
+            };
             state
                 .client
                 .decode_v1(&request)
                 .map(|body| {
                     (
                         body,
-                        vec![".ytyp NEF8 ListFile body decoded through engine.assets".to_owned()],
+                        vec![".ytyp encoded/source-dictionary body decoded through engine.assets".to_owned()],
                     )
                 })
                 .map_err(|decode_error| {
-                    format!("engine.assets.definitions: .ytyp NEF8 source requires asset.decode_v1 source='{source}' err='{decode_error}'")
+                    format!("engine.assets.definitions: encoded .ytyp source requires asset.decode_v1 source='{source}' err='{decode_error}'")
                 })
         }
         Err(read_error) => {
@@ -38,8 +41,8 @@ fn load_ytyp_semantic_body(
                 logical_path: source.to_owned(),
                 output_kind: ASSET_LIST_FILE_BODY_OUTPUT.to_owned(),
                 selector: serde_json::Value::Null,
-                            format_descriptor: None,
-};
+                format_descriptor: None,
+            };
             state
                 .client
                 .decode_v1(&request)

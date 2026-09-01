@@ -17,8 +17,8 @@ use newengine_assets_api::{
     maps_method, require_asset_reference_extension, AssetDecodeRequest, MapCellRequestV1,
     MapDependenciesV1, MapIndexV1, MapRefRequestV1, MapResolvedCellV1, MapResolvedCellV2,
     MapValidationV1, ASSET_LIST_FILE_BODY_OUTPUT, ENGINE_ASSETS_MAPS_SERVICE_ID,
-    ENGINE_ASSET_SERVICE_ID, LIST_FILE_MAGIC_NEF8, MAPS_BACKEND_CAPABILITY_ID,
-    MAPS_RUNTIME_CONTRACT, MAPS_SERVICE_ID, MAPS_SERVICE_METHODS, MAP_INDEX_ENTRY,
+    ENGINE_ASSET_SERVICE_ID, MAPS_BACKEND_CAPABILITY_ID, MAPS_RUNTIME_CONTRACT, MAPS_SERVICE_ID,
+    MAPS_SERVICE_METHODS, MAP_INDEX_ENTRY,
 };
 use newengine_plugin_api::Blob;
 use newengine_service_kit::{
@@ -94,14 +94,14 @@ fn canonical_map_source(request: &MapRefRequestV1) -> Result<(String, String), S
 
 fn load_map_body(state: &MapsRuntimeState, source: &str) -> Result<(Vec<u8>, Vec<String>), String> {
     match state.client.raw_bytes_v1(source) {
-        Ok(body) if body.get(0..4) != Some(&LIST_FILE_MAGIC_NEF8[..]) => Ok((
+        Ok(body) if newengine_authored_xml::body_is_xml(&body) => Ok((
             body,
-            vec![".ymap loose authoring body read through engine.assets raw_bytes_v1".to_owned()],
+            vec![".ymap loose XML authoring body read through engine.assets raw_bytes_v1".to_owned()],
         )),
-        Ok(_nef8) => decode_map_body(state, source).map(|body| {
+        Ok(_encoded_or_source_dictionary) => decode_map_body(state, source).map(|body| {
             (
                 body,
-                vec![".ymap NEF8 ListFile body decoded through engine.assets".to_owned()],
+                vec![".ymap encoded/source body decoded through engine.assets".to_owned()],
             )
         }),
         Err(read_error) => decode_map_body(state, source)

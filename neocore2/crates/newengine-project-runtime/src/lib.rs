@@ -24,9 +24,9 @@ use std::path::{Path, PathBuf};
 
 use newengine_project_api::{
     resolve_project_manifest_request, ContentMountRegistry, ProjectManifest, ProjectScriptRegistry,
-    ResolvedProjectLaunch,
-    RuntimeLaunchProfile, GAME_MANIFEST_ENV, GAME_ROOT_ENV, PROJECT_LAUNCH_PRESET_ENV,
-    PROJECT_MANIFEST_ENV, PROJECT_MANIFEST_FILE, PROJECT_REQUEST_ENV, PROJECT_ROOT_ENV,
+    ResolvedProjectLaunch, RuntimeLaunchProfile, GAME_MANIFEST_ENV, GAME_ROOT_ENV,
+    PROJECT_LAUNCH_PRESET_ENV, PROJECT_MANIFEST_ENV, PROJECT_MANIFEST_FILE, PROJECT_REQUEST_ENV,
+    PROJECT_ROOT_ENV,
 };
 
 #[derive(Clone, Debug)]
@@ -87,10 +87,7 @@ impl RuntimeCompositionContext {
     }
 }
 
-fn path_request_from_args(
-    args: &[std::ffi::OsString],
-    flags: &[&str],
-) -> Option<PathBuf> {
+fn path_request_from_args(args: &[std::ffi::OsString], flags: &[&str]) -> Option<PathBuf> {
     let mut args = args.iter();
     while let Some(arg) = args.next() {
         if flags
@@ -140,8 +137,7 @@ fn project_request_from_sources(
     path_request_from_args(args, &["--project"])
         .or_else(|| environment_path(environment_var_os, PROJECT_MANIFEST_ENV))
         .or_else(|| {
-            environment_path(environment_var_os, PROJECT_ROOT_ENV)
-                .map(manifest_request_from_root)
+            environment_path(environment_var_os, PROJECT_ROOT_ENV).map(manifest_request_from_root)
         })
         .or_else(|| environment_path(environment_var_os, PROJECT_REQUEST_ENV))
 }
@@ -237,8 +233,7 @@ pub fn load_project_from_request_with_launch(
 ) -> Result<ProjectRuntimeContext, String> {
     let working_dir = std::env::current_dir()
         .map_err(|error| format!("resolve project request base directory: {error}"))?;
-    let manifest_path =
-        resolve_project_manifest_request(request.to_path_buf(), &working_dir);
+    let manifest_path = resolve_project_manifest_request(request.to_path_buf(), &working_dir);
     let project_paths = ProjectPaths::from_manifest_path(&manifest_path);
     let project_root = project_paths.root().to_path_buf();
     let source = std::fs::read_to_string(&manifest_path).map_err(|error| {

@@ -15,6 +15,20 @@ fn normalized_definition_path(reference: &str) -> Option<String> {
     (!path.is_empty()).then(|| path.to_owned())
 }
 
+fn definition_selector(reference: &str) -> Option<String> {
+    let (_, selector) = reference.trim().split_once('@')?;
+    let selector = selector.trim();
+    (!selector.is_empty()).then(|| selector.to_owned())
+}
+
+fn selector_matches_declared_name(selector: Option<&str>, declared_name: &str) -> bool {
+    match selector {
+        None => true,
+        Some(selector) if selector.starts_with("hash:") => true,
+        Some(selector) => declared_name.trim().eq_ignore_ascii_case(selector.trim()),
+    }
+}
+
 fn source_candidates(root: &Path, reference: &str) -> Vec<PathBuf> {
     let Some(path) = normalized_definition_path(reference) else {
         return Vec::new();
@@ -40,12 +54,27 @@ fn source_candidates(root: &Path, reference: &str) -> Vec<PathBuf> {
     out
 }
 
-fn read_weapon_namespace(path: &Path) -> Result<serde_json::Value, String> {
+fn read_weapon_namespace(
+    path: &Path,
+    expected_selector: Option<&str>,
+) -> Result<serde_json::Value, String> {
     let body = fs::read(path)
         .map_err(|error| format!("read YTYP source '{}' failed: {error}", path.display()))?;
     let source = path.display().to_string();
     let document = newengine_authored_xml::parse_xml_body(&body, &source)?;
     let root = document.root_element();
+
+    if let Some(selector) = expected_selector {
+        let declared = newengine_authored_xml::xml_attr_any(root, &["name"]).unwrap_or_default();
+        if !selector_matches_declared_name(Some(selector), declared.trim()) {
+            return Err(format!(
+                "YTYP selector mismatch source='{}' selector='{}' declared_name='{}'",
+                path.display(),
+                selector,
+                declared.trim(),
+            ));
+        }
+    }
     let metadata = newengine_authored_xml::xml_child(root, "Metadata")
         .ok_or_else(|| format!("YTYP '{}' has no Metadata", path.display()))?;
     for namespace in newengine_authored_xml::xml_children_named(metadata, "Namespace") {
@@ -101,7 +130,8 @@ pub fn hydrate_item_package_from_ytyp_source_roots(
                     .join(", ")
             )
         })?;
-        let namespace = read_weapon_namespace(&path)?;
+        let selector = definition_selector(&reference);
+        let namespace = read_weapon_namespace(&path, selector.as_deref())?;
         apply_weapon_ytyp_namespace(item, &namespace).map_err(|error| {
             format!(
                 "offline YTYP hydration failed item='{}' ref='{}' source='{}': {error}",
@@ -113,4 +143,31 @@ pub fn hydrate_item_package_from_ytyp_source_roots(
         hydrated += 1;
     }
     Ok(hydrated)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn definition_selector_contract_matches_runtime_named_lookup() {
+        assert_eq!(
+            definition_selector("shared/definitions/weapon/rifle_mini14.ytyp@rifle_mini14")
+                .as_deref(),
+            Some("rifle_mini14")
+        );
+        assert!(selector_matches_declared_name(
+            Some("rifle_mini14"),
+            "Rifle_Mini14"
+        ));
+        assert!(!selector_matches_declared_name(
+            Some("rifle_mini14"),
+            "rifle"
+        ));
+    }
+
+    #[test]
+    fn hash_selector_remains_deferred_to_canonical_ytyp_validation() {
+        assert!(selector_matches_declared_name(Some("hash:42"), "anything"));
+    }
 }

@@ -11,20 +11,26 @@ use std::collections::{BTreeMap, BTreeSet};
 use newengine_ecs::{EntityId, World};
 use newengine_engine_runtime::gameplay::{
     active_equipped_weapon_binding, active_equipped_weapon_component_modifiers,
-    active_equipped_weapon_muzzle, consume_equipped_ammo, emit_animation_pulse,
+    active_equipped_weapon_component_stat_modifiers, active_equipped_weapon_muzzle,
+    consume_equipped_ammo, drain_weapon_reload_animation_markers, emit_animation_pulse,
     emit_gameplay_event, equipped_reserve_ammo, persist_equipped_weapon_state,
     resolve_weapon_impact, sync_equipped_weapon_runtime, try_collect_item_pickup,
-    BallisticMaterialResponse, BallisticShotProfile, EquippedWeaponBinding,
+    BallisticMaterialResponse, BallisticShotProfile, EquippedWeaponBinding, EquippedWeaponEntity,
     FiringPatternDefinition, FiringPatternKind, HitscanWeaponTuning, Interactable,
     InteractionEvent, InteractionEventBus, ItemCatalog, ItemInstanceId, ItemPickup,
     MeleeWeaponTuning, PendingHitscan, PendingInteraction, PhysicsSurface,
     PlayerAuthoredAnimationCapabilities, PlayerCommandFrame, PlayerController,
     PlayerInteractionTuning, PlayerStanceKind, PlayerStanceState, PlayerWeaponState,
-    WeaponAccuracyModifiers, WeaponAccuracyState, WeaponAttackKind, WeaponEvent, WeaponEventBus,
-    WeaponEventKind, WeaponFireControllerState, WeaponImpact, WeaponObstructionState, WeaponType,
+    ResolvedWeaponStats, WeaponAccuracyModifiers, WeaponAccuracyState, WeaponActionKind,
+    WeaponActionRuntime, WeaponActionTimingSource, WeaponAttackKind, WeaponEvent, WeaponEventBus,
+    WeaponEventKind, WeaponFireControllerState, WeaponImpact, WeaponObstructionState,
+    WeaponRecoilProfile, WeaponReloadAnimationAuthority, WeaponReloadAnimationMarker,
+    WeaponReloadPhase, WeaponReloadTimelineProfile, WeaponRuntimeProfiles,
+    WeaponSpreadDistribution, WeaponSpreadProfile, WeaponStatModifierStack, WeaponType,
     GAMEPLAY_EVENT_WEAPON_EMPTY, GAMEPLAY_EVENT_WEAPON_FIRED, GAMEPLAY_EVENT_WEAPON_HIT,
     GAMEPLAY_EVENT_WEAPON_MELEE_ATTACKED, GAMEPLAY_EVENT_WEAPON_PENETRATED,
-    GAMEPLAY_EVENT_WEAPON_RELOAD_COMPLETED, GAMEPLAY_EVENT_WEAPON_RELOAD_STARTED,
+    GAMEPLAY_EVENT_WEAPON_RELOAD_COMPLETED, GAMEPLAY_EVENT_WEAPON_RELOAD_PHASE,
+    GAMEPLAY_EVENT_WEAPON_RELOAD_STARTED,
 };
 #[cfg(test)]
 use newengine_gameplay_fps_api::action as fps_action;
@@ -40,6 +46,24 @@ use newengine_transform::Transform;
 
 #[cfg(test)]
 use newengine_engine_runtime::gameplay::{EquippedWeaponMuzzle, Health};
+
+#[inline]
+fn resolved_weapon_stats(world: &World, player: EntityId) -> ResolvedWeaponStats {
+    let base = ResolvedWeaponStats::from_component_modifiers(
+        active_equipped_weapon_component_modifiers(world, player),
+    );
+    let component_stack = active_equipped_weapon_component_stat_modifiers(world, player);
+    let owner_stack = world.get::<WeaponStatModifierStack>(player);
+    let weapon_stack = world
+        .get::<EquippedWeaponEntity>(player)
+        .and_then(|link| world.get::<WeaponStatModifierStack>(link.entity));
+    ResolvedWeaponStats::resolve_stacks(
+        base,
+        core::iter::once(&component_stack)
+            .chain(owner_stack)
+            .chain(weapon_stack),
+    )
+}
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct PendingFocusedItemInteraction {
@@ -117,12 +141,16 @@ pub fn focused_item_pickup(world: &World, player: EntityId) -> Option<EntityId> 
         .map(|(entity, _)| entity)
 }
 
+#[path = "combat/actions.rs"]
+mod actions;
 #[path = "combat/queries.rs"]
 mod queries;
 #[path = "combat/runtime.rs"]
 mod runtime;
 #[path = "combat/targeting.rs"]
 mod targeting;
+
+use actions::*;
 
 pub use queries::{collect_combat_queries, resolve_combat_queries};
 pub use runtime::step_player_combat;
@@ -133,7 +161,7 @@ use runtime::{emit_interaction_event, emit_weapon_event};
 use targeting::{
     hitscan_bounce_query_seq, hitscan_query_seq, interaction_query_seq, interaction_ray,
     melee_origin_and_direction, queue_weapon_obstruction_probe, shot_origin_and_direction,
-    signed_unit,
+    shot_origin_and_direction_with_profiles, signed_unit,
 };
 
 #[cfg(test)]

@@ -558,17 +558,21 @@ fn evaluate_player_animation_presentation(
                 }
             }
         } else {
+            let ready_pose_set = select_equipment_pose_set(
+                &binding.equipment_default_pose_set,
+                &binding.equipment_pose_sets,
+                equipment_pose_family,
+            );
+            let ready_sample_phase = equipment_ready_sample_phase_for_pose_set(
+                ready_pose_set,
+                binding.equipment_ready_sample_phase,
+            );
             if let Err(error) = apply_equipment_rotation_overlay(
-                select_equipment_pose_set(
-                    &binding.equipment_default_pose_set,
-                    &binding.equipment_pose_sets,
-                    equipment_pose_family,
-                )
-                .and_then(|set| set.ready.as_ref()),
+                ready_pose_set.and_then(|set| set.ready.as_ref()),
                 &binding.animation_runtime,
                 &mut binding.equipment_overlay_locals,
                 &mut binding.sampled_target_locals,
-                binding.equipment_ready_sample_phase,
+                ready_sample_phase,
                 binding.equipment_ready_rotation_weights.as_slice(),
                 1.0,
             ) {

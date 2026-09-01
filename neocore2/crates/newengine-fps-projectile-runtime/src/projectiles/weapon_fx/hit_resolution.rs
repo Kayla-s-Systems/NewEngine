@@ -1,3 +1,6 @@
+const DEFAULT_WEAPON_IMPACT_PARTICLE_EFFECT: &str =
+    "shared/vfx/weapon/firearm.fxd@bullet_impact";
+
 /// Narrows the semantic tracer to the authoritative hitscan impact without creating an impact
 /// composition. Kept as a compatibility facade for callers that only know the hit point.
 pub fn clamp_weapon_shot_fx_to_hit(
@@ -77,11 +80,28 @@ fn resolve_weapon_shot_hit_fx_segment(
     let surface = target
         .and_then(|entity| world.get::<PhysicsSurface>(entity))
         .map(|surface| surface.id.clone());
+    // A firearm contact always emits a short-lived particle composition at the authoritative
+    // hit point. Weapon data may specialize it per surface; Shared owns the production fallback.
     let effect = equipped_weapon_vfx_definition(world, owner)
-        .and_then(|vfx| vfx.impact_effect(surface.as_deref()).map(str::to_owned));
-    let Some(effect) = effect else {
-        return;
-    };
+        .and_then(|vfx| vfx.impact_effect(surface.as_deref()).map(str::to_owned))
+        .unwrap_or_else(|| DEFAULT_WEAPON_IMPACT_PARTICLE_EFFECT.to_owned());
+    let physical_surface = target
+        .and_then(|entity| world.get::<newengine_engine_runtime::gameplay::DamageReceiver>(entity))
+        .is_none_or(|receiver| {
+            receiver.kind != newengine_engine_runtime::gameplay::DamageReceiverKind::Character
+        });
+    if physical_surface {
+        let _ = spawn_persistent_impact_debris(
+            world,
+            owner,
+            shot_sequence,
+            point,
+            normal,
+            incoming_direction,
+            target,
+            surface.as_deref(),
+        );
+    }
     let request = newengine_vfx_api::VfxSpawnRequestV1 {
         effect: newengine_vfx_api::VfxEffectRef::new(effect),
         owner: Some(newengine_vfx_api::EntityHandle::new(
@@ -106,23 +126,6 @@ fn resolve_weapon_shot_hit_fx_segment(
             owner.stable_u64(),
             shot_sequence,
             error
-        );
-    }
-    let physical_surface = target
-        .and_then(|entity| world.get::<newengine_engine_runtime::gameplay::DamageReceiver>(entity))
-        .is_none_or(|receiver| {
-            receiver.kind != newengine_engine_runtime::gameplay::DamageReceiverKind::Character
-        });
-    if physical_surface {
-        let _ = spawn_persistent_impact_debris(
-            world,
-            owner,
-            shot_sequence,
-            point,
-            normal,
-            incoming_direction,
-            target,
-            surface.as_deref(),
         );
     }
 }

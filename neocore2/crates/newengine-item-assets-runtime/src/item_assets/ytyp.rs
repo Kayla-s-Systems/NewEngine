@@ -221,6 +221,7 @@ fn parse_component_graph(
                 audio_override: fields.get(3).copied().unwrap_or("").to_owned(),
                 muzzle_vfx_override: fields.get(4).copied().unwrap_or("").to_owned(),
                 tracer_vfx_override: fields.get(5).copied().unwrap_or("").to_owned(),
+                stat_modifiers: Vec::new(),
                 modifiers: AuthoredWeaponComponentModifiers {
                     accuracy_multiplier: scalar(6)?,
                     recoil_multiplier: scalar(7)?,
@@ -498,6 +499,7 @@ pub(crate) fn apply_weapon_ytyp_namespace(
             v3!(ads_rear_sight_from_handle);
             v3!(ads_front_sight_from_handle);
             v3!(ads_camera_to_rear_sight);
+            v3!(ads_camera_translation_weight);
             v4!(ready_body_to_root_rotation);
             v4!(ready_right_palm_to_weapon);
             v4!(ready_left_palm_to_weapon);
@@ -761,6 +763,7 @@ mod tests {
                 "right_palm_to_handle": [0.019, 0.033, -0.083],
                 "first_person_hip_handle_offset": [0.20, -0.20, -0.58],
                 "first_person_full_body_hip_handle_offset": [0.20, -0.20, -0.08],
+                "ads_camera_translation_weight": [1.0, 0.0, 0.75],
                 "aim_response_hz": 14.0,
                 "secondary_hip_max_angle_radians": 0.08,
                 "secondary_ads_max_angle_radians": 0.03,
@@ -835,6 +838,10 @@ mod tests {
         assert_eq!(
             runtime_presentation.first_person_full_body_hip_handle_offset,
             [0.20, -0.20, -0.08]
+        );
+        assert_eq!(
+            runtime_presentation.ads_camera_translation_weight,
+            [1.0, 0.0, 0.75]
         );
         assert!((presentation.aim_response_hz - 14.0).abs() < 1.0e-6);
         assert!((presentation.secondary_angular_inertia_gain - 0.31).abs() < 1.0e-6);

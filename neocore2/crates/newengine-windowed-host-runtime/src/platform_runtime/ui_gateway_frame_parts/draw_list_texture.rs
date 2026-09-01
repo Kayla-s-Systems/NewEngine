@@ -62,40 +62,14 @@ fn ensure_loading_texture_payload(
         return;
     }
 
-    let payload = match serde_json::to_vec(&serde_json::json!({ "texture_ref": texture_ref })) {
-        Ok(payload) => payload,
-        Err(err) => {
-            draw_list.paint.diagnostics.push(format!(
-                "engine.ui.loading texture payload encode failed node_id={} ref='{}' err={}",
-                node_id, texture_ref, err
-            ));
-            return;
-        }
-    };
-
-    let bytes = match newengine_core::call_service_v1(
-        newengine_assets_api::ENGINE_ASSETS_TEXTURES_SERVICE_ID,
-        newengine_assets_api::textures_method::ENTRY_RGBA8_V1,
-        &payload,
-    ) {
-        Ok(bytes) => bytes,
-        Err(err) => {
-            newengine_ulog_api::ulog::warn!(
-                "engine.ui.loading texture payload resolve failed node_id={} ref='{}' err={}",
-                node_id,
-                texture_ref,
-                err
-            );
-            draw_list.paint.diagnostics.push(format!(
-                "engine.ui.loading texture payload resolve failed node_id={} ref='{}' err={}",
-                node_id, texture_ref, err
-            ));
-            return;
-        }
-    };
-
-    match decode_loading_rgba8_texture(&bytes) {
-        Ok(mut texture) => {
+    let assets =
+        newengine_assets::AssetServiceClient::new(newengine_plugin_host::default_host_api());
+    match assets.textures_entry_rgba8_ref_v1_typed(texture_ref) {
+        Ok(resolved) => {
+            let mut texture = newengine_ui_api::UiTexture {
+                size: [resolved.width, resolved.height],
+                rgba8: resolved.rgba,
+            };
             if node_id.contains("spinner") {
                 apply_spinner_sprite_frame_if_sheet(&mut texture, spinner_animation);
             }
@@ -125,52 +99,6 @@ fn ensure_loading_texture_payload(
             ));
         }
     }
-}
-
-fn decode_loading_rgba8_texture(bytes: &[u8]) -> Result<newengine_ui_api::UiTexture, String> {
-    let min_len = newengine_assets_api::texture_wire::HEADER_LEN;
-    if bytes.len() < min_len {
-        return Err(format!(
-            "short rgba8 frame bytes={} expected_at_least={}",
-            bytes.len(),
-            min_len
-        ));
-    }
-    if bytes[0..4] != newengine_assets_api::texture_wire::MAGIC[..] {
-        return Err("bad rgba8 frame magic".to_owned());
-    }
-    let version = u16::from_le_bytes([bytes[4], bytes[5]]);
-    if version != newengine_assets_api::texture_wire::VERSION_RGBA8_V1 {
-        return Err(format!("unsupported rgba8 frame version={}", version));
-    }
-    let width = u32::from_le_bytes([bytes[8], bytes[9], bytes[10], bytes[11]]);
-    let height = u32::from_le_bytes([bytes[12], bytes[13], bytes[14], bytes[15]]);
-    let payload_len = u32::from_le_bytes([bytes[16], bytes[17], bytes[18], bytes[19]]) as usize;
-    let expected_frame_len = min_len.saturating_add(payload_len);
-    if bytes.len() != expected_frame_len {
-        return Err(format!(
-            "rgba8 frame size mismatch bytes={} expected={}",
-            bytes.len(),
-            expected_frame_len
-        ));
-    }
-    let rgba8 = bytes[min_len..].to_vec();
-    let expected_rgba = (width as usize)
-        .saturating_mul(height as usize)
-        .saturating_mul(4);
-    if rgba8.len() != expected_rgba {
-        return Err(format!(
-            "rgba8 payload size mismatch bytes={} expected={} extent={}x{}",
-            rgba8.len(),
-            expected_rgba,
-            width,
-            height
-        ));
-    }
-    Ok(newengine_ui_api::UiTexture {
-        size: [width, height],
-        rgba8,
-    })
 }
 
 fn apply_spinner_sprite_frame_if_sheet(

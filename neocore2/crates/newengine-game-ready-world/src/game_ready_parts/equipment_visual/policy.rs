@@ -429,6 +429,10 @@ fn clear_equipped_weapon_visual(world: &mut newengine_ecs::World, owner: EntityI
     }
     let _ = world.remove::<EquippedWeaponMuzzle>(owner);
     let _ = world.remove::<EquippedWeaponEntity>(owner);
+    let _ =
+        world.remove::<newengine_engine_runtime::gameplay::WeaponReloadAnimationAuthority>(owner);
+    let _ =
+        world.remove::<newengine_engine_runtime::gameplay::WeaponReloadAnimationMarkerInbox>(owner);
     let _ = world.remove::<WeaponVisualAdmissionState>(owner);
 }
 

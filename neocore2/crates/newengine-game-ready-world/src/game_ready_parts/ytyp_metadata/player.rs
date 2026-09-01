@@ -19,6 +19,24 @@ pub(super) fn equipment_animation_slot_from_attribute(attribute: &str) -> Option
         .then(|| format!("equipment.{family}.{stance}"))
 }
 
+/// Maps `equipment_<family>_ready_sample_phase` to the same open-ended normalized family id used
+/// by `weapon.class`. This lets a character freeze an authored transition at its READY endpoint
+/// without changing other equipment families or teaching runtime any weapon names.
+pub(super) fn equipment_ready_sample_phase_family_from_attribute(
+    attribute: &str,
+) -> Option<String> {
+    let normalized = attribute.trim().to_ascii_lowercase();
+    let family = normalized
+        .strip_prefix("equipment_")?
+        .strip_suffix("_ready_sample_phase")?
+        .replace('-', "_");
+    (!family.is_empty()
+        && family
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || ch == '_'))
+    .then_some(family)
+}
+
 fn player_joint_channels_text(
     raw: &str,
 ) -> Option<newengine_engine_runtime::gameplay::PlayerJointChannels> {
@@ -529,6 +547,17 @@ pub(super) fn apply_player_model_from_ytyp(
     // families from metadata instead of encoding a knife/rifle/pistol enum here.
     if let Some(attributes) = model.as_object() {
         for (attribute, value) in attributes {
+            if let Some(family) = equipment_ready_sample_phase_family_from_attribute(attribute) {
+                if let Some(phase) = value_f32(value) {
+                    profile
+                        .player
+                        .model
+                        .equipment_ready_sample_phases
+                        .insert(family, phase.clamp(0.0, 1.0));
+                    applied += 1;
+                }
+                continue;
+            }
             let Some(semantic) = equipment_animation_slot_from_attribute(attribute) else {
                 continue;
             };

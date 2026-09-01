@@ -1,3 +1,5 @@
+use crate::render_controller::module_impl::passes::mesh_visibility::sphere_screen_coverage_hint;
+use crate::render_controller::state::MaterialTextureStreamingClass;
 use newengine_core::render::{
     BindGroupId, BufferSlice, DrawIndexedArgs, IndexFormat, PipelineId, SamplerId, TextureId,
 };
@@ -58,6 +60,7 @@ pub(crate) fn publish_camera_spawn(
 #[derive(Clone)]
 struct TerrainDrawEntry {
     distance_sq: f32,
+    screen_coverage: f32,
     entity_key: u64,
     mesh_key: u64,
     base_color: [f32; 4],
@@ -174,13 +177,15 @@ fn draw_procedural_terrain_for_pass(
             continue;
         }
         let mesh_key = terrain.mesh_key();
+        let local_bounds = terrain.heightfield.local_bounds();
+        let (center_ws, radius_ws) = transform_sphere(
+            gt.0,
+            local_bounds.center(),
+            local_bounds.half_extents().length(),
+        );
+        let distance_m = (center_ws - camera_position).length();
+        let screen_coverage = sphere_screen_coverage_hint(radius_ws, distance_m);
         if runtime && terrain_culling_enabled {
-            let local_bounds = terrain.heightfield.local_bounds();
-            let (center_ws, radius_ws) = transform_sphere(
-                gt.0,
-                local_bounds.center(),
-                local_bounds.half_extents().length(),
-            );
             if !frustum_sphere_visible(
                 terrain_frustum.as_ref().expect("terrain culling frustum"),
                 camera_position,
@@ -197,7 +202,8 @@ fn draw_procedural_terrain_for_pass(
             .cloned()
             .unwrap_or_else(MeshRenderOptions::terrain_patch);
         entries.push(TerrainDrawEntry {
-            distance_sq: distance_sq_to_camera(gt.0, camera_position),
+            distance_sq: distance_m * distance_m,
+            screen_coverage,
             entity_key: id.stable_u64(),
             mesh_key,
             base_color: terrain.base_color,
@@ -224,6 +230,8 @@ fn draw_procedural_terrain_for_pass(
     let mut stream = BucketedIndexedDrawStream::with_capacity(entries.len());
     for entry in entries {
         let entity_key = entry.entity_key;
+        let distance_m = entry.distance_sq.sqrt();
+        let screen_coverage = entry.screen_coverage;
         let mesh_key = entry.mesh_key;
         let model = entry.model;
         let material = entry.material;
@@ -264,6 +272,21 @@ fn draw_procedural_terrain_for_pass(
             ^ ((terrain_local_shadow_texture.get() as u64) << 16);
         let (pipeline, base_tex, normal_tex, roughness_tex, sampler, material_params) =
             if let Some(layers) = surface_layers {
+                for path in [
+                    layers.forest_base_texture.as_str(),
+                    layers.sand_base_texture.as_str(),
+                    layers.rock_base_texture.as_str(),
+                ] {
+                    this.request_material_texture_with_view_hints(
+                        path,
+                        MaterialTextureStreamingClass::StreamingCritical,
+                        screen_coverage,
+                        distance_m,
+                        232,
+                        0,
+                        224,
+                    );
+                }
                 let forest_tex = this.material_texture_or_default(
                     r,
                     Some(layers.forest_base_texture.as_str()),
@@ -297,6 +320,15 @@ fn draw_procedural_terrain_for_pass(
                     ],
                 )
             } else {
+                this.request_material_set_with_view_hints(
+                    material_plan.base_color_texture,
+                    material_plan.normal_texture,
+                    material_plan.roughness_texture,
+                    screen_coverage,
+                    distance_m,
+                    0,
+                    false,
+                );
                 let base_tex = this.material_texture_or_default(
                     r,
                     material_plan.base_color_texture,

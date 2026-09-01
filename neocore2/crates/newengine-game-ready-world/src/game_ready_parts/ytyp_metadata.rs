@@ -859,6 +859,32 @@ mod player_presentation_metadata_tests {
     }
 
     #[test]
+    fn equipment_ready_sample_phase_family_attributes_are_open_ended() {
+        assert_eq!(
+            player::equipment_ready_sample_phase_family_from_attribute(
+                "equipment_pistol_ready_sample_phase"
+            )
+            .as_deref(),
+            Some("pistol")
+        );
+        assert_eq!(
+            player::equipment_ready_sample_phase_family_from_attribute(
+                "equipment_long-gun_ready_sample_phase"
+            )
+            .as_deref(),
+            Some("long_gun")
+        );
+        assert!(player::equipment_ready_sample_phase_family_from_attribute(
+            "equipment_ready_sample_phase"
+        )
+        .is_none());
+        assert!(player::equipment_ready_sample_phase_family_from_attribute(
+            "equipment_pistol_aim_sample_phase"
+        )
+        .is_none());
+    }
+
+    #[test]
     fn generic_or_malformed_equipment_attributes_do_not_become_family_slots() {
         assert!(
             player::equipment_animation_slot_from_attribute("equipment_ready_animation").is_none()

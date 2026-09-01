@@ -4,6 +4,8 @@ use super::*;
 // physical ownership is split by responsibility.
 include!("definitions/core.rs");
 include!("definitions/world.rs");
+include!("definitions/weapon_profiles.rs");
+include!("definitions/weapon_stats.rs");
 include!("definitions/weapon_core.rs");
 include!("definitions/weapon_presentation.rs");
 include!("definitions/ammo.rs");

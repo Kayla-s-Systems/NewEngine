@@ -1,3 +1,38 @@
+fn ycd_schema_supported(schema: u32) -> bool {
+    matches!(
+        schema,
+        YCD_BODY_SCHEMA_VERSION_LEGACY | YCD_BODY_SCHEMA_VERSION_V2 | YCD_BODY_SCHEMA_VERSION
+    )
+}
+
+fn ycd_pose_stride(schema: u32) -> Result<usize, String> {
+    match schema {
+        YCD_BODY_SCHEMA_VERSION_LEGACY => Ok(LOCAL_POSE_STRIDE_V1),
+        YCD_BODY_SCHEMA_VERSION_V2 | YCD_BODY_SCHEMA_VERSION => Ok(LOCAL_POSE_STRIDE_V2),
+        _ => Err(format!(
+            "unsupported YCD body schema={schema} supported={YCD_BODY_SCHEMA_VERSION_LEGACY},{YCD_BODY_SCHEMA_VERSION_V2},{YCD_BODY_SCHEMA_VERSION}"
+        )),
+    }
+}
+
+fn ycd_event_table_offset(
+    body: &[u8],
+    schema: u32,
+    payload_floor: usize,
+) -> Result<Option<usize>, String> {
+    if schema != YCD_BODY_SCHEMA_VERSION {
+        return Ok(None);
+    }
+    let offset = usize_from_u64(read_u64(body, 40)?, "event table")?;
+    if offset < payload_floor || offset > body.len() {
+        return Err(format!(
+            "YCD v3 event table outside payload region offset={offset} payload_floor={payload_floor} body={}",
+            body.len()
+        ));
+    }
+    Ok(Some(offset))
+}
+
 pub fn decode_ycd_dictionary(body: &[u8]) -> Result<AnimationDictionary, String> {
     if body.len() < YCD_BODY_HEADER_LEN {
         return Err(format!(
@@ -6,16 +41,12 @@ pub fn decode_ycd_dictionary(body: &[u8]) -> Result<AnimationDictionary, String>
         ));
     }
     let schema = read_u32(body, 0)?;
-    if schema != YCD_BODY_SCHEMA_VERSION && schema != YCD_BODY_SCHEMA_VERSION_LEGACY {
+    if !ycd_schema_supported(schema) {
         return Err(format!(
-            "unsupported YCD body schema={schema} supported={YCD_BODY_SCHEMA_VERSION_LEGACY},{YCD_BODY_SCHEMA_VERSION}"
+            "unsupported YCD body schema={schema} supported={YCD_BODY_SCHEMA_VERSION_LEGACY},{YCD_BODY_SCHEMA_VERSION_V2},{YCD_BODY_SCHEMA_VERSION}"
         ));
     }
-    let local_pose_stride = if schema == YCD_BODY_SCHEMA_VERSION {
-        LOCAL_POSE_STRIDE_V2
-    } else {
-        LOCAL_POSE_STRIDE_V1
-    };
+    let local_pose_stride = ycd_pose_stride(schema)?;
     let clip_count = read_u32(body, 4)? as usize;
     if clip_count == 0 {
         return Err("YCD body contains no clips".to_owned());
@@ -36,6 +67,7 @@ pub fn decode_ycd_dictionary(body: &[u8]) -> Result<AnimationDictionary, String>
     if payload_floor > body.len() {
         return Err("YCD payload floor outside body".to_owned());
     }
+    let event_table_offset = ycd_event_table_offset(body, schema, payload_floor)?;
 
     let mut clips = Vec::with_capacity(clip_count);
     for index in 0..clip_count {
@@ -45,6 +77,7 @@ pub fn decode_ycd_dictionary(body: &[u8]) -> Result<AnimationDictionary, String>
             strings,
             record,
             payload_floor,
+            event_table_offset,
             schema,
             local_pose_stride,
         )?));
@@ -75,16 +108,12 @@ fn decode_ycd_selected_clip(body: &[u8], selector: &str) -> Result<AnimationClip
         ));
     }
     let schema = read_u32(body, 0)?;
-    if schema != YCD_BODY_SCHEMA_VERSION && schema != YCD_BODY_SCHEMA_VERSION_LEGACY {
+    if !ycd_schema_supported(schema) {
         return Err(format!(
-            "unsupported YCD body schema={schema} supported={YCD_BODY_SCHEMA_VERSION_LEGACY},{YCD_BODY_SCHEMA_VERSION}"
+            "unsupported YCD body schema={schema} supported={YCD_BODY_SCHEMA_VERSION_LEGACY},{YCD_BODY_SCHEMA_VERSION_V2},{YCD_BODY_SCHEMA_VERSION}"
         ));
     }
-    let local_pose_stride = if schema == YCD_BODY_SCHEMA_VERSION {
-        LOCAL_POSE_STRIDE_V2
-    } else {
-        LOCAL_POSE_STRIDE_V1
-    };
+    let local_pose_stride = ycd_pose_stride(schema)?;
     let clip_count = read_u32(body, 4)? as usize;
     if clip_count == 0 {
         return Err("YCD body contains no clips".to_owned());
@@ -105,12 +134,11 @@ fn decode_ycd_selected_clip(body: &[u8], selector: &str) -> Result<AnimationClip
     if payload_floor > body.len() {
         return Err("YCD payload floor outside body".to_owned());
     }
+    let event_table_offset = ycd_event_table_offset(body, schema, payload_floor)?;
 
     for index in 0..clip_count {
         let record = table_offset + index * YCD_CLIP_RECORD_LEN;
         let name_offset = read_u32(body, record + 8)?;
-        // A selected entry is independently addressable. Malformed locator metadata on another
-        // record remains a whole-dictionary validation error, but must not poison this selector.
         let Ok(name) = read_string(strings, name_offset) else {
             continue;
         };
@@ -120,6 +148,7 @@ fn decode_ycd_selected_clip(body: &[u8], selector: &str) -> Result<AnimationClip
                 strings,
                 record,
                 payload_floor,
+                event_table_offset,
                 schema,
                 local_pose_stride,
             );
@@ -128,11 +157,80 @@ fn decode_ycd_selected_clip(body: &[u8], selector: &str) -> Result<AnimationClip
     Err(format!("YCD selector '{selector}' was not found"))
 }
 
+fn decode_ycd_events(
+    body: &[u8],
+    strings: &[u8],
+    clip_name: &str,
+    event_table_offset: usize,
+    event_start: usize,
+    event_count: usize,
+) -> Result<Vec<AnimationEvent>, String> {
+    if event_count > 1_000_000 {
+        return Err(format!(
+            "YCD clip '{clip_name}' has unreasonable event count={event_count}"
+        ));
+    }
+    let start = event_table_offset
+        .checked_add(
+            event_start
+                .checked_mul(YCD_EVENT_RECORD_LEN)
+                .ok_or("YCD event start overflow")?,
+        )
+        .ok_or("YCD event table offset overflow")?;
+    checked_slice(
+        body,
+        start,
+        event_count
+            .checked_mul(YCD_EVENT_RECORD_LEN)
+            .ok_or("YCD event table size overflow")?,
+        "event records",
+    )?;
+
+    let mut events = Vec::with_capacity(event_count);
+    for index in 0..event_count {
+        let record = start + index * YCD_EVENT_RECORD_LEN;
+        let time_seconds = read_f32(body, record)?;
+        let tag = read_string(strings, read_u32(body, record + 4)?)?;
+        let parameter_offset = read_u32(body, record + 8)? as usize;
+        let parameter_count = read_u32(body, record + 12)? as usize;
+        if parameter_count > 65_536 {
+            return Err(format!(
+                "YCD clip '{clip_name}' event={index} has unreasonable parameter count={parameter_count}"
+            ));
+        }
+        let mut parameters = Vec::with_capacity(parameter_count);
+        if parameter_count != 0 {
+            checked_slice(
+                body,
+                parameter_offset,
+                parameter_count
+                    .checked_mul(YCD_EVENT_PARAMETER_RECORD_LEN)
+                    .ok_or("YCD event parameter table size overflow")?,
+                "event parameter records",
+            )?;
+            for parameter_index in 0..parameter_count {
+                let at = parameter_offset + parameter_index * YCD_EVENT_PARAMETER_RECORD_LEN;
+                parameters.push(AnimationEventParameter {
+                    key: read_string(strings, read_u32(body, at)?)?,
+                    value: read_string(strings, read_u32(body, at + 4)?)?,
+                });
+            }
+        }
+        events.push(AnimationEvent {
+            time_seconds,
+            tag,
+            parameters,
+        });
+    }
+    Ok(events)
+}
+
 fn decode_ycd_clip_record(
     body: &[u8],
     strings: &[u8],
     record: usize,
     payload_floor: usize,
+    event_table_offset: Option<usize>,
     schema: u32,
     local_pose_stride: usize,
 ) -> Result<AnimationClip, String> {
@@ -167,11 +265,31 @@ fn decode_ycd_clip_record(
     if payload_offset < payload_floor {
         return Err(format!("YCD clip '{name}' payload precedes payload floor"));
     }
+    if let Some(event_table_offset) = event_table_offset {
+        let payload_end = payload_offset
+            .checked_add(payload_len)
+            .ok_or("YCD clip payload end overflow")?;
+        if payload_end > event_table_offset {
+            return Err(format!(
+                "YCD v3 clip '{name}' pose payload overlaps event table payload_end={payload_end} event_table={event_table_offset}"
+            ));
+        }
+    }
     let payload = checked_slice(body, payload_offset, payload_len, "clip payload")?;
-    let source = read_string(
-        strings,
-        usize_from_u64(read_u64(body, record + 56)?, "source string offset")? as u32,
-    )?;
+    let source_locator = read_u64(body, record + 56)?;
+    let (source_offset, event_start, event_count) = if schema == YCD_BODY_SCHEMA_VERSION {
+        (
+            (source_locator & 0xffff_ffff) as u32,
+            (source_locator >> 32) as usize,
+            read_u32(body, record + 36)? as usize,
+        )
+    } else {
+        let source_offset = usize_from_u64(source_locator, "source string offset")?;
+        let source_offset = u32::try_from(source_offset)
+            .map_err(|_| "YCD source string offset exceeds u32".to_owned())?;
+        (source_offset, 0, 0)
+    };
+    let source = read_string(strings, source_offset)?;
     let tag_bytes = joint_count.checked_mul(4).ok_or("YCD tag bytes overflow")?;
     let pose_count = joint_count
         .checked_mul(frame_count)
@@ -218,7 +336,9 @@ fn decode_ycd_clip_record(
         if !len2.is_finite() || len2 <= 1.0e-8 {
             return Err(format!("YCD clip '{name}' contains invalid quaternion"));
         }
-        let scale = if schema == YCD_BODY_SCHEMA_VERSION {
+        let scale = if schema == YCD_BODY_SCHEMA_VERSION_LEGACY {
+            None
+        } else {
             let value = [
                 read_f32(payload, cursor + 28)?,
                 read_f32(payload, cursor + 32)?,
@@ -228,8 +348,6 @@ fn decode_ycd_clip_record(
                 return Err(format!("YCD clip '{name}' contains invalid scale"));
             }
             Some(value)
-        } else {
-            None
         };
         poses.push(JointLocalPose {
             translation,
@@ -238,6 +356,12 @@ fn decode_ycd_clip_record(
         });
         cursor += local_pose_stride;
     }
+    let events = match (event_table_offset, event_count) {
+        (Some(offset), count) if count != 0 => {
+            decode_ycd_events(body, strings, &name, offset, event_start, count)?
+        }
+        _ => Vec::new(),
+    };
     let clip = AnimationClip {
         name,
         skeleton_ref,
@@ -246,7 +370,7 @@ fn decode_ycd_clip_record(
         sample_rate_hz,
         looped: flags & YCD_CLIP_FLAG_LOOP != 0,
         joint_tags,
-        events: Vec::new(),
+        events,
         poses,
     };
     clip.validate_structure()?;

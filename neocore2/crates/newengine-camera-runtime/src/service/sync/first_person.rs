@@ -33,6 +33,9 @@ fn first_person_ads_position_contract(
     } else {
         0.0
     };
+    // Weapon/avatar presentation publishes an already-resolved ADS anchor, including any authored
+    // per-axis translation policy. Camera runtime owns only temporal blending and never hard-codes
+    // weapon-specific axis locks or offsets.
     ads_camera_position
         .filter(|position| position.is_finite())
         .map(|ads| hip_camera_position.lerp(ads, aim_alpha))

@@ -150,8 +150,7 @@ pub fn decode_yscd_nef8(
     if envelope.header.content_schema_version != expected_schema_version {
         return Err(format!(
             "YSCD content schema mismatch path='{logical_path}' expected={} actual={}",
-            expected_schema_version,
-            envelope.header.content_schema_version
+            expected_schema_version, envelope.header.content_schema_version
         ));
     }
     decode_yscd_binary_body(&envelope.body)

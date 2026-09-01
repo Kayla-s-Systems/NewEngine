@@ -4,7 +4,7 @@ use newengine_camera::CameraRig;
 use newengine_core::host_events::CursorState;
 use newengine_ecs::{EntityId, World};
 use newengine_input_actions_api::move_mask as input_move;
-use newengine_math::{EulerRot, Mat3, Quat, Vec2, Vec3, wrap_pi};
+use newengine_math::{wrap_pi, EulerRot, Mat3, Quat, Vec2, Vec3};
 use newengine_sim::{
     CameraRigComp, CharacterMotor, FollowTargetCameraController, FollowTargetCameraMotor,
     MotorInput,
@@ -14,7 +14,7 @@ use newengine_transform::{
 };
 
 use crate::constraints::{
-    CameraSpringArmCollisionWorld, CameraSpringArmConfig, constrain_spring_arm_offset_ls,
+    constrain_spring_arm_offset_ls, CameraSpringArmCollisionWorld, CameraSpringArmConfig,
 };
 use crate::manager::{CameraDirectorRequest, CameraManagerResource};
 use crate::modes::{
@@ -396,8 +396,9 @@ pub struct CameraRuntimeServiceConfig {
     pub first_person_eye_height: f32,
     /// Optional stable render-cadence eye anchor supplied by the active avatar provider.
     pub first_person_anchor_ws: Option<Vec3>,
-    /// Optional ADS camera position resolved from the rendered weapon's rear sight. Camera runtime
-    /// blends toward it with the same aim alpha used for FOV/recoil, while orientation stays input-owned.
+    /// Optional provider-resolved ADS camera position. Weapon/avatar presentation already applies
+    /// authored per-axis translation policy; camera runtime only blends toward this finite anchor while
+    /// orientation remains input-owned.
     pub first_person_ads_anchor_ws: Option<Vec3>,
     /// Optional render-cadence body rotation. FPP position follows this body frame while look yaw/pitch
     /// remain input-owned; this prevents mouse look from orbiting the camera around the skull.

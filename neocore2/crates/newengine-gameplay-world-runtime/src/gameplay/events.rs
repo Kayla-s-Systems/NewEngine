@@ -7,6 +7,7 @@ pub const GAMEPLAY_EVENT_WEAPON_FIRED: &str = "gameplay.weapon.fired";
 pub const GAMEPLAY_EVENT_WEAPON_EMPTY: &str = "gameplay.weapon.empty";
 pub const GAMEPLAY_EVENT_WEAPON_RELOAD_STARTED: &str = "gameplay.weapon.reload.started";
 pub const GAMEPLAY_EVENT_WEAPON_RELOAD_COMPLETED: &str = "gameplay.weapon.reload.completed";
+pub const GAMEPLAY_EVENT_WEAPON_RELOAD_PHASE: &str = "gameplay.weapon.reload.phase";
 pub const GAMEPLAY_EVENT_WEAPON_MELEE_ATTACKED: &str = "gameplay.weapon.melee.attacked";
 pub const GAMEPLAY_EVENT_WEAPON_HIT: &str = "gameplay.weapon.hit";
 pub const GAMEPLAY_EVENT_WEAPON_PENETRATED: &str = "gameplay.weapon.penetrated";

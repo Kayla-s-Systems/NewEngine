@@ -49,7 +49,11 @@ pub fn encode_fxd_nef8(
 }
 
 /// Decodes the canonical project-owned `.fxd` dictionary.
-pub fn decode_fxd_nef8(bytes: &[u8], content_kind: u32, content_schema_version: u16) -> Result<FxdDictionaryV1, String> {
+pub fn decode_fxd_nef8(
+    bytes: &[u8],
+    content_kind: u32,
+    content_schema_version: u16,
+) -> Result<FxdDictionaryV1, String> {
     let envelope = decode_list_file_envelope(bytes, content_kind, "<fxd>")?;
     if envelope.header.content_schema_version != content_schema_version {
         return Err(format!(
@@ -101,7 +105,13 @@ mod tests {
             }],
             ..FxdDictionaryV1::default()
         };
-        let encoded = encode_fxd_nef8(&dictionary, "effects/weapons/rifle.fxd", 35, FXD_VERSION_V1 as u16).unwrap();
+        let encoded = encode_fxd_nef8(
+            &dictionary,
+            "effects/weapons/rifle.fxd",
+            35,
+            FXD_VERSION_V1 as u16,
+        )
+        .unwrap();
         let decoded = decode_fxd_nef8(&encoded, 35, FXD_VERSION_V1 as u16).unwrap();
         assert_eq!(decoded, dictionary);
     }

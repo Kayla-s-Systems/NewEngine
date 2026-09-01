@@ -66,6 +66,38 @@ pub fn active_equipped_weapon_component_modifiers(
     )
 }
 
+pub fn active_equipped_weapon_component_stat_modifiers(
+    world: &World,
+    owner: EntityId,
+) -> WeaponStatModifierStack {
+    let Some(binding) = world.get::<EquippedWeaponBinding>(owner).copied() else {
+        return WeaponStatModifierStack::default();
+    };
+    let Some(definition) = world
+        .resource::<ItemCatalog>()
+        .and_then(|catalog| catalog.get(binding.item))
+    else {
+        return WeaponStatModifierStack::default();
+    };
+    let Some(installed) = world
+        .get::<PlayerInventory>(owner)
+        .and_then(|inventory| inventory.weapon_components.get(&binding.instance_id))
+    else {
+        return WeaponStatModifierStack::default();
+    };
+    let mut modifiers = Vec::new();
+    for instance in installed.values().filter(|instance| instance.active) {
+        if let Some(component) = definition
+            .weapon_components
+            .components
+            .get(&instance.component_id)
+        {
+            modifiers.extend(component.stat_modifiers.modifiers.iter().copied());
+        }
+    }
+    WeaponStatModifierStack { modifiers }.sanitized()
+}
+
 pub fn active_equipped_weapon_component_overrides(
     world: &World,
     owner: EntityId,
@@ -944,6 +976,7 @@ mod component_graph_tests {
             audio_override: None,
             muzzle_vfx_override: None,
             tracer_vfx_override: None,
+            stat_modifiers: WeaponStatModifierStack::default(),
             modifiers: WeaponComponentModifiers {
                 accuracy_multiplier: accuracy,
                 recoil_multiplier: recoil,

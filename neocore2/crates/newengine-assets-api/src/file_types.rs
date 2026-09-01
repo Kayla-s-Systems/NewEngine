@@ -248,7 +248,10 @@ impl AssetFileTypeDescriptor {
             ));
         }
         if self.module_id.trim().is_empty() {
-            return Err(format!("asset type '.{}' descriptor module_id is empty", ext));
+            return Err(format!(
+                "asset type '.{}' descriptor module_id is empty",
+                ext
+            ));
         }
         if self.handler_service.trim().is_empty() {
             return Err(format!(
@@ -257,8 +260,14 @@ impl AssetFileTypeDescriptor {
             ));
         }
         if let Some(route) = &self.default_entry_route {
-            if route.gateway.trim().is_empty() || route.method.trim().is_empty() || route.semantic_owner.trim().is_empty() {
-                return Err(format!("asset type '.{}' default_entry_route is incomplete", ext));
+            if route.gateway.trim().is_empty()
+                || route.method.trim().is_empty()
+                || route.semantic_owner.trim().is_empty()
+            {
+                return Err(format!(
+                    "asset type '.{}' default_entry_route is incomplete",
+                    ext
+                ));
             }
         }
         let is_container = self.is_container_codec();

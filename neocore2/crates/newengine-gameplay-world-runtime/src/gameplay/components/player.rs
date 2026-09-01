@@ -590,6 +590,9 @@ pub struct PlayerCharacterPresentation {
     pub fall_medium_min_distance: f32,
     pub fall_high_min_distance: f32,
     pub equipment_ready_sample_phase: f32,
+    /// Optional per-equipment-family READY sample phases. Keys are opaque normalized weapon-class
+    /// ids (`pistol`, `knife`, `long_gun`, ...); runtime never enumerates them.
+    pub equipment_ready_sample_phases: std::collections::BTreeMap<String, f32>,
     pub equipment_ready_rotation_weights: Vec<PlayerJointRotationWeight>,
     pub equipment_aim_rotation_weights: Vec<PlayerJointRotationWeight>,
     pub equipment_reload_rotation_weights: Vec<PlayerJointRotationWeight>,
@@ -633,6 +636,7 @@ impl Default for PlayerCharacterPresentation {
             fall_medium_min_distance: 0.0,
             fall_high_min_distance: 0.0,
             equipment_ready_sample_phase: 0.0,
+            equipment_ready_sample_phases: std::collections::BTreeMap::new(),
             equipment_ready_rotation_weights: Vec::new(),
             equipment_aim_rotation_weights: Vec::new(),
             equipment_reload_rotation_weights: Vec::new(),
@@ -812,10 +816,10 @@ impl Default for PlayerModelBinding {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PlayerFirstPersonCameraAnchor {
     pub eye_center_ws: Vec3,
-    /// Optional rendered-weapon ADS camera position. When present, the camera runtime blends from
-    /// the stable anatomical eye anchor to this position using its ordinary semantic aim alpha.
-    /// The weapon provider derives it from the *actual* rear sight, so camera translation cannot
-    /// invalidate rear-sight/front-sight collinearity. Orientation remains gameplay-input-owned.
+    /// Optional provider-resolved ADS camera anchor. The weapon provider derives the raw anchor from
+    /// the rendered rear sight and applies its authored per-axis translation weights against the stable
+    /// anatomical eye center before publishing it. Camera runtime only performs temporal blending;
+    /// orientation remains gameplay-input-owned.
     pub ads_camera_position_ws: Option<Vec3>,
     /// Small body-forward clearance from the stable eye center. It is body-owned; view yaw/pitch
     /// are orientation-only and must never translate this offset around the head.
