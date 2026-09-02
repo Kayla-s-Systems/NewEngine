@@ -594,13 +594,15 @@ mod tests {
     #[test]
     fn gameplay_view_switch_cuts_manager_blend_but_reconfigures_possession() {
         let player = newengine_ecs::EntityId::default();
-        let mut manager = CameraManagerResource::default();
-        manager.active_director = CameraDirectorKind::Gameplay;
-        manager.active_mode = CameraRuntimeMode::GameplayFirstPerson;
-        manager.view_mode = CameraViewMode::FirstPerson;
-        manager.input_context = CameraInputContext::GameplayLook;
-        manager.target_entity = Some(player);
-        manager.transition = CameraTransitionState::default();
+        let mut manager = CameraManagerResource {
+            active_director: CameraDirectorKind::Gameplay,
+            active_mode: CameraRuntimeMode::GameplayFirstPerson,
+            view_mode: CameraViewMode::FirstPerson,
+            input_context: CameraInputContext::GameplayLook,
+            target_entity: Some(player),
+            transition: CameraTransitionState::default(),
+            ..Default::default()
+        };
         manager.frame_blend.begin(CameraFrameBlendPlan::cut());
 
         manager.sync_world_state(direct_gameplay_state(
@@ -625,13 +627,15 @@ mod tests {
     #[test]
     fn all_possessed_gameplay_view_switches_have_single_transition_owner() {
         let player = newengine_ecs::EntityId::default();
-        let mut manager = CameraManagerResource::default();
-        manager.active_director = CameraDirectorKind::Gameplay;
-        manager.active_mode = CameraRuntimeMode::GameplayFirstPerson;
-        manager.view_mode = CameraViewMode::FirstPerson;
-        manager.input_context = CameraInputContext::GameplayLook;
-        manager.target_entity = Some(player);
-        manager.transition = CameraTransitionState::default();
+        let mut manager = CameraManagerResource {
+            active_director: CameraDirectorKind::Gameplay,
+            active_mode: CameraRuntimeMode::GameplayFirstPerson,
+            view_mode: CameraViewMode::FirstPerson,
+            input_context: CameraInputContext::GameplayLook,
+            target_entity: Some(player),
+            transition: CameraTransitionState::default(),
+            ..Default::default()
+        };
         manager.frame_blend.begin(CameraFrameBlendPlan::cut());
 
         for (view, mode) in [

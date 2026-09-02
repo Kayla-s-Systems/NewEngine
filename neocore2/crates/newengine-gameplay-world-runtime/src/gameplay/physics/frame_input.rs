@@ -20,6 +20,7 @@ use super::util::{
     body_kind_to_dto, quat_to_arr, shape_to_dto, translated_shape_aabb, vec3_to_arr,
 };
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn build_frame_input(
     world: &World,
     frame_index: u64,

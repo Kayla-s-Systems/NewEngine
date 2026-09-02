@@ -40,6 +40,7 @@ fn near_clip_limits(config: CameraRuntimeServiceConfig) -> (f32, f32) {
 /// The scanner intentionally reuses `CameraSpringArmCollisionWorld`; near-clip protection must not
 /// create a second physics/query authority. Each ray terminates on the candidate near plane, so the
 /// minimum forward depth reached by any constrained ray is a safe upper bound for that plane.
+#[allow(clippy::too_many_arguments)]
 fn scan_safe_near_clip(
     target: EntityId,
     camera_position: Vec3,
@@ -271,10 +272,12 @@ mod tests {
             max_ws: Vec3::new(1.0, 1.0, -0.070),
         });
         ecs.insert_resource(collision);
-        let mut config = CameraRuntimeServiceConfig::default();
-        config.near_clip_first_person_max_distance = 0.09;
-        config.near_clip_pull_in_distance = 0.010;
-        config.near_clip_probe_radius = 0.0;
+        let config = CameraRuntimeServiceConfig {
+            near_clip_first_person_max_distance: 0.09,
+            near_clip_pull_in_distance: 0.010,
+            near_clip_probe_radius: 0.0,
+            ..Default::default()
+        };
         let near = CameraRuntimeService::resolve_gameplay_near_clip(
             &mut ecs,
             camera,

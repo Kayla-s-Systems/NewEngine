@@ -114,8 +114,10 @@ mod first_person_position_tests {
 
     #[test]
     fn locomotion_never_moves_or_rotates_first_person_camera() {
-        let mut state = GameplayFirstPersonCameraState::default();
-        state.initialized = true;
+        let mut state = GameplayFirstPersonCameraState {
+            initialized: true,
+            ..Default::default()
+        };
         for aiming in [false, true] {
             for _ in 0..120 {
                 let pose = step_first_person_additive_motion(

@@ -54,9 +54,8 @@ fn ai_agent_snapshot(world: &World, agent: EntityId) -> AiAgentSnapshotV1 {
 pub fn build_ai_frame_input(world: &World, fixed_tick: u64) -> AiFrameInputV1 {
     let mut agents = world
         .query::<AIController>()
-        .filter_map(|(entity, _)| {
-            controller_is_operational(world, entity).then(|| ai_agent_snapshot(world, entity))
-        })
+        .filter(|(entity, _)| controller_is_operational(world, *entity))
+        .map(|(entity, _)| ai_agent_snapshot(world, entity))
         .collect::<Vec<_>>();
     agents.sort_by_key(|agent| agent.entity.stable_id);
     AiFrameInputV1 {

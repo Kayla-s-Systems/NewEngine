@@ -322,6 +322,7 @@ pub fn run_schedule(
     );
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn run_schedule_with_physics_mode(
     schedule: &mut SimSchedule,
     gameplay_content: &mut GameplayContentProviderRegistry,
@@ -345,6 +346,7 @@ pub fn run_schedule_with_physics_mode(
     );
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn run_schedule_with_physics_mode_and_telemetry(
     schedule: &mut SimSchedule,
     gameplay_content: &mut GameplayContentProviderRegistry,
@@ -371,6 +373,7 @@ pub fn run_schedule_with_physics_mode_and_telemetry(
     );
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn run_schedule_with_physics_mode_and_telemetry_for_frame(
     schedule: &mut SimSchedule,
     gameplay_content: &mut GameplayContentProviderRegistry,

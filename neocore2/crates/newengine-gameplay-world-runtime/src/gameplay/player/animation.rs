@@ -63,6 +63,7 @@ pub fn player_fall_is_confirmed(
 }
 
 #[inline]
+#[allow(clippy::too_many_arguments)]
 fn select_locomotion_animation(
     grounded: bool,
     crouched: bool,

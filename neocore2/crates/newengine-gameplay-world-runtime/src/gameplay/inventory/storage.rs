@@ -540,14 +540,16 @@ impl WeaponSocketPose {
             Vec3::new(delta.x, delta.y, delta.z) * (angle / (sin_half * dt))
         };
         Self {
-            linear_velocity: linear_velocity
-                .is_finite()
-                .then_some(linear_velocity)
-                .unwrap_or(Vec3::ZERO),
-            angular_velocity: angular_velocity
-                .is_finite()
-                .then_some(angular_velocity)
-                .unwrap_or(Vec3::ZERO),
+            linear_velocity: if linear_velocity.is_finite() {
+                linear_velocity
+            } else {
+                Vec3::ZERO
+            },
+            angular_velocity: if angular_velocity.is_finite() {
+                angular_velocity
+            } else {
+                Vec3::ZERO
+            },
             ..self
         }
     }

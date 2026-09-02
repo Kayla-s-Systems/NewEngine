@@ -272,6 +272,7 @@ impl CameraRuntimeService {
     /// Applies mouse look immediately at render/input cadence while movement
     /// remains fixed-step deterministic. This removes fixed-step quantization and
     /// one-frame latency from first-person camera rotation.
+    #[allow(clippy::too_many_arguments)]
     pub fn apply_player_input(
         world: &mut World,
         player: EntityId,
