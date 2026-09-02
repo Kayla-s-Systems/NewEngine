@@ -273,6 +273,10 @@ pub struct JPC_RayCastResult {
     pub SubShapeID2: JPC_SubShapeID,
 }
 
+pub type JPC_RayCastHitCallback = Option<
+    unsafe extern "C" fn(user_data: *mut c_void, result: *const JPC_RayCastResult),
+>;
+
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct JPC_BroadPhaseLayerInterfaceFns {
@@ -498,6 +502,20 @@ pub struct JPC_NarrowPhaseQuery_CastRayArgs {
     pub BroadPhaseLayerFilter: *const JPC_BroadPhaseLayerFilter,
     pub ObjectLayerFilter: *const JPC_ObjectLayerFilter,
     pub BodyFilter: *const JPC_BodyFilter,
+}
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct JPC_NarrowPhaseQuery_CastRayAllArgs {
+    pub Ray: JPC_RRayCast,
+    pub BackFaceModeTriangles: JPC_BackFaceMode,
+    pub BackFaceModeConvex: JPC_BackFaceMode,
+    pub TreatConvexAsSolid: bool,
+    pub BroadPhaseLayerFilter: *const JPC_BroadPhaseLayerFilter,
+    pub ObjectLayerFilter: *const JPC_ObjectLayerFilter,
+    pub BodyFilter: *const JPC_BodyFilter,
+    pub UserData: *mut c_void,
+    pub OnHit: JPC_RayCastHitCallback,
 }
 
 #[cfg(feature = "double-precision")] pub type JPC_RVec3 = JPC_DVec3;
@@ -744,6 +762,10 @@ extern "C" {
     pub fn JPC_BodyInterface_SetUserData(arg0: *const JPC_BodyInterface, arg1: JPC_BodyID, arg2: u64);
     pub fn JPC_BodyInterface_InvalidateContactCache(arg0: *mut JPC_BodyInterface, arg1: JPC_BodyID);
     pub fn JPC_NarrowPhaseQuery_CastRay(arg0: *const JPC_NarrowPhaseQuery, arg1: *mut JPC_NarrowPhaseQuery_CastRayArgs) -> bool;
+    pub fn JPC_NarrowPhaseQuery_CastRayAll(
+        arg0: *const JPC_NarrowPhaseQuery,
+        arg1: *const JPC_NarrowPhaseQuery_CastRayAllArgs,
+    ) -> u32;
     pub fn JPC_PhysicsSystem_new() -> *mut JPC_PhysicsSystem;
     pub fn JPC_PhysicsSystem_delete(arg0: *mut JPC_PhysicsSystem);
     pub fn JPC_PhysicsSystem_Init(arg0: *mut JPC_PhysicsSystem, arg1: c_uint, arg2: c_uint, arg3: c_uint, arg4: c_uint, arg5: *mut JPC_BroadPhaseLayerInterface, arg6: *mut JPC_ObjectVsBroadPhaseLayerFilter, arg7: *mut JPC_ObjectLayerPairFilter);

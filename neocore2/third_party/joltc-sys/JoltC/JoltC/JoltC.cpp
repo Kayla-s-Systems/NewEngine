@@ -1594,6 +1594,28 @@ JPC_API void JPC_BodyInterface_InvalidateContactCache(JPC_BodyInterface *self, J
 ////////////////////////////////////////////////////////////////////////////////
 // NarrowPhaseQuery
 
+class JPCRayCastAllCollector final : public JPH::CastRayCollector {
+public:
+	JPCRayCastAllCollector(void *user_data, JPC_RayCastHitCallback callback)
+		: mUserData(user_data), mCallback(callback) { }
+
+	void AddHit(const JPH::RayCastResult &result) override
+	{
+		++mHitCount;
+		if (mCallback != nullptr) {
+			JPC_RayCastResult converted = to_jpc(result);
+			mCallback(mUserData, &converted);
+		}
+	}
+
+	uint32_t GetHitCount() const { return mHitCount; }
+
+private:
+	void *mUserData = nullptr;
+	JPC_RayCastHitCallback mCallback = nullptr;
+	uint32_t mHitCount = 0;
+};
+
 JPC_API bool JPC_NarrowPhaseQuery_CastRay(const JPC_NarrowPhaseQuery* self, JPC_NarrowPhaseQuery_CastRayArgs* args) {
 	JPH::RayCastResult result;
 
@@ -1628,6 +1650,46 @@ JPC_API bool JPC_NarrowPhaseQuery_CastRay(const JPC_NarrowPhaseQuery* self, JPC_
 	}
 
 	return hit;
+}
+
+JPC_API uint32_t JPC_NarrowPhaseQuery_CastRayAll(const JPC_NarrowPhaseQuery* self, const JPC_NarrowPhaseQuery_CastRayAllArgs* args) {
+	if (self == nullptr || args == nullptr || args->OnHit == nullptr) {
+		return 0;
+	}
+
+	JPH::BroadPhaseLayerFilter defaultBplFilter{};
+	const JPH::BroadPhaseLayerFilter* bplFilter = &defaultBplFilter;
+	if (args->BroadPhaseLayerFilter != nullptr) {
+		bplFilter = to_jph(args->BroadPhaseLayerFilter);
+	}
+
+	JPH::ObjectLayerFilter defaultOlFilter{};
+	const JPH::ObjectLayerFilter* olFilter = &defaultOlFilter;
+	if (args->ObjectLayerFilter != nullptr) {
+		olFilter = to_jph(args->ObjectLayerFilter);
+	}
+
+	JPH::BodyFilter defaultBodyFilter{};
+	const JPH::BodyFilter* bodyFilter = &defaultBodyFilter;
+	if (args->BodyFilter != nullptr) {
+		bodyFilter = to_jph(args->BodyFilter);
+	}
+
+	JPH::RayCastSettings settings;
+	settings.mBackFaceModeTriangles = static_cast<JPH::EBackFaceMode>(args->BackFaceModeTriangles);
+	settings.mBackFaceModeConvex = static_cast<JPH::EBackFaceMode>(args->BackFaceModeConvex);
+	settings.mTreatConvexAsSolid = args->TreatConvexAsSolid;
+
+	JPCRayCastAllCollector collector(args->UserData, args->OnHit);
+	to_jph(self)->CastRay(
+		to_jph(args->Ray),
+		settings,
+		collector,
+		*bplFilter,
+		*olFilter,
+		*bodyFilter
+	);
+	return collector.GetHitCount();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

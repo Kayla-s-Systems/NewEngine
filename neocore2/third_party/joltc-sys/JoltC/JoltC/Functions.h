@@ -160,6 +160,10 @@ typedef struct JPC_RayCastResult {
 	JPC_SubShapeID SubShapeID2;
 } JPC_RayCastResult;
 
+// Callback used by the all-hits narrow-phase ray query. The pointed result is valid only
+// for the duration of the callback; callers that need persistence must copy it.
+typedef void (*JPC_RayCastHitCallback)(void *user_data, const JPC_RayCastResult *result);
+
 typedef struct JPC_Body JPC_Body;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -851,6 +855,23 @@ typedef struct JPC_NarrowPhaseQuery_CastRayArgs {
 } JPC_NarrowPhaseQuery_CastRayArgs;
 
 JPC_API bool JPC_NarrowPhaseQuery_CastRay(const JPC_NarrowPhaseQuery* self, JPC_NarrowPhaseQuery_CastRayArgs* args);
+
+// Multi-hit ray query used by mesh/projectile traces. Unlike the closest-hit helper above,
+// this exposes every narrow-phase intersection (including backfaces when requested) together
+// with BodyID/SubShapeID so callers can pair entry/exit intersections without approximation.
+typedef struct JPC_NarrowPhaseQuery_CastRayAllArgs {
+	JPC_RRayCast Ray;
+	JPC_BackFaceMode BackFaceModeTriangles;
+	JPC_BackFaceMode BackFaceModeConvex;
+	bool TreatConvexAsSolid;
+	const JPC_BroadPhaseLayerFilter *BroadPhaseLayerFilter;
+	const JPC_ObjectLayerFilter *ObjectLayerFilter;
+	const JPC_BodyFilter *BodyFilter;
+	void *UserData;
+	JPC_RayCastHitCallback OnHit;
+} JPC_NarrowPhaseQuery_CastRayAllArgs;
+
+JPC_API uint32_t JPC_NarrowPhaseQuery_CastRayAll(const JPC_NarrowPhaseQuery* self, const JPC_NarrowPhaseQuery_CastRayAllArgs* args);
 
 ////////////////////////////////////////////////////////////////////////////////
 // PhysicsSystem
