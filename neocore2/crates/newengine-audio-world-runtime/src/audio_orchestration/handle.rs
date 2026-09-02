@@ -128,7 +128,7 @@ impl AudioOrchestrationHandle {
         let id = AudioObjectId(self.next_object_id.fetch_add(1, Ordering::Relaxed).max(1));
         self.submit(AudioOrchestrationCommand::CreateObject {
             object_id: id,
-            state: state.sanitized(),
+            state: Box::new(state.sanitized()),
         })?;
         Ok(id)
     }
@@ -144,7 +144,7 @@ impl AudioOrchestrationHandle {
     ) -> Result<(), String> {
         self.submit(AudioOrchestrationCommand::UpdateObject {
             object_id,
-            state: state.sanitized(),
+            state: Box::new(state.sanitized()),
         })
     }
 
@@ -173,7 +173,7 @@ impl AudioOrchestrationHandle {
         self.submit(AudioOrchestrationCommand::PlayStream {
             instance_id: id,
             object_id,
-            request,
+            request: Box::new(request),
         })?;
         Ok(id)
     }
@@ -308,7 +308,7 @@ impl AudioOrchestrationHandle {
             AudioTransportAction::PlayStream {
                 instance_id,
                 object_id,
-                request,
+                request: Box::new(request),
             },
         )?;
         Ok((instance_id, action_id))

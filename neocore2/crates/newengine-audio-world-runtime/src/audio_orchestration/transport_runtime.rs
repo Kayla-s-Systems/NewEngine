@@ -204,7 +204,7 @@ impl AudioOrchestrationRuntimeModule {
                 self.play_stream_instance(
                     instance_id,
                     object_id,
-                    request,
+                    *request,
                     pending.intended_sample,
                     self.transport.sample(),
                     Some(provider_sample),
@@ -376,7 +376,7 @@ impl AudioOrchestrationRuntimeModule {
                     self.play_stream_instance(
                         instance_id,
                         object_id,
-                        request,
+                        *request,
                         due.intended_sample,
                         due.dispatch_sample,
                         None,

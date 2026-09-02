@@ -101,7 +101,7 @@ impl AudioOrchestrationRuntimeModule {
                     .insert(
                         object_id,
                         RuntimeObject {
-                            state: state.sanitized(),
+                            state: (*state).sanitized(),
                         },
                     )
                     .is_some()
@@ -130,7 +130,7 @@ impl AudioOrchestrationRuntimeModule {
             AudioOrchestrationCommand::UpdateObject { object_id, state } => {
                 self.clear_scalar_transitions_for_target(&AudioParameterTarget::Object(object_id));
                 if let Some(object) = self.objects.get_mut(&object_id) {
-                    object.state = state.sanitized();
+                    object.state = (*state).sanitized();
                 } else {
                     newengine_ulog_api::ulog::warn!(
                         "audio orchestration: update ignored unknown object_id={}",
@@ -152,7 +152,7 @@ impl AudioOrchestrationRuntimeModule {
                 request,
             } => {
                 let sample = self.transport.sample();
-                self.play_stream_instance(instance_id, object_id, request, sample, sample, None)
+                self.play_stream_instance(instance_id, object_id, *request, sample, sample, None)
             }
             AudioOrchestrationCommand::StopInstance { instance_id } => {
                 self.stop_instance(instance_id);

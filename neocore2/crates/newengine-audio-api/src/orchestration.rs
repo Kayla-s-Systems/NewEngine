@@ -502,14 +502,14 @@ pub enum AudioOrchestrationCommand {
     },
     CreateObject {
         object_id: AudioObjectId,
-        state: AudioObjectState,
+        state: Box<AudioObjectState>,
     },
     DestroyObject {
         object_id: AudioObjectId,
     },
     UpdateObject {
         object_id: AudioObjectId,
-        state: AudioObjectState,
+        state: Box<AudioObjectState>,
     },
     Play {
         instance_id: AudioInstanceId,
@@ -519,7 +519,7 @@ pub enum AudioOrchestrationCommand {
     PlayStream {
         instance_id: AudioInstanceId,
         object_id: AudioObjectId,
-        request: AudioPlayStreamInstanceRequest,
+        request: Box<AudioPlayStreamInstanceRequest>,
     },
     StopInstance {
         instance_id: AudioInstanceId,

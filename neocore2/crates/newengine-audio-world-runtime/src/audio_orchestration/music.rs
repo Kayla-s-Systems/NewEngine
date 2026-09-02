@@ -1,5 +1,15 @@
 use super::*;
 
+struct MusicStatePlanRequest<'a> {
+    graph: &'a InteractiveMusicGraph,
+    object_id: AudioObjectId,
+    current_stems: &'a BTreeMap<String, AudioInstanceId>,
+    parameters: &'a AudioParameterSet,
+    target_state: &'a str,
+    start_sample: u64,
+    crossfade_samples: u64,
+}
+
 impl AudioOrchestrationRuntimeModule {
     pub(super) fn allocate_music_instance_id(&self) -> AudioInstanceId {
         AudioInstanceId(
@@ -107,15 +117,15 @@ impl AudioOrchestrationRuntimeModule {
         };
         let sample = self.transport.sample();
         let parameters = AudioParameterSet::default();
-        match self.plan_music_state(
-            &graph,
+        match self.plan_music_state(MusicStatePlanRequest {
+            graph: &graph,
             object_id,
-            &BTreeMap::new(),
-            &parameters,
-            &initial.id,
-            sample,
-            0,
-        ) {
+            current_stems: &BTreeMap::new(),
+            parameters: &parameters,
+            target_state: &initial.id,
+            start_sample: sample,
+            crossfade_samples: 0,
+        }) {
             Ok(pending) => {
                 self.music_sessions.insert(
                     session_id,
@@ -249,15 +259,15 @@ impl AudioOrchestrationRuntimeModule {
                 return;
             }
         };
-        match self.plan_music_state(
-            &graph,
-            snapshot.object_id,
-            &snapshot.stems,
-            &snapshot.parameters,
-            &target.id,
-            boundary,
-            transition.crossfade_samples,
-        ) {
+        match self.plan_music_state(MusicStatePlanRequest {
+            graph: &graph,
+            object_id: snapshot.object_id,
+            current_stems: &snapshot.stems,
+            parameters: &snapshot.parameters,
+            target_state: &target.id,
+            start_sample: boundary,
+            crossfade_samples: transition.crossfade_samples,
+        }) {
             Ok(pending) => {
                 if let Some(session) = self.music_sessions.get_mut(&session_id) {
                     session.pending = Some(pending);
@@ -278,16 +288,19 @@ impl AudioOrchestrationRuntimeModule {
         }
     }
 
-    pub(super) fn plan_music_state(
+    fn plan_music_state(
         &mut self,
-        graph: &InteractiveMusicGraph,
-        object_id: AudioObjectId,
-        current_stems: &BTreeMap<String, AudioInstanceId>,
-        parameters: &AudioParameterSet,
-        target_state: &str,
-        start_sample: u64,
-        crossfade_samples: u64,
+        request: MusicStatePlanRequest<'_>,
     ) -> Result<PendingMusicTransition, String> {
+        let MusicStatePlanRequest {
+            graph,
+            object_id,
+            current_stems,
+            parameters,
+            target_state,
+            start_sample,
+            crossfade_samples,
+        } = request;
         let state = graph
             .state(target_state)
             .ok_or_else(|| format!("unknown interactive music state '{target_state}'"))?;
@@ -333,7 +346,7 @@ impl AudioOrchestrationRuntimeModule {
                     AudioTransportAction::PlayStream {
                         instance_id,
                         object_id,
-                        request,
+                        request: Box::new(request),
                     },
                 )?;
                 if crossfade_samples > 0 {

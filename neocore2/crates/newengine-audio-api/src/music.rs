@@ -18,20 +18,11 @@ pub const AUDIO_INTERACTIVE_MUSIC_MAX_SELECTORS: usize = 256;
 #[serde(transparent)]
 pub struct AudioMusicSessionId(pub u64);
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AudioMusicStemSpec {
     pub id: String,
     pub request: AudioPlayStreamInstanceRequest,
-}
-
-impl Default for AudioMusicStemSpec {
-    fn default() -> Self {
-        Self {
-            id: String::new(),
-            request: AudioPlayStreamInstanceRequest::default(),
-        }
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

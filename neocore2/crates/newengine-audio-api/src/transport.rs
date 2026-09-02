@@ -101,20 +101,11 @@ impl AudioTempoGrid {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AudioTransportMarker {
     pub id: String,
     pub sample: u64,
-}
-
-impl Default for AudioTransportMarker {
-    fn default() -> Self {
-        Self {
-            id: String::new(),
-            sample: 0,
-        }
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -200,20 +191,19 @@ pub struct AudioTransportPosition {
     pub beat_in_bar: u16,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "at", rename_all = "snake_case")]
 pub enum AudioTransportSchedulePoint {
+    #[default]
     Immediate,
-    AbsoluteSample { sample: u64 },
+    AbsoluteSample {
+        sample: u64,
+    },
     NextBeat,
     NextBar,
-    Marker { id: String },
-}
-
-impl Default for AudioTransportSchedulePoint {
-    fn default() -> Self {
-        Self::Immediate
-    }
+    Marker {
+        id: String,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -227,7 +217,7 @@ pub enum AudioTransportAction {
     PlayStream {
         instance_id: AudioInstanceId,
         object_id: AudioObjectId,
-        request: AudioPlayStreamInstanceRequest,
+        request: Box<AudioPlayStreamInstanceRequest>,
     },
     StopInstance {
         instance_id: AudioInstanceId,
@@ -286,7 +276,7 @@ impl AudioTransportAction {
                             .to_owned(),
                     );
                 }
-                *request = request.clone().sanitized()?;
+                **request = (**request).clone().sanitized()?;
             }
             Self::StopInstance { instance_id } => {
                 if instance_id.0 == 0 {
@@ -458,7 +448,7 @@ mod tests {
         let action = AudioTransportAction::PlayStream {
             instance_id: AudioInstanceId(11),
             object_id: AudioObjectId(22),
-            request,
+            request: Box::new(request),
         }
         .validate()
         .expect("valid transport stream action");
