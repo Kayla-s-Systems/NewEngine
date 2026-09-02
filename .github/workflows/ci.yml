@@ -98,7 +98,10 @@ jobs:
       - name: Cargo workspace metadata preflight
         run: cargo metadata --format-version 1 --no-deps > /dev/null
       - run: cargo miri setup
-      - run: cargo miri test --workspace --lib --no-fail-fast
+      - name: Run Miri
+        env:
+          MIRIFLAGS: -Zmiri-disable-isolation
+        run: cargo miri test --workspace --lib --no-fail-fast
 
   coverage:
     runs-on: ubuntu-latest
